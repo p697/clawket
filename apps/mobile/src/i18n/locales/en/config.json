@@ -304,5 +304,10 @@
   "GPT-5.4": "GPT-5.4",
   "GPT-5.4 · 09:41": "GPT-5.4 · 09:41",
   "This wallpaper still keeps the chat readable.": "This wallpaper still keeps the chat readable.",
-  "Looks good. Keep it clean and easy to read.": "Looks good. Keep it clean and easy to read."
+  "Looks good. Keep it clean and easy to read.": "Looks good. Keep it clean and easy to read.",
+  "Diagnose & Fix": "Diagnose & Fix",
+  "Auto-detect and repair common OpenClaw issues": "Auto-detect and repair common OpenClaw issues",
+  "Run the following command on your host machine to automatically detect and fix common OpenClaw configuration issues:": "Run the following command on your host machine to automatically detect and fix common OpenClaw configuration issues:",
+  "This command checks gateway connectivity, config validity, port availability, and auth setup — then applies fixes automatically where possible.": "This command checks gateway connectivity, config validity, port availability, and auth setup — then applies fixes automatically where possible.",
+  "To diagnose without applying fixes:": "To diagnose without applying fixes:"
 }

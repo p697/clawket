@@ -2,9 +2,10 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Archive, ChevronRight, Eye, RotateCcw } from 'lucide-react-native';
+import { Archive, ChevronRight, Eye, RotateCcw, Stethoscope } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
-import { createCardContentStyle } from '../../components/ui';
+import { CopyableCommand } from '../../components/config/CopyableCommand';
+import { createCardContentStyle, ModalSheet } from '../../components/ui';
 import { useAppContext } from '../../contexts/AppContext';
 import { useProPaywall } from '../../contexts/ProPaywallContext';
 import { useNativeStackModalHeader } from '../../hooks/useNativeStackModalHeader';
@@ -66,6 +67,7 @@ export function OpenClawConfigScreen(): React.JSX.Element {
   const { requirePro } = useProPaywall();
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
   const [backingUpConfig, setBackingUpConfig] = useState(false);
+  const [doctorModalVisible, setDoctorModalVisible] = useState(false);
   const runtimeSettings = useGatewayRuntimeSettings({
     gateway,
     gatewayEpoch,
@@ -219,6 +221,49 @@ export function OpenClawConfigScreen(): React.JSX.Element {
           </Pressable>
         </View>
       ) : null}
+
+      <View style={styles.secondaryCard}>
+        <Pressable
+          onPress={() => setDoctorModalVisible(true)}
+          style={({ pressed }) => [
+            styles.row,
+            pressed && styles.rowPressed,
+          ]}
+        >
+          <View style={styles.rowLead}>
+            <View style={[styles.rowIconBadge, { backgroundColor: '#EDE9FE' }]}>
+              <Stethoscope size={17} strokeWidth={2.2} color="#7C3AED" />
+            </View>
+            <View style={styles.rowText}>
+              <Text style={styles.rowTitle}>{t('Diagnose & Fix')}</Text>
+              <Text style={styles.rowSubtitle}>
+                {t('Auto-detect and repair common OpenClaw issues')}
+              </Text>
+            </View>
+          </View>
+          <ChevronRight size={16} color={theme.colors.textSubtle} strokeWidth={2} />
+        </Pressable>
+      </View>
+
+      <ModalSheet
+        visible={doctorModalVisible}
+        onClose={() => setDoctorModalVisible(false)}
+        title={t('Diagnose & Fix')}
+      >
+        <View style={styles.doctorContent}>
+          <Text style={styles.doctorDescription}>
+            {t('Run the following command on your host machine to automatically detect and fix common OpenClaw configuration issues:')}
+          </Text>
+          <CopyableCommand command="openclaw doctor --fix" />
+          <Text style={styles.doctorHint}>
+            {t('This command checks gateway connectivity, config validity, port availability, and auth setup — then applies fixes automatically where possible.')}
+          </Text>
+          <Text style={styles.doctorDiagnoseOnly}>
+            {t('To diagnose without applying fixes:')}
+          </Text>
+          <CopyableCommand command="openclaw doctor" />
+        </View>
+      </ModalSheet>
     </ScrollView>
   );
 }
@@ -289,6 +334,26 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       height: StyleSheet.hairlineWidth,
       backgroundColor: colors.borderStrong,
       marginLeft: Space.lg,
+    },
+    doctorContent: {
+      paddingHorizontal: Space.lg,
+      paddingBottom: Space.lg,
+      gap: Space.md,
+    },
+    doctorDescription: {
+      color: colors.text,
+      fontSize: FontSize.base,
+      lineHeight: 22,
+    },
+    doctorHint: {
+      color: colors.textSubtle,
+      fontSize: FontSize.sm,
+      lineHeight: 18,
+    },
+    doctorDiagnoseOnly: {
+      color: colors.textMuted,
+      fontSize: FontSize.base,
+      marginTop: Space.sm,
     },
   });
 }
