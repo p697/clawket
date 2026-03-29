@@ -88,10 +88,20 @@ loadEnvFile(resolve(appRoot, '.env'));
 
 function validateConfig(config, platform) {
   const errors = [];
+  const requirePostHog = parseBoolean(process.env.CLAWKET_REQUIRE_POSTHOG) === true;
+  const requireRevenueCat = parseBoolean(process.env.CLAWKET_REQUIRE_REVENUECAT) === true;
+
+  if (requirePostHog && !config.posthog.enabled) {
+    errors.push('PostHog must be enabled for this build, but no EXPO_PUBLIC_POSTHOG_* configuration was found.');
+  }
 
   if (config.posthog.enabled) {
     if (!config.posthog.host) errors.push('PostHog is enabled but EXPO_PUBLIC_POSTHOG_HOST is missing.');
     if (!config.posthog.apiKeyConfigured) errors.push('PostHog is enabled but EXPO_PUBLIC_POSTHOG_API_KEY is missing.');
+  }
+
+  if (requireRevenueCat && (platform === 'ios' || platform === 'all') && !config.revenueCat.enabled) {
+    errors.push('RevenueCat must be enabled for iOS archives, but no EXPO_PUBLIC_REVENUECAT_* configuration was found.');
   }
 
   if (config.revenueCat.enabled) {

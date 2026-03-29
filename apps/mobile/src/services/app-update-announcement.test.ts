@@ -82,7 +82,7 @@ describe('app update announcement service', () => {
     await markCurrentAppUpdateAnnouncementShown();
 
     expect(AsyncStorage.setItem).toHaveBeenCalledWith(
-      'clawket.appUpdateAnnouncementSeen.v1:1.5.0',
+      'clawket.appUpdateAnnouncementSeen.v1:1.6.0',
       '1',
     );
   });

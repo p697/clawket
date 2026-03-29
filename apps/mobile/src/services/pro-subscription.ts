@@ -57,7 +57,29 @@ export type ProPurchaseErrorCode =
   | 'notConfigured'
   | 'unknown';
 
+export type RevenueCatDiagnostics = {
+  buildEnabled: boolean;
+  iosApiKeyMasked: string | null;
+  entitlementId: string | null;
+  offeringId: string | null;
+  packageId: string | null;
+  runtimeConfigResolved: boolean;
+  runtimeApiKeyMasked: string | null;
+  keySource: 'test' | 'platform' | 'none';
+  purchasesIsConfigured: boolean | null;
+  ensureConfiguredStatus: 'configured' | 'not_configured' | 'error';
+  ensureConfiguredError: string | null;
+  customerInfoStatus: 'ok' | 'not_configured' | 'error';
+  customerInfoError: string | null;
+  appUserId: string | null;
+  offeringsStatus: 'ok' | 'not_configured' | 'error';
+  offeringsCount: number | null;
+  offeringsError: string | null;
+  lastUpdatedAt: string | null;
+};
+
 let configurePromise: Promise<RevenueCatConfig | null> | null = null;
+const RETRY_DELAY_MS = 900;
 
 function isDevRuntime(): boolean {
   return typeof __DEV__ !== 'undefined' ? __DEV__ : false;
@@ -65,6 +87,90 @@ function isDevRuntime(): boolean {
 
 function trimEnv(value: string | undefined | null): string {
   return value?.trim() ?? '';
+}
+
+function maskSecret(value: string | null | undefined): string | null {
+  const trimmed = trimEnv(value);
+  if (!trimmed) return null;
+  if (trimmed.length <= 10) return '***';
+  return `${trimmed.slice(0, 6)}...${trimmed.slice(-4)}`;
+}
+
+function formatDiagnosticError(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function createRevenueCatDiagnosticsBase(): RevenueCatDiagnostics {
+  const resolvedConfig = resolveRevenueCatConfig();
+  const testApiKey = trimEnv(publicRevenueCatConfig.testApiKey);
+  const keySource = resolvedConfig
+    ? isDevRuntime() && testApiKey
+      ? 'test'
+      : 'platform'
+    : 'none';
+
+  return {
+    buildEnabled: publicRevenueCatConfig.enabled,
+    iosApiKeyMasked: maskSecret(publicRevenueCatConfig.iosApiKey),
+    entitlementId: trimEnv(publicRevenueCatConfig.entitlementId) || null,
+    offeringId: trimEnv(publicRevenueCatConfig.offeringId) || null,
+    packageId: trimEnv(publicRevenueCatConfig.packageId) || null,
+    runtimeConfigResolved: Boolean(resolvedConfig),
+    runtimeApiKeyMasked: maskSecret(resolvedConfig?.apiKey),
+    keySource,
+    purchasesIsConfigured: null,
+    ensureConfiguredStatus: 'not_configured',
+    ensureConfiguredError: null,
+    customerInfoStatus: 'not_configured',
+    customerInfoError: null,
+    appUserId: null,
+    offeringsStatus: 'not_configured',
+    offeringsCount: null,
+    offeringsError: null,
+    lastUpdatedAt: null,
+  };
+}
+
+let runtimeRevenueCatDiagnostics: RevenueCatDiagnostics = createRevenueCatDiagnosticsBase();
+
+function updateRevenueCatDiagnostics(patch: Partial<RevenueCatDiagnostics>): void {
+  runtimeRevenueCatDiagnostics = {
+    ...runtimeRevenueCatDiagnostics,
+    ...createRevenueCatDiagnosticsBase(),
+    ...patch,
+    lastUpdatedAt: new Date().toISOString(),
+  };
+}
+
+function logRevenueCatDiagnostic(event: string, details: Record<string, unknown>): void {
+  try {
+    console.info(`[RevenueCatDiag] ${event} ${JSON.stringify(details)}`);
+  } catch {
+    console.info(`[RevenueCatDiag] ${event}`);
+  }
+}
+
+async function retryOnce<T>(operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    await delay(RETRY_DELAY_MS);
+    return operation().catch(() => {
+      throw error;
+    });
+  }
 }
 
 export function resolveRevenueCatConfig(
@@ -96,11 +202,34 @@ export function resolveRevenueCatConfig(
 
 export async function ensureRevenueCatConfigured(): Promise<RevenueCatConfig | null> {
   const config = resolveRevenueCatConfig();
-  if (!config) return null;
+  if (!config) {
+    const purchasesIsConfigured = await Purchases.isConfigured().catch(() => null);
+    updateRevenueCatDiagnostics({
+      purchasesIsConfigured,
+      ensureConfiguredStatus: 'not_configured',
+      ensureConfiguredError: null,
+    });
+    logRevenueCatDiagnostic('ensure:not_configured', {
+      buildEnabled: publicRevenueCatConfig.enabled,
+      runtimeConfigResolved: false,
+      keySource: runtimeRevenueCatDiagnostics.keySource,
+    });
+    return null;
+  }
 
   if (!configurePromise) {
     configurePromise = (async () => {
       const isConfigured = await Purchases.isConfigured().catch(() => false);
+      updateRevenueCatDiagnostics({
+        purchasesIsConfigured: isConfigured,
+        ensureConfiguredStatus: 'configured',
+        ensureConfiguredError: null,
+      });
+      logRevenueCatDiagnostic('ensure:start', {
+        alreadyConfigured: isConfigured,
+        keySource: isDevRuntime() && trimEnv(publicRevenueCatConfig.testApiKey) ? 'test' : 'platform',
+        runtimeKey: maskSecret(config.apiKey),
+      });
       if (!isConfigured) {
         Purchases.configure({
           apiKey: config.apiKey,
@@ -108,15 +237,88 @@ export async function ensureRevenueCatConfigured(): Promise<RevenueCatConfig | n
           storeKitVersion: Purchases.STOREKIT_VERSION.DEFAULT,
         });
       }
-      await Purchases.setLogLevel(isDevRuntime() ? Purchases.LOG_LEVEL.DEBUG : Purchases.LOG_LEVEL.WARN);
+      void Purchases.setLogLevel(isDevRuntime() ? Purchases.LOG_LEVEL.DEBUG : Purchases.LOG_LEVEL.WARN).catch(() => {
+        // Log level is non-critical. A transient failure here should not make RevenueCat look unconfigured.
+      });
+      updateRevenueCatDiagnostics({
+        purchasesIsConfigured: true,
+        ensureConfiguredStatus: 'configured',
+        ensureConfiguredError: null,
+      });
+      logRevenueCatDiagnostic('ensure:configured', {
+        runtimeKey: maskSecret(config.apiKey),
+        entitlementId: config.entitlementId,
+        offeringId: config.offeringId ?? null,
+      });
       return config;
     })().catch((error) => {
+      updateRevenueCatDiagnostics({
+        ensureConfiguredStatus: 'error',
+        ensureConfiguredError: formatDiagnosticError(error),
+      });
+      logRevenueCatDiagnostic('ensure:error', {
+        error: formatDiagnosticError(error),
+      });
       configurePromise = null;
       throw error;
     });
   }
 
   return configurePromise;
+}
+
+export async function collectRevenueCatDiagnostics(): Promise<RevenueCatDiagnostics> {
+  const diagnostics: RevenueCatDiagnostics = {
+    ...runtimeRevenueCatDiagnostics,
+    ...createRevenueCatDiagnosticsBase(),
+  };
+
+  diagnostics.purchasesIsConfigured = await Purchases.isConfigured().catch(() => null);
+
+  try {
+    const config = await ensureRevenueCatConfigured();
+    if (!config) {
+      diagnostics.ensureConfiguredStatus = 'not_configured';
+      return diagnostics;
+    }
+    diagnostics.ensureConfiguredStatus = 'configured';
+    diagnostics.runtimeApiKeyMasked = maskSecret(config.apiKey);
+  } catch (error) {
+    diagnostics.ensureConfiguredStatus = 'error';
+    diagnostics.ensureConfiguredError = formatDiagnosticError(error);
+    return diagnostics;
+  }
+
+  try {
+    const result = await ProSubscriptionService.getCustomerInfo();
+    if (!result) {
+      diagnostics.customerInfoStatus = 'not_configured';
+    } else {
+      diagnostics.customerInfoStatus = 'ok';
+      diagnostics.appUserId = result.snapshot.originalAppUserId;
+    }
+  } catch (error) {
+    diagnostics.customerInfoStatus = 'error';
+    diagnostics.customerInfoError = formatDiagnosticError(error);
+  }
+
+  try {
+    const packages = await ProSubscriptionService.getPaywallPackages();
+    diagnostics.offeringsStatus = 'ok';
+    diagnostics.offeringsCount = packages.length;
+  } catch (error) {
+    diagnostics.offeringsStatus = 'error';
+    diagnostics.offeringsError = formatDiagnosticError(error);
+  }
+
+  return diagnostics;
+}
+
+export function getRevenueCatRuntimeDiagnostics(): RevenueCatDiagnostics {
+  return {
+    ...runtimeRevenueCatDiagnostics,
+    ...createRevenueCatDiagnosticsBase(),
+  };
 }
 
 export function deriveProSubscriptionSnapshot(
@@ -248,19 +450,75 @@ export function classifyProPurchaseError(error: unknown): ProPurchaseErrorCode {
 export const ProSubscriptionService = {
   async getCustomerInfo(): Promise<ProPurchaseResult | null> {
     const config = await ensureRevenueCatConfigured();
-    if (!config) return null;
-    const customerInfo = await Purchases.getCustomerInfo();
-    return {
-      customerInfo,
-      snapshot: deriveProSubscriptionSnapshot(customerInfo, config.entitlementId),
-    };
+    if (!config) {
+      updateRevenueCatDiagnostics({
+        customerInfoStatus: 'not_configured',
+        customerInfoError: null,
+      });
+      return null;
+    }
+    try {
+      const customerInfo = await retryOnce(() => Purchases.getCustomerInfo());
+      const snapshot = deriveProSubscriptionSnapshot(customerInfo, config.entitlementId);
+      updateRevenueCatDiagnostics({
+        customerInfoStatus: 'ok',
+        customerInfoError: null,
+        appUserId: snapshot.originalAppUserId,
+      });
+      logRevenueCatDiagnostic('customer_info:ok', {
+        appUserId: snapshot.originalAppUserId,
+        entitlementActive: snapshot.isActive,
+      });
+      return {
+        customerInfo,
+        snapshot,
+      };
+    } catch (error) {
+      updateRevenueCatDiagnostics({
+        customerInfoStatus: 'error',
+        customerInfoError: formatDiagnosticError(error),
+      });
+      logRevenueCatDiagnostic('customer_info:error', {
+        error: formatDiagnosticError(error),
+      });
+      throw error;
+    }
   },
 
   async getPaywallPackages(): Promise<ProPaywallPackage[]> {
     const config = await ensureRevenueCatConfigured();
-    if (!config) return [];
-    const offerings = await Purchases.getOfferings();
-    return selectRevenueCatPackages(offerings, config).map(toProPaywallPackage);
+    if (!config) {
+      updateRevenueCatDiagnostics({
+        offeringsStatus: 'not_configured',
+        offeringsCount: 0,
+        offeringsError: null,
+      });
+      return [];
+    }
+    try {
+      const offerings = await retryOnce(() => Purchases.getOfferings());
+      const packages = selectRevenueCatPackages(offerings, config).map(toProPaywallPackage);
+      updateRevenueCatDiagnostics({
+        offeringsStatus: 'ok',
+        offeringsCount: packages.length,
+        offeringsError: null,
+      });
+      logRevenueCatDiagnostic('offerings:ok', {
+        count: packages.length,
+        offeringId: config.offeringId ?? null,
+      });
+      return packages;
+    } catch (error) {
+      updateRevenueCatDiagnostics({
+        offeringsStatus: 'error',
+        offeringsCount: 0,
+        offeringsError: formatDiagnosticError(error),
+      });
+      logRevenueCatDiagnostic('offerings:error', {
+        error: formatDiagnosticError(error),
+      });
+      throw error;
+    }
   },
 
   async purchasePro(aPackage: PurchasesPackage): Promise<ProPurchaseResult> {

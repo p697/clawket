@@ -44,6 +44,39 @@ export const DEFAULT_APP_UPDATE_DEBUG_HINT =
 // Keep this array newest-first. The first entry is treated as the latest release.
 export const APP_UPDATE_RELEASES: AppUpdateRelease[] = [
   {
+    version: '1.6.0',
+    releasedAt: '2026-03-26',
+    entries: [
+      {
+        id: 'open-source-github',
+        emoji: '⭐',
+        title: 'Now Open Source!',
+        subtitle: 'Tap to view our GitHub repository and leave a star~',
+        action: {
+          type: 'open_url',
+          url: CLAWKET_GITHUB_REPO_URL,
+        },
+      },
+      {
+        id: 'dark-mode-improvements',
+        emoji: '🌙',
+        title: 'Dark Mode Improvements',
+        subtitle: 'A better-looking, more refined dark mode.',
+        action: {
+          type: 'none',
+        },
+      },
+      {
+        id: 'known-issues-fixed',
+        emoji: '🛠️',
+        title: 'Fixed Known Issues',
+        action: {
+          type: 'none',
+        },
+      },
+    ],
+  },
+  {
     version: '1.5.0',
     releasedAt: '2026-03-23',
     entries: [

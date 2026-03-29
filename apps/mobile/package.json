@@ -1,12 +1,13 @@
 {
   "name": "clawket",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "license": "AGPL-3.0-only",
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
+    "eas-build-post-install": "npm --prefix ./office-game install && npm --prefix ./office-game run build",
     "prebuild:clean": "npx expo prebuild --clean",
     "pod-install:ios": "npx pod-install ios",
     "dev": "./scripts/dev-ios.sh",

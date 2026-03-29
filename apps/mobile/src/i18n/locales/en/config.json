@@ -122,7 +122,7 @@
   "Requesting Gateway restart...": "Requesting Gateway restart...",
   "Restarting Gateway...": "Restarting Gateway...",
   "GATEWAY CONFIG": "GATEWAY CONFIG",
-  "OPENCLAW CONFIG": "OPENCLAW CONFIG & MANAGEMENT",
+  "OPENCLAW CONFIG": "OpenClaw Config & Management",
   "View Config": "View Config",
   "Open a read-only JSON snapshot of the current Gateway config": "Open a read-only JSON snapshot of the current Gateway config",
   "Open a read-only JSON snapshot of the current OpenClaw config": "Open a read-only JSON snapshot of the current OpenClaw config",

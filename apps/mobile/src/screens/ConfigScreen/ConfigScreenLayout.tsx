@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Application from 'expo-application';
 import * as FileSystem from 'expo-file-system';
 import * as Haptics from 'expo-haptics';
@@ -29,6 +29,12 @@ import { SwipeableGatewayRow, SwipeableMethods } from '../../components/config/S
 import { IconButton, ModalSheet, SegmentedTabs, ThemedSwitch } from '../../components/ui';
 import { useProPaywall } from '../../contexts/ProPaywallContext';
 import { analyticsEvents } from '../../services/analytics/events';
+import { getPostHogDiagnostics, type PostHogDiagnostics } from '../../services/analytics/posthog';
+import {
+  collectRevenueCatDiagnostics,
+  getRevenueCatRuntimeDiagnostics,
+  type RevenueCatDiagnostics,
+} from '../../services/pro-subscription';
 import { AppTheme, builtInAccents, BuiltInAccentColorId } from '../../theme';
 import { FontSize, FontWeight, Radius, Shadow, Space } from '../../theme/tokens';
 import { GatewayMode, SpeechRecognitionLanguage, ThemeMode } from '../../types';
@@ -120,7 +126,15 @@ function RowIcon({ backgroundColor, children, styles }: RowIconProps): React.JSX
 const WECHAT_QR_IMAGE = require('../../../assets/wechat-group-qr.jpg');
 export function ConfigScreenLayout({ insets, tabBarHeight, controller }: Props): React.JSX.Element {
   const { t, i18n } = useTranslation(['config', 'common']);
-  const { isPro, showPaywallPreview, snapshot } = useProPaywall();
+  const {
+    debugOverrideEnabled,
+    errorCode,
+    isPro,
+    isConfigured,
+    paywallPackages,
+    showPaywallPreview,
+    snapshot,
+  } = useProPaywall();
   const configNavigation = useNavigation<NativeStackNavigationProp<ConfigStackParamList>>();
   const { theme } = controller;
   const styles = useMemo(() => createStyles(theme.colors), [theme]);
@@ -137,6 +151,10 @@ export function ConfigScreenLayout({ insets, tabBarHeight, controller }: Props):
     ? t('Clawket {{version}} (Build {{build}})', { version: appVersion, build: appBuildVersion })
     : t('Clawket {{version}}', { version: appVersion });
   const appUserId = snapshot?.originalAppUserId?.trim() || null;
+  const [revenueCatDiagnostics, setRevenueCatDiagnostics] = useState<RevenueCatDiagnostics>(() => getRevenueCatRuntimeDiagnostics());
+  const [postHogDiagnostics, setPostHogDiagnostics] = useState<PostHogDiagnostics | null>(null);
+  const [diagnosticsLoading, setDiagnosticsLoading] = useState(false);
+  const [diagnosticsError, setDiagnosticsError] = useState<string | null>(null);
   const isMainlandChineseLocale = (i18n.resolvedLanguage ?? i18n.language) === 'zh-Hans';
   const showWecomSupportEntry = shouldShowWecomSupportEntry();
   const supportEmailUrl = buildSupportEmailUrl(publicAppLinks.supportEmail);
@@ -160,6 +178,36 @@ export function ConfigScreenLayout({ insets, tabBarHeight, controller }: Props):
 
   const openRowRef = useRef<SwipeableMethods | null>(null);
   const rowRefs = useRef<Map<string, SwipeableMethods>>(new Map());
+
+  const refreshDiagnostics = useCallback(async () => {
+    setDiagnosticsLoading(true);
+    setDiagnosticsError(null);
+    try {
+      const [nextRevenueCat, nextPostHog] = await Promise.all([
+        collectRevenueCatDiagnostics(),
+        Promise.resolve(getPostHogDiagnostics()),
+      ]);
+      setRevenueCatDiagnostics(nextRevenueCat);
+      setPostHogDiagnostics(nextPostHog);
+    } catch (error) {
+      setDiagnosticsError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setDiagnosticsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!controller.debugMode) return;
+    void refreshDiagnostics();
+  }, [controller.debugMode, refreshDiagnostics]);
+
+  useEffect(() => {
+    if (!controller.debugMode) return;
+    const interval = setInterval(() => {
+      setRevenueCatDiagnostics(getRevenueCatRuntimeDiagnostics());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [controller.debugMode]);
 
   const handleSwipeOpen = useCallback((id: string) => {
     if (openRowRef.current && openRowRef.current !== rowRefs.current.get(id)) {
@@ -790,6 +838,94 @@ export function ConfigScreenLayout({ insets, tabBarHeight, controller }: Props):
                   </Text>
                 </View>
               ) : null}
+              <View style={styles.deviceMetaBlock}>
+                <Text style={styles.deviceLabel}>RevenueCat Diagnostics</Text>
+                <Text style={styles.deviceId}>
+                  Build enabled: {revenueCatDiagnostics?.buildEnabled ? 'yes' : 'no'}
+                </Text>
+                <Text style={styles.deviceId}>
+                  Paywall configured: {isConfigured ? 'yes' : 'no'}
+                </Text>
+                <Text style={styles.deviceId}>
+                  iOS key: {revenueCatDiagnostics?.iosApiKeyMasked ?? 'missing'}
+                </Text>
+                <Text style={styles.deviceId}>
+                  Runtime key: {revenueCatDiagnostics?.runtimeApiKeyMasked ?? 'missing'}
+                </Text>
+                <Text style={styles.deviceId}>
+                  Entitlement: {revenueCatDiagnostics?.entitlementId ?? 'missing'}
+                </Text>
+                <Text style={styles.deviceId}>
+                  Offering: {revenueCatDiagnostics?.offeringId ?? 'missing'}
+                </Text>
+                <Text style={styles.deviceId}>
+                  `Purchases.isConfigured()`: {revenueCatDiagnostics?.purchasesIsConfigured == null ? 'unknown' : revenueCatDiagnostics.purchasesIsConfigured ? 'yes' : 'no'}
+                </Text>
+                <Text style={styles.deviceId}>
+                  `ensureRevenueCatConfigured()`: {revenueCatDiagnostics?.ensureConfiguredStatus ?? 'unknown'}
+                </Text>
+                {revenueCatDiagnostics?.ensureConfiguredError ? (
+                  <Text style={styles.deviceId}>
+                    Ensure error: {revenueCatDiagnostics.ensureConfiguredError}
+                  </Text>
+                ) : null}
+                <Text style={styles.deviceId}>
+                  `getCustomerInfo()`: {revenueCatDiagnostics?.customerInfoStatus ?? 'unknown'}
+                </Text>
+                {revenueCatDiagnostics?.customerInfoError ? (
+                  <Text style={styles.deviceId}>
+                    Customer info error: {revenueCatDiagnostics.customerInfoError}
+                  </Text>
+                ) : null}
+                <Text style={styles.deviceId}>
+                  Customer App User ID: {revenueCatDiagnostics?.appUserId ?? 'missing'}
+                </Text>
+                <Text style={styles.deviceId}>
+                  `getPaywallPackages()`: {revenueCatDiagnostics?.offeringsStatus ?? 'unknown'}
+                </Text>
+                <Text style={styles.deviceId}>
+                  Packages: {revenueCatDiagnostics?.offeringsCount ?? 0}
+                </Text>
+                {revenueCatDiagnostics?.offeringsError ? (
+                  <Text style={styles.deviceId}>
+                    Offerings error: {revenueCatDiagnostics.offeringsError}
+                  </Text>
+                ) : null}
+              </View>
+              <View style={styles.deviceMetaBlock}>
+                <Text style={styles.deviceLabel}>PostHog Diagnostics</Text>
+                <Text style={styles.deviceId}>
+                  Build enabled: {postHogDiagnostics?.enabled ? 'yes' : 'no'}
+                </Text>
+                <Text style={styles.deviceId}>
+                  Client initialized: {postHogDiagnostics?.clientInitialized ? 'yes' : 'no'}
+                </Text>
+                <Text style={styles.deviceId}>
+                  Host: {postHogDiagnostics?.host ?? 'missing'}
+                </Text>
+                <Text style={styles.deviceId}>
+                  API key: {postHogDiagnostics?.apiKeyMasked ?? 'missing'}
+                </Text>
+              </View>
+              {diagnosticsError ? (
+                <View style={styles.deviceMetaBlock}>
+                  <Text style={styles.deviceLabel}>Diagnostics error</Text>
+                  <Text style={styles.deviceId}>{diagnosticsError}</Text>
+                </View>
+              ) : null}
+              <Pressable
+                onPress={() => {
+                  void refreshDiagnostics();
+                }}
+                style={({ pressed }) => [
+                  styles.debugRefreshButton,
+                  pressed && styles.debugRefreshButtonPressed,
+                ]}
+              >
+                <Text style={styles.debugRefreshButtonText}>
+                  {diagnosticsLoading ? 'Refreshing…' : 'Refresh diagnostics'}
+                </Text>
+              </Pressable>
             </View>
           </View>
         ) : null}
@@ -1111,6 +1247,7 @@ function createStyles(colors: Colors) {
       fontSize: FontSize.xs,
       fontWeight: FontWeight.semibold,
       letterSpacing: 0.7,
+      textTransform: 'uppercase',
       marginTop: Space.xl,
       marginBottom: Space.sm,
       paddingHorizontal: Space.xs,
@@ -1515,6 +1652,24 @@ function createStyles(colors: Colors) {
     },
     deviceMetaBlock: {
       marginTop: Space.md,
+    },
+    debugRefreshButton: {
+      marginTop: Space.md,
+      alignSelf: 'flex-start',
+      borderRadius: Radius.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surfaceMuted,
+      paddingHorizontal: Space.md,
+      paddingVertical: Space.sm,
+    },
+    debugRefreshButtonPressed: {
+      opacity: 0.8,
+    },
+    debugRefreshButtonText: {
+      color: colors.text,
+      fontSize: FontSize.sm,
+      fontWeight: FontWeight.medium,
     },
     modalBody: {
       paddingHorizontal: Space.lg,

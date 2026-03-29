@@ -22,7 +22,7 @@ type PublicEnv = Partial<Record<
   | 'EXPO_PUBLIC_REVENUECAT_PRO_PACKAGE_ID'
   | 'EXPO_PUBLIC_REVENUECAT_TEST_API_KEY',
   string | undefined
->>;
+>> & Partial<NodeJS.ProcessEnv>;
 
 const STATIC_PUBLIC_ENV: PublicEnv = {
   EXPO_PUBLIC_DISCORD_INVITE_URL: process.env.EXPO_PUBLIC_DISCORD_INVITE_URL,

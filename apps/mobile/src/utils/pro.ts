@@ -1,4 +1,4 @@
-import { resolvePublicRevenueCatConfig } from '../config/public';
+import { publicRevenueCatConfig, resolvePublicRevenueCatConfig } from '../config/public';
 
 export type ProFeature =
   | 'gatewayConnections'
@@ -13,11 +13,14 @@ export type ProFeature =
 export const DEFAULT_FREE_AGENT_ID = 'main';
 export const SETTINGS_MEMBERSHIP_PREVIEW_FEATURE: ProFeature = 'settingsMembershipPreview';
 
+const STATIC_UNLOCK_PRO = process.env.EXPO_PUBLIC_UNLOCK_PRO;
+
 export function resolveProAccessEnabled(
-  envValue: string | undefined | null = process.env.EXPO_PUBLIC_UNLOCK_PRO,
-  env: NodeJS.ProcessEnv = process.env,
+  envValue: string | undefined | null = STATIC_UNLOCK_PRO,
+  env?: NodeJS.ProcessEnv,
 ): boolean {
-  if (!resolvePublicRevenueCatConfig(env).enabled) return true;
+  const revenueCatEnabled = env ? resolvePublicRevenueCatConfig(env).enabled : publicRevenueCatConfig.enabled;
+  if (!revenueCatEnabled) return true;
   if (!envValue) return false;
   const normalized = envValue.trim().toLowerCase();
   return normalized === '1' || normalized === 'true' || normalized === 'yes';

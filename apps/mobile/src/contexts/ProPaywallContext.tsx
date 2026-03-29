@@ -32,6 +32,7 @@ export type ProPaywallStatusCode =
 
 type ProPaywallContextType = {
   isPro: boolean;
+  debugOverrideEnabled: boolean;
   visible: boolean;
   previewOnly: boolean;
   blockedFeature: ProFeature | null;
@@ -59,6 +60,7 @@ type ProPaywallContextType = {
 };
 
 const ProPaywallContext = React.createContext<ProPaywallContextType | null>(null);
+const INITIAL_REFRESH_RETRY_DELAY_MS = 500;
 
 export function ProPaywallProvider({ children }: { children: React.ReactNode }): React.JSX.Element {
   const debugOverrideEnabled = useMemo(() => resolveProAccessEnabled(), []);
@@ -77,6 +79,11 @@ export function ProPaywallProvider({ children }: { children: React.ReactNode }):
   const subscriptionRequestIdRef = useRef(0);
   const offeringsRequestIdRef = useRef(0);
   const paywallListenerRef = useRef<((info: ProPurchaseResult['customerInfo']) => void) | null>(null);
+  const bootstrapRunIdRef = useRef(0);
+
+  const delay = useCallback((ms: number) => new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  }), []);
 
   const applySnapshot = useCallback(async (next: ProSubscriptionSnapshot | null) => {
     setSnapshot(next);
@@ -88,25 +95,27 @@ export function ProPaywallProvider({ children }: { children: React.ReactNode }):
     await StorageService.clearProSubscriptionSnapshot();
   }, []);
 
-  const refreshSubscription = useCallback(async () => {
+  const refreshSubscriptionState = useCallback(async (): Promise<ProSubscriptionSnapshot | null> => {
     const requestId = ++subscriptionRequestIdRef.current;
     try {
       const config = await ensureRevenueCatConfigured();
-      if (requestId !== subscriptionRequestIdRef.current) return;
+      if (requestId !== subscriptionRequestIdRef.current) return null;
       if (!config) {
         setIsConfigured(false);
-        await applySnapshot(null);
         setIsLoading(false);
-        return;
+        return null;
       }
 
       setIsConfigured(true);
       setErrorCode((current) => current === 'notConfigured' ? null : current);
       const result = await ProSubscriptionService.getCustomerInfo();
-      if (requestId !== subscriptionRequestIdRef.current) return;
-      await applySnapshot(result?.snapshot ?? null);
+      if (requestId !== subscriptionRequestIdRef.current) return null;
+      const nextSnapshot = result?.snapshot ?? null;
+      await applySnapshot(nextSnapshot);
+      return nextSnapshot;
     } catch {
-      if (requestId !== subscriptionRequestIdRef.current) return;
+      if (requestId !== subscriptionRequestIdRef.current) return null;
+      return null;
     } finally {
       if (requestId === subscriptionRequestIdRef.current) {
         setIsLoading(false);
@@ -114,23 +123,27 @@ export function ProPaywallProvider({ children }: { children: React.ReactNode }):
     }
   }, [applySnapshot]);
 
-  const refreshOfferings = useCallback(async () => {
+  const refreshSubscription = useCallback(async () => {
+    await refreshSubscriptionState();
+  }, [refreshSubscriptionState]);
+
+  const refreshOfferingsState = useCallback(async (): Promise<ProPaywallPackage[]> => {
     const requestId = ++offeringsRequestIdRef.current;
     setOfferingsLoading(true);
     try {
       const config = await ensureRevenueCatConfigured();
-      if (requestId !== offeringsRequestIdRef.current) return;
+      if (requestId !== offeringsRequestIdRef.current) return [];
       if (!config) {
         setIsConfigured(false);
         setPaywallPackages([]);
         setSelectedPackageId(null);
         setErrorCode((current) => current ?? 'notConfigured');
-        return;
+        return [];
       }
 
       setIsConfigured(true);
       const nextPackages = await ProSubscriptionService.getPaywallPackages();
-      if (requestId !== offeringsRequestIdRef.current) return;
+      if (requestId !== offeringsRequestIdRef.current) return [];
       setPaywallPackages(nextPackages);
       const defaultPackage = selectDefaultRevenueCatPackage(nextPackages, config);
       setSelectedPackageId((current) => {
@@ -148,17 +161,28 @@ export function ProPaywallProvider({ children }: { children: React.ReactNode }):
       } else {
         setErrorCode((current) => current ?? 'offeringsUnavailable');
       }
+      return nextPackages;
     } catch {
-      if (requestId !== offeringsRequestIdRef.current) return;
+      if (requestId !== offeringsRequestIdRef.current) return [];
       setPaywallPackages([]);
       setSelectedPackageId(null);
       setErrorCode('offeringsUnavailable');
+      return [];
     } finally {
       if (requestId === offeringsRequestIdRef.current) {
         setOfferingsLoading(false);
       }
     }
   }, []);
+
+  const refreshOfferings = useCallback(async () => {
+    await refreshOfferingsState();
+  }, [refreshOfferingsState]);
+
+  const refreshRevenueCatState = useCallback(async (): Promise<void> => {
+    await refreshSubscriptionState();
+    await refreshOfferingsState();
+  }, [refreshOfferingsState, refreshSubscriptionState]);
 
   useEffect(() => {
     if (debugOverrideEnabled) {
@@ -174,23 +198,32 @@ export function ProPaywallProvider({ children }: { children: React.ReactNode }):
     let active = true;
 
     const bootstrap = async () => {
+      const runId = ++bootstrapRunIdRef.current;
       const cached = await StorageService.getProSubscriptionSnapshot();
       if (active && cached?.snapshot) {
         setSnapshot(cached.snapshot);
         syncAnalyticsSubscriptionContext(cached.snapshot);
       }
-      await Promise.all([
-        refreshSubscription(),
-        refreshOfferings(),
-      ]);
+
+      const nextSnapshot = await refreshSubscriptionState();
+      const nextPackages = await refreshOfferingsState();
+      if (!active || runId !== bootstrapRunIdRef.current) return;
+
+      const hasSubscription = Boolean(nextSnapshot ?? cached?.snapshot);
+      if (!hasSubscription || nextPackages.length === 0) {
+        await delay(INITIAL_REFRESH_RETRY_DELAY_MS);
+        if (!active || runId !== bootstrapRunIdRef.current) return;
+        await refreshRevenueCatState();
+      }
     };
 
     void bootstrap();
 
     return () => {
       active = false;
+      bootstrapRunIdRef.current += 1;
     };
-  }, [debugOverrideEnabled, refreshOfferings, refreshSubscription]);
+  }, [debugOverrideEnabled, delay, refreshRevenueCatState]);
 
   useEffect(() => {
     if (debugOverrideEnabled) return;
@@ -226,14 +259,11 @@ export function ProPaywallProvider({ children }: { children: React.ReactNode }):
 
     const subscription = AppState.addEventListener('change', (nextState: AppStateStatus) => {
       if (nextState === 'active') {
-        void refreshSubscription();
-        if (blockedFeature || previewOnly) {
-          void refreshOfferings();
-        }
+        void refreshRevenueCatState();
       }
     });
     return () => subscription.remove();
-  }, [blockedFeature, debugOverrideEnabled, previewOnly, refreshOfferings, refreshSubscription]);
+  }, [debugOverrideEnabled, refreshRevenueCatState]);
 
   useEffect(() => {
     if (debugOverrideEnabled) return;
@@ -355,6 +385,7 @@ export function ProPaywallProvider({ children }: { children: React.ReactNode }):
   const value = useMemo(
     () => ({
       isPro,
+      debugOverrideEnabled,
       visible: blockedFeature !== null || previewOnly,
       previewOnly,
       blockedFeature,
@@ -382,11 +413,13 @@ export function ProPaywallProvider({ children }: { children: React.ReactNode }):
     }),
     [
       blockedFeature,
+      debugOverrideEnabled,
       errorCode,
       hidePaywall,
       isConfigured,
       isLoading,
       isPro,
+      debugOverrideEnabled,
       previewOnly,
       offeringsLoading,
       paywallPackages,
