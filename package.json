@@ -14,9 +14,9 @@
     "wrangler": "^4.4.0"
   },
   "overrides": {
-    "expo": "55.0.4",
-    "expo-modules-core": "55.0.13",
-    "jest-expo": "55.0.9"
+    "expo": "~55.0.9",
+    "expo-modules-core": "~55.0.18",
+    "jest-expo": "~55.0.11"
   },
   "scripts": {
     "postinstall": "node scripts/setup-mobile-node-modules.mjs",

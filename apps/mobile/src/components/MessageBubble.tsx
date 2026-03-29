@@ -193,8 +193,9 @@ function stripReplyTagPrefix(input: string): string {
 }
 
 function Avatar({ uri }: { uri?: string }): React.JSX.Element | null {
-  if (!uri) return null;
-  return <Image source={{ uri }} style={avatarStyles.img} />;
+  const normalizedUri = uri?.trim();
+  if (!normalizedUri) return null;
+  return <Image source={{ uri: normalizedUri }} style={avatarStyles.img} />;
 }
 
 const avatarStyles = StyleSheet.create({
@@ -388,7 +389,7 @@ function MessageBubbleComponent({
     <View ref={rowRef} style={[styles.row, overlayMode && styles.rowOverlay, shouldHideSourceMessage && styles.rowHiddenSource, styles.rowAssistant]}>
       {reserveAvatarSlot ? (
         <Pressable style={styles.avatarSlot} onPress={onAvatarPress} hitSlop={4}>
-          {avatarUri
+          {avatarUri?.trim()
             ? <Avatar uri={avatarUri} />
             : (
               <View style={[avatarStyles.placeholder, { backgroundColor: theme.colors.primary }]}>

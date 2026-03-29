@@ -128,7 +128,7 @@ describe('historyLineage', () => {
           },
         ],
       },
-    ] as CachedSessionSnapshot[];
+    ] as unknown as CachedSessionSnapshot[];
 
     expect(buildCachedLineageMessages(snapshots).map((message) => message.id)).toEqual(['a2']);
   });

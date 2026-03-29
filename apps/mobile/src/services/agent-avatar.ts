@@ -7,6 +7,30 @@ const AVATAR_STORAGE_KEY = 'agent_avatars';
 
 type AvatarMap = Record<string, string>; // avatarKey → base64 data URI
 
+function normalizeStoredAvatarValue(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+
+  if (
+    trimmed.startsWith('data:')
+    || trimmed.startsWith('http://')
+    || trimmed.startsWith('https://')
+    || trimmed.startsWith('file://')
+    || trimmed.startsWith('content://')
+    || trimmed.startsWith('/')
+  ) {
+    return trimmed;
+  }
+
+  // Backward compatibility: older builds may have persisted raw base64 only.
+  if (/^[A-Za-z0-9+/=\r\n]+$/.test(trimmed) && trimmed.length >= 64) {
+    const compact = trimmed.replace(/\s+/g, '');
+    return `data:image/jpeg;base64,${compact}`;
+  }
+
+  return trimmed;
+}
+
 /** Build a composite storage key from agentId and optional agentName.
  *  When a name is available the key is "agentId:agentName", otherwise just "agentId". */
 export function buildAvatarKey(agentId: string, agentName?: string): string {
@@ -35,7 +59,7 @@ export function resolveAgentAvatarKeyCandidates(agent?: AgentInfo): string[] {
 
 export function readAgentAvatar(map: Record<string, string>, agent?: AgentInfo): string | undefined {
   for (const key of resolveAgentAvatarKeyCandidates(agent)) {
-    const avatar = map[key];
+    const avatar = normalizeStoredAvatarValue(map[key]);
     if (avatar) return avatar;
   }
   return undefined;

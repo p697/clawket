@@ -1,6 +1,6 @@
 import React from 'react';
 import type WebView from 'react-native-webview';
-import type { WebViewMessageEvent } from 'react-native-webview';
+import type { WebViewMessageEvent } from 'react-native-webview/lib/WebViewTypes';
 import { GatewayClient } from '../services/gateway';
 import { LastOpenedSessionSnapshot } from '../services/storage';
 import { GatewayConfig } from '../types';

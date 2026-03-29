@@ -10,6 +10,7 @@ import {
 } from '../../../utils/primary-session-cache';
 import { agentIdFromSessionKey } from './agentActivity';
 import { buildInitialAgentIdentity } from './chatControllerUtils';
+import { pickAgentIdentityAvatarUri, resolveAgentAvatarUri } from '../../../utils/agent-avatar-uri';
 
 type GatewayLike = {
   fetchIdentity: (agentId: string) => Promise<{
@@ -32,9 +33,9 @@ function mergeAgentIdentity(
   next: Partial<ChatAgentIdentity>,
 ): ChatAgentIdentity {
   const merged = {
-    displayName: next.displayName ?? prev.displayName,
-    avatarUri: next.avatarUri ?? prev.avatarUri,
-    emoji: next.emoji ?? prev.emoji,
+    displayName: next.displayName !== undefined ? next.displayName : prev.displayName,
+    avatarUri: next.avatarUri !== undefined ? next.avatarUri : prev.avatarUri,
+    emoji: next.emoji !== undefined ? next.emoji : prev.emoji,
   };
 
   if (
@@ -77,16 +78,7 @@ export function useChatAgentIdentity({
   const lastPersistedAgentIdentityRef = useRef<string | null>(null);
 
   const resolveAvatarUri = useCallback(
-    (avatar: string): string | null => {
-      if (avatar.startsWith('/')) {
-        const base = gateway.getBaseUrl();
-        return base ? `${base}${avatar}` : null;
-      }
-      if (avatar.startsWith('http') || avatar.startsWith('data:')) {
-        return avatar;
-      }
-      return null;
-    },
+    (avatar: string | null | undefined): string | null => resolveAgentAvatarUri(avatar, gateway.getBaseUrl.bind(gateway)),
     [gateway],
   );
 
@@ -148,12 +140,7 @@ export function useChatAgentIdentity({
     }
 
     const emoji = agentInfo?.identity?.emoji ?? null;
-    let avatarUri: string | null = null;
-    if (agentInfo?.identity?.avatar) {
-      avatarUri = resolveAvatarUri(agentInfo.identity.avatar);
-    } else if (agentInfo?.identity?.avatarUrl) {
-      avatarUri = agentInfo.identity.avatarUrl;
-    }
+    const avatarUri = pickAgentIdentityAvatarUri(agentInfo?.identity, gateway.getBaseUrl.bind(gateway));
 
     if (agents.length > 0) {
       setAgentIdentity((prev) => mergeAgentIdentity(prev, {
@@ -178,7 +165,7 @@ export function useChatAgentIdentity({
             const name = identity.name?.trim() || prev.displayName;
             const nextEmoji = identity.emoji || prev.emoji;
             let nextAvatar = prev.avatarUri;
-            if (identity.avatar) {
+            if (!nextAvatar && identity.avatar) {
               const resolved = resolveAvatarUri(identity.avatar);
               if (resolved) nextAvatar = resolved;
             }

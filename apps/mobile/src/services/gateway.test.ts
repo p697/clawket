@@ -584,6 +584,11 @@ describe('GatewayClient', () => {
       client.configure({ url: 'ws://localhost:3000/' });
       expect(client.getBaseUrl()).toBe('http://localhost:3000');
     });
+
+    it('strips the websocket path suffix used by relay endpoints', () => {
+      client.configure({ url: 'wss://relay.example.com/ws' });
+      expect(client.getBaseUrl()).toBe('https://relay.example.com');
+    });
   });
 
   describe('handleChatEvent via WebSocket message', () => {

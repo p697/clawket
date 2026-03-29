@@ -15,7 +15,10 @@ const mockAsyncSetItem = AsyncStorage.setItem as jest.Mock;
 
 describe('StorageService last session key scoping', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    mockGetItemAsync.mockReset();
+    mockSetItemAsync.mockReset();
+    mockAsyncGetItem.mockReset();
+    mockAsyncSetItem.mockReset();
     mockAsyncGetItem.mockResolvedValue(null);
     mockAsyncSetItem.mockResolvedValue(undefined);
   });
@@ -90,7 +93,33 @@ describe('StorageService last session key scoping', () => {
     );
   });
 
-  it('falls back to the legacy agent-scoped snapshot key when the global slot is missing', async () => {
+  it('prefers the agent-scoped snapshot key when an agent id is provided', async () => {
+    const globalSnapshot = {
+      sessionKey: 'agent:main:main',
+      updatedAt: 1111,
+      agentId: 'main',
+    };
+    const scopedSnapshot = {
+      sessionKey: 'agent:writer:main',
+      updatedAt: 2222,
+      agentId: 'writer',
+    };
+    mockAsyncGetItem
+      .mockResolvedValueOnce(JSON.stringify(scopedSnapshot))
+      .mockResolvedValueOnce(JSON.stringify(globalSnapshot));
+
+    await expect(
+      StorageService.getLastOpenedSessionSnapshot('cfg:gw-5', 'writer'),
+    ).resolves.toEqual(scopedSnapshot);
+
+    expect(mockAsyncGetItem).toHaveBeenNthCalledWith(
+      1,
+      'clawket.lastOpenedSessionSnapshot.v1.cfg:gw-5::writer',
+    );
+    expect(mockAsyncGetItem).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to the global snapshot when the scoped slot is missing', async () => {
     const snapshot = {
       sessionKey: 'agent:main:main',
       updatedAt: 1234,
@@ -102,15 +131,15 @@ describe('StorageService last session key scoping', () => {
 
     await expect(
       StorageService.getLastOpenedSessionSnapshot('cfg:gw-5', 'main'),
-    ).resolves.toEqual(snapshot);
+    ).resolves.toEqual(expect.objectContaining(snapshot));
 
     expect(mockAsyncGetItem).toHaveBeenNthCalledWith(
       1,
-      'clawket.lastOpenedSessionSnapshot.v1.cfg:gw-5',
+      'clawket.lastOpenedSessionSnapshot.v1.cfg:gw-5::main',
     );
     expect(mockAsyncGetItem).toHaveBeenNthCalledWith(
       2,
-      'clawket.lastOpenedSessionSnapshot.v1.cfg:gw-5::main',
+      'clawket.lastOpenedSessionSnapshot.v1.cfg:gw-5',
     );
   });
 

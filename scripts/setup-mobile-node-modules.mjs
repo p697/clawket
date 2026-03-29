@@ -6,7 +6,7 @@ const mobileNodeModules = path.join(repoRoot, 'apps', 'mobile', 'node_modules');
 const mobilePackageJson = JSON.parse(
   fs.readFileSync(path.join(repoRoot, 'apps', 'mobile', 'package.json'), 'utf8'),
 );
-const copiedPackages = new Set(['react', 'react-native']);
+const copiedPackages = new Set(['react-native']);
 
 const links = new Set([
   ...Object.keys(mobilePackageJson.dependencies ?? {}),
@@ -26,13 +26,10 @@ for (const pkg of links) {
 
   try {
     const stat = fs.lstatSync(target);
-    if (copiedPackages.has(pkg) && stat.isDirectory() && !stat.isSymbolicLink() && samePackageVersion(source, target)) {
+    if (stat.isDirectory() && !stat.isSymbolicLink()) {
       continue;
     }
-    if (!copiedPackages.has(pkg) && stat.isDirectory() && !stat.isSymbolicLink()) {
-      continue;
-    }
-    if (!copiedPackages.has(pkg) && stat.isSymbolicLink() && sameRealPath(source, target)) {
+    if (stat.isSymbolicLink() && sameRealPath(source, target)) {
       continue;
     }
     fs.rmSync(target, { recursive: true, force: true });
@@ -43,17 +40,7 @@ for (const pkg of links) {
     continue;
   }
 
-  fs.symlinkSync(path.relative(mobileNodeModules, source), target, 'junction');
-}
-
-function samePackageVersion(sourceDir, targetDir) {
-  try {
-    const sourcePackage = JSON.parse(fs.readFileSync(path.join(sourceDir, 'package.json'), 'utf8'));
-    const targetPackage = JSON.parse(fs.readFileSync(path.join(targetDir, 'package.json'), 'utf8'));
-    return sourcePackage.name === targetPackage.name && sourcePackage.version === targetPackage.version;
-  } catch {
-    return false;
-  }
+  fs.symlinkSync(path.relative(path.dirname(target), source), target, 'junction');
 }
 
 function sameRealPath(sourcePath, targetPath) {

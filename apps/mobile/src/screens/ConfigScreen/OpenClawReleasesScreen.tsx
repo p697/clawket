@@ -5,7 +5,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, X } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
-import { WebView, type WebViewNavigation } from 'react-native-webview';
+import WebView, { type WebViewNavigation } from 'react-native-webview';
 import { IconButton } from '../../components/ui';
 import { publicAppLinks } from '../../config/public';
 import { useAppTheme } from '../../theme';

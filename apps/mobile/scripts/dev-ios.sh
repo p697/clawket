@@ -95,7 +95,7 @@ wait_for_server() {
 # ---- Install dependencies ----
 
 echo "Installing dependencies..."
-(cd "$ROOT_DIR" && npm install)
+(cd "$ROOT_DIR" && npm install --workspaces=false)
 (cd "$OFFICE_GAME_DIR" && npm install)
 echo ""
 

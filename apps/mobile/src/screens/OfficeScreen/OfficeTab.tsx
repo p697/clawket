@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { CommonActions, useIsFocused, useNavigation } from '@react-navigation/native';
-import type { WebViewMessageEvent } from 'react-native-webview';
+import type { WebViewMessageEvent } from 'react-native-webview/lib/WebViewTypes';
 import { useAppContext } from '../../contexts/AppContext';
 import { analyticsEvents } from '../../services/analytics/events';
 import { StorageService } from '../../services/storage';

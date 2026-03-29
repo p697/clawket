@@ -25,6 +25,7 @@ import { formatSessionContextLabel } from '../../utils/usage-format';
 import { resolveGatewayCacheScopeId } from '../../services/gateway-cache-scope';
 import { SlashCommand } from '../../data/slash-commands';
 import { canAddAgent } from '../../utils/pro';
+import { pickAgentIdentityAvatarUri } from '../../utils/agent-avatar-uri';
 import { ChatComposerPane } from './components/ChatComposerPane';
 import { ChatMessagePane } from './components/ChatMessagePane';
 import { ChatOverlays } from './components/ChatOverlays';
@@ -155,7 +156,7 @@ export function ChatScreenLayout({ controller, insets, onOpenSidebar, onAddGatew
   const currentAgentName = currentAgent?.identity?.name?.trim() || currentAgent?.name?.trim() || controller.agentDisplayName || null;
   const currentAvatarKey = buildAvatarKey(currentAgentId, currentAgentName ?? undefined);
   const localAvatar = readAgentAvatar(agentAvatars, currentAgent);
-  const effectiveAvatarUri = localAvatar ?? controller.agentAvatarUri ?? undefined;
+  const effectiveAvatarUri = localAvatar?.trim() || controller.agentAvatarUri?.trim() || undefined;
 
   // Canvas WebView panel
   const { canvasVisible, canvasUrl, canvasTitle, canvasRef, closeCanvas } = useCanvasController();
@@ -197,16 +198,7 @@ export function ChatScreenLayout({ controller, insets, onOpenSidebar, onAddGatew
     return agents.map((agent) => {
       const isCurrent = agent.id === currentAgentId;
       const activity = activityMap.get(agent.id);
-      let avatarUri: string | null = null;
-      if (agent.identity?.avatar) {
-        const base = gateway.getBaseUrl();
-        avatarUri = agent.identity.avatar.startsWith('/') && base
-          ? `${base}${agent.identity.avatar}`
-          : agent.identity.avatar.startsWith('http') || agent.identity.avatar.startsWith('data:')
-            ? agent.identity.avatar
-            : null;
-      }
-      if (agent.identity?.avatarUrl) avatarUri = agent.identity.avatarUrl;
+      let avatarUri = pickAgentIdentityAvatarUri(agent.identity, gateway.getBaseUrl.bind(gateway));
       const localAv = readAgentAvatar(agentAvatars, agent);
       if (localAv) avatarUri = localAv;
 

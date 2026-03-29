@@ -42,4 +42,12 @@ describe('buildAvatarKey', () => {
       { id: 'main', name: 'Writer', identity: { name: 'Assistant' } },
     )).toBe('data:image/png;base64,legacy');
   });
+
+  it('normalizes raw base64 avatar payloads from older builds', () => {
+    const rawBase64 = 'a'.repeat(128);
+    expect(readAgentAvatar(
+      { 'main:Assistant': rawBase64 },
+      { id: 'main', name: 'Writer', identity: { name: 'Assistant' } },
+    )).toBe(`data:image/jpeg;base64,${rawBase64}`);
+  });
 });

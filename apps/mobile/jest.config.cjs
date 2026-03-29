@@ -1,6 +1,5 @@
-import type { Config } from 'jest';
-
-const config: Config = {
+/** @type {import('jest').Config} */
+const config = {
   testMatch: ['**/*.test.ts', '**/*.test.tsx'],
   transform: {
     '^.+\\.tsx?$': ['ts-jest', {
@@ -19,4 +18,4 @@ const config: Config = {
   },
 };
 
-export default config;
+module.exports = config;

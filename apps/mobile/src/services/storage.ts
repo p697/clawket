@@ -914,18 +914,21 @@ export const StorageService = {
     const normalizedAgentId = agentId?.trim();
     if (!normalizedScope) return null;
     try {
+      if (normalizedAgentId) {
+        const scopedRaw = await AsyncStorage.getItem(
+          lastOpenedSessionSnapshotStorageKey(normalizedScope, normalizedAgentId),
+        );
+        if (scopedRaw) {
+          return normalizeLastOpenedSessionSnapshot(JSON.parse(scopedRaw));
+        }
+      }
       const raw = await AsyncStorage.getItem(
         lastOpenedSessionSnapshotStorageKey(normalizedScope),
       );
       if (raw) {
         return normalizeLastOpenedSessionSnapshot(JSON.parse(raw));
       }
-      if (!normalizedAgentId) return null;
-      const scopedRaw = await AsyncStorage.getItem(
-        lastOpenedSessionSnapshotStorageKey(normalizedScope, normalizedAgentId),
-      );
-      if (!scopedRaw) return null;
-      return normalizeLastOpenedSessionSnapshot(JSON.parse(scopedRaw));
+      return null;
     } catch {
       return null;
     }

@@ -1118,8 +1118,19 @@ export class GatewayClient {
   /** Get the configured gateway base URL (for constructing avatar HTTP URLs). */
   public getBaseUrl(): string | null {
     if (!this.config?.url) return null;
-    // Convert ws(s):// to http(s)://
-    return this.config.url.replace(/^ws(s?):\/\//, 'http$1://').replace(/\/+$/, '');
+    try {
+      const url = new URL(this.config.url.replace(/^ws(s?):\/\//, 'http$1://'));
+      url.hash = '';
+      url.search = '';
+      url.pathname = url.pathname.replace(/\/ws\/?$/, '') || '/';
+      return url.toString().replace(/\/+$/, '');
+    } catch {
+      // Convert ws(s):// to http(s):// and drop the websocket mount path when present.
+      return this.config.url
+        .replace(/^ws(s?):\/\//, 'http$1://')
+        .replace(/\/+$/, '')
+        .replace(/\/ws$/, '');
+    }
   }
 
   // ---- Private: event emission ----

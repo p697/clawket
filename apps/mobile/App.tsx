@@ -4,7 +4,8 @@ import { ActivityIndicator, AppState, AppStateStatus, NativeModules, Platform, S
 import { useTranslation } from 'react-i18next';
 import { StatusBar } from 'expo-status-bar';
 import * as Notifications from 'expo-notifications';
-import { WebView, type WebViewMessageEvent } from 'react-native-webview';
+import WebView, { type WebViewMessageEvent } from 'react-native-webview';
+import type { WebViewErrorEvent, WebViewHttpErrorEvent } from 'react-native-webview/lib/WebViewTypes';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   createNavigationContainerRef,
@@ -66,8 +67,8 @@ import { usePostHogScreenTracking } from './src/hooks/usePostHogScreenTracking';
 import { ChatAppearanceSettings, GatewayConfig, SpeechRecognitionLanguage } from './src/types';
 import type { AgentInfo } from './src/types/agent';
 import { buildTheme, builtInAccents, defaultAccentId, useAppTheme } from './src/theme';
-import { AppProviders } from './src/app/AppProviders';
-import { useAppBootstrap } from './src/app/useAppBootstrap';
+import { AppProviders } from './src/bootstrap/AppProviders';
+import { useAppBootstrap } from './src/bootstrap/useAppBootstrap';
 import i18next from './src/i18n';
 import { getActiveLeafRouteName } from './src/utils/posthog-navigation';
 import {
@@ -1123,7 +1124,7 @@ function AppContent({
           bounces={false}
           overScrollMode="never"
           javaScriptEnabled
-          onMessage={(e) => officeMessageHandlerRef.current?.(e)}
+          onMessage={(event: WebViewMessageEvent) => officeMessageHandlerRef.current?.(event)}
           onLoadStart={() => {
             officeWebViewLoadedRef.current = false;
           }}
@@ -1132,10 +1133,10 @@ function AppContent({
             sendOfficeLocale();
             officeLoadEndHandlerRef.current?.();
           }}
-          onError={(event) => {
+          onError={(event: WebViewErrorEvent) => {
             officeDebugAppendRef.current?.(`❌ webview error: ${event.nativeEvent.description}`);
           }}
-          onHttpError={(event) => {
+          onHttpError={(event: WebViewHttpErrorEvent) => {
             officeDebugAppendRef.current?.(`❌ webview http ${event.nativeEvent.statusCode}: ${event.nativeEvent.description}`);
           }}
           originWhitelist={['*']}

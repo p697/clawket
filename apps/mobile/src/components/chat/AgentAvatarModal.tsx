@@ -26,14 +26,15 @@ export function AgentAvatarModal({ visible, agentName, agentEmoji, avatarUri, on
   const styles = useMemo(() => createStyles(theme.colors), [theme]);
   const { colors } = theme;
   const displayEmoji = extractDisplayAgentEmoji(agentEmoji);
+  const normalizedAvatarUri = avatarUri?.trim();
 
   return (
     <ModalSheet visible={visible} onClose={onClose} title={t('Agent Avatar')}>
       <View style={styles.body}>
         {/* Current avatar */}
         <View style={styles.avatarSection}>
-          {avatarUri ? (
-            <Image source={{ uri: avatarUri }} style={styles.avatarLarge} />
+          {normalizedAvatarUri ? (
+            <Image source={{ uri: normalizedAvatarUri }} style={styles.avatarLarge} />
           ) : (
             <View style={[styles.avatarLarge, styles.avatarPlaceholder, { backgroundColor: colors.primarySoft }]}>
               <Text style={styles.avatarPlaceholderText}>
@@ -50,7 +51,7 @@ export function AgentAvatarModal({ visible, agentName, agentEmoji, avatarUri, on
             <Camera size={18} color={colors.primary} strokeWidth={2} />
             <Text style={[styles.actionText, { color: colors.primary }]}>{t('Pick a Photo')}</Text>
           </TouchableOpacity>
-          {avatarUri && (
+          {normalizedAvatarUri && (
             <TouchableOpacity style={styles.actionButton} activeOpacity={0.7} onPress={onRemove}>
               <Trash2 size={18} color={colors.error} strokeWidth={2} />
               <Text style={[styles.actionText, { color: colors.error }]}>{t('common:Remove')}</Text>

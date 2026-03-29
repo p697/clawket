@@ -1,7 +1,7 @@
 import React, { forwardRef, useCallback, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { WebView, WebViewNavigation } from 'react-native-webview';
+import WebView, { type WebViewNavigation } from 'react-native-webview';
 import { AlertTriangle, ExternalLink, Maximize2, Minimize2, X } from 'lucide-react-native';
 import ViewShot, { captureRef } from 'react-native-view-shot';
 import { IconButton } from '../ui';

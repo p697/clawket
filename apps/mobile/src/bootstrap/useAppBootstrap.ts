@@ -18,6 +18,28 @@ type Props = {
   nodeClient: NodeClient;
 };
 
+function buildAgentPreview(
+  agentId: string,
+  identity?: {
+    agentName?: string;
+    agentEmoji?: string;
+    agentAvatarUri?: string;
+  } | null,
+): LastOpenedSessionSnapshot {
+  if (agentId === PRIMARY_CACHED_AGENT_ID) {
+    return buildPrimarySessionPreview(identity);
+  }
+
+  return {
+    sessionKey: `agent:${agentId}:main`,
+    updatedAt: Date.now(),
+    agentId,
+    agentName: identity?.agentName,
+    agentEmoji: identity?.agentEmoji,
+    agentAvatarUri: identity?.agentAvatarUri,
+  };
+}
+
 export function useAppBootstrap({ gateway, nodeClient }: Props) {
   const [config, setConfig] = useState<GatewayConfig | null>(null);
   const [activeGatewayConfigId, setActiveGatewayConfigId] = useState<string | null>(null);
@@ -67,6 +89,7 @@ export function useAppBootstrap({ gateway, nodeClient }: Props) {
       StorageService.getSpeechRecognitionLanguage(),
       StorageService.getNodeEnabled(),
       StorageService.getNodeCapabilityToggles(),
+      StorageService.getCurrentAgentId(),
     ])
       .then(([
         gatewayConfigsState,
@@ -84,11 +107,13 @@ export function useAppBootstrap({ gateway, nodeClient }: Props) {
         savedSpeechRecognitionLanguage,
         savedNodeEnabled,
         savedNodeCapabilityToggles,
+        savedCurrentAgentId,
       ]) => {
         const gatewayScopeId = resolveGatewayCacheScopeId({
           activeConfigId: gatewayConfigsState.activeId,
           config: savedConfig,
         });
+        const initialAgent = savedCurrentAgentId?.trim() || PRIMARY_CACHED_AGENT_ID;
         setActiveGatewayConfigId(gatewayScopeId);
         setDebugMode(debug);
         setShowAgentAvatar(showAvatar);
@@ -103,13 +128,15 @@ export function useAppBootstrap({ gateway, nodeClient }: Props) {
         setCustomAccent(savedCustomAccent);
         setNodeEnabled(savedNodeEnabled);
         setNodeCapabilityToggles(savedNodeCapabilityToggles);
-        return StorageService.getLastOpenedSessionSnapshot(gatewayScopeId)
+        return StorageService.getLastOpenedSessionSnapshot(gatewayScopeId, initialAgent)
           .catch(() => null)
           .then(async (rawSnapshot) => {
-            const snapshot = sanitizePrimarySessionSnapshot(rawSnapshot);
+            const snapshot = initialAgent === PRIMARY_CACHED_AGENT_ID
+              ? sanitizePrimarySessionSnapshot(rawSnapshot)
+              : rawSnapshot;
             const cachedAgentIdentity = await StorageService.getCachedAgentIdentity(
               gatewayScopeId,
-              PRIMARY_CACHED_AGENT_ID,
+              initialAgent,
             ).catch(() => null);
             setInitialChatPreview(
               snapshot
@@ -119,12 +146,12 @@ export function useAppBootstrap({ gateway, nodeClient }: Props) {
                   agentEmoji: snapshot.agentEmoji ?? cachedAgentIdentity?.agentEmoji,
                   agentAvatarUri: snapshot.agentAvatarUri ?? cachedAgentIdentity?.agentAvatarUri,
                 }
-                : buildPrimarySessionPreview(cachedAgentIdentity),
+                : buildAgentPreview(initialAgent, cachedAgentIdentity),
             );
-            setInitialAgentId(PRIMARY_CACHED_AGENT_ID);
+            setInitialAgentId(initialAgent);
           })
           .catch(() => {
-            setInitialAgentId(PRIMARY_CACHED_AGENT_ID);
+            setInitialAgentId(initialAgent);
           });
       })
       .finally(() => setLoading(false));
