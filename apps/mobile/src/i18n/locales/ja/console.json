@@ -763,5 +763,8 @@
   "Loading user info...": "ユーザー情報を読み込み中...",
   "My Info updated": "My Info を更新しました",
   "Save": "保存",
-  "Share": "共有"
+  "Share": "共有",
+  "No chart data": "チャートデータなし",
+  "No cost data": "コストデータなし",
+  "Total": "合計"
 }

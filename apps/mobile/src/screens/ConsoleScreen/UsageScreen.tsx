@@ -1,15 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useIsFocused, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Card, EmptyState, LoadingState, createCardContentStyle } from '../../components/ui';
+import { SvgBarChart, SvgRingChart } from '../../components/charts';
+import type { BarDataPoint, RingSegment } from '../../components/charts';
 import { useTranslation } from 'react-i18next';
 import { useAppContext } from '../../contexts/AppContext';
 import { useNativeStackModalHeader } from '../../hooks/useNativeStackModalHeader';
 import { useAppTheme } from '../../theme';
 import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
 import type { CostSummary, UsageDailyEntry, UsageResult } from '../../types';
-import { filterModelsByExcludedProvider, formatCost, formatDayLabel, formatTokens, pct } from '../../utils/usage-format';
+import { filterModelsByExcludedProvider, formatCost, formatTokens, pct } from '../../utils/usage-format';
 import type { ConsoleStackParamList } from './ConsoleTab';
 
 type UsageNavigation = NativeStackNavigationProp<ConsoleStackParamList, 'Usage'>;
@@ -26,9 +28,6 @@ type DashboardState = {
 };
 
 type DateRangeItem = { label: string; key: RangeKey };
-
-const DAILY_CHART_HEIGHT = Space.xxxl + Space.xxxl + Space.xl + Space.md + Space.sm;
-const DAILY_TRACK_HEIGHT = Space.xxxl + Space.xxl + Space.md + Space.sm;
 
 function formatIsoDate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
@@ -178,13 +177,6 @@ export function UsageScreen(): React.JSX.Element {
     return !hasTokenData && hasCostData;
   }, [daily]);
 
-  const maxDailyValue = useMemo(() => {
-    return daily.reduce((max, entry) => {
-      const nextValue = chartUsesCost ? entry.cost : entry.tokens;
-      return Math.max(max, nextValue);
-    }, 0);
-  }, [chartUsesCost, daily]);
-
   const topModels = useMemo(() => {
     const models = usageResult?.aggregates?.byModel ?? [];
     return filterModelsByExcludedProvider(models, 'openclaw')
@@ -231,6 +223,17 @@ export function UsageScreen(): React.JSX.Element {
     theme.colors.usageCostInput,
     theme.colors.usageCostOutput,
   ]);
+
+  const ringSegments = useMemo<RingSegment[]>(() => breakdownSegments.map((s) => ({
+    label: s.label,
+    value: s.cost,
+    color: s.color,
+  })), [breakdownSegments]);
+
+  const barData = useMemo<BarDataPoint[]>(() => daily.map((d) => ({
+    date: d.date,
+    value: chartUsesCost ? d.cost : d.tokens,
+  })), [daily, chartUsesCost]);
 
   const hasData =
     totalTokens > 0 ||
@@ -301,23 +304,10 @@ export function UsageScreen(): React.JSX.Element {
 
           <Text style={styles.sectionTitle}>{t('Cost Breakdown')}</Text>
           <Card style={styles.sectionCard}>
-            <View style={styles.breakdownBar}>
-              {breakdownSegments.map((segment) => (
-                <View
-                  key={segment.label}
-                  style={[styles.barSegment, { flex: segment.pct, backgroundColor: segment.color }]}
-                />
-              ))}
-            </View>
-
-            <View style={styles.legendRow}>
-              {breakdownSegments.map((segment) => (
-                <View key={segment.label} style={styles.legendItem}>
-                  <View style={[styles.legendDot, { backgroundColor: segment.color }]} />
-                  <Text style={styles.legendLabel}>{`${segment.label} ${formatCost(segment.cost)}`}</Text>
-                </View>
-              ))}
-            </View>
+            <SvgRingChart
+              segments={ringSegments}
+              totalCost={totalCost}
+            />
           </Card>
 
           <Text style={styles.sectionTitle}>{t('Top Models')}</Text>
@@ -348,24 +338,11 @@ export function UsageScreen(): React.JSX.Element {
           <Text style={styles.sectionTitle}>{t('Daily Usage')}</Text>
           <Card style={styles.sectionCard}>
             <Text style={styles.chartMeta}>{chartUsesCost ? t('Cost per day') : t('Tokens per day')}</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.dailyChart}
-              contentContainerStyle={styles.dailyChartContent}
-            >
-              {daily.map((day) => {
-                const value = chartUsesCost ? day.cost : day.tokens;
-                const heightPct = maxDailyValue > 0 ? (value / maxDailyValue) * 100 : 0;
-                return (
-                  <View key={day.date} style={styles.dailyBarWrap}>
-                    <View style={styles.dailyBarTrack}>
-                      <View style={[styles.dailyBar, { height: `${heightPct}%` }]} />
-                    </View>
-                    <Text style={styles.dailyBarLabel}>{formatDayLabel(day.date)}</Text>
-                  </View>
-                );
-              })}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <SvgBarChart
+                data={barData}
+                mode={chartUsesCost ? 'cost' : 'tokens'}
+              />
             </ScrollView>
           </Card>
 
@@ -512,73 +489,10 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       backgroundColor: colors.surface,
       padding: Space.md,
     },
-    breakdownBar: {
-      height: Space.md,
-      borderRadius: Radius.sm - 2,
-      overflow: 'hidden',
-      flexDirection: 'row',
-      backgroundColor: colors.surfaceMuted,
-    },
-    barSegment: {
-      height: '100%',
-    },
-    legendRow: {
-      marginTop: Space.md,
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: Space.sm,
-    },
-    legendItem: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginRight: Space.md,
-    },
-    legendDot: {
-      width: Space.sm,
-      height: Space.sm,
-      borderRadius: Radius.full,
-      marginRight: Space.xs + 2,
-    },
-    legendLabel: {
-      fontSize: FontSize.sm,
-      color: colors.textMuted,
-    },
     chartMeta: {
       fontSize: FontSize.sm,
       color: colors.textMuted,
       marginBottom: Space.sm,
-    },
-    dailyChart: {
-      height: DAILY_CHART_HEIGHT,
-    },
-    dailyChartContent: {
-      alignItems: 'flex-end',
-      paddingRight: Space.sm,
-      gap: Space.sm,
-    },
-    dailyBarWrap: {
-      width: Space.xl + Space.sm,
-      alignItems: 'center',
-    },
-    dailyBarTrack: {
-      width: Space.xl,
-      height: DAILY_TRACK_HEIGHT,
-      backgroundColor: colors.surfaceMuted,
-      borderRadius: Radius.sm - Space.xs,
-      justifyContent: 'flex-end',
-      overflow: 'hidden',
-    },
-    dailyBar: {
-      width: '100%',
-      backgroundColor: colors.primary,
-      borderRadius: Radius.sm - Space.xs,
-      minHeight: Space.xs - 2,
-    },
-    dailyBarLabel: {
-      marginTop: Space.xs,
-      fontSize: FontSize.xs,
-      color: colors.textMuted,
-      textAlign: 'center',
     },
     listItem: {
       paddingVertical: Space.md,

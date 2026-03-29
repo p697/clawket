@@ -763,5 +763,8 @@
   "Loading user info...": "Loading user info...",
   "My Info updated": "My Info updated",
   "Save": "Save",
-  "Share": "Share"
+  "Share": "Share",
+  "No chart data": "No chart data",
+  "No cost data": "No cost data",
+  "Total": "Total"
 }

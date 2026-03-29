@@ -763,5 +763,8 @@
   "Loading user info...": "正在加载用户信息...",
   "My Info updated": "我的信息已更新",
   "Save": "保存",
-  "Share": "分享"
+  "Share": "分享",
+  "No chart data": "暂无图表数据",
+  "No cost data": "暂无费用数据",
+  "Total": "总计"
 }

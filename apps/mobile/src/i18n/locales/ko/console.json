@@ -763,5 +763,8 @@
   "Loading user info...": "사용자 정보를 불러오는 중...",
   "My Info updated": "내 정보가 업데이트되었습니다",
   "Save": "저장",
-  "Share": "공유"
+  "Share": "공유",
+  "No chart data": "차트 데이터 없음",
+  "No cost data": "비용 데이터 없음",
+  "Total": "합계"
 }

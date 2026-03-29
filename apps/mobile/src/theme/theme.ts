@@ -54,6 +54,7 @@ export type AppTheme = {
     badgeThinking: string;
     badgeTools: string;
     badgePrompts: string;
+    chartGrid: string;
   };
 };
 
@@ -109,6 +110,7 @@ const lightPalette: FixedPalette = {
   badgeThinking: '#F59E0B',
   badgeTools: '#3B82F6',
   badgePrompts: '#22C55E',
+  chartGrid: '#E5E5EA',
 };
 
 const darkPalette: FixedPalette = {
@@ -149,6 +151,7 @@ const darkPalette: FixedPalette = {
   badgeThinking: '#FBBF24',
   badgeTools: '#60A5FA',
   badgePrompts: '#34D399',
+  chartGrid: '#38383A',
 };
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } {

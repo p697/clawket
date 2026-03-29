@@ -763,5 +763,8 @@
   "Loading user info...": "Benutzerinfos werden geladen...",
   "My Info updated": "Meine Infos wurden aktualisiert",
   "Save": "Speichern",
-  "Share": "Teilen"
+  "Share": "Teilen",
+  "No chart data": "Keine Diagrammdaten",
+  "No cost data": "Keine Kostendaten",
+  "Total": "Gesamt"
 }
