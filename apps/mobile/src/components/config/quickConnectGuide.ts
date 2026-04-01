@@ -1,6 +1,6 @@
 import type { TFunction } from 'i18next';
 
-export const MANUAL_INSTALL_CMD = 'npm install -g @p697/clawket';
+export const MANUAL_INSTALL_CMD = 'pnpm add -g @p697/clawket';
 export const MANUAL_PAIR_CMD = 'clawket pair';
 export const MANUAL_PAIR_LOCAL_CMD = 'clawket pair --local';
 export type QuickConnectPairMode = 'relay' | 'local';

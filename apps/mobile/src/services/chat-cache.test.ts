@@ -164,7 +164,7 @@ describe("ChatCacheService", () => {
           role: "tool",
           text: "",
           toolName: "bash",
-          toolSummary: "Executed npm test",
+          toolSummary: "Executed pnpm test",
           toolStatus: "success",
         }),
         makeMsg({
@@ -723,7 +723,7 @@ describe("ChatCacheService", () => {
             role: "tool",
             text: "",
             toolName: "bash",
-            toolSummary: "Executed npm install",
+            toolSummary: "Executed pnpm add -g",
           }),
         ],
       );
@@ -731,7 +731,7 @@ describe("ChatCacheService", () => {
       const byName = await ChatCacheService.search("bash");
       expect(byName).toHaveLength(1);
 
-      const bySummary = await ChatCacheService.search("npm install");
+      const bySummary = await ChatCacheService.search("pnpm add -g");
       expect(bySummary).toHaveLength(1);
     });
   });

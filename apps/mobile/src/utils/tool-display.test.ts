@@ -138,7 +138,7 @@ describe('formatToolOneLinerLocalized', () => {
 
   it('localizes known tool labels while keeping detail raw', () => {
     expect(formatToolOneLinerLocalized('web_search', { query: 'expo docs' }, t)).toBe('L:Web Search expo docs');
-    expect(formatToolOneLinerLocalized('exec', { command: 'npm run build' }, t)).toBe('L:Command npm run build');
+    expect(formatToolOneLinerLocalized('exec', { command: 'pnpm run build' }, t)).toBe('L:Command pnpm run build');
   });
 });
 

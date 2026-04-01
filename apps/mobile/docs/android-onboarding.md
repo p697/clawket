@@ -89,7 +89,7 @@ Run these before the first Android release build:
 
 ```bash
 cd apps/mobile
-npm run config:check:android
+pnpm run config:check:android
 ```
 
 If Android device work is needed too:
@@ -104,7 +104,7 @@ adb devices
 
 ```bash
 cd apps/mobile
-npm run build:android:aab
+pnpm run build:android:aab
 ```
 
 Behavior of this script:
@@ -134,7 +134,7 @@ ANDROID_HOME=/opt/homebrew/share/android-commandlinetools \
 
 ```bash
 cd apps/mobile
-npm run build:android:pro-temp
+pnpm run build:android:pro-temp
 ```
 
 Use this only to verify Pro UI and feature gating. It is not a substitute for real Google Play purchase testing.
@@ -157,10 +157,10 @@ Fix:
 Fix:
 
 ```bash
-EXPO_ANDROID_VERSION_CODE=10750 npm run build:android:aab
+EXPO_ANDROID_VERSION_CODE=10750 pnpm run build:android:aab
 ```
 
-Or just rerun `npm run build:android:aab` on the same machine and let the script auto-increment from the current native project.
+Or just rerun `pnpm run build:android:aab` on the same machine and let the script auto-increment from the current native project.
 
 ### Release signing config missing
 
@@ -192,7 +192,7 @@ Some phones also keep a second user profile or clone profile. Check all users if
 
 Before uploading to Google Play:
 
-1. `npm run config:check:android` passes
+1. `pnpm run config:check:android` passes
 2. RevenueCat Android key is present
 3. upload keystore is loaded
 4. privacy policy URL is set

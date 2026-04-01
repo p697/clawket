@@ -137,7 +137,7 @@ function validateConfig(config, platform) {
 
     if (existsSync(iosRoot)) {
       if (!existsSync(xcodeEnvPath)) {
-        errors.push('iOS project exists but ios/.xcode.env is missing. Run `npm run mobile:sync:native`.');
+        errors.push('iOS project exists but ios/.xcode.env is missing. Run `pnpm mobile:sync:native`.');
       } else {
         const xcodeEnvContent = readFileSync(xcodeEnvPath, 'utf8');
         const hasGeneratedBlock =
@@ -145,7 +145,7 @@ function validateConfig(config, platform) {
 
         if (!hasGeneratedBlock) {
           errors.push(
-            'iOS project exists but ios/.xcode.env does not source app env files. Run `npm run mobile:sync:native` to restore Xcode env wiring.',
+            'iOS project exists but ios/.xcode.env does not source app env files. Run `pnpm mobile:sync:native` to restore Xcode env wiring.',
           );
         }
       }

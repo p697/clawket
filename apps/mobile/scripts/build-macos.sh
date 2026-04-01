@@ -18,7 +18,7 @@ AUTH_ISSUER_ID="${APP_STORE_CONNECT_API_ISSUER_ID:-}"
 usage() {
   cat <<'EOF'
 Usage:
-  npm run build:macos
+  pnpm build:macos
 
 Builds the Mac Catalyst app in Release mode.
 
@@ -136,7 +136,7 @@ RUBY
 }
 
 echo "Installing dependencies..."
-(cd "$ROOT_DIR" && npm install)
+(cd "$ROOT_DIR" && pnpm install)
 
 apply_maccatalyst_patch
 ensure_pods

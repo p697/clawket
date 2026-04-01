@@ -12,7 +12,7 @@ PIDS=()
 usage() {
   cat <<'EOF'
 Usage:
-  npm run dev:android [-- expo start args]
+  pnpm dev:android [-- expo start args]
 
 Starts the Android real-device dev stack:
   - office-game Vite dev server
@@ -20,10 +20,10 @@ Starts the Android real-device dev stack:
   - Expo Metro bundler
 
 Examples:
-  npm run dev:android
-  ANDROID_SERIAL=9a7c8276 npm run dev:android
-  npm run dev:android -- --clear
-  npm run dev:android -- --tunnel
+  pnpm dev:android
+  ANDROID_SERIAL=9a7c8276 pnpm dev:android
+  pnpm dev:android -- --clear
+  pnpm dev:android -- --tunnel
 
 Environment variables:
   ANDROID_SERIAL                     Specific Android device serial to use.
@@ -156,8 +156,8 @@ fi
 export PATH="$(dirname "$ADB"):$PATH"
 
 echo "Installing dependencies..."
-(cd "$ROOT_DIR" && npm install --workspaces=false)
-(cd "$OFFICE_GAME_DIR" && npm install)
+(cd "$ROOT_DIR" && pnpm install --workspaces=false)
+(cd "$OFFICE_GAME_DIR" && pnpm install)
 echo ""
 
 kill_port_listener "$OFFICE_PORT"
@@ -175,7 +175,7 @@ trap cleanup EXIT INT TERM
 echo "Starting office-game dev server (:${OFFICE_PORT})..."
 (
   cd "$OFFICE_GAME_DIR"
-  npm run dev -- --host "$HOST" --port "$OFFICE_PORT" --strictPort
+  pnpm dev -- --host "$HOST" --port "$OFFICE_PORT" --strictPort
 ) &
 PIDS+=($!)
 

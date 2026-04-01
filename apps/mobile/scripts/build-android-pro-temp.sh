@@ -60,7 +60,7 @@ fi
 echo "Building Office packaged assets..."
 (
   cd "$OFFICE_GAME_DIR"
-  npm run build
+  pnpm build
 )
 
 echo "Building Android release variant with temporary Pro unlock enabled..."

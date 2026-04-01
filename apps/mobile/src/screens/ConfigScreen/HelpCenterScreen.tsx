@@ -182,7 +182,7 @@ export function HelpCenterScreen(): React.JSX.Element {
       {
         q: t("Gateway version mismatch"),
         a: t(
-          "Update OpenClaw on your host with: npm update -g @nicepkg/openclaw. Then restart the Gateway.",
+          "Update OpenClaw on your host with: pnpm add -g @nicepkg/openclaw@latest. Then restart the Gateway.",
         ),
       },
     ],

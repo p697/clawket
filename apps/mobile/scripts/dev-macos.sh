@@ -22,7 +22,7 @@ OFFICE_PID=""
 usage() {
   cat <<'EOF'
 Usage:
-  npm run dev:macos [-- expo start args]
+  pnpm dev:macos [-- expo start args]
 
 Starts the macOS Catalyst development stack:
   - office-game Vite dev server
@@ -31,10 +31,10 @@ Starts the macOS Catalyst development stack:
   - opens the built .app
 
 Examples:
-  npm run dev:macos
-  npm run dev:macos -- --clear
-  METRO_PORT=8088 npm run dev:macos
-  FORCE_POD_INSTALL=1 npm run dev:macos
+  pnpm dev:macos
+  pnpm dev:macos -- --clear
+  METRO_PORT=8088 pnpm dev:macos
+  FORCE_POD_INSTALL=1 pnpm dev:macos
 
 Environment variables:
   DEV_HOST                          Dev server bind host for office-game (default: 0.0.0.0).
@@ -195,8 +195,8 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 echo "Installing dependencies..."
-(cd "$ROOT_DIR" && npm install)
-(cd "$OFFICE_GAME_DIR" && npm install)
+(cd "$ROOT_DIR" && pnpm install)
+(cd "$OFFICE_GAME_DIR" && pnpm install)
 echo ""
 
 apply_maccatalyst_patch
@@ -222,7 +222,7 @@ fi
 echo "Starting office-game dev server (:${OFFICE_PORT})..."
 (
   cd "$OFFICE_GAME_DIR"
-  npm run dev -- --host "$HOST" --port "$OFFICE_PORT" --strictPort
+  pnpm dev -- --host "$HOST" --port "$OFFICE_PORT" --strictPort
 ) &
 OFFICE_PID="$!"
 PIDS+=($OFFICE_PID)

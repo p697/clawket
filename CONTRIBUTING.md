@@ -28,8 +28,8 @@ This repository is still in the migration and open-source-hardening phase.
 Run the relevant checks before submitting changes:
 
 ```bash
-npm run typecheck
-npm run test
+pnpm typecheck
+pnpm test
 ```
 
 For targeted work, run the affected workspace tests directly.

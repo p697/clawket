@@ -12,7 +12,7 @@ describe('empty connection guide', () => {
     );
 
     const prompt = getQuickConnectAgentPrompt(t as never);
-    expect(prompt).toContain('npm install -g @p697/clawket');
+    expect(prompt).toContain('pnpm add -g @p697/clawket');
     expect(prompt).toContain('open-source Clawket CLI');
     expect(prompt).toContain('clawket pair');
   });

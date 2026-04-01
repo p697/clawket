@@ -19,7 +19,7 @@
     "test": "vitest run src"
   },
   "dependencies": {
-    "@clawket/bridge-core": "0.3.1",
+    "@clawket/bridge-core": "workspace:*",
     "ws": "^8.18.3"
   },
   "devDependencies": {

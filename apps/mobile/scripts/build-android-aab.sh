@@ -170,7 +170,7 @@ fi
 echo "Building Office packaged assets..."
 (
   cd "$OFFICE_GAME_DIR"
-  npm run build
+  pnpm build
 )
 
 echo "Validating Android public release config..."

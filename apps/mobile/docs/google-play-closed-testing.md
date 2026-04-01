@@ -9,8 +9,8 @@ Use it together with `docs/android-build.md`.
 The repo now supports:
 
 - release signing via `android/app/keystore.properties` or `CLAWKET_ANDROID_KEY_*` environment variables
-- signed Android App Bundle builds through `npm run build:android:aab`
-- Android config validation through `npm run config:check:android`
+- signed Android App Bundle builds through `pnpm run build:android:aab`
+- Android config validation through `pnpm run config:check:android`
 - blocking store builds when `EXPO_PUBLIC_REVENUECAT_TEST_API_KEY` or `EXPO_PUBLIC_UNLOCK_PRO` are enabled
 
 ## What You Still Need To Prepare
@@ -54,7 +54,7 @@ Validate with:
 
 ```bash
 cd apps/mobile
-npm run config:check:android
+pnpm run config:check:android
 ```
 
 ## 2. Android Upload Keystore
@@ -151,8 +151,8 @@ After env and keystore are ready:
 
 ```bash
 cd apps/mobile
-npm run config:check:android
-EXPO_ANDROID_VERSION_CODE=10701 npm run build:android:aab
+pnpm run config:check:android
+EXPO_ANDROID_VERSION_CODE=10701 pnpm run build:android:aab
 ```
 
 Expected output:

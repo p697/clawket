@@ -20,10 +20,10 @@
     "node": ">=20"
   },
   "scripts": {
-    "build:bundle": "npm run --workspace @clawket/bridge-core build && npm run --workspace @clawket/bridge-runtime build && node scripts/build-bundle.mjs",
-    "build": "npm run build:bundle",
-    "typecheck": "npm run --workspace @clawket/bridge-core build && npm run --workspace @clawket/bridge-runtime build && tsc -p tsconfig.json --noEmit",
-    "test": "npm run --workspace @clawket/bridge-core build && npm run --workspace @clawket/bridge-runtime build && vitest run --passWithNoTests",
+    "build:bundle": "pnpm --filter @clawket/bridge-core run build && pnpm --filter @clawket/bridge-runtime run build && node scripts/build-bundle.mjs",
+    "build": "pnpm run build:bundle",
+    "typecheck": "pnpm --filter @clawket/bridge-core run build && pnpm --filter @clawket/bridge-runtime run build && tsc -p tsconfig.json --noEmit",
+    "test": "pnpm --filter @clawket/bridge-core run build && pnpm --filter @clawket/bridge-runtime run build && vitest run --passWithNoTests",
     "status": "node scripts/run-command.mjs status",
     "doctor": "node scripts/run-command.mjs doctor",
     "logs": "node scripts/run-command.mjs logs",
@@ -35,8 +35,8 @@
     "reset": "node scripts/run-command.mjs reset",
     "refresh-code": "node scripts/run-command.mjs refresh-code",
     "verify:package": "node scripts/verify-package.mjs",
-    "prepack": "npm run build && npm run verify:package",
-    "publish:dry-run": "npm publish --dry-run",
+    "prepack": "pnpm run build && pnpm run verify:package",
+    "publish:dry-run": "pnpm publish --dry-run",
     "pair": "node scripts/run-command.mjs pair",
     "run": "node scripts/run-command.mjs run"
   },
@@ -46,8 +46,8 @@
     "ws": "^8.18.3"
   },
   "devDependencies": {
-    "@clawket/bridge-core": "0.3.1",
-    "@clawket/bridge-runtime": "0.3.1",
+    "@clawket/bridge-core": "workspace:*",
+    "@clawket/bridge-runtime": "workspace:*",
     "@types/qrcode": "^1.5.6",
     "tsup": "^8.5.0"
   }

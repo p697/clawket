@@ -13,7 +13,7 @@ AUTH_ISSUER_ID="${APP_STORE_CONNECT_API_ISSUER_ID:-}"
 usage() {
   cat <<'EOF'
 Usage:
-  npm run export:macos
+  pnpm export:macos
 
 Exports/uploads a signed Mac Catalyst archive using xcodebuild -exportArchive.
 
@@ -35,7 +35,7 @@ fi
 
 if [[ ! -d "$ARCHIVE_PATH" ]]; then
   echo "Archive not found: ${ARCHIVE_PATH}"
-  echo "Run MACOS_ALLOW_SIGNING=1 npm run archive:macos first."
+  echo "Run MACOS_ALLOW_SIGNING=1 pnpm archive:macos first."
   exit 1
 fi
 

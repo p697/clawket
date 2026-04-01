@@ -104,7 +104,7 @@ function ensureAccountSelection({ wranglerBin, workspaceRoot, selectedConfig, se
     console.error(
       `[run-wrangler] configured account_id ${selectedAccountId} was not found in your current Wrangler login session.`,
     );
-    console.error('[run-wrangler] run `npm run cf:whoami` and update your local config or login context.');
+    console.error('[run-wrangler] run `pnpm cf:whoami` and update your local config or login context.');
     process.exit(1);
   }
 

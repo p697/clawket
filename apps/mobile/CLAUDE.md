@@ -11,7 +11,7 @@ If the task involves setting up a fresh machine for Android packaging, read `doc
 
 For Android release work, keep these facts in mind:
 
-1. The canonical store-build command is `npm run build:android:aab`.
+1. The canonical store-build command is `pnpm run build:android:aab`.
 2. That script now builds Office assets, runs `expo prebuild --platform android --no-install`, and then builds the signed release `.aab`.
 3. Android upload builds depend on local secrets that are not in git:
    - `apps/mobile/.env.local`
@@ -20,7 +20,7 @@ For Android release work, keep these facts in mind:
 4. The repo supports overriding Play `versionCode` with `EXPO_ANDROID_VERSION_CODE`.
 5. If `EXPO_ANDROID_VERSION_CODE` is not set, `build:android:aab` will auto-pick a version code based on the current native project state.
 6. On macOS, prefer Homebrew `openjdk@17` at `/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home` for Android builds. This avoids the Gradle `IBM_SEMERU` toolchain issue seen with some other detected JDKs.
-7. Local temporary Pro verification uses `npm run build:android:pro-temp`. Do not confuse it with real Google Play purchase validation.
+7. Local temporary Pro verification uses `pnpm run build:android:pro-temp`. Do not confuse it with real Google Play purchase validation.
 
 # Clawket Ecosystem — Cross-Repository Awareness
 
@@ -30,7 +30,7 @@ This app lives inside the Clawket monorepo. When your task involves connection, 
 |------|------|------|
 | **mobile** (this app) | `.` | Mobile app (RN + Expo) |
 | **relay** | `../relay-registry`, `../relay-worker`, `../../packages/relay-shared` | Cloudflare relay + registry |
-| **bridge** | `../bridge-cli`, `../../packages/bridge-core`, `../../packages/bridge-runtime` | Local bridge CLI (npm `@p697/clawket`) |
+| **bridge** | `../bridge-cli`, `../../packages/bridge-core`, `../../packages/bridge-runtime` | Local bridge CLI (pnpm `@p697/clawket`) |
 
 ## Language Policy
 - All code comments and commit messages **must be in English**.
@@ -109,8 +109,8 @@ The app has two separate i18n systems that must be kept in sync:
 ## Validation Checklist
 1. All 6 locale JSON files (`en`, `zh-Hans`, `ja`, `ko`, `de`, `es`) have the same set of keys (no orphans).
 2. All 5 Office game locale files have the same set of keys.
-3. `npx tsc --noEmit` passes.
-4. `cd office-game && npm run build` passes.
+3. `pnpm run typecheck` passes.
+4. `cd office-game && pnpm run build` passes.
 
 # Analytics Rules
 
@@ -142,8 +142,8 @@ Use a single documented flow for all mobile env changes. Do not invent one-off r
 2. Wire it into `src/config/public.ts` or the appropriate shared config module.
 3. Update `scripts/check-public-config.mjs` if release validation should enforce it.
 4. Update the relevant docs.
-5. Run `npm run config:check:ios`.
-6. Run the affected tests and `npm run typecheck`.
+5. Run `pnpm run config:check:ios`.
+6. Run the affected tests and `pnpm run typecheck`.
 
 # Chat Runtime Rules (RN Only)
 
@@ -201,7 +201,7 @@ All new UI work must follow these rules so dark mode works automatically.
 3. Manual `Dark` mode renders correctly.
 4. Chat and Config tabs keep consistent theme when switching tabs.
 5. Status bar style matches background contrast.
-6. Run typecheck: `npx tsc --noEmit`.
+6. Run typecheck: `pnpm run typecheck`.
 
 ## Notes
 - The architecture supports extension (e.g. high-contrast theme), but only if new UI uses semantic tokens.
@@ -322,7 +322,7 @@ All page-level top navigation bars must follow the same visual system as Chat he
 ## Refactor Safety Checklist
 1. Keep the Gateway event flow behavior unchanged when extracting hooks/components.
 2. Preserve existing user-visible copy and interaction behavior unless explicitly requested.
-3. After refactor, run `npx tsc --noEmit` and verify Chat/Config critical paths still work.
+3. After refactor, run `pnpm run typecheck` and verify Chat/Config critical paths still work.
 
 # Unit Testing Rules
 
@@ -332,13 +332,13 @@ The project uses Jest + ts-jest for unit testing. Tests cover utils, services, h
 - Config: `jest.config.ts` (ts-jest, node environment)
 - Setup: `jest.setup.ts` (mocks for AsyncStorage, expo-linking, expo-secure-store, expo-haptics, expo-clipboard, crypto)
 - RN mock: `__mocks__/react-native.ts` (Platform, Alert, StyleSheet, etc.)
-- Run: `npm test` / `npm run test:coverage`
+- Run: `pnpm test` / `pnpm run test:coverage`
 
 ## Post-Change Testing Requirements
 
 After completing any task that modifies logic (not pure UI-only styling changes), you **must**:
 
-1. **Run existing tests:** Execute `npm test` and confirm all tests pass. If any test fails due to your change, fix the test or the code — do not leave broken tests.
+1. **Run existing tests:** Execute `pnpm test` and confirm all tests pass. If any test fails due to your change, fix the test or the code — do not leave broken tests.
 2. **Evaluate whether new tests are needed.** Add tests when your change:
    - Adds or modifies a pure function in `src/utils/` or `src/services/`
    - Changes event handling, parsing, formatting, or data transformation logic
@@ -503,22 +503,22 @@ The app uses a bottom-tab navigator with nested stack navigators per tab (e.g. C
    - menu model/layout
    - renderer scene/overlay
 6. After Office refactors or feature work, run:
-   - `npx tsc --noEmit`
-   - `npm test -- --runInBand`
-   - `cd office-game && npm run build`
+   - `pnpm run typecheck`
+   - `pnpm test -- --runInBand`
+   - `cd office-game && pnpm run build`
 
 ## Source
 - Pixel art source: `office-game/scripts/sprites/` (palette, tiles, furniture, decorations, characters)
 - Generator: `office-game/scripts/generate-sprites.ts`
 - Output: `office-game/sprites/` (PNG sheets + `sprites.json` frame map)
-- Build: `cd office-game && npx tsx scripts/generate-sprites.ts && npm run build`
+- Build: `cd office-game && pnpm dlx tsx scripts/generate-sprites.ts && pnpm run build`
 
 ## ⚠️ Sprite Registration Pitfall
 `generate-sprites.ts` merges `FURNITURE` and `DECORATIONS` into a single sprite sheet. If you **rename or remove** a key that the merge logic depends on as an insertion anchor, decorations silently vanish from the sheet — `getFrame()` returns `undefined` and the entire canvas render crashes (all furniture disappears).
 
 **Rule:** When adding/removing/renaming sprite entries in `furniture.ts` or `decorations.ts`, always verify `sprites.json` output contains ALL expected keys. Run:
 ```bash
-npx tsx scripts/generate-sprites.ts
+pnpm dlx tsx scripts/generate-sprites.ts
 # Check the "N sprites" count matches expectations
 ```
 
@@ -536,8 +536,8 @@ If all furniture disappears after sprite work, check in this order:
 2. Regenerate sprite assets and rebuild:
 ```bash
 cd office-game
-npx tsx scripts/generate-sprites.ts
-npm run build
+pnpm dlx tsx scripts/generate-sprites.ts
+pnpm run build
 ```
 3. Confirm renderer mapping and fallback paths cover the new key (especially optional decorations).
 

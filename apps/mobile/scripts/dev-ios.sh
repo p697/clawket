@@ -11,15 +11,15 @@ PIDS=()
 usage() {
   cat <<'EOF'
 Usage:
-  npm run dev [-- expo run:ios args]
+  pnpm dev [-- expo run:ios args]
 
 Opens Expo's iOS device picker by default.
 Pass explicit expo run:ios args to keep full control.
 
 Examples:
-  npm run dev
-  npm run dev -- --configuration Release
-  npm run dev -- --device "DEVICE_ID"
+  pnpm dev
+  pnpm dev -- --configuration Release
+  pnpm dev -- --device "DEVICE_ID"
 
 Environment variables:
   OFFICE_DEV_PORT                   Office dev server port (default: 5174).
@@ -95,8 +95,8 @@ wait_for_server() {
 # ---- Install dependencies ----
 
 echo "Installing dependencies..."
-(cd "$ROOT_DIR" && npm install --workspaces=false)
-(cd "$OFFICE_GAME_DIR" && npm install)
+(cd "$ROOT_DIR" && pnpm install --workspaces=false)
+(cd "$OFFICE_GAME_DIR" && pnpm install)
 echo ""
 
 # ---- Detect network ----
@@ -135,7 +135,7 @@ trap cleanup EXIT INT TERM
 echo "Starting office-game dev server (:${OFFICE_PORT})..."
 (
   cd "$OFFICE_GAME_DIR"
-  npm run dev -- --host "$HOST" --port "$OFFICE_PORT" --strictPort
+  pnpm dev -- --host "$HOST" --port "$OFFICE_PORT" --strictPort
 ) &
 PIDS+=($!)
 

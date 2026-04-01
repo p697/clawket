@@ -79,9 +79,9 @@ If you only want to run the mobile app locally, start here. You do not need to u
 For iOS development on macOS:
 
 ```bash
-npm install
-npm run mobile:sync:native
-npm run mobile:dev:ios
+pnpm install
+pnpm mobile:sync:native
+pnpm mobile:dev:ios
 ```
 
 This command prepares the embedded Office web assets and launches the iOS dev build.
@@ -89,9 +89,9 @@ This command prepares the embedded Office web assets and launches the iOS dev bu
 For Android development:
 
 ```bash
-npm install
-npm run mobile:sync:native
-npm run mobile:dev:android
+pnpm install
+pnpm mobile:sync:native
+pnpm mobile:dev:android
 ```
 
 ### Connect to OpenClaw
@@ -99,7 +99,7 @@ npm run mobile:dev:android
 If you already installed the published bridge CLI from npm, pair it separately:
 
 ```bash
-npm install -g @p697/clawket
+pnpm add -g @p697/clawket
 clawket pair
 ```
 
@@ -129,8 +129,9 @@ cp apps/relay-worker/wrangler.local.example.toml apps/relay-worker/wrangler.loca
 3. Start local workers:
 
 ```bash
-npm run relay:dev:registry
-npm run relay:dev:worker
+pnpm install
+pnpm relay:dev:registry
+pnpm relay:dev:worker
 ```
 
 ### Bridge
@@ -138,25 +139,26 @@ npm run relay:dev:worker
 For relay mode, pair against your own registry:
 
 ```bash
-npm run bridge:pair -- --server https://registry.example.com
+pnpm install
+pnpm bridge:pair -- --server https://registry.example.com
 ```
 
 Or:
 
 ```bash
-CLAWKET_REGISTRY_URL=https://registry.example.com npm run bridge:pair
+CLAWKET_REGISTRY_URL=https://registry.example.com pnpm bridge:pair
 ```
 
 For direct local pairing without relay infrastructure:
 
 ```bash
-npm run bridge:pair:local
+pnpm bridge:pair:local
 ```
 
 For an explicit local, Tailscale, or custom gateway URL:
 
 ```bash
-npm run bridge:pair -- --local --url ws://100.x.x.x:18789
+pnpm bridge:pair -- --local --url ws://100.x.x.x:18789
 ```
 
 ## Mobile Configuration
@@ -180,9 +182,9 @@ For direct Xcode iOS builds, the bundling phase sources `.env`, `.env.local`, `i
 
 Choose the prerequisites that match what you want to do:
 
-- To run the iOS app locally: macOS, Xcode, Node.js 20+, and npm
-- To run the Android app locally: Node.js 20+, npm, and Android Studio
-- To use the published bridge CLI: Node.js 20+ and npm
+- To run the iOS app locally: macOS, Xcode, Node.js 20+, and pnpm
+- To run the Android app locally: Node.js 20+, pnpm, and Android Studio
+- To use the published bridge CLI: Node.js 20+ and pnpm
 - To run relay infrastructure: a Cloudflare account
 
 ## Self-Hosting

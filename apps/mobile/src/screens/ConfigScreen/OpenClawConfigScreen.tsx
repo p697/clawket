@@ -28,7 +28,7 @@ import { useGatewayRuntimeSettings } from './hooks/useGatewayRuntimeSettings';
 
 type Navigation = NativeStackNavigationProp<ConfigStackParamList, 'OpenClawConfig'>;
 
-const UPDATE_CLAWKET_CLI_COMMAND = 'npm install -g @p697/clawket@latest';
+const UPDATE_CLAWKET_CLI_COMMAND = 'pnpm add -g @p697/clawket@latest';
 const RESTART_CLAWKET_CLI_COMMAND = 'clawket restart';
 
 type ActionRowProps = {
@@ -262,7 +262,7 @@ export function OpenClawConfigScreen(): React.JSX.Element {
 
   const hasActiveGateway = Boolean(activeGatewayConfig?.url);
   const isRelayRoute = hasActiveGateway && gateway.getConnectionRoute() === 'relay';
-  const updateAgentPrompt = t('Please first upgrade the installed clawket client on this computer by running `npm install -g @p697/clawket@latest`, then run `clawket restart` after the installation completes.');
+  const updateAgentPrompt = t('Please first upgrade the installed clawket client on this computer by running `pnpm add -g @p697/clawket@latest`, then run `clawket restart` after the installation completes.');
 
   return (
     <ScrollView contentContainerStyle={createCardContentStyle()}>

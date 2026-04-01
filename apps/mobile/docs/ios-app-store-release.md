@@ -60,7 +60,7 @@ This document tracks the local Xcode release process and App Store Connect items
 ## 3. Local Build Environment Checklist
 
 - [ ] Start from `.env.example` for local env shape
-- [ ] `npm run config:check:ios` passes
+- [ ] `pnpm run config:check:ios` passes
 - [ ] `.env.local` or local shell environment contains `EXPO_PUBLIC_REVENUECAT_APPLE_API_KEY`
 - [ ] `.env.local` or local shell environment contains `EXPO_PUBLIC_REVENUECAT_PRO_ENTITLEMENT_ID=Clawket Pro`
 - [ ] `.env.local` or local shell environment contains `EXPO_PUBLIC_REVENUECAT_PRO_OFFERING_ID=default`
@@ -80,21 +80,21 @@ Use this checklist in the same PR:
 - [ ] Wire it through `src/config/public.ts` or another shared config module
 - [ ] Update `scripts/check-public-config.mjs` if release validation should enforce it
 - [ ] Update this release checklist if the new variable is required for TestFlight or App Store builds
-- [ ] Re-run `npm run config:check:ios` before archiving
+- [ ] Re-run `pnpm run config:check:ios` before archiving
 
 ## 4. Pre-Build Commands
 
 Build the WebView assets before any release or TestFlight build:
 
 ```bash
-cd office-game && npm run build && cd ..
+cd office-game && pnpm run build && cd ..
 ```
 
 Optional validation:
 
 ```bash
-npx tsc --noEmit
-npm test -- --runInBand
+pnpm dlx tsc --noEmit
+pnpm test -- --runInBand
 ```
 
 ## 5. Refresh Native Project If Needed
@@ -102,7 +102,7 @@ npm test -- --runInBand
 If Expo config, plugins, permissions, bundle identifiers, or other managed native settings changed since the last iOS release build, refresh the iOS native project before archiving:
 
 ```bash
-npx expo prebuild --platform ios
+pnpm dlx expo prebuild --platform ios
 ```
 
 If the native iOS project is already up to date and no Expo-managed native config changed, you can skip this step.
@@ -170,7 +170,7 @@ This is expected before App Review. These warnings should disappear after the su
 
 1. Finish App Store Connect metadata
 2. Build Office assets and run optional validation
-3. Refresh the iOS native project if needed with `npx expo prebuild --platform ios`
+3. Refresh the iOS native project if needed with `pnpm dlx expo prebuild --platform ios`
 4. Archive locally in Xcode
 5. Upload to TestFlight from Xcode Organizer
 6. Confirm the build appears in App Store Connect / TestFlight
