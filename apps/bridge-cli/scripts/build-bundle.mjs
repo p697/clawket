@@ -35,6 +35,8 @@ const args = [
   "--no-external",
   "@clawket/bridge-runtime",
   "--external",
+  "qrcode",
+  "--external",
   "ws",
   "--external",
   "qrcode-terminal",

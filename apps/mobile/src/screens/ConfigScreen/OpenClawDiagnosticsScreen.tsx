@@ -104,7 +104,7 @@ export function OpenClawDiagnosticsScreen(): React.JSX.Element {
   }, [gateway, runningFix, t]);
 
   useEffect(() => {
-    if (!requirePro('configBackups')) {
+    if (!requirePro('openclawDiagnostics')) {
       navigation.goBack();
     }
   }, [navigation, requirePro]);

@@ -100,7 +100,7 @@ export function OpenClawConfigScreen(): React.JSX.Element {
 
   const handleBackupConfigPress = useCallback(async () => {
     if (backingUpConfig) return;
-    if (!requirePro('configBackups')) return;
+    if (!requirePro('configBackupCreate')) return;
     if (!activeGatewayConfig?.url) {
       Alert.alert(t('No Active Gateway'), t('Please add and activate a gateway connection first.'));
       return;
@@ -130,12 +130,12 @@ export function OpenClawConfigScreen(): React.JSX.Element {
   }, [activeGatewayConfig?.url, backingUpConfig, gateway, requirePro, t]);
 
   const handleRestoreConfigPress = useCallback(() => {
-    if (!requirePro('configBackups')) return;
+    if (!requirePro('configBackupRestore')) return;
     navigation.navigate('GatewayConfigBackups');
   }, [navigation, requirePro]);
 
   const handlePermissionsPress = useCallback(() => {
-    if (!requirePro('configBackups')) return;
+    if (!requirePro('openclawPermissions')) return;
     navigation.navigate('OpenClawPermissions');
   }, [navigation, requirePro]);
 
@@ -157,7 +157,7 @@ export function OpenClawConfigScreen(): React.JSX.Element {
 
   const handleDoctorPress = useCallback(async () => {
     if (runningDoctor) return;
-    if (!requirePro('configBackups')) return;
+    if (!requirePro('openclawDiagnostics')) return;
     setRunningDoctor(true);
     setActionLoadingVisible(true);
     showOverlay(t('Running openclaw doctor...'));
@@ -190,7 +190,7 @@ export function OpenClawConfigScreen(): React.JSX.Element {
 
   const handleAutoFixPress = useCallback(async () => {
     if (runningAutoFix) return;
-    if (!requirePro('configBackups')) return;
+    if (!requirePro('openclawDiagnostics')) return;
     setRunningAutoFix(true);
     setActionLoadingVisible(true);
     showOverlay(t('Running openclaw doctor --fix...'));

@@ -76,7 +76,7 @@ export function ToolsScreen(): React.JSX.Element {
   }, [tab, toolSettings]);
 
   const handleOpenPermissions = useCallback(() => {
-    if (!requirePro('configBackups')) return;
+    if (!requirePro('openclawPermissions')) return;
     openOpenClawPermissions(navigation);
   }, [navigation, requirePro]);
 

@@ -2,7 +2,10 @@ import { publicRevenueCatConfig, resolvePublicRevenueCatConfig } from '../config
 
 export type ProFeature =
   | 'gatewayConnections'
-  | 'configBackups'
+  | 'configBackupCreate'
+  | 'configBackupRestore'
+  | 'openclawDiagnostics'
+  | 'openclawPermissions'
   | 'agents'
   | 'coreFileEditing'
   | 'logs'

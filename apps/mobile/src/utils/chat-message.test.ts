@@ -189,6 +189,16 @@ describe('silent reply helpers', () => {
 });
 
 describe('sanitizeDisplayText', () => {
+  it('strips leaked reasoning blocks and keeps the final body', () => {
+    const input = '<think>\nUpdate completed successfully.\n</think> <final> 搞定啦！';
+    expect(sanitizeDisplayText(input)).toBe('搞定啦！');
+  });
+
+  it('strips reasoning-tag variants used by Gemini-style output', () => {
+    const input = '<reasoning>hidden</reasoning>\n<syncing>also hidden</syncing>\n<final>\nvisible\n</final>';
+    expect(sanitizeDisplayText(input)).toBe('visible');
+  });
+
   it('strips final envelope tags around assistant output', () => {
     expect(sanitizeDisplayText('<final>\nhello world\n</final>')).toBe('hello world');
   });
@@ -205,9 +215,33 @@ describe('sanitizeDisplayText', () => {
     expect(sanitizeDisplayText('<final>\npartial reply')).toBe('partial reply');
   });
 
+  it('suppresses a leaked reasoning block during streaming before the closing tag arrives', () => {
+    expect(sanitizeDisplayText('<think>\npartial hidden')).toBe('');
+  });
+
   it('strips bracketed system message blocks from display text', () => {
     const input = '好嘞\n\n[System: The content may include mention tags.]\n[System: If user_id is "abc", that mention refers to you.]';
     expect(sanitizeDisplayText(input)).toBe('好嘞');
+  });
+
+  it('keeps reasoning tags inside fenced code blocks intact', () => {
+    const input = '```xml\n<think>demo</think>\n<final>answer</final>\n```';
+    expect(sanitizeDisplayText(input)).toBe(input);
+  });
+
+  it('keeps literal reasoning tags in normal prose', () => {
+    const input = 'Use <think>demo</think> tags in docs.';
+    expect(sanitizeDisplayText(input)).toBe(input);
+  });
+
+  it('keeps literal final tags in normal prose', () => {
+    const input = 'Literal <final> marker should stay visible.';
+    expect(sanitizeDisplayText(input)).toBe(input);
+  });
+
+  it('does not unwrap a final tag when it is not the outer envelope', () => {
+    const input = '<final>hello</final> and more';
+    expect(sanitizeDisplayText(input)).toBe(input);
   });
 });
 

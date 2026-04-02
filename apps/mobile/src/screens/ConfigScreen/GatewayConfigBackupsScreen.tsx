@@ -48,7 +48,7 @@ export function GatewayConfigBackupsScreen(): React.JSX.Element {
   }, [loadBackups]);
 
   const handleRestore = useCallback(async (backupId: string) => {
-    if (!requirePro('configBackups')) return;
+    if (!requirePro('configBackupRestore')) return;
     if (!activeGatewayConfig?.url) {
       Alert.alert(t('No Active Gateway'), t('Current Gateway connection is required to restore a backup.'));
       return;

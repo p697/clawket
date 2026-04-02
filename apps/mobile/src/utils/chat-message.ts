@@ -91,13 +91,65 @@ export function isAssistantDeliveryMirrorMessage(message: unknown): boolean {
 
 function stripWrappedFinalTag(text: string): string {
   let result = text;
+  const hasOpeningWrapper = /^\s*<\s*final\b[^>]*>\s*(?:\r?\n)?/i.test(result);
+  const hasClosingWrapperAtEnd = /(?:\r?\n)?\s*<\s*\/\s*final\s*>\s*$/i.test(result);
+  const hasClosingWrapperAnywhere = /<\s*\/\s*final\s*>/i.test(result);
 
   // MiniMax may wrap the entire visible answer in a transport-only <final> envelope.
-  // Strip only boundary wrappers so inline Markdown/code examples remain untouched.
-  result = result.replace(/^\s*<final>\s*(?:\r?\n)?/i, '');
-  result = result.replace(/(?:\r?\n)?\s*<\/final>\s*$/i, '');
+  // Strip only clear boundary wrappers so inline Markdown/code examples remain untouched.
+  // If a closing tag exists but not at the end, treat it as normal content instead of guessing.
+  if (hasOpeningWrapper && (hasClosingWrapperAtEnd || !hasClosingWrapperAnywhere)) {
+    result = result.replace(/^\s*<\s*final\b[^>]*>\s*(?:\r?\n)?/i, '');
+  }
+  if (hasOpeningWrapper && hasClosingWrapperAtEnd) {
+    result = result.replace(/(?:\r?\n)?\s*<\s*\/\s*final\s*>\s*$/i, '');
+  }
 
   return result;
+}
+
+const REASONING_TAG_NAMES = ['think', 'thinking', 'thought', 'reasoning', 'syncing'] as const;
+const LEADING_REASONING_BLOCK_RE = new RegExp(
+  String.raw`^\s*<\s*(${REASONING_TAG_NAMES.join('|')})\b[^>]*>[\s\S]*?(?:<\s*\/\s*\1\s*>|$)\s*`,
+  'i',
+);
+const PROTECTED_MARKDOWN_SEGMENT_RE = /```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]*`/g;
+
+function stripModelControlTags(text: string): string {
+  if (!/[<](?:\/)?(?:think|thinking|thought|reasoning|syncing|final)\b/i.test(text)) {
+    return text;
+  }
+
+  let result = '';
+  let cursor = 0;
+  for (const match of text.matchAll(PROTECTED_MARKDOWN_SEGMENT_RE)) {
+    const start = match.index ?? 0;
+    if (start > cursor) {
+      result += stripModelControlTagsFromPlainText(text.slice(cursor, start));
+    }
+    result += match[0];
+    cursor = start + match[0].length;
+  }
+
+  if (cursor < text.length) {
+    result += stripModelControlTagsFromPlainText(text.slice(cursor));
+  }
+
+  return result;
+}
+
+function stripModelControlTagsFromPlainText(text: string): string {
+  let result = text;
+
+  while (LEADING_REASONING_BLOCK_RE.test(result)) {
+    result = result.replace(LEADING_REASONING_BLOCK_RE, '');
+  }
+
+  result = stripWrappedFinalTag(result);
+
+  return result
+    .replace(/^[ \t]+(?=\S)/, '')
+    .replace(/(\r?\n){3,}/g, '\n\n');
 }
 
 function stripBracketedSystemMessageBlocks(text: string): string {
@@ -122,7 +174,7 @@ export function formatMessageText(text: string, options: FormatMessageTextOption
     result = stripGatewayPrefixes(result);
   }
   if (options.stripWrappedFinalTag) {
-    result = stripWrappedFinalTag(result);
+    result = stripModelControlTags(result);
   }
   if (options.stripBracketedSystemMessageBlocks) {
     result = stripBracketedSystemMessageBlocks(result);

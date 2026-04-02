@@ -194,7 +194,7 @@ export function GatewayToolsRouteScreen(): React.JSX.Element {
   });
 
   const handleOpenPermissions = React.useCallback(() => {
-    if (!requirePro('configBackups')) return;
+    if (!requirePro('openclawPermissions')) return;
     openOpenClawPermissions(navigation);
   }, [navigation, requirePro]);
 

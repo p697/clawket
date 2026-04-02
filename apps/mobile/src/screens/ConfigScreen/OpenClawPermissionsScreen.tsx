@@ -126,7 +126,7 @@ export function OpenClawPermissionsScreen(): React.JSX.Element {
   }, [gateway, hasActiveGateway, isRelayRoute, t]);
 
   useEffect(() => {
-    if (!requirePro('configBackups')) {
+    if (!requirePro('openclawPermissions')) {
       navigation.goBack();
     }
   }, [navigation, requirePro]);

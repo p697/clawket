@@ -243,13 +243,15 @@ export function ChatSharePosterModal({
             <Text style={s.avatarEmoji}>{getDisplayAgentEmoji(agentEmoji)}</Text>
           </View>
         )}
-        <Text style={s.agentName}>{agentName}</Text>
-        {formattedTime ? <Text style={s.timestamp}>{formattedTime}</Text> : null}
-        {showModel && modelLabel ? (
-          <View style={[s.modelBadge, { backgroundColor: theme.accentSoft, borderColor: theme.accentMuted }]}>
-            <Text style={[s.modelText, { color: theme.accent }]}>{modelLabel}</Text>
-          </View>
-        ) : null}
+        <View style={s.agentMeta}>
+          <Text style={s.agentName}>{agentName}</Text>
+          {formattedTime ? <Text style={s.timestamp}>{formattedTime}</Text> : null}
+          {showModel && modelLabel ? (
+            <View style={[s.modelBadge, { backgroundColor: theme.accentSoft, borderColor: theme.accentMuted }]}>
+              <Text style={[s.modelText, { color: theme.accent }]}>{modelLabel}</Text>
+            </View>
+          ) : null}
+        </View>
       </View>
 
       {/* Message Content */}
@@ -371,13 +373,14 @@ const s = StyleSheet.create({
     backgroundColor: C.bg,
     borderRadius: 20,
     paddingHorizontal: 24,
-    paddingTop: 32,
+    paddingTop: 44,
     paddingBottom: 24,
-    alignItems: 'center',
   },
   // Avatar section
   avatarSection: {
-    alignItems: 'center',
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'flex-start',
     marginBottom: 20,
   },
   avatar: {
@@ -385,7 +388,6 @@ const s = StyleSheet.create({
     height: 56,
     borderRadius: 28,
     borderWidth: 2,
-    marginBottom: 12,
   },
   avatarFallback: {
     width: 56,
@@ -394,10 +396,15 @@ const s = StyleSheet.create({
     borderWidth: 1.5,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
   },
   avatarEmoji: {
     fontSize: 28,
+  },
+  agentMeta: {
+    flex: 1,
+    alignItems: 'flex-start',
+    marginLeft: 12,
+    paddingTop: 2,
   },
   agentName: {
     fontSize: 17,
@@ -416,6 +423,7 @@ const s = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: Radius.lg,
     borderWidth: 1,
+    marginTop: 2,
   },
   modelText: {
     fontSize: 11,

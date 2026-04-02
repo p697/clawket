@@ -27,7 +27,7 @@
     "mobile:start": "npm run mobile:prepare && npm run --workspace clawket start",
     "mobile:ios": "npm run mobile:prepare && npm run --workspace clawket ios",
     "mobile:android": "npm run mobile:prepare && npm run --workspace clawket android",
-    "mobile:sync:native": "npm run --workspace clawket prebuild:clean && npm run --workspace clawket pod-install:ios",
+    "mobile:sync:native": "npm --prefix apps/mobile install && npm run --workspace clawket prebuild:clean && npm run --workspace clawket pod-install:ios",
     "mobile:dev:ios": "npm run mobile:prepare && npm run --workspace clawket dev",
     "mobile:dev:android": "npm run mobile:prepare && npm run --workspace clawket dev:android",
     "mobile:dev:macos": "npm run mobile:prepare && npm run --workspace clawket dev:macos",

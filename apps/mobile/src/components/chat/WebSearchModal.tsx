@@ -50,7 +50,7 @@ function WebSearchModalContent({ onClose }: { onClose: () => void }): React.JSX.
   };
 
   const handleOpenPermissions = () => {
-    if (!requirePro('configBackups')) return;
+    if (!requirePro('openclawPermissions')) return;
     onClose();
     openOpenClawPermissions(navigation);
   };
