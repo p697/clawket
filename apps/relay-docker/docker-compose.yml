@@ -1,0 +1,31 @@
+services:
+  clawket-relay:
+    build:
+      context: ../../
+      dockerfile: apps/relay-docker/Dockerfile
+    # 如需使用已发布镜像，可改为：
+    # image: weirdoyh/clawket-relay:latest
+    container_name: clawket-relay
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3001:3001"
+      - "127.0.0.1:3002:3002"
+    volumes:
+      - clawket-data:/data
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  clawket-data:
+    driver: local

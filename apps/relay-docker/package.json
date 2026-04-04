@@ -1,0 +1,26 @@
+{
+  "name": "@clawket/relay-docker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "dependencies": {
+    "@clawket/shared": "0.1.0",
+    "better-sqlite3": "^11.9.1",
+    "ws": "^8.18.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.2"
+  },
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/server.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "docker:build": "cd ../.. && docker build -f apps/relay-docker/Dockerfile -t clawket-relay .",
+    "docker:run": "docker run -p 3001:3001 -p 3002:3002 -v clawket-data:/data clawket-relay"
+  }
+}
