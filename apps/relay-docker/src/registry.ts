@@ -61,7 +61,7 @@ const MAX_JSON_BODY_BYTES = 16 * 1024;
 export function createRegistryServer(
   config: RegistryConfig,
   port: number,
-): { start: () => void; close: () => void } {
+): { start: () => void; close: () => Promise<void> } {
   const server = createServer(async (req, res) => {
     const startedAt = Date.now();
     const url = new URL(req.url ?? '/', `http://localhost:${port}`);
@@ -145,9 +145,15 @@ export function createRegistryServer(
         console.log(`[registry] Registry API listening on port ${port}`);
       });
     },
-    close: () => {
-      server.close();
-    },
+    close: () => new Promise((resolve, reject) => {
+      server.close((error) => {
+        if (error && (error as NodeJS.ErrnoException).code !== 'ERR_SERVER_NOT_RUNNING') {
+          reject(error);
+          return;
+        }
+        resolve();
+      });
+    }),
   };
 }
 

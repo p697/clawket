@@ -58,6 +58,8 @@ const WS_OPEN = 1;
 export class DockerRelayRoom {
   private readonly runtime: RelayRuntime;
   private initialized = false;
+  private initializationPromise: Promise<void> | null = null;
+  private socketEventQueue: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly roomId: string,
@@ -71,12 +73,24 @@ export class DockerRelayRoom {
 
   async initialize(): Promise<void> {
     if (this.initialized) return;
-    this.initialized = true;
-    await loadRoomMeta(this.runtime);
-    await loadMirroredClientTokenHashes(this.runtime);
-    await loadGatewayOwner(this.runtime);
-    rehydrateSockets(this.runtime);
-    await ensureHeartbeat(this.runtime);
+    if (!this.initializationPromise) {
+      this.initializationPromise = (async () => {
+        await loadRoomMeta(this.runtime);
+        await loadMirroredClientTokenHashes(this.runtime);
+        await loadGatewayOwner(this.runtime);
+        rehydrateSockets(this.runtime);
+        await ensureHeartbeat(this.runtime);
+        this.initialized = true;
+      })()
+        .catch((error) => {
+          this.initialized = false;
+          throw error;
+        })
+        .finally(() => {
+          this.initializationPromise = null;
+        });
+    }
+    await this.initializationPromise;
   }
 
   /**
@@ -180,14 +194,38 @@ export class DockerRelayRoom {
       hasGateway: Boolean(this.runtime.gatewaySocket?.readyState === WS_OPEN),
     });
 
-    void ensureHeartbeat(this.runtime);
+    void ensureHeartbeat(this.runtime).catch((error) => {
+      logRelayTelemetry('relay_worker', 'heartbeat_schedule_failed', {
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+    });
 
     // Wire up ws event handlers
-    ws.on('message', (message) => this.onMessage(ws, message));
-    ws.on('close', () => this.onClose(ws));
-    ws.on('error', () => this.onError(ws));
+    ws.on('message', (message) => {
+      void this.enqueueSocketEvent('message', () => this.onMessage(ws, message));
+    });
+    ws.on('close', () => {
+      void this.enqueueSocketEvent('close', () => this.onClose(ws));
+    });
+    ws.on('error', () => {
+      void this.enqueueSocketEvent('error', () => this.onError(ws));
+    });
 
     return { accepted: true };
+  }
+
+  private enqueueSocketEvent(
+    eventType: 'message' | 'close' | 'error',
+    handler: () => Promise<void>,
+  ): Promise<void> {
+    const run = this.socketEventQueue.then(handler);
+    this.socketEventQueue = run.catch((error) => {
+      logRelayTelemetry('relay_worker', 'ws_event_handler_error', {
+        eventType,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+    });
+    return this.socketEventQueue;
   }
 
   private async onMessage(ws: WsWebSocket, message: unknown): Promise<void> {

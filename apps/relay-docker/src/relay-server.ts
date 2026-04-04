@@ -13,7 +13,7 @@ import type { RoomManager } from './room-manager.js';
 export function createRelayServer(
   roomManager: RoomManager,
   port: number,
-): { start: () => void; close: () => void } {
+): { start: () => void; close: () => Promise<void> } {
   const httpServer = createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', `http://localhost:${port}`);
 
@@ -34,7 +34,7 @@ export function createRelayServer(
 
   const wss = new WebSocketServer({ noServer: true });
 
-  httpServer.on('upgrade', async (req: IncomingMessage, socket, head) => {
+  httpServer.on('upgrade', (req: IncomingMessage, socket, head) => {
     const url = new URL(req.url ?? '/', `http://localhost:${port}`);
     if (url.pathname !== '/ws') {
       socket.destroy();
@@ -50,27 +50,41 @@ export function createRelayServer(
 
     const room = roomManager.getRoom(query.gatewayId);
 
-    wss.handleUpgrade(req, socket, head, async (ws) => {
-      // Build headers map for the room
-      const headers: Record<string, string> = {};
-      for (const [key, value] of Object.entries(req.headers)) {
-        if (typeof value === 'string') {
-          headers[key.toLowerCase()] = value;
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      void (async () => {
+        try {
+          // Build headers map for the room
+          const headers: Record<string, string> = {};
+          for (const [key, value] of Object.entries(req.headers)) {
+            if (typeof value === 'string') {
+              headers[key.toLowerCase()] = value;
+            }
+          }
+
+          const result = await room.handleWebSocket(
+            ws,
+            url.toString(),
+            headers,
+          );
+
+          if (!result.accepted) {
+            ws.close(
+              result.status === 401 ? 4401 : result.status === 409 ? 4409 : 4400,
+              result.error ?? 'rejected',
+            );
+          }
+        } catch {
+          try {
+            if (ws.readyState < 2) {
+              ws.close(1011, 'internal error');
+            } else {
+              ws.terminate();
+            }
+          } catch {
+            ws.terminate();
+          }
         }
-      }
-
-      const result = await room.handleWebSocket(
-        ws,
-        url.toString(),
-        headers,
-      );
-
-      if (!result.accepted) {
-        ws.close(
-          result.status === 401 ? 4001 : result.status === 409 ? 4009 : 4000,
-          result.error ?? 'rejected',
-        );
-      }
+      })();
     });
   });
 
@@ -80,11 +94,35 @@ export function createRelayServer(
         console.log(`[relay-server] WebSocket relay listening on port ${port}`);
       });
     },
-    close: () => {
-      wss.close();
-      httpServer.close();
+    close: async () => {
+      await closeWebSocketServer(wss);
+      await closeHttpServer(httpServer);
     },
   };
+}
+
+function closeWebSocketServer(server: WebSocketServer): Promise<void> {
+  return new Promise((resolve, reject) => {
+    server.close((error?: Error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
+    });
+  });
+}
+
+function closeHttpServer(server: ReturnType<typeof createServer>): Promise<void> {
+  return new Promise((resolve, reject) => {
+    server.close((error) => {
+      if (error && (error as NodeJS.ErrnoException).code !== 'ERR_SERVER_NOT_RUNNING') {
+        reject(error);
+        return;
+      }
+      resolve();
+    });
+  });
 }
 
 function sendJson(res: ServerResponse, status: number, data: unknown): void {

@@ -20,6 +20,7 @@
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/server.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
     "docker:build": "cd ../.. && docker build -f apps/relay-docker/Dockerfile -t clawket-relay .",
     "docker:run": "docker run -p 3001:3001 -p 3002:3002 -v clawket-data:/data clawket-relay"
   }

@@ -88,14 +88,51 @@ registry.start();
 relay.start();
 
 // Graceful shutdown
-function shutdown(): void {
-  console.log('\n[server] Shutting down...');
-  relay.close();
-  registry.close();
-  roomManager.close();
-  kv.close();
-  process.exit(0);
+let isShuttingDown = false;
+
+async function shutdown(signal: NodeJS.Signals): Promise<void> {
+  if (isShuttingDown) {
+    console.log(`[server] Shutdown already in progress (${signal})...`);
+    return;
+  }
+
+  isShuttingDown = true;
+  console.log(`\n[server] Shutting down (${signal})...`);
+
+  const forceExitTimeout = setTimeout(() => {
+    console.error('[server] Forced shutdown after timeout');
+    process.exit(1);
+  }, 10_000);
+  forceExitTimeout.unref();
+
+  const settleSync = <T>(fn: () => T): Promise<void> => new Promise((resolve) => {
+    try {
+      fn();
+    } finally {
+      resolve();
+    }
+  });
+
+  try {
+    await Promise.allSettled([
+      relay.close(),
+      registry.close(),
+      settleSync(() => roomManager.close()),
+      settleSync(() => kv.close()),
+    ]);
+
+    clearTimeout(forceExitTimeout);
+    process.exitCode = 0;
+  } catch (error) {
+    clearTimeout(forceExitTimeout);
+    console.error('[server] Error during shutdown', error);
+    process.exit(1);
+  }
 }
 
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
+process.on('SIGINT', () => {
+  void shutdown('SIGINT');
+});
+process.on('SIGTERM', () => {
+  void shutdown('SIGTERM');
+});
