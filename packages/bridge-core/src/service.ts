@@ -429,7 +429,7 @@ Type=simple
 ExecStart=${execStart}
 Restart=always
 RestartSec=2
-WorkingDirectory=${escapeSystemdArg(SERVICE_DIR)}
+WorkingDirectory=${SERVICE_DIR}
 StandardOutput=append:${logPath}
 StandardError=append:${errorLogPath}
 

@@ -55,6 +55,8 @@ describe('service helpers', () => {
     expect(unit).toContain('Description=Clawket Bridge CLI');
     expect(unit).toContain('ExecStart="/home/tester/.clawket/clawket-launcher.sh"');
     expect(unit).toContain('Restart=always');
+    expect(unit).toContain('WorkingDirectory=');
+    expect(unit).not.toContain('WorkingDirectory="');
     expect(unit).toContain('StandardOutput=append:/home/tester/.clawket/logs/bridge-cli.log');
   });
 
