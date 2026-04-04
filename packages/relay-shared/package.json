@@ -7,6 +7,7 @@
   "main": "src/index.ts",
   "types": "src/index.ts",
   "scripts": {
+    "build": "tsc -p tsconfig.build.json --outDir dist --declaration && node scripts/write-dist-package-json.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "lint": "echo \"No lint for @clawket/shared\""
