@@ -1,0 +1,70 @@
+# Clawket Self-Hosted Relay — nginx Reverse Proxy Example
+#
+# This configuration assumes:
+# - Registry runs on localhost:3001
+# - Relay WebSocket server runs on localhost:3002
+# - You have SSL certificates configured
+# - nginx handles TLS termination
+#
+# Place this in /etc/nginx/sites-available/ and symlink to sites-enabled/
+
+# Registry API
+server {
+    listen 443 ssl http2;
+    server_name registry.example.com;
+
+    ssl_certificate     /etc/ssl/certs/registry.example.com.pem;
+    ssl_certificate_key /etc/ssl/private/registry.example.com.key;
+    client_max_body_size 16k;
+
+    location / {
+        proxy_pass http://127.0.0.1:3001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Optional: pass GeoIP country for region-based relay selection
+        # Requires nginx geoip2 module
+        # proxy_set_header X-Real-Country $geoip2_data_country_code;
+    }
+}
+
+# Relay WebSocket
+server {
+    listen 443 ssl http2;
+    server_name relay.example.com;
+
+    ssl_certificate     /etc/ssl/certs/relay.example.com.pem;
+    ssl_certificate_key /etc/ssl/private/relay.example.com.key;
+
+    # WebSocket endpoint
+    location /ws {
+        proxy_pass http://127.0.0.1:3002;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Keep WebSocket connections alive for long sessions
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+
+    # Relay health check
+    location = /v1/health {
+        proxy_pass http://127.0.0.1:3002/v1/health;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Everything else on the relay domain stays closed.
+    location / {
+        return 404;
+    }
+}
