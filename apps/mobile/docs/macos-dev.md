@@ -23,6 +23,7 @@ Notes:
 - If you change native iOS dependencies or manually edit the `ios` project, rerun `npm run dev:macos`. If Pods are still in sync but you want a clean refresh, run `FORCE_POD_INSTALL=1 npm run dev:macos`.
 - The built app goes to `/tmp/clawket-mac-dev/Build/Products/Debug-maccatalyst/Clawket.app` by default.
 - If Metro is already running on port `8081`, the script reuses it.
+- The release/build scripts now auto-fallback to the first available macOS destination if `platform=macOS,variant=Mac Catalyst` is not exposed by the current Xcode toolchain on this machine.
 
 Useful variants:
 

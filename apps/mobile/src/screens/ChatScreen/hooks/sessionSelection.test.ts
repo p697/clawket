@@ -70,4 +70,19 @@ describe('selectSessionForCurrentAgent', () => {
 
     expect(result).toBeNull();
   });
+
+  it('uses backend-scoped Hermes sessions without agent prefix filtering', () => {
+    const sessions = [
+      makeSession('main'),
+      makeSession('20260411_122441_d40735'),
+    ];
+
+    const result = selectSessionForCurrentAgent({
+      sessions,
+      mainSessionKey: 'main',
+      currentKey: '20260411_122441_d40735',
+    });
+
+    expect(result?.key).toBe('20260411_122441_d40735');
+  });
 });

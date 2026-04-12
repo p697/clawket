@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   buildLinuxCronEntry,
   buildLinuxSystemdUnit,
@@ -9,6 +9,11 @@ import {
   registerRuntimeProcess,
   unregisterRuntimeProcess,
 } from './service.js';
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 describe('service helpers', () => {
   it('builds POSIX service program args using the CLI script directly', () => {
@@ -160,5 +165,32 @@ describe('runtime process registry', () => {
     expect(list.every((p) => p.pid > 0)).toBe(true);
 
     unregisterRuntimeProcess(process.pid);
+  });
+
+  it('ignores Hermes runtime commands when scanning for OpenClaw runtimes', async () => {
+    vi.resetModules();
+    vi.spyOn(process, 'kill').mockImplementation(() => true as never);
+    vi.doMock('node:child_process', async () => {
+      const actual = await vi.importActual<typeof import('node:child_process')>('node:child_process');
+      return {
+        ...actual,
+        execFileSync: vi.fn((command: string, args: string[]) => {
+          if (command === 'ps' && args.join(' ') === '-ax -o pid=,args=') {
+            return [
+              `111 /opt/homebrew/bin/node ${process.argv[1]} run --service`,
+              `222 /opt/homebrew/bin/node ${process.argv[1]} hermes run --host 0.0.0.0 --port 4321`,
+              `333 /opt/homebrew/bin/node ${process.argv[1]} hermes relay run --host 0.0.0.0 --port 4321 --api-url http://127.0.0.1:8642`,
+            ].join('\n');
+          }
+          return actual.execFileSync(command, args, { encoding: 'utf8' } as never);
+        }),
+      };
+    });
+
+    const { listRuntimeProcesses: listWithMock } = await import('./service.js');
+    const list = listWithMock();
+    expect(list.map((entry) => entry.pid)).toContain(111);
+    expect(list.map((entry) => entry.pid)).not.toContain(222);
+    expect(list.map((entry) => entry.pid)).not.toContain(333);
   });
 });

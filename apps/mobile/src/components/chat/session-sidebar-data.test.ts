@@ -110,6 +110,26 @@ describe('buildSidebarSessionItems', () => {
     expect(result).toHaveLength(1);
     expect(result[0].key).toBe('agent:agentA:telegram:1');
   });
+
+  it('shows all Hermes sessions when using a backend-scoped main session key', () => {
+    const sessions = [
+      makeSession({ key: 'main', updatedAt: 200 }),
+      makeSession({ key: '20260411_122441_d40735', updatedAt: 100 }),
+    ];
+
+    const result = buildSidebarSessionItems({
+      sessions,
+      cachedSessions: [],
+      currentAgentId: 'main',
+      mainSessionKey: 'main',
+      activeTab: 'sessions',
+      activeChannel: 'all',
+      searchText: '',
+      pinnedSessionKeys: [],
+    });
+
+    expect(result.map((item) => item.key)).toEqual(['main', '20260411_122441_d40735']);
+  });
 });
 
 describe('buildChannelOptions', () => {

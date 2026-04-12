@@ -13,14 +13,20 @@ import { useConnectionState } from '../../hooks/useConnectionState';
 import { logAppTelemetry } from '../../services/app-telemetry';
 import { analyticsEvents } from '../../services/analytics/events';
 import { readAgentAvatar } from '../../services/agent-avatar';
+import { buildConsoleLibraryEntryDescriptors } from '../../services/console-entry-descriptors';
+import { loadGatewayConsoleDashboardBundle } from '../../services/gateway-console-dashboard';
+import { resolveGatewayBackendKind, selectByBackend } from '../../services/gateway-backends';
 import { StorageService } from '../../services/storage';
+import { resolveDashboardCostDisplay } from '../../services/usage-cost-display';
 import { getDisplayAgentEmoji } from '../../utils/agent-emoji';
 import { formatConsoleHeartbeatAge } from '../../utils/console-heartbeat';
 import { parseGatewayRuntimeSettings } from '../../utils/gateway-settings';
 import { getConsoleHeaderRefreshState } from './hooks/consoleHeaderRefreshPolicy';
+import { HermesConsoleMenuScreen } from './HermesConsoleMenuScreen';
 import { StatsPosterModal } from './StatsPosterModal';
 import type { ConsoleStackParamList } from './ConsoleTab';
 import { isCronJobForAgent } from './cronData';
+import { isConsoleScreenSupported } from './console-screen-support';
 
 type ConsoleMenuNavigation = NativeStackNavigationProp<ConsoleStackParamList, 'ConsoleMenu'>;
 
@@ -30,6 +36,8 @@ export type DashboardData = {
   agentName: string;
   agentEmoji: string;
   cost: string | null;
+  costDisplayLabel: string | null;
+  costBadge: string | null;
   tokens: string | null;
   agents: number | null;
   channels: number | null;
@@ -63,9 +71,9 @@ function formatTokens(n: number): string {
 }
 
 function formatCost(n: number): string {
-  if (n >= 100) return n.toFixed(0);
-  if (n >= 10) return n.toFixed(1);
-  return n.toFixed(2);
+  if (n >= 100) return `$${n.toFixed(0)}`;
+  if (n >= 10) return `$${n.toFixed(1)}`;
+  return `$${n.toFixed(2)}`;
 }
 
 function getTodayDateStr(): string {
@@ -85,6 +93,48 @@ function classifyNodePlatform(node: { platform?: string; deviceFamily?: string }
 
 type NodeSummary = { mobile: number; desktop: number; total: number };
 
+type ConsoleMenuStatItem = {
+  key: string;
+  screen: keyof ConsoleStackParamList;
+  source: string;
+  emoji: string;
+  label: string;
+  value: React.ReactNode;
+  valueStyle?: object;
+  numberOfLines?: number;
+  adjustsFontSizeToFit?: boolean;
+  minimumFontScale?: number;
+};
+
+type ConsoleMenuHeroItem = {
+  key: string;
+  screen: keyof ConsoleStackParamList;
+  source: string;
+  label: string;
+  value: React.ReactNode;
+  badge?: string | null;
+};
+
+type ConsoleMenuGridItem = {
+  key: string;
+  screen: keyof ConsoleStackParamList;
+  source: string;
+  emoji: string;
+  label: string;
+  value: React.ReactNode;
+  badge?: { text: string; color: string } | null;
+};
+
+type ConsoleMenuListItem = {
+  key: string;
+  screen: keyof ConsoleStackParamList;
+  source: string;
+  emoji: string;
+  title: string;
+  description: string;
+  hideBorderBottom?: boolean;
+};
+
 function summarizeNodes(nodes: { platform?: string; deviceFamily?: string }[]): NodeSummary {
   let mobile = 0;
   let desktop = 0;
@@ -102,6 +152,31 @@ function formatNodeSummary(nodes: { platform?: string; deviceFamily?: string }[]
   if (mobile > 0) return `${mobile} 📱`;
   if (desktop > 0) return `${desktop} 💻`;
   return String(nodes.length);
+}
+
+function renderNodeGridValue(
+  nodeCounts: NodeSummary | null,
+  textColor: string,
+): React.ReactNode {
+  if (!nodeCounts) return '—';
+  return (
+    <>
+      {nodeCounts.mobile > 0 && (
+        <>
+          <Text style={[styles.gridValue, { color: textColor }]}>{nodeCounts.mobile}</Text>
+          <Text style={styles.nodeDeviceIcon}>📱</Text>
+        </>
+      )}
+      {nodeCounts.mobile > 0 && nodeCounts.desktop > 0 && <Text style={styles.nodeDeviceSpacer}>{' '}</Text>}
+      {nodeCounts.desktop > 0 && (
+        <>
+          <Text style={[styles.gridValue, { color: textColor }]}>{nodeCounts.desktop}</Text>
+          <Text style={styles.nodeDeviceIcon}>💻</Text>
+        </>
+      )}
+      {nodeCounts.total === 0 && <Text style={[styles.gridValue, { color: textColor }]}>0</Text>}
+    </>
+  );
 }
 
 function isSessionInAgentScope(sessionKey: string | undefined, currentAgentId: string): boolean {
@@ -138,7 +213,7 @@ function formatRelativeSnapshotAge(savedAt: number, now: number, t: ReturnType<t
 // ---- Dashboard Hook ----
 
 const EMPTY_DASHBOARD: DashboardData = {
-  agentName: 'Hello?', agentEmoji: '🤖', cost: null, tokens: null,
+  agentName: 'Hello?', agentEmoji: '🤖', cost: null, costDisplayLabel: null, costBadge: null, tokens: null,
   messages: null, userMessages: null, toolCalls: null, lastHeartbeat: null,
   agents: null, channels: null, cronTotal: null, cronFailed: null,
   skills: null, tools: null, models: null, sessions: null, files: null,
@@ -252,31 +327,32 @@ function useDashboardData() {
       const today = getTodayDateStr();
       const [ackedIds, settledResults] = await Promise.all([
         StorageService.getAckedCronFailures(),
-        Promise.allSettled([
-          gateway.fetchIdentity(currentAgentId),
-          gateway.listAgentFiles(currentAgentId),
-          gateway.getChannelsStatus(),
-          gateway.listCronJobs(),
-          gateway.getSkillsStatus(currentAgentId),
-          gateway.request('models.list', {}),
-          gateway.listSessions(),
-          gateway.fetchUsage({ startDate: today, endDate: today }),
-          gateway.request('last-heartbeat', {}),
-          gateway.fetchCostSummary({ startDate: today, endDate: today }),
-          gateway.listAgents(),
-          gateway.listNodes(),
-          gateway.listNodePairRequests(),
-          gateway.listDevices(),
-          gateway.getConfig(),
-          gateway.fetchToolsCatalog(currentAgentId),
-        ]),
+        loadGatewayConsoleDashboardBundle(gateway, currentAgentId, today),
       ]);
 
-      const [identityResult, fileResult, channelResult, cronResult, skillResult, modelResult, sessionResult, usageResult, heartbeatResult, costResult, agentsResult, nodesResult, nodePairResult, devicesResult, configResult, toolCatalogResult] = settledResults;
+      const {
+        identity,
+        files,
+        channels,
+        cron,
+        skills,
+        modelCount,
+        sessions,
+        usage,
+        lastHeartbeat,
+        cost,
+        agents,
+        nodes,
+        nodePairs,
+        devices,
+        config: gatewayConfig,
+        tools,
+      } = settledResults;
 
-      const hasUsageData = usageResult.status === 'fulfilled' && Array.isArray(usageResult.value?.sessions);
+      const hasUsageData = Array.isArray(usage?.sessions);
+      const usageValue = usage;
       const usageSessionsForAgent = hasUsageData
-        ? (usageResult.value.sessions ?? []).filter((session) => isSessionInAgentScope(session.key, currentAgentId))
+        ? (usageValue?.sessions ?? []).filter((session) => isSessionInAgentScope(session.key, currentAgentId))
         : [];
       const usageTotals = hasUsageData
         ? usageSessionsForAgent.reduce(
@@ -291,46 +367,57 @@ function useDashboardData() {
             { totalCost: 0, totalTokens: 0, messages: 0, userMessages: 0, toolCalls: 0 },
           )
         : null;
-      const hasCronData = cronResult.status === 'fulfilled' && Array.isArray(cronResult.value?.jobs);
+      const hasCronData = Array.isArray(cron?.jobs);
+      const cronValue = cron;
       const jobsForAgent = hasCronData
-        ? cronResult.value.jobs.filter((job) => isCronJobForAgent(job, currentAgentId))
+        ? cronValue?.jobs?.filter((job) => isCronJobForAgent(job, currentAgentId)) ?? []
         : [];
-      const hasSessionData = sessionResult.status === 'fulfilled' && Array.isArray(sessionResult.value);
+      const hasSessionData = Array.isArray(sessions);
       const sessionsForAgent = hasSessionData
-        ? sessionResult.value.filter((session) => isSessionInAgentScope(session.key, currentAgentId))
+        ? sessions.filter((session) => isSessionInAgentScope(session.key, currentAgentId))
         : [];
 
+      const fallbackCostLabel = (() => {
+        if (cost?.totals?.totalCost != null) return formatCost(cost.totals.totalCost);
+        if (usageTotals) return formatCost(usageTotals.totalCost);
+        return null;
+      })();
+      const dashboardCostDisplay = resolveDashboardCostDisplay({
+        usageResult: usage ?? null,
+        costSummary: cost ?? null,
+        fallbackCostLabel,
+        t,
+      });
+
       const nextData: DashboardData = {
-        agentName: identityResult.status === 'fulfilled' && identityResult.value?.name
-          ? identityResult.value.name
+        agentName: identity?.name
+          ? identity.name
           : hasGateway ? t('Connecting') : t('Hello?'),
-        agentEmoji: identityResult.status === 'fulfilled' && identityResult.value?.emoji
-          ? identityResult.value.emoji
+        agentEmoji: identity?.emoji
+          ? identity.emoji
           : '🤖',
-        cost: (() => {
-          if (costResult.status === 'fulfilled' && costResult.value?.totals?.totalCost != null) return formatCost(costResult.value.totals.totalCost);
-          if (usageTotals) return formatCost(usageTotals.totalCost);
-          return null;
-        })(),
+        cost: fallbackCostLabel,
+        costDisplayLabel: dashboardCostDisplay.valueLabel,
+        costBadge: dashboardCostDisplay.badge,
         tokens: (() => {
-          if (costResult.status === 'fulfilled' && costResult.value?.totals?.totalTokens != null) return formatTokens(costResult.value.totals.totalTokens);
+          if (cost?.totals?.totalTokens != null) return formatTokens(cost.totals.totalTokens);
           if (usageTotals) return formatTokens(usageTotals.totalTokens);
           return null;
         })(),
-        agents: agentsResult.status === 'fulfilled' && Array.isArray(agentsResult.value?.agents) ? agentsResult.value.agents.length : null,
-        channels: channelResult.status === 'fulfilled' && channelResult.value?.channelOrder ? channelResult.value.channelOrder.length : null,
+        agents: Array.isArray(agents?.agents) ? agents.agents.length : null,
+        channels: Array.isArray(channels?.channelOrder) ? channels.channelOrder.length : null,
         cronTotal: hasCronData ? jobsForAgent.length : null,
         cronFailed: hasCronData ? jobsForAgent.filter((job) => job.state?.lastRunStatus === 'error' && !ackedIds.has(job.id)).length : null,
-        skills: skillResult.status === 'fulfilled' && skillResult.value?.skills ? Object.keys(skillResult.value.skills).length : null,
-        tools: toolCatalogResult.status === 'fulfilled' && Array.isArray(toolCatalogResult.value?.groups)
-          ? toolCatalogResult.value.groups.reduce((sum, g) => sum + (g.tools?.length ?? 0), 0)
+        skills: Array.isArray(skills?.skills) ? skills.skills.length : null,
+        tools: Array.isArray(tools?.groups)
+          ? tools.groups.reduce((sum, g) => sum + (g.tools?.length ?? 0), 0)
           : null,
-        files: fileResult.status === 'fulfilled' && Array.isArray(fileResult.value) ? fileResult.value.length : null,
-        models: modelResult.status === 'fulfilled' && Array.isArray((modelResult.value as any)?.models) ? (modelResult.value as any).models.length : null,
+        files: Array.isArray(files) ? files.length : null,
+        models: modelCount,
         sessions: hasSessionData ? sessionsForAgent.length : null,
         lastHeartbeat: (() => {
-          if (heartbeatResult.status !== 'fulfilled' || !heartbeatResult.value) return null;
-          const hb = heartbeatResult.value as any;
+          if (!lastHeartbeat) return null;
+          const hb = lastHeartbeat as any;
           const ts = hb.lastHeartbeatAt || hb.ts || hb.timestamp;
           if (!ts) return null;
           const mins = Math.floor((Date.now() - ts) / 60_000);
@@ -342,21 +429,21 @@ function useDashboardData() {
         messages: usageTotals?.messages ?? null,
         userMessages: usageTotals?.userMessages ?? null,
         toolCalls: usageTotals?.toolCalls ?? null,
-        nodes: nodesResult.status === 'fulfilled' && Array.isArray(nodesResult.value?.nodes) ? nodesResult.value.nodes.length : null,
-        nodeSummary: nodesResult.status === 'fulfilled' && Array.isArray(nodesResult.value?.nodes) ? formatNodeSummary(nodesResult.value.nodes) : null,
-        nodeCounts: nodesResult.status === 'fulfilled' && Array.isArray(nodesResult.value?.nodes) ? summarizeNodes(nodesResult.value.nodes) : null,
+        nodes: Array.isArray(nodes?.nodes) ? nodes.nodes.length : null,
+        nodeSummary: Array.isArray(nodes?.nodes) ? formatNodeSummary(nodes.nodes) : null,
+        nodeCounts: Array.isArray(nodes?.nodes) ? summarizeNodes(nodes.nodes) : null,
         pendingPairCount: (() => {
-          const nodePending = nodePairResult.status === 'fulfilled' ? (nodePairResult.value?.pending?.length ?? 0) : 0;
-          const devicePending = devicesResult.status === 'fulfilled' ? (devicesResult.value?.pending?.length ?? 0) : 0;
+          const nodePending = nodePairs?.pending?.length ?? 0;
+          const devicePending = devices?.pending?.length ?? 0;
           const total = nodePending + devicePending;
           return total > 0 ? total : null;
         })(),
-        devices: devicesResult.status === 'fulfilled' && Array.isArray(devicesResult.value?.paired) ? devicesResult.value.paired.length : null,
+        devices: Array.isArray(devices?.paired) ? devices.paired.length : null,
         ...(() => {
-          if (configResult.status !== 'fulfilled' || !configResult.value?.config) {
+          if (!gatewayConfig?.config) {
             return { configDefaultModel: null, configHeartbeat: null, configActiveHours: null };
           }
-          const parsed = parseGatewayRuntimeSettings(configResult.value.config);
+          const parsed = parseGatewayRuntimeSettings(gatewayConfig.config);
           return {
             configDefaultModel: parsed.defaultModel || null,
             configHeartbeat: parsed.heartbeatEvery || null,
@@ -408,8 +495,9 @@ function useDashboardData() {
   }, [cacheScope, currentAgentId, gateway, hasGateway, t]);
 
   useEffect(() => {
+    if (!isFocused) return;
     refresh('manual').catch(() => {});
-  }, [gatewayEpoch, refresh]);
+  }, [gatewayEpoch, isFocused, refresh]);
 
   useFocusEffect(useCallback(() => { refresh('focus').catch(() => {}); }, [refresh]));
 
@@ -485,15 +573,18 @@ function GridCard({ emoji, value, label, onPress, colors, badge }: {
 
 // ---- Main Screen ----
 
-export function ConsoleMenuScreen(): React.JSX.Element {
+function OpenClawConsoleMenuScreen(): React.JSX.Element {
   const { theme } = useAppTheme();
   const { t, i18n } = useTranslation('console');
+  const { t: tCommon } = useTranslation('common');
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<ConsoleMenuNavigation>();
   const { config, gateway, currentAgentId, agents, agentAvatars } = useAppContext();
+  const backendKind = resolveGatewayBackendKind(config);
   const { data, refresh, refreshing, lastUpdatedAt, hydratedFromCache, lastRefreshError } = useDashboardData();
   const connectionState = useConnectionState();
   const colors = theme.colors;
+  const capabilities = gateway.getBackendCapabilities();
   const [pullRefreshing, setPullRefreshing] = useState(false);
   const refreshSpin = useRef(new Animated.Value(0)).current;
 
@@ -590,17 +681,216 @@ export function ConsoleMenuScreen(): React.JSX.Element {
     };
   }, [headerRefreshState.spinning, refreshSpin]);
 
+  const supportsScreen = useCallback(
+    (screen: keyof ConsoleStackParamList) => isConsoleScreenSupported(screen, capabilities),
+    [capabilities],
+  );
   const nav = useCallback((screen: keyof ConsoleStackParamList, source: string) => {
+    if (!supportsScreen(screen)) return;
     analyticsEvents.consoleEntryTapped({
       destination: screen,
       source,
     });
     navigation.navigate(screen as any);
-  }, [navigation]);
+  }, [navigation, supportsScreen]);
   const useCompactHeartbeatStat = locale === 'es'
     || locale.startsWith('es-')
     || locale === 'de'
     || locale.startsWith('de-');
+  const statItems = useMemo<ConsoleMenuStatItem[]>(
+    () => {
+      const items: ConsoleMenuStatItem[] = [
+      {
+        key: 'tokens',
+        screen: 'Usage',
+        source: 'stats_tokens',
+        emoji: '🌀',
+        label: t('Tokens'),
+        value: data.tokens ?? '—',
+      },
+      {
+        key: 'messages',
+        screen: 'ChatHistory',
+        source: 'stats_messages',
+        emoji: '💬',
+        label: t('Messages'),
+        value: data.messages != null ? String(data.messages) : '—',
+      },
+      {
+        key: 'toolCalls',
+        screen: 'ToolList',
+        source: 'stats_tools',
+        emoji: '🔧',
+        label: t('Tool Calls'),
+        value: data.toolCalls != null ? String(data.toolCalls) : '—',
+      },
+      {
+        key: 'sessions',
+        screen: 'SessionsBoard',
+        source: 'stats_sessions',
+        emoji: '🗂️',
+        label: t('Sessions'),
+        value: data.sessions != null ? String(data.sessions) : '—',
+      },
+      {
+        key: 'heartbeat',
+        screen: 'HeartbeatSettings',
+        source: 'stats_heartbeat',
+        emoji: '💓',
+        label: t('Heartbeat'),
+        value: data.lastHeartbeat ?? '—',
+        valueStyle: useCompactHeartbeatStat ? styles.statValueCompact : undefined,
+        numberOfLines: useCompactHeartbeatStat ? 1 : undefined,
+        adjustsFontSizeToFit: useCompactHeartbeatStat,
+        minimumFontScale: useCompactHeartbeatStat ? 0.85 : undefined,
+      },
+      ];
+      return items.filter((item) => supportsScreen(item.screen));
+    },
+    [data.lastHeartbeat, data.messages, data.sessions, data.tokens, data.toolCalls, supportsScreen, t, useCompactHeartbeatStat],
+  );
+  const heroItems = useMemo<ConsoleMenuHeroItem[]>(
+    () => {
+      const items: ConsoleMenuHeroItem[] = [
+      {
+        key: 'cost',
+        screen: 'Usage',
+        source: 'hero_cost_today',
+        label: t('Cost Today'),
+        value: data.costDisplayLabel ?? '—',
+        badge: data.costBadge,
+      },
+      {
+        key: 'cron',
+        screen: 'CronList',
+        source: 'hero_cron_jobs',
+        label: t('Cron Jobs'),
+        value: <>{data.cronTotal != null ? String(data.cronTotal) : '—'} <Text style={styles.heroIcon}>⏰</Text></>,
+        badge: data.cronFailed ? `⚠ ${t('{{count}} failed', { count: data.cronFailed })}` : null,
+      },
+      ];
+      return items.filter((item) => supportsScreen(item.screen));
+    },
+    [data.cost, data.cronFailed, data.cronTotal, supportsScreen, t],
+  );
+  const gridRows = useMemo<ConsoleMenuGridItem[][]>(
+    () => {
+      const rows: ConsoleMenuGridItem[][] = [
+        [
+        {
+          key: 'agents',
+          screen: 'AgentList',
+          source: 'grid_agents',
+          emoji: '🤖',
+          label: t('common:Agents'),
+          value: data.agents ? String(data.agents) : '—',
+        },
+        {
+          key: 'files',
+          screen: 'FileList',
+          source: 'grid_memory',
+          emoji: '🧬',
+          label: t('Memory'),
+          value: data.files != null ? String(data.files) : '—',
+        },
+        {
+          key: 'nodes',
+          screen: 'Nodes',
+          source: 'grid_nodes',
+          emoji: '🌐',
+          label: t('Nodes'),
+          value: renderNodeGridValue(data.nodeCounts, colors.text),
+          badge: data.pendingPairCount ? { text: t('{{count}} pending', { count: data.pendingPairCount }), color: colors.warning } : null,
+        },
+      ],
+      [
+        {
+          key: 'models',
+          screen: 'ModelList',
+          source: 'grid_models',
+          emoji: '🧩',
+          label: t('Models'),
+          value: data.models != null ? String(data.models) : '—',
+        },
+        {
+          key: 'skills',
+          screen: 'SkillList',
+          source: 'grid_skills',
+          emoji: '⚡',
+          label: t('Skills'),
+          value: data.skills != null ? String(data.skills) : '—',
+        },
+        {
+          key: 'tools',
+          screen: 'ToolList',
+          source: 'grid_tools',
+          emoji: '🧰',
+          label: t('Available Tools'),
+          value: data.tools != null ? String(data.tools) : '—',
+        },
+        ],
+      ];
+      return rows.map((row) => row.filter((item) => supportsScreen(item.screen)));
+    },
+    [
+      colors.text,
+      colors.warning,
+      data.agents,
+      data.files,
+      data.models,
+      data.nodeCounts,
+      data.pendingPairCount,
+      data.skills,
+      data.tools,
+      supportsScreen,
+      t,
+    ],
+  );
+  const listItems = useMemo<ConsoleMenuListItem[]>(
+    () => {
+      const items: ConsoleMenuListItem[] = [
+      {
+        key: 'agentSessionsBoard',
+        screen: 'AgentSessionsBoard',
+        source: 'list_agent_sessions_board',
+        emoji: '🪟',
+        title: t('Agent & Session Board'),
+        description: t('A calmer overview for recent agent and session activity'),
+      },
+      {
+        key: 'channels',
+        screen: 'Channels',
+        source: 'list_channels',
+        emoji: '🔗',
+        title: t('Channels'),
+        description: t('Manage channel connections'),
+      },
+      {
+        key: 'devices',
+        screen: 'Devices',
+        source: 'list_devices',
+        emoji: '📱',
+        title: t('Devices'),
+        description: t('Manage paired devices'),
+      },
+      {
+        key: 'logs',
+        screen: 'Logs',
+        source: 'list_logs',
+        emoji: '🔍',
+        title: t('Logs'),
+        description: t('View gateway and agent logs'),
+      },
+      ...buildConsoleLibraryEntryDescriptors({
+        backendKind,
+        tConsole: t,
+        tCommon,
+      }),
+      ];
+      return items.filter((item) => supportsScreen(item.screen));
+    },
+    [backendKind, supportsScreen, t, tCommon],
+  );
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background, paddingTop: insets.top }]}>
@@ -645,38 +935,20 @@ export function ConsoleMenuScreen(): React.JSX.Element {
 
       {/* Stats grid */}
       <View style={styles.statsGrid}>
-        <TouchableOpacity style={styles.statItem} onPress={() => nav('Usage', 'stats_tokens')} activeOpacity={0.6}>
-          <Text style={styles.statEmoji}>{'🌀'}</Text>
-          <Text style={[styles.statValue, { color: colors.text }]}>{data.tokens ?? '—'}</Text>
-          <Text style={[styles.statLabel, { color: colors.textMuted }]}>{t('Tokens')}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.statItem} onPress={() => nav('ChatHistory', 'stats_messages')} activeOpacity={0.6}>
-          <Text style={styles.statEmoji}>{'💬'}</Text>
-          <Text style={[styles.statValue, { color: colors.text }]}>{data.messages != null ? String(data.messages) : '—'}</Text>
-          <Text style={[styles.statLabel, { color: colors.textMuted }]}>{t('Messages')}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.statItem} onPress={() => nav('ToolList', 'stats_tools')} activeOpacity={0.6}>
-          <Text style={styles.statEmoji}>{'🔧'}</Text>
-          <Text style={[styles.statValue, { color: colors.text }]}>{data.toolCalls != null ? String(data.toolCalls) : '—'}</Text>
-          <Text style={[styles.statLabel, { color: colors.textMuted }]}>{t('Tool Calls')}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.statItem} onPress={() => nav('SessionsBoard', 'stats_sessions')} activeOpacity={0.6}>
-          <Text style={styles.statEmoji}>{'🗂️'}</Text>
-          <Text style={[styles.statValue, { color: colors.text }]}>{data.sessions != null ? String(data.sessions) : '—'}</Text>
-          <Text style={[styles.statLabel, { color: colors.textMuted }]}>{t('Sessions')}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.statItem} onPress={() => nav('HeartbeatSettings', 'stats_heartbeat')} activeOpacity={0.6}>
-          <Text style={styles.statEmoji}>{'💓'}</Text>
-          <Text
-            style={[styles.statValue, { color: colors.text }, useCompactHeartbeatStat && styles.statValueCompact]}
-            numberOfLines={useCompactHeartbeatStat ? 1 : undefined}
-            adjustsFontSizeToFit={useCompactHeartbeatStat}
-            minimumFontScale={useCompactHeartbeatStat ? 0.85 : undefined}
-          >
-            {data.lastHeartbeat ?? '—'}
-          </Text>
-          <Text style={[styles.statLabel, { color: colors.textMuted }]}>{t('Heartbeat')}</Text>
-        </TouchableOpacity>
+        {statItems.map((item) => (
+          <TouchableOpacity key={item.key} style={styles.statItem} onPress={() => nav(item.screen, item.source)} activeOpacity={0.6}>
+            <Text style={styles.statEmoji}>{item.emoji}</Text>
+            <Text
+              style={[styles.statValue, { color: colors.text }, item.valueStyle]}
+              numberOfLines={item.numberOfLines}
+              adjustsFontSizeToFit={item.adjustsFontSizeToFit}
+              minimumFontScale={item.minimumFontScale}
+            >
+              {item.value}
+            </Text>
+            <Text style={[styles.statLabel, { color: colors.textMuted }]}>{item.label}</Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
       <ScrollView
@@ -692,160 +964,75 @@ export function ConsoleMenuScreen(): React.JSX.Element {
       >
         {/* Hero Row: Cost + Nodes */}
         <View style={styles.heroRow}>
-          <HeroCard
-            label={t('Cost Today')}
-            value={'$' + (data.cost ?? ' —')}
-            onPress={() => nav('Usage', 'hero_cost_today')}
-            colors={colors}
-          />
-          <HeroCard
-            label={t('Cron Jobs')}
-            value={<>{data.cronTotal != null ? String(data.cronTotal) : '—'} <Text style={styles.heroIcon}>⏰</Text></>}
-            onPress={() => nav('CronList', 'hero_cron_jobs')}
-            colors={colors}
-            badge={data.cronFailed ? `⚠ ${t('{{count}} failed', { count: data.cronFailed })}` : null}
-          />
+          {heroItems.map((item) => (
+            <HeroCard
+              key={item.key}
+              label={item.label}
+              value={item.value}
+              onPress={() => nav(item.screen, item.source)}
+              colors={colors}
+              badge={item.badge}
+            />
+          ))}
         </View>
 
         {/* Grid: 3×2 */}
-        <View style={styles.gridRow}>
-          <GridCard
-            emoji="🤖"
-            value={data.agents ? String(data.agents) : '—'}
-            label={t('common:Agents')}
-            onPress={() => nav('AgentList', 'grid_agents')}
-            colors={colors}
-          />
-          <GridCard
-            emoji="🧬"
-            value={data.files != null ? String(data.files) : '—'}
-            label={t('Memory')}
-            onPress={() => nav('FileList', 'grid_memory')}
-            colors={colors}
-          />
-          <GridCard
-            emoji="🌐"
-            value={data.nodeCounts ? (
-              <>
-                {data.nodeCounts.mobile > 0 && (
-                  <>
-                    <Text style={[styles.gridValue, { color: colors.text }]}>{data.nodeCounts.mobile}</Text>
-                    <Text style={styles.nodeDeviceIcon}>📱</Text>
-                  </>
-                )}
-                {data.nodeCounts.mobile > 0 && data.nodeCounts.desktop > 0 && <Text style={styles.nodeDeviceSpacer}>{' '}</Text>}
-                {data.nodeCounts.desktop > 0 && (
-                  <>
-                    <Text style={[styles.gridValue, { color: colors.text }]}>{data.nodeCounts.desktop}</Text>
-                    <Text style={styles.nodeDeviceIcon}>💻</Text>
-                  </>
-                )}
-                {data.nodeCounts.total === 0 && <Text style={[styles.gridValue, { color: colors.text }]}>0</Text>}
-              </>
-            ) : '—'}
-            label={t('Nodes')}
-            onPress={() => nav('Nodes', 'grid_nodes')}
-            colors={colors}
-            badge={data.pendingPairCount ? { text: t('{{count}} pending', { count: data.pendingPairCount }), color: colors.warning } : null}
-          />
-        </View>
-
-        <View style={styles.gridRow}>
-          <GridCard
-            emoji="🧩"
-            value={data.models != null ? String(data.models) : '—'}
-            label={t('Models')}
-            onPress={() => nav('ModelList', 'grid_models')}
-            colors={colors}
-          />
-          <GridCard
-            emoji="⚡"
-            value={data.skills != null ? String(data.skills) : '—'}
-            label={t('Skills')}
-            onPress={() => nav('SkillList', 'grid_skills')}
-            colors={colors}
-          />
-          <GridCard
-            emoji="🧰"
-            value={data.tools != null ? String(data.tools) : '—'}
-            label={t('Available Tools')}
-            onPress={() => nav('ToolList', 'grid_tools')}
-            colors={colors}
-          />
-        </View>
+        {gridRows.map((row, index) => (
+          <View key={index} style={styles.gridRow}>
+            {row.map((item) => (
+              <GridCard
+                key={item.key}
+                emoji={item.emoji}
+                value={item.value}
+                label={item.label}
+                onPress={() => nav(item.screen, item.source)}
+                colors={colors}
+                badge={item.badge}
+              />
+            ))}
+          </View>
+        ))}
 
         {/* List items */}
         <View style={styles.listSection}>
-          <TouchableOpacity
-            style={[styles.listItem, { borderColor: colors.border }]}
-            onPress={() => nav('Discover', 'list_discover')}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.listEmoji}>{'🧩'}</Text>
-            <View style={styles.listText}>
-              <Text style={[styles.listTitle, { color: colors.text }]}>{t('Discover', { ns: 'common' })}</Text>
-              <Text style={[styles.listDesc, { color: colors.textMuted }]}>{t('Browse skills across ClawHub and skills.sh', { ns: 'common' })}</Text>
-            </View>
-            <ChevronRight size={16} color={colors.textSubtle} strokeWidth={2} />
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.listItem, { borderColor: colors.border }]} onPress={() => nav('AgentSessionsBoard', 'list_agent_sessions_board')} activeOpacity={0.7}>
-            <Text style={styles.listEmoji}>{'🪟'}</Text>
-            <View style={styles.listText}>
-              <Text style={[styles.listTitle, { color: colors.text }]}>{t('Agent & Session Board')}</Text>
-              <Text style={[styles.listDesc, { color: colors.textMuted }]}>{t('A calmer overview for recent agent and session activity')}</Text>
-            </View>
-            <ChevronRight size={16} color={colors.textSubtle} strokeWidth={2} />
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.listItem, { borderColor: colors.border }]} onPress={() => nav('Channels', 'list_channels')} activeOpacity={0.7}>
-            <Text style={styles.listEmoji}>{'🔗'}</Text>
-            <View style={styles.listText}>
-              <Text style={[styles.listTitle, { color: colors.text }]}>{t('Channels')}</Text>
-              <Text style={[styles.listDesc, { color: colors.textMuted }]}>{t('Manage channel connections')}</Text>
-            </View>
-            <ChevronRight size={16} color={colors.textSubtle} strokeWidth={2} />
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.listItem, { borderColor: colors.border }]} onPress={() => nav('Devices', 'list_devices')} activeOpacity={0.7}>
-            <Text style={styles.listEmoji}>{'📱'}</Text>
-            <View style={styles.listText}>
-              <Text style={[styles.listTitle, { color: colors.text }]}>{t('Devices')}</Text>
-              <Text style={[styles.listDesc, { color: colors.textMuted }]}>{t('Manage paired devices')}</Text>
-            </View>
-            <ChevronRight size={16} color={colors.textSubtle} strokeWidth={2} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.listItem, { borderColor: colors.border }]}
-            onPress={() => {
-              nav('Logs', 'list_logs');
-            }}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.listEmoji}>{'🔍'}</Text>
-            <View style={styles.listText}>
-              <Text style={[styles.listTitle, { color: colors.text }]}>{t('Logs')}</Text>
-              <Text style={[styles.listDesc, { color: colors.textMuted }]}>{t('View gateway and agent logs')}</Text>
-            </View>
-            <ChevronRight size={16} color={colors.textSubtle} strokeWidth={2} />
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.listItem, { borderColor: colors.border }]} onPress={() => nav('ClawHub', 'list_clawhub')} activeOpacity={0.7}>
-            <Text style={styles.listEmoji}>{'🦞'}</Text>
-            <View style={styles.listText}>
-              <Text style={[styles.listTitle, { color: colors.text }]}>{t('ClawHub')}</Text>
-              <Text style={[styles.listDesc, { color: colors.textMuted }]}>{t('Browse and install community skills')}</Text>
-            </View>
-            <ChevronRight size={16} color={colors.textSubtle} strokeWidth={2} />
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.listItem, { borderBottomWidth: 0 }]} onPress={() => nav('Docs', 'list_docs')} activeOpacity={0.7}>
-            <Text style={styles.listEmoji}>{'📖'}</Text>
-            <View style={styles.listText}>
-              <Text style={[styles.listTitle, { color: colors.text }]}>{t('Documentation')}</Text>
-              <Text style={[styles.listDesc, { color: colors.textMuted }]}>{t('OpenClaw protocol docs')}</Text>
-            </View>
-            <ChevronRight size={16} color={colors.textSubtle} strokeWidth={2} />
-          </TouchableOpacity>
+          {listItems.map((item) => (
+            <TouchableOpacity
+              key={item.key}
+              style={[
+                styles.listItem,
+                { borderColor: colors.border },
+                item.hideBorderBottom ? { borderBottomWidth: 0 } : null,
+              ]}
+              onPress={() => nav(item.screen, item.source)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.listEmoji}>{item.emoji}</Text>
+              <View style={styles.listText}>
+                <Text style={[styles.listTitle, { color: colors.text }]}>{item.title}</Text>
+                <Text style={[styles.listDesc, { color: colors.textMuted }]}>{item.description}</Text>
+              </View>
+              <ChevronRight size={16} color={colors.textSubtle} strokeWidth={2} />
+            </TouchableOpacity>
+          ))}
         </View>
       </ScrollView>
     </View>
   );
+}
+
+// Thin dispatcher: route to the backend-specific ConsoleMenu implementation.
+// Backend branching lives in a single helper (`selectByBackend`) so we never
+// spread `if (backend === 'hermes')` across screen files (see Backend
+// Architecture Rule #3 in apps/mobile/CLAUDE.md). For OpenClaw configs this
+// resolves to `OpenClawConsoleMenuScreen`, preserving the existing render
+// path exactly.
+export function ConsoleMenuScreen(): React.JSX.Element {
+  const { config } = useAppContext();
+  const Component = selectByBackend(config, {
+    openclaw: OpenClawConsoleMenuScreen,
+    hermes: HermesConsoleMenuScreen,
+  });
+  return <Component />;
 }
 
 // ---- Styles ----

@@ -19,6 +19,14 @@ export type SkillInstallOption = {
   bins: string[];
 };
 
+export type SkillLinkedFiles = {
+  references?: string[];
+  templates?: string[];
+  assets?: string[];
+  scripts?: string[];
+  other?: string[];
+} | null;
+
 export type SkillStatusEntry = {
   name: string;
   description: string;
@@ -34,6 +42,9 @@ export type SkillStatusEntry = {
   disabled: boolean;
   blockedByAllowlist: boolean;
   eligible: boolean;
+  createdAtMs?: number;
+  updatedAtMs?: number;
+  deletable?: boolean;
   requirements: RequirementStatus;
   missing: RequirementStatus;
   configChecks: SkillConfigCheck[];
@@ -44,4 +55,16 @@ export type SkillStatusReport = {
   workspaceDir: string;
   managedSkillsDir: string;
   skills: SkillStatusEntry[];
+};
+
+export type SkillContentDetail = {
+  skillKey: string;
+  name: string;
+  path: string;
+  content: string;
+  filePath?: string | null;
+  fileType?: string | null;
+  isBinary?: boolean;
+  linkedFiles: SkillLinkedFiles;
+  editable: boolean;
 };

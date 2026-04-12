@@ -24,7 +24,31 @@ export interface LegacyPairingQrPayloadV1 {
   password?: string | null;
 }
 
-export type PairingQrPayload = PairingQrPayloadV2 | LegacyPairingQrPayloadV1;
+export interface HermesLocalPairingQrPayloadV1 {
+  version: 1;
+  kind: 'clawket_hermes_local';
+  mode: 'hermes';
+  url: string;
+  expiresAt: number;
+  hermes: {
+    bridgeUrl: string;
+    displayName?: string;
+  };
+}
+
+export interface HermesRelayPairingQrPayloadV1 {
+  version: 1;
+  kind: 'clawket_hermes_pair';
+  backend: 'hermes';
+  transport: 'relay';
+  server: string;
+  bridgeId: string;
+  accessCode: string;
+  relayUrl?: string;
+  displayName?: string | null;
+}
+
+export type PairingQrPayload = PairingQrPayloadV2 | LegacyPairingQrPayloadV1 | HermesLocalPairingQrPayloadV1 | HermesRelayPairingQrPayloadV1;
 
 export interface GatewayQrPayloadV2 {
   url: string;
@@ -89,6 +113,53 @@ export function buildGatewayQrPayload(input: {
   }
   if (input.password?.trim()) {
     payload.password = input.password.trim();
+  }
+  return JSON.stringify(payload);
+}
+
+export function buildHermesLocalPairingQrPayload(input: {
+  bridgeWsUrl: string;
+  bridgeHttpUrl: string;
+  displayName?: string | null;
+  expiresAt?: number;
+}): string {
+  const payload: HermesLocalPairingQrPayloadV1 = {
+    version: 1,
+    kind: 'clawket_hermes_local',
+    mode: 'hermes',
+    url: input.bridgeWsUrl.trim(),
+    expiresAt: input.expiresAt ?? Date.now() + 10 * 60 * 1000,
+    hermes: {
+      bridgeUrl: input.bridgeHttpUrl.trim(),
+    },
+  };
+  if (input.displayName?.trim()) {
+    payload.hermes.displayName = input.displayName.trim();
+  }
+  return JSON.stringify(payload);
+}
+
+export function buildHermesRelayPairingQrPayload(input: {
+  server: string;
+  bridgeId: string;
+  accessCode: string;
+  displayName?: string | null;
+  relayUrl?: string | null;
+}): string {
+  const payload: HermesRelayPairingQrPayloadV1 = {
+    version: 1,
+    kind: 'clawket_hermes_pair',
+    backend: 'hermes',
+    transport: 'relay',
+    server: input.server.trim(),
+    bridgeId: input.bridgeId.trim(),
+    accessCode: input.accessCode.trim(),
+  };
+  if (input.displayName?.trim()) {
+    payload.displayName = input.displayName.trim();
+  }
+  if (input.relayUrl?.trim()) {
+    payload.relayUrl = input.relayUrl.trim();
   }
   return JSON.stringify(payload);
 }

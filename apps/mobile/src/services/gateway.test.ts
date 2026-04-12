@@ -295,6 +295,21 @@ describe('GatewayClient', () => {
       expect(states).toContain('challenging');
     });
 
+    it('transitions Hermes connections directly to ready on ws open', () => {
+      const states: string[] = [];
+      client.on('connection', (e) => states.push(e.state));
+      client.configure({
+        url: 'ws://127.0.0.1:4319/v1/hermes/ws',
+        backendKind: 'hermes',
+        mode: 'hermes',
+      });
+      client.connect();
+
+      createdWs.onopen!();
+      expect(states).toContain('ready');
+      expect(states).not.toContain('challenging');
+    });
+
     it('keeps current connect attempt valid when connect is called repeatedly during connecting', () => {
       const states: string[] = [];
       client.on('connection', (e) => states.push(e.state));
@@ -421,6 +436,30 @@ describe('GatewayClient', () => {
       expect(parsed.searchParams.get('clientId')).toBe('a'.repeat(64));
       expect(parsed.searchParams.get('token')).toBe('relay-access-token');
       expect(globalThis.fetch).not.toHaveBeenCalled();
+    });
+
+    it('uses bridgeId instead of gatewayId for Hermes relay fast-path connections', async () => {
+      mockDeviceIdentity();
+      client.configure({
+        url: 'wss://relay-hermes.example.com/ws',
+        mode: 'hermes',
+        backendKind: 'hermes',
+        transportKind: 'relay',
+        relay: {
+          serverUrl: 'https://hermes-registry.example.com',
+          gatewayId: 'hbg_123',
+          clientToken: 'hct_secret',
+        },
+      });
+      client.connect();
+      await flushPromises();
+
+      expect((globalThis as any).WebSocket).toHaveBeenCalledTimes(1);
+      const relayUrl = ((globalThis as any).WebSocket as jest.Mock).mock.calls[0][0] as string;
+      const parsed = new URL(relayUrl);
+      expect(parsed.searchParams.get('bridgeId')).toBe('hbg_123');
+      expect(parsed.searchParams.get('gatewayId')).toBeNull();
+      expect(parsed.searchParams.get('token')).toBe('hct_secret');
     });
 
     it('does not start duplicate relay fast-path connections while bootstrap is in flight', async () => {
@@ -613,6 +652,15 @@ describe('GatewayClient', () => {
     it('strips the websocket path suffix used by relay endpoints', () => {
       client.configure({ url: 'wss://relay.example.com/ws' });
       expect(client.getBaseUrl()).toBe('https://relay.example.com');
+    });
+
+    it('strips the Hermes websocket mount path', () => {
+      client.configure({
+        url: 'ws://127.0.0.1:4319/v1/hermes/ws',
+        backendKind: 'hermes',
+        mode: 'hermes',
+      });
+      expect(client.getBaseUrl()).toBe('http://127.0.0.1:4319');
     });
   });
 

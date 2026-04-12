@@ -8,7 +8,7 @@ type Props = {
   approveCommand: string;
   copied: boolean;
   onCopy: () => void;
-  connectionMode?: 'relay' | 'local' | 'tailscale' | 'cloudflare' | 'custom';
+  connectionMode?: 'relay' | 'local' | 'tailscale' | 'cloudflare' | 'custom' | 'hermes';
   onRetry?: () => void;
 };
 

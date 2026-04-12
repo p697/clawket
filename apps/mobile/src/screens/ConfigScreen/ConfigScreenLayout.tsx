@@ -36,7 +36,7 @@ import {
 } from '../../services/pro-subscription';
 import { AppTheme, builtInAccents, BuiltInAccentColorId } from '../../theme';
 import { FontSize, FontWeight, Radius, Shadow, Space } from '../../theme/tokens';
-import { GatewayMode, SpeechRecognitionLanguage, ThemeMode } from '../../types';
+import { GatewayBackendKind, GatewayMode, GatewayTransportKind, SpeechRecognitionLanguage, ThemeMode } from '../../types';
 import { shouldShowWecomSupportEntry } from '../../utils/mainlandChina';
 import { openExternalUrl } from '../../utils/openExternalUrl';
 import { isMacCatalyst } from '../../utils/platform';
@@ -44,6 +44,7 @@ import { APP_PACKAGE_VERSION } from '../../constants/app-version';
 import { CLAWKET_GITHUB_REPO_URL } from '../../config/app-links';
 import { buildSupportEmailUrl, publicAppLinks } from '../../config/public';
 import { AppIconVariant, getCurrentAppIconAsync, isAppIconChangeSupportedAsync, setCurrentAppIconAsync } from '../../services/app-icon';
+import { getGatewayBackendCapabilities, getGatewayModeLabel, selectByBackend } from '../../services/gateway-backends';
 import { saveBundledImageToPhotoLibrary } from '../../services/photo-library';
 import { useConfigScreenController } from './hooks/useConfigScreenController';
 import type { ConfigStackParamList } from './ConfigTab';
@@ -90,23 +91,54 @@ function getSpeechRecognitionLanguageOptions(
   ];
 }
 
-function getModeLabels(t: (key: string) => string): Record<GatewayMode, string> {
+function getBackendLabels(t: (key: string) => string): Record<GatewayBackendKind, string> {
   return {
-    relay: t('Remote'),
-    custom: t('common:Custom'),
-    local: t('common:Custom'),
-    tailscale: t('common:Custom'),
-    cloudflare: t('common:Custom'),
+    openclaw: t('OpenClaw'),
+    hermes: t('Hermes'),
   };
 }
 
-const MODE_PLACEHOLDERS: Record<GatewayMode, string> = {
-  relay: 'wss://relay.example.com/ws',
-  custom: 'wss://gateway.example.com or ws://192.168.x.x:18789',
-  local: 'ws://192.168.1.x:18789',
-  tailscale: 'ws://100.x.x.x:18789',
-  cloudflare: 'wss://xxx.trycloudflare.com',
-};
+function getTransportLabels(t: (key: string) => string): Record<GatewayTransportKind, string> {
+  return {
+    relay: t('Remote'),
+    local: t('Local'),
+    tailscale: t('Tailscale'),
+    cloudflare: t('Cloudflare Tunnel'),
+    custom: t('common:Custom'),
+  };
+}
+
+function getUrlPlaceholder(input: {
+  backendKind: GatewayBackendKind;
+  transportKind: GatewayTransportKind;
+}): string {
+  if (input.backendKind === 'hermes') {
+    switch (input.transportKind) {
+      case 'local':
+        return 'ws://192.168.x.x:4319/v1/hermes/ws?token=...';
+      case 'tailscale':
+        return 'ws://100.x.x.x:4319/v1/hermes/ws?token=...';
+      case 'cloudflare':
+        return 'wss://xxx.trycloudflare.com/v1/hermes/ws?token=...';
+      case 'custom':
+      default:
+        return 'wss://gateway.example.com/v1/hermes/ws?token=...';
+    }
+  }
+  switch (input.transportKind) {
+    case 'relay':
+      return 'wss://relay.example.com/ws';
+    case 'local':
+      return 'ws://192.168.1.x:18789';
+    case 'tailscale':
+      return 'ws://100.x.x.x:18789';
+    case 'cloudflare':
+      return 'wss://xxx.trycloudflare.com';
+    case 'custom':
+    default:
+      return 'wss://gateway.example.com or ws://192.168.x.x:18789';
+  }
+}
 const CLAWKET_IOS_APP_STORE_URL = 'https://apps.apple.com/app/id6759597015';
 const CLAWKET_ANDROID_PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.p697.clawket';
 const APP_ICON_OPTIONS: Array<{ value: AppIconVariant; labelKey: 'Light' | 'Dark'; source: number }> = [
@@ -148,7 +180,6 @@ export function ConfigScreenLayout({ insets, tabBarHeight, controller }: Props):
   const styles = useMemo(() => createStyles(theme.colors), [theme]);
   const THEME_OPTIONS = useMemo(() => getThemeOptions(t), [t]);
   const SPEECH_RECOGNITION_LANGUAGE_OPTIONS = useMemo(() => getSpeechRecognitionLanguageOptions(t), [t]);
-  const MODE_LABELS = useMemo(() => getModeLabels(t), [t]);
   const themeModeLabel = THEME_OPTIONS.find((o) => o.value === controller.mode)?.label ?? t('Follow System');
   const speechRecognitionLanguageLabel = SPEECH_RECOGNITION_LANGUAGE_OPTIONS.find(
     (option) => option.value === controller.speechRecognitionLanguage,
@@ -188,6 +219,10 @@ export function ConfigScreenLayout({ insets, tabBarHeight, controller }: Props):
   const sortedConfigs = useMemo(() => {
     return [...controller.configs].sort((a, b) => a.createdAt - b.createdAt);
   }, [controller.configs]);
+  const activeBackendCapabilities = useMemo(
+    () => getGatewayBackendCapabilities(controller.activeConfig ?? undefined),
+    [controller.activeConfig],
+  );
 
   const openRowRef = useRef<SwipeableMethods | null>(null);
   const rowRefs = useRef<Map<string, SwipeableMethods>>(new Map());
@@ -422,6 +457,7 @@ export function ConfigScreenLayout({ insets, tabBarHeight, controller }: Props):
   const renderGatewayIcon = useCallback((mode: GatewayMode) => {
     const color = theme.colors.textMuted;
     if (mode === 'relay') return <Link2 size={16} color={color} strokeWidth={2} />;
+    if (mode === 'hermes') return <Link2 size={16} color={color} strokeWidth={2} />;
     return <Cloud size={16} color={color} strokeWidth={2} />;
   }, [theme.colors.textMuted]);
 
@@ -443,12 +479,12 @@ export function ConfigScreenLayout({ insets, tabBarHeight, controller }: Props):
           </Pressable>
         </View>
 
-        <Text style={styles.sectionHeader}>{t('OPENCLAW CONNECTION')}</Text>
+        <Text style={styles.sectionHeader}>{t('CONNECTIONS')}</Text>
 
         <View style={styles.card}>
           {sortedConfigs.length === 0 ? (
             <View style={styles.emptyGatewayWrap}>
-              <Text style={styles.emptyGatewayTitle}>{t('No OpenClaw Connection Configured')}</Text>
+              <Text style={styles.emptyGatewayTitle}>{t('No Connection Configured')}</Text>
               <Pressable
                 onPress={() => {
                   controller.openCreateEditor();
@@ -457,7 +493,7 @@ export function ConfigScreenLayout({ insets, tabBarHeight, controller }: Props):
               >
                 <View style={styles.buttonContent}>
                   <Plus size={15} color={theme.colors.primaryText} strokeWidth={2} />
-                  <Text style={styles.primaryButtonText}>{t('Add OpenClaw Connection')}</Text>
+                  <Text style={styles.primaryButtonText}>{t('Add Connection')}</Text>
                 </View>
               </Pressable>
             </View>
@@ -485,7 +521,7 @@ export function ConfigScreenLayout({ insets, tabBarHeight, controller }: Props):
                         <View style={styles.gatewayTextWrap}>
                           <Text style={styles.gatewayName} numberOfLines={1}>{item.name}</Text>
                           <Text style={styles.gatewayMeta} numberOfLines={1}>
-                            {MODE_LABELS[item.mode]} · {item.url}
+                            {getGatewayModeLabel(item)} · {item.url}
                           </Text>
                         </View>
                       </View>
@@ -515,7 +551,7 @@ export function ConfigScreenLayout({ insets, tabBarHeight, controller }: Props):
           >
             <View style={styles.buttonContent}>
               <Plus size={15} color={theme.colors.primaryText} strokeWidth={2} />
-              <Text style={styles.primaryButtonText}>{t('Add OpenClaw Connection')}</Text>
+              <Text style={styles.primaryButtonText}>{t('Add Connection')}</Text>
             </View>
           </Pressable>
           {/* <Pressable
@@ -526,22 +562,26 @@ export function ConfigScreenLayout({ insets, tabBarHeight, controller }: Props):
           </Pressable> */}
         </View>}
 
-        <Text style={styles.sectionHeader}>{t('OPENCLAW CONFIG')}</Text>
+        {activeBackendCapabilities.openClawConfigScreens ? (
+          <>
+            <Text style={styles.sectionHeader}>{t('OPENCLAW CONFIG')}</Text>
 
-        <View style={styles.card}>
-          <Pressable
-            onPress={() => configNavigation.navigate('OpenClawConfig')}
-            style={({ pressed }) => [styles.row, styles.feedbackRow, pressed && styles.rowPressed]}
-          >
-            <RowIcon backgroundColor="#E7F0FF" styles={styles}>
-              <Eye size={17} strokeWidth={2.2} color="#2F6BFF" />
-            </RowIcon>
-            <View style={styles.supportRowText}>
-              <Text style={styles.rowLabel}>{t('OPENCLAW CONFIG')}</Text>
+            <View style={styles.card}>
+              <Pressable
+                onPress={() => configNavigation.navigate('OpenClawConfig')}
+                style={({ pressed }) => [styles.row, styles.feedbackRow, pressed && styles.rowPressed]}
+              >
+                <RowIcon backgroundColor="#E7F0FF" styles={styles}>
+                  <Eye size={17} strokeWidth={2.2} color="#2F6BFF" />
+                </RowIcon>
+                <View style={styles.supportRowText}>
+                  <Text style={styles.rowLabel}>{t('OPENCLAW CONFIG')}</Text>
+                </View>
+                <ChevronRight size={16} color={theme.colors.textSubtle} strokeWidth={2} />
+              </Pressable>
             </View>
-            <ChevronRight size={16} color={theme.colors.textSubtle} strokeWidth={2} />
-          </Pressable>
-        </View>
+          </>
+        ) : null}
 
         <Text style={styles.sectionHeader}>{t('APPEARANCE')}</Text>
 
@@ -1177,11 +1217,19 @@ function EditorModal({ controller, theme, styles }: EditorModalProps): React.JSX
     { key: 'token', label: t('Auth Token') },
     { key: 'password', label: t('Password') },
   ], [t]);
-  const MODE_LABELS = useMemo(() => getModeLabels(t), [t]);
+  const BACKEND_LABELS = useMemo(() => getBackendLabels(t), [t]);
+  const TRANSPORT_LABELS = useMemo(() => getTransportLabels(t), [t]);
+  const transportOptions = useMemo<GatewayTransportKind[]>(
+    () => selectByBackend<GatewayTransportKind[]>(controller.editorBackendKind, {
+      openclaw: ['relay', 'local', 'tailscale', 'cloudflare', 'custom'],
+      hermes: ['local', 'tailscale', 'cloudflare', 'custom'],
+    }),
+    [controller.editorBackendKind],
+  );
   const authInputLabel = controller.editorAuthMethod === 'token' ? t('Auth Token') : t('Password');
   const authInputPlaceholder = controller.editorAuthMethod === 'token'
-    ? (isEditing ? t('Paste token here') : t('Paste OpenClaw Gateway Auth Token here'))
-    : t('Paste OpenClaw Gateway Auth Password here');
+    ? (isEditing ? t('Paste token here') : t('Paste connection auth token here'))
+    : t('Paste connection auth password here');
   const authInputValue = controller.editorAuthMethod === 'token'
     ? controller.editorToken
     : controller.editorPassword;
@@ -1208,7 +1256,7 @@ function EditorModal({ controller, theme, styles }: EditorModalProps): React.JSX
       {editorTab === 'quick' && !isEditing ? (
         <ScrollView contentContainerStyle={styles.modalBody}>
           <Text style={styles.quickHint}>
-            {t('Scan or upload a QR code from your Gateway to connect instantly.')}
+            {t('Scan or upload a pairing QR code to connect instantly.')}
           </Text>
 
           <Pressable
@@ -1246,18 +1294,37 @@ function EditorModal({ controller, theme, styles }: EditorModalProps): React.JSX
         </ScrollView>
       ) : (
         <ScrollView contentContainerStyle={styles.modalBody}>
-          {isEditing && !isLockedRelayEditor && (
+          {!isLockedRelayEditor && (
             <View style={styles.fieldWrap}>
-              <Text style={styles.inputLabel}>{t('Connection Mode')}</Text>
+              <Text style={styles.inputLabel}>{t('Backend')}</Text>
               <View style={styles.segmentedWrap}>
-                {(['relay', 'custom'] as const).map((mode) => (
+                {(['openclaw', 'hermes'] as const).map((backendKind) => (
                   <Pressable
-                    key={mode}
-                    style={[styles.segment, controller.editorMode === mode && styles.segmentActive]}
-                    onPress={() => controller.setEditorMode(mode)}
+                    key={backendKind}
+                    style={[styles.segment, controller.editorBackendKind === backendKind && styles.segmentActive]}
+                    onPress={() => controller.setEditorBackendKind(backendKind)}
                   >
-                    <Text style={[styles.segmentText, controller.editorMode === mode && styles.segmentTextActive]}>
-                      {MODE_LABELS[mode]}
+                    <Text style={[styles.segmentText, controller.editorBackendKind === backendKind && styles.segmentTextActive]}>
+                      {BACKEND_LABELS[backendKind]}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          )}
+
+          {!isLockedRelayEditor && (
+            <View style={styles.fieldWrap}>
+              <Text style={styles.inputLabel}>{t('Transport')}</Text>
+              <View style={styles.segmentedWrap}>
+                {transportOptions.map((transportKind) => (
+                  <Pressable
+                    key={transportKind}
+                    style={[styles.segment, controller.editorTransportKind === transportKind && styles.segmentActive]}
+                    onPress={() => controller.setEditorTransportKind(transportKind)}
+                  >
+                    <Text style={[styles.segmentText, controller.editorTransportKind === transportKind && styles.segmentTextActive]}>
+                      {TRANSPORT_LABELS[transportKind]}
                     </Text>
                   </Pressable>
                 ))}
@@ -1272,7 +1339,10 @@ function EditorModal({ controller, theme, styles }: EditorModalProps): React.JSX
                 <TextInput
                   autoCapitalize="none"
                   autoCorrect={false}
-                  placeholder={isEditing ? MODE_PLACEHOLDERS[controller.editorMode] : 'ws://192.168.x.x:18789'}
+                  placeholder={getUrlPlaceholder({
+                    backendKind: controller.editorBackendKind,
+                    transportKind: controller.editorTransportKind,
+                  })}
                   placeholderTextColor={theme.colors.textSubtle}
                   style={styles.input}
                   value={controller.editorUrl}
@@ -1280,31 +1350,35 @@ function EditorModal({ controller, theme, styles }: EditorModalProps): React.JSX
                 />
               </View>
 
-              <View style={styles.fieldWrap}>
-                <Text style={styles.inputLabel}>{t('Auth Method')}</Text>
-                <SegmentedTabs
-                  tabs={AUTH_METHOD_TABS}
-                  active={controller.editorAuthMethod}
-                  onSwitch={controller.setEditorAuthMethod}
-                  containerStyle={styles.authMethodTabs}
-                />
-              </View>
+              {controller.editorRequiresDirectAuth ? (
+                <>
+                  <View style={styles.fieldWrap}>
+                    <Text style={styles.inputLabel}>{t('Auth Method')}</Text>
+                    <SegmentedTabs
+                      tabs={AUTH_METHOD_TABS}
+                      active={controller.editorAuthMethod}
+                      onSwitch={controller.setEditorAuthMethod}
+                      containerStyle={styles.authMethodTabs}
+                    />
+                  </View>
 
-              <View style={styles.fieldWrap}>
-                <Text style={styles.inputLabel}>{authInputLabel}</Text>
-                <TextInput
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  placeholder={authInputPlaceholder}
-                  placeholderTextColor={theme.colors.textSubtle}
-                  secureTextEntry
-                  style={styles.input}
-                  value={authInputValue}
-                  onChangeText={controller.editorAuthMethod === 'token' ? controller.setEditorToken : controller.setEditorPassword}
-                />
-              </View>
+                  <View style={styles.fieldWrap}>
+                    <Text style={styles.inputLabel}>{authInputLabel}</Text>
+                    <TextInput
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      placeholder={authInputPlaceholder}
+                      placeholderTextColor={theme.colors.textSubtle}
+                      secureTextEntry
+                      style={styles.input}
+                      value={authInputValue}
+                      onChangeText={controller.editorAuthMethod === 'token' ? controller.setEditorToken : controller.setEditorPassword}
+                    />
+                  </View>
+                </>
+              ) : null}
 
-              {controller.editorMode === 'relay' && (
+              {controller.editorTransportKind === 'relay' ? (
                 <>
                   <View style={styles.fieldWrap}>
                     <Text style={styles.inputLabel}>{t('Relay Pair Server URL')}</Text>
@@ -1335,7 +1409,7 @@ function EditorModal({ controller, theme, styles }: EditorModalProps): React.JSX
                     </Text>
                   </View>
                 </>
-              )}
+              ) : null}
             </>
           )}
 
@@ -1361,7 +1435,7 @@ function EditorModal({ controller, theme, styles }: EditorModalProps): React.JSX
             </Text>
           </Pressable>
 
-          {!isEditing && <ConnectionHelpManual activeMode="custom" />}
+          {!isEditing && controller.editorBackendKind === 'openclaw' ? <ConnectionHelpManual activeMode="custom" /> : null}
         </ScrollView>
       )}
     </ModalSheet>

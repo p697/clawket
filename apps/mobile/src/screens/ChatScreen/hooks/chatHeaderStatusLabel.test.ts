@@ -9,6 +9,7 @@ describe('getChatHeaderStatusLabel', () => {
   });
 
   it.each<[ChatHeaderStatusKind, string]>([
+    ['starting_hermes', 'Starting Hermes, this may take a few seconds.'],
     ['connecting_gateway', 'Connecting to gateway...'],
     ['reconnecting', 'Reconnecting...'],
     ['connecting', 'Connecting...'],

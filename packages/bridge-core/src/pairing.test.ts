@@ -6,7 +6,7 @@ import {
   resolveCloudflareChallengeFallbackUrl,
 } from './pairing.js';
 import { getDefaultBridgeDisplayName, pickOpenClawDefaultAgentName } from './config.js';
-import { buildGatewayQrPayload, buildPairingQrPayload } from './qr.js';
+import { buildGatewayQrPayload, buildHermesLocalPairingQrPayload, buildHermesRelayPairingQrPayload, buildPairingQrPayload } from './qr.js';
 import type { PairingConfig } from './config.js';
 
 const baseConfig: PairingConfig = {
@@ -100,6 +100,64 @@ describe('pairing helpers', () => {
     expect(payload.password).toBe('gateway-password');
     expect(payload.token).toBeUndefined();
     expect(payload.url).toBe('ws://100.88.1.7:18789/');
+  });
+
+  it('builds a hermes local pairing payload on a separate kind', () => {
+    const payload = JSON.parse(buildHermesLocalPairingQrPayload({
+      bridgeWsUrl: 'ws://192.168.1.20:4319/v1/hermes/ws?token=secret',
+      bridgeHttpUrl: 'http://192.168.1.20:4319',
+      displayName: 'Hermes',
+      expiresAt: 123,
+    })) as {
+      kind?: string;
+      mode?: string;
+      url?: string;
+      expiresAt?: number;
+      hermes?: { bridgeUrl?: string; displayName?: string };
+    };
+
+    expect(payload).toEqual({
+      version: 1,
+      kind: 'clawket_hermes_local',
+      mode: 'hermes',
+      url: 'ws://192.168.1.20:4319/v1/hermes/ws?token=secret',
+      expiresAt: 123,
+      hermes: {
+        bridgeUrl: 'http://192.168.1.20:4319',
+        displayName: 'Hermes',
+      },
+    });
+  });
+
+  it('builds a hermes relay pairing payload on a separate kind', () => {
+    const payload = JSON.parse(buildHermesRelayPairingQrPayload({
+      server: 'https://hermes-registry.example.com',
+      bridgeId: 'hbg_123',
+      accessCode: 'ABC234',
+      displayName: 'Hermes',
+      relayUrl: 'wss://hermes-relay.example.com/ws',
+    })) as {
+      kind?: string;
+      backend?: string;
+      transport?: string;
+      server?: string;
+      bridgeId?: string;
+      accessCode?: string;
+      relayUrl?: string;
+      displayName?: string;
+    };
+
+    expect(payload).toEqual({
+      version: 1,
+      kind: 'clawket_hermes_pair',
+      backend: 'hermes',
+      transport: 'relay',
+      server: 'https://hermes-registry.example.com',
+      bridgeId: 'hbg_123',
+      accessCode: 'ABC234',
+      relayUrl: 'wss://hermes-relay.example.com/ws',
+      displayName: 'Hermes',
+    });
   });
 
   it('prefers the default OpenClaw agent identity name', () => {

@@ -48,6 +48,21 @@ export const DEFAULT_APP_UPDATE_DEBUG_HINT =
 // Keep this array newest-first. The first entry is treated as the latest release.
 export const APP_UPDATE_RELEASES: AppUpdateRelease[] = [
   {
+    version: '2.0.0',
+    releasedAt: '2026-04-12',
+    entries: [
+      {
+        id: 'hermes-full-support',
+        emoji: '⚡',
+        title: 'Hermes Full Support',
+        subtitle: 'Connect and manage Hermes and OpenClaw at the same time.',
+        action: {
+          type: 'none',
+        },
+      },
+    ],
+  },
+  {
     version: '1.10.0',
     releasedAt: '2026-04-10',
     entries: [

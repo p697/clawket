@@ -34,6 +34,21 @@ describe('chatSyncPolicy', () => {
     });
   });
 
+  it('shows the Hermes startup state only for Hermes before a session is selected', () => {
+    expect(getChatHeaderSyncState({
+      config: { url: 'ws://gateway.example', backendKind: 'hermes' } as { url: string; backendKind: 'hermes' },
+      sessionKey: null,
+      connectionState: 'idle',
+      refreshing: false,
+      historyLoaded: false,
+      isSending: false,
+    })).toEqual({
+      isConnecting: true,
+      status: 'starting_hermes',
+      busy: true,
+    });
+  });
+
   it('shows conversation refresh only after a session exists', () => {
     expect(getChatHeaderSyncState({
       config: { url: 'ws://gateway.example' } as { url: string },

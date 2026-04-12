@@ -133,6 +133,29 @@ function areLikelySameUserMessage(a: UiMessage, b: UiMessage): boolean {
   return false;
 }
 
+function hasMissingUserMatchMetadata(message: UiMessage): boolean {
+  return !message.idempotencyKey || !message.timestampMs;
+}
+
+function findTailUserFallbackMatch(
+  optimisticUser: UiMessage,
+  messages: UiMessage[],
+): UiMessage | null {
+  const normalizedOptimisticText = normalizeUserText(optimisticUser.text);
+  if (!normalizedOptimisticText) return null;
+  if (optimisticUser.imageUris?.length) return null;
+
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const candidate = messages[index];
+    if (candidate.role !== 'user') continue;
+    if (normalizeUserText(candidate.text) !== normalizedOptimisticText) continue;
+    if (!hasMissingUserMatchMetadata(candidate)) continue;
+    return candidate;
+  }
+
+  return null;
+}
+
 function areLikelySameAssistantMessage(a: UiMessage, b: UiMessage): boolean {
   const normalizedA = normalizeAssistantText(a.text);
   const normalizedB = normalizeAssistantText(b.text);
@@ -162,7 +185,10 @@ export function preserveOptimisticAssistantMessage(
     const hasMatchingUser = nextMessages.some((message) => (
       message.role === 'user' && areLikelySameUserMessage(message, previousLastUser)
     ));
-    if (!hasMatchingUser) {
+    const fallbackMatch = hasMatchingUser
+      ? null
+      : findTailUserFallbackMatch(previousLastUser, nextMessages);
+    if (!hasMatchingUser && !fallbackMatch) {
       mergedMessages = [...nextMessages, previousLastUser];
     }
   }

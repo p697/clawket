@@ -20,6 +20,7 @@ import type { ModelInfo } from '../../components/chat/ModelPickerModal';
 import { useNativeStackModalHeader } from '../../hooks/useNativeStackModalHeader';
 import { useAppContext } from '../../contexts/AppContext';
 import { analyticsEvents } from '../../services/analytics/events';
+import { loadGatewayModelPickerOptions } from '../../services/gateway-models';
 import { AppTheme } from '../../theme';
 import { FontSize, FontWeight, Radius, Shadow, Space } from '../../theme/tokens';
 import { useConfigScreenController } from '../ConfigScreen/hooks/useConfigScreenController';
@@ -174,8 +175,8 @@ export function HeartbeatSettingsScreen(): React.JSX.Element {
   const openModelPicker = useCallback(() => {
     setModelPickerVisible(true);
     setModelsLoading(true);
-    gateway.listModels().then((result) => {
-      setModels(result.map((m) => ({ id: m.id, name: m.name, provider: m.provider })));
+    loadGatewayModelPickerOptions(gateway).then((result) => {
+      setModels(result);
     }).catch(() => {
       setModels([]);
     }).finally(() => {

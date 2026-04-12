@@ -20,6 +20,7 @@ type Props = {
   onOpenSidebar: () => void;
   onRefresh: () => void;
   contextLabel?: string | null;
+  modelLabel?: string | null;
   hasOtherAgentActivity?: boolean;
   onAgentActivity?: () => void;
   refreshDisabled: boolean;
@@ -103,6 +104,7 @@ export function ChatHeader({
   onOpenSidebar,
   onRefresh,
   contextLabel,
+  modelLabel,
   hasOtherAgentActivity,
   onAgentActivity,
   refreshDisabled,
@@ -245,9 +247,9 @@ export function ChatHeader({
             <Text style={styles.statusText} numberOfLines={1}>
               {statusLabel}
             </Text>
-          ) : contextLabel ? (
+          ) : [modelLabel, contextLabel].filter(Boolean).join(" · ") ? (
             <Text style={styles.contextText} numberOfLines={1}>
-              {contextLabel}
+              {[modelLabel, contextLabel].filter(Boolean).join(" · ")}
             </Text>
           ) : null}
         </Animated.View>

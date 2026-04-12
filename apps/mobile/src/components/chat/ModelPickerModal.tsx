@@ -26,6 +26,7 @@ import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
 import {
   buildModelSections,
   isModelSelected,
+  type ModelProviderInfo,
   normalizeModelProvider,
   resolveProviderModel,
   shouldShowDefaultRow,
@@ -43,6 +44,7 @@ type Props = {
   onClose: () => void;
   title?: string;
   models: ModelInfo[];
+  providers?: ModelProviderInfo[];
   loading: boolean;
   error?: string | null;
   onRetry?: () => void;
@@ -76,6 +78,7 @@ export function ModelPickerModal({
   onClose,
   title,
   models,
+  providers,
   loading,
   error,
   onRetry,
@@ -94,14 +97,15 @@ export function ModelPickerModal({
 
   const snapPoints = useMemo(() => ['58%', '92%'], []);
   const modelSections = useMemo(
-    () => buildModelSections(models, searchQuery),
-    [models, searchQuery],
+    () => buildModelSections(models, searchQuery, providers),
+    [models, providers, searchQuery],
   );
   const showDefaultRow = useMemo(
     () => shouldShowDefaultRow(searchQuery, showDefault),
     [searchQuery, showDefault],
   );
   const hasVisibleModels = modelSections.some((section) => section.data.length > 0);
+  const hasVisibleProviders = modelSections.length > 0;
 
   useEffect(() => {
     if (visible) {
@@ -183,9 +187,18 @@ export function ModelPickerModal({
   const renderSectionHeader = useCallback(({ section }: { section: SectionListData<ModelInfo, ModelSection> }) => (
     <View style={styles.sectionHeader}>
       <Text style={styles.sectionHeaderText}>{section.title}</Text>
-      <Text style={styles.sectionHeaderCount}>{section.data.length}</Text>
+      <Text style={styles.sectionHeaderCount}>{section.totalModels}</Text>
     </View>
   ), [styles]);
+
+  const renderSectionFooter = useCallback(({ section }: { section: SectionListData<ModelInfo, ModelSection> }) => {
+    if (section.data.length > 0) return null;
+    return (
+      <View style={styles.sectionEmptyWrap}>
+        <Text style={styles.sectionEmptyText}>{t('No models available')}</Text>
+      </View>
+    );
+  }, [styles, t]);
 
   const renderControls = useCallback(() => (
     <View style={styles.listHeader}>
@@ -254,7 +267,8 @@ export function ModelPickerModal({
         keyExtractor={(item: ModelInfo) => `${normalizeModelProvider(item.provider)}:${item.id || item.name}`}
         renderItem={renderModelRow}
         renderSectionHeader={renderSectionHeader}
-        ListEmptyComponent={!showDefaultRow || hasVisibleModels ? renderEmptyState : null}
+        renderSectionFooter={renderSectionFooter}
+        ListEmptyComponent={!showDefaultRow && !hasVisibleProviders && !hasVisibleModels ? renderEmptyState : null}
         contentContainerStyle={styles.listContent}
         stickySectionHeadersEnabled
         keyboardDismissMode="on-drag"
@@ -401,6 +415,18 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       fontSize: FontSize.xs,
       textAlign: 'center',
       overflow: 'hidden',
+    },
+    sectionEmptyWrap: {
+      marginHorizontal: Space.lg,
+      paddingHorizontal: Space.xs,
+      paddingBottom: Space.sm,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.border,
+    },
+    sectionEmptyText: {
+      color: colors.textSubtle,
+      fontSize: FontSize.sm,
+      lineHeight: 20,
     },
     modelRow: {
       minHeight: 56,

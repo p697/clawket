@@ -1,9 +1,21 @@
 import type { ModelInfo } from './ModelPickerModal';
 
+export type ModelProviderInfo = {
+  slug: string;
+  name: string;
+  isCurrent?: boolean;
+  totalModels?: number;
+  source?: string;
+  apiUrl?: string;
+};
+
 export type ModelSection = {
   title: string;
   provider: string;
   data: ModelInfo[];
+  totalModels: number;
+  source?: string;
+  apiUrl?: string;
 };
 
 function normalize(value: string | undefined | null): string {
@@ -36,7 +48,11 @@ export function resolveProviderModel(model: ModelInfo): string {
   return `${provider}/${modelRef}`;
 }
 
-export function buildModelSections(models: ModelInfo[], query: string): ModelSection[] {
+export function buildModelSections(
+  models: ModelInfo[],
+  query: string,
+  providers?: ModelProviderInfo[],
+): ModelSection[] {
   const providerMap = new Map<string, ModelInfo[]>();
 
   for (const model of models) {
@@ -50,6 +66,38 @@ export function buildModelSections(models: ModelInfo[], query: string): ModelSec
     }
   }
 
+  const providerSections = Array.isArray(providers)
+    ? providers
+        .map((provider) => {
+          const slug = normalizeProvider(provider.slug);
+          const group = providerMap.get(slug) ?? [];
+          const title = provider.name?.trim() || formatProvider(slug);
+          return {
+            title,
+            provider: slug,
+            data: [...group].sort((modelA, modelB) => {
+              const left = normalize(modelA.name || modelA.id);
+              const right = normalize(modelB.name || modelB.id);
+              return left.localeCompare(right);
+            }),
+            totalModels: typeof provider.totalModels === 'number' ? provider.totalModels : group.length,
+            source: provider.source,
+            apiUrl: provider.apiUrl,
+          };
+        })
+        .filter((section) => {
+          if (section.data.length > 0) return true;
+          const normalizedQuery = normalize(query);
+          if (normalizedQuery.length === 0) return true;
+          return normalize(section.title).includes(normalizedQuery)
+            || normalize(section.provider).includes(normalizedQuery);
+        })
+    : [];
+
+  if (providerSections.length > 0) {
+    return providerSections;
+  }
+
   return Array.from(providerMap.entries())
     .sort(([providerA], [providerB]) => providerA.localeCompare(providerB))
     .map(([provider, group]) => ({
@@ -60,6 +108,7 @@ export function buildModelSections(models: ModelInfo[], query: string): ModelSec
         const right = normalize(modelB.name || modelB.id);
         return left.localeCompare(right);
       }),
+      totalModels: group.length,
     }));
 }
 

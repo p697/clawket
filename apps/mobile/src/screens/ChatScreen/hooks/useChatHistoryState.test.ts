@@ -124,6 +124,47 @@ describe('useChatHistoryState', () => {
     expect(gateway.fetchHistory).toHaveBeenCalledWith('agent:main:channel:target', 50);
   });
 
+  it('optimistically enters the Hermes main session before sessions.list resolves', async () => {
+    const listSessionsDeferred = deferred<Array<ReturnType<typeof createSession>>>();
+    const gateway = {
+      listSessions: jest.fn(() => listSessionsDeferred.promise),
+      fetchHistory: jest.fn().mockResolvedValue({ messages: [] }),
+      getConnectionState: jest.fn().mockReturnValue('ready'),
+    };
+
+    const { result } = renderHook(() => {
+      const sessionKeyRef = useRef<string | null>(null);
+      const state = useChatHistoryState({
+        gateway: gateway as any,
+        dbg: jest.fn(),
+        t: translate,
+        sessionKeyRef,
+        mainSessionKey: 'main',
+        gatewayConfigId: 'hermes-gw',
+        currentAgentId: 'main',
+      });
+      return { state, sessionKeyRef };
+    });
+
+    let loadPromise: Promise<void> | undefined;
+    await act(async () => {
+      loadPromise = result.current.state.loadSessionsAndHistory();
+      await Promise.resolve();
+    });
+
+    expect(result.current.state.sessionKey).toBe('main');
+    expect(result.current.sessionKeyRef.current).toBe('main');
+    expect(gateway.fetchHistory).toHaveBeenCalledWith('main', 50);
+
+    await act(async () => {
+      listSessionsDeferred.resolve([createSession('main')]);
+      await loadPromise;
+    });
+
+    expect(result.current.state.sessionKey).toBe('main');
+    expect(result.current.state.sessions).toEqual([createSession('main')]);
+  });
+
   it('reloads only the current session history for lightweight refresh', async () => {
     const gateway = {
       listSessions: jest.fn().mockResolvedValue([]),
@@ -674,6 +715,112 @@ describe('useChatHistoryState', () => {
       'user:same text',
       'user:same text',
       'assistant:reply',
+    ]);
+  });
+
+  it('renders persisted tool results from history', async () => {
+    const gateway = {
+      listSessions: jest.fn().mockResolvedValue([]),
+      fetchHistory: jest.fn().mockResolvedValue({
+        messages: [
+          { role: 'user', content: 'check weather', timestamp: 1_000 },
+          {
+            role: 'toolResult',
+            content: 'sunny',
+            timestamp: 1_500,
+            toolName: 'weather',
+            toolCallId: 'tool_1',
+            isError: false,
+          },
+          { role: 'assistant', content: 'It is sunny.', timestamp: 2_000 },
+        ],
+      }),
+      getConnectionState: jest.fn().mockReturnValue('ready'),
+    };
+
+    const { result } = renderHook(() => {
+      const sessionKeyRef = useRef<string | null>('agent:main:main');
+      const state = useChatHistoryState({
+        gateway: gateway as any,
+        dbg: jest.fn(),
+        t: translate,
+        sessionKeyRef,
+        mainSessionKey: 'agent:main:main',
+        gatewayConfigId: null,
+        currentAgentId: 'main',
+      });
+      return { state, sessionKeyRef };
+    });
+
+    await act(async () => {
+      result.current.state.setSessionKey('agent:main:main');
+      await result.current.state.loadHistory('agent:main:main', 50);
+    });
+
+    expect(result.current.state.messages).toEqual([
+      expect.objectContaining({ role: 'user', text: 'check weather' }),
+      expect.objectContaining({
+        role: 'tool',
+        toolName: 'weather',
+        toolStatus: 'success',
+        toolArgs: undefined,
+      }),
+      expect.objectContaining({ role: 'assistant', text: 'It is sunny.' }),
+    ]);
+  });
+
+  it('keeps persisted tool timing and args details from history', async () => {
+    const gateway = {
+      listSessions: jest.fn().mockResolvedValue([]),
+      fetchHistory: jest.fn().mockResolvedValue({
+        messages: [
+          {
+            role: 'toolResult',
+            content: '{"ok":true}',
+            timestamp: 1_500,
+            toolName: 'weather',
+            toolCallId: 'tool_1',
+            toolArgs: '{"city":"Shanghai"}',
+            toolDurationMs: 250,
+            toolStartedAt: 1_250,
+            toolFinishedAt: 1_500,
+            isError: false,
+          },
+        ],
+      }),
+      getConnectionState: jest.fn().mockReturnValue('ready'),
+    };
+
+    const { result } = renderHook(() => {
+      const sessionKeyRef = useRef<string | null>('agent:main:main');
+      const state = useChatHistoryState({
+        gateway: gateway as any,
+        dbg: jest.fn(),
+        t: translate,
+        sessionKeyRef,
+        mainSessionKey: 'agent:main:main',
+        gatewayConfigId: null,
+        currentAgentId: 'main',
+      });
+      return { state, sessionKeyRef };
+    });
+
+    await act(async () => {
+      result.current.state.setSessionKey('agent:main:main');
+      await result.current.state.loadHistory('agent:main:main', 50);
+    });
+
+    expect(result.current.state.messages).toEqual([
+      expect.objectContaining({
+        role: 'tool',
+        toolName: 'weather',
+        toolStatus: 'success',
+        toolArgs: '{"city":"Shanghai"}',
+        toolDetail: '{"ok":true}',
+        toolDurationMs: 250,
+        toolStartedAt: 1_250,
+        toolFinishedAt: 1_500,
+      }),
     ]);
   });
 

@@ -93,7 +93,7 @@ export function QuickConnectGuideCard({ style, variant = 'numbered' }: Props): R
       ),
     },
     {
-      title: t('Scan the generated QR code.'),
+      title: t('Scan one of the generated QR codes.'),
       body: null,
     },
   ], [styles, t]);

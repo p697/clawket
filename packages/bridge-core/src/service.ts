@@ -25,6 +25,10 @@ const SERVICE_LAUNCHER_PATH = join(SERVICE_DIR, 'clawket-launcher.sh');
 const LINUX_CRON_RECORD_PATH = join(SERVICE_DIR, 'bridge-service.cron');
 const SERVICE_LOG_PATH = join(LOG_DIR, 'bridge-cli.log');
 const SERVICE_ERROR_LOG_PATH = join(LOG_DIR, 'bridge-cli-error.log');
+const HERMES_BRIDGE_LOG_PATH = join(LOG_DIR, 'hermes-bridge.log');
+const HERMES_BRIDGE_ERROR_LOG_PATH = join(LOG_DIR, 'hermes-bridge-error.log');
+const HERMES_RELAY_LOG_PATH = join(LOG_DIR, 'hermes-relay.log');
+const HERMES_RELAY_ERROR_LOG_PATH = join(LOG_DIR, 'hermes-relay-error.log');
 const MACOS_PLIST_PATH = join(homedir(), 'Library', 'LaunchAgents', `${SERVICE_LABEL}.plist`);
 const LINUX_SERVICE_PATH = join(homedir(), '.config', 'systemd', 'user', SYSTEMD_UNIT_NAME);
 const LINUX_CRON_MARKER = '# clawket-bridge-cli';
@@ -104,7 +108,7 @@ export function getServiceStatus(): ServiceStatus {
     case 'launchagent':
       base.installed = existsSync(MACOS_PLIST_PATH);
       if (base.installed) {
-        base.running = commandSucceeds('launchctl', ['list', SERVICE_LABEL]) || base.running;
+        base.running = isMacosLaunchAgentRunning(SERVICE_LABEL) || base.running;
       }
       return base;
     case 'systemd-user':
@@ -392,6 +396,21 @@ export function getServicePaths(): { logPath: string; errorLogPath: string; serv
   };
 }
 
+export function getHermesProcessLogPaths(): {
+  bridgeLogPath: string;
+  bridgeErrorLogPath: string;
+  relayLogPath: string;
+  relayErrorLogPath: string;
+} {
+  ensureServiceDirs();
+  return {
+    bridgeLogPath: HERMES_BRIDGE_LOG_PATH,
+    bridgeErrorLogPath: HERMES_BRIDGE_ERROR_LOG_PATH,
+    relayLogPath: HERMES_RELAY_LOG_PATH,
+    relayErrorLogPath: HERMES_RELAY_ERROR_LOG_PATH,
+  };
+}
+
 export function buildMacosPlist(programArgs: string[], logPath: string, errorLogPath: string): string {
   const argsXml = programArgs.map((arg) => `    <string>${escapeXml(arg)}</string>`).join('\n');
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -558,12 +577,34 @@ function listPosixRuntimePids(scriptPath: string): number[] {
         const pid = Number(match[1]);
         const command = match[2];
         if (!Number.isInteger(pid) || pid <= 0 || pid === process.pid) return [];
-        if (!command.includes(scriptPath)) return [];
-        if (!/\brun\b/.test(command)) return [];
+        if (!isOpenClawRuntimeCommand(command, scriptPath)) return [];
         return [pid];
       });
   } catch {
     return [];
+  }
+}
+
+function isOpenClawRuntimeCommand(command: string, scriptPath: string): boolean {
+  const scriptIndex = command.indexOf(scriptPath);
+  if (scriptIndex < 0) return false;
+  const tail = command.slice(scriptIndex + scriptPath.length).trim();
+  return /^run(?:\s|$)/.test(tail);
+}
+
+function isMacosLaunchAgentRunning(label: string): boolean {
+  if (process.platform !== 'darwin') return false;
+  const uid = process.getuid?.();
+  if (uid == null) return false;
+  try {
+    const output = execFileSync('launchctl', ['print', `gui/${uid}/${label}`], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    const match = output.match(/active count = (\d+)/);
+    return Number(match?.[1] ?? '0') > 0;
+  } catch {
+    return false;
   }
 }
 

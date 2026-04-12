@@ -1,6 +1,6 @@
 {
   "name": "@p697/clawket",
-  "version": "0.5.4",
+  "version": "0.6.0",
   "private": false,
   "type": "module",
   "license": "AGPL-3.0-only",
@@ -34,6 +34,9 @@
     "uninstall": "node scripts/run-command.mjs uninstall",
     "reset": "node scripts/run-command.mjs reset",
     "refresh-code": "node scripts/run-command.mjs refresh-code",
+    "hermes:dev": "node scripts/run-command.mjs hermes dev",
+    "hermes:pair:relay": "node scripts/run-command.mjs hermes pair relay",
+    "hermes:relay:run": "node scripts/run-command.mjs hermes relay run",
     "verify:package": "node scripts/verify-package.mjs",
     "prepack": "npm run build && npm run verify:package",
     "publish:dry-run": "npm publish --dry-run",

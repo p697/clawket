@@ -1,0 +1,29 @@
+name = "clawket-hermes-relay"
+main = "src/index.ts"
+compatibility_date = "2026-03-03"
+workers_dev = true
+account_id = "replace-with-your-cloudflare-account-id"
+
+[vars]
+# Copy this file to wrangler.local.toml and replace these values with resources/endpoints
+# from the Cloudflare account you use for local deploys or remote dev.
+MAX_MESSAGES_PER_10S = "120"
+MAX_CLIENT_MESSAGES_PER_10S = "300"
+HEARTBEAT_INTERVAL_MS = "30000"
+AWAITING_CHALLENGE_TTL_MS = "25000"
+CLIENT_IDLE_TIMEOUT_MS = "600000"
+REGISTRY_VERIFY_URL = "https://hermes-registry.example.com"
+GATEWAY_OWNER_LEASE_MS = "20000"
+
+[[durable_objects.bindings]]
+name = "HERMES_ROOM"
+class_name = "HermesRelayRoom"
+
+[[kv_namespaces]]
+binding = "HERMES_ROUTES_KV"
+id = "replace-with-your-kv-namespace-id"
+preview_id = "replace-with-your-kv-preview-id"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["HermesRelayRoom"]

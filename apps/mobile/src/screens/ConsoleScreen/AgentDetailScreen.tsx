@@ -25,11 +25,12 @@ import { useAppContext } from '../../contexts/AppContext';
 import { useAppTheme } from '../../theme';
 import { analyticsEvents } from '../../services/analytics/events';
 import { enrichAgentsWithIdentity } from '../../services/agent-identity';
+import { loadGatewayAgentDetailBundle } from '../../services/gateway-agent-detail';
+import { loadGatewayModelPickerOptions } from '../../services/gateway-models';
 import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
 import type { AgentInfo } from '../../types/agent';
 import {
   EMPTY_AGENT_IDENTITY_PROFILE,
-  parseAgentIdentityProfile,
   type AgentIdentityProfile,
 } from '../../utils/agent-identity-profile';
 import { persistAgentDetailChanges } from '../../utils/agent-detail-save';
@@ -94,121 +95,24 @@ export function AgentDetailScreen(): React.JSX.Element {
   const loadAgent = useCallback(async () => {
     setLoading(true);
     try {
-      const [agentsResult, identityResult, identityFileResult, configResult] = await Promise.allSettled([
-        gateway.listAgents(),
-        gateway.fetchIdentity(agentId),
-        gateway.getAgentFile('IDENTITY.md', agentId),
-        gateway.getConfig(),
-      ]);
-
-      let loadedName = '';
-      let loadedEmoji = '';
-      let loadedCreature = '';
-      let loadedVibe = '';
-      let loadedTheme = '';
-      let loadedAvatar = '';
-      let loadedModel = '';
-      let loadedFallbacks: string[] = [];
-
-      if (agentsResult.status === 'fulfilled') {
-        const found = agentsResult.value.agents.find((a) => a.id === agentId);
-        setAgent(found ?? null);
-        setMainKey(agentsResult.value.mainKey);
-        loadedName = found?.identity?.name || found?.name || '';
-      }
-
-      if (identityResult.status === 'fulfilled') {
-        const identity = identityResult.value;
-        if (identity.name) loadedName = identity.name;
-        loadedEmoji = identity.emoji ?? '';
-        loadedAvatar = identity.avatar ?? '';
-      }
-
-      if (configResult.status === 'fulfilled' && configResult.value.config) {
-        configHashRef.current = configResult.value.hash;
-        const cfg = configResult.value.config;
-        const agentsList = (cfg.agents as Record<string, unknown>)?.list;
-        if (Array.isArray(agentsList)) {
-          const idx = agentsList.findIndex(
-            (a: Record<string, unknown>) => a && a.id === agentId,
-          );
-          agentIndexRef.current = idx;
-          if (idx >= 0) {
-            const agentCfg = agentsList[idx] as Record<string, unknown>;
-            const agentIdentity = typeof agentCfg.identity === 'object' && agentCfg.identity !== null
-              ? agentCfg.identity as Record<string, unknown>
-              : null;
-            const configTheme = typeof agentIdentity?.theme === 'string' ? agentIdentity.theme : '';
-            const configAvatar = typeof agentIdentity?.avatar === 'string' ? agentIdentity.avatar : '';
-            if (configTheme) loadedTheme = configTheme;
-            if (configAvatar) loadedAvatar = configAvatar;
-            if (agentCfg?.model) {
-              if (typeof agentCfg.model === 'string') {
-                loadedModel = agentCfg.model;
-              } else if (typeof agentCfg.model === 'object' && agentCfg.model !== null) {
-                const modelObj = agentCfg.model as Record<string, unknown>;
-                const primaryVal = modelObj.primary as string | undefined;
-                if (primaryVal) loadedModel = primaryVal;
-                const fb = modelObj.fallbacks;
-                if (Array.isArray(fb)) {
-                  loadedFallbacks = sanitizeFallbackModels(
-                    fb.filter((s): s is string => typeof s === 'string' && s.length > 0),
-                    { primaryModel: loadedModel || primaryVal },
-                  );
-                }
-              }
-            }
-          }
-        }
-      }
-
-      if (identityFileResult.status === 'fulfilled') {
-        identityFileContentRef.current = identityFileResult.value.content ?? '';
-        const identityProfile = parseAgentIdentityProfile(identityFileResult.value.content ?? '');
-        if (identityProfile.name) {
-          loadedName = identityProfile.name;
-        }
-        if (identityProfile.emoji) {
-          loadedEmoji = identityProfile.emoji;
-        }
-        if (identityProfile.creature) {
-          loadedCreature = identityProfile.creature;
-        }
-        if (identityProfile.vibe) {
-          loadedVibe = identityProfile.vibe;
-        }
-        if (identityProfile.theme) {
-          loadedTheme = identityProfile.theme;
-        }
-        if (identityProfile.avatar) {
-          loadedAvatar = identityProfile.avatar;
-        }
-      }
-
-      identityProfileRef.current = {
-        ...EMPTY_AGENT_IDENTITY_PROFILE,
-        name: loadedName,
-        emoji: loadedEmoji,
-        creature: loadedCreature,
-        vibe: loadedVibe,
-        theme: loadedTheme,
-        avatar: loadedAvatar,
-      };
-
-      setName(loadedName);
-      setEmoji(loadedEmoji);
-      setVibe(loadedVibe);
-
-      setModel(loadedModel);
-      setFallbacks(loadedFallbacks);
-
-      // Snapshot initial values for dirty tracking
+      const bundle = await loadGatewayAgentDetailBundle(gateway, agentId);
+      setAgent(bundle.agent);
+      setMainKey(bundle.mainKey);
+      configHashRef.current = bundle.configHash;
+      agentIndexRef.current = bundle.agentIndex;
+      identityProfileRef.current = bundle.identityProfile;
+      identityFileContentRef.current = bundle.identityFileContent;
+      setName(bundle.form.name);
+      setEmoji(bundle.form.emoji);
+      setVibe(bundle.form.vibe);
+      setModel(bundle.form.model);
+      setFallbacks(bundle.form.fallbacks);
       initialRef.current = {
-        name: loadedName,
-        emoji: loadedEmoji,
-        vibe: loadedVibe,
-        model: loadedModel,
-        fallbacks: JSON.stringify(loadedFallbacks),
+        name: bundle.form.name,
+        emoji: bundle.form.emoji,
+        vibe: bundle.form.vibe,
+        model: bundle.form.model,
+        fallbacks: JSON.stringify(bundle.form.fallbacks),
       };
     } catch {
       // handled by empty state
@@ -382,8 +286,7 @@ export function AgentDetailScreen(): React.JSX.Element {
   const loadModels = useCallback(async () => {
     setModelsLoading(true);
     try {
-      const result = await gateway.listModels();
-      setModels(result.map((m) => ({ id: m.id, name: m.name, provider: m.provider })));
+      setModels(await loadGatewayModelPickerOptions(gateway));
     } catch {
       setModels([]);
     } finally {

@@ -21,6 +21,7 @@ import { useTranslation } from 'react-i18next';
 import { useAppContext } from '../../contexts/AppContext';
 import { analyticsEvents } from '../../services/analytics/events';
 import { scheduleAutomaticAppReview } from '../../services/auto-app-review';
+import { loadGatewayModelPickerOptions } from '../../services/gateway-models';
 import { useAppTheme } from '../../theme';
 import { FontSize, FontWeight, HitSize, Radius, Space } from '../../theme/tokens';
 import type { CronJob, CronJobCreate, CronJobPatch, CronSchedule } from '../../types';
@@ -399,8 +400,7 @@ export function CronEditorScreen(): React.JSX.Element {
   const loadModels = useCallback(async () => {
     setModelsLoading(true);
     try {
-      const result = await gateway.listModels();
-      setModels(result.map((m) => ({ id: m.id, name: m.name, provider: m.provider })));
+      setModels(await loadGatewayModelPickerOptions(gateway));
     } catch {
       setModels([]);
     } finally {

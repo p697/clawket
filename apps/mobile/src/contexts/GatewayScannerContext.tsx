@@ -127,7 +127,7 @@ export function GatewayScannerProvider({ children }: { children: React.ReactNode
       if (!parsed) {
         Alert.alert(
           i18n.t('Invalid QR Code', { ns: 'config' }),
-          i18n.t('This QR code does not contain valid OpenClaw connection info.', { ns: 'config' }),
+          i18n.t('This QR code does not contain valid connection info.', { ns: 'config' }),
         );
         return;
       }
@@ -153,7 +153,7 @@ export function GatewayScannerProvider({ children }: { children: React.ReactNode
     if (action === 'show-settings') {
       Alert.alert(
         i18n.t('Camera Access Required', { ns: 'config' }),
-        i18n.t('Camera access is required to scan your OpenClaw Gateway QR code. Enable Camera in Settings and try again.', { ns: 'config' }),
+        i18n.t('Camera access is required to scan a pairing QR code. Enable Camera in Settings and try again.', { ns: 'config' }),
         [
           {
             text: i18n.t('Cancel', { ns: 'common' }),

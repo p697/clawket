@@ -9,7 +9,15 @@ import {
   furnitureList,
   tileToPixel,
 } from "./world";
-import { getGatewayState, postToRN, triggerOfficeClockRecall, EVENING_START_HOUR, EVENING_END_HOUR } from "./bridge";
+import {
+  getGatewayState,
+  isOfficeActionDisabled,
+  isOfficeCharacterDisabled,
+  postToRN,
+  triggerOfficeClockRecall,
+  EVENING_START_HOUR,
+  EVENING_END_HOUR,
+} from "./bridge";
 import {
   isMenuOpen,
   openCharacterMenu,
@@ -207,7 +215,7 @@ function handleTap(clientX: number, clientY: number): void {
   }
 
   const propAction = resolvePropAction(scenePoint);
-  if (propAction) {
+  if (propAction && !isOfficeActionDisabled(propAction.action)) {
     postToRN({ type: "HAPTIC" });
     postToRN(propAction);
     return;
@@ -216,6 +224,7 @@ function handleTap(clientX: number, clientY: number): void {
   const character =
     hitTestCharacter(scenePoint) ?? resolveDeskHitCharacter(scenePoint, latestCharacters);
   if (!character) return;
+  if (isOfficeCharacterDisabled(character.id)) return;
   postToRN({ type: "HAPTIC" });
   openCharacterMenu(character.id, character);
 }
@@ -255,7 +264,7 @@ function hitTestOfficeClock(point: { x: number; y: number }): boolean {
 function resolvePropAction(point: {
   x: number;
   y: number;
-}): { type: "MENU_ACTION"; action: string; characterId: string } | null {
+}): { type: "MENU_ACTION"; action: string; characterId: string; source: "prop" } | null {
   const mappings: Array<{ type: string; action: string }> = [
     { type: "filing_cabinet", action: "memory" },
     { type: "mailbox", action: "connections" },
@@ -279,6 +288,7 @@ function resolvePropAction(point: {
         type: "MENU_ACTION",
         action: mapping.action,
         characterId: "assistant",
+        source: "prop",
       };
     }
   }

@@ -1,13 +1,33 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import {
   buildGatewayControlUiOrigin,
   buildLocalPairingInfo,
+  detectLanIp,
   normalizeExplicitGatewayUrl,
   rewriteGatewayHost,
   scoreLanCandidate,
 } from './local-pair.js';
 
+const { execFileSyncMock } = vi.hoisted(() => ({
+  execFileSyncMock: vi.fn(),
+}));
+
+vi.mock('node:child_process', () => ({
+  execFileSync: execFileSyncMock,
+}));
+
 describe('local pair helpers', () => {
+  const originalPlatform = process.platform;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.stubGlobal('process', process);
+    Object.defineProperty(process, 'platform', { value: originalPlatform });
+  });
+
   it('builds a local QR payload with password auth', () => {
     const info = buildLocalPairingInfo({
       explicitUrl: 'http://100.88.1.7:18789',
@@ -44,5 +64,36 @@ describe('local pair helpers', () => {
   it('prefers real LAN interfaces over tunnel adapters', () => {
     expect(scoreLanCandidate('tailscale0', '100.90.0.3')).toBe(0);
     expect(scoreLanCandidate('en0', '192.168.1.12')).toBeGreaterThan(0);
+  });
+
+  it('prefers realtime ipconfig lookup on macOS en0/en1', () => {
+    Object.defineProperty(process, 'platform', { value: 'darwin' });
+    execFileSyncMock
+      .mockImplementationOnce(() => '192.168.31.41\n');
+
+    expect(detectLanIp()).toBe('192.168.31.41');
+    expect(execFileSyncMock).toHaveBeenCalledWith('ipconfig', ['getifaddr', 'en0'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+  });
+
+  it('falls back from en0 to en1 on macOS', () => {
+    Object.defineProperty(process, 'platform', { value: 'darwin' });
+    execFileSyncMock
+      .mockImplementationOnce(() => {
+        throw new Error('no en0 address');
+      })
+      .mockImplementationOnce(() => '192.168.31.42\n');
+
+    expect(detectLanIp()).toBe('192.168.31.42');
+    expect(execFileSyncMock).toHaveBeenNthCalledWith(1, 'ipconfig', ['getifaddr', 'en0'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    expect(execFileSyncMock).toHaveBeenNthCalledWith(2, 'ipconfig', ['getifaddr', 'en1'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
   });
 });

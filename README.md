@@ -10,7 +10,7 @@
 
 [中文说明](./README.zh-CN.md)
 
-Clawket is an open-source mobile app for managing your [OpenClaw](https://github.com/openclaw/openclaw) AI agents on the go. Available on iOS and Android.
+Clawket is an open-source mobile app for managing your AI agents on the go. It currently supports [OpenClaw](https://github.com/openclaw/openclaw) and [Hermes](https://github.com/NousResearch/hermes-agent), and is available on iOS and Android.
 
 <p align="center">
   <a href="https://apps.apple.com/app/id6759597015">
@@ -51,12 +51,18 @@ Clawket supports two connection paths:
 
 ## How It Works
 
-1. Run `clawket pair` on your Mac/PC — the bridge prints a time-limited, single-use QR code for relay-backed pairing. Or run `clawket pair --local` to pair directly over your local network without any relay infrastructure.
-2. Scan the QR with the Clawket mobile app to trust that machine.
-3. In relay mode, the registry verifies the pairing and the relay worker carries real-time WebSocket traffic between your phone and the bridge.
-4. In direct mode, the app connects straight to your gateway over LAN or Tailscale — no relay needed.
-5. The bridge forwards everything to your local OpenClaw host. Chat, manage agents, edit configs — all from your phone in real time.
+1. Run `clawket pair` on your Mac/PC — the bridge auto-detects which local backends are available and prints one or more time-limited QR codes.
+2. Run `clawket pair --local` if you want direct local pairing instead of relay-backed pairing.
+3. Scan the QR with the Clawket mobile app to trust that machine.
+4. In relay mode, the registry verifies the pairing and the relay worker carries real-time WebSocket traffic between your phone and the bridge.
+5. In direct mode, the app connects straight to your backend bridge over LAN, Tailscale, or another direct URL — no relay needed.
 6. After the first pairing, reconnection is automatic.
+
+Current pairing behavior:
+
+- If the machine only has OpenClaw, `clawket pair` and `clawket pair --local` behave the same as before.
+- If the machine only has Hermes, `clawket pair` and `clawket pair --local` generate a Hermes local bridge QR.
+- If the machine has both OpenClaw and Hermes, Clawket prints one QR per backend and clearly labels them.
 
 ## Workspace Layout
 
@@ -94,7 +100,7 @@ npm run mobile:sync:native
 npm run mobile:dev:android
 ```
 
-### Connect to OpenClaw
+### Connect to OpenClaw or Hermes
 
 If you already installed the published bridge CLI from npm, pair it separately:
 
@@ -103,10 +109,23 @@ npm install -g @p697/clawket
 clawket pair
 ```
 
+This command auto-detects OpenClaw and Hermes on the machine:
+
+- OpenClaw uses relay pairing by default
+- Hermes uses local bridge pairing for now
+- If both are available, you get one QR code per backend
+
 For direct local pairing without relay infrastructure:
 
 ```bash
 clawket pair --local
+```
+
+To force a specific backend:
+
+```bash
+clawket pair --backend hermes
+clawket pair --local --backend hermes
 ```
 
 Then scan the generated QR code in the app.
@@ -153,6 +172,13 @@ For direct local pairing without relay infrastructure:
 npm run bridge:pair:local
 ```
 
+For explicit Hermes pairing:
+
+```bash
+npm run bridge:pair:hermes
+npm run bridge:pair:local:hermes
+```
+
 For an explicit local, Tailscale, or custom gateway URL:
 
 ```bash
@@ -193,6 +219,7 @@ Key defaults for self-hosters:
 
 - `clawket pair` requires `--server` or `CLAWKET_REGISTRY_URL` — no hardcoded registry
 - `clawket pair --local` works without any Cloudflare infrastructure
+- OpenClaw pairing state remains in its legacy config, while Hermes pairing state is stored separately, so upgrading the bridge does not break existing OpenClaw pairings
 - Checked-in `wrangler.toml` files use placeholder bindings and `example.com` endpoints only
 - If analytics, support, or legal links are unset, the app disables or hides those integrations
 - If RevenueCat is unset, the app skips subscription billing and defaults to unlocked Pro access

@@ -162,7 +162,7 @@ export function FileListView({
     if (mode === 'refresh') setRefreshing(true);
     try {
       const result = await gateway.listAgentFiles(agentId);
-      const FILE_ORDER = ['SOUL.md', 'MEMORY.md', 'AGENTS.md'];
+      const FILE_ORDER = ['SOUL.md', 'MEMORY.md', 'USER.md', 'AGENTS.md'];
       result.sort((a, b) => {
         const ai = FILE_ORDER.indexOf(a.name);
         const bi = FILE_ORDER.indexOf(b.name);

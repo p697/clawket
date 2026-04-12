@@ -343,7 +343,7 @@ function AgentCard({
   colors: ReturnType<typeof useAppTheme>['theme']['colors'];
   t: ReturnType<typeof useTranslation<'console'>>['t'];
   onPress: () => void;
-  onSettingsPress: () => void;
+  onSettingsPress?: () => void;
 }): React.JSX.Element {
   const tone = statusTone(card.status, colors);
 
@@ -389,21 +389,23 @@ function AgentCard({
         {card.preview}
       </Text>
 
-      <Pressable
-        style={({ pressed }) => [
-          styles.agentSettingsButton,
-          {
-            backgroundColor: colors.surfaceMuted,
-            borderColor: colors.border,
-            opacity: pressed ? 0.9 : 1,
-          },
-        ]}
-        onPress={onSettingsPress}
-      >
-        <Text style={[styles.agentSettingsButtonText, { color: colors.text }]}>
-          {t('Edit Agent')}
-        </Text>
-      </Pressable>
+      {onSettingsPress ? (
+        <Pressable
+          style={({ pressed }) => [
+            styles.agentSettingsButton,
+            {
+              backgroundColor: colors.surfaceMuted,
+              borderColor: colors.border,
+              opacity: pressed ? 0.9 : 1,
+            },
+          ]}
+          onPress={onSettingsPress}
+        >
+          <Text style={[styles.agentSettingsButtonText, { color: colors.text }]}>
+            {t('Edit Agent')}
+          </Text>
+        </Pressable>
+      ) : null}
     </Pressable>
   );
 }
@@ -489,6 +491,8 @@ export function AgentSessionsBoardScreen(): React.JSX.Element {
   const { theme } = useAppTheme();
   const { t } = useTranslation('console');
   const { gateway, currentAgentId, agents, requestOfficeChat, switchAgent } = useAppContext();
+  const capabilities = useMemo(() => gateway.getBackendCapabilities(), [gateway]);
+  const canOpenAgentDetail = capabilities.consoleAgentDetail;
   const isFocused = useIsFocused();
   const stylesMemo = useMemo(() => createStyles(theme.colors), [theme.colors]);
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
@@ -599,9 +603,10 @@ export function AgentSessionsBoardScreen(): React.JSX.Element {
   }, [currentAgentId, navigation, requestOfficeChat, switchAgent]);
 
   const openAgentSettings = useCallback((agentId: string) => {
+    if (!canOpenAgentDetail) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     navigation.navigate('AgentDetail', { agentId });
-  }, [navigation]);
+  }, [canOpenAgentDetail, navigation]);
 
   return (
     <View style={[stylesMemo.root, { backgroundColor: theme.colors.background }]}>
@@ -654,7 +659,7 @@ export function AgentSessionsBoardScreen(): React.JSX.Element {
                     colors={theme.colors}
                     t={t}
                     onPress={() => openAgent(card.agentId, card.sessionKey)}
-                    onSettingsPress={() => openAgentSettings(card.agentId)}
+                    onSettingsPress={canOpenAgentDetail ? () => openAgentSettings(card.agentId) : undefined}
                   />
                 </View>
               ))}

@@ -1,14 +1,25 @@
-import type { GatewayMode } from '../types';
+import type { GatewayBackendKind, GatewayTransportKind } from '../types';
 
 export function resolveSavedGatewayName(input: {
   name: string;
-  mode: GatewayMode;
+  backendKind: GatewayBackendKind;
+  transportKind: GatewayTransportKind;
   url: string;
   relayDisplayName?: string;
+  hermesDisplayName?: string;
 }): string {
   const trimmedName = input.name.trim();
   const relayDisplayName = input.relayDisplayName?.trim();
-  if (!relayDisplayName || input.mode !== 'relay') return trimmedName;
+  const hermesDisplayName = input.hermesDisplayName?.trim();
+  if (hermesDisplayName && input.backendKind === 'hermes') {
+    if (!trimmedName) return hermesDisplayName;
+    if (trimmedName === hermesDisplayName) return hermesDisplayName;
+    if (trimmedName === 'Gateway') return hermesDisplayName;
+    const host = parseHost(input.url);
+    if (host && trimmedName === `Hermes (${host})`) return hermesDisplayName;
+    return trimmedName;
+  }
+  if (!relayDisplayName || input.transportKind !== 'relay') return trimmedName;
   if (!trimmedName) return relayDisplayName;
   if (trimmedName === relayDisplayName) return relayDisplayName;
   if (trimmedName === 'Gateway') return relayDisplayName;

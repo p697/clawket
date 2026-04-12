@@ -6,6 +6,7 @@ export function getChatHeaderStatusLabel(
   status: ChatHeaderStatusKind | null,
   t: Translate,
 ): string | null {
+  if (status === 'starting_hermes') return t('Starting Hermes, this may take a few seconds.');
   if (status === 'connecting_gateway') return t('Connecting to gateway...');
   if (status === 'reconnecting') return t('Reconnecting...');
   if (status === 'connecting') return t('Connecting...');

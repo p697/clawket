@@ -35,6 +35,21 @@ describe('preserveOptimisticAssistantMessage', () => {
     expect(preserveOptimisticAssistantMessage(previousMessages, nextMessages)).toEqual(nextMessages);
   });
 
+  it('drops the local optimistic user when history catches up but omits timestamp metadata', () => {
+    const previousMessages: UiMessage[] = [
+      { id: 'u1', role: 'user', text: 'Older question', timestampMs: 1_000 },
+      { id: 'a1', role: 'assistant', text: 'Older answer', timestampMs: 2_000 },
+      { id: 'usr_3000', role: 'user', text: '你好', timestampMs: 3_000 },
+    ];
+    const nextMessages: UiMessage[] = [
+      { id: 'u1', role: 'user', text: 'Older question', timestampMs: 1_000 },
+      { id: 'a1', role: 'assistant', text: 'Older answer', timestampMs: 2_000 },
+      { id: 'h_user_missing_meta', role: 'user', text: '你好' },
+    ];
+
+    expect(preserveOptimisticAssistantMessage(previousMessages, nextMessages)).toEqual(nextMessages);
+  });
+
   it('does not conflate consecutive image-only user messages during history refresh', () => {
     const previousMessages: UiMessage[] = [
       { id: 'u1', role: 'user', text: 'Older question', timestampMs: 1_000 },

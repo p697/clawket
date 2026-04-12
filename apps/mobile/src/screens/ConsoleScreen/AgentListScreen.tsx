@@ -46,6 +46,9 @@ export function AgentListScreen(): React.JSX.Element {
   const navigation = useNavigation<AgentListNavigation>();
   const route = useRoute<AgentListRoute>();
   const styles = useMemo(() => createStyles(theme.colors), [theme]);
+  const capabilities = gateway.getBackendCapabilities();
+  const canOpenAgentDetail = capabilities.consoleAgentDetail;
+  const canEditAgents = capabilities.consoleAgentDetail && capabilities.configWrite;
 
   const [agents, setLocalAgents] = useState<AgentInfo[]>([]);
   const [mainKey, setMainKey] = useState('main');
@@ -66,7 +69,7 @@ export function AgentListScreen(): React.JSX.Element {
   }, [agents.length, isPro, showPaywall]);
 
   const headerRight = useMemo(
-    () => (
+    () => canEditAgents ? (
       <HeaderActionButton
         icon={Plus}
         onPress={() => {
@@ -74,8 +77,8 @@ export function AgentListScreen(): React.JSX.Element {
         }}
         size={22}
       />
-    ),
-    [openCreateModal],
+    ) : null,
+    [canEditAgents, openCreateModal],
   );
 
   useNativeStackModalHeader({
@@ -92,11 +95,15 @@ export function AgentListScreen(): React.JSX.Element {
   // Auto-open create modal when navigated with openCreate param
   useEffect(() => {
     if (route.params?.openCreate) {
+      if (!canEditAgents) {
+        navigation.setParams({ openCreate: undefined });
+        return;
+      }
       openCreateModal('agent_route_param');
       // Clear the param so it doesn't re-trigger on focus
       navigation.setParams({ openCreate: undefined });
     }
-  }, [navigation, openCreateModal, route.params?.openCreate]);
+  }, [canEditAgents, navigation, openCreateModal, route.params?.openCreate]);
 
   // On focus, drain the shared pendingAgentDeletes set into the local ref
   // and immediately remove those agents from the displayed list.
@@ -151,7 +158,7 @@ export function AgentListScreen(): React.JSX.Element {
     return (
       <Card
         style={styles.card}
-        onPress={() => navigation.navigate('AgentDetail', { agentId: item.id })}
+        onPress={canOpenAgentDetail ? () => navigation.navigate('AgentDetail', { agentId: item.id }) : undefined}
       >
         <View style={styles.cardRow}>
           <Text style={styles.cardEmoji}>{emoji}</Text>
@@ -170,7 +177,9 @@ export function AgentListScreen(): React.JSX.Element {
                 <Text style={styles.defaultBadgeText}>{t('Default')}</Text>
               </View>
             )}
-            <ChevronRight size={16} color={theme.colors.textSubtle} strokeWidth={2} />
+            {canOpenAgentDetail ? (
+              <ChevronRight size={16} color={theme.colors.textSubtle} strokeWidth={2} />
+            ) : null}
           </View>
         </View>
       </Card>

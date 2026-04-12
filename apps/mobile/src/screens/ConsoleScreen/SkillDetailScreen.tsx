@@ -12,16 +12,19 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Wrench } from 'lucide-react-native';
+import { ArrowRight, FileText, Trash2, Wrench } from 'lucide-react-native';
 import { RouteProp, useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
-import { LoadingState } from '../../components/ui';
+import { HeaderActionButton, LoadingState } from '../../components/ui';
 import { useAppContext } from '../../contexts/AppContext';
+import { useProPaywall } from '../../contexts/ProPaywallContext';
 import { useNativeStackModalHeader } from '../../hooks/useNativeStackModalHeader';
+import { resolveGatewayBackendKind } from '../../services/gateway-backends';
 import { useAppTheme } from '../../theme';
 import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
 import type { RequirementStatus, SkillStatusEntry, SkillStatusReport } from '../../types';
+import { formatTimestamp } from '../../utils/cron';
 import { buildSkillFixPrompt } from '../../utils/skill-fix';
 import type { ConsoleStackParamList } from './ConsoleTab';
 
@@ -118,12 +121,14 @@ function hasConfiguredApiKey(skill: SkillStatusEntry): boolean {
 }
 
 export function SkillDetailScreen(): React.JSX.Element {
-  const { gateway, currentAgentId, requestChatWithInput } = useAppContext();
+  const { gateway, currentAgentId, requestChatWithInput, config } = useAppContext();
+  const { requirePro } = useProPaywall();
   const { theme } = useAppTheme();
   const { t } = useTranslation('console');
   const navigation = useNavigation<SkillDetailNavigation>();
   const route = useRoute<SkillDetailRoute>();
   const styles = useMemo(() => createStyles(theme.colors), [theme]);
+  const supportsHermesSkillContent = resolveGatewayBackendKind(config) === 'hermes';
 
   const { skillKey } = route.params;
 
@@ -132,6 +137,7 @@ export function SkillDetailScreen(): React.JSX.Element {
   const [refreshing, setRefreshing] = useState(false);
   const [toggling, setToggling] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deletingSkill, setDeletingSkill] = useState(false);
 
   const loadDetail = useCallback(async (mode: 'initial' | 'refresh' | 'background' = 'initial') => {
     if (mode === 'initial') setLoading(true);
@@ -193,7 +199,7 @@ export function SkillDetailScreen(): React.JSX.Element {
     } finally {
       setToggling(false);
     }
-  }, [gateway, loadDetail, skill, toggling]);
+  }, [gateway, loadDetail, skill, toggling, t]);
 
   const handleOpenHomepage = useCallback(async (url: string) => {
     try {
@@ -206,7 +212,7 @@ export function SkillDetailScreen(): React.JSX.Element {
     } catch {
       Alert.alert(t('Cannot open link'), t('Failed to open homepage URL.'));
     }
-  }, []);
+  }, [t]);
 
   const handleFixWithAgent = useCallback(() => {
     if (!skill || !fixableUnavailable) return;
@@ -214,6 +220,47 @@ export function SkillDetailScreen(): React.JSX.Element {
     navigation.popToTop();
     setTimeout(() => requestChatWithInput(prompt), 50);
   }, [fixableUnavailable, navigation, requestChatWithInput, skill]);
+
+  const handleOpenSkillContent = useCallback(() => {
+    if (!skill) return;
+    navigation.navigate('SkillContent', { skillKey: skill.skillKey });
+  }, [navigation, skill]);
+
+  const handleDeleteSkillConfirmed = useCallback(async () => {
+    if (!supportsHermesSkillContent || !skill?.deletable || deletingSkill) return;
+    setDeletingSkill(true);
+    try {
+      await gateway.deleteSkill(skill.skillKey, currentAgentId);
+      Alert.alert(t('Skill deleted'), t('This skill has been removed.'));
+      navigation.goBack();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : t('Delete skill failed');
+      Alert.alert(t('Delete skill failed'), message);
+    } finally {
+      setDeletingSkill(false);
+    }
+  }, [currentAgentId, deletingSkill, gateway, navigation, skill?.deletable, skill?.skillKey, supportsHermesSkillContent, t]);
+
+  const handleDeleteSkillPress = useCallback(() => {
+    if (!supportsHermesSkillContent || !skill?.deletable || deletingSkill) return;
+    if (!requirePro('coreFileEditing')) return;
+    Alert.alert(
+      t('Delete Skill'),
+      t('Delete this skill?'),
+      [
+        { text: t('common:Cancel'), style: 'cancel' },
+        {
+          text: t('Delete'),
+          style: 'destructive',
+          onPress: () => {
+            handleDeleteSkillConfirmed().catch(() => {
+              // Error state is handled in handleDeleteSkillConfirmed.
+            });
+          },
+        },
+      ],
+    );
+  }, [deletingSkill, handleDeleteSkillConfirmed, requirePro, skill?.deletable, supportsHermesSkillContent, t]);
 
   const renderCheckRow = (label: string, satisfied: boolean, key: string) => (
     <View key={key} style={styles.checkRow}>
@@ -231,9 +278,22 @@ export function SkillDetailScreen(): React.JSX.Element {
     </View>
   );
 
+  const headerRight = useMemo(
+    () => (supportsHermesSkillContent && skill?.deletable ? (
+      <HeaderActionButton
+        icon={Trash2}
+        onPress={handleDeleteSkillPress}
+        tone="destructive"
+        disabled={deletingSkill}
+      />
+    ) : null),
+    [deletingSkill, handleDeleteSkillPress, skill?.deletable, supportsHermesSkillContent],
+  );
+
   useNativeStackModalHeader({
     navigation,
     title: skill?.name || t('Skill'),
+    rightContent: headerRight ?? undefined,
     onClose: () => navigation.goBack(),
   });
 
@@ -282,7 +342,11 @@ export function SkillDetailScreen(): React.JSX.Element {
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={() => loadDetail('refresh')}
+            onRefresh={() => {
+              loadDetail('refresh').catch(() => {
+                // Error state is handled in loadDetail.
+              });
+            }}
             tintColor={theme.colors.primary}
           />
         }
@@ -321,6 +385,7 @@ export function SkillDetailScreen(): React.JSX.Element {
               <Text style={styles.toggleLabel}>{skill.always ? t('Always active') : (skill.disabled ? t('Disabled') : t('Enabled'))}</Text>
             </View>
           </View>
+
         </View>
 
         <View style={styles.sectionCard}>
@@ -353,6 +418,20 @@ export function SkillDetailScreen(): React.JSX.Element {
             </View>
           </View>
 
+          {typeof skill.createdAtMs === 'number' && Number.isFinite(skill.createdAtMs) ? (
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>{t('Created')}</Text>
+              <Text style={styles.infoValue}>{formatTimestamp(skill.createdAtMs)}</Text>
+            </View>
+          ) : null}
+
+          {typeof skill.updatedAtMs === 'number' && Number.isFinite(skill.updatedAtMs) ? (
+            <View style={homepage ? styles.infoRow : styles.infoRowLast}>
+              <Text style={styles.infoLabel}>{t('Updated')}</Text>
+              <Text style={styles.infoValue}>{formatTimestamp(skill.updatedAtMs)}</Text>
+            </View>
+          ) : null}
+
           {homepage ? (
             <View style={styles.infoRowLast}>
               <Text style={styles.infoLabel}>{t('Homepage')}</Text>
@@ -365,13 +444,18 @@ export function SkillDetailScreen(): React.JSX.Element {
           ) : null}
         </View>
 
-        {fixableUnavailable ? (
-          <View style={styles.sectionCard}>
-            <TouchableOpacity style={styles.fixButton} activeOpacity={0.88} onPress={handleFixWithAgent}>
-              <Wrench size={15} color={theme.colors.primaryText} strokeWidth={2} />
-              <Text style={styles.fixButtonText}>{t('One-click fix')}</Text>
-            </TouchableOpacity>
-          </View>
+        {supportsHermesSkillContent ? (
+          <TouchableOpacity style={styles.instructionsAction} onPress={handleOpenSkillContent} activeOpacity={0.9}>
+            <View style={styles.instructionsActionContent}>
+              <View style={styles.instructionsActionIconWrap}>
+                <FileText size={18} color={theme.colors.primaryText} strokeWidth={2.1} />
+              </View>
+              <View style={styles.instructionsActionTextWrap}>
+                <Text style={styles.instructionsActionTitle}>{t('View and edit Skill.md and related files')}</Text>
+              </View>
+              <ArrowRight size={18} color={theme.colors.primaryText} strokeWidth={2.2} />
+            </View>
+          </TouchableOpacity>
         ) : null}
 
         {requirementsVisible ? (
@@ -440,6 +524,14 @@ export function SkillDetailScreen(): React.JSX.Element {
             </View>
           </View>
         ) : null}
+
+        {fixableUnavailable ? (
+          <TouchableOpacity style={styles.fixButton} activeOpacity={0.88} onPress={handleFixWithAgent}>
+            <Wrench size={15} color={theme.colors.primaryText} strokeWidth={2} />
+            <Text style={styles.fixButtonText}>{t('One-click fix')}</Text>
+          </TouchableOpacity>
+        ) : null}
+
       </ScrollView>
     </View>
   );
@@ -625,6 +717,49 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       color: colors.textMuted,
       fontSize: FontSize.sm,
       lineHeight: 17,
+    },
+    instructionsAction: {
+      width: '100%',
+      borderRadius: Radius.md,
+      backgroundColor: colors.primary,
+      paddingHorizontal: Space.md,
+      paddingVertical: Space.md,
+    },
+    instructionsActionContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Space.sm,
+    },
+    instructionsActionIconWrap: {
+      width: 40,
+      height: 40,
+      borderRadius: Radius.full,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.primaryText + '22',
+    },
+    instructionsActionTextWrap: {
+      flex: 1,
+      gap: 2,
+    },
+    instructionsActionTitle: {
+      color: colors.primaryText,
+      fontSize: FontSize.base,
+      lineHeight: 20,
+      fontWeight: FontWeight.bold,
+      flexShrink: 1,
+    },
+    primaryAction: {
+      borderRadius: Radius.sm,
+      backgroundColor: colors.primary,
+      paddingHorizontal: Space.sm + 2,
+      paddingVertical: 7,
+      alignSelf: 'flex-start',
+    },
+    primaryActionText: {
+      color: colors.primaryText,
+      fontSize: FontSize.sm,
+      fontWeight: FontWeight.semibold,
     },
     centerState: {
       flex: 1,

@@ -18,6 +18,7 @@ import * as DocumentPicker from "expo-document-picker";
 
 import { useChatImagePreview } from "../../../hooks/useChatImagePreview";
 import { analyticsEvents } from "../../../services/analytics/events";
+import { getGatewayThinkingLevels } from "../../../services/gateway-backends";
 import { resolveGatewayCacheScopeId } from "../../../services/gateway-cache-scope";
 import { cacheMessageImages } from "../../../services/image-cache";
 import { stopSpeechRecognitionAsync } from "../../../services/speech/speechRecognition";
@@ -178,6 +179,11 @@ export function useChatController({
   const showDebug = debugMode ?? false;
   const { logs: debugLog, appendDebugLog: dbg } = useBufferedDebugLog(showDebug);
   const hasGatewayConfig = hasActiveGatewayConfig(config);
+  const backendKind = gateway.getBackendKind();
+  const thinkingLevelOptions = useMemo(
+    () => getGatewayThinkingLevels(backendKind),
+    [backendKind],
+  );
 
   const sessionKeyRef = useRef<string | null>(null);
   const lastConnStateRef = useRef<ConnectionState>(
@@ -308,9 +314,11 @@ export function useChatController({
   }, []);
 
   const clearTransientRunPresentation = useCallback(
-    (options?: { preserveCurrentStream?: boolean }) => {
+    (options?: { preserveCurrentStream?: boolean; preserveToolMessages?: boolean }) => {
       setChatStreamSegments([]);
-      setChatToolMessages([]);
+      if (!options?.preserveToolMessages) {
+        setChatToolMessages([]);
+      }
       if (options?.preserveCurrentStream) {
         return;
       }
@@ -415,6 +423,7 @@ export function useChatController({
     gateway,
     gatewayConfigId,
     initialPreview: initialChatPreview,
+    mainSessionKey,
     sessionKey: history.sessionKey,
   });
   useChatAutoCache({
@@ -1353,13 +1362,9 @@ export function useChatController({
       }) => {
         if (!sessionKey || sessionKey !== history.sessionKey) return;
         if (currentRunIdRef.current !== runId) return;
-        requestVisibleHistoryReload(sessionKey, "tool-result")
-          .finally(() =>
-            clearTransientRunPresentation({ preserveCurrentStream: true }),
-          );
+        requestVisibleHistoryReload(sessionKey, "tool-result").catch(() => {});
       },
       [
-        clearTransientRunPresentation,
         history.sessionKey,
         requestVisibleHistoryReload,
       ],
@@ -1693,6 +1698,10 @@ export function useChatController({
 
   const {
     availableModels,
+    availableProviders,
+    currentModel,
+    currentModelHeaderLabel,
+    currentModelProvider,
     modelPickerError,
     modelPickerLoading,
     modelPickerVisible,
@@ -2352,6 +2361,7 @@ export function useChatController({
 
   const abortCurrentRun = useCallback(() => {
     if (!history.sessionKey) return;
+    if (!gateway.getBackendCapabilities().chatAbort) return;
 
     Alert.alert(
       t("Stop Agent"),
@@ -2455,9 +2465,13 @@ export function useChatController({
     modelPickerLoading,
     modelPickerError,
     availableModels,
+    availableProviders,
     retryModelPickerLoad,
     onSelectModel,
     openModelPicker,
+    currentModel,
+    currentModelHeaderLabel,
+    currentModelProvider,
     thinkingLevel: history.thinkingLevel,
     openThinkPicker: openStaticThinkPicker,
     staticThinkPickerVisible,
@@ -2478,7 +2492,9 @@ export function useChatController({
     listData,
     approveCommand: APPROVE_COMMAND,
     activityLabel,
+    thinkingLevelOptions,
     abortCurrentRun,
+    canAbortCurrentRun: gateway.getBackendCapabilities().chatAbort,
     resolveApproval,
     agentActivityRef,
     agentActiveCount,

@@ -1,6 +1,7 @@
 import {
   shouldShowConnectionRecoveryMessage,
   shouldDelayConnectionRecoveryMessage,
+  shouldSuppressHermesStartupRecoveryMessage,
 } from './connectionRecoveryPolicy';
 
 describe('shouldShowConnectionRecoveryMessage', () => {
@@ -69,5 +70,54 @@ describe('shouldDelayConnectionRecoveryMessage', () => {
 
   it('returns false when both are undefined', () => {
     expect(shouldDelayConnectionRecoveryMessage()).toBe(false);
+  });
+});
+
+describe('shouldSuppressHermesStartupRecoveryMessage', () => {
+  it('suppresses transient websocket startup noise for Hermes before a session is ready', () => {
+    expect(shouldSuppressHermesStartupRecoveryMessage({
+      backendKind: 'hermes',
+      sessionKey: null,
+      connectionState: 'connecting',
+      code: 'ws_error',
+      message: 'WebSocket error',
+    })).toBe(true);
+    expect(shouldSuppressHermesStartupRecoveryMessage({
+      backendKind: 'hermes',
+      sessionKey: null,
+      connectionState: 'challenging',
+      code: 'challenge_timeout',
+      message: 'Gateway challenge timed out',
+    })).toBe(true);
+  });
+
+  it('still suppresses startup noise for Hermes while the transport is not ready, even if a preview session key exists', () => {
+    expect(shouldSuppressHermesStartupRecoveryMessage({
+      backendKind: 'hermes',
+      sessionKey: 'main',
+      connectionState: 'connecting',
+      code: 'ws_error',
+      message: 'WebSocket error',
+    })).toBe(true);
+  });
+
+  it('does not suppress Hermes recovery errors once the transport is ready', () => {
+    expect(shouldSuppressHermesStartupRecoveryMessage({
+      backendKind: 'hermes',
+      sessionKey: 'main',
+      connectionState: 'ready',
+      code: 'ws_error',
+      message: 'WebSocket error',
+    })).toBe(false);
+  });
+
+  it('does not suppress OpenClaw recovery errors', () => {
+    expect(shouldSuppressHermesStartupRecoveryMessage({
+      backendKind: 'openclaw',
+      sessionKey: null,
+      connectionState: 'connecting',
+      code: 'ws_error',
+      message: 'WebSocket error',
+    })).toBe(false);
   });
 });

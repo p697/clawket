@@ -1,0 +1,17 @@
+name = "clawket-hermes-registry"
+main = "src/index.ts"
+compatibility_date = "2026-03-03"
+workers_dev = true
+account_id = "replace-with-your-cloudflare-account-id"
+
+[vars]
+# Copy this file to wrangler.local.toml and replace these values with resources/endpoints
+# from the Cloudflare account you use for local deploys or remote dev.
+RELAY_REGION_MAP = "{\"cn\":\"wss://hermes-relay.example.com/ws\",\"sg\":\"wss://hermes-relay.example.com/ws\",\"us\":\"wss://hermes-relay.example.com/ws\",\"eu\":\"wss://hermes-relay.example.com/ws\"}"
+PAIR_ACCESS_CODE_TTL_SEC = "600"
+PAIR_CLIENT_TOKEN_MAX = "8"
+
+[[kv_namespaces]]
+binding = "HERMES_ROUTES_KV"
+id = "replace-with-your-kv-namespace-id"
+preview_id = "replace-with-your-kv-preview-id"

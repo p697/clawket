@@ -27,6 +27,8 @@ export type ChatAgentIdentity = {
   emoji: string | null;
 };
 
+const READY_IDENTITY_FETCH_DELAY_MS = 1500;
+
 function mergeAgentIdentity(
   prev: ChatAgentIdentity,
   next: Partial<ChatAgentIdentity>,
@@ -56,6 +58,7 @@ type Params = {
   gateway: GatewayLike;
   gatewayConfigId: string | null;
   initialPreview?: LastOpenedSessionSnapshot | null;
+  mainSessionKey: string;
   sessionKey: string | null;
 };
 
@@ -67,6 +70,7 @@ export function useChatAgentIdentity({
   gateway,
   gatewayConfigId,
   initialPreview,
+  mainSessionKey,
   sessionKey,
 }: Params): ChatAgentIdentity {
   const [agentIdentity, setAgentIdentity] = useState<ChatAgentIdentity>(
@@ -83,12 +87,12 @@ export function useChatAgentIdentity({
 
   useEffect(() => {
     if (!gatewayConfigId) return;
-    if (sessionKey && !isSessionKeyInAgentScope(sessionKey, currentAgentId)) return;
+    if (sessionKey && !isSessionKeyInAgentScope(sessionKey, currentAgentId, { mainSessionKey })) return;
     let cancelled = false;
 
     Promise.all([
       StorageService.getLastOpenedSessionSnapshot(gatewayConfigId, currentAgentId)
-        .then((snapshot) => sanitizeSnapshotForAgent(snapshot, currentAgentId))
+        .then((snapshot) => sanitizeSnapshotForAgent(snapshot, currentAgentId, { mainSessionKey }))
         .catch(() => null),
       StorageService.getCachedAgentIdentity(gatewayConfigId, currentAgentId).catch(() => null),
     ])
@@ -123,7 +127,7 @@ export function useChatAgentIdentity({
     return () => {
       cancelled = true;
     };
-  }, [currentAgentId, gatewayConfigId, sessionKey]);
+  }, [currentAgentId, gatewayConfigId, mainSessionKey, sessionKey]);
 
   useEffect(() => {
     const agentInfo = agents.find((agent) => agent.id === currentAgentId);
@@ -153,7 +157,9 @@ export function useChatAgentIdentity({
       });
     }
 
-    if (gateway.getConnectionState() === 'ready') {
+    if (gateway.getConnectionState() !== 'ready') return undefined;
+
+    const timer = setTimeout(() => {
       gateway.fetchIdentity(currentAgentId)
         .then((identity) => {
           setAgentIdentity((prev) => {
@@ -172,7 +178,11 @@ export function useChatAgentIdentity({
           });
         })
         .catch(() => {});
-    }
+    }, READY_IDENTITY_FETCH_DELAY_MS);
+
+    return () => {
+      clearTimeout(timer);
+    };
   }, [agents, cacheAgentName, currentAgentId, gateway, resolveAvatarUri]);
 
   useEffect(() => {
@@ -183,7 +193,7 @@ export function useChatAgentIdentity({
 
   useEffect(() => {
     if (!gatewayConfigId || !sessionKey) return;
-    if (!isSessionKeyInAgentScope(sessionKey, currentAgentId)) return;
+    if (!isSessionKeyInAgentScope(sessionKey, currentAgentId, { mainSessionKey })) return;
     const snapshotAgentId = agentIdFromSessionKey(sessionKey) ?? currentAgentId;
     const snapshotLabel = currentSessionInfo
       ? sessionLabel(currentSessionInfo, {
@@ -216,12 +226,13 @@ export function useChatAgentIdentity({
     currentAgentId,
     currentSessionInfo,
     gatewayConfigId,
+    mainSessionKey,
     sessionKey,
   ]);
 
   useEffect(() => {
     if (!gatewayConfigId) return;
-    if (sessionKey && !isSessionKeyInAgentScope(sessionKey, currentAgentId)) return;
+    if (sessionKey && !isSessionKeyInAgentScope(sessionKey, currentAgentId, { mainSessionKey })) return;
     const cachedIdentity = {
       agentId: currentAgentId,
       updatedAt: Date.now(),
@@ -249,6 +260,7 @@ export function useChatAgentIdentity({
     agentIdentity.emoji,
     currentAgentId,
     gatewayConfigId,
+    mainSessionKey,
     sessionKey,
   ]);
 

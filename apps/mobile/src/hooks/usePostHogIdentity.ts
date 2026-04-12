@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Platform } from 'react-native';
 import { useAppTheme } from '../theme';
 import { posthogClient } from '../services/analytics/posthog';
+import { resolveGatewayBackendKind, resolveGatewayTransportKind } from '../services/gateway-backends';
 import { StorageService } from '../services/storage';
 import type { GatewayConfig } from '../types';
 
@@ -12,7 +13,7 @@ type Args = {
 
 function resolveGatewayMode(config: GatewayConfig | null): string {
   if (!config?.url) return 'unconfigured';
-  return config.mode ?? 'configured';
+  return `${resolveGatewayBackendKind(config)}:${resolveGatewayTransportKind(config)}`;
 }
 
 export function usePostHogIdentity({ config, currentAgentId }: Args): void {
@@ -50,5 +51,5 @@ export function usePostHogIdentity({ config, currentAgentId }: Args): void {
       theme_mode: mode,
       theme_scheme: resolvedScheme,
     }).catch(() => {});
-  }, [accentId, config?.mode, config?.url, currentAgentId, mode, resolvedScheme]);
+  }, [accentId, config?.backendKind, config?.transportKind, config?.mode, config?.url, currentAgentId, mode, resolvedScheme]);
 }

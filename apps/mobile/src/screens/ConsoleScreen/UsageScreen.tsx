@@ -8,6 +8,8 @@ import type { BarDataPoint, RingSegment } from '../../components/charts';
 import { useTranslation } from 'react-i18next';
 import { useAppContext } from '../../contexts/AppContext';
 import { useNativeStackModalHeader } from '../../hooks/useNativeStackModalHeader';
+import { loadGatewayUsageDashboardBundle } from '../../services/gateway-usage-dashboard';
+import { resolveUsageCostSummaryDisplay, resolveUsageSessionCostLabel } from '../../services/usage-cost-display';
 import { useAppTheme } from '../../theme';
 import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
 import type { CostSummary, UsageDailyEntry, UsageResult } from '../../types';
@@ -86,11 +88,8 @@ function useUsageDashboard(active: boolean): DashboardState {
     setCostSummary(null);
     const { startDate, endDate } = range;
 
-    Promise.all([
-      gateway.fetchUsage({ startDate, endDate }),
-      gateway.fetchCostSummary({ startDate, endDate }),
-    ])
-      .then(([usage, cost]) => {
+    loadGatewayUsageDashboardBundle(gateway, { startDate, endDate })
+      .then(({ usageResult: usage, costSummary: cost }) => {
         if (!mounted) return;
         setUsageResult(usage ?? null);
         setCostSummary(cost ?? null);
@@ -243,6 +242,11 @@ export function UsageScreen(): React.JSX.Element {
     (usageResult?.sessions?.length ?? 0) > 0 ||
     daily.length > 0;
 
+  const costSummaryDisplay = useMemo(
+    () => resolveUsageCostSummaryDisplay({ usageResult, costSummary, t }),
+    [costSummary, t, usageResult],
+  );
+
   return (
     <View style={styles.root}>
       <View style={styles.rangeRow}>
@@ -280,8 +284,10 @@ export function UsageScreen(): React.JSX.Element {
 
           <View style={styles.summaryGrid}>
             <Card style={styles.summaryCard}>
-              <Text style={styles.summaryValue}>{formatCost(totalCost)}</Text>
-              <Text style={styles.summarySubtitle}>{formatTokens(totalTokens)} tokens</Text>
+              <Text style={styles.summaryValue}>{costSummaryDisplay.valueLabel}</Text>
+              <Text style={styles.summarySubtitle}>
+                {costSummaryDisplay.subtitle ?? `${formatTokens(totalTokens)} tokens`}
+              </Text>
             </Card>
 
             <Card style={styles.summaryCard}>
@@ -301,6 +307,13 @@ export function UsageScreen(): React.JSX.Element {
               <Text style={styles.summarySubtitle}>{t('Token cache rate')}</Text>
             </Card>
           </View>
+
+          {costSummaryDisplay.bannerTitle && costSummaryDisplay.bannerBody ? (
+            <Card style={styles.noticeCard}>
+              <Text style={styles.noticeTitle}>{costSummaryDisplay.bannerTitle}</Text>
+              <Text style={styles.noticeText}>{costSummaryDisplay.bannerBody}</Text>
+            </Card>
+          ) : null}
 
           <Text style={styles.sectionTitle}>{t('Cost Breakdown')}</Text>
           <Card style={styles.sectionCard}>
@@ -375,7 +388,7 @@ export function UsageScreen(): React.JSX.Element {
                       <Text style={styles.listTitle} numberOfLines={1}>{label}</Text>
                       <Text style={styles.listSubtitle}>{`${formatTokens(sessionTokens)} tokens`}</Text>
                     </View>
-                    <Text style={styles.listValue}>{formatCost(sessionCost)}</Text>
+                    <Text style={styles.listValue}>{resolveUsageSessionCostLabel({ session, t })}</Text>
                   </View>
                 );
               })
@@ -440,12 +453,29 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       marginBottom: Space.sm,
       backgroundColor: colors.surface,
     },
+    noticeCard: {
+      borderWidth: 1,
+      borderColor: colors.primary,
+      marginTop: Space.lg,
+      marginBottom: Space.sm,
+      backgroundColor: colors.surface,
+    },
     errorTitle: {
       fontSize: FontSize.base,
       fontWeight: FontWeight.semibold,
       color: colors.error,
     },
     errorText: {
+      marginTop: Space.xs,
+      fontSize: FontSize.sm,
+      color: colors.textMuted,
+    },
+    noticeTitle: {
+      fontSize: FontSize.base,
+      fontWeight: FontWeight.semibold,
+      color: colors.text,
+    },
+    noticeText: {
       marginTop: Space.xs,
       fontSize: FontSize.sm,
       color: colors.textMuted,

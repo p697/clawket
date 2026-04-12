@@ -39,6 +39,24 @@ Notes:
 1. One-time pairing `accessCode` values are 6-character uppercase codes from `ABCDEFGHJKMNPQRSTVWXYZ23456789`.
 2. Claim remains backward-compatible with older unclaimed 6-digit numeric access codes.
 
+### Hermes Registry Worker
+
+Path: `apps/hermes-relay-registry`
+
+Responsibilities:
+
+1. Issue Hermes relay pairing credentials.
+2. Store Hermes pairing records in Cloudflare KV under `hermes-pair-bridge:<bridgeId>`.
+3. Verify Hermes `relaySecret` and `clientToken` values for relay auth.
+4. Keep Hermes rollout isolated from OpenClaw registry APIs and storage.
+
+Public HTTP routes:
+
+1. `POST /v1/hermes/pair/register`
+2. `POST /v1/hermes/pair/access-code`
+3. `POST /v1/hermes/pair/claim`
+4. `GET /v1/hermes/verify/:bridgeId`
+
 ### Relay Worker
 
 Path: `apps/relay-worker`
@@ -56,6 +74,17 @@ WebSocket auth:
 1. Legacy clients may still send the pairing token as query `token=`.
 2. New clients may send `Authorization: Bearer <token>`.
 3. Telemetry must not log tokens or user-correlatable identifiers.
+
+### Hermes Relay Worker
+
+Path: `apps/hermes-relay-worker`
+
+Responsibilities:
+
+1. Route each `bridgeId` to a Hermes Durable Object room.
+2. Accept Hermes bridge and client WebSocket connections.
+3. Verify Hermes pairing credentials against Hermes registry state only.
+4. Keep Hermes relay rooms, bindings, and DO classes isolated from OpenClaw.
 
 ### Gateway Runtime
 
@@ -154,6 +183,16 @@ Response shape:
 }
 ```
 
+### Hermes Pair Verify
+
+`GET /v1/hermes/verify/:bridgeId`
+
+Header:
+
+```http
+Authorization: Bearer <relaySecret-or-clientToken>
+```
+
 ### Relay WebSocket
 
 `GET /ws?gatewayId=<gatewayId>&role=gateway|client&clientId=<id>&token=<optional-legacy-token>`
@@ -173,6 +212,11 @@ Rules:
 
 1. Pairing records keyed by `pair-gateway:<gatewayId>`.
 2. Relay auth source-of-truth data used by registry verification and relay fallback paths.
+
+`HERMES_ROUTES_KV` stores:
+
+1. Hermes pairing records keyed by `hermes-pair-bridge:<bridgeId>`.
+2. Hermes relay auth source-of-truth data used only by the Hermes relay stack.
 
 ### Durable Object State
 
@@ -195,3 +239,4 @@ Public deployments should keep these constraints intact:
 1. Registry and relay are separate Worker services and may be deployed independently.
 2. Both services must use resources in the operator's own Cloudflare account.
 3. Checked-in `wrangler.toml` files use open-source-safe placeholders for account-bound bindings.
+4. Hermes relay services are separate from OpenClaw relay services and must not replace the existing OpenClaw workers.

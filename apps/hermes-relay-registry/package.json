@@ -1,0 +1,20 @@
+{
+  "name": "@clawket/hermes-registry-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "dependencies": {
+    "@clawket/shared": "0.1.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260220.0"
+  },
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "lint": "echo \"No lint for hermes registry worker\""
+  }
+}

@@ -1,9 +1,17 @@
 import type { MutableRefObject } from 'react';
 import type { GatewayClient } from '../services/gateway';
+import {
+  buildGatewayDefaultName,
+  resolveGatewayBackendKind,
+  resolveGatewayTransportKind,
+  toLegacyGatewayMode,
+} from '../services/gateway-backends';
 import { resolveGatewayCacheScopeId } from '../services/gateway-cache-scope';
 import { RelayPairingService } from '../services/relay-pairing';
+import { HermesRelayPairingService } from '../services/hermes-relay-pairing';
+import { markHermesConnectTrace, startHermesConnectTrace } from '../services/hermes-connect-debug';
 import { StorageService } from '../services/storage';
-import type { GatewayConfig, GatewayConfigsState, GatewayMode, SavedGatewayConfig } from '../types';
+import type { GatewayBackendKind, GatewayConfig, GatewayConfigsState, GatewayMode, GatewayTransportKind, SavedGatewayConfig } from '../types';
 import { buildRelayClaimKey } from './gatewayConfigForm.utils';
 
 export const MIN_SWITCH_DURATION_MS = 1000;
@@ -12,7 +20,13 @@ export type GatewayScanPayload = {
   url: string;
   token?: string;
   password?: string;
+  backendKind?: GatewayBackendKind;
+  transportKind?: GatewayTransportKind;
   mode?: GatewayMode;
+  hermes?: {
+    bridgeUrl: string;
+    displayName?: string;
+  };
   relay?: {
     serverUrl: string;
     gatewayId: string;
@@ -26,18 +40,25 @@ export type GatewayScanPayload = {
 };
 
 export function buildDefaultName(mode: GatewayMode, url: string, index: number): string {
-  const host = parseHost(url);
-  const modeLabel = mode === 'relay' ? 'Relay' : 'Custom';
-  if (host) return `${modeLabel} (${host})`;
-  return `${modeLabel} Gateway ${index}`;
+  return buildGatewayDefaultName({
+    backendKind: mode === 'hermes' ? 'hermes' : 'openclaw',
+    transportKind: mode === 'relay' ? 'relay' : 'custom',
+    url,
+    index,
+  });
 }
 
 export function toRuntimeConfig(item: SavedGatewayConfig, debugMode: boolean): GatewayConfig {
+  const backendKind = resolveGatewayBackendKind(item);
+  const transportKind = resolveGatewayTransportKind(item);
   return {
     url: item.url,
     token: item.token,
     password: item.password,
-    mode: item.mode,
+    backendKind,
+    transportKind,
+    mode: toLegacyGatewayMode({ backendKind, transportKind }),
+    hermes: item.hermes,
     relay: item.relay,
     debugMode,
   };
@@ -57,6 +78,35 @@ export async function claimRelayPairing(
   if (existing) return existing;
 
   const task = (async (): Promise<GatewayScanPayload> => {
+    if (payload.backendKind === 'hermes') {
+      startHermesConnectTrace('scan_claim_begin', {
+        transport: 'relay',
+      });
+      const claimed = await HermesRelayPairingService.claim({
+        serverUrl: payload.relay!.serverUrl,
+        bridgeId: payload.relay!.gatewayId,
+        accessCode: payload.relay!.accessCode!,
+      });
+      const relayUrl = claimed.relayUrl.trim();
+      markHermesConnectTrace('scan_claim_done', {
+        transport: 'relay',
+      });
+      return {
+        url: relayUrl,
+        backendKind: 'hermes',
+        transportKind: 'relay',
+        mode: 'hermes',
+        relay: {
+          serverUrl: payload.relay!.serverUrl,
+          gatewayId: claimed.bridgeId,
+          clientToken: claimed.clientToken,
+          relayUrl,
+          displayName: claimed.displayName ?? payload.relay!.displayName,
+          protocolVersion: payload.relay!.protocolVersion,
+          supportsBootstrap: payload.relay!.supportsBootstrap,
+        },
+      };
+    }
     const claimed = await RelayPairingService.claim({
       serverUrl: payload.relay!.serverUrl,
       gatewayId: payload.relay!.gatewayId,
@@ -65,6 +115,8 @@ export async function claimRelayPairing(
     const relayUrl = claimed.relayUrl.trim();
     return {
       url: relayUrl,
+      backendKind: 'openclaw',
+      transportKind: 'relay',
       token: payload.token,
       password: payload.password,
       mode: 'relay',
@@ -90,12 +142,23 @@ export async function createGatewayConfigFromScan(input: {
   payload: GatewayScanPayload;
   debugMode: boolean;
 }): Promise<{ created: SavedGatewayConfig; nextConfigs: SavedGatewayConfig[] }> {
+  if (resolveGatewayBackendKind(input.payload) === 'hermes') {
+    markHermesConnectTrace('scan_config_save_begin', {
+      transport: resolveGatewayTransportKind(input.payload),
+    });
+  }
   const existingState = await StorageService.getGatewayConfigsState();
   const nextState = upsertGatewayConfigFromScan({
     existingState,
     payload: input.payload,
   });
   await StorageService.setGatewayConfigsState({ activeId: nextState.created.id, configs: nextState.nextConfigs });
+  if (resolveGatewayBackendKind(input.payload) === 'hermes') {
+    markHermesConnectTrace('scan_config_save_done', {
+      transport: resolveGatewayTransportKind(input.payload),
+      configCount: nextState.nextConfigs.length,
+    });
+  }
   return nextState;
 }
 
@@ -106,19 +169,49 @@ export function upsertGatewayConfigFromScan(input: {
 }): { created: SavedGatewayConfig; nextConfigs: SavedGatewayConfig[] } {
   const trimmedUrl = input.payload.url.trim();
   const now = input.now ?? Date.now();
-  const mode = input.payload.mode === 'relay' || input.payload.relay ? 'relay' : 'custom';
-  const relay = mode === 'relay' ? toSavedRelayConfig(input.payload) : undefined;
+  const backendKind = resolveGatewayBackendKind(input.payload);
+  const transportKind = resolveGatewayTransportKind(input.payload);
+  const mode = toLegacyGatewayMode({ backendKind, transportKind });
+  const hermes = backendKind === 'hermes' && transportKind !== 'relay'
+    ? {
+      bridgeUrl: input.payload.hermes?.bridgeUrl?.trim() || trimmedUrl,
+      displayName: input.payload.hermes?.displayName?.trim() || undefined,
+    }
+    : undefined;
+  const relay = transportKind === 'relay' ? toSavedRelayConfig(input.payload) : undefined;
   const relayMatchIndex = findMatchingRelayConfigIndex(input.existingState.configs, relay);
+  const hermesMatchIndex = findMatchingHermesConfigIndex(input.existingState.configs, hermes);
+
+  if (hermesMatchIndex >= 0) {
+    const existing = input.existingState.configs[hermesMatchIndex];
+    const updated: SavedGatewayConfig = {
+      ...existing,
+      backendKind,
+      transportKind,
+      mode,
+      url: trimmedUrl,
+      hermes,
+      relay: undefined,
+      token: undefined,
+      password: undefined,
+      updatedAt: now,
+    };
+    const nextConfigs = input.existingState.configs.map((item, index) => (index === hermesMatchIndex ? updated : item));
+    return { created: updated, nextConfigs };
+  }
 
   if (relayMatchIndex >= 0) {
     const existing = input.existingState.configs[relayMatchIndex];
     const mergedRelay = mergeRelayConfig(existing.relay, relay);
     const updated: SavedGatewayConfig = {
       ...existing,
+      backendKind,
+      transportKind,
       mode,
       url: trimmedUrl,
       token: mergeOptionalCredential(input.payload.token, existing.token),
       password: mergeOptionalCredential(input.payload.password, existing.password),
+      hermes: undefined,
       relay: mergedRelay,
       updatedAt: now,
     };
@@ -127,15 +220,24 @@ export function upsertGatewayConfigFromScan(input: {
   }
 
   const name = input.payload.relay?.displayName?.trim()
-    || buildDefaultName(mode, trimmedUrl, input.existingState.configs.length + 1);
+    || input.payload.hermes?.displayName?.trim()
+    || buildGatewayDefaultName({
+      backendKind,
+      transportKind,
+      url: trimmedUrl,
+      index: input.existingState.configs.length + 1,
+    });
 
   const created: SavedGatewayConfig = {
     id: `gateway_${now}`,
     name,
+    backendKind,
+    transportKind,
     mode,
     url: trimmedUrl,
     token: input.payload.token || undefined,
     password: input.payload.password || undefined,
+    hermes,
     relay,
     createdAt: now,
     updatedAt: now,
@@ -148,8 +250,12 @@ export function willCreateGatewayConfigFromScan(
   configs: SavedGatewayConfig[],
   payload: GatewayScanPayload,
 ): boolean {
-  const mode = payload.mode === 'relay' || payload.relay ? 'relay' : 'custom';
-  if (mode !== 'relay') return true;
+  const backendKind = resolveGatewayBackendKind(payload);
+  const transportKind = resolveGatewayTransportKind(payload);
+  if (backendKind === 'hermes' && transportKind !== 'relay') {
+    return findMatchingHermesConfigIndex(configs, payload.hermes) < 0;
+  }
+  if (transportKind !== 'relay') return true;
   return findMatchingRelayConfigIndex(configs, toSavedRelayConfig(payload)) < 0;
 }
 
@@ -178,14 +284,6 @@ export function reconnectGatewayWithOverlay(input: {
   }, MIN_SWITCH_DURATION_MS);
 }
 
-function parseHost(url: string): string {
-  try {
-    return new URL(url).host;
-  } catch {
-    return '';
-  }
-}
-
 function findMatchingRelayConfigIndex(
   configs: SavedGatewayConfig[],
   relay: { serverUrl: string; gatewayId: string } | undefined,
@@ -194,6 +292,18 @@ function findMatchingRelayConfigIndex(
   return configs.findIndex((item) => (
     normalizeRelayServerUrl(item.relay?.serverUrl) === normalizeRelayServerUrl(relay.serverUrl)
     && item.relay?.gatewayId === relay.gatewayId
+  ));
+}
+
+function findMatchingHermesConfigIndex(
+  configs: SavedGatewayConfig[],
+  hermes: { bridgeUrl: string } | undefined,
+): number {
+  if (!hermes) return -1;
+  const target = hermes.bridgeUrl.trim().replace(/\/+$/, '');
+  return configs.findIndex((item) => (
+    resolveGatewayBackendKind(item) === 'hermes'
+    && item.hermes?.bridgeUrl?.trim().replace(/\/+$/, '') === target
   ));
 }
 

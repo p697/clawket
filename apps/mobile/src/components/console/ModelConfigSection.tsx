@@ -165,7 +165,7 @@ export function ModelConfigSection({
           <Text style={styles.fieldLabel}>{t('Default Thinking Level')}</Text>
           {onSelectThinkingLevel ? (
             <ThinkingLevelMenu
-              current={t(`thinking_${thinkingDefault || 'off'}`)}
+              current={thinkingDefault || 'off'}
               onSelect={onSelectThinkingLevel}
               disabled={disabled}
               title={t('Default Thinking Level')}

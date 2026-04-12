@@ -16,6 +16,7 @@ describe('parseQRPayload', () => {
     expect(parseQRPayload(raw)).toEqual({
       url: 'ws://192.168.31.39:18789',
       token: 'abc',
+      transportKind: 'local',
       mode: 'local',
       relay: {
         serverUrl: 'https://registry.example.com',
@@ -29,6 +30,8 @@ describe('parseQRPayload', () => {
 
     expect(parseQRPayload(raw)).toEqual({
       url: 'wss://10.0.0.8:18789',
+      backendKind: 'openclaw',
+      transportKind: 'relay',
       token: 'xyz',
       mode: 'relay',
       relay: {
@@ -52,6 +55,7 @@ describe('parseQRPayload', () => {
     expect(parseQRPayload(raw)).toEqual({
       url: 'wss://relay-fallback.example.com/ws',
       token: 'token_pro',
+      transportKind: 'relay',
       mode: 'relay',
       relay: {
         serverUrl: 'https://registry-fallback.example.com',
@@ -65,6 +69,8 @@ describe('parseQRPayload', () => {
 
     expect(parseQRPayload(raw)).toEqual({
       url: 'wss://relay-fallback.example.com/ws',
+      backendKind: 'openclaw',
+      transportKind: 'relay',
       token: 'token_pro',
       mode: 'relay',
       relay: {
@@ -86,7 +92,6 @@ describe('parseQRPayload', () => {
 
     expect(parseQRPayload(raw)).toEqual({
       url: '',
-      token: undefined,
       mode: 'relay',
       relay: {
         serverUrl: 'https://registry.example.com',
@@ -111,7 +116,6 @@ describe('parseQRPayload', () => {
 
     expect(parseQRPayload(raw)).toEqual({
       url: '',
-      token: undefined,
       mode: 'relay',
       relay: {
         serverUrl: 'https://registry.example.com',
@@ -161,7 +165,6 @@ describe('parseQRPayload', () => {
 
     expect(parseQRPayload(raw)).toEqual({
       url: '',
-      token: undefined,
       password: 'gateway-password',
       mode: 'relay',
       relay: {
@@ -189,6 +192,7 @@ describe('parseQRPayload', () => {
     expect(parseQRPayload(raw)).toEqual({
       url: 'wss://relay.example.com/ws',
       token: 'gateway-token',
+      transportKind: 'relay',
       mode: 'relay',
       relay: {
         serverUrl: 'https://registry.example.com',
@@ -208,10 +212,62 @@ describe('parseQRPayload', () => {
 
     expect(parseQRPayload(raw)).toEqual({
       url: 'wss://gateway.example.com/ws',
-      token: undefined,
       password: 'pw-secret',
+      transportKind: 'custom',
       mode: 'custom',
-      relay: undefined,
+    });
+  });
+
+  it('parses hermes local bridge QR payload', () => {
+    const raw = JSON.stringify({
+      version: 1,
+      kind: 'clawket_hermes_local',
+      mode: 'hermes',
+      url: 'ws://192.168.1.8:4319/v1/hermes/ws?token=secret',
+      expiresAt: Date.now() + 60_000,
+      hermes: {
+        bridgeUrl: 'http://192.168.1.8:4319',
+        displayName: 'Hermes',
+      },
+    });
+
+    expect(parseQRPayload(raw)).toEqual({
+      url: 'ws://192.168.1.8:4319/v1/hermes/ws?token=secret',
+      backendKind: 'hermes',
+      transportKind: 'local',
+      mode: 'hermes',
+      hermes: {
+        bridgeUrl: 'http://192.168.1.8:4319',
+        displayName: 'Hermes',
+      },
+    });
+  });
+
+  it('parses hermes relay pairing QR payload', () => {
+    const raw = JSON.stringify({
+      version: 1,
+      kind: 'clawket_hermes_pair',
+      backend: 'hermes',
+      transport: 'relay',
+      server: 'https://hermes-registry.example.com',
+      bridgeId: 'hbg_123',
+      accessCode: 'ABCD23',
+      relayUrl: 'wss://hermes-relay.example.com/ws',
+      displayName: 'Hermes Mac',
+    });
+
+    expect(parseQRPayload(raw)).toEqual({
+      url: 'wss://hermes-relay.example.com/ws',
+      backendKind: 'hermes',
+      transportKind: 'relay',
+      mode: 'hermes',
+      relay: {
+        serverUrl: 'https://hermes-registry.example.com',
+        gatewayId: 'hbg_123',
+        accessCode: 'ABCD23',
+        relayUrl: 'wss://hermes-relay.example.com/ws',
+        displayName: 'Hermes Mac',
+      },
     });
   });
 

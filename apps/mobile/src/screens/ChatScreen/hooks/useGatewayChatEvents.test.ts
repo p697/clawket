@@ -39,7 +39,7 @@ type GatewayEventMap = {
   chatRunStart: { runId: string; sessionKey?: string };
   chatCompaction: { runId: string; sessionKey?: string; phase: 'start' | 'end' };
   error: { code: string; message: string; retryable?: boolean; hint?: string };
-  connection: ConnectionState;
+  connection: { state: ConnectionState };
   pairingRequired: unknown;
   pairingResolved: unknown;
   execApprovalRequested: never;
@@ -64,6 +64,7 @@ function createGatewayMock() {
     },
     fetchHistory: jest.fn().mockResolvedValue({ messages: [] }),
     listSessions: jest.fn().mockResolvedValue([]),
+    listAgents: jest.fn().mockResolvedValue({ agents: [], defaultId: null }),
     getConnectionState: jest.fn().mockReturnValue('ready'),
   };
 }
@@ -340,7 +341,10 @@ describe('useGatewayChatEvents', () => {
     expect(harness.getMessages()).toEqual([]);
     expect(harness.params.currentRunIdRef.current).toBeNull();
     expect(harness.params.streamStartedAtRef.current).toBeNull();
-    expect(harness.params.clearTransientRunPresentation).toHaveBeenCalledWith({ preserveCurrentStream: true });
+    expect(harness.params.clearTransientRunPresentation).toHaveBeenCalledWith({
+      preserveCurrentStream: true,
+      preserveToolMessages: true,
+    });
     expect(harness.params.onStreamFinished).toHaveBeenCalled();
   });
 
@@ -366,7 +370,10 @@ describe('useGatewayChatEvents', () => {
     expect(harness.getMessages()).toEqual([]);
     expect(harness.params.currentRunIdRef.current).toBeNull();
     expect(harness.params.streamStartedAtRef.current).toBeNull();
-    expect(harness.params.clearTransientRunPresentation).toHaveBeenCalledWith({ preserveCurrentStream: true });
+    expect(harness.params.clearTransientRunPresentation).toHaveBeenCalledWith({
+      preserveCurrentStream: true,
+      preserveToolMessages: true,
+    });
     expect(harness.params.onStreamFinished).toHaveBeenCalled();
   });
 
@@ -388,5 +395,58 @@ describe('useGatewayChatEvents', () => {
         text: 'Direct local TLS gateway connections are not supported in Clawket mobile yet. Disable OpenClaw gateway TLS for LAN pairing, or use Relay/Tailscale instead.',
       }),
     ]);
+  });
+
+  it('waits for Hermes session sync before loading agents after reconnect', async () => {
+    jest.useFakeTimers();
+    const harness = createHookHarness();
+    let resolveSessions: (() => void) | null = null;
+    harness.params.config = { backendKind: 'hermes' } as any;
+    harness.params.lastConnStateRef.current = 'connecting';
+    harness.params.loadSessionsAndHistory = jest.fn().mockImplementation(() => new Promise<void>((resolve) => {
+      resolveSessions = resolve;
+    }));
+
+    renderHook(() => useGatewayChatEvents(harness.params));
+
+    act(() => {
+      harness.gateway.emit('connection', { state: 'ready' });
+    });
+
+    expect(harness.params.loadSessionsAndHistory).toHaveBeenCalledTimes(1);
+    expect(harness.gateway.listAgents).not.toHaveBeenCalled();
+
+    await act(async () => {
+      resolveSessions?.();
+      await Promise.resolve();
+    });
+
+    expect(harness.gateway.listAgents).not.toHaveBeenCalled();
+
+    await act(async () => {
+      jest.advanceTimersByTime(1500);
+      await Promise.resolve();
+    });
+
+    expect(harness.gateway.listAgents).toHaveBeenCalledTimes(1);
+    jest.useRealTimers();
+  });
+
+  it('keeps OpenClaw agent loading immediate after reconnect', async () => {
+    const harness = createHookHarness();
+    harness.params.config = { backendKind: 'openclaw' } as any;
+    harness.params.lastConnStateRef.current = 'connecting';
+    harness.params.loadSessionsAndHistory = jest.fn().mockResolvedValue(undefined);
+
+    renderHook(() => useGatewayChatEvents(harness.params));
+
+    await act(async () => {
+      harness.gateway.emit('connection', { state: 'ready' });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(harness.params.loadSessionsAndHistory).toHaveBeenCalledTimes(1);
+    expect(harness.gateway.listAgents).toHaveBeenCalledTimes(1);
   });
 });

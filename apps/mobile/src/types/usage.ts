@@ -12,6 +12,15 @@ export type UsageTotals = {
   missingCostEntries: number;
 };
 
+export type CostPresentation = {
+  mode: 'currency' | 'included' | 'estimated' | 'actual' | 'unknown' | 'mixed';
+  relevantSessions?: number;
+  includedSessions?: number;
+  estimatedSessions?: number;
+  actualSessions?: number;
+  unknownSessions?: number;
+};
+
 export type UsageDailyEntry = {
   date: string;
   tokens: number;
@@ -44,6 +53,8 @@ export type UsageSessionEntry = {
   usage: {
     totalTokens: number;
     totalCost: number;
+    costStatus?: string;
+    costSource?: string;
     messageCounts?: {
       total: number;
       user: number;
@@ -83,6 +94,7 @@ export type UsageResult = {
   sessions?: UsageSessionEntry[];
   totals?: UsageTotals;
   aggregates?: UsageAggregates;
+  costPresentation?: CostPresentation;
 };
 
 export type CostDailyEntry = UsageTotals & { date: string };
@@ -92,4 +104,5 @@ export type CostSummary = {
   days?: number;
   daily?: CostDailyEntry[];
   totals?: UsageTotals;
+  costPresentation?: CostPresentation;
 };

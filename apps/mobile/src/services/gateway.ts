@@ -19,6 +19,7 @@ import {
   ResFrame,
   SessionInfo,
   SkillStatusReport,
+  SkillContentDetail,
   SessionsListPayload,
   isEventFrame,
   isGatewayFrame,
@@ -28,6 +29,12 @@ import type { AgentInfo, AgentsListResult, AgentCreateResult, AgentUpdateResult,
 import type { CostSummary, UsageResult } from '../types/usage';
 import type { ToolsCatalogResult } from '../types/index';
 import type { NodeInvokeRequest, CanvasPresentPayload, CanvasNavigatePayload, CanvasEvalPayload, CanvasSnapshotPayload } from '../types/canvas';
+import type {
+  HermesCronJob,
+  HermesCronJobUpsert,
+  HermesCronOutputDetail,
+  HermesCronOutputEntry,
+} from '../types/hermes-cron';
 import { StorageService } from './storage';
 import { isUnsupportedDirectLocalTlsConfig } from '../hooks/gatewayConfigForm.utils';
 import {
@@ -107,6 +114,9 @@ import type {
 } from './gateway-relay';
 import { APP_PACKAGE_VERSION } from '../constants/app-version';
 import { getRuntimeClientId, getRuntimeDeviceFamily, getRuntimePlatform } from '../utils/platform';
+import { getGatewayBackendCapabilities, resolveGatewayBackendKind } from './gateway-backends';
+import { getGatewayBackendOperations } from './gateway-backend-operations';
+import { markHermesConnectTrace } from './hermes-connect-debug';
 
 export { extractText };
 export type { ChatHistoryResult, GatewayInfo };
@@ -209,7 +219,10 @@ export class GatewayClient {
       || prev.url !== config.url
       || prev.token !== config.token
       || prev.password !== config.password
+      || prev.backendKind !== config.backendKind
+      || prev.transportKind !== config.transportKind
       || prev.mode !== config.mode
+      || prev.hermes?.bridgeUrl !== config.hermes?.bridgeUrl
       || prev.relay?.gatewayId !== config.relay?.gatewayId
       || prev.relay?.serverUrl !== config.relay?.serverUrl
       || prev.relay?.clientToken !== config.relay?.clientToken
@@ -346,6 +359,17 @@ export class GatewayClient {
       this.connectRequestInFlight = false;
       this.connectRequestCompleted = false;
       this.wsOpenedAt = Date.now();
+      if (!this.getBackendOperations().usesConnectHandshake) {
+        this.setState('ready');
+        this.startTickWatchdog();
+        this.logTelemetry('ws_open', {
+          attemptId,
+          route,
+          elapsedMs: Date.now() - this.connectStartedAt,
+          mode: this.getBackendKind(),
+        });
+        return;
+      }
       // Wait for connect.challenge event — don't send anything yet
       this.setState('challenging');
       this.logTelemetry('ws_open', {
@@ -361,12 +385,14 @@ export class GatewayClient {
       this.handleRawMessage(event.data);
     };
 
-    this.ws.onerror = () => {
+    this.ws.onerror = (errorEvent?: { message?: string; type?: string }) => {
       if (attemptId !== this.connectAttemptId) return;
       this.logTelemetry('ws_error', {
         attemptId,
         route,
         elapsedMs: Date.now() - this.connectStartedAt,
+        errorType: errorEvent?.type,
+        errorMessage: errorEvent?.message,
       });
       this.emit('error', { code: 'ws_error', message: 'WebSocket error' });
     };
@@ -651,24 +677,87 @@ export class GatewayClient {
       cacheWrite: number;
     };
   }>> {
-    const payload = await this.sendRequest('models.list', {});
-    const result = payload as {
-      models?: Array<{
-        id: string;
-        name: string;
-        provider: string;
-        contextWindow?: number;
-        reasoning?: boolean;
-        input?: Array<'text' | 'image'>;
-        cost?: {
-          input: number;
-          output: number;
-          cacheRead: number;
-          cacheWrite: number;
-        };
-      }>;
-    } | null;
-    return result?.models ?? [];
+    return this.getBackendOperations().listModels(this.sendBackendRequest);
+  }
+
+  public async getModelSelectionState(): Promise<{
+    currentModel: string;
+    currentProvider: string;
+    currentBaseUrl: string;
+    models: Array<{
+      id: string;
+      name: string;
+      provider: string;
+      contextWindow?: number;
+      reasoning?: boolean;
+      input?: Array<'text' | 'image'>;
+      cost?: {
+        input: number;
+        output: number;
+        cacheRead: number;
+        cacheWrite: number;
+      };
+    }>;
+    providers?: Array<{
+      slug: string;
+      name: string;
+      isCurrent: boolean;
+      models: string[];
+      totalModels: number;
+      source?: string;
+      apiUrl?: string;
+    }>;
+    note?: string | null;
+  }> {
+    return this.getBackendOperations().getModelSelectionState(this.sendBackendRequest);
+  }
+
+  public async getCurrentModelState(): Promise<{
+    currentModel: string;
+    currentProvider: string;
+    currentBaseUrl: string;
+    note?: string | null;
+  }> {
+    return this.getBackendOperations().getCurrentModelState(this.sendBackendRequest);
+  }
+
+  public async setModelSelection(params: {
+    model: string;
+    provider?: string;
+    scope?: 'global' | 'session';
+    sessionKey?: string | null;
+  }): Promise<{
+    ok: boolean;
+    scope: 'global';
+    currentModel: string;
+    currentProvider: string;
+    currentBaseUrl: string;
+    models: Array<{
+      id: string;
+      name: string;
+      provider: string;
+      contextWindow?: number;
+      reasoning?: boolean;
+      input?: Array<'text' | 'image'>;
+      cost?: {
+        input: number;
+        output: number;
+        cacheRead: number;
+        cacheWrite: number;
+      };
+    }>;
+    providers?: Array<{
+      slug: string;
+      name: string;
+      isCurrent: boolean;
+      models: string[];
+      totalModels: number;
+      source?: string;
+      apiUrl?: string;
+    }>;
+    note?: string | null;
+  }> {
+    return this.getBackendOperations().setModelSelection(this.sendBackendRequest, params);
   }
 
   /** Get configured chat channels and account runtime snapshots. */
@@ -865,23 +954,17 @@ export class GatewayClient {
 
   /** List workspace files for an agent. */
   public async listAgentFiles(agentId = 'main'): Promise<Array<{ name: string; path: string; missing: boolean; size?: number; updatedAtMs?: number }>> {
-    const payload = await this.sendRequest('agents.files.list', { agentId });
-    const result = payload as { files?: Array<{ name: string; path: string; missing: boolean; size?: number; updatedAtMs?: number }> } | null;
-    return result?.files ?? [];
+    return this.getBackendOperations().listAgentFiles(this.sendBackendRequest, agentId);
   }
 
   /** Read an agent workspace file. */
   public async getAgentFile(name: string, agentId = 'main'): Promise<{ name: string; path: string; missing: boolean; size?: number; updatedAtMs?: number; content?: string }> {
-    const payload = await this.sendRequest('agents.files.get', { agentId, name });
-    const result = payload as { file?: { name: string; path: string; missing: boolean; size?: number; updatedAtMs?: number; content?: string } } | null;
-    if (!result?.file) throw new Error('File not found');
-    return result.file;
+    return this.getBackendOperations().getAgentFile(this.sendBackendRequest, agentId, name);
   }
 
   /** Write content to an agent workspace file. */
   public async setAgentFile(name: string, content: string, agentId = 'main'): Promise<{ ok: boolean }> {
-    const payload = await this.sendRequest('agents.files.set', { agentId, name, content });
-    const result = payload as { ok?: boolean } | null;
+    const result = await this.getBackendOperations().setAgentFile(this.sendBackendRequest, agentId, name, content);
     if (result?.ok && name === 'IDENTITY.md') {
       this.invalidateAgentMetadataCache(agentId);
     }
@@ -906,6 +989,38 @@ export class GatewayClient {
     env?: Record<string, string>;
   }): Promise<{ ok: boolean; skillKey: string; config: unknown }> {
     return this.request('skills.update', { skillKey, ...patch });
+  }
+
+  /** Get skill content and linked files. */
+  public async getSkillDetail(
+    skillKey: string,
+    params?: {
+      agentId?: string;
+      filePath?: string | null;
+    },
+  ): Promise<SkillContentDetail> {
+    return this.request('skills.get', {
+      skillKey,
+      agentId: params?.agentId ?? 'main',
+      ...(params?.filePath ? { filePath: params.filePath } : {}),
+    });
+  }
+
+  /** Update the main SKILL.md content for one skill. */
+  public async updateSkillContent(
+    skillKey: string,
+    content: string,
+    agentId = 'main',
+  ): Promise<{ ok: boolean; skillKey: string; path: string }> {
+    return this.request('skills.content.update', { skillKey, content, agentId });
+  }
+
+  /** Delete one skill when the backend allows it. */
+  public async deleteSkill(
+    skillKey: string,
+    agentId = 'main',
+  ): Promise<{ ok: boolean; skillKey: string }> {
+    return this.request('skills.delete', { skillKey, agentId });
   }
 
   /** List cron jobs. */
@@ -952,6 +1067,71 @@ export class GatewayClient {
     return this.request('cron.runs', params);
   }
 
+  /** List Hermes scheduled tasks. */
+  public async listHermesCronJobs(params?: {
+    includeDisabled?: boolean;
+  }): Promise<HermesCronJob[]> {
+    const result = await this.request<{ jobs?: HermesCronJob[] }>('hermes.cron.jobs.list', params ?? {});
+    return Array.isArray(result?.jobs) ? result.jobs : [];
+  }
+
+  /** Fetch one Hermes scheduled task. */
+  public async getHermesCronJob(jobId: string): Promise<HermesCronJob | null> {
+    const result = await this.request<{ job?: HermesCronJob | null }>('hermes.cron.jobs.get', { jobId });
+    return result?.job ?? null;
+  }
+
+  /** Create a Hermes scheduled task. */
+  public async createHermesCronJob(job: HermesCronJobUpsert): Promise<HermesCronJob | null> {
+    const result = await this.request<{ job?: HermesCronJob | null }>('hermes.cron.jobs.create', job);
+    return result?.job ?? null;
+  }
+
+  /** Update a Hermes scheduled task. */
+  public async updateHermesCronJob(jobId: string, patch: Partial<HermesCronJobUpsert>): Promise<HermesCronJob | null> {
+    const result = await this.request<{ job?: HermesCronJob | null }>('hermes.cron.jobs.update', { jobId, ...patch });
+    return result?.job ?? null;
+  }
+
+  /** Pause a Hermes scheduled task. */
+  public async pauseHermesCronJob(jobId: string): Promise<HermesCronJob | null> {
+    const result = await this.request<{ job?: HermesCronJob | null }>('hermes.cron.jobs.pause', { jobId });
+    return result?.job ?? null;
+  }
+
+  /** Resume a Hermes scheduled task. */
+  public async resumeHermesCronJob(jobId: string): Promise<HermesCronJob | null> {
+    const result = await this.request<{ job?: HermesCronJob | null }>('hermes.cron.jobs.resume', { jobId });
+    return result?.job ?? null;
+  }
+
+  /** Trigger a Hermes scheduled task to run on the next tick. */
+  public async runHermesCronJob(jobId: string): Promise<HermesCronJob | null> {
+    const result = await this.request<{ job?: HermesCronJob | null }>('hermes.cron.jobs.run', { jobId });
+    return result?.job ?? null;
+  }
+
+  /** Remove a Hermes scheduled task. */
+  public async removeHermesCronJob(jobId: string): Promise<boolean> {
+    const result = await this.request<{ ok?: boolean }>('hermes.cron.jobs.remove', { jobId });
+    return Boolean(result?.ok);
+  }
+
+  /** List Hermes cron output records. */
+  public async listHermesCronOutputs(params?: {
+    jobId?: string;
+    limit?: number;
+  }): Promise<HermesCronOutputEntry[]> {
+    const result = await this.request<{ outputs?: HermesCronOutputEntry[] }>('hermes.cron.outputs.list', params ?? {});
+    return Array.isArray(result?.outputs) ? result.outputs : [];
+  }
+
+  /** Read one Hermes cron output record. */
+  public async getHermesCronOutput(jobId: string, fileName: string): Promise<HermesCronOutputDetail | null> {
+    const result = await this.request<{ output?: HermesCronOutputDetail | null }>('hermes.cron.outputs.get', { jobId, fileName });
+    return result?.output ?? null;
+  }
+
   /** Fetch gateway log tail with cursor-based pagination. */
   public async fetchLogs(params: {
     cursor?: number;
@@ -992,13 +1172,7 @@ export class GatewayClient {
     startDate: string;
     endDate: string;
   }): Promise<UsageResult> {
-    const result = await this.sendRequest('sessions.usage', {
-      startDate: params.startDate,
-      endDate: params.endDate,
-      limit: 500,
-      includeContextWeight: false,
-    });
-    return (result ?? {}) as UsageResult;
+    return this.getBackendOperations().fetchUsage(this.sendBackendRequest, params);
   }
 
   /** Fetch daily cost summary for a date range. */
@@ -1006,11 +1180,7 @@ export class GatewayClient {
     startDate: string;
     endDate: string;
   }): Promise<CostSummary> {
-    const result = await this.sendRequest('usage.cost', {
-      startDate: params.startDate,
-      endDate: params.endDate,
-    });
-    return (result ?? {}) as CostSummary;
+    return this.getBackendOperations().fetchCostSummary(this.sendBackendRequest, params);
   }
 
   /** Create a new agent. */
@@ -1073,48 +1243,33 @@ export class GatewayClient {
 
   /** Fetch full gateway config snapshot (for reading agent tool overrides). */
   public async getConfig(): Promise<{ config: Record<string, unknown> | null; hash: string | null }> {
-    const result = await this.sendRequest('config.get', {}) as {
-      config?: Record<string, unknown> | null;
-      hash?: string | null;
-    } | null;
-    return {
-      config: result?.config ?? null,
-      hash: result?.hash ?? null,
-    };
+    return this.getBackendOperations().getConfig(this.sendBackendRequest);
   }
 
   /** Apply a merge-patch to gateway config (for updating agent tool overrides). */
   public async patchConfig(raw: string, baseHash: string): Promise<{ ok: boolean; config?: Record<string, unknown>; hash?: string }> {
-    const result = await this.sendRequest('config.patch', { raw, baseHash }) as {
-      ok?: boolean;
-      config?: Record<string, unknown>;
-      hash?: string;
-    } | null;
-    return {
-      ok: result?.ok ?? false,
-      config: result?.config ?? undefined,
-      hash: result?.hash ?? undefined,
-    };
+    return this.getBackendOperations().patchConfig(
+      this.sendBackendRequest,
+      raw,
+      baseHash,
+    );
   }
 
   /** Replace the full gateway config snapshot after local validation/preparation. */
   public async setConfig(raw: string, baseHash: string): Promise<{ ok: boolean; config?: Record<string, unknown>; path?: string }> {
-    const result = await this.sendRequest('config.set', { raw, baseHash }) as {
-      ok?: boolean;
-      config?: Record<string, unknown>;
-      path?: string;
-    } | null;
-    return {
-      ok: result?.ok ?? false,
-      config: result?.config ?? undefined,
-      path: result?.path ?? undefined,
-    };
+    return this.getBackendOperations().setConfig(
+      this.sendBackendRequest,
+      raw,
+      baseHash,
+    );
   }
 
   /** Fetch tools catalog from gateway. */
   public async fetchToolsCatalog(agentId = 'main'): Promise<ToolsCatalogResult> {
-    const result = await this.sendRequest('tools.catalog', { agentId, includePlugins: true });
-    return (result ?? { agentId, profiles: [], groups: [] }) as ToolsCatalogResult;
+    return this.getBackendOperations().fetchToolsCatalog(
+      this.sendBackendRequest,
+      agentId,
+    );
   }
 
   /** Resolve a pending exec approval request. */
@@ -1124,21 +1279,24 @@ export class GatewayClient {
 
   /** Get the configured gateway base URL (for constructing avatar HTTP URLs). */
   public getBaseUrl(): string | null {
-    if (!this.config?.url) return null;
-    try {
-      const url = new URL(this.config.url.replace(/^ws(s?):\/\//, 'http$1://'));
-      url.hash = '';
-      url.search = '';
-      url.pathname = url.pathname.replace(/\/ws\/?$/, '') || '/';
-      return url.toString().replace(/\/+$/, '');
-    } catch {
-      // Convert ws(s):// to http(s):// and drop the websocket mount path when present.
-      return this.config.url
-        .replace(/^ws(s?):\/\//, 'http$1://')
-        .replace(/\/+$/, '')
-        .replace(/\/ws$/, '');
-    }
+    return this.getBackendOperations().getBaseUrl(this.config);
   }
+
+  public getBackendKind() {
+    return resolveGatewayBackendKind(this.config);
+  }
+
+  public getBackendCapabilities() {
+    return getGatewayBackendCapabilities(this.config);
+  }
+
+  private getBackendOperations() {
+    return getGatewayBackendOperations(this.config);
+  }
+
+  private readonly sendBackendRequest = <T = unknown>(method: string, params?: object): Promise<T> => (
+    this.sendRequest(method, params) as Promise<T>
+  );
 
   // ---- Private: event emission ----
 
@@ -1646,7 +1804,14 @@ export class GatewayClient {
     clientId: string,
     traceId?: string,
   ): string {
-    return buildRelayClientWsUrl(relayUrl, relayDeviceId, token, clientId, traceId);
+    return buildRelayClientWsUrl(
+      relayUrl,
+      relayDeviceId,
+      token,
+      clientId,
+      this.config?.backendKind ?? 'openclaw',
+      traceId,
+    );
   }
 
   private getConnectRole(): string {
@@ -2001,6 +2166,14 @@ export class GatewayClient {
     if (!this.pairingPending) {
       this.setState('reconnecting', `retrying in ${delay}ms`);
     }
+    this.logTelemetry('reconnect_scheduled', {
+      attemptId: this.connectAttemptId,
+      route: this.activeRoute,
+      reconnectAttempts: this.reconnectAttempts,
+      backoffMs: Math.floor(backoff),
+      delayMs: delay,
+      pairingPending: this.pairingPending,
+    });
     this.clearReconnectTimer();
     this.reconnectTimer = setTimeout(() => this.connect(), delay);
   }
@@ -2092,6 +2265,12 @@ export class GatewayClient {
       const elapsed = this.lastTickAt ? Date.now() - this.lastTickAt : tolerance + 1;
       if (elapsed > tolerance) {
         this.lastTickAt = null;
+        this.logTelemetry('tick_watchdog_stale', {
+          attemptId: this.connectAttemptId,
+          route: this.activeRoute,
+          elapsedMs: elapsed,
+          toleranceMs: tolerance,
+        });
         this.reconnect();
         return;
       }
@@ -2133,6 +2312,13 @@ export class GatewayClient {
     if (this.manuallyClosed || this.pairingPending || this.reconnectBlockedReason) {
       return;
     }
+    this.logTelemetry('stale_transport_recovered', {
+      attemptId: this.connectAttemptId,
+      route: this.activeRoute,
+      reason,
+      state: this.state,
+      wsReadyState: this.ws?.readyState,
+    });
     if (this.state === 'ready') {
       this.setState('reconnecting', reason);
     }
@@ -2186,7 +2372,56 @@ export class GatewayClient {
       ts: Date.now(),
       ...fields,
     };
-    console.log(`[gateway-telemetry] ${JSON.stringify(payload)}`);
+    if (this.getBackendKind() !== 'hermes' || !this.shouldLogHermesTelemetryEvent(event)) {
+      return;
+    }
+    const serialized = Object.entries(payload)
+      .filter(([, value]) => value !== undefined && value !== null)
+      .map(([key, value]) => `${key}=${this.serializeHermesTelemetryValue(value)}`)
+      .join(' ');
+    // console.log(`[hermes-connect] gateway_event=${event} ${serialized}`);
+    // markHermesConnectTrace(`gateway_${event}`, fields);
+    void serialized;
+  }
+
+  private shouldLogHermesTelemetryEvent(event: string): boolean {
+    switch (event) {
+      case 'connect_start':
+      case 'connect_skipped':
+      case 'ws_connecting':
+      case 'ws_open':
+      case 'ws_error':
+      case 'ws_close':
+      case 'reconnect_scheduled':
+      case 'reconnect_skipped':
+      case 'ws_open_timeout':
+      case 'challenge_timeout':
+      case 'relay_challenge_timeout':
+      case 'relay_bootstrap_timeout':
+      case 'connect_handshake_start':
+      case 'connect_req_sent':
+      case 'connect_ready':
+      case 'connect_res_err':
+      case 'relay_bootstrap_issued':
+      case 'relay_bootstrap_failed':
+      case 'relay_bootstrap_requested':
+      case 'relay_bootstrap_fallback_legacy':
+      case 'stale_transport_recovered':
+      case 'tick_watchdog_stale':
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  private serializeHermesTelemetryValue(value: unknown): string {
+    if (typeof value === 'string') {
+      return value.replace(/\s+/g, ' ').trim().slice(0, 160);
+    }
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      return String(value);
+    }
+    return JSON.stringify(value);
   }
 
   private shouldTraceRequest(method: string): boolean {

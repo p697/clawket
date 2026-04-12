@@ -4,6 +4,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { PendingImageBar } from '../../../components/chat/PendingImageBar';
 import { ChatComposer } from '../../../components/chat/ChatComposer';
 import { PendingImage } from '../../../types/chat';
+import type { ThinkingLevel } from '../../../utils/gateway-settings';
 import { isComposerInputEditable } from '../hooks/composerInteractionPolicy';
 
 type ComposerGesture = ReturnType<typeof Gesture.Pan>;
@@ -21,6 +22,7 @@ type Props = {
   placeholder: string;
   animatedPlaceholder?: boolean;
   thinkingLevel?: string | null;
+  thinkingLevelOptions?: ThinkingLevel[];
   modelLabel?: string | null;
   onAbort?: () => void;
   onBlur: () => void;
@@ -57,6 +59,7 @@ export function ChatComposerPane({
   placeholder,
   animatedPlaceholder,
   thinkingLevel,
+  thinkingLevelOptions,
   modelLabel,
   onAbort,
   onBlur,
@@ -116,6 +119,7 @@ export function ChatComposerPane({
           attachDisabled={!inputEditable}
           commandDisabled={isConnecting || isSending}
           thinkingLevel={thinkingLevel}
+          thinkingLevelOptions={thinkingLevelOptions}
           onSelectThinkingLevel={onSelectThinkingLevel}
           modelLabel={modelLabel}
           onModelPress={onModelPress}

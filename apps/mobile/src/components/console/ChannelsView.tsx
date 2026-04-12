@@ -20,6 +20,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useAppContext } from '../../contexts/AppContext';
 import { useGatewayPatch } from '../../hooks/useGatewayPatch';
+import { loadGatewayChannelsBundle } from '../../services/gateway-channels';
 import { GatewayClient } from '../../services/gateway';
 import { useAppTheme } from '../../theme';
 import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
@@ -185,21 +186,15 @@ export function ChannelsView({
     if (mode === 'refresh') setRefreshing(true);
 
     try {
-      const [channelsResult, configResult] = await Promise.allSettled([
-        gateway.getChannelsStatus({ probe: false }),
-        gateway.getConfig(),
-      ]);
-
-      if (channelsResult.status !== 'fulfilled') {
-        throw channelsResult.reason;
+      const bundle = await loadGatewayChannelsBundle(gateway);
+      setChannelsStatus(bundle.channelsStatus);
+      // Preserve previous dm-scope / config-hash when `getConfig()` fails
+      // transiently. Matches the pre-refactor `Promise.allSettled` behavior
+      // where channels could still render even if config fetch errored.
+      if (bundle.config) {
+        setDmScope(bundle.config.dmScope);
+        setConfigHash(bundle.config.configHash);
       }
-
-      if (configResult.status === 'fulfilled') {
-        setDmScope(parseDmScope(configResult.value.config));
-        setConfigHash(configResult.value.hash);
-      }
-
-      setChannelsStatus(channelsResult.value);
       setError(null);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : t('Failed to load channels');
@@ -234,6 +229,11 @@ export function ChannelsView({
       configHash,
       confirmation: true,
       onSuccess: async () => {
+        // After a successful config patch we must see the new config back,
+        // so we fetch channels + config strictly in parallel here. Any
+        // failure from getConfig() propagates as-is and the existing
+        // patchWithRestart failure Alert will surface the real RPC error
+        // message (not a synthesized translation).
         const [refreshed, configRefresh] = await Promise.all([
           gateway.getChannelsStatus({ probe: false }),
           gateway.getConfig(),

@@ -30,8 +30,8 @@ describe('empty connection guide', () => {
   it('returns the translated two-step onboarding copy', () => {
     const t = ((key: string) => key) as never;
     expect(getQuickConnectGuideSteps(t)).toEqual([
-      { title: 'Step 1', description: 'Copy this message to your OpenClaw Agent.' },
-      { title: 'Step 2', description: 'Scan the QR code sent by your Agent.' },
+      { title: 'Step 1', description: 'Copy this message to your agent.' },
+      { title: 'Step 2', description: 'Scan one of the QR codes sent by your agent.' },
     ]);
   });
 });

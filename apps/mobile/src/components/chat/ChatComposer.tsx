@@ -31,6 +31,7 @@ import Svg, { Path } from 'react-native-svg';
 import { useAppContext } from '../../contexts/AppContext';
 import { useAppTheme } from '../../theme';
 import { FontSize, FontWeight, Radius, Shadow, Space } from '../../theme/tokens';
+import type { ThinkingLevel } from '../../utils/gateway-settings';
 import { isComposerInputEditable } from '../../screens/ChatScreen/hooks/composerInteractionPolicy';
 import { CircleButton, IconButton } from '../ui';
 import { AttachmentMenu } from './AttachmentMenu';
@@ -57,6 +58,7 @@ type Props = {
   attachDisabled: boolean;
   commandDisabled?: boolean;
   thinkingLevel?: string | null;
+  thinkingLevelOptions?: ThinkingLevel[];
   onSelectThinkingLevel?: (value: string) => void;
   modelLabel?: string | null;
   onModelPress?: () => void;
@@ -93,7 +95,7 @@ function SendArrowGlyph({ color }: { color: string }): React.JSX.Element {
   );
 }
 
-export function ChatComposer({ value, placeholder, animatedPlaceholder = false, editable, canSend, onChangeText, onSend, onPickImage, onTakePhoto, onChooseFile, onCommandPress, attachDisabled, commandDisabled = false, thinkingLevel, onSelectThinkingLevel, modelLabel, onModelPress, onWebSearchPress, onPromptPress, isSending = false, onAbort, bottomPadding, bottomOffset, composerRef, onFocus, onBlur, onVoiceInputPress, showVoiceInput = false, voiceInputActive = false, voiceInputDisabled = false, voiceInputLevel = 0 }: Props): React.JSX.Element {
+export function ChatComposer({ value, placeholder, animatedPlaceholder = false, editable, canSend, onChangeText, onSend, onPickImage, onTakePhoto, onChooseFile, onCommandPress, attachDisabled, commandDisabled = false, thinkingLevel, thinkingLevelOptions, onSelectThinkingLevel, modelLabel, onModelPress, onWebSearchPress, onPromptPress, isSending = false, onAbort, bottomPadding, bottomOffset, composerRef, onFocus, onBlur, onVoiceInputPress, showVoiceInput = false, voiceInputActive = false, voiceInputDisabled = false, voiceInputLevel = 0 }: Props): React.JSX.Element {
   const inputRef = useRef<TextInput>(null);
   const inputContentHeightRef = useRef(0);
   const scrollFrameRef = useRef<number | null>(null);
@@ -265,6 +267,7 @@ export function ChatComposer({ value, placeholder, animatedPlaceholder = false, 
           current={thinkingLevel ?? ''}
           onSelect={onSelectThinkingLevel!}
           title={t('Thinking Level')}
+          options={thinkingLevelOptions}
         >
           {wallpaperActive ? (
             <View style={styles.blurBadgeClip}>

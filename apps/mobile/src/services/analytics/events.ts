@@ -205,7 +205,7 @@ export const analyticsEvents = {
 
   cronSaveSucceeded(properties: {
     is_editing: boolean;
-    payload_kind: 'agentTurn' | 'systemEvent';
+    payload_kind: 'agentTurn' | 'systemEvent' | 'hermes';
     schedule_kind: string;
     has_model_override: boolean;
     delivery_mode: string;

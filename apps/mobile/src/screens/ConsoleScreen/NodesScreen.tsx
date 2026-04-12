@@ -3,17 +3,18 @@ import { CommonActions, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
 import { NodesView } from '../../components/console/NodesView';
-import { publicAppLinks } from '../../config/public';
 import { useAppContext } from '../../contexts/AppContext';
 import { useNativeStackModalHeader } from '../../hooks/useNativeStackModalHeader';
+import { resolveGatewayDocumentationPageUrl } from '../../services/gateway-doc-links';
 import type { ConsoleStackParamList } from './ConsoleTab';
 
 type NodesNavigation = NativeStackNavigationProp<ConsoleStackParamList, 'Nodes'>;
 
 export function NodesScreen(): React.JSX.Element {
-  const { gateway } = useAppContext();
+  const { gateway, config } = useAppContext();
   const { t } = useTranslation('console');
   const navigation = useNavigation<NodesNavigation>();
+  const nodeDocsUrl = resolveGatewayDocumentationPageUrl(config, 'nodes');
 
   useNativeStackModalHeader({
     navigation,
@@ -32,13 +33,13 @@ export function NodesScreen(): React.JSX.Element {
           displayName: node.displayName,
         });
       }}
-      onOpenNodeDocs={publicAppLinks.docsUrl ? () => {
+      onOpenNodeDocs={nodeDocsUrl ? () => {
         navigation.dispatch(
           CommonActions.reset({
             index: 1,
             routes: [
               { name: 'ConsoleMenu' },
-              { name: 'Docs', params: { url: `${publicAppLinks.docsUrl}/nodes/index#nodes` } },
+              { name: 'Docs', params: { url: nodeDocsUrl } },
             ],
           }),
         );

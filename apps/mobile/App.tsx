@@ -60,6 +60,7 @@ import {
   shouldShowChatReplyNotification,
 } from './src/services/chat-notifications';
 import { StorageService } from './src/services/storage';
+import { resolveGatewayBackendKind } from './src/services/gateway-backends';
 import { resolveGatewayCacheScopeId } from './src/services/gateway-cache-scope';
 import { analyticsEvents } from './src/services/analytics/events';
 import { useDeepLinkHandler } from './src/hooks/useDeepLinkHandler';
@@ -77,6 +78,7 @@ import {
   isAssistantSilentReplyMessage,
   sanitizeSilentPreviewText,
 } from './src/utils/chat-message';
+import { resolveMainSessionKey } from './src/utils/agent-session-scope';
 import { normalizeAccessibleAgentId } from './src/utils/pro';
 
 type RootTabParamList = {
@@ -496,7 +498,11 @@ function AppContent({
     setOfficeGuideVisible(false);
   }, []);
 
-  const mainSessionKey = useMemo(() => `agent:${currentAgentId}:main`, [currentAgentId]);
+  const backendKind = useMemo(() => resolveGatewayBackendKind(config), [config]);
+  const mainSessionKey = useMemo(
+    () => resolveMainSessionKey(currentAgentId, { mainSessionKey: backendKind === 'hermes' ? 'main' : null }),
+    [backendKind, currentAgentId],
+  );
   const isMultiAgent = agents.length > 1;
 
   const setCurrentAgentId = useCallback((id: string) => {
@@ -510,6 +516,12 @@ function AppContent({
     setCurrentAgentIdState(normalized);
     StorageService.setCurrentAgentId(normalized);
   }, [currentAgentId, isPro]);
+
+  useEffect(() => {
+    if (backendKind !== 'hermes' || currentAgentId === 'main') return;
+    setCurrentAgentIdState('main');
+    StorageService.setCurrentAgentId('main');
+  }, [backendKind, currentAgentId]);
 
   const switchAgent = useCallback((id: string) => {
     setCurrentAgentIdState(id);

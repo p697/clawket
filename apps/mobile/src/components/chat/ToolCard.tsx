@@ -40,12 +40,13 @@ function normalizeSummary(
 }
 
 function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
+  const formatDecimal = (value: number): string => value.toFixed(2).replace(/\.?0+$/, '');
+  if (ms < 1000) return `${formatDecimal(ms)}ms`;
   const s = ms / 1000;
-  if (s < 60) return `${s.toFixed(1)}s`;
+  if (s < 60) return `${formatDecimal(s)}s`;
   const m = Math.floor(s / 60);
-  const remainS = Math.round(s % 60);
-  return `${m}m${remainS}s`;
+  const remainS = s % 60;
+  return `${m}m${formatDecimal(remainS)}s`;
 }
 
 export function ToolCard({
@@ -67,12 +68,20 @@ export function ToolCard({
   const text = normalizeSummary(name, status, summary, t);
   const hasArgs = !!args && args.trim().length > 0;
   const hasOutput = !!detail && detail.trim().length > 0;
-  const canOpen = hasArgs || hasOutput;
   const computedDurationMs = useMemo(() => {
     if (typeof durationMs === 'number') return durationMs;
     if (typeof startedAtMs !== 'number' || typeof finishedAtMs !== 'number') return undefined;
     return Math.max(0, finishedAtMs - startedAtMs);
   }, [durationMs, finishedAtMs, startedAtMs]);
+  const hasTiming = typeof computedDurationMs === 'number'
+    || typeof startedAtMs === 'number'
+    || typeof finishedAtMs === 'number';
+  const hasUsage = !!usage && (
+    typeof usage.inputTokens === 'number'
+    || typeof usage.outputTokens === 'number'
+    || typeof usage.totalTokens === 'number'
+  );
+  const canOpen = hasArgs || hasOutput || hasTiming || hasUsage;
 
   return (
     <View style={styles.row}>

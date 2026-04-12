@@ -33,8 +33,9 @@ export function ChatScreen({ openSidebarRequestAt, openAgentSessionsBoardRequest
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const controller = useChatControllerContext();
-  const { debugMode } = useAppContext();
+  const { debugMode, gateway } = useAppContext();
   const isFocused = useIsFocused();
+  const capabilities = React.useMemo(() => gateway.getBackendCapabilities(), [gateway]);
   const handledRequestRef = React.useRef<number | null>(null);
   const handledBoardRequestRef = React.useRef<number | null>(null);
   const checkedModeRef = React.useRef<string | null>(null);
@@ -50,13 +51,14 @@ export function ChatScreen({ openSidebarRequestAt, openAgentSessionsBoardRequest
   }, [navigation, openSidebarRequestAt]);
 
   React.useEffect(() => {
+    if (!capabilities.consoleAgentSessionsBoard) return;
     if (!openAgentSessionsBoardRequestAt) return;
     if (handledBoardRequestRef.current === openAgentSessionsBoardRequestAt) return;
     handledBoardRequestRef.current = openAgentSessionsBoardRequestAt;
     const parentNavigation = navigation.getParent();
     if (!parentNavigation) return;
     parentNavigation.dispatch(CommonActions.navigate({ name: 'AgentSessionsBoard' }));
-  }, [navigation, openAgentSessionsBoardRequestAt]);
+  }, [capabilities.consoleAgentSessionsBoard, navigation, openAgentSessionsBoardRequestAt]);
 
   React.useEffect(() => {
     if (!isFocused) return;
@@ -159,10 +161,11 @@ export function ChatScreen({ openSidebarRequestAt, openAgentSessionsBoardRequest
   }, [navigation]);
 
   const handleOpenAgentSessionsBoard = React.useCallback(() => {
+    if (!capabilities.consoleAgentSessionsBoard) return;
     const parentNavigation = navigation.getParent();
     if (!parentNavigation) return;
     parentNavigation.dispatch(CommonActions.navigate({ name: 'AgentSessionsBoard' }));
-  }, [navigation]);
+  }, [capabilities.consoleAgentSessionsBoard, navigation]);
 
   const closeAnnouncement = React.useCallback(async () => {
     if (!debugMode) {
@@ -237,7 +240,7 @@ export function ChatScreen({ openSidebarRequestAt, openAgentSessionsBoardRequest
         onAddGatewayConnection={handleOpenAddGatewayConnection}
         onOpenCustomConnection={handleOpenCustomConnection}
         onManageAgents={handleOpenManageAgents}
-        onOpenAgentSessionsBoard={handleOpenAgentSessionsBoard}
+        onOpenAgentSessionsBoard={capabilities.consoleAgentSessionsBoard ? handleOpenAgentSessionsBoard : undefined}
       />
       <AppUpdateAnnouncementModal
         visible={announcementVisible}

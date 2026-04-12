@@ -34,6 +34,7 @@ import { GatewayClient } from '../../services/gateway';
 import { useGatewayPatch } from '../../hooks/useGatewayPatch';
 import { analyticsEvents } from '../../services/analytics/events';
 import { scheduleAutomaticAppReview } from '../../services/auto-app-review';
+import { loadGatewayModelsConfigBundle } from '../../services/gateway-models';
 import { useAppTheme } from '../../theme';
 import { FontSize, FontWeight, Radius, Shadow, Space } from '../../theme/tokens';
 import { addFallbackModel, moveFallbackModel, removeFallbackModelAt, sanitizeFallbackModels } from '../../utils/fallback-models';
@@ -92,6 +93,8 @@ type ModelConfigProps = {
   savingSettings: boolean;
   settingsError: string | null;
   hasActiveGateway: boolean;
+  supportsRuntimeSettings?: boolean;
+  supportsModelSelection?: boolean;
   onLoadSettings: () => Promise<void>;
   onSaveSettings: () => Promise<void>;
   overlayMessage?: string | null;
@@ -282,18 +285,15 @@ export function ModelsView({
     if (mode === 'initial') setLoading(true);
     if (mode === 'refresh') setRefreshing(true);
     try {
-      const [modelsResult, configResult] = await Promise.all([
-        gateway.listModels(),
-        gateway.getConfig(),
-      ]);
-      setModels(modelsResult);
-      setConfig(configResult.config);
-      setConfigHash(configResult.hash);
+      const bundle = await loadGatewayModelsConfigBundle(gateway);
+      setModels(bundle.models);
+      setConfig(bundle.config);
+      setConfigHash(bundle.configHash);
       setError(null);
       return {
-        models: modelsResult,
-        config: configResult.config,
-        configHash: configResult.hash,
+        models: bundle.models,
+        config: bundle.config,
+        configHash: bundle.configHash,
       };
     } catch (err: unknown) {
       if (isExpectedRestartActive) {

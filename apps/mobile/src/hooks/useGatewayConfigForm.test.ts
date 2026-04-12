@@ -52,7 +52,7 @@ describe('useGatewayConfigForm', () => {
     consoleErrorSpy.mockRestore();
   });
 
-  it('forces new manual connections to start in custom mode', async () => {
+  it('forces new manual connections to start as OpenClaw custom transport', async () => {
     const gateway = {
       disconnect: jest.fn(),
       configure: jest.fn(),
@@ -76,7 +76,108 @@ describe('useGatewayConfigForm', () => {
 
     expect(result.current.editorVisible).toBe(true);
     expect(result.current.editingConfigId).toBeNull();
-    expect(result.current.editorMode).toBe('custom');
+    expect(result.current.editorBackendKind).toBe('openclaw');
+    expect(result.current.editorTransportKind).toBe('custom');
+  });
+
+  it('allows creating a Hermes local connection without separate auth fields', async () => {
+    const onSaved = jest.fn();
+    const gateway = {
+      disconnect: jest.fn(),
+      configure: jest.fn(),
+      connect: jest.fn(),
+      getDeviceIdentity: jest.fn().mockResolvedValue({ deviceId: 'device-1' }),
+    } as any;
+
+    const { result } = renderHook(() =>
+      useGatewayConfigForm({
+        gateway,
+        initialConfig: null,
+        debugMode: false,
+        onSaved,
+        onReset: jest.fn(),
+      }),
+    );
+
+    await act(async () => {
+      result.current.openCreateEditor('manual');
+    });
+
+    await act(async () => {
+      result.current.setEditorBackendKind('hermes');
+      result.current.setEditorTransportKind('local');
+      result.current.setEditorUrl('ws://192.168.1.8:4319/v1/hermes/ws?token=secret');
+      result.current.setEditorName('Hermes LAN');
+    });
+
+    await act(async () => {
+      await result.current.saveEditor();
+    });
+
+    const lastCall = (StorageService.setGatewayConfigsState as jest.Mock).mock.calls.at(-1)?.[0];
+    expect(lastCall.configs[0]).toMatchObject({
+      name: 'Hermes LAN',
+      backendKind: 'hermes',
+      transportKind: 'local',
+      mode: 'hermes',
+      url: 'ws://192.168.1.8:4319/v1/hermes/ws?token=secret',
+      token: undefined,
+      password: undefined,
+      hermes: {
+        bridgeUrl: 'http://192.168.1.8:4319',
+      },
+    });
+    expect(onSaved).toHaveBeenCalled();
+  });
+
+  it('keeps OpenClaw direct connections on the legacy auth path', async () => {
+    const onSaved = jest.fn();
+    const gateway = {
+      disconnect: jest.fn(),
+      configure: jest.fn(),
+      connect: jest.fn(),
+      getDeviceIdentity: jest.fn().mockResolvedValue({ deviceId: 'device-1' }),
+    } as any;
+
+    const { result } = renderHook(() =>
+      useGatewayConfigForm({
+        gateway,
+        initialConfig: null,
+        debugMode: false,
+        onSaved,
+        onReset: jest.fn(),
+      }),
+    );
+
+    await act(async () => {
+      result.current.openCreateEditor('manual');
+    });
+
+    await act(async () => {
+      result.current.setEditorBackendKind('openclaw');
+      result.current.setEditorTransportKind('local');
+      result.current.setEditorUrl('ws://192.168.1.20:18789');
+      result.current.setEditorToken('legacy-token');
+      result.current.setEditorName('OpenClaw LAN');
+    });
+
+    await act(async () => {
+      await result.current.saveEditor();
+    });
+
+    const lastCall = (StorageService.setGatewayConfigsState as jest.Mock).mock.calls.at(-1)?.[0];
+    expect(lastCall.configs[0]).toMatchObject({
+      name: 'OpenClaw LAN',
+      backendKind: 'openclaw',
+      transportKind: 'local',
+      mode: 'local',
+      url: 'ws://192.168.1.20:18789',
+      token: 'legacy-token',
+      password: undefined,
+      relay: undefined,
+      hermes: undefined,
+    });
+    expect(onSaved).toHaveBeenCalled();
   });
 
   it('prefers token auth method when opening an editor with both credentials', async () => {
@@ -312,6 +413,90 @@ describe('useGatewayConfigForm', () => {
         clientToken: 'gct_new',
         protocolVersion: 2,
         supportsBootstrap: true,
+      },
+    });
+  });
+
+  it('keeps Hermes relay transport when refreshing an existing config from a scanned QR', async () => {
+    (StorageService.getGatewayConfigsState as jest.Mock).mockResolvedValue({
+      activeId: 'cfg_hermes_relay',
+      configs: [{
+        id: 'cfg_hermes_relay',
+        name: 'Hermes Relay',
+        backendKind: 'hermes',
+        transportKind: 'relay',
+        mode: 'hermes',
+        url: 'wss://hermes-relay-old.example.com/ws',
+        relay: {
+          serverUrl: 'https://hermes-registry.example.com',
+          gatewayId: 'hbg_123',
+          clientToken: 'hct_old',
+        },
+        createdAt: 2,
+        updatedAt: 2,
+      }],
+    });
+
+    const gateway = {
+      disconnect: jest.fn(),
+      configure: jest.fn(),
+      connect: jest.fn(),
+      getDeviceIdentity: jest.fn().mockResolvedValue({ deviceId: 'device-1' }),
+    } as any;
+
+    const { result } = renderHook(() =>
+      useGatewayConfigForm({
+        gateway,
+        initialConfig: null,
+        debugMode: false,
+        onSaved: jest.fn(),
+        onReset: jest.fn(),
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.configs.length).toBe(1);
+    });
+
+    await act(async () => {
+      result.current.openEditEditor('cfg_hermes_relay');
+    });
+
+    await act(async () => {
+      await result.current.applyScannedConfig({
+        url: 'wss://hermes-relay.example.com/ws',
+        backendKind: 'hermes',
+        transportKind: 'relay',
+        mode: 'hermes',
+        relay: {
+          serverUrl: 'https://hermes-registry.example.com',
+          gatewayId: 'hbg_123',
+          clientToken: 'hct_new',
+          displayName: 'Hermes Mac',
+        },
+      });
+    });
+
+    expect(result.current.editorBackendKind).toBe('hermes');
+    expect(result.current.editorTransportKind).toBe('relay');
+    expect(result.current.isRelayEditorLocked).toBe(true);
+    expect(result.current.editorRelayClientToken).toBe('hct_new');
+
+    await act(async () => {
+      await result.current.saveEditor();
+    });
+
+    const lastCall = (StorageService.setGatewayConfigsState as jest.Mock).mock.calls.at(-1)?.[0];
+    expect(lastCall.configs[0]).toMatchObject({
+      id: 'cfg_hermes_relay',
+      backendKind: 'hermes',
+      transportKind: 'relay',
+      mode: 'hermes',
+      url: 'wss://hermes-relay.example.com/ws',
+      relay: {
+        serverUrl: 'https://hermes-registry.example.com',
+        gatewayId: 'hbg_123',
+        clientToken: 'hct_new',
       },
     });
   });

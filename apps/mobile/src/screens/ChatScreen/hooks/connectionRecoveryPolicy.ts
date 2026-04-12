@@ -1,3 +1,5 @@
+import type { ConnectionState, GatewayBackendKind } from '../../../types';
+
 export function shouldShowConnectionRecoveryMessage(code?: string, message?: string): boolean {
   const normalizedCode = (code ?? '').toLowerCase();
   const normalizedMessage = (message ?? '').toLowerCase();
@@ -39,4 +41,30 @@ export function shouldDelayConnectionRecoveryMessage(code?: string, message?: st
     || normalizedMessage.includes('websocket open timed out')
     || normalizedMessage.includes('challenge timed out')
     || normalizedMessage.includes('relay bootstrap timed out');
+}
+
+// This function encodes a Hermes-specific suppression rule: during the
+// Hermes bridge boot window, transient websocket / auth errors should
+// be silenced because the bridge is still coming up. It is named after
+// Hermes intentionally — it is not a generic connection recovery rule.
+// OpenClaw uses a different recovery model and is guarded out early.
+export function shouldSuppressHermesStartupRecoveryMessage(input: {
+  backendKind?: GatewayBackendKind;
+  sessionKey?: string | null;
+  connectionState?: ConnectionState;
+  code?: string;
+  message?: string;
+}): boolean {
+  if (input.backendKind !== 'hermes') return false;
+  if (input.connectionState === 'ready') return false;
+
+  const normalizedCode = (input.code ?? '').toLowerCase();
+  const normalizedMessage = (input.message ?? '').toLowerCase();
+  return normalizedCode === 'ws_error'
+    || normalizedCode === 'ws_connect_timeout'
+    || normalizedCode === 'challenge_timeout'
+    || normalizedCode === 'auth_failed'
+    || normalizedMessage.includes('websocket error')
+    || normalizedMessage.includes('websocket open timed out')
+    || normalizedMessage.includes('challenge timed out');
 }

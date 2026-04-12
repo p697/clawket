@@ -3,6 +3,7 @@ import path from 'node:path';
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
 const mobileNodeModules = path.join(repoRoot, 'apps', 'mobile', 'node_modules');
+const mobilePodfileLock = path.join(repoRoot, 'apps', 'mobile', 'ios', 'Podfile.lock');
 const mobilePackageJson = JSON.parse(
   fs.readFileSync(path.join(repoRoot, 'apps', 'mobile', 'package.json'), 'utf8'),
 );
@@ -13,6 +14,10 @@ const links = new Set([
   ...Object.keys(mobilePackageJson.devDependencies ?? {}),
   'react-native-safe-area-context',
 ]);
+
+for (const pkg of readPodLinkedPackages(mobilePodfileLock)) {
+  links.add(pkg);
+}
 
 for (const pkg of links) {
   const source = path.join(repoRoot, 'node_modules', pkg);
@@ -49,4 +54,23 @@ function sameRealPath(sourcePath, targetPath) {
   } catch {
     return false;
   }
+}
+
+function readPodLinkedPackages(lockfilePath) {
+  if (!fs.existsSync(lockfilePath)) {
+    return [];
+  }
+
+  const lockfile = fs.readFileSync(lockfilePath, 'utf8');
+  const packages = new Set();
+  const pathPattern = /^\s*:path:\s+"..\/node_modules\/(.+?)\/ios"\s*$/gm;
+
+  for (const match of lockfile.matchAll(pathPattern)) {
+    const pkg = match[1]?.trim();
+    if (pkg) {
+      packages.add(pkg);
+    }
+  }
+
+  return [...packages];
 }

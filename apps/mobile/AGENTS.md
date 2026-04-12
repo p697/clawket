@@ -29,6 +29,47 @@ When touching Android release packaging, keep these rules in mind:
 
 Clawket now lives in a monorepo. This app is the client-facing frontend; relay and bridge live in sibling workspace folders.
 
+## Dual Backend Compatibility Rule
+
+This mobile app must keep both OpenClaw and Hermes usable during the migration period.
+
+1. Do not ship Hermes fixes that regress OpenClaw chat, pairing, config, or session behavior.
+2. Preserve legacy OpenClaw interfaces and expectations; Hermes-specific behavior should use isolated backend-aware handling.
+3. When touching shared chat state, message parsing, history merge, or connection code, verify the behavior still makes sense for both OpenClaw and Hermes.
+4. Treat Hermes source at `/Users/lucy/.hermes/hermes-agent` as read-only external code unless the user explicitly approves changing Hermes itself.
+
+## Backend Architecture Rule
+
+For all new mobile work, use this model:
+
+1. `backendKind` is the product backend: `openclaw` or `hermes`.
+2. `transportKind` is the connection route: `local`, `relay`, `tailscale`, `cloudflare`, or `custom`.
+3. Legacy `mode` fields may still exist for compatibility, but new logic should prefer `backendKind` + `transportKind`.
+4. Do not add new screen-level or component-level branching that treats Hermes as just another `mode`.
+5. Put backend differences behind shared helpers, capability registries, or adapters in `src/services/` or backend-specific modules.
+6. When adding Console or Config features, define whether they are shared, OpenClaw-only, or Hermes-only before writing UI code.
+7. Unsupported backend actions must be hidden or disabled via centralized capability checks, not by optimistic requests that fail later.
+8. Treat `src/services/gateway-backends.ts` as the primary source of truth for backend capability metadata; extend it before wiring new backend-specific UI affordances.
+9. OpenClaw and Hermes Console menus are intentionally implemented as **separate top-level screens** (for example `OpenClawConsoleMenuScreen` and `HermesConsoleMenuScreen`), dispatched via `selectByBackend()`. Do not try to merge them into a single cross-backend menu. Inside each per-backend menu screen, prefer descriptor-driven item lists over hand-written per-item conditional JSX so the menu stays maintainable as that backend grows.
+10. Keep `src/services/gateway.ts` focused on transport, connection, caching, and event orchestration. Backend-specific request semantics should live in dedicated operations/helpers such as `gateway-backend-operations.ts`.
+11. When a screen or hook needs multiple gateway resources together, prefer a shared bundle loader in `src/services/` over duplicating `Promise.all(...)` request orchestration inside the view layer.
+12. Treat the Console dashboard/Home page the same way: aggregate capability-gated gateway reads in a dedicated service loader rather than building a long inline `Promise.allSettled(...)` block inside the screen.
+13. Treat Console entry metadata the same way: page titles, descriptions, docs links, and Hermes/OpenClaw action cards should come from shared descriptor/resolver helpers in `src/services/`, not from repeated object literals embedded in screens.
+14. `Discover` and `ClawHub` are part of the backend support matrix too. Do not assume they are always available; gate them through backend capabilities or shared entry descriptors before exposing them in Console.
+15. Apply the same separation to connection setup. Gateway config editors, QR scan results, and saved configs must model `backendKind` and `transportKind` independently. Do not re-introduce new Hermes-only editor modes when a backend/transport combination is what the product actually needs.
+16. During the Hermes phase-1 rollout, treat `hermes + local/tailscale/cloudflare/custom` as direct-bridge transports. Reserve `relay` as a separate transport track that will later plug into backend-aware relay infrastructure rather than being faked through direct URLs.
+17. Default connection UX copy to backend-neutral language (`Connection`, `pairing QR code`, etc.). Mention OpenClaw explicitly only for genuinely OpenClaw-specific flows such as auth-file guidance, permission repair, or config-management screens.
+18. When deciding whether a config should use relay connection behavior, key off `transportKind === 'relay'` or `resolveGatewayTransportKind(...)`, not `mode === 'relay'`. Hermes relay may still retain legacy `mode: 'hermes'` for compatibility.
+
+## Hermes Model Selection Rule
+
+When adding Hermes model-selection UI or behavior in mobile:
+
+1. Treat Hermes model selection as `global` only for now. The current Hermes API-server integration used by Clawket does not provide stable per-session model overrides.
+2. Any Hermes `/model` command handling and Console model-setting flows must converge on shared gateway/bridge operations instead of separate screen-specific logic.
+3. Do not hardcode Hermes custom-provider slug rules in screens or components. Provider canonicalization belongs in shared services/bridge helpers.
+4. If a future page appears to need session-scoped Hermes models, stop and re-evaluate the bridge/runtime contract before implementing UI.
+
 ## Sister Repositories
 
 | Repo | Path | Role |

@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { networkInterfaces } from 'node:os';
 import { buildGatewayQrPayload, normalizeGatewayQrUrl } from '@clawket/bridge-core';
 import { resolveGatewayUrl } from '@clawket/bridge-runtime';
@@ -96,6 +97,10 @@ export function rewriteGatewayHost(gatewayUrl: string, nextHost: string): string
 }
 
 export function detectLanIp(): string | null {
+  const preferredDarwinIp = detectPreferredDarwinLanIp();
+  if (preferredDarwinIp) {
+    return preferredDarwinIp;
+  }
   const interfaces = networkInterfaces();
   let best: { score: number; ip: string } | null = null;
   for (const [name, addresses] of Object.entries(interfaces)) {
@@ -109,6 +114,31 @@ export function detectLanIp(): string | null {
     }
   }
   return best?.ip ?? null;
+}
+
+function detectPreferredDarwinLanIp(): string | null {
+  if (process.platform !== 'darwin') {
+    return null;
+  }
+  for (const interfaceName of ['en0', 'en1']) {
+    const ip = readInterfaceIpv4(interfaceName);
+    if (ip) {
+      return ip;
+    }
+  }
+  return null;
+}
+
+function readInterfaceIpv4(interfaceName: string): string | null {
+  try {
+    const output = execFileSync('ipconfig', ['getifaddr', interfaceName], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+    return isLanIpv4(output) ? output : null;
+  } catch {
+    return null;
+  }
 }
 
 export function scoreLanCandidate(name: string, ip: string): number {

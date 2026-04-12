@@ -16,9 +16,11 @@ import { AgentRowData } from '../../components/chat/AgentsModal';
 import { useAppContext } from '../../contexts/AppContext';
 import { pickAvatarImage, saveAgentAvatar, removeAgentAvatar, buildAvatarKey, readAgentAvatar } from '../../services/agent-avatar';
 import { scheduleAutomaticAppReview } from '../../services/auto-app-review';
+import { finishHermesConnectTrace, markHermesConnectTrace } from '../../services/hermes-connect-debug';
 import { useShareIntent } from '../../hooks/useShareIntent';
 import { useChatGatewaySwitcher } from '../../hooks/useChatGatewaySwitcher';
 import { useProPaywall } from '../../contexts/ProPaywallContext';
+import { resolveGatewayBackendKind } from '../../services/gateway-backends';
 import { useAppTheme } from '../../theme';
 import { FontSize, FontWeight, Radius, Shadow, Space } from '../../theme/tokens';
 import { useGatewayScanner } from '../../contexts/GatewayScannerContext';
@@ -54,7 +56,7 @@ type Props = {
   onAddGatewayConnection: () => void;
   onOpenCustomConnection: () => void;
   onManageAgents: () => void;
-  onOpenAgentSessionsBoard: () => void;
+  onOpenAgentSessionsBoard?: () => void;
   openAgentsModalRequestAt?: number | null;
 };
 
@@ -115,8 +117,8 @@ function InitializationView({ theme, styles, onAdd, onUpload, onAddCustom, t }: 
       showsVerticalScrollIndicator={false}
     >
       <Animated.View style={[styles.initWrap, { opacity: fadeAnim }]}>
-        <Text style={styles.initTitle}>{t('Your OpenClaw Mobile is ready.')}</Text>
-        <Text style={styles.initSubtitle}>{t('One connection away from something interesting.')}</Text>
+        <Text style={styles.initTitle}>{t('Your Agent Home is Ready')}</Text>
+        <Text style={styles.initSubtitle}>{t('Connect your OpenClaw or Hermes Agent.')}</Text>
         <QuickConnectGuideCard style={styles.initGuideCard} variant="simple" />
         <Pressable
           onPress={onAdd}
@@ -392,8 +394,9 @@ export function ChatScreenLayout({ controller, insets, onOpenSidebar, onAddGatew
     });
   }, [controller.scrollToBottomRequestAt, scrollToBottom]);
   const currentLabel = controller.sessions.find((item) => item.key === controller.sessionKey);
-  const currentModelLabel = currentLabel?.model || null;
-  const currentModelProvider = currentLabel?.modelProvider || null;
+  const currentModelLabel = controller.currentModel ?? currentLabel?.model ?? null;
+  const currentModelProvider = controller.currentModelProvider ?? currentLabel?.modelProvider ?? null;
+  const currentModelHeaderLabel = currentModelLabel;
   const gatewayConfigId = useMemo(
     () => resolveGatewayCacheScopeId({ activeConfigId: activeGatewayConfigId, config }),
     [activeGatewayConfigId, config],
@@ -428,9 +431,10 @@ export function ChatScreenLayout({ controller, insets, onOpenSidebar, onAddGatew
     onToggleFavorite: favorites.toggleFavorite,
   });
 
+  const backendKind = resolveGatewayBackendKind(config);
   const headerContextLabel = formatSessionContextLabel({
-    totalTokens: currentLabel?.totalTokens,
-    totalTokensFresh: currentLabel?.totalTokensFresh,
+    totalTokens: backendKind === 'hermes' ? undefined : currentLabel?.totalTokens,
+    totalTokensFresh: backendKind === 'hermes' ? false : currentLabel?.totalTokensFresh,
     contextTokens: currentLabel?.contextTokens,
   });
   const headerSyncState = getChatHeaderSyncState({
@@ -444,6 +448,37 @@ export function ChatScreenLayout({ controller, insets, onOpenSidebar, onAddGatew
   const isConnecting = headerSyncState.isConnecting;
   const headerStatusLabel = getChatHeaderStatusLabel(headerSyncState.status, t);
   const headerBusy = headerSyncState.busy;
+  const previousHeaderStatusRef = useRef<typeof headerSyncState.status>(null);
+
+  useEffect(() => {
+    if (backendKind !== 'hermes') {
+      previousHeaderStatusRef.current = headerSyncState.status;
+      return;
+    }
+    const prevStatus = previousHeaderStatusRef.current;
+    if (prevStatus === headerSyncState.status) return;
+    markHermesConnectTrace('header_status', {
+      status: headerSyncState.status ?? 'idle',
+      prevStatus: prevStatus ?? 'idle',
+      sessionKeyPresent: Boolean(controller.sessionKey),
+      historyLoaded: controller.historyLoaded,
+      connectionState: controller.connectionState,
+    });
+    if (prevStatus === 'starting_hermes' && headerSyncState.status !== 'starting_hermes') {
+      finishHermesConnectTrace('starting_hermes_hidden', {
+        nextStatus: headerSyncState.status ?? 'idle',
+        sessionKeyPresent: Boolean(controller.sessionKey),
+        historyLoaded: controller.historyLoaded,
+      });
+    }
+    previousHeaderStatusRef.current = headerSyncState.status;
+  }, [
+    backendKind,
+    controller.connectionState,
+    controller.historyLoaded,
+    controller.sessionKey,
+    headerSyncState.status,
+  ]);
 
   const isAgentWorking = controller.isSending && !isConnecting && controller.voiceInputState !== 'listening' && controller.voiceInputState !== 'authorizing';
   const rotatingPlaceholder = useRotatingPlaceholder(isAgentWorking);
@@ -519,6 +554,7 @@ export function ChatScreenLayout({ controller, insets, onOpenSidebar, onAddGatew
         onOpenSidebar={onOpenSidebar}
         onRefresh={controller.onRefresh}
         contextLabel={headerContextLabel}
+        modelLabel={currentModelHeaderLabel}
         wallpaperActive={chatAppearance.background.enabled && !!chatAppearance.background.imagePath}
         hasOtherAgentActivity={isMultiAgent && controller.agentActiveCount > 0}
         onAgentActivity={onOpenAgentSessionsBoard}
@@ -606,7 +642,8 @@ export function ChatScreenLayout({ controller, insets, onOpenSidebar, onAddGatew
             }
             animatedPlaceholder={isAgentWorking}
             thinkingLevel={controller.thinkingLevel}
-            onAbort={controller.abortCurrentRun}
+            thinkingLevelOptions={controller.thinkingLevelOptions}
+            onAbort={controller.canAbortCurrentRun ? controller.abortCurrentRun : undefined}
             onBlur={handleComposerBlur}
             onChangeText={controller.setInput}
             onChooseFile={controller.pickFile}
@@ -666,6 +703,7 @@ export function ChatScreenLayout({ controller, insets, onOpenSidebar, onAddGatew
         modelPickerError={controller.modelPickerError}
         modelPickerLoading={controller.modelPickerLoading}
         modelPickerVisible={controller.modelPickerVisible}
+        modelProviders={controller.availableProviders}
         modelPickerDefaultModel={currentModelLabel ?? undefined}
         modelPickerDefaultProvider={currentModelProvider ?? undefined}
         models={controller.availableModels}
@@ -715,6 +753,7 @@ export function ChatScreenLayout({ controller, insets, onOpenSidebar, onAddGatew
         onSelectPrompt={handleSelectPrompt}
         staticThinkPickerVisible={controller.staticThinkPickerVisible}
         thinkingLevel={controller.thinkingLevel}
+        thinkingLevelOptions={controller.thinkingLevelOptions}
         onCloseStaticThinkPicker={controller.closeStaticThinkPicker}
         onSelectStaticThinkLevel={controller.onSelectStaticThinkLevel}
         takePhoto={controller.takePhoto}

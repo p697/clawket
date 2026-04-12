@@ -1,12 +1,18 @@
-import { GatewayMode } from '../../types';
+import { GatewayBackendKind, GatewayMode, GatewayTransportKind } from '../../types';
 import { PairingQrPayload } from '../../services/relay-pairing';
 
 export type QRScanResult = {
   url: string;
   token?: string;
   password?: string;
+  backendKind?: GatewayBackendKind;
+  transportKind?: GatewayTransportKind;
   /** Connection mode encoded in the QR payload — lets the app auto-switch modes. */
   mode?: GatewayMode;
+  hermes?: {
+    bridgeUrl: string;
+    displayName?: string;
+  };
   relay?: {
     serverUrl: string;
     gatewayId: string;
@@ -29,7 +35,7 @@ export type QRScanResult = {
 export function parseQRPayload(raw: string): QRScanResult | null {
   const trimmed = raw.trim();
   const normalizeMode = (value: unknown): GatewayMode | undefined => (
-    value === 'local' || value === 'tailscale' || value === 'cloudflare' || value === 'custom' || value === 'relay'
+    value === 'local' || value === 'tailscale' || value === 'cloudflare' || value === 'custom' || value === 'relay' || value === 'hermes'
       ? value
       : undefined
   );
@@ -58,12 +64,57 @@ export function parseQRPayload(raw: string): QRScanResult | null {
       supportsBootstrap,
     };
   };
+  const readHermes = (value: unknown): QRScanResult['hermes'] => {
+    if (!value || typeof value !== 'object') return undefined;
+    const hermes = value as Record<string, unknown>;
+    const bridgeUrl = typeof hermes.bridgeUrl === 'string' ? hermes.bridgeUrl.trim() : '';
+    if (!bridgeUrl) return undefined;
+    return {
+      bridgeUrl,
+      displayName: typeof hermes.displayName === 'string' ? hermes.displayName.trim() : undefined,
+    };
+  };
   const readPairingPayload = (value: unknown): QRScanResult | null => {
     if (!value || typeof value !== 'object') return null;
     const payload = value as Record<string, unknown>;
     const isCompact = payload.k === 'cp' && payload.v === 2;
     const isLegacy = payload.kind === 'clawket_pair' && payload.version === 1;
-    if (!isCompact && !isLegacy) return null;
+    const isHermesLocal = payload.kind === 'clawket_hermes_local' && payload.version === 1;
+    const isHermesRelay = payload.kind === 'clawket_hermes_pair' && payload.version === 1;
+    if (!isCompact && !isLegacy && !isHermesLocal && !isHermesRelay) return null;
+    if (isHermesLocal) {
+      const bridgeUrl = typeof payload.url === 'string' ? payload.url.trim() : '';
+      const hermes = readHermes(payload.hermes);
+      if (!bridgeUrl || !hermes?.bridgeUrl) return null;
+      return {
+        url: bridgeUrl,
+        backendKind: 'hermes',
+        transportKind: 'local',
+        mode: 'hermes',
+        hermes,
+      };
+    }
+    if (isHermesRelay) {
+      const serverUrl = typeof payload.server === 'string' ? payload.server.trim() : '';
+      const bridgeId = typeof payload.bridgeId === 'string' ? payload.bridgeId.trim() : '';
+      const accessCode = typeof payload.accessCode === 'string' ? payload.accessCode.trim() : '';
+      const relayUrl = typeof payload.relayUrl === 'string' ? payload.relayUrl.trim() : '';
+      const displayName = typeof payload.displayName === 'string' ? payload.displayName.trim() : undefined;
+      if (!serverUrl || !bridgeId || !accessCode) return null;
+      return {
+        url: relayUrl,
+        backendKind: 'hermes',
+        transportKind: 'relay',
+        mode: 'hermes',
+        relay: {
+          serverUrl,
+          gatewayId: bridgeId,
+          accessCode,
+          relayUrl: relayUrl || undefined,
+          displayName,
+        },
+      };
+    }
     const serverUrl = typeof payload.s === 'string'
       ? payload.s.trim()
       : typeof payload.server === 'string'
@@ -138,14 +189,29 @@ export function parseQRPayload(raw: string): QRScanResult | null {
       const pairingPayload = readPairingPayload(obj);
       if (pairingPayload) return pairingPayload;
       if (obj.url && (obj.token || obj.password)) {
-        const mode = normalizeMode(obj.mode);
-        const relay = readRelay(obj.relay);
+      const mode = normalizeMode(obj.mode);
+      const relay = readRelay(obj.relay);
+      const hermes = readHermes(obj.hermes);
         return {
           url: String(obj.url),
-          token: typeof obj.token === 'string' ? obj.token : undefined,
-          password: typeof obj.password === 'string' ? obj.password : undefined,
+          ...(hermes ? { backendKind: 'hermes' as const } : {}),
+          ...(mode && mode !== 'hermes' ? { transportKind: mode } : {}),
+          ...(typeof obj.token === 'string' ? { token: obj.token } : {}),
+          ...(typeof obj.password === 'string' ? { password: obj.password } : {}),
           mode,
-          relay,
+          ...(hermes ? { hermes } : {}),
+          ...(relay ? { relay } : {}),
+        };
+      }
+      if (obj.url && normalizeMode(obj.mode) === 'hermes') {
+        const hermes = readHermes(obj.hermes);
+        if (!hermes) return null;
+        return {
+          url: String(obj.url),
+          backendKind: 'hermes',
+          transportKind: 'custom',
+          mode: 'hermes',
+          hermes,
         };
       }
       if (obj.host && (obj.token || obj.password)) {
@@ -153,12 +219,16 @@ export function parseQRPayload(raw: string): QRScanResult | null {
         const port = obj.port ?? 18789;
         const mode = normalizeMode(obj.mode);
         const relay = readRelay(obj.relay);
+        const hermes = readHermes(obj.hermes);
         return {
           url: `${scheme}://${obj.host}:${port}`,
-          token: typeof obj.token === 'string' ? obj.token : undefined,
-          password: typeof obj.password === 'string' ? obj.password : undefined,
+          ...(hermes ? { backendKind: 'hermes' as const } : {}),
+          ...(mode && mode !== 'hermes' ? { transportKind: mode } : {}),
+          ...(typeof obj.token === 'string' ? { token: obj.token } : {}),
+          ...(typeof obj.password === 'string' ? { password: obj.password } : {}),
           mode,
-          relay,
+          ...(hermes ? { hermes } : {}),
+          ...(relay ? { relay } : {}),
         };
       }
     } catch {
@@ -202,10 +272,25 @@ export function parseQRPayload(raw: string): QRScanResult | null {
           : undefined;
         return {
           url: directUrl,
-          token: tokenFromUrl ?? undefined,
-          password: passwordFromUrl ?? undefined,
+          ...(mode === 'relay' ? { backendKind: 'openclaw' as const, transportKind: 'relay' as const } : {}),
+          ...(tokenFromUrl ? { token: tokenFromUrl } : {}),
+          ...(passwordFromUrl ? { password: passwordFromUrl } : {}),
           mode,
-          relay,
+          ...(relay ? { relay } : {}),
+        };
+      }
+      if (directUrl && normalizeMode(url.searchParams.get('mode')) === 'hermes') {
+        const bridgeUrl = (url.searchParams.get('bridgeUrl') ?? '').trim();
+        if (!bridgeUrl) return null;
+        return {
+          url: directUrl,
+          backendKind: 'hermes',
+          transportKind: 'custom',
+          mode: 'hermes',
+          hermes: {
+            bridgeUrl,
+            displayName: (url.searchParams.get('displayName') ?? '').trim() || undefined,
+          },
         };
       }
       const host = url.searchParams.get('host');
@@ -243,10 +328,11 @@ export function parseQRPayload(raw: string): QRScanResult | null {
           : undefined;
         return {
           url: `${scheme}://${host}:${port}`,
-          token: token ?? undefined,
-          password: password ?? undefined,
+          ...(mode === 'relay' ? { backendKind: 'openclaw' as const, transportKind: 'relay' as const } : {}),
+          ...(token ? { token } : {}),
+          ...(password ? { password } : {}),
           mode,
-          relay,
+          ...(relay ? { relay } : {}),
         };
       }
     } catch {

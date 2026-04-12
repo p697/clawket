@@ -21,10 +21,12 @@ function useSteps(
   if (activeMode === 'relay') {
     return [
       {
-        title: 'Pair your OpenClaw machine first',
+        title: t('Pair your computer first'),
         body: (
           <Text style={styles.helpText}>
-            The recommended flow is to run <Text style={styles.code}>clawket pair</Text> on your OpenClaw machine and scan the generated QR code.
+            {t('The recommended flow is to run {{command}} on your computer and scan one of the generated QR codes.', {
+              command: 'clawket pair',
+            })}
           </Text>
         ),
       },
@@ -152,11 +154,6 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     helpBold: {
       fontWeight: FontWeight.semibold,
       color: colors.text,
-    },
-    code: {
-      fontFamily: 'Menlo',
-      fontSize: FontSize.sm,
-      color: colors.textMuted,
     },
   });
 }

@@ -5,18 +5,24 @@ import { GatewayClient } from '../services/gateway';
 import { useGatewayOverlay } from '../contexts/GatewayOverlayContext';
 import { useProPaywall } from '../contexts/ProPaywallContext';
 import { analyticsEvents } from '../services/analytics/events';
+import {
+  buildGatewayDefaultName,
+  resolveGatewayBackendKind,
+  resolveGatewayTransportKind,
+  toLegacyGatewayMode,
+} from '../services/gateway-backends';
 import { StorageService } from '../services/storage';
-import { GatewayConfig, GatewayMode, SavedGatewayConfig } from '../types';
+import { GatewayBackendKind, GatewayConfig, GatewayMode, GatewayTransportKind, SavedGatewayConfig } from '../types';
 import { isUnsupportedDirectLocalTlsConfig, shouldSuppressDuplicatePairingAlert } from './gatewayConfigForm.utils';
 import {
   claimRelayPairing as claimRelayPairingPayload,
-  buildDefaultName,
   createGatewayConfigFromScan,
   reconnectGatewayWithOverlay,
   toRuntimeConfig,
   willCreateGatewayConfigFromScan,
   type GatewayScanPayload,
 } from './gatewayScanFlow';
+import { markHermesConnectTrace } from '../services/hermes-connect-debug';
 import { canAddGatewayConnection } from '../utils/pro';
 
 type Params = {
@@ -30,12 +36,41 @@ type Params = {
 type GatewayAuthMethod = 'token' | 'password';
 type EditorTabPreference = 'quick' | 'manual';
 
-function toEditorMode(mode: GatewayMode): GatewayMode {
-  return mode === 'relay' ? 'relay' : 'custom';
+function getCreateEditorBackendKind(): GatewayBackendKind {
+  return 'openclaw';
 }
 
-function getCreateEditorMode(): GatewayMode {
+function getCreateEditorTransportKind(): GatewayTransportKind {
   return 'custom';
+}
+
+function normalizeEditorTransportKind(backendKind: GatewayBackendKind, transportKind: GatewayTransportKind): GatewayTransportKind {
+  if (backendKind === 'hermes' && transportKind === 'relay') {
+    return 'custom';
+  }
+  return transportKind;
+}
+
+function deriveHermesBridgeConfig(
+  url: string,
+  existing?: SavedGatewayConfig['hermes'],
+): SavedGatewayConfig['hermes'] | undefined {
+  const trimmed = url.trim();
+  if (!trimmed) {
+    return existing;
+  }
+  try {
+    const parsed = new URL(trimmed.replace(/^ws:/, 'http:').replace(/^wss:/, 'https:'));
+    parsed.hash = '';
+    parsed.search = '';
+    parsed.pathname = parsed.pathname.replace(/\/v1\/hermes\/ws\/?$/, '') || '/';
+    return {
+      bridgeUrl: parsed.toString().replace(/\/+$/, ''),
+      ...(existing?.displayName ? { displayName: existing.displayName } : {}),
+    };
+  } catch {
+    return existing;
+  }
 }
 
 function detectAuthMethod(token?: string, password?: string): GatewayAuthMethod {
@@ -56,7 +91,8 @@ export function useGatewayConfigForm({ gateway, initialConfig, debugMode, onSave
   const [editorVisible, setEditorVisible] = useState(false);
   const [editingConfigId, setEditingConfigId] = useState<string | null>(null);
   const [editorPreferredTab, setEditorPreferredTab] = useState<EditorTabPreference>('quick');
-  const [editorMode, setEditorMode] = useState<GatewayMode>(getCreateEditorMode);
+  const [editorBackendKind, setEditorBackendKindState] = useState<GatewayBackendKind>(getCreateEditorBackendKind);
+  const [editorTransportKind, setEditorTransportKindState] = useState<GatewayTransportKind>(getCreateEditorTransportKind);
   const [editorName, setEditorName] = useState('');
   const [editorUrl, setEditorUrl] = useState('');
   const [editorToken, setEditorToken] = useState('');
@@ -84,7 +120,9 @@ export function useGatewayConfigForm({ gateway, initialConfig, debugMode, onSave
           const now = Date.now();
           const migrated: SavedGatewayConfig = {
             id: `legacy_${now}`,
-            name: buildDefaultName('custom', initialConfig.url, 1),
+            name: buildGatewayDefaultName({ url: initialConfig.url, index: 1 }),
+            backendKind: resolveGatewayBackendKind(initialConfig),
+            transportKind: resolveGatewayTransportKind(initialConfig),
             mode: 'custom',
             url: initialConfig.url,
             token: initialConfig.token,
@@ -124,7 +162,21 @@ export function useGatewayConfigForm({ gateway, initialConfig, debugMode, onSave
     () => (activeConfigId ? configs.find((item) => item.id === activeConfigId) ?? null : null),
     [activeConfigId, configs],
   );
-  const isRelayEditorLocked = Boolean(editingConfigId && editorMode === 'relay');
+  const isRelayEditorLocked = Boolean(editingConfigId && editorTransportKind === 'relay');
+  const editorMode: GatewayMode = useMemo(
+    () => toLegacyGatewayMode({ backendKind: editorBackendKind, transportKind: editorTransportKind }),
+    [editorBackendKind, editorTransportKind],
+  );
+  const editorRequiresDirectAuth = editorBackendKind === 'openclaw' && editorTransportKind !== 'relay';
+
+  const setEditorBackendKind = useCallback((nextBackendKind: GatewayBackendKind) => {
+    setEditorBackendKindState(nextBackendKind);
+    setEditorTransportKindState((currentTransportKind) => normalizeEditorTransportKind(nextBackendKind, currentTransportKind));
+  }, []);
+
+  const setEditorTransportKind = useCallback((nextTransportKind: GatewayTransportKind) => {
+    setEditorTransportKindState(normalizeEditorTransportKind(editorBackendKind, nextTransportKind));
+  }, [editorBackendKind]);
 
   const closeEditor = useCallback(() => {
     setEditorVisible(false);
@@ -163,7 +215,8 @@ export function useGatewayConfigForm({ gateway, initialConfig, debugMode, onSave
     }
     setEditorPreferredTab(preferredTab);
     setEditingConfigId(null);
-    setEditorMode(getCreateEditorMode());
+    setEditorBackendKindState(getCreateEditorBackendKind());
+    setEditorTransportKindState(getCreateEditorTransportKind());
     setEditorName('');
     setEditorUrl('');
     setEditorToken('');
@@ -181,7 +234,8 @@ export function useGatewayConfigForm({ gateway, initialConfig, debugMode, onSave
     const existing = configs.find((item) => item.id === configId);
     if (!existing) return;
     setEditingConfigId(existing.id);
-    setEditorMode(toEditorMode(existing.mode));
+    setEditorBackendKindState(resolveGatewayBackendKind(existing));
+    setEditorTransportKindState(resolveGatewayTransportKind(existing));
     setEditorName(existing.name);
     setEditorUrl(existing.url);
     setEditorToken(existing.token ?? '');
@@ -237,6 +291,8 @@ export function useGatewayConfigForm({ gateway, initialConfig, debugMode, onSave
     const trimmedRelayGatewayId = editorRelayGatewayId.trim();
     const trimmedRelayClientToken = editorRelayClientToken.trim();
     const now = Date.now();
+    const backendKind = editorBackendKind;
+    const transportKind = editorTransportKind;
 
     if (!trimmedUrl) {
       Alert.alert(tConfig('Missing URL'), tConfig('Gateway URL is required.'));
@@ -244,30 +300,38 @@ export function useGatewayConfigForm({ gateway, initialConfig, debugMode, onSave
     }
 
     const selectedCredential = editorAuthMethodState === 'token' ? trimmedToken : trimmedPassword;
-    if (editorMode !== 'relay' && !selectedCredential) {
+    if (editorRequiresDirectAuth && !selectedCredential) {
       Alert.alert(tConfig('Missing Auth'), tConfig('Auth Token or Password is required.'));
       return;
     }
 
-    if (editorMode === 'relay' && !trimmedServerUrl) {
+    if (transportKind === 'relay' && !trimmedServerUrl) {
       Alert.alert(tConfig('Missing Pair Server URL'), tConfig('Relay pair server URL is required in Relay mode.'));
       return;
     }
 
-    if (editorMode === 'relay' && !trimmedRelayGatewayId) {
+    if (transportKind === 'relay' && !trimmedRelayGatewayId) {
       Alert.alert(tConfig('Missing Gateway ID'), tConfig('Relay gateway ID is required in Relay mode.'));
       return;
     }
 
-    if (editorMode === 'relay' && !trimmedRelayClientToken) {
+    if (transportKind === 'relay' && !trimmedRelayClientToken) {
       Alert.alert(tConfig('Missing Relay Pairing'), tConfig('Scan a Bridge QR code to import the Relay pairing credential.'));
       return;
     }
 
-    const trimmedName = editorName.trim() || buildDefaultName(editorMode, trimmedUrl, configs.length + 1);
-    const token = editorAuthMethodState === 'token' ? (trimmedToken || undefined) : undefined;
-    const password = editorAuthMethodState === 'password' ? (trimmedPassword || undefined) : undefined;
-    const relay = editorMode === 'relay'
+    const trimmedName = editorName.trim() || buildGatewayDefaultName({
+      backendKind,
+      transportKind,
+      url: trimmedUrl,
+      index: configs.length + 1,
+    });
+    const token = backendKind === 'openclaw' && editorAuthMethodState === 'token' ? (trimmedToken || undefined) : undefined;
+    const password = backendKind === 'openclaw' && editorAuthMethodState === 'password' ? (trimmedPassword || undefined) : undefined;
+    const hermes = backendKind === 'hermes'
+      ? deriveHermesBridgeConfig(trimmedUrl, configs.find((item) => item.id === editingConfigId)?.hermes)
+      : undefined;
+    const relay = transportKind === 'relay'
       ? {
         serverUrl: trimmedServerUrl,
         gatewayId: trimmedRelayGatewayId,
@@ -287,10 +351,13 @@ export function useGatewayConfigForm({ gateway, initialConfig, debugMode, onSave
       const updated: SavedGatewayConfig = {
         ...existing,
         name: trimmedName,
-        mode: editorMode,
+        backendKind,
+        transportKind,
+        mode: toLegacyGatewayMode({ backendKind, transportKind }),
         url: trimmedUrl,
         token,
         password,
+        hermes,
         relay,
         updatedAt: now,
       };
@@ -318,10 +385,13 @@ export function useGatewayConfigForm({ gateway, initialConfig, debugMode, onSave
     const created: SavedGatewayConfig = {
       id: `gateway_${now}`,
       name: trimmedName,
-      mode: editorMode,
+      backendKind,
+      transportKind,
+      mode: toLegacyGatewayMode({ backendKind, transportKind }),
       url: trimmedUrl,
       token,
       password,
+      hermes,
       relay,
       createdAt: now,
       updatedAt: now,
@@ -348,7 +418,7 @@ export function useGatewayConfigForm({ gateway, initialConfig, debugMode, onSave
     configs,
     debugMode,
     editingConfigId,
-    editorMode,
+    editorBackendKind,
     editorAuthMethodState,
     editorName,
     editorRelayGatewayId,
@@ -357,6 +427,9 @@ export function useGatewayConfigForm({ gateway, initialConfig, debugMode, onSave
     editorPassword,
     editorRelayProtocolVersion,
     editorRelaySupportsBootstrap,
+    editorRequiresDirectAuth,
+    editorTransportKind,
+    editorMode,
     editorToken,
     editorUrl,
     reconnectGateway,
@@ -405,10 +478,17 @@ export function useGatewayConfigForm({ gateway, initialConfig, debugMode, onSave
       return;
     }
 
-    const nextMode = resolved.mode === 'relay' || resolved.relay ? 'relay' : 'custom';
-    const preserveRelayFallbackCredentials = nextMode === 'relay' && Boolean(editingConfigId);
+    const nextBackendKind = resolveGatewayBackendKind(resolved);
+    const nextTransportKind = resolveGatewayTransportKind(resolved);
+    const preserveRelayFallbackCredentials = nextTransportKind === 'relay' && Boolean(editingConfigId);
     const suggestedName = resolved.relay?.displayName?.trim()
-      || buildDefaultName(nextMode, trimmedUrl, configs.length + 1);
+      || resolved.hermes?.displayName?.trim()
+      || buildGatewayDefaultName({
+        backendKind: nextBackendKind,
+        transportKind: nextTransportKind,
+        url: trimmedUrl,
+        index: configs.length + 1,
+      });
 
     if (!editorVisible) {
       setEditingConfigId(null);
@@ -418,7 +498,8 @@ export function useGatewayConfigForm({ gateway, initialConfig, debugMode, onSave
     if (!editingConfigId) {
       setEditorName((prev) => (prev.trim() ? prev : suggestedName));
     }
-    setEditorMode(nextMode);
+    setEditorBackendKindState(nextBackendKind);
+    setEditorTransportKindState(nextTransportKind);
     setEditorUrl(trimmedUrl);
     setEditorToken(preserveRelayFallbackCredentials ? (resolved.token ?? editorToken) : (resolved.token ?? ''));
     setEditorPassword(preserveRelayFallbackCredentials ? (resolved.password ?? editorPassword) : (resolved.password ?? ''));
@@ -444,10 +525,10 @@ export function useGatewayConfigForm({ gateway, initialConfig, debugMode, onSave
   }, [
     claimRelayPairing,
     configs.length,
-    editingConfigId,
-    editorPassword,
-    editorRelayClientToken,
-    editorRelayProtocolVersion,
+      editingConfigId,
+      editorPassword,
+      editorRelayClientToken,
+      editorRelayProtocolVersion,
     editorRelaySupportsBootstrap,
     editorToken,
     editorVisible,
@@ -489,6 +570,11 @@ export function useGatewayConfigForm({ gateway, initialConfig, debugMode, onSave
       debugMode,
     });
 
+    if (created.backendKind === 'hermes') {
+      markHermesConnectTrace('scan_reconnect_begin', {
+        transport: created.transportKind,
+      });
+    }
     setConfigs(nextConfigs);
     setActiveConfigId(created.id);
     setEditorVisible(false);
@@ -556,7 +642,8 @@ export function useGatewayConfigForm({ gateway, initialConfig, debugMode, onSave
             setEditorRelayServerUrl('');
             setEditorRelayGatewayId('');
             setEditorRelayClientToken('');
-            setEditorMode('custom');
+            setEditorBackendKindState(getCreateEditorBackendKind());
+            setEditorTransportKindState(getCreateEditorTransportKind());
             try {
               const newIdentity = await gateway.getDeviceIdentity();
               setDeviceId(newIdentity.deviceId);
@@ -579,7 +666,10 @@ export function useGatewayConfigForm({ gateway, initialConfig, debugMode, onSave
     editingConfigId,
     isRelayEditorLocked,
     editorPreferredTab,
+    editorBackendKind,
+    editorTransportKind,
     editorMode,
+    editorRequiresDirectAuth,
     editorName,
     editorUrl,
     editorToken,
@@ -587,7 +677,8 @@ export function useGatewayConfigForm({ gateway, initialConfig, debugMode, onSave
     editorRelayServerUrl,
     editorRelayGatewayId,
     editorRelayClientToken,
-    setEditorMode,
+    setEditorBackendKind,
+    setEditorTransportKind,
     setEditorName,
     setEditorUrl,
     setEditorToken: setEditorTokenValue,

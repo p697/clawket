@@ -31,6 +31,7 @@ import { useTranslation } from 'react-i18next';
 import { useAppContext } from '../../contexts/AppContext';
 import { analyticsEvents } from '../../services/analytics/events';
 import { GatewayClient } from '../../services/gateway';
+import { loadGatewayNodesBundle } from '../../services/gateway-nodes';
 import { useAppTheme } from '../../theme';
 import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
 import type { DevicePairRequest, NodeInfo, NodePairRequest } from '../../types';
@@ -208,29 +209,13 @@ export function NodesView({
     if (mode === 'refresh') setRefreshing(true);
 
     try {
-      const [nodeListResult, nodePairListResult, deviceListResult] = await Promise.allSettled([
-        gateway.listNodes(),
-        gateway.listNodePairRequests(),
-        gateway.listDevices(),
-      ]);
-
-      const connectionFailure = [nodeListResult, nodePairListResult].find(
-        (result) => result.status === 'rejected',
-      );
-      if (connectionFailure && connectionFailure.status === 'rejected') {
-        throw connectionFailure.reason;
-      }
-
-      const nodeList = (nodeListResult as PromiseFulfilledResult<Awaited<ReturnType<GatewayClient['listNodes']>>>).value;
-      const nodePairList = (nodePairListResult as PromiseFulfilledResult<Awaited<ReturnType<GatewayClient['listNodePairRequests']>>>).value;
+      const { nodes: loadedNodes, nodePairRequests, devicePairRequests } = await loadGatewayNodesBundle(gateway);
       const unified: UnifiedPairRequest[] = [
-        ...nodePairList.pending.map((r): UnifiedPairRequest => ({ source: 'node', request: r })),
+        ...nodePairRequests.map((r): UnifiedPairRequest => ({ source: 'node', request: r })),
+        ...devicePairRequests.map((r): UnifiedPairRequest => ({ source: 'device', request: r })),
       ];
-      if (deviceListResult.status === 'fulfilled') {
-        unified.push(...deviceListResult.value.pending.map((r): UnifiedPairRequest => ({ source: 'device', request: r })));
-      }
 
-      setNodes(sortNodes(nodeList.nodes));
+      setNodes(sortNodes(loadedNodes));
       setPendingRequests(sortUnifiedPending(unified));
       setError(null);
     } catch (err: unknown) {

@@ -11,10 +11,12 @@ import { WebSearchModal } from '../../../components/chat/WebSearchModal';
 import { PromptPickerModal } from '../../../components/chat/PromptPickerModal';
 import { ImagePreviewModal } from '../../../components/chat/ImagePreviewModal';
 import { ModelPickerModal, ModelInfo } from '../../../components/chat/ModelPickerModal';
+import type { ModelProviderInfo } from '../../../components/chat/model-picker-data';
 import { useAppTheme } from '../../../theme';
 import { Radius, Shadow, Space } from '../../../theme/tokens';
 import { MessageSelectionFrames } from '../../../components/MessageBubble';
 import type { UiMessage } from '../../../types/chat';
+import type { ThinkingLevel } from '../../../utils/gateway-settings';
 import { ChatSharePosterModal } from './ChatSharePosterModal';
 import { getSelectedMessageOverlayLayout } from './selectedMessageOverlayLayout';
 
@@ -62,6 +64,7 @@ type Props = {
   modelPickerError: string | null;
   modelPickerLoading: boolean;
   modelPickerVisible: boolean;
+  modelProviders?: ModelProviderInfo[];
   onCloseCommandPicker: () => void;
   onCloseCreateAgent: () => void;
   onCloseToolAvatar: () => void;
@@ -71,7 +74,7 @@ type Props = {
   onRetryModelPickerLoad: () => void;
   onAddGateway: () => void;
   onManageAgents: () => void;
-  onOpenAgentSessionsBoard: () => void;
+  onOpenAgentSessionsBoard?: () => void;
   onSelectAgent: (agentId: string) => void;
   onSelectGateway: (configId: string) => void | Promise<void>;
   onSelectCommandOption: (option: string) => void;
@@ -101,6 +104,7 @@ type Props = {
   onSelectPrompt: (text: string) => void;
   staticThinkPickerVisible: boolean;
   thinkingLevel: string | null;
+  thinkingLevelOptions: ThinkingLevel[];
   onCloseStaticThinkPicker: () => void;
   onSelectStaticThinkLevel: (level: string) => void;
 };
@@ -141,6 +145,7 @@ export function ChatOverlays({
   modelPickerError,
   modelPickerLoading,
   modelPickerVisible,
+  modelProviders,
   models,
   onCloseCommandPicker,
   onCloseCreateAgent,
@@ -176,6 +181,7 @@ export function ChatOverlays({
   onSelectPrompt,
   staticThinkPickerVisible,
   thinkingLevel,
+  thinkingLevelOptions,
   onCloseStaticThinkPicker,
   onSelectStaticThinkLevel,
   takePhoto,
@@ -387,6 +393,7 @@ export function ChatOverlays({
         loading={modelPickerLoading}
         error={modelPickerError}
         models={models}
+        providers={modelProviders}
         onClose={() => setModelPickerVisible(false)}
         onRetry={onRetryModelPickerLoad}
         onSelectModel={onSelectModel}
@@ -421,6 +428,7 @@ export function ChatOverlays({
         visible={staticThinkPickerVisible}
         onClose={onCloseStaticThinkPicker}
         current={thinkingLevel ?? ''}
+        options={thinkingLevelOptions}
         onSelect={onSelectStaticThinkLevel}
       />
 

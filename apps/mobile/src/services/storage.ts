@@ -5,11 +5,13 @@ import {
   AccentColorId,
   DEFAULT_OFFICE_CHANNEL_SLOT_CONFIG,
   DeviceIdentity,
+  GatewayBackendKind,
   GatewayConfig,
   GatewayConfigsState,
   GatewayMode,
   GatewayProfileMode,
   GatewayProfilesConfig,
+  GatewayTransportKind,
   OfficeChannelSlotConfig,
   SavedGatewayConfig,
   SpeechRecognitionLanguage,
@@ -28,6 +30,14 @@ import {
   NodeCapabilityToggles,
   normalizeNodeCapabilityToggles,
 } from './node-capabilities';
+import {
+  isGatewayBackendKind,
+  isGatewayTransportKind,
+  resolveGatewayBackendKind,
+  resolveGatewayTransportKind,
+  selectByBackend,
+  toLegacyGatewayMode,
+} from './gateway-backends';
 import { resolveSavedGatewayName } from './gateway-config-name';
 import type { ProSubscriptionSnapshot } from './pro-subscription';
 
@@ -96,6 +106,18 @@ export type AutoAppReviewState = {
   lastAttemptVersion?: string;
 };
 
+export type SkillListSortMode = 'name' | 'createdAsc' | 'createdDesc' | 'updatedAsc' | 'updatedDesc';
+
+// Exported so that callers (e.g. SkillListScreen's useState initializer)
+// can share the same default without duplicating the backend mapping.
+// Uses `selectByBackend` so the dispatch stays centralized in one spot.
+export function getDefaultSkillListSortMode(backendKind: GatewayBackendKind): SkillListSortMode {
+  return selectByBackend<SkillListSortMode>(backendKind, {
+    openclaw: 'name',
+    hermes: 'createdDesc',
+  });
+}
+
 export type DeviceTokenStorageScope = {
   serverUrl?: string | null;
   gatewayId?: string | null;
@@ -136,6 +158,7 @@ const KEYS = {
   promptPeekShown: 'clawket.promptPeekShown.v1',
   proSubscriptionSnapshot: 'clawket.proSubscriptionSnapshot.v1',
   autoAppReviewState: 'clawket.autoAppReviewState.v1',
+  skillListSortModePrefix: 'clawket.skillListSortMode.v1',
 } as const;
 
 const NODE_INVOKE_AUDIT_KEY = 'clawket.nodeInvokeAudit.v1';
@@ -165,6 +188,10 @@ function lastOpenedSessionSnapshotStorageKey(scopeId: string, agentId?: string):
 
 function cachedAgentIdentityStorageKey(scopeId: string, agentId: string): string {
   return `${KEYS.cachedAgentIdentityPrefix}.${scopeId}::${agentId}`;
+}
+
+function skillListSortModeStorageKey(backendKind: GatewayBackendKind): string {
+  return `${KEYS.skillListSortModePrefix}.${backendKind}`;
 }
 
 function normalizeDeviceTokenScopePart(value: string | null | undefined): string {
@@ -280,8 +307,16 @@ function normalizeGatewayConfigBackupEntry(value: unknown): GatewayConfigBackupE
 }
 
 function normalizeMode(mode: unknown): GatewayMode {
-  if (mode === 'tailscale' || mode === 'cloudflare' || mode === 'custom' || mode === 'relay') return mode;
+  if (mode === 'tailscale' || mode === 'cloudflare' || mode === 'custom' || mode === 'relay' || mode === 'hermes') return mode;
   return 'local';
+}
+
+function normalizeBackendKind(value: unknown): GatewayBackendKind | undefined {
+  return isGatewayBackendKind(value) ? value : undefined;
+}
+
+function normalizeTransportKind(value: unknown): GatewayTransportKind | undefined {
+  return isGatewayTransportKind(value) ? value : undefined;
 }
 
 function normalizeProfileMode(mode: unknown): GatewayProfileMode {
@@ -324,6 +359,23 @@ function normalizeRelayConfig(
   };
 }
 
+function normalizeHermesConfig(
+  value: unknown,
+): {
+  bridgeUrl: string;
+  displayName?: string;
+} | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const record = value as Record<string, unknown>;
+  const bridgeUrl = typeof record.bridgeUrl === 'string' ? record.bridgeUrl.trim() : '';
+  const displayName = typeof record.displayName === 'string' ? record.displayName.trim() : '';
+  if (!bridgeUrl) return undefined;
+  return {
+    bridgeUrl,
+    displayName: displayName || undefined,
+  };
+}
+
 function normalizeProfiles(value: unknown): GatewayProfilesConfig | null {
   if (!value || typeof value !== 'object') return null;
   const record = value as Record<string, unknown>;
@@ -353,11 +405,24 @@ function normalizeSavedGatewayConfig(value: unknown): SavedGatewayConfig | null 
   const token = typeof record.token === 'string' && record.token.trim() ? record.token.trim() : undefined;
   const password = typeof record.password === 'string' && record.password.trim() ? record.password.trim() : undefined;
   const relay = normalizeRelayConfig(record.relay);
+  const hermes = normalizeHermesConfig(record.hermes);
+  const backendKind = resolveGatewayBackendKind({
+    backendKind: normalizeBackendKind(record.backendKind),
+    mode,
+    hermes,
+  });
+  const transportKind = resolveGatewayTransportKind({
+    transportKind: normalizeTransportKind(record.transportKind),
+    mode,
+    relay,
+  });
   const resolvedName = resolveSavedGatewayName({
     name,
-    mode,
+    backendKind,
+    transportKind,
     url,
     relayDisplayName: relay?.displayName,
+    hermesDisplayName: hermes?.displayName,
   });
   const createdAt = typeof record.createdAt === 'number' && Number.isFinite(record.createdAt) ? record.createdAt : Date.now();
   const updatedAt = typeof record.updatedAt === 'number' && Number.isFinite(record.updatedAt) ? record.updatedAt : createdAt;
@@ -365,10 +430,13 @@ function normalizeSavedGatewayConfig(value: unknown): SavedGatewayConfig | null 
   return {
     id,
     name: resolvedName,
-    mode,
+    backendKind,
+    transportKind,
+    mode: toLegacyGatewayMode({ backendKind, transportKind }),
     url,
     token,
     password,
+    hermes,
     relay,
     createdAt,
     updatedAt,
@@ -402,6 +470,8 @@ function buildStateFromLegacyProfiles(profiles: GatewayProfilesConfig): GatewayC
     configs.push({
       id,
       name,
+      backendKind: 'openclaw',
+      transportKind: mode,
       mode,
       url: profile.url.trim(),
       token: profile.token?.trim() || undefined,
@@ -507,6 +577,8 @@ export const StorageService = {
           {
             id: 'legacy_single',
             name: 'Gateway',
+            backendKind: 'openclaw',
+            transportKind: 'local',
             mode: 'local',
             url: legacy.url.trim(),
             token: legacy.token?.trim() || undefined,
@@ -582,10 +654,13 @@ export const StorageService = {
         if (item.id !== state.activeId) return item;
         return {
           ...item,
+          backendKind: config.backendKind ?? item.backendKind,
+          transportKind: config.transportKind ?? item.transportKind,
           url: config.url,
           token: config.token,
           password: config.password,
           mode: config.mode ?? item.mode,
+          hermes: config.hermes,
           relay: config.relay,
           updatedAt: now,
         };
@@ -597,10 +672,13 @@ export const StorageService = {
     const created: SavedGatewayConfig = {
       id: `gateway_${now}`,
       name: 'Gateway',
+      backendKind: config.backendKind,
+      transportKind: config.transportKind,
       mode: config.mode ?? 'custom',
       url: config.url,
       token: config.token,
       password: config.password,
+      hermes: config.hermes,
       relay: config.relay,
       createdAt: now,
       updatedAt: now,
@@ -616,7 +694,10 @@ export const StorageService = {
         url: active.url,
         token: active.token,
         password: active.password,
+        backendKind: active.backendKind,
+        transportKind: active.transportKind,
         mode: active.mode,
+        hermes: active.hermes,
         relay: active.relay,
       };
     }
@@ -1083,6 +1164,34 @@ export const StorageService = {
       await AsyncStorage.setItem(KEYS.autoAppReviewState, JSON.stringify(normalized));
     } catch {
       // Best-effort cache only.
+    }
+  },
+
+  async getSkillListSortMode(backendKind: GatewayBackendKind): Promise<SkillListSortMode> {
+    try {
+      const raw = await AsyncStorage.getItem(skillListSortModeStorageKey(backendKind));
+      if (
+        raw === 'name'
+        || raw === 'createdAsc'
+        || raw === 'createdDesc'
+        || raw === 'updatedAsc'
+        || raw === 'updatedDesc'
+      ) {
+        return raw;
+      }
+      if (raw === 'created') return 'createdAsc';
+      if (raw === 'updated') return 'updatedDesc';
+    } catch {
+      // Best-effort preference only.
+    }
+    return getDefaultSkillListSortMode(backendKind);
+  },
+
+  async setSkillListSortMode(backendKind: GatewayBackendKind, sortMode: SkillListSortMode): Promise<void> {
+    try {
+      await AsyncStorage.setItem(skillListSortModeStorageKey(backendKind), sortMode);
+    } catch {
+      // Best-effort preference only.
     }
   },
 

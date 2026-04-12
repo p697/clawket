@@ -52,6 +52,7 @@ describe('useChatAgentIdentity', () => {
       gateway,
       gatewayConfigId: 'cfg:one',
       initialPreview: null,
+      mainSessionKey: 'agent:main:main',
       sessionKey: 'agent:main:main',
     }));
 
@@ -94,6 +95,7 @@ describe('useChatAgentIdentity', () => {
       gateway,
       gatewayConfigId: 'cfg:one',
       initialPreview: null,
+      mainSessionKey: 'agent:main:main',
       sessionKey: 'agent:main:main',
     }));
 
@@ -138,6 +140,7 @@ describe('useChatAgentIdentity', () => {
       gateway,
       gatewayConfigId: 'cfg:one',
       initialPreview: null,
+      mainSessionKey: 'agent:main:main',
       sessionKey: 'agent:main:main',
     }));
 
@@ -179,6 +182,7 @@ describe('useChatAgentIdentity', () => {
       gateway,
       gatewayConfigId: 'cfg:one',
       initialPreview: null,
+      mainSessionKey: 'agent:writer:main',
       sessionKey: 'agent:writer:dm:alice',
     }));
 
@@ -221,6 +225,7 @@ describe('useChatAgentIdentity', () => {
       gateway,
       gatewayConfigId: 'cfg:one',
       initialPreview: null,
+      mainSessionKey: 'agent:main:main',
       sessionKey: 'agent:writer:dm:alice',
     }));
 
@@ -233,5 +238,74 @@ describe('useChatAgentIdentity', () => {
     expect(mockedStorage.getCachedAgentIdentity).not.toHaveBeenCalled();
     expect(mockedStorage.setLastOpenedSessionSnapshot).not.toHaveBeenCalled();
     expect(mockedStorage.setCachedAgentIdentity).not.toHaveBeenCalled();
+  });
+
+  it('treats Hermes sessions as in scope when using a backend-scoped main session key', async () => {
+    const mockedStorage = StorageService as jest.Mocked<typeof StorageService>;
+    const gateway = createGateway('connecting');
+
+    renderHook(() => useChatAgentIdentity({
+      agents: [],
+      cacheAgentName: undefined,
+      currentAgentId: 'main',
+      currentSessionInfo: {
+        key: '20260411_122441_d40735',
+        kind: 'unknown',
+        sessionId: '20260411_122441_d40735',
+      },
+      gateway,
+      gatewayConfigId: 'cfg:hermes',
+      initialPreview: null,
+      mainSessionKey: 'main',
+      sessionKey: '20260411_122441_d40735',
+    }));
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mockedStorage.getLastOpenedSessionSnapshot).toHaveBeenCalled();
+    expect(mockedStorage.setLastOpenedSessionSnapshot).toHaveBeenCalledWith(
+      'cfg:hermes',
+      expect.objectContaining({
+        sessionKey: '20260411_122441_d40735',
+        sessionId: '20260411_122441_d40735',
+      }),
+    );
+  });
+
+  it('delays gateway identity fetch after ready to avoid contending with session sync', async () => {
+    jest.useFakeTimers();
+    const gateway = createGateway('ready');
+
+    renderHook(() => useChatAgentIdentity({
+      agents: [],
+      cacheAgentName: undefined,
+      currentAgentId: 'main',
+      currentSessionInfo: undefined,
+      gateway,
+      gatewayConfigId: 'cfg:one',
+      initialPreview: null,
+      mainSessionKey: 'agent:main:main',
+      sessionKey: 'agent:main:main',
+    }));
+
+    expect(gateway.fetchIdentity).not.toHaveBeenCalled();
+
+    await act(async () => {
+      jest.advanceTimersByTime(1499);
+      await Promise.resolve();
+    });
+
+    expect(gateway.fetchIdentity).not.toHaveBeenCalled();
+
+    await act(async () => {
+      jest.advanceTimersByTime(1);
+      await Promise.resolve();
+    });
+
+    expect(gateway.fetchIdentity).toHaveBeenCalledWith('main');
+    jest.useRealTimers();
   });
 });

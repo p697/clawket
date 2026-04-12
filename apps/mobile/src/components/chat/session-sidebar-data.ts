@@ -1,5 +1,6 @@
 import { CachedSessionMeta } from '../../services/chat-cache';
 import { SessionInfo } from '../../types';
+import { isSessionKeyInAgentScope } from '../../utils/agent-session-scope';
 import { sanitizeSilentPreviewText } from '../../utils/chat-message';
 
 export type SessionSidebarTabKey = 'sessions' | 'subagents' | 'cron';
@@ -20,7 +21,7 @@ export function normalizeChannelId(channel?: string): string | undefined {
 }
 
 export function isMainSession(key: string): boolean {
-  return /^agent:[^:]+:main$/.test(key);
+  return /^agent:[^:]+:main$/.test(key) || key === 'main';
 }
 
 export function isSubagentSession(key: string): boolean {
@@ -61,14 +62,19 @@ export function buildSidebarSessionItems(params: {
   sessions: SessionInfo[];
   cachedSessions: CachedSessionMeta[];
   currentAgentId: string;
+  mainSessionKey?: string;
   activeTab: SessionSidebarTabKey;
   activeChannel: string;
   searchText: string;
   pinnedSessionKeys: string[];
 }): SidebarSessionItem[] {
   const pinnedKeys = new Set(params.pinnedSessionKeys);
-  const remoteSessions = params.sessions.filter((session) => session.key.startsWith(`agent:${params.currentAgentId}:`));
-  const cacheSessions = params.cachedSessions.filter((session) => session.agentId === params.currentAgentId);
+  const remoteSessions = params.sessions.filter((session) => (
+    isSessionKeyInAgentScope(session.key, params.currentAgentId, { mainSessionKey: params.mainSessionKey })
+  ));
+  const cacheSessions = params.cachedSessions.filter((session) => (
+    isSessionKeyInAgentScope(session.sessionKey, params.currentAgentId, { mainSessionKey: params.mainSessionKey })
+  ));
   const remoteByKey = new Map(remoteSessions.map((session) => [session.key, session]));
   const cacheByKey = new Map(cacheSessions.map((session) => [session.sessionKey, session]));
   const keys = new Set<string>([

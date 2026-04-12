@@ -1,5 +1,6 @@
 import type { GatewayConfig } from '../types';
 import { normalizeWsUrl } from './gateway-auth';
+import { resolveGatewayTransportKind } from './gateway-backends';
 
 export const RELAY_CONTROL_PREFIX = '__clawket_relay_control__:';
 
@@ -73,7 +74,7 @@ export function shouldTryRelayFallback(_context: GatewayRelayContext, _route: 'd
 }
 
 export function shouldConnectRelayFirst(context: GatewayRelayContext): boolean {
-  return context.config?.mode === 'relay'
+  return resolveGatewayTransportKind(context.config) === 'relay'
     && !!context.config?.url
     && !!context.config?.relay?.gatewayId;
 }
@@ -93,6 +94,7 @@ export async function tryConnectRelayFastPath(context: GatewayRelayContext, atte
       relayConfig.gatewayId,
       accessToken,
       identity.deviceId,
+      context.config?.backendKind ?? 'openclaw',
       context.connectTraceId ?? undefined,
     );
     context.logTelemetry('relay_fastpath_connect', {
@@ -561,6 +563,7 @@ export function buildRelayClientWsUrl(
   relayGatewayId: string,
   token: string,
   clientId: string,
+  backendKind: GatewayConfig['backendKind'] = 'openclaw',
   traceId?: string,
 ): string {
   const base = normalizeWsUrl(relayUrl);
@@ -568,7 +571,7 @@ export function buildRelayClientWsUrl(
   if (!url.pathname || url.pathname === '/') {
     url.pathname = '/ws';
   }
-  url.searchParams.set('gatewayId', relayGatewayId);
+  url.searchParams.set(backendKind === 'hermes' ? 'bridgeId' : 'gatewayId', relayGatewayId);
   url.searchParams.set('role', 'client');
   url.searchParams.set('clientId', clientId);
   url.searchParams.set('token', token);

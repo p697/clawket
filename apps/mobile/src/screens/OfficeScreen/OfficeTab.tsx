@@ -8,11 +8,14 @@ import { CommonActions, useIsFocused, useNavigation } from '@react-navigation/na
 import type { WebViewMessageEvent } from 'react-native-webview/lib/WebViewTypes';
 import { useAppContext } from '../../contexts/AppContext';
 import { analyticsEvents } from '../../services/analytics/events';
+import { selectByBackend } from '../../services/gateway-backends';
+import type { GatewayBackendCapabilities } from '../../services/gateway-backends';
 import { StorageService } from '../../services/storage';
 import { useAppTheme } from '../../theme';
 import type { ConsoleStackParamList } from '../ConsoleScreen/sharedNavigator';
 import type {
   ChannelsStatusResult,
+  GatewayBackendKind,
   OfficeChannelId,
   OfficeChannelSlotConfig,
   OfficeCharacterId,
@@ -141,6 +144,41 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
   });
 }
 
+type OfficeInteractionConfig = {
+  disabledCharacterIds: OfficeCharacterId[];
+  hiddenDeskLabelIds: OfficeCharacterId[];
+  disabledPropActions: string[];
+};
+
+function resolveOfficeInteractionConfig(
+  backendKind: GatewayBackendKind,
+  capabilities: GatewayBackendCapabilities,
+): OfficeInteractionConfig {
+  const disabledPropActions = [
+    !capabilities.consoleChannels ? 'connections' : null,
+    !capabilities.consoleLogs ? 'logs' : null,
+    !(capabilities.consoleTools && capabilities.configRead) ? 'tools' : null,
+    !capabilities.consoleNodes ? 'node_devices' : null,
+  ].filter((value): value is string => Boolean(value));
+
+  // Office characters and desk labels that only make sense for OpenClaw
+  // (sub-agents, cron, per-channel desks) are hidden on Hermes. Using
+  // selectByBackend keeps the OpenClaw branch ("show everything") as the
+  // default, preserving existing Office UX for OpenClaw users.
+  return selectByBackend<OfficeInteractionConfig>(backendKind, {
+    openclaw: {
+      disabledCharacterIds: [],
+      hiddenDeskLabelIds: [],
+      disabledPropActions,
+    },
+    hermes: {
+      disabledCharacterIds: ['assistant', 'subagent', 'cron', 'channel1', 'channel2', 'channel3', 'channel4'],
+      hiddenDeskLabelIds: ['subagent', 'cron', 'channel1', 'channel2', 'channel3', 'channel4'],
+      disabledPropActions,
+    },
+  });
+}
+
 export function OfficeTab(): React.JSX.Element {
   const navigation = useNavigation();
   const isFocused = useIsFocused();
@@ -157,6 +195,18 @@ export function OfficeTab(): React.JSX.Element {
   const [channelSlots, setChannelSlots] = useState<OfficeChannelSlotConfig>(DEFAULT_OFFICE_CHANNEL_SLOT_CONFIG);
   const currentAgent = agents.find((a) => a.id === currentAgentId);
   const currentAgentName = currentAgent?.identity?.name?.trim() || currentAgent?.name?.trim() || null;
+  const officeInteractionConfig = useMemo(
+    () => resolveOfficeInteractionConfig(gateway.getBackendKind(), gateway.getBackendCapabilities()),
+    [config, gateway],
+  );
+  const disabledCharacterIds = useMemo(
+    () => new Set<OfficeCharacterId>(officeInteractionConfig.disabledCharacterIds),
+    [officeInteractionConfig],
+  );
+  const disabledPropActions = useMemo(
+    () => new Set<string>(officeInteractionConfig.disabledPropActions),
+    [officeInteractionConfig],
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -240,6 +290,13 @@ export function OfficeTab(): React.JSX.Element {
     });
     officeWebViewRef.current?.postMessage(message);
   }, [channelSlots]);
+
+  const sendOfficeInteractionConfig = useCallback(() => {
+    officeWebViewRef.current?.postMessage(JSON.stringify({
+      type: 'OFFICE_INTERACTION_CONFIG',
+      ...officeInteractionConfig,
+    }));
+  }, [officeInteractionConfig, officeWebViewRef]);
 
   const sendGatewayState = useCallback(() => {
     const state = config?.url ? 'configured' : 'none';
@@ -327,6 +384,10 @@ export function OfficeTab(): React.JSX.Element {
   useEffect(() => {
     sendOfficeChannelConfig();
   }, [sendOfficeChannelConfig]);
+
+  useEffect(() => {
+    sendOfficeInteractionConfig();
+  }, [sendOfficeInteractionConfig]);
 
   // Send gateway connection state to office WebView
   useEffect(() => {
@@ -589,8 +650,11 @@ export function OfficeTab(): React.JSX.Element {
         return;
       }
       if (data.type === 'MENU_ACTION' && typeof data.characterId === 'string' && isOfficeCharacterId(data.characterId)) {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         const roleId = data.characterId as OfficeCharacterId;
+        const isPropAction = data.source === 'prop';
+        if (typeof data.action === 'string' && disabledPropActions.has(data.action)) return;
+        if (!isPropAction && disabledCharacterIds.has(roleId)) return;
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         if (data.action === 'chat') {
           const sessionKey = getDefaultSessionKey(roleId, latestSessionsRef.current, mainSessionKey, channelSlots) ?? mainSessionKey;
           analyticsEvents.officeOpenChatFromCharacter({
@@ -662,7 +726,7 @@ export function OfficeTab(): React.JSX.Element {
     } catch {
       // Ignore invalid messages from WebView.
     }
-  }, [appendDebug, channelSlots, debugMode, mainSessionKey, navigation, openAddConnectionModal, openConsoleModal, requestChatSidebar, requestOfficeChat]);
+  }, [appendDebug, channelSlots, debugMode, disabledCharacterIds, disabledPropActions, mainSessionKey, navigation, openAddConnectionModal, openConsoleModal, requestChatSidebar, requestOfficeChat]);
 
   const handleLoadEnd = useCallback(() => {
     if (currentAgentName) {
@@ -671,6 +735,7 @@ export function OfficeTab(): React.JSX.Element {
       );
     }
     sendOfficeChannelConfig();
+    sendOfficeInteractionConfig();
     // Re-send gateway state so whiteboard renders correctly after WebView load
     sendGatewayState();
     // Send usage immediately so whiteboard can leave placeholder without waiting for poll tick
@@ -704,7 +769,7 @@ export function OfficeTab(): React.JSX.Element {
         );
       })
       .catch(() => {});
-  }, [currentAgentId, currentAgentName, fetchAndSendDailyReport, fetchAndSendUsage, gateway, officeWebViewRef, sendGatewayState, sendOfficeChannelConfig]);
+  }, [currentAgentId, currentAgentName, fetchAndSendDailyReport, fetchAndSendUsage, gateway, officeWebViewRef, sendGatewayState, sendOfficeChannelConfig, sendOfficeInteractionConfig]);
 
   // Register message handler on the shared ref so root WebView forwards events here
   useEffect(() => {

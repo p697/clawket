@@ -13,6 +13,18 @@ export function selectSessionForCurrentAgent({
   currentKey,
   cachedKey,
 }: Params): SessionInfo | null {
+  const isBackendScoped = !mainSessionKey.startsWith('agent:');
+  if (isBackendScoped) {
+    const currentSelected = currentKey
+      ? sessions.find((item) => item.key === currentKey)
+      : undefined;
+    const cachedSelected = cachedKey
+      ? sessions.find((item) => item.key === cachedKey)
+      : undefined;
+    const main = sessions.find((item) => item.key === mainSessionKey);
+    return currentSelected ?? cachedSelected ?? main ?? sessions[0] ?? null;
+  }
+
   const agentPrefix = mainSessionKey.replace(/:main$/, ':');
   const currentSelected = (
     currentKey && currentKey.startsWith(agentPrefix)

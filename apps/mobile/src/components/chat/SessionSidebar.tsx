@@ -318,7 +318,7 @@ export function SessionSidebar({
   externalSelection,
 }: Props): React.JSX.Element {
   const { t } = useTranslation('chat');
-  const { agents, currentAgentId, isMultiAgent } = useAppContext();
+  const { agents, currentAgentId, isMultiAgent, mainSessionKey } = useAppContext();
   const { theme } = useAppTheme();
   const { colors } = theme;
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -365,12 +365,13 @@ export function SessionSidebar({
       sessions,
       cachedSessions,
       currentAgentId,
+      mainSessionKey,
       activeTab: 'sessions',
       activeChannel: 'all',
       searchText: '',
       pinnedSessionKeys,
     }),
-    [cachedSessions, currentAgentId, pinnedSessionKeys, sessions],
+    [cachedSessions, currentAgentId, mainSessionKey, pinnedSessionKeys, sessions],
   );
 
   const channelOptions = useMemo<SessionChannelOption[]>(
@@ -391,12 +392,13 @@ export function SessionSidebar({
       sessions,
       cachedSessions,
       currentAgentId,
+      mainSessionKey,
       activeTab,
       activeChannel,
       searchText,
       pinnedSessionKeys,
     }),
-    [activeChannel, activeTab, cachedSessions, currentAgentId, pinnedSessionKeys, searchText, sessions],
+    [activeChannel, activeTab, cachedSessions, currentAgentId, mainSessionKey, pinnedSessionKeys, searchText, sessions],
   );
 
   const rows = useMemo<ListRow[]>(() => {

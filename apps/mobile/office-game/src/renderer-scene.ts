@@ -11,7 +11,7 @@ import {
   tileToPixel,
   waypointMap,
 } from './world';
-import { getChannelConnectionStatus, getChannelLabelForSlot } from './bridge';
+import { getChannelConnectionStatus, getChannelLabelForSlot, isDeskLabelHidden } from './bridge';
 import { drawSpriteAt, getFrameSafe } from './renderer-shared';
 
 const tileToSpriteName: Record<number, string> = {
@@ -285,6 +285,7 @@ function buildWorkstations(): Workstation[] {
 }
 
 function shortDeskLabel(characterId: string): string | null {
+  if (isDeskLabelHidden(characterId)) return null;
   if (fixedDeskLabels[characterId]) return fixedDeskLabels[characterId];
   const channelLabel = getChannelLabelForSlot(characterId);
   if (!channelLabel || channelLabel === characterId) return null;

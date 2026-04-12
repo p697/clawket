@@ -1,0 +1,29 @@
+name = "clawket-hermes-relay"
+main = "src/index.ts"
+compatibility_date = "2026-03-03"
+workers_dev = true
+
+[vars]
+# Checked-in templates must not point at the official hosted deployment by default.
+# Replace these example endpoints and account-bound resource IDs before deploys or
+# remote-binding workflows in your own account.
+MAX_MESSAGES_PER_10S = "120"
+MAX_CLIENT_MESSAGES_PER_10S = "300"
+HEARTBEAT_INTERVAL_MS = "30000"
+AWAITING_CHALLENGE_TTL_MS = "25000"
+CLIENT_IDLE_TIMEOUT_MS = "600000"
+REGISTRY_VERIFY_URL = "https://hermes-registry.example.com"
+GATEWAY_OWNER_LEASE_MS = "20000"
+
+[[durable_objects.bindings]]
+name = "HERMES_ROOM"
+class_name = "HermesRelayRoom"
+
+[[kv_namespaces]]
+binding = "HERMES_ROUTES_KV"
+id = "00000000000000000000000000000000"
+preview_id = "00000000000000000000000000000000"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["HermesRelayRoom"]

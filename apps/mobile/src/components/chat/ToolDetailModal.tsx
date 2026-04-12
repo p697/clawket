@@ -47,12 +47,13 @@ function isStructuredJson(raw: string): boolean {
 }
 
 function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
+  const formatDecimal = (value: number): string => value.toFixed(2).replace(/\.?0+$/, '');
+  if (ms < 1000) return `${formatDecimal(ms)}ms`;
   const s = ms / 1000;
-  if (s < 60) return `${s.toFixed(1)}s`;
+  if (s < 60) return `${formatDecimal(s)}s`;
   const m = Math.floor(s / 60);
-  const remainS = Math.round(s % 60);
-  return `${m}m${remainS}s`;
+  const remainS = s % 60;
+  return `${m}m${formatDecimal(remainS)}s`;
 }
 
 function formatTokenCount(n?: number): string {

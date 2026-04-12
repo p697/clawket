@@ -40,9 +40,11 @@ import { shouldAdoptPendingOptimisticRunId } from './pendingOptimisticRun';
 import { formatSystemErrorMessage } from './systemErrorMessage';
 import {
   shouldDelayConnectionRecoveryMessage,
+  shouldSuppressHermesStartupRecoveryMessage,
   shouldShowConnectionRecoveryMessage,
 } from './connectionRecoveryPolicy';
 import { sanitizeVisibleStreamText } from './chatControllerUtils';
+import { markHermesConnectTrace } from '../../../services/hermes-connect-debug';
 
 type Params = {
   gateway: ChatScreenProps['gateway'];
@@ -64,7 +66,7 @@ type Params = {
   setMessages: Dispatch<SetStateAction<UiMessage[]>>;
   setToolMessages: Dispatch<SetStateAction<UiMessage[]>>;
   commitCurrentStreamSegment: (timestampMs?: number) => void;
-  clearTransientRunPresentation: (options?: { preserveCurrentStream?: boolean }) => void;
+  clearTransientRunPresentation: (options?: { preserveCurrentStream?: boolean; preserveToolMessages?: boolean }) => void;
   setCompactionNotice: (message: string | null) => void;
   loadSessionsAndHistory: () => Promise<void>;
   reconcileLatestAssistantFromHistory: (
@@ -89,6 +91,7 @@ type Params = {
 };
 
 let msgCounter = 0;
+const HERMES_READY_AGENT_LOAD_DELAY_MS = 1500;
 function makeId(prefix: string): string {
   return `${prefix}_${++msgCounter}`;
 }
@@ -190,6 +193,7 @@ function shouldMergeFinalIntoExistingAssistant(params: {
 export function useGatewayChatEvents(params: Params) {
   const lastFatalErrorRef = useRef<{ signature: string; at: number } | null>(null);
   const delayedConnectionErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const readyAgentLoadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingConnectionRecoveryRef = useRef<{
     signature: string;
     code?: string;
@@ -245,6 +249,13 @@ export function useGatewayChatEvents(params: Params) {
       pendingConnectionRecoveryRef.current = null;
     };
 
+    const clearReadyAgentLoad = () => {
+      if (readyAgentLoadTimerRef.current) {
+        clearTimeout(readyAgentLoadTimerRef.current);
+        readyAgentLoadTimerRef.current = null;
+      }
+    };
+
     const appendConnectionRecoveryMessage = (message?: string, code?: string) => {
       const signature = `recovery:${code ?? ''}:${message ?? ''}`;
       const now = Date.now();
@@ -253,7 +264,7 @@ export function useGatewayChatEvents(params: Params) {
         return;
       }
       lastFatalErrorRef.current = { signature, at: now };
-      const connectionRecoveryText = i18n.t('Connection Error: Check your network connection and that OpenClaw is running, or run "clawket pair" on your OpenClaw computer, then try again.', { ns: 'chat' });
+      const connectionRecoveryText = i18n.t('Connection Error: Check your network connection and that OpenClaw or Hermes is running, or run "clawket pair" on your computer, then try again.', { ns: 'chat' });
       setMessages((prev) => [...prev, {
         id: makeId('err'),
         role: 'system',
@@ -372,33 +383,68 @@ export function useGatewayChatEvents(params: Params) {
       tracedSetIsSending(true, `applyRemembered:restore runId=${remembered.runId.slice(0, 8)}`);
     };
 
+    const loadAgents = () => {
+      gateway.listAgents().then(async (result) => {
+        if (result.agents.length > 0) {
+          // Immediately provide basic agent data so UI has something to show
+          onAgentsLoaded(result.agents);
+          const enriched = await enrichAgentsWithIdentity(gateway, result.agents);
+          onAgentsLoaded(enriched);
+        }
+        if (result.defaultId && result.defaultId !== 'main') {
+          onDefaultAgentId?.(result.defaultId);
+        }
+      }).catch(() => {});
+    };
+
+    const scheduleReadyAgentLoad = () => {
+      clearReadyAgentLoad();
+      if (config?.backendKind !== 'hermes') {
+        loadAgents();
+        return;
+      }
+      readyAgentLoadTimerRef.current = setTimeout(() => {
+        readyAgentLoadTimerRef.current = null;
+        loadAgents();
+      }, HERMES_READY_AGENT_LOAD_DELAY_MS);
+    };
+
     const offConn = gateway.on('connection', ({ state }) => {
       const prevState = lastConnStateRef.current;
       lastConnStateRef.current = state;
       setConnectionState(state);
+      if (config?.backendKind === 'hermes') {
+        markHermesConnectTrace('connection_state', {
+          state,
+          prevState,
+        });
+      }
       if (state === 'ready') {
         clearDelayedConnectionRecovery();
         setPairingPending(false);
         if (prevState !== 'ready') {
           void applyRememberedRunStateToCurrentSession();
-          loadSessionsAndHistory();
-          gateway.listAgents().then(async (result) => {
-            if (result.agents.length > 0) {
-              // Immediately provide basic agent data so UI has something to show
-              onAgentsLoaded(result.agents);
-              const enriched = await enrichAgentsWithIdentity(gateway, result.agents);
-              onAgentsLoaded(enriched);
+          if (config?.backendKind === 'hermes') {
+            markHermesConnectTrace('connection_ready', {
+              sessionKeyPresent: Boolean(sessionKeyRef.current),
+            });
+            markHermesConnectTrace('load_sessions_and_history_begin');
+          }
+          void loadSessionsAndHistory().finally(() => {
+            if (config?.backendKind === 'hermes') {
+              markHermesConnectTrace('load_sessions_and_history_done', {
+                sessionKeyPresent: Boolean(sessionKeyRef.current),
+              });
             }
-            if (result.defaultId && result.defaultId !== 'main') {
-              onDefaultAgentId?.(result.defaultId);
-            }
-          }).catch(() => {});
+            scheduleReadyAgentLoad();
+          });
         }
       } else if (state === 'pairing_pending') {
         setPairingPending(true);
       }
       // Reset all streaming state on connection loss
       if (state !== 'ready' && prevState === 'ready') {
+        clearReadyAgentLoad();
         const lostRunId = currentRunIdRef.current;
         agentActivityRef.current.clear();
         childSessionActivityRef.current.clear();
@@ -710,7 +756,7 @@ export function useGatewayChatEvents(params: Params) {
       // Order matters: setMessages adds the final bubble first, so listData's
       // guard suppresses the streaming bubble. Then setChatStream(null) removes
       // it cleanly with no visible flash.
-      clearTransientRunPresentation({ preserveCurrentStream: true });
+      clearTransientRunPresentation({ preserveCurrentStream: true, preserveToolMessages: true });
       tracedSetIsSending(false, `chatFinal:${runId.slice(0, 8)}`);
       setActivityLabel(null);
       currentRunIdRef.current = null;
@@ -837,6 +883,19 @@ export function useGatewayChatEvents(params: Params) {
     });
 
     const offErr = gateway.on('error', ({ code, message, retryable, hint }) => {
+      if (shouldSuppressHermesStartupRecoveryMessage({
+        backendKind: config?.backendKind,
+        sessionKey: sessionKeyRef.current,
+        connectionState: gateway.getConnectionState(),
+        code,
+        message,
+      })) {
+        clearDelayedConnectionRecovery();
+        if (showDebug) {
+          dbg(`suppress Hermes startup error: code=${code ?? 'unknown'} message=${message ?? ''}`);
+        }
+        return;
+      }
       if (code === 'local_tls_unsupported') {
         clearDelayedConnectionRecovery();
         const signature = `${code}:${message}:${hint ?? ''}`;
@@ -871,7 +930,7 @@ export function useGatewayChatEvents(params: Params) {
           return;
         }
         lastFatalErrorRef.current = { signature, at: now };
-        const connectionRecoveryText = i18n.t('Connection Error: Check your network connection and that OpenClaw is running, or run "clawket pair" on your OpenClaw computer, then try again.', { ns: 'chat' });
+        const connectionRecoveryText = i18n.t('Connection Error: Check your network connection and that OpenClaw or Hermes is running, or run "clawket pair" on your computer, then try again.', { ns: 'chat' });
         setMessages((prev) => [...prev, {
           id: makeId('err'),
           role: 'system',
@@ -973,11 +1032,17 @@ export function useGatewayChatEvents(params: Params) {
 
     if (config?.url) {
       gateway.configure(config);
+      if (config.backendKind === 'hermes') {
+        markHermesConnectTrace('gateway_connect_call', {
+          transport: config.transportKind,
+        });
+      }
       gateway.connect();
     }
 
     return () => {
       clearDelayedConnectionRecovery();
+      clearReadyAgentLoad();
       offConn();
       offPairing();
       offPairingResolved();

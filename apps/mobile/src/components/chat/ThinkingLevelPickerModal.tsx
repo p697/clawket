@@ -7,6 +7,7 @@ import { ModalSheet } from '../ui';
 import { useAppTheme } from '../../theme';
 import { FontSize, FontWeight, Space } from '../../theme/tokens';
 import { THINKING_LEVELS } from '../../utils/gateway-settings';
+import type { ThinkingLevel } from '../../utils/gateway-settings';
 
 type Props = {
   visible: boolean;
@@ -14,9 +15,8 @@ type Props = {
   current: string;
   onSelect: (value: string) => void;
   disabled?: boolean;
+  options?: ThinkingLevel[];
 };
-
-const STATIC_OPTIONS = THINKING_LEVELS.map((level) => ({ value: level }));
 
 export function ThinkingLevelPickerModal({
   visible,
@@ -24,17 +24,19 @@ export function ThinkingLevelPickerModal({
   current,
   onSelect,
   disabled = false,
+  options = [...THINKING_LEVELS],
 }: Props): React.JSX.Element {
   const { t } = useTranslation('chat');
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme.colors), [theme]);
 
+  const staticOptions = useMemo(() => options.map((level) => ({ value: level })), [options]);
   const normalizedCurrent = current || 'off';
 
   return (
     <ModalSheet visible={visible} onClose={onClose} title={t('Thinking Level')} maxHeight="50%">
       <FlatList
-        data={STATIC_OPTIONS}
+        data={staticOptions}
         keyExtractor={(item) => item.value}
         renderItem={({ item }) => {
           const isActive = item.value === normalizedCurrent;

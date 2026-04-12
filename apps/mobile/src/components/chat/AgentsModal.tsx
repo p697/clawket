@@ -7,6 +7,7 @@ import { Check, ChevronRight, Cloud, Link2, Plus, Table2, X } from 'lucide-react
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FullWindowOverlay } from 'react-native-screens';
 import type { GatewayMode } from '../../types';
+import { getGatewayModeLabel } from '../../services/gateway-backends';
 import { useAppTheme } from '../../theme';
 import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
 import { AgentActivityStatus } from '../../screens/ChatScreen/hooks/agentActivity';
@@ -352,6 +353,9 @@ export function AgentsModal({
                               </View>
                             ) : null}
                           </View>
+                          <Text style={styles.activity} numberOfLines={1}>
+                            {getGatewayModeLabel(gateway)}
+                          </Text>
                         </View>
                         {gateway.isCurrent ? (
                           <Check size={18} color={theme.colors.primary} strokeWidth={2.4} />
@@ -375,7 +379,7 @@ export function AgentsModal({
                   activeOpacity={0.7}
                 >
                   <Plus size={18} color={theme.colors.primary} strokeWidth={2} />
-                  <Text style={styles.addGatewayText}>{t('Add OpenClaw Connection', { ns: 'config' })}</Text>
+                  <Text style={styles.addGatewayText}>{t('Add Connection', { ns: 'config' })}</Text>
                 </TouchableOpacity>
               ) : null}
             </View>

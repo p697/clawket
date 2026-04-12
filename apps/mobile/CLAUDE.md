@@ -5,32 +5,101 @@ Clawket is a mobile client for OpenClaw (iOS/Android, React Native + Expo) insid
 For OpenClaw protocol details and reference implementations, see: `../../../../openclaw` or `/Users/lucy/Desktop/op/openclaw`
 
 If the task involves Android development or building an Android release package, refer to `docs/android-build.md`.
-If the task involves setting up a fresh machine for Android packaging, read `docs/android-onboarding.md` before changing code.
+If the task is to prepare a fresh machine for Android packaging, read `docs/android-onboarding.md` first.
 
 # Android Packaging Notes
 
-For Android release work, keep these facts in mind:
+When touching Android release packaging, keep these rules in mind:
 
-1. The canonical store-build command is `npm run build:android:aab`.
-2. That script now builds Office assets, runs `expo prebuild --platform android --no-install`, and then builds the signed release `.aab`.
-3. Android upload builds depend on local secrets that are not in git:
+1. Use `npm run build:android:aab` as the default Google Play packaging command.
+2. That script is responsible for:
+   - building Office packaged assets
+   - syncing Expo native Android config through `expo prebuild`
+   - producing the signed release `.aab`
+3. Store-ready Android builds depend on local files and secrets that are not committed:
    - `apps/mobile/.env.local`
    - `apps/mobile/android/app/keystore.properties` or `CLAWKET_ANDROID_KEY_*`
-   - the upload keystore file itself
-4. The repo supports overriding Play `versionCode` with `EXPO_ANDROID_VERSION_CODE`.
-5. If `EXPO_ANDROID_VERSION_CODE` is not set, `build:android:aab` will auto-pick a version code based on the current native project state.
-6. On macOS, prefer Homebrew `openjdk@17` at `/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home` for Android builds. This avoids the Gradle `IBM_SEMERU` toolchain issue seen with some other detected JDKs.
-7. Local temporary Pro verification uses `npm run build:android:pro-temp`. Do not confuse it with real Google Play purchase validation.
+   - the upload keystore file
+4. `EXPO_ANDROID_VERSION_CODE` can override the Play version code when needed.
+5. If no explicit Android version code is provided, `build:android:aab` auto-increments from the current native project state so repeat uploads do not stay stuck on an old value.
+6. On macOS, prefer Homebrew `openjdk@17` at `/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home` for Android builds to avoid the Gradle `IBM_SEMERU` issue.
+7. `npm run build:android:pro-temp` is only for local Pro UI verification and must not be treated as a real subscription or Play-delivered validation flow.
 
 # Clawket Ecosystem — Cross-Repository Awareness
 
-This app lives inside the Clawket monorepo. When your task involves connection, pairing, relay, bridge, or protocol issues, you **must** check the sibling workspace folders first:
+Clawket now lives in a monorepo. This app is the client-facing frontend; relay and bridge live in sibling workspace folders.
+
+## Dual Backend Compatibility Rule
+
+This mobile app must keep both OpenClaw and Hermes usable during the migration period.
+
+1. Do not ship Hermes fixes that regress OpenClaw chat, pairing, config, or session behavior.
+2. Preserve legacy OpenClaw interfaces and expectations; Hermes-specific behavior should use isolated backend-aware handling.
+3. When touching shared chat state, message parsing, history merge, or connection code, verify the behavior still makes sense for both OpenClaw and Hermes.
+4. Treat Hermes source at `/Users/lucy/.hermes/hermes-agent` as read-only external code unless the user explicitly approves changing Hermes itself.
+
+## Backend Architecture Rule
+
+For all new mobile work, use this model:
+
+1. `backendKind` is the product backend: `openclaw` or `hermes`.
+2. `transportKind` is the connection route: `local`, `relay`, `tailscale`, `cloudflare`, or `custom`.
+3. Legacy `mode` fields may still exist for compatibility, but new logic should prefer `backendKind` + `transportKind`.
+4. Do not add new screen-level or component-level branching that treats Hermes as just another `mode`.
+5. Put backend differences behind shared helpers, capability registries, or adapters in `src/services/` or backend-specific modules.
+6. When adding Console or Config features, define whether they are shared, OpenClaw-only, or Hermes-only before writing UI code.
+7. Unsupported backend actions must be hidden or disabled via centralized capability checks, not by optimistic requests that fail later.
+8. Treat `src/services/gateway-backends.ts` as the primary source of truth for backend capability metadata; extend it before wiring new backend-specific UI affordances.
+9. OpenClaw and Hermes Console menus are intentionally implemented as **separate top-level screens** (for example `OpenClawConsoleMenuScreen` and `HermesConsoleMenuScreen`), dispatched via `selectByBackend()`. Do not try to merge them into a single cross-backend menu. Inside each per-backend menu screen, prefer descriptor-driven item lists over hand-written per-item conditional JSX so the menu stays maintainable as that backend grows.
+10. Keep `src/services/gateway.ts` focused on transport, connection, caching, and event orchestration. Backend-specific request semantics should live in dedicated operations/helpers such as `gateway-backend-operations.ts`.
+11. When a screen or hook needs multiple gateway resources together, prefer a shared bundle loader in `src/services/` over duplicating `Promise.all(...)` request orchestration inside the view layer.
+12. Treat the Console dashboard/Home page the same way: aggregate capability-gated gateway reads in a dedicated service loader rather than building a long inline `Promise.allSettled(...)` block inside the screen.
+13. Treat Console entry metadata the same way: page titles, descriptions, docs links, and Hermes/OpenClaw action cards should come from shared descriptor/resolver helpers in `src/services/`, not from repeated object literals embedded in screens.
+14. `Discover` and `ClawHub` are part of the backend support matrix too. Do not assume they are always available; gate them through backend capabilities or shared entry descriptors before exposing them in Console.
+15. Apply the same separation to connection setup. Gateway config editors, QR scan results, and saved configs must model `backendKind` and `transportKind` independently. Do not re-introduce new Hermes-only editor modes when a backend/transport combination is what the product actually needs.
+16. During the Hermes phase-1 rollout, treat `hermes + local/tailscale/cloudflare/custom` as direct-bridge transports. Reserve `relay` as a separate transport track that will later plug into backend-aware relay infrastructure rather than being faked through direct URLs.
+17. Default connection UX copy to backend-neutral language (`Connection`, `pairing QR code`, etc.). Mention OpenClaw explicitly only for genuinely OpenClaw-specific flows such as auth-file guidance, permission repair, or config-management screens.
+18. When deciding whether a config should use relay connection behavior, key off `transportKind === 'relay'` or `resolveGatewayTransportKind(...)`, not `mode === 'relay'`. Hermes relay may still retain legacy `mode: 'hermes'` for compatibility.
+
+## Hermes Model Selection Rule
+
+When adding Hermes model-selection UI or behavior in mobile:
+
+1. Treat Hermes model selection as `global` only for now. The current Hermes API-server integration used by Clawket does not provide stable per-session model overrides.
+2. Any Hermes `/model` command handling and Console model-setting flows must converge on shared gateway/bridge operations instead of separate screen-specific logic.
+3. Do not hardcode Hermes custom-provider slug rules in screens or components. Provider canonicalization belongs in shared services/bridge helpers.
+4. If a future page appears to need session-scoped Hermes models, stop and re-evaluate the bridge/runtime contract before implementing UI.
+
+## Sister Repositories
 
 | Repo | Path | Role |
 |------|------|------|
-| **mobile** (this app) | `.` | Mobile app (RN + Expo) |
-| **relay** | `../relay-registry`, `../relay-worker`, `../../packages/relay-shared` | Cloudflare relay + registry |
-| **bridge** | `../bridge-cli`, `../../packages/bridge-core`, `../../packages/bridge-runtime` | Local bridge CLI (npm `@p697/clawket`) |
+| **mobile** (this app) | `.` | React Native mobile app — Chat UI, Console, Config, Office game |
+| **relay** | `../relay-registry`, `../relay-worker`, `../../packages/relay-shared` | Cloudflare Workers + Durable Objects — WebSocket relay, registry, pairing |
+| **bridge** | `../bridge-cli`, `../../packages/bridge-core`, `../../packages/bridge-runtime` | Node.js CLI + npm package — local bridge between relay and OpenClaw Gateway |
+
+## Architecture Flow
+
+```
+[Clawket App] ←WS→ [Relay] ←WS→ [Bridge CLI] ←WS→ [OpenClaw Gateway]
+```
+
+## When to Look at Sister Repos
+
+You **must** read the sister repo's code (start with its `AGENTS.md` and `CLAUDE.md`) when:
+
+1. **Connection issues** — If the bug involves WebSocket connectivity, handshake failures, "challenge timed out", or reconnection, the cause may be in relay or bridge, not in this app.
+2. **Pairing flow** — QR code generation, `accessCode` claiming, token verification spans all three repos.
+3. **Message protocol** — The WS frame format, control frames (`__clawket_relay_control__:` prefix), and `connect`/`challenge` handshake are defined in relay and bridge.
+4. **Relay behavior** — Offline message caching, gateway owner lease, heartbeat/alarm logic live in `clawket-relay`.
+5. **Bridge lifecycle** — Demand-driven gateway connection, lazy connect/disconnect, service install/uninstall live in `clawket-bridge`.
+6. **Gateway API** — The app calls Gateway methods (`chat.*`, `config.*`, `models.*`, `cron.*`, etc.) through the relay+bridge tunnel. Understanding what the Gateway supports requires checking OpenClaw source at `../../../../openclaw` or `/Users/lucy/Desktop/op/openclaw`.
+
+## How to Read Sister Repos
+
+1. **Always read `AGENTS.md` and `CLAUDE.md` first** — they contain architecture, rules, and pitfalls.
+2. Then look at the specific code relevant to your task.
+3. Do not modify sister repos without understanding their conventions.
 
 ## Language Policy
 - All code comments and commit messages **must be in English**.
@@ -40,90 +109,90 @@ This app lives inside the Clawket monorepo. When your task involves connection, 
 - Any flow that patches Gateway config must show a secondary confirmation dialog, because the change will restart Gateway and may interrupt active OpenClaw tasks.
 
 ## Global Loading Overlay Rules
-- Use the shared global loading overlay for transient app-wide loading states that should appear above the current UI without tearing down the screen underneath.
-- Preferred entrypoint: `src/contexts/GlobalLoadingOverlayContext.tsx` with `useGlobalLoadingOverlay()`. The root overlay component is `src/components/ui/GlobalLoadingOverlay.tsx`.
-- `useGatewayOverlay`, `GatewayOverlayProvider`, and `GatewaySwitchOverlay` still exist, but they are compatibility aliases. New work should target the global naming rather than adding more Gateway-specific overlay usage.
-- Use `LoadingState` only for genuine screen-level loading pages. If the UX should keep the current page visible and show a centered spinner above it, use the global overlay instead.
-- If the user can dismiss a modal while an action is still running, pair the global overlay with `usePreventRemove` or equivalent exit confirmation logic so swipes/back actions do not silently interrupt work.
+- Reuse the shared global loading overlay for app-wide in-flight states that should float above the current screen without replacing its layout.
+- Preferred API: `src/contexts/GlobalLoadingOverlayContext.tsx` via `useGlobalLoadingOverlay()` and the root-rendered `GlobalLoadingOverlay`.
+- The older Gateway-named exports (`useGatewayOverlay`, `GatewayOverlayProvider`, `GatewaySwitchOverlay`) are compatibility aliases only. Do not introduce new feature work against the Gateway-specific names unless you are touching legacy code that already uses them.
+- Do not replace a whole screen with `LoadingState` when the intended UX is a transient global spinner above the existing UI. Use `LoadingState` for true full-screen loading pages only.
+- If an in-flight action can be interrupted by dismissing a modal screen or swiping down a native-stack modal, add an explicit confirmation before leaving; do not assume the global overlay itself prevents dismissal.
 
 ## Release Update Modal
 - The Chat first-screen release/update modal content lives in `src/features/app-updates/currentAnnouncement.ts`.
-- If the task is “edit the update popup” (copy, button text, version, or jump target), change that file first rather than hunting through Chat UI code.
-- Any new user-facing strings added there must also be added to all 6 RN locale files in `src/i18n/locales/{en,zh-Hans,ja,ko,de,es}/chat.json`.
-- The modal's local-cache/version gating lives in `src/services/app-update-announcement.ts`; the visual component lives in `src/screens/ChatScreen/components/AppUpdateAnnouncementModal.tsx`.
+- When the user asks to change update-popup copy, CTA labels, target version, or destination, edit that file first instead of searching across Chat screen files.
+- Any new user-facing strings introduced there must also be added to all 6 React Native locale files under `src/i18n/locales/{en,zh-Hans,ja,ko,de,es}/chat.json`.
+- The display/cache logic for that modal is implemented in `src/services/app-update-announcement.ts`; UI lives in `src/screens/ChatScreen/components/AppUpdateAnnouncementModal.tsx`.
 
 # Internationalization (i18n) Rules
 
-All user-visible text in Clawket must be internationalized. Hardcoding UI strings is forbidden.
-
 ## Supported Locales
-- English (`en`) — default/fallback
-- Simplified Chinese (`zh-Hans`)
-- Japanese (`ja`)
-- Korean (`ko`)
-- German (`de`)
-- Spanish (`es`)
 
-## Two Runtimes
+| Locale | Code | Status |
+|--------|------|--------|
+| English | `en` | Default / fallback |
+| Simplified Chinese | `zh-Hans` | Full coverage |
+| Japanese | `ja` | Full coverage |
+| Korean | `ko` | Full coverage |
+| German | `de` | Full coverage |
+| Spanish | `es` | Full coverage |
 
-The app has two separate i18n systems that must be kept in sync:
+## Two-Runtime Architecture
 
-| Runtime | Stack | Translation Files | Usage |
-|---------|-------|-------------------|-------|
-| **React Native** | `i18next` + `react-i18next` | `src/i18n/locales/{en,zh-Hans,ja,ko,de,es}/{common,chat,config,console}.json` | `useTranslation()` hook → `t('key')` |
-| **Office WebView** | `office-game/src/i18n.ts` | `office-game/src/locales/{zh-Hans,ja,ko,de,es}.ts` | `t('key')` from `./i18n` import |
+| Runtime | Tech | Translation source |
+|---------|------|--------------------|
+| React Native | i18next + `react-i18next` | `src/i18n/locales/{locale}/{namespace}.json` (4 namespaces: `common`, `chat`, `config`, `console`) |
+| Office WebView | Custom `office-game/src/i18n.ts` | `office-game/src/locales/{zh-Hans,ja,ko,de,es}.ts`; locale set via `LOCALE` bridge message from RN |
 
 ## Key Design
-- Natural English text as keys: `t('Save')`, `t('Loading...')`.
+- Use natural English text as translation keys: `t('Save')`, `t('Loading...')`.
 - Missing translations fall back to the key itself (readable English).
-- RN has 4 namespaces: `common`, `chat`, `config`, `console`. Cross-namespace: `t('common:Save')`.
 
 ## Required Rules
-1. **Every new user-visible string must use `t()`.** No hardcoded UI text in screens, components, alerts, empty states, button labels, or placeholder text.
-2. **Add keys to ALL 6 locale translation files** (`en`, `zh-Hans`, `ja`, `ko`, `de`, `es`) when introducing new strings. Never leave a key present in only some locales.
-3. **Translation keys must be natural English text** (e.g. `t('Save')`, `t('Loading...')`). Never use non-English text as keys.
-4. **Constants with translatable labels** (e.g. tab arrays, picker options) must be computed inside the component (via `useMemo`) so they have access to `t()`. Do not define translated constants at module level.
-5. **Alert.alert() calls** must wrap title, message, and button labels with `t()` or `t('common:...')`.
-6. **Office game strings** use the same `t()` pattern from `office-game/src/i18n.ts`. New bubble texts, menu labels, and report comments all need corresponding entries in **all 5** non-English locale files (`zh-Hans.ts`, `ja.ts`, `ko.ts`, `de.ts`, `es.ts`).
+1. **All new features must include i18n for every supported locale.** No feature is complete until translations exist for **all 6 locales**.
+2. **Hardcoded user-facing strings are forbidden.** Every visible string in RN screens must go through `t()`. Every visible string in Office game must go through the Office `t()`.
+3. When adding a new RN translation key, add it to **all 6 locale directories**: `en`, `zh-Hans`, `ja`, `ko`, `de`, `es`. Never add a key to only one or two locales.
+4. When adding a new Office game string, add translations to **all 5 non-English locale files**: `zh-Hans.ts`, `ja.ts`, `ko.ts`, `de.ts`, `es.ts`.
+5. Translation keys must always be **natural English text** (e.g. `t('Save')`, `t('Loading...')`). Never use non-English text as keys.
+5. Constants with translatable labels (e.g. tab arrays, picker options) must use `useMemo` + `t()` inside the component so translations update with locale changes.
+6. `Alert.alert()` title, message, and button labels must be wrapped with `t()`.
 
 ## Forbidden Patterns
-1. Do not hardcode user-visible English strings in source files — always use `t()`.
-2. Do not add a translation key to one locale without adding it to **all 6 locales**. Every key must exist in every locale file.
-3. Do not use `t()` for internal identifiers, log messages, or technical strings that users never see.
-4. Do not use non-English text as translation keys — keys must always be English.
+1. Do not hardcode UI strings in screen/component/office source files.
+2. Do not use Chinese text directly in source code — only in locale JSON files and `zh-Hans.ts`.
+3. Do not apply `t()` at module-level definition time for Office templates — apply at selection/render time (locale may change after init).
 
-## How to Add New Strings (RN)
-1. Choose the correct namespace (`common` for shared terms, or the screen-specific namespace).
-2. Add the key to **all 6** locale files: `src/i18n/locales/{en,zh-Hans,ja,ko,de,es}/<namespace>.json`.
-3. Use `const { t } = useTranslation('<namespace>')` in the component, then `t('Your new string')`.
+## How to Add Strings — React Native
+1. Add key to **all 6** locale JSON files under `src/i18n/locales/{en,zh-Hans,ja,ko,de,es}/{namespace}.json`.
+2. The `en` value should equal the key (natural English). Other locales provide the translated value.
+3. Use `const { t } = useTranslation('{namespace}')` in the component.
+4. Render with `t('Your new string')`.
 
-## How to Add New Strings (Office Game)
-1. Wrap the string with `t()` from `import { t } from './i18n'`.
-2. Add translations to **all 5** non-English locale files: `office-game/src/locales/{zh-Hans,ja,ko,de,es}.ts`.
-3. English fallback is automatic (the key itself).
+## How to Add Strings — Office Game
+1. Use `t('Your new string')` in the office source file (import from `./i18n`).
+2. English works by fallback (key = English text).
+3. Add translations to **all 5** non-English locale files: `office-game/src/locales/{zh-Hans,ja,ko,de,es}.ts`.
 
-## Locale Delivery
-- RN: `expo-localization` detects device locale; `i18next` manages switching.
-- Office WebView: RN sends a `LOCALE` bridge message; office calls `setLocale()`.
+## Locale Delivery to Office WebView
+- `src/screens/OfficeScreen/OfficeTab.tsx` sends `{ type: 'LOCALE', locale }` on WebView load and on `i18next.languageChanged`.
+- `office-game/src/bridge.ts` handles `LOCALE` messages and calls `setLocale()`.
 
 ## Validation Checklist
 1. All 6 locale JSON files (`en`, `zh-Hans`, `ja`, `ko`, `de`, `es`) have the same set of keys (no orphans).
-2. All 5 Office game locale files have the same set of keys.
+2. All 5 Office game locale files have the same set of keys as `zh-Hans.ts`.
 3. `npx tsc --noEmit` passes.
 4. `cd office-game && npm run build` passes.
 
 # Analytics Rules
 
-Clawket uses PostHog for product analytics. Keep instrumentation centralized, reusable, and focused on product decisions.
+Clawket uses PostHog for product analytics. Analytics work must stay centralized and low-noise.
 
 ## Required Rules
-1. **All critical features must ship with analytics.** This is especially mandatory for subscription, paywall, restore, purchase, and other revenue flows, plus core actions such as connect, send, create, and save.
-2. **Reuse the shared analytics layer.** Add semantic event helpers in `src/services/analytics/events.ts` and keep provider/client wiring in `src/services/analytics/`; do not duplicate near-identical `posthog.capture(...)` blocks in multiple screens.
-3. **Track meaningful actions, not noise.** Prefer business events and small stable properties (source, mode, count, booleans). Avoid sensitive data and high-cardinality payloads.
+1. **Any new critical feature must include analytics.** This is mandatory for subscription/paywall/purchase flows and for core product actions such as connect, send, create, save, and major Console entry points.
+2. **Do not scatter raw `posthog.capture(...)` calls across the app.** Add or reuse semantic helpers in `src/services/analytics/events.ts`, and keep client/config wiring inside `src/services/analytics/` plus the existing root hooks.
+3. **Prefer business events over UI-noise events.** Track outcome-oriented actions (`gateway_connect_saved`, `paywall_subscribe_tapped`) instead of every close button, minor filter toggle, or transient interaction.
+4. **Keep event properties compact and stable.** Prefer booleans, small enums, counts, and source labels; avoid high-cardinality raw IDs, large text, message contents, tokens, URLs with secrets, or other sensitive data.
 
 ## Notes
-1. Route-level screen tracking is centralized at the app root; update `src/utils/posthog-navigation.ts` when adding new navigable screens.
-2. If a PR changes a core workflow or paywall flow, the PR should update analytics in the same change.
+1. Page exposure is handled centrally from the navigation root; new navigable screens should be added to `src/utils/posthog-navigation.ts`.
+2. When adding subscription or payment-related UI, update analytics in the same change. The feature is not complete until the critical paywall/purchase events are covered.
 
 # Mobile Environment Variable Rules
 
@@ -416,7 +485,7 @@ All structural style values (spacing, font size, border radius, shadows, animati
 | `ModalSheet` | Centered card modal with backdrop | All centered-card modals (tool detail, avatar, editor, picker) |
 | `SearchInput` | Pill-shaped search field with icon | Any list/page that needs keyword filtering |
 
-**IMPORTANT:** Whenever you create, refactor, or extract a new shared UI component into `src/components/ui/`, you **must** update this table and add corresponding usage rules to this file and `AGENTS.md`.
+**IMPORTANT:** Whenever you create, refactor, or extract a new shared UI component into `src/components/ui/`, you **must** update this table and add corresponding usage rules to this file and `CLAUDE.md`.
 
 ## Adding New Tokens
 1. Add to `src/theme/tokens.ts` with a clear semantic name.

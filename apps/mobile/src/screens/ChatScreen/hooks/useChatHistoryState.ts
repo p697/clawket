@@ -2,6 +2,7 @@ import { RefObject, useCallback, useEffect, useRef, useState } from 'react';
 import { CachedSessionMeta, ChatCacheService } from '../../../services/chat-cache';
 import { cacheMessageImages, findCachedEntry, generateStableKey, getAllCachedForSession } from '../../../services/image-cache';
 import { LastOpenedSessionSnapshot, StorageService } from '../../../services/storage';
+import { markHermesConnectTrace } from '../../../services/hermes-connect-debug';
 import { SessionInfo } from '../../../types';
 import { ImageMeta, UiMessage } from '../../../types/chat';
 import { sessionKeysMatch } from '../../../utils/session-key';
@@ -36,6 +37,7 @@ import {
 } from './startupPreview';
 import { useChatLocalHistoryPaging } from './useChatLocalHistoryPaging';
 import {
+  isBackendScopedMainSessionKey,
   isSessionKeyInAgentScope,
   sanitizeSnapshotForAgent,
 } from '../../../utils/agent-session-scope';
@@ -286,13 +288,13 @@ export function useChatHistoryState({
         StorageService.getLastOpenedSessionSnapshot(gatewayConfigId, currentAgentId).catch(() => null),
         ChatCacheService.listSessions().catch((): CachedSessionMeta[] => []),
       ]);
-      const snapshot = sanitizeSnapshotForAgent(rawSnapshot, currentAgentId);
+      const snapshot = sanitizeSnapshotForAgent(rawSnapshot, currentAgentId, { mainSessionKey });
       if (cancelled || sessionKeyRef.current) return;
 
       const snapshotPreview = buildSnapshotPreviewSession(snapshot);
       const previewCacheKey = snapshot?.sessionKey ?? mainSessionKey;
       const cachedPreview = buildCachedPreviewSessions(cachedSessions, gatewayConfigId, previewCacheKey)
-        .filter((session) => isSessionKeyInAgentScope(session.key, currentAgentId));
+        .filter((session) => isSessionKeyInAgentScope(session.key, currentAgentId, { mainSessionKey }));
       const previewSessions = [...snapshotPreview, ...cachedPreview]
         .filter((session, index, list) => list.findIndex((item) => item.key === session.key) === index);
       if (previewSessions.length > 0) {
@@ -337,6 +339,9 @@ export function useChatHistoryState({
     }
 
     const request = (async (): Promise<number> => {
+    markHermesConnectTrace('history_fetch_begin', {
+      limit,
+    });
     const requestId = ++historyRequestIdRef.current;
     const isStaleRequest = () => (
       requestId !== historyRequestIdRef.current
@@ -345,6 +350,10 @@ export function useChatHistoryState({
 
     try {
       const historyResult = await gateway.fetchHistory(key, limit);
+      markHermesConnectTrace('history_fetch_done', {
+        limit,
+        messageCount: historyResult.messages.length,
+      });
       const history = historyResult.messages;
       const currentSessionId = historyResult.sessionId;
 
@@ -587,6 +596,24 @@ export function useChatHistoryState({
           const toolCallId = readToolCallId(msgRecord);
           const name = readToolName(msgRecord);
           const hasError = !!(msgRecord.isError || msgRecord.error);
+          const toolArgs = typeof msgRecord.toolArgs === 'string'
+            ? msgRecord.toolArgs
+            : msgRecord.args !== undefined
+              ? stringifyUnknown(msgRecord.args)
+              : undefined;
+          const toolStartedAt = typeof msgRecord.toolStartedAt === 'number'
+            ? msgRecord.toolStartedAt
+            : undefined;
+          const toolFinishedAt = typeof msgRecord.toolFinishedAt === 'number'
+            ? msgRecord.toolFinishedAt
+            : (msgTs > 0 ? msgTs : undefined);
+          const toolDurationMs = typeof msgRecord.toolDurationMs === 'number'
+            ? msgRecord.toolDurationMs
+            : (
+              typeof toolStartedAt === 'number' && typeof toolFinishedAt === 'number'
+                ? Math.max(0, toolFinishedAt - toolStartedAt)
+                : undefined
+            );
 
           const outputText = extractText(message.content);
           const outputValue = outputText
@@ -626,9 +653,11 @@ export function useChatHistoryState({
               toolSummary: hasError
                 ? t('Failed {{name}}', { name: baseSummary })
                 : t('Completed {{name}}', { name: baseSummary }),
+              toolArgs: existing.toolArgs ?? toolArgs,
               toolDetail: output || undefined,
-              toolDurationMs: durationMs,
-              toolFinishedAt: finishedAt,
+              toolDurationMs: durationMs ?? toolDurationMs,
+              toolStartedAt: existing.toolStartedAt ?? toolStartedAt,
+              toolFinishedAt: finishedAt ?? toolFinishedAt,
             };
           } else {
             const baseSummary = formatToolOneLinerLocalized(name, undefined, t);
@@ -641,8 +670,11 @@ export function useChatHistoryState({
               toolSummary: hasError
                 ? t('Failed {{name}}', { name: baseSummary })
                 : t('Completed {{name}}', { name: baseSummary }),
+              toolArgs,
               toolDetail: output || undefined,
-              toolFinishedAt: msgTs > 0 ? msgTs : undefined,
+              toolDurationMs,
+              toolStartedAt,
+              toolFinishedAt,
             });
           }
           continue;
@@ -686,6 +718,10 @@ export function useChatHistoryState({
         cacheHydrationSessionKeyRef.current = null;
       }
       setHistoryLoaded(true);
+      markHermesConnectTrace('history_loaded', {
+        messageCount: uiMessages.length,
+        sessionKeyPresent: Boolean(sessionKeyRef.current),
+      });
       return history.length;
     } catch {
       if (cacheHydrationSessionKeyRef.current === key) {
@@ -699,6 +735,10 @@ export function useChatHistoryState({
           dbg(`history: failed to load for key=${key}; keeping cached/current messages`);
         }
         setHistoryLoaded(true);
+        markHermesConnectTrace('history_loaded_error_path', {
+          connectionState: connState,
+          sessionKeyPresent: Boolean(sessionKeyRef.current),
+        });
       }
       return 0;
     }
@@ -735,7 +775,7 @@ export function useChatHistoryState({
       });
       const fallbackKey = (
         selected?.key
-        ?? (currentKey && currentKey.startsWith(mainSessionKey.replace(/:main$/, ':')) ? currentKey : null)
+        ?? (currentKey && isSessionKeyInAgentScope(currentKey, currentAgentId, { mainSessionKey }) ? currentKey : null)
         ?? mainSessionKey
       );
 
@@ -940,11 +980,14 @@ export function useChatHistoryState({
 
   const loadSessionsAndHistory = useCallback(async () => {
     const currentKey = sessionKeyRef.current;
+    markHermesConnectTrace('history_bootstrap_begin', {
+      currentKeyPresent: Boolean(currentKey),
+    });
 
     // Fire both reads in parallel: cached snapshot + server session list
     const snapshotPromise = gatewayConfigId
       ? StorageService.getLastOpenedSessionSnapshot(gatewayConfigId, currentAgentId)
-        .then((snapshot) => sanitizeSnapshotForAgent(snapshot, currentAgentId))
+        .then((snapshot) => sanitizeSnapshotForAgent(snapshot, currentAgentId, { mainSessionKey }))
         .catch(() => null)
       : Promise.resolve(null);
     const listPromise = gateway.listSessions();
@@ -956,14 +999,18 @@ export function useChatHistoryState({
       setSessions((prev) => (prev.length > 0 ? prev : snapshotPreview));
     }
     const preferredKey = (
-      currentKey && isSessionKeyInAgentScope(currentKey, currentAgentId)
+      currentKey && isSessionKeyInAgentScope(currentKey, currentAgentId, { mainSessionKey })
         ? currentKey
-        : snapshot?.sessionKey ?? null
+        : snapshot?.sessionKey
+          ?? (isBackendScopedMainSessionKey(mainSessionKey) ? mainSessionKey : null)
     );
     let optimisticHistoryPromise: Promise<number> | null = null;
     if (preferredKey) {
       sessionKeyRef.current = preferredKey;
       setSessionKey(preferredKey);
+      markHermesConnectTrace('session_key_selected', {
+        source: 'preferred',
+      });
       historyLimitRef.current = HISTORY_PAGE_SIZE;
       setHasMoreHistory(true);
       setHistoryLoaded(false);
@@ -977,6 +1024,9 @@ export function useChatHistoryState({
 
     try {
       const list = await listPromise;
+      markHermesConnectTrace('sessions_list_done', {
+        count: list.length,
+      });
       setSessions(list);
       const selected = selectSessionForCurrentAgent({
         sessions: list,
@@ -992,6 +1042,9 @@ export function useChatHistoryState({
           // (stale optimistic result auto-dropped by historyRequestIdRef guard)
           sessionKeyRef.current = selected.key;
           setSessionKey(selected.key);
+          markHermesConnectTrace('session_key_selected', {
+            source: 'selected',
+          });
           historyLimitRef.current = HISTORY_PAGE_SIZE;
           setHasMoreHistory(true);
           setHistoryLoaded(false);
@@ -1004,6 +1057,9 @@ export function useChatHistoryState({
           await loadHistory(selected.key, HISTORY_PAGE_SIZE);
         }
       }
+      markHermesConnectTrace('history_bootstrap_done', {
+        sessionKeyPresent: Boolean(sessionKeyRef.current),
+      });
     } catch {
       // If optimistic load is already running, let it finish
       if (optimisticHistoryPromise) {
@@ -1013,6 +1069,9 @@ export function useChatHistoryState({
       const fallbackKey = preferredKey ?? mainSessionKey;
       sessionKeyRef.current = fallbackKey;
       setSessionKey(fallbackKey);
+      markHermesConnectTrace('session_key_selected', {
+        source: 'fallback',
+      });
       historyLimitRef.current = HISTORY_PAGE_SIZE;
       setHasMoreHistory(true);
       setHistoryLoaded(false);

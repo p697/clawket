@@ -16,6 +16,7 @@ import { useAppContext } from '../../contexts/AppContext';
 import { useGatewayPatch } from '../../hooks/useGatewayPatch';
 import { analyticsEvents } from '../../services/analytics/events';
 import { GatewayClient } from '../../services/gateway';
+import { loadGatewayToolsConfigBundle } from '../../services/gateway-tools';
 import { useAppTheme } from '../../theme';
 import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
 import type { ToolCatalogEntry, ToolCatalogGroup } from '../../types';
@@ -154,17 +155,14 @@ export const ToolsView = React.forwardRef<ToolsViewHandle, Props>(function Tools
     if (mode === 'refresh') setRefreshing(true);
 
     try {
-      const [catalogResult, configResult] = await Promise.all([
-        gateway.fetchToolsCatalog(agentId),
-        gateway.getConfig(),
-      ]);
-      const extracted = extractAgentToolsConfig(configResult.config, agentId);
-      setGroups(catalogResult.groups);
-      setRawConfig(configResult.config);
-      setConfigHash(configResult.hash);
+      const bundle = await loadGatewayToolsConfigBundle(gateway, agentId);
+      const extracted = extractAgentToolsConfig(bundle.config, agentId);
+      setGroups(bundle.catalog.groups);
+      setRawConfig(bundle.config);
+      setConfigHash(bundle.configHash);
       setSavedConfig(extracted);
       setDraftConfig(extracted);
-      configHashRef.current = configResult.hash;
+      configHashRef.current = bundle.configHash;
       setError(null);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load tools');

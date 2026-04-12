@@ -137,14 +137,83 @@ describe('StorageService gateway config backups', () => {
       url: 'wss://relay.example.com/ws',
       token: undefined,
       password: undefined,
+      backendKind: 'openclaw',
+      transportKind: 'relay',
       mode: 'relay',
+      hermes: undefined,
       relay: {
         serverUrl: 'https://registry.example.com',
         gatewayId: 'gw_123',
         clientToken: 'gct_new',
+        displayName: undefined,
         protocolVersion: 2,
         supportsBootstrap: true,
       },
+    });
+  });
+
+  it('migrates legacy profile configs with explicit OpenClaw backend and transport metadata', async () => {
+    secureStoreValues['clawket.gatewayProfilesConfig.v1'] = JSON.stringify({
+      activeMode: 'tailscale',
+      local: {
+        url: 'http://127.0.0.1:8080',
+        token: 'local-token',
+      },
+      tailscale: {
+        url: 'http://gateway.tailnet.ts.net:8080',
+        token: 'tailscale-token',
+      },
+      cloudflare: {
+        url: '',
+      },
+    });
+
+    const state = await StorageService.getGatewayConfigsState();
+
+    expect(state.activeId).toBe('legacy_tailscale');
+    expect(state.configs).toEqual([
+      expect.objectContaining({
+        id: 'legacy_local',
+        backendKind: 'openclaw',
+        transportKind: 'local',
+        mode: 'local',
+        url: 'http://127.0.0.1:8080',
+        token: 'local-token',
+      }),
+      expect.objectContaining({
+        id: 'legacy_tailscale',
+        backendKind: 'openclaw',
+        transportKind: 'tailscale',
+        mode: 'tailscale',
+        url: 'http://gateway.tailnet.ts.net:8080',
+        token: 'tailscale-token',
+      }),
+    ]);
+  });
+
+  it('migrates the legacy single gateway config with explicit OpenClaw metadata', async () => {
+    secureStoreValues['clawket.gatewayConfig.v1'] = JSON.stringify({
+      url: 'http://127.0.0.1:8080',
+      token: 'legacy-token',
+      password: 'legacy-password',
+    });
+
+    const state = await StorageService.getGatewayConfigsState();
+
+    expect(state).toEqual({
+      activeId: 'legacy_single',
+      configs: [
+        expect.objectContaining({
+          id: 'legacy_single',
+          name: 'Gateway',
+          backendKind: 'openclaw',
+          transportKind: 'local',
+          mode: 'local',
+          url: 'http://127.0.0.1:8080',
+          token: 'legacy-token',
+          password: 'legacy-password',
+        }),
+      ],
     });
   });
 

@@ -7,7 +7,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, X } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { IconButton } from '../../components/ui';
-import { publicAppLinks } from '../../config/public';
+import { useAppContext } from '../../contexts/AppContext';
+import { resolveGatewayDocumentationDescriptor } from '../../services/gateway-doc-links';
 import { useAppTheme } from '../../theme';
 import { FontSize, FontWeight, Space } from '../../theme/tokens';
 import type { ConsoleStackParamList } from './ConsoleTab';
@@ -18,11 +19,13 @@ type DocsRoute = RouteProp<ConsoleStackParamList, 'Docs'>;
 export function DocsScreen(): React.JSX.Element {
   const { theme } = useAppTheme();
   const { t } = useTranslation('console');
+  const { config } = useAppContext();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<DocsNavigation>();
   const route = useRoute<DocsRoute>();
-  const initialUrl = route.params?.url ?? publicAppLinks.docsUrl;
+  const docsDescriptor = useMemo(() => resolveGatewayDocumentationDescriptor(config), [config]);
+  const initialUrl = route.params?.url ?? docsDescriptor.url;
   const webViewRef = useRef<WebView>(null);
   const [canGoBack, setCanGoBack] = useState(false);
   const styles = useMemo(() => createStyles(colors), [theme]);
@@ -72,7 +75,9 @@ export function DocsScreen(): React.JSX.Element {
       ) : (
         <View style={styles.emptyState}>
           <Text style={styles.emptyTitle}>{t('Docs')}</Text>
-          <Text style={styles.emptyDescription}>{t('Documentation is not configured in this build.')}</Text>
+          <Text style={styles.emptyDescription}>
+            {t('Documentation is not configured for this backend in this build.')}
+          </Text>
         </View>
       )}
     </View>

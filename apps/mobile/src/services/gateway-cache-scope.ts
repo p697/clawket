@@ -1,4 +1,5 @@
 import { GatewayConfig } from '../types';
+import { resolveGatewayBackendKind, resolveGatewayTransportKind } from './gateway-backends';
 import { createCompositeHash, createHash } from './crypto-hash';
 
 function normalizeUrl(url?: string): string {
@@ -38,7 +39,8 @@ export function resolveGatewayCacheScopeId(params: {
   }
 
   return `runtime:${createCompositeHash([
-    params.config?.mode ?? 'custom',
+    resolveGatewayBackendKind(params.config),
+    resolveGatewayTransportKind(params.config),
     normalizeUrl(params.config?.url),
     normalizeRelayServerUrl(params.config?.relay?.serverUrl),
     params.config?.relay?.gatewayId?.trim() || '',

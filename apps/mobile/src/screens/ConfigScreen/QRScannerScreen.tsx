@@ -32,7 +32,7 @@ export function QRScannerScreen({ onScanned, onCancel }: Props): React.JSX.Eleme
       } else {
         Alert.alert(
           t('Invalid QR Code'),
-          t('This QR code does not contain valid OpenClaw connection info.'),
+          t('This QR code does not contain valid connection info.'),
           [{ text: t('Try Again', { ns: 'common' }), onPress: () => { lastScanRef.current = ''; scanAcceptedRef.current = false; } }],
         );
       }

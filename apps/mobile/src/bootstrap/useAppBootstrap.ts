@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { GatewayClient } from '../services/gateway';
+import { resolveGatewayBackendKind, resolveGlobalMainSessionKey } from '../services/gateway-backends';
 import { resolveGatewayCacheScopeId } from '../services/gateway-cache-scope';
 import { NodeClient } from '../services/node-client';
 import { LastOpenedSessionSnapshot, StorageService } from '../services/storage';
@@ -11,7 +12,7 @@ import {
   buildPrimarySessionPreview,
   PRIMARY_CACHED_AGENT_ID,
 } from '../utils/primary-session-cache';
-import { sanitizeSnapshotForAgent } from '../utils/agent-session-scope';
+import { resolveMainSessionKey, sanitizeSnapshotForAgent } from '../utils/agent-session-scope';
 
 type Props = {
   gateway: GatewayClient;
@@ -20,6 +21,7 @@ type Props = {
 
 function buildAgentPreview(
   agentId: string,
+  backendKind: 'openclaw' | 'hermes',
   identity?: {
     agentName?: string;
     agentEmoji?: string;
@@ -31,7 +33,9 @@ function buildAgentPreview(
   }
 
   return {
-    sessionKey: `agent:${agentId}:main`,
+    sessionKey: resolveMainSessionKey(agentId, {
+      mainSessionKey: resolveGlobalMainSessionKey(backendKind),
+    }),
     updatedAt: Date.now(),
     agentId,
     agentName: identity?.agentName,
@@ -113,7 +117,14 @@ export function useAppBootstrap({ gateway, nodeClient }: Props) {
           activeConfigId: gatewayConfigsState.activeId,
           config: savedConfig,
         });
-        const initialAgent = savedCurrentAgentId?.trim() || PRIMARY_CACHED_AGENT_ID;
+        const backendKind = resolveGatewayBackendKind(savedConfig);
+        // Hermes phase 1 uses a single global 'main' agent; OpenClaw
+        // restores whichever agent the user had last open. The helper
+        // keeps the dispatch centralized and returns null for OpenClaw
+        // so the legacy fallback path is preserved exactly.
+        const globalMainSessionKey = resolveGlobalMainSessionKey(backendKind);
+        const initialAgent = globalMainSessionKey
+          ?? (savedCurrentAgentId?.trim() || PRIMARY_CACHED_AGENT_ID);
         setActiveGatewayConfigId(gatewayScopeId);
         setDebugMode(debug);
         setShowAgentAvatar(showAvatar);
@@ -131,7 +142,9 @@ export function useAppBootstrap({ gateway, nodeClient }: Props) {
         return StorageService.getLastOpenedSessionSnapshot(gatewayScopeId, initialAgent)
           .catch(() => null)
           .then(async (rawSnapshot) => {
-            const snapshot = sanitizeSnapshotForAgent(rawSnapshot, initialAgent);
+            const snapshot = sanitizeSnapshotForAgent(rawSnapshot, initialAgent, {
+              mainSessionKey: globalMainSessionKey,
+            });
             const cachedAgentIdentity = await StorageService.getCachedAgentIdentity(
               gatewayScopeId,
               initialAgent,
@@ -144,7 +157,7 @@ export function useAppBootstrap({ gateway, nodeClient }: Props) {
                   agentEmoji: snapshot.agentEmoji ?? cachedAgentIdentity?.agentEmoji,
                   agentAvatarUri: snapshot.agentAvatarUri ?? cachedAgentIdentity?.agentAvatarUri,
                 }
-                : buildAgentPreview(initialAgent, cachedAgentIdentity),
+                : buildAgentPreview(initialAgent, backendKind, cachedAgentIdentity),
             );
             setInitialAgentId(initialAgent);
           })

@@ -1,6 +1,8 @@
 import { ConnectionState, GatewayConfig } from '../../../types';
+import { selectByBackend } from '../../../services/gateway-backends';
 
 export type ChatHeaderStatusKind =
+  | 'starting_hermes'
   | 'connecting_gateway'
   | 'reconnecting'
   | 'connecting'
@@ -35,8 +37,16 @@ export function getChatHeaderSyncState(input: ChatHeaderSyncStateInput): {
   }
 
   const isConnecting = input.connectionState !== 'ready' || !input.sessionKey;
+  // The "no session yet" status label depends on whether the backend
+  // still needs to start a local Hermes bridge (Hermes) or just needs to
+  // establish the gateway socket (OpenClaw). Resolution lives in the
+  // shared backend selector so this file has no inline backend check.
+  const awaitingSessionStatus: ChatHeaderStatusKind = selectByBackend(input.config, {
+    openclaw: 'connecting_gateway',
+    hermes: 'starting_hermes',
+  });
   const status = !input.sessionKey
-    ? 'connecting_gateway'
+    ? awaitingSessionStatus
     : input.connectionState === 'reconnecting'
       ? 'reconnecting'
       : input.connectionState === 'connecting' || input.connectionState === 'challenging'

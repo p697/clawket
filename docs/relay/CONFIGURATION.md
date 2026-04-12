@@ -39,6 +39,16 @@ Path: `apps/relay-registry`
    - If unset, relay auth falls back to KV and registry verification paths only.
    - If set on one service, set the same value on both registry and relay.
 
+## Hermes Registry Worker
+
+Path: `apps/hermes-relay-registry`
+
+### Required bindings
+
+1. `HERMES_ROUTES_KV`
+   - Cloudflare KV namespace for Hermes pairing records.
+   - Keep this separate from the OpenClaw `ROUTES_KV` namespace for rollout safety.
+
 ## Relay Worker
 
 Path: `apps/relay-worker`
@@ -85,6 +95,28 @@ Path: `apps/relay-worker`
    - Absolute idle timeout for silent or ghost client sockets.
    - Default in checked-in templates: `600000`.
 
+## Hermes Relay Worker
+
+Path: `apps/hermes-relay-worker`
+
+### Required bindings
+
+1. `HERMES_ROOM`
+   - Durable Object namespace for Hermes relay rooms.
+
+2. `HERMES_ROUTES_KV`
+   - Same Hermes KV namespace used by the Hermes registry worker.
+
+### Vars
+
+1. `REGISTRY_VERIFY_URL`
+   - Base URL of the Hermes registry worker used for relay verification fallback.
+   - Example: `https://hermes-registry.example.com`
+
+2. `PAIRING_SYNC_SECRET`
+   - Optional shared secret for the internal Hermes `client-tokens` sync endpoint.
+   - Must match the Hermes registry worker value when enabled.
+
 ## Checked-In Wrangler Files
 
 The tracked `wrangler.toml` files are open-source-safe templates:
@@ -102,6 +134,11 @@ For local deploys or remote dev against your own Cloudflare account:
 3. Fill in your own `account_id`, KV IDs, and service URLs.
 4. Keep these `wrangler.local.toml` files untracked.
 
+For Hermes relay, also create:
+
+1. `apps/hermes-relay-registry/wrangler.local.toml`
+2. `apps/hermes-relay-worker/wrangler.local.toml`
+
 Repo scripts prefer `wrangler.local.toml` automatically when present.
 
 ## Minimum Self-Hosted Setup
@@ -113,6 +150,8 @@ At minimum, a working deployment needs:
 3. One deployed relay worker with a Durable Object namespace.
 4. `RELAY_REGION_MAP` values that point to the relay worker WebSocket endpoint.
 5. `REGISTRY_VERIFY_URL` that points to the registry worker.
+
+Hermes relay needs its own equivalent set of resources and must not reuse the OpenClaw production bindings during rollout.
 
 ## Account-Safety Rules
 

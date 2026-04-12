@@ -1,0 +1,19 @@
+name = "clawket-hermes-registry"
+main = "src/index.ts"
+compatibility_date = "2026-03-03"
+workers_dev = true
+
+[vars]
+# Checked-in templates must not point at the official hosted deployment by default.
+# Replace these example endpoints and account-bound resource IDs before deploys or
+# remote-binding workflows in your own account.
+# JSON map example:
+# {"cn":"wss://relay.example.com/ws","sg":"wss://relay.example.com/ws","us":"wss://relay.example.com/ws","eu":"wss://relay.example.com/ws"}
+RELAY_REGION_MAP = "{\"cn\":\"wss://hermes-relay.example.com/ws\",\"sg\":\"wss://hermes-relay.example.com/ws\",\"us\":\"wss://hermes-relay.example.com/ws\",\"eu\":\"wss://hermes-relay.example.com/ws\"}"
+PAIR_ACCESS_CODE_TTL_SEC = "600"
+PAIR_CLIENT_TOKEN_MAX = "8"
+
+[[kv_namespaces]]
+binding = "HERMES_ROUTES_KV"
+id = "00000000000000000000000000000000"
+preview_id = "00000000000000000000000000000000"

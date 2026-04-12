@@ -25,16 +25,28 @@ export interface RelayGatewayConfig {
   supportsBootstrap?: boolean;
 }
 
+export interface HermesGatewayConfig {
+  bridgeUrl: string;
+  displayName?: string;
+}
+
+export type GatewayBackendKind = 'openclaw' | 'hermes';
+export type GatewayTransportKind = 'local' | 'tailscale' | 'cloudflare' | 'custom' | 'relay';
+export type GatewayMode = GatewayTransportKind | 'hermes';
+
 export interface GatewayConfig {
   url: string;
   token?: string;
   password?: string;
+  backendKind?: GatewayBackendKind;
+  transportKind?: GatewayTransportKind;
+  /** Transitional legacy field: prefer backendKind + transportKind for new code. */
   mode?: GatewayMode;
   relay?: RelayGatewayConfig;
+  hermes?: HermesGatewayConfig;
   debugMode?: boolean;
 }
 
-export type GatewayMode = 'local' | 'tailscale' | 'cloudflare' | 'custom' | 'relay';
 export type GatewayProfileMode = 'local' | 'tailscale' | 'cloudflare';
 
 export interface GatewayProfileConfig {
@@ -53,11 +65,15 @@ export interface GatewayProfilesConfig {
 export interface SavedGatewayConfig {
   id: string;
   name: string;
+  backendKind?: GatewayBackendKind;
+  transportKind?: GatewayTransportKind;
+  /** Transitional legacy field: prefer backendKind + transportKind for new code. */
   mode: GatewayMode;
   url: string;
   token?: string;
   password?: string;
   relay?: RelayGatewayConfig;
+  hermes?: HermesGatewayConfig;
   createdAt: number;
   updatedAt: number;
 }

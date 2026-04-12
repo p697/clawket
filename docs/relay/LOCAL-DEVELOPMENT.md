@@ -126,3 +126,87 @@ npm run relay:deploy:worker
 ```
 
 These scripts automatically prefer `wrangler.local.toml` when present.
+
+## 11. Hermes Relay Local Development
+
+Hermes relay uses separate workers and separate Wrangler configs:
+
+```bash
+npm run relay:dev:hermes-registry
+npm run relay:dev:hermes-worker
+```
+
+Hermes deploy commands:
+
+```bash
+npm run relay:deploy:hermes-registry
+npm run relay:deploy:hermes-worker
+```
+
+Important:
+
+1. Keep Hermes KV and DO resources separate from OpenClaw.
+2. Do not point Hermes local configs at the production OpenClaw registry or relay.
+3. Do not replace the existing OpenClaw workers when testing Hermes relay rollout.
+
+### Hermes Relay End-To-End Smoke Flow
+
+Start the isolated Hermes workers in two terminals:
+
+```bash
+npm run relay:dev:hermes-registry
+npm run relay:dev:hermes-worker
+```
+
+Generate a Hermes relay QR in a third terminal:
+
+```bash
+npm run bridge:pair:relay:hermes -- --server http://127.0.0.1:8787
+```
+
+That prints a Hermes Relay QR in the terminal and writes a PNG file. Scan it in Clawket to save a Hermes relay connection.
+
+Then start the Hermes relay runtime in a fourth terminal:
+
+```bash
+npm run bridge:run:relay:hermes
+```
+
+If you need to start a standalone local Hermes bridge first, you can still use:
+
+```bash
+npm run bridge:hermes:dev:once
+```
+
+Recommended manual verification order:
+
+1. Pair with `bridge:pair:relay:hermes`
+2. Start the bridge-to-relay runtime with `bridge:run:relay:hermes`
+3. Open the saved Hermes connection in Clawket
+4. Verify chat connect, Console entry, and reconnect after background/foreground
+
+### Hermes Relay On A Real Device
+
+For a phone or any device outside the local machine, do not use the `127.0.0.1` local-only Hermes relay workers. Instead use the device-aware scripts, which detect the current LAN IP and make the registry return a real reachable relay URL:
+
+```bash
+# Terminal 1
+npm run relay:dev:hermes-registry:device
+
+# Terminal 2
+npm run relay:dev:hermes-worker:device
+
+# Terminal 3
+npm run bridge:pair:relay:hermes:device
+
+# Terminal 4
+npm run bridge:run:relay:hermes
+```
+
+If auto-detection picks the wrong interface, pass the host explicitly:
+
+```bash
+npm run relay:dev:hermes-registry:device -- --public-host 192.168.31.41
+npm run relay:dev:hermes-worker:device -- --public-host 192.168.31.41
+npm run bridge:pair:relay:hermes:device -- --public-host 192.168.31.41
+```

@@ -223,6 +223,8 @@ jest.mock('../../../services/analytics/events', () => ({
 function createGateway(connectionState: 'ready' | 'connecting' = 'ready') {
   return {
     getConnectionState: jest.fn(() => connectionState),
+    getBackendKind: jest.fn(() => 'openclaw' as const),
+    getBackendCapabilities: jest.fn(() => ({ chatAbort: true })),
     getBaseUrl: jest.fn(() => ''),
     fetchIdentity: jest.fn().mockResolvedValue({}),
     probeConnection: jest.fn().mockResolvedValue(true),

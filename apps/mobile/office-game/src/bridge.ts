@@ -92,6 +92,13 @@ interface GatewayStateMessage {
   state: "configured" | "none";
 }
 
+interface OfficeInteractionConfigMessage {
+  type: "OFFICE_INTERACTION_CONFIG";
+  disabledCharacterIds?: string[];
+  hiddenDeskLabelIds?: string[];
+  disabledPropActions?: string[];
+}
+
 export interface DailyReportData {
   mainMessages: number;
   mainUserMessages: number;
@@ -142,6 +149,7 @@ type BridgeMessage =
   | MemoryFileCountMessage
   | PendingPairCountMessage
   | CronFailureCountMessage
+  | OfficeInteractionConfigMessage
   | GatewayStateMessage
   | DailyReportDataMessage
   | AgentNameMessage
@@ -181,6 +189,9 @@ let cronFailureCount = 0;
 let gatewayState: "configured" | "none" = "none";
 let dailyReportData: DailyReportData | null = null;
 let agentName: string | null = null;
+let disabledCharacterIds = new Set<string>();
+let hiddenDeskLabelIds = new Set<string>();
+let disabledPropActions = new Set<string>();
 
 export const EVENING_START_HOUR = 18;
 export const EVENING_END_HOUR = 22;
@@ -256,6 +267,11 @@ function handleMessage(event: MessageEvent): void {
       break;
     case "GATEWAY_STATE":
       gatewayState = data.state;
+      break;
+    case "OFFICE_INTERACTION_CONFIG":
+      disabledCharacterIds = new Set(Array.isArray(data.disabledCharacterIds) ? data.disabledCharacterIds : []);
+      hiddenDeskLabelIds = new Set(Array.isArray(data.hiddenDeskLabelIds) ? data.hiddenDeskLabelIds : []);
+      disabledPropActions = new Set(Array.isArray(data.disabledPropActions) ? data.disabledPropActions : []);
       break;
     case "DAILY_REPORT_DATA":
       dailyReportData = data.data;
@@ -464,6 +480,18 @@ export function getDailyReportData(): DailyReportData | null {
 /** Return the agent name received from RN. null = not yet received. */
 export function getAgentName(): string | null {
   return agentName;
+}
+
+export function isOfficeCharacterDisabled(characterId: string): boolean {
+  return disabledCharacterIds.has(characterId);
+}
+
+export function isDeskLabelHidden(characterId: string): boolean {
+  return hiddenDeskLabelIds.has(characterId);
+}
+
+export function isOfficeActionDisabled(action: string): boolean {
+  return disabledPropActions.has(action);
 }
 
 /** Derive bubble context from current bridge state (no new bridge messages needed). */

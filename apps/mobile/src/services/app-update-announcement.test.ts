@@ -34,7 +34,7 @@ describe('app update announcement service', () => {
   });
 
   it('returns null when the app version is not in the unified release history', () => {
-    expect(getCurrentAppUpdateAnnouncement('2.0.0')).toBeNull();
+    expect(getCurrentAppUpdateAnnouncement('3.0.0')).toBeNull();
   });
 
   it('returns null when the app version is empty', () => {
@@ -86,7 +86,7 @@ describe('app update announcement service', () => {
     await markCurrentAppUpdateAnnouncementShown();
 
     expect(AsyncStorage.setItem).toHaveBeenCalledWith(
-      'clawket.appUpdateAnnouncementSeen.v1:1.10.0',
+      'clawket.appUpdateAnnouncementSeen.v1:2.0.0',
       '1',
     );
   });

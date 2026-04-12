@@ -2,9 +2,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { Alert } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useGatewayPatch } from '../../../hooks/useGatewayPatch';
+import { getGatewayBackendCapabilities } from '../../../services/gateway-backends';
 import { GatewayClient, GatewayInfo } from '../../../services/gateway';
+import {
+  DEFAULT_GATEWAY_RUNTIME_SETTINGS,
+  loadGatewayRuntimeSettingsBundle,
+} from '../../../services/gateway-runtime-settings';
 import { isNewerVersion } from '../../../utils/version';
-import { buildGatewayRuntimePatch, parseGatewayRuntimeSettings } from '../../../utils/gateway-settings';
+import { buildGatewayRuntimePatch } from '../../../utils/gateway-settings';
 import { publicAppLinks } from '../../../config/public';
 
 const ACTIVE_HOURS_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
@@ -41,6 +46,7 @@ async function fetchLatestOpenClawVersion(url: string): Promise<string | null> {
 
 export function useGatewayRuntimeSettings({ gateway, gatewayEpoch, hasActiveGateway }: Params) {
   const { t } = useTranslation('config');
+  const capabilities = getGatewayBackendCapabilities(gateway.getBackendKind());
   const [heartbeatEvery, setHeartbeatEvery] = useState('');
   const [heartbeatActiveStart, setHeartbeatActiveStart] = useState('');
   const [heartbeatActiveEnd, setHeartbeatActiveEnd] = useState('');
@@ -65,51 +71,38 @@ export function useGatewayRuntimeSettings({ gateway, gatewayEpoch, hasActiveGate
       setGatewaySettingsError(null);
       setGatewaySettingsHash(null);
       setAvailableModels([]);
-      setHeartbeatEvery('');
-      setHeartbeatActiveStart('');
-      setHeartbeatActiveEnd('');
-      setHeartbeatActiveTimezone('');
-      setHeartbeatSession('');
-      setHeartbeatModel('');
-      setDefaultModel('');
-      setFallbackModels([]);
-      setThinkingDefault('');
+      setHeartbeatEvery(DEFAULT_GATEWAY_RUNTIME_SETTINGS.heartbeatEvery);
+      setHeartbeatActiveStart(DEFAULT_GATEWAY_RUNTIME_SETTINGS.heartbeatActiveStart);
+      setHeartbeatActiveEnd(DEFAULT_GATEWAY_RUNTIME_SETTINGS.heartbeatActiveEnd);
+      setHeartbeatActiveTimezone(DEFAULT_GATEWAY_RUNTIME_SETTINGS.heartbeatActiveTimezone);
+      setHeartbeatSession(DEFAULT_GATEWAY_RUNTIME_SETTINGS.heartbeatSession);
+      setHeartbeatModel(DEFAULT_GATEWAY_RUNTIME_SETTINGS.heartbeatModel);
+      setDefaultModel(DEFAULT_GATEWAY_RUNTIME_SETTINGS.defaultModel);
+      setFallbackModels(DEFAULT_GATEWAY_RUNTIME_SETTINGS.fallbackModels);
+      setThinkingDefault(DEFAULT_GATEWAY_RUNTIME_SETTINGS.thinkingDefault);
       setGatewayInfo(null);
       setGatewayUpdateInfo(null);
       return;
     }
     setLoadingGatewaySettings(true);
     try {
-      const [configResult, modelsResult] = await Promise.allSettled([
-        gateway.getConfig(),
-        gateway.listModels(),
-      ]);
-      if (configResult.status !== 'fulfilled') {
-        throw configResult.reason;
-      }
-      const configPayload = configResult.value;
-      const parsed = parseGatewayRuntimeSettings(configPayload.config);
-      setHeartbeatEvery(parsed.heartbeatEvery);
-      setHeartbeatActiveStart(parsed.heartbeatActiveStart);
-      setHeartbeatActiveEnd(parsed.heartbeatActiveEnd);
-      setHeartbeatActiveTimezone(parsed.heartbeatActiveTimezone);
-      setHeartbeatSession(parsed.heartbeatSession);
-      setHeartbeatModel(parsed.heartbeatModel);
-      setDefaultModel(parsed.defaultModel);
-      setFallbackModels(parsed.fallbackModels);
-      setThinkingDefault(parsed.thinkingDefault);
+      const bundle = await loadGatewayRuntimeSettingsBundle(gateway, {
+        canReadConfig: capabilities.configRead,
+        canListModels: capabilities.modelCatalog,
+      });
+      setHeartbeatEvery(bundle.settings.heartbeatEvery);
+      setHeartbeatActiveStart(bundle.settings.heartbeatActiveStart);
+      setHeartbeatActiveEnd(bundle.settings.heartbeatActiveEnd);
+      setHeartbeatActiveTimezone(bundle.settings.heartbeatActiveTimezone);
+      setHeartbeatSession(bundle.settings.heartbeatSession);
+      setHeartbeatModel(bundle.settings.heartbeatModel);
+      setDefaultModel(bundle.settings.defaultModel);
+      setFallbackModels(bundle.settings.fallbackModels);
+      setThinkingDefault(bundle.settings.thinkingDefault);
       setGatewayInfo(gateway.getGatewayInfo());
-      setGatewaySettingsHash(configPayload.hash);
-      if (modelsResult.status === 'fulfilled') {
-        setAvailableModels(
-          modelsResult.value
-            .map((model) => `${model.provider}/${model.id}`)
-            .filter((value, index, arr) => arr.indexOf(value) === index)
-            .sort((a, b) => a.localeCompare(b)),
-        );
-      } else {
-        setAvailableModels([]);
-      }
+      setGatewaySettingsHash(bundle.configHash);
+      setAvailableModels(bundle.availableModels);
+      setGatewayUpdateInfo(null);
       setGatewaySettingsError(null);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : t('Failed to load gateway settings');
@@ -117,7 +110,7 @@ export function useGatewayRuntimeSettings({ gateway, gatewayEpoch, hasActiveGate
     } finally {
       setLoadingGatewaySettings(false);
     }
-  }, [gateway, hasActiveGateway]);
+  }, [capabilities.configRead, capabilities.modelCatalog, gateway, hasActiveGateway]);
 
   useEffect(() => {
     void loadGatewaySettings();
@@ -155,6 +148,10 @@ export function useGatewayRuntimeSettings({ gateway, gatewayEpoch, hasActiveGate
   const saveGatewaySettings = useCallback(async () => {
     if (!hasActiveGateway) {
       Alert.alert(t('No Active Gateway'), t('Please add and activate a gateway connection first.'));
+      return;
+    }
+    if (!capabilities.configWrite) {
+      Alert.alert(t('Unavailable'), t('This backend does not support editing runtime settings yet.'));
       return;
     }
     if (!gatewaySettingsHash) {
@@ -205,6 +202,7 @@ export function useGatewayRuntimeSettings({ gateway, gatewayEpoch, hasActiveGate
     });
     setSavingGatewaySettings(false);
   }, [
+    capabilities.configWrite,
     defaultModel,
     fallbackModels,
     gatewaySettingsHash,
@@ -222,6 +220,10 @@ export function useGatewayRuntimeSettings({ gateway, gatewayEpoch, hasActiveGate
 
   const restartGateway = useCallback(async () => {
     if (!hasActiveGateway) {
+      return;
+    }
+    if (!capabilities.configWrite) {
+      setGatewaySettingsError(t('This backend does not support restart from the app yet.'));
       return;
     }
 
@@ -262,7 +264,7 @@ export function useGatewayRuntimeSettings({ gateway, gatewayEpoch, hasActiveGate
     });
 
     setRestartingGateway(false);
-  }, [gateway, gatewaySettingsHash, hasActiveGateway, loadGatewaySettings, patchWithRestart, t]);
+  }, [capabilities.configWrite, gateway, gatewaySettingsHash, hasActiveGateway, loadGatewaySettings, patchWithRestart, t]);
 
   return {
     heartbeatEvery,
@@ -285,6 +287,9 @@ export function useGatewayRuntimeSettings({ gateway, gatewayEpoch, hasActiveGate
     setThinkingDefault,
     gatewayInfo,
     gatewayUpdateInfo,
+    supportsRuntimeSettings: capabilities.configRead,
+    supportsRuntimeSettingsWrite: capabilities.configWrite,
+    supportsModelSelection: capabilities.modelSelection,
     availableModels,
     loadingGatewaySettings,
     savingGatewaySettings,

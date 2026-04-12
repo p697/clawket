@@ -83,6 +83,30 @@ ensure_distribution_identity() {
   exit 1
 }
 
+resolve_destination() {
+  if [[ -n "${MACOS_DESTINATION:-}" ]]; then
+    echo "$MACOS_DESTINATION"
+    return
+  fi
+
+  local destinations
+  destinations="$(xcodebuild -workspace "$WORKSPACE_PATH" -scheme "$SCHEME_NAME" -showdestinations 2>/dev/null || true)"
+
+  if printf '%s\n' "$destinations" | grep -Fq "{ platform:macOS, variant:Mac Catalyst"; then
+    echo "$DESTINATION"
+    return
+  fi
+
+  local mac_id
+  mac_id="$(printf '%s\n' "$destinations" | sed -n '/platform:macOS/s/.*id:\([^,}]*\).*/\1/p' | head -n 1 | tr -d ' ')"
+  if [[ -n "$mac_id" ]]; then
+    echo "id=${mac_id}"
+    return
+  fi
+
+  echo "$DESTINATION"
+}
+
 apply_maccatalyst_patch() {
   local target_file="$ROOT_DIR/node_modules/expo-modules-core/ios/Core/SharedObjects/SharedObject.swift"
 
@@ -133,20 +157,52 @@ File.write(path, text)
 RUBY
 }
 
+apply_react_native_jsi_patch() {
+  local target_file="$ROOT_DIR/node_modules/react-native/ReactCommon/jsi/jsi/jsi.h"
+
+  if [[ ! -f "$target_file" ]]; then
+    echo "Expected file not found: ${target_file}"
+    exit 1
+  fi
+
+  if grep -Fq 'const_cast<char *>(buffer.data())' "$target_file"; then
+    return
+  fi
+
+  echo "Applying React Native JSI SDK compatibility patch..."
+  TARGET_FILE="$target_file" ruby <<'RUBY'
+path = ENV.fetch('TARGET_FILE')
+text = File.read(path)
+needle = "        buffer.data(),\n"
+replacement = "        const_cast<char *>(buffer.data()),\n"
+
+unless text.include?(needle)
+  warn "Failed to find JSI buffer.data() call in #{path}"
+  exit 1
+end
+
+text.sub!(needle, replacement)
+File.write(path, text)
+RUBY
+}
+
 echo "Installing dependencies..."
 (cd "$ROOT_DIR" && npm install)
 
 apply_maccatalyst_patch
+apply_react_native_jsi_patch
 ensure_pods
 ensure_distribution_identity
 
 cd "$ROOT_DIR"
 
+RESOLVED_DESTINATION="$(resolve_destination)"
+
 XCODE_ARGS=(
   -workspace "$WORKSPACE_PATH"
   -scheme "$SCHEME_NAME"
   -configuration "$CONFIGURATION"
-  -destination "$DESTINATION"
+  -destination "$RESOLVED_DESTINATION"
   -archivePath "$ARCHIVE_PATH"
   archive
 )
@@ -175,6 +231,7 @@ if [[ -n "$AUTH_KEY_PATH" || -n "$AUTH_KEY_ID" || -n "$AUTH_ISSUER_ID" ]]; then
 fi
 
 echo "Archiving Mac Catalyst app..."
+echo "Using destination: ${RESOLVED_DESTINATION}"
 xcodebuild "${XCODE_ARGS[@]}"
 
 echo "Archive: ${ARCHIVE_PATH}"

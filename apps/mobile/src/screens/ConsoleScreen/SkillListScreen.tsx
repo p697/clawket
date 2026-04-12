@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   RefreshControl,
   SectionList,
@@ -8,7 +8,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { ChevronDown, ChevronRight, Plus } from 'lucide-react-native';
+import { MenuAction, MenuView } from '@react-native-menu/menu';
+import { ArrowUpDown, ChevronDown, ChevronRight, Plus } from 'lucide-react-native';
 import { CommonActions, useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
@@ -24,6 +25,8 @@ import { useTranslation } from 'react-i18next';
 import { useAppContext } from '../../contexts/AppContext';
 import { useNativeStackModalHeader } from '../../hooks/useNativeStackModalHeader';
 import { analyticsEvents } from '../../services/analytics/events';
+import { resolveGatewayBackendKind } from '../../services/gateway-backends';
+import { StorageService, getDefaultSkillListSortMode } from '../../services/storage';
 import { useAppTheme } from '../../theme';
 import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
 import type { SkillStatusEntry, SkillStatusReport } from '../../types';
@@ -37,6 +40,8 @@ type SkillSection = {
   order: number;
   data: SkillStatusEntry[];
 };
+
+type SkillSortMode = 'name' | 'createdAsc' | 'createdDesc' | 'updatedAsc' | 'updatedDesc';
 
 const SOURCE_GROUPS: Array<{ key: string; title: string; order: number; sources: string[] }> = [
   { key: 'workspace', title: 'Workspace', order: 0, sources: ['workspace', 'openclaw-workspace'] },
@@ -72,12 +77,32 @@ function resolveSkillStatus(skill: SkillStatusEntry): {
   return { label: 'Unavailable', colorToken: 'warning' };
 }
 
+function sortSkills(skills: SkillStatusEntry[], sortMode: SkillSortMode): SkillStatusEntry[] {
+  return [...skills].sort((left, right) => {
+    if (sortMode === 'createdAsc') {
+      const diff = (left.createdAtMs ?? 0) - (right.createdAtMs ?? 0);
+      if (diff !== 0) return diff;
+    } else if (sortMode === 'createdDesc') {
+      const diff = (right.createdAtMs ?? 0) - (left.createdAtMs ?? 0);
+      if (diff !== 0) return diff;
+    } else if (sortMode === 'updatedAsc') {
+      const diff = (left.updatedAtMs ?? 0) - (right.updatedAtMs ?? 0);
+      if (diff !== 0) return diff;
+    } else if (sortMode === 'updatedDesc') {
+      const diff = (right.updatedAtMs ?? 0) - (left.updatedAtMs ?? 0);
+      if (diff !== 0) return diff;
+    }
+    return left.name.localeCompare(right.name);
+  });
+}
+
 export function SkillListScreen(): React.JSX.Element {
-  const { gateway, gatewayEpoch, currentAgentId } = useAppContext();
+  const { gateway, gatewayEpoch, currentAgentId, config } = useAppContext();
   const { theme } = useAppTheme();
   const { t } = useTranslation('console');
   const navigation = useNavigation<SkillListNavigation>();
   const styles = useMemo(() => createStyles(theme.colors), [theme]);
+  const backendKind = resolveGatewayBackendKind(config);
 
   const handleOpenDiscover = useCallback(() => {
     analyticsEvents.clawHubCreateTapped({
@@ -119,15 +144,6 @@ export function SkillListScreen(): React.JSX.Element {
     }
   }, [navigation]);
 
-  useNativeStackModalHeader({
-    navigation,
-    title: t('Skills'),
-    onClose: () => navigation.goBack(),
-    rightContent: (
-      <HeaderActionButton icon={Plus} onPress={handleOpenDiscover} size={20} />
-    ),
-  });
-
   const [report, setReport] = useState<SkillStatusReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
@@ -135,6 +151,65 @@ export function SkillListScreen(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [filterText, setFilterText] = useState('');
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
+  const [sortMode, setSortMode] = useState<SkillSortMode>(
+    getDefaultSkillListSortMode(backendKind),
+  );
+
+  const sortMenuActions = useMemo<MenuAction[]>(() => [
+    { id: 'name', title: t('Sort by name'), state: sortMode === 'name' ? 'on' : 'off' },
+    { id: 'createdAsc', title: t('Sort by creation time ↑'), state: sortMode === 'createdAsc' ? 'on' : 'off' },
+    { id: 'createdDesc', title: t('Sort by creation time ↓'), state: sortMode === 'createdDesc' ? 'on' : 'off' },
+    { id: 'updatedAsc', title: t('Sort by updated time ↑'), state: sortMode === 'updatedAsc' ? 'on' : 'off' },
+    { id: 'updatedDesc', title: t('Sort by updated time ↓'), state: sortMode === 'updatedDesc' ? 'on' : 'off' },
+  ], [sortMode, t]);
+
+  useEffect(() => {
+    let active = true;
+    StorageService.getSkillListSortMode(backendKind)
+      .then((storedMode) => {
+        if (!active) return;
+        setSortMode(storedMode);
+      })
+      .catch(() => {
+        // Best-effort preference only.
+      });
+    return () => {
+      active = false;
+    };
+  }, [backendKind]);
+
+  useEffect(() => {
+    void StorageService.setSkillListSortMode(backendKind, sortMode);
+  }, [backendKind, sortMode]);
+
+  useNativeStackModalHeader({
+    navigation,
+    title: t('Skills'),
+    onClose: () => navigation.goBack(),
+    rightContent: (
+      <View style={styles.headerActions}>
+        <MenuView
+          actions={sortMenuActions}
+          onPressAction={({ nativeEvent }) => {
+            if (
+              nativeEvent.event === 'name'
+              || nativeEvent.event === 'createdAsc'
+              || nativeEvent.event === 'createdDesc'
+              || nativeEvent.event === 'updatedAsc'
+              || nativeEvent.event === 'updatedDesc'
+            ) {
+              setSortMode(nativeEvent.event);
+            }
+          }}
+        >
+          <View>
+            <HeaderActionButton icon={ArrowUpDown} onPress={() => undefined} size={18} />
+          </View>
+        </MenuView>
+        <HeaderActionButton icon={Plus} onPress={handleOpenDiscover} size={20} />
+      </View>
+    ),
+  });
 
   const loadSkills = useCallback(async (mode: 'initial' | 'refresh' | 'background' = 'initial') => {
     if (mode === 'initial') setLoading(true);
@@ -184,7 +259,7 @@ export function SkillListScreen(): React.JSX.Element {
 
     const nextSections = Array.from(grouped.values()).map((section) => ({
       ...section,
-      data: [...section.data].sort((a, b) => a.name.localeCompare(b.name)),
+      data: sortSkills(section.data, sortMode),
     }));
 
     nextSections.sort((a, b) => {
@@ -193,7 +268,7 @@ export function SkillListScreen(): React.JSX.Element {
     });
 
     return nextSections;
-  }, [skills]);
+  }, [skills, sortMode]);
 
   const filteredSections = useMemo(() => {
     const needle = filterText.trim().toLowerCase();
@@ -353,6 +428,11 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       marginHorizontal: Space.lg,
       marginTop: ScreenLayout.listTop,
       marginBottom: Space.xs,
+    },
+    headerActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Space.xs,
     },
     sectionHeader: {
       flexDirection: 'row',

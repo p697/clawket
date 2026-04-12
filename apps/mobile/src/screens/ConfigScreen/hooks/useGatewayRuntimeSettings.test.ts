@@ -40,6 +40,7 @@ describe('useGatewayRuntimeSettings', () => {
       }),
       listModels: jest.fn().mockResolvedValue([]),
       getGatewayInfo: jest.fn().mockReturnValue(null),
+      getBackendKind: jest.fn().mockReturnValue('openclaw'),
     } as any;
 
     const { result } = renderHook(() => useGatewayRuntimeSettings({

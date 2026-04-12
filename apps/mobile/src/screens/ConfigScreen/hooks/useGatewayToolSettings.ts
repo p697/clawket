@@ -2,11 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useGatewayPatch } from '../../../hooks/useGatewayPatch';
 import { GatewayClient } from '../../../services/gateway';
 import {
+  DEFAULT_GATEWAY_TOOL_SETTINGS,
+  loadGatewayToolSettingsBundle,
+} from '../../../services/gateway-tool-settings';
+import {
   ExecAsk,
   ExecSecurity,
   GatewayToolSettings,
   buildGatewayToolPatch,
-  parseGatewayToolSettings,
 } from '../../../utils/gateway-tool-settings';
 
 type Params = {
@@ -31,16 +34,7 @@ export function useGatewayToolSettings({ gateway, gatewayEpoch, hasActiveGateway
   const { patchWithRestart } = useGatewayPatch(gateway);
 
   // Keep a ref of latest settings so auto-save always uses current values
-  const settingsRef = useRef<GatewayToolSettings>({
-    webSearchEnabled: true,
-    webFetchEnabled: true,
-    execSecurity: 'deny',
-    execAsk: 'on-miss',
-    mediaImageEnabled: true,
-    mediaAudioEnabled: true,
-    mediaVideoEnabled: true,
-    linksEnabled: true,
-  });
+  const settingsRef = useRef<GatewayToolSettings>(DEFAULT_GATEWAY_TOOL_SETTINGS);
 
   const applyParsed = useCallback((parsed: GatewayToolSettings) => {
     setWebSearchEnabledState(parsed.webSearchEnabled);
@@ -58,25 +52,14 @@ export function useGatewayToolSettings({ gateway, gatewayEpoch, hasActiveGateway
     if (!hasActiveGateway) {
       setError(null);
       hashRef.current = null;
-      const defaults: GatewayToolSettings = {
-        webSearchEnabled: true,
-        webFetchEnabled: true,
-        execSecurity: 'deny',
-        execAsk: 'on-miss',
-        mediaImageEnabled: true,
-        mediaAudioEnabled: true,
-        mediaVideoEnabled: true,
-        linksEnabled: true,
-      };
-      applyParsed(defaults);
+      applyParsed(DEFAULT_GATEWAY_TOOL_SETTINGS);
       return;
     }
     setLoading(true);
     try {
-      const configPayload = await gateway.getConfig();
-      const parsed = parseGatewayToolSettings(configPayload.config);
-      applyParsed(parsed);
-      hashRef.current = configPayload.hash;
+      const bundle = await loadGatewayToolSettingsBundle(gateway);
+      applyParsed(bundle.settings);
+      hashRef.current = bundle.configHash;
       setError(null);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to load tool settings';
