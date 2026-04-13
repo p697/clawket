@@ -1,4 +1,4 @@
-import { Linking, Platform } from 'react-native';
+import { Linking } from 'react-native';
 import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
 import type { useAppTheme } from '../../theme';
 
@@ -79,7 +79,7 @@ export function createChatMarkdownStyle(
 }
 
 export function getChatMarkdownFlavor(): 'github' | undefined {
-  return Platform.OS === 'ios' ? 'github' : undefined;
+  return 'github';
 }
 
 export function openChatMarkdownLink({ url }: { url: string }): void {
