@@ -219,6 +219,20 @@ function isDuplicateHermesHistoryMessage(
   return false;
 }
 
+function compareHermesHistoryMessages(left: HermesHistoryMessage, right: HermesHistoryMessage): number {
+  const timestampDelta = left.timestamp - right.timestamp;
+  if (timestampDelta !== 0) return timestampDelta;
+  return getHermesHistoryRoleRank(left.role) - getHermesHistoryRoleRank(right.role);
+}
+
+function getHermesHistoryRoleRank(role: string): number {
+  if (role === 'system') return 0;
+  if (role === 'user') return 1;
+  if (role === 'assistant') return 2;
+  if (role === 'toolResult') return 3;
+  return 4;
+}
+
 type HermesBridgeStoreState = {
   version: 1;
   sessions: HermesBridgeSession[];
@@ -1333,9 +1347,7 @@ export class HermesLocalBridge {
     });
 
     const localSession = this.sessionStore.findSession(key);
-    const lastNativeTimestamp = native.messages.at(-1)?.timestamp ?? 0;
-    const appendedLocalMessages = (localSession?.messages ?? [])
-      .filter((message) => message.ts > lastNativeTimestamp)
+    const localMessages = (localSession?.messages ?? [])
       .filter((message) => !isDuplicateHermesHistoryMessage(message, native.messages))
       .map((message) => ({
         role: message.role,
@@ -1352,7 +1364,7 @@ export class HermesLocalBridge {
         toolFinishedAt: message.toolFinishedAt,
       }));
 
-    const mergedMessages = [...native.messages, ...appendedLocalMessages];
+    const mergedMessages = [...native.messages, ...localMessages].sort(compareHermesHistoryMessages);
     const trimmedMessages = limit > 0 ? mergedMessages.slice(-limit) : mergedMessages;
     return {
       messages: trimmedMessages,

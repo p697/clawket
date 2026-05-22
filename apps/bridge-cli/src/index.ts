@@ -290,6 +290,7 @@ async function main(): Promise<void> {
 }
 
 const HERMES_BRIDGE_CONFIG_PATH = join(homedir(), '.clawket', 'hermes-bridge.json');
+const HERMES_API_ENV_PATH = join(homedir(), '.hermes', '.env');
 
 type HermesBridgeCliConfig = {
   token: string;
@@ -302,6 +303,7 @@ type HermesBridgeRuntimeOptions = {
   host: string;
   port: number;
   apiBaseUrl: string;
+  apiKey: string | null;
   token: string;
   replaceExisting: boolean;
   restartHermes: boolean;
@@ -579,11 +581,13 @@ async function handleHermesCommand(args: string[], jsonOutput: boolean): Promise
     const host = readFlag(subArgs, '--host') ?? saved?.host ?? '0.0.0.0';
     const port = Number(readFlag(subArgs, '--port') ?? saved?.port ?? '4319');
     const apiBaseUrl = readFlag(subArgs, '--api-url') ?? saved?.apiBaseUrl ?? 'http://127.0.0.1:8642';
+    const apiKey = resolveHermesApiKey(subArgs);
     const token = readFlag(subArgs, '--token') ?? process.env.CLAWKET_HERMES_BRIDGE_TOKEN ?? saved?.token ?? randomUUID();
     const bridge = await startHermesBridgeRuntime({
       host,
       port,
       apiBaseUrl,
+      apiKey,
       token,
       replaceExisting: hasFlag(subArgs, '--replace') || !hasFlag(subArgs, '--no-replace'),
       restartHermes: hasFlag(subArgs, '--restart-hermes'),
@@ -616,6 +620,7 @@ async function handleHermesCommand(args: string[], jsonOutput: boolean): Promise
     const host = readFlag(subArgs, '--host') ?? saved?.host ?? '0.0.0.0';
     const port = Number(readFlag(subArgs, '--port') ?? saved?.port ?? '4319');
     const apiBaseUrl = readFlag(subArgs, '--api-url') ?? saved?.apiBaseUrl ?? 'http://127.0.0.1:8642';
+    const apiKey = resolveHermesApiKey(subArgs);
     const token = readFlag(subArgs, '--token') ?? process.env.CLAWKET_HERMES_BRIDGE_TOKEN ?? saved?.token ?? randomUUID();
     const publicHost = readFlag(subArgs, '--public-host') ?? detectLanIp();
     if (!publicHost) {
@@ -626,6 +631,7 @@ async function handleHermesCommand(args: string[], jsonOutput: boolean): Promise
       host,
       port,
       apiBaseUrl,
+      apiKey,
       token,
       replaceExisting: hasFlag(subArgs, '--replace') || !hasFlag(subArgs, '--no-replace'),
       restartHermes: hasFlag(subArgs, '--restart-hermes'),
@@ -1248,7 +1254,7 @@ function isKnownClawketBridgeCliCommand(command: string): boolean {
 }
 
 async function startHermesBridgeRuntime(options: HermesBridgeRuntimeOptions): Promise<HermesLocalBridge> {
-  const { host, port, apiBaseUrl, token, replaceExisting, restartHermes, startHermesIfNeeded } = options;
+  const { host, port, apiBaseUrl, apiKey, token, replaceExisting, restartHermes, startHermesIfNeeded } = options;
 
   const existingBridgePids = listHermesBridgeRuntimePids();
   if (existingBridgePids.length > 0) {
@@ -1279,6 +1285,7 @@ async function startHermesBridgeRuntime(options: HermesBridgeRuntimeOptions): Pr
     host,
     port,
     apiBaseUrl,
+    apiKey: apiKey ?? undefined,
     bridgeToken: token,
     startHermesIfNeeded,
     onLog: (line) => {
@@ -1456,12 +1463,13 @@ async function ensureHermesRelayBackgroundRuntime(args: string[]): Promise<strin
     stopHermesBridgeRuntimePids(relayPids);
   }
 
-  const { host, port, apiBaseUrl, token } = await ensureHermesPairingRuntimeReady(args);
+  const { host, port, apiBaseUrl, apiKey, token } = await ensureHermesPairingRuntimeReady(args);
   const relayStartedAt = Date.now();
   startDetachedHermesRelayRuntime({
     host,
     port,
     apiBaseUrl,
+    apiKey,
     token,
     restartHermes: hasFlag(args, '--restart-hermes'),
   });
@@ -1494,6 +1502,7 @@ async function ensureHermesBridgeBackgroundRuntime(input: {
     host: input.config.host,
     port: input.config.port,
     apiBaseUrl: input.config.apiBaseUrl,
+    apiKey: resolveHermesApiKey([]),
     token: input.config.token,
     restartHermes: false,
   });
@@ -1516,6 +1525,7 @@ async function ensureHermesRelayBackgroundRuntimeWithConfig(input: {
     host: input.config.host,
     port: input.config.port,
     apiBaseUrl: input.config.apiBaseUrl,
+    apiKey: resolveHermesApiKey([]),
     token: input.config.token,
     restartHermes: false,
   });
@@ -1678,6 +1688,46 @@ function readFlag(args: string[], name: string): string | null {
   return value?.trim() ? value.trim() : null;
 }
 
+function resolveHermesApiKey(args: string[]): string | null {
+  const explicit = readFlag(args, '--api-key');
+  if (explicit) return explicit;
+
+  const envValue = process.env.CLAWKET_HERMES_API_KEY?.trim()
+    || process.env.API_SERVER_KEY?.trim()
+    || process.env.HERMES_API_KEY?.trim();
+  if (envValue) return envValue;
+
+  try {
+    const raw = readFileSync(HERMES_API_ENV_PATH, 'utf8');
+    const match = raw.match(/^\s*(?:export\s+)?API_SERVER_KEY\s*=\s*(.*)\s*$/m);
+    if (!match) return null;
+    return stripEnvQuotes(match[1].trim()) || null;
+  } catch {
+    return null;
+  }
+}
+
+function stripEnvQuotes(value: string): string {
+  if (
+    (value.startsWith('"') && value.endsWith('"'))
+    || (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    return value.slice(1, -1);
+  }
+  return value;
+}
+
+function buildHermesChildEnv(token: string, apiKey: string | null): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    CLAWKET_HERMES_BRIDGE_TOKEN: token,
+  };
+  if (apiKey) {
+    env.CLAWKET_HERMES_API_KEY = apiKey;
+  }
+  return env;
+}
+
 function hasFlag(args: string[], name: string): boolean {
   return args.includes(name);
 }
@@ -1731,6 +1781,7 @@ async function ensureHermesPairingRuntimeReady(args: string[]): Promise<{
   host: string;
   port: number;
   apiBaseUrl: string;
+  apiKey: string | null;
   token: string;
 }> {
   const startedAt = Date.now();
@@ -1739,6 +1790,7 @@ async function ensureHermesPairingRuntimeReady(args: string[]): Promise<{
   const host = readFlag(args, '--host') ?? saved?.host ?? '0.0.0.0';
   const port = Number(readFlag(args, '--port') ?? saved?.port ?? '4319');
   const apiBaseUrl = readFlag(args, '--api-url') ?? saved?.apiBaseUrl ?? 'http://127.0.0.1:8642';
+  const apiKey = resolveHermesApiKey(args);
   const token = readFlag(args, '--token') ?? process.env.CLAWKET_HERMES_BRIDGE_TOKEN ?? saved?.token ?? randomUUID();
   const existingBridgePids = listHermesBridgeRuntimePids();
 
@@ -1760,6 +1812,7 @@ async function ensureHermesPairingRuntimeReady(args: string[]): Promise<{
     host,
     port,
     apiBaseUrl,
+    apiKey,
     token,
     restartHermes: hasFlag(args, '--restart-hermes'),
   });
@@ -1769,13 +1822,14 @@ async function ensureHermesPairingRuntimeReady(args: string[]): Promise<{
     port,
   });
 
-  return { host, port, apiBaseUrl, token };
+  return { host, port, apiBaseUrl, apiKey, token };
 }
 
 async function resolveExistingHermesPairingRuntime(saved: HermesBridgeCliConfig | null): Promise<{
   host: string;
   port: number;
   apiBaseUrl: string;
+  apiKey: string | null;
   token: string;
 }> {
   if (!saved?.token) {
@@ -1791,6 +1845,7 @@ async function resolveExistingHermesPairingRuntime(saved: HermesBridgeCliConfig 
     host: runningBridge?.host ?? saved.host,
     port: runningBridge?.port ?? saved.port,
     apiBaseUrl: health.hermesApiBaseUrl ?? saved.apiBaseUrl,
+    apiKey: resolveHermesApiKey([]),
     token: saved.token,
   };
 }
@@ -1799,16 +1854,15 @@ function startDetachedHermesBridgeRuntime(input: {
   host: string;
   port: number;
   apiBaseUrl: string;
+  apiKey: string | null;
   token: string;
   restartHermes: boolean;
 }): void {
   const logFiles = getHermesProcessLogPaths();
   const stdoutFd = openSync(logFiles.bridgeLogPath, 'a');
   const stderrFd = openSync(logFiles.bridgeErrorLogPath, 'a');
-  // Pass the bridge token via the environment instead of argv so it does
-  // not appear in `ps`, /proc/<pid>/cmdline, or shell history. The child
-  // `clawket hermes run` handler reads `CLAWKET_HERMES_BRIDGE_TOKEN` as a
-  // fallback when `--token` is not passed explicitly.
+  // Pass secrets via the environment instead of argv so they do not appear
+  // in `ps`, /proc/<pid>/cmdline, or shell history.
   const childArgs = [
     resolveCurrentScriptPath(),
     'hermes',
@@ -1827,7 +1881,7 @@ function startDetachedHermesBridgeRuntime(input: {
   const child = spawn(process.execPath, childArgs, {
     detached: true,
     stdio: ['ignore', stdoutFd, stderrFd],
-    env: { ...process.env, CLAWKET_HERMES_BRIDGE_TOKEN: input.token },
+    env: buildHermesChildEnv(input.token, input.apiKey),
   });
   closeSync(stdoutFd);
   closeSync(stderrFd);
@@ -1838,17 +1892,15 @@ function startDetachedHermesRelayRuntime(input: {
   host: string;
   port: number;
   apiBaseUrl: string;
+  apiKey: string | null;
   token: string;
   restartHermes: boolean;
 }): void {
   const logFiles = getHermesProcessLogPaths();
   const stdoutFd = openSync(logFiles.relayLogPath, 'a');
   const stderrFd = openSync(logFiles.relayErrorLogPath, 'a');
-  // Pass the bridge token via the environment instead of argv so it does
-  // not appear in `ps`, /proc/<pid>/cmdline, or shell history. The child
-  // `clawket hermes relay run` handler (via ensureHermesPairingRuntimeReady)
-  // reads `CLAWKET_HERMES_BRIDGE_TOKEN` as a fallback when `--token` is not
-  // passed explicitly.
+  // Pass secrets via the environment instead of argv so they do not appear
+  // in `ps`, /proc/<pid>/cmdline, or shell history.
   const childArgs = [
     resolveCurrentScriptPath(),
     'hermes',
@@ -1867,7 +1919,7 @@ function startDetachedHermesRelayRuntime(input: {
   const child = spawn(process.execPath, childArgs, {
     detached: true,
     stdio: ['ignore', stdoutFd, stderrFd],
-    env: { ...process.env, CLAWKET_HERMES_BRIDGE_TOKEN: input.token },
+    env: buildHermesChildEnv(input.token, input.apiKey),
   });
   closeSync(stdoutFd);
   closeSync(stderrFd);
@@ -2054,9 +2106,9 @@ function sleep(ms: number): Promise<void> {
 
 function printHelp(): void {
   console.log([
-    'clawket pair [--backend <openclaw|hermes>] [--server <url>] [--name <displayName>] [--public-host <192.168.x.x>] [--port <4319>] [--qr-file <path>] [--json] [--force]',
-    'clawket pair local [--backend <openclaw|hermes>] [--url <ws://host:port>] [--public-host <192.168.x.x>] [--port <4319>] [--qr-file <path>] [--json]',
-    'clawket pair --local [--backend <openclaw|hermes>] [--url <ws://host:port>] [--public-host <192.168.x.x>] [--port <4319>] [--qr-file <path>] [--json]',
+    'clawket pair [--backend <openclaw|hermes>] [--server <url>] [--name <displayName>] [--public-host <192.168.x.x>] [--port <4319>] [--api-key <key>] [--qr-file <path>] [--json] [--force]',
+    'clawket pair local [--backend <openclaw|hermes>] [--url <ws://host:port>] [--public-host <192.168.x.x>] [--port <4319>] [--api-key <key>] [--qr-file <path>] [--json]',
+    'clawket pair --local [--backend <openclaw|hermes>] [--url <ws://host:port>] [--public-host <192.168.x.x>] [--port <4319>] [--api-key <key>] [--qr-file <path>] [--json]',
     'clawket refresh-code [--qr-file <path>] [--json]',
     'clawket start',
     'clawket install',
@@ -2068,11 +2120,11 @@ function printHelp(): void {
     'clawket logs [--last <2m>] [--lines <200>] [--errors] [--follow] [--json]',
     'clawket doctor [--json]',
     'clawket run [--gateway-url <ws://127.0.0.1:18789>] [--replace]',
-    'clawket hermes dev [--public-host <192.168.x.x>] [--host <0.0.0.0>] [--port <4319>] [--api-url <http://127.0.0.1:8642>] [--qr-file <path>] [--restart-hermes] [--json]',
-    'clawket hermes run [--host <0.0.0.0>] [--port <4319>] [--api-url <http://127.0.0.1:8642>] [--restart-hermes]',
-    'clawket hermes pair local [--public-host <192.168.x.x>] [--port <4319>] [--qr-file <path>] [--json]',
+    'clawket hermes dev [--public-host <192.168.x.x>] [--host <0.0.0.0>] [--port <4319>] [--api-url <http://127.0.0.1:8642>] [--api-key <key>] [--qr-file <path>] [--restart-hermes] [--json]',
+    'clawket hermes run [--host <0.0.0.0>] [--port <4319>] [--api-url <http://127.0.0.1:8642>] [--api-key <key>] [--restart-hermes]',
+    'clawket hermes pair local [--public-host <192.168.x.x>] [--port <4319>] [--api-key <key>] [--qr-file <path>] [--json]',
     'clawket hermes pair relay [--server <url>] [--name <displayName>] [--qr-file <path>] [--json]',
-    'clawket hermes relay run [--host <127.0.0.1>] [--port <4319>] [--api-url <http://127.0.0.1:8642>] [--restart-hermes] [--json]',
+    'clawket hermes relay run [--host <127.0.0.1>] [--port <4319>] [--api-url <http://127.0.0.1:8642>] [--api-key <key>] [--restart-hermes] [--json]',
   ].join('\n'));
 }
 

@@ -1453,6 +1453,69 @@ describe('HermesLocalBridge history metadata', () => {
     });
   });
 
+  it('keeps local user prompts ordered before newer native assistant replies', async () => {
+    const hermesStateDbPath = await createHermesStateDbPath();
+    const hermesHomePath = await createHermesHomePath();
+    execFileSync('python3', [
+      '-c',
+      [
+        'import sqlite3, sys',
+        'db_path = sys.argv[1]',
+        'conn = sqlite3.connect(db_path)',
+        'conn.execute("""CREATE TABLE sessions (',
+        '  id TEXT PRIMARY KEY, source TEXT NOT NULL, user_id TEXT, model TEXT, model_config TEXT, system_prompt TEXT,',
+        '  parent_session_id TEXT, started_at REAL NOT NULL, ended_at REAL, end_reason TEXT,',
+        '  message_count INTEGER DEFAULT 0, tool_call_count INTEGER DEFAULT 0,',
+        '  input_tokens INTEGER DEFAULT 0, output_tokens INTEGER DEFAULT 0, cache_read_tokens INTEGER DEFAULT 0, cache_write_tokens INTEGER DEFAULT 0, reasoning_tokens INTEGER DEFAULT 0,',
+        '  billing_provider TEXT, billing_base_url TEXT, billing_mode TEXT, estimated_cost_usd REAL, actual_cost_usd REAL, cost_status TEXT, cost_source TEXT, pricing_version TEXT, title TEXT',
+        ')""")',
+        'conn.execute("""CREATE TABLE messages (',
+        '  id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, role TEXT NOT NULL, content TEXT,',
+        '  tool_call_id TEXT, tool_calls TEXT, tool_name TEXT, timestamp REAL NOT NULL, token_count INTEGER, finish_reason TEXT, reasoning TEXT, reasoning_details TEXT, codex_reasoning_items TEXT',
+        ')""")',
+        'conn.execute("INSERT INTO sessions (id, source, model, billing_provider, started_at, title) VALUES (?, ?, ?, ?, ?, ?)", ("clawket-hermes:main", "api_server", "gpt-5.3-codex", "openai-codex", 1, "Hermes"))',
+        'conn.execute("INSERT INTO messages (session_id, role, content, timestamp) VALUES (?, ?, ?, ?)", ("clawket-hermes:main", "assistant", "native answer", 2))',
+        'conn.commit()',
+        'conn.close()',
+      ].join('\n'),
+      hermesStateDbPath,
+    ]);
+
+    const bridge = new HermesLocalBridge({
+      hermesStateDbPath,
+      hermesHomePath,
+      sessionStorePath: await createSessionStorePath(),
+      startHermesIfNeeded: false,
+    });
+
+    (bridge as any).sessionStore.appendMessage('main', {
+      role: 'user',
+      content: 'local question',
+      ts: 1_000,
+      runId: 'run_local',
+    });
+
+    await expect((bridge as any).dispatchRequest('chat.history', {
+      sessionKey: 'main',
+      limit: 50,
+    })).resolves.toEqual({
+      thinkingLevel: 'medium',
+      sessionId: 'clawket-hermes:main',
+      messages: [
+        expect.objectContaining({
+          role: 'user',
+          content: 'local question',
+        }),
+        expect.objectContaining({
+          role: 'assistant',
+          content: 'native answer',
+          model: 'gpt-5.3-codex',
+          provider: 'openai-codex',
+        }),
+      ],
+    });
+  });
+
   it('preserves timestamp and idempotencyKey for user history entries', async () => {
     vi.stubGlobal('fetch', vi.fn(async () =>
       new Response(JSON.stringify({ run_id: 'run_1' }), {

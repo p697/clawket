@@ -414,6 +414,23 @@ describe('cli pairing output', () => {
     exitSpy.mockRestore();
   });
 
+  it('passes the Hermes API key from ~/.hermes/.env into local bridge runs', async () => {
+    mkdirSync(join(process.env.HOME as string, '.hermes'), { recursive: true });
+    writeFileSync(join(process.env.HOME as string, '.hermes', '.env'), 'API_SERVER_KEY=api-server-key\n', 'utf8');
+    process.argv = ['node', 'clawket', 'hermes', 'run'];
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined as never));
+
+    await import('./index.js');
+
+    await vi.waitFor(() => {
+      expect(hermesLocalBridgeCtorMock).toHaveBeenCalledWith(expect.objectContaining({
+        apiKey: 'api-server-key',
+      }));
+    });
+
+    exitSpy.mockRestore();
+  });
+
   it('runs Hermes local dev as a single command with QR output', async () => {
     process.argv = ['node', 'clawket', 'hermes', 'dev', '--public-host', '192.168.31.41', '--port', '4321'];
     execFileSyncMock.mockReturnValue(`40160 ${process.argv[1]} hermes dev --public-host 192.168.31.41 --port 4321\n`);
@@ -481,6 +498,7 @@ describe('cli pairing output', () => {
 
   it('supports Hermes local pairing through pair local --backend hermes', async () => {
     mkdirSync(join(process.env.HOME as string, '.hermes', 'hermes-agent'), { recursive: true });
+    writeFileSync(join(process.env.HOME as string, '.hermes', '.env'), 'API_SERVER_KEY=api-server-key\n', 'utf8');
     process.argv = [
       'node',
       'clawket',
@@ -511,6 +529,16 @@ describe('cli pairing output', () => {
       );
     });
     expect(buildLocalPairingInfoMock).not.toHaveBeenCalled();
+    expect(spawnMock).toHaveBeenCalledWith(
+      process.execPath,
+      expect.not.arrayContaining(['--api-key', 'api-server-key']),
+      expect.objectContaining({
+        env: expect.objectContaining({
+          CLAWKET_HERMES_API_KEY: 'api-server-key',
+          CLAWKET_HERMES_BRIDGE_TOKEN: 'hermes-token',
+        }),
+      }),
+    );
   });
 
   it('reuses the running Hermes bridge config for local pairing instead of transient CLI flags', async () => {
