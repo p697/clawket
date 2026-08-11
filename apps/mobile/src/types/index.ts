@@ -31,7 +31,7 @@ export interface HermesGatewayConfig {
 }
 
 export type GatewayBackendKind = 'openclaw' | 'hermes' | 'youmind';
-export type GatewayTransportKind = 'local' | 'tailscale' | 'cloudflare' | 'custom' | 'relay';
+export type GatewayTransportKind = 'local' | 'tailscale' | 'bonjour' | 'multipeer' | 'cloudflare' | 'custom' | 'relay';
 export type GatewayMode = GatewayTransportKind | 'hermes';
 
 export interface GatewayConfig {

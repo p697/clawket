@@ -47,6 +47,11 @@ function describeAction(action: DeepLinkAction): { title: string; message: strin
         title: 'Connect to Server',
         message: `Connect to ${action.url}? This will change your active gateway connection.`,
       };
+    case 'hermes-pair':
+      return {
+        title: 'Pair Hermes Bridge',
+        message: `Connect to Hermes via ${action.transportKind}${action.displayName ? ` (${action.displayName})` : ''} at ${action.bridgeUrl}?`,
+      };
   }
 }
 
@@ -78,6 +83,24 @@ function executeAction(action: DeepLinkAction, deps: DeepLinkDeps) {
       const config: GatewayConfig = { url: action.url, token: action.token, password: action.password };
       StorageService.setGatewayConfig(config);
       onSaved(config, resolveGatewayCacheScopeId({ config }));
+      break;
+    }
+    case 'hermes-pair': {
+      const config: GatewayConfig = {
+        url: action.url,
+        backendKind: 'hermes',
+        transportKind: action.transportKind,
+        mode: 'hermes',
+        hermes: {
+          bridgeUrl: action.bridgeUrl,
+          displayName: action.displayName,
+        },
+      };
+      StorageService.setGatewayConfig(config);
+      onSaved(config, resolveGatewayCacheScopeId({ config }));
+      if (rootNavigationRef.isReady()) {
+        rootNavigationRef.navigate('MainTabs', { screen: 'Chat' });
+      }
       break;
     }
   }

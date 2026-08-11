@@ -24,10 +24,14 @@ export interface LegacyPairingQrPayloadV1 {
   password?: string | null;
 }
 
+export type HermesLocalPairingTransport = 'local' | 'tailscale' | 'bonjour' | 'multipeer';
+
 export interface HermesLocalPairingQrPayloadV1 {
   version: 1;
   kind: 'clawket_hermes_local';
   mode: 'hermes';
+  /** How the client should treat the host in this payload. Defaults to local. */
+  transport?: HermesLocalPairingTransport;
   url: string;
   expiresAt: number;
   hermes: {
@@ -122,6 +126,7 @@ export function buildHermesLocalPairingQrPayload(input: {
   bridgeHttpUrl: string;
   displayName?: string | null;
   expiresAt?: number;
+  transport?: HermesLocalPairingTransport | null;
 }): string {
   const payload: HermesLocalPairingQrPayloadV1 = {
     version: 1,
@@ -136,7 +141,25 @@ export function buildHermesLocalPairingQrPayload(input: {
   if (input.displayName?.trim()) {
     payload.hermes.displayName = input.displayName.trim();
   }
+  if (input.transport && input.transport !== 'local') {
+    payload.transport = input.transport;
+  }
   return JSON.stringify(payload);
+}
+
+/**
+ * Deep-link / AirDrop handoff URL. The mobile app opens this and applies the
+ * same Hermes local pairing payload that a QR scan would.
+ */
+export function buildHermesLocalPairingDeepLink(input: {
+  bridgeWsUrl: string;
+  bridgeHttpUrl: string;
+  displayName?: string | null;
+  transport?: HermesLocalPairingTransport | null;
+  expiresAt?: number;
+}): string {
+  const payload = buildHermesLocalPairingQrPayload(input);
+  return `clawket://hermes-pair?payload=${encodeURIComponent(payload)}`;
 }
 
 export function buildHermesRelayPairingQrPayload(input: {

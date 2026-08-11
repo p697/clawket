@@ -2,7 +2,7 @@
   "expo": {
     "name": "Clawket",
     "slug": "clawket",
-    "version": "2.1.0",
+    "version": "3.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -32,7 +32,8 @@
         "CFBundleDevelopmentRegion": "en",
         "UIPrefersShowingLanguageSettings": true
       },
-      "appleTeamId": "C8TM82D73W"
+      "appleTeamId": "C8TM82D73W",
+      "buildNumber": "260810004"
     },
     "android": {
       "adaptiveIcon": {

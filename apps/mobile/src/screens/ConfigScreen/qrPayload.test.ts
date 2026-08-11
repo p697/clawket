@@ -119,6 +119,26 @@ describe('parseQRPayload', () => {
       expect(result?.hermes?.displayName).toBe('Local Hermes');
     });
 
+    it('honors transport on Hermes local payloads (tailscale/bonjour/multipeer)', () => {
+      for (const transport of ['tailscale', 'bonjour', 'multipeer'] as const) {
+        const payload = JSON.stringify({
+          version: 1,
+          kind: 'clawket_hermes_local',
+          mode: 'hermes',
+          transport,
+          url: 'ws://100.64.1.9:4319/v1/hermes/ws?token=abc',
+          expiresAt: Date.now() + 600_000,
+          hermes: {
+            bridgeUrl: 'http://100.64.1.9:4319',
+            displayName: 'Hermes',
+          },
+        });
+        const result = parseQRPayload(payload);
+        expect(result?.backendKind).toBe('hermes');
+        expect(result?.transportKind).toBe(transport);
+      }
+    });
+
     it('rejects a Hermes local payload missing bridgeUrl', () => {
       const payload = JSON.stringify({
         version: 1,

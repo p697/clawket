@@ -153,6 +153,8 @@ const HERMES_THINKING_LEVELS: ThinkingLevel[] = ['off', 'minimal', 'low', 'mediu
 export function isGatewayTransportKind(value: unknown): value is GatewayTransportKind {
   return value === 'local'
     || value === 'tailscale'
+    || value === 'bonjour'
+    || value === 'multipeer'
     || value === 'cloudflare'
     || value === 'custom'
     || value === 'relay';
@@ -259,6 +261,10 @@ export function getGatewayModeLabel(input: GatewayLike): string {
       return 'Local';
     case 'tailscale':
       return 'Tailscale';
+    case 'bonjour':
+      return 'Bonjour';
+    case 'multipeer':
+      return 'Multipeer';
     case 'cloudflare':
       return 'Cloudflare';
     default:

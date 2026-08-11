@@ -52,7 +52,7 @@ type Props = {
   insets: EdgeInsets;
   onOpenSidebar: () => void;
   onAddGatewayConnection: () => void;
-  onOpenQuickConnectionFlow: (flow: 'local' | 'youmind') => void;
+  onOpenQuickConnectionFlow: (flow: 'local' | 'youmind' | 'tailscale' | 'bonjour' | 'multipeer' | 'airdrop') => void;
   onManageAgents: () => void;
   onOpenAgentSessionsBoard?: () => void;
   openAgentsModalRequestAt?: number | null;
@@ -92,7 +92,7 @@ function AnimatedEntrance({ children }: { children: React.ReactNode }): React.JS
 
 function InitializationView({ styles, onOpenQuickConnectionFlow, t }: {
   styles: ReturnType<typeof createStyles>;
-  onOpenQuickConnectionFlow: (flow: 'local' | 'youmind') => void;
+  onOpenQuickConnectionFlow: (flow: 'local' | 'youmind' | 'tailscale' | 'bonjour' | 'multipeer' | 'airdrop') => void;
   t: (key: string, options?: { ns?: string }) => string;
 }): React.JSX.Element {
   const fadeAnim = useRef(new Animated.Value(0)).current;

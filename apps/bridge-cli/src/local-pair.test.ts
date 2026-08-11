@@ -3,6 +3,7 @@ import {
   buildGatewayControlUiOrigin,
   buildLocalPairingInfo,
   detectLanIp,
+  detectTailscaleIp,
   normalizeExplicitGatewayUrl,
   rewriteGatewayHost,
   scoreLanCandidate,
@@ -15,6 +16,14 @@ const { execFileSyncMock } = vi.hoisted(() => ({
 vi.mock('node:child_process', () => ({
   execFileSync: execFileSyncMock,
 }));
+
+vi.mock('node:os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:os')>();
+  return {
+    ...actual,
+    networkInterfaces: vi.fn(() => ({})),
+  };
+});
 
 describe('local pair helpers', () => {
   const originalPlatform = process.platform;
@@ -95,5 +104,36 @@ describe('local pair helpers', () => {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
     });
+  });
+
+  it('detects the Tailscale IP from utun4 on macOS', () => {
+    Object.defineProperty(process, 'platform', { value: 'darwin' });
+    execFileSyncMock.mockImplementationOnce(() => '100.89.167.39\n');
+
+    expect(detectTailscaleIp()).toBe('100.89.167.39');
+    expect(execFileSyncMock).toHaveBeenCalledWith('ipconfig', ['getifaddr', 'utun4'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+  });
+
+  it('prefers an explicitly requested Tailscale interface', () => {
+    Object.defineProperty(process, 'platform', { value: 'darwin' });
+    execFileSyncMock.mockImplementationOnce(() => '100.64.1.2\n');
+
+    expect(detectTailscaleIp({ preferredInterfaceName: 'utun7' })).toBe('100.64.1.2');
+    expect(execFileSyncMock).toHaveBeenCalledWith('ipconfig', ['getifaddr', 'utun7'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+  });
+
+  it('returns null when no Tailscale interface has an address', () => {
+    Object.defineProperty(process, 'platform', { value: 'darwin' });
+    execFileSyncMock.mockImplementation(() => {
+      throw new Error('no address');
+    });
+
+    expect(detectTailscaleIp()).toBeNull();
   });
 });

@@ -91,6 +91,7 @@ vi.mock('./local-pair.js', () => ({
   buildGatewayControlUiOrigin: vi.fn(),
   buildLocalPairingInfo: buildLocalPairingInfoMock,
   detectLanIp: vi.fn(() => '192.168.31.41'),
+  detectTailscaleIp: vi.fn(() => '100.89.167.39'),
 }));
 
 vi.mock('./metadata.js', () => ({
@@ -119,8 +120,10 @@ vi.mock('node:child_process', () => ({
 vi.mock('@clawket/bridge-core', () => ({
   buildHermesLocalPairingQrPayload: buildHermesLocalPairingQrPayloadMock,
   clearServiceState: vi.fn(),
+  createBonjourAdvertiser: vi.fn(),
   deleteHermesRelayConfig: vi.fn(),
   deletePairingConfig: vi.fn(),
+  detectInterfaceIp: vi.fn(() => '192.168.31.41'),
   getDefaultBridgeDisplayName: vi.fn(() => 'Lucy'),
   getHermesProcessLogPaths: getHermesProcessLogPathsMock,
   getHermesRelayConfigPath: vi.fn(() => '/tmp/hermes-relay.json'),
@@ -132,6 +135,7 @@ vi.mock('@clawket/bridge-core', () => ({
   getServiceStatus: getServiceStatusMock,
   installService: installServiceMock,
   isAutostartUnsupportedError: vi.fn(() => false),
+  isPairingTransport: vi.fn((value) => ['local', 'tailscale', 'bonjour', 'multipeer', 'relay', 'cloudflare'].includes(value)),
   listRuntimeProcesses: vi.fn(() => []),
   pairGateway: pairGatewayMock,
   pairHermesRelay: pairHermesRelayMock,
@@ -714,7 +718,7 @@ describe('cli pairing output', () => {
       }),
       'utf8',
     );
-    process.argv = ['node', 'clawket', 'hermes', 'relay', 'run', '--json'];
+    process.argv = ['node', 'clawket', 'hermes', 'relay', 'run', '--json', '--token', 'test'];
     hermesLocalBridgeCtorMock.mockImplementation(() => ({
       start: vi.fn().mockResolvedValue(undefined),
       stop: vi.fn().mockResolvedValue(undefined),

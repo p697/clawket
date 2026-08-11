@@ -82,7 +82,11 @@ function useSteps(
   ];
 }
 
-export function ConnectionHelpQuick(): React.JSX.Element {
+export function ConnectionHelpQuick({
+  initialMode,
+}: {
+  initialMode?: import('./quickConnectGuide').QuickConnectPairMode;
+} = {}): React.JSX.Element {
   const { t } = useTranslation('config');
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme.colors), [theme]);
@@ -90,7 +94,7 @@ export function ConnectionHelpQuick(): React.JSX.Element {
   return (
     <View style={styles.sectionContainer}>
       <Text style={styles.title}>{t('How to Connect')}</Text>
-      <QuickConnectGuideCard />
+      <QuickConnectGuideCard initialMode={initialMode} />
     </View>
   );
 }

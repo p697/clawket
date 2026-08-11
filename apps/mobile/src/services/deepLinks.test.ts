@@ -55,6 +55,40 @@ describe('parseDeepLink', () => {
     });
   });
 
+  describe('hermes-pair route (AirDrop / share-sheet)', () => {
+    it('parses a JSON payload deep link', () => {
+      const payload = encodeURIComponent(JSON.stringify({
+        version: 1,
+        kind: 'clawket_hermes_local',
+        mode: 'hermes',
+        transport: 'tailscale',
+        url: 'ws://100.64.1.2:4319/v1/hermes/ws?token=abc',
+        hermes: { bridgeUrl: 'http://100.64.1.2:4319', displayName: 'Studio' },
+      }));
+      const result = parseDeepLink(`clawket://hermes-pair?payload=${payload}`);
+      expect(result).toEqual({
+        type: 'hermes-pair',
+        url: 'ws://100.64.1.2:4319/v1/hermes/ws?token=abc',
+        bridgeUrl: 'http://100.64.1.2:4319',
+        transportKind: 'tailscale',
+        displayName: 'Studio',
+      });
+    });
+
+    it('parses explicit query params', () => {
+      const result = parseDeepLink(
+        'clawket://hermes-pair?url=ws%3A%2F%2F192.168.1.5%3A4319%2Fv1%2Fhermes%2Fws&bridgeUrl=http%3A%2F%2F192.168.1.5%3A4319&transport=bonjour&displayName=LAN',
+      );
+      expect(result).toEqual({
+        type: 'hermes-pair',
+        url: 'ws://192.168.1.5:4319/v1/hermes/ws',
+        bridgeUrl: 'http://192.168.1.5:4319',
+        transportKind: 'bonjour',
+        displayName: 'LAN',
+      });
+    });
+  });
+
   describe('edge cases', () => {
     it('returns null for invalid URL', () => {
       expect(parseDeepLink('not a url')).toBeNull();

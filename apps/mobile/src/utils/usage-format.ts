@@ -50,7 +50,7 @@ export function formatDayLabel(dateStr: string): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
   if (!match) return dateStr;
   const [, y, m, d] = match;
-  const date = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d)));
+  const date = new Date(Number(y), Number(m) - 1, Number(d));
   if (Number.isNaN(date.valueOf())) return dateStr;
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }

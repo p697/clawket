@@ -111,21 +111,21 @@ export function ChatScreen({ openSidebarRequestAt, openAgentSessionsBoardRequest
     navigateToConfigHome();
   }, [navigateToConfigHome]);
 
-  const handleOpenQuickConnectionFlow = React.useCallback((flow: 'local' | 'youmind') => {
+  const handleOpenQuickConnectionFlow = React.useCallback((flow: 'local' | 'youmind' | 'tailscale' | 'bonjour' | 'multipeer' | 'airdrop') => {
     requestConfigAddConnection({
       tab: 'quick',
-      flow,
+      flow: flow === 'youmind' ? 'youmind' : 'local',
     });
     navigateToConfigHome();
   }, [navigateToConfigHome]);
 
   const handleNavigateToConfigAddConnection = React.useCallback((options?: {
     tab?: 'quick' | 'manual';
-    flow?: 'local' | 'youmind';
+    flow?: 'local' | 'youmind' | 'tailscale' | 'bonjour' | 'multipeer' | 'airdrop';
   }) => {
     requestConfigAddConnection({
       tab: options?.tab === 'manual' ? 'manual' : 'quick',
-      flow: options?.flow,
+      flow: options?.flow === 'youmind' ? 'youmind' : options?.flow ? 'local' : undefined,
     });
     navigateToConfigHome();
   }, [navigateToConfigHome]);

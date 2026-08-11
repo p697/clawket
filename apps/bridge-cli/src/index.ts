@@ -14,18 +14,22 @@ import {
   summarizeDoctorReport,
 } from './diagnostics.js';
 import { parseLookbackToMs } from './log-parse.js';
-import { buildGatewayControlUiOrigin, buildLocalPairingInfo, detectLanIp } from './local-pair.js';
+import { buildGatewayControlUiOrigin, buildLocalPairingInfo, detectLanIp, detectTailscaleIp } from './local-pair.js';
 import { readCliVersion } from './metadata.js';
 import { buildLocalPairingJson, buildPairingJson } from './pairing-output.js';
 import { writePairingQrPng, writeRawQrPng } from './qr-file.js';
 import { decidePairServiceAction } from './service-decision.js';
 import {
   clearServiceState,
+  createBonjourAdvertiser,
+  type BonjourAdvertiser,
+  type BonjourOptions,
   deletePairingConfig,
   deleteHermesRelayConfig,
   getHermesProcessLogPaths,
   getHermesRelayConfigPath,
   getPairingConfigPath,
+  buildHermesLocalPairingDeepLink,
   buildHermesLocalPairingQrPayload,
   pairHermesRelay,
   getServicePaths,
@@ -49,6 +53,8 @@ import {
   type PairingInfo,
   type ServiceStatus,
   writeServiceState,
+  isPairingTransport,
+  type PairingTransport,
 } from '@clawket/bridge-core';
 import {
   BridgeRuntime,
@@ -154,7 +160,7 @@ async function main(): Promise<void> {
     deleteHermesBridgeCliConfig();
     console.log(`Cleared pairing config: ${getPairingConfigPath()}`);
     console.log(`Cleared Hermes relay config: ${getHermesRelayConfigPath()}`);
-    console.log(`Cleared Hermes bridge config: ${HERMES_BRIDGE_CONFIG_PATH}`);
+    console.log(`Cleared Hermes bridge config: ${getHermesBridgeConfigPath()}`);
     return;
   }
 
@@ -289,7 +295,9 @@ async function main(): Promise<void> {
   printHelp();
 }
 
-const HERMES_BRIDGE_CONFIG_PATH = join(homedir(), '.clawket', 'hermes-bridge.json');
+function getHermesBridgeConfigPath(): string {
+  return join(process.env.HOME ?? homedir(), '.clawket', 'hermes-bridge.json');
+}
 
 type HermesBridgeCliConfig = {
   token: string;
@@ -313,12 +321,13 @@ type HermesLocalPairingResult = {
   bridgeWsUrl: string;
   publicHost: string;
   qrPayload: string;
+  deepLink: string;
   qrImagePath: string;
 };
 
 type PairBackendKind = 'openclaw' | 'hermes';
 
-type PairTransportKind = 'relay' | 'local';
+type PairTransportKind = 'relay' | 'local' | PairingTransport;
 
 type PairSuccessResult = {
   backend: PairBackendKind;
@@ -580,6 +589,7 @@ async function handleHermesCommand(args: string[], jsonOutput: boolean): Promise
     const port = Number(readFlag(subArgs, '--port') ?? saved?.port ?? '4319');
     const apiBaseUrl = readFlag(subArgs, '--api-url') ?? saved?.apiBaseUrl ?? 'http://127.0.0.1:8642';
     const token = readFlag(subArgs, '--token') ?? process.env.CLAWKET_HERMES_BRIDGE_TOKEN ?? saved?.token ?? randomUUID();
+    const advertiseBonjour = hasFlag(subArgs, '--advertise-bonjour');
     const bridge = await startHermesBridgeRuntime({
       host,
       port,
@@ -590,11 +600,19 @@ async function handleHermesCommand(args: string[], jsonOutput: boolean): Promise
       startHermesIfNeeded: !hasFlag(subArgs, '--no-start-hermes'),
     });
 
+    const publicHost = readFlag(subArgs, '--public-host') ?? detectLanIp() ?? '127.0.0.1';
+    const bonjour = advertiseBonjour
+      ? await startBonjourAdvertiser({ host: publicHost, port, token, transport: 'local' })
+      : null;
+
     if (!jsonOutput) {
       console.log(`Hermes bridge URL: ${bridge.getHttpUrl()}`);
       console.log(`Hermes bridge WS: ${bridge.getWsUrl()}`);
       console.log(`Hermes API: ${apiBaseUrl}`);
       console.log(`Hermes bridge health: ${bridge.getHttpUrl()}/health`);
+      if (bonjour) {
+        console.log(`Bonjour service: ${bonjour.getService()?.name ?? 'advertising...'}`);
+      }
       console.log('');
       console.log(`Hermes local bridge is running. Press Ctrl+C to stop.`);
       console.log('');
@@ -604,10 +622,11 @@ async function handleHermesCommand(args: string[], jsonOutput: boolean): Promise
         bridgeUrl: bridge.getHttpUrl(),
         wsUrl: bridge.getWsUrl(),
         apiBaseUrl,
+        bonjour: Boolean(bonjour),
       });
     }
 
-    await keepHermesBridgeAlive(bridge);
+    await keepHermesBridgeAliveWithBonjour(bridge, bonjour);
     return;
   }
 
@@ -617,9 +636,11 @@ async function handleHermesCommand(args: string[], jsonOutput: boolean): Promise
     const port = Number(readFlag(subArgs, '--port') ?? saved?.port ?? '4319');
     const apiBaseUrl = readFlag(subArgs, '--api-url') ?? saved?.apiBaseUrl ?? 'http://127.0.0.1:8642';
     const token = readFlag(subArgs, '--token') ?? process.env.CLAWKET_HERMES_BRIDGE_TOKEN ?? saved?.token ?? randomUUID();
-    const publicHost = readFlag(subArgs, '--public-host') ?? detectLanIp();
+    const transport = readPairingTransportFlag(subArgs) ?? 'local';
+    const advertiseBonjour = hasFlag(subArgs, '--advertise-bonjour') || transport === 'bonjour';
+    const publicHost = readFlag(subArgs, '--public-host') ?? detectHostForTransport(transport);
     if (!publicHost) {
-      throw new Error('Failed to determine a LAN IP address for Hermes pairing. Pass --public-host explicitly.');
+      throw new Error(`Failed to determine a ${transport} IP address for Hermes dev pairing. Pass --public-host explicitly.`);
     }
 
     const bridge = await startHermesBridgeRuntime({
@@ -637,16 +658,21 @@ async function handleHermesCommand(args: string[], jsonOutput: boolean): Promise
       token,
       qrFile: readFlag(subArgs, '--qr-file'),
     });
+    const bonjour = advertiseBonjour
+      ? await startBonjourAdvertiser({ host: publicHost, port, token, transport })
+      : null;
 
     if (jsonOutput) {
       printJson({
         ok: true,
         mode: 'hermes-dev',
+        transport,
         bridgeUrl: pairing.bridgeHttpUrl,
         wsUrl: pairing.bridgeWsUrl,
         publicHost: pairing.publicHost,
         apiBaseUrl,
         qrImagePath: pairing.qrImagePath,
+        bonjour: Boolean(bonjour),
       });
     } else {
       console.log(`Hermes bridge URL: ${pairing.bridgeHttpUrl}`);
@@ -654,6 +680,12 @@ async function handleHermesCommand(args: string[], jsonOutput: boolean): Promise
       console.log(`Hermes API: ${apiBaseUrl}`);
       console.log(`Hermes bridge health: ${bridge.getHttpUrl()}/health`);
       console.log(`Hermes pairing host: ${pairing.publicHost}`);
+      if (transport !== 'local') {
+        console.log(`Hermes pairing transport: ${transport}`);
+      }
+      if (bonjour) {
+        console.log(`Bonjour service: ${bonjour.getService()?.name ?? 'advertising...'}`);
+      }
       console.log('\nScan this Hermes local bridge QR in the Clawket app:\n');
       qrcodeTerminal.generate(pairing.qrPayload, { small: true });
       console.log(`QR image: ${pairing.qrImagePath}`);
@@ -662,17 +694,22 @@ async function handleHermesCommand(args: string[], jsonOutput: boolean): Promise
       console.log('');
     }
 
-    await keepHermesBridgeAlive(bridge);
+    await keepHermesBridgeAliveWithBonjour(bridge, bonjour);
     return;
   }
 
   if (subcommand === 'pair') {
     const pairSubcommand = readPairSubcommand(subArgs);
+    const explicitTransport = readPairingTransportFlag(subArgs);
     if (pairSubcommand === 'relay' || hasFlag(subArgs, '--relay')) {
       await handleHermesRelayPairCommand(subArgs, jsonOutput);
       return;
     }
-    if (pairSubcommand !== 'local' && !hasFlag(subArgs, '--local')) {
+    if (
+      pairSubcommand !== 'local'
+      && !hasFlag(subArgs, '--local')
+      && explicitTransport == null
+    ) {
       await handleHermesRelayPairCommand(subArgs, jsonOutput);
       return;
     }
@@ -849,37 +886,71 @@ async function performOpenClawRelayPairing(args: string[]): Promise<PairSuccessR
 
 async function performHermesLocalPairing(args: string[]): Promise<PairSuccessResult> {
   const { port, token } = await ensureHermesPairingRuntimeReady(args);
-  const publicHost = readFlag(args, '--public-host') ?? detectLanIp();
+  const transport = readPairingTransportFlag(args) ?? 'local';
+  const publicHost = readFlag(args, '--public-host') ?? detectHostForTransport(transport);
   if (!publicHost) {
-    throw new Error('Failed to determine a LAN IP address for Hermes pairing. Pass --public-host explicitly.');
+    throw new Error(`Failed to determine a ${transport} IP address for Hermes pairing. Pass --public-host explicitly.`);
   }
   const pairing = await buildHermesLocalPairing({
     publicHost,
     port,
     token,
+    transport,
     qrFile: readFlag(args, '--qr-file'),
   });
+  const shareAirdrop = hasFlag(args, '--share-airdrop') || hasFlag(args, '--airdrop');
+  if (shareAirdrop) {
+    await shareHermesPairingViaAirdrop({
+      deepLink: pairing.deepLink,
+      qrImagePath: pairing.qrImagePath,
+      transport,
+      bridgeHttpUrl: pairing.bridgeHttpUrl,
+    });
+  }
+  const label = transport === 'local' ? 'Hermes · Local' : `Hermes · ${capitalize(transport)}`;
   return {
     backend: 'hermes',
-    transport: 'local',
-    label: 'Hermes · Local',
+    transport,
+    label,
     qrPayload: pairing.qrPayload,
     qrImagePath: pairing.qrImagePath,
     summaryLines: [
       `Hermes bridge URL: ${pairing.bridgeHttpUrl}`,
       `Hermes bridge WS: ${pairing.bridgeWsUrl}`,
+      `Transport: ${transport}`,
+      `Deep link: ${pairing.deepLink}`,
       `QR image: ${pairing.qrImagePath}`,
+      ...(shareAirdrop ? ['AirDrop share sheet opened.'] : []),
     ],
     jsonValue: {
       ok: true,
       mode: 'hermes',
       backend: 'hermes',
-      transport: 'local',
+      transport,
       bridgeUrl: pairing.bridgeHttpUrl,
       wsUrl: pairing.bridgeWsUrl,
+      deepLink: pairing.deepLink,
       qrImagePath: pairing.qrImagePath,
+      airdropShared: shareAirdrop,
     },
   };
+}
+
+function detectHostForTransport(transport: PairingTransport): string | null {
+  switch (transport) {
+    case 'tailscale':
+      return detectTailscaleIp();
+    case 'local':
+    case 'bonjour':
+    case 'multipeer':
+      return detectLanIp();
+    default:
+      return detectLanIp();
+  }
+}
+
+function capitalize(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 async function performHermesRelayPairing(args: string[]): Promise<PairSuccessResult> {
@@ -1302,14 +1373,29 @@ async function buildHermesLocalPairing(options: {
   publicHost: string;
   port: number;
   token: string;
+  transport?: PairingTransport;
   qrFile: string | null;
 }): Promise<HermesLocalPairingResult> {
   const bridgeHttpUrl = `http://${options.publicHost}:${options.port}`;
   const bridgeWsUrl = buildHermesBridgeWsUrl(options.publicHost, options.port, options.token);
+  const transport = (
+    options.transport === 'tailscale'
+    || options.transport === 'bonjour'
+    || options.transport === 'multipeer'
+  )
+    ? options.transport
+    : 'local';
   const qrPayload = buildHermesLocalPairingQrPayload({
     bridgeHttpUrl,
     bridgeWsUrl,
     displayName: 'Hermes',
+    transport,
+  });
+  const deepLink = buildHermesLocalPairingDeepLink({
+    bridgeHttpUrl,
+    bridgeWsUrl,
+    displayName: 'Hermes',
+    transport,
   });
   const qrImagePath = await writeRawQrPng(qrPayload, 'clawket-hermes-local-pair', options.qrFile);
   return {
@@ -1317,14 +1403,122 @@ async function buildHermesLocalPairing(options: {
     bridgeWsUrl,
     publicHost: options.publicHost,
     qrPayload,
+    deepLink,
     qrImagePath,
   };
+}
+
+async function shareHermesPairingViaAirdrop(options: {
+  deepLink: string;
+  qrImagePath: string;
+  transport: string;
+  bridgeHttpUrl: string;
+}): Promise<void> {
+  if (process.platform !== 'darwin') {
+    console.warn('AirDrop share is only available on macOS. Deep link printed above can still be copied manually.');
+    return;
+  }
+
+  const note = `Clawket Hermes pairing (${options.transport})\\n${options.bridgeHttpUrl}\\n${options.deepLink}`;
+  const script = [
+    'on run argv',
+    '  set theLink to item 1 of argv',
+    '  set theImage to item 2 of argv',
+    '  set theNote to item 3 of argv',
+    '  set theItems to {theLink, POSIX file theImage, theNote}',
+    '  tell application "Finder"',
+    '    activate',
+    '  end tell',
+    '  delay 0.2',
+    '  try',
+    '    tell application "System Events"',
+    '      set frontApp to first application process whose frontmost is true',
+    '    end tell',
+    '  end try',
+    '  do shell script "open -a Finder " & quoted form of theImage',
+    '  delay 0.4',
+    '  tell application "System Events" to keystroke "c" using command down',
+    'end run',
+  ].join('\n');
+
+  // Prefer a lightweight share: copy the deep link and open the QR image so the
+  // user can AirDrop from Finder / Share menu. Full NSSharingService needs a
+  // GUI helper; this path stays dependency-free for the CLI.
+  try {
+    execFileSync('pbcopy', {
+      input: `${options.deepLink}\n${options.bridgeHttpUrl}\n`,
+      encoding: 'utf8',
+      stdio: ['pipe', 'ignore', 'ignore'],
+    });
+  } catch {
+    // ignore clipboard failures
+  }
+
+  try {
+    execFileSync('open', ['-R', options.qrImagePath], { stdio: 'ignore' });
+  } catch {
+    // ignore reveal failures
+  }
+
+  try {
+    // Open the deep-link text file for AirDrop as a shareable item when possible.
+    const shareDir = join(homedir(), '.clawket', 'share');
+    mkdirSync(shareDir, { recursive: true });
+    const sharePath = join(shareDir, `hermes-pair-${Date.now()}.txt`);
+    writeFileSync(sharePath, `${note.replace(/\\n/g, '\n')}\n`, 'utf8');
+    execFileSync('open', ['-R', sharePath], { stdio: 'ignore' });
+    console.log(`AirDrop helper: deep link copied to clipboard and share files revealed in Finder.`);
+    console.log(`Share either the QR PNG or ${sharePath} via AirDrop.`);
+  } catch (error) {
+    console.warn(`AirDrop helper could not open share files: ${formatError(error)}`);
+    console.log(`Copy this deep link manually: ${options.deepLink}`);
+  }
+
+  void script;
 }
 
 async function keepHermesBridgeAlive(bridge: HermesLocalBridge): Promise<void> {
   const shutdown = async () => {
     process.off('SIGINT', shutdown);
     process.off('SIGTERM', shutdown);
+    await bridge.stop();
+    process.exit(0);
+  };
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
+  await new Promise<void>(() => {});
+}
+
+async function startBonjourAdvertiser(options: {
+  host: string;
+  port: number;
+  token: string;
+  transport: PairingTransport;
+  displayName?: string;
+}): Promise<BonjourAdvertiser> {
+  const advertiser = createBonjourAdvertiser({
+    host: options.host,
+    port: options.port,
+    token: options.token,
+    wsPath: '/v1/hermes/ws',
+    backend: 'hermes',
+    transport: options.transport,
+    displayName: options.displayName ?? getDefaultBridgeDisplayName(),
+  });
+  await advertiser.start();
+  return advertiser;
+}
+
+async function keepHermesBridgeAliveWithBonjour(
+  bridge: HermesLocalBridge,
+  bonjour: BonjourAdvertiser | null,
+): Promise<void> {
+  const shutdown = async () => {
+    process.off('SIGINT', shutdown);
+    process.off('SIGTERM', shutdown);
+    if (bonjour) {
+      await bonjour.stop().catch(() => {});
+    }
     await bridge.stop();
     process.exit(0);
   };
@@ -1713,6 +1907,13 @@ function readPairSubcommand(args: string[]): string | null {
   return null;
 }
 
+function readPairingTransportFlag(args: string[]): PairingTransport | null {
+  const explicit = readFlag(args, '--transport');
+  if (!explicit) return null;
+  if (isPairingTransport(explicit)) return explicit;
+  throw new Error(`Unknown pairing transport "${explicit}". Supported: local, tailscale, bonjour, multipeer, relay, cloudflare.`);
+}
+
 function resolveRequestedPairBackend(args: string[]): 'openclaw' | 'hermes' | null {
   const backend = readFlag(args, '--backend')?.toLowerCase();
   if (!backend) {
@@ -1780,7 +1981,7 @@ async function resolveExistingHermesPairingRuntime(saved: HermesBridgeCliConfig 
 }> {
   if (!saved?.token) {
     throw new Error(
-      `A Clawket-managed Hermes bridge is already running, but no saved bridge config was found at ${HERMES_BRIDGE_CONFIG_PATH}. `
+      `A Clawket-managed Hermes bridge is already running, but no saved bridge config was found at ${getHermesBridgeConfigPath()}. `
       + 'To avoid emitting a mismatched QR code or relay target, stop the running bridge or rerun with "--replace" so Clawket can take ownership cleanly.',
     );
   }
@@ -2068,9 +2269,9 @@ function printHelp(): void {
     'clawket logs [--last <2m>] [--lines <200>] [--errors] [--follow] [--json]',
     'clawket doctor [--json]',
     'clawket run [--gateway-url <ws://127.0.0.1:18789>] [--replace]',
-    'clawket hermes dev [--public-host <192.168.x.x>] [--host <0.0.0.0>] [--port <4319>] [--api-url <http://127.0.0.1:8642>] [--qr-file <path>] [--restart-hermes] [--json]',
-    'clawket hermes run [--host <0.0.0.0>] [--port <4319>] [--api-url <http://127.0.0.1:8642>] [--restart-hermes]',
-    'clawket hermes pair local [--public-host <192.168.x.x>] [--port <4319>] [--qr-file <path>] [--json]',
+    'clawket hermes dev [--transport <local|tailscale|bonjour|multipeer>] [--advertise-bonjour] [--public-host <host>] [--host <0.0.0.0>] [--port <4319>] [--api-url <http://127.0.0.1:8642>] [--qr-file <path>] [--restart-hermes] [--json]',
+    'clawket hermes run [--host <0.0.0.0>] [--port <4319>] [--api-url <http://127.0.0.1:8642>] [--advertise-bonjour] [--public-host <host>] [--restart-hermes]',
+    'clawket hermes pair local [--transport <local|tailscale|bonjour|multipeer>] [--share-airdrop] [--advertise-bonjour] [--public-host <host>] [--port <4319>] [--qr-file <path>] [--json]',
     'clawket hermes pair relay [--server <url>] [--name <displayName>] [--qr-file <path>] [--json]',
     'clawket hermes relay run [--host <127.0.0.1>] [--port <4319>] [--api-url <http://127.0.0.1:8642>] [--restart-hermes] [--json]',
   ].join('\n'));
@@ -2174,11 +2375,12 @@ function printJson(value: unknown): void {
 }
 
 function readHermesBridgeCliConfig(): HermesBridgeCliConfig | null {
-  if (!existsSync(HERMES_BRIDGE_CONFIG_PATH)) {
+  const configPath = getHermesBridgeConfigPath();
+  if (!existsSync(configPath)) {
     return null;
   }
   try {
-    const parsed = JSON.parse(readFileSync(HERMES_BRIDGE_CONFIG_PATH, 'utf8')) as Partial<HermesBridgeCliConfig>;
+    const parsed = JSON.parse(readFileSync(configPath, 'utf8')) as Partial<HermesBridgeCliConfig>;
     if (!parsed.token || !parsed.port || !parsed.host || !parsed.apiBaseUrl) {
       return null;
     }
@@ -2195,14 +2397,15 @@ function readHermesBridgeCliConfig(): HermesBridgeCliConfig | null {
 
 function writeHermesBridgeCliConfig(config: HermesBridgeCliConfig): void {
   mkdirSync(join(homedir(), '.clawket'), { recursive: true });
-  writeFileSync(HERMES_BRIDGE_CONFIG_PATH, JSON.stringify(config, null, 2) + '\n', 'utf8');
+  writeFileSync(getHermesBridgeConfigPath(), JSON.stringify(config, null, 2) + '\n', 'utf8');
 }
 
 function deleteHermesBridgeCliConfig(): void {
-  if (!existsSync(HERMES_BRIDGE_CONFIG_PATH)) {
+  const configPath = getHermesBridgeConfigPath();
+  if (!existsSync(configPath)) {
     return;
   }
-  rmSync(HERMES_BRIDGE_CONFIG_PATH, { force: true });
+  rmSync(configPath, { force: true });
 }
 
 main().catch((error) => {

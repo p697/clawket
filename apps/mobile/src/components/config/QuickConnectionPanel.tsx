@@ -1,11 +1,19 @@
 import React, { useMemo } from 'react';
 import { Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { Cloud, Link2 } from 'lucide-react-native';
+import { Cloud, Link2, Radar, Share2, Bluetooth, Wifi } from 'lucide-react-native';
 import { useAppTheme } from '../../theme';
 import { FontSize, FontWeight, Radius, Shadow, Space } from '../../theme/tokens';
+import { PairingTransportLottie } from './PairingTransportLottie';
+import { PAIRING_TRANSPORT_OPTIONS } from './pairingTransportOptions';
 
-type QuickConnectionTarget = 'local' | 'youmind';
+export type QuickConnectionTarget =
+  | 'local'
+  | 'youmind'
+  | 'tailscale'
+  | 'bonjour'
+  | 'multipeer'
+  | 'airdrop';
 
 type QuickConnectionCard = {
   key: QuickConnectionTarget;
@@ -44,6 +52,10 @@ export function QuickConnectionPanel({ onSelectTarget, style }: Props): React.JS
     },
   ], [t]);
 
+  const transportCards = useMemo(() => (
+    PAIRING_TRANSPORT_OPTIONS.filter((item) => !['relay', 'local'].includes(item.id))
+  ), []);
+
   return (
     <View style={style}>
       <Text style={styles.quickHint}>{t('Choose how you want to connect.')}</Text>
@@ -68,6 +80,31 @@ export function QuickConnectionPanel({ onSelectTarget, style }: Props): React.JS
             ))}
           </View>
 
+          {card.key === 'local' ? (
+            <View style={styles.transportGrid}>
+              <Text style={styles.transportHeading}>{t('Pairing methods')}</Text>
+              {transportCards.map((item) => (
+                <Pressable
+                  key={item.id}
+                  onPress={() => onSelectTarget(item.id as QuickConnectionTarget)}
+                  style={({ pressed }) => [styles.transportCard, pressed && styles.transportCardPressed]}
+                >
+                  <PairingTransportLottie source={item.lottie} size={56} />
+                  <View style={styles.transportTextCol}>
+                    <View style={styles.transportTitleRow}>
+                      {item.id === 'tailscale' ? <Wifi size={14} color={theme.colors.primary} /> : null}
+                      {item.id === 'bonjour' ? <Radar size={14} color={theme.colors.primary} /> : null}
+                      {item.id === 'multipeer' ? <Bluetooth size={14} color={theme.colors.primary} /> : null}
+                      {item.id === 'airdrop' ? <Share2 size={14} color={theme.colors.primary} /> : null}
+                      <Text style={styles.transportTitle}>{item.label}</Text>
+                    </View>
+                    <Text style={styles.transportSubtitle} numberOfLines={2}>{item.description}</Text>
+                  </View>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
+
           <Pressable
             onPress={() => onSelectTarget(card.key)}
             style={({ pressed }) => [styles.primaryButton, styles.quickAction, pressed && styles.primaryButtonPressed]}
@@ -77,7 +114,9 @@ export function QuickConnectionPanel({ onSelectTarget, style }: Props): React.JS
                 ? <Link2 size={15} color={theme.colors.primaryText} strokeWidth={2} />
                 : <Cloud size={15} color={theme.colors.primaryText} strokeWidth={2} />
               }
-              <Text style={styles.primaryButtonText}>{t('Start Connection')}</Text>
+              <Text style={styles.primaryButtonText}>
+                {card.key === 'local' ? t('Start with QR / guide') : t('Start Connection')}
+              </Text>
             </View>
           </Pressable>
         </View>
@@ -169,8 +208,50 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       fontWeight: FontWeight.semibold,
     },
     quickAction: {
-      marginTop: 0,
+      marginTop: Space.sm,
+      marginBottom: 0,
+    },
+    transportGrid: {
+      gap: Space.sm,
       marginBottom: Space.sm,
+    },
+    transportHeading: {
+      color: colors.textMuted,
+      fontSize: FontSize.sm,
+      fontWeight: FontWeight.semibold,
+      marginTop: Space.xs,
+    },
+    transportCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Space.sm,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: Radius.md,
+      padding: Space.sm,
+      backgroundColor: colors.surfaceMuted,
+    },
+    transportCardPressed: {
+      opacity: 0.88,
+    },
+    transportTextCol: {
+      flex: 1,
+      gap: 2,
+    },
+    transportTitleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    transportTitle: {
+      color: colors.text,
+      fontSize: FontSize.md,
+      fontWeight: FontWeight.semibold,
+    },
+    transportSubtitle: {
+      color: colors.textMuted,
+      fontSize: FontSize.xs,
+      lineHeight: 16,
     },
   });
 }

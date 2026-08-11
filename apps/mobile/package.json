@@ -77,6 +77,7 @@
     "expo-store-review": "~55.0.9",
     "i18next": "^25.8.14",
     "js-sha256": "^0.11.1",
+    "lottie-react-native": "~7.3.4",
     "lucide-react-native": "^0.575.0",
     "posthog-react-native": "^4.37.1",
     "react": "19.2.0",

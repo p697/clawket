@@ -2,6 +2,11 @@ import { execFileSync } from 'node:child_process';
 import { networkInterfaces } from 'node:os';
 import { buildGatewayQrPayload, normalizeGatewayQrUrl } from '@clawket/bridge-core';
 import { resolveGatewayUrl } from '@clawket/bridge-runtime';
+import {
+  detectInterfaceIp,
+  isTailscaleIp,
+  type TailscaleIpOptions,
+} from '@clawket/bridge-core';
 
 const BLOCKED_INTERFACE_TOKENS = [
   'utun',
@@ -94,6 +99,15 @@ export function rewriteGatewayHost(gatewayUrl: string, nextHost: string): string
   const parsed = new URL(withScheme);
   parsed.hostname = nextHost;
   return normalizeGatewayQrUrl(parsed.toString()).url;
+}
+
+export function detectTailscaleIp(options?: TailscaleIpOptions): string | null {
+  return detectInterfaceIp({
+    preferredInterfaceNames: options?.preferredInterfaceName
+      ? [options.preferredInterfaceName]
+      : ['utun4', 'utun3', 'utun2', 'utun1', 'utun0'],
+    ipFilter: (ip) => isTailscaleIp(ip),
+  });
 }
 
 export function detectLanIp(): string | null {

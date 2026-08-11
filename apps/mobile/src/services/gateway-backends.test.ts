@@ -178,6 +178,8 @@ describe('gateway-backends', () => {
       expect(isGatewayTransportKind('relay')).toBe(true);
       expect(isGatewayTransportKind('local')).toBe(true);
       expect(isGatewayTransportKind('tailscale')).toBe(true);
+      expect(isGatewayTransportKind('bonjour')).toBe(true);
+      expect(isGatewayTransportKind('multipeer')).toBe(true);
       expect(isGatewayTransportKind('cloudflare')).toBe(true);
       expect(isGatewayTransportKind('custom')).toBe(true);
       expect(isGatewayTransportKind('hermes')).toBe(false);

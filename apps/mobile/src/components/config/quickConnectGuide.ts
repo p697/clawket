@@ -1,9 +1,16 @@
 import type { TFunction } from 'i18next';
+import {
+  getPairingTransportOption,
+  type PairingTransportOptionId,
+  PAIRING_TRANSPORT_OPTIONS,
+} from './pairingTransportOptions';
 
 export const MANUAL_INSTALL_CMD = 'npm install -g @p697/clawket';
 export const MANUAL_PAIR_CMD = 'clawket pair';
 export const MANUAL_PAIR_LOCAL_CMD = 'clawket pair --local';
-export type QuickConnectPairMode = 'relay' | 'local';
+
+/** Extended pair modes for onboarding (includes new transports). */
+export type QuickConnectPairMode = PairingTransportOptionId;
 
 export function getQuickConnectAgentPrompt(
   t: TFunction<'chat', undefined>,
@@ -28,4 +35,13 @@ export function getQuickConnectGuideSteps(
       description: t('Scan one of the QR codes sent by your agent.'),
     },
   ];
+}
+
+export function getPairCommandForMode(mode: QuickConnectPairMode): string {
+  const option = getPairingTransportOption(mode);
+  return option.agentPairCommand ?? option.pairCommand;
+}
+
+export function listPairingTransportModes(): readonly PairingTransportOptionId[] {
+  return PAIRING_TRANSPORT_OPTIONS.map((item) => item.id);
 }

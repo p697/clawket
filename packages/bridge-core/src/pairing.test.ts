@@ -129,6 +129,36 @@ describe('pairing helpers', () => {
     });
   });
 
+  it('includes non-local transport on hermes local pairing payloads', () => {
+    const payload = JSON.parse(buildHermesLocalPairingQrPayload({
+      bridgeWsUrl: 'ws://100.64.1.2:4319/v1/hermes/ws?token=secret',
+      bridgeHttpUrl: 'http://100.64.1.2:4319',
+      displayName: 'Hermes',
+      transport: 'tailscale',
+      expiresAt: 123,
+    })) as {
+      transport?: string;
+      hermes?: { bridgeUrl?: string };
+    };
+
+    expect(payload.transport).toBe('tailscale');
+    expect(payload.hermes?.bridgeUrl).toBe('http://100.64.1.2:4319');
+  });
+
+  it('builds a hermes local deep link for AirDrop / share-sheet handoff', async () => {
+    const { buildHermesLocalPairingDeepLink } = await import('./qr.js');
+    const link = buildHermesLocalPairingDeepLink({
+      bridgeWsUrl: 'ws://192.168.1.20:4319/v1/hermes/ws?token=secret',
+      bridgeHttpUrl: 'http://192.168.1.20:4319',
+      transport: 'bonjour',
+    });
+    expect(link.startsWith('clawket://hermes-pair?payload=')).toBe(true);
+    const encoded = link.slice('clawket://hermes-pair?payload='.length);
+    const payload = JSON.parse(decodeURIComponent(encoded)) as { transport?: string; kind?: string };
+    expect(payload.kind).toBe('clawket_hermes_local');
+    expect(payload.transport).toBe('bonjour');
+  });
+
   it('builds a hermes relay pairing payload on a separate kind', () => {
     const payload = JSON.parse(buildHermesRelayPairingQrPayload({
       server: 'https://hermes-registry.example.com',

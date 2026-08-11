@@ -35,7 +35,25 @@ export type QRScanResult = {
 export function parseQRPayload(raw: string): QRScanResult | null {
   const trimmed = raw.trim();
   const normalizeMode = (value: unknown): GatewayMode | undefined => (
-    value === 'local' || value === 'tailscale' || value === 'cloudflare' || value === 'custom' || value === 'relay' || value === 'hermes'
+    value === 'local'
+    || value === 'tailscale'
+    || value === 'bonjour'
+    || value === 'multipeer'
+    || value === 'cloudflare'
+    || value === 'custom'
+    || value === 'relay'
+    || value === 'hermes'
+      ? value
+      : undefined
+  );
+  const normalizeTransport = (value: unknown): GatewayTransportKind | undefined => (
+    value === 'local'
+    || value === 'tailscale'
+    || value === 'bonjour'
+    || value === 'multipeer'
+    || value === 'cloudflare'
+    || value === 'custom'
+    || value === 'relay'
       ? value
       : undefined
   );
@@ -86,10 +104,11 @@ export function parseQRPayload(raw: string): QRScanResult | null {
       const bridgeUrl = typeof payload.url === 'string' ? payload.url.trim() : '';
       const hermes = readHermes(payload.hermes);
       if (!bridgeUrl || !hermes?.bridgeUrl) return null;
+      const transportKind = normalizeTransport(payload.transport) ?? 'local';
       return {
         url: bridgeUrl,
         backendKind: 'hermes',
-        transportKind: 'local',
+        transportKind,
         mode: 'hermes',
         hermes,
       };
