@@ -1,6 +1,6 @@
 {
   "name": "clawket",
-  "version": "2.1.0",
+  "version": "2.1.2",
   "license": "AGPL-3.0-only",
   "main": "index.ts",
   "scripts": {
