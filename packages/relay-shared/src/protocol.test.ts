@@ -4,6 +4,7 @@ import {
   isSecurePairingSecretConfigured,
   issuePairingRelayTicket,
   normalizeRegion,
+  parseHermesRelayAuthQuery,
   parsePositiveInt,
   parseRelayAuthQuery,
   readBearerToken,
@@ -26,6 +27,30 @@ describe('shared protocol helpers', () => {
   it('defaults role to client when invalid', () => {
     const url = new URL('https://relay.example/ws?gatewayId=gw1&role=invalid');
     expect(parseRelayAuthQuery(url).role).toBe('client');
+  });
+
+  it('parses Hermes relay auth query without changing its gateway compatibility alias', () => {
+    const url = new URL('https://relay.example/ws?bridgeId=hbg_1&role=gateway&clientId=c1&token=t1');
+    expect(parseHermesRelayAuthQuery(url)).toEqual({
+      bridgeId: 'hbg_1',
+      gatewayId: 'hbg_1',
+      role: 'gateway',
+      clientId: 'c1',
+      token: 't1',
+    });
+  });
+
+  it('keeps Hermes query defaults and trimming unchanged through the public barrel', async () => {
+    const publicProtocol = await import('./index');
+    const url = new URL('https://relay.example/ws?bridgeId=%20hbg_2%20&role=invalid&clientId=%20&token=%20');
+    expect(publicProtocol.parseHermesRelayAuthQuery).toBe(parseHermesRelayAuthQuery);
+    expect(publicProtocol.parseHermesRelayAuthQuery(url)).toEqual({
+      bridgeId: 'hbg_2',
+      gatewayId: 'hbg_2',
+      role: 'client',
+      clientId: undefined,
+      token: undefined,
+    });
   });
 
   it('reads bearer token', () => {
