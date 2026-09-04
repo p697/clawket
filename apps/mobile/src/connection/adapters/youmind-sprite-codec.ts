@@ -22,6 +22,7 @@ export type YouMindCompletionChunk =
 
 export type YouMindSpriteChunkState = {
   runId: string;
+  started: boolean;
   terminal: boolean;
   blockTypes: Map<string, string>;
   toolNames: Map<string, string>;
@@ -30,6 +31,7 @@ export type YouMindSpriteChunkState = {
 export function createYouMindSpriteChunkState(runId: string): YouMindSpriteChunkState {
   return {
     runId,
+    started: false,
     terminal: false,
     blockTypes: new Map(),
     toolNames: new Map(),
@@ -129,7 +131,7 @@ function mapSpriteInsert(
   if (dataType === 'Generation') {
     const id = readString(data.id);
     if (id) state.runId = id;
-    return [{ type: 'run_started', sessionKey, runId: state.runId }];
+    return startRun(sessionKey, state);
   }
 
   if (dataType === 'Message') {
@@ -137,7 +139,7 @@ function mapSpriteInsert(
     const id = readString(data.id);
     if (role !== 'assistant') return [];
     if (id) state.runId = id;
-    const updates: SessionUpdate[] = [{ type: 'run_started', sessionKey, runId: state.runId }];
+    const updates: SessionUpdate[] = startRun(sessionKey, state);
     const blocks = Array.isArray(data.blocks) ? data.blocks : [];
     for (const block of blocks) {
       if (!block || typeof block !== 'object') continue;
@@ -193,7 +195,7 @@ function mapSpriteEvent(
 ): SessionUpdate[] {
   const normalized = event.trim().toLowerCase().replace(/_/g, '-');
   if (normalized === 'task-started') {
-    return [{ type: 'run_started', sessionKey, runId: state.runId }];
+    return startRun(sessionKey, state);
   }
   if (normalized === 'task-ended') {
     const status = readEventStatus(data);
@@ -209,6 +211,12 @@ function mapSpriteEvent(
     return finishRun(sessionKey, state, 'cancelled');
   }
   return [];
+}
+
+function startRun(sessionKey: string, state: YouMindSpriteChunkState): SessionUpdate[] {
+  if (state.started || state.terminal) return [];
+  state.started = true;
+  return [{ type: 'run_started', sessionKey, runId: state.runId }];
 }
 
 function finishForStatus(
