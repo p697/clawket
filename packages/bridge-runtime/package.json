@@ -21,6 +21,7 @@
     "test:hermes-integration": "vitest run src/hermes.test.ts"
   },
   "dependencies": {
+    "@clawket/agent-protocol": "3.0.0",
     "@clawket/bridge-core": "3.0.0",
     "tweetnacl": "^1.0.3",
     "ws": "^8.21.3"

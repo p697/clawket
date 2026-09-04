@@ -28,9 +28,16 @@ This repository is the Clawket monorepo.
 | `apps/relay-registry` | Cloudflare registry worker |
 | `apps/relay-worker` | Cloudflare relay worker |
 | `apps/bridge-cli` | Publishable bridge CLI |
+| `packages/agent-protocol` | Pure TypeScript agent descriptors, adapter contracts, capabilities, and fixtures |
 | `packages/bridge-core` | Bridge shared helpers |
 | `packages/bridge-runtime` | Bridge runtime |
 | `packages/relay-shared` | Relay shared protocol/types |
+
+## Agent Protocol Package Rule
+
+1. `packages/agent-protocol` is the backend-neutral contract boundary shared by Mobile and Bridge. Keep it pure TypeScript with no React Native or backend runtime dependency.
+2. Define backend capabilities centrally in that package. Runtime adapters may downgrade declared capabilities, but must never advertise unsupported operations or upgrade the product matrix.
+3. Keep transport identity separate from backend identity in all protocol descriptors and fixtures.
 
 ## External Dependency
 

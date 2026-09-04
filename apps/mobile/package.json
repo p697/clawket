@@ -37,6 +37,7 @@
     "test:coverage": "jest --coverage"
   },
   "dependencies": {
+    "@clawket/agent-protocol": "file:../../packages/agent-protocol",
     "@expo/log-box": "~55.0.13",
     "@expo/ui": "~55.0.17",
     "@gorhom/bottom-sheet": "^5.2.8",

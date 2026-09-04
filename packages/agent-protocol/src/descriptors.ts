@@ -1,0 +1,197 @@
+export type BackendKind = 'openclaw' | 'hermes' | 'youmind';
+
+export type TransportKind =
+  | 'relay'
+  | 'local'
+  | 'tailscale'
+  | 'cloudflare'
+  | 'custom'
+  | 'https';
+
+export type ServiceEnvironment = 'production' | 'preview';
+
+/** Exact platform-neutral shape of the pre-3.0 OpenClaw bootstrap record. */
+export interface OpenClawBootstrapConfig {
+  token: string;
+  strategy: 'mobile-setup' | 'legacy-bound';
+  expiresAtMs?: number;
+  access?: 'full' | 'limited' | 'node';
+}
+
+/** Exact platform-neutral shape of the pre-3.0 Relay configuration. */
+export interface RelayGatewayConfig {
+  serverUrl: string;
+  gatewayId: string;
+  clientToken?: string;
+  displayName?: string;
+  protocolVersion?: number;
+  supportsBootstrap?: boolean;
+}
+
+/** Exact platform-neutral shape of the pre-3.0 Hermes configuration. */
+export interface HermesGatewayConfig {
+  bridgeUrl: string;
+  displayName?: string;
+}
+
+/** Credential-bearing record. Only the connection registry may persist it. */
+export interface ConnectionRecord {
+  id: string;
+  backendKind: BackendKind;
+  transportKind: TransportKind;
+  label: string;
+  environment?: ServiceEnvironment;
+  createdAt: number;
+  url: string;
+  auth?: { token?: string; password?: string };
+  bootstrap?: OpenClawBootstrapConfig;
+  relay?: RelayGatewayConfig;
+  hermes?: HermesGatewayConfig;
+  youmind?: { authScopeKey: string };
+  debugMode?: boolean;
+}
+
+/** Credential-free connection view that is safe for UI and protocol consumers. */
+export interface ConnectionDescriptor {
+  id: string;
+  backendKind: BackendKind;
+  transportKind: TransportKind;
+  label: string;
+  environment?: ServiceEnvironment;
+  createdAt: number;
+  bridgeOutdated?: boolean;
+  isFreeSlot: boolean;
+}
+
+export interface AgentDescriptor {
+  connectionId: string;
+  agentId: string;
+  name: string;
+  emoji?: string;
+  avatarUrl?: string;
+  isMain: boolean;
+  mainSessionKey: string;
+}
+
+export type SessionKind =
+  | 'main'
+  | 'channel'
+  | 'direct'
+  | 'group'
+  | 'subagent'
+  | 'cron'
+  | 'other';
+
+export interface SessionActions {
+  rename: boolean;
+  reset: boolean;
+  delete: boolean;
+  pin: boolean;
+}
+
+export interface SessionDescriptor {
+  connectionId: string;
+  agentId: string;
+  key: string;
+  kind: SessionKind;
+  title: string;
+  channel?: string;
+  updatedAt: number | null;
+  preview?: string;
+  model?: string;
+  hasActiveRun: boolean;
+  attention?: 'approval' | 'error' | 'cron_failed' | null;
+  parentSessionKey?: string;
+  source?: 'bridge' | 'native';
+  allowedActions: SessionActions;
+}
+
+export interface PromptAttachment {
+  type: 'image' | 'file';
+  mimeType: string;
+  content: string;
+  name?: string;
+}
+
+export interface PromptInput {
+  text: string;
+  attachments?: PromptAttachment[];
+  skillId?: string;
+  thinkingLevel?: string;
+  idempotencyKey: string;
+}
+
+export interface Usage {
+  input?: number;
+  output?: number;
+  cacheRead?: number;
+  cacheWrite?: number;
+  total?: number;
+  costUsd?: number;
+}
+
+/** Rendering-neutral subset of the existing mobile `UiMessage` model. */
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system' | 'tool';
+  text: string;
+  timestampMs?: number;
+  idempotencyKey?: string;
+  skill?: { id: string; name: string };
+  attachments?: Array<{
+    type: 'image' | 'file';
+    mimeType: string;
+    content?: string;
+    uri?: string;
+    name?: string;
+  }>;
+  provider?: string;
+  model?: string;
+  usage?: Usage;
+  tool?: {
+    name: string;
+    status: 'running' | 'success' | 'error';
+    summary?: string;
+    input?: unknown;
+    output?: unknown;
+  };
+}
+
+export interface SessionHistory {
+  key: string;
+  messages: ChatMessage[];
+  nextCursor?: string;
+  hasActiveRun: boolean;
+}
+
+export interface FinalMessage {
+  role: 'assistant';
+  content: string;
+  provider?: string;
+  model?: string;
+}
+
+export type ApprovalRequest =
+  | {
+      kind: 'exec';
+      id: string;
+      command: string;
+      cwd?: string;
+      host?: string;
+      expiresAtMs: number;
+    }
+  | {
+      kind: 'plugin';
+      id: string;
+      pluginId: string;
+      title: string;
+      expiresAtMs: number;
+    }
+  | {
+      kind: 'pair';
+      id: string;
+      target: 'device' | 'node';
+      displayName: string | null;
+      platform: string | null;
+      receivedAtMs: number;
+    };
