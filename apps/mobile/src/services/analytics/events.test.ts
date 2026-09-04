@@ -86,6 +86,57 @@ describe('analyticsEvents', () => {
     );
   });
 
+  it('captures connection lifecycle events with low-cardinality properties', () => {
+    analyticsEvents.connectAttempt({
+      backend: 'hermes',
+      transport: 'relay',
+      reason: 'switch',
+    });
+    analyticsEvents.connectReady({
+      backend: 'hermes',
+      transport: 'relay',
+      elapsed_ms: 321,
+      attempt: 2,
+    });
+    analyticsEvents.connectFailed({
+      backend: 'hermes',
+      transport: 'relay',
+      code: 'bridge_offline',
+      stage: 'handshake',
+      attempt: 3,
+    });
+    analyticsEvents.reconnect({
+      backend: 'hermes',
+      transport: 'relay',
+      reason: 'probe_failed',
+    });
+
+    expect(mockedPostHogClient.capture).toHaveBeenNthCalledWith(
+      1,
+      'connect_attempt',
+      expect.objectContaining({
+        backend: 'hermes',
+        transport: 'relay',
+        reason: 'switch',
+      }),
+    );
+    expect(mockedPostHogClient.capture).toHaveBeenNthCalledWith(
+      2,
+      'connect_ready',
+      expect.objectContaining({ elapsed_ms: 321, attempt: 2 }),
+    );
+    expect(mockedPostHogClient.capture).toHaveBeenNthCalledWith(
+      3,
+      'connect_failed',
+      expect.objectContaining({ code: 'bridge_offline', stage: 'handshake', attempt: 3 }),
+    );
+    expect(mockedPostHogClient.capture).toHaveBeenNthCalledWith(
+      4,
+      'reconnect',
+      expect.objectContaining({ reason: 'probe_failed' }),
+    );
+  });
+
   it('captures model add events', () => {
     analyticsEvents.modelAddTapped({
       provider: 'openai',

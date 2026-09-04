@@ -59,6 +59,41 @@ export const analyticsEvents = {
     captureAnalyticsEvent('gateway_secure_pairing_finished', properties);
   },
 
+  connectAttempt(properties: {
+    backend: 'openclaw' | 'hermes' | 'youmind';
+    transport: 'relay' | 'local' | 'tailscale' | 'cloudflare' | 'custom' | 'https';
+    reason: 'launch' | 'switch' | 'foreground' | 'manual' | 'retry';
+  }): void {
+    captureAnalyticsEvent('connect_attempt', properties);
+  },
+
+  connectReady(properties: {
+    backend: 'openclaw' | 'hermes' | 'youmind';
+    transport: 'relay' | 'local' | 'tailscale' | 'cloudflare' | 'custom' | 'https';
+    elapsed_ms: number;
+    attempt: number;
+  }): void {
+    captureAnalyticsEvent('connect_ready', properties);
+  },
+
+  connectFailed(properties: {
+    backend: 'openclaw' | 'hermes' | 'youmind';
+    transport: 'relay' | 'local' | 'tailscale' | 'cloudflare' | 'custom' | 'https';
+    code: string;
+    stage: 'socket' | 'handshake' | 'ready';
+    attempt: number;
+  }): void {
+    captureAnalyticsEvent('connect_failed', properties);
+  },
+
+  reconnect(properties: {
+    backend: 'openclaw' | 'hermes' | 'youmind';
+    transport: 'relay' | 'local' | 'tailscale' | 'cloudflare' | 'custom' | 'https';
+    reason: 'tick_timeout' | 'socket_close' | 'probe_failed' | 'seq_gap' | 'foreground';
+  }): void {
+    captureAnalyticsEvent('reconnect', properties);
+  },
+
   appRatingTapped(properties: {
     source: string;
     result: 'review_prompt' | 'store_page' | 'unavailable' | 'error';
