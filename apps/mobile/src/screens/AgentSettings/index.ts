@@ -21,3 +21,30 @@ export type {
   AgentSettingsRowDescriptor,
   AgentSettingsSummary,
 } from './model';
+export {
+  AgentSettingsSectionScreen,
+  AgentSettingsSectionView,
+} from './AgentSettingsSectionScreen';
+export type {
+  AgentSettingsSectionActionContext,
+  AgentSettingsSectionActionRequest,
+  AgentSettingsSectionActionResolver,
+  AgentSettingsSectionScreenProps,
+  AgentSettingsSectionViewProps,
+} from './AgentSettingsSectionScreen';
+export {
+  buildAgentSettingsSectionModel,
+  getAgentSettingsSectionPaywallReason,
+  getAgentSettingsSectionTitle,
+  isAgentSettingsSectionSupported,
+  isAgentSettingsSectionLocked,
+  resolveAgentSettingsSectionState,
+} from './section-model';
+export type {
+  AgentSettingsSectionAction,
+  AgentSettingsSectionGroupDescriptor,
+  AgentSettingsSectionModel,
+  AgentSettingsSectionRowDescriptor,
+  AgentSettingsSectionState,
+  BuildAgentSettingsSectionModelInput,
+} from './section-model';
