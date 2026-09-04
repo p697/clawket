@@ -26,7 +26,7 @@
 |---|---|---|---|---|
 | M0 基线与护栏 | 已完成 | 2026-09-05 | 干净 `npm ci`；required 全绿；compat 5 files / 34 tests；双 lock audit 0 high/critical；LOC 已记录 | `717f265bd3ca15fcbed4207c653c6c56e920bd6d` |
 | M1 契约与包骨架 | 已完成 | 2026-09-05 | required 全绿；协议包 3 files / 23 tests、四项覆盖率 100%；Mobile 162 suites / 1361 tests；compat 5 files / 34 tests；Android Metro 与 Bridge/CLI bundle 验证通过 | `ef8ae596d031d891a4263fa4a3c04d192f8658a1` |
-| M2 Relay / Registry 合一与安全口子 | 进行中（M2a 已完成，M2b 待开始） | | M2a compat 前后签名一致；required、integration、配置 dry-run 与双 Preview 冒烟全绿 | |
+| M2 Relay / Registry 合一与安全口子 | 进行中（M2a 已完成，M2b 待开始） | | M2a compat 前后签名一致；required、integration、配置 dry-run 与双 Preview 冒烟全绿 | M2a `f0ac6d2f676e6a9ade4f4dfb23d3c748f832c9fd` |
 | M3 Bridge 拆分与 Hermes 多会话 | 未开始 | | | |
 | M4 App 连接层 v2 | 未开始 | | | |
 | M5 App 界面 | 未开始 | | | |
