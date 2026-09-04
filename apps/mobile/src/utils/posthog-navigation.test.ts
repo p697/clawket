@@ -1,76 +1,60 @@
 import { getActiveLeafRouteName, getTrackedScreen } from './posthog-navigation';
 
 describe('posthog navigation tracking', () => {
-  it('maps the chat tab root to the Chat screen', () => {
+  it('maps the roster root without a legacy tab dimension', () => {
     const state = {
       index: 0,
       routes: [
         {
-          key: 'main-tabs',
-          name: 'MainTabs',
-          state: {
-            index: 0,
-            routes: [
-              {
-                key: 'chat-tab',
-                name: 'Chat',
-                state: {
-                  index: 0,
-                  routes: [{ key: 'chat-main-1', name: 'ChatMain' }],
-                },
-              },
-            ],
-          },
+          key: 'roster-1',
+          name: 'Roster',
         },
       ],
     };
 
-    expect(getActiveLeafRouteName(state as never)).toBe('ChatMain');
+    expect(getActiveLeafRouteName(state as never)).toBe('Roster');
     expect(getTrackedScreen(state as never)).toEqual({
-      name: 'Chat',
-      routeName: 'ChatMain',
-      area: 'chat',
+      name: 'Roster',
+      routeName: 'Roster',
+      area: 'roster',
       kind: 'root',
-      tab: 'Chat',
-      uniqueKey: 'chat-main-1',
+      uniqueKey: 'roster-1',
       properties: {
-        navigation_path: 'MainTabs > Chat > ChatMain',
-        screen_area: 'chat',
+        navigation_path: 'Roster',
+        screen_area: 'roster',
         screen_kind: 'root',
-        screen_route: 'ChatMain',
-        screen_tab: 'Chat',
+        screen_route: 'Roster',
       },
     });
   });
 
-  it('maps nested console detail screens and only captures param presence', () => {
+  it('maps thread details and only captures param presence', () => {
     const state = {
       index: 1,
       routes: [
-        { key: 'main-tabs', name: 'MainTabs' },
+        { key: 'roster-1', name: 'Roster' },
         {
-          key: 'node-detail-1',
-          name: 'NodeDetail',
-          params: { nodeId: 'node-123', displayName: 'Edge Node' },
+          key: 'thread-1',
+          name: 'Thread',
+          params: { connectionId: 'connection-123', agentId: 'main', sessionKey: 'agent:main:main' },
         },
       ],
     };
 
     expect(getTrackedScreen(state as never)).toEqual({
-      name: 'Node Detail',
-      routeName: 'NodeDetail',
-      area: 'console',
+      name: 'Thread',
+      routeName: 'Thread',
+      area: 'thread',
       kind: 'detail',
-      tab: 'Console',
-      uniqueKey: 'node-detail-1',
+      uniqueKey: 'thread-1',
       properties: {
-        navigation_path: 'NodeDetail',
-        screen_area: 'console',
+        navigation_path: 'Thread',
+        screen_area: 'thread',
         screen_kind: 'detail',
-        screen_route: 'NodeDetail',
-        screen_tab: 'Console',
-        has_node_id: true,
-        has_display_name: true,
+        screen_route: 'Thread',
+        has_connection_id: true,
+        has_agent_id: true,
+        has_session_key: true,
       },
     });
   });
