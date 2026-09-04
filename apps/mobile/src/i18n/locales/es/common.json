@@ -188,5 +188,13 @@
   "{{count}} active now": "{{count}} en uso ahora",
   "You might also like": "También te puede gustar",
   "Clear search": "Borrar búsqueda",
-  "Header action": "Acción de navegación"
+  "Header action": "Acción de navegación",
+  "Account settings": "Ajustes de la cuenta",
+  "Loading agents": "Cargando agentes",
+  "Offline · reconnecting": "Sin conexión · reconectando",
+  "Reconnect": "Volver a conectar",
+  "Connection unavailable": "Conexión no disponible",
+  "Pro unlocks this agent": "Pro desbloquea este agente",
+  "View Pro": "Ver Pro",
+  "No agents on this connection": "No hay agentes en esta conexión"
 }

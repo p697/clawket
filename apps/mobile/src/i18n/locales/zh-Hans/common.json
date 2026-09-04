@@ -188,5 +188,13 @@
   "{{count}} active now": "{{count}} 人在用",
   "You might also like": "你可能还会喜欢",
   "Clear search": "清除搜索",
-  "Header action": "导航操作"
+  "Header action": "导航操作",
+  "Account settings": "账户设置",
+  "Loading agents": "正在加载智能体",
+  "Offline · reconnecting": "离线 · 正在重连",
+  "Reconnect": "重新连接",
+  "Connection unavailable": "连接不可用",
+  "Pro unlocks this agent": "升级 Pro 后可使用此智能体",
+  "View Pro": "查看 Pro",
+  "No agents on this connection": "此连接中没有智能体"
 }

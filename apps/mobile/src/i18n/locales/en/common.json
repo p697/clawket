@@ -188,5 +188,13 @@
   "{{count}} active now": "{{count}} active now",
   "You might also like": "You might also like",
   "Clear search": "Clear search",
-  "Header action": "Header action"
+  "Header action": "Header action",
+  "Account settings": "Account settings",
+  "Loading agents": "Loading agents",
+  "Offline · reconnecting": "Offline · reconnecting",
+  "Reconnect": "Reconnect",
+  "Connection unavailable": "Connection unavailable",
+  "Pro unlocks this agent": "Pro unlocks this agent",
+  "View Pro": "View Pro",
+  "No agents on this connection": "No agents on this connection"
 }

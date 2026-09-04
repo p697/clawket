@@ -188,5 +188,13 @@
   "{{count}} active now": "{{count}}명이 사용 중",
   "You might also like": "이런 것도 좋아할 수 있어요",
   "Clear search": "검색 지우기",
-  "Header action": "탐색 작업"
+  "Header action": "탐색 작업",
+  "Account settings": "계정 설정",
+  "Loading agents": "에이전트 불러오는 중",
+  "Offline · reconnecting": "오프라인 · 다시 연결 중",
+  "Reconnect": "다시 연결",
+  "Connection unavailable": "연결을 사용할 수 없음",
+  "Pro unlocks this agent": "Pro에서 이 에이전트를 사용할 수 있습니다",
+  "View Pro": "Pro 보기",
+  "No agents on this connection": "이 연결에 에이전트가 없습니다"
 }
