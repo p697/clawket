@@ -163,6 +163,10 @@ export function ThreadScreen({
       sessionTitle={currentSession?.title ?? currentSession?.label}
       isMainSession={sessionKey === app.mainSessionKey}
       model={controller.currentModelHeaderLabel}
+      contextUsed={currentSession?.totalTokensFresh === false
+        ? undefined
+        : currentSession?.totalTokens}
+      contextWindow={currentSession?.contextTokens}
       activityLabel={controller.activityLabel}
       capabilities={capabilities}
       state={state}

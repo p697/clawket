@@ -808,7 +808,10 @@ export function SessionPanel({
             : summary),
         }).find((candidate) => candidate.key === session.key)
         : undefined;
-      if (row) await onSelectSession(row);
+      if (row) {
+        await onSelectSession(row);
+        onClose();
+      }
     }
     : undefined);
 
