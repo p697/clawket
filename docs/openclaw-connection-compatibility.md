@@ -38,14 +38,30 @@ New Bridges also create a short-lived encrypted invitation for the same single-u
 - Existing raw token and password configurations remain valid recovery paths.
 - Legacy raw device-token strings are read as operator records with unknown scopes and upgraded when OpenClaw returns current role/scope metadata.
 
+### Bridge capability envelope
+
+`bridge.capabilities.v2` is negotiated only between App and Bridge. The App may add a top-level `meta` sibling to an OpenClaw `connect` or `connect.start` request; it must not put this metadata in `params` or a Relay control frame:
+
+```json
+{"type":"req","id":"connect-1","method":"connect","params":{},"meta":{"capabilities":["bridge.capabilities.v2"]}}
+```
+
+OpenClaw Gateway request envelopes use a closed schema and do not accept that top-level field. Before forwarding either connect method, a new Bridge therefore removes the entire top-level `meta` property whenever it is present, including malformed metadata and unknown capabilities. Other envelope fields remain intact. Only an exact `bridge.capabilities.v2` string opts in; unknown strings never imply support.
+
+The Bridge correlates the opt-in by request ID. It adds `meta.capabilities: ["bridge.capabilities.v2"]` only to the matching successful connect response (`type: "res"`, `ok: true`) on the App-facing leg. Existing response metadata and unknown capabilities are preserved. Failed, malformed, unmatched, or unrequested responses pass through unchanged, and Bridge metadata never reaches the Gateway.
+
+The capability layer must return the original text bytes without parsing and reserialization when a v1 connect request has no top-level `meta`. It must likewise leave its response bytes unchanged when the request did not opt in. Existing authentication and protocol-range patching remain separate compatibility behavior; non-connect frames are outside this capability envelope.
+
 ## Version-skew matrix
 
 | App | Bridge | Negotiated behavior |
 | --- | --- | --- |
 | Old | Old | Existing legacy bootstrap contract. |
-| New | Old | Old Bridge ignores the additive capability; new App treats an unmarked response as legacy-bound. |
+| New | Old | An old Bridge may forward unknown top-level metadata into the closed Gateway schema. On an unknown Bridge, the new App retries at most once without `meta`, caches the connection as legacy, and accepts an unmarked successful response as legacy-bound. |
 | Old | New | Capability is absent, so new Bridge deliberately issues the legacy bound credential. |
 | New | New | Exact capability match enables official mobile setup and automatic operator handoff. |
+
+The App must never repeatedly probe an old Bridge with the v2 envelope. A failed v2 attempt falls back to the byte-stable v1 request on the same connection retry path; lack of a marked response never upgrades the connection by inference.
 
 The secure invitation layer follows the same additive skew rule: old Apps scan the unchanged QR; new Apps can scan that QR or use a link/code emitted by a new Bridge and Registry. A Registry that does not advertise the exact version-2 capability causes the Bridge to keep presenting the legacy 12-character code. Registry also verifies the deployed Relay capability before advertising version 2, so mixed server rollout order fails closed to the legacy path instead of creating an unusable six-digit invitation.
 
@@ -89,6 +105,9 @@ Preview is an isolated service environment for the existing OpenClaw Relay trans
 - SecretRef detection without value exposure.
 - Relay strategy forwarding and absent-field compatibility.
 - Capability-present official selection plus missing/unknown-capability legacy selection.
+- Top-level connect metadata stripping before the closed Gateway schema, including malformed and unknown metadata.
+- Request-ID-correlated capability injection only on opted-in successful responses; failures and unmatched responses remain byte-identical.
+- Literal byte equality for v1 requests and responses with absent metadata, plus a bounded new-App/old-Bridge fallback replay.
 - Temporary node handshake, operator handoff persistence, and automatic reconnect.
 - Direct QR parsing, expiry rejection, legacy token migration, and gateway-scoped storage.
 - Existing OpenClaw token/password and Hermes required suites.
