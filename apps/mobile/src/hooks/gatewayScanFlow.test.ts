@@ -6,7 +6,7 @@ import {
 } from './gatewayScanFlow';
 import { StorageService } from '../services/storage';
 import { RelayPairingService } from '../services/relay-pairing';
-import { HermesRelayPairingService } from '../services/hermes-relay-pairing';
+import { HermesRelayPairingService } from '../connection/registry/hermes-relay-pairing';
 
 jest.mock('../services/storage', () => ({
   StorageService: {
@@ -21,7 +21,7 @@ jest.mock('../services/relay-pairing', () => ({
   },
 }));
 
-jest.mock('../services/hermes-relay-pairing', () => ({
+jest.mock('../connection/registry/hermes-relay-pairing', () => ({
   HermesRelayPairingService: {
     claim: jest.fn(),
   },

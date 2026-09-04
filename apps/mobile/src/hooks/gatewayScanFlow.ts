@@ -8,7 +8,7 @@ import {
 } from '@clawket/agent-protocol';
 import { resolveGatewayCacheScopeId } from '../services/gateway-cache-scope';
 import { RelayPairingService } from '../services/relay-pairing';
-import { HermesRelayPairingService } from '../services/hermes-relay-pairing';
+import { HermesRelayPairingService } from '../connection/registry/hermes-relay-pairing';
 import { markHermesConnectTrace, startHermesConnectTrace } from '../services/hermes-connect-debug';
 import { StorageService } from '../services/storage';
 import type { GatewayBackendKind, GatewayConfig, GatewayConfigsState, GatewayMode, GatewayTransportKind, SavedGatewayConfig } from '../types';
