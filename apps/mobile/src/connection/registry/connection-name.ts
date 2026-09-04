@@ -1,4 +1,4 @@
-import type { GatewayBackendKind, GatewayTransportKind } from '../types';
+import type { GatewayBackendKind, GatewayTransportKind } from '../../types';
 
 export function resolveSavedGatewayName(input: {
   name: string;

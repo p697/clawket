@@ -35,7 +35,7 @@ import {
   selectByBackend,
   toLegacyGatewayMode,
 } from '@clawket/agent-protocol';
-import { resolveSavedGatewayName } from './gateway-config-name';
+import { resolveSavedGatewayName } from '../connection/registry/connection-name';
 import type { ProSubscriptionSnapshot } from './pro-subscription';
 
 export type NodeInvokeAuditEntry = {

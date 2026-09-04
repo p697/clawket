@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@jest/globals';
-import { resolveSavedGatewayName } from './gateway-config-name';
+import { resolveSavedGatewayName } from './connection-name';
 
 describe('resolveSavedGatewayName', () => {
   it('prefers relay displayName over generic relay host names', () => {
