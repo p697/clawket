@@ -1,0 +1,694 @@
+import type {
+  AgentAdapter,
+  AgentDescriptor,
+  ConnectionDescriptor,
+  ConnectionState,
+  SessionDescriptor,
+} from '@clawket/agent-protocol';
+import { useEffect, useMemo, useSyncExternalStore } from 'react';
+
+import {
+  connectionStore,
+  type ConnectionAdapterFactory,
+  type ConnectionRecordPatch,
+  type ConnectionRecordReplacement,
+  type ConnectionStore,
+  type ConnectionStoreSnapshot,
+  type NewConnectionRecord,
+} from './registry/connection-store';
+import {
+  aggregateRoster,
+  rosterCache,
+  type RosterCache,
+  type RosterCacheSnapshot,
+  type RosterConnectionGroup,
+  type RosterSnapshotInput,
+} from './registry/roster-cache';
+import {
+  unreadWatermarks,
+  type SessionWatermarks,
+  type UnreadWatermarks,
+} from './registry/unread-watermarks';
+
+export type ConnectionRuntimeFailure = Readonly<{
+  operation: 'load' | 'connect' | 'roster' | 'probe';
+  connectionId?: string;
+  message: string;
+}>;
+
+export type ConnectionRuntimeSnapshot = Readonly<{
+  revision: number;
+  initialized: boolean;
+  switching: boolean;
+  connectionsRevision: number;
+  connections: ReadonlyArray<ConnectionDescriptor>;
+  activeConnectionId: string | null;
+  freeConnectionId: string | null;
+  activeAdapter: AgentAdapter | null;
+  activeState: ConnectionState;
+  roster: ReadonlyArray<RosterConnectionGroup>;
+  error: ConnectionRuntimeFailure | null;
+}>;
+
+type ConnectionStorePort = Pick<
+  ConnectionStore,
+  | 'add'
+  | 'createAdapter'
+  | 'getSnapshot'
+  | 'load'
+  | 'remove'
+  | 'replace'
+  | 'rollback'
+  | 'setActive'
+  | 'setFreeConnection'
+  | 'subscribe'
+  | 'update'
+>;
+
+type RosterCachePort = Pick<RosterCache, 'getMany' | 'remove' | 'set'>;
+type UnreadWatermarksPort = Pick<
+  UnreadWatermarks,
+  'clearConnection' | 'get' | 'markOpened' | 'markPromptSucceeded'
+>;
+
+export interface ConnectionCoordinatorOptions {
+  store?: ConnectionStorePort;
+  cache?: RosterCachePort;
+  watermarks?: UnreadWatermarksPort;
+  adapterFactory?: ConnectionAdapterFactory;
+  now?: () => number;
+}
+
+type ActiveAdapterEntry = {
+  connectionId: string;
+  adapter: AgentAdapter;
+  factoryRevision: number;
+  unsubscribers: Array<() => void>;
+};
+
+const EMPTY_CONNECTIONS = Object.freeze([]) as ReadonlyArray<ConnectionDescriptor>;
+const EMPTY_ROSTER = Object.freeze([]) as ReadonlyArray<RosterConnectionGroup>;
+
+const INITIAL_SNAPSHOT: ConnectionRuntimeSnapshot = Object.freeze({
+  revision: 0,
+  initialized: false,
+  switching: false,
+  connectionsRevision: 0,
+  connections: EMPTY_CONNECTIONS,
+  activeConnectionId: null,
+  freeConnectionId: null,
+  activeAdapter: null,
+  activeState: 'idle',
+  roster: EMPTY_ROSTER,
+  error: null,
+});
+
+/**
+ * Owns the one-live-connection invariant independently from React. Adapters for
+ * inactive connections are not retained; their roster data comes from cache.
+ */
+export class ConnectionCoordinator {
+  private readonly store: ConnectionStorePort;
+  private readonly cache: RosterCachePort;
+  private readonly watermarks: UnreadWatermarksPort;
+  private readonly now: () => number;
+  private readonly listeners = new Set<() => void>();
+  private readonly rosterInputs = new Map<string, RosterSnapshotInput>();
+
+  private adapterFactory: ConnectionAdapterFactory | null;
+  private adapterFactoryRevision = 0;
+  private active: ActiveAdapterEntry | null = null;
+  private storeUnsubscribe: (() => void) | null = null;
+  private operation: Promise<void> = Promise.resolve();
+  private startPromise: Promise<ConnectionRuntimeSnapshot> | null = null;
+  private reconcileScheduled = false;
+  private started = false;
+  private snapshot: ConnectionRuntimeSnapshot = INITIAL_SNAPSHOT;
+  private error: ConnectionRuntimeFailure | null = null;
+
+  constructor(options: ConnectionCoordinatorOptions = {}) {
+    this.store = options.store ?? connectionStore;
+    this.cache = options.cache ?? rosterCache;
+    this.watermarks = options.watermarks ?? unreadWatermarks;
+    this.adapterFactory = options.adapterFactory ?? null;
+    this.now = options.now ?? Date.now;
+  }
+
+  getSnapshot = (): ConnectionRuntimeSnapshot => this.snapshot;
+
+  subscribe = (listener: () => void): (() => void) => {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  };
+
+  getAdapter(connectionId: string | null | undefined): AgentAdapter | null {
+    if (!connectionId || this.active?.connectionId !== connectionId) return null;
+    return this.active.adapter;
+  }
+
+  setAdapterFactory(factory: ConnectionAdapterFactory): void {
+    if (this.adapterFactory === factory) return;
+    this.adapterFactory = factory;
+    this.adapterFactoryRevision += 1;
+    if (!this.started) return;
+    this.disconnectActiveImmediately();
+    this.scheduleReconcile();
+  }
+
+  async start(): Promise<ConnectionRuntimeSnapshot> {
+    if (this.startPromise) return this.startPromise;
+    this.started = true;
+    this.startPromise = this.enqueue(async () => {
+      try {
+        const storeSnapshot = await this.store.load();
+        if (!this.started) return this.snapshot;
+        this.storeUnsubscribe ??= this.store.subscribe(this.handleStoreChange);
+        await this.hydrateRosterCaches(storeSnapshot);
+        await this.reconcileActiveAdapter(storeSnapshot);
+        this.publish({ initialized: true });
+      } catch (error) {
+        this.error = failure('load', error);
+        this.publish({ initialized: true, switching: false });
+      }
+      return this.snapshot;
+    });
+    return this.startPromise;
+  }
+
+  async stop(): Promise<void> {
+    this.started = false;
+    this.startPromise = null;
+    this.storeUnsubscribe?.();
+    this.storeUnsubscribe = null;
+    this.disconnectActiveImmediately();
+    await this.whenIdle();
+    this.error = null;
+    this.publish({ initialized: false, switching: false });
+  }
+
+  async whenIdle(): Promise<void> {
+    let pending: Promise<void>;
+    do {
+      pending = this.operation;
+      await pending;
+    } while (pending !== this.operation);
+  }
+
+  async activate(connectionId: string): Promise<ConnectionRuntimeSnapshot> {
+    await this.store.setActive(connectionId);
+    await this.whenIdle();
+    return this.snapshot;
+  }
+
+  async addConnection(input: NewConnectionRecord): Promise<ConnectionDescriptor> {
+    const descriptor = await this.store.add(input);
+    await this.whenIdle();
+    return descriptor;
+  }
+
+  async replaceConnection(
+    connectionId: string,
+    replacement: ConnectionRecordReplacement,
+  ): Promise<ConnectionDescriptor> {
+    const descriptor = await this.store.replace(connectionId, replacement);
+    if (this.active?.connectionId === connectionId) {
+      this.disconnectActiveImmediately();
+      this.scheduleReconcile();
+      await this.whenIdle();
+    }
+    return descriptor;
+  }
+
+  async updateConnection(
+    connectionId: string,
+    patch: ConnectionRecordPatch,
+  ): Promise<ConnectionDescriptor> {
+    const descriptor = await this.store.update(connectionId, patch);
+    if (this.active?.connectionId === connectionId) {
+      this.disconnectActiveImmediately();
+      this.scheduleReconcile();
+      await this.whenIdle();
+    }
+    return descriptor;
+  }
+
+  async removeConnection(connectionId: string): Promise<boolean> {
+    const removed = await this.store.remove(connectionId);
+    if (!removed) return false;
+    this.rosterInputs.delete(connectionId);
+    await Promise.allSettled([
+      this.cache.remove(connectionId),
+      this.watermarks.clearConnection(connectionId),
+    ]);
+    this.publish();
+    await this.whenIdle();
+    return true;
+  }
+
+  async setFreeConnection(connectionId: string): Promise<ConnectionRuntimeSnapshot> {
+    await this.store.setFreeConnection(connectionId);
+    await this.whenIdle();
+    return this.snapshot;
+  }
+
+  async rollbackConnections(): Promise<ConnectionRuntimeSnapshot> {
+    await this.store.rollback();
+    this.disconnectActiveImmediately();
+    this.scheduleReconcile();
+    await this.whenIdle();
+    return this.snapshot;
+  }
+
+  async refreshRoster(): Promise<ReadonlyArray<RosterConnectionGroup>> {
+    await this.enqueue(async () => {
+      const entry = this.active;
+      if (entry) await this.refreshActiveRoster(entry);
+    });
+    return this.snapshot.roster;
+  }
+
+  async probeActive(timeoutMs?: number): Promise<boolean> {
+    const entry = this.active;
+    if (!entry) return false;
+    try {
+      const healthy = await entry.adapter.probe(timeoutMs);
+      if (!healthy && this.active === entry) {
+        this.error = failure('probe', new Error('Active connection probe failed.'), entry.connectionId);
+        this.publish({ switching: true });
+        entry.adapter.disconnect();
+        await entry.adapter.connect();
+        if (this.active === entry) {
+          this.error = null;
+          await this.refreshActiveRoster(entry);
+          this.publish({ switching: false });
+        }
+      }
+      return healthy;
+    } catch (error) {
+      if (this.active === entry) {
+        this.error = failure('probe', error, entry.connectionId);
+        this.publish({ switching: false });
+      }
+      return false;
+    }
+  }
+
+  async markSessionOpened(
+    session: Pick<SessionDescriptor, 'connectionId' | 'key' | 'updatedAt'>,
+    openedAt = this.now(),
+  ): Promise<SessionWatermarks> {
+    const values = await this.watermarks.markOpened(session, openedAt);
+    this.applyWatermarks(session.connectionId, values);
+    return values;
+  }
+
+  async markPromptSucceeded(
+    session: Pick<SessionDescriptor, 'connectionId' | 'key' | 'updatedAt'>,
+    acceptedAt = this.now(),
+  ): Promise<SessionWatermarks> {
+    const values = await this.watermarks.markPromptSucceeded(session, acceptedAt);
+    this.applyWatermarks(session.connectionId, values);
+    return values;
+  }
+
+  private readonly handleStoreChange = (): void => {
+    if (!this.started) return;
+    const storeSnapshot = this.store.getSnapshot();
+    if (this.active && this.active.connectionId !== storeSnapshot.activeConnectionId) {
+      this.disconnectActiveImmediately();
+    }
+    const needsSwitch = Boolean(
+      storeSnapshot.activeConnectionId
+      && this.adapterFactory
+      && (
+        this.active?.connectionId !== storeSnapshot.activeConnectionId
+        || this.active.factoryRevision !== this.adapterFactoryRevision
+      ),
+    );
+    this.publishStoreSnapshot(storeSnapshot, {
+      switching: needsSwitch,
+    });
+    this.scheduleReconcile();
+  };
+
+  private scheduleReconcile(): void {
+    if (!this.started || this.reconcileScheduled) return;
+    this.reconcileScheduled = true;
+    void this.enqueue(async () => {
+      this.reconcileScheduled = false;
+      const storeSnapshot = this.store.getSnapshot();
+      await this.hydrateRosterCaches(storeSnapshot);
+      await this.reconcileActiveAdapter(storeSnapshot);
+    });
+  }
+
+  private async reconcileActiveAdapter(storeSnapshot: ConnectionStoreSnapshot): Promise<void> {
+    if (!this.started) return;
+    this.publishStoreSnapshot(storeSnapshot);
+    const connectionId = storeSnapshot.activeConnectionId;
+    const factory = this.adapterFactory;
+    const factoryRevision = this.adapterFactoryRevision;
+    if (!connectionId || !factory) {
+      this.disconnectActiveImmediately();
+      this.publish({ switching: false });
+      return;
+    }
+    if (
+      this.active?.connectionId === connectionId
+      && this.active.factoryRevision === factoryRevision
+    ) {
+      this.publish({ switching: false });
+      return;
+    }
+
+    this.disconnectActiveImmediately();
+    this.publish({ switching: true });
+    let adapter: AgentAdapter;
+    try {
+      adapter = await this.store.createAdapter(connectionId, factory);
+    } catch (error) {
+      this.error = failure('connect', error, connectionId);
+      this.publish({ switching: false });
+      return;
+    }
+
+    if (
+      !this.started
+      || this.store.getSnapshot().activeConnectionId !== connectionId
+      || this.adapterFactoryRevision !== factoryRevision
+    ) {
+      adapter.disconnect();
+      return;
+    }
+
+    const entry: ActiveAdapterEntry = {
+      connectionId,
+      adapter,
+      factoryRevision,
+      unsubscribers: [],
+    };
+    entry.unsubscribers.push(
+      adapter.on('state', () => {
+        if (this.active === entry) this.publish();
+      }),
+      adapter.on('sessions', (sessions) => {
+        if (this.active === entry) this.acceptSessionSnapshot(entry, sessions);
+      }),
+    );
+    this.active = entry;
+    this.error = null;
+    this.publish({ switching: true });
+
+    try {
+      await adapter.connect();
+      if (this.active !== entry) return;
+      this.error = null;
+      this.publish({ switching: false });
+      await this.refreshActiveRoster(entry);
+    } catch (error) {
+      if (this.active !== entry) return;
+      this.error = failure('connect', error, connectionId);
+      this.publish({ switching: false });
+    }
+  }
+
+  private async hydrateRosterCaches(storeSnapshot: ConnectionStoreSnapshot): Promise<void> {
+    const descriptors = storeSnapshot.connections;
+    const descriptorById = new Map(descriptors.map((connection) => [connection.id, connection]));
+    for (const connectionId of this.rosterInputs.keys()) {
+      if (!descriptorById.has(connectionId)) this.rosterInputs.delete(connectionId);
+    }
+    let cached: Awaited<ReturnType<RosterCachePort['getMany']>> = EMPTY_CACHED_ROSTERS;
+    try {
+      cached = await this.cache.getMany(descriptors.map((connection) => connection.id));
+    } catch (error) {
+      this.error = failure('roster', error, storeSnapshot.activeConnectionId ?? undefined);
+    }
+    const cachedById = new Map(cached.map((entry) => [entry.connectionId, entry]));
+    let activeWatermarks: SessionWatermarks = {};
+    if (storeSnapshot.activeConnectionId) {
+      try {
+        activeWatermarks = await this.watermarks.get(storeSnapshot.activeConnectionId);
+      } catch (error) {
+        this.error = failure('roster', error, storeSnapshot.activeConnectionId);
+      }
+    }
+
+    for (const connection of descriptors) {
+      const current = this.rosterInputs.get(connection.id);
+      if (current?.source === 'live' && this.active?.connectionId === connection.id) {
+        this.rosterInputs.set(connection.id, {
+          ...current,
+          connection,
+          watermarks: connection.id === storeSnapshot.activeConnectionId
+            ? activeWatermarks
+            : undefined,
+        });
+        continue;
+      }
+      const entry = cachedById.get(connection.id);
+      this.rosterInputs.set(connection.id, {
+        connection,
+        agents: entry?.agents ?? EMPTY_AGENTS,
+        sessions: entry?.sessions ?? EMPTY_SESSIONS,
+        source: 'cache',
+        syncedAt: entry?.savedAt ?? 0,
+        ...(connection.id === storeSnapshot.activeConnectionId
+          ? { watermarks: activeWatermarks }
+          : {}),
+      });
+    }
+    this.publishStoreSnapshot(storeSnapshot);
+  }
+
+  private async refreshActiveRoster(entry: ActiveAdapterEntry): Promise<void> {
+    try {
+      const [agents, sessions, watermarks] = await Promise.all([
+        entry.adapter.listAgents(),
+        entry.adapter.listSessions(),
+        this.watermarks.get(entry.connectionId),
+      ]);
+      if (this.active !== entry) return;
+      const connection = this.connectionDescriptor(entry.connectionId);
+      if (!connection) return;
+      const syncedAt = this.now();
+      this.rosterInputs.set(entry.connectionId, {
+        connection,
+        agents: cloneAgents(agents),
+        sessions: cloneSessions(sessions),
+        source: 'live',
+        syncedAt,
+        watermarks,
+      });
+      this.error = null;
+      this.publish();
+      const cacheSnapshot = await this.cache.set(
+        entry.connectionId,
+        agents,
+        sessions,
+        entry.adapter.state,
+      );
+      if (this.active !== entry) return;
+      this.rosterInputs.set(entry.connectionId, {
+        connection,
+        agents: cacheSnapshot.agents,
+        sessions: cacheSnapshot.sessions,
+        source: 'live',
+        syncedAt: cacheSnapshot.savedAt,
+        watermarks,
+      });
+      this.publish();
+    } catch (error) {
+      if (this.active !== entry) return;
+      this.error = failure('roster', error, entry.connectionId);
+      this.publish();
+    }
+  }
+
+  private acceptSessionSnapshot(
+    entry: ActiveAdapterEntry,
+    sessions: ReadonlyArray<SessionDescriptor>,
+  ): void {
+    const existing = this.rosterInputs.get(entry.connectionId);
+    const connection = this.connectionDescriptor(entry.connectionId);
+    if (!connection || this.active !== entry) return;
+    const next: RosterSnapshotInput = {
+      connection,
+      agents: existing?.agents ?? EMPTY_AGENTS,
+      sessions: cloneSessions(sessions),
+      source: 'live',
+      syncedAt: this.now(),
+      watermarks: existing?.watermarks ?? {},
+    };
+    this.rosterInputs.set(entry.connectionId, next);
+    this.publish();
+    void this.cache.set(
+      entry.connectionId,
+      next.agents,
+      next.sessions,
+      entry.adapter.state,
+    ).catch((error: unknown) => {
+      if (this.active !== entry) return;
+      this.error = failure('roster', error, entry.connectionId);
+      this.publish();
+    });
+  }
+
+  private applyWatermarks(connectionId: string, watermarks: SessionWatermarks): void {
+    const existing = this.rosterInputs.get(connectionId);
+    if (!existing) return;
+    this.rosterInputs.set(connectionId, { ...existing, watermarks });
+    this.publish();
+  }
+
+  private disconnectActiveImmediately(): void {
+    const entry = this.active;
+    if (!entry) return;
+    this.active = null;
+    for (const unsubscribe of entry.unsubscribers.splice(0)) unsubscribe();
+    const roster = this.rosterInputs.get(entry.connectionId);
+    if (roster?.source === 'live') {
+      this.rosterInputs.set(entry.connectionId, { ...roster, source: 'cache' });
+    }
+    entry.adapter.disconnect();
+    this.publish({ switching: false });
+  }
+
+  private connectionDescriptor(connectionId: string): ConnectionDescriptor | null {
+    return this.store.getSnapshot().connections.find(
+      (connection) => connection.id === connectionId,
+    ) ?? null;
+  }
+
+  private publishStoreSnapshot(
+    storeSnapshot: ConnectionStoreSnapshot,
+    patch: Partial<Pick<ConnectionRuntimeSnapshot, 'switching'>> = {},
+  ): void {
+    this.publish({
+      connectionsRevision: storeSnapshot.revision,
+      connections: storeSnapshot.connections,
+      activeConnectionId: storeSnapshot.activeConnectionId,
+      freeConnectionId: storeSnapshot.freeConnectionId,
+      ...patch,
+    });
+  }
+
+  private publish(patch: Partial<ConnectionRuntimeSnapshot> = {}): void {
+    const storeSnapshot = this.store.getSnapshot();
+    const activeConnectionId = patch.activeConnectionId === undefined
+      ? storeSnapshot.activeConnectionId
+      : patch.activeConnectionId;
+    const roster = aggregateRoster([...this.rosterInputs.values()], activeConnectionId);
+    this.snapshot = Object.freeze({
+      revision: this.snapshot.revision + 1,
+      initialized: patch.initialized ?? this.snapshot.initialized,
+      switching: patch.switching ?? this.snapshot.switching,
+      connectionsRevision: patch.connectionsRevision ?? storeSnapshot.revision,
+      connections: patch.connections ?? storeSnapshot.connections,
+      activeConnectionId,
+      freeConnectionId: patch.freeConnectionId === undefined
+        ? storeSnapshot.freeConnectionId
+        : patch.freeConnectionId,
+      activeAdapter: this.active?.adapter ?? null,
+      activeState: this.active?.adapter.state ?? 'idle',
+      roster,
+      error: this.error,
+    });
+    for (const listener of this.listeners) listener();
+  }
+
+  private enqueue<T>(operation: () => Promise<T>): Promise<T> {
+    const pending = this.operation.then(operation, operation);
+    this.operation = pending.then(() => undefined, () => undefined);
+    return pending;
+  }
+}
+
+const EMPTY_AGENTS = Object.freeze([]) as ReadonlyArray<AgentDescriptor>;
+const EMPTY_SESSIONS = Object.freeze([]) as ReadonlyArray<SessionDescriptor>;
+const EMPTY_CACHED_ROSTERS = Object.freeze([]) as ReadonlyArray<RosterCacheSnapshot>;
+
+function cloneAgents(agents: ReadonlyArray<AgentDescriptor>): AgentDescriptor[] {
+  return agents.map((agent) => ({ ...agent }));
+}
+
+function cloneSessions(sessions: ReadonlyArray<SessionDescriptor>): SessionDescriptor[] {
+  return sessions.map((session) => ({
+    ...session,
+    allowedActions: { ...session.allowedActions },
+  }));
+}
+
+function failure(
+  operation: ConnectionRuntimeFailure['operation'],
+  error: unknown,
+  connectionId?: string,
+): ConnectionRuntimeFailure {
+  return Object.freeze({
+    operation,
+    ...(connectionId ? { connectionId } : {}),
+    message: error instanceof Error ? error.message : String(error ?? 'Unknown connection error'),
+  });
+}
+
+let defaultCoordinator = new ConnectionCoordinator();
+
+export function getConnectionRuntime(): ConnectionCoordinator {
+  return defaultCoordinator;
+}
+
+export function configureConnectionRuntime(
+  factory: ConnectionAdapterFactory,
+): ConnectionCoordinator {
+  defaultCoordinator.setAdapterFactory(factory);
+  return defaultCoordinator;
+}
+
+export async function resetConnectionRuntimeForTests(
+  options: ConnectionCoordinatorOptions = {},
+): Promise<ConnectionCoordinator> {
+  await defaultCoordinator.stop();
+  defaultCoordinator = new ConnectionCoordinator(options);
+  return defaultCoordinator;
+}
+
+function useConnectionRuntimeSnapshot(): ConnectionRuntimeSnapshot {
+  const coordinator = getConnectionRuntime();
+  useEffect(() => {
+    void coordinator.start();
+  }, [coordinator]);
+  return useSyncExternalStore(
+    coordinator.subscribe,
+    coordinator.getSnapshot,
+    coordinator.getSnapshot,
+  );
+}
+
+/** Connection registry state. Mutations remain on the exported coordinator. */
+export function useConnections(): ConnectionRuntimeSnapshot {
+  return useConnectionRuntimeSnapshot();
+}
+
+/** Returns an adapter only while that connection is the one live connection. */
+export function useAdapter(connectionId: string | null | undefined): AgentAdapter | null {
+  const snapshot = useConnectionRuntimeSnapshot();
+  return useMemo(
+    () => connectionId && snapshot.activeConnectionId === connectionId
+      ? snapshot.activeAdapter
+      : null,
+    [connectionId, snapshot.activeAdapter, snapshot.activeConnectionId, snapshot.revision],
+  );
+}
+
+/** Live active-connection rows plus cache-only rows for every inactive connection. */
+export function useRoster(): ReadonlyArray<RosterConnectionGroup> {
+  return useConnectionRuntimeSnapshot().roster;
+}
+
+export type {
+  ConnectionAdapterFactory,
+  ConnectionRecordPatch,
+  ConnectionRecordReplacement,
+  NewConnectionRecord,
+  RosterConnectionGroup,
+};
