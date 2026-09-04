@@ -1,4 +1,5 @@
 import React from 'react';
+import type { AgentAdapter } from '@clawket/agent-protocol';
 import { GatewayClient } from '../connection/protocol';
 import { LastOpenedSessionSnapshot } from '../services/storage';
 import { GatewayConfig } from '../types';
@@ -24,6 +25,7 @@ export type ChatNotificationOpenRequest = {
 
 export type AppContextType = {
   gateway: GatewayClient;
+  activeAdapter: AgentAdapter | null;
   activeGatewayConfigId: string | null;
   gatewayEpoch: number;
   foregroundEpoch: number;

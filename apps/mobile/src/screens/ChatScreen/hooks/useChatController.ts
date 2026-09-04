@@ -11,6 +11,16 @@ import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import * as Network from "expo-network";
 import { useTranslation } from "react-i18next";
+import type {
+  AgentAdapter,
+  AgentDescriptor,
+  ConnectionState as AdapterConnectionState,
+  SessionDescriptor,
+} from "@clawket/agent-protocol";
+import {
+  type AdapterChatUpdate,
+  useAdapterChatEvents,
+} from "../../../chat/useAdapterChatEvents";
 import { ChatComposerHandle } from "../../../components/chat/ChatComposer";
 import { SLASH_COMMANDS, SlashCommand } from "../../../data/slash-commands";
 import { useChatImagePicker } from "../../../hooks/useChatImagePicker";
@@ -27,7 +37,6 @@ import { ConnectionState, SessionInfo } from "../../../types";
 import { PendingImage, UiMessage } from "../../../types/chat";
 import {
   extractAssistantDisplayText,
-  extractText,
   isAssistantDeliveryMirrorMessage,
   isAssistantSilentReplyMessage,
   parseMessageTimestamp,
@@ -42,9 +51,18 @@ import { useAppContext } from "../../../contexts/AppContext";
 import {
   AgentActivity,
   agentIdFromSessionKey,
+  applyDelta as applyActivityDelta,
+  applyRunEnd,
   applyRunStart,
+  applyToolStart as applyActivityToolStart,
 } from "./agentActivity";
-import { ChildSessionActivity } from "./childSessionActivity";
+import {
+  applyChildDelta,
+  applyChildRunEnd,
+  applyChildRunStart,
+  applyChildToolStart,
+  ChildSessionActivity,
+} from "./childSessionActivity";
 import { resolveCachedAgentIdentity } from "./cacheAgentIdentity";
 import { shouldClearComposerInput } from "./composerClearPolicy";
 import { canSendMessage } from "./composerInteractionPolicy";
@@ -52,15 +70,24 @@ import { deriveCurrentSessionActivity } from "./currentSessionActivity";
 import { hasCompletedAssistantForRememberedRun } from "./runStateValidation";
 import { hasActiveGatewayConfig } from "./chatSyncPolicy";
 import { useChatHistoryState } from "./useChatHistoryState";
-import { useGatewayChatEvents } from "./useGatewayChatEvents";
 import { buildLiveRunListData, StreamSegment } from "./liveRunThread";
-import { SessionRunState } from "./sessionRunState";
+import {
+  clearSessionRunState,
+  markSessionRunDelta,
+  markSessionRunStarted,
+  SessionRunState,
+} from "./sessionRunState";
+import { shouldAdoptPendingOptimisticRunId } from "./pendingOptimisticRun";
+import { preserveOptimisticAssistantMessage } from "./historyMergePolicy";
 import {
   FOREGROUND_REFRESH_AFTER_RECONNECT_TIMEOUT_MS,
   getForegroundRefreshDelayMs,
   shouldReconnectBeforeForegroundRefresh,
 } from "./foregroundRefreshPolicy";
-import { formatToolActivity } from "../../../utils/tool-display";
+import {
+  formatToolActivity,
+  formatToolOneLinerLocalized,
+} from "../../../utils/tool-display";
 import { useChatVoiceInput } from "./useChatVoiceInput";
 import { useChatModelPicker } from "./useChatModelPicker";
 import { useChatCommandPicker } from "./useChatCommandPicker";
@@ -78,7 +105,107 @@ import { preparePendingImagesForSend } from "./preparePendingImagesForSend";
 
 type PendingImageWithFile = PendingImage & { fileName?: string };
 
+type SilentCommandProbe = {
+  sessionKey: string;
+  latestText: string;
+  finishing: boolean;
+  timeout: ReturnType<typeof setTimeout> | null;
+  resolve: (value: string) => void;
+  reject: (reason: Error) => void;
+};
+
+function mapAdapterConnectionState(state: AdapterConnectionState): ConnectionState {
+  switch (state) {
+    case "idle":
+      return "idle";
+    case "connecting":
+      return "connecting";
+    case "handshaking":
+      return "challenging";
+    case "ready":
+      return "ready";
+    case "reconnecting":
+      return "reconnecting";
+    case "offline":
+    case "error":
+      return "closed";
+  }
+}
+
+function mapAdapterSession(session: SessionDescriptor): SessionInfo {
+  const kind: SessionInfo["kind"] = session.kind === "direct"
+    ? "direct"
+    : session.kind === "group"
+      ? "group"
+      : "global";
+  return {
+    key: session.key,
+    kind,
+    label: session.title,
+    title: session.title,
+    lastMessagePreview: session.preview,
+    updatedAt: session.updatedAt,
+    channel: session.channel,
+    model: session.model,
+    spawnedBy: session.parentSessionKey,
+  };
+}
+
+function mapAdapterAgent(agent: AgentDescriptor) {
+  return {
+    id: agent.agentId,
+    name: agent.name,
+    identity: {
+      name: agent.name,
+      emoji: agent.emoji,
+      avatarUrl: agent.avatarUrl,
+    },
+  };
+}
+
+function mergeStreamText(previous: string | null, incoming: string): string {
+  if (!previous || incoming.startsWith(previous)) return incoming;
+  if (previous.startsWith(incoming)) return previous;
+  return `${previous}${incoming}`;
+}
+
+function withToolMessage(previous: UiMessage[], message: UiMessage): UiMessage[] {
+  const index = previous.findIndex((candidate) => candidate.id === message.id);
+  if (index < 0) return [...previous, message];
+  const next = [...previous];
+  next[index] = { ...previous[index], ...message, id: message.id };
+  return next;
+}
+
+function appendUniqueMessage(previous: UiMessage[], message: UiMessage): UiMessage[] {
+  return previous.some((candidate) => candidate.id === message.id)
+    ? previous
+    : [...previous, message];
+}
+
+function shouldMergeFinalMessage(
+  candidate: UiMessage,
+  finalText: string,
+  activeRunStartedAt: number | null,
+): boolean {
+  if (candidate.role !== "assistant") return false;
+  if (candidate.id.startsWith("final_") || candidate.id.startsWith("abort_")) return false;
+  const candidateText = candidate.text.replace(/\s+/g, " ").trim();
+  const normalizedFinal = finalText.replace(/\s+/g, " ").trim();
+  if (!candidateText || !normalizedFinal) return false;
+  const candidateTimestamp = candidate.timestampMs ?? 0;
+  if (
+    activeRunStartedAt
+    && candidateTimestamp > 0
+    && candidateTimestamp + 1_000 < activeRunStartedAt
+  ) {
+    return false;
+  }
+  return candidateText.includes(normalizedFinal) || normalizedFinal.includes(candidateText);
+}
+
 export function useChatController({
+  adapter,
   gateway,
   config,
   debugMode,
@@ -90,7 +217,7 @@ export function useChatController({
   const { t, i18n } = useTranslation("chat");
   const { speechRecognitionLanguage } = appContext;
   const [connectionState, setConnectionState] = useState<ConnectionState>(
-    gateway.getConnectionState(),
+    adapter ? mapAdapterConnectionState(adapter.state) : "idle",
   );
   const [input, setInput] = useState("");
   const composerRef = useRef<ChatComposerHandle>(null);
@@ -186,9 +313,8 @@ export function useChatController({
   );
 
   const sessionKeyRef = useRef<string | null>(null);
-  const lastConnStateRef = useRef<ConnectionState>(
-    gateway.getConnectionState(),
-  );
+  const lastAdapterStateRef = useRef<AdapterConnectionState>("idle");
+  const lastAdapterRef = useRef<AgentAdapter | null>(adapter);
   const sendPreflightInFlightRef = useRef(false);
   const sendTriggerGuardRef = useRef(false);
 
@@ -264,7 +390,7 @@ export function useChatController({
     }
   }, [onChildSessionActivityChange]);
   const compactionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const silentCommandRunIdsRef = useRef<Set<string>>(new Set());
+  const silentCommandProbesRef = useRef<Map<string, SilentCommandProbe>>(new Map());
 
   const {
     toggleVoiceInput,
@@ -900,7 +1026,7 @@ export function useChatController({
           platformOs: Platform.OS,
           awayMs,
           hasRunningChat,
-          connectionState: gateway.getConnectionState(),
+          connectionState,
         })
       ) {
         foregroundRefreshTimerRef.current = setTimeout(() => {
@@ -925,7 +1051,14 @@ export function useChatController({
         })();
       }, delayMs);
     },
-    [autoRefresh, clearForegroundRefreshWait, dbg, gateway, hasGatewayConfig],
+    [
+      autoRefresh,
+      clearForegroundRefreshWait,
+      connectionState,
+      dbg,
+      gateway,
+      hasGatewayConfig,
+    ],
   );
 
   const previousGatewayScopeRef = useRef<string | null>(gatewayConfigId);
@@ -1076,7 +1209,7 @@ export function useChatController({
         // Refresh visible history after transport freshness has been re-established.
         scheduleForegroundRefresh(awayMs, hasRunningChat);
         if (hasRunningChat) {
-          if (awayMs >= 12_000 || gateway.getConnectionState() !== "ready") {
+          if (awayMs >= 12_000 || connectionState !== "ready") {
             void gateway.probeConnection();
           }
           if (history.sessionKey) {
@@ -1234,143 +1367,598 @@ export function useChatController({
     setSlashSuggestionsDismissed(false);
   }, [input]);
 
-  const shouldIgnoreRunId = useCallback((runId: string) => {
-    return silentCommandRunIdsRef.current.has(runId);
+  const markTransportConfirmed = useCallback((timestampMs = Date.now()) => {
+    lastConfirmedTransportAtRef.current = timestampMs;
+    forceSendProbeUntilRef.current = 0;
   }, []);
 
-  useGatewayChatEvents({
-    gateway,
-    config,
-    showDebug,
-    dbg,
-    sessionKeyRef,
-    lastConnStateRef,
-    compactionTimerRef,
-    currentRunIdRef,
-    streamStartedAtRef,
-    chatStreamRef,
-    sessionRunStateRef,
-    pendingOptimisticRunIdsRef,
-    setConnectionState,
-    setPairingPending,
-    setIsSending,
-    setChatStream,
-    setMessages: history.setMessages,
-    setToolMessages: setChatToolMessages,
-    commitCurrentStreamSegment,
+  const markRunSignal = useCallback(() => {
+    clearPostStreamHistoryRefreshTimer();
+    lastRunSignalAtRef.current = Date.now();
+    lastRunRecoveryProbeAtRef.current = 0;
+    armPendingRunTimeout();
+  }, [armPendingRunTimeout, clearPostStreamHistoryRefreshTimer]);
+
+  const adoptPendingRunId = useCallback((sessionKey: string, runId: string) => {
+    if (!shouldAdoptPendingOptimisticRunId({
+      sessionKey,
+      eventRunId: runId,
+      currentRunId: currentRunIdRef.current,
+      pendingRunIds: pendingOptimisticRunIdsRef.current,
+    })) {
+      if (pendingOptimisticRunIdsRef.current.get(sessionKey) === runId) {
+        pendingOptimisticRunIdsRef.current.delete(sessionKey);
+      }
+      return false;
+    }
+    const previousRunId = currentRunIdRef.current;
+    currentRunIdRef.current = runId;
+    pendingOptimisticRunIdsRef.current.delete(sessionKey);
+    if (showDebug) {
+      dbg(
+        `adopt optimistic runId: ${previousRunId?.slice(0, 8) ?? "none"} -> ${runId.slice(0, 8)} session=${sessionKey}`,
+      );
+    }
+    return true;
+  }, [dbg, showDebug]);
+
+  const finishSilentCommandProbe = useCallback(
+    (runId: string, result: { text?: string; error?: Error }) => {
+      const probe = silentCommandProbesRef.current.get(runId);
+      if (!probe) return;
+      silentCommandProbesRef.current.delete(runId);
+      if (probe.timeout) clearTimeout(probe.timeout);
+      if (result.error) probe.reject(result.error);
+      else probe.resolve(result.text ?? probe.latestText);
+    },
+    [],
+  );
+
+  const consumeSilentCommandUpdate = useCallback(
+    (update: AdapterChatUpdate): boolean => {
+      if (!("runId" in update) || !update.runId) return false;
+      const probe = silentCommandProbesRef.current.get(update.runId);
+      if (!probe) return false;
+      if ("sessionKey" in update && update.sessionKey !== probe.sessionKey) {
+        return false;
+      }
+
+      switch (update.type) {
+        case "agent_message_chunk":
+          probe.latestText = mergeStreamText(probe.latestText, update.text);
+          return true;
+        case "run_finished":
+          if (probe.finishing) return true;
+          probe.finishing = true;
+          if (update.stopReason === "cancelled") {
+            finishSilentCommandProbe(update.runId, {
+              error: new Error("Command probe aborted."),
+            });
+            return true;
+          }
+          if (update.stopReason === "error") {
+            finishSilentCommandProbe(update.runId, {
+              error: new Error("Command probe failed."),
+            });
+            return true;
+          }
+          void (async () => {
+            let finalText = update.finalMessage?.text ?? probe.latestText;
+            if (!finalText.trim()) {
+              try {
+                const historyResult = await gateway.fetchHistory(probe.sessionKey, 8);
+                const assistant = [...historyResult.messages]
+                  .reverse()
+                  .find((message) => (
+                    message.role === "assistant"
+                    && !isAssistantDeliveryMirrorMessage(message)
+                  ));
+                finalText = extractAssistantDisplayText(assistant?.content);
+              } catch {
+                finalText = probe.latestText;
+              }
+            }
+            finishSilentCommandProbe(update.runId, { text: finalText });
+          })();
+          return true;
+        case "error":
+          finishSilentCommandProbe(update.runId, {
+            error: new Error(update.errorMessage || "Command probe failed."),
+          });
+          return true;
+        case "run_started":
+        case "agent_thought_chunk":
+        case "tool_call":
+        case "tool_call_update":
+          return true;
+        default:
+          return false;
+      }
+    },
+    [finishSilentCommandProbe, gateway],
+  );
+
+  const schedulePostStreamHistoryRefresh = useCallback(() => {
+    const completedSessionKey = sessionKeyRef.current;
+    clearPostStreamHistoryRefreshTimer();
+    postStreamHistoryRefreshTimerRef.current = setTimeout(() => {
+      postStreamHistoryRefreshTimerRef.current = null;
+      if (!completedSessionKey) return;
+      if (sessionKeyRef.current !== completedSessionKey) return;
+      if (currentRunIdRef.current) return;
+      if (streamStartedAtRef.current !== null) return;
+      requestVisibleHistoryReload(completedSessionKey, "post-stream")
+        .finally(() =>
+          clearTransientRunPresentation({ preserveCurrentStream: true }),
+        )
+        .catch(() => {});
+    }, POST_STREAM_HISTORY_REFRESH_DELAY_MS);
+  }, [
+    clearPostStreamHistoryRefreshTimer,
     clearTransientRunPresentation,
-    setCompactionNotice,
-    loadSessionsAndHistory: history.loadSessionsAndHistory,
-    reconcileLatestAssistantFromHistory:
-      history.reconcileLatestAssistantFromHistory,
-    currentAgentId,
-    onAgentsLoaded: setAgents,
-    onDefaultAgentId: useCallback(
-      (defaultId: string) => {
-        // Apply gateway's default agent only if user hasn't persisted a choice
-        StorageService.getCurrentAgentId()
-          .then((persisted) => {
-            if (!persisted) setCurrentAgentId(defaultId);
-          })
-          .catch(() => {});
-      },
-      [setCurrentAgentId],
-    ),
-    shouldIgnoreRunId,
-    onStreamFinished: useCallback(() => {
-      const completedSessionKey = sessionKeyRef.current;
-      clearPostStreamHistoryRefreshTimer();
-      postStreamHistoryRefreshTimerRef.current = setTimeout(() => {
-        postStreamHistoryRefreshTimerRef.current = null;
-        if (!completedSessionKey) return;
-        if (sessionKeyRef.current !== completedSessionKey) return;
-        if (currentRunIdRef.current) return;
-        if (streamStartedAtRef.current !== null) return;
-        requestVisibleHistoryReload(completedSessionKey, "post-stream")
-          .finally(() =>
-            clearTransientRunPresentation({ preserveCurrentStream: true }),
-          )
-          .catch(() => {});
-      }, POST_STREAM_HISTORY_REFRESH_DELAY_MS);
-    }, [
-      clearPostStreamHistoryRefreshTimer,
-      clearTransientRunPresentation,
-      requestVisibleHistoryReload,
-    ]),
-    execApprovalEnabled,
-    setActivityLabel,
-    agentActivityRef,
-    childSessionActivityRef,
+    requestVisibleHistoryReload,
+  ]);
+
+  const handleAdapterState = useCallback((state: AdapterConnectionState) => {
+    const previous = lastAdapterStateRef.current;
+    const adapterChanged = lastAdapterRef.current !== adapter;
+    lastAdapterRef.current = adapter;
+    lastAdapterStateRef.current = state;
+    setConnectionState(mapAdapterConnectionState(state));
+
+    if (state === "ready") {
+      markTransportConfirmed();
+      setPairingPending(false);
+      if (adapterChanged || previous !== "ready") {
+        restoreRunStateForSession(sessionKeyRef.current);
+        void history.loadSessionsAndHistory();
+        const activeAdapter = adapter;
+        if (activeAdapter) {
+          void activeAdapter.listAgents().then((listedAgents) => {
+            if (listedAgents.length === 0) return;
+            setAgents(listedAgents.map(mapAdapterAgent));
+            const defaultAgent = listedAgents.find((agent) => agent.isMain);
+            if (!defaultAgent || defaultAgent.agentId === "main") return;
+            StorageService.getCurrentAgentId()
+              .then((persisted) => {
+                if (!persisted) setCurrentAgentId(defaultAgent.agentId);
+              })
+              .catch(() => {});
+          }).catch(() => {});
+        }
+      }
+      return;
+    }
+
+    forceSendProbeUntilRef.current = Date.now() + SEND_FORCE_PROBE_GRACE_MS;
+    if (previous !== "ready") return;
+    const sessionKey = sessionKeyRef.current;
+    if (sessionKey && currentRunIdRef.current) {
+      sessionRunStateRef.current.set(sessionKey, {
+        runId: currentRunIdRef.current,
+        streamText: chatStreamRef.current,
+        startedAt: streamStartedAtRef.current ?? Date.now(),
+      });
+    }
+    agentActivityRef.current.clear();
+    childSessionActivityRef.current.clear();
+    onChildSessionActivityChange();
+    resetAgentActiveCount();
+    currentRunIdRef.current = null;
+    streamStartedAtRef.current = null;
+    clearTransientRunPresentation();
+    setIsSending(false);
+    setActivityLabel(null);
+  }, [
+    adapter,
+    clearTransientRunPresentation,
+    history.loadSessionsAndHistory,
+    markTransportConfirmed,
     onChildSessionActivityChange,
-    onAgentActiveCountChange,
     resetAgentActiveCount,
-    onRunSignal: useCallback(() => {
-      clearPostStreamHistoryRefreshTimer();
-      lastRunSignalAtRef.current = Date.now();
-      lastRunRecoveryProbeAtRef.current = 0;
-      armPendingRunTimeout();
-    }, [armPendingRunTimeout, clearPostStreamHistoryRefreshTimer]),
-    onToolSettled: useCallback(
-      ({
-        runId,
-        sessionKey,
-        toolName,
-        status,
-      }: {
-        runId: string;
-        sessionKey: string | null;
-        toolName: string;
-        status: "success" | "error";
-      }) => {
-        if (!sessionKey || sessionKey !== history.sessionKey) return;
-        if (currentRunIdRef.current !== runId) return;
-        clearToolSettledRecoveryTimer();
-        if (showDebug)
-          dbg(
-            `toolSettled:schedule session=${sessionKey} runId=${runId.slice(0, 8)} tool=${toolName} status=${status}`,
+    restoreRunStateForSession,
+    setAgents,
+    setCurrentAgentId,
+  ]);
+
+  const handleAdapterSessions = useCallback((sessions: SessionDescriptor[]) => {
+    history.setSessions((previous) => sessions.map((session) => {
+      const existing = previous.find((candidate) => candidate.key === session.key);
+      return { ...existing, ...mapAdapterSession(session) };
+    }));
+  }, [history.setSessions]);
+
+  const handleAdapterUpdate = useCallback((update: AdapterChatUpdate) => {
+    if (consumeSilentCommandUpdate(update)) return;
+    if (update.type !== "error") markTransportConfirmed();
+
+    const markActivityStarted = (sessionKey: string, runId: string) => {
+      markSessionRunStarted(sessionRunStateRef.current, sessionKey, runId);
+      const agentId = agentIdFromSessionKey(sessionKey);
+      if (agentId && agentId !== currentAgentId) {
+        if (applyRunStart(agentActivityRef.current, agentId)) {
+          onAgentActiveCountChange(1);
+        }
+      }
+      if (sessionKey.includes(":subagent:")) {
+        applyChildRunStart(childSessionActivityRef.current, sessionKey);
+        onChildSessionActivityChange();
+      }
+    };
+
+    const markActivityFinished = (sessionKey: string, runId: string) => {
+      clearSessionRunState(sessionRunStateRef.current, sessionKey, runId);
+      const agentId = agentIdFromSessionKey(sessionKey);
+      if (agentId && agentId !== currentAgentId) {
+        if (applyRunEnd(agentActivityRef.current, agentId)) {
+          onAgentActiveCountChange(-1);
+        }
+      }
+      if (sessionKey.includes(":subagent:")) {
+        applyChildRunEnd(childSessionActivityRef.current, sessionKey);
+        onChildSessionActivityChange();
+      }
+    };
+
+    const matchesCurrentSession = (sessionKey: string) =>
+      sessionKeysMatch(sessionKey, sessionKeyRef.current);
+
+    const acceptRun = (sessionKey: string, runId: string) => {
+      if (
+        currentRunIdRef.current
+        && currentRunIdRef.current !== runId
+        && !adoptPendingRunId(sessionKey, runId)
+      ) {
+        return false;
+      }
+      if (!currentRunIdRef.current) {
+        currentRunIdRef.current = runId;
+        streamStartedAtRef.current = Date.now();
+      }
+      setIsSending(true);
+      return true;
+    };
+
+    switch (update.type) {
+      case "history_reconciled": {
+        if (!matchesCurrentSession(update.sessionKey)) return;
+        history.setMessages((previous) =>
+          preserveOptimisticAssistantMessage(previous, update.messages),
+        );
+        history.historyRawCountRef.current = update.history.messages.length;
+        history.setHistoryLoaded(true);
+        history.setHasMoreHistory(Boolean(update.nextCursor));
+        if (!update.hasActiveRun) {
+          const activeRunId = currentRunIdRef.current;
+          clearSessionRunState(
+            sessionRunStateRef.current,
+            update.sessionKey,
+            activeRunId ?? undefined,
           );
+          pendingOptimisticRunIdsRef.current.delete(update.sessionKey);
+          currentRunIdRef.current = null;
+          streamStartedAtRef.current = null;
+          clearTransientRunPresentation();
+          setIsSending(false);
+          setActivityLabel(null);
+        }
+        return;
+      }
+      case "run_started":
+        if (lastAdapterStateRef.current !== "ready") return;
+        markRunSignal();
+        markActivityStarted(update.sessionKey, update.runId);
+        if (!matchesCurrentSession(update.sessionKey)) return;
+        acceptRun(update.sessionKey, update.runId);
+        return;
+      case "agent_message_chunk": {
+        if (lastAdapterStateRef.current !== "ready") return;
+        markRunSignal();
+        const mergedText = mergeStreamText(
+          sessionRunStateRef.current.get(update.sessionKey)?.streamText ?? null,
+          update.text,
+        );
+        markSessionRunDelta(
+          sessionRunStateRef.current,
+          update.sessionKey,
+          update.runId,
+          mergedText,
+        );
+        const agentId = agentIdFromSessionKey(update.sessionKey);
+        if (agentId && agentId !== currentAgentId) {
+          applyActivityDelta(agentActivityRef.current, agentId, mergedText);
+        }
+        if (update.sessionKey.includes(":subagent:")) {
+          applyChildDelta(childSessionActivityRef.current, update.sessionKey, mergedText);
+          onChildSessionActivityChange();
+        }
+        if (!update.visible || !matchesCurrentSession(update.sessionKey)) return;
+        if (!acceptRun(update.sessionKey, update.runId)) return;
+        const nextText = mergeStreamText(chatStreamRef.current, update.text);
+        chatStreamRef.current = nextText;
+        setChatStream(nextText);
+        setActivityLabel(null);
+        return;
+      }
+      case "agent_thought_chunk":
+        if (lastAdapterStateRef.current !== "ready") return;
+        markRunSignal();
+        markActivityStarted(update.sessionKey, update.runId);
+        if (matchesCurrentSession(update.sessionKey)) {
+          acceptRun(update.sessionKey, update.runId);
+        }
+        return;
+      case "tool_call": {
+        if (lastAdapterStateRef.current !== "ready") return;
+        markRunSignal();
+        markActivityStarted(update.sessionKey, update.runId);
+        const agentId = agentIdFromSessionKey(update.sessionKey);
+        const toolName = update.message.toolName ?? "tool";
+        if (agentId && agentId !== currentAgentId) {
+          applyActivityToolStart(agentActivityRef.current, agentId, toolName);
+        }
+        if (update.sessionKey.includes(":subagent:")) {
+          applyChildToolStart(childSessionActivityRef.current, update.sessionKey, toolName);
+          onChildSessionActivityChange();
+        }
+        if (!matchesCurrentSession(update.sessionKey)) return;
+        if (!acceptRun(update.sessionKey, update.runId)) return;
+        commitCurrentStreamSegment();
+        setActivityLabel(formatToolActivity(toolName, t));
+        const message = {
+          ...update.message,
+          toolSummary: formatToolOneLinerLocalized(toolName, update.message.toolArgs, t),
+        };
+        setChatToolMessages((previous) => withToolMessage(previous, message));
+        return;
+      }
+      case "tool_call_update": {
+        if (lastAdapterStateRef.current !== "ready") return;
+        markRunSignal();
+        markSessionRunStarted(sessionRunStateRef.current, update.sessionKey, update.runId);
+        if (!matchesCurrentSession(update.sessionKey)) return;
+        if (!acceptRun(update.sessionKey, update.runId)) return;
+        const previousMessage = chatToolMessagesRef.current.find(
+          (message) => message.id === update.message.id,
+        );
+        const toolName = previousMessage?.toolName ?? "tool";
+        const finishedAt = update.message.toolFinishedAt;
+        const durationMs = finishedAt && previousMessage?.toolStartedAt
+          ? Math.max(0, finishedAt - previousMessage.toolStartedAt)
+          : undefined;
+        const localizedSummary = formatToolOneLinerLocalized(
+          toolName,
+          previousMessage?.toolArgs,
+          t,
+        );
+        const message: UiMessage = {
+          ...previousMessage,
+          ...update.message,
+          toolName,
+          toolSummary: update.message.toolStatus === "error"
+            ? t("Failed {{name}}", { name: localizedSummary })
+            : update.message.toolStatus === "success"
+              ? t("Completed {{name}}", { name: localizedSummary })
+              : localizedSummary,
+          toolDurationMs: durationMs,
+        };
+        setChatToolMessages((previous) => withToolMessage(previous, message));
+        if (update.message.toolStatus === "running") return;
+        clearToolSettledRecoveryTimer();
+        requestVisibleHistoryReload(update.sessionKey, "tool-result").catch(() => {});
         toolSettledRecoveryTimerRef.current = setTimeout(() => {
           toolSettledRecoveryTimerRef.current = null;
           if (
-            currentRunIdRef.current !== runId ||
-            history.sessionKey !== sessionKey
-          )
-            return;
-          if (showDebug)
-            dbg(
-              `toolSettled:recover session=${sessionKey} runId=${runId.slice(0, 8)} tool=${toolName} status=${status}`,
-            );
-          void requestRunRecovery(sessionKey, "tool-settled");
+            currentRunIdRef.current !== update.runId
+            || !sessionKeysMatch(update.sessionKey, sessionKeyRef.current)
+          ) return;
+          void requestRunRecovery(update.sessionKey, "tool-settled");
         }, 1800);
-      },
-      [
-        clearToolSettledRecoveryTimer,
-        dbg,
-        history.sessionKey,
-        requestRunRecovery,
-        showDebug,
-      ],
-    ),
-    onToolResult: useCallback(
-      ({
-        runId,
-        sessionKey,
-      }: {
-        runId: string;
-        sessionKey: string | null;
-        toolName: string;
-        status: "success" | "error";
-      }) => {
-        if (!sessionKey || sessionKey !== history.sessionKey) return;
-        if (currentRunIdRef.current !== runId) return;
-        requestVisibleHistoryReload(sessionKey, "tool-result").catch(() => {});
-      },
-      [
-        history.sessionKey,
-        requestVisibleHistoryReload,
-      ],
-    ),
+        return;
+      }
+      case "run_finished": {
+        markRunSignal();
+        markActivityFinished(update.sessionKey, update.runId);
+        if (!matchesCurrentSession(update.sessionKey)) return;
+        const activeRunId = currentRunIdRef.current;
+        if (
+          activeRunId !== update.runId
+          && !adoptPendingRunId(update.sessionKey, update.runId)
+        ) {
+          return;
+        }
+        const activeRunStartedAt = streamStartedAtRef.current;
+        const streamText = chatStreamRef.current ?? "";
+        if (update.stopReason === "cancelled") {
+          if (streamText.trim()) {
+            history.setMessages((previous) => appendUniqueMessage(previous, {
+              id: `abort_${update.runId}`,
+              role: "assistant",
+              text: streamText,
+              timestampMs: Date.now(),
+            }));
+          }
+          if (update.systemMessage) {
+            history.setMessages((previous) =>
+              appendUniqueMessage(previous, update.systemMessage!),
+            );
+          }
+        } else if (update.stopReason !== "error") {
+          const finalText = update.finalMessage?.text || streamText;
+          if (finalText.trim()) {
+            const finalMessage: UiMessage = {
+              ...(update.finalMessage ?? {
+                id: `final_${update.runId}`,
+                role: "assistant" as const,
+                text: finalText,
+                timestampMs: Date.now(),
+              }),
+              text: finalText,
+            };
+            history.setMessages((previous) => {
+              if (previous.some((message) => message.id === finalMessage.id)) {
+                return previous;
+              }
+              for (let index = previous.length - 1; index >= 0; index -= 1) {
+                const candidate = previous[index];
+                if (!shouldMergeFinalMessage(candidate, finalText, activeRunStartedAt)) {
+                  continue;
+                }
+                const next = [...previous];
+                next[index] = { ...candidate, ...finalMessage };
+                return next;
+              }
+              return [...previous, finalMessage];
+            });
+          } else {
+            setTimeout(() => {
+              history.reconcileLatestAssistantFromHistory(update.sessionKey, {
+                appendIfMissing: true,
+                minTimestampMs: activeRunStartedAt ?? undefined,
+              }).catch(() => {});
+            }, 30);
+          }
+        }
+        pendingOptimisticRunIdsRef.current.delete(update.sessionKey);
+        currentRunIdRef.current = null;
+        streamStartedAtRef.current = null;
+        clearTransientRunPresentation({
+          preserveCurrentStream: true,
+          preserveToolMessages: update.stopReason !== "cancelled",
+        });
+        setIsSending(false);
+        setActivityLabel(null);
+        if (update.stopReason !== "cancelled" && update.stopReason !== "error") {
+          schedulePostStreamHistoryRefresh();
+        }
+        return;
+      }
+      case "compaction":
+        if (!matchesCurrentSession(update.sessionKey)) return;
+        if (compactionTimerRef.current) clearTimeout(compactionTimerRef.current);
+        compactionTimerRef.current = null;
+        setCompactionNotice(update.notice);
+        if (update.notice) {
+          compactionTimerRef.current = setTimeout(() => {
+            setCompactionNotice(null);
+            compactionTimerRef.current = null;
+          }, 5000);
+        }
+        return;
+      case "approval_requested":
+        if (update.approval.kind === "pair") {
+          setPairingPending(true);
+          return;
+        }
+        if (
+          update.approval.kind === "exec"
+          && execApprovalEnabled
+          && (!update.sessionKey || matchesCurrentSession(update.sessionKey))
+          && update.message
+        ) {
+          history.setMessages((previous) =>
+            appendUniqueMessage(previous, update.message!),
+          );
+        }
+        return;
+      case "approval_resolved":
+        setPairingPending(false);
+        history.setMessages((previous) => previous.map((message) => (
+          message.id === update.messageId && message.approval
+            ? {
+                ...message,
+                approval: { ...message.approval, status: update.status },
+              }
+            : message
+        )));
+        return;
+      case "session_info_update":
+        history.setSessions((previous) => {
+          const existing = previous.find((session) => session.key === update.session.key);
+          const partial: SessionInfo = {
+            key: update.session.key,
+            title: update.session.title,
+            label: update.session.title,
+            lastMessagePreview: update.session.preview,
+            updatedAt: update.session.updatedAt,
+            channel: update.session.channel,
+            model: update.session.model,
+            spawnedBy: update.session.parentSessionKey,
+          };
+          if (!existing) return [...previous, partial];
+          return previous.map((session) =>
+            session.key === update.session.key ? { ...session, ...partial } : session,
+          );
+        });
+        return;
+      case "usage_update":
+        history.setSessions((previous) => previous.map((session) =>
+          session.key === update.sessionKey
+            ? {
+                ...session,
+                totalTokens: update.contextUsed,
+                contextTokens: update.contextWindow,
+                totalTokensFresh: update.contextUsed !== undefined,
+              }
+            : session,
+        ));
+        return;
+      case "system_event":
+        if (matchesCurrentSession(update.sessionKey)) {
+          history.setMessages((previous) =>
+            appendUniqueMessage(previous, update.message),
+          );
+        }
+        return;
+      case "error": {
+        forceSendProbeUntilRef.current = Date.now() + SEND_FORCE_PROBE_GRACE_MS;
+        const matchesSession = !update.sessionKey
+          || matchesCurrentSession(update.sessionKey);
+        if (!matchesSession) return;
+        if (update.runId && currentRunIdRef.current === update.runId) {
+          clearActiveRunState(
+            update.sessionKey ?? sessionKeyRef.current,
+            `adapter-error:${update.code}`,
+            update.runId,
+          );
+        }
+        history.setMessages((previous) =>
+          appendUniqueMessage(previous, update.message),
+        );
+        return;
+      }
+    }
+  }, [
+    adoptPendingRunId,
+    clearActiveRunState,
+    clearToolSettledRecoveryTimer,
+    clearTransientRunPresentation,
+    commitCurrentStreamSegment,
+    consumeSilentCommandUpdate,
+    currentAgentId,
+    execApprovalEnabled,
+    history,
+    markRunSignal,
+    markTransportConfirmed,
+    onAgentActiveCountChange,
+    onChildSessionActivityChange,
+    requestRunRecovery,
+    requestVisibleHistoryReload,
+    schedulePostStreamHistoryRefresh,
+    t,
+  ]);
+
+  useAdapterChatEvents({
+    adapter,
+    onState: handleAdapterState,
+    onSessions: handleAdapterSessions,
+    onUpdate: handleAdapterUpdate,
   });
+
+  useEffect(() => {
+    if (adapter) return;
+    handleAdapterState("idle");
+  }, [adapter, handleAdapterState]);
 
   // When switching agents, reconcile the agent activity ref:
   // 1. Clear the incoming agent's tracked activity (it becomes current, so its
@@ -1429,39 +2017,10 @@ export function useChatController({
     ],
   );
 
-  const markTransportConfirmed = useCallback((timestampMs = Date.now()) => {
-    lastConfirmedTransportAtRef.current = timestampMs;
-    forceSendProbeUntilRef.current = 0;
-  }, []);
-
   useEffect(() => {
     if (connectionState === "ready") return;
     forceSendProbeUntilRef.current = Date.now() + SEND_FORCE_PROBE_GRACE_MS;
   }, [connectionState, SEND_FORCE_PROBE_GRACE_MS]);
-
-  useEffect(() => {
-    const markIfReady = () => {
-      if (gateway.getConnectionState() === "ready") {
-        markTransportConfirmed();
-      }
-    };
-
-    const offTick = gateway.on("tick", markIfReady);
-    const offHealth = gateway.on("health", markIfReady);
-    const offDelta = gateway.on("chatDelta", markIfReady);
-    const offFinal = gateway.on("chatFinal", markIfReady);
-    const offErr = gateway.on("error", () => {
-      forceSendProbeUntilRef.current = Date.now() + SEND_FORCE_PROBE_GRACE_MS;
-    });
-
-    return () => {
-      offTick();
-      offHealth();
-      offDelta();
-      offFinal();
-      offErr();
-    };
-  }, [gateway, markTransportConfirmed, SEND_FORCE_PROBE_GRACE_MS]);
 
   const isNetworkLikelyOffline = useCallback(async (): Promise<boolean> => {
     try {
@@ -1767,95 +2326,22 @@ export function useChatController({
       }
 
       const runId = `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-      let latestText = "";
-      let finished = false;
-
       return new Promise<string>((resolve, reject) => {
-        let timeoutRef: ReturnType<typeof setTimeout> | null = null;
-
-        const cleanup = (
-          offDelta: () => void,
-          offFinal: () => void,
-          offAborted: () => void,
-          offChatError: () => void,
-        ) => {
-          offDelta();
-          offFinal();
-          offAborted();
-          offChatError();
-          silentCommandRunIdsRef.current.delete(runId);
-          if (timeoutRef) {
-            clearTimeout(timeoutRef);
-            timeoutRef = null;
-          }
+        const probe: SilentCommandProbe = {
+          sessionKey,
+          latestText: "",
+          finishing: false,
+          timeout: null,
+          resolve,
+          reject,
         };
-
-        const offDelta = gateway.on(
-          "chatDelta",
-          ({ runId: evtRunId, sessionKey: evtKey, text }) => {
-            if (evtRunId !== runId || evtKey !== sessionKey) return;
-            latestText = text;
-          },
-        );
-
-        const offFinal = gateway.on(
-          "chatFinal",
-          ({ runId: evtRunId, sessionKey: evtKey }) => {
-            if (evtRunId !== runId || evtKey !== sessionKey || finished) return;
-            finished = true;
-            void (async () => {
-              let finalText = latestText;
-              if (!finalText.trim()) {
-                try {
-                  const historyResult = await gateway.fetchHistory(
-                    sessionKey,
-                    8,
-                  );
-                  const assistant = [...historyResult.messages]
-                    .reverse()
-                    .find((item) => (
-                      item.role === "assistant"
-                      && !isAssistantDeliveryMirrorMessage(item)
-                    ));
-                  finalText = extractAssistantDisplayText(assistant?.content);
-                } catch {
-                  finalText = latestText;
-                }
-              }
-              cleanup(offDelta, offFinal, offAborted, offChatError);
-              resolve(finalText);
-            })();
-          },
-        );
-
-        const offAborted = gateway.on(
-          "chatAborted",
-          ({ runId: evtRunId, sessionKey: evtKey }) => {
-            if (evtRunId !== runId || evtKey !== sessionKey || finished) return;
-            finished = true;
-            cleanup(offDelta, offFinal, offAborted, offChatError);
-            reject(new Error("Command probe aborted."));
-          },
-        );
-
-        const offChatError = gateway.on(
-          "chatError",
-          ({ runId: evtRunId, sessionKey: evtKey, message }) => {
-            if (evtRunId !== runId || evtKey !== sessionKey || finished) return;
-            finished = true;
-            cleanup(offDelta, offFinal, offAborted, offChatError);
-            reject(new Error(message || "Command probe failed."));
-          },
-        );
-
-        silentCommandRunIdsRef.current.add(runId);
+        silentCommandProbesRef.current.set(runId, probe);
         void (async () => {
           const ready = await ensureConnectionReadyForSend();
           if (!ready) {
-            if (finished) return;
-            finished = true;
-            cleanup(offDelta, offFinal, offAborted, offChatError);
-            reject(new Error("Gateway is not connected."));
+            finishSilentCommandProbe(runId, {
+              error: new Error("Gateway is not connected."),
+            });
             return;
           }
           gateway
@@ -1863,22 +2349,25 @@ export function useChatController({
               idempotencyKey: runId,
             })
             .catch((err: unknown) => {
-              if (finished) return;
-              finished = true;
-              cleanup(offDelta, offFinal, offAborted, offChatError);
-              reject(err instanceof Error ? err : new Error(String(err)));
+              finishSilentCommandProbe(runId, {
+                error: err instanceof Error ? err : new Error(String(err)),
+              });
             });
         })();
 
-        timeoutRef = setTimeout(() => {
-          if (finished) return;
-          finished = true;
-          cleanup(offDelta, offFinal, offAborted, offChatError);
-          reject(new Error("Timed out while loading command options."));
+        probe.timeout = setTimeout(() => {
+          finishSilentCommandProbe(runId, {
+            error: new Error("Timed out while loading command options."),
+          });
         }, 15_000);
       });
     },
-    [ensureConnectionReadyForSend, gateway, history.sessionKey],
+    [
+      ensureConnectionReadyForSend,
+      finishSilentCommandProbe,
+      gateway,
+      history.sessionKey,
+    ],
   );
 
   const {

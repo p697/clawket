@@ -2,8 +2,8 @@ import { act, renderHook } from '@testing-library/react-native';
 import * as Network from 'expo-network';
 import { analyticsEvents } from '../../../services/analytics/events';
 import { StorageService } from '../../../services/storage';
-import { useChatController } from './useChatController';
-import { useGatewayChatEvents } from './useGatewayChatEvents';
+import { useAdapterChatEvents } from '../../../chat/useAdapterChatEvents';
+import { useChatController as useChatControllerImpl } from './useChatController';
 
 const mockT = (key: string) => key;
 const mockI18n = { language: 'en-US' };
@@ -164,6 +164,7 @@ function resetMockState() {
   mockAppContext.mainSessionKey = 'agent:main:main';
   mockAppContext.currentAgentId = 'main';
   mockAppContext.pendingAgentSwitch = null;
+  mockAppContext.execApprovalEnabled = false;
   mockAppContext.speechRecognitionLanguage = 'system';
   mockAppContext.pendingChatInput = null;
   mockAppContext.pendingMainSessionSwitch = false;
@@ -196,8 +197,8 @@ jest.mock('./useChatHistoryState', () => ({
   useChatHistoryState: jest.fn(() => historyMock),
 }));
 
-jest.mock('./useGatewayChatEvents', () => ({
-  useGatewayChatEvents: jest.fn(),
+jest.mock('../../../chat/useAdapterChatEvents', () => ({
+  useAdapterChatEvents: jest.fn(),
 }));
 
 jest.mock('./useChatVoiceInput', () => ({
@@ -236,6 +237,24 @@ function createGateway(connectionState: 'ready' | 'connecting' = 'ready') {
     abortChat: jest.fn().mockResolvedValue(undefined),
     on: jest.fn(() => jest.fn()),
   };
+}
+
+function createAdapter(connectionState: 'ready' | 'connecting' = 'ready') {
+  return {
+    state: connectionState,
+    listAgents: jest.fn().mockResolvedValue([]),
+    on: jest.fn(() => jest.fn()),
+  };
+}
+
+function useChatController(options: Record<string, any>) {
+  const connectionState = options.gateway.getConnectionState() as 'ready' | 'connecting';
+  return useChatControllerImpl({
+    ...options,
+    adapter: options.adapter === undefined
+      ? createAdapter(connectionState)
+      : options.adapter,
+  } as any);
 }
 
 describe('useChatController contract', () => {
@@ -291,6 +310,24 @@ describe('useChatController contract', () => {
         onSelectCommandOption: commandPickerHookMock.onSelectCommandOption,
         closeCommandPicker: commandPickerHookMock.closeCommandPicker,
       }),
+    );
+  });
+
+  it('stays idle and subscribes safely while the active adapter is null', () => {
+    const gateway = createGateway();
+    const { result } = renderHook(() =>
+      useChatController({
+        adapter: null,
+        gateway: gateway as any,
+        config: null,
+        debugMode: false,
+        showAgentAvatar: true,
+      }),
+    );
+
+    expect(result.current.connectionState).toBe('idle');
+    expect(jest.mocked(useAdapterChatEvents)).toHaveBeenLastCalledWith(
+      expect.objectContaining({ adapter: null }),
     );
   });
 
@@ -1000,7 +1037,337 @@ describe('useChatController contract', () => {
     expect(result.current.isSending).toBe(true);
   });
 
-  it('avoids double history reload when toolResult and toolSettled fire for the same run', async () => {
+  it('drives connection and session state from adapter events', async () => {
+    const gateway = createGateway('connecting');
+    const adapter = createAdapter('connecting');
+    const { result } = renderHook(() =>
+      useChatController({
+        adapter,
+        gateway: gateway as any,
+        config: null,
+        debugMode: false,
+        showAgentAvatar: true,
+      }),
+    );
+    const eventParams = jest.mocked(useAdapterChatEvents).mock.calls.at(-1)?.[0];
+    expect(eventParams).toBeTruthy();
+    expect(result.current.connectionState).toBe('connecting');
+
+    await act(async () => {
+      eventParams!.onState?.('ready');
+      eventParams!.onSessions?.([{
+        connectionId: 'connection-1',
+        agentId: 'main',
+        key: 'agent:main:main',
+        kind: 'main',
+        title: 'Main thread',
+        updatedAt: 123,
+        preview: 'Latest reply',
+        hasActiveRun: false,
+        allowedActions: {
+          rename: true,
+          reset: true,
+          delete: false,
+          pin: true,
+        },
+      }]);
+      await Promise.resolve();
+    });
+
+    expect(result.current.connectionState).toBe('ready');
+    expect(historyMock.loadSessionsAndHistory).toHaveBeenCalledTimes(1);
+    expect(historyMock.sessions).toEqual([
+      expect.objectContaining({
+        key: 'agent:main:main',
+        kind: 'global',
+        title: 'Main thread',
+        lastMessagePreview: 'Latest reply',
+      }),
+    ]);
+  });
+
+  it('renders adapter run chunks and tools, then commits the final message', async () => {
+    const gateway = createGateway('ready');
+    const { result } = renderHook(() =>
+      useChatController({
+        gateway: gateway as any,
+        config: null,
+        debugMode: false,
+        showAgentAvatar: true,
+      } as any),
+    );
+    const eventParams = jest.mocked(useAdapterChatEvents).mock.calls.at(-1)?.[0];
+    expect(eventParams).toBeTruthy();
+
+    await act(async () => {
+      eventParams!.onState?.('ready');
+      eventParams!.onUpdate?.({
+        type: 'run_started',
+        sessionKey: 'agent:main:main',
+        runId: 'run-adapter',
+        activeRunId: 'run-adapter',
+        isSending: true,
+        startedAtMs: 100,
+      });
+      eventParams!.onUpdate?.({
+        type: 'agent_message_chunk',
+        sessionKey: 'agent:main:main',
+        runId: 'run-adapter',
+        text: 'Hello',
+        activeRunId: 'run-adapter',
+        isSending: true,
+        visible: true,
+        streamingMessage: {
+          id: 'streaming',
+          role: 'assistant',
+          text: 'Hello',
+          streaming: true,
+        },
+      });
+      eventParams!.onUpdate?.({
+        type: 'tool_call',
+        sessionKey: 'agent:main:main',
+        runId: 'run-adapter',
+        toolCallId: 'tool-adapter',
+        activeRunId: 'run-adapter',
+        isSending: true,
+        merge: false,
+        message: {
+          id: 'toolcall_tool-adapter',
+          role: 'tool',
+          text: '',
+          toolName: 'exec',
+          toolStatus: 'running',
+          toolArgs: '{"command":"pwd"}',
+        },
+      });
+    });
+
+    expect(result.current.isSending).toBe(true);
+    expect(result.current.listData).toEqual(expect.arrayContaining([
+      expect.objectContaining({ role: 'assistant', text: 'Hello' }),
+      expect.objectContaining({
+        id: 'toolcall_tool-adapter',
+        role: 'tool',
+        toolStatus: 'running',
+      }),
+    ]));
+
+    await act(async () => {
+      eventParams!.onUpdate?.({
+        type: 'tool_call_update',
+        sessionKey: 'agent:main:main',
+        runId: 'run-adapter',
+        toolCallId: 'tool-adapter',
+        activeRunId: 'run-adapter',
+        isSending: true,
+        merge: true,
+        message: {
+          id: 'toolcall_tool-adapter',
+          role: 'tool',
+          text: '',
+          toolStatus: 'success',
+          toolFinishedAt: 200,
+        },
+      });
+      eventParams!.onUpdate?.({
+        type: 'run_finished',
+        sessionKey: 'agent:main:main',
+        runId: 'run-adapter',
+        stopReason: 'end_turn',
+        activeRunId: null,
+        isSending: false,
+        finalMessage: {
+          id: 'final_run-adapter',
+          role: 'assistant',
+          text: 'Hello world',
+          timestampMs: 300,
+        },
+      });
+      await Promise.resolve();
+    });
+
+    expect(result.current.isSending).toBe(false);
+    expect(historyMock.messages).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'final_run-adapter',
+        role: 'assistant',
+        text: 'Hello world',
+      }),
+    ]));
+  });
+
+  it('handles cancelled and errored adapter runs without leaving sending state stuck', async () => {
+    const gateway = createGateway('ready');
+    const { result } = renderHook(() =>
+      useChatController({
+        gateway: gateway as any,
+        config: null,
+        debugMode: false,
+        showAgentAvatar: true,
+      } as any),
+    );
+    const eventParams = jest.mocked(useAdapterChatEvents).mock.calls.at(-1)?.[0];
+    expect(eventParams).toBeTruthy();
+
+    await act(async () => {
+      eventParams!.onState?.('ready');
+      eventParams!.onUpdate?.({
+        type: 'run_started',
+        sessionKey: 'agent:main:main',
+        runId: 'run-cancelled',
+        activeRunId: 'run-cancelled',
+        isSending: true,
+        startedAtMs: 100,
+      });
+      eventParams!.onUpdate?.({
+        type: 'agent_message_chunk',
+        sessionKey: 'agent:main:main',
+        runId: 'run-cancelled',
+        text: 'Partial',
+        activeRunId: 'run-cancelled',
+        isSending: true,
+        visible: true,
+      });
+      eventParams!.onUpdate?.({
+        type: 'run_finished',
+        sessionKey: 'agent:main:main',
+        runId: 'run-cancelled',
+        stopReason: 'cancelled',
+        activeRunId: null,
+        isSending: false,
+        systemMessage: {
+          id: 'sys_abort_run-cancelled',
+          role: 'system',
+          text: 'Run aborted by user.',
+        },
+      });
+    });
+
+    expect(result.current.isSending).toBe(false);
+    expect(historyMock.messages).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'abort_run-cancelled', text: 'Partial' }),
+      expect.objectContaining({ id: 'sys_abort_run-cancelled' }),
+    ]));
+
+    await act(async () => {
+      eventParams!.onUpdate?.({
+        type: 'run_started',
+        sessionKey: 'agent:main:main',
+        runId: 'run-error',
+        activeRunId: 'run-error',
+        isSending: true,
+        startedAtMs: 400,
+      });
+      eventParams!.onUpdate?.({
+        type: 'error',
+        sessionKey: 'agent:main:main',
+        runId: 'run-error',
+        code: 'server',
+        errorMessage: 'Backend failed',
+        message: {
+          id: 'error_run-error_500',
+          role: 'system',
+          text: 'Backend failed',
+        },
+      });
+      eventParams!.onUpdate?.({
+        type: 'run_finished',
+        sessionKey: 'agent:main:main',
+        runId: 'run-error',
+        stopReason: 'error',
+        activeRunId: null,
+        isSending: false,
+      });
+    });
+
+    expect(result.current.isSending).toBe(false);
+    expect(historyMock.messages).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'error_run-error_500', text: 'Backend failed' }),
+    ]));
+  });
+
+  it('applies adapter approvals and reconciled history to the current session', async () => {
+    mockAppContext.execApprovalEnabled = true;
+    const gateway = createGateway('ready');
+    const { result } = renderHook(() =>
+      useChatController({
+        gateway: gateway as any,
+        config: null,
+        debugMode: false,
+        showAgentAvatar: true,
+      } as any),
+    );
+    const eventParams = jest.mocked(useAdapterChatEvents).mock.calls.at(-1)?.[0];
+    expect(eventParams).toBeTruthy();
+
+    await act(async () => {
+      eventParams!.onState?.('ready');
+      eventParams!.onUpdate?.({
+        type: 'approval_requested',
+        sessionKey: 'agent:main:main',
+        approval: {
+          kind: 'exec',
+          id: 'approval-1',
+          command: 'pwd',
+          expiresAtMs: 999,
+        },
+        message: {
+          id: 'approval_approval-1',
+          role: 'system',
+          text: '',
+          approval: {
+            id: 'approval-1',
+            command: 'pwd',
+            expiresAtMs: 999,
+            status: 'pending',
+          },
+        },
+      });
+      eventParams!.onUpdate?.({
+        type: 'approval_resolved',
+        approvalId: 'approval-1',
+        decision: 'allow-once',
+        status: 'allowed',
+        messageId: 'approval_approval-1',
+      });
+    });
+
+    expect(historyMock.messages).toEqual([
+      expect.objectContaining({
+        id: 'approval_approval-1',
+        approval: expect.objectContaining({ status: 'allowed' }),
+      }),
+    ]);
+
+    await act(async () => {
+      eventParams!.onUpdate?.({
+        type: 'history_reconciled',
+        sessionKey: 'agent:main:main',
+        history: {
+          key: 'agent:main:main',
+          hasActiveRun: false,
+          messages: [],
+        },
+        messages: [{
+          id: 'history-assistant',
+          role: 'assistant',
+          text: 'Reconciled answer',
+        }],
+        nextCursor: 'cursor-2',
+        hasActiveRun: false,
+      });
+    });
+
+    expect(result.current.isSending).toBe(false);
+    expect(historyMock.messages).toEqual([
+      expect.objectContaining({ id: 'history-assistant', text: 'Reconciled answer' }),
+    ]);
+    expect(historyMock.setHistoryLoaded).toHaveBeenCalledWith(true);
+    expect(historyMock.setHasMoreHistory).toHaveBeenCalledWith(true);
+  });
+
+  it('avoids duplicate history recovery for a terminal adapter tool update', async () => {
     const gateway = createGateway('ready');
     const { rerender } = renderHook(() =>
       useChatController({
@@ -1011,18 +1378,36 @@ describe('useChatController contract', () => {
       } as any),
     );
 
-    const eventParams = jest.mocked(useGatewayChatEvents).mock.calls.at(-1)?.[0];
+    const eventParams = jest.mocked(useAdapterChatEvents).mock.calls.at(-1)?.[0];
     expect(eventParams).toBeTruthy();
 
     historyMock.sessionKey = 'agent:main:main';
-    eventParams!.currentRunIdRef.current = 'run-1';
 
     await act(async () => {
-      eventParams!.onToolResult?.({
+      eventParams!.onState?.('ready');
+      eventParams!.onUpdate?.({
+        type: 'run_started',
         runId: 'run-1',
         sessionKey: 'agent:main:main',
-        toolName: 'exec',
-        status: 'success',
+        activeRunId: 'run-1',
+        isSending: true,
+        startedAtMs: Date.now(),
+      });
+      eventParams!.onUpdate?.({
+        type: 'tool_call_update',
+        runId: 'run-1',
+        sessionKey: 'agent:main:main',
+        toolCallId: 'tool-1',
+        activeRunId: 'run-1',
+        isSending: true,
+        merge: true,
+        message: {
+          id: 'toolcall_tool-1',
+          role: 'tool',
+          text: '',
+          toolStatus: 'success',
+          toolFinishedAt: Date.now(),
+        },
       });
       await Promise.resolve();
     });
@@ -1030,12 +1415,6 @@ describe('useChatController contract', () => {
     expect(historyMock.loadHistory).toHaveBeenCalledTimes(1);
 
     await act(async () => {
-      eventParams!.onToolSettled?.({
-        runId: 'run-1',
-        sessionKey: 'agent:main:main',
-        toolName: 'exec',
-        status: 'success',
-      });
       jest.advanceTimersByTime(1_800);
       await Promise.resolve();
     });

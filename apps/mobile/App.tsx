@@ -51,6 +51,11 @@ import { loadAgentAvatars } from './src/services/agent-avatar';
 import * as Linking from 'expo-linking';
 import * as Sharing from 'expo-sharing';
 import { GatewayClient } from './src/connection/protocol';
+import {
+  configureConnectionRuntimeGateway,
+  useConnections,
+} from './src/connection';
+import type { AgentAdapter } from '@clawket/agent-protocol';
 import { NodeClient } from './src/services/node-client';
 import { dispatchNodeInvoke } from './src/services/node-invoke-dispatcher';
 import { NodeCapabilityToggles } from './src/services/node-capabilities';
@@ -128,6 +133,8 @@ const rootTabIcons = {
 };
 export default function App(): React.JSX.Element {
   const [gateway] = useState(() => new GatewayClient());
+  const [connectionRuntime] = useState(() => configureConnectionRuntimeGateway(gateway));
+  const connectionSnapshot = useConnections();
   const [nodeClient] = useState(() => new NodeClient());
   const {
     accentId,
@@ -161,7 +168,11 @@ export default function App(): React.JSX.Element {
     showModelUsage,
     speechRecognitionLanguage,
     themeMode,
-  } = useAppBootstrap({ gateway, nodeClient });
+  } = useAppBootstrap({ nodeClient });
+
+  useEffect(() => () => {
+    void connectionRuntime.stop();
+  }, [connectionRuntime]);
 
   if (loading) {
     return (
@@ -183,6 +194,7 @@ export default function App(): React.JSX.Element {
       <ProPaywallProvider>
         <AppContent
           gateway={gateway}
+          activeAdapter={connectionSnapshot.activeAdapter}
           activeGatewayConfigId={activeGatewayConfigId}
           nodeClient={nodeClient}
           config={config}
@@ -235,16 +247,16 @@ export default function App(): React.JSX.Element {
           }}
           onSaved={(next, nextGatewayScopeId) => {
             setConfig(next);
-            gateway.configure(next);
             setActiveGatewayConfigId(
               nextGatewayScopeId
               ?? resolveGatewayCacheScopeId({ config: next }),
             );
+            void connectionRuntime.syncLegacyConnections();
           }}
           onReset={() => {
             setConfig(null);
             setActiveGatewayConfigId(null);
-            gateway.configure(null);
+            void connectionRuntime.syncLegacyConnections();
           }}
         />
       </ProPaywallProvider>
@@ -297,6 +309,7 @@ function resolveAgentNotificationName(sessionKey: string, agents: AgentInfo[], c
 
 type AppContentProps = {
   gateway: GatewayClient;
+  activeAdapter: AgentAdapter | null;
   activeGatewayConfigId: string | null;
   nodeClient: NodeClient;
   config: GatewayConfig | null;
@@ -326,6 +339,7 @@ type AppContentProps = {
 
 function AppContent({
   gateway,
+  activeAdapter,
   activeGatewayConfigId,
   nodeClient,
   config,
@@ -714,6 +728,7 @@ function AppContent({
   const appContextValue = useMemo(
     () => ({
       gateway,
+      activeAdapter,
       activeGatewayConfigId,
       gatewayEpoch,
       foregroundEpoch,
@@ -814,6 +829,7 @@ function AppContent({
     [
       agentAvatars,
       agents,
+      activeAdapter,
       activeGatewayConfigId,
       chatAppearance,
       chatFontSize,

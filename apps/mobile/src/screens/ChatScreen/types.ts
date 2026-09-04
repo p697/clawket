@@ -1,7 +1,9 @@
+import type { AgentAdapter } from '@clawket/agent-protocol';
 import { GatewayClient } from '../../connection/protocol';
 import { GatewayConfig } from '../../types';
 
 export type ChatScreenProps = {
+  adapter: AgentAdapter | null;
   gateway: GatewayClient;
   config: GatewayConfig | null;
   debugMode?: boolean;

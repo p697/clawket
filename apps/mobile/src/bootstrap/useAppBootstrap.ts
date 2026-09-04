@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import { GatewayClient } from '../connection/protocol';
-import { getGatewayBackendCapabilities, resolveGatewayBackendKind, resolveGlobalMainSessionKey } from '@clawket/agent-protocol';
+import { resolveGatewayBackendKind, resolveGlobalMainSessionKey } from '@clawket/agent-protocol';
 import { resolveGatewayCacheScopeId } from '../services/gateway-cache-scope';
 import { NodeClient } from '../services/node-client';
 import { LastOpenedSessionSnapshot, StorageService } from '../services/storage';
@@ -19,7 +18,6 @@ import {
 } from '../utils/agent-session-scope';
 
 type Props = {
-  gateway: GatewayClient;
   nodeClient: NodeClient;
 };
 
@@ -48,7 +46,7 @@ function buildAgentPreview(
   };
 }
 
-export function useAppBootstrap({ gateway, nodeClient }: Props) {
+export function useAppBootstrap({ nodeClient }: Props) {
   const [config, setConfig] = useState<GatewayConfig | null>(null);
   const [activeGatewayConfigId, setActiveGatewayConfigId] = useState<string | null>(null);
   const [nodeEnabled, setNodeEnabled] = useState(false);
@@ -74,10 +72,6 @@ export function useAppBootstrap({ gateway, nodeClient }: Props) {
     const configPromise = StorageService.getGatewayConfig();
     configPromise.then((saved) => {
       setConfig(saved);
-      gateway.configure(saved);
-      if (saved?.url && getGatewayBackendCapabilities(saved).gatewayConnection) {
-        gateway.connect();
-      }
     });
 
     Promise.all([
@@ -176,10 +170,9 @@ export function useAppBootstrap({ gateway, nodeClient }: Props) {
       .finally(() => setLoading(false));
 
     return () => {
-      gateway.disconnect();
       nodeClient.disconnect();
     };
-  }, [gateway, nodeClient]);
+  }, [nodeClient]);
 
   return {
     accentId,

@@ -228,6 +228,7 @@ export function ChatTab(): React.JSX.Element {
   const { theme } = useAppTheme();
   const {
     activeGatewayConfigId,
+    activeAdapter,
     gateway,
     config,
     debugMode,
@@ -265,6 +266,7 @@ export function ChatTab(): React.JSX.Element {
   }, [chatSidebarRequest, clearChatSidebarRequest]);
 
   const controller = useChatController({
+    adapter: activeAdapter,
     gateway,
     config,
     debugMode,
