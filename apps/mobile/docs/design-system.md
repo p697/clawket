@@ -1,170 +1,137 @@
 # Clawket Mobile Design System
 
-This document is the implementation source of truth for Clawket's mobile UI. It borrows the discipline of YouMind Mobile—semantic colors, structural tokens, shared primitives, and ratcheted style checks—while keeping an independent visual language.
-
-Clawket should feel like a calm technical workspace: cool layered surfaces, compact but readable controls, restrained elevation, and a configurable accent. It must not inherit YouMind's neutral black-and-white palette or its product-specific component vocabulary.
+This is the durable implementation guide for Clawket 3.0 mobile UI. Product decisions and exact recipes live in `docs/3.0/05-visual-system.md`; this document records how those decisions map to the Mobile workspace.
 
 ## 1. Sources of truth
 
-- Color palettes and semantic colors: `src/theme/theme.ts`
-- Accent scales: `src/theme/accents.ts`
-- Structural tokens: `src/theme/tokens.ts`
-- Theme-independent media/data-viz palette: `PresentationColor` in `src/theme/tokens.ts`
-- Shared surface recipe: `createSurfaceStyle()` in `src/theme/tokens.ts`
+- Semantic colors and Agent palette: `src/theme/theme.ts`
+- Preserved user accent identifiers: `src/theme/accents.ts`
+- Structural tokens and shared surface helpers: `src/theme/tokens.ts`
 - Theme provider: `src/theme/ThemeProvider.tsx`
-- Shared UI primitives: `src/components/ui/`
-- Root tab metrics: `src/navigation/root-tab-bar.ts`
-- Automated style guard: `npm run check:design-system`
+- Canonical primitives: `src/components/ui/`
+- Root route contract: `src/navigation/root-stack.ts`
+- Automated guard: `npm run check:design-system`
 
-Business screens consume these sources; they do not define local palettes or parallel spacing/type scales.
+Business screens consume these sources. They must not create local palettes, type scales, elevation recipes, navigation chrome, or backend-specific visual branches.
 
 ## 2. Visual character
 
-Clawket deliberately differs from YouMind in three ways:
+Clawket 3.0 is a quiet, content-first interface:
 
-1. The neutral ramp is cool graphite rather than neutral black. Light mode starts from a blue-gray app canvas; dark mode uses deep blue-charcoal surfaces.
-2. The default accent is `iceBlue`, with additional Clawket-owned accent scales. Accent selection remains a supported product feature.
-3. Information density is slightly tighter. The body type step is 15 rather than 16, cards use a 12-point standard radius, and the largest common surface radius is 24.
+1. Content reaches the transparent status bar; there is no bottom tab bar or system navigation header.
+2. Navigation and primary actions float above the page in self-drawn controls.
+3. Lists have no cards, outlines, or separators. Spacing and two levels of text provide hierarchy.
+4. Color belongs mainly to Agent avatars. Accent is reserved for actions, selection, links, viewing state, and unread indicators.
+5. Status is carried by avatar treatment, an icon, or a small dot—not a decorative text label.
+6. Only `400` and `600` weights are valid.
 
-These values are product decisions. Do not replace them with YouMind palette values during component migration.
+Do not introduce Liquid Glass, SF Symbols, native tab bars, Material ripples, blur navigation chrome, emoji interface icons, typing-dot animations, colored status text, or gradients outside the paywall hero.
 
-## 3. Color model
+## 3. Semantic color model
 
-Use intent-based values from `theme.colors`:
+New UI uses the canonical values on `theme.colors`:
 
 | Layer | Tokens | Purpose |
 |---|---|---|
-| App canvas | `background` | Root screen background |
-| Standard surface | `surface` | Cards, rows, navigation chrome |
-| Quiet surface | `surfaceMuted` | Recessed controls, pressed states, grouped backgrounds |
-| Raised surface | `surfaceElevated` | Modals, floating controls, WebView-adjacent chrome |
-| Edges | `border`, `borderStrong` | Hairline separation and deliberate emphasis |
-| Text | `text`, `textMuted`, `textSubtle` | Primary, secondary, tertiary hierarchy |
-| Actions | `primary`, `primaryText`, `primarySoft` | Accent-driven actions and selected states |
-| Feedback | `success`, `warning`, `error` and matching `*Soft` values | Semantic status and quiet status backgrounds |
-| Information | `info`, `infoSoft` | Non-accent informational affordances |
+| Canvas | `canvas`, `canvasGrouped` | Content pages; grouped settings pages |
+| Surfaces | `surface`, `surfaceFloating` | Assistant bubbles and pressed rows; floating chrome |
+| Text | `ink`, `inkSecondary`, `inkTertiary` | Primary, supporting, and time/placeholder text |
+| Allowed line | `line` | Hairlines inside a settings group and dark floating-surface edges only |
+| Action | `accent`, `accentSoft` | Primary actions, selection, user bubbles, links, unread |
+| Feedback | `good`, `warn`, `bad` and matching `*Soft` | Status rings, badges, and failure surfaces; pair color with an icon or text |
+| Agent identity | `agentPalette` | Stable Agent avatar color selected by Agent id hash |
 
 Rules:
 
-1. UI files use `useAppTheme()` and semantic tokens; do not hardcode hex/rgb/rgba colors.
-2. Add a missing semantic token to both light and dark palettes before using it.
-3. Name tokens by purpose, never literal hue.
-4. Avoid per-component `theme.scheme` branches when a token can express the state.
-5. Text input placeholders use `theme.colors.textSubtle`.
-6. Theme-independent media overlays and data-viz colors use `PresentationColor`; never use it as a shortcut for ordinary app chrome.
+1. Use `useAppTheme()`; ordinary UI must not hardcode hex, rgb, or rgba values.
+2. Add a missing semantic value to both schemes before using it.
+3. Prefer purpose names over hue names and avoid `theme.scheme` branches when a token expresses the state.
+4. `PresentationColor` is only for media overlays, exported artifacts, and data visualization.
+5. Legacy aliases such as `background`, `text`, `primary`, `surfaceMuted`, and `info` exist only while pre-3.0 screens are deleted. New code must not use them.
 
 ## 4. Structural tokens
 
-Spacing follows a 4-point grid: `Space.xs` 4, `sm` 8, `md` 12, `lg` 16, `xl` 24, `xxl` 32, `xxxl` 48.
+Spacing uses `Space` on a four-point grid: 4, 8, 12, 16, 24, and 32. Do not derive intermediate values with arithmetic.
 
-Typography uses `FontSize`, matching `LineHeight`, and `FontWeight`. Named steps cover micro labels through display values, including the common 14- and 20-point steps. Do not create intermediate sizes with arithmetic.
+Typography uses matching `FontSize` and `LineHeight` entries:
 
-Radii use `Radius.xs` 4, `sm` 8, `md` 12, `lg` 18, `xl` 24, and `full` for circles/capsules. Standard cards use `Radius.md`; modal cards use `Radius.xl`.
+| Step | Size / line | Use |
+|---|---|---|
+| `display` | 28 / 34 | One onboarding or paywall hero title |
+| `title` | 20 / 26 | Settings or sheet title |
+| `body` | 17 / 24 | Message body, row title, input, button |
+| `secondary` | 15 / 20 | Preview, trailing value, system event |
+| `caption` | 13 / 18 | Time, legal copy, numeric badge |
 
-Standalone controls have at least a 44-point target (`HitSize.md`). `ControlSize` owns visible control and settings-row metrics. A 36-point target (`HitSize.sm`) is allowed only inside compact grouped toolbars.
+`FontWeight` exposes regular 400 and semibold 600. A page's default UI uses two visible type steps; a third is allowed only for a page title, expanded detail, onboarding, or paywall. User content is excluded from that count.
 
-Raised surfaces use `createThemedShadowStyle()`. Light mode gets a quiet edge and lift; dark mode uses a hairline edge without a black halo. Normal surface borders use `StyleSheet.hairlineWidth`; use `BorderWidth.strong` for deliberate selection/artifact framing and `BorderWidth.emphasis` only for high-visibility presentation marks such as scanner corners.
+`Radius` contains named 3.0 shapes: bubble 20, card 16, settings group 14, the four avatar sizes, YouMind-derived sheet radii, and `full` for controls. `BorderWidth` may be used only for documented status rings, dark raised-surface hairlines, settings-group separators, and presentation framing—not list-row cards.
 
-Every ordinary card, input, button, search field, grouped-settings container, and modal must get its edge/elevation from `createSurfaceStyle()`, either directly or through a shared component. Its four tiers are:
+`ControlSize` owns the 40-point pill, 44-point floating button, 52-point settings row, and 88-point roster row. `HitSize` provides accessible touch targets. Icons use `IconSize` or the component-owned recipe.
 
-| Tier | Use |
+`Shadow` is an implementation ingredient for shared primitives. Business screens never spread it directly. `createThemedShadowStyle()` owns light-mode lift and the dark-mode hairline. Transitional primitives may still call `createSurfaceStyle()` until their old callers are removed; new 3.0 UI chooses a canonical primitive instead of assembling a surface locally.
+
+## 5. Navigation and page ownership
+
+The App has one native stack whose system header is always hidden. Root routes are Roster, Thread, Agent Settings, Account Settings, Search, and Paywall, with detail routes layered above them. Bottom tabs, tab-height insets, and system back buttons are forbidden.
+
+Every page owns a symmetric header contract:
+
+- left: one 44-point `FloatingButton` or an empty 44-point slot;
+- center: a title or `HeaderPill`;
+- right: one 44-point `FloatingButton` or an empty 44-point slot.
+
+Content begins below the safe area plus floating header. Full-screen pages use the same safe-area treatment on iOS and Android and reserve 16 points above Android's gesture area.
+
+Backend identity and transport identity never select a visual route directly. Route availability and controls come from capability metadata.
+
+## 6. Canonical 3.0 primitives
+
+| Component | Contract |
 |---|---|
-| `flat` | Grouped cards, list rows, standard content cards |
-| `raised` | Inputs, search, primary controls, composer chrome |
-| `floating` | FABs, detached toolbars, popovers |
-| `overlay` | Modal cards and top-level overlays |
+| `FloatingButton` | 44-point circle, Lucide 22 icon, optional accent dot or bad numeric badge, 0.96 press scale |
+| `HeaderPill` | 40-point capsule with 28-point Agent avatar, name, and the one allowed header subtitle |
+| `AgentAvatar` | Stable palette square with initials/emoji content and working, attention, done, offline, or locked state |
+| `RosterRow` | 88-point borderless row; avatar, name, one preview line, time, unread/attention/lock state |
+| `Bubble` | One assistant/user shape recipe with Markdown-compatible content |
+| `SystemEventRow` | One centered supporting line with Lucide icon and optional disclosure |
+| `RunCard` | Quiet card with a 3-point semantic state rail and one compact description |
+| `ApprovalCard` | Run-card shell plus command preview and primary/secondary capsule actions |
+| `Composer` | Add button, composition-safe growing capsule input, mic, and send/stop action |
+| `Sheet` | Shared bottom/iPad presentation chrome, handle, backdrop, title, and close action |
+| `SettingsGroup` / `SettingsRow` | 14-radius grouped card, 52-point rows, internal hairlines only |
+| `Skeleton` | 1.2-second breathing block that respects reduced motion |
+| `Banner` | One sentence and one action on a warn/bad soft surface |
+| `SegmentedTabs` | Full capsule, 44-point standard or 32-point compact track; at most three filters |
+| `SearchInput` | 44-point composition-safe capsule; use the sheet variant inside `Sheet` |
 
-Do not spread `Shadow.*` or assemble background + border + shadow independently in new business UI. A special media/export surface may own custom chrome when it cannot follow the app theme; keep that exception local and documented.
+Use the primitive rather than copying its markup. A shared `style` prop is for layout only; add a semantic variant when chrome must change.
 
-## 5. Root bottom navigation
+## 7. Transitional primitives
 
-The root navigator uses `@react-navigation/bottom-tabs` on both iOS and Android.
+Pre-3.0 screens still consume `ActionButton`, `Button`, `Card`, `FormTextInput`, `SettingsIcon`, and `ThemedSwitch`. Keep their public behavior stable while those callers are migrated. New 3.0 screens may use `Button`, composition-safe inputs, and switches only where the product recipe explicitly calls for them; they must not revive card tone variants or legacy icon chrome.
 
-Non-negotiable rules:
+Intentional native or presentation exceptions remain narrowly scoped:
 
-1. Do not add `@bottom-tabs/react-navigation` or `react-native-bottom-tabs`.
-2. Do not add a native Liquid Glass/SF Symbols tab path. One JS implementation must serve all supported OS versions.
-3. Root tabs show a Lucide icon and short localized label. Active state is expressed by the current accent, not a platform-only material effect.
-4. Backend capability metadata decides which routes exist. Backend identity must not be modeled as a transport or a tab implementation branch.
-5. JS tabs occupy layout space. Screens, drawers, lists, composers, and scroll containers must not add tab height as a bottom inset. Use `useTabBarHeight()` only for full-screen overlays or keyboard policies that need the measured physical height.
-6. Keep the tab layout stable while the keyboard moves; do not add `tabBarHideOnKeyboard` or focus-driven remounting.
-7. Full-bleed overlays use `getRootTabBarMetrics()` so their edge stops above the actual bar and safe area.
+- `ChatComposer` and `FileEditorView` own specialized text editing.
+- `SkillContentScreen` owns its editor interaction while the legacy screen remains.
+- `ChatSharePosterModal` and `StatsPosterModal` render exported artifacts.
+- `ChatAppearancePreviewCard` previews a shadow as content.
 
-## 6. Shared component decisions
+No exception permits ordinary application chrome to bypass the semantic system.
 
-| Component | Use |
-|---|---|
-| `Card` | Standard flat/raised/pressable content surface; use `elevation`, `tone`, `padding`, and `selected` rather than recreating chrome |
-| `Button` | Page-level text CTA with `primary`, `secondary`, `ghost`, or `destructive` intent |
-| `ActionButton` | Theme-owned compact icon chrome (`bare`, `surface`, `accent`, `destructive`) |
-| `IconButton` | Legacy bare icon action; prefer `ActionButton` when the component should own icon chrome |
-| `HeaderActionButton` | Lucide icon action inside a page header |
-| `HeaderTextAction` | Short text-only action inside a page header |
-| `CircleButton` | Primary circular action such as send or FAB |
-| `ScreenHeader` | Content-owned header when native stack chrome is insufficient |
-| `ModalScreenLayout` | Close-style full-screen modal shell |
-| `ModalSheet` | Centered card modal |
-| `SearchInput` | Standard searchable-list input |
-| `FormTextInput` | Standard single-line or multiline form field; use `surface="sunken"` inside an existing surface |
-| `SegmentedTabs` | Two or more switchable views inside a page |
-| `LoadingState` | True full-page loading state |
-| `GlobalLoadingOverlay` | Transient app-wide in-flight state |
-| `EmptyState` | Empty list or unavailable-content state |
-| `ThemedSwitch` | Theme-aware binary control |
-| `SettingsIcon` | Semantic accent/info/success/warning/danger/neutral icon badge for settings-like rows |
-| `SettingsGroup` / `SettingsRow` / `SettingsDivider` | Grouped Settings and settings-like modal sections |
-| `ScreenLayout` | Shared first-section and scroll-content rhythm |
+## 8. State, copy, and motion
 
-Prefer these components over copied markup. Add a primitive only when at least two product surfaces share the same interaction and visual contract.
+Each shipped page covers loading, empty, error, offline-with-cache, and permission/paywall states. Loading uses `Skeleton`; offline and error preserve usable cached content and add one-action `Banner` feedback. Unsupported actions are absent or locked from capability metadata—they do not fail after navigation.
 
-Shared component `style` props are for layout (margin, flex, width, alignment), not chrome. If a caller needs a different semantic background, border, radius, text treatment, or pressed state, add a named variant to the shared component instead of overriding it locally.
+Default copy has two levels. Rows and controls do not carry explanatory subtitles. Empty, error, banner, and system-event copy is one sentence (up to 8 English words or 16 Chinese characters) plus one action word. Text badges are limited to unread numbers and `Pro`; trailing settings values are a single value, not a sentence. Filters appear only when a list exceeds one screen and are capped at three.
 
-### Control states
+Animation durations are 120, 200, and 320 ms with ease-out. Reduced motion removes positional motion and freezes the working ring. Rows change surface on press; floating buttons scale; bubbles do not animate on press. New messages fade and move four points, session switches cross-fade, and sheets rise over 320 ms.
 
-| State | Shared behavior |
-|---|---|
-| Default | Semantic surface and text tokens |
-| Pressed | Primary fill lowers opacity; surface controls use `surfaceMuted` |
-| Selected | `primarySoft` fill; selection is not represented by a thicker border |
-| Disabled | Opacity only; layout and border remain stable |
-| Loading | Action remains the same size; progress replaces content and disables repeat submission |
-| Invalid | Form edge uses `error`; pair it with readable error text |
+## 9. Verification and style ratchet
 
-Theme/accent swatches, camera/QR overlays, share posters, visual previews, charts, and media controls may use specialized presentation. Their surrounding app chrome still uses shared components where practical.
+For every UI batch run affected render tests in both light and dark schemes, `npm run typecheck`, and `npm run check:design-system`. Tests assert capability degradation, all five page states, no row border, and the set of rendered font sizes; screenshots are reserved for human device acceptance.
 
-The intentional native-control exceptions are explicit and guarded by the style checker:
+`scripts/check-ui-style.mjs` rejects new hardcoded colors, numeric radii/fonts/borders, `FontSize` arithmetic, outlined list rows, emoji icon literals, more than three `FontSize.*` references per screen, React Native `KeyboardAvoidingView`, raw `Shadow.*`, unapproved native `TextInput`/`Switch`, and bottom-tab dependencies. Existing debt is stored per file and rule in `scripts/ui-style-baseline.json`; counts only decrease. Never update the baseline to hide a regression.
 
-- `ChatComposer`, `FileEditorView`, and `SkillContentScreen` own specialized native text editing behavior.
-- `ChatSharePosterModal` owns the switch and fixed-layout typography used by its exported chat artifact.
-- `StatsPosterModal` owns a fixed-layout palette and typography because the rendered poster is an exported artifact, not application chrome.
-- `ChatAppearancePreviewCard` may render a raw shadow because the shadow is previewed content rather than application chrome.
-
-When Debug Mode is enabled, open Settings → Design System to inspect the shared controls, four surface tiers, all built-in accents, and light/dark states on a real device.
-
-## 7. Page rhythm
-
-- Screen horizontal inset: `Space.lg`.
-- First list/card section: `Space.md` below the header.
-- Standard card gap: `Space.md`.
-- Major section gap: `Space.xl`.
-- Scroll bottom breathing room: `Space.xxxl`.
-- Page headers keep centered 16-point semibold titles and symmetric 44-point action slots.
-
-Use `createListContentStyle()`, `createCardContentStyle()`, and `createListHeaderSpacing()` before defining a page-local spacing recipe.
-
-## 8. Theme and backend verification
-
-For UI work, verify:
-
-1. Follow System updates after an OS appearance change.
-2. Manual Light and Dark modes render every changed surface.
-3. Active/inactive tab contrast is readable in both schemes.
-4. OpenClaw and Hermes keep the same connection, Chat, Console, and Settings reachability they had before the UI change.
-5. Unsupported backend pages remain capability-gated rather than failing after navigation.
-6. `npm run typecheck`, affected tests, and `npm run check:design-system` pass.
-
-## 9. Style ratchet
-
-`scripts/check-ui-style.mjs` rejects new hardcoded colors, numeric radius/font/border values, FontSize arithmetic, outlined list rows, emoji literals used as interface icons, screen files with more than three distinct `FontSize.*` values, React Native `KeyboardAvoidingView` imports, raw `Shadow.*` use, unapproved native `TextInput`/`Switch` use, and native bottom-tab dependencies. Existing legacy debt is counted per file and rule in `scripts/ui-style-baseline.json`; every count may only decrease. The checker prints the scanned screen/component scope plus the violation and affected-file totals for the M5 rules so accidental coverage loss stays visible.
-
-Do not update the baseline to make a new violation pass. `--update` compares against the existing valid baseline and refuses any per-file, per-rule increase; it is only for ratcheting the baseline downward after intentional cleanup.
+The docs checker verifies canonical and transitional exports, the `BorderWidth`, `ControlSize`, `FontSize`, `LineHeight`, `PresentationColor`, `Radius`, `Shadow`, and `Space` families, plus `createSurfaceStyle`. Remove transitional names from this document and its checker only in the same change that deletes the last real caller.
