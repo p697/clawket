@@ -105,3 +105,15 @@ export function parseResponseId(data: string): string | null {
     return null;
   }
 }
+
+export function parseRequestFrame(data: string): { id: string; method: string } | null {
+  try {
+    const parsed = JSON.parse(data) as { type?: unknown; id?: unknown; method?: unknown };
+    if (parsed?.type !== 'req') return null;
+    if (typeof parsed.id !== 'string' || !parsed.id.trim()) return null;
+    if (typeof parsed.method !== 'string' || !parsed.method.trim()) return null;
+    return { id: parsed.id, method: parsed.method };
+  } catch {
+    return null;
+  }
+}

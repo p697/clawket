@@ -8,6 +8,7 @@ account_id = "00000000000000000000000000000000"
 enabled = true
 
 [vars]
+RELAY_BACKEND = "openclaw"
 # Set PAIRING_TICKET_SECRET with `wrangler secret put` on both Preview workers;
 # never place that shared secret in this file.
 RELAY_REGION_MAP = "{\"cn\":\"wss://clawket-relay-preview.example.workers.dev/ws\",\"sg\":\"wss://clawket-relay-preview.example.workers.dev/ws\",\"us\":\"wss://clawket-relay-preview.example.workers.dev/ws\",\"eu\":\"wss://clawket-relay-preview.example.workers.dev/ws\"}"

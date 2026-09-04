@@ -1,10 +1,15 @@
+import type { RelayRuntime } from './runtime';
+
 const REDACTED_FIELD_KEYS = new Set([
   'accessCode',
   'authorization',
   'cfRay',
   'clientId',
   'clientLabel',
+  'currentBridgeClientId',
   'currentGatewayClientId',
+  'bridgeClientId',
+  'bridgeId',
   'gatewayClientId',
   'gatewayId',
   'objectId',
@@ -23,7 +28,7 @@ function sanitizeTelemetryFields(fields: Record<string, unknown>): Record<string
 }
 
 export function logRelayTelemetry(
-  scope: 'relay_worker' | 'registry_worker',
+  scope: 'relay_worker' | 'registry_worker' | 'hermes_relay_worker' | 'hermes_registry_worker',
   event: string,
   fields: Record<string, unknown>,
 ): void {
@@ -34,4 +39,12 @@ export function logRelayTelemetry(
     ts: new Date().toISOString(),
     ...sanitizedFields,
   }));
+}
+
+export function logRuntimeTelemetry(
+  runtime: RelayRuntime,
+  event: string,
+  fields: Record<string, unknown>,
+): void {
+  logRelayTelemetry(runtime.policy.telemetryScope, event, fields);
 }

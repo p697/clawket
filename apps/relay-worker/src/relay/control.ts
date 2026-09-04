@@ -4,7 +4,7 @@ import {
   type RelayControlEnvelope,
   type SocketAttachment,
 } from './types';
-import { logRelayTelemetry } from './telemetry';
+import { logRuntimeTelemetry } from './telemetry';
 import type { RelayRuntime } from './runtime';
 
 export function replaceGateway(runtime: RelayRuntime, nextGateway: WebSocket): void {
@@ -12,18 +12,22 @@ export function replaceGateway(runtime: RelayRuntime, nextGateway: WebSocket): v
     && runtime.gatewaySocket !== nextGateway
     && runtime.gatewaySocket.readyState === WebSocket.OPEN) {
     runtime.pendingChallenge = null;
-    runtime.gatewaySocket.close(SOCKET_CLOSE_CODES.REPLACED_BY_NEW_GATEWAY, 'replaced_by_new_gateway');
+    runtime.gatewaySocket.close(SOCKET_CLOSE_CODES.REPLACED_BY_NEW_GATEWAY, runtime.policy.ownerReplacedReason);
   }
   runtime.gatewaySocket = nextGateway;
+  if (runtime.policy.watchdog !== 'none') {
+    runtime.pendingGatewayPingAt = 0;
+    runtime.gatewayPingCapability = 'unknown';
+  }
 }
+
+export const replaceBridge = replaceGateway;
 
 export function parseControlEnvelope(text: string): RelayControlEnvelope | null {
   if (!text.startsWith(CONTROL_PREFIX)) return null;
   try {
     const parsed = JSON.parse(text.slice(CONTROL_PREFIX.length));
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      return null;
-    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
     return parsed as RelayControlEnvelope;
   } catch {
     return null;
@@ -51,12 +55,14 @@ export function sendControlToGateway(
     event,
     ...(payload ?? {}),
   }));
-  logRelayTelemetry('relay_worker', 'control_sent', {
+  logRuntimeTelemetry(runtime, 'control_sent', {
     controlEvent: event,
     count: payload?.count,
     clientCount: runtime.clients.size,
   });
 }
+
+export const sendControlToBridge = sendControlToGateway;
 
 export function logControlRoutingTelemetry(
   runtime: RelayRuntime,
@@ -65,7 +71,7 @@ export function logControlRoutingTelemetry(
   envelope: RelayControlEnvelope,
   extra: Record<string, unknown> = {},
 ): void {
-  logRelayTelemetry('relay_worker', event, {
+  logRuntimeTelemetry(runtime, event, {
     role: attachment.role,
     controlEvent: normalizeControlEvent(envelope),
     hasSourceClient: typeof envelope.sourceClientId === 'string' && envelope.sourceClientId.trim().length > 0,

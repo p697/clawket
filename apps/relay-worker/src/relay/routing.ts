@@ -10,10 +10,11 @@ import {
   isConnectStartReqFrame,
   isPendingChallengeExpired,
   parseConnectReqId,
+  parseRequestFrame,
   parseResponseId,
   resolveAwaitingChallengeClientId,
 } from './frames';
-import { logRelayTelemetry } from './telemetry';
+import { logRuntimeTelemetry } from './telemetry';
 import type { RelayRuntime } from './runtime';
 import { touchClientActivity, touchGatewayActivity } from './runtime';
 import { dropClientState, prunePendingConnectStarts } from './heartbeat';
@@ -134,15 +135,16 @@ export function tryDeliverChallenge(
     payload.relayLegMs = Math.max(0, now - connectStartAt);
     runtime.connectStartAtByClientId.delete(challengeClientId);
   }
-  logRelayTelemetry('relay_worker', 'challenge_delivered', payload);
+  logRuntimeTelemetry(runtime, 'challenge_delivered', payload);
   return true;
 }
 
 export function flushPendingChallenge(runtime: RelayRuntime, now: number): boolean {
   const pending = runtime.pendingChallenge;
   if (!pending) return false;
+  const pendingOwnerClientId = pending[runtime.policy.pendingOwnerField];
   if (runtime.awaitingChallenge.size === 0) {
-    logRelayTelemetry('relay_worker', 'challenge_buffer_dropped_without_awaiting_client', {
+    logRuntimeTelemetry(runtime, 'challenge_buffer_dropped_without_awaiting_client', {
       role: 'gateway',
       queuedMs: Math.max(0, now - pending.queuedAt),
       clientCount: runtime.clients.size,
@@ -153,17 +155,17 @@ export function flushPendingChallenge(runtime: RelayRuntime, now: number): boole
   const currentGatewayAttachment = runtime.gatewaySocket?.deserializeAttachment() as SocketAttachment | null;
   if (!currentGatewayAttachment
     || currentGatewayAttachment.role !== 'gateway'
-    || currentGatewayAttachment.clientId !== pending.gatewayClientId) {
-    logRelayTelemetry('relay_worker', 'challenge_buffer_dropped_stale_gateway', {
+    || currentGatewayAttachment.clientId !== pendingOwnerClientId) {
+    logRuntimeTelemetry(runtime, 'challenge_buffer_dropped_stale_gateway', {
       role: 'gateway',
-      gatewayReplaced: true,
+      [runtime.policy.ownerReplacedField]: true,
       queuedMs: Math.max(0, now - pending.queuedAt),
     });
     runtime.pendingChallenge = null;
     return false;
   }
   if (isPendingChallengeExpired(pending.queuedAt, now)) {
-    logRelayTelemetry('relay_worker', 'challenge_buffer_expired', {
+    logRuntimeTelemetry(runtime, 'challenge_buffer_expired', {
       role: 'gateway',
       queuedMs: Math.max(0, now - pending.queuedAt),
       awaitingChallengeCount: runtime.awaitingChallenge.size,
@@ -174,7 +176,7 @@ export function flushPendingChallenge(runtime: RelayRuntime, now: number): boole
   }
   if (tryDeliverChallenge(runtime, pending.data, {
     role: 'gateway',
-    clientId: pending.gatewayClientId,
+    clientId: pendingOwnerClientId ?? '',
     connectedAt: pending.queuedAt,
     traceId: pending.traceId,
   }, now, true)) {
@@ -197,10 +199,10 @@ export function forwardGatewayChallengeFastPath(
   runtime.pendingChallenge = {
     data: text,
     queuedAt: now,
-    gatewayClientId: gatewayAttachment.clientId,
+    [runtime.policy.pendingOwnerField]: gatewayAttachment.clientId,
     traceId: gatewayAttachment.traceId,
   };
-  logRelayTelemetry('relay_worker', 'challenge_buffered_no_client', {
+  logRuntimeTelemetry(runtime, 'challenge_buffered_no_client', {
     role: 'gateway',
     hasActiveClient: Boolean(runtime.activeClientId),
     hasChallengeClient: Boolean(runtime.challengeClientId),
@@ -226,14 +228,14 @@ export function flushPendingConnectStarts(runtime: RelayRuntime): void {
     markAwaitingChallenge(runtime, clientId, pending.queuedAt);
     runtime.pendingConnectStarts.delete(clientId);
     flushed += 1;
-    logRelayTelemetry('relay_worker', 'connect_start_flushed', {
+    logRuntimeTelemetry(runtime, 'connect_start_flushed', {
       role: 'client',
       queuedMs: Math.max(0, now - pending.queuedAt),
     });
   }
 
   if (flushed > 0) {
-    logRelayTelemetry('relay_worker', 'connect_start_flush_done', {
+    logRuntimeTelemetry(runtime, 'connect_start_flush_done', {
       flushed,
       remaining: runtime.pendingConnectStarts.size,
       clientCount: runtime.clients.size,
@@ -252,13 +254,23 @@ export async function handleGatewayMessage(
   if (text.startsWith(CONTROL_PREFIX)) {
     const gatewayControl = parseControlEnvelope(text);
     if (gatewayControl) {
-      if (gatewayControl.event === 'client.reconnect-required') {
+      if (runtime.policy.watchdog !== 'none' && gatewayControl.event === 'gateway_pong') {
+        runtime.pendingGatewayPingAt = 0;
+        runtime.gatewayPingCapability = 'supported';
+        logRuntimeTelemetry(runtime, 'gateway_pong_received', {
+          role: 'gateway',
+          clientCount: runtime.clients.size,
+        });
+        return;
+      }
+      if (runtime.policy.reconnectClientsOnOwnerRequest
+        && gatewayControl.event === 'client.reconnect-required') {
         disconnectClientsForGatewayRestart(runtime);
         return;
       }
       routeGatewayControl(runtime, attachment, gatewayControl);
     } else {
-      logRelayTelemetry('relay_worker', 'gateway_control_invalid', {
+      logRuntimeTelemetry(runtime, runtime.policy.ownerControlInvalidEvent, {
         role: 'gateway',
         clientCount: runtime.clients.size,
       });
@@ -266,7 +278,7 @@ export async function handleGatewayMessage(
     return;
   }
   if (isConnectChallengeFrame(text)) {
-    logRelayTelemetry('relay_worker', 'challenge_forward', {
+    logRuntimeTelemetry(runtime, 'challenge_forward', {
       role: 'gateway',
       clientCount: runtime.clients.size,
     });
@@ -275,20 +287,42 @@ export async function handleGatewayMessage(
   }
   const connectResId = parseResponseId(text);
   if (connectResId) {
+    if (runtime.policy.routeRequestsByOrigin) {
+      const mappedClientId = runtime.requestClientByReqId.get(connectResId);
+      if (mappedClientId) {
+        const mappedClient = runtime.clients.get(mappedClientId);
+        runtime.requestClientByReqId.delete(connectResId);
+        if (mappedClient?.readyState === WebSocket.OPEN) {
+          mappedClient.send(text);
+          touchClientActivity(runtime, mappedClientId);
+          logRuntimeTelemetry(runtime, 'request_response_delivered', {
+            role: 'gateway',
+            targetClientId: mappedClientId,
+            clientCount: runtime.clients.size,
+          });
+          return;
+        }
+        logRuntimeTelemetry(runtime, 'request_response_target_missing', {
+          role: 'gateway',
+          targetClientId: mappedClientId,
+          clientCount: runtime.clients.size,
+        });
+      }
+    }
     const targetClientId = runtime.connectReqClientByReqId.get(connectResId);
     if (targetClientId) {
       const targetClient = runtime.clients.get(targetClientId);
       if (targetClient?.readyState === WebSocket.OPEN) {
         targetClient.send(text);
         touchClientActivity(runtime, targetClientId);
-        logRelayTelemetry('relay_worker', 'connect_response_delivered', {
+        logRuntimeTelemetry(runtime, 'connect_response_delivered', {
           role: 'gateway',
           matchedRequest: true,
         });
         runtime.connectReqClientByReqId.delete(connectResId);
         return;
       }
-      logRelayTelemetry('relay_worker', 'connect_response_target_missing', {
+      logRuntimeTelemetry(runtime, 'connect_response_target_missing', {
         role: 'gateway',
         matchedRequest: true,
       });
@@ -303,13 +337,15 @@ export async function handleGatewayMessage(
     delivered = 1;
   }
   if (delivered === 0) {
-    logRelayTelemetry('relay_worker', 'gateway_message_dropped_without_active_client', {
+    logRuntimeTelemetry(runtime, runtime.policy.ownerMessageDroppedEvent, {
       role: 'gateway',
-      hasGateway: true,
+      [runtime.policy.ownerPresentField]: true,
       clientCount: runtime.clients.size,
     });
   }
 }
+
+export const handleBridgeMessage = handleGatewayMessage;
 
 function disconnectClientsForGatewayRestart(runtime: RelayRuntime): void {
   let disconnected = 0;
@@ -323,7 +359,7 @@ function disconnectClientsForGatewayRestart(runtime: RelayRuntime): void {
   }
   runtime.pendingChallenge = null;
   sendControlToGateway(runtime, 'client_disconnected', { count: 0 });
-  logRelayTelemetry('relay_worker', 'clients_reconnect_required', {
+  logRuntimeTelemetry(runtime, 'clients_reconnect_required', {
     role: 'gateway',
     disconnected,
   });
@@ -339,7 +375,8 @@ function routeGatewayControl(
     : null;
 
   if (targetClientId) {
-    const targetClient = runtime.clients.get(targetClientId) ?? runtime.pairingClients.get(targetClientId);
+    const targetClient = runtime.clients.get(targetClientId)
+      ?? (runtime.policy.securePairing ? runtime.pairingClients.get(targetClientId) : undefined);
     if (targetClient?.readyState === WebSocket.OPEN) {
       targetClient.send(serializeControlEnvelope(envelope));
       touchClientActivity(runtime, targetClientId);
@@ -385,9 +422,11 @@ export function handleGatewayConnected(runtime: RelayRuntime): void {
   flushPendingConnectStarts(runtime);
 }
 
+export const handleBridgeConnected = handleGatewayConnected;
+
 export function handleInactiveClientMessage(runtime: RelayRuntime, attachment: SocketAttachment): boolean {
   if (runtime.activeClientId !== attachment.clientId) {
-    logRelayTelemetry('relay_worker', 'inactive_client_message_dropped', {
+    logRuntimeTelemetry(runtime, 'inactive_client_message_dropped', {
       role: 'client',
       reason: 'non_connect_before_active',
     });
@@ -398,16 +437,26 @@ export function handleInactiveClientMessage(runtime: RelayRuntime, attachment: S
 
 export function prepareClientMessage(runtime: RelayRuntime, attachment: SocketAttachment, text: string): boolean | null {
   const isConnectStart = isConnectStartReqFrame(text);
+  const requestFrame = parseRequestFrame(text);
   if (isConnectStart) {
     if (runtime.activeClientId !== attachment.clientId) {
       runtime.activeClientId = attachment.clientId;
-      logRelayTelemetry('relay_worker', 'active_client_switched', {
+      logRuntimeTelemetry(runtime, 'active_client_switched', {
         role: 'client',
         reason: 'connect_start',
       });
     }
     if (runtime.challengeClientId === attachment.clientId) {
       runtime.challengeClientId = null;
+    }
+  } else if (runtime.policy.routeRequestsByOrigin) {
+    if (requestFrame) runtime.requestClientByReqId.set(requestFrame.id, attachment.clientId);
+    if (runtime.activeClientId !== attachment.clientId) {
+      runtime.activeClientId = attachment.clientId;
+      logRuntimeTelemetry(runtime, 'active_client_switched', {
+        role: 'client',
+        reason: requestFrame ? `request:${requestFrame.method}` : 'client_message',
+      });
     }
   } else if (handleInactiveClientMessage(runtime, attachment)) {
     return null;
@@ -459,13 +508,48 @@ export function forwardClientMessageToGateway(
     if (connectReqId) {
       runtime.connectReqClientByReqId.set(connectReqId, attachment.clientId);
     }
-    logRelayTelemetry('relay_worker', 'connect_start_forward', {
+    logRuntimeTelemetry(runtime, 'connect_start_forward', {
       role: 'client',
       hasRequestId: Boolean(connectReqId),
       clientCount: runtime.clients.size,
     });
   }
   runtime.gatewaySocket.send(text);
+}
+
+export const forwardClientMessageToBridge = forwardClientMessageToGateway;
+
+export function rejectClientRequestWithoutBridge(
+  runtime: RelayRuntime,
+  ws: WebSocket,
+  attachment: SocketAttachment,
+  text: string,
+): boolean {
+  if (!runtime.policy.rejectRequestWithoutOwner) return false;
+  const frame = parseRequestFrame(text);
+  if (!frame || isConnectStartReqFrame(text)) return false;
+
+  const response = JSON.stringify({
+    type: 'res',
+    id: frame.id,
+    ok: false,
+    error: {
+      code: 'BRIDGE_UNAVAILABLE',
+      message: 'Hermes bridge is temporarily unavailable. Please retry.',
+    },
+  });
+  try {
+    ws.send(response);
+    touchClientActivity(runtime, attachment.clientId);
+  } catch {
+    // Best effort error delivery; the client may retry on the same socket.
+  }
+  logRuntimeTelemetry(runtime, 'client_request_rejected_no_bridge', {
+    role: 'client',
+    method: frame.method,
+    clientCount: runtime.clients.size,
+  });
+  return true;
 }
 
 export function forwardClientControlToGateway(
@@ -475,7 +559,7 @@ export function forwardClientControlToGateway(
 ): void {
   const envelope = parseControlEnvelope(text);
   if (!envelope) {
-    logRelayTelemetry('relay_worker', 'client_control_invalid', {
+    logRuntimeTelemetry(runtime, 'client_control_invalid', {
       role: 'client',
       clientCount: runtime.clients.size,
     });
@@ -495,9 +579,11 @@ export function forwardClientControlToGateway(
   };
   runtime.gatewaySocket.send(serializeControlEnvelope(forwardedEnvelope));
   logControlRoutingTelemetry(runtime, 'client_control_forwarded', attachment, forwardedEnvelope, {
-    gatewayClientId: gatewayAttachment?.clientId ?? null,
+    [runtime.policy.pendingOwnerField]: gatewayAttachment?.clientId ?? null,
   });
 }
+
+export const forwardClientControlToBridge = forwardClientControlToGateway;
 
 export function forwardPairingControlToGateway(
   runtime: RelayRuntime,
@@ -543,7 +629,7 @@ export function bufferClientConnectStart(
     traceId: attachment.traceId,
   });
   prunePendingConnectStarts(runtime, queuedAt);
-  logRelayTelemetry('relay_worker', 'connect_start_no_gateway', {
+  logRuntimeTelemetry(runtime, runtime.policy.connectStartMissingEvent, {
     role: 'client',
     hasRequestId: Boolean(connectReqId),
     clientCount: runtime.clients.size,

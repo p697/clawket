@@ -12,7 +12,10 @@
   },
   "scripts": {
     "dev": "wrangler dev",
+    "dev:hermes": "node ../../scripts/relay/run-wrangler.mjs dev relay-worker --config-file wrangler.hermes.local.toml",
     "deploy": "node ../../scripts/relay/run-wrangler.mjs deploy relay-worker",
+    "deploy:hermes": "node ../../scripts/relay/run-wrangler.mjs deploy relay-worker --config-file wrangler.hermes.local.toml",
+    "tail:hermes": "node ../../scripts/relay/run-wrangler.mjs tail relay-worker --config-file wrangler.hermes.local.toml",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "lint": "echo \"No lint for relay worker\""

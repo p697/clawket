@@ -108,7 +108,7 @@ beforeAll(async () => {
     },
     {
       cwd: process.cwd(),
-      configPath: 'apps/hermes-relay-registry/wrangler.toml',
+      configPath: 'apps/relay-registry/wrangler.hermes.toml',
       port: hermesRegistryPort,
       inspectorPort: hermesRegistryInspectorPort,
       envVars: {
@@ -137,7 +137,7 @@ beforeAll(async () => {
     },
     {
       cwd: process.cwd(),
-      configPath: 'apps/hermes-relay-worker/wrangler.toml',
+      configPath: 'apps/relay-worker/wrangler.hermes.toml',
       port: hermesRelayPort,
       inspectorPort: hermesRelayInspectorPort,
       envVars: {

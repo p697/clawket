@@ -8,6 +8,7 @@ account_id = "00000000000000000000000000000000"
 enabled = true
 
 [vars]
+RELAY_BACKEND = "openclaw"
 # Set PAIRING_TICKET_SECRET with `wrangler secret put` on both Preview workers;
 # never place that shared secret in this file.
 MAX_MESSAGES_PER_10S = "120"

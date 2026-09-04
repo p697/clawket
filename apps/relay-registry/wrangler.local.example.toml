@@ -5,6 +5,7 @@ workers_dev = true
 account_id = "replace-with-your-cloudflare-account-id"
 
 [vars]
+RELAY_BACKEND = "openclaw"
 # Copy this file to wrangler.local.toml and replace these values with resources/endpoints
 # from the Cloudflare account you use for local deploys or remote dev.
 # Set PAIRING_TICKET_SECRET with `wrangler secret put` on both Registry and Relay;

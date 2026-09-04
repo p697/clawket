@@ -187,7 +187,7 @@ export function ensureAccountSelection({
     logError(
       `[run-wrangler] configured account_id ${selectedAccountId} was not found in your current Wrangler login session.`,
     );
-    logError('[run-wrangler] run `npm run cf:whoami` and update your local config or login context.');
+    logError('[run-wrangler] run `npm run relay:cf:whoami` and update your local config or login context.');
     return false;
   }
 

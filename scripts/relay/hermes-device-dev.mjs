@@ -3,96 +3,106 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { networkInterfaces } from 'node:os';
+import { pathToFileURL } from 'node:url';
 
-const [, , mode, ...restArgs] = process.argv;
+export function runHermesDeviceDev([mode, ...restArgs]) {
+  if (!mode || !['registry', 'worker', 'pair'].includes(mode)) {
+    console.error('Usage: node scripts/relay/hermes-device-dev.mjs <registry|worker|pair> [--public-host <ip>] [--registry-port <8787>] [--worker-port <8788>]');
+    return 1;
+  }
 
-if (!mode || !['registry', 'worker', 'pair'].includes(mode)) {
-  console.error('Usage: node scripts/relay/hermes-device-dev.mjs <registry|worker|pair> [--public-host <ip>] [--registry-port <8787>] [--worker-port <8788>]');
-  process.exit(1);
-}
+  const workspaceRoot = process.cwd();
+  const publicHost = readFlag(restArgs, '--public-host') ?? detectLanIp();
+  const registryPort = Number(readFlag(restArgs, '--registry-port') ?? '8787');
+  const workerPort = Number(readFlag(restArgs, '--worker-port') ?? '8788');
 
-const workspaceRoot = process.cwd();
-const publicHost = readFlag(restArgs, '--public-host') ?? detectLanIp();
-const registryPort = Number(readFlag(restArgs, '--registry-port') ?? '8787');
-const workerPort = Number(readFlag(restArgs, '--worker-port') ?? '8788');
+  if (!publicHost) {
+    console.error('Failed to determine a LAN IP address. Pass --public-host explicitly.');
+    return 1;
+  }
 
-if (!publicHost) {
-  console.error('Failed to determine a LAN IP address. Pass --public-host explicitly.');
-  process.exit(1);
-}
+  if (mode === 'pair') {
+    const result = spawnSync(
+      'npm',
+      [
+        'run',
+        '--workspace',
+        '@p697/clawket',
+        'hermes:pair:relay',
+        '--',
+        '--server',
+        `http://${publicHost}:${registryPort}`,
+      ],
+      {
+        cwd: workspaceRoot,
+        stdio: 'inherit',
+        env: process.env,
+      },
+    );
+    return result.status ?? 1;
+  }
 
-if (mode === 'pair') {
+  const wranglerBin = path.join(
+    workspaceRoot,
+    'node_modules',
+    '.bin',
+    process.platform === 'win32' ? 'wrangler.cmd' : 'wrangler',
+  );
+  const appName = mode === 'registry' ? 'relay-registry' : 'relay-worker';
+  const configPath = writeTempConfig({
+    workspaceRoot,
+    appName,
+    publicHost,
+    registryPort,
+    workerPort,
+  });
+
+  console.error(`[hermes-device-dev] public host ${publicHost}`);
+  console.error(`[hermes-device-dev] temp config ${configPath}`);
+
+  const args = [
+    'dev',
+    '--config',
+    configPath,
+    '--cwd',
+    workspaceRoot,
+    '--ip',
+    '0.0.0.0',
+    '--port',
+    String(mode === 'registry' ? registryPort : workerPort),
+  ];
+
   const result = spawnSync(
-    'npm',
-    [
-      'run',
-      '--workspace',
-      '@p697/clawket',
-      'hermes:pair:relay',
-      '--',
-      '--server',
-      `http://${publicHost}:${registryPort}`,
-    ],
+    wranglerBin,
+    args,
     {
       cwd: workspaceRoot,
       stdio: 'inherit',
       env: process.env,
     },
   );
-  process.exit(result.status ?? 1);
+
+  rmSync(path.dirname(configPath), { recursive: true, force: true });
+  return result.status ?? 1;
 }
-
-const wranglerBin = path.join(
-  workspaceRoot,
-  'node_modules',
-  '.bin',
-  process.platform === 'win32' ? 'wrangler.cmd' : 'wrangler',
-);
-const appName = mode === 'registry' ? 'hermes-relay-registry' : 'hermes-relay-worker';
-const configPath = writeTempConfig({
-  workspaceRoot,
-  appName,
-  publicHost,
-  registryPort,
-  workerPort,
-});
-
-console.error(`[hermes-device-dev] public host ${publicHost}`);
-console.error(`[hermes-device-dev] temp config ${configPath}`);
-
-const args = [
-  'dev',
-  '--config',
-  configPath,
-  '--cwd',
-  workspaceRoot,
-  '--ip',
-  '0.0.0.0',
-  '--port',
-  String(mode === 'registry' ? registryPort : workerPort),
-];
-
-const result = spawnSync(wranglerBin, args, {
-  cwd: workspaceRoot,
-  stdio: 'inherit',
-  env: process.env,
-});
-
-rmSync(path.dirname(configPath), { recursive: true, force: true });
-process.exit(result.status ?? 1);
 
 function writeTempConfig(input) {
   const tempDir = mkdtempSync(path.join(tmpdir(), `clawket-${input.appName}-`));
   const configPath = path.join(tempDir, 'wrangler.toml');
+  writeFileSync(configPath, buildHermesDeviceConfig(input), 'utf8');
+  return configPath;
+}
 
-  if (input.appName === 'hermes-relay-registry') {
-    writeFileSync(configPath, [
+export function buildHermesDeviceConfig(input) {
+  if (input.appName === 'relay-registry') {
+    return [
       'name = "clawket-hermes-registry"',
-      `main = "${escapeTomlString(path.join(input.workspaceRoot, 'apps', 'hermes-relay-registry', 'src', 'index.ts'))}"`,
+      `main = "${escapeTomlString(path.join(input.workspaceRoot, 'apps', 'relay-registry', 'src', 'index.ts'))}"`,
       'compatibility_date = "2026-03-03"',
       'workers_dev = true',
       '',
       '[vars]',
+      'RELAY_BACKEND = "hermes"',
       `RELAY_REGION_MAP = "${escapeTomlJson(JSON.stringify({
         cn: `ws://${input.publicHost}:${input.workerPort}/ws`,
         sg: `ws://${input.publicHost}:${input.workerPort}/ws`,
@@ -107,22 +117,23 @@ function writeTempConfig(input) {
       'id = "00000000000000000000000000000000"',
       'preview_id = "00000000000000000000000000000000"',
       '',
-    ].join('\n'), 'utf8');
-    return configPath;
+    ].join('\n');
   }
 
-  writeFileSync(configPath, [
+  return [
     'name = "clawket-hermes-relay"',
-    `main = "${escapeTomlString(path.join(input.workspaceRoot, 'apps', 'hermes-relay-worker', 'src', 'index.ts'))}"`,
+    `main = "${escapeTomlString(path.join(input.workspaceRoot, 'apps', 'relay-worker', 'src', 'index.ts'))}"`,
     'compatibility_date = "2026-03-03"',
     'workers_dev = true',
     '',
     '[vars]',
+    'RELAY_BACKEND = "hermes"',
     'MAX_MESSAGES_PER_10S = "120"',
     'MAX_CLIENT_MESSAGES_PER_10S = "300"',
     'HEARTBEAT_INTERVAL_MS = "30000"',
     'AWAITING_CHALLENGE_TTL_MS = "25000"',
-    'CLIENT_IDLE_TIMEOUT_MS = "600000"',
+    'CLIENT_PONG_TIMEOUT_MS = "30000"',
+    'GATEWAY_PING_TIMEOUT_MS = "12000"',
     `REGISTRY_VERIFY_URL = "http://${input.publicHost}:${input.registryPort}"`,
     'GATEWAY_OWNER_LEASE_MS = "20000"',
     '',
@@ -139,8 +150,7 @@ function writeTempConfig(input) {
     'tag = "v1"',
     'new_sqlite_classes = ["HermesRelayRoom"]',
     '',
-  ].join('\n'), 'utf8');
-  return configPath;
+  ].join('\n');
 }
 
 function escapeTomlJson(value) {
@@ -236,4 +246,8 @@ function isCgnat(ip) {
 function isValidIpv4(ip) {
   const parts = ip.split('.');
   return parts.length === 4 && parts.every((part) => /^\d+$/.test(part) && Number(part) >= 0 && Number(part) <= 255);
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  process.exitCode = runHermesDeviceDev(process.argv.slice(2));
 }
