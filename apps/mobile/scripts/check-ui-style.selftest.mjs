@@ -134,6 +134,11 @@ expectFailure('native text inputs cannot bypass shared field chrome', {
   source: "import { TextInput } from 'react-native'; export const x = <TextInput />;\n",
 }, 'native TextInput is reserved');
 
+expectPass('canonical Composer may own its composition-safe native input', {
+  componentFile: 'ui/Composer.tsx',
+  source: "import { TextInput } from 'react-native'; export const x = <TextInput />;\n",
+});
+
 expectFailure('raw shadows cannot bypass dark-mode surface semantics', {
   source: "import { Shadow } from '../theme/tokens'; export const x = <View style={Shadow.md} />;\n",
 }, 'raw Shadow tokens must go through');

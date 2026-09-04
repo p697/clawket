@@ -21,6 +21,9 @@ const NATIVE_SWITCH_ALLOWED_FILES = new Set([
   'src/screens/ChatScreen/components/ChatSharePosterModal.tsx',
 ]);
 const NATIVE_TEXT_INPUT_ALLOWED_FILES = new Set([
+  // Canonical 3.0 composer owns multiline sizing, paste, microphone, and
+  // streaming controls; ordinary form fields still go through shared chrome.
+  'src/components/ui/Composer.tsx',
   'src/components/ui/FormTextInput.tsx',
   'src/components/ui/SearchInput.tsx',
   // These are editors/composers with selection, accessory, or streaming
