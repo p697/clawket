@@ -28,7 +28,6 @@ import {
 import type { AgentInfo, AgentsListResult, AgentCreateResult, AgentUpdateResult, AgentDeleteResult } from '../types/agent';
 import type { CostSummary, UsageResult } from '../types/usage';
 import type { ToolsCatalogResult } from '../types/index';
-import type { NodeInvokeRequest, CanvasPresentPayload, CanvasNavigatePayload, CanvasEvalPayload, CanvasSnapshotPayload } from '../types/canvas';
 import type {
   HermesCronJob,
   HermesCronJobUpsert,
@@ -246,11 +245,6 @@ export class GatewayClient {
     pairingResolved: new Set(),
     execApprovalRequested: new Set(),
     execApprovalResolved: new Set(),
-    canvasPresent: new Set(),
-    canvasHide: new Set(),
-    canvasNavigate: new Set(),
-    canvasEval: new Set(),
-    canvasSnapshot: new Set(),
     seqGap: new Set(),
     health: new Set(),
     tick: new Set(),
@@ -1484,9 +1478,7 @@ export class GatewayClient {
         deviceFamily,
       },
       caps: role === 'node' ? [] : ['tool-events'],
-      commands: role === 'node'
-        ? []
-        : ['canvas.present', 'canvas.hide', 'canvas.navigate', 'canvas.eval', 'canvas.snapshot'],
+      commands: [],
       role,
       scopes,
       device: {
@@ -2034,11 +2026,6 @@ export class GatewayClient {
       clearTimeout(pending.timeout);
       pending.reject(permissionsError.error);
     }
-  }
-
-  /** Respond to a node.invoke.request from the Gateway. */
-  public async sendNodeInvokeResponse(requestId: string, result: unknown): Promise<void> {
-    await this.sendRequest('node.invoke.response', { id: requestId, result });
   }
 
   private shouldTryRelayFallback(route: 'direct' | 'relay'): boolean {

@@ -1,13 +1,6 @@
 import type { ConnectionState, SessionInfo } from '../types';
 import type { AgentEventPayload, ChatEventPayload, ConnectChallengePayload } from '../types';
 import { isSilentReplyPrefixText } from '../utils/chat-message';
-import type {
-  CanvasEvalPayload,
-  CanvasNavigatePayload,
-  CanvasPresentPayload,
-  CanvasSnapshotPayload,
-  NodeInvokeRequest,
-} from '../types/canvas';
 
 export const MIN_PROTOCOL_VERSION = 3;
 export const PROTOCOL_VERSION = 4;
@@ -71,11 +64,6 @@ export type GatewayEvents = {
     id: string;
     decision: string;
   };
-  canvasPresent: { requestId: string; payload: CanvasPresentPayload };
-  canvasHide: { requestId: string };
-  canvasNavigate: { requestId: string; payload: CanvasNavigatePayload };
-  canvasEval: { requestId: string; payload: CanvasEvalPayload };
-  canvasSnapshot: { requestId: string; payload: CanvasSnapshotPayload };
   seqGap: { sessionKey?: string; fromSeq?: number; toSeq?: number };
   health: { status?: string; ts?: number; [key: string]: unknown };
   tick: Record<string, never>;
@@ -210,12 +198,10 @@ export type GatewayMessageContext = {
   clearReconnectBlock: () => void;
   clearPairingTimer: () => void;
   scheduleReconnect: () => void;
-  sendNodeInvokeResponse: (requestId: string, result: unknown) => Promise<void>;
 };
 
 export type GatewayChatPayload = ChatEventPayload;
 export type GatewayAgentPayload = AgentEventPayload;
-export type GatewayNodeInvokeRequest = NodeInvokeRequest;
 
 export function extractText(message?: ExtractableMessage): string {
   if (!message?.content) return '';
@@ -432,13 +418,6 @@ function handleGatewayEvent(context: GatewayMessageContext, frame: GatewayEventF
     case 'exec.approval.resolved':
       context.emit('execApprovalResolved', frame.payload as GatewayEvents['execApprovalResolved']);
       return;
-    case 'node.invoke.request': {
-      const request = frame.payload as NodeInvokeRequest | undefined;
-      if (request?.id && request.command) {
-        handleNodeInvokeRequest(context, request);
-      }
-      return;
-    }
     case 'seq.gap': {
       const gapPayload = frame.payload as GatewayEvents['seqGap'] | undefined;
       context.emit('seqGap', {
@@ -574,29 +553,6 @@ function handleGatewayAgentEvent(context: GatewayMessageContext, payload: AgentE
     output: output ?? undefined,
     status,
   });
-}
-
-function handleNodeInvokeRequest(context: GatewayMessageContext, request: NodeInvokeRequest): void {
-  const { id, command, params } = request;
-  switch (command) {
-    case 'canvas.present':
-      context.emit('canvasPresent', { requestId: id, payload: (params ?? {}) as CanvasPresentPayload });
-      return;
-    case 'canvas.hide':
-      context.emit('canvasHide', { requestId: id });
-      return;
-    case 'canvas.navigate':
-      context.emit('canvasNavigate', { requestId: id, payload: (params ?? {}) as CanvasNavigatePayload });
-      return;
-    case 'canvas.eval':
-      context.emit('canvasEval', { requestId: id, payload: (params ?? {}) as CanvasEvalPayload });
-      return;
-    case 'canvas.snapshot':
-      context.emit('canvasSnapshot', { requestId: id, payload: (params ?? {}) as CanvasSnapshotPayload });
-      return;
-    default:
-      context.sendNodeInvokeResponse(id, { error: `Unknown command: ${command}` }).catch(() => {});
-  }
 }
 
 export function isAbortLikeError(error: unknown): boolean {

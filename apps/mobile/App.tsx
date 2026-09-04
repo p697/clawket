@@ -132,7 +132,6 @@ export default function App(): React.JSX.Element {
   const {
     accentId,
     activeGatewayConfigId,
-    canvasEnabled,
     chatFontSize,
     chatAppearance,
     config,
@@ -146,7 +145,6 @@ export default function App(): React.JSX.Element {
     nodeEnabled,
     setAccentId,
     setActiveGatewayConfigId,
-    setCanvasEnabled,
     setChatFontSize,
     setChatAppearance,
     setConfig,
@@ -192,7 +190,6 @@ export default function App(): React.JSX.Element {
           showAgentAvatar={showAgentAvatar}
           showModelUsage={showModelUsage}
           execApprovalEnabled={execApprovalEnabled}
-          canvasEnabled={canvasEnabled}
           nodeEnabled={nodeEnabled}
           nodeCapabilityToggles={nodeCapabilityToggles}
           chatFontSize={chatFontSize}
@@ -215,10 +212,6 @@ export default function App(): React.JSX.Element {
           onExecApprovalToggle={(enabled) => {
             setExecApprovalEnabled(enabled);
             StorageService.setExecApprovalEnabled(enabled);
-          }}
-          onCanvasToggle={(enabled) => {
-            setCanvasEnabled(enabled);
-            StorageService.setCanvasEnabled(enabled);
           }}
           onNodeEnabledToggle={(enabled) => {
             setNodeEnabled(enabled);
@@ -311,7 +304,6 @@ type AppContentProps = {
   showAgentAvatar: boolean;
   showModelUsage: boolean;
   execApprovalEnabled: boolean;
-  canvasEnabled: boolean;
   nodeEnabled: boolean;
   nodeCapabilityToggles: NodeCapabilityToggles;
   chatFontSize: number;
@@ -323,7 +315,6 @@ type AppContentProps = {
   onShowAgentAvatarToggle: (show: boolean) => void;
   onShowModelUsageToggle: (enabled: boolean) => void;
   onExecApprovalToggle: (enabled: boolean) => void;
-  onCanvasToggle: (enabled: boolean) => void;
   onNodeEnabledToggle: (enabled: boolean) => void;
   onNodeCapabilityTogglesChange: (toggles: NodeCapabilityToggles) => void;
   onChatFontSizeChange: (size: number) => void;
@@ -342,7 +333,6 @@ function AppContent({
   showAgentAvatar,
   showModelUsage,
   execApprovalEnabled,
-  canvasEnabled,
   nodeEnabled,
   nodeCapabilityToggles,
   chatFontSize,
@@ -354,7 +344,6 @@ function AppContent({
   onShowAgentAvatarToggle,
   onShowModelUsageToggle,
   onExecApprovalToggle,
-  onCanvasToggle,
   onNodeEnabledToggle,
   onNodeCapabilityTogglesChange,
   onChatFontSizeChange,
@@ -733,7 +722,6 @@ function AppContent({
       showAgentAvatar,
       showModelUsage,
       execApprovalEnabled,
-      canvasEnabled,
       nodeEnabled,
       onNodeEnabledToggle,
       nodeCapabilityToggles,
@@ -760,7 +748,6 @@ function AppContent({
       onShowAgentAvatarToggle,
       onShowModelUsageToggle,
       onExecApprovalToggle,
-      onCanvasToggle,
       onChatFontSizeChange,
       onChatAppearanceChange,
       requestChatSession: (sessionKey: string, sourceRole?: string) => {
@@ -828,7 +815,6 @@ function AppContent({
       agentAvatars,
       agents,
       activeGatewayConfigId,
-      canvasEnabled,
       chatAppearance,
       chatFontSize,
       chatSidebarRequest,
@@ -849,7 +835,6 @@ function AppContent({
       pendingMainSessionSwitch,
       openChatFromNotification,
       onDebugToggle,
-      onCanvasToggle,
       onChatAppearanceChange,
       onChatFontSizeChange,
       onNodeEnabledToggle,

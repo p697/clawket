@@ -181,16 +181,6 @@ jest.mock('../../utils/agent-avatar-uri', () => ({
   pickAgentIdentityAvatarUri: jest.fn(() => null),
 }));
 
-jest.mock('./hooks/useCanvasController', () => ({
-  useCanvasController: () => ({
-    canvasVisible: false,
-    canvasUrl: null,
-    canvasTitle: null,
-    canvasRef: { current: null },
-    closeCanvas: jest.fn(),
-  }),
-}));
-
 jest.mock('./hooks/chatSyncPolicy', () => ({
   getChatHeaderSyncState: jest.fn(() => ({
     isConnecting: false,

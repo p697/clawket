@@ -34,7 +34,6 @@ import { ChatOverlays } from './components/ChatOverlays';
 import { renderChatMessageBubble } from './components/renderChatMessageBubble';
 import { useChatController } from './hooks/useChatController';
 import { useChatKeyboardLayout } from './hooks/useChatKeyboardLayout';
-import { useCanvasController } from './hooks/useCanvasController';
 import { getChatHeaderSyncState } from './hooks/chatSyncPolicy';
 import { getChatHeaderStatusLabel } from './hooks/chatHeaderStatusLabel';
 import { useChatListViewport } from './hooks/useChatListViewport';
@@ -135,9 +134,6 @@ export function ChatScreenLayout({ controller, insets, onOpenSidebar, onAddGatew
   const currentAvatarKey = buildAvatarKey(currentAgentId, currentAgentName ?? undefined);
   const localAvatar = readAgentAvatar(agentAvatars, currentAgent);
   const effectiveAvatarUri = localAvatar?.trim() || controller.agentAvatarUri?.trim() || undefined;
-
-  // Canvas WebView panel
-  const { canvasVisible, canvasUrl, canvasTitle, canvasRef, closeCanvas } = useCanvasController();
 
   // Handle incoming share intents
   useShareIntent(controller.setPendingImages ? {
@@ -640,12 +636,7 @@ export function ChatScreenLayout({ controller, insets, onOpenSidebar, onAddGatew
         gateways={gatewayRows}
         gatewayLoading={gatewaySwitcher.loading}
         avatarModalVisible={avatarModalVisible}
-        canvasRef={canvasRef}
-        canvasTitle={canvasTitle ?? t('Canvas')}
-        canvasUrl={canvasUrl ?? ''}
-        canvasVisible={canvasVisible}
         clearSelection={clearSelection}
-        closeCanvas={closeCanvas}
         commandPickerError={controller.commandPickerError}
         commandPickerLoading={controller.commandPickerLoading}
         commandPickerOptions={controller.commandPickerOptions}

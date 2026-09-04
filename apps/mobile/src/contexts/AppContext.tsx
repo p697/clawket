@@ -53,7 +53,6 @@ export type AppContextType = {
   setAgents: (agents: AgentInfo[]) => void;
   showModelUsage: boolean;
   execApprovalEnabled: boolean;
-  canvasEnabled: boolean;
   chatFontSize: number;
   chatAppearance: ChatAppearanceSettings;
   speechRecognitionLanguage: SpeechRecognitionLanguage;
@@ -61,7 +60,6 @@ export type AppContextType = {
   onShowAgentAvatarToggle: (show: boolean) => void;
   onShowModelUsageToggle: (enabled: boolean) => void;
   onExecApprovalToggle: (enabled: boolean) => void;
-  onCanvasToggle: (enabled: boolean) => void;
   nodeEnabled: boolean;
   onNodeEnabledToggle: (enabled: boolean) => void;
   nodeCapabilityToggles: NodeCapabilityToggles;

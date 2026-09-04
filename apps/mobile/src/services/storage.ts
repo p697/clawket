@@ -162,7 +162,6 @@ const KEYS = {
   currentAgentId: 'clawket.currentAgentId.v1',
   showModelUsage: 'clawket.showModelUsage.v1',
   execApproval: 'clawket.execApproval.v1',
-  canvasEnabled: 'clawket.canvasEnabled.v1',
   chatFontSize: 'clawket.chatFontSize.v1',
   chatAppearance: 'clawket.chatAppearance.v1',
   speechRecognitionLanguage: 'clawket.speechRecognitionLanguage.v1',
@@ -1216,16 +1215,6 @@ export const StorageService = {
   async getExecApprovalEnabled(): Promise<boolean> {
     const raw = await SecureStore.getItemAsync(KEYS.execApproval, SECURE_OPTIONS);
     return raw === '1'; // default OFF
-  },
-
-  async setCanvasEnabled(enabled: boolean): Promise<void> {
-    await SecureStore.setItemAsync(KEYS.canvasEnabled, enabled ? '1' : '0', SECURE_OPTIONS);
-  },
-
-  async getCanvasEnabled(): Promise<boolean> {
-    const raw = await SecureStore.getItemAsync(KEYS.canvasEnabled, SECURE_OPTIONS);
-    // Default ON — canvas is enabled unless explicitly disabled
-    return raw !== '0';
   },
 
   async setChatFontSize(size: number): Promise<void> {

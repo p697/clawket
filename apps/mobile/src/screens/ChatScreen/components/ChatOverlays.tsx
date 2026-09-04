@@ -1,6 +1,5 @@
 import React from 'react';
 import { Animated, View } from 'react-native';
-import { CanvasSheet } from '../../../components/canvas/CanvasSheet';
 import { AgentAvatarModal } from '../../../components/chat/AgentAvatarModal';
 import { AgentsModal, AgentRowData, GatewayRowData } from '../../../components/chat/AgentsModal';
 import { CreateAgentModal } from '../../../components/agents/CreateAgentModal';
@@ -33,10 +32,6 @@ type Props = {
   gateways: GatewayRowData[];
   gatewayLoading: boolean;
   avatarModalVisible: boolean;
-  canvasRef: React.RefObject<unknown>;
-  canvasTitle: string;
-  canvasUrl: string;
-  canvasVisible: boolean;
   commandPickerError: string | null;
   commandPickerLoading: boolean;
   commandPickerOptions: { value: string; isCurrent: boolean }[];
@@ -93,7 +88,6 @@ type Props = {
   pickImage: () => void;
   takePhoto: () => void;
   clearSelection: () => void;
-  closeCanvas: () => void;
   webSearchVisible: boolean;
   onCloseWebSearch: () => void;
   promptPickerVisible: boolean;
@@ -112,12 +106,7 @@ export function ChatOverlays({
   gateways,
   gatewayLoading,
   avatarModalVisible,
-  canvasRef,
-  canvasTitle,
-  canvasUrl,
-  canvasVisible,
   clearSelection,
-  closeCanvas,
   commandPickerError,
   commandPickerLoading,
   commandPickerOptions,
@@ -261,14 +250,6 @@ export function ChatOverlays({
         current={thinkingLevel ?? ''}
         options={thinkingLevelOptions}
         onSelect={onSelectStaticThinkLevel}
-      />
-
-      <CanvasSheet
-        ref={canvasRef as never}
-        visible={canvasVisible}
-        url={canvasUrl}
-        title={canvasTitle}
-        onClose={closeCanvas}
       />
 
       <AgentAvatarModal

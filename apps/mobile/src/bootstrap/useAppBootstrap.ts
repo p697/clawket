@@ -59,7 +59,6 @@ export function useAppBootstrap({ gateway, nodeClient }: Props) {
   const [showAgentAvatar, setShowAgentAvatar] = useState(true);
   const [showModelUsage, setShowModelUsage] = useState(true);
   const [execApprovalEnabled, setExecApprovalEnabled] = useState(false);
-  const [canvasEnabled, setCanvasEnabled] = useState(true);
   const [chatFontSize, setChatFontSize] = useState(16);
   const [chatAppearance, setChatAppearance] = useState<ChatAppearanceSettings>(DEFAULT_CHAT_APPEARANCE);
   const [speechRecognitionLanguage, setSpeechRecognitionLanguage] = useState<SpeechRecognitionLanguage>('system');
@@ -91,7 +90,6 @@ export function useAppBootstrap({ gateway, nodeClient }: Props) {
       StorageService.getCustomAccentScale(),
       StorageService.getShowModelUsage(),
       StorageService.getExecApprovalEnabled(),
-      StorageService.getCanvasEnabled(),
       StorageService.getChatFontSize(),
       StorageService.getChatAppearance(),
       StorageService.getSpeechRecognitionLanguage(),
@@ -109,7 +107,6 @@ export function useAppBootstrap({ gateway, nodeClient }: Props) {
         savedCustomAccent,
         savedShowModelUsage,
         savedExecApproval,
-        savedCanvasEnabled,
         savedChatFontSize,
         savedChatAppearance,
         savedSpeechRecognitionLanguage,
@@ -137,7 +134,6 @@ export function useAppBootstrap({ gateway, nodeClient }: Props) {
         setShowAgentAvatar(showAvatar);
         setShowModelUsage(savedShowModelUsage);
         setExecApprovalEnabled(savedExecApproval);
-        setCanvasEnabled(savedCanvasEnabled);
         setChatFontSize(savedChatFontSize);
         setChatAppearance(savedChatAppearance);
         setSpeechRecognitionLanguage(savedSpeechRecognitionLanguage);
@@ -188,7 +184,6 @@ export function useAppBootstrap({ gateway, nodeClient }: Props) {
   return {
     accentId,
     activeGatewayConfigId,
-    canvasEnabled,
     chatFontSize,
     chatAppearance,
     config,
@@ -202,7 +197,6 @@ export function useAppBootstrap({ gateway, nodeClient }: Props) {
     nodeEnabled,
     setAccentId,
     setActiveGatewayConfigId,
-    setCanvasEnabled,
     setChatFontSize,
     setChatAppearance,
     setConfig,
