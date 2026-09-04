@@ -151,7 +151,7 @@ export function mapGatewayAdapterEvent(
         decision: event.payload.decision,
       }];
     case 'pairingRequired': {
-      const approvalId = event.payload.requestId ?? `pair-${now()}`;
+      const approvalId = event.payload.requestId ?? 'pair';
       return [{
         type: 'approval_requested',
         approval: {
@@ -181,20 +181,23 @@ export function mapGatewayAdapterEvent(
 
 export function mapGatewayErrorCode(code: string): AdapterErrorCode {
   const normalized = code.trim().toLowerCase();
-  if (normalized.includes('frame_too_large') || normalized === '1009') return 'frame_too_large';
-  if (normalized.includes('rate') || normalized === '4008') return 'rate_limited';
+  if (normalized.includes('frame_too_large') || /^1009(?:\s|$)/u.test(normalized)) {
+    return 'frame_too_large';
+  }
+  if (normalized.includes('rate') || /^4008(?:\s|$)/u.test(normalized)) return 'rate_limited';
   if (normalized.includes('pairing_expired') || normalized.includes('claim_expired')) return 'pairing_expired';
   if (normalized.includes('pairing')) return 'pairing_required';
   if (normalized.includes('auth') || normalized.includes('unauthorized')) return 'unauthorized';
+  if (
+    normalized.startsWith('network')
+    || normalized.startsWith('ws_')
+    || normalized.includes('socket')
+    || normalized.includes('dns')
+  ) return 'network';
   if (normalized.includes('challenge') || normalized.includes('bridge')) return 'bridge_offline';
   if (normalized.includes('timeout')) return 'timeout';
   if (normalized.includes('gateway') || normalized.includes('unavailable')) return 'gateway_offline';
-  if (
-    normalized.startsWith('ws_')
-    || normalized.includes('socket')
-    || normalized.includes('network')
-    || normalized.includes('dns')
-  ) return 'network';
+  if (normalized.includes('network')) return 'network';
   if (normalized.includes('unsupported')) return 'unsupported';
   return 'server';
 }

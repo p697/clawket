@@ -22,6 +22,7 @@ export type ConnectionState =
   | 'error';
 
 export type SessionUpdate =
+  | { type: 'history_reconciled'; sessionKey: string; history: SessionHistory }
   | { type: 'run_started'; sessionKey: string; runId: string }
   | { type: 'agent_message_chunk'; sessionKey: string; runId: string; text: string }
   | { type: 'agent_thought_chunk'; sessionKey: string; runId: string; text: string }

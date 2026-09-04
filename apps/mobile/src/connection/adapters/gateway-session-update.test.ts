@@ -79,12 +79,40 @@ describe('mapGatewayAdapterEvent', () => {
       },
     }]);
   });
+
+  it('uses the same stable fallback id for pairing request and resolution events', () => {
+    expect(mapGatewayAdapterEvent({
+      type: 'pairingRequired',
+      payload: {},
+    }, 'fallback', () => 123)).toEqual([{
+      type: 'approval_requested',
+      approval: {
+        kind: 'pair',
+        id: 'pair',
+        target: 'device',
+        displayName: null,
+        platform: null,
+        receivedAtMs: 123,
+      },
+    }]);
+
+    expect(mapGatewayAdapterEvent({
+      type: 'pairingResolved',
+      payload: { decision: 'approved' },
+    }, 'fallback')).toEqual([{
+      type: 'approval_resolved',
+      approvalId: 'pair',
+      decision: 'approved',
+    }]);
+  });
 });
 
 describe('mapGatewayErrorCode', () => {
   it.each([
     ['frame_too_large', 'frame_too_large'],
+    ['1009 Message too big', 'frame_too_large'],
     ['rate_limited', 'rate_limited'],
+    ['4008 Policy violation', 'rate_limited'],
     ['auth_failed', 'unauthorized'],
     ['challenge_timeout', 'bridge_offline'],
     ['request_timeout', 'timeout'],
