@@ -16,9 +16,9 @@
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run src",
-    "test:required": "vitest run src --exclude src/hermes.test.ts",
-    "test:hermes-integration": "vitest run src/hermes.test.ts"
+    "test": "vitest run src --no-file-parallelism",
+    "test:required": "vitest run src --exclude '**/*.integration.test.ts'",
+    "test:hermes-integration": "vitest run src/hermes/*.integration.test.ts --no-file-parallelism"
   },
   "dependencies": {
     "@clawket/agent-protocol": "3.0.0",

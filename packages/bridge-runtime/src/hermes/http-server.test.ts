@@ -6,11 +6,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import WebSocket from 'ws';
 import { describe, expect, it, vi } from 'vitest';
-import { HermesLocalBridge } from './hermes.js';
+import { HermesLocalBridge } from './index.js';
 import {
   FRAME_TOO_LARGE_ERROR_CODE,
   WEBSOCKET_FRAME_LIMIT_BYTES,
-} from './frame-limit.js';
+} from '../frame-limit.js';
 
 async function reserveAvailablePort(): Promise<number> {
   const server = createServer();
@@ -92,4 +92,41 @@ describe('HermesLocalBridge WebSocket frame limit', () => {
       await rm(stateDir, { recursive: true, force: true });
     }
   }, 15_000);
+});
+
+describe('HermesLocalBridge capability advertisement', () => {
+  it('returns the same capabilities over HTTP and the initial WebSocket health event', async () => {
+    const port = await reserveAvailablePort();
+    const stateDir = await mkdtemp(join(tmpdir(), 'clawket-hermes-capabilities-'));
+    const bridge = new HermesLocalBridge({
+      host: '127.0.0.1',
+      port,
+      apiBaseUrl: 'http://127.0.0.1:1',
+      bridgeToken: 'capabilities-test',
+      startHermesIfNeeded: false,
+      hermesSourcePath: join(stateDir, 'missing-hermes-source'),
+      hermesHomePath: join(stateDir, 'home'),
+      hermesPythonPath: 'python3',
+      sessionStorePath: join(stateDir, 'sessions.json'),
+      usageLedgerPath: join(stateDir, 'usage.json'),
+    });
+    try {
+      await bridge.start();
+      const health = await fetch(`${bridge.getHttpUrl()}/v1/hermes/health`).then((response) => response.json()) as any;
+      expect(health.capabilities).toEqual(['bridge.capabilities.v2', 'hermes.multi-session.v2']);
+
+      const socket = new WebSocket(bridge.getWsUrl());
+      const [data] = await once(socket, 'message') as [WebSocket.RawData];
+      const initial = JSON.parse(data.toString());
+      expect(initial).toMatchObject({
+        type: 'event',
+        event: 'health',
+        payload: { capabilities: ['bridge.capabilities.v2', 'hermes.multi-session.v2'] },
+      });
+      socket.close();
+    } finally {
+      await bridge.stop();
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
 });

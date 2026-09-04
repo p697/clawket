@@ -1,4 +1,5 @@
 import WebSocket, { type RawData } from 'ws';
+import { RelaySessionState } from '../relay-session.js';
 import type { HermesRelayConfig } from '@clawket/bridge-core';
 import {
   FRAME_TOO_LARGE_CLOSE_CODE,
@@ -7,7 +8,7 @@ import {
   isWebSocketMaxPayloadError,
   WEBSOCKET_FRAME_LIMIT_BYTES,
   type WebSocketFrameData,
-} from './frame-limit.js';
+} from '../frame-limit.js';
 
 const RELAY_CONTROL_PREFIX = '__clawket_relay_control__:';
 const BRIDGE_HEALTH_METHOD = 'health';
@@ -65,6 +66,8 @@ export class HermesRelayRuntime {
   private bridgeStatusTimer: NodeJS.Timeout | null = null;
   private bridgeHealthProbeTimer: NodeJS.Timeout | null = null;
   private relayStabilityTimer: NodeJS.Timeout | null = null;
+  private readonly relaySession = new RelaySessionState();
+  private readonly bridgeSession = new RelaySessionState();
   private relayAttempt = 0;
   private bridgeAttempt = 0;
   private stopped = true;
@@ -72,6 +75,7 @@ export class HermesRelayRuntime {
   private readonly pendingBridgeMessages: Array<{ text?: string; data?: Buffer }> = [];
   private bridgeHealthProbeSeq = 0;
   private relayMessageSeq = 0;
+  private relayActivityAfterOpen = false;
   private pendingBridgeHealthProbe:
     | {
       id: string;
@@ -137,8 +141,8 @@ export class HermesRelayRuntime {
     if (this.stopped || this.relaySocket?.readyState === WebSocket.OPEN || this.relaySocket?.readyState === WebSocket.CONNECTING) {
       return;
     }
-    this.relayAttempt += 1;
-    const attempt = this.relayAttempt;
+    const attempt = this.relaySession.beginConnectAttempt();
+    this.relayAttempt = attempt;
     const relay = this.createWebSocket(buildHermesRelayWsUrl(this.options.config), {
       headers: buildHermesRelayWsHeaders(this.options.config),
     });
@@ -151,6 +155,7 @@ export class HermesRelayRuntime {
         return;
       }
       this.updateSnapshot({ relayConnected: true, lastError: null });
+      this.relayActivityAfterOpen = false;
       this.log(`relay connected attempt=${attempt}`);
       this.scheduleRelayStabilityReset(relay);
       this.connectBridge();
@@ -200,8 +205,8 @@ export class HermesRelayRuntime {
     if (this.bridgeSocket?.readyState === WebSocket.OPEN || this.bridgeSocket?.readyState === WebSocket.CONNECTING) {
       return;
     }
-    this.bridgeAttempt += 1;
-    const attempt = this.bridgeAttempt;
+    const attempt = this.bridgeSession.beginConnectAttempt();
+    this.bridgeAttempt = attempt;
     const bridge = this.createWebSocket(this.options.bridgeUrl);
     this.bridgeSocket = bridge;
     this.log(`bridge connect attempt=${attempt}`);
@@ -255,7 +260,8 @@ export class HermesRelayRuntime {
   private handleRelayMessage(data: RawData, isBinary: boolean): void {
     const relay = this.relaySocket;
     if (relay && this.rejectOversizedFrame(relay, data, 'relay_in')) return;
-    if (this.relayAttempt !== 0) {
+    this.relayActivityAfterOpen = true;
+    if (this.relaySession.confirmHealth()) {
       this.relayAttempt = 0;
       this.log('relay health confirmed; reconnect backoff reset');
     }
@@ -296,6 +302,7 @@ export class HermesRelayRuntime {
   private handleBridgeMessage(data: RawData, isBinary: boolean): void {
     const bridge = this.bridgeSocket;
     if (bridge && this.rejectOversizedFrame(bridge, data, 'bridge_in')) return;
+    this.bridgeSession.observeActivity();
     const relay = this.relaySocket;
     if (isBinary) {
       if (!relay || relay.readyState !== WebSocket.OPEN) return;
@@ -383,7 +390,12 @@ export class HermesRelayRuntime {
 
   private scheduleRelayReconnect(): void {
     if (this.stopped || this.reconnectTimer) return;
-    const delayMs = computeBackoff(this.relayAttempt, this.options.reconnectBaseDelayMs ?? 1_000, this.options.reconnectMaxDelayMs ?? 15_000);
+    const baseDelayMs = this.options.reconnectBaseDelayMs ?? 1_000;
+    const maxDelayMs = this.options.reconnectMaxDelayMs ?? 15_000;
+    const delayMs = Math.max(
+      this.relaySession.reconnectDelayMs(baseDelayMs, maxDelayMs),
+      computeBackoff(this.relayAttempt, baseDelayMs, maxDelayMs),
+    );
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       this.connectRelay();
@@ -392,7 +404,10 @@ export class HermesRelayRuntime {
 
   private scheduleBridgeReconnect(): void {
     if (this.stopped || this.bridgeReconnectTimer) return;
-    const delayMs = computeBackoff(this.bridgeAttempt, 500, 5_000);
+    const delayMs = Math.max(
+      this.bridgeSession.reconnectDelayMs(500, 5_000),
+      computeBackoff(this.bridgeAttempt, 500, 5_000),
+    );
     this.bridgeReconnectTimer = setTimeout(() => {
       this.bridgeReconnectTimer = null;
       this.connectBridge();
@@ -532,6 +547,7 @@ export class HermesRelayRuntime {
         return true;
       }
       this.clearPendingBridgeHealthProbe();
+      this.bridgeSession.confirmHealth();
       this.bridgeAttempt = 0;
       return true;
     } catch {
@@ -575,7 +591,8 @@ export class HermesRelayRuntime {
     this.relayStabilityTimer = setTimeout(() => {
       this.relayStabilityTimer = null;
       if (this.stopped || this.relaySocket !== relay || relay.readyState !== WebSocket.OPEN) return;
-      if (this.relayAttempt !== 0) {
+      if (!this.relayActivityAfterOpen) return;
+      if (this.relaySession.confirmHealth()) {
         this.relayAttempt = 0;
         this.log('relay stable window reached; reconnect backoff reset');
       }

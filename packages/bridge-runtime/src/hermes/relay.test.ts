@@ -1,15 +1,15 @@
 import { EventEmitter } from 'node:events';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   buildHermesRelayWsHeaders,
   buildHermesRelayWsUrl,
   HermesRelayRuntime,
-} from './hermes-relay.js';
+} from './relay.js';
 import {
   FRAME_TOO_LARGE_CLOSE_CODE,
   FRAME_TOO_LARGE_ERROR_CODE,
   WEBSOCKET_FRAME_LIMIT_BYTES,
-} from './frame-limit.js';
+} from '../frame-limit.js';
 
 class FakeSocket extends EventEmitter {
   static readonly CONNECTING = 0;
@@ -67,6 +67,31 @@ function createConfig() {
 }
 
 describe('hermes relay runtime helpers', () => {
+  it('does not reset reconnect backoff from a raw stable WebSocket open', async () => {
+    vi.useFakeTimers();
+    const sockets: FakeSocket[] = [];
+    const logs: string[] = [];
+    const runtime = new HermesRelayRuntime({
+      config: createConfig(),
+      bridgeUrl: 'ws://127.0.0.1:4319/v1/hermes/ws?token=test',
+      createWebSocket: ((url: string, options?: { headers?: Record<string, string>; maxPayload?: number }) => {
+        const socket = new FakeSocket(url, options);
+        sockets.push(socket);
+        return socket as any;
+      }),
+      onLog: (line) => logs.push(line),
+    });
+    try {
+      runtime.start();
+      sockets[0].open();
+      await vi.advanceTimersByTimeAsync(30_001);
+      expect(logs).not.toContain('relay stable window reached; reconnect backoff reset');
+    } finally {
+      await runtime.stop();
+      vi.useRealTimers();
+    }
+  });
+
   it('builds relay websocket URL with bridge identity but no token query', () => {
     const url = new URL(buildHermesRelayWsUrl({
       serverUrl: 'https://registry.example.com',

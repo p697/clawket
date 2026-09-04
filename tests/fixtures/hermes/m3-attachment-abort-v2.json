@@ -1,0 +1,134 @@
+{
+  "schema": "clawket.hermes.recorded-packets.v1",
+  "source": {
+    "repository": "https://github.com/NousResearch/hermes-agent.git",
+    "commit": "7d426e6536910c5fedb7cd4a9a9010527b264de1",
+    "evidence": [
+      "gateway/platforms/api_server.py",
+      "hermes_state.py"
+    ]
+  },
+  "recordedAt": "2026-09-04T19:50:10Z",
+  "sanitization": "The auth token, run ID, backing session ID, prompt, prior history, MIME payload, timestamps, and host paths are deterministic test values or capture placeholders.",
+  "capture": {
+    "kind": "controlled-local-websocket-replay",
+    "realDevice": false,
+    "note": "This fixture locks the protocol boundary with a controlled fetch and real local WebSocket; it is not a phone, simulator, Preview, or live Hermes recording."
+  },
+  "firstFrame": {
+    "type": "event",
+    "event": "health",
+    "payload": {
+      "status": "ok",
+      "ts": "{{any:number}}",
+      "hermesApiReachable": true,
+      "mode": "hermes",
+      "capabilities": [
+        "bridge.capabilities.v2",
+        "hermes.multi-session.v2"
+      ]
+    }
+  },
+  "setup": {
+    "sessionKey": "attachment-recorded-session",
+    "title": "Attachment recorded session",
+    "priorMessages": [
+      {
+        "role": "user",
+        "content": "Earlier recorded question",
+        "ts": 1700000100000
+      }
+    ]
+  },
+  "sendPacket": {
+    "label": "chat.send.image",
+    "request": {
+      "type": "req",
+      "id": "send-image",
+      "method": "chat.send",
+      "params": {
+        "sessionKey": "attachment-recorded-session",
+        "message": "Describe the recorded image",
+        "idempotencyKey": "recorded-idempotency-key",
+        "attachments": [
+          {
+            "type": "image",
+            "mimeType": "image/png",
+            "content": "iVBORw0KGgo="
+          }
+        ]
+      }
+    },
+    "captureValues": {
+      "run.id": "payload.runId"
+    },
+    "expect": {
+      "type": "res",
+      "id": "send-image",
+      "ok": true,
+      "payload": {
+        "runId": "{{run.id}}"
+      }
+    }
+  },
+  "expectedHermesRunBody": {
+    "input": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Describe the recorded image"
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "data:image/png;base64,iVBORw0KGgo="
+            }
+          }
+        ]
+      }
+    ],
+    "conversation_history": [
+      {
+        "role": "user",
+        "content": "Earlier recorded question"
+      }
+    ],
+    "session_id": "{{session.id}}"
+  },
+  "abortPacket": {
+    "label": "chat.abort.by-run",
+    "request": {
+      "type": "req",
+      "id": "abort-image",
+      "method": "chat.abort",
+      "params": {
+        "sessionKey": "attachment-recorded-session",
+        "runId": "{{run.id}}"
+      }
+    },
+    "expect": {
+      "type": "res",
+      "id": "abort-image",
+      "ok": true,
+      "payload": {
+        "ok": true,
+        "abortedRunIds": [
+          "{{run.id}}"
+        ],
+        "upstreamCancelled": false
+      }
+    }
+  },
+  "abortedEvent": {
+    "type": "event",
+    "event": "chat",
+    "payload": {
+      "runId": "{{run.id}}",
+      "sessionKey": "attachment-recorded-session",
+      "seq": 1,
+      "state": "aborted"
+    }
+  }
+}

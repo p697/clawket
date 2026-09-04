@@ -5,8 +5,8 @@ export type {
   SessionDescriptor,
   SessionUpdate,
 } from '@clawket/agent-protocol';
-export * from './hermes.js';
-export * from './hermes-relay.js';
+export * from './hermes/index.js';
+export * from './hermes/relay.js';
 export * from './openclaw.js';
 export * from './protocol.js';
 export * from './openclaw/runtime.js';
