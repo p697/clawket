@@ -47,6 +47,7 @@ import {
   normalizeWsUrl,
 } from '../../services/gateway-auth';
 import { StorageService } from '../../services/storage';
+import { sanitizeSilentPreviewText } from '../../utils/chat-message';
 import {
   getRuntimeClientId,
   getRuntimeDeviceFamily,
@@ -231,6 +232,7 @@ export class GatewayProtocolClient {
   private pairingPending = false;
   private connectRequestInFlight = false;
   private connectRequestCompleted = false;
+  private activeConnectAuthSource: RelayConnectAuthSelection['source'] | null = null;
   private bootstrapDisabledForConfig = false;
   private readinessTimer: ReturnType<typeof setTimeout> | null = null;
   private identity: DeviceIdentity | null = null;
@@ -338,7 +340,7 @@ export class GatewayProtocolClient {
       this.emit('error', { code: 'config_missing', message: 'Gateway URL is not configured' });
       return;
     }
-    if (this.transport && this.state !== 'closed' && this.state !== 'idle') return;
+    if (this.state !== 'closed' && this.state !== 'idle') return;
     this.manuallyClosed = false;
     this.pairingPending = false;
     const epoch = ++this.epoch;
@@ -367,6 +369,7 @@ export class GatewayProtocolClient {
     this.pairingPending = false;
     this.connectRequestCompleted = false;
     this.connectRequestInFlight = false;
+    this.activeConnectAuthSource = null;
     this.connectResponseCapabilities = undefined;
     this.handshakeSerial += 1;
     this.clearReadinessTimer();
@@ -376,6 +379,7 @@ export class GatewayProtocolClient {
       this.setState('reconnecting');
       this.transport.reconnect();
     } else {
+      this.setState('closed');
       this.connect();
     }
   }
@@ -403,12 +407,15 @@ export class GatewayProtocolClient {
     try {
       const config = this.config;
       if (!config || epoch !== this.epoch || this.manuallyClosed) return;
-      const identity = await this.getDeviceIdentity();
-      if (epoch !== this.epoch || this.manuallyClosed) return;
       const route = resolveRoute(config);
-      const url = route === 'relay'
-        ? buildConfiguredRelayUrl(config, identity.deviceId, this.getBackendKind())
-        : normalizeWsUrl(config.url);
+      let url: string;
+      if (route === 'relay') {
+        const identity = await this.getDeviceIdentity();
+        if (epoch !== this.epoch || this.manuallyClosed) return;
+        url = buildConfiguredRelayUrl(config, identity.deviceId, this.getBackendKind());
+      } else {
+        url = normalizeWsUrl(config.url);
+      }
       const shared = {
         url,
         webSocketFactory: this.options.webSocketFactory,
@@ -503,6 +510,7 @@ export class GatewayProtocolClient {
     this.handshakeSerial += 1;
     this.connectRequestInFlight = false;
     this.connectRequestCompleted = false;
+    this.activeConnectAuthSource = null;
     this.connectResponseCapabilities = undefined;
     this.supportedMethods.clear();
     const serial = this.handshakeSerial;
@@ -637,6 +645,7 @@ export class GatewayProtocolClient {
     const publicKey = bytesToBase64Url(hexToBytes(identity.publicKeyHex));
     const plan = await this.resolveConnectPlan(identity, publicKey, epoch, serial);
     this.assertCurrentHandshake(epoch, serial);
+    this.activeConnectAuthSource = plan.auth.source;
     const client = this.options.client ?? {
       id: getRuntimeClientId(),
       platform: getRuntimePlatform(),
@@ -740,6 +749,7 @@ export class GatewayProtocolClient {
       this.transport.configureHeartbeat({ tickIntervalMs: response.policy.tickIntervalMs });
     }
     this.connectRequestCompleted = true;
+    this.activeConnectAuthSource = null;
     this.pairingPending = false;
     this.markTransportReady();
     this.subscribeToSessionChangesIfSupported(epoch);
@@ -832,6 +842,17 @@ export class GatewayProtocolClient {
           retryable: true,
         });
     const message = normalized.message;
+    if (
+      this.activeConnectAuthSource === 'bootstrap-token'
+      && this.hasLegacyCredential()
+      && isBootstrapAuthSchemaRejection(normalized)
+    ) {
+      this.activeConnectAuthSource = null;
+      this.bootstrapDisabledForConfig = true;
+      queueMicrotask(() => this.recycleTransport(epoch, serial));
+      return;
+    }
+    this.activeConnectAuthSource = null;
     if (isPairingRequired(normalized)) {
       const details = isRecord(normalized.details) ? normalized.details : {};
       const requestId = readString(details.requestId)
@@ -1156,6 +1177,7 @@ export class GatewayProtocolClient {
     const defaultContext = result?.defaults?.contextTokens;
     return (result?.sessions ?? []).map((session) => ({
       ...session,
+      lastMessagePreview: sanitizeSilentPreviewText(session.lastMessagePreview),
       ...(typeof session.contextTokens !== 'number' && typeof defaultContext === 'number'
         ? { contextTokens: defaultContext }
         : {}),
@@ -1835,6 +1857,14 @@ function isFatalDeviceAuthError(error: GatewayRequestError): boolean {
     || code === 'DEVICE_AUTH_SIGNATURE_INVALID'
     || message.includes('device nonce mismatch')
     || message.includes('device signature invalid');
+}
+
+function isBootstrapAuthSchemaRejection(error: GatewayRequestError): boolean {
+  const code = error.code.toUpperCase();
+  const message = error.message.toLowerCase();
+  return (code === 'INVALID_REQUEST' || code === 'BAD_REQUEST')
+    && message.includes('bootstraptoken')
+    && (message.includes('unexpected') || message.includes('invalid connect'));
 }
 
 function closeErrorCode(code: number | undefined): string {

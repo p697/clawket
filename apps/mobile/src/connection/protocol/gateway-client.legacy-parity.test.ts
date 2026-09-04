@@ -1,13 +1,22 @@
-import { extractText, GatewayClient } from './gateway';
-import { GatewayRequestError } from './gateway-shared';
-import type { ConnectChallengePayload } from '../types';
-import { RELAY_CLIENT_PONG_CAPABILITY, RELAY_CONTROL_PREFIX } from './gateway-relay';
+import { extractText } from './events';
+import { GatewayProtocolClient } from './gateway-client';
+import { GatewayRequestError } from './types';
+import { RELAY_CONTROL_PREFIX } from './relay-control';
+import { RELAY_CLIENT_PONG_CAPABILITY } from '../transports/relay-ws';
 import {
   FRAME_TOO_LARGE_CLOSE_CODE,
   FRAME_TOO_LARGE_ERROR_CODE,
   WEBSOCKET_FRAME_LIMIT_BYTES,
   WebSocketFrameTooLargeError,
-} from './websocket-frame-limit';
+} from '../transports/frame-limit';
+
+/**
+ * Migrated 2.1.x GatewayClient coverage. Wire parsing, authentication,
+ * request helpers, frame limits, and event routing remain assertions on the
+ * protocol client. Reconnect backoff/heartbeat assertions now exercise the
+ * transport-owned boundary, while periodic probe and roster-cache ownership
+ * is asserted by the connection coordinator tests.
+ */
 
 // Mock tweetnacl
 jest.mock('tweetnacl', () => ({
@@ -26,7 +35,7 @@ jest.mock('js-sha256', () => ({
 }));
 
 // Mock StorageService
-jest.mock('./storage', () => {
+jest.mock('../../services/storage', () => {
   const getDeviceToken = jest.fn((
     _deviceId: string,
     _scope?: { serverUrl?: string; gatewayId?: string; gatewayUrl?: string },
@@ -159,15 +168,22 @@ describe('extractText', () => {
 
 // ---- GatewayClient tests ----
 
-describe('GatewayClient', () => {
-  let client: GatewayClient;
+describe('GatewayProtocolClient migrated parity', () => {
+  let client: GatewayProtocolClient;
   let createdWs: MockWebSocket;
   let logSpy: jest.SpyInstance;
+  let identityProvider: jest.Mock;
 
   beforeEach(() => {
     jest.useFakeTimers();
     logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
-    client = new GatewayClient();
+    identityProvider = jest.fn(async () => ({
+      deviceId: 'a'.repeat(64),
+      publicKeyHex: '01'.repeat(32),
+      secretKeyHex: '02'.repeat(64),
+      createdAt: '2026-09-05T00:00:00.000Z',
+    }));
+    client = new GatewayProtocolClient({ identityProvider, reconnectJitter: false });
     (globalThis as { fetch?: unknown }).fetch = jest.fn();
 
     // Capture the WebSocket instance created during connect()
@@ -181,7 +197,7 @@ describe('GatewayClient', () => {
     (globalThis as any).WebSocket.CLOSING = MockWebSocket.CLOSING;
     (globalThis as any).WebSocket.CLOSED = MockWebSocket.CLOSED;
 
-    const { StorageService } = jest.requireMock('./storage') as {
+    const { StorageService } = jest.requireMock('../../services/storage') as {
       StorageService: {
         getDeviceToken: jest.Mock;
         getDeviceTokenRecord: jest.Mock;
@@ -214,21 +230,17 @@ describe('GatewayClient', () => {
   }
 
   async function flushPromises(): Promise<void> {
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
+    for (let turn = 0; turn < 12; turn += 1) {
+      await Promise.resolve();
+    }
   }
 
   function mockDeviceIdentity(): void {
-    jest.spyOn(client as unknown as { ensureIdentity: () => Promise<{
-      deviceId: string;
-      publicKeyHex: string;
-      secretKeyHex: string;
-    }> }, 'ensureIdentity').mockResolvedValue({
+    identityProvider.mockResolvedValue({
       deviceId: 'a'.repeat(64),
       publicKeyHex: '01'.repeat(32),
       secretKeyHex: '02'.repeat(64),
+      createdAt: '2026-09-05T00:00:00.000Z',
     });
   }
 
@@ -348,7 +360,9 @@ describe('GatewayClient', () => {
       expect(states).toContain('challenging');
     });
 
-    it('transitions Hermes connections directly to ready on ws open', () => {
+    it('waits for Hermes health evidence after ws open before becoming ready', () => {
+      // 2.1.x treated a raw Hermes socket open as ready. The 3.0 liveness
+      // contract requires a real Bridge health frame before readiness.
       const states: string[] = [];
       client.on('connection', (e) => states.push(e.state));
       client.configure({
@@ -359,8 +373,16 @@ describe('GatewayClient', () => {
       client.connect();
 
       createdWs.onopen!();
+      expect(states).toContain('challenging');
+      expect(states).not.toContain('ready');
+      createdWs.onmessage!({
+        data: JSON.stringify({
+          type: 'event',
+          event: 'health',
+          payload: { status: 'ok', hermesApiReachable: true },
+        }),
+      });
       expect(states).toContain('ready');
-      expect(states).not.toContain('challenging');
     });
 
     it('keeps current connect attempt valid when connect is called repeatedly during connecting', () => {
@@ -378,55 +400,51 @@ describe('GatewayClient', () => {
     it('normalizes http URL to ws', () => {
       client.configure({ url: 'http://localhost:3000' });
       client.connect();
-      expect((globalThis as any).WebSocket).toHaveBeenCalledWith('ws://localhost:3000');
+      expect((globalThis as any).WebSocket).toHaveBeenCalledWith('ws://localhost:3000', undefined);
     });
 
     it('normalizes https URL to wss', () => {
       client.configure({ url: 'https://example.com' });
       client.connect();
-      expect((globalThis as any).WebSocket).toHaveBeenCalledWith('wss://example.com');
+      expect((globalThis as any).WebSocket).toHaveBeenCalledWith('wss://example.com', undefined);
     });
 
     it('adds wss:// to bare hostname', () => {
       client.configure({ url: 'example.com' });
       client.connect();
-      expect((globalThis as any).WebSocket).toHaveBeenCalledWith('wss://example.com');
+      expect((globalThis as any).WebSocket).toHaveBeenCalledWith('wss://example.com', undefined);
     });
 
     it('keeps wss:// URL unchanged', () => {
       client.configure({ url: 'wss://example.com' });
       client.connect();
-      expect((globalThis as any).WebSocket).toHaveBeenCalledWith('wss://example.com');
+      expect((globalThis as any).WebSocket).toHaveBeenCalledWith('wss://example.com', undefined);
     });
 
-    it('blocks direct local wss connections before opening a socket', () => {
-      const errorListener = jest.fn();
-      const states: string[] = [];
-      client.on('error', errorListener);
-      client.on('connection', (event) => states.push(event.state));
-
+    it('passes direct local wss through to the transport', () => {
+      // 3.0 keeps transport validation backend-neutral. Platform TLS failures
+      // surface from the socket instead of guessing from an IP-shaped URL.
       client.configure({ url: 'wss://192.168.1.8:18789' });
       client.connect();
 
-      expect((globalThis as any).WebSocket).not.toHaveBeenCalled();
-      expect(errorListener).toHaveBeenCalledWith({
-        code: 'local_tls_unsupported',
-        message: 'Clawket mobile does not currently support direct local TLS gateway connections. Disable OpenClaw gateway TLS for LAN pairing, or use Relay/Tailscale instead.',
-        retryable: false,
-        hint: 'If you are connecting over your local network, set gateway.tls.enabled to false before pairing.',
-      });
-      expect(states).toContain('closed');
+      expect((globalThis as any).WebSocket).toHaveBeenCalledWith(
+        'wss://192.168.1.8:18789',
+        undefined,
+      );
     });
 
     it('still allows public wss connections', () => {
       client.configure({ url: 'wss://gateway.example.com' });
       client.connect();
-      expect((globalThis as any).WebSocket).toHaveBeenCalledWith('wss://gateway.example.com');
+      expect((globalThis as any).WebSocket).toHaveBeenCalledWith(
+        'wss://gateway.example.com',
+        undefined,
+      );
     });
 
     it('does not use relay pairing state while mode is local', async () => {
       jest.useRealTimers();
-      const { StorageService } = jest.requireMock('./storage') as {
+      const { StorageService } = jest.requireMock('../../services/storage') as {
         StorageService: { getIdentity: jest.Mock; getDeviceToken: jest.Mock };
       };
       StorageService.getIdentity.mockResolvedValue({
@@ -460,7 +478,7 @@ describe('GatewayClient', () => {
 
     it('uses relay fast path in relay mode with configured relay credentials', async () => {
       jest.useRealTimers();
-      const { StorageService } = jest.requireMock('./storage') as {
+      const { StorageService } = jest.requireMock('../../services/storage') as {
         StorageService: { getIdentity: jest.Mock };
       };
       StorageService.getIdentity.mockResolvedValue(null);
@@ -525,9 +543,16 @@ describe('GatewayClient', () => {
       expect(parsed.searchParams.get('token')).toBe('hct_secret');
     });
 
-    it('does not start duplicate relay fast-path connections while bootstrap is in flight', async () => {
-      (globalThis.fetch as jest.Mock).mockReturnValue(new Promise(() => {}));
-      const fastPathSpy = jest.spyOn(client as any, 'tryConnectRelayFastPath');
+    it('does not start duplicate relay transports while identity loading is in flight', async () => {
+      let resolveIdentity!: (identity: {
+        deviceId: string;
+        publicKeyHex: string;
+        secretKeyHex: string;
+        createdAt: string;
+      }) => void;
+      identityProvider.mockImplementation(() => new Promise((resolve) => {
+        resolveIdentity = resolve;
+      }));
 
       client.configure({
         url: 'wss://relay-us.example.com/ws',
@@ -542,19 +567,22 @@ describe('GatewayClient', () => {
 
       client.connect();
       client.connect();
-      await Promise.resolve();
-      await Promise.resolve();
+      expect(identityProvider).toHaveBeenCalledTimes(1);
+      expect((globalThis as any).WebSocket).not.toHaveBeenCalled();
 
-      expect(fastPathSpy).toHaveBeenCalledTimes(1);
-      expect((globalThis.fetch as jest.Mock).mock.calls.length).toBeLessThanOrEqual(1);
-      expect(((globalThis as any).WebSocket as jest.Mock).mock.calls.length).toBeLessThanOrEqual(1);
+      resolveIdentity({
+        deviceId: 'a'.repeat(64),
+        publicKeyHex: '01'.repeat(32),
+        secretKeyHex: '02'.repeat(64),
+        createdAt: '2026-09-05T00:00:00.000Z',
+      });
+      await flushPromises();
+      expect((globalThis as any).WebSocket).toHaveBeenCalledTimes(1);
     });
 
-    it('forces reconnect when relay bootstrap hangs before fast path opens socket', async () => {
-      const { StorageService } = jest.requireMock('./storage') as {
-        StorageService: { getIdentity: jest.Mock };
-      };
-      StorageService.getIdentity.mockReturnValue(new Promise(() => {}));
+    it('forces reconnect when relay handshake health evidence never arrives', async () => {
+      // The Registry bootstrap was removed from GatewayClient in 3.0. The
+      // transport now owns the equivalent bounded handshake watchdog.
       const errorListener = jest.fn();
       client.on('error', errorListener);
 
@@ -570,22 +598,19 @@ describe('GatewayClient', () => {
       });
 
       client.connect();
-      await Promise.resolve();
-      await Promise.resolve();
-      jest.advanceTimersByTime(12_100);
-      await Promise.resolve();
-      await Promise.resolve();
+      await flushPromises();
+      createdWs.readyState = MockWebSocket.OPEN;
+      createdWs.onopen!();
+      jest.advanceTimersByTime(20_000);
 
       expect(errorListener).toHaveBeenCalledWith(
-        expect.objectContaining({ code: 'relay_bootstrap_timeout' }),
+        expect.objectContaining({ code: 'challenge_timeout' }),
       );
+      jest.advanceTimersByTime(800);
+      expect((globalThis as any).WebSocket).toHaveBeenCalledTimes(2);
     });
 
-    it('still times out bootstrap after a skipped duplicate connect before socket open', async () => {
-      const { StorageService } = jest.requireMock('./storage') as {
-        StorageService: { getIdentity: jest.Mock };
-      };
-      StorageService.getIdentity.mockReturnValue(new Promise(() => {}));
+    it('keeps the handshake watchdog after a duplicate connect is skipped', async () => {
       const errorListener = jest.fn();
       client.on('error', errorListener);
 
@@ -602,14 +627,14 @@ describe('GatewayClient', () => {
 
       client.connect();
       client.connect();
-      await Promise.resolve();
-      await Promise.resolve();
-      jest.advanceTimersByTime(12_100);
-      await Promise.resolve();
-      await Promise.resolve();
+      await flushPromises();
+      expect((globalThis as any).WebSocket).toHaveBeenCalledTimes(1);
+      createdWs.readyState = MockWebSocket.OPEN;
+      createdWs.onopen!();
+      jest.advanceTimersByTime(20_000);
 
       expect(errorListener).toHaveBeenCalledWith(
-        expect.objectContaining({ code: 'relay_bootstrap_timeout' }),
+        expect.objectContaining({ code: 'challenge_timeout' }),
       );
     });
 
@@ -634,8 +659,8 @@ describe('GatewayClient', () => {
       expect((globalThis as any).WebSocket).not.toHaveBeenCalled();
       expect(errorListener).toHaveBeenCalledWith(
         expect.objectContaining({
-          code: 'relay_config_invalid',
-          message: 'Relay connection is incomplete.',
+          code: 'connection_failed',
+          message: 'Relay connection is not configured.',
         }),
       );
       expect(globalThis.fetch).not.toHaveBeenCalled();
@@ -670,7 +695,9 @@ describe('GatewayClient', () => {
       expect(client.getConnectionState()).toBe('connecting');
     });
 
-    it('does not restart while a handshake is already in progress', () => {
+    it('explicitly restarts a handshake already in progress', () => {
+      // The 3.0 API gives an explicit reconnect call precedence. Duplicate
+      // automatic connect() calls are still coalesced by the transport.
       client.configure({ url: 'wss://example.com' });
       client.connect();
       const firstWs = createdWs;
@@ -679,9 +706,9 @@ describe('GatewayClient', () => {
 
       client.reconnect();
 
-      expect(firstWs.close).not.toHaveBeenCalled();
-      expect((globalThis as any).WebSocket).toHaveBeenCalledTimes(1);
-      expect(client.getConnectionState()).toBe('challenging');
+      expect(firstWs.close).toHaveBeenCalled();
+      expect((globalThis as any).WebSocket).toHaveBeenCalledTimes(2);
+      expect(client.getConnectionState()).toBe('connecting');
     });
 
     it('emits config error when reconnect is called without URL', () => {
@@ -1146,6 +1173,7 @@ describe('GatewayClient', () => {
       expect(errorListener).toHaveBeenCalledWith({
         code: FRAME_TOO_LARGE_ERROR_CODE,
         message: FRAME_TOO_LARGE_ERROR_CODE,
+        retryable: true,
       });
       expect(createdWs.close).toHaveBeenCalledWith(
         FRAME_TOO_LARGE_CLOSE_CODE,
@@ -1157,12 +1185,13 @@ describe('GatewayClient', () => {
 
   describe('outbound frame boundary', () => {
     it.each([
-      ['OpenClaw', { backendKind: 'openclaw', transportKind: 'relay', mode: 'relay' }],
-      ['Hermes', { backendKind: 'hermes', transportKind: 'relay', mode: 'hermes' }],
+      ['OpenClaw', { backendKind: 'openclaw', transportKind: 'local', mode: 'local' }],
+      ['Hermes', { backendKind: 'hermes', transportKind: 'local', mode: 'hermes' }],
     ] as const)('rejects oversized %s wire frames before WebSocket.send', async (_label, backend) => {
-      const ws = new MockWebSocket();
       client.configure({ url: 'wss://example.com/ws', ...backend });
-      (client as unknown as { ws: MockWebSocket }).ws = ws;
+      client.connect();
+      createdWs.readyState = MockWebSocket.OPEN;
+      createdWs.onopen!();
       (client as unknown as { state: string }).state = 'ready';
 
       const pending = client.request('chat.send', {
@@ -1173,7 +1202,7 @@ describe('GatewayClient', () => {
         code: FRAME_TOO_LARGE_ERROR_CODE,
         name: WebSocketFrameTooLargeError.name,
       });
-      expect(ws.send).not.toHaveBeenCalled();
+      expect(createdWs.send).not.toHaveBeenCalled();
       expect((client as unknown as { pendingRequests: Map<string, unknown> }).pendingRequests.size).toBe(0);
     });
   });
@@ -1188,27 +1217,30 @@ describe('GatewayClient', () => {
 
     it('blocks non-connect requests until handshake reaches ready state', async () => {
       const pending = client.request('sessions.list', { limit: 1 });
-      await expect(pending).rejects.toThrow('Gateway handshake in progress: sessions.list');
+      await expect(pending).rejects.toMatchObject({ code: 'not_connected' });
       expect(createdWs.send).not.toHaveBeenCalled();
     });
 
-    it('rejects timed-out requests and restarts transport', async () => {
+    it('rejects timed-out requests without duplicating transport recovery', async () => {
+      // Liveness recovery belongs to the transport/coordinator in 3.0. A
+      // single request timeout must not create a second reconnect loop.
       const firstWs = createdWs;
+      createdWs.onmessage!({ data: JSON.stringify({ type: 'event', event: 'noop' }) });
       (client as unknown as { state: string }).state = 'ready';
       const pending = client.request('sessions.list', { limit: 1 });
 
       jest.advanceTimersByTime(15_000);
-      await expect(pending).rejects.toThrow('Request timed out: sessions.list');
+      await expect(pending).rejects.toMatchObject({ code: 'request_timeout' });
 
-      expect(firstWs.close).toHaveBeenCalled();
-      expect((globalThis as any).WebSocket).toHaveBeenCalledTimes(2);
-      expect(client.getConnectionState()).toBe('connecting');
+      expect(firstWs.close).not.toHaveBeenCalled();
+      expect((globalThis as any).WebSocket).toHaveBeenCalledTimes(1);
+      expect(client.getConnectionState()).toBe('ready');
     });
   });
 
   describe('relay bootstrap v2', () => {
     it('uses stored deviceToken in relay mode even when no legacy token or password is configured', async () => {
-      const { StorageService } = jest.requireMock('./storage') as {
+      const { StorageService } = jest.requireMock('../../services/storage') as {
         StorageService: { getDeviceToken: jest.Mock };
       };
       StorageService.getDeviceToken.mockResolvedValue('stored-device-token');
@@ -1248,7 +1280,7 @@ describe('GatewayClient', () => {
     });
 
     it('uses stored deviceToken in relay mode without requesting bootstrap', async () => {
-      const { StorageService } = jest.requireMock('./storage') as {
+      const { StorageService } = jest.requireMock('../../services/storage') as {
         StorageService: { getDeviceToken: jest.Mock };
       };
       StorageService.getDeviceToken.mockResolvedValue('stored-device-token');
@@ -1294,7 +1326,7 @@ describe('GatewayClient', () => {
     });
 
     it('requests bootstrap and connects with bootstrapToken when relay supports V2 and no deviceToken exists', async () => {
-      const { StorageService } = jest.requireMock('./storage') as {
+      const { StorageService } = jest.requireMock('../../services/storage') as {
         StorageService: { getDeviceToken: jest.Mock };
       };
       StorageService.getDeviceToken.mockResolvedValue(null);
@@ -1370,7 +1402,7 @@ describe('GatewayClient', () => {
     });
 
     it('requests bootstrap without legacy fallback credentials when relay supports V2 and no deviceToken exists', async () => {
-      const { StorageService } = jest.requireMock('./storage') as {
+      const { StorageService } = jest.requireMock('../../services/storage') as {
         StorageService: { getDeviceToken: jest.Mock };
       };
       StorageService.getDeviceToken.mockResolvedValue(null);
@@ -1417,7 +1449,7 @@ describe('GatewayClient', () => {
     });
 
     it('silently exchanges official mobile setup credentials for an operator device token', async () => {
-      const { StorageService } = jest.requireMock('./storage') as {
+      const { StorageService } = jest.requireMock('../../services/storage') as {
         StorageService: {
           getDeviceToken: jest.Mock;
           getDeviceTokenRecord: jest.Mock;
@@ -1503,7 +1535,7 @@ describe('GatewayClient', () => {
         {
           token: 'operator-device-token',
           role: 'operator',
-          scopes: ['operator.admin', 'operator.read', 'operator.write'],
+          scopes: ['operator.write', 'operator.read', 'operator.admin'],
         },
         {
           serverUrl: 'https://registry.example.com',
@@ -1516,7 +1548,7 @@ describe('GatewayClient', () => {
     });
 
     it('stores issued deviceToken using the active relay gateway scope', async () => {
-      const { StorageService } = jest.requireMock('./storage') as {
+      const { StorageService } = jest.requireMock('../../services/storage') as {
         StorageService: { getDeviceToken: jest.Mock; setDeviceToken: jest.Mock };
       };
       StorageService.getDeviceToken.mockResolvedValue('stored-device-token');
@@ -1538,23 +1570,36 @@ describe('GatewayClient', () => {
       createdWs.readyState = MockWebSocket.OPEN;
       createdWs.onopen!();
 
-      const sendRequestSpy = jest
-        .spyOn(client as unknown as { sendRequest: (method: string, params?: object, options?: object) => Promise<unknown> }, 'sendRequest')
-        .mockResolvedValue({
-          auth: { deviceToken: 'issued-device-token' },
-        });
-
-      await (client as unknown as { handleConnectChallenge: (payload: ConnectChallengePayload) => Promise<void> })
-        .handleConnectChallenge({ nonce: 'b'.repeat(64), ts: Date.now() });
-
-      expect(sendRequestSpy).toHaveBeenCalledWith(
-        'connect',
-        expect.any(Object),
-        expect.objectContaining({
-          timeoutMs: 8_000,
-          skipAutoReconnectOnTimeout: true,
+      createdWs.onmessage!({
+        data: JSON.stringify({
+          type: 'event',
+          event: 'connect.challenge',
+          payload: { nonce: 'b'.repeat(64), ts: Date.now() },
         }),
-      );
+      });
+      await flushPromises();
+      const connectFrame = createdWs.send.mock.calls
+        .map(([raw]) => raw)
+        .filter((raw): raw is string => typeof raw === 'string' && raw.startsWith('{'))
+        .map((raw) => JSON.parse(raw))
+        .find((frame) => frame.method === 'connect');
+      expect(connectFrame).toBeDefined();
+      createdWs.onmessage!({
+        data: JSON.stringify({
+          type: 'res',
+          id: connectFrame.id,
+          ok: true,
+          payload: {
+            auth: {
+              deviceToken: 'issued-device-token',
+              role: 'operator',
+              scopes: ['operator.read'],
+            },
+          },
+        }),
+      });
+      await flushPromises();
+
       expect(StorageService.setDeviceToken).toHaveBeenCalledWith('a'.repeat(64), 'issued-device-token', {
         serverUrl: 'https://registry.example.com',
         gatewayId: 'gateway-device-relay',
@@ -1562,7 +1607,7 @@ describe('GatewayClient', () => {
     });
 
     it('retries connect when OpenClaw reports startup sidecars are still loading', async () => {
-      const { StorageService } = jest.requireMock('./storage') as {
+      const { StorageService } = jest.requireMock('../../services/storage') as {
         StorageService: { getDeviceToken: jest.Mock; setDeviceToken: jest.Mock };
       };
       StorageService.getDeviceToken.mockResolvedValue('stored-device-token');
@@ -1584,29 +1629,63 @@ describe('GatewayClient', () => {
       createdWs.readyState = MockWebSocket.OPEN;
       createdWs.onopen!();
 
-      const sendRequestSpy = jest
-        .spyOn(client as unknown as { sendRequest: (method: string, params?: object, options?: object) => Promise<unknown> }, 'sendRequest')
-        .mockRejectedValueOnce(new GatewayRequestError({
-          code: 'UNAVAILABLE',
-          message: 'gateway startup sidecars are still loading',
-          details: { reason: 'startup-sidecars' },
-          retryable: true,
-          retryAfterMs: 500,
-        }))
-        .mockResolvedValueOnce({
-          auth: { deviceToken: 'issued-device-token' },
-        });
-
-      const challengePromise = (client as unknown as { handleConnectChallenge: (payload: ConnectChallengePayload) => Promise<void> })
-        .handleConnectChallenge({ nonce: 'b'.repeat(64), ts: Date.now() });
-
+      const firstWs = createdWs;
+      firstWs.onmessage!({
+        data: JSON.stringify({
+          type: 'event',
+          event: 'connect.challenge',
+          payload: { nonce: 'b'.repeat(64), ts: Date.now() },
+        }),
+      });
       await flushPromises();
-      expect(sendRequestSpy).toHaveBeenCalledTimes(1);
+      const firstConnect = JSON.parse(firstWs.send.mock.calls[0][0] as string);
+      firstWs.onmessage!({
+        data: JSON.stringify({
+          type: 'res',
+          id: firstConnect.id,
+          ok: false,
+          error: {
+            code: 'UNAVAILABLE',
+            message: 'gateway startup sidecars are still loading',
+            details: { reason: 'startup-sidecars' },
+            retryable: true,
+            retryAfterMs: 500,
+          },
+        }),
+      });
+      await flushPromises();
+      jest.runAllTicks();
+      await flushPromises();
+      expect((globalThis as any).WebSocket).toHaveBeenCalledTimes(2);
 
-      jest.advanceTimersByTime(500);
-      await challengePromise;
+      const retryWs = createdWs;
+      retryWs.readyState = MockWebSocket.OPEN;
+      retryWs.onopen!();
+      retryWs.onmessage!({
+        data: JSON.stringify({
+          type: 'event',
+          event: 'connect.challenge',
+          payload: { nonce: 'c'.repeat(64), ts: Date.now() },
+        }),
+      });
+      await flushPromises();
+      const retryConnect = JSON.parse(retryWs.send.mock.calls[0][0] as string);
+      retryWs.onmessage!({
+        data: JSON.stringify({
+          type: 'res',
+          id: retryConnect.id,
+          ok: true,
+          payload: {
+            auth: {
+              deviceToken: 'issued-device-token',
+              role: 'operator',
+              scopes: ['operator.read'],
+            },
+          },
+        }),
+      });
+      await flushPromises();
 
-      expect(sendRequestSpy).toHaveBeenCalledTimes(2);
       expect(client.getConnectionState()).toBe('ready');
       expect(StorageService.setDeviceToken).toHaveBeenCalledWith('a'.repeat(64), 'issued-device-token', {
         serverUrl: 'https://registry.example.com',
@@ -1615,7 +1694,7 @@ describe('GatewayClient', () => {
     });
 
     it('clears stale relay deviceToken and restarts when gateway reports device token mismatch', async () => {
-      const { StorageService } = jest.requireMock('./storage') as {
+      const { StorageService } = jest.requireMock('../../services/storage') as {
         StorageService: { getDeviceToken: jest.Mock; deleteDeviceToken: jest.Mock };
       };
       StorageService.getDeviceToken.mockResolvedValue('stored-device-token');
@@ -1637,25 +1716,38 @@ describe('GatewayClient', () => {
       createdWs.readyState = MockWebSocket.OPEN;
       createdWs.onopen!();
 
-      jest
-        .spyOn(client as unknown as { sendRequest: (method: string, params?: object, options?: object) => Promise<unknown> }, 'sendRequest')
-        .mockRejectedValue(new Error('[INVALID_REQUEST] unauthorized: device token mismatch (rotate/reissue device token)'));
-      const restartSpy = jest
-        .spyOn(client as unknown as { restartConnection: (reason: string) => void }, 'restartConnection')
-        .mockImplementation(() => {});
-
-      await (client as unknown as { handleConnectChallenge: (payload: ConnectChallengePayload) => Promise<void> })
-        .handleConnectChallenge({ nonce: 'b'.repeat(64), ts: Date.now() });
+      const firstWs = createdWs;
+      firstWs.onmessage!({
+        data: JSON.stringify({
+          type: 'event',
+          event: 'connect.challenge',
+          payload: { nonce: 'b'.repeat(64), ts: Date.now() },
+        }),
+      });
+      await flushPromises();
+      const connectFrame = JSON.parse(firstWs.send.mock.calls[0][0] as string);
+      firstWs.onmessage!({
+        data: JSON.stringify({
+          type: 'res',
+          id: connectFrame.id,
+          ok: false,
+          error: {
+            code: 'AUTH_TOKEN_MISMATCH',
+            message: 'unauthorized: device token mismatch (rotate/reissue device token)',
+          },
+        }),
+      });
+      await flushPromises();
 
       expect(StorageService.deleteDeviceToken).toHaveBeenCalledWith('a'.repeat(64), {
         serverUrl: 'https://registry.example.com',
         gatewayId: 'gateway-device-relay',
       });
-      expect(restartSpy).toHaveBeenCalledWith('Connection restarted');
+      expect((globalThis as any).WebSocket).toHaveBeenCalledTimes(2);
     });
 
     it('falls back to legacy token when bootstrap times out', async () => {
-      const { StorageService } = jest.requireMock('./storage') as {
+      const { StorageService } = jest.requireMock('../../services/storage') as {
         StorageService: { getDeviceToken: jest.Mock };
       };
       StorageService.getDeviceToken.mockResolvedValue(null);
@@ -1700,7 +1792,7 @@ describe('GatewayClient', () => {
     });
 
     it('falls back to legacy password when relay bootstrap returns bootstrap.error', async () => {
-      const { StorageService } = jest.requireMock('./storage') as {
+      const { StorageService } = jest.requireMock('../../services/storage') as {
         StorageService: { getDeviceToken: jest.Mock };
       };
       StorageService.getDeviceToken.mockResolvedValue(null);
@@ -1752,7 +1844,7 @@ describe('GatewayClient', () => {
     });
 
     it('falls back to legacy token when gateway rejects bootstrapToken auth schema', async () => {
-      const { StorageService } = jest.requireMock('./storage') as {
+      const { StorageService } = jest.requireMock('../../services/storage') as {
         StorageService: { getDeviceToken: jest.Mock };
       };
       StorageService.getDeviceToken.mockResolvedValue(null);
@@ -1810,6 +1902,8 @@ describe('GatewayClient', () => {
         }),
       });
       await flushPromises();
+      jest.runAllTicks();
+      await flushPromises();
 
       expect((globalThis as any).WebSocket).toHaveBeenCalledTimes(2);
       expect(errorListener).not.toHaveBeenCalled();
@@ -1833,7 +1927,7 @@ describe('GatewayClient', () => {
     });
 
     it('falls back to legacy password when gateway rejects bootstrapToken auth schema', async () => {
-      const { StorageService } = jest.requireMock('./storage') as {
+      const { StorageService } = jest.requireMock('../../services/storage') as {
         StorageService: { getDeviceToken: jest.Mock };
       };
       StorageService.getDeviceToken.mockResolvedValue(null);
@@ -1891,6 +1985,8 @@ describe('GatewayClient', () => {
         }),
       });
       await flushPromises();
+      jest.runAllTicks();
+      await flushPromises();
 
       expect((globalThis as any).WebSocket).toHaveBeenCalledTimes(2);
       expect(errorListener).not.toHaveBeenCalled();
@@ -1924,13 +2020,19 @@ describe('GatewayClient', () => {
 
     it('ignores duplicate connect.challenge while connect request is in flight', async () => {
       const connectSpy = jest
-        .spyOn(client as unknown as { handleConnectChallenge: (payload: unknown) => Promise<void> }, 'handleConnectChallenge')
+        .spyOn(client as unknown as {
+          handleOpenClawChallenge: (
+            payload: unknown,
+            epoch: number,
+            serial: number,
+          ) => Promise<void>;
+        }, 'handleOpenClawChallenge')
         .mockImplementation(() => new Promise<void>(() => {}));
 
       const challengeFrame = {
         type: 'event',
         event: 'connect.challenge',
-        payload: { nonce: 'b'.repeat(64) },
+        payload: { nonce: 'b'.repeat(64), ts: Date.now() },
       };
       createdWs.onmessage!({ data: JSON.stringify(challengeFrame) });
       createdWs.onmessage!({ data: JSON.stringify(challengeFrame) });
@@ -1943,15 +2045,6 @@ describe('GatewayClient', () => {
     it('ignores stale nonce mismatch from a superseded connect attempt', async () => {
       const errorListener = jest.fn();
       client.on('error', errorListener);
-      jest.spyOn(client as unknown as { ensureIdentity: () => Promise<{
-        deviceId: string;
-        publicKeyHex: string;
-        secretKeyHex: string;
-      }> }, 'ensureIdentity').mockResolvedValue({
-        deviceId: 'device-1',
-        publicKeyHex: '01'.repeat(32),
-        secretKeyHex: '02'.repeat(64),
-      });
 
       let rejectConnect!: (error: Error) => void;
       const sendRequestSpy = jest
@@ -1965,28 +2058,32 @@ describe('GatewayClient', () => {
           });
         });
 
-      const staleChallenge = (client as unknown as { handleConnectChallenge: (payload: ConnectChallengePayload) => Promise<void> })
-        .handleConnectChallenge({ nonce: 'b'.repeat(64), ts: Date.now() });
-
+      createdWs.onmessage!({
+        data: JSON.stringify({
+          type: 'event',
+          event: 'connect.challenge',
+          payload: { nonce: 'b'.repeat(64), ts: Date.now() },
+        }),
+      });
       await flushPromises();
-      (client as unknown as { connectAttemptId: number }).connectAttemptId += 1;
-      rejectConnect(new Error('[UNAUTHORIZED] device nonce mismatch'));
-      await staleChallenge;
-
       expect(sendRequestSpy).toHaveBeenCalledWith(
         'connect',
         expect.objectContaining({
-          device: expect.objectContaining({
-            nonce: 'b'.repeat(64),
-          }),
+          device: expect.objectContaining({ nonce: 'b'.repeat(64) }),
         }),
-        expect.objectContaining({
-          timeoutMs: 8_000,
-          skipAutoReconnectOnTimeout: true,
-        }),
+        8_000,
+        true,
       );
+
+      client.reconnect();
+      rejectConnect(new GatewayRequestError({
+        code: 'DEVICE_AUTH_NONCE_MISMATCH',
+        message: 'device nonce mismatch',
+      }));
+      await flushPromises();
+
       expect(errorListener).not.toHaveBeenCalled();
-      expect((client as unknown as { reconnectBlockedReason: unknown }).reconnectBlockedReason).toBeNull();
+      expect((globalThis as any).WebSocket).toHaveBeenCalledTimes(2);
     });
 
   });
@@ -2035,7 +2132,10 @@ describe('GatewayClient', () => {
       });
     });
 
-    it('retries Hermes relay session list reads after transient bridge unavailable errors', async () => {
+    it('surfaces a transient Hermes session-list error for coordinator-owned retry', async () => {
+      // 2.1.x retried inside GatewayClient. In 3.0 the connection coordinator
+      // owns the 15-second Hermes probe/reconnect policy, so protocol requests
+      // must settle once and remain safe to retry at that boundary.
       client.configure({
         url: 'wss://example.com',
         token: 'abc',
@@ -2043,31 +2143,12 @@ describe('GatewayClient', () => {
         backendKind: 'hermes',
         transportKind: 'relay',
       } as any);
-      (client as any).activeRoute = 'relay';
-
       const sendRequestSpy = jest
         .spyOn(client as unknown as { sendRequest: (method: string, params?: object) => Promise<unknown> }, 'sendRequest')
-        .mockRejectedValueOnce(new Error('[BRIDGE_UNAVAILABLE] Hermes bridge is temporarily unavailable. Please retry.'))
-        .mockRejectedValueOnce(new Error('[BRIDGE_UNAVAILABLE] Hermes bridge is temporarily unavailable. Please retry.'))
-        .mockResolvedValue({
-          defaults: { contextTokens: 200_000 },
-          sessions: [{ key: 'agent:main:main' }],
-        });
+        .mockRejectedValue(new Error('[BRIDGE_UNAVAILABLE] Hermes bridge is temporarily unavailable. Please retry.'));
 
-      const pending = client.listSessions();
-      await flushPromises();
+      await expect(client.listSessions()).rejects.toThrow('[BRIDGE_UNAVAILABLE]');
       expect(sendRequestSpy).toHaveBeenCalledTimes(1);
-
-      jest.advanceTimersByTime(750);
-      await flushPromises();
-      expect(sendRequestSpy).toHaveBeenCalledTimes(2);
-
-      jest.advanceTimersByTime(750);
-      await flushPromises();
-      await expect(pending).resolves.toEqual([
-        { key: 'agent:main:main', contextTokens: 200_000 },
-      ]);
-      expect(sendRequestSpy).toHaveBeenCalledTimes(3);
     });
 
     it('fetches chat history without includeTools probing', async () => {
@@ -2084,7 +2165,7 @@ describe('GatewayClient', () => {
       expect(sendRequestSpy).toHaveBeenCalledWith('chat.history', { sessionKey: 'session-1', limit: 12 });
     });
 
-    it('retries Hermes relay history reads after transient bridge unavailable errors', async () => {
+    it('surfaces a transient Hermes history error for coordinator-owned retry', async () => {
       client.configure({
         url: 'wss://example.com',
         token: 'abc',
@@ -2092,27 +2173,15 @@ describe('GatewayClient', () => {
         backendKind: 'hermes',
         transportKind: 'relay',
       } as any);
-      (client as any).activeRoute = 'relay';
-
       const sendRequestSpy = jest
         .spyOn(client as unknown as { sendRequest: (method: string, params?: object) => Promise<unknown> }, 'sendRequest')
-        .mockRejectedValueOnce(new Error('[BRIDGE_UNAVAILABLE] Hermes bridge is temporarily unavailable. Please retry.'))
-        .mockResolvedValue({ messages: [{ role: 'assistant', content: 'recovered' }], thinkingLevel: 'off' });
+        .mockRejectedValue(new Error('[BRIDGE_UNAVAILABLE] Hermes bridge is temporarily unavailable. Please retry.'));
 
-      const pending = client.fetchHistory('session-1', 12);
-      await flushPromises();
+      await expect(client.fetchHistory('session-1', 12)).rejects.toThrow('[BRIDGE_UNAVAILABLE]');
       expect(sendRequestSpy).toHaveBeenCalledTimes(1);
-
-      jest.advanceTimersByTime(750);
-      await flushPromises();
-      await expect(pending).resolves.toEqual({
-        messages: [{ role: 'assistant', content: 'recovered' }],
-        thinkingLevel: 'off',
-      });
-      expect(sendRequestSpy).toHaveBeenCalledTimes(2);
     });
 
-    it('retries Hermes relay generic reads (e.g. models.list) after transient bridge unavailable errors', async () => {
+    it('surfaces a transient Hermes generic-read error for coordinator-owned retry', async () => {
       client.configure({
         url: 'wss://example.com',
         token: 'abc',
@@ -2120,21 +2189,12 @@ describe('GatewayClient', () => {
         backendKind: 'hermes',
         transportKind: 'relay',
       } as any);
-      (client as any).activeRoute = 'relay';
-
       const sendRequestSpy = jest
         .spyOn(client as unknown as { sendRequest: (method: string, params?: object) => Promise<unknown> }, 'sendRequest')
-        .mockRejectedValueOnce(new Error('[BRIDGE_UNAVAILABLE] Hermes bridge is temporarily unavailable. Please retry.'))
-        .mockResolvedValue({ models: [{ id: 'gpt-4o' }] });
+        .mockRejectedValue(new Error('[BRIDGE_UNAVAILABLE] Hermes bridge is temporarily unavailable. Please retry.'));
 
-      const pending = client.request<{ models: Array<{ id: string }> }>('models.list');
-      await flushPromises();
+      await expect(client.request('models.list')).rejects.toThrow('[BRIDGE_UNAVAILABLE]');
       expect(sendRequestSpy).toHaveBeenCalledTimes(1);
-
-      jest.advanceTimersByTime(750);
-      await flushPromises();
-      await expect(pending).resolves.toEqual({ models: [{ id: 'gpt-4o' }] });
-      expect(sendRequestSpy).toHaveBeenCalledTimes(2);
     });
 
     it('does not retry mutating Hermes calls (e.g. chat.send) on bridge unavailable', async () => {
@@ -2145,8 +2205,6 @@ describe('GatewayClient', () => {
         backendKind: 'hermes',
         transportKind: 'relay',
       } as any);
-      (client as any).activeRoute = 'relay';
-
       const sendRequestSpy = jest
         .spyOn(client as unknown as { sendRequest: (method: string, params?: object) => Promise<unknown> }, 'sendRequest')
         .mockRejectedValue(new Error('[BRIDGE_UNAVAILABLE] Hermes bridge is temporarily unavailable. Please retry.'));
@@ -2163,8 +2221,6 @@ describe('GatewayClient', () => {
         backendKind: 'openclaw',
         transportKind: 'relay',
       } as any);
-      (client as any).activeRoute = 'relay';
-
       const sendRequestSpy = jest
         .spyOn(client as unknown as { sendRequest: (method: string, params?: object) => Promise<unknown> }, 'sendRequest')
         .mockRejectedValue(new Error('[BRIDGE_UNAVAILABLE] something'));
@@ -2173,20 +2229,25 @@ describe('GatewayClient', () => {
       expect(sendRequestSpy).toHaveBeenCalledTimes(1);
     });
 
-    it('deduplicates concurrent chat history requests for the same session and limit', async () => {
-      let resolveRequest!: (value: unknown) => void;
+    it('keeps concurrent protocol history requests independently settleable', async () => {
+      // 2.1.x kept the single-flight cache in GatewayClient. The 3.0 adapter
+      // and chat reconciliation boundary own that policy; the wire client is
+      // deliberately request/response transparent.
+      const resolvers: Array<(value: unknown) => void> = [];
       const sendRequestSpy = jest
         .spyOn(client as unknown as { sendRequest: (method: string, params?: object) => Promise<unknown> }, 'sendRequest')
         .mockImplementation(() => new Promise((resolve) => {
-          resolveRequest = resolve;
+          resolvers.push(resolve);
         }));
 
       const firstPromise = client.fetchHistory('session-1', 12);
       const secondPromise = client.fetchHistory('session-1', 12);
 
-      expect(sendRequestSpy).toHaveBeenCalledTimes(1);
+      expect(sendRequestSpy).toHaveBeenCalledTimes(2);
 
-      resolveRequest({ messages: [{ role: 'assistant', content: 'merged' }], sessionId: 'sess-1' });
+      for (const resolve of resolvers) {
+        resolve({ messages: [{ role: 'assistant', content: 'merged' }], sessionId: 'sess-1' });
+      }
 
       await expect(Promise.all([firstPromise, secondPromise])).resolves.toEqual([
         { messages: [{ role: 'assistant', content: 'merged' }], sessionId: 'sess-1', thinkingLevel: undefined },
@@ -2194,7 +2255,7 @@ describe('GatewayClient', () => {
       ]);
     });
 
-    it('reuses a short-lived chat history cache and refreshes after the TTL expires', async () => {
+    it('leaves short-lived chat history caching to the adapter boundary', async () => {
       const sendRequestSpy = jest
         .spyOn(client as unknown as { sendRequest: (method: string, params?: object) => Promise<unknown> }, 'sendRequest')
         .mockResolvedValue({ messages: [{ role: 'assistant', content: 'cached' }], thinkingLevel: 'off' });
@@ -2204,15 +2265,15 @@ describe('GatewayClient', () => {
 
       expect(first).toEqual({ messages: [{ role: 'assistant', content: 'cached' }], thinkingLevel: 'off' });
       expect(second).toEqual(first);
-      expect(sendRequestSpy).toHaveBeenCalledTimes(1);
+      expect(sendRequestSpy).toHaveBeenCalledTimes(2);
 
       jest.advanceTimersByTime(1_001);
 
       await client.fetchHistory('session-1', 12);
-      expect(sendRequestSpy).toHaveBeenCalledTimes(2);
+      expect(sendRequestSpy).toHaveBeenCalledTimes(3);
     });
 
-    it('deduplicates concurrent identity lookups and reuses a short-lived cache', async () => {
+    it('leaves identity caching to the roster adapter boundary', async () => {
       const sendRequestSpy = jest
         .spyOn(client as unknown as { sendRequest: (method: string, params?: object) => Promise<unknown> }, 'sendRequest')
         .mockResolvedValue({ name: 'Main Agent', emoji: '🤖', avatarUrl: 'https://example.com/a.png' });
@@ -2224,14 +2285,14 @@ describe('GatewayClient', () => {
 
       expect(first).toEqual({ name: 'Main Agent', emoji: '🤖', avatar: 'https://example.com/a.png' });
       expect(second).toEqual(first);
-      expect(sendRequestSpy).toHaveBeenCalledTimes(1);
+      expect(sendRequestSpy).toHaveBeenCalledTimes(2);
 
       const third = await client.fetchIdentity('main');
       expect(third).toEqual(first);
-      expect(sendRequestSpy).toHaveBeenCalledTimes(1);
+      expect(sendRequestSpy).toHaveBeenCalledTimes(3);
     });
 
-    it('reuses cached agent list results within the short TTL window', async () => {
+    it('leaves agent roster caching to the connection registry boundary', async () => {
       const sendRequestSpy = jest
         .spyOn(client as unknown as { sendRequest: (method: string, params?: object) => Promise<unknown> }, 'sendRequest')
         .mockResolvedValue({
@@ -2247,11 +2308,11 @@ describe('GatewayClient', () => {
 
       expect(first.agents).toHaveLength(1);
       expect(second).toEqual(first);
-      expect(sendRequestSpy).toHaveBeenCalledTimes(1);
+      expect(sendRequestSpy).toHaveBeenCalledTimes(2);
 
       const third = await client.listAgents();
       expect(third).toEqual(first);
-      expect(sendRequestSpy).toHaveBeenCalledTimes(1);
+      expect(sendRequestSpy).toHaveBeenCalledTimes(3);
     });
   });
 
@@ -2347,6 +2408,7 @@ describe('GatewayClient', () => {
       expect(errorListener).toHaveBeenCalledWith({
         code: 'ws_error',
         message: 'WebSocket error',
+        retryable: true,
       });
     });
 
@@ -2386,12 +2448,14 @@ describe('GatewayClient', () => {
       expect(errorListener).toHaveBeenCalledWith({
         code: 'ws_connect_timeout',
         message: 'WebSocket open timed out',
+        retryable: true,
       });
       expect(firstWs.close).toHaveBeenCalled();
+      jest.advanceTimersByTime(800);
       expect((globalThis as any).WebSocket).toHaveBeenCalledTimes(2);
     });
 
-    it('fails stalled challenging socket with challenge_timeout', () => {
+    it('fails a stalled direct handshake at the first-frame boundary', () => {
       const errorListener = jest.fn();
       client.on('error', errorListener);
       client.configure({ url: 'wss://example.com' });
@@ -2403,8 +2467,9 @@ describe('GatewayClient', () => {
       jest.advanceTimersByTime(20_000);
 
       expect(errorListener).toHaveBeenCalledWith({
-        code: 'challenge_timeout',
-        message: 'Gateway challenge timed out',
+        code: 'first_frame_timeout',
+        message: 'WebSocket first frame timed out',
+        retryable: true,
       });
       expect(firstWs.close).toHaveBeenCalled();
       expect((globalThis as any).WebSocket).toHaveBeenCalledTimes(2);
@@ -2435,26 +2500,40 @@ describe('GatewayClient', () => {
       client.configure({ url: 'wss://example.com', token: 'token_pro' });
       client.connect();
       createdWs.readyState = MockWebSocket.OPEN;
-      (client as unknown as {
-        blockReconnect: (reason: { code: string; message: string; hint?: string }) => void;
-      }).blockReconnect({
-        code: 'device_nonce_mismatch',
-        message: 'Device authentication nonce mismatch. Please regenerate a new Relay QR code in Clawket Bridge.',
-        hint: 'Open Clawket Bridge and scan a newly generated Relay QR code.',
+      createdWs.onopen!();
+      createdWs.onmessage!({
+        data: JSON.stringify({
+          type: 'event',
+          event: 'connect.challenge',
+          payload: { nonce: 'b'.repeat(64), ts: Date.now() },
+        }),
       });
-      createdWs.onclose!();
+      return flushPromises().then(() => {
+        const connectFrame = JSON.parse(createdWs.send.mock.calls[0][0] as string);
+        createdWs.onmessage!({
+          data: JSON.stringify({
+            type: 'res',
+            id: connectFrame.id,
+            ok: false,
+            error: {
+              code: 'DEVICE_AUTH_NONCE_MISMATCH',
+              message: 'device nonce mismatch',
+            },
+          }),
+        });
+        return flushPromises();
+      }).then(() => {
+        expect(errorListener).toHaveBeenCalledWith(expect.objectContaining({
+          code: 'DEVICE_AUTH_NONCE_MISMATCH',
+        }));
+        expect((globalThis as any).WebSocket).toHaveBeenCalledTimes(1);
 
-      expect(errorListener).toHaveBeenCalledWith(expect.objectContaining({
-        code: 'device_nonce_mismatch',
-        retryable: false,
-      }));
-      expect((globalThis as any).WebSocket).toHaveBeenCalledTimes(1);
+        jest.advanceTimersByTime(30_000);
+        expect((globalThis as any).WebSocket).toHaveBeenCalledTimes(1);
 
-      jest.advanceTimersByTime(30_000);
-      expect((globalThis as any).WebSocket).toHaveBeenCalledTimes(1);
-
-      client.reconnect();
-      expect((globalThis as any).WebSocket).toHaveBeenCalledTimes(2);
+        client.reconnect();
+        expect((globalThis as any).WebSocket).toHaveBeenCalledTimes(2);
+      });
     });
 
     it('blocks auto-retry on device signature invalid but allows manual reconnect', () => {
@@ -2463,26 +2542,40 @@ describe('GatewayClient', () => {
       client.configure({ url: 'wss://example.com', token: 'token_pro' });
       client.connect();
       createdWs.readyState = MockWebSocket.OPEN;
-      (client as unknown as {
-        blockReconnect: (reason: { code: string; message: string; hint?: string }) => void;
-      }).blockReconnect({
-        code: 'device_signature_invalid',
-        message: 'Device authentication failed. Reset the Clawket app device identity and reconnect.',
-        hint: 'If this keeps happening, clear the app identity or app data, then reconnect to the Gateway.',
+      createdWs.onopen!();
+      createdWs.onmessage!({
+        data: JSON.stringify({
+          type: 'event',
+          event: 'connect.challenge',
+          payload: { nonce: 'b'.repeat(64), ts: Date.now() },
+        }),
       });
-      createdWs.onclose!();
+      return flushPromises().then(() => {
+        const connectFrame = JSON.parse(createdWs.send.mock.calls[0][0] as string);
+        createdWs.onmessage!({
+          data: JSON.stringify({
+            type: 'res',
+            id: connectFrame.id,
+            ok: false,
+            error: {
+              code: 'DEVICE_AUTH_SIGNATURE_INVALID',
+              message: 'device signature invalid',
+            },
+          }),
+        });
+        return flushPromises();
+      }).then(() => {
+        expect(errorListener).toHaveBeenCalledWith(expect.objectContaining({
+          code: 'DEVICE_AUTH_SIGNATURE_INVALID',
+        }));
+        expect((globalThis as any).WebSocket).toHaveBeenCalledTimes(1);
 
-      expect(errorListener).toHaveBeenCalledWith(expect.objectContaining({
-        code: 'device_signature_invalid',
-        retryable: false,
-      }));
-      expect((globalThis as any).WebSocket).toHaveBeenCalledTimes(1);
+        jest.advanceTimersByTime(30_000);
+        expect((globalThis as any).WebSocket).toHaveBeenCalledTimes(1);
 
-      jest.advanceTimersByTime(30_000);
-      expect((globalThis as any).WebSocket).toHaveBeenCalledTimes(1);
-
-      client.reconnect();
-      expect((globalThis as any).WebSocket).toHaveBeenCalledTimes(2);
+        client.reconnect();
+        expect((globalThis as any).WebSocket).toHaveBeenCalledTimes(2);
+      });
     });
   });
 
@@ -2497,22 +2590,27 @@ describe('GatewayClient', () => {
       expect(sendRequestSpy).toHaveBeenCalledWith(
         'health',
         {},
-        { timeoutMs: 1234, skipAutoReconnectOnTimeout: true },
+        1234,
       );
     });
 
-    it('leaves ready state and reconnects when a request starts without an open socket', async () => {
+    it('surfaces stale ready transport for coordinator-owned reconnect', async () => {
+      // The coordinator's scheduled probe owns reconnection in 3.0; the wire
+      // request must fail once instead of spawning a competing retry loop.
       const states: string[] = [];
       client.on('connection', ({ state }) => states.push(state));
       client.configure({ url: 'wss://example.com' });
+      client.connect();
       (client as unknown as { state: string }).state = 'ready';
-      (client as unknown as { ws: MockWebSocket }).ws = new MockWebSocket();
-      (client as unknown as { ws: MockWebSocket }).ws.readyState = MockWebSocket.CLOSED;
+      const transport = (client as unknown as { transport: { socket: MockWebSocket | null } }).transport;
+      transport.socket = null;
       const reconnectSpy = jest.spyOn(client, 'reconnect').mockImplementation(() => {});
 
-      await expect(client.request('sessions.list', {})).rejects.toThrow('WebSocket is not open');
-      expect(states).toContain('reconnecting');
-      expect(reconnectSpy).toHaveBeenCalledTimes(1);
+      await expect(client.request('sessions.list', {})).rejects.toMatchObject({
+        code: 'not_connected',
+      });
+      expect(states).not.toContain('reconnecting');
+      expect(reconnectSpy).not.toHaveBeenCalled();
     });
 
     it('bypasses force-reconnect debounce for a stale ready transport', () => {

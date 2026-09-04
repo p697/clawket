@@ -125,8 +125,9 @@ function routeAgentEvent(
   emit: Emit,
   now: () => number,
 ): void {
-  if (!payload || typeof payload.runId !== 'string') return;
-  const runId = payload.runId;
+  if (!payload) return;
+  const runId = readString(payload.runId);
+  if (!runId) return;
   const sessionKey = readString(payload.sessionKey);
   if (payload.stream === 'compaction') {
     const phase = payload.data?.phase;
@@ -160,7 +161,7 @@ function routeAgentEvent(
   });
 }
 
-function extractText(message?: ChatEventPayload['message']): string {
+export function extractText(message?: ChatEventPayload['message']): string {
   if (!message?.content) return '';
   if (typeof message.content === 'string') return message.content;
   return message.content
