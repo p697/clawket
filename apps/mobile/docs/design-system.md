@@ -165,6 +165,6 @@ For UI work, verify:
 
 ## 9. Style ratchet
 
-`scripts/check-ui-style.mjs` rejects new hardcoded colors, numeric radius/font/border values, FontSize arithmetic, React Native `KeyboardAvoidingView` imports, raw `Shadow.*` use, unapproved native `TextInput`/`Switch` use, and native bottom-tab dependencies. Existing legacy debt is counted per file and rule in `scripts/ui-style-baseline.json`; counts may only decrease.
+`scripts/check-ui-style.mjs` rejects new hardcoded colors, numeric radius/font/border values, FontSize arithmetic, outlined list rows, emoji literals used as interface icons, screen files with more than three distinct `FontSize.*` values, React Native `KeyboardAvoidingView` imports, raw `Shadow.*` use, unapproved native `TextInput`/`Switch` use, and native bottom-tab dependencies. Existing legacy debt is counted per file and rule in `scripts/ui-style-baseline.json`; every count may only decrease. The checker prints the scanned screen/component scope plus the violation and affected-file totals for the M5 rules so accidental coverage loss stays visible.
 
-Do not update the baseline to make a new violation pass. `--update` is only for ratcheting the baseline downward after intentional cleanup.
+Do not update the baseline to make a new violation pass. `--update` compares against the existing valid baseline and refuses any per-file, per-rule increase; it is only for ratcheting the baseline downward after intentional cleanup.

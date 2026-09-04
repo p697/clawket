@@ -34,6 +34,14 @@ const RAW_SHADOW_ALLOWED_FILES = new Set([
   // including its optional shadow, rather than ordinary application chrome.
   'src/components/chat/ChatAppearancePreviewCard.tsx',
 ]);
+const EMOJI_LITERAL_ALLOWED_FILES = new Set([
+  // These literals are user-selectable Agent avatar content, not interface
+  // icons. AgentAvatar renders the chosen value as identity data.
+  'src/components/agents/EmojiPicker.tsx',
+]);
+const SCREEN_DIR_PREFIX = 'src/screens/';
+const SCREEN_FONT_SIZE_LIMIT = 3;
+const EMOJI_LITERAL_RE = /\p{Extended_Pictographic}/u;
 
 const RULES = {
   'border-radius-literal': 'borderRadius numeric literal — use Radius tokens',
@@ -42,8 +50,16 @@ const RULES = {
   'font-token-arithmetic': 'FontSize arithmetic — use a FontSize/LineHeight step',
   'border-width-literal': 'borderWidth numeric literal — use StyleSheet.hairlineWidth',
   'native-keyboard-avoider': "KeyboardAvoidingView from react-native — use react-native-keyboard-controller",
+  'list-row-border-width': 'list-row borderWidth — rows must use spacing and pressed-state color, not an outline',
+  'emoji-icon-literal': 'emoji literal used as an icon — use a Lucide icon or dynamic Agent avatar content',
+  'screen-font-size-budget': `screen uses more than ${SCREEN_FONT_SIZE_LIMIT} FontSize tokens — keep the default hierarchy to two tiers (three including a title)`,
 };
 const RULE_IDS = Object.keys(RULES);
+const M5_RULE_IDS = [
+  'list-row-border-width',
+  'emoji-icon-literal',
+  'screen-font-size-budget',
+];
 
 function walk(dir, files = []) {
   for (const entry of readdirSync(dir)) {
@@ -63,6 +79,109 @@ function propertyName(node) {
     return name.text;
   }
   return null;
+}
+
+function declarationName(node) {
+  if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) return node.name.text;
+  if (
+    (ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || ts.isMethodDeclaration(node))
+    && node.name
+  ) {
+    return ts.isIdentifier(node.name) || ts.isStringLiteral(node.name)
+      ? node.name.text
+      : null;
+  }
+  return null;
+}
+
+function isIconSemanticName(name) {
+  if (!name) return false;
+  const words = name
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .split(/[^a-zA-Z0-9]+/)
+    .filter(Boolean)
+    .map((word) => word.toLowerCase());
+  return words.some((word) => word === 'icon' || word === 'icons' || word === 'emoji' || word === 'emojis');
+}
+
+function isListRowSemanticName(name) {
+  if (!name) return false;
+  const words = name
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .split(/[^a-zA-Z0-9]+/)
+    .filter(Boolean)
+    .map((word) => word.toLowerCase());
+  return words.includes('row') || words.includes('item');
+}
+
+function jsxTagName(node, sourceFile) {
+  if (ts.isJsxElement(node)) return node.openingElement.tagName.getText(sourceFile);
+  if (ts.isJsxSelfClosingElement(node)) return node.tagName.getText(sourceFile);
+  return null;
+}
+
+function sourceStem(rel) {
+  const fileName = rel.split('/').at(-1) ?? rel;
+  return fileName.replace(/\.(?:ts|tsx)$/, '');
+}
+
+function jsxAttributeOwnerName(node, sourceFile) {
+  if (!ts.isJsxAttribute(node) || !ts.isJsxAttributes(node.parent)) return null;
+  return jsxTagName(node.parent.parent, sourceFile);
+}
+
+function owningStyleName(node, sourceFile) {
+  let current = node.parent;
+  while (current && !ts.isSourceFile(current)) {
+    if (ts.isObjectLiteralExpression(current)) {
+      const owner = current.parent;
+      if (ts.isPropertyAssignment(owner)) return propertyName(owner);
+      const name = declarationName(owner);
+      if (name) return name;
+    }
+    if (ts.isJsxExpression(current) && ts.isJsxAttribute(current.parent)) {
+      const attribute = current.parent;
+      if (attribute.name.getText(sourceFile) !== 'style') return null;
+      const element = attribute.parent;
+      return ts.isJsxAttributes(element) ? jsxTagName(element.parent, sourceFile) : null;
+    }
+    current = current.parent;
+  }
+  return null;
+}
+
+function isEmojiLiteral(node) {
+  if (
+    ts.isStringLiteral(node)
+    || ts.isNoSubstitutionTemplateLiteral(node)
+    || ts.isJsxText(node)
+    || ts.isTemplateHead(node)
+    || ts.isTemplateMiddle(node)
+    || ts.isTemplateTail(node)
+  ) {
+    return EMOJI_LITERAL_RE.test(node.text);
+  }
+  return false;
+}
+
+function isEmojiIconLiteral(node, sourceFile) {
+  if (!isEmojiLiteral(node)) return false;
+  let current = node.parent;
+  while (current && !ts.isSourceFile(current)) {
+    if (ts.isJsxAttribute(current) && isIconSemanticName(current.name.getText(sourceFile))) {
+      return true;
+    }
+    if (ts.isPropertyAssignment(current) && isIconSemanticName(propertyName(current))) {
+      return true;
+    }
+    const name = declarationName(current);
+    if (name && isIconSemanticName(name)) return true;
+    if (ts.isJsxElement(current) && jsxTagName(current, sourceFile) === 'Text') {
+      return true;
+    }
+    current = current.parent;
+  }
+  return false;
 }
 
 function isScope(node) {
@@ -208,6 +327,7 @@ export function scanSource(rel, source) {
   ));
   const initializers = collectInitializers(sourceFile);
   const violations = [];
+  const screenFontSizes = new Map();
   const lineOf = (node) => sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
   const add = (ruleId, node) => violations.push({ ruleId, line: lineOf(node) });
 
@@ -227,6 +347,16 @@ export function scanSource(rel, source) {
     if (name === 'borderWidth' && numericLiteral(expression, initializers, true)) {
       add('border-width-literal', node);
     }
+    if (
+      name === 'borderWidth'
+      && (
+        isListRowSemanticName(sourceStem(rel))
+        || isListRowSemanticName(owningStyleName(node, sourceFile))
+        || isListRowSemanticName(jsxAttributeOwnerName(node, sourceFile))
+      )
+    ) {
+      add('list-row-border-width', node);
+    }
   };
 
   const visit = (node) => {
@@ -238,9 +368,25 @@ export function scanSource(rel, source) {
         : node.initializer;
       if (expression) checkProperty(node.name.getText(sourceFile), expression, node);
     }
+    if (!EMOJI_LITERAL_ALLOWED_FILES.has(rel) && isEmojiIconLiteral(node, sourceFile)) {
+      add('emoji-icon-literal', node);
+    }
+    if (
+      rel.startsWith(SCREEN_DIR_PREFIX)
+      && ts.isPropertyAccessExpression(node)
+      && ts.isIdentifier(node.expression)
+      && node.expression.text === 'FontSize'
+      && !screenFontSizes.has(node.name.text)
+    ) {
+      screenFontSizes.set(node.name.text, node);
+    }
     ts.forEachChild(node, visit);
   };
   visit(sourceFile);
+
+  for (const node of [...screenFontSizes.values()].slice(SCREEN_FONT_SIZE_LIMIT)) {
+    add('screen-font-size-budget', node);
+  }
 
   const nativeImport = /import\s*\{([^}]*)\}\s*from\s*['"]react-native['"]/gs;
   for (const match of source.matchAll(nativeImport)) {
@@ -295,16 +441,36 @@ export function validateRawShadowUsage(rel, source) {
     : [];
 }
 
-function validateBaseline(value) {
+export function validateBaseline(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return 'root must be an object';
   for (const [rel, counts] of Object.entries(value)) {
     if (!counts || typeof counts !== 'object' || Array.isArray(counts)) return `${rel} must map to counts`;
+    if (!SCAN_DIRS.some((dir) => rel.startsWith(`${dir}/`))) return `${rel} is outside the UI scan roots`;
+    if (!/\.(ts|tsx)$/.test(rel)) return `${rel} is not a TypeScript UI source`;
+    if (Object.keys(counts).length === 0) return `${rel} has empty counts`;
     for (const [ruleId, count] of Object.entries(counts)) {
       if (!RULE_IDS.includes(ruleId)) return `${rel} has unknown rule ${ruleId}`;
-      if (!Number.isInteger(count) || count < 0) return `${rel}/${ruleId} has an invalid count`;
+      if (!Number.isInteger(count) || count <= 0) return `${rel}/${ruleId} has an invalid count`;
     }
   }
   return null;
+}
+
+export function compareBaseline(counts, baseline) {
+  const regressions = [];
+  let improvements = 0;
+  for (const rel of new Set([...Object.keys(counts), ...Object.keys(baseline)])) {
+    for (const ruleId of RULE_IDS) {
+      const actual = counts[rel]?.[ruleId] ?? 0;
+      const allowed = baseline[rel]?.[ruleId] ?? 0;
+      if (actual > allowed) {
+        regressions.push({ rel, ruleId, actual, allowed });
+      } else if (actual < allowed) {
+        improvements += 1;
+      }
+    }
+  }
+  return { regressions, improvements };
 }
 
 function sortedCounts(counts) {
@@ -318,14 +484,39 @@ function sortedCounts(counts) {
   );
 }
 
-const files = SCAN_DIRS.flatMap((dir) => walk(join(ROOT, dir)));
+function loadBaseline() {
+  const raw = readFileSync(BASELINE_PATH, 'utf8');
+  if (!raw.trim()) throw new Error('baseline file is empty');
+  const value = JSON.parse(raw);
+  const error = validateBaseline(value);
+  if (error) throw new Error(error);
+  return value;
+}
+
+const files = [];
+const scopeCounts = {};
+const sourceCollectionFailures = [];
+for (const dir of SCAN_DIRS) {
+  try {
+    const full = join(ROOT, dir);
+    if (!statSync(full).isDirectory()) throw new Error('not a directory');
+    const scopedFiles = walk(full);
+    if (scopedFiles.length === 0) throw new Error('contains no TypeScript UI sources');
+    scopeCounts[dir] = scopedFiles.length;
+    files.push(...scopedFiles);
+  } catch (error) {
+    sourceCollectionFailures.push(`${dir}: ${error instanceof Error ? error.message : String(error)}`);
+    scopeCounts[dir] = 0;
+  }
+}
 const counts = {};
 const details = {};
-const hardFailures = [];
+const hardFailures = [...sourceCollectionFailures];
 
 for (const file of files) {
   const rel = relative(ROOT, file);
   const source = readFileSync(file, 'utf8');
+  if (!source.trim()) hardFailures.push(`${rel}: UI source file is empty`);
   const result = scanSource(rel, source);
   hardFailures.push(...result.failures);
   hardFailures.push(...validateTabBarHeightUsage(rel, source));
@@ -342,16 +533,50 @@ for (const file of files) {
 
 try {
   const appSource = readFileSync(join(ROOT, 'App.tsx'), 'utf8');
-  const packageJson = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+  if (!appSource.trim()) throw new Error('App.tsx is empty');
+  const packageSource = readFileSync(join(ROOT, 'package.json'), 'utf8');
+  if (!packageSource.trim()) throw new Error('package.json is empty');
+  const packageJson = JSON.parse(packageSource);
+  if (!packageJson || typeof packageJson !== 'object' || Array.isArray(packageJson)) {
+    throw new Error('package.json root must be an object');
+  }
   hardFailures.push(...validateBottomTabSafety(appSource, packageJson));
 } catch (error) {
   hardFailures.push(`cannot validate bottom-tab safety: ${error instanceof Error ? error.message : String(error)}`);
 }
 
+const scopeSummary = SCAN_DIRS.map((dir) => `${dir}=${scopeCounts[dir] ?? 0}`).join(', ');
+console.log(`[check-ui-style] scanned ${files.length} UI source files (${scopeSummary})`);
+console.log(`[check-ui-style] M5 rule coverage: list-row and emoji=${files.length} files; screen FontSize=${scopeCounts['src/screens'] ?? 0} files`);
+console.log(`[check-ui-style] M5 tracked debt: ${M5_RULE_IDS.map((ruleId) => {
+  let violations = 0;
+  let affectedFiles = 0;
+  for (const fileCounts of Object.values(counts)) {
+    const count = fileCounts[ruleId] ?? 0;
+    violations += count;
+    if (count > 0) affectedFiles += 1;
+  }
+  return `${ruleId}=${violations}/${affectedFiles} files`;
+}).join(', ')}`);
+
+let baseline;
+try {
+  baseline = loadBaseline();
+} catch (error) {
+  console.error('[check-ui-style] failed');
+  console.error(`- Missing or invalid baseline: ${error instanceof Error ? error.message : String(error)}`);
+  process.exit(1);
+}
+
+const comparison = compareBaseline(counts, baseline);
+
 if (UPDATE) {
-  if (hardFailures.length) {
+  if (hardFailures.length || comparison.regressions.length) {
     console.error('[check-ui-style] failed');
     for (const failure of hardFailures) console.error(`- ${failure}`);
+    for (const { rel, ruleId, actual, allowed } of comparison.regressions) {
+      console.error(`- baseline update refused: ${rel}/${ruleId}: ${actual}, existing baseline ${allowed}`);
+    }
     process.exit(1);
   }
   const sorted = sortedCounts(counts);
@@ -364,31 +589,11 @@ if (UPDATE) {
   process.exit(0);
 }
 
-let baseline;
-try {
-  baseline = JSON.parse(readFileSync(BASELINE_PATH, 'utf8'));
-  const error = validateBaseline(baseline);
-  if (error) throw new Error(error);
-} catch (error) {
-  console.error('[check-ui-style] failed');
-  console.error(`- Missing or invalid baseline: ${error instanceof Error ? error.message : String(error)}`);
-  process.exit(1);
-}
-
-const regressions = [];
-let improvements = 0;
-for (const rel of new Set([...Object.keys(counts), ...Object.keys(baseline)])) {
-  for (const ruleId of RULE_IDS) {
-    const actual = counts[rel]?.[ruleId] ?? 0;
-    const allowed = baseline[rel]?.[ruleId] ?? 0;
-    if (actual > allowed) {
-      regressions.push(`${rel}/${ruleId}: ${actual}, baseline ${allowed}`);
-      for (const detail of details[rel]?.[ruleId] ?? []) console.error(`  ${detail}`);
-    } else if (actual < allowed) {
-      improvements += 1;
-    }
-  }
-}
+const regressions = comparison.regressions.map(({ rel, ruleId, actual, allowed }) => {
+  for (const detail of details[rel]?.[ruleId] ?? []) console.error(`  ${detail}`);
+  return `${rel}/${ruleId}: ${actual}, baseline ${allowed}`;
+});
+const { improvements } = comparison;
 
 if (hardFailures.length || regressions.length) {
   console.error('[check-ui-style] failed');
@@ -398,7 +603,7 @@ if (hardFailures.length || regressions.length) {
 }
 
 if (improvements) {
-  console.log(`ui-style check passed; ${improvements} file/rule pair(s) beat the baseline.`);
+  console.log(`ui-style check passed; verified ${files.length} UI source files; ${improvements} file/rule pair(s) beat the baseline.`);
 } else {
   console.log(`ui-style check passed; verified ${files.length} UI source files and bottom-tab dependencies.`);
 }

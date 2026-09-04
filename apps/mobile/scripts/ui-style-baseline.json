@@ -1,14 +1,215 @@
 {
+  "src/components/chat/AgentsModal.tsx": {
+    "list-row-border-width": 1
+  },
+  "src/components/chat/ChatAppearancePreviewCard.tsx": {
+    "list-row-border-width": 1
+  },
+  "src/components/chat/JsonTree.tsx": {
+    "emoji-icon-literal": 1
+  },
+  "src/components/chat/ModelPickerModal.tsx": {
+    "list-row-border-width": 1
+  },
+  "src/components/chat/PairingPendingCard.tsx": {
+    "emoji-icon-literal": 1
+  },
+  "src/components/chat/SessionSidebar.tsx": {
+    "list-row-border-width": 1,
+    "emoji-icon-literal": 3
+  },
+  "src/components/console/ChannelsView.tsx": {
+    "emoji-icon-literal": 10
+  },
+  "src/components/console/DevicesView.tsx": {
+    "emoji-icon-literal": 2
+  },
+  "src/components/console/FileListView.tsx": {
+    "emoji-icon-literal": 10
+  },
+  "src/components/console/HermesModelSelectionView.tsx": {
+    "list-row-border-width": 1,
+    "emoji-icon-literal": 2
+  },
+  "src/components/console/ModelConfigSection.tsx": {
+    "list-row-border-width": 1
+  },
+  "src/components/console/ModelsView.tsx": {
+    "emoji-icon-literal": 2
+  },
+  "src/components/console/NodeDetailView.tsx": {
+    "list-row-border-width": 1
+  },
+  "src/components/console/NodesView.tsx": {
+    "emoji-icon-literal": 8
+  },
+  "src/components/console/ToolsView.tsx": {
+    "emoji-icon-literal": 3
+  },
+  "src/components/MessageBubble.tsx": {
+    "list-row-border-width": 1
+  },
+  "src/components/pro/ProPaywallOverlay.tsx": {
+    "emoji-icon-literal": 5
+  },
+  "src/screens/ChatScreen/components/AppUpdateAnnouncementModal.tsx": {
+    "emoji-icon-literal": 1
+  },
   "src/screens/ChatScreen/components/ChatSharePosterModal.tsx": {
     "border-radius-literal": 3,
     "hardcoded-color": 13,
     "font-size-literal": 10,
-    "border-width-literal": 6
+    "border-width-literal": 6,
+    "emoji-icon-literal": 2,
+    "screen-font-size-budget": 1
+  },
+  "src/screens/ChatScreen/components/YouMindSkillPickerModal.tsx": {
+    "screen-font-size-budget": 1
+  },
+  "src/screens/ChatScreen/YouMindChatTab.tsx": {
+    "screen-font-size-budget": 1
+  },
+  "src/screens/ConfigScreen/ConfigScreenLayout.tsx": {
+    "list-row-border-width": 1,
+    "screen-font-size-budget": 3
+  },
+  "src/screens/ConfigScreen/DesignSystemScreen.tsx": {
+    "screen-font-size-budget": 2
+  },
+  "src/screens/ConfigScreen/GatewayConfigBackupsScreen.tsx": {
+    "emoji-icon-literal": 1
+  },
+  "src/screens/ConfigScreen/ReleaseNotesHistoryScreen.tsx": {
+    "emoji-icon-literal": 1
+  },
+  "src/screens/ConsoleScreen/AgentListScreen.tsx": {
+    "emoji-icon-literal": 1,
+    "screen-font-size-budget": 1
+  },
+  "src/screens/ConsoleScreen/AgentSessionsBoardScreen.tsx": {
+    "list-row-border-width": 1,
+    "screen-font-size-budget": 4
+  },
+  "src/screens/ConsoleScreen/ChatHistoryDetailScreen.tsx": {
+    "list-row-border-width": 1,
+    "emoji-icon-literal": 1
+  },
+  "src/screens/ConsoleScreen/ChatHistoryScreen.tsx": {
+    "list-row-border-width": 1,
+    "emoji-icon-literal": 2,
+    "screen-font-size-budget": 2
+  },
+  "src/screens/ConsoleScreen/ConsoleMenuScreen.tsx": {
+    "emoji-icon-literal": 20,
+    "screen-font-size-budget": 7
+  },
+  "src/screens/ConsoleScreen/CronDetailScreen.tsx": {
+    "screen-font-size-budget": 3
+  },
+  "src/screens/ConsoleScreen/CronEditorScreen.tsx": {
+    "list-row-border-width": 1,
+    "screen-font-size-budget": 2
+  },
+  "src/screens/ConsoleScreen/CronListScreen.tsx": {
+    "emoji-icon-literal": 2,
+    "screen-font-size-budget": 2
+  },
+  "src/screens/ConsoleScreen/CronWizardScreen.tsx": {
+    "emoji-icon-literal": 9,
+    "screen-font-size-budget": 2
+  },
+  "src/screens/ConsoleScreen/FavoriteMessageDetailScreen.tsx": {
+    "emoji-icon-literal": 1
+  },
+  "src/screens/ConsoleScreen/HeartbeatSettingsScreen.tsx": {
+    "list-row-border-width": 1,
+    "emoji-icon-literal": 1
+  },
+  "src/screens/ConsoleScreen/HermesAwareCronScreens.tsx": {
+    "emoji-icon-literal": 1
+  },
+  "src/screens/ConsoleScreen/HermesConsoleMenuScreen.tsx": {
+    "emoji-icon-literal": 2,
+    "screen-font-size-budget": 2
+  },
+  "src/screens/ConsoleScreen/HermesCronDetailScreen.tsx": {
+    "emoji-icon-literal": 3,
+    "screen-font-size-budget": 1
+  },
+  "src/screens/ConsoleScreen/HermesCronListScreen.tsx": {
+    "emoji-icon-literal": 3
+  },
+  "src/screens/ConsoleScreen/HermesCronWizardScreen.tsx": {
+    "emoji-icon-literal": 9,
+    "screen-font-size-budget": 2
+  },
+  "src/screens/ConsoleScreen/LogScreen.tsx": {
+    "list-row-border-width": 1,
+    "emoji-icon-literal": 1
+  },
+  "src/screens/ConsoleScreen/sharedNavigator.tsx": {
+    "emoji-icon-literal": 1
+  },
+  "src/screens/ConsoleScreen/SkillDetailScreen.tsx": {
+    "emoji-icon-literal": 1,
+    "screen-font-size-budget": 4
+  },
+  "src/screens/ConsoleScreen/SkillListScreen.tsx": {
+    "emoji-icon-literal": 2,
+    "screen-font-size-budget": 3
   },
   "src/screens/ConsoleScreen/StatsPosterModal.tsx": {
     "border-radius-literal": 4,
     "hardcoded-color": 3,
     "font-size-literal": 10,
-    "border-width-literal": 2
+    "border-width-literal": 2,
+    "emoji-icon-literal": 1
+  },
+  "src/screens/ConsoleScreen/UsageScreen.tsx": {
+    "emoji-icon-literal": 1,
+    "screen-font-size-budget": 2
+  },
+  "src/screens/ConsoleScreen/YouMindBoardDetailScreen.tsx": {
+    "emoji-icon-literal": 4
+  },
+  "src/screens/ConsoleScreen/YouMindBoardItemWebViewScreen.tsx": {
+    "emoji-icon-literal": 2
+  },
+  "src/screens/ConsoleScreen/YouMindBoardPickerScreen.tsx": {
+    "emoji-icon-literal": 2
+  },
+  "src/screens/ConsoleScreen/YouMindConsoleMenuScreen.tsx": {
+    "emoji-icon-literal": 4
+  },
+  "src/screens/DiscoverScreen/ClawHubBrowseScreen.tsx": {
+    "emoji-icon-literal": 2
+  },
+  "src/screens/DiscoverScreen/components/DiscoverSkillCard.tsx": {
+    "list-row-border-width": 1,
+    "screen-font-size-budget": 2
+  },
+  "src/screens/DiscoverScreen/components/DiscoverSkillSkeleton.tsx": {
+    "list-row-border-width": 1,
+    "screen-font-size-budget": 1
+  },
+  "src/screens/DiscoverScreen/DiscoverDetailScreen.tsx": {
+    "screen-font-size-budget": 4
+  },
+  "src/screens/DiscoverScreen/DiscoverHomeScreen.tsx": {
+    "emoji-icon-literal": 2,
+    "screen-font-size-budget": 2
+  },
+  "src/screens/DiscoverScreen/SkillsShBrowseScreen.tsx": {
+    "emoji-icon-literal": 2
+  },
+  "src/screens/LiveScreen/LiveOverview.tsx": {
+    "screen-font-size-budget": 3
+  },
+  "src/screens/ProfileScreen/YouMindAddOnCreditsScreen.tsx": {
+    "emoji-icon-literal": 2
+  },
+  "src/screens/ProfileScreen/YouMindProfileScreen.tsx": {
+    "emoji-icon-literal": 2,
+    "screen-font-size-budget": 4
   }
 }
