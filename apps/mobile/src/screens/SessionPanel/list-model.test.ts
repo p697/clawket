@@ -3,7 +3,7 @@ import {
   buildSessionBoardRows,
   filterSessionBoardRows,
   summarizeSessionBoardRows,
-} from './sessions-board';
+} from './list-model';
 
 function makeSession(overrides: Partial<SessionInfo> = {}): SessionInfo {
   return {
@@ -13,7 +13,7 @@ function makeSession(overrides: Partial<SessionInfo> = {}): SessionInfo {
   };
 }
 
-describe('sessions-board', () => {
+describe('SessionPanel list model', () => {
   it('classifies active recent and idle sessions by updatedAt', () => {
     const now = 1_000_000;
     const rows = buildSessionBoardRows([

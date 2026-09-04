@@ -21,7 +21,7 @@ import {
   type SessionBoardKind,
   type SessionBoardRow,
   type SessionBoardStatus,
-} from './sessions-board';
+} from '../SessionPanel/list-model';
 
 type SessionsBoardNavigation = NativeStackNavigationProp<ConsoleStackParamList, 'SessionsBoard'>;
 

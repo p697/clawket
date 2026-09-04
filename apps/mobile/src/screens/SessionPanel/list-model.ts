@@ -1,6 +1,8 @@
 import { SessionInfo } from '../../types';
 import { sanitizeSilentPreviewText, sessionLabel } from '../../utils/chat-message';
 
+/** Shared list-mode projection used by the 3.0 SessionPanel. */
+
 export type SessionBoardStatus = 'active' | 'recent' | 'idle';
 export type SessionBoardKind = 'main' | 'subagent' | 'cron' | 'group' | 'direct' | 'other';
 

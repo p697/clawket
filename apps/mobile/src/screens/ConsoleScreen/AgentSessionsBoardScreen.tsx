@@ -26,7 +26,7 @@ import {
   buildSessionBoardRows,
   type SessionBoardKind,
   type SessionBoardRow,
-} from './sessions-board';
+} from '../SessionPanel/list-model';
 
 type AgentSessionsBoardNavigation = NativeStackNavigationProp<ConsoleStackParamList, 'AgentSessionsBoard'>;
 
