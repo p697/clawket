@@ -12,7 +12,7 @@
   },
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "deploy": "node ../../scripts/relay/run-wrangler.mjs deploy relay-worker",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "lint": "echo \"No lint for relay worker\""

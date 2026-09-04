@@ -13,13 +13,29 @@
   "devDependencies": {
     "@types/node": "^22.13.9",
     "typescript": "^5.8.2",
-    "vitest": "^3.2.4",
-    "wrangler": "^4.4.0"
+    "vitest": "^3.2.7",
+    "wrangler": "^4.129.0"
   },
   "overrides": {
+    "@react-native/metro-config": "0.83.10",
+    "@xmldom/xmldom": "0.8.15",
+    "brace-expansion@<1.1.18": "1.1.18",
+    "brace-expansion@>=2 <3": "2.1.4",
+    "brace-expansion@>=5 <6": "5.0.9",
+    "browserslist": "4.28.9",
     "expo": "~55.0.31",
     "expo-modules-core": "~55.0.26",
-    "jest-expo": "~55.0.22"
+    "form-data": "4.0.6",
+    "handlebars": "4.7.9",
+    "jest-expo": "~55.0.22",
+    "js-yaml@<4": "3.15.2",
+    "lodash": "4.18.1",
+    "metro": "0.83.8",
+    "metro-config": "0.83.8",
+    "metro-transform-worker": "0.83.8",
+    "picomatch@>=2 <3": "2.3.2",
+    "picomatch@>=4 <5": "4.0.7",
+    "shell-quote": "1.10.0"
   },
   "scripts": {
     "postinstall": "node scripts/setup-mobile-node-modules.mjs",
@@ -27,7 +43,9 @@
     "check:required": "npm run typecheck && npm run test:required && npm run mobile:check:design-system && npm run check:docs",
     "typecheck": "npm run mobile:typecheck && npm run relay:typecheck && npm run bridge:typecheck",
     "test": "npm run mobile:test -- --runInBand && npm run relay:test && npm run bridge:test",
-    "test:required": "npm run mobile:test -- --runInBand && npm run relay:test && npm run bridge:test:required",
+    "test:required": "npm run mobile:test -- --runInBand && npm run relay:test && npm run bridge:test:required && node --test apps/mobile/scripts/patch-android-native-deps.test.mjs scripts/bridge/publish-cli.test.mjs scripts/metrics/loc.test.mjs scripts/relay/run-wrangler.test.mjs",
+    "test:compat": "vitest run --config tests/compat/vitest.config.ts",
+    "metrics:loc": "node scripts/metrics/loc.mjs",
     "build": "npm run bridge:build",
     "mobile:start": "npm run --workspace clawket start",
     "mobile:ios": "npm run --workspace clawket ios",

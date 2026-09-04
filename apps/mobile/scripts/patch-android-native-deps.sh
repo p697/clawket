@@ -1,17 +1,30 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT_DIR="${CLAWKET_MOBILE_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 
 python3 - "$ROOT_DIR" <<'PY'
 from pathlib import Path
 import sys
 
 root = Path(sys.argv[1])
+repo_root = root.parent.parent
+
+
+def dependency_file(relative_path: str) -> Path:
+    candidates = [
+        root / "node_modules" / relative_path,
+        repo_root / "node_modules" / relative_path,
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    searched = ", ".join(str(candidate) for candidate in candidates)
+    raise SystemExit(f"Missing dependency Gradle file; searched: {searched}")
 
 targets = [
     (
-        root / "node_modules/@react-native-menu/menu/android/build.gradle",
+        dependency_file("@react-native-menu/menu/android/build.gradle"),
         """      // MenuViewManager
       if (getReactNativeMinorVersion() <= 75) {
         java.srcDirs += "src/reactNativeVersionPatch/MenuViewManager/75"
@@ -32,7 +45,7 @@ targets = [
 """,
     ),
     (
-        root / "node_modules/react-native-keyboard-controller/android/build.gradle",
+        dependency_file("react-native-keyboard-controller/android/build.gradle"),
         """      if (project.ext.shouldUseBaseReactPackage()) {
         java.srcDirs += ['src/base']
       } else {
@@ -53,9 +66,6 @@ targets = [
 ]
 
 for path, needle, replacement in targets:
-    if not path.exists():
-        raise SystemExit(f"Missing dependency Gradle file: {path}")
-
     text = path.read_text()
     if "kotlin.srcDirs += java.srcDirs" in text:
         continue

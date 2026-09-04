@@ -13,6 +13,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -31,3 +33,11 @@ jobs:
 
       - name: Run required checks
         run: npm run check:required
+
+      - name: Run v1 protocol compatibility replay
+        run: npm run test:compat
+
+      - name: Audit high-severity dependencies in both lockfiles
+        run: |
+          npm audit --audit-level=high
+          npm --prefix apps/mobile audit --audit-level=high --workspaces=false

@@ -77,7 +77,7 @@ That script rebuilds `android/app/keystore.properties` from:
 
 Do not commit the restored `keystore.properties` file.
 
-After `npm install`, the repo now also auto-runs `./scripts/patch-android-native-deps.sh` to re-apply the Android Kotlin source-set fix needed by `@react-native-menu/menu` and `react-native-keyboard-controller` on the current Expo / React Native toolchain.
+After `npm install`, the repo now also auto-runs `./scripts/patch-android-native-deps.sh` to re-apply the Android Kotlin source-set fix needed by `@react-native-menu/menu` and `react-native-keyboard-controller` on the current Expo / React Native toolchain. The patcher supports both a standalone mobile install and dependencies hoisted by a root workspace `npm ci`.
 
 ## Required Env Values For Google Play Builds
 

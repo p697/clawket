@@ -104,7 +104,7 @@ describe('persistAgentDetailChanges', () => {
         hash: 'hash-1',
       })),
       setAgentFile: jest
-        .fn<any>()
+        .fn<() => Promise<{ ok: boolean }>>()
         .mockResolvedValueOnce({ ok: true })
         .mockResolvedValueOnce({ ok: false }),
     };

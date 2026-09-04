@@ -1,0 +1,184 @@
+{
+  "schemaVersion": 1,
+  "id": "registry-openclaw-v1",
+  "backend": "registry",
+  "recordedAt": "2026-09-05T00:00:00.000Z",
+  "description": "OpenClaw Registry v1 register, access-code refresh, encrypted session resolution, and single-use claim sequence.",
+  "captureMethod": "Request shapes were extracted from the pinned clients and Bridge pairing implementation, sanitized, then replayed against a real Wrangler dev Registry process.",
+  "sources": [
+    {
+      "label": "2.1.0 shipped production build",
+      "commit": "c2bfe068da15837d94dce70c3247fb39759e9c59",
+      "provenance": "production-build"
+    },
+    {
+      "label": "unversioned pre-3.0 session-resolve snapshot",
+      "commit": "d9c1adae8192839c78cb6e10091551cf342c3a93",
+      "provenance": "pre-3.0-snapshot"
+    }
+  ],
+  "ignoredPaths": [],
+  "frames": [
+    {
+      "sequence": 1,
+      "label": "register.request",
+      "kind": "http",
+      "direction": "bridge-to-registry",
+      "payload": {
+        "method": "POST",
+        "path": "/v1/pair/register",
+        "body": { "displayName": "Compatibility Mac", "preferredRegion": "us" }
+      }
+    },
+    {
+      "sequence": 2,
+      "label": "register.response",
+      "kind": "http",
+      "direction": "registry-to-bridge",
+      "payload": {
+        "status": 200,
+        "body": {
+          "gatewayId": "$capture:gatewayId:gateway-id",
+          "relaySecret": "$capture:relaySecret:nonempty-string",
+          "relayUrl": "$capture:relayUrl:url",
+          "accessCode": "$capture:registerAccessCode:nonempty-string",
+          "accessCodeExpiresAt": "$capture:registerAccessExpiresAt:iso8601",
+          "displayName": "Compatibility Mac",
+          "region": "us"
+        }
+      }
+    },
+    {
+      "sequence": 3,
+      "label": "access-code.request",
+      "kind": "http",
+      "direction": "bridge-to-registry",
+      "payload": {
+        "method": "POST",
+        "path": "/v1/pair/access-code",
+        "body": {
+          "gatewayId": "$ref:gatewayId",
+          "relaySecret": "$ref:relaySecret",
+          "displayName": "Compatibility Mac 2"
+        }
+      }
+    },
+    {
+      "sequence": 4,
+      "label": "access-code.response",
+      "kind": "http",
+      "direction": "registry-to-bridge",
+      "payload": {
+        "status": 200,
+        "body": {
+          "gatewayId": "$ref:gatewayId",
+          "relayUrl": "$ref:relayUrl",
+          "accessCode": "$capture:accessCode:nonempty-string",
+          "accessCodeExpiresAt": "$capture:accessExpiresAt:iso8601",
+          "displayName": "Compatibility Mac 2",
+          "region": "us"
+        }
+      }
+    },
+    {
+      "sequence": 5,
+      "label": "session-create.request",
+      "kind": "http",
+      "direction": "bridge-to-registry",
+      "payload": {
+        "method": "POST",
+        "path": "/v1/pair/session",
+        "body": {
+          "gatewayId": "$ref:gatewayId",
+          "relaySecret": "$ref:relaySecret",
+          "codeHash": "3f63d25fcb898ecfd6c2e2322bfdb11f44fe17dd0dc359e70b7246224bb223e9",
+          "shortCodeHash": "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92",
+          "linkPayload": {
+            "nonce": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYX",
+            "ciphertext": "CVnmZpjgNOwAinuGGvP3Pz2TWTisr9YqlBPsUQX_K-N_03fy6kxHm2LQAg"
+          },
+          "codePayload": {
+            "nonce": "GBkaGxwdHh8gISIjJCUmJygpKissLS4v",
+            "ciphertext": "jsbEIuq1G0BEyGQJ6C-uclVav65fyvIyGJZQzQgLdZByg8z5dutvt0GL-Q"
+          }
+        }
+      }
+    },
+    {
+      "sequence": 6,
+      "label": "session-create.response",
+      "kind": "http",
+      "direction": "registry-to-bridge",
+      "payload": {
+        "status": 200,
+        "body": {
+          "sessionId": "$capture:sessionId:session-id",
+          "pairingUrl": "$capture:pairingUrl:url",
+          "expiresAt": "$ref:accessExpiresAt",
+          "displayName": "Compatibility Mac 2",
+          "capabilities": []
+        }
+      }
+    },
+    {
+      "sequence": 7,
+      "label": "session-resolve.request",
+      "kind": "http",
+      "direction": "client-to-registry",
+      "payload": {
+        "method": "POST",
+        "path": "/v1/pair/session/resolve",
+        "body": { "codeHash": "3f63d25fcb898ecfd6c2e2322bfdb11f44fe17dd0dc359e70b7246224bb223e9" }
+      }
+    },
+    {
+      "sequence": 8,
+      "label": "session-resolve.response",
+      "kind": "http",
+      "direction": "registry-to-client",
+      "payload": {
+        "status": 200,
+        "body": {
+          "sessionId": "$ref:sessionId",
+          "expiresAt": "$ref:accessExpiresAt",
+          "displayName": "Compatibility Mac 2",
+          "encryptedPayload": {
+            "nonce": "GBkaGxwdHh8gISIjJCUmJygpKissLS4v",
+            "ciphertext": "jsbEIuq1G0BEyGQJ6C-uclVav65fyvIyGJZQzQgLdZByg8z5dutvt0GL-Q"
+          }
+        }
+      }
+    },
+    {
+      "sequence": 9,
+      "label": "claim.request",
+      "kind": "http",
+      "direction": "client-to-registry",
+      "payload": {
+        "method": "POST",
+        "path": "/v1/pair/claim",
+        "body": {
+          "gatewayId": "$ref:gatewayId",
+          "accessCode": "$ref:accessCode",
+          "clientLabel": "Compatibility iPhone"
+        }
+      }
+    },
+    {
+      "sequence": 10,
+      "label": "claim.response",
+      "kind": "http",
+      "direction": "registry-to-client",
+      "payload": {
+        "status": 200,
+        "body": {
+          "gatewayId": "$ref:gatewayId",
+          "relayUrl": "$ref:relayUrl",
+          "clientToken": "$capture:clientToken:nonempty-string",
+          "displayName": "Compatibility Mac 2",
+          "region": "us"
+        }
+      }
+    }
+  ]
+}

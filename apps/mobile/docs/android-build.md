@@ -343,7 +343,7 @@ android/app/build/outputs/bundle/release/app-release.aab
 
 The fallback local AAB build restores the ignored local signing file automatically before Gradle runs, but it still requires `CLAWKET_ANDROID_KEYSTORE_PATH` plus the keystore passwords.
 
-If dependencies are reinstalled, `npm install` now also runs `./scripts/patch-android-native-deps.sh` via `postinstall`, so the Kotlin source-set fix is re-applied automatically.
+If dependencies are reinstalled, `npm install` now also runs `./scripts/patch-android-native-deps.sh` via `postinstall`, so the Kotlin source-set fix is re-applied automatically for both standalone mobile installs and root workspace installs with hoisted dependencies.
 
 For a locally installable release APK signed with the same upload key, use:
 

@@ -1,0 +1,247 @@
+{
+  "schemaVersion": 1,
+  "id": "bridge-openclaw-forwarding-v1",
+  "backend": "bridge",
+  "recordedAt": "2026-09-05T00:00:00.000Z",
+  "description": "BridgeRuntime forwards the v1 OpenClaw handshake and application envelopes without changing application payloads.",
+  "captureMethod": "The pinned Bridge runtime frame boundary was replayed in-process while its Relay peer and local Gateway peer used real websocket servers.",
+  "sources": [
+    {
+      "label": "latest pre-3.0 Bridge runtime snapshot",
+      "commit": "9cf26e59dc6269292e8b6769ba1db47023157597",
+      "provenance": "pre-3.0-snapshot"
+    }
+  ],
+  "ignoredPaths": ["/ts", "/payload/ts"],
+  "frames": [
+    {
+      "sequence": 1,
+      "label": "relay.connection",
+      "kind": "connection",
+      "direction": "bridge-to-relay",
+      "payload": {
+        "path": "/ws",
+        "query": {
+          "gatewayId": "$capture:gatewayId:gateway-id",
+          "role": "gateway",
+          "clientId": "compat-bridge"
+        },
+        "authorization": "$capture:gatewayAuthorization:nonempty-string"
+      }
+    },
+    {
+      "sequence": 2,
+      "label": "challenge.local-to-bridge",
+      "kind": "websocket",
+      "direction": "local-to-bridge",
+      "payload": { "type": "event", "event": "connect.challenge", "payload": { "nonce": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd", "ts": 1778198400200 } }
+    },
+    {
+      "sequence": 3,
+      "label": "challenge.bridge-to-relay",
+      "kind": "websocket",
+      "direction": "bridge-to-relay",
+      "payload": { "type": "event", "event": "connect.challenge", "payload": { "nonce": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd", "ts": 1778198400200 } }
+    },
+    {
+      "sequence": 4,
+      "label": "connect-31a.relay-to-bridge",
+      "kind": "websocket",
+      "direction": "relay-to-bridge",
+      "payload": { "type": "req", "id": "connect-31a-v1", "method": "connect", "params": { "minProtocol": 3, "maxProtocol": 4, "client": { "id": "openclaw-ios", "displayName": "Clawket", "version": "2.1.0", "platform": "ios", "mode": "ui", "deviceFamily": "iphone" }, "caps": ["tool-events"], "commands": ["canvas.present", "canvas.hide", "canvas.navigate", "canvas.eval", "canvas.snapshot"], "role": "operator", "scopes": ["operator.admin", "operator.read", "operator.write", "operator.pairing"], "device": { "id": "56475aa75463474c0285df5dbf2bcab73da651358839e9b77481b2eab107708c", "publicKey": "A6EHv_POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg", "signature": "DIoYV2K0RoTC-en3rk9VOobCvt3x3tp58M3iU3quAA8vtNhl3zGBL1L90Eq00l3dxMAFm92BdUPwaUEI6Q7dDQ", "signedAt": 1778198400222, "nonce": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd" }, "auth": { "token": "fixture-openclaw-token" } } }
+    },
+    {
+      "sequence": 5,
+      "label": "connect-31a.bridge-to-local",
+      "kind": "websocket",
+      "direction": "bridge-to-local",
+      "payload": { "type": "req", "id": "connect-31a-v1", "method": "connect", "params": { "minProtocol": 3, "maxProtocol": 4, "client": { "id": "openclaw-ios", "displayName": "Clawket", "version": "2.1.0", "platform": "ios", "mode": "ui", "deviceFamily": "iphone" }, "caps": ["tool-events"], "commands": ["canvas.present", "canvas.hide", "canvas.navigate", "canvas.eval", "canvas.snapshot"], "role": "operator", "scopes": ["operator.admin", "operator.read", "operator.write", "operator.pairing"], "device": { "id": "56475aa75463474c0285df5dbf2bcab73da651358839e9b77481b2eab107708c", "publicKey": "A6EHv_POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg", "signature": "DIoYV2K0RoTC-en3rk9VOobCvt3x3tp58M3iU3quAA8vtNhl3zGBL1L90Eq00l3dxMAFm92BdUPwaUEI6Q7dDQ", "signedAt": 1778198400222, "nonce": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd" }, "auth": { "token": "fixture-openclaw-token" } } }
+    },
+    {
+      "sequence": 6,
+      "label": "connect-31a.local-to-bridge",
+      "kind": "websocket",
+      "direction": "local-to-bridge",
+      "payload": { "type": "res", "id": "connect-31a-v1", "ok": true, "payload": { "server": { "version": "fixture-openclaw", "connId": "fixture-connection" }, "policy": { "tickIntervalMs": 30000 }, "snapshot": { "uptimeMs": 10, "presence": [] } } }
+    },
+    {
+      "sequence": 7,
+      "label": "connect-31a.bridge-to-relay",
+      "kind": "websocket",
+      "direction": "bridge-to-relay",
+      "payload": { "type": "res", "id": "connect-31a-v1", "ok": true, "payload": { "server": { "version": "fixture-openclaw", "connId": "fixture-connection" }, "policy": { "tickIntervalMs": 30000 }, "snapshot": { "uptimeMs": 10, "presence": [] } } }
+    },
+    {
+      "sequence": 8,
+      "label": "connect-c2.relay-to-bridge",
+      "kind": "websocket",
+      "direction": "relay-to-bridge",
+      "annotation": "The 2.1.0 App frame advertises maxProtocol 3 before the Bridge compatibility patch.",
+      "payload": { "type": "req", "id": "connect-c2-v1", "method": "connect", "params": { "minProtocol": 3, "maxProtocol": 3, "client": { "id": "openclaw-ios", "displayName": "Clawket", "version": "2.1.0", "platform": "ios", "mode": "ui", "deviceFamily": "iphone" }, "caps": ["tool-events"], "commands": ["canvas.present", "canvas.hide", "canvas.navigate", "canvas.eval", "canvas.snapshot"], "role": "operator", "scopes": ["operator.admin", "operator.read", "operator.write", "operator.pairing"], "device": { "id": "56475aa75463474c0285df5dbf2bcab73da651358839e9b77481b2eab107708c", "publicKey": "A6EHv_POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg", "signature": "PUtFJmaKw2PM0bZx6TEar0j3TKsxM3Jgm5swfUZE5g0h9i2E6uVdP_odI2tV4YBXidtKgFzfnmROPBiSIv6HDg", "signedAt": 1778198400111, "nonce": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" }, "auth": { "token": "fixture-openclaw-token" } } }
+    },
+    {
+      "sequence": 9,
+      "label": "connect-c2.bridge-to-local",
+      "kind": "websocket",
+      "direction": "bridge-to-local",
+      "annotation": "BridgeRuntime raises maxProtocol 3 to the OpenClaw Gateway minimum-compatible maximum 4 without changing the rest of the signed request.",
+      "payload": { "type": "req", "id": "connect-c2-v1", "method": "connect", "params": { "minProtocol": 3, "maxProtocol": 4, "client": { "id": "openclaw-ios", "displayName": "Clawket", "version": "2.1.0", "platform": "ios", "mode": "ui", "deviceFamily": "iphone" }, "caps": ["tool-events"], "commands": ["canvas.present", "canvas.hide", "canvas.navigate", "canvas.eval", "canvas.snapshot"], "role": "operator", "scopes": ["operator.admin", "operator.read", "operator.write", "operator.pairing"], "device": { "id": "56475aa75463474c0285df5dbf2bcab73da651358839e9b77481b2eab107708c", "publicKey": "A6EHv_POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg", "signature": "PUtFJmaKw2PM0bZx6TEar0j3TKsxM3Jgm5swfUZE5g0h9i2E6uVdP_odI2tV4YBXidtKgFzfnmROPBiSIv6HDg", "signedAt": 1778198400111, "nonce": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" }, "auth": { "token": "fixture-openclaw-token" } } }
+    },
+    {
+      "sequence": 10,
+      "label": "connect-c2.local-to-bridge",
+      "kind": "websocket",
+      "direction": "local-to-bridge",
+      "payload": { "type": "res", "id": "connect-c2-v1", "ok": true, "payload": { "server": { "version": "fixture-openclaw", "connId": "fixture-c2" } } }
+    },
+    {
+      "sequence": 11,
+      "label": "connect-c2.bridge-to-relay",
+      "kind": "websocket",
+      "direction": "bridge-to-relay",
+      "payload": { "type": "res", "id": "connect-c2-v1", "ok": true, "payload": { "server": { "version": "fixture-openclaw", "connId": "fixture-c2" } } }
+    },
+    {
+      "sequence": 12,
+      "label": "connect-d9c.relay-to-bridge",
+      "kind": "websocket",
+      "direction": "relay-to-bridge",
+      "payload": { "type": "req", "id": "connect-d9c-v1", "method": "connect", "params": { "minProtocol": 3, "maxProtocol": 4, "client": { "id": "openclaw-ios", "displayName": "Clawket", "version": "2.1.2", "platform": "ios", "mode": "ui", "deviceFamily": "iphone" }, "caps": ["tool-events"], "commands": ["canvas.present", "canvas.hide", "canvas.navigate", "canvas.eval", "canvas.snapshot"], "role": "operator", "scopes": ["operator.admin", "operator.approvals", "operator.pairing", "operator.questions", "operator.read", "operator.talk.secrets", "operator.write"], "device": { "id": "56475aa75463474c0285df5dbf2bcab73da651358839e9b77481b2eab107708c", "publicKey": "A6EHv_POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg", "signature": "znX5wNKUg6c_2XusJ7jBuVRqieVXAwIyYNeizO9Ofr2HyBEBH1eJt_5el31hBCqP-YbV3BEggh20Lf8Wh8LvAw", "signedAt": 1778198400300, "nonce": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" }, "auth": { "token": "fixture-openclaw-token" } } }
+    },
+    {
+      "sequence": 13,
+      "label": "connect-d9c.bridge-to-local",
+      "kind": "websocket",
+      "direction": "bridge-to-local",
+      "payload": { "type": "req", "id": "connect-d9c-v1", "method": "connect", "params": { "minProtocol": 3, "maxProtocol": 4, "client": { "id": "openclaw-ios", "displayName": "Clawket", "version": "2.1.2", "platform": "ios", "mode": "ui", "deviceFamily": "iphone" }, "caps": ["tool-events"], "commands": ["canvas.present", "canvas.hide", "canvas.navigate", "canvas.eval", "canvas.snapshot"], "role": "operator", "scopes": ["operator.admin", "operator.approvals", "operator.pairing", "operator.questions", "operator.read", "operator.talk.secrets", "operator.write"], "device": { "id": "56475aa75463474c0285df5dbf2bcab73da651358839e9b77481b2eab107708c", "publicKey": "A6EHv_POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg", "signature": "znX5wNKUg6c_2XusJ7jBuVRqieVXAwIyYNeizO9Ofr2HyBEBH1eJt_5el31hBCqP-YbV3BEggh20Lf8Wh8LvAw", "signedAt": 1778198400300, "nonce": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" }, "auth": { "token": "fixture-openclaw-token" } } }
+    },
+    {
+      "sequence": 14,
+      "label": "connect-d9c.local-to-bridge",
+      "kind": "websocket",
+      "direction": "local-to-bridge",
+      "payload": { "type": "res", "id": "connect-d9c-v1", "ok": true, "payload": { "server": { "version": "fixture-openclaw", "connId": "fixture-d9c" } } }
+    },
+    {
+      "sequence": 15,
+      "label": "connect-d9c.bridge-to-relay",
+      "kind": "websocket",
+      "direction": "bridge-to-relay",
+      "payload": { "type": "res", "id": "connect-d9c-v1", "ok": true, "payload": { "server": { "version": "fixture-openclaw", "connId": "fixture-d9c" } } }
+    },
+    {
+      "sequence": 16,
+      "label": "connect-start.relay-to-bridge",
+      "kind": "websocket",
+      "direction": "relay-to-bridge",
+      "annotation": "Synthetic compatibility alias; no released 2.1.x App is claimed as its source.",
+      "payload": { "type": "req", "id": "connect-start-v1", "method": "connect.start", "params": { "minProtocol": 3, "maxProtocol": 4, "client": { "id": "openclaw-ios", "displayName": "Clawket", "version": "2.1.2", "platform": "ios", "mode": "ui", "deviceFamily": "iphone" }, "caps": ["tool-events"], "commands": ["canvas.present", "canvas.hide", "canvas.navigate", "canvas.eval", "canvas.snapshot"], "role": "operator", "scopes": ["operator.admin", "operator.approvals", "operator.pairing", "operator.questions", "operator.read", "operator.talk.secrets", "operator.write"], "device": { "id": "56475aa75463474c0285df5dbf2bcab73da651358839e9b77481b2eab107708c", "publicKey": "A6EHv_POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg", "signature": "znX5wNKUg6c_2XusJ7jBuVRqieVXAwIyYNeizO9Ofr2HyBEBH1eJt_5el31hBCqP-YbV3BEggh20Lf8Wh8LvAw", "signedAt": 1778198400300, "nonce": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" }, "auth": { "token": "fixture-openclaw-token" } } }
+    },
+    {
+      "sequence": 17,
+      "label": "connect-start.bridge-to-local",
+      "kind": "websocket",
+      "direction": "bridge-to-local",
+      "annotation": "Synthetic compatibility alias forwarded without changing its method or signed parameters.",
+      "payload": { "type": "req", "id": "connect-start-v1", "method": "connect.start", "params": { "minProtocol": 3, "maxProtocol": 4, "client": { "id": "openclaw-ios", "displayName": "Clawket", "version": "2.1.2", "platform": "ios", "mode": "ui", "deviceFamily": "iphone" }, "caps": ["tool-events"], "commands": ["canvas.present", "canvas.hide", "canvas.navigate", "canvas.eval", "canvas.snapshot"], "role": "operator", "scopes": ["operator.admin", "operator.approvals", "operator.pairing", "operator.questions", "operator.read", "operator.talk.secrets", "operator.write"], "device": { "id": "56475aa75463474c0285df5dbf2bcab73da651358839e9b77481b2eab107708c", "publicKey": "A6EHv_POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg", "signature": "znX5wNKUg6c_2XusJ7jBuVRqieVXAwIyYNeizO9Ofr2HyBEBH1eJt_5el31hBCqP-YbV3BEggh20Lf8Wh8LvAw", "signedAt": 1778198400300, "nonce": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" }, "auth": { "token": "fixture-openclaw-token" } } }
+    },
+    {
+      "sequence": 18,
+      "label": "connect-start.local-to-bridge",
+      "kind": "websocket",
+      "direction": "local-to-bridge",
+      "payload": { "type": "res", "id": "connect-start-v1", "ok": true, "payload": { "server": { "version": "fixture-openclaw", "connId": "fixture-connection-alias" } } }
+    },
+    {
+      "sequence": 19,
+      "label": "connect-start.bridge-to-relay",
+      "kind": "websocket",
+      "direction": "bridge-to-relay",
+      "payload": { "type": "res", "id": "connect-start-v1", "ok": true, "payload": { "server": { "version": "fixture-openclaw", "connId": "fixture-connection-alias" } } }
+    },
+    {
+      "sequence": 20,
+      "label": "chat.relay-to-bridge",
+      "kind": "websocket",
+      "direction": "relay-to-bridge",
+      "payload": { "type": "req", "id": "chat-v1", "method": "chat.send", "params": { "sessionKey": "agent:main:main", "message": "compat hello", "thinking": "off", "deliver": false, "idempotencyKey": "compat-chat-1" } }
+    },
+    {
+      "sequence": 21,
+      "label": "chat.bridge-to-local",
+      "kind": "websocket",
+      "direction": "bridge-to-local",
+      "payload": { "type": "req", "id": "chat-v1", "method": "chat.send", "params": { "sessionKey": "agent:main:main", "message": "compat hello", "thinking": "off", "deliver": false, "idempotencyKey": "compat-chat-1" } }
+    },
+    {
+      "sequence": 22,
+      "label": "response.local-to-bridge",
+      "kind": "websocket",
+      "direction": "local-to-bridge",
+      "payload": { "type": "res", "id": "chat-v1", "ok": true, "payload": { "runId": "compat-run-1" } }
+    },
+    {
+      "sequence": 23,
+      "label": "response.bridge-to-relay",
+      "kind": "websocket",
+      "direction": "bridge-to-relay",
+      "payload": { "type": "res", "id": "chat-v1", "ok": true, "payload": { "runId": "compat-run-1" } }
+    },
+    {
+      "sequence": 24,
+      "label": "sessions.relay-to-bridge",
+      "kind": "websocket",
+      "direction": "relay-to-bridge",
+      "payload": { "type": "req", "id": "sessions-v1", "method": "sessions.list", "params": { "limit": 100, "includeLastMessage": true, "includeDerivedTitles": true } }
+    },
+    {
+      "sequence": 25,
+      "label": "sessions.bridge-to-local",
+      "kind": "websocket",
+      "direction": "bridge-to-local",
+      "payload": { "type": "req", "id": "sessions-v1", "method": "sessions.list", "params": { "limit": 100, "includeLastMessage": true, "includeDerivedTitles": true } }
+    },
+    {
+      "sequence": 26,
+      "label": "sessions.local-to-bridge",
+      "kind": "websocket",
+      "direction": "local-to-bridge",
+      "payload": { "type": "res", "id": "sessions-v1", "ok": true, "payload": { "defaults": { "contextTokens": 200000 }, "sessions": [] } }
+    },
+    {
+      "sequence": 27,
+      "label": "sessions.bridge-to-relay",
+      "kind": "websocket",
+      "direction": "bridge-to-relay",
+      "payload": { "type": "res", "id": "sessions-v1", "ok": true, "payload": { "defaults": { "contextTokens": 200000 }, "sessions": [] } }
+    },
+    {
+      "sequence": 28,
+      "label": "image.relay-to-bridge",
+      "kind": "websocket",
+      "direction": "relay-to-bridge",
+      "payload": { "type": "req", "id": "chat-image-v1", "method": "chat.send", "params": { "sessionKey": "agent:main:main", "message": "compat image", "thinking": "off", "deliver": false, "idempotencyKey": "compat-image-1", "attachments": [{ "type": "image", "mimeType": "image/jpeg", "content": { "$base64": { "decodedBytes": 1572864, "fillByte": 0, "prefixBase64": "/9j/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAb/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFAEBAAAAAAAAAAAAAAAAAAAAAP/EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAMAwEAAhEDEQA/AIwAH//Z", "sha256": "be152331d7e2a258a0aed29704c0d34f889fa2f3bdaf17036a830bbe77a5c27c" } } }] } }
+    },
+    {
+      "sequence": 29,
+      "label": "image.bridge-to-local",
+      "kind": "websocket",
+      "direction": "bridge-to-local",
+      "payload": { "type": "req", "id": "chat-image-v1", "method": "chat.send", "params": { "sessionKey": "agent:main:main", "message": "compat image", "thinking": "off", "deliver": false, "idempotencyKey": "compat-image-1", "attachments": [{ "type": "image", "mimeType": "image/jpeg", "content": { "$base64": { "decodedBytes": 1572864, "fillByte": 0, "prefixBase64": "/9j/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAb/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFAEBAAAAAAAAAAAAAAAAAAAAAP/EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAMAwEAAhEDEQA/AIwAH//Z", "sha256": "be152331d7e2a258a0aed29704c0d34f889fa2f3bdaf17036a830bbe77a5c27c" } } }] } }
+    },
+    {
+      "sequence": 30,
+      "label": "image.local-to-bridge",
+      "kind": "websocket",
+      "direction": "local-to-bridge",
+      "payload": { "type": "res", "id": "chat-image-v1", "ok": true, "payload": { "runId": "compat-run-image" } }
+    },
+    {
+      "sequence": 31,
+      "label": "image.bridge-to-relay",
+      "kind": "websocket",
+      "direction": "bridge-to-relay",
+      "payload": { "type": "res", "id": "chat-image-v1", "ok": true, "payload": { "runId": "compat-run-image" } }
+    }
+  ]
+}

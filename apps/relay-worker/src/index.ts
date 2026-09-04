@@ -204,9 +204,11 @@ export class RelayRoom {
         : {}),
     };
 
+    // The constructor rehydrates existing sockets. Keep that map intact until
+    // the replacement branch below has closed the previous peer with its
+    // public 4001/4002 code; reconciling after accept would hide that peer.
     this.runtime.state.acceptWebSocket(server);
     server.serializeAttachment(attachment);
-    reconcileSockets(this.runtime, { preferredSocket: server });
 
     if (query.role === 'gateway') {
       replaceGateway(this.runtime, server);

@@ -1,0 +1,390 @@
+{
+  "schemaVersion": 1,
+  "id": "relay-openclaw-v1",
+  "backend": "openclaw",
+  "recordedAt": "2026-09-05T00:00:00.000Z",
+  "description": "OpenClaw Relay v1 websocket upgrade, challenge handshake, application requests, negotiated pong, and close-code contract.",
+  "captureMethod": "Published client serialization was extracted from pinned source, secrets were replaced with test values, and frames are replayed through Wrangler dev and an in-process BridgeRuntime.",
+  "sources": [
+    {
+      "label": "2.1.0 shipped production build",
+      "commit": "c2bfe068da15837d94dce70c3247fb39759e9c59",
+      "provenance": "production-build"
+    },
+    {
+      "label": "2.1.1 inferred intermediate protocol snapshot (no exact 2.1.1 version commit exists)",
+      "commit": "31a857abe4aaa362ec335213c8e381135d3ef0a0",
+      "provenance": "inferred-protocol"
+    },
+    {
+      "label": "2.1.2 version anchor",
+      "commit": "3e37a72e95615ace91c387571f0ef62acadd92e5",
+      "provenance": "version-bump"
+    },
+    {
+      "label": "latest pre-3.0 client/server capability snapshot",
+      "commit": "d9c1adae8192839c78cb6e10091551cf342c3a93",
+      "provenance": "pre-3.0-snapshot"
+    }
+  ],
+  "ignoredPaths": ["/ts", "/payload/ts"],
+  "frames": [
+    {
+      "sequence": 1,
+      "label": "gateway.connection",
+      "kind": "connection",
+      "direction": "gateway-to-relay",
+      "payload": {
+        "path": "/ws",
+        "query": { "gatewayId": "$capture:gatewayId:gateway-id", "role": "gateway", "clientId": "compat-bridge" },
+        "authorization": "$capture:gatewayAuthorization:nonempty-string"
+      }
+    },
+    {
+      "sequence": 2,
+      "label": "legacy-client.connection",
+      "kind": "connection",
+      "direction": "client-to-relay",
+      "payload": {
+        "path": "/ws",
+        "query": { "gatewayId": "$ref:gatewayId", "role": "client", "clientId": "compat-ios-legacy", "token": "$capture:clientToken:nonempty-string" }
+      }
+    },
+    {
+      "sequence": 3,
+      "label": "connect.31a.challenge",
+      "kind": "websocket",
+      "direction": "relay-to-client",
+      "payload": { "type": "event", "event": "connect.challenge", "payload": { "nonce": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd", "ts": 1778198400200 } }
+    },
+    {
+      "sequence": 4,
+      "label": "connect.31a.request",
+      "kind": "websocket",
+      "direction": "client-to-relay",
+      "payload": {
+        "type": "req",
+        "id": "connect-31a-v1",
+        "method": "connect",
+        "params": {
+          "minProtocol": 3,
+          "maxProtocol": 4,
+          "client": {
+            "id": "openclaw-ios",
+            "displayName": "Clawket",
+            "version": "2.1.0",
+            "platform": "ios",
+            "mode": "ui",
+            "deviceFamily": "iphone"
+          },
+          "caps": ["tool-events"],
+          "commands": ["canvas.present", "canvas.hide", "canvas.navigate", "canvas.eval", "canvas.snapshot"],
+          "role": "operator",
+          "scopes": ["operator.admin", "operator.read", "operator.write", "operator.pairing"],
+          "device": {
+            "id": "56475aa75463474c0285df5dbf2bcab73da651358839e9b77481b2eab107708c",
+            "publicKey": "A6EHv_POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg",
+            "signature": "DIoYV2K0RoTC-en3rk9VOobCvt3x3tp58M3iU3quAA8vtNhl3zGBL1L90Eq00l3dxMAFm92BdUPwaUEI6Q7dDQ",
+            "signedAt": 1778198400222,
+            "nonce": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+          },
+          "auth": { "token": "fixture-openclaw-token" }
+        }
+      }
+    },
+    {
+      "sequence": 5,
+      "label": "connect.31a.response",
+      "kind": "websocket",
+      "direction": "relay-to-client",
+      "payload": {
+        "type": "res",
+        "id": "connect-31a-v1",
+        "ok": true,
+        "payload": {
+          "server": { "version": "fixture-openclaw", "connId": "fixture-connection" },
+          "policy": { "tickIntervalMs": 30000 },
+          "snapshot": { "uptimeMs": 10, "presence": [] }
+        }
+      }
+    },
+    {
+      "sequence": 6,
+      "label": "connect-start.challenge",
+      "kind": "websocket",
+      "direction": "relay-to-client",
+      "annotation": "connect.start is a compatibility alias accepted by Relay and Bridge; shipped Clawket 2.1.x App frames used connect, so this is a synthetic alias replay and not a claimed production App capture.",
+      "payload": { "type": "event", "event": "connect.challenge", "payload": { "nonce": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "ts": 1778198400300 } }
+    },
+    {
+      "sequence": 7,
+      "label": "connect-start.request",
+      "kind": "websocket",
+      "direction": "client-to-relay",
+      "annotation": "Synthetic compatibility alias; all other fields preserve the v1 handshake envelope.",
+      "payload": {
+        "type": "req",
+        "id": "connect-start-v1",
+        "method": "connect.start",
+        "params": {
+          "minProtocol": 3,
+          "maxProtocol": 4,
+          "client": { "id": "openclaw-ios", "displayName": "Clawket", "version": "2.1.2", "platform": "ios", "mode": "ui", "deviceFamily": "iphone" },
+          "caps": ["tool-events"],
+          "commands": ["canvas.present", "canvas.hide", "canvas.navigate", "canvas.eval", "canvas.snapshot"],
+          "role": "operator",
+          "scopes": ["operator.admin", "operator.approvals", "operator.pairing", "operator.questions", "operator.read", "operator.talk.secrets", "operator.write"],
+          "device": { "id": "56475aa75463474c0285df5dbf2bcab73da651358839e9b77481b2eab107708c", "publicKey": "A6EHv_POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg", "signature": "znX5wNKUg6c_2XusJ7jBuVRqieVXAwIyYNeizO9Ofr2HyBEBH1eJt_5el31hBCqP-YbV3BEggh20Lf8Wh8LvAw", "signedAt": 1778198400300, "nonce": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" },
+          "auth": { "token": "fixture-openclaw-token" }
+        }
+      }
+    },
+    {
+      "sequence": 8,
+      "label": "connect-start.response",
+      "kind": "websocket",
+      "direction": "relay-to-client",
+      "payload": { "type": "res", "id": "connect-start-v1", "ok": true, "payload": { "server": { "version": "fixture-openclaw", "connId": "fixture-connection-alias" } } }
+    },
+    {
+      "sequence": 9,
+      "label": "chat-send.request",
+      "kind": "websocket",
+      "direction": "client-to-relay",
+      "payload": {
+        "type": "req",
+        "id": "chat-v1",
+        "method": "chat.send",
+        "params": { "sessionKey": "agent:main:main", "message": "compat hello", "thinking": "off", "deliver": false, "idempotencyKey": "compat-chat-1" }
+      }
+    },
+    {
+      "sequence": 10,
+      "label": "chat-send.response",
+      "kind": "websocket",
+      "direction": "relay-to-client",
+      "payload": { "type": "res", "id": "chat-v1", "ok": true, "payload": { "runId": "compat-run-1" } }
+    },
+    {
+      "sequence": 11,
+      "label": "sessions-list.request",
+      "kind": "websocket",
+      "direction": "client-to-relay",
+      "payload": { "type": "req", "id": "sessions-v1", "method": "sessions.list", "params": { "limit": 100, "includeLastMessage": true, "includeDerivedTitles": true } }
+    },
+    {
+      "sequence": 12,
+      "label": "sessions-list.response",
+      "kind": "websocket",
+      "direction": "relay-to-client",
+      "payload": { "type": "res", "id": "sessions-v1", "ok": true, "payload": { "defaults": { "contextTokens": 200000 }, "sessions": [] } }
+    },
+    {
+      "sequence": 13,
+      "label": "chat-send-1.5m.request",
+      "kind": "websocket",
+      "direction": "client-to-relay",
+      "annotation": "The $base64 recipe materializes a valid 1x1 JPEG followed by inert padding to exactly 1,572,864 decoded bytes and 2,097,152 base64 characters. Its SHA-256 is be152331d7e2a258a0aed29704c0d34f889fa2f3bdaf17036a830bbe77a5c27c.",
+      "payload": {
+        "type": "req",
+        "id": "chat-image-v1",
+        "method": "chat.send",
+        "params": {
+          "sessionKey": "agent:main:main",
+          "message": "compat image",
+          "thinking": "off",
+          "deliver": false,
+          "idempotencyKey": "compat-image-1",
+          "attachments": [
+            {
+              "type": "image",
+              "mimeType": "image/jpeg",
+              "content": {
+                "$base64": {
+                  "decodedBytes": 1572864,
+                  "fillByte": 0,
+                  "prefixBase64": "/9j/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAb/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFAEBAAAAAAAAAAAAAAAAAAAAAP/EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAMAwEAAhEDEQA/AIwAH//Z",
+                  "sha256": "be152331d7e2a258a0aed29704c0d34f889fa2f3bdaf17036a830bbe77a5c27c"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "sequence": 14,
+      "label": "chat-send-1.5m.response",
+      "kind": "websocket",
+      "direction": "relay-to-client",
+      "payload": { "type": "res", "id": "chat-image-v1", "ok": true, "payload": { "runId": "compat-run-image" } }
+    },
+    {
+      "sequence": 15,
+      "label": "legacy.tick",
+      "kind": "websocket",
+      "direction": "relay-to-client",
+      "payload": { "type": "tick", "ts": 1778198400100 }
+    },
+    {
+      "sequence": 16,
+      "label": "capable-client.connection",
+      "kind": "connection",
+      "direction": "client-to-relay",
+      "payload": {
+        "path": "/ws",
+        "query": { "gatewayId": "$ref:gatewayId", "role": "client", "clientId": "compat-ios-pong", "token": "$ref:clientToken", "capabilities": "relay.client-pong.v1" }
+      }
+    },
+    {
+      "sequence": 17,
+      "label": "capable.tick",
+      "kind": "websocket",
+      "direction": "relay-to-client",
+      "payload": { "type": "tick", "ts": 1778198400200, "ack": "relay.client-pong.v1" }
+    },
+    {
+      "sequence": 18,
+      "label": "capable.pong",
+      "kind": "websocket",
+      "direction": "client-to-relay",
+      "payload": { "type": "pong", "ts": 1778198400200 }
+    },
+    {
+      "sequence": 19,
+      "label": "close.replaced-gateway",
+      "kind": "close",
+      "direction": "relay-to-gateway",
+      "payload": { "code": 4001, "reason": "replaced_by_new_gateway" }
+    },
+    {
+      "sequence": 20,
+      "label": "close.replaced-client",
+      "kind": "close",
+      "direction": "relay-to-client",
+      "payload": { "code": 4002, "reason": "replaced_by_new_client_socket" }
+    },
+    {
+      "sequence": 21,
+      "label": "close.rate-limited",
+      "kind": "close",
+      "direction": "relay-to-client",
+      "payload": { "code": 4008, "reason": "rate_limited" }
+    },
+    {
+      "sequence": 22,
+      "label": "close.pong-timeout",
+      "kind": "close",
+      "direction": "relay-to-client",
+      "payload": { "code": 4009, "reason": "client_pong_timeout" }
+    },
+    {
+      "sequence": 23,
+      "label": "close.dead-socket",
+      "kind": "close",
+      "direction": "relay-to-client",
+      "annotation": "A network peer cannot deterministically force a server-side send exception; the compat runner pins this code against the exported Relay close-code table while unit tests exercise the failing-send path.",
+      "payload": { "code": 4010, "reason": "dead_socket" }
+    },
+    {
+      "sequence": 24,
+      "label": "close.gateway-unavailable",
+      "kind": "close",
+      "direction": "relay-to-client",
+      "payload": { "code": 4011, "reason": "gateway_unavailable" }
+    },
+    {
+      "sequence": 25,
+      "label": "close.gateway-reconnect",
+      "kind": "close",
+      "direction": "relay-to-client",
+      "payload": { "code": 4012, "reason": "gateway_reconnect_required" }
+    },
+    {
+      "sequence": 26,
+      "label": "connect.c2.challenge",
+      "kind": "websocket",
+      "direction": "relay-to-client",
+      "annotation": "Challenge shape used by the c2bfe 2.1.0 source; older clients sign a fresh local clock value rather than reusing challenge ts.",
+      "payload": { "type": "event", "event": "connect.challenge", "payload": { "nonce": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "ts": 1778198400100 } }
+    },
+    {
+      "sequence": 27,
+      "label": "connect.c2.request",
+      "kind": "websocket",
+      "direction": "client-to-relay",
+      "payload": {
+        "type": "req",
+        "id": "connect-c2-v1",
+        "method": "connect",
+        "params": {
+          "minProtocol": 3,
+          "maxProtocol": 3,
+          "client": { "id": "openclaw-ios", "displayName": "Clawket", "version": "2.1.0", "platform": "ios", "mode": "ui", "deviceFamily": "iphone" },
+          "caps": ["tool-events"],
+          "commands": ["canvas.present", "canvas.hide", "canvas.navigate", "canvas.eval", "canvas.snapshot"],
+          "role": "operator",
+          "scopes": ["operator.admin", "operator.read", "operator.write", "operator.pairing"],
+          "device": {
+            "id": "56475aa75463474c0285df5dbf2bcab73da651358839e9b77481b2eab107708c",
+            "publicKey": "A6EHv_POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg",
+            "signature": "PUtFJmaKw2PM0bZx6TEar0j3TKsxM3Jgm5swfUZE5g0h9i2E6uVdP_odI2tV4YBXidtKgFzfnmROPBiSIv6HDg",
+            "signedAt": 1778198400111,
+            "nonce": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "auth": { "token": "fixture-openclaw-token" }
+        }
+      }
+    },
+    {
+      "sequence": 28,
+      "label": "connect.c2.response",
+      "kind": "websocket",
+      "direction": "relay-to-client",
+      "payload": { "type": "res", "id": "connect-c2-v1", "ok": true, "payload": { "server": { "version": "fixture-openclaw", "connId": "fixture-c2" } } }
+    },
+    {
+      "sequence": 29,
+      "label": "connect.d9c.challenge",
+      "kind": "websocket",
+      "direction": "relay-to-client",
+      "annotation": "The d9c pre-3.0 client validates challenge ts and signs that exact safe integer.",
+      "payload": { "type": "event", "event": "connect.challenge", "payload": { "nonce": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "ts": 1778198400300 } }
+    },
+    {
+      "sequence": 30,
+      "label": "connect.d9c.request",
+      "kind": "websocket",
+      "direction": "client-to-relay",
+      "payload": {
+        "type": "req",
+        "id": "connect-d9c-v1",
+        "method": "connect",
+        "params": {
+          "minProtocol": 3,
+          "maxProtocol": 4,
+          "client": { "id": "openclaw-ios", "displayName": "Clawket", "version": "2.1.2", "platform": "ios", "mode": "ui", "deviceFamily": "iphone" },
+          "caps": ["tool-events"],
+          "commands": ["canvas.present", "canvas.hide", "canvas.navigate", "canvas.eval", "canvas.snapshot"],
+          "role": "operator",
+          "scopes": ["operator.admin", "operator.approvals", "operator.pairing", "operator.questions", "operator.read", "operator.talk.secrets", "operator.write"],
+          "device": {
+            "id": "56475aa75463474c0285df5dbf2bcab73da651358839e9b77481b2eab107708c",
+            "publicKey": "A6EHv_POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg",
+            "signature": "znX5wNKUg6c_2XusJ7jBuVRqieVXAwIyYNeizO9Ofr2HyBEBH1eJt_5el31hBCqP-YbV3BEggh20Lf8Wh8LvAw",
+            "signedAt": 1778198400300,
+            "nonce": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+          },
+          "auth": { "token": "fixture-openclaw-token" }
+        }
+      }
+    },
+    {
+      "sequence": 31,
+      "label": "connect.d9c.response",
+      "kind": "websocket",
+      "direction": "relay-to-client",
+      "payload": { "type": "res", "id": "connect-d9c-v1", "ok": true, "payload": { "server": { "version": "fixture-openclaw", "connId": "fixture-d9c" } } }
+    }
+  ]
+}
