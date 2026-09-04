@@ -1,5 +1,5 @@
 import type { ConnectionRecord, SessionUpdate } from '@clawket/agent-protocol';
-import type { GatewayClient } from '../../services/gateway';
+import type { GatewayClient } from '../protocol';
 import type { ConnectionState, GatewayConfig } from '../../types';
 import { mergeGatewayHistory } from './gateway-adapter';
 import { HermesAdapter } from './hermes';
@@ -8,6 +8,7 @@ import { OPENCLAW_BRIDGE_CAPABILITY, OpenClawAdapter } from './openclaw';
 type GatewayEventName =
   | 'connection'
   | 'health'
+  | 'sessionsChanged'
   | 'seqGap'
   | 'chatRunStart'
   | 'chatDelta'
@@ -204,6 +205,27 @@ describe('GatewayAdapter lifecycle boundaries', () => {
       runId: 'run-child',
       text: 'child delta',
     });
+  });
+
+  it('refreshes the canonical session snapshot after a negotiated session invalidation', async () => {
+    const fake = new LifecycleGateway();
+    fake.sessions = [{ key: 'agent:main:main', title: 'Main', updatedAt: 42 }];
+    const adapter = new OpenClawAdapter(connection('openclaw', 'sessions-changed'), {
+      gateway: gateway(fake),
+      historyCache: null,
+      bridgeCapabilityMode: 'legacy',
+    });
+    const snapshots: Array<Array<{ key: string }>> = [];
+    const off = adapter.on('sessions', (sessions) => snapshots.push(sessions));
+
+    fake.emit('sessionsChanged', {});
+    await flushAsync();
+
+    expect(snapshots).toEqual([
+      [expect.objectContaining({ key: 'agent:main:main' })],
+    ]);
+    off();
+    adapter.disconnect();
   });
 
   it('emits reconciled history after a sequence gap', async () => {

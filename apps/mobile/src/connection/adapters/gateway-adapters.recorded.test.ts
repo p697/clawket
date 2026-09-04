@@ -2,7 +2,7 @@ import type { ConnectionRecord, SessionUpdate } from '@clawket/agent-protocol';
 import openClawFixture from '../../../../../tests/compat/fixtures/v1/bridge/openclaw-forwarding-v1.json';
 import hermesAttachmentFixture from '../../../../../tests/fixtures/hermes/m3-attachment-abort-v2.json';
 import hermesSessionsFixture from '../../../../../tests/fixtures/hermes/m3-multi-session-v2.json';
-import type { GatewayClient } from '../../services/gateway';
+import type { GatewayClient } from '../protocol';
 import type { ConnectionState, GatewayConfig } from '../../types';
 import { HermesAdapter, HERMES_MULTI_SESSION_CAPABILITY } from './hermes';
 import {

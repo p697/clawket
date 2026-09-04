@@ -12,8 +12,7 @@ import {
   type SessionKind,
   type SessionUpdate,
 } from '@clawket/agent-protocol';
-import { GatewayClient } from '../../services/gateway';
-import type { GatewayEvents } from '../../services/gateway-shared';
+import { GatewayClient, type GatewayEvents } from '../protocol';
 import { ChatCacheService, type CachedMessage } from '../../services/chat-cache';
 import type {
   ConnectionState as LegacyConnectionState,
@@ -392,6 +391,16 @@ export abstract class GatewayAdapterBase implements AgentAdapter {
         this.handleGatewayConnectionState(state, reason);
       }),
       this.gateway.on('health', (payload) => this.handleGatewayHealth(payload)),
+      this.gateway.on('sessionsChanged', () => {
+        void this.listSessions().catch((error: unknown) => {
+          const normalized = toAdapterError(error);
+          this.emitUpdate({
+            type: 'error',
+            code: normalized.code,
+            message: normalized.message,
+          });
+        });
+      }),
       this.gateway.on('seqGap', ({ sessionKey }) => {
         const key = sessionKey || this.fallbackSessionKey;
         void this.loadSession(key, { limit: 50 })

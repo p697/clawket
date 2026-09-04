@@ -19,7 +19,7 @@ import {
   type SessionUpdate,
 } from '@clawket/agent-protocol';
 import { searchDiscoverSkills } from '../../features/discover';
-import type { GatewayEvents } from '../../services/gateway-shared';
+import type { GatewayEvents } from '../protocol';
 import type { ConnectionState as LegacyConnectionState, GatewayConfig } from '../../types';
 import type {
   HermesCronJob,
