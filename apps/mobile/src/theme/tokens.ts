@@ -8,59 +8,113 @@ export const Space = {
   lg: 16,
   xl: 24,
   xxl: 32,
-  xxxl: 48,
+  /** @deprecated Use `xxl`; 3.0 spacing stops at 32. */
+  xxxl: 32,
 } as const;
 
 // ─── Typography ───
 export const FontSize = {
-  nano: 9,
-  micro: 10,
-  xs: 11,
-  sm: 12,
+  display: 28,
+  title: 20,
+  body: 17,
+  secondary: 15,
+  caption: 13,
+  /** @deprecated Use `caption`. */
+  nano: 13,
+  /** @deprecated Use `caption`. */
+  micro: 13,
+  /** @deprecated Use `caption`. */
+  xs: 13,
+  /** @deprecated Use `caption`. */
+  sm: 13,
+  /** @deprecated Use `caption`. */
   md: 13,
-  bodySm: 14,
+  /** @deprecated Use `secondary`. */
+  bodySm: 15,
+  /** @deprecated Use `secondary`. */
   base: 15,
-  lg: 16,
-  xl: 18,
+  /** @deprecated Use `body`. */
+  lg: 17,
+  /** @deprecated Use `body`. */
+  xl: 17,
+  /** @deprecated Use `title`. */
   displaySm: 20,
-  xxl: 22,
-  emoji: 24,
-  displayMd: 26,
+  /** @deprecated Use `title`. */
+  xxl: 20,
+  /** @deprecated Use `title` and size emoji independently. */
+  emoji: 20,
+  /** @deprecated Use `display`. */
+  displayMd: 28,
+  /** @deprecated Use `display`. */
   xxxl: 28,
-  displayHero: 32,
-  displayLg: 36,
-  hero: 48,
+  /** @deprecated Use `display`. */
+  displayHero: 28,
+  /** @deprecated Use `display`. */
+  displayLg: 28,
+  /** @deprecated Use `display`. */
+  hero: 28,
 } as const;
 
 export const LineHeight = {
-  xs: 14,
-  sm: 16,
+  display: 34,
+  title: 26,
+  body: 24,
+  secondary: 20,
+  caption: 18,
+  /** @deprecated Use `caption`. */
+  xs: 18,
+  /** @deprecated Use `caption`. */
+  sm: 18,
+  /** @deprecated Use `caption`. */
   md: 18,
+  /** @deprecated Use `secondary`. */
   bodySm: 20,
-  base: 21,
-  lg: 22,
+  /** @deprecated Use `secondary`. */
+  base: 20,
+  /** @deprecated Use `body`. */
+  lg: 24,
+  /** @deprecated Use `body`. */
   xl: 24,
-  xxl: 28,
+  /** @deprecated Use `title`. */
+  xxl: 26,
+  /** @deprecated Use `display`. */
   xxxl: 34,
 } as const;
 
 export const FontWeight = {
   regular: '400' as const,
-  medium: '500' as const,
   semibold: '600' as const,
-  bold: '700' as const,
+  /** @deprecated Use `semibold`; 3.0 has only 400 and 600. */
+  medium: '600' as const,
+  /** @deprecated Use `semibold`; 3.0 has only 400 and 600. */
+  bold: '600' as const,
 };
 
 // ─── Border Radius ───
 export const Radius = {
-  none: 0,
-  micro: 2,
-  xs: 4,
-  sm: 8,
-  md: 12,
-  lg: 18,
-  xl: 24,
+  bubble: 20,
+  card: 16,
+  settingsGroup: 14,
+  avatarRoster: 18,
+  avatarHeader: 9,
+  avatarSettings: 14,
+  avatarSheet: 10,
+  xl: 22,
+  bottomSheet: 28,
+  sheet: 36,
   full: 9999,
+  /** @deprecated Transitional alias for legacy square surfaces. */
+  none: 0,
+  /** @deprecated Use a component-specific 3.0 radius. */
+  micro: 2,
+  /** @deprecated Use a component-specific 3.0 radius. */
+  xs: 4,
+  /** @deprecated Use a component-specific 3.0 radius. */
+  sm: 8,
+  /** @deprecated Use `settingsGroup` where applicable. */
+  md: 12,
+  /** @deprecated Use `avatarRoster`, `card`, or `bubble`. */
+  lg: 18,
 } as const;
 
 export const BorderWidth = {
@@ -112,16 +166,31 @@ export const HitSize = {
 // Component chrome should consume these metrics rather than creating local
 // heights/paddings. Product-specific composites may still own their layout.
 export const ControlSize = {
+  pill: 40,
+  floatingButton: 44,
+  settingsRow: 52,
+  rosterRow: 88,
+  /** @deprecated Use a component-specific 3.0 metric. */
   compact: 36,
+  /** @deprecated Use `floatingButton`. */
   standard: 44,
+  /** @deprecated Use a component-specific 3.0 metric. */
   large: 48,
+  /** @deprecated Use `pill` for canonical pill controls. */
   field: 48,
-  settingsRow: 56,
+  /** @deprecated Use a component-specific avatar metric. */
   settingsIcon: 32,
 } as const;
 
 // ─── Elevation (shadows) ───
 export const Shadow = {
+  floating: {
+    shadowColor: '#111113',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 2,
+  },
   xs: {
     shadowColor: '#071218',
     shadowOffset: { width: 0, height: 1 },
@@ -231,6 +300,7 @@ export function createSurfaceStyle(
 }
 
 // ─── Animation Presets ───
+/** @deprecated Use the canonical ease-out `Motion` timings. */
 export const SpringPreset = {
   /** Snappy UI feedback — buttons, toggles, small movements */
   snappy: { damping: 20, stiffness: 300, mass: 0.8 },
@@ -240,8 +310,18 @@ export const SpringPreset = {
   gentle: { damping: 18, stiffness: 160, mass: 1.0 },
 } as const;
 
-export const TimingPreset = {
-  fast: 150,
-  normal: 250,
-  slow: 400,
+export const Motion = {
+  duration: {
+    fast: 120,
+    normal: 200,
+    slow: 320,
+  },
+  easing: 'easeOut',
+  pressedScale: 0.96,
+  messageEnterOffset: 4,
+  avatarWorkingLoop: 1_200,
+  avatarDoneFade: 3_000,
 } as const;
+
+/** @deprecated Use `Motion.duration`. */
+export const TimingPreset = Motion.duration;
