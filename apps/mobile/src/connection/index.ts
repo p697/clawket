@@ -30,6 +30,7 @@ import {
   type SessionWatermarks,
   type UnreadWatermarks,
 } from './registry/unread-watermarks';
+import { createConnectionAdapter } from './adapters';
 
 export type ConnectionRuntimeFailure = Readonly<{
   operation: 'load' | 'connect' | 'roster' | 'probe';
@@ -728,7 +729,9 @@ const defaultConnectionTelemetry: ConnectionTelemetry = {
   },
 };
 
-let defaultCoordinator = new ConnectionCoordinator();
+let defaultCoordinator = new ConnectionCoordinator({
+  adapterFactory: createConnectionAdapter,
+});
 
 export function getConnectionRuntime(): ConnectionCoordinator {
   return defaultCoordinator;
