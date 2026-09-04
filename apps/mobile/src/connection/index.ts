@@ -80,6 +80,8 @@ export interface ConnectionCoordinatorOptions {
   adapterFactory?: ConnectionAdapterFactory;
   now?: () => number;
   telemetry?: ConnectionTelemetry;
+  rosterRefreshIntervalMs?: number;
+  hermesProbeIntervalMs?: number;
 }
 
 export interface ConnectionTelemetry {
@@ -105,7 +107,15 @@ type ActiveAdapterEntry = {
   attempt: number;
   connectStartedAt: number;
   lastState: ConnectionState;
+  rosterRefreshTimer: ReturnType<typeof setInterval> | null;
+  hermesProbeTimer: ReturnType<typeof setInterval> | null;
+  rosterRefreshInFlight: Promise<void> | null;
+  probeInFlight: Promise<boolean> | null;
+  maintenanceTail: Promise<void>;
 };
+
+export const DEFAULT_ROSTER_REFRESH_INTERVAL_MS = 30_000;
+export const DEFAULT_HERMES_PROBE_INTERVAL_MS = 15_000;
 
 const EMPTY_CONNECTIONS = Object.freeze([]) as ReadonlyArray<ConnectionDescriptor>;
 const EMPTY_ROSTER = Object.freeze([]) as ReadonlyArray<RosterConnectionGroup>;
@@ -134,6 +144,8 @@ export class ConnectionCoordinator {
   private readonly watermarks: UnreadWatermarksPort;
   private readonly now: () => number;
   private readonly telemetry: ConnectionTelemetry;
+  private readonly rosterRefreshIntervalMs: number | null;
+  private readonly hermesProbeIntervalMs: number | null;
   private readonly listeners = new Set<() => void>();
   private readonly rosterInputs = new Map<string, RosterSnapshotInput>();
 
@@ -156,6 +168,14 @@ export class ConnectionCoordinator {
     this.adapterFactory = options.adapterFactory ?? null;
     this.now = options.now ?? Date.now;
     this.telemetry = options.telemetry ?? defaultConnectionTelemetry;
+    this.rosterRefreshIntervalMs = readMaintenanceInterval(
+      options.rosterRefreshIntervalMs,
+      DEFAULT_ROSTER_REFRESH_INTERVAL_MS,
+    );
+    this.hermesProbeIntervalMs = readMaintenanceInterval(
+      options.hermesProbeIntervalMs,
+      DEFAULT_HERMES_PROBE_INTERVAL_MS,
+    );
   }
 
   getSnapshot = (): ConnectionRuntimeSnapshot => this.snapshot;
@@ -297,6 +317,13 @@ export class ConnectionCoordinator {
   async probeActive(timeoutMs?: number): Promise<boolean> {
     const entry = this.active;
     if (!entry) return false;
+    return this.probeEntry(entry, timeoutMs);
+  }
+
+  private async performActiveProbe(
+    entry: ActiveAdapterEntry,
+    timeoutMs?: number,
+  ): Promise<boolean> {
     try {
       const healthy = await entry.adapter.probe(timeoutMs);
       if (!healthy && this.active === entry) {
@@ -307,7 +334,7 @@ export class ConnectionCoordinator {
         await entry.adapter.connect();
         if (this.active === entry) {
           this.error = null;
-          await this.refreshActiveRoster(entry);
+          await this.performActiveRosterRefresh(entry);
           this.publish({ switching: false });
         }
       }
@@ -417,6 +444,11 @@ export class ConnectionCoordinator {
       attempt: 1,
       connectStartedAt: this.now(),
       lastState: adapter.state,
+      rosterRefreshTimer: null,
+      hermesProbeTimer: null,
+      rosterRefreshInFlight: null,
+      probeInFlight: null,
+      maintenanceTail: Promise.resolve(),
     };
     const connectReason = this.nextConnectReason;
     this.nextConnectReason = 'retry';
@@ -448,6 +480,7 @@ export class ConnectionCoordinator {
       );
       this.error = null;
       this.publish({ switching: false });
+      this.startActiveMaintenance(entry);
       await this.refreshActiveRoster(entry);
     } catch (error) {
       if (this.active !== entry) return;
@@ -511,7 +544,22 @@ export class ConnectionCoordinator {
     this.publishStoreSnapshot(storeSnapshot);
   }
 
-  private async refreshActiveRoster(entry: ActiveAdapterEntry): Promise<void> {
+  private refreshActiveRoster(entry: ActiveAdapterEntry): Promise<void> {
+    if (entry.rosterRefreshInFlight) return entry.rosterRefreshInFlight;
+    const operation = entry.maintenanceTail.then(async () => {
+      if (!this.started || this.active !== entry) return;
+      await this.performActiveRosterRefresh(entry);
+    });
+    entry.maintenanceTail = operation.then(() => undefined, () => undefined);
+    let tracked: Promise<void>;
+    tracked = operation.finally(() => {
+      if (entry.rosterRefreshInFlight === tracked) entry.rosterRefreshInFlight = null;
+    });
+    entry.rosterRefreshInFlight = tracked;
+    return tracked;
+  }
+
+  private async performActiveRosterRefresh(entry: ActiveAdapterEntry): Promise<void> {
     try {
       const [agents, sessions, watermarks] = await Promise.all([
         entry.adapter.listAgents(),
@@ -595,6 +643,7 @@ export class ConnectionCoordinator {
     const entry = this.active;
     if (!entry) return;
     this.active = null;
+    this.clearActiveMaintenance(entry);
     for (const unsubscribe of entry.unsubscribers.splice(0)) unsubscribe();
     const roster = this.rosterInputs.get(entry.connectionId);
     if (roster?.source === 'live') {
@@ -602,6 +651,53 @@ export class ConnectionCoordinator {
     }
     entry.adapter.disconnect();
     this.publish({ switching: false });
+  }
+
+  private probeEntry(entry: ActiveAdapterEntry, timeoutMs?: number): Promise<boolean> {
+    if (entry.probeInFlight) return entry.probeInFlight;
+    const operation = entry.maintenanceTail.then(async () => {
+      if (!this.started || this.active !== entry) return false;
+      return this.performActiveProbe(entry, timeoutMs);
+    });
+    entry.maintenanceTail = operation.then(() => undefined, () => undefined);
+    let tracked: Promise<boolean>;
+    tracked = operation.finally(() => {
+      if (entry.probeInFlight === tracked) entry.probeInFlight = null;
+    });
+    entry.probeInFlight = tracked;
+    return tracked;
+  }
+
+  private startActiveMaintenance(entry: ActiveAdapterEntry): void {
+    this.clearActiveMaintenance(entry);
+    if (this.rosterRefreshIntervalMs !== null) {
+      entry.rosterRefreshTimer = setInterval(() => {
+        if (this.active !== entry || !this.started) return;
+        void this.refreshActiveRoster(entry);
+      }, this.rosterRefreshIntervalMs);
+      unrefTimer(entry.rosterRefreshTimer);
+    }
+    if (
+      entry.adapter.connection.backendKind === 'hermes'
+      && this.hermesProbeIntervalMs !== null
+    ) {
+      entry.hermesProbeTimer = setInterval(() => {
+        if (this.active !== entry || !this.started) return;
+        void this.probeEntry(entry);
+      }, this.hermesProbeIntervalMs);
+      unrefTimer(entry.hermesProbeTimer);
+    }
+  }
+
+  private clearActiveMaintenance(entry: ActiveAdapterEntry): void {
+    if (entry.rosterRefreshTimer !== null) {
+      clearInterval(entry.rosterRefreshTimer);
+      entry.rosterRefreshTimer = null;
+    }
+    if (entry.hermesProbeTimer !== null) {
+      clearInterval(entry.hermesProbeTimer);
+      entry.hermesProbeTimer = null;
+    }
   }
 
   private connectionDescriptor(connectionId: string): ConnectionDescriptor | null {
@@ -693,6 +789,18 @@ function connectionFailureStage(state: ConnectionState): 'socket' | 'handshake' 
   if (state === 'handshaking') return 'handshake';
   if (state === 'ready' || state === 'reconnecting') return 'ready';
   return 'socket';
+}
+
+function readMaintenanceInterval(value: number | undefined, fallback: number): number | null {
+  if (value === 0) return null;
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? value
+    : fallback;
+}
+
+function unrefTimer(timer: ReturnType<typeof setInterval>): void {
+  const nodeTimer = timer as unknown as { unref?: () => void };
+  nodeTimer.unref?.();
 }
 
 const defaultConnectionTelemetry: ConnectionTelemetry = {

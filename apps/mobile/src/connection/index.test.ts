@@ -15,6 +15,7 @@ import { RosterCache, type RosterCacheStorage } from './registry/roster-cache';
 import { UnreadWatermarks } from './registry/unread-watermarks';
 import {
   ConnectionCoordinator,
+  type ConnectionCoordinatorOptions,
   type ConnectionTelemetry,
 } from './index';
 
@@ -138,7 +139,13 @@ function instrumentAdapter(
   return adapter;
 }
 
-async function createHarness(withFactory = true) {
+async function createHarness(
+  withFactory = true,
+  maintenance: Pick<
+    ConnectionCoordinatorOptions,
+    'rosterRefreshIntervalMs' | 'hermesProbeIntervalMs'
+  > = {},
+) {
   const { secureStorage, store } = await createStoreHarness();
   const dashboardStorage = new MemoryDashboardStorage();
   const cache = new RosterCache({ storage: dashboardStorage, now: () => 50 });
@@ -156,8 +163,49 @@ async function createHarness(withFactory = true) {
     watermarks,
     ...(withFactory ? { adapterFactory: factory } : {}),
     now: () => 50,
+    ...maintenance,
   });
   return { adapters, cache, coordinator, events, factory, secureStorage, store, watermarks };
+}
+
+async function createMaintenanceHarness(
+  backendKind: 'openclaw' | 'hermes',
+  maintenance: Pick<
+    ConnectionCoordinatorOptions,
+    'rosterRefreshIntervalMs' | 'hermesProbeIntervalMs'
+  >,
+) {
+  const secureStorage = new MemorySecureStorage();
+  const store = new ConnectionStore({ secureStorage, legacyStorage });
+  await store.load();
+  await store.add({ ...connectionInput('alpha'), backendKind });
+  const dashboardStorage = new MemoryDashboardStorage();
+  let adapter: AgentAdapter | null = null;
+  const coordinator = new ConnectionCoordinator({
+    store,
+    cache: new RosterCache({ storage: dashboardStorage }),
+    watermarks: new UnreadWatermarks({ storage: dashboardStorage }),
+    adapterFactory: (_record, descriptor) => {
+      adapter = instrumentAdapter(descriptor, []);
+      return adapter;
+    },
+    ...maintenance,
+  });
+  return {
+    coordinator,
+    getAdapter(): AgentAdapter {
+      if (!adapter) throw new Error('Adapter has not been created');
+      return adapter;
+    },
+  };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((next) => {
+    resolve = next;
+  });
+  return { promise, resolve };
 }
 
 describe('ConnectionCoordinator', () => {
@@ -335,5 +383,103 @@ describe('ConnectionCoordinator', () => {
 
     expect(events).toEqual(['attempt:openclaw:launch', 'ready:relay:0:1']);
     expect(events.join('|')).not.toContain('alpha');
+  });
+
+  it('refreshes active roster on the injected interval and clears timers on switch and stop', async () => {
+    jest.useFakeTimers();
+    try {
+      const harness = await createHarness(true, {
+        rosterRefreshIntervalMs: 100,
+        hermesProbeIntervalMs: 50,
+      });
+      await harness.coordinator.start();
+      const alpha = harness.adapters[0];
+      const alphaListSessions = jest.spyOn(alpha, 'listSessions');
+
+      expect(jest.getTimerCount()).toBe(1);
+      await jest.advanceTimersByTimeAsync(99);
+      expect(alphaListSessions).not.toHaveBeenCalled();
+      await jest.advanceTimersByTimeAsync(1);
+      expect(alphaListSessions).toHaveBeenCalledTimes(1);
+
+      await harness.coordinator.activate('beta');
+      expect(jest.getTimerCount()).toBe(1);
+      await jest.advanceTimersByTimeAsync(200);
+      expect(alphaListSessions).toHaveBeenCalledTimes(1);
+
+      await harness.coordinator.stop();
+      expect(jest.getTimerCount()).toBe(0);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('runs Hermes request probes every interval without overlapping probe or roster work', async () => {
+    jest.useFakeTimers();
+    try {
+      const harness = await createMaintenanceHarness('hermes', {
+        rosterRefreshIntervalMs: 100,
+        hermesProbeIntervalMs: 50,
+      });
+      await harness.coordinator.start();
+      const adapter = harness.getAdapter();
+      const pendingProbe = deferred<boolean>();
+      const probe = jest.spyOn(adapter, 'probe').mockImplementation(() => pendingProbe.promise);
+      const listSessions = jest.spyOn(adapter, 'listSessions');
+
+      await jest.advanceTimersByTimeAsync(50);
+      await Promise.resolve();
+      expect(probe).toHaveBeenCalledTimes(1);
+
+      await jest.advanceTimersByTimeAsync(200);
+      expect(probe).toHaveBeenCalledTimes(1);
+      expect(listSessions).not.toHaveBeenCalled();
+
+      pendingProbe.resolve(true);
+      await Promise.resolve();
+      await Promise.resolve();
+      await jest.advanceTimersByTimeAsync(0);
+      expect(listSessions).toHaveBeenCalledTimes(1);
+
+      probe.mockResolvedValue(true);
+      await jest.advanceTimersByTimeAsync(50);
+      expect(probe).toHaveBeenCalledTimes(2);
+      await harness.coordinator.stop();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('coalesces roster ticks while a prior fallback refresh is still running', async () => {
+    jest.useFakeTimers();
+    try {
+      const harness = await createMaintenanceHarness('openclaw', {
+        rosterRefreshIntervalMs: 50,
+        hermesProbeIntervalMs: 0,
+      });
+      await harness.coordinator.start();
+      const adapter = harness.getAdapter();
+      const originalListAgents = adapter.listAgents.bind(adapter);
+      const pendingAgents = deferred<AgentDescriptor[]>();
+      const listAgents = jest.spyOn(adapter, 'listAgents')
+        .mockImplementationOnce(() => pendingAgents.promise)
+        .mockImplementation(originalListAgents);
+
+      await jest.advanceTimersByTimeAsync(50);
+      await Promise.resolve();
+      expect(listAgents).toHaveBeenCalledTimes(1);
+      await jest.advanceTimersByTimeAsync(200);
+      expect(listAgents).toHaveBeenCalledTimes(1);
+
+      pendingAgents.resolve([agent('alpha')]);
+      await Promise.resolve();
+      await Promise.resolve();
+      await jest.advanceTimersByTimeAsync(0);
+      await jest.advanceTimersByTimeAsync(50);
+      expect(listAgents).toHaveBeenCalledTimes(2);
+      await harness.coordinator.stop();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });
