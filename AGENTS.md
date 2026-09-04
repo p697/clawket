@@ -2,6 +2,13 @@
 
 This repository is the Clawket monorepo.
 
+## Clawket 3.0 Program Rule
+
+1. `docs/3.0/` is the single implementation source for the 3.0 rebuild. Read `docs/3.0/README.md` first, then `docs/3.0/00-decisions.md` (product decisions; implementation may deviate only under the README deviation rules) and `docs/3.0/08-milestones.md` (execution order).
+2. `docs/3.0/PROGRESS.md` is the shared progress log. Read it at the start of every session and update it after every milestone.
+3. Do not block on humans: record human-only work in the `HUMAN TODO` table of `docs/3.0/PROGRESS.md` and continue. Do not expand scope beyond the spec.
+4. The v1 client protocol replay tests in `tests/compat/` are a deployment gate for Relay, Registry, and Bridge. Never deploy on a red run.
+
 ## Working Principles
 
 1. Treat the current code, tests, deploy scripts, and product behavior as the source of truth; historical documentation is supporting context only.
