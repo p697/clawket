@@ -241,5 +241,8 @@
   "This cannot be undone.": "この操作は取り消せません。",
   "Update bridge to 3.0 for more sessions": "複数セッションにはBridge 3.0が必要です",
   "Update": "更新",
-  "{{active}} active · {{recent}} recent · {{idle}} idle": "アクティブ {{active}} · 最近 {{recent}} · アイドル {{idle}}"
+  "{{active}} active · {{recent}} recent · {{idle}} idle": "アクティブ {{active}} · 最近 {{recent}} · アイドル {{idle}}",
+  "Help": "ヘルプ",
+  "Pair again": "再度ペアリング",
+  "Sign in": "サインイン"
 }

@@ -241,5 +241,8 @@
   "This cannot be undone.": "此操作无法撤销。",
   "Update bridge to 3.0 for more sessions": "升级 Bridge 到 3.0 解锁多会话",
   "Update": "更新",
-  "{{active}} active · {{recent}} recent · {{idle}} idle": "{{active}} 活跃 · {{recent}} 最近 · {{idle}} 空闲"
+  "{{active}} active · {{recent}} recent · {{idle}} idle": "{{active}} 活跃 · {{recent}} 最近 · {{idle}} 空闲",
+  "Help": "帮助",
+  "Pair again": "重新配对",
+  "Sign in": "登录"
 }

@@ -241,5 +241,8 @@
   "This cannot be undone.": "이 작업은 취소할 수 없습니다.",
   "Update bridge to 3.0 for more sessions": "더 많은 세션에는 Bridge 3.0이 필요합니다",
   "Update": "업데이트",
-  "{{active}} active · {{recent}} recent · {{idle}} idle": "활성 {{active}} · 최근 {{recent}} · 유휴 {{idle}}"
+  "{{active}} active · {{recent}} recent · {{idle}} idle": "활성 {{active}} · 최근 {{recent}} · 유휴 {{idle}}",
+  "Help": "도움말",
+  "Pair again": "다시 페어링",
+  "Sign in": "로그인"
 }

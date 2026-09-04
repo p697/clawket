@@ -241,5 +241,8 @@
   "This cannot be undone.": "This cannot be undone.",
   "Update bridge to 3.0 for more sessions": "Update bridge to 3.0 for more sessions",
   "Update": "Update",
-  "{{active}} active · {{recent}} recent · {{idle}} idle": "{{active}} active · {{recent}} recent · {{idle}} idle"
+  "{{active}} active · {{recent}} recent · {{idle}} idle": "{{active}} active · {{recent}} recent · {{idle}} idle",
+  "Help": "Help",
+  "Pair again": "Pair again",
+  "Sign in": "Sign in"
 }

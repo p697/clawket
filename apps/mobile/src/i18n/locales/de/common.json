@@ -241,5 +241,8 @@
   "This cannot be undone.": "Dies kann nicht rückgängig gemacht werden.",
   "Update bridge to 3.0 for more sessions": "Für mehr Sitzungen Bridge auf 3.0 aktualisieren",
   "Update": "Aktualisieren",
-  "{{active}} active · {{recent}} recent · {{idle}} idle": "{{active}} aktiv · {{recent}} kürzlich · {{idle}} inaktiv"
+  "{{active}} active · {{recent}} recent · {{idle}} idle": "{{active}} aktiv · {{recent}} kürzlich · {{idle}} inaktiv",
+  "Help": "Hilfe",
+  "Pair again": "Erneut koppeln",
+  "Sign in": "Anmelden"
 }

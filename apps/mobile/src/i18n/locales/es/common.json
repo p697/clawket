@@ -241,5 +241,8 @@
   "This cannot be undone.": "Esta acción no se puede deshacer.",
   "Update bridge to 3.0 for more sessions": "Actualiza Bridge a 3.0 para más sesiones",
   "Update": "Actualizar",
-  "{{active}} active · {{recent}} recent · {{idle}} idle": "{{active}} activas · {{recent}} recientes · {{idle}} inactivas"
+  "{{active}} active · {{recent}} recent · {{idle}} idle": "{{active}} activas · {{recent}} recientes · {{idle}} inactivas",
+  "Help": "Ayuda",
+  "Pair again": "Volver a vincular",
+  "Sign in": "Iniciar sesión"
 }
