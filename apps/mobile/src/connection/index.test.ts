@@ -13,7 +13,10 @@ import {
 } from './registry/connection-store';
 import { RosterCache, type RosterCacheStorage } from './registry/roster-cache';
 import { UnreadWatermarks } from './registry/unread-watermarks';
-import { ConnectionCoordinator } from './index';
+import {
+  ConnectionCoordinator,
+  type ConnectionTelemetry,
+} from './index';
 
 class MemorySecureStorage implements SecureConnectionStorage {
   private readonly values = new Map<string, string>();
@@ -305,5 +308,32 @@ describe('ConnectionCoordinator', () => {
     const after = harness.coordinator.getSnapshot();
     expect(after).not.toBe(before);
     expect(harness.coordinator.getSnapshot()).toBe(after);
+  });
+
+  it('emits low-cardinality lifecycle telemetry without connection ids or labels', async () => {
+    const { store } = await createStoreHarness();
+    const dashboardStorage = new MemoryDashboardStorage();
+    const events: string[] = [];
+    const telemetry = {
+      attempt: jest.fn((connection, reason) => events.push(`attempt:${connection.backendKind}:${reason}`)),
+      ready: jest.fn((connection, elapsedMs, attempt) => (
+        events.push(`ready:${connection.transportKind}:${elapsedMs}:${attempt}`)
+      )),
+      failed: jest.fn(),
+      reconnect: jest.fn(),
+    } satisfies ConnectionTelemetry;
+    const coordinator = new ConnectionCoordinator({
+      store,
+      cache: new RosterCache({ storage: dashboardStorage }),
+      watermarks: new UnreadWatermarks({ storage: dashboardStorage }),
+      adapterFactory: (_record, descriptor) => instrumentAdapter(descriptor, []),
+      now: () => 50,
+      telemetry,
+    });
+
+    await coordinator.start();
+
+    expect(events).toEqual(['attempt:openclaw:launch', 'ready:relay:0:1']);
+    expect(events.join('|')).not.toContain('alpha');
   });
 });

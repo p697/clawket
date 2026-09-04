@@ -6,6 +6,7 @@ import type {
   SessionDescriptor,
 } from '@clawket/agent-protocol';
 import { useEffect, useMemo, useSyncExternalStore } from 'react';
+import { analyticsEvents } from '../services/analytics/events';
 
 import {
   connectionStore,
@@ -77,13 +78,32 @@ export interface ConnectionCoordinatorOptions {
   watermarks?: UnreadWatermarksPort;
   adapterFactory?: ConnectionAdapterFactory;
   now?: () => number;
+  telemetry?: ConnectionTelemetry;
 }
+
+export interface ConnectionTelemetry {
+  attempt(connection: ConnectionDescriptor, reason: ConnectReason): void;
+  ready(connection: ConnectionDescriptor, elapsedMs: number, attempt: number): void;
+  failed(
+    connection: ConnectionDescriptor,
+    code: string,
+    stage: 'socket' | 'handshake' | 'ready',
+    attempt: number,
+  ): void;
+  reconnect(connection: ConnectionDescriptor, reason: ReconnectReason): void;
+}
+
+type ConnectReason = 'launch' | 'switch' | 'foreground' | 'manual' | 'retry';
+type ReconnectReason = 'tick_timeout' | 'socket_close' | 'probe_failed' | 'seq_gap' | 'foreground';
 
 type ActiveAdapterEntry = {
   connectionId: string;
   adapter: AgentAdapter;
   factoryRevision: number;
   unsubscribers: Array<() => void>;
+  attempt: number;
+  connectStartedAt: number;
+  lastState: ConnectionState;
 };
 
 const EMPTY_CONNECTIONS = Object.freeze([]) as ReadonlyArray<ConnectionDescriptor>;
@@ -112,6 +132,7 @@ export class ConnectionCoordinator {
   private readonly cache: RosterCachePort;
   private readonly watermarks: UnreadWatermarksPort;
   private readonly now: () => number;
+  private readonly telemetry: ConnectionTelemetry;
   private readonly listeners = new Set<() => void>();
   private readonly rosterInputs = new Map<string, RosterSnapshotInput>();
 
@@ -125,6 +146,7 @@ export class ConnectionCoordinator {
   private started = false;
   private snapshot: ConnectionRuntimeSnapshot = INITIAL_SNAPSHOT;
   private error: ConnectionRuntimeFailure | null = null;
+  private nextConnectReason: ConnectReason = 'launch';
 
   constructor(options: ConnectionCoordinatorOptions = {}) {
     this.store = options.store ?? connectionStore;
@@ -132,6 +154,7 @@ export class ConnectionCoordinator {
     this.watermarks = options.watermarks ?? unreadWatermarks;
     this.adapterFactory = options.adapterFactory ?? null;
     this.now = options.now ?? Date.now;
+    this.telemetry = options.telemetry ?? defaultConnectionTelemetry;
   }
 
   getSnapshot = (): ConnectionRuntimeSnapshot => this.snapshot;
@@ -195,6 +218,9 @@ export class ConnectionCoordinator {
   }
 
   async activate(connectionId: string): Promise<ConnectionRuntimeSnapshot> {
+    if (this.store.getSnapshot().activeConnectionId !== connectionId) {
+      this.nextConnectReason = 'switch';
+    }
     await this.store.setActive(connectionId);
     await this.whenIdle();
     return this.snapshot;
@@ -273,6 +299,7 @@ export class ConnectionCoordinator {
     try {
       const healthy = await entry.adapter.probe(timeoutMs);
       if (!healthy && this.active === entry) {
+        this.telemetry.reconnect(entry.adapter.connection, 'probe_failed');
         this.error = failure('probe', new Error('Active connection probe failed.'), entry.connectionId);
         this.publish({ switching: true });
         entry.adapter.disconnect();
@@ -386,10 +413,21 @@ export class ConnectionCoordinator {
       adapter,
       factoryRevision,
       unsubscribers: [],
+      attempt: 1,
+      connectStartedAt: this.now(),
+      lastState: adapter.state,
     };
+    const connectReason = this.nextConnectReason;
+    this.nextConnectReason = 'retry';
+    this.telemetry.attempt(adapter.connection, connectReason);
     entry.unsubscribers.push(
-      adapter.on('state', () => {
-        if (this.active === entry) this.publish();
+      adapter.on('state', (state) => {
+        if (this.active !== entry) return;
+        if (state === 'reconnecting' && entry.lastState !== 'reconnecting') {
+          this.telemetry.reconnect(adapter.connection, 'socket_close');
+        }
+        entry.lastState = state;
+        this.publish();
       }),
       adapter.on('sessions', (sessions) => {
         if (this.active === entry) this.acceptSessionSnapshot(entry, sessions);
@@ -402,11 +440,22 @@ export class ConnectionCoordinator {
     try {
       await adapter.connect();
       if (this.active !== entry) return;
+      this.telemetry.ready(
+        adapter.connection,
+        Math.max(0, this.now() - entry.connectStartedAt),
+        entry.attempt,
+      );
       this.error = null;
       this.publish({ switching: false });
       await this.refreshActiveRoster(entry);
     } catch (error) {
       if (this.active !== entry) return;
+      this.telemetry.failed(
+        adapter.connection,
+        readConnectionErrorCode(error),
+        connectionFailureStage(entry.lastState),
+        entry.attempt,
+      );
       this.error = failure('connect', error, connectionId);
       this.publish({ switching: false });
     }
@@ -630,6 +679,54 @@ function failure(
     message: error instanceof Error ? error.message : String(error ?? 'Unknown connection error'),
   });
 }
+
+function readConnectionErrorCode(error: unknown): string {
+  if (error && typeof error === 'object' && 'code' in error) {
+    const code = (error as { code?: unknown }).code;
+    if (typeof code === 'string' && code.trim()) return code.trim();
+  }
+  return 'network';
+}
+
+function connectionFailureStage(state: ConnectionState): 'socket' | 'handshake' | 'ready' {
+  if (state === 'handshaking') return 'handshake';
+  if (state === 'ready' || state === 'reconnecting') return 'ready';
+  return 'socket';
+}
+
+const defaultConnectionTelemetry: ConnectionTelemetry = {
+  attempt(connection, reason) {
+    analyticsEvents.connectAttempt({
+      backend: connection.backendKind,
+      transport: connection.transportKind,
+      reason,
+    });
+  },
+  ready(connection, elapsedMs, attempt) {
+    analyticsEvents.connectReady({
+      backend: connection.backendKind,
+      transport: connection.transportKind,
+      elapsed_ms: elapsedMs,
+      attempt,
+    });
+  },
+  failed(connection, code, stage, attempt) {
+    analyticsEvents.connectFailed({
+      backend: connection.backendKind,
+      transport: connection.transportKind,
+      code,
+      stage,
+      attempt,
+    });
+  },
+  reconnect(connection, reason) {
+    analyticsEvents.reconnect({
+      backend: connection.backendKind,
+      transport: connection.transportKind,
+      reason,
+    });
+  },
+};
 
 let defaultCoordinator = new ConnectionCoordinator();
 
