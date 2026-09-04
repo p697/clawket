@@ -155,6 +155,12 @@ export const IconSize = {
   lg: 24,
 } as const;
 
+// ─── Status Indicators ───
+export const StatusSize = {
+  dot: 6,
+  attention: 12,
+} as const;
+
 // ─── Touch Targets ───
 export const HitSize = {
   sm: 36,

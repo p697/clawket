@@ -25,6 +25,7 @@ const TOKEN_FAMILIES = [
   'Radius',
   'Shadow',
   'Space',
+  'StatusSize',
   'createSurfaceStyle',
 ];
 const DOCUMENTED_EXCEPTIONS = [

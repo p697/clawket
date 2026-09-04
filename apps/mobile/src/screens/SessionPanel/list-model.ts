@@ -1,10 +1,11 @@
+import type { SessionDescriptor } from '@clawket/agent-protocol';
 import { SessionInfo } from '../../types';
 import { sanitizeSilentPreviewText, sessionLabel } from '../../utils/chat-message';
 
 /** Shared list-mode projection used by the 3.0 SessionPanel. */
 
 export type SessionBoardStatus = 'active' | 'recent' | 'idle';
-export type SessionBoardKind = 'main' | 'subagent' | 'cron' | 'group' | 'direct' | 'other';
+export type SessionBoardKind = 'main' | 'channel' | 'subagent' | 'cron' | 'group' | 'direct' | 'other';
 
 export type SessionBoardRow = {
   key: string;
@@ -61,6 +62,14 @@ function resolveModelLabel(session: SessionInfo): string | null {
   return null;
 }
 
+function sortSessionBoardRows(a: SessionBoardRow, b: SessionBoardRow): number {
+  const statusScore = { active: 3, recent: 2, idle: 1 };
+  if (statusScore[a.status] !== statusScore[b.status]) {
+    return statusScore[b.status] - statusScore[a.status];
+  }
+  return b.updatedAt - a.updatedAt || a.key.localeCompare(b.key);
+}
+
 export function buildSessionBoardRows(
   sessions: SessionInfo[],
   options?: {
@@ -106,13 +115,45 @@ export function buildSessionBoardRows(
         searchableText,
       } satisfies SessionBoardRow;
     })
-    .sort((a, b) => {
-      const statusScore = { active: 3, recent: 2, idle: 1 };
-      if (statusScore[a.status] !== statusScore[b.status]) {
-        return statusScore[b.status] - statusScore[a.status];
-      }
-      return b.updatedAt - a.updatedAt;
-    });
+    .sort(sortSessionBoardRows);
+}
+
+/** Canonical adapter projection used by the 3.0 panel without reviving Gateway shapes. */
+export function buildSessionDescriptorBoardRows(
+  sessions: ReadonlyArray<SessionDescriptor>,
+  options?: { now?: number },
+): SessionBoardRow[] {
+  const now = options?.now ?? Date.now();
+  return sessions
+    .map((session) => {
+      const updatedAt = session.updatedAt ?? 0;
+      const channelLabel = normalizeChannelLabel(session.channel);
+      const modelLabel = session.model?.trim() || null;
+      const preview = sanitizeSilentPreviewText(session.preview)?.replace(/\s+/g, ' ').trim() ?? '';
+      const searchableText = [
+        session.key,
+        session.title,
+        preview,
+        channelLabel,
+        modelLabel,
+      ]
+        .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+        .join('\n')
+        .toLowerCase();
+
+      return {
+        key: session.key,
+        title: session.title,
+        preview,
+        channelLabel,
+        modelLabel,
+        updatedAt,
+        status: resolveStatus(updatedAt, now),
+        kind: session.kind,
+        searchableText,
+      } satisfies SessionBoardRow;
+    })
+    .sort(sortSessionBoardRows);
 }
 
 export function filterSessionBoardRows(

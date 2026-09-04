@@ -25,6 +25,7 @@ import {
   Motion,
   Radius,
   Space,
+  StatusSize,
 } from '../../theme/tokens';
 import {
   AgentAvatar,
@@ -192,8 +193,8 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   attentionDot: {
-    width: Space.md,
-    height: Space.md,
+    width: StatusSize.attention,
+    height: StatusSize.attention,
     borderRadius: Radius.full,
   },
   unreadBadge: {

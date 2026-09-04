@@ -22,6 +22,7 @@ import {
   Motion,
   Radius,
   Space,
+  StatusSize,
 } from '../../theme/tokens';
 
 export type AgentAvatarVariant = 'roster' | 'header' | 'settings' | 'sheet';
@@ -273,8 +274,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: -BorderWidth.strong,
     bottom: -BorderWidth.strong,
-    width: Space.md,
-    height: Space.md,
+    width: StatusSize.attention,
+    height: StatusSize.attention,
     borderRadius: Radius.full,
     borderWidth: BorderWidth.strong,
   },

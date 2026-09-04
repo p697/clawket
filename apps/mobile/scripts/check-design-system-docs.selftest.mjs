@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { validateDesignSystemDocs } from './check-design-system-docs.mjs';
 
 const components = ['ActionButton', 'Button', 'Card', 'FormTextInput', 'SearchInput', 'SettingsGroup', 'SettingsIcon', 'ThemedSwitch'];
-const tokens = ['BorderWidth', 'ControlSize', 'FontSize', 'LineHeight', 'PresentationColor', 'Radius', 'Shadow', 'Space', 'createSurfaceStyle'];
+const tokens = ['BorderWidth', 'ControlSize', 'FontSize', 'LineHeight', 'PresentationColor', 'Radius', 'Shadow', 'Space', 'StatusSize', 'createSurfaceStyle'];
 const exceptions = ['ChatAppearancePreviewCard', 'ChatComposer', 'ChatSharePosterModal', 'FileEditorView', 'SkillContentScreen', 'StatsPosterModal'];
 const codeList = (values) => values.map((value) => `\`${value}\``).join('\n');
 const validInput = {

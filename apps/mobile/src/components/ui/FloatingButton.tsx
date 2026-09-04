@@ -26,6 +26,7 @@ import {
   Radius,
   Shadow,
   Space,
+  StatusSize,
 } from '../../theme/tokens';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -219,8 +220,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -Space.xs,
     right: -Space.xs,
-    width: Space.md,
-    height: Space.md,
+    width: StatusSize.attention,
+    height: StatusSize.attention,
     borderRadius: Radius.full,
   },
   countBadge: {

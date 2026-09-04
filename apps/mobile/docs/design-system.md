@@ -67,7 +67,7 @@ Typography uses matching `FontSize` and `LineHeight` entries:
 
 `Radius` contains named 3.0 shapes: bubble 20, card 16, settings group 14, the four avatar sizes, YouMind-derived sheet radii, and `full` for controls. `BorderWidth` may be used only for documented status rings, dark raised-surface hairlines, settings-group separators, and presentation framing—not list-row cards.
 
-`ControlSize` owns the 40-point pill, 44-point floating button, 52-point settings row, and 88-point roster row. `HitSize` provides accessible touch targets. Icons use `IconSize` or the component-owned recipe.
+`ControlSize` owns the 40-point pill, 44-point floating button, 52-point settings row, and 88-point roster row. `HitSize` provides accessible touch targets. Icons use `IconSize` or the component-owned recipe. `StatusSize` owns the 6-point list status dot and 12-point attention marker.
 
 `Shadow` is an implementation ingredient for shared primitives. Business screens never spread it directly. `createThemedShadowStyle()` owns light-mode lift and the dark-mode hairline. Transitional primitives may still call `createSurfaceStyle()` until their old callers are removed; new 3.0 UI chooses a canonical primitive instead of assembling a surface locally.
 
@@ -134,4 +134,4 @@ For every UI batch run affected render tests in both light and dark schemes, `np
 
 `scripts/check-ui-style.mjs` rejects new hardcoded colors, numeric radii/fonts/borders, `FontSize` arithmetic, outlined list rows, emoji icon literals, more than three `FontSize.*` references per screen, React Native `KeyboardAvoidingView`, raw `Shadow.*`, unapproved native `TextInput`/`Switch`, and bottom-tab dependencies. Existing debt is stored per file and rule in `scripts/ui-style-baseline.json`; counts only decrease. Never update the baseline to hide a regression.
 
-The docs checker verifies canonical and transitional exports, the `BorderWidth`, `ControlSize`, `FontSize`, `LineHeight`, `PresentationColor`, `Radius`, `Shadow`, and `Space` families, plus `createSurfaceStyle`. Remove transitional names from this document and its checker only in the same change that deletes the last real caller.
+The docs checker verifies canonical and transitional exports, the `BorderWidth`, `ControlSize`, `FontSize`, `LineHeight`, `PresentationColor`, `Radius`, `Shadow`, `Space`, and `StatusSize` families, plus `createSurfaceStyle`. Remove transitional names from this document and its checker only in the same change that deletes the last real caller.

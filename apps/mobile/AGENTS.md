@@ -467,6 +467,7 @@ All structural style values (spacing, font size, border radius, shadows, animati
 | | `BorderWidth.strong` | 2 | Deliberate selection/artifact frames only |
 | | `BorderWidth.emphasis` | 3 | Scanner corners and high-visibility presentation marks only |
 | **Presentation** | `PresentationColor.*` | — | Theme-independent media overlays, exported artwork, and data visualization only |
+| **Status Size** | `StatusSize.dot` / `attention` | 6 / 12 | Compact list status and avatar attention indicators |
 | **Control Size** | `ControlSize.compact` | 36 | Grouped toolbar controls |
 | | `ControlSize.standard` | 44 | Standard actions and search |
 | | `ControlSize.large` / `field` | 48 | Large CTA / form field |
