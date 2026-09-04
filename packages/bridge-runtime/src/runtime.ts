@@ -438,7 +438,7 @@ export class BridgeRuntime {
         : this.options.issueLegacyOpenClawBootstrapToken ?? issueLegacyOpenClawBootstrapToken;
       const issued = await issueBootstrapToken({
         ...bootstrapRequest,
-        gatewayUrl: this.options.config.relayUrl,
+        gatewayUrl: this.options.gatewayUrl,
       });
       this.log(
         `relay bootstrap token issued requestId=${requestId} targetClientId=${replyTargetClientId || '<none>'} ` +

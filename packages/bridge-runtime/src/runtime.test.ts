@@ -1083,7 +1083,7 @@ describe('bridge runtime protocol helpers', () => {
       publicKey: 'public-key-1',
       role: 'operator',
       scopes: ['operator.read', 'operator.write'],
-      gatewayUrl: BASE_CONFIG.relayUrl,
+      gatewayUrl: 'ws://127.0.0.1:18789',
     });
 
     await runtime.stop();
@@ -1137,7 +1137,7 @@ describe('bridge runtime protocol helpers', () => {
       publicKey: 'public-key-legacy',
       role: 'operator',
       scopes: ['operator.read'],
-      gatewayUrl: BASE_CONFIG.relayUrl,
+      gatewayUrl: 'ws://127.0.0.1:18789',
     });
     expect(parseControl(relay.sent[0] as string)?.payload).toMatchObject({
       bootstrapToken: 'legacy-bootstrap-token',

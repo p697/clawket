@@ -34,6 +34,7 @@ For Hermes in this monorepo, model switching currently has a hard product bounda
 3. Relay control responses may add strategy metadata, but older Bridge/App combinations must continue to work when the field is absent.
 4. Never include bootstrap or device-token values in runtime logs.
 5. Changes to OpenClaw bootstrap handling must not alter Hermes adapters, relay infrastructure, or lifecycle behavior.
+6. Pass the actual Gateway URL used by the Bridge to the OpenClaw setup-code issuer. A Relay transport URL is not an OpenClaw Gateway URL and must never be substituted for it.
 
 ## Connection Recovery Rule
 

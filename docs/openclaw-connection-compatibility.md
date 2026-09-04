@@ -5,7 +5,7 @@ This document records Clawket's internal OpenClaw connection contract. It is an 
 ## Pairing flow
 
 1. Bridge detects whether gateway auth is configured without resolving or printing SecretRef values.
-2. Mobile advertises `openclaw.bootstrap.mobile-setup.v1` in the existing Relay bootstrap request. Only a Bridge that sees that exact capability invokes `openclaw qr --json --url <gateway-url>` and extracts the bootstrap token, expiry, and access classification from the setup code.
+2. Mobile advertises `openclaw.bootstrap.mobile-setup.v1` in the existing Relay bootstrap request. Only a Bridge that sees that exact capability invokes `openclaw qr --json --url <gateway-url>` with the actual OpenClaw Gateway URL used by the Bridge—not the Relay transport URL—and extracts the bootstrap token, expiry, and access classification from the setup code.
 3. Mobile opens a temporary signed `node` connection with no operator scopes, capabilities, or commands.
 4. OpenClaw returns role-bound device credentials in `hello-ok.auth.deviceTokens`.
 5. Mobile stores the operator token together with the exact returned scopes and immediately reconnects as the operator. No setup or compatibility choice is shown to the user.
