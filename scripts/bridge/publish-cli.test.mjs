@@ -49,15 +49,51 @@ test('blocks before reading or changing the package when compatibility fails', a
         read = true;
         return '{}';
       },
-      writeText: async () => {
-        wrote = true;
-      },
       stdout: { write() {} },
-      stderr: { write() {} },
     }),
     /npm run test:compat failed with exit code 1/,
   );
 
   assert.equal(read, false);
   assert.equal(wrote, false);
+});
+
+test('publishes the decision-locked 3.0.0 version without mutating the manifest', async () => {
+  const calls = [];
+  const output = [];
+
+  await preparePublish({
+    env: {
+      CLAWKET_PACKAGE_DEFAULT_REGISTRY_URL: 'https://registry.example.com',
+      CLAWKET_PACKAGE_DEFAULT_REGISTRY_FALLBACK_URL: 'https://fallback.example.com',
+    },
+    readText: async () => JSON.stringify({ name: '@p697/clawket', version: '3.0.0' }),
+    spawn: (command, args, options) => {
+      calls.push({ command, args, options });
+      return { status: 0 };
+    },
+    stdout: { write(value) { output.push(value); } },
+    cwd: '/workspace',
+  });
+
+  assert.deepEqual(calls.map(({ command, args }) => [command, args]), [
+    ['npm', ['run', 'test:compat']],
+    ['npm', ['run', '--workspace', '@p697/clawket', 'publish:dry-run']],
+  ]);
+  assert.match(output.join(''), /Publishing @p697\/clawket version: 3\.0\.0/);
+});
+
+test('fails closed when the package version would violate the 3.0 decision', async () => {
+  await assert.rejects(
+    preparePublish({
+      env: {
+        CLAWKET_PACKAGE_DEFAULT_REGISTRY_URL: 'https://registry.example.com',
+        CLAWKET_PACKAGE_DEFAULT_REGISTRY_FALLBACK_URL: 'https://fallback.example.com',
+      },
+      readText: async () => JSON.stringify({ name: '@p697/clawket', version: '3.0.1' }),
+      spawn: () => ({ status: 0 }),
+      stdout: { write() {} },
+    }),
+    /Expected @p697\/clawket version 3\.0\.0, found 3\.0\.1/,
+  );
 });

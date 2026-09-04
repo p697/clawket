@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import process from "node:process";
@@ -8,6 +8,7 @@ import { loadBridgeCliEnv } from "../../apps/bridge-cli/scripts/load-env.mjs";
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(scriptDir, "..", "..");
 const bridgePkgPath = path.join(rootDir, "apps", "bridge-cli", "package.json");
+const REQUIRED_CLI_VERSION = "3.0.0";
 
 function runOrThrow(command, args, cwd = rootDir, spawn = spawnSync) {
   const result = spawn(command, args, {
@@ -28,16 +29,6 @@ export function runCompatibilityGate({ spawn = spawnSync, cwd = rootDir } = {}) 
   runOrThrow("npm", ["run", "test:compat"], cwd, spawn);
 }
 
-function bumpPatch(version) {
-  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version);
-  if (!match) {
-    throw new Error(`Unsupported version format "${version}". Expected x.y.z`);
-  }
-
-  const [, major, minor, patch] = match;
-  return `${major}.${minor}.${Number(patch) + 1}`;
-}
-
 function readRequiredEnv(name, env = process.env) {
   const value = env[name]?.trim() ?? "";
   if (!value) {
@@ -52,9 +43,7 @@ export async function preparePublish({
   spawn = spawnSync,
   env = process.env,
   readText = readFile,
-  writeText = writeFile,
   stdout = process.stdout,
-  stderr = process.stderr,
   cwd = rootDir,
   packagePath = bridgePkgPath,
 } = {}) {
@@ -65,29 +54,23 @@ export async function preparePublish({
   const fallbackUrl = readRequiredEnv("CLAWKET_PACKAGE_DEFAULT_REGISTRY_FALLBACK_URL", env);
   const originalText = await readText(packagePath, "utf8");
   const pkg = JSON.parse(originalText);
-  const oldVersion = pkg.version;
-  const newVersion = bumpPatch(oldVersion);
+  if (pkg.version !== REQUIRED_CLI_VERSION) {
+    throw new Error(
+      `Expected @p697/clawket version ${REQUIRED_CLI_VERSION}, found ${String(pkg.version)}.`,
+    );
+  }
 
-  pkg.version = newVersion;
-  await writeText(packagePath, `${JSON.stringify(pkg, null, 2)}\n`, "utf8");
-
-  stdout.write(`\nBumped @p697/clawket version: ${oldVersion} -> ${newVersion}\n`);
+  stdout.write(`\nPublishing @p697/clawket version: ${pkg.version}\n`);
   stdout.write(`Publishing default registry: ${registryUrl}\n`);
   stdout.write(`Publishing fallback registry: ${fallbackUrl}\n`);
   stdout.write("Running publish safety checks (build + verify + dry-run)...\n\n");
 
-  try {
-    runOrThrow(
-      "npm",
-      ["run", "--workspace", "@p697/clawket", "publish:dry-run"],
-      cwd,
-      spawn,
-    );
-  } catch (error) {
-    await writeText(packagePath, originalText, "utf8");
-    stderr.write("\nPublish preparation failed; reverted apps/bridge-cli/package.json version bump.\n");
-    throw error;
-  }
+  runOrThrow(
+    "npm",
+    ["run", "--workspace", "@p697/clawket", "publish:dry-run"],
+    cwd,
+    spawn,
+  );
 
   stdout.write("\nAll publish checks passed.\n");
   stdout.write(`Final manual step:\n`);
