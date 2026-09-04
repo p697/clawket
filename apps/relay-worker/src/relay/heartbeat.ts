@@ -21,7 +21,16 @@ export async function ensureHeartbeat(runtime: RelayRuntime): Promise<void> {
     await runtime.state.storage.deleteAlarm();
     return;
   }
-  await runtime.state.storage.setAlarm(Date.now() + interval);
+  const now = Date.now();
+  let nextAlarmAt = now + interval;
+  if (runtime.policy.watchdog !== 'none' && runtime.pendingGatewayPingAt > 0) {
+    const timeoutMs = parsePositiveInt(
+      runtime.env.GATEWAY_PING_TIMEOUT_MS,
+      runtime.policy.gatewayPingTimeoutMs ?? GATEWAY_PING_TIMEOUT_DEFAULT_MS,
+    );
+    nextAlarmAt = Math.min(nextAlarmAt, runtime.pendingGatewayPingAt + timeoutMs);
+  }
+  await runtime.state.storage.setAlarm(nextAlarmAt);
 }
 
 export function hasOpenClients(runtime: RelayRuntime): boolean {

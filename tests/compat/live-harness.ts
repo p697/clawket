@@ -10,6 +10,7 @@ export type CompatWranglerDevParams = {
   configPath: string;
   port: number;
   inspectorPort: number;
+  persistencePath?: string;
   envVars?: Record<string, string>;
 };
 
@@ -24,6 +25,7 @@ export class CompatWranglerDevProcess {
     private readonly inspectorPort: number,
     private readonly tempDirectory: string,
     private readonly envFilePath: string,
+    private readonly persistencePath: string,
   ) {}
 
   static async start(params: CompatWranglerDevParams): Promise<CompatWranglerDevProcess> {
@@ -41,6 +43,7 @@ export class CompatWranglerDevProcess {
       params.inspectorPort,
       tempDirectory,
       envFilePath,
+      params.persistencePath ?? join(tempDirectory, 'state'),
     );
     try {
       await runner.startProcess();
@@ -89,7 +92,7 @@ export class CompatWranglerDevProcess {
       '--inspector-port', String(this.inspectorPort),
       '--inspector-ip', '127.0.0.1',
       '--local',
-      '--persist-to', join(this.tempDirectory, 'state'),
+      '--persist-to', this.persistencePath,
       '--log-level', 'log',
       '--show-interactive-dev-session', 'false',
       '--env-file', this.envFilePath,
@@ -259,6 +262,52 @@ export async function openWebSocket(url: string, options?: { headers?: Record<st
     socket.once('close', onClose);
   });
   return inbox;
+}
+
+export async function rejectWebSocketUpgrade(
+  url: string,
+  options?: { headers?: Record<string, string> },
+): Promise<{ status: number; body: string }> {
+  const socket = new WebSocket(url, options);
+  return new Promise((resolve, reject) => {
+    let responseStarted = false;
+    let settled = false;
+    const finish = (action: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      action();
+    };
+    const timeout = setTimeout(() => {
+      socket.once('error', () => {});
+      socket.terminate();
+      finish(() => reject(new Error(`Timed out waiting for rejected websocket upgrade ${redactUrl(url)}`)));
+    }, 10_000);
+
+    socket.once('open', () => {
+      finish(() => {
+        socket.terminate();
+        reject(new Error(`Expected websocket upgrade rejection, but connection opened: ${redactUrl(url)}`));
+      });
+    });
+    socket.once('error', (error) => {
+      if (!responseStarted) finish(() => reject(error));
+    });
+    socket.once('unexpected-response', (request, response) => {
+      responseStarted = true;
+      const chunks: Buffer[] = [];
+      response.on('data', (chunk: Buffer | string) => {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      });
+      response.once('error', (error) => finish(() => reject(error)));
+      response.once('end', () => {
+        const status = response.statusCode ?? 0;
+        const body = Buffer.concat(chunks).toString('utf8');
+        request.destroy();
+        finish(() => resolve({ status, body }));
+      });
+    });
+  });
 }
 
 export async function startWebSocketServer(

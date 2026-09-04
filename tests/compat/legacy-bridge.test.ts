@@ -37,6 +37,7 @@ let relay: CompatWranglerDevProcess | undefined;
 let fixture: CompatFixture;
 let prepared: PreparedLegacyBridge[] = [];
 let isolatedOpenClawState = '';
+let servicePersistence = '';
 
 const savedOpenClawEnv = new Map<string, string | undefined>();
 const isolatedEnvNames = [
@@ -54,7 +55,10 @@ beforeAll(async () => {
   fixture = await loadCompatFixture('relay-openclaw/openclaw-v1.json');
   prepared = await prepareLegacyBridgeMatrix(process.cwd());
 
-  isolatedOpenClawState = await mkdtemp(join(tmpdir(), 'clawket-legacy-bridge-state-'));
+  [isolatedOpenClawState, servicePersistence] = await Promise.all([
+    mkdtemp(join(tmpdir(), 'clawket-legacy-bridge-state-')),
+    mkdtemp(join(tmpdir(), 'clawket-legacy-bridge-services-')),
+  ]);
   for (const name of isolatedEnvNames) {
     savedOpenClawEnv.set(name, process.env[name]);
     delete process.env[name];
@@ -73,6 +77,7 @@ beforeAll(async () => {
     configPath: 'apps/relay-registry/wrangler.toml',
     port: registryPort,
     inspectorPort: registryInspectorPort,
+    persistencePath: servicePersistence,
     envVars: {
       RELAY_REGION_MAP: relayMap(relayUrl),
       PAIR_ACCESS_CODE_TTL_SEC: '600',
@@ -84,6 +89,7 @@ beforeAll(async () => {
     configPath: 'apps/relay-worker/wrangler.toml',
     port: relayPort,
     inspectorPort: relayInspectorPort,
+    persistencePath: servicePersistence,
     envVars: {
       REGISTRY_VERIFY_URL: registry.baseUrl,
       MAX_MESSAGES_PER_10S: '120',
@@ -99,6 +105,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await Promise.allSettled([relay?.stop(), registry?.stop()]);
   if (isolatedOpenClawState) await rm(isolatedOpenClawState, { recursive: true, force: true });
+  if (servicePersistence) await rm(servicePersistence, { recursive: true, force: true });
   for (const name of isolatedEnvNames) {
     const previous = savedOpenClawEnv.get(name);
     if (previous === undefined) delete process.env[name];

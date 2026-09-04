@@ -6,6 +6,7 @@ import WebSocket, { type RawData, type WebSocketServer } from 'ws';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { BridgeRuntime } from '../../packages/bridge-runtime/src/runtime';
 import { HermesRelayRuntime } from '../../packages/bridge-runtime/src/hermes-relay';
+import { RELAY_FRAME_MAX_BYTES, SOCKET_CLOSE_CODES } from '../../apps/relay-worker/src/relay/types';
 import { getFreePort } from '../integration/harness';
 import { loadCompatFixture } from './loader';
 import {
@@ -16,6 +17,7 @@ import {
   isRecord,
   openWebSocket,
   parseJson,
+  rejectWebSocketUpgrade,
   startCompatWranglerDevProcesses,
   startWebSocketServer,
   waitFor,
@@ -43,6 +45,8 @@ let registryFixture: CompatFixture;
 let hermesFixture: CompatFixture;
 let bridgeFixture: CompatFixture;
 let isolatedOpenClawState = '';
+let openClawPersistence = '';
+let hermesPersistence = '';
 
 const savedOpenClawEnv = new Map<string, string | undefined>();
 const liveFixtureCoverage = new Map<string, Set<string>>();
@@ -65,7 +69,11 @@ beforeAll(async () => {
     loadCompatFixture('bridge/openclaw-forwarding-v1.json'),
   ]);
 
-  isolatedOpenClawState = await mkdtemp(join(tmpdir(), 'clawket-compat-openclaw-'));
+  [isolatedOpenClawState, openClawPersistence, hermesPersistence] = await Promise.all([
+    mkdtemp(join(tmpdir(), 'clawket-compat-openclaw-')),
+    mkdtemp(join(tmpdir(), 'clawket-compat-openclaw-services-')),
+    mkdtemp(join(tmpdir(), 'clawket-compat-hermes-services-')),
+  ]);
   for (const name of isolatedEnvNames) {
     savedOpenClawEnv.set(name, process.env[name]);
     delete process.env[name];
@@ -100,6 +108,7 @@ beforeAll(async () => {
       configPath: 'apps/relay-registry/wrangler.toml',
       port: openClawRegistryPort,
       inspectorPort: openClawRegistryInspectorPort,
+      persistencePath: openClawPersistence,
       envVars: {
         RELAY_REGION_MAP: relayMap(openClawRelayUrl),
         PAIR_ACCESS_CODE_TTL_SEC: '600',
@@ -111,6 +120,7 @@ beforeAll(async () => {
       configPath: 'apps/relay-registry/wrangler.hermes.toml',
       port: hermesRegistryPort,
       inspectorPort: hermesRegistryInspectorPort,
+      persistencePath: hermesPersistence,
       envVars: {
         RELAY_REGION_MAP: relayMap(hermesRelayUrl),
         PAIR_ACCESS_CODE_TTL_SEC: '600',
@@ -125,6 +135,7 @@ beforeAll(async () => {
       configPath: 'apps/relay-worker/wrangler.toml',
       port: openClawRelayPort,
       inspectorPort: openClawRelayInspectorPort,
+      persistencePath: openClawPersistence,
       envVars: {
         REGISTRY_VERIFY_URL: openClawRegistry.baseUrl,
         MAX_MESSAGES_PER_10S: '20',
@@ -140,6 +151,7 @@ beforeAll(async () => {
       configPath: 'apps/relay-worker/wrangler.hermes.toml',
       port: hermesRelayPort,
       inspectorPort: hermesRelayInspectorPort,
+      persistencePath: hermesPersistence,
       envVars: {
         REGISTRY_VERIFY_URL: hermesRegistry.baseUrl,
         HEARTBEAT_INTERVAL_MS: '30000',
@@ -159,6 +171,8 @@ afterAll(async () => {
     hermesRegistry?.stop(),
   ]);
   if (isolatedOpenClawState) await rm(isolatedOpenClawState, { recursive: true, force: true });
+  if (openClawPersistence) await rm(openClawPersistence, { recursive: true, force: true });
+  if (hermesPersistence) await rm(hermesPersistence, { recursive: true, force: true });
   for (const name of isolatedEnvNames) {
     const previous = savedOpenClawEnv.get(name);
     if (previous === undefined) delete process.env[name];
@@ -176,6 +190,30 @@ afterAll(async () => {
 });
 
 describe('v1 compatibility live replay', () => {
+  it('returns structured 404 responses for unknown principals before websocket upgrade', async () => {
+    const cases = [
+      {
+        relay: openClawRelay,
+        query: { gatewayId: 'gw_compat_unknown_00000000', role: 'client', token: 'invalid' },
+      },
+      {
+        relay: hermesRelay,
+        query: { bridgeId: 'hbg_compat_unknown_00000000', role: 'client', token: 'invalid' },
+      },
+    ];
+
+    for (const { relay, query } of cases) {
+      const rejected = await rejectWebSocketUpgrade(wsUrl(`${relay.baseUrl}/ws`, query));
+      expect(rejected.status).toBe(404);
+      expect(parseJson(rejected.body)).toEqual({
+        error: {
+          code: 'UNKNOWN_GATEWAY',
+          message: expect.any(String),
+        },
+      });
+    }
+  });
+
   it('replays Registry register, access-code, session resolve, and claim through Wrangler dev', async () => {
     const comparison = createCompatComparisonContext();
     const registerRequest = { displayName: 'Compatibility Mac', preferredRegion: 'us' };
@@ -292,6 +330,7 @@ describe('v1 compatibility live replay', () => {
       assertBridge('relay.connection', bridgeRelayConnections[0]);
       assertOpenClaw('legacy-client.connection', openClawClientConnectionPayload(paired, 'compat-ios-legacy'));
       legacyClient = await openOpenClawClient(paired, 'compat-ios-legacy');
+      await expectRelayReadyFirst(legacyClient);
 
       const challenge = await legacyClient.nextJson((frame) => frame.event === 'connect.challenge');
       assertOpenClaw('connect.31a.challenge', challenge);
@@ -436,6 +475,7 @@ describe('v1 compatibility live replay', () => {
     await expectPongTimeoutCloseCode(assertClose);
     await expectGatewayUnavailableCloseCode(assertClose);
     await expectGatewayReconnectCloseCode(assertClose);
+    await expectFrameTooLargeCloseCode();
   }, 60_000);
 
   it('replays Hermes health and sessions.list without inventing an OpenClaw handshake', async () => {
@@ -443,6 +483,7 @@ describe('v1 compatibility live replay', () => {
     const paired = await pairHermes('Hermes Replay');
     const clientConnection = hermesClientConnectionPayload(paired, 'compat-hermes-ios');
     const client = await openHermesClient(paired, 'compat-hermes-ios');
+    await expectRelayReadyFirst(client);
     const localPort = await getFreePort();
     const localFrames: Record<string, unknown>[] = [];
     const bridgeRelayConnections: JsonValue[] = [];
@@ -517,6 +558,16 @@ describe('v1 compatibility live replay', () => {
 
 type FixtureAsserter = (label: string, actual: unknown) => void;
 
+async function expectRelayReadyFirst(inbox: WebSocketInbox): Promise<void> {
+  const firstFrame = await inbox.nextText(() => true);
+  expect(firstFrame.startsWith(CONTROL_PREFIX)).toBe(true);
+  expect(parseJson(firstFrame.slice(CONTROL_PREFIX.length))).toEqual({
+    type: 'control',
+    event: 'relay.ready',
+    payload: { capabilities: ['relay.frame-limit.v2'] },
+  });
+}
+
 function createFixtureAsserter(fixture: CompatFixture): FixtureAsserter {
   const context = createCompatComparisonContext();
   return (label, actual) => assertFixtureFrame(fixture, label, actual, context);
@@ -579,6 +630,17 @@ async function expectGatewayReconnectCloseCode(assertClose: FixtureAsserter): Pr
   gateway.socket.send(`${CONTROL_PREFIX}${JSON.stringify({ type: 'control', event: 'client.reconnect-required' })}`);
   assertClose('close.gateway-reconnect', await waitForCloseWithRelayLogs(client));
   closeWebSocket(gateway);
+}
+
+async function expectFrameTooLargeCloseCode(): Promise<void> {
+  const paired = await pairOpenClaw('Close Oversized Frame');
+  const client = await openOpenClawClient(paired, 'oversized-frame-client');
+  await expectRelayReadyFirst(client);
+  client.socket.send(Buffer.alloc(RELAY_FRAME_MAX_BYTES + 1));
+  expect(await waitForCloseWithRelayLogs(client)).toEqual({
+    code: SOCKET_CLOSE_CODES.FRAME_TOO_LARGE,
+    reason: 'frame_too_large',
+  });
 }
 
 async function pairOpenClaw(displayName: string): Promise<{

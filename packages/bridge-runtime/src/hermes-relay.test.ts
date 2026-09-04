@@ -5,6 +5,11 @@ import {
   buildHermesRelayWsUrl,
   HermesRelayRuntime,
 } from './hermes-relay.js';
+import {
+  FRAME_TOO_LARGE_CLOSE_CODE,
+  FRAME_TOO_LARGE_ERROR_CODE,
+  WEBSOCKET_FRAME_LIMIT_BYTES,
+} from './frame-limit.js';
 
 class FakeSocket extends EventEmitter {
   static readonly CONNECTING = 0;
@@ -13,8 +18,13 @@ class FakeSocket extends EventEmitter {
 
   readyState = FakeSocket.CONNECTING;
   sent: Array<string | Buffer> = [];
+  closeCode?: number;
+  closeReason?: string;
 
-  constructor(readonly url: string, readonly options?: { headers?: Record<string, string> }) {
+  constructor(
+    readonly url: string,
+    readonly options?: { headers?: Record<string, string>; maxPayload?: number },
+  ) {
     super();
   }
 
@@ -23,6 +33,8 @@ class FakeSocket extends EventEmitter {
   }
 
   close(code = 1000, reason = ''): void {
+    this.closeCode = code;
+    this.closeReason = reason;
     this.readyState = FakeSocket.CLOSED;
     this.emit('close', code, Buffer.from(reason));
   }
@@ -34,6 +46,10 @@ class FakeSocket extends EventEmitter {
 
   pushText(text: string): void {
     this.emit('message', text, false);
+  }
+
+  pushBinary(data: Buffer): void {
+    this.emit('message', data, true);
   }
 }
 
@@ -98,6 +114,45 @@ describe('hermes relay runtime helpers', () => {
     relaySocket.pushText('{"type":"req","id":"req_1","method":"chat.send"}');
 
     expect(bridgeSocket.sent).toEqual(['{"type":"req","id":"req_1","method":"chat.send"}']);
+
+    await runtime.stop();
+  });
+
+  it('enforces the 8 MiB frame boundary on both Hermes relay sockets', async () => {
+    const sockets: FakeSocket[] = [];
+    const runtime = new HermesRelayRuntime({
+      config: createConfig(),
+      bridgeUrl: 'ws://127.0.0.1:4319/v1/hermes/ws?token=secret',
+      createWebSocket: (url, options) => {
+        const socket = new FakeSocket(url, options);
+        sockets.push(socket);
+        return socket as never;
+      },
+    });
+
+    runtime.start();
+    const relaySocket = sockets[0];
+    expect(relaySocket.options?.maxPayload).toBe(WEBSOCKET_FRAME_LIMIT_BYTES);
+    relaySocket.open();
+    const bridgeSocket = sockets[1];
+    expect(bridgeSocket.options?.maxPayload).toBe(WEBSOCKET_FRAME_LIMIT_BYTES);
+    bridgeSocket.open();
+
+    const exactBoundary = Buffer.alloc(WEBSOCKET_FRAME_LIMIT_BYTES);
+    relaySocket.pushBinary(exactBoundary);
+    expect((bridgeSocket.sent.at(-1) as Buffer).byteLength).toBe(WEBSOCKET_FRAME_LIMIT_BYTES);
+    bridgeSocket.pushBinary(exactBoundary);
+    expect((relaySocket.sent.at(-1) as Buffer).byteLength).toBe(WEBSOCKET_FRAME_LIMIT_BYTES);
+
+    const oversized = Buffer.alloc(WEBSOCKET_FRAME_LIMIT_BYTES + 1);
+    bridgeSocket.pushBinary(oversized);
+    expect(bridgeSocket.closeCode).toBe(FRAME_TOO_LARGE_CLOSE_CODE);
+    expect(bridgeSocket.closeReason).toBe(FRAME_TOO_LARGE_ERROR_CODE);
+    expect(relaySocket.sent).toHaveLength(1);
+
+    relaySocket.pushBinary(oversized);
+    expect(relaySocket.closeCode).toBe(FRAME_TOO_LARGE_CLOSE_CODE);
+    expect(relaySocket.closeReason).toBe(FRAME_TOO_LARGE_ERROR_CODE);
 
     await runtime.stop();
   });

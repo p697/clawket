@@ -33,6 +33,11 @@ import {
   parsePairResolvedEvent,
   parseResponseEnvelopeMeta,
 } from './protocol.js';
+import {
+  FRAME_TOO_LARGE_CLOSE_CODE,
+  FRAME_TOO_LARGE_ERROR_CODE,
+  WEBSOCKET_FRAME_LIMIT_BYTES,
+} from './frame-limit.js';
 
 const tempDirs: string[] = [];
 
@@ -49,6 +54,8 @@ class FakeSocket extends EventEmitter {
   readyState = 0;
   sent: Array<string | Buffer> = [];
   closeCalls = 0;
+  closeCode?: number;
+  closeReason?: string;
   pingCalls = 0;
   options?: {
     headers?: Record<string, string>;
@@ -72,8 +79,10 @@ class FakeSocket extends EventEmitter {
     this.sent.push(typeof data === 'string' ? data : Buffer.from(data));
   }
 
-  close(): void {
+  close(code = 1000, reason = ''): void {
     this.closeCalls += 1;
+    this.closeCode = code;
+    this.closeReason = reason;
     if (this.readyState === 2 || this.readyState === 3) return;
     this.readyState = 2;
   }
@@ -94,6 +103,10 @@ class FakeSocket extends EventEmitter {
 
   message(text: string): void {
     this.emit('message', Buffer.from(text), false);
+  }
+
+  binaryMessage(data: Buffer): void {
+    this.emit('message', data, true);
   }
 
   closeFromRemote(code = 1000, reason = ''): void {
@@ -867,6 +880,46 @@ describe('bridge runtime protocol helpers', () => {
     expect(logs.join('\n')).not.toContain(BASE_CONFIG.relaySecret);
     expect(logs.some((line) => line.includes(`gatewayId=${BASE_CONFIG.gatewayId}`))).toBe(true);
     expect(logs.join('\n')).not.toContain(BASE_CONFIG.instanceId);
+
+    await runtime.stop();
+  });
+
+  it('enforces the 8 MiB frame boundary on both OpenClaw sockets', async () => {
+    const sockets: FakeSocket[] = [];
+    const runtime = new BridgeRuntime({
+      config: BASE_CONFIG,
+      gatewayUrl: 'ws://127.0.0.1:18789',
+      createWebSocket: (url, options) => {
+        const socket = new FakeSocket(url, options);
+        sockets.push(socket);
+        return socket;
+      },
+    });
+
+    runtime.start();
+    const relay = sockets[0];
+    expect(relay.options?.maxPayload).toBe(WEBSOCKET_FRAME_LIMIT_BYTES);
+    relay.open();
+
+    const exactBoundary = Buffer.alloc(WEBSOCKET_FRAME_LIMIT_BYTES);
+    relay.binaryMessage(exactBoundary);
+    const gateway = sockets[1];
+    expect(gateway.options?.maxPayload).toBe(WEBSOCKET_FRAME_LIMIT_BYTES);
+    expect(relay.closeCalls).toBe(0);
+    gateway.open();
+
+    gateway.binaryMessage(exactBoundary);
+    expect((relay.sent.at(-1) as Buffer).byteLength).toBe(WEBSOCKET_FRAME_LIMIT_BYTES);
+
+    const oversized = Buffer.alloc(WEBSOCKET_FRAME_LIMIT_BYTES + 1);
+    gateway.binaryMessage(oversized);
+    expect(gateway.closeCode).toBe(FRAME_TOO_LARGE_CLOSE_CODE);
+    expect(gateway.closeReason).toBe(FRAME_TOO_LARGE_ERROR_CODE);
+    expect(relay.sent).toHaveLength(1);
+
+    relay.binaryMessage(oversized);
+    expect(relay.closeCode).toBe(FRAME_TOO_LARGE_CLOSE_CODE);
+    expect(relay.closeReason).toBe(FRAME_TOO_LARGE_ERROR_CODE);
 
     await runtime.stop();
   });

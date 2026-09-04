@@ -1,6 +1,13 @@
 import { sha256 } from 'js-sha256';
 import nacl from 'tweetnacl';
 import { resolveOfficialRelayEnvironment } from './relay-environment';
+import {
+  assertWebSocketFrameWithinLimit,
+  FRAME_TOO_LARGE_CLOSE_CODE,
+  FRAME_TOO_LARGE_ERROR_CODE,
+  isWebSocketFrameTooLarge,
+  WebSocketFrameTooLargeError,
+} from './websocket-frame-limit';
 
 type PairingSessionCiphertext = {
   nonce: string;
@@ -163,15 +170,15 @@ function exchangeSecurePairingPayload(input: {
     const timeout = setTimeout(() => {
       fail('PAIRING_HANDSHAKE_TIMEOUT', 'The computer did not respond to the pairing request.');
     }, 15_000);
-    const fail = (code: string, message: string) => {
+    const fail = (code: string, message: string, closeCode?: number) => {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
-      try { socket.close(); } catch { /* already closed */ }
+      try { socket.close(closeCode, closeCode ? code : undefined); } catch { /* already closed */ }
       reject(new PairingSessionError(code, message));
     };
     socket.onopen = () => {
-      socket.send(`${RELAY_CONTROL_PREFIX}${JSON.stringify({
+      const frame = `${RELAY_CONTROL_PREFIX}${JSON.stringify({
         type: 'control',
         event: 'pairing.secure.start',
         requestId: input.requestId,
@@ -181,11 +188,29 @@ function exchangeSecurePairingPayload(input: {
           clientPublicKey: input.clientPublicKey,
           clientProof: input.clientProof,
         },
-      })}`);
+      })}`;
+      try {
+        assertWebSocketFrameWithinLimit(frame);
+        socket.send(frame);
+      } catch (error) {
+        if (error instanceof WebSocketFrameTooLargeError) {
+          fail(error.code, error.message, FRAME_TOO_LARGE_CLOSE_CODE);
+          return;
+        }
+        fail('PAIRING_HANDSHAKE_FAILED', 'Could not establish the secure pairing channel.');
+      }
     };
     socket.onerror = () => fail('PAIRING_HANDSHAKE_FAILED', 'Could not establish the secure pairing channel.');
     socket.onclose = () => fail('PAIRING_HANDSHAKE_FAILED', 'The secure pairing channel closed before pairing completed.');
     socket.onmessage = (event) => {
+      if (isWebSocketFrameTooLarge(event.data)) {
+        fail(
+          FRAME_TOO_LARGE_ERROR_CODE,
+          FRAME_TOO_LARGE_ERROR_CODE,
+          FRAME_TOO_LARGE_CLOSE_CODE,
+        );
+        return;
+      }
       if (typeof event.data !== 'string' || !event.data.startsWith(RELAY_CONTROL_PREFIX)) return;
       let envelope: { event?: unknown; requestId?: unknown; payload?: Record<string, unknown> };
       try {

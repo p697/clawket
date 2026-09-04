@@ -117,6 +117,12 @@ You **must** read the sister repo's code (start with its `AGENTS.md` and `CLAUDE
 2. Treat WebSocket `open`, first valid frame, and backend `ready` as separate lifecycle stages. OpenClaw reconnect backoff resets only after `connect_ready`; direct backends reset after a valid first frame.
 3. Unknown tick fields and close codes remain non-fatal so new Relay workers stay compatible with old App releases and new Apps stay compatible with old Relay workers.
 
+## Relay Frame Limit
+
+1. Check the final serialized WebSocket frame before sending on every backend/transport path; strings are measured as UTF-8 bytes.
+2. Exactly 8 MiB is valid. A strictly larger frame must fail locally with the stable error code `frame_too_large` and must not reach the socket.
+3. Keep the check centralized in the connection service so OpenClaw and Hermes cannot drift, and preserve the existing nominal 5 MiB image workflow.
+
 ## Preview Relay Environment
 
 1. Preview is selected only from Debug Mode and changes the official Registry/Relay environment used for new OpenClaw Relay pairing. It is not a transport or backend option.

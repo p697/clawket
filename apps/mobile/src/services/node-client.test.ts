@@ -1,4 +1,9 @@
 import { NodeClient } from './node-client';
+import {
+  FRAME_TOO_LARGE_CLOSE_CODE,
+  FRAME_TOO_LARGE_ERROR_CODE,
+  WEBSOCKET_FRAME_LIMIT_BYTES,
+} from './websocket-frame-limit';
 
 // Mock tweetnacl
 jest.mock('tweetnacl', () => ({
@@ -39,10 +44,10 @@ class MockWebSocket {
   readyState = MockWebSocket.OPEN;
   onopen: (() => void) | null = null;
   onclose: (() => void) | null = null;
-  onmessage: ((event: { data: string }) => void) | null = null;
+  onmessage: ((event: { data: unknown }) => void) | null = null;
   onerror: (() => void) | null = null;
   send = jest.fn();
-  close = jest.fn(() => {
+  close = jest.fn((_code?: number, _reason?: string) => {
     this.readyState = MockWebSocket.CLOSED;
     if (this.onclose) this.onclose();
   });
@@ -205,5 +210,44 @@ describe('NodeClient', () => {
     const sendCallsBefore = ws.send.mock.calls.length;
     client.sendInvokeResult('inv-1', { ok: true, payload: {} });
     expect(ws.send.mock.calls.length).toBe(sendCallsBefore);
+  });
+
+  it('rejects oversized invoke results before WebSocket.send', () => {
+    client.configure({ url: 'ws://localhost:18789' });
+    client.connect();
+    const ws = (client as any).ws as MockWebSocket;
+    (client as any).deviceId = 'device-123';
+    const errors: Array<{ code: string; message: string }> = [];
+    client.on('error', (error) => errors.push(error));
+
+    client.sendInvokeResult('inv-1', {
+      ok: true,
+      payload: { value: '😀'.repeat(WEBSOCKET_FRAME_LIMIT_BYTES / 4) },
+    });
+
+    expect(ws.send).not.toHaveBeenCalled();
+    expect(errors).toContainEqual({
+      code: FRAME_TOO_LARGE_ERROR_CODE,
+      message: FRAME_TOO_LARGE_ERROR_CODE,
+    });
+  });
+
+  it('rejects oversized inbound frames before parsing', () => {
+    client.configure({ url: 'ws://localhost:18789' });
+    client.connect();
+    const ws = (client as any).ws as MockWebSocket;
+    const errors: Array<{ code: string; message: string }> = [];
+    client.on('error', (error) => errors.push(error));
+
+    ws.onmessage?.({ data: new ArrayBuffer(WEBSOCKET_FRAME_LIMIT_BYTES + 1) });
+
+    expect(errors).toContainEqual({
+      code: FRAME_TOO_LARGE_ERROR_CODE,
+      message: FRAME_TOO_LARGE_ERROR_CODE,
+    });
+    expect(ws.close).toHaveBeenCalledWith(
+      FRAME_TOO_LARGE_CLOSE_CODE,
+      FRAME_TOO_LARGE_ERROR_CODE,
+    );
   });
 });

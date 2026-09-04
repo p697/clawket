@@ -2,6 +2,12 @@ import { extractText, GatewayClient } from './gateway';
 import { GatewayRequestError } from './gateway-shared';
 import type { ConnectChallengePayload } from '../types';
 import { RELAY_CLIENT_PONG_CAPABILITY, RELAY_CONTROL_PREFIX } from './gateway-relay';
+import {
+  FRAME_TOO_LARGE_CLOSE_CODE,
+  FRAME_TOO_LARGE_ERROR_CODE,
+  WEBSOCKET_FRAME_LIMIT_BYTES,
+  WebSocketFrameTooLargeError,
+} from './websocket-frame-limit';
 
 // Mock tweetnacl
 jest.mock('tweetnacl', () => ({
@@ -72,10 +78,10 @@ class MockWebSocket {
   readyState = MockWebSocket.OPEN;
   onopen: (() => void) | null = null;
   onclose: (() => void) | null = null;
-  onmessage: ((event: { data: string }) => void) | null = null;
+  onmessage: ((event: { data: unknown }) => void) | null = null;
   onerror: (() => void) | null = null;
   send = jest.fn();
-  close = jest.fn(() => {
+  close = jest.fn((_code?: number, _reason?: string) => {
     this.readyState = MockWebSocket.CLOSED;
     if (this.onclose) this.onclose();
   });
@@ -1131,6 +1137,45 @@ describe('GatewayClient', () => {
       expect(tickListener).toHaveBeenCalledWith({});
     });
 
+    it('rejects an oversized inbound frame with a stable error code', () => {
+      const errorListener = jest.fn();
+      client.on('error', errorListener);
+
+      createdWs.onmessage!({ data: 'a'.repeat(WEBSOCKET_FRAME_LIMIT_BYTES + 1) });
+
+      expect(errorListener).toHaveBeenCalledWith({
+        code: FRAME_TOO_LARGE_ERROR_CODE,
+        message: FRAME_TOO_LARGE_ERROR_CODE,
+      });
+      expect(createdWs.close).toHaveBeenCalledWith(
+        FRAME_TOO_LARGE_CLOSE_CODE,
+        FRAME_TOO_LARGE_ERROR_CODE,
+      );
+    });
+
+  });
+
+  describe('outbound frame boundary', () => {
+    it.each([
+      ['OpenClaw', { backendKind: 'openclaw', transportKind: 'relay', mode: 'relay' }],
+      ['Hermes', { backendKind: 'hermes', transportKind: 'relay', mode: 'hermes' }],
+    ] as const)('rejects oversized %s wire frames before WebSocket.send', async (_label, backend) => {
+      const ws = new MockWebSocket();
+      client.configure({ url: 'wss://example.com/ws', ...backend });
+      (client as unknown as { ws: MockWebSocket }).ws = ws;
+      (client as unknown as { state: string }).state = 'ready';
+
+      const pending = client.request('chat.send', {
+        message: '😀'.repeat(WEBSOCKET_FRAME_LIMIT_BYTES / 4),
+      });
+
+      await expect(pending).rejects.toMatchObject({
+        code: FRAME_TOO_LARGE_ERROR_CODE,
+        name: WebSocketFrameTooLargeError.name,
+      });
+      expect(ws.send).not.toHaveBeenCalled();
+      expect((client as unknown as { pendingRequests: Map<string, unknown> }).pendingRequests.size).toBe(0);
+    });
   });
 
   describe('request timeout recovery', () => {

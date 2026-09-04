@@ -129,7 +129,7 @@ These scripts automatically prefer `wrangler.local.toml` when present.
 
 ## 11. Hermes Relay Local Development
 
-Hermes relay uses separate workers and separate Wrangler configs:
+Hermes relay uses the same Registry and Relay source workspaces as OpenClaw, selected by `RELAY_BACKEND=hermes`. It still deploys as separate services with separate Wrangler configs and resources:
 
 ```bash
 npm run relay:dev:hermes-registry
@@ -148,6 +148,7 @@ Important:
 1. Keep Hermes KV and DO resources separate from OpenClaw.
 2. Do not point Hermes local configs at the production OpenClaw registry or relay.
 3. Do not replace the existing OpenClaw workers when testing Hermes relay rollout.
+4. Keep the Registry's `PAIR_REGISTER_LIMITER` binding and SQLite migration in every local config; it enforces the 10-per-hour registration limit without KV counters.
 
 ### Hermes Relay End-To-End Smoke Flow
 

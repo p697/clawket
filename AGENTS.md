@@ -72,6 +72,14 @@ During the OpenClaw + Hermes coexistence period, treat backend identity and tran
 3. A Bridge or local Gateway reconnect must force any stale client transport to reconnect when its existing backend session can no longer be resumed safely.
 4. Successful health evidence must reset reconnect backoff. A raw WebSocket `open` event is not sufficient proof of a completed backend handshake.
 
+## Relay Resource Safety Rule
+
+1. Relay `/ws` requests must prove the backend-specific pairing record exists before resolving a room Durable Object. Keep the bounded 60-second existence cache free of credentials and request-scoped state.
+2. Relay, Bridge, and App use the same 8 MiB application-frame limit. Relay closes strictly larger frames with `1009` / `frame_too_large`; Bridge normalizes the `ws` hard-limit error to the same stable code, and App rejects it before send. The nominal 5 MiB image flow must remain below the wire limit.
+3. Registry registration is limited to 10 attempts per hashed source IP per fixed hour using a strongly consistent counter. Never store or log the raw source IP for this limit.
+4. Unclaimed registration records expire after 24 hours; successful claim restores the existing 365-day lifetime.
+5. Relay health and the post-authentication `relay.ready` control frame advertise `relay.frame-limit.v2`; older peers must remain able to ignore the additive control frame.
+
 ## Preview Service Environment Rule
 
 1. Preview is an OpenClaw Relay service environment, not a backend or transport kind. Keep `backendKind=openclaw` and `transportKind=relay` for both Production and Preview.

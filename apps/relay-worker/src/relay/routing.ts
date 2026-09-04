@@ -17,7 +17,7 @@ import {
 import { logRuntimeTelemetry } from './telemetry';
 import type { RelayRuntime } from './runtime';
 import { touchClientActivity, touchGatewayActivity } from './runtime';
-import { dropClientState, prunePendingConnectStarts } from './heartbeat';
+import { dropClientState, ensureHeartbeat, prunePendingConnectStarts } from './heartbeat';
 import {
   logControlRoutingTelemetry,
   parseControlEnvelope,
@@ -261,6 +261,7 @@ export async function handleGatewayMessage(
           role: 'gateway',
           clientCount: runtime.clients.size,
         });
+        await ensureHeartbeat(runtime);
         return;
       }
       if (runtime.policy.reconnectClientsOnOwnerRequest

@@ -76,6 +76,8 @@ Current pairing behavior:
 | `packages/bridge-runtime` | Bridge runtime |
 | `packages/relay-shared` | Shared relay protocol & types |
 
+The two Relay workspaces deploy OpenClaw and Hermes from one policy-driven codebase. Production and Preview still use separate Worker services, KV namespaces, Durable Object namespaces, and credentials for each backend.
+
 ## Quick Start
 
 If you only want to run the mobile app locally, start here. You do not need to understand Relay, Registry, or build the bridge from source first.

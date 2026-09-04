@@ -2,8 +2,21 @@ import { describe, expect, it, vi } from 'vitest';
 import { sha256Hex } from '@clawket/shared';
 import worker from './index';
 
+vi.mock('cloudflare:workers', () => ({
+  DurableObject: class {
+    protected readonly ctx: DurableObjectState;
+    protected readonly env: unknown;
+
+    constructor(ctx: DurableObjectState, env: unknown) {
+      this.ctx = ctx;
+      this.env = env;
+    }
+  },
+}));
+
 const fetchHandler = worker.fetch as (request: Request, env: unknown) => Promise<Response>;
-const RECORD_TTL_SEC = 365 * 24 * 3600;
+const UNCLAIMED_RECORD_TTL_SEC = 24 * 60 * 60;
+const CLAIMED_RECORD_TTL_SEC = 365 * 24 * 60 * 60;
 
 type PutCall = {
   key: string;
@@ -79,10 +92,19 @@ function createEnv(backendCase: BackendCase, overrides: Record<string, unknown> 
       RELAY_REGION_MAP: JSON.stringify({ us: 'wss://relay-us.example.com/ws' }),
       PAIR_ACCESS_CODE_TTL_SEC: '600',
       PAIR_CLIENT_TOKEN_MAX: '8',
+      PAIR_REGISTER_LIMITER: createAlwaysAllowRegisterLimiter(),
       ...overrides,
     },
     selectedKv: backendCase.backend === 'openclaw' ? openClawKv : hermesKv,
     unusedKv: backendCase.backend === 'openclaw' ? hermesKv : openClawKv,
+  };
+}
+
+function createAlwaysAllowRegisterLimiter() {
+  return {
+    getByName: () => ({
+      consume: async (nowMs: number) => ({ allowed: true, count: 1, resetAt: nowMs + 60 * 60 * 1000 }),
+    }),
   };
 }
 
@@ -133,7 +155,7 @@ describe('Registry backend contract matrix', () => {
 
       const recordKey = `${backendCase.pairKeyPrefix}${principalId}`;
       const registerPut = selectedKv.puts.find((call) => call.key === recordKey);
-      expect(registerPut?.options).toEqual({ expirationTtl: RECORD_TTL_SEC });
+      expect(registerPut?.options).toEqual({ expirationTtl: UNCLAIMED_RECORD_TTL_SEC });
       expect(unusedKv.puts).toHaveLength(0);
       const storedAtRegister = JSON.parse(registerPut?.value as string) as Record<string, unknown>;
       expect(Object.keys(storedAtRegister)[0]).toBe(backendCase.principalParam);
@@ -167,9 +189,9 @@ describe('Registry backend contract matrix', () => {
       ]);
       expect(claimed).not.toHaveProperty(backendCase.otherPrincipalParam);
       expect(claimed.clientToken).toMatch(new RegExp(`^${backendCase.clientTokenPrefix}`));
-      expect(selectedKv.puts.filter((call) => call.key === recordKey).every(
-        (call) => call.options?.expirationTtl === RECORD_TTL_SEC,
-      )).toBe(true);
+      expect(selectedKv.puts.filter((call) => call.key === recordKey).map(
+        (call) => call.options?.expirationTtl,
+      )).toEqual([UNCLAIMED_RECORD_TTL_SEC, CLAIMED_RECORD_TTL_SEC]);
       const storedAfterClaim = selectedKv.map.get(recordKey) as string;
       expect(storedAfterClaim).not.toContain(claimed.clientToken as string);
       expect(JSON.parse(storedAfterClaim)).toMatchObject({
@@ -200,6 +222,66 @@ describe('Registry backend contract matrix', () => {
     } finally {
       log.mockRestore();
     }
+  });
+
+  it.each(BACKENDS)('keeps a previously claimed $backend record on the one-year TTL after refresh', async (backendCase) => {
+    const { env, selectedKv } = createEnv(backendCase);
+    const registered = await register(backendCase, env);
+    const principalId = registered[backendCase.principalParam] as string;
+    const recordKey = `${backendCase.pairKeyPrefix}${principalId}`;
+
+    const claim = await postJson(`${backendCase.pairBasePath}/claim`, {
+      [backendCase.principalParam]: principalId,
+      accessCode: registered.accessCode,
+    }, env);
+    expect(claim.status).toBe(200);
+
+    const refresh = await postJson(`${backendCase.pairBasePath}/access-code`, {
+      [backendCase.principalParam]: principalId,
+      relaySecret: registered.relaySecret,
+    }, env);
+    expect(refresh.status).toBe(200);
+    expect(selectedKv.puts.filter((call) => call.key === recordKey).map(
+      (call) => call.options?.expirationTtl,
+    )).toEqual([
+      UNCLAIMED_RECORD_TTL_SEC,
+      CLAIMED_RECORD_TTL_SEC,
+      CLAIMED_RECORD_TTL_SEC,
+    ]);
+  });
+
+  it('keeps a claimed OpenClaw record on the one-year TTL when creating a later invitation', async () => {
+    const backendCase = BACKENDS[0];
+    const { env, selectedKv } = createEnv(backendCase);
+    const registered = await register(backendCase, env);
+    const gatewayId = registered.gatewayId as string;
+    const recordKey = `pair-gateway:${gatewayId}`;
+
+    const claim = await postJson('/v1/pair/claim', {
+      gatewayId,
+      accessCode: registered.accessCode,
+    }, env);
+    expect(claim.status).toBe(200);
+    const refresh = await postJson('/v1/pair/access-code', {
+      gatewayId,
+      relaySecret: registered.relaySecret,
+    }, env);
+    expect(refresh.status).toBe(200);
+
+    const ciphertext = {
+      nonce: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+      ciphertext: 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
+    };
+    const session = await postJson('/v1/pair/session', {
+      gatewayId,
+      relaySecret: registered.relaySecret,
+      codeHash: await sha256Hex('ABCD-EFGH-JKLM'),
+      linkPayload: ciphertext,
+      codePayload: ciphertext,
+    }, env);
+    expect(session.status).toBe(200);
+    const recordPuts = selectedKv.puts.filter((call) => call.key === recordKey);
+    expect(recordPuts.at(-1)?.options?.expirationTtl).toBe(CLAIMED_RECORD_TTL_SEC);
   });
 
   it.each(BACKENDS)('preserves $backend principal errors and access-code expiry', async (backendCase) => {

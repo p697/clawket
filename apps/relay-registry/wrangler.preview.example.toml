@@ -20,6 +20,10 @@ APPLE_APP_IDS = "TEAMID.com.example.clawket"
 ANDROID_APP_LINK_PACKAGE = "com.example.clawket"
 ANDROID_APP_LINK_SHA256_CERT_FINGERPRINTS = ""
 
+[[durable_objects.bindings]]
+name = "PAIR_REGISTER_LIMITER"
+class_name = "PairRegisterRateLimiter"
+
 [[kv_namespaces]]
 binding = "ROUTES_KV"
 id = "00000000000000000000000000000000"
@@ -27,3 +31,7 @@ id = "00000000000000000000000000000000"
 [[services]]
 binding = "RELAY_SYNC_SERVICE"
 service = "clawket-relay-preview"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["PairRegisterRateLimiter"]

@@ -1,3 +1,4 @@
+import { RELAY_FRAME_LIMIT_V2 } from '@clawket/shared';
 import {
   CONTROL_PREFIX,
   SOCKET_CLOSE_CODES,
@@ -36,6 +37,14 @@ export function parseControlEnvelope(text: string): RelayControlEnvelope | null 
 
 export function serializeControlEnvelope(envelope: RelayControlEnvelope): string {
   return `${CONTROL_PREFIX}${JSON.stringify(envelope)}`;
+}
+
+export function sendRelayReady(socket: WebSocket): void {
+  socket.send(serializeControlEnvelope({
+    type: 'control',
+    event: 'relay.ready',
+    payload: { capabilities: [RELAY_FRAME_LIMIT_V2] },
+  }));
 }
 
 function normalizeControlEvent(envelope: RelayControlEnvelope): string | null {

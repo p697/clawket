@@ -34,6 +34,9 @@ import {
   resolveRegistryBackendPolicy,
   type RegistryBackendPolicy,
 } from './backend-policy';
+import { PairRegisterRateLimiter } from './pair-register-rate-limiter';
+
+export { PairRegisterRateLimiter } from './pair-register-rate-limiter';
 
 interface Env {
   RELAY_BACKEND?: string;
@@ -50,6 +53,7 @@ interface Env {
   ANDROID_APP_LINK_SHA256_CERT_FINGERPRINTS?: string;
   PAIRING_SYNC_SECRET?: string;
   RELAY_SYNC_SERVICE?: Fetcher;
+  PAIR_REGISTER_LIMITER: DurableObjectNamespace<PairRegisterRateLimiter>;
 }
 
 type PairClientTokenRecord = {
@@ -105,6 +109,8 @@ const ACCESS_CODE_LENGTH = 6;
 const ACCESS_CODE_RANDOM_LIMIT = Math.floor(256 / ACCESS_CODE_ALPHABET.length) * ACCESS_CODE_ALPHABET.length;
 const PAIR_SESSION_RESOLVE_MAX_ATTEMPTS_FALLBACK = 5;
 const PAIR_SESSION_MAX_CIPHERTEXT_LENGTH = 64 * 1024;
+const UNCLAIMED_PAIR_RECORD_TTL_SEC = 24 * 60 * 60;
+const CLAIMED_PAIR_RECORD_TTL_SEC = 365 * 24 * 60 * 60;
 
 type PairingSessionRecord = {
   sessionId: string;
@@ -222,6 +228,13 @@ async function handlePairRegister(
   env: Env,
   policy: RegistryBackendPolicy,
 ): Promise<Response> {
+  if (await consumePairRegisterAttempt(request, env)) {
+    return errorResponse(
+      'PAIRING_REGISTER_RATE_LIMITED',
+      'Too many pairing registration attempts. Try again later.',
+      429,
+    );
+  }
   const body = await readJson<PairRegisterRequest | HermesPairRegisterRequest>(request);
   const relayMap = readRelayMap(env);
   const region = resolveRegion(request, body?.preferredRegion ?? undefined);
@@ -677,7 +690,9 @@ async function putPairRecord(
   record: PairPrincipalRecord,
 ): Promise<void> {
   await kv.put(pairRecordKey(policy, recordPrincipalId(record, policy)), JSON.stringify(record), {
-    expirationTtl: 365 * 24 * 3600,
+    expirationTtl: record.clientTokens.length > 0
+      ? CLAIMED_PAIR_RECORD_TTL_SEC
+      : UNCLAIMED_PAIR_RECORD_TTL_SEC,
   });
 }
 
@@ -1056,6 +1071,13 @@ async function consumePairingResolveAttempt(request: Request, env: Env): Promise
   if (current >= max) return true;
   await kv.put(key, String(current + 1), { expirationTtl: 20 * 60 });
   return false;
+}
+
+async function consumePairRegisterAttempt(request: Request, env: Env): Promise<boolean> {
+  const sourceIp = request.headers.get('CF-Connecting-IP')?.trim() ?? '';
+  const ipHash = await sha256Hex(sourceIp);
+  const result = await env.PAIR_REGISTER_LIMITER.getByName(ipHash).consume(Date.now());
+  return !result.allowed;
 }
 
 function generatePairingSessionId(): string {

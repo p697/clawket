@@ -126,6 +126,14 @@ import { getRuntimeClientId, getRuntimeDeviceFamily, getRuntimePlatform } from '
 import { getGatewayBackendCapabilities, resolveGatewayBackendKind } from './gateway-backends';
 import { getGatewayBackendOperations } from './gateway-backend-operations';
 import { markHermesConnectTrace } from './hermes-connect-debug';
+import {
+  assertWebSocketFrameWithinLimit,
+  FRAME_TOO_LARGE_CLOSE_CODE,
+  FRAME_TOO_LARGE_ERROR_CODE,
+  getWebSocketFrameByteLength,
+  WEBSOCKET_FRAME_LIMIT_BYTES,
+  WebSocketFrameTooLargeError,
+} from './websocket-frame-limit';
 
 export { extractText };
 export type { ChatHistoryResult, GatewayInfo };
@@ -1835,7 +1843,7 @@ export class GatewayClient {
         timeout,
       });
       try {
-        this.ws.send(JSON.stringify(frame));
+        this.sendWireFrame(JSON.stringify(frame));
       } catch (sendErr: unknown) {
         const pending = this.pendingRequests.get(id);
         if (pending) clearTimeout(pending.timeout);
@@ -1847,7 +1855,34 @@ export class GatewayClient {
 
   // ---- Private: message routing ----
 
+  private sendWireFrame(data: string): void {
+    assertWebSocketFrameWithinLimit(data);
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      throw new Error('WebSocket is not open');
+    }
+    this.ws.send(data);
+  }
+
+  private rejectOversizedIncomingFrame(rawData: unknown): boolean {
+    const byteLength = getWebSocketFrameByteLength(rawData);
+    if (byteLength == null || byteLength <= WEBSOCKET_FRAME_LIMIT_BYTES) return false;
+    this.logTelemetry('frame_too_large', {
+      attemptId: this.connectAttemptId,
+      route: this.activeRoute,
+      direction: 'inbound',
+      byteLength,
+      limitBytes: WEBSOCKET_FRAME_LIMIT_BYTES,
+    });
+    this.emit('error', {
+      code: FRAME_TOO_LARGE_ERROR_CODE,
+      message: FRAME_TOO_LARGE_ERROR_CODE,
+    });
+    this.ws?.close(FRAME_TOO_LARGE_CLOSE_CODE, FRAME_TOO_LARGE_ERROR_CODE);
+    return true;
+  }
+
   private handleRawMessage(rawData: unknown): void {
+    if (this.rejectOversizedIncomingFrame(rawData)) return;
     // Any inbound frame proves the upstream is reachable; clear the
     // first-frame watchdog so the Hermes path does not recycle a healthy
     // socket. Safe for OpenClaw because the watchdog is only armed there
@@ -1886,7 +1921,7 @@ export class GatewayClient {
       || this.ws.readyState !== WebSocket.OPEN
     ) return;
     try {
-      this.ws.send(JSON.stringify({ type: 'pong', ts: parsed.ts }));
+      this.sendWireFrame(JSON.stringify({ type: 'pong', ts: parsed.ts }));
     } catch {
       // The normal close/error path owns reconnect scheduling.
     }
@@ -2211,7 +2246,7 @@ export class GatewayClient {
       });
 
       try {
-        this.ws?.send(buildRelayBootstrapRequestFrame({
+        this.sendWireFrame(buildRelayBootstrapRequestFrame({
           requestId,
           deviceId: params.deviceId,
           publicKey: params.publicKey,
@@ -2229,10 +2264,12 @@ export class GatewayClient {
       } catch (error: unknown) {
         clearTimeout(timeout);
         this.pendingRelayBootstrapRequests.delete(requestId);
-        reject(new RelayBootstrapRequestError(
-          'relay_bootstrap_failed',
-          error instanceof Error ? error.message : String(error),
-        ));
+        reject(error instanceof WebSocketFrameTooLargeError
+          ? error
+          : new RelayBootstrapRequestError(
+            'relay_bootstrap_failed',
+            error instanceof Error ? error.message : String(error),
+          ));
       }
     });
   }
@@ -2304,14 +2341,16 @@ export class GatewayClient {
       });
 
       try {
-        this.ws?.send(buildRelayDoctorRequestFrame({ requestId }));
+        this.sendWireFrame(buildRelayDoctorRequestFrame({ requestId }));
       } catch (error: unknown) {
         clearTimeout(timeout);
         this.pendingRelayDoctorRequests.delete(requestId);
-        reject(new RelayDoctorRequestError(
-          'relay_doctor_failed',
-          error instanceof Error ? error.message : String(error),
-        ));
+        reject(error instanceof WebSocketFrameTooLargeError
+          ? error
+          : new RelayDoctorRequestError(
+            'relay_doctor_failed',
+            error instanceof Error ? error.message : String(error),
+          ));
       }
     });
   }
@@ -2361,14 +2400,16 @@ export class GatewayClient {
       });
 
       try {
-        this.ws?.send(buildRelayPermissionsRequestFrame({ requestId }));
+        this.sendWireFrame(buildRelayPermissionsRequestFrame({ requestId }));
       } catch (error: unknown) {
         clearTimeout(timeout);
         this.pendingRelayPermissionsRequests.delete(requestId);
-        reject(new RelayDoctorRequestError(
-          'relay_doctor_failed',
-          error instanceof Error ? error.message : String(error),
-        ));
+        reject(error instanceof WebSocketFrameTooLargeError
+          ? error
+          : new RelayDoctorRequestError(
+            'relay_doctor_failed',
+            error instanceof Error ? error.message : String(error),
+          ));
       }
     });
   }
@@ -2399,14 +2440,16 @@ export class GatewayClient {
       });
 
       try {
-        this.ws?.send(buildRelayDoctorFixRequestFrame({ requestId }));
+        this.sendWireFrame(buildRelayDoctorFixRequestFrame({ requestId }));
       } catch (error: unknown) {
         clearTimeout(timeout);
         this.pendingRelayDoctorFixRequests.delete(requestId);
-        reject(new RelayDoctorRequestError(
-          'relay_doctor_fix_failed',
-          error instanceof Error ? error.message : String(error),
-        ));
+        reject(error instanceof WebSocketFrameTooLargeError
+          ? error
+          : new RelayDoctorRequestError(
+            'relay_doctor_fix_failed',
+            error instanceof Error ? error.message : String(error),
+          ));
       }
     });
   }

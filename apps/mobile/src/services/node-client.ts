@@ -16,6 +16,14 @@ import {
 } from './node-capabilities';
 import { APP_PACKAGE_VERSION } from '../constants/app-version';
 import { getRuntimeClientId, getRuntimeDeviceFamily, getRuntimePlatform } from '../utils/platform';
+import {
+  assertWebSocketFrameWithinLimit,
+  FRAME_TOO_LARGE_CLOSE_CODE,
+  FRAME_TOO_LARGE_ERROR_CODE,
+  getWebSocketFrameByteLength,
+  WEBSOCKET_FRAME_LIMIT_BYTES,
+  WebSocketFrameTooLargeError,
+} from './websocket-frame-limit';
 
 // Advertise the protocol range Clawket can speak across OpenClaw 4.x and 5.x.
 const MIN_PROTOCOL_VERSION = 3;
@@ -205,8 +213,11 @@ export class NodeClient {
       },
     };
     try {
-      this.ws.send(JSON.stringify(frame));
-    } catch {
+      this.sendWireFrame(JSON.stringify(frame));
+    } catch (error) {
+      if (error instanceof WebSocketFrameTooLargeError) {
+        this.emit('error', { code: error.code, message: error.message });
+      }
       // Swallow send errors — connection will reconnect
     }
   }
@@ -317,7 +328,7 @@ export class NodeClient {
       const frame = { type: 'req', id, method, params };
       this.pendingRequests.set(id, { resolve, reject });
       try {
-        this.ws.send(JSON.stringify(frame));
+        this.sendWireFrame(JSON.stringify(frame));
       } catch (sendErr: unknown) {
         this.pendingRequests.delete(id);
         reject(sendErr instanceof Error ? sendErr : new Error(String(sendErr)));
@@ -327,7 +338,27 @@ export class NodeClient {
 
   // ---- Private: message routing ----
 
+  private sendWireFrame(data: string): void {
+    assertWebSocketFrameWithinLimit(data);
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      throw new Error('WebSocket is not open');
+    }
+    this.ws.send(data);
+  }
+
+  private rejectOversizedIncomingFrame(rawData: unknown): boolean {
+    const byteLength = getWebSocketFrameByteLength(rawData);
+    if (byteLength == null || byteLength <= WEBSOCKET_FRAME_LIMIT_BYTES) return false;
+    this.emit('error', {
+      code: FRAME_TOO_LARGE_ERROR_CODE,
+      message: FRAME_TOO_LARGE_ERROR_CODE,
+    });
+    this.ws?.close(FRAME_TOO_LARGE_CLOSE_CODE, FRAME_TOO_LARGE_ERROR_CODE);
+    return true;
+  }
+
   private handleRawMessage(rawData: unknown): void {
+    if (this.rejectOversizedIncomingFrame(rawData)) return;
     let parsed: unknown;
     try {
       parsed = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;

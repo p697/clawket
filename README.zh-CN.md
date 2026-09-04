@@ -76,6 +76,8 @@ Clawket 支持两种连接方式：
 | `packages/bridge-runtime` | Bridge Runtime |
 | `packages/relay-shared` | Relay 共享协议与类型 |
 
+两个 Relay 工作区通过同一套策略驱动的代码部署 OpenClaw 与 Hermes；各后端的 Production 和 Preview 仍分别使用独立的 Worker 服务、KV、Durable Object 与凭据。
+
 ## 快速开始
 
 如果你只是想先在本地把移动端跑起来，从这里开始即可。你不需要先理解 Relay、Registry，也不需要先从源码构建 bridge。

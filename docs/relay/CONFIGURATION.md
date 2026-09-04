@@ -17,6 +17,11 @@ Path: `apps/relay-registry`
    - Lets a newly claimed client token become usable immediately without waiting for KV propagation.
    - The public HTTP sync path remains a compatibility fallback when this binding is absent.
 
+3. `PAIR_REGISTER_LIMITER`
+   - SQLite Durable Object namespace for the pairing-registration fixed-window limiter.
+   - Each hashed source IP maps to its own `PairRegisterRateLimiter` object.
+   - Every Registry configuration must declare the binding and a `new_sqlite_classes` migration for the class.
+
 ### Vars
 
 1. `RELAY_REGION_MAP`
@@ -68,15 +73,20 @@ Path: `apps/relay-registry`
    - Comma-separated SHA-256 signing certificate fingerprints for Android App Links.
    - Include every signing certificate used by installed builds that should open pairing links directly. If empty, the Registry serves an empty association list and the browser/custom-scheme fallback remains available.
 
-## Hermes Registry Worker
+## Hermes Registry Instance
 
-Path: `apps/hermes-relay-registry`
+Path: `apps/relay-registry`
+
+Config: `wrangler.hermes.toml` or one of the Hermes local/Preview variants.
 
 ### Required bindings
 
 1. `HERMES_ROUTES_KV`
    - Cloudflare KV namespace for Hermes pairing records.
    - Keep this separate from the OpenClaw `ROUTES_KV` namespace for rollout safety.
+
+2. `PAIR_REGISTER_LIMITER`
+   - Same code contract as the OpenClaw Registry binding, deployed into the Hermes Registry service's independent Durable Object namespace.
 
 ## Relay Worker
 
@@ -125,13 +135,19 @@ Path: `apps/relay-worker`
    - Maximum time a client may remain in the awaiting-challenge set before prune logic may treat it as stale.
    - Default in checked-in templates: `25000`.
 
-9. `CLIENT_IDLE_TIMEOUT_MS`
-   - Absolute idle timeout for silent or ghost client sockets.
-   - Default in checked-in templates: `600000`.
+9. `CLIENT_PONG_TIMEOUT_MS`
+   - Timeout applied only to clients that advertise `relay.client-pong.v1`.
+   - OpenClaw defaults to `120000`; Hermes defaults to `30000`.
 
-## Hermes Relay Worker
+10. `GATEWAY_PING_TIMEOUT_MS`
+   - Hermes Bridge probe timeout; omitted by OpenClaw configurations.
+   - Hermes defaults to `12000`.
 
-Path: `apps/hermes-relay-worker`
+## Hermes Relay Instance
+
+Path: `apps/relay-worker`
+
+Config: `wrangler.hermes.toml` or one of the Hermes local/Preview variants.
 
 ### Required bindings
 
@@ -151,9 +167,30 @@ Path: `apps/hermes-relay-worker`
    - Optional shared secret for the internal Hermes `client-tokens` sync endpoint.
    - Must match the Hermes registry worker value when enabled.
 
+3. `HEARTBEAT_INTERVAL_MS`
+   - Hermes room heartbeat interval.
+   - Default in every checked-in Hermes template: `30000`.
+
+4. `CLIENT_PONG_TIMEOUT_MS`
+   - Applies only after a client advertises `relay.client-pong.v1`.
+   - Default: `30000`.
+
+5. `GATEWAY_PING_TIMEOUT_MS`
+   - Timeout for a capability-proven Hermes Bridge response to `gateway_ping`.
+   - Default: `12000`; Relay sends these probes only while clients are attached.
+
 ## Checked-In Wrangler Files
 
-The tracked `wrangler.toml` files are open-source-safe templates:
+The tracked Wrangler files are open-source-safe templates. Both workspaces provide OpenClaw and Hermes variants:
+
+1. `wrangler.toml`
+2. `wrangler.local.example.toml`
+3. `wrangler.preview.example.toml`
+4. `wrangler.hermes.toml`
+5. `wrangler.hermes.local.example.toml`
+6. `wrangler.hermes.preview.example.toml`
+
+For all of them:
 
 1. Account-bound IDs are placeholders.
 2. Service URLs must stay on neutral placeholder domains such as `example.com`, not the official hosted deployment.
@@ -175,24 +212,24 @@ npx wrangler secret put PAIRING_TICKET_SECRET --config apps/relay-worker/wrangle
 npx wrangler secret put PAIRING_TICKET_SECRET --config apps/relay-registry/wrangler.local.toml
 ```
 
-For Hermes relay, also create:
+For Hermes relay, also create local files in the same two workspaces:
 
-1. `apps/hermes-relay-registry/wrangler.local.toml`
-2. `apps/hermes-relay-worker/wrangler.local.toml`
+1. `apps/relay-registry/wrangler.hermes.local.toml`
+2. `apps/relay-worker/wrangler.hermes.local.toml`
 
 Repo scripts prefer `wrangler.local.toml` automatically when present.
 
-For an isolated Preview environment, copy the tracked `wrangler.preview.example.toml` files to ignored `wrangler.preview.local.toml` files, point both at Preview-only resources, and use the `relay:deploy:preview-*` commands. Production and Preview must not share pairing KV or Durable Object namespaces.
+For isolated Preview environments, copy the OpenClaw and Hermes Preview example files to their ignored `.local.toml` names, point each service pair at Preview-only resources, and use the matching `relay:deploy:preview-*` or `relay:deploy:hermes-preview-*` commands. Production and Preview must not share pairing KV or Durable Object namespaces.
 
 ## Minimum Self-Hosted Setup
 
 At minimum, a working deployment needs:
 
-1. One KV namespace shared by registry and relay.
-2. One deployed registry worker.
-3. One deployed relay worker with a Durable Object namespace.
-4. `RELAY_REGION_MAP` values that point to the relay worker WebSocket endpoint.
-5. `REGISTRY_VERIFY_URL` that points to the registry worker.
+1. One KV namespace shared by Registry and Relay.
+2. One Registry service with its per-IP limiter Durable Object namespace.
+3. One Relay service with its room Durable Object namespace.
+4. `RELAY_REGION_MAP` values that point to the Relay WebSocket endpoint.
+5. `REGISTRY_VERIFY_URL` that points to the Registry service.
 
 Hermes relay needs its own equivalent set of resources and must not reuse the OpenClaw production bindings during rollout.
 

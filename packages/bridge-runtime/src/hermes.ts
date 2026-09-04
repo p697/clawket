@@ -6,6 +6,14 @@ import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { homedir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
 import WebSocket, { WebSocketServer } from 'ws';
+import {
+  FRAME_TOO_LARGE_CLOSE_CODE,
+  FRAME_TOO_LARGE_ERROR_CODE,
+  getWebSocketFrameByteLength,
+  isWebSocketMaxPayloadError,
+  WEBSOCKET_FRAME_LIMIT_BYTES,
+  type WebSocketFrameData,
+} from './frame-limit.js';
 
 const DEFAULT_HERMES_API_BASE_URL = 'http://127.0.0.1:8642';
 const DEFAULT_HERMES_API_HEALTH_PATH = '/health';
@@ -635,7 +643,10 @@ export class HermesLocalBridge {
     this.httpServer = createServer((req, res) => {
       void this.handleHttpRequest(req, res);
     });
-    this.wsServer = new WebSocketServer({ noServer: true });
+    this.wsServer = new WebSocketServer({
+      noServer: true,
+      maxPayload: WEBSOCKET_FRAME_LIMIT_BYTES,
+    });
     this.wsServer.on('connection', (socket) => {
       this.handleWsConnection(socket);
     });
@@ -922,6 +933,19 @@ export class HermesLocalBridge {
     this.clients.add(client);
     this.updateSnapshot({ clientCount: this.clients.size });
 
+    socket.on('error', (error) => {
+      if (isWebSocketMaxPayloadError(error)) {
+        // `ws` enforces maxPayload before emitting `message` and has already
+        // entered CLOSING with a reasonless 1009 frame when this event fires.
+        // Keep that hard receive ceiling and normalize the internal signal.
+        this.log(
+          `client_in rejected code=${FRAME_TOO_LARGE_ERROR_CODE} ` +
+          `limit=${WEBSOCKET_FRAME_LIMIT_BYTES} source=ws_max_payload`,
+        );
+        return;
+      }
+      this.log(`client websocket error: ${formatError(error)}`);
+    });
     socket.on('message', (raw) => {
       // Any inbound application frame proves the client is alive, so the
       // heartbeat sweep should not terminate it on the next tick.
@@ -971,6 +995,7 @@ export class HermesLocalBridge {
   }
 
   private async handleWsMessage(client: HermesLocalBridgeClient, raw: WebSocket.RawData): Promise<void> {
+    if (this.rejectOversizedFrame(client.socket, raw, 'client_in')) return;
     let request: HermesBridgeRequest;
     try {
       request = JSON.parse(raw.toString()) as HermesBridgeRequest;
@@ -4358,16 +4383,16 @@ export class HermesLocalBridge {
   }
 
   private sendResponse(socket: WebSocket, id: string, payload: unknown): void {
-    socket.send(JSON.stringify({
+    this.sendFrame(socket, JSON.stringify({
       type: 'res',
       id,
       ok: true,
       payload,
-    }));
+    }), 'client_out');
   }
 
   private sendError(socket: WebSocket, id: string | null, code: string, message: string): void {
-    socket.send(JSON.stringify({
+    this.sendFrame(socket, JSON.stringify({
       type: 'res',
       id: id ?? randomUUID(),
       ok: false,
@@ -4375,7 +4400,7 @@ export class HermesLocalBridge {
         code,
         message,
       },
-    }));
+    }), 'client_out');
   }
 
   private broadcastEvent(event: string, payload: unknown): void {
@@ -4388,11 +4413,32 @@ export class HermesLocalBridge {
     if (socket.readyState !== WebSocket.OPEN) {
       return;
     }
-    socket.send(JSON.stringify({
+    this.sendFrame(socket, JSON.stringify({
       type: 'event',
       event,
       payload,
-    }));
+    }), 'client_out');
+  }
+
+  private rejectOversizedFrame(
+    socket: WebSocket,
+    data: WebSocketFrameData,
+    direction: string,
+  ): boolean {
+    const byteLength = getWebSocketFrameByteLength(data);
+    if (byteLength <= WEBSOCKET_FRAME_LIMIT_BYTES) return false;
+    this.log(
+      `${direction} rejected code=${FRAME_TOO_LARGE_ERROR_CODE} ` +
+      `bytes=${byteLength} limit=${WEBSOCKET_FRAME_LIMIT_BYTES}`,
+    );
+    socket.close(FRAME_TOO_LARGE_CLOSE_CODE, FRAME_TOO_LARGE_ERROR_CODE);
+    return true;
+  }
+
+  private sendFrame(socket: WebSocket, data: WebSocketFrameData, direction: string): boolean {
+    if (this.rejectOversizedFrame(socket, data, direction)) return false;
+    socket.send(data as WebSocket.Data);
+    return true;
   }
 
   private writeJson(res: ServerResponse, status: number, payload: unknown): void {

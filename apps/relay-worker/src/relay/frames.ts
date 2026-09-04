@@ -1,4 +1,33 @@
-import { CONTROL_PREFIX, PENDING_CHALLENGE_TTL_MS } from './types';
+import { CONTROL_PREFIX, PENDING_CHALLENGE_TTL_MS, RELAY_FRAME_MAX_BYTES } from './types';
+
+export function relayFrameByteLength(message: string | ArrayBuffer): number {
+  if (typeof message !== 'string') return message.byteLength;
+
+  // Count UTF-8 bytes without allocating a second multi-megabyte buffer.
+  let bytes = 0;
+  for (let index = 0; index < message.length; index += 1) {
+    const codeUnit = message.charCodeAt(index);
+    if (codeUnit <= 0x7f) {
+      bytes += 1;
+    } else if (codeUnit <= 0x7ff) {
+      bytes += 2;
+    } else if (codeUnit >= 0xd800 && codeUnit <= 0xdbff
+      && index + 1 < message.length
+      && message.charCodeAt(index + 1) >= 0xdc00
+      && message.charCodeAt(index + 1) <= 0xdfff) {
+      bytes += 4;
+      index += 1;
+    } else {
+      // BMP code points and unpaired surrogates (encoded as U+FFFD) use 3 bytes.
+      bytes += 3;
+    }
+  }
+  return bytes;
+}
+
+export function isRelayFrameTooLarge(message: string | ArrayBuffer): boolean {
+  return relayFrameByteLength(message) > RELAY_FRAME_MAX_BYTES;
+}
 
 export function normalizeMessage(message: string | ArrayBuffer): string | null {
   if (typeof message === 'string') return message;

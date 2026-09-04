@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import { runCompatGate, runWrangler, shouldRunCompatGate } from './run-wrangler.mjs';
@@ -72,7 +72,7 @@ const TRACKED_CONFIGS = [
     binding: 'HERMES_ROOM',
     className: 'HermesRelayRoom',
     kvBinding: 'HERMES_ROUTES_KV',
-    heartbeatMs: '5000',
+    heartbeatMs: '30000',
   },
   {
     path: 'apps/relay-worker/wrangler.hermes.local.example.toml',
@@ -81,7 +81,7 @@ const TRACKED_CONFIGS = [
     binding: 'HERMES_ROOM',
     className: 'HermesRelayRoom',
     kvBinding: 'HERMES_ROUTES_KV',
-    heartbeatMs: '5000',
+    heartbeatMs: '30000',
   },
   {
     path: 'apps/relay-worker/wrangler.hermes.preview.example.toml',
@@ -90,24 +90,30 @@ const TRACKED_CONFIGS = [
     binding: 'HERMES_ROOM',
     className: 'HermesRelayRoom',
     kvBinding: 'HERMES_ROUTES_KV',
-    heartbeatMs: '5000',
+    heartbeatMs: '30000',
   },
   {
     path: 'apps/relay-registry/wrangler.toml',
     name: 'clawket-registry',
     backend: 'openclaw',
+    binding: 'PAIR_REGISTER_LIMITER',
+    className: 'PairRegisterRateLimiter',
     kvBinding: 'ROUTES_KV',
   },
   {
     path: 'apps/relay-registry/wrangler.local.example.toml',
     name: 'clawket-registry',
     backend: 'openclaw',
+    binding: 'PAIR_REGISTER_LIMITER',
+    className: 'PairRegisterRateLimiter',
     kvBinding: 'ROUTES_KV',
   },
   {
     path: 'apps/relay-registry/wrangler.preview.example.toml',
     name: 'clawket-registry-preview',
     backend: 'openclaw',
+    binding: 'PAIR_REGISTER_LIMITER',
+    className: 'PairRegisterRateLimiter',
     kvBinding: 'ROUTES_KV',
     serviceBinding: 'RELAY_SYNC_SERVICE',
     serviceName: 'clawket-relay-preview',
@@ -116,18 +122,24 @@ const TRACKED_CONFIGS = [
     path: 'apps/relay-registry/wrangler.hermes.toml',
     name: 'clawket-hermes-registry',
     backend: 'hermes',
+    binding: 'PAIR_REGISTER_LIMITER',
+    className: 'PairRegisterRateLimiter',
     kvBinding: 'HERMES_ROUTES_KV',
   },
   {
     path: 'apps/relay-registry/wrangler.hermes.local.example.toml',
     name: 'clawket-hermes-registry',
     backend: 'hermes',
+    binding: 'PAIR_REGISTER_LIMITER',
+    className: 'PairRegisterRateLimiter',
     kvBinding: 'HERMES_ROUTES_KV',
   },
   {
     path: 'apps/relay-registry/wrangler.hermes.preview.example.toml',
     name: 'clawket-hermes-registry-preview',
     backend: 'hermes',
+    binding: 'PAIR_REGISTER_LIMITER',
+    className: 'PairRegisterRateLimiter',
     kvBinding: 'HERMES_ROUTES_KV',
   },
 ];
@@ -260,6 +272,18 @@ test('routes every root Relay dev, deploy, and tail command through the merged w
   for (const [scriptName, expected] of Object.entries(ROOT_WRANGLER_SCRIPTS)) {
     assert.equal(manifest.scripts[scriptName], expected, `${scriptName} Wrangler route changed`);
     assert.doesNotMatch(manifest.scripts[scriptName], /\.example\.toml\b/, scriptName);
+  }
+});
+
+test('keeps obsolete Hermes Relay workspaces out of the repository and lockfile', () => {
+  const obsoleteWorkspaces = [
+    'apps/hermes-relay-registry',
+    'apps/hermes-relay-worker',
+  ];
+  const lockfile = readFileSync('package-lock.json', 'utf8');
+  for (const workspace of obsoleteWorkspaces) {
+    assert.equal(existsSync(workspace), false, `${workspace} must remain deleted`);
+    assert.doesNotMatch(lockfile, new RegExp(workspace.replaceAll('/', '\\/')));
   }
 });
 

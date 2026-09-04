@@ -1,5 +1,13 @@
 import WebSocket, { type RawData } from 'ws';
 import type { HermesRelayConfig } from '@clawket/bridge-core';
+import {
+  FRAME_TOO_LARGE_CLOSE_CODE,
+  FRAME_TOO_LARGE_ERROR_CODE,
+  getWebSocketFrameByteLength,
+  isWebSocketMaxPayloadError,
+  WEBSOCKET_FRAME_LIMIT_BYTES,
+  type WebSocketFrameData,
+} from './frame-limit.js';
 
 const RELAY_CONTROL_PREFIX = '__clawket_relay_control__:';
 const BRIDGE_HEALTH_METHOD = 'health';
@@ -38,10 +46,15 @@ export type HermesRelayRuntimeOptions = {
   bridgeStatusPollIntervalMs?: number;
   bridgeHealthProbeIntervalMs?: number;
   bridgeHealthProbeTimeoutMs?: number;
-  createWebSocket?: (url: string, options?: { headers?: Record<string, string> }) => WebSocket;
+  createWebSocket?: (url: string, options?: HermesSocketConnectOptions) => WebSocket;
   fetchImpl?: typeof fetch;
   onStatus?: (snapshot: HermesRelayRuntimeSnapshot) => void;
   onLog?: (line: string) => void;
+};
+
+type HermesSocketConnectOptions = {
+  headers?: Record<string, string>;
+  maxPayload?: number;
 };
 
 export class HermesRelayRuntime {
@@ -149,6 +162,13 @@ export class HermesRelayRuntime {
     });
 
     relay.once('error', (error) => {
+      if (isWebSocketMaxPayloadError(error)) {
+        this.log(
+          `relay_in rejected code=${FRAME_TOO_LARGE_ERROR_CODE} ` +
+          `limit=${WEBSOCKET_FRAME_LIMIT_BYTES} source=ws_max_payload`,
+        );
+        return;
+      }
       this.log(`relay error: ${String(error)}`);
     });
 
@@ -203,6 +223,13 @@ export class HermesRelayRuntime {
     });
 
     bridge.once('error', (error) => {
+      if (isWebSocketMaxPayloadError(error)) {
+        this.log(
+          `bridge_in rejected code=${FRAME_TOO_LARGE_ERROR_CODE} ` +
+          `limit=${WEBSOCKET_FRAME_LIMIT_BYTES} source=ws_max_payload`,
+        );
+        return;
+      }
       this.log(`bridge error: ${String(error)}`);
     });
 
@@ -226,6 +253,8 @@ export class HermesRelayRuntime {
   }
 
   private handleRelayMessage(data: RawData, isBinary: boolean): void {
+    const relay = this.relaySocket;
+    if (relay && this.rejectOversizedFrame(relay, data, 'relay_in')) return;
     if (this.relayAttempt !== 0) {
       this.relayAttempt = 0;
       this.log('relay health confirmed; reconnect backoff reset');
@@ -254,21 +283,23 @@ export class HermesRelayRuntime {
       if (!relay || relay.readyState !== WebSocket.OPEN) {
         return;
       }
-      relay.send(`${RELAY_CONTROL_PREFIX}${JSON.stringify({
+      this.sendFrame(relay, `${RELAY_CONTROL_PREFIX}${JSON.stringify({
         type: 'control',
         event: 'gateway_pong',
         ts: typeof parsed.ts === 'number' ? parsed.ts : Date.now(),
-      })}`);
+      })}`, 'relay_out');
     } catch {
       // Ignore malformed control envelopes; normal relay traffic still flows.
     }
   }
 
   private handleBridgeMessage(data: RawData, isBinary: boolean): void {
+    const bridge = this.bridgeSocket;
+    if (bridge && this.rejectOversizedFrame(bridge, data, 'bridge_in')) return;
     const relay = this.relaySocket;
     if (isBinary) {
       if (!relay || relay.readyState !== WebSocket.OPEN) return;
-      relay.send(normalizeBinary(data));
+      this.sendFrame(relay, normalizeBinary(data), 'relay_out');
       return;
     }
     const text = normalizeText(data);
@@ -278,7 +309,7 @@ export class HermesRelayRuntime {
       return;
     }
     if (!relay || relay.readyState !== WebSocket.OPEN) return;
-    relay.send(text);
+    this.sendFrame(relay, text, 'relay_out');
   }
 
   private forwardOrQueueBridgeMessage(message: { text?: string; data?: Buffer }): void {
@@ -295,11 +326,11 @@ export class HermesRelayRuntime {
     }
     if (message.text !== undefined) {
       this.traceRelayFrame('bridge_send', message.text);
-      bridge.send(message.text);
+      this.sendFrame(bridge, message.text, 'bridge_out');
       return;
     }
     if (message.data) {
-      bridge.send(message.data);
+      this.sendFrame(bridge, message.data, 'bridge_out');
     }
   }
 
@@ -311,9 +342,9 @@ export class HermesRelayRuntime {
       if (!next) break;
       if (next.text !== undefined) {
         this.traceRelayFrame('bridge_flush', next.text);
-        bridge.send(next.text);
+        this.sendFrame(bridge, next.text, 'bridge_out');
       } else if (next.data) {
-        bridge.send(next.data);
+        this.sendFrame(bridge, next.data, 'bridge_out');
       }
     }
   }
@@ -463,12 +494,12 @@ export class HermesRelayRuntime {
 
     this.pendingBridgeHealthProbe = { id: probeId, timeout };
     try {
-      bridge.send(JSON.stringify({
+      this.sendFrame(bridge, JSON.stringify({
         type: 'req',
         id: probeId,
         method: BRIDGE_HEALTH_METHOD,
         params: BRIDGE_HEALTH_PARAMS,
-      }));
+      }), 'bridge_out');
     } catch (error) {
       this.clearPendingBridgeHealthProbe();
       this.log(`bridge health probe send failed: ${String(error)}`);
@@ -561,10 +592,35 @@ export class HermesRelayRuntime {
     return this.relaySocket?.readyState === WebSocket.OPEN;
   }
 
-  private createWebSocket(url: string, options?: { headers?: Record<string, string> }): WebSocket {
+  private createWebSocket(url: string, options?: HermesSocketConnectOptions): WebSocket {
+    const mergedOptions = {
+      ...options,
+      maxPayload: WEBSOCKET_FRAME_LIMIT_BYTES,
+    };
     return this.options.createWebSocket
-      ? this.options.createWebSocket(url, options)
-      : new WebSocket(url, options);
+      ? this.options.createWebSocket(url, mergedOptions)
+      : new WebSocket(url, mergedOptions);
+  }
+
+  private rejectOversizedFrame(
+    socket: WebSocket,
+    data: WebSocketFrameData,
+    direction: string,
+  ): boolean {
+    const byteLength = getWebSocketFrameByteLength(data);
+    if (byteLength <= WEBSOCKET_FRAME_LIMIT_BYTES) return false;
+    this.log(
+      `${direction} rejected code=${FRAME_TOO_LARGE_ERROR_CODE} ` +
+      `bytes=${byteLength} limit=${WEBSOCKET_FRAME_LIMIT_BYTES}`,
+    );
+    socket.close(FRAME_TOO_LARGE_CLOSE_CODE, FRAME_TOO_LARGE_ERROR_CODE);
+    return true;
+  }
+
+  private sendFrame(socket: WebSocket, data: WebSocketFrameData, direction: string): boolean {
+    if (this.rejectOversizedFrame(socket, data, direction)) return false;
+    socket.send(data as WebSocket.Data);
+    return true;
   }
 
   private updateSnapshot(patch: Partial<HermesRelayRuntimeSnapshot>): void {

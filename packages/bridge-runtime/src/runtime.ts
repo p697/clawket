@@ -29,6 +29,14 @@ import {
   parseResponseEnvelopeMeta,
   type PendingPairRequest,
 } from './protocol.js';
+import {
+  FRAME_TOO_LARGE_CLOSE_CODE,
+  FRAME_TOO_LARGE_ERROR_CODE,
+  getWebSocketFrameByteLength,
+  isWebSocketMaxPayloadError,
+  WEBSOCKET_FRAME_LIMIT_BYTES,
+  type WebSocketFrameData,
+} from './frame-limit.js';
 
 type PendingGatewayMessage =
   | { kind: 'text'; text: string }
@@ -227,7 +235,7 @@ export class BridgeRuntime {
     );
     const relay = this.createWebSocket(relayUrl, {
       headers: relayHeaders,
-      maxPayload: 25 * 1024 * 1024,
+      maxPayload: WEBSOCKET_FRAME_LIMIT_BYTES,
     });
     this.relaySocket = relay;
 
@@ -259,6 +267,13 @@ export class BridgeRuntime {
     });
 
     relay.once('error', (error: Error) => {
+      if (isWebSocketMaxPayloadError(error)) {
+        this.log(
+          `relay_in rejected code=${FRAME_TOO_LARGE_ERROR_CODE} ` +
+          `limit=${WEBSOCKET_FRAME_LIMIT_BYTES} source=ws_max_payload`,
+        );
+        return;
+      }
       this.log(`relay error: ${String(error)}`);
     });
 
@@ -283,6 +298,8 @@ export class BridgeRuntime {
   }
 
   private async handleRelayMessage(data: RawData, isBinary: boolean): Promise<void> {
+    const relay = this.relaySocket;
+    if (relay && this.rejectOversizedFrame(relay, data, 'relay_in')) return;
     this.lastRelayActivityMs = Date.now();
     if (isBinary) {
       this.forwardOrQueueGatewayMessage({ kind: 'binary', data: normalizeBinary(data) });
@@ -662,6 +679,13 @@ export class BridgeRuntime {
     });
 
     gateway.once('error', (error: Error) => {
+      if (isWebSocketMaxPayloadError(error)) {
+        this.log(
+          `gateway_in rejected code=${FRAME_TOO_LARGE_ERROR_CODE} ` +
+          `limit=${WEBSOCKET_FRAME_LIMIT_BYTES} source=ws_max_payload`,
+        );
+        return;
+      }
       this.log(`gateway error: ${String(error)}`);
     });
 
@@ -702,10 +726,12 @@ export class BridgeRuntime {
   }
 
   private handleGatewayMessage(data: RawData, isBinary: boolean): void {
+    const gateway = this.gatewaySocket;
+    if (gateway && this.rejectOversizedFrame(gateway, data, 'gateway_in')) return;
     const relay = this.relaySocket;
     if (!relay || relay.readyState !== WebSocket.OPEN) return;
     if (isBinary) {
-      relay.send(normalizeBinary(data));
+      this.sendFrame(relay, normalizeBinary(data), 'relay_out');
       return;
     }
     const text = normalizeText(data);
@@ -725,7 +751,7 @@ export class BridgeRuntime {
       }
       this.observeGatewayResponse(response);
     }
-    relay.send(text);
+    this.sendFrame(relay, text, 'relay_out');
   }
 
   private flushPendingGatewayMessages(): void {
@@ -779,10 +805,10 @@ export class BridgeRuntime {
           `gateway connect protocol patched min=${OPENCLAW_GATEWAY_MIN_PROTOCOL_VERSION} max=${OPENCLAW_GATEWAY_MAX_PROTOCOL_VERSION}`,
         );
       }
-      gateway.send(patched.text);
+      this.sendFrame(gateway, patched.text, 'gateway_out');
       return;
     }
-    gateway.send(message.data);
+    this.sendFrame(gateway, message.data, 'gateway_out');
   }
 
   private sendGatewayRequest(method: string, params: Record<string, unknown>): void {
@@ -886,13 +912,13 @@ export class BridgeRuntime {
   }): void {
     const relay = this.relaySocket;
     if (!relay || relay.readyState !== WebSocket.OPEN) return;
-    relay.send(`__clawket_relay_control__:${JSON.stringify({
+    this.sendFrame(relay, `__clawket_relay_control__:${JSON.stringify({
       type: 'control',
       event: control.event,
       requestId: control.requestId,
       targetClientId: control.targetClientId,
       payload: control.payload,
-    })}`);
+    })}`, 'relay_out');
   }
 
   private closeGateway(reconnectAfterClose = false): void {
@@ -946,7 +972,7 @@ export class BridgeRuntime {
     const mergedOptions: RuntimeSocketConnectOptions = {
       ...gatewayTlsOptions,
       ...options,
-      maxPayload: options?.maxPayload ?? 25 * 1024 * 1024,
+      maxPayload: options?.maxPayload ?? WEBSOCKET_FRAME_LIMIT_BYTES,
     };
     if (this.options.createWebSocket) {
       return this.options.createWebSocket(url, mergedOptions);
@@ -957,7 +983,7 @@ export class BridgeRuntime {
       rejectUnauthorized?: boolean;
       checkServerIdentity?: never;
     } = {
-      maxPayload: mergedOptions.maxPayload ?? 25 * 1024 * 1024,
+      maxPayload: mergedOptions.maxPayload ?? WEBSOCKET_FRAME_LIMIT_BYTES,
       headers: mergedOptions.headers,
     };
     if (mergedOptions.rejectUnauthorized !== undefined) {
@@ -1001,12 +1027,33 @@ export class BridgeRuntime {
       if (!activeGateway || activeGateway.readyState !== WebSocket.OPEN) return;
       current.startedAtMs = Date.now();
       current.slowWarningLogged = false;
-      activeGateway.send(current.text);
+      if (!this.sendFrame(activeGateway, current.text, 'gateway_out')) return;
       this.log(
         `gateway connect startup-sidecars retry sent reqId=<redacted> ` +
         `attempt=${current.startupRetryCount}`,
       );
     }, delayMs);
+    return true;
+  }
+
+  private rejectOversizedFrame(
+    socket: RuntimeSocket,
+    data: WebSocketFrameData,
+    direction: string,
+  ): boolean {
+    const byteLength = getWebSocketFrameByteLength(data);
+    if (byteLength <= WEBSOCKET_FRAME_LIMIT_BYTES) return false;
+    this.log(
+      `${direction} rejected code=${FRAME_TOO_LARGE_ERROR_CODE} ` +
+      `bytes=${byteLength} limit=${WEBSOCKET_FRAME_LIMIT_BYTES}`,
+    );
+    socket.close(FRAME_TOO_LARGE_CLOSE_CODE, FRAME_TOO_LARGE_ERROR_CODE);
+    return true;
+  }
+
+  private sendFrame(socket: RuntimeSocket, data: WebSocketFrameData, direction: string): boolean {
+    if (this.rejectOversizedFrame(socket, data, direction)) return false;
+    socket.send(data as Parameters<RuntimeSocket['send']>[0]);
     return true;
   }
 

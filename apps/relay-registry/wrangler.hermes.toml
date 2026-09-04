@@ -12,7 +12,15 @@ RELAY_REGION_MAP = "{\"cn\":\"wss://hermes-relay.example.com/ws\",\"sg\":\"wss:/
 PAIR_ACCESS_CODE_TTL_SEC = "600"
 PAIR_CLIENT_TOKEN_MAX = "8"
 
+[[durable_objects.bindings]]
+name = "PAIR_REGISTER_LIMITER"
+class_name = "PairRegisterRateLimiter"
+
 [[kv_namespaces]]
 binding = "HERMES_ROUTES_KV"
 id = "00000000000000000000000000000000"
 preview_id = "00000000000000000000000000000000"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["PairRegisterRateLimiter"]

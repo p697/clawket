@@ -42,3 +42,9 @@ For Hermes in this monorepo, model switching currently has a hard product bounda
 2. Reset OpenClaw Gateway retry backoff only after a successful connect response, not on raw WebSocket open.
 3. If an unexpected local OpenClaw Gateway close invalidates the active client session, notify Relay to force a client transport reconnect. Expected demand-driven closes must not trigger that signal.
 4. Hermes keeps real local bridge request/response probes. Cloud bridge-status polling is a low-frequency safety check, not the primary five-second health mechanism.
+
+## Relay Frame Limit Rule
+
+1. Every Bridge WebSocket boundary uses the shared 8 MiB application-frame limit for both OpenClaw and Hermes.
+2. Measure strings as UTF-8 bytes and binary payloads by byte length; exactly 8 MiB is valid and strictly larger frames fail with `frame_too_large`.
+3. Keep the limit in a shared runtime helper so inbound `maxPayload` settings and explicit outbound checks cannot drift.

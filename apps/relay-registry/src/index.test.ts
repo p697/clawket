@@ -2,6 +2,18 @@ import { describe, expect, it, vi } from 'vitest';
 import { sha256Hex, verifyPairingRelayTicket } from '@clawket/shared';
 import worker from './index';
 
+vi.mock('cloudflare:workers', () => ({
+  DurableObject: class {
+    protected readonly ctx: DurableObjectState;
+    protected readonly env: unknown;
+
+    constructor(ctx: DurableObjectState, env: unknown) {
+      this.ctx = ctx;
+      this.env = env;
+    }
+  },
+}));
+
 const fetchHandler = worker.fetch as (request: Request, env: unknown) => Promise<Response>;
 const ACCESS_CODE_PATTERN = /^[ABCDEFGHJKMNPQRSTVWXYZ23456789]{6}$/;
 
@@ -30,6 +42,7 @@ function createEnv() {
     }),
     PAIR_ACCESS_CODE_TTL_SEC: '600',
     PAIR_CLIENT_TOKEN_MAX: '4',
+    PAIR_REGISTER_LIMITER: createAlwaysAllowRegisterLimiter(),
     PAIRING_TICKET_SECRET: 'test-pairing-ticket-secret-that-is-long-enough',
     RELAY_SYNC_SERVICE: {
       fetch: vi.fn(async () => new Response(JSON.stringify({
@@ -37,6 +50,14 @@ function createEnv() {
         capabilities: ['pairing.secure-short-code.v2'],
       }), { status: 200 })),
     },
+  };
+}
+
+function createAlwaysAllowRegisterLimiter() {
+  return {
+    getByName: () => ({
+      consume: async (nowMs: number) => ({ allowed: true, count: 1, resetAt: nowMs + 60 * 60 * 1000 }),
+    }),
   };
 }
 

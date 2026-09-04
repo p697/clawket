@@ -6,6 +6,63 @@ import {
   type Env,
 } from './relay/types';
 
+export const PRINCIPAL_EXISTENCE_CACHE_TTL_MS = 60_000;
+export const PRINCIPAL_EXISTENCE_CACHE_MAX_ENTRIES = 10_000;
+
+type PrincipalExistenceCacheEntry = {
+  expiresAt: number;
+};
+
+/**
+ * Isolate-local bounded cache for positive pair-record existence checks. It
+ * intentionally stores no request or binding objects; misses are retried so a
+ * newly registered principal is not hidden by KV propagation delay.
+ */
+export class PrincipalExistenceCache {
+  private readonly entries = new Map<string, PrincipalExistenceCacheEntry>();
+
+  constructor(
+    private readonly ttlMs = PRINCIPAL_EXISTENCE_CACHE_TTL_MS,
+    private readonly maxEntries = PRINCIPAL_EXISTENCE_CACHE_MAX_ENTRIES,
+  ) {
+    if (!Number.isSafeInteger(ttlMs) || ttlMs <= 0) throw new Error('ttlMs must be a positive integer');
+    if (!Number.isSafeInteger(maxEntries) || maxEntries <= 0) {
+      throw new Error('maxEntries must be a positive integer');
+    }
+  }
+
+  has(key: string, now: number): boolean {
+    const entry = this.entries.get(key);
+    if (!entry) return false;
+    if (entry.expiresAt <= now) {
+      this.entries.delete(key);
+      return false;
+    }
+    return true;
+  }
+
+  add(key: string, now: number): void {
+    // Reinsert updates eviction order without extending other entries' TTLs.
+    this.entries.delete(key);
+    while (this.entries.size >= this.maxEntries) {
+      const oldestKey = this.entries.keys().next().value;
+      if (oldestKey === undefined) break;
+      this.entries.delete(oldestKey);
+    }
+    this.entries.set(key, { expiresAt: now + this.ttlMs });
+  }
+
+  clear(): void {
+    this.entries.clear();
+  }
+
+  get size(): number {
+    return this.entries.size;
+  }
+}
+
+const principalExistenceCache = new PrincipalExistenceCache();
+
 export const OPENCLAW_BACKEND_POLICY: BackendPolicy = {
   backend: 'openclaw',
   principalParam: 'gatewayId',
@@ -97,4 +154,23 @@ export function routesKv(env: Env, policy: BackendPolicy): KVNamespace {
   const binding = env[policy.kvBinding];
   if (!binding) throw new Error(`Missing ${policy.kvBinding} KV binding`);
   return binding;
+}
+
+export async function pairedPrincipalExists(
+  env: Env,
+  policy: BackendPolicy,
+  principalId: string,
+  now = Date.now(),
+): Promise<boolean> {
+  const pairKey = `${policy.kvKeys.pair}${principalId}`;
+  const cacheKey = `${policy.backend}:${pairKey}`;
+  if (principalExistenceCache.has(cacheKey, now)) return true;
+
+  const exists = await routesKv(env, policy).get(pairKey) !== null;
+  if (exists) principalExistenceCache.add(cacheKey, now);
+  return exists;
+}
+
+export function clearPrincipalExistenceCache(): void {
+  principalExistenceCache.clear();
 }

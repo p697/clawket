@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import relayWorker, { __testing, HermesRelayRoom } from './index';
 import { resolveHermesClientLabelFromToken as resolveClientLabelFromToken } from './relay/auth';
+import { ensureHeartbeat } from './relay/heartbeat';
 
 class MemoryKV {
   private map = new Map<string, string>();
@@ -924,6 +925,120 @@ describe('relay worker helpers', () => {
     expect(bridgeSocket.closeCalls).toEqual([]);
     expect(relay.runtime.pendingGatewayPingAt).toBe(0);
     expect(relay.runtime.gatewayPingCapability).toBe('unsupported');
+  });
+
+  it('sends Hermes bridge probes only while at least one client socket is open', () => {
+    const bridgeSocket = new FakeWebSocket({
+      attachment: { role: 'gateway', clientId: 'bridge-main', connectedAt: 1 },
+    });
+    const closedClient = new FakeWebSocket({
+      readyState: WebSocket.CLOSED,
+      attachment: { role: 'client', clientId: 'ios-closed', connectedAt: 2 },
+    });
+    const openClient = new FakeWebSocket({
+      attachment: { role: 'client', clientId: 'ios-open', connectedAt: 3 },
+    });
+    const { room } = createHermesRelayRoomWithSockets();
+    const relay = room as unknown as {
+      runtime: {
+        bridgeSocket: FakeWebSocket | null;
+        clients: Map<string, FakeWebSocket>;
+        pendingGatewayPingAt: number;
+      };
+    };
+    relay.runtime.bridgeSocket = bridgeSocket;
+
+    __testing.reconcileGatewayLiveness(relay.runtime as never, 10_000);
+    relay.runtime.clients.set('ios-closed', closedClient);
+    __testing.reconcileGatewayLiveness(relay.runtime as never, 20_000);
+    expect(bridgeSocket.sent).toEqual([]);
+    expect(relay.runtime.pendingGatewayPingAt).toBe(0);
+
+    relay.runtime.clients.set('ios-open', openClient);
+    __testing.reconcileGatewayLiveness(relay.runtime as never, 30_000);
+    expect(bridgeSocket.sent).toHaveLength(1);
+    expect(bridgeSocket.sent[0]).toContain('gateway_ping');
+    expect(relay.runtime.pendingGatewayPingAt).toBe(30_000);
+  });
+
+  it('schedules a pending Hermes bridge probe at its 12s watchdog deadline before the 30s heartbeat', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(10_000);
+    const clientSocket = new FakeWebSocket({
+      attachment: { role: 'client', clientId: 'ios-open', connectedAt: 1 },
+    });
+    const { room, storage } = createHermesRelayRoomWithSockets([clientSocket], {
+      HEARTBEAT_INTERVAL_MS: '30000',
+      GATEWAY_PING_TIMEOUT_MS: '12000',
+    });
+    const relay = room as unknown as {
+      runtime: {
+        pendingGatewayPingAt: number;
+      };
+    };
+
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      expect(storage.alarmAt).toBe(40_000);
+      relay.runtime.pendingGatewayPingAt = 10_000;
+      await ensureHeartbeat(relay.runtime as never);
+      expect(storage.alarmAt).toBe(22_000);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('restores the 30s heartbeat cadence after a Hermes bridge pong satisfies the 12s watchdog', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(11_000);
+    const bridgeSocket = new FakeWebSocket({
+      attachment: { role: 'gateway', clientId: 'bridge-main', connectedAt: 1 },
+    });
+    const clientSocket = new FakeWebSocket({
+      attachment: { role: 'client', clientId: 'ios-open', connectedAt: 2 },
+    });
+    const { room, storage } = createHermesRelayRoomWithSockets([bridgeSocket, clientSocket], {
+      HEARTBEAT_INTERVAL_MS: '30000',
+      GATEWAY_PING_TIMEOUT_MS: '12000',
+    });
+    const relay = room as unknown as {
+      runtime: {
+        pendingGatewayPingAt: number;
+        gatewayPingCapability: 'unknown' | 'supported' | 'unsupported';
+      };
+      webSocketMessage: (ws: WebSocket, message: string | ArrayBuffer) => Promise<void>;
+    };
+
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      relay.runtime.pendingGatewayPingAt = 10_000;
+      storage.alarmAt = 22_000;
+
+      await relay.webSocketMessage(
+        bridgeSocket as never,
+        `${__testing.CONTROL_PREFIX}${JSON.stringify({ type: 'control', event: 'gateway_pong' })}`,
+      );
+
+      expect(relay.runtime.pendingGatewayPingAt).toBe(0);
+      expect(relay.runtime.gatewayPingCapability).toBe('supported');
+      expect(storage.alarmAt).toBe(41_000);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('deletes the heartbeat alarm when no client socket is open even with a pending Hermes probe', async () => {
+    const { room, storage } = createHermesRelayRoomWithSockets();
+    const relay = room as unknown as {
+      runtime: {
+        pendingGatewayPingAt: number;
+      };
+    };
+    relay.runtime.pendingGatewayPingAt = 10_000;
+    storage.alarmAt = 22_000;
+
+    await ensureHeartbeat(relay.runtime as never);
+    expect(storage.alarmAt).toBeNull();
   });
 
   it('closes a gateway after ping timeout only once gateway_pong support was proven', async () => {

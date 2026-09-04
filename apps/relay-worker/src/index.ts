@@ -4,6 +4,7 @@ import {
   jsonResponse,
   parseHermesRelayAuthQuery,
   parseRelayAuthQuery,
+  RELAY_FRAME_LIMIT_V2,
   resolveRelayAuthToken,
   SECURE_PAIRING_V2_CAPABILITY,
 } from '@clawket/shared';
@@ -16,6 +17,7 @@ import {
   isConnectStartReqFrame,
   isPendingChallengeExpired,
   normalizeMessage,
+  relayFrameByteLength,
   resolveAwaitingChallengeClientId,
   shouldEmitClientControlAfterSocketEvent,
 } from './relay/frames';
@@ -30,6 +32,8 @@ import {
 import {
   HERMES_BACKEND_POLICY,
   OPENCLAW_BACKEND_POLICY,
+  clearPrincipalExistenceCache,
+  pairedPrincipalExists,
   policyForBackend,
   roomNamespace,
   routesKv,
@@ -50,7 +54,7 @@ import {
   prepareClientMessage,
   rejectClientRequestWithoutBridge,
 } from './relay/routing';
-import { replaceBridge, replaceGateway, sendControlToGateway } from './relay/control';
+import { replaceBridge, replaceGateway, sendControlToGateway, sendRelayReady } from './relay/control';
 import {
   canAcceptGatewayOwner,
   loadGatewayOwner,
@@ -67,6 +71,7 @@ import { parsePositiveInt } from './relay/utils';
 import {
   CONTROL_PREFIX,
   CLIENT_PONG_CAPABILITY,
+  RELAY_FRAME_MAX_BYTES,
   SOCKET_CLOSE_CODES,
   type BackendPolicy,
   type Env,
@@ -103,13 +108,14 @@ async function fetchForPolicy(request: Request, env: Env, policy: BackendPolicy)
   const url = new URL(request.url);
 
   if (request.method === 'GET' && url.pathname === '/v1/health') {
-    if (!policy.securePairing) return jsonResponse({ ok: true, runtime: 'durable-object' });
+    const capabilities = [RELAY_FRAME_LIMIT_V2];
+    if (policy.securePairing && isSecurePairingSecretConfigured(env.PAIRING_TICKET_SECRET)) {
+      capabilities.unshift(SECURE_PAIRING_V2_CAPABILITY);
+    }
     return jsonResponse({
       ok: true,
       runtime: 'durable-object',
-      capabilities: isSecurePairingSecretConfigured(env.PAIRING_TICKET_SECRET)
-        ? [SECURE_PAIRING_V2_CAPABILITY]
-        : [],
+      capabilities,
     });
   }
 
@@ -146,6 +152,9 @@ async function fetchForPolicy(request: Request, env: Env, policy: BackendPolicy)
   if (!query.principalId) return invalidPrincipalResponse(policy);
   if (!request.headers.get('upgrade')?.toLowerCase().includes('websocket')) {
     return errorResponse('UPGRADE_REQUIRED', 'Expected websocket upgrade', 426);
+  }
+  if (!await pairedPrincipalExists(env, policy, query.principalId)) {
+    return errorResponse('UNKNOWN_GATEWAY', `${policy.principalParam} is not registered`, 404);
   }
   const namespace = roomNamespace(env, policy);
   return namespace.get(namespace.idFromName(query.principalId)).fetch(request);
@@ -274,6 +283,7 @@ class BaseRelayRoom {
     // branch has closed the previous peer with the backend-specific reason.
     this.runtime.state.acceptWebSocket(server);
     server.serializeAttachment(attachment);
+    sendRelayReady(server);
 
     if (query.role === 'gateway') {
       replaceGateway(this.runtime, server);
@@ -313,6 +323,21 @@ class BaseRelayRoom {
 
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
     const attachment = ws.deserializeAttachment() as SocketAttachment | null;
+    const frameBytes = relayFrameByteLength(message);
+    if (frameBytes > RELAY_FRAME_MAX_BYTES) {
+      logRuntimeTelemetry(this.runtime, 'frame_too_large', {
+        role: attachment?.role ?? 'unknown',
+        frameBytes,
+        frameLimitBytes: RELAY_FRAME_MAX_BYTES,
+        frameType: typeof message === 'string' ? 'text' : 'binary',
+      });
+      try {
+        ws.close(SOCKET_CLOSE_CODES.FRAME_TOO_LARGE, 'frame_too_large');
+      } catch {
+        // Best effort: the peer may have already started closing.
+      }
+      return;
+    }
     if (!attachment) return;
     const text = normalizeMessage(message);
     if (text == null) return;
@@ -566,6 +591,7 @@ function hasValidPairingSyncSecret(request: Request, configuredSecret?: string):
 export const __testing = {
   parsePositiveInt,
   normalizeMessage,
+  relayFrameByteLength,
   isRelayTokenAuthorized,
   hasValidPairingSyncSecret,
   sha256Hex,
@@ -585,11 +611,14 @@ export const __testing = {
   reconcileSockets,
   replaceGateway,
   replaceBridge,
+  sendRelayReady,
+  clearPrincipalExistenceCache,
   BackendPolicy: {
     openclaw: OPENCLAW_BACKEND_POLICY,
     hermes: HERMES_BACKEND_POLICY,
   },
   SocketCloseCode: {
+    FRAME_TOO_LARGE: SOCKET_CLOSE_CODES.FRAME_TOO_LARGE,
     IDLE_OR_STALE_TIMEOUT: SOCKET_CLOSE_CODES.IDLE_OR_STALE_TIMEOUT,
     DEAD_SOCKET: SOCKET_CLOSE_CODES.DEAD_SOCKET,
     BRIDGE_UNAVAILABLE: SOCKET_CLOSE_CODES.BRIDGE_UNAVAILABLE,
