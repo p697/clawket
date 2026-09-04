@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-- 当前里程碑：M1（未开始）
+- 当前里程碑：M2a（未开始）
 - 集成分支：`release/3.0`
 - 最近一次全绿：2026-09-05，`npm run check:required && npm run test:compat && npm run metrics:loc`
 
@@ -12,11 +12,11 @@
 
 | 指标 | 基线 | 最新 | 差值 |
 |---|---|---|---|
-| 非测试代码行数（apps + packages，ts/tsx） | 124147 | 124151 | +4 |
-| 测试代码行数 | 36018 | 36018 | 0 |
-| 测试文件数 | 186 | 186 | 0 |
-| Markdown 文档数（包含 docs/3.0） | 53 | 54 | +1 |
-| `git diff --shortstat <baseline>..HEAD` | — | 43 files changed, 22540 insertions(+), 20270 deletions(-) | +2270 净行（主要为 lockfile 与协议 fixture） |
+| 非测试代码行数（apps + packages，ts/tsx） | 124147 | 126154 | +2007 |
+| 测试代码行数 | 36018 | 36837 | +819 |
+| 测试文件数 | 186 | 190 | +4 |
+| Markdown 文档数（包含 docs/3.0） | 53 | 56 | +3 |
+| `git diff --shortstat <baseline>..HEAD` | — | 65 files changed, 25961 insertions(+), 20556 deletions(-) | +5405 净行（主要为 lockfile、compat fixture 与新协议包） |
 
 基线提交：`db20f7d0f9b25d094a1e3aa9c83a27c362d2fc7d`
 
@@ -25,7 +25,7 @@
 | 里程碑 | 状态 | 完成日期 | 验证结果 | 提交 |
 |---|---|---|---|---|
 | M0 基线与护栏 | 已完成 | 2026-09-05 | 干净 `npm ci`；required 全绿；compat 5 files / 34 tests；双 lock audit 0 high/critical；LOC 已记录 | `717f265bd3ca15fcbed4207c653c6c56e920bd6d` |
-| M1 契约与包骨架 | 未开始 | | | |
+| M1 契约与包骨架 | 已完成 | 2026-09-05 | required 全绿；协议包 3 files / 23 tests、四项覆盖率 100%；Mobile 162 suites / 1361 tests；compat 5 files / 34 tests；Android Metro 与 Bridge/CLI bundle 验证通过 | `ef8ae596d031d891a4263fa4a3c04d192f8658a1` |
 | M2 Relay / Registry 合一与安全口子 | 未开始 | | | |
 | M3 Bridge 拆分与 Hermes 多会话 | 未开始 | | | |
 | M4 App 连接层 v2 | 未开始 | | | |
@@ -44,6 +44,10 @@
 | 2026-09-05 | 重新解析两份 lockfile并仅用兼容性测试覆盖的 transitive overrides 清除 high/critical 告警。 | `npm audit --audit-level=high` 必须在根与 mobile lockfile 都能从干净安装通过；剩余为 root 1 low + 54 moderate、mobile 22 moderate。 |
 | 2026-09-05 | Android native dependency patcher同时支持 workspace hoist 与 mobile standalone 布局，并对上游块变化 fail-closed。 | 首次干净 `npm ci` 暴露 mobile postinstall 早于根链接建立；修复后干净安装与 3 条路径回归全绿。 |
 | 2026-09-05 | M2 的应用层帧上限按决策采用 8 MiB。 | 当前 Cloudflare Durable Objects 接收 WebSocket 消息上限为 32 MiB；名义 5 MiB 图片的实测 JSON 帧为 6,990,768 bytes，低于 8 MiB。 |
+| 2026-09-05 | `@clawket/agent-protocol` 同时承载 3.0 契约与临时 legacy Gateway facade；Mobile 原文件只 re-export，M4 再删除 facade。 | M1 要求 App 行为零变化，同时先建立唯一能力矩阵；迁移期 facade 避免复制旧逻辑。 |
+| 2026-09-05 | Management 子接口按方法可选并映射细粒度能力；`modelPerSession` 约束 model scope，`skillInstall` 约束 prompt，不虚构不存在的 Gateway 管理方法。 | capability 必须能独立降级；Hermes 只读 Agent 等组合不能靠整组存在性表达。 |
+| 2026-09-05 | 协议包暂以 CommonJS package boundary 暴露 TypeScript 源给 Metro/Jest；Bridge 只允许 type-only import。 | 该组合同时通过 Mobile 独立安装、Jest/Metro 与 Bridge NodeNext typecheck；Node 若以后导入运行时值，必须先增加编译产物或 bundle。 |
+| 2026-09-05 | 握手能力解析的已知集合包含既有 pong、secure-pairing 与三项 v2 常量，解析/序列化保留所有 sibling meta。 | 新增能力不能过滤现有声明；无 capabilities 的 v1 meta 需保持 JSON 字节形状不变。 |
 
 ## 偏离记录（规格与实现不一致之处，最终报告汇总）
 
@@ -54,6 +58,7 @@
 | `02-protocol-and-services.md` §7 | 从历史 App 真实流程录制 packet fixture，并在 worktree 构建老 Bridge。 | fixture 从 pinned 客户端的真实序列化/分派源码边界提取并经真实服务回放；历史 Bridge 使用从该 commit lock 精确裁剪的 Bridge-only closure 做 `npm ci` 与构建。 | 无可下载历史 App 二进制；历史 full-monorepo lock 的 Expo closure 已失配，完整 `npm ci` 在当时源码上不可复现。 | 协议、签名、scopes、未知控制事件与 3 个唯一 Bridge artifact 均有机器证明；不宣称二进制抓包或完整历史 App 构建。 |
 | `02-protocol-and-services.md` §4.2 | 2.1.x 客户端有 5 MB 图片硬上限，可测“压缩后最大的图片”。 | 执行四个 pinned pipeline 后记录：JPEG 三次压缩均超 5 MiB 时仍返回 best candidate，因此不存在确定性最大值；冻结 1.5 MiB 与名义 5 MiB 的实际 wire bytes。 | 历史实现只在 PNG 快路使用 5 MiB 条件，没有最终 JPEG 拒绝。 | 1.5 MiB fixture 为 2,097,412-byte JSON；5 MiB 为 6,990,768 bytes；不冒充真机 compressor 上界。 |
 | `02-protocol-and-services.md` §2 与 §4.2 | `relay.frame-limit.v2` 表中写 256 KB，安全口子写 8 MiB。 | 后续实现遵循 §4.2、`00-decisions.md` 与 M2 的 8 MiB。 | 256 KB 会直接破坏现有 base64 图片发送；8 MiB 高于名义 5 MiB 图片 wire 且低于平台 32 MiB。 | M2 的 capability 文案与实现统一为 8 MiB。 |
+| `01-architecture.md` §3.4 | Management 示例把组内方法全部写成必选，并使用若干简化参数与返回类型；示例未列 config 写入与 exec approval resolve。 | 采用方法级 `Partial`，逐项沿用当前 `GatewayClient` 的分页、参数与返回类型，并补 `config.patch/set`、`approvals.resolveExec`。 | 原示例无法表达 Hermes 的只读 Agent、独立 cron create / heartbeat / pairRequests 等能力，也会丢失现有 UI 依赖的返回字段。 | 契约对现有行为保持可迁移兼容；适配器只暴露 capability 允许的方法，不使用抛错占位。 |
 
 ## HUMAN TODO（只有人能做的事）
 
@@ -78,3 +83,4 @@
 - `m0-required-compat-metrics.md`：干净安装、required/compat/LOC 结果与覆盖矩阵。
 - `m0-audit-and-tooling.md`：双 lock audit、Wrangler/Expo 版本与帧大小证据。
 - `m0-baseline-deviations.md`：基线 replacement bug、历史来源与图片上界偏离。
+- `m1-contracts.md`：协议契约、真实消费者、覆盖率、compat 与 LOC 验证证据。
