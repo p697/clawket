@@ -16,6 +16,7 @@ const REFRESH_THRESHOLD_RATIO = 0.1;
 const REFRESH_THRESHOLD_MIN_MS = 30_000;
 const YOUMIND_APP_ID = '0';
 const YOUMIND_NONCE_BYTES = 12;
+const sharedSessionRefreshes = new Map<string, Promise<YouMindAuthSession | null>>();
 
 export type YouMindSprite = {
   id: string;
@@ -54,6 +55,11 @@ export interface YouMindSpriteApi {
   }): Promise<{ aborted: boolean; completionId?: string }>;
 }
 
+export type YouMindEmailAuthApi = Pick<
+  YouMindSpriteApi,
+  'sendOtp' | 'verifyOtp'
+>;
+
 export class YouMindSpriteApiError extends Error {
   public constructor(
     message: string,
@@ -82,6 +88,7 @@ type YouMindSpriteApiClientOptions = {
   now?: () => number;
   timeZone?: () => string;
   platform?: string;
+  appSecret?: string | null;
 };
 
 export class YouMindSpriteApiClient implements YouMindSpriteApi {
@@ -92,8 +99,9 @@ export class YouMindSpriteApiClient implements YouMindSpriteApi {
   private readonly now: () => number;
   private readonly timeZone: () => string;
   private readonly platform: string;
+  private readonly appSecret: string | null;
   private readonly streamTransport: HttpStreamTransport;
-  private refreshPromise: Promise<YouMindAuthSession | null> | null = null;
+  private readonly sessionScopeId: string;
 
   public constructor(
     baseUrl: string,
@@ -102,12 +110,16 @@ export class YouMindSpriteApiClient implements YouMindSpriteApi {
   ) {
     this.baseUrl = normalizeBaseUrl(baseUrl);
     this.authScopeKey = authScopeKey.trim();
+    this.sessionScopeId = `${this.baseUrl}::${this.authScopeKey}`;
     this.storage = options.storage ?? StorageService;
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.now = options.now ?? Date.now;
     this.timeZone = options.timeZone
       ?? (() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
     this.platform = options.platform ?? Platform.OS;
+    this.appSecret = options.appSecret === undefined
+      ? publicYouMindAuthConfig.appSecret
+      : options.appSecret;
     this.streamTransport = options.streamTransport ?? new HttpStreamTransport({
       baseUrl: this.baseUrl,
       getHeaders: () => this.buildHeaders(),
@@ -132,7 +144,7 @@ export class YouMindSpriteApiClient implements YouMindSpriteApi {
     const bodyText = JSON.stringify(body);
     await this.requestJson(path, {
       bodyText,
-      headers: buildYouMindHmacHeaders(path, bodyText, this.now()),
+      headers: buildYouMindHmacHeaders(path, bodyText, this.now(), this.appSecret),
     });
   }
 
@@ -161,19 +173,19 @@ export class YouMindSpriteApiClient implements YouMindSpriteApi {
       '/api/v1/sprite/ensureDefault',
       { auth: true, body: {}, signal },
     );
-    if (!response.sprite?.id) {
+    if (!response?.sprite?.id) {
       throw new YouMindSpriteApiError('YouMind default Sprite is missing.', 500);
     }
     return response.sprite;
   }
 
-  public loadSpriteSession(params: {
+  public async loadSpriteSession(params: {
     spriteId: string;
     limit: number;
     cursor?: string;
     signal?: AbortSignal;
   }): Promise<Record<string, unknown>> {
-    return this.requestJson('/api/v1/sprite/sessionLoad', {
+    const response = await this.requestJson<unknown>('/api/v1/sprite/sessionLoad', {
       auth: true,
       signal: params.signal,
       body: {
@@ -182,6 +194,10 @@ export class YouMindSpriteApiClient implements YouMindSpriteApi {
         ...(params.cursor ? { cursor: params.cursor } : {}),
       },
     });
+    if (!response || typeof response !== 'object' || Array.isArray(response)) {
+      throw new YouMindSpriteApiError('YouMind returned an invalid Sprite session.', 500);
+    }
+    return response as Record<string, unknown>;
   }
 
   public async streamSpriteMessage(params: {
@@ -236,9 +252,10 @@ export class YouMindSpriteApiClient implements YouMindSpriteApi {
     const stored = await this.getStoredSession();
     if (!stored) return null;
     if (!force && !shouldRefresh(stored, this.now())) return stored;
-    if (this.refreshPromise) return this.refreshPromise;
+    const sharedRefresh = sharedSessionRefreshes.get(this.sessionScopeId);
+    if (sharedRefresh) return sharedRefresh;
 
-    this.refreshPromise = this.requestJson<{
+    const refresh = this.requestJson<{
       accessToken: string;
       refreshToken: string;
       expiresIn: number;
@@ -248,19 +265,26 @@ export class YouMindSpriteApiClient implements YouMindSpriteApi {
       allowRefresh: false,
     }).then(async (response) => {
       const next = toSession(response, this.now(), stored.user);
+      const latest = await this.getStoredSession();
+      if (!isSameSession(latest, stored)) return latest;
       await this.storage.setYouMindAuthSession(this.baseUrl, next, this.authScopeKey);
       return next;
     }).catch(async (error: unknown) => {
       if (error instanceof YouMindSpriteApiError && error.status === 401) {
+        const latest = await this.getStoredSession().catch(() => null);
+        if (!isSameSession(latest, stored)) return latest;
         await this.clearSession();
         throw error;
       }
       if (force) throw error;
       return stored;
     }).finally(() => {
-      this.refreshPromise = null;
+      if (sharedSessionRefreshes.get(this.sessionScopeId) === refresh) {
+        sharedSessionRefreshes.delete(this.sessionScopeId);
+      }
     });
-    return this.refreshPromise;
+    sharedSessionRefreshes.set(this.sessionScopeId, refresh);
+    return refresh;
   }
 
   private async requestJson<T>(
@@ -314,6 +338,10 @@ export class YouMindSpriteApiClient implements YouMindSpriteApi {
     const text = await response.text().catch(() => '');
     if (!response.ok) {
       const detail = parseErrorPayload(text);
+      if (response.status === 401 && options.auth && session) {
+        const latest = await this.getStoredSession().catch(() => null);
+        if (isSameSession(latest, session)) await this.clearSession();
+      }
       throw new YouMindSpriteApiError(
         detail.message || response.statusText || 'YouMind request failed.',
         response.status,
@@ -393,6 +421,25 @@ function shouldRefresh(session: YouMindAuthSession, now: number): boolean {
   return session.createdAtMs + lifetimeMs - now <= thresholdMs;
 }
 
+function isSameSession(
+  left: YouMindAuthSession | null,
+  right: YouMindAuthSession | null,
+): boolean {
+  return left?.accessToken === right?.accessToken
+    && left?.refreshToken === right?.refreshToken
+    && left?.createdAtMs === right?.createdAtMs;
+}
+
+export function parseYouMindSuccessPayload<T>(text: string): T {
+  const trimmed = text.trim();
+  if (!trimmed) return undefined as T;
+  try {
+    return JSON.parse(trimmed) as T;
+  } catch {
+    return trimmed as T;
+  }
+}
+
 function toSession(
   value: {
     accessToken: string;
@@ -419,8 +466,9 @@ function buildYouMindHmacHeaders(
   path: string,
   bodyText: string,
   timestampMs: number,
+  appSecret: string | null,
 ): Record<string, string> {
-  const secret = publicYouMindAuthConfig.appSecret?.trim();
+  const secret = appSecret?.trim();
   if (!secret) {
     throw new YouMindSpriteApiError(
       'YouMind app secret is not configured. Set EXPO_PUBLIC_YOUMIND_APP_SECRET.',
@@ -486,7 +534,8 @@ function readString(value: unknown): string | undefined {
 export function mapYouMindSpriteApiError(error: unknown): YouMindSpriteApiError {
   if (error instanceof YouMindSpriteApiError) return error;
   if (error instanceof HttpStreamError) {
-    return new YouMindSpriteApiError(error.message, error.status, error.detailCode, error);
+    const status = error.status ?? (error.code === 'decode_error' ? 500 : undefined);
+    return new YouMindSpriteApiError(error.message, status, error.detailCode, error);
   }
   return new YouMindSpriteApiError(
     error instanceof Error ? error.message : 'YouMind request failed.',

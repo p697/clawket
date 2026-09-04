@@ -6,7 +6,7 @@ import { sha256 } from 'js-sha256';
 import { publicYouMindAuthConfig } from '../config/public';
 import i18n from '../i18n';
 import { StorageService, type YouMindAuthSession } from './storage';
-import { parseYouMindSuccessPayload } from './youmind-response';
+import { parseYouMindSuccessPayload } from '../connection/adapters/youmind-sprite-api';
 export type { YouMindAuthSession } from './storage';
 
 type YouMindUser = {

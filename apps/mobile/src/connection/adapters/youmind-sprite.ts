@@ -68,6 +68,7 @@ export class YouMindSpriteAdapter implements AgentAdapter {
   private userId = '';
   private personaId = '';
   private latestUpdatedAt: number | null = null;
+  private latestPreview: string | undefined;
   private activeRun: {
     runId: string;
     controller: AbortController;
@@ -159,7 +160,15 @@ export class YouMindSpriteAdapter implements AgentAdapter {
 
   public async listSessions(): Promise<SessionDescriptor[]> {
     await this.ensureReady();
-    const sessions = [this.createMainSession()];
+    const detail = await this.api.loadSpriteSession({
+      spriteId: this.requireSprite().id,
+      limit: 1,
+    }).catch((error: unknown) => {
+      throw toAdapterError(error);
+    });
+    const history = mapYouMindSpriteHistory(detail, MAIN_SESSION_KEY);
+    this.updateHistoryMetadata(history);
+    const sessions = [this.createMainSession(history.hasActiveRun)];
     this.emit('sessions', sessions);
     return sessions;
   }
@@ -178,12 +187,7 @@ export class YouMindSpriteAdapter implements AgentAdapter {
       throw toAdapterError(error);
     });
     const history = mapYouMindSpriteHistory(detail, MAIN_SESSION_KEY);
-    this.latestUpdatedAt = history.messages.reduce<number | null>(
-      (latest, message) => message.timestampMs != null
-        ? Math.max(latest ?? 0, message.timestampMs)
-        : latest,
-      null,
-    );
+    this.updateHistoryMetadata(history);
     this.emit('sessions', [this.createMainSession(history.hasActiveRun)]);
     if (history.messages.length === 0 && !options.cursor) {
       await this.startOpeningIfNeeded();
@@ -221,7 +225,17 @@ export class YouMindSpriteAdapter implements AgentAdapter {
     await this.ensureReady();
     const active = this.activeRun;
     if (runId && active && active.runId !== runId) return;
-    active?.controller.abort();
+    if (active) {
+      this.generation += 1;
+      this.activeRun = null;
+      active.controller.abort();
+      this.emit('update', {
+        type: 'run_finished',
+        sessionKey: MAIN_SESSION_KEY,
+        runId: active.runId,
+        stopReason: 'cancelled',
+      });
+    }
     try {
       await this.api.abortSprite({
         spriteId: this.requireSprite().id,
@@ -229,16 +243,6 @@ export class YouMindSpriteAdapter implements AgentAdapter {
       });
     } catch (error) {
       throw toAdapterError(error);
-    } finally {
-      if (active && this.activeRun?.generation === active.generation) {
-        this.activeRun = null;
-        this.emit('update', {
-          type: 'run_finished',
-          sessionKey: MAIN_SESSION_KEY,
-          runId: active.runId,
-          stopReason: 'cancelled',
-        });
-      }
     }
   }
 
@@ -287,17 +291,33 @@ export class YouMindSpriteAdapter implements AgentAdapter {
     generation: number,
   ): Promise<void> {
     const chunkState = createYouMindSpriteChunkState(initialRunId);
+    let assistantPreview = '';
     try {
       for await (const chunk of stream) {
         if (this.generation !== generation) return;
         const updates = mapYouMindSpriteChunk(chunk, MAIN_SESSION_KEY, chunkState);
-        updates.forEach((update) => this.emit('update', update));
+        for (const update of updates) {
+          if (update.type === 'agent_message_chunk') {
+            assistantPreview += update.text;
+            this.latestPreview = assistantPreview;
+            this.latestUpdatedAt = Date.now();
+          }
+          this.emit('update', update);
+        }
+        if (updates.some((update) => update.type === 'run_finished')) {
+          this.emit('sessions', [this.createMainSession(false)]);
+        }
       }
       if (!chunkState.terminal && this.generation === generation) {
         await this.recoverRun(chunkState.runId, generation);
       }
     } catch (error) {
       if (this.generation !== generation || isAbortError(error)) return;
+      const mapped = toAdapterError(error);
+      if (mapped.code !== 'network' && mapped.code !== 'timeout') {
+        await this.finishFailedRun(chunkState.runId, mapped, generation);
+        return;
+      }
       await this.recoverRun(chunkState.runId, generation, error);
     } finally {
       if (this.activeRun?.generation === generation) this.activeRun = null;
@@ -315,8 +335,14 @@ export class YouMindSpriteAdapter implements AgentAdapter {
           limit: 50,
         });
         const history = mapYouMindSpriteHistory(detail, MAIN_SESSION_KEY);
+        this.updateHistoryMetadata(history);
         this.emit('sessions', [this.createMainSession(history.hasActiveRun)]);
         if (!history.hasActiveRun) {
+          this.emit('update', {
+            type: 'history_reconciled',
+            sessionKey: MAIN_SESSION_KEY,
+            history,
+          });
           this.emit('update', {
             type: 'run_finished',
             sessionKey: MAIN_SESSION_KEY,
@@ -325,27 +351,46 @@ export class YouMindSpriteAdapter implements AgentAdapter {
           });
           return;
         }
-      } catch {
+      } catch (error) {
+        const mapped = toAdapterError(error);
+        if (mapped.code === 'unauthorized' || mapped.code === 'rate_limited') {
+          await this.finishFailedRun(runId, mapped, generation);
+          return;
+        }
         // Recovery is deliberately tolerant: the next backoff performs a fresh read.
       }
       attempt += 1;
     }
     if (this.generation === generation) {
       const mapped = toAdapterError(streamError);
-      this.emit('update', {
-        type: 'error',
-        sessionKey: MAIN_SESSION_KEY,
-        runId,
-        code: mapped.code,
-        message: mapped.message,
-      });
-      this.emit('update', {
-        type: 'run_finished',
-        sessionKey: MAIN_SESSION_KEY,
-        runId,
-        stopReason: 'error',
-      });
+      await this.finishFailedRun(runId, mapped, generation);
     }
+  }
+
+  private async finishFailedRun(
+    runId: string,
+    error: AdapterError,
+    generation: number,
+  ): Promise<void> {
+    if (error.code === 'unauthorized') {
+      await this.api.clearSession().catch(() => undefined);
+      if (this.generation !== generation) return;
+      this.setState('error', error.message);
+    }
+    if (this.generation !== generation) return;
+    this.emit('update', {
+      type: 'error',
+      sessionKey: MAIN_SESSION_KEY,
+      runId,
+      code: error.code,
+      message: error.message,
+    });
+    this.emit('update', {
+      type: 'run_finished',
+      sessionKey: MAIN_SESSION_KEY,
+      runId,
+      stopReason: 'error',
+    });
   }
 
   private async startOpeningIfNeeded(): Promise<void> {
@@ -366,6 +411,7 @@ export class YouMindSpriteAdapter implements AgentAdapter {
       kind: 'main',
       title: readString(sprite.name) || this.connection.label || 'YouMind',
       updatedAt: this.latestUpdatedAt,
+      preview: this.latestPreview,
       hasActiveRun,
       attention: null,
       source: 'native',
@@ -376,6 +422,30 @@ export class YouMindSpriteAdapter implements AgentAdapter {
         pin: true,
       },
     };
+  }
+
+  private updateHistoryMetadata(history: SessionHistory): void {
+    const latest = history.messages.reduce<(typeof history.messages)[number] | undefined>(
+      (current, message) => {
+        if (!current) return message;
+        const currentTime = current.timestampMs ?? Number.NEGATIVE_INFINITY;
+        const messageTime = message.timestampMs ?? Number.NEGATIVE_INFINITY;
+        return messageTime >= currentTime ? message : current;
+      },
+      undefined,
+    );
+    if (!latest) return;
+    if (
+      latest.timestampMs != null
+      && (this.latestUpdatedAt == null || latest.timestampMs >= this.latestUpdatedAt)
+    ) {
+      this.latestUpdatedAt = latest.timestampMs;
+      this.latestPreview = latest.text.trim() || undefined;
+      return;
+    }
+    if (this.latestPreview === undefined) {
+      this.latestPreview = latest.text.trim() || undefined;
+    }
   }
 
   private requireSprite(): YouMindSprite {
@@ -440,6 +510,7 @@ function toAdapterError(error: unknown): AdapterError {
   const mapped: YouMindSpriteApiError = mapYouMindSpriteApiError(error);
   if (mapped.status === 401) return new AdapterError('unauthorized', mapped.message);
   if (mapped.status === 429) return new AdapterError('rate_limited', mapped.message);
+  if (mapped.status === 408) return new AdapterError('timeout', mapped.message);
   if (mapped.status != null) return new AdapterError('server', mapped.message);
   if (isAbortError(error)) return new AdapterError('timeout', mapped.message);
   return new AdapterError('network', mapped.message);

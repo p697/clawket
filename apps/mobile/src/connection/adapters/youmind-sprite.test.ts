@@ -6,6 +6,7 @@ import type {
   YouMindSprite,
   YouMindSpriteApi,
 } from './youmind-sprite-api';
+import { YouMindSpriteApiError } from './youmind-sprite-api';
 import type { YouMindCompletionChunk } from './youmind-sprite-codec';
 
 const session: YouMindAuthSession = {
@@ -73,8 +74,14 @@ describe('YouMindSpriteAdapter', () => {
     })]);
     expect(await adapter.listSessions()).toEqual([expect.objectContaining({
       key: 'main',
+      preview: 'Hi there',
+      updatedAt: Date.parse('2026-09-01T10:00:01.000Z'),
       allowedActions: { rename: false, reset: false, delete: false, pin: true },
     })]);
+    expect(api.loadSpriteSession).toHaveBeenCalledWith({
+      spriteId: 'sprite-fixture',
+      limit: 1,
+    });
   });
 
   it('loads a cursor page and replays the recorded stream as canonical updates', async () => {
@@ -147,6 +154,35 @@ describe('YouMindSpriteAdapter', () => {
     await flushAsync();
   });
 
+  it('emits one cancellation even when the aborted stream settles before the server abort', async () => {
+    let finishServerAbort: ((value: { aborted: boolean }) => void) | undefined;
+    const serverAbort = new Promise<{ aborted: boolean }>((resolve) => {
+      finishServerAbort = resolve;
+    });
+    const api = createApi({
+      streamSpriteMessage: jest.fn(async ({ signal }) => abortOnSignal(signal)),
+      abortSprite: jest.fn(() => serverAbort),
+    });
+    const adapter = createAdapter(api);
+    const updates: SessionUpdate[] = [];
+    adapter.on('update', (update) => updates.push(update));
+
+    await adapter.prompt('main', prompt('stop quickly'));
+    await flushAsync();
+    const cancellation = adapter.cancel('main', 'prompt-fixture');
+    await flushAsync();
+
+    expect(updates.filter((update) => (
+      update.type === 'run_finished' && update.stopReason === 'cancelled'
+    ))).toHaveLength(1);
+    finishServerAbort?.({ aborted: true });
+    await cancellation;
+    await flushAsync();
+    expect(updates.filter((update) => (
+      update.type === 'run_finished' && update.stopReason === 'cancelled'
+    ))).toHaveLength(1);
+  });
+
   it('reconciles a broken stream after 3s, 6s and 12s backoff steps', async () => {
     const delay = jest.fn(async (_milliseconds: number) => undefined);
     const loadSpriteSession = jest.fn()
@@ -166,9 +202,34 @@ describe('YouMindSpriteAdapter', () => {
 
     expect(delay.mock.calls.map(([milliseconds]) => milliseconds)).toEqual([3_000, 6_000, 12_000]);
     expect(updates).toContainEqual(expect.objectContaining({
+      type: 'history_reconciled',
+      history: expect.objectContaining({ hasActiveRun: false }),
+    }));
+    expect(updates).toContainEqual(expect.objectContaining({
       type: 'run_finished',
       stopReason: 'end_turn',
     }));
+  });
+
+  it('surfaces an unauthorized stream without entering recovery polling', async () => {
+    const delay = jest.fn(async (_milliseconds: number) => undefined);
+    const api = createApi({
+      streamSpriteMessage: jest.fn(async () => unauthorizedStream()),
+    });
+    const adapter = createAdapter(api, { delay });
+    const updates: SessionUpdate[] = [];
+    adapter.on('update', (update) => updates.push(update));
+
+    await adapter.prompt('main', prompt('expired'));
+    await flushAsync(10);
+
+    expect(delay).not.toHaveBeenCalled();
+    expect(api.clearSession).toHaveBeenCalledTimes(1);
+    expect(adapter.state).toBe('error');
+    expect(updates).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'error', code: 'unauthorized' }),
+      expect.objectContaining({ type: 'run_finished', stopReason: 'error' }),
+    ]));
   });
 
   it('rejects unsupported attachments before opening a stream', async () => {
@@ -192,6 +253,26 @@ async function* chunks(values: YouMindCompletionChunk[]): AsyncGenerator<YouMind
 
 async function* brokenStream(): AsyncGenerator<YouMindCompletionChunk> {
   throw new Error('network interrupted');
+}
+
+async function* unauthorizedStream(): AsyncGenerator<YouMindCompletionChunk> {
+  throw new YouMindSpriteApiError('Sign in again.', 401);
+}
+
+async function* abortOnSignal(signal?: AbortSignal): AsyncGenerator<YouMindCompletionChunk> {
+  await new Promise<void>((_resolve, reject) => {
+    if (signal?.aborted) {
+      reject(abortError());
+      return;
+    }
+    signal?.addEventListener('abort', () => reject(abortError()), { once: true });
+  });
+}
+
+function abortError(): Error {
+  const error = new Error('Request aborted');
+  error.name = 'AbortError';
+  return error;
 }
 
 function createPendingStream(): {

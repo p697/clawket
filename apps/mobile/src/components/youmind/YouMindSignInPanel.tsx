@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { analyticsEvents } from '../../services/analytics/events';
 import type { YouMindAuthSession } from '../../services/storage';
 import { openExternalUrl } from '../../utils/openExternalUrl';
-import { YouMindClient } from '../../services/youmind';
+import type { YouMindEmailAuthApi } from '../../connection/adapters/youmind-sprite-api';
 import { useAppTheme } from '../../theme';
 import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
 import { YouMindSignInCard } from './YouMindSignInCard';
@@ -21,7 +21,7 @@ export function YouMindSignInPanel({
   backButtonVariant = 'default',
   centered = false,
 }: {
-  client: YouMindClient;
+  client: YouMindEmailAuthApi;
   source: string;
   headline?: string | null;
   description?: string | null;

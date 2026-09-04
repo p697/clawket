@@ -1,11 +1,76 @@
 import type { YouMindAuthSession } from '../../services/storage';
-import { HttpStreamTransport } from '../transports';
+import { HttpStreamError, HttpStreamTransport } from '../transports';
 import {
+  mapYouMindSpriteApiError,
+  parseYouMindSuccessPayload,
   YouMindSpriteApiClient,
   youMindSseDecoder,
 } from './youmind-sprite-api';
 
 describe('YouMindSpriteApiClient', () => {
+  it('sends and verifies email OTP with the existing scoped session storage', async () => {
+    const fetchImpl = jest.fn()
+      .mockResolvedValueOnce(response({ sent: true }))
+      .mockResolvedValueOnce(response({
+        accessToken: 'access-one',
+        refreshToken: 'refresh-one',
+        expiresIn: 3_600,
+        user: { id: 'user-one', email: 'person@example.invalid' },
+      }));
+    const storage = {
+      getYouMindAuthSession: jest.fn(async () => null),
+      setYouMindAuthSession: jest.fn(async () => undefined),
+      clearYouMindAuthSession: jest.fn(async () => undefined),
+      getYouMindDeviceId: jest.fn(async () => 'device-one'),
+      setYouMindDeviceId: jest.fn(async () => undefined),
+    };
+    const api = new YouMindSpriteApiClient(
+      'https://youmind.example.invalid/',
+      'account-one',
+      {
+        storage,
+        fetchImpl,
+        now: () => 100_000,
+        platform: 'ios',
+        timeZone: () => 'Asia/Tokyo',
+        appSecret: 'test-app-secret',
+      },
+    );
+
+    await api.sendOtp(' person@example.invalid ');
+    const session = await api.verifyOtp(' person@example.invalid ', '123456');
+
+    expect(fetchImpl.mock.calls[0][0]).toBe(
+      'https://youmind.example.invalid/api/v1/auth/signInWithOTP',
+    );
+    expect(fetchImpl.mock.calls[0][1].headers).toEqual(expect.objectContaining({
+      'x-app-id': '0',
+      'x-timestamp': '100000',
+      'x-signature': expect.any(String),
+    }));
+    expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({
+      email: 'person@example.invalid',
+      timeZone: 'Asia/Tokyo',
+    });
+    expect(JSON.parse(fetchImpl.mock.calls[1][1].body)).toEqual({
+      formData: {
+        email: 'person@example.invalid',
+        token: ['1', '2', '3', '4', '5', '6'],
+      },
+      timeZone: 'Asia/Tokyo',
+    });
+    expect(session).toEqual(expect.objectContaining({
+      accessToken: 'access-one',
+      refreshToken: 'refresh-one',
+      createdAtMs: 100_000,
+    }));
+    expect(storage.setYouMindAuthSession).toHaveBeenCalledWith(
+      'https://youmind.example.invalid',
+      session,
+      'account-one',
+    );
+  });
+
   it('refreshes an expiring session before an authenticated request and persists it', async () => {
     let stored: YouMindAuthSession | null = {
       accessToken: 'expired-access',
@@ -91,6 +156,105 @@ describe('YouMindSpriteApiClient', () => {
     expect(fetchImpl.mock.calls[2][1].headers.Authorization).toBe('Bearer fresh-access');
   });
 
+  it('clears the scoped session when one refresh still leaves the request unauthorized', async () => {
+    let stored: YouMindAuthSession | null = {
+      accessToken: 'old-access',
+      refreshToken: 'refresh-one',
+      expiresIn: 3_600,
+      createdAtMs: 100_000,
+    };
+    const fetchImpl = jest.fn()
+      .mockResolvedValueOnce(response({ message: 'expired' }, 401))
+      .mockResolvedValueOnce(response({
+        accessToken: 'fresh-access',
+        refreshToken: 'refresh-two',
+        expiresIn: 3_600,
+      }))
+      .mockResolvedValueOnce(response({ message: 'sign in again' }, 401));
+    const storage = {
+      getYouMindAuthSession: jest.fn(async () => stored),
+      setYouMindAuthSession: jest.fn(async (_url: string, next: YouMindAuthSession) => {
+        stored = next;
+      }),
+      clearYouMindAuthSession: jest.fn(async () => { stored = null; }),
+      getYouMindDeviceId: jest.fn(async () => 'device-one'),
+      setYouMindDeviceId: jest.fn(async () => undefined),
+    };
+    const api = new YouMindSpriteApiClient(
+      'https://youmind.retry.invalid',
+      'account-one',
+      { storage, fetchImpl, now: () => 100_001, platform: 'ios', timeZone: () => 'UTC' },
+    );
+
+    await expect(api.ensureDefaultSprite()).rejects.toMatchObject({ status: 401 });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(storage.clearYouMindAuthSession).toHaveBeenCalledWith(
+      'https://youmind.retry.invalid',
+      'account-one',
+    );
+    expect(stored).toBeNull();
+  });
+
+  it('shares one rotating refresh across clients for the same account scope', async () => {
+    let stored: YouMindAuthSession | null = {
+      accessToken: 'expired-access',
+      refreshToken: 'refresh-one',
+      expiresIn: 60,
+      createdAtMs: 1,
+      user: { id: 'user-one' },
+    };
+    let resolveRefresh: ((value: Response) => void) | undefined;
+    const refreshResponse = new Promise<Response>((resolve) => {
+      resolveRefresh = resolve;
+    });
+    const firstFetch = jest.fn()
+      .mockImplementationOnce(() => refreshResponse)
+      .mockResolvedValueOnce(response({ sprite: { id: 'sprite-one' } }));
+    const secondFetch = jest.fn()
+      .mockResolvedValueOnce(response({ sprite: { id: 'sprite-one' } }));
+    const storage = {
+      getYouMindAuthSession: jest.fn(async () => stored),
+      setYouMindAuthSession: jest.fn(async (_url: string, next: YouMindAuthSession) => {
+        stored = next;
+      }),
+      clearYouMindAuthSession: jest.fn(async () => { stored = null; }),
+      getYouMindDeviceId: jest.fn(async () => 'device-one'),
+      setYouMindDeviceId: jest.fn(async () => undefined),
+    };
+    const options = { storage, now: () => 100_000, platform: 'ios', timeZone: () => 'UTC' };
+    const first = new YouMindSpriteApiClient(
+      'https://youmind.shared.invalid',
+      'account-one',
+      { ...options, fetchImpl: firstFetch },
+    );
+    const second = new YouMindSpriteApiClient(
+      'https://youmind.shared.invalid',
+      'account-one',
+      { ...options, fetchImpl: secondFetch },
+    );
+
+    const firstRequest = first.ensureDefaultSprite();
+    const secondRequest = second.ensureDefaultSprite();
+    await flushPromises();
+
+    expect(firstFetch).toHaveBeenCalledTimes(1);
+    expect(secondFetch).not.toHaveBeenCalled();
+    resolveRefresh?.(response({
+      accessToken: 'fresh-access',
+      refreshToken: 'refresh-two',
+      expiresIn: 3_600,
+    }));
+
+    await expect(Promise.all([firstRequest, secondRequest])).resolves.toEqual([
+      expect.objectContaining({ id: 'sprite-one' }),
+      expect.objectContaining({ id: 'sprite-one' }),
+    ]);
+    expect(firstFetch).toHaveBeenCalledTimes(2);
+    expect(secondFetch).toHaveBeenCalledTimes(1);
+    expect(storage.setYouMindAuthSession).toHaveBeenCalledTimes(1);
+  });
+
   it('builds the production Sprite prompt body without unsupported context fields', async () => {
     const stream = async function* () { yield { mode: 'event', event: 'task-ended' } as const; };
     const streamMethod = jest.fn(async (
@@ -134,6 +298,16 @@ describe('YouMindSpriteApiClient', () => {
   });
 });
 
+describe('parseYouMindSuccessPayload', () => {
+  it('keeps legacy success-body parsing while the old screens are being removed', () => {
+    expect(parseYouMindSuccessPayload<void>('   ')).toBeUndefined();
+    expect(parseYouMindSuccessPayload<{ ok: boolean }>('{"ok":true}')).toEqual({ ok: true });
+    expect(parseYouMindSuccessPayload<number>('1')).toBe(1);
+    expect(parseYouMindSuccessPayload<boolean>('true')).toBe(true);
+    expect(parseYouMindSuccessPayload<string>(' deleted ')).toBe('deleted');
+  });
+});
+
 describe('youMindSseDecoder', () => {
   it('retains partial events and parses multiple CRLF-delimited chunks', () => {
     const first = youMindSseDecoder(
@@ -161,6 +335,14 @@ describe('youMindSseDecoder', () => {
   });
 });
 
+describe('mapYouMindSpriteApiError', () => {
+  it('classifies malformed stream payloads as server responses', () => {
+    expect(mapYouMindSpriteApiError(
+      new HttpStreamError('decode_error', 'invalid stream'),
+    )).toMatchObject({ status: 500 });
+  });
+});
+
 function response(body: unknown, status = 200): Response {
   return {
     ok: status >= 200 && status < 300,
@@ -168,4 +350,11 @@ function response(body: unknown, status = 200): Response {
     statusText: status === 401 ? 'Unauthorized' : 'OK',
     text: async () => JSON.stringify(body),
   } as Response;
+}
+
+async function flushPromises(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
 }

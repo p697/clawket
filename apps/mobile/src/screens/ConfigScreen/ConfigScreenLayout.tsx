@@ -38,7 +38,7 @@ import {
   type RevenueCatDiagnostics,
 } from '../../services/pro-subscription';
 import { StorageService } from '../../services/storage';
-import { YouMindClient } from '../../services/youmind';
+import { YouMindSpriteApiClient } from '../../connection/adapters/youmind-sprite-api';
 import { AppTheme, builtInAccents, BuiltInAccentColorId } from '../../theme';
 import { BorderWidth, FontSize, FontWeight, LineHeight, Radius, Space, createSurfaceStyle } from '../../theme/tokens';
 import { GatewayBackendKind, GatewayMode, GatewayTransportKind, SpeechRecognitionLanguage, ThemeMode } from '../../types';
@@ -1287,7 +1287,7 @@ function EditorModal({ controller, theme, styles }: EditorModalProps): React.JSX
   const activeYouMindScopeKey = draftYouMindConfigId;
   const activeYouMindClient = useMemo(
     () => activeYouMindScopeKey
-      ? new YouMindClient('https://youmind.com', { authScopeKey: activeYouMindScopeKey })
+      ? new YouMindSpriteApiClient('https://youmind.com', activeYouMindScopeKey)
       : null,
     [activeYouMindScopeKey],
   );
