@@ -1,4 +1,5 @@
 import { createMockAdapter } from '@clawket/agent-protocol';
+import legacyFixture from '../../../../../tests/fixtures/mobile-storage/v2.1.2-gateway-configs.schema-fixture.json';
 
 import type { GatewayConfigsState } from '../../types';
 import {
@@ -13,65 +14,7 @@ const CURRENT_KEY = 'clawket.connectionRegistry.v1';
 const ROLLBACK_KEY = 'clawket.connectionRegistry.rollback.v1';
 const LEGACY_KEY = 'clawket.gatewayConfigsState.v1';
 
-const LEGACY_2_1_FIXTURE: GatewayConfigsState = {
-  activeId: 'hermes-preview',
-  configs: [
-    {
-      id: 'openclaw-production',
-      name: 'Lucy',
-      backendKind: 'openclaw',
-      transportKind: 'relay',
-      mode: 'relay',
-      url: 'wss://relay.clawket.ai/ws',
-      token: 'legacy-token',
-      password: 'legacy-password',
-      bootstrap: {
-        token: 'bootstrap-token',
-        strategy: 'mobile-setup',
-        expiresAtMs: 123,
-        access: 'full',
-      },
-      relay: {
-        serverUrl: 'https://registry.clawket.ai',
-        gatewayId: 'gw_legacy',
-        clientToken: 'gct_legacy',
-        protocolVersion: 2,
-        supportsBootstrap: true,
-      },
-      createdAt: 10,
-      updatedAt: 11,
-    },
-    {
-      id: 'hermes-preview',
-      name: 'Hermes',
-      backendKind: 'hermes',
-      transportKind: 'relay',
-      mode: 'hermes',
-      url: 'wss://hermes-relay-preview.clawket.workers.dev/ws',
-      relay: {
-        serverUrl: 'https://clawket-hermes-registry-preview.clawket.workers.dev',
-        gatewayId: 'hbg_legacy',
-        clientToken: 'hct_legacy',
-      },
-      hermes: {
-        bridgeUrl: 'ws://127.0.0.1:8789/v1/hermes/ws',
-        displayName: 'Hermes Preview',
-      },
-      createdAt: 20,
-      updatedAt: 21,
-    },
-    {
-      id: 'youmind-default',
-      name: 'Sprite',
-      backendKind: 'youmind',
-      transportKind: 'custom',
-      mode: 'custom',
-      url: 'https://youmind.com',
-      createdAt: 30,
-      updatedAt: 31,
-    },
-  ],
-};
+const LEGACY_2_1_FIXTURE = legacyFixture.secureStore.value as GatewayConfigsState;
 
 class MemorySecureStorage implements SecureConnectionStorage {
   readonly values = new Map<string, string>();
@@ -118,18 +61,14 @@ function openClawInput(label: string, token = `${label}-token`) {
 }
 
 describe('ConnectionStore', () => {
-  it('migrates the legacy 2.1 fixture once and persists every credential-bearing field in SecureStore', async () => {
-    const secureStorage = new MemorySecureStorage();
-    const legacyRaw = JSON.stringify({
-      ...LEGACY_2_1_FIXTURE,
-      configs: LEGACY_2_1_FIXTURE.configs.map((config) => ({
-        ...config,
-        ...(config.id === 'hermes-preview' ? { debugMode: true } : {}),
-        ...(config.id === 'youmind-default'
-          ? { youmind: { authScopeKey: 'youmind:user@example.com' } }
-          : {}),
-      })),
+  it('migrates the released 2.1 schema fixture once and preserves every credential-bearing field', async () => {
+    expect(legacyFixture.provenance).toMatchObject({
+      kind: 'schema-reconstruction',
+      sourceCommit: '3e37a72',
+      sourceVersion: '2.1.2',
     });
+    const secureStorage = new MemorySecureStorage();
+    const legacyRaw = JSON.stringify(LEGACY_2_1_FIXTURE);
     secureStorage.values.set(LEGACY_KEY, legacyRaw);
     const legacy = legacyStorage(LEGACY_2_1_FIXTURE);
     const store = new ConnectionStore({ secureStorage, legacyStorage: legacy });
@@ -160,25 +99,25 @@ describe('ConnectionStore', () => {
         transportKind: 'https',
       }),
     ]);
-    expect(JSON.stringify(first)).not.toContain('legacy-token');
-    expect(JSON.stringify(first)).not.toContain('gct_legacy');
-    expect(JSON.stringify(first)).not.toContain('bootstrap-token');
+    expect(JSON.stringify(first)).not.toContain('sanitized-openclaw-token');
+    expect(JSON.stringify(first)).not.toContain('gct_sanitized_openclaw');
+    expect(JSON.stringify(first)).not.toContain('sanitized-bootstrap-token');
     expect(legacy.getGatewayConfigsState).toHaveBeenCalledTimes(1);
 
     const persisted = JSON.parse(secureStorage.values.get(CURRENT_KEY) ?? '{}');
     expect(persisted.state.records[0]).toMatchObject({
-      auth: { token: 'legacy-token', password: 'legacy-password' },
-      bootstrap: { token: 'bootstrap-token', strategy: 'mobile-setup' },
-      relay: { clientToken: 'gct_legacy' },
+      auth: { token: 'sanitized-openclaw-token', password: 'sanitized-openclaw-password' },
+      bootstrap: { token: 'sanitized-bootstrap-token', strategy: 'mobile-setup' },
+      relay: { clientToken: 'gct_sanitized_openclaw' },
     });
     expect(persisted.state.records[1]).toMatchObject({
-      relay: { clientToken: 'hct_legacy' },
+      relay: { clientToken: 'hct_sanitized_hermes' },
       hermes: { bridgeUrl: 'ws://127.0.0.1:8789/v1/hermes/ws' },
       debugMode: true,
     });
     expect(persisted.state.records[2]).toMatchObject({
       transportKind: 'https',
-      youmind: { authScopeKey: 'youmind:user@example.com' },
+      youmind: { authScopeKey: 'youmind:sanitized@example.invalid' },
     });
     expect(secureStorage.values.has(ROLLBACK_KEY)).toBe(true);
     expect(secureStorage.values.get(LEGACY_KEY)).toBe(legacyRaw);

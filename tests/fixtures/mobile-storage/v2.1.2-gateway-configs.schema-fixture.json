@@ -1,0 +1,74 @@
+{
+  "provenance": {
+    "kind": "schema-reconstruction",
+    "sourceCommit": "3e37a72",
+    "sourceVersion": "2.1.2",
+    "note": "Reconstructed from the released storage contract; replace with a privacy-reviewed physical-device export before release sign-off."
+  },
+  "secureStore": {
+    "key": "clawket.gatewayConfigsState.v1",
+    "value": {
+      "activeId": "hermes-preview",
+      "configs": [
+        {
+          "id": "openclaw-production",
+          "name": "Sanitized OpenClaw",
+          "backendKind": "openclaw",
+          "transportKind": "relay",
+          "mode": "relay",
+          "url": "wss://relay.clawket.ai/ws",
+          "token": "sanitized-openclaw-token",
+          "password": "sanitized-openclaw-password",
+          "bootstrap": {
+            "token": "sanitized-bootstrap-token",
+            "strategy": "mobile-setup",
+            "expiresAtMs": 1778198400000,
+            "access": "full"
+          },
+          "relay": {
+            "serverUrl": "https://registry.clawket.ai",
+            "gatewayId": "gw_sanitized_openclaw",
+            "clientToken": "gct_sanitized_openclaw",
+            "protocolVersion": 2,
+            "supportsBootstrap": true
+          },
+          "createdAt": 1778198300000,
+          "updatedAt": 1778198350000
+        },
+        {
+          "id": "hermes-preview",
+          "name": "Sanitized Hermes",
+          "backendKind": "hermes",
+          "transportKind": "relay",
+          "mode": "hermes",
+          "url": "wss://clawket-hermes-relay-preview.example.workers.dev/ws",
+          "relay": {
+            "serverUrl": "https://clawket-hermes-registry-preview.example.workers.dev",
+            "gatewayId": "hbg_sanitized_hermes",
+            "clientToken": "hct_sanitized_hermes"
+          },
+          "hermes": {
+            "bridgeUrl": "ws://127.0.0.1:8789/v1/hermes/ws",
+            "displayName": "Sanitized Hermes Preview"
+          },
+          "debugMode": true,
+          "createdAt": 1778198400000,
+          "updatedAt": 1778198450000
+        },
+        {
+          "id": "youmind-default",
+          "name": "Sanitized Sprite",
+          "backendKind": "youmind",
+          "transportKind": "custom",
+          "mode": "custom",
+          "url": "https://youmind.com",
+          "youmind": {
+            "authScopeKey": "youmind:sanitized@example.invalid"
+          },
+          "createdAt": 1778198500000,
+          "updatedAt": 1778198550000
+        }
+      ]
+    }
+  }
+}
