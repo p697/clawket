@@ -224,7 +224,7 @@ function createStyles(
       paddingHorizontal: Space.sm,
       paddingVertical: 5,
       borderRadius: Radius.full,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
     },
     agentName: {
       color: colors.textMuted,
@@ -247,7 +247,7 @@ function createStyles(
     },
     agentMetaInline: {
       color: colors.textSubtle,
-      fontSize: FontSize.xs - 1,
+      fontSize: FontSize.micro,
       marginBottom: Space.xs,
       opacity: 0.85,
     },
@@ -288,7 +288,7 @@ function createStyles(
       paddingHorizontal: Space.md,
       paddingVertical: Space.sm + 2,
       backgroundColor: colors.inputBackground,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
     },
     composerPlaceholder: {

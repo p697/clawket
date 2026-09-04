@@ -65,7 +65,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     markdownWrap: {
       backgroundColor: colors.surfaceMuted,
       borderColor: colors.border,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderRadius: Radius.md,
       padding: Space.md,
     },

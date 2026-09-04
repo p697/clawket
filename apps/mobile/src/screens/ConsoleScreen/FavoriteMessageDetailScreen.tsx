@@ -241,7 +241,7 @@ const styles = StyleSheet.create({
   },
   card: {
     borderRadius: Radius.md,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     padding: Space.md,
   },
   headerRow: {
@@ -273,7 +273,7 @@ const styles = StyleSheet.create({
   },
   markdownWrap: {
     marginTop: Space.md,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderRadius: Radius.sm,
     padding: Space.md,
   },

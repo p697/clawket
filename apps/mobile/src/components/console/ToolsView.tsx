@@ -4,14 +4,13 @@ import {
   FlatList,
   RefreshControl,
   StyleSheet,
-  Switch,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { ChevronDown, ChevronRight, Save } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
-import { EmptyState, LoadingState, ScreenHeader, SearchInput } from '../ui';
+import { EmptyState, LoadingState, ScreenHeader, SearchInput, ThemedSwitch } from '../ui';
 import { useAppContext } from '../../contexts/AppContext';
 import { useGatewayPatch } from '../../hooks/useGatewayPatch';
 import { analyticsEvents } from '../../services/analytics/events';
@@ -401,12 +400,10 @@ export const ToolsView = React.forwardRef<ToolsViewHandle, Props>(function Tools
               <Text style={styles.pluginTagText}>{t('plugin')}</Text>
             </View>
           ) : null}
-          <Switch
+          <ThemedSwitch
             value={enabled}
             onValueChange={(val) => handleToggleTool(tool.id, val)}
             disabled={hasExplicitAllow || isGatewayDisabled}
-            trackColor={{ false: theme.colors.surfaceMuted, true: theme.colors.primary }}
-            thumbColor={theme.colors.primaryText}
             style={styles.switch}
           />
         </View>
@@ -604,7 +601,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       borderBottomColor: colors.border,
     },
     groupEmoji: {
-      fontSize: 20,
+      fontSize: FontSize.displaySm,
       marginRight: Space.sm + 2,
     },
     groupInfo: {
@@ -616,7 +613,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       color: colors.text,
     },
     groupCount: {
-      fontSize: FontSize.xs + 1,
+      fontSize: FontSize.sm,
       color: colors.textMuted,
       marginTop: 1,
     },
@@ -633,7 +630,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       flex: 1,
     },
     toolName: {
-      fontSize: FontSize.sm + 1,
+      fontSize: FontSize.md,
       fontWeight: FontWeight.medium,
       color: colors.text,
     },
@@ -641,7 +638,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       color: colors.textSubtle,
     },
     toolDesc: {
-      fontSize: FontSize.xs + 1,
+      fontSize: FontSize.sm,
       color: colors.textMuted,
       marginTop: 2,
     },
@@ -660,7 +657,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       paddingHorizontal: 8,
       paddingVertical: 2,
       borderRadius: Radius.sm,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
     },
     profileText: {
       fontSize: FontSize.xs,
@@ -718,7 +715,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       paddingVertical: 11,
       borderRadius: Radius.md,
       backgroundColor: colors.surface,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
     },
     discardLabel: {

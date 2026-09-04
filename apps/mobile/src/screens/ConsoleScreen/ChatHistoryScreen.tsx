@@ -1092,7 +1092,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Space.md,
     paddingVertical: Space.xs + 2,
     borderRadius: Radius.lg,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     gap: Space.xs,
   },
   filterChipEmoji: {
@@ -1128,7 +1128,7 @@ const styles = StyleSheet.create({
   },
   sessionCard: {
     borderRadius: Radius.md,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     paddingVertical: Space.sm + 2,
     paddingHorizontal: Space.md,
     marginBottom: Space.sm,
@@ -1139,7 +1139,7 @@ const styles = StyleSheet.create({
     gap: Space.sm,
   },
   sessionEmoji: {
-    fontSize: 22,
+    fontSize: FontSize.xxl,
   },
   sessionInfo: {
     flex: 1,
@@ -1197,7 +1197,7 @@ const styles = StyleSheet.create({
   },
   favoriteCard: {
     borderRadius: Radius.md,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: Space.md,
     paddingVertical: Space.md,
     marginBottom: Space.sm,
@@ -1228,7 +1228,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: Radius.full,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     alignItems: "center",
     justifyContent: "center",
     zIndex: 1,

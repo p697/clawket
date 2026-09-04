@@ -83,8 +83,8 @@ export function useChatController({
   config,
   debugMode,
   showAgentAvatar,
-  officeChatRequest,
-  clearOfficeChatRequest,
+  chatSessionRequest,
+  clearChatSessionRequest,
 }: ChatScreenProps) {
   const appContext = useAppContext();
   const { t, i18n } = useTranslation("chat");
@@ -2261,16 +2261,16 @@ export function useChatController({
   }, [history.historyLoaded, history.sessionKey]);
 
   useEffect(() => {
-    const targetKey = officeChatRequest?.sessionKey?.trim();
+    const targetKey = chatSessionRequest?.sessionKey?.trim();
     if (!targetKey) return;
     if (history.sessionKey === targetKey) {
-      clearOfficeChatRequest?.();
+      clearChatSessionRequest?.();
       return;
     }
 
     let cancelled = false;
 
-    const openFromOffice = async () => {
+    const openRequestedSession = async () => {
       let latestSessions = history.sessions;
       let targetSession = latestSessions.find(
         (session) => session.key === targetKey,
@@ -2296,20 +2296,20 @@ export function useChatController({
           label: targetKey,
         },
       );
-      clearOfficeChatRequest?.();
+      clearChatSessionRequest?.();
     };
 
-    void openFromOffice();
+    void openRequestedSession();
     return () => {
       cancelled = true;
     };
   }, [
-    clearOfficeChatRequest,
+    clearChatSessionRequest,
     gateway,
     history.sessionKey,
     history.sessions,
     history.setSessions,
-    officeChatRequest,
+    chatSessionRequest,
     switchSession,
   ]);
 

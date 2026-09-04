@@ -22,7 +22,6 @@ import Animated, { interpolate, useAnimatedStyle } from 'react-native-reanimated
 import { Gesture } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X } from 'lucide-react-native';
-import { useTabBarHeight } from '../../hooks/useTabBarHeight';
 import { useAppContext } from '../../contexts/AppContext';
 import { SessionSidebar } from '../../components/chat/SessionSidebar';
 import { ChatHeader } from '../../components/chat/ChatHeader';
@@ -40,7 +39,7 @@ import { renderChatMessageBubble } from './components/renderChatMessageBubble';
 import { useChatImagePreview } from '../../hooks/useChatImagePreview';
 import { useChatImagePicker } from '../../hooks/useChatImagePicker';
 import { useAppTheme } from '../../theme';
-import { FontSize, FontWeight, Radius, Shadow, Space } from '../../theme/tokens';
+import { FontSize, FontWeight, PresentationColor, Radius, Shadow, Space } from '../../theme/tokens';
 import { resolveGatewayCacheScopeId } from '../../services/gateway-cache-scope';
 import { hydrateYouMindChatAttachmentCache, rememberYouMindChatAttachments } from '../../services/youmind-chat-attachment-cache';
 import {
@@ -132,9 +131,9 @@ function SkillAvatarGlyph({
   return (
     <View style={styles.skillGlyphWrap}>
       <View style={styles.skillGlyphShadow}>
-        <YouMindSkillIcon skill={skill} color="rgba(0, 0, 0, 0.2)" size={size} />
+        <YouMindSkillIcon skill={skill} color={PresentationColor.mediaScrim} size={size} />
       </View>
-      <YouMindSkillIcon skill={skill} color="#fff" size={size} />
+      <YouMindSkillIcon skill={skill} color={PresentationColor.onMedia} size={size} />
     </View>
   );
 }
@@ -415,13 +414,13 @@ const YouMindDrawerContent = React.memo(function YouMindDrawerContent({
   const shadowAnimatedStyle = useAnimatedStyle(() => {
     const p = progress.get();
     return {
-      shadowColor: '#000',
+      shadowColor: theme.colors.shadow,
       shadowOffset: { width: 4, height: 0 },
       shadowOpacity: interpolate(p, [0, 0.15], [0, theme.scheme === 'dark' ? 0.5 : 0.12]),
       shadowRadius: interpolate(p, [0, 0.15], [0, 20]),
       elevation: p > 0.05 ? 24 : 0,
     };
-  }, [theme.scheme]);
+  }, [theme.colors.shadow, theme.scheme]);
 
   return (
     <Animated.View style={[styles.drawerShadowWrap, shadowAnimatedStyle]}>
@@ -502,7 +501,6 @@ function YouMindChatScreen({
 }): React.JSX.Element {
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
-  const tabBarHeight = useTabBarHeight();
   const { t } = useTranslation(['chat', 'common']);
   const { theme } = useAppTheme();
   const flatListRef = React.useRef<any>(null);
@@ -585,9 +583,9 @@ function YouMindChatScreen({
     composerSwipeGesture,
     handleComposerBlur,
     handleComposerFocus,
+    modalBottomInset,
   } = useChatKeyboardLayout({
     insets,
-    keyboardVisible: false,
     screenHeight,
   });
   const messageListExtraData = React.useMemo(() => ({
@@ -624,7 +622,7 @@ function YouMindChatScreen({
   });
 
   return (
-    <Animated.View style={[{ flex: 1, paddingBottom: Platform.OS === 'ios' ? tabBarHeight : 0 }, animatedRootStyle]}>
+    <Animated.View style={[{ flex: 1 }, animatedRootStyle]}>
       <ChatHeader
         title={currentSession?.title || currentSession?.label || t('YouMind')}
         connectionState={statusLabel ? 'ready' : 'idle'}
@@ -676,7 +674,7 @@ function YouMindChatScreen({
         shareProductLabel="YouMind"
         hasSelectedMessageText={hasSelectedMessageText}
         insetsTop={insets.top}
-        modalBottomInset={Platform.OS === 'ios' ? tabBarHeight : 0}
+        modalBottomInset={modalBottomInset}
         onCopySelectedMessage={copySelectedMessage}
         onToggleSelectedMessageFavorite={toggleSelectedMessageFavorite}
         renderSelectedMessage={() => (
@@ -698,7 +696,7 @@ function YouMindChatScreen({
         screenWidth={preview.screenWidth}
         screenHeight={preview.screenHeight}
         insetsTop={insets.top}
-        insetsBottom={Platform.OS === 'ios' ? tabBarHeight : 0}
+        insetsBottom={modalBottomInset}
         onClose={preview.closePreview}
         onIndexChange={preview.setPreviewIndex}
       />
@@ -772,7 +770,6 @@ export function YouMindChatTab(): React.JSX.Element {
   const { t } = useTranslation(['chat', 'common', 'console']);
   const isFocused = useIsFocused();
   const { theme } = useAppTheme();
-  const tabBarHeight = useTabBarHeight();
   const {
     activeGatewayConfigId,
     config,
@@ -1492,7 +1489,7 @@ export function YouMindChatTab(): React.JSX.Element {
     />
   ), [handleSelectRecommendedSkill, recommendedSkills, recommendedSkillsLoading]);
 
-  const bottomPadding = tabBarHeight + 12;
+  const bottomPadding = Space.md;
 
   const renderDrawerContent = React.useCallback(
     (props: DrawerContentComponentProps) => (
@@ -1535,18 +1532,14 @@ export function YouMindChatTab(): React.JSX.Element {
     drawerStyle: {
       width: '85%' as const,
       backgroundColor: theme.colors.surface,
-      paddingBottom: tabBarHeight,
       shadowOpacity: 0,
       elevation: 0,
     },
-    sceneStyle: {
-      paddingBottom: tabBarHeight,
-    },
     overlayColor: theme.scheme === 'dark' ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.3)',
-  }), [tabBarHeight, theme.colors.surface, theme.scheme]);
+  }), [theme.colors.surface, theme.scheme]);
 
   return (
-    <View style={{ flex: 1, marginBottom: -tabBarHeight }}>
+    <View style={{ flex: 1 }}>
       <YouMindDrawer.Navigator drawerContent={renderDrawerContent} screenOptions={screenOptions}>
         <YouMindDrawer.Screen name="YouMindChatMain">
           {(drawerScreenProps) => (
@@ -1618,7 +1611,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     alignSelf: 'flex-start',
     borderRadius: Radius.full,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     gap: Space.xs,
     maxWidth: '88%',
@@ -1643,7 +1636,7 @@ const styles = StyleSheet.create({
     width: 24,
   },
   composerSkillChipAvatarShade: {
-    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+    backgroundColor: PresentationColor.mediaScrim,
     borderRadius: Radius.full,
     ...StyleSheet.absoluteFillObject,
   },
@@ -1656,11 +1649,11 @@ const styles = StyleSheet.create({
     paddingBottom: Space.sm,
   },
   composerPaneWrap: {
-    borderRadius: 30,
+    borderRadius: Radius.xl,
     overflow: 'hidden',
   },
   emptyStateTitle: {
-    fontSize: 24,
+    fontSize: FontSize.emoji,
     fontWeight: FontWeight.semibold,
     letterSpacing: -0.5,
     textAlign: 'left',
@@ -1675,7 +1668,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   skillAvatar: {
-    backgroundColor: '#C5CDD8',
+    backgroundColor: PresentationColor.skillAvatarFallback,
     borderRadius: Radius.full,
     height: 52,
     width: 52,
@@ -1691,7 +1684,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
   },
   skillAvatarShade: {
-    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+    backgroundColor: PresentationColor.mediaScrim,
     borderRadius: Radius.full,
     ...StyleSheet.absoluteFillObject,
   },
@@ -1720,7 +1713,7 @@ const styles = StyleSheet.create({
     minHeight: 68,
   },
   skillName: {
-    fontSize: 17,
+    fontSize: FontSize.lg,
     fontWeight: FontWeight.semibold,
     letterSpacing: -0.15,
   },
@@ -1734,7 +1727,7 @@ const styles = StyleSheet.create({
       + Space.xl,
   },
   secondaryButton: {
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderRadius: Radius.lg,
     paddingHorizontal: Space.lg,
     paddingVertical: Space.md,

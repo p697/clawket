@@ -1,5 +1,5 @@
 import { Linking, Platform } from 'react-native';
-import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
+import { BorderWidth, FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
 import type { useAppTheme } from '../../theme';
 
 type ThemeColors = ReturnType<typeof useAppTheme>['theme']['colors'];
@@ -47,7 +47,7 @@ export function createChatMarkdownStyle(
       lineHeight,
       backgroundColor: colors.surfaceMuted,
       borderColor: colors.borderStrong,
-      borderWidth: 3,
+      borderWidth: BorderWidth.strong,
       marginBottom: 6,
     },
     code: {
@@ -72,7 +72,7 @@ export function createChatMarkdownStyle(
     table: {
       fontSize: FontSize.md,
       borderColor: colors.borderStrong,
-      borderRadius: 6,
+      borderRadius: Radius.sm,
       headerBackgroundColor: colors.surfaceMuted,
     },
   };

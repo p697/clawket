@@ -9,12 +9,10 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { useTabBarHeight } from '../../hooks/useTabBarHeight';
-import { HeaderActionButton, ModalSheet } from '../../components/ui';
+import { Button, FormTextInput, HeaderActionButton, ModalSheet } from '../../components/ui';
 import { ModelPickerModal, resolveProviderModel } from '../../components/chat/ModelPickerModal';
 import type { ModelInfo } from '../../components/chat/ModelPickerModal';
 import { useNativeStackModalHeader } from '../../hooks/useNativeStackModalHeader';
@@ -22,7 +20,7 @@ import { useAppContext } from '../../contexts/AppContext';
 import { analyticsEvents } from '../../services/analytics/events';
 import { loadGatewayModelPickerOptions } from '../../services/gateway-models';
 import { AppTheme } from '../../theme';
-import { FontSize, FontWeight, Radius, Shadow, Space } from '../../theme/tokens';
+import { FontSize, FontWeight, Radius, Space, createSurfaceStyle } from '../../theme/tokens';
 import { useConfigScreenController } from '../ConfigScreen/hooks/useConfigScreenController';
 import type { ConsoleStackParamList } from './ConsoleTab';
 
@@ -94,13 +92,12 @@ function resolveSessionMode(raw: string): SessionMode {
 
 export function HeartbeatSettingsScreen(): React.JSX.Element {
   const { t } = useTranslation('console');
-  const tabBarHeight = useTabBarHeight();
   const controller = useConfigScreenController();
   const { gateway, currentAgentId } = useAppContext();
   const navigation =
     useNavigation<NativeStackNavigationProp<ConsoleStackParamList, 'HeartbeatSettings'>>();
   const { theme } = controller;
-  const styles = useMemo(() => createStyles(theme.colors), [theme]);
+  const styles = useMemo(() => createStyles(theme.colors, theme.scheme), [theme]);
   const hasActiveGateway = controller.configs.length > 0;
 
   const handleRefresh = useCallback(() => {
@@ -277,7 +274,7 @@ export function HeartbeatSettingsScreen(): React.JSX.Element {
           styles.container,
           {
             paddingTop: Space.lg,
-            paddingBottom: Space.xxxl + tabBarHeight,
+            paddingBottom: Space.xxxl,
           },
         ]}
       >
@@ -363,18 +360,19 @@ export function HeartbeatSettingsScreen(): React.JSX.Element {
                   {t('How often the agent sends a heartbeat (leave empty to disable)')}
                 </Text>
                 <View style={styles.intervalRow}>
-                  <TextInput
+                  <FormTextInput
                     keyboardType="number-pad"
                     returnKeyType="done"
                     autoCorrect={false}
                     placeholder="30"
-                    placeholderTextColor={theme.colors.textSubtle}
-                    style={styles.intervalInput}
                     value={intervalValue}
                     onChangeText={(text) => updateInterval(text, intervalUnit)}
                     editable={!fieldDisabled}
                     maxLength={4}
                     selectTextOnFocus
+                    surface="sunken"
+                    containerStyle={styles.intervalInput}
+                    inputStyle={styles.intervalInputText}
                   />
                   <View style={styles.unitSelector}>
                     {DURATION_UNITS.map((u) => {
@@ -550,7 +548,8 @@ export function HeartbeatSettingsScreen(): React.JSX.Element {
           ) : null}
         </View>
 
-        <Pressable
+        <Button
+          label={controller.savingGatewaySettings ? t('common:Saving...') : t('common:Save')}
           onPress={() => {
             analyticsEvents.heartbeatSaveTapped({
               has_active_hours: Boolean(controller.heartbeatActiveStart.trim() || controller.heartbeatActiveEnd.trim()),
@@ -559,17 +558,10 @@ export function HeartbeatSettingsScreen(): React.JSX.Element {
             });
             void controller.saveGatewaySettings();
           }}
-          style={({ pressed }) => [
-            styles.primaryButton,
-            pressed && styles.primaryButtonPressed,
-            fieldDisabled && styles.buttonDisabled,
-          ]}
           disabled={fieldDisabled}
-        >
-          <Text style={styles.primaryButtonText}>
-            {controller.savingGatewaySettings ? t('common:Saving...') : t('common:Save')}
-          </Text>
-        </Pressable>
+          loading={controller.savingGatewaySettings}
+          style={styles.saveButton}
+        />
       </ScrollView>
 
       <ModalSheet
@@ -588,36 +580,26 @@ export function HeartbeatSettingsScreen(): React.JSX.Element {
             }}
           />
           <View style={styles.timePickerActions}>
-            <Pressable
+            <Button
+              label={t('common:Cancel')}
+              variant="secondary"
+              size="sm"
               onPress={() => setPickerVisible(false)}
-              style={({ pressed }) => [
-                styles.outlineButton,
-                styles.timePickerActionButton,
-                pressed && styles.outlineButtonPressed,
-              ]}
-            >
-              <Text style={styles.outlineButtonText}>{t('common:Cancel')}</Text>
-            </Pressable>
-            <Pressable
+              style={styles.timePickerActionButton}
+            />
+            <Button
+              label={t('common:Clear')}
+              variant="destructive"
+              size="sm"
               onPress={clearPicker}
-              style={({ pressed }) => [
-                styles.destructiveButton,
-                styles.timePickerActionButton,
-                pressed && styles.destructiveButtonPressed,
-              ]}
-            >
-              <Text style={styles.destructiveButtonText}>{t('common:Clear')}</Text>
-            </Pressable>
-            <Pressable
+              style={styles.timePickerActionButton}
+            />
+            <Button
+              label={t('Set')}
+              size="sm"
               onPress={applyPicker}
-              style={({ pressed }) => [
-                styles.primaryButton,
-                styles.timePickerActionButton,
-                pressed && styles.primaryButtonPressed,
-              ]}
-            >
-              <Text style={styles.primaryButtonText}>{t('Set')}</Text>
-            </Pressable>
+              style={styles.timePickerActionButton}
+            />
           </View>
         </View>
       </ModalSheet>
@@ -639,7 +621,7 @@ export function HeartbeatSettingsScreen(): React.JSX.Element {
 
 // ---- Styles ----
 
-function createStyles(colors: AppTheme['colors']) {
+function createStyles(colors: AppTheme['colors'], scheme: AppTheme['scheme']) {
   return StyleSheet.create({
     root: {
       flex: 1,
@@ -650,12 +632,9 @@ function createStyles(colors: AppTheme['colors']) {
       paddingTop: Space.lg,
     },
     card: {
-      backgroundColor: colors.surface,
       borderRadius: Radius.md,
-      borderWidth: 1,
-      borderColor: colors.border,
       overflow: 'hidden',
-      ...Shadow.sm,
+      ...createSurfaceStyle(colors, scheme, 'flat'),
     },
     divider: {
       height: StyleSheet.hairlineWidth,
@@ -689,7 +668,7 @@ function createStyles(colors: AppTheme['colors']) {
       paddingBottom: Space.sm,
     },
     instructionEmoji: {
-      fontSize: 28,
+      fontSize: FontSize.xxxl,
     },
     instructionHeaderText: {
       flex: 1,
@@ -709,7 +688,7 @@ function createStyles(colors: AppTheme['colors']) {
       marginBottom: Space.sm,
       backgroundColor: colors.surfaceMuted,
       borderRadius: Radius.sm,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       paddingHorizontal: Space.md,
       paddingVertical: Space.md,
@@ -787,21 +766,15 @@ function createStyles(colors: AppTheme['colors']) {
     },
     intervalInput: {
       flex: 1,
-      color: colors.text,
-      fontSize: FontSize.base,
+    },
+    intervalInputText: {
       fontWeight: FontWeight.semibold,
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: Radius.md,
-      backgroundColor: colors.surfaceMuted,
-      paddingHorizontal: Space.md,
-      paddingVertical: 11,
       textAlign: 'center',
     },
     unitSelector: {
       flexDirection: 'row',
       borderRadius: Radius.md,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       backgroundColor: colors.surfaceMuted,
       overflow: 'hidden',
@@ -825,7 +798,7 @@ function createStyles(colors: AppTheme['colors']) {
     sessionSelector: {
       flexDirection: 'row',
       borderRadius: Radius.md,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       backgroundColor: colors.surfaceMuted,
       overflow: 'hidden',
@@ -852,7 +825,7 @@ function createStyles(colors: AppTheme['colors']) {
     },
     rowPicker: {
       marginTop: Space.sm,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       borderRadius: Radius.md,
       backgroundColor: colors.surfaceMuted,
@@ -880,58 +853,8 @@ function createStyles(colors: AppTheme['colors']) {
       fontSize: FontSize.sm,
     },
     // ---- Action buttons ----
-    primaryButton: {
-      alignItems: 'center',
-      backgroundColor: colors.primary,
-      borderRadius: Radius.md,
-      paddingVertical: 11,
+    saveButton: {
       marginTop: Space.lg,
-      ...Shadow.md,
-    },
-    primaryButtonPressed: {
-      opacity: 0.88,
-    },
-    primaryButtonText: {
-      color: colors.primaryText,
-      fontSize: FontSize.base,
-      fontWeight: FontWeight.semibold,
-    },
-    outlineButton: {
-      alignItems: 'center',
-      borderRadius: Radius.md,
-      marginTop: Space.md,
-      paddingVertical: 11,
-      borderWidth: 1,
-      borderColor: colors.primary,
-      backgroundColor: colors.surface,
-    },
-    outlineButtonPressed: {
-      backgroundColor: colors.surfaceMuted,
-    },
-    outlineButtonText: {
-      color: colors.primary,
-      fontSize: FontSize.base,
-      fontWeight: FontWeight.semibold,
-    },
-    destructiveButton: {
-      alignItems: 'center',
-      borderRadius: Radius.md,
-      marginTop: Space.md,
-      paddingVertical: 11,
-      borderWidth: 1,
-      borderColor: colors.error,
-      backgroundColor: colors.surface,
-    },
-    destructiveButtonPressed: {
-      backgroundColor: colors.surfaceMuted,
-    },
-    destructiveButtonText: {
-      color: colors.error,
-      fontSize: FontSize.base,
-      fontWeight: FontWeight.semibold,
-    },
-    buttonDisabled: {
-      opacity: 0.55,
     },
     // ---- Time picker modal ----
     timePickerBody: {

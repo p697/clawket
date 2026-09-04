@@ -230,7 +230,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     codeBlock: {
       backgroundColor: colors.surfaceMuted,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       borderRadius: Radius.sm,
       padding: Space.sm + 2,

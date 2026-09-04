@@ -1,8 +1,8 @@
 import React, { useMemo } from 'react';
-import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, StyleSheet, Text, View } from 'react-native';
 import { Camera, Trash2 } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
-import { ModalSheet, ThemedSwitch } from '../ui';
+import { Button, ModalSheet, ThemedSwitch } from '../ui';
 import { useAppTheme } from '../../theme';
 import { useAppContext } from '../../contexts/AppContext';
 import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
@@ -47,15 +47,9 @@ export function AgentAvatarModal({ visible, agentName, agentEmoji, avatarUri, on
 
         {/* Actions */}
         <View style={styles.actions}>
-          <TouchableOpacity style={styles.actionButton} activeOpacity={0.7} onPress={onPickImage}>
-            <Camera size={18} color={colors.primary} strokeWidth={2} />
-            <Text style={[styles.actionText, { color: colors.primary }]}>{t('Pick a Photo')}</Text>
-          </TouchableOpacity>
+          <Button label={t('Pick a Photo')} icon={Camera} variant="secondary" onPress={onPickImage} />
           {normalizedAvatarUri && (
-            <TouchableOpacity style={styles.actionButton} activeOpacity={0.7} onPress={onRemove}>
-              <Trash2 size={18} color={colors.error} strokeWidth={2} />
-              <Text style={[styles.actionText, { color: colors.error }]}>{t('common:Remove')}</Text>
-            </TouchableOpacity>
+            <Button label={t('common:Remove')} icon={Trash2} variant="destructive" onPress={onRemove} />
           )}
         </View>
 
@@ -65,8 +59,6 @@ export function AgentAvatarModal({ visible, agentName, agentEmoji, avatarUri, on
           <ThemedSwitch
             value={showAgentAvatar}
             onValueChange={onShowAgentAvatarToggle}
-            trackColor={{ false: colors.borderStrong, true: colors.primarySoft }}
-            thumbColor={showAgentAvatar ? colors.primary : colors.surfaceMuted}
           />
         </View>
       </View>
@@ -86,14 +78,14 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     avatarLarge: {
       width: 80,
       height: 80,
-      borderRadius: 40,
+      borderRadius: Radius.full,
     },
     avatarPlaceholder: {
       alignItems: 'center',
       justifyContent: 'center',
     },
     avatarPlaceholderText: {
-      fontSize: 32,
+      fontSize: FontSize.displayHero,
     },
     agentName: {
       marginTop: Space.sm,
@@ -103,20 +95,6 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     actions: {
       gap: Space.sm,
-    },
-    actionButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: Space.sm,
-      paddingVertical: 11,
-      paddingHorizontal: Space.md,
-      borderRadius: Radius.md,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    actionText: {
-      fontSize: FontSize.base,
-      fontWeight: FontWeight.semibold,
     },
     toggleRow: {
       flexDirection: 'row',

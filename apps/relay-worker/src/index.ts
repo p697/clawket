@@ -1,5 +1,12 @@
-import { errorResponse, jsonResponse, parseRelayAuthQuery, resolveRelayAuthToken } from '@clawket/shared';
-import { isRelayTokenAuthorized, resolveClientLabelFromToken, sha256Hex } from './relay/auth';
+import {
+  errorResponse,
+  isSecurePairingSecretConfigured,
+  jsonResponse,
+  parseRelayAuthQuery,
+  resolveRelayAuthToken,
+  SECURE_PAIRING_V2_CAPABILITY,
+} from '@clawket/shared';
+import { authorizeRelayToken, isRelayTokenAuthorized, sha256Hex } from './relay/auth';
 import {
   isAwaitingChallengeExpired,
   isClientIdleExpired,
@@ -15,9 +22,12 @@ import { dropClientState, ensureHeartbeat, pruneExpiredAwaitingChallenges, prune
 import { RelayRuntime, touchClientActivity, touchGatewayActivity } from './relay/runtime';
 import {
   allowMessage,
+  acknowledgeClientPong,
   bufferClientConnectStart,
+  clearClientChallengeMarker,
   flushPendingChallenge,
   forwardClientControlToGateway,
+  forwardPairingControlToGateway,
   forwardClientMessageToGateway,
   handleClientConnected,
   handleGatewayConnected,
@@ -40,6 +50,7 @@ import { logRelayTelemetry } from './relay/telemetry';
 import { parsePositiveInt } from './relay/utils';
 import {
   CONTROL_PREFIX,
+  CLIENT_PONG_CAPABILITY,
   SOCKET_CLOSE_CODES,
   type Env,
   type SocketAttachment,
@@ -50,7 +61,13 @@ export default {
     const url = new URL(request.url);
 
     if (request.method === 'GET' && url.pathname === '/v1/health') {
-      return jsonResponse({ ok: true, runtime: 'durable-object' });
+      return jsonResponse({
+        ok: true,
+        runtime: 'durable-object',
+        capabilities: isSecurePairingSecretConfigured(env.PAIRING_TICKET_SECRET)
+          ? [SECURE_PAIRING_V2_CAPABILITY]
+          : [],
+      });
     }
 
     if (request.method === 'POST' && url.pathname === '/v1/internal/pairing/client-tokens') {
@@ -135,15 +152,16 @@ export class RelayRoom {
       });
       return errorResponse('UNAUTHORIZED', 'Missing token for relay connection', 401);
     }
-    const authorized = await isRelayTokenAuthorized({
+    const authorization = await authorizeRelayToken({
       routesKv: this.runtime.env.ROUTES_KV,
       registryVerifyUrl: this.runtime.env.REGISTRY_VERIFY_URL,
       gatewayId: query.gatewayId,
       role: query.role,
       token,
       mirroredClientTokenHashes: this.runtime.mirroredClientTokenHashes,
+      pairingTicketSecret: this.runtime.env.PAIRING_TICKET_SECRET,
     });
-    if (!authorized) {
+    if (!authorization.authorized) {
       logRelayTelemetry('relay_worker', 'ws_auth_rejected', {
         role: query.role,
         authSource,
@@ -171,15 +189,19 @@ export class RelayRoom {
     }
 
     const clientId = query.role === 'gateway' ? gatewayId : (query.clientId || crypto.randomUUID());
-    const clientLabel = query.role === 'client'
-      ? await resolveClientLabelFromToken(this.runtime.env.ROUTES_KV, query.gatewayId, token)
-      : null;
+    const clientLabel = query.role === 'client' ? authorization.clientLabel : null;
     const attachment: SocketAttachment = {
       role: query.role,
       clientId,
       connectedAt: Date.now(),
       traceId,
       clientLabel,
+      authScope: authorization.authScope,
+      ...(authorization.pairingSessionId ? { pairingSessionId: authorization.pairingSessionId } : {}),
+      ...(authorization.ticketExpiresAt ? { ticketExpiresAt: authorization.ticketExpiresAt } : {}),
+      ...(query.role === 'client' && parseCapabilities(url).includes(CLIENT_PONG_CAPABILITY)
+        ? { capabilities: [CLIENT_PONG_CAPABILITY], lastPongAt: Date.now() }
+        : {}),
     };
 
     this.runtime.state.acceptWebSocket(server);
@@ -191,6 +213,12 @@ export class RelayRoom {
       touchGatewayActivity(this.runtime, attachment.connectedAt);
       await touchGatewayOwner(this.runtime, clientId, true);
       handleGatewayConnected(this.runtime);
+    } else if (authorization.authScope === 'pairing') {
+      const previousClient = this.runtime.pairingClients.get(clientId);
+      if (previousClient && previousClient !== server && previousClient.readyState === WebSocket.OPEN) {
+        previousClient.close(SOCKET_CLOSE_CODES.REPLACED_BY_NEW_CLIENT_SOCKET, 'replaced_by_new_pairing_socket');
+      }
+      this.runtime.pairingClients.set(clientId, server);
     } else {
       const previousClient = this.runtime.clients.get(clientId);
       if (previousClient && previousClient !== server && previousClient.readyState === WebSocket.OPEN) {
@@ -206,6 +234,7 @@ export class RelayRoom {
     logRelayTelemetry('relay_worker', 'ws_connected', {
       role: query.role,
       authSource,
+      authPath: authorization.path,
       clientCount: this.runtime.clients.size,
       hasGateway: Boolean(this.runtime.gatewaySocket?.readyState === WebSocket.OPEN),
     });
@@ -224,8 +253,18 @@ export class RelayRoom {
 
     const text = normalizeMessage(message);
     if (text == null) return;
+    if (attachment.authScope === 'pairing') {
+      if ((attachment.ticketExpiresAt ?? 0) <= Date.now()
+        || !allowMessage(this.runtime, ws, attachment, text)
+        || !text.startsWith(CONTROL_PREFIX)
+        || !forwardPairingControlToGateway(this.runtime, attachment, text)) {
+        ws.close(SOCKET_CLOSE_CODES.RATE_LIMITED, 'invalid_pairing_message');
+      }
+      return;
+    }
     if (attachment.role === 'client') {
       touchClientActivity(this.runtime, attachment.clientId);
+      if (acknowledgeClientPong(this.runtime, ws, attachment, text)) return;
     }
     if (!allowMessage(this.runtime, ws, attachment, text)) {
       ws.close(SOCKET_CLOSE_CODES.RATE_LIMITED, 'rate_limited');
@@ -246,6 +285,7 @@ export class RelayRoom {
 
     const isConnectStart = prepareClientMessage(this.runtime, attachment, text);
     if (isConnectStart == null) return;
+    if (isConnectStart) clearClientChallengeMarker(ws, attachment);
 
     if (this.runtime.gatewaySocket?.readyState === WebSocket.OPEN) {
       forwardClientMessageToGateway(this.runtime, attachment, text, isConnectStart);
@@ -257,8 +297,13 @@ export class RelayRoom {
     }
   }
 
-  async webSocketClose(ws: WebSocket): Promise<void> {
+  async webSocketClose(ws: WebSocket, code: number, reason: string): Promise<void> {
     await this.removeSocket(ws, 'close');
+    try {
+      ws.close(code, reason);
+    } catch {
+      // The peer may already have completed the close handshake.
+    }
   }
 
   async webSocketError(ws: WebSocket): Promise<void> {
@@ -271,8 +316,25 @@ export class RelayRoom {
     pruneExpiredAwaitingChallenges(this.runtime, now);
     prunePendingConnectStarts(this.runtime, now);
     const flushedChallenge = flushPendingChallenge(this.runtime, now);
-    const payload = JSON.stringify({ type: 'tick', ts: now });
     const deadClients: Array<{ clientId: string; socket: WebSocket }> = [];
+    const expiredPairingClients: Array<{ clientId: string; socket: WebSocket }> = [];
+
+    for (const [clientId, client] of this.runtime.pairingClients.entries()) {
+      const attachment = client.deserializeAttachment() as SocketAttachment | null;
+      if (client.readyState === WebSocket.OPEN && (attachment?.ticketExpiresAt ?? 0) > now) continue;
+      expiredPairingClients.push({ clientId, socket: client });
+    }
+
+    for (const { clientId, socket } of expiredPairingClients) {
+      if (this.runtime.pairingClients.get(clientId) === socket) {
+        this.runtime.pairingClients.delete(clientId);
+      }
+      try {
+        socket.close(SOCKET_CLOSE_CODES.IDLE_OR_STALE_TIMEOUT, 'pairing_ticket_expired');
+      } catch {
+        // Best effort cleanup; expired sockets may already be detached remotely.
+      }
+    }
 
     for (const [clientId, client] of this.runtime.clients.entries()) {
       if (client.readyState !== WebSocket.OPEN) {
@@ -280,7 +342,14 @@ export class RelayRoom {
         continue;
       }
       try {
-        client.send(payload);
+        const attachment = client.deserializeAttachment() as SocketAttachment | null;
+        client.send(JSON.stringify({
+          type: 'tick',
+          ts: now,
+          ...(attachment?.capabilities?.includes(CLIENT_PONG_CAPABILITY)
+            ? { ack: CLIENT_PONG_CAPABILITY }
+            : {}),
+        }));
       } catch {
         deadClients.push({ clientId, socket: client });
       }
@@ -312,6 +381,7 @@ export class RelayRoom {
       awaitingChallengeCount: this.runtime.awaitingChallenge.size,
       flushedChallenge,
       deadClientsRemoved: removedDeadClients,
+      pairingClientsExpired: expiredPairingClients.length,
     });
     await ensureHeartbeat(this.runtime);
   }
@@ -325,6 +395,17 @@ export class RelayRoom {
         this.runtime.gatewaySocket = null;
         this.runtime.pendingChallenge = null;
         await touchGatewayOwner(this.runtime, attachment.clientId, true);
+        for (const client of [...this.runtime.clients.values(), ...this.runtime.pairingClients.values()]) {
+          try {
+            client.close(SOCKET_CLOSE_CODES.GATEWAY_UNAVAILABLE, 'gateway_unavailable');
+          } catch {
+            // Best effort cleanup; clients may already be detached remotely.
+          }
+        }
+      }
+    } else if (attachment.authScope === 'pairing') {
+      if (this.runtime.pairingClients.get(attachment.clientId) === ws) {
+        this.runtime.pairingClients.delete(attachment.clientId);
       }
     } else {
       const wasCurrentClientMapping = this.runtime.clients.get(attachment.clientId) === ws;
@@ -350,6 +431,14 @@ export class RelayRoom {
 
     await ensureHeartbeat(this.runtime);
   }
+}
+
+function parseCapabilities(url: URL): string[] {
+  return (url.searchParams.get('capabilities') ?? '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .slice(0, 16);
 }
 
 async function readJson<T>(request: Request): Promise<T | null> {

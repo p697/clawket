@@ -3,7 +3,6 @@ import * as SecureStore from 'expo-secure-store';
 import { sha256 } from 'js-sha256';
 import {
   AccentColorId,
-  DEFAULT_OFFICE_CHANNEL_SLOT_CONFIG,
   DeviceIdentity,
   GatewayBackendKind,
   GatewayConfig,
@@ -12,12 +11,10 @@ import {
   GatewayProfileMode,
   GatewayProfilesConfig,
   GatewayTransportKind,
-  OfficeChannelSlotConfig,
   SavedGatewayConfig,
   SpeechRecognitionLanguage,
   ChatAppearanceSettings,
   ThemeMode,
-  normalizeOfficeChannelSlotConfig,
 } from '../types';
 import { AccentScale, defaultAccentId, isAccentScale } from '../theme/accents';
 import { DEFAULT_CHAT_APPEARANCE, normalizeChatAppearanceSettings } from '../features/chat-appearance/defaults';
@@ -124,6 +121,14 @@ export type DeviceTokenStorageScope = {
   gatewayUrl?: string | null;
 };
 
+export type DeviceTokenRecord = {
+  version: 1;
+  token: string;
+  role: string;
+  scopes: string[];
+  updatedAtMs: number;
+};
+
 export type YouMindAuthSession = {
   accessToken: string;
   refreshToken: string;
@@ -149,12 +154,12 @@ const KEYS = {
   gatewayConfigsState: 'clawket.gatewayConfigsState.v1',
   deviceTokenPrefix: 'clawket.deviceToken.',
   debugMode: 'clawket.debugMode.v1',
+  relayServiceEnvironment: 'clawket.relayServiceEnvironment.v1',
   showAgentAvatar: 'clawket.showAgentAvatar.v1',
   themeMode: 'clawket.themeMode.v1',
   accentColor: 'clawket.accentColor.v1',
   customAccentScale: 'clawket.customAccentScale.v1',
   currentAgentId: 'clawket.currentAgentId.v1',
-  officeChannelSlots: 'clawket.officeChannelSlots.v1',
   showModelUsage: 'clawket.showModelUsage.v1',
   execApproval: 'clawket.execApproval.v1',
   canvasEnabled: 'clawket.canvasEnabled.v1',
@@ -284,6 +289,46 @@ function deviceTokenStorageKey(deviceId: string, scope?: DeviceTokenStorageScope
   }
 
   return legacyDeviceTokenStorageKey(normalizedDeviceId);
+}
+
+function normalizeDeviceTokenRecord(value: string | null): DeviceTokenRecord | null {
+  const trimmed = value?.trim() ?? '';
+  if (!trimmed) return null;
+  try {
+    const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+    const token = typeof parsed.token === 'string' ? parsed.token.trim() : '';
+    const role = typeof parsed.role === 'string' ? parsed.role.trim() : '';
+    const scopes = Array.isArray(parsed.scopes)
+      ? [...new Set(parsed.scopes
+        .filter((entry): entry is string => typeof entry === 'string')
+        .map((entry) => entry.trim())
+        .filter(Boolean))].sort()
+      : [];
+    const updatedAtMs = typeof parsed.updatedAtMs === 'number' && Number.isFinite(parsed.updatedAtMs)
+      ? parsed.updatedAtMs
+      : 0;
+    if (parsed.version !== 1 || !token || !role) return null;
+    return { version: 1, token, role, scopes, updatedAtMs };
+  } catch {
+    return {
+      version: 1,
+      token: trimmed,
+      role: 'operator',
+      scopes: [],
+      updatedAtMs: 0,
+    };
+  }
+}
+
+async function readStoredDeviceTokenValue(
+  deviceId: string,
+  scope?: DeviceTokenStorageScope,
+): Promise<string | null> {
+  const scopedKey = deviceTokenStorageKey(deviceId, scope);
+  const scopedValue = await SecureStore.getItemAsync(scopedKey, SECURE_OPTIONS);
+  if (scopedValue) return scopedValue;
+  if (scopedKey === legacyDeviceTokenStorageKey(deviceId)) return scopedValue;
+  return SecureStore.getItemAsync(legacyDeviceTokenStorageKey(deviceId), SECURE_OPTIONS);
 }
 
 function normalizeLastOpenedSessionSnapshot(value: unknown): LastOpenedSessionSnapshot | null {
@@ -482,6 +527,28 @@ function normalizeHermesConfig(
   };
 }
 
+function normalizeOpenClawBootstrapConfig(value: unknown): SavedGatewayConfig['bootstrap'] {
+  if (!value || typeof value !== 'object') return undefined;
+  const record = value as Record<string, unknown>;
+  const token = typeof record.token === 'string' ? record.token.trim() : '';
+  const strategy = record.strategy === 'mobile-setup' || record.strategy === 'legacy-bound'
+    ? record.strategy
+    : undefined;
+  const expiresAtMs = typeof record.expiresAtMs === 'number' && Number.isSafeInteger(record.expiresAtMs)
+    ? record.expiresAtMs
+    : undefined;
+  const access = record.access === 'full' || record.access === 'limited' || record.access === 'node'
+    ? record.access
+    : undefined;
+  if (!token || !strategy) return undefined;
+  return {
+    token,
+    strategy,
+    ...(expiresAtMs !== undefined ? { expiresAtMs } : {}),
+    ...(access ? { access } : {}),
+  };
+}
+
 function normalizeProfiles(value: unknown): GatewayProfilesConfig | null {
   if (!value || typeof value !== 'object') return null;
   const record = value as Record<string, unknown>;
@@ -510,6 +577,7 @@ function normalizeSavedGatewayConfig(value: unknown): SavedGatewayConfig | null 
   const url = typeof record.url === 'string' ? record.url.trim() : '';
   const token = typeof record.token === 'string' && record.token.trim() ? record.token.trim() : undefined;
   const password = typeof record.password === 'string' && record.password.trim() ? record.password.trim() : undefined;
+  const bootstrap = normalizeOpenClawBootstrapConfig(record.bootstrap);
   const relay = normalizeRelayConfig(record.relay);
   const hermes = normalizeHermesConfig(record.hermes);
   const backendKind = resolveGatewayBackendKind({
@@ -542,6 +610,7 @@ function normalizeSavedGatewayConfig(value: unknown): SavedGatewayConfig | null 
     url,
     token,
     password,
+    bootstrap,
     hermes,
     relay,
     createdAt,
@@ -689,6 +758,7 @@ export const StorageService = {
             url: legacy.url.trim(),
             token: legacy.token?.trim() || undefined,
             password: legacy.password?.trim() || undefined,
+            bootstrap: normalizeOpenClawBootstrapConfig(legacy.bootstrap),
             createdAt: now,
             updatedAt: now,
           },
@@ -765,6 +835,7 @@ export const StorageService = {
           url: config.url,
           token: config.token,
           password: config.password,
+          bootstrap: config.bootstrap,
           mode: config.mode ?? item.mode,
           hermes: config.hermes,
           relay: config.relay,
@@ -784,6 +855,7 @@ export const StorageService = {
       url: config.url,
       token: config.token,
       password: config.password,
+      bootstrap: config.bootstrap,
       hermes: config.hermes,
       relay: config.relay,
       createdAt: now,
@@ -800,6 +872,7 @@ export const StorageService = {
         url: active.url,
         token: active.token,
         password: active.password,
+        bootstrap: active.bootstrap,
         backendKind: active.backendKind,
         transportKind: active.transportKind,
         mode: active.mode,
@@ -1013,12 +1086,39 @@ export const StorageService = {
     );
   },
 
+  async setDeviceTokenRecord(
+    deviceId: string,
+    record: Omit<DeviceTokenRecord, 'version' | 'updatedAtMs'> & { updatedAtMs?: number },
+    scope?: DeviceTokenStorageScope,
+  ): Promise<void> {
+    const token = record.token.trim();
+    const role = record.role.trim();
+    if (!token || !role) {
+      throw new Error('Device token and role are required.');
+    }
+    const value: DeviceTokenRecord = {
+      version: 1,
+      token,
+      role,
+      scopes: [...new Set(record.scopes.map((entry) => entry.trim()).filter(Boolean))].sort(),
+      updatedAtMs: record.updatedAtMs ?? Date.now(),
+    };
+    await SecureStore.setItemAsync(
+      deviceTokenStorageKey(deviceId, scope),
+      JSON.stringify(value),
+      SECURE_OPTIONS,
+    );
+  },
+
+  async getDeviceTokenRecord(
+    deviceId: string,
+    scope?: DeviceTokenStorageScope,
+  ): Promise<DeviceTokenRecord | null> {
+    return normalizeDeviceTokenRecord(await readStoredDeviceTokenValue(deviceId, scope));
+  },
+
   async getDeviceToken(deviceId: string, scope?: DeviceTokenStorageScope): Promise<string | null> {
-    const scopedKey = deviceTokenStorageKey(deviceId, scope);
-    const scopedValue = await SecureStore.getItemAsync(scopedKey, SECURE_OPTIONS);
-    if (scopedValue) return scopedValue;
-    if (scopedKey === legacyDeviceTokenStorageKey(deviceId)) return scopedValue;
-    return SecureStore.getItemAsync(legacyDeviceTokenStorageKey(deviceId), SECURE_OPTIONS);
+    return normalizeDeviceTokenRecord(await readStoredDeviceTokenValue(deviceId, scope))?.token ?? null;
   },
 
   async deleteDeviceToken(deviceId: string, scope?: DeviceTokenStorageScope): Promise<void> {
@@ -1037,6 +1137,15 @@ export const StorageService = {
   async getDebugMode(): Promise<boolean> {
     const raw = await SecureStore.getItemAsync(KEYS.debugMode, SECURE_OPTIONS);
     return raw === '1';
+  },
+
+  async setRelayServiceEnvironment(environment: 'production' | 'preview'): Promise<void> {
+    await SecureStore.setItemAsync(KEYS.relayServiceEnvironment, environment, SECURE_OPTIONS);
+  },
+
+  async getRelayServiceEnvironment(): Promise<'production' | 'preview'> {
+    const raw = await SecureStore.getItemAsync(KEYS.relayServiceEnvironment, SECURE_OPTIONS);
+    return raw === 'preview' ? 'preview' : 'production';
   },
 
   async setShowAgentAvatar(show: boolean): Promise<void> {
@@ -1088,16 +1197,6 @@ export const StorageService = {
 
   async getCurrentAgentId(): Promise<string | null> {
     return SecureStore.getItemAsync(KEYS.currentAgentId, SECURE_OPTIONS);
-  },
-
-  async setOfficeChannelSlots(config: OfficeChannelSlotConfig): Promise<void> {
-    await setJson(KEYS.officeChannelSlots, normalizeOfficeChannelSlotConfig(config));
-  },
-
-  async getOfficeChannelSlots(): Promise<OfficeChannelSlotConfig> {
-    const parsed = await getJson<unknown>(KEYS.officeChannelSlots);
-    if (!parsed) return { ...DEFAULT_OFFICE_CHANNEL_SLOT_CONFIG };
-    return normalizeOfficeChannelSlotConfig(parsed);
   },
 
   async setShowModelUsage(enabled: boolean): Promise<void> {

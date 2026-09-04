@@ -14,25 +14,46 @@ export type RelayAuthInput = {
   mirroredClientTokenHashes?: ReadonlySet<string>;
 };
 
+export type RelayAuthorizationResult = {
+  authorized: boolean;
+  clientLabel: string | null;
+  path: 'mirrored' | 'kv' | 'registry' | 'rejected';
+};
+
 export async function isRelayTokenAuthorized(input: RelayAuthInput): Promise<boolean> {
+  return (await authorizeRelayToken(input)).authorized;
+}
+
+export async function authorizeRelayToken(input: RelayAuthInput): Promise<RelayAuthorizationResult> {
   const { routesKv, registryVerifyUrl, bridgeId, role, token, mirroredClientTokenHashes } = input;
   const tokenHash = await sha256Hex(token);
-  if (role === 'client' && mirroredClientTokenHashes?.has(tokenHash)) {
-    return true;
-  }
+  const mirrored = role === 'client' && mirroredClientTokenHashes?.has(tokenHash) === true;
   const pairBridge = await getPairBridge(routesKv, bridgeId);
   if (pairBridge) {
     if (role === 'gateway') {
-      if (tokenHash === pairBridge.relaySecretHash) return true;
-      return verifyViaRegistry(registryVerifyUrl, bridgeId, token);
+      if (tokenHash === pairBridge.relaySecretHash) {
+        return { authorized: true, clientLabel: null, path: 'kv' };
+      }
+      const authorized = await verifyViaRegistry(registryVerifyUrl, bridgeId, token);
+      return { authorized, clientLabel: null, path: authorized ? 'registry' : 'rejected' };
     }
-    if (Array.isArray(pairBridge.clientTokens)
-      && pairBridge.clientTokens.some((item) => item?.hash === tokenHash)) {
-      return true;
+    const matched = Array.isArray(pairBridge.clientTokens)
+      ? pairBridge.clientTokens.find((item) => item?.hash === tokenHash)
+      : undefined;
+    if (matched) {
+      return {
+        authorized: true,
+        clientLabel: matched.label?.trim() || null,
+        path: mirrored ? 'mirrored' : 'kv',
+      };
     }
-    return verifyViaRegistry(registryVerifyUrl, bridgeId, token);
+    if (mirrored) return { authorized: true, clientLabel: null, path: 'mirrored' };
+    const authorized = await verifyViaRegistry(registryVerifyUrl, bridgeId, token);
+    return { authorized, clientLabel: null, path: authorized ? 'registry' : 'rejected' };
   }
-  return verifyViaRegistry(registryVerifyUrl, bridgeId, token);
+  if (mirrored) return { authorized: true, clientLabel: null, path: 'mirrored' };
+  const authorized = await verifyViaRegistry(registryVerifyUrl, bridgeId, token);
+  return { authorized, clientLabel: null, path: authorized ? 'registry' : 'rejected' };
 }
 
 export async function getPairBridge(routesKv: KVNamespace, bridgeId: string): Promise<PairBridgeRecord | null> {

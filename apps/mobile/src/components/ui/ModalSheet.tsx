@@ -3,7 +3,7 @@ import { DimensionValue, Modal, Pressable, StyleSheet, Text, View } from 'react-
 import { X } from 'lucide-react-native';
 import { IconButton } from './IconButton';
 import { useAppTheme } from '../../theme';
-import { FontSize, FontWeight, Radius, Shadow, Space } from '../../theme/tokens';
+import { FontSize, FontWeight, LineHeight, Radius, Space, createSurfaceStyle } from '../../theme/tokens';
 
 type Props = {
   visible: boolean;
@@ -25,7 +25,10 @@ export function ModalSheet({
   children,
 }: Props): React.JSX.Element {
   const { theme } = useAppTheme();
-  const styles = useMemo(() => createStyles(theme.colors), [theme]);
+  const styles = useMemo(
+    () => createStyles(theme.colors, theme.scheme),
+    [theme.colors, theme.scheme],
+  );
 
   return (
     <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
@@ -49,7 +52,10 @@ export function ModalSheet({
   );
 }
 
-function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors']) {
+function createStyles(
+  colors: ReturnType<typeof useAppTheme>['theme']['colors'],
+  scheme: ReturnType<typeof useAppTheme>['theme']['scheme'],
+) {
   return StyleSheet.create({
     root: {
       flex: 1,
@@ -61,10 +67,9 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       backgroundColor: colors.overlay,
     },
     card: {
-      backgroundColor: colors.surface,
-      borderRadius: Radius.lg,
+      borderRadius: Radius.xl,
       overflow: 'hidden',
-      ...Shadow.lg,
+      ...createSurfaceStyle(colors, scheme, 'overlay'),
     },
     header: {
       flexDirection: 'row',
@@ -76,7 +81,8 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     title: {
       color: colors.text,
-      fontSize: FontSize.base + 2,
+      fontSize: FontSize.lg,
+      lineHeight: LineHeight.lg,
       fontWeight: FontWeight.bold,
       flex: 1,
       marginRight: Space.sm,

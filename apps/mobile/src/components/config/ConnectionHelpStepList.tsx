@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useAppTheme } from '../../theme';
-import { FontSize, FontWeight, Space } from '../../theme/tokens';
+import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
 
 export type ConnectionHelpStep = {
   title: string;
@@ -53,7 +53,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     numCircle: {
       width: 22,
       height: 22,
-      borderRadius: 11,
+      borderRadius: Radius.md,
       backgroundColor: colors.primary,
       alignItems: 'center',
       justifyContent: 'center',

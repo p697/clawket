@@ -3,7 +3,15 @@ import { setTimeout as delay } from 'node:timers/promises';
 import type { PeerCertificate } from 'node:tls';
 import type { PairingConfig } from '@clawket/bridge-core';
 import WebSocket, { type RawData } from 'ws';
+import nacl from 'tweetnacl';
 import {
+  consumeSecurePairingAttempt,
+  createSecurePairingBridgeProof,
+  createSecurePairingClientProof,
+  securePairingProofEquals,
+} from '@clawket/bridge-core';
+import {
+  issueLegacyOpenClawBootstrapToken,
   issueOpenClawBootstrapToken,
   readOpenClawPermissions,
   readOpenClawInfo,
@@ -73,6 +81,8 @@ export type BridgeRuntimeOptions = {
   heartbeatTimeoutMs?: number;
   connectHandshakeWarnDelayMs?: number;
   createWebSocket?: (url: string, options?: RuntimeSocketConnectOptions) => RuntimeSocket;
+  issueLegacyOpenClawBootstrapToken?: typeof issueLegacyOpenClawBootstrapToken;
+  issueOpenClawBootstrapToken?: typeof issueOpenClawBootstrapToken;
   onStatus?: (snapshot: BridgeRuntimeSnapshot) => void;
   onLog?: (line: string) => void;
   onPendingPairRequest?: (request: PendingPairRequest) => void;
@@ -106,6 +116,7 @@ const STARTUP_SIDECARS_CONNECT_RETRY_MAX_ATTEMPTS = 4;
 const STARTUP_SIDECARS_CONNECT_RETRY_DEFAULT_DELAY_MS = 750;
 const STARTUP_SIDECARS_CONNECT_RETRY_MIN_DELAY_MS = 250;
 const STARTUP_SIDECARS_CONNECT_RETRY_MAX_DELAY_MS = 3_000;
+export const OPENCLAW_MOBILE_SETUP_CAPABILITY = 'openclaw.bootstrap.mobile-setup.v1';
 
 export class BridgeRuntime {
   private relaySocket: RuntimeSocket | null = null;
@@ -122,6 +133,7 @@ export class BridgeRuntime {
   private pendingGatewayMessages: PendingGatewayMessage[] = [];
   private gatewayHandshakeStarted = false;
   private gatewayCloseBoundaryPending = false;
+  private gatewayCloseExpected = false;
   private clientDemandStartedAtMs: number | null = null;
   private gatewayConnectedAtMs: number | null = null;
   private readonly inFlightConnectHandshakes = new Map<string, InFlightConnectHandshake>();
@@ -240,6 +252,10 @@ export class BridgeRuntime {
 
     relay.on('pong', () => {
       this.lastRelayActivityMs = Date.now();
+      if (this.relayAttempt !== 0) {
+        this.relayAttempt = 0;
+        this.log('relay health confirmed; reconnect backoff reset');
+      }
     });
 
     relay.once('error', (error: Error) => {
@@ -311,6 +327,11 @@ export class BridgeRuntime {
 
     if (control.event === 'permissions.request') {
       await this.handlePermissionsRequest(control);
+      return;
+    }
+
+    if (control.event === 'pairing.secure.start') {
+      this.handleSecurePairingRequest(control);
       return;
     }
 
@@ -410,7 +431,15 @@ export class BridgeRuntime {
     }
 
     try {
-      const issued = await issueOpenClawBootstrapToken(parsed.value);
+      const { capabilities, ...bootstrapRequest } = parsed.value;
+      const supportsMobileSetup = capabilities.includes(OPENCLAW_MOBILE_SETUP_CAPABILITY);
+      const issueBootstrapToken = supportsMobileSetup
+        ? this.options.issueOpenClawBootstrapToken ?? issueOpenClawBootstrapToken
+        : this.options.issueLegacyOpenClawBootstrapToken ?? issueLegacyOpenClawBootstrapToken;
+      const issued = await issueBootstrapToken({
+        ...bootstrapRequest,
+        gatewayUrl: this.options.config.relayUrl,
+      });
       this.log(
         `relay bootstrap token issued requestId=${requestId} targetClientId=${replyTargetClientId || '<none>'} ` +
         `expiresAtMs=${issued.expiresAtMs}`,
@@ -422,6 +451,8 @@ export class BridgeRuntime {
         payload: {
           bootstrapToken: issued.token,
           expiresAtMs: issued.expiresAtMs,
+          strategy: issued.strategy,
+          ...(issued.access ? { access: issued.access } : {}),
         },
       });
     } catch (error) {
@@ -619,7 +650,7 @@ export class BridgeRuntime {
       this.gatewayConnecting = false;
       this.gatewayHandshakeStarted = false;
       this.gatewayCloseBoundaryPending = false;
-      this.gatewayRetryAttempt = 0;
+      this.gatewayCloseExpected = false;
       this.gatewayConnectedAtMs = Date.now();
       this.updateSnapshot({ gatewayConnected: true, lastError: null });
       this.log(`gateway connected sinceClientDemandMs=${this.elapsedSince(this.clientDemandStartedAtMs)}`);
@@ -635,6 +666,7 @@ export class BridgeRuntime {
     });
 
     gateway.once('close', (code: number, reason: Buffer) => {
+      const wasExpectedClose = this.gatewayCloseExpected;
       const queuedConnectRequests = summarizePendingGatewayMessages(this.pendingGatewayMessages).connectRequests;
       const reconnectAfterClose = this.gatewayCloseBoundaryPending
         && shouldKeepGatewayConnected(this.snapshot.clientCount, queuedConnectRequests);
@@ -644,6 +676,7 @@ export class BridgeRuntime {
       this.gatewayConnecting = false;
       this.gatewayHandshakeStarted = false;
       this.gatewayCloseBoundaryPending = false;
+      this.gatewayCloseExpected = false;
       this.gatewayConnectedAtMs = null;
       this.clearInFlightConnectHandshakes(`gateway disconnected code=${code}`);
       this.updateSnapshot({
@@ -653,6 +686,12 @@ export class BridgeRuntime {
           : `gateway closed: ${reason.toString() || code}`,
       });
       this.log(`gateway disconnected code=${code} reason=${reason.toString() || '<none>'} sinceClientDemandMs=${this.elapsedSince(this.clientDemandStartedAtMs)}`);
+      if (!wasExpectedClose && this.snapshot.clientCount > 0) {
+        this.sendRelayControl({
+          event: 'client.reconnect-required',
+          payload: { reason: 'gateway_closed' },
+        });
+      }
       if (reconnectAfterClose) {
         this.log('gateway close boundary reached; reconnecting for fresh demand');
         this.ensureGatewayConnected();
@@ -756,6 +795,89 @@ export class BridgeRuntime {
     this.forwardOrQueueGatewayMessage({ kind: 'text', text: payload });
   }
 
+  private handleSecurePairingRequest(control: {
+    requestId?: string;
+    payload?: Record<string, unknown>;
+    sourceClientId?: string;
+  }): void {
+    const requestId = control.requestId?.trim() ?? '';
+    const sourceClientId = control.sourceClientId?.trim() ?? '';
+    const sessionId = typeof control.payload?.sessionId === 'string' ? control.payload.sessionId.trim() : '';
+    const clientPublicKey = typeof control.payload?.clientPublicKey === 'string'
+      ? control.payload.clientPublicKey.trim()
+      : '';
+    const clientProof = typeof control.payload?.clientProof === 'string' ? control.payload.clientProof.trim() : '';
+    if (!requestId || !sourceClientId || !/^ps_[a-f0-9]{64}$/.test(sessionId)) return;
+    if (!/^[A-Za-z0-9_-]{43}$/.test(clientPublicKey) || !/^[a-f0-9]{64}$/.test(clientProof)) {
+      this.sendSecurePairingError(sourceClientId, requestId, 'invalid_request');
+      return;
+    }
+    const state = consumeSecurePairingAttempt(sessionId);
+    if (!state || state.gatewayId !== this.options.config.gatewayId) {
+      this.sendSecurePairingError(sourceClientId, requestId, 'unavailable');
+      return;
+    }
+    const expectedProof = createSecurePairingClientProof({
+      codeKeyHex: state.codeKeyHex,
+      sessionId,
+      requestId,
+      clientPublicKey,
+    });
+    if (!securePairingProofEquals(clientProof, expectedProof)) {
+      this.sendSecurePairingError(sourceClientId, requestId, 'invalid_code');
+      return;
+    }
+    try {
+      const clientKeyBytes = Buffer.from(clientPublicKey, 'base64url');
+      if (clientKeyBytes.length !== nacl.box.publicKeyLength) throw new Error('invalid client key');
+      const bridgeKeys = nacl.box.keyPair();
+      const nonce = nacl.randomBytes(nacl.box.nonceLength);
+      const ciphertext = nacl.box(
+        Buffer.from(state.qrPayload, 'utf8'),
+        nonce,
+        clientKeyBytes,
+        bridgeKeys.secretKey,
+      );
+      const bridgePublicKey = Buffer.from(bridgeKeys.publicKey).toString('base64url');
+      const nonceValue = Buffer.from(nonce).toString('base64url');
+      const ciphertextValue = Buffer.from(ciphertext).toString('base64url');
+      const bridgeProof = createSecurePairingBridgeProof({
+        codeKeyHex: state.codeKeyHex,
+        sessionId,
+        requestId,
+        clientPublicKey,
+        bridgePublicKey,
+        nonce: nonceValue,
+        ciphertext: ciphertextValue,
+      });
+      this.sendRelayControl({
+        event: 'pairing.secure.result',
+        requestId,
+        targetClientId: sourceClientId,
+        payload: {
+          protocol: 2,
+          sessionId,
+          bridgePublicKey,
+          nonce: nonceValue,
+          ciphertext: ciphertextValue,
+          bridgeProof,
+        },
+      });
+      this.log(`secure pairing response sent requestId=${requestId}`);
+    } catch {
+      this.sendSecurePairingError(sourceClientId, requestId, 'handshake_failed');
+    }
+  }
+
+  private sendSecurePairingError(targetClientId: string, requestId: string, code: string): void {
+    this.sendRelayControl({
+      event: 'pairing.secure.error',
+      requestId,
+      targetClientId,
+      payload: { protocol: 2, code },
+    });
+  }
+
   private sendRelayControl(control: {
     event: string;
     requestId?: string;
@@ -815,6 +937,7 @@ export class BridgeRuntime {
       return;
     }
     this.gatewayCloseBoundaryPending = shouldReconnectAfterClose;
+    this.gatewayCloseExpected = true;
     gateway.close();
   }
 
@@ -891,6 +1014,9 @@ export class BridgeRuntime {
     const pending = this.inFlightConnectHandshakes.get(response.id);
     if (!pending) return;
     this.inFlightConnectHandshakes.delete(response.id);
+    if (response.ok) {
+      this.gatewayRetryAttempt = 0;
+    }
     const detail = response.ok
       ? 'ok=true'
       : `ok=false errorCode=${response.errorCode ?? '<none>'} errorMessage=${response.errorMessage ?? '<none>'}`;
@@ -1366,7 +1492,16 @@ function formatConnectHandshakeMetaForLog(meta: {
 function parseBootstrapRequestPayload(
   payload: Record<string, unknown> | undefined,
 ):
-  | { ok: true; value: { deviceId: string; publicKey: string; role: string; scopes: string[] } }
+  | {
+      ok: true;
+      value: {
+        deviceId: string;
+        publicKey: string;
+        role: string;
+        scopes: string[];
+        capabilities: string[];
+      };
+    }
   | { ok: false; code: string; message: string } {
   if (!payload) {
     return {
@@ -1380,6 +1515,7 @@ function parseBootstrapRequestPayload(
   const publicKey = readRequiredString(payload.publicKey);
   const role = readRequiredString(payload.role);
   const scopes = normalizeScopeList(payload.scopes);
+  const capabilities = normalizeScopeList(payload.capabilities);
 
   if (!deviceId) {
     return { ok: false, code: 'invalid_request', message: 'payload.deviceId is required' };
@@ -1401,6 +1537,7 @@ function parseBootstrapRequestPayload(
       publicKey,
       role,
       scopes,
+      capabilities,
     },
   };
 }

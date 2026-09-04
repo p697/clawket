@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import { Animated, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { BorderWidth, PresentationColor, Radius } from '../../theme/tokens';
 import { POSTER_THEMES, PosterTheme } from './posterThemes';
 
 type Props = {
@@ -83,15 +84,15 @@ const s = StyleSheet.create({
   trigger: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: Radius.full,
+    backgroundColor: PresentationColor.mediaControl,
     justifyContent: 'center',
     alignItems: 'center',
   },
   triggerDot: {
     width: 18,
     height: 18,
-    borderRadius: 9,
+    borderRadius: Radius.full,
   },
   palette: {
     position: 'absolute',
@@ -99,8 +100,8 @@ const s = StyleSheet.create({
     left: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 20,
+    backgroundColor: PresentationColor.mediaControlSoft,
+    borderRadius: Radius.full,
     paddingHorizontal: 6,
     paddingVertical: 4,
     gap: 2,
@@ -111,10 +112,10 @@ const s = StyleSheet.create({
   dot: {
     width: 20,
     height: 20,
-    borderRadius: 10,
+    borderRadius: Radius.full,
   },
   dotActive: {
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
+    borderWidth: BorderWidth.strong,
+    borderColor: PresentationColor.onMedia,
   },
 });

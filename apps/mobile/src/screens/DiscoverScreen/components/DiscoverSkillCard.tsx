@@ -122,7 +122,7 @@ export function DiscoverSkillRailCard({ item, onPress }: Props): React.JSX.Eleme
 function createVerticalStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors']) {
   return StyleSheet.create({
     card: {
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       backgroundColor: colors.surface,
       borderRadius: Radius.lg,
@@ -179,7 +179,7 @@ function createRowStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors
     row: {
       flexDirection: 'row',
       alignItems: 'stretch',
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       backgroundColor: colors.surface,
       borderRadius: Radius.md,
@@ -242,7 +242,7 @@ function createRailStyles(colors: ReturnType<typeof useAppTheme>['theme']['color
     card: {
       width: RAIL_CARD_WIDTH,
       minHeight: 168,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       backgroundColor: colors.surface,
       borderRadius: Radius.lg,

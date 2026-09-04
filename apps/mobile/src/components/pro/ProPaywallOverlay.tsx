@@ -22,7 +22,7 @@ import {
   selectDisplayedRevenueCatPackage,
 } from '../../services/pro-subscription';
 import { useAppTheme } from '../../theme';
-import { FontSize, FontWeight, Radius, Shadow, Space } from '../../theme/tokens';
+import { FontSize, FontWeight, Radius, Space, createSurfaceStyle } from '../../theme/tokens';
 
 type Props = {
   visible: boolean;
@@ -163,7 +163,7 @@ export function ProPaywallOverlay({ visible, onClose }: Props): React.JSX.Elemen
       <Animated.View
         style={[
           styles.card,
-          Shadow.lg,
+          createSurfaceStyle(theme.colors, theme.scheme, 'overlay'),
           {
             transform: [{ scale }],
           },
@@ -462,7 +462,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       maxWidth: 460,
       borderRadius: Radius.lg,
       backgroundColor: colors.surfaceElevated,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       paddingHorizontal: Space.xl,
       paddingVertical: Space.xl,
@@ -499,7 +499,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       opacity: 0.82,
     },
     title: {
-      fontSize: 28,
+      fontSize: FontSize.xxxl,
       lineHeight: 32,
       fontWeight: FontWeight.bold,
       color: colors.text,
@@ -512,7 +512,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       borderRadius: Radius.md,
       padding: Space.md,
       backgroundColor: colors.surfaceMuted,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
     },
     planCardSelected: {
@@ -561,7 +561,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       paddingVertical: Space.sm,
     },
     featureEmoji: {
-      fontSize: 20,
+      fontSize: FontSize.displaySm,
       width: 28,
       textAlign: 'center',
     },
@@ -576,7 +576,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       paddingHorizontal: Space.md,
       paddingVertical: Space.sm,
       backgroundColor: colors.surfaceMuted,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.error,
     },
     errorBannerText: {
@@ -589,7 +589,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       paddingHorizontal: Space.md,
       paddingVertical: Space.sm,
       backgroundColor: colors.primarySoft,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.primary,
     },
     successBannerText: {

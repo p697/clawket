@@ -26,8 +26,13 @@ export type AppTheme = {
     primarySoft: string;
     searchHighlightBg: string;
     success: string;
+    successSoft: string;
     warning: string;
+    warningSoft: string;
     error: string;
+    errorSoft: string;
+    info: string;
+    infoSoft: string;
     overlay: string;
     debugOverlay: string;
     debugText: string;
@@ -55,6 +60,7 @@ export type AppTheme = {
     badgeTools: string;
     badgePrompts: string;
     chartGrid: string;
+    shadow: string;
   };
 };
 
@@ -83,8 +89,13 @@ const lightPalette: FixedPalette = {
   textMuted: '#5E6673',
   textSubtle: '#8A93A1',
   success: '#22C55E',
+  successSoft: '#E9F8EE',
   warning: '#F59E0B',
+  warningSoft: '#FFF3D6',
   error: '#EF4444',
+  errorSoft: '#FFECEE',
+  info: '#3978D4',
+  infoSoft: '#EAF2FF',
   overlay: 'rgba(0,0,0,0.45)',
   debugOverlay: 'rgba(0,0,0,0.85)',
   debugText: '#22C55E',
@@ -111,6 +122,7 @@ const lightPalette: FixedPalette = {
   badgeTools: '#3B82F6',
   badgePrompts: '#22C55E',
   chartGrid: '#E5E5EA',
+  shadow: '#071218',
 };
 
 const darkPalette: FixedPalette = {
@@ -124,8 +136,13 @@ const darkPalette: FixedPalette = {
   textMuted: '#A7B0BC',
   textSubtle: '#7C8796',
   success: '#34D399',
+  successSoft: '#163024',
   warning: '#FBBF24',
+  warningSoft: '#392B12',
   error: '#F87171',
+  errorSoft: '#3A1D24',
+  info: '#78A9E8',
+  infoSoft: '#18263A',
   overlay: 'rgba(0,0,0,0.6)',
   debugOverlay: 'rgba(5,8,14,0.92)',
   debugText: '#4ADE80',
@@ -152,6 +169,7 @@ const darkPalette: FixedPalette = {
   badgeTools: '#60A5FA',
   badgePrompts: '#34D399',
   chartGrid: '#38383A',
+  shadow: '#000000',
 };
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } {

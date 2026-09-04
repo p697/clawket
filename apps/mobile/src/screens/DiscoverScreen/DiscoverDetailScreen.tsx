@@ -333,7 +333,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       marginBottom: Space.lg,
     },
     heroCard: {
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       marginBottom: Space.md,
       paddingVertical: Space.xl,
@@ -365,22 +365,22 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       marginBottom: Space.lg,
     },
     summaryCard: {
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       marginBottom: Space.md,
     },
     metaCard: {
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       marginBottom: Space.md,
     },
     markdownCard: {
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       marginBottom: Space.md,
     },
     errorCard: {
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       marginBottom: Space.md,
     },
@@ -402,7 +402,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       paddingLeft: Space.md,
       paddingRight: Space.sm,
       backgroundColor: colors.surfaceMuted,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
     },
     commandText: {
@@ -445,7 +445,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       borderRadius: Radius.md,
       paddingVertical: 11,
       paddingHorizontal: Space.lg,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       flexDirection: 'row',
       alignItems: 'center',
@@ -470,7 +470,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       borderRadius: Radius.md,
       padding: Space.md,
       backgroundColor: colors.surfaceMuted,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
     },
     metaKey: {

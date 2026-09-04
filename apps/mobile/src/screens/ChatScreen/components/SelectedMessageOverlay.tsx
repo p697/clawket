@@ -3,7 +3,7 @@ import { Animated, Modal, Pressable, ScrollView, StyleSheet, TouchableOpacity, V
 import { Check, Copy, Share2, Star } from 'lucide-react-native';
 import type { UiMessage } from '../../../types/chat';
 import { useAppTheme } from '../../../theme';
-import { Radius, Shadow } from '../../../theme/tokens';
+import { Radius, Shadow, createThemedShadowStyle } from '../../../theme/tokens';
 import { ChatSharePosterModal } from './ChatSharePosterModal';
 import { getSelectedMessageOverlayLayout } from './selectedMessageOverlayLayout';
 import type { MessageSelectionFrames } from '../../../components/MessageBubble';
@@ -50,7 +50,7 @@ export function SelectedMessageOverlay({
   selectionAnim,
 }: Props): React.JSX.Element {
   const { theme } = useAppTheme();
-  const styles = useMemo(() => createStyles(theme.colors), [theme]);
+  const styles = useMemo(() => createStyles(theme.colors, theme.scheme), [theme]);
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const [sharePosterVisible, setSharePosterVisible] = useState(false);
   const sharePosterDataRef = useRef<{ text: string; modelLabel?: string; timestampMs?: number } | null>(null);
@@ -242,7 +242,10 @@ export function SelectedMessageOverlay({
   );
 }
 
-function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors']) {
+function createStyles(
+  colors: ReturnType<typeof useAppTheme>['theme']['colors'],
+  scheme: ReturnType<typeof useAppTheme>['theme']['scheme'],
+) {
   return StyleSheet.create({
     floatingActionBtn: {
       flex: 1,
@@ -250,7 +253,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: colors.surfaceElevated,
-      ...Shadow.lg,
+      ...createThemedShadowStyle(colors, scheme, Shadow.lg),
     },
     floatingActionBtnCopied: {
       backgroundColor: colors.surface,

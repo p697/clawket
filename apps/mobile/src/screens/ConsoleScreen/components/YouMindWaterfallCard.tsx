@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import Svg, { Defs, LinearGradient, Path, Stop } from 'react-native-svg';
 import type { YouMindBoardEntry, YouMindBoardEntryCardVariant, YouMindBoardEntryIcon } from '../../../services/youmind';
 import { useAppTheme } from '../../../theme';
-import { FontSize, FontWeight, Radius, Space } from '../../../theme/tokens';
+import { FontSize, FontWeight, PresentationColor, Radius, Space, createSurfaceStyle } from '../../../theme/tokens';
 
 type Props = {
   entry: YouMindBoardEntry;
@@ -280,7 +280,7 @@ export function YouMindWaterfallCard({
         ) : fallbackIcon ? (
           <View style={styles.centerFill}>{fallbackIcon}</View>
         ) : null}
-        <View style={styles.mediaShade} />
+        <View style={[styles.mediaShade, { backgroundColor: PresentationColor.mediaTintSoft }]} />
       </View>
       <View style={styles.cardBody}>
         {subtitle ? (
@@ -350,7 +350,7 @@ export function YouMindWaterfallCard({
         ) : (
           fallbackIcon
         )}
-        <View style={styles.mediaShade} />
+        <View style={[styles.mediaShade, { backgroundColor: PresentationColor.mediaTintSoft }]} />
       </View>
       <Text style={[styles.cardTitle, { color: theme.colors.text }]} numberOfLines={2}>
         {title}
@@ -399,9 +399,8 @@ export function YouMindWaterfallCard({
     <Pressable
       style={({ pressed }) => [
         styles.card,
+        createSurfaceStyle(theme.colors, theme.scheme, 'raised'),
         {
-          backgroundColor: theme.colors.surface,
-          borderColor: theme.colors.border,
           opacity: disabled ? 0.78 : 1,
           transform: [{ translateY: pressed && !disabled ? -1 : 0 }],
         },
@@ -416,14 +415,8 @@ export function YouMindWaterfallCard({
 
 const styles = StyleSheet.create({
   card: {
-    borderWidth: 0,
-    borderRadius: 18,
+    borderRadius: Radius.lg,
     overflow: 'hidden',
-    shadowColor: '#02041A',
-    shadowOpacity: 0.12,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 4,
   },
   cardBody: {
     paddingHorizontal: 14,
@@ -438,7 +431,7 @@ const styles = StyleSheet.create({
   groupIconBadge: {
     width: 44,
     height: 44,
-    borderRadius: 14,
+    borderRadius: Radius.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -460,7 +453,7 @@ const styles = StyleSheet.create({
   chatBadge: {
     width: 38,
     height: 38,
-    borderRadius: 19,
+    borderRadius: Radius.full,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -471,8 +464,8 @@ const styles = StyleSheet.create({
   },
   mediaWrap: {
     width: '100%',
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
+    borderTopLeftRadius: Radius.lg,
+    borderTopRightRadius: Radius.lg,
     overflow: 'hidden',
   },
   mediaImage: {
@@ -487,13 +480,12 @@ const styles = StyleSheet.create({
   },
   imageOnlyWrap: {
     width: '100%',
-    borderRadius: 18,
+    borderRadius: Radius.lg,
     overflow: 'hidden',
     minHeight: 132,
   },
   mediaShade: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(2, 4, 26, 0.04)',
   },
   centerFill: {
     flex: 1,
@@ -503,7 +495,7 @@ const styles = StyleSheet.create({
   smallHero: {
     width: '100%',
     height: 84,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -517,17 +509,17 @@ const styles = StyleSheet.create({
   favicon: {
     width: 18,
     height: 18,
-    borderRadius: 4,
+    borderRadius: Radius.xs,
   },
   faviconFallback: {
     width: 18,
     height: 18,
-    borderRadius: 4,
+    borderRadius: Radius.xs,
     alignItems: 'center',
     justifyContent: 'center',
   },
   faviconLetter: {
-    fontSize: 10,
+    fontSize: FontSize.micro,
     fontWeight: FontWeight.semibold,
   },
   siteText: {

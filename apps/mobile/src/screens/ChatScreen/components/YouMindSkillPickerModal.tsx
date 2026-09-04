@@ -24,7 +24,7 @@ import { FullWindowOverlay } from 'react-native-screens';
 import { IconButton } from '../../../components/ui';
 import { getYouMindSkillBackgroundUri } from '../../../services/youmind-skill-background';
 import { useAppTheme } from '../../../theme';
-import { FontSize, FontWeight, Radius, Space } from '../../../theme/tokens';
+import { FontSize, FontWeight, PresentationColor, Radius, Space } from '../../../theme/tokens';
 import type { YouMindInstalledSkills, YouMindSkillSummary } from '../../../services/youmind';
 import { YouMindSkillIcon } from './YouMindSkillIcon';
 import { buildYouMindSkillSections, type YouMindSkillSection } from './youmind-skill-picker-data';
@@ -84,7 +84,7 @@ function SkillAvatar({
           },
         ]}
       >
-        <YouMindSkillIcon skill={skill} color="#fff" size={Math.max(12, Math.round(size * 0.48))} />
+        <YouMindSkillIcon skill={skill} color={PresentationColor.onMedia} size={Math.max(12, Math.round(size * 0.48))} />
       </View>
     </View>
   );
@@ -326,7 +326,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       alignItems: 'center',
       gap: Space.sm,
       borderRadius: Radius.lg,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       backgroundColor: colors.inputBackground,
       paddingHorizontal: Space.md,
@@ -442,14 +442,14 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
 const stylesShared = StyleSheet.create({
   skillAvatarWrap: {
     overflow: 'hidden',
-    backgroundColor: '#5c677d',
+    backgroundColor: PresentationColor.skillAvatarFallback,
   },
   skillAvatarImage: {
     ...StyleSheet.absoluteFillObject,
   },
   skillAvatarShade: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.16)',
+    backgroundColor: PresentationColor.mediaScrimSoft,
   },
   skillAvatarOverlay: {
     alignItems: 'center',

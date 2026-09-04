@@ -7,14 +7,14 @@ import {
   StyleSheet,
   type StyleProp,
   Text,
-  TextInput,
   type ViewStyle,
   View,
   type LayoutChangeEvent,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useAppTheme } from '../../theme';
-import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
+import { FontSize, FontWeight, Radius, Space, createSurfaceStyle } from '../../theme/tokens';
+import { Button, Card, FormTextInput } from '../ui';
 
 const YOUMIND_GOOGLE_ICON = require('../../../assets/youmind-google.png');
 
@@ -67,7 +67,10 @@ export function YouMindSignInCard({
 }): React.JSX.Element {
   const { t } = useTranslation(['chat', 'common']);
   const { theme } = useAppTheme();
-  const styles = React.useMemo(() => createStyles(theme.colors), [theme.colors]);
+  const styles = React.useMemo(
+    () => createStyles(theme.colors, theme.scheme),
+    [theme.colors, theme.scheme],
+  );
   const scrollRef = React.useRef<ScrollView | null>(null);
   const fieldOffsetsRef = React.useRef<Partial<Record<SignInFieldKey, number>>>({});
 
@@ -98,7 +101,7 @@ export function YouMindSignInCard({
         keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
         automaticallyAdjustKeyboardInsets
       >
-        <View style={[styles.card, cardStyle]}>
+        <Card style={[styles.card, cardStyle]} padding="lg">
           {step === 'options' ? (
             <>
               <Text style={styles.title}>{t('Sign in to YouMind')}</Text>
@@ -140,31 +143,23 @@ export function YouMindSignInCard({
                 <View style={styles.dividerLine} />
               </View>
               <View onLayout={(event) => handleFieldLayout('optionEmail', event)}>
-                <TextInput
+                <FormTextInput
                   value={email}
                   onChangeText={onChangeEmail}
                   autoCapitalize="none"
                   autoCorrect={false}
                   keyboardType="email-address"
                   placeholder={t('Email address')}
-                  placeholderTextColor={theme.colors.textSubtle}
-                  style={styles.input}
+                  surface="sunken"
                   onFocus={() => scrollToField('optionEmail')}
                 />
               </View>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.primaryButton,
-                  pressed && styles.primaryButtonPressed,
-                  busy && styles.buttonDisabled,
-                ]}
+              <Button
+                label={emailBusy ? t('Loading...', { ns: 'common' }) : t('Send verification code')}
                 onPress={onSendCode}
                 disabled={busy}
-              >
-                <Text style={styles.primaryButtonText}>
-                  {emailBusy ? t('Loading...', { ns: 'common' }) : t('Send verification code')}
-                </Text>
-              </Pressable>
+                loading={emailBusy}
+              />
             </>
           ) : (
             <>
@@ -178,46 +173,37 @@ export function YouMindSignInCard({
               <Text style={styles.title}>{t('Sign in with email')}</Text>
               {!otpSent ? (
                 <View onLayout={(event) => handleFieldLayout('email', event)}>
-                  <TextInput
+                  <FormTextInput
                     value={email}
                     onChangeText={onChangeEmail}
                     autoCapitalize="none"
                     autoCorrect={false}
                     keyboardType="email-address"
                     placeholder={t('Email address')}
-                    placeholderTextColor={theme.colors.textSubtle}
-                    style={styles.input}
+                    surface="sunken"
                     onFocus={() => scrollToField('email')}
                   />
                 </View>
               ) : null}
               {otpSent ? (
                 <View onLayout={(event) => handleFieldLayout('code', event)}>
-                  <TextInput
+                  <FormTextInput
                     value={code}
                     onChangeText={onChangeCode}
                     keyboardType="number-pad"
                     placeholder={t('Verification code')}
-                    placeholderTextColor={theme.colors.textSubtle}
-                    style={styles.input}
+                    surface="sunken"
                     onFocus={() => scrollToField('code')}
                     autoFocus
                   />
                 </View>
               ) : null}
-              <Pressable
-                style={({ pressed }) => [
-                  styles.primaryButton,
-                  pressed && styles.primaryButtonPressed,
-                  busy && styles.buttonDisabled,
-                ]}
+              <Button
+                label={emailBusy ? t('Loading...', { ns: 'common' }) : otpSent ? t('Verify and Sign In') : t('Send verification code')}
                 onPress={otpSent ? () => { void onVerify(); } : onSendCode}
                 disabled={busy}
-              >
-                <Text style={styles.primaryButtonText}>
-                  {emailBusy ? t('Loading...', { ns: 'common' }) : otpSent ? t('Verify and Sign In') : t('Send verification code')}
-                </Text>
-              </Pressable>
+                loading={emailBusy}
+              />
               {otpSent ? (
                 <View style={styles.secondaryActions}>
                   <Pressable style={styles.secondaryButton} onPress={onSendCode} disabled={busy}>
@@ -230,13 +216,16 @@ export function YouMindSignInCard({
               ) : null}
             </>
           )}
-        </View>
+        </Card>
       </ScrollView>
     </View>
   );
 }
 
-function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors']) {
+function createStyles(
+  colors: ReturnType<typeof useAppTheme>['theme']['colors'],
+  scheme: ReturnType<typeof useAppTheme>['theme']['scheme'],
+) {
   return StyleSheet.create({
     root: {
       width: '100%',
@@ -245,13 +234,9 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       paddingBottom: Space.lg,
     },
     card: {
-      backgroundColor: colors.surface,
-      borderColor: colors.border,
       borderRadius: Radius.lg,
-      borderWidth: 1,
       gap: Space.md,
       marginHorizontal: Space.sm,
-      padding: Space.lg,
     },
     title: {
       color: colors.text,
@@ -261,12 +246,10 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       textAlign: 'center',
     },
     socialButton: {
-      backgroundColor: colors.surfaceElevated,
-      borderColor: colors.border,
       borderRadius: Radius.lg,
-      borderWidth: 1,
       paddingHorizontal: Space.md,
       paddingVertical: Space.md,
+      ...createSurfaceStyle(colors, scheme, 'flat'),
     },
     socialButtonContent: {
       alignItems: 'center',
@@ -281,7 +264,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     appleLogo: {
       color: colors.text,
-      fontSize: 18,
+      fontSize: FontSize.xl,
     },
     googleLogo: {
       height: 18,
@@ -303,31 +286,8 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       fontSize: FontSize.sm,
       textTransform: 'uppercase',
     },
-    input: {
-      backgroundColor: colors.background,
-      borderColor: colors.border,
-      borderRadius: Radius.lg,
-      borderWidth: 1,
-      color: colors.text,
-      fontSize: FontSize.base,
-      paddingHorizontal: Space.md,
-      paddingVertical: Space.md,
-    },
-    primaryButton: {
-      alignItems: 'center',
-      backgroundColor: colors.primary,
-      borderRadius: Radius.lg,
-      justifyContent: 'center',
-      minHeight: 48,
-      paddingHorizontal: Space.md,
-    },
     primaryButtonPressed: {
       opacity: 0.88,
-    },
-    primaryButtonText: {
-      color: colors.primaryText,
-      fontSize: FontSize.base,
-      fontWeight: FontWeight.semibold,
     },
     buttonDisabled: {
       opacity: 0.45,
@@ -353,7 +313,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       alignItems: 'center',
       borderColor: colors.border,
       borderRadius: Radius.lg,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       flex: 1,
       justifyContent: 'center',
       minHeight: 44,

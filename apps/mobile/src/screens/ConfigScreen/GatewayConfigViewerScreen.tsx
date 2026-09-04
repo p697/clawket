@@ -129,7 +129,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     jsonCard: {
       borderRadius: Radius.md,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       backgroundColor: colors.surface,
       paddingHorizontal: Space.md,

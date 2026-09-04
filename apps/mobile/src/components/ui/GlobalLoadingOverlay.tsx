@@ -3,7 +3,7 @@ import { ActivityIndicator, Animated, Modal, Platform, StyleSheet, Text, View } 
 import { useTranslation } from 'react-i18next';
 import { FullWindowOverlay } from 'react-native-screens';
 import { useAppTheme } from '../../theme';
-import { FontSize, FontWeight, Radius, Shadow, Space } from '../../theme/tokens';
+import { FontSize, FontWeight, Radius, Space, createSurfaceStyle } from '../../theme/tokens';
 
 type Props = {
   visible: boolean;
@@ -28,8 +28,8 @@ export function GlobalLoadingOverlay({ visible, message }: Props): React.JSX.Ele
   if (!visible) return null;
 
   const content = (
-    <Animated.View style={[styles.overlay, { opacity }]} pointerEvents="auto">
-      <View style={[styles.card, { backgroundColor: theme.colors.surface }, Shadow.lg]}>
+    <Animated.View style={[styles.overlay, { opacity, backgroundColor: theme.colors.overlay }]} pointerEvents="auto">
+      <View style={[styles.card, createSurfaceStyle(theme.colors, theme.scheme, 'overlay')]}>
         <ActivityIndicator size="small" color={theme.colors.primary} />
         <Text style={[styles.label, { color: theme.colors.text }]}>{displayMessage}</Text>
       </View>
@@ -54,7 +54,6 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.25)',
   },
   card: {
     flexDirection: 'row',

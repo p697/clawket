@@ -14,7 +14,7 @@ import {
   summarizeDoctorReport,
 } from './diagnostics.js';
 import { parseLookbackToMs } from './log-parse.js';
-import { buildGatewayControlUiOrigin, buildLocalPairingInfo, detectLanIp } from './local-pair.js';
+import { buildGatewayControlUiOrigin, buildLocalPairingInfo, detectLanIp, resolveLocalPairGatewayUrl } from './local-pair.js';
 import { readCliVersion } from './metadata.js';
 import { buildLocalPairingJson, buildPairingJson } from './pairing-output.js';
 import { writePairingQrPng, writeRawQrPng } from './qr-file.js';
@@ -41,12 +41,15 @@ import {
   refreshHermesRelayAccessCode,
   refreshAccessCode,
   restartService,
+  SECURE_PAIRING_V2_CAPABILITY,
   startTransientRuntime,
   stopService,
   stopRuntimeProcesses,
   unregisterRuntimeProcess,
   uninstallService,
   type PairingInfo,
+  type PairingEnvironment,
+  type PairingConfig,
   type ServiceStatus,
   writeServiceState,
 } from '@clawket/bridge-core';
@@ -57,12 +60,16 @@ import {
   buildHermesBridgeWsUrl,
   buildHermesRelayWsUrl,
   configureOpenClawLanAccess,
+  isOpenClawGatewayAuthConfigured,
+  issueOpenClawPairingSetupToken,
+  readOpenClawInfo,
   resolveGatewayAuth,
   resolveGatewayUrl,
   restartOpenClawGateway,
 } from '@clawket/bridge-runtime';
 
 const HERMES_SERVICE_WATCHDOG_INTERVAL_MS = 30_000;
+const PREVIEW_REGISTRY_URL = 'https://clawket-registry-preview.clawket.workers.dev';
 
 async function main(): Promise<void> {
   const [, , command = 'help', ...args] = process.argv;
@@ -80,6 +87,7 @@ async function main(): Promise<void> {
   }
 
   if (command === 'refresh-code') {
+    const environment = resolvePairingEnvironment(args);
     const qrFile = readFlag(args, '--qr-file');
     const gatewayAuth = resolveGatewayAuth();
     if ('error' in gatewayAuth) {
@@ -88,7 +96,18 @@ async function main(): Promise<void> {
     const paired = await refreshAccessCode({
       gatewayToken: gatewayAuth.token,
       gatewayPassword: gatewayAuth.password,
+      environment,
     });
+    const currentService = getServiceStatus();
+    if (paired.pairingSession?.protocol === 2
+      && currentService.running
+      && !currentService.capabilities?.includes(SECURE_PAIRING_V2_CAPABILITY)) {
+      stopRuntimeProcesses();
+      restartService();
+    }
+    if (paired.pairingSession && !hasFlag(args, '--no-open') && !jsonOutput) {
+      openPairingPage(paired.pairingSession.pairingUrl);
+    }
     const qrImagePath = await writePairingQrPng(paired, qrFile);
     if (jsonOutput) {
       printJson(buildPairingJson(paired, qrImagePath, getServiceStatus(), 'Pairing code refreshed.'));
@@ -143,18 +162,31 @@ async function main(): Promise<void> {
   }
 
   if (command === 'reset') {
+    const previewOnly = hasFlag(args, '--preview');
     stopRuntimeProcesses();
-    stopHermesBridgeRuntimePids([
-      ...listHermesRelayRuntimePids(),
-      ...listHermesBridgeRuntimePids(),
-    ]);
+    if (!previewOnly) {
+      stopHermesBridgeRuntimePids([
+        ...listHermesRelayRuntimePids(),
+        ...listHermesBridgeRuntimePids(),
+      ]);
+    }
     stopService();
-    deletePairingConfig();
-    deleteHermesRelayConfig();
-    deleteHermesBridgeCliConfig();
-    console.log(`Cleared pairing config: ${getPairingConfigPath()}`);
-    console.log(`Cleared Hermes relay config: ${getHermesRelayConfigPath()}`);
-    console.log(`Cleared Hermes bridge config: ${HERMES_BRIDGE_CONFIG_PATH}`);
+    if (previewOnly) {
+      deletePairingConfig('preview');
+      console.log(`Cleared Preview pairing config: ${getPairingConfigPath('preview')}`);
+      if (readPairingConfig() && getServiceStatus().installed) {
+        restartService();
+      }
+    } else {
+      deletePairingConfig();
+      deletePairingConfig('preview');
+      deleteHermesRelayConfig();
+      deleteHermesBridgeCliConfig();
+      console.log(`Cleared pairing config: ${getPairingConfigPath()}`);
+      console.log(`Cleared Preview pairing config: ${getPairingConfigPath('preview')}`);
+      console.log(`Cleared Hermes relay config: ${getHermesRelayConfigPath()}`);
+      console.log(`Cleared Hermes bridge config: ${HERMES_BRIDGE_CONFIG_PATH}`);
+    }
     return;
   }
 
@@ -198,7 +230,8 @@ async function main(): Promise<void> {
   }
 
   if (command === 'run') {
-    const config = requirePairingConfig();
+    const requestedEnvironment = resolvePairingEnvironment(args);
+    const runtimeConfigs = resolveOpenClawRuntimeConfigs(requestedEnvironment, isServiceMode);
     const replaceExisting = hasFlag(args, '--replace');
     const existingRuntimePids = listRuntimeProcesses().map((entry: { pid: number }) => entry.pid);
     if (existingRuntimePids.length > 0) {
@@ -216,6 +249,7 @@ async function main(): Promise<void> {
       console.log(`[${Date.now()}] ${line}`);
     };
     if (!isServiceMode) {
+      const [{ config }] = runtimeConfigs;
       console.log(`Gateway ID: ${config.gatewayId}`);
       console.log(`Instance ID: ${config.instanceId}`);
       console.log(`Gateway URL: ${gatewayUrl}`);
@@ -227,35 +261,38 @@ async function main(): Promise<void> {
     }
 
     if (isServiceMode) {
-      writeServiceState();
+      writeServiceState(process.pid, [SECURE_PAIRING_V2_CAPABILITY]);
     }
 
-    const runtime = new BridgeRuntime({
-      config,
-      gatewayUrl,
-      onLog: (line) => {
-        emitRuntimeLine(`[clawket] ${line}`);
-      },
-      onStatus: (snapshot) => {
-        if (snapshot.lastError) {
+    const runtimes = runtimeConfigs.map(({ environment, config }) => {
+      const runtime = new BridgeRuntime({
+        config,
+        gatewayUrl,
+        onLog: (line) => {
+          emitRuntimeLine(`[clawket:${environment}] ${line}`);
+        },
+        onStatus: (snapshot) => {
+          if (snapshot.lastError) {
+            emitRuntimeLine(
+              `[status:${environment}] relay=${snapshot.relayConnected ? 'up' : 'down'} gateway=${snapshot.gatewayConnected ? 'up' : 'down'} clients=${snapshot.clientCount} error=${snapshot.lastError}`,
+            );
+            return;
+          }
           emitRuntimeLine(
-            `[status] relay=${snapshot.relayConnected ? 'up' : 'down'} gateway=${snapshot.gatewayConnected ? 'up' : 'down'} clients=${snapshot.clientCount} error=${snapshot.lastError}`,
+            `[status:${environment}] relay=${snapshot.relayConnected ? 'up' : 'down'} gateway=${snapshot.gatewayConnected ? 'up' : 'down'} clients=${snapshot.clientCount}`,
           );
-          return;
-        }
-        emitRuntimeLine(
-          `[status] relay=${snapshot.relayConnected ? 'up' : 'down'} gateway=${snapshot.gatewayConnected ? 'up' : 'down'} clients=${snapshot.clientCount}`,
-        );
-      },
-      onPendingPairRequest: () => {
-        emitRuntimeLine('[pair-request] pending');
-      },
+        },
+        onPendingPairRequest: () => {
+          emitRuntimeLine(`[pair-request:${environment}] pending`);
+        },
+      });
+      runtime.start();
+      return runtime;
     });
-
-    runtime.start();
+    const primaryConfig = runtimeConfigs[0].config;
     registerRuntimeProcess({
-      gatewayId: config.gatewayId,
-      instanceId: config.instanceId,
+      gatewayId: primaryConfig.gatewayId,
+      instanceId: primaryConfig.instanceId,
       serviceMode: isServiceMode,
     });
     const hermesServiceWatchdog = isServiceMode
@@ -271,7 +308,7 @@ async function main(): Promise<void> {
     const shutdown = async () => {
       process.off('SIGINT', shutdown);
       process.off('SIGTERM', shutdown);
-      await runtime.stop();
+      await Promise.all(runtimes.map((runtime) => runtime.stop()));
       if (hermesServiceWatchdog) {
         clearInterval(hermesServiceWatchdog);
       }
@@ -355,7 +392,18 @@ async function handlePairCommand(args: string[], jsonOutput: boolean): Promise<v
   const pairSubcommand = readPairSubcommand(args);
   const localPair = pairSubcommand === 'local' || hasFlag(args, '--local');
   const requestedBackend = resolveRequestedPairBackend(args);
-  const backends = requestedBackend ? [requestedBackend] : detectAvailablePairBackends();
+  const previewPair = hasFlag(args, '--preview');
+  if (previewPair && localPair) {
+    throw new Error('Preview is a Relay environment and cannot be combined with local pairing.');
+  }
+  if (previewPair && requestedBackend === 'hermes') {
+    throw new Error('The Preview environment currently supports OpenClaw Relay pairing only.');
+  }
+  const backends = previewPair
+    ? ['openclaw' as const]
+    : requestedBackend
+      ? [requestedBackend]
+      : detectAvailablePairBackends();
 
   if (backends.length === 0) {
     throw new Error(
@@ -559,7 +607,7 @@ function canPairOpenClaw(): boolean {
   if ('error' in gatewayAuth) {
     return false;
   }
-  return Boolean(gatewayAuth.token || gatewayAuth.password);
+  return isOpenClawGatewayAuthConfigured(readOpenClawInfo());
 }
 
 function canPairHermes(): boolean {
@@ -701,18 +749,28 @@ function printPairingInfo(paired: PairingInfo, qrImagePath: string): void {
   qrcodeTerminal.generate(paired.qrPayload, { small: true });
   console.log(`Expires: ${formatLocalTime(paired.accessCodeExpiresAt)}`);
   console.log(`QR image: ${qrImagePath}`);
+  printOneTapPairingInfo(paired);
+}
+
+function printOneTapPairingInfo(paired: PairingInfo): void {
+  if (!paired.pairingSession) return;
+  console.log('\nOr connect without scanning:');
+  console.log(`Pairing page: ${paired.pairingSession.pairingUrl}`);
+  console.log(`Pairing code: ${paired.pairingSession.pairingCode}`);
 }
 
 function printLocalPairingInfo(
   gatewayUrl: string,
-  authMode: 'token' | 'password',
+  authMode: 'token' | 'password' | undefined,
   expiresAt: number,
   qrPayload: string,
   qrImagePath: string,
   customUrl: string | null,
 ): void {
   console.log(`Gateway URL: ${gatewayUrl}`);
-  console.log(`Auth mode: ${authMode}`);
+  if (authMode) {
+    console.log(`Auth mode: ${authMode}`);
+  }
   console.log(customUrl ? '\nScan this custom gateway QR in the Clawket app:\n' : '\nScan this local gateway QR in the Clawket app:\n');
   qrcodeTerminal.generate(qrPayload, { small: true });
   console.log(`Expires: ${new Date(expiresAt).toLocaleString()}`);
@@ -726,18 +784,14 @@ async function performOpenClawLocalPairing(args: string[]): Promise<PairSuccessR
   }
   const qrFile = readFlag(args, '--qr-file');
   const explicitLocalUrl = readFlag(args, '--url');
-  const local = buildLocalPairingInfo({
-    explicitUrl: explicitLocalUrl,
-    gatewayToken: gatewayAuth.token,
-    gatewayPassword: gatewayAuth.password,
-  });
+  const gatewayUrl = resolveLocalPairGatewayUrl({ explicitUrl: explicitLocalUrl });
   let message = 'Generated a local gateway pairing QR.';
   let configUpdated = false;
   let controlUiOrigin: string | null = null;
   let gatewayRestartAction: 'restarted' | 'started' | 'unchanged' = 'unchanged';
 
   if (!explicitLocalUrl) {
-    controlUiOrigin = buildGatewayControlUiOrigin(local.gatewayUrl);
+    controlUiOrigin = buildGatewayControlUiOrigin(gatewayUrl);
     const lanConfig = await configureOpenClawLanAccess({ controlUiOrigin });
     configUpdated = lanConfig.bindChanged || lanConfig.allowedOriginAdded;
     if (configUpdated) {
@@ -749,6 +803,16 @@ async function performOpenClawLocalPairing(args: string[]): Promise<PairSuccessR
       : 'OpenClaw already allowed LAN pairing. Generated a local gateway pairing QR.';
   }
 
+  const bootstrap = !gatewayAuth.token && !gatewayAuth.password
+    ? await issueOpenClawPairingSetupToken({ gatewayUrl })
+    : undefined;
+  const local = buildLocalPairingInfo({
+    explicitUrl: gatewayUrl,
+    gatewayToken: gatewayAuth.token,
+    gatewayPassword: gatewayAuth.password,
+    ...(bootstrap ? { bootstrap, expiresAt: bootstrap.expiresAtMs } : {}),
+  });
+
   const qrImagePath = await writeRawQrPng(local.qrPayload, 'clawket-local-pair', qrFile);
   return {
     backend: 'openclaw',
@@ -758,14 +822,14 @@ async function performOpenClawLocalPairing(args: string[]): Promise<PairSuccessR
     qrImagePath,
     summaryLines: [
       `Gateway URL: ${local.gatewayUrl}`,
-      `Auth mode: ${local.authMode}`,
+      ...(local.authMode === 'device' ? [] : [`Auth mode: ${local.authMode}`]),
       `Expires: ${new Date(local.expiresAt).toLocaleString()}`,
       `QR image: ${qrImagePath}`,
       message,
     ],
     jsonValue: buildLocalPairingJson({
       gatewayUrl: local.gatewayUrl,
-      authMode: local.authMode,
+      authMode: local.authMode === 'device' ? undefined : local.authMode,
       expiresAt: local.expiresAt,
       qrImagePath,
       message,
@@ -778,6 +842,7 @@ async function performOpenClawLocalPairing(args: string[]): Promise<PairSuccessR
 }
 
 async function performOpenClawRelayPairing(args: string[]): Promise<PairSuccessResult> {
+  const environment = resolvePairingEnvironment(args);
   const forcePair = hasFlag(args, '--force');
   if (!forcePair) {
     await ensurePairPrerequisites();
@@ -794,10 +859,19 @@ async function performOpenClawRelayPairing(args: string[]): Promise<PairSuccessR
     displayName: name,
     gatewayToken: gatewayAuth.token,
     gatewayPassword: gatewayAuth.password,
+    environment,
   });
+  if (paired.pairingSession && !hasFlag(args, '--no-open') && !hasFlag(args, '--json')) {
+    openPairingPage(paired.pairingSession.pairingUrl);
+  }
   const qrImagePath = await writePairingQrPng(paired, qrFile);
   const currentService = getServiceStatus();
-  const serviceAction = decidePairServiceAction(paired, currentService);
+  let serviceAction = decidePairServiceAction(paired, currentService);
+  if (paired.pairingSession?.protocol === 2
+    && currentService.running
+    && !currentService.capabilities?.includes(SECURE_PAIRING_V2_CAPABILITY)) {
+    serviceAction = 'restart';
+  }
   let serviceStatus = currentService;
   let serviceMessage = 'Background service already running. Left unchanged.';
 
@@ -833,17 +907,25 @@ async function performOpenClawRelayPairing(args: string[]): Promise<PairSuccessR
   return {
     backend: 'openclaw',
     transport: 'relay',
-    label: 'OpenClaw · Relay',
+    label: environment === 'preview' ? 'OpenClaw · Preview Relay' : 'OpenClaw · Relay',
     qrPayload: paired.qrPayload,
     qrImagePath,
     summaryLines: [
+      `Environment: ${environment === 'preview' ? 'Preview' : 'Production'}`,
       `Gateway ID: ${paired.config.gatewayId}`,
+      ...(paired.pairingSession ? [
+        `Pairing page: ${paired.pairingSession.pairingUrl}`,
+        `Pairing code: ${paired.pairingSession.pairingCode}`,
+      ] : []),
       `Expires: ${formatLocalTime(paired.accessCodeExpiresAt)}`,
       `QR image: ${qrImagePath}`,
       serviceMessage,
       `Service: ${serviceStatus.installed ? (serviceStatus.running ? 'installed, running' : 'installed, stopped') : 'not installed'}`,
     ],
-    jsonValue: buildPairingJson(paired, qrImagePath, serviceStatus, serviceMessage) as Record<string, unknown>,
+    jsonValue: {
+      ...buildPairingJson(paired, qrImagePath, serviceStatus, serviceMessage),
+      environment,
+    },
   };
 }
 
@@ -947,16 +1029,27 @@ async function handleOpenClawRelayPairCommand(args: string[], jsonOutput: boolea
     printJson(result.jsonValue);
     return;
   }
+  const environmentLine = result.summaryLines.find((line) => line.startsWith('Environment: '));
   const gatewayIdLine = result.summaryLines.find((line) => line.startsWith('Gateway ID: '));
   const expiresLine = result.summaryLines.find((line) => line.startsWith('Expires: '));
+  const pairingPageLine = result.summaryLines.find((line) => line.startsWith('Pairing page: '));
+  const pairingCodeLine = result.summaryLines.find((line) => line.startsWith('Pairing code: '));
   const qrImageLine = result.summaryLines.find((line) => line.startsWith('QR image: '));
-  const serviceMessage = result.summaryLines.find((line) => !line.startsWith('Gateway ID: ') && !line.startsWith('Expires: ') && !line.startsWith('QR image: ') && !line.startsWith('Service: ')) ?? null;
+  const serviceMessage = result.summaryLines.find((line) => !line.startsWith('Environment: ') && !line.startsWith('Gateway ID: ') && !line.startsWith('Pairing page: ') && !line.startsWith('Pairing code: ') && !line.startsWith('Expires: ') && !line.startsWith('QR image: ') && !line.startsWith('Service: ')) ?? null;
   const serviceStatusLine = result.summaryLines.find((line) => line.startsWith('Service: '));
+  if (environmentLine) {
+    console.log(environmentLine);
+  }
   if (gatewayIdLine) {
     console.log(gatewayIdLine);
   }
   console.log('\nScan this QR code in the Clawket app:\n');
   qrcodeTerminal.generate(result.qrPayload, { small: true });
+  if (pairingPageLine || pairingCodeLine) {
+    console.log('\nOr connect without scanning:');
+    if (pairingPageLine) console.log(pairingPageLine);
+    if (pairingCodeLine) console.log(pairingCodeLine);
+  }
   if (expiresLine) {
     console.log(expiresLine);
   }
@@ -1004,7 +1097,7 @@ async function handleOpenClawLocalPairCommand(args: string[], jsonOutput: boolea
   } else {
     const payload = result.jsonValue as {
       gatewayUrl: string;
-      authMode: 'token' | 'password';
+      authMode?: 'token' | 'password';
       expiresAt: number;
       message?: string;
     };
@@ -1151,6 +1244,7 @@ async function handleHermesLifecycle(
 
 async function printStatus(): Promise<void> {
   const report = await buildDoctorReport();
+  const previewConfig = readPairingConfig('preview');
   console.log(`Version: ${readCliVersion()}`);
   console.log('');
   console.log('[OpenClaw]');
@@ -1166,6 +1260,12 @@ async function printStatus(): Promise<void> {
   console.log(`Service Path: ${report.servicePath || '-'}`);
   console.log(`CLI Log: ${report.logPath}`);
   console.log(`CLI Error Log: ${report.errorLogPath}`);
+  console.log('');
+  console.log('[OpenClaw Preview]');
+  console.log(`Paired: ${previewConfig ? 'yes' : 'no'}`);
+  console.log(`Gateway ID: ${previewConfig?.gatewayId ?? '-'}`);
+  console.log(`Server URL: ${previewConfig?.serverUrl ?? '-'}`);
+  console.log(`Relay URL: ${previewConfig?.relayUrl ?? '-'}`);
   console.log('');
   console.log('[Hermes]');
   console.log(`Source: ${report.hermesSourceFound ? 'found' : 'missing'} (${report.hermesSourcePath})`);
@@ -1662,13 +1762,38 @@ function printDoctorReport(report: Awaited<ReturnType<typeof buildDoctorReport>>
   console.log(`Hermes relay error log: ${report.hermesRelayErrorLogPath}`);
 }
 
-function requirePairingConfig() {
-  const config = readPairingConfig();
+function requirePairingConfig(environment: PairingEnvironment = 'production') {
+  const config = readPairingConfig(environment);
   if (!config) {
-    console.error(`Not paired. Run "clawket pair" first. Config path: ${getPairingConfigPath()}`);
+    const pairCommand = environment === 'preview' ? 'clawket pair --preview' : 'clawket pair';
+    console.error(`Not paired. Run "${pairCommand}" first. Config path: ${getPairingConfigPath(environment)}`);
     process.exit(1);
   }
   return config;
+}
+
+function resolvePairingEnvironment(args: string[]): PairingEnvironment {
+  return hasFlag(args, '--preview') ? 'preview' : 'production';
+}
+
+function resolveOpenClawRuntimeConfigs(
+  requestedEnvironment: PairingEnvironment,
+  serviceMode: boolean,
+): Array<{ environment: PairingEnvironment; config: PairingConfig }> {
+  if (!serviceMode) {
+    return [{ environment: requestedEnvironment, config: requirePairingConfig(requestedEnvironment) }];
+  }
+
+  const configs: Array<{ environment: PairingEnvironment; config: PairingConfig }> = [];
+  const production = readPairingConfig('production');
+  const preview = readPairingConfig('preview');
+  if (production) configs.push({ environment: 'production', config: production });
+  if (preview) configs.push({ environment: 'preview', config: preview });
+  if (configs.length === 0) {
+    console.error('Not paired. Run "clawket pair" or "clawket pair --preview" first.');
+    process.exit(1);
+  }
+  return configs;
 }
 
 function readFlag(args: string[], name: string): string | null {
@@ -1694,6 +1819,10 @@ function resolvePairServer(args: string[], backend: PairBackendKind): string {
     throw new Error(
       'No Hermes registry server configured. Pass --server https://hermes-registry.example.com or set CLAWKET_HERMES_REGISTRY_URL.',
     );
+  }
+
+  if (resolvePairingEnvironment(args) === 'preview') {
+    return PREVIEW_REGISTRY_URL;
   }
 
   const envServer = process.env.CLAWKET_REGISTRY_URL?.trim() || process.env.CLAWKET_PACKAGE_DEFAULT_REGISTRY_URL?.trim();
@@ -2052,22 +2181,39 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function openPairingPage(url: string): void {
+  try {
+    const command = process.platform === 'darwin'
+      ? { file: 'open', args: [url] }
+      : process.platform === 'win32'
+        ? { file: 'rundll32', args: ['url.dll,FileProtocolHandler', url] }
+        : { file: 'xdg-open', args: [url] };
+    const child = spawn(command.file, command.args, {
+      detached: true,
+      stdio: 'ignore',
+    });
+    child.unref();
+  } catch {
+    // The terminal output remains a complete fallback when no browser opener exists.
+  }
+}
+
 function printHelp(): void {
   console.log([
-    'clawket pair [--backend <openclaw|hermes>] [--server <url>] [--name <displayName>] [--public-host <192.168.x.x>] [--port <4319>] [--qr-file <path>] [--json] [--force]',
+    'clawket pair [--preview] [--backend <openclaw|hermes>] [--server <url>] [--name <displayName>] [--public-host <192.168.x.x>] [--port <4319>] [--qr-file <path>] [--no-open] [--json] [--force]',
     'clawket pair local [--backend <openclaw|hermes>] [--url <ws://host:port>] [--public-host <192.168.x.x>] [--port <4319>] [--qr-file <path>] [--json]',
     'clawket pair --local [--backend <openclaw|hermes>] [--url <ws://host:port>] [--public-host <192.168.x.x>] [--port <4319>] [--qr-file <path>] [--json]',
-    'clawket refresh-code [--qr-file <path>] [--json]',
+    'clawket refresh-code [--preview] [--qr-file <path>] [--no-open] [--json]',
     'clawket start',
     'clawket install',
     'clawket restart',
     'clawket stop',
     'clawket uninstall',
-    'clawket reset',
+    'clawket reset [--preview]',
     'clawket status',
     'clawket logs [--last <2m>] [--lines <200>] [--errors] [--follow] [--json]',
     'clawket doctor [--json]',
-    'clawket run [--gateway-url <ws://127.0.0.1:18789>] [--replace]',
+    'clawket run [--preview] [--gateway-url <ws://127.0.0.1:18789>] [--replace]',
     'clawket hermes dev [--public-host <192.168.x.x>] [--host <0.0.0.0>] [--port <4319>] [--api-url <http://127.0.0.1:8642>] [--qr-file <path>] [--restart-hermes] [--json]',
     'clawket hermes run [--host <0.0.0.0>] [--port <4319>] [--api-url <http://127.0.0.1:8642>] [--restart-hermes]',
     'clawket hermes pair local [--public-host <192.168.x.x>] [--port <4319>] [--qr-file <path>] [--json]',

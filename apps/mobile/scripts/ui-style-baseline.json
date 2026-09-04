@@ -1,0 +1,14 @@
+{
+  "src/screens/ChatScreen/components/ChatSharePosterModal.tsx": {
+    "border-radius-literal": 3,
+    "hardcoded-color": 13,
+    "font-size-literal": 10,
+    "border-width-literal": 6
+  },
+  "src/screens/ConsoleScreen/StatsPosterModal.tsx": {
+    "border-radius-literal": 4,
+    "hardcoded-color": 3,
+    "font-size-literal": 10,
+    "border-width-literal": 2
+  }
+}

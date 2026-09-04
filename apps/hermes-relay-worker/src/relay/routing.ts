@@ -1,4 +1,9 @@
-import { CONTROL_PREFIX, type RelayControlEnvelope, type SocketAttachment } from './types';
+import {
+  CLIENT_PONG_CAPABILITY,
+  CONTROL_PREFIX,
+  type RelayControlEnvelope,
+  type SocketAttachment,
+} from './types';
 import {
   isConnectChallengeFrame,
   isConnectStartReqFrame,
@@ -112,6 +117,11 @@ export function tryDeliverChallenge(
   }
 
   challengeClient.send(data);
+  const challengeAttachment = challengeClient.deserializeAttachment() as SocketAttachment | null;
+  if (challengeAttachment) {
+    challengeAttachment.challengeDeliveredAt = now;
+    challengeClient.serializeAttachment(challengeAttachment);
+  }
   touchClientActivity(runtime, challengeClientId);
   runtime.awaitingChallenge.delete(challengeClientId);
   const connectStartAt = runtime.connectStartAtByClientId.get(challengeClientId);
@@ -421,6 +431,35 @@ export function prepareClientMessage(runtime: RelayRuntime, attachment: SocketAt
     }
   }
   return isConnectStart;
+}
+
+export function acknowledgeClientPong(
+  runtime: RelayRuntime,
+  ws: WebSocket,
+  attachment: SocketAttachment,
+  text: string,
+): boolean {
+  if (!attachment.capabilities?.includes(CLIENT_PONG_CAPABILITY)) return false;
+  let parsed: { type?: unknown; ts?: unknown };
+  try {
+    parsed = JSON.parse(text) as { type?: unknown; ts?: unknown };
+  } catch {
+    return false;
+  }
+  if (parsed.type !== 'pong' || typeof parsed.ts !== 'number' || !Number.isFinite(parsed.ts)) {
+    return false;
+  }
+  const now = Date.now();
+  attachment.lastPongAt = now;
+  ws.serializeAttachment(attachment);
+  touchClientActivity(runtime, attachment.clientId, now);
+  return true;
+}
+
+export function clearClientChallengeMarker(ws: WebSocket, attachment: SocketAttachment): void {
+  if (!attachment.challengeDeliveredAt) return;
+  delete attachment.challengeDeliveredAt;
+  ws.serializeAttachment(attachment);
 }
 
 export function forwardClientMessageToBridge(

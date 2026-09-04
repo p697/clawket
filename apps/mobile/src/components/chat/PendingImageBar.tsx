@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { FileText, Plus, X } from 'lucide-react-native';
 import { PendingImage } from '../../types/chat';
-import { FontSize, FontWeight } from '../../theme/tokens';
+import { BorderWidth, FontSize, FontWeight } from '../../theme/tokens';
 import { useAppTheme } from '../../theme';
 import { Radius, Space } from '../../theme/tokens';
 import { CircleButton } from '../ui';
@@ -94,12 +94,12 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     fileThumb: {
       alignItems: 'center',
       justifyContent: 'center',
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       paddingHorizontal: 2,
     },
     fileThumbName: {
-      fontSize: FontSize.xs - 2,
+      fontSize: FontSize.nano,
       color: colors.textMuted,
       fontWeight: FontWeight.medium,
       marginTop: 1,
@@ -112,7 +112,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     imagePreviewAdd: {
       borderRadius: Radius.sm,
-      borderWidth: 1.5,
+      borderWidth: BorderWidth.strong,
       borderColor: colors.imageAddBorder,
       borderStyle: 'dashed',
     },

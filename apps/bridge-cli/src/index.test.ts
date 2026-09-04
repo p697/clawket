@@ -27,6 +27,10 @@ const {
   spawnMock,
   buildHermesLocalPairingQrPayloadMock,
   buildLocalPairingInfoMock,
+  resolveLocalPairGatewayUrlMock,
+  isOpenClawGatewayAuthConfiguredMock,
+  issueOpenClawPairingSetupTokenMock,
+  readOpenClawInfoMock,
   buildHermesRelayWsUrlMock,
   getHermesProcessLogPathsMock,
   readRecentCliLogsMock,
@@ -47,6 +51,10 @@ const {
   spawnMock: vi.fn(() => ({ unref: vi.fn() })),
   buildHermesLocalPairingQrPayloadMock: vi.fn(() => '{"v":1,"kind":"hermes-local"}'),
   buildLocalPairingInfoMock: vi.fn(),
+  resolveLocalPairGatewayUrlMock: vi.fn(),
+  isOpenClawGatewayAuthConfiguredMock: vi.fn(),
+  issueOpenClawPairingSetupTokenMock: vi.fn(),
+  readOpenClawInfoMock: vi.fn(),
   buildHermesRelayWsUrlMock: vi.fn(() => 'wss://hermes-relay.example.com/ws?bridgeId=hbg_123&role=gateway'),
   getHermesProcessLogPathsMock: vi.fn(() => ({
     bridgeLogPath: '/tmp/hermes-bridge.log',
@@ -91,6 +99,7 @@ vi.mock('./local-pair.js', () => ({
   buildGatewayControlUiOrigin: vi.fn(),
   buildLocalPairingInfo: buildLocalPairingInfoMock,
   detectLanIp: vi.fn(() => '192.168.31.41'),
+  resolveLocalPairGatewayUrl: resolveLocalPairGatewayUrlMock,
 }));
 
 vi.mock('./metadata.js', () => ({
@@ -147,6 +156,7 @@ vi.mock('@clawket/bridge-core', () => ({
   uninstallService: uninstallServiceMock,
   unregisterRuntimeProcess: vi.fn(),
   writeServiceState: vi.fn(),
+  SECURE_PAIRING_V2_CAPABILITY: 'pairing.secure-short-code.v2',
 }));
 
 vi.mock('@clawket/bridge-runtime', () => ({
@@ -156,6 +166,9 @@ vi.mock('@clawket/bridge-runtime', () => ({
   buildHermesBridgeWsUrl: vi.fn((host: string, port: number, token: string) => `ws://${host}:${port}/v1/hermes/ws?token=${token}`),
   buildHermesRelayWsUrl: buildHermesRelayWsUrlMock,
   configureOpenClawLanAccess: vi.fn(),
+  isOpenClawGatewayAuthConfigured: isOpenClawGatewayAuthConfiguredMock,
+  issueOpenClawPairingSetupToken: issueOpenClawPairingSetupTokenMock,
+  readOpenClawInfo: readOpenClawInfoMock,
   resolveGatewayAuth: resolveGatewayAuthMock,
   resolveGatewayUrl: vi.fn(() => 'ws://127.0.0.1:18789'),
   restartOpenClawGateway: vi.fn(),
@@ -173,6 +186,27 @@ describe('cli pairing output', () => {
     vi.stubEnv('HOME', mkdtempSync(join(tmpdir(), 'clawket-cli-home-')));
     process.argv = ['node', 'clawket', 'refresh-code'];
     resolveGatewayAuthMock.mockReturnValue({ token: 'gateway-token', password: null });
+    resolveLocalPairGatewayUrlMock.mockImplementation(({ explicitUrl }: { explicitUrl?: string | null }) => (
+      explicitUrl ?? 'ws://192.168.31.41:18789'
+    ));
+    readOpenClawInfoMock.mockReturnValue({
+      configFound: true,
+      gatewayPort: 18789,
+      gatewayTlsEnabled: false,
+      gatewayTlsFingerprint: null,
+      authMode: 'token',
+      tokenConfigured: true,
+      passwordConfigured: false,
+      token: 'gateway-token',
+      password: null,
+    });
+    isOpenClawGatewayAuthConfiguredMock.mockReturnValue(true);
+    issueOpenClawPairingSetupTokenMock.mockResolvedValue({
+      token: 'official-bootstrap-token',
+      expiresAtMs: Date.now() + 60_000,
+      strategy: 'mobile-setup',
+      access: 'full',
+    });
     refreshAccessCodeMock.mockResolvedValue({
       config: {
         serverUrl: 'https://registry.example.com',
@@ -298,6 +332,36 @@ describe('cli pairing output', () => {
     expect(exitSpy).toHaveBeenCalledWith(1);
     expect(pairGatewayMock).not.toHaveBeenCalled();
     exitSpy.mockRestore();
+  });
+
+  it('pairs OpenClaw with the isolated Preview registry without requiring a server flag', async () => {
+    process.argv = ['node', 'clawket', 'pair', '--preview'];
+    pairGatewayMock.mockResolvedValue({
+      config: {
+        serverUrl: 'https://clawket-registry-preview.clawket.workers.dev',
+        gatewayId: 'gw_preview_123',
+        relaySecret: 'preview-secret',
+        relayUrl: 'wss://clawket-relay-preview.clawket.workers.dev/ws',
+        instanceId: 'inst-preview',
+        displayName: 'Lucy',
+        createdAt: '2026-09-04T00:00:00.000Z',
+        updatedAt: '2026-09-04T00:00:00.000Z',
+      },
+      accessCode: 'PV8W2K',
+      accessCodeExpiresAt: '2026-09-04T01:00:00.000Z',
+      qrPayload: '{"v":2,"k":"cp","g":"gw_preview_123","a":"PV8W2K"}',
+      action: 'registered',
+    });
+
+    await import('./index.js');
+
+    await vi.waitFor(() => {
+      expect(pairGatewayMock).toHaveBeenCalledWith(expect.objectContaining({
+        serverUrl: 'https://clawket-registry-preview.clawket.workers.dev',
+        environment: 'preview',
+      }));
+    });
+    expect(pairHermesRelayMock).not.toHaveBeenCalled();
   });
 
   it('replaces an existing Hermes local bridge process before starting a new one', async () => {
@@ -477,6 +541,41 @@ describe('cli pairing output', () => {
       );
     });
     expect(buildHermesLocalPairingQrPayloadMock).not.toHaveBeenCalled();
+  });
+
+  it('uses managed OpenClaw setup for SecretRef auth without exposing the strategy', async () => {
+    resolveGatewayAuthMock.mockReturnValue({ token: null, password: null, label: null });
+    const bootstrap = {
+      token: 'official-bootstrap-token',
+      expiresAtMs: 1_800_000_000_000,
+      strategy: 'mobile-setup',
+      access: 'full',
+    };
+    issueOpenClawPairingSetupTokenMock.mockResolvedValue(bootstrap);
+    buildLocalPairingInfoMock.mockReturnValue({
+      gatewayUrl: 'ws://192.168.1.9:18789',
+      qrPayload: '{"v":2,"kind":"openclaw-local"}',
+      expiresAt: bootstrap.expiresAtMs,
+      authMode: 'device',
+    });
+    process.argv = ['node', 'clawket', 'pair', 'local', '--url', 'ws://192.168.1.9:18789'];
+
+    await import('./index.js');
+
+    await vi.waitFor(() => {
+      expect(issueOpenClawPairingSetupTokenMock).toHaveBeenCalledWith({
+        gatewayUrl: 'ws://192.168.1.9:18789',
+      });
+      expect(buildLocalPairingInfoMock).toHaveBeenCalledWith({
+        explicitUrl: 'ws://192.168.1.9:18789',
+        gatewayToken: null,
+        gatewayPassword: null,
+        bootstrap,
+        expiresAt: bootstrap.expiresAtMs,
+      });
+    });
+    expect(consoleLogSpy).not.toHaveBeenCalledWith('Auth mode: device');
+    expect(consoleLogSpy.mock.calls.flat().join('\n')).not.toContain('mobile-setup');
   });
 
   it('supports Hermes local pairing through pair local --backend hermes', async () => {
@@ -945,7 +1044,7 @@ describe('cli pairing output', () => {
     );
     vi.stubEnv('HOME', homeDir);
     process.argv = ['node', 'clawket', 'run', '--service'];
-    readPairingConfigMock.mockReturnValue({
+    readPairingConfigMock.mockImplementation((environment?: string) => environment === 'preview' ? null : ({
       serverUrl: 'https://registry.example.com',
       gatewayId: 'gw_test_123',
       relaySecret: 'secret',
@@ -954,7 +1053,7 @@ describe('cli pairing output', () => {
       displayName: 'Lucy',
       createdAt: '2026-03-08T00:00:00.000Z',
       updatedAt: '2026-03-08T00:00:00.000Z',
-    } as never);
+    } as never));
     execFileSyncMock
       .mockReturnValueOnce('')
       .mockReturnValueOnce(`40160 ${process.argv[1]} hermes run --host 0.0.0.0 --port 4321\n`)

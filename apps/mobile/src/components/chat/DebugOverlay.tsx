@@ -82,7 +82,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       paddingVertical: Space.xs,
       borderRadius: Radius.sm,
       backgroundColor: colors.surface,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
     },
     copyButtonPressed: {
@@ -98,7 +98,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     debugText: {
       color: colors.debugText,
-      fontSize: FontSize.xs - 1,
+      fontSize: FontSize.micro,
       fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
       lineHeight: 14,
     },

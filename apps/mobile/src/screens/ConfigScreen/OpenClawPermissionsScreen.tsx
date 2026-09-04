@@ -419,8 +419,6 @@ export function OpenClawPermissionsScreen(): React.JSX.Element {
           <ThemedSwitch
             value={toolSettings.webSearchEnabled}
             onValueChange={toolSettings.setWebSearchEnabled}
-            trackColor={{ false: theme.colors.borderStrong, true: theme.colors.primarySoft }}
-            thumbColor={toolSettings.webSearchEnabled ? theme.colors.primary : theme.colors.surfaceMuted}
             disabled={toolSettings.loadingToolSettings || toolSettings.savingToolSettings}
           />
         </View>
@@ -439,8 +437,6 @@ export function OpenClawPermissionsScreen(): React.JSX.Element {
           <ThemedSwitch
             value={toolSettings.webFetchEnabled}
             onValueChange={toolSettings.setWebFetchEnabled}
-            trackColor={{ false: theme.colors.borderStrong, true: theme.colors.primarySoft }}
-            thumbColor={toolSettings.webFetchEnabled ? theme.colors.primary : theme.colors.surfaceMuted}
             disabled={toolSettings.loadingToolSettings || toolSettings.savingToolSettings}
           />
         </View>
@@ -557,7 +553,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     card: {
       borderRadius: Radius.md,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       backgroundColor: colors.surface,
       padding: Space.lg,
@@ -635,7 +631,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       paddingHorizontal: Space.md,
       paddingVertical: 8,
       borderRadius: Radius.lg,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       backgroundColor: colors.surfaceMuted,
     },

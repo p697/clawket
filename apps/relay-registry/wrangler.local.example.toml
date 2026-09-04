@@ -7,9 +7,16 @@ account_id = "replace-with-your-cloudflare-account-id"
 [vars]
 # Copy this file to wrangler.local.toml and replace these values with resources/endpoints
 # from the Cloudflare account you use for local deploys or remote dev.
+# Set PAIRING_TICKET_SECRET with `wrangler secret put` on both Registry and Relay;
+# never place that shared secret in this file.
 RELAY_REGION_MAP = "{\"cn\":\"wss://relay.example.com/ws\",\"sg\":\"wss://relay.example.com/ws\",\"us\":\"wss://relay.example.com/ws\",\"eu\":\"wss://relay.example.com/ws\"}"
 PAIR_ACCESS_CODE_TTL_SEC = "600"
 PAIR_CLIENT_TOKEN_MAX = "8"
+PAIR_PUBLIC_BASE_URL = "https://registry.example.com"
+PAIR_SESSION_RESOLVE_MAX_ATTEMPTS = "5"
+APPLE_APP_IDS = "TEAMID.com.example.clawket"
+ANDROID_APP_LINK_PACKAGE = "com.example.clawket"
+ANDROID_APP_LINK_SHA256_CERT_FINGERPRINTS = ""
 
 [[kv_namespaces]]
 binding = "ROUTES_KV"

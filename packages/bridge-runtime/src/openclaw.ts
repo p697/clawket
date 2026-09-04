@@ -11,8 +11,20 @@ export type OpenClawInfo = {
   gatewayTlsEnabled: boolean;
   gatewayTlsFingerprint: string | null;
   authMode: 'token' | 'password' | null;
+  tokenConfigured: boolean;
+  passwordConfigured: boolean;
   token: string | null;
   password: string | null;
+};
+
+export type OpenClawBootstrapStrategy = 'mobile-setup' | 'legacy-bound';
+
+export type OpenClawBootstrapTokenResult = {
+  token: string;
+  expiresAtMs: number;
+  strategy: OpenClawBootstrapStrategy;
+  access?: 'full' | 'limited' | 'node';
+  statePath?: string;
 };
 
 export type DeviceBootstrapTokenRecord = {
@@ -81,6 +93,8 @@ export function readOpenClawInfo(): OpenClawInfo {
       gatewayTlsEnabled: false,
       gatewayTlsFingerprint: null,
       authMode: null,
+      tokenConfigured: Boolean(readGatewayTokenEnv()),
+      passwordConfigured: Boolean(readGatewayPasswordEnv()),
       token: readGatewayTokenEnv(),
       password: readGatewayPasswordEnv(),
     };
@@ -110,14 +124,18 @@ export function readOpenClawInfo(): OpenClawInfo {
     const authMode = parsed.gateway?.auth?.mode === 'token' || parsed.gateway?.auth?.mode === 'password'
       ? parsed.gateway.auth.mode
       : null;
-    const token = readConfiguredSecret(parsed.gateway?.auth?.token) ?? readGatewayTokenEnv();
-    const password = readConfiguredSecret(parsed.gateway?.auth?.password) ?? readGatewayPasswordEnv();
+    const envToken = readGatewayTokenEnv();
+    const envPassword = readGatewayPasswordEnv();
+    const token = readConfiguredSecret(parsed.gateway?.auth?.token) ?? envToken;
+    const password = readConfiguredSecret(parsed.gateway?.auth?.password) ?? envPassword;
     return {
       configFound: true,
       gatewayPort: envGatewayPort ?? configuredGatewayPort,
       gatewayTlsEnabled,
       gatewayTlsFingerprint,
       authMode,
+      tokenConfigured: isConfiguredSecretInput(parsed.gateway?.auth?.token) || Boolean(envToken),
+      passwordConfigured: isConfiguredSecretInput(parsed.gateway?.auth?.password) || Boolean(envPassword),
       token,
       password,
     };
@@ -128,6 +146,8 @@ export function readOpenClawInfo(): OpenClawInfo {
       gatewayTlsEnabled: false,
       gatewayTlsFingerprint: null,
       authMode: null,
+      tokenConfigured: Boolean(readGatewayTokenEnv()),
+      passwordConfigured: Boolean(readGatewayPasswordEnv()),
       token: readGatewayTokenEnv(),
       password: readGatewayPasswordEnv(),
     };
@@ -181,13 +201,13 @@ export function resolveGatewayPassword(): string | null {
 export function resolveGatewayAuth():
   | { token: string; password: null; label: 'token' }
   | { token: null; password: string; label: 'password' }
-  | { token: string; password: string; label: 'token' | 'password'; error: string }
+  | { token: string | null; password: string | null; label: 'token' | 'password'; error: string }
   | { token: null; password: null; label: null }
 {
   const info = readOpenClawInfo();
   const token = info.token;
   const password = info.password;
-  if (token && password && info.authMode == null) {
+  if (info.tokenConfigured && info.passwordConfigured && info.authMode == null) {
     return {
       token,
       password,
@@ -212,6 +232,12 @@ export function resolveGatewayAuth():
     return { token: null, password, label: 'password' };
   }
   return { token: null, password: null, label: null };
+}
+
+export function isOpenClawGatewayAuthConfigured(info = readOpenClawInfo()): boolean {
+  if (info.authMode === 'token') return info.tokenConfigured;
+  if (info.authMode === 'password') return info.passwordConfigured;
+  return info.tokenConfigured || info.passwordConfigured;
 }
 
 export function getOpenClawConfigDir(): string {
@@ -781,8 +807,39 @@ export async function issueOpenClawBootstrapToken(params: {
   publicKey: string;
   role: string;
   scopes: readonly string[];
+  gatewayUrl?: string;
   stateDir?: string;
-}): Promise<{ token: string; expiresAtMs: number; statePath: string }> {
+}): Promise<OpenClawBootstrapTokenResult> {
+  const deviceId = params.deviceId.trim();
+  const publicKey = params.publicKey.trim();
+  const role = params.role.trim();
+  const scopes = normalizeStringArray(params.scopes);
+  if (!deviceId || !publicKey || !role || scopes.length === 0) {
+    throw new Error('deviceId, publicKey, role, and scopes are required');
+  }
+
+  try {
+    return await issueOpenClawPairingSetupToken({
+      gatewayUrl: params.gatewayUrl,
+      stateDir: params.stateDir,
+    });
+  } catch (error) {
+    if (!isUnsupportedOpenClawPairingSetupCliError(error)) {
+      throw error;
+    }
+  }
+
+  return issueLegacyOpenClawBootstrapToken(params);
+}
+
+export async function issueLegacyOpenClawBootstrapToken(params: {
+  deviceId: string;
+  publicKey: string;
+  role: string;
+  scopes: readonly string[];
+  gatewayUrl?: string;
+  stateDir?: string;
+}): Promise<OpenClawBootstrapTokenResult> {
   const deviceId = params.deviceId.trim();
   const publicKey = params.publicKey.trim();
   const role = params.role.trim();
@@ -810,13 +867,87 @@ export async function issueOpenClawBootstrapToken(params: {
     return {
       token,
       expiresAtMs: issuedAtMs + DEVICE_BOOTSTRAP_TOKEN_TTL_MS,
+      strategy: 'legacy-bound',
       statePath,
     };
   });
 }
 
+export async function issueOpenClawPairingSetupToken(params: {
+  gatewayUrl?: string;
+  stateDir?: string;
+} = {}): Promise<OpenClawBootstrapTokenResult> {
+  const openclaw = resolveOpenClawPaths();
+  const gatewayUrl = params.gatewayUrl?.trim() || resolveGatewayUrl();
+  const cliPaths = params.stateDir?.trim()
+    ? { ...openclaw, stateDir: params.stateDir.trim() }
+    : openclaw;
+  const { stdout } = await runOpenClawCli(['qr', '--json', '--url', gatewayUrl], cliPaths);
+  const parsed = parseEmbeddedJsonValue(stdout) as {
+    setupCode?: unknown;
+    access?: unknown;
+  };
+  const setupCode = typeof parsed.setupCode === 'string' ? parsed.setupCode.trim() : '';
+  if (!setupCode) {
+    throw new Error('OpenClaw qr --json did not return a setup code.');
+  }
+  const payload = decodeOpenClawPairingSetupCode(setupCode);
+  const access = parsed.access === 'full' || parsed.access === 'limited' || parsed.access === 'node'
+    ? parsed.access
+    : undefined;
+  return {
+    token: payload.bootstrapToken,
+    expiresAtMs: payload.expiresAtMs,
+    strategy: 'mobile-setup',
+    ...(access ? { access } : {}),
+  };
+}
+
+function decodeOpenClawPairingSetupCode(setupCode: string): {
+  bootstrapToken: string;
+  expiresAtMs: number;
+} {
+  const encoded = setupCode.toLowerCase().startsWith('oc-pair://')
+    ? setupCode.slice('oc-pair://'.length)
+    : setupCode;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8'));
+  } catch (error) {
+    throw new Error('OpenClaw qr --json returned an invalid setup code.', { cause: error });
+  }
+  const record = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+    ? parsed as Record<string, unknown>
+    : null;
+  const bootstrapToken = typeof record?.bootstrapToken === 'string'
+    ? record.bootstrapToken.trim()
+    : '';
+  const rawExpiresAtMs = record?.expiresAtMs;
+  const expiresAtMs = typeof rawExpiresAtMs === 'number' && Number.isSafeInteger(rawExpiresAtMs)
+    ? rawExpiresAtMs
+    : Date.now() + DEVICE_BOOTSTRAP_TOKEN_TTL_MS;
+  if (!bootstrapToken || expiresAtMs <= Date.now()) {
+    throw new Error('OpenClaw qr --json returned an invalid or expired bootstrap credential.');
+  }
+  return { bootstrapToken, expiresAtMs };
+}
+
+function isUnsupportedOpenClawPairingSetupCliError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return message.includes('unknown command')
+    || message.includes('unrecognized command')
+    || message.includes('unknown option')
+    || message.includes('invalid command')
+    || message.includes('command not found');
+}
+
 function readConfiguredSecret(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function isConfiguredSecretInput(value: unknown): boolean {
+  if (typeof value === 'string') return value.trim().length > 0;
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
 
 function readRecord(value: unknown): Record<string, unknown> | null {

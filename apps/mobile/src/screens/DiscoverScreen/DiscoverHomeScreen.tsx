@@ -13,7 +13,6 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
 import { Card, EmptyState, LoadingState, SearchInput, createCardContentStyle } from '../../components/ui';
 import { useNativeStackModalHeader } from '../../hooks/useNativeStackModalHeader';
-import { useTabBarHeight } from '../../hooks/useTabBarHeight';
 import { searchDiscoverSkills } from '../../features/discover';
 import { fetchClawHubLatest, fetchClawHubTrending } from '../../features/discover/clawhub';
 import { fetchSkillsShHot } from '../../features/discover/skillsSh';
@@ -33,7 +32,6 @@ const SECTION_LIMIT = 4;
 export function DiscoverHomeScreen(): React.JSX.Element {
   const navigation = useNavigation<DiscoverNavigation>();
   const { theme } = useAppTheme();
-  const tabBarHeight = useTabBarHeight();
   const { t } = useTranslation('common');
   const parentNavigation = navigation.getParent();
 
@@ -181,8 +179,7 @@ export function DiscoverHomeScreen(): React.JSX.Element {
   return (
     <View style={[styles.root, { backgroundColor: theme.colors.background, paddingTop: 0 }]}>
       <ScrollView
-        contentContainerStyle={createCardContentStyle({ top: Space.md, bottom: tabBarHeight + Space.xl })}
-        scrollIndicatorInsets={{ bottom: tabBarHeight }}
+        contentContainerStyle={createCardContentStyle({ top: Space.md, bottom: Space.xl })}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -546,7 +543,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       gap: Space.md,
     },
     browseCard: {
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       backgroundColor: colors.surface,
       borderRadius: Radius.lg,
@@ -571,7 +568,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     errorCard: {
       marginBottom: Space.md,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
     },
     errorTitle: {

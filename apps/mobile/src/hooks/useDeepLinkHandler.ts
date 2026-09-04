@@ -8,10 +8,11 @@ import { GatewayClient } from '../services/gateway';
 import { StorageService } from '../services/storage';
 import { GatewayConfig } from '../types';
 import type { ConsoleStackParamList } from '../screens/ConsoleScreen/sharedNavigator';
+import { useGatewayScanner } from '../contexts/GatewayScannerContext';
 
 type RootTabParamList = {
   Chat: undefined;
-  Office: undefined;
+  Live: undefined;
   Console: undefined;
   Profile: undefined;
   My: undefined;
@@ -22,7 +23,7 @@ type RootStackParamList = {
   OpenClawPermissions: undefined;
 } & ConsoleStackParamList;
 
-type DeepLinkDeps = {
+export type DeepLinkDeps = {
   rootNavigationRef: NavigationContainerRefWithCurrent<RootStackParamList>;
   gateway: GatewayClient;
   mainSessionKey: string;
@@ -47,6 +48,8 @@ function describeAction(action: DeepLinkAction): { title: string; message: strin
         title: 'Connect to Server',
         message: `Connect to ${action.url}? This will change your active gateway connection.`,
       };
+    case 'pair':
+      return { title: 'Connect to Computer', message: 'Open this secure pairing invitation?' };
   }
 }
 
@@ -80,22 +83,26 @@ function executeAction(action: DeepLinkAction, deps: DeepLinkDeps) {
       onSaved(config, resolveGatewayCacheScopeId({ config }));
       break;
     }
+    case 'pair':
+      break;
   }
 }
 
 export function useDeepLinkHandler(deps: DeepLinkDeps) {
   const processedRef = useRef<string | null>(null);
+  const { connectPairingLink } = useGatewayScanner();
 
   const handleUrl = (url: string) => {
-    // Skip non-clawket URLs
-    if (!url.startsWith('clawket://')) return;
-
     // Deduplicate (same URL delivered via initial + event)
     if (processedRef.current === url) return;
     processedRef.current = url;
 
     const action = parseDeepLink(url);
     if (!action) return;
+    if (action.type === 'pair') {
+      void connectPairingLink(action.url);
+      return;
+    }
 
     const { title, message } = describeAction(action);
     Alert.alert(title, message, [
@@ -117,5 +124,5 @@ export function useDeepLinkHandler(deps: DeepLinkDeps) {
 
     return () => sub.remove();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deps.gateway, deps.mainSessionKey, deps.onSaved, deps.requestChatSidebar, deps.rootNavigationRef]);
+  }, [connectPairingLink, deps.gateway, deps.mainSessionKey, deps.onSaved, deps.requestChatSidebar, deps.rootNavigationRef]);
 }

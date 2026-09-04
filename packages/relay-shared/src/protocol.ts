@@ -59,6 +59,69 @@ export interface PairClaimResponse {
   region: string;
 }
 
+export interface PairingSessionCiphertext {
+  nonce: string;
+  ciphertext: string;
+}
+
+export interface PairingSessionCreateRequest {
+  gatewayId: string;
+  relaySecret: string;
+  codeHash: string;
+  shortCodeHash?: string;
+  linkPayload: PairingSessionCiphertext;
+  codePayload: PairingSessionCiphertext;
+}
+
+export interface PairingSessionCreateResponse {
+  sessionId: string;
+  pairingUrl: string;
+  expiresAt: string;
+  displayName: string | null;
+  capabilities?: string[];
+}
+
+export interface PairingSessionReadResponse {
+  sessionId: string;
+  expiresAt: string;
+  displayName: string | null;
+  encryptedPayload: PairingSessionCiphertext;
+}
+
+export interface PairingSessionResolveRequest {
+  codeHash: string;
+}
+
+export interface SecurePairingResolveRequest {
+  codeHash: string;
+}
+
+export interface SecurePairingResolveResponse {
+  protocol: 2;
+  sessionId: string;
+  gatewayId: string;
+  relayUrl: string;
+  relayTicket: string;
+  expiresAt: string;
+  displayName: string | null;
+}
+
+export interface PairingRelayTicketClaims {
+  version: 2;
+  scope: 'pairing';
+  gatewayId: string;
+  sessionId: string;
+  tokenId: string;
+  expiresAt: number;
+}
+
+export const SECURE_PAIRING_V2_CAPABILITY = 'pairing.secure-short-code.v2';
+export const PAIRING_TICKET_SECRET_MIN_LENGTH = 32;
+
+export function isSecurePairingSecretConfigured(secret: string | undefined): boolean {
+  return (secret?.trim().length ?? 0) >= PAIRING_TICKET_SECRET_MIN_LENGTH;
+}
+
 export interface RegistryErrorShape {
   error: {
     code: string;
@@ -144,6 +207,59 @@ export async function sha256Hex(input: string): Promise<string> {
     .join('');
 }
 
+export async function hmacSha256Hex(secret: string, input: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(input));
+  return bytesToHex(new Uint8Array(signature));
+}
+
+export async function issuePairingRelayTicket(
+  claims: PairingRelayTicketClaims,
+  secret: string,
+): Promise<string> {
+  const payload = encodeBase64Url(new TextEncoder().encode(JSON.stringify(claims)));
+  const signature = await hmacSha256Hex(secret, `clawket-pairing-ticket-v2.${payload}`);
+  return `cpt2.${payload}.${signature}`;
+}
+
+export async function verifyPairingRelayTicket(input: {
+  token: string;
+  secret: string;
+  gatewayId: string;
+  nowMs?: number;
+}): Promise<PairingRelayTicketClaims | null> {
+  const parts = input.token.split('.');
+  if (parts.length !== 3 || parts[0] !== 'cpt2') return null;
+  const payload = parts[1] ?? '';
+  const signature = parts[2] ?? '';
+  if (!payload || !/^[a-f0-9]{64}$/.test(signature)) return null;
+  const expected = await hmacSha256Hex(input.secret, `clawket-pairing-ticket-v2.${payload}`);
+  if (!safeEqual(signature, expected)) return null;
+  try {
+    const parsed = JSON.parse(new TextDecoder().decode(decodeBase64Url(payload))) as Partial<PairingRelayTicketClaims>;
+    if (parsed.version !== 2
+      || parsed.scope !== 'pairing'
+      || parsed.gatewayId !== input.gatewayId
+      || typeof parsed.sessionId !== 'string'
+      || !/^ps_[a-f0-9]{64}$/.test(parsed.sessionId)
+      || typeof parsed.tokenId !== 'string'
+      || !/^[a-f0-9-]{16,64}$/.test(parsed.tokenId)
+      || typeof parsed.expiresAt !== 'number'
+      || parsed.expiresAt <= (input.nowMs ?? Date.now())) {
+      return null;
+    }
+    return parsed as PairingRelayTicketClaims;
+  } catch {
+    return null;
+  }
+}
+
 export function parsePositiveInt(raw: string | undefined, fallback: number): number {
   if (!raw) return fallback;
   const value = parseInt(raw, 10);
@@ -158,4 +274,21 @@ function safeEqual(left: string, right: string): boolean {
     diff |= (left.charCodeAt(index) || 0) ^ (right.charCodeAt(index) || 0);
   }
   return diff === 0;
+}
+
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes).map((value) => value.toString(16).padStart(2, '0')).join('');
+}
+
+function encodeBase64Url(bytes: Uint8Array): string {
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function decodeBase64Url(value: string): Uint8Array {
+  if (!/^[A-Za-z0-9_-]+$/.test(value)) throw new Error('Invalid base64url');
+  const padded = value.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (value.length % 4)) % 4);
+  const binary = atob(padded);
+  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
 }

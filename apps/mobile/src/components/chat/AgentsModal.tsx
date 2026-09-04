@@ -104,7 +104,7 @@ function TypingDots({ color }: { color: string }) {
   const dotStyle = (anim: Animated.Value) => ({
     width: 4,
     height: 4,
-    borderRadius: 2,
+    borderRadius: Radius.micro,
     backgroundColor: color,
     marginHorizontal: 1.5,
     opacity: anim.interpolate({ inputRange: [0, 1], outputRange: [0.3, 1] }),
@@ -460,7 +460,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       backgroundColor: colors.surfaceMuted,
       borderRadius: Radius.lg,
       overflow: 'hidden',
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
     },
     gatewayRow: {
@@ -568,7 +568,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       justifyContent: 'center',
       paddingVertical: Space.md,
       borderRadius: Radius.lg,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       backgroundColor: colors.surface,
     },

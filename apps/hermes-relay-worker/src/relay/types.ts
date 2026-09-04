@@ -8,7 +8,7 @@ export interface Env {
   HEARTBEAT_INTERVAL_MS: string;
   GATEWAY_OWNER_LEASE_MS?: string;
   AWAITING_CHALLENGE_TTL_MS?: string;
-  CLIENT_IDLE_TIMEOUT_MS?: string;
+  CLIENT_PONG_TIMEOUT_MS?: string;
   GATEWAY_PING_TIMEOUT_MS?: string;
 }
 
@@ -18,6 +18,9 @@ export type SocketAttachment = {
   connectedAt: number;
   traceId?: string;
   clientLabel?: string | null;
+  capabilities?: string[];
+  lastPongAt?: number;
+  challengeDeliveredAt?: number;
 };
 
 export type PendingConnectStart = {
@@ -85,7 +88,8 @@ export const BRIDGE_OWNER_TOUCH_INTERVAL_MS = 5_000;
 export const CONNECT_START_BUFFER_TTL_MS = 12_000;
 export const PENDING_CHALLENGE_TTL_MS = 5_000;
 export const AWAITING_CHALLENGE_TTL_DEFAULT_MS = 25_000;
-export const CLIENT_IDLE_TIMEOUT_DEFAULT_MS = 10 * 60_000;
+export const CLIENT_PONG_CAPABILITY = 'relay.client-pong.v1';
+export const CLIENT_PONG_TIMEOUT_DEFAULT_MS = 30_000;
 export const GATEWAY_PING_TIMEOUT_DEFAULT_MS = 45_000;
 
 export const SOCKET_CLOSE_CODES = {

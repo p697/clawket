@@ -117,7 +117,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     control: {
       minHeight: 56,
       borderRadius: Radius.lg,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       backgroundColor: colors.surface,
       paddingHorizontal: Space.md,

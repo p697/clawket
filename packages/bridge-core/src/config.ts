@@ -5,6 +5,7 @@ import { join } from 'node:path';
 
 const CONFIG_DIR = join(homedir(), '.clawket');
 const CONFIG_PATH = join(CONFIG_DIR, 'bridge-cli.json');
+const PREVIEW_CONFIG_PATH = join(CONFIG_DIR, 'bridge-cli.preview.json');
 const CONFIG_DIR_MODE = 0o700;
 const CONFIG_FILE_MODE = 0o600;
 
@@ -19,19 +20,22 @@ export interface PairingConfig {
   updatedAt: string;
 }
 
-export function getPairingConfigPath(): string {
-  return CONFIG_PATH;
+export type PairingEnvironment = 'production' | 'preview';
+
+export function getPairingConfigPath(environment: PairingEnvironment = 'production'): string {
+  return environment === 'preview' ? PREVIEW_CONFIG_PATH : CONFIG_PATH;
 }
 
 export function getPairingConfigDir(): string {
   return CONFIG_DIR;
 }
 
-export function readPairingConfig(): PairingConfig | null {
-  if (!existsSync(CONFIG_PATH)) return null;
-  hardenPairingConfigPermissions();
+export function readPairingConfig(environment: PairingEnvironment = 'production'): PairingConfig | null {
+  const configPath = getPairingConfigPath(environment);
+  if (!existsSync(configPath)) return null;
+  hardenPairingConfigPermissions(configPath);
   try {
-    const parsed = JSON.parse(readFileSync(CONFIG_PATH, 'utf8')) as Partial<PairingConfig>;
+    const parsed = JSON.parse(readFileSync(configPath, 'utf8')) as Partial<PairingConfig>;
     if (!parsed.serverUrl || !parsed.gatewayId || !parsed.relaySecret || !parsed.relayUrl) {
       return null;
     }
@@ -46,7 +50,7 @@ export function readPairingConfig(): PairingConfig | null {
       updatedAt: parsed.updatedAt ?? new Date().toISOString(),
     };
     if (parsed.instanceId !== normalized.instanceId) {
-      writePairingConfig(normalized);
+      writePairingConfig(normalized, environment);
     }
     return normalized;
   } catch {
@@ -54,18 +58,23 @@ export function readPairingConfig(): PairingConfig | null {
   }
 }
 
-export function writePairingConfig(config: PairingConfig): void {
+export function writePairingConfig(
+  config: PairingConfig,
+  environment: PairingEnvironment = 'production',
+): void {
+  const configPath = getPairingConfigPath(environment);
   ensurePairingConfigDir();
-  writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2) + '\n', {
+  writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n', {
     encoding: 'utf8',
     mode: CONFIG_FILE_MODE,
   });
-  safeChmodSync(CONFIG_PATH, CONFIG_FILE_MODE);
+  safeChmodSync(configPath, CONFIG_FILE_MODE);
 }
 
-export function deletePairingConfig(): void {
-  if (!existsSync(CONFIG_PATH)) return;
-  rmSync(CONFIG_PATH, { force: true });
+export function deletePairingConfig(environment: PairingEnvironment = 'production'): void {
+  const configPath = getPairingConfigPath(environment);
+  if (!existsSync(configPath)) return;
+  rmSync(configPath, { force: true });
 }
 
 export function getDefaultBridgeDisplayName(): string {
@@ -121,11 +130,11 @@ function ensurePairingConfigDir(): void {
   safeChmodSync(CONFIG_DIR, CONFIG_DIR_MODE);
 }
 
-function hardenPairingConfigPermissions(): void {
+function hardenPairingConfigPermissions(configPath: string): void {
   if (existsSync(CONFIG_DIR)) {
     safeChmodSync(CONFIG_DIR, CONFIG_DIR_MODE);
   }
-  safeChmodSync(CONFIG_PATH, CONFIG_FILE_MODE);
+  safeChmodSync(configPath, CONFIG_FILE_MODE);
 }
 
 function safeChmodSync(path: string, mode: number): void {

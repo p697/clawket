@@ -1,5 +1,5 @@
 import { errorResponse, jsonResponse, parseHermesRelayAuthQuery, resolveRelayAuthToken } from '@clawket/shared';
-import { isRelayTokenAuthorized, resolveClientLabelFromToken, sha256Hex } from './relay/auth';
+import { authorizeRelayToken, isRelayTokenAuthorized, sha256Hex } from './relay/auth';
 import {
   isAwaitingChallengeExpired,
   isClientIdleExpired,
@@ -22,7 +22,9 @@ import {
 import { RelayRuntime, touchClientActivity, touchBridgeActivity } from './relay/runtime';
 import {
   allowMessage,
+  acknowledgeClientPong,
   bufferClientConnectStart,
+  clearClientChallengeMarker,
   flushPendingChallenge,
   forwardClientControlToBridge,
   forwardClientMessageToBridge,
@@ -48,6 +50,7 @@ import { logRelayTelemetry } from './relay/telemetry';
 import { parsePositiveInt } from './relay/utils';
 import {
   CONTROL_PREFIX,
+  CLIENT_PONG_CAPABILITY,
   SOCKET_CLOSE_CODES,
   type Env,
   type SocketAttachment,
@@ -187,7 +190,7 @@ export class HermesRelayRoom {
       });
       return errorResponse('UNAUTHORIZED', 'Missing token for relay connection', 401);
     }
-    const authorized = await isRelayTokenAuthorized({
+    const authorization = await authorizeRelayToken({
       routesKv: this.runtime.env.HERMES_ROUTES_KV,
       registryVerifyUrl: this.runtime.env.REGISTRY_VERIFY_URL,
       bridgeId: query.bridgeId,
@@ -195,7 +198,7 @@ export class HermesRelayRoom {
       token,
       mirroredClientTokenHashes: this.runtime.mirroredClientTokenHashes,
     });
-    if (!authorized) {
+    if (!authorization.authorized) {
       logRelayTelemetry('hermes_relay_worker', 'ws_auth_rejected', {
         role: query.role,
         authSource,
@@ -224,15 +227,16 @@ export class HermesRelayRoom {
     }
 
     const clientId = query.role === 'gateway' ? bridgeId : (query.clientId || crypto.randomUUID());
-    const clientLabel = query.role === 'client'
-      ? await resolveClientLabelFromToken(this.runtime.env.HERMES_ROUTES_KV, query.bridgeId, token)
-      : null;
+    const clientLabel = query.role === 'client' ? authorization.clientLabel : null;
     const attachment: SocketAttachment = {
       role: query.role,
       clientId,
       connectedAt: Date.now(),
       traceId,
       clientLabel,
+      ...(query.role === 'client' && parseCapabilities(url).includes(CLIENT_PONG_CAPABILITY)
+        ? { capabilities: [CLIENT_PONG_CAPABILITY], lastPongAt: Date.now() }
+        : {}),
     };
 
     this.runtime.state.acceptWebSocket(server);
@@ -259,6 +263,7 @@ export class HermesRelayRoom {
     logRelayTelemetry('hermes_relay_worker', 'ws_connected', {
       role: query.role,
       authSource,
+      authPath: authorization.path,
       clientCount: this.runtime.clients.size,
       hasBridge: Boolean(this.runtime.bridgeSocket?.readyState === WebSocket.OPEN),
       traceHint: toTraceHint(traceId),
@@ -280,6 +285,7 @@ export class HermesRelayRoom {
     if (text == null) return;
     if (attachment.role === 'client') {
       touchClientActivity(this.runtime, attachment.clientId);
+      if (acknowledgeClientPong(this.runtime, ws, attachment, text)) return;
     }
     if (!allowMessage(this.runtime, ws, attachment, text)) {
       ws.close(SOCKET_CLOSE_CODES.RATE_LIMITED, 'rate_limited');
@@ -300,6 +306,7 @@ export class HermesRelayRoom {
 
     const isConnectStart = prepareClientMessage(this.runtime, attachment, text);
     if (isConnectStart == null) return;
+    if (isConnectStart) clearClientChallengeMarker(ws, attachment);
 
     if (this.runtime.bridgeSocket?.readyState === WebSocket.OPEN) {
       forwardClientMessageToBridge(this.runtime, attachment, text, isConnectStart);
@@ -316,8 +323,13 @@ export class HermesRelayRoom {
     }
   }
 
-  async webSocketClose(ws: WebSocket): Promise<void> {
+  async webSocketClose(ws: WebSocket, code: number, reason: string): Promise<void> {
     await this.removeSocket(ws, 'close');
+    try {
+      ws.close(code, reason);
+    } catch {
+      // The peer may already have completed the close handshake.
+    }
   }
 
   async webSocketError(ws: WebSocket): Promise<void> {
@@ -331,7 +343,6 @@ export class HermesRelayRoom {
     prunePendingConnectStarts(this.runtime, now);
     reconcileGatewayLiveness(this.runtime, now);
     const flushedChallenge = flushPendingChallenge(this.runtime, now);
-    const payload = JSON.stringify({ type: 'tick', ts: now });
     const deadClients: Array<{ clientId: string; socket: WebSocket }> = [];
 
     for (const [clientId, client] of this.runtime.clients.entries()) {
@@ -340,7 +351,14 @@ export class HermesRelayRoom {
         continue;
       }
       try {
-        client.send(payload);
+        const attachment = client.deserializeAttachment() as SocketAttachment | null;
+        client.send(JSON.stringify({
+          type: 'tick',
+          ts: now,
+          ...(attachment?.capabilities?.includes(CLIENT_PONG_CAPABILITY)
+            ? { ack: CLIENT_PONG_CAPABILITY }
+            : {}),
+        }));
       } catch {
         deadClients.push({ clientId, socket: client });
       }
@@ -421,6 +439,14 @@ export class HermesRelayRoom {
 
     await ensureHeartbeat(this.runtime);
   }
+}
+
+function parseCapabilities(url: URL): string[] {
+  return (url.searchParams.get('capabilities') ?? '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .slice(0, 16);
 }
 
 async function readJson<T>(request: Request): Promise<T | null> {

@@ -4,7 +4,6 @@ import {
   RefreshControl,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TouchableOpacity,
   View,
@@ -19,6 +18,7 @@ import {
   HeaderActionButton,
   LoadingState,
   ScreenHeader,
+  ThemedSwitch,
   createCardContentStyle,
 } from '../../components/ui';
 import { useAppTheme } from '../../theme';
@@ -318,12 +318,10 @@ export function CronDetailScreen(): React.JSX.Element {
             <Text style={styles.infoLabel}>{t('Status')}</Text>
             <View style={styles.statusToggleWrap}>
               <Text style={styles.infoValue}>{job.enabled ? t('Enabled') : t('Disabled')}</Text>
-              <Switch
+              <ThemedSwitch
                 value={job.enabled}
                 onValueChange={handleToggleEnabled}
                 disabled={togglingEnabled || deleting}
-                trackColor={{ false: theme.colors.borderStrong, true: theme.colors.primary }}
-                thumbColor={theme.colors.iconOnColor}
               />
             </View>
           </View>
@@ -521,7 +519,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     sectionCard: {
       backgroundColor: colors.surface,
       borderRadius: Radius.md,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       padding: Space.md,
     },
@@ -538,7 +536,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     badge: {
       borderRadius: Radius.sm + 2,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.borderStrong,
       backgroundColor: colors.surfaceMuted,
       paddingHorizontal: Space.sm,
@@ -578,7 +576,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     runCard: {
       marginTop: Space.md - 2,
       borderRadius: Radius.sm + 2,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       backgroundColor: colors.surfaceMuted,
       padding: Space.md - 2,
@@ -598,7 +596,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     runStatusBadge: {
       borderRadius: Radius.full,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       paddingHorizontal: Space.sm,
       paddingVertical: 3,
       backgroundColor: colors.surface,
@@ -641,7 +639,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       paddingHorizontal: Space.sm,
       paddingVertical: 3,
       borderRadius: Radius.sm,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.primary,
       backgroundColor: colors.surface,
     },
@@ -653,7 +651,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     loadMoreButton: {
       marginTop: Space.md,
       borderRadius: Radius.sm + 2,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.borderStrong,
       backgroundColor: colors.surfaceMuted,
       paddingVertical: 9,
@@ -678,7 +676,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     errorTitle: {
       color: colors.error,
-      fontSize: FontSize.md + 1,
+      fontSize: FontSize.bodySm,
       fontWeight: FontWeight.bold,
       textAlign: 'center',
     },

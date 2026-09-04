@@ -45,7 +45,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: colors.surfaceElevated,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       borderRadius: Radius.sm,
       paddingLeft: Space.md,

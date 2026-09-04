@@ -56,6 +56,12 @@ export interface GatewayQrPayloadV2 {
   port: number;
   token?: string;
   password?: string;
+  bootstrap?: {
+    token: string;
+    strategy: 'mobile-setup' | 'legacy-bound';
+    expiresAtMs?: number;
+    access?: 'full' | 'limited' | 'node';
+  };
   tls: boolean;
   mode: 'gateway';
   expiresAt: number;
@@ -96,6 +102,7 @@ export function buildGatewayQrPayload(input: {
   gatewayUrl: string;
   token?: string | null;
   password?: string | null;
+  bootstrap?: GatewayQrPayloadV2['bootstrap'];
   expiresAt?: number;
 }): string {
   const parsed = normalizeGatewayQrUrl(input.gatewayUrl);
@@ -113,6 +120,14 @@ export function buildGatewayQrPayload(input: {
   }
   if (input.password?.trim()) {
     payload.password = input.password.trim();
+  }
+  if (input.bootstrap?.token.trim()) {
+    payload.bootstrap = {
+      token: input.bootstrap.token.trim(),
+      strategy: input.bootstrap.strategy,
+      ...(input.bootstrap.expiresAtMs !== undefined ? { expiresAtMs: input.bootstrap.expiresAtMs } : {}),
+      ...(input.bootstrap.access ? { access: input.bootstrap.access } : {}),
+    };
   }
   return JSON.stringify(payload);
 }

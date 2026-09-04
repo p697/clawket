@@ -7,14 +7,13 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
-import { ChevronDown, RefreshCw, Search } from 'lucide-react-native';
+import { ChevronDown, RefreshCw } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { CircleButton, EmptyState, HeaderActionButton, IconButton, LoadingState } from '../../components/ui';
+import { CircleButton, EmptyState, HeaderActionButton, IconButton, LoadingState, SearchInput } from '../../components/ui';
 import { ProBlurOverlay } from '../../components/pro/ProBlurOverlay';
 import { useTranslation } from 'react-i18next';
 import { useAppContext } from '../../contexts/AppContext';
@@ -22,7 +21,7 @@ import { useProPaywall } from '../../contexts/ProPaywallContext';
 import { useNativeStackModalHeader } from '../../hooks/useNativeStackModalHeader';
 import { GatewayClient } from '../../services/gateway';
 import { useAppTheme } from '../../theme';
-import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
+import { FontSize, FontWeight, LineHeight, Radius, Space } from '../../theme/tokens';
 import { LOG_LEVELS, LogEntry, LOG_LEVEL_BADGE_COLORS, LogLevel } from '../../types/logs';
 import { parseLogLine } from '../../utils/log-parser';
 import type { ConsoleStackParamList } from './ConsoleTab';
@@ -278,18 +277,11 @@ export function LogScreen(): React.JSX.Element {
       ) : null}
 
       <View style={styles.filtersWrap}>
-        <View style={styles.searchWrap}>
-          <Search size={16} color={theme.colors.textSubtle} strokeWidth={2} />
-          <TextInput
-            style={styles.searchInput}
-            value={filterText}
-            onChangeText={setFilterText}
-            placeholder={t('Search logs...')}
-            placeholderTextColor={theme.colors.textSubtle}
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-        </View>
+        <SearchInput
+          value={filterText}
+          onChangeText={setFilterText}
+          placeholder={t('Search logs...')}
+        />
 
         <ScrollView
           horizontal
@@ -419,7 +411,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     errorBanner: {
       marginHorizontal: Space.lg,
       marginTop: Space.sm,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.error,
       borderRadius: Radius.sm,
       backgroundColor: colors.surface,
@@ -441,22 +433,6 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       paddingTop: Space.sm,
       gap: Space.sm,
     },
-    searchWrap: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      borderWidth: 1,
-      borderColor: colors.border,
-      backgroundColor: colors.inputBackground,
-      borderRadius: Radius.lg,
-      paddingHorizontal: Space.md,
-      gap: Space.sm,
-    },
-    searchInput: {
-      flex: 1,
-      color: colors.text,
-      fontSize: FontSize.base,
-      paddingVertical: Space.sm + 2,
-    },
     levelChips: {
       paddingBottom: Space.xs,
       gap: Space.sm,
@@ -465,7 +441,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       flexDirection: 'row',
       alignItems: 'center',
       borderRadius: Radius.full,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       paddingHorizontal: Space.md,
       paddingVertical: Space.xs + 2,
       gap: Space.xs + 2,
@@ -512,7 +488,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     entryRow: {
       backgroundColor: colors.surface,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       borderRadius: Radius.md,
       paddingHorizontal: Space.sm + 2,
@@ -549,7 +525,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     entryMessage: {
       fontSize: FontSize.sm,
       color: colors.text,
-      lineHeight: FontSize.md + FontSize.xs,
+      lineHeight: LineHeight.xl,
     },
     scrollToBottomWrap: {
       position: 'absolute',

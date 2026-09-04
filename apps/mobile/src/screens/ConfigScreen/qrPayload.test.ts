@@ -215,6 +215,53 @@ describe('parseQRPayload', () => {
     });
   });
 
+  describe('OpenClaw official local setup payload', () => {
+    it('parses an unexpired setup credential without requiring raw gateway auth', () => {
+      const expiresAtMs = Date.now() + 600_000;
+      const result = parseQRPayload(JSON.stringify({
+        url: 'ws://192.168.1.12:18789/',
+        host: '192.168.1.12',
+        port: 18789,
+        tls: false,
+        mode: 'gateway',
+        expiresAt: expiresAtMs,
+        qrVersion: 2,
+        bootstrap: {
+          token: 'official-bootstrap-token',
+          strategy: 'mobile-setup',
+          expiresAtMs,
+          access: 'full',
+        },
+      }));
+
+      expect(result).toMatchObject({
+        url: 'ws://192.168.1.12:18789/',
+        bootstrap: {
+          token: 'official-bootstrap-token',
+          strategy: 'mobile-setup',
+          expiresAtMs,
+          access: 'full',
+        },
+      });
+      expect(result?.token).toBeUndefined();
+      expect(result?.password).toBeUndefined();
+    });
+
+    it('rejects an expired setup credential instead of exposing a broken connection', () => {
+      expect(parseQRPayload(JSON.stringify({
+        url: 'ws://192.168.1.12:18789/',
+        mode: 'gateway',
+        expiresAt: Date.now() + 600_000,
+        qrVersion: 2,
+        bootstrap: {
+          token: 'expired-bootstrap-token',
+          strategy: 'mobile-setup',
+          expiresAtMs: Date.now() - 1,
+        },
+      }))).toBeNull();
+    });
+  });
+
   describe('legacy openclaw:// URL scheme', () => {
     it('parses openclaw://connect?host=...&token=... URL form', () => {
       const raw = 'openclaw://connect?host=192.168.1.10&port=18789&token=url_token';

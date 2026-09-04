@@ -4,9 +4,7 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -14,7 +12,7 @@ import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/dat
 import { ChevronDown, ChevronRight, CircleHelp, X } from 'lucide-react-native';
 import { RouteProp, useNavigation, usePreventRemove, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationOptions, NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { HeaderActionButton, HeaderTextAction, LoadingState, createCardContentStyle } from '../../components/ui';
+import { FormTextInput, HeaderActionButton, HeaderTextAction, LoadingState, ThemedSwitch, createCardContentStyle } from '../../components/ui';
 import { ModelPickerModal, resolveProviderModel } from '../../components/chat/ModelPickerModal';
 import type { ModelInfo } from '../../components/chat/ModelPickerModal';
 import { useTranslation } from 'react-i18next';
@@ -23,7 +21,7 @@ import { analyticsEvents } from '../../services/analytics/events';
 import { scheduleAutomaticAppReview } from '../../services/auto-app-review';
 import { loadGatewayModelPickerOptions } from '../../services/gateway-models';
 import { useAppTheme } from '../../theme';
-import { FontSize, FontWeight, HitSize, Radius, Space } from '../../theme/tokens';
+import { ControlSize, FontSize, FontWeight, HitSize, Radius, Space } from '../../theme/tokens';
 import type { CronJob, CronJobCreate, CronJobPatch, CronSchedule } from '../../types';
 import { describeCronExpression } from '../../utils/cron';
 import type { ConsoleStackParamList } from './ConsoleTab';
@@ -128,8 +126,6 @@ function CronFieldsInput({
   styles: ReturnType<typeof createStyles>;
 }): React.JSX.Element {
   const fields = splitCronFields(value);
-  const { theme } = useAppTheme();
-
   const handleChange = (index: number, text: string) => {
     const next = [...fields];
     next[index] = text;
@@ -141,13 +137,15 @@ function CronFieldsInput({
       {CRON_FIELD_LABELS.map((label, i) => (
         <View key={label} style={s.cronFieldCol}>
           <Text style={s.cronFieldLabel}>{label}</Text>
-          <TextInput
-            style={s.cronFieldInput}
+          <FormTextInput
             value={fields[i]}
             onChangeText={(t) => handleChange(i, t)}
-            placeholderTextColor={theme.colors.textSubtle}
             autoCapitalize="none"
             autoCorrect={false}
+            surface="sunken"
+            minHeight={ControlSize.compact}
+            containerStyle={s.cronFieldInput}
+            inputStyle={s.cronFieldInputText}
           />
         </View>
       ))}
@@ -623,7 +621,7 @@ export function CronEditorScreen(): React.JSX.Element {
       },
       headerTitleStyle: {
         color: theme.colors.text,
-        fontSize: 16,
+        fontSize: FontSize.lg,
         fontWeight: '600',
       },
       headerLeft: () => (
@@ -674,12 +672,11 @@ export function CronEditorScreen(): React.JSX.Element {
           <Text style={styles.sectionTitle}>{t('General')}</Text>
 
           <Text style={styles.fieldLabel}>{t('Name *')}</Text>
-          <TextInput
-            style={styles.input}
+          <FormTextInput
             value={form.name}
             onChangeText={(value) => patchForm({ name: value })}
             placeholder={t('Daily standup reminder')}
-            placeholderTextColor={theme.colors.textSubtle}
+            surface="sunken"
           />
         </View>
 
@@ -738,13 +735,13 @@ export function CronEditorScreen(): React.JSX.Element {
             <>
               <Text style={styles.fieldLabel}>{t('Interval')}</Text>
               <View style={styles.inlineRow}>
-                <TextInput
-                  style={[styles.input, styles.inlineInput]}
+                <FormTextInput
                   value={form.everyAmount}
                   onChangeText={(value) => patchForm({ everyAmount: value })}
                   placeholder="30"
-                  placeholderTextColor={theme.colors.textSubtle}
                   keyboardType="decimal-pad"
+                  surface="sunken"
+                  containerStyle={styles.inlineInput}
                 />
                 <View style={styles.inlineSegmentWrap}>
                   <SegmentedControl
@@ -800,14 +797,13 @@ export function CronEditorScreen(): React.JSX.Element {
           />
 
           <Text style={styles.fieldLabel}>{form.payloadKind === 'agentTurn' ? t('Message *') : t('Text *')}</Text>
-          <TextInput
-            style={[styles.input, styles.textarea]}
+          <FormTextInput
             value={form.payloadText}
             onChangeText={(value) => patchForm({ payloadText: value })}
             placeholder={form.payloadKind === 'agentTurn' ? t('Write the agent task...') : t('System event text...')}
-            placeholderTextColor={theme.colors.textSubtle}
             multiline
-            textAlignVertical="top"
+            minHeight={Space.xxxl * 2}
+            surface="sunken"
           />
 
           {form.payloadKind === 'agentTurn' ? (
@@ -841,14 +837,13 @@ export function CronEditorScreen(): React.JSX.Element {
           {form.deliveryMode !== 'none' ? (
             <>
               <Text style={styles.fieldLabel}>{t('Channel')}</Text>
-              <TextInput
-                style={styles.input}
+              <FormTextInput
                 value={form.deliveryChannel}
                 onChangeText={(value) => patchForm({ deliveryChannel: value })}
                 placeholder="last or channel id (optional)"
-                placeholderTextColor={theme.colors.textSubtle}
                 autoCapitalize="none"
                 autoCorrect={false}
+                surface="sunken"
               />
             </>
           ) : null}
@@ -856,14 +851,13 @@ export function CronEditorScreen(): React.JSX.Element {
           {form.deliveryMode === 'announce' ? (
             <>
               <Text style={styles.fieldLabel}>{t('Target')}</Text>
-              <TextInput
-                style={styles.input}
+              <FormTextInput
                 value={form.deliveryTo}
                 onChangeText={(value) => patchForm({ deliveryTo: value })}
                 placeholder={t('Optional target')}
-                placeholderTextColor={theme.colors.textSubtle}
                 autoCapitalize="none"
                 autoCorrect={false}
+                surface="sunken"
               />
             </>
           ) : null}
@@ -871,14 +865,13 @@ export function CronEditorScreen(): React.JSX.Element {
           {form.deliveryMode === 'webhook' ? (
             <>
               <Text style={styles.fieldLabel}>{t('Webhook URL *')}</Text>
-              <TextInput
-                style={styles.input}
+              <FormTextInput
                 value={form.deliveryTo}
                 onChangeText={(value) => patchForm({ deliveryTo: value })}
                 placeholder="https://example.com/hook"
-                placeholderTextColor={theme.colors.textSubtle}
                 autoCapitalize="none"
                 autoCorrect={false}
+                surface="sunken"
               />
             </>
           ) : null}
@@ -894,35 +887,31 @@ export function CronEditorScreen(): React.JSX.Element {
         {showAdvanced ? (
           <View style={styles.section}>
             <Text style={styles.fieldLabel}>{t('Description')}</Text>
-            <TextInput
-              style={styles.input}
+            <FormTextInput
               value={form.description}
               onChangeText={(value) => patchForm({ description: value })}
               placeholder={t('Optional details')}
-              placeholderTextColor={theme.colors.textSubtle}
+              surface="sunken"
             />
 
             <View style={styles.switchRow}>
               <Text style={styles.fieldLabelSwitch}>{t('Enabled')}</Text>
-              <Switch
+              <ThemedSwitch
                 value={form.enabled}
                 onValueChange={(value) => patchForm({ enabled: value })}
-                trackColor={{ false: theme.colors.borderStrong, true: theme.colors.primary }}
-                thumbColor={theme.colors.iconOnColor}
               />
             </View>
 
             {form.scheduleKind === 'cron' ? (
               <>
                 <Text style={styles.fieldLabel}>{t('Timezone')}</Text>
-                <TextInput
-                  style={styles.input}
+                <FormTextInput
                   value={form.cronTz}
                   onChangeText={(value) => patchForm({ cronTz: value })}
                   placeholder={t('UTC (optional)')}
-                  placeholderTextColor={theme.colors.textSubtle}
                   autoCapitalize="none"
                   autoCorrect={false}
+                  surface="sunken"
                 />
               </>
             ) : null}
@@ -951,11 +940,9 @@ export function CronEditorScreen(): React.JSX.Element {
 
             <View style={styles.switchRow}>
               <Text style={styles.fieldLabelSwitch}>{t('Delete After Run')}</Text>
-              <Switch
+              <ThemedSwitch
                 value={form.deleteAfterRun}
                 onValueChange={(value) => patchForm({ deleteAfterRun: value })}
-                trackColor={{ false: theme.colors.borderStrong, true: theme.colors.primary }}
-                thumbColor={theme.colors.iconOnColor}
               />
             </View>
           </View>
@@ -998,7 +985,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     section: {
       backgroundColor: colors.surface,
       borderRadius: Radius.md,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       padding: Space.md,
       gap: 8,
@@ -1021,7 +1008,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       alignItems: 'center',
       justifyContent: 'center',
       borderRadius: Radius.sm + 6,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       backgroundColor: colors.surfaceMuted,
     },
@@ -1033,22 +1020,12 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     fieldLabelSwitch: {
       color: colors.text,
-      fontSize: FontSize.md + 1,
+      fontSize: FontSize.base,
       fontWeight: FontWeight.semibold,
     },
-    input: {
-      borderRadius: Radius.sm + 2,
-      borderWidth: 1,
-      borderColor: colors.border,
-      backgroundColor: colors.surfaceMuted,
-      color: colors.text,
-      paddingHorizontal: Space.md,
-      paddingVertical: 9,
-      fontSize: FontSize.md + 1,
-    },
     localDateCard: {
-      borderRadius: Radius.sm + 2,
-      borderWidth: 1,
+      borderRadius: Radius.md,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       backgroundColor: colors.surfaceMuted,
       paddingHorizontal: Space.md,
@@ -1057,7 +1034,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     localDateText: {
       color: colors.text,
-      fontSize: FontSize.md + 1,
+      fontSize: FontSize.base,
       fontWeight: FontWeight.semibold,
     },
     localDateHint: {
@@ -1066,8 +1043,8 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     nowButton: {
       marginTop: 2,
-      borderRadius: Radius.sm + 2,
-      borderWidth: 1,
+      borderRadius: Radius.md,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.borderStrong,
       backgroundColor: colors.surface,
       paddingVertical: 9,
@@ -1081,8 +1058,8 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     pickerButton: {
       marginTop: 2,
-      borderRadius: Radius.sm + 2,
-      borderWidth: 1,
+      borderRadius: Radius.md,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.borderStrong,
       backgroundColor: colors.surface,
       paddingVertical: 9,
@@ -1097,14 +1074,14 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     pickerWrap: {
       marginTop: 2,
       borderRadius: Radius.md,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       backgroundColor: colors.surfaceMuted,
       overflow: 'hidden',
       paddingTop: Platform.OS === 'ios' ? Space.sm : 0,
     },
     pickerDoneButton: {
-      borderTopWidth: 1,
+      borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: colors.border,
       paddingVertical: Space.md - 2,
       alignItems: 'center',
@@ -1116,16 +1093,12 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       fontSize: FontSize.md,
       fontWeight: FontWeight.bold,
     },
-    textarea: {
-      minHeight: Space.xxxl * 2,
-      paddingTop: 10,
-    },
     modelPickerRow: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      borderRadius: Radius.sm + 2,
-      borderWidth: 1,
+      borderRadius: Radius.md,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       backgroundColor: colors.surfaceMuted,
       paddingHorizontal: Space.md,
@@ -1133,12 +1106,12 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     modelPickerValue: {
       color: colors.text,
-      fontSize: FontSize.md + 1,
+      fontSize: FontSize.base,
       flex: 1,
     },
     modelPickerPlaceholder: {
       color: colors.textSubtle,
-      fontSize: FontSize.md + 1,
+      fontSize: FontSize.base,
       flex: 1,
     },
     advancedToggle: {
@@ -1171,8 +1144,8 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     segmentWrap: {
       flexDirection: 'row',
-      borderRadius: Radius.sm + 2,
-      borderWidth: 1,
+      borderRadius: Radius.md,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       overflow: 'hidden',
     },
@@ -1212,7 +1185,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     errorTitle: {
       color: colors.error,
-      fontSize: FontSize.md + 1,
+      fontSize: FontSize.base,
       fontWeight: FontWeight.bold,
       textAlign: 'center',
     },
@@ -1244,21 +1217,16 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     cronFieldInput: {
       width: '100%',
-      borderRadius: Radius.sm + 2,
-      borderWidth: 1,
-      borderColor: colors.border,
-      backgroundColor: colors.surfaceMuted,
-      color: colors.text,
+    },
+    cronFieldInputText: {
       textAlign: 'center',
       paddingHorizontal: Space.xs,
-      paddingVertical: 9,
-      fontSize: FontSize.base,
     },
     cronGuideBox: {
       marginTop: Space.sm,
       borderRadius: Radius.sm,
       backgroundColor: colors.surfaceMuted,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       paddingVertical: Space.sm,
       paddingHorizontal: Space.md,

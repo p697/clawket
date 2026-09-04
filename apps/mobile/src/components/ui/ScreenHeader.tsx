@@ -1,9 +1,10 @@
 import React from 'react';
 import { Platform, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { ChevronLeft, X } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 import { useAppTheme } from '../../theme';
-import { FontSize, FontWeight, Space } from '../../theme/tokens';
-import { IconButton } from './IconButton';
+import { FontSize, FontWeight, LineHeight, Space } from '../../theme/tokens';
+import { HeaderActionButton } from './HeaderActionButton';
 
 type Props = {
   title: string;
@@ -12,7 +13,9 @@ type Props = {
   dismissStyle?: 'back' | 'close';
   subtitle?: string;
   topInsetBehavior?: 'auto' | 'safe' | 'compact' | 'none';
+  leftContent?: React.ReactNode;
   rightContent?: React.ReactNode;
+  showBorder?: boolean;
   style?: ViewStyle;
   leftSlotStyle?: ViewStyle;
   rightSlotStyle?: ViewStyle;
@@ -25,12 +28,15 @@ export function ScreenHeader({
   dismissStyle = 'back',
   subtitle,
   topInsetBehavior = 'auto',
+  leftContent,
   rightContent,
+  showBorder,
   style,
   leftSlotStyle,
   rightSlotStyle,
 }: Props): React.JSX.Element {
   const { theme } = useAppTheme();
+  const { t } = useTranslation('common');
   const { colors } = theme;
   const resolvedTopInsetBehavior =
     topInsetBehavior === 'auto'
@@ -46,7 +52,7 @@ export function ScreenHeader({
           ? topInset
           : Math.min(topInset, Space.lg)
         : topInset;
-  const showBorder = dismissStyle !== 'close';
+  const resolvedShowBorder = showBorder ?? dismissStyle !== 'close';
 
   return (
     <View
@@ -57,7 +63,7 @@ export function ScreenHeader({
           paddingTop: resolvedTopPadding,
           backgroundColor: colors.surface,
           borderBottomColor: colors.border,
-          borderBottomWidth: showBorder ? 1 : 0,
+          borderBottomWidth: resolvedShowBorder ? StyleSheet.hairlineWidth : 0,
         },
         style,
       ]}
@@ -72,16 +78,14 @@ export function ScreenHeader({
           ) : null}
         </View>
         <View style={[styles.leftSlot, leftSlotStyle]}>
-          {onBack ? (
-            <IconButton
-              icon={
-                dismissStyle === 'close'
-                  ? <X size={20} color={colors.textMuted} strokeWidth={2} />
-                  : <ChevronLeft size={22} color={colors.textMuted} strokeWidth={2} />
-              }
+          {leftContent ?? (onBack ? (
+            <HeaderActionButton
+              icon={dismissStyle === 'close' ? X : ChevronLeft}
               onPress={onBack}
+              size={dismissStyle === 'close' ? 20 : 22}
+              accessibilityLabel={t(dismissStyle === 'close' ? 'Close' : 'Back')}
             />
-          ) : null}
+          ) : null)}
         </View>
         <View style={styles.spacer} />
         <View style={[styles.rightSlot, rightSlotStyle]}>
@@ -94,7 +98,7 @@ export function ScreenHeader({
 
 const styles = StyleSheet.create({
   headerOuter: {
-    paddingHorizontal: Space.md,
+    paddingHorizontal: Space.lg,
     paddingBottom: 2,
   },
   headerRow: {
@@ -109,7 +113,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 48,
   },
   leftSlot: {
-    width: 44,
+    minWidth: 44,
     alignItems: 'flex-start',
   },
   spacer: {
@@ -118,18 +122,21 @@ const styles = StyleSheet.create({
   title: {
     textAlign: 'center',
     fontSize: FontSize.lg,
+    lineHeight: LineHeight.lg,
     fontWeight: FontWeight.semibold,
   },
   subtitle: {
     marginTop: 2,
     textAlign: 'center',
     fontSize: FontSize.sm,
+    lineHeight: LineHeight.sm,
     fontWeight: FontWeight.medium,
   },
   rightSlot: {
-    width: 44,
+    minWidth: 44,
     alignItems: 'flex-end',
     flexDirection: 'row',
     justifyContent: 'flex-end',
+    gap: Space.xs,
   },
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { sha256Hex } from '@clawket/shared';
+import { sha256Hex, verifyPairingRelayTicket } from '@clawket/shared';
 import worker from './index';
 
 const fetchHandler = worker.fetch as (request: Request, env: unknown) => Promise<Response>;
@@ -15,6 +15,10 @@ class MemoryKV {
   async put(key: string, value: string): Promise<void> {
     this.map.set(key, value);
   }
+
+  async delete(key: string): Promise<void> {
+    this.map.delete(key);
+  }
 }
 
 function createEnv() {
@@ -26,10 +30,201 @@ function createEnv() {
     }),
     PAIR_ACCESS_CODE_TTL_SEC: '600',
     PAIR_CLIENT_TOKEN_MAX: '4',
+    PAIRING_TICKET_SECRET: 'test-pairing-ticket-secret-that-is-long-enough',
+    RELAY_SYNC_SERVICE: {
+      fetch: vi.fn(async () => new Response(JSON.stringify({
+        ok: true,
+        capabilities: ['pairing.secure-short-code.v2'],
+      }), { status: 200 })),
+    },
   };
 }
 
 describe('registry worker', () => {
+  it('creates encrypted one-tap and short-code pairing sessions without exposing the legacy payload', async () => {
+    const env = createEnv();
+    const registerRes = await fetchHandler(new Request('https://registry.example.com/v1/pair/register', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ displayName: 'Studio Mac', preferredRegion: 'us' }),
+    }), env);
+    const registered = await registerRes.json() as {
+      gatewayId: string;
+      relaySecret: string;
+      accessCode: string;
+    };
+    const codeHash = await sha256Hex('ABCD-EFGH-JKLM');
+    const shortCodeHash = await sha256Hex('123456');
+    const encrypted = {
+      nonce: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+      ciphertext: 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
+    };
+    const createRes = await fetchHandler(new Request('https://registry.example.com/v1/pair/session', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        gatewayId: registered.gatewayId,
+        relaySecret: registered.relaySecret,
+        codeHash,
+        shortCodeHash,
+        linkPayload: encrypted,
+        codePayload: { ...encrypted, ciphertext: 'CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC' },
+      }),
+    }), env);
+    expect(createRes.status).toBe(200);
+    const created = await createRes.json() as {
+      sessionId: string;
+      pairingUrl: string;
+      displayName: string;
+      capabilities: string[];
+    };
+    expect(created.sessionId).toMatch(/^ps_[a-f0-9]{64}$/);
+    expect(created.pairingUrl).toBe(`https://registry.example.com/pair/${created.sessionId}`);
+    expect(created.displayName).toBe('Studio Mac');
+    expect(created.capabilities).toContain('pairing.secure-short-code.v2');
+
+    const secureResolveRes = await fetchHandler(new Request('https://registry.example.com/v2/pair/session/resolve', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'cf-connecting-ip': '203.0.113.11',
+      },
+      body: JSON.stringify({ codeHash: shortCodeHash }),
+    }), env);
+    expect(secureResolveRes.status).toBe(200);
+    const secureResolved = await secureResolveRes.json() as {
+      protocol: number;
+      sessionId: string;
+      gatewayId: string;
+      relayTicket: string;
+    };
+    expect(secureResolved).toMatchObject({
+      protocol: 2,
+      sessionId: created.sessionId,
+      gatewayId: registered.gatewayId,
+    });
+    await expect(verifyPairingRelayTicket({
+      token: secureResolved.relayTicket,
+      secret: env.PAIRING_TICKET_SECRET,
+      gatewayId: registered.gatewayId,
+    })).resolves.toMatchObject({
+      scope: 'pairing',
+      sessionId: created.sessionId,
+    });
+
+    const readRes = await fetchHandler(new Request(
+      `https://registry.example.com/v1/pair/session/${created.sessionId}`,
+    ), env);
+    expect(readRes.status).toBe(200);
+    await expect(readRes.json()).resolves.toMatchObject({
+      sessionId: created.sessionId,
+      displayName: 'Studio Mac',
+      encryptedPayload: encrypted,
+    });
+
+    const resolveRes = await fetchHandler(new Request('https://registry.example.com/v1/pair/session/resolve', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'cf-connecting-ip': '203.0.113.10',
+      },
+      body: JSON.stringify({ codeHash }),
+    }), env);
+    expect(resolveRes.status).toBe(200);
+    await expect(resolveRes.json()).resolves.toMatchObject({
+      encryptedPayload: { ciphertext: 'CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC' },
+    });
+
+    const pageRes = await fetchHandler(new Request(created.pairingUrl), env);
+    expect(pageRes.status).toBe(200);
+    const page = await pageRes.text();
+    expect(page).toContain('Connect to Studio Mac');
+    expect(page).not.toContain(registered.accessCode);
+
+    const claimRes = await fetchHandler(new Request('https://registry.example.com/v1/pair/claim', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        gatewayId: registered.gatewayId,
+        accessCode: registered.accessCode,
+      }),
+    }), env);
+    expect(claimRes.status).toBe(200);
+    const consumedRes = await fetchHandler(new Request(
+      `https://registry.example.com/v1/pair/session/${created.sessionId}`,
+    ), env);
+    expect(consumedRes.status).toBe(404);
+  });
+
+  it('falls back to the legacy pairing code when Relay has not advertised secure pairing', async () => {
+    const env = {
+      ...createEnv(),
+      RELAY_SYNC_SERVICE: {
+        fetch: vi.fn(async () => new Response(JSON.stringify({ ok: true, capabilities: [] }), { status: 200 })),
+      },
+    };
+    const registerRes = await fetchHandler(new Request('https://registry.example.com/v1/pair/register', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ preferredRegion: 'us' }),
+    }), env);
+    const registered = await registerRes.json() as { gatewayId: string; relaySecret: string };
+    const encrypted = {
+      nonce: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+      ciphertext: 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
+    };
+    const createRes = await fetchHandler(new Request('https://registry.example.com/v1/pair/session', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        gatewayId: registered.gatewayId,
+        relaySecret: registered.relaySecret,
+        codeHash: await sha256Hex('ABCD-EFGH-JKLM'),
+        shortCodeHash: await sha256Hex('123456'),
+        linkPayload: encrypted,
+        codePayload: encrypted,
+      }),
+    }), env);
+    expect(createRes.status).toBe(200);
+    await expect(createRes.json()).resolves.toMatchObject({ capabilities: [] });
+  });
+
+  it('rate limits pairing-code resolution attempts and serves native association documents', async () => {
+    const env = createEnv();
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const response = await fetchHandler(new Request('https://registry.example.com/v1/pair/session/resolve', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'cf-connecting-ip': '203.0.113.20',
+        },
+        body: JSON.stringify({ codeHash: '0'.repeat(64) }),
+      }), env);
+      expect(response.status).toBe(404);
+    }
+    const limited = await fetchHandler(new Request('https://registry.example.com/v1/pair/session/resolve', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'cf-connecting-ip': '203.0.113.20',
+      },
+      body: JSON.stringify({ codeHash: '0'.repeat(64) }),
+    }), env);
+    expect(limited.status).toBe(429);
+
+    const apple = await fetchHandler(new Request(
+      'https://registry.example.com/.well-known/apple-app-site-association',
+    ), env);
+    expect(apple.status).toBe(200);
+    await expect(apple.json()).resolves.toMatchObject({
+      applinks: { details: [{ appIDs: ['C8TM82D73W.com.p697.clawket'] }] },
+    });
+    const android = await fetchHandler(new Request(
+      'https://registry.example.com/.well-known/assetlinks.json',
+    ), env);
+    await expect(android.json()).resolves.toEqual([]);
+  });
+
   it('registers a gateway and claims a single-use access code', async () => {
     const env = createEnv();
 
@@ -136,6 +331,7 @@ describe('registry worker', () => {
     const env = {
       ...createEnv(),
       PAIRING_SYNC_SECRET: 'sync-secret',
+      RELAY_SYNC_SERVICE: undefined,
     };
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })) as unknown as typeof fetch;
     const originalFetch = globalThis.fetch;
@@ -171,6 +367,33 @@ describe('registry worker', () => {
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+
+  it('prefers a Relay service binding for immediate token synchronization', async () => {
+    const serviceFetch = vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    const env = {
+      ...createEnv(),
+      PAIRING_SYNC_SECRET: 'sync-secret',
+      RELAY_SYNC_SERVICE: { fetch: serviceFetch },
+    };
+
+    const registerRes = await fetchHandler(new Request('https://registry.example.com/v1/pair/register', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ preferredRegion: 'us' }),
+    }), env as never);
+    const registerBody = await registerRes.json() as { gatewayId: string; accessCode: string };
+    const claimRes = await fetchHandler(new Request('https://registry.example.com/v1/pair/claim', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(registerBody),
+    }), env as never);
+
+    expect(claimRes.status).toBe(200);
+    expect(serviceFetch).toHaveBeenCalledWith(
+      'https://relay-us.example.com/v1/internal/pairing/client-tokens',
+      expect.objectContaining({ method: 'POST' }),
+    );
   });
 
   it('keeps legacy KV pairing records readable after reusable-code fields are removed', async () => {

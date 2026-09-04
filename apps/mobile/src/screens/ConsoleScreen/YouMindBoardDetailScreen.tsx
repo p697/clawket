@@ -443,7 +443,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       marginBottom: Space.md,
     },
     heroTitle: {
-      fontSize: 20,
+      fontSize: FontSize.displaySm,
       fontWeight: FontWeight.semibold,
     },
     stateWrap: {
@@ -464,7 +464,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       flex: 1,
       minHeight: 56,
       borderRadius: Radius.lg,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       backgroundColor: colors.surface,
       paddingHorizontal: Space.md,

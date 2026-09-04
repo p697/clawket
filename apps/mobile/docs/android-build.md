@@ -10,7 +10,7 @@ If this is a fresh machine, read `docs/android-onboarding.md` first.
 
 Do not treat them as the same thing:
 
-- Daily development should use the installed `debug` app + Metro + Office Vite dev server.
+- Daily development should use the installed `debug` app + Metro.
 - APK packaging is only for first install, native changes, or distribution verification.
 - Google Play closed testing requires a release-signed `.aab`, not a debug-signed APK.
 
@@ -62,12 +62,8 @@ npm run dev:android
 
 What this script does:
 
-- installs root and `office-game` dependencies
-- starts the `office-game` Vite dev server on port `5174`
-- waits for the Office server to become ready
-- configures `adb reverse` for:
-  - `tcp:8081` -> Metro
-  - `tcp:5174` -> Office WebView dev server
+- installs root dependencies
+- configures `adb reverse` for `tcp:8081` -> Metro
 - starts Expo Metro on port `8081`
 
 ### What Hot Reloads
@@ -75,7 +71,6 @@ What this script does:
 These changes update without rebuilding the APK:
 
 - React Native `JS/TS` code under `src/`
-- Office WebView code under `office-game/` via the Vite dev server
 
 ### What Requires Rebuild/Reinstall
 
@@ -132,18 +127,6 @@ Use packaging only when needed:
 - generating an APK to share manually
 - generating a signed `.aab` for Google Play
 
-### Office WebView Asset Build for Packaged APKs
-
-For packaged APKs, the Office tab uses the built inline asset instead of the dev server.
-
-Build it first:
-
-```bash
-cd office-game && npm run build && cd ..
-```
-
-If you skip this, the packaged app may show a blank Office screen or stale Office content.
-
 ### Debug APK
 
 ```bash
@@ -167,8 +150,6 @@ Recommended use:
 ### Release APK
 
 ```bash
-cd office-game && npm run build && cd ..
-
 cd android
 ANDROID_HOME=/opt/homebrew/share/android-commandlinetools \
 JAVA_HOME=$(/usr/libexec/java_home -v 17) \
@@ -202,10 +183,9 @@ npm run build:android:aab
 
 This script is the canonical Google Play packaging flow. It now:
 
-1. builds Office packaged assets
-2. auto-selects an Android `versionCode` unless `EXPO_ANDROID_VERSION_CODE` is explicitly provided
-3. runs `expo prebuild --platform android --no-install`
-4. builds the signed release `.aab`
+1. auto-selects an Android `versionCode` unless `EXPO_ANDROID_VERSION_CODE` is explicitly provided
+2. runs `expo prebuild --platform android --no-install`
+3. builds the signed release `.aab`
 
 Artifact:
 
@@ -349,7 +329,6 @@ npm run build:android:aab
 
 What it does:
 
-- builds the Office packaged assets
 - patches the known Android Gradle source-set issue in `@react-native-menu/menu` and `react-native-keyboard-controller`
 - restores the ignored local signing file
 - normalizes the generated Expo `android/app/build.gradle` release signing block
@@ -464,21 +443,6 @@ Fix:
 
 - keep Aliyun mirrors before `google()` in `android/build.gradle`
 
-### Android WebView Local HTML Failure (`ERR_EMPTY_RESPONSE`)
-
-Symptom:
-
-- Office tab fails to load packaged local HTML on Android
-
-Cause:
-
-- Android WebView cannot use Metro's HTML asset id the same way iOS can
-
-Fix:
-
-- package Office as inline HTML/JS via `office-game` build output
-- in development, use the Vite dev server instead
-
 ### APK Install Failure (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`)
 
 Symptom:
@@ -542,7 +506,6 @@ npx expo run:android
 Use this when you need a packaged release-variant APK:
 
 ```bash
-cd office-game && npm run build && cd ..
 cd android && ./gradlew app:assembleRelease -x lint -x test --configure-on-demand --build-cache -Pclawket.allowDebugReleaseSigning=true -PreactNativeArchitectures=arm64-v8a
 ```
 

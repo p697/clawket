@@ -231,7 +231,7 @@ function createStyles(colors: ReturnType<typeof import('../../theme').useAppThem
       ...createListContentStyle({ grow: true, bottom: Space.xxxl }),
     },
     card: {
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       borderRadius: Radius.md,
       padding: Space.lg - 2,
@@ -243,7 +243,7 @@ function createStyles(colors: ReturnType<typeof import('../../theme').useAppThem
       gap: 10,
     },
     cardEmoji: {
-      fontSize: 24,
+      fontSize: FontSize.emoji,
     },
     cardTextWrap: {
       flex: 1,
@@ -277,7 +277,7 @@ function createStyles(colors: ReturnType<typeof import('../../theme').useAppThem
     },
     defaultBadge: {
       borderRadius: Radius.sm,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.borderStrong,
       backgroundColor: colors.surfaceMuted,
       paddingHorizontal: Space.sm,

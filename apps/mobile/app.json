@@ -15,6 +15,10 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.p697.clawket",
+      "associatedDomains": [
+        "applinks:registry.clawket.ai",
+        "applinks:clawket-registry-preview.clawket.workers.dev"
+      ],
       "infoPlist": {
         "NSCameraUsageDescription": "Allow Clawket to use your camera to scan QR codes and take photos to send to AI.",
         "NSPhotoLibraryAddUsageDescription": "Allow Clawket to save stats posters to your photo library.",
@@ -41,6 +45,28 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.p697.clawket",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "registry.clawket.ai",
+              "pathPrefix": "/pair/"
+            },
+            {
+              "scheme": "https",
+              "host": "clawket-registry-preview.clawket.workers.dev",
+              "pathPrefix": "/pair/"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ],
       "permissions": [
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",

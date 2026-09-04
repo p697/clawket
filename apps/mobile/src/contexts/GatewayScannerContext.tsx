@@ -17,6 +17,15 @@ import {
 import { isUnsupportedDirectLocalTlsConfig, shouldSuppressDuplicatePairingAlert } from '../hooks/gatewayConfigForm.utils';
 import { getGatewayCameraPermissionAction } from '../utils/gateway-camera-permission';
 import { isMacCatalyst } from '../utils/platform';
+import {
+  parsePairingLink,
+  PairingSessionError,
+  resolvePairingCode,
+  resolvePairingLink,
+  type ResolvedPairingSession,
+} from '../services/pairing-session';
+import { resolveOfficialRelayEnvironment } from '../services/relay-environment';
+import { analyticsEvents } from '../services/analytics/events';
 
 type GatewayScannerOptions = {
   onScanned: (result: QRScanResult) => void | Promise<void>;
@@ -26,6 +35,8 @@ type GatewayScannerOptions = {
 type GatewayScannerContextType = {
   openGatewayScanner: (options: GatewayScannerOptions) => void;
   importGatewayQrImage: (options?: GatewayScannerOptions) => Promise<void>;
+  connectPairingLink: (url: string) => Promise<boolean>;
+  connectPairingCode: (input: { serverUrl: string; pairingCode: string }) => Promise<boolean>;
 };
 
 const GatewayScannerContext = React.createContext<GatewayScannerContextType | null>(null);
@@ -62,31 +73,37 @@ export function GatewayScannerProvider({ children }: { children: React.ReactNode
     Alert.alert('Pairing Failed', message);
   }, [hideOverlay]);
 
-  const createFromScan = useCallback(async (payload: GatewayScanPayload): Promise<void> => {
+  const connectFromScan = useCallback(async (payload: GatewayScanPayload): Promise<boolean> => {
     let resolved = payload;
     showOverlay(i18n.t('Switching Gateway...', { ns: 'common' }));
     try {
       resolved = payload.relay?.accessCode ? await claimRelayPairing(payload, relayClaimInFlightRef) : payload;
     } catch (error) {
       showPairingFailedAlert(error instanceof Error ? error.message : 'Could not claim this Bridge pairing code.');
-      return;
+      return false;
     }
     if (!resolved.url.trim()) {
       hideOverlay();
-      return;
+      return false;
     }
     if (isUnsupportedDirectLocalTlsConfig({
       url: resolved.url,
       hasRelayConfig: Boolean(resolved.relay?.gatewayId),
     })) {
       showPairingFailedAlert(i18n.t('Direct local TLS gateway connections are not supported in Clawket mobile yet. Disable OpenClaw gateway TLS for LAN pairing, or use Relay/Tailscale instead.', { ns: 'chat' }));
-      return;
+      return false;
     }
 
-    const { created } = await createGatewayConfigFromScan({
-      payload: resolved,
-      debugMode,
-    });
+    let created;
+    try {
+      ({ created } = await createGatewayConfigFromScan({
+        payload: resolved,
+        debugMode,
+      }));
+    } catch {
+      showPairingFailedAlert(i18n.t('Could not save this connection. Try again.', { ns: 'config' }));
+      return false;
+    }
 
     reconnectGatewayWithOverlay({
       gateway,
@@ -97,7 +114,78 @@ export function GatewayScannerProvider({ children }: { children: React.ReactNode
       message: i18n.t('Switching Gateway...', { ns: 'common' }),
       switchTimerRef,
     });
+    return true;
   }, [debugMode, gateway, hideOverlay, onSaved, showOverlay, showPairingFailedAlert]);
+
+  const createFromScan = useCallback(async (payload: GatewayScanPayload): Promise<void> => {
+    await connectFromScan(payload);
+  }, [connectFromScan]);
+
+  const confirmResolvedPairing = useCallback((resolved: ResolvedPairingSession): Promise<boolean> => {
+    const parsed = parseQRPayload(resolved.rawQrPayload);
+    if (!parsed) {
+      showPairingFailedAlert(i18n.t('This pairing invitation does not contain valid connection info.', { ns: 'config' }));
+      return Promise.resolve(false);
+    }
+    if (resolveOfficialRelayEnvironment(resolved.serverUrl) === 'preview' && !debugMode) {
+      showPairingFailedAlert(i18n.t('Enable Debug Mode before pairing with the Preview environment.', { ns: 'config' }));
+      return Promise.resolve(false);
+    }
+    const displayName = resolved.displayName?.trim()
+      || parsed.relay?.displayName?.trim()
+      || i18n.t('your computer', { ns: 'config' });
+    return new Promise((resolve) => {
+      Alert.alert(
+        i18n.t('Connect to {{name}}?', { ns: 'config', name: displayName }),
+        i18n.t('This secure pairing invitation will add the computer to Clawket.', { ns: 'config' }),
+        [
+          { text: i18n.t('Cancel', { ns: 'common' }), style: 'cancel', onPress: () => resolve(false) },
+          {
+            text: i18n.t('Connect', { ns: 'config' }),
+            onPress: () => {
+              void connectFromScan(parsed).then(resolve);
+            },
+          },
+        ],
+        { onDismiss: () => resolve(false) },
+      );
+    });
+  }, [connectFromScan, debugMode, showPairingFailedAlert]);
+
+  const connectPairingLink = useCallback(async (url: string): Promise<boolean> => {
+    const descriptor = parsePairingLink(url);
+    if (!descriptor) return false;
+    const environment = resolveOfficialRelayEnvironment(descriptor.serverUrl) ?? 'production';
+    showOverlay(i18n.t('Opening secure pairing invitation...', { ns: 'config' }));
+    try {
+      const resolved = await resolvePairingLink(url);
+      hideOverlay();
+      const connected = await confirmResolvedPairing(resolved);
+      analyticsEvents.gatewaySecurePairingFinished({ method: 'link', environment, connected });
+      return connected;
+    } catch (error) {
+      hideOverlay();
+      analyticsEvents.gatewaySecurePairingFinished({ method: 'link', environment, connected: false });
+      showPairingFailedAlert(pairingFailureMessage(error));
+      return false;
+    }
+  }, [confirmResolvedPairing, hideOverlay, showOverlay, showPairingFailedAlert]);
+
+  const connectPairingCode = useCallback(async (input: {
+    serverUrl: string;
+    pairingCode: string;
+  }): Promise<boolean> => {
+    const environment = resolveOfficialRelayEnvironment(input.serverUrl) ?? 'production';
+    try {
+      const connected = await confirmResolvedPairing(await resolvePairingCode(input));
+      analyticsEvents.gatewaySecurePairingFinished({ method: 'code', environment, connected });
+      return connected;
+    } catch (error) {
+      analyticsEvents.gatewaySecurePairingFinished({ method: 'code', environment, connected: false });
+      showPairingFailedAlert(pairingFailureMessage(error));
+      return false;
+    }
+  }, [confirmResolvedPairing, showPairingFailedAlert]);
 
   const importGatewayQrImage = useCallback(async (options?: GatewayScannerOptions) => {
     const resolvedOptions: GatewayScannerOptions = options ?? { onScanned: createFromScan };
@@ -213,8 +301,8 @@ export function GatewayScannerProvider({ children }: { children: React.ReactNode
   }, [scannerOptions]);
 
   const value = useMemo(
-    () => ({ openGatewayScanner, importGatewayQrImage }),
-    [importGatewayQrImage, openGatewayScanner],
+    () => ({ openGatewayScanner, importGatewayQrImage, connectPairingLink, connectPairingCode }),
+    [connectPairingCode, connectPairingLink, importGatewayQrImage, openGatewayScanner],
   );
 
   return (
@@ -233,4 +321,33 @@ export function useGatewayScanner(): GatewayScannerContextType {
     throw new Error('useGatewayScanner must be used within GatewayScannerProvider');
   }
   return context;
+}
+
+function pairingFailureMessage(error: unknown): string {
+  if (!(error instanceof PairingSessionError)) {
+    return i18n.t('Could not load this pairing invitation.', { ns: 'config' });
+  }
+  switch (error.code) {
+    case 'PAIRING_NETWORK_ERROR':
+      return i18n.t('Could not reach the pairing service. Check your connection and try again.', { ns: 'config' });
+    case 'INVALID_PAIRING_CODE':
+      return i18n.t('Enter the 6-digit pairing code shown on your computer.', { ns: 'config' });
+    case 'PAIRING_CODE_RATE_LIMITED':
+      return i18n.t('Too many pairing attempts. Wait a few minutes and try again.', { ns: 'config' });
+    case 'PAIRING_SESSION_NOT_FOUND':
+    case 'PAIRING_SESSION_EXPIRED':
+    case 'ACCESS_CODE_EXPIRED':
+      return i18n.t('This pairing invitation is invalid or has expired. Create a new one on your computer.', { ns: 'config' });
+    case 'PAIRING_HANDSHAKE_TIMEOUT':
+    case 'PAIRING_HANDSHAKE_FAILED':
+    case 'PAIRING_HANDSHAKE_REJECTED':
+      return i18n.t('The computer did not complete the secure pairing request. Create a new code and try again.', { ns: 'config' });
+    case 'INVALID_PAIRING_LINK':
+    case 'INVALID_PAIRING_SECRET':
+    case 'PAIRING_DECRYPT_FAILED':
+    case 'UNTRUSTED_PAIRING_SERVER':
+      return i18n.t('This pairing invitation is invalid or was copied incompletely.', { ns: 'config' });
+    default:
+      return i18n.t('Could not load this pairing invitation.', { ns: 'config' });
+  }
 }

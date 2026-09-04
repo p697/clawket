@@ -15,6 +15,7 @@ import {
   patchConnectRequestGatewayAuth,
   patchConnectRequestGatewayProtocolRange,
   patchOpenClawConnectRequest,
+  OPENCLAW_MOBILE_SETUP_CAPABILITY,
   prunePendingGatewayMessagesForFreshDemand,
   sanitizeRuntimeLogLine,
   shouldRecycleGatewayForFreshClient,
@@ -756,12 +757,86 @@ describe('bridge runtime protocol helpers', () => {
     gatewayA.closeFromRemote(1006, 'socket hang up');
 
     expect(logs).toContain('gateway reconnect scheduled delayMs=10 attempt=1');
+    expect(relay.sent.some((frame) => (
+      typeof frame === 'string' && frame.includes('client.reconnect-required')
+    ))).toBe(true);
 
     await vi.advanceTimersByTimeAsync(10);
     const gatewayB = sockets[2];
     gatewayB.closeFromRemote(1006, 'socket hang up');
 
     expect(logs).toContain('gateway reconnect scheduled delayMs=17 attempt=2');
+
+    await runtime.stop();
+    vi.useRealTimers();
+  });
+
+  it('resets relay reconnect backoff after a pong proves the connection healthy', async () => {
+    vi.useFakeTimers();
+    const sockets: FakeSocket[] = [];
+    const logs: string[] = [];
+    const runtime = new BridgeRuntime({
+      config: BASE_CONFIG,
+      gatewayUrl: 'ws://127.0.0.1:18789',
+      reconnectBaseDelayMs: 10,
+      reconnectMaxDelayMs: 100,
+      onLog: (line) => logs.push(line),
+      createWebSocket: (url) => {
+        const socket = new FakeSocket(url);
+        sockets.push(socket);
+        return socket;
+      },
+    });
+
+    runtime.start();
+    const relayA = sockets[0];
+    relayA.open();
+    relayA.closeFromRemote(1006, 'network');
+    await vi.advanceTimersByTimeAsync(10);
+
+    const relayB = sockets[1];
+    relayB.open();
+    relayB.emit('pong');
+    relayB.closeFromRemote(1006, 'network');
+
+    expect(logs.filter((line) => line === 'relay reconnect scheduled delayMs=10')).toHaveLength(2);
+    expect(logs).toContain('relay health confirmed; reconnect backoff reset');
+
+    await runtime.stop();
+    vi.useRealTimers();
+  });
+
+  it('resets gateway reconnect backoff only after a successful connect response', async () => {
+    vi.useFakeTimers();
+    const sockets: FakeSocket[] = [];
+    const logs: string[] = [];
+    const runtime = new BridgeRuntime({
+      config: BASE_CONFIG,
+      gatewayUrl: 'ws://127.0.0.1:18789',
+      gatewayRetryDelayMs: 10,
+      onLog: (line) => logs.push(line),
+      createWebSocket: (url) => {
+        const socket = new FakeSocket(url);
+        sockets.push(socket);
+        return socket;
+      },
+    });
+
+    runtime.start();
+    const relay = sockets[0];
+    relay.open();
+    relay.message('__clawket_relay_control__:{"event":"client_count","count":1}');
+    const gatewayA = sockets[1];
+    gatewayA.closeFromRemote(1006, 'socket hang up');
+    await vi.advanceTimersByTimeAsync(10);
+
+    const gatewayB = sockets[2];
+    gatewayB.open();
+    relay.message(JSON.stringify({ type: 'req', id: 'connect-ok', method: 'connect', params: {} }));
+    gatewayB.message(JSON.stringify({ type: 'res', id: 'connect-ok', ok: true }));
+    gatewayB.closeFromRemote(1006, 'socket hang up');
+
+    expect(logs.filter((line) => line === 'gateway reconnect scheduled delayMs=10 attempt=1')).toHaveLength(2);
 
     await runtime.stop();
     vi.useRealTimers();
@@ -952,13 +1027,17 @@ describe('bridge runtime protocol helpers', () => {
   });
 
   it('issues bootstrap tokens for a specific device and replies to the requesting relay client', async () => {
-    const stateDir = await createOpenClawStateDir();
-    vi.stubEnv('OPENCLAW_STATE_DIR', stateDir);
-
     const sockets: FakeSocket[] = [];
+    const issueOpenClawBootstrapToken = vi.fn().mockResolvedValue({
+      token: 'setup-bootstrap-token',
+      expiresAtMs: 1_800_000_000_000,
+      strategy: 'mobile-setup',
+      access: 'full',
+    });
     const runtime = new BridgeRuntime({
       config: BASE_CONFIG,
       gatewayUrl: 'ws://127.0.0.1:18789',
+      issueOpenClawBootstrapToken,
       createWebSocket: (url) => {
         const socket = new FakeSocket(url);
         sockets.push(socket);
@@ -970,7 +1049,20 @@ describe('bridge runtime protocol helpers', () => {
     const relay = sockets[0];
     relay.open();
 
-    relay.message('__clawket_relay_control__:{"type":"control","event":"bootstrap.request","requestId":"req_bootstrap_1","sourceClientId":"client-1","targetClientId":"inst_test","payload":{"deviceId":"device-1","publicKey":"public-key-1","role":"operator","scopes":["operator.write","operator.read"]}}');
+    relay.message(`__clawket_relay_control__:${JSON.stringify({
+      type: 'control',
+      event: 'bootstrap.request',
+      requestId: 'req_bootstrap_1',
+      sourceClientId: 'client-1',
+      targetClientId: 'inst_test',
+      payload: {
+        deviceId: 'device-1',
+        publicKey: 'public-key-1',
+        role: 'operator',
+        scopes: ['operator.write', 'operator.read'],
+        capabilities: [OPENCLAW_MOBILE_SETUP_CAPABILITY],
+      },
+    })}`);
     await delay(10);
 
     expect(relay.sent).toHaveLength(1);
@@ -981,25 +1073,75 @@ describe('bridge runtime protocol helpers', () => {
       targetClientId: 'client-1',
     });
     expect(response?.payload).toMatchObject({
-      bootstrapToken: expect.any(String),
-      expiresAtMs: expect.any(Number),
+      bootstrapToken: 'setup-bootstrap-token',
+      expiresAtMs: 1_800_000_000_000,
+      strategy: 'mobile-setup',
+      access: 'full',
     });
-
-    const persisted = JSON.parse(await readFile(join(stateDir, 'devices', 'bootstrap.json'), 'utf8')) as Record<string, {
-      token: string;
-      deviceId?: string;
-      publicKey?: string;
-      roles?: string[];
-      scopes?: string[];
-    }>;
-    const issuedToken = String(response?.payload?.bootstrapToken);
-
-    expect(persisted[issuedToken]).toMatchObject({
-      token: issuedToken,
+    expect(issueOpenClawBootstrapToken).toHaveBeenCalledWith({
       deviceId: 'device-1',
       publicKey: 'public-key-1',
-      roles: ['operator'],
+      role: 'operator',
       scopes: ['operator.read', 'operator.write'],
+      gatewayUrl: BASE_CONFIG.relayUrl,
+    });
+
+    await runtime.stop();
+  });
+
+  it.each([
+    { label: 'missing capability metadata', capabilities: undefined },
+    { label: 'unknown capability metadata', capabilities: ['future.unknown.v1'] },
+  ])('keeps legacy bootstrap issuance for $label', async ({ capabilities }) => {
+    const sockets: FakeSocket[] = [];
+    const issueOpenClawBootstrapToken = vi.fn();
+    const issueLegacyOpenClawBootstrapToken = vi.fn().mockResolvedValue({
+      token: 'legacy-bootstrap-token',
+      expiresAtMs: 1_800_000_000_000,
+      strategy: 'legacy-bound',
+    });
+    const runtime = new BridgeRuntime({
+      config: BASE_CONFIG,
+      gatewayUrl: 'ws://127.0.0.1:18789',
+      issueOpenClawBootstrapToken,
+      issueLegacyOpenClawBootstrapToken,
+      createWebSocket: (url) => {
+        const socket = new FakeSocket(url);
+        sockets.push(socket);
+        return socket;
+      },
+    });
+
+    runtime.start();
+    const relay = sockets[0];
+    relay.open();
+
+    relay.message(`__clawket_relay_control__:${JSON.stringify({
+      type: 'control',
+      event: 'bootstrap.request',
+      requestId: 'req_bootstrap_legacy',
+      sourceClientId: 'client-legacy',
+      payload: {
+        deviceId: 'device-legacy',
+        publicKey: 'public-key-legacy',
+        role: 'operator',
+        scopes: ['operator.read'],
+        ...(capabilities ? { capabilities } : {}),
+      },
+    })}`);
+    await delay(10);
+
+    expect(issueOpenClawBootstrapToken).not.toHaveBeenCalled();
+    expect(issueLegacyOpenClawBootstrapToken).toHaveBeenCalledWith({
+      deviceId: 'device-legacy',
+      publicKey: 'public-key-legacy',
+      role: 'operator',
+      scopes: ['operator.read'],
+      gatewayUrl: BASE_CONFIG.relayUrl,
+    });
+    expect(parseControl(relay.sent[0] as string)?.payload).toMatchObject({
+      bootstrapToken: 'legacy-bootstrap-token',
+      strategy: 'legacy-bound',
     });
 
     await runtime.stop();

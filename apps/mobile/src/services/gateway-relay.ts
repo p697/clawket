@@ -3,6 +3,8 @@ import { normalizeWsUrl } from './gateway-auth';
 import { resolveGatewayTransportKind } from './gateway-backends';
 
 export const RELAY_CONTROL_PREFIX = '__clawket_relay_control__:';
+export const OPENCLAW_MOBILE_SETUP_CAPABILITY = 'openclaw.bootstrap.mobile-setup.v1';
+export const RELAY_CLIENT_PONG_CAPABILITY = 'relay.client-pong.v1';
 
 export type RelayLookupResult = {
   relayUrl: string;
@@ -18,6 +20,15 @@ export type RelayConnectAuthSelection = {
   };
   signatureToken?: string;
   source: 'device-token' | 'bootstrap-token' | 'legacy-token' | 'legacy-password' | 'none';
+  bootstrapStrategy?: RelayBootstrapStrategy;
+};
+
+export type RelayBootstrapStrategy = 'mobile-setup' | 'legacy-bound';
+
+export type RelayBootstrapCredential = {
+  token: string;
+  strategy: RelayBootstrapStrategy;
+  access?: 'full' | 'limited' | 'node';
 };
 
 export type RelayControlFrame = {
@@ -29,7 +40,7 @@ export type PendingRelayBootstrapRequest = {
   requestId: string;
   startedAt: number;
   timeout: ReturnType<typeof setTimeout>;
-  resolve: (bootstrapToken: string) => void;
+  resolve: (credential: RelayBootstrapCredential) => void;
   reject: (error: Error) => void;
 };
 
@@ -163,6 +174,7 @@ export function selectRelayConnectAuth(params: {
   password?: string;
   storedDeviceToken?: string | null;
   bootstrapToken?: string | null;
+  bootstrapStrategy?: RelayBootstrapStrategy;
 }): RelayConnectAuthSelection {
   const deviceToken = trimToUndefined(params.storedDeviceToken);
   if (deviceToken) {
@@ -179,6 +191,7 @@ export function selectRelayConnectAuth(params: {
       auth: { bootstrapToken },
       signatureToken: bootstrapToken,
       source: 'bootstrap-token',
+      ...(params.bootstrapStrategy ? { bootstrapStrategy: params.bootstrapStrategy } : {}),
     };
   }
 
@@ -208,6 +221,7 @@ export function buildRelayBootstrapRequestFrame(params: {
   publicKey: string;
   role: string;
   scopes: string[];
+  capabilities?: string[];
 }): string {
   return `${RELAY_CONTROL_PREFIX}${JSON.stringify({
     type: 'control',
@@ -218,6 +232,7 @@ export function buildRelayBootstrapRequestFrame(params: {
       publicKey: params.publicKey,
       role: params.role,
       scopes: params.scopes,
+      ...(params.capabilities ? { capabilities: params.capabilities } : {}),
     },
   })}`;
 }
@@ -240,13 +255,30 @@ export function parseRelayControlFrame(raw: string): RelayControlFrame | null {
   }
 }
 
-export function parseRelayBootstrapIssued(control: RelayControlFrame): { requestId?: string; bootstrapToken: string } | null {
+export function parseRelayBootstrapIssued(control: RelayControlFrame): {
+  requestId?: string;
+  credential: RelayBootstrapCredential;
+} | null {
   if (control.event !== 'bootstrap.issued') return null;
   const payload = unwrapRelayControlPayload(control.payload);
   const bootstrapToken = trimToUndefined(payload.bootstrapToken ?? payload.token);
   if (!bootstrapToken) return null;
   const requestId = trimToUndefined(payload.requestId);
-  return { requestId, bootstrapToken };
+  const rawStrategy = trimToUndefined(payload.strategy);
+  const strategy: RelayBootstrapStrategy = rawStrategy === 'mobile-setup'
+    ? 'mobile-setup'
+    : 'legacy-bound';
+  const access = payload.access === 'full' || payload.access === 'limited' || payload.access === 'node'
+    ? payload.access
+    : undefined;
+  return {
+    requestId,
+    credential: {
+      token: bootstrapToken,
+      strategy,
+      ...(access ? { access } : {}),
+    },
+  };
 }
 
 export function parseRelayBootstrapError(control: RelayControlFrame): { requestId?: string; error: RelayBootstrapRequestError } | null {
@@ -575,6 +607,7 @@ export function buildRelayClientWsUrl(
   url.searchParams.set('role', 'client');
   url.searchParams.set('clientId', clientId);
   url.searchParams.set('token', token);
+  url.searchParams.set('capabilities', RELAY_CLIENT_PONG_CAPABILITY);
   if (traceId) url.searchParams.set('traceId', traceId);
   return url.toString();
 }

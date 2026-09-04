@@ -447,7 +447,7 @@ const styles = StyleSheet.create({
   },
   msgRow: {
     borderRadius: Radius.sm,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     padding: Space.md,
     marginBottom: Space.xs,
   },
@@ -485,7 +485,7 @@ const styles = StyleSheet.create({
   statusDot: {
     width: 6,
     height: 6,
-    borderRadius: 3,
+    borderRadius: Radius.xs,
   },
   statusText: {
     fontSize: FontSize.xs,

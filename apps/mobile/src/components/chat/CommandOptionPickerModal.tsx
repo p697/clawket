@@ -120,7 +120,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     stateText: {
       color: colors.textMuted,
-      fontSize: FontSize.md + 1,
+      fontSize: FontSize.bodySm,
       textAlign: 'center',
       lineHeight: 20,
     },
@@ -129,7 +129,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       paddingHorizontal: 14,
       paddingVertical: Space.sm,
       borderRadius: Radius.sm + 2,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.borderStrong,
       backgroundColor: colors.surfaceMuted,
     },

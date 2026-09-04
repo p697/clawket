@@ -51,6 +51,14 @@ export const analyticsEvents = {
     captureAnalyticsEvent('gateway_scan_qr_tapped', properties);
   },
 
+  gatewaySecurePairingFinished(properties: {
+    method: 'link' | 'code';
+    environment: 'production' | 'preview';
+    connected: boolean;
+  }): void {
+    captureAnalyticsEvent('gateway_secure_pairing_finished', properties);
+  },
+
   appRatingTapped(properties: {
     source: string;
     result: 'review_prompt' | 'store_page' | 'unavailable' | 'error';
@@ -307,12 +315,19 @@ export const analyticsEvents = {
     captureAnalyticsEvent('chat_reply_notification_opened', properties);
   },
 
-  officeOpenChatFromCharacter(properties: {
-    action: string;
-    character_id: string;
-    has_session_key: boolean;
+  liveSessionOpened(properties: {
+    role: string;
+    status: string;
+    source: 'team_activity' | 'recent_activity' | 'attention';
   }): void {
-    captureAnalyticsEvent('office_open_chat_from_character', properties);
+    captureAnalyticsEvent('live_session_opened', properties);
+  },
+
+  liveAttentionOpened(properties: {
+    kind: string;
+    count: number;
+  }): void {
+    captureAnalyticsEvent('live_attention_opened', properties);
   },
 
   consoleEntryTapped(properties: {

@@ -1,11 +1,18 @@
 import 'react-native-get-random-values';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, AppStateStatus, NativeModules, Platform, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, AppState, AppStateStatus, Platform, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { StatusBar } from 'expo-status-bar';
 import * as Notifications from 'expo-notifications';
-import WebView, { type WebViewMessageEvent } from 'react-native-webview';
-import type { WebViewErrorEvent, WebViewHttpErrorEvent } from 'react-native-webview/lib/WebViewTypes';
+import {
+  Activity,
+  LayoutGrid,
+  MessageCircle,
+  Settings,
+  SquareTerminal,
+  UserRound,
+  type LucideIcon,
+} from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   createNavigationContainerRef,
@@ -17,9 +24,11 @@ import {
   NavigationState,
   Theme as NavigationTheme,
 } from '@react-navigation/native';
-import { createNativeBottomTabNavigator } from '@bottom-tabs/react-navigation';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import {
+  createNativeStackNavigator,
+  type NativeStackHeaderProps,
+} from '@react-navigation/native-stack';
 import { ConfigTab } from './src/screens/ConfigScreen/ConfigTab';
 import { ChatTab } from './src/screens/ChatScreen/ChatTab';
 import { ConsoleTab } from './src/screens/ConsoleScreen/ConsoleTab';
@@ -30,18 +39,13 @@ import {
   type ConsoleStackParamList,
   useConsoleRootModalScreenOptions,
 } from './src/screens/ConsoleScreen/sharedNavigator';
-import { OfficeTab } from './src/screens/OfficeScreen/OfficeTab';
-import {
-  OfficeGuideButton,
-  OfficeGuideOverlay,
-} from './src/screens/OfficeScreen/OfficeGuideOverlay';
-import { AppContextProvider, useAppContext } from './src/contexts/AppContext';
+import { LiveTab } from './src/screens/LiveScreen/LiveTab';
+import { AppContextProvider } from './src/contexts/AppContext';
 import { GlobalLoadingOverlayProvider, useGlobalLoadingOverlay } from './src/contexts/GlobalLoadingOverlayContext';
 import { GatewayScannerProvider } from './src/contexts/GatewayScannerContext';
 import { NodeCameraCaptureProvider } from './src/contexts/NodeCameraCaptureContext';
 import { ProPaywallProvider, useProPaywall } from './src/contexts/ProPaywallContext';
 import { GlobalLoadingOverlay } from './src/components/ui';
-import { DebugOverlay } from './src/components/chat/DebugOverlay';
 import { ProPaywallOverlay } from './src/components/pro/ProPaywallOverlay';
 import { loadAgentAvatars } from './src/services/agent-avatar';
 import * as Linking from 'expo-linking';
@@ -64,7 +68,9 @@ import { StorageService } from './src/services/storage';
 import { getGatewayBackendCapabilities, resolveGatewayBackendKind, resolveGlobalMainSessionKey } from './src/services/gateway-backends';
 import { resolveGatewayCacheScopeId } from './src/services/gateway-cache-scope';
 import { analyticsEvents } from './src/services/analytics/events';
-import { useDeepLinkHandler } from './src/hooks/useDeepLinkHandler';
+import { useDeepLinkHandler, type DeepLinkDeps } from './src/hooks/useDeepLinkHandler';
+import { NativeStackModalHeader } from './src/hooks/useNativeStackModalHeader';
+import { isClawketHandledDeepLink } from './src/services/deepLinks';
 import { usePostHogIdentity } from './src/hooks/usePostHogIdentity';
 import { usePostHogScreenTracking } from './src/hooks/usePostHogScreenTracking';
 import { ChatAppearanceSettings, GatewayConfig, SpeechRecognitionLanguage } from './src/types';
@@ -72,7 +78,6 @@ import type { AgentInfo } from './src/types/agent';
 import { buildTheme, builtInAccents, defaultAccentId, useAppTheme } from './src/theme';
 import { AppProviders } from './src/bootstrap/AppProviders';
 import { useAppBootstrap } from './src/bootstrap/useAppBootstrap';
-import i18next from './src/i18n';
 import { getActiveLeafRouteName } from './src/utils/posthog-navigation';
 import {
   extractAssistantDisplayText,
@@ -81,10 +86,12 @@ import {
 } from './src/utils/chat-message';
 import { resolveMainSessionKey } from './src/utils/agent-session-scope';
 import { normalizeAccessibleAgentId } from './src/utils/pro';
+import { getRootTabBarMetrics } from './src/navigation/root-tab-bar';
+import { FontSize, FontWeight, LineHeight, Radius } from './src/theme/tokens';
 
 type RootTabParamList = {
   Chat: undefined;
-  Office: undefined;
+  Live: undefined;
   Console: undefined;
   Profile: undefined;
   My: undefined;
@@ -96,11 +103,29 @@ type RootStackParamList = {
 } & ConsoleStackParamList;
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
-const NativeTab = createNativeBottomTabNavigator<RootTabParamList>();
-const JsTab = createBottomTabNavigator<RootTabParamList>();
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const Tab = (Platform.OS === 'ios' ? NativeTab : JsTab) as any;
+const Tab = createBottomTabNavigator<RootTabParamList>();
 const LOADING_THEME = buildTheme('light', 'light', builtInAccents[defaultAccentId]);
+
+const ROOT_TAB_ICON_SIZE = 23;
+
+function renderRootTabIcon(Icon: LucideIcon) {
+  return ({ color, focused }: { color: string; focused: boolean; size: number }) => (
+    <Icon
+      color={color}
+      size={ROOT_TAB_ICON_SIZE}
+      strokeWidth={focused ? 2.35 : 2}
+    />
+  );
+}
+
+const rootTabIcons = {
+  Chat: renderRootTabIcon(MessageCircle),
+  Live: renderRootTabIcon(Activity),
+  ConsoleGrid: renderRootTabIcon(LayoutGrid),
+  ConsoleTerminal: renderRootTabIcon(SquareTerminal),
+  Profile: renderRootTabIcon(UserRound),
+  My: renderRootTabIcon(Settings),
+};
 export default function App(): React.JSX.Element {
   const [gateway] = useState(() => new GatewayClient());
   const [nodeClient] = useState(() => new NodeClient());
@@ -234,38 +259,7 @@ export default function App(): React.JSX.Element {
   );
 }
 
-const OFFICE_DEV_PORT = 5174;
-const DEV_URL_OVERRIDE = process.env.EXPO_PUBLIC_OFFICE_DEV_URL;
-
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const officeHtmlString: string = require('./office-game/dist/office-inline.js').html;
-
-const OFFICE_HTML_BG_REGEX = /(html,\s*body\s*\{[^}]*background-color:\s*)([^;]+)(;)/;
-
-const TAB_BAR_HEIGHT = Platform.OS === 'android' ? 60 : 49;
 const GATEWAY_KEEPALIVE_INTERVAL_MS = 5_000;
-
-function resolveDevHost(): string {
-  const scriptURL = (NativeModules as { SourceCode?: { scriptURL?: string } }).SourceCode?.scriptURL;
-  if (!scriptURL) return 'localhost';
-  try {
-    const { hostname } = new URL(scriptURL);
-    return hostname || 'localhost';
-  } catch {
-    return 'localhost';
-  }
-}
-
-function resolveOfficeDevUrl(): string {
-  const override = DEV_URL_OVERRIDE?.trim();
-  if (override) return override;
-  const host = resolveDevHost();
-  return `http://${host}:${OFFICE_DEV_PORT}`;
-}
-
-function getOfficeLocale(): string {
-  return i18next.resolvedLanguage ?? i18next.language ?? 'en';
-}
 
 function resolveNodeInvokeSource(req: {
   source?: string;
@@ -382,23 +376,13 @@ function AppContent({
   const [foregroundEpoch, setForegroundEpoch] = useState(0);
   const hasUnreadChatRef = useRef(false);
   const activeTabRef = useRef<string>('Chat');
-  const officeWebViewRef = useRef<WebView>(null);
-  const officeWebViewLoadedRef = useRef(false);
-  const officeMessageHandlerRef = useRef<((e: WebViewMessageEvent) => void) | null>(null);
-  const officeLoadEndHandlerRef = useRef<(() => void) | null>(null);
-  const officeDebugAppendRef = useRef<((msg: string) => void) | null>(null);
-  const [isOfficeFocused, setIsOfficeFocused] = useState(false);
-  const [officeViewportTopInset, setOfficeViewportTopInset] = useState(0);
-  const [shouldShowOfficeWebView, setShouldShowOfficeWebView] = useState(false);
-  const [isOfficeWebViewMounted, setIsOfficeWebViewMounted] = useState(false);
-  const [officeGuideVisible, setOfficeGuideVisible] = useState(false);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const backgroundedAtRef = useRef<number | null>(null);
   const gatewayKeepAliveTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Load saved agent avatars on mount
   useEffect(() => { loadAgentAvatars().then(setAgentAvatars).catch(() => {}); }, []);
-  const [officeChatRequest, setOfficeChatRequest] = useState<{
+  const [chatSessionRequest, setChatSessionRequest] = useState<{
     sessionKey: string;
     requestedAt: number;
     sourceRole?: string;
@@ -420,9 +404,6 @@ function AppContent({
   const [pendingAddGateway, setPendingAddGateway] = useState(false);
   const [navigationReady, setNavigationReady] = useState(false);
   const handledNotificationResponseIdsRef = useRef(new Set<string>());
-
-  // Office tab uses lazy: false from the start — WebView runs in a separate
-  // process so it won't block the Chat tab's initial render.
 
   useEffect(() => {
     initializeChatNotifications();
@@ -453,23 +434,12 @@ function AppContent({
     currentAgentId,
   });
 
-  // Keep locale sync at the WebView host level so the first load does not
-  // depend on OfficeTab registering handlers before the page finishes loading.
-  const sendOfficeLocale = useCallback(() => {
-    if (!officeWebViewLoadedRef.current) return;
-    officeWebViewRef.current?.postMessage(
-      JSON.stringify({ type: 'LOCALE', locale: getOfficeLocale() }),
-    );
-  }, []);
-
   // Track active tab and clear unread when navigating to Chat
   const handleNavigationStateChange = useCallback((state: NavigationState | undefined) => {
     if (!state) return;
     trackScreenState(state);
     const mainTabsState = getMainTabsState(state);
     const activeTabRoute = mainTabsState?.routes[mainTabsState.index ?? 0];
-    const activeRootRoute = state.routes[state.index ?? 0];
-    const officeTabFocused = activeTabRoute?.name === 'Office';
     if (activeTabRoute) {
       activeTabRef.current = activeTabRoute.name;
     }
@@ -477,35 +447,12 @@ function AppContent({
       hasUnreadChatRef.current = false;
       setHasUnreadChat(false);
     }
-    setIsOfficeFocused(officeTabFocused);
-    setShouldShowOfficeWebView(
-      Platform.OS === 'ios'
-        ? officeTabFocused
-        : officeTabFocused && activeRootRoute?.name === 'MainTabs',
-    );
     setIsWebViewScreen(getActiveLeafRouteName(state) === 'Docs');
   }, [trackScreenState]);
 
-  useEffect(() => {
-    if (isOfficeFocused) return;
-    setOfficeGuideVisible(false);
-  }, [isOfficeFocused]);
-
-  useEffect(() => {
-    setIsOfficeWebViewMounted(shouldShowOfficeWebView);
-  }, [shouldShowOfficeWebView]);
-
-  const handleOpenOfficeGuide = useCallback(() => {
-    setOfficeGuideVisible(true);
-  }, []);
-
-  const handleCloseOfficeGuide = useCallback(() => {
-    setOfficeGuideVisible(false);
-  }, []);
-
   const backendCapabilities = useMemo(() => getGatewayBackendCapabilities(config), [config]);
   const backendKind = useMemo(() => resolveGatewayBackendKind(config), [config]);
-  const showOfficeTab = backendCapabilities.gatewayConnection;
+  const showLiveTab = backendCapabilities.gatewayConnection;
   const showConsoleTab = backendCapabilities.consoleRoot;
   const showProfileTab = backendKind === 'youmind';
   const consoleTabLabel = backendKind === 'youmind' ? t('Workspace') : t('Console');
@@ -794,7 +741,7 @@ function AppContent({
       chatFontSize,
       chatAppearance,
       speechRecognitionLanguage,
-      officeChatRequest,
+      chatSessionRequest,
       chatSidebarRequest,
       pendingChatNotificationOpen,
       agents,
@@ -816,15 +763,15 @@ function AppContent({
       onCanvasToggle,
       onChatFontSizeChange,
       onChatAppearanceChange,
-      requestOfficeChat: (sessionKey: string, sourceRole?: string) => {
-        setOfficeChatRequest({
+      requestChatSession: (sessionKey: string, sourceRole?: string) => {
+        setChatSessionRequest({
           sessionKey,
           sourceRole,
           requestedAt: Date.now(),
         });
       },
-      clearOfficeChatRequest: () => {
-        setOfficeChatRequest(null);
+      clearChatSessionRequest: () => {
+        setChatSessionRequest(null);
       },
       requestChatSidebar: (params?: { tab?: 'sessions' | 'subagents' | 'cron'; channel?: string; openDrawer?: boolean }) => {
         const normalizedChannel = params?.channel?.trim().toLowerCase() || undefined;
@@ -876,13 +823,6 @@ function AppContent({
       onSpeechRecognitionLanguageChange,
       onSaved,
       onReset,
-      officeWebViewRef,
-      officeMessageHandlerRef,
-      officeLoadEndHandlerRef,
-      officeDebugAppendRef,
-      isOfficeFocused,
-      officeViewportTopInset,
-      setOfficeViewportTopInset,
     }),
     [
       agentAvatars,
@@ -898,13 +838,12 @@ function AppContent({
       execApprovalEnabled,
       gateway,
       showAgentAvatar,
-      isOfficeFocused,
       nodeEnabled,
       nodeCapabilityToggles,
       pendingAddGateway,
       isMultiAgent,
       mainSessionKey,
-      officeChatRequest,
+      chatSessionRequest,
       pendingChatNotificationOpen,
       pendingChatInput,
       pendingMainSessionSwitch,
@@ -930,7 +869,6 @@ function AppContent({
       clearPendingAgentSwitch,
       showModelUsage,
       speechRecognitionLanguage,
-      officeViewportTopInset,
     ],
   );
 
@@ -951,46 +889,31 @@ function AppContent({
     };
   }, [theme]);
 
-  // Deep link handler for clawket:// scheme
-  useDeepLinkHandler({
-    rootNavigationRef,
-    gateway,
-    mainSessionKey,
-    onSaved,
-    requestChatSidebar: appContextValue.requestChatSidebar,
-  });
-
   const insets = useSafeAreaInsets();
-
-  const themedOfficeHtml = useMemo(
-    () => officeHtmlString.replace(OFFICE_HTML_BG_REGEX, `$1${theme.colors.background}$3`),
-    [theme.colors.background],
+  const rootTabBarMetrics = useMemo(
+    () => getRootTabBarMetrics(Platform.OS, insets.bottom),
+    [insets.bottom],
   );
-  const officeSource = useMemo(() => {
-    if (!__DEV__) return { html: themedOfficeHtml };
-    return { uri: resolveOfficeDevUrl() };
-  }, [themedOfficeHtml]);
+  const rootTabBarBackground = isWebViewScreen
+    ? theme.colors.surfaceElevated
+    : theme.colors.surface;
+  const rootTabBarStyle = useMemo(
+    () => ({
+      backgroundColor: rootTabBarBackground,
+      borderTopColor: theme.colors.border,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      ...(Platform.OS === 'android'
+        ? {
+          height: rootTabBarMetrics.height,
+          paddingTop: rootTabBarMetrics.paddingTop,
+          paddingBottom: rootTabBarMetrics.paddingBottom,
+        }
+        : null),
+    }),
+    [rootTabBarBackground, rootTabBarMetrics, theme.colors.border],
+  );
 
-  useEffect(() => {
-    const handleLanguageChanged = () => {
-      sendOfficeLocale();
-    };
-    i18next.on('languageChanged', handleLanguageChanged);
-    return () => {
-      i18next.off('languageChanged', handleLanguageChanged);
-    };
-  }, [sendOfficeLocale]);
-
-  useEffect(() => {
-    if (!isOfficeFocused) return;
-    sendOfficeLocale();
-  }, [isOfficeFocused, sendOfficeLocale]);
-
-  useEffect(() => {
-    sendOfficeLocale();
-  }, [foregroundEpoch, sendOfficeLocale]);
-
-  // Share intent linking config (excludes clawket:// deep links — handled by useDeepLinkHandler)
+  // Share intent linking config excludes app-controlled pairing and action links.
   const shareIntentLinking = useMemo<LinkingOptions<RootStackParamList>>(() => ({
     prefixes: [Linking.createURL('/')],
     config: {
@@ -1004,7 +927,7 @@ function AppContent({
     },
     async getInitialURL() {
       const url = await Linking.getInitialURL();
-      if (url && url.startsWith('clawket://')) return null;
+      if (url && isClawketHandledDeepLink(url)) return null;
       if (url && new URL(url).hostname === 'expo-sharing') {
         return Linking.createURL('/handle-share');
       }
@@ -1012,7 +935,7 @@ function AppContent({
     },
     subscribe(listener: (url: string) => void) {
       const sub = Linking.addEventListener('url', ({ url }) => {
-        if (url.startsWith('clawket://')) return;
+        if (isClawketHandledDeepLink(url)) return;
         if (new URL(url).hostname === 'expo-sharing') {
           listener(Linking.createURL('/handle-share'));
         } else {
@@ -1030,6 +953,9 @@ function AppContent({
         animation: 'slide_from_right' as const,
         contentStyle: { backgroundColor: theme.colors.background },
         headerShown: true,
+        header: (props: NativeStackHeaderProps) => (
+          <NativeStackModalHeader {...props} dismissStyleOverride="close" />
+        ),
       };
     }
     return {
@@ -1038,6 +964,9 @@ function AppContent({
       contentStyle: { backgroundColor: theme.colors.background },
       gestureEnabled: true,
       headerShown: true,
+      header: (props: NativeStackHeaderProps) => (
+        <NativeStackModalHeader {...props} dismissStyleOverride="close" />
+      ),
     };
   }, [theme.colors.background]);
 
@@ -1045,6 +974,13 @@ function AppContent({
     <AppContextProvider value={appContextValue}>
     <GlobalLoadingOverlayProvider>
     <GatewayScannerProvider>
+    <AppDeepLinkHandler
+      rootNavigationRef={rootNavigationRef}
+      gateway={gateway}
+      mainSessionKey={mainSessionKey}
+      onSaved={onSaved}
+      requestChatSidebar={appContextValue.requestChatSidebar}
+    />
     <NodeCameraCaptureProvider>
       <NavigationContainer
         ref={rootNavigationRef}
@@ -1057,7 +993,14 @@ function AppContent({
         onStateChange={handleNavigationStateChange}
       >
         <StatusBar style={theme.scheme === 'dark' ? 'light' : 'dark'} />
-        <RootStack.Navigator screenOptions={{ headerShown: false }}>
+        <RootStack.Navigator
+          screenOptions={{
+            headerShown: false,
+            header: (props: NativeStackHeaderProps) => <NativeStackModalHeader {...props} />,
+            headerBackTitle: '',
+            headerBackButtonDisplayMode: 'minimal',
+          }}
+        >
           <RootStack.Screen
             name="MainTabs"
             options={{
@@ -1067,26 +1010,33 @@ function AppContent({
           >
             {() => (
               <Tab.Navigator
-                tabBarActiveTintColor={theme.colors.primary}
-                tabBarInactiveTintColor={theme.colors.textMuted}
-                {...(isWebViewScreen && Platform.OS === 'ios' ? {
-                  tabBarStyle: { backgroundColor: theme.scheme === 'dark' ? '#000000' : '#FFFFFF' },
-                } : {})}
-                {...(Platform.OS === 'android' ? {
-                  screenOptions: {
-                    headerShown: false,
-                    tabBarStyle: {
-                      backgroundColor: isWebViewScreen ? (theme.scheme === 'dark' ? '#000000' : '#FFFFFF') : theme.colors.surface,
-                      borderTopColor: theme.colors.border, height: 60, paddingTop: 8,
-                    },
-                    tabBarLabelStyle: { fontSize: 13, fontWeight: '600' as const },
-                    tabBarIconStyle: { display: 'none' as const },
+                screenOptions={{
+                  headerShown: false,
+                  sceneStyle: { backgroundColor: theme.colors.background },
+                  tabBarActiveTintColor: theme.colors.primary,
+                  tabBarInactiveTintColor: theme.colors.textMuted,
+                  tabBarStyle: rootTabBarStyle,
+                  tabBarLabelStyle: {
+                    fontSize: FontSize.xs,
+                    fontWeight: FontWeight.semibold,
+                    lineHeight: LineHeight.xs,
+                    marginTop: 2,
                   },
-                } : {
-                  screenOptions: {
-                    sceneStyle: { backgroundColor: theme.colors.background },
+                  tabBarIconStyle: {
+                    marginTop: 4,
+                    marginBottom: 1,
                   },
-                })}
+                  tabBarItemStyle: {
+                    paddingVertical: 0,
+                  },
+                  tabBarBadgeStyle: {
+                    backgroundColor: theme.colors.primary,
+                    borderRadius: Radius.full,
+                    height: 7,
+                    minWidth: 7,
+                    paddingHorizontal: 0,
+                  },
+                }}
               >
                 <Tab.Screen
                   name="Chat"
@@ -1100,20 +1050,16 @@ function AppContent({
                   options={{
                     tabBarLabel: t('Chat'),
                     tabBarBadge: hasUnreadChat ? '' : undefined,
-                    ...(Platform.OS === 'ios' ? {
-                      tabBarIcon: ({ focused }: { focused: boolean }) => ({ sfSymbol: focused ? 'message.fill' : 'message' }),
-                    } : {}),
+                    tabBarIcon: rootTabIcons.Chat,
                   }}
                 />
-                {showOfficeTab ? (
+                {showLiveTab ? (
                   <Tab.Screen
-                    name="Office"
-                    component={OfficeTab}
+                    name="Live"
+                    component={LiveTab}
                     options={{
-                      tabBarLabel: t('Office'),
-                      ...(Platform.OS === 'ios' ? {
-                        tabBarIcon: ({ focused }: { focused: boolean }) => ({ sfSymbol: focused ? 'building.2.fill' : 'building.2' }),
-                      } : {}),
+                      tabBarLabel: t('Live'),
+                      tabBarIcon: rootTabIcons.Live,
                     }}
                   />
                 ) : null}
@@ -1123,13 +1069,9 @@ function AppContent({
                     component={ConsoleTab}
                     options={{
                       tabBarLabel: consoleTabLabel,
-                      ...(Platform.OS === 'ios' ? {
-                        tabBarIcon: ({ focused }: { focused: boolean }) => ({
-                          sfSymbol: backendKind === 'youmind'
-                            ? (focused ? 'square.grid.2x2.fill' : 'square.grid.2x2')
-                            : (focused ? 'terminal.fill' : 'terminal'),
-                        }),
-                      } : {}),
+                      tabBarIcon: backendKind === 'youmind'
+                        ? rootTabIcons.ConsoleGrid
+                        : rootTabIcons.ConsoleTerminal,
                     }}
                   />
                 ) : null}
@@ -1139,11 +1081,7 @@ function AppContent({
                     component={ProfileTab}
                     options={{
                       tabBarLabel: t('Profile'),
-                      ...(Platform.OS === 'ios' ? {
-                        tabBarIcon: ({ focused }: { focused: boolean }) => ({
-                          sfSymbol: focused ? 'person.crop.circle.fill' : 'person.crop.circle',
-                        }),
-                      } : {}),
+                      tabBarIcon: rootTabIcons.Profile,
                     }}
                   />
                 ) : null}
@@ -1152,9 +1090,7 @@ function AppContent({
                   component={ConfigTab}
                   options={{
                     tabBarLabel: backendKind === 'youmind' ? t('Settings') : t('Setting'),
-                    ...(Platform.OS === 'ios' ? {
-                      tabBarIcon: ({ focused }: { focused: boolean }) => ({ sfSymbol: focused ? 'gearshape.fill' : 'gearshape' }),
-                    } : {}),
+                    tabBarIcon: rootTabIcons.My,
                   }}
                 />
               </Tab.Navigator>
@@ -1175,58 +1111,6 @@ function AppContent({
           </React.Fragment>
         </RootStack.Navigator>
       </NavigationContainer>
-      <View
-        pointerEvents={shouldShowOfficeWebView ? 'auto' : 'none'}
-        style={isOfficeWebViewMounted
-          ? {
-            position: 'absolute',
-            top: officeViewportTopInset,
-            left: 0,
-            right: 0,
-            bottom: TAB_BAR_HEIGHT + insets.bottom,
-          }
-          : { position: 'absolute', width: 1, height: 1, overflow: 'hidden' }
-        }
-      >
-        <WebView
-          ref={officeWebViewRef}
-          source={officeSource}
-          style={{ flex: 1, backgroundColor: 'transparent' }}
-          scrollEnabled={false}
-          bounces={false}
-          overScrollMode="never"
-          javaScriptEnabled
-          onMessage={(event: WebViewMessageEvent) => officeMessageHandlerRef.current?.(event)}
-          onLoadStart={() => {
-            officeWebViewLoadedRef.current = false;
-          }}
-          onLoadEnd={() => {
-            officeWebViewLoadedRef.current = true;
-            sendOfficeLocale();
-            officeLoadEndHandlerRef.current?.();
-          }}
-          onError={(event: WebViewErrorEvent) => {
-            officeDebugAppendRef.current?.(`❌ webview error: ${event.nativeEvent.description}`);
-          }}
-          onHttpError={(event: WebViewHttpErrorEvent) => {
-            officeDebugAppendRef.current?.(`❌ webview http ${event.nativeEvent.statusCode}: ${event.nativeEvent.description}`);
-          }}
-          originWhitelist={['*']}
-          contentInsetAdjustmentBehavior="never"
-        />
-      </View>
-      {shouldShowOfficeWebView && !officeGuideVisible ? (
-        <OfficeGuideButton
-          top={Math.max(insets.top, officeViewportTopInset, 8) + 8}
-          right={8}
-          onPress={handleOpenOfficeGuide}
-        />
-      ) : null}
-      <OfficeGuideOverlay
-        visible={officeGuideVisible}
-        onClose={handleCloseOfficeGuide}
-      />
-      <OfficeDebugOverlay />
       <GlobalGatewayOverlay />
       <GlobalProPaywallOverlay />
     </NodeCameraCaptureProvider>
@@ -1236,32 +1120,9 @@ function AppContent({
   );
 }
 
-const DEBUG_LOG_LIMIT = 40;
-
-function OfficeDebugOverlay(): React.JSX.Element | null {
-  const { debugMode, isOfficeFocused, officeDebugAppendRef } = useAppContext();
-  const insets = useSafeAreaInsets();
-  const [logs, setLogs] = useState<string[]>([]);
-
-  useEffect(() => {
-    officeDebugAppendRef.current = (msg: string) => {
-      setLogs((prev) => [...prev.slice(-(DEBUG_LOG_LIMIT - 1)), `${new Date().toLocaleTimeString()} ${msg}`]);
-    };
-    return () => { officeDebugAppendRef.current = null; };
-  }, [officeDebugAppendRef]);
-
-  if (!debugMode || !isOfficeFocused || logs.length === 0) return null;
-
-  return (
-    <DebugOverlay
-      logs={logs}
-      style={{
-        top: undefined,
-        bottom: TAB_BAR_HEIGHT + insets.bottom + 8,
-        zIndex: 9999,
-      }}
-    />
-  );
+function AppDeepLinkHandler(props: DeepLinkDeps): null {
+  useDeepLinkHandler(props);
+  return null;
 }
 
 function GlobalGatewayOverlay(): React.JSX.Element | null {

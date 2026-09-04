@@ -4,7 +4,6 @@ import {
   FlatList,
   RefreshControl,
   StyleSheet,
-  Switch,
   Text,
   TouchableOpacity,
   View,
@@ -14,6 +13,7 @@ import {
   EmptyState,
   LoadingState,
   ScreenHeader,
+  ThemedSwitch,
   createListContentStyle,
   createListHeaderSpacing,
 } from '../ui';
@@ -23,7 +23,7 @@ import { useGatewayPatch } from '../../hooks/useGatewayPatch';
 import { loadGatewayChannelsBundle } from '../../services/gateway-channels';
 import { GatewayClient } from '../../services/gateway';
 import { useAppTheme } from '../../theme';
-import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
+import { BorderWidth, FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
 import type {
   ChannelStatusAccount,
   ChannelSummary,
@@ -331,12 +331,10 @@ export function ChannelsView({
                     <Text style={styles.channelAccountTitle}>
                       {formatAccountTitle(account, item.defaultAccountId, t)}
                     </Text>
-                    <Switch
+                    <ThemedSwitch
                       value={isEnabled}
                       onValueChange={(value) => { void handleAccountToggle(item.id, account.accountId, value); }}
                       disabled={isToggling}
-                      trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
-                      thumbColor={theme.colors.surface}
                     />
                   </View>
 
@@ -484,7 +482,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     dmScopeCard: {
       borderRadius: Radius.md,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       backgroundColor: colors.surface,
       padding: Space.md,
@@ -509,7 +507,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     dmScopeOption: {
       borderRadius: Radius.sm,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       backgroundColor: colors.surfaceMuted,
       paddingHorizontal: Space.md,
@@ -529,7 +527,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       width: 16,
       height: 16,
       borderRadius: Radius.full,
-      borderWidth: 1.5,
+      borderWidth: BorderWidth.strong,
       borderColor: colors.border,
       alignItems: 'center',
       justifyContent: 'center',
@@ -572,7 +570,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       color: colors.textMuted,
     },
     placeholderCard: {
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       borderRadius: Radius.md,
       padding: Space.md,
@@ -583,7 +581,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       color: colors.textSubtle,
     },
     channelCard: {
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       borderRadius: Radius.md,
       padding: Space.md,
@@ -609,7 +607,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     channelStateBadge: {
       borderRadius: Radius.full,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       paddingHorizontal: Space.sm,
       paddingVertical: 2,
       backgroundColor: colors.surface,
@@ -623,7 +621,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     channelAccountCard: {
       borderRadius: Radius.sm,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       backgroundColor: colors.surfaceMuted,
       padding: Space.sm,
@@ -652,7 +650,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     errorBanner: {
       borderRadius: Radius.sm,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.error,
       backgroundColor: colors.surfaceElevated,
       paddingHorizontal: Space.md,
@@ -661,7 +659,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     errorCard: {
       borderRadius: Radius.md,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       backgroundColor: colors.surface,
       padding: Space.lg,

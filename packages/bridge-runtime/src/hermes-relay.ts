@@ -5,6 +5,9 @@ const RELAY_CONTROL_PREFIX = '__clawket_relay_control__:';
 const BRIDGE_HEALTH_METHOD = 'health';
 const BRIDGE_HEALTH_PARAMS = {};
 const DEFAULT_BRIDGE_HEALTH_PROBE_TIMEOUT_MS = 10_000;
+const DEFAULT_BRIDGE_HEALTH_PROBE_INTERVAL_MS = 15_000;
+const DEFAULT_BRIDGE_STATUS_POLL_INTERVAL_MS = 90_000;
+const RELAY_STABILITY_RESET_MS = 30_000;
 const TRACEABLE_RELAY_METHODS = new Set([
   'sessions.list',
   'chat.history',
@@ -33,6 +36,7 @@ export type HermesRelayRuntimeOptions = {
   reconnectBaseDelayMs?: number;
   reconnectMaxDelayMs?: number;
   bridgeStatusPollIntervalMs?: number;
+  bridgeHealthProbeIntervalMs?: number;
   bridgeHealthProbeTimeoutMs?: number;
   createWebSocket?: (url: string, options?: { headers?: Record<string, string> }) => WebSocket;
   fetchImpl?: typeof fetch;
@@ -47,6 +51,7 @@ export class HermesRelayRuntime {
   private bridgeReconnectTimer: NodeJS.Timeout | null = null;
   private bridgeStatusTimer: NodeJS.Timeout | null = null;
   private bridgeHealthProbeTimer: NodeJS.Timeout | null = null;
+  private relayStabilityTimer: NodeJS.Timeout | null = null;
   private relayAttempt = 0;
   private bridgeAttempt = 0;
   private stopped = true;
@@ -90,10 +95,12 @@ export class HermesRelayRuntime {
     if (this.bridgeReconnectTimer) clearTimeout(this.bridgeReconnectTimer);
     if (this.bridgeStatusTimer) clearTimeout(this.bridgeStatusTimer);
     if (this.bridgeHealthProbeTimer) clearTimeout(this.bridgeHealthProbeTimer);
+    if (this.relayStabilityTimer) clearTimeout(this.relayStabilityTimer);
     this.reconnectTimer = null;
     this.bridgeReconnectTimer = null;
     this.bridgeStatusTimer = null;
     this.bridgeHealthProbeTimer = null;
+    this.relayStabilityTimer = null;
     this.bridgeStatusProbeInFlight = false;
     this.clearPendingBridgeHealthProbe();
     this.relaySocket?.close();
@@ -132,6 +139,7 @@ export class HermesRelayRuntime {
       }
       this.updateSnapshot({ relayConnected: true, lastError: null });
       this.log(`relay connected attempt=${attempt}`);
+      this.scheduleRelayStabilityReset(relay);
       this.connectBridge();
       this.scheduleBridgeStatusProbe();
     });
@@ -149,6 +157,7 @@ export class HermesRelayRuntime {
         return;
       }
       this.relaySocket = null;
+      this.clearRelayStabilityReset();
       this.updateSnapshot({
         relayConnected: false,
         bridgeConnected: false,
@@ -217,6 +226,10 @@ export class HermesRelayRuntime {
   }
 
   private handleRelayMessage(data: RawData, isBinary: boolean): void {
+    if (this.relayAttempt !== 0) {
+      this.relayAttempt = 0;
+      this.log('relay health confirmed; reconnect backoff reset');
+    }
     if (isBinary) {
       this.forwardOrQueueBridgeMessage({ data: normalizeBinary(data) });
       return;
@@ -357,7 +370,7 @@ export class HermesRelayRuntime {
 
   private scheduleBridgeStatusProbe(): void {
     if (this.stopped || this.bridgeStatusTimer) return;
-    const intervalMs = this.options.bridgeStatusPollIntervalMs ?? 5_000;
+    const intervalMs = this.options.bridgeStatusPollIntervalMs ?? DEFAULT_BRIDGE_STATUS_POLL_INTERVAL_MS;
     this.bridgeStatusTimer = setTimeout(() => {
       this.bridgeStatusTimer = null;
       void this.runBridgeStatusProbe();
@@ -373,7 +386,9 @@ export class HermesRelayRuntime {
 
   private scheduleBridgeHealthProbe(): void {
     if (this.stopped || this.bridgeHealthProbeTimer) return;
-    const intervalMs = this.options.bridgeStatusPollIntervalMs ?? 5_000;
+    const intervalMs = this.options.bridgeHealthProbeIntervalMs
+      ?? this.options.bridgeStatusPollIntervalMs
+      ?? DEFAULT_BRIDGE_HEALTH_PROBE_INTERVAL_MS;
     this.bridgeHealthProbeTimer = setTimeout(() => {
       this.bridgeHealthProbeTimer = null;
       this.runBridgeHealthProbe();
@@ -486,6 +501,7 @@ export class HermesRelayRuntime {
         return true;
       }
       this.clearPendingBridgeHealthProbe();
+      this.bridgeAttempt = 0;
       return true;
     } catch {
       return false;
@@ -503,6 +519,7 @@ export class HermesRelayRuntime {
     if (!relay) return;
 
     this.relaySocket = null;
+    this.clearRelayStabilityReset();
     this.clearBridgeStatusProbe();
     this.clearPendingBridgeHealthProbe();
     this.updateSnapshot({
@@ -520,6 +537,24 @@ export class HermesRelayRuntime {
     if (!this.stopped) {
       this.scheduleRelayReconnect();
     }
+  }
+
+  private scheduleRelayStabilityReset(relay: WebSocket): void {
+    this.clearRelayStabilityReset();
+    this.relayStabilityTimer = setTimeout(() => {
+      this.relayStabilityTimer = null;
+      if (this.stopped || this.relaySocket !== relay || relay.readyState !== WebSocket.OPEN) return;
+      if (this.relayAttempt !== 0) {
+        this.relayAttempt = 0;
+        this.log('relay stable window reached; reconnect backoff reset');
+      }
+    }, RELAY_STABILITY_RESET_MS);
+  }
+
+  private clearRelayStabilityReset(): void {
+    if (!this.relayStabilityTimer) return;
+    clearTimeout(this.relayStabilityTimer);
+    this.relayStabilityTimer = null;
   }
 
   private isRelayOpen(): boolean {

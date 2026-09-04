@@ -1,8 +1,9 @@
 import React, { useMemo } from 'react';
-import { ActivityIndicator, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useAppTheme } from '../../theme';
-import { FontSize, FontWeight, Radius, Shadow, Space } from '../../theme/tokens';
+import { FontSize, FontWeight, LineHeight, Radius, Space } from '../../theme/tokens';
+import { Button, Card } from '../ui';
 
 type Props = {
   approveCommand: string;
@@ -21,7 +22,7 @@ export function PairingPendingCard({ approveCommand, copied, onCopy, connectionM
 
   return (
     <View style={styles.pairingContainer}>
-      <View style={styles.pairingCard}>
+      <Card style={styles.pairingCard} elevation="floating" padding="lg">
         <Text style={styles.pairingEmoji}>🔐</Text>
         <Text style={styles.pairingTitle}>{t('Device Pairing Required')}</Text>
 
@@ -39,9 +40,7 @@ export function PairingPendingCard({ approveCommand, copied, onCopy, connectionM
               <Text style={styles.commandText} selectable>{approveCommand}</Text>
             </View>
 
-            <TouchableOpacity style={styles.copyBtn} onPress={onCopy} activeOpacity={0.7}>
-              <Text style={styles.copyBtnText}>{copied ? t('Copied!', { ns: 'common' }) : t('Copy Command')}</Text>
-            </TouchableOpacity>
+            <Button label={copied ? t('Copied!', { ns: 'common' }) : t('Copy Command')} onPress={onCopy} style={styles.copyBtn} />
           </>
         )}
 
@@ -53,11 +52,9 @@ export function PairingPendingCard({ approveCommand, copied, onCopy, connectionM
         <Text style={styles.pairingHint}>{t('The app will connect automatically once approved.')}</Text>
 
         {onRetry && (
-          <TouchableOpacity style={styles.retryBtn} onPress={onRetry} activeOpacity={0.7}>
-            <Text style={styles.retryBtnText}>{t('Retry Now', { ns: 'common' })}</Text>
-          </TouchableOpacity>
+          <Button label={t('Retry Now', { ns: 'common' })} variant="secondary" size="sm" onPress={onRetry} style={styles.retryBtn} />
         )}
-      </View>
+      </Card>
     </View>
   );
 }
@@ -71,36 +68,31 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       paddingHorizontal: Space.xl,
     },
     pairingCard: {
-      backgroundColor: colors.surface,
-      borderRadius: Radius.lg - 4,
-      padding: 28,
+      borderRadius: Radius.md,
       width: '100%',
       alignItems: 'center',
-      borderWidth: 1,
-      borderColor: colors.border,
-      ...Shadow.md,
     },
     pairingEmoji: {
-      fontSize: 48,
+      fontSize: FontSize.hero,
       marginBottom: 16,
     },
     pairingTitle: {
-      fontSize: FontSize.lg + 4,
+      fontSize: FontSize.displaySm,
       fontWeight: FontWeight.bold,
       color: colors.text,
       marginBottom: Space.sm,
     },
     pairingDesc: {
-      fontSize: FontSize.md + 1,
+      fontSize: FontSize.bodySm,
       color: colors.textMuted,
       textAlign: 'center',
-      lineHeight: 20,
+      lineHeight: LineHeight.md,
       marginBottom: Space.lg + Space.xs,
     },
     commandContainer: {
       backgroundColor: colors.surfaceElevated,
       borderRadius: Radius.sm + 2,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       paddingVertical: Space.lg - 2,
       paddingHorizontal: Space.lg,
@@ -114,18 +106,8 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       textAlign: 'center',
     },
     copyBtn: {
-      backgroundColor: colors.primary,
-      borderRadius: Radius.sm + 2,
-      paddingVertical: Space.md,
-      paddingHorizontal: Space.xl,
       width: '100%',
-      alignItems: 'center',
       marginBottom: Space.xl,
-    },
-    copyBtnText: {
-      color: colors.primaryText,
-      fontSize: FontSize.base,
-      fontWeight: FontWeight.semibold,
     },
     pairingStatusRow: {
       flexDirection: 'row',
@@ -144,16 +126,6 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     retryBtn: {
       marginTop: Space.lg,
-      paddingVertical: Space.sm + 2,
-      paddingHorizontal: Space.xl,
-      borderRadius: Radius.sm + 2,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    retryBtnText: {
-      fontSize: FontSize.md,
-      color: colors.textMuted,
-      fontWeight: FontWeight.medium,
     },
   });
 }

@@ -73,7 +73,7 @@ class FakeStorage {
 
 class FakeWebSocket {
   readonly readyState: number;
-  private readonly attachment: unknown;
+  private attachment: unknown;
   readonly sent: string[] = [];
   readonly closeCalls: Array<{ code?: number; reason?: string }> = [];
   shouldThrowOnSend = false;
@@ -85,6 +85,10 @@ class FakeWebSocket {
 
   deserializeAttachment(): unknown {
     return this.attachment;
+  }
+
+  serializeAttachment(attachment: unknown): void {
+    this.attachment = attachment;
   }
 
   send(payload: string): void {
@@ -813,6 +817,77 @@ describe('relay worker helpers', () => {
     expect(relay.runtime.clients.has('client-healthy')).toBe(true);
     expect(healthyClient.sent).toHaveLength(1);
     expect(JSON.parse(healthyClient.sent[0])).toMatchObject({ type: 'tick' });
+  });
+
+  it('keeps legacy idle clients connected while requiring pong from capable clients', async () => {
+    const { room } = createHermesRelayRoomWithSockets();
+    const legacyClient = new FakeWebSocket({
+      attachment: { role: 'client', clientId: 'client-legacy', connectedAt: 1 },
+    });
+    const capableClient = new FakeWebSocket({
+      attachment: {
+        role: 'client',
+        clientId: 'client-capable',
+        connectedAt: 1,
+        capabilities: ['relay.client-pong.v1'],
+        lastPongAt: 1,
+      },
+    });
+    const relay = room as unknown as {
+      runtime: {
+        clients: Map<string, FakeWebSocket>;
+        clientLastActivityAtById: Map<string, number>;
+      };
+      alarm: () => Promise<void>;
+    };
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    relay.runtime.clients.set('client-legacy', legacyClient);
+    relay.runtime.clients.set('client-capable', capableClient);
+    relay.runtime.clientLastActivityAtById.set('client-legacy', 1);
+    relay.runtime.clientLastActivityAtById.set('client-capable', 1);
+
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(40_000);
+    try {
+      await relay.alarm();
+    } finally {
+      nowSpy.mockRestore();
+    }
+
+    expect(relay.runtime.clients.has('client-legacy')).toBe(true);
+    expect(legacyClient.closeCalls).toEqual([]);
+    expect(relay.runtime.clients.has('client-capable')).toBe(false);
+    expect(capableClient.closeCalls).toEqual([{ code: 4009, reason: 'client_pong_timeout' }]);
+  });
+
+  it('acknowledges capable client pongs locally without forwarding them to the bridge', async () => {
+    const bridgeSocket = new FakeWebSocket({
+      attachment: { role: 'gateway', clientId: 'bridge-main', connectedAt: 1 },
+    });
+    const clientSocket = new FakeWebSocket({
+      attachment: {
+        role: 'client',
+        clientId: 'client-pong',
+        connectedAt: 2,
+        capabilities: ['relay.client-pong.v1'],
+        lastPongAt: 2,
+      },
+    });
+    const { room } = createHermesRelayRoomWithSockets();
+    const relay = room as unknown as {
+      runtime: { bridgeSocket: FakeWebSocket | null };
+      webSocketMessage: (ws: WebSocket, message: string | ArrayBuffer) => Promise<void>;
+    };
+    relay.runtime.bridgeSocket = bridgeSocket;
+
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(20_000);
+    try {
+      await relay.webSocketMessage(clientSocket as never, JSON.stringify({ type: 'pong', ts: 19_000 }));
+    } finally {
+      nowSpy.mockRestore();
+    }
+
+    expect(bridgeSocket.sent).toEqual([]);
+    expect(clientSocket.deserializeAttachment()).toMatchObject({ lastPongAt: 20_000 });
   });
 
   it('does not close a gateway that has not proven gateway_pong support yet', async () => {

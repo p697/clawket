@@ -2,19 +2,17 @@ import React, { useMemo } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import {
   createNativeStackNavigator,
+  type NativeStackHeaderProps,
   type NativeStackNavigationOptions,
 } from '@react-navigation/native-stack';
-import { useTabBarHeight } from '../../hooks/useTabBarHeight';
 import { useTranslation } from 'react-i18next';
 import { EmptyState } from '../../components/ui';
 import { useAppContext } from '../../contexts/AppContext';
 import { getGatewayBackendDescriptor } from '../../services/gateway-backends';
 import { useAppTheme } from '../../theme';
+import { NativeStackModalHeader } from '../../hooks/useNativeStackModalHeader';
 import { isConsoleScreenSupported } from './console-screen-support';
 
-// On iOS the native tab bar overlays content, so screens need paddingBottom.
-// On Android the JS tab bar occupies layout space, so no extra padding is needed.
-const needsTabBarPadding = Platform.OS === 'ios';
 import { ConsoleMenuScreen } from './ConsoleMenuScreen';
 import { ChannelsScreen } from './ChannelsScreen';
 import { NodesScreen } from './NodesScreen';
@@ -122,16 +120,25 @@ function createConsoleScreenOptions(
       gestureEnabled: true,
       fullScreenGestureEnabled: true,
       contentStyle: defaultContentStyle,
+      header: (props: NativeStackHeaderProps) => <NativeStackModalHeader {...props} />,
+      headerBackTitle: '',
+      headerBackButtonDisplayMode: 'minimal',
     },
     detailScreenOptions,
     editorScreenOptions,
     nativeModalHeaderOptions: {
       ...detailScreenOptions,
       headerShown: true,
+      header: (props: NativeStackHeaderProps) => (
+        <NativeStackModalHeader {...props} dismissStyleOverride="close" />
+      ),
     },
     nativeEditorHeaderOptions: {
       ...editorScreenOptions,
       headerShown: true,
+      header: (props: NativeStackHeaderProps) => (
+        <NativeStackModalHeader {...props} dismissStyleOverride="close" />
+      ),
     },
   };
 }
@@ -174,14 +181,12 @@ function buildEditorScreenOptions(contentStyle: {
 
 export function useConsoleTabScreenOptions(): ConsoleScreenOptions {
   const { theme } = useAppTheme();
-  const tabBarHeight = useTabBarHeight();
 
   const defaultContentStyle = useMemo(
     () => ({
       backgroundColor: theme.colors.background,
-      paddingBottom: needsTabBarPadding ? tabBarHeight : 0,
     }),
-    [tabBarHeight, theme.colors.background],
+    [theme.colors.background],
   );
   const modalContentStyle = useMemo(
     () => ({

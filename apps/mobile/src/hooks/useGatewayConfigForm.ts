@@ -12,7 +12,7 @@ import {
   toLegacyGatewayMode,
 } from '../services/gateway-backends';
 import { StorageService } from '../services/storage';
-import { GatewayBackendKind, GatewayConfig, GatewayMode, GatewayTransportKind, SavedGatewayConfig } from '../types';
+import { GatewayBackendKind, GatewayConfig, GatewayMode, GatewayTransportKind, SavedGatewayConfig, type RelayServiceEnvironment } from '../types';
 import { isUnsupportedDirectLocalTlsConfig, shouldSuppressDuplicatePairingAlert } from './gatewayConfigForm.utils';
 import {
   claimRelayPairing as claimRelayPairingPayload,
@@ -24,6 +24,7 @@ import {
 } from './gatewayScanFlow';
 import { markHermesConnectTrace } from '../services/hermes-connect-debug';
 import { canAddGatewayConnection } from '../utils/pro';
+import { assessRelayEnvironmentSelection } from '../services/relay-environment';
 
 type Params = {
   gateway: GatewayClient;
@@ -102,6 +103,7 @@ export function useGatewayConfigForm({ gateway, initialConfig, debugMode, onSave
   const [configs, setConfigs] = useState<SavedGatewayConfig[]>([]);
   const [activeConfigId, setActiveConfigId] = useState<string | null>(null);
   const [deviceId, setDeviceId] = useState<string>('loading...');
+  const [relayEnvironment, setRelayEnvironmentState] = useState<RelayServiceEnvironment>('production');
 
   const [editorVisible, setEditorVisible] = useState(false);
   const [editingConfigId, setEditingConfigId] = useState<string | null>(null);
@@ -113,6 +115,7 @@ export function useGatewayConfigForm({ gateway, initialConfig, debugMode, onSave
   const [editorUrl, setEditorUrl] = useState('');
   const [editorToken, setEditorToken] = useState('');
   const [editorPassword, setEditorPassword] = useState('');
+  const [editorBootstrap, setEditorBootstrap] = useState<GatewayConfig['bootstrap']>(undefined);
   const [editorAuthMethodState, setEditorAuthMethodState] = useState<GatewayAuthMethod>('token');
   const [editorRelayServerUrl, setEditorRelayServerUrl] = useState('');
   const [editorRelayGatewayId, setEditorRelayGatewayId] = useState('');
@@ -173,6 +176,25 @@ export function useGatewayConfigForm({ gateway, initialConfig, debugMode, onSave
       active = false;
     };
   }, [gateway, initialConfig]);
+
+  useEffect(() => {
+    let active = true;
+    StorageService.getRelayServiceEnvironment()
+      .then((environment) => {
+        if (active) setRelayEnvironmentState(environment);
+      })
+      .catch(() => {
+        if (active) setRelayEnvironmentState('production');
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const setRelayEnvironment = useCallback((environment: RelayServiceEnvironment) => {
+    setRelayEnvironmentState(environment);
+    void StorageService.setRelayServiceEnvironment(environment);
+  }, []);
 
   const activeConfig = useMemo(
     () => (activeConfigId ? configs.find((item) => item.id === activeConfigId) ?? null : null),
@@ -252,6 +274,7 @@ export function useGatewayConfigForm({ gateway, initialConfig, debugMode, onSave
     setEditorUrl('');
     setEditorToken('');
     setEditorPassword('');
+    setEditorBootstrap(undefined);
     setEditorAuthMethodState('token');
     setEditorRelayServerUrl('');
     setEditorRelayGatewayId('');
@@ -272,6 +295,7 @@ export function useGatewayConfigForm({ gateway, initialConfig, debugMode, onSave
     setEditorUrl(existing.url);
     setEditorToken(existing.token ?? '');
     setEditorPassword(existing.password ?? '');
+    setEditorBootstrap(existing.bootstrap);
     setEditorAuthMethodState(detectAuthMethod(existing.token, existing.password));
     setEditorRelayServerUrl(existing.relay?.serverUrl ?? '');
     setEditorRelayGatewayId(existing.relay?.gatewayId ?? '');
@@ -448,7 +472,7 @@ export function useGatewayConfigForm({ gateway, initialConfig, debugMode, onSave
     }
 
     const selectedCredential = editorAuthMethodState === 'token' ? trimmedToken : trimmedPassword;
-    if (editorRequiresDirectAuth && !selectedCredential) {
+    if (editorRequiresDirectAuth && !selectedCredential && !editorBootstrap?.token) {
       Alert.alert(tConfig('Missing Auth'), tConfig('Auth Token or Password is required.'));
       return;
     }
@@ -476,6 +500,7 @@ export function useGatewayConfigForm({ gateway, initialConfig, debugMode, onSave
     });
     const token = backendKind === 'openclaw' && editorAuthMethodState === 'token' ? (trimmedToken || undefined) : undefined;
     const password = backendKind === 'openclaw' && editorAuthMethodState === 'password' ? (trimmedPassword || undefined) : undefined;
+    const bootstrap = backendKind === 'openclaw' ? editorBootstrap : undefined;
     const hermes = backendKind === 'hermes'
       ? deriveHermesBridgeConfig(trimmedUrl, configs.find((item) => item.id === editingConfigId)?.hermes)
       : undefined;
@@ -505,6 +530,7 @@ export function useGatewayConfigForm({ gateway, initialConfig, debugMode, onSave
         url: trimmedUrl,
         token,
         password,
+        bootstrap,
         hermes,
         relay,
         updatedAt: now,
@@ -539,6 +565,7 @@ export function useGatewayConfigForm({ gateway, initialConfig, debugMode, onSave
       url: trimmedUrl,
       token,
       password,
+      bootstrap,
       hermes,
       relay,
       createdAt: now,
@@ -573,6 +600,7 @@ export function useGatewayConfigForm({ gateway, initialConfig, debugMode, onSave
     editorRelayClientToken,
     editorRelayServerUrl,
     editorPassword,
+    editorBootstrap,
     editorRelayProtocolVersion,
     editorRelaySupportsBootstrap,
     editorRequiresDirectAuth,
@@ -602,8 +630,22 @@ export function useGatewayConfigForm({ gateway, initialConfig, debugMode, onSave
   }, [hideOverlay]);
 
   const claimRelayPairing = useCallback(async (payload: GatewayScanPayload): Promise<GatewayScanPayload> => {
+    const issue = assessRelayEnvironmentSelection({
+      serverUrl: payload.relay?.serverUrl,
+      selectedEnvironment: relayEnvironment,
+      debugMode,
+    });
+    if (issue === 'preview_requires_debug_mode') {
+      throw new Error(tConfig('Enable Debug Mode before pairing with the Preview environment.'));
+    }
+    if (issue === 'official_environment_mismatch') {
+      const expected = relayEnvironment === 'preview' ? tConfig('Preview') : tConfig('Production');
+      throw new Error(tConfig('This QR code belongs to a different server environment. Select {{environment}} and scan the matching QR code.', {
+        environment: expected,
+      }));
+    }
     return claimRelayPairingPayload(payload, relayClaimInFlightRef);
-  }, []);
+  }, [debugMode, relayEnvironment, tConfig]);
 
   const applyScannedConfig = useCallback(async (payload: GatewayScanPayload): Promise<void> => {
     let resolved = payload;
@@ -652,6 +694,7 @@ export function useGatewayConfigForm({ gateway, initialConfig, debugMode, onSave
     setEditorUrl(trimmedUrl);
     setEditorToken(preserveRelayFallbackCredentials ? (resolved.token ?? editorToken) : (resolved.token ?? ''));
     setEditorPassword(preserveRelayFallbackCredentials ? (resolved.password ?? editorPassword) : (resolved.password ?? ''));
+    setEditorBootstrap(resolved.bootstrap);
     setEditorAuthMethodState(detectAuthMethod(
       preserveRelayFallbackCredentials ? (resolved.token ?? editorToken) : resolved.token,
       preserveRelayFallbackCredentials ? (resolved.password ?? editorPassword) : resolved.password,
@@ -811,6 +854,9 @@ export function useGatewayConfigForm({ gateway, initialConfig, debugMode, onSave
     activeConfigId,
     activeConfig,
     deviceId,
+    relayEnvironment,
+    effectiveRelayEnvironment: debugMode ? relayEnvironment : 'production',
+    setRelayEnvironment,
     editorVisible,
     editingConfigId,
     isRelayEditorLocked,

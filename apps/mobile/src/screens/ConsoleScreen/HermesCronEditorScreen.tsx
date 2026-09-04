@@ -4,13 +4,12 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
-import { HeaderTextAction, LoadingState, createCardContentStyle } from '../../components/ui';
+import { FormTextInput, HeaderTextAction, LoadingState, createCardContentStyle } from '../../components/ui';
 import { useAppContext } from '../../contexts/AppContext';
 import { useNativeStackModalHeader } from '../../hooks/useNativeStackModalHeader';
 import { analyticsEvents } from '../../services/analytics/events';
@@ -229,23 +228,14 @@ function FormField({
   return (
     <View style={fieldStyles.root}>
       <Text style={[fieldStyles.label, { color: theme.colors.textMuted }]}>{label}</Text>
-      <TextInput
-        style={[
-          fieldStyles.input,
-          {
-            color: theme.colors.text,
-            borderColor: theme.colors.border,
-            backgroundColor: theme.colors.background,
-          },
-          multiline ? fieldStyles.multiline : null,
-        ]}
+      <FormTextInput
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor={theme.colors.textSubtle}
         multiline={multiline}
+        minHeight={multiline ? 140 : undefined}
         keyboardType={keyboardType}
-        textAlignVertical={multiline ? 'top' : 'center'}
+        surface="sunken"
       />
     </View>
   );
@@ -259,16 +249,6 @@ const fieldStyles = StyleSheet.create({
     fontSize: FontSize.sm,
     fontWeight: FontWeight.semibold,
   },
-  input: {
-    borderWidth: 1,
-    borderRadius: Radius.md,
-    paddingHorizontal: Space.md,
-    paddingVertical: Space.sm,
-    fontSize: FontSize.base,
-  },
-  multiline: {
-    minHeight: 140,
-  },
 });
 
 function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors']) {
@@ -279,7 +259,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     sectionCard: {
       backgroundColor: colors.surface,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       borderRadius: Radius.lg,
       padding: Space.lg,

@@ -5,16 +5,15 @@ import {
   RefreshControl,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
-import { ChevronRight, Search, X } from 'lucide-react-native';
+import { ChevronRight } from 'lucide-react-native';
 import {
   Card,
   EmptyState,
-  IconButton,
   LoadingState,
+  SearchInput,
   ScreenHeader,
   ScreenLayout,
   createListContentStyle,
@@ -23,7 +22,7 @@ import { useTranslation } from 'react-i18next';
 import { useAppContext } from '../../contexts/AppContext';
 import { GatewayClient } from '../../services/gateway';
 import { useAppTheme } from '../../theme';
-import { FontSize, FontWeight, HitSize, Radius, Space } from '../../theme/tokens';
+import { FontSize, FontWeight, LineHeight, Radius, Space } from '../../theme/tokens';
 import { relativeTime } from '../../utils/chat-message';
 
 type AgentFile = {
@@ -372,26 +371,13 @@ export function FileListView({
 
   const headerComponent = useMemo(() => (
     <View style={styles.listHeader}>
-      <View style={styles.searchInputWrap}>
-        <Search size={16} color={theme.colors.textMuted} strokeWidth={2} />
-        <TextInput
-          style={styles.searchInput}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          placeholder={t('Search memory...')}
-          placeholderTextColor={theme.colors.textSubtle}
-          autoCapitalize="none"
-          autoCorrect={false}
-          returnKeyType="search"
-        />
-        {searchQuery ? (
-          <IconButton
-            size={HitSize.sm}
-            icon={<X size={16} color={theme.colors.textMuted} strokeWidth={2} />}
-            onPress={clearSearch}
-          />
-        ) : null}
-      </View>
+      <SearchInput
+        value={searchQuery}
+        onChangeText={setSearchQuery}
+        onClear={clearSearch}
+        placeholder={t('Search memory...')}
+        clearAccessibilityLabel={t('Clear search')}
+      />
       {searchLoading && debouncedQuery ? (
         <View style={styles.searchLoadingRow}>
           <ActivityIndicator size="small" color={theme.colors.primary} />
@@ -420,12 +406,8 @@ export function FileListView({
     styles.listHeader,
     styles.retryButton,
     styles.retryText,
-    styles.searchInput,
-    styles.searchInputWrap,
     styles.searchLoadingRow,
     theme.colors.primary,
-    theme.colors.textMuted,
-    theme.colors.textSubtle,
   ]);
 
   const isSearchMode = searchQuery.trim().length > 0;
@@ -482,29 +464,12 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       backgroundColor: colors.background,
       paddingBottom: Space.md,
     },
-    searchInputWrap: {
-      minHeight: HitSize.md,
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: Space.sm,
-      borderRadius: Radius.lg,
-      borderWidth: 1,
-      borderColor: colors.border,
-      backgroundColor: colors.surfaceMuted,
-      paddingHorizontal: Space.md,
-    },
-    searchInput: {
-      flex: 1,
-      color: colors.text,
-      fontSize: FontSize.base,
-      paddingVertical: Space.sm + 1,
-    },
     searchLoadingRow: {
       paddingTop: Space.sm,
       alignItems: 'flex-start',
     },
     card: {
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       borderRadius: Radius.md,
       marginBottom: Space.md - 2,
@@ -551,7 +516,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     groupHeader: {
       backgroundColor: colors.surfaceMuted,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       borderRadius: Radius.md,
       paddingHorizontal: Space.md,
@@ -590,7 +555,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       marginLeft: Space.xs,
       marginRight: Space.xs,
       backgroundColor: colors.surface,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       borderRadius: Radius.md,
       paddingHorizontal: Space.md,
@@ -599,7 +564,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     matchText: {
       color: colors.text,
       fontSize: FontSize.md,
-      lineHeight: FontSize.lg + 2,
+      lineHeight: LineHeight.md,
     },
     matchTextHighlight: {
       color: colors.primary,
@@ -625,14 +590,14 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     errorCard: {
       backgroundColor: colors.surface,
       borderRadius: Radius.md,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.error,
       marginBottom: Space.md,
       padding: Space.md,
     },
     errorTitle: {
       color: colors.error,
-      fontSize: FontSize.md + 1,
+      fontSize: FontSize.bodySm,
       fontWeight: FontWeight.bold,
     },
     errorMessage: {

@@ -8,6 +8,9 @@ jest.mock('expo-clipboard', () => ({
 }));
 
 jest.mock('react-native', () => ({
+  StyleSheet: {
+    hairlineWidth: 1,
+  },
   Animated: {
     Value: class {
       value: number;

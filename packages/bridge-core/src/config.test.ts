@@ -69,4 +69,17 @@ describe('pairing config permissions', () => {
     expect(dirStat.mode & 0o777).toBe(0o700);
     expect(fileStat.mode & 0o777).toBe(0o600);
   });
+
+  it('keeps Preview pairing state in a separate private config file', async () => {
+    const homeDir = await mkdtemp(join(tmpdir(), 'clawket-bridge-config-preview-'));
+    tempDirs.push(homeDir);
+
+    const { getPairingConfigPath, readPairingConfig, writePairingConfig } = await loadConfigModule(homeDir);
+    writePairingConfig(BASE_CONFIG, 'preview');
+
+    expect(getPairingConfigPath('preview')).toBe(join(homeDir, '.clawket', 'bridge-cli.preview.json'));
+    expect(readPairingConfig()).toBeNull();
+    expect(readPairingConfig('preview')).toMatchObject(BASE_CONFIG);
+    expect((await stat(getPairingConfigPath('preview'))).mode & 0o777).toBe(0o600);
+  });
 });

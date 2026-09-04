@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
   constantTimeSecretEqual,
+  isSecurePairingSecretConfigured,
+  issuePairingRelayTicket,
   normalizeRegion,
   parsePositiveInt,
   parseRelayAuthQuery,
   readBearerToken,
   resolveRelayAuthToken,
   sha256Hex,
+  verifyPairingRelayTicket,
 } from './protocol';
 
 describe('shared protocol helpers', () => {
@@ -80,6 +83,40 @@ describe('shared protocol helpers', () => {
     const a = await sha256Hex('alpha');
     const b = await sha256Hex('beta');
     expect(a).not.toBe(b);
+  });
+
+  it('requires a sufficiently long secret and rejects tampered or expired pairing tickets', async () => {
+    expect(isSecurePairingSecretConfigured('too-short')).toBe(false);
+    expect(isSecurePairingSecretConfigured('x'.repeat(32))).toBe(true);
+    const secret = 'test-pairing-ticket-secret-that-is-long-enough';
+    const claims = {
+      version: 2 as const,
+      scope: 'pairing' as const,
+      gatewayId: 'gw_ticket',
+      sessionId: `ps_${'a'.repeat(64)}`,
+      tokenId: '00000000-0000-4000-8000-000000000000',
+      expiresAt: 20_000,
+    };
+    const token = await issuePairingRelayTicket(claims, secret);
+    await expect(verifyPairingRelayTicket({
+      token,
+      secret,
+      gatewayId: claims.gatewayId,
+      nowMs: 10_000,
+    })).resolves.toEqual(claims);
+    const tamperedToken = `${token.slice(0, -1)}${token.endsWith('0') ? '1' : '0'}`;
+    await expect(verifyPairingRelayTicket({
+      token: tamperedToken,
+      secret,
+      gatewayId: claims.gatewayId,
+      nowMs: 10_000,
+    })).resolves.toBeNull();
+    await expect(verifyPairingRelayTicket({
+      token,
+      secret,
+      gatewayId: claims.gatewayId,
+      nowMs: 20_000,
+    })).resolves.toBeNull();
   });
 
   it('parsePositiveInt returns fallback for undefined', () => {

@@ -8,10 +8,9 @@ npm run dev:macos
 
 What it does:
 
-- Runs `npm install` in the app and `office-game`.
+- Runs `npm install` in the app.
 - Reapplies the local `expo-modules-core` Mac Catalyst patch if `npm install` overwrote it.
 - Runs `pod install` only when CocoaPods is missing or out of sync. Set `FORCE_POD_INSTALL=1` to force it.
-- Starts the `office-game` Vite server.
 - Starts Expo Metro in dev-client mode.
 - Builds the Mac Catalyst Debug app with `xcodebuild`.
 - Opens the built `.app`.

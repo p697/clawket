@@ -1,7 +1,10 @@
 import React, { useMemo } from 'react';
 import { Platform } from 'react-native';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { useTabBarHeight } from '../../hooks/useTabBarHeight';
+import {
+  createNativeStackNavigator,
+  type NativeStackHeaderProps,
+} from '@react-navigation/native-stack';
+import { NativeStackModalHeader } from '../../hooks/useNativeStackModalHeader';
 import { useAppTheme } from '../../theme';
 import { ConfigScreen } from './index';
 import { ChatAppearanceScreen } from './ChatAppearanceScreen';
@@ -14,6 +17,7 @@ import { OpenClawConfigScreen } from './OpenClawConfigScreen';
 import { OpenClawDiagnosticsScreen } from './OpenClawDiagnosticsScreen';
 import { OpenClawPermissionRepairScreen } from './OpenClawPermissionRepairScreen';
 import { OpenClawPermissionsScreen } from './OpenClawPermissionsScreen';
+import { DesignSystemScreen } from './DesignSystemScreen';
 import type { RelayDoctorResult } from '../../services/gateway-relay';
 
 export type ConfigStackParamList = {
@@ -41,23 +45,18 @@ export type ConfigStackParamList = {
   OpenClawPermissions: undefined;
   GatewayConfigViewer: undefined;
   GatewayConfigBackups: undefined;
+  DesignSystem: undefined;
 };
 
 const ConfigStack = createNativeStackNavigator<ConfigStackParamList>();
 
-// On iOS the native tab bar overlays content, so screens need paddingBottom.
-// On Android the JS tab bar occupies layout space, so no extra padding is needed.
-const needsTabBarPadding = Platform.OS === 'ios';
-
 export function ConfigTab(): React.JSX.Element {
   const { theme } = useAppTheme();
-  const tabBarHeight = useTabBarHeight();
   const contentStyle = useMemo(
     () => ({
       backgroundColor: theme.colors.background,
-      paddingBottom: needsTabBarPadding ? tabBarHeight : 0,
     }),
-    [tabBarHeight, theme.colors.background],
+    [theme.colors.background],
   );
   const modalContentStyle = useMemo(
     () => ({
@@ -68,7 +67,14 @@ export function ConfigTab(): React.JSX.Element {
 
   const modalScreenOptions = useMemo(() => {
     if (Platform.OS !== 'ios') {
-      return { animation: 'slide_from_right' as const, contentStyle: modalContentStyle, headerShown: true };
+      return {
+        animation: 'slide_from_right' as const,
+        contentStyle: modalContentStyle,
+        headerShown: true,
+        header: (props: NativeStackHeaderProps) => (
+          <NativeStackModalHeader {...props} dismissStyleOverride="close" />
+        ),
+      };
     }
     return {
       animation: 'slide_from_bottom' as const,
@@ -76,6 +82,9 @@ export function ConfigTab(): React.JSX.Element {
       contentStyle: modalContentStyle,
       gestureEnabled: true,
       headerShown: true,
+      header: (props: NativeStackHeaderProps) => (
+        <NativeStackModalHeader {...props} dismissStyleOverride="close" />
+      ),
     };
   }, [modalContentStyle]);
 
@@ -83,6 +92,9 @@ export function ConfigTab(): React.JSX.Element {
     <ConfigStack.Navigator
       screenOptions={{
         headerShown: false,
+        header: (props: NativeStackHeaderProps) => <NativeStackModalHeader {...props} />,
+        headerBackTitle: '',
+        headerBackButtonDisplayMode: 'minimal',
         animation: 'slide_from_right',
         gestureEnabled: true,
         fullScreenGestureEnabled: true,
@@ -100,6 +112,7 @@ export function ConfigTab(): React.JSX.Element {
       <ConfigStack.Screen name="OpenClawPermissions" component={OpenClawPermissionsScreen} options={modalScreenOptions} />
       <ConfigStack.Screen name="GatewayConfigViewer" component={GatewayConfigViewerScreen} options={modalScreenOptions} />
       <ConfigStack.Screen name="GatewayConfigBackups" component={GatewayConfigBackupsScreen} options={modalScreenOptions} />
+      <ConfigStack.Screen name="DesignSystem" component={DesignSystemScreen} options={modalScreenOptions} />
     </ConfigStack.Navigator>
   );
 }

@@ -4,7 +4,6 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
 import { EmptyState, SearchInput, SegmentedTabs } from '../../components/ui';
-import { useTabBarHeight } from '../../hooks/useTabBarHeight';
 import { useNativeStackModalHeader } from '../../hooks/useNativeStackModalHeader';
 import type { SegmentedTabItem } from '../../components/ui';
 import { fetchSkillsShBrowseList } from '../../features/discover';
@@ -20,7 +19,6 @@ type Nav = NativeStackNavigationProp<DiscoverStackParamList, 'DiscoverSkillsShBr
 
 export function SkillsShBrowseScreen(): React.JSX.Element {
   const navigation = useNavigation<Nav>();
-  const tabBarHeight = useTabBarHeight();
   const { theme } = useAppTheme();
   const { t } = useTranslation('common');
 
@@ -125,8 +123,7 @@ export function SkillsShBrowseScreen(): React.JSX.Element {
             ) : null}
           </View>
         }
-        contentContainerStyle={[styles.listContent, { paddingBottom: tabBarHeight + Space.xl }]}
-        scrollIndicatorInsets={{ bottom: tabBarHeight }}
+        contentContainerStyle={[styles.listContent, { paddingBottom: Space.xl }]}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}

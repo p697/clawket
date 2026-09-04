@@ -1,8 +1,16 @@
-import React from 'react';
-import { StyleProp, StyleSheet, Text, TouchableOpacity, View, ViewStyle } from 'react-native';
+import React, { useMemo } from 'react';
+import { Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { triggerLightImpact } from '../../services/haptics';
 import { useAppTheme } from '../../theme';
-import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
+import {
+  FontSize,
+  FontWeight,
+  LineHeight,
+  Radius,
+  Shadow,
+  Space,
+  createThemedShadowStyle,
+} from '../../theme/tokens';
 
 export type SegmentedTabItem<T extends string = string> = {
   key: T;
@@ -19,19 +27,23 @@ type Props<T extends string = string> = {
 export function SegmentedTabs<T extends string = string>({ tabs, active, onSwitch, containerStyle }: Props<T>): React.JSX.Element {
   const { theme } = useAppTheme();
   const colors = theme.colors;
+  const styles = useMemo(
+    () => createStyles(theme.colors, theme.scheme),
+    [theme.colors, theme.scheme],
+  );
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.surfaceMuted }, containerStyle]}>
+    <View style={[styles.container, containerStyle]}>
       {tabs.map((t) => {
         const isActive = active === t.key;
         return (
-          <TouchableOpacity
+          <Pressable
             key={t.key}
-            activeOpacity={0.7}
             onPress={() => { triggerLightImpact(); onSwitch(t.key); }}
-            style={[
+            style={({ pressed }) => [
               styles.tab,
-              isActive && [styles.tabActive, { backgroundColor: colors.surface }],
+              isActive ? styles.tabActive : null,
+              pressed ? styles.tabPressed : null,
             ]}
           >
             <Text style={[
@@ -41,34 +53,47 @@ export function SegmentedTabs<T extends string = string>({ tabs, active, onSwitc
             ]}>
               {t.label}
             </Text>
-          </TouchableOpacity>
+          </Pressable>
         );
       })}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    marginHorizontal: Space.lg,
-    marginTop: Space.sm,
-    marginBottom: Space.xs,
-    borderRadius: Radius.sm,
-    padding: 3,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 7,
-    borderRadius: Radius.sm - 1,
-    alignItems: 'center',
-  },
-  tabActive: {},
-  label: {
-    fontSize: FontSize.md,
-    fontWeight: FontWeight.regular,
-  },
-  labelActive: {
-    fontWeight: FontWeight.semibold,
-  },
-});
+function createStyles(
+  colors: ReturnType<typeof useAppTheme>['theme']['colors'],
+  scheme: ReturnType<typeof useAppTheme>['theme']['scheme'],
+) {
+  return StyleSheet.create({
+    container: {
+      backgroundColor: colors.surfaceMuted,
+      flexDirection: 'row',
+      marginHorizontal: Space.lg,
+      marginTop: Space.sm,
+      marginBottom: Space.xs,
+      borderRadius: Radius.md,
+      padding: Space.xs,
+    },
+    tab: {
+      flex: 1,
+      paddingVertical: Space.sm,
+      borderRadius: Radius.sm,
+      alignItems: 'center',
+    },
+    tabActive: {
+      backgroundColor: colors.surface,
+      ...createThemedShadowStyle(colors, scheme, Shadow.xs),
+    },
+    tabPressed: {
+      opacity: 0.72,
+    },
+    label: {
+      fontSize: FontSize.md,
+      lineHeight: LineHeight.md,
+      fontWeight: FontWeight.regular,
+    },
+    labelActive: {
+      fontWeight: FontWeight.semibold,
+    },
+  });
+}

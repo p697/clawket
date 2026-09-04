@@ -239,11 +239,11 @@ function createRunStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors
       fontWeight: FontWeight.medium,
     },
     card: {
-      borderWidth: 1, borderColor: colors.border, borderRadius: Radius.md,
+      borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, borderRadius: Radius.md,
       padding: Space.md, gap: Space.xs + 2, marginBottom: Space.sm - 2,
     },
     row: { flexDirection: 'row', alignItems: 'center', gap: Space.sm },
-    statusIcon: { fontSize: 14, fontWeight: FontWeight.bold, width: 16, textAlign: 'center' },
+    statusIcon: { fontSize: FontSize.bodySm, fontWeight: FontWeight.bold, width: 16, textAlign: 'center' },
     jobName: { flex: 1, fontSize: FontSize.base, fontWeight: FontWeight.semibold, color: colors.text },
     time: { fontSize: FontSize.sm, color: colors.textSubtle },
     detail: { flex: 1, fontSize: FontSize.sm, color: colors.textMuted, marginLeft: 16 + Space.sm },
@@ -253,7 +253,7 @@ function createRunStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors
     askAiBtn: {
       flexDirection: 'row', alignItems: 'center', gap: 4,
       paddingHorizontal: Space.sm, paddingVertical: 3,
-      borderRadius: Radius.sm, borderWidth: 1, borderColor: colors.primary,
+      borderRadius: Radius.sm, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.primary,
       backgroundColor: colors.surface,
     },
     askAiLabel: { fontSize: FontSize.xs, color: colors.primary, fontWeight: FontWeight.semibold },
@@ -369,7 +369,7 @@ function createJobStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors
   return StyleSheet.create({
     content: { ...createListContentStyle({ grow: true }), gap: Space.md - 2 },
     card: {
-      borderWidth: 1, borderColor: colors.border, borderRadius: Radius.md,
+      borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, borderRadius: Radius.md,
       padding: Space.lg - 2, gap: Space.sm,
     },
     cardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Space.md },
@@ -380,14 +380,14 @@ function createJobStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors
     cardSchedule: { fontSize: FontSize.md, color: colors.textMuted },
     metaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
     statusValueWrap: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-    statusSymbol: { fontSize: 14, fontWeight: FontWeight.bold },
+    statusSymbol: { fontSize: FontSize.bodySm, fontWeight: FontWeight.bold },
     metaLabel: { fontSize: FontSize.sm, color: colors.textSubtle },
     metaValue: { fontSize: FontSize.sm, color: colors.textMuted, fontWeight: FontWeight.medium },
     errorCard: {
       backgroundColor: colors.surface, borderRadius: Radius.md,
-      borderWidth: 1, borderColor: colors.error, padding: Space.md, marginBottom: Space.sm,
+      borderWidth: StyleSheet.hairlineWidth, borderColor: colors.error, padding: Space.md, marginBottom: Space.sm,
     },
-    errorTitle: { color: colors.error, fontSize: FontSize.md + 1, fontWeight: FontWeight.bold },
+    errorTitle: { color: colors.error, fontSize: FontSize.bodySm, fontWeight: FontWeight.bold },
     errorText: { color: colors.textMuted, fontSize: FontSize.sm, marginTop: Space.xs },
     retryButton: {
       marginTop: Space.md - 2, alignSelf: 'flex-start',

@@ -16,10 +16,13 @@
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run src"
+    "test": "vitest run src",
+    "test:required": "vitest run src --exclude src/hermes.test.ts",
+    "test:hermes-integration": "vitest run src/hermes.test.ts"
   },
   "dependencies": {
     "@clawket/bridge-core": "0.3.1",
+    "tweetnacl": "^1.0.3",
     "ws": "^8.18.3"
   },
   "devDependencies": {

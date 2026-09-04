@@ -6,7 +6,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -35,11 +34,11 @@ import { CachedSessionMeta, ChatCacheService } from '../../services/chat-cache';
 import { SessionPreferencesService } from '../../services/session-preferences';
 import { SessionInfo } from '../../types';
 import { useAppTheme } from '../../theme';
-import { FontSize, FontWeight, HitSize, Radius, Space } from '../../theme/tokens';
+import { FontSize, FontWeight, HitSize, LineHeight, Radius, Space } from '../../theme/tokens';
 import { getDisplayAgentEmoji } from '../../utils/agent-emoji';
 import { relativeTime, sessionLabel } from '../../utils/chat-message';
 import i18n from '../../i18n';
-import { EmptyState, IconButton, ModalSheet, SearchInput } from '../ui';
+import { Button, EmptyState, FormTextInput, IconButton, ModalSheet, SearchInput } from '../ui';
 import {
   buildChannelOptions,
   buildSidebarSessionItems,
@@ -754,30 +753,20 @@ export function SessionSidebar({
 
           <View style={styles.modalSection}>
             <Text style={styles.modalSectionTitle}>{t('Session Name')}</Text>
-            <TextInput
+            <FormTextInput
               value={editingLabel}
               onChangeText={setEditingLabel}
               placeholder={t('Enter a session name')}
-              placeholderTextColor={colors.textSubtle}
               editable={!actionState && !selectedSession?.localOnly}
-              style={[styles.modalInput, selectedSession?.localOnly && styles.modalInputDisabled]}
+              surface="sunken"
+              containerStyle={styles.modalInput}
+              inputStyle={selectedSession?.localOnly ? styles.modalInputDisabled : undefined}
             />
-            <TouchableOpacity
-              style={[
-                styles.primaryActionButton,
-                {
-                  backgroundColor: selectedSession?.localOnly ? colors.surfaceMuted : colors.primary,
-                  opacity: actionState || selectedSession?.localOnly ? 0.6 : 1,
-                },
-              ]}
+            <Button
+              label={actionState === 'rename' ? buttonTitleForAction(actionState) : t('Rename Session')}
               disabled={!!actionState || !!selectedSession?.localOnly}
               onPress={handleSaveLabel}
-              activeOpacity={0.88}
-            >
-              <Text style={[styles.primaryActionText, { color: selectedSession?.localOnly ? colors.textMuted : colors.primaryText }]}>
-                {actionState === 'rename' ? buttonTitleForAction(actionState) : t('Rename Session')}
-              </Text>
-            </TouchableOpacity>
+            />
           </View>
 
           {showRemoteSessionActions ? (
@@ -851,10 +840,10 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       flex: 1,
     },
     agentEmoji: {
-      fontSize: FontSize.lg + 4,
+      fontSize: FontSize.displaySm,
     },
     sidebarTitle: {
-      fontSize: FontSize.lg + 4,
+      fontSize: FontSize.displaySm,
       fontWeight: FontWeight.bold,
       color: colors.text,
       flexShrink: 1,
@@ -877,7 +866,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       paddingHorizontal: Space.md,
       borderRadius: Radius.lg - Space.xs,
       backgroundColor: colors.surfaceMuted,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       alignItems: 'center',
       justifyContent: 'center',
@@ -923,7 +912,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       justifyContent: 'center',
       gap: Space.xs,
       borderRadius: Radius.full,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       backgroundColor: colors.surfaceMuted,
       paddingHorizontal: Space.md,
@@ -969,7 +958,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     sessionItem: {
       borderRadius: Radius.md,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       backgroundColor: colors.surface,
       paddingHorizontal: Space.md,
@@ -1012,7 +1001,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       fontSize: FontSize.base,
       fontWeight: FontWeight.semibold,
       color: colors.text,
-      lineHeight: FontSize.base + 12,
+      lineHeight: LineHeight.xxl,
     },
     sessionTitleActive: {
       color: colors.text,
@@ -1037,7 +1026,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     sessionPreview: {
       fontSize: FontSize.md,
       color: colors.textMuted,
-      lineHeight: FontSize.md + 5,
+      lineHeight: LineHeight.md,
       marginTop: 2,
     },
     sessionMetaRow: {
@@ -1095,35 +1084,17 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       color: colors.text,
     },
     modalInput: {
-      fontSize: FontSize.base,
-      color: colors.text,
-      backgroundColor: colors.inputBackground,
-      borderRadius: Radius.md,
-      borderWidth: 1,
-      borderColor: colors.border,
-      paddingHorizontal: Space.md,
-      paddingVertical: Space.md,
+      marginTop: Space.xs,
     },
     modalInputDisabled: {
-      backgroundColor: colors.surfaceMuted,
       color: colors.textMuted,
-    },
-    primaryActionButton: {
-      paddingVertical: 11,
-      borderRadius: Radius.md,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    primaryActionText: {
-      fontSize: FontSize.base,
-      fontWeight: FontWeight.semibold,
     },
     outlineActionButton: {
       paddingVertical: 11,
       borderRadius: Radius.md,
       alignItems: 'center',
       justifyContent: 'center',
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       backgroundColor: colors.surface,
     },
     outlineActionText: {

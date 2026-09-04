@@ -48,6 +48,32 @@ describe('local pair helpers', () => {
     });
   });
 
+  it('keeps official OpenClaw setup credentials inside the local QR payload', () => {
+    const info = buildLocalPairingInfo({
+      explicitUrl: 'ws://192.168.1.12:18789',
+      bootstrap: {
+        token: 'official-bootstrap-token',
+        strategy: 'mobile-setup',
+        expiresAtMs: 1_800_000_000_000,
+        access: 'full',
+      },
+      expiresAt: 1_800_000_000_000,
+    });
+
+    expect(info.authMode).toBe('device');
+    expect(JSON.parse(info.qrPayload)).toMatchObject({
+      url: 'ws://192.168.1.12:18789/',
+      bootstrap: {
+        token: 'official-bootstrap-token',
+        strategy: 'mobile-setup',
+        expiresAtMs: 1_800_000_000_000,
+        access: 'full',
+      },
+      expiresAt: 1_800_000_000_000,
+      qrVersion: 2,
+    });
+  });
+
   it('normalizes explicit URLs without a scheme', () => {
     expect(normalizeExplicitGatewayUrl('tailnet-device:18789/ws')).toBe('ws://tailnet-device:18789/ws');
   });

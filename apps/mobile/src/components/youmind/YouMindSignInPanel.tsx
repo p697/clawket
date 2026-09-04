@@ -211,7 +211,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       paddingVertical: Space.xs,
     },
     inlineBackButtonConfigInline: {
-      borderRadius: 0,
+      borderRadius: Radius.none,
       marginBottom: Space.xs,
       paddingHorizontal: 0,
     },

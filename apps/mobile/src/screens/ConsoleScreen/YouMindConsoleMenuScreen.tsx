@@ -11,7 +11,6 @@ import { ChevronDown, Plus } from 'lucide-react-native';
 import { EmptyState, SearchInput, createListContentStyle } from '../../components/ui';
 import { YouMindAddMaterialSheet } from '../../components/console/YouMindAddMaterialSheet';
 import { useAppContext } from '../../contexts/AppContext';
-import { useTabBarHeight } from '../../hooks/useTabBarHeight';
 import { analyticsEvents } from '../../services/analytics/events';
 import { StorageService } from '../../services/storage';
 import {
@@ -23,7 +22,7 @@ import {
   type YouMindBoardSummary,
 } from '../../services/youmind';
 import { useAppTheme } from '../../theme';
-import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
+import { FontSize, FontWeight, Radius, Shadow, Space, createThemedShadowStyle } from '../../theme/tokens';
 import type { ConsoleStackParamList } from './ConsoleTab';
 import { YouMindBoardControls } from './components/YouMindBoardControls';
 import { YouMindBoardFilterModal } from './components/YouMindBoardFilterModal';
@@ -279,7 +278,7 @@ function YouMindAddMaterialFab({
 }): React.JSX.Element {
   const { theme } = useAppTheme();
   const { t } = useTranslation('console');
-  const styles = useMemo(() => createStyles(theme.colors), [theme]);
+  const styles = useMemo(() => createStyles(theme.colors, theme.scheme), [theme]);
 
   return (
     <Pressable
@@ -318,9 +317,8 @@ export function YouMindConsoleMenuScreen(): React.JSX.Element {
   const { t } = useTranslation('console');
   const { config, activeGatewayConfigId } = useAppContext();
   const insets = useSafeAreaInsets();
-  const tabBarHeight = useTabBarHeight();
   const isFocused = useIsFocused();
-  const styles = useMemo(() => createStyles(theme.colors), [theme]);
+  const styles = useMemo(() => createStyles(theme.colors, theme.scheme), [theme]);
   const refreshProgressOffset = insets.top + 56;
   const baseUrl = config?.url || 'https://youmind.com';
   const client = useMemo(() => new YouMindClient(baseUrl, { authScopeKey: activeGatewayConfigId }), [activeGatewayConfigId, baseUrl]);
@@ -591,7 +589,7 @@ export function YouMindConsoleMenuScreen(): React.JSX.Element {
           <YouMindWorkspaceSkeleton
             styles={styles}
             insetsTop={insets.top}
-            bottomInset={Space.xxxl + tabBarHeight + 88}
+            bottomInset={Space.xxxl + 88}
           />
         ) : viewMode === 'list' ? (
           <FlashList
@@ -600,7 +598,7 @@ export function YouMindConsoleMenuScreen(): React.JSX.Element {
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={createListContentStyle({
               top: insets.top + Space.sm,
-              bottom: Space.xxxl + tabBarHeight + 88,
+              bottom: Space.xxxl + 88,
               grow: state.kind !== 'ready' || visibleEntries.length === 0,
             })}
             refreshControl={(
@@ -650,7 +648,7 @@ export function YouMindConsoleMenuScreen(): React.JSX.Element {
             )}
             contentContainerStyle={createListContentStyle({
               top: insets.top + Space.sm,
-              bottom: Space.xxxl + tabBarHeight + 88,
+              bottom: Space.xxxl + 88,
               grow: state.kind !== 'ready' || visibleEntries.length === 0,
             })}
             refreshControl={(
@@ -697,7 +695,10 @@ export function YouMindConsoleMenuScreen(): React.JSX.Element {
   );
 }
 
-function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors']) {
+function createStyles(
+  colors: ReturnType<typeof useAppTheme>['theme']['colors'],
+  scheme: ReturnType<typeof useAppTheme>['theme']['scheme'],
+) {
   return StyleSheet.create({
     root: {
       flex: 1,
@@ -738,7 +739,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     heroTitle: {
       flexShrink: 1,
       minWidth: 0,
-      fontSize: 20,
+      fontSize: FontSize.displaySm,
       fontWeight: FontWeight.semibold,
     },
     sectionPicker: {
@@ -811,7 +812,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       paddingBottom: Space.md,
     },
     skeletonWaterfallCard: {
-      borderRadius: 18,
+      borderRadius: Radius.lg,
       overflow: 'hidden',
       backgroundColor: colors.surface,
     },
@@ -836,11 +837,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       borderRadius: Radius.full,
       alignItems: 'center',
       justifyContent: 'center',
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 6 },
-      shadowOpacity: colors.background === '#0E1013' ? 0.22 : 0.1,
-      shadowRadius: 12,
-      elevation: 6,
+      ...createThemedShadowStyle(colors, scheme, Shadow.md),
     },
   });
 }

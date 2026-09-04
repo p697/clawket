@@ -5,7 +5,7 @@ import { ChevronDown } from 'lucide-react-native';
 import { CircleButton } from '../../../components/ui';
 import { SlashSuggestions } from '../../../components/chat/SlashSuggestions';
 import { useAppTheme } from '../../../theme';
-import { Radius, Shadow, Space } from '../../../theme/tokens';
+import { Radius, Shadow, Space, createThemedShadowStyle } from '../../../theme/tokens';
 import { SlashCommand } from '../../../data/slash-commands';
 import { UiMessage } from '../../../types/chat';
 
@@ -86,7 +86,7 @@ export function ChatMessagePane({
   slashSuggestionsMaxHeight,
   theme,
 }: Props): React.JSX.Element {
-  const styles = useMemo(() => createStyles(theme.colors), [theme]);
+  const styles = useMemo(() => createStyles(theme.colors, theme.scheme), [theme]);
 
   return (
     <View style={styles.listArea}>
@@ -152,7 +152,10 @@ export function ChatMessagePane({
   );
 }
 
-function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors']) {
+function createStyles(
+  colors: ReturnType<typeof useAppTheme>['theme']['colors'],
+  scheme: ReturnType<typeof useAppTheme>['theme']['scheme'],
+) {
   return StyleSheet.create({
     historyLoadingMore: {
       paddingVertical: Space.md,
@@ -175,7 +178,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       right: Space.lg,
       bottom: Space.lg,
       borderRadius: Radius.full,
-      ...Shadow.md,
+      ...createThemedShadowStyle(colors, scheme, Shadow.md),
     },
     slashDismissArea: {
       ...StyleSheet.absoluteFillObject,

@@ -217,7 +217,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       flexGrow: 1,
     },
     card: {
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       borderRadius: Radius.md,
       padding: Space.md,
@@ -264,7 +264,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       padding: Space.md,
       borderRadius: Radius.md,
       backgroundColor: colors.surface,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.error,
       gap: Space.xs,
     },

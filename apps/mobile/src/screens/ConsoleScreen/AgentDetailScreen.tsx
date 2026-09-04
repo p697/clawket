@@ -5,8 +5,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
 
@@ -14,7 +12,7 @@ import { ChevronRight, UserRound } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { LoadingState } from '../../components/ui';
+import { Button, FormTextInput, LoadingState } from '../../components/ui';
 import { useGatewayPatch } from '../../hooks/useGatewayPatch';
 import { useNativeStackModalHeader } from '../../hooks/useNativeStackModalHeader';
 import { EmojiPicker } from '../../components/agents/EmojiPicker';
@@ -356,19 +354,16 @@ export function AgentDetailScreen(): React.JSX.Element {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {/* Name */}
         <Text style={styles.fieldLabel}>{t('Name')}</Text>
-        <View style={styles.fieldRow}>
-          <TextInput
-            style={styles.textInput}
-            value={name}
-            onChangeText={setName}
-            placeholder={t('Agent name')}
-            placeholderTextColor={theme.colors.textSubtle}
-            editable={!saving}
-            maxLength={50}
-            autoCapitalize="words"
-            autoCorrect={false}
-          />
-        </View>
+        <FormTextInput
+          value={name}
+          onChangeText={setName}
+          placeholder={t('Agent name')}
+          editable={!saving}
+          maxLength={50}
+          autoCapitalize="words"
+          autoCorrect={false}
+          surface="sunken"
+        />
 
         {/* Emoji */}
         <Text style={styles.fieldLabel}>{t('Emoji')}</Text>
@@ -379,18 +374,15 @@ export function AgentDetailScreen(): React.JSX.Element {
         />
 
         <Text style={styles.fieldLabel}>{t('Vibe')}</Text>
-        <View style={styles.fieldRow}>
-          <TextInput
-            style={styles.textInput}
-            value={vibe}
-            onChangeText={setVibe}
-            placeholder={t('How should this agent come across?')}
-            placeholderTextColor={theme.colors.textSubtle}
-            editable={!saving}
-            autoCapitalize="sentences"
-            autoCorrect={false}
-          />
-        </View>
+        <FormTextInput
+          value={vibe}
+          onChangeText={setVibe}
+          placeholder={t('How should this agent come across?')}
+          editable={!saving}
+          autoCapitalize="sentences"
+          autoCorrect={false}
+          surface="sunken"
+        />
 
         <Text style={styles.fieldLabel}>{t('My Info')}</Text>
         <Pressable
@@ -425,37 +417,32 @@ export function AgentDetailScreen(): React.JSX.Element {
         />
 
         {/* Save button */}
-        <TouchableOpacity
-          style={[styles.primaryButton, (!isDirty || saving) && styles.buttonDisabled]}
+        <Button
+          label={saving ? tCommon('Saving...') : t('Save Changes')}
+          loading={saving}
           onPress={handleSave}
           disabled={!isDirty || saving}
-          activeOpacity={0.88}
-        >
-          <Text style={styles.primaryButtonText}>
-            {saving ? tCommon('Saving...') : t('Save Changes')}
-          </Text>
-        </TouchableOpacity>
+          style={styles.primaryButton}
+        />
 
         {/* Switch to agent */}
         {!isCurrent && (
-          <TouchableOpacity
-            style={styles.outlineButton}
+          <Button
+            label={t('Switch to This Agent')}
+            variant="secondary"
             onPress={handleSwitch}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.outlineButtonText}>{t('Switch to This Agent')}</Text>
-          </TouchableOpacity>
+            style={styles.secondaryButton}
+          />
         )}
 
         {/* Delete agent */}
         {!isMain && (
-          <TouchableOpacity
-            style={styles.destructiveButton}
+          <Button
+            label={t('Delete Agent')}
+            variant="destructive"
             onPress={handleDelete}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.destructiveButtonText}>{t('Delete Agent')}</Text>
-          </TouchableOpacity>
+            style={styles.secondaryButton}
+          />
         )}
       </ScrollView>
 
@@ -500,17 +487,6 @@ function createStyles(colors: ReturnType<typeof import('../../theme').useAppThem
       marginBottom: Space.xs,
       marginTop: Space.lg,
     },
-    fieldRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      backgroundColor: colors.inputBackground,
-      borderColor: colors.border,
-      borderWidth: 1,
-      borderRadius: Radius.md,
-      paddingHorizontal: Space.md,
-      paddingVertical: Space.sm + 4,
-    },
     fieldDisabled: {
       opacity: 0.5,
     },
@@ -519,18 +495,12 @@ function createStyles(colors: ReturnType<typeof import('../../theme').useAppThem
       fontSize: FontSize.base,
       color: colors.text,
     },
-    textInput: {
-      flex: 1,
-      fontSize: FontSize.base,
-      color: colors.text,
-      paddingVertical: 0,
-    },
     navCard: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
       borderRadius: Radius.md,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       backgroundColor: colors.surface,
       paddingHorizontal: Space.md,
@@ -549,7 +519,7 @@ function createStyles(colors: ReturnType<typeof import('../../theme').useAppThem
     navIconBadge: {
       width: 36,
       height: 36,
-      borderRadius: 18,
+      borderRadius: Radius.full,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: colors.inputBackground,
@@ -570,46 +540,9 @@ function createStyles(colors: ReturnType<typeof import('../../theme').useAppThem
     // Buttons
     primaryButton: {
       marginTop: Space.xl,
-      backgroundColor: colors.primary,
-      borderRadius: Radius.md,
-      paddingVertical: 11,
-      alignItems: 'center',
     },
-    buttonDisabled: {
-      opacity: 0.6,
-    },
-    primaryButtonText: {
-      color: colors.primaryText,
-      fontSize: FontSize.base,
-      fontWeight: FontWeight.semibold,
-    },
-    outlineButton: {
+    secondaryButton: {
       marginTop: Space.md,
-      backgroundColor: colors.surface,
-      borderRadius: Radius.md,
-      borderWidth: 1,
-      borderColor: colors.primary,
-      paddingVertical: 11,
-      alignItems: 'center',
-    },
-    outlineButtonText: {
-      color: colors.primary,
-      fontSize: FontSize.base,
-      fontWeight: FontWeight.semibold,
-    },
-    destructiveButton: {
-      marginTop: Space.md,
-      backgroundColor: colors.surface,
-      borderRadius: Radius.md,
-      borderWidth: 1,
-      borderColor: colors.error,
-      paddingVertical: 11,
-      alignItems: 'center',
-    },
-    destructiveButtonText: {
-      color: colors.error,
-      fontSize: FontSize.base,
-      fontWeight: FontWeight.semibold,
     },
   });
 }

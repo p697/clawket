@@ -1,6 +1,6 @@
 import {
   AWAITING_CHALLENGE_TTL_DEFAULT_MS,
-  CLIENT_IDLE_TIMEOUT_DEFAULT_MS,
+  CLIENT_PONG_TIMEOUT_DEFAULT_MS,
   type Env,
   type BridgeOwnerRecord,
   type PendingChallenge,
@@ -41,8 +41,8 @@ export class RelayRuntime {
     return parsePositiveInt(this.env.AWAITING_CHALLENGE_TTL_MS, AWAITING_CHALLENGE_TTL_DEFAULT_MS);
   }
 
-  clientIdleTimeoutMs(): number {
-    return parsePositiveInt(this.env.CLIENT_IDLE_TIMEOUT_MS, CLIENT_IDLE_TIMEOUT_DEFAULT_MS);
+  clientPongTimeoutMs(): number {
+    return parsePositiveInt(this.env.CLIENT_PONG_TIMEOUT_MS, CLIENT_PONG_TIMEOUT_DEFAULT_MS);
   }
 
   objectId(): string | null {

@@ -26,11 +26,18 @@ const BLOCKED_INTERFACE_TOKENS = [
   'ppp',
 ];
 
+export type LocalBootstrapPairingCredential = {
+  token: string;
+  strategy: 'mobile-setup' | 'legacy-bound';
+  expiresAtMs?: number;
+  access?: 'full' | 'limited' | 'node';
+};
+
 export interface LocalPairingInfo {
   gatewayUrl: string;
   qrPayload: string;
   expiresAt: number;
-  authMode: 'token' | 'password';
+  authMode: 'token' | 'password' | 'device';
 }
 
 export function buildGatewayControlUiOrigin(gatewayUrl: string): string {
@@ -44,6 +51,7 @@ export function buildLocalPairingInfo(input: {
   explicitUrl?: string | null;
   gatewayToken?: string | null;
   gatewayPassword?: string | null;
+  bootstrap?: LocalBootstrapPairingCredential;
   defaultGatewayUrl?: string | null;
   expiresAt?: number;
 }): LocalPairingInfo {
@@ -61,6 +69,7 @@ export function buildLocalPairingInfo(input: {
       gatewayUrl,
       token: auth.token,
       password: auth.password,
+      bootstrap: auth.bootstrap,
       expiresAt,
     }),
   };
@@ -171,12 +180,20 @@ export function scoreLanCandidate(name: string, ip: string): number {
 function resolveLocalPairAuth(input: {
   gatewayToken?: string | null;
   gatewayPassword?: string | null;
-}): { mode: 'token'; token: string; password: null } | { mode: 'password'; token: null; password: string } {
+  bootstrap?: LocalBootstrapPairingCredential;
+}):
+  | { mode: 'token'; token: string; password: null; bootstrap: undefined }
+  | { mode: 'password'; token: null; password: string; bootstrap: undefined }
+  | { mode: 'device'; token: null; password: null; bootstrap: LocalBootstrapPairingCredential }
+{
   if (input.gatewayToken?.trim()) {
-    return { mode: 'token', token: input.gatewayToken.trim(), password: null };
+    return { mode: 'token', token: input.gatewayToken.trim(), password: null, bootstrap: undefined };
   }
   if (input.gatewayPassword?.trim()) {
-    return { mode: 'password', token: null, password: input.gatewayPassword.trim() };
+    return { mode: 'password', token: null, password: input.gatewayPassword.trim(), bootstrap: undefined };
+  }
+  if (input.bootstrap?.token.trim()) {
+    return { mode: 'device', token: null, password: null, bootstrap: input.bootstrap };
   }
   throw new Error('OpenClaw gateway auth is missing (token or password).');
 }

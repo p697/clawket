@@ -14,7 +14,6 @@ import {
   Share,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
@@ -22,12 +21,13 @@ import { ScrollView } from 'react-native-gesture-handler';
 import { EdgeInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useIsFocused, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { AppWindow, ChevronLeft, ChevronRight, Cloud, Eye, Gamepad2, Github, HelpCircle, Mic, Palette, Share2, ShieldCheck, Link2, Mail, MessageCircleMore, Minus, Plus, ScanLine, Sparkles, Star, ImageUp } from 'lucide-react-native';
-import { ConnectionHelpQuick, ConnectionHelpManual } from '../../components/config/ConnectionHelpSection';
+import { AppWindow, ChevronLeft, ChevronRight, Cloud, Eye, Gamepad2, Github, HelpCircle, Mic, Palette, Share2, ShieldCheck, Link2, Mail, MessageCircleMore, Minus, Plus, Sparkles, Star } from 'lucide-react-native';
+import { ConnectionHelpManual } from '../../components/config/ConnectionHelpSection';
 import { QuickConnectionPanel } from '../../components/config/QuickConnectionPanel';
+import { PairingCodeCard } from '../../components/config/PairingCodeCard';
 import { SwipeableGatewayRow, SwipeableMethods } from '../../components/config/SwipeableGatewayRow';
 import { YouMindSignInPanel } from '../../components/youmind/YouMindSignInPanel';
-import { IconButton, ModalSheet, SegmentedTabs, ThemedSwitch } from '../../components/ui';
+import { Button, FormTextInput, IconButton, ModalSheet, SegmentedTabs, SettingsDivider, SettingsGroup, SettingsIcon, SettingsRow, ThemedSwitch } from '../../components/ui';
 import { useProPaywall } from '../../contexts/ProPaywallContext';
 import { analyticsEvents } from '../../services/analytics/events';
 import { getPostHogDiagnostics, type PostHogDiagnostics } from '../../services/analytics/posthog';
@@ -40,7 +40,7 @@ import {
 import { StorageService } from '../../services/storage';
 import { YouMindClient } from '../../services/youmind';
 import { AppTheme, builtInAccents, BuiltInAccentColorId } from '../../theme';
-import { FontSize, FontWeight, Radius, Shadow, Space } from '../../theme/tokens';
+import { BorderWidth, FontSize, FontWeight, LineHeight, Radius, Space, createSurfaceStyle } from '../../theme/tokens';
 import { GatewayBackendKind, GatewayMode, GatewayTransportKind, SpeechRecognitionLanguage, ThemeMode } from '../../types';
 import { shouldShowWecomSupportEntry } from '../../utils/mainlandChina';
 import { openExternalUrl } from '../../utils/openExternalUrl';
@@ -51,6 +51,7 @@ import { buildSupportEmailUrl, publicAppLinks } from '../../config/public';
 import { AppIconVariant, getCurrentAppIconAsync, isAppIconChangeSupportedAsync, setCurrentAppIconAsync } from '../../services/app-icon';
 import { getGatewayBackendCapabilities, getGatewayModeLabel, resolveGatewayBackendKind } from '../../services/gateway-backends';
 import { saveBundledImageToPhotoLibrary } from '../../services/photo-library';
+import { getOfficialRelayRegistryUrl, getRelayPairCommand, resolveOfficialRelayEnvironment } from '../../services/relay-environment';
 import { useConfigScreenController } from './hooks/useConfigScreenController';
 import type { ConfigStackParamList } from './ConfigTab';
 
@@ -58,7 +59,6 @@ type Colors = AppTheme['colors'];
 
 type Props = {
   insets: EdgeInsets;
-  tabBarHeight: number;
   controller: ReturnType<typeof useConfigScreenController> & {
     onScanQR: () => void;
     onUploadQR: () => void;
@@ -147,22 +147,9 @@ const APP_ICON_OPTIONS: Array<{ value: AppIconVariant; labelKey: 'Light' | 'Dark
   { value: 'black', labelKey: 'Dark', source: require('../../../assets/app-icons/black/app-icon-black-1024.png') },
 ];
 
-type RowIconProps = {
-  backgroundColor: string;
-  children: React.ReactNode;
-  styles: ReturnType<typeof createStyles>;
-};
-
-function RowIcon({ backgroundColor, children, styles }: RowIconProps): React.JSX.Element {
-  return (
-    <View style={[styles.rowIconBadge, { backgroundColor }]}>
-      {children}
-    </View>
-  );
-}
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const WECHAT_QR_IMAGE = require('../../../assets/wechat-group-qr.jpg');
-export function ConfigScreenLayout({ insets, tabBarHeight, controller }: Props): React.JSX.Element {
+export function ConfigScreenLayout({ insets, controller }: Props): React.JSX.Element {
   const { t, i18n } = useTranslation(['config', 'common']);
   const {
     debugOverrideEnabled,
@@ -178,7 +165,10 @@ export function ConfigScreenLayout({ insets, tabBarHeight, controller }: Props):
   const configNavigation = useNavigation<NativeStackNavigationProp<ConfigStackParamList>>();
   const isFocused = useIsFocused();
   const { theme } = controller;
-  const styles = useMemo(() => createStyles(theme.colors), [theme]);
+  const styles = useMemo(
+    () => createStyles(theme.colors, theme.scheme),
+    [theme.colors, theme.scheme],
+  );
   const THEME_OPTIONS = useMemo(() => getThemeOptions(t), [t]);
   const SPEECH_RECOGNITION_LANGUAGE_OPTIONS = useMemo(() => getSpeechRecognitionLanguageOptions(t), [t]);
   const themeModeLabel = THEME_OPTIONS.find((o) => o.value === controller.mode)?.label ?? t('Follow System');
@@ -218,7 +208,6 @@ export function ConfigScreenLayout({ insets, tabBarHeight, controller }: Props):
       state: controller.speechRecognitionLanguage === option.value ? 'on' : 'off',
     }))
   ), [SPEECH_RECOGNITION_LANGUAGE_OPTIONS, controller.speechRecognitionLanguage]);
-
   const sortedConfigs = useMemo(() => {
     return [...controller.configs].sort((a, b) => a.createdAt - b.createdAt);
   }, [controller.configs]);
@@ -542,7 +531,7 @@ export function ConfigScreenLayout({ insets, tabBarHeight, controller }: Props):
       <ScrollView
         contentContainerStyle={[
           styles.container,
-          { paddingTop: insets.top + Space.lg, paddingBottom: Space.xxxl + tabBarHeight },
+          { paddingTop: insets.top + Space.lg, paddingBottom: Space.xxxl },
         ]}
       >
         <View style={styles.pageTitleRow}>
@@ -557,25 +546,22 @@ export function ConfigScreenLayout({ insets, tabBarHeight, controller }: Props):
 
         <Text style={styles.sectionHeader}>{t('CONNECTIONS')}</Text>
 
-        <View style={styles.card}>
+        <SettingsGroup>
           {sortedConfigs.length === 0 ? (
             <View style={styles.emptyGatewayWrap}>
               <Text style={styles.emptyGatewayTitle}>{t('No Connection Configured')}</Text>
-              <Pressable
+              <Button
+                label={t('Add Connection')}
+                icon={Plus}
                 onPress={() => {
                   controller.openCreateEditor();
                 }}
-                style={({ pressed }) => [styles.primaryButton, pressed && styles.primaryButtonPressed]}
-              >
-                <View style={styles.buttonContent}>
-                  <Plus size={15} color={theme.colors.primaryText} strokeWidth={2} />
-                  <Text style={styles.primaryButtonText}>{t('Add Connection')}</Text>
-                </View>
-              </Pressable>
+              />
             </View>
           ) : (
             sortedConfigs.map((item, index) => {
               const active = item.id === controller.activeConfigId;
+              const isPreviewRelay = resolveOfficialRelayEnvironment(item.relay?.serverUrl) === 'preview';
               return (
                 <React.Fragment key={item.id}>
                   <SwipeableGatewayRow
@@ -602,6 +588,11 @@ export function ConfigScreenLayout({ insets, tabBarHeight, controller }: Props):
                         </View>
                       </View>
                       <View style={styles.gatewayRight}>
+                        {isPreviewRelay ? (
+                          <View style={styles.previewChip}>
+                            <Text style={styles.previewChipText}>{t('Preview')}</Text>
+                          </View>
+                        ) : null}
                         {active ? (
                           <View style={styles.activeChip}>
                             <Text style={styles.activeChipText}>{t('common:Active')}</Text>
@@ -611,62 +602,49 @@ export function ConfigScreenLayout({ insets, tabBarHeight, controller }: Props):
                       </View>
                     </Pressable>
                   </SwipeableGatewayRow>
-                  {index < sortedConfigs.length - 1 ? <View style={styles.divider} /> : null}
+                  {index < sortedConfigs.length - 1 ? <SettingsDivider inset="content" /> : null}
                 </React.Fragment>
               );
             })
           )}
-        </View>
+        </SettingsGroup>
 
         {sortedConfigs.length > 0 && <View style={styles.createRow}>
-          <Pressable
+          <Button
+            label={t('Add Connection')}
+            icon={Plus}
             onPress={() => {
               controller.openCreateEditor();
             }}
-            style={({ pressed }) => [styles.primaryButton, styles.createButtonFlex, pressed && styles.primaryButtonPressed]}
-          >
-            <View style={styles.buttonContent}>
-              <Plus size={15} color={theme.colors.primaryText} strokeWidth={2} />
-              <Text style={styles.primaryButtonText}>{t('Add Connection')}</Text>
-            </View>
-          </Pressable>
-          {/* <Pressable
-            onPress={handleQRPicker}
-            style={({ pressed }) => [styles.outlineButton, styles.qrButton, pressed && styles.outlineButtonPressed]}
-          >
-            <QrCode size={18} color={theme.colors.primary} strokeWidth={2} />
-          </Pressable> */}
+            style={styles.createButtonFlex}
+          />
         </View>}
 
         {activeBackendCapabilities.openClawConfigScreens ? (
           <>
             <Text style={styles.sectionHeader}>{t('OPENCLAW CONFIG')}</Text>
 
-            <View style={styles.card}>
-              <Pressable
+            <SettingsGroup>
+              <SettingsRow
                 onPress={() => configNavigation.navigate('OpenClawConfig')}
-                style={({ pressed }) => [styles.row, styles.feedbackRow, pressed && styles.rowPressed]}
+                style={styles.feedbackRow}
               >
-                <RowIcon backgroundColor="#E7F0FF" styles={styles}>
-                  <Eye size={17} strokeWidth={2.2} color="#2F6BFF" />
-                </RowIcon>
+                <SettingsIcon icon={Eye} tone="info" />
                 <View style={styles.supportRowText}>
                   <Text style={styles.rowLabel}>{t('OPENCLAW CONFIG')}</Text>
                 </View>
                 <ChevronRight size={16} color={theme.colors.textSubtle} strokeWidth={2} />
-              </Pressable>
-            </View>
+              </SettingsRow>
+            </SettingsGroup>
           </>
         ) : null}
 
         <Text style={styles.sectionHeader}>{t('APPEARANCE')}</Text>
 
-        <View style={styles.card}>
-          <View style={[styles.row, styles.selectRow]}>
+        <SettingsGroup>
+          <SettingsRow style={styles.selectRow}>
             <View style={styles.settingRowLead}>
-              <RowIcon backgroundColor="#E9F4FF" styles={styles}>
-                <Palette size={17} strokeWidth={2.2} color="#2A74D8" />
-              </RowIcon>
+              <SettingsIcon icon={Palette} tone="accent" />
               <View style={styles.supportRowText}>
                 <Text style={styles.rowLabel}>{t('Theme')}</Text>
               </View>
@@ -692,36 +670,32 @@ export function ConfigScreenLayout({ insets, tabBarHeight, controller }: Props):
                 </View>
               </MenuView>
             </View>
-          </View>
+          </SettingsRow>
 
-          <View style={styles.divider} />
+          <SettingsDivider inset="content" />
 
-          <Pressable
+          <SettingsRow
             onPress={() => configNavigation.navigate('ChatAppearance')}
-            style={({ pressed }) => [styles.row, styles.feedbackRow, pressed && styles.rowPressed]}
+            style={styles.feedbackRow}
           >
-            <RowIcon backgroundColor="#FFF0DB" styles={styles}>
-              <Sparkles size={17} strokeWidth={2.2} color="#C97A00" />
-            </RowIcon>
+            <SettingsIcon icon={Sparkles} tone="warning" />
             <View style={styles.supportRowText}>
               <Text style={styles.rowLabel}>{t('Chat Appearance')}</Text>
             </View>
             <ChevronRight size={16} color={theme.colors.textSubtle} strokeWidth={2} />
-          </Pressable>
+          </SettingsRow>
 
-          {appIconSupported ? <View style={styles.divider} /> : null}
+          {appIconSupported ? <SettingsDivider inset="content" /> : null}
 
           {appIconSupported ? (
             <>
-              <Pressable
+              <SettingsRow
                 onPress={() => {
                   handleAppIconEntryPress();
                 }}
-                style={({ pressed }) => [styles.row, styles.feedbackRow, pressed && styles.rowPressed]}
+                style={styles.feedbackRow}
               >
-                <RowIcon backgroundColor="#EEF3FF" styles={styles}>
-                  <AppWindow size={17} strokeWidth={2.2} color="#5765F2" />
-                </RowIcon>
+                <SettingsIcon icon={AppWindow} tone="accent" />
                 <View style={styles.supportRowText}>
                   <Text style={styles.rowLabel}>{t('App Icon')}</Text>
                 </View>
@@ -733,13 +707,13 @@ export function ConfigScreenLayout({ insets, tabBarHeight, controller }: Props):
                   )}
                   <ChevronRight size={16} color={theme.colors.textSubtle} strokeWidth={2} />
                 </View>
-              </Pressable>
+              </SettingsRow>
 
-              <View style={styles.divider} />
+              <SettingsDivider inset="content" />
             </>
           ) : null}
 
-          <View style={styles.row}>
+          <SettingsRow layout="column">
             <Text style={styles.rowLabel}>{t('Accent Color')}</Text>
             <View style={styles.accentRow}>
               {ACCENT_OPTIONS.map((option) => {
@@ -775,17 +749,15 @@ export function ConfigScreenLayout({ insets, tabBarHeight, controller }: Props):
                 );
               })}
             </View>
-          </View>
-        </View>
+          </SettingsRow>
+        </SettingsGroup>
 
         <Text style={styles.sectionHeader}>{t('VOICE INPUT')}</Text>
 
-        <View style={styles.card}>
-          <View style={[styles.row, styles.selectRow]}>
+        <SettingsGroup>
+          <SettingsRow style={styles.selectRow}>
             <View style={styles.settingRowLead}>
-              <RowIcon backgroundColor="#FFF1E5" styles={styles}>
-                <Mic size={17} strokeWidth={2.2} color="#CC6C25" />
-              </RowIcon>
+              <SettingsIcon icon={Mic} tone="warning" />
               <View style={styles.supportRowText}>
                 <Text style={styles.rowLabel}>{t('Speech Recognition Language')}</Text>
               </View>
@@ -813,254 +785,217 @@ export function ConfigScreenLayout({ insets, tabBarHeight, controller }: Props):
                 </View>
               </MenuView>
             </View>
-          </View>
-        </View>
+          </SettingsRow>
+        </SettingsGroup>
 
         <Text style={styles.sectionHeader}>{t('COMMUNITY')}</Text>
-        <View style={styles.card}>
-          <Pressable
+        <SettingsGroup>
+          <SettingsRow
             onPress={() => {
               void handleShareAppPress();
             }}
-            style={({ pressed }) => [styles.row, styles.feedbackRow, pressed && styles.rowPressed]}
+            style={styles.feedbackRow}
           >
-            <RowIcon backgroundColor="#EAF3FF" styles={styles}>
-              <Share2 size={17} strokeWidth={2.2} color="#2F6BFF" />
-            </RowIcon>
+            <SettingsIcon icon={Share2} tone="info" />
             <View style={styles.supportRowText}>
               <Text style={styles.rowLabel}>{t('Share Clawket with Friends')}</Text>
             </View>
             <ChevronRight size={16} color={theme.colors.textSubtle} strokeWidth={2} />
-          </Pressable>
+          </SettingsRow>
 
           {(Platform.OS === 'ios' || publicAppLinks.discordInviteUrl || showWecomSupportEntry) ? (
-            <View style={styles.divider} />
+            <SettingsDivider inset="content" />
           ) : null}
 
           {Platform.OS === 'ios' ? (
             <>
-              <Pressable
+              <SettingsRow
                 onPress={() => {
                   void handleRateAppPress();
                 }}
-                style={({ pressed }) => [styles.row, styles.feedbackRow, pressed && styles.rowPressed]}
+                style={styles.feedbackRow}
               >
-                <RowIcon backgroundColor="#FFF4D6" styles={styles}>
-                  <Star size={17} strokeWidth={2.1} color="#D79A00" />
-                </RowIcon>
+                <SettingsIcon icon={Star} tone="warning" strokeWidth={2.1} />
                 <View style={styles.supportRowText}>
                   <Text style={styles.rowLabel}>{t('Rate Clawket')}</Text>
                 </View>
                 <ChevronRight size={16} color={theme.colors.textSubtle} strokeWidth={2} />
-              </Pressable>
+              </SettingsRow>
 
-              <View style={styles.divider} />
+              <SettingsDivider inset="content" />
             </>
           ) : null}
 
           {publicAppLinks.discordInviteUrl ? (
-            <Pressable
+            <SettingsRow
               onPress={() => {
                 void handleOpenExternalUrl(publicAppLinks.discordInviteUrl as string);
               }}
-              style={({ pressed }) => [styles.row, styles.feedbackRow, pressed && styles.rowPressed]}
+              style={styles.feedbackRow}
             >
-              <RowIcon backgroundColor="#EEF1FF" styles={styles}>
-                <Gamepad2 size={17} strokeWidth={2.2} color="#596AE8" />
-              </RowIcon>
+              <SettingsIcon icon={Gamepad2} tone="info" />
               <View style={styles.supportRowText}>
                 <Text style={styles.rowLabel}>{t('Join Discord')}</Text>
               </View>
               <ChevronRight size={16} color={theme.colors.textSubtle} strokeWidth={2} />
-            </Pressable>
+            </SettingsRow>
           ) : null}
 
           {showWecomSupportEntry ? (
             <>
-              {publicAppLinks.discordInviteUrl ? <View style={styles.divider} /> : null}
+              {publicAppLinks.discordInviteUrl ? <SettingsDivider inset="content" /> : null}
 
-              <Pressable
+              <SettingsRow
                 onPress={() => setWecomModalVisible(true)}
-                style={({ pressed }) => [styles.row, styles.feedbackRow, pressed && styles.rowPressed]}
+                style={styles.feedbackRow}
               >
-                <RowIcon backgroundColor="#E7F7EC" styles={styles}>
-                  <MessageCircleMore size={17} strokeWidth={2.2} color="#1C9A57" />
-                </RowIcon>
+                <SettingsIcon icon={MessageCircleMore} tone="success" />
                 <View style={styles.supportRowText}>
                   <Text style={styles.rowLabel}>{t('Join WeCom Group')}</Text>
                 </View>
-              </Pressable>
+              </SettingsRow>
             </>
           ) : null}
-        </View>
+        </SettingsGroup>
 
         <Text style={styles.sectionHeader}>{t('OPEN SOURCE')}</Text>
-        <View style={styles.card}>
-          <Pressable
+        <SettingsGroup>
+          <SettingsRow
             onPress={() => {
               void handleOpenExternalUrl(CLAWKET_GITHUB_REPO_URL);
             }}
-            style={({ pressed }) => [styles.row, styles.feedbackRow, pressed && styles.rowPressed]}
+            style={styles.feedbackRow}
           >
-            <RowIcon backgroundColor="#ECEEF2" styles={styles}>
-              <Github size={17} strokeWidth={2.2} color="#1F2937" fill="#1F2937" />
-            </RowIcon>
+            <SettingsIcon icon={Github} tone="neutral" fill />
             <View style={styles.supportRowText}>
               <Text style={styles.rowLabel}>{t('View GitHub Repository')}</Text>
             </View>
             <ChevronRight size={16} color={theme.colors.textSubtle} strokeWidth={2} />
-          </Pressable>
-        </View>
+          </SettingsRow>
+        </SettingsGroup>
 
         <Text style={styles.sectionHeader}>{t('HELP')}</Text>
-        <View style={styles.card}>
-          <Pressable
+        <SettingsGroup>
+          <SettingsRow
             onPress={() => configNavigation.navigate('HelpCenter')}
-            style={({ pressed }) => [styles.row, styles.feedbackRow, pressed && styles.rowPressed]}
+            style={styles.feedbackRow}
           >
-            <RowIcon backgroundColor="#E8F7F8" styles={styles}>
-              <HelpCircle size={17} strokeWidth={2.2} color="#0B8C99" />
-            </RowIcon>
+            <SettingsIcon icon={HelpCircle} tone="info" />
             <View style={styles.supportRowText}>
               <Text style={styles.rowLabel}>{t('Help Center')}</Text>
             </View>
             <ChevronRight size={16} color={theme.colors.textSubtle} strokeWidth={2} />
-          </Pressable>
+          </SettingsRow>
 
-          <View style={styles.divider} />
+          <SettingsDivider inset="content" />
 
-          <Pressable
+          <SettingsRow
             onPress={handleReleaseNotesEntryPress}
-            style={({ pressed }) => [styles.row, styles.feedbackRow, pressed && styles.rowPressed]}
+            style={styles.feedbackRow}
           >
-            <RowIcon backgroundColor="#F4EBFF" styles={styles}>
-              <Sparkles size={17} strokeWidth={2.2} color="#8A4DCC" />
-            </RowIcon>
+            <SettingsIcon icon={Sparkles} tone="accent" />
             <View style={styles.supportRowText}>
               <Text style={styles.rowLabel}>{t('Release Notes')}</Text>
             </View>
-          </Pressable>
+          </SettingsRow>
 
-          {supportEmailUrl || publicAppLinks.privacyPolicyUrl || publicAppLinks.termsOfUseUrl ? <View style={styles.divider} /> : null}
+          {supportEmailUrl || publicAppLinks.privacyPolicyUrl || publicAppLinks.termsOfUseUrl ? <SettingsDivider inset="content" /> : null}
 
           {supportEmailUrl ? (
-            <Pressable
+            <SettingsRow
               onPress={() => {
                 void handleOpenExternalUrl(supportEmailUrl);
               }}
-              style={({ pressed }) => [styles.row, styles.feedbackRow, pressed && styles.rowPressed]}
+              style={styles.feedbackRow}
             >
-              <RowIcon backgroundColor="#FFECEE" styles={styles}>
-                <Mail size={17} strokeWidth={2.2} color="#CC4D5F" />
-              </RowIcon>
+              <SettingsIcon icon={Mail} tone="danger" />
               <View style={styles.supportRowText}>
                 <Text style={styles.rowLabel}>{t('Send Feedback')}</Text>
               </View>
-            </Pressable>
+            </SettingsRow>
           ) : null}
 
-          {supportEmailUrl && (publicAppLinks.privacyPolicyUrl || publicAppLinks.termsOfUseUrl) ? <View style={styles.divider} /> : null}
+          {supportEmailUrl && (publicAppLinks.privacyPolicyUrl || publicAppLinks.termsOfUseUrl) ? <SettingsDivider inset="content" /> : null}
 
           {publicAppLinks.privacyPolicyUrl ? (
-            <Pressable
+            <SettingsRow
               onPress={() => {
                 void handleOpenExternalUrl(publicAppLinks.privacyPolicyUrl as string);
               }}
-              style={({ pressed }) => [styles.row, styles.feedbackRow, pressed && styles.rowPressed]}
+              style={styles.feedbackRow}
             >
-              <RowIcon backgroundColor="#E8F3FF" styles={styles}>
-                <ShieldCheck size={17} strokeWidth={2.2} color="#2469D9" />
-              </RowIcon>
+              <SettingsIcon icon={ShieldCheck} tone="info" />
               <View style={styles.supportRowText}>
                 <Text style={styles.rowLabel}>{t('Privacy Policy', { ns: 'common' })}</Text>
               </View>
               <ChevronRight size={16} color={theme.colors.textSubtle} strokeWidth={2} />
-            </Pressable>
+            </SettingsRow>
           ) : null}
 
-          {publicAppLinks.privacyPolicyUrl && publicAppLinks.termsOfUseUrl ? <View style={styles.divider} /> : null}
+          {publicAppLinks.privacyPolicyUrl && publicAppLinks.termsOfUseUrl ? <SettingsDivider inset="content" /> : null}
 
           {publicAppLinks.termsOfUseUrl ? (
-            <Pressable
+            <SettingsRow
               onPress={() => {
                 void handleOpenExternalUrl(publicAppLinks.termsOfUseUrl as string);
               }}
-              style={({ pressed }) => [styles.row, styles.feedbackRow, pressed && styles.rowPressed]}
+              style={styles.feedbackRow}
             >
-              <RowIcon backgroundColor="#F1F0FF" styles={styles}>
-                <Link2 size={17} strokeWidth={2.25} color="#6B5CE7" />
-              </RowIcon>
+              <SettingsIcon icon={Link2} tone="accent" strokeWidth={2.25} />
               <View style={styles.supportRowText}>
                 <Text style={styles.rowLabel}>{t('Terms of Use', { ns: 'common' })}</Text>
               </View>
               <ChevronRight size={16} color={theme.colors.textSubtle} strokeWidth={2} />
-            </Pressable>
+            </SettingsRow>
           ) : null}
-        </View>
+        </SettingsGroup>
 
         <Text style={styles.sectionHeader}>{t('DEVELOPER')}</Text>
 
-        <View style={styles.card}>
-          {/* <View style={[styles.row, styles.toggleRow]}>
-            <View style={styles.toggleLabels}>
-              <Text style={styles.rowLabel}>Tool Approval</Text>
-              <Text style={styles.rowMeta}>Review dangerous commands before execution</Text>
-            </View>
-            <ThemedSwitch
-              value={controller.execApprovalEnabled}
-              onValueChange={controller.onExecApprovalToggle}
-              trackColor={{ false: theme.colors.borderStrong, true: theme.colors.primarySoft }}
-              thumbColor={controller.execApprovalEnabled ? theme.colors.primary : theme.colors.surfaceMuted}
-            />
-          </View>
-
-          <View style={styles.divider} /> */}
-
-          {/* <View style={[styles.row, styles.toggleRow]}>
-            <View style={styles.toggleLabels}>
-              <Text style={styles.rowLabel}>Allow Canvas</Text>
-              <Text style={styles.rowMeta}>Let agents open an embedded browser panel</Text>
-            </View>
-            <ThemedSwitch
-              value={controller.canvasEnabled}
-              onValueChange={controller.onCanvasToggle}
-              trackColor={{ false: theme.colors.borderStrong, true: theme.colors.primarySoft }}
-              thumbColor={controller.canvasEnabled ? theme.colors.primary : theme.colors.surfaceMuted}
-            />
-          </View> */}
-
-          <View style={[styles.row, styles.toggleRow]}>
+        <SettingsGroup>
+          <SettingsRow style={styles.toggleRow}>
             <View style={styles.toggleLabels}>
               <Text style={styles.rowLabel}>{t('Debug Mode')}</Text>
             </View>
             <ThemedSwitch
               value={controller.debugMode}
               onValueChange={controller.onDebugToggle}
-              trackColor={{ false: theme.colors.borderStrong, true: theme.colors.primarySoft }}
-              thumbColor={controller.debugMode ? theme.colors.primary : theme.colors.surfaceMuted}
             />
-          </View>
+          </SettingsRow>
 
           {controller.debugMode ? (
             <>
-              <View style={styles.divider} />
+              <SettingsDivider inset="content" />
 
-              <Pressable
+              <SettingsRow
+                onPress={() => configNavigation.navigate('DesignSystem')}
+                style={styles.feedbackRow}
+              >
+                <View style={styles.supportRowText}>
+                  <Text style={styles.rowLabel}>{t('Design System')}</Text>
+                  <Text style={styles.rowMeta}>{t('Review shared components, themes, and interaction states.')}</Text>
+                </View>
+                <ChevronRight size={16} color={theme.colors.textSubtle} strokeWidth={2} />
+              </SettingsRow>
+
+              <SettingsDivider inset="content" />
+
+              <SettingsRow
                 onPress={handleClearLifetimeUpgradeAnnouncementCache}
-                style={({ pressed }) => [styles.row, styles.feedbackRow, pressed && styles.rowPressed]}
+                style={styles.feedbackRow}
               >
                 <View style={styles.supportRowText}>
                   <Text style={styles.rowLabel}>{t('Clear Cache')}</Text>
                   <Text style={styles.rowMeta}>{t('Clear the one-time lifetime upgrade popup cache.')}</Text>
                 </View>
-              </Pressable>
+              </SettingsRow>
             </>
           ) : null}
-        </View>
+        </SettingsGroup>
 
         {controller.debugMode ? (
-          <View style={[styles.card, styles.deviceCard]}>
-            <View style={styles.row}>
+          <SettingsGroup style={styles.deviceCard}>
+            <SettingsRow layout="column">
               <Text style={styles.deviceLabel}>{t('Device Entity (Ed25519)')}</Text>
               <Text style={styles.deviceId} selectable>
                 {controller.deviceId}
@@ -1163,29 +1098,26 @@ export function ConfigScreenLayout({ insets, tabBarHeight, controller }: Props):
                   <Text style={styles.deviceId}>{diagnosticsError}</Text>
                 </View>
               ) : null}
-              <Pressable
+              <Button
+                label={diagnosticsLoading ? 'Refreshing…' : 'Refresh diagnostics'}
+                variant="secondary"
+                size="sm"
+                loading={diagnosticsLoading}
                 onPress={() => {
                   void refreshDiagnostics();
                 }}
-                style={({ pressed }) => [
-                  styles.debugRefreshButton,
-                  pressed && styles.debugRefreshButtonPressed,
-                ]}
-              >
-                <Text style={styles.debugRefreshButtonText}>
-                  {diagnosticsLoading ? 'Refreshing…' : 'Refresh diagnostics'}
-                </Text>
-              </Pressable>
-            </View>
-          </View>
+                style={styles.debugRefreshButton}
+              />
+            </SettingsRow>
+          </SettingsGroup>
         ) : null}
 
-        <Pressable
+        <Button
+          label={t('Reset Device')}
+          variant="destructive"
           onPress={controller.resetDevice}
-          style={({ pressed }) => [styles.destructiveButton, pressed && styles.destructiveButtonPressed]}
-        >
-          <Text style={styles.destructiveButtonText}>{t('Reset Device')}</Text>
-        </Pressable>
+          style={styles.destructiveButton}
+        />
         <Text style={styles.resetHint}>{t('Clears identity, token, pairing, and all saved gateways.')}</Text>
 
         <View style={styles.footer}>
@@ -1228,15 +1160,10 @@ export function ConfigScreenLayout({ insets, tabBarHeight, controller }: Props):
           <Text style={styles.lifetimeUpgradeAnnouncementText}>
             {t('Thanks for supporting Clawket. To thank our early supporters, everyone who purchased an annual membership before April 18 has been automatically upgraded to lifetime membership.')}
           </Text>
-          <Pressable
+          <Button
+            label={t('Got it')}
             onPress={handleLifetimeUpgradeAnnouncementClose}
-            style={({ pressed }) => [
-              styles.lifetimeUpgradeAnnouncementButton,
-              pressed && styles.lifetimeUpgradeAnnouncementButtonPressed,
-            ]}
-          >
-            <Text style={styles.lifetimeUpgradeAnnouncementButtonText}>{t('Got it')}</Text>
-          </Pressable>
+          />
         </View>
       </ModalSheet>
 
@@ -1252,14 +1179,12 @@ export function ConfigScreenLayout({ insets, tabBarHeight, controller }: Props):
             resizeMode="contain"
           />
           <Text style={styles.wecomModalHint}>{t('Scan this QR code in WeCom to join the group chat.')}</Text>
-          <Pressable
+          <Button
+            label={t('Download QR Code')}
             onPress={() => {
               void handleDownloadWecomQr();
             }}
-            style={({ pressed }) => [styles.wecomDownloadButton, pressed && styles.wecomDownloadButtonPressed]}
-          >
-            <Text style={styles.wecomDownloadButtonText}>{t('Download QR Code')}</Text>
-          </Pressable>
+          />
         </View>
       </ModalSheet>
 
@@ -1340,6 +1265,10 @@ function EditorModal({ controller, theme, styles }: EditorModalProps): React.JSX
   const AUTH_METHOD_TABS = useMemo<{ key: AuthMethodTab; label: string }[]>(() => [
     { key: 'token', label: t('Auth Token') },
     { key: 'password', label: t('Password') },
+  ], [t]);
+  const relayEnvironmentTabs = useMemo(() => [
+    { key: 'production' as const, label: t('Production') },
+    { key: 'preview' as const, label: t('Preview') },
   ], [t]);
   const BACKEND_LABELS = useMemo(() => getBackendLabels(t), [t]);
   const manualBackendOptions = useMemo(
@@ -1427,7 +1356,7 @@ function EditorModal({ controller, theme, styles }: EditorModalProps): React.JSX
             ? t('Sign in to YouMind')
             : t('Add Connection')}
     >
-      {!isEditing && (
+      {!isEditing && quickPage === 'quick' && (
         <SegmentedTabs tabs={EDITOR_TABS} active={editorTab} onSwitch={setEditorTab} />
       )}
 
@@ -1460,40 +1389,35 @@ function EditorModal({ controller, theme, styles }: EditorModalProps): React.JSX
               <Text style={styles.inlineBackButtonText}>{t('Back', { ns: 'chat' })}</Text>
             </Pressable>
 
-            <ConnectionHelpQuick />
-
-            <View style={styles.quickActionsWrap}>
-              <Pressable
-                onPress={() => {
-                  if (!isMacCatalyst) {
-                    analyticsEvents.gatewayScanQrTapped({ source: 'config_quick_connect' });
-                    controller.onScanQR();
-                    return;
-                  }
-                  controller.onUploadQR();
-                }}
-                style={({ pressed }) => [styles.primaryButton, styles.quickAction, pressed && styles.primaryButtonPressed]}
-              >
-                <View style={styles.buttonContent}>
-                  {isMacCatalyst
-                    ? <ImageUp size={15} color={theme.colors.primaryText} strokeWidth={2} />
-                    : <ScanLine size={15} color={theme.colors.primaryText} strokeWidth={2} />}
-                  <Text style={styles.primaryButtonText}>{t(isMacCatalyst ? 'Upload QR Image' : 'Scan QR Code')}</Text>
-                </View>
-              </Pressable>
-
-              {!isMacCatalyst && (
-                <Pressable
-                  onPress={controller.onUploadQR}
-                  style={({ pressed }) => [styles.outlineButton, styles.quickAction, pressed && styles.outlineButtonPressed]}
-                >
-                  <View style={styles.buttonContent}>
-                    <ImageUp size={15} color={theme.colors.primary} strokeWidth={2} />
-                    <Text style={styles.outlineButtonText}>{t('Upload QR Image')}</Text>
+            {controller.debugMode ? (
+              <View style={styles.environmentSection}>
+                <Text style={styles.inputLabel}>{t('Server Environment')}</Text>
+                <SegmentedTabs
+                  tabs={relayEnvironmentTabs}
+                  active={controller.relayEnvironment}
+                  onSwitch={controller.setRelayEnvironment}
+                  containerStyle={styles.authMethodTabs}
+                />
+                {controller.effectiveRelayEnvironment === 'preview' ? (
+                  <View style={styles.previewEnvironmentNotice}>
+                    <Text style={styles.previewEnvironmentNoticeText}>
+                      {t('Preview uses isolated pre-release infrastructure and may be unstable. Do not rely on it for production work.')}
+                    </Text>
                   </View>
-                </Pressable>
-              )}
-            </View>
+                ) : null}
+              </View>
+            ) : null}
+
+            <PairingCodeCard
+              serverUrl={getOfficialRelayRegistryUrl(controller.effectiveRelayEnvironment)}
+              pairCommand={getRelayPairCommand(controller.effectiveRelayEnvironment)}
+              onScanQr={isMacCatalyst ? undefined : () => {
+                analyticsEvents.gatewayScanQrTapped({ source: 'config_quick_connect' });
+                controller.onScanQR();
+              }}
+              onUploadQr={controller.onUploadQR}
+              onConnected={closeEditorModal}
+            />
           </ScrollView>
         ) : (
         <ScrollView contentContainerStyle={styles.modalBody}>
@@ -1533,15 +1457,14 @@ function EditorModal({ controller, theme, styles }: EditorModalProps): React.JSX
             <>
               <View style={styles.fieldWrap}>
                 <Text style={styles.inputLabel}>{t('Gateway URL')}</Text>
-                <TextInput
+                <FormTextInput
                   autoCapitalize="none"
                   autoCorrect={false}
                   placeholder={getUrlPlaceholder({
                     backendKind: controller.editorBackendKind,
                     transportKind: 'custom',
                   })}
-                  placeholderTextColor={theme.colors.textSubtle}
-                  style={styles.input}
+                  surface="sunken"
                   value={controller.editorUrl}
                   onChangeText={controller.setEditorUrl}
                 />
@@ -1567,13 +1490,12 @@ function EditorModal({ controller, theme, styles }: EditorModalProps): React.JSX
 
                   <View style={styles.fieldWrap}>
                     <Text style={styles.inputLabel}>{authInputLabel}</Text>
-                    <TextInput
+                    <FormTextInput
                       autoCapitalize="none"
                       autoCorrect={false}
                       placeholder={authInputPlaceholder}
-                      placeholderTextColor={theme.colors.textSubtle}
+                      surface="sunken"
                       secureTextEntry
-                      style={styles.input}
                       value={authInputValue}
                       onChangeText={controller.editorAuthMethod === 'token' ? controller.setEditorToken : controller.setEditorPassword}
                     />
@@ -1585,12 +1507,11 @@ function EditorModal({ controller, theme, styles }: EditorModalProps): React.JSX
                 <>
                   <View style={styles.fieldWrap}>
                     <Text style={styles.inputLabel}>{t('Relay Pair Server URL')}</Text>
-                    <TextInput
+                    <FormTextInput
                       autoCapitalize="none"
                       autoCorrect={false}
                       placeholder="https://registry.example.com"
-                      placeholderTextColor={theme.colors.textSubtle}
-                      style={styles.input}
+                      surface="sunken"
                       value={controller.editorRelayServerUrl}
                       onChangeText={controller.setEditorRelayServerUrl}
                     />
@@ -1598,12 +1519,11 @@ function EditorModal({ controller, theme, styles }: EditorModalProps): React.JSX
 
                   <View style={styles.fieldWrap}>
                     <Text style={styles.inputLabel}>{t('Relay Gateway ID')}</Text>
-                    <TextInput
+                    <FormTextInput
                       autoCapitalize="none"
                       autoCorrect={false}
                       placeholder={t('gateway_xxxxx')}
-                      placeholderTextColor={theme.colors.textSubtle}
-                      style={styles.input}
+                      surface="sunken"
                       value={controller.editorRelayGatewayId}
                       onChangeText={controller.setEditorRelayGatewayId}
                     />
@@ -1618,25 +1538,21 @@ function EditorModal({ controller, theme, styles }: EditorModalProps): React.JSX
 
           <View style={styles.fieldWrap}>
             <Text style={styles.inputLabel}>{t('Connection Name')}</Text>
-            <TextInput
+            <FormTextInput
               autoCapitalize="words"
               autoCorrect={false}
               placeholder={isEditing ? t('Home Gateway') : 'Lucy'}
-              placeholderTextColor={theme.colors.textSubtle}
-              style={styles.input}
+              surface="sunken"
               value={controller.editorName}
               onChangeText={controller.setEditorName}
             />
           </View>
 
-          <Pressable
+          <Button
+            label={isEditing ? t('Save Changes') : t('Save and Activate')}
             onPress={() => { void controller.saveEditor(); }}
-            style={({ pressed }) => [styles.primaryButton, styles.saveButton, pressed && styles.primaryButtonPressed]}
-          >
-            <Text style={styles.primaryButtonText}>
-              {isEditing ? t('Save Changes') : t('Save and Activate')}
-            </Text>
-          </Pressable>
+            style={styles.saveButton}
+          />
 
           {!isEditing && controller.editorBackendKind === 'openclaw' ? <ConnectionHelpManual activeMode="custom" /> : null}
         </ScrollView>
@@ -1659,7 +1575,7 @@ function formatUptime(ms: number): string {
 }
 
 
-function createStyles(colors: Colors) {
+function createStyles(colors: Colors, scheme: AppTheme['scheme']) {
   return StyleSheet.create({
     container: {
       paddingHorizontal: Space.lg,
@@ -1685,14 +1601,6 @@ function createStyles(colors: Colors) {
       marginTop: Space.xl,
       marginBottom: Space.sm,
       paddingHorizontal: Space.xs,
-    },
-    card: {
-      backgroundColor: colors.surface,
-      borderRadius: Radius.md,
-      borderWidth: 1,
-      borderColor: colors.border,
-      overflow: 'hidden',
-      ...Shadow.sm,
     },
     membershipTag: {
       flexDirection: 'row',
@@ -1720,19 +1628,6 @@ function createStyles(colors: Colors) {
     },
     membershipTagTextFree: {
       color: colors.primary,
-    },
-    divider: {
-      height: StyleSheet.hairlineWidth,
-      backgroundColor: colors.borderStrong,
-      marginLeft: Space.lg,
-    },
-    row: {
-      paddingHorizontal: Space.lg,
-      paddingVertical: 14,
-      // minHeight: 52,
-    },
-    rowPressed: {
-      backgroundColor: colors.surfaceMuted,
     },
     themeMenuTrigger: {
       flexShrink: 1,
@@ -1763,14 +1658,6 @@ function createStyles(colors: Colors) {
       alignItems: 'center',
       gap: Space.md,
     },
-    rowIconBadge: {
-      width: 32,
-      height: 32,
-      borderRadius: Radius.md,
-      alignItems: 'center',
-      justifyContent: 'center',
-      flexShrink: 0,
-    },
     supportRowText: {
       flex: 1,
       justifyContent: 'center',
@@ -1786,7 +1673,7 @@ function createStyles(colors: Colors) {
       width: 220,
       height: 220,
       borderRadius: Radius.md,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       backgroundColor: colors.surfaceMuted,
     },
@@ -1795,22 +1682,6 @@ function createStyles(colors: Colors) {
       color: colors.textMuted,
       textAlign: 'center',
       lineHeight: 19,
-    },
-    wecomDownloadButton: {
-      width: '100%',
-      borderRadius: Radius.md,
-      backgroundColor: colors.primary,
-      paddingVertical: 11,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    wecomDownloadButtonPressed: {
-      opacity: 0.88,
-    },
-    wecomDownloadButtonText: {
-      color: colors.primaryText,
-      fontSize: FontSize.base,
-      fontWeight: FontWeight.semibold,
     },
     appIconModalBody: {
       gap: Space.md,
@@ -1829,28 +1700,12 @@ function createStyles(colors: Colors) {
       lineHeight: 24,
       textAlign: 'center',
     },
-    lifetimeUpgradeAnnouncementButton: {
-      alignItems: 'center',
-      justifyContent: 'center',
-      minHeight: 48,
-      borderRadius: Radius.md,
-      backgroundColor: colors.primary,
-      paddingHorizontal: Space.lg,
-    },
-    lifetimeUpgradeAnnouncementButtonPressed: {
-      opacity: 0.88,
-    },
-    lifetimeUpgradeAnnouncementButtonText: {
-      color: colors.primaryText,
-      fontSize: FontSize.base,
-      fontWeight: FontWeight.semibold,
-    },
     appIconCard: {
       alignItems: 'center',
       backgroundColor: colors.surfaceElevated,
       borderColor: colors.border,
       borderRadius: Radius.md,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       flexDirection: 'row',
       gap: Space.md,
       paddingHorizontal: Space.md,
@@ -1883,7 +1738,7 @@ function createStyles(colors: Colors) {
       backgroundColor: colors.surfaceMuted,
       borderColor: colors.borderStrong,
       borderRadius: Radius.full,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       height: 14,
       width: 14,
     },
@@ -1912,7 +1767,7 @@ function createStyles(colors: Colors) {
     },
     rowPicker: {
       marginTop: Space.sm,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       borderRadius: Radius.md,
       backgroundColor: colors.surfaceMuted,
@@ -2002,29 +1857,15 @@ function createStyles(colors: Colors) {
       fontSize: FontSize.xs,
       fontWeight: FontWeight.semibold,
     },
-    buttonContent: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: Space.sm,
+    previewChip: {
+      paddingHorizontal: Space.sm,
+      paddingVertical: 4,
+      borderRadius: Radius.full,
+      backgroundColor: colors.warningSoft,
     },
-    primaryButton: {
-      alignItems: 'center',
-      backgroundColor: colors.primary,
-      borderRadius: Radius.md,
-      paddingVertical: 11,
-      marginTop: Space.md,
-      ...Shadow.md,
-    },
-    primaryButtonPressed: {
-      opacity: 0.88,
-    },
-    buttonDisabled: {
-      opacity: 0.55,
-    },
-    primaryButtonText: {
-      color: colors.primaryText,
-      fontSize: FontSize.base,
+    previewChipText: {
+      color: colors.warning,
+      fontSize: FontSize.xs,
       fontWeight: FontWeight.semibold,
     },
     createRow: {
@@ -2036,26 +1877,12 @@ function createStyles(colors: Colors) {
       flex: 1,
       marginTop: 0,
     },
-    restartGatewayButton: {
-      marginTop: Space.sm,
-    },
-    qrButton: {
-      marginTop: 0,
-      justifyContent: 'center',
-      aspectRatio: 1,
-      paddingVertical: 0,
-    },
     quickHint: {
       fontSize: FontSize.md,
       color: colors.textMuted,
       lineHeight: 20,
       marginBottom: Space.lg,
     },
-    quickAction: {
-      marginTop: 0,
-      marginBottom: Space.sm,
-    },
-    quickActionsWrap: {},
     inlineBackButton: {
       alignSelf: 'flex-start',
       marginBottom: Space.xs,
@@ -2072,39 +1899,8 @@ function createStyles(colors: Colors) {
     saveButton: {
       marginTop: Space.xs,
     },
-    outlineButton: {
-      alignItems: 'center',
-      borderRadius: Radius.md,
-      marginTop: Space.md,
-      paddingVertical: 11,
-      borderWidth: 1,
-      borderColor: colors.primary,
-      backgroundColor: colors.surface,
-    },
-    outlineButtonPressed: {
-      backgroundColor: colors.surfaceMuted,
-    },
-    outlineButtonText: {
-      color: colors.primary,
-      fontSize: FontSize.base,
-      fontWeight: FontWeight.semibold,
-    },
     destructiveButton: {
-      alignItems: 'center',
-      borderRadius: Radius.md,
       marginTop: Space.xl,
-      paddingVertical: 11,
-      borderWidth: 1,
-      borderColor: colors.error,
-      backgroundColor: colors.surface,
-    },
-    destructiveButtonPressed: {
-      backgroundColor: colors.surfaceMuted,
-    },
-    destructiveButtonText: {
-      color: colors.error,
-      fontSize: FontSize.base,
-      fontWeight: FontWeight.semibold,
     },
     resetHint: {
       color: colors.textSubtle,
@@ -2126,7 +1922,7 @@ function createStyles(colors: Colors) {
       width: 30,
       height: 30,
       borderRadius: Radius.full,
-      borderWidth: 2,
+      borderWidth: BorderWidth.strong,
       borderColor: colors.surface,
       alignItems: 'center',
       justifyContent: 'center',
@@ -2138,7 +1934,7 @@ function createStyles(colors: Colors) {
       width: 12,
       height: 12,
       borderRadius: Radius.full,
-      backgroundColor: '#FFFFFF',
+      backgroundColor: colors.iconOnColor,
     },
     accentLabel: {
       fontSize: FontSize.xs,
@@ -2183,25 +1979,25 @@ function createStyles(colors: Colors) {
     debugRefreshButton: {
       marginTop: Space.md,
       alignSelf: 'flex-start',
-      borderRadius: Radius.md,
-      borderWidth: 1,
-      borderColor: colors.border,
-      backgroundColor: colors.surfaceMuted,
-      paddingHorizontal: Space.md,
-      paddingVertical: Space.sm,
-    },
-    debugRefreshButtonPressed: {
-      opacity: 0.8,
-    },
-    debugRefreshButtonText: {
-      color: colors.text,
-      fontSize: FontSize.sm,
-      fontWeight: FontWeight.medium,
     },
     modalBody: {
       paddingHorizontal: Space.lg,
       paddingBottom: Space.xl,
       paddingTop: Space.md,
+    },
+    environmentSection: {
+      marginBottom: Space.md,
+    },
+    previewEnvironmentNotice: {
+      marginTop: Space.sm,
+      borderRadius: Radius.md,
+      backgroundColor: colors.warningSoft,
+      padding: Space.md,
+    },
+    previewEnvironmentNoticeText: {
+      color: colors.text,
+      fontSize: FontSize.sm,
+      lineHeight: LineHeight.sm,
     },
     fieldWrap: {
       marginBottom: Space.md,
@@ -2211,16 +2007,6 @@ function createStyles(colors: Colors) {
       fontSize: FontSize.sm,
       fontWeight: FontWeight.medium,
       marginBottom: Space.xs,
-    },
-    input: {
-      color: colors.text,
-      fontSize: FontSize.base,
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: Radius.md,
-      backgroundColor: colors.surfaceMuted,
-      paddingHorizontal: Space.md,
-      paddingVertical: 11,
     },
     inputHelp: {
       marginTop: Space.xs,
@@ -2273,7 +2059,7 @@ function createStyles(colors: Colors) {
     },
     emptyFallback: {
       marginTop: Space.sm,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       backgroundColor: colors.surfaceMuted,
       borderRadius: Radius.md,
@@ -2286,7 +2072,7 @@ function createStyles(colors: Colors) {
     },
     fallbackList: {
       marginTop: Space.sm,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       borderRadius: Radius.md,
       backgroundColor: colors.surfaceMuted,
@@ -2326,8 +2112,6 @@ function createStyles(colors: Colors) {
       flexDirection: 'row',
       backgroundColor: colors.surfaceMuted,
       borderRadius: Radius.sm,
-      borderWidth: 1,
-      borderColor: colors.border,
       padding: 2,
     },
     segment: {
@@ -2337,8 +2121,7 @@ function createStyles(colors: Colors) {
       borderRadius: Radius.sm - 2,
     },
     segmentActive: {
-      backgroundColor: colors.surface,
-      ...Shadow.sm,
+      ...createSurfaceStyle(colors, scheme, 'raised'),
     },
     segmentText: {
       fontSize: FontSize.sm,

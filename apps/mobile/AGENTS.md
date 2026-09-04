@@ -1,11 +1,14 @@
 # Overview
 
-Clawket is a mobile client for OpenClaw (iOS/Android, React Native + Expo) inside the Clawket monorepo.
+Clawket is a multi-backend mobile client for OpenClaw and Hermes (iOS/Android, React Native + Expo) inside the Clawket monorepo.
 
 For OpenClaw protocol details and reference implementations, see: `../../../../openclaw` or `/Users/lucy/Desktop/op/openclaw`
+Hermes source at `/Users/lucy/.hermes/hermes-agent` is read-only reference material unless the user explicitly asks to modify it.
+For modern mobile engineering patterns, UI primitives, and quality gates, `/Users/lucy/Desktop/youmind/youmind-mobile` is a read-only reference. Borrow structure and discipline, not YouMind product assumptions or literal design values.
 
 If the task involves Android development or building an Android release package, refer to `docs/android-build.md`.
 If the task is to prepare a fresh machine for Android packaging, read `docs/android-onboarding.md` first.
+For the supported Node/Expo/React Native baseline, dependency update policy, native synchronization, and required checks, read `docs/engineering-baseline.md`.
 
 # Android Packaging Notes
 
@@ -13,7 +16,6 @@ When touching Android release packaging, keep these rules in mind:
 
 1. Use `npm run build:android:aab` as the default Google Play packaging command.
 2. That script is responsible for:
-   - building Office packaged assets
    - syncing Expo native Android config through `expo prebuild`
    - producing the signed release `.aab`
 3. Store-ready Android builds depend on local files and secrets that are not committed:
@@ -74,14 +76,15 @@ When adding Hermes model-selection UI or behavior in mobile:
 
 | Repo | Path | Role |
 |------|------|------|
-| **mobile** (this app) | `.` | React Native mobile app — Chat UI, Console, Config, Office game |
+| **mobile** (this app) | `.` | React Native mobile app — Chat, Live, Console, and Config UI |
 | **relay** | `../relay-registry`, `../relay-worker`, `../../packages/relay-shared` | Cloudflare Workers + Durable Objects — WebSocket relay, registry, pairing |
 | **bridge** | `../bridge-cli`, `../../packages/bridge-core`, `../../packages/bridge-runtime` | Node.js CLI + npm package — local bridge between relay and OpenClaw Gateway |
 
 ## Architecture Flow
 
 ```
-[Clawket App] ←WS→ [Relay] ←WS→ [Bridge CLI] ←WS→ [OpenClaw Gateway]
+[Clawket App] ←WS→ [OpenClaw Relay] ←WS→ [Bridge CLI] ←WS→ [OpenClaw Gateway]
+[Clawket App] ←WS→ [Hermes Local Bridge or isolated Hermes Relay] ←→ [Hermes Agent]
 ```
 
 ## When to Look at Sister Repos
@@ -97,16 +100,36 @@ You **must** read the sister repo's code (start with its `AGENTS.md` and `CLAUDE
 
 ## How to Read Sister Repos
 
-1. **Always read `AGENTS.md` and `CLAUDE.md` first** — they contain architecture, rules, and pitfalls.
+1. **Always read the closest `AGENTS.md` first.** `CLAUDE.md` is only a compatibility symlink to the same content.
 2. Then look at the specific code relevant to your task.
 3. Do not modify sister repos without understanding their conventions.
 
 ## Language Policy
 - All code comments and commit messages **must be in English**.
-- No Chinese (or other non-English) text in source files — translations belong exclusively in locale files (`src/i18n/locales/` and `office-game/src/locales/`).
+- No Chinese (or other non-English) text in source files — translations belong exclusively in locale files under `src/i18n/locales/`.
 
 ## Gateway Config Safety
 - Any flow that patches Gateway config must show a secondary confirmation dialog, because the change will restart Gateway and may interrupt active OpenClaw tasks.
+
+## Relay Liveness Compatibility
+
+1. Relay client URLs advertise `relay.client-pong.v1`; clients must answer only Relay ticks that explicitly request that capability acknowledgement.
+2. Treat WebSocket `open`, first valid frame, and backend `ready` as separate lifecycle stages. OpenClaw reconnect backoff resets only after `connect_ready`; direct backends reset after a valid first frame.
+3. Unknown tick fields and close codes remain non-fatal so new Relay workers stay compatible with old App releases and new Apps stay compatible with old Relay workers.
+
+## Preview Relay Environment
+
+1. Preview is selected only from Debug Mode and changes the official Registry/Relay environment used for new OpenClaw Relay pairing. It is not a transport or backend option.
+2. Official Production and Preview QR codes must match the selected environment. Reject an official Preview QR while Debug Mode is off; do not apply this restriction to custom/self-hosted Registry URLs.
+3. Persist the developer's environment choice, but use Production as the effective default whenever Debug Mode is off.
+4. Keep saved connections environment-isolated through their Registry URL and gateway identity. Existing Preview connections remain clearly labeled and must not overwrite Production credentials.
+
+## Secure Pairing Invitation Rule
+
+1. Universal/App Links and pairing codes must decrypt locally, parse through `qrPayload.ts`, and reuse the existing backend-aware claim/save/reconnect flow.
+2. Accept official pairing links only from configured Clawket Registry environments; keep custom and self-hosted pairing available through the existing QR path.
+3. Preview invitations require Debug Mode. Legacy QR scanning and both OpenClaw and Hermes connection paths must remain unchanged.
+4. Present OpenClaw Relay pairing as one primary path: run the environment-specific pairing command, obtain a pairing code, enter it, and connect. Keep QR scanning/upload as a collapsed compatibility path so legacy and self-hosted flows remain available without competing with the default onboarding.
 
 ## Global Loading Overlay Rules
 - Reuse the shared global loading overlay for app-wide in-flight states that should float above the current screen without replacing its layout.
@@ -116,7 +139,7 @@ You **must** read the sister repo's code (start with its `AGENTS.md` and `CLAUDE
 - If an in-flight action can be interrupted by dismissing a modal screen or swiping down a native-stack modal, add an explicit confirmation before leaving; do not assume the global overlay itself prevents dismissal.
 
 ## Release Update Modal
-- The Chat first-screen release/update modal content lives in `src/features/app-updates/currentAnnouncement.ts`.
+- The unified release/update history lives in `src/features/app-updates/releases.ts`.
 - When the user asks to change update-popup copy, CTA labels, target version, or destination, edit that file first instead of searching across Chat screen files.
 - Any new user-facing strings introduced there must also be added to all 6 React Native locale files under `src/i18n/locales/{en,zh-Hans,ja,ko,de,es}/chat.json`.
 - The display/cache logic for that modal is implemented in `src/services/app-update-announcement.ts`; UI lives in `src/screens/ChatScreen/components/AppUpdateAnnouncementModal.tsx`.
@@ -134,12 +157,11 @@ You **must** read the sister repo's code (start with its `AGENTS.md` and `CLAUDE
 | German | `de` | Full coverage |
 | Spanish | `es` | Full coverage |
 
-## Two-Runtime Architecture
+## Runtime Architecture
 
 | Runtime | Tech | Translation source |
 |---------|------|--------------------|
 | React Native | i18next + `react-i18next` | `src/i18n/locales/{locale}/{namespace}.json` (4 namespaces: `common`, `chat`, `config`, `console`) |
-| Office WebView | Custom `office-game/src/i18n.ts` | `office-game/src/locales/{zh-Hans,ja,ko,de,es}.ts`; locale set via `LOCALE` bridge message from RN |
 
 ## Key Design
 - Use natural English text as translation keys: `t('Save')`, `t('Loading...')`.
@@ -147,17 +169,15 @@ You **must** read the sister repo's code (start with its `AGENTS.md` and `CLAUDE
 
 ## Required Rules
 1. **All new features must include i18n for every supported locale.** No feature is complete until translations exist for **all 6 locales**.
-2. **Hardcoded user-facing strings are forbidden.** Every visible string in RN screens must go through `t()`. Every visible string in Office game must go through the Office `t()`.
+2. **Hardcoded user-facing strings are forbidden.** Every visible string in RN screens must go through `t()`.
 3. When adding a new RN translation key, add it to **all 6 locale directories**: `en`, `zh-Hans`, `ja`, `ko`, `de`, `es`. Never add a key to only one or two locales.
-4. When adding a new Office game string, add translations to **all 5 non-English locale files**: `zh-Hans.ts`, `ja.ts`, `ko.ts`, `de.ts`, `es.ts`.
-5. Translation keys must always be **natural English text** (e.g. `t('Save')`, `t('Loading...')`). Never use non-English text as keys.
+4. Translation keys must always be **natural English text** (e.g. `t('Save')`, `t('Loading...')`). Never use non-English text as keys.
 5. Constants with translatable labels (e.g. tab arrays, picker options) must use `useMemo` + `t()` inside the component so translations update with locale changes.
 6. `Alert.alert()` title, message, and button labels must be wrapped with `t()`.
 
 ## Forbidden Patterns
-1. Do not hardcode UI strings in screen/component/office source files.
-2. Do not use Chinese text directly in source code — only in locale JSON files and `zh-Hans.ts`.
-3. Do not apply `t()` at module-level definition time for Office templates — apply at selection/render time (locale may change after init).
+1. Do not hardcode UI strings in screen or component source files.
+2. Do not use Chinese text directly in source code — only in locale JSON files.
 
 ## How to Add Strings — React Native
 1. Add key to **all 6** locale JSON files under `src/i18n/locales/{en,zh-Hans,ja,ko,de,es}/{namespace}.json`.
@@ -165,20 +185,9 @@ You **must** read the sister repo's code (start with its `AGENTS.md` and `CLAUDE
 3. Use `const { t } = useTranslation('{namespace}')` in the component.
 4. Render with `t('Your new string')`.
 
-## How to Add Strings — Office Game
-1. Use `t('Your new string')` in the office source file (import from `./i18n`).
-2. English works by fallback (key = English text).
-3. Add translations to **all 5** non-English locale files: `office-game/src/locales/{zh-Hans,ja,ko,de,es}.ts`.
-
-## Locale Delivery to Office WebView
-- `src/screens/OfficeScreen/OfficeTab.tsx` sends `{ type: 'LOCALE', locale }` on WebView load and on `i18next.languageChanged`.
-- `office-game/src/bridge.ts` handles `LOCALE` messages and calls `setLocale()`.
-
 ## Validation Checklist
 1. All 6 locale JSON files (`en`, `zh-Hans`, `ja`, `ko`, `de`, `es`) have the same set of keys (no orphans).
-2. All 5 Office game locale files have the same set of keys as `zh-Hans.ts`.
-3. `npx tsc --noEmit` passes.
-4. `cd office-game && npm run build` passes.
+2. `npx tsc --noEmit` passes.
 
 # Analytics Rules
 
@@ -243,7 +252,9 @@ All new UI work must follow these rules so dark mode works automatically.
 
 ## Source of Truth
 - Theme provider: `src/theme/ThemeProvider.tsx`
-- Theme tokens: `src/theme/theme.ts`
+- Semantic color tokens: `src/theme/theme.ts`
+- Structural tokens: `src/theme/tokens.ts`
+- Full specification: `docs/design-system.md`
 - Theme mode storage: `src/services/storage.ts`
 
 ## Required Rules
@@ -253,6 +264,8 @@ All new UI work must follow these rules so dark mode works automatically.
    - `const styles = useMemo(() => createStyles(theme.colors), [theme]);`
 4. For text inputs, use themed placeholder colors (`placeholderTextColor={theme.colors.textSubtle}`).
 5. For markdown or rich content, generate themed style objects from `theme.colors`.
+6. Use `LineHeight` with `FontSize`; do not create intermediate type steps with arithmetic.
+7. Use `StyleSheet.hairlineWidth` for ordinary surface edges.
 
 ## Forbidden Patterns
 1. Do not hardcode hex/rgb/rgba colors inside screen/component files.
@@ -271,50 +284,21 @@ All new UI work must follow these rules so dark mode works automatically.
 4. Chat and Config tabs keep consistent theme when switching tabs.
 5. Status bar style matches background contrast.
 6. Run typecheck: `npx tsc --noEmit`.
+7. Run the design-system gate: `npm run check:design-system`.
 
 ## Notes
 - The architecture supports extension (e.g. high-contrast theme), but only if new UI uses semantic tokens.
 - If a component needs a one-off visual state, add a token instead of hardcoding a color.
 
-# Small Button Component Rules
+# Button and Control Rules
 
-When implementing compact icon-only buttons, always use shared UI components from `src/components/ui`.
-
-## Required Rules
-1. Use `IconButton` for bare icon actions (header/toolbar/inline utility actions).
-2. Use `CircleButton` only for primary circular actions (send, scroll-to-bottom, FAB-like actions).
-3. Use Lucide icons only for button icons; do not use unicode symbol text such as `✕`, `←`, `↑`, `+`.
-4. Keep touch target size at least 44 for standalone actions; 36-40 is allowed for tightly grouped inline actions.
-5. Prefer `strokeWidth={2}` by default; use `2.5` only for emphasized actions.
-
-# Full-Width Button Rules
-
-Full-width buttons are page-level actions that span the available content width (e.g. Save & Connect, Scan QR Code, Reset Device).
-
-## Standard Spec
-
-| Property | Value | Token |
-|----------|-------|-------|
-| `paddingVertical` | 11 | — |
-| `borderRadius` | 12 | `Radius.md` |
-| `fontSize` | 15 | `FontSize.base` |
-| `fontWeight` | 600 | `FontWeight.semibold` |
-| Inline icon size | 15 | — |
-| Inline icon `strokeWidth` | 2 | — |
-
-## Variants
-
-| Variant | Background | Border | Text color |
-|---------|------------|--------|------------|
-| Primary | `colors.primary` | none | `colors.primaryText` |
-| Outline | `colors.surface` | `1px colors.primary` | `colors.primary` |
-| Destructive | `colors.surface` | `1px colors.error` | `colors.error` |
-
-## Required Rules
-1. All full-width buttons must use `paddingVertical: 11` and `borderRadius: Radius.md` — never deviate for visual parity.
-2. Text must be `FontSize.base` + `FontWeight.semibold` — do not use `bold` or a different size.
-3. Pressed state: Primary → `opacity: 0.88`; Outline/Destructive → `backgroundColor: colors.surfaceMuted`.
-4. Buttons with an icon: use `flexDirection: 'row'`, `alignItems: 'center'`, `gap: Space.sm`, icon size 15, `strokeWidth={2}`.
+1. Page-level text CTAs use shared `Button`; do not hand-roll `Pressable` plus primary/error chrome in screens.
+2. Compact icon chrome uses `ActionButton`. `IconButton` is retained for legacy bare-icon call sites; migrate it when touching that surface. `CircleButton` remains for specialized primary circular actions such as send and scroll-to-bottom.
+3. Standard standalone controls are `ControlSize.standard` (44). Compact grouped controls may use `ControlSize.compact` (36); settings rows use `ControlSize.settingsRow` (56).
+4. Use Lucide icons only for button icons; do not use unicode symbol text such as `✕`, `←`, `↑`, `+`.
+5. Button/action callers may override layout only. Background, edge, radius, typography, pressed, disabled, and loading behavior belong to the shared component.
+6. `Button` variants are `primary`, `secondary`, `ghost`, and `destructive`; sizes are `sm`, `md`, and `lg`.
+7. Special brand/media/export controls may keep custom presentation, but ordinary app chrome around them still uses shared controls.
 
 # Top Navigation Bar Rules
 
@@ -449,22 +433,41 @@ All structural style values (spacing, font size, border radius, shadows, animati
 | | `Space.xl` | 24 | Section separators, large gaps |
 | | `Space.xxl` | 32 | Major section breaks |
 | | `Space.xxxl` | 48 | Bottom padding for scroll content |
-| **Font Size** | `FontSize.xs` | 11 | Badges, timestamps |
+| **Font Size** | `FontSize.nano` / `micro` | 9 / 10 | Exceptional dense labels only |
+| | `FontSize.xs` | 11 | Badges, timestamps |
 | | `FontSize.sm` | 12 | Captions, helper text |
 | | `FontSize.md` | 13 | Descriptions, secondary text |
+| | `FontSize.bodySm` | 14 | Compact body/control text |
 | | `FontSize.base` | 15 | Body text, input text, card titles |
 | | `FontSize.lg` | 16 | Screen titles |
 | | `FontSize.xl` | 18 | Large headings (rare) |
+| | `FontSize.displaySm` | 20 | Compact display text |
 | | `FontSize.xxl` | 22 | Emoji icons in cards |
+| | `FontSize.displayMd` | 26 | Compact display values |
+| | `FontSize.xxxl` | 28 | Display numerals and hero text |
+| | `FontSize.displayLg` | 36 | Large identity emoji/display text |
+| **Line Height** | `LineHeight.xs` → `LineHeight.xxxl` | 14 → 34 | Matched leading for every font step |
 | **Font Weight** | `FontWeight.regular` | 400 | Body text |
 | | `FontWeight.medium` | 500 | Subtle emphasis |
 | | `FontWeight.semibold` | 600 | Titles, card titles, labels |
 | | `FontWeight.bold` | 700 | Strong emphasis only |
-| **Radius** | `Radius.sm` | 8 | Tags, badges, small cards |
-| | `Radius.md` | 12 | Standard cards, modals |
-| | `Radius.lg` | 20 | Pill inputs, large buttons |
+| **Radius** | `Radius.xs` | 4 | Compact indicators and tight inner corners |
+| | `Radius.sm` | 8 | Tags, badges, small cards |
+| | `Radius.md` | 12 | Standard cards and grouped controls |
+| | `Radius.lg` | 18 | Inputs and large buttons |
+| | `Radius.xl` | 24 | Modal cards and large floating surfaces |
 | | `Radius.full` | 9999 | Perfect circles |
-| **Shadow** | `Shadow.sm` | — | Subtle lift (cards) |
+| **Border** | `BorderWidth.hairline` | platform | Ordinary semantic edges |
+| | `BorderWidth.strong` | 2 | Deliberate selection/artifact frames only |
+| | `BorderWidth.emphasis` | 3 | Scanner corners and high-visibility presentation marks only |
+| **Presentation** | `PresentationColor.*` | — | Theme-independent media overlays, exported artwork, and data visualization only |
+| **Control Size** | `ControlSize.compact` | 36 | Grouped toolbar controls |
+| | `ControlSize.standard` | 44 | Standard actions and search |
+| | `ControlSize.large` / `field` | 48 | Large CTA / form field |
+| | `ControlSize.settingsRow` | 56 | Grouped settings rows |
+| | `ControlSize.settingsIcon` | 32 | Semantic settings icon badges |
+| **Shadow** | `Shadow.xs` | — | Selected chips and subtle capsules |
+| | `Shadow.sm` | — | Subtle lift (cards) |
 | | `Shadow.md` | — | Floating elements (FAB, popover) |
 | | `Shadow.lg` | — | Modals, overlays |
 
@@ -472,34 +475,44 @@ All structural style values (spacing, font size, border radius, shadows, animati
 
 | Component | Purpose | When to use |
 |-----------|---------|-------------|
+| `Button` | Shared text CTA | Save, connect, retry, confirm, destructive actions |
+| `ActionButton` | Shared compact icon chrome | Header, toolbar, composer, floating utility actions |
 | `IconButton` | Bare icon touch target | Header actions, toolbar, inline utilities |
 | `HeaderActionButton` | Header icon action button | Actions shown inside native-stack headers and `ScreenHeader.rightContent` |
 | `HeaderTextAction` | Header text action | Text-only actions inside native-stack headers and `ScreenHeader.rightContent` |
 | `CircleButton` | Solid circle + icon | Send, scroll-to-bottom, FAB |
 | `ScreenHeader` | Top navigation bar | All Console sub-pages (not Chat — Chat has its own header) |
 | `ModalScreenLayout` | Page-level modal shell | Native-stack modal/detail screens with a close-style header |
-| `Card` | Rounded surface container | List items, menu items, detail sections |
+| `Card` | Shared surface container | List items, menu items, detail sections; use variants rather than local chrome |
 | `LoadingState` | Centered spinner + message | Full-screen loading |
 | `EmptyState` | Icon + title + optional action | Empty lists, no results |
 | `SegmentedTabs` | iOS-style segmented tab bar | Any page with 2+ switchable views (Cron Runs/Jobs, Connections Channels/Nodes) |
 | `ModalSheet` | Centered card modal with backdrop | All centered-card modals (tool detail, avatar, editor, picker) |
 | `SearchInput` | Pill-shaped search field with icon | Any list/page that needs keyword filtering |
+| `FormTextInput` | Shared form field | Standard single-line/multiline forms; use sunken mode inside cards/modals |
+| `SettingsIcon` | Semantic settings icon badge | Accent/info/success/warning/danger/neutral settings affordances |
+| `ThemedSwitch` | Theme-aware binary control | All ordinary toggles; do not use native `Switch` directly |
+| `SettingsGroup` / `SettingsRow` / `SettingsDivider` | Grouped settings chrome | Settings screens and settings-like modal sections |
 
-**IMPORTANT:** Whenever you create, refactor, or extract a new shared UI component into `src/components/ui/`, you **must** update this table and add corresponding usage rules to this file and `CLAUDE.md`.
+**IMPORTANT:** Whenever you create, refactor, or extract a new shared UI component into `src/components/ui/`, update this table and `docs/design-system.md`. `CLAUDE.md` is a symlink and must not be edited separately.
 
 ## Adding New Tokens
 1. Add to `src/theme/tokens.ts` with a clear semantic name.
 2. Update the token reference table in this file.
 3. Prefer extending existing scales (add `Space.xxxl` not `Space.mySpecialPadding`).
+4. Ordinary surface chrome must flow through `createSurfaceStyle`; raw shadow tokens are reserved for documented presentation previews.
+5. `PresentationColor` is limited to media, export, scanner, and data-viz content. Never use it instead of `theme.colors` for ordinary app chrome.
 
 # Cross-Tab Navigation Rules
 
 ## Architecture
 The app uses a bottom-tab navigator with nested stack navigators per tab (e.g. Console tab contains a `ConsoleStack` with `ConsoleMenu` → sub-screens).
 
+The root tab navigator must use `@react-navigation/bottom-tabs` on every platform. Do not reintroduce `@bottom-tabs/react-navigation`, `react-native-bottom-tabs`, SF Symbols tab descriptors, or a native Liquid Glass path. JS tabs already occupy layout space; never add `tabBarHeight` to ordinary screen, drawer, list, composer, or scroll padding. Use `useTabBarHeight()` only for full-screen overlays or keyboard policies that need the physical measurement. Root tab availability remains capability-gated so OpenClaw and Hermes preserve their supported page sets.
+
 ## Required Rules
 1. **Never use `CommonActions.navigate` with `params: { screen: 'SubScreen' }` to deep-link into a nested stack from another tab.** This replaces the entire stack state with only the target screen — the stack root is lost, so the back button jumps to the previous tab instead of the stack root.
-2. When navigating from another tab (e.g. Office) into a nested stack screen (e.g. Console → Usage), explicitly set the stack state with the root screen at the bottom:
+2. When navigating from another tab (for example Live) into a nested stack screen (for example Console → Usage), explicitly set the stack state with the root screen at the bottom:
    ```typescript
    navigation.dispatch(
      CommonActions.navigate({
@@ -517,98 +530,13 @@ The app uses a bottom-tab navigator with nested stack navigators per tab (e.g. C
    ```
 3. For navigating to just the tab root (no sub-screen), `navigation.navigate('Console')` is fine.
 
-## Reference
-- Helper pattern: see `navigateToConsoleScreen()` in `src/screens/OfficeScreen/OfficeTab.tsx`.
-
-# Office Game Sprite Pipeline
-
-# Office Game Architecture Rules
-
-## Runtime Layout
-- Bootstrap and fixed-timestep loop live in `office-game/src/main.ts`.
-- React Native remains the source of truth for OpenClaw data. `office-game/src/bridge.ts` only adapts bridge messages into office runtime state.
-- Office simulation/domain logic lives in:
-  - `office-game/src/world.ts`
-  - `office-game/src/pathfinding.ts`
-  - `office-game/src/character.ts`
-  - `office-game/src/bubbles.ts`
-  - `office-game/src/bubble-scheduler.ts`
-- Office menu is split by responsibility:
-  - `office-game/src/menu.ts` = facade/public API + input routing
-  - `office-game/src/menu-state.ts` = mutable menu state only
-  - `office-game/src/menu-model.ts` = derived data, filtering, labels, pagination data
-  - `office-game/src/menu-layout.ts` = panel geometry and hit rectangles
-  - `office-game/src/menu-draw.ts` = canvas drawing only
-- Office renderer is split by responsibility:
-  - `office-game/src/renderer.ts` = canvas lifecycle, global input handling, render pipeline orchestration
-  - `office-game/src/renderer-scene.ts` = floor/furniture/character scene drawing
-  - `office-game/src/renderer-overlays.ts` = whiteboard, badges, bubbles, sweat/startle overlays
-  - `office-game/src/renderer-shared.ts` = small shared rendering helpers
-
-## Required Refactor Rules
-1. Keep `menu.ts` and `renderer.ts` as thin facades. Do not grow them back into thousand-line files.
-2. Put pure derivation logic in `menu-model.ts` or other pure helper modules, not in drawing or bridge code.
-3. Put mutable singleton UI state in `menu-state.ts`; avoid introducing duplicate ad-hoc module state elsewhere.
-4. Put canvas drawing in draw-focused modules and keep side effects limited to rendering and stored hit bounds.
-5. Extend office features by data flow order:
-   - bridge/domain state
-   - simulation/scheduler
-   - render/model helpers
-   - input/navigation wiring
-6. Preserve the public API contracts used by the runtime:
-   - `menu.ts` exports menu open/close/input/draw functions
-   - `renderer.ts` exports `initRenderer()` and `render()`
-7. Do not make `office-game` fetch OpenClaw data directly. RN must continue to own polling, gateway access, and navigation.
-8. When adding new office interactions, prefer adding a new bridge/menu action mapping instead of hardcoding navigation logic inside draw modules.
-
-## Office Feature Design Guidance
-1. Treat the office as a data-driven management simulation, not a detached mini-game.
-2. New “fun” behavior should be grounded in real OpenClaw state whenever possible (sessions, cron, usage, memory, connections, tools).
-3. If a feature needs more data, extend the RN → WebView bridge in a backward-compatible message rather than scraping existing UI state in the renderer.
-4. Prefer reusable event/scheduler primitives over one-off timers embedded in rendering code.
-5. Before adding new office UI, first decide which layer owns it:
-   - bridge/domain
-   - simulation/scheduler
-   - menu model/layout
-   - renderer scene/overlay
-6. After Office refactors or feature work, run:
-   - `npx tsc --noEmit`
-   - `npm test -- --runInBand`
-   - `cd office-game && npm run build`
-
-## Source
-- Pixel art source: `office-game/scripts/sprites/` (palette, tiles, furniture, decorations, characters)
-- Generator: `office-game/scripts/generate-sprites.ts`
-- Output: `office-game/sprites/` (PNG sheets + `sprites.json` frame map)
-- Build: `cd office-game && npx tsx scripts/generate-sprites.ts && npm run build`
-
-## ⚠️ Sprite Registration Pitfall
-`generate-sprites.ts` merges `FURNITURE` and `DECORATIONS` into a single sprite sheet. If you **rename or remove** a key that the merge logic depends on as an insertion anchor, decorations silently vanish from the sheet — `getFrame()` returns `undefined` and the entire canvas render crashes (all furniture disappears).
-
-**Rule:** When adding/removing/renaming sprite entries in `furniture.ts` or `decorations.ts`, always verify `sprites.json` output contains ALL expected keys. Run:
-```bash
-npx tsx scripts/generate-sprites.ts
-# Check the "N sprites" count matches expectations
-```
-
-## Renderer Fail-Safe Rule
-When introducing or changing office sprite keys, renderer code must use safe frame lookup and fallback for optional elements.
-
-1. Use a safe lookup (`getFrameSafe` pattern with `try/catch`) instead of direct `getFrame` for optional/new sprites.
-2. If a frame is missing, skip that single element or use a known fallback sprite.
-3. Never allow one missing frame to abort the whole render pass.
-
-## Furniture-Disappear Troubleshooting
-If all furniture disappears after sprite work, check in this order:
-
-1. Verify the expected key exists in `office-game/sprites/sprites.json`.
-2. Regenerate sprite assets and rebuild:
-```bash
-cd office-game
-npx tsx scripts/generate-sprites.ts
-npm run build
-```
-3. Confirm renderer mapping and fallback paths cover the new key (especially optional decorations).
+## Live Product Structure
+1. The root tab and internal navigation route are both named `Live`. It uses the shared Lucide `Activity` icon, is intentionally headerless, and begins below the platform safe area.
+2. Live may show only state backed by real gateway signals such as sessions, run lifecycle events, tool events, usage, cron failures, and pairing requests.
+3. Do not infer task completion from message volume or session recency. Completion and failure labels must come from explicit runtime events; recency may be labeled only as working, recent, or standby.
+4. Preserve backend-aware session scope. OpenClaw sessions are agent-prefixed; Hermes uses global session keys and must not be filtered through OpenClaw prefix assumptions.
+5. Bring personality into Live through real member identity, restrained status motion, tool activity, and explicit completion feedback. Respect the system reduce-motion setting and keep information legibility ahead of decoration.
+6. Keep Live implementation under `src/screens/LiveScreen/` and its pure aggregation logic in `src/services/live-dashboard.ts`.
 
 # Tab UI Rules
 
@@ -665,3 +593,25 @@ All native-stack modal/detail pages that use a close-style header should use the
 2. Pass `onClose` and let the layout render the close affordance; do not hand-roll a separate modal-page header.
 3. Use `rightContent` for lightweight title-bar actions such as save/edit/run.
 4. Keep scrolling inside the screen body; `ModalScreenLayout` only owns the outer shell and header.
+
+# OpenClaw Native Setup Handoff
+
+1. Official setup credentials are an internal onboarding mechanism, not a user-selectable auth mode or compatibility setting.
+2. Use the setup credential only for the temporary node-role handshake, then persist the operator handoff token with the exact scopes returned by OpenClaw and reconnect automatically.
+3. Sign device auth with the timestamp from `connect.challenge`; do not substitute the local clock.
+4. Keep stored token records gateway-scoped, migrate legacy raw token strings, and clear stale tokens on structured token or scope mismatch errors.
+5. Older Relay responses without strategy metadata remain legacy-bound bootstrap responses. Preserve existing token/password and Hermes connection paths.
+6. Advertise `openclaw.bootstrap.mobile-setup.v1` only on the OpenClaw bootstrap request. Missing or unknown capability metadata must remain compatible with legacy Bridge responses and must never surface as a user-selectable mode.
+
+# Secure Short-Code Pairing
+
+1. Six-digit pairing codes must use the scoped version-2 Relay handshake; never use six decimal digits directly as a payload decryption key.
+2. Pairing-ticket sockets may carry only `pairing.secure.*` control frames and must close before the normal Relay claim/reconnect flow begins.
+3. Verify the Bridge's code-bound response proof before decrypting its ephemeral TweetNaCl box payload.
+4. Continue accepting legacy 12-character codes and the compact QR payload so new Apps remain compatible with older Bridge/Registry deployments.
+
+# iOS Local Signing Compatibility
+
+1. Release builds keep the Associated Domains entitlement for Universal Links.
+2. `npm run dev` derives a Debug-only entitlement file without Associated Domains by default so an existing local provisioning profile can still install the App; the `clawket://` pairing fallback remains available.
+3. Set `CLAWKET_IOS_DEV_UNIVERSAL_LINKS=1` only when intentionally testing Universal Links with a provisioning profile that includes Associated Domains.

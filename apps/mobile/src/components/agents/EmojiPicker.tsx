@@ -200,7 +200,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       justifyContent: 'center',
     },
     previewEmoji: {
-      fontSize: 32,
+      fontSize: FontSize.displayHero,
     },
     gridScroll: {
       maxHeight: 200,
@@ -236,7 +236,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       backgroundColor: colors.primarySoft,
     },
     cellEmoji: {
-      fontSize: 24,
+      fontSize: FontSize.emoji,
       lineHeight: 28,
       textAlign: 'center',
       textAlignVertical: 'center',

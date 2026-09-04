@@ -82,7 +82,7 @@ function useSteps(
   ];
 }
 
-export function ConnectionHelpQuick(): React.JSX.Element {
+export function ConnectionHelpQuick({ pairCommand = 'clawket pair' }: { pairCommand?: string }): React.JSX.Element {
   const { t } = useTranslation('config');
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme.colors), [theme]);
@@ -90,7 +90,7 @@ export function ConnectionHelpQuick(): React.JSX.Element {
   return (
     <View style={styles.sectionContainer}>
       <Text style={styles.title}>{t('How to Connect')}</Text>
-      <QuickConnectGuideCard />
+      <QuickConnectGuideCard relayPairCommand={pairCommand} />
     </View>
   );
 }
@@ -122,7 +122,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       backgroundColor: colors.surface,
       borderRadius: Radius.md,
       padding: Space.lg,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
     },
     title: {

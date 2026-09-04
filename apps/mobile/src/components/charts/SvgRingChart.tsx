@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
 import { useAppTheme } from '../../theme';
-import { FontSize, FontWeight, Space } from '../../theme/tokens';
+import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
 import { formatCost } from '../../utils/usage-format';
 import { describeArc, easeOut } from './chart-utils';
 
@@ -198,7 +198,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     legendDot: {
       width: Space.sm,
       height: Space.sm,
-      borderRadius: 9999,
+      borderRadius: Radius.full,
       marginRight: Space.xs + 2,
     },
     legendLabel: {

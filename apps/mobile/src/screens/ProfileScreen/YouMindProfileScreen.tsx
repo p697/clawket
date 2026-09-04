@@ -30,7 +30,7 @@ import {
 } from '../../services/youmind';
 import { resolveGatewayBackendKind } from '../../services/gateway-backends';
 import { useAppTheme } from '../../theme';
-import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
+import { FontSize, FontWeight, PresentationColor, Radius, Space } from '../../theme/tokens';
 import type { ProfileStackParamList } from './ProfileTab';
 
 type ProfileData = {
@@ -52,13 +52,13 @@ const CATEGORY_META: Array<{
   label: string;
   color: string;
 }> = [
-  { key: 'chat', label: 'Chat', color: '#C6BC61' },
-  { key: 'writing', label: 'Writing', color: '#A088AD' },
-  { key: 'search', label: 'Search', color: '#6E9AD2' },
-  { key: 'image', label: 'Image', color: '#8DAF87' },
-  { key: 'audio', label: 'Audio', color: '#C89469' },
-  { key: 'parsing', label: 'Parsing', color: '#708090' },
-  { key: 'video', label: 'Video', color: '#E85D75' },
+  { key: 'chat', label: 'Chat', color: PresentationColor.creditCategory.chat },
+  { key: 'writing', label: 'Writing', color: PresentationColor.creditCategory.writing },
+  { key: 'search', label: 'Search', color: PresentationColor.creditCategory.search },
+  { key: 'image', label: 'Image', color: PresentationColor.creditCategory.image },
+  { key: 'audio', label: 'Audio', color: PresentationColor.creditCategory.audio },
+  { key: 'parsing', label: 'Parsing', color: PresentationColor.creditCategory.parsing },
+  { key: 'video', label: 'Video', color: PresentationColor.creditCategory.video },
 ];
 
 function formatNumber(value: number): string {
@@ -280,7 +280,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       color: colors.textMuted,
     },
     heroValue: {
-      fontSize: 30,
+      fontSize: FontSize.displayHero,
       fontWeight: FontWeight.bold,
       color: colors.text,
     },
@@ -490,7 +490,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     signOutButton: {
       marginTop: Space.sm,
       borderRadius: Radius.md,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.borderStrong,
       paddingVertical: Space.md,
       alignItems: 'center',
@@ -522,7 +522,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     skeletonButton: {
       height: 50,
       borderRadius: Radius.md,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.borderStrong,
       justifyContent: 'center',
       alignItems: 'center',

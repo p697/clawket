@@ -218,7 +218,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       justifyContent: 'space-between',
       backgroundColor: colors.inputBackground,
       borderColor: colors.border,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderRadius: Radius.md,
       paddingHorizontal: Space.md,
       paddingVertical: Space.sm + 4,
@@ -253,7 +253,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     emptyFallback: {
       backgroundColor: colors.inputBackground,
       borderColor: colors.border,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderRadius: Radius.md,
       padding: Space.md,
     },
@@ -265,7 +265,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     fallbackList: {
       backgroundColor: colors.inputBackground,
       borderColor: colors.border,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderRadius: Radius.md,
       overflow: 'hidden',
     },
@@ -287,7 +287,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     fallbackOrder: {
       width: 22,
       height: 22,
-      borderRadius: 11,
+      borderRadius: Radius.md,
       backgroundColor: colors.surfaceMuted,
       alignItems: 'center',
       justifyContent: 'center',

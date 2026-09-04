@@ -1,4 +1,5 @@
 import {
+  CLIENT_PONG_CAPABILITY,
   CONNECT_START_BUFFER_TTL_MS,
   GATEWAY_PING_TIMEOUT_DEFAULT_MS,
   SOCKET_CLOSE_CODES,
@@ -120,22 +121,40 @@ export function pruneExpiredAwaitingChallenges(runtime: RelayRuntime, now: numbe
 export function pruneStaleHandshakeClients(runtime: RelayRuntime, now: number): void {
   let changed = false;
   const ttlMs = runtime.awaitingChallengeTtlMs();
-  const idleTimeoutMs = runtime.clientIdleTimeoutMs();
+  const pongTimeoutMs = runtime.clientPongTimeoutMs();
   for (const [clientId, client] of runtime.clients.entries()) {
     if (client.readyState !== WebSocket.OPEN) {
       changed = dropClientState(runtime, clientId, 'non_open_ready_state') || changed;
       continue;
     }
-    const lastActivityAt = runtime.clientLastActivityAtById.get(clientId) ?? 0;
-    if (lastActivityAt > 0 && isClientIdleExpired(lastActivityAt, now, idleTimeoutMs)) {
+    const attachment = client.deserializeAttachment() as {
+      connectedAt?: number;
+      capabilities?: string[];
+      lastPongAt?: number;
+      challengeDeliveredAt?: number;
+    } | null;
+    const supportsClientPong = attachment?.capabilities?.includes(CLIENT_PONG_CAPABILITY) === true;
+    const lastPongAt = attachment?.lastPongAt ?? attachment?.connectedAt ?? 0;
+    if (supportsClientPong && lastPongAt > 0 && isClientIdleExpired(lastPongAt, now, pongTimeoutMs)) {
       try {
-        client.close(SOCKET_CLOSE_CODES.IDLE_OR_STALE_TIMEOUT, 'idle_timeout');
+        client.close(SOCKET_CLOSE_CODES.IDLE_OR_STALE_TIMEOUT, 'client_pong_timeout');
       } catch {
         // Best effort cleanup; stale sockets may already be detached remotely.
       }
-      changed = dropClientState(runtime, clientId, 'idle_timeout') || changed;
+      changed = dropClientState(runtime, clientId, 'client_pong_timeout') || changed;
       continue;
     }
+    const challengeDeliveredAt = attachment?.challengeDeliveredAt ?? 0;
+    if (challengeDeliveredAt > 0 && now - challengeDeliveredAt > ttlMs) {
+      try {
+        client.close(SOCKET_CLOSE_CODES.IDLE_OR_STALE_TIMEOUT, 'stale_handshake_timeout');
+      } catch {
+        // Best effort cleanup; stale sockets may already be detached remotely.
+      }
+      changed = dropClientState(runtime, clientId, 'stale_handshake_timeout') || changed;
+      continue;
+    }
+    const lastActivityAt = runtime.clientLastActivityAtById.get(clientId) ?? 0;
     const awaiting = runtime.awaitingChallenge.get(clientId);
     if (!awaiting) continue;
     const handshakeActivityAt = lastActivityAt > 0 ? lastActivityAt : awaiting.queuedAt;

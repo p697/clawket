@@ -2,7 +2,6 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-OFFICE_GAME_DIR="$ROOT_DIR/office-game"
 ANDROID_DIR="$ROOT_DIR/android"
 OUTPUT_DIR="$ANDROID_DIR/app/build/outputs/apk/release"
 SOURCE_APK="$OUTPUT_DIR/app-release.apk"
@@ -56,12 +55,6 @@ if [[ -z "$JAVA_HOME_VALUE" ]]; then
   echo "JAVA_HOME is not set and no default JDK 17 path was found."
   exit 1
 fi
-
-echo "Building Office packaged assets..."
-(
-  cd "$OFFICE_GAME_DIR"
-  npm run build
-)
 
 echo "Building Android release variant with temporary Pro unlock enabled..."
 (

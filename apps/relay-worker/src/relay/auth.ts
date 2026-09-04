@@ -1,4 +1,4 @@
-import { sha256Hex } from '@clawket/shared';
+import { isSecurePairingSecretConfigured, sha256Hex, verifyPairingRelayTicket } from '@clawket/shared';
 import type { PairGatewayRecord } from './types';
 
 function pairGatewayKey(gatewayId: string): string {
@@ -12,27 +12,81 @@ export type RelayAuthInput = {
   role: 'gateway' | 'client';
   token: string;
   mirroredClientTokenHashes?: ReadonlySet<string>;
+  pairingTicketSecret?: string;
+};
+
+export type RelayAuthorizationResult = {
+  authorized: boolean;
+  clientLabel: string | null;
+  path: 'mirrored' | 'kv' | 'registry' | 'ticket' | 'rejected';
+  authScope: 'full' | 'pairing';
+  pairingSessionId: string | null;
+  ticketExpiresAt: number | null;
 };
 
 export async function isRelayTokenAuthorized(input: RelayAuthInput): Promise<boolean> {
+  return (await authorizeRelayToken(input)).authorized;
+}
+
+export async function authorizeRelayToken(input: RelayAuthInput): Promise<RelayAuthorizationResult> {
   const { routesKv, registryVerifyUrl, gatewayId, role, token, mirroredClientTokenHashes } = input;
-  const tokenHash = await sha256Hex(token);
-  if (role === 'client' && mirroredClientTokenHashes?.has(tokenHash)) {
-    return true;
+  const pairingTicketSecret = input.pairingTicketSecret?.trim() ?? '';
+  if (role === 'client' && isSecurePairingSecretConfigured(pairingTicketSecret)) {
+    const ticket = await verifyPairingRelayTicket({
+      token,
+      secret: pairingTicketSecret,
+      gatewayId,
+    });
+    if (ticket) {
+      return {
+        authorized: true,
+        clientLabel: null,
+        path: 'ticket',
+        authScope: 'pairing',
+        pairingSessionId: ticket.sessionId,
+        ticketExpiresAt: ticket.expiresAt,
+      };
+    }
   }
+  const tokenHash = await sha256Hex(token);
+  const mirrored = role === 'client' && mirroredClientTokenHashes?.has(tokenHash) === true;
   const pairGateway = await getPairGateway(routesKv, gatewayId);
   if (pairGateway) {
     if (role === 'gateway') {
-      if (tokenHash === pairGateway.relaySecretHash) return true;
-      return verifyViaRegistry(registryVerifyUrl, gatewayId, token);
+      if (tokenHash === pairGateway.relaySecretHash) {
+        return fullAuthorization(true, null, 'kv');
+      }
+      const authorized = await verifyViaRegistry(registryVerifyUrl, gatewayId, token);
+      return fullAuthorization(authorized, null, authorized ? 'registry' : 'rejected');
     }
-    if (Array.isArray(pairGateway.clientTokens)
-      && pairGateway.clientTokens.some((item) => item?.hash === tokenHash)) {
-      return true;
+    const matched = Array.isArray(pairGateway.clientTokens)
+      ? pairGateway.clientTokens.find((item) => item?.hash === tokenHash)
+      : undefined;
+    if (matched) {
+      return fullAuthorization(true, matched.label?.trim() || null, mirrored ? 'mirrored' : 'kv');
     }
-    return verifyViaRegistry(registryVerifyUrl, gatewayId, token);
+    if (mirrored) return fullAuthorization(true, null, 'mirrored');
+    const authorized = await verifyViaRegistry(registryVerifyUrl, gatewayId, token);
+    return fullAuthorization(authorized, null, authorized ? 'registry' : 'rejected');
   }
-  return verifyViaRegistry(registryVerifyUrl, gatewayId, token);
+  if (mirrored) return fullAuthorization(true, null, 'mirrored');
+  const authorized = await verifyViaRegistry(registryVerifyUrl, gatewayId, token);
+  return fullAuthorization(authorized, null, authorized ? 'registry' : 'rejected');
+}
+
+function fullAuthorization(
+  authorized: boolean,
+  clientLabel: string | null,
+  path: RelayAuthorizationResult['path'],
+): RelayAuthorizationResult {
+  return {
+    authorized,
+    clientLabel,
+    path,
+    authScope: 'full',
+    pairingSessionId: null,
+    ticketExpiresAt: null,
+  };
 }
 
 export async function getPairGateway(routesKv: KVNamespace, gatewayId: string): Promise<PairGatewayRecord | null> {

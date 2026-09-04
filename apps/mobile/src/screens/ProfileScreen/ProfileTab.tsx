@@ -2,9 +2,10 @@ import React, { useMemo } from 'react';
 import { Platform } from 'react-native';
 import {
   createNativeStackNavigator,
+  type NativeStackHeaderProps,
   type NativeStackNavigationOptions,
 } from '@react-navigation/native-stack';
-import { useTabBarHeight } from '../../hooks/useTabBarHeight';
+import { NativeStackModalHeader } from '../../hooks/useNativeStackModalHeader';
 import { useAppTheme } from '../../theme';
 import { YouMindAddOnCreditsScreen } from './YouMindAddOnCreditsScreen';
 import { YouMindProfileScreen } from './YouMindProfileScreen';
@@ -15,11 +16,8 @@ export type ProfileStackParamList = {
 };
 
 const ProfileStack = createNativeStackNavigator<ProfileStackParamList>();
-const needsTabBarPadding = Platform.OS === 'ios';
-
 function buildDefaultScreenOptions(contentStyle: {
   backgroundColor: string;
-  paddingBottom?: number;
 }): NativeStackNavigationOptions {
   return {
     headerShown: false,
@@ -27,6 +25,9 @@ function buildDefaultScreenOptions(contentStyle: {
     gestureEnabled: true,
     fullScreenGestureEnabled: true,
     contentStyle,
+    header: (props: NativeStackHeaderProps) => <NativeStackModalHeader {...props} />,
+    headerBackTitle: '',
+    headerBackButtonDisplayMode: 'minimal',
   };
 }
 
@@ -38,6 +39,9 @@ function buildNativeModalScreenOptions(contentStyle: {
       headerShown: true,
       animation: 'slide_from_right',
       contentStyle,
+      header: (props: NativeStackHeaderProps) => (
+        <NativeStackModalHeader {...props} dismissStyleOverride="close" />
+      ),
     };
   }
 
@@ -47,18 +51,19 @@ function buildNativeModalScreenOptions(contentStyle: {
     presentation: 'modal',
     gestureEnabled: true,
     contentStyle,
+    header: (props: NativeStackHeaderProps) => (
+      <NativeStackModalHeader {...props} dismissStyleOverride="close" />
+    ),
   };
 }
 
 export function ProfileTab(): React.JSX.Element {
   const { theme } = useAppTheme();
-  const tabBarHeight = useTabBarHeight();
   const defaultContentStyle = useMemo(
     () => ({
       backgroundColor: theme.colors.background,
-      paddingBottom: needsTabBarPadding ? tabBarHeight : 0,
     }),
-    [tabBarHeight, theme.colors.background],
+    [theme.colors.background],
   );
   const modalContentStyle = useMemo(
     () => ({

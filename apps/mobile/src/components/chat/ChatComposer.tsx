@@ -10,7 +10,6 @@ import {
   View,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
-import * as Haptics from 'expo-haptics';
 import { useTranslation } from 'react-i18next';
 import Animated, {
   FadeIn,
@@ -29,8 +28,9 @@ import Animated, {
 import { Brain, Lightbulb, MessageSquareText, Mic, Orbit, Paperclip, TerminalSquare, Wrench } from 'lucide-react-native';
 import Svg, { Path } from 'react-native-svg';
 import { useAppContext } from '../../contexts/AppContext';
+import { triggerLightImpact } from '../../services/haptics';
 import { useAppTheme } from '../../theme';
-import { FontSize, FontWeight, Radius, Shadow, Space } from '../../theme/tokens';
+import { ControlSize, FontSize, FontWeight, Radius, Space, createSurfaceStyle } from '../../theme/tokens';
 import type { ThinkingLevel } from '../../utils/gateway-settings';
 import { isComposerInputEditable } from '../../screens/ChatScreen/hooks/composerInteractionPolicy';
 import { CircleButton, IconButton } from '../ui';
@@ -234,7 +234,7 @@ export function ChatComposer({ value, placeholder, animatedPlaceholder = false, 
     if (!wallpaperActive) return null;
     return (
       <Pressable
-        onPress={onPress ? () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onPress(); } : undefined}
+        onPress={onPress ? () => { triggerLightImpact(); onPress(); } : undefined}
         style={[styles.blurBadgeClip, extraStyle]}
       >
         <BlurView tint={blurTint} intensity={blurIntensity} style={StyleSheet.absoluteFill}>
@@ -258,7 +258,7 @@ export function ChatComposer({ value, placeholder, animatedPlaceholder = false, 
         ) : (
           <Pressable
             style={({ pressed }) => [styles.badge, styles.badgeModelWrap, { backgroundColor: pressed ? badgeBgPressed : badgeBg, borderColor: badgeBorder }]}
-            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onModelPress(); }}
+            onPress={() => { triggerLightImpact(); onModelPress(); }}
           >
             <Orbit size={12} color={colors.badgeModel} strokeWidth={2} />
             <Text style={[styles.badgeText, styles.badgeModelText, { color: badgeTextColor }]} numberOfLines={1}>{modelLabel}</Text>
@@ -298,7 +298,7 @@ export function ChatComposer({ value, placeholder, animatedPlaceholder = false, 
         ) : (
           <Pressable
             style={({ pressed }) => [styles.badge, { backgroundColor: pressed ? badgeBgPressed : badgeBg, borderColor: badgeBorder }]}
-            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onWebSearchPress!(); }}
+            onPress={() => { triggerLightImpact(); onWebSearchPress!(); }}
           >
             <Wrench size={12} color={colors.badgeTools} strokeWidth={2} />
             <Text style={[styles.badgeText, { color: badgeTextColor }]}>{t('Tools')}</Text>
@@ -315,7 +315,7 @@ export function ChatComposer({ value, placeholder, animatedPlaceholder = false, 
         ) : (
           <Pressable
             style={({ pressed }) => [styles.badge, { backgroundColor: pressed ? badgeBgPressed : badgeBg, borderColor: badgeBorder }]}
-            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onPromptPress!(); }}
+            onPress={() => { triggerLightImpact(); onPromptPress!(); }}
           >
             <MessageSquareText size={12} color={colors.badgePrompts} strokeWidth={2} />
             <Text style={[styles.badgeText, { color: badgeTextColor }]}>{t('Prompts')}</Text>
@@ -352,7 +352,7 @@ export function ChatComposer({ value, placeholder, animatedPlaceholder = false, 
   const skillButton = onSkillPress ? (
     wallpaperActive ? (
       <Pressable
-        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onSkillPress(); }}
+        onPress={() => { triggerLightImpact(); onSkillPress(); }}
         disabled={skillDisabled || !inputEditable}
         style={({ pressed }) => [
           styles.blurButtonClip,
@@ -372,7 +372,7 @@ export function ChatComposer({ value, placeholder, animatedPlaceholder = false, 
       </Pressable>
     ) : (
       <Pressable
-        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onSkillPress(); }}
+        onPress={() => { triggerLightImpact(); onSkillPress(); }}
         disabled={skillDisabled || !inputEditable}
         style={({ pressed }) => [
           styles.attachButtonTrigger,
@@ -434,9 +434,9 @@ export function ChatComposer({ value, placeholder, animatedPlaceholder = false, 
         <Animated.View style={[styles.voiceInputRing, { backgroundColor: colors.error }, voiceButtonRingAnimatedStyle]} />
         <CircleButton
           icon={<StopGlyph color={colors.iconOnColor} />}
-          onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onVoiceInputPress?.(); }}
+          onPress={() => { triggerLightImpact(); onVoiceInputPress?.(); }}
           disabled={voiceInputDisabled}
-          size={36}
+          size={ControlSize.compact}
           color={colors.error}
           disabledColor={colors.borderStrong}
           shadow
@@ -450,7 +450,7 @@ export function ChatComposer({ value, placeholder, animatedPlaceholder = false, 
       >
         {wallpaperActive ? (
           <Pressable
-            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onVoiceInputPress?.(); }}
+            onPress={() => { triggerLightImpact(); onVoiceInputPress?.(); }}
             disabled={voiceInputDisabled}
             style={styles.blurButtonClip}
           >
@@ -464,9 +464,9 @@ export function ChatComposer({ value, placeholder, animatedPlaceholder = false, 
         ) : (
           <IconButton
             icon={<Mic size={20} color={voiceInputDisabled ? colors.textSubtle : colors.textMuted} strokeWidth={2} />}
-            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onVoiceInputPress?.(); }}
+            onPress={() => { triggerLightImpact(); onVoiceInputPress?.(); }}
             disabled={voiceInputDisabled}
-            size={36}
+            size={ControlSize.compact}
           />
         )}
       </Animated.View>
@@ -485,7 +485,7 @@ export function ChatComposer({ value, placeholder, animatedPlaceholder = false, 
         icon={sendButtonIcon}
         onPress={handlePrimaryAction}
         disabled={sendButtonDisabled}
-        size={36}
+        size={ControlSize.compact}
         color={sendButtonColor}
         disabledColor={colors.borderStrong}
       />
@@ -541,7 +541,7 @@ function createStyles(
       paddingHorizontal: Space.sm,
       paddingVertical: 3,
       borderRadius: Radius.sm,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
     },
     badgeText: {
@@ -562,7 +562,7 @@ function createStyles(
       paddingHorizontal: Space.sm,
       paddingVertical: 3,
       borderRadius: Radius.sm,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: blurOutline,
       overflow: 'hidden',
     },
@@ -584,16 +584,15 @@ function createStyles(
       overflow: 'hidden',
     },
     inputWrapWallpaper: {
-      borderRadius: 22,
-      borderWidth: 1,
+      borderRadius: Radius.xl,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: blurOutline,
       overflow: 'hidden',
     },
     input: {
+      ...createSurfaceStyle(colors, scheme, 'raised'),
       backgroundColor: colors.inputBackground,
-      borderColor: colors.border,
-      borderWidth: 1,
-      borderRadius: 22,
+      borderRadius: Radius.xl,
       color: colors.text,
       fontSize: FontSize.base,
       maxHeight: 120,
@@ -606,7 +605,7 @@ function createStyles(
     },
     inputBlurFill: {
       ...StyleSheet.absoluteFillObject,
-      borderRadius: 22,
+      borderRadius: Radius.xl,
       overflow: 'hidden',
     },
     inputBlurTint: {
@@ -621,17 +620,17 @@ function createStyles(
       fontSize: FontSize.base,
     },
     attachButtonTrigger: {
-      width: 36,
-      height: 36,
+      width: ControlSize.compact,
+      height: ControlSize.compact,
       alignItems: 'center',
       justifyContent: 'center',
       borderRadius: Radius.full,
     },
     blurButtonClip: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
-      borderWidth: 1,
+      width: ControlSize.compact,
+      height: ControlSize.compact,
+      borderRadius: Radius.full,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: blurOutline,
       overflow: 'hidden',
       alignItems: 'center',
@@ -652,8 +651,8 @@ function createStyles(
       opacity: 0.84,
     },
     voiceInputButtonWrap: {
-      width: 36,
-      height: 36,
+      width: ControlSize.compact,
+      height: ControlSize.compact,
       alignItems: 'center',
       justifyContent: 'center',
       overflow: 'visible',
@@ -662,7 +661,7 @@ function createStyles(
       position: 'absolute',
       width: 42,
       height: 42,
-      borderRadius: 21,
+      borderRadius: Radius.full,
     },
   });
 }
@@ -674,6 +673,6 @@ const sharedStyles = StyleSheet.create({
   stopGlyph: {
     width: 10,
     height: 10,
-    borderRadius: 4,
+    borderRadius: Radius.xs,
   },
 });

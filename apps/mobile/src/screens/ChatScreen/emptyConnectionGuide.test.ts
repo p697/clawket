@@ -15,6 +15,8 @@ describe('empty connection guide', () => {
     expect(prompt).toContain('npm install -g @p697/clawket');
     expect(prompt).toContain('open-source Clawket CLI');
     expect(prompt).toContain('clawket pair');
+    expect(prompt).toContain('pairing code shown in the terminal');
+    expect(prompt).not.toContain('QR');
   });
 
   it('supports the local pairing command in the agent prompt', () => {
@@ -31,7 +33,7 @@ describe('empty connection guide', () => {
     const t = ((key: string) => key) as never;
     expect(getQuickConnectGuideSteps(t)).toEqual([
       { title: 'Step 1', description: 'Copy this message to your agent.' },
-      { title: 'Step 2', description: 'Scan one of the QR codes sent by your agent.' },
+      { title: 'Step 2', description: 'Enter the pairing code in Clawket.' },
     ]);
   });
 });

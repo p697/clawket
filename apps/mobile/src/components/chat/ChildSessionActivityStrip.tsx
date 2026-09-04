@@ -4,7 +4,7 @@ import * as Haptics from 'expo-haptics';
 import { Bot, CheckCircle2, ChevronDown, ChevronUp, Sparkles, Wrench } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useAppTheme } from '../../theme';
-import { FontSize, FontWeight, Radius, Shadow, Space } from '../../theme/tokens';
+import { FontSize, FontWeight, Radius, Shadow, Space, createThemedShadowStyle } from '../../theme/tokens';
 import {
   ChildSessionActivityCard,
   getChildSessionStatusLabel,
@@ -61,7 +61,7 @@ export function ChildSessionActivityStrip({
 }: Props): React.JSX.Element | null {
   const { t } = useTranslation('chat');
   const { theme } = useAppTheme();
-  const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
+  const styles = useMemo(() => createStyles(theme.colors, theme.scheme), [theme]);
   const [collapsed, setCollapsed] = useState(false);
 
   if (cards.length === 0) return null;
@@ -131,7 +131,10 @@ export function ChildSessionActivityStrip({
   );
 }
 
-function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors']) {
+function createStyles(
+  colors: ReturnType<typeof useAppTheme>['theme']['colors'],
+  scheme: ReturnType<typeof useAppTheme>['theme']['scheme'],
+) {
   return StyleSheet.create({
     wrap: {
       paddingTop: Space.xs,
@@ -156,7 +159,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       paddingVertical: 6,
       borderRadius: Radius.full,
       backgroundColor: colors.primarySoft,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       flexShrink: 1,
     },
@@ -172,7 +175,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: colors.surfaceMuted,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       flexShrink: 0,
     },
@@ -195,9 +198,9 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       paddingVertical: 7,
       borderRadius: Radius.full,
       backgroundColor: colors.surfaceElevated,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
-      ...Shadow.sm,
+      ...createThemedShadowStyle(colors, scheme, Shadow.sm),
     },
     pillCompleted: {
       opacity: 0.86,
@@ -221,7 +224,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       paddingHorizontal: 8,
       paddingVertical: 4,
       borderRadius: Radius.full,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       flexShrink: 0,
     },
     statusBadgeText: {

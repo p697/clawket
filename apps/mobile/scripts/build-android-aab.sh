@@ -2,7 +2,6 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-OFFICE_GAME_DIR="$ROOT_DIR/office-game"
 ANDROID_DIR="$ROOT_DIR/android"
 OUTPUT_DIR="$ANDROID_DIR/app/build/outputs/bundle/release"
 AAB_PATH="$OUTPUT_DIR/app-release.aab"
@@ -165,12 +164,6 @@ if [[ ! "$ANDROID_VERSION_CODE_VALUE" =~ ^[0-9]+$ ]] || (( ANDROID_VERSION_CODE_
   echo "Resolved invalid Android version code: $ANDROID_VERSION_CODE_VALUE"
   exit 1
 fi
-
-echo "Building Office packaged assets..."
-(
-  cd "$OFFICE_GAME_DIR"
-  npm run build
-)
 
 echo "Validating Android public release config..."
 (

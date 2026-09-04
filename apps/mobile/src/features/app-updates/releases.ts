@@ -6,7 +6,7 @@ export type AppUpdateAnnouncementAction =
     }
   | {
       type: 'navigate_tab';
-      screen: 'Office';
+      screen: 'Live';
     }
   | {
       type: 'open_url';

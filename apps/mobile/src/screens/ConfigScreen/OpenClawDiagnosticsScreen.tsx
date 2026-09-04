@@ -24,13 +24,14 @@ function DoctorCheckRow({
   check: RelayDoctorCheckResult;
   styles: ReturnType<typeof createStyles>;
 }): React.JSX.Element {
+  const { theme } = useAppTheme();
   const statusIcon = check.status === 'pass'
-    ? <CheckCircle2 size={15} strokeWidth={2.2} color="#22C55E" />
+    ? <CheckCircle2 size={15} strokeWidth={2.2} color={theme.colors.success} />
     : check.status === 'warn'
-      ? <TriangleAlert size={15} strokeWidth={2.2} color="#F59E0B" />
+      ? <TriangleAlert size={15} strokeWidth={2.2} color={theme.colors.warning} />
       : check.status === 'skip'
-        ? <CheckCircle2 size={15} strokeWidth={2.2} color="#94A3B8" />
-        : <CircleAlert size={15} strokeWidth={2.2} color="#EF4444" />;
+        ? <CheckCircle2 size={15} strokeWidth={2.2} color={theme.colors.textSubtle} />
+        : <CircleAlert size={15} strokeWidth={2.2} color={theme.colors.error} />;
 
   return (
     <View style={styles.doctorCheckRow}>
@@ -133,11 +134,11 @@ export function OpenClawDiagnosticsScreen(): React.JSX.Element {
         <View style={styles.heroSection}>
           <View style={styles.doctorSummaryRow}>
             {initialFixResult.ok
-              ? <CheckCircle2 size={20} strokeWidth={2.2} color="#22C55E" />
-              : <TriangleAlert size={20} strokeWidth={2.2} color="#F59E0B" />}
+              ? <CheckCircle2 size={20} strokeWidth={2.2} color={theme.colors.success} />
+              : <TriangleAlert size={20} strokeWidth={2.2} color={theme.colors.warning} />}
             <Text style={[
               styles.doctorSummaryText,
-              { color: initialFixResult.ok ? '#22C55E' : '#F59E0B' },
+              { color: initialFixResult.ok ? theme.colors.success : theme.colors.warning },
             ]}>
               {initialFixResult.ok ? t('Fix completed successfully') : t('Fix completed with issues')}
             </Text>
@@ -182,11 +183,11 @@ export function OpenClawDiagnosticsScreen(): React.JSX.Element {
       <View style={styles.heroSection}>
         <View style={styles.doctorSummaryRow}>
           {doctorResult.ok
-            ? <CheckCircle2 size={20} strokeWidth={2.2} color="#22C55E" />
-            : <CircleAlert size={20} strokeWidth={2.2} color="#EF4444" />}
+            ? <CheckCircle2 size={20} strokeWidth={2.2} color={theme.colors.success} />
+            : <CircleAlert size={20} strokeWidth={2.2} color={theme.colors.error} />}
           <Text style={[
             styles.doctorSummaryText,
-            { color: doctorResult.ok ? '#22C55E' : theme.colors.error },
+            { color: doctorResult.ok ? theme.colors.success : theme.colors.error },
           ]}>
             {doctorResult.ok ? t('All checks passed') : t('Issues detected')}
           </Text>
@@ -226,11 +227,11 @@ export function OpenClawDiagnosticsScreen(): React.JSX.Element {
         <View style={styles.section}>
           <View style={styles.doctorSummaryRow}>
             {fixResult.ok
-              ? <CheckCircle2 size={20} strokeWidth={2.2} color="#22C55E" />
-              : <TriangleAlert size={20} strokeWidth={2.2} color="#F59E0B" />}
+              ? <CheckCircle2 size={20} strokeWidth={2.2} color={theme.colors.success} />
+              : <TriangleAlert size={20} strokeWidth={2.2} color={theme.colors.warning} />}
             <Text style={[
               styles.doctorSummaryText,
-              { color: fixResult.ok ? '#22C55E' : '#F59E0B' },
+              { color: fixResult.ok ? theme.colors.success : theme.colors.warning },
             ]}>
               {fixResult.ok ? t('Fix completed successfully') : t('Fix completed with issues')}
             </Text>
@@ -323,7 +324,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     rawShell: {
       backgroundColor: colors.surfaceMuted,
       borderRadius: Radius.md,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       overflow: 'hidden',
     },

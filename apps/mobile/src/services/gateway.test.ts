@@ -1,7 +1,7 @@
 import { extractText, GatewayClient } from './gateway';
 import { GatewayRequestError } from './gateway-shared';
 import type { ConnectChallengePayload } from '../types';
-import { RELAY_CONTROL_PREFIX } from './gateway-relay';
+import { RELAY_CLIENT_PONG_CAPABILITY, RELAY_CONTROL_PREFIX } from './gateway-relay';
 
 // Mock tweetnacl
 jest.mock('tweetnacl', () => ({
@@ -20,18 +20,44 @@ jest.mock('js-sha256', () => ({
 }));
 
 // Mock StorageService
-jest.mock('./storage', () => ({
-  StorageService: {
+jest.mock('./storage', () => {
+  const getDeviceToken = jest.fn((
+    _deviceId: string,
+    _scope?: { serverUrl?: string; gatewayId?: string; gatewayUrl?: string },
+  ): Promise<string | null> => Promise.resolve(null));
+  const setDeviceToken = jest.fn((
+    _deviceId: string,
+    _token: string,
+    _scope?: { serverUrl?: string; gatewayId?: string; gatewayUrl?: string },
+  ): Promise<void> => Promise.resolve());
+  return {
+    StorageService: {
     getIdentity: jest.fn(() => Promise.resolve(null)),
     setIdentity: jest.fn(() => Promise.resolve()),
     clearIdentity: jest.fn(() => Promise.resolve()),
-    setDeviceToken: jest.fn(() => Promise.resolve()),
-    getDeviceToken: jest.fn(() => Promise.resolve(null)),
+    setDeviceToken,
+    getDeviceToken,
+    setDeviceTokenRecord: jest.fn((deviceId, record, scope) => (
+      setDeviceToken(deviceId, record.token, scope)
+    )),
+    getDeviceTokenRecord: jest.fn(async (deviceId, scope) => {
+      const token = await getDeviceToken(deviceId, scope);
+      return token
+        ? {
+          version: 1,
+          token,
+          role: 'operator',
+          scopes: [],
+          updatedAtMs: 1,
+        }
+        : null;
+    }),
     deleteDeviceToken: jest.fn(() => Promise.resolve()),
     getGatewayConfig: jest.fn(() => Promise.resolve(null)),
     setGatewayConfig: jest.fn(() => Promise.resolve()),
   },
-}));
+  };
+});
 
 // MockWebSocket
 class MockWebSocket {
@@ -148,6 +174,26 @@ describe('GatewayClient', () => {
     (globalThis as any).WebSocket.CONNECTING = MockWebSocket.CONNECTING;
     (globalThis as any).WebSocket.CLOSING = MockWebSocket.CLOSING;
     (globalThis as any).WebSocket.CLOSED = MockWebSocket.CLOSED;
+
+    const { StorageService } = jest.requireMock('./storage') as {
+      StorageService: {
+        getDeviceToken: jest.Mock;
+        getDeviceTokenRecord: jest.Mock;
+      };
+    };
+    StorageService.getDeviceToken.mockResolvedValue(null);
+    StorageService.getDeviceTokenRecord.mockImplementation(async (deviceId, scope) => {
+      const token = await StorageService.getDeviceToken(deviceId, scope);
+      return token
+        ? {
+          version: 1,
+          token,
+          role: 'operator',
+          scopes: [],
+          updatedAtMs: 1,
+        }
+        : null;
+    });
   });
 
   function decodeLatestSignedPayload(): string {
@@ -436,7 +482,17 @@ describe('GatewayClient', () => {
       expect(parsed.searchParams.get('role')).toBe('client');
       expect(parsed.searchParams.get('clientId')).toBe('a'.repeat(64));
       expect(parsed.searchParams.get('token')).toBe('relay-access-token');
+      expect(parsed.searchParams.get('capabilities')).toBe(RELAY_CLIENT_PONG_CAPABILITY);
       expect(globalThis.fetch).not.toHaveBeenCalled();
+
+      createdWs.onmessage!({
+        data: JSON.stringify({
+          type: 'tick',
+          ts: 12345,
+          ack: RELAY_CLIENT_PONG_CAPABILITY,
+        }),
+      });
+      expect(createdWs.send).toHaveBeenCalledWith(JSON.stringify({ type: 'pong', ts: 12345 }));
     });
 
     it('uses bridgeId instead of gatewayId for Hermes relay fast-path connections', async () => {
@@ -1235,7 +1291,16 @@ describe('GatewayClient', () => {
           deviceId: 'a'.repeat(64),
           publicKey: expect.any(String),
           role: 'operator',
-          scopes: ['operator.admin', 'operator.read', 'operator.write', 'operator.pairing'],
+          capabilities: ['openclaw.bootstrap.mobile-setup.v1'],
+          scopes: [
+            'operator.admin',
+            'operator.approvals',
+            'operator.pairing',
+            'operator.questions',
+            'operator.read',
+            'operator.talk.secrets',
+            'operator.write',
+          ],
         },
       });
       expect(bootstrapRequest.deviceId).toBeUndefined();
@@ -1304,6 +1369,105 @@ describe('GatewayClient', () => {
       expect(createdWs.send).toHaveBeenCalledTimes(2);
       const connectFrame = JSON.parse(createdWs.send.mock.calls[1][0] as string);
       expect(connectFrame.params.auth).toEqual({ bootstrapToken: 'bootstrap-token' });
+    });
+
+    it('silently exchanges official mobile setup credentials for an operator device token', async () => {
+      const { StorageService } = jest.requireMock('./storage') as {
+        StorageService: {
+          getDeviceToken: jest.Mock;
+          getDeviceTokenRecord: jest.Mock;
+          setDeviceTokenRecord: jest.Mock;
+        };
+      };
+      StorageService.getDeviceToken.mockResolvedValue(null);
+      StorageService.getDeviceTokenRecord.mockResolvedValue(null);
+      mockDeviceIdentity();
+
+      client.configure({
+        url: 'wss://relay-us.example.com/ws',
+        mode: 'relay',
+        relay: {
+          serverUrl: 'https://registry.example.com',
+          gatewayId: 'gateway-device-relay',
+          clientToken: 'relay-access-token',
+          protocolVersion: 2,
+        },
+      });
+
+      client.connect();
+      await flushPromises();
+      const setupWs = createdWs;
+      setupWs.readyState = MockWebSocket.OPEN;
+      setupWs.onopen!();
+      const challengeTs = 1_800_000_000_000;
+      setupWs.onmessage!({
+        data: JSON.stringify({
+          type: 'event',
+          event: 'connect.challenge',
+          payload: { nonce: 'b'.repeat(64), ts: challengeTs },
+        }),
+      });
+      await flushPromises();
+
+      const bootstrapRequestRaw = setupWs.send.mock.calls[0][0] as string;
+      const bootstrapRequest = JSON.parse(bootstrapRequestRaw.slice(RELAY_CONTROL_PREFIX.length));
+      setupWs.onmessage!({
+        data: `${RELAY_CONTROL_PREFIX}${JSON.stringify({
+          event: 'bootstrap.issued',
+          requestId: bootstrapRequest.requestId,
+          bootstrapToken: 'official-bootstrap-token',
+          strategy: 'mobile-setup',
+          access: 'full',
+        })}`,
+      });
+      await flushPromises();
+
+      const setupConnectFrame = JSON.parse(setupWs.send.mock.calls[1][0] as string);
+      expect(setupConnectFrame.params).toMatchObject({
+        role: 'node',
+        scopes: [],
+        caps: [],
+        commands: [],
+        client: { mode: 'node' },
+        device: { signedAt: challengeTs },
+        auth: { bootstrapToken: 'official-bootstrap-token' },
+      });
+
+      setupWs.onmessage!({
+        data: JSON.stringify({
+          type: 'res',
+          id: setupConnectFrame.id,
+          ok: true,
+          payload: {
+            auth: {
+              role: 'node',
+              scopes: [],
+              deviceTokens: [{
+                deviceToken: 'operator-device-token',
+                role: 'operator',
+                scopes: ['operator.write', 'operator.read', 'operator.admin'],
+              }],
+            },
+          },
+        }),
+      });
+      await flushPromises();
+
+      expect(StorageService.setDeviceTokenRecord).toHaveBeenCalledWith(
+        'a'.repeat(64),
+        {
+          token: 'operator-device-token',
+          role: 'operator',
+          scopes: ['operator.admin', 'operator.read', 'operator.write'],
+        },
+        {
+          serverUrl: 'https://registry.example.com',
+          gatewayId: 'gateway-device-relay',
+        },
+      );
+      expect((globalThis as any).WebSocket).toHaveBeenCalledTimes(2);
+      expect(createdWs).not.toBe(setupWs);
+      expect(client.getConnectionState()).toBe('connecting');
     });
 
     it('stores issued deviceToken using the active relay gateway scope', async () => {

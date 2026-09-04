@@ -5,6 +5,12 @@ export type QRScanResult = {
   url: string;
   token?: string;
   password?: string;
+  bootstrap?: {
+    token: string;
+    strategy: 'mobile-setup' | 'legacy-bound';
+    expiresAtMs?: number;
+    access?: 'full' | 'limited' | 'node';
+  };
   backendKind?: GatewayBackendKind;
   transportKind?: GatewayTransportKind;
   /** Connection mode encoded in the QR payload — lets the app auto-switch modes. */
@@ -72,6 +78,27 @@ export function parseQRPayload(raw: string): QRScanResult | null {
     return {
       bridgeUrl,
       displayName: typeof hermes.displayName === 'string' ? hermes.displayName.trim() : undefined,
+    };
+  };
+  const readBootstrap = (value: unknown): QRScanResult['bootstrap'] => {
+    if (!value || typeof value !== 'object') return undefined;
+    const record = value as Record<string, unknown>;
+    const token = typeof record.token === 'string' ? record.token.trim() : '';
+    const strategy = record.strategy === 'mobile-setup' || record.strategy === 'legacy-bound'
+      ? record.strategy
+      : undefined;
+    const expiresAtMs = typeof record.expiresAtMs === 'number' && Number.isSafeInteger(record.expiresAtMs)
+      ? record.expiresAtMs
+      : undefined;
+    const access = record.access === 'full' || record.access === 'limited' || record.access === 'node'
+      ? record.access
+      : undefined;
+    if (!token || !strategy || (expiresAtMs !== undefined && expiresAtMs <= Date.now())) return undefined;
+    return {
+      token,
+      strategy,
+      ...(expiresAtMs !== undefined ? { expiresAtMs } : {}),
+      ...(access ? { access } : {}),
     };
   };
   const readPairingPayload = (value: unknown): QRScanResult | null => {
@@ -188,16 +215,18 @@ export function parseQRPayload(raw: string): QRScanResult | null {
       }
       const pairingPayload = readPairingPayload(obj);
       if (pairingPayload) return pairingPayload;
-      if (obj.url && (obj.token || obj.password)) {
-      const mode = normalizeMode(obj.mode);
-      const relay = readRelay(obj.relay);
-      const hermes = readHermes(obj.hermes);
+      const bootstrap = readBootstrap(obj.bootstrap);
+      if (obj.url && (obj.token || obj.password || bootstrap)) {
+        const mode = normalizeMode(obj.mode);
+        const relay = readRelay(obj.relay);
+        const hermes = readHermes(obj.hermes);
         return {
           url: String(obj.url),
           ...(hermes ? { backendKind: 'hermes' as const } : {}),
           ...(mode && mode !== 'hermes' ? { transportKind: mode } : {}),
           ...(typeof obj.token === 'string' ? { token: obj.token } : {}),
           ...(typeof obj.password === 'string' ? { password: obj.password } : {}),
+          ...(bootstrap ? { bootstrap } : {}),
           mode,
           ...(hermes ? { hermes } : {}),
           ...(relay ? { relay } : {}),
@@ -214,7 +243,7 @@ export function parseQRPayload(raw: string): QRScanResult | null {
           hermes,
         };
       }
-      if (obj.host && (obj.token || obj.password)) {
+      if (obj.host && (obj.token || obj.password || bootstrap)) {
         const scheme = obj.tls ? 'wss' : 'ws';
         const port = obj.port ?? 18789;
         const mode = normalizeMode(obj.mode);
@@ -226,6 +255,7 @@ export function parseQRPayload(raw: string): QRScanResult | null {
           ...(mode && mode !== 'hermes' ? { transportKind: mode } : {}),
           ...(typeof obj.token === 'string' ? { token: obj.token } : {}),
           ...(typeof obj.password === 'string' ? { password: obj.password } : {}),
+          ...(bootstrap ? { bootstrap } : {}),
           mode,
           ...(hermes ? { hermes } : {}),
           ...(relay ? { relay } : {}),

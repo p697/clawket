@@ -1,8 +1,6 @@
 import React, { useCallback, useRef } from 'react';
-import { InteractionManager, Platform } from 'react-native';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { InteractionManager } from 'react-native';
 import { RouteProp, useIsFocused, useNavigation, useRoute } from '@react-navigation/native';
-import { useTabBarHeight } from '../../hooks/useTabBarHeight';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import i18n from '../../i18n';
 import { ConfigScreenLayout } from './ConfigScreenLayout';
@@ -15,7 +13,6 @@ import type { ConfigStackParamList } from './ConfigTab';
 
 export function ConfigScreen(): React.JSX.Element {
   const insets = useSafeAreaInsets();
-  const tabBarHeight = useTabBarHeight();
   const controller = useConfigScreenController();
   const route = useRoute<RouteProp<ConfigStackParamList, 'ConfigHome'>>();
   const navigation = useNavigation();
@@ -141,16 +138,5 @@ export function ConfigScreen(): React.JSX.Element {
     onUploadQR: handleUploadQR,
   };
 
-  const content = (
-    <ConfigScreenLayout insets={insets} tabBarHeight={tabBarHeight} controller={extendedController} />
-  );
-
-  // iOS native bottom tabs render each tab in a separate native UIViewController,
-  // so the app-level GestureHandlerRootView cannot reach into it.
-  // Wrap with a local GestureHandlerRootView to enable Swipeable gestures.
-  if (Platform.OS === 'ios') {
-    return <GestureHandlerRootView style={{ flex: 1 }}>{content}</GestureHandlerRootView>;
-  }
-
-  return content;
+  return <ConfigScreenLayout insets={insets} controller={extendedController} />;
 }

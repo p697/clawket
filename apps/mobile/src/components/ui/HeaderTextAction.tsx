@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text } from 'react-native';
 import { useAppTheme } from '../../theme';
-import { FontSize, FontWeight, Space } from '../../theme/tokens';
+import { FontSize, FontWeight, LineHeight, Space } from '../../theme/tokens';
 
 type Props = {
   label: string;
@@ -53,6 +53,7 @@ const styles = StyleSheet.create({
   label: {
     textAlign: 'center',
     fontSize: FontSize.base,
+    lineHeight: LineHeight.base,
     fontWeight: FontWeight.semibold,
   },
 });

@@ -1,6 +1,4 @@
 import React from 'react';
-import type WebView from 'react-native-webview';
-import type { WebViewMessageEvent } from 'react-native-webview/lib/WebViewTypes';
 import { GatewayClient } from '../services/gateway';
 import { LastOpenedSessionSnapshot } from '../services/storage';
 import { GatewayConfig } from '../types';
@@ -32,7 +30,7 @@ export type AppContextType = {
   config: GatewayConfig | null;
   debugMode: boolean;
   showAgentAvatar: boolean;
-  officeChatRequest: {
+  chatSessionRequest: {
     sessionKey: string;
     requestedAt: number;
     sourceRole?: string;
@@ -71,8 +69,8 @@ export type AppContextType = {
   onChatFontSizeChange: (size: number) => void;
   onChatAppearanceChange: (settings: ChatAppearanceSettings) => void;
   onSpeechRecognitionLanguageChange: (language: SpeechRecognitionLanguage) => void;
-  requestOfficeChat: (sessionKey: string, sourceRole?: string) => void;
-  clearOfficeChatRequest: () => void;
+  requestChatSession: (sessionKey: string, sourceRole?: string) => void;
+  clearChatSessionRequest: () => void;
   requestChatSidebar: (params?: { tab?: SessionSidebarTab; channel?: string; openDrawer?: boolean }) => void;
   clearChatSidebarRequest: () => void;
   requestOpenChatFromNotification: (params: {
@@ -91,13 +89,6 @@ export type AppContextType = {
   clearPendingAddGateway: () => void;
   onSaved: (next: GatewayConfig, nextGatewayScopeId?: string | null) => void;
   onReset: () => void;
-  officeWebViewRef: React.RefObject<WebView | null>;
-  officeMessageHandlerRef: React.MutableRefObject<((e: WebViewMessageEvent) => void) | null>;
-  officeLoadEndHandlerRef: React.MutableRefObject<(() => void) | null>;
-  officeDebugAppendRef: React.MutableRefObject<((msg: string) => void) | null>;
-  isOfficeFocused: boolean;
-  officeViewportTopInset: number;
-  setOfficeViewportTopInset: (value: number) => void;
 };
 
 const AppContext = React.createContext<AppContextType | null>(null);

@@ -3,11 +3,8 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 IOS_DIR="$ROOT_DIR/ios"
-OFFICE_GAME_DIR="$ROOT_DIR/office-game"
-HOST="${DEV_HOST:-0.0.0.0}"
 METRO_PORT="${METRO_PORT:-8081}"
-OFFICE_PORT="${OFFICE_DEV_PORT:-5174}"
-TIMEOUT_SECONDS="${WEBVIEW_BOOT_TIMEOUT_SECONDS:-25}"
+TIMEOUT_SECONDS="${METRO_BOOT_TIMEOUT_SECONDS:-25}"
 DERIVED_DATA_PATH="${MACOS_DERIVED_DATA_PATH:-/tmp/clawket-mac-dev}"
 APP_NAME="${MACOS_APP_NAME:-Clawket}"
 WORKSPACE_PATH="$IOS_DIR/Clawket.xcworkspace"
@@ -17,7 +14,6 @@ DESTINATION="${MACOS_DESTINATION:-platform=macOS,variant=Mac Catalyst}"
 PIDS=()
 STARTED_METRO=false
 METRO_PID=""
-OFFICE_PID=""
 
 usage() {
   cat <<'EOF'
@@ -25,7 +21,6 @@ Usage:
   npm run dev:macos [-- expo start args]
 
 Starts the macOS Catalyst development stack:
-  - office-game Vite dev server
   - Expo Metro dev server
   - xcodebuild Debug build for Mac Catalyst
   - opens the built .app
@@ -37,10 +32,8 @@ Examples:
   FORCE_POD_INSTALL=1 npm run dev:macos
 
 Environment variables:
-  DEV_HOST                          Dev server bind host for office-game (default: 0.0.0.0).
   METRO_PORT                        Metro port (default: 8081).
-  OFFICE_DEV_PORT                   Office dev server port (default: 5174).
-  WEBVIEW_BOOT_TIMEOUT_SECONDS      Wait time for Vite/Metro readiness (default: 25).
+  METRO_BOOT_TIMEOUT_SECONDS        Wait time for Metro readiness (default: 25).
   MACOS_DERIVED_DATA_PATH           xcodebuild DerivedData path (default: /tmp/clawket-mac-dev).
   MACOS_APP_NAME                    Built app name (default: Clawket).
   MACOS_SCHEME                      Xcode scheme (default: Clawket).
@@ -55,42 +48,6 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   usage
   exit 0
 fi
-
-kill_port_listener() {
-  local port="$1"
-  local pids
-  pids="$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)"
-  if [[ -z "$pids" ]]; then
-    return
-  fi
-
-  echo "Cleaning existing listeners on port ${port}: ${pids}"
-  kill $pids >/dev/null 2>&1 || true
-
-  sleep 0.6
-  local remaining
-  remaining="$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)"
-  if [[ -n "$remaining" ]]; then
-    echo "Force killing remaining listeners on port ${port}: ${remaining}"
-    kill -9 $remaining >/dev/null 2>&1 || true
-  fi
-}
-
-wait_for_http() {
-  local url="$1"
-  local name="$2"
-
-  echo "Waiting for ${name}..."
-  for ((i = 0; i < TIMEOUT_SECONDS; i++)); do
-    if curl -fsS "$url" >/dev/null 2>&1; then
-      return 0
-    fi
-    sleep 1
-  done
-
-  echo "${name} failed to become ready within ${TIMEOUT_SECONDS}s."
-  return 1
-}
 
 wait_for_metro() {
   echo "Waiting for Metro on :${METRO_PORT}..."
@@ -190,21 +147,15 @@ cleanup() {
       kill "$pid" >/dev/null 2>&1 || true
     fi
   done
-  kill_port_listener "$OFFICE_PORT"
 }
 trap cleanup EXIT INT TERM
 
 echo "Installing dependencies..."
 (cd "$ROOT_DIR" && npm install)
-(cd "$OFFICE_GAME_DIR" && npm install)
 echo ""
 
 apply_maccatalyst_patch
 ensure_pods
-
-export EXPO_PUBLIC_OFFICE_DEV_URL="http://127.0.0.1:${OFFICE_PORT}"
-
-kill_port_listener "$OFFICE_PORT"
 
 if curl -fsS "http://127.0.0.1:${METRO_PORT}/status" 2>/dev/null | grep -q "packager-status:running"; then
   echo "Reusing Metro on :${METRO_PORT}"
@@ -219,16 +170,7 @@ else
   STARTED_METRO=true
 fi
 
-echo "Starting office-game dev server (:${OFFICE_PORT})..."
-(
-  cd "$OFFICE_GAME_DIR"
-  npm run dev -- --host "$HOST" --port "$OFFICE_PORT" --strictPort
-) &
-OFFICE_PID="$!"
-PIDS+=($OFFICE_PID)
-
 wait_for_metro || exit 1
-wait_for_http "http://127.0.0.1:${OFFICE_PORT}" "office-game" || exit 1
 
 if [[ "${DEV_MACOS_KILL_RUNNING_APP:-1}" != "0" ]]; then
   pkill -x "$APP_NAME" >/dev/null 2>&1 || true
@@ -255,16 +197,13 @@ if [[ ! -d "$APP_PATH" ]]; then
 fi
 
 echo ""
-echo "Office Game: ${EXPO_PUBLIC_OFFICE_DEV_URL}"
 echo "Metro:       http://127.0.0.1:${METRO_PORT}"
 echo "App:         ${APP_PATH}"
 echo ""
 echo "Opening ${APP_NAME}.app..."
 open "$APP_PATH"
-echo "JS/TS changes hot reload through Metro; Office changes hot reload through Vite."
+echo "JS/TS changes hot reload through Metro."
 
 if [[ "$STARTED_METRO" == true ]]; then
   wait "$METRO_PID"
-else
-  wait "$OFFICE_PID"
 fi

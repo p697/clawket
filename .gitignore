@@ -20,7 +20,6 @@ dist/
 apps/mobile/.expo/
 apps/mobile/coverage/
 apps/mobile/ios/build/
-apps/mobile/office-game/dist/
-apps/mobile/office-game/node_modules/
 
 apps/*/wrangler.local.toml
+apps/*/wrangler.*.local.toml

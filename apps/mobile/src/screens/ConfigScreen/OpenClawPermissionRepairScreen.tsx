@@ -27,13 +27,14 @@ type StatusCardProps = {
 };
 
 function StatusCard({ title, summary, status, styles }: StatusCardProps): React.JSX.Element {
+  const { theme } = useAppTheme();
   const icon = status === 'available'
-    ? <CheckCircle2 size={18} strokeWidth={2.2} color="#22C55E" />
+    ? <CheckCircle2 size={18} strokeWidth={2.2} color={theme.colors.success} />
     : status === 'needs_approval'
-      ? <ShieldAlert size={18} strokeWidth={2.2} color="#F59E0B" />
+      ? <ShieldAlert size={18} strokeWidth={2.2} color={theme.colors.warning} />
       : status === 'configuration_needed' || status === 'restricted'
-        ? <TriangleAlert size={18} strokeWidth={2.2} color="#F59E0B" />
-        : <CircleAlert size={18} strokeWidth={2.2} color="#EF4444" />;
+        ? <TriangleAlert size={18} strokeWidth={2.2} color={theme.colors.warning} />
+        : <CircleAlert size={18} strokeWidth={2.2} color={theme.colors.error} />;
 
   return (
     <View style={styles.statusCard}>
@@ -442,7 +443,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     card: {
       borderRadius: Radius.md,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       backgroundColor: colors.surface,
       padding: Space.lg,
@@ -453,7 +454,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     statusCard: {
       borderRadius: Radius.md,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       backgroundColor: colors.surface,
       padding: Space.lg,

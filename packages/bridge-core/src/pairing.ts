@@ -1,5 +1,12 @@
-import { readPairingConfig, writePairingConfig, type PairingConfig } from './config.js';
+import {
+  readPairingConfig,
+  writePairingConfig,
+  type PairingConfig,
+  type PairingEnvironment,
+} from './config.js';
 import { buildPairingQrPayload } from './qr.js';
+import { buildPairingSessionDraft } from './pairing-session.js';
+import { securePairingCodeKeyHex, writeSecurePairingResponderState } from './secure-pairing.js';
 
 const PACKAGED_DEFAULT_REGISTRY_BASE = process.env.CLAWKET_PACKAGE_DEFAULT_REGISTRY_URL?.trim() ?? '';
 const PACKAGED_DEFAULT_REGISTRY_FALLBACK_BASE = process.env.CLAWKET_PACKAGE_DEFAULT_REGISTRY_FALLBACK_URL?.trim() ?? '';
@@ -19,7 +26,16 @@ export interface PairingInfo {
   accessCode: string;
   accessCodeExpiresAt: string;
   qrPayload: string;
+  pairingSession?: PairingSessionInfo | null;
   action: 'registered' | 'refreshed';
+}
+
+export interface PairingSessionInfo {
+  sessionId: string;
+  pairingUrl: string;
+  pairingCode: string;
+  expiresAt: string;
+  protocol: 1 | 2;
 }
 
 export async function pairGateway(input: {
@@ -27,9 +43,11 @@ export async function pairGateway(input: {
   displayName?: string | null;
   gatewayToken?: string | null;
   gatewayPassword?: string | null;
+  environment?: PairingEnvironment;
 }): Promise<PairingInfo> {
   const baseUrl = normalizeHttpBase(input.serverUrl);
-  const existing = readPairingConfig();
+  const environment = input.environment ?? 'production';
+  const existing = readPairingConfig(environment);
   const compatibility = assessPairingCompatibility(existing, baseUrl);
   if (compatibility === 'refresh-existing' && existing) {
     return refreshAccessCode({
@@ -39,6 +57,7 @@ export async function pairGateway(input: {
       displayName: input.displayName,
       gatewayToken: input.gatewayToken,
       gatewayPassword: input.gatewayPassword,
+      environment,
     });
   }
   if (compatibility === 'server-mismatch') {
@@ -70,19 +89,27 @@ export async function pairGateway(input: {
     createdAt: now,
     updatedAt: now,
   };
-  writePairingConfig(config);
+  writePairingConfig(config, environment);
+  const qrPayload = buildPairingQrPayload({
+    server: baseUrl,
+    gatewayId: payload.gatewayId,
+    accessCode: payload.accessCode,
+    displayName: payload.displayName,
+    token: input.gatewayToken?.trim() || null,
+    password: input.gatewayPassword?.trim() || null,
+  });
   return {
     config,
     accessCode: payload.accessCode,
     accessCodeExpiresAt: payload.accessCodeExpiresAt,
     action: 'registered',
-    qrPayload: buildPairingQrPayload({
-      server: baseUrl,
+    qrPayload,
+    pairingSession: await createPairingSession({
+      serverUrl: baseUrl,
       gatewayId: payload.gatewayId,
-      accessCode: payload.accessCode,
-      displayName: payload.displayName,
-      token: input.gatewayToken?.trim() || null,
-      password: input.gatewayPassword?.trim() || null,
+      relaySecret: payload.relaySecret,
+      qrPayload,
+      environment,
     }),
   };
 }
@@ -94,8 +121,10 @@ export async function refreshAccessCode(input?: {
   displayName?: string | null;
   gatewayToken?: string | null;
   gatewayPassword?: string | null;
+  environment?: PairingEnvironment;
 }): Promise<PairingInfo> {
-  const existing = readPairingConfig();
+  const environment = input?.environment ?? 'production';
+  const existing = readPairingConfig(environment);
   const serverUrl = normalizeHttpBase(input?.serverUrl ?? existing?.serverUrl ?? '');
   const gatewayId = input?.gatewayId ?? existing?.gatewayId ?? '';
   const relaySecret = input?.relaySecret ?? existing?.relaySecret ?? '';
@@ -133,22 +162,88 @@ export async function refreshAccessCode(input?: {
     createdAt: existing?.createdAt ?? new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
-  writePairingConfig(nextConfig);
+  writePairingConfig(nextConfig, environment);
+  const qrPayload = buildPairingQrPayload({
+    server: serverUrl,
+    gatewayId: payload.gatewayId,
+    accessCode: payload.accessCode,
+    displayName: payload.displayName,
+    token: input?.gatewayToken?.trim() || null,
+    password: input?.gatewayPassword?.trim() || null,
+  });
   return {
     config: nextConfig,
     accessCode: payload.accessCode,
     accessCodeExpiresAt: payload.accessCodeExpiresAt,
     action: 'refreshed',
-    qrPayload: buildPairingQrPayload({
-      server: serverUrl,
+    qrPayload,
+    pairingSession: await createPairingSession({
+      serverUrl,
       gatewayId: payload.gatewayId,
-      accessCode: payload.accessCode,
-      displayName: payload.displayName,
-      token: input?.gatewayToken?.trim() || null,
-      password: input?.gatewayPassword?.trim() || null,
+      relaySecret,
+      qrPayload,
+      environment,
     }),
   };
 }
+
+async function createPairingSession(input: {
+  serverUrl: string;
+  gatewayId: string;
+  relaySecret: string;
+  qrPayload: string;
+  environment: PairingEnvironment;
+}): Promise<PairingSessionInfo | null> {
+  const draft = buildPairingSessionDraft(input);
+  try {
+    const request = await postJsonWithCloudflareFallback(`${input.serverUrl}/v1/pair/session`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify(draft.request),
+    });
+    if (!request.response.ok) return null;
+    const payload = await request.response.json() as {
+      sessionId?: string;
+      pairingUrl?: string;
+      expiresAt?: string;
+      capabilities?: string[];
+    };
+    const sessionId = payload.sessionId?.trim() ?? '';
+    const pairingUrl = payload.pairingUrl?.trim() ?? '';
+    const expiresAt = payload.expiresAt?.trim() ?? '';
+    if (!/^ps_[a-f0-9]{64}$/.test(sessionId) || !pairingUrl || !Number.isFinite(Date.parse(expiresAt))) {
+      return null;
+    }
+    const url = new URL(pairingUrl);
+    const secureShortCode = payload.capabilities?.includes('pairing.secure-short-code.v2') === true;
+    const displayedPairingCode = secureShortCode ? draft.shortPairingCode : draft.pairingCode;
+    url.hash = new URLSearchParams({
+      k: draft.linkSecret,
+      c: displayedPairingCode,
+    }).toString();
+    if (secureShortCode) {
+      writeSecurePairingResponderState({
+        environment: input.environment,
+        sessionId,
+        gatewayId: input.gatewayId,
+        codeKeyHex: securePairingCodeKeyHex(draft.shortPairingCode),
+        qrPayload: input.qrPayload,
+        expiresAt,
+      });
+    }
+    return {
+      sessionId,
+      pairingUrl: url.toString(),
+      pairingCode: displayedPairingCode,
+      expiresAt,
+      protocol: secureShortCode ? 2 : 1,
+    };
+  } catch {
+    // A new Bridge must remain usable with a Registry that predates pairing sessions.
+    return null;
+  }
+}
+
 
 export function normalizeHttpBase(url: string): string {
   const trimmed = url.trim();

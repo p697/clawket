@@ -1,4 +1,10 @@
-import { CONTROL_PREFIX, type RelayControlEnvelope, type SocketAttachment } from './types';
+import {
+  CLIENT_PONG_CAPABILITY,
+  CONTROL_PREFIX,
+  SOCKET_CLOSE_CODES,
+  type RelayControlEnvelope,
+  type SocketAttachment,
+} from './types';
 import {
   isConnectChallengeFrame,
   isConnectStartReqFrame,
@@ -10,7 +16,7 @@ import {
 import { logRelayTelemetry } from './telemetry';
 import type { RelayRuntime } from './runtime';
 import { touchClientActivity, touchGatewayActivity } from './runtime';
-import { prunePendingConnectStarts } from './heartbeat';
+import { dropClientState, prunePendingConnectStarts } from './heartbeat';
 import {
   logControlRoutingTelemetry,
   parseControlEnvelope,
@@ -110,6 +116,11 @@ export function tryDeliverChallenge(
   }
 
   challengeClient.send(data);
+  const challengeAttachment = challengeClient.deserializeAttachment() as SocketAttachment | null;
+  if (challengeAttachment) {
+    challengeAttachment.challengeDeliveredAt = now;
+    challengeClient.serializeAttachment(challengeAttachment);
+  }
   touchClientActivity(runtime, challengeClientId);
   runtime.awaitingChallenge.delete(challengeClientId);
   const connectStartAt = runtime.connectStartAtByClientId.get(challengeClientId);
@@ -241,6 +252,10 @@ export async function handleGatewayMessage(
   if (text.startsWith(CONTROL_PREFIX)) {
     const gatewayControl = parseControlEnvelope(text);
     if (gatewayControl) {
+      if (gatewayControl.event === 'client.reconnect-required') {
+        disconnectClientsForGatewayRestart(runtime);
+        return;
+      }
       routeGatewayControl(runtime, attachment, gatewayControl);
     } else {
       logRelayTelemetry('relay_worker', 'gateway_control_invalid', {
@@ -296,6 +311,24 @@ export async function handleGatewayMessage(
   }
 }
 
+function disconnectClientsForGatewayRestart(runtime: RelayRuntime): void {
+  let disconnected = 0;
+  for (const [clientId, client] of Array.from(runtime.clients.entries())) {
+    try {
+      client.close(SOCKET_CLOSE_CODES.GATEWAY_RECONNECT_REQUIRED, 'gateway_reconnect_required');
+    } catch {
+      // Best effort cleanup; the client may already be detached remotely.
+    }
+    if (dropClientState(runtime, clientId, 'gateway_reconnect_required')) disconnected += 1;
+  }
+  runtime.pendingChallenge = null;
+  sendControlToGateway(runtime, 'client_disconnected', { count: 0 });
+  logRelayTelemetry('relay_worker', 'clients_reconnect_required', {
+    role: 'gateway',
+    disconnected,
+  });
+}
+
 function routeGatewayControl(
   runtime: RelayRuntime,
   attachment: SocketAttachment,
@@ -306,7 +339,7 @@ function routeGatewayControl(
     : null;
 
   if (targetClientId) {
-    const targetClient = runtime.clients.get(targetClientId);
+    const targetClient = runtime.clients.get(targetClientId) ?? runtime.pairingClients.get(targetClientId);
     if (targetClient?.readyState === WebSocket.OPEN) {
       targetClient.send(serializeControlEnvelope(envelope));
       touchClientActivity(runtime, targetClientId);
@@ -382,6 +415,35 @@ export function prepareClientMessage(runtime: RelayRuntime, attachment: SocketAt
   return isConnectStart;
 }
 
+export function acknowledgeClientPong(
+  runtime: RelayRuntime,
+  ws: WebSocket,
+  attachment: SocketAttachment,
+  text: string,
+): boolean {
+  if (!attachment.capabilities?.includes(CLIENT_PONG_CAPABILITY)) return false;
+  let parsed: { type?: unknown; ts?: unknown };
+  try {
+    parsed = JSON.parse(text) as { type?: unknown; ts?: unknown };
+  } catch {
+    return false;
+  }
+  if (parsed.type !== 'pong' || typeof parsed.ts !== 'number' || !Number.isFinite(parsed.ts)) {
+    return false;
+  }
+  const now = Date.now();
+  attachment.lastPongAt = now;
+  ws.serializeAttachment(attachment);
+  touchClientActivity(runtime, attachment.clientId, now);
+  return true;
+}
+
+export function clearClientChallengeMarker(ws: WebSocket, attachment: SocketAttachment): void {
+  if (!attachment.challengeDeliveredAt) return;
+  delete attachment.challengeDeliveredAt;
+  ws.serializeAttachment(attachment);
+}
+
 export function forwardClientMessageToGateway(
   runtime: RelayRuntime,
   attachment: SocketAttachment,
@@ -435,6 +497,32 @@ export function forwardClientControlToGateway(
   logControlRoutingTelemetry(runtime, 'client_control_forwarded', attachment, forwardedEnvelope, {
     gatewayClientId: gatewayAttachment?.clientId ?? null,
   });
+}
+
+export function forwardPairingControlToGateway(
+  runtime: RelayRuntime,
+  attachment: SocketAttachment,
+  text: string,
+): boolean {
+  const envelope = parseControlEnvelope(text);
+  if (!envelope || envelope.event !== 'pairing.secure.start') return false;
+  const payload = envelope.payload as Record<string, unknown> | undefined;
+  if (!payload
+    || typeof payload !== 'object'
+    || payload.sessionId !== attachment.pairingSessionId) {
+    return false;
+  }
+  if (!runtime.gatewaySocket || runtime.gatewaySocket.readyState !== WebSocket.OPEN) {
+    logControlRoutingTelemetry(runtime, 'pairing_control_no_gateway', attachment, envelope);
+    return true;
+  }
+  runtime.gatewaySocket.send(serializeControlEnvelope({
+    ...envelope,
+    type: 'control',
+    sourceClientId: attachment.clientId,
+  }));
+  logControlRoutingTelemetry(runtime, 'pairing_control_forwarded', attachment, envelope);
+  return true;
 }
 
 export function bufferClientConnectStart(

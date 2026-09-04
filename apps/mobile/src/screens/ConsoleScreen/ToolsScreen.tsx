@@ -10,7 +10,6 @@ import { useAppContext } from '../../contexts/AppContext';
 import { useProPaywall } from '../../contexts/ProPaywallContext';
 import { useNativeStackModalHeader } from '../../hooks/useNativeStackModalHeader';
 import { useAppTheme } from '../../theme';
-import { useTabBarHeight } from '../../hooks/useTabBarHeight';
 import { useGatewayToolSettings } from '../ConfigScreen/hooks/useGatewayToolSettings';
 import { ToolSettingsContent, openOpenClawPermissions } from '../ConfigScreen/GatewayToolsScreen';
 import { getGatewayDisabledToolIds } from '../../utils/gateway-tool-settings';
@@ -33,7 +32,6 @@ export function ToolsScreen(): React.JSX.Element {
   );
   const { requirePro } = useProPaywall();
   const { theme } = useAppTheme();
-  const tabBarHeight = useTabBarHeight();
   const navigation = useNavigation<ToolsNavigation>();
   const [tab, setTab] = useState<ToolsTab>('settings');
   const toolsViewRef = useRef<ToolsViewHandle>(null);
@@ -102,9 +100,9 @@ export function ToolsScreen(): React.JSX.Element {
       {tab === 'settings' ? (
         <ToolSettingsContent
           colors={theme.colors}
+          scheme={theme.scheme}
           toolSettings={toolSettings}
           hasActiveGateway={hasActiveGateway}
-          tabBarHeight={tabBarHeight}
           onOpenPermissions={handleOpenPermissions}
         />
       ) : (

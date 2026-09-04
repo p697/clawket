@@ -2,7 +2,8 @@ import React, { useCallback } from 'react';
 import { Pressable, StyleProp, StyleSheet, ViewStyle } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import { triggerLightImpact } from '../../services/haptics';
-import { HitSize, Shadow } from '../../theme/tokens';
+import { useAppTheme } from '../../theme';
+import { HitSize, Shadow, createThemedShadowStyle } from '../../theme/tokens';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -30,6 +31,7 @@ export function CircleButton({
   style,
   shadow,
 }: Props): React.JSX.Element {
+  const { theme } = useAppTheme();
   const radius = size / 2;
   const scale = useSharedValue(1);
 
@@ -60,7 +62,7 @@ export function CircleButton({
         styles.base,
         { width: size, height: size, borderRadius: radius, backgroundColor: disabled ? (disabledColor ?? color) : color },
         disabled && styles.disabled,
-        shadow && styles.shadow,
+        shadow && createThemedShadowStyle(theme.colors, theme.scheme, Shadow.md),
         style,
         animatedStyle,
       ]}
@@ -77,8 +79,5 @@ const styles = StyleSheet.create({
   },
   disabled: {
     opacity: 0.45,
-  },
-  shadow: {
-    ...Shadow.md,
   },
 });

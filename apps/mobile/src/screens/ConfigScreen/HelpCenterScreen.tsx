@@ -494,7 +494,7 @@ function createStyles(
     configGuideCard: {
       backgroundColor: colors.surface,
       borderRadius: Radius.md,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       padding: Space.lg,
     },
@@ -524,7 +524,7 @@ function createStyles(
     stepsCard: {
       backgroundColor: colors.surface,
       borderRadius: Radius.md,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       padding: Space.lg,
     },
@@ -539,7 +539,7 @@ function createStyles(
     faqCard: {
       backgroundColor: colors.surface,
       borderRadius: Radius.md,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       padding: Space.lg,
       marginBottom: Space.sm,
@@ -558,7 +558,7 @@ function createStyles(
     infoCard: {
       backgroundColor: colors.surface,
       borderRadius: Radius.md,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       padding: Space.lg,
     },
@@ -573,7 +573,7 @@ function createStyles(
       gap: Space.md,
       backgroundColor: colors.surface,
       borderRadius: Radius.md,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       padding: Space.lg,
     },
@@ -607,7 +607,7 @@ function createStyles(
       width: 220,
       height: 220,
       borderRadius: Radius.md,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       backgroundColor: colors.surfaceMuted,
     },

@@ -3,7 +3,6 @@ import { InteractionManager, Platform, StyleSheet, View } from 'react-native';
 import { CommonActions } from '@react-navigation/native';
 import { DrawerContentComponentProps, createDrawerNavigator, useDrawerProgress } from '@react-navigation/drawer';
 import Animated, { useAnimatedStyle, interpolate } from 'react-native-reanimated';
-import { useTabBarHeight } from '../../hooks/useTabBarHeight';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SessionSidebar } from '../../components/chat/SessionSidebar';
 import { useAppContext } from '../../contexts/AppContext';
@@ -11,6 +10,7 @@ import { resolveGatewayCacheScopeId } from '../../services/gateway-cache-scope';
 import { analyticsEvents } from '../../services/analytics/events';
 import { ChatCacheService } from '../../services/chat-cache';
 import { useAppTheme } from '../../theme';
+import { Space } from '../../theme/tokens';
 import { ChatControllerProvider, useChatControllerContext } from './ChatControllerContext';
 import { useChatController } from './hooks/useChatController';
 import { ChatScreen } from './index';
@@ -183,7 +183,7 @@ const ChatDrawerContent = React.memo(function ChatDrawerContent({
   const shadowAnimatedStyle = useAnimatedStyle(() => {
     const p = progress.get();
     return {
-      shadowColor: '#000',
+      shadowColor: theme.colors.shadow,
       shadowOffset: { width: 4, height: 0 },
       shadowOpacity: interpolate(
         p,
@@ -193,7 +193,7 @@ const ChatDrawerContent = React.memo(function ChatDrawerContent({
       shadowRadius: interpolate(p, [0, 0.15], [0, 20]),
       elevation: p > 0.05 ? 24 : 0,
     };
-  }, [theme.scheme]);
+  }, [theme.colors.shadow, theme.scheme]);
 
   return (
     <Animated.View style={[styles.drawerShadowWrap, shadowAnimatedStyle]}>
@@ -226,15 +226,14 @@ const styles = StyleSheet.create({
 
 export function ChatTab(): React.JSX.Element {
   const { theme } = useAppTheme();
-  const tabBarHeight = useTabBarHeight();
   const {
     activeGatewayConfigId,
     gateway,
     config,
     debugMode,
     showAgentAvatar,
-    officeChatRequest,
-    clearOfficeChatRequest,
+    chatSessionRequest,
+    clearChatSessionRequest,
     chatSidebarRequest,
     clearChatSidebarRequest,
   } = useAppContext();
@@ -270,11 +269,11 @@ export function ChatTab(): React.JSX.Element {
     config,
     debugMode,
     showAgentAvatar,
-    officeChatRequest,
-    clearOfficeChatRequest,
+    chatSessionRequest,
+    clearChatSessionRequest,
   });
 
-  const bottomPadding = tabBarHeight + 12;
+  const bottomPadding = Space.md;
   const gatewayConfigId = React.useMemo(
     () => resolveGatewayCacheScopeId({ activeConfigId: activeGatewayConfigId, config }),
     [activeGatewayConfigId, config],
@@ -309,19 +308,15 @@ export function ChatTab(): React.JSX.Element {
     drawerStyle: {
       width: '85%' as const,
       backgroundColor: theme.colors.surface,
-      paddingBottom: tabBarHeight,
       shadowOpacity: 0,
       elevation: 0,
     },
-    sceneStyle: {
-      paddingBottom: tabBarHeight,
-    },
     overlayColor: theme.scheme === 'dark' ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.3)',
-  }), [theme.colors.surface, theme.scheme, tabBarHeight]);
+  }), [theme.colors.surface, theme.scheme]);
 
   return (
     <ChatControllerProvider controller={controller}>
-      <View style={{ flex: 1, marginBottom: -tabBarHeight }}>
+      <View style={{ flex: 1 }}>
         <ChatDrawer.Navigator
           drawerContent={renderDrawerContent}
           screenOptions={screenOptions}

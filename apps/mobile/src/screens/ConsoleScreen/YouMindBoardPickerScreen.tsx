@@ -11,11 +11,9 @@ import { useNativeStackModalHeader } from '../../hooks/useNativeStackModalHeader
 import { StorageService } from '../../services/storage';
 import { YouMindClient, type YouMindBoardSummary } from '../../services/youmind';
 import { useAppTheme } from '../../theme';
-import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
+import { ControlSize, FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
 import type { ConsoleStackParamList } from './ConsoleTab';
 import { YouMindBoardIcon } from './components/YouMindBoardIcon';
-
-const YOUMIND_FAVORITE_STAR_COLOR = '#FACC15';
 
 type Navigation = NativeStackNavigationProp<ConsoleStackParamList, 'YouMindBoardPicker'>;
 type PickerRoute = RouteProp<ConsoleStackParamList, 'YouMindBoardPicker'>;
@@ -140,8 +138,8 @@ export function YouMindBoardPickerScreen(): React.JSX.Element {
                     {item.isFavorited ? (
                       <Star
                         size={14}
-                        color={YOUMIND_FAVORITE_STAR_COLOR}
-                        fill={YOUMIND_FAVORITE_STAR_COLOR}
+                        color={theme.colors.warning}
+                        fill={theme.colors.warning}
                         strokeWidth={1.8}
                       />
                     ) : null}
@@ -172,7 +170,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     searchInput: {
       borderWidth: 0,
-      minHeight: 48,
+      minHeight: ControlSize.field,
       borderRadius: Radius.lg,
     },
     centerState: {
@@ -210,13 +208,13 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       fontWeight: FontWeight.semibold,
     },
     badge: {
-      borderWidth: 1,
-      borderRadius: 999,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderRadius: Radius.full,
       paddingHorizontal: 8,
       paddingVertical: 3,
     },
     badgeText: {
-      fontSize: 11,
+      fontSize: FontSize.xs,
       fontWeight: FontWeight.medium,
     },
   });

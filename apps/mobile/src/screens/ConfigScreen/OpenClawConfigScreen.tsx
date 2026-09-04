@@ -14,7 +14,7 @@ import {
 } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { CopyableCommand } from '../../components/config/CopyableCommand';
-import { createCardContentStyle } from '../../components/ui';
+import { SettingsIcon, createCardContentStyle } from '../../components/ui';
 import { useAppContext } from '../../contexts/AppContext';
 import { useGatewayOverlay } from '../../contexts/GatewayOverlayContext';
 import { useProPaywall } from '../../contexts/ProPaywallContext';
@@ -277,11 +277,7 @@ export function OpenClawConfigScreen(): React.JSX.Element {
           onPress={handleViewConfigPress}
           styles={styles}
           chevronColor={theme.colors.textSubtle}
-          icon={(
-            <View style={[styles.rowIconBadge, { backgroundColor: '#E7F0FF' }]}>
-              <Eye size={17} strokeWidth={2.2} color="#2F6BFF" />
-            </View>
-          )}
+          icon={<SettingsIcon icon={Eye} tone="info" />}
         />
 
         <View style={styles.divider} />
@@ -295,11 +291,7 @@ export function OpenClawConfigScreen(): React.JSX.Element {
           disabled={backingUpConfig}
           styles={styles}
           chevronColor={theme.colors.textSubtle}
-          icon={(
-            <View style={[styles.rowIconBadge, { backgroundColor: '#FFF1E5' }]}>
-              <Archive size={17} strokeWidth={2.2} color="#D96C1F" />
-            </View>
-          )}
+          icon={<SettingsIcon icon={Archive} tone="warning" />}
         />
 
         <View style={styles.divider} />
@@ -310,11 +302,7 @@ export function OpenClawConfigScreen(): React.JSX.Element {
           onPress={handleRestoreConfigPress}
           styles={styles}
           chevronColor={theme.colors.textSubtle}
-          icon={(
-            <View style={[styles.rowIconBadge, { backgroundColor: '#E9F8EE' }]}>
-              <RotateCcw size={17} strokeWidth={2.25} color="#248A4D" />
-            </View>
-          )}
+          icon={<SettingsIcon icon={RotateCcw} tone="success" strokeWidth={2.25} />}
         />
       </View>
 
@@ -337,9 +325,7 @@ export function OpenClawConfigScreen(): React.JSX.Element {
             }
           >
             <View style={styles.rowLead}>
-              <View style={[styles.rowIconBadge, { backgroundColor: '#FFF4D6' }]}>
-                <RotateCcw size={17} strokeWidth={2.25} color="#D79A00" />
-              </View>
+              <SettingsIcon icon={RotateCcw} tone="warning" strokeWidth={2.25} />
               <View style={styles.rowText}>
                 <Text style={styles.rowTitle}>
                   {runtimeSettings.restartingGateway ? t('common:Loading...') : t('Restart Current Gateway')}
@@ -360,11 +346,7 @@ export function OpenClawConfigScreen(): React.JSX.Element {
           onPress={handlePermissionRepairPress}
           styles={styles}
           chevronColor={theme.colors.textSubtle}
-          icon={(
-            <View style={[styles.rowIconBadge, { backgroundColor: '#E9F8EE' }]}>
-              <Wrench size={17} strokeWidth={2.25} color="#248A4D" />
-            </View>
-          )}
+          icon={<SettingsIcon icon={Wrench} tone="success" strokeWidth={2.25} />}
         />
 
         <View style={styles.divider} />
@@ -375,11 +357,7 @@ export function OpenClawConfigScreen(): React.JSX.Element {
           onPress={handlePermissionsPress}
           styles={styles}
           chevronColor={theme.colors.textSubtle}
-          icon={(
-            <View style={[styles.rowIconBadge, { backgroundColor: '#E8F1FF' }]}>
-              <Shield size={17} strokeWidth={2.2} color="#2563EB" />
-            </View>
-          )}
+          icon={<SettingsIcon icon={Shield} tone="info" />}
         />
 
         <View style={styles.divider} />
@@ -394,9 +372,7 @@ export function OpenClawConfigScreen(): React.JSX.Element {
           disabled={runningDoctor || runningAutoFix || !hasActiveGateway}
         >
           <View style={styles.rowLead}>
-            <View style={[styles.rowIconBadge, { backgroundColor: '#EDE9FE' }]}>
-              <Stethoscope size={17} strokeWidth={2.2} color="#7C3AED" />
-            </View>
+            <SettingsIcon icon={Stethoscope} tone="accent" />
             <View style={styles.rowText}>
               <Text style={styles.rowTitle}>
                 {runningDoctor ? t('Running diagnostics...') : t('Status Diagnostics')}
@@ -423,9 +399,7 @@ export function OpenClawConfigScreen(): React.JSX.Element {
           disabled={runningDoctor || runningAutoFix || !hasActiveGateway}
         >
           <View style={styles.rowLead}>
-            <View style={[styles.rowIconBadge, { backgroundColor: '#E9F8EE' }]}>
-              <Wrench size={17} strokeWidth={2.25} color="#248A4D" />
-            </View>
+            <SettingsIcon icon={Wrench} tone="success" strokeWidth={2.25} />
             <View style={styles.rowText}>
               <Text style={styles.rowTitle}>
                 {runningAutoFix ? t('Running fix...') : t('Auto Fix')}
@@ -472,7 +446,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
   return StyleSheet.create({
     card: {
       borderRadius: Radius.md,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       backgroundColor: colors.surface,
       overflow: 'hidden',
@@ -481,7 +455,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     secondaryCard: {
       marginTop: Space.lg,
       borderRadius: Radius.md,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       backgroundColor: colors.surface,
       overflow: 'hidden',
@@ -507,14 +481,6 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       alignItems: 'center',
       gap: Space.md,
       minWidth: 0,
-    },
-    rowIconBadge: {
-      width: 32,
-      height: 32,
-      borderRadius: Radius.md,
-      alignItems: 'center',
-      justifyContent: 'center',
-      flexShrink: 0,
     },
     rowText: {
       flex: 1,

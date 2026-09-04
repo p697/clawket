@@ -1,19 +1,34 @@
 import React, { useMemo } from 'react';
 import { StyleProp, StyleSheet, TextInput, View, ViewStyle } from 'react-native';
-import { Search } from 'lucide-react-native';
+import { Search, X } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 import { useAppTheme } from '../../theme';
-import { FontSize, Radius, Space } from '../../theme/tokens';
+import { ControlSize, FontSize, LineHeight, Radius, Space, createSurfaceStyle } from '../../theme/tokens';
+import { ActionButton } from './ActionButton';
 
 type Props = {
   value: string;
   onChangeText: (text: string) => void;
   placeholder?: string;
   style?: StyleProp<ViewStyle>;
+  clearAccessibilityLabel?: string;
+  onClear?: () => void;
 };
 
-export function SearchInput({ value, onChangeText, placeholder = 'Search...', style }: Props): React.JSX.Element {
+export function SearchInput({
+  value,
+  onChangeText,
+  placeholder = 'Search...',
+  style,
+  clearAccessibilityLabel,
+  onClear,
+}: Props): React.JSX.Element {
   const { theme } = useAppTheme();
-  const styles = useMemo(() => createStyles(theme.colors), [theme]);
+  const { t } = useTranslation('common');
+  const styles = useMemo(
+    () => createStyles(theme.colors, theme.scheme),
+    [theme.colors, theme.scheme],
+  );
 
   return (
     <View style={[styles.wrap, style]}>
@@ -26,29 +41,46 @@ export function SearchInput({ value, onChangeText, placeholder = 'Search...', st
         placeholderTextColor={theme.colors.textSubtle}
         autoCapitalize="none"
         autoCorrect={false}
-        clearButtonMode="while-editing"
+        clearButtonMode="never"
       />
+      {value ? (
+        <ActionButton
+          icon={X}
+          onPress={onClear ?? (() => onChangeText(''))}
+          accessibilityLabel={clearAccessibilityLabel ?? t('Clear search')}
+          appearance="bare"
+          size="sm"
+          iconSize={16}
+          iconColor={theme.colors.textMuted}
+          style={styles.clearButton}
+        />
+      ) : null}
     </View>
   );
 }
 
-function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors']) {
+function createStyles(
+  colors: ReturnType<typeof useAppTheme>['theme']['colors'],
+  scheme: ReturnType<typeof useAppTheme>['theme']['scheme'],
+) {
   return StyleSheet.create({
     wrap: {
+      height: ControlSize.standard,
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: colors.inputBackground,
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: Radius.lg,
+      borderRadius: Radius.full,
       paddingHorizontal: Space.lg,
       gap: Space.sm,
+      ...createSurfaceStyle(colors, scheme, 'raised'),
     },
     input: {
       flex: 1,
+      height: ControlSize.standard,
       fontSize: FontSize.base,
+      lineHeight: LineHeight.base,
       color: colors.text,
-      paddingVertical: Space.sm + 2,
+      paddingVertical: 0,
     },
+    clearButton: { marginRight: -Space.sm },
   });
 }

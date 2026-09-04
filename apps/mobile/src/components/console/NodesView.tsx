@@ -9,7 +9,6 @@ import {
   SectionListData,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   UIManager,
   View,
@@ -18,7 +17,9 @@ import * as Clipboard from 'expo-clipboard';
 import { CircleHelp, Wifi } from 'lucide-react-native';
 import {
   Card,
+  Button,
   EmptyState,
+  FormTextInput,
   IconButton,
   LoadingState,
   ScreenHeader,
@@ -606,8 +607,6 @@ export function NodesView({
           <ThemedSwitch
             value={nodeEnabled}
             onValueChange={handleNodeEnabledChange}
-            trackColor={{ false: theme.colors.borderStrong, true: theme.colors.primarySoft }}
-            thumbColor={nodeEnabled ? theme.colors.primary : theme.colors.surfaceMuted}
           />
         </View>
       </Card>
@@ -699,43 +698,42 @@ export function NodesView({
         }}
       >
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
+          <Card elevation="overlay" padding="lg" style={styles.modalCard}>
             <Text style={styles.modalTitle}>{t('Rename Node')}</Text>
-            <TextInput
+            <FormTextInput
               value={renameDraft}
               onChangeText={setRenameDraft}
-              style={styles.modalInput}
               placeholder={t('Node name')}
-              placeholderTextColor={theme.colors.textSubtle}
               autoCapitalize="words"
               autoCorrect={false}
               editable={!renameSaving}
+              surface="sunken"
             />
 
             <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalButtonSecondary, renameSaving && styles.buttonDisabled]}
+              <Button
+                label={t('common:Cancel')}
+                variant="secondary"
+                size="sm"
                 onPress={() => {
                   if (renameSaving) return;
                   setRenameTarget(null);
                   setRenameDraft('');
                 }}
-                activeOpacity={0.7}
                 disabled={renameSaving}
-              >
-                <Text style={styles.modalButtonSecondaryText}>{t('common:Cancel')}</Text>
-              </TouchableOpacity>
+                style={styles.modalButton}
+              />
 
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalButtonPrimary, renameSaving && styles.buttonDisabled]}
+              <Button
+                label={renameSaving ? t('common:Saving...') : t('common:Save')}
                 onPress={() => { handleRenameConfirm().catch(() => {}); }}
-                activeOpacity={0.7}
                 disabled={renameSaving}
-              >
-                <Text style={styles.modalButtonPrimaryText}>{renameSaving ? t('common:Saving...') : t('common:Save')}</Text>
-              </TouchableOpacity>
+                loading={renameSaving}
+                size="sm"
+                style={styles.modalButton}
+              />
             </View>
-          </View>
+          </Card>
         </View>
       </Modal>
     </View>
@@ -760,7 +758,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       padding: Space.md,
       borderRadius: Radius.md,
       backgroundColor: colors.surface,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       gap: Space.sm,
     },
@@ -817,7 +815,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     toastBanner: {
       backgroundColor: colors.surfaceElevated,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.borderStrong,
       borderRadius: Radius.sm,
       paddingHorizontal: Space.md,
@@ -863,7 +861,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       justifyContent: 'center',
       paddingHorizontal: Space.sm,
       backgroundColor: colors.surfaceElevated,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
     },
     sectionCountText: {
@@ -872,14 +870,14 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       fontWeight: FontWeight.semibold,
     },
     card: {
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       borderRadius: Radius.md,
       padding: Space.md,
       gap: Space.xs,
     },
     pendingCard: {
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.warning,
       borderRadius: Radius.md,
       padding: Space.md,
@@ -887,7 +885,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       backgroundColor: colors.surfaceElevated,
     },
     placeholderCard: {
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       borderRadius: Radius.md,
       padding: Space.md,
@@ -934,7 +932,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       paddingVertical: Space.sm,
       alignItems: 'center',
       justifyContent: 'center',
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.borderStrong,
       backgroundColor: colors.surface,
     },
@@ -967,7 +965,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       paddingHorizontal: Space.sm,
       paddingVertical: 3,
       backgroundColor: colors.surfaceMuted,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       minWidth: 28,
       alignItems: 'center',
@@ -992,7 +990,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     errorBanner: {
       borderRadius: Radius.sm,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.error,
       backgroundColor: colors.surfaceElevated,
       paddingHorizontal: Space.md,
@@ -1001,7 +999,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     errorCard: {
       borderRadius: Radius.md,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       backgroundColor: colors.surface,
       padding: Space.lg,
@@ -1036,27 +1034,12 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       backgroundColor: colors.overlay,
     },
     modalCard: {
-      borderRadius: Radius.md,
-      borderWidth: 1,
-      borderColor: colors.border,
-      backgroundColor: colors.surface,
-      padding: Space.lg,
       gap: Space.md,
     },
     modalTitle: {
       fontSize: FontSize.lg,
       fontWeight: FontWeight.semibold,
       color: colors.text,
-    },
-    modalInput: {
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: Radius.sm,
-      paddingHorizontal: Space.md,
-      paddingVertical: Space.sm,
-      fontSize: FontSize.base,
-      color: colors.text,
-      backgroundColor: colors.inputBackground,
     },
     modalActions: {
       flexDirection: 'row',
@@ -1065,29 +1048,6 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     modalButton: {
       minWidth: 86,
-      borderRadius: Radius.sm,
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingVertical: Space.sm,
-      paddingHorizontal: Space.md,
-    },
-    modalButtonPrimary: {
-      backgroundColor: colors.primary,
-    },
-    modalButtonPrimaryText: {
-      color: colors.primaryText,
-      fontSize: FontSize.sm,
-      fontWeight: FontWeight.semibold,
-    },
-    modalButtonSecondary: {
-      borderWidth: 1,
-      borderColor: colors.borderStrong,
-      backgroundColor: colors.surface,
-    },
-    modalButtonSecondaryText: {
-      color: colors.textMuted,
-      fontSize: FontSize.sm,
-      fontWeight: FontWeight.semibold,
     },
   });
 }

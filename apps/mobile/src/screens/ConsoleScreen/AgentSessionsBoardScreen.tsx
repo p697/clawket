@@ -17,7 +17,7 @@ import { useAppContext } from '../../contexts/AppContext';
 import { useNativeStackModalHeader } from '../../hooks/useNativeStackModalHeader';
 import type { AgentInfo } from '../../types/agent';
 import { useAppTheme } from '../../theme';
-import { FontSize, FontWeight, Radius, Shadow, Space } from '../../theme/tokens';
+import { FontSize, FontWeight, Radius, Shadow, Space, createThemedShadowStyle } from '../../theme/tokens';
 import { SessionInfo } from '../../types';
 import { getDisplayAgentEmoji } from '../../utils/agent-emoji';
 import { relativeTime, sanitizeSilentPreviewText, sessionLabel } from '../../utils/chat-message';
@@ -490,11 +490,11 @@ export function AgentSessionsBoardScreen(): React.JSX.Element {
   const navigation = useNavigation<AgentSessionsBoardNavigation>();
   const { theme } = useAppTheme();
   const { t } = useTranslation('console');
-  const { gateway, currentAgentId, agents, requestOfficeChat, switchAgent } = useAppContext();
+  const { gateway, currentAgentId, agents, requestChatSession, switchAgent } = useAppContext();
   const capabilities = useMemo(() => gateway.getBackendCapabilities(), [gateway]);
   const canOpenAgentDetail = capabilities.consoleAgentDetail;
   const isFocused = useIsFocused();
-  const stylesMemo = useMemo(() => createStyles(theme.colors), [theme.colors]);
+  const stylesMemo = useMemo(() => createStyles(theme.colors, theme.scheme), [theme]);
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -586,9 +586,9 @@ export function AgentSessionsBoardScreen(): React.JSX.Element {
       if (agentId && agentId !== currentAgentId) {
         switchAgent(agentId);
       }
-      requestOfficeChat(sessionKey);
+      requestChatSession(sessionKey);
     });
-  }, [currentAgentId, navigation, requestOfficeChat, switchAgent]);
+  }, [currentAgentId, navigation, requestChatSession, switchAgent]);
 
   const openAgent = useCallback((agentId: string, sessionKey: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -598,9 +598,9 @@ export function AgentSessionsBoardScreen(): React.JSX.Element {
       if (agentId !== currentAgentId) {
         switchAgent(agentId);
       }
-      requestOfficeChat(sessionKey);
+      requestChatSession(sessionKey);
     });
-  }, [currentAgentId, navigation, requestOfficeChat, switchAgent]);
+  }, [currentAgentId, navigation, requestChatSession, switchAgent]);
 
   const openAgentSettings = useCallback((agentId: string) => {
     if (!canOpenAgentDetail) return;
@@ -749,7 +749,10 @@ export function AgentSessionsBoardScreen(): React.JSX.Element {
   );
 }
 
-function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors']) {
+function createStyles(
+  colors: ReturnType<typeof useAppTheme>['theme']['colors'],
+  scheme: ReturnType<typeof useAppTheme>['theme']['scheme'],
+) {
   return StyleSheet.create({
     root: {
       flex: 1,
@@ -762,7 +765,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     segmentedWrap: {
       flexDirection: 'row',
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderRadius: Radius.full,
       padding: 3,
       gap: Space.xs,
@@ -771,7 +774,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       flex: 1,
       minHeight: 38,
       borderRadius: Radius.full,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       alignItems: 'center',
       justifyContent: 'center',
       paddingHorizontal: Space.md,
@@ -807,12 +810,12 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       marginBottom: Space.sm,
     },
     agentCard: {
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderRadius: Radius.lg,
       padding: Space.md,
       gap: 10,
       minHeight: 178,
-      ...Shadow.sm,
+      ...createThemedShadowStyle(colors, scheme, Shadow.sm),
     },
     cardTopRow: {
       flexDirection: 'row',
@@ -834,7 +837,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       justifyContent: 'center',
     },
     agentEmoji: {
-      fontSize: 22,
+      fontSize: FontSize.xxl,
     },
     agentMeta: {
       flex: 1,
@@ -880,7 +883,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderRadius: Radius.full,
       paddingHorizontal: Space.sm,
       paddingVertical: 5,
@@ -902,7 +905,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     agentSettingsButton: {
       minHeight: 32,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderRadius: Radius.md,
       alignItems: 'center',
       justifyContent: 'center',
@@ -913,18 +916,18 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       fontWeight: FontWeight.semibold,
     },
     sessionCard: {
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderRadius: Radius.lg,
       padding: Space.lg,
       gap: Space.md,
-      ...Shadow.sm,
+      ...createThemedShadowStyle(colors, scheme, Shadow.sm),
     },
     sessionCardCompact: {
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderRadius: Radius.lg,
       padding: Space.md,
       gap: Space.sm,
-      ...Shadow.sm,
+      ...createThemedShadowStyle(colors, scheme, Shadow.sm),
     },
     sessionTopRow: {
       flexDirection: 'row',

@@ -247,7 +247,7 @@ const styles = StyleSheet.create({
   imageIcon: {
     width: 22,
     height: 22,
-    borderRadius: 6,
+    borderRadius: Radius.sm,
     resizeMode: 'cover',
   },
   vectorIconWrap: {

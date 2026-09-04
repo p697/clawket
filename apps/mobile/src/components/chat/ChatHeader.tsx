@@ -5,7 +5,7 @@ import { Menu, RefreshCw, SquarePen, Users } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
 import { ConnectionState } from "../../types";
 import { useAppTheme } from "../../theme";
-import { Radius, Shadow, Space } from "../../theme/tokens";
+import { BorderWidth, FontSize, FontWeight, Radius, Shadow, Space, createThemedShadowStyle } from "../../theme/tokens";
 import { extractDisplayAgentEmoji } from "../../utils/agent-emoji";
 import { IconButton } from "../ui";
 
@@ -71,7 +71,7 @@ function TypingDots({ color }: { color: string }) {
   const dotStyle = (anim: Animated.Value) => ({
     width: 4,
     height: 4,
-    borderRadius: 2,
+    borderRadius: Radius.micro,
     backgroundColor: color,
     marginHorizontal: 1.5,
     opacity: anim.interpolate({ inputRange: [0, 1], outputRange: [0.3, 1] }),
@@ -340,7 +340,7 @@ function createStyles(
     header: {
       backgroundColor: colors.surface,
       borderBottomColor: colors.border,
-      borderBottomWidth: 1,
+      borderBottomWidth: StyleSheet.hairlineWidth,
       flexDirection: "row",
       alignItems: "center",
       paddingHorizontal: 4,
@@ -357,15 +357,15 @@ function createStyles(
       borderRadius: Radius.lg,
       paddingHorizontal: 2,
       paddingVertical: 2,
-      ...Shadow.sm,
+      ...createThemedShadowStyle(colors, scheme, Shadow.sm),
     },
     titleBlock: {
       flex: 1,
       marginHorizontal: 10,
     },
     headerTitle: {
-      fontSize: 16,
-      fontWeight: "600",
+      fontSize: FontSize.lg,
+      fontWeight: FontWeight.semibold,
       color: colors.text,
     },
     headerTitleWallpaper: {
@@ -379,27 +379,27 @@ function createStyles(
       marginTop: 3,
     },
     typingText: {
-      fontSize: 12,
+      fontSize: FontSize.sm,
       color: colors.primary,
-      fontWeight: "500",
+      fontWeight: FontWeight.medium,
       marginTop: -1,
     },
     statusText: {
       marginTop: 2,
-      fontSize: 12,
+      fontSize: FontSize.sm,
       color: colors.textMuted,
-      fontWeight: "500",
+      fontWeight: FontWeight.medium,
     },
     contextText: {
-      fontSize: 12,
+      fontSize: FontSize.sm,
       color: colors.textMuted,
-      fontWeight: "500",
+      fontWeight: FontWeight.medium,
       marginTop: 2,
     },
     statusDot: {
       width: 8,
       height: 8,
-      borderRadius: 4,
+      borderRadius: Radius.full,
       marginLeft: 12,
       marginRight: 12,
     },
@@ -415,9 +415,9 @@ function createStyles(
       right: 8,
       width: 8,
       height: 8,
-      borderRadius: 99,
+      borderRadius: Radius.full,
       backgroundColor: colors.primary,
-      borderWidth: 1.5,
+      borderWidth: BorderWidth.strong,
       borderColor: colors.surface,
     },
   });

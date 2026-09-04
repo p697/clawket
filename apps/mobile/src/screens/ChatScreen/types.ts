@@ -6,10 +6,10 @@ export type ChatScreenProps = {
   config: GatewayConfig | null;
   debugMode?: boolean;
   showAgentAvatar?: boolean;
-  officeChatRequest?: {
+  chatSessionRequest?: {
     sessionKey: string;
     requestedAt: number;
     sourceRole?: string;
   } | null;
-  clearOfficeChatRequest?: () => void;
+  clearChatSessionRequest?: () => void;
 };

@@ -37,7 +37,7 @@ const styles = StyleSheet.create({
     paddingVertical: Space.xxxl,
   },
   icon: {
-    fontSize: 36,
+    fontSize: FontSize.displayLg,
     marginBottom: Space.md,
   },
   title: {

@@ -19,9 +19,14 @@ import {
 type Props = {
   style?: StyleProp<ViewStyle>;
   variant?: 'simple' | 'numbered';
+  relayPairCommand?: string;
 };
 
-export function QuickConnectGuideCard({ style, variant = 'numbered' }: Props): React.JSX.Element {
+export function QuickConnectGuideCard({
+  style,
+  variant = 'numbered',
+  relayPairCommand = MANUAL_PAIR_CMD,
+}: Props): React.JSX.Element {
   const { t } = useTranslation(['chat', 'config']);
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme.colors), [theme]);
@@ -29,8 +34,8 @@ export function QuickConnectGuideCard({ style, variant = 'numbered' }: Props): R
   const [pairMode, setPairMode] = useState<QuickConnectPairMode>('relay');
   const [manualExpanded, setManualExpanded] = useState(false);
   const quickConnectAgentPrompt = useMemo(
-    () => getQuickConnectAgentPrompt(t, pairMode === 'local' ? MANUAL_PAIR_LOCAL_CMD : MANUAL_PAIR_CMD),
-    [pairMode, t],
+    () => getQuickConnectAgentPrompt(t, pairMode === 'local' ? MANUAL_PAIR_LOCAL_CMD : relayPairCommand),
+    [pairMode, relayPairCommand, t],
   );
   const pairModeTabs = useMemo<SegmentedTabItem<QuickConnectPairMode>[]>(() => [
     { key: 'relay', label: t('Remote', { ns: 'config' }) },
@@ -77,7 +82,7 @@ export function QuickConnectGuideCard({ style, variant = 'numbered' }: Props): R
       title: t('Remote connection command'),
       body: (
         <>
-          <CopyableCommand command={MANUAL_PAIR_CMD} />
+          <CopyableCommand command={relayPairCommand} />
           <Text style={styles.pairModeHint}>
             {t('Use this when your phone and your OpenClaw host device are not on the same Wi-Fi network.')}
           </Text>
@@ -96,7 +101,7 @@ export function QuickConnectGuideCard({ style, variant = 'numbered' }: Props): R
       title: t('Scan one of the generated QR codes.'),
       body: null,
     },
-  ], [styles, t]);
+  ], [relayPairCommand, styles, t]);
 
   const manualSection = (
     <>
@@ -154,7 +159,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     card: {
       backgroundColor: colors.surface,
       borderRadius: Radius.lg,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       padding: Space.lg,
     },

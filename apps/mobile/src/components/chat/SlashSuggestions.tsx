@@ -4,7 +4,15 @@ import * as Haptics from 'expo-haptics';
 import { useTranslation } from 'react-i18next';
 import { SlashCommand } from '../../data/slash-commands';
 import { useAppTheme } from '../../theme';
-import { FontSize, FontWeight, Radius, Space, TimingPreset } from '../../theme/tokens';
+import {
+  FontSize,
+  FontWeight,
+  Radius,
+  Shadow,
+  Space,
+  TimingPreset,
+  createThemedShadowStyle,
+} from '../../theme/tokens';
 
 type Props = {
   visible: boolean;
@@ -34,7 +42,7 @@ function splitCommandLabel(command: string, typedPrefix: string): { highlight: s
 export function SlashSuggestions({ visible, inputValue, suggestions, maxHeight, onSelect }: Props): React.JSX.Element | null {
   const { t } = useTranslation('chat');
   const { theme } = useAppTheme();
-  const styles = useMemo(() => createStyles(theme.colors), [theme]);
+  const styles = useMemo(() => createStyles(theme.colors, theme.scheme), [theme]);
   const anim = useRef(new Animated.Value(0)).current;
   const show = visible && suggestions.length > 0;
   const [rendered, setRendered] = useState(show);
@@ -124,25 +132,24 @@ export function SlashSuggestions({ visible, inputValue, suggestions, maxHeight, 
   );
 }
 
-function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors']) {
+function createStyles(
+  colors: ReturnType<typeof useAppTheme>['theme']['colors'],
+  scheme: ReturnType<typeof useAppTheme>['theme']['scheme'],
+) {
   return StyleSheet.create({
     popup: {
-      borderRadius: Radius.md + 2,
+      borderRadius: Radius.md,
       backgroundColor: colors.surfaceElevated,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 0 },
-      shadowOpacity: 0.12,
-      shadowRadius: 6,
-      elevation: 6,
+      ...createThemedShadowStyle(colors, scheme, Shadow.sm),
     },
     popupInner: {
-      borderRadius: Radius.md + 2,
-      borderWidth: 1,
+      borderRadius: Radius.md,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       backgroundColor: colors.surfaceElevated,
       overflow: 'hidden',
-      paddingTop: 4,
-      paddingBottom: 4,
+      paddingTop: Space.xs,
+      paddingBottom: Space.xs,
     },
     row: {
       minHeight: 46,
@@ -165,13 +172,13 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     command: {
       color: colors.text,
-      fontSize: FontSize.md + 1,
+      fontSize: FontSize.bodySm,
       fontWeight: FontWeight.bold,
       flexShrink: 1,
     },
     commandHighlight: {
       color: colors.primary,
-      fontSize: FontSize.md + 1,
+      fontSize: FontSize.bodySm,
       fontWeight: FontWeight.bold,
     },
     description: {

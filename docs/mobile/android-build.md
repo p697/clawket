@@ -7,7 +7,7 @@ This document covers two separate workflows:
 
 Do not treat them as the same thing:
 
-- Daily development should use the installed `debug` app + Metro + Office Vite dev server.
+- Daily development should use the installed `debug` app + Metro.
 - APK packaging is only for first install, native changes, or distribution verification.
 
 ## Environment Setup
@@ -58,12 +58,8 @@ npm run dev:android
 
 What this script does:
 
-- installs root and `office-game` dependencies
-- starts the `office-game` Vite dev server on port `5174`
-- waits for the Office server to become ready
-- configures `adb reverse` for:
-  - `tcp:8081` -> Metro
-  - `tcp:5174` -> Office WebView dev server
+- installs root dependencies
+- configures `adb reverse` for `tcp:8081` -> Metro
 - starts Expo Metro on port `8081`
 
 ### What Hot Reloads
@@ -71,7 +67,6 @@ What this script does:
 These changes update without rebuilding the APK:
 
 - React Native `JS/TS` code under `src/`
-- Office WebView code under `office-game/` via the Vite dev server
 
 ### What Requires Rebuild/Reinstall
 
@@ -127,18 +122,6 @@ Use packaging only when needed:
 - validating production-like behavior
 - generating an APK to share manually
 
-### Office WebView Asset Build for Packaged APKs
-
-For packaged APKs, the Office tab uses the built inline asset instead of the dev server.
-
-Build it first:
-
-```bash
-cd office-game && npm run build && cd ..
-```
-
-If you skip this, the packaged app may show a blank Office screen or stale Office content.
-
 ### Debug APK
 
 ```bash
@@ -162,8 +145,6 @@ Recommended use:
 ### Release APK
 
 ```bash
-cd office-game && npm run build && cd ..
-
 cd android
 ANDROID_HOME=/opt/homebrew/share/android-commandlinetools \
 JAVA_HOME=$(/usr/libexec/java_home -v 17) \
@@ -270,21 +251,6 @@ Fix:
 
 - keep Aliyun mirrors before `google()` in `android/build.gradle`
 
-### Android WebView Local HTML Failure (`ERR_EMPTY_RESPONSE`)
-
-Symptom:
-
-- Office tab fails to load packaged local HTML on Android
-
-Cause:
-
-- Android WebView cannot use Metro's HTML asset id the same way iOS can
-
-Fix:
-
-- package Office as inline HTML/JS via `office-game` build output
-- in development, use the Vite dev server instead
-
 ### APK Install Failure (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`)
 
 Symptom:
@@ -330,6 +296,5 @@ npx expo run:android
 Use this when you need a packaged release-variant APK:
 
 ```bash
-cd office-game && npm run build && cd ..
 cd android && ./gradlew app:assembleRelease -x lint -x test --configure-on-demand --build-cache -PreactNativeArchitectures=arm64-v8a
 ```

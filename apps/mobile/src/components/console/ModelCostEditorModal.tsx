@@ -1,9 +1,9 @@
 import React, { useMemo } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { ModalSheet } from '../ui';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Button, Card, FormTextInput, ModalSheet } from '../ui';
 import { useTranslation } from 'react-i18next';
 import { useAppTheme } from '../../theme';
-import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
+import { ControlSize, FontSize, FontWeight, LineHeight, Space } from '../../theme/tokens';
 import type { ModelCostValue } from '../../utils/model-cost-config';
 
 export type ModelCostDraft = {
@@ -87,12 +87,14 @@ export function ModelCostEditorModal({
         {fields.map((field) => (
           <View key={field.key} style={styles.fieldRow}>
             <Text style={styles.fieldLabel}>{field.label}</Text>
-            <TextInput
+            <FormTextInput
               value={draft[field.key]}
               onChangeText={(value) => onChangeField(field.key, value)}
-              style={[styles.input, !editable && styles.inputDisabled]}
+              containerStyle={[styles.inputField, !editable && styles.inputDisabled]}
+              inputStyle={styles.inputText}
+              minHeight={ControlSize.compact}
+              surface="sunken"
               placeholder={String(initialCost[field.key])}
-              placeholderTextColor={theme.colors.textSubtle}
               keyboardType="decimal-pad"
               autoCapitalize="none"
               autoCorrect={false}
@@ -101,44 +103,32 @@ export function ModelCostEditorModal({
           </View>
         ))}
 
-        <Pressable
+        <Button
+          label={saving ? t('common:Saving...') : t('common:Save')}
           onPress={onSave}
-          style={({ pressed }) => [
-            styles.saveButton,
-            pressed && styles.saveButtonPressed,
-            saveDisabled && styles.saveButtonDisabled,
-          ]}
           disabled={saveDisabled}
-        >
-          <Text style={styles.saveButtonText}>
-            {saving ? t('common:Saving...') : t('common:Save')}
-          </Text>
-        </Pressable>
+          loading={saving}
+          style={styles.saveButton}
+        />
 
         {deleteVisible ? (
           <View style={styles.deleteSection}>
             {deleteBlockedReasons.length > 0 ? (
-              <View style={styles.blockCard}>
+              <Card style={styles.blockCard}>
                 <Text style={styles.blockText}>{t('This model cannot be deleted yet.')}</Text>
                 {deleteBlockedReasons.map((reason) => (
                   <Text key={reason} style={styles.blockReasonText}>- {reason}</Text>
                 ))}
-              </View>
+              </Card>
             ) : null}
 
-            <Pressable
+            <Button
+              label={deleting ? t('Deleting model...') : t('Delete Model')}
+              variant="destructive"
               onPress={onDelete}
-              style={({ pressed }) => [
-                styles.deleteButton,
-                pressed && styles.deleteButtonPressed,
-                deleteDisabled && styles.deleteButtonDisabled,
-              ]}
               disabled={deleteDisabled}
-            >
-              <Text style={styles.deleteButtonText}>
-                {deleting ? t('Deleting model...') : t('Delete Model')}
-              </Text>
-            </Pressable>
+              loading={deleting}
+            />
           </View>
         ) : null}
       </ScrollView>
@@ -155,7 +145,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     infoText: {
       fontSize: FontSize.md,
-      lineHeight: FontSize.md * 1.5,
+      lineHeight: LineHeight.md,
     },
     infoLabel: {
       color: colors.textMuted,
@@ -174,21 +164,17 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       fontSize: FontSize.sm,
     },
     blockCard: {
-      backgroundColor: colors.surface,
-      borderRadius: Radius.md,
-      borderWidth: 1,
       borderColor: colors.error,
-      padding: Space.md,
     },
     blockText: {
       color: colors.error,
       fontSize: FontSize.sm,
-      lineHeight: FontSize.sm * 1.5,
+      lineHeight: LineHeight.sm,
     },
     blockReasonText: {
       color: colors.error,
       fontSize: FontSize.sm,
-      lineHeight: FontSize.sm * 1.5,
+      lineHeight: LineHeight.sm,
       marginTop: Space.xs,
     },
     fieldRow: {
@@ -203,61 +189,23 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       fontWeight: FontWeight.medium,
       flexShrink: 0,
     },
-    input: {
-      backgroundColor: colors.inputBackground,
-      borderRadius: Radius.sm,
-      borderWidth: 1,
-      borderColor: colors.border,
-      color: colors.text,
+    inputField: {
+      width: 100,
+    },
+    inputText: {
       fontSize: FontSize.md,
       fontWeight: FontWeight.medium,
-      width: 100,
       textAlign: 'right',
       paddingHorizontal: Space.sm,
-      paddingVertical: Space.xs + 2,
     },
     inputDisabled: {
       opacity: 0.6,
     },
     saveButton: {
-      alignItems: 'center',
-      backgroundColor: colors.primary,
-      borderRadius: Radius.md,
-      paddingVertical: 11,
       marginTop: Space.sm,
-    },
-    saveButtonPressed: {
-      opacity: 0.88,
-    },
-    saveButtonDisabled: {
-      opacity: 0.55,
-    },
-    saveButtonText: {
-      color: colors.primaryText,
-      fontSize: FontSize.base,
-      fontWeight: FontWeight.semibold,
     },
     deleteSection: {
       gap: Space.sm,
-    },
-    deleteButton: {
-      alignItems: 'center',
-      backgroundColor: colors.surface,
-      borderWidth: 1,
-      borderColor: colors.error,
-      borderRadius: Radius.md,
-      paddingVertical: 11,
-    },
-    deleteButtonPressed: {
-      backgroundColor: colors.surfaceMuted,
-    },
-    deleteButtonDisabled: {
-      opacity: 0.55,
-    },
-    deleteButtonText: {
-      color: colors.error,
-      fontSize: FontSize.base,
-      fontWeight: FontWeight.semibold,
     },
   });
 }

@@ -7,11 +7,13 @@ account_id = "replace-with-your-cloudflare-account-id"
 [vars]
 # Copy this file to wrangler.local.toml and replace these values with resources/endpoints
 # from the Cloudflare account you use for local deploys or remote dev.
+# Set PAIRING_TICKET_SECRET with `wrangler secret put` on both Registry and Relay;
+# never place that shared secret in this file.
 MAX_MESSAGES_PER_10S = "120"
 MAX_CLIENT_MESSAGES_PER_10S = "300"
 HEARTBEAT_INTERVAL_MS = "30000"
 AWAITING_CHALLENGE_TTL_MS = "25000"
-CLIENT_IDLE_TIMEOUT_MS = "600000"
+CLIENT_PONG_TIMEOUT_MS = "120000"
 REGISTRY_VERIFY_URL = "https://registry.example.com"
 GATEWAY_OWNER_LEASE_MS = "20000"
 

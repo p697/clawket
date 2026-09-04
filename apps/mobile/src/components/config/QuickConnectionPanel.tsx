@@ -1,16 +1,16 @@
 import React, { useMemo } from 'react';
-import { Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import { StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { Cloud, Link2 } from 'lucide-react-native';
 import { useAppTheme } from '../../theme';
-import { FontSize, FontWeight, Radius, Shadow, Space } from '../../theme/tokens';
+import { ControlSize, FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
+import { Button, Card } from '../ui';
 
 type QuickConnectionTarget = 'local' | 'youmind';
 
 type QuickConnectionCard = {
   key: QuickConnectionTarget;
   icon: React.ReactNode;
-  iconBackgroundColor: string;
   title: string;
   description: string;
   badges: string[];
@@ -28,30 +28,28 @@ export function QuickConnectionPanel({ onSelectTarget, style }: Props): React.JS
   const cards = useMemo<QuickConnectionCard[]>(() => [
     {
       key: 'local',
-      icon: <Link2 size={18} color="#2F6BFF" strokeWidth={2.1} />,
-      iconBackgroundColor: '#E7F0FF',
+      icon: <Link2 size={18} color={theme.colors.primary} strokeWidth={2.1} />,
       title: t('Local Agents'),
-      description: t('Install the Clawket CLI on your computer, then pair with a QR code.'),
+      description: t('Run the Clawket pairing command on your computer, then enter the code it shows.'),
       badges: [t('OpenClaw'), t('Hermes')],
     },
     {
       key: 'youmind',
-      icon: <Cloud size={18} color="#39834A" strokeWidth={2.1} />,
-      iconBackgroundColor: '#EEF8E8',
+      icon: <Cloud size={18} color={theme.colors.primary} strokeWidth={2.1} />,
       title: t('Cloud Agents'),
       description: t('Sign in directly on this device. No computer setup required.'),
       badges: [t('YouMind')],
     },
-  ], [t]);
+  ], [t, theme.colors.primary]);
 
   return (
     <View style={style}>
       <Text style={styles.quickHint}>{t('Choose how you want to connect.')}</Text>
 
       {cards.map((card) => (
-        <View key={card.key} style={styles.quickGroupCard}>
+        <Card key={card.key} style={styles.quickGroupCard} padding="lg">
           <View style={styles.quickGroupHeader}>
-            <View style={[styles.quickGroupIcon, { backgroundColor: card.iconBackgroundColor }]}>
+            <View style={styles.quickGroupIcon}>
               {card.icon}
             </View>
             <View style={styles.quickGroupHeaderText}>
@@ -68,19 +66,13 @@ export function QuickConnectionPanel({ onSelectTarget, style }: Props): React.JS
             ))}
           </View>
 
-          <Pressable
+          <Button
+            label={t('Start Connection')}
+            icon={card.key === 'local' ? Link2 : Cloud}
             onPress={() => onSelectTarget(card.key)}
-            style={({ pressed }) => [styles.primaryButton, styles.quickAction, pressed && styles.primaryButtonPressed]}
-          >
-            <View style={styles.buttonContent}>
-              {card.key === 'local'
-                ? <Link2 size={15} color={theme.colors.primaryText} strokeWidth={2} />
-                : <Cloud size={15} color={theme.colors.primaryText} strokeWidth={2} />
-              }
-              <Text style={styles.primaryButtonText}>{t('Start Connection')}</Text>
-            </View>
-          </Pressable>
-        </View>
+            style={styles.quickAction}
+          />
+        </Card>
       ))}
     </View>
   );
@@ -88,27 +80,6 @@ export function QuickConnectionPanel({ onSelectTarget, style }: Props): React.JS
 
 function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors']) {
   return StyleSheet.create({
-    buttonContent: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: Space.sm,
-    },
-    primaryButton: {
-      alignItems: 'center',
-      backgroundColor: colors.primary,
-      borderRadius: Radius.md,
-      paddingVertical: 11,
-      ...Shadow.md,
-    },
-    primaryButtonPressed: {
-      opacity: 0.88,
-    },
-    primaryButtonText: {
-      color: colors.primaryText,
-      fontSize: FontSize.base,
-      fontWeight: FontWeight.semibold,
-    },
     quickHint: {
       fontSize: FontSize.md,
       color: colors.textMuted,
@@ -117,11 +88,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       textAlign: 'center',
     },
     quickGroupCard: {
-      backgroundColor: colors.surface,
       borderRadius: Radius.lg,
-      borderWidth: 1,
-      borderColor: colors.border,
-      padding: Space.lg,
       marginBottom: Space.md,
     },
     quickGroupHeader: {
@@ -134,11 +101,12 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       gap: Space.xs,
     },
     quickGroupIcon: {
-      width: 36,
-      height: 36,
+      width: ControlSize.compact,
+      height: ControlSize.compact,
       borderRadius: Radius.full,
       alignItems: 'center',
       justifyContent: 'center',
+      backgroundColor: colors.primarySoft,
     },
     quickGroupTitle: {
       color: colors.text,

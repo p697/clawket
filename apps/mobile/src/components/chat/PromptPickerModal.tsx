@@ -7,13 +7,12 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { ChevronLeft, Pin, Plus } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
-import { ModalSheet } from '../ui';
+import { Button, FormTextInput, ModalSheet } from '../ui';
 import { SwipeableGatewayRow, SwipeableMethods } from '../config/SwipeableGatewayRow';
 import { useAppTheme } from '../../theme';
 import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
@@ -238,30 +237,29 @@ function PromptPickerContent({
             {editingPrompt ? t('Edit Prompt') : t('Add Prompt')}
           </Text>
         </View>
-        <TextInput
-          style={[styles.editorInput, { borderColor: colors.border }]}
+        <FormTextInput
           value={editorText}
           onChangeText={setEditorText}
           placeholder={t('Enter prompt text...')}
-          placeholderTextColor={colors.textSubtle}
           multiline
+          minHeight={140}
           autoFocus
-          textAlignVertical="top"
+          containerStyle={styles.editorInput}
+          inputStyle={styles.editorInputText}
         />
         <View style={styles.editorActions}>
-          <Pressable
-            style={({ pressed }) => [styles.editorButton, styles.editorCancelButton, { borderColor: colors.border }, pressed && { backgroundColor: colors.surfaceMuted }]}
+          <Button
+            label={t('Cancel')}
+            variant="secondary"
+            size="sm"
             onPress={handleCancelEditor}
-          >
-            <Text style={[styles.editorButtonText, { color: colors.textMuted }]}>{t('Cancel')}</Text>
-          </Pressable>
-          <Pressable
-            style={({ pressed }) => [styles.editorButton, styles.editorSaveButton, { backgroundColor: colors.primary }, pressed && { opacity: 0.88 }]}
+          />
+          <Button
+            label={t('Save')}
+            size="sm"
             onPress={handleSave}
             disabled={!editorText.trim()}
-          >
-            <Text style={[styles.editorButtonText, { color: colors.primaryText }]}>{t('Save')}</Text>
-          </Pressable>
+          />
         </View>
       </View>
     );
@@ -406,16 +404,10 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       color: colors.text,
     },
     editorInput: {
-      backgroundColor: colors.inputBackground,
-      borderWidth: 1,
-      borderRadius: Radius.md,
-      color: colors.text,
-      fontSize: FontSize.base,
-      minHeight: 140,
-      maxHeight: 220,
-      paddingHorizontal: Space.md,
-      paddingVertical: Space.md,
       marginTop: Space.sm,
+    },
+    editorInputText: {
+      maxHeight: 220,
       lineHeight: 22,
     },
     editorActions: {
@@ -423,21 +415,6 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       justifyContent: 'flex-end',
       gap: Space.sm,
       marginTop: Space.md,
-    },
-    editorButton: {
-      paddingHorizontal: Space.lg,
-      paddingVertical: 9,
-      borderRadius: Radius.md,
-      alignItems: 'center',
-    },
-    editorCancelButton: {
-      backgroundColor: 'transparent',
-      borderWidth: 1,
-    },
-    editorSaveButton: {},
-    editorButtonText: {
-      fontSize: FontSize.base,
-      fontWeight: FontWeight.semibold,
     },
   });
 }

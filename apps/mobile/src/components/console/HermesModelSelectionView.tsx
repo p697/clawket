@@ -567,7 +567,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       justifyContent: 'space-between',
       backgroundColor: colors.inputBackground,
       borderColor: colors.border,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderRadius: Radius.md,
       paddingHorizontal: Space.md,
       paddingVertical: Space.sm + 4,
@@ -588,7 +588,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       justifyContent: 'center',
       minHeight: 44,
       borderRadius: Radius.md,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       backgroundColor: colors.inputBackground,
       paddingHorizontal: Space.md,
@@ -613,7 +613,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       marginTop: -2,
     },
     errorCard: {
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.error,
       borderRadius: Radius.lg,
       backgroundColor: colors.surface,
@@ -692,7 +692,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       gap: Space.xs,
     },
     metaChip: {
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       borderRadius: Radius.full,
       backgroundColor: colors.surfaceMuted,
@@ -705,7 +705,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       fontWeight: FontWeight.medium,
     },
     providerEmptyState: {
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       borderRadius: Radius.md,
       backgroundColor: colors.surfaceMuted,
@@ -718,7 +718,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       lineHeight: 20,
     },
     modelsWrap: {
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       borderRadius: Radius.md,
       overflow: 'hidden',

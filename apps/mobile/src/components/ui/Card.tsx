@@ -1,33 +1,78 @@
-import React from 'react';
-import { StyleSheet, TouchableOpacity, View, ViewStyle } from 'react-native';
+import React, { useMemo } from 'react';
+import { Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import { useAppTheme } from '../../theme';
-import { Radius, Space } from '../../theme/tokens';
+import { Radius, Space, SurfaceElevation, createSurfaceStyle } from '../../theme/tokens';
 
 type Props = {
   onPress?: () => void;
   disabled?: boolean;
-  style?: ViewStyle | (ViewStyle | false | undefined)[];
+  elevation?: SurfaceElevation;
+  tone?: 'default' | 'muted' | 'elevated';
+  selected?: boolean;
+  padding?: 'none' | 'sm' | 'md' | 'lg';
+  style?: StyleProp<ViewStyle>;
   children: React.ReactNode;
 };
 
-export function Card({ onPress, disabled, style, children }: Props): React.JSX.Element {
+export function Card({
+  onPress,
+  disabled,
+  elevation = 'flat',
+  tone = 'default',
+  selected = false,
+  padding = 'md',
+  style,
+  children,
+}: Props): React.JSX.Element {
   const { theme } = useAppTheme();
-  const { colors } = theme;
-  const cardStyle = [styles.card, { backgroundColor: colors.surface }, style];
+  const styles = useMemo(
+    () => createStyles(theme.colors, theme.scheme, elevation),
+    [elevation, theme.colors, theme.scheme],
+  );
+  const chrome = [
+    styles.card,
+    styles[`padding${padding.toUpperCase()}` as 'paddingNONE' | 'paddingSM' | 'paddingMD' | 'paddingLG'],
+    tone === 'muted' ? styles.muted : tone === 'elevated' ? styles.elevated : null,
+    selected ? styles.selected : null,
+  ];
 
   if (onPress) {
     return (
-      <TouchableOpacity style={cardStyle} onPress={onPress} disabled={disabled} activeOpacity={0.7}>
+      <Pressable
+        style={({ pressed }) => [
+          chrome,
+          pressed && !disabled ? styles.cardPressed : null,
+          style,
+        ]}
+        onPress={onPress}
+        disabled={disabled}
+      >
         {children}
-      </TouchableOpacity>
+      </Pressable>
     );
   }
-  return <View style={cardStyle}>{children}</View>;
+  return <View style={[chrome, style]}>{children}</View>;
 }
 
-const styles = StyleSheet.create({
-  card: {
-    borderRadius: Radius.md,
-    padding: Space.lg - 2,
-  },
-});
+function createStyles(
+  colors: ReturnType<typeof useAppTheme>['theme']['colors'],
+  scheme: ReturnType<typeof useAppTheme>['theme']['scheme'],
+  elevation: SurfaceElevation,
+) {
+  return StyleSheet.create({
+    card: {
+      borderRadius: Radius.md,
+      ...createSurfaceStyle(colors, scheme, elevation),
+    },
+    paddingNONE: { padding: 0 },
+    paddingSM: { padding: Space.sm },
+    paddingMD: { padding: Space.md },
+    paddingLG: { padding: Space.lg },
+    muted: { backgroundColor: colors.surfaceMuted },
+    elevated: { backgroundColor: colors.surfaceElevated },
+    selected: { backgroundColor: colors.primarySoft },
+    cardPressed: {
+      backgroundColor: colors.surfaceMuted,
+    },
+  });
+}

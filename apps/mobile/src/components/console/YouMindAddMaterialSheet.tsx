@@ -1,26 +1,24 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Image,
-  KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import * as ImagePicker from 'expo-image-picker';
 import { ArrowLeft, Camera, ImageIcon, Link2, Trash2 } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { analyticsEvents } from '../../services/analytics/events';
 import { YouMindClient } from '../../services/youmind';
 import { useAppTheme } from '../../theme';
-import { FontSize, FontWeight, Radius, Shadow, Space } from '../../theme/tokens';
+import { BorderWidth, FontSize, FontWeight, Radius, Space, createSurfaceStyle } from '../../theme/tokens';
 import { isMacCatalyst } from '../../utils/platform';
-import { ModalSheet } from '../ui';
+import { Button, FormTextInput, ModalSheet } from '../ui';
 
 type ViewMode = 'menu' | 'photoPreview' | 'cameraPreview';
 
@@ -112,7 +110,7 @@ export function YouMindAddMaterialSheet({
 }: Props): React.JSX.Element {
   const { theme } = useAppTheme();
   const { t } = useTranslation('console');
-  const styles = useMemo(() => createStyles(theme.colors), [theme]);
+  const styles = useMemo(() => createStyles(theme.colors, theme.scheme), [theme]);
   const [viewMode, setViewMode] = useState<ViewMode>('menu');
   const [linkDraft, setLinkDraft] = useState('');
   const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
@@ -306,37 +304,28 @@ export function YouMindAddMaterialSheet({
       <View style={styles.sectionHeader}>
         <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>{t('Link')}</Text>
         {linkDraft.trim().length > 0 ? (
-          <Pressable
-            style={({ pressed }) => [
-              styles.ghostButton,
-              {
-                opacity: pressed ? 0.72 : 1,
-                borderColor: theme.colors.border,
-              },
-            ]}
+          <Button
+            label={t('Clear')}
+            icon={Trash2}
+            variant="ghost"
+            size="sm"
             disabled={submitting}
             onPress={clearLinks}
-          >
-            <Trash2 size={16} color={theme.colors.textMuted} strokeWidth={2.1} />
-            <Text style={[styles.ghostButtonText, { color: theme.colors.textMuted }]}>{t('Clear')}</Text>
-          </Pressable>
+          />
         ) : null}
       </View>
 
-      <View style={[styles.textAreaWrap, { backgroundColor: theme.colors.surfaceMuted }]}>
-        <TextInput
-          value={linkDraft}
-          onChangeText={setLinkDraft}
-          placeholder={t('Paste one or more links here, each on a separate line')}
-          placeholderTextColor={theme.colors.textSubtle}
-          autoCapitalize="none"
-          autoCorrect={false}
-          keyboardType="url"
-          multiline
-          textAlignVertical="top"
-          style={[styles.textArea, { color: theme.colors.text }]}
-        />
-      </View>
+      <FormTextInput
+        value={linkDraft}
+        onChangeText={setLinkDraft}
+        placeholder={t('Paste one or more links here, each on a separate line')}
+        autoCapitalize="none"
+        autoCorrect={false}
+        keyboardType="url"
+        multiline
+        minHeight={112}
+        surface="sunken"
+      />
 
       {parsedLinks.invalidLines.length > 0 ? (
         <View style={styles.invalidStatusRow}>
@@ -346,29 +335,16 @@ export function YouMindAddMaterialSheet({
         </View>
       ) : null}
 
-      <Pressable
-        style={({ pressed }) => [
-          styles.primaryButton,
-          {
-            backgroundColor: boardReady ? theme.colors.primary : theme.colors.surfaceMuted,
-            opacity: !boardReady ? 1 : pressed || submitting || parsedLinks.urls.length === 0 ? 0.72 : 1,
-          },
-        ]}
+      <Button
+        label={parsedLinks.urls.length > 1
+          ? t('Add {{count}} links', { count: parsedLinks.urls.length })
+          : t('Add link')}
         disabled={submitting || parsedLinks.urls.length === 0 || !boardReady}
+        loading={submitting}
         onPress={() => {
           void submitLinks();
         }}
-      >
-        {submitting ? (
-          <ActivityIndicator color={theme.colors.primaryText} />
-        ) : (
-          <Text style={[styles.primaryButtonText, { color: boardReady ? theme.colors.primaryText : theme.colors.textSubtle }]}>
-            {parsedLinks.urls.length > 1
-              ? t('Add {{count}} links', { count: parsedLinks.urls.length })
-              : t('Add link')}
-          </Text>
-        )}
-      </Pressable>
+      />
     </View>
   );
 
@@ -424,14 +400,14 @@ export function YouMindAddMaterialSheet({
     return (
       <View style={styles.stack}>
         <View style={styles.inlineHeader}>
-          <Pressable
-            style={({ pressed }) => [styles.ghostButton, { opacity: pressed ? 0.72 : 1, borderColor: theme.colors.border }]}
+          <Button
+            label={t('Back')}
+            icon={ArrowLeft}
+            variant="ghost"
+            size="sm"
             disabled={submitting}
             onPress={goBackToMenu}
-          >
-            <ArrowLeft size={16} color={theme.colors.textMuted} strokeWidth={2.2} />
-            <Text style={[styles.ghostButtonText, { color: theme.colors.textMuted }]}>{t('Back')}</Text>
-          </Pressable>
+          />
         </View>
 
         <View style={styles.previewStack}>
@@ -492,31 +468,18 @@ export function YouMindAddMaterialSheet({
               : t('This photo will be added to the current workspace as an image material.')}
         </Text>
 
-        <Pressable
-          style={({ pressed }) => [
-            styles.primaryButton,
-            {
-              backgroundColor: theme.colors.primary,
-              opacity: pressed || submitting ? 0.72 : 1,
-            },
-          ]}
+        <Button
+          label={isCamera
+            ? t('Add capture')
+            : isMultiplePhotos
+              ? t('Add {{count}} photos', { count: pendingImages.length })
+              : t('Add photo')}
           disabled={submitting}
+          loading={submitting}
           onPress={() => {
             void submitImage();
           }}
-        >
-          {submitting ? (
-            <ActivityIndicator color={theme.colors.primaryText} />
-          ) : (
-            <Text style={[styles.primaryButtonText, { color: theme.colors.primaryText }]}>
-              {isCamera
-                ? t('Add capture')
-                : isMultiplePhotos
-                  ? t('Add {{count}} photos', { count: pendingImages.length })
-                  : t('Add photo')}
-            </Text>
-          )}
-        </Pressable>
+        />
       </View>
     );
   };
@@ -539,7 +502,7 @@ export function YouMindAddMaterialSheet({
 
 function ActionCard({ icon, title, subtitle, onPress, disabled = false }: ActionCardProps): React.JSX.Element {
   const { theme } = useAppTheme();
-  const styles = useMemo(() => createStyles(theme.colors), [theme]);
+  const styles = useMemo(() => createStyles(theme.colors, theme.scheme), [theme]);
 
   return (
     <Pressable
@@ -565,7 +528,10 @@ function ActionCard({ icon, title, subtitle, onPress, disabled = false }: Action
   );
 }
 
-function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors']) {
+function createStyles(
+  colors: ReturnType<typeof useAppTheme>['theme']['colors'],
+  scheme: ReturnType<typeof useAppTheme>['theme']['scheme'],
+) {
   return StyleSheet.create({
     content: {
       paddingHorizontal: Space.lg,
@@ -591,7 +557,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     actionCard: {
       flex: 1,
       minHeight: 92,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderRadius: Radius.lg,
       paddingHorizontal: Space.md,
       paddingVertical: Space.sm,
@@ -602,7 +568,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     actionIconWrap: {
       width: 36,
       height: 36,
-      borderRadius: 12,
+      borderRadius: Radius.md,
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -631,32 +597,6 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       fontSize: FontSize.lg,
       fontWeight: FontWeight.semibold,
     },
-    ghostButton: {
-      minHeight: 38,
-      paddingHorizontal: Space.md,
-      borderRadius: Radius.full,
-      borderWidth: 1,
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: Space.xs,
-    },
-    ghostButtonText: {
-      fontSize: FontSize.sm,
-      fontWeight: FontWeight.medium,
-    },
-    textAreaWrap: {
-      borderRadius: Radius.lg,
-      minHeight: 112,
-      paddingHorizontal: Space.md,
-      paddingVertical: Space.sm,
-    },
-    textArea: {
-      flex: 1,
-      minHeight: 84,
-      fontSize: FontSize.base,
-      lineHeight: 22,
-      paddingTop: Space.xs,
-    },
     invalidStatusRow: {
       alignItems: 'flex-end',
       marginTop: Space.xs,
@@ -668,17 +608,6 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     helperText: {
       fontSize: FontSize.sm,
       lineHeight: 18,
-    },
-    primaryButton: {
-      minHeight: 50,
-      borderRadius: Radius.md,
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingHorizontal: Space.lg,
-    },
-    primaryButtonText: {
-      fontSize: FontSize.base,
-      fontWeight: FontWeight.semibold,
     },
     previewImage: {
       width: '100%',
@@ -696,10 +625,9 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       width: 36,
       height: 36,
       borderRadius: Radius.full,
-      borderWidth: 1,
       alignItems: 'center',
       justifyContent: 'center',
-      ...Shadow.sm,
+      ...createSurfaceStyle(colors, scheme, 'floating'),
     },
     previewStack: {
       gap: Space.sm,
@@ -710,7 +638,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     previewThumbWrap: {
       borderRadius: Radius.md,
-      borderWidth: 2,
+      borderWidth: BorderWidth.strong,
       overflow: 'hidden',
     },
     previewThumb: {

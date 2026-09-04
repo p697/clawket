@@ -223,7 +223,7 @@ function SvgBarChartComponent({ data, mode, height = DEFAULT_HEIGHT, width }: Pr
               <SvgText
                 x={PADDING_LEFT - 6}
                 y={y + 4}
-                fontSize={10}
+                fontSize={FontSize.micro}
                 fill={theme.colors.textSubtle}
                 textAnchor="end"
               >
@@ -265,7 +265,7 @@ function SvgBarChartComponent({ data, mode, height = DEFAULT_HEIGHT, width }: Pr
               key={`label-${point.date}`}
               x={x}
               y={height - 6}
-              fontSize={9}
+              fontSize={FontSize.nano}
               fill={theme.colors.textMuted}
               textAnchor="middle"
             >

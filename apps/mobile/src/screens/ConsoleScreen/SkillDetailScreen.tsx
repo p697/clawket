@@ -7,7 +7,6 @@ import {
   RefreshControl,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TouchableOpacity,
   View,
@@ -16,7 +15,7 @@ import { ArrowRight, FileText, Trash2, Wrench } from 'lucide-react-native';
 import { RouteProp, useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
-import { HeaderActionButton, LoadingState } from '../../components/ui';
+import { HeaderActionButton, LoadingState, ThemedSwitch } from '../../components/ui';
 import { useAppContext } from '../../contexts/AppContext';
 import { useProPaywall } from '../../contexts/ProPaywallContext';
 import { useNativeStackModalHeader } from '../../hooks/useNativeStackModalHeader';
@@ -374,12 +373,10 @@ export function SkillDetailScreen(): React.JSX.Element {
             <View style={styles.toggleWrap}>
               <View style={styles.toggleRow}>
                 {toggling ? <ActivityIndicator size="small" color={theme.colors.primary} /> : null}
-                <Switch
+                <ThemedSwitch
                   value={skill.always ? true : !skill.disabled}
                   onValueChange={() => handleToggleEnabled()}
                   disabled={skill.always || toggling}
-                  trackColor={{ false: theme.colors.borderStrong, true: theme.colors.primary }}
-                  thumbColor={theme.colors.iconOnColor}
                 />
               </View>
               <Text style={styles.toggleLabel}>{skill.always ? t('Always active') : (skill.disabled ? t('Disabled') : t('Enabled'))}</Text>
@@ -553,7 +550,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     sectionCard: {
       backgroundColor: colors.surface,
       borderRadius: Radius.md,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       padding: Space.md,
     },
@@ -586,7 +583,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       minWidth: 0,
     },
     heroEmoji: {
-      fontSize: 32,
+      fontSize: FontSize.displayHero,
       lineHeight: 38,
     },
     heroTextWrap: {
@@ -595,14 +592,14 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       gap: 6,
     },
     heroTitle: {
-      fontSize: FontSize.lg + 4,
+      fontSize: FontSize.displaySm,
       fontWeight: FontWeight.bold,
       color: colors.text,
     },
     sourceBadge: {
       alignSelf: 'flex-start',
       borderRadius: Radius.full,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       paddingHorizontal: 9,
       paddingVertical: Space.xs,
     },
@@ -659,7 +656,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     statusDot: {
       width: 8,
       height: 8,
-      borderRadius: 4,
+      borderRadius: Radius.xs,
     },
     statusValue: {
       color: colors.text,
@@ -706,7 +703,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     installCard: {
       borderRadius: Radius.sm + 2,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       backgroundColor: colors.surfaceMuted,
       paddingHorizontal: 10,
@@ -775,7 +772,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     errorTitle: {
       color: colors.error,
-      fontSize: FontSize.md + 1,
+      fontSize: FontSize.bodySm,
       fontWeight: FontWeight.bold,
       textAlign: 'center',
     },

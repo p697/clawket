@@ -9,7 +9,9 @@ import {
   getOpenClawConfigPath,
   getOpenClawMediaDir,
   getOpenClawStateDir,
+  isOpenClawGatewayAuthConfigured,
   issueOpenClawBootstrapToken,
+  issueOpenClawPairingSetupToken,
   readOpenClawPermissions,
   readOpenClawInfo,
   restartOpenClawGateway,
@@ -113,6 +115,28 @@ describe('openclaw auth resolution', () => {
       password: 'gateway-password',
       error: expect.stringContaining('gateway.auth.mode is unset'),
     });
+  });
+
+  it('recognizes SecretRef-backed gateway auth without exposing the secret value', () => {
+    fsMock.existsSync.mockReturnValue(true);
+    fsMock.readFileSync.mockReturnValue(JSON.stringify({
+      gateway: {
+        auth: {
+          mode: 'token',
+          token: { source: 'env', id: 'OPENCLAW_GATEWAY_TOKEN' },
+        },
+      },
+    }));
+
+    const info = readOpenClawInfo();
+    expect(info).toMatchObject({
+      authMode: 'token',
+      tokenConfigured: true,
+      passwordConfigured: false,
+      token: null,
+      password: null,
+    });
+    expect(isOpenClawGatewayAuthConfigured(info)).toBe(true);
   });
 
   it('falls back to env-provided password when config is absent', () => {
@@ -310,6 +334,10 @@ describe('openclaw auth resolution', () => {
     });
     fsPromisesMock.mkdir.mockResolvedValue(undefined);
     fsPromisesMock.chmod.mockResolvedValue(undefined);
+    childProcessMock.execFile.mockImplementation((_command, _args, _options, callback) => {
+      const error = new Error('unknown command qr');
+      callback(error, '', 'unknown command qr');
+    });
 
     const issued = await issueOpenClawBootstrapToken({
       deviceId: 'device-1',
@@ -343,6 +371,33 @@ describe('openclaw auth resolution', () => {
 
     expect(fsPromisesMock.rename).toHaveBeenCalledOnce();
     dateNowSpy.mockRestore();
+  });
+
+  it('issues official mobile setup credentials through the current OpenClaw CLI', async () => {
+    const expiresAtMs = Date.now() + 60_000;
+    const setupCode = Buffer.from(JSON.stringify({
+      url: 'wss://relay.example.com/ws',
+      bootstrapToken: 'official-bootstrap-token',
+      expiresAtMs,
+    })).toString('base64url');
+    childProcessMock.execFile.mockImplementation((_command, _args, _options, callback) => {
+      callback(null, JSON.stringify({ setupCode, access: 'full' }), '');
+    });
+
+    await expect(issueOpenClawPairingSetupToken({
+      gatewayUrl: 'wss://relay.example.com/ws',
+    })).resolves.toEqual({
+      token: 'official-bootstrap-token',
+      expiresAtMs,
+      strategy: 'mobile-setup',
+      access: 'full',
+    });
+    const [command, args, options, callback] = childProcessMock.execFile.mock.calls[0];
+    expect(command).toBe('openclaw');
+    expect(args).toEqual(['qr', '--json', '--url', 'wss://relay.example.com/ws']);
+    expect((options as { env: NodeJS.ProcessEnv }).env.OPENCLAW_STATE_DIR).toBeTruthy();
+    expect(callback).toEqual(expect.any(Function));
+    expect(fsPromisesMock.writeFile).not.toHaveBeenCalled();
   });
 
   it('configures LAN bind/origin against the active root-owned config', async () => {

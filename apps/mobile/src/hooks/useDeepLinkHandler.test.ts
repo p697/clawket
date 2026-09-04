@@ -5,6 +5,7 @@ import { StorageService } from '../services/storage';
 // Capture the useEffect callback and useRef value
 let effectCallback: (() => void | (() => void)) | null = null;
 const refObject = { current: null as string | null };
+const connectPairingLinkMock = jest.fn();
 
 jest.mock('react', () => ({
   useEffect: jest.fn((cb: () => void | (() => void)) => {
@@ -17,6 +18,10 @@ jest.mock('../services/storage', () => ({
   StorageService: {
     setGatewayConfig: jest.fn(),
   },
+}));
+
+jest.mock('../contexts/GatewayScannerContext', () => ({
+  useGatewayScanner: () => ({ connectPairingLink: connectPairingLinkMock }),
 }));
 
 // Import after mocks are set up
@@ -107,6 +112,15 @@ describe('useDeepLinkHandler', () => {
         'Open the settings screen?',
         expect.any(Array)
       );
+    });
+
+    it('should send an official pairing Universal Link directly to the secure pairing flow', async () => {
+      const url = 'https://registry.clawket.ai/pair/ps_abc123#k=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+      setupHook();
+      await flushPromises();
+      simulateUrl(url);
+      expect(connectPairingLinkMock).toHaveBeenCalledWith(url);
+      expect(Alert.alert).not.toHaveBeenCalled();
     });
   });
 

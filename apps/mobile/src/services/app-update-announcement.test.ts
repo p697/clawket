@@ -22,7 +22,19 @@ describe('app update announcement service', () => {
   });
 
   it('returns the current version release note entry when one exists', () => {
-    expect(getCurrentAppUpdateAnnouncement()).not.toBeNull();
+    jest.spyOn(releaseUpdates, 'getAppUpdateRelease').mockReturnValueOnce({
+      version: APP_PACKAGE_VERSION,
+      entries: [{
+        id: 'current-release',
+        emoji: '🚀',
+        title: 'Current release',
+        action: { type: 'none' },
+      }],
+    });
+
+    expect(getCurrentAppUpdateAnnouncement()).toMatchObject({
+      entries: [expect.objectContaining({ id: 'current-release' })],
+    });
   });
 
   it('returns the release announcement for a version that exists in the unified history', () => {
@@ -65,6 +77,15 @@ describe('app update announcement service', () => {
   });
 
   it('auto-shows when the current app version has a matching unseen release note entry', async () => {
+    jest.spyOn(releaseUpdates, 'getAppUpdateRelease').mockReturnValueOnce({
+      version: APP_PACKAGE_VERSION,
+      entries: [{
+        id: 'current-release',
+        emoji: '🚀',
+        title: 'Current release',
+        action: { type: 'none' },
+      }],
+    });
     jest.mocked(AsyncStorage.getItem).mockResolvedValueOnce(null);
 
     await expect(shouldShowCurrentAppUpdateAnnouncement(false)).resolves.toBe(true);
@@ -106,10 +127,19 @@ describe('app update announcement service', () => {
   });
 
   it('stores the shown flag for the current version', async () => {
+    jest.spyOn(releaseUpdates, 'getAppUpdateRelease').mockReturnValueOnce({
+      version: APP_PACKAGE_VERSION,
+      entries: [{
+        id: 'current-release',
+        emoji: '🚀',
+        title: 'Current release',
+        action: { type: 'none' },
+      }],
+    });
     await markCurrentAppUpdateAnnouncementShown();
 
     expect(AsyncStorage.setItem).toHaveBeenCalledWith(
-      'clawket.appUpdateAnnouncementSeen.v1:2.1.0',
+      `clawket.appUpdateAnnouncementSeen.v1:${APP_PACKAGE_VERSION}`,
       '1',
     );
   });

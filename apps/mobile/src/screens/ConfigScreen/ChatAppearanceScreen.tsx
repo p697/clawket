@@ -497,8 +497,6 @@ export function ChatAppearanceScreen(): React.JSX.Element {
           <ThemedSwitch
             value={draftShowAgentAvatar}
             onValueChange={setDraftShowAgentAvatar}
-            trackColor={{ false: theme.colors.borderStrong, true: theme.colors.primarySoft }}
-            thumbColor={draftShowAgentAvatar ? theme.colors.primary : theme.colors.surfaceMuted}
           />
         </View>
 
@@ -512,8 +510,6 @@ export function ChatAppearanceScreen(): React.JSX.Element {
           <ThemedSwitch
             value={draftShowModelUsage}
             onValueChange={setDraftShowModelUsage}
-            trackColor={{ false: theme.colors.borderStrong, true: theme.colors.primarySoft }}
-            thumbColor={draftShowModelUsage ? theme.colors.primary : theme.colors.surfaceMuted}
           />
         </View>
 
@@ -579,7 +575,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       alignItems: 'center',
       backgroundColor: colors.surface,
       borderRadius: Radius.md,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.error,
       paddingVertical: 11,
     },
@@ -662,7 +658,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     resetButton: {
       alignItems: 'center',
       borderRadius: Radius.md,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.borderStrong,
       backgroundColor: colors.surface,
       paddingVertical: 11,

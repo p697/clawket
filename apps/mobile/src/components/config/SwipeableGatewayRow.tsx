@@ -110,7 +110,7 @@ export function SwipeableGatewayRow({
       key: 'delete',
       backgroundColor: colors.error,
       icon: Trash2,
-      iconColor: '#FFFFFF',
+      iconColor: colors.iconOnColor,
       onPress: handleDelete,
     },
   ];

@@ -40,6 +40,8 @@ const args = [
   "ws",
   "--external",
   "qrcode-terminal",
+  "--external",
+  "tweetnacl",
   `--define.process.env.CLAWKET_PACKAGE_DEFAULT_REGISTRY_URL=${JSON.stringify(packagedRegistryUrl)}`,
   `--define.process.env.CLAWKET_PACKAGE_DEFAULT_REGISTRY_FALLBACK_URL=${JSON.stringify(packagedRegistryFallbackUrl)}`,
 ];

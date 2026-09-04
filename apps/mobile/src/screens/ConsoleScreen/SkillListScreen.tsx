@@ -118,7 +118,7 @@ export function SkillListScreen(): React.JSX.Element {
         }),
       );
     } else {
-      // At RootStack level (opened from Office/Chat) —
+      // At RootStack level (opened from a root tab) —
       // atomic reset: dismiss SkillList + switch to Console tab with Discover
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       navigation.dispatch((rootState: any) => {
@@ -455,7 +455,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       fontWeight: FontWeight.medium,
     },
     card: {
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       borderRadius: Radius.md,
       padding: Space.lg - 2,
@@ -475,7 +475,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       minWidth: 0,
     },
     cardEmoji: {
-      fontSize: 20,
+      fontSize: FontSize.displaySm,
     },
     cardTextWrap: {
       flex: 1,
@@ -503,7 +503,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     statusDot: {
       width: 8,
       height: 8,
-      borderRadius: 4,
+      borderRadius: Radius.xs,
     },
     statusLabel: {
       fontSize: FontSize.sm,
@@ -512,7 +512,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     alwaysBadge: {
       borderRadius: Radius.sm + 2,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.borderStrong,
       backgroundColor: colors.surfaceMuted,
       paddingHorizontal: Space.sm,
@@ -538,14 +538,14 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     errorCard: {
       backgroundColor: colors.surface,
       borderRadius: Radius.md,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.error,
       padding: Space.md,
       marginBottom: Space.md - 2,
     },
     errorTitle: {
       color: colors.error,
-      fontSize: FontSize.md + 1,
+      fontSize: FontSize.bodySm,
       fontWeight: FontWeight.bold,
     },
     errorText: {

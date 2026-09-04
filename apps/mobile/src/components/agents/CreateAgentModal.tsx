@@ -4,15 +4,13 @@ import {
   Alert,
   StyleSheet,
   Text,
-  TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useAppContext } from '../../contexts/AppContext';
 import { useAppTheme } from '../../theme';
-import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
-import { ModalSheet } from '../ui';
+import { FontSize, FontWeight, Space } from '../../theme/tokens';
+import { Button, FormTextInput, ModalSheet } from '../ui';
 import { EmojiPicker, getRandomEmoji } from './EmojiPicker';
 import { shouldResetCreateAgentForm } from './createAgentModalState';
 import { enrichAgentsWithIdentity } from '../../services/agent-identity';
@@ -148,12 +146,11 @@ export function CreateAgentModal({ visible, onClose, onCreated }: Props): React.
         <Text style={styles.description}>{t('create_agent_desc')}</Text>
 
         <Text style={styles.fieldLabel}>{t('Name')}</Text>
-        <TextInput
-          style={styles.fieldInput}
+        <FormTextInput
           value={name}
           onChangeText={setName}
           placeholder={t('Agent name')}
-          placeholderTextColor={theme.colors.textSubtle}
+          surface="sunken"
           autoCapitalize="none"
           autoCorrect={false}
           editable={!creating && !polling}
@@ -172,16 +169,13 @@ export function CreateAgentModal({ visible, onClose, onCreated }: Props): React.
             <Text style={styles.pollingText}>{t('Creating agent...')}</Text>
           </View>
         ) : (
-          <TouchableOpacity
-            style={[styles.createButton, creating && styles.createButtonDisabled]}
+          <Button
+            label={creating ? t('Creating agent...') : t('common:Create')}
             onPress={handleCreate}
             disabled={creating}
-            activeOpacity={0.88}
-          >
-            <Text style={styles.createButtonText}>
-              {creating ? t('Creating agent...') : t('common:Create')}
-            </Text>
-          </TouchableOpacity>
+            loading={creating}
+            style={styles.createButton}
+          />
         )}
       </View>
     </ModalSheet>
@@ -207,30 +201,8 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       marginBottom: Space.xs,
       marginTop: Space.md,
     },
-    fieldInput: {
-      backgroundColor: colors.inputBackground,
-      borderColor: colors.border,
-      borderWidth: 1,
-      borderRadius: Radius.md,
-      color: colors.text,
-      fontSize: FontSize.base,
-      paddingHorizontal: Space.md,
-      paddingVertical: Space.sm + 2,
-    },
     createButton: {
       marginTop: Space.xl,
-      backgroundColor: colors.primary,
-      borderRadius: Radius.md,
-      paddingVertical: 11,
-      alignItems: 'center' as const,
-    },
-    createButtonDisabled: {
-      opacity: 0.6,
-    },
-    createButtonText: {
-      color: colors.primaryText,
-      fontSize: FontSize.base,
-      fontWeight: FontWeight.semibold,
     },
     pollingRow: {
       marginTop: Space.xl,

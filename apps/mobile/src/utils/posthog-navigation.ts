@@ -13,10 +13,10 @@ type NavigationLikeState = {
 };
 
 type ScreenDefinition = {
-  area: 'chat' | 'discover' | 'office' | 'console' | 'settings';
+  area: 'chat' | 'discover' | 'live' | 'console' | 'settings';
   kind: 'root' | 'list' | 'detail' | 'editor' | 'webview';
   name: string;
-  tab: 'Chat' | 'Office' | 'Console' | 'My';
+  tab: 'Chat' | 'Live' | 'Console' | 'My';
 };
 
 type ActiveRouteSnapshot = {
@@ -42,7 +42,7 @@ export const TRACKED_SCREEN_DEFINITIONS: Record<string, ScreenDefinition> = {
   DiscoverDetail: { name: 'Discover Detail', area: 'discover', tab: 'Console', kind: 'detail' },
   DiscoverClawHubBrowse: { name: 'Discover ClawHub Browse', area: 'discover', tab: 'Console', kind: 'list' },
   DiscoverSkillsShBrowse: { name: 'Discover skills.sh Browse', area: 'discover', tab: 'Console', kind: 'list' },
-  Office: { name: 'Office', area: 'office', tab: 'Office', kind: 'root' },
+  Live: { name: 'Live', area: 'live', tab: 'Live', kind: 'root' },
   ConsoleMenu: { name: 'Console', area: 'console', tab: 'Console', kind: 'root' },
   ConfigHome: { name: 'Settings', area: 'settings', tab: 'My', kind: 'root' },
   ChatAppearance: { name: 'Chat Appearance', area: 'settings', tab: 'My', kind: 'editor' },

@@ -2,20 +2,20 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { LayoutChangeEvent } from 'react-native';
 import {
   Alert,
-  KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { RouteProp, useNavigation, usePreventRemove, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { PencilLine } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Button, FormTextInput } from '../../components/ui';
 import { useAppContext } from '../../contexts/AppContext';
 import { useProPaywall } from '../../contexts/ProPaywallContext';
 import { useNativeStackModalHeader } from '../../hooks/useNativeStackModalHeader';
@@ -264,23 +264,16 @@ export function AgentUserInfoScreen(): React.JSX.Element {
             >
               <Text style={styles.fieldLabel}>{field.label}</Text>
               {editing ? (
-                <TextInput
-                  style={[
-                    styles.input,
-                    field.multiline && styles.inputMultiline,
-                    field.multiline && field.minHeight != null
-                      ? { minHeight: field.minHeight }
-                      : null,
-                  ]}
+                <FormTextInput
                   value={value}
                   onChangeText={(nextValue) => updateField(field.key, nextValue)}
                   placeholder={field.placeholder}
-                  placeholderTextColor={theme.colors.textSubtle}
                   editable={!saving}
                   autoCapitalize={field.autoCapitalize ?? 'sentences'}
                   autoCorrect={false}
                   multiline={field.multiline}
-                  textAlignVertical={field.multiline ? 'top' : 'center'}
+                  minHeight={field.multiline ? field.minHeight ?? 164 : undefined}
+                  surface="sunken"
                   onFocus={() => handleFieldFocus(field.key)}
                 />
               ) : (
@@ -311,34 +304,27 @@ export function AgentUserInfoScreen(): React.JSX.Element {
       >
         {editing ? (
           <>
-            <Pressable
+            <Button
+              label={tCommon('Cancel')}
+              variant="secondary"
               onPress={handleCancelEdit}
-              style={({ pressed }) => [styles.secondaryButton, pressed && styles.buttonPressed]}
-            >
-              <Text style={styles.secondaryButtonText}>{tCommon('Cancel')}</Text>
-            </Pressable>
-            <Pressable
+              style={styles.footerButton}
+            />
+            <Button
+              label={saving ? tCommon('Saving...') : tCommon('Save')}
               onPress={() => void handleSave()}
               disabled={!isDirty || saving}
-              style={({ pressed }) => [
-                styles.primaryButton,
-                (!isDirty || saving) && styles.buttonDisabled,
-                pressed && !(!isDirty || saving) && styles.buttonPressed,
-              ]}
-            >
-              <Text style={styles.primaryButtonText}>
-                {saving ? tCommon('Saving...') : tCommon('Save')}
-              </Text>
-            </Pressable>
+              loading={saving}
+              style={styles.footerButton}
+            />
           </>
         ) : (
-          <Pressable
+          <Button
+            label={tCommon('Edit')}
+            icon={PencilLine}
             onPress={handleStartEdit}
-            style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed]}
-          >
-            <PencilLine size={16} color={theme.colors.primaryText} strokeWidth={2.2} />
-            <Text style={styles.primaryButtonText}>{tCommon('Edit')}</Text>
-          </Pressable>
+            style={styles.footerButton}
+          />
         )}
       </View>
     </KeyboardAvoidingView>
@@ -367,7 +353,7 @@ function createStyles(colors: ReturnType<typeof import('../../theme').useAppThem
     valueCard: {
       minHeight: 52,
       borderRadius: Radius.md,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       backgroundColor: colors.inputBackground,
       paddingHorizontal: Space.md,
@@ -386,64 +372,17 @@ function createStyles(colors: ReturnType<typeof import('../../theme').useAppThem
     emptyValueText: {
       color: colors.textSubtle,
     },
-    input: {
-      minHeight: 52,
-      borderRadius: Radius.md,
-      borderWidth: 1,
-      borderColor: colors.border,
-      backgroundColor: colors.inputBackground,
-      paddingHorizontal: Space.md,
-      paddingVertical: Space.sm + 4,
-      color: colors.text,
-      fontSize: FontSize.base,
-    },
-    inputMultiline: {
-      minHeight: 164,
-    },
     footer: {
       flexDirection: 'row',
       gap: Space.md,
       paddingHorizontal: Space.lg,
       paddingTop: Space.md,
-      borderTopWidth: 1,
+      borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: colors.border,
       backgroundColor: colors.background,
     },
-    primaryButton: {
+    footerButton: {
       flex: 1,
-      minHeight: 48,
-      borderRadius: Radius.md,
-      backgroundColor: colors.primary,
-      alignItems: 'center',
-      justifyContent: 'center',
-      flexDirection: 'row',
-      gap: Space.sm,
-    },
-    primaryButtonText: {
-      color: colors.primaryText,
-      fontSize: FontSize.base,
-      fontWeight: FontWeight.semibold,
-    },
-    secondaryButton: {
-      flex: 1,
-      minHeight: 48,
-      borderRadius: Radius.md,
-      borderWidth: 1,
-      borderColor: colors.border,
-      backgroundColor: colors.surface,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    secondaryButtonText: {
-      color: colors.text,
-      fontSize: FontSize.base,
-      fontWeight: FontWeight.medium,
-    },
-    buttonDisabled: {
-      opacity: 0.6,
-    },
-    buttonPressed: {
-      opacity: 0.85,
     },
     centerState: {
       flex: 1,

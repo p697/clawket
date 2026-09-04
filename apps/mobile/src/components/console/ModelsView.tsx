@@ -8,7 +8,6 @@ import {
   RefreshControl,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TouchableOpacity,
   View,
@@ -18,7 +17,7 @@ import * as Haptics from 'expo-haptics';
 import { useNavigation, usePreventRemove } from '@react-navigation/native';
 import { ChevronDown, ChevronRight, Plus, RefreshCw, Trash2 } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { EmptyState, IconButton, LoadingState, ScreenHeader, SearchInput, SegmentedTabs } from '../ui';
+import { EmptyState, IconButton, LoadingState, ScreenHeader, SearchInput, SegmentedTabs, ThemedSwitch } from '../ui';
 import { AddModelModal, type AddModelDraft } from './AddModelModal';
 import { ModelConfigSection } from './ModelConfigSection';
 import { ModelCostEditorModal, type ModelCostDraft } from './ModelCostEditorModal';
@@ -36,7 +35,7 @@ import { analyticsEvents } from '../../services/analytics/events';
 import { scheduleAutomaticAppReview } from '../../services/auto-app-review';
 import { loadGatewayModelsConfigBundle } from '../../services/gateway-models';
 import { useAppTheme } from '../../theme';
-import { FontSize, FontWeight, Radius, Shadow, Space } from '../../theme/tokens';
+import { FontSize, FontWeight, Radius, Shadow, Space, createThemedShadowStyle } from '../../theme/tokens';
 import { addFallbackModel, moveFallbackModel, removeFallbackModelAt, sanitizeFallbackModels } from '../../utils/fallback-models';
 import {
   areModelCostsEqual,
@@ -160,7 +159,7 @@ export function ModelsView({
   const { isExpectedRestartActive } = useGatewayOverlay();
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
-  const styles = useMemo(() => createStyles(theme.colors), [theme]);
+  const styles = useMemo(() => createStyles(theme.colors, theme.scheme), [theme]);
   const allowlistBarAnimation = useRef(new Animated.Value(0)).current;
 
   const [models, setModels] = useState<Model[]>([]);
@@ -1063,15 +1062,10 @@ export function ModelsView({
               </Text>
             </Pressable>
           ) : (
-            <Switch
+            <ThemedSwitch
               value={inAllowlist}
               onValueChange={(value) => { handleAllowlistToggle(model, value); }}
               disabled={savingAllowlistChanges}
-              trackColor={{
-                false: theme.colors.surfaceMuted,
-                true: theme.colors.primary,
-              }}
-              thumbColor={theme.colors.surface}
               ios_backgroundColor={theme.colors.surfaceMuted}
               style={styles.modelSwitch}
             />
@@ -1411,7 +1405,10 @@ function HintCard({ styles }: HintCardProps): React.JSX.Element {
   );
 }
 
-function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors']) {
+function createStyles(
+  colors: ReturnType<typeof useAppTheme>['theme']['colors'],
+  scheme: ReturnType<typeof useAppTheme>['theme']['scheme'],
+) {
   return StyleSheet.create({
     root: {
       flex: 1,
@@ -1464,7 +1461,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     emptyProviderCard: {
       backgroundColor: colors.surface,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       borderRadius: Radius.md,
       marginBottom: Space.sm,
@@ -1485,7 +1482,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     modelCard: {
       backgroundColor: colors.surface,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       borderRadius: Radius.md,
       marginBottom: Space.sm,
@@ -1519,7 +1516,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       flexDirection: 'row',
       alignItems: 'center',
       gap: Space.xs,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.error,
       borderRadius: Radius.full,
       backgroundColor: colors.surface,
@@ -1562,7 +1559,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     chip: {
       backgroundColor: colors.surfaceMuted,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       borderRadius: Radius.sm + 2,
       paddingHorizontal: Space.sm,
@@ -1594,13 +1591,13 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     errorCard: {
       backgroundColor: colors.surface,
       borderRadius: Radius.md,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.error,
       padding: Space.md,
     },
     errorTitle: {
       color: colors.error,
-      fontSize: FontSize.md + 1,
+      fontSize: FontSize.bodySm,
       fontWeight: FontWeight.bold,
     },
     errorMessage: {
@@ -1623,7 +1620,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     hintCard: {
       marginBottom: Space.md,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       borderRadius: Radius.md,
       backgroundColor: colors.surfaceMuted,
@@ -1663,7 +1660,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       backgroundColor: colors.primary,
       borderRadius: Radius.md,
       paddingVertical: 11,
-      ...Shadow.md,
+      ...createThemedShadowStyle(colors, scheme, Shadow.md),
     },
     configPrimaryButtonPressed: {
       opacity: 0.88,
@@ -1686,13 +1683,13 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     pendingBar: {
       backgroundColor: colors.surface,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       borderRadius: Radius.lg,
       paddingHorizontal: Space.md,
       paddingTop: Space.md,
       paddingBottom: Space.md,
-      ...Shadow.md,
+      ...createThemedShadowStyle(colors, scheme, Shadow.md),
     },
     pendingBarTextWrap: {
       marginBottom: Space.md,
@@ -1717,7 +1714,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       justifyContent: 'center',
       minHeight: 46,
       borderRadius: Radius.md,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       backgroundColor: colors.surfaceMuted,
       paddingHorizontal: Space.md,

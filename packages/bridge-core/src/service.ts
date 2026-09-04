@@ -48,11 +48,13 @@ export interface ServiceStatus {
   logPath: string;
   errorLogPath: string;
   pid: number | null;
+  capabilities?: string[];
 }
 
 interface ServiceState {
   pid: number;
   startedAt: string;
+  capabilities?: string[];
 }
 
 export interface RuntimeProcessRecord {
@@ -87,7 +89,8 @@ export function getServiceProgramArgs(
 
 export function getServiceStatus(): ServiceStatus {
   ensureServiceDirs();
-  const pid = readServiceState()?.pid ?? null;
+  const state = readServiceState();
+  const pid = state?.pid ?? null;
   const method = detectServiceMethod();
   const base: ServiceStatus = {
     installed: false,
@@ -97,6 +100,7 @@ export function getServiceStatus(): ServiceStatus {
     logPath: SERVICE_LOG_PATH,
     errorLogPath: SERVICE_ERROR_LOG_PATH,
     pid,
+    capabilities: state?.capabilities ?? [],
   };
 
   if (base.pid != null && !base.running) {
@@ -282,11 +286,12 @@ export function stopService(): ServiceStatus {
   return getServiceStatus();
 }
 
-export function writeServiceState(pid = process.pid): void {
+export function writeServiceState(pid = process.pid, capabilities: string[] = []): void {
   ensureServiceDirs();
   const state: ServiceState = {
     pid,
     startedAt: new Date().toISOString(),
+    capabilities: [...new Set(capabilities.map((value) => value.trim()).filter(Boolean))],
   };
   writeFileSync(SERVICE_STATE_PATH, JSON.stringify(state, null, 2) + '\n', 'utf8');
 }
@@ -508,6 +513,9 @@ function readServiceState(): ServiceState | null {
     return {
       pid: parsed.pid,
       startedAt: parsed.startedAt ?? new Date(0).toISOString(),
+      capabilities: Array.isArray(parsed.capabilities)
+        ? parsed.capabilities.filter((value): value is string => typeof value === 'string')
+        : [],
     };
   } catch {
     return null;

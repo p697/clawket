@@ -276,7 +276,7 @@ function DetailRow({ label, value, danger = false }: { label: string; value: str
   const { theme } = useAppTheme();
   return (
     <View style={detailStyles.row}>
-      <Text style={detailStyles.label}>{label}</Text>
+      <Text style={[detailStyles.label, { color: theme.colors.textMuted }]}>{label}</Text>
       <Text style={[detailStyles.value, { color: danger ? theme.colors.error : theme.colors.text }]}>{value}</Text>
     </View>
   );
@@ -289,7 +289,6 @@ const detailStyles = StyleSheet.create({
   label: {
     fontSize: FontSize.sm,
     fontWeight: FontWeight.semibold,
-    color: '#6B7280',
   },
   value: {
     fontSize: FontSize.sm,
@@ -308,7 +307,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     heroCard: {
       backgroundColor: colors.surface,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       borderRadius: Radius.lg,
       padding: Space.lg,
@@ -341,7 +340,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       paddingHorizontal: Space.md,
       paddingVertical: Space.sm,
       borderRadius: Radius.md,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       backgroundColor: colors.background,
     },
@@ -355,7 +354,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     sectionCard: {
       backgroundColor: colors.surface,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       borderRadius: Radius.lg,
       padding: Space.lg,
@@ -372,7 +371,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       lineHeight: 20,
     },
     outputCard: {
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       borderRadius: Radius.md,
       padding: Space.md,

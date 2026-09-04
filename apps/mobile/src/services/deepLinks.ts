@@ -6,13 +6,18 @@
  *   clawket://session?key=...
  *   clawket://config
  *   clawket://connect?url=...&token=...
+ *   clawket://pair?server=...&session=...&key=...
+ *   https://registry.clawket.ai/pair/...#k=...
  */
+
+import { parsePairingLink } from './pairing-session';
 
 export type DeepLinkAction =
   | { type: 'agent'; message: string; sessionKey?: string }
   | { type: 'session'; key: string }
   | { type: 'config' }
-  | { type: 'connect'; url: string; token?: string; password?: string };
+  | { type: 'connect'; url: string; token?: string; password?: string }
+  | { type: 'pair'; url: string };
 
 export function parseDeepLink(url: string): DeepLinkAction | null {
   let parsed: URL;
@@ -22,6 +27,7 @@ export function parseDeepLink(url: string): DeepLinkAction | null {
     return null;
   }
 
+  if (parsePairingLink(url)) return { type: 'pair', url };
   if (parsed.protocol !== 'clawket:') return null;
 
   const route = parsed.hostname;
@@ -51,4 +57,8 @@ export function parseDeepLink(url: string): DeepLinkAction | null {
     default:
       return null;
   }
+}
+
+export function isClawketHandledDeepLink(url: string): boolean {
+  return parseDeepLink(url) !== null;
 }

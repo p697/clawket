@@ -84,13 +84,7 @@ Use this checklist in the same PR:
 
 ## 4. Pre-Build Commands
 
-Build the WebView assets before any release or TestFlight build:
-
-```bash
-cd office-game && npm run build && cd ..
-```
-
-Optional validation:
+Run validation before any release or TestFlight build:
 
 ```bash
 npx tsc --noEmit
@@ -169,7 +163,7 @@ This is expected before App Review. These warnings should disappear after the su
 ## 11. Recommended Release Order
 
 1. Finish App Store Connect metadata
-2. Build Office assets and run optional validation
+2. Run release validation
 3. Refresh the iOS native project if needed with `npx expo prebuild --platform ios`
 4. Archive locally in Xcode
 5. Upload to TestFlight from Xcode Organizer

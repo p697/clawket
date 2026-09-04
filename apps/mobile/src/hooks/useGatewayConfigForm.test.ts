@@ -29,6 +29,8 @@ jest.mock('../services/storage', () => ({
     setGatewayConfigsState: jest.fn(),
     clearIdentity: jest.fn(),
     clearGatewayConfig: jest.fn(),
+    getRelayServiceEnvironment: jest.fn(),
+    setRelayServiceEnvironment: jest.fn(),
   },
 }));
 
@@ -46,6 +48,7 @@ describe('useGatewayConfigForm', () => {
       activeId: null,
       configs: [],
     });
+    (StorageService.getRelayServiceEnvironment as jest.Mock).mockResolvedValue('production');
   });
 
   afterEach(() => {

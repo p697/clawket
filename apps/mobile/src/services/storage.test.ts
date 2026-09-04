@@ -257,6 +257,44 @@ describe('StorageService gateway config backups', () => {
     })).resolves.toBe('legacy-token');
   });
 
+  it('migrates raw device tokens to operator records with unknown scopes', async () => {
+    secureStoreValues['clawket.deviceToken.device-1'] = 'legacy-token';
+
+    await expect(StorageService.getDeviceTokenRecord('device-1', {
+      serverUrl: 'https://registry.example.com',
+      gatewayId: 'gw_alpha',
+    })).resolves.toEqual({
+      version: 1,
+      token: 'legacy-token',
+      role: 'operator',
+      scopes: [],
+      updatedAtMs: 0,
+    });
+  });
+
+  it('persists normalized device token role and scopes as one secure record', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(1_800_000_000_000);
+    await StorageService.setDeviceTokenRecord('device-1', {
+      token: ' operator-token ',
+      role: ' operator ',
+      scopes: ['operator.write', 'operator.read', 'operator.write'],
+    }, {
+      serverUrl: 'https://registry.example.com/',
+      gatewayId: 'gw_alpha',
+    });
+
+    await expect(StorageService.getDeviceTokenRecord('device-1', {
+      serverUrl: 'https://registry.example.com',
+      gatewayId: 'gw_alpha',
+    })).resolves.toEqual({
+      version: 1,
+      token: 'operator-token',
+      role: 'operator',
+      scopes: ['operator.read', 'operator.write'],
+      updatedAtMs: 1_800_000_000_000,
+    });
+  });
+
   it('deletes both scoped and legacy device token keys for a relay gateway scope', async () => {
     secureStoreValues[`clawket.deviceToken.device-1_relay_${sha256('https://registry.example.com::gw_alpha')}`] = 'scoped-token';
     secureStoreValues['clawket.deviceToken.device-1'] = 'legacy-token';

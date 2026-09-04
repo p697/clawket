@@ -135,10 +135,9 @@ npm run build:android:aab
 
 Behavior of this script:
 
-1. builds Office packaged assets
-2. picks an Android `versionCode`
-3. runs `expo prebuild --platform android --no-install`
-4. builds a signed release `.aab`
+1. picks an Android `versionCode`
+2. runs `expo prebuild --platform android --no-install`
+3. builds a signed release `.aab`
 
 If `EXPO_ANDROID_VERSION_CODE` is set, that exact value is used.
 

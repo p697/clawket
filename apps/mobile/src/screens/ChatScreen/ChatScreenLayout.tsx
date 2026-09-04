@@ -464,7 +464,6 @@ export function ChatScreenLayout({ controller, insets, onOpenSidebar, onAddGatew
     slashSuggestionsMaxHeight,
   } = useChatKeyboardLayout({
     insets,
-    keyboardVisible: controller.keyboardVisible,
     screenHeight,
   });
   const handleSelectSlashCommand = useCallback((command: SlashCommand) => {
@@ -794,7 +793,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       height: '100%',
       backgroundColor: colors.surfaceElevated,
       borderColor: colors.borderStrong,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderRadius: Radius.full,
       alignItems: 'center',
       justifyContent: 'center',

@@ -6,18 +6,17 @@ import { Gesture } from 'react-native-gesture-handler';
 import { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useTabBarHeight } from '../../../hooks/useTabBarHeight';
 import { Space } from '../../../theme/tokens';
+import { getChatKeyboardBottomPadding } from './chatKeyboardLayout';
 
 type Props = {
   insets: EdgeInsets;
-  keyboardVisible: boolean;
   screenHeight: number;
 };
 
-export function useChatKeyboardLayout({ insets, keyboardVisible, screenHeight }: Props) {
+export function useChatKeyboardLayout({ insets, screenHeight }: Props) {
   const tabBarHeight = useTabBarHeight();
   const composerBottomPadding = Space.md;
   const androidKeyboardGap = Space.sm;
-  const tabBarOffset = Platform.OS === 'ios' ? tabBarHeight : 0;
   const keyboardHeightSV = useSharedValue(0);
   const composerFocusedSV = useSharedValue(false);
 
@@ -66,21 +65,21 @@ export function useChatKeyboardLayout({ insets, keyboardVisible, screenHeight }:
   const animatedRootStyle = useAnimatedStyle(() => {
     if (composerFocusedSV.value) {
       return {
-        paddingBottom: Platform.OS === 'android'
-          // sceneStyle already adds tabBarHeight padding; subtract it so we
-          // don't double-count when the keyboard covers the tab bar area.
-          // Keep a small visual gap above the Android IME so the composer
-          // does not sit flush against the keyboard.
-          ? Math.max(0, keyboardHeightSV.value - insets.bottom - tabBarHeight + androidKeyboardGap)
-          : Math.max(tabBarOffset, keyboardHeightSV.value),
+        // The JS tab navigator already ends the scene above the tab bar.
+        // Subtract the physical bar height from keyboard overlap so the
+        // composer is lifted exactly once. Android keeps a small IME gap.
+        paddingBottom: getChatKeyboardBottomPadding({
+          platform: Platform.OS,
+          keyboardHeight: keyboardHeightSV.value,
+          bottomInset: insets.bottom,
+          tabBarHeight,
+          androidKeyboardGap,
+        }),
       };
     }
 
     return {
-      paddingBottom: withTiming(
-        Platform.OS === 'android' ? 0 : tabBarOffset,
-        { duration: 250 },
-      ),
+      paddingBottom: withTiming(0, { duration: 250 }),
     };
   });
 
@@ -97,8 +96,7 @@ export function useChatKeyboardLayout({ insets, keyboardVisible, screenHeight }:
         runOnJS(dismissKeyboard)();
       }), [dismissKeyboard]);
 
-  const composerBottomOffset = keyboardVisible ? 0 : tabBarOffset;
-  const modalBottomInset = insets.bottom + composerBottomOffset;
+  const modalBottomInset = insets.bottom;
   const slashSuggestionsMaxHeight = useMemo(
     () => Math.round(Math.min(302, Math.max(182, screenHeight * 0.34 + 2))),
     [screenHeight],

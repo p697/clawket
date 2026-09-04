@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import process from "node:process";
+import { fileURLToPath } from "node:url";
 
 const pack = spawnSync("npm", ["pack", "--json", "--dry-run", "--ignore-scripts"], {
   cwd: process.cwd(),
@@ -43,6 +44,16 @@ for (const marker of forbiddenMarkers) {
     process.stderr.write(`Refusing to publish: dist/index.js still contains ${marker}\n`);
     process.exit(1);
   }
+}
+
+const entrypoint = fileURLToPath(new URL("../dist/index.js", import.meta.url));
+const smoke = spawnSync(process.execPath, [entrypoint, "help"], {
+  cwd: process.cwd(),
+  encoding: "utf8"
+});
+if (smoke.status !== 0 || !smoke.stdout.includes("clawket pair")) {
+  process.stderr.write(smoke.stderr || "Refusing to publish: bundled CLI startup smoke test failed\n");
+  process.exit(smoke.status ?? 1);
 }
 
 process.stdout.write(`Package contents verified: ${files.join(", ")}\n`);

@@ -287,8 +287,6 @@ export function NodeDetailView({
                           [item.key]: enabled,
                         });
                       }}
-                      trackColor={{ false: theme.colors.borderStrong, true: theme.colors.primarySoft }}
-                      thumbColor={nodeCapabilityToggles[item.key] ? theme.colors.primary : theme.colors.surfaceMuted}
                     />
                   </View>
                 );
@@ -437,7 +435,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       padding: Space.md,
       borderRadius: Radius.md,
       backgroundColor: colors.surface,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       gap: Space.sm,
     },
@@ -491,7 +489,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     statusBadgeAvailable: {
       borderRadius: Radius.full,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.success,
       backgroundColor: colors.surfaceMuted,
       paddingHorizontal: Space.sm,
@@ -499,7 +497,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     statusBadgeUnavailable: {
       borderRadius: Radius.full,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.borderStrong,
       backgroundColor: colors.surfaceMuted,
       paddingHorizontal: Space.sm,
@@ -535,7 +533,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     commandPill: {
       borderRadius: Radius.sm,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       backgroundColor: colors.surfaceElevated,
       paddingVertical: Space.xs,
@@ -551,7 +549,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     auditRow: {
       borderRadius: Radius.sm,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       backgroundColor: colors.surfaceElevated,
       padding: Space.sm,
@@ -575,7 +573,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     auditSuccessBadge: {
       borderRadius: Radius.full,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.success,
       backgroundColor: colors.surfaceMuted,
       paddingHorizontal: Space.sm,
@@ -583,7 +581,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     auditErrorBadge: {
       borderRadius: Radius.full,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.error,
       backgroundColor: colors.surfaceMuted,
       paddingHorizontal: Space.sm,
@@ -607,7 +605,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     rawBlock: {
       borderRadius: Radius.sm,
       backgroundColor: colors.surfaceElevated,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       padding: Space.sm,
       gap: Space.sm,

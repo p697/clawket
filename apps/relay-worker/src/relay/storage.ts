@@ -152,6 +152,7 @@ export function reconcileSockets(runtime: RelayRuntime, options: ReconcileSocket
   runtime.gatewaySocket = null;
   runtime.gatewayLastActivityAt = 0;
   runtime.clients.clear();
+  runtime.pairingClients.clear();
   runtime.clientLastActivityAtById.clear();
 
   const sockets = runtime.state.getWebSockets();
@@ -159,7 +160,7 @@ export function reconcileSockets(runtime: RelayRuntime, options: ReconcileSocket
   let nonOpenSocketsClosed = 0;
   let duplicateSocketsClosed = 0;
   let gatewayCandidate: { socket: WebSocket; connectedAt: number } | null = null;
-  const clientCandidates = new Map<string, { socket: WebSocket; connectedAt: number }>();
+  const clientCandidates = new Map<string, { socket: WebSocket; connectedAt: number; pairing: boolean }>();
   for (const ws of sockets) {
     const attachment = ws.deserializeAttachment() as SocketAttachment | null;
     if (!attachment) {
@@ -197,7 +198,11 @@ export function reconcileSockets(runtime: RelayRuntime, options: ReconcileSocket
 
     const existing = clientCandidates.get(attachment.clientId);
     if (!existing) {
-      clientCandidates.set(attachment.clientId, { socket: ws, connectedAt: attachment.connectedAt });
+      clientCandidates.set(attachment.clientId, {
+        socket: ws,
+        connectedAt: attachment.connectedAt,
+        pairing: attachment.authScope === 'pairing',
+      });
       continue;
     }
     const nextWins = shouldPreferSocketCandidate({
@@ -210,7 +215,11 @@ export function reconcileSockets(runtime: RelayRuntime, options: ReconcileSocket
     if (nextWins) {
       duplicateSocketsClosed += 1;
       closeSocketBestEffort(existing.socket, 'duplicate_socket');
-      clientCandidates.set(attachment.clientId, { socket: ws, connectedAt: attachment.connectedAt });
+      clientCandidates.set(attachment.clientId, {
+        socket: ws,
+        connectedAt: attachment.connectedAt,
+        pairing: attachment.authScope === 'pairing',
+      });
     } else {
       duplicateSocketsClosed += 1;
       closeSocketBestEffort(ws, 'duplicate_socket');
@@ -222,13 +231,13 @@ export function reconcileSockets(runtime: RelayRuntime, options: ReconcileSocket
     ? Math.max(previousGatewayLastActivityAt, gatewayCandidate.connectedAt)
     : 0;
   for (const [clientId, candidate] of clientCandidates.entries()) {
-    runtime.clients.set(clientId, candidate.socket);
+    (candidate.pairing ? runtime.pairingClients : runtime.clients).set(clientId, candidate.socket);
     const previousActivityAt = previousClientLastActivityAtById.get(clientId);
     runtime.clientLastActivityAtById.set(
       clientId,
       typeof previousActivityAt === 'number'
-        ? Math.max(previousActivityAt, candidate.connectedAt)
-        : candidate.connectedAt,
+        ? Math.max(previousActivityAt, candidate.connectedAt, attachmentTimestamp(candidate.socket, 'lastPongAt'))
+        : Math.max(candidate.connectedAt, attachmentTimestamp(candidate.socket, 'lastPongAt')),
     );
   }
 
@@ -252,6 +261,12 @@ export function reconcileSockets(runtime: RelayRuntime, options: ReconcileSocket
     hasPendingChallenge: Boolean(runtime.pendingChallenge),
   });
   return summary;
+}
+
+function attachmentTimestamp(socket: WebSocket, key: 'lastPongAt'): number {
+  const attachment = socket.deserializeAttachment() as Record<string, unknown> | null;
+  const value = attachment?.[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
 
 export function rehydrateSockets(runtime: RelayRuntime): RehydrateSummary {

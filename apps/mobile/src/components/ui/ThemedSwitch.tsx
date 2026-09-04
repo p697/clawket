@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ColorValue, Platform, Switch, SwitchProps } from 'react-native';
+import { useAppTheme } from '../../theme';
 
 /**
  * Wrapper around RN Switch that works around an iOS bug where
@@ -16,19 +17,35 @@ import { ColorValue, Platform, Switch, SwitchProps } from 'react-native';
  * and force remount between phases so UIKit fully reapplies styling.
  */
 export function ThemedSwitch(props: SwitchProps): React.JSX.Element {
+  const { theme } = useAppTheme();
+  const { value, thumbColor, trackColor, onValueChange, ...rest } = props;
+  const resolvedTrackColor = trackColor ?? {
+    false: theme.colors.borderStrong,
+    true: theme.colors.primarySoft,
+  };
+  const resolvedThumbColor = thumbColor
+    ?? (value ? theme.colors.primary : theme.colors.surfaceMuted);
+
   if (Platform.OS !== 'ios') {
-    return <Switch {...props} />;
+    return (
+      <Switch
+        {...rest}
+        value={value}
+        thumbColor={resolvedThumbColor}
+        trackColor={resolvedTrackColor}
+        onValueChange={onValueChange}
+      />
+    );
   }
 
-  const { value, thumbColor, trackColor, onValueChange, ...rest } = props;
   const [phase, setPhase] = useState<'boot' | 'ready'>(value ? 'boot' : 'ready');
   const colorSignature = useMemo(() => {
     const toKey = (input: ColorValue | null | undefined): string => {
       if (input == null) return 'nil';
       return typeof input === 'string' || typeof input === 'number' ? String(input) : 'obj';
     };
-    return `${toKey(trackColor?.false)}|${toKey(trackColor?.true)}|${toKey(thumbColor)}`;
-  }, [thumbColor, trackColor?.false, trackColor?.true]);
+    return `${toKey(resolvedTrackColor.false)}|${toKey(resolvedTrackColor.true)}|${toKey(resolvedThumbColor)}`;
+  }, [resolvedThumbColor, resolvedTrackColor.false, resolvedTrackColor.true]);
 
   useEffect(() => {
     if (!value) {
@@ -74,8 +91,8 @@ export function ThemedSwitch(props: SwitchProps): React.JSX.Element {
       key={`ios-switch-ready-${value ? '1' : '0'}-${colorSignature}`}
       {...rest}
       value={value}
-      thumbColor={thumbColor}
-      trackColor={trackColor}
+      thumbColor={resolvedThumbColor}
+      trackColor={resolvedTrackColor}
       onValueChange={onValueChange}
     />
   );

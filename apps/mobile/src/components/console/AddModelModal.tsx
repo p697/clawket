@@ -1,9 +1,9 @@
 import React, { useMemo } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { ModalSheet } from '../ui';
+import { Button, Card, FormTextInput, ModalSheet } from '../ui';
 import { useAppTheme } from '../../theme';
-import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
+import { FontSize, FontWeight, Space } from '../../theme/tokens';
 
 export type AddModelDraft = {
   modelId: string;
@@ -38,19 +38,18 @@ export function AddModelModal({
   return (
     <ModalSheet visible={visible} onClose={onClose} title={t('Add Model')} maxHeight="78%">
       <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.metaCard}>
+        <Card tone="muted">
           <Text style={styles.metaLabel}>{t('Provider')}</Text>
           <Text style={styles.metaValue}>{provider}</Text>
-        </View>
+        </Card>
 
         <View style={styles.fieldWrap}>
           <Text style={styles.fieldLabel}>{t('Model ID')}</Text>
-          <TextInput
+          <FormTextInput
             value={draft.modelId}
             onChangeText={(value) => onChangeField('modelId', value)}
-            style={styles.input}
+            surface="sunken"
             placeholder={t('Enter a unique model ID')}
-            placeholderTextColor={theme.colors.textSubtle}
             autoCapitalize="none"
             autoCorrect={false}
             editable={!saving}
@@ -59,31 +58,24 @@ export function AddModelModal({
 
         <View style={styles.fieldWrap}>
           <Text style={styles.fieldLabel}>{t('Model Name')}</Text>
-          <TextInput
+          <FormTextInput
             value={draft.modelName}
             onChangeText={(value) => onChangeField('modelName', value)}
-            style={styles.input}
+            surface="sunken"
             placeholder={t('Enter a display name')}
-            placeholderTextColor={theme.colors.textSubtle}
             autoCapitalize="words"
             autoCorrect={false}
             editable={!saving}
           />
         </View>
 
-        <Pressable
+        <Button
+          label={saving ? t('common:Saving...') : t('common:Add')}
           onPress={onSave}
-          style={({ pressed }) => [
-            styles.saveButton,
-            pressed && styles.saveButtonPressed,
-            saveDisabled && styles.saveButtonDisabled,
-          ]}
           disabled={saveDisabled}
-        >
-          <Text style={styles.saveButtonText}>
-            {saving ? t('common:Saving...') : t('common:Add')}
-          </Text>
-        </Pressable>
+          loading={saving}
+          style={styles.saveButton}
+        />
       </ScrollView>
     </ModalSheet>
   );
@@ -95,14 +87,6 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       padding: Space.md,
       paddingBottom: Space.xxxl,
       gap: Space.md,
-    },
-    metaCard: {
-      backgroundColor: colors.surfaceMuted,
-      borderRadius: Radius.md,
-      borderWidth: 1,
-      borderColor: colors.border,
-      padding: Space.md,
-      gap: Space.xs,
     },
     metaLabel: {
       color: colors.textMuted,
@@ -123,33 +107,8 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       fontSize: FontSize.md,
       fontWeight: FontWeight.medium,
     },
-    input: {
-      backgroundColor: colors.inputBackground,
-      borderRadius: Radius.md,
-      borderWidth: 1,
-      borderColor: colors.border,
-      color: colors.text,
-      fontSize: FontSize.base,
-      paddingHorizontal: Space.md,
-      paddingVertical: Space.sm + 2,
-    },
     saveButton: {
-      alignItems: 'center',
-      backgroundColor: colors.primary,
-      borderRadius: Radius.md,
-      paddingVertical: 11,
       marginTop: Space.sm,
-    },
-    saveButtonPressed: {
-      opacity: 0.88,
-    },
-    saveButtonDisabled: {
-      opacity: 0.55,
-    },
-    saveButtonText: {
-      color: colors.primaryText,
-      fontSize: FontSize.base,
-      fontWeight: FontWeight.semibold,
     },
   });
 }

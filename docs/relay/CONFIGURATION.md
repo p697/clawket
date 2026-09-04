@@ -12,6 +12,11 @@ Path: `apps/relay-registry`
    - Cloudflare KV namespace for pairing records.
    - Must be the same namespace used by the relay worker.
 
+2. `RELAY_SYNC_SERVICE` (recommended for paired Cloudflare deployments)
+   - Service binding to the matching relay worker.
+   - Lets a newly claimed client token become usable immediately without waiting for KV propagation.
+   - The public HTTP sync path remains a compatibility fallback when this binding is absent.
+
 ### Vars
 
 1. `RELAY_REGION_MAP`
@@ -38,6 +43,30 @@ Path: `apps/relay-registry`
    - Optional shared secret used for registry-to-relay immediate token sync after a successful claim.
    - If unset, relay auth falls back to KV and registry verification paths only.
    - If set on one service, set the same value on both registry and relay.
+
+5. `PAIRING_TICKET_SECRET`
+   - Required to enable capability-negotiated six-digit pairing.
+   - Store it as a Wrangler secret, never under `[vars]` or in a checked-in file.
+   - Use at least 32 random characters and set the exact same value on Registry and Relay.
+   - If it is missing, too short, or the deployed Relay does not advertise the matching capability, Registry automatically keeps the legacy pairing-code path.
+
+6. `PAIR_PUBLIC_BASE_URL`
+   - Public HTTPS origin used in generated pairing links.
+   - Set this when the Worker is served through a custom domain.
+
+7. `PAIR_SESSION_RESOLVE_MAX_ATTEMPTS`
+   - Maximum short-code resolution attempts per source address in a 10-minute window.
+   - Default in checked-in templates: `5`.
+
+8. `APPLE_APP_IDS`
+   - Comma-separated Apple application identifiers (`TEAM_ID.bundleIdentifier`) served from `/.well-known/apple-app-site-association`.
+
+9. `ANDROID_APP_LINK_PACKAGE`
+   - Android application ID served from `/.well-known/assetlinks.json`.
+
+10. `ANDROID_APP_LINK_SHA256_CERT_FINGERPRINTS`
+   - Comma-separated SHA-256 signing certificate fingerprints for Android App Links.
+   - Include every signing certificate used by installed builds that should open pairing links directly. If empty, the Registry serves an empty association list and the browser/custom-scheme fallback remains available.
 
 ## Hermes Registry Worker
 
@@ -71,27 +100,32 @@ Path: `apps/relay-worker`
    - Optional shared secret for the internal `client-tokens` sync endpoint.
    - Must match the registry worker value when enabled.
 
-3. `MAX_MESSAGES_PER_10S`
+3. `PAIRING_TICKET_SECRET`
+   - Shared signing key for short-lived, pairing-only Relay tickets.
+   - Store it as a Wrangler secret, use at least 32 random characters, and match the Registry value exactly.
+   - Pairing-ticket sockets are isolated from ordinary App clients and expire independently.
+
+4. `MAX_MESSAGES_PER_10S`
    - Baseline inbound message limit per socket over a 10-second window.
    - Default in checked-in templates: `120`.
 
-4. `MAX_CLIENT_MESSAGES_PER_10S`
+5. `MAX_CLIENT_MESSAGES_PER_10S`
    - Client-specific inbound message limit over a 10-second window.
    - Defaults higher than the baseline worker limit in the checked-in template.
 
-5. `HEARTBEAT_INTERVAL_MS`
+6. `HEARTBEAT_INTERVAL_MS`
    - Relay heartbeat interval for active rooms.
    - Default in checked-in templates: `30000`.
 
-6. `GATEWAY_OWNER_LEASE_MS`
+7. `GATEWAY_OWNER_LEASE_MS`
    - Gateway ownership lease duration used to avoid rapid gateway replacement churn.
    - Default in checked-in templates: `20000`.
 
-7. `AWAITING_CHALLENGE_TTL_MS`
+8. `AWAITING_CHALLENGE_TTL_MS`
    - Maximum time a client may remain in the awaiting-challenge set before prune logic may treat it as stale.
    - Default in checked-in templates: `25000`.
 
-8. `CLIENT_IDLE_TIMEOUT_MS`
+9. `CLIENT_IDLE_TIMEOUT_MS`
    - Absolute idle timeout for silent or ghost client sockets.
    - Default in checked-in templates: `600000`.
 
@@ -134,12 +168,21 @@ For local deploys or remote dev against your own Cloudflare account:
 3. Fill in your own `account_id`, KV IDs, and service URLs.
 4. Keep these `wrangler.local.toml` files untracked.
 
+Enable six-digit pairing by setting the same secret on both deploy units:
+
+```bash
+npx wrangler secret put PAIRING_TICKET_SECRET --config apps/relay-worker/wrangler.local.toml
+npx wrangler secret put PAIRING_TICKET_SECRET --config apps/relay-registry/wrangler.local.toml
+```
+
 For Hermes relay, also create:
 
 1. `apps/hermes-relay-registry/wrangler.local.toml`
 2. `apps/hermes-relay-worker/wrangler.local.toml`
 
 Repo scripts prefer `wrangler.local.toml` automatically when present.
+
+For an isolated Preview environment, copy the tracked `wrangler.preview.example.toml` files to ignored `wrangler.preview.local.toml` files, point both at Preview-only resources, and use the `relay:deploy:preview-*` commands. Production and Preview must not share pairing KV or Durable Object namespaces.
 
 ## Minimum Self-Hosted Setup
 

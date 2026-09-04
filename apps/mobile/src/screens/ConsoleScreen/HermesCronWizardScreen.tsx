@@ -2,15 +2,14 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import {
   Alert,
   FlatList,
-  KeyboardAvoidingView,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { ChevronLeft, ChevronRight, Clock, MessageSquareText, Tag, X } from 'lucide-react-native';
 import { MenuAction, MenuView } from '@react-native-menu/menu';
@@ -21,11 +20,11 @@ import {
   NativeStackNavigationProp,
 } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
-import { HeaderActionButton, HeaderTextAction, LoadingState } from '../../components/ui';
+import { FormTextInput, HeaderActionButton, HeaderTextAction, LoadingState } from '../../components/ui';
 import { useAppContext } from '../../contexts/AppContext';
 import { analyticsEvents } from '../../services/analytics/events';
 import { useAppTheme } from '../../theme';
-import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
+import { ControlSize, FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
 import type { AppTheme } from '../../theme';
 import type { HermesCronJob, HermesCronJobUpsert } from '../../types/hermes-cron';
 import type { ConsoleStackParamList } from './ConsoleTab';
@@ -432,7 +431,7 @@ export function HermesCronWizardScreen(): React.JSX.Element {
       headerStyle: { backgroundColor: colors.surface },
       headerTitleStyle: {
         color: colors.text,
-        fontSize: 16,
+        fontSize: FontSize.lg,
         fontWeight: '600',
       },
       headerLeft: () => (
@@ -656,12 +655,14 @@ export function HermesCronWizardScreen(): React.JSX.Element {
             <View style={styles.settingRow}>
               <Text style={styles.settingLabel}>{t('Interval')}</Text>
               <View style={styles.intervalRow}>
-                <TextInput
-                  style={styles.intervalInput}
+                <FormTextInput
                   value={form.intervalAmount}
                   onChangeText={(text) => patch({ intervalAmount: text })}
                   keyboardType="numeric"
-                  placeholderTextColor={colors.textSubtle}
+                  surface="sunken"
+                  minHeight={ControlSize.compact}
+                  containerStyle={styles.intervalInput}
+                  inputStyle={styles.intervalInputText}
                 />
                 <MenuView
                   actions={intervalUnitActions}
@@ -733,26 +734,22 @@ export function HermesCronWizardScreen(): React.JSX.Element {
           <MessageSquareText size={15} color={colors.textMuted} strokeWidth={2} />
           <Text style={styles.sectionLabel}>{t('What should it do')}</Text>
         </View>
-        <TextInput
-          style={styles.promptInput}
+        <FormTextInput
           multiline
           value={form.prompt}
           onChangeText={(text) => patch({ prompt: text })}
           placeholder={t('Describe what the agent should do...')}
-          placeholderTextColor={colors.textSubtle}
-          textAlignVertical="top"
+          minHeight={120}
         />
 
         <View style={styles.sectionHeader}>
           <Tag size={15} color={colors.textMuted} strokeWidth={2} />
           <Text style={styles.sectionLabel}>{t('Task Name')}</Text>
         </View>
-        <TextInput
-          style={styles.nameInput}
+        <FormTextInput
           value={form.taskName}
           onChangeText={(text) => patch({ taskName: text })}
           placeholder={t('Enter task name...')}
-          placeholderTextColor={colors.textSubtle}
         />
       </ScrollView>
     </KeyboardAvoidingView>
@@ -812,7 +809,7 @@ function createStyles(colors: AppTheme['colors']) {
       justifyContent: 'center',
     },
     templateEmoji: {
-      fontSize: 26,
+      fontSize: FontSize.displayMd,
     },
     templateTextWrap: {
       flex: 1,
@@ -830,7 +827,7 @@ function createStyles(colors: AppTheme['colors']) {
     templateAdvancedButton: {
       alignSelf: 'flex-start',
       borderRadius: Radius.full,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.primary,
       paddingHorizontal: Space.md,
       paddingVertical: Space.xs + 2,
@@ -919,34 +916,11 @@ function createStyles(colors: AppTheme['colors']) {
     },
     intervalInput: {
       width: 72,
-      backgroundColor: colors.surfaceMuted,
-      borderRadius: Radius.sm,
-      paddingHorizontal: Space.sm,
-      paddingVertical: Space.xs,
-      fontSize: FontSize.base,
+    },
+    intervalInputText: {
       fontWeight: FontWeight.semibold,
       color: colors.primary,
       textAlign: 'center',
-    },
-    promptInput: {
-      backgroundColor: colors.surface,
-      borderRadius: Radius.md,
-      padding: Space.md,
-      fontSize: FontSize.base,
-      color: colors.text,
-      minHeight: 120,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    nameInput: {
-      backgroundColor: colors.surface,
-      borderRadius: Radius.md,
-      paddingHorizontal: Space.lg,
-      paddingVertical: Space.md,
-      fontSize: FontSize.base,
-      color: colors.text,
-      borderWidth: 1,
-      borderColor: colors.border,
     },
   });
 }

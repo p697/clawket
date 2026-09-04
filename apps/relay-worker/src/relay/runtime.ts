@@ -1,6 +1,6 @@
 import {
   AWAITING_CHALLENGE_TTL_DEFAULT_MS,
-  CLIENT_IDLE_TIMEOUT_DEFAULT_MS,
+  CLIENT_PONG_TIMEOUT_DEFAULT_MS,
   type Env,
   type GatewayOwnerRecord,
   type PendingChallenge,
@@ -14,6 +14,7 @@ export class RelayRuntime {
   gatewaySocket: WebSocket | null = null;
   gatewayLastActivityAt = 0;
   readonly clients = new Map<string, WebSocket>();
+  readonly pairingClients = new Map<string, WebSocket>();
   readonly rate = new WeakMap<WebSocket, RateState>();
   gatewayOwner: GatewayOwnerRecord | null = null;
   gatewayOwnerTouchedAt = 0;
@@ -38,8 +39,8 @@ export class RelayRuntime {
     return parsePositiveInt(this.env.AWAITING_CHALLENGE_TTL_MS, AWAITING_CHALLENGE_TTL_DEFAULT_MS);
   }
 
-  clientIdleTimeoutMs(): number {
-    return parsePositiveInt(this.env.CLIENT_IDLE_TIMEOUT_MS, CLIENT_IDLE_TIMEOUT_DEFAULT_MS);
+  clientPongTimeoutMs(): number {
+    return parsePositiveInt(this.env.CLIENT_PONG_TIMEOUT_MS, CLIENT_PONG_TIMEOUT_DEFAULT_MS);
   }
 
   objectId(): string | null {

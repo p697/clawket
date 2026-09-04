@@ -14,7 +14,6 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
 import { EmptyState, SearchInput } from '../../components/ui';
 import { useNativeStackModalHeader } from '../../hooks/useNativeStackModalHeader';
-import { useTabBarHeight } from '../../hooks/useTabBarHeight';
 import { fetchClawHubBrowsePage } from '../../features/discover';
 import { searchClawHubSkills } from '../../features/discover/clawhub';
 import type { ClawHubBrowseSort, DiscoverSkillItem } from '../../features/discover/types';
@@ -32,7 +31,6 @@ const PAGE_SIZE = 24;
 export function ClawHubBrowseScreen(): React.JSX.Element {
   const navigation = useNavigation<Nav>();
   const route = useRoute<RouteParams>();
-  const tabBarHeight = useTabBarHeight();
   const { theme } = useAppTheme();
   const { t } = useTranslation('common');
 
@@ -214,8 +212,7 @@ export function ClawHubBrowseScreen(): React.JSX.Element {
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
         ListHeaderComponent={listHeader}
-        contentContainerStyle={[styles.listContent, { paddingBottom: tabBarHeight + Space.xl }]}
-        scrollIndicatorInsets={{ bottom: tabBarHeight }}
+        contentContainerStyle={[styles.listContent, { paddingBottom: Space.xl }]}
         onEndReached={loadMore}
         onEndReachedThreshold={0.6}
         refreshControl={
@@ -265,7 +262,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       paddingHorizontal: Space.md,
       paddingVertical: 6,
       borderRadius: Radius.full,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
     },
     sortChipLabel: {
       fontSize: FontSize.sm,

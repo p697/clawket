@@ -104,7 +104,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     clearButton: {
       minHeight: 48,
       borderRadius: Radius.lg,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       alignItems: 'center',
       justifyContent: 'center',
       paddingHorizontal: Space.md,
@@ -119,7 +119,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       gap: Space.sm,
     },
     chip: {
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderRadius: Radius.full,
       paddingHorizontal: Space.md,
       paddingVertical: Space.sm,

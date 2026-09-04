@@ -6,8 +6,8 @@ import { useFocusEffect, useIsFocused, useNavigation } from '@react-navigation/n
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
 import { useAppTheme } from '../../theme';
-import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
-import { IconButton } from '../../components/ui';
+import { FontSize, FontWeight, LineHeight, Radius, Space } from '../../theme/tokens';
+import { Card, IconButton } from '../../components/ui';
 import { useAppContext } from '../../contexts/AppContext';
 import { useConnectionState } from '../../hooks/useConnectionState';
 import { logAppTelemetry } from '../../services/app-telemetry';
@@ -525,10 +525,10 @@ function HeroCard({ label, value, onPress, colors, badge }: {
   badge?: string | null;
 }) {
   return (
-    <TouchableOpacity
-      style={[styles.heroCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+    <Card
+      style={styles.heroCard}
       onPress={onPress}
-      activeOpacity={0.7}
+      padding="lg"
     >
       <View style={styles.heroHeader}>
         <Text style={[styles.heroValue, { color: colors.text }]}>{value}</Text>
@@ -538,7 +538,7 @@ function HeroCard({ label, value, onPress, colors, badge }: {
         <Text style={[styles.heroLabel, { color: colors.textMuted }]}>{label}</Text>
         {badge ? <Text style={[styles.heroBadge, { color: colors.warning }]}>{badge}</Text> : null}
       </View>
-    </TouchableOpacity>
+    </Card>
   );
 }
 
@@ -551,10 +551,9 @@ function GridCard({ emoji, value, label, onPress, colors, badge }: {
   badge?: { text: string; color: string } | null;
 }) {
   return (
-    <TouchableOpacity
-      style={[styles.gridCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+    <Card
+      style={styles.gridCard}
       onPress={onPress}
-      activeOpacity={0.7}
     >
       <View style={styles.gridTop}>
         <Text style={styles.gridEmoji}>{emoji}</Text>
@@ -568,7 +567,7 @@ function GridCard({ emoji, value, label, onPress, colors, badge }: {
         ? <Text style={[styles.gridValue, { color: colors.text }]}>{value}</Text>
         : <View style={styles.gridValueRow}>{value}</View>}
       <Text style={[styles.gridLabel, { color: colors.textMuted }]}>{label}</Text>
-    </TouchableOpacity>
+    </Card>
   );
 }
 
@@ -1052,7 +1051,7 @@ const styles = StyleSheet.create({
     marginRight: Space.lg,
   },
   headerEmoji: {
-    fontSize: 36,
+    fontSize: FontSize.displayLg,
     marginRight: Space.md - 2,
   },
   headerInfo: {
@@ -1066,10 +1065,10 @@ const styles = StyleSheet.create({
   statusDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
+    borderRadius: Radius.full,
   },
   headerName: {
-    fontSize: 22,
+    fontSize: FontSize.xxl,
     fontWeight: FontWeight.bold,
   },
   headerMeta: {
@@ -1097,9 +1096,9 @@ const styles = StyleSheet.create({
     marginLeft: Space.xs,
   },
   headerDateDay: {
-    fontSize: 20,
+    fontSize: FontSize.displaySm,
     fontWeight: FontWeight.bold,
-    lineHeight: 22,
+    lineHeight: LineHeight.lg,
   },
   headerDateMonth: {
     fontSize: FontSize.xs,
@@ -1118,7 +1117,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   statEmoji: {
-    fontSize: 20,
+    fontSize: FontSize.displaySm,
     marginBottom: 4,
   },
   statValue: {
@@ -1141,8 +1140,6 @@ const styles = StyleSheet.create({
   heroCard: {
     flex: 1,
     borderRadius: Radius.lg,
-    borderWidth: 1,
-    padding: Space.lg,
     paddingVertical: Space.lg + 4,
   },
   heroHeader: {
@@ -1151,12 +1148,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   heroValue: {
-    fontSize: 28,
+    fontSize: FontSize.xxxl,
     fontWeight: FontWeight.bold,
     marginBottom: 4,
   },
   heroIcon: {
-    fontSize: 26,
+    fontSize: FontSize.displayMd,
   },
   heroLabelRow: {
     flexDirection: 'row',
@@ -1179,9 +1176,6 @@ const styles = StyleSheet.create({
   },
   gridCard: {
     flex: 1,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    padding: Space.md,
     minHeight: 90,
   },
   gridTop: {
@@ -1191,14 +1185,14 @@ const styles = StyleSheet.create({
     marginBottom: Space.xs,
   },
   gridEmoji: {
-    fontSize: 20,
+    fontSize: FontSize.displaySm,
   },
   gridBadge: {
     fontSize: FontSize.xs,
     fontWeight: FontWeight.semibold,
   },
   gridValue: {
-    fontSize: 22,
+    fontSize: FontSize.xxl,
     fontWeight: FontWeight.bold,
     marginBottom: 2,
   },
@@ -1208,13 +1202,13 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   nodeDeviceIcon: {
-    fontSize: 16,
+    fontSize: FontSize.lg,
   },
   nodeDeviceSpacer: {
     width: 4,
   },
   gridLabel: {
-    fontSize: FontSize.xs + 1,
+    fontSize: FontSize.sm,
     fontWeight: FontWeight.medium,
   },
   // List items
@@ -1226,7 +1220,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   listEmoji: {
-    fontSize: 20,
+    fontSize: FontSize.displaySm,
     width: 32,
     textAlign: 'center',
   },

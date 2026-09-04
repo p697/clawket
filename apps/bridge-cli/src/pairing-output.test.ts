@@ -71,4 +71,15 @@ describe('pairing json output', () => {
       customUrl: false,
     });
   });
+
+  it('keeps managed setup credential details out of user-facing JSON', () => {
+    const output = buildLocalPairingJson({
+      gatewayUrl: 'ws://192.168.1.12:18789/',
+      expiresAt: 123,
+      qrImagePath: '/Users/tester/.openclaw/media/clawket-local-pair.png',
+      message: 'Generated a local gateway pairing QR.',
+    });
+
+    expect(output).not.toHaveProperty('authMode');
+  });
 });

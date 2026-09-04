@@ -55,6 +55,24 @@ describe('parseDeepLink', () => {
     });
   });
 
+  describe('secure pairing route', () => {
+    const key = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+
+    it('parses the custom scheme used by the browser fallback button', () => {
+      const url = `clawket://pair?server=${encodeURIComponent('https://registry.clawket.ai')}&session=ps_abc123&key=${key}`;
+      expect(parseDeepLink(url)).toEqual({ type: 'pair', url });
+    });
+
+    it('parses official Universal Links', () => {
+      const url = `https://registry.clawket.ai/pair/ps_abc123#k=${key}`;
+      expect(parseDeepLink(url)).toEqual({ type: 'pair', url });
+    });
+
+    it('does not claim lookalike pairing links', () => {
+      expect(parseDeepLink(`https://example.com/pair/ps_abc123#k=${key}`)).toBeNull();
+    });
+  });
+
   describe('edge cases', () => {
     it('returns null for invalid URL', () => {
       expect(parseDeepLink('not a url')).toBeNull();

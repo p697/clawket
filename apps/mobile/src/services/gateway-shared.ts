@@ -120,6 +120,40 @@ export class GatewayRequestError extends Error {
   }
 }
 
+export type GatewayConnectErrorDetails = {
+  code?: string;
+  reason?: string;
+  requestId?: string;
+  recommendedNextStep?: string;
+  canRetryWithDeviceToken?: boolean;
+  pauseReconnect?: boolean;
+};
+
+export function readGatewayConnectErrorDetails(error: unknown): GatewayConnectErrorDetails {
+  const rawDetails = error instanceof GatewayRequestError ? error.details : undefined;
+  const details = rawDetails && typeof rawDetails === 'object' && !Array.isArray(rawDetails)
+    ? rawDetails as Record<string, unknown>
+    : {};
+  const readString = (value: unknown): string | undefined => (
+    typeof value === 'string' && value.trim() ? value.trim() : undefined
+  );
+  return {
+    code: readString(details.code) ?? (error instanceof GatewayRequestError ? readString(error.code) : undefined),
+    reason: readString(details.reason),
+    requestId: readString(details.requestId),
+    recommendedNextStep: readString(details.recommendedNextStep),
+    canRetryWithDeviceToken: typeof details.canRetryWithDeviceToken === 'boolean'
+      ? details.canRetryWithDeviceToken
+      : undefined,
+    pauseReconnect: typeof details.pauseReconnect === 'boolean' ? details.pauseReconnect : undefined,
+  };
+}
+
+export function isGatewayConnectErrorCode(error: unknown, ...codes: string[]): boolean {
+  const code = readGatewayConnectErrorDetails(error).code?.toUpperCase();
+  return Boolean(code && codes.some((candidate) => candidate.toUpperCase() === code));
+}
+
 export type TimedValue<T> = {
   value: T;
   expiresAt: number;

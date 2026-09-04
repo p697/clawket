@@ -9,7 +9,7 @@ export function getQuickConnectAgentPrompt(
   t: TFunction<'chat', undefined>,
   pairCommand = MANUAL_PAIR_CMD,
 ): string {
-  return t('Please run {{installCommand}} to install the open-source Clawket CLI, then run {{pairCommand}}, and send me the generated QR image file or files.', {
+  return t('Please run {{installCommand}} to install the open-source Clawket CLI, then run {{pairCommand}}, and tell me the pairing code shown in the terminal.', {
     installCommand: MANUAL_INSTALL_CMD,
     pairCommand,
   });
@@ -25,7 +25,7 @@ export function getQuickConnectGuideSteps(
     },
     {
       title: t('Step 2'),
-      description: t('Scan one of the QR codes sent by your agent.'),
+      description: t('Enter the pairing code in Clawket.'),
     },
   ];
 }

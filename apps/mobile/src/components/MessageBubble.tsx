@@ -14,7 +14,7 @@ import {
   resolveChatMetaAppearance,
 } from '../features/chat-appearance/resolver';
 import { useAppTheme } from '../theme';
-import { FontSize, FontWeight, Radius, Shadow, Space } from '../theme/tokens';
+import { BorderWidth, FontSize, FontWeight, Radius, Shadow, Space, createThemedShadowStyle } from '../theme/tokens';
 import { sanitizeDisplayText, sanitizeUserMessageText } from '../utils/chat-message';
 import { triggerSelectionHaptic } from '../services/haptics';
 import { AGENT_AVATAR_SIZE, AGENT_AVATAR_SLOT_WIDTH } from './chat/messageLayout';
@@ -212,7 +212,7 @@ const avatarStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  placeholderText: { fontSize: FontSize.md + 1, fontWeight: FontWeight.semibold },
+  placeholderText: { fontSize: FontSize.bodySm, fontWeight: FontWeight.semibold },
 });
 
 function MessageBubbleComponent({
@@ -245,7 +245,7 @@ function MessageBubbleComponent({
   const { theme } = useAppTheme();
   const { chatAppearance } = useAppContext();
   const effectiveFontSize = chatFontSize ?? FontSize.base;
-  const styles = useMemo(() => createStyles(theme.colors, effectiveFontSize), [theme, effectiveFontSize]);
+  const styles = useMemo(() => createStyles(theme.colors, theme.scheme, effectiveFontSize), [theme, effectiveFontSize]);
   const markdownStyle = useMemo(() => createChatMarkdownStyle(theme.colors, effectiveFontSize), [theme, effectiveFontSize]);
   const resolvedBubbleAppearance = useMemo(
     () => resolveChatBubbleAppearance(theme, chatAppearance),
@@ -354,7 +354,7 @@ function MessageBubbleComponent({
           ) : null}
           {userSkill && (hasImages || hasText) && <View style={{ height: 6 }} />}
           {hasImages && (
-            <View style={{ overflow: 'hidden', borderRadius: 10, marginHorizontal: -2 }}>
+            <View style={{ overflow: 'hidden', borderRadius: Radius.md, marginHorizontal: -2 }}>
               <ImageGrid uris={imageUris} metas={imageMetas} maxWidth={imageGridWidth - 4} onPress={(index) => onImagePress?.(imageUris, index)} />
             </View>
           )}
@@ -542,7 +542,11 @@ function arePropsEqual(prev: Props, next: Props): boolean {
 
 export const MessageBubble = React.memo(MessageBubbleComponent, arePropsEqual);
 
-function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'], fontSize: number = FontSize.base) {
+function createStyles(
+  colors: ReturnType<typeof useAppTheme>['theme']['colors'],
+  scheme: ReturnType<typeof useAppTheme>['theme']['scheme'],
+  fontSize: number = FontSize.base,
+) {
   return StyleSheet.create({
     row: {
       marginVertical: 6,
@@ -584,10 +588,10 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'],
       paddingHorizontal: Space.sm,
       paddingVertical: 4,
       borderRadius: Radius.full,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
     },
     assistantNameRowShadow: {
-      ...Shadow.sm,
+      ...createThemedShadowStyle(colors, scheme, Shadow.sm),
     },
     assistantName: {
       fontSize: FontSize.sm,
@@ -631,7 +635,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'],
       borderWidth: 0,
     },
     bubbleShadow: {
-      ...Shadow.sm,
+      ...createThemedShadowStyle(colors, scheme, Shadow.sm),
     },
     bubbleUser: {
       backgroundColor: colors.bubbleUser,
@@ -650,7 +654,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'],
       maxWidth: '90%',
     },
     bubbleSelected: {
-      borderWidth: 2,
+      borderWidth: BorderWidth.strong,
       borderColor: colors.primary,
     },
     text: {
@@ -682,26 +686,26 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'],
     },
     loadingText: {
       color: colors.textMuted,
-      fontSize: FontSize.md + 1,
+      fontSize: FontSize.bodySm,
       fontStyle: 'italic',
     },
     timestampSpacer: {
       color: 'transparent',
-      fontSize: FontSize.xs - 1,
+      fontSize: FontSize.micro,
     },
     timestampOverlay: {
       position: 'absolute',
       right: BUBBLE_PADDING_HORIZONTAL,
       bottom: BUBBLE_PADDING_VERTICAL,
-      fontSize: FontSize.xs - 1,
+      fontSize: FontSize.micro,
       lineHeight: 12,
     },
     timestampInline: {
-      fontSize: FontSize.xs - 1,
+      fontSize: FontSize.micro,
       lineHeight: 12,
     },
     timestampBelow: {
-      fontSize: FontSize.xs - 1,
+      fontSize: FontSize.micro,
       alignSelf: 'flex-end',
       marginTop: Space.xs,
     },

@@ -20,6 +20,7 @@ export type GatewayScanPayload = {
   url: string;
   token?: string;
   password?: string;
+  bootstrap?: GatewayConfig['bootstrap'];
   backendKind?: GatewayBackendKind;
   transportKind?: GatewayTransportKind;
   mode?: GatewayMode;
@@ -55,6 +56,7 @@ export function toRuntimeConfig(item: SavedGatewayConfig, debugMode: boolean): G
     url: item.url,
     token: item.token,
     password: item.password,
+    bootstrap: item.bootstrap,
     backendKind,
     transportKind,
     mode: toLegacyGatewayMode({ backendKind, transportKind }),
@@ -119,6 +121,7 @@ export async function claimRelayPairing(
       transportKind: 'relay',
       token: payload.token,
       password: payload.password,
+      bootstrap: payload.bootstrap,
       mode: 'relay',
       relay: {
         serverUrl: payload.relay!.serverUrl,
@@ -194,6 +197,7 @@ export function upsertGatewayConfigFromScan(input: {
       relay: undefined,
       token: undefined,
       password: undefined,
+      bootstrap: undefined,
       updatedAt: now,
     };
     const nextConfigs = input.existingState.configs.map((item, index) => (index === hermesMatchIndex ? updated : item));
@@ -211,6 +215,7 @@ export function upsertGatewayConfigFromScan(input: {
       url: trimmedUrl,
       token: mergeOptionalCredential(input.payload.token, existing.token),
       password: mergeOptionalCredential(input.payload.password, existing.password),
+      bootstrap: input.payload.bootstrap ?? existing.bootstrap,
       hermes: undefined,
       relay: mergedRelay,
       updatedAt: now,
@@ -237,6 +242,7 @@ export function upsertGatewayConfigFromScan(input: {
     url: trimmedUrl,
     token: input.payload.token || undefined,
     password: input.payload.password || undefined,
+    bootstrap: input.payload.bootstrap,
     hermes,
     relay,
     createdAt: now,

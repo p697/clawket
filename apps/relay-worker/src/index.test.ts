@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import relayWorker, { __testing, RelayRoom } from './index';
 import { resolveClientLabelFromToken } from './relay/auth';
+import { authorizeRelayToken } from './relay/auth';
+import { issuePairingRelayTicket } from '@clawket/shared';
 
 class MemoryKV {
   private map = new Map<string, string>();
@@ -73,7 +75,7 @@ class FakeStorage {
 
 class FakeWebSocket {
   readonly readyState: number;
-  private readonly attachment: unknown;
+  private attachment: unknown;
   readonly sent: string[] = [];
   readonly closeCalls: Array<{ code?: number; reason?: string }> = [];
   shouldThrowOnSend = false;
@@ -85,6 +87,10 @@ class FakeWebSocket {
 
   deserializeAttachment(): unknown {
     return this.attachment;
+  }
+
+  serializeAttachment(attachment: unknown): void {
+    this.attachment = attachment;
   }
 
   send(payload: string): void {
@@ -129,6 +135,43 @@ function createRelayRoomWithSockets(
 }
 
 describe('relay worker helpers', () => {
+  it('advertises secure pairing only when the ticket secret is strong enough', async () => {
+    const fetchHandler = relayWorker.fetch as (request: Request, env: unknown) => Promise<Response>;
+    const withoutSecret = await fetchHandler(new Request('https://relay.example/v1/health'), {});
+    await expect(withoutSecret.json()).resolves.toMatchObject({ capabilities: [] });
+    const withSecret = await fetchHandler(new Request('https://relay.example/v1/health'), {
+      PAIRING_TICKET_SECRET: 'test-pairing-ticket-secret-that-is-long-enough',
+    });
+    await expect(withSecret.json()).resolves.toMatchObject({
+      capabilities: ['pairing.secure-short-code.v2'],
+    });
+  });
+
+  it('accepts a short-lived pairing ticket only with pairing scope', async () => {
+    const secret = 'test-pairing-ticket-secret-that-is-long-enough';
+    const token = await issuePairingRelayTicket({
+      version: 2,
+      scope: 'pairing',
+      gatewayId: 'gw_pair_ticket',
+      sessionId: `ps_${'a'.repeat(64)}`,
+      tokenId: '00000000-0000-4000-8000-000000000000',
+      expiresAt: Date.now() + 60_000,
+    }, secret);
+    const authorization = await authorizeRelayToken({
+      routesKv: new MemoryKV() as unknown as KVNamespace,
+      gatewayId: 'gw_pair_ticket',
+      role: 'client',
+      token,
+      pairingTicketSecret: secret,
+    });
+    expect(authorization).toMatchObject({
+      authorized: true,
+      path: 'ticket',
+      authScope: 'pairing',
+      pairingSessionId: `ps_${'a'.repeat(64)}`,
+    });
+  });
+
   it('parsePositiveInt returns fallback for invalid values', () => {
     expect(__testing.parsePositiveInt(undefined, 10)).toBe(10);
     expect(__testing.parsePositiveInt('0', 10)).toBe(10);
@@ -771,6 +814,143 @@ describe('relay worker helpers', () => {
     expect(relay.runtime.clients.has('client-healthy')).toBe(true);
     expect(healthyClient.sent).toHaveLength(1);
     expect(JSON.parse(healthyClient.sent[0])).toMatchObject({ type: 'tick' });
+  });
+
+  it('keeps pairing sockets out of the normal client set and closes them when their ticket expires', async () => {
+    const { room, storage } = createRelayRoomWithSockets();
+    const pairingClient = new FakeWebSocket({
+      attachment: {
+        role: 'client',
+        clientId: 'pairing-client',
+        connectedAt: 1,
+        authScope: 'pairing',
+        ticketExpiresAt: 10_000,
+      },
+    });
+    const relay = room as unknown as {
+      runtime: {
+        clients: Map<string, FakeWebSocket>;
+        pairingClients: Map<string, FakeWebSocket>;
+      };
+      alarm: () => Promise<void>;
+    };
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    relay.runtime.pairingClients.set('pairing-client', pairingClient);
+
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(10_000);
+    try {
+      await relay.alarm();
+    } finally {
+      nowSpy.mockRestore();
+    }
+
+    expect(relay.runtime.clients.size).toBe(0);
+    expect(relay.runtime.pairingClients.size).toBe(0);
+    expect(pairingClient.sent).toEqual([]);
+    expect(pairingClient.closeCalls).toEqual([{ code: 4009, reason: 'pairing_ticket_expired' }]);
+    expect(storage.alarmAt).toBeNull();
+  });
+
+  it('keeps legacy idle clients connected while requiring pong from capable clients', async () => {
+    const { room } = createRelayRoomWithSockets();
+    const legacyClient = new FakeWebSocket({
+      attachment: { role: 'client', clientId: 'client-legacy', connectedAt: 1 },
+    });
+    const capableClient = new FakeWebSocket({
+      attachment: {
+        role: 'client',
+        clientId: 'client-capable',
+        connectedAt: 1,
+        capabilities: ['relay.client-pong.v1'],
+        lastPongAt: 1,
+      },
+    });
+    const relay = room as unknown as {
+      runtime: {
+        clients: Map<string, FakeWebSocket>;
+        clientLastActivityAtById: Map<string, number>;
+      };
+      alarm: () => Promise<void>;
+    };
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    relay.runtime.clients.set('client-legacy', legacyClient);
+    relay.runtime.clients.set('client-capable', capableClient);
+    relay.runtime.clientLastActivityAtById.set('client-legacy', 1);
+    relay.runtime.clientLastActivityAtById.set('client-capable', 1);
+
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(200_000);
+    try {
+      await relay.alarm();
+    } finally {
+      nowSpy.mockRestore();
+    }
+
+    expect(relay.runtime.clients.has('client-legacy')).toBe(true);
+    expect(legacyClient.closeCalls).toEqual([]);
+    expect(relay.runtime.clients.has('client-capable')).toBe(false);
+    expect(capableClient.closeCalls).toEqual([{ code: 4009, reason: 'client_pong_timeout' }]);
+  });
+
+  it('acknowledges capable client pongs locally without forwarding them to the gateway', async () => {
+    const gatewaySocket = new FakeWebSocket({
+      attachment: { role: 'gateway', clientId: 'gw-main', connectedAt: 1 },
+    });
+    const clientSocket = new FakeWebSocket({
+      attachment: {
+        role: 'client',
+        clientId: 'client-pong',
+        connectedAt: 2,
+        capabilities: ['relay.client-pong.v1'],
+        lastPongAt: 2,
+      },
+    });
+    const { room } = createRelayRoomWithSockets();
+    const relay = room as unknown as {
+      runtime: { gatewaySocket: FakeWebSocket | null };
+      webSocketMessage: (ws: WebSocket, message: string | ArrayBuffer) => Promise<void>;
+    };
+    relay.runtime.gatewaySocket = gatewaySocket;
+
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(50_000);
+    try {
+      await relay.webSocketMessage(clientSocket as never, JSON.stringify({ type: 'pong', ts: 49_000 }));
+    } finally {
+      nowSpy.mockRestore();
+    }
+
+    expect(gatewaySocket.sent).toEqual([]);
+    expect(clientSocket.deserializeAttachment()).toMatchObject({ lastPongAt: 50_000 });
+  });
+
+  it('forces existing clients to reconnect when the local gateway session is lost', async () => {
+    const gatewaySocket = new FakeWebSocket({
+      attachment: { role: 'gateway', clientId: 'gw-main', connectedAt: 1 },
+    });
+    const clientSocket = new FakeWebSocket({
+      attachment: { role: 'client', clientId: 'client-active', connectedAt: 2 },
+    });
+    const { room } = createRelayRoomWithSockets();
+    const relay = room as unknown as {
+      runtime: {
+        gatewaySocket: FakeWebSocket | null;
+        clients: Map<string, FakeWebSocket>;
+      };
+      webSocketMessage: (ws: WebSocket, message: string | ArrayBuffer) => Promise<void>;
+    };
+    relay.runtime.gatewaySocket = gatewaySocket;
+    relay.runtime.clients.set('client-active', clientSocket);
+
+    await relay.webSocketMessage(
+      gatewaySocket as never,
+      `${__testing.CONTROL_PREFIX}${JSON.stringify({
+        type: 'control',
+        event: 'client.reconnect-required',
+      })}`,
+    );
+
+    expect(clientSocket.closeCalls).toEqual([{ code: 4012, reason: 'gateway_reconnect_required' }]);
+    expect(relay.runtime.clients.size).toBe(0);
+    expect(gatewaySocket.sent.some((frame) => frame.includes('client_disconnected'))).toBe(true);
   });
 
   it('forwards client control frames to gateway with relay-injected sourceClientId', async () => {

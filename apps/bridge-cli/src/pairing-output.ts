@@ -16,6 +16,14 @@ export function buildPairingJson(
     instanceId: paired.config.instanceId,
     accessCode: paired.accessCode,
     accessCodeExpiresAt: paired.accessCodeExpiresAt,
+    ...(paired.pairingSession ? {
+      pairingSession: {
+        pairingUrl: paired.pairingSession.pairingUrl,
+        pairingCode: paired.pairingSession.pairingCode,
+        protocol: paired.pairingSession.protocol,
+        expiresAt: paired.pairingSession.expiresAt,
+      },
+    } : {}),
     qrImagePath,
     service: {
       installed: service.installed,
@@ -31,7 +39,7 @@ export function buildPairingJson(
 
 export function buildLocalPairingJson(input: {
   gatewayUrl: string;
-  authMode: 'token' | 'password';
+  authMode?: 'token' | 'password';
   expiresAt: number;
   qrImagePath: string;
   message: string;
@@ -45,7 +53,7 @@ export function buildLocalPairingJson(input: {
     action: 'local',
     message: input.message,
     gatewayUrl: input.gatewayUrl,
-    authMode: input.authMode,
+    ...(input.authMode ? { authMode: input.authMode } : {}),
     expiresAt: input.expiresAt,
     qrImagePath: input.qrImagePath,
     configUpdated: input.configUpdated ?? false,

@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Easing, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, Easing, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { BarChart3, BookOpen, Brain, Clock3, FolderCog, MessageCircle, MessageSquareText, RefreshCw, ScrollText, Sparkles, Wrench } from 'lucide-react-native';
 import { useFocusEffect, useIsFocused, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
-import { IconButton } from '../../components/ui';
+import { Button, Card, IconButton } from '../../components/ui';
 import { useAppContext } from '../../contexts/AppContext';
 import { analyticsEvents } from '../../services/analytics/events';
 import {
@@ -17,7 +17,7 @@ import { loadGatewayHermesConsoleDashboard } from '../../services/gateway-hermes
 import { resolveGatewayDocumentationDescriptor } from '../../services/gateway-doc-links';
 import { resolveUsageCostSummaryDisplay } from '../../services/usage-cost-display';
 import { useAppTheme } from '../../theme';
-import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
+import { FontSize, FontWeight, LineHeight, Radius, Space } from '../../theme/tokens';
 import { getDisplayAgentEmoji } from '../../utils/agent-emoji';
 import { formatConsoleHeartbeatAge } from '../../utils/console-heartbeat';
 import { formatTokens } from '../../utils/usage-format';
@@ -328,7 +328,7 @@ export function HermesConsoleMenuScreen(): React.JSX.Element {
           />
         )}
       >
-        <View style={styles.heroCard}>
+        <Card style={styles.heroCard} padding="lg">
           <Text style={styles.heroProviderValue} numberOfLines={1}>
             {t('Skills')}
           </Text>
@@ -340,21 +340,19 @@ export function HermesConsoleMenuScreen(): React.JSX.Element {
               {heroSkillMeta}
             </Text>
           </View>
-          <TouchableOpacity
+          <Button
+            label={t('Manage Skills')}
+            icon={FolderCog}
+            variant="secondary"
             style={styles.primaryButton}
-            activeOpacity={0.75}
             onPress={() => nav('SkillList', 'hermes_console_skill_card')}
-          >
-            <FolderCog size={16} color={theme.colors.primary} strokeWidth={2} />
-            <Text style={styles.primaryButtonText}>{t('Manage Skills')}</Text>
-          </TouchableOpacity>
-        </View>
+          />
+        </Card>
 
         <View style={styles.quickGrid}>
           {quickActions.usage ? (
-            <TouchableOpacity
+            <Card
               style={styles.quickCard}
-              activeOpacity={0.75}
               onPress={() => nav(quickActions.usage!.screen, quickActions.usage!.source, quickActions.usage!.params)}
             >
               <View style={styles.quickHeader}>
@@ -367,13 +365,12 @@ export function HermesConsoleMenuScreen(): React.JSX.Element {
               <Text style={styles.quickMeta} numberOfLines={2}>
                 {state.todayUsageNote ?? t('View usage details')}
               </Text>
-            </TouchableOpacity>
+            </Card>
           ) : null}
 
           {quickActions.memory ? (
-            <TouchableOpacity
+            <Card
               style={styles.quickCard}
-              activeOpacity={0.75}
               onPress={() => nav(quickActions.memory!.screen, quickActions.memory!.source, quickActions.memory!.params)}
             >
               <View style={styles.quickHeader}>
@@ -386,12 +383,11 @@ export function HermesConsoleMenuScreen(): React.JSX.Element {
                 {state.memoryFiles != null ? t('{{count}} files', { count: state.memoryFiles }) : tCommon('Loading...')}
               </Text>
               <Text style={styles.quickMeta} numberOfLines={2}>{t('View and edit directly')}</Text>
-            </TouchableOpacity>
+            </Card>
           ) : null}
 
-          <TouchableOpacity
+          <Card
             style={styles.quickCard}
-            activeOpacity={0.75}
             onPress={() => nav('ModelList', 'hermes_console_model_card')}
           >
             <View style={styles.quickHeader}>
@@ -405,11 +401,10 @@ export function HermesConsoleMenuScreen(): React.JSX.Element {
               {heroProviderValue}
               {state.modelCount != null ? ` · ${t('{{count}} models', { count: state.modelCount })}` : ''}
             </Text>
-          </TouchableOpacity>
+          </Card>
 
-          <TouchableOpacity
+          <Card
             style={styles.quickCard}
-            activeOpacity={0.75}
             onPress={() => nav('CronList', 'hermes_console_cron_card')}
           >
             <View style={styles.quickHeader}>
@@ -424,15 +419,14 @@ export function HermesConsoleMenuScreen(): React.JSX.Element {
             <Text style={styles.quickMeta} numberOfLines={2}>
               {t('{{count}} runs today', { count: typeof state.cronTodayRuns === 'number' ? state.cronTodayRuns : 0 })}
             </Text>
-          </TouchableOpacity>
+          </Card>
 
         </View>
 
         {listActions.map((item) => (
-          <TouchableOpacity
+          <Card
             key={item.key}
             style={styles.actionCard}
-            activeOpacity={0.75}
             onPress={() => nav(item.screen, item.source, item.params)}
           >
             <View style={styles.actionIconWrap}>
@@ -442,7 +436,7 @@ export function HermesConsoleMenuScreen(): React.JSX.Element {
               <Text style={styles.actionTitle}>{item.title}</Text>
               <Text style={styles.actionDescription}>{item.description}</Text>
             </View>
-          </TouchableOpacity>
+          </Card>
         ))}
       </ScrollView>
     </View>
@@ -492,13 +486,13 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       flex: 1,
     },
     headerEmoji: {
-      fontSize: 34,
+      fontSize: FontSize.displayLg,
     },
     headerTextWrap: {
       flex: 1,
     },
     headerName: {
-      fontSize: 22,
+      fontSize: FontSize.xxl,
       fontWeight: FontWeight.bold,
       color: colors.text,
     },
@@ -515,10 +509,6 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     heroCard: {
       borderRadius: Radius.lg,
-      borderWidth: 1,
-      borderColor: colors.border,
-      backgroundColor: colors.surface,
-      padding: Space.lg,
       gap: Space.xs,
     },
     heroModelBlock: {
@@ -538,38 +528,26 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       letterSpacing: 0.2,
     },
     heroValue: {
-      fontSize: 22,
+      fontSize: FontSize.xxl,
       fontWeight: FontWeight.bold,
       color: colors.text,
-      lineHeight: 28,
+      lineHeight: LineHeight.xxl,
     },
     heroMetaInline: {
       flexShrink: 1,
       textAlign: 'right',
       fontSize: FontSize.sm,
       color: colors.textMuted,
-      lineHeight: 20,
+      lineHeight: LineHeight.bodySm,
     },
     note: {
       marginTop: Space.xs,
       fontSize: FontSize.sm,
       color: colors.textSubtle,
-      lineHeight: 20,
+      lineHeight: LineHeight.bodySm,
     },
     primaryButton: {
       marginTop: Space.sm,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: Space.xs,
-      paddingVertical: 12,
-      borderRadius: Radius.md,
-      backgroundColor: colors.primarySoft,
-    },
-    primaryButtonText: {
-      fontSize: FontSize.base,
-      fontWeight: FontWeight.semibold,
-      color: colors.primary,
     },
     quickGrid: {
       flexDirection: 'row',
@@ -578,11 +556,6 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     quickCard: {
       width: '48.5%',
-      borderRadius: Radius.md,
-      borderWidth: 1,
-      borderColor: colors.border,
-      backgroundColor: colors.surface,
-      padding: Space.md,
       gap: Space.sm,
     },
     quickHeader: {
@@ -593,7 +566,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     quickIconWrap: {
       width: 30,
       height: 30,
-      borderRadius: 15,
+      borderRadius: Radius.full,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: colors.primarySoft,
@@ -608,28 +581,25 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       fontSize: FontSize.lg,
       fontWeight: FontWeight.semibold,
       color: colors.text,
-      lineHeight: 24,
+      lineHeight: LineHeight.xl,
     },
     quickMeta: {
       fontSize: FontSize.sm,
       color: colors.textSubtle,
-      lineHeight: 20,
+      lineHeight: LineHeight.bodySm,
     },
     actionCard: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: Space.md,
       borderRadius: Radius.lg,
-      borderWidth: 1,
-      borderColor: colors.border,
-      backgroundColor: colors.surface,
       paddingHorizontal: Space.md,
       paddingVertical: Space.md + 2,      
     },
     actionIconWrap: {
       width: 38,
       height: 38,
-      borderRadius: 19,
+      borderRadius: Radius.full,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: colors.primarySoft,

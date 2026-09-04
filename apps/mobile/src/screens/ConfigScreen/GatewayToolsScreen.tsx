@@ -11,17 +11,16 @@ import {
 } from 'react-native';
 import { ChevronRight, Shield } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
-import { useTabBarHeight } from '../../hooks/useTabBarHeight';
 import { useAppContext } from '../../contexts/AppContext';
 import { useProPaywall } from '../../contexts/ProPaywallContext';
-import { ScreenHeader, ThemedSwitch } from '../../components/ui';
+import { ScreenHeader, SettingsIcon, ThemedSwitch } from '../../components/ui';
 import { useAppTheme, AppTheme } from '../../theme';
 import {
   FontSize,
   FontWeight,
   Radius,
-  Shadow,
   Space,
+  createSurfaceStyle,
 } from '../../theme/tokens';
 import type { ConsoleStackParamList } from '../ConsoleScreen/ConsoleTab';
 import { useGatewayToolSettings } from './hooks/useGatewayToolSettings';
@@ -51,27 +50,24 @@ export function openOpenClawPermissions(navigation: {
  */
 export function ToolSettingsContent({
   colors,
+  scheme,
   toolSettings,
   hasActiveGateway,
-  tabBarHeight,
   onOpenPermissions,
 }: {
   colors: Colors;
+  scheme: AppTheme['scheme'];
   toolSettings: ReturnType<typeof useGatewayToolSettings>;
   hasActiveGateway: boolean;
-  tabBarHeight: number;
   onOpenPermissions: () => void;
 }): React.JSX.Element {
   const { t } = useTranslation('console');
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const styles = useMemo(() => createStyles(colors, scheme), [colors, scheme]);
   const disabled = !hasActiveGateway || toolSettings.loadingToolSettings;
 
   return (
     <ScrollView
-      contentContainerStyle={[
-        styles.container,
-        { paddingBottom: Space.xxxl + tabBarHeight },
-      ]}
+      contentContainerStyle={[styles.container, { paddingBottom: Space.xxxl }]}
     >
       {/* Web */}
       <View style={styles.card}>
@@ -83,8 +79,6 @@ export function ToolSettingsContent({
           <ThemedSwitch
             value={toolSettings.webSearchEnabled}
             onValueChange={toolSettings.setWebSearchEnabled}
-            trackColor={{ false: colors.borderStrong, true: colors.primarySoft }}
-            thumbColor={toolSettings.webSearchEnabled ? colors.primary : colors.surfaceMuted}
             disabled={disabled}
           />
         </View>
@@ -97,8 +91,6 @@ export function ToolSettingsContent({
           <ThemedSwitch
             value={toolSettings.webFetchEnabled}
             onValueChange={toolSettings.setWebFetchEnabled}
-            trackColor={{ false: colors.borderStrong, true: colors.primarySoft }}
-            thumbColor={toolSettings.webFetchEnabled ? colors.primary : colors.surfaceMuted}
             disabled={disabled}
           />
         </View>
@@ -114,8 +106,6 @@ export function ToolSettingsContent({
           <ThemedSwitch
             value={toolSettings.mediaImageEnabled}
             onValueChange={toolSettings.setMediaImageEnabled}
-            trackColor={{ false: colors.borderStrong, true: colors.primarySoft }}
-            thumbColor={toolSettings.mediaImageEnabled ? colors.primary : colors.surfaceMuted}
             disabled={disabled}
           />
         </View>
@@ -128,8 +118,6 @@ export function ToolSettingsContent({
           <ThemedSwitch
             value={toolSettings.mediaAudioEnabled}
             onValueChange={toolSettings.setMediaAudioEnabled}
-            trackColor={{ false: colors.borderStrong, true: colors.primarySoft }}
-            thumbColor={toolSettings.mediaAudioEnabled ? colors.primary : colors.surfaceMuted}
             disabled={disabled}
           />
         </View>
@@ -142,8 +130,6 @@ export function ToolSettingsContent({
           <ThemedSwitch
             value={toolSettings.mediaVideoEnabled}
             onValueChange={toolSettings.setMediaVideoEnabled}
-            trackColor={{ false: colors.borderStrong, true: colors.primarySoft }}
-            thumbColor={toolSettings.mediaVideoEnabled ? colors.primary : colors.surfaceMuted}
             disabled={disabled}
           />
         </View>
@@ -158,9 +144,7 @@ export function ToolSettingsContent({
         ]}
       >
         <View style={styles.rowLead}>
-          <View style={[styles.rowIconBadge, { backgroundColor: '#E8F1FF' }]}>
-            <Shield size={17} strokeWidth={2.2} color="#2563EB" />
-          </View>
+          <SettingsIcon icon={Shield} tone="info" />
           <View style={styles.rowText}>
             <Text style={styles.rowTitle}>{t('OpenClaw Permission Management')}</Text>
             <Text style={styles.rowSubtitle}>{t('View and adjust common OpenClaw permissions')}</Text>
@@ -178,7 +162,6 @@ export function ToolSettingsContent({
 
 export function GatewayToolsRouteScreen(): React.JSX.Element {
   const insets = useSafeAreaInsets();
-  const tabBarHeight = useTabBarHeight();
   const { t } = useTranslation('console');
   const { theme } = useAppTheme();
   const { gateway, gatewayEpoch, config: initialConfig } = useAppContext();
@@ -203,16 +186,16 @@ export function GatewayToolsRouteScreen(): React.JSX.Element {
       <ScreenHeader title={t('Tools')} topInset={insets.top} onBack={() => navigation.goBack()} />
       <ToolSettingsContent
         colors={theme.colors}
+        scheme={theme.scheme}
         toolSettings={toolSettings}
         hasActiveGateway={hasActiveGateway}
-        tabBarHeight={tabBarHeight}
         onOpenPermissions={handleOpenPermissions}
       />
     </View>
   );
 }
 
-function createStyles(colors: Colors) {
+function createStyles(colors: Colors, scheme: AppTheme['scheme']) {
   return StyleSheet.create({
     container: {
       paddingHorizontal: Space.lg,
@@ -220,23 +203,17 @@ function createStyles(colors: Colors) {
       backgroundColor: colors.background,
     },
     card: {
-      backgroundColor: colors.surface,
       borderRadius: Radius.md,
-      borderWidth: 1,
-      borderColor: colors.border,
       overflow: 'hidden',
-      ...Shadow.sm,
+      ...createSurfaceStyle(colors, scheme, 'flat'),
     },
     cardGap: {
       marginTop: Space.md,
     },
     rowCard: {
-      backgroundColor: colors.surface,
       borderRadius: Radius.md,
-      borderWidth: 1,
-      borderColor: colors.border,
       overflow: 'hidden',
-      ...Shadow.sm,
+      ...createSurfaceStyle(colors, scheme, 'flat'),
       paddingHorizontal: Space.lg,
       paddingVertical: 16,
       flexDirection: 'row',
@@ -260,14 +237,7 @@ function createStyles(colors: Colors) {
       alignItems: 'center',
       flex: 1,
       marginRight: Space.md,
-    },
-    rowIconBadge: {
-      width: 34,
-      height: 34,
-      borderRadius: 999,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginRight: Space.md,
+      gap: Space.md,
     },
     rowText: {
       flex: 1,

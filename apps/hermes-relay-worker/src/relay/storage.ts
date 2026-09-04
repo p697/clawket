@@ -227,8 +227,8 @@ export function reconcileSockets(runtime: RelayRuntime, options: ReconcileSocket
     runtime.clientLastActivityAtById.set(
       clientId,
       typeof previousActivityAt === 'number'
-        ? Math.max(previousActivityAt, candidate.connectedAt)
-        : candidate.connectedAt,
+        ? Math.max(previousActivityAt, candidate.connectedAt, attachmentTimestamp(candidate.socket, 'lastPongAt'))
+        : Math.max(candidate.connectedAt, attachmentTimestamp(candidate.socket, 'lastPongAt')),
     );
   }
 
@@ -252,6 +252,12 @@ export function reconcileSockets(runtime: RelayRuntime, options: ReconcileSocket
     hasPendingChallenge: Boolean(runtime.pendingChallenge),
   });
   return summary;
+}
+
+function attachmentTimestamp(socket: WebSocket, key: 'lastPongAt'): number {
+  const attachment = socket.deserializeAttachment() as Record<string, unknown> | null;
+  const value = attachment?.[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
 
 export function rehydrateSockets(runtime: RelayRuntime): RehydrateSummary {

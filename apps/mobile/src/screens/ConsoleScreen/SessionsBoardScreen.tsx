@@ -212,7 +212,7 @@ export function SessionsBoardScreen(): React.JSX.Element {
   const navigation = useNavigation<SessionsBoardNavigation>();
   const { theme } = useAppTheme();
   const { t } = useTranslation('console');
-  const { gateway, currentAgentId, agents, requestOfficeChat } = useAppContext();
+  const { gateway, currentAgentId, agents, requestChatSession } = useAppContext();
   const isFocused = useIsFocused();
   const stylesMemo = useMemo(() => createStyles(theme.colors), [theme]);
   const [rows, setRows] = useState<SessionBoardRow[]>([]);
@@ -292,9 +292,9 @@ export function SessionsBoardScreen(): React.JSX.Element {
     navigation.goBack();
     navigation.getParent()?.navigate('Chat' as never);
     requestAnimationFrame(() => {
-      requestOfficeChat(sessionKey);
+      requestChatSession(sessionKey);
     });
-  }, [navigation, requestOfficeChat]);
+  }, [navigation, requestChatSession]);
 
   return (
     <View style={[stylesMemo.root, { backgroundColor: theme.colors.background }]}>
@@ -420,23 +420,23 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       gap: Space.xs,
     },
     filterChip: {
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderRadius: Radius.full,
       paddingHorizontal: Space.sm,
       paddingVertical: 3,
     },
     filterChipText: {
-      fontSize: 11,
+      fontSize: FontSize.xs,
       fontWeight: FontWeight.semibold,
     },
     tag: {
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderRadius: Radius.sm,
       paddingHorizontal: 5,
       paddingVertical: 1,
     },
     tagText: {
-      fontSize: 11,
+      fontSize: FontSize.xs,
       fontWeight: FontWeight.semibold,
     },
     errorText: {
@@ -476,7 +476,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       maxWidth: '20%',
     },
     rowTime: {
-      fontSize: 11,
+      fontSize: FontSize.xs,
       fontWeight: FontWeight.medium,
     },
     rowTitle: {
@@ -486,7 +486,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       fontWeight: FontWeight.semibold,
     },
     rowModel: {
-      fontSize: 11,
+      fontSize: FontSize.xs,
       flexShrink: 1,
     },
     rowSubline: {
@@ -495,13 +495,13 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       gap: Space.xs,
     },
     rowMeta: {
-      fontSize: 11,
+      fontSize: FontSize.xs,
       flexShrink: 1,
       maxWidth: '38%',
     },
     rowPreview: {
       flex: 1,
-      fontSize: 11,
+      fontSize: FontSize.xs,
       lineHeight: 13,
     },
   });

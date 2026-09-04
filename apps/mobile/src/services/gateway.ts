@@ -36,6 +36,7 @@ import type {
   HermesCronOutputEntry,
 } from '../types/hermes-cron';
 import { StorageService } from './storage';
+import type { DeviceTokenRecord } from './storage';
 import { isUnsupportedDirectLocalTlsConfig } from '../hooks/gatewayConfigForm.utils';
 import {
   hexToBytes,
@@ -74,11 +75,14 @@ import {
   handleGatewayRawMessage,
   isBootstrapTokenUnsupportedError,
   isDeviceSignatureInvalidError,
+  isGatewayConnectErrorCode,
   isNonceMismatchError,
+  readGatewayConnectErrorDetails,
 } from './gateway-shared';
 import { sanitizeSilentPreviewText } from '../utils/chat-message';
 import {
   buildRelayClientWsUrl,
+  RELAY_CLIENT_PONG_CAPABILITY,
   buildRelayBootstrapRequestFrame,
   buildRelayDoctorRequestFrame,
   buildRelayDoctorFixRequestFrame,
@@ -93,6 +97,7 @@ import {
   parseRelayDoctorResult,
   parseRelayPermissionsError,
   parseRelayPermissionsResult,
+  OPENCLAW_MOBILE_SETUP_CAPABILITY,
   RELAY_CONTROL_PREFIX,
   RelayBootstrapRequestError,
   RelayDoctorRequestError,
@@ -107,6 +112,8 @@ import {
 } from './gateway-relay';
 import type {
   PendingRelayBootstrapRequest,
+  RelayBootstrapCredential,
+  RelayConnectAuthSelection,
   PendingRelayDoctorFixRequest,
   PendingRelayDoctorRequest,
   PendingRelayPermissionsRequest,
@@ -256,6 +263,8 @@ export class GatewayClient {
       || prev.url !== config.url
       || prev.token !== config.token
       || prev.password !== config.password
+      || prev.bootstrap?.token !== config.bootstrap?.token
+      || prev.bootstrap?.strategy !== config.bootstrap?.strategy
       || prev.backendKind !== config.backendKind
       || prev.transportKind !== config.transportKind
       || prev.mode !== config.mode
@@ -392,7 +401,6 @@ export class GatewayClient {
     this.ws.onopen = () => {
       if (attemptId !== this.connectAttemptId) return;
       this.clearWsOpenTimer();
-      this.reconnectAttempts = 0;
       this.connectRequestInFlight = false;
       this.connectRequestCompleted = false;
       this.wsOpenedAt = Date.now();
@@ -1408,27 +1416,33 @@ export class GatewayClient {
       elapsedMs: Date.now() - this.connectStartedAt,
       sinceWsOpenMs: this.wsOpenedAt ? Date.now() - this.wsOpenedAt : null,
     });
-    const { nonce } = payload;
+    const { nonce, ts: challengeTs } = payload;
+    if (!nonce?.trim() || !Number.isSafeInteger(challengeTs) || challengeTs < 0) {
+      this.blockReconnect({
+        code: 'invalid_connect_challenge',
+        message: 'Gateway returned an invalid connection challenge.',
+      });
+      this.ws?.close();
+      return;
+    }
     const identity = await this.ensureIdentity();
     if (!this.isActiveConnectAttempt(attemptId)) return;
     const secretKey = hexToBytes(identity.secretKeyHex);
     const publicKeyBytes = hexToBytes(identity.publicKeyHex);
     const publicKeyB64 = bytesToBase64Url(publicKeyBytes);
 
-    const signedAt = Date.now();
+    const signedAt = challengeTs;
     const clientId = getRuntimeClientId();
-    const clientMode = 'ui';
-    const role = this.getConnectRole();
-    const scopes = this.getConnectScopes();
     const platform = getRuntimePlatform();
     const deviceFamily = getRuntimeDeviceFamily();
-    const connectAuth = await this.resolveConnectAuth({
+    const connectPlan = await this.resolveConnectAuth({
       identity,
       publicKey: publicKeyB64,
-      role,
-      scopes,
     });
     if (!this.isActiveConnectAttempt(attemptId)) return;
+    const { role, scopes } = connectPlan;
+    const clientMode = role === 'node' ? 'node' : 'ui';
+    const connectAuth = connectPlan.auth;
 
     // Build the v3 auth payload and sign it
     const authPayload = buildDeviceAuthPayload({
@@ -1461,8 +1475,10 @@ export class GatewayClient {
         mode: clientMode,
         deviceFamily,
       },
-      caps: ['tool-events'],
-      commands: ['canvas.present', 'canvas.hide', 'canvas.navigate', 'canvas.eval', 'canvas.snapshot'],
+      caps: role === 'node' ? [] : ['tool-events'],
+      commands: role === 'node'
+        ? []
+        : ['canvas.present', 'canvas.hide', 'canvas.navigate', 'canvas.eval', 'canvas.snapshot'],
       role,
       scopes,
       device: {
@@ -1480,9 +1496,20 @@ export class GatewayClient {
       if (!this.isActiveConnectAttempt(attemptId)) return;
       // Save device token and extract gateway info from hello-ok
       const helloOk = result as {
-        auth?: { deviceToken?: string };
+        protocol?: number;
+        features?: { methods?: string[]; events?: string[]; capabilities?: string[] };
+        auth?: {
+          deviceToken?: string;
+          role?: string;
+          scopes?: string[];
+          deviceTokens?: Array<{ deviceToken?: string; role?: string; scopes?: string[] }>;
+        };
         server?: { version?: string; connId?: string };
-        policy?: { tickIntervalMs?: number };
+        policy?: {
+          tickIntervalMs?: number;
+          maxPayload?: number;
+          maxBufferedBytes?: number;
+        };
         snapshot?: {
           uptimeMs?: number;
           presence?: Array<{ host?: string; ip?: string; platform?: string }>;
@@ -1490,13 +1517,40 @@ export class GatewayClient {
           updateAvailable?: { currentVersion: string; latestVersion: string };
         };
       } | null;
-      if (helloOk?.auth?.deviceToken) {
-        const identity = await this.ensureIdentity();
-        await StorageService.setDeviceToken(
-          identity.deviceId,
-          helloOk.auth.deviceToken,
-          this.getDeviceTokenStorageScope(),
-        );
+      const helloAuth = helloOk?.auth;
+      const authRole = helloAuth?.role?.trim() || role;
+      const helloScopes = this.normalizeConnectScopes(helloAuth?.scopes);
+      if (helloAuth?.deviceToken && authRole === 'operator') {
+        const sameStoredToken = connectPlan.storedRecord?.token === helloAuth.deviceToken
+          && connectPlan.storedRecord.role === authRole;
+        await this.persistDeviceTokenRecord({
+          identity,
+          token: helloAuth.deviceToken,
+          role: authRole,
+          scopes: sameStoredToken && connectPlan.storedRecord?.scopes.length
+            ? connectPlan.storedRecord.scopes
+            : helloScopes,
+        });
+      }
+      if (connectAuth.source === 'bootstrap-token' && connectAuth.bootstrapStrategy === 'mobile-setup') {
+        const operatorHandoff = helloAuth?.deviceTokens?.find((entry) => (
+          entry.role?.trim() === 'operator' && Boolean(entry.deviceToken?.trim())
+        ));
+        if (operatorHandoff?.deviceToken) {
+          await this.persistDeviceTokenRecord({
+            identity,
+            token: operatorHandoff.deviceToken,
+            role: 'operator',
+            scopes: this.normalizeConnectScopes(operatorHandoff.scopes),
+          });
+          this.logTelemetry('bootstrap_handoff_completed', {
+            attemptId,
+            route: this.activeRoute,
+          });
+          this.restartConnection('Connection restarted');
+          return;
+        }
+        throw new Error('Secure connection setup did not complete. Please scan a fresh pairing QR code.');
       }
       // Store gateway info snapshot
       const gwSelf = helloOk?.snapshot?.presence?.[0];
@@ -1515,6 +1569,7 @@ export class GatewayClient {
       }
       this.pairingPending = false;
       this.clearReconnectBlock();
+      this.reconnectAttempts = 0;
       this.setState('ready');
       this.startTickWatchdog();
       this.logTelemetry('connect_ready', {
@@ -1526,13 +1581,14 @@ export class GatewayClient {
     } catch (err: unknown) {
       if (!this.isActiveConnectAttempt(attemptId)) return;
       const msg = err instanceof Error ? err.message : String(err);
+      const connectErrorDetails = readGatewayConnectErrorDetails(err);
       this.logTelemetry('connect_res_err', {
         attemptId,
         route: this.activeRoute,
         elapsedMs: Date.now() - this.connectStartedAt,
         message: msg,
       });
-      if (isNonceMismatchError(msg)) {
+      if (isGatewayConnectErrorCode(err, 'DEVICE_AUTH_NONCE_MISMATCH') || isNonceMismatchError(msg)) {
         this.blockReconnect({
           code: 'device_nonce_mismatch',
           message: 'Device authentication nonce mismatch. Please regenerate a new Relay QR code in Clawket Bridge.',
@@ -1541,7 +1597,7 @@ export class GatewayClient {
         this.ws?.close();
         return;
       }
-      if (isDeviceSignatureInvalidError(msg)) {
+      if (isGatewayConnectErrorCode(err, 'DEVICE_AUTH_SIGNATURE_INVALID') || isDeviceSignatureInvalidError(msg)) {
         this.blockReconnect({
           code: 'device_signature_invalid',
           message: 'Device authentication failed. Reset the Clawket app device identity and reconnect.',
@@ -1552,12 +1608,14 @@ export class GatewayClient {
       }
       if (
         connectAuth.source === 'device-token'
-        && this.activeRoute === 'relay'
-        && this.isDeviceTokenMismatchError(msg)
+        && (
+          isGatewayConnectErrorCode(err, 'AUTH_TOKEN_MISMATCH', 'AUTH_SCOPE_MISMATCH')
+          || this.isDeviceTokenMismatchError(msg)
+        )
       ) {
         const identity = await this.ensureIdentity();
         await StorageService.deleteDeviceToken(identity.deviceId, this.getDeviceTokenStorageScope());
-        this.logTelemetry('relay_device_token_cleared_after_mismatch', {
+        this.logTelemetry('device_token_cleared_after_mismatch', {
           attemptId,
           route: this.activeRoute,
           elapsedMs: Date.now() - this.connectStartedAt,
@@ -1567,16 +1625,16 @@ export class GatewayClient {
       }
       if (
         connectAuth.source === 'bootstrap-token'
-        && this.activeRoute === 'relay'
         && this.hasLegacyConnectCredential()
-        && isBootstrapTokenUnsupportedError(msg)
+        && (
+          isBootstrapTokenUnsupportedError(msg)
+          || isGatewayConnectErrorCode(err, 'AUTH_TOKEN_MISMATCH')
+          || msg.toLowerCase().includes('bootstrap token invalid')
+          || msg.toLowerCase().includes('bootstrap token expired')
+        )
       ) {
-        // Temporary compatibility path: some older OpenClaw builds reject
-        // auth.bootstrapToken during the connect handshake. In that case we
-        // fall back to the legacy token/password path for pairing so first
-        // connection can still succeed on those hosts. Once old Gateway
-        // versions are no longer in circulation, this downgrade path should
-        // be removed.
+        // Keep legacy shared auth as an internal recovery path for gateways
+        // that either predate bootstrap auth or reject an expired credential.
         this.disableRelayBootstrapCompatibilityForCurrentConfig();
         this.logTelemetry('relay_bootstrap_legacy_schema_fallback', {
           attemptId,
@@ -1587,10 +1645,13 @@ export class GatewayClient {
         this.restartConnection('Connection restarted');
         return;
       }
-      if (msg.includes('NOT_PAIRED') || msg.includes('pairing required')) {
-        // Extract requestId from error details if available
+      if (
+        isGatewayConnectErrorCode(err, 'PAIRING_REQUIRED')
+        || msg.includes('NOT_PAIRED')
+        || msg.toLowerCase().includes('pairing required')
+      ) {
         const requestIdMatch = msg.match(/requestId[:\s]*([a-f0-9-]+)/i);
-        const requestId = requestIdMatch?.[1];
+        const requestId = connectErrorDetails.requestId ?? requestIdMatch?.[1];
         this.pairingPending = true;
         this.setState('pairing_pending');
         this.emit('pairingRequired', { requestId });
@@ -1804,7 +1865,31 @@ export class GatewayClient {
       this.handleRelayControlFrame(control);
       return;
     }
+    this.acknowledgeRelayTick(rawData);
     handleGatewayRawMessage(this as never, rawData);
+  }
+
+  private acknowledgeRelayTick(rawData: unknown): void {
+    if (this.activeRoute !== 'relay' || typeof rawData !== 'string') return;
+    let parsed: { type?: unknown; ts?: unknown; ack?: unknown };
+    try {
+      parsed = JSON.parse(rawData) as { type?: unknown; ts?: unknown; ack?: unknown };
+    } catch {
+      return;
+    }
+    if (
+      parsed.type !== 'tick'
+      || parsed.ack !== RELAY_CLIENT_PONG_CAPABILITY
+      || typeof parsed.ts !== 'number'
+      || !Number.isFinite(parsed.ts)
+      || !this.ws
+      || this.ws.readyState !== WebSocket.OPEN
+    ) return;
+    try {
+      this.ws.send(JSON.stringify({ type: 'pong', ts: parsed.ts }));
+    } catch {
+      // The normal close/error path owns reconnect scheduling.
+    }
   }
 
   private rejectPendingRequests(reason: string): void {
@@ -1841,7 +1926,7 @@ export class GatewayClient {
         requestId: pending.requestId,
         durationMs: Date.now() - pending.startedAt,
       });
-      pending.resolve(issued.bootstrapToken);
+      pending.resolve(issued.credential);
       return;
     }
 
@@ -1968,12 +2053,16 @@ export class GatewayClient {
     );
   }
 
-  private getConnectRole(): string {
-    return 'operator';
-  }
-
-  private getConnectScopes(): string[] {
-    return ['operator.admin', 'operator.read', 'operator.write', 'operator.pairing'];
+  private getDefaultConnectScopes(): string[] {
+    return [
+      'operator.admin',
+      'operator.approvals',
+      'operator.pairing',
+      'operator.questions',
+      'operator.read',
+      'operator.talk.secrets',
+      'operator.write',
+    ];
   }
 
   private hasLegacyConnectCredential(): boolean {
@@ -1984,33 +2073,67 @@ export class GatewayClient {
     return message.toLowerCase().includes('device token mismatch');
   }
 
+  private normalizeConnectScopes(value: unknown): string[] {
+    if (!Array.isArray(value)) return [];
+    return [...new Set(value
+      .filter((entry): entry is string => typeof entry === 'string')
+      .map((entry) => entry.trim())
+      .filter(Boolean))].sort();
+  }
+
+  private async persistDeviceTokenRecord(params: {
+    identity: DeviceIdentity;
+    token: string;
+    role: string;
+    scopes: string[];
+  }): Promise<void> {
+    await StorageService.setDeviceTokenRecord(
+      params.identity.deviceId,
+      {
+        token: params.token,
+        role: params.role,
+        scopes: this.normalizeConnectScopes(params.scopes),
+      },
+      this.getDeviceTokenStorageScope(),
+    );
+  }
+
   private async resolveConnectAuth(input: {
     identity: DeviceIdentity;
     publicKey: string;
+  }): Promise<{
+    auth: RelayConnectAuthSelection;
     role: string;
     scopes: string[];
-  }): Promise<ReturnType<typeof selectRelayConnectAuth>> {
-    let storedDeviceToken: string | null = null;
-    if (this.activeRoute === 'relay') {
-      storedDeviceToken = await StorageService.getDeviceToken(
-        input.identity.deviceId,
-        this.getDeviceTokenStorageScope(),
-      );
+    storedRecord: DeviceTokenRecord | null;
+  }> {
+    const defaultRole = 'operator';
+    const defaultScopes = this.getDefaultConnectScopes();
+    const storedRecord = await StorageService.getDeviceTokenRecord(
+      input.identity.deviceId,
+      this.getDeviceTokenStorageScope(),
+    );
+    if (storedRecord?.token && storedRecord.role === defaultRole) {
+      return {
+        auth: selectRelayConnectAuth({ storedDeviceToken: storedRecord.token }),
+        role: defaultRole,
+        scopes: storedRecord.scopes.length > 0 ? storedRecord.scopes : defaultScopes,
+        storedRecord,
+      };
     }
 
-    let bootstrapToken: string | null = null;
+    let bootstrapCredential: RelayBootstrapCredential | null = null;
     if (
       this.activeRoute === 'relay'
-      && !storedDeviceToken?.trim()
       && !this.isRelayBootstrapCompatibilityDisabledForCurrentConfig()
       && relaySupportsBootstrapV2(this.config?.relay)
     ) {
       try {
-        bootstrapToken = await this.requestRelayBootstrapToken({
+        bootstrapCredential = await this.requestRelayBootstrapToken({
           deviceId: input.identity.deviceId,
           publicKey: input.publicKey,
-          role: input.role,
-          scopes: input.scopes,
+          role: defaultRole,
+          scopes: defaultScopes,
         });
       } catch (error: unknown) {
         if (this.hasLegacyConnectCredential()) {
@@ -2025,13 +2148,32 @@ export class GatewayClient {
         }
       }
     }
+    if (!bootstrapCredential && this.activeRoute === 'direct') {
+      const configuredBootstrap = this.config?.bootstrap;
+      if (
+        configuredBootstrap?.token.trim()
+        && (configuredBootstrap.expiresAtMs === undefined || configuredBootstrap.expiresAtMs > Date.now())
+      ) {
+        bootstrapCredential = {
+          token: configuredBootstrap.token,
+          strategy: configuredBootstrap.strategy,
+          ...(configuredBootstrap.access ? { access: configuredBootstrap.access } : {}),
+        };
+      }
+    }
 
-    return selectRelayConnectAuth({
-      token: this.config?.token,
-      password: this.config?.password,
-      storedDeviceToken,
-      bootstrapToken,
-    });
+    const mobileSetup = bootstrapCredential?.strategy === 'mobile-setup';
+    return {
+      auth: selectRelayConnectAuth({
+        token: this.config?.token,
+        password: this.config?.password,
+        bootstrapToken: bootstrapCredential?.token,
+        bootstrapStrategy: bootstrapCredential?.strategy,
+      }),
+      role: mobileSetup ? 'node' : defaultRole,
+      scopes: mobileSetup ? [] : defaultScopes,
+      storedRecord: null,
+    };
   }
 
   private async requestRelayBootstrapToken(params: {
@@ -2039,13 +2181,13 @@ export class GatewayClient {
     publicKey: string;
     role: string;
     scopes: string[];
-  }): Promise<string> {
+  }): Promise<RelayBootstrapCredential> {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       throw new RelayBootstrapRequestError('relay_bootstrap_failed', 'Relay socket is not open.');
     }
     const requestId = generateId();
     const startedAt = Date.now();
-    return new Promise<string>((resolve, reject) => {
+    return new Promise<RelayBootstrapCredential>((resolve, reject) => {
       const timeout = setTimeout(() => {
         const pending = this.pendingRelayBootstrapRequests.get(requestId);
         if (!pending) return;
@@ -2075,6 +2217,7 @@ export class GatewayClient {
           publicKey: params.publicKey,
           role: params.role,
           scopes: params.scopes,
+          capabilities: [OPENCLAW_MOBILE_SETUP_CAPABILITY],
         }));
         this.logTelemetry('relay_bootstrap_requested', {
           attemptId: this.connectAttemptId,
@@ -2442,6 +2585,9 @@ export class GatewayClient {
   private markFirstFrameReceived(): void {
     if (this.firstFrameReceived) return;
     this.firstFrameReceived = true;
+    if (this.state === 'ready') {
+      this.reconnectAttempts = 0;
+    }
     this.clearFirstFrameWatchdog();
   }
 

@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Keyboard,
-  KeyboardAvoidingView,
   Platform,
   ScrollView,
   StyleSheet,
@@ -11,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { RouteProp, useNavigation, usePreventRemove, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
@@ -392,7 +392,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     secondaryHeaderButton: {
       borderRadius: Radius.md,
       backgroundColor: colors.surfaceMuted,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       paddingHorizontal: Space.sm,
       paddingVertical: Space.xs + 2,
@@ -425,7 +425,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     fileChip: {
       borderRadius: Radius.full,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       backgroundColor: colors.surfaceMuted,
       paddingHorizontal: 10,
@@ -447,7 +447,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       minHeight: 420,
       backgroundColor: colors.surface,
       borderColor: colors.primary,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderRadius: Radius.md,
     },
     editorInput: {
@@ -465,7 +465,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     readOnlyFrame: {
       backgroundColor: colors.surfaceMuted,
       borderColor: colors.border,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderRadius: Radius.md,
       paddingHorizontal: Space.md,
       paddingVertical: Space.md,

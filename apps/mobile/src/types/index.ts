@@ -30,14 +30,23 @@ export interface HermesGatewayConfig {
   displayName?: string;
 }
 
+export interface OpenClawBootstrapConfig {
+  token: string;
+  strategy: 'mobile-setup' | 'legacy-bound';
+  expiresAtMs?: number;
+  access?: 'full' | 'limited' | 'node';
+}
+
 export type GatewayBackendKind = 'openclaw' | 'hermes' | 'youmind';
 export type GatewayTransportKind = 'local' | 'tailscale' | 'cloudflare' | 'custom' | 'relay';
+export type RelayServiceEnvironment = 'production' | 'preview';
 export type GatewayMode = GatewayTransportKind | 'hermes';
 
 export interface GatewayConfig {
   url: string;
   token?: string;
   password?: string;
+  bootstrap?: OpenClawBootstrapConfig;
   backendKind?: GatewayBackendKind;
   transportKind?: GatewayTransportKind;
   /** Transitional legacy field: prefer backendKind + transportKind for new code. */
@@ -72,6 +81,7 @@ export interface SavedGatewayConfig {
   url: string;
   token?: string;
   password?: string;
+  bootstrap?: OpenClawBootstrapConfig;
   relay?: RelayGatewayConfig;
   hermes?: HermesGatewayConfig;
   createdAt: number;
@@ -369,7 +379,6 @@ export function isGatewayFrame(value: unknown): value is GatewayFrame {
 }
 
 export * from './cron';
-export * from './office';
 export type { LogEntry, LogLevel } from './logs';
 export { LOG_LEVELS } from './logs';
 export * from './skills';

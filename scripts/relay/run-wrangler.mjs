@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
-const [, , command, appName, ...restArgs] = process.argv;
+const [, , command, appName, ...rawRestArgs] = process.argv;
 
 if (!command || !appName) {
   console.error('Usage: node scripts/run-wrangler.mjs <command> <app-name> [wrangler args...]');
@@ -13,7 +13,24 @@ const workspaceRoot = process.cwd();
 const appDir = path.join(workspaceRoot, 'apps', appName);
 const localConfig = path.join(appDir, 'wrangler.local.toml');
 const defaultConfig = path.join(appDir, 'wrangler.toml');
-const selectedConfig = existsSync(localConfig) ? localConfig : defaultConfig;
+const configFileIndex = rawRestArgs.indexOf('--config-file');
+const explicitConfigFile = configFileIndex >= 0 ? rawRestArgs[configFileIndex + 1] : null;
+if (configFileIndex >= 0 && !explicitConfigFile) {
+  console.error('--config-file requires a filename relative to the selected app directory.');
+  process.exit(1);
+}
+const restArgs = configFileIndex >= 0
+  ? rawRestArgs.filter((_, index) => index !== configFileIndex && index !== configFileIndex + 1)
+  : rawRestArgs;
+const selectedConfig = explicitConfigFile
+  ? path.join(appDir, explicitConfigFile)
+  : existsSync(localConfig)
+    ? localConfig
+    : defaultConfig;
+if (!existsSync(selectedConfig)) {
+  console.error(`[run-wrangler] config not found: ${path.relative(workspaceRoot, selectedConfig)}`);
+  process.exit(1);
+}
 const wranglerBin = path.join(
   workspaceRoot,
   'node_modules',
