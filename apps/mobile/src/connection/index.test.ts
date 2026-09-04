@@ -247,6 +247,22 @@ describe('ConnectionCoordinator', () => {
     expect(harness.adapters.find((adapter) => adapter.connection.id === 'alpha')?.state).toBe('idle');
   });
 
+  it('disposes an adapter lifecycle when switching instead of leaving protocol listeners behind', async () => {
+    const harness = await createHarness();
+    await harness.coordinator.start();
+    const first = harness.adapters[0] as AgentAdapter & { dispose?: () => void };
+    first.dispose = jest.fn(() => first.disconnect());
+
+    await harness.coordinator.activate('beta');
+
+    expect(first.dispose).toHaveBeenCalledTimes(1);
+    expect(harness.events).toEqual([
+      'connect:alpha',
+      'disconnect:alpha',
+      'connect:beta',
+    ]);
+  });
+
   it('does not reconnect when the active id is selected again', async () => {
     const harness = await createHarness();
     await harness.coordinator.start();

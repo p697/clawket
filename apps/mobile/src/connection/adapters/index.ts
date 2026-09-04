@@ -5,6 +5,7 @@ import type {
 } from '@clawket/agent-protocol';
 
 import { bridgeCapabilityStore } from '../registry/bridge-capability-store';
+import type { GatewayClient } from '../protocol';
 import { HermesAdapter } from './hermes';
 import { OpenClawAdapter } from './openclaw';
 import { YouMindSpriteAdapter } from './youmind-sprite';
@@ -16,17 +17,19 @@ import { YouMindSpriteAdapter } from './youmind-sprite';
 export function createConnectionAdapter(
   record: Readonly<ConnectionRecord>,
   descriptor: ConnectionDescriptor,
+  options: { gateway?: GatewayClient } = {},
 ): AgentAdapter {
   const isFreeSlot = descriptor.isFreeSlot;
   switch (record.backendKind) {
     case 'openclaw':
       return new OpenClawAdapter(record, {
         isFreeSlot,
+        gateway: options.gateway,
         loadBridgeCapabilityMode: () => bridgeCapabilityStore.get(record.id),
         onBridgeCapabilityMode: (mode) => bridgeCapabilityStore.set(record.id, mode),
       });
     case 'hermes':
-      return new HermesAdapter(record, { isFreeSlot });
+      return new HermesAdapter(record, { isFreeSlot, gateway: options.gateway });
     case 'youmind':
       return new YouMindSpriteAdapter(record, { isFreeSlot });
     default:

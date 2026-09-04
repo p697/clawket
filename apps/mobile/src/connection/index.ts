@@ -31,6 +31,7 @@ import {
   type UnreadWatermarks,
 } from './registry/unread-watermarks';
 import { createConnectionAdapter } from './adapters';
+import type { GatewayClient } from './protocol';
 
 export type ConnectionRuntimeFailure = Readonly<{
   operation: 'load' | 'connect' | 'roster' | 'probe';
@@ -432,7 +433,7 @@ export class ConnectionCoordinator {
       || this.store.getSnapshot().activeConnectionId !== connectionId
       || this.adapterFactoryRevision !== factoryRevision
     ) {
-      adapter.disconnect();
+      disposeAdapter(adapter);
       return;
     }
 
@@ -649,7 +650,7 @@ export class ConnectionCoordinator {
     if (roster?.source === 'live') {
       this.rosterInputs.set(entry.connectionId, { ...roster, source: 'cache' });
     }
-    entry.adapter.disconnect();
+    disposeAdapter(entry.adapter);
     this.publish({ switching: false });
   }
 
@@ -852,6 +853,20 @@ export function configureConnectionRuntime(
   return defaultCoordinator;
 }
 
+/**
+ * M4 strangler bridge for screens still issuing Gateway management requests.
+ * The coordinator remains the sole lifecycle owner while old screens and the
+ * active adapter temporarily share one protocol client and therefore one
+ * transport. M5 removes this once every screen consumes AgentAdapter directly.
+ */
+export function configureConnectionRuntimeGateway(
+  gateway: GatewayClient,
+): ConnectionCoordinator {
+  return configureConnectionRuntime((record, descriptor) => (
+    createConnectionAdapter(record, descriptor, { gateway })
+  ));
+}
+
 export async function resetConnectionRuntimeForTests(
   options: ConnectionCoordinatorOptions = {},
 ): Promise<ConnectionCoordinator> {
@@ -900,3 +915,9 @@ export type {
   NewConnectionRecord,
   RosterConnectionGroup,
 };
+
+function disposeAdapter(adapter: AgentAdapter): void {
+  const disposable = adapter as AgentAdapter & { dispose?: () => void };
+  if (typeof disposable.dispose === 'function') disposable.dispose();
+  else adapter.disconnect();
+}
