@@ -196,5 +196,22 @@
   "Connection unavailable": "接続を利用できません",
   "Pro unlocks this agent": "Proでこのエージェントを利用できます",
   "View Pro": "Proを見る",
-  "No agents on this connection": "この接続にはエージェントがいません"
+  "No agents on this connection": "この接続にはエージェントがいません",
+  "Agent settings": "エージェント設定",
+  "Agent unavailable": "エージェントを利用できません",
+  "Settings could not load": "設定を読み込めませんでした",
+  "Pro required for this agent": "このエージェントにはProが必要です",
+  "Scheduled tasks": "スケジュール済みタスク",
+  "Files": "ファイル",
+  "Connection": "接続",
+  "OpenClaw management": "OpenClaw管理",
+  "Channels & devices": "チャンネルとデバイス",
+  "Online": "オンライン",
+  "Offline": "オフライン",
+  "Connecting": "接続中",
+  "Models": "モデル",
+  "Skills": "スキル",
+  "Usage": "使用量",
+  "Tools": "ツール",
+  "Logs": "ログ"
 }

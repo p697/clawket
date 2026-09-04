@@ -196,5 +196,22 @@
   "Connection unavailable": "Verbindung nicht verfügbar",
   "Pro unlocks this agent": "Pro schaltet diesen Agent frei",
   "View Pro": "Pro ansehen",
-  "No agents on this connection": "Keine Agents in dieser Verbindung"
+  "No agents on this connection": "Keine Agents in dieser Verbindung",
+  "Agent settings": "Agent-Einstellungen",
+  "Agent unavailable": "Agent nicht verfügbar",
+  "Settings could not load": "Einstellungen konnten nicht geladen werden",
+  "Pro required for this agent": "Pro ist für diesen Agent erforderlich",
+  "Scheduled tasks": "Geplante Aufgaben",
+  "Files": "Dateien",
+  "Connection": "Verbindung",
+  "OpenClaw management": "OpenClaw-Verwaltung",
+  "Channels & devices": "Kanäle & Geräte",
+  "Online": "Online",
+  "Offline": "Offline",
+  "Connecting": "Verbindung wird hergestellt",
+  "Models": "Modelle",
+  "Skills": "Skills",
+  "Usage": "Nutzung",
+  "Tools": "Werkzeuge",
+  "Logs": "Protokolle"
 }

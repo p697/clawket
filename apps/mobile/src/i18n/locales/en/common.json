@@ -196,5 +196,22 @@
   "Connection unavailable": "Connection unavailable",
   "Pro unlocks this agent": "Pro unlocks this agent",
   "View Pro": "View Pro",
-  "No agents on this connection": "No agents on this connection"
+  "No agents on this connection": "No agents on this connection",
+  "Agent settings": "Agent settings",
+  "Agent unavailable": "Agent unavailable",
+  "Settings could not load": "Settings could not load",
+  "Pro required for this agent": "Pro required for this agent",
+  "Scheduled tasks": "Scheduled tasks",
+  "Files": "Files",
+  "Connection": "Connection",
+  "OpenClaw management": "OpenClaw management",
+  "Channels & devices": "Channels & devices",
+  "Online": "Online",
+  "Offline": "Offline",
+  "Connecting": "Connecting",
+  "Models": "Models",
+  "Skills": "Skills",
+  "Usage": "Usage",
+  "Tools": "Tools",
+  "Logs": "Logs"
 }

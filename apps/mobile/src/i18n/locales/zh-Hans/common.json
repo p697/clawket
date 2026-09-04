@@ -196,5 +196,22 @@
   "Connection unavailable": "连接不可用",
   "Pro unlocks this agent": "升级 Pro 后可使用此智能体",
   "View Pro": "查看 Pro",
-  "No agents on this connection": "此连接中没有智能体"
+  "No agents on this connection": "此连接中没有智能体",
+  "Agent settings": "智能体设置",
+  "Agent unavailable": "智能体不可用",
+  "Settings could not load": "设置加载失败",
+  "Pro required for this agent": "此智能体需要 Pro",
+  "Scheduled tasks": "定时任务",
+  "Files": "文件",
+  "Connection": "连接",
+  "OpenClaw management": "OpenClaw 管理",
+  "Channels & devices": "渠道与设备",
+  "Online": "在线",
+  "Offline": "离线",
+  "Connecting": "正在连接",
+  "Models": "模型",
+  "Skills": "技能",
+  "Usage": "用量",
+  "Tools": "工具",
+  "Logs": "日志"
 }

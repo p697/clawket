@@ -196,5 +196,22 @@
   "Connection unavailable": "연결을 사용할 수 없음",
   "Pro unlocks this agent": "Pro에서 이 에이전트를 사용할 수 있습니다",
   "View Pro": "Pro 보기",
-  "No agents on this connection": "이 연결에 에이전트가 없습니다"
+  "No agents on this connection": "이 연결에 에이전트가 없습니다",
+  "Agent settings": "에이전트 설정",
+  "Agent unavailable": "에이전트를 사용할 수 없음",
+  "Settings could not load": "설정을 불러올 수 없음",
+  "Pro required for this agent": "이 에이전트에는 Pro가 필요합니다",
+  "Scheduled tasks": "예약된 작업",
+  "Files": "파일",
+  "Connection": "연결",
+  "OpenClaw management": "OpenClaw 관리",
+  "Channels & devices": "채널 및 기기",
+  "Online": "온라인",
+  "Offline": "오프라인",
+  "Connecting": "연결 중",
+  "Models": "모델",
+  "Skills": "스킬",
+  "Usage": "사용량",
+  "Tools": "도구",
+  "Logs": "로그"
 }
