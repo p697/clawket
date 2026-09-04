@@ -33,6 +33,11 @@
     "check:ui-style:selftest": "node scripts/check-ui-style.selftest.mjs",
     "check:design-system:docs": "node scripts/check-design-system-docs.mjs && node --test scripts/check-design-system-docs.selftest.mjs",
     "check:design-system": "npm run check:ui-style && npm run check:ui-style:selftest && npm run check:design-system:docs",
+    "i18n:check": "node scripts/i18n-prune.mjs --catalog-only && node --test scripts/i18n-prune.selftest.mjs",
+    "i18n:prune:report": "node scripts/i18n-prune.mjs",
+    "i18n:prune:strict": "node scripts/i18n-prune.mjs --strict",
+    "i18n:prune:write": "node scripts/i18n-prune.mjs --write",
+    "i18n:prune:selftest": "node --test scripts/i18n-prune.selftest.mjs",
     "test": "jest",
     "test:coverage": "jest --coverage"
   },
