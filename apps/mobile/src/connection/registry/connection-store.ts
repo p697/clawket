@@ -426,6 +426,10 @@ function serializeSnapshot(revision: number, state: RegistryState): string {
   return JSON.stringify({ version: STORAGE_VERSION, revision, state } satisfies PersistedRegistrySnapshot);
 }
 
+function sameRegistryState(left: RegistryState, right: RegistryState): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
 export function createConnectionId(now: number, randomValue: number): string {
   const safeNow = Number.isFinite(now) && now >= 0 ? Math.trunc(now) : 0;
   const boundedRandom = Number.isFinite(randomValue)
@@ -471,6 +475,27 @@ export class ConnectionStore {
     return this.enqueue(async () => {
       const persisted = await this.readOrMigrate();
       this.publish(persisted.state, persisted.revision);
+      return this.snapshot;
+    });
+  }
+
+  /** Import edits made by the legacy connection form during the M4 strangler. */
+  async syncLegacyState(): Promise<ConnectionStoreSnapshot> {
+    return this.enqueue(async () => {
+      const current = await this.readOrMigrate();
+      const legacyRaw = await this.secureStorage.getItemAsync(
+        LEGACY_CONFIGS_STORAGE_KEY,
+        SECURE_OPTIONS,
+      );
+      const legacy = await this.legacyStorage.getGatewayConfigsState();
+      const state = migrateLegacyState(legacy, readLegacySupplements(legacyRaw));
+      if (sameRegistryState(current.state, state)) {
+        this.publish(current.state, current.revision);
+        return this.snapshot;
+      }
+      const revision = current.revision + 1;
+      await this.persist(current, state, revision);
+      this.publish(state, revision);
       return this.snapshot;
     });
   }

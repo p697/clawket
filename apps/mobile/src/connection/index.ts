@@ -65,6 +65,7 @@ type ConnectionStorePort = Pick<
   | 'setActive'
   | 'setFreeConnection'
   | 'subscribe'
+  | 'syncLegacyState'
   | 'update'
 >;
 
@@ -303,6 +304,12 @@ export class ConnectionCoordinator {
     await this.store.rollback();
     this.disconnectActiveImmediately();
     this.scheduleReconcile();
+    await this.whenIdle();
+    return this.snapshot;
+  }
+
+  async syncLegacyConnections(): Promise<ConnectionRuntimeSnapshot> {
+    await this.store.syncLegacyState();
     await this.whenIdle();
     return this.snapshot;
   }

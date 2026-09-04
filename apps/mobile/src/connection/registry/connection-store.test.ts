@@ -177,6 +177,49 @@ describe('ConnectionStore', () => {
     await expect(store.setActive('missing')).rejects.toBeInstanceOf(ConnectionNotFoundError);
   });
 
+  it('imports legacy editor changes atomically without exposing credentials in descriptors', async () => {
+    const secureStorage = new MemorySecureStorage();
+    let legacyState: GatewayConfigsState = { activeId: null, configs: [] };
+    const legacy: LegacyConnectionStorage = {
+      getGatewayConfigsState: jest.fn(async () => legacyState),
+    };
+    const store = new ConnectionStore({ secureStorage, legacyStorage: legacy });
+    await store.load();
+    legacyState = {
+      activeId: 'edited',
+      configs: [{
+        id: 'edited',
+        name: 'Edited connection',
+        backendKind: 'openclaw',
+        transportKind: 'local',
+        mode: 'local',
+        url: 'ws://127.0.0.1:18789/ws',
+        token: 'editor-secret',
+        createdAt: 10,
+        updatedAt: 20,
+      }],
+    };
+
+    const imported = await store.syncLegacyState();
+
+    expect(imported).toMatchObject({
+      activeConnectionId: 'edited',
+      connections: [expect.objectContaining({
+        id: 'edited',
+        backendKind: 'openclaw',
+        label: 'Edited connection',
+      })],
+    });
+    expect(JSON.stringify(imported)).not.toContain('editor-secret');
+    const persisted = JSON.parse(secureStorage.values.get(CURRENT_KEY) ?? '{}');
+    expect(persisted.state.records[0].auth.token).toBe('editor-secret');
+    expect(secureStorage.values.has(ROLLBACK_KEY)).toBe(true);
+
+    const revision = imported.revision;
+    await store.syncLegacyState();
+    expect(store.getSnapshot().revision).toBe(revision);
+  });
+
   it('does not label a custom relay registry as an official production or preview environment', async () => {
     const customLegacy: GatewayConfigsState = {
       activeId: 'custom-relay',
