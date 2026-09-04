@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { EmptyState } from '../../components/ui';
 import { useAppContext } from '../../contexts/AppContext';
 import { useNativeStackModalHeader } from '../../hooks/useNativeStackModalHeader';
-import { selectByBackend } from '../../services/gateway-backends';
+import { selectByBackend } from '@clawket/agent-protocol';
 import { resolveCronEditorDispatch } from './hermesAwareCronDispatch';
 import { CronDetailScreen as OpenClawCronDetailScreen } from './CronDetailScreen';
 import { CronEditorScreen as OpenClawCronEditorScreen } from './CronEditorScreen';

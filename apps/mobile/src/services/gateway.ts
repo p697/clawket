@@ -123,7 +123,7 @@ import type {
 } from './gateway-relay';
 import { APP_PACKAGE_VERSION } from '../constants/app-version';
 import { getRuntimeClientId, getRuntimeDeviceFamily, getRuntimePlatform } from '../utils/platform';
-import { getGatewayBackendCapabilities, resolveGatewayBackendKind } from './gateway-backends';
+import { getGatewayBackendCapabilities, resolveGatewayBackendKind } from '@clawket/agent-protocol';
 import { getGatewayBackendOperations } from './gateway-backend-operations';
 import { markHermesConnectTrace } from './hermes-connect-debug';
 import {

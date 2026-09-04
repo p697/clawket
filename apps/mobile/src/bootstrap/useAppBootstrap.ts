@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { GatewayClient } from '../services/gateway';
-import { getGatewayBackendCapabilities, resolveGatewayBackendKind, resolveGlobalMainSessionKey } from '../services/gateway-backends';
+import { getGatewayBackendCapabilities, resolveGatewayBackendKind, resolveGlobalMainSessionKey } from '@clawket/agent-protocol';
 import { resolveGatewayCacheScopeId } from '../services/gateway-cache-scope';
 import { NodeClient } from '../services/node-client';
 import { LastOpenedSessionSnapshot, StorageService } from '../services/storage';

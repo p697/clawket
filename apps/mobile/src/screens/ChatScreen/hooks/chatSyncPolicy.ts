@@ -1,5 +1,5 @@
 import { ConnectionState, GatewayConfig } from '../../../types';
-import { selectByBackend } from '../../../services/gateway-backends';
+import { selectByBackend } from '@clawket/agent-protocol';
 
 export type ChatHeaderStatusKind =
   | 'starting_hermes'

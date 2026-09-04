@@ -9,7 +9,7 @@ import { ModelsView } from '../../components/console/ModelsView';
 import { useAppContext } from '../../contexts/AppContext';
 import { useNativeStackModalHeader } from '../../hooks/useNativeStackModalHeader';
 import { analyticsEvents } from '../../services/analytics/events';
-import { selectByBackend } from '../../services/gateway-backends';
+import { selectByBackend } from '@clawket/agent-protocol';
 import { useGatewayRuntimeSettings } from '../ConfigScreen/hooks/useGatewayRuntimeSettings';
 import type { ConsoleStackParamList } from './ConsoleTab';
 

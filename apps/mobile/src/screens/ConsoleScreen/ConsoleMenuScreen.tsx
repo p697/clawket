@@ -15,7 +15,7 @@ import { analyticsEvents } from '../../services/analytics/events';
 import { readAgentAvatar } from '../../services/agent-avatar';
 import { buildConsoleLibraryEntryDescriptors } from '../../services/console-entry-descriptors';
 import { loadGatewayConsoleDashboardBundle } from '../../services/gateway-console-dashboard';
-import { resolveGatewayBackendKind, selectByBackend } from '../../services/gateway-backends';
+import { resolveGatewayBackendKind, selectByBackend } from '@clawket/agent-protocol';
 import { StorageService } from '../../services/storage';
 import { resolveDashboardCostDisplay } from '../../services/usage-cost-display';
 import { getDisplayAgentEmoji } from '../../utils/agent-emoji';

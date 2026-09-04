@@ -1,5 +1,5 @@
 import type { GatewayBackendKind, SessionInfo } from '../types';
-import { selectByBackend } from './gateway-backends';
+import { selectByBackend } from '@clawket/agent-protocol';
 
 export type LiveMemberRole = 'main' | 'subagent' | 'cron' | 'channel' | 'session';
 export type LiveMemberStatus = 'working' | 'error' | 'completed' | 'recent' | 'standby';

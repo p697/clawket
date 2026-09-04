@@ -7,7 +7,7 @@ import { Check, ChevronRight, Cloud, Link2, Plus, Table2, X } from 'lucide-react
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FullWindowOverlay } from 'react-native-screens';
 import type { GatewayMode } from '../../types';
-import { getGatewayModeLabel } from '../../services/gateway-backends';
+import { getGatewayModeLabel } from '@clawket/agent-protocol';
 import { useAppTheme } from '../../theme';
 import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
 import { AgentActivityStatus } from '../../screens/ChatScreen/hooks/agentActivity';

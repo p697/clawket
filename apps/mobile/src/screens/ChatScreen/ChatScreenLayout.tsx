@@ -19,7 +19,7 @@ import { finishHermesConnectTrace, markHermesConnectTrace } from '../../services
 import { useShareIntent } from '../../hooks/useShareIntent';
 import { useChatGatewaySwitcher } from '../../hooks/useChatGatewaySwitcher';
 import { useProPaywall } from '../../contexts/ProPaywallContext';
-import { getGatewayBackendCapabilities, getGatewayBackendDescriptor, resolveGatewayBackendKind } from '../../services/gateway-backends';
+import { getGatewayBackendCapabilities, getGatewayBackendDescriptor, resolveGatewayBackendKind } from '@clawket/agent-protocol';
 import { useAppTheme } from '../../theme';
 import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
 import { sessionLabel } from '../../utils/chat-message';

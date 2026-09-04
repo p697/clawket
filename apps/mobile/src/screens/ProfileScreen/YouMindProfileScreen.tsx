@@ -28,7 +28,7 @@ import {
   type YouMindCurrentUser,
   type YouMindPermanentCreditGrant,
 } from '../../services/youmind';
-import { resolveGatewayBackendKind } from '../../services/gateway-backends';
+import { resolveGatewayBackendKind } from '@clawket/agent-protocol';
 import { useAppTheme } from '../../theme';
 import { FontSize, FontWeight, PresentationColor, Radius, Space } from '../../theme/tokens';
 import type { ProfileStackParamList } from './ProfileTab';

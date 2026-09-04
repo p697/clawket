@@ -5,7 +5,7 @@ import {
   resolveGatewayBackendKind,
   resolveGatewayTransportKind,
   toLegacyGatewayMode,
-} from '../services/gateway-backends';
+} from '@clawket/agent-protocol';
 import { resolveGatewayCacheScopeId } from '../services/gateway-cache-scope';
 import { RelayPairingService } from '../services/relay-pairing';
 import { HermesRelayPairingService } from '../services/hermes-relay-pairing';

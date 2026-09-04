@@ -9,7 +9,7 @@ import {
   resolveGlobalMainSessionKey,
   selectByBackend,
   toLegacyGatewayMode,
-} from './gateway-backends';
+} from '@clawket/agent-protocol';
 
 describe('gateway-backends', () => {
   describe('resolveGatewayBackendKind', () => {

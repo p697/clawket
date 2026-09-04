@@ -16,7 +16,7 @@ import {
   markCurrentAppUpdateAnnouncementShown,
   shouldShowCurrentAppUpdateAnnouncement,
 } from '../../services/app-update-announcement';
-import { getGatewayBackendCapabilities } from '../../services/gateway-backends';
+import { getGatewayBackendCapabilities } from '@clawket/agent-protocol';
 import { requestConfigAddConnection } from '../../services/config-add-connection-request';
 import { ChatScreenLayout } from './ChatScreenLayout';
 import { useChatControllerContext } from './ChatControllerContext';

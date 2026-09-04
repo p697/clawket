@@ -18,7 +18,7 @@ import * as DocumentPicker from "expo-document-picker";
 
 import { useChatImagePreview } from "../../../hooks/useChatImagePreview";
 import { analyticsEvents } from "../../../services/analytics/events";
-import { getGatewayThinkingLevels } from "../../../services/gateway-backends";
+import { getGatewayThinkingLevels } from "@clawket/agent-protocol";
 import { resolveGatewayCacheScopeId } from "../../../services/gateway-cache-scope";
 import { cacheMessageImages } from "../../../services/image-cache";
 import { stopSpeechRecognitionAsync } from "../../../services/speech/speechRecognition";

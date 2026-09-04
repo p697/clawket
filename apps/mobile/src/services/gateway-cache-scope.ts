@@ -1,5 +1,5 @@
 import { GatewayConfig } from '../types';
-import { resolveGatewayBackendKind, resolveGatewayTransportKind } from './gateway-backends';
+import { resolveGatewayBackendKind, resolveGatewayTransportKind } from '@clawket/agent-protocol';
 import { createCompositeHash, createHash } from './crypto-hash';
 
 function normalizeUrl(url?: string): string {

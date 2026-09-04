@@ -1,5 +1,5 @@
 import { isConsoleScreenSupported } from './console-screen-support';
-import type { GatewayBackendCapabilities } from '../../services/gateway-backends';
+import type { GatewayBackendCapabilities } from '@clawket/agent-protocol';
 
 describe('console-screen-support', () => {
   it('gates Discover and ClawHub through backend capabilities', () => {

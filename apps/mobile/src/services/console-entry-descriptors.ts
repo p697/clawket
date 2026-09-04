@@ -1,6 +1,6 @@
 import type { TFunction } from 'i18next';
 import type { GatewayBackendKind } from '../types';
-import { selectByBackend } from './gateway-backends';
+import { selectByBackend } from '@clawket/agent-protocol';
 import type { ConsoleStackParamList } from '../screens/ConsoleScreen/sharedNavigator';
 
 export type ConsoleEntryDescriptor = {

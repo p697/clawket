@@ -1,4 +1,4 @@
-import { getGatewayThinkingLevels } from './gateway-backends';
+import { getGatewayThinkingLevels } from '@clawket/agent-protocol';
 import type { ThinkingLevel } from '../utils/gateway-settings';
 
 type GatewayHermesThinkingGateway = {

@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { Platform } from 'react-native';
 import { useAppTheme } from '../theme';
 import { posthogClient } from '../services/analytics/posthog';
-import { resolveGatewayBackendKind, resolveGatewayTransportKind } from '../services/gateway-backends';
+import { resolveGatewayBackendKind, resolveGatewayTransportKind } from '@clawket/agent-protocol';
 import { StorageService } from '../services/storage';
 import type { GatewayConfig } from '../types';
 

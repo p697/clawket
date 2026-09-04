@@ -10,7 +10,7 @@ import {
   resolveGatewayBackendKind,
   resolveGatewayTransportKind,
   toLegacyGatewayMode,
-} from '../services/gateway-backends';
+} from '@clawket/agent-protocol';
 import { StorageService } from '../services/storage';
 import { GatewayBackendKind, GatewayConfig, GatewayMode, GatewayTransportKind, SavedGatewayConfig, type RelayServiceEnvironment } from '../types';
 import { isUnsupportedDirectLocalTlsConfig, shouldSuppressDuplicatePairingAlert } from './gatewayConfigForm.utils';

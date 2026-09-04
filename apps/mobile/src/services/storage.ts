@@ -34,7 +34,7 @@ import {
   resolveGatewayTransportKind,
   selectByBackend,
   toLegacyGatewayMode,
-} from './gateway-backends';
+} from '@clawket/agent-protocol';
 import { resolveSavedGatewayName } from './gateway-config-name';
 import type { ProSubscriptionSnapshot } from './pro-subscription';
 

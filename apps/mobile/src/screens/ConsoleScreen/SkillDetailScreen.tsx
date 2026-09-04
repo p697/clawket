@@ -19,7 +19,7 @@ import { HeaderActionButton, LoadingState, ThemedSwitch } from '../../components
 import { useAppContext } from '../../contexts/AppContext';
 import { useProPaywall } from '../../contexts/ProPaywallContext';
 import { useNativeStackModalHeader } from '../../hooks/useNativeStackModalHeader';
-import { resolveGatewayBackendKind } from '../../services/gateway-backends';
+import { resolveGatewayBackendKind } from '@clawket/agent-protocol';
 import { useAppTheme } from '../../theme';
 import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
 import type { RequirementStatus, SkillStatusEntry, SkillStatusReport } from '../../types';

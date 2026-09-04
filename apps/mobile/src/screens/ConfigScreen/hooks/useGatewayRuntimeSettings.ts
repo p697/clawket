@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Alert } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useGatewayPatch } from '../../../hooks/useGatewayPatch';
-import { getGatewayBackendCapabilities } from '../../../services/gateway-backends';
+import { getGatewayBackendCapabilities } from '@clawket/agent-protocol';
 import { GatewayClient, GatewayInfo } from '../../../services/gateway';
 import {
   DEFAULT_GATEWAY_RUNTIME_SETTINGS,

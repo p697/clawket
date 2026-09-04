@@ -1,4 +1,4 @@
-import type { GatewayBackendCapabilities } from './gateway-backends';
+import type { GatewayBackendCapabilities } from '@clawket/agent-protocol';
 import type { AgentsListResult } from '../types/agent';
 import type { CronListResult } from '../types/cron';
 import type { SkillStatusReport } from '../types/skills';

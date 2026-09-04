@@ -1,6 +1,6 @@
 import { publicAppLinks } from '../config/public';
 import type { GatewayConfig } from '../types';
-import { selectByBackend } from './gateway-backends';
+import { selectByBackend } from '@clawket/agent-protocol';
 
 export type GatewayDocumentationDescriptor = {
   url: string | null;

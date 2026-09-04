@@ -14,7 +14,7 @@ import { Card, EmptyState, LoadingState, ScreenHeader, SearchInput, createCardCo
 import type { ModelInfo } from '../chat/ModelPickerModal';
 import { ThinkingLevelMenu } from '../chat/ThinkingLevelMenu';
 import { useAppContext } from '../../contexts/AppContext';
-import { getGatewayThinkingLevels } from '../../services/gateway-backends';
+import { getGatewayThinkingLevels } from '@clawket/agent-protocol';
 import {
   loadGatewayHermesThinkingState,
   saveGatewayHermesFastMode,

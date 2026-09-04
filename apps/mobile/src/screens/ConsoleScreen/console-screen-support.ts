@@ -1,4 +1,4 @@
-import type { GatewayBackendCapabilities } from '../../services/gateway-backends';
+import type { GatewayBackendCapabilities } from '@clawket/agent-protocol';
 import type { ConsoleStackParamList } from './sharedNavigator';
 
 export function isConsoleScreenSupported(

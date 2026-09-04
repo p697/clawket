@@ -65,7 +65,7 @@ import {
   shouldShowChatReplyNotification,
 } from './src/services/chat-notifications';
 import { StorageService } from './src/services/storage';
-import { getGatewayBackendCapabilities, resolveGatewayBackendKind, resolveGlobalMainSessionKey } from './src/services/gateway-backends';
+import { getGatewayBackendCapabilities, resolveGatewayBackendKind, resolveGlobalMainSessionKey } from '@clawket/agent-protocol';
 import { resolveGatewayCacheScopeId } from './src/services/gateway-cache-scope';
 import { analyticsEvents } from './src/services/analytics/events';
 import { useDeepLinkHandler, type DeepLinkDeps } from './src/hooks/useDeepLinkHandler';

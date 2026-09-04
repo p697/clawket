@@ -14,7 +14,7 @@ import { Gift } from 'lucide-react-native';
 import { Card, EmptyState, LoadingState } from '../../components/ui';
 import { useAppContext } from '../../contexts/AppContext';
 import { useNativeStackModalHeader } from '../../hooks/useNativeStackModalHeader';
-import { resolveGatewayBackendKind } from '../../services/gateway-backends';
+import { resolveGatewayBackendKind } from '@clawket/agent-protocol';
 import {
   YouMindClient,
   getYouMindAuthFailureReason,

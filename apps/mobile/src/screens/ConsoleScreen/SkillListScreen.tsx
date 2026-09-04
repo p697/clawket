@@ -25,7 +25,7 @@ import { useTranslation } from 'react-i18next';
 import { useAppContext } from '../../contexts/AppContext';
 import { useNativeStackModalHeader } from '../../hooks/useNativeStackModalHeader';
 import { analyticsEvents } from '../../services/analytics/events';
-import { resolveGatewayBackendKind } from '../../services/gateway-backends';
+import { resolveGatewayBackendKind } from '@clawket/agent-protocol';
 import { StorageService, getDefaultSkillListSortMode } from '../../services/storage';
 import { useAppTheme } from '../../theme';
 import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';

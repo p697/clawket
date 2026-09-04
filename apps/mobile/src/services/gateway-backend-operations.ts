@@ -1,7 +1,7 @@
 import type { GatewayConfig } from '../types';
 import type { ToolsCatalogResult } from '../types/index';
 import type { CostSummary, UsageResult } from '../types/usage';
-import { resolveGatewayBackendKind } from './gateway-backends';
+import { resolveGatewayBackendKind } from '@clawket/agent-protocol';
 
 type GatewayRequestFn = <T = unknown>(method: string, params?: object) => Promise<T>;
 

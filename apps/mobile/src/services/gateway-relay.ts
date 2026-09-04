@@ -1,6 +1,6 @@
 import type { GatewayConfig } from '../types';
 import { normalizeWsUrl } from './gateway-auth';
-import { resolveGatewayTransportKind } from './gateway-backends';
+import { resolveGatewayTransportKind } from '@clawket/agent-protocol';
 
 export const RELAY_CONTROL_PREFIX = '__clawket_relay_control__:';
 export const OPENCLAW_MOBILE_SETUP_CAPABILITY = 'openclaw.bootstrap.mobile-setup.v1';

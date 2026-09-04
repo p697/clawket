@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppContext } from '../../contexts/AppContext';
 import { useConnectionState } from '../../hooks/useConnectionState';
 import { analyticsEvents } from '../../services/analytics/events';
-import { selectByBackend } from '../../services/gateway-backends';
+import { selectByBackend } from '@clawket/agent-protocol';
 import {
   buildLiveDashboard,
   isLiveSessionInScope,

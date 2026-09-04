@@ -49,7 +49,7 @@ import { APP_PACKAGE_VERSION } from '../../constants/app-version';
 import { CLAWKET_GITHUB_REPO_URL } from '../../config/app-links';
 import { buildSupportEmailUrl, publicAppLinks } from '../../config/public';
 import { AppIconVariant, getCurrentAppIconAsync, isAppIconChangeSupportedAsync, setCurrentAppIconAsync } from '../../services/app-icon';
-import { getGatewayBackendCapabilities, getGatewayModeLabel, resolveGatewayBackendKind } from '../../services/gateway-backends';
+import { getGatewayBackendCapabilities, getGatewayModeLabel, resolveGatewayBackendKind } from '@clawket/agent-protocol';
 import { saveBundledImageToPhotoLibrary } from '../../services/photo-library';
 import { getOfficialRelayRegistryUrl, getRelayPairCommand, resolveOfficialRelayEnvironment } from '../../services/relay-environment';
 import { useConfigScreenController } from './hooks/useConfigScreenController';
