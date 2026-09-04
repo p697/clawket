@@ -53,7 +53,7 @@ jest.mock('../../connection', () => ({
   useConnections: () => mockConnections,
 }));
 
-jest.mock('../ChatScreen/hooks/useChatController', () => ({
+jest.mock('../../chat/useChatController', () => ({
   useChatController: () => mockController,
 }));
 

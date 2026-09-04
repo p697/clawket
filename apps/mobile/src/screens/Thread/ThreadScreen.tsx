@@ -10,7 +10,7 @@ import {
   useConnections,
 } from '../../connection';
 import type { RootStackParamList, ThreadOrigin } from '../../navigation/root-stack';
-import { useChatController } from '../ChatScreen/hooks/useChatController';
+import { useChatController } from '../../chat/useChatController';
 import {
   ThreadView,
   type ThreadCopy,

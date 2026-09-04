@@ -11,6 +11,7 @@ import {
   buildSessionPanelGroups,
   buildSessionPanelRows,
   filterSessionPanelRows,
+  normalizeSessionRenameTitle,
   resolveSessionPanelPageState,
   shouldShowSessionPanelQuickFilters,
   summarizeSessionPanelRows,
@@ -188,6 +189,12 @@ describe('SessionPanel model', () => {
     expect(shouldShowSessionPanelQuickFilters(8)).toBe(false);
     expect(shouldShowSessionPanelQuickFilters(9)).toBe(true);
     expect(shouldShowSessionPanelQuickFilters(4, 3)).toBe(true);
+  });
+
+  it('normalizes rename drafts and rejects blank or unchanged titles', () => {
+    expect(normalizeSessionRenameTitle('  Launch review  ', 'Old title')).toBe('Launch review');
+    expect(normalizeSessionRenameTitle('   ', 'Old title')).toBeNull();
+    expect(normalizeSessionRenameTitle('  Old title ', 'Old title')).toBeNull();
   });
 
   it.each([

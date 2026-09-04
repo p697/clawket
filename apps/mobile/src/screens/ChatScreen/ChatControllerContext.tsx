@@ -1,5 +1,5 @@
 import React from 'react';
-import { useChatController } from './hooks/useChatController';
+import { useChatController } from '../../chat/useChatController';
 
 export type ChatController = ReturnType<typeof useChatController>;
 

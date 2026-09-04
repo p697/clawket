@@ -4,7 +4,7 @@ import { RouteProp, useIsFocused, useNavigation, useRoute } from '@react-navigat
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import i18n from '../../i18n';
 import { ConfigScreenLayout } from './ConfigScreenLayout';
-import { QRScanResult } from './qrPayload';
+import { QRScanResult } from '../../connection/pairing/qrPayload';
 import { useGatewayOverlay } from '../../contexts/GatewayOverlayContext';
 import { useGatewayScanner } from '../../contexts/GatewayScannerContext';
 import { consumePendingConfigAddConnectionRequest } from '../../services/config-add-connection-request';

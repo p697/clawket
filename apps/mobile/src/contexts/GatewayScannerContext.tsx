@@ -5,8 +5,8 @@ import * as ImagePicker from 'expo-image-picker';
 import i18n from '../i18n';
 import { useAppContext } from './AppContext';
 import { useGatewayOverlay } from './GatewayOverlayContext';
-import { QRScannerScreen } from '../screens/ConfigScreen/QRScannerScreen';
-import { parseQRPayload, type QRScanResult } from '../screens/ConfigScreen/qrPayload';
+import { QRScannerScreen } from '../connection/pairing/QRScannerScreen';
+import { parseQRPayload, type QRScanResult } from '../connection/pairing/qrPayload';
 import {
   claimRelayPairing,
   createGatewayConfigFromScan,

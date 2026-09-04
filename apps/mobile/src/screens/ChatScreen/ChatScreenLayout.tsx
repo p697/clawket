@@ -32,17 +32,17 @@ import { ChatComposerPane } from './components/ChatComposerPane';
 import { ChatMessagePane } from './components/ChatMessagePane';
 import { ChatOverlays } from './components/ChatOverlays';
 import { renderChatMessageBubble } from './components/renderChatMessageBubble';
-import { useChatController } from './hooks/useChatController';
-import { useChatKeyboardLayout } from './hooks/useChatKeyboardLayout';
-import { getChatHeaderSyncState } from './hooks/chatSyncPolicy';
-import { getChatHeaderStatusLabel } from './hooks/chatHeaderStatusLabel';
-import { useChatListViewport } from './hooks/useChatListViewport';
-import { useChatMessageEntrance } from './hooks/useChatMessageEntrance';
-import { useChatMessageSelection } from './hooks/useChatMessageSelection';
-import { useMessageFavorites } from './hooks/useMessageFavorites';
-import { useRotatingPlaceholder } from './hooks/useRotatingPlaceholder';
+import { useChatController } from '../../chat/useChatController';
+import { useChatKeyboardLayout } from '../../chat/useChatKeyboardLayout';
+import { getChatHeaderSyncState } from '../../chat/chatSyncPolicy';
+import { getChatHeaderStatusLabel } from '../../chat/chatHeaderStatusLabel';
+import { useChatListViewport } from '../../chat/useChatListViewport';
+import { useChatMessageEntrance } from '../../chat/useChatMessageEntrance';
+import { useChatMessageSelection } from '../../chat/useChatMessageSelection';
+import { useMessageFavorites } from '../../chat/useMessageFavorites';
+import { useRotatingPlaceholder } from '../../chat/useRotatingPlaceholder';
 import { QuickConnectionPanel } from '../../components/config/QuickConnectionPanel';
-import { buildChildSessionActivityCards } from './hooks/childSessionActivity';
+import { buildChildSessionActivityCards } from '../../chat/childSessionActivity';
 
 const COMPLETED_CHILD_STRIP_GRACE_MS = 8_000;
 

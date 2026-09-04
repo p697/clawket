@@ -20,6 +20,9 @@ export type SessionPanelMode = 'grouped' | 'list';
 export type SessionPanelQuickFilter = 'all' | 'attention' | 'working';
 export type SessionPanelKindFilter = 'all' | SessionBoardKind;
 export type SessionPanelAction = keyof SessionActions;
+export type SessionPanelRenamePayload = Readonly<{
+  title: string;
+}>;
 export type SessionPanelPageState =
   | 'loading'
   | 'empty'
@@ -216,6 +219,15 @@ export function shouldShowSessionPanelQuickFilters(
   visibleCapacity = SESSION_PANEL_VISIBLE_ROW_CAPACITY,
 ): boolean {
   return rowCount > Math.max(0, visibleCapacity);
+}
+
+export function normalizeSessionRenameTitle(
+  draft: string,
+  currentTitle: string,
+): string | null {
+  const title = draft.trim();
+  if (!title || title === currentTitle.trim()) return null;
+  return title;
 }
 
 export function resolveSessionPanelPageState(input: Readonly<{

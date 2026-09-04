@@ -53,6 +53,7 @@ export type OnboardingScreenProps = Readonly<{
   initialBackend?: PairableBackendKind;
   status?: OnboardingStatus;
   environment?: 'production' | 'preview';
+  pairingCommand?: string;
   onViewed?: () => void;
   onClose?: () => void;
   onCopyCommand?: (command: string) => MaybePromise<void>;
@@ -78,6 +79,7 @@ export function OnboardingScreen({
   initialBackend = 'openclaw',
   status = { kind: 'idle' },
   environment = 'production',
+  pairingCommand = PAIRING_COMMAND,
   onViewed,
   onClose,
   onCopyCommand,
@@ -215,7 +217,7 @@ export function OnboardingScreen({
                     selectable
                     style={styles.command}
                   >
-                    {PAIRING_COMMAND}
+                    {pairingCommand}
                   </Text>
                   {onOpenPairingHelp ? (
                     <FloatingButton
@@ -231,7 +233,7 @@ export function OnboardingScreen({
                       icon={Copy}
                       appearance="quiet"
                       accessibilityLabel={t('Copy command')}
-                      onPress={() => { void onCopyCommand(PAIRING_COMMAND); }}
+                      onPress={() => { void onCopyCommand(pairingCommand); }}
                     />
                   ) : null}
                 </View>

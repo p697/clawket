@@ -25,16 +25,15 @@ jest.mock('../contexts/GatewayScannerContext', () => ({
 }));
 
 // Import after mocks are set up
-import { useDeepLinkHandler } from './useDeepLinkHandler';
+import { useDeepLinkHandler, type DeepLinkDeps } from './useDeepLinkHandler';
 
 describe('useDeepLinkHandler', () => {
   const mockNavigate = jest.fn();
   const mockIsReady = jest.fn(() => true);
   const mockSendChat = jest.fn();
   const mockOnSaved = jest.fn();
-  const mockRequestChatSidebar = jest.fn();
 
-  const deps = {
+  const deps: DeepLinkDeps = {
     rootNavigationRef: {
       isReady: mockIsReady,
       navigate: mockNavigate,
@@ -43,9 +42,10 @@ describe('useDeepLinkHandler', () => {
     gateway: {
       sendChat: mockSendChat,
     } as any,
+    activeConnectionId: 'connection-1',
+    currentAgentId: 'main',
     mainSessionKey: 'main-session',
     onSaved: mockOnSaved,
-    requestChatSidebar: mockRequestChatSidebar,
   };
 
   // Helper to simulate a deep link URL event
@@ -70,6 +70,8 @@ describe('useDeepLinkHandler', () => {
     jest.clearAllMocks();
     refObject.current = null;
     effectCallback = null;
+    deps.activeConnectionId = 'connection-1';
+    mockIsReady.mockReturnValue(true);
 
     // Reset Linking mocks
     (Linking.getInitialURL as jest.Mock).mockResolvedValue(null);
@@ -191,32 +193,45 @@ describe('useDeepLinkHandler', () => {
       await flushPromises();
     });
 
-    it('should navigate to Chat and send message for agent action', () => {
+    it('should navigate to the active Agent thread and send the message', () => {
       simulateUrl('clawket://agent?message=hello');
       pressAlertConfirm();
-      expect(mockNavigate).toHaveBeenCalledWith('MainTabs', { screen: 'Chat' });
+      expect(mockNavigate).toHaveBeenCalledWith('Thread', {
+        connectionId: 'connection-1',
+        agentId: 'main',
+        sessionKey: 'main-session',
+        from: 'notification',
+      });
       expect(mockSendChat).toHaveBeenCalledWith('main-session', 'hello');
     });
 
-    it('should use custom sessionKey for agent action if provided', () => {
+    it('should navigate and send to a custom sessionKey for an agent action', () => {
       simulateUrl('clawket://agent?message=hello&sessionKey=custom');
       pressAlertConfirm();
+      expect(mockNavigate).toHaveBeenCalledWith('Thread', {
+        connectionId: 'connection-1',
+        agentId: 'main',
+        sessionKey: 'custom',
+        from: 'notification',
+      });
       expect(mockSendChat).toHaveBeenCalledWith('custom', 'hello');
     });
 
-    it('should request chat sidebar for session action', () => {
+    it('should navigate directly to the linked session', () => {
       simulateUrl('clawket://session?key=test');
       pressAlertConfirm();
-      expect(mockRequestChatSidebar).toHaveBeenCalledWith({
-        tab: 'sessions',
-        openDrawer: false,
+      expect(mockNavigate).toHaveBeenCalledWith('Thread', {
+        connectionId: 'connection-1',
+        agentId: 'main',
+        sessionKey: 'test',
+        from: 'notification',
       });
     });
 
-    it('should navigate to My tab for config action', () => {
+    it('should navigate to Account Settings for a config action', () => {
       simulateUrl('clawket://config');
       pressAlertConfirm();
-      expect(mockNavigate).toHaveBeenCalledWith('MainTabs', { screen: 'My' });
+      expect(mockNavigate).toHaveBeenCalledWith('AccountSettings');
     });
 
     it('should save config and call onSaved for connect action', () => {
@@ -259,6 +274,47 @@ describe('useDeepLinkHandler', () => {
       pressAlertConfirm();
       expect(mockNavigate).not.toHaveBeenCalled();
       expect(mockSendChat).toHaveBeenCalledWith('main-session', 'hello');
+    });
+
+    it('should preserve the send failure prompt after opening the thread', async () => {
+      mockSendChat.mockRejectedValueOnce(new Error('offline'));
+      simulateUrl('clawket://agent?message=hello');
+      pressAlertConfirm();
+      await flushPromises();
+      expect(mockNavigate).toHaveBeenCalledWith('Thread', {
+        connectionId: 'connection-1',
+        agentId: 'main',
+        sessionKey: 'main-session',
+        from: 'notification',
+      });
+      expect(Alert.alert).toHaveBeenLastCalledWith(
+        'Send Failed',
+        'Connection is not ready. Please try again in the thread.',
+      );
+    });
+
+    it('should not navigate or send an agent action without an active connection', () => {
+      deps.activeConnectionId = null;
+      simulateUrl('clawket://agent?message=hello');
+      pressAlertConfirm();
+      expect(mockNavigate).not.toHaveBeenCalled();
+      expect(mockSendChat).not.toHaveBeenCalled();
+      expect(Alert.alert).toHaveBeenLastCalledWith(
+        'Connection Required',
+        'Connect to an Agent before sending this message.',
+      );
+    });
+
+    it('should not navigate a session action without an active connection', () => {
+      deps.activeConnectionId = null;
+      simulateUrl('clawket://session?key=test');
+      pressAlertConfirm();
+      expect(mockNavigate).not.toHaveBeenCalled();
+      expect(mockSendChat).not.toHaveBeenCalled();
+      expect(Alert.alert).toHaveBeenLastCalledWith(
+        'Connection Required',
+        'Connect to an Agent before opening this session.',
+      );
     });
   });
 

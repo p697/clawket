@@ -38,38 +38,24 @@ describe('app update announcement service', () => {
   });
 
   it('returns the release announcement for a version that exists in the unified history', () => {
-    expect(getCurrentAppUpdateAnnouncement('1.2.0')).not.toBeNull();
+    expect(getCurrentAppUpdateAnnouncement('3.0.0')).not.toBeNull();
   });
 
-  it('keeps the 2.1.0 release announcement entries available in the history', () => {
-    expect(getCurrentAppUpdateAnnouncement('2.1.0')).toMatchObject({
-      entries: expect.arrayContaining([
-        expect.objectContaining({
-          id: 'youmind-connection',
-          action: {
-            type: 'navigate_config_add_connection',
-            tab: 'quick',
-            flow: 'youmind',
-          },
-        }),
-        expect.objectContaining({
-          id: 'hermes-full-support',
-          action: {
-            type: 'navigate_config_add_connection',
-            tab: 'quick',
-            flow: 'local',
-          },
-        }),
-      ]),
-    });
+  it('keeps only the Clawket 3.0 and 3.0 + Pro entries', () => {
+    expect(releaseUpdates.getAppUpdateReleaseHistory()).toHaveLength(1);
+    expect(getCurrentAppUpdateAnnouncement('3.0.0')?.entries.map((entry) => entry.id)).toEqual([
+      'clawket-3-0',
+      'clawket-3-0-pro',
+    ]);
   });
 
-  it('keeps the 1.9.0 release announcement available in the history', () => {
-    expect(getCurrentAppUpdateAnnouncement('1.9.0')).not.toBeNull();
+  it('removes pre-3.0 release announcements from the history', () => {
+    expect(getCurrentAppUpdateAnnouncement('2.1.0')).toBeNull();
+    expect(getCurrentAppUpdateAnnouncement('1.9.0')).toBeNull();
   });
 
   it('returns null when the app version is not in the unified release history', () => {
-    expect(getCurrentAppUpdateAnnouncement('3.0.0')).toBeNull();
+    expect(getCurrentAppUpdateAnnouncement('9.9.9')).toBeNull();
   });
 
   it('returns null when the app version is empty', () => {

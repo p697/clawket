@@ -410,5 +410,9 @@
   "Too many requests, try again later": "リクエストが多すぎます。後でもう一度お試しください",
   "Message too large to send": "メッセージが大きすぎて送信できません",
   "Not supported by this backend": "このバックエンドではサポートされていません",
+  "Clawket 3.0": "Clawket 3.0",
+  "Every agent and session in one roster.": "すべてのエージェントとセッションを、ひとつの名簿に。",
+  "Clawket 3.0 + Pro": "Clawket 3.0 + Pro",
+  "Unlimited connections, agents, management, logs, files, and search.": "接続数・エージェント数が無制限。管理、ログ、ファイル、検索も利用できます。",
   "Server error": "サーバーエラー"
 }

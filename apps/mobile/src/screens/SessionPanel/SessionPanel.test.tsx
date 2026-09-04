@@ -160,6 +160,13 @@ jest.mock('../../components/ui/SearchInput', () => {
   };
 });
 
+jest.mock('../../components/ui/FormTextInput', () => {
+  const ReactRuntime = require('react');
+  return {
+    FormTextInput: (props: Record<string, unknown>) => ReactRuntime.createElement('TextInput', props),
+  };
+});
+
 jest.mock('../../components/ui/Banner', () => {
   const ReactRuntime = require('react');
   const { Pressable, Text, View } = require('react-native');
@@ -393,6 +400,17 @@ describe('SessionPanelView', () => {
     expect(onSelectSession).toHaveBeenCalledWith(mainRow);
 
     fireEvent(view.getByTestId(`session-panel-row-${mainRow.id}`), 'longPress');
+    fireEvent.press(view.getByTestId('session-panel-action-pin'));
+    expect(onSessionAction).toHaveBeenCalledWith(mainRow, 'pin');
+
+    fireEvent(view.getByTestId(`session-panel-row-${mainRow.id}`), 'longPress');
+    fireEvent.press(view.getByTestId('session-panel-action-reset'));
+    await act(async () => {
+      fireEvent.press(view.getByLabelText('Reset'));
+    });
+    expect(onSessionAction).toHaveBeenCalledWith(mainRow, 'reset');
+
+    fireEvent(view.getByTestId(`session-panel-row-${mainRow.id}`), 'longPress');
     expect(view.getByTestId('session-panel-actions')).toBeTruthy();
     fireEvent.press(view.getByTestId('session-panel-action-delete'));
     expect(view.getByTestId('session-panel-confirm')).toBeTruthy();
@@ -400,6 +418,55 @@ describe('SessionPanelView', () => {
       fireEvent.press(view.getByLabelText('Delete'));
     });
     expect(onSessionAction).toHaveBeenCalledWith(mainRow, 'delete');
+  });
+
+  it('renames through a cross-platform editor and passes the trimmed title to the host', async () => {
+    const onSessionAction = jest.fn(async () => undefined);
+    const mainRow = rows.find((row) => row.kind === 'main' && row.agentId === 'main')!;
+    const view = render(
+      <SessionPanelView {...props({ onSessionAction })} />,
+    );
+
+    fireEvent(view.getByTestId(`session-panel-row-${mainRow.id}`), 'longPress');
+    fireEvent.press(view.getByTestId('session-panel-action-rename'));
+
+    expect(view.getByTestId('session-panel-rename')).toBeTruthy();
+    expect(view.getByTestId('session-panel-rename-input').props.value).toBe(mainRow.title);
+
+    fireEvent.changeText(view.getByTestId('session-panel-rename-input'), '  Launch review  ');
+    await act(async () => {
+      fireEvent.press(view.getByLabelText('Save'));
+    });
+
+    expect(onSessionAction).toHaveBeenCalledWith(
+      mainRow,
+      'rename',
+      { title: 'Launch review' },
+    );
+    await waitFor(() => expect(view.queryByTestId('session-panel-rename')).toBeNull());
+  });
+
+  it('keeps rename open for invalid drafts and failed host updates', async () => {
+    const onSessionAction = jest.fn(async () => {
+      throw new Error('rename failed');
+    });
+    const mainRow = rows.find((row) => row.kind === 'main' && row.agentId === 'main')!;
+    const view = render(
+      <SessionPanelView {...props({ onSessionAction })} />,
+    );
+
+    fireEvent(view.getByTestId(`session-panel-row-${mainRow.id}`), 'longPress');
+    fireEvent.press(view.getByTestId('session-panel-action-rename'));
+    fireEvent.changeText(view.getByTestId('session-panel-rename-input'), '   ');
+    expect(view.getByLabelText('Save').props.disabled).toBe(true);
+
+    fireEvent.changeText(view.getByTestId('session-panel-rename-input'), 'New title');
+    await act(async () => {
+      fireEvent.press(view.getByLabelText('Save'));
+    });
+
+    expect(onSessionAction).toHaveBeenCalledWith(mainRow, 'rename', { title: 'New title' });
+    expect(view.getByTestId('session-panel-rename')).toBeTruthy();
   });
 
   it('covers loading, empty, error, offline cached, permission, and old bridge states', () => {

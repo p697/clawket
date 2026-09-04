@@ -226,6 +226,23 @@ describe('OnboardingScreen', () => {
     expect(onSubmitPairing).toHaveBeenCalledWith(expect.objectContaining({ code: '987654' }));
   });
 
+  it('renders and copies an environment-specific pairing command', () => {
+    const onCopyCommand = jest.fn();
+    const view = render(
+      <OnboardingScreen
+        {...createProps({
+          environment: 'preview',
+          pairingCommand: 'npx @p697/clawket pair --preview',
+          onCopyCommand,
+        })}
+      />,
+    );
+
+    expect(view.getByText('npx @p697/clawket pair --preview')).toBeTruthy();
+    fireEvent.press(view.getByTestId('onboarding-copy-command'));
+    expect(onCopyCommand).toHaveBeenCalledWith('npx @p697/clawket pair --preview');
+  });
+
   it('routes QR, YouMind, and official documentation actions through callbacks', () => {
     const onScanQr = jest.fn();
     const onOpenYouMind = jest.fn();

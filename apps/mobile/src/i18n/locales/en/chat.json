@@ -410,5 +410,9 @@
   "Too many requests, try again later": "Too many requests, try again later",
   "Message too large to send": "Message too large to send",
   "Not supported by this backend": "Not supported by this backend",
+  "Clawket 3.0": "Clawket 3.0",
+  "Every agent and session in one roster.": "Every agent and session in one roster.",
+  "Clawket 3.0 + Pro": "Clawket 3.0 + Pro",
+  "Unlimited connections, agents, management, logs, files, and search.": "Unlimited connections, agents, management, logs, files, and search.",
   "Server error": "Server error"
 }

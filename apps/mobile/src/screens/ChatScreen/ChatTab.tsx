@@ -12,9 +12,8 @@ import { ChatCacheService } from '../../services/chat-cache';
 import { useAppTheme } from '../../theme';
 import { Space } from '../../theme/tokens';
 import { ChatControllerProvider, useChatControllerContext } from './ChatControllerContext';
-import { useChatController } from './hooks/useChatController';
+import { useChatController } from '../../chat/useChatController';
 import { ChatScreen } from './index';
-import { YouMindChatTab } from './YouMindChatTab';
 
 export type ChatDrawerParamList = {
   ChatMain: undefined;
@@ -238,9 +237,6 @@ export function ChatTab(): React.JSX.Element {
     chatSidebarRequest,
     clearChatSidebarRequest,
   } = useAppContext();
-  if (config?.backendKind === 'youmind') {
-    return <YouMindChatTab />;
-  }
   const [sidebarPreset, setSidebarPreset] = React.useState<{
     requestedAt: number;
     tab: 'sessions' | 'subagents' | 'cron';

@@ -181,7 +181,7 @@ jest.mock('../../utils/agent-avatar-uri', () => ({
   pickAgentIdentityAvatarUri: jest.fn(() => null),
 }));
 
-jest.mock('./hooks/chatSyncPolicy', () => ({
+jest.mock('../../chat/chatSyncPolicy', () => ({
   getChatHeaderSyncState: jest.fn(() => ({
     isConnecting: false,
     status: null,
@@ -189,11 +189,11 @@ jest.mock('./hooks/chatSyncPolicy', () => ({
   })),
 }));
 
-jest.mock('./hooks/chatHeaderStatusLabel', () => ({
+jest.mock('../../chat/chatHeaderStatusLabel', () => ({
   getChatHeaderStatusLabel: jest.fn(() => null),
 }));
 
-jest.mock('./hooks/useChatListViewport', () => ({
+jest.mock('../../chat/useChatListViewport', () => ({
   useChatListViewport: () => ({
     onListContentSizeChange: jest.fn(),
     onScrollBeginDrag: jest.fn(),
@@ -204,14 +204,14 @@ jest.mock('./hooks/useChatListViewport', () => ({
   }),
 }));
 
-jest.mock('./hooks/useChatMessageEntrance', () => ({
+jest.mock('../../chat/useChatMessageEntrance', () => ({
   useChatMessageEntrance: () => ({
     listFadeAnim: null,
     newMessageIds: new Set<string>(),
   }),
 }));
 
-jest.mock('./hooks/useChatMessageSelection', () => ({
+jest.mock('../../chat/useChatMessageSelection', () => ({
   useChatMessageSelection: () => ({
     clearSelection: jest.fn(),
     copiedSelected: false,
@@ -230,7 +230,7 @@ jest.mock('./hooks/useChatMessageSelection', () => ({
   }),
 }));
 
-jest.mock('./hooks/useMessageFavorites', () => ({
+jest.mock('../../chat/useMessageFavorites', () => ({
   useMessageFavorites: () => ({
     favoriteMessageIdSet: new Set<string>(),
     isFavoritedMessage: jest.fn(() => false),
@@ -238,11 +238,11 @@ jest.mock('./hooks/useMessageFavorites', () => ({
   }),
 }));
 
-jest.mock('./hooks/useRotatingPlaceholder', () => ({
+jest.mock('../../chat/useRotatingPlaceholder', () => ({
   useRotatingPlaceholder: () => 'Thinking...',
 }));
 
-jest.mock('./hooks/useChatKeyboardLayout', () => ({
+jest.mock('../../chat/useChatKeyboardLayout', () => ({
   useChatKeyboardLayout: () => ({
     animatedRootStyle: {},
     composerBottomPadding: 0,
@@ -258,7 +258,7 @@ jest.mock('./components/renderChatMessageBubble', () => ({
   renderChatMessageBubble: jest.fn(() => null),
 }));
 
-jest.mock('./hooks/childSessionActivity', () => ({
+jest.mock('../../chat/childSessionActivity', () => ({
   buildChildSessionActivityCards: jest.fn(() => []),
 }));
 

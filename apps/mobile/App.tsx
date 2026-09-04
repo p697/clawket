@@ -1,45 +1,29 @@
 import 'react-native-get-random-values';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, AppStateStatus, Platform, StyleSheet, View } from 'react-native';
-import { useTranslation } from 'react-i18next';
+import {
+  ActivityIndicator,
+  AppState,
+  type AppStateStatus,
+  Linking,
+  Platform,
+  Share,
+  StyleSheet,
+  View,
+} from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as Notifications from 'expo-notifications';
-import {
-  Activity,
-  LayoutGrid,
-  MessageCircle,
-  Settings,
-  SquareTerminal,
-  UserRound,
-  type LucideIcon,
-} from 'lucide-react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   createNavigationContainerRef,
   DarkTheme as NavigationDarkTheme,
   DefaultTheme as NavigationDefaultTheme,
-  LinkingOptions,
   NavigationContainer,
-  NavigatorScreenParams,
   NavigationState,
   Theme as NavigationTheme,
 } from '@react-navigation/native';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import {
   createNativeStackNavigator,
-  type NativeStackHeaderProps,
+  type NativeStackScreenProps,
 } from '@react-navigation/native-stack';
-import { ConfigTab } from './src/screens/ConfigScreen/ConfigTab';
-import { ChatTab } from './src/screens/ChatScreen/ChatTab';
-import { ConsoleTab } from './src/screens/ConsoleScreen/ConsoleTab';
-import { ProfileTab } from './src/screens/ProfileScreen/ProfileTab';
-import { OpenClawPermissionsScreen } from './src/screens/ConfigScreen/OpenClawPermissionsScreen';
-import {
-  renderConsoleModalScreens,
-  type ConsoleStackParamList,
-  useConsoleRootModalScreenOptions,
-} from './src/screens/ConsoleScreen/sharedNavigator';
-import { LiveTab } from './src/screens/LiveScreen/LiveTab';
 import { AppContextProvider } from './src/contexts/AppContext';
 import { GlobalLoadingOverlayProvider, useGlobalLoadingOverlay } from './src/contexts/GlobalLoadingOverlayContext';
 import { GatewayScannerProvider } from './src/contexts/GatewayScannerContext';
@@ -48,14 +32,18 @@ import { ProPaywallProvider, useProPaywall } from './src/contexts/ProPaywallCont
 import { GlobalLoadingOverlay } from './src/components/ui';
 import { ProPaywallOverlay } from './src/components/pro/ProPaywallOverlay';
 import { loadAgentAvatars } from './src/services/agent-avatar';
-import * as Linking from 'expo-linking';
-import * as Sharing from 'expo-sharing';
 import { GatewayClient } from './src/connection/protocol';
 import {
   configureConnectionRuntimeGateway,
+  getConnectionRuntime,
   useConnections,
 } from './src/connection';
-import type { AgentAdapter } from '@clawket/agent-protocol';
+import {
+  CAPABILITY_KEYS,
+  resolveCapabilities,
+  type AgentAdapter,
+  type Capabilities,
+} from '@clawket/agent-protocol';
 import { NodeClient } from './src/services/node-client';
 import { dispatchNodeInvoke } from './src/services/node-invoke-dispatcher';
 import { NodeCapabilityToggles } from './src/services/node-capabilities';
@@ -70,12 +58,11 @@ import {
   shouldShowChatReplyNotification,
 } from './src/services/chat-notifications';
 import { StorageService } from './src/services/storage';
-import { getGatewayBackendCapabilities, resolveGatewayBackendKind, resolveGlobalMainSessionKey } from '@clawket/agent-protocol';
+import { getGatewayBackendCapabilities, resolveGlobalMainSessionKey } from '@clawket/agent-protocol';
 import { resolveGatewayCacheScopeId } from './src/services/gateway-cache-scope';
+import { SessionPreferencesService } from './src/services/session-preferences';
 import { analyticsEvents } from './src/services/analytics/events';
 import { useDeepLinkHandler, type DeepLinkDeps } from './src/hooks/useDeepLinkHandler';
-import { NativeStackModalHeader } from './src/hooks/useNativeStackModalHeader';
-import { isClawketHandledDeepLink } from './src/services/deepLinks';
 import { usePostHogIdentity } from './src/hooks/usePostHogIdentity';
 import { usePostHogScreenTracking } from './src/hooks/usePostHogScreenTracking';
 import { ChatAppearanceSettings, GatewayConfig, SpeechRecognitionLanguage } from './src/types';
@@ -91,46 +78,68 @@ import {
 } from './src/utils/chat-message';
 import { resolveMainSessionKey } from './src/utils/agent-session-scope';
 import { normalizeAccessibleAgentId } from './src/utils/pro';
-import { getRootTabBarMetrics } from './src/navigation/root-tab-bar';
-import { FontSize, FontWeight, LineHeight, Radius } from './src/theme/tokens';
-
-type RootTabParamList = {
-  Chat: undefined;
-  Live: undefined;
-  Console: undefined;
-  Profile: undefined;
-  My: undefined;
-};
-
-type RootStackParamList = {
-  MainTabs: NavigatorScreenParams<RootTabParamList> | undefined;
-  OpenClawPermissions: undefined;
-} & ConsoleStackParamList;
+import type {
+  AccountSettingsSection,
+  AgentSettingsSection,
+  RootStackParamList,
+} from './src/navigation/root-stack';
+import { RosterScreen, type RosterDisplayRow } from './src/screens/Roster';
+import { ThreadScreen } from './src/screens/Thread';
+import {
+  SessionPanel,
+  type SessionPanelAction,
+  type SessionPanelRow,
+} from './src/screens/SessionPanel';
+import {
+  AgentSettingsScreen,
+  AgentSettingsSectionScreen,
+  type AgentSettingsSectionActionResolver,
+} from './src/screens/AgentSettings';
+import {
+  AccountSettingsScreen,
+  AccountSettingsSectionScreen,
+  type AccountSettingsAction,
+  type AccountSettingsSectionActionRequest,
+} from './src/screens/AccountSettings';
+import { SearchScreen, MessageDetailScreen } from './src/screens/Search';
+import { OnboardingRoute } from './src/screens/Onboarding/OnboardingRoute';
+import { publicAppLinks } from './src/config/public';
+import { CLAWKET_GITHUB_REPO_URL } from './src/config/app-links';
+import type { ProFeature } from './src/utils/pro';
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
-const Tab = createBottomTabNavigator<RootTabParamList>();
 const LOADING_THEME = buildTheme('light', 'light', builtInAccents[defaultAccentId]);
+const NO_CAPABILITIES = Object.freeze(Object.fromEntries(
+  CAPABILITY_KEYS.map((capability) => [capability, false]),
+)) as unknown as Capabilities;
 
-const ROOT_TAB_ICON_SIZE = 23;
-
-function renderRootTabIcon(Icon: LucideIcon) {
-  return ({ color, focused }: { color: string; focused: boolean; size: number }) => (
-    <Icon
-      color={color}
-      size={ROOT_TAB_ICON_SIZE}
-      strokeWidth={focused ? 2.35 : 2}
-    />
-  );
-}
-
-const rootTabIcons = {
-  Chat: renderRootTabIcon(MessageCircle),
-  Live: renderRootTabIcon(Activity),
-  ConsoleGrid: renderRootTabIcon(LayoutGrid),
-  ConsoleTerminal: renderRootTabIcon(SquareTerminal),
-  Profile: renderRootTabIcon(UserRound),
-  My: renderRootTabIcon(Settings),
-};
+const ACCOUNT_ACTION_SECTION: Readonly<Partial<Record<
+  AccountSettingsAction,
+  AccountSettingsSection
+>>> = Object.freeze({
+  'theme': 'appearance',
+  'accent': 'appearance',
+  'chat-appearance': 'appearance',
+  'app-icon': 'appearance',
+  'speech-language': 'voice',
+  'help-center': 'help',
+  'openclaw-docs': 'help',
+  'hermes-docs': 'help',
+  'release-notes': 'help',
+  'openclaw-releases': 'help',
+  'feedback': 'help',
+  'share': 'community',
+  'rate': 'community',
+  'discord': 'community',
+  'wecom': 'community',
+  'repository': 'about',
+  'privacy': 'about',
+  'terms': 'about',
+  'preview-environment': 'developer',
+  'design-system': 'developer',
+  'clear-cache': 'developer',
+  'reset-device': 'developer',
+});
 export default function App(): React.JSX.Element {
   const [gateway] = useState(() => new GatewayClient());
   const [connectionRuntime] = useState(() => configureConnectionRuntimeGateway(gateway));
@@ -281,12 +290,6 @@ function resolveNodeInvokeSource(req: {
   return 'gateway';
 }
 
-function getMainTabsState(state: NavigationState | undefined): NavigationState | undefined {
-  if (!state) return undefined;
-  const mainTabsRoute = state.routes.find((route) => route.name === 'MainTabs');
-  return mainTabsRoute?.state as NavigationState | undefined;
-}
-
 function agentIdFromSessionKey(sessionKey: string | null | undefined): string | null {
   if (!sessionKey) return null;
   const match = sessionKey.match(/^agent:([^:]+):/);
@@ -367,18 +370,20 @@ function AppContent({
   onReset,
 }: AppContentProps): React.JSX.Element {
   const { theme } = useAppTheme();
-  const { t } = useTranslation('common');
-  const { isPro } = useProPaywall();
+  const {
+    isPro,
+    restorePurchases,
+    showPaywall,
+  } = useProPaywall();
+  const connections = useConnections();
   const rootNavigationRef = useMemo(() => createNavigationContainerRef<RootStackParamList>(), []);
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [agentAvatars, setAgentAvatars] = useState<Record<string, string>>({});
   const [currentAgentId, setCurrentAgentIdState] = useState<string>(initialAgentId ?? 'main');
   const [pendingAgentSwitch, setPendingAgentSwitch] = useState<string | null>(null);
-  const [hasUnreadChat, setHasUnreadChat] = useState(false);
   const [gatewayEpoch, setGatewayEpoch] = useState(0);
   const [foregroundEpoch, setForegroundEpoch] = useState(0);
-  const hasUnreadChatRef = useRef(false);
-  const activeTabRef = useRef<string>('Chat');
+  const activeRouteRef = useRef<keyof RootStackParamList>('Roster');
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const backgroundedAtRef = useRef<number | null>(null);
   const gatewayKeepAliveTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -405,6 +410,12 @@ function AppContent({
   const [pendingChatInput, setPendingChatInput] = useState<string | null>(null);
   const [pendingMainSessionSwitch, setPendingMainSessionSwitch] = useState(false);
   const [pendingAddGateway, setPendingAddGateway] = useState(false);
+  const [sessionPanelVisible, setSessionPanelVisible] = useState(false);
+  const [threadContext, setThreadContext] = useState<RootStackParamList['Thread'] | null>(null);
+  const [pinnedSessionKeys, setPinnedSessionKeys] = useState<Readonly<
+    Record<string, ReadonlyArray<string>>
+  >>({});
+  const [replyNotificationsEnabled, setReplyNotificationsEnabled] = useState(false);
   const [navigationReady, setNavigationReady] = useState(false);
   const handledNotificationResponseIdsRef = useRef(new Set<string>());
 
@@ -412,22 +423,26 @@ function AppContent({
     initializeChatNotifications();
   }, []);
 
-  // Mark unread when chatFinal arrives while not on Chat tab
-  useEffect(() => {
-    if (!getGatewayBackendCapabilities(config).gatewayConnection) {
-      return () => {};
-    }
-    const off = gateway.on('chatFinal', () => {
-      if (activeTabRef.current !== 'Chat') {
-        hasUnreadChatRef.current = true;
-        setHasUnreadChat(true);
-      }
-    });
-    return off;
-  }, [config, gateway]);
+  const pinScopes = useMemo(() => connections.roster.flatMap((group) => (
+    group.agents.map(({ agent }) => ({
+      connectionId: group.connection.id,
+      agentId: agent.agentId,
+    }))
+  )), [connections.roster]);
 
-  // Track whether a full-bleed WebView screen (e.g. Docs) is active
-  const [isWebViewScreen, setIsWebViewScreen] = useState(false);
+  useEffect(() => {
+    let active = true;
+    void Promise.all(pinScopes.map(async ({ connectionId, agentId }) => {
+      const keys = await SessionPreferencesService.getPinnedSessionKeys(connectionId, agentId);
+      return [`${connectionId}:${agentId}`, keys] as const;
+    })).then((entries) => {
+      if (active) setPinnedSessionKeys(Object.fromEntries(entries));
+    });
+    return () => {
+      active = false;
+    };
+  }, [pinScopes]);
+
   const { trackInitialScreen, trackScreenState } = usePostHogScreenTracking({
     rootNavigationRef,
   });
@@ -437,28 +452,16 @@ function AppContent({
     currentAgentId,
   });
 
-  // Track active tab and clear unread when navigating to Chat
   const handleNavigationStateChange = useCallback((state: NavigationState | undefined) => {
     if (!state) return;
     trackScreenState(state);
-    const mainTabsState = getMainTabsState(state);
-    const activeTabRoute = mainTabsState?.routes[mainTabsState.index ?? 0];
-    if (activeTabRoute) {
-      activeTabRef.current = activeTabRoute.name;
+    const routeName = getActiveLeafRouteName(state);
+    if (routeName) {
+      activeRouteRef.current = routeName as keyof RootStackParamList;
     }
-    if (activeTabRoute?.name === 'Chat' && hasUnreadChatRef.current) {
-      hasUnreadChatRef.current = false;
-      setHasUnreadChat(false);
-    }
-    setIsWebViewScreen(getActiveLeafRouteName(state) === 'Docs');
   }, [trackScreenState]);
 
   const backendCapabilities = useMemo(() => getGatewayBackendCapabilities(config), [config]);
-  const backendKind = useMemo(() => resolveGatewayBackendKind(config), [config]);
-  const showLiveTab = backendCapabilities.gatewayConnection;
-  const showConsoleTab = backendCapabilities.consoleRoot;
-  const showProfileTab = backendKind === 'youmind';
-  const consoleTabLabel = backendKind === 'youmind' ? t('Workspace') : t('Console');
   const mainSessionKey = useMemo(
     () => resolveMainSessionKey(currentAgentId, { mainSessionKey: resolveGlobalMainSessionKey(config) }),
     [config, currentAgentId],
@@ -476,12 +479,6 @@ function AppContent({
     setCurrentAgentIdState(normalized);
     StorageService.setCurrentAgentId(normalized);
   }, [currentAgentId, isPro]);
-
-  useEffect(() => {
-    if (backendKind === 'openclaw' || currentAgentId === 'main') return;
-    setCurrentAgentIdState('main');
-    StorageService.setCurrentAgentId('main');
-  }, [backendKind, currentAgentId]);
 
   const switchAgent = useCallback((id: string) => {
     setCurrentAgentIdState(id);
@@ -633,8 +630,9 @@ function AppContent({
     agentId?: string;
     runId?: string;
   }) => {
-    if (payload.agentId && payload.agentId !== currentAgentId) {
-      setCurrentAgentId(payload.agentId);
+    const targetAgentId = payload.agentId ?? agentIdFromSessionKey(payload.sessionKey) ?? currentAgentId;
+    if (targetAgentId !== currentAgentId) {
+      setCurrentAgentId(targetAgentId);
     }
     setPendingChatNotificationOpen({
       requestedAt: Date.now(),
@@ -642,10 +640,15 @@ function AppContent({
       agentId: payload.agentId,
       runId: payload.runId,
     });
-    if (navigationReady && rootNavigationRef.isReady()) {
-      rootNavigationRef.navigate('MainTabs', { screen: 'Chat' });
+    if (navigationReady && rootNavigationRef.isReady() && connections.activeConnectionId) {
+      rootNavigationRef.navigate('Thread', {
+        connectionId: connections.activeConnectionId,
+        agentId: targetAgentId,
+        sessionKey: payload.sessionKey,
+        from: 'notification',
+      });
     }
-  }, [currentAgentId, navigationReady, rootNavigationRef, setCurrentAgentId]);
+  }, [connections.activeConnectionId, currentAgentId, navigationReady, rootNavigationRef, setCurrentAgentId]);
 
   useEffect(() => {
     if (Platform.OS !== 'ios' || !backendCapabilities.gatewayConnection) return;
@@ -691,7 +694,7 @@ function AppContent({
         extractAssistantDisplayText(message?.content),
       );
       const appState = appStateRef.current;
-      const activeTab = activeTabRef.current;
+      const activeTab = activeRouteRef.current === 'Thread' ? 'Chat' : activeRouteRef.current;
       if (!shouldShowChatReplyNotification({ activeTab, appState })) {
         return;
       }
@@ -722,8 +725,16 @@ function AppContent({
   useEffect(() => {
     if (!navigationReady || !pendingChatNotificationOpen) return;
     if (!rootNavigationRef.isReady()) return;
-    rootNavigationRef.navigate('MainTabs', { screen: 'Chat' });
-  }, [navigationReady, pendingChatNotificationOpen, rootNavigationRef]);
+    if (!connections.activeConnectionId) return;
+    rootNavigationRef.navigate('Thread', {
+      connectionId: connections.activeConnectionId,
+      agentId: pendingChatNotificationOpen.agentId
+        ?? agentIdFromSessionKey(pendingChatNotificationOpen.sessionKey)
+        ?? currentAgentId,
+      sessionKey: pendingChatNotificationOpen.sessionKey,
+      from: 'notification',
+    });
+  }, [connections.activeConnectionId, currentAgentId, navigationReady, pendingChatNotificationOpen, rootNavigationRef]);
 
   const appContextValue = useMemo(
     () => ({
@@ -783,8 +794,14 @@ function AppContent({
           channel: normalizedChannel,
           openDrawer: params?.openDrawer ?? true,
         });
-        if (rootNavigationRef.isReady()) {
-          rootNavigationRef.navigate('MainTabs', { screen: 'Chat' });
+        setSessionPanelVisible(true);
+        if (rootNavigationRef.isReady() && connections.activeConnectionId && activeRouteRef.current !== 'Thread') {
+          rootNavigationRef.navigate('Thread', {
+            connectionId: connections.activeConnectionId,
+            agentId: currentAgentId,
+            sessionKey: mainSessionKey,
+            from: 'panel',
+          });
         }
       },
       clearChatSidebarRequest: () => {
@@ -805,8 +822,13 @@ function AppContent({
       requestChatWithInput: (text: string) => {
         setPendingChatInput(text);
         setPendingMainSessionSwitch(true);
-        if (rootNavigationRef.isReady()) {
-          rootNavigationRef.navigate('MainTabs', { screen: 'Chat' });
+        if (rootNavigationRef.isReady() && connections.activeConnectionId) {
+          rootNavigationRef.navigate('Thread', {
+            connectionId: connections.activeConnectionId,
+            agentId: currentAgentId,
+            sessionKey: mainSessionKey,
+            from: 'notification',
+          });
         }
       },
       clearPendingChatInput: () => {
@@ -834,6 +856,7 @@ function AppContent({
       chatAppearance,
       chatFontSize,
       chatSidebarRequest,
+      connections.activeConnectionId,
       config,
       currentAgentId,
       debugMode,
@@ -875,248 +898,371 @@ function AppContent({
 
   const navigationTheme = useMemo<NavigationTheme>(() => {
     const base = theme.scheme === 'dark' ? NavigationDarkTheme : NavigationDefaultTheme;
-
     return {
       ...base,
       colors: {
         ...base.colors,
         primary: theme.colors.primary,
-        background: theme.colors.background,
+        background: theme.colors.canvas,
         card: theme.colors.surface,
-        text: theme.colors.text,
+        text: theme.colors.ink,
         border: theme.colors.border,
         notification: theme.colors.primary,
       },
     };
   }, [theme]);
 
-  const insets = useSafeAreaInsets();
-  const rootTabBarMetrics = useMemo(
-    () => getRootTabBarMetrics(Platform.OS, insets.bottom),
-    [insets.bottom],
-  );
-  const rootTabBarBackground = isWebViewScreen
-    ? theme.colors.surfaceElevated
-    : theme.colors.surface;
-  const rootTabBarStyle = useMemo(
-    () => ({
-      backgroundColor: rootTabBarBackground,
-      borderTopColor: theme.colors.border,
-      borderTopWidth: StyleSheet.hairlineWidth,
-      ...(Platform.OS === 'android'
-        ? {
-          height: rootTabBarMetrics.height,
-          paddingTop: rootTabBarMetrics.paddingTop,
-          paddingBottom: rootTabBarMetrics.paddingBottom,
-        }
-        : null),
-    }),
-    [rootTabBarBackground, rootTabBarMetrics, theme.colors.border],
-  );
+  const settingsConnections = useMemo(() => connections.connections.map((connection) => ({
+    ...connection,
+    locked: !isPro
+      && connections.freeConnectionId !== null
+      && connection.id !== connections.freeConnectionId,
+  })), [connections.connections, connections.freeConnectionId, isPro]);
 
-  // Share intent linking config excludes app-controlled pairing and action links.
-  const shareIntentLinking = useMemo<LinkingOptions<RootStackParamList>>(() => ({
-    prefixes: [Linking.createURL('/')],
-    config: {
-      screens: {
-        MainTabs: {
-          screens: {
-            Chat: 'handle-share',
-          },
-        },
-      },
-    },
-    async getInitialURL() {
-      const url = await Linking.getInitialURL();
-      if (url && isClawketHandledDeepLink(url)) return null;
-      if (url && new URL(url).hostname === 'expo-sharing') {
-        return Linking.createURL('/handle-share');
-      }
-      return url;
-    },
-    subscribe(listener: (url: string) => void) {
-      const sub = Linking.addEventListener('url', ({ url }) => {
-        if (isClawketHandledDeepLink(url)) return;
-        if (new URL(url).hostname === 'expo-sharing') {
-          listener(Linking.createURL('/handle-share'));
-        } else {
-          listener(url);
-        }
-      });
-      return () => sub.remove();
-    },
-  }), []);
+  const settingsSectionConnections = useMemo(() => settingsConnections.map((connection) => ({
+    ...connection,
+    state: connection.id === connections.activeConnectionId ? connections.activeState : 'idle' as const,
+    supportsRelayStats: connection.transportKind === 'relay',
+  })), [connections.activeConnectionId, connections.activeState, settingsConnections]);
 
-  const rootConsoleModalScreenOptions = useConsoleRootModalScreenOptions();
-  const rootModalScreenOptions = useMemo(() => {
-    if (Platform.OS !== 'ios') {
-      return {
-        animation: 'slide_from_right' as const,
-        contentStyle: { backgroundColor: theme.colors.background },
-        headerShown: true,
-        header: (props: NativeStackHeaderProps) => (
-          <NativeStackModalHeader {...props} dismissStyleOverride="close" />
-        ),
-      };
+  const canAccessRosterAgent = useCallback((connectionId: string, targetAgentId: string) => {
+    if (isPro) return true;
+    if (connectionId !== connections.freeConnectionId) return false;
+    return connections.roster.some((group) => (
+      group.connection.id === connectionId
+      && group.agents.some(({ agent }) => agent.agentId === targetAgentId && agent.isMain)
+    ));
+  }, [connections.freeConnectionId, connections.roster, isPro]);
+
+  const handleSessionAction = useCallback(async (
+    row: SessionPanelRow,
+    action: SessionPanelAction,
+    payload?: { title: string },
+  ) => {
+    if (action === 'pin') {
+      const scope = `${row.connectionId}:${row.agentId}`;
+      const keys = await SessionPreferencesService.togglePinnedSession(
+        row.connectionId,
+        row.agentId,
+        row.key,
+      );
+      setPinnedSessionKeys((current) => ({ ...current, [scope]: keys }));
+      return;
     }
-    return {
-      animation: 'slide_from_bottom' as const,
-      presentation: 'modal' as const,
-      contentStyle: { backgroundColor: theme.colors.background },
-      gestureEnabled: true,
-      headerShown: true,
-      header: (props: NativeStackHeaderProps) => (
-        <NativeStackModalHeader {...props} dismissStyleOverride="close" />
-      ),
-    };
-  }, [theme.colors.background]);
+    const adapter = getConnectionRuntime().getAdapter(row.connectionId);
+    if (!adapter) return;
+    if (action === 'rename' && payload?.title) {
+      await adapter.patchSession?.(row.key, { title: payload.title });
+    }
+    if (action === 'reset') await adapter.resetSession?.(row.key);
+    if (action === 'delete') {
+      await adapter.deleteSession?.(row.key);
+      await SessionPreferencesService.clearSession(row.connectionId, row.agentId, row.key);
+    }
+    await getConnectionRuntime().refreshRoster();
+  }, []);
+
+  const openExternalUrl = useCallback((url: string | null | undefined) => {
+    if (url) void Linking.openURL(url).catch(() => undefined);
+  }, []);
+
+  const handleAccountSectionAction = useCallback((
+    request: AccountSettingsSectionActionRequest,
+    navigation: { navigate: typeof rootNavigationRef.navigate },
+  ) => {
+    switch (request.action) {
+      case 'set-reply-notifications':
+        setReplyNotificationsEnabled(request.enabled === true);
+        return;
+      case 'set-debug-mode':
+        onDebugToggle(request.enabled === true);
+        return;
+      case 'view-pro':
+        showPaywall('settingsMembershipPreview');
+        return;
+      case 'restore-purchases':
+        void restorePurchases();
+        return;
+      case 'add-connection':
+        navigation.navigate('Onboarding', { presentation: 'modal' });
+        return;
+      case 'reconnect-connection':
+        if (request.connectionId) {
+          void getConnectionRuntime().activate(request.connectionId)
+            .then(() => getConnectionRuntime().probeActive());
+        }
+        return;
+      case 'help-center':
+      case 'openclaw-docs':
+        openExternalUrl(publicAppLinks.docsUrl ?? 'https://docs.openclaw.ai');
+        return;
+      case 'hermes-docs':
+        openExternalUrl('https://hermes-agent.nousresearch.com/docs/getting-started/quickstart');
+        return;
+      case 'openclaw-releases':
+        openExternalUrl(publicAppLinks.openClawReleasesUrl);
+        return;
+      case 'feedback':
+        openExternalUrl(publicAppLinks.supportEmail ? `mailto:${publicAppLinks.supportEmail}` : null);
+        return;
+      case 'discord':
+        openExternalUrl(publicAppLinks.discordInviteUrl);
+        return;
+      case 'repository':
+        openExternalUrl(CLAWKET_GITHUB_REPO_URL);
+        return;
+      case 'privacy':
+        openExternalUrl(publicAppLinks.privacyPolicyUrl);
+        return;
+      case 'terms':
+        openExternalUrl(publicAppLinks.termsOfUseUrl);
+        return;
+      case 'share':
+        void Share.share({ message: CLAWKET_GITHUB_REPO_URL });
+        return;
+      default:
+        return;
+    }
+  }, [onDebugToggle, openExternalUrl, restorePurchases, rootNavigationRef.navigate, showPaywall]);
+
+  const resolveAgentSettingsAction = useCallback<AgentSettingsSectionActionResolver>(async (
+    request,
+    context,
+  ) => {
+    if (request.action === 'connection.reconnect') {
+      await getConnectionRuntime().activate(context.connection.id);
+      await getConnectionRuntime().probeActive();
+    }
+  }, []);
+
+  if (!connections.initialized) {
+    return (
+      <View style={[loadingStyles.loading, { backgroundColor: theme.colors.canvas }]}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <StatusBar style={theme.scheme === 'dark' ? 'light' : 'dark'} />
+      </View>
+    );
+  }
 
   return (
     <AppContextProvider value={appContextValue}>
-    <GlobalLoadingOverlayProvider>
-    <GatewayScannerProvider>
-    <AppDeepLinkHandler
-      rootNavigationRef={rootNavigationRef}
-      gateway={gateway}
-      mainSessionKey={mainSessionKey}
-      onSaved={onSaved}
-      requestChatSidebar={appContextValue.requestChatSidebar}
-    />
-    <NodeCameraCaptureProvider>
-      <NavigationContainer
-        ref={rootNavigationRef}
-        theme={navigationTheme}
-        linking={shareIntentLinking}
-        onReady={() => {
-          setNavigationReady(true);
-          trackInitialScreen();
-        }}
-        onStateChange={handleNavigationStateChange}
-      >
-        <StatusBar style={theme.scheme === 'dark' ? 'light' : 'dark'} />
-        <RootStack.Navigator
-          screenOptions={{
-            headerShown: false,
-            header: (props: NativeStackHeaderProps) => <NativeStackModalHeader {...props} />,
-            headerBackTitle: '',
-            headerBackButtonDisplayMode: 'minimal',
-          }}
-        >
-          <RootStack.Screen
-            name="MainTabs"
-            options={{
-              headerShown: false,
-              title: '',
-            }}
-          >
-            {() => (
-              <Tab.Navigator
+      <GlobalLoadingOverlayProvider>
+        <GatewayScannerProvider>
+          <AppDeepLinkHandler
+            rootNavigationRef={rootNavigationRef}
+            gateway={gateway}
+            activeConnectionId={connections.activeConnectionId}
+            currentAgentId={currentAgentId}
+            mainSessionKey={mainSessionKey}
+            onSaved={onSaved}
+          />
+          <NodeCameraCaptureProvider>
+            <NavigationContainer
+              ref={rootNavigationRef}
+              theme={navigationTheme}
+              onReady={() => {
+                setNavigationReady(true);
+                trackInitialScreen();
+              }}
+              onStateChange={handleNavigationStateChange}
+            >
+              <StatusBar style={theme.scheme === 'dark' ? 'light' : 'dark'} />
+              <RootStack.Navigator
+                initialRouteName={connections.connections.length > 0 ? 'Roster' : 'Onboarding'}
                 screenOptions={{
                   headerShown: false,
-                  sceneStyle: { backgroundColor: theme.colors.background },
-                  tabBarActiveTintColor: theme.colors.primary,
-                  tabBarInactiveTintColor: theme.colors.textMuted,
-                  tabBarStyle: rootTabBarStyle,
-                  tabBarLabelStyle: {
-                    fontSize: FontSize.xs,
-                    fontWeight: FontWeight.semibold,
-                    lineHeight: LineHeight.xs,
-                    marginTop: 2,
-                  },
-                  tabBarIconStyle: {
-                    marginTop: 4,
-                    marginBottom: 1,
-                  },
-                  tabBarItemStyle: {
-                    paddingVertical: 0,
-                  },
-                  tabBarBadgeStyle: {
-                    backgroundColor: theme.colors.primary,
-                    borderRadius: Radius.full,
-                    height: 7,
-                    minWidth: 7,
-                    paddingHorizontal: 0,
-                  },
+                  contentStyle: { backgroundColor: theme.colors.canvas },
                 }}
               >
-                <Tab.Screen
-                  name="Chat"
-                  component={ChatTab}
-                  listeners={{
-                    tabPress: () => {
-                      hasUnreadChatRef.current = false;
-                      setHasUnreadChat(false);
-                    },
+                <RootStack.Screen name="Onboarding">
+                  {(props) => (
+                    <OnboardingRoute
+                      {...props}
+                      onConnected={() => {
+                        props.navigation.reset({ index: 0, routes: [{ name: 'Roster' }] });
+                      }}
+                    />
+                  )}
+                </RootStack.Screen>
+                <RootStack.Screen name="Roster">
+                  {({ navigation }) => (
+                    <RosterScreen
+                      pinnedSessionKeys={pinnedSessionKeys}
+                      canAccessAgent={canAccessRosterAgent}
+                      isPro={isPro}
+                      onOpenAccount={() => navigation.navigate('AccountSettings')}
+                      onSearch={() => navigation.navigate('Search')}
+                      onAdd={() => navigation.navigate('Onboarding', { presentation: 'modal' })}
+                      onOpenRow={(row: RosterDisplayRow) => {
+                        navigation.navigate('Thread', {
+                          connectionId: row.connectionId,
+                          agentId: row.agentId,
+                          sessionKey: row.sessionKey,
+                          from: 'roster',
+                        });
+                      }}
+                      onOpenLockedRow={(row: RosterDisplayRow) => {
+                        showPaywall(row.connectionId === connections.freeConnectionId
+                          ? 'agents'
+                          : 'gatewayConnections');
+                      }}
+                      onOpenPro={() => showPaywall('agents')}
+                    />
+                  )}
+                </RootStack.Screen>
+                <RootStack.Screen name="Thread">
+                  {(props) => (
+                    <ThreadScreen
+                      {...props}
+                      locked={!canAccessRosterAgent(
+                        props.route.params.connectionId,
+                        props.route.params.agentId,
+                      )}
+                      onOpenSessionPanel={() => {
+                        setThreadContext(props.route.params);
+                        setSessionPanelVisible(true);
+                      }}
+                      onThreadOpened={setThreadContext}
+                    />
+                  )}
+                </RootStack.Screen>
+                <RootStack.Screen name="AgentSettings">
+                  {({ navigation, route }) => {
+                    const group = connections.roster.find((candidate) => (
+                      candidate.connection.id === route.params.connectionId
+                    ));
+                    const connection = connections.connections.find((candidate) => (
+                      candidate.id === route.params.connectionId
+                    )) ?? group?.connection;
+                    const agent = group?.agents.find((candidate) => (
+                      candidate.agent.agentId === route.params.agentId
+                    ))?.agent ?? null;
+                    const adapter = connections.activeConnectionId === route.params.connectionId
+                      ? connections.activeAdapter
+                      : null;
+                    if (!connection) {
+                      return (
+                        <View style={[loadingStyles.loading, { backgroundColor: theme.colors.canvas }]}>
+                          <ActivityIndicator color={theme.colors.primary} />
+                        </View>
+                      );
+                    }
+                    return (
+                      <AgentSettingsScreen
+                        adapter={adapter}
+                        connection={connection}
+                        agent={agent}
+                        capabilities={adapter?.capabilities ?? resolveCapabilities(connection.backendKind)}
+                        isPro={isPro}
+                        permissionDenied={Boolean(agent && !canAccessRosterAgent(
+                          connection.id,
+                          agent.agentId,
+                        ))}
+                        onBack={navigation.goBack}
+                        onNavigate={navigation.navigate}
+                        onOpenPro={(section) => showPaywall(resolveAgentPaywallFeature(section))}
+                        onRetry={() => {
+                          void getConnectionRuntime().activate(connection.id)
+                            .then(() => getConnectionRuntime().probeActive());
+                        }}
+                      />
+                    );
                   }}
-                  options={{
-                    tabBarLabel: t('Chat'),
-                    tabBarBadge: hasUnreadChat ? '' : undefined,
-                    tabBarIcon: rootTabIcons.Chat,
-                  }}
-                />
-                {showLiveTab ? (
-                  <Tab.Screen
-                    name="Live"
-                    component={LiveTab}
-                    options={{
-                      tabBarLabel: t('Live'),
-                      tabBarIcon: rootTabIcons.Live,
-                    }}
-                  />
-                ) : null}
-                {showConsoleTab ? (
-                  <Tab.Screen
-                    name="Console"
-                    component={ConsoleTab}
-                    options={{
-                      tabBarLabel: consoleTabLabel,
-                      tabBarIcon: backendKind === 'youmind'
-                        ? rootTabIcons.ConsoleGrid
-                        : rootTabIcons.ConsoleTerminal,
-                    }}
-                  />
-                ) : null}
-                {showProfileTab ? (
-                  <Tab.Screen
-                    name="Profile"
-                    component={ProfileTab}
-                    options={{
-                      tabBarLabel: t('Profile'),
-                      tabBarIcon: rootTabIcons.Profile,
-                    }}
-                  />
-                ) : null}
-                <Tab.Screen
-                  name="My"
-                  component={ConfigTab}
-                  options={{
-                    tabBarLabel: backendKind === 'youmind' ? t('Settings') : t('Setting'),
-                    tabBarIcon: rootTabIcons.My,
-                  }}
-                />
-              </Tab.Navigator>
-            )}
-          </RootStack.Screen>
-          <RootStack.Screen
-            name="OpenClawPermissions"
-            component={OpenClawPermissionsScreen}
-            options={rootModalScreenOptions}
-          />
-          <React.Fragment>
-            {renderConsoleModalScreens({
-              ...rootConsoleModalScreenOptions,
-              renderScreen: (name, component, options) => (
-                <RootStack.Screen key={name} name={name} component={component} options={options} />
-              ),
-            })}
-          </React.Fragment>
-        </RootStack.Navigator>
-      </NavigationContainer>
-      <GlobalGatewayOverlay />
-      <GlobalProPaywallOverlay />
-    </NodeCameraCaptureProvider>
-    </GatewayScannerProvider>
-    </GlobalLoadingOverlayProvider>
+                </RootStack.Screen>
+                <RootStack.Screen name="AgentSettingsSection">
+                  {(props) => (
+                    <AgentSettingsSectionScreen
+                      {...props}
+                      isPro={isPro}
+                      resolveAction={resolveAgentSettingsAction}
+                      onOpenPaywall={(reason) => showPaywall(normalizePaywallFeature(reason))}
+                    />
+                  )}
+                </RootStack.Screen>
+                <RootStack.Screen name="AccountSettings">
+                  {({ navigation }) => (
+                    <AccountSettingsScreen
+                      status={connections.error ? { kind: 'error', code: connections.error.message } : { kind: 'ready' }}
+                      connections={settingsConnections}
+                      isPro={isPro}
+                      canAddConnection={isPro || connections.connections.length === 0}
+                      replyNotificationsEnabled={replyNotificationsEnabled}
+                      debugMode={debugMode}
+                      onBack={navigation.goBack}
+                      onRetry={() => { void getConnectionRuntime().probeActive(); }}
+                      onOpenAction={(action) => {
+                        if (action === 'view-pro') {
+                          showPaywall('settingsMembershipPreview');
+                          return;
+                        }
+                        if (action === 'restore-purchases') {
+                          void restorePurchases();
+                          return;
+                        }
+                        if (action === 'add-connection') {
+                          navigation.navigate('Onboarding', { presentation: 'modal' });
+                          return;
+                        }
+                        const section = ACCOUNT_ACTION_SECTION[action];
+                        if (section) navigation.navigate('AccountSettingsSection', { section });
+                      }}
+                      onOpenConnection={(connectionId) => {
+                        void getConnectionRuntime().activate(connectionId);
+                        navigation.navigate('AccountSettingsSection', { section: 'connections' });
+                      }}
+                      onOpenPaywall={(reason) => showPaywall(normalizePaywallFeature(reason))}
+                      onReplyNotificationsChange={setReplyNotificationsEnabled}
+                      onDebugModeChange={onDebugToggle}
+                    />
+                  )}
+                </RootStack.Screen>
+                <RootStack.Screen name="AccountSettingsSection">
+                  {({ navigation, route }) => (
+                    <AccountSettingsSectionScreen
+                      section={route.params.section}
+                      data={{
+                        connections: settingsSectionConnections,
+                        isPro,
+                        canAddConnection: isPro || connections.connections.length === 0,
+                        replyNotificationsEnabled,
+                        debugMode,
+                      }}
+                      onBack={navigation.goBack}
+                      onRetry={() => { void getConnectionRuntime().probeActive(); }}
+                      onAction={(request) => handleAccountSectionAction(request, navigation)}
+                      onOpenPaywall={(reason) => showPaywall(normalizePaywallFeature(reason))}
+                    />
+                  )}
+                </RootStack.Screen>
+                <RootStack.Screen name="Search" component={SearchScreen} />
+                <RootStack.Screen name="MessageDetail" component={MessageDetailScreen} />
+                <RootStack.Screen name="Paywall" component={PaywallRouteBridge} />
+              </RootStack.Navigator>
+              <SessionPanel
+                visible={sessionPanelVisible}
+                currentAgentId={threadContext?.agentId ?? currentAgentId}
+                currentSessionKey={threadContext?.sessionKey ?? mainSessionKey}
+                onClose={() => setSessionPanelVisible(false)}
+                onSelectSession={(row) => {
+                  const params: RootStackParamList['Thread'] = {
+                    connectionId: row.connectionId,
+                    agentId: row.agentId,
+                    sessionKey: row.key,
+                    from: 'panel',
+                  };
+                  setThreadContext(params);
+                  setCurrentAgentId(row.agentId);
+                  if (rootNavigationRef.isReady()) rootNavigationRef.navigate('Thread', params);
+                }}
+                onSessionAction={handleSessionAction}
+                onOpenPermission={() => showPaywall('agents')}
+              />
+            </NavigationContainer>
+            <GlobalGatewayOverlay />
+            <GlobalProPaywallOverlay />
+          </NodeCameraCaptureProvider>
+        </GatewayScannerProvider>
+      </GlobalLoadingOverlayProvider>
     </AppContextProvider>
   );
 }
@@ -1124,6 +1270,61 @@ function AppContent({
 function AppDeepLinkHandler(props: DeepLinkDeps): null {
   useDeepLinkHandler(props);
   return null;
+}
+
+function normalizePaywallFeature(reason: string): ProFeature {
+  switch (reason) {
+    case 'gatewayConnections':
+    case 'appIcons':
+    case 'configBackupCreate':
+    case 'configBackupRestore':
+    case 'openclawDiagnostics':
+    case 'openclawPermissions':
+    case 'agents':
+    case 'coreFileEditing':
+    case 'logs':
+    case 'usage':
+    case 'messageHistory':
+    case 'settingsMembershipPreview':
+      return reason;
+    default:
+      return 'settingsMembershipPreview';
+  }
+}
+
+function resolveAgentPaywallFeature(section: AgentSettingsSection): ProFeature {
+  if (section === 'files') return 'coreFileEditing';
+  if (section === 'logs') return 'logs';
+  if (section === 'usage') return 'usage';
+  if (section === 'openclaw') return 'openclawDiagnostics';
+  return 'agents';
+}
+
+function PaywallRouteBridge({
+  navigation,
+  route,
+}: NativeStackScreenProps<RootStackParamList, 'Paywall'>): React.JSX.Element {
+  const { theme } = useAppTheme();
+  const { isPro, showPaywall, visible } = useProPaywall();
+  const openedRef = useRef(false);
+
+  useEffect(() => {
+    if (isPro) {
+      navigation.goBack();
+      return;
+    }
+    showPaywall(normalizePaywallFeature(route.params?.reason ?? 'settingsMembershipPreview'));
+  }, [isPro, navigation, route.params?.reason, showPaywall]);
+
+  useEffect(() => {
+    if (visible) {
+      openedRef.current = true;
+      return;
+    }
+    if (openedRef.current && navigation.canGoBack()) navigation.goBack();
+  }, [navigation, visible]);
+
+  return <View style={[loadingStyles.loading, { backgroundColor: theme.colors.canvas }]} />;
 }
 
 function GlobalGatewayOverlay(): React.JSX.Element | null {

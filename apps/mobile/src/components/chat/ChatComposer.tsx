@@ -32,7 +32,7 @@ import { triggerLightImpact } from '../../services/haptics';
 import { useAppTheme } from '../../theme';
 import { ControlSize, FontSize, FontWeight, Radius, Space, createSurfaceStyle } from '../../theme/tokens';
 import type { ThinkingLevel } from '../../utils/gateway-settings';
-import { isComposerInputEditable } from '../../screens/ChatScreen/hooks/composerInteractionPolicy';
+import { isComposerInputEditable } from '../../chat/composerInteractionPolicy';
 import { CircleButton, IconButton } from '../ui';
 import { AttachmentMenu } from './AttachmentMenu';
 import { ThinkingLevelMenu } from './ThinkingLevelMenu';

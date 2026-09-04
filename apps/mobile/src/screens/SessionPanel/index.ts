@@ -9,6 +9,7 @@ export {
   buildSessionPanelGroups,
   buildSessionPanelRows,
   filterSessionPanelRows,
+  normalizeSessionRenameTitle,
   resolveSessionPanelPageState,
   shouldShowSessionPanelQuickFilters,
   summarizeSessionPanelRows,
@@ -18,6 +19,7 @@ export {
   type SessionPanelMode,
   type SessionPanelPageState,
   type SessionPanelQuickFilter,
+  type SessionPanelRenamePayload,
   type SessionPanelRow,
   type SessionPanelSection,
 } from './model';

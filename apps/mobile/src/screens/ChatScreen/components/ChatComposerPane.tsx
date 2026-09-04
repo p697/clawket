@@ -5,7 +5,7 @@ import { PendingImageBar } from '../../../components/chat/PendingImageBar';
 import { ChatComposer } from '../../../components/chat/ChatComposer';
 import { PendingImage } from '../../../types/chat';
 import type { ThinkingLevel } from '../../../utils/gateway-settings';
-import { isComposerInputEditable } from '../hooks/composerInteractionPolicy';
+import { isComposerInputEditable } from '../../../chat/composerInteractionPolicy';
 
 type ComposerGesture = ReturnType<typeof Gesture.Pan>;
 

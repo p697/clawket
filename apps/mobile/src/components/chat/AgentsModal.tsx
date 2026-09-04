@@ -10,7 +10,7 @@ import type { GatewayMode } from '../../types';
 import { getGatewayModeLabel } from '@clawket/agent-protocol';
 import { useAppTheme } from '../../theme';
 import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
-import { AgentActivityStatus } from '../../screens/ChatScreen/hooks/agentActivity';
+import { AgentActivityStatus } from '../../chat/agentActivity';
 import { getDisplayAgentEmoji } from '../../utils/agent-emoji';
 import { formatToolActivity } from '../../utils/tool-display';
 import { IconButton } from '../ui';

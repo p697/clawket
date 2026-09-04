@@ -31,6 +31,7 @@ import { getConnectionRuntime, useConnections, useRoster } from '../../connectio
 import { Banner } from '../../components/ui/Banner';
 import { Button } from '../../components/ui/Button';
 import { FloatingButton } from '../../components/ui/FloatingButton';
+import { FormTextInput } from '../../components/ui/FormTextInput';
 import { SearchInput } from '../../components/ui/SearchInput';
 import { SegmentedTabs } from '../../components/ui/SegmentedTabs';
 import { Sheet } from '../../components/ui/Sheet';
@@ -52,6 +53,7 @@ import {
   buildSessionPanelGroups,
   buildSessionPanelRows,
   filterSessionPanelRows,
+  normalizeSessionRenameTitle,
   resolveSessionPanelPageState,
   shouldShowSessionPanelQuickFilters,
   summarizeSessionPanelRows,
@@ -61,11 +63,17 @@ import {
   type SessionPanelMode,
   type SessionPanelPageState,
   type SessionPanelQuickFilter,
+  type SessionPanelRenamePayload,
   type SessionPanelRow,
   type SessionPanelSection,
 } from './model';
 
 type MaybePromise = void | Promise<void>;
+type SessionPanelActionHandler = (
+  row: SessionPanelRow,
+  action: SessionPanelAction,
+  payload?: SessionPanelRenamePayload,
+) => MaybePromise;
 
 const MUTATION_CAPABILITIES_OFF = Object.freeze({
   sessionRename: false,
@@ -94,7 +102,7 @@ export type SessionPanelViewProps = Readonly<{
   onClose: () => void;
   onSelectSession: (row: SessionPanelRow) => MaybePromise;
   onCreateSession?: (agentId: string) => MaybePromise;
-  onSessionAction?: (row: SessionPanelRow, action: SessionPanelAction) => MaybePromise;
+  onSessionAction?: SessionPanelActionHandler;
   onOpenKindFilter?: (current: SessionPanelKindFilter) => void;
   onRetry?: () => MaybePromise;
   onModeChange?: (mode: SessionPanelMode) => void;
@@ -113,7 +121,7 @@ export type SessionPanelProps = Readonly<{
   onClose: () => void;
   onSelectSession: (row: SessionPanelRow) => MaybePromise;
   onCreateSession?: (agentId: string) => MaybePromise;
-  onSessionAction?: (row: SessionPanelRow, action: SessionPanelAction) => MaybePromise;
+  onSessionAction?: SessionPanelActionHandler;
   onOpenKindFilter?: (current: SessionPanelKindFilter) => void;
   onModeChange?: (mode: SessionPanelMode) => void;
   onOpenBridgeHelp?: () => void;
@@ -478,6 +486,82 @@ function ConfirmActionSheet({
   );
 }
 
+function RenameSessionSheet({
+  row,
+  onClose,
+  onConfirm,
+}: Readonly<{
+  row: SessionPanelRow | null;
+  onClose: () => void;
+  onConfirm: (row: SessionPanelRow, title: string) => MaybePromise;
+}>): React.JSX.Element {
+  const { t } = useTranslation('common');
+  const [draft, setDraft] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    setDraft(row?.title ?? '');
+    setSubmitting(false);
+  }, [row]);
+
+  const title = row ? normalizeSessionRenameTitle(draft, row.title) : null;
+  const close = useCallback(() => {
+    if (!submitting) onClose();
+  }, [onClose, submitting]);
+  const submit = useCallback(() => {
+    if (!row || !title || submitting) return;
+    setSubmitting(true);
+    void Promise.resolve(onConfirm(row, title)).then(
+      () => {
+        setSubmitting(false);
+        onClose();
+      },
+      () => setSubmitting(false),
+    );
+  }, [onClose, onConfirm, row, submitting, title]);
+
+  return (
+    <Sheet
+      testID="session-panel-rename"
+      visible={row !== null}
+      title={t('Rename')}
+      closeAccessibilityLabel={t('Cancel')}
+      dismissOnBackdropPress={!submitting}
+      onClose={close}
+    >
+      <View style={styles.renameContent}>
+        <FormTextInput
+          testID="session-panel-rename-input"
+          value={draft}
+          placeholder={t('Name')}
+          accessibilityLabel={t('Name')}
+          autoFocus
+          editable={!submitting}
+          returnKeyType="done"
+          onChangeText={setDraft}
+          onSubmitEditing={submit}
+        />
+        <View style={styles.confirmButtons}>
+          <Button
+            label={t('Cancel')}
+            variant="secondary"
+            disabled={submitting}
+            onPress={close}
+            style={styles.confirmButton}
+          />
+          <Button
+            label={t('Save')}
+            disabled={!title}
+            loading={submitting}
+            onPress={submit}
+            style={styles.confirmButton}
+          />
+        </View>
+      </View>
+    </Sheet>
+  );
+}
+
 export function SessionPanelView({
   visible,
   state,
@@ -517,6 +601,7 @@ export function SessionPanelView({
     row: SessionPanelRow;
     action: 'reset' | 'delete';
   }> | null>(null);
+  const [renameRow, setRenameRow] = useState<SessionPanelRow | null>(null);
 
   useEffect(() => {
     setExpandedAgentIds((current) => new Set([...current, currentAgentId]));
@@ -553,6 +638,10 @@ export function SessionPanelView({
       setConfirmation({ row: actionRow, action });
       return;
     }
+    if (action === 'rename') {
+      setRenameRow(actionRow);
+      return;
+    }
     if (onSessionAction) {
       void Promise.resolve(onSessionAction(actionRow, action)).catch(() => undefined);
     }
@@ -565,6 +654,9 @@ export function SessionPanelView({
       void Promise.resolve(onSessionAction(pending.row, pending.action)).catch(() => undefined);
     }
   }, [confirmation, onSessionAction]);
+  const renameSession = useCallback((row: SessionPanelRow, title: string) => (
+    onSessionAction?.(row, 'rename', { title })
+  ), [onSessionAction]);
 
   const modeTabs = useMemo(() => [
     { key: 'grouped' as const, label: t('Grouped') },
@@ -752,6 +844,11 @@ export function SessionPanelView({
         pending={confirmation}
         onClose={() => setConfirmation(null)}
         onConfirm={confirmAction}
+      />
+      <RenameSessionSheet
+        row={renameRow}
+        onClose={() => setRenameRow(null)}
+        onConfirm={renameSession}
       />
     </>
   );
@@ -998,6 +1095,11 @@ const styles = StyleSheet.create({
     fontWeight: FontWeight.regular,
   },
   confirmContent: {
+    paddingHorizontal: Space.xl,
+    paddingBottom: Space.xxl,
+    gap: Space.xl,
+  },
+  renameContent: {
     paddingHorizontal: Space.xl,
     paddingBottom: Space.xxl,
     gap: Space.xl,

@@ -1,5 +1,3 @@
-import { CLAWKET_GITHUB_REPO_URL } from '../../config/app-links';
-
 export type AppUpdateAnnouncementAction =
   | {
       type: 'none';
@@ -53,261 +51,23 @@ export const DEFAULT_APP_UPDATE_DEBUG_HINT =
 // Keep this array newest-first. The first entry is treated as the latest release.
 export const APP_UPDATE_RELEASES: AppUpdateRelease[] = [
   {
-    version: '2.1.0',
-    releasedAt: '2026-04-12',
+    version: '3.0.0',
+    releasedAt: '2026-09-05',
     entries: [
       {
-        id: 'youmind-connection',
-        emoji: '🧠',
-        title: 'YouMind Connection',
-        subtitle: 'You now can connect your YouMind account.',
-        action: {
-          type: 'navigate_config_add_connection',
-          tab: 'quick',
-          flow: 'youmind',
-        },
-      },
-      {
-        id: 'hermes-full-support',
-        emoji: '🪽',
-        title: 'Hermes Connection',
-        subtitle: 'Connect and manage Hermes and OpenClaw at the same time.',
-        action: {
-          type: 'navigate_config_add_connection',
-          tab: 'quick',
-          flow: 'local',
-        },
-      },
-    ],
-  },
-  {
-    version: '1.10.0',
-    releasedAt: '2026-04-10',
-    entries: [
-      {
-        id: 'discover-console-page',
-        emoji: '🧩',
-        title: 'Discover',
-        subtitle: 'Browse skills across ClawHub and skills.sh',
-        action: {
-          type: 'navigate_console',
-          screen: 'Discover',
-        },
-      },
-      {
-        id: 'bug-fixes-and-experience-improvements',
-        emoji: '🛠️',
-        title: 'Bug fixes and experience improvements',
-        action: {
-          type: 'none',
-        },
-      },
-    ],
-  },
-  {
-    version: '1.9.0',
-    releasedAt: '2026-04-07',
-    entries: [
-      {
-        id: 'one-click-permission-repair',
-        emoji: '🔧',
-        title: 'One-click Permission Repair',
-        subtitle: 'Jump straight to the new repair flow from OpenClaw Config Management.',
-        action: {
-          type: 'navigate_config',
-          screen: 'OpenClawPermissionRepair',
-        },
-      },
-    ],
-  },
-  {
-    version: '1.8.0',
-    releasedAt: '2026-04-02',
-    entries: [
-      {
-        id: 'agent-sessions-board-refresh',
-        emoji: '🪟',
-        title: 'All-new Agent & Session Board',
-        subtitle: 'A calmer, smarter home for your recent agents and conversations.',
-        action: {
-          type: 'navigate_console',
-          screen: 'AgentSessionsBoard',
-        },
-      },
-      {
-        id: 'custom-app-icon',
-        emoji: '🎨',
-        title: 'Custom App Icon',
-        subtitle: 'Change your app icon anytime from Settings.',
-        action: {
-          type: 'none',
-        },
-      },
-    ],
-  },
-  {
-    version: '1.7.0',
-    releasedAt: '2026-03-29',
-    entries: [
-      {
-        id: 'openclaw-diagnostics-auto-repair',
-        emoji: '🩺',
-        title: 'OpenClaw Diagnostics and Auto Repair',
-        subtitle: 'View OpenClaw health status and run openclaw doctor --fix.',
-        action: {
-          type: 'navigate_config',
-          screen: 'OpenClawConfig',
-        },
-      },
-      {
-        id: 'openclaw-permissions-management',
-        emoji: '🔐',
-        title: 'OpenClaw Permissions',
-        subtitle: 'Review and manage what OpenClaw is allowed to access.',
-        action: {
-          type: 'navigate_config',
-          screen: 'OpenClawConfig',
-        },
-      },
-      {
-        id: 'openclaw-node-capabilities',
-        emoji: '🧩',
-        title: 'Improved OpenClaw Node Capabilities',
-        subtitle: 'Added support for capabilities like camera.snap and photos.latest.',
-        action: {
-          type: 'navigate_console',
-          screen: 'Nodes',
-        },
-      },
-    ],
-  },
-  {
-    version: '1.6.0',
-    releasedAt: '2026-03-26',
-    entries: [
-      {
-        id: 'open-source-github',
-        emoji: '⭐',
-        title: 'Now Open Source!',
-        subtitle: 'Tap to view our GitHub repository and leave a star~',
-        action: {
-          type: 'open_url',
-          url: CLAWKET_GITHUB_REPO_URL,
-        },
-      },
-      {
-        id: 'dark-mode-improvements',
-        emoji: '🌙',
-        title: 'Dark Mode Improvements',
-        subtitle: 'A better-looking, more refined dark mode.',
+        id: 'clawket-3-0',
+        emoji: '🚀',
+        title: 'Clawket 3.0',
+        subtitle: 'Every agent and session in one roster.',
         action: {
           type: 'none',
         },
       },
       {
-        id: 'known-issues-fixed',
-        emoji: '🛠️',
-        title: 'Fixed Known Issues',
-        action: {
-          type: 'none',
-        },
-      },
-    ],
-  },
-  {
-    version: '1.5.0',
-    releasedAt: '2026-03-23',
-    entries: [
-      {
-        id: 'open-source-github',
-        emoji: '⭐',
-        title: 'Now Open Source!',
-        subtitle: 'Tap to view our GitHub repository and leave a star~',
-        action: {
-          type: 'open_url',
-          url: CLAWKET_GITHUB_REPO_URL,
-        },
-      },
-      {
-        id: 'agent-create-edit-improvements',
-        emoji: '🤖',
-        title: 'Better Agent editing',
-        subtitle: 'Edit an Agent name, emoji, personality, and more.',
-        action: {
-          type: 'none',
-        },
-      },
-      {
-        id: 'stability-and-polish',
-        emoji: '🛠️',
-        title: 'Fixes, stability, and UI polish',
-        subtitle: 'Fixed many known issues, improved security and connection stability, and refined several UI interactions.',
-        action: {
-          type: 'none',
-        },
-      },
-    ],
-  },
-  {
-    version: '1.2.0',
-    releasedAt: '2026-03-21',
-    entries: [
-      {
-        id: 'chat-appearance',
-        emoji: '🖼️',
-        tag: 'New',
-        title: 'Custom Chat Appearance',
-        subtitle: 'Add a custom chat background and adjust bubble opacity in Chat Appearance.',
-        action: {
-          type: 'navigate_config',
-          screen: 'ChatAppearance',
-        },
-      },
-      {
-        id: 'advanced-cron-job-creation',
-        emoji: '⏰',
-        tag: 'New',
-        title: 'Advanced Cron Job Creation',
-        subtitle: 'Use the full advanced Cron Job builder from the template page.',
-        action: {
-          type: 'navigate_console',
-          screen: 'CronWizard',
-        },
-      },
-    ],
-  },
-  {
-    version: '1.1.0',
-    releasedAt: '2026-03-19',
-    entries: [
-      {
-        id: 'sessions-list',
-        emoji: '📋',
-        tag: 'New',
-        title: 'Sessions Board',
-        subtitle: 'See all your Session activity at a glance',
-        action: {
-          type: 'navigate_console',
-          screen: 'SessionsBoard',
-        },
-      },
-      {
-        id: 'model-add-edit',
-        emoji: '💰',
-        tag: 'New',
-        title: 'Add and Edit Models',
-        subtitle: 'Create new models and update existing ones from the Models page',
-        action: {
-          type: 'navigate_console',
-          screen: 'ModelList',
-        },
-      },
-      {
-        id: 'fast-mode-model-switch',
-        emoji: '⚡',
-        tag: 'New',
-        title: 'Switch Models in Fast Mode',
-        subtitle: 'Use /fast to switch models in Fast Mode',
+        id: 'clawket-3-0-pro',
+        emoji: '✨',
+        title: 'Clawket 3.0 + Pro',
+        subtitle: 'Unlimited connections, agents, management, logs, files, and search.',
         action: {
           type: 'none',
         },

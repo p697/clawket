@@ -410,5 +410,9 @@
   "Too many requests, try again later": "请求过多，请稍后重试",
   "Message too large to send": "消息过大，无法发送",
   "Not supported by this backend": "当前后端不支持此功能",
+  "Clawket 3.0": "Clawket 3.0",
+  "Every agent and session in one roster.": "每个 Agent 与会话，都在一个花名册里。",
+  "Clawket 3.0 + Pro": "Clawket 3.0 + Pro",
+  "Unlimited connections, agents, management, logs, files, and search.": "不限连接与 Agent，解锁管理、日志、文件和搜索。",
   "Server error": "服务器错误"
 }

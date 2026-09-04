@@ -1,38 +1,22 @@
 import { useEffect, useRef } from 'react';
 import { Alert } from 'react-native';
 import * as Linking from 'expo-linking';
-import { NavigationContainerRefWithCurrent, NavigatorScreenParams } from '@react-navigation/native';
+import { NavigationContainerRefWithCurrent } from '@react-navigation/native';
 import { parseDeepLink, DeepLinkAction } from '../services/deepLinks';
 import { resolveGatewayCacheScopeId } from '../services/gateway-cache-scope';
 import { GatewayClient } from '../connection/protocol';
 import { StorageService } from '../services/storage';
 import { GatewayConfig } from '../types';
-import type { ConsoleStackParamList } from '../screens/ConsoleScreen/sharedNavigator';
+import type { RootStackParamList } from '../navigation/root-stack';
 import { useGatewayScanner } from '../contexts/GatewayScannerContext';
-
-type RootTabParamList = {
-  Chat: undefined;
-  Live: undefined;
-  Console: undefined;
-  Profile: undefined;
-  My: undefined;
-};
-
-type RootStackParamList = {
-  MainTabs: NavigatorScreenParams<RootTabParamList> | undefined;
-  OpenClawPermissions: undefined;
-} & ConsoleStackParamList;
 
 export type DeepLinkDeps = {
   rootNavigationRef: NavigationContainerRefWithCurrent<RootStackParamList>;
   gateway: GatewayClient;
+  activeConnectionId: string | null;
+  currentAgentId: string;
   mainSessionKey: string;
   onSaved: (next: GatewayConfig, nextGatewayScopeId?: string | null) => void;
-  requestChatSidebar: (params?: {
-    tab?: 'sessions' | 'subagents' | 'cron';
-    channel?: string;
-    openDrawer?: boolean;
-  }) => void;
 };
 
 function describeAction(action: DeepLinkAction): { title: string; message: string } {
@@ -54,26 +38,53 @@ function describeAction(action: DeepLinkAction): { title: string; message: strin
 }
 
 function executeAction(action: DeepLinkAction, deps: DeepLinkDeps) {
-  const { rootNavigationRef, gateway, mainSessionKey, onSaved, requestChatSidebar } = deps;
+  const {
+    rootNavigationRef,
+    gateway,
+    activeConnectionId,
+    currentAgentId,
+    mainSessionKey,
+    onSaved,
+  } = deps;
 
   switch (action.type) {
     case 'agent': {
-      if (rootNavigationRef.isReady()) {
-        rootNavigationRef.navigate('MainTabs', { screen: 'Chat' });
+      if (!activeConnectionId) {
+        Alert.alert('Connection Required', 'Connect to an Agent before sending this message.');
+        break;
       }
       const sessionKey = action.sessionKey ?? mainSessionKey;
+      if (rootNavigationRef.isReady()) {
+        rootNavigationRef.navigate('Thread', {
+          connectionId: activeConnectionId,
+          agentId: currentAgentId,
+          sessionKey,
+          from: 'notification',
+        });
+      }
       Promise.resolve(gateway.sendChat(sessionKey, action.message)).catch(() => {
-        Alert.alert('Send Failed', 'Connection is not ready. Please try again in Chat.');
+        Alert.alert('Send Failed', 'Connection is not ready. Please try again in the thread.');
       });
       break;
     }
     case 'session': {
-      requestChatSidebar({ tab: 'sessions', openDrawer: false });
+      if (!activeConnectionId) {
+        Alert.alert('Connection Required', 'Connect to an Agent before opening this session.');
+        break;
+      }
+      if (rootNavigationRef.isReady()) {
+        rootNavigationRef.navigate('Thread', {
+          connectionId: activeConnectionId,
+          agentId: currentAgentId,
+          sessionKey: action.key,
+          from: 'notification',
+        });
+      }
       break;
     }
     case 'config': {
       if (rootNavigationRef.isReady()) {
-        rootNavigationRef.navigate('MainTabs', { screen: 'My' });
+        rootNavigationRef.navigate('AccountSettings');
       }
       break;
     }
@@ -124,5 +135,13 @@ export function useDeepLinkHandler(deps: DeepLinkDeps) {
 
     return () => sub.remove();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connectPairingLink, deps.gateway, deps.mainSessionKey, deps.onSaved, deps.requestChatSidebar, deps.rootNavigationRef]);
+  }, [
+    connectPairingLink,
+    deps.activeConnectionId,
+    deps.currentAgentId,
+    deps.gateway,
+    deps.mainSessionKey,
+    deps.onSaved,
+    deps.rootNavigationRef,
+  ]);
 }

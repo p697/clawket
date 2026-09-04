@@ -8,7 +8,7 @@ import { FontSize, FontWeight, Radius, Shadow, Space, createThemedShadowStyle } 
 import {
   ChildSessionActivityCard,
   getChildSessionStatusLabel,
-} from '../../screens/ChatScreen/hooks/childSessionActivity';
+} from '../../chat/childSessionActivity';
 
 type Props = {
   cards: ChildSessionActivityCard[];
