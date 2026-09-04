@@ -145,7 +145,7 @@ The current user turn appears only in `input`; `conversation_history` contains p
 
 ### Cron creation
 
-`hermes.cron.jobs.create` is global, not session-scoped. It requires non-empty string `name` and `schedule`, plus at least one execution source: either a non-empty `prompt` or one or more `skills`; a skills-only job is valid. When supplied, `skills` must be an array of non-empty strings, `repeat` must be null or a positive integer, and `startAt` must be null or a valid ISO timestamp. Optional `deliver`, `script`, and `scheduleDisplay` remain strings when supplied. Invalid input is rejected before invoking the Hermes cron tool; semantic schedule parsing remains Hermes-owned. A successful response returns the persisted job and fails closed if Hermes supplies no job ID or the job cannot be read back.
+`hermes.cron.jobs.create` is global, not session-scoped. It requires non-empty string `name` and `schedule`, plus at least one execution source: either a non-empty `prompt` or one or more `skills`; a skills-only job is valid. When supplied, `skills` must be an array whose entries are non-empty strings; an empty array is valid when `prompt` is present. `repeat` must be null or a positive integer, and `startAt` must be null or a valid ISO timestamp. Optional `deliver`, `script`, and `scheduleDisplay` remain strings when supplied. Invalid input is rejected before invoking the Hermes cron tool; semantic schedule parsing remains Hermes-owned. A successful response returns the persisted job and fails closed if Hermes supplies no job ID or the job cannot be read back.
 
 ## Deployment Gate
 
