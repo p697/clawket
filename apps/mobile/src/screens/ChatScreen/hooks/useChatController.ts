@@ -1511,17 +1511,33 @@ export function useChatController({
       setPairingPending(false);
       if (adapterChanged || previous !== "ready") {
         restoreRunStateForSession(sessionKeyRef.current);
-        void history.loadSessionsAndHistory();
         const activeAdapter = adapter;
+        const sessionSync = Promise.resolve(history.loadSessionsAndHistory())
+          .catch(() => undefined);
         if (activeAdapter) {
-          void activeAdapter.listAgents().then((listedAgents) => {
+          void sessionSync.then(async () => {
+            if (
+              lastAdapterRef.current !== activeAdapter
+              || lastAdapterStateRef.current !== "ready"
+            ) return;
+            const listedAgents = await activeAdapter.listAgents();
+            if (
+              lastAdapterRef.current !== activeAdapter
+              || lastAdapterStateRef.current !== "ready"
+            ) return;
             if (listedAgents.length === 0) return;
             setAgents(listedAgents.map(mapAdapterAgent));
             const defaultAgent = listedAgents.find((agent) => agent.isMain);
             if (!defaultAgent || defaultAgent.agentId === "main") return;
             StorageService.getCurrentAgentId()
               .then((persisted) => {
-                if (!persisted) setCurrentAgentId(defaultAgent.agentId);
+                if (
+                  !persisted
+                  && lastAdapterRef.current === activeAdapter
+                  && lastAdapterStateRef.current === "ready"
+                ) {
+                  setCurrentAgentId(defaultAgent.agentId);
+                }
               })
               .catch(() => {});
           }).catch(() => {});
@@ -1653,6 +1669,7 @@ export function useChatController({
         return;
       case "agent_message_chunk": {
         if (lastAdapterStateRef.current !== "ready") return;
+        if (!update.visible) return;
         markRunSignal();
         const mergedText = mergeStreamText(
           sessionRunStateRef.current.get(update.sessionKey)?.streamText ?? null,
@@ -1672,7 +1689,7 @@ export function useChatController({
           applyChildDelta(childSessionActivityRef.current, update.sessionKey, mergedText);
           onChildSessionActivityChange();
         }
-        if (!update.visible || !matchesCurrentSession(update.sessionKey)) return;
+        if (!matchesCurrentSession(update.sessionKey)) return;
         if (!acceptRun(update.sessionKey, update.runId)) return;
         const nextText = mergeStreamText(chatStreamRef.current, update.text);
         chatStreamRef.current = nextText;
