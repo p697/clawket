@@ -4,7 +4,7 @@ import * as Linking from 'expo-linking';
 import { NavigationContainerRefWithCurrent, NavigatorScreenParams } from '@react-navigation/native';
 import { parseDeepLink, DeepLinkAction } from '../services/deepLinks';
 import { resolveGatewayCacheScopeId } from '../services/gateway-cache-scope';
-import { GatewayClient } from '../services/gateway';
+import { GatewayClient } from '../connection/protocol';
 import { StorageService } from '../services/storage';
 import { GatewayConfig } from '../types';
 import type { ConsoleStackParamList } from '../screens/ConsoleScreen/sharedNavigator';

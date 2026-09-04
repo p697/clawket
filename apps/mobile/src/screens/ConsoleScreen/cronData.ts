@@ -1,4 +1,4 @@
-import { GatewayClient } from '../../services/gateway';
+import { GatewayClient } from '../../connection/protocol';
 import type { CronJob } from '../../types';
 
 const PAGE_LIMIT = 100;

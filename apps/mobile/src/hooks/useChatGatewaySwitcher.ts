@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { GatewayConfig, SavedGatewayConfig } from '../types';
-import type { GatewayClient } from '../services/gateway';
+import type { GatewayClient } from '../connection/protocol';
 import { StorageService } from '../services/storage';
 import { useGatewayOverlay } from '../contexts/GatewayOverlayContext';
 import { reconnectGatewayWithOverlay, toRuntimeConfig } from './gatewayScanFlow';

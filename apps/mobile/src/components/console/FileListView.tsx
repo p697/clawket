@@ -20,7 +20,7 @@ import {
 } from '../ui';
 import { useTranslation } from 'react-i18next';
 import { useAppContext } from '../../contexts/AppContext';
-import { GatewayClient } from '../../services/gateway';
+import { GatewayClient } from '../../connection/protocol';
 import { useAppTheme } from '../../theme';
 import { FontSize, FontWeight, LineHeight, Radius, Space } from '../../theme/tokens';
 import { relativeTime } from '../../utils/chat-message';

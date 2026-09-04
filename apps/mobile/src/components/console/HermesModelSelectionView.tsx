@@ -29,7 +29,7 @@ import {
   type GatewayHermesModelSelectionState,
 } from '../../services/gateway-hermes-model-selection';
 import { resolveHermesModelDisplayState } from '../../services/gateway-hermes-model-display';
-import { GatewayClient } from '../../services/gateway';
+import { GatewayClient } from '../../connection/protocol';
 
 type Props = {
   gateway: GatewayClient;

@@ -1,5 +1,5 @@
 import React from 'react';
-import { GatewayClient } from '../services/gateway';
+import { GatewayClient } from '../connection/protocol';
 import { LastOpenedSessionSnapshot } from '../services/storage';
 import { GatewayConfig } from '../types';
 import type { AgentInfo } from '../types/agent';

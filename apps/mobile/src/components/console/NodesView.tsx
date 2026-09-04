@@ -31,7 +31,7 @@ import { CopyableCommand } from '../config/CopyableCommand';
 import { useTranslation } from 'react-i18next';
 import { useAppContext } from '../../contexts/AppContext';
 import { analyticsEvents } from '../../services/analytics/events';
-import { GatewayClient } from '../../services/gateway';
+import { GatewayClient } from '../../connection/protocol';
 import { loadGatewayNodesBundle } from '../../services/gateway-nodes';
 import { useAppTheme } from '../../theme';
 import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';

@@ -1,5 +1,5 @@
 import type { MutableRefObject } from 'react';
-import type { GatewayClient } from '../services/gateway';
+import type { GatewayClient } from '../connection/protocol';
 import {
   buildGatewayDefaultName,
   resolveGatewayBackendKind,

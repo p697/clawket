@@ -14,7 +14,7 @@ import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useTranslation } from 'react-i18next';
 import { LoadingState, ScreenHeader } from '../ui';
 import { useProPaywall } from '../../contexts/ProPaywallContext';
-import { GatewayClient } from '../../services/gateway';
+import { GatewayClient } from '../../connection/protocol';
 import { useAppTheme } from '../../theme';
 import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
 

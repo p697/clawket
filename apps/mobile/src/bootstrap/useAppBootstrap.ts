@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { GatewayClient } from '../services/gateway';
+import { GatewayClient } from '../connection/protocol';
 import { getGatewayBackendCapabilities, resolveGatewayBackendKind, resolveGlobalMainSessionKey } from '@clawket/agent-protocol';
 import { resolveGatewayCacheScopeId } from '../services/gateway-cache-scope';
 import { NodeClient } from '../services/node-client';

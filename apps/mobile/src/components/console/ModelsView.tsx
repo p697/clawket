@@ -29,7 +29,7 @@ import type { ModelInfo } from '../chat/ModelPickerModal';
 import { useTranslation } from 'react-i18next';
 import { useAppContext } from '../../contexts/AppContext';
 import { useGatewayOverlay } from '../../contexts/GatewayOverlayContext';
-import { GatewayClient } from '../../services/gateway';
+import { GatewayClient } from '../../connection/protocol';
 import { useGatewayPatch } from '../../hooks/useGatewayPatch';
 import { analyticsEvents } from '../../services/analytics/events';
 import { scheduleAutomaticAppReview } from '../../services/auto-app-review';

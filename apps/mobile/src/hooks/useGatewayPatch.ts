@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { Alert } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import type { GatewayClient } from '../services/gateway';
+import type { GatewayClient } from '../connection/protocol';
 import { useGatewayOverlay } from '../contexts/GatewayOverlayContext';
 
 const GATEWAY_READY_TIMEOUT_MS = 15_000;

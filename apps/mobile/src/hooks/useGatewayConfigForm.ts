@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { GatewayClient } from '../services/gateway';
+import { GatewayClient } from '../connection/protocol';
 import { useGatewayOverlay } from '../contexts/GatewayOverlayContext';
 import { useProPaywall } from '../contexts/ProPaywallContext';
 import { analyticsEvents } from '../services/analytics/events';

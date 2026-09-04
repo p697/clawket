@@ -11,7 +11,7 @@ import { Card, LoadingState, ScreenHeader, ThemedSwitch } from '../ui';
 import { useAppTheme } from '../../theme';
 import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
 import type { NodeInfo } from '../../types';
-import { GatewayClient } from '../../services/gateway';
+import { GatewayClient } from '../../connection/protocol';
 import type { NodeCapabilityToggleKey, NodeCapabilityToggles } from '../../services/node-capabilities';
 import { NodeInvokeAuditEntry, StorageService } from '../../services/storage';
 

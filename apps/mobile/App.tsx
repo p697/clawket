@@ -50,7 +50,7 @@ import { ProPaywallOverlay } from './src/components/pro/ProPaywallOverlay';
 import { loadAgentAvatars } from './src/services/agent-avatar';
 import * as Linking from 'expo-linking';
 import * as Sharing from 'expo-sharing';
-import { GatewayClient } from './src/services/gateway';
+import { GatewayClient } from './src/connection/protocol';
 import { NodeClient } from './src/services/node-client';
 import { dispatchNodeInvoke } from './src/services/node-invoke-dispatcher';
 import { NodeCapabilityToggles } from './src/services/node-capabilities';

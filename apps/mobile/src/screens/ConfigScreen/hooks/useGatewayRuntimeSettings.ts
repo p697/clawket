@@ -3,7 +3,7 @@ import { Alert } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useGatewayPatch } from '../../../hooks/useGatewayPatch';
 import { getGatewayBackendCapabilities } from '@clawket/agent-protocol';
-import { GatewayClient, GatewayInfo } from '../../../services/gateway';
+import { GatewayClient, GatewayInfo } from '../../../connection/protocol';
 import {
   DEFAULT_GATEWAY_RUNTIME_SETTINGS,
   loadGatewayRuntimeSettingsBundle,

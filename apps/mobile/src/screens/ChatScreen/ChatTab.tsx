@@ -28,11 +28,11 @@ function describeSessionKeyPrefix(sessionKey: string): string {
 }
 
 async function patchGatewaySession(
-  gateway: import('../../services/gateway').GatewayClient,
+  gateway: import('../../connection/protocol').GatewayClient,
   key: string,
   patch: { label?: string | null },
 ): Promise<void> {
-  const candidate = gateway as import('../../services/gateway').GatewayClient & {
+  const candidate = gateway as import('../../connection/protocol').GatewayClient & {
     patchSession?: (sessionKey: string, nextPatch: { label?: string | null }) => Promise<unknown>;
   };
   if (typeof candidate.patchSession === 'function') {
@@ -43,10 +43,10 @@ async function patchGatewaySession(
 }
 
 async function resetGatewaySession(
-  gateway: import('../../services/gateway').GatewayClient,
+  gateway: import('../../connection/protocol').GatewayClient,
   key: string,
 ): Promise<void> {
-  const candidate = gateway as import('../../services/gateway').GatewayClient & {
+  const candidate = gateway as import('../../connection/protocol').GatewayClient & {
     resetSession?: (sessionKey: string, reason?: 'new' | 'reset') => Promise<unknown>;
   };
   if (typeof candidate.resetSession === 'function') {
@@ -57,10 +57,10 @@ async function resetGatewaySession(
 }
 
 async function deleteGatewaySession(
-  gateway: import('../../services/gateway').GatewayClient,
+  gateway: import('../../connection/protocol').GatewayClient,
   key: string,
 ): Promise<void> {
-  const candidate = gateway as import('../../services/gateway').GatewayClient & {
+  const candidate = gateway as import('../../connection/protocol').GatewayClient & {
     deleteSession?: (sessionKey: string) => Promise<unknown>;
   };
   if (typeof candidate.deleteSession === 'function') {

@@ -19,7 +19,7 @@ import { useTranslation } from 'react-i18next';
 import { useAppContext } from '../../contexts/AppContext';
 import { useProPaywall } from '../../contexts/ProPaywallContext';
 import { useNativeStackModalHeader } from '../../hooks/useNativeStackModalHeader';
-import { GatewayClient } from '../../services/gateway';
+import { GatewayClient } from '../../connection/protocol';
 import { useAppTheme } from '../../theme';
 import { FontSize, FontWeight, LineHeight, Radius, Space } from '../../theme/tokens';
 import { LOG_LEVELS, LogEntry, LOG_LEVEL_BADGE_COLORS, LogLevel } from '../../types/logs';

@@ -21,7 +21,7 @@ import { useTranslation } from 'react-i18next';
 import { useAppContext } from '../../contexts/AppContext';
 import { useGatewayPatch } from '../../hooks/useGatewayPatch';
 import { loadGatewayChannelsBundle } from '../../services/gateway-channels';
-import { GatewayClient } from '../../services/gateway';
+import { GatewayClient } from '../../connection/protocol';
 import { useAppTheme } from '../../theme';
 import { BorderWidth, FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
 import type {

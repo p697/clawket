@@ -14,7 +14,7 @@ import { EmptyState, LoadingState, ScreenHeader, SearchInput, ThemedSwitch } fro
 import { useAppContext } from '../../contexts/AppContext';
 import { useGatewayPatch } from '../../hooks/useGatewayPatch';
 import { analyticsEvents } from '../../services/analytics/events';
-import { GatewayClient } from '../../services/gateway';
+import { GatewayClient } from '../../connection/protocol';
 import { loadGatewayToolsConfigBundle } from '../../services/gateway-tools';
 import { useAppTheme } from '../../theme';
 import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';

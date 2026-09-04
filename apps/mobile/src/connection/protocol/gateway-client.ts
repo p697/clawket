@@ -1,8 +1,10 @@
 import type {
   DoctorResult,
+  GatewayBackendCapabilities,
   PermissionsReport,
   RepairResult,
 } from '@clawket/agent-protocol';
+import { getGatewayBackendCapabilities } from '@clawket/agent-protocol';
 import nacl from 'tweetnacl';
 import type {
   ChannelsStatusResult,
@@ -290,6 +292,11 @@ export class GatewayProtocolClient {
 
   public getBackendKind(): 'openclaw' | 'hermes' {
     return resolveBackendKind(this.config);
+  }
+
+  /** @deprecated Transitional facade for pre-3.0 screens. Use adapter.capabilities. */
+  public getBackendCapabilities(): GatewayBackendCapabilities {
+    return getGatewayBackendCapabilities(this.config);
   }
 
   public getBaseUrl(): string | null {

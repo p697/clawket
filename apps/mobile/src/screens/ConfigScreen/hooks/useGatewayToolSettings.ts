@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useGatewayPatch } from '../../../hooks/useGatewayPatch';
-import { GatewayClient } from '../../../services/gateway';
+import { GatewayClient } from '../../../connection/protocol';
 import {
   DEFAULT_GATEWAY_TOOL_SETTINGS,
   loadGatewayToolSettingsBundle,

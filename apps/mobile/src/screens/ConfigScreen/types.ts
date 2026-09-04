@@ -1,4 +1,4 @@
-import { GatewayClient } from '../../services/gateway';
+import { GatewayClient } from '../../connection/protocol';
 import { GatewayConfig } from '../../types';
 
 export type ConfigScreenProps = {
