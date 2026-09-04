@@ -1,19 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { GatewayClient } from '../connection/protocol';
-import { useGatewayOverlay } from '../contexts/GatewayOverlayContext';
-import { useProPaywall } from '../contexts/ProPaywallContext';
-import { analyticsEvents } from '../services/analytics/events';
+import { GatewayClient } from '../protocol';
+import { useGatewayOverlay } from '../../contexts/GatewayOverlayContext';
+import { useProPaywall } from '../../contexts/ProPaywallContext';
+import { analyticsEvents } from '../../services/analytics/events';
 import {
   buildGatewayDefaultName,
   resolveGatewayBackendKind,
   resolveGatewayTransportKind,
   toLegacyGatewayMode,
 } from '@clawket/agent-protocol';
-import { StorageService } from '../services/storage';
-import { GatewayBackendKind, GatewayConfig, GatewayMode, GatewayTransportKind, SavedGatewayConfig, type RelayServiceEnvironment } from '../types';
-import { isUnsupportedDirectLocalTlsConfig, shouldSuppressDuplicatePairingAlert } from '../connection/pairing/connection-form-utils';
+import { StorageService } from '../../services/storage';
+import { GatewayBackendKind, GatewayConfig, GatewayMode, GatewayTransportKind, SavedGatewayConfig, type RelayServiceEnvironment } from '../../types';
+import { isUnsupportedDirectLocalTlsConfig, shouldSuppressDuplicatePairingAlert } from './connection-form-utils';
 import {
   claimRelayPairing as claimRelayPairingPayload,
   createGatewayConfigFromScan,
@@ -21,10 +21,10 @@ import {
   toRuntimeConfig,
   willCreateGatewayConfigFromScan,
   type GatewayScanPayload,
-} from '../connection/pairing/gateway-scan-flow';
-import { markHermesConnectTrace } from '../connection/hermes-connect-trace';
-import { canAddGatewayConnection } from '../utils/pro';
-import { assessRelayEnvironmentSelection } from '../services/relay-environment';
+} from './gateway-scan-flow';
+import { markHermesConnectTrace } from '../hermes-connect-trace';
+import { canAddGatewayConnection } from '../../utils/pro';
+import { assessRelayEnvironmentSelection } from '../../services/relay-environment';
 
 type Params = {
   gateway: GatewayClient;

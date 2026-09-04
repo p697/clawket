@@ -1,4 +1,4 @@
-import { useGatewayConfigForm } from '../../../hooks/useGatewayConfigForm';
+import { useGatewayConfigForm } from '../../../connection/pairing/use-connection-form';
 import { useAppContext } from '../../../contexts/AppContext';
 import { useAppTheme } from '../../../theme';
 import { useGatewayRuntimeSettings } from './useGatewayRuntimeSettings';

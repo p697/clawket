@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { Alert } from 'react-native';
-import { useGatewayConfigForm } from './useGatewayConfigForm';
-import { StorageService } from '../services/storage';
+import { useGatewayConfigForm } from './use-connection-form';
+import { StorageService } from '../../services/storage';
 
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -9,21 +9,21 @@ jest.mock('react-i18next', () => ({
   }),
 }));
 
-jest.mock('../contexts/GatewayOverlayContext', () => ({
+jest.mock('../../contexts/GatewayOverlayContext', () => ({
   useGatewayOverlay: () => ({
     showOverlay: jest.fn(),
     hideOverlay: jest.fn(),
   }),
 }));
 
-jest.mock('../contexts/ProPaywallContext', () => ({
+jest.mock('../../contexts/ProPaywallContext', () => ({
   useProPaywall: jest.fn(() => ({
     isPro: false,
     showPaywall: jest.fn(),
   })),
 }));
 
-jest.mock('../services/storage', () => ({
+jest.mock('../../services/storage', () => ({
   StorageService: {
     getGatewayConfigsState: jest.fn(),
     setGatewayConfigsState: jest.fn(),
@@ -133,7 +133,7 @@ describe('useGatewayConfigForm', () => {
   });
 
   it('can create multiple YouMind connections without activating them immediately', async () => {
-    const { useProPaywall } = jest.requireMock('../contexts/ProPaywallContext') as {
+    const { useProPaywall } = jest.requireMock('../../contexts/ProPaywallContext') as {
       useProPaywall: jest.Mock;
     };
     useProPaywall.mockReturnValue({
