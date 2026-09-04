@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import WebSocket, { type RawData, type WebSocketServer } from 'ws';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { BridgeRuntime } from '../../packages/bridge-runtime/src/runtime';
+import { BridgeRuntime } from '../../packages/bridge-runtime/src/openclaw/runtime';
 import { HermesRelayRuntime } from '../../packages/bridge-runtime/src/hermes-relay';
 import { RELAY_FRAME_MAX_BYTES, SOCKET_CLOSE_CODES } from '../../apps/relay-worker/src/relay/types';
 import { getFreePort } from '../integration/harness';

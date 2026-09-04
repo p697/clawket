@@ -18,7 +18,7 @@ import {
   runOpenClawDoctor,
   runOpenClawDoctorFix,
   type OpenClawInfo,
-} from './openclaw.js';
+} from '../openclaw.js';
 import {
   isConnectHandshakeRequest,
   parseConnectHandshakeMeta,
@@ -29,7 +29,7 @@ import {
   parseResponseEnvelopeMeta,
   normalizeConnectCapabilities,
   type PendingPairRequest,
-} from './protocol.js';
+} from '../protocol.js';
 import {
   FRAME_TOO_LARGE_CLOSE_CODE,
   FRAME_TOO_LARGE_ERROR_CODE,
@@ -37,7 +37,8 @@ import {
   isWebSocketMaxPayloadError,
   WEBSOCKET_FRAME_LIMIT_BYTES,
   type WebSocketFrameData,
-} from './frame-limit.js';
+} from '../frame-limit.js';
+import { RelaySessionState } from '../relay-session.js';
 
 type PendingGatewayMessage =
   | { kind: 'text'; text: string }
@@ -135,8 +136,7 @@ export class BridgeRuntime {
   private relayConnecting = false;
   private gatewayConnecting = false;
   private stopped = true;
-  private relayAttempt = 0;
-  private lastRelayActivityMs = 0;
+  private readonly relaySessionState = new RelaySessionState();
   private reconnectTimer: NodeJS.Timeout | null = null;
   private gatewayRetryTimer: NodeJS.Timeout | null = null;
   private gatewayRetryAttempt = 0;
@@ -228,8 +228,7 @@ export class BridgeRuntime {
   private async connectRelay(): Promise<void> {
     if (this.stopped || this.relayConnecting || this.isRelayOpen()) return;
     this.relayConnecting = true;
-    this.relayAttempt += 1;
-    const attempt = this.relayAttempt;
+    const attempt = this.relaySessionState.beginConnectAttempt();
     const relayUrl = buildRelayWsUrl(this.options.config);
     const relayHeaders = buildRelayWsHeaders(this.options.config);
     this.log(
@@ -248,7 +247,7 @@ export class BridgeRuntime {
         return;
       }
       this.relayConnecting = false;
-      this.lastRelayActivityMs = Date.now();
+      this.relaySessionState.observeActivity();
       this.updateSnapshot({ relayConnected: true, lastError: null });
       this.log(`relay connected attempt=${attempt}`);
       this.startHeartbeat();
@@ -262,9 +261,7 @@ export class BridgeRuntime {
     });
 
     relay.on('pong', () => {
-      this.lastRelayActivityMs = Date.now();
-      if (this.relayAttempt !== 0) {
-        this.relayAttempt = 0;
+      if (this.relaySessionState.confirmHealth()) {
         this.log('relay health confirmed; reconnect backoff reset');
       }
     });
@@ -303,7 +300,7 @@ export class BridgeRuntime {
   private async handleRelayMessage(data: RawData, isBinary: boolean): Promise<void> {
     const relay = this.relaySocket;
     if (relay && this.rejectOversizedFrame(relay, data, 'relay_in')) return;
-    this.lastRelayActivityMs = Date.now();
+    this.relaySessionState.observeActivity();
     if (isBinary) {
       this.forwardOrQueueGatewayMessage({ kind: 'binary', data: normalizeBinary(data) });
       return;
@@ -815,7 +812,10 @@ export class BridgeRuntime {
         );
       }
       if (patched.bridgeMetaStripped) {
-        this.log(`gateway connect Bridge meta accepted capability=${BRIDGE_CAPABILITIES_V2}`);
+        this.log('gateway connect top-level meta stripped before OpenClaw Gateway');
+      }
+      if (patched.bridgeCapabilitiesRequested) {
+        this.log(`gateway connect Bridge capability negotiated capability=${BRIDGE_CAPABILITIES_V2}`);
       }
       this.sendFrame(gateway, patched.text, 'gateway_out');
       return;
@@ -1098,7 +1098,7 @@ export class BridgeRuntime {
     if (this.stopped || this.reconnectTimer) return;
     const base = this.options.reconnectBaseDelayMs ?? RECONNECT_BASE_DELAY_MS;
     const max = this.options.reconnectMaxDelayMs ?? RECONNECT_MAX_DELAY_MS;
-    const delayMs = Math.min(max, base * Math.max(1, this.relayAttempt));
+    const delayMs = this.relaySessionState.reconnectDelayMs(base, max);
     this.log(`relay reconnect scheduled delayMs=${delayMs}`);
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
@@ -1135,7 +1135,7 @@ export class BridgeRuntime {
       if (!relay || relay.readyState !== WebSocket.OPEN) return;
       this.logSlowConnectHandshakes();
       const timeoutMs = this.options.heartbeatTimeoutMs ?? HEARTBEAT_TIMEOUT_MS;
-      if (Date.now() - this.lastRelayActivityMs > timeoutMs) {
+      if (this.relaySessionState.heartbeatTimedOut(timeoutMs)) {
         this.log('relay heartbeat timed out');
         relay.terminate();
         return;
@@ -1453,19 +1453,18 @@ export function stripConnectRequestBridgeMeta(
     if (parsed.type !== 'req' || (parsed.method !== 'connect' && parsed.method !== 'connect.start')) {
       return { text, stripped: false, bridgeCapabilitiesRequested: false };
     }
-    if (!isRuntimeRecord(parsed.meta) || !Array.isArray(parsed.meta.capabilities)) {
+    if (!Object.prototype.hasOwnProperty.call(parsed, 'meta')) {
       return { text, stripped: false, bridgeCapabilitiesRequested: false };
     }
-    const capabilities = normalizeConnectCapabilities(parsed.meta.capabilities);
-    if (!capabilities.includes(BRIDGE_CAPABILITIES_V2)) {
-      return { text, stripped: false, bridgeCapabilitiesRequested: false };
-    }
+    const bridgeCapabilitiesRequested = isRuntimeRecord(parsed.meta)
+      && Array.isArray(parsed.meta.capabilities)
+      && normalizeConnectCapabilities(parsed.meta.capabilities).includes(BRIDGE_CAPABILITIES_V2);
 
     const { meta: _bridgeMeta, ...gatewayRequest } = parsed;
     return {
       text: JSON.stringify(gatewayRequest),
       stripped: true,
-      bridgeCapabilitiesRequested: true,
+      bridgeCapabilitiesRequested,
     };
   } catch {
     return { text, stripped: false, bridgeCapabilitiesRequested: false };

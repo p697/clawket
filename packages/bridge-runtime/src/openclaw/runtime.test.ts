@@ -35,12 +35,12 @@ import {
   parsePairingRequestFromError,
   parsePairResolvedEvent,
   parseResponseEnvelopeMeta,
-} from './protocol.js';
+} from '../protocol.js';
 import {
   FRAME_TOO_LARGE_CLOSE_CODE,
   FRAME_TOO_LARGE_ERROR_CODE,
   WEBSOCKET_FRAME_LIMIT_BYTES,
-} from './frame-limit.js';
+} from '../frame-limit.js';
 
 const tempDirs: string[] = [];
 
@@ -568,7 +568,7 @@ describe('bridge runtime protocol helpers', () => {
     });
   });
 
-  it('keeps a canonical v1 connect request byte-identical without capability meta', () => {
+  it('keeps a canonical v1 connect request byte-identical when top-level meta is absent', () => {
     const original = '{ "type": "req", "id": "req_v1", "method": "connect", "params": { "minProtocol": 3, "maxProtocol": 4 } }';
 
     expect(patchOpenClawConnectRequest(original, {
@@ -587,8 +587,11 @@ describe('bridge runtime protocol helpers', () => {
       meta: { capabilities: BRIDGE_CAPABILITIES_V2 },
     });
     expect(stripConnectRequestBridgeMeta(malformedMeta)).toEqual({
-      text: malformedMeta,
-      stripped: false,
+      text: JSON.stringify({
+        type: 'req',
+        method: 'connect.start',
+      }),
+      stripped: true,
       bridgeCapabilitiesRequested: false,
     });
   });
@@ -617,30 +620,62 @@ describe('bridge runtime protocol helpers', () => {
       params: { minProtocol: 3, maxProtocol: 4 },
     });
 
-    const malformed = JSON.stringify({
-      type: 'req',
-      method: 'connect',
-      meta: { capabilities: BRIDGE_CAPABILITIES_V2 },
-    });
-    expect(stripConnectRequestBridgeMeta(malformed)).toEqual({
-      text: malformed,
-      stripped: false,
-      bridgeCapabilitiesRequested: false,
-    });
-
     for (const capabilities of [[], ['future.bridge.v3']]) {
       const unnegotiated = JSON.stringify({
         type: 'req',
         id: 'req_unnegotiated',
         method: 'connect',
+        futureEnvelope: { mode: 'preserve-me' },
         meta: { capabilities },
       });
       expect(stripConnectRequestBridgeMeta(unnegotiated)).toEqual({
-        text: unnegotiated,
-        stripped: false,
+        text: JSON.stringify({
+          type: 'req',
+          id: 'req_unnegotiated',
+          method: 'connect',
+          futureEnvelope: { mode: 'preserve-me' },
+        }),
+        stripped: true,
         bridgeCapabilitiesRequested: false,
       });
     }
+  });
+
+  it('strips malformed and unknown top-level connect meta without negotiating capabilities', () => {
+    for (const meta of [null, '', 42, [], {}, { future: true }, { capabilities: BRIDGE_CAPABILITIES_V2 }]) {
+      const request = JSON.stringify({
+        type: 'req',
+        id: 'req_unnegotiated_meta',
+        method: 'connect.start',
+        futureEnvelope: { mode: 'preserve-me' },
+        meta,
+        params: { minProtocol: 3, maxProtocol: 4 },
+      });
+      expect(stripConnectRequestBridgeMeta(request)).toEqual({
+        text: JSON.stringify({
+          type: 'req',
+          id: 'req_unnegotiated_meta',
+          method: 'connect.start',
+          futureEnvelope: { mode: 'preserve-me' },
+          params: { minProtocol: 3, maxProtocol: 4 },
+        }),
+        stripped: true,
+        bridgeCapabilitiesRequested: false,
+      });
+    }
+
+    const nonConnect = JSON.stringify({
+      type: 'req',
+      id: 'req_chat_meta',
+      method: 'chat.send',
+      meta: { future: true },
+      params: { message: 'keep me' },
+    });
+    expect(stripConnectRequestBridgeMeta(nonConnect)).toEqual({
+      text: nonConnect,
+      stripped: false,
+      bridgeCapabilitiesRequested: false,
+    });
   });
 
   it('adds Bridge capabilities only to successful connect responses', () => {
@@ -774,6 +809,91 @@ describe('bridge runtime protocol helpers', () => {
       meta: { capabilities: [BRIDGE_CAPABILITIES_V2] },
     });
     await runtime.stop();
+  });
+
+  it('strips unnegotiated connect meta on the Runtime path without advertising Bridge capabilities', async () => {
+    vi.stubEnv('OPENCLAW_STATE_DIR', await createOpenClawStateDir());
+    const sockets: FakeSocket[] = [];
+    const runtime = new BridgeRuntime({
+      config: BASE_CONFIG,
+      gatewayUrl: 'ws://127.0.0.1:18789',
+      createWebSocket: (url) => {
+        const socket = new FakeSocket(url);
+        sockets.push(socket);
+        return socket;
+      },
+    });
+    const request = JSON.stringify({
+      type: 'req',
+      id: 'req_future_meta_wire',
+      method: 'connect',
+      futureEnvelope: { mode: 'preserve-me' },
+      meta: {
+        capabilities: ['future.bridge.v3'],
+        futureMeta: { enabled: true },
+      },
+      params: { minProtocol: 3, maxProtocol: 4 },
+    });
+
+    runtime.start();
+    const relay = sockets[0];
+    relay.open();
+    relay.message(request);
+    const gateway = sockets[1];
+    gateway.open();
+
+    expect(JSON.parse(gateway.sent[0] as string)).toEqual({
+      type: 'req',
+      id: 'req_future_meta_wire',
+      method: 'connect',
+      futureEnvelope: { mode: 'preserve-me' },
+      params: { minProtocol: 3, maxProtocol: 4 },
+    });
+    const response = '{ "type": "res", "id": "req_future_meta_wire", "ok": true, "payload": { "protocol": 4 } }';
+    gateway.message(response);
+    expect(relay.sent).toEqual([response]);
+    await runtime.stop();
+  });
+
+  it('clears pending Bridge capability negotiations on Gateway close and runtime stop', async () => {
+    vi.stubEnv('OPENCLAW_STATE_DIR', await createOpenClawStateDir());
+    const sockets: FakeSocket[] = [];
+    const runtime = new BridgeRuntime({
+      config: BASE_CONFIG,
+      gatewayUrl: 'ws://127.0.0.1:18789',
+      gatewayRetryDelayMs: 60_000,
+      createWebSocket: (url) => {
+        const socket = new FakeSocket(url);
+        sockets.push(socket);
+        return socket;
+      },
+    });
+    const negotiatedRequest = JSON.stringify({
+      type: 'req',
+      id: 'req_pending_capability',
+      method: 'connect',
+      meta: { capabilities: [BRIDGE_CAPABILITIES_V2] },
+      params: { minProtocol: 3, maxProtocol: 4 },
+    });
+
+    runtime.start();
+    const relay = sockets[0];
+    relay.open();
+    relay.message(negotiatedRequest);
+    const gateway = sockets[1];
+    gateway.open();
+    expect((runtime as any).inFlightConnectHandshakes.size).toBe(1);
+
+    gateway.closeFromRemote(1006, 'network');
+    expect((runtime as any).inFlightConnectHandshakes.size).toBe(0);
+
+    relay.message(negotiatedRequest);
+    const replacement = sockets[2];
+    replacement.open();
+    expect((runtime as any).inFlightConnectHandshakes.size).toBe(1);
+
+    await runtime.stop();
+    expect((runtime as any).inFlightConnectHandshakes.size).toBe(0);
   });
 
   it('preserves existing gateway password on proxied connect requests', () => {
