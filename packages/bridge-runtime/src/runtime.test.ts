@@ -12,9 +12,12 @@ import {
   buildRelayWsHeaders,
   buildRelayWsUrl,
   dedupePendingGatewayMessages,
+  BRIDGE_CAPABILITIES_V2,
+  patchConnectResponseBridgeCapabilities,
   patchConnectRequestGatewayAuth,
   patchConnectRequestGatewayProtocolRange,
   patchOpenClawConnectRequest,
+  stripConnectRequestBridgeMeta,
   OPENCLAW_MOBILE_SETUP_CAPABILITY,
   prunePendingGatewayMessagesForFreshDemand,
   sanitizeRuntimeLogLine,
@@ -269,9 +272,27 @@ describe('bridge runtime protocol helpers', () => {
       method: 'connect.start',
       minProtocol: null,
       maxProtocol: null,
+      capabilities: null,
       noncePresent: true,
       nonceLength: 9,
       authFields: ['token'],
+    });
+  });
+
+  it('parses normalized capabilities from explicit connect meta', () => {
+    expect(parseConnectHandshakeMeta(JSON.stringify({
+      type: 'req',
+      id: 'req_v2',
+      method: 'connect',
+      meta: {
+        traceId: 'trace-1',
+        capabilities: [' app.future.v3 ', BRIDGE_CAPABILITIES_V2, 'app.future.v3'],
+      },
+      params: {},
+    }))).toMatchObject({
+      id: 'req_v2',
+      method: 'connect',
+      capabilities: ['app.future.v3', BRIDGE_CAPABILITIES_V2],
     });
   });
 
@@ -545,6 +566,214 @@ describe('bridge runtime protocol helpers', () => {
         },
       },
     });
+  });
+
+  it('keeps a canonical v1 connect request byte-identical without capability meta', () => {
+    const original = '{ "type": "req", "id": "req_v1", "method": "connect", "params": { "minProtocol": 3, "maxProtocol": 4 } }';
+
+    expect(patchOpenClawConnectRequest(original, {
+      authMode: 'token',
+      password: null,
+    })).toEqual({
+      text: original,
+      authInjected: false,
+      protocolPatched: false,
+      bridgeMetaStripped: false,
+      bridgeCapabilitiesRequested: false,
+    });
+    const malformedMeta = JSON.stringify({
+      type: 'req',
+      method: 'connect.start',
+      meta: { capabilities: BRIDGE_CAPABILITIES_V2 },
+    });
+    expect(stripConnectRequestBridgeMeta(malformedMeta)).toEqual({
+      text: malformedMeta,
+      stripped: false,
+      bridgeCapabilitiesRequested: false,
+    });
+  });
+
+  it('strips Bridge-owned request meta before Gateway while preserving envelope siblings', () => {
+    const prepared = stripConnectRequestBridgeMeta(JSON.stringify({
+      type: 'req',
+      id: 'req_v2',
+      method: 'connect.start',
+      futureEnvelope: { mode: 'preserve-me' },
+      meta: {
+        traceId: 'trace-1',
+        futureMeta: { enabled: true },
+        capabilities: [' app.future.v3 ', ` ${BRIDGE_CAPABILITIES_V2} `, 'app.future.v3', '', 42],
+      },
+      params: { minProtocol: 3, maxProtocol: 4 },
+    }));
+
+    expect(prepared.stripped).toBe(true);
+    expect(prepared.bridgeCapabilitiesRequested).toBe(true);
+    expect(JSON.parse(prepared.text)).toEqual({
+      type: 'req',
+      id: 'req_v2',
+      method: 'connect.start',
+      futureEnvelope: { mode: 'preserve-me' },
+      params: { minProtocol: 3, maxProtocol: 4 },
+    });
+
+    const malformed = JSON.stringify({
+      type: 'req',
+      method: 'connect',
+      meta: { capabilities: BRIDGE_CAPABILITIES_V2 },
+    });
+    expect(stripConnectRequestBridgeMeta(malformed)).toEqual({
+      text: malformed,
+      stripped: false,
+      bridgeCapabilitiesRequested: false,
+    });
+
+    for (const capabilities of [[], ['future.bridge.v3']]) {
+      const unnegotiated = JSON.stringify({
+        type: 'req',
+        id: 'req_unnegotiated',
+        method: 'connect',
+        meta: { capabilities },
+      });
+      expect(stripConnectRequestBridgeMeta(unnegotiated)).toEqual({
+        text: unnegotiated,
+        stripped: false,
+        bridgeCapabilitiesRequested: false,
+      });
+    }
+  });
+
+  it('adds Bridge capabilities only to successful connect responses', () => {
+    const successful = patchConnectResponseBridgeCapabilities(JSON.stringify({
+      type: 'res',
+      id: 'req_v2',
+      ok: true,
+      futureEnvelope: { mode: 'preserve-me' },
+      meta: {
+        traceId: 'trace-response',
+        capabilities: [' gateway.future.v3 ', 'gateway.future.v3'],
+      },
+      payload: { protocol: 4 },
+    }));
+    expect(successful.patched).toBe(true);
+    expect(JSON.parse(successful.text)).toEqual({
+      type: 'res',
+      id: 'req_v2',
+      ok: true,
+      futureEnvelope: { mode: 'preserve-me' },
+      meta: {
+        traceId: 'trace-response',
+        capabilities: ['gateway.future.v3', BRIDGE_CAPABILITIES_V2],
+      },
+      payload: { protocol: 4 },
+    });
+
+    const alreadyDeclared = patchConnectResponseBridgeCapabilities(JSON.stringify({
+      type: 'res',
+      id: 'req_v2_existing',
+      ok: true,
+      meta: {
+        capabilities: [` ${BRIDGE_CAPABILITIES_V2} `, 'gateway.future.v3', BRIDGE_CAPABILITIES_V2],
+      },
+    }));
+    expect(JSON.parse(alreadyDeclared.text).meta.capabilities).toEqual([
+      BRIDGE_CAPABILITIES_V2,
+      'gateway.future.v3',
+    ]);
+
+    const failed = JSON.stringify({ type: 'res', id: 'req_v2', ok: false });
+    expect(patchConnectResponseBridgeCapabilities(failed)).toEqual({
+      text: failed,
+      patched: false,
+    });
+  });
+
+  it('forwards a canonical v1 connect request byte-identically through BridgeRuntime', async () => {
+    vi.stubEnv('OPENCLAW_STATE_DIR', await createOpenClawStateDir());
+    const sockets: FakeSocket[] = [];
+    const runtime = new BridgeRuntime({
+      config: BASE_CONFIG,
+      gatewayUrl: 'ws://127.0.0.1:18789',
+      createWebSocket: (url) => {
+        const socket = new FakeSocket(url);
+        sockets.push(socket);
+        return socket;
+      },
+    });
+    const original = '{ "type": "req", "id": "req_v1_wire", "method": "connect", "params": { "minProtocol": 3, "maxProtocol": 4 } }';
+
+    runtime.start();
+    const relay = sockets[0];
+    relay.open();
+    relay.message(original);
+    const gateway = sockets[1];
+    gateway.open();
+
+    expect(gateway.sent).toEqual([original]);
+    const response = '{ "type": "res", "id": "req_v1_wire", "ok": true, "payload": { "protocol": 4 } }';
+    gateway.message(response);
+    expect(relay.sent).toEqual([response]);
+    await runtime.stop();
+  });
+
+  it('merges Bridge capability meta on the Runtime forwarding path', async () => {
+    vi.stubEnv('OPENCLAW_STATE_DIR', await createOpenClawStateDir());
+    const sockets: FakeSocket[] = [];
+    const runtime = new BridgeRuntime({
+      config: BASE_CONFIG,
+      gatewayUrl: 'ws://127.0.0.1:18789',
+      createWebSocket: (url) => {
+        const socket = new FakeSocket(url);
+        sockets.push(socket);
+        return socket;
+      },
+    });
+    const request = JSON.stringify({
+      type: 'req',
+      id: 'req_v2_wire',
+      method: 'connect.start',
+      futureEnvelope: { mode: 'preserve-me' },
+      meta: {
+        traceId: 'trace-wire',
+        futureMeta: { enabled: true },
+        capabilities: [' app.future.v3 ', BRIDGE_CAPABILITIES_V2, 'app.future.v3'],
+      },
+      params: { minProtocol: 3, maxProtocol: 4 },
+    });
+
+    runtime.start();
+    const relay = sockets[0];
+    relay.open();
+    relay.message(request);
+    const gateway = sockets[1];
+    gateway.open();
+
+    expect(JSON.parse(gateway.sent[0] as string)).toEqual({
+      type: 'req',
+      id: 'req_v2_wire',
+      method: 'connect.start',
+      futureEnvelope: { mode: 'preserve-me' },
+      params: { minProtocol: 3, maxProtocol: 4 },
+    });
+    const unrelatedResponse = '{ "type": "res", "id": "unrelated", "ok": true }';
+    gateway.message(unrelatedResponse);
+    expect(relay.sent).toEqual([unrelatedResponse]);
+    gateway.message(JSON.stringify({
+      type: 'res',
+      id: 'req_v2_wire',
+      ok: true,
+      futureResponse: { mode: 'preserve-me-too' },
+      payload: { protocol: 4 },
+    }));
+    expect(JSON.parse(relay.sent[1] as string)).toEqual({
+      type: 'res',
+      id: 'req_v2_wire',
+      ok: true,
+      futureResponse: { mode: 'preserve-me-too' },
+      payload: { protocol: 4 },
+      meta: { capabilities: [BRIDGE_CAPABILITIES_V2] },
+    });
+    await runtime.stop();
   });
 
   it('preserves existing gateway password on proxied connect requests', () => {

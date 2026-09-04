@@ -70,6 +70,10 @@ import {
 
 const HERMES_SERVICE_WATCHDOG_INTERVAL_MS = 30_000;
 const PREVIEW_REGISTRY_URL = 'https://clawket-registry-preview.clawket.workers.dev';
+// bridge-runtime is already bundled into the published CLI, but relay-shared is
+// not a CLI dependency. Keep this wire value local until those package
+// boundaries converge instead of widening the published dependency surface.
+const BRIDGE_CAPABILITIES_V2 = 'bridge.capabilities.v2';
 
 async function main(): Promise<void> {
   const [, , command = 'help', ...args] = process.argv;
@@ -261,7 +265,10 @@ async function main(): Promise<void> {
     }
 
     if (isServiceMode) {
-      writeServiceState(process.pid, [SECURE_PAIRING_V2_CAPABILITY]);
+      writeServiceState(process.pid, [
+        SECURE_PAIRING_V2_CAPABILITY,
+        BRIDGE_CAPABILITIES_V2,
+      ]);
     }
 
     const runtimes = runtimeConfigs.map(({ environment, config }) => {
@@ -1260,6 +1267,7 @@ async function printStatus(): Promise<void> {
   console.log(`Service Path: ${report.servicePath || '-'}`);
   console.log(`CLI Log: ${report.logPath}`);
   console.log(`CLI Error Log: ${report.errorLogPath}`);
+  console.log(`Bridge Capabilities: ${formatCapabilityList(report.openclawBridgeCapabilities)}`);
   console.log('');
   console.log('[OpenClaw Preview]');
   console.log(`Paired: ${previewConfig ? 'yes' : 'no'}`);
@@ -1275,6 +1283,7 @@ async function printStatus(): Promise<void> {
   console.log(`Bridge Health: ${report.hermesBridgeHealthUrl ?? '-'}`);
   console.log(`Bridge Reachable: ${report.hermesBridgeReachable ? 'yes' : 'no'}`);
   console.log(`Hermes API Reachable: ${report.hermesApiReachable == null ? '-' : report.hermesApiReachable ? 'yes' : 'no'}`);
+  console.log(`Bridge Capabilities: ${formatCapabilityList(report.hermesBridgeCapabilities)}`);
   console.log(`Relay Paired: ${report.hermesRelayPaired ? 'yes' : 'no'} (${report.hermesRelayConfigPath})`);
   console.log(`Relay Server: ${report.hermesRelayServerUrl ?? '-'}`);
   console.log(`Relay URL: ${report.hermesRelayUrl ?? '-'}`);
@@ -1737,6 +1746,7 @@ function printDoctorReport(report: Awaited<ReturnType<typeof buildDoctorReport>>
   console.log(`Service path: ${report.servicePath || '-'}`);
   console.log(`Log path: ${report.logPath}`);
   console.log(`Error log path: ${report.errorLogPath}`);
+  console.log(`Bridge capabilities: ${formatCapabilityList(report.openclawBridgeCapabilities)}`);
   console.log(`OpenClaw dir: ${report.openclawConfigDir}`);
   console.log(`OpenClaw media: ${report.openclawMediaDir}`);
   console.log(`OpenClaw config: ${report.openclawConfigFound ? 'found' : 'missing'}`);
@@ -1752,6 +1762,7 @@ function printDoctorReport(report: Awaited<ReturnType<typeof buildDoctorReport>>
   console.log(`Bridge health: ${report.hermesBridgeHealthUrl ?? '-'}`);
   console.log(`Bridge reachable: ${report.hermesBridgeReachable ? 'yes' : 'no'}`);
   console.log(`Hermes API reachable: ${report.hermesApiReachable == null ? '-' : report.hermesApiReachable ? 'yes' : 'no'}`);
+  console.log(`Bridge capabilities: ${formatCapabilityList(report.hermesBridgeCapabilities)}`);
   console.log(`Relay paired: ${report.hermesRelayPaired ? 'yes' : 'no'} (${report.hermesRelayConfigPath})`);
   console.log(`Relay server: ${report.hermesRelayServerUrl ?? '-'}`);
   console.log(`Relay URL: ${report.hermesRelayUrl ?? '-'}`);
@@ -1760,6 +1771,10 @@ function printDoctorReport(report: Awaited<ReturnType<typeof buildDoctorReport>>
   console.log(`Hermes bridge error log: ${report.hermesBridgeErrorLogPath}`);
   console.log(`Hermes relay log: ${report.hermesRelayLogPath}`);
   console.log(`Hermes relay error log: ${report.hermesRelayErrorLogPath}`);
+}
+
+function formatCapabilityList(capabilities: readonly string[]): string {
+  return capabilities.length > 0 ? capabilities.join(', ') : '-';
 }
 
 function requirePairingConfig(environment: PairingEnvironment = 'production') {

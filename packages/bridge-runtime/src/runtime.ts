@@ -27,6 +27,7 @@ import {
   parsePairingRequestFromError,
   parsePairResolvedEvent,
   parseResponseEnvelopeMeta,
+  normalizeConnectCapabilities,
   type PendingPairRequest,
 } from './protocol.js';
 import {
@@ -51,6 +52,7 @@ type PendingGatewayMessageSummary = {
 
 type InFlightConnectHandshake = {
   method: 'connect' | 'connect.start';
+  bridgeCapabilitiesRequested: boolean;
   startedAtMs: number;
   slowWarningLogged: boolean;
   text: string;
@@ -118,6 +120,7 @@ const CONNECT_HANDSHAKE_WARN_DELAY_MS = 8_000;
 const MAX_PENDING_GATEWAY_MESSAGES = 256;
 const MAX_DEVICE_DETAILS = 32;
 const MAX_PENDING_PAIR_REQUESTS = 16;
+export const BRIDGE_CAPABILITIES_V2 = 'bridge.capabilities.v2';
 const OPENCLAW_GATEWAY_MIN_PROTOCOL_VERSION = 3;
 const OPENCLAW_GATEWAY_MAX_PROTOCOL_VERSION = 4;
 const STARTUP_SIDECARS_CONNECT_RETRY_MAX_ATTEMPTS = 4;
@@ -745,13 +748,18 @@ export class BridgeRuntime {
       this.markPairRequestResolved(resolved.requestId, resolved.decision);
     }
     const response = parseResponseEnvelopeMeta(text);
+    let relayText = text;
     if (response) {
       if (this.scheduleStartupSidecarsConnectRetry(response)) {
         return;
       }
+      const pending = this.inFlightConnectHandshakes.get(response.id);
+      if (response.ok && pending?.bridgeCapabilitiesRequested) {
+        relayText = patchConnectResponseBridgeCapabilities(text).text;
+      }
       this.observeGatewayResponse(response);
     }
-    this.sendFrame(relay, text, 'relay_out');
+    this.sendFrame(relay, relayText, 'relay_out');
   }
 
   private flushPendingGatewayMessages(): void {
@@ -789,6 +797,7 @@ export class BridgeRuntime {
         if (meta.id) {
           this.inFlightConnectHandshakes.set(meta.id, {
             method: meta.method,
+            bridgeCapabilitiesRequested: patched.bridgeCapabilitiesRequested,
             startedAtMs: Date.now(),
             slowWarningLogged: false,
             text: patched.text,
@@ -804,6 +813,9 @@ export class BridgeRuntime {
         this.log(
           `gateway connect protocol patched min=${OPENCLAW_GATEWAY_MIN_PROTOCOL_VERSION} max=${OPENCLAW_GATEWAY_MAX_PROTOCOL_VERSION}`,
         );
+      }
+      if (patched.bridgeMetaStripped) {
+        this.log(`gateway connect Bridge meta accepted capability=${BRIDGE_CAPABILITIES_V2}`);
       }
       this.sendFrame(gateway, patched.text, 'gateway_out');
       return;
@@ -1410,14 +1422,87 @@ export function patchConnectRequestGatewayAuth(
 export function patchOpenClawConnectRequest(
   text: string,
   openClawInfo: Pick<OpenClawInfo, 'authMode' | 'password'>,
-): { text: string; authInjected: boolean; protocolPatched: boolean } {
-  const authPatched = patchConnectRequestGatewayAuth(text, openClawInfo);
+): {
+  text: string;
+  authInjected: boolean;
+  protocolPatched: boolean;
+  bridgeMetaStripped: boolean;
+  bridgeCapabilitiesRequested: boolean;
+} {
+  const bridgeMeta = stripConnectRequestBridgeMeta(text);
+  const authPatched = patchConnectRequestGatewayAuth(bridgeMeta.text, openClawInfo);
   const protocolPatched = patchConnectRequestGatewayProtocolRange(authPatched.text);
   return {
     text: protocolPatched.text,
     authInjected: authPatched.injected,
     protocolPatched: protocolPatched.patched,
+    bridgeMetaStripped: bridgeMeta.stripped,
+    bridgeCapabilitiesRequested: bridgeMeta.bridgeCapabilitiesRequested,
   };
+}
+
+export function stripConnectRequestBridgeMeta(
+  text: string,
+): { text: string; stripped: boolean; bridgeCapabilitiesRequested: boolean } {
+  try {
+    const parsed = JSON.parse(text) as {
+      type?: unknown;
+      method?: unknown;
+      meta?: unknown;
+    };
+    if (parsed.type !== 'req' || (parsed.method !== 'connect' && parsed.method !== 'connect.start')) {
+      return { text, stripped: false, bridgeCapabilitiesRequested: false };
+    }
+    if (!isRuntimeRecord(parsed.meta) || !Array.isArray(parsed.meta.capabilities)) {
+      return { text, stripped: false, bridgeCapabilitiesRequested: false };
+    }
+    const capabilities = normalizeConnectCapabilities(parsed.meta.capabilities);
+    if (!capabilities.includes(BRIDGE_CAPABILITIES_V2)) {
+      return { text, stripped: false, bridgeCapabilitiesRequested: false };
+    }
+
+    const { meta: _bridgeMeta, ...gatewayRequest } = parsed;
+    return {
+      text: JSON.stringify(gatewayRequest),
+      stripped: true,
+      bridgeCapabilitiesRequested: true,
+    };
+  } catch {
+    return { text, stripped: false, bridgeCapabilitiesRequested: false };
+  }
+}
+
+export function patchConnectResponseBridgeCapabilities(
+  text: string,
+): { text: string; patched: boolean } {
+  try {
+    const parsed = JSON.parse(text) as {
+      type?: unknown;
+      id?: unknown;
+      ok?: unknown;
+      meta?: unknown;
+    };
+    if (parsed.type !== 'res' || typeof parsed.id !== 'string' || parsed.ok !== true) {
+      return { text, patched: false };
+    }
+    const meta = isRuntimeRecord(parsed.meta) ? parsed.meta : {};
+    const capabilities = normalizeConnectCapabilities(meta.capabilities);
+    if (!capabilities.includes(BRIDGE_CAPABILITIES_V2)) {
+      capabilities.push(BRIDGE_CAPABILITIES_V2);
+    }
+    return {
+      text: JSON.stringify({
+        ...parsed,
+        meta: {
+          ...meta,
+          capabilities,
+        },
+      }),
+      patched: true,
+    };
+  } catch {
+    return { text, patched: false };
+  }
 }
 
 export function patchConnectRequestGatewayProtocolRange(
@@ -1463,6 +1548,10 @@ function readGatewayProtocolVersion(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value >= 1
     ? Math.trunc(value)
     : null;
+}
+
+function isRuntimeRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function buildLocalGatewayTlsConnectOptions(url: string): Pick<

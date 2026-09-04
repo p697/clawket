@@ -30,6 +30,7 @@ export type CliDoctorReport = {
   servicePath: string;
   logPath: string;
   errorLogPath: string;
+  openclawBridgeCapabilities: string[];
   openclawConfigDir: string;
   openclawMediaDir: string;
   openclawConfigFound: boolean;
@@ -46,6 +47,7 @@ export type CliDoctorReport = {
   hermesBridgeHealthUrl: string | null;
   hermesBridgeReachable: boolean;
   hermesApiReachable: boolean | null;
+  hermesBridgeCapabilities: string[];
   hermesBridgeRuntimeRunning: boolean;
   hermesRelayConfigPath: string;
   hermesRelayPaired: boolean;
@@ -197,6 +199,7 @@ export async function buildDoctorReport(): Promise<CliDoctorReport> {
     servicePath: service.servicePath,
     logPath: service.logPath,
     errorLogPath: service.errorLogPath,
+    openclawBridgeCapabilities: normalizeBridgeCapabilities(service.capabilities),
     openclawConfigDir: getOpenClawConfigDir(),
     openclawMediaDir: getOpenClawMediaDir(),
     openclawConfigFound: openclaw.configFound,
@@ -213,6 +216,7 @@ export async function buildDoctorReport(): Promise<CliDoctorReport> {
     hermesBridgeHealthUrl,
     hermesBridgeReachable,
     hermesApiReachable: hermesHealth?.hermesApiReachable ?? null,
+    hermesBridgeCapabilities: hermesHealth?.capabilities ?? [],
     hermesBridgeRuntimeRunning: listHermesBridgeRuntimePids().length > 0,
     hermesRelayConfigPath: getHermesRelayConfigPath(),
     hermesRelayPaired: Boolean(hermesRelayConfig),
@@ -373,17 +377,41 @@ async function checkHttpReachable(url: string): Promise<boolean> {
   }
 }
 
-async function readHermesBridgeHealth(url: string): Promise<{ hermesApiReachable: boolean } | null> {
+async function readHermesBridgeHealth(url: string): Promise<HermesBridgeHealth | null> {
   try {
     const response = await fetch(url);
     if (!response.ok) return null;
-    const parsed = await response.json() as { hermesApiReachable?: boolean };
-    return {
-      hermesApiReachable: Boolean(parsed.hermesApiReachable),
-    };
+    return parseHermesBridgeHealth(await response.json());
   } catch {
     return null;
   }
+}
+
+type HermesBridgeHealth = {
+  hermesApiReachable: boolean;
+  capabilities: string[];
+};
+
+export function parseHermesBridgeHealth(value: unknown): HermesBridgeHealth | null {
+  if (!isRecord(value)) return null;
+  return {
+    hermesApiReachable: value.hermesApiReachable === true,
+    capabilities: normalizeBridgeCapabilities(value.capabilities),
+  };
+}
+
+export function normalizeBridgeCapabilities(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const capabilities: string[] = [];
+  const seen = new Set<string>();
+  for (const candidate of value) {
+    if (typeof candidate !== 'string') continue;
+    const capability = candidate.trim();
+    if (!capability || seen.has(capability)) continue;
+    seen.add(capability);
+    capabilities.push(capability);
+  }
+  return capabilities;
 }
 
 function listHermesBridgeRuntimePids(): number[] {
@@ -440,4 +468,8 @@ function normalizeHermesDisplayHost(host: string): string {
     return '127.0.0.1';
   }
   return trimmed;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
