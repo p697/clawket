@@ -1,8 +1,16 @@
 import React, { useMemo } from 'react';
-import { Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import {
+  Pressable,
+  type StyleProp,
+  StyleSheet,
+  Text,
+  View,
+  type ViewStyle,
+} from 'react-native';
 import { triggerLightImpact } from '../../services/haptics';
 import { useAppTheme } from '../../theme';
 import {
+  ControlSize,
   FontSize,
   FontWeight,
   LineHeight,
@@ -17,41 +25,72 @@ export type SegmentedTabItem<T extends string = string> = {
   label: string;
 };
 
-type Props<T extends string = string> = {
+export type SegmentedTabsProps<T extends string = string> = {
   tabs: SegmentedTabItem<T>[];
   active: T;
   onSwitch: (key: T) => void;
+  size?: 'md' | 'sm';
+  variant?: 'pill' | 'text';
   containerStyle?: StyleProp<ViewStyle>;
+  testID?: string;
 };
 
-export function SegmentedTabs<T extends string = string>({ tabs, active, onSwitch, containerStyle }: Props<T>): React.JSX.Element {
+export function SegmentedTabs<T extends string = string>({
+  tabs,
+  active,
+  onSwitch,
+  size = 'md',
+  variant = 'pill',
+  containerStyle,
+  testID,
+}: SegmentedTabsProps<T>): React.JSX.Element {
   const { theme } = useAppTheme();
-  const colors = theme.colors;
   const styles = useMemo(
     () => createStyles(theme.colors, theme.scheme),
     [theme.colors, theme.scheme],
   );
+  const compact = size === 'sm';
+  const textOnly = variant === 'text';
 
   return (
-    <View style={[styles.container, containerStyle]}>
-      {tabs.map((t) => {
-        const isActive = active === t.key;
+    <View
+      testID={testID}
+      accessibilityRole="tablist"
+      style={[
+        styles.container,
+        compact ? styles.containerCompact : null,
+        textOnly ? styles.containerText : null,
+        containerStyle,
+      ]}
+    >
+      {tabs.map((tab) => {
+        const selected = active === tab.key;
         return (
           <Pressable
-            key={t.key}
-            onPress={() => { triggerLightImpact(); onSwitch(t.key); }}
+            key={tab.key}
+            testID={testID ? `${testID}-${tab.key}` : undefined}
+            accessibilityRole="tab"
+            accessibilityState={{ selected }}
+            onPress={() => {
+              triggerLightImpact();
+              onSwitch(tab.key);
+            }}
             style={({ pressed }) => [
               styles.tab,
-              isActive ? styles.tabActive : null,
+              compact ? styles.tabCompact : null,
+              selected && !textOnly ? styles.tabSelected : null,
               pressed ? styles.tabPressed : null,
             ]}
           >
-            <Text style={[
-              styles.label,
-              { color: isActive ? colors.text : colors.textMuted },
-              isActive && styles.labelActive,
-            ]}>
-              {t.label}
+            <Text
+              numberOfLines={1}
+              style={[
+                styles.label,
+                { color: selected ? theme.colors.ink : theme.colors.inkSecondary },
+                selected ? styles.labelSelected : null,
+              ]}
+            >
+              {tab.label}
             </Text>
           </Pressable>
         );
@@ -66,33 +105,45 @@ function createStyles(
 ) {
   return StyleSheet.create({
     container: {
-      backgroundColor: colors.surfaceMuted,
-      flexDirection: 'row',
-      marginHorizontal: Space.lg,
-      marginTop: Space.sm,
-      marginBottom: Space.xs,
-      borderRadius: Radius.md,
+      minHeight: ControlSize.floatingButton,
       padding: Space.xs,
+      borderRadius: Radius.full,
+      backgroundColor: colors.surface,
+      flexDirection: 'row',
+      alignItems: 'stretch',
+    },
+    containerCompact: {
+      minHeight: Space.xxl,
+      padding: 0,
+    },
+    containerText: {
+      backgroundColor: 'transparent',
     },
     tab: {
       flex: 1,
-      paddingVertical: Space.sm,
-      borderRadius: Radius.sm,
+      minHeight: ControlSize.compact,
+      paddingHorizontal: Space.md,
+      borderRadius: Radius.full,
       alignItems: 'center',
+      justifyContent: 'center',
     },
-    tabActive: {
-      backgroundColor: colors.surface,
+    tabCompact: {
+      minHeight: Space.xxl,
+      paddingHorizontal: Space.sm,
+    },
+    tabSelected: {
+      backgroundColor: colors.surfaceFloating,
       ...createThemedShadowStyle(colors, scheme, Shadow.xs),
     },
     tabPressed: {
       opacity: 0.72,
     },
     label: {
-      fontSize: FontSize.md,
-      lineHeight: LineHeight.md,
+      fontSize: FontSize.secondary,
+      lineHeight: LineHeight.secondary,
       fontWeight: FontWeight.regular,
     },
-    labelActive: {
+    labelSelected: {
       fontWeight: FontWeight.semibold,
     },
   });

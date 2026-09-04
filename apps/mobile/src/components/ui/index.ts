@@ -55,6 +55,7 @@ export { GatewaySwitchOverlay } from './GatewaySwitchOverlay';
 export { ModalSheet } from './ModalSheet';
 export { ModalScreenLayout } from './ModalScreenLayout';
 export { SearchInput } from './SearchInput';
+export type { SearchInputProps } from './SearchInput';
 export { FormTextInput } from './FormTextInput';
 export { SettingsDivider, SettingsGroup, SettingsRow } from './SettingsGroup';
 export type {
