@@ -3,6 +3,9 @@ type TraceState = {
   startedAt: number;
 };
 
+// Temporary debug trace retained inside the connection boundary until the
+// structured M6 connection telemetry fully replaces console tracing.
+
 let activeTrace: TraceState | null = null;
 
 export function startHermesConnectTrace(event: string, fields?: Record<string, unknown>): void {

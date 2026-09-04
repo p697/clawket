@@ -2,7 +2,7 @@ import {
   buildRelayClaimKey,
   isUnsupportedDirectLocalTlsConfig,
   shouldSuppressDuplicatePairingAlert,
-} from './gatewayConfigForm.utils';
+} from './connection-form-utils';
 
 describe('gatewayConfigForm utils', () => {
   it('builds a stable relay claim key', () => {

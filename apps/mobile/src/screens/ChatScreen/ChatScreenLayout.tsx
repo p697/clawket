@@ -15,7 +15,7 @@ import { AgentRowData } from '../../components/chat/AgentsModal';
 import { useAppContext } from '../../contexts/AppContext';
 import { pickAvatarImage, saveAgentAvatar, removeAgentAvatar, buildAvatarKey, readAgentAvatar } from '../../services/agent-avatar';
 import { scheduleAutomaticAppReview } from '../../services/auto-app-review';
-import { finishHermesConnectTrace, markHermesConnectTrace } from '../../services/hermes-connect-debug';
+import { finishHermesConnectTrace, markHermesConnectTrace } from '../../connection/hermes-connect-trace';
 import { useShareIntent } from '../../hooks/useShareIntent';
 import { useChatGatewaySwitcher } from '../../hooks/useChatGatewaySwitcher';
 import { useProPaywall } from '../../contexts/ProPaywallContext';

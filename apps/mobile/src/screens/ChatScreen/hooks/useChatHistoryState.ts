@@ -2,7 +2,7 @@ import { RefObject, useCallback, useEffect, useRef, useState } from 'react';
 import { CachedSessionMeta, ChatCacheService } from '../../../services/chat-cache';
 import { cacheMessageImages, findCachedEntry, generateStableKey, getAllCachedForSession } from '../../../services/image-cache';
 import { LastOpenedSessionSnapshot, StorageService } from '../../../services/storage';
-import { markHermesConnectTrace } from '../../../services/hermes-connect-debug';
+import { markHermesConnectTrace } from '../../../connection/hermes-connect-trace';
 import { SessionInfo } from '../../../types';
 import { ImageMeta, ToolPresentation, UiMessage } from '../../../types/chat';
 import { sessionKeysMatch } from '../../../utils/session-key';

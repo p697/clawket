@@ -1,18 +1,18 @@
 import type { MutableRefObject } from 'react';
-import type { GatewayClient } from '../connection/protocol';
+import type { GatewayClient } from '../protocol';
 import {
   buildGatewayDefaultName,
   resolveGatewayBackendKind,
   resolveGatewayTransportKind,
   toLegacyGatewayMode,
 } from '@clawket/agent-protocol';
-import { resolveGatewayCacheScopeId } from '../services/gateway-cache-scope';
-import { RelayPairingService } from '../services/relay-pairing';
-import { HermesRelayPairingService } from '../connection/registry/hermes-relay-pairing';
-import { markHermesConnectTrace, startHermesConnectTrace } from '../services/hermes-connect-debug';
-import { StorageService } from '../services/storage';
-import type { GatewayBackendKind, GatewayConfig, GatewayConfigsState, GatewayMode, GatewayTransportKind, SavedGatewayConfig } from '../types';
-import { buildRelayClaimKey } from './gatewayConfigForm.utils';
+import { resolveGatewayCacheScopeId } from '../../services/gateway-cache-scope';
+import { RelayPairingService } from '../../services/relay-pairing';
+import { HermesRelayPairingService } from '../registry/hermes-relay-pairing';
+import { markHermesConnectTrace, startHermesConnectTrace } from '../hermes-connect-trace';
+import { StorageService } from '../../services/storage';
+import type { GatewayBackendKind, GatewayConfig, GatewayConfigsState, GatewayMode, GatewayTransportKind, SavedGatewayConfig } from '../../types';
+import { buildRelayClaimKey } from './connection-form-utils';
 
 export const MIN_SWITCH_DURATION_MS = 1000;
 

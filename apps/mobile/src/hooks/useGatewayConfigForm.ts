@@ -13,7 +13,7 @@ import {
 } from '@clawket/agent-protocol';
 import { StorageService } from '../services/storage';
 import { GatewayBackendKind, GatewayConfig, GatewayMode, GatewayTransportKind, SavedGatewayConfig, type RelayServiceEnvironment } from '../types';
-import { isUnsupportedDirectLocalTlsConfig, shouldSuppressDuplicatePairingAlert } from './gatewayConfigForm.utils';
+import { isUnsupportedDirectLocalTlsConfig, shouldSuppressDuplicatePairingAlert } from '../connection/pairing/connection-form-utils';
 import {
   claimRelayPairing as claimRelayPairingPayload,
   createGatewayConfigFromScan,
@@ -21,8 +21,8 @@ import {
   toRuntimeConfig,
   willCreateGatewayConfigFromScan,
   type GatewayScanPayload,
-} from './gatewayScanFlow';
-import { markHermesConnectTrace } from '../services/hermes-connect-debug';
+} from '../connection/pairing/gateway-scan-flow';
+import { markHermesConnectTrace } from '../connection/hermes-connect-trace';
 import { canAddGatewayConnection } from '../utils/pro';
 import { assessRelayEnvironmentSelection } from '../services/relay-environment';
 

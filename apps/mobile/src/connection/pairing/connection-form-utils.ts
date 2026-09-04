@@ -1,3 +1,4 @@
+/** Pure compatibility helpers shared by pairing and the legacy editor. */
 export function buildRelayClaimKey(serverUrl: string, gatewayId: string, accessCode: string): string {
   return `${serverUrl.trim()}::${gatewayId.trim()}::${accessCode.trim()}`;
 }

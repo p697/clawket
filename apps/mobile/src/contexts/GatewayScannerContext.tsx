@@ -13,8 +13,8 @@ import {
   reconnectGatewayWithOverlay,
   toRuntimeConfig,
   type GatewayScanPayload,
-} from '../hooks/gatewayScanFlow';
-import { isUnsupportedDirectLocalTlsConfig, shouldSuppressDuplicatePairingAlert } from '../hooks/gatewayConfigForm.utils';
+} from '../connection/pairing/gateway-scan-flow';
+import { isUnsupportedDirectLocalTlsConfig, shouldSuppressDuplicatePairingAlert } from '../connection/pairing/connection-form-utils';
 import { getGatewayCameraPermissionAction } from '../utils/gateway-camera-permission';
 import { isMacCatalyst } from '../utils/platform';
 import {

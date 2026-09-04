@@ -164,7 +164,7 @@ jest.mock('../../services/auto-app-review', () => ({
   scheduleAutomaticAppReview: jest.fn(),
 }));
 
-jest.mock('../../services/hermes-connect-debug', () => ({
+jest.mock('../../connection/hermes-connect-trace', () => ({
   finishHermesConnectTrace: jest.fn(),
   markHermesConnectTrace: jest.fn(),
 }));
