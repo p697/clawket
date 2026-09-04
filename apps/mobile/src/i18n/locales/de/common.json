@@ -244,5 +244,21 @@
   "{{active}} active · {{recent}} recent · {{idle}} idle": "{{active}} aktiv · {{recent}} kürzlich · {{idle}} inaktiv",
   "Help": "Hilfe",
   "Pair again": "Erneut koppeln",
-  "Sign in": "Anmelden"
+  "Sign in": "Anmelden",
+  "Favorite": "Favorit",
+  "Favorites": "Favoriten",
+  "Loading message": "Nachricht wird geladen",
+  "Loading search": "Suche wird geladen",
+  "Message": "Nachricht",
+  "Message details": "Nachrichtendetails",
+  "Message details require Pro": "Nachrichtendetails erfordern Pro",
+  "Message unavailable": "Nachricht nicht verfügbar",
+  "No recent searches": "Keine letzten Suchanfragen",
+  "No results": "Keine Ergebnisse",
+  "Offline · showing cached message": "Offline · zwischengespeicherte Nachricht wird angezeigt",
+  "Offline · showing cached results": "Offline · zwischengespeicherte Ergebnisse werden angezeigt",
+  "Recent searches": "Letzte Suchanfragen",
+  "Search requires access": "Die Suche erfordert Zugriff",
+  "Search unavailable · {{code}}": "Suche nicht verfügbar · {{code}}",
+  "View in thread": "Im Thread ansehen"
 }

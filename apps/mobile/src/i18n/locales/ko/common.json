@@ -244,5 +244,21 @@
   "{{active}} active · {{recent}} recent · {{idle}} idle": "활성 {{active}} · 최근 {{recent}} · 유휴 {{idle}}",
   "Help": "도움말",
   "Pair again": "다시 페어링",
-  "Sign in": "로그인"
+  "Sign in": "로그인",
+  "Favorite": "즐겨찾기",
+  "Favorites": "즐겨찾기",
+  "Loading message": "메시지 불러오는 중",
+  "Loading search": "검색 불러오는 중",
+  "Message": "메시지",
+  "Message details": "메시지 세부 정보",
+  "Message details require Pro": "메시지 세부 정보를 보려면 Pro가 필요합니다",
+  "Message unavailable": "메시지를 사용할 수 없습니다",
+  "No recent searches": "최근 검색 없음",
+  "No results": "결과 없음",
+  "Offline · showing cached message": "오프라인 · 캐시된 메시지 표시 중",
+  "Offline · showing cached results": "오프라인 · 캐시된 결과 표시 중",
+  "Recent searches": "최근 검색",
+  "Search requires access": "검색하려면 접근 권한이 필요합니다",
+  "Search unavailable · {{code}}": "검색을 사용할 수 없음 · {{code}}",
+  "View in thread": "스레드에서 보기"
 }

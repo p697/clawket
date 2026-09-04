@@ -244,5 +244,21 @@
   "{{active}} active · {{recent}} recent · {{idle}} idle": "{{active}} 活跃 · {{recent}} 最近 · {{idle}} 空闲",
   "Help": "帮助",
   "Pair again": "重新配对",
-  "Sign in": "登录"
+  "Sign in": "登录",
+  "Favorite": "收藏",
+  "Favorites": "收藏",
+  "Loading message": "正在加载消息",
+  "Loading search": "正在搜索",
+  "Message": "消息",
+  "Message details": "消息详情",
+  "Message details require Pro": "消息详情需要 Pro",
+  "Message unavailable": "消息不可用",
+  "No recent searches": "暂无最近搜索",
+  "No results": "没有结果",
+  "Offline · showing cached message": "离线 · 正在显示缓存消息",
+  "Offline · showing cached results": "离线 · 正在显示缓存结果",
+  "Recent searches": "最近搜索",
+  "Search requires access": "搜索需要访问权限",
+  "Search unavailable · {{code}}": "搜索不可用 · {{code}}",
+  "View in thread": "在线程中查看"
 }

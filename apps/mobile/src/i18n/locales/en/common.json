@@ -244,5 +244,21 @@
   "{{active}} active · {{recent}} recent · {{idle}} idle": "{{active}} active · {{recent}} recent · {{idle}} idle",
   "Help": "Help",
   "Pair again": "Pair again",
-  "Sign in": "Sign in"
+  "Sign in": "Sign in",
+  "Favorite": "Favorite",
+  "Favorites": "Favorites",
+  "Loading message": "Loading message",
+  "Loading search": "Loading search",
+  "Message": "Message",
+  "Message details": "Message details",
+  "Message details require Pro": "Message details require Pro",
+  "Message unavailable": "Message unavailable",
+  "No recent searches": "No recent searches",
+  "No results": "No results",
+  "Offline · showing cached message": "Offline · showing cached message",
+  "Offline · showing cached results": "Offline · showing cached results",
+  "Recent searches": "Recent searches",
+  "Search requires access": "Search requires access",
+  "Search unavailable · {{code}}": "Search unavailable · {{code}}",
+  "View in thread": "View in thread"
 }

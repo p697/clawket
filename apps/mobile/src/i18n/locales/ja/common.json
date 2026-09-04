@@ -244,5 +244,21 @@
   "{{active}} active · {{recent}} recent · {{idle}} idle": "アクティブ {{active}} · 最近 {{recent}} · アイドル {{idle}}",
   "Help": "ヘルプ",
   "Pair again": "再度ペアリング",
-  "Sign in": "サインイン"
+  "Sign in": "サインイン",
+  "Favorite": "お気に入り",
+  "Favorites": "お気に入り",
+  "Loading message": "メッセージを読み込み中",
+  "Loading search": "検索を読み込み中",
+  "Message": "メッセージ",
+  "Message details": "メッセージの詳細",
+  "Message details require Pro": "メッセージの詳細には Pro が必要です",
+  "Message unavailable": "メッセージを利用できません",
+  "No recent searches": "最近の検索はありません",
+  "No results": "結果がありません",
+  "Offline · showing cached message": "オフライン · キャッシュ済みメッセージを表示中",
+  "Offline · showing cached results": "オフライン · キャッシュ済み結果を表示中",
+  "Recent searches": "最近の検索",
+  "Search requires access": "検索にはアクセス権が必要です",
+  "Search unavailable · {{code}}": "検索を利用できません · {{code}}",
+  "View in thread": "スレッドで表示"
 }
