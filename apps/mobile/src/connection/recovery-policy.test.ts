@@ -2,7 +2,7 @@ import {
   shouldShowConnectionRecoveryMessage,
   shouldDelayConnectionRecoveryMessage,
   shouldSuppressHermesStartupRecoveryMessage,
-} from './connectionRecoveryPolicy';
+} from './recovery-policy';
 
 describe('shouldShowConnectionRecoveryMessage', () => {
   it('returns true for known recovery error codes', () => {

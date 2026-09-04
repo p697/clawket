@@ -1,4 +1,4 @@
-import type { ConnectionState, GatewayBackendKind } from '../../../types';
+import type { ConnectionState, GatewayBackendKind } from '../types';
 
 export function shouldShowConnectionRecoveryMessage(code?: string, message?: string): boolean {
   const normalizedCode = (code ?? '').toLowerCase();
