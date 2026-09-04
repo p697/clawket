@@ -1,4 +1,4 @@
-import type { GatewayCurrentModelState } from './gateway-backend-operations';
+import type { ModelSelectionState } from '@clawket/agent-protocol';
 import type { CostSummary, UsageResult } from '../types';
 import type { SkillStatusReport } from '../types';
 import type { HermesCronJob, HermesCronOutputEntry } from '../types/hermes-cron';
@@ -28,6 +28,8 @@ type GatewayHeartbeatSnapshot = {
   ts?: number;
   hermesApiReachable?: boolean;
 };
+
+type GatewayCurrentModelState = Omit<ModelSelectionState, 'models' | 'providers'>;
 
 type GatewayHermesConsoleDashboardGateway = {
   fetchIdentity(agentId?: string): Promise<GatewayIdentity>;

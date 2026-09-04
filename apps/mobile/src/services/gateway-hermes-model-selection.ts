@@ -1,4 +1,4 @@
-import type { GatewayModelProviderInfo } from './gateway-backend-operations';
+import type { ModelProviderInfo } from '@clawket/agent-protocol';
 
 type GatewayHermesModelInfo = {
   id: string;
@@ -12,7 +12,7 @@ type GatewayHermesModelSelectionGateway = {
     currentProvider: string;
     currentBaseUrl: string;
     models: GatewayHermesModelInfo[];
-    providers?: GatewayModelProviderInfo[];
+    providers?: ModelProviderInfo[];
     note?: string | null;
   }>;
   setModelSelection(params: {
@@ -27,7 +27,7 @@ type GatewayHermesModelSelectionGateway = {
     currentProvider: string;
     currentBaseUrl: string;
     models: GatewayHermesModelInfo[];
-    providers?: GatewayModelProviderInfo[];
+    providers?: ModelProviderInfo[];
     note?: string | null;
   }>;
 };
@@ -38,7 +38,7 @@ export type GatewayHermesModelSelectionState = {
   currentBaseUrl: string;
   note: string | null;
   models: GatewayHermesModelInfo[];
-  providers: GatewayModelProviderInfo[];
+  providers: ModelProviderInfo[];
 };
 
 export async function loadGatewayHermesModelSelection(
