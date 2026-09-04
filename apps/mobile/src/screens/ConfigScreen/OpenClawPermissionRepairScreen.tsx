@@ -9,7 +9,7 @@ import { useAppContext } from '../../contexts/AppContext';
 import { useProPaywall } from '../../contexts/ProPaywallContext';
 import { useGatewayPatch } from '../../hooks/useGatewayPatch';
 import { useNativeStackModalHeader } from '../../hooks/useNativeStackModalHeader';
-import type { RelayPermissionsResult, RelayPermissionsStatus } from '../../services/gateway-relay';
+import type { PermissionsReport, PermissionStatus } from '@clawket/agent-protocol';
 import { useAppTheme } from '../../theme';
 import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
 import { buildCurrentAgentCommandAccessPatch } from '../../utils/openclaw-agent-permissions';
@@ -22,7 +22,7 @@ type Navigation = NativeStackNavigationProp<ConfigStackParamList, 'OpenClawPermi
 type StatusCardProps = {
   title: string;
   summary: string;
-  status: RelayPermissionsStatus;
+  status: PermissionStatus;
   styles: ReturnType<typeof createStyles>;
 };
 
@@ -99,7 +99,7 @@ export function OpenClawPermissionRepairScreen(): React.JSX.Element {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<RelayPermissionsResult | null>(null);
+  const [result, setResult] = useState<PermissionsReport | null>(null);
   const [repairingAgentPermissions, setRepairingAgentPermissions] = useState(false);
 
   const loadPermissions = useCallback(async () => {

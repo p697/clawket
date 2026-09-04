@@ -104,14 +104,6 @@ const DEFAULT_CONNECT_SCOPES = Object.freeze([
   'operator.write',
 ]);
 
-const CLIENT_COMMANDS = Object.freeze([
-  'canvas.present',
-  'canvas.hide',
-  'canvas.navigate',
-  'canvas.eval',
-  'canvas.snapshot',
-]);
-
 type PendingRequest = {
   epoch: number;
   method: string;
@@ -680,7 +672,7 @@ export class GatewayProtocolClient {
         deviceFamily: client.deviceFamily,
       },
       caps: plan.role === 'node' ? [] : ['tool-events'],
-      commands: plan.role === 'node' ? [] : [...CLIENT_COMMANDS],
+      commands: [],
       role: plan.role,
       scopes: plan.scopes,
       device: {

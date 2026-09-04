@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useIsFocused } from '@react-navigation/native';
 import { analyticsEvents } from '../../../services/analytics/events';
 import { useAppContext } from '../../../contexts/AppContext';
-import type { GatewayModelProviderInfo } from '../../../services/gateway-backend-operations';
+import type { ModelProviderInfo } from '@clawket/agent-protocol';
 import { ConnectionState, GatewayBackendKind, SessionInfo } from '../../../types';
 
 export type ModelInfo = {
@@ -17,7 +17,7 @@ type ModelSelectionState = {
   currentBaseUrl?: string;
   note?: string | null;
   models: ModelInfo[];
-  providers?: GatewayModelProviderInfo[];
+  providers?: ModelProviderInfo[];
 };
 
 type CurrentModelState = {
@@ -69,7 +69,7 @@ export function useChatModelPicker({
   const [modelPickerLoading, setModelPickerLoading] = useState(false);
   const [modelPickerError, setModelPickerError] = useState<string | null>(null);
   const [availableModels, setAvailableModels] = useState<ModelInfo[]>([]);
-  const [availableProviders, setAvailableProviders] = useState<GatewayModelProviderInfo[]>([]);
+  const [availableProviders, setAvailableProviders] = useState<ModelProviderInfo[]>([]);
   const [currentModel, setCurrentModel] = useState<string | null>(null);
   const [currentModelProvider, setCurrentModelProvider] = useState<string | null>(null);
   const lastForegroundEpochRef = useRef<number | null>(null);

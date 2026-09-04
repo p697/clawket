@@ -8,7 +8,7 @@ import { EmptyState, createCardContentStyle } from '../../components/ui';
 import { useAppContext } from '../../contexts/AppContext';
 import { useProPaywall } from '../../contexts/ProPaywallContext';
 import { useNativeStackModalHeader } from '../../hooks/useNativeStackModalHeader';
-import type { RelayDoctorCheckResult } from '../../services/gateway-relay';
+import type { DoctorResult } from '@clawket/agent-protocol';
 import { useAppTheme } from '../../theme';
 import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
 import type { ConfigStackParamList } from './ConfigTab';
@@ -21,7 +21,7 @@ function DoctorCheckRow({
   check,
   styles,
 }: {
-  check: RelayDoctorCheckResult;
+  check: DoctorResult['checks'][number];
   styles: ReturnType<typeof createStyles>;
 }): React.JSX.Element {
   const { theme } = useAppTheme();

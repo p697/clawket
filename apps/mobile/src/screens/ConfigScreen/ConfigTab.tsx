@@ -18,7 +18,7 @@ import { OpenClawDiagnosticsScreen } from './OpenClawDiagnosticsScreen';
 import { OpenClawPermissionRepairScreen } from './OpenClawPermissionRepairScreen';
 import { OpenClawPermissionsScreen } from './OpenClawPermissionsScreen';
 import { DesignSystemScreen } from './DesignSystemScreen';
-import type { RelayDoctorResult } from '../../services/gateway-relay';
+import type { DoctorResult } from '@clawket/agent-protocol';
 
 export type ConfigStackParamList = {
   ConfigHome: {
@@ -33,7 +33,7 @@ export type ConfigStackParamList = {
   OpenClawConfig: undefined;
   OpenClawDiagnostics: {
     mode?: 'doctor' | 'fix';
-    doctorResult?: RelayDoctorResult;
+    doctorResult?: DoctorResult;
     doctorError?: string;
     fixResult?: {
       ok: boolean;

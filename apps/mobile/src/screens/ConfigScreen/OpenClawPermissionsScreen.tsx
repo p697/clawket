@@ -8,7 +8,7 @@ import { useAppContext } from '../../contexts/AppContext';
 import { useProPaywall } from '../../contexts/ProPaywallContext';
 import { useGatewayPatch } from '../../hooks/useGatewayPatch';
 import { useNativeStackModalHeader } from '../../hooks/useNativeStackModalHeader';
-import type { RelayPermissionsResult } from '../../services/gateway-relay';
+import type { PermissionsReport } from '@clawket/agent-protocol';
 import { useAppTheme } from '../../theme';
 import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
 import { buildCurrentAgentCommandAccessPatch } from '../../utils/openclaw-agent-permissions';
@@ -75,7 +75,7 @@ export function OpenClawPermissionsScreen(): React.JSX.Element {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<RelayPermissionsResult | null>(null);
+  const [result, setResult] = useState<PermissionsReport | null>(null);
   const [savingCurrentAgentAccess, setSavingCurrentAgentAccess] = useState(false);
 
   const loadPermissions = useCallback(async () => {
