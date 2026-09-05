@@ -601,4 +601,15 @@ describe('relativeTime', () => {
   it('returns months', () => {
     expect(relativeTime(Date.now() - 60 * 86_400_000)).toBe('2mo');
   });
+
+  it('delegates compact labels to the provided translator', () => {
+    const translate = jest.fn((key: string, count?: number) => (
+      count === undefined ? `translated:${key}` : `translated:${key}:${count}`
+    ));
+
+    expect(relativeTime(Date.now() - 3 * 3_600_000, translate)).toBe(
+      'translated:{{count}}h ago:3',
+    );
+    expect(translate).toHaveBeenCalledWith('{{count}}h ago', 3);
+  });
 });

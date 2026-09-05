@@ -34,6 +34,8 @@ OpenClaw may be inspected at `../../../../openclaw` or `/Users/lucy/Desktop/op/o
 - Preview is an isolated OpenClaw Relay service environment. Debug mode selects it for new official pairing; it remains `backendKind=openclaw` and `transportKind=relay`.
 - Official Production and Preview invitations are environment-checked. Custom/self-hosted Registry QR payloads remain supported and are not classified as official.
 - Pairing links and six-character codes must decrypt/resolve into the same backend-aware claim/save/reconnect path as legacy QR pairing. Never persist fragment keys, plaintext invitation payloads, raw passwords, or transport credentials in descriptors or logs.
+- Keep the client's own pairing handshake separate from owner device/node approvals. Owner pair requests are connection-wide, never session-owned, and must not enter thread history or message cache.
+- Scope every live or cached Agent identity by both connection ID and Agent ID. A connection switch must render a neutral identity until the new scope is authoritative and must never persist the previous connection's name, emoji, or avatar.
 - Store OpenClaw device tokens by both connection scope and role. Operator and node credentials must never overwrite or invalidate each other; node lookups must not fall back to legacy operator tokens.
 - Bridge diagnostics may read the CLI version only from a negotiated OpenClaw Relay connect response or Hermes health. Direct OpenClaw and legacy peers report no Bridge version; never relabel the Gateway's `server.version` as a Bridge version.
 - Connection removal clears only that connection's credentials, cache generations, roster cache, and unread watermarks. Roll back storage migrations atomically on failure.

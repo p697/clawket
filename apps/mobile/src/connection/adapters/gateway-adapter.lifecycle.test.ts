@@ -20,6 +20,8 @@ type GatewayEventName =
   | 'chatCompaction'
   | 'execApprovalRequested'
   | 'execApprovalResolved'
+  | 'pairApprovalRequested'
+  | 'pairApprovalResolved'
   | 'pairingRequired'
   | 'pairingResolved'
   | 'error';

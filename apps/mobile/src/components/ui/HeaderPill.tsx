@@ -19,8 +19,10 @@ const PRESSED_OPACITY = 0.88;
 export type HeaderPillProps = Readonly<{
   agentId: string;
   name: string;
+  avatarName?: string;
   subtitle: string;
   emoji?: string | null;
+  avatarUrl?: string | null;
   status?: AgentAvatarStatus;
   attentionTone?: AgentAttentionTone;
   onPress?: () => void;
@@ -32,8 +34,10 @@ export type HeaderPillProps = Readonly<{
 export function HeaderPill({
   agentId,
   name,
+  avatarName,
   subtitle,
   emoji,
+  avatarUrl,
   status = 'idle',
   attentionTone,
   onPress,
@@ -61,8 +65,9 @@ export function HeaderPill({
       <AgentAvatar
         testID={testID ? `${testID}-avatar` : undefined}
         agentId={agentId}
-        name={name}
+        name={avatarName ?? name}
         emoji={emoji}
+        avatarUrl={avatarUrl}
         variant="header"
         status={status}
         attentionTone={attentionTone}

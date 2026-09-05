@@ -6,6 +6,7 @@ export interface AgentIdentity {
 }
 
 export interface AgentInfo {
+  connectionId?: string;
   id: string;
   name?: string;
   identity?: AgentIdentity;

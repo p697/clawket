@@ -2514,6 +2514,57 @@ describe('GatewayProtocolClient migrated parity', () => {
       expect((globalThis as any).WebSocket).toHaveBeenCalledTimes(2);
     });
 
+    it('resolves self pairing only for the exact pending request id', () => {
+      const ownerResolution = jest.fn();
+      const selfResolution = jest.fn();
+      client.on('pairApprovalResolved', ownerResolution);
+      client.on('pairingResolved', selfResolution);
+      const reconnect = jest.spyOn(client, 'reconnect').mockImplementation(() => undefined);
+      const internal = client as unknown as {
+        epoch: number;
+        pairingPending: boolean;
+        pendingSelfPairRequestId: string | null;
+        handleTransportMessage(raw: unknown, epoch: number): void;
+      };
+      internal.pairingPending = true;
+      internal.pendingSelfPairRequestId = 'self-request';
+
+      internal.handleTransportMessage(JSON.stringify({
+        type: 'event',
+        event: 'device.pair.resolved',
+        payload: { requestId: 'owner-request', decision: 'approved', ts: 10 },
+      }), internal.epoch);
+      expect(ownerResolution).toHaveBeenCalledWith(expect.objectContaining({
+        requestId: 'owner-request',
+      }));
+      expect(selfResolution).not.toHaveBeenCalled();
+      expect(internal.pairingPending).toBe(true);
+      expect(reconnect).not.toHaveBeenCalled();
+
+      internal.handleTransportMessage(JSON.stringify({
+        type: 'event',
+        event: 'device.pair.resolved',
+        payload: { requestId: 'self-request', decision: 'rejected', ts: 11 },
+      }), internal.epoch);
+      expect(selfResolution).toHaveBeenCalledWith({
+        requestId: 'self-request',
+        deviceId: undefined,
+        decision: 'rejected',
+      });
+      expect(internal.pairingPending).toBe(false);
+      expect(internal.pendingSelfPairRequestId).toBeNull();
+      expect(reconnect).not.toHaveBeenCalled();
+
+      internal.pairingPending = true;
+      internal.pendingSelfPairRequestId = 'approved-self-request';
+      internal.handleTransportMessage(JSON.stringify({
+        type: 'event',
+        event: 'device.pair.resolved',
+        payload: { requestId: 'approved-self-request', decision: 'approved', ts: 12 },
+      }), internal.epoch);
+      expect(reconnect).toHaveBeenCalledTimes(1);
+    });
+
     it('blocks auto-retry on nonce mismatch but allows manual reconnect', () => {
       const errorListener = jest.fn();
       client.on('error', errorListener);

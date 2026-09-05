@@ -92,7 +92,7 @@ Backend identity and transport identity never select a visual route directly. Ro
 |---|---|
 | `FloatingButton` | 44-point circle, Lucide 22 icon, optional accent dot or bad numeric badge, 0.96 press scale |
 | `HeaderPill` | 40-point capsule with 28-point Agent avatar, name, and the one allowed header subtitle |
-| `AgentAvatar` | Stable palette square with initials/emoji content and working, attention, done, offline, or locked state |
+| `AgentAvatar` | Stable palette square with an optional backend image, initials/emoji fallback, and working, attention, done, offline, or locked state |
 | `RosterRow` | 88-point borderless row; avatar, name, one preview line, time, unread/attention/lock state |
 | `Bubble` | One assistant/user shape recipe with Markdown-compatible content |
 | `SystemEventRow` | One centered supporting line with Lucide icon and optional disclosure |

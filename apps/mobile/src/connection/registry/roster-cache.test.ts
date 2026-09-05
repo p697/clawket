@@ -203,7 +203,7 @@ describe('RosterCache', () => {
 });
 
 describe('aggregateRoster', () => {
-  it('sorts connection groups by attention, unread, and activity while keeping each group adjacent', () => {
+  it('sorts connection groups by live signals and activity without stale cached attention', () => {
     const groups = aggregateRoster([
       {
         connection: connection('a', 1),
@@ -239,18 +239,40 @@ describe('aggregateRoster', () => {
       },
     ], 'a');
 
-    expect(groups.map((group) => group.connection.id)).toEqual(['b', 'a', 'c']);
-    expect(groups[0]).toMatchObject({ attentionCount: 1, unreadCount: 0, source: 'cache' });
-    expect(groups[1].agents.map((entry) => entry.agent.agentId)).toEqual(['main', 'quiet']);
-    expect(groups[1].agents[0]).toMatchObject({
+    expect(groups.map((group) => group.connection.id)).toEqual(['a', 'c', 'b']);
+    expect(groups[0].agents.map((entry) => entry.agent.agentId)).toEqual(['main', 'quiet']);
+    expect(groups[0].agents[0]).toMatchObject({
       preview: 'unread main',
       updatedAt: 200,
       lastActivityAt: 600,
       unreadCount: 1,
       hasUnread: true,
     });
-    expect(groups[2].unreadCount).toBe(0);
-    expect(flattenRoster(groups).map((entry) => entry.agent.connectionId)).toEqual(['b', 'a', 'a', 'c']);
+    expect(groups[1].unreadCount).toBe(0);
+    expect(groups[2]).toMatchObject({
+      attentionCount: 0,
+      unreadCount: 0,
+      source: 'cache',
+    });
+    expect(groups[2].agents[0]).toMatchObject({ attentionCount: 0, attention: null });
+    expect(flattenRoster(groups).map((entry) => entry.agent.connectionId)).toEqual(['a', 'a', 'c', 'b']);
+  });
+
+  it('adds backend subtitle metadata at the registry boundary', () => {
+    const youmindConnection: ConnectionDescriptor = {
+      ...connection('sprite', 1),
+      backendKind: 'youmind',
+      transportKind: 'https',
+    };
+    const groups = aggregateRoster([{
+      connection: youmindConnection,
+      source: 'live',
+      syncedAt: 100,
+      agents: [agent('sprite', 'main')],
+      sessions: [session('sprite', 'main', 'main:main', 100)],
+    }], 'sprite');
+
+    expect(groups[0].agents[0].subtitle).toEqual({ kind: 'backend', label: 'YouMind' });
   });
 
   it('suppresses unread for a cached active connection and ignores cross-connection live rows', () => {

@@ -36,6 +36,7 @@ type SearchResultBase = Readonly<{
 export type AgentSearchResult = SearchResultBase & Readonly<{
   kind: 'agent';
   emoji?: string;
+  avatarUrl?: string;
 }>;
 
 export type SessionSearchResult = SearchResultBase & Readonly<{
@@ -197,6 +198,7 @@ function buildAgentResults(
         updatedAt: summary.updatedAt,
         source: group.source,
         ...(agent.emoji ? { emoji: agent.emoji } : {}),
+        ...(agent.avatarUrl ? { avatarUrl: agent.avatarUrl } : {}),
         ...threadLockProperties(input, group.connection.id, agent.agentId),
       };
       const previous = results.get(id);

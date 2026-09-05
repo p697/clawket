@@ -12,18 +12,12 @@ import {
   Text,
   View,
 } from 'react-native';
-import type { LucideIcon } from 'lucide-react-native';
 import {
-  Bot,
   ChevronDown,
   ChevronRight,
-  Clock3,
   Filter,
-  MessageCircle,
   Plus,
-  Radio,
   Search,
-  UsersRound,
 } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import type { AgentDescriptor, Capabilities } from '@clawket/agent-protocol';
@@ -35,6 +29,7 @@ import { FloatingButton } from '../../components/ui/FloatingButton';
 import { FormTextInput } from '../../components/ui/FormTextInput';
 import { SearchInput } from '../../components/ui/SearchInput';
 import { SegmentedTabs } from '../../components/ui/SegmentedTabs';
+import { resolveSessionKindIcon } from '../../components/ui/sessionKindIcon';
 import { Sheet } from '../../components/ui/Sheet';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { useAppTheme } from '../../theme';
@@ -142,14 +137,6 @@ function sectionLabel(
   return t('Scheduled');
 }
 
-function rowIcon(kind: SessionPanelRow['kind']): LucideIcon {
-  if (kind === 'channel') return Radio;
-  if (kind === 'subagent') return Bot;
-  if (kind === 'cron') return Clock3;
-  if (kind === 'direct' || kind === 'group') return UsersRound;
-  return kind === 'main' ? MessageCircle : MessageCircle;
-}
-
 function SessionRow({
   row,
   listMode,
@@ -167,7 +154,7 @@ function SessionRow({
 }>): React.JSX.Element {
   const { theme } = useAppTheme();
   const actions = availableSessionActions(row, capabilities);
-  const Icon = rowIcon(row.kind);
+  const Icon = resolveSessionKindIcon(row.kind);
   const dotColor = row.attention !== null
     ? theme.colors.bad
     : row.hasActiveRun

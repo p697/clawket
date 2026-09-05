@@ -350,7 +350,34 @@ describe('mapAdapterSessionUpdate', () => {
     expect(mapAdapterSessionUpdate(pairUpdate, options)).toMatchObject({
       type: 'approval_requested',
       approval: pairUpdate.approval,
-      message: undefined,
+      message: {
+        id: 'approval_pair-1',
+        role: 'system',
+        timestampMs: 900,
+        approval: {
+          kind: 'pair',
+          id: 'pair-1',
+          target: 'device',
+          displayName: 'Phone',
+          platform: 'ios',
+          receivedAtMs: 900,
+          status: 'pending',
+        },
+      },
+    });
+
+    expect(mapAdapterSessionUpdate({
+      type: 'pairing_required',
+      requestId: 'self-request',
+    }, options)).toEqual({ type: 'pairing_required', requestId: 'self-request' });
+    expect(mapAdapterSessionUpdate({
+      type: 'pairing_resolved',
+      requestId: 'self-request',
+      decision: 'approved',
+    }, options)).toEqual({
+      type: 'pairing_resolved',
+      requestId: 'self-request',
+      decision: 'approved',
     });
 
     expect(mapAdapterSessionUpdate({
@@ -369,6 +396,17 @@ describe('mapAdapterSessionUpdate', () => {
       approvalId: 'approval-2',
       decision: 'expired',
     }, options)).toMatchObject({ status: 'expired' });
+    expect(mapAdapterSessionUpdate({
+      type: 'approval_resolved',
+      approvalId: 'pair-2',
+      decision: 'approved',
+      kind: 'pair',
+      target: 'node',
+    }, options)).toMatchObject({
+      kind: 'pair',
+      target: 'node',
+      status: 'allowed',
+    });
 
     expect(mapAdapterSessionUpdate({
       type: 'session_info_update',

@@ -1,5 +1,12 @@
 import React, { useEffect, useMemo } from 'react';
-import { StyleProp, StyleSheet, Text, type ViewStyle, View } from 'react-native';
+import {
+  Image,
+  StyleProp,
+  StyleSheet,
+  Text,
+  type ViewStyle,
+  View,
+} from 'react-native';
 import { Lock } from 'lucide-react-native';
 import Animated, {
   cancelAnimation,
@@ -70,6 +77,7 @@ export type AgentAvatarProps = Readonly<{
   agentId: string;
   name: string;
   emoji?: string | null;
+  avatarUrl?: string | null;
   variant?: AgentAvatarVariant;
   status?: AgentAvatarStatus;
   attentionTone?: AgentAttentionTone;
@@ -99,6 +107,7 @@ export function AgentAvatar({
   agentId,
   name,
   emoji,
+  avatarUrl,
   variant = 'roster',
   status = 'idle',
   attentionTone = 'warn',
@@ -159,6 +168,7 @@ export function AgentAvatar({
   const doneDotStyle = useAnimatedStyle(() => ({ opacity: doneOpacity.value }));
   const isMuted = status === 'offline' || status === 'locked';
   const statusDotColor = attentionTone === 'bad' ? theme.colors.bad : theme.colors.warn;
+  const resolvedAvatarUrl = !emoji ? avatarUrl?.trim() : undefined;
 
   return (
     <View
@@ -202,6 +212,14 @@ export function AgentAvatar({
           <Text numberOfLines={1} style={textStyle}>
             {content}
           </Text>
+        ) : null}
+        {resolvedAvatarUrl ? (
+          <Image
+            testID={testID ? `${testID}-image` : undefined}
+            source={{ uri: resolvedAvatarUrl }}
+            resizeMode="cover"
+            style={styles.image}
+          />
         ) : null}
       </View>
       {status === 'attention' ? (
@@ -261,6 +279,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
+  },
+  image: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
   },
   workingRing: {
     position: 'absolute',

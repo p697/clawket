@@ -228,6 +228,7 @@ export class GatewayProtocolClient {
   private handshakeSerial = 0;
   private manuallyClosed = false;
   private pairingPending = false;
+  private pendingSelfPairRequestId: string | null = null;
   private connectRequestInFlight = false;
   private connectRequestCompleted = false;
   private activeConnectAuthSource: RelayConnectAuthSelection['source'] | null = null;
@@ -261,6 +262,8 @@ export class GatewayProtocolClient {
     this.connectResponseBridgeVersion = undefined;
     this.supportedMethods.clear();
     this.gatewayInfo = null;
+    this.pairingPending = false;
+    this.pendingSelfPairRequestId = null;
     this.clearReadinessTimer();
     this.rejectPendingRequests('Configuration changed', 'connection_restarted');
     this.rejectPendingControls('Configuration changed');
@@ -344,6 +347,7 @@ export class GatewayProtocolClient {
     if (this.state !== 'closed' && this.state !== 'idle') return;
     this.manuallyClosed = false;
     this.pairingPending = false;
+    this.pendingSelfPairRequestId = null;
     const epoch = ++this.epoch;
     this.setState('connecting');
     void this.startTransport(epoch);
@@ -352,6 +356,7 @@ export class GatewayProtocolClient {
   public disconnect(): void {
     this.manuallyClosed = true;
     this.pairingPending = false;
+    this.pendingSelfPairRequestId = null;
     this.epoch += 1;
     this.handshakeSerial += 1;
     this.clearReadinessTimer();
@@ -368,6 +373,7 @@ export class GatewayProtocolClient {
     }
     this.manuallyClosed = false;
     this.pairingPending = false;
+    this.pendingSelfPairRequestId = null;
     this.connectRequestCompleted = false;
     this.connectRequestInFlight = false;
     this.activeConnectAuthSource = null;
@@ -593,9 +599,16 @@ export class GatewayProtocolClient {
     }
 
     const routed = routeGatewayEvent(frame.event, frame.payload, this.emit.bind(this), this.now);
-    if (routed.pairingApproved && this.pairingPending) {
+    const pairingResolution = routed.pairingResolution;
+    if (
+      pairingResolution?.requestId
+      && this.pairingPending
+      && pairingResolution.requestId === this.pendingSelfPairRequestId
+    ) {
+      this.emit('pairingResolved', pairingResolution);
       this.pairingPending = false;
-      this.reconnect();
+      this.pendingSelfPairRequestId = null;
+      if (pairingResolution.decision === 'approved') this.reconnect();
     }
   }
 
@@ -772,6 +785,7 @@ export class GatewayProtocolClient {
     this.connectRequestCompleted = true;
     this.activeConnectAuthSource = null;
     this.pairingPending = false;
+    this.pendingSelfPairRequestId = null;
     this.markTransportReady();
     this.subscribeToSessionChangesIfSupported(epoch);
   }
@@ -879,6 +893,7 @@ export class GatewayProtocolClient {
       const requestId = readString(details.requestId)
         ?? message.match(/requestId[:\s]*([a-f0-9-]+)/i)?.[1];
       this.pairingPending = true;
+      this.pendingSelfPairRequestId = requestId ?? null;
       this.setState('pairing_pending');
       this.emit('pairingRequired', { requestId });
       return;
@@ -1809,6 +1824,8 @@ function createListenerStore(): {
     chatCompaction: new Set(),
     pairingRequired: new Set(),
     pairingResolved: new Set(),
+    pairApprovalRequested: new Set(),
+    pairApprovalResolved: new Set(),
     execApprovalRequested: new Set(),
     execApprovalResolved: new Set(),
     seqGap: new Set(),

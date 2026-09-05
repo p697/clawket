@@ -10,7 +10,10 @@ import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { analyticsEvents } from '../services/analytics/events';
 import { ChatCacheService } from '../services/chat-cache';
 import { SessionPreferencesService } from '../services/session-preferences';
-import { StorageService } from '../services/storage';
+import {
+  StorageService,
+  type YouMindAuthSession,
+} from '../services/storage';
 
 import {
   ConnectionNotFoundError,
@@ -122,6 +125,15 @@ export interface ConnectionTelemetry {
   ): void;
   reconnect(connection: ConnectionDescriptor, reason: ReconnectReason): void;
 }
+
+type ConnectionIdentityDetailDependencies = Readonly<{
+  getRuntimeConnectionRecord: (connectionId: string) => Promise<ConnectionRecord>;
+  getYouMindAuthSession: (
+    url: string,
+    scopeKey?: string | null,
+    options?: { allowLegacyFallback?: boolean },
+  ) => Promise<YouMindAuthSession | null>;
+}>;
 
 type ConnectReason = 'launch' | 'switch' | 'foreground' | 'manual' | 'retry';
 type ReconnectReason = 'tick_timeout' | 'socket_close' | 'probe_failed' | 'seq_gap' | 'foreground';
@@ -1130,6 +1142,43 @@ let defaultCoordinator = new ConnectionCoordinator({
 
 export function getConnectionRuntime(): ConnectionCoordinator {
   return defaultCoordinator;
+}
+
+/**
+ * Reads the private, account-scoped identity detail needed by a mounted UI
+ * route without adding it to the public connection or Agent descriptors.
+ */
+export async function loadConnectionIdentityDetail(
+  connection: ConnectionDescriptor,
+  dependencies: ConnectionIdentityDetailDependencies = {
+    getRuntimeConnectionRecord: (connectionId) => (
+      getConnectionRuntime().getRuntimeConnectionRecord(connectionId)
+    ),
+    getYouMindAuthSession: (url, scopeKey, options) => (
+      StorageService.getYouMindAuthSession(url, scopeKey, options)
+    ),
+  },
+): Promise<string | undefined> {
+  if (connection.backendKind !== 'youmind') return undefined;
+
+  try {
+    const record = await dependencies.getRuntimeConnectionRecord(connection.id);
+    const authScopeKey = record.youmind?.authScopeKey.trim();
+    if (
+      record.id !== connection.id
+      || record.backendKind !== connection.backendKind
+      || !authScopeKey
+    ) {
+      return undefined;
+    }
+    const session = await dependencies.getYouMindAuthSession(
+      record.url,
+      authScopeKey,
+    );
+    return session?.user?.email?.trim() || undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export function configureConnectionRuntime(

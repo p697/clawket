@@ -79,6 +79,49 @@ export type AgentSettingsScreenProps = Omit<
   permissionDenied?: boolean;
 }>;
 
+type AgentSettingsRuntimeScreenProps = Omit<
+  AgentSettingsScreenProps,
+  'identityDetail'
+> & Readonly<{
+  loadIdentityDetail: (connection: ConnectionDescriptor) => Promise<string | undefined>;
+}>;
+
+export function AgentSettingsRuntimeScreen({
+  connection,
+  loadIdentityDetail,
+  ...screenProps
+}: AgentSettingsRuntimeScreenProps): React.JSX.Element {
+  const [loadedIdentity, setLoadedIdentity] = useState<Readonly<{
+    connectionId: string;
+    detail?: string;
+  }> | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setLoadedIdentity(null);
+    void loadIdentityDetail(connection)
+      .then((detail) => {
+        if (active) setLoadedIdentity({ connectionId: connection.id, detail });
+      })
+      .catch(() => {
+        if (active) setLoadedIdentity({ connectionId: connection.id });
+      });
+    return () => {
+      active = false;
+    };
+  }, [connection, loadIdentityDetail]);
+
+  return (
+    <AgentSettingsScreen
+      {...screenProps}
+      connection={connection}
+      identityDetail={loadedIdentity?.connectionId === connection.id
+        ? loadedIdentity.detail
+        : undefined}
+    />
+  );
+}
+
 export function AgentSettingsRouteLoading({
   onBack,
 }: Readonly<{ onBack: () => void }>): React.JSX.Element {
@@ -332,6 +375,7 @@ export function AgentSettingsView({
                   agentId={agent.agentId}
                   name={model.identity.name}
                   emoji={agent.emoji}
+                  avatarUrl={agent.avatarUrl}
                   variant="settings"
                   status={model.identity.locked
                     ? 'locked'

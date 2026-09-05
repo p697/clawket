@@ -1,4 +1,7 @@
-import { createMockAdapter } from '@clawket/agent-protocol';
+import {
+  createMockAdapter,
+  type ConnectionRecord,
+} from '@clawket/agent-protocol';
 import legacyFixture from '../../../../../tests/fixtures/mobile-storage/v2.1.2-gateway-configs.schema-fixture.json';
 
 import type { GatewayConfigsState } from '../../types';
@@ -62,7 +65,155 @@ function openClawInput(label: string, token = `${label}-token`) {
   };
 }
 
+function youMindRecord(id: string, label: string): ConnectionRecord {
+  return {
+    id,
+    backendKind: 'youmind',
+    transportKind: 'https',
+    label,
+    createdAt: 1,
+    url: 'https://youmind.com',
+    youmind: { authScopeKey: id },
+  };
+}
+
+function persistedRegistry(
+  records: ReadonlyArray<ConnectionRecord>,
+  revision = 1,
+): string {
+  const activeConnectionId = records[0]?.id ?? null;
+  return JSON.stringify({
+    version: 1,
+    revision,
+    state: {
+      activeConnectionId,
+      freeConnectionId: activeConnectionId,
+      records,
+    },
+  });
+}
+
 describe('ConnectionStore', () => {
+  it('sanitizes only the exact legacy YouMind email label in current records and re-pairs', async () => {
+    const secureStorage = new MemorySecureStorage();
+    const records: ConnectionRecord[] = [
+      youMindRecord('auto-email', 'YouMind (owner+one@example.com)'),
+      youMindRecord('custom-name', 'YouMind (Studio)'),
+      youMindRecord('custom-local-address', 'YouMind (owner@local)'),
+      youMindRecord('custom-suffix', 'YouMind (owner@example.com) personal'),
+      {
+        id: 'other-backend',
+        backendKind: 'openclaw',
+        transportKind: 'local',
+        label: 'YouMind (owner@example.com)',
+        createdAt: 1,
+        url: 'ws://127.0.0.1:18789',
+      },
+    ];
+    secureStorage.values.set(CURRENT_KEY, persistedRegistry(records, 7));
+    const store = new ConnectionStore({
+      secureStorage,
+      legacyStorage: legacyStorage(),
+    });
+
+    await expect(store.load()).resolves.toMatchObject({
+      revision: 7,
+      connections: [
+        expect.objectContaining({ id: 'auto-email', label: 'YouMind' }),
+        expect.objectContaining({ id: 'custom-name', label: 'YouMind (Studio)' }),
+        expect.objectContaining({ id: 'custom-local-address', label: 'YouMind (owner@local)' }),
+        expect.objectContaining({ id: 'custom-suffix', label: 'YouMind (owner@example.com) personal' }),
+        expect.objectContaining({ id: 'other-backend', label: 'YouMind (owner@example.com)' }),
+      ],
+    });
+
+    const repaired = await store.upsert({
+      id: 'auto-email',
+      backendKind: 'youmind',
+      transportKind: 'https',
+      label: 'YouMind',
+      url: 'https://youmind.com',
+      youmind: { authScopeKey: 'replacement-scope' },
+    });
+    expect(repaired).toMatchObject({
+      created: false,
+      connection: { id: 'auto-email', label: 'YouMind' },
+    });
+    const persisted = JSON.parse(secureStorage.values.get(CURRENT_KEY) ?? '{}');
+    expect(persisted.state.records[0]).toMatchObject({
+      id: 'auto-email',
+      label: 'YouMind',
+      youmind: { authScopeKey: 'replacement-scope' },
+    });
+  });
+
+  it('sanitizes an exact legacy YouMind email label restored from rollback', async () => {
+    const secureStorage = new MemorySecureStorage();
+    secureStorage.values.set(
+      CURRENT_KEY,
+      persistedRegistry([youMindRecord('current', 'Current Sprite')], 2),
+    );
+    secureStorage.values.set(
+      ROLLBACK_KEY,
+      persistedRegistry([youMindRecord('previous', 'YouMind (previous@example.com)')]),
+    );
+    const store = new ConnectionStore({
+      secureStorage,
+      legacyStorage: legacyStorage(),
+    });
+    await store.load();
+
+    const rolledBack = await store.rollback();
+
+    expect(rolledBack.connections).toEqual([
+      expect.objectContaining({ id: 'previous', label: 'YouMind' }),
+    ]);
+    const persisted = JSON.parse(secureStorage.values.get(CURRENT_KEY) ?? '{}');
+    expect(persisted.state.records[0]).toMatchObject({ id: 'previous', label: 'YouMind' });
+  });
+
+  it('sanitizes an exact legacy YouMind email label before persisting migration', async () => {
+    const secureStorage = new MemorySecureStorage();
+    const legacy = legacyStorage({
+      activeId: 'legacy-email',
+      configs: [
+        {
+          id: 'legacy-email',
+          name: 'YouMind (legacy@example.com)',
+          backendKind: 'youmind',
+          transportKind: 'custom',
+          mode: 'custom',
+          url: 'https://youmind.com',
+          createdAt: 1,
+          updatedAt: 1,
+        },
+        {
+          id: 'legacy-custom',
+          name: 'My YouMind (legacy@example.com)',
+          backendKind: 'youmind',
+          transportKind: 'custom',
+          mode: 'custom',
+          url: 'https://youmind.com',
+          createdAt: 2,
+          updatedAt: 2,
+        },
+      ],
+    });
+    const store = new ConnectionStore({ secureStorage, legacyStorage: legacy });
+
+    const migrated = await store.load();
+
+    expect(migrated.connections).toEqual([
+      expect.objectContaining({ id: 'legacy-email', label: 'YouMind' }),
+      expect.objectContaining({ id: 'legacy-custom', label: 'My YouMind (legacy@example.com)' }),
+    ]);
+    const persisted = JSON.parse(secureStorage.values.get(CURRENT_KEY) ?? '{}');
+    expect(persisted.state.records.map((record: ConnectionRecord) => record.label)).toEqual([
+      'YouMind',
+      'My YouMind (legacy@example.com)',
+    ]);
+  });
+
   it('migrates the released 2.1 schema fixture once and preserves every credential-bearing field', async () => {
     expect(legacyFixture.provenance).toMatchObject({
       kind: 'schema-reconstruction',

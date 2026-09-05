@@ -69,7 +69,11 @@ import { canSendMessage } from "./composerInteractionPolicy";
 import { deriveCurrentSessionActivity } from "./currentSessionActivity";
 import { hasCompletedAssistantForRememberedRun } from "./runStateValidation";
 import { useChatHistoryState } from "./useChatHistoryState";
-import { buildLiveRunListData, StreamSegment } from "./liveRunThread";
+import {
+  buildLiveRunListData,
+  mergeNewestFirstMessages,
+  StreamSegment,
+} from "./liveRunThread";
 import {
   clearSessionRunState,
   markSessionRunDelta,
@@ -106,6 +110,11 @@ import { useChatAgentIdentity } from "./useChatAgentIdentity";
 import { useBufferedDebugLog } from "./useBufferedDebugLog";
 import { preparePendingImagesForSend } from "./preparePendingImagesForSend";
 import { mapAdapterSession, mapAdapterSessionPatch } from "./adapterChatMapping";
+import {
+  getConnectionPairApprovalStore,
+  type ConnectionPairApprovalStore,
+  type PairApprovalEntry,
+} from "../connection/pair-approval-store";
 
 type SilentCommandProbe = {
   sessionKey: string;
@@ -136,6 +145,7 @@ function mapAdapterConnectionState(state: AdapterConnectionState): ConnectionSta
 
 function mapAdapterAgent(agent: AgentDescriptor) {
   return {
+    connectionId: agent.connectionId,
     id: agent.agentId,
     name: agent.name,
     identity: {
@@ -227,6 +237,11 @@ export function useChatController({
   const [isSending, setIsSending] = useState(false);
   const [isPreparingSend, setIsPreparingSend] = useState(false);
   const [pairingPending, setPairingPending] = useState(false);
+  const [pairApprovalProjection, setPairApprovalProjection] = useState<Readonly<{
+    adapter: AgentAdapter | null;
+    entries: ReadonlyArray<PairApprovalEntry>;
+  }>>({ adapter: null, entries: [] });
+  const pairApprovalStoreRef = useRef<ConnectionPairApprovalStore | null>(null);
   const [copied, setCopied] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [compactionNotice, setCompactionNotice] = useState<string | null>(null);
@@ -539,9 +554,45 @@ export function useChatController({
     initialPreview: initialChatPreview,
   });
 
+  useEffect(() => {
+    pairApprovalStoreRef.current = null;
+    setPairApprovalProjection({ adapter: null, entries: [] });
+    if (!adapter?.capabilities.pairRequests) return undefined;
+    const store = getConnectionPairApprovalStore(adapter);
+    pairApprovalStoreRef.current = store;
+    const sync = () => setPairApprovalProjection({
+      adapter,
+      entries: store.getSnapshot(),
+    });
+    const unsubscribe = store.subscribe(sync);
+    sync();
+    void store.refresh();
+    return () => {
+      unsubscribe();
+      if (pairApprovalStoreRef.current === store) pairApprovalStoreRef.current = null;
+    };
+  }, [adapter]);
+
+  useEffect(() => {
+    setCompactionNotice(null);
+    if (compactionTimerRef.current) {
+      clearTimeout(compactionTimerRef.current);
+      compactionTimerRef.current = null;
+    }
+    return () => {
+      if (compactionTimerRef.current) clearTimeout(compactionTimerRef.current);
+    };
+  }, [history.sessionKey]);
+
   // Auto-cache messages to local storage
+  const scopedAgents = useMemo(
+    () => gatewayConfigId
+      ? agents.filter((agent) => agent.connectionId === gatewayConfigId)
+      : [],
+    [agents, gatewayConfigId],
+  );
   const cacheAgentIdentity = resolveCachedAgentIdentity(
-    agents,
+    scopedAgents,
     currentAgentId,
     history.sessionKey,
   );
@@ -553,7 +604,7 @@ export function useChatController({
     ? sessionLabel(currentSessionInfo, { currentAgentName: cacheAgentName })
     : undefined;
   const agentIdentity = useChatAgentIdentity({
-    agents,
+    agents: scopedAgents,
     cacheAgentName,
     currentAgentId,
     currentSessionInfo,
@@ -1853,11 +1904,14 @@ export function useChatController({
           }, 5000);
         }
         return;
+      case "pairing_required":
+        setPairingPending(true);
+        return;
+      case "pairing_resolved":
+        setPairingPending(false);
+        return;
       case "approval_requested":
-        if (update.approval.kind === "pair") {
-          setPairingPending(true);
-          return;
-        }
+        if (update.approval.kind === "pair") return;
         if (
           update.approval.kind === "exec"
           && execApprovalEnabled
@@ -1870,7 +1924,7 @@ export function useChatController({
         }
         return;
       case "approval_resolved":
-        setPairingPending(false);
+        if (update.kind === "pair") return;
         history.setMessages((previous) => previous.map((message) => (
           message.id === update.messageId && message.approval
             ? {
@@ -1929,6 +1983,7 @@ export function useChatController({
     }
   }, [
     adoptPendingRunId,
+    adapter,
     clearActiveRunState,
     clearToolSettledRecoveryTimer,
     clearTransientRunPresentation,
@@ -2867,7 +2922,7 @@ export function useChatController({
   }, [adapter]);
 
   const listData = useMemo((): UiMessage[] => {
-    return buildLiveRunListData({
+    const sessionMessages = buildLiveRunListData({
       historyMessages: history.messages,
       streamSegments: chatStreamSegments,
       toolMessages: chatToolMessages,
@@ -2875,16 +2930,60 @@ export function useChatController({
       liveStreamStartedAt: streamStartedAtRef.current,
       activeRunId: currentRunIdRef.current,
     });
-  }, [chatStream, chatStreamSegments, chatToolMessages, history.messages]);
+    const pairApprovals = pairApprovalProjection.adapter === adapter
+      ? pairApprovalProjection.entries
+      : [];
+    const pairMessages: UiMessage[] = pairApprovals.map((approval) => ({
+      id: `approval_pair_${approval.target}_${approval.id}`,
+      role: "system",
+      text: "",
+      timestampMs: approval.receivedAtMs,
+      approval,
+    }));
+    return mergeNewestFirstMessages(sessionMessages, pairMessages);
+  }, [adapter, chatStream, chatStreamSegments, chatToolMessages, history.messages, pairApprovalProjection]);
 
   const resolveApproval = useCallback(
-    (id: string, decision: "allow-once" | "allow-always" | "deny") => {
+    (
+      id: string,
+      decision: "allow-once" | "allow-always" | "deny" | "approve" | "reject",
+      target?: "device" | "node",
+    ): Promise<void> | void => {
+      if (target) {
+        const pairDecision = decision === "reject" ? "reject" : "approve";
+        const store = pairApprovalStoreRef.current;
+        if (!store?.beginResolution(id, target)) return;
+        const operations = target === "device"
+          ? adapter?.management?.devices
+          : adapter?.management?.nodes;
+        const operation = pairDecision === "approve" ? operations?.approve : operations?.reject;
+        if (!operation) {
+          store.failResolution(id, target);
+          return;
+        }
+        return operation(id).then(() => {
+          const resolved = store.completeResolution(id, target, pairDecision);
+          if (resolved?.status !== "allowed" && resolved?.status !== "denied") return;
+          analyticsEvents.approvalResolved({
+            kind: "pair",
+            decision: resolved.status === "allowed" ? "approve" : "reject",
+          });
+        }).catch(() => {
+          store.failResolution(id, target);
+        });
+      }
       analyticsEvents.approvalResolved({
         kind: "exec",
-        decision,
+        decision: decision === "approve"
+          ? "allow-once"
+          : decision === "reject"
+            ? "deny"
+            : decision,
       });
       const status =
-        decision === "deny" ? ("denied" as const) : ("allowed" as const);
+        decision === "deny" || decision === "reject"
+          ? ("denied" as const)
+          : ("allowed" as const);
       history.setMessages((prev) =>
         prev.map((m) =>
           m.approval?.id === id
@@ -2892,7 +2991,12 @@ export function useChatController({
             : m,
         ),
       );
-      adapter?.management?.approvals?.resolveExec(id, decision).catch(() => {});
+      const execDecision = decision === "approve"
+        ? "allow-once"
+        : decision === "reject"
+          ? "deny"
+          : decision;
+      adapter?.management?.approvals?.resolveExec(id, execDecision).catch(() => {});
     },
     [adapter, history],
   );

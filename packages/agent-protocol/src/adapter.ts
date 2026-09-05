@@ -52,8 +52,16 @@ export type SessionUpdate =
       usage?: Usage;
     }
   | { type: 'compaction'; sessionKey: string; phase: 'start' | 'end' }
+  | { type: 'pairing_required'; requestId?: string }
+  | { type: 'pairing_resolved'; requestId?: string; decision: 'approved' | 'rejected' }
   | { type: 'approval_requested'; sessionKey?: string; approval: ApprovalRequest }
-  | { type: 'approval_resolved'; approvalId: string; decision: string }
+  | {
+      type: 'approval_resolved';
+      approvalId: string;
+      decision: string;
+      kind?: ApprovalRequest['kind'];
+      target?: 'device' | 'node';
+    }
   | { type: 'session_info_update'; session: Partial<SessionDescriptor> & { key: string } }
   | {
       type: 'usage_update';

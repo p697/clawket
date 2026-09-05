@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Image,
   Platform,
@@ -12,6 +12,10 @@ import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { EnrichedMarkdownText } from 'react-native-enriched-markdown';
 import Animated, {
   cancelAnimation,
+  Easing,
+  FadeIn,
+  FadeOut,
+  ReduceMotion,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
@@ -78,6 +82,14 @@ import {
 } from './model';
 
 const THREAD_MARKDOWN_FLAVOR = getChatMarkdownFlavor();
+const SESSION_CONTENT_FADE_IN = FadeIn
+  .duration(Motion.duration.normal)
+  .easing(Easing.out(Easing.cubic))
+  .reduceMotion(ReduceMotion.System);
+const SESSION_CONTENT_FADE_OUT = FadeOut
+  .duration(Motion.duration.normal)
+  .easing(Easing.out(Easing.cubic))
+  .reduceMotion(ReduceMotion.System);
 
 export type ThreadCopy = Readonly<{
   back: string;
@@ -100,6 +112,9 @@ export type ThreadCopy = Readonly<{
   toolCompleted: string;
   toolFailed: string;
   approvalTitle: string;
+  approvalError: string;
+  device: string;
+  node: string;
   allow: string;
   reject: string;
   allowed: string;
@@ -117,7 +132,9 @@ export type ThreadCopy = Readonly<{
 export type ThreadViewProps = Readonly<{
   agentId: string;
   agentName: string;
+  sessionKey?: string | null;
   agentEmoji?: string | null;
+  agentAvatarUrl?: string | null;
   sessionTitle?: string | null;
   isMainSession?: boolean;
   model?: string | null;
@@ -127,6 +144,7 @@ export type ThreadViewProps = Readonly<{
   capabilities: Capabilities;
   state: ThreadContentState;
   messages: ReadonlyArray<UiMessage>;
+  compactionNotice?: string | null;
   runCards?: ReadonlyArray<ThreadRunCard>;
   locale?: string;
   input: string;
@@ -176,7 +194,8 @@ export type ThreadViewProps = Readonly<{
   onSelectThinkingLevel?: (level: string) => void;
   onResolveApproval?: (
     approvalId: string,
-    decision: 'allow-once' | 'allow-always' | 'deny',
+    decision: 'allow-once' | 'allow-always' | 'deny' | 'approve' | 'reject',
+    target?: 'device' | 'node',
   ) => void;
   testID?: string;
 }>;
@@ -184,7 +203,9 @@ export type ThreadViewProps = Readonly<{
 export function ThreadView({
   agentId,
   agentName,
+  sessionKey,
   agentEmoji,
+  agentAvatarUrl,
   sessionTitle,
   isMainSession = true,
   model,
@@ -194,6 +215,7 @@ export function ThreadView({
   capabilities,
   state,
   messages,
+  compactionNotice,
   runCards = [],
   locale,
   input,
@@ -241,6 +263,13 @@ export function ThreadView({
   testID = 'thread-screen',
 }: ThreadViewProps): React.JSX.Element {
   const { theme } = useAppTheme();
+  const reduceMotion = useReducedMotion();
+  const previousSessionKeyRef = useRef(sessionKey);
+  const sessionChanged = Boolean(
+    previousSessionKeyRef.current
+      && sessionKey
+      && previousSessionKeyRef.current !== sessionKey,
+  );
   const [selectedToolMessageId, setSelectedToolMessageId] = useState<string | null>(null);
   const selectedToolMessage = selectedToolMessageId
     ? messages.find((message) => message.id === selectedToolMessageId) ?? null
@@ -291,6 +320,10 @@ export function ThreadView({
       setSelectedToolMessageId(null);
     }
   }, [selectedToolMessage, selectedToolMessageId]);
+
+  useEffect(() => {
+    previousSessionKeyRef.current = sessionKey;
+  }, [sessionKey]);
 
   const renderMessage = useCallback(
     ({ item }: ListRenderItemInfo<ThreadTimelineItem>) => {
@@ -361,8 +394,10 @@ export function ThreadView({
             testID={`${testID}-header-pill`}
             agentId={agentId}
             name={headerName}
+            avatarName={agentName}
             subtitle={headerSubtitle}
             emoji={agentEmoji}
+            avatarUrl={agentAvatarUrl}
             status={avatarStatus}
             accessibilityLabel={copy.openSessions}
             onPress={!locked && canOpenSessions ? onOpenSessionPanel : undefined}
@@ -401,53 +436,67 @@ export function ThreadView({
       ) : null}
 
       <View style={styles.timeline}>
-        {state.kind === 'loading' ? (
-          <ThreadHistorySkeleton copy={copy} topInset={timelineClearance} />
-        ) : state.kind === 'locked' ? (
-          <View
-            testID={`${testID}-locked`}
-            style={[styles.centeredState, { paddingTop: timelineClearance }]}
-          >
-            <Banner
-              icon={CircleAlert}
-              message={copy.locked}
-              actionLabel={onOpenPaywall ? copy.viewPro : undefined}
-              onAction={onOpenPaywall}
-            />
-          </View>
-        ) : state.kind === 'empty' ? (
-          <View
-            testID={`${testID}-empty`}
-            style={[styles.centeredState, { paddingTop: timelineClearance }]}
-          >
-            <SystemEventRow
-              icon={MessageCircle}
-              label={copy.formatEmpty(agentName)}
-            />
-          </View>
-        ) : (
-          <FlashList
-            testID={`${testID}-timeline`}
-            data={timelineItems}
-            inverted
-            keyboardShouldPersistTaps="handled"
-            keyExtractor={(item) => item.key}
-            renderItem={renderMessage}
-            contentContainerStyle={[
-              styles.timelineContent,
-              { paddingBottom: timelineClearance },
-            ]}
-            onEndReached={onLoadMoreHistory}
-            onEndReachedThreshold={0.3}
-            ListFooterComponent={loadingMoreHistory ? (
-              <Skeleton
-                testID={`${testID}-history-more`}
-                accessibilityLabel={copy.loadingHistory}
-                style={styles.historyMore}
+        <Animated.View
+          key={`thread-session:${sessionKey ?? 'unscoped'}`}
+          testID={`${testID}-session-content`}
+          collapsable={false}
+          entering={sessionChanged && !reduceMotion ? SESSION_CONTENT_FADE_IN : undefined}
+          exiting={reduceMotion ? undefined : SESSION_CONTENT_FADE_OUT}
+          style={styles.sessionContent}
+        >
+          {state.kind === 'loading' ? (
+            <ThreadHistorySkeleton copy={copy} topInset={timelineClearance} />
+          ) : state.kind === 'locked' ? (
+            <View
+              testID={`${testID}-locked`}
+              style={[styles.centeredState, { paddingTop: timelineClearance }]}
+            >
+              <Banner
+                icon={CircleAlert}
+                message={copy.locked}
+                actionLabel={onOpenPaywall ? copy.viewPro : undefined}
+                onAction={onOpenPaywall}
               />
-            ) : null}
-          />
-        )}
+            </View>
+          ) : state.kind === 'empty' ? (
+            <View
+              testID={`${testID}-empty`}
+              style={[styles.centeredState, { paddingTop: timelineClearance }]}
+            >
+              <SystemEventRow
+                icon={MessageCircle}
+                label={copy.formatEmpty(agentName)}
+              />
+            </View>
+          ) : (
+            <FlashList
+              testID={`${testID}-timeline`}
+              data={timelineItems}
+              inverted
+              keyboardShouldPersistTaps="handled"
+              keyExtractor={(item) => item.key}
+              renderItem={renderMessage}
+              contentContainerStyle={[
+                styles.timelineContent,
+                { paddingBottom: timelineClearance },
+              ]}
+              onEndReached={onLoadMoreHistory}
+              onEndReachedThreshold={0.3}
+              ListHeaderComponent={compactionNotice ? (
+                <View testID={`${testID}-compaction`} style={stylesStatic.timelineItem}>
+                  <SystemEventRow icon={Info} label={compactionNotice} />
+                </View>
+              ) : null}
+              ListFooterComponent={loadingMoreHistory ? (
+                <Skeleton
+                  testID={`${testID}-history-more`}
+                  accessibilityLabel={copy.loadingHistory}
+                  style={styles.historyMore}
+                />
+              ) : null}
+            />
+          )}
+        </Animated.View>
       </View>
 
       {!locked && capabilities.chat ? (
@@ -609,7 +658,10 @@ function ThreadMessageTimelineItem({
   onResolveApproval,
 }: ThreadMessageTimelineItemProps): React.JSX.Element | null {
   if (message.approval) {
-    if (!capabilities.execApproval) return null;
+    const supported = message.approval.kind === 'pair'
+      ? capabilities.pairRequests
+      : capabilities.execApproval;
+    if (!supported) return null;
     return (
       <ThreadApprovalTimelineItem
         messageId={message.id}
@@ -762,6 +814,66 @@ function ThreadApprovalTimelineItem({
 }: Readonly<{
   messageId: string;
   approval: NonNullable<UiMessage['approval']>;
+  copy: ThreadCopy;
+  onResolveApproval?: ThreadViewProps['onResolveApproval'];
+}>): React.JSX.Element {
+  if (approval.kind === 'pair') {
+    const title = approval.displayName?.trim()
+      || approval.platform?.trim()
+      || (approval.target === 'node' ? copy.node : copy.device);
+    const resolved = approval.status !== 'pending';
+    const detail = approval.status === 'allowed'
+      ? copy.allowed
+      : approval.status === 'denied'
+        ? copy.denied
+        : approval.status === 'expired'
+          ? copy.expired
+          : approval.resolutionError
+            ? copy.approvalError
+            : undefined;
+    return (
+      <View style={stylesStatic.timelineItem}>
+        <ApprovalCard
+          testID={`thread-approval-${messageId}`}
+          title={title}
+          detail={detail}
+          tone={approval.resolutionError ? 'bad' : undefined}
+          expired={resolved}
+          primaryAction={{
+            label: copy.allow,
+            onPress: () => onResolveApproval?.(approval.id, 'approve', approval.target),
+            disabled: !onResolveApproval || approval.resolving === true,
+            accessibilityLabel: copy.allow,
+          }}
+          secondaryAction={{
+            label: copy.reject,
+            onPress: () => onResolveApproval?.(approval.id, 'reject', approval.target),
+            disabled: !onResolveApproval || approval.resolving === true,
+            accessibilityLabel: copy.reject,
+          }}
+        />
+      </View>
+    );
+  }
+
+  return (
+    <ThreadExecApprovalTimelineItem
+      messageId={messageId}
+      approval={approval}
+      copy={copy}
+      onResolveApproval={onResolveApproval}
+    />
+  );
+}
+
+function ThreadExecApprovalTimelineItem({
+  messageId,
+  approval,
+  copy,
+  onResolveApproval,
+}: Readonly<{
+  messageId: string;
+  approval: Exclude<NonNullable<UiMessage['approval']>, { kind: 'pair' }>;
   copy: ThreadCopy;
   onResolveApproval?: ThreadViewProps['onResolveApproval'];
 }>): React.JSX.Element {
@@ -987,6 +1099,9 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     timeline: {
       flex: 1,
       minHeight: 0,
+    },
+    sessionContent: {
+      ...StyleSheet.absoluteFillObject,
     },
     timelineContent: {
       paddingTop: Space.lg,

@@ -47,6 +47,21 @@ const LEGACY_YOUMIND_METADATA: Record<BackendKind, (id: string) => ConnectionRec
   youmind: (id) => ({ authScopeKey: `cfg:${id}` }),
 };
 
+// Before 3.0, onboarding generated `YouMind (<email>)`. Keep the matcher
+// deliberately narrow so names, host labels, and user-authored variants stay
+// untouched: exact casing/spacing, one local-part separator, and a dotted
+// domain with no whitespace or parentheses.
+const LEGACY_YOUMIND_EMAIL_LABEL = /^YouMind \([^@()\s]+@[^@().\s]+(?:\.[^@().\s]+)+\)$/u;
+
+function sanitizeLegacyYouMindEmailLabel(
+  backendKind: BackendKind,
+  label: string,
+): string {
+  return backendKind === 'youmind' && LEGACY_YOUMIND_EMAIL_LABEL.test(label)
+    ? 'YouMind'
+    : label;
+}
+
 type RegistryState = {
   activeConnectionId: string | null;
   freeConnectionId: string | null;
@@ -277,7 +292,10 @@ function normalizeRegistryState(value: unknown): RegistryState | null {
   if (!isObject(value) || !Array.isArray(value.records)) return null;
   const records = value.records.map(normalizeConnectionRecord);
   if (records.some((record) => record === null)) return null;
-  const normalizedRecords = records as ConnectionRecord[];
+  const normalizedRecords = (records as ConnectionRecord[]).map((record) => {
+    const label = sanitizeLegacyYouMindEmailLabel(record.backendKind, record.label);
+    return label === record.label ? record : { ...record, label };
+  });
   const ids = new Set(normalizedRecords.map((record) => record.id));
   if (ids.size !== normalizedRecords.length) return null;
   const activeConnectionId = value.activeConnectionId === null
@@ -368,7 +386,7 @@ function migrateLegacyConfig(
     id: config.id,
     backendKind,
     transportKind,
-    label: config.name,
+    label: sanitizeLegacyYouMindEmailLabel(backendKind, config.name),
     ...(environment ? { environment } : {}),
     createdAt: config.createdAt,
     url: config.url,
@@ -546,7 +564,7 @@ function createDescriptor(
     id: record.id,
     backendKind: record.backendKind,
     transportKind: record.transportKind,
-    label: record.label,
+    label: sanitizeLegacyYouMindEmailLabel(record.backendKind, record.label),
     ...(record.environment ? { environment: record.environment } : {}),
     createdAt: record.createdAt,
     ...(bridgeOutdated ? { bridgeOutdated: true } : {}),

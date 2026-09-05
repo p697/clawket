@@ -40,6 +40,7 @@ jest.mock('react-native', () => {
   );
   return {
     Platform: { OS: 'ios', select: (options: Record<string, unknown>) => options.ios ?? options.default },
+    Image: primitive('Image'),
     Pressable: primitive('Pressable'),
     StyleSheet: {
       absoluteFillObject: {},
@@ -86,9 +87,15 @@ jest.mock('lucide-react-native', () => {
   const ReactRuntime = require('react');
   const icon = (name: string) => (props: Record<string, unknown>) => ReactRuntime.createElement(name, props);
   return {
+    Bot: icon('Bot'),
     ChevronRight: icon('ChevronRight'),
+    Clock3: icon('Clock3'),
     Lock: icon('Lock'),
+    MessageCircle: icon('MessageCircle'),
+    Pin: icon('Pin'),
+    Radio: icon('Radio'),
     Search: icon('Search'),
+    UsersRound: icon('UsersRound'),
   };
 });
 
@@ -248,8 +255,12 @@ describe.each(['light', 'dark'] as const)('%s roster primitives', (scheme) => {
         testID="roster-row"
         agentId="main"
         name="Main"
+        avatarName="Owning Agent"
+        emoji="C"
         preview="Latest message"
         timeLabel="2h"
+        pinned
+        sessionKind="channel"
         onPress={jest.fn()}
       />,
     );
@@ -272,6 +283,34 @@ describe.each(['light', 'dark'] as const)('%s roster primitives', (scheme) => {
     expect(resting).not.toHaveProperty('borderWidth');
     expect(resting).not.toHaveProperty('borderColor');
     expect(root.props.android_ripple).toBeUndefined();
+    expect(result.getByTestId('roster-row-pin-icon')).toBeTruthy();
+    expect(result.getByTestId('roster-row-avatar').props.accessibilityLabel).toBe('Owning Agent');
+    expect(result.getByTestId('roster-row-avatar-overlay')).toBeTruthy();
+    expect(result.getByTestId('roster-row-avatar-overlay-icon')).toBeTruthy();
+  });
+
+  it('shows cached sync and lock state without stale attention or unread badges', () => {
+    const result = render(
+      <RosterRow
+        testID="cached-row"
+        agentId="main"
+        name="Main"
+        preview="Cached message"
+        timeLabel="2h"
+        unreadCount={8}
+        attention
+        cached
+        locked
+        accessibilityLabel="Main, Last synced"
+        onPress={jest.fn()}
+      />,
+    );
+
+    expect(result.getByTestId('cached-row-lock-icon')).toBeTruthy();
+    expect(result.getByTestId('cached-row-synced').props.children).toBe('2h');
+    expect(result.getByTestId('cached-row').props.accessibilityLabel).toBe('Main, Last synced');
+    expect(result.queryByTestId('cached-row-attention')).toBeNull();
+    expect(result.queryByTestId('cached-row-unread')).toBeNull();
   });
 
   it('renders system events, skeletons, and banners with canonical semantic colors', () => {
@@ -343,6 +382,33 @@ describe('AgentAvatar states and motion', () => {
     expect(getAgentInitials('Ada Lovelace')).toBe('AL');
     expect(getAgentInitials('助手')).toBe('助手');
     expect(getAgentInitials('   ')).toBe('');
+  });
+
+  it('renders an image avatar with initials as its fallback and preserves an explicit emoji', () => {
+    const image = render(
+      <AgentAvatar
+        testID="sprite-avatar"
+        agentId="sprite"
+        name="Sprite"
+        avatarUrl=" https://cdn.example.invalid/sprite.png "
+      />,
+    );
+    expect(image.getByTestId('sprite-avatar-image').props.source).toEqual({
+      uri: 'https://cdn.example.invalid/sprite.png',
+    });
+    expect(image.getByText('SP')).toBeTruthy();
+
+    image.rerender(
+      <AgentAvatar
+        testID="sprite-avatar"
+        agentId="sprite"
+        name="Sprite"
+        emoji="✨"
+        avatarUrl="https://cdn.example.invalid/sprite.png"
+      />,
+    );
+    expect(image.queryByTestId('sprite-avatar-image')).toBeNull();
+    expect(image.getByText('✨')).toBeTruthy();
   });
 
   it('animates the working scan ring and makes it solid for reduced motion', () => {

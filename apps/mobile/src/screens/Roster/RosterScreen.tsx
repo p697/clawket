@@ -332,20 +332,29 @@ export function RosterView({
     const activeConnectionOffline = item.connectionId === activeConnectionId
       && (showOfflineBanner ?? state === 'offline');
     const open = item.locked ? onOpenLockedRow : onOpenRow;
+    const timeLabel = relativeTime(
+      item.cached ? item.syncedAt : item.updatedAt,
+      (key, count) => count === undefined ? t(key) : t(key, { count }),
+    );
     return (
       <RosterRow
         testID={`roster-row-${item.key}`}
         agentId={item.agentId}
         name={item.name}
+        avatarName={item.avatarName}
         emoji={item.emoji}
-        preview={item.preview ?? t('No activity yet')}
+        avatarUrl={item.avatarUrl}
+        preview={item.subtitle?.label ?? item.preview ?? t('No activity yet')}
+        pinned={item.kind === 'pinned_session'}
+        sessionKind={item.sessionKind}
         avatarStatus={activeConnectionOffline ? 'offline' : item.working ? 'working' : 'idle'}
-        timeLabel={relativeTime(item.updatedAt)}
+        timeLabel={timeLabel}
         unreadCount={item.unreadCount}
         attention={item.attention !== null}
         attentionTone="bad"
         cached={item.cached}
         locked={item.locked}
+        accessibilityLabel={item.cached ? `${item.name}, ${t('Last synced')}` : item.name}
         onPress={() => open(item)}
         {...(onLongPressRow ? { onLongPress: () => onLongPressRow(item) } : {})}
       />

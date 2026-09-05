@@ -1127,29 +1127,9 @@ export const StorageService = {
     const normalizedScope = scopeId.trim();
     const normalized = normalizeCachedAgentIdentitySnapshot(identity);
     if (!normalizedScope || !normalized) return;
-    let payload = normalized;
-    try {
-      const existingRaw = await AsyncStorage.getItem(
-        cachedAgentIdentityStorageKey(normalizedScope, normalized.agentId),
-      );
-      if (existingRaw) {
-        const existing = normalizeCachedAgentIdentitySnapshot(JSON.parse(existingRaw));
-        if (existing) {
-          payload = {
-            agentId: normalized.agentId,
-            updatedAt: normalized.updatedAt,
-            agentName: normalized.agentName ?? existing.agentName,
-            agentEmoji: normalized.agentEmoji ?? existing.agentEmoji,
-            agentAvatarUri: normalized.agentAvatarUri ?? existing.agentAvatarUri,
-          };
-        }
-      }
-    } catch {
-      payload = normalized;
-    }
     await AsyncStorage.setItem(
       cachedAgentIdentityStorageKey(normalizedScope, normalized.agentId),
-      JSON.stringify(payload),
+      JSON.stringify(normalized),
     );
   },
 

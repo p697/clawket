@@ -97,6 +97,8 @@ export type AdapterChatUpdate =
       phase: 'start' | 'end';
       notice: string | null;
     }
+  | { type: 'pairing_required'; requestId?: string }
+  | { type: 'pairing_resolved'; requestId?: string; decision: 'approved' | 'rejected' }
   | {
       type: 'approval_requested';
       sessionKey?: string;
@@ -107,6 +109,8 @@ export type AdapterChatUpdate =
       type: 'approval_resolved';
       approvalId: string;
       decision: string;
+      kind?: ApprovalRequest['kind'];
+      target?: 'device' | 'node';
       status: ApprovalStatus;
       messageId: string;
     }
@@ -244,6 +248,18 @@ function mapApprovalStatus(decision: string): ApprovalStatus {
 }
 
 function mapApprovalMessage(approval: ApprovalRequest, now: () => number): UiMessage | undefined {
+  if (approval.kind === 'pair') {
+    return {
+      id: `approval_${approval.id}`,
+      role: 'system',
+      text: '',
+      timestampMs: approval.receivedAtMs,
+      approval: {
+        ...approval,
+        status: 'pending',
+      },
+    };
+  }
   if (approval.kind !== 'exec') return undefined;
   return {
     id: `approval_${approval.id}`,
@@ -251,6 +267,7 @@ function mapApprovalMessage(approval: ApprovalRequest, now: () => number): UiMes
     text: '',
     timestampMs: now(),
     approval: {
+      kind: 'exec',
       id: approval.id,
       command: approval.command,
       cwd: approval.cwd,
@@ -396,6 +413,9 @@ export function mapAdapterSessionUpdate(
         ...update,
         notice: update.phase === 'start' ? translate('Compacting context...') : null,
       };
+    case 'pairing_required':
+    case 'pairing_resolved':
+      return update;
     case 'approval_requested':
       return {
         ...update,

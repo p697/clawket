@@ -1,5 +1,5 @@
 import { UiMessage } from '../types/chat';
-import { buildLiveRunListData } from './liveRunThread';
+import { buildLiveRunListData, mergeNewestFirstMessages } from './liveRunThread';
 
 describe('buildLiveRunListData', () => {
   it('interleaves stream segments and tool cards after stable history', () => {
@@ -131,5 +131,30 @@ describe('buildLiveRunListData', () => {
     });
 
     expect(list.some((item) => item.role === 'assistant' && item.streaming)).toBe(false);
+  });
+});
+
+describe('mergeNewestFirstMessages', () => {
+  it('stably interleaves pair cards without moving untimed live rows', () => {
+    const sessionMessages: UiMessage[] = [
+      { id: 'streaming', role: 'assistant', text: 'Current live text' },
+      { id: 'session-new', role: 'assistant', text: 'New', timestampMs: 300 },
+      { id: 'session-old', role: 'user', text: 'Old', timestampMs: 100 },
+    ];
+    const pairMessages: UiMessage[] = [
+      { id: 'pair-new', role: 'system', text: '', timestampMs: 400 },
+      { id: 'pair-middle', role: 'system', text: '', timestampMs: 200 },
+      { id: 'pair-tied', role: 'system', text: '', timestampMs: 100 },
+    ];
+
+    expect(mergeNewestFirstMessages(sessionMessages, pairMessages).map((message) => message.id))
+      .toEqual([
+        'streaming',
+        'pair-new',
+        'session-new',
+        'pair-middle',
+        'session-old',
+        'pair-tied',
+      ]);
   });
 });

@@ -78,31 +78,87 @@ describe('mapGatewayAdapterEvent', () => {
         expiresAtMs: 123,
       },
     }]);
+    expect(mapGatewayAdapterEvent({
+      type: 'execApprovalResolved',
+      payload: { id: 'approval-1', decision: 'deny' },
+    }, 'fallback')).toEqual([{
+      type: 'approval_resolved',
+      approvalId: 'approval-1',
+      decision: 'deny',
+      kind: 'exec',
+    }]);
   });
 
-  it('uses the same stable fallback id for pairing request and resolution events', () => {
+  it('keeps self-device handshake pairing state separate from owner approvals', () => {
     expect(mapGatewayAdapterEvent({
       type: 'pairingRequired',
       payload: {},
-    }, 'fallback', () => 123)).toEqual([{
-      type: 'approval_requested',
-      approval: {
-        kind: 'pair',
-        id: 'pair',
-        target: 'device',
-        displayName: null,
-        platform: null,
-        receivedAtMs: 123,
-      },
-    }]);
+    }, 'fallback', () => 123)).toEqual([{ type: 'pairing_required', requestId: undefined }]);
 
     expect(mapGatewayAdapterEvent({
       type: 'pairingResolved',
       payload: { decision: 'approved' },
     }, 'fallback')).toEqual([{
-      type: 'approval_resolved',
-      approvalId: 'pair',
+      type: 'pairing_resolved',
+      requestId: undefined,
       decision: 'approved',
+    }]);
+  });
+
+  it('maps device and node pair approvals to the backend-neutral contract', () => {
+    expect(mapGatewayAdapterEvent({
+      type: 'pairApprovalRequested',
+      payload: {
+        requestId: 'pair-device',
+        target: 'device',
+        displayName: 'Work phone',
+        platform: 'ios',
+        ts: 123,
+      },
+    }, 'fallback')).toEqual([{
+      type: 'approval_requested',
+      approval: {
+        kind: 'pair',
+        id: 'pair-device',
+        target: 'device',
+        displayName: 'Work phone',
+        platform: 'ios',
+        receivedAtMs: 123,
+      },
+    }]);
+    expect(mapGatewayAdapterEvent({
+      type: 'pairApprovalRequested',
+      payload: {
+        requestId: 'pair-node',
+        target: 'node',
+        displayName: null,
+        platform: null,
+      },
+    }, 'fallback', () => 456)).toEqual([{
+      type: 'approval_requested',
+      approval: {
+        kind: 'pair',
+        id: 'pair-node',
+        target: 'node',
+        displayName: null,
+        platform: null,
+        receivedAtMs: 456,
+      },
+    }]);
+    expect(mapGatewayAdapterEvent({
+      type: 'pairApprovalResolved',
+      payload: {
+        requestId: 'pair-node',
+        target: 'node',
+        decision: 'rejected',
+        ts: 789,
+      },
+    }, 'fallback')).toEqual([{
+      type: 'approval_resolved',
+      approvalId: 'pair-node',
+      decision: 'rejected',
+      kind: 'pair',
+      target: 'node',
     }]);
   });
 });

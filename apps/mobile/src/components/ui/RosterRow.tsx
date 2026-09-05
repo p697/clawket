@@ -1,4 +1,5 @@
 import React from 'react';
+import type { SessionKind } from '@clawket/agent-protocol';
 import {
   Pressable,
   StyleProp,
@@ -7,7 +8,7 @@ import {
   type ViewStyle,
   View,
 } from 'react-native';
-import { Lock } from 'lucide-react-native';
+import { Lock, Pin } from 'lucide-react-native';
 import Animated, {
   interpolateColor,
   useAnimatedStyle,
@@ -28,19 +29,25 @@ import {
   StatusSize,
 } from '../../theme/tokens';
 import {
+  AGENT_AVATAR_METRICS,
   AgentAvatar,
   type AgentAttentionTone,
   type AgentAvatarStatus,
 } from './AgentAvatar';
 import { formatFloatingButtonBadgeCount } from './FloatingButton';
+import { resolveSessionKindIcon } from './sessionKindIcon';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export type RosterRowProps = Readonly<{
   agentId: string;
   name: string;
+  avatarName?: string;
   preview: string;
   emoji?: string | null;
+  avatarUrl?: string | null;
+  pinned?: boolean;
+  sessionKind?: SessionKind;
   avatarStatus?: AgentAvatarStatus;
   attentionTone?: AgentAttentionTone;
   timeLabel?: string;
@@ -58,8 +65,12 @@ export type RosterRowProps = Readonly<{
 export function RosterRow({
   agentId,
   name,
+  avatarName,
   preview,
   emoji,
+  avatarUrl,
+  pinned = false,
+  sessionKind,
   avatarStatus = 'idle',
   attentionTone = 'bad',
   timeLabel,
@@ -74,6 +85,9 @@ export function RosterRow({
   testID,
 }: RosterRowProps): React.JSX.Element {
   const { theme } = useAppTheme();
+  const AvatarOverlayIcon = pinned && sessionKind
+    ? resolveSessionKindIcon(sessionKind)
+    : null;
   const pressProgress = useSharedValue(0);
   const pressedStyle = useAnimatedStyle(() => ({
     backgroundColor: interpolateColor(
@@ -109,25 +123,72 @@ export function RosterRow({
         style,
       ]}
     >
-      <AgentAvatar
-        testID={testID ? `${testID}-avatar` : undefined}
-        agentId={agentId}
-        name={name}
-        emoji={emoji}
-        status={resolvedAvatarStatus}
-        attentionTone={attentionTone}
-        variant="roster"
-      />
+      <View style={styles.avatarSlot}>
+        <AgentAvatar
+          testID={testID ? `${testID}-avatar` : undefined}
+          agentId={agentId}
+          name={avatarName ?? name}
+          emoji={emoji}
+          avatarUrl={avatarUrl}
+          status={resolvedAvatarStatus}
+          attentionTone={attentionTone}
+          variant="roster"
+        />
+        {AvatarOverlayIcon ? (
+          <View
+            testID={testID ? `${testID}-avatar-overlay` : undefined}
+            pointerEvents="none"
+            style={[styles.avatarOverlay, { backgroundColor: theme.colors.surfaceFloating }]}
+          >
+            <AvatarOverlayIcon
+              testID={testID ? `${testID}-avatar-overlay-icon` : undefined}
+              size={Space.md}
+              color={theme.colors.inkSecondary}
+              strokeWidth={BorderWidth.strong}
+            />
+          </View>
+        ) : null}
+      </View>
       <View style={styles.copy}>
-        <Text style={[styles.name, { color: theme.colors.ink }]} numberOfLines={1}>
-          {name}
-        </Text>
+        <View style={styles.nameRow}>
+          {pinned ? (
+            <Pin
+              testID={testID ? `${testID}-pin-icon` : undefined}
+              size={IconSize.sm}
+              color={theme.colors.inkTertiary}
+              strokeWidth={BorderWidth.strong}
+            />
+          ) : null}
+          <Text style={[styles.name, { color: theme.colors.ink }]} numberOfLines={1}>
+            {name}
+          </Text>
+        </View>
         <Text style={[styles.preview, { color: theme.colors.inkSecondary }]} numberOfLines={1}>
           {preview}
         </Text>
       </View>
       <View testID={testID ? `${testID}-trailing` : undefined} style={styles.trailing}>
-        {locked ? (
+        {cached ? (
+          <View style={styles.cachedStatus}>
+            {locked ? (
+              <Lock
+                testID={testID ? `${testID}-lock-icon` : undefined}
+                size={IconSize.sm}
+                color={theme.colors.inkTertiary}
+                strokeWidth={BorderWidth.strong}
+              />
+            ) : null}
+            {timeLabel ? (
+              <Text
+                testID={testID ? `${testID}-synced` : undefined}
+                style={[styles.time, { color: theme.colors.inkTertiary }]}
+                numberOfLines={1}
+              >
+                {timeLabel}
+              </Text>
+            ) : null}
+          </View>
+        ) : locked ? (
           <Lock
             testID={testID ? `${testID}-lock-icon` : undefined}
             size={IconSize.sm}
@@ -166,15 +227,36 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Space.md,
   },
+  avatarSlot: {
+    width: AGENT_AVATAR_METRICS.roster.size,
+    height: AGENT_AVATAR_METRICS.roster.size,
+    position: 'relative',
+  },
+  avatarOverlay: {
+    position: 'absolute',
+    top: -Space.xs,
+    right: -Space.xs,
+    width: Space.lg,
+    height: Space.lg,
+    borderRadius: Radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   copy: {
     flex: 1,
     minWidth: 0,
     gap: Space.xs,
   },
   name: {
+    flexShrink: 1,
     fontSize: FontSize.body,
     lineHeight: LineHeight.body,
     fontWeight: FontWeight.semibold,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space.xs,
   },
   preview: {
     fontSize: FontSize.secondary,
@@ -185,6 +267,11 @@ const styles = StyleSheet.create({
     minWidth: Space.xl,
     alignItems: 'flex-end',
     justifyContent: 'center',
+  },
+  cachedStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space.xs,
   },
   time: {
     fontSize: FontSize.caption,

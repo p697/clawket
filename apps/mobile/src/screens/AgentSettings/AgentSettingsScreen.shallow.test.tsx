@@ -7,6 +7,7 @@ import {
   type ConnectionDescriptor,
 } from '@clawket/agent-protocol';
 import {
+  AgentSettingsRuntimeScreen,
   AgentSettingsScreen,
   AgentSettingsRouteLoading,
   AgentSettingsView,
@@ -243,6 +244,40 @@ describe('AgentSettingsView shallow states', () => {
     expect(view.getByTestId('agent-settings-loading')).toBeTruthy();
     await waitFor(() => expect(view.getByText('loaded-model')).toBeTruthy());
     expect(mockLoadSummary).toHaveBeenCalledWith(adapter, agent);
+  });
+
+  it('renders the authenticated YouMind email through the route-scoped container', async () => {
+    const youmindConnection: ConnectionDescriptor = {
+      id: 'connection-youmind',
+      backendKind: 'youmind',
+      transportKind: 'https',
+      label: 'YouMind',
+      createdAt: 2,
+      isFreeSlot: true,
+    };
+    const sprite: AgentDescriptor = {
+      connectionId: youmindConnection.id,
+      agentId: 'sprite-one',
+      name: 'My Sprite',
+      isMain: true,
+      mainSessionKey: 'main',
+    };
+    const loadIdentityDetail = jest.fn(async () => 'owner@example.com');
+    const view = render(
+      <AgentSettingsRuntimeScreen
+        {...viewProps({
+          connection: youmindConnection,
+          agent: sprite,
+          capabilities: { ...CAPABILITY_MATRIX.youmind },
+        })}
+        adapter={null}
+        loadIdentityDetail={loadIdentityDetail}
+      />,
+    );
+
+    await waitFor(() => expect(view.getByText('owner@example.com')).toBeTruthy());
+    expect(loadIdentityDetail).toHaveBeenCalledWith(youmindConnection);
+    expect(view.getByTestId('agent-settings-identity').props.onPress).toBeUndefined();
   });
 
   it('does not expose a locked Agent to management summary calls', async () => {

@@ -46,6 +46,19 @@ export type GatewayProtocolEvents = {
     deviceId?: string;
     decision: 'approved' | 'rejected';
   };
+  pairApprovalRequested: {
+    requestId: string;
+    target: 'device' | 'node';
+    displayName: string | null;
+    platform: string | null;
+    ts: number;
+  };
+  pairApprovalResolved: {
+    requestId: string;
+    target: 'device' | 'node';
+    decision: 'approved' | 'rejected';
+    ts: number;
+  };
   execApprovalRequested: {
     id: string;
     request: {

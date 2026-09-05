@@ -8,10 +8,14 @@ export type RosterDisplayRow = Readonly<{
   agentId: string;
   sessionKey: string;
   name: string;
+  avatarName?: string;
   emoji?: string;
   avatarUrl?: string;
   preview?: string;
+  subtitle?: RosterConnectionGroup['agents'][number]['subtitle'];
+  sessionKind?: SessionDescriptor['kind'];
   updatedAt: number | null;
+  syncedAt: number | null;
   unreadCount: number;
   attention: SessionDescriptor['attention'];
   working: boolean;
@@ -47,13 +51,14 @@ function sessionTitle(session: SessionDescriptor): string {
 
 function buildPinnedRows(
   group: RosterConnectionGroup,
-  agentId: string,
+  agent: RosterConnectionGroup['agents'][number]['agent'],
   sessions: ReadonlyArray<SessionDescriptor>,
   pinnedKeys: ReadonlyArray<string>,
   locked: boolean,
   agentPinned: boolean,
   muted: boolean,
 ): RosterDisplayRow[] {
+  const cached = group.source === 'cache';
   const rank = new Map(pinnedKeys.map((key, index) => [key, index]));
   return sessions
     .filter((session) => rank.has(session.key) && session.allowedActions.pin)
@@ -66,15 +71,20 @@ function buildPinnedRows(
       key: `session:${group.connection.id}:${session.key}`,
       kind: 'pinned_session' as const,
       connectionId: group.connection.id,
-      agentId,
+      agentId: agent.agentId,
       sessionKey: session.key,
       name: sessionTitle(session),
+      avatarName: agent.name,
+      ...(agent.emoji ? { emoji: agent.emoji } : {}),
+      ...(agent.avatarUrl ? { avatarUrl: agent.avatarUrl } : {}),
       ...(session.preview ? { preview: session.preview } : {}),
+      sessionKind: session.kind,
       updatedAt: session.updatedAt,
+      syncedAt: cached ? group.syncedAt : null,
       unreadCount: 0,
-      attention: session.attention,
-      working: session.hasActiveRun,
-      cached: group.source === 'cache',
+      attention: cached ? null : session.attention,
+      working: cached ? false : session.hasActiveRun,
+      cached,
       locked,
       agentPinned,
       muted,
@@ -85,14 +95,15 @@ function buildPinnedRows(
 function compareAgentPriority(
   connectionId: string,
   preferences: RosterModelOptions['agentPreferences'],
+  cached: boolean,
   left: RosterConnectionGroup['agents'][number],
   right: RosterConnectionGroup['agents'][number],
 ): number {
   const leftPinned = preferences?.[`${connectionId}:${left.agent.agentId}`]?.agentPinned === true;
   const rightPinned = preferences?.[`${connectionId}:${right.agent.agentId}`]?.agentPinned === true;
   return Number(rightPinned) - Number(leftPinned)
-    || Number(right.attentionCount > 0) - Number(left.attentionCount > 0)
-    || Number(right.hasUnread) - Number(left.hasUnread)
+    || (cached ? 0 : Number(right.attentionCount > 0) - Number(left.attentionCount > 0))
+    || (cached ? 0 : Number(right.hasUnread) - Number(left.hasUnread))
     || (right.updatedAt ?? 0) - (left.updatedAt ?? 0);
 }
 
@@ -109,12 +120,14 @@ export function buildRosterRows(
   const rows: RosterDisplayRow[] = [];
 
   for (const group of groups) {
+    const cached = group.source === 'cache';
     const sortedAgents = group.agents
       .map((summary, index) => ({ summary, index }))
       .sort((left, right) => (
         compareAgentPriority(
           group.connection.id,
           options.agentPreferences,
+          cached,
           left.summary,
           right.summary,
         ) || left.index - right.index
@@ -132,21 +145,27 @@ export function buildRosterRows(
         agentId: agent.agentId,
         sessionKey: agent.mainSessionKey,
         name: agent.name,
+        avatarName: agent.name,
         ...(agent.emoji ? { emoji: agent.emoji } : {}),
         ...(agent.avatarUrl ? { avatarUrl: agent.avatarUrl } : {}),
-        ...(summary.preview ? { preview: summary.preview } : {}),
+        ...(summary.subtitle
+          ? { subtitle: summary.subtitle }
+          : summary.preview
+            ? { preview: summary.preview }
+            : {}),
         updatedAt: summary.updatedAt,
-        unreadCount: summary.unreadCount,
-        attention: summary.attention,
-        working: summary.sessions.some((session) => session.hasActiveRun),
-        cached: group.source === 'cache',
+        syncedAt: cached ? group.syncedAt : null,
+        unreadCount: cached ? 0 : summary.unreadCount,
+        attention: cached ? null : summary.attention,
+        working: cached ? false : summary.sessions.some((session) => session.hasActiveRun),
+        cached,
         locked,
         agentPinned: preferences?.agentPinned === true,
         muted: preferences?.muted === true,
       });
       rows.push(...buildPinnedRows(
         group,
-        agent.agentId,
+        agent,
         summary.sessions,
         options.pinnedSessionKeys?.[`${group.connection.id}:${agent.agentId}`] ?? [],
         locked,

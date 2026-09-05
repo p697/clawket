@@ -42,6 +42,25 @@ export type GatewayAdapterEvent =
       };
     }
   | { type: 'execApprovalResolved'; payload: { id: string; decision: string } }
+  | {
+      type: 'pairApprovalRequested';
+      payload: {
+        requestId: string;
+        target: 'device' | 'node';
+        displayName: string | null;
+        platform: string | null;
+        ts?: number;
+      };
+    }
+  | {
+      type: 'pairApprovalResolved';
+      payload: {
+        requestId: string;
+        target: 'device' | 'node';
+        decision: 'approved' | 'rejected';
+        ts: number;
+      };
+    }
   | { type: 'pairingRequired'; payload: { requestId?: string } }
   | {
       type: 'pairingResolved';
@@ -149,25 +168,34 @@ export function mapGatewayAdapterEvent(
         type: 'approval_resolved',
         approvalId: event.payload.id,
         decision: event.payload.decision,
+        kind: 'exec',
       }];
-    case 'pairingRequired': {
-      const approvalId = event.payload.requestId ?? 'pair';
+    case 'pairApprovalRequested':
       return [{
         type: 'approval_requested',
         approval: {
           kind: 'pair',
-          id: approvalId,
-          target: 'device',
-          displayName: null,
-          platform: null,
-          receivedAtMs: now(),
+          id: event.payload.requestId,
+          target: event.payload.target,
+          displayName: event.payload.displayName,
+          platform: event.payload.platform,
+          receivedAtMs: event.payload.ts ?? now(),
         },
       }];
-    }
-    case 'pairingResolved':
+    case 'pairApprovalResolved':
       return [{
         type: 'approval_resolved',
-        approvalId: event.payload.requestId ?? 'pair',
+        approvalId: event.payload.requestId,
+        decision: event.payload.decision,
+        kind: 'pair',
+        target: event.payload.target,
+      }];
+    case 'pairingRequired':
+      return [{ type: 'pairing_required', requestId: event.payload.requestId }];
+    case 'pairingResolved':
+      return [{
+        type: 'pairing_resolved',
+        requestId: event.payload.requestId,
         decision: event.payload.decision,
       }];
     case 'error':

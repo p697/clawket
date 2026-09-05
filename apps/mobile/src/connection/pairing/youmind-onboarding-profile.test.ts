@@ -24,7 +24,7 @@ function descriptor(): ConnectionDescriptor {
     id: 'youmind-connection',
     backendKind: 'youmind',
     transportKind: 'https',
-    label: 'YouMind (lucy@example.com)',
+    label: 'YouMind',
     createdAt: 1,
     isFreeSlot: true,
   };
@@ -74,11 +74,13 @@ describe('YouMind onboarding connection profile', () => {
       id: 'youmind-connection',
       backendKind: 'youmind',
       transportKind: 'https',
-      label: 'YouMind (lucy@example.com)',
+      label: 'YouMind',
       url: 'https://youmind.com',
       youmind: { authScopeKey: 'youmind-connection' },
       debugMode: true,
     });
+    expect(JSON.stringify(coordinator.upsertConnection.mock.calls))
+      .not.toContain('lucy@example.com');
     expect(coordinator.activate).toHaveBeenCalledWith('youmind-connection');
     expect(api.clearSession).not.toHaveBeenCalled();
     expect(mockGatewayConnectSaved).toHaveBeenCalledWith({

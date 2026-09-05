@@ -94,9 +94,23 @@ function group(id: string, source: 'live' | 'cache' = 'live'): RosterConnectionG
 
 describe('Roster model', () => {
   it('keeps pinned sessions immediately below their Agent and connection groups adjacent', () => {
-    const rows = buildRosterRows([group('one'), group('two', 'cache')], {
+    const cachedSource = group('two', 'cache');
+    const cachedGroup: RosterConnectionGroup = {
+      ...cachedSource,
+      agents: cachedSource.agents.map((summary, index) => index === 0
+        ? {
+            ...summary,
+            sessions: summary.sessions.map((entry) => ({
+              ...entry,
+              hasActiveRun: true,
+            })),
+          }
+        : summary),
+    };
+    const rows = buildRosterRows([group('one'), cachedGroup], {
       pinnedSessionKeys: {
         'one:main': ['agent:main:channel:general'],
+        'two:main': ['agent:main:channel:general'],
       },
     });
 
@@ -105,10 +119,39 @@ describe('Roster model', () => {
       'session:one:agent:main:channel:general',
       'agent:one:builder',
       'agent:two:main',
+      'session:two:agent:main:channel:general',
       'agent:two:builder',
     ]);
-    expect(rows[1]).toMatchObject({ name: '#general', kind: 'pinned_session' });
-    expect(rows.slice(3).every((row) => row.cached)).toBe(true);
+    expect(rows[1]).toMatchObject({
+      name: '#general',
+      kind: 'pinned_session',
+      avatarName: 'Main',
+      emoji: 'C',
+      sessionKind: 'channel',
+    });
+    expect(rows.slice(3).every((row) => (
+      row.cached
+      && row.syncedAt === 100
+      && row.unreadCount === 0
+      && row.attention === null
+      && row.working === false
+    ))).toBe(true);
+  });
+
+  it('projects registry-provided semantic subtitles without inspecting the backend', () => {
+    const source = group('sprite');
+    const rows = buildRosterRows([{
+      ...source,
+      agents: source.agents.map((summary, index) => index === 0
+        ? { ...summary, subtitle: { kind: 'backend' as const, label: 'YouMind' } }
+        : summary),
+    }]);
+
+    expect(rows[0]).toMatchObject({
+      kind: 'agent',
+      subtitle: { kind: 'backend', label: 'YouMind' },
+    });
+    expect(rows[0]).not.toHaveProperty('preview');
   });
 
   it('locks inaccessible Agents and their pinned sessions without hiding them', () => {

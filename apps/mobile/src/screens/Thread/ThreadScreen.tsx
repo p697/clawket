@@ -188,16 +188,27 @@ export function ThreadScreen({
     analyticsOpenedKeyRef.current = openedKey;
     analyticsEvents.threadOpened({ backend: analyticsBackend, kind, from });
   }, [analyticsBackend, connectionId, currentSession?.kind, from, sessionKey]);
-  const agent = app.agents.find((candidate) => candidate.id === agentId);
-  const agentName = agent?.identity?.name?.trim()
-    || agent?.name?.trim()
-    || controller.agentDisplayName?.trim()
-    || agentId;
-  const locale = i18n.resolvedLanguage || i18n.language;
   const currentRosterAgent = connections.roster
     .find((group) => group.connection.id === connectionId)
     ?.agents.find((candidate) => candidate.agent.agentId === agentId)
     ?.agent;
+  const agent = app.agents.find((candidate) => (
+    candidate.id === agentId && candidate.connectionId === connectionId
+  )) ?? app.agents.find((candidate) => (
+    candidate.id === agentId && !candidate.connectionId
+  ));
+  const agentName = currentRosterAgent?.name?.trim()
+    || controller.agentDisplayName?.trim()
+    || agent?.identity?.name?.trim()
+    || agent?.name?.trim()
+    || agentId;
+  const agentEmoji = currentRosterAgent?.emoji
+    ?? controller.agentEmoji
+    ?? agent?.identity?.emoji;
+  const agentAvatarUrl = currentRosterAgent?.avatarUrl
+    ?? controller.agentAvatarUri
+    ?? agent?.identity?.avatarUrl;
+  const locale = i18n.resolvedLanguage || i18n.language;
   const isMainThread = currentSession?.kind === 'main'
     || sessionKey === app.mainSessionKey
     || sessionKey === 'main'
@@ -473,7 +484,9 @@ export function ThreadScreen({
       <ThreadView
         agentId={agentId}
         agentName={agentName}
-        agentEmoji={agent?.identity?.emoji}
+        sessionKey={controller.sessionKey ?? sessionKey}
+        agentEmoji={agentEmoji}
+        agentAvatarUrl={agentAvatarUrl}
         sessionTitle={currentSession?.title ?? currentSession?.label}
         isMainSession={sessionKey === app.mainSessionKey}
         model={controller.currentModelHeaderLabel}
@@ -485,6 +498,7 @@ export function ThreadScreen({
         capabilities={capabilities}
         state={state}
         messages={controller.listData}
+        compactionNotice={controller.compactionNotice}
         runCards={runCards}
         locale={locale}
         input={controller.input}
@@ -705,6 +719,9 @@ export function createThreadCopy(t: TFunction): ThreadCopy {
     toolCompleted: t('Completed', { ns: 'chat' }),
     toolFailed: t('Failed', { ns: 'chat' }),
     approvalTitle: t('Allow exec?', { ns: 'chat' }),
+    approvalError: t('Could not update this request. Try again.', { ns: 'chat' }),
+    device: t('Device', { ns: 'chat' }),
+    node: t('Node', { ns: 'chat' }),
     allow: t('Allow', { ns: 'chat' }),
     reject: t('Reject', { ns: 'chat' }),
     allowed: t('Allowed', { ns: 'chat' }),

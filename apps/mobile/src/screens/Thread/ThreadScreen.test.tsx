@@ -157,11 +157,13 @@ function createController(): Record<string, unknown> {
     activityLabel: null,
     agentDisplayName: 'Controller Atlas',
     agentAvatarUri: null,
+    agentEmoji: null,
     availableModels: [],
     availableProviders: [],
     canAddMoreImages: true,
     canAbortCurrentRun: true,
     canSend: true,
+    compactionNotice: 'Compacting context...',
     childSessionActivityRef: { current: new Map() },
     childSessionActivityVersion: 0,
     clearChildSessionActivities: jest.fn(),
@@ -321,7 +323,8 @@ describe('ThreadScreen connection container', () => {
     });
     expect(mockThreadViewProps).toMatchObject({
       agentId: 'atlas',
-      agentName: 'Atlas',
+      agentName: 'Controller Atlas',
+      sessionKey: 'agent:atlas:main',
       model: 'Sonnet',
       contextUsed: 46,
       contextWindow: 100,
@@ -329,6 +332,7 @@ describe('ThreadScreen connection container', () => {
       capabilities: adapter.capabilities,
       topInset: 24,
       bottomInset: 16,
+      compactionNotice: 'Compacting context...',
     });
     expect(mockThreadViewProps?.composerRef).toBe(mockController.composerRef);
     expect(mockThreadViewProps?.onPasteFiles).toBe(mockController.onPasteFiles);
@@ -357,6 +361,56 @@ describe('ThreadScreen connection container', () => {
     expect(mockController.abortCurrentRun).toHaveBeenCalledTimes(1);
     expect(mockedAnalyticsEvents.chatAbortTapped).toHaveBeenCalledWith({ backend: 'openclaw' });
     expect(mockThreadOverlayProps?.stopConfirmation.visible).toBe(false);
+  });
+
+  it('prefers route-scoped roster identity over same-id agents from another connection', () => {
+    mockApp.agents = [{
+      connectionId: 'connection-2',
+      id: 'atlas',
+      name: 'Legacy Atlas',
+      identity: {
+        name: 'Legacy Atlas',
+        emoji: 'L',
+        avatarUrl: 'https://example.com/legacy.png',
+      },
+    }];
+    mockController.agentDisplayName = 'Controller Atlas';
+    mockController.agentEmoji = 'C';
+    mockController.agentAvatarUri = 'https://example.com/controller.png';
+    mockConnections.roster = [
+      {
+        connection: { id: 'connection-2' },
+        agents: [{
+          agent: {
+            connectionId: 'connection-2',
+            agentId: 'atlas',
+            name: 'Wrong Atlas',
+            emoji: 'W',
+            avatarUrl: 'https://example.com/wrong.png',
+          },
+        }],
+      },
+      {
+        connection: { id: 'connection-1' },
+        agents: [{
+          agent: {
+            connectionId: 'connection-1',
+            agentId: 'atlas',
+            name: 'Scoped Atlas',
+            emoji: 'S',
+            avatarUrl: 'https://example.com/scoped.png',
+          },
+        }],
+      },
+    ];
+
+    render(<ThreadScreen {...createNavigationProps()} />);
+
+    expect(mockThreadViewProps).toMatchObject({
+      agentName: 'Scoped Atlas',
+      agentEmoji: 'S',
+      agentAvatarUrl: 'https://example.com/scoped.png',
+    });
   });
 
   it('uses the connection quota reason supplied by the host and keeps agents as the default', () => {

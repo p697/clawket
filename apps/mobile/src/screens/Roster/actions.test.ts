@@ -21,6 +21,7 @@ function row(
     sessionKey: 'agent:agent:main',
     name: 'Agent',
     updatedAt: 1,
+    syncedAt: null,
     unreadCount: 0,
     attention: null,
     working: false,

@@ -6,6 +6,7 @@ import { analyticsEvents } from '../services/analytics/events';
 import { recordSuccessfulSendForAutomaticReview } from '../services/auto-app-review';
 import { cacheMessageImages } from '../services/image-cache';
 import { StorageService } from '../services/storage';
+import { useChatAutoCache } from '../hooks/useChatAutoCache';
 import { useAdapterChatEvents } from './useAdapterChatEvents';
 import { useChatController as useChatControllerImpl } from './useChatController';
 
@@ -175,6 +176,7 @@ function resetMockState() {
   mockAppContext.activeGatewayConfigId = null;
   mockAppContext.mainSessionKey = 'agent:main:main';
   mockAppContext.currentAgentId = 'main';
+  mockAppContext.agents = [];
   mockAppContext.pendingAgentSwitch = null;
   mockAppContext.execApprovalEnabled = false;
   mockAppContext.speechRecognitionLanguage = 'system';
@@ -237,7 +239,18 @@ function createAdapter(
   connectionState: 'ready' | 'connecting' = 'ready',
   backendKind: 'openclaw' | 'hermes' = 'openclaw',
 ) {
+  const listeners: Record<string, Set<(...args: any[]) => void>> = {
+    update: new Set(),
+    state: new Set(),
+    sessions: new Set(),
+  };
   const resolveExec = jest.fn().mockResolvedValue(undefined);
+  const approveDevice = jest.fn().mockResolvedValue(undefined);
+  const rejectDevice = jest.fn().mockResolvedValue(undefined);
+  const approveNode = jest.fn().mockResolvedValue(undefined);
+  const rejectNode = jest.fn().mockResolvedValue(undefined);
+  const listDevices = jest.fn().mockResolvedValue({ pending: [], paired: [] });
+  const listNodePairRequests = jest.fn().mockResolvedValue({ pending: [], nodes: [] });
   return {
     connection: {
       id: 'connection-1',
@@ -263,14 +276,37 @@ function createAdapter(
     cancel: jest.fn().mockResolvedValue(undefined),
     management: {
       approvals: { resolveExec },
+      devices: { list: listDevices, approve: approveDevice, reject: rejectDevice },
+      nodes: {
+        pairRequests: listNodePairRequests,
+        approve: approveNode,
+        reject: rejectNode,
+      },
       models: { listThinkingLevels: () => ['off', 'low', 'high'] },
     },
-    on: jest.fn(() => jest.fn()),
+    on: jest.fn((event: string, listener: (...args: any[]) => void) => {
+      listeners[event]?.add(listener);
+      return () => listeners[event]?.delete(listener);
+    }),
+    emitUpdate(update: any) {
+      for (const listener of listeners.update) listener(update);
+    },
+    emitState(state: any) {
+      for (const listener of listeners.state) listener(state);
+    },
   };
 }
 
 function useChatController(options: Record<string, any>) {
   return useChatControllerImpl(options as any);
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((next) => {
+    resolve = next;
+  });
+  return { promise, resolve };
 }
 
 describe('useChatController contract', () => {
@@ -373,6 +409,67 @@ describe('useChatController contract', () => {
     expect(result.current.agentDisplayName).toBe('Snapshot Agent');
     expect(result.current.agentEmoji).toBe('🤖');
     expect(result.current.agentAvatarUri).toBe('https://example.com/avatar.png');
+  });
+
+  it('does not pass another connection global agent identity to the message cache', () => {
+    mockAppContext.agents = [{
+      connectionId: 'connection-a',
+      id: 'main',
+      name: 'Agent A',
+      identity: { name: 'Agent A', emoji: 'A' },
+    }];
+    historyMock.messages = [{ id: 'message-1', role: 'assistant', text: 'Hello' }];
+    const adapter = createAdapter('connecting');
+    adapter.connection.id = 'connection-b';
+
+    renderHook(() =>
+      useChatController({
+        adapter: adapter as any,
+        debugMode: false,
+        showAgentAvatar: true,
+      } as any),
+    );
+
+    expect(jest.mocked(useChatAutoCache)).toHaveBeenLastCalledWith(expect.objectContaining({
+      gatewayConfigId: 'connection-b',
+      agentId: 'main',
+      agentName: undefined,
+      agentEmoji: undefined,
+    }));
+  });
+
+  it('selects the active connection identity when global agents contain the same id twice', () => {
+    mockAppContext.agents = [{
+      connectionId: 'connection-a',
+      id: 'main',
+      name: 'Agent A',
+      identity: { name: 'Agent A', emoji: 'A' },
+    }, {
+      connectionId: 'connection-b',
+      id: 'main',
+      name: 'Agent B',
+      identity: { name: 'Agent B', emoji: 'B' },
+    }];
+    historyMock.messages = [{ id: 'message-1', role: 'assistant', text: 'Hello' }];
+    const adapter = createAdapter('connecting');
+    adapter.connection.id = 'connection-b';
+
+    const { result } = renderHook(() =>
+      useChatController({
+        adapter: adapter as any,
+        debugMode: false,
+        showAgentAvatar: true,
+      } as any),
+    );
+
+    expect(result.current.agentDisplayName).toBe('Agent B');
+    expect(result.current.agentEmoji).toBe('B');
+    expect(jest.mocked(useChatAutoCache)).toHaveBeenLastCalledWith(expect.objectContaining({
+      gatewayConfigId: 'connection-b',
+      agentId: 'main',
+      agentName: 'Agent B',
+      agentEmoji: 'B',
+    }));
   });
 
   it('hydrates agent identity from cached agent storage when snapshot is unavailable', async () => {
@@ -946,6 +1043,226 @@ describe('useChatController contract', () => {
     expect(adapter.management.approvals.resolveExec).toHaveBeenCalledWith('approval-1', 'allow-once');
   });
 
+  it('routes pair decisions to the target management operation', async () => {
+    const adapter = createAdapter('ready');
+    const historyMessages = [
+      { id: 'session-older', role: 'user', text: 'Older', timestampMs: 100 },
+      { id: 'session-newer', role: 'assistant', text: 'Newer', timestampMs: 400 },
+    ];
+    historyMock.messages = historyMessages;
+    adapter.management.devices.list.mockResolvedValue({
+      pending: [{
+        requestId: 'device-request',
+        deviceId: 'phone-1',
+        displayName: 'Phone',
+        platform: 'ios',
+        requestedAtMs: 200,
+      }],
+      paired: [],
+    });
+    adapter.management.nodes.pairRequests.mockResolvedValue({
+      pending: [{
+        requestId: 'node-request',
+        nodeId: 'node-1',
+        displayName: 'Mac',
+        platform: 'darwin',
+        requestedAtMs: 300,
+      }],
+      nodes: [],
+    });
+    const { result } = renderHook(() =>
+      useChatController({
+        adapter: adapter as any,
+        debugMode: false,
+        showAgentAvatar: true,
+      } as any),
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result.current.listData.map((message) => message.id)).toEqual([
+      'session-newer',
+      'approval_pair_node_node-request',
+      'approval_pair_device_device-request',
+      'session-older',
+    ]);
+    expect(historyMock.messages).toEqual(historyMessages);
+
+    await act(async () => {
+      await result.current.resolveApproval('device-request', 'approve', 'device');
+      await result.current.resolveApproval('node-request', 'reject', 'node');
+    });
+
+    expect(mockedAnalytics.approvalResolved.mock.calls).toEqual([
+      [{ kind: 'pair', decision: 'approve' }],
+      [{ kind: 'pair', decision: 'reject' }],
+    ]);
+    expect(adapter.management.devices.approve).toHaveBeenCalledWith('device-request');
+    expect(adapter.management.nodes.reject).toHaveBeenCalledWith('node-request');
+    expect(result.current.listData.map((message) => message.approval?.status)).toEqual([
+      undefined,
+      'denied',
+      'allowed',
+      undefined,
+    ]);
+    expect(historyMock.messages).toEqual(historyMessages);
+  });
+
+  it('keeps a failed pair decision pending and emits no success analytics', async () => {
+    const adapter = createAdapter('ready');
+    adapter.management.devices.list.mockResolvedValue({
+      pending: [{
+        requestId: 'device-request',
+        deviceId: 'phone-1',
+        displayName: 'Phone',
+        requestedAtMs: 1,
+      }],
+      paired: [],
+    });
+    adapter.management.devices.approve.mockRejectedValueOnce(new Error('stale request'));
+    const { result } = renderHook(() =>
+      useChatController({
+        adapter: adapter as any,
+        debugMode: false,
+        showAgentAvatar: true,
+      } as any),
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await result.current.resolveApproval('device-request', 'approve', 'device');
+    });
+
+    expect(adapter.management.devices.approve).toHaveBeenCalledWith('device-request');
+    expect(adapter.management.devices.list).toHaveBeenCalledTimes(1);
+    expect(mockedAnalytics.approvalResolved).not.toHaveBeenCalled();
+    expect(result.current.listData[0]?.approval).toMatchObject({
+      id: 'device-request',
+      status: 'pending',
+      resolving: false,
+      resolutionError: true,
+    });
+    expect(historyMock.messages).toEqual([]);
+
+    await act(async () => {
+      await result.current.resolveApproval('device-request', 'approve', 'device');
+    });
+    expect(adapter.management.devices.approve).toHaveBeenCalledTimes(2);
+    expect(mockedAnalytics.approvalResolved).toHaveBeenCalledWith({
+      kind: 'pair',
+      decision: 'approve',
+    });
+    expect(result.current.listData[0]?.approval).toMatchObject({
+      status: 'allowed',
+      resolving: false,
+      resolutionError: false,
+    });
+  });
+
+  it('keeps a resolving pair card through refresh and deduplicates rapid decisions', async () => {
+    const adapter = createAdapter('ready');
+    const approval = deferred<void>();
+    adapter.management.devices.list.mockResolvedValue({
+      pending: [{
+        requestId: 'device-request',
+        deviceId: 'phone-1',
+        displayName: 'Phone',
+        requestedAtMs: 1,
+      }],
+      paired: [],
+    });
+    adapter.management.devices.approve.mockReturnValueOnce(approval.promise);
+    const { result } = renderHook(() =>
+      useChatController({
+        adapter: adapter as any,
+        debugMode: false,
+        showAgentAvatar: true,
+      } as any),
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    let resolution: Promise<void> | void;
+    act(() => {
+      resolution = result.current.resolveApproval('device-request', 'approve', 'device');
+      result.current.resolveApproval('device-request', 'approve', 'device');
+    });
+    expect(adapter.management.devices.approve).toHaveBeenCalledTimes(1);
+    expect(result.current.listData[0]?.approval).toMatchObject({
+      status: 'pending',
+      resolving: true,
+    });
+
+    adapter.management.devices.list.mockResolvedValue({ pending: [], paired: [] });
+    adapter.management.nodes.pairRequests.mockResolvedValue({ pending: [], nodes: [] });
+    await act(async () => {
+      adapter.emitUpdate({
+        type: 'history_reconciled',
+        sessionKey: 'agent:main:main',
+        history: { key: 'agent:main:main', messages: [], hasActiveRun: false },
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result.current.listData[0]?.approval).toMatchObject({
+      status: 'pending',
+      resolving: true,
+    });
+
+    await act(async () => {
+      approval.resolve();
+      await resolution;
+    });
+    expect(result.current.listData[0]?.approval).toMatchObject({
+      status: 'allowed',
+      resolving: false,
+      resolutionError: false,
+    });
+  });
+
+  it('does not project one connection pair request after the adapter changes', async () => {
+    const firstAdapter = createAdapter('ready');
+    firstAdapter.management.devices.list.mockResolvedValue({
+      pending: [{
+        requestId: 'first-connection-request',
+        deviceId: 'phone-1',
+        displayName: 'First phone',
+        requestedAtMs: 1,
+      }],
+      paired: [],
+    });
+    const secondAdapter = createAdapter('ready');
+    secondAdapter.connection.id = 'connection-2';
+    let currentAdapter = firstAdapter;
+    const { result, rerender } = renderHook(() =>
+      useChatController({
+        adapter: currentAdapter as any,
+        debugMode: false,
+        showAgentAvatar: true,
+      } as any),
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result.current.listData[0]?.approval?.id).toBe('first-connection-request');
+
+    currentAdapter = secondAdapter;
+    rerender(undefined);
+    expect(result.current.listData.some((message) => (
+      message.approval?.id === 'first-connection-request'
+    ))).toBe(false);
+    expect(historyMock.messages).toEqual([]);
+  });
+
   it('skips a second probe when transport was just confirmed healthy', async () => {
     const adapter = createAdapter('ready');
     adapter.probe.mockResolvedValue(true);
@@ -1493,6 +1810,116 @@ describe('useChatController contract', () => {
     expect(historyMock.messages).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: 'error_run-error_500', text: 'Backend failed' }),
     ]));
+  });
+
+  it('shows compaction temporarily and keeps handshake pairing state separate from pair cards', async () => {
+    const adapter = createAdapter('ready');
+    adapter.management.devices.list.mockResolvedValue({
+      pending: [{
+        requestId: 'owner-request',
+        deviceId: 'phone-1',
+        displayName: 'Phone',
+        platform: 'ios',
+        requestedAtMs: 123,
+      }],
+      paired: [],
+    });
+    const { result } = renderHook(() =>
+      useChatController({
+        adapter: adapter as any,
+        debugMode: false,
+        showAgentAvatar: true,
+      } as any),
+    );
+    const eventParams = jest.mocked(useAdapterChatEvents).mock.calls.at(-1)?.[0];
+    expect(eventParams).toBeTruthy();
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    act(() => {
+      eventParams!.onUpdate?.({
+        type: 'compaction',
+        sessionKey: 'agent:main:main',
+        phase: 'start',
+        notice: 'Compacting context...',
+      });
+    });
+    expect(result.current.compactionNotice).toBe('Compacting context...');
+    act(() => jest.advanceTimersByTime(5_000));
+    expect(result.current.compactionNotice).toBeNull();
+
+    act(() => {
+      eventParams!.onUpdate?.({
+        type: 'compaction',
+        sessionKey: 'agent:main:main',
+        phase: 'start',
+        notice: 'Compacting context...',
+      });
+      eventParams!.onUpdate?.({
+        type: 'compaction',
+        sessionKey: 'agent:main:main',
+        phase: 'end',
+        notice: null,
+      });
+    });
+    expect(result.current.compactionNotice).toBeNull();
+
+    act(() => {
+      eventParams!.onUpdate?.({ type: 'pairing_required', requestId: 'self-request' });
+      eventParams!.onUpdate?.({
+        type: 'approval_requested',
+        approval: {
+          kind: 'pair',
+          id: 'owner-request',
+          target: 'device',
+          displayName: 'Phone',
+          platform: 'ios',
+          receivedAtMs: 123,
+        },
+        message: {
+          id: 'approval_owner-request',
+          role: 'system',
+          text: '',
+          timestampMs: 123,
+          approval: {
+            kind: 'pair',
+            id: 'owner-request',
+            target: 'device',
+            displayName: 'Phone',
+            platform: 'ios',
+            receivedAtMs: 123,
+            status: 'pending',
+          },
+        },
+      });
+    });
+    expect(result.current.pairingPending).toBe(true);
+    expect(result.current.listData).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'approval_pair_device_owner-request' }),
+    ]));
+    expect(historyMock.messages).toEqual([]);
+
+    act(() => {
+      adapter.emitUpdate({
+        type: 'approval_resolved',
+        approvalId: 'owner-request',
+        decision: 'approved',
+        kind: 'pair',
+        target: 'device',
+      });
+    });
+    expect(result.current.pairingPending).toBe(true);
+    expect(result.current.listData[0]?.approval?.status).toBe('allowed');
+    act(() => {
+      eventParams!.onUpdate?.({
+        type: 'pairing_resolved',
+        requestId: 'self-request',
+        decision: 'approved',
+      });
+    });
+    expect(result.current.pairingPending).toBe(false);
   });
 
   it('applies adapter approvals and reconciled history to the current session', async () => {

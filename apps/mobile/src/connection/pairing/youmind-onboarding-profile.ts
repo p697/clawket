@@ -70,7 +70,7 @@ export function createYouMindOnboardingConnection(
         id: connectionId,
         backendKind: 'youmind',
         transportKind: 'https',
-        label: buildYouMindConnectionLabel(session.user),
+        label: 'YouMind',
         url: baseUrl,
         youmind: { authScopeKey: connectionId },
         debugMode: input.debugMode,
@@ -116,11 +116,4 @@ export function createYouMindOnboardingConnection(
       return finishInFlight;
     },
   });
-}
-
-function buildYouMindConnectionLabel(
-  user: { email?: string | null; name?: string | null } | null | undefined,
-): string {
-  const identity = user?.email?.trim() || user?.name?.trim();
-  return identity ? `YouMind (${identity})` : 'YouMind';
 }

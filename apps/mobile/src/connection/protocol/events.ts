@@ -8,7 +8,7 @@ type Emit = <K extends keyof GatewayProtocolEvents>(
 ) => void;
 
 export type RoutedEventResult = {
-  pairingApproved?: boolean;
+  pairingResolution?: GatewayProtocolEvents['pairingResolved'];
   terminalSessionChange?: boolean;
 };
 
@@ -34,6 +34,20 @@ export function routeGatewayEvent(
         emit('execApprovalResolved', payload as GatewayProtocolEvents['execApprovalResolved']);
       }
       return {};
+    case 'device.pair.requested':
+    case 'node.pair.requested': {
+      const requested = isRecord(payload) ? payload : {};
+      const requestId = readString(requested.requestId);
+      if (!requestId) return {};
+      emit('pairApprovalRequested', {
+        requestId,
+        target: event === 'node.pair.requested' ? 'node' : 'device',
+        displayName: readString(requested.displayName) ?? null,
+        platform: readString(requested.platform) ?? null,
+        ts: readNumber(requested.ts) ?? now(),
+      });
+      return {};
+    }
     case 'seq.gap': {
       const gap = isRecord(payload) ? payload : {};
       emit('seqGap', {
@@ -56,12 +70,34 @@ export function routeGatewayEvent(
     case 'device.pair.resolved': {
       const resolved = isRecord(payload) ? payload : {};
       const decision = resolved.decision === 'approved' ? 'approved' : 'rejected';
-      emit('pairingResolved', {
-        requestId: readString(resolved.requestId),
+      const requestId = readString(resolved.requestId);
+      const ts = readNumber(resolved.ts) ?? now();
+      if (requestId) {
+        emit('pairApprovalResolved', {
+          requestId,
+          target: 'device',
+          decision,
+          ts,
+        });
+      }
+      const pairingResolution: GatewayProtocolEvents['pairingResolved'] = {
+        requestId,
         deviceId: readString(resolved.deviceId),
         decision,
+      };
+      return { pairingResolution };
+    }
+    case 'node.pair.resolved': {
+      const resolved = isRecord(payload) ? payload : {};
+      const requestId = readString(resolved.requestId);
+      if (!requestId) return {};
+      emit('pairApprovalResolved', {
+        requestId,
+        target: 'node',
+        decision: resolved.decision === 'approved' ? 'approved' : 'rejected',
+        ts: readNumber(resolved.ts) ?? now(),
       });
-      return { pairingApproved: decision === 'approved' };
+      return {};
     }
     default:
       return {};

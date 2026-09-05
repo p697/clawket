@@ -22,6 +22,31 @@ export type UiFileAttachment = {
   uri?: string;
 };
 
+export type UiApprovalStatus = 'pending' | 'allowed' | 'denied' | 'expired';
+
+export type UiApproval =
+  | {
+    /** Optional for compatibility with approval cards restored from the pre-3.0 cache. */
+    kind?: 'exec';
+    id: string;
+    command: string;
+    cwd?: string;
+    host?: string;
+    expiresAtMs: number;
+    status: UiApprovalStatus;
+  }
+  | {
+    kind: 'pair';
+    id: string;
+    target: 'device' | 'node';
+    displayName: string | null;
+    platform: string | null;
+    receivedAtMs: number;
+    status: UiApprovalStatus;
+    resolving?: boolean;
+    resolutionError?: boolean;
+  };
+
 export type UiMessage = {
   id: string;
   role: 'user' | 'assistant' | 'system' | 'tool';
@@ -47,14 +72,7 @@ export type UiMessage = {
   toolStartedAt?: number;
   toolFinishedAt?: number;
   toolPresentation?: ToolPresentation[];
-  approval?: {
-    id: string;
-    command: string;
-    cwd?: string;
-    host?: string;
-    expiresAtMs: number;
-    status: 'pending' | 'allowed' | 'denied' | 'expired';
-  };
+  approval?: UiApproval;
 };
 
 export type PendingImage = {

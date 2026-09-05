@@ -20,6 +20,32 @@ export type ChatAgentIdentity = {
 };
 
 const READY_IDENTITY_FETCH_DELAY_MS = 1500;
+const EMPTY_AGENT_IDENTITY: ChatAgentIdentity = Object.freeze({
+  displayName: 'Assistant',
+  avatarUri: null,
+  emoji: null,
+});
+
+type ScopedAgentIdentity = Readonly<{
+  scopeKey: string | null;
+  identity: ChatAgentIdentity;
+  source: 'initial' | 'loading' | 'cache' | 'live';
+  persistable: boolean;
+}>;
+
+function identityScopeKey(gatewayConfigId: string | null, agentId: string): string | null {
+  return gatewayConfigId ? `${gatewayConfigId}\u0000${agentId}` : null;
+}
+
+function hasPersistableAgentIdentity(
+  snapshot: Pick<LastOpenedSessionSnapshot, 'agentName' | 'agentEmoji' | 'agentAvatarUri'> | null | undefined,
+): boolean {
+  return Boolean(
+    snapshot?.agentName?.trim()
+    || snapshot?.agentEmoji?.trim()
+    || snapshot?.agentAvatarUri?.trim(),
+  );
+}
 
 function mergeAgentIdentity(
   prev: ChatAgentIdentity,
@@ -65,9 +91,16 @@ export function useChatAgentIdentity({
   mainSessionKey,
   sessionKey,
 }: Params): ChatAgentIdentity {
-  const [agentIdentity, setAgentIdentity] = useState<ChatAgentIdentity>(
-    buildInitialAgentIdentity(initialPreview),
-  );
+  const scopeKey = identityScopeKey(gatewayConfigId, currentAgentId);
+  const [scopedIdentity, setScopedIdentity] = useState<ScopedAgentIdentity>(() => ({
+    scopeKey,
+    identity: buildInitialAgentIdentity(initialPreview),
+    source: 'initial',
+    persistable: hasPersistableAgentIdentity(initialPreview),
+  }));
+  const agentIdentity = scopedIdentity.scopeKey === scopeKey
+    ? scopedIdentity.identity
+    : EMPTY_AGENT_IDENTITY;
   const sessionSnapshotUpdatedAtRef = useRef(Date.now());
   const lastPersistedSessionSnapshotRef = useRef<string | null>(null);
   const lastPersistedAgentIdentityRef = useRef<string | null>(null);
@@ -76,6 +109,20 @@ export function useChatAgentIdentity({
     (avatar: string | null | undefined): string | null => resolveAgentAvatarUri(avatar, () => null),
     [],
   );
+
+  useEffect(() => {
+    setScopedIdentity((previous) => previous.scopeKey === scopeKey
+      ? previous
+      : {
+          scopeKey,
+          identity: EMPTY_AGENT_IDENTITY,
+          source: 'loading',
+          persistable: false,
+        });
+    sessionSnapshotUpdatedAtRef.current = Date.now();
+    lastPersistedSessionSnapshotRef.current = null;
+    lastPersistedAgentIdentityRef.current = null;
+  }, [scopeKey]);
 
   useEffect(() => {
     if (!gatewayConfigId) return;
@@ -91,7 +138,11 @@ export function useChatAgentIdentity({
       .then(([snapshot, cachedIdentity]) => {
         if (cancelled) return;
         const allowCachedIdentityFallback = !isBackendScopedMainSessionKey(mainSessionKey) || Boolean(snapshot);
-        setAgentIdentity((prev) => {
+        const hasStoredIdentity = hasPersistableAgentIdentity(snapshot)
+          || (allowCachedIdentityFallback && hasPersistableAgentIdentity(cachedIdentity));
+        setScopedIdentity((previous) => {
+          if (previous.scopeKey !== scopeKey || previous.source === 'live') return previous;
+          const prev = previous.identity;
           const nextDisplayName = snapshot?.agentName?.trim()
             || (allowCachedIdentityFallback ? cachedIdentity?.agentName?.trim() : undefined)
             || prev.displayName;
@@ -106,12 +157,20 @@ export function useChatAgentIdentity({
             && nextAvatarUri === prev.avatarUri
             && nextEmoji === prev.emoji
           ) {
-            return prev;
+            if (!hasStoredIdentity) return previous;
+            return previous.persistable && previous.source === 'cache'
+              ? previous
+              : { ...previous, source: 'cache', persistable: true };
           }
           return {
-            displayName: nextDisplayName,
-            avatarUri: nextAvatarUri,
-            emoji: nextEmoji,
+            scopeKey,
+            identity: {
+              displayName: nextDisplayName,
+              avatarUri: nextAvatarUri,
+              emoji: nextEmoji,
+            },
+            source: 'cache',
+            persistable: hasStoredIdentity,
           };
         });
       })
@@ -124,6 +183,9 @@ export function useChatAgentIdentity({
 
   useEffect(() => {
     const agentInfo = agents.find((agent) => agent.id === currentAgentId);
+    const agentInfoBelongsToCurrentScope = Boolean(
+      gatewayConfigId && agentInfo?.connectionId === gatewayConfigId,
+    );
     let displayName = 'Assistant';
     if (agentInfo?.identity?.name?.trim()) {
       displayName = agentInfo.identity.name.trim();
@@ -134,51 +196,59 @@ export function useChatAgentIdentity({
     const emoji = agentInfo?.identity?.emoji ?? null;
     const avatarUri = pickAgentIdentityAvatarUri(agentInfo?.identity, () => null);
 
-    if (agents.length > 0) {
-      setAgentIdentity((prev) => mergeAgentIdentity(prev, {
-        displayName,
-        avatarUri,
-        emoji,
-      }));
-    } else {
-      setAgentIdentity((prev) => {
-        const fallbackName = cacheAgentName?.trim();
-        const nextDisplayName = fallbackName && prev.displayName === 'Assistant'
-          ? fallbackName
-          : prev.displayName;
-        return mergeAgentIdentity(prev, { displayName: nextDisplayName });
+    if (agentInfoBelongsToCurrentScope) {
+      setScopedIdentity((previous) => {
+        if (previous.scopeKey !== scopeKey) return previous;
+        const identity = mergeAgentIdentity(previous.identity, {
+          displayName,
+          avatarUri,
+          emoji,
+        });
+        if (identity === previous.identity && previous.source === 'live' && previous.persistable) {
+          return previous;
+        }
+        return {
+          scopeKey,
+          identity,
+          source: 'live',
+          persistable: true,
+        };
       });
     }
 
     if (adapter?.state !== 'ready') return undefined;
+    let cancelled = false;
 
     const timer = setTimeout(() => {
       adapter.listAgents()
         .then((listedAgents) => {
+          if (cancelled) return;
           const identity = listedAgents.find((agent) => agent.agentId === currentAgentId);
           if (!identity) return;
-          setAgentIdentity((prev) => {
-            const name = identity.name?.trim() || prev.displayName;
-            const nextEmoji = identity.emoji || prev.emoji;
-            let nextAvatar = prev.avatarUri;
-            if (!nextAvatar && identity.avatarUrl) {
-              const resolved = resolveAvatarUri(identity.avatarUrl);
-              if (resolved) nextAvatar = resolved;
-            }
-            return mergeAgentIdentity(prev, {
-              displayName: name,
-              avatarUri: nextAvatar,
-              emoji: nextEmoji,
-            });
+          setScopedIdentity((previous) => {
+            if (previous.scopeKey !== scopeKey) return previous;
+            return {
+              scopeKey,
+              identity: {
+                displayName: identity.name?.trim() || 'Assistant',
+                avatarUri: identity.avatarUrl
+                  ? resolveAvatarUri(identity.avatarUrl)
+                  : null,
+                emoji: identity.emoji?.trim() || null,
+              },
+              source: 'live',
+              persistable: true,
+            };
           });
         })
         .catch(() => {});
     }, READY_IDENTITY_FETCH_DELAY_MS);
 
     return () => {
+      cancelled = true;
       clearTimeout(timer);
     };
-  }, [adapter, agents, cacheAgentName, currentAgentId, resolveAvatarUri]);
+  }, [adapter, adapter?.state, agents, cacheAgentName, currentAgentId, gatewayConfigId, resolveAvatarUri, scopeKey]);
 
   useEffect(() => {
     if (sessionKey) {
@@ -188,6 +258,7 @@ export function useChatAgentIdentity({
 
   useEffect(() => {
     if (!gatewayConfigId || !sessionKey) return;
+    if (scopedIdentity.scopeKey !== scopeKey || !scopedIdentity.persistable) return;
     if (!isSessionKeyInAgentScope(sessionKey, currentAgentId, { mainSessionKey })) return;
     const snapshotAgentId = agentIdFromSessionKey(sessionKey) ?? currentAgentId;
     const snapshotLabel = currentSessionInfo
@@ -205,7 +276,7 @@ export function useChatAgentIdentity({
       agentEmoji: agentIdentity.emoji || undefined,
       agentAvatarUri: agentIdentity.avatarUri || undefined,
     };
-    const signature = JSON.stringify(snapshot);
+    const signature = JSON.stringify({ scope: gatewayConfigId, snapshot });
     if (lastPersistedSessionSnapshotRef.current === signature) return;
     lastPersistedSessionSnapshotRef.current = signature;
     StorageService.setLastOpenedSessionSnapshot(gatewayConfigId, snapshot).catch(() => {
@@ -222,11 +293,15 @@ export function useChatAgentIdentity({
     currentSessionInfo,
     gatewayConfigId,
     mainSessionKey,
+    scopeKey,
+    scopedIdentity.persistable,
+    scopedIdentity.scopeKey,
     sessionKey,
   ]);
 
   useEffect(() => {
     if (!gatewayConfigId) return;
+    if (scopedIdentity.scopeKey !== scopeKey || !scopedIdentity.persistable) return;
     if (sessionKey && !isSessionKeyInAgentScope(sessionKey, currentAgentId, { mainSessionKey })) return;
     const cachedIdentity = {
       agentId: currentAgentId,
@@ -256,6 +331,9 @@ export function useChatAgentIdentity({
     currentAgentId,
     gatewayConfigId,
     mainSessionKey,
+    scopeKey,
+    scopedIdentity.persistable,
+    scopedIdentity.scopeKey,
     sessionKey,
   ]);
 

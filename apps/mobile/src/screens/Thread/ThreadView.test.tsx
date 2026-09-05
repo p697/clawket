@@ -3,12 +3,13 @@ import { act, fireEvent, render } from '@testing-library/react-native';
 import { CAPABILITY_MATRIX, type Capabilities } from '@clawket/agent-protocol';
 import { builtInAccents } from '../../theme/accents';
 import { buildTheme } from '../../theme/theme';
-import { FontSize, Radius, Space } from '../../theme/tokens';
+import { FontSize, Motion, Radius, Space } from '../../theme/tokens';
 import type { ComposerHandle } from '../../components/ui/Composer';
 import type { UiMessage } from '../../types/chat';
 import { ThreadView, type ThreadCopy, type ThreadViewProps } from './ThreadView';
 
 let mockScheme: 'light' | 'dark' = 'light';
+let mockReducedMotion = false;
 
 jest.mock('react-native', () => {
   const ReactRuntime = require('react');
@@ -34,7 +35,13 @@ jest.mock('react-native', () => {
     Image: host('Image'),
     Pressable: host('Pressable'),
     StyleSheet: {
-      absoluteFillObject: {},
+      absoluteFillObject: {
+        position: 'absolute',
+        top: 0,
+        right: 0,
+        bottom: 0,
+        left: 0,
+      },
       create: <T,>(styles: T) => styles,
       flatten: (style: unknown) => flattenStyle(style),
       hairlineWidth: 1,
@@ -78,11 +85,13 @@ jest.mock('@shopify/flash-list', () => {
     FlashList: ReactRuntime.forwardRef(({
       data = [],
       renderItem,
+      ListHeaderComponent,
       ListFooterComponent,
       ...props
     }: {
       data?: unknown[];
       renderItem: (info: { item: unknown; index: number; target: string }) => React.ReactNode;
+      ListHeaderComponent?: React.ReactNode;
       ListFooterComponent?: React.ReactNode;
     }, ref: unknown) => ReactRuntime.createElement(
       View,
@@ -92,6 +101,7 @@ jest.mock('@shopify/flash-list', () => {
         { key: (item as { id?: string }).id ?? index },
         renderItem({ item, index, target: 'Cell' }),
       )),
+      ListHeaderComponent,
       ListFooterComponent,
     )),
   };
@@ -99,6 +109,27 @@ jest.mock('@shopify/flash-list', () => {
 
 jest.mock('react-native-reanimated', () => {
   const { Text, View } = require('react-native');
+  const createLayoutAnimation = (name: string) => {
+    const animation = {
+      name,
+      durationMs: undefined as number | undefined,
+      easingValue: undefined as unknown,
+      reduceMotionMode: undefined as string | undefined,
+      duration(durationMs: number) {
+        animation.durationMs = durationMs;
+        return animation;
+      },
+      easing(easingValue: unknown) {
+        animation.easingValue = easingValue;
+        return animation;
+      },
+      reduceMotion(reduceMotionMode: string) {
+        animation.reduceMotionMode = reduceMotionMode;
+        return animation;
+      },
+    };
+    return animation;
+  };
   return {
     __esModule: true,
     default: {
@@ -108,12 +139,21 @@ jest.mock('react-native-reanimated', () => {
     },
     cancelAnimation: jest.fn(),
     Easing: {
+      cubic: 'cubic',
       ease: 'ease',
       linear: 'linear',
       inOut: (value: unknown) => value,
+      out: (value: unknown) => ({ kind: 'out', value }),
+    },
+    FadeIn: createLayoutAnimation('FadeIn'),
+    FadeOut: createLayoutAnimation('FadeOut'),
+    ReduceMotion: {
+      Always: 'always',
+      Never: 'never',
+      System: 'system',
     },
     useAnimatedStyle: (factory: () => unknown) => factory(),
-    useReducedMotion: () => false,
+    useReducedMotion: () => mockReducedMotion,
     useSharedValue: (value: unknown) => ({ value }),
     withDelay: jest.fn((_delay: number, value: unknown) => value),
     withRepeat: jest.fn((value: unknown) => value),
@@ -207,6 +247,9 @@ const copy: ThreadCopy = {
   toolCompleted: 'Completed',
   toolFailed: 'Failed',
   approvalTitle: 'Allow exec?',
+  approvalError: 'Could not update this request. Try again.',
+  device: 'Device',
+  node: 'Node',
   allow: 'Allow',
   reject: 'Reject',
   allowed: 'Allowed',
@@ -225,6 +268,7 @@ function createProps(overrides: Partial<ThreadViewProps> = {}): ThreadViewProps 
   return {
     agentId: 'atlas',
     agentName: 'Atlas',
+    sessionKey: 'agent:atlas:main',
     model: 'Sonnet',
     capabilities: { ...CAPABILITY_MATRIX.openclaw },
     state: { kind: 'ready' },
@@ -256,6 +300,7 @@ describe('ThreadView', () => {
 
   beforeEach(() => {
     mockScheme = 'light';
+    mockReducedMotion = false;
     require('react-native').Linking.openURL.mockClear();
     consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation((message?: unknown) => {
       if (typeof message === 'string' && message.includes('react-test-renderer is deprecated')) return;
@@ -450,6 +495,162 @@ describe('ThreadView', () => {
       ['request-1', 'allow-always'],
       ['request-1', 'deny'],
     ]);
+  });
+
+  it('renders pair requests behind pairRequests without the exec long-press action', () => {
+    const onResolveApproval = jest.fn();
+    const view = render(<ThreadView {...createProps({
+      messages: [
+        {
+          id: 'pair-device',
+          role: 'system',
+          text: '',
+          approval: {
+            kind: 'pair',
+            id: 'device-request',
+            target: 'device',
+            displayName: 'Lucy’s iPhone',
+            platform: 'ios',
+            receivedAtMs: 100,
+            status: 'pending',
+          },
+        },
+        {
+          id: 'pair-node',
+          role: 'system',
+          text: '',
+          approval: {
+            kind: 'pair',
+            id: 'node-request',
+            target: 'node',
+            displayName: null,
+            platform: null,
+            receivedAtMs: 101,
+            status: 'pending',
+          },
+        },
+      ],
+      onResolveApproval,
+    })} />);
+
+    expect(view.getByText('Lucy’s iPhone')).toBeTruthy();
+    expect(view.getByText('Node')).toBeTruthy();
+    const allow = view.getByTestId('thread-approval-pair-device-primary');
+    expect(allow.props.onLongPress).toBeUndefined();
+    fireEvent.press(allow);
+    fireEvent.press(view.getByTestId('thread-approval-pair-node-secondary'));
+    expect(onResolveApproval.mock.calls).toEqual([
+      ['device-request', 'approve', 'device'],
+      ['node-request', 'reject', 'node'],
+    ]);
+
+    view.rerender(<ThreadView {...createProps({
+      capabilities: { ...CAPABILITY_MATRIX.openclaw, pairRequests: false },
+      messages: [{
+        id: 'pair-hidden',
+        role: 'system',
+        text: '',
+        approval: {
+          kind: 'pair',
+          id: 'hidden',
+          target: 'device',
+          displayName: 'Hidden phone',
+          platform: null,
+          receivedAtMs: 102,
+          status: 'pending',
+        },
+      }],
+    })} />);
+    expect(view.queryByTestId('thread-approval-pair-hidden')).toBeNull();
+  });
+
+  it('shows a low-sensitivity retry message and keeps failed pair requests actionable', () => {
+    const onResolveApproval = jest.fn();
+    const view = render(<ThreadView {...createProps({
+      messages: [{
+        id: 'pair-failed',
+        role: 'system',
+        text: '',
+        approval: {
+          kind: 'pair',
+          id: 'failed-request',
+          target: 'device',
+          displayName: 'Lucy’s iPhone',
+          platform: 'ios',
+          receivedAtMs: 103,
+          status: 'pending',
+          resolutionError: true,
+        },
+      }],
+      onResolveApproval,
+    })} />);
+
+    expect(view.getByText('Could not update this request. Try again.')).toBeTruthy();
+    const allow = view.getByTestId('thread-approval-pair-failed-primary');
+    expect(allow.props.accessibilityState).toEqual({ disabled: false });
+    fireEvent.press(allow);
+    expect(onResolveApproval).toHaveBeenCalledWith('failed-request', 'approve', 'device');
+  });
+
+  it('renders compaction as a temporary system event row', () => {
+    const view = render(<ThreadView {...createProps({
+      compactionNotice: 'Compacting context...',
+    })} />);
+    expect(view.getByTestId('thread-screen-compaction')).toBeTruthy();
+    expect(view.getByText('Compacting context...')).toBeTruthy();
+
+    view.rerender(<ThreadView {...createProps({ compactionNotice: null })} />);
+    expect(view.queryByTestId('thread-screen-compaction')).toBeNull();
+  });
+
+  it('keeps avatar initials scoped to the agent when the header decorates a sub-session name', () => {
+    const view = render(<ThreadView {...createProps({
+      agentName: 'Atlas Agent',
+      sessionTitle: 'Research',
+      isMainSession: false,
+    })} />);
+
+    expect(view.getByText('Atlas Agent · Research')).toBeTruthy();
+    expect(view.getByTestId('thread-screen-header-pill-avatar').props.accessibilityLabel)
+      .toBe('Atlas Agent');
+  });
+
+  it('cross-fades overlapping session content and bypasses it for reduced motion', () => {
+    const view = render(<ThreadView {...createProps({ sessionKey: 'session-a' })} />);
+    expect(view.getByTestId('thread-screen-session-content').props.entering).toBeUndefined();
+
+    view.rerender(<ThreadView {...createProps({ sessionKey: 'session-a' })} />);
+    expect(view.getByTestId('thread-screen-session-content').props.entering).toBeUndefined();
+
+    view.rerender(<ThreadView {...createProps({ sessionKey: 'session-b' })} />);
+    const sessionContent = view.getByTestId('thread-screen-session-content');
+    expect(sessionContent.props.entering).toMatchObject({
+      name: 'FadeIn',
+      durationMs: Motion.duration.normal,
+      easingValue: { kind: 'out', value: 'cubic' },
+      reduceMotionMode: 'system',
+    });
+    expect(sessionContent.props.exiting).toMatchObject({
+      name: 'FadeOut',
+      durationMs: Motion.duration.normal,
+      easingValue: { kind: 'out', value: 'cubic' },
+      reduceMotionMode: 'system',
+    });
+    expect(flattenStyle(sessionContent.props.style)).toMatchObject({
+      position: 'absolute',
+      top: 0,
+      right: 0,
+      bottom: 0,
+      left: 0,
+    });
+
+    view.unmount();
+    mockReducedMotion = true;
+    const reducedView = render(<ThreadView {...createProps({ sessionKey: 'session-c' })} />);
+    reducedView.rerender(<ThreadView {...createProps({ sessionKey: 'session-d' })} />);
+    const reducedContent = reducedView.getByTestId('thread-screen-session-content');
+    expect(reducedContent.props.entering).toBeUndefined();
+    expect(reducedContent.props.exiting).toBeUndefined();
   });
 
   it('renders dated subagent and Cron cards without treating tool details as sessions', () => {

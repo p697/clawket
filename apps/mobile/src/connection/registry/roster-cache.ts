@@ -1,10 +1,10 @@
-import type {
-  AgentDescriptor,
-  ConnectionDescriptor,
-  SessionDescriptor,
-  SessionKind,
+import {
+  getGatewayBackendDescriptor,
+  type AgentDescriptor,
+  type ConnectionDescriptor,
+  type SessionDescriptor,
+  type SessionKind,
 } from '@clawket/agent-protocol';
-
 import {
   StorageService,
   type DashboardCacheEntry,
@@ -13,6 +13,11 @@ import {
   summarizeSessionSignals,
   type SessionWatermarks,
 } from './unread-watermarks';
+
+export type RosterAgentSubtitle = Readonly<{
+  kind: 'backend';
+  label: string;
+}>;
 
 const ROSTER_CACHE_VERSION = 1;
 const ROSTER_SCOPE_PREFIX = 'connection-registry:roster-cache:v1:';
@@ -59,6 +64,7 @@ export type RosterSnapshotInput = Readonly<{
 export type RosterAgentSummary = Readonly<{
   agent: AgentDescriptor;
   sessions: ReadonlyArray<SessionDescriptor>;
+  subtitle?: RosterAgentSubtitle;
   preview?: string;
   updatedAt: number | null;
   lastActivityAt: number | null;
@@ -239,16 +245,29 @@ function compareConnectionGroups(a: RosterConnectionGroup, b: RosterConnectionGr
     || a.connection.id.localeCompare(b.connection.id);
 }
 
+function resolveRosterAgentSubtitle(
+  connection: ConnectionDescriptor,
+): RosterAgentSubtitle | undefined {
+  if (connection.backendKind !== 'youmind') return undefined;
+  return Object.freeze({
+    kind: 'backend',
+    label: getGatewayBackendDescriptor(connection.backendKind).label,
+  });
+}
+
 function buildAgentSummary(
   agent: AgentDescriptor,
   sessions: ReadonlyArray<SessionDescriptor>,
   watermarks: SessionWatermarks,
-  unreadEnabled: boolean,
+  liveSignalsEnabled: boolean,
+  subtitle: RosterAgentSubtitle | undefined,
 ): RosterAgentSummary {
   const agentSessions = sessions.filter((session) => (
     session.connectionId === agent.connectionId && session.agentId === agent.agentId
   ));
-  const signals = summarizeSessionSignals(agentSessions, watermarks, { unreadEnabled });
+  const signals = summarizeSessionSignals(agentSessions, watermarks, {
+    unreadEnabled: liveSignalsEnabled,
+  });
   const recentSession = [...agentSessions].sort(
     (a, b) => activityValue(b.updatedAt) - activityValue(a.updatedAt) || a.key.localeCompare(b.key),
   )[0];
@@ -256,13 +275,14 @@ function buildAgentSummary(
   return Object.freeze({
     agent,
     sessions: Object.freeze(agentSessions),
+    ...(subtitle ? { subtitle } : {}),
     ...(mainSession?.preview ? { preview: mainSession.preview } : {}),
     updatedAt: mainSession?.updatedAt ?? null,
     lastActivityAt: signals.lastActivityAt,
     unreadCount: signals.unreadCount,
     hasUnread: signals.unreadCount > 0,
-    attentionCount: signals.attentionCount,
-    attention: signals.attention,
+    attentionCount: liveSignalsEnabled ? signals.attentionCount : 0,
+    attention: liveSignalsEnabled ? signals.attention : null,
   });
 }
 
@@ -271,11 +291,19 @@ export function aggregateRoster(
   activeConnectionId: string | null,
 ): ReadonlyArray<RosterConnectionGroup> {
   const groups = inputs.map((input): RosterConnectionGroup => {
-    const unreadEnabled = input.source === 'live' && input.connection.id === activeConnectionId;
+    const liveSignalsEnabled = input.source === 'live'
+      && input.connection.id === activeConnectionId;
+    const subtitle = resolveRosterAgentSubtitle(input.connection);
     const watermarks = input.watermarks ?? {};
     const agents = input.agents
       .filter((agent) => agent.connectionId === input.connection.id)
-      .map((agent) => buildAgentSummary(agent, input.sessions, watermarks, unreadEnabled))
+      .map((agent) => buildAgentSummary(
+        agent,
+        input.sessions,
+        watermarks,
+        liveSignalsEnabled,
+        subtitle,
+      ))
       .sort(compareAgentSummaries);
     const unreadCount = agents.reduce((total, agent) => total + agent.unreadCount, 0);
     const attentionCount = agents.reduce((total, agent) => total + agent.attentionCount, 0);

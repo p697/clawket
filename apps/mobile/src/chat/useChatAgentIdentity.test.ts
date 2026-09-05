@@ -12,9 +12,12 @@ jest.mock('../services/storage', () => ({
   },
 }));
 
-function createAdapter(connectionState: 'ready' | 'connecting' = 'connecting') {
+function createAdapter(
+  connectionState: 'ready' | 'connecting' = 'connecting',
+  connectionId = 'connection-1',
+) {
   const listAgents = jest.fn().mockResolvedValue([{
-    connectionId: 'connection-1',
+    connectionId,
     agentId: 'main',
     name: 'Main',
     isMain: true,
@@ -22,7 +25,7 @@ function createAdapter(connectionState: 'ready' | 'connecting' = 'connecting') {
   }]);
   const adapter = {
     connection: {
-      id: 'connection-1',
+      id: connectionId,
       backendKind: 'openclaw' as const,
       transportKind: 'relay' as const,
       label: 'OpenClaw',
@@ -98,6 +101,7 @@ describe('useChatAgentIdentity', () => {
     const adapter = createAdapter('ready');
     const agents = [
       {
+        connectionId: 'cfg:one',
         id: 'main',
         name: 'Main',
         identity: {
@@ -181,6 +185,261 @@ describe('useChatAgentIdentity', () => {
     });
   });
 
+  it('does not persist the Assistant fallback when cache hydration is empty', async () => {
+    const mockedStorage = StorageService as jest.Mocked<typeof StorageService>;
+    const adapter = createAdapter('connecting');
+
+    const { result } = renderHook(() => useChatAgentIdentity({
+      agents: [],
+      cacheAgentName: undefined,
+      currentAgentId: 'main',
+      currentSessionInfo: {
+        key: 'agent:main:main',
+        kind: 'unknown',
+      },
+      adapter,
+      gatewayConfigId: 'cfg:one',
+      initialPreview: {
+        sessionKey: 'agent:main:main',
+        updatedAt: 1,
+        agentId: 'main',
+      },
+      mainSessionKey: 'agent:main:main',
+      sessionKey: 'agent:main:main',
+    }));
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current).toEqual({
+      displayName: 'Assistant',
+      avatarUri: null,
+      emoji: null,
+    });
+    expect(mockedStorage.setLastOpenedSessionSnapshot).not.toHaveBeenCalled();
+    expect(mockedStorage.setCachedAgentIdentity).not.toHaveBeenCalled();
+  });
+
+  it('resets identity scope before persisting an A-to-B same-agent switch', async () => {
+    const mockedStorage = StorageService as jest.Mocked<typeof StorageService>;
+    mockedStorage.getCachedAgentIdentity.mockImplementation(async (scopeId) => (
+      scopeId === 'connection-b'
+        ? {
+            agentId: 'main',
+            updatedAt: 2,
+            agentName: 'Cached B',
+            agentEmoji: 'B',
+            agentAvatarUri: 'https://example.com/b-cached.png',
+          }
+        : null
+    ));
+    const adapterA = createAdapter('connecting', 'connection-a');
+    const adapterB = createAdapter('connecting', 'connection-b');
+    let params: Parameters<typeof useChatAgentIdentity>[0] = {
+      agents: [{
+        connectionId: 'connection-a',
+        id: 'main',
+        name: 'Agent A',
+        identity: {
+          name: 'Agent A',
+          emoji: 'A',
+          avatarUrl: 'https://example.com/a.png',
+        },
+      }],
+      cacheAgentName: 'Agent A' as string | undefined,
+      currentAgentId: 'main',
+      currentSessionInfo: {
+        key: 'agent:main:main',
+        kind: 'unknown' as const,
+      },
+      adapter: adapterA as AgentAdapter | null,
+      gatewayConfigId: 'connection-a' as string | null,
+      initialPreview: null,
+      mainSessionKey: 'agent:main:main',
+      sessionKey: 'agent:main:main' as string | null,
+    };
+    const { result, rerender } = renderHook(() => useChatAgentIdentity(params));
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result.current).toEqual({
+      displayName: 'Agent A',
+      avatarUri: 'https://example.com/a.png',
+      emoji: 'A',
+    });
+    mockedStorage.setCachedAgentIdentity.mockClear();
+    mockedStorage.setLastOpenedSessionSnapshot.mockClear();
+
+    params = {
+      ...params,
+      adapter: adapterB,
+      gatewayConfigId: 'connection-b',
+    };
+    rerender(undefined);
+    expect(result.current).toEqual({
+      displayName: 'Assistant',
+      avatarUri: null,
+      emoji: null,
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result.current.displayName).toBe('Cached B');
+    expect(mockedStorage.setCachedAgentIdentity.mock.calls.filter(([scopeId]) => (
+      scopeId === 'connection-b'
+    ))).not.toEqual(expect.arrayContaining([
+      expect.arrayContaining([expect.objectContaining({ agentName: 'Agent A' })]),
+    ]));
+
+    params = {
+      ...params,
+      agents: [{
+        connectionId: 'connection-b',
+        id: 'main',
+        name: 'Agent B',
+        identity: { name: 'Agent B' },
+      }],
+      cacheAgentName: 'Agent B',
+    };
+    rerender(undefined);
+    expect(result.current).toEqual({
+      displayName: 'Agent B',
+      avatarUri: null,
+      emoji: null,
+    });
+    expect(mockedStorage.setCachedAgentIdentity).toHaveBeenLastCalledWith(
+      'connection-b',
+      expect.not.objectContaining({
+        agentEmoji: expect.anything(),
+        agentAvatarUri: expect.anything(),
+      }),
+    );
+    expect(mockedStorage.setLastOpenedSessionSnapshot.mock.calls.filter(([scopeId, snapshot]) => (
+      scopeId === 'connection-b' && snapshot.agentName === 'Agent A'
+    ))).toHaveLength(0);
+  });
+
+  it('applies an already-loaded B identity when the connection scope changes', async () => {
+    const adapterA = createAdapter('connecting', 'connection-a');
+    const adapterB = createAdapter('connecting', 'connection-b');
+    let params: Parameters<typeof useChatAgentIdentity>[0] = {
+      agents: [{
+        connectionId: 'connection-a',
+        id: 'main',
+        name: 'Agent A',
+        identity: { name: 'Agent A', emoji: 'A' },
+      }],
+      cacheAgentName: 'Agent A',
+      currentAgentId: 'main',
+      currentSessionInfo: undefined,
+      adapter: adapterA,
+      gatewayConfigId: 'connection-a',
+      initialPreview: null,
+      mainSessionKey: 'agent:main:main',
+      sessionKey: 'agent:main:main',
+    };
+    const { result, rerender } = renderHook(() => useChatAgentIdentity(params));
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    params = {
+      ...params,
+      agents: [{
+        connectionId: 'connection-b',
+        id: 'main',
+        name: 'Agent B',
+        identity: { name: 'Agent B', emoji: 'B' },
+      }],
+      cacheAgentName: 'Agent B',
+      adapter: adapterB,
+      gatewayConfigId: 'connection-b',
+    };
+    rerender(undefined);
+
+    expect(result.current).toEqual({
+      displayName: 'Agent B',
+      avatarUri: null,
+      emoji: 'B',
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+  });
+
+  it('ignores an old listAgents result after the adapter changes within one scope', async () => {
+    jest.useFakeTimers();
+    const mockedStorage = StorageService as jest.Mocked<typeof StorageService>;
+    let resolveOldAgents!: (agents: Awaited<ReturnType<AgentAdapter['listAgents']>>) => void;
+    const oldAgents = new Promise<Awaited<ReturnType<AgentAdapter['listAgents']>>>((resolve) => {
+      resolveOldAgents = resolve;
+    });
+    const adapterA = createAdapter('ready', 'connection-shared');
+    const adapterB = createAdapter('connecting', 'connection-shared');
+    adapterA.listAgents.mockReturnValueOnce(oldAgents);
+    let params: Parameters<typeof useChatAgentIdentity>[0] = {
+      agents: [],
+      cacheAgentName: undefined,
+      currentAgentId: 'main',
+      currentSessionInfo: undefined,
+      adapter: adapterA,
+      gatewayConfigId: 'connection-shared',
+      initialPreview: null,
+      mainSessionKey: 'agent:main:main',
+      sessionKey: 'agent:main:main',
+    };
+    const { result, rerender } = renderHook(() => useChatAgentIdentity(params));
+
+    await act(async () => {
+      jest.advanceTimersByTime(1500);
+      await Promise.resolve();
+    });
+    expect(adapterA.listAgents).toHaveBeenCalledTimes(1);
+
+    params = {
+      ...params,
+      agents: [{
+        connectionId: 'connection-shared',
+        id: 'main',
+        name: 'Fresh Agent',
+        identity: { name: 'Fresh Agent', emoji: 'F' },
+      }],
+      cacheAgentName: 'Fresh Agent',
+      adapter: adapterB,
+    };
+    rerender(undefined);
+    expect(result.current.displayName).toBe('Fresh Agent');
+
+    await act(async () => {
+      resolveOldAgents([{
+        connectionId: 'connection-shared',
+        agentId: 'main',
+        name: 'Stale Agent',
+        isMain: true,
+        mainSessionKey: 'agent:main:main',
+      }]);
+      await oldAgents;
+    });
+
+    expect(result.current).toEqual({
+      displayName: 'Fresh Agent',
+      avatarUri: null,
+      emoji: 'F',
+    });
+    expect(mockedStorage.setCachedAgentIdentity.mock.calls.some(([, identity]) => (
+      identity.agentName === 'Stale Agent'
+    ))).toBe(false);
+    jest.useRealTimers();
+  });
+
   it('persists last-session snapshot and agent cache for a non-main session in the current agent scope', async () => {
     const mockedStorage = StorageService as jest.Mocked<typeof StorageService>;
     const adapter = createAdapter('connecting');
@@ -188,6 +447,7 @@ describe('useChatAgentIdentity', () => {
     renderHook(() => useChatAgentIdentity({
       agents: [
         {
+          connectionId: 'cfg:one',
           id: 'writer',
           name: 'Writer',
           identity: {
@@ -270,7 +530,12 @@ describe('useChatAgentIdentity', () => {
     const adapter = createAdapter('connecting');
 
     renderHook(() => useChatAgentIdentity({
-      agents: [],
+      agents: [{
+        connectionId: 'cfg:hermes',
+        id: 'main',
+        name: 'Hermes',
+        identity: { name: 'Hermes' },
+      }],
       cacheAgentName: undefined,
       currentAgentId: 'main',
       currentSessionInfo: {

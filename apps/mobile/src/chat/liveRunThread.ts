@@ -7,6 +7,40 @@ export type StreamSegment = {
   timestampMs: number;
 };
 
+function finiteTimestamp(message: UiMessage): number | undefined {
+  return typeof message.timestampMs === 'number' && Number.isFinite(message.timestampMs)
+    ? message.timestampMs
+    : undefined;
+}
+
+/** Stable merge for two newest-first streams without reordering untimed live rows. */
+export function mergeNewestFirstMessages(
+  first: ReadonlyArray<UiMessage>,
+  second: ReadonlyArray<UiMessage>,
+): UiMessage[] {
+  const merged: UiMessage[] = [];
+  let firstIndex = 0;
+  let secondIndex = 0;
+  while (firstIndex < first.length && secondIndex < second.length) {
+    const firstMessage = first[firstIndex]!;
+    const secondMessage = second[secondIndex]!;
+    const firstTimestamp = finiteTimestamp(firstMessage);
+    const secondTimestamp = finiteTimestamp(secondMessage);
+    if (
+      firstTimestamp === undefined
+      || (secondTimestamp !== undefined && firstTimestamp >= secondTimestamp)
+    ) {
+      merged.push(firstMessage);
+      firstIndex += 1;
+    } else {
+      merged.push(secondMessage);
+      secondIndex += 1;
+    }
+  }
+  merged.push(...first.slice(firstIndex), ...second.slice(secondIndex));
+  return merged;
+}
+
 const MIN_LIVE_STREAM_VISIBLE_CHARS = 12;
 const MIN_LIVE_STREAM_VISIBLE_DELAY_MS = 250;
 

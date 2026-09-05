@@ -151,9 +151,7 @@ describe('StorageService last session key scoping', () => {
       agentEmoji: '✍️',
       agentAvatarUri: 'https://example.com/writer.png',
     };
-    mockAsyncGetItem
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce(JSON.stringify(identity));
+    mockAsyncGetItem.mockResolvedValueOnce(JSON.stringify(identity));
 
     await StorageService.setCachedAgentIdentity('cfg:gw-6', identity);
     await expect(
@@ -166,6 +164,24 @@ describe('StorageService last session key scoping', () => {
     );
     expect(mockAsyncGetItem).toHaveBeenCalledWith(
       'clawket.cachedAgentIdentity.v1.cfg:gw-6::writer',
+    );
+  });
+
+  it('replaces cached identity so authoritative missing optional fields stay cleared', async () => {
+    await StorageService.setCachedAgentIdentity('cfg:gw-7', {
+      agentId: 'writer',
+      updatedAt: 5678,
+      agentName: 'Writer',
+    });
+
+    expect(mockAsyncGetItem).not.toHaveBeenCalled();
+    expect(mockAsyncSetItem).toHaveBeenCalledWith(
+      'clawket.cachedAgentIdentity.v1.cfg:gw-7::writer',
+      JSON.stringify({
+        agentId: 'writer',
+        updatedAt: 5678,
+        agentName: 'Writer',
+      }),
     );
   });
 });

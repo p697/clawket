@@ -106,6 +106,7 @@ export function UsagePosterSheet({
               agentId={agent.agentId}
               name={agent.name}
               emoji={agent.emoji}
+              avatarUrl={agent.avatarUrl}
               variant="settings"
             />
             <View style={styles.identityCopy}>

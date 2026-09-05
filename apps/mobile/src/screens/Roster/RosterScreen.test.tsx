@@ -64,6 +64,7 @@ const darkColors = {
 let mockTheme = { scheme: 'light' as 'light' | 'dark', colors: lightColors };
 let mockConnections: ConnectionRuntimeSnapshot;
 let mockRoster: ReadonlyArray<RosterConnectionGroup> = [];
+let mockCommonTranslations: Readonly<Record<string, string>> = {};
 const mockRefreshRoster = jest.fn(async () => mockRoster);
 const mockProbeActive = jest.fn(async () => true);
 
@@ -116,6 +117,7 @@ jest.mock('react-native', () => {
   };
   return {
     FlatList,
+    Image: host('Image'),
     Platform: {
       OS: 'ios',
       select: (options: Record<string, unknown>) => options.ios ?? options.default,
@@ -174,7 +176,11 @@ jest.mock('react-native-safe-area-context', () => ({
 }));
 
 jest.mock('react-i18next', () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+  useTranslation: () => ({
+    t: (key: string, options?: Readonly<{ count?: number }>) => (
+      mockCommonTranslations[key] ?? key
+    ).replace('{{count}}', String(options?.count ?? '')),
+  }),
 }));
 
 jest.mock('../../theme', () => ({
@@ -382,6 +388,7 @@ describe('RosterScreen', () => {
 
   beforeEach(() => {
     mockTheme = { scheme: 'light', colors: lightColors };
+    mockCommonTranslations = {};
     mockRoster = [group('live', 'live', [agent('live', 'main'), agent('live', 'builder')])];
     mockConnections = snapshot();
     mockRefreshRoster.mockClear();
@@ -428,8 +435,17 @@ describe('RosterScreen', () => {
     expect(view.getByTestId('roster-row-agent:live:main-attention')).toBeTruthy();
     expect(view.getByTestId('roster-row-agent:live:builder-unread')).toBeTruthy();
     expect(view.getByTestId('roster-row-session:live:agent:main:main:channel:ops')).toBeTruthy();
+    expect(view.getByTestId('roster-row-session:live:agent:main:main:channel:ops-pin-icon')).toBeTruthy();
+    expect(view.getByTestId(
+      'roster-row-session:live:agent:main:main:channel:ops-avatar-overlay',
+    )).toBeTruthy();
     expect(view.getByTestId('roster-row-agent:cached:builder-lock-icon')).toBeTruthy();
-    expect(view.getByTestId('roster-row-agent:cached:main').props.accessibilityLabel).toBe('Main');
+    expect(view.getAllByText('just now')).toHaveLength(2);
+    expect(view.queryByTestId('roster-row-agent:cached:main-attention')).toBeNull();
+    expect(view.queryByTestId('roster-row-agent:cached:builder-unread')).toBeNull();
+    expect(view.getByTestId('roster-row-agent:cached:main').props.accessibilityLabel).toBe(
+      'Main, Last synced',
+    );
     expect(view.queryByTestId('roster-row-agent:cached:main-avatar-working-ring')).toBeNull();
 
     fireEvent.press(view.getByTestId('roster-account'));
@@ -450,6 +466,68 @@ describe('RosterScreen', () => {
       locked: true,
     }));
     expect(onLongPressRow).toHaveBeenCalledWith(expect.objectContaining({ agentId: 'main' }));
+  });
+
+  it('renders the registry-provided semantic subtitle instead of the latest session preview', () => {
+    const source = group('sprite');
+    mockRoster = [{
+      ...source,
+      connection: {
+        ...source.connection,
+        backendKind: 'youmind',
+        transportKind: 'https',
+      },
+      agents: source.agents.map((summary, index) => index === 0
+        ? {
+            ...summary,
+            agent: {
+              ...summary.agent,
+              emoji: undefined,
+              avatarUrl: 'https://cdn.example.invalid/sprite.png',
+            },
+            subtitle: { kind: 'backend' as const, label: 'YouMind' },
+          }
+        : summary),
+    }];
+    mockConnections = snapshot({
+      connections: [mockRoster[0].connection],
+      activeConnectionId: 'sprite',
+      roster: mockRoster,
+    });
+
+    const view = render(<RosterScreen {...props()} />);
+
+    expect(view.getByText('YouMind')).toBeTruthy();
+    expect(view.getByTestId('roster-row-agent:sprite:main-avatar-image').props.source).toEqual({
+      uri: 'https://cdn.example.invalid/sprite.png',
+    });
+    expect(view.queryByText('Needs approval')).toBeNull();
+  });
+
+  it('localizes the cached last-synced time in a non-English locale', () => {
+    const now = Date.now();
+    mockCommonTranslations = {
+      '{{count}}h ago': '{{count}}時間前',
+      'Last synced': '最終同期',
+    };
+    mockRoster = [{
+      ...group('cached-ja', 'cache'),
+      syncedAt: now - 2 * 3_600_000,
+    }];
+    mockConnections = snapshot({
+      connections: [connection('cached-ja')],
+      activeConnectionId: 'live',
+      roster: mockRoster,
+    });
+
+    const view = render(<RosterScreen {...props()} />);
+
+    expect(view.getByTestId('roster-row-agent:cached-ja:main-synced').props.children).toBe(
+      '2時間前',
+    );
+    expect(view.getByTestId('roster-row-agent:cached-ja:main').props.accessibilityLabel).toBe(
+      'Main, 最終同期',
+    );
   });
 
   it('overlays the free Pro entry on the single account control while preserving attention priority', () => {
@@ -547,12 +625,19 @@ describe('RosterScreen', () => {
     });
     const view = render(<RosterScreen {...screenProps} />);
     const pinned = view.getByTestId('roster-row-session:live:agent:main:main:channel:ops');
+    expect(view.getByTestId('roster-row-session:live:agent:main:main:channel:ops-pin-icon')).toBeTruthy();
 
     fireEvent(pinned, 'longPress');
     fireEvent.press(view.getByTestId('roster-action-unpin_session'));
     expect(onUnpinSession).toHaveBeenCalledWith(expect.objectContaining({ kind: 'pinned_session' }));
 
-    fireEvent(pinned, 'longPress');
+    view.rerender(<RosterScreen {...screenProps} pinnedSessionKeys={{}} />);
+    expect(view.queryByTestId('roster-row-session:live:agent:main:main:channel:ops')).toBeNull();
+    expect(view.queryByTestId('roster-row-session:live:agent:main:main:channel:ops-pin-icon')).toBeNull();
+
+    view.rerender(<RosterScreen {...screenProps} />);
+
+    fireEvent(view.getByTestId('roster-row-session:live:agent:main:main:channel:ops'), 'longPress');
     fireEvent.press(view.getByTestId('roster-action-rename_session'));
     fireEvent.changeText(view.getByTestId('roster-rename-input'), 'Renamed channel');
     await act(async () => {

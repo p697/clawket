@@ -100,6 +100,7 @@ function SearchResultLeading({ result }: Readonly<{ result: SearchResult }>): Re
         agentId={result.agentId}
         name={result.title}
         emoji={result.emoji}
+        avatarUrl={result.avatarUrl}
         status={result.lockedReason ? 'locked' : result.source === 'cache' ? 'offline' : 'idle'}
       />
     );

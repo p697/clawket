@@ -64,7 +64,7 @@ export function ApprovalCard({
         style={[styles.status, { backgroundColor: theme.colors[tone] }]}
       />
       <View style={styles.content}>
-        <Text style={styles.title}>{title}</Text>
+        <Text style={styles.title} numberOfLines={1}>{title}</Text>
         {command ? (
           <Text
             testID={testID ? `${testID}-command` : undefined}
