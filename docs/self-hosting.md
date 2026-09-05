@@ -1,17 +1,29 @@
 # Self-Hosting Clawket
 
-This guide is for operators who clone the public repository and want to run Clawket on infrastructure they control.
+This guide is for operators who clone the public repository and run Clawket on infrastructure they control. The repository is usable without a private hosted dependency baked into its source.
+
+## Public-Source Boundary
+
+The repository includes:
+
+- the iOS and Android app source
+- the Bridge CLI and OpenClaw/Hermes runtimes
+- the shared Registry and Relay Worker source
+- direct LAN, Tailscale, and custom-endpoint pairing
+- Cloudflare templates and self-hosting documentation
+
+It does not include private production endpoints, Cloudflare account or namespace IDs, analytics or RevenueCat credentials, support/legal defaults, signing material, or deployment secrets. Bring your own direct connection or Relay infrastructure and enable only the optional integrations you operate.
+
+YouMind Sprite uses its own optional HTTPS adapter and account flow. It is not deployed by the Relay workspaces and is not a Relay transport kind.
 
 ## What You Need
 
 - Node.js and npm
-- an OpenClaw host that the bridge can control
-- Xcode / Expo tooling only if you want to build the mobile app yourself
+- an OpenClaw or Hermes host that the Bridge can control
+- Xcode or Android/Expo tooling only when building the mobile app
+- a Cloudflare account only when running Relay infrastructure
 
-Cloudflare is optional. Clawket supports both:
-
-- a relay-backed mode using `relay-registry` and `relay-worker`
-- a direct mode using LAN IP, Tailscale IP, or another custom gateway URL
+Clawket supports a Relay-backed path and a direct path over LAN, Tailscale, or another custom endpoint. Relay is transport; it is not the agent runtime or operator workstation.
 
 ## 1. Install Dependencies
 
@@ -25,56 +37,66 @@ npm install
 
 ### Option A: Direct local or Tailscale pairing
 
-If you do not want to deploy relay infrastructure, you can pair directly against your OpenClaw gateway.
-
-Auto-detect a LAN pairing URL:
+Pair every detected local-capable backend:
 
 ```bash
 npm run bridge:pair:local
 ```
 
-Or provide an explicit local, Tailscale, or custom gateway URL:
+To select one backend:
 
 ```bash
-npm run bridge:pair -- --local --url ws://100.x.x.x:18789
+npm run bridge:pair:local -- --backend openclaw
+npm run bridge:pair:local -- --backend hermes
 ```
 
-The mobile app can import or scan that QR payload and connect directly.
+For an explicit OpenClaw LAN, Tailscale, or custom Gateway URL:
+
+```bash
+npm run bridge:pair -- --local --backend openclaw --url ws://100.x.x.x:18789
+```
+
+The mobile app can scan or import the generated payload and connect directly.
 
 ### Option B: Relay-backed pairing with Cloudflare
 
-If you want a relay-backed path, prepare and deploy the registry and relay workers in your own Cloudflare account.
+Registry and Relay share one policy-driven implementation for OpenClaw and Hermes, but each backend and environment must use separate Worker services, KV namespaces, Durable Object namespaces, and secrets.
 
 ## 3. Prepare Cloudflare Worker Config
 
-Copy the open-source-safe templates into local overrides:
+Copy the open-source-safe OpenClaw templates into ignored local overrides:
 
 ```bash
 cp apps/relay-registry/wrangler.local.example.toml apps/relay-registry/wrangler.local.toml
 cp apps/relay-worker/wrangler.local.example.toml apps/relay-worker/wrangler.local.toml
 ```
 
-Then fill in your own:
+For a Hermes Relay instance, use the Hermes templates in the same workspaces:
 
-- `account_id`
-- KV namespace IDs
-- Durable Object bindings
-- `RELAY_REGION_MAP`
-- `REGISTRY_VERIFY_URL`
-- any optional shared secret values
+```bash
+cp apps/relay-registry/wrangler.hermes.local.example.toml apps/relay-registry/wrangler.hermes.local.toml
+cp apps/relay-worker/wrangler.hermes.local.example.toml apps/relay-worker/wrangler.hermes.local.toml
+```
 
-Tracked `wrangler.toml` files should stay generic.
+Fill in your own `account_id`, KV and Durable Object bindings, `RELAY_REGION_MAP`, `REGISTRY_VERIFY_URL`, and optional shared secrets. Keep tracked Wrangler files generic and never reuse OpenClaw resources for Hermes.
 
 ## 4. Run or Deploy Relay Infrastructure
 
-Local development:
+OpenClaw local development:
 
 ```bash
 npm run relay:dev:registry
 npm run relay:dev:worker
 ```
 
-Deploy to your Cloudflare account:
+Hermes local development:
+
+```bash
+npm run relay:dev:hermes-registry
+npm run relay:dev:hermes-worker
+```
+
+Before deploying, confirm the selected account. Then deploy only the intended backend pair:
 
 ```bash
 npm run relay:cf:whoami
@@ -82,35 +104,36 @@ npm run relay:deploy:registry
 npm run relay:deploy:worker
 ```
 
+Hermes uses the corresponding `relay:deploy:hermes-registry` and `relay:deploy:hermes-worker` commands. Every deploy wrapper runs the compatibility gate first.
+
 ## 5. Pair the Bridge Against Your Registry
 
-From the repo root:
+For OpenClaw:
 
 ```bash
-npm run bridge:pair -- --server https://registry.example.com
+npm run bridge:pair -- --backend openclaw --server https://registry.example.com
 ```
 
-Or:
+For Hermes:
 
 ```bash
-CLAWKET_REGISTRY_URL=https://registry.example.com npm run bridge:pair
+npm run bridge:pair:relay:hermes -- --server https://hermes-registry.example.com
 ```
 
-The public-source CLI does not assume a hosted registry.
+You may set `CLAWKET_REGISTRY_URL` or `CLAWKET_HERMES_REGISTRY_URL` instead. Hermes Relay pairing also tries to start the Clawket-managed local Bridge and Relay runtime.
 
 ## 6. Configure the Mobile Build
 
-If you are building the mobile app yourself, copy `apps/mobile/.env.example` to `.env.local` and set only the public values you actually want.
+Copy `apps/mobile/.env.example` to `.env.local` and set only the public values needed by your build. Examples include your support, documentation, privacy, and terms links.
 
-Examples:
+Optional private services are configured at build time:
 
-- support/legal links for your own fork
-- docs link for your own OpenClaw docs
-- other optional integrations only if you operate those services yourself
+- PostHog: `EXPO_PUBLIC_POSTHOG_ENABLED`, `EXPO_PUBLIC_POSTHOG_HOST`, and `EXPO_PUBLIC_POSTHOG_API_KEY`
+- RevenueCat: `EXPO_PUBLIC_REVENUECAT_ENABLED`, the platform API key, and the Pro entitlement/offering identifiers
 
-If you leave those values empty, the app hides or disables those integrations.
+In ordinary public development builds, an unconfigured integration stays disabled or hidden; when RevenueCat is disabled, subscription billing is skipped and Pro is unlocked. Store-distribution build commands apply stricter fail-closed configuration checks documented in the platform release guides.
 
-Recommended local checks:
+Recommended checks:
 
 ```bash
 npm run mobile:config:show
@@ -118,36 +141,30 @@ npm run mobile:config:check
 npm run mobile:config:check:ios
 ```
 
-Direct Xcode `Build` / `Archive` flows read `apps/mobile/.env.local` through `apps/mobile/ios/.xcode.env`, so iOS bundle-time `EXPO_PUBLIC_*` values stay aligned with the local Expo config.
+Direct Xcode builds read `apps/mobile/.env.local` through `apps/mobile/ios/.xcode.env`, so bundle-time `EXPO_PUBLIC_*` values stay aligned with Expo config.
 
-Private-service configuration and related self-hosting defaults are documented in [SELF_HOSTING_MODEL.md](../SELF_HOSTING_MODEL.md).
+When adding a mobile environment variable, add it to `.env.example`, expose it through `src/config/public.ts` when needed at runtime, update the public-config validator when release validation should enforce it, and rerun the platform config check.
 
-When you add a new mobile env variable:
+## Privacy and Secrets
 
-1. add it to `apps/mobile/.env.example`
-2. wire it through `apps/mobile/src/config/public.ts` if client runtime code needs it
-3. update `apps/mobile/scripts/check-public-config.mjs` if your release flow should validate it
-4. run `npm run mobile:config:check:ios` before archiving in Xcode
+- Relay forwards live traffic and does not persist message content.
+- Message caches stay on the device and deleting a connection clears that connection's cache.
+- Analytics must not include message text, prompts, raw identifiers, credentials, invitation material, or secret-bearing URLs.
+- Keep real Relay/Registry hostnames, account and namespace IDs, analytics and billing credentials, signing material, support aliases, and release-only defaults out of source control.
+
+Store private values in your environment, ignored local config, or release pipeline.
 
 ## 7. Verify
 
-Recommended checks:
-
 ```bash
-npm run typecheck
-npm run test
+npm run check:required
+npm run test:compat
 ```
 
-Then validate the full flow manually:
-
-1. choose either direct mode or relay mode
-2. if using relay mode, deploy or run your registry and relay
-3. pair the bridge with either a direct local URL or your own registry
-4. scan or import the resulting pairing data in the mobile app
-5. confirm that the connection uses your own endpoints
+Then validate the real flow: start or deploy the selected connection path, pair the Bridge, scan or import the result, and confirm that the app uses your endpoints.
 
 ## Related Docs
 
-- [docs/relay/CONFIGURATION.md](./relay/CONFIGURATION.md)
-- [docs/relay/LOCAL-DEVELOPMENT.md](./relay/LOCAL-DEVELOPMENT.md)
-- [docs/relay/ARCHITECTURE.md](./relay/ARCHITECTURE.md)
+- [Relay configuration](./relay/CONFIGURATION.md)
+- [Relay local development](./relay/LOCAL-DEVELOPMENT.md)
+- [Relay architecture](./relay/ARCHITECTURE.md)

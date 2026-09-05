@@ -92,6 +92,7 @@ Additional rules:
 ## Native configuration and dependencies
 
 - Expo config plugins under `plugins/` are the source for generated native edits. Plugins must be idempotent and fail closed when their anchor/template changes.
+- Keep direct dependencies tied to production, test, config-plugin, or native-link consumers. Review Knip findings against string-loaded Expo plugins and generated native configuration before removing a package or export.
 - Keep root and Mobile lockfiles synchronized. Both root and workspace install entry points must apply required native dependency patches.
 - After native dependency or plugin changes, run a clean Expo prebuild, iOS pod install/build, and Android Debug build. Inspect generated changes; do not hand-edit a generated native file unless the build documentation explicitly requires it.
 - `@mattermost/react-native-paste-input` requires the checked podspec patch and iOS `PasteInputModule.setup(factory.rootViewFactory)` bridge setup. Preserve both postinstall paths and their tests.

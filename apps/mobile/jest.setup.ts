@@ -67,32 +67,6 @@ jest.mock('expo-linking', () => ({
   createURL: jest.fn((path: string) => `clawket://${path}`),
 }));
 
-// Mock expo-apple-authentication
-jest.mock('expo-apple-authentication', () => ({
-  isAvailableAsync: jest.fn(() => Promise.resolve(true)),
-  signInAsync: jest.fn(() => Promise.resolve({
-    identityToken: 'apple-id-token',
-  })),
-  AppleAuthenticationScope: {
-    EMAIL: 'EMAIL',
-    FULL_NAME: 'FULL_NAME',
-  },
-}));
-
-// Mock expo-auth-session/providers/google
-jest.mock('expo-auth-session/providers/google', () => ({
-  useIdTokenAuthRequest: jest.fn(() => ([
-    { url: 'https://accounts.google.com' },
-    null,
-    jest.fn(() => Promise.resolve({
-      type: 'success',
-      params: {
-        id_token: 'google-id-token',
-      },
-    })),
-  ])),
-}));
-
 // Mock expo-camera
 jest.mock('expo-camera', () => {
   const React = require('react');
@@ -133,16 +107,6 @@ jest.mock('expo-application', () => ({
   nativeBuildVersion: '1',
   getIosIdForVendorAsync: jest.fn(() => Promise.resolve(null)),
   androidId: null,
-}));
-
-// Mock expo-constants
-jest.mock('expo-constants', () => ({
-  __esModule: true,
-  default: {
-    expoConfig: { extra: {} },
-    sessionId: 'jest-session',
-  },
-  expoConfig: { extra: {} },
 }));
 
 // Mock expo-device
@@ -479,39 +443,6 @@ jest.mock('react-native-purchases', () => {
     __esModule: true,
     default: mockModule,
     ...mockModule,
-  };
-});
-
-jest.mock('react-native-draggable-flatlist', () => {
-  const React = require('react');
-  const { View } = require('react-native');
-
-  const MockDraggableFlatList = ({
-    data,
-    renderItem,
-  }: {
-    data: Array<unknown>;
-    renderItem: (params: { item: unknown; getIndex: () => number; drag: () => void; isActive: boolean }) => React.ReactNode;
-  }) => React.createElement(
-    View,
-    null,
-    data.map((item, index) =>
-      React.createElement(
-        React.Fragment,
-        { key: String(index) },
-        renderItem({
-          item,
-          getIndex: () => index,
-          drag: jest.fn(),
-          isActive: false,
-        }),
-      )),
-  );
-
-  return {
-    __esModule: true,
-    default: MockDraggableFlatList,
-    ScaleDecorator: ({ children }: { children: React.ReactNode }) => children,
   };
 });
 

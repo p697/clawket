@@ -15,6 +15,7 @@ This repository is the Clawket monorepo.
 2. Preserve unrelated work in a dirty tree. Do not reformat, revert, or opportunistically rewrite files outside the task.
 3. Prefer stability and explicit compatibility over broad cleanup, especially across the OpenClaw and Hermes paths.
 4. Keep prompts, documentation, and implementation rules concise and non-duplicative. Put detailed workspace rules in the closest workspace document.
+5. Keep production files, exports, and direct dependencies consumer-backed. Document string-loaded entry points, bundle externals, and other static-analysis exceptions instead of deleting them blindly.
 
 ## AGENTS / CLAUDE Source Rule
 

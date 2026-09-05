@@ -22,7 +22,7 @@ import {
   summarizeText,
 } from './internal.js';
 
-export type HermesRunStartedResponse = { run_id?: string; status?: string };
+type HermesRunStartedResponse = { run_id?: string; status?: string };
 
 export type HermesActiveRun = {
   runId: string;

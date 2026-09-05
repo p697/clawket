@@ -30,6 +30,8 @@ Production and Preview have separate:
 
 The product-facing Preview selector is still `backendKind=openclaw` with `transportKind=relay`. Environment must not be modeled as another transport. A separately named Hermes Preview Registry/Relay pair exists for infrastructure acceptance, but it does not enroll Hermes into the OpenClaw Preview product environment or share any bindings with it.
 
+OpenClaw Preview configs set `RELAY_BACKEND=openclaw`; the separate Hermes Preview configs set `RELAY_BACKEND=hermes`. Together with their Production counterparts, they form four isolated service pairs from the same two source workspaces.
+
 The installed Bridge service reads both `~/.clawket/bridge-cli.json` and `~/.clawket/bridge-cli.preview.json`. When both exist it runs independent Relay runtimes, allowing Production and Preview connections to stay available at the same time.
 
 ## Operator setup

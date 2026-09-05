@@ -396,10 +396,6 @@ export function ThreadScreen({
       });
       return;
     }
-    if (entry.action.type === 'navigate_tab') {
-      navigation.navigate('Roster');
-      return;
-    }
     if (entry.action.type === 'navigate_config') {
       if (entry.action.screen === 'ChatAppearance') {
         navigation.navigate('AccountSettingsSection', { section: 'appearance' });
@@ -412,15 +408,6 @@ export function ThreadScreen({
       }
       return;
     }
-    const section = {
-      Discover: 'skills',
-      Cron: 'cron',
-      SessionsBoard: 'connection',
-      AgentSessionsBoard: 'connection',
-      ModelList: 'models',
-      Nodes: 'channels-devices',
-    }[entry.action.screen] as 'skills' | 'cron' | 'connection' | 'models' | 'channels-devices';
-    navigation.navigate('AgentSettingsSection', { connectionId, agentId, section });
   }, [agentId, closeAnnouncement, connectionId, navigation]);
 
   const handleCopyMessage = useCallback((message: UiMessage) => {

@@ -21,7 +21,7 @@ export type HermesUsageTotals = {
   missingCostEntries: number;
 };
 
-export type HermesUsageResult = {
+type HermesUsageResult = {
   updatedAt?: number;
   startDate?: string;
   endDate?: string;
@@ -96,7 +96,7 @@ export type HermesUsageResult = {
   };
 };
 
-export type HermesCostSummary = {
+type HermesCostSummary = {
   updatedAt?: number;
   days?: number;
   daily?: Array<HermesUsageTotals & { date: string }>;
@@ -122,7 +122,7 @@ export type HermesObservedSessionUsageSnapshot = {
   totals: HermesUsageTotals;
 };
 
-export type HermesUsageLedgerSessionEntry = {
+type HermesUsageLedgerSessionEntry = {
   key: string;
   label: string;
   agentId: string;
@@ -140,7 +140,7 @@ export type HermesUsageLedgerDayRecord = {
   sessions: Record<string, HermesUsageLedgerSessionEntry>;
 };
 
-export type HermesUsageLedgerSnapshotRecord = {
+type HermesUsageLedgerSnapshotRecord = {
   sessionId: string;
   key: string;
   label: string;

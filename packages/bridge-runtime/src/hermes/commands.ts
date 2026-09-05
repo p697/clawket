@@ -11,7 +11,7 @@ import {
   readString,
 } from './internal.js';
 
-export type HermesProviderListing = {
+type HermesProviderListing = {
   slug: string;
   name: string;
   isCurrent: boolean;
@@ -21,7 +21,7 @@ export type HermesProviderListing = {
   apiUrl?: string;
 };
 
-export type HermesModelDescriptor = {
+type HermesModelDescriptor = {
   id: string;
   name: string;
   provider: string;

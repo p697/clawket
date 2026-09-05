@@ -81,6 +81,12 @@ If the Bridge cloud socket or its local OpenClaw Gateway session is lost, Relay 
 
 The Bridge resets Relay backoff after a transport pong and resets local Gateway retry backoff only after a successful connect response. Hermes additionally accepts inbound Relay traffic or a stable 30-second connection as health evidence, and uses low-frequency cloud bridge-status polling alongside a real local bridge request/response probe.
 
+## Relay frame-limit capability
+
+Relay health and the additive post-authentication `relay.ready` control frame advertise `relay.frame-limit.v2`. The exact capability means that App, Relay, and Bridge enforce the shared 8 MiB application-frame boundary: exactly 8 MiB is valid, larger frames fail before send where possible, and an oversized peer is closed with code `1009` and the stable `frame_too_large` signal. Bridge also normalizes the Node `ws` hard-limit error to that code internally.
+
+Older peers may ignore `relay.ready` and continue through the v1 path. Missing, malformed, or unknown capability values never imply frame-limit support or upgrade another behavior.
+
 ## Security and product boundaries
 
 - Bootstrap tokens, decoded setup codes, and device tokens must never be logged.
@@ -113,4 +119,5 @@ Preview is an isolated service environment for the existing OpenClaw Relay trans
 - Existing OpenClaw token/password and Hermes required suites.
 - Encrypted invitation creation/read/resolve, six-digit scoped-ticket handshake, ephemeral payload encryption, Bridge-side attempt limit, expiry/rate-limit handling, and legacy QR/code fallback.
 - Capability-negotiated tick/pong, legacy idle preservation, missed-pong expiry, and hibernation attachment persistence.
+- Exact 8 MiB acceptance, larger-frame rejection, `relay.frame-limit.v2` advertisement, and legacy handling of the additive ready frame.
 - Bridge Relay backoff reset, Gateway handshake-qualified reset, and forced App reconnect after unexpected Gateway loss.

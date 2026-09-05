@@ -74,7 +74,7 @@ type HermesBridgePersistedState = {
   sessions: HermesBridgePersistedSession[];
 };
 
-export const BRIDGE_SESSION_ACTIONS: HermesSessionActions = Object.freeze({
+const BRIDGE_SESSION_ACTIONS: HermesSessionActions = Object.freeze({
   rename: true,
   reset: true,
   delete: true,

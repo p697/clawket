@@ -190,14 +190,6 @@ function normalizeFingerprint(input: string): string | null {
   return normalized ? normalized : null;
 }
 
-export function resolveGatewayToken(): string | null {
-  return readOpenClawInfo().token;
-}
-
-export function resolveGatewayPassword(): string | null {
-  return readOpenClawInfo().password;
-}
-
 export function resolveGatewayAuth():
   | { token: string; password: null; label: 'token' }
   | { token: null; password: string; label: 'password' }

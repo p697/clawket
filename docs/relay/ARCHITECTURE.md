@@ -81,6 +81,42 @@ The gateway-side bridge runtime lives in this monorepo:
 - `packages/bridge-core`
 - `packages/bridge-runtime`
 
+## Hermes Instances
+
+OpenClaw and Hermes share the two Worker source workspaces, selected by `RELAY_BACKEND`, but deploy as four isolated service pairs:
+
+| Environment | Registry | Relay | Backend |
+|---|---|---|---|
+| OpenClaw Production | `clawket-registry` | `clawket-relay` | `openclaw` |
+| OpenClaw Preview | `clawket-registry-preview` | `clawket-relay-preview` | `openclaw` |
+| Hermes Production | `clawket-hermes-registry` | `clawket-hermes-relay` | `hermes` |
+| Hermes Preview | `clawket-hermes-registry-preview` | `clawket-hermes-relay-preview` | `hermes` |
+
+Sharing code never merges deployment or compatibility boundaries. Hermes retains:
+
+1. `/v1/hermes/pair/*`, `/v1/hermes/verify/:bridgeId`, and the internal Hermes Relay routes.
+2. `bridgeId` plus the `hbg_`, `hrs_`, and `hct_` credential prefixes.
+3. `hermes-pair-bridge:<bridgeId>` KV keys.
+4. `HERMES_ROOM` and the `HermesRelayRoom` Durable Object class.
+5. `~/.clawket/hermes-relay.json` for its local pairing state.
+
+The historical Hermes owner wire role remains `gateway`, while product semantics identify it as a bridge. Backend-specific identity, storage codecs, route prefixes, room bindings, replacement reasons, liveness, and safe telemetry fields belong to the centralized backend policy or a narrow lifecycle override; callers must not scatter backend checks.
+
+Mobile represents this path as `backendKind: 'hermes'` plus `transportKind: 'relay'`. The default `clawket pair` flow uses Hermes Relay and attempts to start the Clawket-managed local Bridge and Relay runtime; `clawket pair local` is the explicit local-only path.
+
+### Local Hermes Bridge contract
+
+The local Bridge owns capability negotiation, logical sessions, active-run cancellation, and translation to Hermes HTTP APIs. Relay only transports frames.
+
+- A bounded request/response probe determines readiness; a listening socket or WebSocket `open` event alone is not health evidence.
+- Health and the first WebSocket health event advertise `bridge.capabilities.v2` and `hermes.multi-session.v2` only while their complete behavior exists. Missing or unknown capability metadata keeps the single-`main` compatibility path.
+- Clawket may create, rename, reset, and delete only Bridge-owned session metadata. Hermes native sessions remain read-only; reset rotates the backing session ID, and native read failure degrades to Bridge-owned sessions with a warning.
+- `chat.history` uses an opaque cursor bound to the backing session. `chat.abort` owns the matching active request controller, replies once, and emits one terminal aborted chat state.
+- Image attachments are validated before a run and translated into one OpenAI-style user message with text followed by `image_url` data-URL parts. The current turn stays out of `conversation_history`, and the shared 8 MiB frame limit still applies.
+- Hermes cron creation is global rather than session-scoped. The Bridge validates required fields and execution input before invoking Hermes and fails closed when no persisted job can be read back.
+
+Every Registry or Relay deployment runs `tests/compat` first. A valid release also requires both backend configurations and tests to pass, Preview smoke tests to use isolated resources, and account-bound values to remain in ignored local configs or Cloudflare secrets.
+
 ## Public Contracts
 
 ### Pair Register

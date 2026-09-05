@@ -92,26 +92,6 @@ export function normalizeHermesHistoryContent(content: unknown): string {
     .trim();
 }
 
-export function isDuplicateHermesHistoryMessage(
-  localMessage: HermesBridgeSessionMessage,
-  nativeMessages: HermesHistoryMessage[],
-): boolean {
-  if (localMessage.role === 'assistant') {
-    const localContent = normalizeHermesHistoryContent(localMessage.content);
-    return !!localContent && nativeMessages.some((message) => (
-      message.role === 'assistant'
-      && normalizeHermesHistoryContent(message.content) === localContent
-    ));
-  }
-  if (localMessage.role !== 'toolResult') return false;
-  return nativeMessages.some((message) => (
-    message.role === 'toolResult'
-    && ((!!localMessage.toolCallId && message.toolCallId === localMessage.toolCallId)
-      || ((message.toolName ?? '') === (localMessage.toolName ?? '')
-        && normalizeHermesHistoryContent(message.content) === normalizeHermesHistoryContent(localMessage.content)))
-  ));
-}
-
 export class HermesNativeSessionReader {
   private warnings: string[] = [];
 

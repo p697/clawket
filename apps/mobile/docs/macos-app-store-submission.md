@@ -1,5 +1,7 @@
 # macOS App Store Submission
 
+> macOS and Mac Catalyst remain outside the Clawket 3.0 release scope. The scripts and this future release checklist are retained but are not part of 3.0 acceptance.
+
 This document describes the remaining steps to submit the Mac Catalyst version of Clawket to the Mac App Store without changing the existing iOS shipping path.
 
 ## Current State

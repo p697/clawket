@@ -3,16 +3,8 @@ export type AppUpdateAnnouncementAction =
       type: 'none';
     }
   | {
-      type: 'navigate_tab';
-      screen: 'Live';
-    }
-  | {
       type: 'open_url';
       url: string;
-    }
-  | {
-      type: 'navigate_console';
-      screen: 'Discover' | 'Cron' | 'SessionsBoard' | 'AgentSessionsBoard' | 'ModelList';
     }
   | {
       type: 'navigate_config';

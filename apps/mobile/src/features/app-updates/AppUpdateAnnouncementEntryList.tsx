@@ -57,8 +57,6 @@ export function AppUpdateAnnouncementEntryList({ entries, colors, onEntryPress, 
     <View style={stylesWithTheme.entries}>
       {entries.map((entry) => {
         const isNavigable = entry.action.type === 'open_url'
-          || entry.action.type === 'navigate_tab'
-          || entry.action.type === 'navigate_console'
           || entry.action.type === 'navigate_config'
           || entry.action.type === 'navigate_config_add_connection'
           || entry.action.type === 'open_paywall';

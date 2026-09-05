@@ -61,3 +61,4 @@ Subprocesses set `HERMES_HOME` and prepend `hermesSourcePath` to `PYTHONPATH`. D
 2. Tests that inspect the external read-only Hermes checkout must use the `*.integration.test.ts` suffix. They may verify behavior but may not modify source, state, tests, or scripts outside this repository.
 3. `npm test` is the broad suite and includes both self-contained and integration tests. Do not silently skip an external integration test or replace it with a stub to obtain a green run.
 4. Keep tests beside the module they cover and add regressions for both OpenClaw and Hermes whenever shared Relay or frame behavior changes.
+5. Export only runtime contracts consumed outside their implementation module. Keep implementation-only helpers and record shapes private so the published surface does not grow accidentally.

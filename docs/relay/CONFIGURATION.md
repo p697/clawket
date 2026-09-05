@@ -2,6 +2,15 @@
 
 This document describes the public configuration surface for the registry worker and relay worker. All account-bound resources must be created in the operator's own Cloudflare account.
 
+## Backend Instance Selector
+
+Both Worker workspaces use `RELAY_BACKEND`:
+
+- `openclaw` selects the OpenClaw routes, identifiers, bindings, room class, and telemetry policy.
+- `hermes` selects the isolated Hermes equivalents.
+
+Every new Wrangler configuration must set this value explicitly. Omission retains the legacy OpenClaw default for compatibility; any unknown value fails closed. The two source workspaces deploy four isolated service pairs—OpenClaw and Hermes in Production and Preview—and no pair may share KV, Durable Object, credentials, or local pairing state with another environment.
+
 ## Registry Worker
 
 Path: `apps/relay-registry`

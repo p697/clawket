@@ -43,7 +43,7 @@
     "check:required": "npm run typecheck && npm run test:required && npm run mobile:check:design-system && npm run --workspace clawket i18n:check && npm run check:docs",
     "typecheck": "npm run protocol:typecheck && npm run mobile:typecheck && npm run relay:typecheck && npm run bridge:typecheck",
     "test": "npm run protocol:test && npm run mobile:test -- --runInBand && npm run relay:test && npm run bridge:test",
-    "test:required": "npm run protocol:test:coverage && npm run mobile:test -- --runInBand && npm run relay:test && npm run bridge:test:required && node --test apps/mobile/scripts/android-release-signing.test.mjs apps/mobile/scripts/check-public-config.test.mjs apps/mobile/scripts/patch-android-native-deps.test.mjs apps/mobile/scripts/patch-paste-input-podspec.test.mjs scripts/bridge/publish-cli.test.mjs scripts/metrics/loc.test.mjs scripts/relay/hermes-device-dev.test.mjs scripts/relay/preview-hermes-smoke.test.mjs scripts/relay/run-wrangler.test.mjs",
+    "test:required": "npm run protocol:test:coverage && npm run mobile:test -- --runInBand && npm run relay:test && npm run bridge:test:required && node --test apps/mobile/scripts/android-release-signing.test.mjs apps/mobile/scripts/check-public-config.test.mjs apps/mobile/scripts/patch-android-native-deps.test.mjs apps/mobile/scripts/patch-paste-input-podspec.test.mjs scripts/bridge/publish-cli.test.mjs scripts/metrics/loc.test.mjs scripts/relay/hermes-device-dev.test.mjs scripts/relay/preview-hermes-smoke.test.mjs scripts/relay/run-wrangler.test.mjs scripts/setup-mobile-node-modules.test.mjs",
     "test:compat": "vitest run --config tests/compat/vitest.config.ts",
     "metrics:loc": "node scripts/metrics/loc.mjs",
     "build": "npm run bridge:build",

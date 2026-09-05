@@ -9,7 +9,7 @@ export type HermesPythonRunnerOptions = {
   env?: NodeJS.ProcessEnv;
 };
 
-export function buildHermesPythonPath(sourcePath: string, existing: string | undefined): string {
+function buildHermesPythonPath(sourcePath: string, existing: string | undefined): string {
   return [sourcePath, existing].filter(Boolean).join(delimiter);
 }
 
