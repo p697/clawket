@@ -4,19 +4,27 @@
 
 ## 当前状态
 
-- 当前里程碑：M8（M7 已完成）
+- 当前里程碑：M8 Preview 自动验收已完成；Production、商店与真机验收待人
 - 集成分支：`release/3.0`
-- 最近一次全绿：2026-09-05，M7 exact gate、Mobile 225 suites / 1,998 tests、Bridge Runtime broad 186、compat 5 files / 35 tests、Relay integration 4 files / 7 tests、139 UI / 566 token sources、5,910 条翻译、Expo Doctor 20/20、CLI publish dry-run 与 iOS/Android clean build 全绿
+- 实现提交：`2d640eb`（M8 release gaps）、`dea5c67`（i18n strict 静态闭包）
+- Preview：四个隔离服务已部署并健康；每次上传前 compat 35/35，Production 未改动
+- 自动验收：`09-release-and-acceptance.md` 的 55 行均已完成自动可做部分，或明确标记无安全本地替代；混合项仍保留真机、控制台或视觉部分
+- 发布物：3.0.0 tarball 已验证、全局安装并重启；workspace、tarball、global bundle 字节一致
+- 最近一次全绿：2026-09-05，exact gate、Mobile 228 suites / 2,051 tests、compat 5 files / 35 tests、Relay integration 4 files / 7 tests、140 UI / 571 token sources、5,952 条翻译、iOS/Android clean build 全绿
+- 未完成：Production 发布、npm 正式发布、商店提交、真机验收及提交前/发布后 48 小时观察
+- 偏离：自配对握手与 owner 审批拆分；规格中的 📌 使用 Lucide Pin；隐私标签按实际身份关联采取更保守口径
+- 首要风险：公开法务/支持页面仍是旧 OpenClaw-only 与“无分析”口径；须在商店提交前更新
+- 后续风险：Hermes Production 首次合一部署与 2.1.2 回滚链、商店购买/权限/附件矩阵仍需真人闭环
 
 ## 基线（M0 填写）
 
 | 指标 | 基线 | 最新 | 差值 |
 |---|---|---|---|
-| 非测试代码行数（apps + packages，ts/tsx） | 124147 | 100165 | -23982（M7 删除零消费者 Mobile/Bridge 实现，未删测试或压缩排版） |
-| 测试代码行数 | 36018 | 65722 | +29704（新增协议、迁移、状态与组件回归；不删测试凑指标） |
-| 测试文件数 | 186 | 272 | +86 |
+| 非测试代码行数（apps + packages，ts/tsx） | 124147 | 101256 | -22891（M8 验收缺口增加 1,091 行后仍低于基线；未删测试或压缩排版） |
+| 测试代码行数 | 36018 | 67730 | +31712（新增协议、迁移、审批、身份竞态、状态与组件回归；不删测试凑指标） |
+| 测试文件数 | 186 | 275 | +89 |
 | Markdown 文档数（包含 docs/3.0） | 53 | 49 | -4 |
-| `git diff --shortstat <baseline>..HEAD` | — | 970 files changed, 130761 insertions(+), 126683 deletions(-) | +4078 净 diff 行；文件移动与新增测试会按删除/新增计，按同口径 LOC 的非测试代码实际低于基线 23982 行 |
+| `git diff --shortstat <baseline>..dea5c67` | — | 978 files changed, 135228 insertions(+), 127991 deletions(-) | +7237 净 diff 行；文件移动与新增测试会按删除/新增计，按同口径 LOC 的非测试代码实际低于基线 22891 行 |
 
 基线提交：`db20f7d0f9b25d094a1e3aa9c83a27c362d2fc7d`
 
@@ -32,7 +40,7 @@
 | M5 App 界面 | 已完成 | 2026-09-05 | typecheck；Mobile 211/1824；设计门禁 153 UI / 566 token sources；i18n 6×4；iOS/Android fresh build | `6384b57`…`f97c52a` |
 | M6 付费墙、额度与埋点 | 已完成 | 2026-09-05 | Mobile 225/1997；required、compat 35/35、integration 7/7；RevenueCat mock 四路径；156 UI / 591 token sources；iOS/Android fresh build | `a6c563db4108f016bc16a74a1624cbc8ae70bd15` |
 | M7 减法收尾 | 已完成 | 2026-09-05 | exact gate 全绿；Mobile 225/1998、Runtime 186、compat 35/35、integration 7/7；Knip 全量审计；Expo Doctor 20/20；CLI publish dry-run；双端 clean build；LOC/Markdown 均低于基线 | `24b78685d023023a2e7146c877d4942bdd5ce49e` |
-| M8 发布 | 未开始 | | | |
+| M8 发布 | 已完成（Preview 自动部分） | 2026-09-05 | `09` 清单 55/55 行已完成自动可做部分或标记无安全本地替代；四 Preview 服务健康；OpenClaw 9/9、Hermes 7/7；compat 35/35；最终 exact gate、strict i18n 与双端 clean build 全绿 | `2d640eb`、`dea5c67` |
 
 ## M2a 合并前差异盘点
 
@@ -187,6 +195,102 @@ Onboarding 的页面专属状态为默认表单、连接中、offline/error 与 
 - 最终原样执行 `npm run check:required && npm run test && npm run test:compat && npm run metrics:loc` 全绿：Protocol 24 且四项覆盖率 100%；Mobile 225/1,998；Registry 41、Relay 103、Bridge Core 39、Runtime broad 186、CLI 61；compat 35/35。额外 Relay/adapters integration 7/7，CLI 3 文件发布包、4 runtime boundaries、17 modules、47 provenance inputs 验证及 `npm publish --dry-run` 通过。
 - 非测试代码 100,165 行，较 M0 基线减少 23,982；测试 65,722 行 / 272 文件；Markdown 49 份，较基线少 4。没有通过删测试、合并文件、压缩排版或删除仍成立的文档凑数。详细本地日志见 `m7-subtraction.md`。
 
+## M8 完成证据
+
+- `2d640eb` 收齐 Preview 验收缺口：缓存花名册以 `syncedAt` 标记且不传播过期未读/attention/working；置顶会话行显示 owning Agent 头像、Lucide Pin 与类型 overlay，并在取消置顶后消失；远程头像、相对时间、YouMind 公共身份、临时 compaction 行、200 ms 会话交叉淡入与 reduce-motion 均有回归。线程身份按 connection + Agent 隔离，连接级 pair approval 有稳定合并、tombstone、并发刷新保护、失败重试与低敏错误，且不写历史或 cache。`dea5c67` 把花名册相对时间改为可静态审计的 literal-key 分派，使 strict i18n 门禁全绿。
+- 四个 Preview 服务按 Registry → Relay、OpenClaw → Hermes 顺序部署；每次 wrapper 上传前都先通过 compat 35/35。当前版本：OpenClaw Registry `c3bb9e6a-5c83-4192-9e73-659c5726c853`、Relay `c3bcb3a8-34d3-4027-a9cc-bc0a667c7d30`；Hermes Registry `3d311407-e7bc-4575-b01e-ddd789412b30`、Relay `644f98f0-31e1-4584-981d-96f766f741f4`。上一版本已记录为反向回滚锚点；Production bindings 与流量均未触碰。
+- 四个 health 均为 200；OpenClaw 产品冒烟 9/9、Hermes 7/7。未知 OpenClaw/Hermes principal 在线返回 `404 UNKNOWN_GATEWAY`，单元/集成测试证明在 `idFromName` 前拒绝；Hermes 固定小时公开 IP 限速精确在第 11 次返回 429。1,572,975-byte 帧进入在线 Relay/Bridge 队列，9 MiB binary 以 1009 / `frame_too_large` 关闭；因未挂真实 Gateway，不把前者声称为附件端到端交付。
+- 从 M8 源码构建 `/tmp/clawket-m8-final-pack.seousx/p697-clawket-3.0.0.tgz`：3 个文件、110.1 kB packed / 512.7 kB unpacked，npm shasum `787d8e16d3389b9c0e3790070132d3f42b49656d`，tarball SHA-256 `0c3b38f20d2c56db382ee1b384d1e44e601c8c65d01bbc456b458560c7ed352f`。workspace / tarball / global 的 `dist/index.js` 都是 `bad7f48bec0c91d8de15b29b4fb262de2084d4db7d3d0bc68c8df7357cee0da6`；全局安装、`clawket restart`、doctor/status 均健康，正式 npm publish 留给 `HT-M3-1`。
+- 最终原样执行 `npm run check:required && npm run test && npm run test:compat && npm run metrics:loc` 全绿：Protocol 3 files / 24 tests 且报告内覆盖率 100%；Mobile 228/2,051；Relay Shared 2/34、Registry 4/41、Relay Worker 5/103；Bridge Core 6/39、Runtime broad 20/186、CLI 8/61；compat 5/35；required Node checks 55。额外 Relay/adapters integration 4 files / 7 tests 全绿。
+- i18n strict 扫描 343 个源文件：6 locales × 4 namespaces、992 keys / 5,952 translations、referenced 985、unused 7、removable 0、retained 7、dynamic protected 0、missing 0；7 个保留项均是显式 `thinking_*` prefix。设计门禁扫描 140 UI / 571 token sources / 44 selftest outcomes；设计文档锁定 11 个组件、10 个 token family、18 个颜色与 6 个例外。
+- `mobile:sync:native` clean prebuild 与 Pods 成功。Android arm64-v8a Debug 为 532 actionable tasks（503 executed / 29 up-to-date）、`BUILD SUCCESSFUL`；iOS Simulator Debug 为 148-target graph、`CLEAN SUCCEEDED`、`BUILD SUCCEEDED`。未启动模拟器、未截图；生成缓存验证后已删除。
+- Mobile Knip 没有 unused dependency/devDependency、unresolved 或 cycle；剩余项仅为 3 个字符串加载的 Expo plugin、禁用的 `expo-updates` 误报及公共 contract/test seam。Packages/CLI Knip 只保留 bundle externals `tweetnacl`/`ws`、动态 `tsup` 和系统命令。Expo Doctor 1.20.4 为 20/20；root audit 为 1 low / 47 moderate / 0 high / 0 critical，Mobile 为 20 moderate / 0 high / 0 critical。
+- `09-release-and-acceptance.md` 共 55 行：55/55 行均已完成自动可做部分，或对 Android license tester 等项目明确记录无安全本地替代；其中 48 行仍有真机、控制台或视觉部分，7 行无需人类补验。最终 LOC 为非测试 101,256、测试 67,730 / 275 文件、Markdown 49；相对 M0 非测试 -22,891、测试 +31,712、测试文件 +89、Markdown -4。增长来自验收缺口及审批/身份竞态回归，没有删除测试、合并文件、压缩排版或删除仍成立文档凑数。详细本地日志见 `m8-preview-release.md`。
+
+### M8 商店文案草案
+
+| 字段 | English | 简体中文 |
+|---|---|---|
+| App name | Clawket | Clawket |
+| Apple subtitle | AI agent control tower | OpenClaw 与 Hermes 的手机控制塔 |
+| Google short description | See, chat with, and manage your OpenClaw and Hermes agents from your phone. | 在手机上查看、对话并管理你的 OpenClaw 与 Hermes Agent。 |
+| Promotional text | See what every agent is doing and take control when it matters. Clawket brings OpenClaw and Hermes together on your phone, with chat for YouMind Sprite. | 一屏看清每个 Agent 在做什么，需要时随时接管。Clawket 把你电脑上的 OpenClaw 与 Hermes 带到手机，并支持 YouMind 精灵聊天。 |
+| Keywords | OpenClaw,Hermes,AI agents,agent manager,remote chat,self-hosted,automation | OpenClaw,Hermes,AI Agent,智能体,远程管理,会话,自动化,自托管 |
+
+English full description:
+
+```text
+See what every agent is doing and take control when it matters. Connect OpenClaw or Hermes running on your own computer to chat and manage sessions, schedules, skills, and models. The official OpenClaw app is for chat; Clawket is for control.
+
+Clawket is a mobile session control tower for self-hosted AI agents.
+
+• See agents, live status, conversation previews, unread activity, and items that need attention.
+• Chat in persistent threads and switch, rename, reset, or delete sessions.
+• Manage supported models, skills, scheduled tasks, files, devices, approvals, and logs.
+• Pair through Clawket Relay, or connect over your local network, Tailscale, or a custom endpoint.
+• Sign in with email to chat with your YouMind Sprite.
+
+Free includes one connection and its main agent. Clawket Pro unlocks multiple connections and agents, plus OpenClaw management, logs, file editing, message search details, and alternate app icons. Choose an annual, lifetime, or monthly plan; localized prices are shown in the app. No free trial.
+
+Privacy by design:
+• Clawket message caches stay on your device.
+• Clawket Relay forwards live traffic and does not persist message content.
+• Removing a connection clears its local message cache.
+
+Feature availability depends on the connected backend. YouMind Sprite supports chat only.
+```
+
+简体中文完整描述：
+
+```text
+看清每个 Agent 在做什么，随时接管。连接你自己电脑上的 OpenClaw 或 Hermes，聊天、管理会话、定时任务、技能与模型；官方 OpenClaw App 用来聊，Clawket 用来管。
+
+Clawket 是自托管 Agent 的手机会话控制塔。
+
+• 一屏查看 Agent 状态、对话预览、未读和待处理事项
+• 在持续线程中聊天，切换、重命名、重置或删除会话
+• 按后端能力管理模型、技能、定时任务、文件、设备、审批与日志
+• 默认通过 Clawket Relay 配对，也可使用局域网、Tailscale 或自定义端点直连
+• 使用邮箱登录，与 YouMind 精灵聊天
+
+免费版包含 1 个连接和该连接的 main Agent。Clawket Pro 解锁多个连接与 Agent，以及 OpenClaw 管理、日志、文件编辑、消息搜索详情和更多 App 图标。可选年付、终身或月付方案；本地化价格以 App 内显示为准，不提供试用。
+
+隐私优先：
+• Clawket 的消息缓存只保存在你的设备上
+• Clawket Relay 只转发实时流量，不持久化消息内容
+• 删除连接会清除该连接的本地消息缓存
+
+具体能力取决于所连接的后端；YouMind 精灵仅支持聊天。
+```
+
+What’s New (English):
+
+```text
+Clawket 3.0 is rebuilt around a unified agent roster and persistent threads. It adds Hermes multi-session support, YouMind Sprite chat, six-digit Relay pairing, capability-aware settings, global search, a new Pro plan, and a redesigned visual system. Connection recovery and OpenClaw/Hermes compatibility are strengthened throughout.
+```
+
+更新说明（简体中文）：
+
+```text
+Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes 多会话、YouMind 精灵聊天、六位 Relay 配对、按能力显示的设置、全局搜索、新 Pro 方案和全新视觉系统，并全面增强 OpenClaw 与 Hermes 的连接恢复和兼容性。
+```
+
+### M8 商店隐私标签保守草案
+
+| 数据类型 | 用途 | 关联身份 | Tracking | 备注 |
+|---|---|---|---|---|
+| Email Address | App Functionality | Yes | No | YouMind 登录与私有 Agent Settings |
+| User ID | App Functionality | Yes | No | 账户/后端身份 |
+| Device ID | Analytics | Yes | No | PostHog `identify(deviceId)` |
+| Purchase History | App Functionality + Analytics | Yes | No | RevenueCat entitlement 与购买事件 |
+| Product Interaction / Other Usage | Analytics | Yes | No | 白名单事件，不含消息正文或凭据 |
+| Performance / Other Diagnostics | Analytics | Yes | No | 连接与错误诊断 |
+| Other User Content | App Functionality | Yes | No | YouMind 消息及用户主动发往 Agent 的内容 |
+| Location、Photos/Videos、Audio、Files/Documents | 待商店提交前确认 | 待确认 | No | 原生权限及附件可能发送给用户选择的 Agent，见 `HT-M8-4` |
+| Payment Info | Not collected | No | No | 由 App Store / Play 处理，Clawket 不直接收集 |
+
+不声明“全部传输加密”：custom/direct 连接仍允许用户配置 `http/ws`。全局 Tracking 申报为 No；最终标签须与两商店实际构建、SDK 控制台和公开隐私政策一起由人复核。
+
 ## 决策记录（实现期间做出的、规格没写死的选择）
 
 | 日期 | 决策 | 理由 |
@@ -240,6 +344,9 @@ Onboarding 的页面专属状态为默认表单、连接中、offline/error 与 
 | `[M6-1] 08-milestones.md` M6.2 / `06-paywall-and-growth.md` §2 | 付费墙实现“五套英雄图”。 | 按同节触发映射表实现 `connections`、`agents`、`manage`、`logsFiles`、`search`、`generic` 六套独立 hero。 | 映射表有六个互不等价的用户情境；合并任意一项会让表内触发点失去对应视觉。 | 只扩大 hero 枚举到规格已逐项定义的六项，不增加新触发点、文案或产品能力。 |
 | `[M6-2] 06-paywall-and-growth.md` §1 | 宽限标记随设备 identity 保存，重装不重置。 | 同一安装生命周期内由 SecureStore 严格一次性；不声称 Android 卸载后仍能保留，因为卸载会删除该应用的 SecureStore 数据。 | 跨卸载绝对保证需要新增服务端账户/稳定设备标识，超出规格范围并扩大隐私面；本地实现无法诚实满足。 | iOS/Android 卸载重装行为列入真机 HUMAN TODO；未新增跟踪后端，恢复购买仍可恢复 Pro。 |
 | `[M7-1] 10-migration-map.md` §文档 | Relay/Registry 文档写成“`RELAY_BACKEND` 与三实例部署说明”。 | 文档按实际拓扑写成 OpenClaw/Hermes × Production/Preview 四个隔离服务对，两个 source workspace 共部署 8 个 Worker service。 | `08-milestones.md` 已锁定一套代码四个实例，现有 Wrangler 配置也明确有四个 backend/environment 组合；“三实例”会遗漏 Hermes Preview 或混淆 Registry/Relay。 | 只修正文档计数，不改变已部署资源、环境身份或产品协议。 |
+| `[M8-1] 09-release-and-acceptance.md` §3.2 | 置顶会话行要求“带 📌”；`05` / `09` 同时禁止 emoji 充当界面图标。 | 使用视觉系统规定的 Lucide `Pin` 图标，保留置顶语义与位置。 | 字面 emoji 与全局视觉护栏冲突；Lucide 是同义、可主题化且可审计的既定组件。 | 只改变图标实现，不改变功能、顺序、可访问性标签或验收语义。 |
+| `[M8-2] 09-release-and-acceptance.md` §3.3 pairing approval | 验收文案可读成所有 `PAIRING_REQUIRED` 都进入同一审批映射。 | 把当前客户端自配对握手与连接级 owner pair approval 拆开；前者只认精确 request ID，后者由连接级 store 维护。 | 别人的审批结果不能误满足当前客户端握手；迟到事件、刷新竞态与失败重试也需要独立生命周期。 | 旧 wire 与 owner 审批 UI 不变；提高双后端重连和审批安全性。 |
+| `[M8-3] 09-release-and-acceptance.md` §1 隐私标签 | 诊断/使用数据写作“不关联身份”。 | 商店草案按更保守的 linked 口径申报 Device ID、RevenueCat purchase 与 YouMind identity/content。 | 实际 PostHog 使用 `identify(deviceId)`，同时接入 RevenueCat 与 YouMind；不能用窄口径掩盖 SDK 的真实关联。 | 不改变 Relay 不持久化消息、本地 cache 与删除清理承诺；公开政策和最终商店标签须同步更新。 |
 
 ## HUMAN TODO（只有人能做的事）
 
@@ -253,6 +360,11 @@ Onboarding 的页面专属状态为默认表单、连接中、offline/error 与 
 | HT-M6-3 | 完成 iOS Sandbox/TestFlight 结账验收。 | 配置 App Store Connect 与 RevenueCat 后，在真机分别购买月/年/终身并验证恢复、取消、pending/Ask to Buy 与到期。 | entitlement、动态价格、默认包、续做动作和本地到期降级均符合记录。 | 待处理，不阻塞 Preview 自动化验收 |
 | HT-M6-4 | 真机验证 PostHog 事件与看板。 | 在 iOS/Android 各执行配对、连接、付费墙、结账、聊天、审批、重连；检查最近事件并建立 `07` §5 四组看板。 | 事件名、白名单属性、super properties、失败 reason 与五类 reconnect reason 正确，且无消息正文、token 或凭据。 | 待处理，不阻塞自动化里程碑 |
 | HT-M6-5 | 验证两端卸载重装后的 entitlement、免费连接与宽限行为。 | 分别在 iOS/Android 真机记录安装前状态，卸载重装、重新配对并恢复购买；观察 SecureStore/Keychain 的平台差异。 | Pro 可由商店恢复；免费连接重新确定；明确记录宽限是否被平台保留或重发，并据结果决定是否需要另立隐私评审的后端方案。 | 待处理；已记录 M6-2 偏离 |
+| HT-M8-1 | iOS / Android 真机完成 `09-release-and-acceptance.md` 的 Preview 人类部分。 | 用 Preview 配置覆盖 OpenClaw 六位码/QR/direct/Tailscale、Hermes Relay/local/旧 Bridge 提示、YouMind OTP、附件、审批、缓存花名册、减动效、主题/语言、权限与真实后端会话；逐行记录结果，不做模拟器截图替代。 | 两端 48 个含 HUMAN 部分的清单行均有真机/视觉结果；失败必须修复并重跑对应自动门禁。 | 待处理；不阻塞已完成的 Preview 自动部分 |
+| HT-M8-2 | 更新公开隐私政策、条款、支持页与首页。 | 在 `clawket.ai` 补 Hermes、YouMind、Relay、本地 cache、PostHog、RevenueCat 与联系方式；移除 Office 和旧“无分析/无第三方”口径，并与上方保守隐私标签对齐。 | 公开页面、App 内链接与商店申报一致，无 OpenClaw-only、Office 或否认实际 SDK 的陈述。 | 待处理；商店提交前 P0 |
+| HT-M8-3 | 按已记录回滚锚点完成 Production 四服务、2.1.2 回放、回滚演练与 npm 正式发布。 | 先保存四个 Production 当前 version，再从 Registry 到 Relay、OpenClaw 到 Hermes 逐项执行仓库 wrapper；每次上传必须 compat 35/35。用真实 2.1.2 App 验证旧协议并反向演练回滚；npm 步骤沿用 `HT-M3-1`，WAF/告警沿用 `HT-M2-1`。 | 四个 Production health/冒烟正常，2.1.2 可用，回滚能恢复锚点，npm metadata/integrity/gitHead 对齐最终 release commit。 | 待处理；Production 未触碰 |
+| HT-M8-4 | 完成 TestFlight / Play、商店元数据、截图、隐私标签、商品与原生权限矩阵。 | 使用上方中英文草案，配置后台商品/entitlement、权限说明与隐私标签；在商店分发构建验证相机、照片、音频、文件、通知、语音、图标，以及月/年/终身购买、恢复、取消和 pending。 | 两商店控制台、分发构建与公开政策一致；真实价格/权限/购买矩阵全绿，截图由真机生成并人工审核。 | 待处理；不阻塞 Preview 自动部分 |
+| HT-M8-5 | 正式提交前稳定运行 48 小时，并在发布后监控 48 小时。 | Preview 真机验收与 Production 发布后分别观察错误、重连、Relay/DO/KV 用量、结账失败、崩溃和支持渠道；只在无发布阻断问题时提交/继续放量。 | 两个 48 小时窗口有时间戳记录；异常有处置与回滚结论。 | 待处理 |
 
 ## 待人类确认
 
@@ -280,3 +392,4 @@ Onboarding 的页面专属状态为默认表单、连接中、offline/error 与 
 - `m5-mobile-ui.md`：页面状态、视觉/文案门禁、自绘组件、i18n、删除清单、双端 fresh build 与 screens LOC 证据。
 - `m6-paywall-entitlement-analytics.md`：免费额度、宽限与竞态、付费墙触发/续做、RevenueCat、埋点白名单、Android 排查、双端 fresh build 与 LOC 证据。
 - `m7-subtraction.md`：删除清单、依赖逐项双端构建、Knip 剩余项理由、Expo Doctor、发布包 dry-run、双 lock audit 与最终 LOC 证据。
+- `m8-preview-release.md`：四个 Preview 版本与回滚锚点、线上探针、Bridge 发布物、55 项 AUTO/HUMAN 分流、最终门禁与双端构建。
