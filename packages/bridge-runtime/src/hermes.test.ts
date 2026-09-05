@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -618,6 +618,55 @@ describe('HermesLocalBridge history metadata', () => {
     expect(logs.some((line) => line.includes('degraded'))).toBe(true);
 
     await bridge.stop();
+  });
+
+  it('persists Hermes API server config before spawning the gateway process', async () => {
+    let fetchCalls = 0;
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      fetchCalls += 1;
+      if (fetchCalls < 2) {
+        throw new Error('connect ECONNREFUSED');
+      }
+      return { ok: true };
+    }));
+
+    const dir = await mkdtemp(join(tmpdir(), 'clawket-hermes-command-'));
+    tempDirs.push(dir);
+    const commandLogPath = join(dir, 'hermes-command.log');
+    const fakeHermesPath = join(dir, 'hermes');
+    const bridgePort = 50_000 + Math.floor(Math.random() * 10_000);
+    await writeFile(
+      fakeHermesPath,
+      [
+        '#!/bin/sh',
+        'echo "$@" >> "$CLAWKET_TEST_HERMES_COMMAND_LOG"',
+        'if [ "$1" = "gateway" ]; then',
+        '  echo "env API_SERVER_ENABLED=$API_SERVER_ENABLED API_SERVER_HOST=$API_SERVER_HOST API_SERVER_PORT=$API_SERVER_PORT" >> "$CLAWKET_TEST_HERMES_COMMAND_LOG"',
+        '  sleep 30',
+        'fi',
+      ].join('\n') + '\n',
+      'utf8',
+    );
+    await chmod(fakeHermesPath, 0o755);
+    vi.stubEnv('CLAWKET_TEST_HERMES_COMMAND_LOG', commandLogPath);
+
+    const bridge = new HermesLocalBridge({
+      apiBaseUrl: 'http://127.0.0.1:8642',
+      hermesCommand: fakeHermesPath,
+      port: bridgePort,
+      sessionStorePath: await createSessionStorePath(),
+      keepSpawnedHermesGatewayAliveOnStop: false,
+    });
+
+    await bridge.start();
+    await bridge.stop();
+
+    const commandLog = await readFile(commandLogPath, 'utf8');
+    expect(commandLog).toContain('config set API_SERVER_ENABLED true');
+    expect(commandLog).toContain('config set API_SERVER_HOST 127.0.0.1');
+    expect(commandLog).toContain('config set API_SERVER_PORT 8642');
+    expect(commandLog).toContain('gateway run --replace');
+    expect(commandLog).toContain('env API_SERVER_ENABLED=1 API_SERVER_HOST=127.0.0.1 API_SERVER_PORT=8642');
   });
 
   it('does not expose a tokenized websocket URL from the unauthenticated health endpoint', async () => {

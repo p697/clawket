@@ -787,6 +787,7 @@ export class HermesLocalBridge {
       apiBaseUrl: this.apiBaseUrl,
     });
     this.log(`starting hermes gateway via ${command}`);
+    persistHermesApiServerConfig(command, this.apiBaseUrl, (line) => this.log(line));
     // Hermes gateway stdout/stderr may contain prompts, assistant replies,
     // tool invocations, and other session data. Clawket must not persist
     // that content to its log files, so by default we route the child's
@@ -4839,6 +4840,26 @@ function isPersistedSessionRecord(value: unknown): value is HermesBridgePersiste
     && typeof value.title === 'string'
     && typeof value.updatedAt === 'number'
     && Number.isFinite(value.updatedAt);
+}
+
+function persistHermesApiServerConfig(command: string, apiBaseUrl: string, log: (line: string) => void): void {
+  const settings: Array<[string, string]> = [
+    ['API_SERVER_ENABLED', 'true'],
+    ['API_SERVER_HOST', extractHostname(apiBaseUrl)],
+    ['API_SERVER_PORT', String(extractPort(apiBaseUrl))],
+  ];
+
+  for (const [key, value] of settings) {
+    try {
+      execFileSync(command, ['config', 'set', key, value], {
+        stdio: 'ignore',
+        timeout: 10_000,
+        env: process.env,
+      });
+    } catch (error) {
+      log(`unable to persist Hermes ${key}; relying on gateway process env (${formatError(error)})`);
+    }
+  }
 }
 
 function buildHermesApiHeaders(apiKey: string | null): Record<string, string> {
