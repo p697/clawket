@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   FlatList,
+  Pressable,
   RefreshControl,
   StyleSheet,
   Text,
@@ -76,6 +77,7 @@ export type RosterViewProps = Readonly<{
   refreshing?: boolean;
   graceBanner?: RosterGraceBanner;
   accountBadge?: FloatingButtonBadge;
+  showProEntry?: boolean;
   showOfflineBanner?: boolean;
   showErrorBanner?: boolean;
   onOpenAccount: () => void;
@@ -105,6 +107,7 @@ export type RosterScreenProps = Readonly<{
   onOpenLockedRow: (row: RosterDisplayRow) => void;
   onLongPressRow?: (row: RosterDisplayRow) => void;
   onCreateAgent?: () => void;
+  onCreateAgentLocked?: () => void;
   onToggleAgentPinned?: (row: RosterDisplayRow) => MaybePromise;
   onToggleAgentMuted?: (row: RosterDisplayRow) => MaybePromise;
   onRemoveConnection?: (row: RosterDisplayRow) => MaybePromise;
@@ -139,37 +142,58 @@ function ActionRows({
   );
 }
 
-function resolveAccountBadge(
-  attentionCount: number,
-  isPro: boolean,
-): FloatingButtonBadge | undefined {
+function resolveAccountBadge(attentionCount: number): FloatingButtonBadge | undefined {
   if (attentionCount > 0) {
     return { tone: 'bad', count: attentionCount };
   }
-  if (isPro) return { tone: 'accent' };
   return undefined;
 }
 
 function RosterHeader({
   accountBadge,
+  showProEntry,
   onOpenAccount,
+  onOpenPro,
   onSearch,
   onAdd,
 }: Pick<
   RosterViewProps,
-  'accountBadge' | 'onOpenAccount' | 'onSearch' | 'onAdd'
+  'accountBadge' | 'showProEntry' | 'onOpenAccount' | 'onOpenPro' | 'onSearch' | 'onAdd'
 >): React.JSX.Element {
-  const { t } = useTranslation('common');
+  const { t } = useTranslation(['common', 'config']);
+  const { theme } = useAppTheme();
 
   return (
     <View testID="roster-header" pointerEvents="box-none" style={styles.headerRow}>
-      <FloatingButton
-        testID="roster-account"
-        icon={UserRound}
-        badge={accountBadge}
-        accessibilityLabel={t('Account settings')}
-        onPress={onOpenAccount}
-      />
+      <View style={styles.accountActions}>
+        <View testID="roster-account-control" style={styles.accountControl}>
+          <FloatingButton
+            testID="roster-account"
+            icon={UserRound}
+            badge={accountBadge}
+            accessibilityLabel={t('Account settings')}
+            onPress={onOpenAccount}
+          />
+          {showProEntry && onOpenPro ? (
+            <Pressable
+              testID="roster-pro"
+              accessibilityRole="button"
+              accessibilityLabel={t('View Pro', { ns: 'common' })}
+              hitSlop={Space.md}
+              onPress={onOpenPro}
+              style={({ pressed }) => [
+                styles.proBadge,
+                { backgroundColor: theme.colors.ink },
+                pressed ? styles.proBadgePressed : null,
+              ]}
+            >
+              <Text style={[styles.proBadgeText, { color: theme.colors.canvas }]}>
+                {t('Pro', { ns: 'config' })}
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+      </View>
       <View style={styles.headerActions}>
         <FloatingButton
           testID="roster-search"
@@ -281,6 +305,7 @@ export function RosterView({
   refreshing = false,
   graceBanner,
   accountBadge,
+  showProEntry = false,
   showOfflineBanner,
   showErrorBanner,
   onOpenAccount,
@@ -340,7 +365,9 @@ export function RosterView({
       <View pointerEvents="box-none" style={[styles.header, headerInsets]}>
         <RosterHeader
           accountBadge={accountBadge}
+          showProEntry={showProEntry}
           onOpenAccount={onOpenAccount}
+          onOpenPro={onOpenPro}
           onSearch={onSearch}
           onAdd={onAdd}
         />
@@ -409,6 +436,7 @@ export function RosterScreen({
   onOpenLockedRow,
   onLongPressRow,
   onCreateAgent,
+  onCreateAgentLocked,
   onToggleAgentPinned,
   onToggleAgentMuted,
   onRemoveConnection,
@@ -444,7 +472,7 @@ export function RosterScreen({
   });
   const offline = connections.activeState === 'offline'
     || connections.activeState === 'reconnecting';
-  const accountBadge = resolveAccountBadge(accountAttentionCount, isPro);
+  const accountBadge = resolveAccountBadge(accountAttentionCount);
   const refresh = useCallback(async () => {
     if (refreshing) return;
     setRefreshing(true);
@@ -506,11 +534,11 @@ export function RosterScreen({
       return;
     }
     if (!isPro) {
-      onOpenPro?.();
+      (onCreateAgentLocked ?? onOpenPro)?.();
       return;
     }
     onCreateAgent?.();
-  }, [isPro, onAdd, onCreateAgent, onOpenPro]);
+  }, [isPro, onAdd, onCreateAgent, onCreateAgentLocked, onOpenPro]);
   const handleLongPressRow = useCallback((row: RosterDisplayRow) => {
     onLongPressRow?.(row);
     setActionRow(row);
@@ -564,6 +592,7 @@ export function RosterScreen({
         refreshing={refreshing}
         graceBanner={graceBanner}
         accountBadge={accountBadge}
+        showProEntry={!isPro}
         showOfflineBanner={offline}
         showErrorBanner={connections.error !== null && !offline}
         onOpenAccount={onOpenAccount}
@@ -685,6 +714,34 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Space.sm,
+  },
+  accountActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  accountControl: {
+    width: ControlSize.floatingButton,
+    height: ControlSize.floatingButton,
+    position: 'relative',
+  },
+  proBadge: {
+    position: 'absolute',
+    right: -Space.sm,
+    bottom: -Space.xs,
+    minWidth: LineHeight.caption + Space.sm,
+    height: LineHeight.caption,
+    paddingHorizontal: Space.xs,
+    borderRadius: Radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  proBadgePressed: {
+    opacity: 0.8,
+  },
+  proBadgeText: {
+    fontSize: FontSize.caption,
+    lineHeight: LineHeight.caption,
+    fontWeight: FontWeight.semibold,
   },
   list: {
     flex: 1,

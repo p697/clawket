@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ScrollView,
   StyleSheet,
@@ -28,6 +28,7 @@ import type {
   AgentSettingsSection,
   RootStackParamList,
 } from '../../navigation/root-stack';
+import { analyticsEvents } from '../../services/analytics/events';
 import { useAppTheme } from '../../theme';
 import {
   ControlSize,
@@ -65,7 +66,7 @@ export type AgentSettingsViewProps = Readonly<{
   errorMessage?: string;
   onBack: () => void;
   onNavigate: AgentSettingsNavigate;
-  onOpenPro: (section: AgentSettingsSection) => void;
+  onOpenPro: (section: AgentSettingsSection, onContinue?: () => void) => void;
   onRetry: () => void;
 }>;
 
@@ -114,8 +115,9 @@ export function AgentSettingsScreen({
   errorMessage,
   ...viewProps
 }: AgentSettingsScreenProps): React.JSX.Element {
+  const accessibleAdapter = permissionDenied ? null : adapter;
   const [connectionState, setConnectionState] = useState<ConnectionState>(
-    adapter?.state ?? 'offline',
+    accessibleAdapter?.state ?? 'offline',
   );
   const summaryKey = agent ? `${connection.id}:${agent.agentId}` : null;
   const [loadedSummary, setLoadedSummary] = useState<Readonly<{
@@ -131,20 +133,20 @@ export function AgentSettingsScreen({
     || summary !== undefined;
 
   useEffect(() => {
-    setConnectionState(adapter?.state ?? 'offline');
+    setConnectionState(accessibleAdapter?.state ?? 'offline');
     setHasStateError(false);
-    if (!adapter) return undefined;
-    return adapter.on('state', (nextState) => {
+    if (!accessibleAdapter) return undefined;
+    return accessibleAdapter.on('state', (nextState) => {
       setConnectionState(nextState);
       setHasStateError(nextState === 'error');
     });
-  }, [adapter]);
+  }, [accessibleAdapter]);
 
   useEffect(() => {
-    if (!adapter || !agent || !summaryKey || connectionState !== 'ready') return undefined;
+    if (!accessibleAdapter || !agent || !summaryKey || connectionState !== 'ready') return undefined;
 
     let active = true;
-    void loadAgentSettingsSummary(adapter, agent).then((nextSummary) => {
+    void loadAgentSettingsSummary(accessibleAdapter, agent).then((nextSummary) => {
       if (!active) return;
       setLoadedSummary((previous) => ({
         key: summaryKey,
@@ -157,7 +159,7 @@ export function AgentSettingsScreen({
     return () => {
       active = false;
     };
-  }, [adapter, agent, connectionState, initialSummary, summaryKey]);
+  }, [accessibleAdapter, agent, connectionState, initialSummary, summaryKey]);
 
   const state = resolveAgentSettingsPageState({
     initialized,
@@ -172,7 +174,7 @@ export function AgentSettingsScreen({
       {...viewProps}
       connection={connection}
       agent={agent}
-      capabilities={adapter?.capabilities ?? capabilities}
+      capabilities={accessibleAdapter?.capabilities ?? capabilities}
       connectionState={connectionState}
       state={state}
       isPro={viewProps.isPro}
@@ -202,6 +204,13 @@ export function AgentSettingsView({
   const { theme } = useAppTheme();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
+  const trackedConnectionRef = useRef<string | null>(null);
+  useEffect(() => {
+    const key = `${connection.id}:${connection.backendKind}`;
+    if (trackedConnectionRef.current === key) return;
+    trackedConnectionRef.current = key;
+    analyticsEvents.agentSettingsOpened({ backend: connection.backendKind });
+  }, [connection.backendKind, connection.id]);
   const model = useMemo(() => agent ? buildAgentSettingsModel({
     connection,
     agent,
@@ -231,11 +240,31 @@ export function AgentSettingsView({
   };
 
   const openRow = (row: AgentSettingsRowDescriptor) => {
+    const onContinue = () => navigate(row.section);
+    analyticsEvents.settingsRowOpened({
+      row: row.id,
+      locked: row.locked,
+      backend: connection.backendKind,
+    });
     if (row.locked) {
-      onOpenPro(row.section);
+      onOpenPro(row.section, onContinue);
       return;
     }
-    navigate(row.section);
+    onContinue();
+  };
+
+  const openIdentity = () => {
+    const onContinue = () => navigate('identity');
+    analyticsEvents.settingsRowOpened({
+      row: 'identity',
+      locked: model?.identity.locked === true,
+      backend: connection.backendKind,
+    });
+    if (model?.identity.locked) {
+      onOpenPro('identity', onContinue);
+      return;
+    }
+    onContinue();
   };
 
   return (
@@ -290,7 +319,7 @@ export function AgentSettingsView({
               testID="agent-settings-permission"
               message={translateAgentSettingsKey(t, 'Pro required for this agent')}
               actionLabel={t('Unlock', { ns: 'common' })}
-              onAction={() => onOpenPro('identity')}
+              onAction={() => onOpenPro('identity', () => navigate('identity'))}
             />
           ) : null}
 
@@ -316,9 +345,9 @@ export function AgentSettingsView({
               locked={model.identity.locked}
               showChevron={model.identity.editable}
               onPress={model.identity.locked
-                ? () => onOpenPro('identity')
+                ? openIdentity
                 : model.identity.editable
-                  ? () => navigate('identity')
+                  ? openIdentity
                   : undefined}
             />
           </SettingsGroup>

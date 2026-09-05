@@ -229,7 +229,7 @@ jest.mock('../../services/analytics/events', () => ({
     gatewayConfigViewOpened: jest.fn(),
     gatewayConfigBackupCreated: jest.fn(),
     gatewayConfigRestoreTapped: jest.fn(),
-    chatExecApprovalResolved: jest.fn(),
+    approvalResolved: jest.fn(),
   },
 }));
 
@@ -570,14 +570,29 @@ describe('OpenClawManageScreen', () => {
     expect(harness.view).toHaveBeenCalledTimes(1);
   });
 
-  it('blocks management calls without Pro access and opens the paywall action', () => {
+  it('blocks management calls and preserves each contextual paywall trigger without Pro access', () => {
     const harness = createAdapterHarness();
     const screen = renderScreen(harness, { isPro: false, permissionDenied: true });
 
     expect(screen.getByTestId('openclaw-manage-locked')).toBeTruthy();
     expect(harness.view).not.toHaveBeenCalled();
     fireEvent.press(screen.getByTestId('openclaw-manage-locked-action'));
-    expect(screen.onOpenPaywall).toHaveBeenCalledWith('openclawManagement');
+    expect(screen.onOpenPaywall).toHaveBeenLastCalledWith('configManage');
+
+    fireEvent.press(screen.getByTestId('openclaw-manage-tabs-permissions'));
+    fireEvent.press(screen.getByTestId('openclaw-manage-locked-action'));
+    expect(screen.onOpenPaywall).toHaveBeenLastCalledWith('openclawPermissions');
+
+    fireEvent.press(screen.getByTestId('openclaw-manage-tabs-diagnostics'));
+    fireEvent.press(screen.getByTestId('openclaw-manage-locked-action'));
+    expect(screen.onOpenPaywall).toHaveBeenLastCalledWith('openclawDiagnostics');
+
+    fireEvent.press(screen.getByTestId('openclaw-manage-tabs-backups'));
+    fireEvent.press(screen.getByTestId('openclaw-manage-locked-action'));
+    expect(screen.onOpenPaywall).toHaveBeenLastCalledWith('configBackups');
+    expect(harness.permissions).not.toHaveBeenCalled();
+    expect(harness.doctor).not.toHaveBeenCalled();
+    expect(harness.listBackups).not.toHaveBeenCalled();
   });
 
   it('does not call operations that runtime capabilities downgrade', () => {

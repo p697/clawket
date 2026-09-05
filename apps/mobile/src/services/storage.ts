@@ -36,6 +36,12 @@ import {
 } from '@clawket/agent-protocol';
 import { resolveSavedGatewayName } from '../connection/registry/connection-name';
 import type { ProSubscriptionSnapshot } from './pro-subscription';
+import {
+  normalizeAutoAppReviewState,
+  type AutoAppReviewState,
+} from './auto-app-review-state';
+
+export type { AutoAppReviewState } from './auto-app-review-state';
 
 export type NodeInvokeAuditEntry = {
   id: string;
@@ -94,12 +100,6 @@ export type GatewayConfigBackupEntry = {
 export type GatewayConfigBackupSummary = {
   id: string;
   createdAt: number;
-};
-
-export type AutoAppReviewState = {
-  firstSeenAtMs: number;
-  lastAttemptAtMs?: number;
-  lastAttemptVersion?: string;
 };
 
 export type DeviceTokenStorageScope = {
@@ -326,24 +326,6 @@ function normalizeLastOpenedSessionSnapshot(value: unknown): LastOpenedSessionSn
     agentName: agentName || undefined,
     agentEmoji: agentEmoji || undefined,
     agentAvatarUri: agentAvatarUri || undefined,
-  };
-}
-
-function normalizeAutoAppReviewState(value: unknown): AutoAppReviewState | null {
-  if (!value || typeof value !== 'object') return null;
-  const record = value as Record<string, unknown>;
-  const firstSeenAtMs = typeof record.firstSeenAtMs === 'number' ? record.firstSeenAtMs : NaN;
-  if (!Number.isFinite(firstSeenAtMs) || firstSeenAtMs <= 0) return null;
-  const lastAttemptAtMs = typeof record.lastAttemptAtMs === 'number' && Number.isFinite(record.lastAttemptAtMs)
-    ? record.lastAttemptAtMs
-    : undefined;
-  const lastAttemptVersion = typeof record.lastAttemptVersion === 'string'
-    ? record.lastAttemptVersion.trim() || undefined
-    : undefined;
-  return {
-    firstSeenAtMs,
-    ...(lastAttemptAtMs !== undefined ? { lastAttemptAtMs } : {}),
-    ...(lastAttemptVersion ? { lastAttemptVersion } : {}),
   };
 }
 
@@ -1281,12 +1263,10 @@ export const StorageService = {
 
   async setAutoAppReviewState(state: AutoAppReviewState): Promise<void> {
     const normalized = normalizeAutoAppReviewState(state);
-    if (!normalized) return;
-    try {
-      await AsyncStorage.setItem(KEYS.autoAppReviewState, JSON.stringify(normalized));
-    } catch {
-      // Best-effort cache only.
-    }
+    if (!normalized) throw new Error('Invalid automatic app review state');
+    // Unlike display caches, this write gates a one-time native side effect. Let
+    // callers observe failure so a prompt is never shown without durable state.
+    await AsyncStorage.setItem(KEYS.autoAppReviewState, JSON.stringify(normalized));
   },
 
   async appendNodeInvokeAudit(entry: NodeInvokeAuditEntry): Promise<void> {

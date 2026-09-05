@@ -255,8 +255,11 @@ describe('AccountSettingsScreen', () => {
     expect(view.getByText('Preview')).toBeTruthy();
     expect(view.getByTestId('account-settings-row-preview-environment')).toBeTruthy();
     expect(view.getByTestId('account-settings-row-app-icon')).toBeTruthy();
+    expect(view.getByTestId('account-settings-row-pro-status-lock-icon')).toBeTruthy();
 
     fireEvent.press(view.getByTestId('account-settings-back'));
+    fireEvent.press(view.getByTestId('account-settings-row-pro-status'));
+    expect(onOpenPaywall).toHaveBeenLastCalledWith('generic');
     fireEvent.press(view.getByTestId('account-settings-row-restore-purchases'));
     fireEvent.press(view.getByTestId('account-settings-row-connection-home'));
     fireEvent.press(view.getByTestId('account-settings-row-connection-work'));
@@ -268,8 +271,18 @@ describe('AccountSettingsScreen', () => {
     expect(onBack).toHaveBeenCalledTimes(1);
     expect(onOpenAction).toHaveBeenCalledWith('restore-purchases');
     expect(onOpenConnection).toHaveBeenCalledWith('home');
-    expect(onOpenPaywall).toHaveBeenCalledWith('gatewayConnections');
-    expect(onOpenPaywall).toHaveBeenCalledWith('appIcons');
+    expect(onOpenPaywall).toHaveBeenCalledWith('gatewayConnections', expect.any(Function));
+    expect(onOpenPaywall).toHaveBeenCalledWith('appIcons', expect.any(Function));
+    const connectionContinuation = onOpenPaywall.mock.calls.find(
+      ([reason]) => reason === 'gatewayConnections',
+    )?.[1];
+    const appIconContinuation = onOpenPaywall.mock.calls.find(
+      ([reason]) => reason === 'appIcons',
+    )?.[1];
+    connectionContinuation?.();
+    appIconContinuation?.();
+    expect(onOpenConnection).toHaveBeenCalledWith('work');
+    expect(onOpenAction).toHaveBeenCalledWith('app-icon');
     expect(onReplyNotificationsChange).toHaveBeenCalledWith(true);
     expect(onDebugModeChange).toHaveBeenCalledWith(false);
   });

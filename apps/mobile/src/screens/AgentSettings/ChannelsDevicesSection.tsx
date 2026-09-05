@@ -27,6 +27,7 @@ import {
 } from '../../components/ui/SettingsGroup';
 import { Sheet } from '../../components/ui/Sheet';
 import { Skeleton } from '../../components/ui/Skeleton';
+import { analyticsEvents } from '../../services/analytics/events';
 import { useAppTheme } from '../../theme';
 import {
   ControlSize,
@@ -148,6 +149,7 @@ export function ChannelsDevicesSection({
     setErrors((current) => ({ ...current, devices: undefined }));
     try {
       await operation(request.requestId);
+      analyticsEvents.approvalResolved({ kind: 'pair', decision });
       setDevices((current) => ({
         ...current,
         pending: current.pending.filter((candidate) => candidate.requestId !== request.requestId),
@@ -176,6 +178,7 @@ export function ChannelsDevicesSection({
     setErrors((current) => ({ ...current, nodes: undefined }));
     try {
       await operation(request.requestId);
+      analyticsEvents.approvalResolved({ kind: 'pair', decision });
       setNodeRequests((current) => current.filter(
         (candidate) => candidate.requestId !== request.requestId,
       ));

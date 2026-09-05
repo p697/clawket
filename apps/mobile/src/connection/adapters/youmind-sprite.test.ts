@@ -35,6 +35,7 @@ function createAdapter(api: YouMindSpriteApi, options: {
   opened?: boolean;
   language?: string;
   delay?: (milliseconds: number) => Promise<void>;
+  onGreetingSent?: () => void;
 } = {}): YouMindSpriteAdapter {
   let opened = options.opened ?? true;
   return new YouMindSpriteAdapter({
@@ -49,6 +50,7 @@ function createAdapter(api: YouMindSpriteApi, options: {
     api,
     language: () => options.language ?? 'en',
     delay: options.delay,
+    onGreetingSent: options.onGreetingSent,
     openingStore: {
       hasOpened: jest.fn(async () => opened),
       markOpened: jest.fn(async () => { opened = true; }),
@@ -136,7 +138,12 @@ describe('YouMindSpriteAdapter', () => {
       loadSpriteSession: jest.fn(async () => ({ messages: [], status: 'done' })),
       streamSpriteMessage,
     });
-    const adapter = createAdapter(api, { opened: false, language: 'zh-Hans' });
+    const onGreetingSent = jest.fn();
+    const adapter = createAdapter(api, {
+      opened: false,
+      language: 'zh-Hans',
+      onGreetingSent,
+    });
 
     await adapter.loadSession('main');
     await flushAsync();
@@ -146,6 +153,7 @@ describe('YouMindSpriteAdapter', () => {
     expect(streamSpriteMessage).toHaveBeenCalledWith(expect.objectContaining({
       text: '\u9192\u6765\u5427',
     }));
+    expect(onGreetingSent).toHaveBeenCalledTimes(1);
   });
 
   it('aborts both the local stream and the server-side persona run', async () => {

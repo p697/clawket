@@ -107,6 +107,9 @@ describe('AccountSettings model', () => {
     expect(groups.find((group) => group.id === 'appearance')?.rows).toEqual(
       expect.arrayContaining([expect.objectContaining({ id: 'app-icon', locked: true })]),
     );
+    expect(groups.find((group) => group.id === 'pro')?.rows).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: 'pro-status', locked: true })]),
+    );
     expect(groups.find((group) => group.id === 'developer')?.rows).toEqual(
       expect.arrayContaining([expect.objectContaining({ id: 'preview-environment' })]),
     );
@@ -160,5 +163,8 @@ describe('AccountSettings model', () => {
       'clear-cache',
       'reset-device',
     ]);
+    expect(groups.find((group) => group.id === 'pro')?.rows).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: 'pro-status', locked: false })]),
+    );
   });
 });

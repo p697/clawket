@@ -61,6 +61,10 @@ export type AccountSettingsSectionConnection = AccountSettingsConnection & Reado
   state?: ConnectionState;
   supportsRelayStats?: boolean;
   relayStats?: AccountSettingsRelayStats;
+  isFreeConnection?: boolean;
+  freeSwitchAvailable?: boolean;
+  freeSwitchStatus?: string;
+  freeSwitching?: boolean;
 }>;
 
 export type AccountSettingsSectionLabels = Readonly<{
@@ -85,6 +89,7 @@ export type AccountSettingsSectionData = Readonly<{
 export type AccountSettingsSectionAction = AccountSettingsAction
   | 'reconnect-connection'
   | 'remove-connection'
+  | 'set-free-connection'
   | 'set-reply-notifications'
   | 'set-debug-mode';
 
@@ -277,7 +282,12 @@ function buildConnectionGroups(
         `${connection.id}-reconnect`,
         'Reconnect',
         'reconnect-connection',
-        { connectionId: connection.id, titleNamespace: 'common' },
+        {
+          connectionId: connection.id,
+          titleNamespace: 'common',
+          locked: connection.locked === true,
+          paywallReason: 'gatewayConnections',
+        },
       ), capabilities.connectionManagement),
       gateRow(navigationRow(
         `${connection.id}-remove`,
@@ -286,6 +296,23 @@ function buildConnectionGroups(
         { connectionId: connection.id, titleNamespace: 'common' },
       ), capabilities.connectionManagement),
     );
+    if (data.isPro === false) {
+      rows.push(connection.isFreeConnection ? {
+        id: `${connection.id}-free-connection`,
+        titleKey: 'Free connection',
+        valueKey: 'Current',
+        kind: 'value',
+      } : navigationRow(
+        `${connection.id}-set-free-connection`,
+        'Use as free connection',
+        'set-free-connection',
+        {
+          connectionId: connection.id,
+          value: connection.freeSwitchStatus,
+          disabled: connection.freeSwitchAvailable === false || connection.freeSwitching === true,
+        },
+      ));
+    }
     return group(`connection-${connection.id}`, rows, connection.label);
   });
 

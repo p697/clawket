@@ -11,6 +11,7 @@ import {
   type ConnectionDescriptor,
   type ManagementOperations,
 } from '@clawket/agent-protocol';
+import { analyticsEvents } from '../../services/analytics/events';
 import { FontSize, Radius } from '../../theme/tokens';
 import {
   AgentSettingsSectionScreen,
@@ -45,10 +46,17 @@ const mockCoordinator = {
   getSnapshot: jest.fn(),
   probeActive: jest.fn(async () => true),
 };
+const mockedAnalyticsEvents = analyticsEvents as jest.Mocked<typeof analyticsEvents>;
 
 jest.mock('../../connection', () => ({
   getConnectionRuntime: () => mockCoordinator,
   useConnections: () => mockRuntime,
+}));
+
+jest.mock('../../services/analytics/events', () => ({
+  analyticsEvents: {
+    settingsRowOpened: jest.fn(),
+  },
 }));
 
 jest.mock('react-native', () => {
@@ -324,6 +332,7 @@ function viewProps(
       connectionState: 'ready',
       isPro: true,
     }),
+    backend: connection.backendKind,
     connectionLabel: connection.label,
     state: 'ready',
     onBack: jest.fn(),
@@ -338,6 +347,7 @@ describe('AgentSettingsSectionView', () => {
   let consoleErrorSpy: jest.SpyInstance;
 
   beforeEach(() => {
+    jest.clearAllMocks();
     consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation((message?: unknown) => {
       if (typeof message === 'string' && message.includes('react-test-renderer is deprecated')) return;
     });
@@ -367,6 +377,11 @@ describe('AgentSettingsSectionView', () => {
     fireEvent.press(view.getByTestId('agent-settings-section-row-models.default'));
     expect(onBack).toHaveBeenCalledTimes(1);
     expect(onAction).toHaveBeenCalledWith('models.default');
+    expect(mockedAnalyticsEvents.settingsRowOpened).toHaveBeenCalledWith({
+      row: 'models.default',
+      locked: false,
+      backend: 'openclaw',
+    });
   });
 
   it('shows unsupported and Pro-locked states without exposing actions', () => {
@@ -390,6 +405,7 @@ describe('AgentSettingsSectionView', () => {
     unsupported.unmount();
 
     const onOpenPaywall = jest.fn();
+    const onAction = jest.fn();
     const lockedModel = buildAgentSettingsSectionModel({
       section: 'logs',
       capabilities: { ...CAPABILITY_MATRIX.openclaw },
@@ -400,13 +416,27 @@ describe('AgentSettingsSectionView', () => {
     });
     const locked = render(
       <AgentSettingsSectionView
-        {...viewProps('logs', { model: lockedModel, state: 'locked', onOpenPaywall })}
+        {...viewProps('logs', {
+          model: lockedModel,
+          state: 'locked',
+          onAction,
+          onOpenPaywall,
+        })}
       />,
     );
     fireEvent.press(locked.getByTestId('agent-settings-section-locked-action'));
     fireEvent.press(locked.getByTestId('agent-settings-section-row-logs.view'));
     expect(onOpenPaywall).toHaveBeenCalledTimes(2);
-    expect(onOpenPaywall).toHaveBeenCalledWith('logs');
+    expect(onOpenPaywall).toHaveBeenNthCalledWith(1, 'logs');
+    expect(onOpenPaywall).toHaveBeenNthCalledWith(2, 'logs', expect.any(Function));
+    const continueToLogs = onOpenPaywall.mock.calls[1]?.[1] as (() => void) | undefined;
+    continueToLogs?.();
+    expect(onAction).toHaveBeenCalledWith('logs.view');
+    expect(mockedAnalyticsEvents.settingsRowOpened).toHaveBeenCalledWith({
+      row: 'logs.view',
+      locked: true,
+      backend: 'openclaw',
+    });
   });
 
   it('keeps cached connection content visible offline and reconnects', () => {
@@ -581,6 +611,26 @@ describe('AgentSettingsSectionScreen host', () => {
     };
     render(<AgentSettingsSectionScreen {...screenProps('models', jest.fn())} />);
     await waitFor(() => expect(mockCoordinator.activate).toHaveBeenCalledWith('studio'));
+  });
+
+  it('does not activate a permission-locked route connection', async () => {
+    mockRuntime = {
+      ...mockRuntime,
+      activeConnectionId: 'other',
+      activeAdapter: null,
+      activeState: 'connecting',
+    };
+    const view = render(
+      <AgentSettingsSectionScreen
+        {...screenProps('models', jest.fn())}
+        isPro={false}
+        permissionDenied
+      />,
+    );
+
+    await Promise.resolve();
+    expect(mockCoordinator.activate).not.toHaveBeenCalled();
+    expect(view.getByTestId('agent-settings-section-locked')).toBeTruthy();
   });
 
   it('renders Bridge details only from the coordinator runtime projection', () => {

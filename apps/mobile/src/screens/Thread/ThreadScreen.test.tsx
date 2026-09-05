@@ -2,6 +2,11 @@ import React from 'react';
 import { act, render, waitFor } from '@testing-library/react-native';
 import { CAPABILITY_MATRIX } from '@clawket/agent-protocol';
 import type { ComposerHandle } from '../../components/ui/Composer';
+import { analyticsEvents } from '../../services/analytics/events';
+import {
+  getCurrentAppUpdateAnnouncement,
+  shouldShowCurrentAppUpdateAnnouncement,
+} from '../../services/app-update-announcement';
 import { ThreadScreen, type ThreadScreenProps } from './ThreadScreen';
 import type { ThreadViewProps } from './ThreadView';
 import type { ThreadOverlaysProps } from './components/ThreadOverlays';
@@ -14,6 +19,13 @@ let mockController: Record<string, unknown>;
 let mockIsPro = true;
 const mockToggleFavorite = jest.fn(async () => ({ favorited: true, favoriteKey: 'favorite-1' }));
 const mockIsFavoritedMessage = jest.fn(() => false);
+const mockedAnalyticsEvents = analyticsEvents as jest.Mocked<typeof analyticsEvents>;
+const mockedGetCurrentAppUpdateAnnouncement = getCurrentAppUpdateAnnouncement as jest.MockedFunction<
+  typeof getCurrentAppUpdateAnnouncement
+>;
+const mockedShouldShowCurrentAppUpdateAnnouncement = shouldShowCurrentAppUpdateAnnouncement as jest.MockedFunction<
+  typeof shouldShowCurrentAppUpdateAnnouncement
+>;
 
 const mockRuntime = {
   activate: jest.fn(async () => undefined),
@@ -83,6 +95,14 @@ jest.mock('../../services/app-update-announcement', () => ({
   shouldShowCurrentAppUpdateAnnouncement: jest.fn(async () => false),
 }));
 
+jest.mock('../../services/analytics/events', () => ({
+  analyticsEvents: {
+    chatAbortTapped: jest.fn(),
+    runCardOpened: jest.fn(),
+    threadOpened: jest.fn(),
+  },
+}));
+
 jest.mock('./ThreadView', () => {
   const ReactRuntime = require('react');
   const { View } = require('react-native');
@@ -106,7 +126,7 @@ jest.mock('./components/ThreadOverlays', () => {
 });
 
 const adapter = {
-  connection: { id: 'connection-1' },
+  connection: { id: 'connection-1', backendKind: 'openclaw' },
   capabilities: { ...CAPABILITY_MATRIX.openclaw },
   cancel: jest.fn(async () => undefined),
   management: { cron: {} as Record<string, unknown> },
@@ -245,7 +265,7 @@ describe('ThreadScreen connection container', () => {
       switching: false,
       activeConnectionId: 'connection-1',
       activeAdapter: adapter,
-      connections: [{ id: 'connection-1', label: 'OpenClaw Preview' }],
+      connections: [{ id: 'connection-1', backendKind: 'openclaw', label: 'OpenClaw Preview' }],
       roster: [],
       error: null,
     };
@@ -260,6 +280,11 @@ describe('ThreadScreen connection container', () => {
     mockRuntime.getSnapshot.mockReturnValue({ activeConnectionId: 'connection-1' });
     mockToggleFavorite.mockClear();
     mockIsFavoritedMessage.mockClear();
+    mockedAnalyticsEvents.chatAbortTapped.mockClear();
+    mockedAnalyticsEvents.runCardOpened.mockClear();
+    mockedAnalyticsEvents.threadOpened.mockClear();
+    mockedGetCurrentAppUpdateAnnouncement.mockClear();
+    mockedShouldShowCurrentAppUpdateAnnouncement.mockClear();
     consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation((message?: unknown) => {
       if (typeof message === 'string' && message.includes('react-test-renderer is deprecated')) return;
     });
@@ -287,6 +312,11 @@ describe('ThreadScreen connection container', () => {
       connectionId: 'connection-1',
       agentId: 'atlas',
       sessionKey: 'agent:atlas:main',
+      from: 'roster',
+    });
+    expect(mockedAnalyticsEvents.threadOpened).toHaveBeenCalledWith({
+      backend: 'openclaw',
+      kind: 'main',
       from: 'roster',
     });
     expect(mockThreadViewProps).toMatchObject({
@@ -325,7 +355,93 @@ describe('ThreadScreen connection container', () => {
     expect(adapter.cancel).not.toHaveBeenCalled();
     act(() => mockThreadOverlayProps?.stopConfirmation.onConfirm());
     expect(mockController.abortCurrentRun).toHaveBeenCalledTimes(1);
+    expect(mockedAnalyticsEvents.chatAbortTapped).toHaveBeenCalledWith({ backend: 'openclaw' });
     expect(mockThreadOverlayProps?.stopConfirmation.visible).toBe(false);
+  });
+
+  it('uses the connection quota reason supplied by the host and keeps agents as the default', () => {
+    const defaultProps = createNavigationProps();
+    const defaultView = render(<ThreadScreen {...defaultProps} locked />);
+    act(() => mockThreadViewProps?.onOpenPaywall?.());
+    expect(defaultProps.navigation.navigate).toHaveBeenCalledWith('Paywall', { reason: 'agents' });
+
+    defaultView.unmount();
+    const connectionProps = createNavigationProps();
+    render(
+      <ThreadScreen
+        {...connectionProps}
+        locked
+        lockedReason="gatewayConnections"
+      />,
+    );
+    act(() => mockThreadViewProps?.onOpenPaywall?.());
+    expect(connectionProps.navigation.navigate).toHaveBeenCalledWith('Paywall', {
+      reason: 'gatewayConnections',
+    });
+  });
+
+  it('does not run the legacy update-announcement state machine in production', () => {
+    render(<ThreadScreen {...createNavigationProps()} />);
+
+    expect(mockedGetCurrentAppUpdateAnnouncement).not.toHaveBeenCalled();
+    expect(mockedShouldShowCurrentAppUpdateAnnouncement).not.toHaveBeenCalled();
+    expect(mockThreadOverlayProps?.announcement).toMatchObject({
+      visible: false,
+      value: null,
+      debugMode: false,
+    });
+  });
+
+  it('retains the update-announcement content for debug previews only', async () => {
+    mockApp.debugMode = true;
+    mockedGetCurrentAppUpdateAnnouncement.mockReturnValue({
+      debugHint: 'Debug preview',
+      entries: [],
+    });
+
+    render(<ThreadScreen {...createNavigationProps()} />);
+
+    await waitFor(() => expect(mockThreadOverlayProps?.announcement.value).toEqual({
+      debugHint: 'Debug preview',
+      entries: [],
+    }));
+    expect(mockedShouldShowCurrentAppUpdateAnnouncement).not.toHaveBeenCalled();
+    expect(mockThreadOverlayProps?.announcement.visible).toBe(false);
+  });
+
+  it('opens the settings membership paywall from the 3.0 Pro announcement entry', () => {
+    const props = createNavigationProps();
+    render(<ThreadScreen {...props} />);
+
+    act(() => mockThreadOverlayProps?.announcement.onEntryPress({
+      id: 'clawket-3-0-pro',
+      icon: 'sparkles',
+      title: 'Clawket 3.0 + Pro',
+      action: {
+        type: 'open_paywall',
+        feature: 'settingsMembershipPreview',
+      },
+    }));
+
+    expect(props.navigation.navigate).toHaveBeenCalledWith('Paywall', {
+      reason: 'settingsMembershipPreview',
+    });
+  });
+
+  it('normalizes global and unknown session kinds to other for analytics', () => {
+    mockController.sessions = [{
+      key: 'agent:atlas:main',
+      kind: 'global',
+      title: 'Global thread',
+    }];
+
+    render(<ThreadScreen {...createNavigationProps()} />);
+
+    expect(mockedAnalyticsEvents.threadOpened).toHaveBeenCalledWith({
+      backend: 'openclaw',
+      kind: 'other',
+      from: 'roster',
+    });
   });
 
   it('projects owned child activity and real Cron results into capability- and Pro-gated run cards', async () => {
@@ -450,7 +566,7 @@ describe('ThreadScreen connection container', () => {
         }),
       ]));
     expect(mockThreadViewProps?.locale).toBe('en');
-    expect(mockThreadViewProps?.onOpenRunSession).toBe(onOpenRunSession);
+    expect(mockThreadViewProps?.onOpenRunSession).toBeDefined();
     expect(mockThreadViewProps?.onOpenRunLogs).toBe(onOpenRunLogs);
     act(() => mockThreadViewProps?.onOpenRunSession?.(
       childSessionKey,
@@ -458,6 +574,7 @@ describe('ThreadScreen connection container', () => {
       'subagent',
     ));
     expect(onOpenRunSession).toHaveBeenCalledWith(childSessionKey, 'atlas', 'subagent');
+    expect(mockedAnalyticsEvents.runCardOpened).toHaveBeenCalledWith({ kind: 'subagent' });
 
     view.unmount();
     mockIsPro = false;
@@ -572,5 +689,22 @@ describe('ThreadScreen connection container', () => {
 
     render(<ThreadScreen {...createNavigationProps()} locked />);
     expect(mockThreadViewProps?.state).toEqual({ kind: 'locked' });
+  });
+
+  it('does not activate or expose an adapter for a locked inactive connection', async () => {
+    mockConnections = {
+      ...mockConnections,
+      switching: true,
+      activeConnectionId: 'connection-2',
+      activeAdapter: adapter,
+    };
+    mockRuntime.getSnapshot.mockReturnValue({ activeConnectionId: 'connection-2' });
+
+    render(<ThreadScreen {...createNavigationProps()} locked />);
+
+    await act(async () => Promise.resolve());
+    expect(mockRuntime.activate).not.toHaveBeenCalled();
+    expect(mockThreadViewProps?.state).toEqual({ kind: 'locked' });
+    expect(mockThreadViewProps?.capabilities.chat).toBe(false);
   });
 });

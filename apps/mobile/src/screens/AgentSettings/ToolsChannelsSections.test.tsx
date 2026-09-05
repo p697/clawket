@@ -11,8 +11,11 @@ import {
   type ChannelsStatusResult,
   type ToolCatalog,
 } from '@clawket/agent-protocol';
+import { analyticsEvents } from '../../services/analytics/events';
 import { ChannelsDevicesSection } from './ChannelsDevicesSection';
 import { ToolsSection } from './ToolsSection';
+
+const mockedAnalyticsEvents = analyticsEvents as jest.Mocked<typeof analyticsEvents>;
 
 const colors = {
   canvas: '#FFFFFF',
@@ -72,6 +75,13 @@ jest.mock('react-i18next', () => {
 
 jest.mock('../../theme', () => ({
   useAppTheme: () => ({ theme: { scheme: 'light', colors } }),
+}));
+
+jest.mock('../../services/analytics/events', () => ({
+  analyticsEvents: {
+    approvalResolved: jest.fn(),
+    toolsSaveTapped: jest.fn(),
+  },
 }));
 
 jest.mock('../../components/ui/Banner', () => {
@@ -220,10 +230,6 @@ jest.mock('../../components/ui/ThemedSwitch', () => {
   };
 });
 
-jest.mock('../../services/analytics/events', () => ({
-  analyticsEvents: { toolsSaveTapped: jest.fn() },
-}));
-
 const agent: AgentDescriptor = {
   connectionId: 'studio',
   agentId: 'main',
@@ -277,6 +283,7 @@ describe('ToolsSection', () => {
   let consoleErrorSpy: jest.SpyInstance;
 
   beforeEach(() => {
+    jest.clearAllMocks();
     consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
   });
 
@@ -487,6 +494,10 @@ describe('ChannelsDevicesSection', () => {
     await waitFor(() => expect(view.getByTestId('agent-device-request-pair-1')).toBeTruthy());
     fireEvent.press(view.getByTestId('agent-device-request-pair-1-approve'));
     await waitFor(() => expect(approve).toHaveBeenCalledWith('pair-1'));
+    expect(mockedAnalyticsEvents.approvalResolved).toHaveBeenCalledWith({
+      kind: 'pair',
+      decision: 'approve',
+    });
 
     await waitFor(() => expect(view.getByTestId('agent-device-row-laptop')).toBeTruthy());
     fireEvent.press(view.getByTestId('agent-device-row-laptop'));
@@ -557,6 +568,10 @@ describe('ChannelsDevicesSection', () => {
     await waitFor(() => expect(view.getByTestId('agent-node-request-node-pair')).toBeTruthy());
     fireEvent.press(view.getByTestId('agent-node-request-node-pair-approve'));
     await waitFor(() => expect(approve).toHaveBeenCalledWith('node-pair'));
+    expect(mockedAnalyticsEvents.approvalResolved).toHaveBeenCalledWith({
+      kind: 'pair',
+      decision: 'approve',
+    });
 
     fireEvent.press(view.getByTestId('agent-node-row-node-1'));
     expect(view.getByTestId('agent-node-detail')).toBeTruthy();

@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  act,
   fireEvent,
   render,
   waitFor,
@@ -434,7 +435,7 @@ describe('AgentSettings functional sections', () => {
     expect(onChanged).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps core identity files readable and gates their writes through Pro', async () => {
+  it('keeps core identity files editable and gates the save through Pro', async () => {
     const set = jest.fn(async () => ({ ok: true }));
     const onOpenPaywall = jest.fn();
     const adapter = identityAdapter({ set });
@@ -451,20 +452,14 @@ describe('AgentSettings functional sections', () => {
     fireEvent.press(view.getByTestId('agent-identity-user'));
     expect(view.getByTestId('agent-identity-user-name').props.value).toBe('Lucy');
     fireEvent.press(view.getByTestId('agent-identity-file-edit'));
-    expect(onOpenPaywall).toHaveBeenCalledWith('coreFileEditing');
-
-    view.rerender(
-      <IdentitySection
-        adapter={adapter}
-        agent={agent}
-        online
-        isPro
-        onOpenPaywall={onOpenPaywall}
-      />,
-    );
-    fireEvent.press(view.getByTestId('agent-identity-file-edit'));
+    expect(view.getByTestId('agent-identity-user-name').props.editable).toBe(true);
+    expect(onOpenPaywall).not.toHaveBeenCalled();
     fireEvent.changeText(view.getByTestId('agent-identity-user-name'), 'Lucy Chen');
     fireEvent.press(view.getByTestId('agent-identity-file-save'));
+    expect(onOpenPaywall).toHaveBeenCalledWith('coreFileEditing', expect.any(Function));
+    expect(set).not.toHaveBeenCalled();
+    const continueSaving = onOpenPaywall.mock.calls[0]?.[1] as (() => void) | undefined;
+    act(() => continueSaving?.());
     await waitFor(() => expect(set).toHaveBeenCalledWith(
       'USER.md',
       expect.stringContaining('- **Name:** Lucy Chen'),
@@ -494,8 +489,11 @@ describe('AgentSettings functional sections', () => {
     );
     await waitFor(() => expect(view.getByTestId('agent-identity-create')).toBeTruthy());
     fireEvent.press(view.getByTestId('agent-identity-create'));
-    expect(onOpenPaywall).toHaveBeenCalledWith('agents');
+    expect(onOpenPaywall).toHaveBeenCalledWith('agents', expect.any(Function));
     expect(view.queryByTestId('agent-identity-create-sheet')).toBeNull();
+    const continueCreating = onOpenPaywall.mock.calls[0]?.[1] as (() => void) | undefined;
+    act(() => continueCreating?.());
+    expect(view.getByTestId('agent-identity-create-sheet')).toBeTruthy();
 
     view.rerender(
       <IdentitySection
@@ -507,7 +505,6 @@ describe('AgentSettings functional sections', () => {
         onChanged={onChanged}
       />,
     );
-    fireEvent.press(view.getByTestId('agent-identity-create'));
     fireEvent.changeText(view.getByTestId('agent-identity-create-name'), 'Researcher');
     fireEvent.changeText(view.getByTestId('agent-identity-create-emoji'), '🔬');
     fireEvent.press(view.getByTestId('agent-identity-create-action'));
@@ -709,7 +706,7 @@ describe('AgentSettings functional sections', () => {
     ));
   });
 
-  it('reads and saves files, and routes the edit gate to the Pro paywall', async () => {
+  it('reads and edits files, then routes the save gate to the Pro paywall', async () => {
     const list = jest.fn(async () => [{
       name: 'SOUL.md',
       path: '/SOUL.md',
@@ -740,20 +737,14 @@ describe('AgentSettings functional sections', () => {
     fireEvent.press(view.getByTestId('agent-file-SOUL.md'));
     await waitFor(() => expect(view.getByText('Original')).toBeTruthy());
     fireEvent.press(view.getByTestId('agent-file-edit'));
-    expect(onOpenPaywall).toHaveBeenCalledWith('coreFileEditing');
-
-    view.rerender(
-      <FilesSection
-        adapter={adapter}
-        agent={agent}
-        online
-        isPro
-        onOpenPaywall={onOpenPaywall}
-      />,
-    );
-    fireEvent.press(view.getByTestId('agent-file-edit'));
+    expect(view.getByTestId('agent-file-editor-input')).toBeTruthy();
+    expect(onOpenPaywall).not.toHaveBeenCalled();
     fireEvent.changeText(view.getByTestId('agent-file-editor-input'), 'Updated');
     fireEvent.press(view.getByTestId('agent-file-save'));
+    expect(onOpenPaywall).toHaveBeenCalledWith('coreFileEditing', expect.any(Function));
+    expect(set).not.toHaveBeenCalled();
+    const continueSaving = onOpenPaywall.mock.calls[0]?.[1] as (() => void) | undefined;
+    act(() => continueSaving?.());
     await waitFor(() => expect(set).toHaveBeenCalledWith('SOUL.md', 'Updated', agent.agentId));
   });
 

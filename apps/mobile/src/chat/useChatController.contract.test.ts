@@ -3,6 +3,7 @@ import * as Network from 'expo-network';
 import * as DocumentPicker from 'expo-document-picker';
 import { CAPABILITY_MATRIX } from '@clawket/agent-protocol';
 import { analyticsEvents } from '../services/analytics/events';
+import { recordSuccessfulSendForAutomaticReview } from '../services/auto-app-review';
 import { cacheMessageImages } from '../services/image-cache';
 import { StorageService } from '../services/storage';
 import { useAdapterChatEvents } from './useAdapterChatEvents';
@@ -148,6 +149,10 @@ jest.mock('../services/image-cache', () => ({
   cacheMessageImages: jest.fn().mockResolvedValue([]),
 }));
 
+jest.mock('../services/auto-app-review', () => ({
+  recordSuccessfulSendForAutomaticReview: jest.fn().mockResolvedValue(undefined),
+}));
+
 const mockAppContext: any = {
   activeGatewayConfigId: null,
   mainSessionKey: 'agent:main:main',
@@ -224,7 +229,7 @@ jest.mock('../services/analytics/events', () => ({
   analyticsEvents: {
     chatSendTapped: jest.fn(),
     chatSlashCommandTriggered: jest.fn(),
-    chatExecApprovalResolved: jest.fn(),
+    approvalResolved: jest.fn(),
   },
 }));
 
@@ -510,6 +515,7 @@ describe('useChatController contract', () => {
 
     expect(adapter.probe).toHaveBeenCalledTimes(1);
     expect(adapter.prompt).not.toHaveBeenCalled();
+    expect(recordSuccessfulSendForAutomaticReview).not.toHaveBeenCalled();
     expect(result.current.input).toBe('hello');
   });
 
@@ -535,6 +541,7 @@ describe('useChatController contract', () => {
 
     expect(adapter.probe).toHaveBeenCalledTimes(1);
     expect(adapter.prompt).toHaveBeenCalledTimes(1);
+    expect(recordSuccessfulSendForAutomaticReview).toHaveBeenCalledTimes(1);
   });
 
   it.each(['openclaw', 'hermes'] as const)(
@@ -932,9 +939,9 @@ describe('useChatController contract', () => {
       result.current.resolveApproval('approval-1', 'allow-once');
     });
 
-    expect(mockedAnalytics.chatExecApprovalResolved).toHaveBeenCalledWith({
+    expect(mockedAnalytics.approvalResolved).toHaveBeenCalledWith({
+      kind: 'exec',
       decision: 'allow-once',
-      source: 'approval_card',
     });
     expect(adapter.management.approvals.resolveExec).toHaveBeenCalledWith('approval-1', 'allow-once');
   });

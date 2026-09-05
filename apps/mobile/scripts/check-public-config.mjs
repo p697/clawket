@@ -2,6 +2,7 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const XCODE_ENV_BLOCK_START = '# @generated begin clawket-xcode-env';
 const XCODE_ENV_BLOCK_END = '# @generated end clawket-xcode-env';
@@ -25,7 +26,7 @@ function loadEnvFile(filePath) {
   }
 }
 
-function parseBoolean(value) {
+export function parseBoolean(value) {
   const normalized = trim(value).toLowerCase();
   if (!normalized) return null;
   if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
@@ -33,30 +34,25 @@ function parseBoolean(value) {
   return null;
 }
 
-function read(name) {
-  const value = trim(process.env[name]);
-  return value || null;
-}
+export function buildConfig(env = process.env) {
+  const readEnv = (name) => trim(env[name]) || null;
+  const posthogApiKey = readEnv('EXPO_PUBLIC_POSTHOG_API_KEY');
+  const posthogHost = readEnv('EXPO_PUBLIC_POSTHOG_HOST');
+  const revenueCatAppleApiKey = readEnv('EXPO_PUBLIC_REVENUECAT_APPLE_API_KEY');
+  const revenueCatGoogleApiKey = readEnv('EXPO_PUBLIC_REVENUECAT_GOOGLE_API_KEY');
+  const revenueCatEntitlementId = readEnv('EXPO_PUBLIC_REVENUECAT_PRO_ENTITLEMENT_ID');
+  const revenueCatOfferingId = readEnv('EXPO_PUBLIC_REVENUECAT_PRO_OFFERING_ID');
+  const revenueCatPackageId = readEnv('EXPO_PUBLIC_REVENUECAT_PRO_PACKAGE_ID');
+  const revenueCatTestApiKey = readEnv('EXPO_PUBLIC_REVENUECAT_TEST_API_KEY');
+  const unlockProEnabled = parseBoolean(env.EXPO_PUBLIC_UNLOCK_PRO) === true;
 
-function enabled(flagName, values) {
-  const explicit = parseBoolean(process.env[flagName]);
-  if (explicit != null) return explicit;
-  return values.some(Boolean);
-}
-
-function buildConfig() {
-  const posthogApiKey = read('EXPO_PUBLIC_POSTHOG_API_KEY');
-  const posthogHost = read('EXPO_PUBLIC_POSTHOG_HOST');
-  const revenueCatAppleApiKey = read('EXPO_PUBLIC_REVENUECAT_APPLE_API_KEY');
-  const revenueCatGoogleApiKey = read('EXPO_PUBLIC_REVENUECAT_GOOGLE_API_KEY');
-  const revenueCatEntitlementId = read('EXPO_PUBLIC_REVENUECAT_PRO_ENTITLEMENT_ID');
-  const revenueCatOfferingId = read('EXPO_PUBLIC_REVENUECAT_PRO_OFFERING_ID');
-  const revenueCatPackageId = read('EXPO_PUBLIC_REVENUECAT_PRO_PACKAGE_ID');
-  const revenueCatTestApiKey = read('EXPO_PUBLIC_REVENUECAT_TEST_API_KEY');
-  const unlockProEnabled = parseBoolean(process.env.EXPO_PUBLIC_UNLOCK_PRO) === true;
-
-  const posthogEnabled = enabled('EXPO_PUBLIC_POSTHOG_ENABLED', [posthogApiKey, posthogHost]);
-  const revenueCatEnabled = enabled('EXPO_PUBLIC_REVENUECAT_ENABLED', [
+  const enabledForEnv = (flagName, values) => {
+    const explicit = parseBoolean(env[flagName]);
+    if (explicit != null) return explicit;
+    return values.some(Boolean);
+  };
+  const posthogEnabled = enabledForEnv('EXPO_PUBLIC_POSTHOG_ENABLED', [posthogApiKey, posthogHost]);
+  const revenueCatEnabled = enabledForEnv('EXPO_PUBLIC_REVENUECAT_ENABLED', [
     revenueCatAppleApiKey,
     revenueCatGoogleApiKey,
     revenueCatEntitlementId,
@@ -90,10 +86,25 @@ const appRoot = resolve(import.meta.dirname, '..');
 loadEnvFile(resolve(appRoot, '.env.local'));
 loadEnvFile(resolve(appRoot, '.env'));
 
-function validateConfig(config, platform) {
+export function validateConfig(config, platform, env = process.env, root = appRoot) {
   const errors = [];
-  const requirePostHog = parseBoolean(process.env.CLAWKET_REQUIRE_POSTHOG) === true;
-  const requireRevenueCat = parseBoolean(process.env.CLAWKET_REQUIRE_REVENUECAT) === true;
+  const booleanFlags = [
+    'CLAWKET_REQUIRE_POSTHOG',
+    'CLAWKET_REQUIRE_REVENUECAT',
+    'EXPO_PUBLIC_POSTHOG_ENABLED',
+    'EXPO_PUBLIC_REVENUECAT_ENABLED',
+    'EXPO_PUBLIC_UNLOCK_PRO',
+  ];
+
+  for (const flagName of booleanFlags) {
+    const rawValue = trim(env[flagName]);
+    if (rawValue && parseBoolean(rawValue) == null) {
+      errors.push(`${flagName} must be a boolean value (true/false or 1/0).`);
+    }
+  }
+
+  const requirePostHog = parseBoolean(env.CLAWKET_REQUIRE_POSTHOG) === true;
+  const requireRevenueCat = parseBoolean(env.CLAWKET_REQUIRE_REVENUECAT) === true;
 
   if (requirePostHog && !config.posthog.enabled) {
     errors.push('PostHog must be enabled for this build, but no EXPO_PUBLIC_POSTHOG_* configuration was found.');
@@ -104,8 +115,8 @@ function validateConfig(config, platform) {
     if (!config.posthog.apiKeyConfigured) errors.push('PostHog is enabled but EXPO_PUBLIC_POSTHOG_API_KEY is missing.');
   }
 
-  if (requireRevenueCat && (platform === 'ios' || platform === 'all') && !config.revenueCat.enabled) {
-    errors.push('RevenueCat must be enabled for iOS archives, but no EXPO_PUBLIC_REVENUECAT_* configuration was found.');
+  if (requireRevenueCat && !config.revenueCat.enabled) {
+    errors.push(`RevenueCat must be enabled for ${platform} store builds, but no EXPO_PUBLIC_REVENUECAT_* configuration was found.`);
   }
 
   if (config.revenueCat.enabled) {
@@ -132,7 +143,7 @@ function validateConfig(config, platform) {
   }
 
   if (platform === 'ios' || platform === 'all') {
-    const iosRoot = resolve(appRoot, 'ios');
+    const iosRoot = resolve(root, 'ios');
     const xcodeEnvPath = resolve(iosRoot, '.xcode.env');
 
     if (existsSync(iosRoot)) {
@@ -155,31 +166,39 @@ function validateConfig(config, platform) {
   return errors;
 }
 
-const args = new Set(process.argv.slice(2));
-const json = args.has('--json');
-const platform = args.has('--platform=ios')
-  ? 'ios'
-  : args.has('--platform=android')
-    ? 'android'
-    : 'all';
+export function runCli(argv = process.argv.slice(2)) {
+  const args = new Set(argv);
+  const json = args.has('--json');
+  const platform = args.has('--platform=ios')
+    ? 'ios'
+    : args.has('--platform=android')
+      ? 'android'
+      : 'all';
 
-const config = buildConfig();
-const errors = validateConfig(config, platform);
+  const config = buildConfig();
+  const errors = validateConfig(config, platform);
 
-if (json) {
-  console.log(JSON.stringify({ platform, config, errors }, null, 2));
-} else {
-  console.log(`Public config check (${platform})`);
-  console.log(`- PostHog: ${config.posthog.enabled ? 'enabled' : 'disabled'}`);
-  console.log(`- RevenueCat: ${config.revenueCat.enabled ? 'enabled' : 'disabled'}`);
-  if (errors.length > 0) {
-    console.log('');
-    for (const error of errors) {
-      console.log(`ERROR: ${error}`);
+  if (json) {
+    console.log(JSON.stringify({ platform, config, errors }, null, 2));
+  } else {
+    console.log(`Public config check (${platform})`);
+    console.log(`- PostHog: ${config.posthog.enabled ? 'enabled' : 'disabled'}`);
+    console.log(`- RevenueCat: ${config.revenueCat.enabled ? 'enabled' : 'disabled'}`);
+    if (errors.length > 0) {
+      console.log('');
+      for (const error of errors) {
+        console.log(`ERROR: ${error}`);
+      }
     }
   }
+
+  return errors.length === 0 ? 0 : 1;
 }
 
-if (errors.length > 0) {
-  process.exit(1);
+const isMain = process.argv[1]
+  ? resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+  : false;
+
+if (isMain) {
+  process.exitCode = runCli();
 }

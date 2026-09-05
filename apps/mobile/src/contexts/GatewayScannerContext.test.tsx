@@ -205,6 +205,7 @@ describe('GatewayScannerProvider pairing persistence', () => {
         runtime: mockRuntime,
         payload: claimed,
         debugMode: true,
+        source: 'gateway_scanner',
       });
     });
     expect(mockShowOverlay).toHaveBeenCalledTimes(1);
@@ -276,6 +277,7 @@ describe('GatewayScannerProvider pairing persistence', () => {
         transportKind: 'relay',
       }),
       debugMode: true,
+      source: 'gateway_scanner',
     });
     expect(view.queryByTestId('gateway-secure-pairing-confirmation')).toBeNull();
   });

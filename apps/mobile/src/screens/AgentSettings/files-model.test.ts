@@ -26,20 +26,18 @@ describe('Agent files model', () => {
     expect(formatFileSize(-1)).toBeUndefined();
   });
 
-  it('gates editing and saving on capability, operation, Pro, online, and changes', () => {
+  it('gates editing and save attempts on capability, operation, online state, and changes', () => {
     expect(canEditAgentFile({ fileEdit: true }, operations)).toBe(true);
     expect(canEditAgentFile({ fileEdit: false }, operations)).toBe(false);
     expect(canSaveAgentFile({
       capabilities: { fileEdit: true },
       operations,
-      isPro: true,
       online: true,
       changed: true,
     })).toBe(true);
     expect(canSaveAgentFile({
-      capabilities: { fileEdit: true },
+      capabilities: { fileEdit: false },
       operations,
-      isPro: false,
       online: true,
       changed: true,
     })).toBe(false);

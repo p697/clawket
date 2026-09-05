@@ -134,6 +134,7 @@ const BACKEND_PAIRING_PROFILES: Readonly<Record<PairingBackendKind, BackendPairi
           },
         },
         debugMode: input.debugMode,
+        source: 'pairing_code',
       });
       return requireExpectedConnection('hermes', saved.connection);
     },
@@ -196,6 +197,7 @@ export async function connectBackendPairingPayload(
     runtime: input.runtime,
     payload: resolved,
     debugMode: input.debugMode,
+    source: 'pairing_qr',
   });
   return requireExpectedConnection(input.backendKind, saved.connection);
 }

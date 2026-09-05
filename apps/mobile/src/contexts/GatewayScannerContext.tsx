@@ -119,6 +119,7 @@ export function GatewayScannerProvider({ children }: { children: React.ReactNode
         runtime: getConnectionRuntime(),
         payload: resolved,
         debugMode,
+        source: 'gateway_scanner',
       });
     } catch {
       showPairingFailedAlert(i18n.t('Could not save this connection. Try again.', { ns: 'config' }));

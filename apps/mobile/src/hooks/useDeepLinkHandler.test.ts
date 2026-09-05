@@ -11,6 +11,9 @@ const mockGetSnapshot = jest.fn();
 const mockUpsertConnection = jest.fn();
 const mockActivate = jest.fn();
 const mockRequestConfirmation = jest.fn();
+const mockOpenPaywall = jest.fn();
+const mockGatewayConnectSaved = jest.fn();
+const mockRecordSuccessfulSend = jest.fn(async () => undefined);
 const mockActiveAdapter = {
   connection: { id: 'connection-1' },
   prompt: mockPrompt,
@@ -35,6 +38,16 @@ jest.mock('../connection', () => ({
 
 jest.mock('../contexts/GatewayScannerContext', () => ({
   useGatewayScanner: () => ({ connectPairingLink: connectPairingLinkMock }),
+}));
+
+jest.mock('../services/analytics/events', () => ({
+  analyticsEvents: {
+    gatewayConnectSaved: (...args: unknown[]) => mockGatewayConnectSaved(...args),
+  },
+}));
+
+jest.mock('../services/auto-app-review', () => ({
+  recordSuccessfulSendForAutomaticReview: () => mockRecordSuccessfulSend(),
 }));
 
 // Import after mocks are set up
@@ -81,6 +94,9 @@ describe('useDeepLinkHandler', () => {
     effectCallback = null;
     deps.activeConnectionId = 'connection-1';
     deps.activeAdapter = mockActiveAdapter as any;
+    deps.canAddConnection = undefined;
+    deps.activeAccessDeniedReason = null;
+    deps.onOpenPaywall = mockOpenPaywall;
     mockIsReady.mockReturnValue(true);
     mockPrompt.mockResolvedValue({ runId: 'deep-link-run' });
     mockGetAdapter.mockReturnValue(mockActiveAdapter);
@@ -139,6 +155,18 @@ describe('useDeepLinkHandler', () => {
       simulateUrl(url);
       expect(connectPairingLinkMock).toHaveBeenCalledWith(url);
       expect(mockRequestConfirmation).not.toHaveBeenCalled();
+    });
+
+    it('paywalls a second pairing and resumes the same secure link after purchase', async () => {
+      const url = 'https://registry.clawket.ai/pair/ps_abc123#k=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+      deps.canAddConnection = false;
+      setupHook();
+      await flushPromises();
+      simulateUrl(url);
+      expect(connectPairingLinkMock).not.toHaveBeenCalled();
+      expect(mockOpenPaywall).toHaveBeenCalledWith('gatewayConnections', expect.any(Function));
+      await mockOpenPaywall.mock.calls[0]?.[1]?.();
+      expect(connectPairingLinkMock).toHaveBeenCalledWith(url);
     });
   });
 
@@ -218,12 +246,13 @@ describe('useDeepLinkHandler', () => {
         connectionId: 'connection-1',
         agentId: 'main',
         sessionKey: 'main-session',
-        from: 'notification',
+        from: 'deeplink',
       });
       expect(mockPrompt).toHaveBeenCalledWith('main-session', {
         text: 'hello',
         idempotencyKey: expect.stringMatching(/^deeplink_[a-z0-9]+_[a-f0-9]{8}$/),
       });
+      expect(mockRecordSuccessfulSend).toHaveBeenCalledTimes(1);
     });
 
     it('should navigate and prompt a custom sessionKey for an agent action', async () => {
@@ -234,7 +263,7 @@ describe('useDeepLinkHandler', () => {
         connectionId: 'connection-1',
         agentId: 'main',
         sessionKey: 'custom',
-        from: 'notification',
+        from: 'deeplink',
       });
       expect(mockPrompt).toHaveBeenCalledWith('custom', {
         text: 'hello',
@@ -258,7 +287,7 @@ describe('useDeepLinkHandler', () => {
         connectionId: 'connection-1',
         agentId: 'main',
         sessionKey: 'test',
-        from: 'notification',
+        from: 'deeplink',
       });
     });
 
@@ -280,8 +309,41 @@ describe('useDeepLinkHandler', () => {
         auth: { token: 'secret' },
       });
       expect(mockActivate).toHaveBeenCalledWith('connection-from-link');
+      expect(mockGatewayConnectSaved).toHaveBeenCalledWith({
+        backend: 'openclaw',
+        transport: 'custom',
+        source: 'deeplink',
+      });
       expect(mockUpsertConnection.mock.invocationCallOrder[0]).toBeLessThan(
         mockActivate.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('paywalls a second custom connection and resumes its original action', async () => {
+      deps.canAddConnection = false;
+      simulateUrl('clawket://connect?url=https://example.com&token=secret');
+      confirmRequest();
+      await flushPromises();
+      expect(mockUpsertConnection).not.toHaveBeenCalled();
+      expect(mockOpenPaywall).toHaveBeenCalledWith('gatewayConnections', expect.any(Function));
+      await mockOpenPaywall.mock.calls[0]?.[1]?.();
+      await flushPromises();
+      expect(mockUpsertConnection).toHaveBeenCalledTimes(1);
+      expect(mockActivate).toHaveBeenCalledWith('connection-from-link');
+    });
+
+    it('paywalls a locked active Agent and resumes the exact prompt after purchase', async () => {
+      deps.activeAccessDeniedReason = 'agents';
+      simulateUrl('clawket://agent?message=hello');
+      confirmRequest();
+      await flushPromises();
+      expect(mockPrompt).not.toHaveBeenCalled();
+      expect(mockOpenPaywall).toHaveBeenCalledWith('agents', expect.any(Function));
+      await mockOpenPaywall.mock.calls[0]?.[1]?.();
+      await flushPromises();
+      expect(mockPrompt).toHaveBeenCalledWith(
+        'main-session',
+        expect.objectContaining({ text: 'hello' }),
       );
     });
 
@@ -344,12 +406,13 @@ describe('useDeepLinkHandler', () => {
         connectionId: 'connection-1',
         agentId: 'main',
         sessionKey: 'main-session',
-        from: 'notification',
+        from: 'deeplink',
       });
       expect(Alert.alert).toHaveBeenLastCalledWith(
         'Send Failed',
         'Connection is not ready. Please try again in the thread.',
       );
+      expect(mockRecordSuccessfulSend).not.toHaveBeenCalled();
     });
 
     it('should not navigate or send an agent action without an active connection', () => {

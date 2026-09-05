@@ -31,6 +31,7 @@ import * as DocumentPicker from "expo-document-picker";
 
 import { useChatImagePreview } from "../hooks/useChatImagePreview";
 import { analyticsEvents } from "../services/analytics/events";
+import { recordSuccessfulSendForAutomaticReview } from "../services/auto-app-review";
 import { cacheMessageImages } from "../services/image-cache";
 import { stopSpeechRecognitionAsync } from "../services/speech/speechRecognition";
 import { StorageService } from "../services/storage";
@@ -2180,6 +2181,7 @@ export function useChatController({
       adapter
         .prompt(sessionKey, { text: effectiveText, attachments, idempotencyKey })
         .then(({ runId: serverRunId }) => {
+          void recordSuccessfulSendForAutomaticReview();
           markTransportConfirmed();
           if (
             pendingOptimisticRunIdsRef.current.get(sessionKey) ===
@@ -2877,9 +2879,9 @@ export function useChatController({
 
   const resolveApproval = useCallback(
     (id: string, decision: "allow-once" | "allow-always" | "deny") => {
-      analyticsEvents.chatExecApprovalResolved({
+      analyticsEvents.approvalResolved({
+        kind: "exec",
         decision,
-        source: "approval_card",
       });
       const status =
         decision === "deny" ? ("denied" as const) : ("allowed" as const);

@@ -343,9 +343,15 @@ describe('AccountSettings support screens', () => {
     });
   });
 
-  it('renders the releases data as a read-only 3.0 history', () => {
+  it('renders the 3.0 history and opens the membership paywall from its final entry', () => {
     const onBack = jest.fn();
-    const view = render(<ReleaseNotesHistoryScreen onBack={onBack} />);
+    const onOpenPaywall = jest.fn();
+    const view = render(
+      <ReleaseNotesHistoryScreen
+        onBack={onBack}
+        onOpenPaywall={onOpenPaywall}
+      />,
+    );
 
     expect(view.getByText('v3.0.0')).toBeTruthy();
     expect(view.getByText('Clawket 3.0')).toBeTruthy();
@@ -353,8 +359,11 @@ describe('AccountSettings support screens', () => {
     expect(view.getByText('Clawket 3.0 + Pro')).toBeTruthy();
     expect(view.getByText('Unlimited connections, agents, management, logs, files, and search.')).toBeTruthy();
     expect(formatReleaseDate('not-a-date', 'en')).toBe('not-a-date');
+    expect(view.getByTestId('release-notes-entry-clawket-3-0-pro').props.accessibilityRole).toBe('button');
 
+    fireEvent.press(view.getByTestId('release-notes-entry-clawket-3-0-pro'));
     fireEvent.press(view.getByTestId('release-notes-back'));
+    expect(onOpenPaywall).toHaveBeenCalledWith('settingsMembershipPreview');
     expect(onBack).toHaveBeenCalledTimes(1);
   });
 

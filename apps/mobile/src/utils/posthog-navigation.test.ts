@@ -1,4 +1,8 @@
-import { getActiveLeafRouteName, getTrackedScreen } from './posthog-navigation';
+import {
+  getActiveLeafRouteName,
+  getManualTrackedScreen,
+  getTrackedScreen,
+} from './posthog-navigation';
 
 describe('posthog navigation tracking', () => {
   it('maps the roster root without a legacy tab dimension', () => {
@@ -13,22 +17,21 @@ describe('posthog navigation tracking', () => {
     };
 
     expect(getActiveLeafRouteName(state as never)).toBe('Roster');
-    expect(getTrackedScreen(state as never)).toEqual({
+    expect(getTrackedScreen(state as never, { backend: 'openclaw' })).toEqual({
       name: 'Roster',
       routeName: 'Roster',
       area: 'roster',
       kind: 'root',
-      uniqueKey: 'roster-1',
+      uniqueKey: 'roster-1:Roster',
       properties: {
-        navigation_path: 'Roster',
         screen_area: 'roster',
         screen_kind: 'root',
-        screen_route: 'Roster',
+        backend: 'openclaw',
       },
     });
   });
 
-  it('maps thread details and only captures param presence', () => {
+  it('maps thread details without exposing route parameters', () => {
     const state = {
       index: 1,
       routes: [
@@ -41,22 +44,20 @@ describe('posthog navigation tracking', () => {
       ],
     };
 
-    expect(getTrackedScreen(state as never)).toEqual({
+    expect(getTrackedScreen(state as never, { backend: 'hermes' })).toEqual({
       name: 'Thread',
       routeName: 'Thread',
       area: 'thread',
       kind: 'detail',
-      uniqueKey: 'thread-1',
+      uniqueKey: 'thread-1:Thread',
       properties: {
-        navigation_path: 'Thread',
         screen_area: 'thread',
         screen_kind: 'detail',
-        screen_route: 'Thread',
-        has_connection_id: true,
-        has_agent_id: true,
-        has_session_key: true,
+        backend: 'hermes',
       },
     });
+    expect(JSON.stringify(getTrackedScreen(state as never))).not.toContain('connection-123');
+    expect(JSON.stringify(getTrackedScreen(state as never))).not.toContain('agent:main:main');
   });
 
   it('returns null for routes that are not part of the tracking catalog', () => {
@@ -98,9 +99,7 @@ describe('posthog navigation tracking', () => {
       properties: {
         screen_area: 'settings',
         screen_kind: 'detail',
-        has_section: true,
-        has_connection_id: true,
-        has_agent_id: true,
+        backend: 'unconfigured',
       },
     });
     expect(JSON.stringify(tracked)).not.toContain('private');
@@ -121,7 +120,50 @@ describe('posthog navigation tracking', () => {
       area: 'account',
       properties: {
         screen_area: 'account',
-        has_section: true,
+        screen_kind: 'detail',
+        backend: 'unconfigured',
+      },
+    });
+  });
+
+  it('tracks the production release-notes detail without route data', () => {
+    const state = {
+      index: 0,
+      routes: [{ key: 'release-notes-1', name: 'ReleaseNotes' }],
+    };
+
+    expect(getTrackedScreen(state as never)).toMatchObject({
+      name: 'ReleaseNotes',
+      routeName: 'ReleaseNotes',
+      area: 'account',
+      kind: 'detail',
+    });
+  });
+
+  it('builds the manual Session Panel screen view without manufacturing a route', () => {
+    expect(getManualTrackedScreen('SessionPanel', { backend: 'youmind' })).toEqual({
+      name: 'SessionPanel',
+      routeName: 'SessionPanel',
+      area: 'thread',
+      kind: 'modal',
+      uniqueKey: 'manual:SessionPanel:SessionPanel',
+      properties: {
+        screen_area: 'thread',
+        screen_kind: 'modal',
+        backend: 'youmind',
+      },
+    });
+  });
+
+  it('supports the global Paywall overlay as a manual screen view', () => {
+    expect(getManualTrackedScreen('Paywall', { backend: 'openclaw' })).toMatchObject({
+      name: 'Paywall',
+      area: 'paywall',
+      kind: 'modal',
+      properties: {
+        screen_area: 'paywall',
+        screen_kind: 'modal',
+        backend: 'openclaw',
       },
     });
   });

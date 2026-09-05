@@ -26,7 +26,7 @@ describe('app update announcement service', () => {
       version: APP_PACKAGE_VERSION,
       entries: [{
         id: 'current-release',
-        emoji: '🚀',
+        icon: 'rocket',
         title: 'Current release',
         action: { type: 'none' },
       }],
@@ -43,10 +43,15 @@ describe('app update announcement service', () => {
 
   it('keeps only the Clawket 3.0 and 3.0 + Pro entries', () => {
     expect(releaseUpdates.getAppUpdateReleaseHistory()).toHaveLength(1);
-    expect(getCurrentAppUpdateAnnouncement('3.0.0')?.entries.map((entry) => entry.id)).toEqual([
+    const entries = getCurrentAppUpdateAnnouncement('3.0.0')?.entries;
+    expect(entries?.map((entry) => entry.id)).toEqual([
       'clawket-3-0',
       'clawket-3-0-pro',
     ]);
+    expect(entries ? entries[entries.length - 1]?.action : undefined).toEqual({
+      type: 'open_paywall',
+      feature: 'settingsMembershipPreview',
+    });
   });
 
   it('removes pre-3.0 release announcements from the history', () => {
@@ -67,7 +72,7 @@ describe('app update announcement service', () => {
       version: APP_PACKAGE_VERSION,
       entries: [{
         id: 'current-release',
-        emoji: '🚀',
+        icon: 'rocket',
         title: 'Current release',
         action: { type: 'none' },
       }],
@@ -97,7 +102,7 @@ describe('app update announcement service', () => {
       entries: [
         {
           id: 'silent-entry',
-          emoji: '🔕',
+          icon: 'sparkles',
           title: 'Custom Chat Appearance',
           subtitle: 'Add a custom chat background and adjust bubble opacity in Chat Appearance.',
           action: {
@@ -117,7 +122,7 @@ describe('app update announcement service', () => {
       version: APP_PACKAGE_VERSION,
       entries: [{
         id: 'current-release',
-        emoji: '🚀',
+        icon: 'rocket',
         title: 'Current release',
         action: { type: 'none' },
       }],

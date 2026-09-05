@@ -5,6 +5,14 @@ import {
   type PairingConnectionRuntime,
 } from './save-paired-connection';
 
+const mockGatewayConnectSaved = jest.fn();
+
+jest.mock('../../services/analytics/events', () => ({
+  analyticsEvents: {
+    gatewayConnectSaved: (...args: unknown[]) => mockGatewayConnectSaved(...args),
+  },
+}));
+
 function descriptor(
   id: string,
   backendKind: 'openclaw' | 'hermes' = 'openclaw',
@@ -20,6 +28,10 @@ function descriptor(
 }
 
 describe('save paired connection', () => {
+  beforeEach(() => {
+    mockGatewayConnectSaved.mockReset();
+  });
+
   it('builds an environment-aware credential-bearing Relay record', () => {
     expect(buildPairedConnectionRecord({
       payload: {
@@ -142,7 +154,13 @@ describe('save paired connection', () => {
         relay: { serverUrl: 'https://registry.example', gatewayId: 'gateway-1' },
       },
       debugMode: false,
+      source: 'pairing_qr',
     })).resolves.toEqual({ connection, created: false, probeSucceeded: false });
     expect(calls).toEqual(['upsert', 'activate', 'probe']);
+    expect(mockGatewayConnectSaved).toHaveBeenCalledWith({
+      backend: 'openclaw',
+      transport: 'relay',
+      source: 'pairing_qr',
+    });
   });
 });

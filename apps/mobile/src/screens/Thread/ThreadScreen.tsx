@@ -9,6 +9,7 @@ import {
   supportsFileAttachments,
   type AdapterErrorCode,
   type Capabilities,
+  type SessionKind,
 } from '@clawket/agent-protocol';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppContext } from '../../contexts/AppContext';
@@ -28,9 +29,8 @@ import { useMessageFavorites } from '../../chat/useMessageFavorites';
 import {
   getCurrentAppUpdateAnnouncement,
   getCurrentAppVersion,
-  markCurrentAppUpdateAnnouncementShown,
-  shouldShowCurrentAppUpdateAnnouncement,
 } from '../../services/app-update-announcement';
+import { analyticsEvents } from '../../services/analytics/events';
 import type { AppUpdateAnnouncement } from '../../features/app-updates/releases';
 import type { UiMessage } from '../../types/chat';
 import {
@@ -65,6 +65,7 @@ type NavigationProps = NativeStackScreenProps<RootStackParamList, 'Thread'>;
 
 export type ThreadScreenProps = NavigationProps & Readonly<{
   locked?: boolean;
+  lockedReason?: 'gatewayConnections' | 'agents';
   onOpenSessionPanel?: () => void;
   onOpenAddMenu?: () => void;
   onOpenRunSession?: (
@@ -86,6 +87,7 @@ export function ThreadScreen({
   navigation,
   route,
   locked = false,
+  lockedReason = 'agents',
   onOpenSessionPanel,
   onOpenAddMenu,
   onOpenRunSession,
@@ -109,39 +111,28 @@ export function ThreadScreen({
   const [announcementVisible, setAnnouncementVisible] = useState(false);
   const [stopConfirmationVisible, setStopConfirmationVisible] = useState(false);
   const [cronRunSeeds, setCronRunSeeds] = useState<ThreadRunSeed[]>([]);
-  const announcementCheckedRef = useRef(false);
   const currentVersion = useMemo(() => getCurrentAppVersion(), []);
   const openedKeyRef = useRef<string | null>(null);
+  const analyticsOpenedKeyRef = useRef<string | null>(null);
   const requestedSessionKeyRef = useRef<string | null>(null);
   const { connectionId, agentId, sessionKey, from } = route.params;
   const routeIsActive = connections.activeConnectionId === connectionId;
-  const adapter = routeIsActive ? connections.activeAdapter : null;
+  const adapter = routeIsActive && !locked ? connections.activeAdapter : null;
   const capabilities = adapter?.capabilities ?? NO_CAPABILITIES;
   const fileAttachmentsEnabled = supportsFileAttachments(capabilities);
   const copy = useMemo(() => createThreadCopy(t), [t]);
 
   useEffect(() => {
-    if (announcementCheckedRef.current) return;
-    announcementCheckedRef.current = true;
-    if (app.debugMode) {
-      setAnnouncement(getCurrentAppUpdateAnnouncement(currentVersion));
+    setAnnouncementVisible(false);
+    if (!app.debugMode) {
+      setAnnouncement(null);
       return;
     }
-    let cancelled = false;
-    void (async () => {
-      const value = getCurrentAppUpdateAnnouncement(currentVersion);
-      const visible = await shouldShowCurrentAppUpdateAnnouncement(false);
-      if (cancelled) return;
-      setAnnouncement(value);
-      setAnnouncementVisible(visible);
-    })();
-    return () => {
-      cancelled = true;
-    };
+    setAnnouncement(getCurrentAppUpdateAnnouncement(currentVersion));
   }, [app.debugMode, currentVersion]);
 
   useEffect(() => {
-    if (!connections.initialized || routeIsActive) return;
+    if (!connections.initialized || routeIsActive || locked) return;
     let cancelled = false;
     setActivationFailure(null);
     void getConnectionRuntime().activate(connectionId).catch((error: unknown) => {
@@ -151,7 +142,7 @@ export function ThreadScreen({
     return () => {
       cancelled = true;
     };
-  }, [connectionId, connections.initialized, routeIsActive]);
+  }, [connectionId, connections.initialized, locked, routeIsActive]);
 
   useEffect(() => {
     if (app.currentAgentId !== agentId) app.setCurrentAgentId(agentId);
@@ -187,6 +178,16 @@ export function ThreadScreen({
     clearChatSessionRequest: app.clearChatSessionRequest,
   });
   const currentSession = controller.sessions.find((session) => session.key === sessionKey);
+  const analyticsBackend = adapter?.connection.backendKind
+    ?? connections.connections.find((connection) => connection.id === connectionId)?.backendKind;
+  useEffect(() => {
+    if (!analyticsBackend) return;
+    const kind = normalizeAnalyticsSessionKind(currentSession?.kind, sessionKey);
+    const openedKey = `${connectionId}:${sessionKey}:${from}:${analyticsBackend}:${kind}`;
+    if (analyticsOpenedKeyRef.current === openedKey) return;
+    analyticsOpenedKeyRef.current = openedKey;
+    analyticsEvents.threadOpened({ backend: analyticsBackend, kind, from });
+  }, [analyticsBackend, connectionId, currentSession?.kind, from, sessionKey]);
   const agent = app.agents.find((candidate) => candidate.id === agentId);
   const agentName = agent?.identity?.name?.trim()
     || agent?.name?.trim()
@@ -361,21 +362,31 @@ export function ThreadScreen({
     : undefined;
   const confirmCancelCurrentRun = useCallback(() => {
     setStopConfirmationVisible(false);
+    if (analyticsBackend) analyticsEvents.chatAbortTapped({ backend: analyticsBackend });
     controller.abortCurrentRun();
-  }, [controller]);
+  }, [analyticsBackend, controller]);
+  const openRunSession = useCallback((
+    targetSessionKey: string,
+    targetAgentId: string | undefined,
+    kind: ThreadRunCard['kind'],
+  ) => {
+    analyticsEvents.runCardOpened({ kind });
+    onOpenRunSession?.(targetSessionKey, targetAgentId, kind);
+  }, [onOpenRunSession]);
 
   const closeAnnouncement = useCallback(() => {
-    if (!app.debugMode) {
-      void markCurrentAppUpdateAnnouncementShown().catch(() => undefined);
-    }
     setAnnouncementVisible(false);
-  }, [app.debugMode]);
+  }, []);
 
   const handleAnnouncementEntryPress = useCallback((entry: AppUpdateAnnouncement['entries'][number]) => {
     closeAnnouncement();
     if (entry.action.type === 'none') return;
     if (entry.action.type === 'open_url') {
       void openExternalUrl(entry.action.url, () => undefined);
+      return;
+    }
+    if (entry.action.type === 'open_paywall') {
+      navigation.navigate('Paywall', { reason: entry.action.feature });
       return;
     }
     if (entry.action.type === 'navigate_config_add_connection') {
@@ -506,10 +517,10 @@ export function ThreadScreen({
         onOpenAddMenu={capabilities.attachments || capabilities.skills ? handleOpenAddMenu : undefined}
         onVoice={controller.voiceInputSupported ? controller.toggleVoiceInput : undefined}
         onRetry={retry}
-        onOpenPaywall={() => navigation.navigate('Paywall', { reason: 'agents' })}
+        onOpenPaywall={() => navigation.navigate('Paywall', { reason: lockedReason })}
         onErrorAction={() => retry()}
         onLoadMoreHistory={controller.hasMoreHistory ? controller.onLoadMoreHistory : undefined}
-        onOpenRunSession={onOpenRunSession}
+        onOpenRunSession={onOpenRunSession ? openRunSession : undefined}
         onOpenRunLogs={onOpenRunLogs}
         onOpenAttachments={handleOpenMessageAttachments}
         onMessageLongPress={setSelectedMessage}
@@ -627,6 +638,21 @@ export function ThreadScreen({
       />
     </>
   );
+}
+
+function inferAnalyticsSessionKind(sessionKey: string): SessionKind {
+  if (sessionKey === 'main' || /^agent:[^:]+:main$/.test(sessionKey)) return 'main';
+  if (sessionKey.includes(':subagent:')) return 'subagent';
+  if (sessionKey.includes(':cron:')) return 'cron';
+  return 'other';
+}
+
+function normalizeAnalyticsSessionKind(
+  kind: SessionKind | 'global' | 'unknown' | undefined,
+  sessionKey: string,
+): SessionKind {
+  if (kind === 'global' || kind === 'unknown') return 'other';
+  return kind ?? inferAnalyticsSessionKind(sessionKey);
 }
 
 function translateThreadErrorMessage(t: TFunction, code: AdapterErrorCode): string {

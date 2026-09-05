@@ -137,7 +137,6 @@ const CONNECTION_ROWS: ReadonlyArray<RowDefinition> = [
     id: 'openclaw',
     title: 'OpenClaw management',
     capabilities: ['configManage'],
-    requiresPro: true,
     value: () => undefined,
   },
   {

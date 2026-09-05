@@ -86,6 +86,10 @@ jest.mock('../services/speech/speechRecognition', () => ({
   stopSpeechRecognitionAsync: jest.fn().mockResolvedValue(undefined),
 }));
 
+jest.mock('../services/auto-app-review', () => ({
+  recordSuccessfulSendForAutomaticReview: jest.fn().mockResolvedValue(undefined),
+}));
+
 jest.mock('../services/storage', () => ({
   StorageService: {
     getComposerDraft: jest.fn().mockResolvedValue(''),
@@ -182,7 +186,7 @@ jest.mock('../services/analytics/events', () => ({
   analyticsEvents: {
     chatSendTapped: jest.fn(),
     chatSlashCommandTriggered: jest.fn(),
-    chatExecApprovalResolved: jest.fn(),
+    approvalResolved: jest.fn(),
   },
 }));
 

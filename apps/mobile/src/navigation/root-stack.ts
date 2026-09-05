@@ -1,6 +1,6 @@
 import type { BackendKind } from '@clawket/agent-protocol';
 
-export type ThreadOrigin = 'roster' | 'panel' | 'search' | 'notification' | 'onboarding';
+export type ThreadOrigin = 'roster' | 'panel' | 'search' | 'notification' | 'deeplink' | 'onboarding';
 
 export type AgentSettingsSection =
   | 'identity'
@@ -48,6 +48,7 @@ export type RootStackParamList = {
   };
   AccountSettings: undefined;
   AccountSettingsSection: { section: AccountSettingsSection };
+  ReleaseNotes: undefined;
   ChatAppearance: undefined;
   Search: { query?: string } | undefined;
   MessageDetail: {
@@ -66,6 +67,7 @@ export const ROOT_ROUTE_NAMES = [
   'AgentSettingsSection',
   'AccountSettings',
   'AccountSettingsSection',
+  'ReleaseNotes',
   'ChatAppearance',
   'Search',
   'MessageDetail',

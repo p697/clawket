@@ -2,6 +2,7 @@ import {
   buildSupportEmailUrl,
   resolvePublicAnalyticsConfig,
   resolvePublicAppLinks,
+  resolvePublicPaywallSocialProof,
   resolvePublicRevenueCatConfig,
   resolvePublicYouMindAuthConfig,
 } from './public';
@@ -93,6 +94,26 @@ describe('resolvePublicRevenueCatConfig', () => {
     expect(resolvePublicRevenueCatConfig({
       EXPO_PUBLIC_REVENUECAT_GOOGLE_API_KEY: 'goog_key',
     } as unknown as NodeJS.ProcessEnv).enabled).toBe(true);
+  });
+});
+
+describe('resolvePublicPaywallSocialProof', () => {
+  it('exposes the reviewed rating and quote defaults', () => {
+    expect(resolvePublicPaywallSocialProof()).toEqual({
+      rating: 4.4,
+      quote: 'Updated quickly, always stays ahead',
+    });
+  });
+
+  it('fails safe when an update is blank or outside the rating range', () => {
+    expect(resolvePublicPaywallSocialProof({ rating: Number.NaN, quote: '   ' })).toEqual({
+      rating: 4.4,
+      quote: 'Updated quickly, always stays ahead',
+    });
+    expect(resolvePublicPaywallSocialProof({ rating: 5, quote: ' Fresh quote ' })).toEqual({
+      rating: 5,
+      quote: 'Fresh quote',
+    });
   });
 });
 

@@ -345,8 +345,8 @@ const SECTION_DEFINITIONS: Readonly<Record<AgentSettingsSection, SectionDefiniti
   openclaw: {
     title: 'OpenClaw management',
     gate: all('configManage'),
-    requiresPro: true,
-    paywallReason: 'openclawManagement',
+    requiresPro: false,
+    paywallReason: 'configManage',
     groups: [{
       id: 'openclaw',
       rows: [

@@ -22,11 +22,17 @@ export type AppUpdateAnnouncementAction =
       type: 'navigate_config_add_connection';
       tab?: 'quick' | 'manual';
       flow?: 'local' | 'youmind';
+    }
+  | {
+      type: 'open_paywall';
+      feature: 'settingsMembershipPreview';
     };
+
+export type AppUpdateAnnouncementIcon = 'rocket' | 'sparkles';
 
 export type AppUpdateAnnouncementEntry = {
   id: string;
-  emoji: string;
+  icon: AppUpdateAnnouncementIcon;
   tag?: string;
   title: string;
   subtitle?: string;
@@ -56,7 +62,7 @@ export const APP_UPDATE_RELEASES: AppUpdateRelease[] = [
     entries: [
       {
         id: 'clawket-3-0',
-        emoji: '🚀',
+        icon: 'rocket',
         title: 'Clawket 3.0',
         subtitle: 'Every agent and session in one roster.',
         action: {
@@ -65,11 +71,12 @@ export const APP_UPDATE_RELEASES: AppUpdateRelease[] = [
       },
       {
         id: 'clawket-3-0-pro',
-        emoji: '✨',
+        icon: 'sparkles',
         title: 'Clawket 3.0 + Pro',
         subtitle: 'Unlimited connections, agents, management, logs, files, and search.',
         action: {
-          type: 'none',
+          type: 'open_paywall',
+          feature: 'settingsMembershipPreview',
         },
       },
     ],

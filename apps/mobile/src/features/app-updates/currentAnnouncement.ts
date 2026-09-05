@@ -2,6 +2,7 @@ export type {
   AppUpdateAnnouncement,
   AppUpdateAnnouncementAction,
   AppUpdateAnnouncementEntry,
+  AppUpdateAnnouncementIcon,
   AppUpdateRelease,
 } from './releases';
 

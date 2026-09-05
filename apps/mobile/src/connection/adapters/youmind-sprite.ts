@@ -40,6 +40,7 @@ type YouMindSpriteAdapterOptions = {
   language?: () => string;
   delay?: (milliseconds: number) => Promise<void>;
   isFreeSlot?: boolean;
+  onGreetingSent?: () => void;
 };
 
 type AdapterListeners = {
@@ -56,6 +57,7 @@ export class YouMindSpriteAdapter implements AgentAdapter {
   private readonly openingStore: OpeningStore;
   private readonly language: () => string;
   private readonly delay: (milliseconds: number) => Promise<void>;
+  private readonly onGreetingSent?: () => void;
   private readonly listeners: {
     [K in keyof AdapterListeners]: Set<AdapterListeners[K]>;
   } = {
@@ -89,6 +91,7 @@ export class YouMindSpriteAdapter implements AgentAdapter {
     this.openingStore = options.openingStore ?? createOpeningStore();
     this.language = options.language ?? (() => i18n.language || 'en');
     this.delay = options.delay ?? wait;
+    this.onGreetingSent = options.onGreetingSent;
     this.connection = {
       id: record.id,
       backendKind: record.backendKind,
@@ -397,6 +400,11 @@ export class YouMindSpriteAdapter implements AgentAdapter {
       idempotencyKey: `opening-${this.connection.id}`,
     });
     await this.openingStore.markOpened(this.connection.id);
+    try {
+      this.onGreetingSent?.();
+    } catch {
+      // Telemetry must never turn a successful greeting into a failed load.
+    }
   }
 
   private createMainSession(hasActiveRun = Boolean(this.activeRun)): SessionDescriptor {

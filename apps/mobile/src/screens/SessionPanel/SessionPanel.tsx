@@ -2,6 +2,7 @@ import React, {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import {
@@ -48,6 +49,7 @@ import {
   StatusSize,
 } from '../../theme/tokens';
 import { relativeTime } from '../../utils/chat-message';
+import { analyticsEvents } from '../../services/analytics/events';
 import {
   availableSessionActions,
   buildSessionPanelGroups,
@@ -82,6 +84,7 @@ const MUTATION_CAPABILITIES_OFF = Object.freeze({
 }) satisfies Pick<Capabilities, 'sessionRename' | 'sessionReset' | 'sessionDelete'>;
 
 const PANEL_SKELETON_ROWS = Object.freeze(['one', 'two', 'three', 'four', 'five']);
+const PANEL_SEARCH_ANALYTICS_DEBOUNCE_MS = 400;
 let rememberedPanelMode: SessionPanelMode = 'grouped';
 
 export type SessionPanelViewProps = Readonly<{
@@ -602,6 +605,16 @@ export function SessionPanelView({
     action: 'reset' | 'delete';
   }> | null>(null);
   const [renameRow, setRenameRow] = useState<SessionPanelRow | null>(null);
+  const wasVisibleRef = useRef(false);
+  useEffect(() => {
+    if (!visible) {
+      wasVisibleRef.current = false;
+      return;
+    }
+    if (wasVisibleRef.current) return;
+    wasVisibleRef.current = true;
+    analyticsEvents.sessionPanelOpened({ mode, session_count: rows.length });
+  }, [mode, rows.length, visible]);
 
   useEffect(() => {
     setExpandedAgentIds((current) => new Set([...current, currentAgentId]));
@@ -612,6 +625,18 @@ export function SessionPanelView({
     quickFilter,
     kindFilter,
   }), [kindFilter, query, quickFilter, rows]);
+  useEffect(() => {
+    if (!visible || !query.trim()) return undefined;
+    const resultKinds = [...new Set(filteredRows.map((row) => row.kind))].sort().join(',') || 'none';
+    const timer = setTimeout(() => {
+      analyticsEvents.searchPerformed({
+        scope: 'panel',
+        has_results: filteredRows.length > 0,
+        result_kinds: resultKinds,
+      });
+    }, PANEL_SEARCH_ANALYTICS_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [filteredRows, query, visible]);
   const groups = useMemo(
     () => buildSessionPanelGroups(filteredRows, agents, currentAgentId),
     [agents, currentAgentId, filteredRows],
@@ -623,13 +648,21 @@ export function SessionPanelView({
   const switchMode = useCallback((next: SessionPanelMode) => {
     rememberedPanelMode = next;
     setMode(next);
+    if (next !== mode) analyticsEvents.sessionPanelModeChanged({ mode: next });
     onModeChange?.(next);
-  }, [onModeChange]);
+  }, [mode, onModeChange]);
   const select = useCallback((row: SessionPanelRow) => {
+    analyticsEvents.chatSessionSelected({
+      source: 'panel',
+      session_kind: row.kind,
+      from: 'panel',
+    });
     void Promise.resolve(onSelectSession(row)).then(onClose, () => undefined);
   }, [onClose, onSelectSession]);
   const create = useCallback(() => {
-    if (onCreateSession) void Promise.resolve(onCreateSession(currentAgentId)).catch(() => undefined);
+    if (!onCreateSession) return;
+    analyticsEvents.sessionAction({ action: 'create' });
+    void Promise.resolve(onCreateSession(currentAgentId)).catch(() => undefined);
   }, [currentAgentId, onCreateSession]);
   const chooseAction = useCallback((action: SessionPanelAction) => {
     if (!actionRow) return;
@@ -643,6 +676,7 @@ export function SessionPanelView({
       return;
     }
     if (onSessionAction) {
+      analyticsEvents.sessionAction({ action });
       void Promise.resolve(onSessionAction(actionRow, action)).catch(() => undefined);
     }
   }, [actionRow, onSessionAction]);
@@ -651,12 +685,15 @@ export function SessionPanelView({
     const pending = confirmation;
     setConfirmation(null);
     if (onSessionAction) {
+      analyticsEvents.sessionAction({ action: pending.action });
       void Promise.resolve(onSessionAction(pending.row, pending.action)).catch(() => undefined);
     }
   }, [confirmation, onSessionAction]);
-  const renameSession = useCallback((row: SessionPanelRow, title: string) => (
-    onSessionAction?.(row, 'rename', { title })
-  ), [onSessionAction]);
+  const renameSession = useCallback((row: SessionPanelRow, title: string) => {
+    if (!onSessionAction) return undefined;
+    analyticsEvents.sessionAction({ action: 'rename' });
+    return onSessionAction(row, 'rename', { title });
+  }, [onSessionAction]);
 
   const modeTabs = useMemo(() => [
     { key: 'grouped' as const, label: t('Grouped') },

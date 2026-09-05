@@ -244,4 +244,23 @@ describe('AgentSettingsView shallow states', () => {
     await waitFor(() => expect(view.getByText('loaded-model')).toBeTruthy());
     expect(mockLoadSummary).toHaveBeenCalledWith(adapter, agent);
   });
+
+  it('does not expose a locked Agent to management summary calls', async () => {
+    const adapter = createMockAdapter({
+      connection,
+      agents: [agent],
+      initialState: 'ready',
+    });
+    const view = render(
+      <AgentSettingsScreen
+        {...viewProps({ isPro: false })}
+        adapter={adapter}
+        permissionDenied
+      />,
+    );
+
+    expect(view.getByTestId('agent-settings-permission')).toBeTruthy();
+    await Promise.resolve();
+    expect(mockLoadSummary).not.toHaveBeenCalled();
+  });
 });

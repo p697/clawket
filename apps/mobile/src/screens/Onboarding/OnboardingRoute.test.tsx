@@ -364,9 +364,11 @@ describe('OnboardingRoute', () => {
   });
 
   it('rejects a QR that does not match the selected backend before claiming it', async () => {
+    const onScanQrTapped = jest.fn();
     mockConnectBackendPairingPayload.mockRejectedValueOnce({ code: 'unsupported' });
-    render(<OnboardingRoute {...createProps()} />);
+    render(<OnboardingRoute {...createProps({ onScanQrTapped })} />);
     act(() => mockScreenProps?.onScanQr('hermes'));
+    expect(onScanQrTapped).toHaveBeenCalledWith('hermes');
     const options = mockScanner.openGatewayScanner.mock.calls[0][0];
 
     await act(async () => {
@@ -440,12 +442,41 @@ describe('OnboardingRoute', () => {
     });
   });
 
-  it('uses the Pro gate before opening an additional connection flow', () => {
+  it('resumes an additional connection flow after the host Pro gate succeeds', () => {
     mockRuntime = connectionSnapshot();
-    render(<OnboardingRoute {...createProps()} />);
+    const onOpenPaywall = jest.fn();
+    render(<OnboardingRoute {...createProps({ onOpenPaywall })} />);
     act(() => mockScreenProps?.onScanQr('openclaw'));
-    expect(mockPro.requirePro).toHaveBeenCalledWith('gatewayConnections');
+    expect(onOpenPaywall).toHaveBeenCalledWith('gatewayConnections', expect.any(Function));
     expect(mockScanner.openGatewayScanner).not.toHaveBeenCalled();
+
+    act(() => onOpenPaywall.mock.calls[0]?.[1]?.());
+    expect(mockScanner.openGatewayScanner).toHaveBeenCalledTimes(1);
+    expect(mockPro.requirePro).not.toHaveBeenCalled();
+  });
+
+  it('resumes the exact pairing-code submission after the host Pro gate succeeds', async () => {
+    mockRuntime = connectionSnapshot();
+    const onOpenPaywall = jest.fn();
+    render(<OnboardingRoute {...createProps({ onOpenPaywall })} />);
+
+    await act(async () => {
+      await mockScreenProps?.onSubmitPairing({
+        backendKind: 'hermes',
+        transportKind: 'relay',
+        code: 'ABC234',
+      });
+    });
+    expect(mockConnectBackendPairingCode).not.toHaveBeenCalled();
+    expect(onOpenPaywall).toHaveBeenCalledWith('gatewayConnections', expect.any(Function));
+
+    act(() => onOpenPaywall.mock.calls[0]?.[1]?.());
+    await waitFor(() => expect(mockConnectBackendPairingCode).toHaveBeenCalledWith(
+      expect.objectContaining({
+        backendKind: 'hermes',
+        pairingCode: 'ABC234',
+      }),
+    ));
   });
 
   it('binds clipboard, official docs, YouMind, modal close, and offline retry', async () => {

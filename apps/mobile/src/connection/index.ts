@@ -16,6 +16,7 @@ import {
   ConnectionNotFoundError,
   connectionStore,
   type ConnectionAdapterFactory,
+  type ConnectionAdapterFactoryContext,
   type ConnectionRecordPatch,
   type ConnectionRecordReplacement,
   type ConnectionStore,
@@ -52,6 +53,7 @@ export type ConnectionRuntimeSnapshot = Readonly<{
   revision: number;
   initialized: boolean;
   switching: boolean;
+  launchPaywallShownThisProcess: boolean;
   connectionsRevision: number;
   connections: ReadonlyArray<ConnectionDescriptor>;
   activeConnectionId: string | null;
@@ -135,7 +137,11 @@ type ActiveAdapterEntry = {
   rosterRefreshTimer: ReturnType<typeof setInterval> | null;
   hermesProbeTimer: ReturnType<typeof setInterval> | null;
   rosterRefreshInFlight: Promise<void> | null;
+  readyRefresh: Promise<void> | null;
+  readyRevision: number;
+  hasReportedReady: boolean;
   probeInFlight: Promise<boolean> | null;
+  probeReconnectReason: Extract<ReconnectReason, 'probe_failed' | 'foreground'> | null;
   maintenanceTail: Promise<void>;
   sessionSnapshotRevision: number;
 };
@@ -154,6 +160,7 @@ const INITIAL_SNAPSHOT: ConnectionRuntimeSnapshot = Object.freeze({
   revision: 0,
   initialized: false,
   switching: false,
+  launchPaywallShownThisProcess: false,
   connectionsRevision: 0,
   connections: EMPTY_CONNECTIONS,
   activeConnectionId: null,
@@ -392,6 +399,17 @@ export class ConnectionCoordinator {
     return this.snapshot;
   }
 
+  /**
+   * Claims the one automatic launch-paywall opportunity for this process.
+   * This deliberately survives coordinator stop/start cycles and is never
+   * persisted, so reconnects and connection switches cannot show it again.
+   */
+  markLaunchPaywallShown(): boolean {
+    if (this.snapshot.launchPaywallShownThisProcess) return false;
+    this.publish({ launchPaywallShownThisProcess: true });
+    return true;
+  }
+
   async rollbackConnections(): Promise<ConnectionRuntimeSnapshot> {
     await this.store.rollback();
     this.disconnectActiveImmediately();
@@ -408,7 +426,10 @@ export class ConnectionCoordinator {
     return this.snapshot.roster;
   }
 
-  async probeActive(timeoutMs?: number): Promise<boolean> {
+  async probeActive(
+    timeoutMs?: number,
+    reconnectReason: Extract<ReconnectReason, 'probe_failed' | 'foreground'> = 'probe_failed',
+  ): Promise<boolean> {
     let entry = this.active;
     if (!entry) {
       if (
@@ -422,24 +443,25 @@ export class ConnectionCoordinator {
       entry = this.active;
       if (!entry) return false;
     }
-    return this.probeEntry(entry, timeoutMs);
+    return this.probeEntry(entry, timeoutMs, reconnectReason);
   }
 
   private async performActiveProbe(
     entry: ActiveAdapterEntry,
     timeoutMs?: number,
+    reconnectReason: Extract<ReconnectReason, 'probe_failed' | 'foreground'> = 'probe_failed',
   ): Promise<boolean> {
     try {
       const healthy = await entry.adapter.probe(timeoutMs);
       if (!healthy && this.active === entry) {
-        this.telemetry.reconnect(entry.adapter.connection, 'probe_failed');
+        this.telemetry.reconnect(entry.adapter.connection, reconnectReason);
         this.error = failure('probe', new Error('Active connection probe failed.'), entry.connectionId);
         this.publish({ switching: true });
         entry.adapter.disconnect();
         await entry.adapter.connect();
         if (this.active === entry) {
           this.error = null;
-          await this.performActiveRosterRefresh(entry);
+          if (entry.adapter.state === 'ready') void this.handleActiveReady(entry);
           this.publish({ switching: false });
         }
       }
@@ -526,7 +548,13 @@ export class ConnectionCoordinator {
     this.publish({ switching: true });
     let adapter: AgentAdapter;
     try {
-      adapter = await this.store.createAdapter(connectionId, factory);
+      adapter = await this.store.createAdapter(connectionId, (record, descriptor) => factory(
+        record,
+        descriptor,
+        {
+          onReconnect: (reason) => this.telemetry.reconnect(descriptor, reason),
+        },
+      ));
     } catch (error) {
       this.error = failure('connect', error, connectionId);
       this.publish({ switching: false });
@@ -553,7 +581,11 @@ export class ConnectionCoordinator {
       rosterRefreshTimer: null,
       hermesProbeTimer: null,
       rosterRefreshInFlight: null,
+      readyRefresh: null,
+      readyRevision: 0,
+      hasReportedReady: false,
       probeInFlight: null,
+      probeReconnectReason: null,
       maintenanceTail: Promise.resolve(),
       sessionSnapshotRevision: 0,
     };
@@ -561,16 +593,31 @@ export class ConnectionCoordinator {
     this.nextConnectReason = 'retry';
     this.telemetry.attempt(adapter.connection, connectReason);
     entry.unsubscribers.push(
-      adapter.on('state', (state) => {
+      adapter.on('state', (state, reason) => {
         if (this.active !== entry) return;
         if (state === 'reconnecting' && entry.lastState !== 'reconnecting') {
-          this.telemetry.reconnect(adapter.connection, 'socket_close');
+          const stateReason = reconnectReasonFromAdapterState(reason);
+          this.telemetry.reconnect(
+            adapter.connection,
+            stateReason === 'socket_close'
+              ? entry.probeReconnectReason ?? stateReason
+              : stateReason,
+          );
         }
-        if (state === 'ready' && entry.lastState !== 'ready') {
-          this.captureConnectionReady(entry);
+        const enteredReady = state === 'ready' && entry.lastState !== 'ready';
+        if (state !== 'ready') {
+          entry.readyRefresh = null;
+          const roster = this.rosterInputs.get(entry.connectionId);
+          if (roster?.source === 'live') {
+            this.rosterInputs.set(entry.connectionId, { ...roster, source: 'cache' });
+          }
         }
         entry.lastState = state;
-        this.publish();
+        if (enteredReady) {
+          void this.handleActiveReady(entry);
+        } else {
+          this.publish();
+        }
       }),
       adapter.on('sessions', (sessions) => {
         if (this.active === entry) this.acceptSessionSnapshot(entry, sessions);
@@ -583,16 +630,11 @@ export class ConnectionCoordinator {
     try {
       await adapter.connect();
       if (this.active !== entry) return;
-      if (adapter.state === 'ready') this.captureConnectionReady(entry);
-      this.telemetry.ready(
-        adapter.connection,
-        Math.max(0, this.now() - entry.connectStartedAt),
-        entry.attempt,
-      );
-      this.error = null;
-      this.publish({ switching: false });
-      this.startActiveMaintenance(entry);
-      await this.refreshActiveRoster(entry);
+      if (adapter.state === 'ready') {
+        await this.handleActiveReady(entry);
+      } else {
+        this.publish({ switching: false });
+      }
     } catch (error) {
       if (this.active !== entry) return;
       this.telemetry.failed(
@@ -674,8 +716,8 @@ export class ConnectionCoordinator {
     this.publishStoreSnapshot(storeSnapshot);
   }
 
-  private refreshActiveRoster(entry: ActiveAdapterEntry): Promise<void> {
-    if (entry.rosterRefreshInFlight) return entry.rosterRefreshInFlight;
+  private refreshActiveRoster(entry: ActiveAdapterEntry, force = false): Promise<void> {
+    if (entry.rosterRefreshInFlight && !force) return entry.rosterRefreshInFlight;
     const operation = entry.maintenanceTail.then(async () => {
       if (!this.started || this.active !== entry) return;
       await this.performActiveRosterRefresh(entry);
@@ -691,13 +733,18 @@ export class ConnectionCoordinator {
 
   private async performActiveRosterRefresh(entry: ActiveAdapterEntry): Promise<void> {
     try {
+      const readyRevision = entry.readyRevision;
       const sessionSnapshotRevision = entry.sessionSnapshotRevision;
       const [agents, sessions, watermarks] = await Promise.all([
         entry.adapter.listAgents(),
         entry.adapter.listSessions(),
         this.watermarks.get(entry.connectionId),
       ]);
-      if (this.active !== entry) return;
+      if (
+        this.active !== entry
+        || entry.adapter.state !== 'ready'
+        || entry.readyRevision !== readyRevision
+      ) return;
       const connection = this.connectionDescriptor(entry.connectionId);
       if (!connection) return;
       const syncedAt = this.now();
@@ -721,7 +768,11 @@ export class ConnectionCoordinator {
         acceptedSessions,
         entry.adapter.state,
       );
-      if (this.active !== entry) return;
+      if (
+        this.active !== entry
+        || entry.adapter.state !== 'ready'
+        || entry.readyRevision !== readyRevision
+      ) return;
       if (entry.sessionSnapshotRevision !== acceptedSessionRevision) return;
       this.rosterInputs.set(entry.connectionId, {
         connection,
@@ -813,11 +864,20 @@ export class ConnectionCoordinator {
     this.publish({ switching: false });
   }
 
-  private probeEntry(entry: ActiveAdapterEntry, timeoutMs?: number): Promise<boolean> {
+  private probeEntry(
+    entry: ActiveAdapterEntry,
+    timeoutMs?: number,
+    reconnectReason: Extract<ReconnectReason, 'probe_failed' | 'foreground'> = 'probe_failed',
+  ): Promise<boolean> {
     if (entry.probeInFlight) return entry.probeInFlight;
     const operation = entry.maintenanceTail.then(async () => {
       if (!this.started || this.active !== entry) return false;
-      return this.performActiveProbe(entry, timeoutMs);
+      entry.probeReconnectReason = reconnectReason;
+      try {
+        return await this.performActiveProbe(entry, timeoutMs, reconnectReason);
+      } finally {
+        entry.probeReconnectReason = null;
+      }
     });
     entry.maintenanceTail = operation.then(() => undefined, () => undefined);
     let tracked: Promise<boolean>;
@@ -866,6 +926,34 @@ export class ConnectionCoordinator {
     ) ?? null;
   }
 
+  /**
+   * Handles every non-ready -> ready transition, including adapter-owned
+   * reconnects after the original connect promise has already rejected. Each
+   * transition owns one forced roster refresh so approval evidence cannot be
+   * mistaken for data from the previous backend session.
+   */
+  private handleActiveReady(entry: ActiveAdapterEntry): Promise<void> {
+    if (this.active !== entry || entry.adapter.state !== 'ready') return Promise.resolve();
+    if (entry.readyRefresh) return entry.readyRefresh;
+
+    entry.readyRevision += 1;
+    this.captureConnectionReady(entry);
+    if (!entry.hasReportedReady) {
+      entry.hasReportedReady = true;
+      this.telemetry.ready(
+        entry.adapter.connection,
+        Math.max(0, this.now() - entry.connectStartedAt),
+        entry.attempt,
+      );
+    }
+    this.error = null;
+    this.publish({ switching: false });
+    this.startActiveMaintenance(entry);
+    const refresh = this.refreshActiveRoster(entry, true);
+    entry.readyRefresh = refresh;
+    return refresh;
+  }
+
   private captureConnectionReady(entry: ActiveAdapterEntry): void {
     if (this.active !== entry) return;
     const metadata = readConnectionRuntimeMetadata(entry.adapter);
@@ -899,6 +987,8 @@ export class ConnectionCoordinator {
       revision: this.snapshot.revision + 1,
       initialized: patch.initialized ?? this.snapshot.initialized,
       switching: patch.switching ?? this.snapshot.switching,
+      launchPaywallShownThisProcess: patch.launchPaywallShownThisProcess
+        ?? this.snapshot.launchPaywallShownThisProcess,
       connectionsRevision: patch.connectionsRevision ?? storeSnapshot.revision,
       connections: patch.connections ?? storeSnapshot.connections,
       activeConnectionId,
@@ -968,6 +1058,17 @@ function connectionFailureStage(state: ConnectionState): 'socket' | 'handshake' 
   return 'socket';
 }
 
+function reconnectReasonFromAdapterState(reason?: string): ReconnectReason {
+  const normalized = reason?.trim().toLowerCase() ?? '';
+  if (
+    normalized.includes('heartbeat')
+    && (normalized.includes('timeout') || normalized.includes('timed out'))
+  ) {
+    return 'tick_timeout';
+  }
+  return 'socket_close';
+}
+
 function readMaintenanceInterval(value: number | undefined, fallback: number): number | null {
   if (value === 0) return null;
   return typeof value === 'number' && Number.isFinite(value) && value > 0
@@ -1014,8 +1115,17 @@ const defaultConnectionTelemetry: ConnectionTelemetry = {
   },
 };
 
+const defaultAdapterFactory: ConnectionAdapterFactory = (
+  record,
+  descriptor,
+  context?: ConnectionAdapterFactoryContext,
+) => createConnectionAdapter(record, descriptor, {
+  onReconnect: context?.onReconnect,
+  onSpriteGreetingSent: () => analyticsEvents.spriteGreetingSent(),
+});
+
 let defaultCoordinator = new ConnectionCoordinator({
-  adapterFactory: createConnectionAdapter,
+  adapterFactory: defaultAdapterFactory,
 });
 
 export function getConnectionRuntime(): ConnectionCoordinator {
@@ -1072,6 +1182,7 @@ export function useRoster(): ReadonlyArray<RosterConnectionGroup> {
 
 export type {
   ConnectionAdapterFactory,
+  ConnectionAdapterFactoryContext,
   ConnectionRecordPatch,
   ConnectionRecordReplacement,
   ConnectionUpsertResult,

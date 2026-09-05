@@ -10,6 +10,7 @@ describe('3.0 root navigation', () => {
       'AgentSettingsSection',
       'AccountSettings',
       'AccountSettingsSection',
+      'ReleaseNotes',
       'ChatAppearance',
       'Search',
       'MessageDetail',

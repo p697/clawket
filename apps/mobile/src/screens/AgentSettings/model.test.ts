@@ -101,7 +101,7 @@ describe('Agent settings descriptor model', () => {
       expect.objectContaining({ id: 'connection', value: 'Online' }),
       expect.objectContaining({ id: 'tools', value: '63' }),
       expect.objectContaining({ id: 'channels-devices', value: '1', attention: true }),
-      expect.objectContaining({ id: 'openclaw', locked: true }),
+      expect.objectContaining({ id: 'openclaw', locked: false }),
       expect.objectContaining({ id: 'logs', locked: true }),
     ]));
   });

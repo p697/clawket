@@ -8,8 +8,10 @@ import {
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   CAPABILITY_KEYS,
+  resolveCapabilities,
   type AgentAdapter,
   type AgentDescriptor,
+  type BackendKind,
   type Capabilities,
   type ConnectionDescriptor,
 } from '@clawket/agent-protocol';
@@ -33,6 +35,7 @@ import type {
   AgentSettingsSection,
   RootStackParamList,
 } from '../../navigation/root-stack';
+import { analyticsEvents } from '../../services/analytics/events';
 import { useAppTheme } from '../../theme';
 import {
   ControlSize,
@@ -94,11 +97,12 @@ export type AgentSettingsSectionScreenProps = NavigationProps & Readonly<{
   isPro?: boolean;
   permissionDenied?: boolean;
   resolveAction?: AgentSettingsSectionActionResolver;
-  onOpenPaywall?: (reason: string) => void;
+  onOpenPaywall?: (reason: string, onContinue?: () => void) => void;
 }>;
 
 export type AgentSettingsSectionViewProps = Readonly<{
   model: AgentSettingsSectionModel;
+  backend?: BackendKind;
   connectionLabel?: string;
   state: AgentSettingsSectionState;
   errorMessage?: string;
@@ -107,7 +111,7 @@ export type AgentSettingsSectionViewProps = Readonly<{
   onRetry: () => void;
   onAction?: (action: AgentSettingsSectionAction) => void;
   canResolveAction?: (action: AgentSettingsSectionAction) => boolean;
-  onOpenPaywall: (reason: string) => void;
+  onOpenPaywall: (reason: string, onContinue?: () => void) => void;
   sectionContent?: React.ReactNode;
 }>;
 
@@ -127,7 +131,7 @@ export function AgentSettingsSectionScreen({
   const locale = i18n?.resolvedLanguage;
   const { connectionId, agentId, section } = route.params;
   const routeIsActive = runtime.activeConnectionId === connectionId;
-  const adapter = routeIsActive ? runtime.activeAdapter : null;
+  const adapter = routeIsActive && !permissionDenied ? runtime.activeAdapter : null;
   const connectionGroup = runtime.roster.find(
     (candidate) => candidate.connection.id === connectionId,
   );
@@ -137,8 +141,9 @@ export function AgentSettingsSectionScreen({
   const agent = connectionGroup?.agents.find(
     (candidate) => candidate.agent.agentId === agentId,
   )?.agent ?? null;
-  const capabilities = adapter?.capabilities ?? NO_CAPABILITIES;
-  const supported = adapter
+  const capabilities = adapter?.capabilities
+    ?? (connection ? resolveCapabilities(connection.backendKind) : NO_CAPABILITIES);
+  const supported = connection
     ? isAgentSettingsSectionSupported(section, capabilities)
     : false;
   const sectionLocked = isAgentSettingsSectionLocked(section, isPro, permissionDenied);
@@ -149,7 +154,7 @@ export function AgentSettingsSectionScreen({
   const errorMessage = actionError ?? activationError ?? runtimeError ?? undefined;
 
   useEffect(() => {
-    if (!runtime.initialized || routeIsActive) return;
+    if (!runtime.initialized || routeIsActive || permissionDenied) return;
     let active = true;
     setActivationError(null);
     void getConnectionRuntime().activate(connectionId).catch((error: unknown) => {
@@ -158,7 +163,7 @@ export function AgentSettingsSectionScreen({
     return () => {
       active = false;
     };
-  }, [connectionId, routeIsActive, runtime.initialized]);
+  }, [connectionId, permissionDenied, routeIsActive, runtime.initialized]);
 
   const model = useMemo(() => connection ? buildAgentSettingsSectionModel({
     section,
@@ -185,9 +190,10 @@ export function AgentSettingsSectionScreen({
     locale,
   ]);
   const state = resolveAgentSettingsSectionState({
-    initialized: runtime.initialized && (adapter !== null || Boolean(errorMessage)),
-    routeIsActive,
-    switching: runtime.switching,
+    initialized: sectionLocked
+      || (runtime.initialized && (adapter !== null || Boolean(errorMessage))),
+    routeIsActive: sectionLocked || routeIsActive,
+    switching: sectionLocked ? false : runtime.switching,
     hasConnection: connection !== null,
     hasAgent: agent !== null,
     connectionState: runtime.activeState,
@@ -210,9 +216,9 @@ export function AgentSettingsSectionScreen({
     });
   }, [connectionId]);
 
-  const openPaywall = useCallback((reason: string) => {
+  const openPaywall = useCallback((reason: string, onContinue?: () => void) => {
     if (onOpenPaywall) {
-      onOpenPaywall(reason);
+      onOpenPaywall(reason, onContinue);
       return;
     }
     navigation.navigate('Paywall', { reason });
@@ -322,7 +328,7 @@ export function AgentSettingsSectionScreen({
         isPro={isPro}
         permissionDenied={permissionDenied}
         onBack={navigation.goBack}
-        onOpenPaywall={() => openPaywall('openclawManagement')}
+        onOpenPaywall={openPaywall}
       />
     );
   }
@@ -330,6 +336,7 @@ export function AgentSettingsSectionScreen({
   return (
     <AgentSettingsSectionView
       model={model}
+      backend={connection?.backendKind}
       connectionLabel={connection?.label}
       state={state}
       errorMessage={errorMessage}
@@ -346,6 +353,7 @@ export function AgentSettingsSectionScreen({
 
 export function AgentSettingsSectionView({
   model,
+  backend,
   connectionLabel,
   state,
   errorMessage,
@@ -366,16 +374,26 @@ export function AgentSettingsSectionView({
     (key: string) => translateAgentSettingsKey(t, key),
     [t],
   );
-  const openRow = (row: AgentSettingsSectionRowDescriptor) => {
-    if (row.locked || state === 'locked') {
-      onOpenPaywall(row.paywallReason ?? model.paywallReason ?? 'agents');
-      return;
-    }
+  const openAvailableRow = (row: AgentSettingsSectionRowDescriptor) => {
     if (row.id === 'connection.remove') {
       setRemoveConfirmationVisible(true);
       return;
     }
     onAction?.(row.id);
+  };
+  const openRow = (row: AgentSettingsSectionRowDescriptor) => {
+    const locked = row.locked || state === 'locked';
+    if (backend) {
+      analyticsEvents.settingsRowOpened({ row: row.id, locked, backend });
+    }
+    if (locked) {
+      onOpenPaywall(
+        row.paywallReason ?? model.paywallReason ?? 'agents',
+        () => openAvailableRow(row),
+      );
+      return;
+    }
+    openAvailableRow(row);
   };
 
   return (

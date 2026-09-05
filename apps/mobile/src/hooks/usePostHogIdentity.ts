@@ -3,6 +3,11 @@ import { Platform } from 'react-native';
 import type { ConnectionDescriptor } from '@clawket/agent-protocol';
 import { useAppTheme } from '../theme';
 import { posthogClient } from '../services/analytics/posthog';
+import {
+  buildAnalyticsSuperProperties,
+  REMOVED_ANALYTICS_PERSON_PROPERTIES,
+  REMOVED_ANALYTICS_SUPER_PROPERTIES,
+} from '../services/analytics/super-properties';
 import { StorageService } from '../services/storage';
 
 type Args = {
@@ -18,11 +23,15 @@ export function usePostHogIdentity({
   isPro,
   graceActive = false,
 }: Args): void {
-  const { accentId, mode, resolvedScheme } = useAppTheme();
-  const activeConnection = connections.find((connection) => connection.id === activeConnectionId) ?? null;
-  const backendKinds = [...new Set(connections.map((connection) => connection.backendKind))]
-    .sort()
-    .join(',');
+  const { accentId, mode } = useAppTheme();
+
+  useEffect(() => {
+    const client = posthogClient;
+    if (!client || typeof client.unregister !== 'function') return;
+    void Promise.all(
+      REMOVED_ANALYTICS_SUPER_PROPERTIES.map((property) => client.unregister(property)),
+    ).catch(() => {});
+  }, []);
 
   useEffect(() => {
     const client = posthogClient;
@@ -32,10 +41,10 @@ export function usePostHogIdentity({
     StorageService.getIdentity()
       .then((identity) => {
         if (cancelled || !identity?.deviceId) return;
-        return client.identify(identity.deviceId, {
-          device_id: identity.deviceId,
-          device_identity_created_at: identity.createdAt,
-        });
+        client.identify(identity.deviceId);
+        if (typeof client.unsetPersonProperties === 'function') {
+          client.unsetPersonProperties([...REMOVED_ANALYTICS_PERSON_PROPERTIES], false);
+        }
       })
       .catch(() => {});
 
@@ -47,33 +56,21 @@ export function usePostHogIdentity({
   useEffect(() => {
     const client = posthogClient;
     if (!client) return;
-    void client.register({
-      app_platform: Platform.OS,
-      connection_count: connections.length,
-      backend_kinds: backendKinds,
-      active_backend: activeConnection?.backendKind ?? 'unconfigured',
-      active_transport: activeConnection?.transportKind ?? 'unconfigured',
-      is_pro: isPro,
-      is_premium: isPro,
-      grace_active: graceActive,
-      // Kept for one transition release; active_backend/active_transport replace it.
-      gateway_mode: activeConnection
-        ? `${activeConnection.backendKind}:${activeConnection.transportKind}`
-        : 'unconfigured',
-      has_gateway_config: connections.length > 0,
-      theme_accent_id: accentId,
-      theme_mode: mode,
-      theme_scheme: resolvedScheme,
-    }).catch(() => {});
+    void client.register(buildAnalyticsSuperProperties({
+      platform: Platform.OS === 'android' ? 'android' : 'ios',
+      connections,
+      activeConnectionId,
+      isPro,
+      graceActive,
+      themeMode: mode,
+      themeAccentId: accentId,
+    })).catch(() => {});
   }, [
     accentId,
-    activeConnection?.backendKind,
-    activeConnection?.transportKind,
-    backendKinds,
-    connections.length,
+    activeConnectionId,
+    connections,
     graceActive,
     isPro,
     mode,
-    resolvedScheme,
   ]);
 }

@@ -85,9 +85,14 @@ export type ConnectionRecordPatch = Partial<
   debugMode?: boolean | null;
 };
 
+export type ConnectionAdapterFactoryContext = Readonly<{
+  onReconnect?: (reason: 'seq_gap') => void;
+}>;
+
 export type ConnectionAdapterFactory = (
   record: Readonly<ConnectionRecord>,
   descriptor: ConnectionDescriptor,
+  context?: ConnectionAdapterFactoryContext,
 ) => AgentAdapter;
 
 export type ConnectionStoreSnapshot = Readonly<{

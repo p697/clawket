@@ -42,12 +42,10 @@ export function canEditAgentFile(
 export function canSaveAgentFile(input: Readonly<{
   capabilities: Pick<Capabilities, 'fileEdit'>;
   operations: AgentFileOperations | undefined;
-  isPro: boolean;
   online: boolean;
   changed: boolean;
 }>): boolean {
-  return input.isPro
-    && input.online
+  return input.online
     && input.changed
     && canEditAgentFile(input.capabilities, input.operations);
 }

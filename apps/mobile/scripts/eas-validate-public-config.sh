@@ -18,8 +18,8 @@ fi
 cd "$APP_ROOT"
 
 case "$PROFILE" in
-  production|preview)
-    CLAWKET_REQUIRE_REVENUECAT=1 "$NODE_RUNNER" scripts/check-public-config.mjs --platform=android
+  production|preview|testflight)
+    CLAWKET_REQUIRE_POSTHOG=1 CLAWKET_REQUIRE_REVENUECAT=1 "$NODE_RUNNER" scripts/check-public-config.mjs --platform=android
     ;;
   *)
     "$NODE_RUNNER" scripts/check-public-config.mjs --platform=android

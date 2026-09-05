@@ -326,6 +326,7 @@ describe('GatewayAdapter lifecycle boundaries', () => {
 
   it('emits reconciled history after a sequence gap', async () => {
     const fake = new LifecycleGateway();
+    const onReconnect = jest.fn();
     fake.requestHandler = (method) => method === 'chat.history'
       ? { messages: [{ id: 'history-1', role: 'assistant', content: 'recovered' }] }
       : {};
@@ -333,6 +334,7 @@ describe('GatewayAdapter lifecycle boundaries', () => {
       gateway: gateway(fake),
       historyCache: null,
       bridgeCapabilityMode: 'legacy',
+      onReconnect,
     });
     const updates: SessionUpdate[] = [];
     adapter.on('update', (update) => updates.push(update));
@@ -349,6 +351,8 @@ describe('GatewayAdapter lifecycle boundaries', () => {
         hasActiveRun: false,
       },
     });
+    expect(onReconnect).toHaveBeenCalledTimes(1);
+    expect(onReconnect).toHaveBeenCalledWith('seq_gap');
   });
 
   it('clears optimistic active-run state when the server proves the session idle', async () => {

@@ -3,6 +3,7 @@ import {
   type AgentAdapter,
   type AgentDescriptor,
   type ConnectionDescriptor,
+  type ConnectionState,
   type SessionDescriptor,
 } from '@clawket/agent-protocol';
 
@@ -155,7 +156,7 @@ async function createHarness(
   > = {},
   runtimeOptions: Pick<
     ConnectionCoordinatorOptions,
-    'chatCache' | 'credentialStore' | 'sessionPreferences'
+    'chatCache' | 'credentialStore' | 'sessionPreferences' | 'telemetry'
   > = {},
 ) {
   const { secureStorage, store } = await createStoreHarness();
@@ -221,7 +222,261 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+function controllableAdapter(
+  descriptor: ConnectionDescriptor,
+  connect: (emitState: (state: ConnectionState, reason?: string) => void) => Promise<void>,
+): Readonly<{
+  adapter: AgentAdapter;
+  emitState: (state: ConnectionState, reason?: string) => void;
+}> {
+  const delegate = createMockAdapter({
+    connection: descriptor,
+    agents: [agent(descriptor.id)],
+    sessions: [session(descriptor.id, 20)],
+  });
+  const stateListeners = new Set<(state: ConnectionState, reason?: string) => void>();
+  let state: ConnectionState = 'idle';
+  const emitState = (next: ConnectionState, reason?: string) => {
+    state = next;
+    for (const listener of stateListeners) listener(next, reason);
+  };
+  const adapter = {
+    ...delegate,
+    connect: () => connect(emitState),
+    disconnect: () => emitState('idle', 'disconnected'),
+    on: ((event: string, listener: (...args: never[]) => void) => {
+      if (event === 'state') {
+        stateListeners.add(listener as (next: ConnectionState, reason?: string) => void);
+        return () => stateListeners.delete(
+          listener as (next: ConnectionState, reason?: string) => void,
+        );
+      }
+      return delegate.on(event as 'update', listener as never);
+    }) as AgentAdapter['on'],
+  } as AgentAdapter;
+  Object.defineProperty(adapter, 'state', { configurable: true, get: () => state });
+  return { adapter, emitState };
+}
+
+async function flushMaintenance(): Promise<void> {
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  await new Promise<void>((resolve) => setImmediate(resolve));
+}
+
 describe('ConnectionCoordinator', () => {
+  it('claims the launch paywall at most once for the coordinator process', async () => {
+    const harness = await createHarness(false);
+
+    expect(harness.coordinator.getSnapshot().launchPaywallShownThisProcess).toBe(false);
+    expect(harness.coordinator.markLaunchPaywallShown()).toBe(true);
+    expect(harness.coordinator.markLaunchPaywallShown()).toBe(false);
+    expect(harness.coordinator.getSnapshot().launchPaywallShownThisProcess).toBe(true);
+
+    await harness.coordinator.start();
+    await harness.coordinator.stop();
+    await harness.coordinator.start();
+
+    expect(harness.coordinator.getSnapshot().launchPaywallShownThisProcess).toBe(true);
+  });
+
+  it.each(['openclaw', 'hermes'] as const)(
+    'refreshes %s roster when the same adapter reaches ready after connect failed',
+    async (backendKind) => {
+      const secureStorage = new MemorySecureStorage();
+      const store = new ConnectionStore({ secureStorage, legacyStorage });
+      await store.load();
+      await store.add({ ...connectionInput('alpha'), backendKind });
+      let now = 100;
+      const dashboardStorage = new MemoryDashboardStorage();
+      let control!: ReturnType<typeof controllableAdapter>;
+      let listAgentsCalls = 0;
+      let listSessionsCalls = 0;
+      const coordinator = new ConnectionCoordinator({
+        store,
+        cache: new RosterCache({ storage: dashboardStorage, now: () => now }),
+        watermarks: new UnreadWatermarks({ storage: dashboardStorage, now: () => now }),
+        now: () => now,
+        rosterRefreshIntervalMs: 0,
+        hermesProbeIntervalMs: 0,
+        adapterFactory: (_record, descriptor) => {
+          control = controllableAdapter(descriptor, async (emitState) => {
+            emitState('connecting');
+            emitState('error', 'first handshake failed');
+            throw new Error('first handshake failed');
+          });
+          const listAgents = control.adapter.listAgents.bind(control.adapter);
+          const listSessions = control.adapter.listSessions.bind(control.adapter);
+          control.adapter.listAgents = async () => {
+            listAgentsCalls += 1;
+            return listAgents();
+          };
+          control.adapter.listSessions = async () => {
+            listSessionsCalls += 1;
+            return listSessions();
+          };
+          return control.adapter;
+        },
+      });
+
+      await coordinator.start();
+      expect(coordinator.getSnapshot()).toMatchObject({
+        activeState: 'error',
+        error: { operation: 'connect', connectionId: 'alpha' },
+      });
+      expect(listAgentsCalls).toBe(0);
+      expect(listSessionsCalls).toBe(0);
+
+      now = 200;
+      control.emitState('ready');
+      await flushMaintenance();
+
+      const snapshot = coordinator.getSnapshot();
+      const live = snapshot.roster.find((group) => group.connection.id === 'alpha');
+      expect(snapshot).toMatchObject({ activeState: 'ready', switching: false, error: null });
+      expect(snapshot.connectionDetails.alpha?.lastReadyAt).toBe(200);
+      expect(live).toMatchObject({ source: 'live', syncedAt: 200 });
+      expect(listAgentsCalls).toBe(1);
+      expect(listSessionsCalls).toBe(1);
+      await coordinator.stop();
+    },
+  );
+
+  it.each(['openclaw', 'hermes'] as const)(
+    'forces one fresh %s roster scan for each ready transition',
+    async (backendKind) => {
+      const secureStorage = new MemorySecureStorage();
+      const store = new ConnectionStore({ secureStorage, legacyStorage });
+      await store.load();
+      await store.add({ ...connectionInput('alpha'), backendKind });
+      let now = 100;
+      const dashboardStorage = new MemoryDashboardStorage();
+      let control!: ReturnType<typeof controllableAdapter>;
+      let listAgentsCalls = 0;
+      let listSessionsCalls = 0;
+      const reconnect = jest.fn();
+      const coordinator = new ConnectionCoordinator({
+        store,
+        cache: new RosterCache({ storage: dashboardStorage, now: () => now }),
+        watermarks: new UnreadWatermarks({ storage: dashboardStorage, now: () => now }),
+        now: () => now,
+        rosterRefreshIntervalMs: 0,
+        hermesProbeIntervalMs: 0,
+        telemetry: {
+          attempt: jest.fn(),
+          ready: jest.fn(),
+          failed: jest.fn(),
+          reconnect,
+        },
+        adapterFactory: (_record, descriptor) => {
+          control = controllableAdapter(descriptor, async (emitState) => {
+            emitState('connecting');
+            emitState('handshaking');
+            emitState('ready');
+          });
+          const listAgents = control.adapter.listAgents.bind(control.adapter);
+          const listSessions = control.adapter.listSessions.bind(control.adapter);
+          control.adapter.listAgents = async () => {
+            listAgentsCalls += 1;
+            return listAgents();
+          };
+          control.adapter.listSessions = async () => {
+            listSessionsCalls += 1;
+            return listSessions();
+          };
+          return control.adapter;
+        },
+      });
+
+      await coordinator.start();
+      expect(listAgentsCalls).toBe(1);
+      expect(listSessionsCalls).toBe(1);
+
+      now = 200;
+      control.emitState('reconnecting', 'socket closed');
+      control.emitState('ready');
+      await flushMaintenance();
+
+      const snapshot = coordinator.getSnapshot();
+      const live = snapshot.roster.find((group) => group.connection.id === 'alpha');
+      expect(snapshot.connectionDetails.alpha?.lastReadyAt).toBe(200);
+      expect(live).toMatchObject({ source: 'live', syncedAt: 200 });
+      expect(listAgentsCalls).toBe(2);
+      expect(listSessionsCalls).toBe(2);
+      expect(reconnect).toHaveBeenLastCalledWith(
+        expect.objectContaining({ backendKind }),
+        'socket_close',
+      );
+
+      now = 300;
+      control.emitState('ready', 'duplicate ready evidence');
+      await flushMaintenance();
+      expect(listAgentsCalls).toBe(2);
+      expect(listSessionsCalls).toBe(2);
+
+      control.emitState('reconnecting', 'Relay heartbeat timed out');
+      control.emitState('ready');
+      await flushMaintenance();
+      expect(listAgentsCalls).toBe(3);
+      expect(listSessionsCalls).toBe(3);
+      expect(reconnect).toHaveBeenLastCalledWith(
+        expect.objectContaining({ backendKind }),
+        'tick_timeout',
+      );
+      await coordinator.stop();
+    },
+  );
+
+  it('does not let a pre-reconnect roster response satisfy the new ready scan', async () => {
+    const secureStorage = new MemorySecureStorage();
+    const store = new ConnectionStore({ secureStorage, legacyStorage });
+    await store.load();
+    await store.add(connectionInput('alpha'));
+    let now = 100;
+    const dashboardStorage = new MemoryDashboardStorage();
+    let control!: ReturnType<typeof controllableAdapter>;
+    const coordinator = new ConnectionCoordinator({
+      store,
+      cache: new RosterCache({ storage: dashboardStorage, now: () => now }),
+      watermarks: new UnreadWatermarks({ storage: dashboardStorage, now: () => now }),
+      now: () => now,
+      rosterRefreshIntervalMs: 0,
+      hermesProbeIntervalMs: 0,
+      adapterFactory: (_record, descriptor) => {
+        control = controllableAdapter(descriptor, async (emitState) => {
+          emitState('connecting');
+          emitState('handshaking');
+          emitState('ready');
+        });
+        return control.adapter;
+      },
+    });
+    await coordinator.start();
+
+    const pendingAgents = deferred<AgentDescriptor[]>();
+    const originalListAgents = control.adapter.listAgents.bind(control.adapter);
+    const listAgents = jest.spyOn(control.adapter, 'listAgents')
+      .mockImplementationOnce(() => pendingAgents.promise)
+      .mockImplementation(originalListAgents);
+    const staleRefresh = coordinator.refreshRoster();
+    await flushMaintenance();
+    expect(listAgents).toHaveBeenCalledTimes(1);
+
+    now = 150;
+    control.emitState('reconnecting', 'socket closed');
+    expect(coordinator.getSnapshot().roster[0]?.source).toBe('cache');
+    now = 200;
+    control.emitState('ready');
+    pendingAgents.resolve([agent('alpha')]);
+    await staleRefresh;
+    await flushMaintenance();
+
+    const snapshot = coordinator.getSnapshot();
+    expect(listAgents).toHaveBeenCalledTimes(2);
+    expect(snapshot.connectionDetails.alpha?.lastReadyAt).toBe(200);
+    expect(snapshot.roster[0]).toMatchObject({ source: 'live', syncedAt: 200 });
+    await coordinator.stop();
+  });
+
   it('reads isolated credential records for trusted runtime consumers', async () => {
     const harness = await createHarness(false);
     await harness.store.update('alpha', {
@@ -763,6 +1018,111 @@ describe('ConnectionCoordinator', () => {
 
     expect(events).toEqual(['attempt:openclaw:launch', 'ready:relay:0:1']);
     expect(events.join('|')).not.toContain('alpha');
+  });
+
+  it('routes adapter sequence-gap telemetry through the coordinator', async () => {
+    const { store } = await createStoreHarness();
+    const dashboardStorage = new MemoryDashboardStorage();
+    const reconnect = jest.fn();
+    let reportSequenceGap: (() => void) | undefined;
+    const coordinator = new ConnectionCoordinator({
+      store,
+      cache: new RosterCache({ storage: dashboardStorage }),
+      watermarks: new UnreadWatermarks({ storage: dashboardStorage }),
+      telemetry: {
+        attempt: jest.fn(),
+        ready: jest.fn(),
+        failed: jest.fn(),
+        reconnect,
+      },
+      adapterFactory: (_record, descriptor, context) => {
+        reportSequenceGap = () => context?.onReconnect?.('seq_gap');
+        return instrumentAdapter(descriptor, []);
+      },
+    });
+
+    await coordinator.start();
+    reportSequenceGap?.();
+
+    expect(reconnect).toHaveBeenCalledTimes(1);
+    expect(reconnect).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'alpha' }),
+      'seq_gap',
+    );
+    await coordinator.stop();
+  });
+
+  it('attributes a foreground-triggered reconnect to foreground instead of a generic probe failure', async () => {
+    const reconnect = jest.fn();
+    const telemetry: ConnectionTelemetry = {
+      attempt: jest.fn(),
+      ready: jest.fn(),
+      failed: jest.fn(),
+      reconnect,
+    };
+    const harness = await createHarness(true, {
+      rosterRefreshIntervalMs: 0,
+      hermesProbeIntervalMs: 0,
+    }, { telemetry });
+    await harness.coordinator.start();
+    jest.spyOn(harness.adapters[0], 'probe').mockResolvedValueOnce(false);
+
+    await expect(harness.coordinator.probeActive(undefined, 'foreground')).resolves.toBe(false);
+    await flushMaintenance();
+
+    expect(reconnect).toHaveBeenCalledTimes(1);
+    expect(reconnect).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'alpha' }),
+      'foreground',
+    );
+    await harness.coordinator.stop();
+  });
+
+  it('preserves the foreground trigger when the adapter reconnects inside its probe', async () => {
+    const secureStorage = new MemorySecureStorage();
+    const store = new ConnectionStore({ secureStorage, legacyStorage });
+    await store.load();
+    await store.add(connectionInput('alpha'));
+    const dashboardStorage = new MemoryDashboardStorage();
+    let control!: ReturnType<typeof controllableAdapter>;
+    const reconnect = jest.fn();
+    const coordinator = new ConnectionCoordinator({
+      store,
+      cache: new RosterCache({ storage: dashboardStorage }),
+      watermarks: new UnreadWatermarks({ storage: dashboardStorage }),
+      rosterRefreshIntervalMs: 0,
+      hermesProbeIntervalMs: 0,
+      telemetry: {
+        attempt: jest.fn(),
+        ready: jest.fn(),
+        failed: jest.fn(),
+        reconnect,
+      },
+      adapterFactory: (_record, descriptor) => {
+        control = controllableAdapter(descriptor, async (emitState) => {
+          emitState('connecting');
+          emitState('handshaking');
+          emitState('ready');
+        });
+        return control.adapter;
+      },
+    });
+    await coordinator.start();
+    control.adapter.probe = jest.fn(async () => {
+      control.emitState('reconnecting');
+      control.emitState('ready');
+      return true;
+    });
+
+    await expect(coordinator.probeActive(undefined, 'foreground')).resolves.toBe(true);
+    await flushMaintenance();
+
+    expect(reconnect).toHaveBeenCalledTimes(1);
+    expect(reconnect).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'alpha' }),
+      'foreground',
+    );
+    await coordinator.stop();
   });
 
   it('refreshes active roster on the injected interval and clears timers on switch and stop', async () => {

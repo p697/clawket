@@ -1,5 +1,6 @@
 import React, { Fragment, useMemo } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ChevronRight } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -16,6 +17,7 @@ import {
   ControlSize,
   FontSize,
   FontWeight,
+  IconSize,
   LineHeight,
   Space,
 } from '../../theme/tokens';
@@ -23,6 +25,7 @@ import { AccountSettingsPageHeader } from './AccountSettingsPageHeader';
 
 export type ReleaseNotesHistoryScreenProps = Readonly<{
   onBack: () => void;
+  onOpenPaywall?: (feature: 'settingsMembershipPreview') => void;
   releases?: ReadonlyArray<AppUpdateRelease>;
 }>;
 
@@ -60,6 +63,7 @@ function translateReleaseCopy(
 
 export function ReleaseNotesHistoryScreen({
   onBack,
+  onOpenPaywall,
   releases = getAppUpdateReleaseHistory(),
 }: ReleaseNotesHistoryScreenProps): React.JSX.Element {
   const { t, i18n } = useTranslation('config');
@@ -112,29 +116,62 @@ export function ReleaseNotesHistoryScreen({
               ) : null}
             </View>
             <SettingsGroup testID={`release-notes-${release.version}-entries`}>
-              {release.entries.map((entry, index) => (
-                <Fragment key={entry.id}>
-                  {index > 0 ? <SettingsDivider inset="content" /> : null}
-                  <View
-                    testID={`release-notes-entry-${entry.id}`}
-                    style={styles.entry}
-                  >
-                    <Text style={[styles.entryTitle, { color: theme.colors.ink }]}>
-                      {translateReleaseCopy(tChat, entry.title)}
-                    </Text>
-                    {entry.subtitle ? (
-                      <Text
-                        style={[
-                          styles.entryBody,
-                          { color: theme.colors.inkSecondary },
+              {release.entries.map((entry, index) => {
+                const title = translateReleaseCopy(tChat, entry.title);
+                const paywallFeature = entry.action.type === 'open_paywall'
+                  ? entry.action.feature
+                  : null;
+                const opensPaywall = paywallFeature !== null && Boolean(onOpenPaywall);
+                const content = (
+                  <>
+                    <View style={styles.entryCopy}>
+                      <Text style={[styles.entryTitle, { color: theme.colors.ink }]}>
+                        {title}
+                      </Text>
+                      {entry.subtitle ? (
+                        <Text
+                          style={[
+                            styles.entryBody,
+                            { color: theme.colors.inkSecondary },
+                          ]}
+                        >
+                          {translateReleaseCopy(tChat, entry.subtitle)}
+                        </Text>
+                      ) : null}
+                    </View>
+                    {opensPaywall ? (
+                      <ChevronRight
+                        size={IconSize.sm}
+                        color={theme.colors.inkTertiary}
+                        strokeWidth={2}
+                      />
+                    ) : null}
+                  </>
+                );
+                return (
+                  <Fragment key={entry.id}>
+                    {index > 0 ? <SettingsDivider inset="content" /> : null}
+                    {paywallFeature && onOpenPaywall ? (
+                      <Pressable
+                        testID={`release-notes-entry-${entry.id}`}
+                        accessibilityRole="button"
+                        accessibilityLabel={title}
+                        onPress={() => onOpenPaywall(paywallFeature)}
+                        style={({ pressed }) => [
+                          styles.entry,
+                          pressed ? { backgroundColor: theme.colors.surface } : null,
                         ]}
                       >
-                        {translateReleaseCopy(tChat, entry.subtitle)}
-                      </Text>
-                    ) : null}
-                  </View>
-                </Fragment>
-              ))}
+                        {content}
+                      </Pressable>
+                    ) : (
+                      <View testID={`release-notes-entry-${entry.id}`} style={styles.entry}>
+                        {content}
+                      </View>
+                    )}
+                  </Fragment>
+                );
+              })}
             </SettingsGroup>
           </View>
         ))}
@@ -173,6 +210,12 @@ const styles = StyleSheet.create({
     minHeight: ControlSize.settingsRow,
     paddingHorizontal: Space.lg,
     paddingVertical: Space.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space.md,
+  },
+  entryCopy: {
+    flex: 1,
     justifyContent: 'center',
     gap: Space.xs,
   },

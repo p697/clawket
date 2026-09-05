@@ -48,6 +48,7 @@ export type GatewayAdapterOptions = {
   isFreeSlot?: boolean;
   connectTimeoutMs?: number;
   historyCache?: GatewayHistoryCache | null;
+  onReconnect?: (reason: 'seq_gap') => void;
 };
 
 type AdapterListenerMap = {
@@ -93,6 +94,7 @@ export abstract class GatewayAdapterBase implements AgentAdapter {
 
   private readonly connectTimeoutMs: number;
   private readonly historyCache: GatewayHistoryCache | null;
+  private readonly onReconnect?: GatewayAdapterOptions['onReconnect'];
   private readonly listeners: {
     [K in keyof AdapterListenerMap]: Set<AdapterListenerMap[K]>;
   } = {
@@ -132,6 +134,7 @@ export abstract class GatewayAdapterBase implements AgentAdapter {
     this.historyCache = input.options?.historyCache === undefined
       ? DEFAULT_GATEWAY_HISTORY_CACHE
       : input.options.historyCache;
+    this.onReconnect = input.options?.onReconnect;
     this.fallbackSessionKey = input.fallbackSessionKey;
     this.currentCapabilities = resolveCapabilities(input.backendCapabilities);
     this.connection = {
@@ -431,6 +434,11 @@ export abstract class GatewayAdapterBase implements AgentAdapter {
         });
       }),
       this.gateway.on('seqGap', ({ sessionKey }) => {
+        try {
+          this.onReconnect?.('seq_gap');
+        } catch {
+          // Analytics must never interrupt the required history reconciliation.
+        }
         const key = sessionKey || this.fallbackSessionKey;
         void this.loadSession(key, { limit: 50 })
           .then((history) => this.emitUpdate({

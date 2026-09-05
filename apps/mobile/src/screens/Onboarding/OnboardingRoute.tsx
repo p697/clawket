@@ -57,6 +57,8 @@ export type OnboardingRouteProps = NavigationProps & Readonly<{
     backendKind: PairableBackendKind;
     lengthOk: boolean;
   }) => void;
+  onScanQrTapped?: (backendKind: PairableBackendKind) => void;
+  onOpenPaywall?: (reason: 'gatewayConnections', onContinue?: () => void) => void;
   onClose?: () => void;
 }>;
 
@@ -83,6 +85,8 @@ export function OnboardingRoute({
   onViewed,
   onDocsOpened,
   onPairingCodeSubmitted,
+  onScanQrTapped,
+  onOpenPaywall,
   onClose,
 }: OnboardingRouteProps): React.JSX.Element {
   const runtime = useConnections();
@@ -106,10 +110,14 @@ export function OnboardingRoute({
   const announcedConnectionRef = useRef<string | null>(null);
   const lastActionRef = useRef<(() => void) | null>(null);
 
-  const canBeginPairing = useCallback((): boolean => {
+  const canBeginPairing = useCallback((onContinue?: () => void): boolean => {
     if (runtime.connections.length === 0 || isPro) return true;
+    if (onOpenPaywall) {
+      onOpenPaywall('gatewayConnections', onContinue);
+      return false;
+    }
     return requirePro('gatewayConnections');
-  }, [isPro, requirePro, runtime.connections.length]);
+  }, [isPro, onOpenPaywall, requirePro, runtime.connections.length]);
 
   const acquirePairingRequest = useCallback((): boolean => {
     if (pairingRequestInFlightRef.current) return false;
@@ -163,33 +171,36 @@ export function OnboardingRoute({
   }, [failOperation]);
 
   const submitPairing = useCallback(async (submission: PairingSubmission) => {
-    if (!canBeginPairing() || !acquirePairingRequest()) return;
-    onPairingCodeSubmitted?.({
-      backendKind: submission.backendKind,
-      lengthOk: submission.code.length === 6,
-    });
-    const action = () => { void submitPairing(submission); };
-    lastActionRef.current = action;
-    const requestId = beginOperation(submission.backendKind);
-    try {
-      const result = await connectBackendPairingCode({
+    const perform = async () => {
+      if (!acquirePairingRequest()) return;
+      onPairingCodeSubmitted?.({
         backendKind: submission.backendKind,
-        environment,
-        debugMode,
-        runtime: getConnectionRuntime(),
-        pairingCode: submission.code,
-        secureInvitation: {
-          connectCode: connectSecurePairingCode,
-          connectLink: connectSecurePairingLink,
-        },
+        lengthOk: submission.code.length === 6,
       });
-      if (requestId !== requestIdRef.current) return;
-      await awaitRuntimeConnection(requestId, result);
-    } catch (error) {
-      failOperation(requestId, error);
-    } finally {
-      releasePairingRequest();
-    }
+      lastActionRef.current = () => { void perform(); };
+      const requestId = beginOperation(submission.backendKind);
+      try {
+        const result = await connectBackendPairingCode({
+          backendKind: submission.backendKind,
+          environment,
+          debugMode,
+          runtime: getConnectionRuntime(),
+          pairingCode: submission.code,
+          secureInvitation: {
+            connectCode: connectSecurePairingCode,
+            connectLink: connectSecurePairingLink,
+          },
+        });
+        if (requestId !== requestIdRef.current) return;
+        await awaitRuntimeConnection(requestId, result);
+      } catch (error) {
+        failOperation(requestId, error);
+      } finally {
+        releasePairingRequest();
+      }
+    };
+    if (!canBeginPairing(() => { void perform(); })) return;
+    await perform();
   }, [
     acquirePairingRequest,
     awaitRuntimeConnection,
@@ -239,40 +250,49 @@ export function OnboardingRoute({
   ]);
 
   const scanQr = useCallback((expectedBackendKind: PairableBackendKind) => {
-    if (pairingRequestInFlightRef.current || !canBeginPairing()) return;
-    setOperation((current) => ({
-      ...current,
-      active: false,
-      backendKind: expectedBackendKind,
-      errorCode: undefined,
-    }));
-    openGatewayScanner({
-      onScanned: (result) => connectScannedPayload(result, expectedBackendKind),
-    });
-  }, [canBeginPairing, connectScannedPayload, openGatewayScanner]);
+    const perform = () => {
+      if (pairingRequestInFlightRef.current) return;
+      onScanQrTapped?.(expectedBackendKind);
+      setOperation((current) => ({
+        ...current,
+        active: false,
+        backendKind: expectedBackendKind,
+        errorCode: undefined,
+      }));
+      openGatewayScanner({
+        onScanned: (result) => connectScannedPayload(result, expectedBackendKind),
+      });
+    };
+    if (!canBeginPairing(perform)) return;
+    perform();
+  }, [canBeginPairing, connectScannedPayload, onScanQrTapped, openGatewayScanner]);
 
   const connectFromPairingLink = useCallback(async (url: string) => {
-    if (!canBeginPairing() || !acquirePairingRequest()) return;
-    const requestId = beginOperation(initialBackend);
-    try {
-      const result = await connectBackendPairingLink({
-        backendKind: initialBackend,
-        environment,
-        debugMode,
-        runtime: getConnectionRuntime(),
-        url,
-        secureInvitation: {
-          connectCode: connectSecurePairingCode,
-          connectLink: connectSecurePairingLink,
-        },
-      });
-      if (requestId !== requestIdRef.current) return;
-      await awaitRuntimeConnection(requestId, result);
-    } catch (error) {
-      failOperation(requestId, error);
-    } finally {
-      releasePairingRequest();
-    }
+    const perform = async () => {
+      if (!acquirePairingRequest()) return;
+      const requestId = beginOperation(initialBackend);
+      try {
+        const result = await connectBackendPairingLink({
+          backendKind: initialBackend,
+          environment,
+          debugMode,
+          runtime: getConnectionRuntime(),
+          url,
+          secureInvitation: {
+            connectCode: connectSecurePairingCode,
+            connectLink: connectSecurePairingLink,
+          },
+        });
+        if (requestId !== requestIdRef.current) return;
+        await awaitRuntimeConnection(requestId, result);
+      } catch (error) {
+        failOperation(requestId, error);
+      } finally {
+        releasePairingRequest();
+      }
+    };
+    if (!canBeginPairing(() => { void perform(); })) return;
+    await perform();
   }, [
     acquirePairingRequest,
     awaitRuntimeConnection,
@@ -351,12 +371,15 @@ export function OnboardingRoute({
   }, [onDocsOpened]);
 
   const openYouMind = useCallback(() => {
-    if (!canBeginPairing()) return;
-    onOpenYouMind?.();
-    setYouMindDraft(createYouMindOnboardingConnection({
-      runtime: getConnectionRuntime(),
-      debugMode,
-    }));
+    const perform = () => {
+      onOpenYouMind?.();
+      setYouMindDraft(createYouMindOnboardingConnection({
+        runtime: getConnectionRuntime(),
+        debugMode,
+      }));
+    };
+    if (!canBeginPairing(perform)) return;
+    perform();
   }, [canBeginPairing, debugMode, onOpenYouMind]);
 
   const closeYouMind = useCallback(() => {

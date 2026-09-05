@@ -169,7 +169,7 @@ Remove it to include `armeabi-v7a` for older devices, at the cost of a larger AP
 If you need to upload a replacement build to Google Play and the previous `versionCode` is already used, rebuild with a higher override:
 
 ```bash
-EXPO_ANDROID_VERSION_CODE=10701 npm run build:android:aab
+EXPO_ANDROID_VERSION_CODE=30001 npm run build:android:aab
 ```
 
 ### Store-ready AAB
@@ -315,7 +315,7 @@ cd apps/mobile
 npm run eas:env:sync
 ```
 
-- Store-distribution Android EAS builds now run a pre-install validation step and will fail if RevenueCat is missing or if `EXPO_PUBLIC_REVENUECAT_TEST_API_KEY` / `EXPO_PUBLIC_UNLOCK_PRO` are enabled.
+- Store-distribution Android EAS builds run a pre-install validation step and fail if PostHog or RevenueCat is missing, or if `EXPO_PUBLIC_REVENUECAT_TEST_API_KEY` / `EXPO_PUBLIC_UNLOCK_PRO` are enabled. The local release AAB and APK scripts enforce the same check.
 
 Use the local Gradle path below only as a fallback or recovery flow.
 
@@ -387,11 +387,12 @@ Before uploading the first closed-test build, verify:
 4. `npm run config:check:android` passes before the build.
 5. `EXPO_PUBLIC_REVENUECAT_GOOGLE_API_KEY` is present in `.env.local` or the shell environment.
 6. `EXPO_PUBLIC_REVENUECAT_PRO_ENTITLEMENT_ID` matches the RevenueCat entitlement used by the paywall.
-7. `EXPO_PUBLIC_REVENUECAT_PRO_OFFERING_ID` and `EXPO_PUBLIC_REVENUECAT_PRO_PACKAGE_ID` point at the packages you intend to sell in Google Play.
-8. `EXPO_PUBLIC_REVENUECAT_TEST_API_KEY` is not set.
-9. `EXPO_PUBLIC_UNLOCK_PRO` is not set.
-10. Privacy policy URL and support email are configured in the app and Play listing.
-11. You upload `app-release.aab`, not `app-release.apk`.
+7. RevenueCat's customer-specific current Offering contains annual, lifetime, and monthly packages in that order; `EXPO_PUBLIC_REVENUECAT_PRO_OFFERING_ID=pro` is only the no-current fallback.
+8. `EXPO_PUBLIC_REVENUECAT_PRO_PACKAGE_ID` is unset for the standard 3.0 Offering; it is only a legacy fallback when an Offering has no annual, lifetime, or monthly package.
+9. `EXPO_PUBLIC_REVENUECAT_TEST_API_KEY` is not set.
+10. `EXPO_PUBLIC_UNLOCK_PRO` is not set.
+11. Privacy policy URL and support email are configured in the app and Play listing.
+12. You upload `app-release.aab`, not `app-release.apk`.
 
 ## Android Subscription Readiness
 
@@ -401,9 +402,9 @@ Before starting Play closed testing, verify:
 
 1. A Google Play app exists for `com.p697.clawket`.
 2. Payments profile, tax, and merchant setup are complete in Play Console.
-3. Google Play subscription products are created for the Android app.
-4. Those products are attached to the same RevenueCat entitlement used on iOS.
-5. The RevenueCat `default` offering maps the intended Google Play products to the packages used by the app, usually `$rc_monthly` and `$rc_annual`.
+3. The monthly and annual subscriptions have active base plans, and the lifetime one-time product is active with no trial or introductory offer.
+4. All three products are attached to the same RevenueCat entitlement used on iOS; lifetime is configured as non-consumable in RevenueCat.
+5. RevenueCat serves the customer-specific current Offering: the control Offering is `pro`, experiment variants contain the same annual / lifetime / monthly packages, and metadata uses `default_package` (`annual` or `monthly`) plus boolean `social_proof`.
 6. The Android build uses `EXPO_PUBLIC_REVENUECAT_GOOGLE_API_KEY`, not the Apple key.
 7. A closed-test build is installed from Play, not only sideloaded locally.
 
@@ -412,9 +413,11 @@ Recommended validation on a Play-delivered closed-test build:
 1. Free user sees the Pro paywall at the correct gated entry points.
 2. Monthly purchase succeeds.
 3. Yearly purchase succeeds.
-4. Restore / re-login / reinstall still resolves the active entitlement.
-5. Existing Pro user sees the correct read-only paywall state.
-6. RevenueCat diagnostics in the Config screen show the expected entitlement and offering IDs.
+4. Lifetime purchase succeeds and cannot be purchased again by the same account.
+5. Restore / re-login / reinstall still resolves the active entitlement.
+6. Existing Pro user sees the correct read-only paywall state.
+7. The paywall displays all three packages with store-localized prices and honors the current Offering's metadata.
+8. PostHog records normalized Android purchase and restore outcomes, including `cancelled`, `pending`, `offerings_unavailable`, and `store_error:*` reasons.
 
 ## Maven Mirror for Mainland China
 

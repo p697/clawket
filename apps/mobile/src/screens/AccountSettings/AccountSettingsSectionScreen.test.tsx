@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render } from '@testing-library/react-native';
 import type { ConnectionDescriptor } from '@clawket/agent-protocol';
 
 import { FontSize } from '../../theme/tokens';
@@ -102,6 +102,13 @@ jest.mock('react-i18next', () => ({
 
 jest.mock('../../theme', () => ({
   useAppTheme: () => ({ theme: mockTheme }),
+}));
+
+jest.mock('../../contexts/AppContext', () => ({
+  useAppContext: () => ({
+    speechRecognitionLanguage: 'system',
+    onSpeechRecognitionLanguageChange: jest.fn(),
+  }),
 }));
 
 jest.mock('../../services/app-icon', () => ({
@@ -347,6 +354,45 @@ describe('AccountSettingsSectionScreen', () => {
     });
   });
 
+  it('routes an available free-connection switch and paywalls locked reconnects', () => {
+    const onAction = jest.fn();
+    const onOpenPaywall = jest.fn();
+    const view = render(
+      <AccountSettingsSectionScreen
+        {...createProps({
+          data: {
+            isPro: false,
+            canAddConnection: false,
+            connections: [
+              { ...connection(), isFreeConnection: true },
+              {
+                ...connection({ id: 'work', label: 'Work', isFreeSlot: false }),
+                locked: true,
+                freeSwitchAvailable: true,
+              },
+            ],
+          },
+          onAction,
+          onOpenPaywall,
+        })}
+      />,
+    );
+
+    fireEvent.press(view.getByTestId('account-settings-section-row-work-reconnect'));
+    expect(onOpenPaywall).toHaveBeenCalledWith('gatewayConnections', expect.any(Function));
+    onOpenPaywall.mock.calls[0]?.[1]?.();
+    expect(onAction).toHaveBeenCalledWith({
+      action: 'reconnect-connection',
+      connectionId: 'work',
+    });
+
+    fireEvent.press(view.getByTestId('account-settings-section-row-work-set-free-connection'));
+    expect(onAction).toHaveBeenCalledWith({
+      action: 'set-free-connection',
+      connectionId: 'work',
+    });
+  });
+
   it('uses the existing reply-notification state and callback', () => {
     const onAction = jest.fn();
     const view = render(
@@ -371,6 +417,18 @@ describe('AccountSettingsSectionScreen', () => {
       action: 'set-reply-notifications',
       enabled: false,
     });
+  });
+
+  it('dispatches the production Help to Release Notes navigation action', () => {
+    const onAction = jest.fn();
+    const view = render(
+      <AccountSettingsSectionScreen
+        {...createProps({ section: 'help', onAction })}
+      />,
+    );
+
+    fireEvent.press(view.getByTestId('account-settings-section-row-release-notes'));
+    expect(onAction).toHaveBeenCalledWith({ action: 'release-notes' });
   });
 
   it('renders a dark unsupported capability gate without backend inspection', () => {
@@ -461,7 +519,9 @@ describe('AccountSettingsSectionScreen', () => {
       />,
     );
     fireEvent.press(view.getByTestId('account-settings-section-row-app-icon'));
-    expect(onOpenPaywall).toHaveBeenCalledWith('appIcons');
+    expect(onOpenPaywall).toHaveBeenCalledWith('appIcons', expect.any(Function));
+    act(() => onOpenPaywall.mock.calls[0]?.[1]?.());
+    expect(view.getByTestId('account-preference-sheet')).toBeTruthy();
     expect(onAction).not.toHaveBeenCalled();
 
     view.rerender(

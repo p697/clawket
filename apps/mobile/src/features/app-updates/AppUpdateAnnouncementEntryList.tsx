@@ -1,8 +1,14 @@
 import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { ChevronRight } from 'lucide-react-native';
+import {
+  ChevronRight,
+  Rocket,
+  Sparkles,
+  type LucideIcon,
+} from 'lucide-react-native';
 import {
   type AppUpdateAnnouncementEntry,
+  type AppUpdateAnnouncementIcon,
 } from './releases';
 import type { AppTheme } from '../../theme';
 import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
@@ -12,6 +18,11 @@ type Props = {
   colors: AppTheme['colors'];
   onEntryPress?: (entry: AppUpdateAnnouncementEntry) => void;
   t: (key: string) => string;
+};
+
+const ENTRY_ICONS: Readonly<Record<AppUpdateAnnouncementIcon, LucideIcon>> = {
+  rocket: Rocket,
+  sparkles: Sparkles,
 };
 
 function translateEntryCopy(t: Props['t'], key: string): string {
@@ -44,18 +55,24 @@ export function AppUpdateAnnouncementEntryList({ entries, colors, onEntryPress, 
 
   return (
     <View style={stylesWithTheme.entries}>
-      {entries.map((entry, index) => {
+      {entries.map((entry) => {
         const isNavigable = entry.action.type === 'open_url'
           || entry.action.type === 'navigate_tab'
           || entry.action.type === 'navigate_console'
           || entry.action.type === 'navigate_config'
-          || entry.action.type === 'navigate_config_add_connection';
-        const isLast = index === entries.length - 1;
+          || entry.action.type === 'navigate_config_add_connection'
+          || entry.action.type === 'open_paywall';
+        const EntryIcon = ENTRY_ICONS[entry.icon];
 
         const content = (
-          <View style={[stylesWithTheme.entryRow, !isLast && stylesWithTheme.entryBorder]}>
-            <View style={stylesWithTheme.entryEmojiContainer}>
-              <Text style={stylesWithTheme.entryEmoji}>{entry.emoji}</Text>
+          <View testID={`app-update-entry-${entry.id}-row`} style={stylesWithTheme.entryRow}>
+            <View style={stylesWithTheme.entryIconContainer}>
+              <EntryIcon
+                testID={`app-update-entry-${entry.id}-icon`}
+                size={20}
+                color={colors.ink}
+                strokeWidth={2}
+              />
             </View>
             <View style={stylesWithTheme.entryCopy}>
               <View style={stylesWithTheme.entryTitleRow}>
@@ -86,6 +103,9 @@ export function AppUpdateAnnouncementEntryList({ entries, colors, onEntryPress, 
           return (
             <Pressable
               key={entry.id}
+              testID={`app-update-entry-${entry.id}`}
+              accessibilityRole="button"
+              accessibilityLabel={translateEntryCopy(t, entry.title)}
               onPress={() => onEntryPress(entry)}
               style={({ pressed }) => pressed && stylesWithTheme.entryPressed}
             >
@@ -94,7 +114,7 @@ export function AppUpdateAnnouncementEntryList({ entries, colors, onEntryPress, 
           );
         }
 
-        return <View key={entry.id}>{content}</View>;
+        return <View key={entry.id} testID={`app-update-entry-${entry.id}`}>{content}</View>;
       })}
     </View>
   );
@@ -118,6 +138,7 @@ function createStyles(colors: AppTheme['colors']) {
       borderRadius: Radius.card,
       backgroundColor: colors.surface,
       overflow: 'hidden',
+      gap: Space.xs,
     },
     entryRow: {
       flexDirection: 'row',
@@ -126,23 +147,16 @@ function createStyles(colors: AppTheme['colors']) {
       paddingVertical: Space.md,
       gap: Space.md,
     },
-    entryBorder: {
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: colors.line,
-    },
     entryPressed: {
       opacity: 0.7,
     },
-    entryEmojiContainer: {
+    entryIconContainer: {
       width: 40,
       height: 40,
       borderRadius: Radius.avatarSettings,
-      backgroundColor: colors.surface,
+      backgroundColor: colors.surfaceFloating,
       alignItems: 'center',
       justifyContent: 'center',
-    },
-    entryEmoji: {
-      fontSize: FontSize.body,
     },
     entryCopy: {
       flex: 1,

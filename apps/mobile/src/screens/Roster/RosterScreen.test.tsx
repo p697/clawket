@@ -13,6 +13,7 @@ import type {
 import {
   ControlSize,
   FontSize,
+  LineHeight,
   Radius,
   Space,
 } from '../../theme/tokens';
@@ -318,6 +319,7 @@ function snapshot(
     revision: 1,
     initialized: true,
     switching: false,
+    launchPaywallShownThisProcess: false,
     connectionsRevision: 1,
     connections,
     activeConnectionId: 'live',
@@ -450,10 +452,48 @@ describe('RosterScreen', () => {
     expect(onLongPressRow).toHaveBeenCalledWith(expect.objectContaining({ agentId: 'main' }));
   });
 
+  it('overlays the free Pro entry on the single account control while preserving attention priority', () => {
+    const onOpenAccount = jest.fn();
+    const onOpenPro = jest.fn();
+    const screenProps = props({
+      accountAttentionCount: 2,
+      onOpenAccount,
+      onOpenPro,
+    });
+    const view = render(<RosterScreen {...screenProps} />);
+
+    expect(view.getByText('Pro')).toBeTruthy();
+    expect(view.getByTestId('roster-account-badge')).toBeTruthy();
+    expect(flattenStyle(view.getByTestId('roster-account-control').props.style)).toMatchObject({
+      width: ControlSize.floatingButton,
+      height: ControlSize.floatingButton,
+      position: 'relative',
+    });
+    expect(flattenStyle(view.getByTestId('roster-pro').props.style)).toMatchObject({
+      position: 'absolute',
+      height: LineHeight.caption,
+    });
+    fireEvent.press(view.getByTestId('roster-account'));
+    fireEvent.press(view.getByTestId('roster-pro'));
+    expect(onOpenAccount).toHaveBeenCalledTimes(1);
+    expect(onOpenPro).toHaveBeenCalledTimes(1);
+
+    view.rerender(
+      <RosterScreen
+        {...screenProps}
+        accountAttentionCount={0}
+        isPro
+      />,
+    );
+    expect(view.queryByTestId('roster-pro')).toBeNull();
+    expect(view.queryByTestId('roster-account-badge')).toBeNull();
+  });
+
   it('assembles production add and sole-Agent actions with Pro gating and confirmation', () => {
     mockRoster = [group('live', 'live', [agent('live', 'main')])];
     mockConnections = snapshot({ roster: mockRoster });
     const onCreateAgent = jest.fn();
+    const onCreateAgentLocked = jest.fn();
     const onOpenPro = jest.fn();
     const onToggleAgentPinned = jest.fn();
     const onToggleAgentMuted = jest.fn();
@@ -461,6 +501,7 @@ describe('RosterScreen', () => {
     const screenProps = props({
       canCreateAgent: true,
       onCreateAgent,
+      onCreateAgentLocked,
       onOpenPro,
       onToggleAgentPinned,
       onToggleAgentMuted,
@@ -471,7 +512,8 @@ describe('RosterScreen', () => {
     fireEvent.press(view.getByTestId('roster-add'));
     expect(view.getByTestId('roster-action-add_connection')).toBeTruthy();
     fireEvent.press(view.getByTestId('roster-action-create_agent'));
-    expect(onOpenPro).toHaveBeenCalledTimes(1);
+    expect(onCreateAgentLocked).toHaveBeenCalledTimes(1);
+    expect(onOpenPro).not.toHaveBeenCalled();
     expect(onCreateAgent).not.toHaveBeenCalled();
 
     view.rerender(<RosterScreen {...screenProps} isPro />);

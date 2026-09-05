@@ -59,6 +59,7 @@ export type AccountSettingsSectionScreenProps = Readonly<{
   onPreferenceChanged?: (preference: AccountPreferenceAction, value: string) => void;
   onOpenPaywall: (
     reason: Extract<AccountSettingsPageStatus, { kind: 'permission' }>['reason'],
+    onContinue?: () => void,
   ) => void;
 }>;
 
@@ -102,12 +103,7 @@ function SectionGroupView({
   const { t } = useTranslation('config');
   const { theme } = useAppTheme();
 
-  const openRow = (row: AccountSettingsSectionRow) => {
-    if (row.disabled) return;
-    if (row.locked) {
-      onOpenPaywall(row.paywallReason ?? 'generic');
-      return;
-    }
+  const openAvailableRow = (row: AccountSettingsSectionRow) => {
     if (row.action && isAccountPreferenceAction(row.action)) {
       onOpenPreference(row.action);
       return;
@@ -125,6 +121,17 @@ function SectionGroupView({
         ...(row.connectionId ? { connectionId: row.connectionId } : {}),
       });
     }
+  };
+  const openRow = (row: AccountSettingsSectionRow) => {
+    if (row.disabled) return;
+    if (row.locked) {
+      onOpenPaywall(
+        row.paywallReason ?? 'generic',
+        row.action ? () => openAvailableRow(row) : undefined,
+      );
+      return;
+    }
+    openAvailableRow(row);
   };
 
   return (

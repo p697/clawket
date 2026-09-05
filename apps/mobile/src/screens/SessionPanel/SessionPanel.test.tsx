@@ -12,6 +12,7 @@ import type {
 } from '@clawket/agent-protocol';
 
 import type { RosterConnectionGroup } from '../../connection';
+import { analyticsEvents } from '../../services/analytics/events';
 import { FontSize } from '../../theme/tokens';
 import {
   SessionPanelView,
@@ -55,6 +56,7 @@ const darkColors = {
 };
 
 let mockTheme = { scheme: 'light' as 'light' | 'dark', colors: lightColors };
+const mockedAnalyticsEvents = analyticsEvents as jest.Mocked<typeof analyticsEvents>;
 
 jest.mock('react-native', () => {
   const ReactRuntime = require('react');
@@ -99,6 +101,16 @@ jest.mock('react-i18next', () => ({
 
 jest.mock('../../theme', () => ({
   useAppTheme: () => ({ theme: mockTheme }),
+}));
+
+jest.mock('../../services/analytics/events', () => ({
+  analyticsEvents: {
+    chatSessionSelected: jest.fn(),
+    searchPerformed: jest.fn(),
+    sessionAction: jest.fn(),
+    sessionPanelModeChanged: jest.fn(),
+    sessionPanelOpened: jest.fn(),
+  },
 }));
 
 jest.mock('../../connection', () => ({
@@ -340,6 +352,7 @@ describe('SessionPanelView', () => {
   let consoleErrorSpy: jest.SpyInstance;
 
   beforeEach(() => {
+    jest.clearAllMocks();
     mockTheme = { scheme: 'light', colors: lightColors };
     consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation((message?: unknown) => {
       if (typeof message === 'string' && message.includes('react-test-renderer is deprecated')) return;
@@ -352,6 +365,10 @@ describe('SessionPanelView', () => {
 
   it('expands the current Agent, keeps others folded, and reveals completed runs', () => {
     const view = render(<SessionPanelView {...props()} />);
+    expect(mockedAnalyticsEvents.sessionPanelOpened).toHaveBeenCalledWith({
+      mode: 'grouped',
+      session_count: rows.length,
+    });
     expect(view.getByText('Main thread')).toBeTruthy();
     expect(view.queryByText('Builder thread')).toBeNull();
     expect(view.getByText('Completed 1')).toBeTruthy();
@@ -363,7 +380,7 @@ describe('SessionPanelView', () => {
     expect(view.getByText('Builder thread')).toBeTruthy();
   });
 
-  it('switches to compact list, reports summary, searches, and opens kind filter', () => {
+  it('switches to compact list, reports summary, searches, and opens kind filter', async () => {
     const onOpenKindFilter = jest.fn();
     const view = render(
       <SessionPanelView
@@ -372,6 +389,7 @@ describe('SessionPanelView', () => {
     );
     expect(view.getByTestId('session-panel-quick-filter')).toBeTruthy();
     fireEvent.press(view.getByTestId('session-panel-mode-list'));
+    expect(mockedAnalyticsEvents.sessionPanelModeChanged).toHaveBeenCalledWith({ mode: 'list' });
     expect(view.getByTestId('session-panel-list-mode')).toBeTruthy();
     expect(view.getByText('6 active · 0 recent · 1 idle')).toBeTruthy();
     expect(view.getAllByTestId(/-icon$/)).toHaveLength(rows.length);
@@ -382,6 +400,11 @@ describe('SessionPanelView', () => {
     fireEvent.changeText(view.getByTestId('session-panel-search'), 'daily');
     expect(view.getByText('Daily report')).toBeTruthy();
     expect(view.queryByText('Main thread')).toBeNull();
+    await waitFor(() => expect(mockedAnalyticsEvents.searchPerformed).toHaveBeenCalledWith({
+      scope: 'panel',
+      has_results: true,
+      result_kinds: 'cron',
+    }));
   });
 
   it('selects and closes, then exposes capability-gated actions with destructive confirmation', async () => {
@@ -398,6 +421,11 @@ describe('SessionPanelView', () => {
     fireEvent.press(view.getByTestId(`session-panel-row-${mainRow.id}`));
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
     expect(onSelectSession).toHaveBeenCalledWith(mainRow);
+    expect(mockedAnalyticsEvents.chatSessionSelected).toHaveBeenCalledWith({
+      source: 'panel',
+      session_kind: 'main',
+      from: 'panel',
+    });
 
     fireEvent(view.getByTestId(`session-panel-row-${mainRow.id}`), 'longPress');
     fireEvent.press(view.getByTestId('session-panel-action-pin'));
@@ -418,6 +446,11 @@ describe('SessionPanelView', () => {
       fireEvent.press(view.getByLabelText('Delete'));
     });
     expect(onSessionAction).toHaveBeenCalledWith(mainRow, 'delete');
+    expect(mockedAnalyticsEvents.sessionAction.mock.calls).toEqual([
+      [{ action: 'pin' }],
+      [{ action: 'reset' }],
+      [{ action: 'delete' }],
+    ]);
   });
 
   it('renames through a cross-platform editor and passes the trimmed title to the host', async () => {
@@ -443,6 +476,7 @@ describe('SessionPanelView', () => {
       'rename',
       { title: 'Launch review' },
     );
+    expect(mockedAnalyticsEvents.sessionAction).toHaveBeenCalledWith({ action: 'rename' });
     await waitFor(() => expect(view.queryByTestId('session-panel-rename')).toBeNull());
   });
 

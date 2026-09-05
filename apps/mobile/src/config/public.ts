@@ -101,6 +101,31 @@ export type PublicYouMindAuthConfig = {
   appSecret: string | null;
 };
 
+export type PublicPaywallSocialProof = Readonly<{
+  rating: number;
+  quote: string;
+}>;
+
+const DEFAULT_PAYWALL_SOCIAL_PROOF: PublicPaywallSocialProof = {
+  rating: 4.4,
+  quote: 'Updated quickly, always stays ahead',
+};
+
+export function resolvePublicPaywallSocialProof(
+  value: Partial<PublicPaywallSocialProof> = DEFAULT_PAYWALL_SOCIAL_PROOF,
+): PublicPaywallSocialProof {
+  const rating = typeof value.rating === 'number'
+    && Number.isFinite(value.rating)
+    && value.rating > 0
+    && value.rating <= 5
+    ? value.rating
+    : DEFAULT_PAYWALL_SOCIAL_PROOF.rating;
+  const quote = typeof value.quote === 'string' && value.quote.trim()
+    ? value.quote.trim()
+    : DEFAULT_PAYWALL_SOCIAL_PROOF.quote;
+  return { rating, quote };
+}
+
 export function resolvePublicAppLinks(env: PublicEnv = STATIC_PUBLIC_ENV): PublicAppLinks {
   return {
     discordInviteUrl: readOptionalEnv('EXPO_PUBLIC_DISCORD_INVITE_URL', env),
@@ -166,5 +191,6 @@ export function buildSupportEmailUrl(email: string | null): string | null {
 
 export const publicAppLinks = resolvePublicAppLinks();
 export const publicAnalyticsConfig = resolvePublicAnalyticsConfig();
+export const publicPaywallSocialProof = resolvePublicPaywallSocialProof();
 export const publicRevenueCatConfig = resolvePublicRevenueCatConfig();
 export const publicYouMindAuthConfig = resolvePublicYouMindAuthConfig();

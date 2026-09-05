@@ -454,4 +454,54 @@ describe('StorageService legacy connections and config backups', () => {
       'clawket.lifetimeUpgradeAnnouncementShown.v1',
     );
   });
+
+  it('normalizes and persists the automatic review launch state', async () => {
+    mockedAsyncStorage.getItem.mockResolvedValueOnce(JSON.stringify({
+      version: 2,
+      firstSuccessfulSendAtMs: 100,
+      coldStartsAfterFirstSuccessfulSend: 2,
+    }));
+    await expect(StorageService.getAutoAppReviewState()).resolves.toEqual({
+      version: 2,
+      firstSuccessfulSendAtMs: 100,
+      coldStartsAfterFirstSuccessfulSend: 2,
+    });
+
+    await StorageService.setAutoAppReviewState({
+      version: 2,
+      firstSuccessfulSendAtMs: 100,
+      coldStartsAfterFirstSuccessfulSend: 3,
+      reviewPendingAtMs: 400,
+    });
+    expect(mockedAsyncStorage.setItem).toHaveBeenCalledWith(
+      'clawket.autoAppReviewState.v1',
+      JSON.stringify({
+        version: 2,
+        coldStartsAfterFirstSuccessfulSend: 3,
+        firstSuccessfulSendAtMs: 100,
+        reviewPendingAtMs: 400,
+      }),
+    );
+
+    mockedAsyncStorage.getItem.mockResolvedValueOnce(JSON.stringify({
+      firstSeenAtMs: 10,
+      lastAttemptAtMs: 20,
+      lastAttemptVersion: '2.1.2',
+    }));
+    await expect(StorageService.getAutoAppReviewState()).resolves.toEqual({
+      version: 2,
+      coldStartsAfterFirstSuccessfulSend: 0,
+      reviewAttemptedAtMs: 20,
+    });
+  });
+
+  it('surfaces automatic review state write failures to its side-effect gate', async () => {
+    mockedAsyncStorage.setItem.mockRejectedValueOnce(new Error('disk full'));
+
+    await expect(StorageService.setAutoAppReviewState({
+      version: 2,
+      firstSuccessfulSendAtMs: 100,
+      coldStartsAfterFirstSuccessfulSend: 1,
+    })).rejects.toThrow('disk full');
+  });
 });

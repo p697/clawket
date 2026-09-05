@@ -6,6 +6,7 @@ import type {
   ConnectionDescriptor,
 } from '@clawket/agent-protocol';
 import { CAPABILITY_MATRIX } from '@clawket/agent-protocol';
+import { analyticsEvents } from '../../services/analytics/events';
 import { FontSize, Radius } from '../../theme/tokens';
 import {
   AgentSettingsView,
@@ -52,6 +53,7 @@ const darkColors = {
 };
 
 let mockTheme = { scheme: 'light' as 'light' | 'dark', colors: lightColors };
+const mockedAnalyticsEvents = analyticsEvents as jest.Mocked<typeof analyticsEvents>;
 
 jest.mock('react-native', () => {
   const ReactRuntime = require('react');
@@ -126,6 +128,13 @@ jest.mock('../../theme', () => ({
   useAppTheme: () => ({ theme: mockTheme }),
 }));
 
+jest.mock('../../services/analytics/events', () => ({
+  analyticsEvents: {
+    agentSettingsOpened: jest.fn(),
+    settingsRowOpened: jest.fn(),
+  },
+}));
+
 function flattenStyle(style: unknown): Record<string, unknown> {
   if (!style) return {};
   if (!Array.isArray(style)) return style as Record<string, unknown>;
@@ -181,6 +190,7 @@ describe('AgentSettingsView deep rendering', () => {
   let consoleErrorSpy: jest.SpyInstance;
 
   beforeEach(() => {
+    jest.clearAllMocks();
     mockTheme = { scheme: 'light', colors: lightColors };
     consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation((message?: unknown) => {
       if (typeof message === 'string' && message.includes('react-test-renderer is deprecated')) return;
@@ -220,17 +230,33 @@ describe('AgentSettingsView deep rendering', () => {
       ['AgentSettingsSection', { connectionId: 'connection-one', agentId: 'main', section: 'identity' }],
       ['AgentSettingsSection', { connectionId: 'connection-one', agentId: 'main', section: 'models' }],
     ]);
+    expect(mockedAnalyticsEvents.agentSettingsOpened).toHaveBeenCalledWith({ backend: 'openclaw' });
+    expect(mockedAnalyticsEvents.settingsRowOpened.mock.calls).toEqual([
+      [{ row: 'identity', locked: false, backend: 'openclaw' }],
+      [{ row: 'models', locked: false, backend: 'openclaw' }],
+    ]);
   });
 
-  it('sends locked Pro rows to the paywall callback and opens them for Pro', () => {
+  it('opens contextual management for free users while keeping logs Pro-gated', () => {
     const onNavigate = jest.fn();
     const onOpenPro = jest.fn();
     const free = render(<AgentSettingsView {...props({ onNavigate, onOpenPro })} />);
 
     fireEvent.press(free.getByTestId('agent-settings-row-openclaw'));
     fireEvent.press(free.getByTestId('agent-settings-row-logs'));
-    expect(onOpenPro.mock.calls).toEqual([['openclaw'], ['logs']]);
-    expect(onNavigate).not.toHaveBeenCalled();
+    expect(onOpenPro).toHaveBeenCalledWith('logs', expect.any(Function));
+    expect(onNavigate).toHaveBeenCalledWith('AgentSettingsSection', {
+      connectionId: 'connection-one',
+      agentId: 'main',
+      section: 'openclaw',
+    });
+    const continueToLogs = onOpenPro.mock.calls[0]?.[1] as (() => void) | undefined;
+    continueToLogs?.();
+    expect(onNavigate).toHaveBeenCalledWith('AgentSettingsSection', {
+      connectionId: 'connection-one',
+      agentId: 'main',
+      section: 'logs',
+    });
     free.unmount();
 
     const pro = render(<AgentSettingsView {...props({ isPro: true, onNavigate, onOpenPro })} />);
@@ -286,7 +312,13 @@ describe('AgentSettingsView deep rendering', () => {
     expect(permission.getByTestId('agent-settings-permission')).toBeTruthy();
     fireEvent.press(permission.getByTestId('agent-settings-permission-action'));
     fireEvent.press(permission.getByTestId('agent-settings-row-connection'));
-    expect(onOpenPro.mock.calls).toEqual([['identity'], ['connection']]);
+    expect(onOpenPro).toHaveBeenNthCalledWith(1, 'identity', expect.any(Function));
+    expect(onOpenPro).toHaveBeenNthCalledWith(2, 'connection', expect.any(Function));
+    expect(mockedAnalyticsEvents.settingsRowOpened).toHaveBeenCalledWith({
+      row: 'connection',
+      locked: true,
+      backend: 'openclaw',
+    });
   });
 
   it('uses the same semantic hierarchy in dark mode', () => {

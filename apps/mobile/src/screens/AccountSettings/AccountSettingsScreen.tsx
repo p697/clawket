@@ -52,7 +52,10 @@ export type AccountSettingsScreenProps = Readonly<{
   onRetry?: () => void;
   onOpenAction: (action: AccountSettingsAction) => void;
   onOpenConnection: (connectionId: string) => void;
-  onOpenPaywall: (reason: 'gatewayConnections' | 'appIcons' | 'generic') => void;
+  onOpenPaywall: (
+    reason: 'gatewayConnections' | 'appIcons' | 'generic',
+    onContinue?: () => void,
+  ) => void;
   onReplyNotificationsChange: (enabled: boolean) => void;
   onDebugModeChange: (enabled: boolean) => void;
 }>;
@@ -124,16 +127,23 @@ function SettingsGroupView({
   const { t } = useTranslation('config');
 
   const openRow = (row: AccountSettingsRow) => {
+    if (row.action === 'view-pro' && !isPro) {
+      onOpenPaywall('generic');
+      return;
+    }
     if (row.locked) {
-      onOpenPaywall(row.action === 'app-icon' ? 'appIcons' : 'gatewayConnections');
+      onOpenPaywall(
+        row.action === 'app-icon' ? 'appIcons' : 'gatewayConnections',
+        row.connectionId
+          ? () => onOpenConnection(row.connectionId!)
+          : row.action
+            ? () => onOpenAction(row.action!)
+            : undefined,
+      );
       return;
     }
     if (row.connectionId) {
       onOpenConnection(row.connectionId);
-      return;
-    }
-    if (row.action === 'view-pro' && !isPro) {
-      onOpenPaywall('generic');
       return;
     }
     if (row.action) onOpenAction(row.action);
@@ -218,7 +228,7 @@ function StatusBanner({
   if (status.kind === 'empty') {
     const addConnection = () => {
       if (canAddConnection) onOpenAction('add-connection');
-      else onOpenPaywall('gatewayConnections');
+      else onOpenPaywall('gatewayConnections', () => onOpenAction('add-connection'));
     };
     return (
       <Banner

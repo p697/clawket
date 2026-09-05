@@ -27,10 +27,12 @@ import {
   MessageFavoritesService,
   type FavoritedMessage,
 } from '../../services/message-favorites';
+import { analyticsEvents } from '../../services/analytics/events';
 import {
   buildSearchModel,
   resolveSearchPageState,
   type CachedMessageMatches,
+  type ResolveSearchThreadLockedReason,
   type SearchFilter,
   type SearchResult,
 } from './model';
@@ -41,13 +43,17 @@ import {
 import { SearchView } from './SearchView';
 
 const RECENT_SEARCH_SETTLE_MS = 400;
+const SEARCH_ANALYTICS_DEBOUNCE_MS = 400;
 
 type NavigationProps = NativeStackScreenProps<RootStackParamList, 'Search'>;
 
 export type SearchScreenProps = NavigationProps & Readonly<{
   permissionGranted?: boolean;
   isProOverride?: boolean;
+  resolveThreadLockedReason?: ResolveSearchThreadLockedReason;
+  /** @deprecated Prefer resolveThreadLockedReason so the paywall shows the exact quota. */
   canOpenThread?: (connectionId: string, agentId: string) => boolean;
+  onOpenPaywall?: (reason: string, onContinue?: () => void) => void;
 }>;
 
 function collectConnections(
@@ -77,7 +83,9 @@ export function SearchScreen({
   route,
   permissionGranted = true,
   isProOverride,
+  resolveThreadLockedReason,
   canOpenThread,
+  onOpenPaywall,
 }: SearchScreenProps): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const runtime = useConnections();
@@ -180,6 +188,7 @@ export function SearchScreen({
     favorites,
     capabilitiesByConnection,
     isPro,
+    resolveThreadLockedReason,
     canOpenThread,
   }), [
     cachedSessions,
@@ -191,8 +200,27 @@ export function SearchScreen({
     isPro,
     messageMatches,
     query,
+    resolveThreadLockedReason,
     roster,
   ]);
+  const analyticsResultKinds = useMemo(
+    () => model.sections
+      .filter((section) => section.results.length > 0)
+      .map((section) => section.kind)
+      .join(',') || 'none',
+    [model.sections],
+  );
+  useEffect(() => {
+    if (!permissionGranted || !model.query || !baseLoaded || searchingMessages) return undefined;
+    const timer = setTimeout(() => {
+      analyticsEvents.searchPerformed({
+        scope: 'global',
+        has_results: model.visibleResultCount > 0,
+        result_kinds: analyticsResultKinds,
+      });
+    }, SEARCH_ANALYTICS_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [analyticsResultKinds, baseLoaded, model.query, model.visibleResultCount, permissionGranted, searchingMessages]);
   const runtimeError = runtime.error?.message ?? null;
   const errorCode = dataError || runtimeError ? 'network' : null;
   const offline = runtime.activeState === 'offline' || runtime.activeState === 'reconnecting';
@@ -221,12 +249,7 @@ export function SearchScreen({
     });
   }, [navigation]);
 
-  const selectResult = useCallback((result: SearchResult) => {
-    rememberCurrentQuery();
-    if (result.lockedReason) {
-      navigation.navigate('Paywall', { reason: result.lockedReason });
-      return;
-    }
+  const openResult = useCallback((result: SearchResult) => {
     if (result.kind === 'agent' || result.kind === 'session') {
       openThread(result);
       return;
@@ -236,7 +259,21 @@ export function SearchScreen({
       sessionKey: result.sessionKey,
       messageId: result.messageId,
     });
-  }, [navigation, openThread, rememberCurrentQuery]);
+  }, [navigation, openThread]);
+
+  const selectResult = useCallback((result: SearchResult) => {
+    rememberCurrentQuery();
+    if (result.kind === 'message' || result.kind === 'favorite') {
+      analyticsEvents.searchMessageOpened({ is_pro: isPro });
+    }
+    const onContinue = () => openResult(result);
+    if (result.lockedReason) {
+      if (onOpenPaywall) onOpenPaywall(result.lockedReason, onContinue);
+      else navigation.navigate('Paywall', { reason: result.lockedReason });
+      return;
+    }
+    onContinue();
+  }, [isPro, navigation, onOpenPaywall, openResult, rememberCurrentQuery]);
 
   const retry = useCallback(() => {
     setDataError(null);

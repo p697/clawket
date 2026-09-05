@@ -38,7 +38,7 @@ export type FilesSectionProps = Readonly<{
   agent: AgentDescriptor;
   online: boolean;
   isPro: boolean;
-  onOpenPaywall: (reason: string) => void;
+  onOpenPaywall: (reason: string, onContinue?: () => void) => void;
 }>;
 
 export function FilesSection({
@@ -67,6 +67,7 @@ export function FilesSection({
   const [discardVisible, setDiscardVisible] = useState(false);
   const changed = draft !== original;
   const editable = canEditAgentFile(adapter.capabilities, operations);
+  const startEditing = useCallback(() => setEditing(true), []);
 
   const load = useCallback(async () => {
     if (!operations?.list) {
@@ -122,11 +123,10 @@ export function FilesSection({
     setDetailError(null);
   }, [changed, editing, saving]);
 
-  const save = useCallback(async () => {
+  const commitSave = useCallback(async () => {
     if (!selection || saving || !canSaveAgentFile({
       capabilities: adapter.capabilities,
       operations,
-      isPro,
       online,
       changed,
     })) return;
@@ -144,7 +144,15 @@ export function FilesSection({
     } finally {
       setSaving(false);
     }
-  }, [adapter.capabilities, agent.agentId, changed, draft, isPro, load, online, operations, saving, selection, t]);
+  }, [adapter.capabilities, agent.agentId, changed, draft, load, online, operations, saving, selection, t]);
+
+  const save = useCallback(() => {
+    if (!isPro) {
+      onOpenPaywall('coreFileEditing', () => { void commitSave(); });
+      return;
+    }
+    void commitSave();
+  }, [commitSave, isPro, onOpenPaywall]);
 
   const visibleFiles = useMemo(
     () => filterAgentFiles(files ?? [], query),
@@ -254,12 +262,11 @@ export function FilesSection({
                     disabled={!canSaveAgentFile({
                       capabilities: adapter.capabilities,
                       operations,
-                      isPro,
                       online,
                       changed,
                     })}
                     loading={saving}
-                    onPress={() => { void save(); }}
+                    onPress={save}
                     style={styles.actionButton}
                   />
                 </View>
@@ -268,14 +275,8 @@ export function FilesSection({
                   testID="agent-file-edit"
                   label={t('Edit', { ns: 'common' })}
                   variant="secondary"
-                  disabled={isPro && !online}
-                  onPress={() => {
-                    if (!isPro) {
-                      onOpenPaywall('coreFileEditing');
-                      return;
-                    }
-                    setEditing(true);
-                  }}
+                  disabled={!online}
+                  onPress={startEditing}
                 />
               ) : null}
             </>

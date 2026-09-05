@@ -85,8 +85,21 @@ export type OpenClawManageScreenProps = Readonly<{
   permissionDenied?: boolean;
   initialTab?: OpenClawManageTab;
   onBack: () => void;
-  onOpenPaywall: (reason: 'openclawManagement') => void;
+  onOpenPaywall: (
+    reason: 'configManage' | 'openclawPermissions' | 'openclawDiagnostics' | 'configBackups',
+  ) => void;
 }>;
+
+function paywallFeatureForTab(
+  tab: OpenClawManageTab,
+): 'configManage' | 'openclawPermissions' | 'openclawDiagnostics' | 'configBackups' {
+  switch (tab) {
+    case 'permissions': return 'openclawPermissions';
+    case 'diagnostics': return 'openclawDiagnostics';
+    case 'backups': return 'configBackups';
+    default: return 'configManage';
+  }
+}
 
 export function OpenClawManageScreen({
   adapter,
@@ -333,9 +346,9 @@ export function OpenClawManageScreen({
     setSheetError(null);
     try {
       await resolve(approval.id, decision);
-      analyticsEvents.chatExecApprovalResolved({
+      analyticsEvents.approvalResolved({
+        kind: 'exec',
         decision,
-        source: 'openclaw_management',
       });
       setApprovals((current) => current.filter((candidate) => candidate.id !== approval.id));
       setSheet(null);
@@ -519,13 +532,6 @@ export function OpenClawManageScreen({
             testID="openclaw-manage-unsupported"
             message={t('Not supported by this backend')}
           />
-        ) : !hasAccess ? (
-          <Banner
-            testID="openclaw-manage-locked"
-            message={t('common:Pro required for this agent')}
-            actionLabel={t('common:View Pro')}
-            onAction={() => onOpenPaywall('openclawManagement')}
-          />
         ) : (
           <>
             <SegmentedTabs
@@ -540,7 +546,14 @@ export function OpenClawManageScreen({
               }}
               size="sm"
             />
-            {!online ? (
+            {!hasAccess ? (
+              <Banner
+                testID="openclaw-manage-locked"
+                message={t('common:Pro required for this agent')}
+                actionLabel={t('common:View Pro')}
+                onAction={() => onOpenPaywall(paywallFeatureForTab(activeTab))}
+              />
+            ) : !online ? (
               <Banner
                 testID="openclaw-manage-offline"
                 message={t('Offline · showing cached settings', { ns: 'config' })}
@@ -548,7 +561,7 @@ export function OpenClawManageScreen({
                 onAction={() => { void retry(); }}
               />
             ) : null}
-            {errors[activeTab] ? (
+            {hasAccess && errors[activeTab] ? (
               <Banner
                 testID="openclaw-manage-error"
                 tone="bad"
@@ -557,8 +570,8 @@ export function OpenClawManageScreen({
                 onAction={() => { void retry(); }}
               />
             ) : null}
-            {notice ? <Text style={styles.notice}>{notice}</Text> : null}
-            {renderSection()}
+            {hasAccess && notice ? <Text style={styles.notice}>{notice}</Text> : null}
+            {hasAccess ? renderSection() : null}
           </>
         )}
       </ScrollView>

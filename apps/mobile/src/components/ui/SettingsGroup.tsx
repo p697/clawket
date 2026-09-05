@@ -85,7 +85,12 @@ export function SettingsRow({
         {attention ? <View testID={testID ? `${testID}-attention` : undefined} style={styles.attention} /> : null}
         {value ? <Text style={styles.value} numberOfLines={1}>{value}</Text> : null}
         {trailing ?? (locked ? (
-          <Lock size={IconSize.sm} color={theme.colors.inkTertiary} strokeWidth={2} />
+          <Lock
+            testID={testID ? `${testID}-lock-icon` : undefined}
+            size={IconSize.sm}
+            color={theme.colors.inkTertiary}
+            strokeWidth={2}
+          />
         ) : showChevron ? (
           <ChevronRight size={IconSize.sm} color={theme.colors.inkTertiary} strokeWidth={2} />
         ) : null)}

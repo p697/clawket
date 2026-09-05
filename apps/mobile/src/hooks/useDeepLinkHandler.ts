@@ -11,6 +11,8 @@ import { createCompositeHash } from '../services/crypto-hash';
 import { getConnectionRuntime } from '../connection';
 import type { RootStackParamList } from '../navigation/root-stack';
 import { useGatewayScanner } from '../contexts/GatewayScannerContext';
+import { analyticsEvents } from '../services/analytics/events';
+import { recordSuccessfulSendForAutomaticReview } from '../services/auto-app-review';
 
 export type DeepLinkDeps = {
   rootNavigationRef: NavigationContainerRefWithCurrent<RootStackParamList>;
@@ -18,6 +20,12 @@ export type DeepLinkDeps = {
   activeConnectionId: string | null;
   currentAgentId: string;
   mainSessionKey: string;
+  canAddConnection?: boolean;
+  activeAccessDeniedReason?: 'gatewayConnections' | 'agents' | null;
+  onOpenPaywall?: (
+    reason: 'gatewayConnections' | 'agents',
+    onContinue?: () => void | Promise<void>,
+  ) => void;
   requestConfirmation: (request: DeepLinkConfirmationRequest) => void;
 };
 
@@ -58,6 +66,14 @@ async function executeAction(
     mainSessionKey,
   } = deps;
 
+  if ((action.type === 'agent' || action.type === 'session') && deps.activeAccessDeniedReason) {
+    deps.onOpenPaywall?.(
+      deps.activeAccessDeniedReason,
+      () => executeAction(action, { ...deps, activeAccessDeniedReason: null }, promptIdempotencyKey),
+    );
+    return;
+  }
+
   switch (action.type) {
     case 'agent': {
       if (!activeConnectionId) {
@@ -70,7 +86,7 @@ async function executeAction(
           connectionId: activeConnectionId,
           agentId: currentAgentId,
           sessionKey,
-          from: 'notification',
+          from: 'deeplink',
         });
       }
       const adapter = activeAdapter?.connection.id === activeConnectionId
@@ -91,6 +107,7 @@ async function executeAction(
             receivedAtMs: Date.now(),
           }),
         });
+        void recordSuccessfulSendForAutomaticReview();
       } catch {
         Alert.alert('Send Failed', 'Connection is not ready. Please try again in the thread.');
       }
@@ -106,7 +123,7 @@ async function executeAction(
           connectionId: activeConnectionId,
           agentId: currentAgentId,
           sessionKey: action.key,
-          from: 'notification',
+          from: 'deeplink',
         });
       }
       break;
@@ -118,6 +135,13 @@ async function executeAction(
       break;
     }
     case 'connect': {
+      if (deps.canAddConnection === false) {
+        deps.onOpenPaywall?.(
+          'gatewayConnections',
+          () => executeAction(action, { ...deps, canAddConnection: true }, promptIdempotencyKey),
+        );
+        break;
+      }
       const runtime = getConnectionRuntime();
       const url = action.url.trim();
       const auth = action.token || action.password
@@ -140,6 +164,11 @@ async function executeAction(
           ...(auth ? { auth } : {}),
         });
         await runtime.activate(saved.connection.id);
+        analyticsEvents.gatewayConnectSaved({
+          backend: 'openclaw',
+          transport: 'custom',
+          source: 'deeplink',
+        });
       } catch {
         Alert.alert('Connection Failed', 'Could not save this connection. Try again.');
       }
@@ -162,6 +191,15 @@ export function useDeepLinkHandler(deps: DeepLinkDeps) {
     const action = parseDeepLink(url);
     if (!action) return;
     if (action.type === 'pair') {
+      if (deps.canAddConnection === false) {
+        deps.onOpenPaywall?.(
+          'gatewayConnections',
+          async () => {
+            await connectPairingLink(action.url);
+          },
+        );
+        return;
+      }
       void connectPairingLink(action.url);
       return;
     }
@@ -200,9 +238,12 @@ export function useDeepLinkHandler(deps: DeepLinkDeps) {
     connectPairingLink,
     deps.activeAdapter,
     deps.activeConnectionId,
+    deps.activeAccessDeniedReason,
+    deps.canAddConnection,
     deps.currentAgentId,
     deps.mainSessionKey,
     deps.requestConfirmation,
     deps.rootNavigationRef,
+    deps.onOpenPaywall,
   ]);
 }

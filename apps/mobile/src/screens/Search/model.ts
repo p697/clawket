@@ -13,7 +13,12 @@ export type SearchFilter = 'all' | 'messages' | 'favorites';
 export type SearchResultKind = 'agent' | 'session' | 'message' | 'favorite';
 export type SearchSectionKind = 'agents' | 'sessions' | 'messages' | 'favorites';
 export type SearchDataSource = 'live' | 'cache';
-export type SearchLockedReason = 'agents' | 'messageHistory';
+export type SearchThreadLockedReason = 'gatewayConnections' | 'agents';
+export type SearchLockedReason = SearchThreadLockedReason | 'messageHistory';
+export type ResolveSearchThreadLockedReason = (
+  connectionId: string,
+  agentId: string,
+) => SearchThreadLockedReason | null;
 
 type SearchResultBase = Readonly<{
   id: string;
@@ -76,6 +81,8 @@ export type SearchModelInput = Readonly<{
   favorites: ReadonlyArray<FavoritedMessage>;
   capabilitiesByConnection: Readonly<Record<string, Capabilities | undefined>>;
   isPro: boolean;
+  resolveThreadLockedReason?: ResolveSearchThreadLockedReason;
+  /** @deprecated Prefer resolveThreadLockedReason so connection and agent quota gates stay distinct. */
   canOpenThread?: (connectionId: string, agentId: string) => boolean;
 }>;
 
@@ -146,11 +153,25 @@ function hasCapability(
 }
 
 function threadLockReason(
-  canOpenThread: SearchModelInput['canOpenThread'],
+  input: Pick<SearchModelInput, 'resolveThreadLockedReason' | 'canOpenThread'>,
   connectionId: string,
   agentId: string,
-): SearchLockedReason | undefined {
-  return canOpenThread && !canOpenThread(connectionId, agentId) ? 'agents' : undefined;
+): SearchThreadLockedReason | undefined {
+  if (input.resolveThreadLockedReason) {
+    return input.resolveThreadLockedReason(connectionId, agentId) ?? undefined;
+  }
+  return input.canOpenThread && !input.canOpenThread(connectionId, agentId)
+    ? 'agents'
+    : undefined;
+}
+
+function threadLockProperties(
+  input: Pick<SearchModelInput, 'resolveThreadLockedReason' | 'canOpenThread'>,
+  connectionId: string,
+  agentId: string,
+): Readonly<{ lockedReason?: SearchThreadLockedReason }> {
+  const lockedReason = threadLockReason(input, connectionId, agentId);
+  return lockedReason ? { lockedReason } : {};
 }
 
 function buildAgentResults(
@@ -176,9 +197,7 @@ function buildAgentResults(
         updatedAt: summary.updatedAt,
         source: group.source,
         ...(agent.emoji ? { emoji: agent.emoji } : {}),
-        ...(threadLockReason(input.canOpenThread, group.connection.id, agent.agentId)
-          ? { lockedReason: 'agents' as const }
-          : {}),
+        ...threadLockProperties(input, group.connection.id, agent.agentId),
       };
       const previous = results.get(id);
       if (!previous || result.source === 'live' || (result.updatedAt ?? 0) > (previous.updatedAt ?? 0)) {
@@ -227,9 +246,7 @@ function buildSessionResults(
           subtitle: summary.agent.name,
           updatedAt: session.updatedAt,
           source: group.source,
-          ...(threadLockReason(input.canOpenThread, group.connection.id, summary.agent.agentId)
-            ? { lockedReason: 'agents' as const }
-            : {}),
+          ...threadLockProperties(input, group.connection.id, summary.agent.agentId),
         });
       }
     }
@@ -259,9 +276,7 @@ function buildSessionResults(
       subtitle: agentTitle,
       updatedAt: meta.lastMessageMs ?? meta.updatedAt,
       source: 'cache',
-      ...(threadLockReason(input.canOpenThread, meta.gatewayConfigId, meta.agentId)
-        ? { lockedReason: 'agents' as const }
-        : {}),
+      ...threadLockProperties(input, meta.gatewayConfigId, meta.agentId),
     };
     const existing = results.get(id);
     if (!existing) results.set(id, cached);
@@ -286,7 +301,9 @@ function buildMessageResults(
         meta.gatewayConfigId,
         `message:${meta.sessionKey}:${message.id}`,
       );
-      const lockedReason = input.isPro ? undefined : 'messageHistory';
+      const lockedReason = input.isPro
+        ? threadLockReason(input, meta.gatewayConfigId, meta.agentId)
+        : 'messageHistory';
       results.set(id, {
         id,
         kind: 'message',
@@ -325,7 +342,9 @@ function buildFavoriteResults(
       connections.get(favorite.gatewayConfigId)?.label,
     )) continue;
     const id = resultKey(favorite.gatewayConfigId, `favorite:${favorite.favoriteKey}`);
-    const lockedReason = input.isPro ? undefined : 'messageHistory';
+    const lockedReason = input.isPro
+      ? threadLockReason(input, favorite.gatewayConfigId, favorite.agentId)
+      : 'messageHistory';
     results.set(id, {
       id,
       kind: 'favorite',

@@ -2,6 +2,7 @@ import React from 'react';
 import { act, render, waitFor } from '@testing-library/react-native';
 import { resolveCapabilities } from '@clawket/agent-protocol';
 import type { ConnectionRuntimeSnapshot, RosterConnectionGroup } from '../../connection';
+import { analyticsEvents } from '../../services/analytics/events';
 import type { SearchViewProps } from './SearchView';
 import {
   resolveSearchCapabilities,
@@ -13,6 +14,7 @@ let mockSearchViewProps: SearchViewProps | null = null;
 let mockRuntime: ConnectionRuntimeSnapshot;
 let mockRoster: ReadonlyArray<RosterConnectionGroup> = [];
 let mockIsPro = false;
+const mockedAnalyticsEvents = analyticsEvents as jest.Mocked<typeof analyticsEvents>;
 
 const mockProbeActive = jest.fn(async () => true);
 const mockListSessions = jest.fn(async () => [{
@@ -61,6 +63,13 @@ jest.mock('../../connection', () => ({
 
 jest.mock('../../contexts/ProPaywallContext', () => ({
   useProPaywall: () => ({ isPro: mockIsPro }),
+}));
+
+jest.mock('../../services/analytics/events', () => ({
+  analyticsEvents: {
+    searchMessageOpened: jest.fn(),
+    searchPerformed: jest.fn(),
+  },
 }));
 
 jest.mock('../../services/chat-cache', () => ({
@@ -159,6 +168,7 @@ describe('SearchScreen connection container', () => {
   let consoleErrorSpy: jest.SpyInstance;
 
   beforeEach(() => {
+    jest.clearAllMocks();
     mockSearchViewProps = null;
     mockIsPro = false;
     mockRoster = [rosterGroup];
@@ -166,6 +176,7 @@ describe('SearchScreen connection container', () => {
       revision: 1,
       initialized: true,
       switching: false,
+      launchPaywallShownThisProcess: false,
       connectionsRevision: 1,
       connections: [connection],
       activeConnectionId: 'connection',
@@ -206,6 +217,11 @@ describe('SearchScreen connection container', () => {
       'sessions',
       'messages',
     ]);
+    await waitFor(() => expect(mockedAnalyticsEvents.searchPerformed).toHaveBeenCalledWith({
+      scope: 'global',
+      has_results: true,
+      result_kinds: 'agents,sessions,messages',
+    }));
   });
 
   it('navigates Agent/session rows to Thread and free message rows to the Pro gate', async () => {
@@ -227,6 +243,7 @@ describe('SearchScreen connection container', () => {
     expect(props.navigation.navigate).toHaveBeenCalledWith('Paywall', {
       reason: 'messageHistory',
     });
+    expect(mockedAnalyticsEvents.searchMessageOpened).toHaveBeenCalledWith({ is_pro: false });
   });
 
   it('opens Pro message results in MessageDetail and restores recent queries', async () => {
@@ -243,10 +260,68 @@ describe('SearchScreen connection container', () => {
       sessionKey: 'session',
       messageId: 'message',
     });
+    expect(mockedAnalyticsEvents.searchMessageOpened).toHaveBeenCalledWith({ is_pro: true });
 
     act(() => mockSearchViewProps?.onSelectRecent('Previous query'));
     await waitFor(() => expect(mockSearchViewProps?.query).toBe('Previous query'));
     expect(mockSearchViewProps?.filter).toBe('all');
+  });
+
+  it('hands a locked message continuation to the host paywall coordinator', async () => {
+    const props = createProps();
+    const onOpenPaywall = jest.fn();
+    render(
+      <SearchScreen
+        {...props}
+        resolveThreadLockedReason={() => 'gatewayConnections'}
+        onOpenPaywall={onOpenPaywall}
+      />,
+    );
+    await waitFor(() => expect(mockSearchViewProps?.state).toBe('ready'));
+    const message = mockSearchViewProps?.sections
+      .flatMap((section) => section.results)
+      .find((result) => result.kind === 'message');
+
+    act(() => mockSearchViewProps?.onSelectResult(message!));
+    expect(onOpenPaywall).toHaveBeenCalledWith('messageHistory', expect.any(Function));
+    expect(props.navigation.navigate).not.toHaveBeenCalledWith('MessageDetail', expect.anything());
+
+    const onContinue = onOpenPaywall.mock.calls[0]?.[1] as (() => void) | undefined;
+    act(() => onContinue?.());
+    expect(props.navigation.navigate).toHaveBeenCalledWith('MessageDetail', {
+      connectionId: 'connection',
+      sessionKey: 'session',
+      messageId: 'message',
+    });
+  });
+
+  it('uses the exact connection quota reason and preserves the original Thread continuation', async () => {
+    const props = createProps();
+    const onOpenPaywall = jest.fn();
+    render(
+      <SearchScreen
+        {...props}
+        resolveThreadLockedReason={() => 'gatewayConnections'}
+        onOpenPaywall={onOpenPaywall}
+      />,
+    );
+    await waitFor(() => expect(mockSearchViewProps?.state).toBe('ready'));
+    const agentResult = mockSearchViewProps?.sections
+      .flatMap((section) => section.results)
+      .find((result) => result.kind === 'agent');
+
+    act(() => mockSearchViewProps?.onSelectResult(agentResult!));
+    expect(onOpenPaywall).toHaveBeenCalledWith('gatewayConnections', expect.any(Function));
+    expect(props.navigation.navigate).not.toHaveBeenCalledWith('Thread', expect.anything());
+
+    const onContinue = onOpenPaywall.mock.calls[0]?.[1] as (() => void) | undefined;
+    act(() => onContinue?.());
+    expect(props.navigation.navigate).toHaveBeenCalledWith('Thread', {
+      connectionId: 'connection',
+      agentId: 'agent',
+      sessionKey: 'session',
+      from: 'search',
+    });
   });
 
   it('exposes back, retry, and whole-page permission callbacks', async () => {

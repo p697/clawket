@@ -70,13 +70,17 @@ import {
   type AgentRosterPreferences,
 } from './src/services/session-preferences';
 import { analyticsEvents } from './src/services/analytics/events';
-import { requestManualAppReview } from './src/services/auto-app-review';
+import {
+  requestManualAppReview,
+  scheduleAutomaticAppReviewForColdStart,
+} from './src/services/auto-app-review';
 import i18n from './src/i18n';
 import {
   useDeepLinkHandler,
   type DeepLinkConfirmationRequest,
   type DeepLinkDeps,
 } from './src/hooks/useDeepLinkHandler';
+import { useProEntitlement } from './src/hooks/useProEntitlement';
 import { usePostHogIdentity } from './src/hooks/usePostHogIdentity';
 import { usePostHogScreenTracking } from './src/hooks/usePostHogScreenTracking';
 import { ChatAppearanceSettings, SpeechRecognitionLanguage } from './src/types';
@@ -84,6 +88,11 @@ import type { AgentInfo } from './src/types/agent';
 import { buildTheme, builtInAccents, defaultAccentId, useAppTheme } from './src/theme';
 import { APP_PACKAGE_VERSION } from './src/constants/app-version';
 import { getCurrentAppIconAsync, type AppIconVariant } from './src/services/app-icon';
+import {
+  getCurrentAppVersion,
+  markCurrentAppUpdateAnnouncementShown,
+  shouldShowCurrentAppUpdateAnnouncement,
+} from './src/services/app-update-announcement';
 import { AppProviders } from './src/bootstrap/AppProviders';
 import { useAppBootstrap } from './src/bootstrap/useAppBootstrap';
 import { getActiveLeafRouteName } from './src/utils/posthog-navigation';
@@ -96,19 +105,38 @@ import {
   resolveConnectedThreadTarget,
   resolveMainSessionKey,
 } from './src/connection/session-scope';
-import { normalizeAccessibleAgentId } from './src/utils/pro';
+import {
+  canAddGatewayConnection,
+  canCreateAgent as canCreateProAgent,
+  canUseAgent,
+  canUseConnection,
+  isGraceActive,
+  normalizeProFeature,
+} from './src/utils/pro';
 import type {
   AccountSettingsSection,
   AgentSettingsSection,
   RootStackParamList,
 } from './src/navigation/root-stack';
 import {
+  buildRosterRows,
   isRosterAgentMuted,
   renameRosterSession,
   resolveRosterCreateAgentTarget,
   RosterScreen,
   type RosterDisplayRow,
 } from './src/screens/Roster';
+import {
+  findPendingApprovalTarget,
+  isApprovalScanFresh,
+  remainingLaunchPaywallDelay,
+  resolveStartupNavigation,
+  type StartupThreadTarget,
+} from './src/navigation/launch-paywall';
+import {
+  consumeAcceptedPaywallPresentation,
+  PaywallContinuationCoordinator,
+} from './src/navigation/paywall-continuation';
 import { ThreadScreen } from './src/screens/Thread';
 import {
   SessionPanel,
@@ -125,6 +153,7 @@ import {
   AccountSettingsScreen,
   AccountSettingsSectionScreen,
   ChatAppearanceScreen,
+  ReleaseNotesHistoryScreen,
   resolveAccountSettingsRuntimeStatus,
   type AccountSettingsAction,
   type AccountSettingsSectionActionRequest,
@@ -210,6 +239,10 @@ export default function App(): React.JSX.Element {
   useEffect(() => () => {
     void connectionRuntime.stop();
   }, [connectionRuntime]);
+
+  useEffect(() => {
+    void scheduleAutomaticAppReviewForColdStart();
+  }, []);
 
   if (loading) {
     return (
@@ -369,8 +402,11 @@ function AppContent({
   const {
     isPro,
     isLoading: accountPermissionsLoading,
+    visible: paywallVisible,
+    hidePaywall,
     restorePurchases,
     showPaywall,
+    showThreePointZeroIntro,
   } = useProPaywall();
   const connections = useConnections();
   const rootNavigationRef = useMemo(() => createNavigationContainerRef<RootStackParamList>(), []);
@@ -410,7 +446,83 @@ function AppContent({
   const [replyNotificationsEnabled, setReplyNotificationsEnabled] = useState(false);
   const [currentAppIcon, setCurrentAppIcon] = useState<AppIconVariant>('default');
   const [navigationReady, setNavigationReady] = useState(false);
+  const [activeRouteName, setActiveRouteName] = useState<keyof RootStackParamList | null>(null);
+  const [rosterRenderedAt, setRosterRenderedAt] = useState<number | null>(null);
+  const [pendingAutoOpen, setPendingAutoOpen] = useState<StartupThreadTarget | null>(null);
+  const [startupAnnouncementLoading, setStartupAnnouncementLoading] = useState(true);
+  const [threePointZeroIntroPending, setThreePointZeroIntroPending] = useState(false);
   const handledNotificationResponseIdsRef = useRef(new Set<string>());
+  const launchPaywallPhaseRef = useRef<'idle' | 'opening' | 'visible'>('idle');
+  const launchPaywallKindRef = useRef<Readonly<{
+    kind: 'generic' | 'threePointZeroIntro';
+    firstRun: boolean;
+  }> | null>(null);
+  const initialConnectionCountRef = useRef(connections.connections.length);
+  const paywallContinuationCoordinatorRef = useRef(new PaywallContinuationCoordinator());
+  const rosterViewTrackedRef = useRef(false);
+  const presentPaywall = useCallback((
+    feature: ProFeature,
+    onContinue?: () => void | Promise<void>,
+  ): boolean => {
+    if (paywallVisible) return false;
+    if (isPro) {
+      if (onContinue) void Promise.resolve(onContinue()).catch(() => undefined);
+      return false;
+    }
+    return paywallContinuationCoordinatorRef.current.tryPresent(
+      () => showPaywall(feature),
+      onContinue,
+    );
+  }, [isPro, paywallVisible, showPaywall]);
+  const dismissPaywall = useCallback(() => {
+    paywallContinuationCoordinatorRef.current.clear();
+    hidePaywall();
+  }, [hidePaywall]);
+  const continueAfterPaywall = useCallback(() => {
+    const continuation = paywallContinuationCoordinatorRef.current.take();
+    if (continuation) void Promise.resolve(continuation()).catch(() => undefined);
+  }, []);
+  const {
+    entitlement,
+    loading: entitlementLoading,
+    switching: freeConnectionSwitching,
+    nextFreeConnectionSwitchAt,
+    switchFreeConnection,
+  } = useProEntitlement({
+    isPro,
+    subscriptionLoading: accountPermissionsLoading,
+    connections: connections.connections,
+    activeConnectionId: connections.activeConnectionId,
+    registryFreeConnectionId: connections.freeConnectionId,
+    roster: connections.roster,
+    foregroundEpoch,
+  });
+  const permissionsLoading = accountPermissionsLoading || entitlementLoading;
+  const canAddConnectionWithEntitlement = canAddGatewayConnection(
+    connections.connections.length,
+    entitlement,
+  );
+  const canAccessConnection = useCallback((connectionId: string) => {
+    const connection = connections.connections.find(({ id }) => id === connectionId);
+    return Boolean(connection && canUseConnection(connection, entitlement));
+  }, [connections.connections, entitlement]);
+  const canAccessRosterAgent = useCallback((connectionId: string, targetAgentId: string) => {
+    const connection = connections.connections.find(({ id }) => id === connectionId);
+    if (!connection) return false;
+    if (entitlement.isPro) return true;
+    const agent = connections.roster.find((group) => (
+      group.connection.id === connectionId
+    ))?.agents.find(({ agent: candidate }) => candidate.agentId === targetAgentId)?.agent;
+    return Boolean(agent && canUseAgent(agent, connection, entitlement));
+  }, [connections.connections, connections.roster, entitlement]);
+  const rosterAnalyticsRows = useMemo(() => buildRosterRows(connections.roster, {
+    pinnedSessionKeys,
+    agentPreferences,
+    canAccessAgent: canAccessRosterAgent,
+  }), [agentPreferences, canAccessRosterAgent, connections.roster, pinnedSessionKeys]);
+  const activeConnection = useMemo(() => connections.connections.find(
+    (connection) => connection.id === connections.activeConnectionId,
+  ) ?? null, [connections.activeConnectionId, connections.connections]);
 
   useEffect(() => {
     let active = true;
@@ -421,6 +533,36 @@ function AppContent({
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    const version = getCurrentAppVersion();
+    if (debugMode || !/^3\.0(?:\.|$)/.test(version)) {
+      setStartupAnnouncementLoading(false);
+      return () => {
+        active = false;
+      };
+    }
+    void (async () => {
+      const shouldShow = await shouldShowCurrentAppUpdateAnnouncement(false);
+      if (!shouldShow) return;
+      if (initialConnectionCountRef.current === 0) {
+        await markCurrentAppUpdateAnnouncementShown();
+        return;
+      }
+      if (
+        active
+        && !getConnectionRuntime().getSnapshot().launchPaywallShownThisProcess
+      ) {
+        setThreePointZeroIntroPending(true);
+      }
+    })().catch(() => undefined).finally(() => {
+      if (active) setStartupAnnouncementLoading(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, [debugMode]);
 
   useEffect(() => {
     let active = true;
@@ -456,21 +598,43 @@ function AppContent({
     };
   }, [preferenceScopes]);
 
-  const { trackInitialScreen, trackScreenState } = usePostHogScreenTracking({
+  const { trackInitialScreen, trackScreenState, trackManualScreen } = usePostHogScreenTracking({
     rootNavigationRef,
+    activeBackend: activeConnection?.backendKind,
   });
+  const manualScreenVisibilityRef = useRef({ sessionPanel: false, paywall: false });
 
-  const activeConnection = useMemo(() => connections.connections.find(
-    (connection) => connection.id === connections.activeConnectionId,
-  ) ?? null, [connections.activeConnectionId, connections.connections]);
+  useEffect(() => {
+    if (sessionPanelVisible && !manualScreenVisibilityRef.current.sessionPanel) {
+      trackManualScreen('SessionPanel');
+    }
+    manualScreenVisibilityRef.current.sessionPanel = sessionPanelVisible;
+  }, [sessionPanelVisible, trackManualScreen]);
+
+  useEffect(() => {
+    if (paywallVisible && !manualScreenVisibilityRef.current.paywall) {
+      trackManualScreen('Paywall');
+    }
+    manualScreenVisibilityRef.current.paywall = paywallVisible;
+  }, [paywallVisible, trackManualScreen]);
+
   const activeAdapter = connections.activeAdapter;
   const activeCapabilities = activeAdapter?.capabilities
     ?? (activeConnection ? resolveCapabilities(activeConnection.backendKind) : NO_CAPABILITIES);
+
+  useEffect(() => {
+    if (entitlementLoading || entitlement.isPro || isGraceActive(entitlement)) return;
+    if (!activeConnection || canUseConnection(activeConnection, entitlement)) return;
+    const freeConnectionId = entitlement.freeConnectionId;
+    if (!freeConnectionId || freeConnectionId === activeConnection.id) return;
+    void getConnectionRuntime().activate(freeConnectionId).catch(() => undefined);
+  }, [activeConnection, entitlement, entitlementLoading]);
 
   usePostHogIdentity({
     connections: connections.connections,
     activeConnectionId: connections.activeConnectionId,
     isPro,
+    graceActive: isGraceActive(entitlement),
   });
 
   const handleNavigationStateChange = useCallback((state: NavigationState | undefined) => {
@@ -479,8 +643,41 @@ function AppContent({
     const routeName = getActiveLeafRouteName(state);
     if (routeName) {
       activeRouteRef.current = routeName as keyof RootStackParamList;
+      setActiveRouteName(routeName as keyof RootStackParamList);
     }
   }, [trackScreenState]);
+
+  useEffect(() => {
+    if (activeRouteName !== 'Roster') {
+      rosterViewTrackedRef.current = false;
+      return;
+    }
+    if (
+      rosterViewTrackedRef.current
+      || !connections.initialized
+      || (connections.connections.length > 0 && connections.roster.length === 0)
+    ) {
+      return;
+    }
+    rosterViewTrackedRef.current = true;
+    analyticsEvents.rosterViewed({
+      connection_count: connections.connections.length,
+      agent_count: connections.roster.reduce((total, group) => total + group.agents.length, 0),
+      pinned_count: rosterAnalyticsRows.filter((row) => row.kind === 'pinned_session').length,
+      unread_count: connections.roster.reduce((total, group) => (
+        total + group.agents.reduce((subtotal, summary) => subtotal + summary.unreadCount, 0)
+      ), 0),
+      attention_count: connections.roster.reduce((total, group) => (
+        total + group.agents.reduce((subtotal, summary) => subtotal + summary.attentionCount, 0)
+      ), 0),
+    });
+  }, [
+    activeRouteName,
+    connections.connections.length,
+    connections.initialized,
+    connections.roster,
+    rosterAnalyticsRows,
+  ]);
 
   const mainSessionKey = useMemo(
     () => resolveMainSessionKey(currentAgentId, {
@@ -496,11 +693,23 @@ function AppContent({
   }, []);
 
   useEffect(() => {
-    const normalized = normalizeAccessibleAgentId(currentAgentId, isPro);
-    if (normalized === currentAgentId) return;
-    setCurrentAgentIdState(normalized);
-    StorageService.setCurrentAgentId(normalized);
-  }, [currentAgentId, isPro]);
+    if (!activeConnection || entitlementLoading) return;
+    const group = connections.roster.find(({ connection }) => connection.id === activeConnection.id);
+    const currentAgent = group?.agents.find(({ agent }) => agent.agentId === currentAgentId)?.agent;
+    if (!currentAgent || canUseAgent(currentAgent, activeConnection, entitlement)) return;
+    const accessibleMain = group?.agents.find(({ agent }) => (
+      agent.isMain && canUseAgent(agent, activeConnection, entitlement)
+    ))?.agent.agentId;
+    if (!accessibleMain || accessibleMain === currentAgentId) return;
+    setCurrentAgentIdState(accessibleMain);
+    StorageService.setCurrentAgentId(accessibleMain);
+  }, [
+    activeConnection,
+    connections.roster,
+    currentAgentId,
+    entitlement,
+    entitlementLoading,
+  ]);
 
   const switchAgent = useCallback((id: string) => {
     setCurrentAgentIdState(id);
@@ -560,7 +769,7 @@ function AppContent({
         shouldProbe,
       });
       if (shouldProbe) {
-        void getConnectionRuntime().probeActive();
+        void getConnectionRuntime().probeActive(undefined, 'foreground');
       }
     });
     return () => sub.remove();
@@ -724,6 +933,10 @@ function AppContent({
       }
 
       const targetAgentId = agentIdFromSessionKey(sessionKey) ?? currentAgentId;
+      if (!connections.activeConnectionId
+        || !canAccessRosterAgent(connections.activeConnectionId, targetAgentId)) {
+        return;
+      }
       if (isRosterAgentMuted({
         preferences: agentPreferences,
         connectionId: connections.activeConnectionId,
@@ -758,23 +971,53 @@ function AppContent({
     activeCapabilities.replyNotifications,
     agentPreferences,
     agents,
+    canAccessRosterAgent,
     connections.activeConnectionId,
     currentAgentId,
   ]);
 
   useEffect(() => {
-    if (!navigationReady || !pendingChatNotificationOpen) return;
+    if (entitlementLoading || !navigationReady || !pendingChatNotificationOpen) return;
     if (!rootNavigationRef.isReady()) return;
     if (!connections.activeConnectionId) return;
+    const targetAgentId = pendingChatNotificationOpen.agentId
+      ?? agentIdFromSessionKey(pendingChatNotificationOpen.sessionKey)
+      ?? currentAgentId;
+    if (!canAccessRosterAgent(connections.activeConnectionId, targetAgentId)) {
+      const target: RootStackParamList['Thread'] = {
+        connectionId: connections.activeConnectionId,
+        agentId: targetAgentId,
+        sessionKey: pendingChatNotificationOpen.sessionKey,
+        from: 'notification',
+      };
+      setPendingChatNotificationOpen(null);
+      presentPaywall(
+        canAccessConnection(connections.activeConnectionId)
+          ? 'agents'
+          : 'gatewayConnections',
+        () => {
+          if (rootNavigationRef.isReady()) rootNavigationRef.navigate('Thread', target);
+        },
+      );
+      return;
+    }
     rootNavigationRef.navigate('Thread', {
       connectionId: connections.activeConnectionId,
-      agentId: pendingChatNotificationOpen.agentId
-        ?? agentIdFromSessionKey(pendingChatNotificationOpen.sessionKey)
-        ?? currentAgentId,
+      agentId: targetAgentId,
       sessionKey: pendingChatNotificationOpen.sessionKey,
       from: 'notification',
     });
-  }, [connections.activeConnectionId, currentAgentId, navigationReady, pendingChatNotificationOpen, rootNavigationRef]);
+  }, [
+    canAccessConnection,
+    canAccessRosterAgent,
+    connections.activeConnectionId,
+    currentAgentId,
+    entitlementLoading,
+    navigationReady,
+    pendingChatNotificationOpen,
+    rootNavigationRef,
+    presentPaywall,
+  ]);
 
   const appContextValue = useMemo(
     () => ({
@@ -833,6 +1076,15 @@ function AppContent({
       pendingChatInput,
       pendingMainSessionSwitch,
       requestChatWithInput: (text: string) => {
+        if (!connections.activeConnectionId
+          || !canAccessRosterAgent(connections.activeConnectionId, currentAgentId)) {
+          if (connections.activeConnectionId) {
+            presentPaywall(canAccessConnection(connections.activeConnectionId)
+              ? 'agents'
+              : 'gatewayConnections');
+          }
+          return;
+        }
         setPendingChatInput(text);
         setPendingMainSessionSwitch(true);
         if (rootNavigationRef.isReady() && connections.activeConnectionId) {
@@ -852,6 +1104,10 @@ function AppContent({
       },
       pendingAddGateway,
       requestAddGateway: () => {
+        if (!canAddConnectionWithEntitlement) {
+          presentPaywall('gatewayConnections', () => setPendingAddGateway(true));
+          return;
+        }
         setPendingAddGateway(true);
       },
       clearPendingAddGateway: () => {
@@ -864,11 +1120,15 @@ function AppContent({
       agents,
       chatAppearance,
       chatFontSize,
+      canAddConnectionWithEntitlement,
+      canAccessConnection,
+      canAccessRosterAgent,
       connections.activeConnectionId,
       currentAgentId,
       debugMode,
       execApprovalEnabled,
       showAgentAvatar,
+      presentPaywall,
       nodeEnabled,
       nodeCapabilityToggles,
       pendingAddGateway,
@@ -915,8 +1175,11 @@ function AppContent({
     };
   }, [theme]);
 
-  const settingsConnections = connections.connections;
-  const canAddSettingsConnection = isPro || settingsConnections.length === 0;
+  const settingsConnections = useMemo(() => connections.connections.map((connection) => ({
+    ...connection,
+    locked: !canUseConnection(connection, entitlement),
+  })), [connections.connections, entitlement]);
+  const canAddSettingsConnection = canAddConnectionWithEntitlement;
   const accountSettingsStatus = useMemo(() => resolveAccountSettingsRuntimeStatus({
     connectionInitialized: connections.initialized,
     connectionSwitching: connections.switching,
@@ -924,10 +1187,10 @@ function AppContent({
     activeConnectionId: connections.activeConnectionId,
     activeState: connections.activeState,
     connectionErrorCode: connections.error?.operation,
-    permissionsLoading: accountPermissionsLoading,
+    permissionsLoading,
     permissionReason: canAddSettingsConnection ? null : 'gatewayConnections',
   }), [
-    accountPermissionsLoading,
+    permissionsLoading,
     canAddSettingsConnection,
     connections.activeConnectionId,
     connections.activeState,
@@ -987,36 +1250,247 @@ function AppContent({
     ...connection,
     state: connection.id === connections.activeConnectionId ? connections.activeState : 'idle' as const,
     supportsRelayStats: connection.transportKind === 'relay',
-  })), [connections.activeConnectionId, connections.activeState, settingsConnections]);
+    isFreeConnection: connection.id === entitlement.freeConnectionId,
+    freeSwitchAvailable: nextFreeConnectionSwitchAt === null
+      || entitlement.now >= nextFreeConnectionSwitchAt,
+    freeSwitchStatus: nextFreeConnectionSwitchAt !== null
+      && entitlement.now < nextFreeConnectionSwitchAt
+      ? i18n.t('Available {{time}}', {
+          ns: 'config',
+          time: new Date(nextFreeConnectionSwitchAt).toLocaleString(i18n.language),
+        })
+      : undefined,
+    freeSwitching: freeConnectionSwitching,
+  })), [
+    connections.activeConnectionId,
+    connections.activeState,
+    entitlement.freeConnectionId,
+    entitlement.now,
+    freeConnectionSwitching,
+    nextFreeConnectionSwitchAt,
+    settingsConnections,
+  ]);
 
-  const canAccessRosterAgent = useCallback((connectionId: string, targetAgentId: string) => {
-    if (isPro) return true;
-    if (connectionId !== connections.freeConnectionId) return false;
-    return connections.roster.some((group) => (
-      group.connection.id === connectionId
-      && group.agents.some(({ agent }) => agent.agentId === targetAgentId && agent.isMain)
+  const graceDaysLeft = isGraceActive(entitlement)
+    ? Math.max(1, Math.ceil(((entitlement.graceUntil ?? entitlement.now) - entitlement.now)
+      / (24 * 60 * 60 * 1_000)))
+    : null;
+  const rosterGraceBanner = graceDaysLeft === null ? undefined : {
+    message: i18n.t('{{count}} days of Pro access left', {
+      ns: 'common',
+      count: graceDaysLeft,
+    }),
+    actionLabel: i18n.t('View Pro', { ns: 'common' }),
+  };
+  const graceAnalyticsRef = useRef<{
+    graceUntil: number | null;
+    wasActive: boolean | null;
+    viewedFor: number | null;
+  }>({ graceUntil: null, wasActive: null, viewedFor: null });
+  useEffect(() => {
+    if (entitlementLoading) return;
+    const active = isGraceActive(entitlement);
+    const previous = graceAnalyticsRef.current;
+    if (active && entitlement.graceUntil !== null && previous.viewedFor !== entitlement.graceUntil) {
+      analyticsEvents.graceBannerViewed({ days_left: graceDaysLeft ?? 1 });
+      previous.viewedFor = entitlement.graceUntil;
+    }
+    if (previous.wasActive === true && !active) {
+      analyticsEvents.graceExpired({ days_left: 0 });
+    }
+    previous.graceUntil = entitlement.graceUntil;
+    previous.wasActive = active;
+  }, [entitlement, entitlementLoading, graceDaysLeft]);
+
+  const pendingApprovalTarget = useMemo(() => findPendingApprovalTarget(
+    connections.roster,
+    connections.activeConnectionId,
+  ), [connections.activeConnectionId, connections.roster]);
+  const activeRosterGroup = connections.roster.find((group) => (
+    group.connection.id === connections.activeConnectionId
+  ));
+  const activeConnectionReadyAt = connections.activeConnectionId
+    ? connections.connectionDetails[connections.activeConnectionId]?.lastReadyAt ?? null
+    : null;
+  const approvalScanReady = isApprovalScanFresh(
+    activeRosterGroup?.source,
+    activeRosterGroup?.syncedAt,
+    activeConnectionReadyAt,
+  );
+
+  useEffect(() => {
+    if (activeRouteName === 'Roster' && rosterRenderedAt === null) {
+      setRosterRenderedAt(Date.now());
+    }
+  }, [activeRouteName, rosterRenderedAt]);
+
+  const openStartupThread = useCallback((target: StartupThreadTarget) => {
+    if (!rootNavigationRef.isReady()) return;
+    activeRouteRef.current = 'Thread';
+    setActiveRouteName('Thread');
+    setPendingAutoOpen(null);
+    rootNavigationRef.navigate('Thread', target);
+  }, [rootNavigationRef]);
+
+  useEffect(() => {
+    if (!navigationReady || activeRouteName !== 'Roster') return;
+    if (paywallVisible || launchPaywallPhaseRef.current !== 'idle') return;
+
+    const action = resolveStartupNavigation({
+      rosterRendered: rosterRenderedAt !== null,
+      approvalScanReady,
+      activeState: connections.activeState,
+      subscriptionLoading: permissionsLoading || startupAnnouncementLoading,
+      isPro,
+      launchPaywallShownThisProcess: connections.launchPaywallShownThisProcess,
+      pendingAutoOpen,
+      pendingApproval: pendingApprovalTarget,
+      threePointZeroIntroPending,
+    });
+
+    if (action.type === 'open_thread') {
+      if (action.skipLaunchPaywall) {
+        getConnectionRuntime().markLaunchPaywallShown();
+        setThreePointZeroIntroPending(false);
+        openStartupThread(action.target);
+        return;
+      }
+    }
+    if (action.type === 'show_three_point_zero_intro') {
+      consumeAcceptedPaywallPresentation(showThreePointZeroIntro, () => {
+        getConnectionRuntime().markLaunchPaywallShown();
+        setThreePointZeroIntroPending(false);
+        launchPaywallKindRef.current = { kind: 'threePointZeroIntro', firstRun: false };
+        launchPaywallPhaseRef.current = 'opening';
+        void markCurrentAppUpdateAnnouncementShown().catch(() => undefined);
+      });
+      return;
+    }
+    if (action.type === 'open_thread') {
+      openStartupThread(action.target);
+      return;
+    }
+    if (action.type !== 'show_launch_paywall') return;
+
+    const firstRun = pendingAutoOpen?.from === 'onboarding';
+    const timer = setTimeout(() => {
+      if (activeRouteRef.current !== 'Roster') return;
+      const runtime = getConnectionRuntime();
+      const latest = runtime.getSnapshot();
+      if (latest.activeState !== 'ready' || latest.launchPaywallShownThisProcess) return;
+      const latestReadyAt = latest.activeConnectionId
+        ? latest.connectionDetails[latest.activeConnectionId]?.lastReadyAt ?? null
+        : null;
+      const latestRosterGroup = latest.roster.find((group) => (
+        group.connection.id === latest.activeConnectionId
+      ));
+      if (!isApprovalScanFresh(
+        latestRosterGroup?.source,
+        latestRosterGroup?.syncedAt,
+        latestReadyAt,
+      )) return;
+      const latestApprovalTarget = findPendingApprovalTarget(
+        latest.roster,
+        latest.activeConnectionId,
+      );
+      if (latestApprovalTarget) {
+        runtime.markLaunchPaywallShown();
+        setThreePointZeroIntroPending(false);
+        openStartupThread(latestApprovalTarget);
+        return;
+      }
+      consumeAcceptedPaywallPresentation(() => presentPaywall('launch'), () => {
+        if (!runtime.markLaunchPaywallShown()) return;
+        launchPaywallKindRef.current = { kind: 'generic', firstRun };
+        launchPaywallPhaseRef.current = 'opening';
+        analyticsEvents.paywallLaunchShown({ variant: 'generic', first_run: firstRun });
+      });
+    }, remainingLaunchPaywallDelay(
+      Date.now(),
+      activeConnectionReadyAt,
+      rosterRenderedAt,
     ));
-  }, [connections.freeConnectionId, connections.roster, isPro]);
+    return () => clearTimeout(timer);
+  }, [
+    activeRouteName,
+    activeConnectionReadyAt,
+    approvalScanReady,
+    connections.activeState,
+    connections.launchPaywallShownThisProcess,
+    isPro,
+    navigationReady,
+    openStartupThread,
+    paywallVisible,
+    pendingApprovalTarget,
+    pendingAutoOpen,
+    permissionsLoading,
+    presentPaywall,
+    rosterRenderedAt,
+    showThreePointZeroIntro,
+    startupAnnouncementLoading,
+    threePointZeroIntroPending,
+  ]);
+
+  useEffect(() => {
+    const phase = launchPaywallPhaseRef.current;
+    if (phase === 'opening' && paywallVisible) {
+      launchPaywallPhaseRef.current = 'visible';
+      return;
+    }
+    if (phase === 'opening' && isPro) {
+      launchPaywallPhaseRef.current = 'idle';
+      launchPaywallKindRef.current = null;
+      if (pendingAutoOpen) openStartupThread(pendingAutoOpen);
+      return;
+    }
+    if (phase !== 'visible' || paywallVisible) return;
+    launchPaywallPhaseRef.current = 'idle';
+    const launch = launchPaywallKindRef.current;
+    launchPaywallKindRef.current = null;
+    if (launch?.kind === 'generic') {
+      analyticsEvents.paywallLaunchClosed({
+        variant: 'generic',
+        first_run: launch.firstRun,
+      });
+    }
+    if (pendingAutoOpen) openStartupThread(pendingAutoOpen);
+  }, [isPro, openStartupThread, paywallVisible, pendingAutoOpen]);
 
   const handleToggleRosterAgentPinned = useCallback(async (row: RosterDisplayRow) => {
+    if (!canAccessRosterAgent(row.connectionId, row.agentId)) {
+      presentPaywall(canAccessConnection(row.connectionId) ? 'agents' : 'gatewayConnections');
+      return;
+    }
     const scope = `${row.connectionId}:${row.agentId}`;
     const preferences = await SessionPreferencesService.toggleAgentPinned(
       row.connectionId,
       row.agentId,
     );
     setAgentPreferences((current) => ({ ...current, [scope]: preferences }));
-  }, []);
+    analyticsEvents.rosterPinToggled({
+      action: row.agentPinned ? 'unpin' : 'pin',
+      kind: 'agent',
+    });
+  }, [canAccessConnection, canAccessRosterAgent, presentPaywall]);
 
   const handleToggleRosterAgentMuted = useCallback(async (row: RosterDisplayRow) => {
+    if (!canAccessRosterAgent(row.connectionId, row.agentId)) {
+      presentPaywall(canAccessConnection(row.connectionId) ? 'agents' : 'gatewayConnections');
+      return;
+    }
     const scope = `${row.connectionId}:${row.agentId}`;
     const preferences = await SessionPreferencesService.toggleAgentMuted(
       row.connectionId,
       row.agentId,
     );
     setAgentPreferences((current) => ({ ...current, [scope]: preferences }));
-  }, []);
+  }, [canAccessConnection, canAccessRosterAgent, presentPaywall]);
 
   const handleRosterSessionUnpin = useCallback(async (row: RosterDisplayRow) => {
+    if (!canAccessRosterAgent(row.connectionId, row.agentId)) {
+      presentPaywall(canAccessConnection(row.connectionId) ? 'agents' : 'gatewayConnections');
+      return;
+    }
     const scope = `${row.connectionId}:${row.agentId}`;
     const keys = await SessionPreferencesService.setPinnedSession(
       row.connectionId,
@@ -1025,12 +1499,17 @@ function AppContent({
       false,
     );
     setPinnedSessionKeys((current) => ({ ...current, [scope]: keys }));
-  }, []);
+    analyticsEvents.rosterPinToggled({ action: 'unpin', kind: 'session' });
+  }, [canAccessConnection, canAccessRosterAgent, presentPaywall]);
 
   const handleRosterSessionRename = useCallback(async (
     row: RosterDisplayRow,
     title: string,
   ) => {
+    if (!canAccessRosterAgent(row.connectionId, row.agentId)) {
+      presentPaywall(canAccessConnection(row.connectionId) ? 'agents' : 'gatewayConnections');
+      return;
+    }
     const adapter = getConnectionRuntime().getAdapter(row.connectionId);
     await renameRosterSession({
       adapter,
@@ -1038,7 +1517,7 @@ function AppContent({
       title,
       refreshRoster: () => getConnectionRuntime().refreshRoster(),
     });
-  }, []);
+  }, [canAccessConnection, canAccessRosterAgent, presentPaywall]);
 
   const handleRosterConnectionRemove = useCallback(async (row: RosterDisplayRow) => {
     const wasLastConnection = connections.connections.length === 1;
@@ -1055,6 +1534,10 @@ function AppContent({
     action: SessionPanelAction,
     payload?: { title: string },
   ) => {
+    if (!canAccessRosterAgent(row.connectionId, row.agentId)) {
+      presentPaywall(canAccessConnection(row.connectionId) ? 'agents' : 'gatewayConnections');
+      return;
+    }
     if (action === 'pin') {
       const scope = `${row.connectionId}:${row.agentId}`;
       const keys = await SessionPreferencesService.togglePinnedSession(
@@ -1076,7 +1559,7 @@ function AppContent({
       await SessionPreferencesService.clearSession(row.connectionId, row.agentId, row.key);
     }
     await getConnectionRuntime().refreshRoster();
-  }, []);
+  }, [canAccessConnection, canAccessRosterAgent, presentPaywall]);
 
   const openExternalUrl = useCallback((url: string | null | undefined) => {
     if (url) void Linking.openURL(url).catch(() => undefined);
@@ -1101,7 +1584,7 @@ function AppContent({
         onDebugToggle(request.enabled === true);
         return;
       case 'view-pro':
-        showPaywall('settingsMembershipPreview');
+        presentPaywall('settingsMembershipPreview');
         return;
       case 'restore-purchases':
         void restorePurchases();
@@ -1112,10 +1595,37 @@ function AppContent({
       case 'chat-appearance':
         navigation.navigate('ChatAppearance');
         return;
+      case 'release-notes':
+        navigation.navigate('ReleaseNotes');
+        return;
       case 'reconnect-connection':
         if (request.connectionId) {
           void getConnectionRuntime().activate(request.connectionId)
             .then(() => getConnectionRuntime().probeActive());
+        }
+        return;
+      case 'set-free-connection':
+        if (request.connectionId) {
+          void switchFreeConnection(request.connectionId).then(async (result) => {
+            if (result.ok) {
+              if (result.changed) await getConnectionRuntime().activate(request.connectionId!);
+              return;
+            }
+            Alert.alert(
+              i18n.t('Unable to switch free connection', { ns: 'config' }),
+              result.reason === 'cooldown' && result.retryAt !== null
+                ? i18n.t('You can switch again at {{time}}.', {
+                    ns: 'config',
+                    time: new Date(result.retryAt).toLocaleString(i18n.language),
+                  })
+                : i18n.t('Please try again later.', { ns: 'common' }),
+            );
+          }).catch(() => {
+            Alert.alert(
+              i18n.t('Unable to switch free connection', { ns: 'config' }),
+              i18n.t('Please try again later.', { ns: 'common' }),
+            );
+          });
         }
         return;
       case 'remove-connection':
@@ -1204,7 +1714,8 @@ function AppContent({
     openExternalUrl,
     restorePurchases,
     rootNavigationRef.navigate,
-    showPaywall,
+    presentPaywall,
+    switchFreeConnection,
     updateReplyNotifications,
   ]);
 
@@ -1213,6 +1724,16 @@ function AppContent({
     context,
   ) => {
     if (request.action === 'connection.reconnect') {
+      if (!canAccessRosterAgent(context.connection.id, context.agent.agentId)) {
+        presentPaywall(
+          canAccessConnection(context.connection.id) ? 'agents' : 'gatewayConnections',
+          async () => {
+            await getConnectionRuntime().activate(context.connection.id);
+            await getConnectionRuntime().probeActive();
+          },
+        );
+        return;
+      }
       await getConnectionRuntime().activate(context.connection.id);
       await getConnectionRuntime().probeActive();
       return;
@@ -1229,7 +1750,13 @@ function AppContent({
       }
       rootNavigationRef.navigate('Roster');
     }
-  }, [connections.connections.length, rootNavigationRef]);
+  }, [
+    canAccessConnection,
+    canAccessRosterAgent,
+    connections.connections.length,
+    rootNavigationRef,
+    presentPaywall,
+  ]);
 
   if (!connections.initialized) {
     return (
@@ -1244,19 +1771,33 @@ function AppContent({
     <AppContextProvider value={appContextValue}>
       <GlobalLoadingOverlayProvider>
         <GatewayScannerProvider>
-          <AppDeepLinkHandler
-            rootNavigationRef={rootNavigationRef}
-            activeConnectionId={connections.activeConnectionId}
-            activeAdapter={connections.activeAdapter}
-            currentAgentId={currentAgentId}
-            mainSessionKey={mainSessionKey}
-          />
+          {!permissionsLoading ? (
+            <AppDeepLinkHandler
+              rootNavigationRef={rootNavigationRef}
+              activeConnectionId={connections.activeConnectionId}
+              activeAdapter={connections.activeAdapter}
+              currentAgentId={currentAgentId}
+              mainSessionKey={mainSessionKey}
+              canAddConnection={canAddSettingsConnection}
+              activeAccessDeniedReason={activeConnection && !canAccessConnection(activeConnection.id)
+                ? 'gatewayConnections'
+                : activeConnection && !canAccessRosterAgent(activeConnection.id, currentAgentId)
+                  ? 'agents'
+                  : null}
+              onOpenPaywall={presentPaywall}
+            />
+          ) : null}
           <NodeCameraCaptureProvider>
             <NavigationContainer
               ref={rootNavigationRef}
               theme={navigationTheme}
               onReady={() => {
                 setNavigationReady(true);
+                const routeName = rootNavigationRef.getCurrentRoute()?.name;
+                if (routeName) {
+                  activeRouteRef.current = routeName;
+                  setActiveRouteName(routeName);
+                }
                 trackInitialScreen();
               }}
               onStateChange={handleNavigationStateChange}
@@ -1273,6 +1814,21 @@ function AppContent({
                   {(props) => (
                     <OnboardingRoute
                       {...props}
+                      onViewed={() => analyticsEvents.onboardingViewed({
+                        source: props.route.params?.presentation === 'modal'
+                          ? 'add_connection'
+                          : 'first_run',
+                      })}
+                      onPairingCodeSubmitted={({ lengthOk }) => {
+                        analyticsEvents.pairingCodeSubmitted({ length_ok: lengthOk });
+                      }}
+                      onDocsOpened={(backend) => analyticsEvents.onboardingDocsOpened({ backend })}
+                      onScanQrTapped={() => analyticsEvents.gatewayScanQrTapped({
+                        source: props.route.params?.presentation === 'modal'
+                          ? 'add_connection'
+                          : 'first_run',
+                      })}
+                      onOpenPaywall={(reason, onContinue) => presentPaywall(reason, onContinue)}
                       onConnected={({ connectionId, backendKind }) => {
                         const rosterGroup = getConnectionRuntime().getSnapshot().roster.find((group) => (
                           group.connection.id === connectionId
@@ -1282,20 +1838,15 @@ function AppContent({
                           rosterGroup?.agents.map((summary) => summary.agent),
                         );
                         setCurrentAgentId(target.agentId);
+                        setPendingAutoOpen({
+                          connectionId,
+                          agentId: target.agentId,
+                          sessionKey: target.sessionKey,
+                          from: 'onboarding',
+                        });
                         props.navigation.reset({
-                          index: 1,
-                          routes: [
-                            { name: 'Roster' },
-                            {
-                              name: 'Thread',
-                              params: {
-                                connectionId,
-                                agentId: target.agentId,
-                                sessionKey: target.sessionKey,
-                                from: 'onboarding',
-                              },
-                            },
-                          ],
+                          index: 0,
+                          routes: [{ name: 'Roster' }],
                         });
                       }}
                     />
@@ -1307,6 +1858,7 @@ function AppContent({
                       pinnedSessionKeys={pinnedSessionKeys}
                       agentPreferences={agentPreferences}
                       canAccessAgent={canAccessRosterAgent}
+                      graceBanner={rosterGraceBanner}
                       canCreateAgent={activeCapabilities.agentCreate === true
                         && Boolean(activeAdapter?.management?.agents?.create)}
                       canRenamePinnedSession={connections.activeState === 'ready'
@@ -1315,7 +1867,15 @@ function AppContent({
                       isPro={isPro}
                       onOpenAccount={() => navigation.navigate('AccountSettings')}
                       onSearch={() => navigation.navigate('Search')}
-                      onAdd={() => navigation.navigate('Onboarding', { presentation: 'modal' })}
+                      onAdd={() => {
+                        if (!canAddSettingsConnection) {
+                          presentPaywall('gatewayConnections', () => {
+                            navigation.navigate('Onboarding', { presentation: 'modal' });
+                          });
+                          return;
+                        }
+                        navigation.navigate('Onboarding', { presentation: 'modal' });
+                      }}
                       onCreateAgent={() => {
                         const target = resolveRosterCreateAgentTarget({
                           activeConnectionId: connections.activeConnectionId,
@@ -1323,14 +1883,53 @@ function AppContent({
                           roster: connections.roster,
                         });
                         if (!target) return;
-                        navigation.navigate('AgentSettingsSection', {
+                        const openCreateAgent = () => navigation.navigate('AgentSettingsSection', {
                           connectionId: target.connectionId,
                           agentId: target.agentId,
                           section: 'identity',
                           action: 'create-agent',
                         });
+                        if (!canCreateProAgent(entitlement)) {
+                          presentPaywall('agents', openCreateAgent);
+                          return;
+                        }
+                        openCreateAgent();
+                      }}
+                      onCreateAgentLocked={() => {
+                        const target = resolveRosterCreateAgentTarget({
+                          activeConnectionId: connections.activeConnectionId,
+                          currentAgentId,
+                          roster: connections.roster,
+                        });
+                        presentPaywall('agents', target ? () => {
+                          navigation.navigate('AgentSettingsSection', {
+                            connectionId: target.connectionId,
+                            agentId: target.agentId,
+                            section: 'identity',
+                            action: 'create-agent',
+                          });
+                        } : undefined);
                       }}
                       onOpenRow={(row: RosterDisplayRow) => {
+                        analyticsEvents.rosterRowOpened({
+                          kind: row.kind,
+                          unread: row.unreadCount > 0,
+                          attention: Boolean(row.attention),
+                          locked: row.locked,
+                          cached: row.cached,
+                        });
+                        if (!canAccessRosterAgent(row.connectionId, row.agentId)) {
+                          presentPaywall(
+                            canAccessConnection(row.connectionId) ? 'agents' : 'gatewayConnections',
+                            () => navigation.navigate('Thread', {
+                              connectionId: row.connectionId,
+                              agentId: row.agentId,
+                              sessionKey: row.sessionKey,
+                              from: 'roster',
+                            }),
+                          );
+                          return;
+                        }
                         navigation.navigate('Thread', {
                           connectionId: row.connectionId,
                           agentId: row.agentId,
@@ -1339,16 +1938,30 @@ function AppContent({
                         });
                       }}
                       onOpenLockedRow={(row: RosterDisplayRow) => {
-                        showPaywall(row.connectionId === connections.freeConnectionId
-                          ? 'agents'
-                          : 'gatewayConnections');
+                        analyticsEvents.rosterRowOpened({
+                          kind: row.kind,
+                          unread: row.unreadCount > 0,
+                          attention: Boolean(row.attention),
+                          locked: true,
+                          cached: row.cached,
+                        });
+                        presentPaywall(
+                          canAccessConnection(row.connectionId) ? 'agents' : 'gatewayConnections',
+                          () => navigation.navigate('Thread', {
+                            connectionId: row.connectionId,
+                            agentId: row.agentId,
+                            sessionKey: row.sessionKey,
+                            from: 'roster',
+                          }),
+                        );
                       }}
                       onToggleAgentPinned={handleToggleRosterAgentPinned}
                       onToggleAgentMuted={handleToggleRosterAgentMuted}
                       onRemoveConnection={handleRosterConnectionRemove}
                       onUnpinSession={handleRosterSessionUnpin}
                       onRenameSession={handleRosterSessionRename}
-                      onOpenPro={() => showPaywall('agents')}
+                      onGraceAction={() => presentPaywall('settingsMembershipPreview')}
+                      onOpenPro={() => presentPaywall('settingsMembershipPreview')}
                     />
                   )}
                 </RootStack.Screen>
@@ -1360,14 +1973,52 @@ function AppContent({
                         props.route.params.connectionId,
                         props.route.params.agentId,
                       )}
+                      lockedReason={canAccessConnection(props.route.params.connectionId)
+                        ? 'agents'
+                        : 'gatewayConnections'}
                       onOpenSessionPanel={() => {
+                        if (!canAccessRosterAgent(
+                          props.route.params.connectionId,
+                          props.route.params.agentId,
+                        )) {
+                          presentPaywall(
+                            canAccessConnection(props.route.params.connectionId)
+                              ? 'agents'
+                              : 'gatewayConnections',
+                            () => {
+                              setThreadContext(props.route.params);
+                              setSessionPanelVisible(true);
+                            },
+                          );
+                          return;
+                        }
                         setThreadContext(props.route.params);
                         setSessionPanelVisible(true);
                       }}
                       onOpenRunSession={(sessionKey, agentId) => {
+                        const targetAgentId = agentId ?? props.route.params.agentId;
+                        if (!canAccessRosterAgent(props.route.params.connectionId, targetAgentId)) {
+                          presentPaywall(
+                            canAccessConnection(props.route.params.connectionId)
+                              ? 'agents'
+                              : 'gatewayConnections',
+                            () => {
+                              const target: RootStackParamList['Thread'] = {
+                                connectionId: props.route.params.connectionId,
+                                agentId: targetAgentId,
+                                sessionKey,
+                                from: 'panel',
+                              };
+                              setThreadContext(target);
+                              setCurrentAgentId(target.agentId);
+                              props.navigation.push('Thread', target);
+                            },
+                          );
+                          return;
+                        }
                         const target: RootStackParamList['Thread'] = {
                           connectionId: props.route.params.connectionId,
-                          agentId: agentId ?? props.route.params.agentId,
+                          agentId: targetAgentId,
                           sessionKey,
                           from: 'panel',
                         };
@@ -1403,6 +2054,10 @@ function AppContent({
                     if (!connection) {
                       return <AgentSettingsRouteLoading onBack={navigation.goBack} />;
                     }
+                    const permissionDenied = Boolean(agent && !canAccessRosterAgent(
+                      connection.id,
+                      agent.agentId,
+                    ));
                     return (
                       <AgentSettingsScreen
                         adapter={adapter}
@@ -1410,14 +2065,26 @@ function AppContent({
                         agent={agent}
                         capabilities={adapter?.capabilities ?? resolveCapabilities(connection.backendKind)}
                         isPro={isPro}
-                        permissionDenied={Boolean(agent && !canAccessRosterAgent(
-                          connection.id,
-                          agent.agentId,
-                        ))}
+                        permissionDenied={permissionDenied}
                         onBack={navigation.goBack}
                         onNavigate={navigation.navigate}
-                        onOpenPro={(section) => showPaywall(resolveAgentPaywallFeature(section))}
+                        onOpenPro={(section, onContinue) => presentPaywall(
+                          permissionDenied
+                            ? (canAccessConnection(connection.id) ? 'agents' : 'gatewayConnections')
+                            : resolveAgentPaywallFeature(section),
+                          onContinue,
+                        )}
                         onRetry={() => {
+                          if (!canAccessRosterAgent(connection.id, agent?.agentId ?? route.params.agentId)) {
+                            presentPaywall(
+                              canAccessConnection(connection.id) ? 'agents' : 'gatewayConnections',
+                              async () => {
+                                await getConnectionRuntime().activate(connection.id);
+                                await getConnectionRuntime().probeActive();
+                              },
+                            );
+                            return;
+                          }
                           void getConnectionRuntime().activate(connection.id)
                             .then(() => getConnectionRuntime().probeActive());
                         }}
@@ -1426,14 +2093,28 @@ function AppContent({
                   }}
                 </RootStack.Screen>
                 <RootStack.Screen name="AgentSettingsSection">
-                  {(props) => (
-                    <AgentSettingsSectionScreen
-                      {...props}
-                      isPro={isPro}
-                      resolveAction={resolveAgentSettingsAction}
-                      onOpenPaywall={(reason) => showPaywall(normalizePaywallFeature(reason))}
-                    />
-                  )}
+                  {(props) => {
+                    const permissionDenied = !canAccessRosterAgent(
+                      props.route.params.connectionId,
+                      props.route.params.agentId,
+                    );
+                    return (
+                      <AgentSettingsSectionScreen
+                        {...props}
+                        isPro={isPro}
+                        permissionDenied={permissionDenied}
+                        resolveAction={resolveAgentSettingsAction}
+                        onOpenPaywall={(reason, onContinue) => presentPaywall(
+                          permissionDenied
+                            ? (canAccessConnection(props.route.params.connectionId)
+                              ? 'agents'
+                              : 'gatewayConnections')
+                            : normalizePaywallFeature(reason),
+                          onContinue,
+                        )}
+                      />
+                    );
+                  }}
                 </RootStack.Screen>
                 <RootStack.Screen name="AccountSettings">
                   {({ navigation }) => (
@@ -1449,7 +2130,7 @@ function AppContent({
                       onRetry={() => { void getConnectionRuntime().probeActive(); }}
                       onOpenAction={(action) => {
                         if (action === 'view-pro') {
-                          showPaywall('settingsMembershipPreview');
+                          presentPaywall('settingsMembershipPreview');
                           return;
                         }
                         if (action === 'restore-purchases') {
@@ -1467,7 +2148,10 @@ function AppContent({
                         void getConnectionRuntime().activate(connectionId);
                         navigation.navigate('AccountSettingsSection', { section: 'connections' });
                       }}
-                      onOpenPaywall={(reason) => showPaywall(normalizePaywallFeature(reason))}
+                      onOpenPaywall={(reason, onContinue) => presentPaywall(
+                        normalizePaywallFeature(reason),
+                        onContinue,
+                      )}
                       onReplyNotificationsChange={updateReplyNotifications}
                       onDebugModeChange={onDebugToggle}
                     />
@@ -1494,7 +2178,10 @@ function AppContent({
                           setCurrentAppIcon(value);
                         }
                       }}
-                      onOpenPaywall={(reason) => showPaywall(normalizePaywallFeature(reason))}
+                      onOpenPaywall={(reason, onContinue) => presentPaywall(
+                        normalizePaywallFeature(reason),
+                        onContinue,
+                      )}
                     />
                   )}
                 </RootStack.Screen>
@@ -1503,16 +2190,63 @@ function AppContent({
                     <ChatAppearanceScreen onBack={navigation.goBack} />
                   )}
                 </RootStack.Screen>
-                <RootStack.Screen name="Search" component={SearchScreen} />
+                <RootStack.Screen name="ReleaseNotes">
+                  {({ navigation }) => (
+                    <ReleaseNotesHistoryScreen
+                      onBack={navigation.goBack}
+                      onOpenPaywall={(feature) => presentPaywall(feature)}
+                    />
+                  )}
+                </RootStack.Screen>
+                <RootStack.Screen name="Search">
+                  {(props) => (
+                    <SearchScreen
+                      {...props}
+                      resolveThreadLockedReason={(connectionId, agentId) => {
+                        if (!canAccessConnection(connectionId)) return 'gatewayConnections';
+                        if (!canAccessRosterAgent(connectionId, agentId)) return 'agents';
+                        return null;
+                      }}
+                      onOpenPaywall={(reason, onContinue) => presentPaywall(
+                        normalizePaywallFeature(reason),
+                        onContinue,
+                      )}
+                    />
+                  )}
+                </RootStack.Screen>
                 <RootStack.Screen name="MessageDetail" component={MessageDetailScreen} />
-                <RootStack.Screen name="Paywall" component={PaywallRouteBridge} />
+                <RootStack.Screen
+                  name="Paywall"
+                  component={PaywallRouteBridge}
+                  options={{ presentation: 'fullScreenModal', gestureEnabled: true }}
+                />
               </RootStack.Navigator>
               <SessionPanel
                 visible={sessionPanelVisible}
                 currentAgentId={threadContext?.agentId ?? currentAgentId}
                 currentSessionKey={threadContext?.sessionKey ?? mainSessionKey}
+                permissionDenied={threadContext
+                  ? !canAccessRosterAgent(threadContext.connectionId, threadContext.agentId)
+                  : false}
                 onClose={() => setSessionPanelVisible(false)}
                 onSelectSession={(row) => {
+                  if (!canAccessRosterAgent(row.connectionId, row.agentId)) {
+                    presentPaywall(
+                      canAccessConnection(row.connectionId) ? 'agents' : 'gatewayConnections',
+                      () => {
+                        const params: RootStackParamList['Thread'] = {
+                          connectionId: row.connectionId,
+                          agentId: row.agentId,
+                          sessionKey: row.key,
+                          from: 'panel',
+                        };
+                        setThreadContext(params);
+                        setCurrentAgentId(row.agentId);
+                        if (rootNavigationRef.isReady()) rootNavigationRef.navigate('Thread', params);
+                      },
+                    );
+                    return;
+                  }
                   const params: RootStackParamList['Thread'] = {
                     connectionId: row.connectionId,
                     agentId: row.agentId,
@@ -1524,11 +2258,18 @@ function AppContent({
                   if (rootNavigationRef.isReady()) rootNavigationRef.navigate('Thread', params);
                 }}
                 onSessionAction={handleSessionAction}
-                onOpenPermission={() => showPaywall('agents')}
+                onOpenPermission={() => presentPaywall(
+                  threadContext && !canAccessConnection(threadContext.connectionId)
+                    ? 'gatewayConnections'
+                    : 'agents',
+                )}
               />
             </NavigationContainer>
             <GlobalGatewayOverlay />
-            <GlobalProPaywallOverlay />
+            <GlobalProPaywallOverlay
+              onDismiss={dismissPaywall}
+              onContinue={continueAfterPaywall}
+            />
           </NodeCameraCaptureProvider>
         </GatewayScannerProvider>
       </GlobalLoadingOverlayProvider>
@@ -1557,6 +2298,8 @@ function normalizePaywallFeature(reason: string): ProFeature {
   switch (reason) {
     case 'gatewayConnections':
     case 'appIcons':
+    case 'configBackups':
+    case 'configManage':
     case 'configBackupCreate':
     case 'configBackupRestore':
     case 'openclawDiagnostics':
@@ -1566,8 +2309,9 @@ function normalizePaywallFeature(reason: string): ProFeature {
     case 'logs':
     case 'usage':
     case 'messageHistory':
+    case 'launch':
     case 'settingsMembershipPreview':
-      return reason;
+      return normalizeProFeature(reason);
     default:
       return 'settingsMembershipPreview';
   }
@@ -1577,7 +2321,7 @@ function resolveAgentPaywallFeature(section: AgentSettingsSection): ProFeature {
   if (section === 'files') return 'coreFileEditing';
   if (section === 'logs') return 'logs';
   if (section === 'usage') return 'usage';
-  if (section === 'openclaw') return 'openclawDiagnostics';
+  if (section === 'openclaw') return 'configManage';
   return 'agents';
 }
 
@@ -1613,9 +2357,21 @@ function GlobalGatewayOverlay(): React.JSX.Element | null {
   return <GlobalLoadingOverlay visible={!!loadingMessage} message={loadingMessage ?? undefined} />;
 }
 
-function GlobalProPaywallOverlay(): React.JSX.Element | null {
-  const { visible, hidePaywall } = useProPaywall();
-  return <ProPaywallOverlay visible={visible} onClose={hidePaywall} />;
+function GlobalProPaywallOverlay({
+  onDismiss,
+  onContinue,
+}: Readonly<{
+  onDismiss: () => void;
+  onContinue: () => void;
+}>): React.JSX.Element | null {
+  const { visible } = useProPaywall();
+  return (
+    <ProPaywallOverlay
+      visible={visible}
+      onClose={onDismiss}
+      onContinue={onContinue}
+    />
+  );
 }
 
 const loadingStyles = StyleSheet.create({

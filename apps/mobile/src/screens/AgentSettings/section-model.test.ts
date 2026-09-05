@@ -209,13 +209,14 @@ describe('AgentSettings section model', () => {
   });
 
   it('applies section and row Pro gates from descriptors', () => {
-    expect(isAgentSettingsSectionLocked('openclaw', false)).toBe(true);
+    expect(isAgentSettingsSectionLocked('openclaw', false)).toBe(false);
     expect(isAgentSettingsSectionLocked('logs', false)).toBe(true);
     expect(isAgentSettingsSectionLocked('models', false)).toBe(false);
 
     const openclaw = model('openclaw', { isPro: false });
-    expect(openclaw.locked).toBe(true);
-    expect(openclaw.groups[0]?.rows.every((row) => row.locked)).toBe(true);
+    expect(openclaw.locked).toBe(false);
+    expect(openclaw.paywallReason).toBe('configManage');
+    expect(openclaw.groups[0]?.rows.every((row) => !row.locked)).toBe(true);
 
     const files = model('files', { isPro: false });
     expect(files.locked).toBe(false);

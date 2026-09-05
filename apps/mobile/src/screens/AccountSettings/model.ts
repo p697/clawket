@@ -238,6 +238,7 @@ export function buildAccountSettingsGroups({
           valueKey: isPro ? 'Active' : 'Free',
           action: 'view-pro',
           kind: 'navigation',
+          locked: !isPro,
         },
         {
           id: 'restore-purchases',

@@ -169,6 +169,47 @@ describe('AccountSettings section model', () => {
     });
   });
 
+  it('models the 24-hour free-connection switch without unlocking a locked reconnect', () => {
+    const model = buildAccountSettingsSectionModel({
+      section: 'connections',
+      labels,
+      data: {
+        isPro: false,
+        connections: [
+          { ...connection(), isFreeConnection: true },
+          {
+            ...connection({ id: 'work', label: 'Work', isFreeSlot: false }),
+            locked: true,
+            freeSwitchAvailable: false,
+            freeSwitchStatus: 'Available tomorrow',
+          },
+        ],
+      },
+    });
+
+    expect(model.groups[0]?.rows).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'studio-free-connection',
+        kind: 'value',
+        valueKey: 'Current',
+      }),
+    ]));
+    expect(model.groups[1]?.rows).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'work-reconnect',
+        locked: true,
+        paywallReason: 'gatewayConnections',
+      }),
+      expect.objectContaining({
+        id: 'work-set-free-connection',
+        action: 'set-free-connection',
+        disabled: true,
+        value: 'Available tomorrow',
+      }),
+    ]));
+    expect(model.groups[1]?.rows.find((row) => row.id === 'work-remove')?.locked).not.toBe(true);
+  });
+
   it('defaults only omitted capabilities and fail-closes malformed uptime values', () => {
     const capabilities = resolveAccountSettingsSectionCapabilities({ designSystem: false });
     expect(capabilities.designSystem).toBe(false);

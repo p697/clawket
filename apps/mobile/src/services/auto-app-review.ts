@@ -1,13 +1,11 @@
 import { InteractionManager, Linking, Platform } from 'react-native';
 import * as StoreReview from 'expo-store-review';
-import { APP_PACKAGE_VERSION } from '../constants/app-version';
 import { publicAppLinks } from '../config/public';
-import { AutoAppReviewState, StorageService } from './storage';
-
-export type AutoAppReviewTrigger =
-  | 'agent_created'
-  | 'cron_created'
-  | 'model_added';
+import {
+  persistAutoAppReviewStateEvent,
+  type AutoAppReviewStateEvent,
+} from './auto-app-review-state';
+import { StorageService } from './storage';
 
 export type ManualAppReviewResult =
   | 'review_prompt'
@@ -15,27 +13,12 @@ export type ManualAppReviewResult =
   | 'unavailable'
   | 'error';
 
-const MIN_FIRST_USE_AGE_MS = 24 * 60 * 60 * 1000;
-const MIN_BETWEEN_ATTEMPTS_MS = 30 * 24 * 60 * 60 * 1000;
 const DEFAULT_DELAY_MS = 900;
 
 let pendingTimer: ReturnType<typeof setTimeout> | null = null;
 let inFlightAttempt: Promise<boolean> | null = null;
-
-export function shouldAttemptAutomaticReview(params: {
-  nowMs: number;
-  appVersion: string;
-  state: AutoAppReviewState | null;
-}): boolean {
-  const { appVersion, nowMs, state } = params;
-  if (!state) return false;
-  if (nowMs - state.firstSeenAtMs < MIN_FIRST_USE_AGE_MS) return false;
-  if (state.lastAttemptVersion === appVersion) return false;
-  if (typeof state.lastAttemptAtMs === 'number' && nowMs - state.lastAttemptAtMs < MIN_BETWEEN_ATTEMPTS_MS) {
-    return false;
-  }
-  return true;
-}
+let persistenceQueue: Promise<void> = Promise.resolve();
+let coldStartTask: Promise<boolean> | null = null;
 
 function runAfterInteractions(): Promise<void> {
   return new Promise((resolve) => {
@@ -43,38 +26,28 @@ function runAfterInteractions(): Promise<void> {
   });
 }
 
-async function attemptAutomaticReview(_trigger: AutoAppReviewTrigger): Promise<boolean> {
+function persistEventSerially(
+  type: AutoAppReviewStateEvent['type'],
+  atMs: number,
+): Promise<Awaited<ReturnType<typeof persistAutoAppReviewStateEvent>>> {
+  const task = persistenceQueue.then(() => persistAutoAppReviewStateEvent(
+    StorageService,
+    { type, atMs },
+  ));
+  persistenceQueue = task.then(() => undefined, () => undefined);
+  return task;
+}
+
+async function attemptAutomaticReview(): Promise<boolean> {
   if (Platform.OS !== 'ios') return false;
   if (inFlightAttempt) return inFlightAttempt;
 
   inFlightAttempt = (async () => {
     await runAfterInteractions();
-
-    const nowMs = Date.now();
-    const existingState = await StorageService.getAutoAppReviewState();
-    if (!existingState) {
-      await StorageService.setAutoAppReviewState({ firstSeenAtMs: nowMs });
-      return false;
-    }
-
-    if (!shouldAttemptAutomaticReview({
-      nowMs,
-      appVersion: APP_PACKAGE_VERSION,
-      state: existingState,
-    })) {
-      return false;
-    }
-
-    const available = await StoreReview.isAvailableAsync();
-    if (!available) return false;
-
-    await StorageService.setAutoAppReviewState({
-      ...existingState,
-      lastAttemptAtMs: nowMs,
-      lastAttemptVersion: APP_PACKAGE_VERSION,
-    });
-
     try {
+      if (!await StoreReview.isAvailableAsync()) return false;
+      const transition = await persistEventSerially('review_attempt_started', Date.now());
+      if (!transition.shouldRequestReview) return false;
       await StoreReview.requestReview();
       return true;
     } catch {
@@ -89,17 +62,48 @@ async function attemptAutomaticReview(_trigger: AutoAppReviewTrigger): Promise<b
   }
 }
 
-export function scheduleAutomaticAppReview(
-  trigger: AutoAppReviewTrigger,
-  options?: { delayMs?: number },
-): void {
-  if (Platform.OS !== 'ios') return;
-  if (pendingTimer || inFlightAttempt) return;
+/** Call only after adapter.prompt has resolved successfully, never on a send tap. */
+export async function recordSuccessfulSendForAutomaticReview(
+  options: { nowMs?: number } = {},
+): Promise<void> {
+  try {
+    await persistEventSerially('successful_send', options.nowMs ?? Date.now());
+  } catch {
+    // The send path must remain successful when this best-effort marker cannot persist.
+  }
+}
 
-  pendingTimer = setTimeout(() => {
-    pendingTimer = null;
-    void attemptAutomaticReview(trigger);
-  }, options?.delayMs ?? DEFAULT_DELAY_MS);
+/** Call once during a true cold-start bootstrap; foreground transitions do not count. */
+export async function scheduleAutomaticAppReviewForColdStart(
+  options: { delayMs?: number; nowMs?: number } = {},
+): Promise<boolean> {
+  if (Platform.OS !== 'ios') return false;
+  if (coldStartTask) return coldStartTask;
+  coldStartTask = (async () => {
+    let transition: Awaited<ReturnType<typeof persistAutoAppReviewStateEvent>>;
+    try {
+      transition = await persistEventSerially('cold_start', options.nowMs ?? Date.now());
+    } catch {
+      // Never prompt unless the pending trigger was durably recorded first.
+      return false;
+    }
+    if (!transition.shouldRequestReview || pendingTimer || inFlightAttempt) return false;
+
+    pendingTimer = setTimeout(() => {
+      pendingTimer = null;
+      void attemptAutomaticReview();
+    }, options.delayMs ?? DEFAULT_DELAY_MS);
+    return true;
+  })();
+  return coldStartTask;
+}
+
+export function __resetAutomaticAppReviewRuntimeForTests(): void {
+  if (pendingTimer) clearTimeout(pendingTimer);
+  pendingTimer = null;
+  inFlightAttempt = null;
+  persistenceQueue = Promise.resolve();
+  coldStartTask = null;
 }
 
 export async function requestManualAppReview(): Promise<ManualAppReviewResult> {

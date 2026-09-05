@@ -146,6 +146,7 @@ describe('backend pairing profiles', () => {
     expect(mockSavePairedConnection).toHaveBeenCalledWith({
       runtime,
       debugMode: true,
+      source: 'pairing_code',
       payload: {
         url: 'wss://hermes-relay.example/ws',
         backendKind: 'hermes',
@@ -299,6 +300,7 @@ describe('backend pairing profiles', () => {
       runtime,
       payload: claimed,
       debugMode: false,
+      source: 'pairing_qr',
     });
   });
 

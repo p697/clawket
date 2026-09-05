@@ -228,11 +228,13 @@ describe('global Search model', () => {
     );
   });
 
-  it('locks message details for free users and thread rows denied by access policy', () => {
+  it('preserves message-history priority and exact connection or agent quota reasons', () => {
     const model = buildSearchModel({
       ...buildInput(),
       isPro: false,
-      canOpenThread: (_connectionId, agentId) => agentId !== 'main',
+      resolveThreadLockedReason: (connectionId) => (
+        connectionId === 'home' ? 'gatewayConnections' : 'agents'
+      ),
     });
 
     expect(model.sections.flatMap((section) => section.results).filter(
@@ -243,6 +245,30 @@ describe('global Search model', () => {
     expect(model.sections.flatMap((section) => section.results).filter(
       (result) => result.kind === 'agent' || result.kind === 'session',
     )).toEqual(expect.arrayContaining([
+      expect.objectContaining({ connectionId: 'home', lockedReason: 'gatewayConnections' }),
+      expect.objectContaining({ connectionId: 'travel', lockedReason: 'agents' }),
+    ]));
+
+    const proModel = buildSearchModel({
+      ...buildInput(),
+      resolveThreadLockedReason: (connectionId) => (
+        connectionId === 'home' ? 'gatewayConnections' : null
+      ),
+    });
+    expect(proModel.sections.flatMap((section) => section.results).filter(
+      (result) => result.kind === 'message' || result.kind === 'favorite',
+    )).toEqual(expect.arrayContaining([
+      expect.objectContaining({ lockedReason: 'gatewayConnections' }),
+    ]));
+  });
+
+  it('keeps the legacy boolean thread-access policy as an agents fallback', () => {
+    const model = buildSearchModel({
+      ...buildInput(),
+      canOpenThread: (_connectionId, agentId) => agentId !== 'main',
+    });
+
+    expect(model.sections.flatMap((section) => section.results)).toEqual(expect.arrayContaining([
       expect.objectContaining({ lockedReason: 'agents' }),
     ]));
   });

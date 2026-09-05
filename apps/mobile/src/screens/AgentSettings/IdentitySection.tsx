@@ -46,7 +46,7 @@ export type IdentitySectionProps = Readonly<{
   online: boolean;
   isPro: boolean;
   openCreateOnMount?: boolean;
-  onOpenPaywall: (reason: string) => void;
+  onOpenPaywall: (reason: string, onContinue?: () => void) => void;
   onChanged?: () => void | Promise<void>;
   onCreated?: (agentId: string) => void | Promise<void>;
   onRemoved?: () => void | Promise<void>;
@@ -228,15 +228,11 @@ export function IdentitySection({
 
   const startFileEdit = useCallback(() => {
     if (!filesEditable) return;
-    if (!isPro) {
-      onOpenPaywall('coreFileEditing');
-      return;
-    }
     setEditingFile(true);
-  }, [filesEditable, isPro, onOpenPaywall]);
+  }, [filesEditable]);
 
-  const saveFile = useCallback(async () => {
-    if (!bundle || !sheet || !filesEditable || !isPro || !online || saving) return;
+  const commitFileSave = useCallback(async () => {
+    if (!bundle || !sheet || !filesEditable || !online || saving) return;
     const name = sheet === 'user'
       ? 'USER.md'
       : sheet === 'persona'
@@ -272,7 +268,6 @@ export function IdentitySection({
     fileDraft,
     fileOperations,
     filesEditable,
-    isPro,
     onChanged,
     online,
     saving,
@@ -280,6 +275,14 @@ export function IdentitySection({
     t,
     userDraft,
   ]);
+
+  const saveFile = useCallback(() => {
+    if (!isPro) {
+      onOpenPaywall('coreFileEditing', () => { void commitFileSave(); });
+      return;
+    }
+    void commitFileSave();
+  }, [commitFileSave, isPro, onOpenPaywall]);
 
   const removeAgent = useCallback(async () => {
     if (agent.isMain || !profileEditable || !operations?.remove || !online || saving) return;
@@ -297,17 +300,21 @@ export function IdentitySection({
     }
   }, [agent.agentId, agent.isMain, onRemoved, online, operations, profileEditable, saving, t]);
 
-  const openCreate = useCallback(() => {
-    if (!agentCreatable) return;
-    if (!isPro) {
-      onOpenPaywall('agents');
-      return;
-    }
+  const showCreateSheet = useCallback(() => {
     setCreateName('');
     setCreateEmoji('');
     setCreateError(null);
     setCreateVisible(true);
-  }, [agentCreatable, isPro, onOpenPaywall]);
+  }, []);
+
+  const openCreate = useCallback(() => {
+    if (!agentCreatable) return;
+    if (!isPro) {
+      onOpenPaywall('agents', showCreateSheet);
+      return;
+    }
+    showCreateSheet();
+  }, [agentCreatable, isPro, onOpenPaywall, showCreateSheet]);
 
   useEffect(() => {
     if (!openCreateOnMount || handledOpenCreateRef.current) return;
@@ -522,7 +529,7 @@ export function IdentitySection({
                   label={t('Save', { ns: 'common' })}
                   loading={saving}
                   disabled={!online || !(userChanged || rawFileChanged)}
-                  onPress={() => { void saveFile(); }}
+                  onPress={saveFile}
                   style={styles.actionButton}
                 />
               </View>

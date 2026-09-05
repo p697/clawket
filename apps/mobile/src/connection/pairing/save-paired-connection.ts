@@ -10,6 +10,7 @@ import {
 } from '../hermes-connect-trace';
 import type { NewConnectionRecord } from '../registry/connection-store';
 import { resolveOfficialRelayEnvironment } from '../../services/relay-environment';
+import { analyticsEvents } from '../../services/analytics/events';
 import type { GatewayScanPayload } from './gateway-scan-flow';
 
 export type PairingConnectionRuntime = Pick<
@@ -79,6 +80,7 @@ export async function savePairedConnection(input: Readonly<{
   runtime: PairingConnectionRuntime;
   payload: GatewayScanPayload;
   debugMode: boolean;
+  source?: string;
 }>): Promise<SavePairedConnectionResult> {
   const backendKind = resolveGatewayBackendKind(input.payload);
   const transportKind = resolveGatewayTransportKind(input.payload);
@@ -93,6 +95,11 @@ export async function savePairedConnection(input: Readonly<{
   const saved = await input.runtime.upsertConnection(record);
   await input.runtime.activate(saved.connection.id);
   const probeSucceeded = await input.runtime.probeActive();
+  analyticsEvents.gatewayConnectSaved({
+    backend: saved.connection.backendKind,
+    transport: saved.connection.transportKind,
+    source: input.source ?? 'pairing',
+  });
   if (backendKind === 'hermes') {
     markHermesConnectTrace('scan_config_save_done', {
       transport: transportKind,
