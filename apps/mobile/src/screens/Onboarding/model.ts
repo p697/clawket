@@ -3,6 +3,11 @@ import type { AdapterErrorCode, BackendKind, TransportKind } from '@clawket/agen
 export const PAIRING_COMMAND = 'npx @p697/clawket pair';
 export const VERIFICATION_CODE_LENGTH = 6;
 
+const PAIRING_CODE_FILTERS: Readonly<Record<PairableBackendKind, RegExp>> = {
+  openclaw: /\D/g,
+  hermes: /[^A-HJ-KM-NP-TV-Z2-9]/g,
+};
+
 export type PairableBackendKind = Extract<BackendKind, 'openclaw' | 'hermes'>;
 
 export type PairingSubmission = Readonly<{
@@ -30,26 +35,37 @@ const BACKEND_OFFLINE_MESSAGE: Record<PairableBackendKind, string> = {
   hermes: 'Hermes is not responding',
 };
 
-export function normalizeVerificationCode(value: string): string {
-  return value.replace(/\D/g, '').slice(0, VERIFICATION_CODE_LENGTH);
+export function normalizeVerificationCode(
+  value: string,
+  backendKind: PairableBackendKind = 'openclaw',
+): string {
+  const normalized = value.toUpperCase();
+  const characters = normalized.replace(PAIRING_CODE_FILTERS[backendKind], '');
+  return characters.slice(0, VERIFICATION_CODE_LENGTH);
 }
 
-export function formatVerificationCode(value: string): string {
-  const normalized = normalizeVerificationCode(value);
+export function formatVerificationCode(
+  value: string,
+  backendKind: PairableBackendKind = 'openclaw',
+): string {
+  const normalized = normalizeVerificationCode(value, backendKind);
   if (normalized.length <= 3) return normalized;
   return `${normalized.slice(0, 3)} ${normalized.slice(3)}`;
 }
 
-export function isVerificationCodeComplete(value: string): boolean {
-  return normalizeVerificationCode(value).length === VERIFICATION_CODE_LENGTH;
+export function isVerificationCodeComplete(
+  value: string,
+  backendKind: PairableBackendKind = 'openclaw',
+): boolean {
+  return normalizeVerificationCode(value, backendKind).length === VERIFICATION_CODE_LENGTH;
 }
 
 export function createPairingSubmission(
   backendKind: PairableBackendKind,
   value: string,
 ): PairingSubmission | null {
-  const code = normalizeVerificationCode(value);
-  if (!isVerificationCodeComplete(code)) return null;
+  const code = normalizeVerificationCode(value, backendKind);
+  if (!isVerificationCodeComplete(code, backendKind)) return null;
   return {
     backendKind,
     transportKind: 'relay',

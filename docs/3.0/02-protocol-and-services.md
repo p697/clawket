@@ -14,10 +14,10 @@
 | `relay.client-pong.v1` | 客户端（已有） | 客户端会应答带该能力要求的 tick；Relay 才可按 pong 超时清理它 |
 | `pairing.secure-short-code.v2` | Relay / Registry（已有） | 六位码配对可用 |
 | `relay.frame-limit.v2` | Relay | 声明应用层帧上限 256 KB；客户端据此自限 |
-| `bridge.capabilities.v2` | Bridge | 握手 meta 与健康接口里带 `capabilities: string[]` |
+| `bridge.capabilities.v2` | Bridge | 握手 meta 与健康接口里带 `capabilities: string[]`，并可附带真实 CLI `bridgeVersion` |
 | `hermes.multi-session.v2` | Hermes Bridge | 支持 `sessions.create / patch / reset / delete` 与分页 `chat.history` |
 
-声明位置：客户端在 `connect.start` 请求的 meta（现有 `ConnectHandshakeMeta` 扩展一个可选 `capabilities` 数组）；Relay 在 `/v1/health` 的 `capabilities` 与握手成功后的第一条控制帧 `relay.ready`（新增，老客户端不认识则忽略，因为它是以控制前缀发出的额外帧——**必须验证 2.1.x 客户端对未知控制事件是忽略而不是断开**，`tests/compat` 覆盖）；Bridge 在 `connect` 转发前附加的 meta 与 `/v1/hermes/health`。
+声明位置：客户端在 `connect.start` 请求的 meta（现有 `ConnectHandshakeMeta` 扩展一个可选 `capabilities` 数组）；Relay 在 `/v1/health` 的 `capabilities` 与握手成功后的第一条控制帧 `relay.ready`（新增，老客户端不认识则忽略，因为它是以控制前缀发出的额外帧——**必须验证 2.1.x 客户端对未知控制事件是忽略而不是断开**，`tests/compat` 覆盖）；OpenClaw Bridge 消费客户端 `connect` 的 Bridge meta、不得把该 meta 转发给闭合 schema 的 Gateway，并仅在对应的协商成功响应里回写能力；Hermes Bridge 在 `/v1/hermes/health` 与同构 health 帧里声明。
 
 ## 3. Relay / Registry 合一
 
@@ -142,7 +142,7 @@ packages/bridge-runtime/src/
 
 ### 6.2 能力声明
 
-握手 meta：`{ ...existing, capabilities: ['bridge.capabilities.v2', 'hermes.multi-session.v2'] }`；`/v1/hermes/health` 返回同一数组；OpenClaw Bridge 声明 `['bridge.capabilities.v2']`。`clawket status` 打印它。
+握手 meta：`{ ...existing, capabilities: ['bridge.capabilities.v2', 'hermes.multi-session.v2'], bridgeVersion?: string }`；`/v1/hermes/health` 及 WebSocket health 返回同一能力数组和可选 `bridgeVersion`；OpenClaw Bridge 仅在客户端请求且 Bridge 回应 `bridge.capabilities.v2` 的成功 connect 响应 meta 中声明 `['bridge.capabilities.v2']` 和可选 `bridgeVersion`。版本值来自正在运行的 CLI 包，空白、控制字符或超长值省略；不得透传 Gateway 伪造的同名字段，也不得用 Gateway `server.version` 冒充。未协商、v1、失败响应保持原字节。`clawket status` 打印能力。
 
 ### 6.3 Hermes 多会话协议（Bridge 方法）
 

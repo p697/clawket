@@ -1,9 +1,10 @@
 import type { ConnectionRecord, SessionUpdate } from '@clawket/agent-protocol';
 import type { GatewayClient } from '../protocol';
 import type { ConnectionState, GatewayConfig } from '../../types';
-import { mergeGatewayHistory } from './gateway-adapter';
+import { mapGatewayHistoryMessage, mergeGatewayHistory } from './gateway-adapter';
 import { HermesAdapter } from './hermes';
 import { OPENCLAW_BRIDGE_CAPABILITY, OpenClawAdapter } from './openclaw';
+import { readConnectionRuntimeMetadata } from '../runtime-details';
 
 type GatewayEventName =
   | 'connection'
@@ -29,6 +30,7 @@ class LifecycleGateway {
   public disconnectCalls = 0;
   public currentConnectMeta: { capabilities: string[] } | undefined;
   public readonly connectMetas: Array<{ capabilities: string[] } | undefined> = [];
+  public connectResponseBridgeVersion: string | undefined;
   public onConnect: (() => void) | undefined;
   public requestHandler: ((method: string, params: object) => unknown | Promise<unknown>) | undefined;
   public sessions: Array<Record<string, unknown>> = [];
@@ -70,6 +72,10 @@ class LifecycleGateway {
     return undefined;
   }
 
+  public getConnectResponseBridgeVersion(): string | undefined {
+    return this.connectResponseBridgeVersion;
+  }
+
   public async probeConnection(): Promise<boolean> {
     return this.state === 'ready';
   }
@@ -108,6 +114,30 @@ function connection(backendKind: 'openclaw' | 'hermes', id: string = backendKind
   };
 }
 
+function credentialConnection(
+  backendKind: 'openclaw' | 'hermes',
+  id: string,
+): ConnectionRecord {
+  return {
+    ...connection(backendKind, id),
+    transportKind: 'relay',
+    url: `wss://${id}.invalid/ws`,
+    auth: {
+      token: `${id}-auth-token`,
+      password: `${id}-auth-password`,
+    },
+    bootstrap: {
+      token: `${id}-bootstrap-token`,
+      strategy: 'mobile-setup',
+    },
+    relay: {
+      serverUrl: `wss://${id}-relay.invalid`,
+      gatewayId: `${id}-gateway`,
+      clientToken: `${id}-client-token`,
+    },
+  };
+}
+
 async function flushAsync(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
@@ -117,6 +147,35 @@ async function flushAsync(): Promise<void> {
 describe('GatewayAdapter lifecycle boundaries', () => {
   afterEach(() => {
     jest.useRealTimers();
+  });
+
+  it('keeps OpenClaw and Hermes runtime credentials out of enumerable adapter state', () => {
+    const openClawRecord = credentialConnection('openclaw', 'openclaw-private');
+    const hermesRecord = credentialConnection('hermes', 'hermes-private');
+    const adapters = [
+      new OpenClawAdapter(openClawRecord, {
+        bridgeCapabilityMode: 'legacy',
+        historyCache: null,
+      }),
+      new HermesAdapter(hermesRecord, { historyCache: null }),
+    ];
+
+    for (const [adapter, record] of [
+      [adapters[0], openClawRecord],
+      [adapters[1], hermesRecord],
+    ] as const) {
+      const serialized = JSON.stringify(adapter);
+      expect(Reflect.ownKeys(adapter)).not.toEqual(expect.arrayContaining([
+        'record',
+        'gateway',
+        'gatewayConfig',
+      ]));
+      expect(serialized).not.toContain(record.auth!.token!);
+      expect(serialized).not.toContain(record.auth!.password!);
+      expect(serialized).not.toContain(record.bootstrap!.token);
+      expect(serialized).not.toContain(record.relay!.clientToken!);
+      adapter.dispose();
+    }
   });
 
   it('loads a persisted legacy bridge mode once before opening the socket', async () => {
@@ -135,6 +194,43 @@ describe('GatewayAdapter lifecycle boundaries', () => {
 
     expect(loadMode).toHaveBeenCalledTimes(1);
     expect(fake.connectMetas).toEqual([undefined, undefined]);
+  });
+
+  it('clears Hermes Bridge version before a reconnect to versionless legacy health', async () => {
+    const fake = new LifecycleGateway();
+    const adapter = new HermesAdapter(connection('hermes', 'hermes-version'), {
+      gateway: gateway(fake),
+      historyCache: null,
+    });
+
+    const firstConnect = adapter.connect();
+    fake.emit('health', {
+      status: 'ok',
+      hermesApiReachable: true,
+      bridgeVersion: '3.0.0',
+      capabilities: ['bridge.capabilities.v2', 'hermes.multi-session.v2'],
+    });
+    await firstConnect;
+    expect(readConnectionRuntimeMetadata(adapter).bridgeVersion).toBe('3.0.0');
+    expect(readConnectionRuntimeMetadata(adapter).bridgeCapabilities).toEqual([
+      'bridge.capabilities.v2',
+      'hermes.multi-session.v2',
+    ]);
+
+    adapter.disconnect();
+    expect(readConnectionRuntimeMetadata(adapter)).toEqual({
+      bridgeVersion: null,
+      bridgeCapabilities: [],
+    });
+    const legacyConnect = adapter.connect();
+    fake.emit('health', {
+      status: 'ok',
+      hermesApiReachable: true,
+      capabilities: ['bridge.capabilities.v2'],
+    });
+    await legacyConnect;
+
+    expect(readConnectionRuntimeMetadata(adapter).bridgeVersion).toBeNull();
   });
 
   it('does not downgrade a v2 handshake after a transient network failure', async () => {
@@ -329,5 +425,34 @@ describe('mergeGatewayHistory', () => {
       expect.objectContaining({ id: 'remote-answer' }),
       expect.objectContaining({ id: 'optimistic' }),
     ]);
+  });
+});
+
+describe('mapGatewayHistoryMessage', () => {
+  it('keeps tool pairing and timing metadata in the adapter contract', () => {
+    expect(mapGatewayHistoryMessage('agent:main:main', {
+      id: 'result-message',
+      role: 'toolResult',
+      toolCallId: 'call-1',
+      name: 'read',
+      content: 'two lines',
+      args: { path: '/tmp/file' },
+      toolStartedAt: 1_000,
+      toolFinishedAt: 1_050,
+      toolDurationMs: 50,
+    }, 0)).toMatchObject({
+      id: 'result-message',
+      role: 'tool',
+      text: 'two lines',
+      tool: {
+        callId: 'call-1',
+        name: 'read',
+        status: 'success',
+        input: { path: '/tmp/file' },
+        startedAtMs: 1_000,
+        finishedAtMs: 1_050,
+        durationMs: 50,
+      },
+    });
   });
 });

@@ -13,7 +13,7 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": false,
+      "supportsTablet": true,
       "bundleIdentifier": "com.p697.clawket",
       "associatedDomains": [
         "applinks:registry.clawket.ai",
@@ -127,6 +127,7 @@
       "./plugins/with-locales",
       "./plugins/with-alternate-app-icons",
       "./plugins/with-android-release-signing",
+      "./plugins/with-paste-input-setup",
       "./plugins/with-xcode-env"
     ],
     "scheme": "clawket",

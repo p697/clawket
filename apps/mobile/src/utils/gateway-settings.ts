@@ -5,9 +5,6 @@ type UnknownRecord = Record<string, unknown>;
 export const THINKING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'adaptive'] as const;
 export type ThinkingLevel = typeof THINKING_LEVELS[number];
 
-export const DM_SCOPES = ['main', 'per-peer', 'per-channel-peer', 'per-account-channel-peer'] as const;
-export type DmScope = typeof DM_SCOPES[number];
-
 export type GatewayRuntimeSettings = {
   heartbeatEvery: string;
   heartbeatActiveStart: string;
@@ -90,21 +87,6 @@ export function buildGatewayRuntimePatch(input: GatewayRuntimeSettings): Record<
   return {
     agents: {
       defaults: defaultsPatch,
-    },
-  };
-}
-
-export function parseDmScope(config: Record<string, unknown> | null): DmScope {
-  const session = readRecord(config?.session);
-  const raw = readString(session?.dmScope);
-  if (DM_SCOPES.includes(raw as DmScope)) return raw as DmScope;
-  return 'main';
-}
-
-export function buildDmScopePatch(dmScope: DmScope): Record<string, unknown> {
-  return {
-    session: {
-      dmScope,
     },
   };
 }

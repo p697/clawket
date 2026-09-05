@@ -12,8 +12,11 @@ import {
   type SessionKind,
   type SessionUpdate,
 } from '@clawket/agent-protocol';
-import { GatewayClient, type GatewayEvents } from '../protocol';
-import { ChatCacheService, type CachedMessage } from '../../services/chat-cache';
+import {
+  GatewayClient,
+  type GatewayEvents,
+  type GatewayProtocolProfile,
+} from '../protocol';
 import type {
   ConnectionState as LegacyConnectionState,
   GatewayConfig,
@@ -24,6 +27,19 @@ import {
   mapGatewayErrorCode,
   type GatewayAdapterEvent,
 } from './gateway-session-update';
+import {
+  DEFAULT_GATEWAY_HISTORY_CACHE,
+  mapGatewayHistoryMessage,
+  mergeGatewayHistory,
+  type GatewayHistoryCache,
+} from './gateway-history';
+import type { ConnectionAdapterRuntimeMetadata } from '../runtime-details';
+
+export {
+  mapGatewayHistoryMessage,
+  mergeGatewayHistory,
+  type GatewayHistoryCache,
+} from './gateway-history';
 
 export const DEFAULT_ADAPTER_CONNECT_TIMEOUT_MS = 30_000;
 
@@ -32,15 +48,6 @@ export type GatewayAdapterOptions = {
   isFreeSlot?: boolean;
   connectTimeoutMs?: number;
   historyCache?: GatewayHistoryCache | null;
-};
-
-export type GatewayHistoryCache = {
-  load(
-    connectionId: string,
-    agentId: string,
-    sessionKey: string,
-    limit: number,
-  ): Promise<ChatMessage[]>;
 };
 
 type AdapterListenerMap = {
@@ -68,21 +75,22 @@ type GatewayHistoryPayload = {
   messages?: unknown[];
   nextCursor?: string;
   hasActiveRun?: boolean;
+  sessionId?: string;
+  thinkingLevel?: string;
 };
 
 /**
- * Temporary strangler base around GatewayClient. It contains no backend
- * selection; concrete adapters provide one fixed GatewayConfig and normalize
- * their own agent/session semantics.
+ * Protocol-backed adapter base with no backend selection. Concrete adapters
+ * provide one fixed GatewayConfig and normalize their own agent/session
+ * semantics.
  */
 export abstract class GatewayAdapterBase implements AgentAdapter {
   public readonly connection: ConnectionDescriptor;
 
-  protected readonly gateway: GatewayClient;
-  protected readonly record: ConnectionRecord;
+  readonly #gateway: GatewayClient;
+  readonly #gatewayConfig: GatewayConfig;
   protected currentCapabilities: Capabilities;
 
-  private readonly gatewayConfig: GatewayConfig;
   private readonly connectTimeoutMs: number;
   private readonly historyCache: GatewayHistoryCache | null;
   private readonly listeners: {
@@ -101,16 +109,22 @@ export abstract class GatewayAdapterBase implements AgentAdapter {
   private fallbackSessionKey: string;
   private lastSessions: SessionDescriptor[] = [];
 
+  protected get gateway(): GatewayClient {
+    return this.#gateway;
+  }
+
   protected constructor(input: {
     record: ConnectionRecord;
     gatewayConfig: GatewayConfig;
     backendCapabilities: 'openclaw' | 'hermes';
+    protocolProfile: GatewayProtocolProfile;
     fallbackSessionKey: string;
     options?: GatewayAdapterOptions;
   }) {
-    this.record = input.record;
-    this.gatewayConfig = input.gatewayConfig;
-    this.gateway = input.options?.gateway ?? new GatewayClient();
+    this.#gatewayConfig = input.gatewayConfig;
+    this.#gateway = input.options?.gateway ?? new GatewayClient({
+      profile: input.protocolProfile,
+    });
     this.connectTimeoutMs = readPositiveNumber(
       input.options?.connectTimeoutMs,
       DEFAULT_ADAPTER_CONNECT_TIMEOUT_MS,
@@ -129,7 +143,7 @@ export abstract class GatewayAdapterBase implements AgentAdapter {
       createdAt: input.record.createdAt,
       isFreeSlot: input.options?.isFreeSlot ?? false,
     };
-    this.gateway.configure(this.gatewayConfig);
+    this.#gateway.configure(this.#gatewayConfig, input.protocolProfile);
     this.subscribeToGateway();
   }
 
@@ -139,6 +153,17 @@ export abstract class GatewayAdapterBase implements AgentAdapter {
 
   public get state(): ConnectionState {
     return this.currentState;
+  }
+
+  public getConnectionRuntimeMetadata(): ConnectionAdapterRuntimeMetadata {
+    const runtimeGateway = this.gateway as typeof this.gateway & Readonly<{
+      getConnectResponseBridgeVersion?: () => string | undefined;
+      getConnectResponseCapabilities?: () => readonly string[] | undefined;
+    }>;
+    return {
+      bridgeVersion: runtimeGateway.getConnectResponseBridgeVersion?.(),
+      bridgeCapabilities: runtimeGateway.getConnectResponseCapabilities?.(),
+    };
   }
 
   public connect(): Promise<void> {
@@ -197,6 +222,10 @@ export abstract class GatewayAdapterBase implements AgentAdapter {
         ? { nextCursor: payload.nextCursor }
         : {}),
       hasActiveRun: payload?.hasActiveRun === true || this.hasActiveRunForSession(key),
+      ...(readNonEmptyString(payload?.sessionId) ? { sessionId: readNonEmptyString(payload?.sessionId) } : {}),
+      ...(readNonEmptyString(payload?.thinkingLevel)
+        ? { thinkingLevel: readNonEmptyString(payload?.thinkingLevel) }
+        : {}),
     };
   }
 
@@ -240,7 +269,7 @@ export abstract class GatewayAdapterBase implements AgentAdapter {
     if (this.pendingConnect) return this.pendingConnect.promise;
 
     this.manuallyDisconnected = false;
-    this.gateway.configure(this.gatewayConfig);
+    this.#gateway.configure(this.#gatewayConfig);
     let resolvePromise!: () => void;
     let rejectPromise!: (error: Error) => void;
     const promise = new Promise<void>((resolve, reject) => {
@@ -618,36 +647,6 @@ export function inferOpenClawSessionKind(session: Pick<SessionInfo, 'key' | 'kin
   return 'other';
 }
 
-export function mapGatewayHistoryMessage(
-  sessionKey: string,
-  value: unknown,
-  index: number,
-): ChatMessage | null {
-  if (!isRecord(value)) return null;
-  const role = normalizeRole(value.role);
-  const timestampMs = normalizeTimestamp(value.timestampMs ?? value.timestamp ?? value.ts);
-  const content = value.content;
-  const id = readNonEmptyString(value.id)
-    || readNonEmptyString(value.messageId)
-    || `${sessionKey}:history:${timestampMs ?? 'unknown'}:${index}`;
-  const message: ChatMessage = {
-    id,
-    role,
-    text: extractHistoryText(content),
-    ...(timestampMs !== undefined ? { timestampMs } : {}),
-    ...(readNonEmptyString(value.idempotencyKey)
-      ? { idempotencyKey: readNonEmptyString(value.idempotencyKey) }
-      : {}),
-    ...(readNonEmptyString(value.provider) ? { provider: readNonEmptyString(value.provider) } : {}),
-    ...(readNonEmptyString(value.model) ? { model: readNonEmptyString(value.model) } : {}),
-  };
-  const usage = normalizeUsage(value.usage);
-  if (usage) message.usage = usage;
-  const attachments = extractHistoryAttachments(content);
-  if (attachments.length > 0) message.attachments = attachments;
-  return message;
-}
-
 export function toAdapterError(error: unknown): AdapterError {
   if (error instanceof AdapterError) return error;
   const record = isRecord(error) ? error : null;
@@ -668,151 +667,8 @@ export function normalizeSessionUpdatedAt(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
-export function mergeGatewayHistory(
-  remoteMessages: ChatMessage[],
-  cachedMessages: ChatMessage[],
-): ChatMessage[] {
-  if (cachedMessages.length === 0) return remoteMessages;
-  if (remoteMessages.length === 0) return cachedMessages;
-
-  const remoteIds = new Set(remoteMessages.map((message) => message.id));
-  const remoteIdempotencyKeys = new Set(
-    remoteMessages
-      .map((message) => message.idempotencyKey)
-      .filter((value): value is string => Boolean(value)),
-  );
-  const remoteTimestamps = remoteMessages
-    .map((message) => message.timestampMs)
-    .filter((value): value is number => typeof value === 'number');
-  const earliestRemoteTimestamp = remoteTimestamps.length > 0
-    ? Math.min(...remoteTimestamps)
-    : undefined;
-  const optimisticCacheTail = cachedMessages.filter((message) => {
-    if (remoteIds.has(message.id)) return false;
-    if (message.idempotencyKey && remoteIdempotencyKeys.has(message.idempotencyKey)) return false;
-    return earliestRemoteTimestamp === undefined
-      || message.timestampMs === undefined
-      || message.timestampMs >= earliestRemoteTimestamp;
-  });
-
-  return [...remoteMessages, ...optimisticCacheTail]
-    .map((message, index) => ({ message, index }))
-    .sort((left, right) => {
-      const leftTimestamp = left.message.timestampMs;
-      const rightTimestamp = right.message.timestampMs;
-      if (leftTimestamp === undefined || rightTimestamp === undefined) return left.index - right.index;
-      return leftTimestamp - rightTimestamp || left.index - right.index;
-    })
-    .map(({ message }) => message);
-}
-
-const DEFAULT_GATEWAY_HISTORY_CACHE: GatewayHistoryCache = {
-  async load(connectionId, agentId, sessionKey, limit) {
-    const page = await ChatCacheService.getTimelinePage(connectionId, agentId, sessionKey, {
-      pageSize: limit,
-    });
-    return page.messages.map(cachedMessageToChatMessage);
-  },
-};
-
-function cachedMessageToChatMessage(message: CachedMessage): ChatMessage {
-  const attachments = message.imageUris?.map((uri) => ({
-    type: 'image' as const,
-    mimeType: 'image/*',
-    uri,
-  }));
-  return {
-    id: message.id,
-    role: message.role,
-    text: message.text,
-    ...(message.timestampMs !== undefined ? { timestampMs: message.timestampMs } : {}),
-    ...(message.idempotencyKey ? { idempotencyKey: message.idempotencyKey } : {}),
-    ...(message.modelLabel ? { model: message.modelLabel } : {}),
-    ...(message.usage
-      ? {
-          usage: {
-            input: message.usage.inputTokens,
-            output: message.usage.outputTokens,
-            cacheRead: message.usage.cacheReadTokens,
-            cacheWrite: message.usage.cacheWriteTokens,
-            total: message.usage.totalTokens,
-          },
-        }
-      : {}),
-    ...(attachments?.length ? { attachments } : {}),
-    ...(message.toolName
-      ? {
-          tool: {
-            name: message.toolName,
-            status: message.toolStatus ?? 'success',
-            summary: message.toolSummary,
-            input: message.toolArgs,
-            output: message.toolDetail,
-          },
-        }
-      : {}),
-  };
-}
-
 function cloneSession(session: SessionDescriptor): SessionDescriptor {
   return { ...session, allowedActions: { ...session.allowedActions } };
-}
-
-function extractHistoryText(content: unknown): string {
-  if (typeof content === 'string') return content;
-  if (!Array.isArray(content)) return '';
-  return content
-    .filter(isRecord)
-    .filter((block) => block.type === 'text' || block.type === 'content')
-    .map((block) => typeof block.text === 'string' ? block.text : '')
-    .join('');
-}
-
-function extractHistoryAttachments(content: unknown): NonNullable<ChatMessage['attachments']> {
-  if (!Array.isArray(content)) return [];
-  const attachments: NonNullable<ChatMessage['attachments']> = [];
-  for (const raw of content) {
-    if (!isRecord(raw)) continue;
-    const type = raw.type;
-    if (type !== 'image' && type !== 'file' && type !== 'image_url') continue;
-    const imageUrl = isRecord(raw.image_url) ? readNonEmptyString(raw.image_url.url) : undefined;
-    const uri = readNonEmptyString(raw.uri) ?? imageUrl;
-    attachments.push({
-      type: type === 'file' ? 'file' : 'image',
-      mimeType: readNonEmptyString(raw.mimeType) ?? readNonEmptyString(raw.mime_type) ?? 'application/octet-stream',
-      ...(readNonEmptyString(raw.content) ? { content: readNonEmptyString(raw.content) } : {}),
-      ...(uri ? { uri } : {}),
-      ...(readNonEmptyString(raw.name) ? { name: readNonEmptyString(raw.name) } : {}),
-    });
-  }
-  return attachments;
-}
-
-function normalizeRole(value: unknown): ChatMessage['role'] {
-  if (value === 'user' || value === 'assistant' || value === 'system' || value === 'tool') return value;
-  return 'system';
-}
-
-function normalizeTimestamp(value: unknown): number | undefined {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
-  return value > 0 && value < 10_000_000_000 ? value * 1_000 : value;
-}
-
-function normalizeUsage(value: unknown): ChatMessage['usage'] | undefined {
-  if (!isRecord(value)) return undefined;
-  const usage = {
-    input: readFiniteNumber(value.input),
-    output: readFiniteNumber(value.output),
-    cacheRead: readFiniteNumber(value.cacheRead),
-    cacheWrite: readFiniteNumber(value.cacheWrite),
-    total: readFiniteNumber(value.total),
-    costUsd: readFiniteNumber(value.costUsd),
-  };
-  return Object.values(usage).some((entry) => entry !== undefined) ? usage : undefined;
-}
-
-function readFiniteNumber(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
 function readNonEmptyString(value: unknown): string | undefined {

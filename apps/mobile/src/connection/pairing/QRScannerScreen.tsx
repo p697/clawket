@@ -56,10 +56,10 @@ export function QRScannerScreen({ onScanned, onCancel }: Props): React.JSX.Eleme
           <View style={styles.overlaySide} />
           <View style={styles.scanArea}>
             {/* Corner markers */}
-            <View style={[styles.corner, styles.cornerTL, { borderColor: colors.primary }]} />
-            <View style={[styles.corner, styles.cornerTR, { borderColor: colors.primary }]} />
-            <View style={[styles.corner, styles.cornerBL, { borderColor: colors.primary }]} />
-            <View style={[styles.corner, styles.cornerBR, { borderColor: colors.primary }]} />
+            <View style={[styles.corner, styles.cornerTL, { borderColor: colors.accent }]} />
+            <View style={[styles.corner, styles.cornerTR, { borderColor: colors.accent }]} />
+            <View style={[styles.corner, styles.cornerBL, { borderColor: colors.accent }]} />
+            <View style={[styles.corner, styles.cornerBR, { borderColor: colors.accent }]} />
           </View>
           <View style={styles.overlaySide} />
         </View>
@@ -78,15 +78,15 @@ const SCAN_SIZE = 250;
 
 const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  cancelButton: { borderRadius: Radius.md, borderWidth: BorderWidth.hairline, paddingHorizontal: Space.xl, paddingVertical: Space.sm },
-  cancelText: { fontSize: FontSize.md },
+  cancelButton: { borderRadius: Radius.full, borderWidth: BorderWidth.hairline, paddingHorizontal: Space.xl, paddingVertical: Space.sm },
+  cancelText: { fontSize: FontSize.caption },
   overlay: { ...StyleSheet.absoluteFillObject },
   overlayTop: { flex: 1, backgroundColor: PresentationColor.mediaOverlayStrong },
   overlayMiddle: { flexDirection: 'row', height: SCAN_SIZE },
   overlaySide: { flex: 1, backgroundColor: PresentationColor.mediaOverlayStrong },
   scanArea: { width: SCAN_SIZE, height: SCAN_SIZE },
   overlayBottom: { flex: 1, backgroundColor: PresentationColor.mediaOverlayStrong, alignItems: 'center', paddingTop: Space.xl },
-  hint: { color: PresentationColor.onMedia, fontSize: FontSize.md, fontWeight: FontWeight.semibold },
+  hint: { color: PresentationColor.onMedia, fontSize: FontSize.caption, fontWeight: FontWeight.semibold },
   corner: { position: 'absolute', width: 24, height: 24, borderWidth: BorderWidth.emphasis },
   cornerTL: { top: 0, left: 0, borderRightWidth: 0, borderBottomWidth: 0 },
   cornerTR: { top: 0, right: 0, borderLeftWidth: 0, borderBottomWidth: 0 },

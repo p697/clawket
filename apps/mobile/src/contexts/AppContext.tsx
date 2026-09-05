@@ -1,20 +1,8 @@
 import React from 'react';
-import type { AgentAdapter } from '@clawket/agent-protocol';
-import { GatewayClient } from '../connection/protocol';
 import { LastOpenedSessionSnapshot } from '../services/storage';
-import { GatewayConfig } from '../types';
 import type { AgentInfo } from '../types/agent';
 import type { NodeCapabilityToggles } from '../services/node-capabilities';
 import type { ChatAppearanceSettings, SpeechRecognitionLanguage } from '../types';
-
-export type SessionSidebarTab = 'sessions' | 'subagents' | 'cron';
-
-export type ChatSidebarRequest = {
-  requestedAt: number;
-  tab: SessionSidebarTab;
-  channel?: string;
-  openDrawer: boolean;
-};
 
 export type ChatNotificationOpenRequest = {
   requestedAt: number;
@@ -24,12 +12,7 @@ export type ChatNotificationOpenRequest = {
 };
 
 export type AppContextType = {
-  gateway: GatewayClient;
-  activeAdapter: AgentAdapter | null;
-  activeGatewayConfigId: string | null;
-  gatewayEpoch: number;
   foregroundEpoch: number;
-  config: GatewayConfig | null;
   debugMode: boolean;
   showAgentAvatar: boolean;
   chatSessionRequest: {
@@ -37,7 +20,6 @@ export type AppContextType = {
     requestedAt: number;
     sourceRole?: string;
   } | null;
-  chatSidebarRequest: ChatSidebarRequest | null;
   pendingChatNotificationOpen: ChatNotificationOpenRequest | null;
   agents: AgentInfo[];
   currentAgentId: string;
@@ -71,8 +53,6 @@ export type AppContextType = {
   onSpeechRecognitionLanguageChange: (language: SpeechRecognitionLanguage) => void;
   requestChatSession: (sessionKey: string, sourceRole?: string) => void;
   clearChatSessionRequest: () => void;
-  requestChatSidebar: (params?: { tab?: SessionSidebarTab; channel?: string; openDrawer?: boolean }) => void;
-  clearChatSidebarRequest: () => void;
   requestOpenChatFromNotification: (params: {
     sessionKey: string;
     agentId?: string;
@@ -87,8 +67,6 @@ export type AppContextType = {
   pendingAddGateway: boolean;
   requestAddGateway: () => void;
   clearPendingAddGateway: () => void;
-  onSaved: (next: GatewayConfig, nextGatewayScopeId?: string | null) => void;
-  onReset: () => void;
 };
 
 const AppContext = React.createContext<AppContextType | null>(null);

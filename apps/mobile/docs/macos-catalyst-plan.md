@@ -2,6 +2,9 @@
 
 Updated: 2026-03-15
 
+> Clawket 3.0 enables the shared iPhone/iPad target, but macOS and Mac Catalyst
+> remain outside the 3.0 release scope. This document is a future plan only.
+
 ## Conclusion
 
 Clawket should target `Mac Catalyst` first.
@@ -11,21 +14,22 @@ Reason:
 - The current app is already an iOS native app with a full `ios/` Xcode project.
 - React Native 0.83 already exposes `Platform.isMacCatalyst`, so most adjustments can stay inside the existing iOS codepath instead of creating a separate macOS app.
 - Apple officially supports bringing an iPad app to Mac with Mac Catalyst.
-- The lighter "run iPhone/iPad app on Apple Silicon Mac" route is not enough here because it only covers Apple Silicon Macs and the app is currently configured as iPhone-first.
+- The lighter "run iPhone/iPad app on Apple Silicon Mac" route is not enough here because it only covers Apple Silicon Macs and does not provide a Catalyst target.
 
 ## What I found in this repo
 
 ### Native project state
 
-- `app.json` sets `ios.supportsTablet` to `false`.
+- `app.json` sets `ios.supportsTablet` to `true` for the 3.0 adaptive iPad layout.
 - `ios/Podfile` explicitly sets `:mac_catalyst_enabled => false`.
 - Xcode build settings currently show:
   - `SUPPORTED_PLATFORMS = iphoneos iphonesimulator`
   - `SUPPORTS_MACCATALYST = NO`
-  - `TARGETED_DEVICE_FAMILY = 1`
+  - `TARGETED_DEVICE_FAMILY = 1,2` after Expo prebuild
 - `ios/Clawket/Info.plist` is still an iOS-only plist with `LSRequiresIPhoneOS = true`.
 
-This means the project is not "almost already on Mac". The app has a good foundation, but the native target is still configured as iPhone-only.
+This means the project is not "almost already on Mac". The app now supports
+iPhone and iPad, but its native target is still configured without Catalyst.
 
 ### JavaScript/runtime state
 

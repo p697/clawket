@@ -91,7 +91,7 @@ export function ToolCard({
         disabled={!canOpen}
         style={styles.card}
       >
-        <Monitor size={14} color={theme.colors.textMuted} strokeWidth={2} />
+        <Monitor size={14} color={theme.colors.inkSecondary} strokeWidth={2} />
         <Text
           numberOfLines={1}
           style={[styles.text, status === 'error' ? styles.textError : null]}
@@ -131,25 +131,25 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'],
       alignItems: 'center',
       gap: Space.sm - 2,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
-      backgroundColor: colors.surfaceMuted,
-      borderRadius: Radius.sm,
+      borderColor: colors.line,
+      backgroundColor: colors.surface,
+      borderRadius: Radius.card,
       paddingHorizontal: Space.sm + 2,
       paddingVertical: Space.sm,
       marginLeft: reserveAvatarSlot ? AGENT_AVATAR_SLOT_WIDTH : 0,
     },
     text: {
       flex: 1,
-      color: colors.textMuted,
-      fontSize: FontSize.md,
+      color: colors.inkSecondary,
+      fontSize: FontSize.caption,
       lineHeight: 18,
     },
     textError: {
-      color: colors.error,
+      color: colors.bad,
     },
     duration: {
-      color: colors.textSubtle,
-      fontSize: FontSize.xs,
+      color: colors.inkTertiary,
+      fontSize: FontSize.caption,
       fontFamily: 'monospace',
       marginLeft: Space.xs,
     },

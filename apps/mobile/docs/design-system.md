@@ -38,7 +38,8 @@ New UI uses the canonical values on `theme.colors`:
 | Text | `ink`, `inkSecondary`, `inkTertiary` | Primary, supporting, and time/placeholder text |
 | Allowed line | `line` | Hairlines inside a settings group and dark floating-surface edges only |
 | Action | `accent`, `accentSoft` | Primary actions, selection, user bubbles, links, unread |
-| Feedback | `good`, `warn`, `bad` and matching `*Soft` | Status rings, badges, and failure surfaces; pair color with an icon or text |
+| Foreground / overlay | `onAccent`, `scrim` | Content on accent fills; the shared 40% modal backdrop |
+| Feedback | `good`, `goodSoft`, `warn`, `warnSoft`, `bad`, `badSoft` | Status rings, badges, and failure surfaces; pair color with an icon or text |
 | Agent identity | `agentPalette` | Stable Agent avatar color selected by Agent id hash |
 
 Rules:
@@ -47,7 +48,7 @@ Rules:
 2. Add a missing semantic value to both schemes before using it.
 3. Prefer purpose names over hue names and avoid `theme.scheme` branches when a token expresses the state.
 4. `PresentationColor` is only for media overlays, exported artifacts, and data visualization.
-5. Legacy aliases such as `background`, `text`, `primary`, `surfaceMuted`, and `info` exist only while pre-3.0 screens are deleted. New code must not use them.
+5. Pre-3.0 aliases such as `background`, `text`, `primary`, `surfaceMuted`, and `info` are removed. The design-system gate rejects their definitions and use in production or test sources.
 
 ## 4. Structural tokens
 
@@ -63,7 +64,7 @@ Typography uses matching `FontSize` and `LineHeight` entries:
 | `secondary` | 15 / 20 | Preview, trailing value, system event |
 | `caption` | 13 / 18 | Time, legal copy, numeric badge |
 
-`FontWeight` exposes regular 400 and semibold 600. A page's default UI uses two visible type steps; a third is allowed only for a page title, expanded detail, onboarding, or paywall. User content is excluded from that count.
+`FontWeight` exposes only `regular` 400 and `semibold` 600. A page's default UI uses two visible type steps; a third is allowed only for a page title, expanded detail, onboarding, or paywall. User content is excluded from that count.
 
 `Radius` contains named 3.0 shapes: bubble 20, card 16, settings group 14, the four avatar sizes, YouMind-derived sheet radii, and `full` for controls. `BorderWidth` may be used only for documented status rings, dark raised-surface hairlines, settings-group separators, and presentation framing—not list-row cards.
 
@@ -98,6 +99,9 @@ Backend identity and transport identity never select a visual route directly. Ro
 | `RunCard` | Quiet card with a 3-point semantic state rail and one compact description |
 | `ApprovalCard` | Run-card shell plus command preview and primary/secondary capsule actions |
 | `Composer` | Add button, composition-safe growing capsule input, mic, and send/stop action |
+| `CompositionSafeTextInput` | Sole stock `TextInput` host; iOS native-owns composing text while external replacement/reset still syncs |
+| `CompositionSafeBottomSheetTextInput` | Gorhom input with the same native-owned iOS composition and external sync contract |
+| `PasteCapableTextInput` | Composition-safe Thread input that sends pasted images/files through the pending attachment pipeline; text paste stays native |
 | `Sheet` | Shared bottom/iPad presentation chrome, handle, backdrop, title, and close action |
 | `SettingsGroup` / `SettingsRow` | 14-radius grouped card, 52-point rows, internal hairlines only |
 | `Skeleton` | 1.2-second breathing block that respects reduced motion |
@@ -126,12 +130,12 @@ Each shipped page covers loading, empty, error, offline-with-cache, and permissi
 
 Default copy has two levels. Rows and controls do not carry explanatory subtitles. Empty, error, banner, and system-event copy is one sentence (up to 8 English words or 16 Chinese characters) plus one action word. Text badges are limited to unread numbers and `Pro`; trailing settings values are a single value, not a sentence. Filters appear only when a list exceeds one screen and are capped at three.
 
-Animation durations are 120, 200, and 320 ms with ease-out. Reduced motion removes positional motion and freezes the working ring. Rows change surface on press; floating buttons scale; bubbles do not animate on press. New messages fade and move four points, session switches cross-fade, and sheets rise over 320 ms.
+`Motion` is the sole timing token: animations use its 120, 200, and 320 ms durations with ease-out. `SpringPreset` and `TimingPreset` are removed, and the design-system gate rejects their reintroduction. Reduced motion removes positional motion and freezes the working ring. Rows change surface on press; floating buttons scale; bubbles do not animate on press. New messages fade and move four points, session switches cross-fade, and sheets rise over 320 ms.
 
 ## 9. Verification and style ratchet
 
 For every UI batch run affected render tests in both light and dark schemes, `npm run typecheck`, and `npm run check:design-system`. Tests assert capability degradation, all five page states, no row border, and the set of rendered font sizes; screenshots are reserved for human device acceptance.
 
-`scripts/check-ui-style.mjs` rejects new hardcoded colors, numeric radii/fonts/borders, `FontSize` arithmetic, outlined list rows, emoji icon literals, more than three `FontSize.*` references per screen, React Native `KeyboardAvoidingView`, raw `Shadow.*`, unapproved native `TextInput`/`Switch`, and bottom-tab dependencies. Existing debt is stored per file and rule in `scripts/ui-style-baseline.json`; counts only decrease. Never update the baseline to hide a regression.
+`scripts/check-ui-style.mjs` scans every production and test TypeScript source and rejects any member outside the exact canonical `Space`, `FontSize`, `LineHeight`, `FontWeight`, `Radius`, and `ControlSize` sets. It also rejects removed motion and semantic-color aliases and malformed source input, alongside hardcoded colors, numeric radii/fonts/borders, `FontSize` arithmetic, outlined list rows, emoji icon literals, more than three `FontSize.*` references per screen, React Native `KeyboardAvoidingView`, raw `Shadow.*`, unapproved native `TextInput`/`Switch`, and bottom-tab dependencies. Existing debt is stored per file and rule in `scripts/ui-style-baseline.json`; counts only decrease. Never update the baseline to hide a regression.
 
-The docs checker verifies canonical and transitional exports, the `BorderWidth`, `ControlSize`, `FontSize`, `LineHeight`, `PresentationColor`, `Radius`, `Shadow`, `Space`, and `StatusSize` families, plus `createSurfaceStyle`. Remove transitional names from this document and its checker only in the same change that deletes the last real caller.
+The docs checker verifies canonical and transitional exports, all 18 canonical `theme.colors`, the `BorderWidth`, `ControlSize`, `FontSize`, `LineHeight`, `PresentationColor`, `Radius`, `Shadow`, `Space`, and `StatusSize` families, plus `createSurfaceStyle`. Removed color aliases must stay absent from `theme.ts`; remove transitional component names from this document and its checker only in the same change that deletes the last real caller.

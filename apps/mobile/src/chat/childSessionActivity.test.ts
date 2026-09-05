@@ -157,6 +157,7 @@ describe('buildChildSessionActivityCards', () => {
     ).toEqual([
       expect.objectContaining({
         sessionKey: 'agent:main:subagent:orchestrator:subagent:coder',
+        agentId: 'main',
         title: 'Code Worker',
       }),
     ]);
@@ -249,5 +250,10 @@ describe('getChildSessionStatusLabel', () => {
 
   it('uses completed label after the run ends', () => {
     expect(getChildSessionStatusLabel('completed', 'Done', null, t)).toBe('Completed');
+  });
+
+  it('uses a status word rather than message preview while streaming', () => {
+    expect(getChildSessionStatusLabel('streaming', 'Drafting a private answer', null, t))
+      .toBe('Running');
   });
 });

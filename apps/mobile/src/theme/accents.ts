@@ -15,7 +15,7 @@ export type AccentScale = {
   dark: AccentToneScale;
 };
 
-export type BuiltInAccentColorId = Exclude<AccentColorId, 'custom'>;
+export type BuiltInAccentColorId = AccentColorId;
 
 export const builtInAccents: Record<BuiltInAccentColorId, AccentScale> = {
   iceBlue: {
@@ -124,27 +124,7 @@ export function isBuiltInAccentId(value: string): value is BuiltInAccentColorId 
 
 export function resolveAccentScale(
   accentId: AccentColorId,
-  customAccent?: AccentScale | null,
 ): AccentScale {
-  if (accentId === 'custom' && customAccent) return customAccent;
   if (isBuiltInAccentId(accentId)) return builtInAccents[accentId];
   return builtInAccents[defaultAccentId];
-}
-
-function isAccentToneScale(value: unknown): value is AccentToneScale {
-  if (!value || typeof value !== 'object') return false;
-  const v = value as Record<string, unknown>;
-  return (
-    typeof v['accent50'] === 'string' &&
-    typeof v['accent100'] === 'string' &&
-    typeof v['accent200'] === 'string' &&
-    typeof v['accent500'] === 'string' &&
-    typeof v['accent700'] === 'string'
-  );
-}
-
-export function isAccentScale(value: unknown): value is AccentScale {
-  if (!value || typeof value !== 'object') return false;
-  const v = value as Record<string, unknown>;
-  return isAccentToneScale(v['light']) && isAccentToneScale(v['dark']);
 }

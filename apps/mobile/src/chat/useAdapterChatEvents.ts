@@ -2,16 +2,17 @@ import {
   useEffect,
   useRef,
 } from 'react';
-import type {
-  AdapterErrorCode,
-  AgentAdapter,
-  ApprovalRequest,
-  ChatMessage,
-  ConnectionState,
-  SessionDescriptor,
-  SessionHistory,
-  SessionUpdate,
-  Usage,
+import {
+  normalizeAttachmentMimeType,
+  type AdapterErrorCode,
+  type AgentAdapter,
+  type ApprovalRequest,
+  type ChatMessage,
+  type ConnectionState,
+  type SessionDescriptor,
+  type SessionHistory,
+  type SessionUpdate,
+  type Usage,
 } from '@clawket/agent-protocol';
 import i18n from '../i18n';
 import type { MessageUsage, UiMessage } from '../types/chat';
@@ -190,8 +191,25 @@ export function mapAdapterChatMessage(message: ChatMessage): UiMessage | null {
 
   const imageUris = message.attachments
     ?.filter((attachment) => attachment.type === 'image')
-    .map((attachment) => attachment.uri ?? attachment.content)
+    .map((attachment) => {
+      if (attachment.uri) return attachment.uri;
+      if (!attachment.content) return undefined;
+      return attachment.content.startsWith('data:')
+        ? attachment.content
+        : `data:${attachment.mimeType};base64,${attachment.content}`;
+    })
     .filter((uri): uri is string => Boolean(uri));
+  const fileAttachments = message.attachments
+    ?.filter((attachment) => attachment.type === 'file')
+    .map((attachment) => {
+      const fileName = attachment.name?.trim();
+      const uri = attachment.uri?.trim();
+      return {
+        mimeType: normalizeAttachmentMimeType(attachment.mimeType),
+        ...(fileName ? { fileName } : {}),
+        ...(uri ? { uri } : {}),
+      };
+    });
   const tool = message.tool;
 
   return {
@@ -202,6 +220,9 @@ export function mapAdapterChatMessage(message: ChatMessage): UiMessage | null {
     idempotencyKey: message.idempotencyKey,
     timestampMs: message.timestampMs,
     imageUris: imageUris && imageUris.length > 0 ? imageUris : undefined,
+    fileAttachments: fileAttachments && fileAttachments.length > 0
+      ? fileAttachments
+      : undefined,
     modelLabel: modelLabel(message.provider, message.model),
     usage: mapUsage(message.usage),
     toolName: tool?.name,
@@ -209,6 +230,9 @@ export function mapAdapterChatMessage(message: ChatMessage): UiMessage | null {
     toolSummary: tool?.summary,
     toolArgs: stringifyUnknown(tool?.input),
     toolDetail: stringifyUnknown(tool?.output),
+    ...(tool?.durationMs !== undefined ? { toolDurationMs: tool.durationMs } : {}),
+    ...(tool?.startedAtMs !== undefined ? { toolStartedAt: tool.startedAtMs } : {}),
+    ...(tool?.finishedAtMs !== undefined ? { toolFinishedAt: tool.finishedAtMs } : {}),
   };
 }
 
@@ -247,7 +271,11 @@ export function mapAdapterSessionUpdate(
   options: MappingOptions = {},
 ): AdapterChatUpdate {
   const now = options.now ?? Date.now;
-  const translate = options.translate ?? ((key: string) => i18n.t(key, { ns: 'chat' }));
+  const translate = options.translate ?? ((key: string) => (
+    key === 'Run aborted by user.'
+      ? i18n.t('Run aborted by user.', { ns: 'chat' })
+      : i18n.t('Compacting context...', { ns: 'chat' })
+  ));
 
   switch (update.type) {
     case 'history_reconciled': {

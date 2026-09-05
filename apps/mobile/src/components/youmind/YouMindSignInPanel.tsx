@@ -1,12 +1,15 @@
 import React from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import type {
+  YouMindEmailAuthClient,
+  YouMindOnboardingAuthSession,
+} from '../../connection';
 import { analyticsEvents } from '../../services/analytics/events';
-import type { YouMindAuthSession } from '../../services/storage';
 import { openExternalUrl } from '../../utils/openExternalUrl';
-import type { YouMindEmailAuthApi } from '../../connection/adapters/youmind-sprite-api';
 import { useAppTheme } from '../../theme';
 import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
+import { Banner } from '../ui/Banner';
 import { YouMindSignInCard } from './YouMindSignInCard';
 
 const YOUMIND_WEBSITE_URL = 'https://youmind.com/';
@@ -21,11 +24,11 @@ export function YouMindSignInPanel({
   backButtonVariant = 'default',
   centered = false,
 }: {
-  client: YouMindEmailAuthApi;
+  client: YouMindEmailAuthClient;
   source: string;
   headline?: string | null;
   description?: string | null;
-  onSignedIn?: (session: YouMindAuthSession) => Promise<void> | void;
+  onSignedIn?: (session: YouMindOnboardingAuthSession) => Promise<void> | void;
   onBack?: () => void;
   backButtonVariant?: 'default' | 'configInline';
   centered?: boolean;
@@ -37,41 +40,39 @@ export function YouMindSignInPanel({
   const [email, setEmail] = React.useState('');
   const [code, setCode] = React.useState('');
   const [otpSent, setOtpSent] = React.useState(false);
-  const [authBusyMethod, setAuthBusyMethod] = React.useState<'apple' | 'google' | 'email' | null>(null);
-  const authBusy = authBusyMethod !== null;
+  const [authBusy, setAuthBusy] = React.useState(false);
+  const [authError, setAuthError] = React.useState<string | null>(null);
 
   const handleSendCode = React.useCallback(async () => {
     if (!email.trim()) {
-      Alert.alert(t('Missing email', { ns: 'chat' }), t('Please enter your YouMind email first.', { ns: 'chat' }));
+      setAuthError(t('Please enter your YouMind email first.', { ns: 'chat' }));
       return;
     }
+    setAuthError(null);
     analyticsEvents.youMindSignInTapped({ method: 'email', source: otpSent ? 'otp' : source });
-    setAuthBusyMethod('email');
+    setAuthBusy(true);
     try {
       await client.sendOtp(email);
       setOtpSent(true);
       setSignInStep('email');
     } catch (error) {
       analyticsEvents.youMindSignInResolved({ method: 'email', result: 'failure', source: otpSent ? 'otp' : source });
-      Alert.alert(
-        t('Unable to send code', { ns: 'chat' }),
-        error instanceof Error ? error.message : t('Please try again later.', { ns: 'common' }),
-      );
+      setAuthError(error instanceof Error && error.message.trim()
+        ? error.message
+        : t('Unable to send code', { ns: 'chat' }));
     } finally {
-      setAuthBusyMethod(null);
+      setAuthBusy(false);
     }
   }, [client, email, otpSent, source, t]);
 
   const handleVerify = React.useCallback(async () => {
     if (!email.trim() || !code.trim()) {
-      Alert.alert(
-        t('Missing verification code', { ns: 'chat' }),
-        t('Enter both your email and the verification code.', { ns: 'chat' }),
-      );
+      setAuthError(t('Enter both your email and the verification code.', { ns: 'chat' }));
       return false;
     }
+    setAuthError(null);
     analyticsEvents.youMindSignInTapped({ method: 'email', source: 'otp' });
-    setAuthBusyMethod('email');
+    setAuthBusy(true);
     try {
       const session = await client.verifyOtp(email, code);
       analyticsEvents.youMindSignInResolved({ method: 'email', result: 'success', source: 'otp' });
@@ -79,31 +80,18 @@ export function YouMindSignInPanel({
       return true;
     } catch (error) {
       analyticsEvents.youMindSignInResolved({ method: 'email', result: 'failure', source: 'otp' });
-      Alert.alert(
-        t('Unable to sign in', { ns: 'chat' }),
-        error instanceof Error ? error.message : t('Please try again later.', { ns: 'common' }),
-      );
+      setAuthError(error instanceof Error && error.message.trim()
+        ? error.message
+        : t('Unable to sign in', { ns: 'chat' }));
       return false;
     } finally {
-      setAuthBusyMethod(null);
+      setAuthBusy(false);
     }
   }, [client, code, email, onSignedIn, t]);
 
-  const handleUnsupportedSocialSignIn = React.useCallback((method: 'apple' | 'google') => {
-    analyticsEvents.youMindSignInTapped({ method, source });
-    analyticsEvents.youMindSignInResolved({ method, result: 'failure', source });
-    Alert.alert(
-      t('Not supported yet', { ns: 'chat' }),
-      t('Please sign in with email for now.', { ns: 'chat' }),
-    );
-  }, [source, t]);
-
   const handleOpenYouMindWebsite = React.useCallback(() => {
     void openExternalUrl(YOUMIND_WEBSITE_URL, () => {
-      Alert.alert(
-        t('Unable to open link', { ns: 'chat' }),
-        t('Please try again later.', { ns: 'common' }),
-      );
+      setAuthError(t('Unable to open link', { ns: 'chat' }));
     });
   }, [t]);
 
@@ -124,19 +112,27 @@ export function YouMindSignInPanel({
               backButtonVariant === 'configInline' && styles.inlineBackButtonTextConfigInline,
             ]}
           >
-            {t('Back', { ns: 'chat' })}
+            {t('Back', { ns: 'common' })}
           </Text>
         </Pressable>
       ) : null}
       {headline ? (
-        <Text style={[styles.headline, { color: theme.colors.text }]}>
+        <Text style={[styles.headline, { color: theme.colors.ink }]}>
           {headline}
         </Text>
       ) : null}
       {description ? (
-        <Text style={[styles.description, { color: theme.colors.textMuted }]}>
+        <Text style={[styles.description, { color: theme.colors.inkSecondary }]}>
           {description}
         </Text>
+      ) : null}
+      {authError ? (
+        <Banner
+          testID="youmind-sign-in-error"
+          tone="bad"
+          message={authError}
+          style={styles.errorBanner}
+        />
       ) : null}
       <View style={styles.cardWrap}>
         <YouMindSignInCard
@@ -145,28 +141,25 @@ export function YouMindSignInPanel({
           code={code}
           busy={authBusy}
           otpSent={otpSent}
-          appleAvailable
-          googleAvailable
-          appleBusy={authBusyMethod === 'apple'}
-          googleBusy={authBusyMethod === 'google'}
-          emailBusy={authBusyMethod === 'email'}
+          emailBusy={authBusy}
           onBack={() => {
             if (authBusy) return;
             setSignInStep('options');
           }}
           onEditEmail={() => {
             if (authBusy) return;
+            setAuthError(null);
             setOtpSent(false);
             setCode('');
             setSignInStep('email');
           }}
-          onChangeEmail={setEmail}
-          onChangeCode={setCode}
-          onAppleSignIn={() => {
-            handleUnsupportedSocialSignIn('apple');
+          onChangeEmail={(value) => {
+            setAuthError(null);
+            setEmail(value);
           }}
-          onGoogleSignIn={() => {
-            handleUnsupportedSocialSignIn('google');
+          onChangeCode={(value) => {
+            setAuthError(null);
+            setCode(value);
           }}
           onSendCode={() => {
             void handleSendCode();
@@ -176,7 +169,7 @@ export function YouMindSignInPanel({
         />
       </View>
       <View style={styles.websitePrompt}>
-        <Text style={[styles.websitePromptText, { color: theme.colors.textMuted }]}>
+        <Text style={[styles.websitePromptText, { color: theme.colors.inkSecondary }]}>
           {t('New to YouMind? Learn more or create an account on the official website.', { ns: 'chat' })}
         </Text>
         <Pressable
@@ -184,7 +177,7 @@ export function YouMindSignInPanel({
           onPress={handleOpenYouMindWebsite}
           style={({ pressed }) => [styles.websitePromptLink, pressed && styles.websitePromptLinkPressed]}
         >
-          <Text style={[styles.websitePromptLinkText, { color: theme.colors.primary }]}>
+          <Text style={[styles.websitePromptLinkText, { color: theme.colors.accent }]}>
             {t('Visit youmind.com', { ns: 'chat' })}
           </Text>
         </Pressable>
@@ -211,7 +204,6 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       paddingVertical: Space.xs,
     },
     inlineBackButtonConfigInline: {
-      borderRadius: Radius.none,
       marginBottom: Space.xs,
       paddingHorizontal: 0,
     },
@@ -219,21 +211,21 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       opacity: 0.72,
     },
     inlineBackButtonText: {
-      color: colors.textMuted,
-      fontSize: FontSize.base,
-      fontWeight: FontWeight.medium,
+      color: colors.inkSecondary,
+      fontSize: FontSize.secondary,
+      fontWeight: FontWeight.semibold,
     },
     inlineBackButtonTextConfigInline: {
-      color: colors.primary,
+      color: colors.accent,
     },
     headline: {
-      fontSize: FontSize.xxl,
+      fontSize: FontSize.title,
       fontWeight: FontWeight.semibold,
       letterSpacing: -0.6,
       textAlign: 'center',
     },
     description: {
-      fontSize: FontSize.base,
+      fontSize: FontSize.secondary,
       lineHeight: 24,
       marginTop: Space.sm,
       textAlign: 'center',
@@ -243,6 +235,10 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       maxWidth: 520,
       alignSelf: 'center',
       marginTop: Space.lg,
+    },
+    errorBanner: {
+      marginHorizontal: Space.lg,
+      marginTop: Space.md,
     },
     card: {
       marginHorizontal: 0,
@@ -256,7 +252,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       width: '100%',
     },
     websitePromptText: {
-      fontSize: FontSize.base,
+      fontSize: FontSize.secondary,
       lineHeight: 22,
       textAlign: 'center',
     },
@@ -270,7 +266,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       opacity: 0.72,
     },
     websitePromptLinkText: {
-      fontSize: FontSize.base,
+      fontSize: FontSize.secondary,
       fontWeight: FontWeight.semibold,
       textAlign: 'center',
     },

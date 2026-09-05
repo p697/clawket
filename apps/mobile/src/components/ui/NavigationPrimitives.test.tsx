@@ -1,11 +1,13 @@
 import React from 'react';
 import { fireEvent, render } from '@testing-library/react-native';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 import { builtInAccents } from '../../theme/accents';
 import { buildTheme } from '../../theme/theme';
 import { ControlSize, FontSize, Radius } from '../../theme/tokens';
+import { ConfirmationModal } from './ConfirmationModal';
 import { SearchInput } from './SearchInput';
 import { SegmentedTabs } from './SegmentedTabs';
+import { Sheet } from './Sheet';
 
 let mockScheme: 'light' | 'dark' = 'light';
 
@@ -32,11 +34,23 @@ jest.mock('react-native', () => {
     return result;
   };
   return {
-    Platform: { OS: 'ios', select: (options: Record<string, unknown>) => options.ios ?? options.default },
+    Modal: primitive('Modal'),
+    Platform: {
+      OS: 'ios',
+      isMacCatalyst: false,
+      isPad: false,
+      select: (options: Record<string, unknown>) => options.ios ?? options.default,
+    },
     Pressable: primitive('Pressable'),
-    StyleSheet: { create: <T,>(styles: T) => styles, flatten, hairlineWidth: 1 },
+    StyleSheet: {
+      absoluteFillObject: {},
+      create: <T,>(styles: T) => styles,
+      flatten,
+      hairlineWidth: 1,
+    },
     Text: primitive('Text'),
     TextInput: primitive('TextInput'),
+    useWindowDimensions: () => ({ width: 375, height: 812, scale: 3, fontScale: 1 }),
     View: primitive('View'),
   };
 });
@@ -51,6 +65,12 @@ jest.mock('lucide-react-native', () => {
 
 jest.mock('react-native-reanimated', () => ({
   __esModule: true,
+  Easing: {
+    cubic: (value: number) => value ** 3,
+    out: (easing: (value: number) => number) => (
+      (value: number) => 1 - easing(1 - value)
+    ),
+  },
   default: {
     createAnimatedComponent: (component: React.ComponentType<unknown>) => component,
   },
@@ -61,14 +81,20 @@ jest.mock('react-native-reanimated', () => ({
 }));
 
 jest.mock('../../theme', () => {
+  const ReactRuntime = require('react');
   const { buildTheme: createTheme } = jest.requireActual('../../theme/theme');
   const { builtInAccents: accents } = jest.requireActual('../../theme/accents');
   return {
+    ThemeContext: ReactRuntime.createContext(null),
     useAppTheme: () => ({
       theme: createTheme(mockScheme, mockScheme, accents.iceBlue),
     }),
   };
 });
+
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
+}));
 
 jest.mock('../../services/haptics', () => ({
   triggerLightImpact: jest.fn(),
@@ -135,9 +161,68 @@ describe.each(['light', 'dark'] as const)('%s navigation primitives', (scheme) =
     });
     expect(result.getByTestId('search-input').props).toMatchObject({
       autoFocus: true,
+      defaultValue: 'agent',
       placeholderTextColor: theme.colors.inkTertiary,
     });
+    expect(result.getByTestId('search-input').props.value).toBeUndefined();
     fireEvent.press(result.getByTestId('search-clear'));
     expect(onChangeText).toHaveBeenCalledWith('');
+  });
+
+  it('uses a canonical 44pt FloatingButton for sheet close', () => {
+    const onClose = jest.fn();
+    const result = render(
+      <Sheet
+        visible
+        title="Options"
+        onClose={onClose}
+        closeAccessibilityLabel="Close"
+        testID="navigation-sheet"
+        headerRight={<Text testID="sheet-header-right">4s</Text>}
+      >
+        <Text>Content</Text>
+      </Sheet>,
+    );
+    const close = result.getByTestId('navigation-sheet-close');
+
+    expect(flattened(close.props.style)).toMatchObject({
+      width: ControlSize.floatingButton,
+      height: ControlSize.floatingButton,
+      borderRadius: Radius.full,
+    });
+    expect(close.props.accessibilityLabel).toBe('Close');
+    expect(result.getByTestId('sheet-header-right')).toBeTruthy();
+    fireEvent.press(close);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps destructive confirmation in app-owned centered chrome', () => {
+    const onClose = jest.fn();
+    const onConfirm = jest.fn();
+    const result = render(
+      <ConfirmationModal
+        visible
+        title="Delete session?"
+        message="This cannot be undone."
+        cancelLabel="Cancel"
+        confirmLabel="Delete"
+        onClose={onClose}
+        onConfirm={onConfirm}
+        destructive
+        testID="delete-confirmation"
+      />,
+    );
+
+    expect(flattened(result.getByTestId('delete-confirmation-card').props.style)).toMatchObject({
+      width: '100%',
+      maxWidth: 440,
+      alignSelf: 'center',
+      borderRadius: Radius.xl,
+    });
+    expect(result.getByText('This cannot be undone.')).toBeTruthy();
+    fireEvent.press(result.getByTestId('delete-confirmation-confirm'));
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+    fireEvent.press(result.getByTestId('delete-confirmation-backdrop'));
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

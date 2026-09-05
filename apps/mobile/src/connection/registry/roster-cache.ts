@@ -307,6 +307,7 @@ export function flattenRoster(
 export class RosterCache {
   private readonly storage: RosterCacheStorage;
   private readonly now: () => number;
+  private operation: Promise<void> = Promise.resolve();
 
   constructor(options: RosterCacheOptions = {}) {
     this.storage = options.storage ?? StorageService;
@@ -319,46 +320,50 @@ export class RosterCache {
     sessions: ReadonlyArray<SessionDescriptor>,
     connectionStateAtSave = 'ready',
   ): Promise<RosterCacheSnapshot> {
-    const normalizedConnectionId = connectionId.trim();
-    if (!normalizedConnectionId) throw new Error('Connection id is required.');
-    const payload = normalizePersistedRoster({
-      version: ROSTER_CACHE_VERSION,
-      connectionId: normalizedConnectionId,
-      agents,
-      sessions,
-    }, normalizedConnectionId);
-    if (!payload) throw new Error('Roster cache contains invalid or cross-connection descriptors.');
-    const scope = rosterScope(normalizedConnectionId);
-    const savedAt = this.now();
-    await this.storage.setDashboardCache(scope, {
-      version: 2,
-      cacheKey: scope,
-      savedAt,
-      source: 'network',
-      connectionStateAtSave,
-      data: payload,
-    });
-    return Object.freeze({
-      connectionId: normalizedConnectionId,
-      savedAt,
-      connectionStateAtSave,
-      agents: Object.freeze(payload.agents),
-      sessions: Object.freeze(payload.sessions),
+    return this.enqueue(async () => {
+      const normalizedConnectionId = connectionId.trim();
+      if (!normalizedConnectionId) throw new Error('Connection id is required.');
+      const payload = normalizePersistedRoster({
+        version: ROSTER_CACHE_VERSION,
+        connectionId: normalizedConnectionId,
+        agents,
+        sessions,
+      }, normalizedConnectionId);
+      if (!payload) throw new Error('Roster cache contains invalid or cross-connection descriptors.');
+      const scope = rosterScope(normalizedConnectionId);
+      const savedAt = this.now();
+      await this.storage.setDashboardCache(scope, {
+        version: 2,
+        cacheKey: scope,
+        savedAt,
+        source: 'network',
+        connectionStateAtSave,
+        data: payload,
+      });
+      return Object.freeze({
+        connectionId: normalizedConnectionId,
+        savedAt,
+        connectionStateAtSave,
+        agents: Object.freeze(payload.agents),
+        sessions: Object.freeze(payload.sessions),
+      });
     });
   }
 
   async get(connectionId: string): Promise<RosterCacheSnapshot | null> {
-    const normalizedConnectionId = connectionId.trim();
-    if (!normalizedConnectionId) return null;
-    const entry = await this.storage.getDashboardCache<PersistedRoster>(rosterScope(normalizedConnectionId));
-    const payload = normalizePersistedRoster(entry?.data, normalizedConnectionId);
-    if (!entry || !payload) return null;
-    return Object.freeze({
-      connectionId: normalizedConnectionId,
-      savedAt: entry.savedAt,
-      connectionStateAtSave: entry.connectionStateAtSave,
-      agents: Object.freeze(payload.agents),
-      sessions: Object.freeze(payload.sessions),
+    return this.enqueue(async () => {
+      const normalizedConnectionId = connectionId.trim();
+      if (!normalizedConnectionId) return null;
+      const entry = await this.storage.getDashboardCache<PersistedRoster>(rosterScope(normalizedConnectionId));
+      const payload = normalizePersistedRoster(entry?.data, normalizedConnectionId);
+      if (!entry || !payload) return null;
+      return Object.freeze({
+        connectionId: normalizedConnectionId,
+        savedAt: entry.savedAt,
+        connectionStateAtSave: entry.connectionStateAtSave,
+        agents: Object.freeze(payload.agents),
+        sessions: Object.freeze(payload.sessions),
+      });
     });
   }
 
@@ -368,23 +373,31 @@ export class RosterCache {
   }
 
   async remove(connectionId: string): Promise<void> {
-    const normalizedConnectionId = connectionId.trim();
-    if (!normalizedConnectionId) return;
-    const scope = rosterScope(normalizedConnectionId);
-    await this.storage.setDashboardCache(scope, {
-      version: 2,
-      cacheKey: scope,
-      savedAt: this.now(),
-      source: 'network',
-      connectionStateAtSave: 'deleted',
-      data: {
-        version: ROSTER_CACHE_VERSION,
-        connectionId: normalizedConnectionId,
-        deleted: true,
-        agents: [],
-        sessions: [],
-      },
+    await this.enqueue(async () => {
+      const normalizedConnectionId = connectionId.trim();
+      if (!normalizedConnectionId) return;
+      const scope = rosterScope(normalizedConnectionId);
+      await this.storage.setDashboardCache(scope, {
+        version: 2,
+        cacheKey: scope,
+        savedAt: this.now(),
+        source: 'network',
+        connectionStateAtSave: 'deleted',
+        data: {
+          version: ROSTER_CACHE_VERSION,
+          connectionId: normalizedConnectionId,
+          deleted: true,
+          agents: [],
+          sessions: [],
+        },
+      });
     });
+  }
+
+  private enqueue<T>(operation: () => Promise<T>): Promise<T> {
+    const pending = this.operation.then(operation, operation);
+    this.operation = pending.then(() => undefined, () => undefined);
+    return pending;
   }
 }
 

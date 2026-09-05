@@ -62,7 +62,7 @@ export function ScreenHeader({
         {
           paddingTop: resolvedTopPadding,
           backgroundColor: colors.surface,
-          borderBottomColor: colors.border,
+          borderBottomColor: colors.line,
           borderBottomWidth: resolvedShowBorder ? StyleSheet.hairlineWidth : 0,
         },
         style,
@@ -70,9 +70,9 @@ export function ScreenHeader({
     >
       <View style={styles.headerRow}>
         <View style={styles.titleLayer} pointerEvents="none">
-          <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>{title}</Text>
+          <Text style={[styles.title, { color: colors.ink }]} numberOfLines={1}>{title}</Text>
           {subtitle ? (
-            <Text style={[styles.subtitle, { color: colors.textMuted }]} numberOfLines={1}>
+            <Text style={[styles.subtitle, { color: colors.inkSecondary }]} numberOfLines={1}>
               {subtitle}
             </Text>
           ) : null}
@@ -121,16 +121,16 @@ const styles = StyleSheet.create({
   },
   title: {
     textAlign: 'center',
-    fontSize: FontSize.lg,
-    lineHeight: LineHeight.lg,
+    fontSize: FontSize.body,
+    lineHeight: LineHeight.body,
     fontWeight: FontWeight.semibold,
   },
   subtitle: {
     marginTop: 2,
     textAlign: 'center',
-    fontSize: FontSize.sm,
-    lineHeight: LineHeight.sm,
-    fontWeight: FontWeight.medium,
+    fontSize: FontSize.caption,
+    lineHeight: LineHeight.caption,
+    fontWeight: FontWeight.semibold,
   },
   rightSlot: {
     minWidth: 44,

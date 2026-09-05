@@ -6,6 +6,7 @@ import {
   extractText,
   extractImageUris,
   extractImageRawData,
+  extractFileAttachments,
   hasImageBlocks,
   extractIdempotencyKey,
   isAssistantDeliveryMirrorMessage,
@@ -330,6 +331,30 @@ describe('extractImageRawData', () => {
     const blocks = [{ type: 'image', data: 'abc', mimeType: 'image/png' }];
     const result = extractImageRawData(blocks);
     expect(result).toEqual([{ base64: 'abc', mimeType: 'image/png' }]);
+  });
+});
+
+describe('extractFileAttachments', () => {
+  it('extracts normalized display metadata without retaining file payload bytes', () => {
+    expect(extractFileAttachments([
+      { type: 'text', text: 'Review this' },
+      {
+        type: 'FILE',
+        data: 'pdf-base64',
+        mime_type: ' Application/PDF ',
+        name: ' spec.pdf ',
+        uri: ' file:///spec.pdf ',
+      },
+    ])).toEqual([{
+      mimeType: 'application/pdf',
+      fileName: 'spec.pdf',
+      uri: 'file:///spec.pdf',
+    }]);
+  });
+
+  it('returns undefined when there are no file blocks', () => {
+    expect(extractFileAttachments('not-blocks')).toBeUndefined();
+    expect(extractFileAttachments([{ type: 'image', data: 'pixels' }])).toBeUndefined();
   });
 });
 

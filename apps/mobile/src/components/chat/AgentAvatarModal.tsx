@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import { Camera, Trash2 } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
-import { Button, ModalSheet, ThemedSwitch } from '../ui';
+import { Button, Sheet, ThemedSwitch } from '../ui';
 import { useAppTheme } from '../../theme';
 import { useAppContext } from '../../contexts/AppContext';
 import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
@@ -29,14 +29,21 @@ export function AgentAvatarModal({ visible, agentName, agentEmoji, avatarUri, on
   const normalizedAvatarUri = avatarUri?.trim();
 
   return (
-    <ModalSheet visible={visible} onClose={onClose} title={t('Agent Avatar')}>
+    <Sheet
+      visible={visible}
+      onClose={onClose}
+      closeAccessibilityLabel={t('Close', { ns: 'common' })}
+      title={t('Agent Avatar')}
+      maxHeight="75%"
+      testID="agent-avatar-sheet"
+    >
       <View style={styles.body}>
         {/* Current avatar */}
         <View style={styles.avatarSection}>
           {normalizedAvatarUri ? (
             <Image source={{ uri: normalizedAvatarUri }} style={styles.avatarLarge} />
           ) : (
-            <View style={[styles.avatarLarge, styles.avatarPlaceholder, { backgroundColor: colors.primarySoft }]}>
+            <View style={[styles.avatarLarge, styles.avatarPlaceholder, { backgroundColor: colors.accentSoft }]}>
               <Text style={styles.avatarPlaceholderText}>
                 {displayEmoji || (agentName || 'A').charAt(0).toUpperCase()}
               </Text>
@@ -55,14 +62,14 @@ export function AgentAvatarModal({ visible, agentName, agentEmoji, avatarUri, on
 
         {/* Show avatar toggle */}
         <View style={styles.toggleRow}>
-          <Text style={[styles.toggleLabel, { color: colors.text }]}>{tConfig('Show Agent Avatar')}</Text>
+          <Text style={[styles.toggleLabel, { color: colors.ink }]}>{tConfig('Show Agent Avatar')}</Text>
           <ThemedSwitch
             value={showAgentAvatar}
             onValueChange={onShowAgentAvatarToggle}
           />
         </View>
       </View>
-    </ModalSheet>
+    </Sheet>
   );
 }
 
@@ -85,13 +92,13 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       justifyContent: 'center',
     },
     avatarPlaceholderText: {
-      fontSize: FontSize.displayHero,
+      fontSize: FontSize.display,
     },
     agentName: {
       marginTop: Space.sm,
-      fontSize: FontSize.base,
+      fontSize: FontSize.secondary,
       fontWeight: FontWeight.semibold,
-      color: colors.text,
+      color: colors.ink,
     },
     actions: {
       gap: Space.sm,
@@ -105,7 +112,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       paddingBottom: Space.sm,
     },
     toggleLabel: {
-      fontSize: FontSize.base,
+      fontSize: FontSize.secondary,
       fontWeight: FontWeight.semibold,
     },
   });

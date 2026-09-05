@@ -1,4 +1,4 @@
-import type { GatewayBackendKind, GatewayConfig } from '../../types';
+import type { GatewayConfig } from '../../types';
 import { normalizeWsUrl } from '../../services/gateway-auth';
 
 export const RELAY_CONTROL_PREFIX = '__clawket_relay_control__:';
@@ -36,11 +36,11 @@ export function buildRelayClientWsUrl(input: {
   gatewayId: string;
   token: string;
   clientId: string;
-  backendKind: GatewayBackendKind;
+  relayIdQueryParam: 'gatewayId' | 'bridgeId';
 }): string {
   const url = new URL(normalizeWsUrl(input.relayUrl));
   if (!url.pathname || url.pathname === '/') url.pathname = '/ws';
-  url.searchParams.set(input.backendKind === 'hermes' ? 'bridgeId' : 'gatewayId', input.gatewayId);
+  url.searchParams.set(input.relayIdQueryParam, input.gatewayId);
   url.searchParams.set('role', 'client');
   url.searchParams.set('clientId', input.clientId);
   url.searchParams.set('token', input.token);

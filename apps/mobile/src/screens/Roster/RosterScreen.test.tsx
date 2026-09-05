@@ -189,6 +189,41 @@ jest.mock('../../connection', () => ({
   useRoster: () => mockRoster,
 }));
 
+jest.mock('../../components/ui/Sheet', () => {
+  const ReactRuntime = require('react');
+  return {
+    Sheet: ({ visible, children, testID }: Record<string, unknown>) => (
+      visible ? ReactRuntime.createElement('View', { testID }, children) : null
+    ),
+  };
+});
+
+jest.mock('../../components/ui/ConfirmationModal', () => {
+  const ReactRuntime = require('react');
+  return {
+    ConfirmationModal: ({
+      visible,
+      testID,
+      onClose,
+      onConfirm,
+    }: Record<string, unknown>) => visible ? ReactRuntime.createElement(
+      'View',
+      { testID },
+      ReactRuntime.createElement('Pressable', { testID: `${testID}-cancel`, onPress: onClose }),
+      ReactRuntime.createElement('Pressable', { testID: `${testID}-confirm`, onPress: onConfirm }),
+    ) : null,
+  };
+});
+
+jest.mock('../../components/ui/CompositionSafeBottomSheetTextInput', () => {
+  const ReactRuntime = require('react');
+  return {
+    CompositionSafeBottomSheetTextInput: (props: Record<string, unknown>) => (
+      ReactRuntime.createElement('TextInput', props)
+    ),
+  };
+});
+
 function flattenStyle(style: unknown): Record<string, unknown> {
   if (!style) return {};
   if (!Array.isArray(style)) return style as Record<string, unknown>;
@@ -289,6 +324,7 @@ function snapshot(
     freeConnectionId: 'live',
     activeAdapter: null,
     activeState: 'ready',
+    connectionDetails: {},
     roster: mockRoster,
     error: null,
     ...patch,
@@ -397,6 +433,7 @@ describe('RosterScreen', () => {
     fireEvent.press(view.getByTestId('roster-account'));
     fireEvent.press(view.getByTestId('roster-search'));
     fireEvent.press(view.getByTestId('roster-add'));
+    fireEvent.press(view.getByTestId('roster-action-add_connection'));
     fireEvent.press(view.getByTestId('roster-row-agent:live:main'));
     fireEvent.press(view.getByTestId('roster-row-agent:cached:builder'));
     fireEvent(view.getByTestId('roster-row-agent:live:main'), 'longPress');
@@ -411,6 +448,78 @@ describe('RosterScreen', () => {
       locked: true,
     }));
     expect(onLongPressRow).toHaveBeenCalledWith(expect.objectContaining({ agentId: 'main' }));
+  });
+
+  it('assembles production add and sole-Agent actions with Pro gating and confirmation', () => {
+    mockRoster = [group('live', 'live', [agent('live', 'main')])];
+    mockConnections = snapshot({ roster: mockRoster });
+    const onCreateAgent = jest.fn();
+    const onOpenPro = jest.fn();
+    const onToggleAgentPinned = jest.fn();
+    const onToggleAgentMuted = jest.fn();
+    const onRemoveConnection = jest.fn();
+    const screenProps = props({
+      canCreateAgent: true,
+      onCreateAgent,
+      onOpenPro,
+      onToggleAgentPinned,
+      onToggleAgentMuted,
+      onRemoveConnection,
+    });
+    const view = render(<RosterScreen {...screenProps} />);
+
+    fireEvent.press(view.getByTestId('roster-add'));
+    expect(view.getByTestId('roster-action-add_connection')).toBeTruthy();
+    fireEvent.press(view.getByTestId('roster-action-create_agent'));
+    expect(onOpenPro).toHaveBeenCalledTimes(1);
+    expect(onCreateAgent).not.toHaveBeenCalled();
+
+    view.rerender(<RosterScreen {...screenProps} isPro />);
+    fireEvent.press(view.getByTestId('roster-add'));
+    fireEvent.press(view.getByTestId('roster-action-create_agent'));
+    expect(onCreateAgent).toHaveBeenCalledTimes(1);
+
+    fireEvent(view.getByTestId('roster-row-agent:live:main'), 'longPress');
+    fireEvent.press(view.getByTestId('roster-action-pin_agent'));
+    expect(onToggleAgentPinned).toHaveBeenCalledWith(expect.objectContaining({ agentId: 'main' }));
+
+    fireEvent(view.getByTestId('roster-row-agent:live:main'), 'longPress');
+    fireEvent.press(view.getByTestId('roster-action-mute_agent'));
+    expect(onToggleAgentMuted).toHaveBeenCalledWith(expect.objectContaining({ agentId: 'main' }));
+
+    fireEvent(view.getByTestId('roster-row-agent:live:main'), 'longPress');
+    fireEvent.press(view.getByTestId('roster-action-remove_connection'));
+    expect(onRemoveConnection).not.toHaveBeenCalled();
+    fireEvent.press(view.getByTestId('roster-remove-connection-confirm'));
+    expect(onRemoveConnection).toHaveBeenCalledWith(expect.objectContaining({ connectionId: 'live' }));
+  });
+
+  it('unpins and capability-gates a real pinned-session rename action', async () => {
+    const onUnpinSession = jest.fn();
+    const onRenameSession = jest.fn(async () => undefined);
+    const screenProps = props({
+      pinnedSessionKeys: { 'live:main': ['agent:main:main:channel:ops'] },
+      canRenamePinnedSession: true,
+      onUnpinSession,
+      onRenameSession,
+    });
+    const view = render(<RosterScreen {...screenProps} />);
+    const pinned = view.getByTestId('roster-row-session:live:agent:main:main:channel:ops');
+
+    fireEvent(pinned, 'longPress');
+    fireEvent.press(view.getByTestId('roster-action-unpin_session'));
+    expect(onUnpinSession).toHaveBeenCalledWith(expect.objectContaining({ kind: 'pinned_session' }));
+
+    fireEvent(pinned, 'longPress');
+    fireEvent.press(view.getByTestId('roster-action-rename_session'));
+    fireEvent.changeText(view.getByTestId('roster-rename-input'), 'Renamed channel');
+    await act(async () => {
+      fireEvent.press(view.getByTestId('roster-rename-save'));
+    });
+    expect(onRenameSession).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionKey: 'agent:main:main:channel:ops' }),
+      'Renamed channel',
+    );
   });
 
   it('covers loading and empty states with tokenized six-row skeletons', () => {

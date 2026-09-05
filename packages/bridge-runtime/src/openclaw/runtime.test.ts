@@ -689,7 +689,7 @@ describe('bridge runtime protocol helpers', () => {
         capabilities: [' gateway.future.v3 ', 'gateway.future.v3'],
       },
       payload: { protocol: 4 },
-    }));
+    }), ' 3.0.0-preview.1 ');
     expect(successful.patched).toBe(true);
     expect(JSON.parse(successful.text)).toEqual({
       type: 'res',
@@ -699,6 +699,7 @@ describe('bridge runtime protocol helpers', () => {
       meta: {
         traceId: 'trace-response',
         capabilities: ['gateway.future.v3', BRIDGE_CAPABILITIES_V2],
+        bridgeVersion: '3.0.0-preview.1',
       },
       payload: { protocol: 4 },
     });
@@ -708,13 +709,15 @@ describe('bridge runtime protocol helpers', () => {
       id: 'req_v2_existing',
       ok: true,
       meta: {
+        bridgeVersion: 'not-the-bridge-version',
         capabilities: [` ${BRIDGE_CAPABILITIES_V2} `, 'gateway.future.v3', BRIDGE_CAPABILITIES_V2],
       },
-    }));
+    }), ' \n ');
     expect(JSON.parse(alreadyDeclared.text).meta.capabilities).toEqual([
       BRIDGE_CAPABILITIES_V2,
       'gateway.future.v3',
     ]);
+    expect(JSON.parse(alreadyDeclared.text).meta).not.toHaveProperty('bridgeVersion');
 
     const failed = JSON.stringify({ type: 'res', id: 'req_v2', ok: false });
     expect(patchConnectResponseBridgeCapabilities(failed)).toEqual({
@@ -729,6 +732,7 @@ describe('bridge runtime protocol helpers', () => {
     const runtime = new BridgeRuntime({
       config: BASE_CONFIG,
       gatewayUrl: 'ws://127.0.0.1:18789',
+      bridgeVersion: '3.0.0-test',
       createWebSocket: (url) => {
         const socket = new FakeSocket(url);
         sockets.push(socket);
@@ -757,6 +761,7 @@ describe('bridge runtime protocol helpers', () => {
     const runtime = new BridgeRuntime({
       config: BASE_CONFIG,
       gatewayUrl: 'ws://127.0.0.1:18789',
+      bridgeVersion: '3.0.0-test',
       createWebSocket: (url) => {
         const socket = new FakeSocket(url);
         sockets.push(socket);
@@ -798,15 +803,24 @@ describe('bridge runtime protocol helpers', () => {
       id: 'req_v2_wire',
       ok: true,
       futureResponse: { mode: 'preserve-me-too' },
-      payload: { protocol: 4 },
+      payload: {
+        protocol: 4,
+        server: { version: '2026.9.5-openclaw' },
+      },
     }));
     expect(JSON.parse(relay.sent[1] as string)).toEqual({
       type: 'res',
       id: 'req_v2_wire',
       ok: true,
       futureResponse: { mode: 'preserve-me-too' },
-      payload: { protocol: 4 },
-      meta: { capabilities: [BRIDGE_CAPABILITIES_V2] },
+      payload: {
+        protocol: 4,
+        server: { version: '2026.9.5-openclaw' },
+      },
+      meta: {
+        capabilities: [BRIDGE_CAPABILITIES_V2],
+        bridgeVersion: '3.0.0-test',
+      },
     });
     await runtime.stop();
   });

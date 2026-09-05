@@ -8,8 +8,6 @@ export const Space = {
   lg: 16,
   xl: 24,
   xxl: 32,
-  /** @deprecated Use `xxl`; 3.0 spacing stops at 32. */
-  xxxl: 32,
 } as const;
 
 // ─── Typography ───
@@ -19,40 +17,6 @@ export const FontSize = {
   body: 17,
   secondary: 15,
   caption: 13,
-  /** @deprecated Use `caption`. */
-  nano: 13,
-  /** @deprecated Use `caption`. */
-  micro: 13,
-  /** @deprecated Use `caption`. */
-  xs: 13,
-  /** @deprecated Use `caption`. */
-  sm: 13,
-  /** @deprecated Use `caption`. */
-  md: 13,
-  /** @deprecated Use `secondary`. */
-  bodySm: 15,
-  /** @deprecated Use `secondary`. */
-  base: 15,
-  /** @deprecated Use `body`. */
-  lg: 17,
-  /** @deprecated Use `body`. */
-  xl: 17,
-  /** @deprecated Use `title`. */
-  displaySm: 20,
-  /** @deprecated Use `title`. */
-  xxl: 20,
-  /** @deprecated Use `title` and size emoji independently. */
-  emoji: 20,
-  /** @deprecated Use `display`. */
-  displayMd: 28,
-  /** @deprecated Use `display`. */
-  xxxl: 28,
-  /** @deprecated Use `display`. */
-  displayHero: 28,
-  /** @deprecated Use `display`. */
-  displayLg: 28,
-  /** @deprecated Use `display`. */
-  hero: 28,
 } as const;
 
 export const LineHeight = {
@@ -61,33 +25,11 @@ export const LineHeight = {
   body: 24,
   secondary: 20,
   caption: 18,
-  /** @deprecated Use `caption`. */
-  xs: 18,
-  /** @deprecated Use `caption`. */
-  sm: 18,
-  /** @deprecated Use `caption`. */
-  md: 18,
-  /** @deprecated Use `secondary`. */
-  bodySm: 20,
-  /** @deprecated Use `secondary`. */
-  base: 20,
-  /** @deprecated Use `body`. */
-  lg: 24,
-  /** @deprecated Use `body`. */
-  xl: 24,
-  /** @deprecated Use `title`. */
-  xxl: 26,
-  /** @deprecated Use `display`. */
-  xxxl: 34,
 } as const;
 
 export const FontWeight = {
   regular: '400' as const,
   semibold: '600' as const,
-  /** @deprecated Use `semibold`; 3.0 has only 400 and 600. */
-  medium: '600' as const,
-  /** @deprecated Use `semibold`; 3.0 has only 400 and 600. */
-  bold: '600' as const,
 };
 
 // ─── Border Radius ───
@@ -103,18 +45,6 @@ export const Radius = {
   bottomSheet: 28,
   sheet: 36,
   full: 9999,
-  /** @deprecated Transitional alias for legacy square surfaces. */
-  none: 0,
-  /** @deprecated Use a component-specific 3.0 radius. */
-  micro: 2,
-  /** @deprecated Use a component-specific 3.0 radius. */
-  xs: 4,
-  /** @deprecated Use a component-specific 3.0 radius. */
-  sm: 8,
-  /** @deprecated Use `settingsGroup` where applicable. */
-  md: 12,
-  /** @deprecated Use `avatarRoster`, `card`, or `bubble`. */
-  lg: 18,
 } as const;
 
 export const BorderWidth = {
@@ -176,16 +106,6 @@ export const ControlSize = {
   floatingButton: 44,
   settingsRow: 52,
   rosterRow: 88,
-  /** @deprecated Use a component-specific 3.0 metric. */
-  compact: 36,
-  /** @deprecated Use `floatingButton`. */
-  standard: 44,
-  /** @deprecated Use a component-specific 3.0 metric. */
-  large: 48,
-  /** @deprecated Use `pill` for canonical pill controls. */
-  field: 48,
-  /** @deprecated Use a component-specific avatar metric. */
-  settingsIcon: 32,
 } as const;
 
 // ─── Elevation (shadows) ───
@@ -228,16 +148,14 @@ export const Shadow = {
 } as const;
 
 type ThemedShadowColors = {
-  border: string;
-  shadow: string;
+  line: string;
 };
 
 export type SurfaceElevation = 'flat' | 'raised' | 'floating' | 'overlay';
 
 type SurfaceColors = ThemedShadowColors & {
   surface: string;
-  surfaceMuted: string;
-  surfaceElevated: string;
+  surfaceFloating: string;
 };
 
 /**
@@ -252,8 +170,7 @@ export function createThemedShadowStyle(
   if (scheme === 'dark') {
     return {
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
-      shadowColor: colors.shadow,
+      borderColor: colors.line,
       shadowOffset: shadow.shadowOffset,
       shadowOpacity: 0,
       shadowRadius: shadow.shadowRadius,
@@ -262,7 +179,7 @@ export function createThemedShadowStyle(
   }
   return {
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    borderColor: colors.line,
     ...shadow,
   };
 }
@@ -285,13 +202,13 @@ export function createSurfaceStyle(
   elevation: SurfaceElevation = 'flat',
 ): ViewStyle {
   const backgroundColor = elevation === 'overlay'
-    ? colors.surfaceElevated
+    ? colors.surfaceFloating
     : colors.surface;
   if (elevation === 'flat') {
     return {
       backgroundColor,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
+      borderColor: colors.line,
     };
   }
   const shadow = elevation === 'raised'
@@ -305,17 +222,6 @@ export function createSurfaceStyle(
   };
 }
 
-// ─── Animation Presets ───
-/** @deprecated Use the canonical ease-out `Motion` timings. */
-export const SpringPreset = {
-  /** Snappy UI feedback — buttons, toggles, small movements */
-  snappy: { damping: 20, stiffness: 300, mass: 0.8 },
-  /** Standard sheet/modal entrance */
-  sheet: { damping: 22, stiffness: 220, mass: 0.9 },
-  /** Gentle float — tooltips, fade-ins */
-  gentle: { damping: 18, stiffness: 160, mass: 1.0 },
-} as const;
-
 export const Motion = {
   duration: {
     fast: 120,
@@ -328,6 +234,3 @@ export const Motion = {
   avatarWorkingLoop: 1_200,
   avatarDoneFade: 3_000,
 } as const;
-
-/** @deprecated Use `Motion.duration`. */
-export const TimingPreset = Motion.duration;

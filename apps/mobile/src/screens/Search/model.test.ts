@@ -28,7 +28,7 @@ function connection(
   return {
     id,
     backendKind,
-    transportKind: backendKind === 'youmind' ? 'https' : 'relay',
+    transportKind: ({ openclaw: 'relay', hermes: 'relay', youmind: 'https' } as const)[backendKind],
     label: id === 'home' ? 'Home server' : 'Travel server',
     createdAt: 1,
     isFreeSlot: true,

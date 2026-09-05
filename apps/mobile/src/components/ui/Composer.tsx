@@ -1,11 +1,11 @@
 import React, { useImperativeHandle, useMemo, useRef } from 'react';
 import {
-  StyleProp,
+  type StyleProp,
   StyleSheet,
-  TextInput,
-  TextInputProps,
+  type TextInput,
+  type TextInputProps,
   View,
-  ViewStyle,
+  type ViewStyle,
 } from 'react-native';
 import { ArrowUp, Mic, Plus, Square } from 'lucide-react-native';
 import { useAppTheme } from '../../theme';
@@ -18,6 +18,11 @@ import {
   Space,
 } from '../../theme/tokens';
 import { createFloatingSurfaceStyle, FloatingButton } from './FloatingButton';
+import { CompositionSafeTextInput } from './CompositionSafeTextInput';
+import {
+  PasteCapableTextInput,
+  type PastedFile,
+} from './PasteCapableTextInput';
 
 const MAX_VISIBLE_INPUT_LINES = 5;
 const MAX_INPUT_HEIGHT = LineHeight.body * MAX_VISIBLE_INPUT_LINES;
@@ -44,6 +49,8 @@ export type ComposerProps = {
   onStop?: () => void;
   onAddPress?: () => void;
   onVoicePress?: () => void;
+  onPasteFiles?: (files: readonly PastedFile[]) => void;
+  onPasteFailed?: () => void;
   editable?: boolean;
   canSend?: boolean;
   isRunning?: boolean;
@@ -70,6 +77,8 @@ export const Composer = React.forwardRef<ComposerHandle, ComposerProps>(function
   onStop,
   onAddPress,
   onVoicePress,
+  onPasteFiles,
+  onPasteFailed,
   editable = true,
   canSend = true,
   isRunning = false,
@@ -91,6 +100,24 @@ export const Composer = React.forwardRef<ComposerHandle, ComposerProps>(function
   const hasText = value.trim().length > 0;
   const showPrimaryAction = isRunning || hasText;
   const primaryDisabled = isRunning ? !onStop : !editable || !canSend || !hasText;
+  const inputProps = {
+    ref: inputRef,
+    testID: testID ? `${testID}-input` : undefined,
+    accessibilityLabel: placeholder,
+    value,
+    onChangeText,
+    placeholder,
+    placeholderTextColor: theme.colors.inkTertiary,
+    style: styles.input,
+    editable,
+    autoFocus,
+    maxLength,
+    multiline: true,
+    scrollEnabled: true,
+    textAlignVertical: 'top' as const,
+    onFocus,
+    onBlur,
+  };
 
   useImperativeHandle(forwardedRef, () => ({
     focus: () => inputRef.current?.focus(),
@@ -116,24 +143,15 @@ export const Composer = React.forwardRef<ComposerHandle, ComposerProps>(function
         testID={testID ? `${testID}-input-shell` : undefined}
         style={[styles.inputShell, !editable ? styles.disabled : null]}
       >
-        <TextInput
-          ref={inputRef}
-          testID={testID ? `${testID}-input` : undefined}
-          accessibilityLabel={placeholder}
-          value={value}
-          onChangeText={onChangeText}
-          placeholder={placeholder}
-          placeholderTextColor={theme.colors.inkTertiary}
-          style={styles.input}
-          editable={editable}
-          autoFocus={autoFocus}
-          maxLength={maxLength}
-          multiline
-          scrollEnabled
-          textAlignVertical="top"
-          onFocus={onFocus}
-          onBlur={onBlur}
-        />
+        {onPasteFiles ? (
+          <PasteCapableTextInput
+            {...inputProps}
+            onPasteFiles={onPasteFiles}
+            onPasteFailed={onPasteFailed}
+          />
+        ) : (
+          <CompositionSafeTextInput {...inputProps} />
+        )}
         {onVoicePress ? (
           <FloatingButton
             icon={Mic}

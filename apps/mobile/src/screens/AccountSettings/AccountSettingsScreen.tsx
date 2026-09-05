@@ -37,6 +37,7 @@ import {
   type AccountSettingsPageStatus,
   type AccountSettingsRow,
 } from './model';
+import { translateAccountSettingsKey } from './translation';
 
 export type AccountSettingsScreenProps = Readonly<{
   status?: AccountSettingsPageStatus;
@@ -95,15 +96,17 @@ function resolveRowTitle(
   row: AccountSettingsRow,
   t: (key: string, options?: Record<string, unknown>) => string,
 ): string {
-  return row.title ?? (row.titleKey ? t(row.titleKey) : '');
+  return row.title ?? (row.titleKey ? translateAccountSettingsKey(t, row.titleKey) : '');
 }
 
 function resolveRowValue(
   row: AccountSettingsRow,
   t: (key: string, options?: Record<string, unknown>) => string,
 ): string | undefined {
-  if (row.valueKeys) return row.valueKeys.map((key) => t(key)).join(' · ');
-  if (row.valueKey) return t(row.valueKey);
+  if (row.valueKeys) {
+    return row.valueKeys.map((key) => translateAccountSettingsKey(t, key)).join(' · ');
+  }
+  if (row.valueKey) return translateAccountSettingsKey(t, row.valueKey);
   return row.value;
 }
 
@@ -138,7 +141,7 @@ function SettingsGroupView({
 
   return (
     <View testID={`account-settings-group-${group.id}`} style={styles.groupSection}>
-      <Text style={styles.groupTitle}>{t(group.titleKey)}</Text>
+      <Text style={styles.groupTitle}>{translateAccountSettingsKey(t, group.titleKey)}</Text>
       <SettingsGroup>
         {group.rows.map((row, index) => {
           const title = resolveRowTitle(row, t);
@@ -270,8 +273,8 @@ export function AccountSettingsScreen({
     appIcon: labelOverrides?.appIcon ?? t('Default'),
     speechLanguage: labelOverrides?.speechLanguage ?? t('Follow System'),
     appVersion: labelOverrides?.appVersion ?? t('Unknown'),
-    previewEnvironment: labelOverrides?.previewEnvironment ?? t('Production'),
-  }), [labelOverrides, t]);
+    previewEnvironment: labelOverrides?.previewEnvironment ?? t(debugMode ? 'Preview' : 'Production'),
+  }), [debugMode, labelOverrides, t]);
   const groups = useMemo(() => buildAccountSettingsGroups({
     connections,
     capabilities,
@@ -318,7 +321,7 @@ export function AccountSettingsScreen({
               onOpenAction={onOpenAction}
               onOpenPaywall={onOpenPaywall}
             />
-            {!isPro && capabilities.subscription ? (
+            {!isPro && capabilities.subscription && status.kind !== 'permission' ? (
               <Banner
                 testID="account-settings-pro-banner"
                 message={t('Unlock every connection and agent')}

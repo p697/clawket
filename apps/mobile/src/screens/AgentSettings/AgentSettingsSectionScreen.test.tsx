@@ -135,11 +135,121 @@ jest.mock('../../components/ui/FloatingButton', () => {
   };
 });
 
+jest.mock('../../components/ui/ConfirmationModal', () => {
+  const ReactRuntime = require('react');
+  return {
+    ConfirmationModal: ({
+      visible,
+      testID,
+      onClose,
+      onConfirm,
+    }: {
+      visible: boolean;
+      testID: string;
+      onClose: () => void;
+      onConfirm: () => void;
+    }) => visible
+      ? ReactRuntime.createElement(
+        'ConfirmationModal',
+        { testID },
+        ReactRuntime.createElement('ConfirmationCancel', {
+          testID: `${testID}-cancel`,
+          onPress: onClose,
+        }),
+        ReactRuntime.createElement('ConfirmationConfirm', {
+          testID: `${testID}-confirm`,
+          onPress: onConfirm,
+        }),
+      )
+      : null,
+  };
+});
+
 jest.mock('../../components/ui/Skeleton', () => {
   const ReactRuntime = require('react');
   const { View } = require('react-native');
   return {
     Skeleton: (props: Record<string, unknown>) => ReactRuntime.createElement(View, props),
+  };
+});
+
+jest.mock('./ModelsSection', () => {
+  const ReactRuntime = require('react');
+  const { View } = require('react-native');
+  return {
+    ModelsSection: () => ReactRuntime.createElement(View, { testID: 'mock-models-section' }),
+  };
+});
+
+jest.mock('./SkillsSection', () => {
+  const ReactRuntime = require('react');
+  const { View } = require('react-native');
+  return {
+    SkillsSection: () => ReactRuntime.createElement(View, { testID: 'mock-skills-section' }),
+  };
+});
+
+jest.mock('./CronSection', () => {
+  const ReactRuntime = require('react');
+  const { View } = require('react-native');
+  return {
+    CronSection: () => ReactRuntime.createElement(View, { testID: 'mock-cron-section' }),
+  };
+});
+
+jest.mock('./FilesSection', () => {
+  const ReactRuntime = require('react');
+  const { View } = require('react-native');
+  return {
+    FilesSection: () => ReactRuntime.createElement(View, { testID: 'mock-files-section' }),
+  };
+});
+
+jest.mock('./UsageSection', () => {
+  const ReactRuntime = require('react');
+  const { View } = require('react-native');
+  return {
+    UsageSection: () => ReactRuntime.createElement(View, { testID: 'mock-usage-section' }),
+  };
+});
+
+jest.mock('./IdentitySection', () => {
+  const ReactRuntime = require('react');
+  const { View } = require('react-native');
+  return {
+    IdentitySection: () => ReactRuntime.createElement(View, { testID: 'mock-identity-section' }),
+  };
+});
+
+jest.mock('./ToolsSection', () => {
+  const ReactRuntime = require('react');
+  const { View } = require('react-native');
+  return {
+    ToolsSection: () => ReactRuntime.createElement(View, { testID: 'mock-tools-section' }),
+  };
+});
+
+jest.mock('./ChannelsDevicesSection', () => {
+  const ReactRuntime = require('react');
+  const { View } = require('react-native');
+  return {
+    ChannelsDevicesSection: () => ReactRuntime.createElement(View, { testID: 'mock-channels-devices-section' }),
+  };
+});
+
+jest.mock('./LogsSection', () => {
+  const ReactRuntime = require('react');
+  const { View } = require('react-native');
+  return {
+    LogsSection: () => ReactRuntime.createElement(View, { testID: 'mock-logs-section' }),
+  };
+});
+
+jest.mock('./OpenClawManageScreen', () => {
+  const ReactRuntime = require('react');
+  const { View } = require('react-native');
+  return {
+    OpenClawManageScreen: () => ReactRuntime.createElement(View, { testID: 'mock-openclaw-manage-screen' }),
   };
 });
 
@@ -214,6 +324,7 @@ function viewProps(
       connectionState: 'ready',
       isPro: true,
     }),
+    connectionLabel: connection.label,
     state: 'ready',
     onBack: jest.fn(),
     onRetry: jest.fn(),
@@ -320,8 +431,29 @@ describe('AgentSettingsSectionView', () => {
     expect(view.getByTestId('agent-settings-section-offline')).toBeTruthy();
     expect(view.getByText('Preview')).toBeTruthy();
     expect(view.getByText('Offline')).toBeTruthy();
+    expect(flattenStyle(
+      view.getByTestId('agent-settings-section-row-connection.status-attention').props.style,
+    )).toMatchObject({ backgroundColor: colors.bad });
     fireEvent.press(view.getByTestId('agent-settings-section-row-connection.reconnect'));
     expect(onAction).toHaveBeenCalledWith('connection.reconnect');
+  });
+
+  it('requires app-owned confirmation before removing a connection', () => {
+    const onAction = jest.fn();
+    const view = render(
+      <AgentSettingsSectionView {...viewProps('connection', { onAction })} />,
+    );
+
+    fireEvent.press(view.getByTestId('agent-settings-section-row-connection.remove'));
+    expect(onAction).not.toHaveBeenCalled();
+    expect(view.getByTestId('agent-settings-remove-connection-confirmation')).toBeTruthy();
+    fireEvent.press(view.getByTestId('agent-settings-remove-connection-confirmation-cancel'));
+    expect(view.queryByTestId('agent-settings-remove-connection-confirmation')).toBeNull();
+
+    fireEvent.press(view.getByTestId('agent-settings-section-row-connection.remove'));
+    fireEvent.press(view.getByTestId('agent-settings-remove-connection-confirmation-confirm'));
+    expect(onAction).toHaveBeenCalledWith('connection.remove');
+    expect(view.queryByTestId('agent-settings-remove-connection-confirmation')).toBeNull();
   });
 
   it('renders loading, empty, error, and unavailable-operation states', () => {
@@ -397,21 +529,47 @@ describe('AgentSettingsSectionScreen host', () => {
     consoleErrorSpy.mockRestore();
   });
 
-  it('passes a canonical adapter context to the root action resolver', async () => {
+  it('hosts the capability-driven identity implementation instead of descriptor actions', () => {
     const resolveAction = jest.fn();
-    const props = screenProps('skills', resolveAction);
-    const view = render(<AgentSettingsSectionScreen {...props} />);
+    const view = render(<AgentSettingsSectionScreen {...screenProps('identity', resolveAction)} />);
 
-    fireEvent.press(view.getByTestId('agent-settings-section-row-skills.installed'));
-    await waitFor(() => expect(resolveAction).toHaveBeenCalledWith(
-      {
-        section: 'skills',
-        action: 'skills.installed',
-        connectionId: 'studio',
-        agentId: 'main',
-      },
-      { adapter, connection, agent },
-    ));
+    expect(view.getByTestId('mock-identity-section')).toBeTruthy();
+    expect(view.queryByTestId('agent-settings-section-row-identity.profile')).toBeNull();
+    expect(resolveAction).not.toHaveBeenCalled();
+  });
+
+  it('hosts the functional models and skills sections in the canonical screen shell', () => {
+    const models = render(<AgentSettingsSectionScreen {...screenProps('models', jest.fn())} />);
+    expect(models.getByTestId('mock-models-section')).toBeTruthy();
+    expect(models.queryByTestId('agent-settings-section-row-models.default')).toBeNull();
+    models.unmount();
+
+    const skills = render(<AgentSettingsSectionScreen {...screenProps('skills', jest.fn())} />);
+    expect(skills.getByTestId('mock-skills-section')).toBeTruthy();
+    expect(skills.queryByTestId('agent-settings-section-row-skills.installed')).toBeNull();
+
+    skills.unmount();
+    for (const [section, testID] of [
+      ['cron', 'mock-cron-section'],
+      ['files', 'mock-files-section'],
+      ['usage', 'mock-usage-section'],
+      ['tools', 'mock-tools-section'],
+      ['channels-devices', 'mock-channels-devices-section'],
+      ['logs', 'mock-logs-section'],
+    ] as const) {
+      const specialized = render(
+        <AgentSettingsSectionScreen {...screenProps(section, jest.fn())} />,
+      );
+      expect(specialized.getByTestId(testID)).toBeTruthy();
+      specialized.unmount();
+    }
+
+    const openClaw = render(
+      <AgentSettingsSectionScreen {...screenProps('openclaw', jest.fn())} />,
+    );
+    expect(openClaw.getByTestId('mock-openclaw-manage-screen')).toBeTruthy();
+    expect(openClaw.queryByTestId('agent-settings-section-screen')).toBeNull();
+    openClaw.unmount();
   });
 
   it('activates the route connection before resolving its capabilities', async () => {
@@ -423,6 +581,27 @@ describe('AgentSettingsSectionScreen host', () => {
     };
     render(<AgentSettingsSectionScreen {...screenProps('models', jest.fn())} />);
     await waitFor(() => expect(mockCoordinator.activate).toHaveBeenCalledWith('studio'));
+  });
+
+  it('renders Bridge details only from the coordinator runtime projection', () => {
+    mockRuntime = {
+      ...mockRuntime,
+      connectionDetails: {
+        studio: {
+          lastReadyAt: Date.UTC(2026, 8, 5, 7, 30),
+          bridgeVersion: '2026.9.5',
+          bridgeCapabilities: ['bridge.capabilities.v2'],
+        },
+      },
+    };
+
+    const view = render(<AgentSettingsSectionScreen {...screenProps('connection', jest.fn())} />);
+
+    expect(view.getByText('Last ready')).toBeTruthy();
+    expect(view.getByText('Bridge version')).toBeTruthy();
+    expect(view.getByText('2026.9.5')).toBeTruthy();
+    expect(view.getByText('Bridge capabilities')).toBeTruthy();
+    expect(view.getByText('bridge.capabilities.v2')).toBeTruthy();
   });
 });
 

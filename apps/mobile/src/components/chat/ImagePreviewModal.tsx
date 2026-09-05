@@ -1,5 +1,5 @@
 import { ImageZoom } from '@likashefqet/react-native-image-zoom';
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Modal, StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { Gesture, GestureDetector, gestureHandlerRootHOC } from 'react-native-gesture-handler';
@@ -14,11 +14,11 @@ import Animated, {
   withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
-import { X } from 'lucide-react-native';
+import { Download, X } from 'lucide-react-native';
 import { saveImageUriToPhotoLibrary } from '../../services/photo-library';
 import { useAppTheme } from '../../theme';
-import { FontSize, Radius, Space } from '../../theme/tokens';
-import { CircleButton } from '../ui';
+import { FontSize, IconSize, PresentationColor, Radius, Space } from '../../theme/tokens';
+import { FloatingButton, SettingsGroup, SettingsRow, Sheet } from '../ui';
 
 type Props = {
   visible: boolean;
@@ -107,6 +107,7 @@ export function ImagePreviewModal({
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme.colors), [theme]);
   const closeRequestedRef = useRef(false);
+  const [imageActionsIndex, setImageActionsIndex] = useState<number | null>(null);
 
   const scales = useMemo(
     () => uris.map(() => makeMutable(1)),
@@ -122,6 +123,7 @@ export function ImagePreviewModal({
 
   useEffect(() => {
     closeRequestedRef.current = false;
+    if (!visible) setImageActionsIndex(null);
   }, [visible, uris]);
 
   useEffect(() => {
@@ -207,23 +209,15 @@ export function ImagePreviewModal({
   }, [t, uris]);
 
   const showImageActions = useCallback((targetIndex: number) => {
-    Alert.alert(
-      t('Image options'),
-      undefined,
-      [
-        {
-          text: t('Cancel'),
-          style: 'cancel',
-        },
-        {
-          text: t('Save to Photos'),
-          onPress: () => {
-            void handleSaveCurrentImage(targetIndex);
-          },
-        },
-      ],
-    );
-  }, [handleSaveCurrentImage, t]);
+    setImageActionsIndex(targetIndex);
+  }, []);
+
+  const saveSelectedImage = useCallback(() => {
+    if (imageActionsIndex == null) return;
+    const targetIndex = imageActionsIndex;
+    setImageActionsIndex(null);
+    void handleSaveCurrentImage(targetIndex);
+  }, [handleSaveCurrentImage, imageActionsIndex]);
 
   const panGesture = useMemo(
     () =>
@@ -435,15 +429,21 @@ export function ImagePreviewModal({
   }
 
   return (
-    <Modal visible={visible} animationType="none" transparent onRequestClose={animateClose}>
-      <ModalGestureRoot>
-        <Animated.View style={[styles.previewOverlay, overlayAnimatedStyle]}>
+    <>
+      <Modal visible={visible} animationType="none" transparent onRequestClose={animateClose}>
+        <ModalGestureRoot>
+          <Animated.View style={[styles.previewOverlay, overlayAnimatedStyle]}>
           <Animated.View style={[styles.previewClose, { top: insetsTop + Space.md }, closeButtonAnimatedStyle]}>
-            <CircleButton
-              icon={<X size={20} color={theme.colors.primaryText} strokeWidth={2.2} />}
+            <FloatingButton
+              testID="image-preview-close"
+              icon={X}
               onPress={animateClose}
-              size={36}
-              color={theme.colors.overlay}
+              accessibilityLabel={t('Close', { ns: 'common' })}
+              appearance="quiet"
+              iconSize={20}
+              iconColor={PresentationColor.onMedia}
+              strokeWidth={2.2}
+              style={styles.previewCloseButton}
             />
           </Animated.View>
 
@@ -481,9 +481,33 @@ export function ImagePreviewModal({
               {index + 1} / {uris.length}
             </Text>
           ) : null}
-        </Animated.View>
-      </ModalGestureRoot>
-    </Modal>
+          </Animated.View>
+        </ModalGestureRoot>
+      </Modal>
+      <Sheet
+        visible={imageActionsIndex != null}
+        onClose={() => setImageActionsIndex(null)}
+        closeAccessibilityLabel={t('Close', { ns: 'common' })}
+        title={t('Image options')}
+        maxHeight="45%"
+        testID="image-options-sheet"
+      >
+        <SettingsGroup>
+          <SettingsRow
+            testID="image-options-save"
+            title={t('Save to Photos')}
+            leading={(
+              <Download
+                size={IconSize.md}
+                color={theme.colors.inkSecondary}
+                strokeWidth={2}
+              />
+            )}
+            onPress={saveSelectedImage}
+          />
+        </SettingsGroup>
+      </Sheet>
+    </>
   );
 }
 
@@ -491,12 +515,15 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
   return StyleSheet.create({
     previewOverlay: {
       flex: 1,
-      backgroundColor: colors.chatPreviewMask,
+      backgroundColor: PresentationColor.cameraBackground,
     },
     previewClose: {
       position: 'absolute',
       right: Space.lg,
       zIndex: 10,
+    },
+    previewCloseButton: {
+      backgroundColor: PresentationColor.mediaControl,
     },
     gestureSurface: {
       flex: 1,
@@ -513,12 +540,12 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     previewPager: {
       position: 'absolute',
       alignSelf: 'center',
-      color: colors.primaryText,
-      fontSize: FontSize.md,
-      backgroundColor: colors.overlay,
+      color: PresentationColor.onMedia,
+      fontSize: FontSize.caption,
+      backgroundColor: PresentationColor.mediaControl,
       paddingHorizontal: 10,
       paddingVertical: Space.xs,
-      borderRadius: Radius.sm + 2,
+      borderRadius: Radius.full,
     },
   });
 }

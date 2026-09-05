@@ -21,6 +21,7 @@ import {
   useConnections,
 } from '../../connection';
 import { Banner } from '../../components/ui/Banner';
+import { ConfirmationModal } from '../../components/ui/ConfirmationModal';
 import { FloatingButton } from '../../components/ui/FloatingButton';
 import {
   SettingsDivider,
@@ -53,11 +54,21 @@ import {
   type AgentSettingsSectionRowDescriptor,
   type AgentSettingsSectionState,
 } from './section-model';
+import { ModelsSection } from './ModelsSection';
+import { SkillsSection } from './SkillsSection';
+import { CronSection } from './CronSection';
+import { FilesSection } from './FilesSection';
+import { UsageSection } from './UsageSection';
+import { IdentitySection } from './IdentitySection';
+import { ToolsSection } from './ToolsSection';
+import { ChannelsDevicesSection } from './ChannelsDevicesSection';
+import { LogsSection } from './LogsSection';
+import { OpenClawManageScreen } from './OpenClawManageScreen';
+import { translateAgentSettingsKey } from './translation';
 
 const NO_CAPABILITIES = Object.freeze(Object.fromEntries(
   CAPABILITY_KEYS.map((capability) => [capability, false]),
 )) as unknown as Capabilities;
-const SETTINGS_NAMESPACES = ['common', 'console', 'config'];
 
 type NavigationProps = NativeStackScreenProps<RootStackParamList, 'AgentSettingsSection'>;
 
@@ -88,6 +99,7 @@ export type AgentSettingsSectionScreenProps = NavigationProps & Readonly<{
 
 export type AgentSettingsSectionViewProps = Readonly<{
   model: AgentSettingsSectionModel;
+  connectionLabel?: string;
   state: AgentSettingsSectionState;
   errorMessage?: string;
   pendingAction?: AgentSettingsSectionAction | null;
@@ -96,6 +108,7 @@ export type AgentSettingsSectionViewProps = Readonly<{
   onAction?: (action: AgentSettingsSectionAction) => void;
   canResolveAction?: (action: AgentSettingsSectionAction) => boolean;
   onOpenPaywall: (reason: string) => void;
+  sectionContent?: React.ReactNode;
 }>;
 
 export function AgentSettingsSectionScreen({
@@ -110,6 +123,8 @@ export function AgentSettingsSectionScreen({
   const [activationError, setActivationError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<AgentSettingsSectionAction | null>(null);
+  const { i18n } = useTranslation();
+  const locale = i18n?.resolvedLanguage;
   const { connectionId, agentId, section } = route.params;
   const routeIsActive = runtime.activeConnectionId === connectionId;
   const adapter = routeIsActive ? runtime.activeAdapter : null;
@@ -153,6 +168,10 @@ export function AgentSettingsSectionScreen({
     connectionState: runtime.activeState,
     isPro,
     permissionDenied,
+    ...(runtime.connectionDetails?.[connectionId]
+      ? { connectionDetails: runtime.connectionDetails[connectionId] }
+      : {}),
+    ...(locale ? { locale } : {}),
   }) : emptySectionModel(section, sectionLocked), [
     adapter?.management,
     capabilities,
@@ -160,8 +179,10 @@ export function AgentSettingsSectionScreen({
     isPro,
     permissionDenied,
     runtime.activeState,
+    runtime.connectionDetails,
     section,
     sectionLocked,
+    locale,
   ]);
   const state = resolveAgentSettingsSectionState({
     initialized: runtime.initialized && (adapter !== null || Boolean(errorMessage)),
@@ -174,7 +195,6 @@ export function AgentSettingsSectionScreen({
     locked: sectionLocked,
     hasError: Boolean(errorMessage),
   });
-
   const retry = useCallback(() => {
     setActivationError(null);
     setActionError(null);
@@ -197,6 +217,69 @@ export function AgentSettingsSectionScreen({
     }
     navigation.navigate('Paywall', { reason });
   }, [navigation, onOpenPaywall]);
+
+  const refreshRoster = useCallback(async () => {
+    try {
+      await getConnectionRuntime().refreshRoster();
+    } catch {
+      // The management mutation already succeeded; the runtime will refresh on focus.
+    }
+  }, []);
+
+  const finishAgentRemoval = useCallback(async () => {
+    await refreshRoster();
+    navigation.navigate('Roster');
+  }, [navigation, refreshRoster]);
+
+  let sectionContent: React.ReactNode;
+  if (adapter && agent) {
+    const online = runtime.activeState === 'ready';
+    if (section === 'identity') {
+      sectionContent = (
+        <IdentitySection
+          adapter={adapter}
+          agent={agent}
+          online={online}
+          isPro={isPro}
+          openCreateOnMount={route.params.action === 'create-agent'}
+          onOpenPaywall={openPaywall}
+          onChanged={refreshRoster}
+          onCreated={() => navigation.navigate('Roster')}
+          onRemoved={finishAgentRemoval}
+        />
+      );
+    } else if (section === 'models') {
+      sectionContent = <ModelsSection adapter={adapter} agent={agent} online={online} />;
+    } else if (section === 'skills') {
+      sectionContent = <SkillsSection adapter={adapter} agent={agent} online={online} />;
+    } else if (section === 'cron') {
+      sectionContent = <CronSection adapter={adapter} agent={agent} online={online} />;
+    } else if (section === 'files') {
+      sectionContent = (
+        <FilesSection
+          adapter={adapter}
+          agent={agent}
+          online={online}
+          isPro={isPro}
+          onOpenPaywall={openPaywall}
+        />
+      );
+    } else if (section === 'usage') {
+      sectionContent = <UsageSection adapter={adapter} agent={agent} online={online} />;
+    } else if (section === 'tools') {
+      sectionContent = <ToolsSection adapter={adapter} agent={agent} online={online} />;
+    } else if (section === 'channels-devices') {
+      sectionContent = <ChannelsDevicesSection adapter={adapter} online={online} />;
+    } else if (section === 'logs') {
+      sectionContent = (
+        <LogsSection
+          adapter={adapter}
+          online={online}
+          onReconnect={retry}
+        />
+      );
+    }
+  }
 
   const runAction = useCallback((action: AgentSettingsSectionAction) => {
     if (action === 'connection.reconnect') {
@@ -232,9 +315,22 @@ export function AgentSettingsSectionScreen({
     section,
   ]);
 
+  if (section === 'openclaw' && adapter) {
+    return (
+      <OpenClawManageScreen
+        adapter={adapter}
+        isPro={isPro}
+        permissionDenied={permissionDenied}
+        onBack={navigation.goBack}
+        onOpenPaywall={() => openPaywall('openclawManagement')}
+      />
+    );
+  }
+
   return (
     <AgentSettingsSectionView
       model={model}
+      connectionLabel={connection?.label}
       state={state}
       errorMessage={errorMessage}
       pendingAction={pendingAction}
@@ -243,12 +339,14 @@ export function AgentSettingsSectionScreen({
       onAction={runAction}
       canResolveAction={(action) => action === 'connection.reconnect' || Boolean(resolveAction)}
       onOpenPaywall={openPaywall}
+      sectionContent={sectionContent}
     />
   );
 }
 
 export function AgentSettingsSectionView({
   model,
+  connectionLabel,
   state,
   errorMessage,
   pendingAction,
@@ -257,13 +355,15 @@ export function AgentSettingsSectionView({
   onAction,
   canResolveAction,
   onOpenPaywall,
+  sectionContent,
 }: AgentSettingsSectionViewProps): React.JSX.Element {
-  const { t } = useTranslation(['common', 'console', 'config']);
+  const { t } = useTranslation(['common', 'settings', 'config']);
   const { theme } = useAppTheme();
   const insets = useSafeAreaInsets();
+  const [removeConfirmationVisible, setRemoveConfirmationVisible] = useState(false);
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
   const translate = useCallback(
-    (key: string) => t(key, { ns: SETTINGS_NAMESPACES }),
+    (key: string) => translateAgentSettingsKey(t, key),
     [t],
   );
   const openRow = (row: AgentSettingsSectionRowDescriptor) => {
@@ -271,50 +371,55 @@ export function AgentSettingsSectionView({
       onOpenPaywall(row.paywallReason ?? model.paywallReason ?? 'agents');
       return;
     }
+    if (row.id === 'connection.remove') {
+      setRemoveConfirmationVisible(true);
+      return;
+    }
     onAction?.(row.id);
   };
 
   return (
-    <View
-      testID="agent-settings-section-screen"
-      style={[styles.screen, { paddingTop: insets.top }]}
-    >
-      <View testID="agent-settings-section-header" style={styles.header}>
-        <FloatingButton
-          testID="agent-settings-section-back"
-          icon={ChevronLeft}
-          accessibilityLabel={t('Back', { ns: 'common' })}
-          onPress={onBack}
-        />
-        <Text
-          testID="agent-settings-section-title"
-          style={styles.headerTitle}
-          numberOfLines={1}
-        >
-          {translate(model.title)}
-        </Text>
-        <View style={styles.headerSlot} />
-      </View>
-
-      {state === 'loading' ? (
-        <AgentSettingsSectionLoading
-          bottomInset={insets.bottom}
-          label={translate('Loading...')}
-        />
-      ) : state === 'empty' ? (
-        <View testID="agent-settings-section-empty" style={styles.centeredState}>
-          <Text style={styles.stateText}>{translate('Agent unavailable')}</Text>
+    <>
+      <View
+        testID="agent-settings-section-screen"
+        style={[styles.screen, { paddingTop: insets.top }]}
+      >
+        <View testID="agent-settings-section-header" style={styles.header}>
+          <FloatingButton
+            testID="agent-settings-section-back"
+            icon={ChevronLeft}
+            accessibilityLabel={t('Back', { ns: 'common' })}
+            onPress={onBack}
+          />
+          <Text
+            testID="agent-settings-section-title"
+            style={styles.headerTitle}
+            numberOfLines={1}
+          >
+            {translate(model.title)}
+          </Text>
+          <View style={styles.headerSlot} />
         </View>
-      ) : (
-        <ScrollView
-          testID="agent-settings-section-content"
-          automaticallyAdjustContentInsets={false}
-          contentContainerStyle={[
-            styles.content,
-            { paddingBottom: insets.bottom + Space.xl },
-          ]}
-          showsVerticalScrollIndicator={false}
-        >
+
+        {state === 'loading' ? (
+          <AgentSettingsSectionLoading
+            bottomInset={insets.bottom}
+            label={translate('Loading...')}
+          />
+        ) : state === 'empty' ? (
+          <View testID="agent-settings-section-empty" style={styles.centeredState}>
+            <Text style={styles.stateText}>{translate('Agent unavailable')}</Text>
+          </View>
+        ) : (
+          <ScrollView
+            testID="agent-settings-section-content"
+            automaticallyAdjustContentInsets={false}
+            contentContainerStyle={[
+              styles.content,
+              { paddingBottom: insets.bottom + Space.xl },
+            ]}
+            showsVerticalScrollIndicator={false}
+          >
           {state === 'unsupported' ? (
             <Banner
               testID="agent-settings-section-unsupported"
@@ -338,7 +443,10 @@ export function AgentSettingsSectionView({
               onAction={onRetry}
             />
           ) : null}
-          {state === 'offline' ? (
+          {state === 'offline'
+            && model.section !== 'logs'
+            && model.section !== 'tools'
+            && model.section !== 'channels-devices' ? (
             <Banner
               testID="agent-settings-section-offline"
               message={translate('Offline · reconnecting')}
@@ -347,7 +455,9 @@ export function AgentSettingsSectionView({
             />
           ) : null}
 
-          {state !== 'unsupported' && model.groups.length > 0
+          {sectionContent && state !== 'unsupported' && state !== 'locked'
+            ? sectionContent
+            : state !== 'unsupported' && model.groups.length > 0
             ? model.groups.map((group) => (
               <AgentSettingsSectionGroup
                 key={group.id}
@@ -365,9 +475,27 @@ export function AgentSettingsSectionView({
                 <Text style={styles.stateText}>{translate('No available settings')}</Text>
               </View>
             ) : null}
-        </ScrollView>
-      )}
-    </View>
+          </ScrollView>
+        )}
+      </View>
+      <ConfirmationModal
+        visible={removeConfirmationVisible}
+        title={t('Remove connection', { ns: 'config' })}
+        message={t('Are you sure you want to delete "{{name}}"?', {
+          ns: 'config',
+          name: connectionLabel ?? t('Connection', { ns: 'common' }),
+        })}
+        cancelLabel={t('Cancel', { ns: 'common' })}
+        confirmLabel={t('Remove', { ns: 'common' })}
+        destructive
+        testID="agent-settings-remove-connection-confirmation"
+        onClose={() => setRemoveConfirmationVisible(false)}
+        onConfirm={() => {
+          setRemoveConfirmationVisible(false);
+          onAction?.('connection.remove');
+        }}
+      />
+    </>
   );
 }
 
@@ -419,6 +547,7 @@ function AgentSettingsSectionGroup({
                 testID={`agent-settings-section-row-${row.id}`}
                 title={translate(row.title)}
                 value={value}
+                attention={row.attention}
                 locked={isLocked}
                 disabled={!row.available
                   || !offlineAvailable

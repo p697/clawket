@@ -4,7 +4,7 @@ import type { LucideIcon } from 'lucide-react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { triggerLightImpact } from '../../services/haptics';
 import { useAppTheme } from '../../theme';
-import { ControlSize, createSurfaceStyle } from '../../theme/tokens';
+import { ControlSize, HitSize, createSurfaceStyle } from '../../theme/tokens';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -44,12 +44,12 @@ export function ActionButton({
     () => createStyles(theme.colors, theme.scheme),
     [theme.colors, theme.scheme],
   );
-  const dimension = size === 'sm' ? ControlSize.compact : ControlSize.standard;
+  const dimension = size === 'sm' ? HitSize.sm : ControlSize.floatingButton;
   const resolvedIconColor = iconColor ?? (appearance === 'accent'
-    ? theme.colors.primaryText
+    ? theme.colors.onAccent
     : appearance === 'destructive'
-      ? theme.colors.error
-      : theme.colors.text);
+      ? theme.colors.bad
+      : theme.colors.ink);
   const animatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
   const handlePress = useCallback(() => {
     if (haptic) triggerLightImpact();
@@ -87,8 +87,8 @@ function createStyles(
     base: { alignItems: 'center', justifyContent: 'center' },
     bare: { backgroundColor: 'transparent' },
     surface: { ...createSurfaceStyle(colors, scheme, 'raised') },
-    accent: { backgroundColor: colors.primary },
-    destructive: { backgroundColor: colors.errorSoft },
+    accent: { backgroundColor: colors.accent },
+    destructive: { backgroundColor: colors.badSoft },
     disabled: { opacity: 0.4 },
   });
 }

@@ -52,7 +52,7 @@ export class YouMindSpriteAdapter implements AgentAdapter {
   public readonly connection: ConnectionDescriptor;
   public readonly capabilities = { ...CAPABILITY_MATRIX.youmind };
 
-  private readonly api: YouMindSpriteApi;
+  readonly #api: YouMindSpriteApi;
   private readonly openingStore: OpeningStore;
   private readonly language: () => string;
   private readonly delay: (milliseconds: number) => Promise<void>;
@@ -77,10 +77,7 @@ export class YouMindSpriteAdapter implements AgentAdapter {
   private generation = 0;
   private connectPromise: Promise<void> | null = null;
 
-  public constructor(
-    private readonly record: ConnectionRecord,
-    options: YouMindSpriteAdapterOptions = {},
-  ) {
+  public constructor(record: ConnectionRecord, options: YouMindSpriteAdapterOptions = {}) {
     if (record.backendKind !== 'youmind') {
       throw new TypeError('YouMindSpriteAdapter requires a YouMind connection record.');
     }
@@ -88,7 +85,7 @@ export class YouMindSpriteAdapter implements AgentAdapter {
     if (!authScopeKey) {
       throw new TypeError('YouMind connection is missing authScopeKey.');
     }
-    this.api = options.api ?? new YouMindSpriteApiClient(record.url, authScopeKey);
+    this.#api = options.api ?? new YouMindSpriteApiClient(record.url, authScopeKey);
     this.openingStore = options.openingStore ?? createOpeningStore();
     this.language = options.language ?? (() => i18n.language || 'en');
     this.delay = options.delay ?? wait;
@@ -135,7 +132,7 @@ export class YouMindSpriteAdapter implements AgentAdapter {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), Math.max(1, timeoutMs));
     try {
-      const sprite = await this.api.ensureDefaultSprite(controller.signal);
+      const sprite = await this.#api.ensureDefaultSprite(controller.signal);
       this.cacheSprite(sprite);
       return true;
     } catch {
@@ -160,7 +157,7 @@ export class YouMindSpriteAdapter implements AgentAdapter {
 
   public async listSessions(): Promise<SessionDescriptor[]> {
     await this.ensureReady();
-    const detail = await this.api.loadSpriteSession({
+    const detail = await this.#api.loadSpriteSession({
       spriteId: this.requireSprite().id,
       limit: 1,
     }).catch((error: unknown) => {
@@ -179,7 +176,7 @@ export class YouMindSpriteAdapter implements AgentAdapter {
   ): Promise<SessionHistory> {
     this.assertMainSession(key);
     await this.ensureReady();
-    const detail = await this.api.loadSpriteSession({
+    const detail = await this.#api.loadSpriteSession({
       spriteId: this.requireSprite().id,
       limit: Math.max(1, Math.min(50, options.limit ?? 50)),
       cursor: options.cursor,
@@ -207,7 +204,7 @@ export class YouMindSpriteAdapter implements AgentAdapter {
     const runId = input.idempotencyKey || createRunId();
     const controller = new AbortController();
     const generation = ++this.generation;
-    const stream = await this.api.streamSpriteMessage({
+    const stream = await this.#api.streamSpriteMessage({
       spriteId: this.requireSprite().id,
       userId: this.requireUserId(),
       text: input.text,
@@ -237,7 +234,7 @@ export class YouMindSpriteAdapter implements AgentAdapter {
       });
     }
     try {
-      await this.api.abortSprite({
+      await this.#api.abortSprite({
         spriteId: this.requireSprite().id,
         personaId: this.requirePersonaId(),
       });
@@ -265,7 +262,7 @@ export class YouMindSpriteAdapter implements AgentAdapter {
   }
 
   private async initialize(): Promise<void> {
-    const sprite = await this.api.ensureDefaultSprite();
+    const sprite = await this.#api.ensureDefaultSprite();
     this.cacheSprite(sprite);
   }
 
@@ -279,7 +276,7 @@ export class YouMindSpriteAdapter implements AgentAdapter {
   private async ensureReady(): Promise<void> {
     if (this.currentState !== 'ready') await this.connect();
     if (!this.userId) {
-      const session = await this.api.getStoredSession();
+      const session = await this.#api.getStoredSession();
       this.userId = readString(session?.user?.id)
         || readString(this.sprite?.creatorId ?? this.sprite?.creator_id);
     }
@@ -330,7 +327,7 @@ export class YouMindSpriteAdapter implements AgentAdapter {
       await this.delay(RECOVERY_DELAYS_MS[Math.min(attempt, RECOVERY_DELAYS_MS.length - 1)]);
       if (this.generation !== generation) return;
       try {
-        const detail = await this.api.loadSpriteSession({
+        const detail = await this.#api.loadSpriteSession({
           spriteId: this.requireSprite().id,
           limit: 50,
         });
@@ -373,7 +370,7 @@ export class YouMindSpriteAdapter implements AgentAdapter {
     generation: number,
   ): Promise<void> {
     if (error.code === 'unauthorized') {
-      await this.api.clearSession().catch(() => undefined);
+      await this.#api.clearSession().catch(() => undefined);
       if (this.generation !== generation) return;
       this.setState('error', error.message);
     }

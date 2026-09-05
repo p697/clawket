@@ -132,6 +132,7 @@ async function main(): Promise<void> {
         transport: 'relay',
         bridgeId: paired.config.bridgeId,
         relayUrl: paired.config.relayUrl,
+        pairingCode: paired.accessCode,
         accessCodeExpiresAt: paired.accessCodeExpiresAt,
         qrImagePath,
       });
@@ -139,6 +140,7 @@ async function main(): Promise<void> {
       console.log(`Hermes Bridge ID: ${paired.config.bridgeId}`);
       console.log('\nScan this Hermes Relay QR in the Clawket app:\n');
       qrcodeTerminal.generate(paired.qrPayload, { small: true });
+      console.log(`Pairing code: ${paired.accessCode}`);
       console.log(`Expires: ${formatLocalTime(paired.accessCodeExpiresAt)}`);
       console.log(`QR image: ${qrImagePath}`);
     }
@@ -271,10 +273,12 @@ async function main(): Promise<void> {
       ]);
     }
 
+    const bridgeVersion = readCliVersion();
     const runtimes = runtimeConfigs.map(({ environment, config }) => {
       const runtime = new BridgeRuntime({
         config,
         gatewayUrl,
+        bridgeVersion,
         onLog: (line) => {
           emitRuntimeLine(`[clawket:${environment}] ${line}`);
         },
@@ -1013,6 +1017,7 @@ async function performHermesRelayPairing(args: string[]): Promise<PairSuccessRes
     summaryLines: [
       `Hermes Bridge ID: ${paired.config.bridgeId}`,
       `Hermes Relay URL: ${paired.config.relayUrl}`,
+      `Pairing code: ${paired.accessCode}`,
       `Expires: ${formatLocalTime(paired.accessCodeExpiresAt)}`,
       `QR image: ${qrImagePath}`,
       runtimeMessage,
@@ -1023,6 +1028,7 @@ async function performHermesRelayPairing(args: string[]): Promise<PairSuccessRes
       transport: 'relay',
       bridgeId: paired.config.bridgeId,
       relayUrl: paired.config.relayUrl,
+      pairingCode: paired.accessCode,
       accessCodeExpiresAt: paired.accessCodeExpiresAt,
       qrImagePath,
       runtimeMessage,
@@ -1389,6 +1395,7 @@ async function startHermesBridgeRuntime(options: HermesBridgeRuntimeOptions): Pr
     port,
     apiBaseUrl,
     bridgeToken: token,
+    bridgeVersion: readCliVersion(),
     startHermesIfNeeded,
     onLog: (line) => {
       console.log(`[${Date.now()}] [hermes] ${line}`);

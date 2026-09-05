@@ -20,11 +20,11 @@ export function ThemedSwitch(props: SwitchProps): React.JSX.Element {
   const { theme } = useAppTheme();
   const { value, thumbColor, trackColor, onValueChange, ...rest } = props;
   const resolvedTrackColor = trackColor ?? {
-    false: theme.colors.borderStrong,
-    true: theme.colors.primarySoft,
+    false: theme.colors.line,
+    true: theme.colors.accentSoft,
   };
   const resolvedThumbColor = thumbColor
-    ?? (value ? theme.colors.primary : theme.colors.surfaceMuted);
+    ?? (value ? theme.colors.accent : theme.colors.surface);
 
   if (Platform.OS !== 'ios') {
     return (

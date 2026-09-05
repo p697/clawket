@@ -1,13 +1,19 @@
 import { RefObject, useCallback, useEffect, useRef, useState } from 'react';
+import type {
+  AgentAdapter,
+  ChatMessage,
+  SessionHistory,
+} from '@clawket/agent-protocol';
 import { CachedSessionMeta, ChatCacheService } from '../services/chat-cache';
 import { cacheMessageImages, findCachedEntry, generateStableKey, getAllCachedForSession } from '../services/image-cache';
 import { LastOpenedSessionSnapshot, StorageService } from '../services/storage';
 import { markHermesConnectTrace } from '../connection/hermes-connect-trace';
 import { SessionInfo } from '../types';
-import { ImageMeta, ToolPresentation, UiMessage } from '../types/chat';
+import { ImageMeta, ToolPresentation, UiFileAttachment, UiMessage } from '../types/chat';
 import { sessionKeysMatch } from '../utils/session-key';
 import {
   extractAssistantDisplayText,
+  extractFileAttachments,
   extractIdempotencyKey,
   extractImageRawData,
   extractImageUris,
@@ -21,8 +27,8 @@ import {
   stableMessageId,
 } from '../utils/chat-message';
 import { formatToolOneLinerLocalized, stripToolStatusPrefix } from '../utils/tool-display';
-import { HISTORY_PAGE_SIZE } from '../screens/ChatScreen/constants';
-import { ChatScreenProps } from '../screens/ChatScreen/types';
+import { HISTORY_PAGE_SIZE } from './constants';
+import { mapAdapterSession } from './adapterChatMapping';
 import { shouldSuppressHistoryLoadError } from './historyErrorPolicy';
 import { shouldPreserveOptimisticAssistant } from './cacheHydrationPolicy';
 import { preserveOptimisticAssistantMessage } from './historyMergePolicy';
@@ -40,7 +46,7 @@ import {
   isBackendScopedMainSessionKey,
   isSessionKeyInAgentScope,
   sanitizeSnapshotForAgent,
-} from '../utils/agent-session-scope';
+} from '../connection/session-scope';
 
 let msgCounter = 0;
 function makeId(prefix: string): string {
@@ -51,6 +57,21 @@ function appendUniqueUris(target: string[], uris?: string[]): void {
   if (!uris?.length) return;
   for (const uri of uris) {
     if (!target.includes(uri)) target.push(uri);
+  }
+}
+
+function appendUniqueFileAttachments(
+  target: UiFileAttachment[],
+  attachments?: UiFileAttachment[],
+): void {
+  if (!attachments?.length) return;
+  for (const attachment of attachments) {
+    const exists = target.some((candidate) => (
+      candidate.mimeType === attachment.mimeType
+      && candidate.fileName === attachment.fileName
+      && candidate.uri === attachment.uri
+    ));
+    if (!exists) target.push(attachment);
   }
 }
 
@@ -88,6 +109,18 @@ function areStringArraysEqual(a?: string[], b?: string[]): boolean {
   return true;
 }
 
+function areFileAttachmentsEqual(a?: UiFileAttachment[], b?: UiFileAttachment[]): boolean {
+  if (a === b) return true;
+  if (!a || !b) return !a && !b;
+  if (a.length !== b.length) return false;
+  for (let index = 0; index < a.length; index++) {
+    if (a[index].mimeType !== b[index].mimeType) return false;
+    if (a[index].fileName !== b[index].fileName) return false;
+    if (a[index].uri !== b[index].uri) return false;
+  }
+  return true;
+}
+
 function areToolPresentationsEqual(a?: ToolPresentation[], b?: ToolPresentation[]): boolean {
   if (a === b) return true;
   if (!a || !b) return !a && !b;
@@ -118,6 +151,7 @@ function areUiMessagesEquivalent(prev: UiMessage[], next: UiMessage[]): boolean 
     if (a.streaming !== b.streaming) return false;
     if (a.modelLabel !== b.modelLabel) return false;
     if (!areStringArraysEqual(a.imageUris, b.imageUris)) return false;
+    if (!areFileAttachmentsEqual(a.fileAttachments, b.fileAttachments)) return false;
     if (a.imageMetas !== b.imageMetas) return false;
     if (a.toolName !== b.toolName) return false;
     if (a.toolStatus !== b.toolStatus) return false;
@@ -153,8 +187,89 @@ function prependUniqueMessages(previousMessages: UiMessage[], olderMessages: UiM
   return [...prependable, ...previousMessages];
 }
 
+function requireAdapter(adapter: AgentAdapter | null): AgentAdapter {
+  if (!adapter) throw new Error('No active agent adapter.');
+  return adapter;
+}
+
+async function listAdapterSessions(
+  adapter: AgentAdapter | null,
+  currentAgentId: string,
+): Promise<SessionInfo[]> {
+  const sessions = await requireAdapter(adapter).listSessions(currentAgentId);
+  return sessions.map(mapAdapterSession);
+}
+
+function projectHistoryMessage(message: ChatMessage): Record<string, unknown> {
+  const raw = message as unknown as Record<string, unknown>;
+  if ('content' in raw || raw.role === 'toolResult') return raw;
+
+  const content: Array<Record<string, unknown>> = [];
+  if (message.text) content.push({ type: 'text', text: message.text });
+  for (const attachment of message.attachments ?? []) {
+    if (attachment.type === 'image') {
+      if (attachment.uri) {
+        content.push({ type: 'image', uri: attachment.uri, mimeType: attachment.mimeType });
+      } else if (attachment.content) {
+        content.push({ type: 'image', data: attachment.content, mimeType: attachment.mimeType });
+      }
+      continue;
+    }
+    if (attachment.type === 'file') {
+      content.push({
+        type: 'file',
+        mimeType: attachment.mimeType,
+        ...(attachment.name ? { name: attachment.name } : {}),
+        ...(attachment.uri
+          ? { uri: attachment.uri }
+          : attachment.content
+            ? { data: attachment.content }
+            : {}),
+      });
+    }
+  }
+
+  if (message.role === 'tool') {
+    return {
+      ...raw,
+      role: 'toolResult',
+      content: message.text || message.tool?.summary || '',
+      timestamp: message.timestampMs,
+      toolCallId: message.tool?.callId ?? message.id.replace(/^tool(?:call|result)_/, ''),
+      name: message.tool?.name ?? 'tool',
+      args: message.tool?.input,
+      output: message.tool?.output,
+      isError: message.tool?.status === 'error',
+      toolDurationMs: message.tool?.durationMs,
+      toolStartedAt: message.tool?.startedAtMs,
+      toolFinishedAt: message.tool?.finishedAtMs,
+    };
+  }
+
+  if (message.tool) {
+    content.push({
+      type: 'toolCall',
+      id: message.tool.callId ?? message.id.replace(/^toolcall_/, ''),
+      name: message.tool.name,
+      arguments: message.tool.input,
+    });
+  }
+
+  return {
+    ...raw,
+    content: content.length === 1 && content[0].type === 'text'
+      ? message.text
+      : content,
+    timestamp: message.timestampMs,
+  };
+}
+
+function projectSessionHistory(history: SessionHistory): Record<string, unknown>[] {
+  return history.messages.map(projectHistoryMessage);
+}
+
 type Params = {
-  gateway: ChatScreenProps['gateway'];
+  adapter: AgentAdapter | null;
   dbg: (msg: string) => void;
   t: (key: string, options?: Record<string, unknown>) => string;
   sessionKeyRef: RefObject<string | null>;
@@ -165,7 +280,7 @@ type Params = {
 };
 
 export function useChatHistoryState({
-  gateway,
+  adapter,
   dbg,
   t,
   sessionKeyRef,
@@ -366,12 +481,12 @@ export function useChatHistoryState({
     );
 
     try {
-      const historyResult = await gateway.fetchHistory(key, limit);
+      const historyResult = await requireAdapter(adapter).loadSession(key, { limit });
       markHermesConnectTrace('history_fetch_done', {
         limit,
         messageCount: historyResult.messages.length,
       });
-      const history = historyResult.messages;
+      const history = projectSessionHistory(historyResult);
       const currentSessionId = historyResult.sessionId;
 
       if (isStaleRequest()) {
@@ -419,28 +534,36 @@ export function useChatHistoryState({
 
       let currentTurnText = '';
       let currentTurnImages: string[] = [];
+      let currentTurnFiles: UiFileAttachment[] = [];
       let currentTurnTimestamp = 0;
       let currentTurnModel = '';
       let hasAssistantTurn = false;
-      const currentTurnHasContent = () => currentTurnText.trim().length > 0 || currentTurnImages.length > 0;
+      const currentTurnHasContent = () => (
+        currentTurnText.trim().length > 0
+        || currentTurnImages.length > 0
+        || currentTurnFiles.length > 0
+      );
 
       const flushAssistantTurn = () => {
         if (!hasAssistantTurn) return;
         const hasTurnContent = currentTurnHasContent();
         if (hasTurnContent) {
-          const idSeed = currentTurnText || `${currentTurnImages.length}_img`;
+          const idSeed = currentTurnText
+            || `${currentTurnImages.length}_img_${currentTurnFiles.length}_file`;
           uiMessages.push({
             id: stableMessageId('assistant', currentTurnTimestamp, idSeed),
             role: 'assistant',
             text: currentTurnText,
             timestampMs: currentTurnTimestamp > 0 ? currentTurnTimestamp : undefined,
             imageUris: currentTurnImages.length > 0 ? currentTurnImages : undefined,
+            fileAttachments: currentTurnFiles.length > 0 ? currentTurnFiles : undefined,
             modelLabel: currentTurnModel || undefined,
           });
         }
 
         currentTurnText = '';
         currentTurnImages = [];
+        currentTurnFiles = [];
         currentTurnTimestamp = 0;
         currentTurnModel = '';
         hasAssistantTurn = false;
@@ -454,6 +577,7 @@ export function useChatHistoryState({
           const rawText = extractText(message.content);
           const text = sanitizeUserMessageText(rawText);
           let imageUris = extractImageUris(message.content);
+          const fileAttachments = extractFileAttachments(message.content);
           const rawImages = extractImageRawData(message.content);
           let displayText = text;
 
@@ -493,7 +617,7 @@ export function useChatHistoryState({
           }
 
           if (shouldHideMessage({ role: 'user', text: displayText })) continue;
-          if (displayText.trim() === '' && !imageUris) continue;
+          if (displayText.trim() === '' && !imageUris && !fileAttachments) continue;
 
           // Build imageMetas from URIs + cached dimensions
           let imageMetas: ImageMeta[] | undefined;
@@ -506,7 +630,10 @@ export function useChatHistoryState({
           }
 
           // Deduplicate exact same history item by stable ID only.
-          const userMsgId = stableMessageId('user', msgTs, displayText);
+          const userIdSeed = displayText
+            || fileAttachments?.map((file) => file.fileName ?? file.mimeType).join('|')
+            || '';
+          const userMsgId = stableMessageId('user', msgTs, userIdSeed);
           if (uiMessages.some((item) => item.id === userMsgId)) continue;
 
           uiMessages.push({
@@ -517,6 +644,7 @@ export function useChatHistoryState({
             timestampMs: msgTs > 0 ? msgTs : undefined,
             imageUris,
             imageMetas,
+            fileAttachments,
           });
           prevRole = 'user';
           continue;
@@ -570,6 +698,7 @@ export function useChatHistoryState({
           }
 
           appendUniqueUris(currentTurnImages, extractImageUris(message.content));
+          appendUniqueFileAttachments(currentTurnFiles, extractFileAttachments(message.content));
 
           if (Array.isArray(message.content)) {
             for (let index = 0; index < message.content.length; index++) {
@@ -668,8 +797,8 @@ export function useChatHistoryState({
               toolName: existing.toolName ?? name,
               toolStatus: hasError ? 'error' : 'success',
               toolSummary: hasError
-                ? t('Failed {{name}}', { name: baseSummary })
-                : t('Completed {{name}}', { name: baseSummary }),
+                ? t('Failed {{name}}', { ns: 'chat', name: baseSummary })
+                : t('Completed {{name}}', { ns: 'chat', name: baseSummary }),
               toolArgs: existing.toolArgs ?? toolArgs,
               toolDetail: output || undefined,
               toolDurationMs: durationMs ?? toolDurationMs,
@@ -685,8 +814,8 @@ export function useChatHistoryState({
               toolName: name,
               toolStatus: hasError ? 'error' : 'success',
               toolSummary: hasError
-                ? t('Failed {{name}}', { name: baseSummary })
-                : t('Completed {{name}}', { name: baseSummary }),
+                ? t('Failed {{name}}', { ns: 'chat', name: baseSummary })
+                : t('Completed {{name}}', { ns: 'chat', name: baseSummary }),
               toolArgs,
               toolDetail: output || undefined,
               toolDurationMs,
@@ -745,7 +874,7 @@ export function useChatHistoryState({
         cacheHydrationSessionKeyRef.current = null;
       }
       if (requestId === historyRequestIdRef.current) {
-        const connState = gateway.getConnectionState();
+        const connState = adapter?.state ?? 'idle';
         if (shouldSuppressHistoryLoadError(connState)) {
           dbg(`history: suppressed load error while connection state=${connState}`);
         } else {
@@ -770,7 +899,7 @@ export function useChatHistoryState({
         historyLoadInFlightRef.current.delete(requestKey);
       }
     }
-  }, [dbg, gateway, sessionKeyRef, t]);
+  }, [adapter, dbg, sessionKeyRef, t]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -778,7 +907,7 @@ export function useChatHistoryState({
       const startKey = sessionKeyRef.current;
       const startMessages = messagesRef.current;
       dbg(`refresh:start currentKey=${startKey ?? 'null'} | ${summarizeMessages('visible', startMessages)}`);
-      const list = await gateway.listSessions();
+      const list = await listAdapterSessions(adapter, currentAgentId);
       setSessions(list);
 
       const currentKey = sessionKeyRef.current;
@@ -837,7 +966,7 @@ export function useChatHistoryState({
     } finally {
       setRefreshing(false);
     }
-  }, [dbg, gateway, loadHistory, mainSessionKey, restoreCachedMessages, sessionKeyRef]);
+  }, [adapter, currentAgentId, dbg, loadHistory, mainSessionKey, restoreCachedMessages, sessionKeyRef]);
 
   const onLoadMoreHistory = useCallback(async () => {
     if (!sessionKey || loadingMoreHistory || refreshing || !hasMoreHistory) return;
@@ -849,7 +978,7 @@ export function useChatHistoryState({
     const nextLimit = historyLimitRef.current + HISTORY_PAGE_SIZE;
 
     try {
-      const historyResult = await gateway.fetchHistory(sessionKey, nextLimit);
+      const historyResult = await requireAdapter(adapter).loadSession(sessionKey, { limit: nextLimit });
       const history = historyResult.messages;
       historyRawCountRef.current = history.length;
 
@@ -886,7 +1015,7 @@ export function useChatHistoryState({
     setTimeout(() => {
       loadMoreLockRef.current = false;
     }, 350);
-  }, [gateway, hasMoreHistory, loadHistory, loadingMoreHistory, localHistoryPaging, refreshing, sessionKey]);
+  }, [adapter, hasMoreHistory, loadHistory, loadingMoreHistory, localHistoryPaging, refreshing, sessionKey]);
 
   const reconcileLatestAssistantFromHistory = useCallback(async (
     key: string,
@@ -901,8 +1030,8 @@ export function useChatHistoryState({
 
     const request = (async (): Promise<void> => {
     try {
-      const historyResult = await gateway.fetchHistory(key, 12);
-      const history = historyResult.messages;
+      const historyResult = await requireAdapter(adapter).loadSession(key, { limit: 12 });
+      const history = projectSessionHistory(historyResult);
 
       let latestAssistant: (typeof history)[number] | undefined;
       for (let index = history.length - 1; index >= 0; index--) {
@@ -993,7 +1122,7 @@ export function useChatHistoryState({
         historyReconcileInFlightRef.current.delete(requestKey);
       }
     }
-  }, [dbg, gateway, sessionKeyRef]);
+  }, [adapter, dbg, sessionKeyRef]);
 
   const loadSessionsAndHistory = useCallback(async () => {
     const currentKey = sessionKeyRef.current;
@@ -1007,7 +1136,7 @@ export function useChatHistoryState({
         .then((snapshot) => sanitizeSnapshotForAgent(snapshot, currentAgentId, { mainSessionKey }))
         .catch(() => null)
       : Promise.resolve(null);
-    const listPromise = gateway.listSessions();
+    const listPromise = listAdapterSessions(adapter, currentAgentId);
 
     // Optimistic: prefer the currently visible main session; fall back to cached snapshot.
     const snapshot = await snapshotPromise;
@@ -1097,7 +1226,7 @@ export function useChatHistoryState({
       void restoreCachedMessages(fallbackKey, { clearWhenEmpty: true });
       loadHistory(fallbackKey, HISTORY_PAGE_SIZE);
     }
-  }, [currentAgentId, gateway, gatewayConfigId, loadHistory, mainSessionKey, restoreCachedMessages]);
+  }, [adapter, currentAgentId, gatewayConfigId, loadHistory, mainSessionKey, restoreCachedMessages]);
 
   const refreshCurrentSessionHistory = useCallback(async () => {
     const currentKey = sessionKeyRef.current;
@@ -1134,7 +1263,7 @@ export function useChatHistoryState({
       setRefreshingSessions(true);
       try {
         const currentKey = sessionKeyRef.current;
-        const list = await gateway.listSessions();
+        const list = await listAdapterSessions(adapter, currentAgentId);
         setSessions(list);
 
         const selected = selectSessionForCurrentAgent({
@@ -1159,7 +1288,7 @@ export function useChatHistoryState({
       } finally {
         setRefreshingSessions(false);
       }
-    }, [gateway, gatewayConfigId, loadHistory, mainSessionKey, restoreCachedMessages, sessionKeyRef]),
+    }, [adapter, currentAgentId, gatewayConfigId, loadHistory, mainSessionKey, restoreCachedMessages, sessionKeyRef]),
     reconcileLatestAssistantFromHistory,
   };
 }

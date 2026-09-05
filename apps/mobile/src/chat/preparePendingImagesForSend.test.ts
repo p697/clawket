@@ -70,7 +70,7 @@ describe("preparePendingImagesForSend", () => {
       {
         uri: "file://original.png",
         base64: "x".repeat(8192),
-        mimeType: "image/png",
+        mimeType: " Image/PNG ",
         width: 2400,
         height: 1800,
       },

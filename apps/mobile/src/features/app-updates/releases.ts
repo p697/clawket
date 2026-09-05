@@ -12,11 +12,11 @@ export type AppUpdateAnnouncementAction =
     }
   | {
       type: 'navigate_console';
-      screen: 'Discover' | 'CronWizard' | 'SessionsBoard' | 'AgentSessionsBoard' | 'ModelList' | 'Nodes';
+      screen: 'Discover' | 'Cron' | 'SessionsBoard' | 'AgentSessionsBoard' | 'ModelList';
     }
   | {
       type: 'navigate_config';
-      screen: 'ChatAppearance' | 'OpenClawConfig' | 'OpenClawPermissionRepair';
+      screen: 'ChatAppearance';
     }
   | {
       type: 'navigate_config_add_connection';

@@ -7,6 +7,7 @@ import {
   AccountSettingsScreen,
   type AccountSettingsScreenProps,
 } from './AccountSettingsScreen';
+import { resolveAccountSettingsRuntimeStatus } from './model';
 
 const lightColors = {
   canvas: '#FFFFFF',
@@ -342,6 +343,23 @@ describe('AccountSettingsScreen', () => {
     );
     fireEvent.press(view.getByTestId('account-settings-permission-action'));
     expect(onOpenPaywall).toHaveBeenCalledWith('gatewayConnections');
+  });
+
+  it('renders the state assembled from live connection and permission inputs', () => {
+    const status = resolveAccountSettingsRuntimeStatus({
+      connectionInitialized: true,
+      connectionSwitching: false,
+      connectionCount: 2,
+      activeConnectionId: 'home',
+      activeState: 'ready',
+      permissionsLoading: false,
+      permissionReason: 'gatewayConnections',
+    });
+    const view = render(<AccountSettingsScreen {...createProps()} status={status} />);
+
+    expect(view.getByTestId('account-settings-permission')).toBeTruthy();
+    expect(view.queryByTestId('account-settings-pro-banner')).toBeNull();
+    expect(view.getByTestId('account-settings-group-connections')).toBeTruthy();
   });
 
   it('uses only the settings title, row, and tail typography tiers on the light surface', () => {

@@ -1,10 +1,8 @@
 import type {
   DoctorResult,
-  GatewayBackendCapabilities,
   PermissionsReport,
   RepairResult,
 } from '@clawket/agent-protocol';
-import { getGatewayBackendCapabilities } from '@clawket/agent-protocol';
 import nacl from 'tweetnacl';
 import type {
   ChannelsStatusResult,
@@ -15,7 +13,6 @@ import type {
   CronRunsResult,
   DeviceIdentity,
   DevicePairListResult,
-  GatewayBackendKind,
   GatewayConfig,
   NodeListResult,
   NodePairListResult,
@@ -83,6 +80,7 @@ import {
   type GatewayInfo,
   type GatewayProtocolClientOptions,
   type GatewayProtocolEvents,
+  type GatewayProtocolProfile,
   type GatewayProtocolListener,
 } from './types';
 
@@ -91,7 +89,6 @@ const PROTOCOL_VERSION = 4;
 const REQUEST_TIMEOUT_MS = 15_000;
 const CONNECT_REQUEST_TIMEOUT_MS = 8_000;
 const HANDSHAKE_TIMEOUT_MS = 20_000;
-const HERMES_FIRST_HEALTH_TIMEOUT_MS = 8_000;
 const RELAY_BOOTSTRAP_TIMEOUT_MS = 12_000;
 const RELAY_CONTROL_TIMEOUT_MS = 30_000;
 
@@ -209,20 +206,21 @@ const defaultCredentialStore = {
 };
 
 /**
- * Backend protocol lifecycle above the backend-neutral WebSocket transports.
- * It owns OpenClaw device auth and Hermes first-health readiness, but no UI or
- * adapter selection.
+ * Protocol lifecycle above the backend-neutral WebSocket transports. Concrete
+ * adapters inject the few handshake/readiness differences as an explicit
+ * profile, so legacy config fields never select backend behavior here.
  */
 export class GatewayProtocolClient {
-  private config: GatewayConfig | null = null;
+  #config: GatewayConfig | null = null;
   private state: import('../../types').ConnectionState = 'idle';
   private route: 'direct' | 'relay' = 'direct';
-  private transport: BaseWebSocketTransport | null = null;
+  #transport: BaseWebSocketTransport | null = null;
   private transportUnsubscribers: Array<() => void> = [];
   private readonly listeners = createListenerStore();
   private readonly pendingRequests = new Map<string, PendingRequest>();
   private readonly pendingControls = new Map<string, PendingControl>();
-  private readonly options: GatewayProtocolClientOptions;
+  readonly #options: GatewayProtocolClientOptions;
+  private profile: GatewayProtocolProfile;
   private readonly identityProvider: () => Promise<DeviceIdentity>;
   private readonly requestId: () => string;
   private readonly now: () => number;
@@ -235,34 +233,38 @@ export class GatewayProtocolClient {
   private activeConnectAuthSource: RelayConnectAuthSelection['source'] | null = null;
   private bootstrapDisabledForConfig = false;
   private readinessTimer: ReturnType<typeof setTimeout> | null = null;
-  private identity: DeviceIdentity | null = null;
+  #identity: DeviceIdentity | null = null;
   private connectRequestMeta: { capabilities: string[] } | undefined;
   private connectResponseCapabilities: readonly string[] | undefined;
+  private connectResponseBridgeVersion: string | undefined;
   private supportedMethods = new Set<string>();
   private gatewayInfo: GatewayInfo | null = null;
 
-  constructor(options: GatewayProtocolClientOptions = {}) {
-    this.options = options;
+  constructor(options: GatewayProtocolClientOptions) {
+    this.#options = options;
+    this.profile = options.profile;
     this.identityProvider = options.identityProvider ?? ensureIdentity;
     this.requestId = options.requestId ?? generateId;
     this.now = options.now ?? Date.now;
   }
 
-  public configure(config: GatewayConfig | null): void {
-    const changed = !sameGatewayConfig(this.config, config);
-    this.config = config;
+  public configure(config: GatewayConfig | null, profile: GatewayProtocolProfile = this.profile): void {
+    const changed = this.profile !== profile || !sameGatewayConfig(this.#config, config);
+    this.#config = config;
+    this.profile = profile;
     this.route = resolveRoute(config);
     if (!changed) return;
     this.epoch += 1;
     this.handshakeSerial += 1;
     this.bootstrapDisabledForConfig = false;
     this.connectResponseCapabilities = undefined;
+    this.connectResponseBridgeVersion = undefined;
     this.supportedMethods.clear();
     this.gatewayInfo = null;
     this.clearReadinessTimer();
     this.rejectPendingRequests('Configuration changed', 'connection_restarted');
     this.rejectPendingControls('Configuration changed');
-    if (this.transport) {
+    if (this.#transport) {
       this.stopTransport('Configuration changed');
       this.setState(config ? 'closed' : 'idle', 'Configuration changed');
     } else if (this.state !== 'idle') {
@@ -284,19 +286,10 @@ export class GatewayProtocolClient {
     return this.gatewayInfo ? { ...this.gatewayInfo } : null;
   }
 
-  public getBackendKind(): 'openclaw' | 'hermes' {
-    return resolveBackendKind(this.config);
-  }
-
-  /** @deprecated Transitional facade for pre-3.0 screens. Use adapter.capabilities. */
-  public getBackendCapabilities(): GatewayBackendCapabilities {
-    return getGatewayBackendCapabilities(this.config);
-  }
-
   public getBaseUrl(): string | null {
-    const raw = this.config?.url?.trim();
+    const raw = this.#config?.url?.trim();
     if (!raw) return null;
-    const pattern = this.getBackendKind() === 'hermes' ? /\/v1\/hermes\/ws\/?$/ : /\/ws\/?$/;
+    const pattern = this.profile.baseUrlSocketPathPattern;
     try {
       const url = new URL(raw.replace(/^ws(s?):\/\//, 'http$1://'));
       url.hash = '';
@@ -329,14 +322,22 @@ export class GatewayProtocolClient {
       : undefined;
   }
 
+  public getConnectResponseBridgeVersion(): string | undefined {
+    return this.connectResponseBridgeVersion;
+  }
+
   public async getDeviceIdentity(): Promise<DeviceIdentity> {
-    const identity = this.identity ?? await this.identityProvider();
-    this.identity = identity;
+    const identity = this.#identity ?? await this.identityProvider();
+    this.#identity = identity;
     return identity;
   }
 
+  public resetDeviceIdentity(): void {
+    this.#identity = null;
+  }
+
   public connect(): void {
-    if (!this.config?.url?.trim()) {
+    if (!this.#config?.url?.trim()) {
       this.emit('error', { code: 'config_missing', message: 'Gateway URL is not configured' });
       return;
     }
@@ -361,7 +362,7 @@ export class GatewayProtocolClient {
   }
 
   public reconnect(): void {
-    if (!this.config?.url?.trim()) {
+    if (!this.#config?.url?.trim()) {
       this.emit('error', { code: 'config_missing', message: 'Gateway URL is not configured' });
       return;
     }
@@ -371,13 +372,14 @@ export class GatewayProtocolClient {
     this.connectRequestInFlight = false;
     this.activeConnectAuthSource = null;
     this.connectResponseCapabilities = undefined;
+    this.connectResponseBridgeVersion = undefined;
     this.handshakeSerial += 1;
     this.clearReadinessTimer();
     this.rejectPendingRequests('Connection restarted', 'connection_restarted');
     this.rejectPendingControls('Connection restarted');
-    if (this.transport) {
+    if (this.#transport) {
       this.setState('reconnecting');
-      this.transport.reconnect();
+      this.#transport.reconnect();
     } else {
       this.setState('closed');
       this.connect();
@@ -386,7 +388,7 @@ export class GatewayProtocolClient {
 
   public async probeConnection(timeoutMs = 5_000): Promise<boolean> {
     if (this.manuallyClosed) return false;
-    if (this.state === 'ready' && this.transport?.isSocketOpen) {
+    if (this.state === 'ready' && this.#transport?.isSocketOpen) {
       try {
         await this.sendRequest('health', {}, timeoutMs);
         return true;
@@ -405,32 +407,36 @@ export class GatewayProtocolClient {
 
   private async startTransport(epoch: number): Promise<void> {
     try {
-      const config = this.config;
+      const config = this.#config;
       if (!config || epoch !== this.epoch || this.manuallyClosed) return;
       const route = resolveRoute(config);
       let url: string;
       if (route === 'relay') {
         const identity = await this.getDeviceIdentity();
         if (epoch !== this.epoch || this.manuallyClosed) return;
-        url = buildConfiguredRelayUrl(config, identity.deviceId, this.getBackendKind());
+        url = buildConfiguredRelayUrl(
+          config,
+          identity.deviceId,
+          this.profile.relayIdQueryParam,
+        );
       } else {
         url = normalizeWsUrl(config.url);
       }
       const shared = {
         url,
-        webSocketFactory: this.options.webSocketFactory,
-        reconnectBaseMs: this.options.reconnectBaseMs,
-        reconnectMaxMs: this.options.reconnectMaxMs,
-        reconnectFactor: this.options.reconnectFactor,
-        reconnectJitter: this.options.reconnectJitter,
-        openTimeoutMs: this.options.openTimeoutMs,
-        random: this.options.random,
+        webSocketFactory: this.#options.webSocketFactory,
+        reconnectBaseMs: this.#options.reconnectBaseMs,
+        reconnectMaxMs: this.#options.reconnectMaxMs,
+        reconnectFactor: this.#options.reconnectFactor,
+        reconnectJitter: this.#options.reconnectJitter,
+        openTimeoutMs: this.#options.openTimeoutMs,
+        random: this.#options.random,
       };
       const transport = route === 'relay'
-        ? new RelayWsTransport({ ...shared, handshakeTimeoutMs: this.options.handshakeTimeoutMs })
+        ? new RelayWsTransport({ ...shared, handshakeTimeoutMs: this.#options.handshakeTimeoutMs })
         : new DirectWsTransport({
             ...shared,
-            firstFrameTimeoutMs: this.options.directFirstFrameTimeoutMs,
+            firstFrameTimeoutMs: this.#options.directFirstFrameTimeoutMs,
             autoReadyOnFirstFrame: false,
           });
       if (epoch !== this.epoch || this.manuallyClosed) {
@@ -450,7 +456,7 @@ export class GatewayProtocolClient {
 
   private installTransport(transport: BaseWebSocketTransport, epoch: number): void {
     this.stopTransport();
-    this.transport = transport;
+    this.#transport = transport;
     this.transportUnsubscribers = [
       transport.onStateChange((change) => this.handleTransportState(change, epoch)),
       transport.onOpen(() => this.handleTransportOpen(epoch)),
@@ -512,11 +518,11 @@ export class GatewayProtocolClient {
     this.connectRequestCompleted = false;
     this.activeConnectAuthSource = null;
     this.connectResponseCapabilities = undefined;
+    this.connectResponseBridgeVersion = undefined;
     this.supportedMethods.clear();
     const serial = this.handshakeSerial;
-    const timeoutMs = this.getBackendKind() === 'hermes'
-      ? this.options.directFirstFrameTimeoutMs ?? HERMES_FIRST_HEALTH_TIMEOUT_MS
-      : this.options.handshakeTimeoutMs ?? HANDSHAKE_TIMEOUT_MS;
+    const timeoutMs = this.#options[this.profile.readinessTimeoutOption]
+      ?? this.profile.readinessTimeoutMs;
     this.startReadinessTimer(epoch, serial, timeoutMs);
   }
 
@@ -546,8 +552,7 @@ export class GatewayProtocolClient {
     }
     if (frame.type !== 'event' || typeof frame.event !== 'string') return;
 
-    if (frame.event === 'connect.challenge') {
-      if (this.getBackendKind() !== 'openclaw') return;
+    if (frame.event === this.profile.challengeEvent) {
       if (this.connectRequestCompleted || this.connectRequestInFlight) return;
       this.connectRequestInFlight = true;
       const serial = this.handshakeSerial;
@@ -566,20 +571,21 @@ export class GatewayProtocolClient {
       const health: GatewayProtocolEvents['health'] = hasHealthPayload
         ? frame.payload as GatewayProtocolEvents['health']
         : {};
-      if (this.getBackendKind() === 'hermes' && this.state !== 'ready') {
-        if (hasHealthPayload && isHealthyHermesFrame(health)) {
-          this.connectRequestCompleted = true;
-          this.markTransportReady();
-          this.emit('health', health);
-        } else {
-          this.emit('health', health);
-          this.emit('error', {
-            code: 'gateway_offline',
-            message: 'Hermes did not respond to the Bridge health probe',
-            retryable: true,
-          });
-          this.recycleTransport(epoch, this.handshakeSerial);
-        }
+      const readiness = this.state === 'ready'
+        ? undefined
+        : this.profile.healthReadiness?.(health, { hasPayload: hasHealthPayload });
+      if (readiness?.state === 'ready') {
+        this.connectRequestCompleted = true;
+        this.markTransportReady();
+        this.emit('health', health);
+      } else if (readiness?.state === 'error') {
+        this.emit('health', health);
+        this.emit('error', {
+          code: readiness.code,
+          message: readiness.message,
+          retryable: readiness.retryable ?? true,
+        });
+        this.recycleTransport(epoch, this.handshakeSerial);
       } else {
         this.emit('health', health);
       }
@@ -611,7 +617,15 @@ export class GatewayProtocolClient {
     if (frame.ok === true) {
       if (pending.method === 'connect') {
         const meta = isRecord(frame.meta) ? frame.meta : {};
-        this.connectResponseCapabilities = normalizeStrings(meta.capabilities);
+        const capabilities = normalizeStrings(meta.capabilities);
+        const bridgeMetadataRequested = this.route === 'relay'
+          && this.connectRequestMeta?.capabilities.includes('bridge.capabilities.v2') === true;
+        this.connectResponseCapabilities = bridgeMetadataRequested ? capabilities : undefined;
+        const bridgeMetadataNegotiated = bridgeMetadataRequested
+          && capabilities.includes('bridge.capabilities.v2');
+        this.connectResponseBridgeVersion = bridgeMetadataNegotiated
+          ? readString(meta.bridgeVersion)
+          : undefined;
       }
       pending.resolve(frame.payload);
       return;
@@ -646,7 +660,7 @@ export class GatewayProtocolClient {
     const plan = await this.resolveConnectPlan(identity, publicKey, epoch, serial);
     this.assertCurrentHandshake(epoch, serial);
     this.activeConnectAuthSource = plan.auth.source;
-    const client = this.options.client ?? {
+    const client = this.#options.client ?? {
       id: getRuntimeClientId(),
       platform: getRuntimePlatform(),
       deviceFamily: getRuntimeDeviceFamily(),
@@ -696,7 +710,7 @@ export class GatewayProtocolClient {
     const response = await this.sendRequest<ConnectResponse>(
       'connect',
       params,
-      this.options.connectRequestTimeoutMs ?? CONNECT_REQUEST_TIMEOUT_MS,
+      this.#options.connectRequestTimeoutMs ?? CONNECT_REQUEST_TIMEOUT_MS,
       true,
     );
     this.assertCurrentHandshake(epoch, serial);
@@ -704,27 +718,34 @@ export class GatewayProtocolClient {
     const helloAuth = response?.auth;
     const responseRole = readString(helloAuth?.role) ?? plan.role;
     const responseScopes = normalizeStrings(helloAuth?.scopes);
-    if (helloAuth?.deviceToken && responseRole === 'operator') {
+    if (helloAuth?.deviceToken) {
       await this.persistDeviceToken(identity, helloAuth.deviceToken, responseRole, responseScopes);
       this.assertCurrentHandshake(epoch, serial);
     }
     if (plan.auth.source === 'bootstrap-token' && plan.auth.bootstrapStrategy === 'mobile-setup') {
-      const operatorToken = helloAuth?.deviceTokens?.find((entry) => (
-        entry.role === 'operator' && Boolean(readString(entry.deviceToken))
-      ));
-      if (!operatorToken?.deviceToken) {
+      for (const issued of helloAuth?.deviceTokens ?? []) {
+        const issuedToken = readString(issued.deviceToken);
+        const issuedRole = readString(issued.role);
+        if (!issuedToken || !issuedRole) continue;
+        await this.persistDeviceToken(
+          identity,
+          issuedToken,
+          issuedRole,
+          normalizeStrings(issued.scopes),
+        );
+        this.assertCurrentHandshake(epoch, serial);
+      }
+      const operatorToken = responseRole === 'operator' && helloAuth?.deviceToken
+        ? { deviceToken: helloAuth.deviceToken }
+        : helloAuth?.deviceTokens?.find((entry) => (
+          entry.role === 'operator' && Boolean(readString(entry.deviceToken))
+        ));
+      if (!readString(operatorToken?.deviceToken)) {
         throw new GatewayRequestError({
           code: 'bootstrap_handoff_failed',
           message: 'Secure connection setup did not return an operator device token.',
         });
       }
-      await this.persistDeviceToken(
-        identity,
-        operatorToken.deviceToken,
-        'operator',
-        normalizeStrings(operatorToken.scopes),
-      );
-      this.assertCurrentHandshake(epoch, serial);
       this.reconnect();
       return;
     }
@@ -742,11 +763,11 @@ export class GatewayProtocolClient {
       updateAvailable: response?.snapshot?.updateAvailable,
     };
     if (
-      this.transport instanceof RelayWsTransport
+      this.#transport instanceof RelayWsTransport
       && typeof response?.policy?.tickIntervalMs === 'number'
       && response.policy.tickIntervalMs > 0
     ) {
-      this.transport.configureHeartbeat({ tickIntervalMs: response.policy.tickIntervalMs });
+      this.#transport.configureHeartbeat({ tickIntervalMs: response.policy.tickIntervalMs });
     }
     this.connectRequestCompleted = true;
     this.activeConnectAuthSource = null;
@@ -761,7 +782,7 @@ export class GatewayProtocolClient {
     epoch: number,
     serial: number,
   ): Promise<ConnectPlan> {
-    const store = this.options.credentialStore ?? defaultCredentialStore;
+    const store = this.#options.credentialStore ?? defaultCredentialStore;
     const storedRecord = await store
       .getDeviceTokenRecord(identity.deviceId, this.getDeviceTokenStorageScope())
       .catch(() => null);
@@ -781,7 +802,7 @@ export class GatewayProtocolClient {
     if (
       this.route === 'relay'
       && !this.bootstrapDisabledForConfig
-      && relaySupportsBootstrapV2(this.config?.relay)
+      && relaySupportsBootstrapV2(this.#config?.relay)
     ) {
       try {
         const control = await this.requestRelayControl(
@@ -805,7 +826,7 @@ export class GatewayProtocolClient {
       }
       this.assertCurrentHandshake(epoch, serial);
     }
-    const configured = this.config?.bootstrap;
+    const configured = this.#config?.bootstrap;
     if (
       !bootstrap
       && this.route === 'direct'
@@ -821,8 +842,8 @@ export class GatewayProtocolClient {
     const mobileSetup = bootstrap?.strategy === 'mobile-setup';
     return {
       auth: selectConnectAuth({
-        token: this.config?.token,
-        password: this.config?.password,
+        token: this.#config?.token,
+        password: this.#config?.password,
         bootstrapToken: bootstrap?.token,
         bootstrapStrategy: bootstrap?.strategy,
       }),
@@ -867,16 +888,16 @@ export class GatewayProtocolClient {
       || normalized.code === 'AUTH_SCOPE_MISMATCH'
       || message.toLowerCase().includes('device token mismatch')
     ) {
-      const identity = this.identity;
+      const identity = this.#identity;
       if (identity) {
-        void (this.options.credentialStore ?? defaultCredentialStore)
+        void (this.#options.credentialStore ?? defaultCredentialStore)
           .deleteDeviceToken(identity.deviceId, this.getDeviceTokenStorageScope())
           .finally(() => this.recycleTransport(epoch, serial));
       } else {
         this.recycleTransport(epoch, serial);
       }
     } else if (isFatalDeviceAuthError(normalized)) {
-      this.transport?.disconnect(4008, normalized.code);
+      this.#transport?.disconnect(4008, normalized.code);
     } else {
       queueMicrotask(() => this.recycleTransport(epoch, serial));
     }
@@ -888,7 +909,7 @@ export class GatewayProtocolClient {
   }
 
   private markTransportReady(): void {
-    const transport = this.transport;
+    const transport = this.#transport;
     if (transport instanceof RelayWsTransport || transport instanceof DirectWsTransport) {
       transport.markReady();
     }
@@ -898,15 +919,15 @@ export class GatewayProtocolClient {
     if (!this.isCurrentHandshake(epoch, serial)) return;
     this.handshakeSerial += 1;
     this.clearReadinessTimer();
-    this.transport?.reconnect();
+    this.#transport?.reconnect();
   }
 
   private handleRelayControl(control: RelayControlFrame, epoch: number): void {
     if (control.event === 'relay.ready') {
-      if (this.transport instanceof RelayWsTransport) {
+      if (this.#transport instanceof RelayWsTransport) {
         const interval = control.payload.tickIntervalMs;
         if (typeof interval === 'number' && interval > 0) {
-          this.transport.configureHeartbeat({ tickIntervalMs: interval });
+          this.#transport.configureHeartbeat({ tickIntervalMs: interval });
         }
       }
       return;
@@ -946,7 +967,7 @@ export class GatewayProtocolClient {
     payload?: Record<string, unknown>,
     timeoutMs = RELAY_CONTROL_TIMEOUT_MS,
   ): Promise<RelayControlFrame> {
-    if (this.route !== 'relay' || !this.transport?.isSocketOpen) {
+    if (this.route !== 'relay' || !this.#transport?.isSocketOpen) {
       return Promise.reject(new Error('Relay socket is not connected.'));
     }
     const requestId = this.requestId();
@@ -963,7 +984,7 @@ export class GatewayProtocolClient {
         reject,
       });
       try {
-        this.transport?.send(buildRelayControlFrame(requestEvent, requestId, payload));
+        this.#transport?.send(buildRelayControlFrame(requestEvent, requestId, payload));
       } catch (error) {
         clearTimeout(timeout);
         this.pendingControls.delete(requestId);
@@ -975,10 +996,10 @@ export class GatewayProtocolClient {
   private sendRequest<T>(
     method: string,
     params: object,
-    timeoutMs = this.options.requestTimeoutMs ?? REQUEST_TIMEOUT_MS,
+    timeoutMs = this.#options.requestTimeoutMs ?? REQUEST_TIMEOUT_MS,
     allowBeforeReady = false,
   ): Promise<T> {
-    if (!this.transport?.isSocketOpen || (!allowBeforeReady && this.state !== 'ready')) {
+    if (!this.#transport?.isSocketOpen || (!allowBeforeReady && this.state !== 'ready')) {
       return Promise.reject(new GatewayRequestError({
         code: 'not_connected',
         message: 'Gateway is not connected',
@@ -1013,7 +1034,7 @@ export class GatewayProtocolClient {
         reject,
       });
       try {
-        this.transport?.send(JSON.stringify(frame));
+        this.#transport?.send(JSON.stringify(frame));
       } catch (error) {
         clearTimeout(timeout);
         this.pendingRequests.delete(id);
@@ -1061,10 +1082,8 @@ export class GatewayProtocolClient {
       this.readinessTimer = null;
       if (!this.isCurrentHandshake(epoch, serial) || this.state === 'ready') return;
       this.emit('error', {
-        code: this.getBackendKind() === 'hermes' ? 'first_health_timeout' : 'challenge_timeout',
-        message: this.getBackendKind() === 'hermes'
-          ? 'Hermes health frame timed out'
-          : 'Gateway handshake timed out',
+        code: this.profile.readinessTimeoutError.code,
+        message: this.profile.readinessTimeoutError.message,
         retryable: true,
       });
       this.recycleTransport(epoch, serial);
@@ -1078,8 +1097,8 @@ export class GatewayProtocolClient {
   }
 
   private stopTransport(reason?: string): void {
-    const transport = this.transport;
-    this.transport = null;
+    const transport = this.#transport;
+    this.#transport = null;
     for (const unsubscribe of this.transportUnsubscribers.splice(0)) unsubscribe();
     if (transport) transport.disconnect(undefined, reason);
   }
@@ -1134,7 +1153,7 @@ export class GatewayProtocolClient {
     return epoch === this.epoch
       && serial === this.handshakeSerial
       && !this.manuallyClosed
-      && Boolean(this.transport?.isSocketOpen);
+      && Boolean(this.#transport?.isSocketOpen);
   }
 
   private async persistDeviceToken(
@@ -1143,23 +1162,24 @@ export class GatewayProtocolClient {
     role: string,
     scopes: string[],
   ): Promise<void> {
-    await (this.options.credentialStore ?? defaultCredentialStore).setDeviceTokenRecord(
+    await (this.#options.credentialStore ?? defaultCredentialStore).setDeviceTokenRecord(
       identity.deviceId,
       { token, role, scopes: normalizeStrings(scopes) },
-      this.getDeviceTokenStorageScope(),
+      this.getDeviceTokenStorageScope(role),
     );
   }
 
-  private getDeviceTokenStorageScope(): DeviceTokenStorageScope | undefined {
-    const serverUrl = this.config?.relay?.serverUrl?.trim().replace(/\/+$/, '');
-    const gatewayId = this.config?.relay?.gatewayId?.trim();
-    if (serverUrl && gatewayId) return { serverUrl, gatewayId };
-    const gatewayUrl = this.config?.url?.trim().replace(/\/+$/, '');
-    return gatewayUrl ? { gatewayUrl } : undefined;
+  private getDeviceTokenStorageScope(role?: string): DeviceTokenStorageScope | undefined {
+    const roleScope = role && role !== 'operator' ? { role } : {};
+    const serverUrl = this.#config?.relay?.serverUrl?.trim().replace(/\/+$/, '');
+    const gatewayId = this.#config?.relay?.gatewayId?.trim();
+    if (serverUrl && gatewayId) return { serverUrl, gatewayId, ...roleScope };
+    const gatewayUrl = this.#config?.url?.trim().replace(/\/+$/, '');
+    return gatewayUrl ? { gatewayUrl, ...roleScope } : undefined;
   }
 
   private hasLegacyCredential(): boolean {
-    return Boolean(this.config?.token?.trim() || this.config?.password?.trim());
+    return Boolean(this.#config?.token?.trim() || this.#config?.password?.trim());
   }
 
   // Thin management helpers intentionally stay mechanical: backend semantics
@@ -1328,8 +1348,10 @@ export class GatewayProtocolClient {
     currentBaseUrl: string;
     note?: string | null;
   }> {
-    const method = this.getBackendKind() === 'hermes' ? 'model.current' : 'model.get';
-    const result = await this.request<Partial<GatewayModelSelectionState>>(method, {});
+    const result = await this.request<Partial<GatewayModelSelectionState>>(
+      this.profile.currentModelMethod,
+      {},
+    );
     return {
       currentModel: result?.currentModel ?? '',
       currentProvider: result?.currentProvider ?? '',
@@ -1803,10 +1825,6 @@ function sameGatewayConfig(left: GatewayConfig | null, right: GatewayConfig | nu
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
-function resolveBackendKind(config: GatewayConfig | null): 'openclaw' | 'hermes' {
-  return config?.backendKind === 'hermes' || config?.mode === 'hermes' ? 'hermes' : 'openclaw';
-}
-
 function resolveRoute(config: GatewayConfig | null): 'direct' | 'relay' {
   return config?.transportKind === 'relay' || config?.mode === 'relay' ? 'relay' : 'direct';
 }
@@ -1814,7 +1832,7 @@ function resolveRoute(config: GatewayConfig | null): 'direct' | 'relay' {
 function buildConfiguredRelayUrl(
   config: GatewayConfig,
   clientId: string,
-  backendKind: GatewayBackendKind,
+  relayIdQueryParam: 'gatewayId' | 'bridgeId',
 ): string {
   const gatewayId = readString(config.relay?.gatewayId);
   const token = readString(config.relay?.clientToken);
@@ -1824,7 +1842,7 @@ function buildConfiguredRelayUrl(
     gatewayId,
     token,
     clientId,
-    backendKind,
+    relayIdQueryParam,
   });
 }
 
@@ -1834,12 +1852,6 @@ function normalizeStrings(value: unknown): string[] {
     .filter((entry): entry is string => typeof entry === 'string')
     .map((entry) => entry.trim())
     .filter(Boolean))];
-}
-
-function isHealthyHermesFrame(payload: Record<string, unknown>): boolean {
-  const status = readString(payload.status)?.toLowerCase();
-  return payload.hermesApiReachable !== false
-    && (!status || status === 'ok' || status === 'healthy');
 }
 
 function isPairingRequired(error: GatewayRequestError): boolean {

@@ -8,6 +8,7 @@ import {
 } from '@clawket/agent-protocol';
 import {
   AgentSettingsScreen,
+  AgentSettingsRouteLoading,
   AgentSettingsView,
   type AgentSettingsViewProps,
 } from './AgentSettingsScreen';
@@ -201,6 +202,16 @@ describe('AgentSettingsView shallow states', () => {
       />,
     );
     expect(view.getByTestId(testID)).toBeTruthy();
+  });
+
+  it('renders a route-level skeleton while the connection snapshot catches up', () => {
+    const onBack = jest.fn();
+    const view = render(<AgentSettingsRouteLoading onBack={onBack} />);
+
+    expect(view.getByTestId('agent-settings-route-loading')).toBeTruthy();
+    expect(view.getByTestId('agent-settings-loading')).toBeTruthy();
+    fireEvent.press(view.getByTestId('agent-settings-back'));
+    expect(onBack).toHaveBeenCalledTimes(1);
   });
 
   it('keeps content under the offline primitive and dispatches its action', () => {

@@ -123,7 +123,7 @@ describe('AccountSettings section model', () => {
         valueKey: 'Unavailable',
       }),
       expect.objectContaining({
-        id: 'studio-open',
+        id: 'studio-reconnect',
         disabled: true,
         valueKey: 'Unavailable',
       }),

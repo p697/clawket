@@ -429,6 +429,9 @@ describe('cli pairing output', () => {
       expect(killSpy).toHaveBeenCalledWith(40160, 'SIGTERM');
       expect(hermesLocalBridgeCtorMock).toHaveBeenCalledTimes(1);
     });
+    expect(hermesLocalBridgeCtorMock).toHaveBeenCalledWith(expect.objectContaining({
+      bridgeVersion: '0.0.0-test',
+    }));
 
     killSpy.mockRestore();
     exitSpy.mockRestore();
@@ -820,6 +823,7 @@ describe('cli pairing output', () => {
       expect(qrcodeGenerateMock).toHaveBeenCalledWith('{"version":1,"kind":"clawket_hermes_pair"}', { small: true });
     });
     expect(consoleLogSpy).toHaveBeenCalledWith('Hermes Bridge ID: hbg_123');
+    expect(consoleLogSpy).toHaveBeenCalledWith('Pairing code: ABCD23');
   });
 
   it('defaults clawket pair --backend hermes to Hermes relay on the production registry', async () => {
@@ -1122,6 +1126,9 @@ describe('cli pairing output', () => {
       expect(spawnMock).toHaveBeenCalledTimes(2);
       expect(bridgeRuntimeCtorMock).toHaveBeenCalledTimes(1);
     });
+    expect(bridgeRuntimeCtorMock).toHaveBeenCalledWith(expect.objectContaining({
+      bridgeVersion: '0.0.0-test',
+    }));
 
     expect(writeServiceStateMock).toHaveBeenCalledWith(process.pid, [
       'pairing.secure-short-code.v2',

@@ -26,6 +26,7 @@ import {
   type GatewayAdapterOptions,
   type GatewaySessionRecord,
 } from './gateway-adapter';
+import { OPENCLAW_GATEWAY_PROTOCOL_PROFILE } from './gateway-profiles';
 
 export const OPENCLAW_BRIDGE_CAPABILITY = 'bridge.capabilities.v2';
 
@@ -58,6 +59,7 @@ export class OpenClawAdapter extends GatewayAdapterBase {
       record,
       gatewayConfig: toOpenClawGatewayConfig(record),
       backendCapabilities: 'openclaw',
+      protocolProfile: OPENCLAW_GATEWAY_PROTOCOL_PROFILE,
       fallbackSessionKey: 'agent:main:main',
       options,
     });
@@ -120,12 +122,13 @@ export class OpenClawAdapter extends GatewayAdapterBase {
       const mainSessionKey = agent.id === result.defaultId && result.mainKey
         ? result.mainKey
         : `agent:${agent.id}:main`;
+      const avatar = identity.avatar || agent.identity?.avatarUrl || agent.identity?.avatar;
       return {
         connectionId: this.connection.id,
         agentId: agent.id,
         name: identity.name || agent.identity?.name || agent.name || agent.id,
         emoji: identity.emoji || agent.identity?.emoji,
-        avatarUrl: identity.avatar || agent.identity?.avatarUrl || agent.identity?.avatar,
+        avatarUrl: resolveGatewayAvatarUrl(avatar, () => this.gateway.getBaseUrl()),
         isMain: agent.id === 'main' || agent.id === result.defaultId,
         mainSessionKey,
       } satisfies AgentDescriptor;
@@ -422,6 +425,7 @@ export function mapOpenClawSession(
   const agentId = inferOpenClawAgentId(session.key, fallbackAgentId);
   const kind = inferOpenClawSessionKind(session);
   const isMain = kind === 'main';
+  const deleteManagedExternally = kind === 'channel';
   const actions = session.allowedActions;
   return {
     connectionId,
@@ -433,6 +437,8 @@ export function mapOpenClawSession(
     updatedAt: normalizeSessionUpdatedAt(session.updatedAt),
     preview: session.lastMessagePreview,
     model: session.model,
+    modelProvider: session.modelProvider,
+    sessionId: session.sessionId,
     hasActiveRun: session.hasActiveRun === true,
     attention: session.attention ?? null,
     parentSessionKey: session.parentSessionKey || session.spawnedBy,
@@ -440,10 +446,21 @@ export function mapOpenClawSession(
     allowedActions: {
       rename: actions?.rename ?? true,
       reset: actions?.reset ?? true,
-      delete: isMain ? false : (actions?.delete ?? true),
+      delete: isMain || deleteManagedExternally ? false : (actions?.delete ?? true),
       pin: actions?.pin ?? true,
     },
   };
+}
+
+function resolveGatewayAvatarUrl(
+  avatar: string | null | undefined,
+  getBaseUrl: () => string | null,
+): string | undefined {
+  const normalized = avatar?.trim();
+  if (!normalized) return undefined;
+  if (!normalized.startsWith('/')) return normalized;
+  const baseUrl = getBaseUrl();
+  return baseUrl ? `${baseUrl}${normalized}` : undefined;
 }
 
 function toOpenClawGatewayConfig(record: ConnectionRecord): GatewayConfig {

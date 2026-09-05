@@ -1,10 +1,15 @@
-import type { BackendKind } from './descriptors';
+import type { BackendKind, PromptAttachment } from './descriptors';
 
 export interface Capabilities {
   chat: boolean;
   abort: boolean;
   history: boolean;
+  /** Supports image attachments. Use `fileAttachments` for non-image files. */
   attachments: boolean;
+  /** Refines `attachments` to permit non-image files. Absent means unsupported. */
+  fileAttachments?: boolean;
+  /** Client may surface local reply notifications for adapter run completions. */
+  replyNotifications?: boolean;
   sessions: boolean;
   sessionCreate: boolean;
   sessionRename: boolean;
@@ -48,6 +53,8 @@ export const CAPABILITY_KEYS = [
   'abort',
   'history',
   'attachments',
+  'fileAttachments',
+  'replyNotifications',
   'sessions',
   'sessionCreate',
   'sessionRename',
@@ -87,6 +94,8 @@ const OPENCLAW_CAPABILITIES: Capabilities = {
   abort: true,
   history: true,
   attachments: true,
+  fileAttachments: true,
+  replyNotifications: true,
   sessions: true,
   sessionCreate: true,
   sessionRename: true,
@@ -126,6 +135,8 @@ const HERMES_CAPABILITIES: Capabilities = {
   abort: true,
   history: true,
   attachments: true,
+  fileAttachments: false,
+  replyNotifications: true,
   sessions: true,
   sessionCreate: true,
   sessionRename: true,
@@ -165,6 +176,8 @@ const YOUMIND_CAPABILITIES: Capabilities = {
   abort: true,
   history: true,
   attachments: false,
+  fileAttachments: false,
+  replyNotifications: false,
   sessions: false,
   sessionCreate: false,
   sessionRename: false,
@@ -204,6 +217,50 @@ export const CAPABILITY_MATRIX: Record<BackendKind, Capabilities> = {
   hermes: HERMES_CAPABILITIES,
   youmind: YOUMIND_CAPABILITIES,
 };
+
+export type AttachmentCapabilities = Pick<
+  Capabilities,
+  'attachments' | 'fileAttachments'
+>;
+
+/** Canonicalizes MIME for classification, analytics, and serialized prompts. */
+export function normalizeAttachmentMimeType(
+  mimeType: string | null | undefined,
+  fallback = 'application/octet-stream',
+): string {
+  const normalized = typeof mimeType === 'string' ? mimeType.trim().toLowerCase() : '';
+  return normalized || fallback.trim().toLowerCase();
+}
+
+export function isImageAttachmentMimeType(
+  mimeType: string | null | undefined,
+): boolean {
+  return normalizeAttachmentMimeType(mimeType, '').startsWith('image/');
+}
+
+export function supportsFileAttachments(
+  capabilities: AttachmentCapabilities | null | undefined,
+): boolean {
+  return capabilities?.attachments === true && capabilities.fileAttachments === true;
+}
+
+export function supportsAttachmentMimeType(
+  capabilities: AttachmentCapabilities | null | undefined,
+  mimeType: string | null | undefined,
+): boolean {
+  if (capabilities?.attachments !== true) return false;
+  return isImageAttachmentMimeType(mimeType) || capabilities.fileAttachments === true;
+}
+
+/** Validates both the declared prompt kind and its normalized MIME class. */
+export function supportsPromptAttachment(
+  capabilities: AttachmentCapabilities | null | undefined,
+  attachment: Pick<PromptAttachment, 'type' | 'mimeType'>,
+): boolean {
+  const expectedType = isImageAttachmentMimeType(attachment.mimeType) ? 'image' : 'file';
+  return attachment.type === expectedType
+    && supportsAttachmentMimeType(capabilities, attachment.mimeType);
+}
 
 /**
  * Applies runtime capability evidence without ever enabling something the

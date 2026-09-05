@@ -1,5 +1,5 @@
 import { act, renderHook } from '@testing-library/react-native';
-import type { AdapterErrorCode, BackendKind } from '@clawket/agent-protocol';
+import { resolveCapabilities, type AdapterErrorCode, type BackendKind } from '@clawket/agent-protocol';
 import {
   mapAdapterSessionUpdate,
   useAdapterChatEvents,
@@ -186,36 +186,31 @@ jest.mock('../services/analytics/events', () => ({
   },
 }));
 
-function createGateway() {
-  return {
-    getConnectionState: jest.fn(() => 'ready'),
-    getBackendKind: jest.fn(() => 'openclaw' as const),
-    getBackendCapabilities: jest.fn(() => ({ chatAbort: true })),
-    getBaseUrl: jest.fn(() => ''),
-    fetchIdentity: jest.fn().mockResolvedValue({}),
-    probeConnection: jest.fn().mockResolvedValue(true),
-    reconnect: jest.fn(),
-    sendChat: jest.fn().mockResolvedValue({ runId: 'run-1' }),
-    fetchHistory: jest.fn().mockResolvedValue({ messages: [] }),
-    listSessions: jest.fn().mockResolvedValue([]),
-    resolveExecApproval: jest.fn().mockResolvedValue(undefined),
-    abortChat: jest.fn().mockResolvedValue(undefined),
-    on: jest.fn(() => jest.fn()),
-  };
-}
-
 function createAdapter(backendKind: BackendKind = 'openclaw') {
+  const transportKinds = { openclaw: 'relay', hermes: 'relay', youmind: 'https' } as const;
   return {
     state: 'connecting',
+    capabilities: resolveCapabilities(backendKind),
     connection: {
       id: `${backendKind}-connection`,
       backendKind,
-      transportKind: backendKind === 'youmind' ? 'https' : 'relay',
+      transportKind: transportKinds[backendKind],
       label: backendKind,
       createdAt: 1,
       isFreeSlot: true,
     },
+    connect: jest.fn().mockResolvedValue(undefined),
+    disconnect: jest.fn(),
+    probe: jest.fn().mockResolvedValue(true),
     listAgents: jest.fn().mockResolvedValue([]),
+    listSessions: jest.fn().mockResolvedValue([]),
+    loadSession: jest.fn().mockResolvedValue({ key: 'main', messages: [], hasActiveRun: false }),
+    prompt: jest.fn().mockResolvedValue({ runId: 'run-1' }),
+    cancel: jest.fn().mockResolvedValue(undefined),
+    management: {
+      models: { listThinkingLevels: () => [] },
+      approvals: { resolveExec: jest.fn().mockResolvedValue(undefined) },
+    },
     on: jest.fn(() => jest.fn()),
   };
 }
@@ -227,16 +222,13 @@ function latestAdapterHandlers() {
 }
 
 function renderController(backendKind: BackendKind = 'openclaw') {
-  const gateway = createGateway();
   const adapter = createAdapter(backendKind);
   const rendered = renderHook(() => useChatController({
     adapter: adapter as any,
-    gateway: gateway as any,
-    config: null,
     debugMode: false,
     showAgentAvatar: true,
   }));
-  return { ...rendered, adapter, gateway, handlers: latestAdapterHandlers() };
+  return { ...rendered, adapter, handlers: latestAdapterHandlers() };
 }
 
 describe('useChatController adapter event migration', () => {
@@ -423,7 +415,7 @@ describe('useChatController adapter event migration', () => {
 
   it('keeps the dedicated direct local TLS explanation visible through an adapter error', () => {
     const { handlers } = renderController();
-    const explanation = 'Direct local TLS gateway connections are not supported in Clawket mobile yet. Disable OpenClaw gateway TLS for LAN pairing, or use Relay/Tailscale instead.';
+    const explanation = 'Direct local TLS adapter connections are not supported in Clawket mobile yet. Disable OpenClaw adapter TLS for LAN pairing, or use Relay/Tailscale instead.';
 
     act(() => {
       handlers.onState?.('ready');

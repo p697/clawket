@@ -120,24 +120,24 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     container: {
       backgroundColor: colors.surface,
-      borderRadius: Radius.md,
+      borderRadius: Radius.card,
       padding: Space.lg,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
+      borderColor: colors.line,
     },
     title: {
-      fontSize: FontSize.base,
-      fontWeight: FontWeight.bold,
-      color: colors.text,
+      fontSize: FontSize.secondary,
+      fontWeight: FontWeight.semibold,
+      color: colors.ink,
     },
     helpText: {
-      fontSize: FontSize.md,
-      color: colors.textMuted,
+      fontSize: FontSize.caption,
+      color: colors.inkSecondary,
       lineHeight: 18,
     },
     helpTextMuted: {
-      fontSize: FontSize.sm,
-      color: colors.textSubtle,
+      fontSize: FontSize.caption,
+      color: colors.inkTertiary,
       lineHeight: 17,
       marginTop: 3,
     },
@@ -145,15 +145,15 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       marginTop: Space.sm,
     },
     urlExampleLabel: {
-      fontSize: FontSize.sm,
-      color: colors.textSubtle,
+      fontSize: FontSize.caption,
+      color: colors.inkTertiary,
       marginTop: Space.sm,
       marginBottom: Space.xs,
       lineHeight: 17,
     },
     helpBold: {
       fontWeight: FontWeight.semibold,
-      color: colors.text,
+      color: colors.ink,
     },
   });
 }

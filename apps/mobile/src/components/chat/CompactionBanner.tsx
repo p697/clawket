@@ -17,17 +17,17 @@ export function CompactionBanner({ message }: { message: string }): React.JSX.El
 function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors']) {
   return StyleSheet.create({
     banner: {
-      backgroundColor: colors.primarySoft,
-      borderBottomColor: colors.borderStrong,
+      backgroundColor: colors.accentSoft,
+      borderBottomColor: colors.line,
       borderBottomWidth: 1,
       paddingHorizontal: Space.lg,
       paddingVertical: 6,
       alignItems: 'center',
     },
     text: {
-      color: colors.textMuted,
-      fontSize: FontSize.md,
-      fontWeight: FontWeight.medium,
+      color: colors.inkSecondary,
+      fontSize: FontSize.caption,
+      fontWeight: FontWeight.semibold,
     },
   });
 }

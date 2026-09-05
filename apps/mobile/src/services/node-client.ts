@@ -1,5 +1,9 @@
 import nacl from 'tweetnacl';
 import {
+  resolveCapabilities,
+  type ConnectionRecord,
+} from '@clawket/agent-protocol';
+import {
   hexToBytes,
   bytesToBase64Url,
   buildDeviceAuthPayload,
@@ -7,8 +11,7 @@ import {
   generateId,
   ensureIdentity,
 } from './gateway-auth';
-import { StorageService } from './storage';
-import type { GatewayConfig, DeviceIdentity } from '../types';
+import { StorageService, type DeviceTokenStorageScope } from './storage';
 import { getEnabledNodeCaps, getEnabledNodeCommands } from './node-invoke-dispatcher';
 import {
   DEFAULT_NODE_CAPABILITY_TOGGLES,
@@ -24,6 +27,11 @@ import {
   WEBSOCKET_FRAME_LIMIT_BYTES,
   WebSocketFrameTooLargeError,
 } from './websocket-frame-limit';
+import {
+  buildRelayClientWsUrl,
+  RELAY_CLIENT_PONG_CAPABILITY,
+  selectConnectAuth,
+} from '../connection/protocol/relay-control';
 
 // Advertise the protocol range Clawket can speak across OpenClaw 4.x and 5.x.
 const MIN_PROTOCOL_VERSION = 3;
@@ -67,17 +75,25 @@ type PendingRequest = {
   reject: (err: Error) => void;
 };
 
+type SocketAttempt = {
+  generation: number;
+  socket: WebSocket;
+  connection: ConnectionRecord;
+  pendingRequests: Map<string, PendingRequest>;
+};
+
 // ---- NodeClient ----
 
 export class NodeClient {
   private ws: WebSocket | null = null;
-  private config: GatewayConfig | null = null;
+  private activeAttempt: SocketAttempt | null = null;
+  private socketGeneration = 0;
+  private connection: ConnectionRecord | null = null;
   private state: NodeConnectionState = 'idle';
   private reconnectAttempts = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private manuallyClosed = false;
   private deviceId: string | null = null;
-  private pendingRequests = new Map<string, PendingRequest>();
   private encoder = new TextEncoder();
   private capabilityToggles: NodeCapabilityToggles = { ...DEFAULT_NODE_CAPABILITY_TOGGLES };
 
@@ -89,8 +105,11 @@ export class NodeClient {
 
   // ---- Public API ----
 
-  public configure(config: GatewayConfig | null): void {
-    this.config = config;
+  public configure(connection: ConnectionRecord | null): void {
+    if (connection && !resolveCapabilities(connection.backendKind).nodes) {
+      throw new Error('NodeClient requires a connection with the nodes capability');
+    }
+    this.connection = connection ? cloneConnectionRecord(connection) : null;
   }
 
   public getConnectionState(): NodeConnectionState {
@@ -101,23 +120,25 @@ export class NodeClient {
     return this.deviceId;
   }
 
-  private getDeviceTokenStorageScope(): {
-    serverUrl?: string;
-    gatewayId?: string;
-    gatewayUrl?: string;
-  } | undefined {
-    const relayServerUrl = this.config?.relay?.serverUrl?.trim().replace(/\/+$/, '');
-    const relayGatewayId = this.config?.relay?.gatewayId?.trim();
+  private getDeviceTokenStorageScope(
+    connection: ConnectionRecord | null,
+  ): DeviceTokenStorageScope | undefined {
+    const relay = connection?.transportKind === 'relay'
+      ? connection.relay
+      : undefined;
+    const relayServerUrl = relay?.serverUrl?.trim().replace(/\/+$/, '');
+    const relayGatewayId = relay?.gatewayId?.trim();
     if (relayServerUrl && relayGatewayId) {
       return {
         serverUrl: relayServerUrl,
         gatewayId: relayGatewayId,
+        role: 'node',
       };
     }
 
-    const gatewayUrl = this.config?.url?.trim().replace(/\/+$/, '');
+    const gatewayUrl = connection?.url?.trim().replace(/\/+$/, '');
     if (gatewayUrl) {
-      return { gatewayUrl };
+      return { gatewayUrl, role: 'node' };
     }
 
     return undefined;
@@ -135,7 +156,8 @@ export class NodeClient {
   }
 
   public connect(): void {
-    if (!this.config?.url) {
+    const connection = this.connection;
+    if (!connection?.url) {
       this.emit('error', { code: 'config_missing', message: 'Gateway URL is not configured' });
       return;
     }
@@ -150,46 +172,76 @@ export class NodeClient {
       return;
     }
 
-    this.setState(this.reconnectAttempts > 0 ? 'reconnecting' : 'connecting');
-    const wsUrl = normalizeWsUrl(this.config.url);
-    this.ws = new WebSocket(wsUrl);
+    if (this.activeAttempt) {
+      const superseded = this.activeAttempt;
+      this.activeAttempt = null;
+      this.ws = null;
+      superseded.socket.onopen = null;
+      superseded.socket.onmessage = null;
+      superseded.socket.onerror = null;
+      superseded.socket.onclose = null;
+      this.rejectPendingRequests(superseded, new Error('Connection superseded'));
+      superseded.socket.close();
+    }
 
-    this.ws.onopen = () => {
-      this.reconnectAttempts = 0;
+    let wsUrl: string;
+    try {
+      wsUrl = resolveNodeSocketUrl(connection);
+    } catch (error) {
+      const message = error instanceof Error
+        ? error.message
+        : 'Relay connection is not configured';
+      this.emit('error', {
+        code: 'config_missing',
+        message,
+      });
+      this.setState('closed', message);
+      return;
+    }
+    this.setState(this.reconnectAttempts > 0 ? 'reconnecting' : 'connecting');
+    const socket = new WebSocket(wsUrl);
+    const attempt: SocketAttempt = {
+      generation: ++this.socketGeneration,
+      socket,
+      connection,
+      pendingRequests: new Map(),
+    };
+    this.ws = socket;
+    this.activeAttempt = attempt;
+
+    socket.onopen = () => {
+      if (!this.isCurrentAttempt(attempt)) return;
       this.setState('challenging');
     };
 
-    this.ws.onmessage = (event: WebSocketMessageEvent) => {
-      this.handleRawMessage(event.data);
+    socket.onmessage = (event: WebSocketMessageEvent) => {
+      if (!this.isCurrentAttempt(attempt)) return;
+      this.handleRawMessage(event.data, attempt);
     };
 
-    this.ws.onerror = () => {
+    socket.onerror = () => {
+      if (!this.isCurrentAttempt(attempt)) return;
       this.emit('error', { code: 'ws_error', message: 'WebSocket error' });
     };
 
-    this.ws.onclose = () => {
-      this.ws = null;
-
-      for (const [, pending] of this.pendingRequests) {
-        pending.reject(new Error('Connection closed'));
-      }
-      this.pendingRequests.clear();
-
-      if (this.manuallyClosed) {
-        this.setState('closed');
-        return;
-      }
-      this.scheduleReconnect();
+    socket.onclose = () => {
+      this.handleSocketClose(attempt);
     };
   }
 
   public disconnect(): void {
     this.manuallyClosed = true;
     this.clearReconnectTimer();
-    if (this.ws) {
-      this.ws.onclose = null;
-      this.ws.close();
-      this.ws = null;
+    const attempt = this.activeAttempt;
+    this.activeAttempt = null;
+    this.ws = null;
+    if (attempt) {
+      attempt.socket.onopen = null;
+      attempt.socket.onmessage = null;
+      attempt.socket.onerror = null;
+      attempt.socket.onclose = null;
+      this.rejectPendingRequests(attempt, new Error('Connection closed'));
+      attempt.socket.close();
     }
     this.setState('closed');
   }
@@ -237,100 +289,140 @@ export class NodeClient {
 
   // ---- Private: handshake ----
 
-  private async handleConnectChallenge(nonce: string): Promise<void> {
-    const identity = await ensureIdentity();
-    this.deviceId = identity.deviceId;
-    const secretKey = hexToBytes(identity.secretKeyHex);
-    const publicKeyBytes = hexToBytes(identity.publicKeyHex);
-
-    const signedAt = Date.now();
-    const token = this.config?.token ?? '';
-    const clientId = getRuntimeClientId();
-    const clientMode = 'node';
-    const role = 'node';
-    const scopes: string[] = [];
-    const platform = getRuntimePlatform();
-    const deviceFamily = getRuntimeDeviceFamily();
-
-    const authPayload = buildDeviceAuthPayload({
-      deviceId: identity.deviceId,
-      clientId,
-      clientMode,
-      role,
-      scopes,
-      signedAtMs: signedAt,
-      token,
-      nonce,
-      platform,
-      deviceFamily,
-    });
-
-    const payloadBytes = this.encoder.encode(authPayload);
-    const signatureBytes = nacl.sign.detached(payloadBytes, secretKey);
-
-    const publicKeyB64 = bytesToBase64Url(publicKeyBytes);
-    const signatureB64 = bytesToBase64Url(signatureBytes);
-
-    const connectParams = {
-      minProtocol: MIN_PROTOCOL_VERSION,
-      maxProtocol: PROTOCOL_VERSION,
-      client: {
-        id: clientId,
-        displayName: 'Clawket Node',
-        version: APP_PACKAGE_VERSION,
-        platform,
-        mode: clientMode,
-        deviceFamily,
-      },
-      caps: getEnabledNodeCaps(this.capabilityToggles),
-      commands: getEnabledNodeCommands(this.capabilityToggles),
-      role,
-      scopes,
-      device: {
-        id: identity.deviceId,
-        publicKey: publicKeyB64,
-        signature: signatureB64,
-        signedAt,
-        nonce,
-      },
-      auth: {
-        token: this.config?.token,
-      },
-    };
-
+  private async handleConnectChallenge(
+    nonce: string,
+    attempt: SocketAttempt | null = this.activeAttempt,
+  ): Promise<void> {
+    if (!attempt || !this.isCurrentAttempt(attempt)) return;
+    let deviceTokenInUse = false;
+    let identityDeviceId: string | null = null;
+    const deviceTokenScope = this.getDeviceTokenStorageScope(attempt.connection);
     try {
-      const result = await this.sendRequest('connect', connectParams);
+      const identity = await ensureIdentity();
+      if (!this.isCurrentAttempt(attempt)) return;
+      identityDeviceId = identity.deviceId;
+      this.deviceId = identity.deviceId;
+      const secretKey = hexToBytes(identity.secretKeyHex);
+      const publicKeyBytes = hexToBytes(identity.publicKeyHex);
+
+      const storedDeviceTokenRecord = await StorageService
+        .getDeviceTokenRecord(identity.deviceId, deviceTokenScope)
+        .catch(() => null);
+      if (!this.isCurrentAttempt(attempt)) return;
+      const connectAuth = selectConnectAuth({
+        storedDeviceToken: storedDeviceTokenRecord?.role === 'node'
+          ? storedDeviceTokenRecord.token
+          : null,
+        bootstrapToken: attempt.connection.bootstrap?.token,
+        bootstrapStrategy: attempt.connection.bootstrap?.strategy,
+        token: attempt.connection.auth?.token,
+        password: attempt.connection.auth?.password,
+      });
+      deviceTokenInUse = connectAuth.source === 'device-token';
+
+      const signedAt = Date.now();
+      const clientId = getRuntimeClientId();
+      const clientMode = 'node';
+      const role = 'node';
+      const scopes: string[] = [];
+      const platform = getRuntimePlatform();
+      const deviceFamily = getRuntimeDeviceFamily();
+
+      const authPayload = buildDeviceAuthPayload({
+        deviceId: identity.deviceId,
+        clientId,
+        clientMode,
+        role,
+        scopes,
+        signedAtMs: signedAt,
+        token: connectAuth.signatureToken,
+        nonce,
+        platform,
+        deviceFamily,
+      });
+
+      const payloadBytes = this.encoder.encode(authPayload);
+      const signatureBytes = nacl.sign.detached(payloadBytes, secretKey);
+
+      const connectParams = {
+        minProtocol: MIN_PROTOCOL_VERSION,
+        maxProtocol: PROTOCOL_VERSION,
+        client: {
+          id: clientId,
+          displayName: 'Clawket Node',
+          version: APP_PACKAGE_VERSION,
+          platform,
+          mode: clientMode,
+          deviceFamily,
+        },
+        caps: getEnabledNodeCaps(this.capabilityToggles),
+        commands: getEnabledNodeCommands(this.capabilityToggles),
+        role,
+        scopes,
+        device: {
+          id: identity.deviceId,
+          publicKey: bytesToBase64Url(publicKeyBytes),
+          signature: bytesToBase64Url(signatureBytes),
+          signedAt,
+          nonce,
+        },
+        auth: connectAuth.auth,
+      };
+
+      const result = await this.sendRequest('connect', connectParams, attempt);
+      if (!this.isCurrentAttempt(attempt)) return;
       const helloOk = result as { auth?: { deviceToken?: string } } | null;
       if (helloOk?.auth?.deviceToken) {
-        await StorageService.setDeviceToken(
+        await StorageService.setDeviceTokenRecord(
           identity.deviceId,
-          helloOk.auth.deviceToken,
-          this.getDeviceTokenStorageScope(),
+          {
+            token: helloOk.auth.deviceToken,
+            role: 'node',
+            scopes: [],
+          },
+          deviceTokenScope,
         );
       }
+      if (
+        !this.isCurrentAttempt(attempt)
+        || attempt.socket.readyState !== WebSocket.OPEN
+      ) return;
+      // A socket open only proves that the transport exists. Preserve the
+      // accumulated backoff until the Gateway has accepted the signed
+      // protocol handshake and any returned credentials are durable.
+      this.reconnectAttempts = 0;
       this.setState('ready');
     } catch (err: unknown) {
+      if (!this.isCurrentAttempt(attempt)) return;
+      if (deviceTokenInUse && identityDeviceId && isDeviceTokenMismatch(err)) {
+        await StorageService.deleteDeviceToken(identityDeviceId, deviceTokenScope).catch(() => undefined);
+        if (!this.isCurrentAttempt(attempt)) return;
+      }
       const msg = err instanceof Error ? err.message : String(err);
       this.emit('error', { code: 'auth_failed', message: msg });
-      this.ws?.close();
+      attempt.socket.close();
     }
   }
 
   // ---- Private: request/response ----
 
-  private sendRequest(method: string, params?: object): Promise<unknown> {
+  private sendRequest(
+    method: string,
+    params?: object,
+    attempt: SocketAttempt | null = this.activeAttempt,
+  ): Promise<unknown> {
     return new Promise<unknown>((resolve, reject) => {
-      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      if (!attempt || !this.isCurrentAttempt(attempt) || attempt.socket.readyState !== WebSocket.OPEN) {
         reject(new Error('WebSocket is not open'));
         return;
       }
       const id = generateId();
       const frame = { type: 'req', id, method, params };
-      this.pendingRequests.set(id, { resolve, reject });
+      attempt.pendingRequests.set(id, { resolve, reject });
       try {
-        this.sendWireFrame(JSON.stringify(frame));
+        this.sendWireFrame(JSON.stringify(frame), attempt);
       } catch (sendErr: unknown) {
-        this.pendingRequests.delete(id);
+        attempt.pendingRequests.delete(id);
         reject(sendErr instanceof Error ? sendErr : new Error(String(sendErr)));
       }
     });
@@ -338,27 +430,31 @@ export class NodeClient {
 
   // ---- Private: message routing ----
 
-  private sendWireFrame(data: string): void {
+  private sendWireFrame(
+    data: string,
+    attempt: SocketAttempt | null = this.activeAttempt,
+  ): void {
     assertWebSocketFrameWithinLimit(data);
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+    if (!attempt || !this.isCurrentAttempt(attempt) || attempt.socket.readyState !== WebSocket.OPEN) {
       throw new Error('WebSocket is not open');
     }
-    this.ws.send(data);
+    attempt.socket.send(data);
   }
 
-  private rejectOversizedIncomingFrame(rawData: unknown): boolean {
+  private rejectOversizedIncomingFrame(rawData: unknown, attempt: SocketAttempt): boolean {
     const byteLength = getWebSocketFrameByteLength(rawData);
     if (byteLength == null || byteLength <= WEBSOCKET_FRAME_LIMIT_BYTES) return false;
     this.emit('error', {
       code: FRAME_TOO_LARGE_ERROR_CODE,
       message: FRAME_TOO_LARGE_ERROR_CODE,
     });
-    this.ws?.close(FRAME_TOO_LARGE_CLOSE_CODE, FRAME_TOO_LARGE_ERROR_CODE);
+    attempt.socket.close(FRAME_TOO_LARGE_CLOSE_CODE, FRAME_TOO_LARGE_ERROR_CODE);
     return true;
   }
 
-  private handleRawMessage(rawData: unknown): void {
-    if (this.rejectOversizedIncomingFrame(rawData)) return;
+  private handleRawMessage(rawData: unknown, attempt: SocketAttempt): void {
+    if (!this.isCurrentAttempt(attempt)) return;
+    if (this.rejectOversizedIncomingFrame(rawData, attempt)) return;
     let parsed: unknown;
     try {
       parsed = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
@@ -369,14 +465,33 @@ export class NodeClient {
     if (!parsed || typeof parsed !== 'object') return;
     const frame = parsed as Record<string, unknown>;
 
+    if (
+      attempt.connection.transportKind === 'relay'
+      && frame.type === 'tick'
+      && frame.ack === RELAY_CLIENT_PONG_CAPABILITY
+      && typeof frame.ts === 'number'
+      && Number.isFinite(frame.ts)
+    ) {
+      try {
+        this.sendWireFrame(JSON.stringify({ type: 'pong', ts: frame.ts }), attempt);
+      } catch {
+        // The attempt close handler owns reconnect scheduling.
+      }
+      return;
+    }
+
     // Handle response frames
     if (frame.type === 'res' && typeof frame.id === 'string') {
-      const pending = this.pendingRequests.get(frame.id);
+      const pending = attempt.pendingRequests.get(frame.id);
       if (pending) {
-        this.pendingRequests.delete(frame.id);
+        attempt.pendingRequests.delete(frame.id);
         if (frame.error) {
           const errObj = frame.error as Record<string, unknown>;
-          pending.reject(new Error(String(errObj.message ?? errObj.code ?? 'Unknown error')));
+          const error = new Error(String(errObj.message ?? errObj.code ?? 'Unknown error')) as Error & {
+            code?: string;
+          };
+          if (typeof errObj.code === 'string') error.code = errObj.code;
+          pending.reject(error);
         } else {
           pending.resolve(frame.result);
         }
@@ -391,7 +506,7 @@ export class NodeClient {
 
       if (event === 'connect.challenge') {
         const nonce = String(payload.nonce ?? '');
-        if (nonce) void this.handleConnectChallenge(nonce);
+        if (nonce) void this.handleConnectChallenge(nonce, attempt);
         return;
       }
 
@@ -416,6 +531,29 @@ export class NodeClient {
 
   // ---- Private: reconnect ----
 
+  private isCurrentAttempt(attempt: SocketAttempt): boolean {
+    return !this.manuallyClosed
+      && this.activeAttempt?.generation === attempt.generation
+      && this.activeAttempt === attempt
+      && this.ws === attempt.socket;
+  }
+
+  private handleSocketClose(attempt: SocketAttempt): void {
+    this.rejectPendingRequests(attempt, new Error('Connection closed'));
+    if (!this.isCurrentAttempt(attempt)) return;
+
+    this.activeAttempt = null;
+    this.ws = null;
+    this.scheduleReconnect();
+  }
+
+  private rejectPendingRequests(attempt: SocketAttempt, error: Error): void {
+    for (const pending of attempt.pendingRequests.values()) {
+      pending.reject(error);
+    }
+    attempt.pendingRequests.clear();
+  }
+
   private scheduleReconnect(): void {
     const delay = Math.min(RECONNECT_BASE_MS * 2 ** this.reconnectAttempts, RECONNECT_MAX_MS);
     this.reconnectAttempts++;
@@ -434,6 +572,28 @@ export class NodeClient {
   }
 }
 
+function cloneConnectionRecord(record: ConnectionRecord): ConnectionRecord {
+  return JSON.parse(JSON.stringify(record)) as ConnectionRecord;
+}
+
+function resolveNodeSocketUrl(connection: ConnectionRecord): string {
+  if (connection.transportKind !== 'relay') return normalizeWsUrl(connection.url);
+
+  const gatewayId = connection.relay?.gatewayId?.trim();
+  const clientToken = connection.relay?.clientToken?.trim();
+  const connectionId = connection.id.trim();
+  if (!gatewayId || !clientToken || !connectionId) {
+    throw new Error('Relay connection is not configured');
+  }
+  return buildRelayClientWsUrl({
+    relayUrl: connection.url,
+    gatewayId,
+    token: clientToken,
+    clientId: `clawket-node:${connectionId}`,
+    relayIdQueryParam: 'gatewayId',
+  });
+}
+
 function tryParseJSON(value: unknown): unknown {
   if (typeof value !== 'string') return value;
   try {
@@ -441,4 +601,12 @@ function tryParseJSON(value: unknown): unknown {
   } catch {
     return value;
   }
+}
+
+function isDeviceTokenMismatch(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const code = (error as Error & { code?: unknown }).code;
+  return code === 'AUTH_TOKEN_MISMATCH'
+    || code === 'AUTH_SCOPE_MISMATCH'
+    || error.message.toLowerCase().includes('device token mismatch');
 }

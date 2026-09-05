@@ -121,6 +121,35 @@ describe('Roster model', () => {
     expect(rows.find((row) => row.agentId === 'builder')?.locked).toBe(true);
   });
 
+  it('sorts Agents by local pin, attention, unread, and recent activity within each connection', () => {
+    const source = group('one');
+    const builder = source.agents[1];
+    const quiet = {
+      ...source.agents[0],
+      agent: { ...source.agents[0].agent, agentId: 'quiet', name: 'Quiet' },
+      attention: null,
+      attentionCount: 0,
+      hasUnread: false,
+      unreadCount: 0,
+      updatedAt: 200,
+    };
+    const rows = buildRosterRows([{
+      ...source,
+      agents: [builder, quiet, source.agents[0]],
+    }], {
+      agentPreferences: {
+        'one:builder': { agentPinned: true, muted: true },
+      },
+    });
+
+    expect(rows.filter((row) => row.kind === 'agent').map((row) => row.agentId)).toEqual([
+      'builder',
+      'main',
+      'quiet',
+    ]);
+    expect(rows[0]).toMatchObject({ agentPinned: true, muted: true });
+  });
+
   it.each([
     [{ initialized: false, connectionCount: 0, rowCount: 0, activeState: 'idle', hasError: false }, 'loading'],
     [{ initialized: true, connectionCount: 0, rowCount: 0, activeState: 'idle', hasError: false }, 'empty'],

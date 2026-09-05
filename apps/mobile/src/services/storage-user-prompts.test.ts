@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 jest.mock('../theme', () => ({
   defaultAccentId: 'iceBlue',
-  isAccentScale: jest.fn(() => false),
+  isBuiltInAccentId: jest.fn(() => false),
 }));
 
 import { StorageService, type SavedPrompt } from './storage';

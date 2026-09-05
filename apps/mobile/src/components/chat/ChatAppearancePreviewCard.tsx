@@ -69,18 +69,18 @@ export function ChatAppearancePreviewCard({
 
   return (
     <Card style={styles.previewCard}>
-      <ChatBackgroundLayer appearance={appearance} imageUri={backgroundImageUri} borderRadius={Radius.md} />
+      <ChatBackgroundLayer appearance={appearance} imageUri={backgroundImageUri} borderRadius={Radius.card} />
 
       <View style={styles.previewChrome}>
         <View style={styles.previewHeader}>
           <View style={styles.previewHeaderDots}>
-            <View style={[styles.headerDot, { backgroundColor: theme.colors.textSubtle }]} />
-            <View style={[styles.headerDot, { backgroundColor: theme.colors.textSubtle }]} />
-            <View style={[styles.headerDot, { backgroundColor: theme.colors.textSubtle }]} />
+            <View style={[styles.headerDot, { backgroundColor: theme.colors.inkTertiary }]} />
+            <View style={[styles.headerDot, { backgroundColor: theme.colors.inkTertiary }]} />
+            <View style={[styles.headerDot, { backgroundColor: theme.colors.inkTertiary }]} />
           </View>
           <Text style={styles.previewHeaderTitle}>{t('Chat Preview')}</Text>
           <View style={styles.previewHeaderBadge}>
-            <Sparkles size={12} color={theme.colors.primary} strokeWidth={2} />
+            <Sparkles size={12} color={theme.colors.accent} strokeWidth={2} />
           </View>
         </View>
 
@@ -88,8 +88,8 @@ export function ChatAppearancePreviewCard({
           <View style={styles.assistantRow}>
             {showAgentAvatar ? (
                 <View style={styles.avatarSlot}>
-                  <View style={[styles.avatar, { backgroundColor: theme.colors.primarySoft }]}>
-                    <Bot size={16} color={theme.colors.primary} strokeWidth={2} />
+                  <View style={[styles.avatar, { backgroundColor: theme.colors.accentSoft }]}>
+                    <Bot size={16} color={theme.colors.accent} strokeWidth={2} />
                   </View>
                 </View>
             ) : null}
@@ -158,7 +158,7 @@ function createStyles(
       minHeight: 250,
       padding: 0,
       overflow: 'hidden',
-      backgroundColor: colors.background,
+      backgroundColor: colors.canvas,
     },
     previewChrome: {
       flex: 1,
@@ -182,8 +182,8 @@ function createStyles(
       opacity: 0.65,
     },
     previewHeaderTitle: {
-      color: colors.text,
-      fontSize: FontSize.sm,
+      color: colors.ink,
+      fontSize: FontSize.caption,
       fontWeight: FontWeight.semibold,
     },
     previewHeaderBadge: {
@@ -227,37 +227,37 @@ function createStyles(
       borderWidth: StyleSheet.hairlineWidth,
     },
     agentName: {
-      color: colors.textMuted,
-      fontSize: FontSize.sm,
+      color: colors.inkSecondary,
+      fontSize: FontSize.caption,
       marginLeft: Space.xs,
     },
     agentNameWallpaper: {
-      color: colors.text,
+      color: colors.ink,
       marginLeft: 0,
     },
     agentMeta: {
-      color: colors.textSubtle,
-      fontSize: FontSize.xs,
+      color: colors.inkTertiary,
+      fontSize: FontSize.caption,
       marginLeft: Space.sm,
       opacity: 0.7,
     },
     agentMetaWallpaper: {
-      color: colors.textMuted,
+      color: colors.inkSecondary,
       opacity: 1,
     },
     agentMetaInline: {
-      color: colors.textSubtle,
-      fontSize: FontSize.micro,
+      color: colors.inkTertiary,
+      fontSize: FontSize.caption,
       marginBottom: Space.xs,
       opacity: 0.85,
     },
     agentMetaInlineWallpaper: {
-      color: colors.textMuted,
+      color: colors.inkSecondary,
       opacity: 1,
     },
     messageBubble: {
       maxWidth: '88%',
-      borderRadius: Radius.md + 2,
+      borderRadius: Radius.bubble,
       paddingHorizontal: Space.md,
       paddingVertical: Space.md - 2,
     },
@@ -268,12 +268,12 @@ function createStyles(
       alignSelf: 'flex-end',
     },
     assistantText: {
-      color: colors.text,
+      color: colors.ink,
       fontSize,
       lineHeight: Math.round(fontSize * 1.45),
     },
     userText: {
-      color: colors.text,
+      color: colors.ink,
       fontSize,
       lineHeight: Math.round(fontSize * 1.45),
     },
@@ -284,16 +284,16 @@ function createStyles(
       marginTop: Space.md,
     },
     composer: {
-      borderRadius: Radius.lg,
+      borderRadius: Radius.full,
       paddingHorizontal: Space.md,
       paddingVertical: Space.sm + 2,
-      backgroundColor: colors.inputBackground,
+      backgroundColor: colors.surfaceFloating,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
+      borderColor: colors.line,
     },
     composerPlaceholder: {
-      color: colors.textSubtle,
-      fontSize: FontSize.base,
+      color: colors.inkTertiary,
+      fontSize: FontSize.secondary,
     },
   });
 }

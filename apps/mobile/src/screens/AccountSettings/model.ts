@@ -1,6 +1,7 @@
 import type {
   BackendKind,
   ConnectionDescriptor,
+  ConnectionState,
   ServiceEnvironment,
   TransportKind,
 } from '@clawket/agent-protocol';
@@ -15,6 +16,51 @@ export type AccountSettingsPageStatus =
       kind: 'permission';
       reason: 'gatewayConnections' | 'appIcons' | 'generic';
     }>;
+
+export type AccountSettingsRuntimeStatusInput = Readonly<{
+  connectionInitialized: boolean;
+  connectionSwitching: boolean;
+  connectionCount: number;
+  activeConnectionId: string | null;
+  activeState: ConnectionState;
+  connectionErrorCode?: string | null;
+  permissionsLoading: boolean;
+  permissionReason?: Extract<
+    AccountSettingsPageStatus,
+    { kind: 'permission' }
+  >['reason'] | null;
+}>;
+
+export function resolveAccountSettingsRuntimeStatus(
+  input: AccountSettingsRuntimeStatusInput,
+): AccountSettingsPageStatus {
+  if (
+    !input.connectionInitialized
+    || input.permissionsLoading
+    || input.connectionSwitching
+    || input.activeState === 'connecting'
+    || input.activeState === 'handshaking'
+  ) {
+    return { kind: 'loading' };
+  }
+  const errorCode = input.connectionErrorCode?.trim();
+  if (errorCode || input.activeState === 'error') {
+    return { kind: 'error', code: errorCode || 'connection_error' };
+  }
+  if (input.connectionCount <= 0) return { kind: 'empty' };
+  if (
+    !input.activeConnectionId
+    || input.activeState === 'idle'
+    || input.activeState === 'offline'
+    || input.activeState === 'reconnecting'
+  ) {
+    return { kind: 'offline' };
+  }
+  if (input.permissionReason) {
+    return { kind: 'permission', reason: input.permissionReason };
+  }
+  return { kind: 'ready' };
+}
 
 export type AccountSettingsCapability =
   | 'subscription'

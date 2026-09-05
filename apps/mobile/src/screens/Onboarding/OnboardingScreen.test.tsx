@@ -196,15 +196,41 @@ describe('OnboardingScreen', () => {
     const view = render(<OnboardingScreen {...createProps({ onSubmitPairing })} />);
 
     fireEvent.press(view.getByTestId('onboarding-backend-hermes'));
-    fireEvent.changeText(view.getByTestId('onboarding-pairing-code'), '12a3-4567');
-    expect(view.getByTestId('onboarding-pairing-code').props.value).toBe('123 456');
+    fireEvent.changeText(view.getByTestId('onboarding-pairing-code'), 'ab1c-2o34');
+    expect(view.getByTestId('onboarding-pairing-code').props.value).toBe('ABC 234');
     fireEvent.press(view.getByTestId('onboarding-connect'));
 
     expect(onSubmitPairing).toHaveBeenCalledWith({
       backendKind: 'hermes',
       transportKind: 'relay',
-      code: '123456',
+      code: 'ABC234',
     });
+  });
+
+  it('shares one synchronous readiness guard across Enter, button, and input state', () => {
+    const onSubmitPairing = jest.fn(() => new Promise<void>(() => undefined));
+    const props = createProps({ onSubmitPairing });
+    const view = render(<OnboardingScreen {...props} />);
+    const input = view.getByTestId('onboarding-pairing-code');
+
+    fireEvent(input, 'submitEditing');
+    expect(onSubmitPairing).not.toHaveBeenCalled();
+
+    fireEvent.changeText(input, '123456');
+    fireEvent(input, 'submitEditing');
+    fireEvent.press(view.getByTestId('onboarding-connect'));
+    expect(onSubmitPairing).toHaveBeenCalledTimes(1);
+
+    view.rerender(
+      <OnboardingScreen
+        {...props}
+        status={{ kind: 'connecting', phase: 'relay_connected' }}
+      />,
+    );
+    expect(view.getByTestId('onboarding-pairing-code').props.editable).toBe(false);
+    fireEvent(view.getByTestId('onboarding-pairing-code'), 'submitEditing');
+    fireEvent.press(view.getByTestId('onboarding-connect'));
+    expect(onSubmitPairing).toHaveBeenCalledTimes(1);
   });
 
   it('accepts a pairing code through the injected clipboard callback', async () => {

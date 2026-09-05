@@ -2,6 +2,10 @@ jest.mock('react-native', () => ({
   InteractionManager: {
     runAfterInteractions: (callback: () => void) => callback(),
   },
+  Linking: {
+    canOpenURL: jest.fn(),
+    openURL: jest.fn(),
+  },
   Platform: {
     OS: 'ios',
   },
@@ -10,6 +14,7 @@ jest.mock('react-native', () => ({
 jest.mock('expo-store-review', () => ({
   isAvailableAsync: jest.fn(),
   requestReview: jest.fn(),
+  storeUrl: jest.fn(),
 }));
 
 jest.mock('../constants/app-version', () => ({
@@ -24,7 +29,12 @@ jest.mock('./storage', () => ({
 }));
 
 import * as StoreReview from 'expo-store-review';
-import { scheduleAutomaticAppReview, shouldAttemptAutomaticReview } from './auto-app-review';
+import { Linking } from 'react-native';
+import {
+  requestManualAppReview,
+  scheduleAutomaticAppReview,
+  shouldAttemptAutomaticReview,
+} from './auto-app-review';
 import { StorageService } from './storage';
 
 async function flushMicrotasks(): Promise<void> {
@@ -37,6 +47,7 @@ async function flushMicrotasks(): Promise<void> {
 describe('auto app review', () => {
   const mockedStoreReview = StoreReview as jest.Mocked<typeof StoreReview>;
   const mockedStorage = StorageService as jest.Mocked<typeof StorageService>;
+  const mockedLinking = Linking as jest.Mocked<typeof Linking>;
 
   beforeEach(() => {
     jest.useFakeTimers();
@@ -112,5 +123,32 @@ describe('auto app review', () => {
       lastAttemptAtMs: expect.any(Number),
       lastAttemptVersion: '1.2.3',
     });
+  });
+
+  it('opens the native review prompt on a manual request', async () => {
+    mockedStoreReview.isAvailableAsync.mockResolvedValueOnce(true);
+    mockedStoreReview.requestReview.mockResolvedValueOnce();
+
+    await expect(requestManualAppReview()).resolves.toBe('review_prompt');
+    expect(mockedStoreReview.requestReview).toHaveBeenCalledTimes(1);
+    expect(mockedLinking.openURL).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the store page and reports unavailable devices', async () => {
+    mockedStoreReview.isAvailableAsync.mockResolvedValue(false);
+    mockedStoreReview.storeUrl.mockReturnValue('https://store.example/clawket');
+    mockedLinking.canOpenURL.mockResolvedValueOnce(true);
+    mockedLinking.openURL.mockResolvedValueOnce(true);
+
+    await expect(requestManualAppReview()).resolves.toBe('store_page');
+    expect(mockedLinking.openURL).toHaveBeenCalledWith('https://store.example/clawket');
+
+    mockedLinking.canOpenURL.mockResolvedValueOnce(false);
+    await expect(requestManualAppReview()).resolves.toBe('unavailable');
+  });
+
+  it('contains native failures in a manual request', async () => {
+    mockedStoreReview.isAvailableAsync.mockRejectedValueOnce(new Error('native failure'));
+    await expect(requestManualAppReview()).resolves.toBe('error');
   });
 });

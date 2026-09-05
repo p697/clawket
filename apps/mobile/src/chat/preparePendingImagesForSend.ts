@@ -1,3 +1,7 @@
+import {
+  isImageAttachmentMimeType,
+  normalizeAttachmentMimeType,
+} from '@clawket/agent-protocol';
 import { PendingImage } from "../types/chat";
 import { readFileAsBase64 } from "./chatControllerUtils";
 
@@ -30,17 +34,13 @@ function estimateBase64Bytes(base64: string): number {
   return Math.max(0, Math.floor((trimmed.length * 3) / 4) - padding);
 }
 
-function normalizedMimeType(mimeType: string | undefined): string {
-  return mimeType?.trim().toLowerCase() || "image/jpeg";
-}
-
 function isGifMimeType(mimeType: string): boolean {
   return mimeType === "image/gif";
 }
 
 function shouldAttemptLocalCompression(image: PendingImageWithFile): boolean {
-  const mimeType = normalizedMimeType(image.mimeType);
-  if (!mimeType.startsWith("image/")) return false;
+  const mimeType = normalizeAttachmentMimeType(image.mimeType);
+  if (!isImageAttachmentMimeType(mimeType)) return false;
   return !isGifMimeType(mimeType);
 }
 
@@ -112,7 +112,7 @@ async function compressImageForSend(
   image: PendingImageWithFile,
 ): Promise<PendingImageWithFile> {
   const original = await readOriginalImage(image);
-  const originalMimeType = normalizedMimeType(original.mimeType);
+  const originalMimeType = normalizeAttachmentMimeType(original.mimeType);
   const { width, height } = readImageDimensions(original);
 
   if (originalMimeType === "image/png") {
@@ -176,16 +176,22 @@ export async function preparePendingImagesForSend(
   const prepared = await Promise.all(
     images.map(async (image) => {
       const imageWithFile = image as PendingImageWithFile;
-      if (!imageWithFile.mimeType.startsWith("image/")) {
-        if (imageWithFile.base64) return imageWithFile;
+      const mimeType = normalizeAttachmentMimeType(imageWithFile.mimeType);
+      const normalized = mimeType === imageWithFile.mimeType
+        ? imageWithFile
+        : { ...imageWithFile, mimeType };
+      if (normalized !== imageWithFile) changed = true;
+
+      if (!isImageAttachmentMimeType(mimeType)) {
+        if (normalized.base64) return normalized;
         changed = true;
         return {
-          ...imageWithFile,
-          base64: await readFileAsBase64(imageWithFile.uri),
+          ...normalized,
+          base64: await readFileAsBase64(normalized.uri),
         };
       }
 
-      const original = await readOriginalImage(imageWithFile);
+      const original = await readOriginalImage(normalized);
       if (!shouldAttemptLocalCompression(original)) {
         if (original.base64 !== imageWithFile.base64) {
           changed = true;

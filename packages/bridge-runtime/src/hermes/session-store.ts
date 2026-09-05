@@ -85,7 +85,7 @@ export const NATIVE_SESSION_ACTIONS: HermesSessionActions = Object.freeze({
   rename: false,
   reset: false,
   delete: false,
-  pin: false,
+  pin: true,
 });
 
 function createBridgeSessionId(key: string): string {

@@ -4,11 +4,18 @@ import hermesAttachmentFixture from '../../../../../tests/fixtures/hermes/m3-att
 import hermesSessionsFixture from '../../../../../tests/fixtures/hermes/m3-multi-session-v2.json';
 import type { GatewayClient } from '../protocol';
 import type { ConnectionState, GatewayConfig } from '../../types';
-import { HermesAdapter, HERMES_MULTI_SESSION_CAPABILITY } from './hermes';
 import {
+  HermesAdapter,
+  HERMES_MULTI_SESSION_CAPABILITY,
+  legacyHermesMainSession,
+  mapHermesSession,
+} from './hermes';
+import {
+  mapOpenClawSession,
   OPENCLAW_BRIDGE_CAPABILITY,
   OpenClawAdapter,
 } from './openclaw';
+import { readConnectionRuntimeMetadata } from '../runtime-details';
 
 type GatewayEventName =
   | 'connection'
@@ -35,6 +42,8 @@ class RecordedGateway {
   public currentConnectMeta: { capabilities: string[] } | undefined;
   public readonly connectMetas: Array<{ capabilities: string[] } | undefined> = [];
   public connectResponseCapabilities: readonly string[] | undefined;
+  public connectResponseBridgeVersion: string | undefined;
+  public gatewayVersion = '';
   public readonly requests: Array<{ method: string; params: object }> = [];
   public readonly aborts: Array<{ key: string; runId?: string }> = [];
   public sessions: Array<Record<string, unknown>> = [];
@@ -78,6 +87,14 @@ class RecordedGateway {
 
   public getConnectResponseCapabilities(): readonly string[] | undefined {
     return this.connectResponseCapabilities;
+  }
+
+  public getConnectResponseBridgeVersion(): string | undefined {
+    return this.connectResponseBridgeVersion;
+  }
+
+  public getGatewayInfo(): { version: string } | null {
+    return this.gatewayVersion ? { version: this.gatewayVersion } : null;
   }
 
   public getConnectionState(): ConnectionState {
@@ -154,6 +171,21 @@ function packet(label: string): any {
 }
 
 describe('OpenClawAdapter recorded v1 boundary', () => {
+  it('keeps channel deletion outside the App even when legacy metadata omits its policy', () => {
+    const session = mapOpenClawSession('openclaw-recorded', {
+      key: 'agent:main:channel:recorded',
+      channel: 'recorded',
+    });
+
+    expect(session.kind).toBe('channel');
+    expect(session.allowedActions).toEqual({
+      rename: true,
+      reset: true,
+      delete: false,
+      pin: true,
+    });
+  });
+
   it('keeps the recorded v1 prompt body and maps agents, sessions, and events', async () => {
     const fake = new RecordedGateway();
     fake.onConnect = () => fake.emit('connection', { state: 'ready' });
@@ -257,6 +289,35 @@ describe('OpenClawAdapter recorded v1 boundary', () => {
     expect(fake.connectMetas).toEqual([{ capabilities: [OPENCLAW_BRIDGE_CAPABILITY] }]);
     expect(adapter.negotiatedBridgeCapabilityMode).toBe('v2');
   });
+
+  it('exposes sanitized Bridge handshake metadata to the connection layer', () => {
+    const fake = new RecordedGateway();
+    fake.gatewayVersion = 'openclaw-gateway-2026.9.5';
+    fake.connectResponseBridgeVersion = ' 3.0.0 ';
+    fake.connectResponseCapabilities = [OPENCLAW_BRIDGE_CAPABILITY];
+    const adapter = new OpenClawAdapter(connection('openclaw', 'metadata'), {
+      gateway: gateway(fake),
+    });
+
+    expect(readConnectionRuntimeMetadata(adapter)).toEqual({
+      bridgeVersion: '3.0.0',
+      bridgeCapabilities: [OPENCLAW_BRIDGE_CAPABILITY],
+    });
+  });
+
+  it('never aliases an OpenClaw Gateway version to a missing Bridge version', () => {
+    const fake = new RecordedGateway();
+    fake.gatewayVersion = 'openclaw-gateway-2026.9.5';
+    fake.connectResponseCapabilities = [OPENCLAW_BRIDGE_CAPABILITY];
+    const adapter = new OpenClawAdapter(connection('openclaw', 'legacy-metadata'), {
+      gateway: gateway(fake),
+    });
+
+    expect(readConnectionRuntimeMetadata(adapter)).toEqual({
+      bridgeVersion: null,
+      bridgeCapabilities: [OPENCLAW_BRIDGE_CAPABILITY],
+    });
+  });
 });
 
 describe('HermesAdapter recorded M3 boundary', () => {
@@ -283,18 +344,28 @@ describe('HermesAdapter recorded M3 boundary', () => {
     const adapter = new HermesAdapter(connection('hermes'), { gateway: gateway(fake) });
     const connecting = adapter.connect();
     expect(adapter.state).toBe('handshaking');
-    fake.emit('health', hermesSessionsFixture.firstFrame.payload);
+    fake.emit('health', {
+      ...hermesSessionsFixture.firstFrame.payload,
+      bridgeVersion: ' 3.0.0-hermes ',
+    });
     await connecting;
 
     expect(adapter.state).toBe('ready');
     expect(adapter.capabilities.sessions).toBe(true);
     expect(adapter.connection.bridgeOutdated).toBeUndefined();
+    expect(readConnectionRuntimeMetadata(adapter)).toEqual({
+      bridgeVersion: '3.0.0-hermes',
+      bridgeCapabilities: [
+        'bridge.capabilities.v2',
+        'hermes.multi-session.v2',
+      ],
+    });
     const sessions = await adapter.listSessions();
     expect(sessions).toEqual([expect.objectContaining({
       key: 'native-recorded-session',
       source: 'native',
       title: 'Recorded native session',
-      allowedActions: { rename: false, reset: false, delete: false, pin: false },
+      allowedActions: { rename: false, reset: false, delete: false, pin: true },
     })]);
 
     const first = await adapter.loadSession('native-recorded-session', { limit: 2 });
@@ -342,6 +413,18 @@ describe('HermesAdapter recorded M3 boundary', () => {
 
     const recorded = hermesAttachmentFixture.sendPacket.request.params;
     await expect(adapter.prompt(recorded.sessionKey, {
+      text: 'unsupported file',
+      idempotencyKey: 'unsupported-file',
+      attachments: [{
+        type: 'file',
+        mimeType: 'application/pdf',
+        content: 'cGRm',
+        name: 'notes.pdf',
+      }],
+    })).rejects.toMatchObject({ code: 'unsupported' });
+    expect(fake.requests.filter((entry) => entry.method === 'chat.send')).toHaveLength(0);
+
+    await expect(adapter.prompt(recorded.sessionKey, {
       text: recorded.message,
       idempotencyKey: recorded.idempotencyKey,
       attachments: recorded.attachments.map((attachment) => ({
@@ -385,10 +468,28 @@ describe('HermesAdapter recorded M3 boundary', () => {
     expect(adapter.connection.bridgeOutdated).toBe(true);
     await expect(adapter.listSessions()).resolves.toEqual([expect.objectContaining({
       key: 'main',
-      allowedActions: { rename: false, reset: false, delete: false, pin: false },
+      allowedActions: { rename: false, reset: false, delete: false, pin: true },
     })]);
     await expect(adapter.createSession('hermes')).rejects.toMatchObject({ code: 'unsupported' });
     expect(fake.requests).toEqual([]);
+  });
+
+  it('keeps local pinning for legacy sessions and every action for Bridge-created main sessions', () => {
+    expect(legacyHermesMainSession('hermes-legacy').allowedActions).toEqual({
+      rename: false,
+      reset: false,
+      delete: false,
+      pin: true,
+    });
+    expect(mapHermesSession('hermes-recorded', {
+      key: 'main',
+      source: 'bridge',
+    }).allowedActions).toEqual({
+      rename: true,
+      reset: true,
+      delete: true,
+      pin: true,
+    });
   });
 
   it('renders a recorded local slash-command acknowledgement as a system event', async () => {

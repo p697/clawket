@@ -1,369 +1,41 @@
-import {
-  claimRelayPairing,
-  createGatewayConfigFromScan,
-  upsertGatewayConfigFromScan,
-  willCreateGatewayConfigFromScan,
-} from './gateway-scan-flow';
-import { StorageService } from '../../services/storage';
 import { RelayPairingService } from '../../services/relay-pairing';
 import { HermesRelayPairingService } from '../registry/hermes-relay-pairing';
-
-jest.mock('../../services/storage', () => ({
-  StorageService: {
-    getGatewayConfigsState: jest.fn(),
-    setGatewayConfigsState: jest.fn(),
-  },
-}));
+import { claimRelayPairing, type GatewayScanPayload } from './gateway-scan-flow';
 
 jest.mock('../../services/relay-pairing', () => ({
-  RelayPairingService: {
-    claim: jest.fn(),
-  },
+  RelayPairingService: { claim: jest.fn() },
 }));
 
 jest.mock('../registry/hermes-relay-pairing', () => ({
-  HermesRelayPairingService: {
-    claim: jest.fn(),
-  },
+  HermesRelayPairingService: { claim: jest.fn() },
 }));
 
-describe('gatewayScanFlow', () => {
+describe('gateway scan Relay claim', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  it('creates a new relay config when the gateway has not been seen before', () => {
-    const result = upsertGatewayConfigFromScan({
-      existingState: {
-        activeId: null,
-        configs: [],
-      },
-      payload: {
-        url: 'wss://relay.example.com/ws',
-        token: 'gateway-token',
-        mode: 'relay',
-        relay: {
-          serverUrl: 'https://registry.example.com/',
-          gatewayId: 'gw_123',
-          clientToken: 'gct_new',
-          displayName: 'Test Relay',
-        },
-      },
-      now: 100,
-    });
-
-    expect(result.created).toMatchObject({
-      id: 'gateway_100',
-      name: 'Test Relay',
-      mode: 'relay',
+  it('returns an already claimed or direct QR payload unchanged', async () => {
+    const payload: GatewayScanPayload = {
       url: 'wss://relay.example.com/ws',
-      token: 'gateway-token',
-      relay: {
-        serverUrl: 'https://registry.example.com',
-        gatewayId: 'gw_123',
-        clientToken: 'gct_new',
-        displayName: 'Test Relay',
-      },
-      createdAt: 100,
-      updatedAt: 100,
-    });
-    expect(result.nextConfigs).toHaveLength(1);
-  });
-
-  it('updates an existing relay config for the same registry gateway instead of duplicating it', () => {
-    const result = upsertGatewayConfigFromScan({
-      existingState: {
-        activeId: 'gateway_existing',
-        configs: [{
-          id: 'gateway_existing',
-          name: 'My MacBook',
-          mode: 'relay',
-          url: 'wss://relay-old.example.com/ws',
-          token: 'old-token',
-          relay: {
-            serverUrl: 'https://registry.example.com',
-            gatewayId: 'gw_123',
-            clientToken: 'gct_old',
-            displayName: 'Old Name',
-          },
-          createdAt: 10,
-          updatedAt: 20,
-        }],
-      },
-      payload: {
-        url: 'wss://relay.example.com/ws',
-        token: 'new-token',
-        mode: 'relay',
-        relay: {
-          serverUrl: 'https://registry.example.com/',
-          gatewayId: 'gw_123',
-          clientToken: 'gct_new',
-          displayName: 'New Name',
-        },
-      },
-      now: 200,
-    });
-
-    expect(result.created).toEqual({
-      id: 'gateway_existing',
-      name: 'My MacBook',
       backendKind: 'openclaw',
       transportKind: 'relay',
-      mode: 'relay',
-      url: 'wss://relay.example.com/ws',
-      token: 'new-token',
-      password: undefined,
-      hermes: undefined,
       relay: {
         serverUrl: 'https://registry.example.com',
         gatewayId: 'gw_123',
-        clientToken: 'gct_new',
-        displayName: 'New Name',
-        protocolVersion: undefined,
-        supportsBootstrap: undefined,
+        clientToken: 'gct_existing',
       },
-      createdAt: 10,
-      updatedAt: 200,
-    });
-    expect(result.nextConfigs).toHaveLength(1);
-    expect(result.nextConfigs[0]).toEqual(result.created);
+    };
+
+    await expect(claimRelayPairing(payload, { current: new Map() })).resolves.toBe(payload);
+    expect(RelayPairingService.claim).not.toHaveBeenCalled();
+    expect(HermesRelayPairingService.claim).not.toHaveBeenCalled();
   });
 
-  it('preserves existing legacy credentials when a refreshed relay QR omits them', () => {
-    const result = upsertGatewayConfigFromScan({
-      existingState: {
-        activeId: 'gateway_existing',
-        configs: [{
-          id: 'gateway_existing',
-          name: 'My MacBook',
-          mode: 'relay',
-          url: 'wss://relay-old.example.com/ws',
-          token: 'old-token',
-          password: 'old-password',
-          relay: {
-            serverUrl: 'https://registry.example.com',
-            gatewayId: 'gw_123',
-            clientToken: 'gct_old',
-            displayName: 'Old Name',
-          },
-          createdAt: 10,
-          updatedAt: 20,
-        }],
-      },
-      payload: {
-        url: 'wss://relay.example.com/ws',
-        mode: 'relay',
-        relay: {
-          serverUrl: 'https://registry.example.com',
-          gatewayId: 'gw_123',
-          clientToken: 'gct_new',
-          displayName: 'New Name',
-          protocolVersion: 2,
-          supportsBootstrap: true,
-        },
-      },
-      now: 300,
-    });
-
-    expect(result.created).toEqual({
-      id: 'gateway_existing',
-      name: 'My MacBook',
-      backendKind: 'openclaw',
-      transportKind: 'relay',
-      mode: 'relay',
-      url: 'wss://relay.example.com/ws',
-      token: 'old-token',
-      password: 'old-password',
-      hermes: undefined,
-      relay: {
-        serverUrl: 'https://registry.example.com',
-        gatewayId: 'gw_123',
-        clientToken: 'gct_new',
-        displayName: 'New Name',
-        protocolVersion: 2,
-        supportsBootstrap: true,
-      },
-      createdAt: 10,
-      updatedAt: 300,
-    });
-  });
-
-  it('treats a rescan of the same relay gateway as an update instead of a new config', () => {
-    expect(willCreateGatewayConfigFromScan([
-      {
-        id: 'gateway_existing',
-        name: 'My MacBook',
-        mode: 'relay',
-        url: 'wss://relay-old.example.com/ws',
-        token: 'old-token',
-        relay: {
-          serverUrl: 'https://registry.example.com',
-          gatewayId: 'gw_123',
-          clientToken: 'gct_old',
-        },
-        createdAt: 10,
-        updatedAt: 20,
-      },
-    ], {
-      url: 'wss://relay.example.com/ws',
-      mode: 'relay',
-      relay: {
-        serverUrl: 'https://registry.example.com/',
-        gatewayId: 'gw_123',
-        accessCode: '123456',
-      },
-    })).toBe(false);
-  });
-
-  it('persists the upserted config as the active gateway', async () => {
-    (StorageService.getGatewayConfigsState as jest.Mock).mockResolvedValue({
-      activeId: 'gateway_existing',
-      configs: [{
-        id: 'gateway_existing',
-        name: 'My MacBook',
-        mode: 'relay',
-        url: 'wss://relay-old.example.com/ws',
-        token: 'old-token',
-        relay: {
-          serverUrl: 'https://registry.example.com',
-          gatewayId: 'gw_123',
-          clientToken: 'gct_old',
-        },
-        createdAt: 10,
-        updatedAt: 20,
-      }],
-    });
-
-    const result = await createGatewayConfigFromScan({
-      payload: {
-        url: 'wss://relay.example.com/ws',
-        token: 'new-token',
-        mode: 'relay',
-        relay: {
-          serverUrl: 'https://registry.example.com',
-          gatewayId: 'gw_123',
-          clientToken: 'gct_new',
-        },
-      },
-      debugMode: false,
-    });
-
-    expect(result.created.id).toBe('gateway_existing');
-    expect(StorageService.setGatewayConfigsState).toHaveBeenCalledWith({
-      activeId: 'gateway_existing',
-      configs: [result.created],
-    });
-  });
-
-  it('creates a hermes config from scan without inheriting legacy relay fields', () => {
-    const result = upsertGatewayConfigFromScan({
-      existingState: {
-        activeId: null,
-        configs: [],
-      },
-      payload: {
-        url: 'ws://192.168.1.8:4319/v1/hermes/ws?token=secret',
-        backendKind: 'hermes',
-        transportKind: 'local',
-        mode: 'hermes',
-        hermes: {
-          bridgeUrl: 'http://192.168.1.8:4319',
-          displayName: 'Hermes',
-        },
-      },
-      now: 400,
-    });
-
-    expect(result.created).toEqual({
-      id: 'gateway_400',
-      name: 'Hermes',
-      backendKind: 'hermes',
-      transportKind: 'local',
-      mode: 'hermes',
-      url: 'ws://192.168.1.8:4319/v1/hermes/ws?token=secret',
-      token: undefined,
-      password: undefined,
-      hermes: {
-        bridgeUrl: 'http://192.168.1.8:4319',
-        displayName: 'Hermes',
-      },
-      relay: undefined,
-      createdAt: 400,
-      updatedAt: 400,
-    });
-  });
-
-  it('updates an existing hermes config instead of duplicating it', () => {
-    const result = upsertGatewayConfigFromScan({
-      existingState: {
-        activeId: 'gateway_existing',
-        configs: [{
-          id: 'gateway_existing',
-          name: 'Hermes',
-          mode: 'hermes',
-          url: 'ws://192.168.1.8:4319/v1/hermes/ws?token=old',
-          hermes: {
-            bridgeUrl: 'http://192.168.1.8:4319',
-            displayName: 'Hermes',
-          },
-          createdAt: 10,
-          updatedAt: 20,
-        }],
-      },
-      payload: {
-        url: 'ws://192.168.1.8:4319/v1/hermes/ws?token=new',
-        backendKind: 'hermes',
-        transportKind: 'local',
-        mode: 'hermes',
-        hermes: {
-          bridgeUrl: 'http://192.168.1.8:4319',
-          displayName: 'Hermes',
-        },
-      },
-      now: 500,
-    });
-
-    expect(result.created.id).toBe('gateway_existing');
-    expect(result.nextConfigs).toHaveLength(1);
-    expect(result.created.mode).toBe('hermes');
-    expect(result.created.url).toBe('ws://192.168.1.8:4319/v1/hermes/ws?token=new');
-  });
-
-  it('preserves relay bootstrap capability flags when saving scanned configs', () => {
-    const result = upsertGatewayConfigFromScan({
-      existingState: {
-        activeId: null,
-        configs: [],
-      },
-      payload: {
-        url: 'wss://relay.example.com/ws',
-        token: 'gateway-token',
-        mode: 'relay',
-        relay: {
-          serverUrl: 'https://registry.example.com',
-          gatewayId: 'gw_123',
-          clientToken: 'gct_new',
-          protocolVersion: 2,
-          supportsBootstrap: true,
-        },
-      },
-      now: 300,
-    });
-
-    expect(result.created.relay).toEqual({
-      serverUrl: 'https://registry.example.com',
-      gatewayId: 'gw_123',
-      clientToken: 'gct_new',
-      protocolVersion: 2,
-      supportsBootstrap: true,
-    });
-  });
-
-  it('claims a new-format relay QR without legacy credentials and returns a usable relay config', async () => {
-    const accessCode = 'AB7K9Q';
+  it('claims a new-format OpenClaw Relay QR and preserves negotiated metadata', async () => {
     (RelayPairingService.claim as jest.Mock).mockResolvedValue({
       gatewayId: 'gw_123',
-      relayUrl: 'wss://relay.example.com/ws',
+      relayUrl: ' wss://relay.example.com/ws ',
       clientToken: 'gct_new',
       displayName: 'Lucy Mac',
       region: 'us',
@@ -375,7 +47,7 @@ describe('gatewayScanFlow', () => {
       relay: {
         serverUrl: 'https://registry.example.com',
         gatewayId: 'gw_123',
-        accessCode,
+        accessCode: 'AB7K9Q',
         protocolVersion: 2,
         supportsBootstrap: true,
       },
@@ -384,15 +56,15 @@ describe('gatewayScanFlow', () => {
     expect(RelayPairingService.claim).toHaveBeenCalledWith({
       serverUrl: 'https://registry.example.com',
       gatewayId: 'gw_123',
-      accessCode,
+      accessCode: 'AB7K9Q',
     });
-
     expect(result).toEqual({
       url: 'wss://relay.example.com/ws',
       backendKind: 'openclaw',
       transportKind: 'relay',
       token: undefined,
       password: undefined,
+      bootstrap: undefined,
       mode: 'relay',
       relay: {
         serverUrl: 'https://registry.example.com',
@@ -406,13 +78,11 @@ describe('gatewayScanFlow', () => {
     });
   });
 
-  it('claims a legacy relay QR and keeps legacy gateway credentials for fallback auth', async () => {
+  it('keeps legacy OpenClaw gateway credentials for fallback authentication', async () => {
     (RelayPairingService.claim as jest.Mock).mockResolvedValue({
       gatewayId: 'gw_123',
       relayUrl: 'wss://relay.example.com/ws',
       clientToken: 'gct_new',
-      displayName: 'Lucy Mac',
-      region: 'us',
     });
 
     const result = await claimRelayPairing({
@@ -429,15 +99,17 @@ describe('gatewayScanFlow', () => {
       },
     }, { current: new Map() });
 
-    expect(result.token).toBe('legacy-token');
-    expect(result.password).toBe('legacy-password');
-    expect(result.relay?.clientToken).toBe('gct_new');
+    expect(result).toMatchObject({
+      token: 'legacy-token',
+      password: 'legacy-password',
+      relay: { clientToken: 'gct_new' },
+    });
   });
 
-  it('claims a Hermes relay QR into a Hermes relay runtime config', async () => {
+  it('claims a Hermes Relay QR through the isolated Hermes Registry', async () => {
     (HermesRelayPairingService.claim as jest.Mock).mockResolvedValue({
       bridgeId: 'hbg_123',
-      relayUrl: 'wss://hermes-relay.example.com/ws',
+      relayUrl: ' wss://hermes-relay.example.com/ws ',
       clientToken: 'hct_new',
       displayName: 'Hermes Mac',
       region: 'us',
@@ -452,6 +124,8 @@ describe('gatewayScanFlow', () => {
         serverUrl: 'https://hermes-registry.example.com',
         gatewayId: 'hbg_123',
         accessCode: 'ABCD23',
+        protocolVersion: 2,
+        supportsBootstrap: true,
       },
     }, { current: new Map() });
 
@@ -471,145 +145,43 @@ describe('gatewayScanFlow', () => {
         clientToken: 'hct_new',
         relayUrl: 'wss://hermes-relay.example.com/ws',
         displayName: 'Hermes Mac',
-        protocolVersion: undefined,
-        supportsBootstrap: undefined,
+        protocolVersion: 2,
+        supportsBootstrap: true,
       },
     });
   });
 
-  it('creates a Hermes relay config without fabricating direct Hermes bridge metadata', () => {
-    const result = upsertGatewayConfigFromScan({
-      existingState: {
-        activeId: null,
-        configs: [],
-      },
-      payload: {
-        url: 'wss://hermes-relay.example.com/ws',
-        backendKind: 'hermes',
-        transportKind: 'relay',
-        mode: 'hermes',
-        relay: {
-          serverUrl: 'https://hermes-registry.example.com',
-          gatewayId: 'hbg_123',
-          clientToken: 'hct_new',
-          displayName: 'Hermes Mac',
-        },
-      },
-      now: 600,
-    });
-
-    expect(result.created).toEqual({
-      id: 'gateway_600',
-      name: 'Hermes Mac',
-      backendKind: 'hermes',
-      transportKind: 'relay',
-      mode: 'hermes',
-      url: 'wss://hermes-relay.example.com/ws',
-      token: undefined,
-      password: undefined,
-      hermes: undefined,
+  it('deduplicates an in-flight claim and clears it after completion', async () => {
+    let resolveClaim: ((value: {
+      gatewayId: string;
+      relayUrl: string;
+      clientToken: string;
+    }) => void) | undefined;
+    (RelayPairingService.claim as jest.Mock).mockImplementation(() => new Promise((resolve) => {
+      resolveClaim = resolve;
+    }));
+    const payload: GatewayScanPayload = {
+      url: '',
+      mode: 'relay',
       relay: {
-        serverUrl: 'https://hermes-registry.example.com',
-        gatewayId: 'hbg_123',
-        clientToken: 'hct_new',
-        displayName: 'Hermes Mac',
-        protocolVersion: undefined,
-        supportsBootstrap: undefined,
+        serverUrl: 'https://registry.example.com',
+        gatewayId: 'gw_123',
+        accessCode: 'AB7K9Q',
       },
-      createdAt: 600,
-      updatedAt: 600,
-    });
-  });
+    };
+    const inFlight = new Map<string, Promise<GatewayScanPayload>>();
 
-  it('updates an existing Hermes relay config by relay identity instead of clearing relay credentials', () => {
-    const result = upsertGatewayConfigFromScan({
-      existingState: {
-        activeId: 'gateway_existing',
-        configs: [{
-          id: 'gateway_existing',
-          name: 'Hermes Mac',
-          backendKind: 'hermes',
-          transportKind: 'relay',
-          mode: 'hermes',
-          url: 'wss://hermes-relay-old.example.com/ws',
-          hermes: {
-            bridgeUrl: 'wss://hermes-relay-old.example.com/ws',
-          },
-          relay: {
-            serverUrl: 'https://hermes-registry.example.com',
-            gatewayId: 'hbg_123',
-            clientToken: 'hct_old',
-            displayName: 'Hermes Mac',
-          },
-          createdAt: 10,
-          updatedAt: 20,
-        }],
-      },
-      payload: {
-        url: 'wss://hermes-relay.example.com/ws',
-        backendKind: 'hermes',
-        transportKind: 'relay',
-        mode: 'hermes',
-        relay: {
-          serverUrl: 'https://hermes-registry.example.com',
-          gatewayId: 'hbg_123',
-          clientToken: 'hct_new',
-          displayName: 'Hermes Mac',
-        },
-      },
-      now: 700,
-    });
+    const first = claimRelayPairing(payload, { current: inFlight });
+    const second = claimRelayPairing(payload, { current: inFlight });
+    expect(RelayPairingService.claim).toHaveBeenCalledTimes(1);
+    expect(inFlight).toHaveProperty('size', 1);
 
-    expect(result.created).toEqual({
-      id: 'gateway_existing',
-      name: 'Hermes Mac',
-      backendKind: 'hermes',
-      transportKind: 'relay',
-      mode: 'hermes',
-      url: 'wss://hermes-relay.example.com/ws',
-      token: undefined,
-      password: undefined,
-      hermes: undefined,
-      relay: {
-        serverUrl: 'https://hermes-registry.example.com',
-        gatewayId: 'hbg_123',
-        clientToken: 'hct_new',
-        displayName: 'Hermes Mac',
-        protocolVersion: undefined,
-        supportsBootstrap: undefined,
-      },
-      createdAt: 10,
-      updatedAt: 700,
+    resolveClaim?.({
+      gatewayId: 'gw_123',
+      relayUrl: 'wss://relay.example.com/ws',
+      clientToken: 'gct_new',
     });
-  });
-
-  it('treats a rescan of the same Hermes relay gateway as an update instead of a new config', () => {
-    expect(willCreateGatewayConfigFromScan([
-      {
-        id: 'gateway_existing',
-        name: 'Hermes Mac',
-        backendKind: 'hermes',
-        transportKind: 'relay',
-        mode: 'hermes',
-        url: 'wss://hermes-relay-old.example.com/ws',
-        relay: {
-          serverUrl: 'https://hermes-registry.example.com',
-          gatewayId: 'hbg_123',
-          clientToken: 'hct_old',
-        },
-        createdAt: 10,
-        updatedAt: 20,
-      },
-    ], {
-      url: 'wss://hermes-relay.example.com/ws',
-      backendKind: 'hermes',
-      transportKind: 'relay',
-      mode: 'hermes',
-      relay: {
-        serverUrl: 'https://hermes-registry.example.com',
-        gatewayId: 'hbg_123',
-        accessCode: 'ABCD23',
-      },
-    })).toBe(false);
+    await expect(Promise.all([first, second])).resolves.toHaveLength(2);
+    expect(inFlight).toHaveProperty('size', 0);
   });
 });

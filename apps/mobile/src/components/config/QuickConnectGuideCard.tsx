@@ -109,8 +109,8 @@ export function QuickConnectGuideCard({
       <TouchableOpacity onPress={toggleManual} style={styles.manualHeader} activeOpacity={0.7}>
         <Text style={styles.manualHeaderText}>{t('Questions? Manual setup')}</Text>
         {manualExpanded
-          ? <ChevronDown size={12} color={theme.colors.textSubtle} strokeWidth={2} />
-          : <ChevronRight size={12} color={theme.colors.textSubtle} strokeWidth={2} />
+          ? <ChevronDown size={12} color={theme.colors.inkTertiary} strokeWidth={2} />
+          : <ChevronRight size={12} color={theme.colors.inkTertiary} strokeWidth={2} />
         }
       </TouchableOpacity>
       {manualExpanded && (
@@ -158,9 +158,9 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
   return StyleSheet.create({
     card: {
       backgroundColor: colors.surface,
-      borderRadius: Radius.lg,
+      borderRadius: Radius.card,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
+      borderColor: colors.line,
       padding: Space.lg,
     },
     simpleStep: {
@@ -176,30 +176,30 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     stepBadge: {
       alignSelf: 'flex-start',
-      backgroundColor: colors.surfaceElevated,
+      backgroundColor: colors.surfaceFloating,
       borderRadius: Radius.full,
       paddingLeft: 0,
       paddingRight: Space.sm,
       paddingVertical: 4,
     },
     stepBadgeText: {
-      color: colors.textMuted,
-      fontSize: FontSize.xs,
+      color: colors.inkSecondary,
+      fontSize: FontSize.caption,
       fontWeight: FontWeight.semibold,
     },
     stepText: {
-      color: colors.text,
-      fontSize: FontSize.base,
+      color: colors.ink,
+      fontSize: FontSize.secondary,
       lineHeight: 21,
     },
     pairModeDescription: {
-      color: colors.textMuted,
-      fontSize: FontSize.sm,
+      color: colors.inkSecondary,
+      fontSize: FontSize.caption,
       lineHeight: 18,
     },
     manualDivider: {
       height: StyleSheet.hairlineWidth,
-      backgroundColor: colors.border,
+      backgroundColor: colors.line,
       marginTop: Space.lg,
       marginBottom: Space.md,
     },
@@ -211,8 +211,8 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       gap: Space.xs,
     },
     manualHeaderText: {
-      color: colors.text,
-      fontSize: FontSize.md,
+      color: colors.ink,
+      fontSize: FontSize.caption,
       lineHeight: 18,
     },
     manualContent: {
@@ -223,13 +223,13 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       gap: Space.xs,
     },
     pairModeTitle: {
-      color: colors.text,
-      fontSize: FontSize.md,
+      color: colors.ink,
+      fontSize: FontSize.caption,
       fontWeight: FontWeight.semibold,
     },
     pairModeHint: {
-      color: colors.textMuted,
-      fontSize: FontSize.sm,
+      color: colors.inkSecondary,
+      fontSize: FontSize.caption,
       lineHeight: 17,
     },
   });

@@ -16,6 +16,7 @@ export type ChildSessionActivity = {
 
 export type ChildSessionActivityCard = {
   sessionKey: string;
+  agentId: string | null;
   title: string;
   previewText: string | null;
   toolName: string | null;
@@ -203,13 +204,14 @@ export function buildChildSessionActivityCards(params: {
         currentSessionKey,
         currentAgentId,
         activity.sessionKey,
-        known?.spawnedBy ?? null,
+        known?.parentSessionKey ?? known?.spawnedBy ?? null,
       );
     })
     .map((activity) => {
       const session = sessionsByKey.get(activity.sessionKey);
       return {
         sessionKey: activity.sessionKey,
+        agentId: session?.agentId ?? activity.agentId,
         title: resolveChildSessionTitle(
           session,
           activity.sessionKey,
@@ -232,15 +234,15 @@ export function buildChildSessionActivityCards(params: {
 
 export function getChildSessionStatusLabel(
   status: ChildSessionActivityStatus,
-  previewText: string | null,
+  _previewText: string | null,
   toolName: string | null,
   t: (key: string, options?: Record<string, unknown>) => string,
 ): string {
   if (status === 'tool_calling') {
-    return toolName ? formatToolActivity(toolName, t) : t('Using tool');
+    return toolName ? formatToolActivity(toolName, t) : t('Using tool', { ns: 'chat' });
   }
   if (status === 'streaming') {
-    return previewText || t('Thinking');
+    return t('Running', { ns: 'chat' });
   }
-  return t('Completed');
+  return t('Completed', { ns: 'chat' });
 }

@@ -25,6 +25,8 @@ export type CanonicalThemeColors = {
   line: string;
   accent: string;
   accentSoft: string;
+  onAccent: string;
+  scrim: string;
   good: string;
   goodSoft: string;
   warn: string;
@@ -33,120 +35,7 @@ export type CanonicalThemeColors = {
   badSoft: string;
 };
 
-/**
- * @deprecated Temporary aliases for pre-3.0 screens. New code must use
- * `CanonicalThemeColors`; remove this surface once those screens migrate.
- */
-export type LegacyThemeColorAliases = {
-  /** @deprecated Use `canvas`. */
-  background: string;
-  /** @deprecated Use `surface`. */
-  surfaceMuted: string;
-  /** @deprecated Use `surfaceFloating`. */
-  surfaceElevated: string;
-  /** @deprecated Use `line`. */
-  border: string;
-  /** @deprecated Use `line`. */
-  borderStrong: string;
-  /** @deprecated Use `ink`. */
-  text: string;
-  /** @deprecated Use `inkSecondary`. */
-  textMuted: string;
-  /** @deprecated Use `inkTertiary`. */
-  textSubtle: string;
-  /** @deprecated Use `accent` or `accentSoft`. */
-  accent50: string;
-  /** @deprecated Use `accent` or `accentSoft`. */
-  accent100: string;
-  /** @deprecated Use `accent` or `accentSoft`. */
-  accent200: string;
-  /** @deprecated Use `accent`. */
-  accent500: string;
-  /** @deprecated Use `accent`. */
-  accent700: string;
-  /** @deprecated Use `accent`. */
-  primary: string;
-  /** @deprecated Use an explicit foreground appropriate to `accent`. */
-  primaryText: string;
-  /** @deprecated Use `accentSoft`. */
-  primarySoft: string;
-  /** @deprecated Use `accentSoft`. */
-  searchHighlightBg: string;
-  /** @deprecated Use `good`. */
-  success: string;
-  /** @deprecated Use `goodSoft`. */
-  successSoft: string;
-  /** @deprecated Use `warn`. */
-  warning: string;
-  /** @deprecated Use `warnSoft`. */
-  warningSoft: string;
-  /** @deprecated Use `bad`. */
-  error: string;
-  /** @deprecated Use `badSoft`. */
-  errorSoft: string;
-  /** @deprecated Use `accent`. */
-  info: string;
-  /** @deprecated Use `accentSoft`. */
-  infoSoft: string;
-  /** @deprecated Presentation-only compatibility token. */
-  overlay: string;
-  /** @deprecated Debug-only compatibility token. */
-  debugOverlay: string;
-  /** @deprecated Use `good`. */
-  debugText: string;
-  /** @deprecated Use `accentSoft`. */
-  bubbleUser: string;
-  /** @deprecated Use `surface`. */
-  bubbleAssistant: string;
-  /** @deprecated Use `surface`. */
-  bubbleSystem: string;
-  /** @deprecated Use `inkSecondary`. */
-  bubbleSystemText: string;
-  /** @deprecated Use `surfaceFloating`. */
-  inputBackground: string;
-  /** @deprecated Use `line`. */
-  imageAddBorder: string;
-  /** @deprecated Use `inkTertiary`. */
-  imageAddText: string;
-  /** @deprecated Presentation-only compatibility token. */
-  chatPreviewMask: string;
-  /** @deprecated Presentation-only compatibility token. */
-  sidebarBackdrop: string;
-  /** @deprecated Use an explicit on-color foreground. */
-  iconOnColor: string;
-  /** @deprecated Use `agentPalette`. */
-  sessionBadgeSubagent: string;
-  /** @deprecated Use `agentPalette`. */
-  sessionBadgeCron: string;
-  /** @deprecated Use `agentPalette`. */
-  sessionBadgeTelegram: string;
-  /** @deprecated Use `agentPalette`. */
-  sessionBadgeDiscord: string;
-  /** @deprecated Use `agentPalette`. */
-  sessionBadgeSlack: string;
-  /** @deprecated Data-visualization compatibility token. */
-  usageCostOutput: string;
-  /** @deprecated Data-visualization compatibility token. */
-  usageCostInput: string;
-  /** @deprecated Data-visualization compatibility token. */
-  usageCostCacheWrite: string;
-  /** @deprecated Data-visualization compatibility token. */
-  usageCostCacheRead: string;
-  /** @deprecated Use `agentPalette`. */
-  badgeModel: string;
-  /** @deprecated Use `agentPalette`. */
-  badgeThinking: string;
-  /** @deprecated Use `agentPalette`. */
-  badgeTools: string;
-  /** @deprecated Use `agentPalette`. */
-  badgePrompts: string;
-  /** @deprecated Use `line`. */
-  chartGrid: string;
-  /** @deprecated Use the shared `Shadow` recipes. */
-  shadow: string;
-};
-
-export type AppThemeColors = CanonicalThemeColors & LegacyThemeColorAliases;
+export type AppThemeColors = CanonicalThemeColors;
 
 export type AppTheme = {
   scheme: ThemeScheme;
@@ -154,22 +43,7 @@ export type AppTheme = {
   colors: AppThemeColors;
 };
 
-type DerivedAccentKeys =
-  | 'accent'
-  | 'accentSoft'
-  | 'accent50'
-  | 'accent100'
-  | 'accent200'
-  | 'accent500'
-  | 'accent700'
-  | 'primary'
-  | 'primaryText'
-  | 'primarySoft'
-  | 'searchHighlightBg'
-  | 'bubbleUser'
-  | 'info'
-  | 'infoSoft';
-type FixedPalette = Omit<AppThemeColors, DerivedAccentKeys>;
+type FixedPalette = Omit<AppThemeColors, 'accent' | 'accentSoft'>;
 
 const lightCanonical = {
   canvas: '#FFFFFF',
@@ -180,6 +54,8 @@ const lightCanonical = {
   inkSecondary: '#6B6B72',
   inkTertiary: '#A3A3AB',
   line: '#E6E6EA',
+  onAccent: '#FFFFFF',
+  scrim: 'rgba(0,0,0,0.4)',
   good: '#178A6A',
   goodSoft: 'rgba(23,138,106,0.12)',
   warn: '#D9791C',
@@ -197,6 +73,8 @@ const darkCanonical = {
   inkSecondary: '#9A9AA3',
   inkTertiary: '#6A6A73',
   line: '#2A2A2F',
+  onAccent: '#0C0C0D',
+  scrim: 'rgba(0,0,0,0.4)',
   good: '#2FA07C',
   goodSoft: 'rgba(47,160,124,0.2)',
   warn: '#D07F30',
@@ -205,95 +83,8 @@ const darkCanonical = {
   badSoft: 'rgba(224,96,96,0.2)',
 } as const;
 
-const lightPalette: FixedPalette = {
-  ...lightCanonical,
-  background: lightCanonical.canvas,
-  surfaceMuted: lightCanonical.surface,
-  surfaceElevated: lightCanonical.surfaceFloating,
-  border: lightCanonical.line,
-  borderStrong: lightCanonical.line,
-  text: lightCanonical.ink,
-  textMuted: lightCanonical.inkSecondary,
-  textSubtle: lightCanonical.inkTertiary,
-  success: lightCanonical.good,
-  successSoft: lightCanonical.goodSoft,
-  warning: lightCanonical.warn,
-  warningSoft: lightCanonical.warnSoft,
-  error: lightCanonical.bad,
-  errorSoft: lightCanonical.badSoft,
-  overlay: 'rgba(0,0,0,0.4)',
-  debugOverlay: 'rgba(0,0,0,0.85)',
-  debugText: lightCanonical.good,
-  bubbleAssistant: lightCanonical.surface,
-  bubbleSystem: lightCanonical.surface,
-  bubbleSystemText: lightCanonical.inkSecondary,
-  inputBackground: lightCanonical.surfaceFloating,
-  imageAddBorder: lightCanonical.line,
-  imageAddText: lightCanonical.inkTertiary,
-  chatPreviewMask: 'rgba(0,0,0,0.96)',
-  sidebarBackdrop: 'rgba(0,0,0,0.35)',
-  iconOnColor: '#FFFFFF',
-  sessionBadgeSubagent: agentPalette[4],
-  sessionBadgeCron: agentPalette[1],
-  sessionBadgeTelegram: agentPalette[5],
-  sessionBadgeDiscord: agentPalette[0],
-  sessionBadgeSlack: agentPalette[3],
-  usageCostOutput: lightCanonical.bad,
-  usageCostInput: agentPalette[0],
-  usageCostCacheWrite: lightCanonical.warn,
-  usageCostCacheRead: lightCanonical.good,
-  badgeModel: agentPalette[4],
-  badgeThinking: lightCanonical.warn,
-  badgeTools: agentPalette[0],
-  badgePrompts: lightCanonical.good,
-  chartGrid: lightCanonical.line,
-  shadow: lightCanonical.ink,
-};
-
-const darkPalette: FixedPalette = {
-  ...darkCanonical,
-  background: darkCanonical.canvas,
-  surfaceMuted: darkCanonical.surface,
-  surfaceElevated: darkCanonical.surfaceFloating,
-  border: darkCanonical.line,
-  borderStrong: darkCanonical.line,
-  text: darkCanonical.ink,
-  textMuted: darkCanonical.inkSecondary,
-  textSubtle: darkCanonical.inkTertiary,
-  success: darkCanonical.good,
-  successSoft: darkCanonical.goodSoft,
-  warning: darkCanonical.warn,
-  warningSoft: darkCanonical.warnSoft,
-  error: darkCanonical.bad,
-  errorSoft: darkCanonical.badSoft,
-  overlay: 'rgba(0,0,0,0.4)',
-  debugOverlay: 'rgba(5,8,14,0.92)',
-  debugText: darkCanonical.good,
-  bubbleAssistant: darkCanonical.surface,
-  bubbleSystem: darkCanonical.surface,
-  bubbleSystemText: darkCanonical.inkSecondary,
-  inputBackground: darkCanonical.surfaceFloating,
-  imageAddBorder: darkCanonical.line,
-  imageAddText: darkCanonical.inkTertiary,
-  chatPreviewMask: 'rgba(2,4,8,0.98)',
-  sidebarBackdrop: 'rgba(0,0,0,0.5)',
-  iconOnColor: '#FFFFFF',
-  sessionBadgeSubagent: agentPalette[4],
-  sessionBadgeCron: agentPalette[1],
-  sessionBadgeTelegram: agentPalette[5],
-  sessionBadgeDiscord: agentPalette[0],
-  sessionBadgeSlack: agentPalette[3],
-  usageCostOutput: darkCanonical.bad,
-  usageCostInput: agentPalette[0],
-  usageCostCacheWrite: darkCanonical.warn,
-  usageCostCacheRead: darkCanonical.good,
-  badgeModel: agentPalette[4],
-  badgeThinking: darkCanonical.warn,
-  badgeTools: agentPalette[0],
-  badgePrompts: darkCanonical.good,
-  chartGrid: darkCanonical.line,
-  shadow: '#000000',
-};
+const lightPalette: FixedPalette = lightCanonical;
+const darkPalette: FixedPalette = darkCanonical;
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } {
   const normalized = hex.replace('#', '');
@@ -324,18 +115,6 @@ function applyAccentPalette(
     ...fixedPalette,
     accent: accent.accent500,
     accentSoft,
-    accent50: accent.accent50,
-    accent100: accent.accent100,
-    accent200: accent.accent200,
-    accent500: accent.accent500,
-    accent700: accent.accent700,
-    primary: accent.accent500,
-    primaryText: scheme === 'dark' ? fixedPalette.canvas : '#FFFFFF',
-    primarySoft: accentSoft,
-    searchHighlightBg: accentSoft,
-    bubbleUser: accentSoft,
-    info: accent.accent500,
-    infoSoft: accentSoft,
   };
 }
 

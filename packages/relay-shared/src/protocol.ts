@@ -338,6 +338,15 @@ export interface HermesPairClaimRequest {
   clientLabel?: string | null;
 }
 
+/**
+ * Mobile-friendly Hermes claim shape. The Registry resolves the active
+ * single-use code to its opaque bridge id; callers never enumerate bridges.
+ */
+export interface HermesPairCodeClaimRequest {
+  accessCode: string;
+  clientLabel?: string | null;
+}
+
 export interface HermesPairClaimResponse {
   bridgeId: string;
   relayUrl: string;

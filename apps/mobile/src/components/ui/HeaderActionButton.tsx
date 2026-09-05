@@ -18,9 +18,9 @@ type Props = {
 };
 
 function resolveIconColor(tone: Tone, colors: ReturnType<typeof useAppTheme>['theme']['colors']): string {
-  if (tone === 'accent') return colors.primary;
-  if (tone === 'destructive') return colors.error;
-  return colors.textMuted;
+  if (tone === 'accent') return colors.accent;
+  if (tone === 'destructive') return colors.bad;
+  return colors.inkSecondary;
 }
 
 export function HeaderActionButton({

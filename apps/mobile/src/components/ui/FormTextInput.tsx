@@ -1,12 +1,11 @@
 import React, { forwardRef, useMemo } from 'react';
 import {
-  StyleProp,
+  type StyleProp,
   StyleSheet,
-  TextInput,
-  TextInputProps,
-  TextStyle,
+  type TextInput,
+  type TextStyle,
   View,
-  ViewStyle,
+  type ViewStyle,
 } from 'react-native';
 import { useAppTheme } from '../../theme';
 import {
@@ -17,8 +16,12 @@ import {
   Space,
   createSurfaceStyle,
 } from '../../theme/tokens';
+import {
+  CompositionSafeTextInput,
+  type CompositionSafeTextInputProps,
+} from './CompositionSafeTextInput';
 
-type Props = Omit<TextInputProps, 'style'> & {
+type Props = Omit<CompositionSafeTextInputProps, 'style'> & {
   containerStyle?: StyleProp<ViewStyle>;
   inputStyle?: StyleProp<TextStyle>;
   invalid?: boolean;
@@ -51,11 +54,11 @@ export const FormTextInput = forwardRef<TextInput, Props>(function FormTextInput
       invalid ? styles.invalid : null,
       containerStyle,
     ]}>
-      <TextInput
+      <CompositionSafeTextInput
         ref={ref}
         {...rest}
         multiline={multiline}
-        placeholderTextColor={placeholderTextColor ?? theme.colors.textSubtle}
+        placeholderTextColor={placeholderTextColor ?? theme.colors.inkTertiary}
         textAlignVertical={multiline ? 'top' : undefined}
         style={[
           styles.input,
@@ -73,21 +76,21 @@ function createStyles(
   scheme: ReturnType<typeof useAppTheme>['theme']['scheme'],
 ) {
   return StyleSheet.create({
-    field: { borderRadius: Radius.md, overflow: 'hidden' },
+    field: { borderRadius: Radius.settingsGroup, overflow: 'hidden' },
     raised: { ...createSurfaceStyle(colors, scheme, 'raised') },
     sunken: {
-      backgroundColor: colors.surfaceMuted,
+      backgroundColor: colors.canvasGrouped,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
+      borderColor: colors.line,
     },
-    invalid: { borderColor: colors.error },
+    invalid: { borderColor: colors.bad },
     input: {
-      color: colors.text,
-      fontSize: FontSize.base,
-      lineHeight: LineHeight.base,
+      color: colors.ink,
+      fontSize: FontSize.secondary,
+      lineHeight: LineHeight.secondary,
       paddingHorizontal: Space.md,
     },
-    singleLine: { minHeight: ControlSize.field, paddingVertical: 0 },
+    singleLine: { minHeight: ControlSize.floatingButton, paddingVertical: 0 },
     multiline: { minHeight: 120, paddingVertical: Space.md },
   });
 }

@@ -143,7 +143,7 @@ function findTailUserFallbackMatch(
 ): UiMessage | null {
   const normalizedOptimisticText = normalizeUserText(optimisticUser.text);
   if (!normalizedOptimisticText) return null;
-  if (optimisticUser.imageUris?.length) return null;
+  if (optimisticUser.imageUris?.length || optimisticUser.fileAttachments?.length) return null;
 
   for (let index = messages.length - 1; index >= 0; index--) {
     const candidate = messages[index];

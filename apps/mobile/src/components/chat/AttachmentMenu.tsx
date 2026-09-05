@@ -14,7 +14,7 @@ type Props = {
   children: React.ReactNode;
   onPickImage: () => void | Promise<void>;
   onTakePhoto: () => void | Promise<void>;
-  onChooseFile: () => void | Promise<void>;
+  onChooseFile?: () => void | Promise<void>;
 };
 
 export function AttachmentMenu({
@@ -29,15 +29,15 @@ export function AttachmentMenu({
   const { theme } = useAppTheme();
 
   const actions = React.useMemo<MenuAction[]>(() => {
-    const items: MenuAction[] = [
-      { id: 'choose-file', title: t('Choose File') },
-      { id: 'photo-library', title: t('Photo Library') },
-    ];
+    const items: MenuAction[] = [{ id: 'photo-library', title: t('Photo Library') }];
+    if (onChooseFile) {
+      items.unshift({ id: 'choose-file', title: t('Choose File') });
+    }
     if (!isMacCatalyst) {
       items.splice(1, 0, { id: 'take-photo', title: t('Take Photo') });
     }
     return items;
-  }, [t]);
+  }, [onChooseFile, t]);
 
   const handleAction = React.useCallback(({ nativeEvent }: { nativeEvent: { event: string } }) => {
     const action = nativeEvent.event as AttachmentAction;
@@ -51,7 +51,7 @@ export function AttachmentMenu({
       void onTakePhoto();
       return;
     }
-    if (action === 'choose-file') {
+    if (action === 'choose-file' && onChooseFile) {
       void onChooseFile();
     }
   }, [onChooseFile, onPickImage, onTakePhoto]);

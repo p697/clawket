@@ -4,6 +4,10 @@ import { GatewayRequestError } from './types';
 import { RELAY_CONTROL_PREFIX } from './relay-control';
 import { RELAY_CLIENT_PONG_CAPABILITY } from '../transports/relay-ws';
 import {
+  HERMES_GATEWAY_PROTOCOL_PROFILE,
+  OPENCLAW_GATEWAY_PROTOCOL_PROFILE,
+} from '../adapters/gateway-profiles';
+import {
   FRAME_TOO_LARGE_CLOSE_CODE,
   FRAME_TOO_LARGE_ERROR_CODE,
   WEBSOCKET_FRAME_LIMIT_BYTES,
@@ -68,8 +72,6 @@ jest.mock('../../services/storage', () => {
         : null;
     }),
     deleteDeviceToken: jest.fn(() => Promise.resolve()),
-    getGatewayConfig: jest.fn(() => Promise.resolve(null)),
-    setGatewayConfig: jest.fn(() => Promise.resolve()),
   },
   };
 });
@@ -183,7 +185,11 @@ describe('GatewayProtocolClient migrated parity', () => {
       secretKeyHex: '02'.repeat(64),
       createdAt: '2026-09-05T00:00:00.000Z',
     }));
-    client = new GatewayProtocolClient({ identityProvider, reconnectJitter: false });
+    client = new GatewayProtocolClient({
+      profile: OPENCLAW_GATEWAY_PROTOCOL_PROFILE,
+      identityProvider,
+      reconnectJitter: false,
+    });
     (globalThis as { fetch?: unknown }).fetch = jest.fn();
 
     // Capture the WebSocket instance created during connect()
@@ -369,7 +375,7 @@ describe('GatewayProtocolClient migrated parity', () => {
         url: 'ws://127.0.0.1:4319/v1/hermes/ws',
         backendKind: 'hermes',
         mode: 'hermes',
-      });
+      }, HERMES_GATEWAY_PROTOCOL_PROFILE);
       client.connect();
 
       createdWs.onopen!();
@@ -531,7 +537,7 @@ describe('GatewayProtocolClient migrated parity', () => {
           gatewayId: 'hbg_123',
           clientToken: 'hct_secret',
         },
-      });
+      }, HERMES_GATEWAY_PROTOCOL_PROFILE);
       client.connect();
       await flushPromises();
 
@@ -749,7 +755,7 @@ describe('GatewayProtocolClient migrated parity', () => {
         url: 'ws://127.0.0.1:4319/v1/hermes/ws',
         backendKind: 'hermes',
         mode: 'hermes',
-      });
+      }, HERMES_GATEWAY_PROTOCOL_PROFILE);
       expect(client.getBaseUrl()).toBe('http://127.0.0.1:4319');
     });
   });
@@ -1517,6 +1523,7 @@ describe('GatewayProtocolClient migrated parity', () => {
           ok: true,
           payload: {
             auth: {
+              deviceToken: 'node-device-token',
               role: 'node',
               scopes: [],
               deviceTokens: [{
@@ -1530,6 +1537,19 @@ describe('GatewayProtocolClient migrated parity', () => {
       });
       await flushPromises();
 
+      expect(StorageService.setDeviceTokenRecord).toHaveBeenCalledWith(
+        'a'.repeat(64),
+        {
+          token: 'node-device-token',
+          role: 'node',
+          scopes: [],
+        },
+        {
+          serverUrl: 'https://registry.example.com',
+          gatewayId: 'gateway-device-relay',
+          role: 'node',
+        },
+      );
       expect(StorageService.setDeviceTokenRecord).toHaveBeenCalledWith(
         'a'.repeat(64),
         {
@@ -2602,8 +2622,7 @@ describe('GatewayProtocolClient migrated parity', () => {
       client.configure({ url: 'wss://example.com' });
       client.connect();
       (client as unknown as { state: string }).state = 'ready';
-      const transport = (client as unknown as { transport: { socket: MockWebSocket | null } }).transport;
-      transport.socket = null;
+      createdWs.readyState = MockWebSocket.CLOSED;
       const reconnectSpy = jest.spyOn(client, 'reconnect').mockImplementation(() => {});
 
       await expect(client.request('sessions.list', {})).rejects.toMatchObject({

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Alert,
   AppState,
   AppStateStatus,
   Keyboard,
@@ -11,42 +10,42 @@ import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import * as Network from "expo-network";
 import { useTranslation } from "react-i18next";
-import type {
-  AgentAdapter,
-  AgentDescriptor,
-  ConnectionState as AdapterConnectionState,
-  SessionDescriptor,
+import {
+  isImageAttachmentMimeType,
+  normalizeAttachmentMimeType,
+  supportsFileAttachments,
+  type AgentAdapter,
+  type AgentDescriptor,
+  type ConnectionState as AdapterConnectionState,
+  type SessionDescriptor,
+  type SessionHistory,
 } from "@clawket/agent-protocol";
 import {
   type AdapterChatUpdate,
   useAdapterChatEvents,
 } from "./useAdapterChatEvents";
-import { ChatComposerHandle } from "../components/chat/ChatComposer";
+import type { ComposerHandle } from "../components/ui/Composer";
 import { SLASH_COMMANDS, SlashCommand } from "../data/slash-commands";
 import { useChatImagePicker } from "../hooks/useChatImagePicker";
 import * as DocumentPicker from "expo-document-picker";
 
 import { useChatImagePreview } from "../hooks/useChatImagePreview";
 import { analyticsEvents } from "../services/analytics/events";
-import { getGatewayThinkingLevels } from "@clawket/agent-protocol";
-import { resolveGatewayCacheScopeId } from "../services/gateway-cache-scope";
 import { cacheMessageImages } from "../services/image-cache";
 import { stopSpeechRecognitionAsync } from "../services/speech/speechRecognition";
 import { StorageService } from "../services/storage";
 import { ConnectionState, SessionInfo } from "../types";
 import { PendingImage, UiMessage } from "../types/chat";
 import {
-  extractAssistantDisplayText,
   isAssistantDeliveryMirrorMessage,
   isAssistantSilentReplyMessage,
-  parseMessageTimestamp,
   sessionLabel,
   shouldHideMessage,
 } from "../utils/chat-message";
 import { sessionKeysMatch } from "../utils/session-key";
 import { useChatAutoCache } from "../hooks/useChatAutoCache";
-import { APPROVE_COMMAND, HISTORY_PAGE_SIZE, MAX_IMAGES } from "../screens/ChatScreen/constants";
-import { ChatScreenProps } from "../screens/ChatScreen/types";
+import { APPROVE_COMMAND, HISTORY_PAGE_SIZE, MAX_IMAGES } from "./constants";
+import type { ChatControllerOptions } from "./types";
 import { useAppContext } from "../contexts/AppContext";
 import {
   AgentActivity,
@@ -68,7 +67,6 @@ import { shouldClearComposerInput } from "./composerClearPolicy";
 import { canSendMessage } from "./composerInteractionPolicy";
 import { deriveCurrentSessionActivity } from "./currentSessionActivity";
 import { hasCompletedAssistantForRememberedRun } from "./runStateValidation";
-import { hasActiveGatewayConfig } from "./chatSyncPolicy";
 import { useChatHistoryState } from "./useChatHistoryState";
 import { buildLiveRunListData, StreamSegment } from "./liveRunThread";
 import {
@@ -93,17 +91,20 @@ import { useChatModelPicker } from "./useChatModelPicker";
 import { useChatCommandPicker } from "./useChatCommandPicker";
 import { isMacCatalyst } from "../utils/platform";
 import {
+  buildUiFileAttachments,
   extractSlashCommand,
   readFileAsBase64,
+  buildPromptAttachments,
+  resolveAttachmentOnlyFallbackKey,
   sanitizeVisibleStreamText,
   summarizeAttachmentFormats,
 } from "./chatControllerUtils";
 import { useChatComposerDraft } from "./useChatComposerDraft";
+import { useChatPasteAttachments } from "./useChatPasteAttachments";
 import { useChatAgentIdentity } from "./useChatAgentIdentity";
 import { useBufferedDebugLog } from "./useBufferedDebugLog";
 import { preparePendingImagesForSend } from "./preparePendingImagesForSend";
-
-type PendingImageWithFile = PendingImage & { fileName?: string };
+import { mapAdapterSession, mapAdapterSessionPatch } from "./adapterChatMapping";
 
 type SilentCommandProbe = {
   sessionKey: string;
@@ -132,25 +133,6 @@ function mapAdapterConnectionState(state: AdapterConnectionState): ConnectionSta
   }
 }
 
-function mapAdapterSession(session: SessionDescriptor): SessionInfo {
-  const kind: SessionInfo["kind"] = session.kind === "direct"
-    ? "direct"
-    : session.kind === "group"
-      ? "group"
-      : "global";
-  return {
-    key: session.key,
-    kind,
-    label: session.title,
-    title: session.title,
-    lastMessagePreview: session.preview,
-    updatedAt: session.updatedAt,
-    channel: session.channel,
-    model: session.model,
-    spawnedBy: session.parentSessionKey,
-  };
-}
-
 function mapAdapterAgent(agent: AgentDescriptor) {
   return {
     id: agent.agentId,
@@ -161,6 +143,28 @@ function mapAdapterAgent(agent: AgentDescriptor) {
       avatarUrl: agent.avatarUrl,
     },
   };
+}
+
+function latestVisibleAssistant(history: SessionHistory): {
+  text: string;
+  timestampMs: number;
+} | null {
+  for (let index = history.messages.length - 1; index >= 0; index -= 1) {
+    const message = history.messages[index];
+    if (message.role !== "assistant") continue;
+    if (isAssistantDeliveryMirrorMessage(message)) continue;
+    if (isAssistantSilentReplyMessage(message)) continue;
+    const text = message.text.trim();
+    if (!text) continue;
+    return { text: message.text, timestampMs: message.timestampMs ?? 0 };
+  }
+  return null;
+}
+
+function reconnectAdapter(adapter: AgentAdapter | null): void {
+  if (!adapter) return;
+  adapter.disconnect();
+  void adapter.connect().catch(() => undefined);
 }
 
 function mergeStreamText(previous: string | null, incoming: string): string {
@@ -206,13 +210,11 @@ function shouldMergeFinalMessage(
 
 export function useChatController({
   adapter,
-  gateway,
-  config,
   debugMode,
   showAgentAvatar,
   chatSessionRequest,
   clearChatSessionRequest,
-}: ChatScreenProps) {
+}: ChatControllerOptions) {
   const appContext = useAppContext();
   const { t, i18n } = useTranslation("chat");
   const { speechRecognitionLanguage } = appContext;
@@ -220,7 +222,7 @@ export function useChatController({
     adapter ? mapAdapterConnectionState(adapter.state) : "idle",
   );
   const [input, setInput] = useState("");
-  const composerRef = useRef<ChatComposerHandle>(null);
+  const composerRef = useRef<ComposerHandle>(null);
   const [isSending, setIsSending] = useState(false);
   const [isPreparingSend, setIsPreparingSend] = useState(false);
   const [pairingPending, setPairingPending] = useState(false);
@@ -241,8 +243,18 @@ export function useChatController({
     removePendingImage,
     canAddMoreImages,
   } = useChatImagePicker(MAX_IMAGES);
+  const {
+    onPasteFiles,
+    onPasteFailed,
+  } = useChatPasteAttachments({
+    pendingAttachments: pendingImages,
+    setPendingAttachments: setPendingImages,
+    maxAttachments: MAX_IMAGES,
+    capabilities: adapter?.capabilities,
+  });
 
   const pickFile = useCallback(async () => {
+    if (!supportsFileAttachments(adapter?.capabilities)) return;
     const result = await DocumentPicker.getDocumentAsync({
       copyToCacheDirectory: true,
       multiple: false,
@@ -255,7 +267,7 @@ export function useChatController({
       const img = {
         uri: asset.uri,
         base64: b64,
-        mimeType: asset.mimeType ?? "application/octet-stream",
+        mimeType: normalizeAttachmentMimeType(asset.mimeType),
         fileName: asset.name,
       };
       setPendingImages((prev: PendingImage[]) =>
@@ -264,7 +276,7 @@ export function useChatController({
     } catch {
       /* skip */
     }
-  }, [setPendingImages]);
+  }, [adapter?.capabilities, setPendingImages]);
 
   const takePhoto = useCallback(async () => {
     const IP = await import("expo-image-picker");
@@ -293,7 +305,7 @@ export function useChatController({
           {
             uri: a.uri,
             base64: a.base64!,
-            mimeType: a.mimeType ?? "image/jpeg",
+            mimeType: normalizeAttachmentMimeType(a.mimeType, "image/jpeg"),
             width: a.width,
             height: a.height,
           },
@@ -305,11 +317,12 @@ export function useChatController({
   const preview = useChatImagePreview();
   const showDebug = debugMode ?? false;
   const { logs: debugLog, appendDebugLog: dbg } = useBufferedDebugLog(showDebug);
-  const hasGatewayConfig = hasActiveGatewayConfig(config);
-  const backendKind = gateway.getBackendKind();
+  const hasAdapter = adapter !== null;
   const thinkingLevelOptions = useMemo(
-    () => getGatewayThinkingLevels(backendKind),
-    [backendKind],
+    () => adapter?.capabilities.thinkingLevels
+      ? (adapter.management?.models?.listThinkingLevels?.() ?? [])
+      : [],
+    [adapter],
   );
 
   const sessionKeyRef = useRef<string | null>(null);
@@ -497,7 +510,6 @@ export function useChatController({
   }, [clearPendingRunTimeout, clearTransientRunPresentation]);
 
   const {
-    activeGatewayConfigId,
     initialChatPreview,
     mainSessionKey,
     currentAgentId,
@@ -514,12 +526,9 @@ export function useChatController({
     pendingMainSessionSwitch,
     clearPendingMainSessionSwitch,
   } = appContext;
-  const gatewayConfigId = resolveGatewayCacheScopeId({
-    activeConfigId: activeGatewayConfigId,
-    config,
-  });
+  const gatewayConfigId = adapter?.connection.id ?? null;
   const history = useChatHistoryState({
-    gateway,
+    adapter,
     dbg,
     t,
     sessionKeyRef,
@@ -547,7 +556,7 @@ export function useChatController({
     cacheAgentName,
     currentAgentId,
     currentSessionInfo,
-    gateway,
+    adapter,
     gatewayConfigId,
     initialPreview: initialChatPreview,
     mainSessionKey,
@@ -737,26 +746,13 @@ export function useChatController({
             `revalidate:start session=${sessionKey} reason=${reason} runId=${remembered.runId.slice(0, 8)} startedAt=${remembered.startedAt}`,
           );
         }
-        const historyResult = await gateway.fetchHistory(sessionKey, 12);
+        if (!adapter) return;
+        const historyResult = await adapter.loadSession(sessionKey, { limit: 12 });
         if (sessionKeyRef.current !== sessionKey) return;
 
-        let latestAssistantTs = 0;
-        let latestAssistantText = "";
-        for (
-          let index = historyResult.messages.length - 1;
-          index >= 0;
-          index--
-        ) {
-          const message = historyResult.messages[index];
-          if (message.role !== "assistant") continue;
-          if (isAssistantDeliveryMirrorMessage(message)) continue;
-          if (isAssistantSilentReplyMessage(message)) continue;
-          const text = extractAssistantDisplayText(message.content);
-          if (!text.trim()) continue;
-          latestAssistantText = text;
-          latestAssistantTs = parseMessageTimestamp(message);
-          break;
-        }
+        const latestAssistant = latestVisibleAssistant(historyResult);
+        const latestAssistantText = latestAssistant?.text ?? "";
+        const latestAssistantTs = latestAssistant?.timestampMs ?? 0;
 
         if (!latestAssistantText.trim()) {
           if (showDebug)
@@ -807,7 +803,7 @@ export function useChatController({
     [
       clearActiveRunState,
       dbg,
-      gateway,
+      adapter,
       history.reconcileLatestAssistantFromHistory,
       history.refreshSessions,
       showDebug,
@@ -964,8 +960,8 @@ export function useChatController({
   const pendingNotificationScrollSessionKeyRef = useRef<string | null>(null);
   const [scrollToBottomRequestAt, setScrollToBottomRequestAt] = useState<number | null>(null);
   const autoRefresh = useCallback(() => {
-    if (!hasGatewayConfig) {
-      dbg("autoRefresh:skip no gateway config");
+    if (!hasAdapter) {
+      dbg("autoRefresh:skip no adapter");
       return;
     }
     // Skip refresh while a stream is active — reloading history mid-stream
@@ -992,7 +988,7 @@ export function useChatController({
   }, [
     clearTransientRunPresentation,
     dbg,
-    hasGatewayConfig,
+    hasAdapter,
     history.onRefresh,
     history.sessionKey,
   ]);
@@ -1013,8 +1009,8 @@ export function useChatController({
 
   const scheduleForegroundRefresh = useCallback(
     (awayMs: number, hasRunningChat: boolean) => {
-      if (!hasGatewayConfig) {
-        dbg("foregroundRefresh:skip no gateway config");
+      if (!hasAdapter) {
+        dbg("foregroundRefresh:skip no adapter");
         clearForegroundRefreshWait();
         return;
       }
@@ -1041,7 +1037,7 @@ export function useChatController({
       foregroundRefreshTimerRef.current = setTimeout(() => {
         foregroundRefreshTimerRef.current = null;
         void (async () => {
-          const ok = await gateway.probeConnection(
+          const ok = await adapter?.probe(
             FOREGROUND_REFRESH_AFTER_RECONNECT_TIMEOUT_MS,
           );
           if (foregroundRefreshProbeSeqRef.current !== probeSeq) return;
@@ -1056,8 +1052,8 @@ export function useChatController({
       clearForegroundRefreshWait,
       connectionState,
       dbg,
-      gateway,
-      hasGatewayConfig,
+      adapter,
+      hasAdapter,
     ],
   );
 
@@ -1122,7 +1118,7 @@ export function useChatController({
         dbg(
           `foregroundRecovery:start session=${sessionKeySnapshot} runId=${runIdSnapshot.slice(0, 8)} idleMs=${idleMs}`,
         );
-      gateway.reconnect();
+      reconnectAdapter(adapter);
       void requestRunRecovery(sessionKeySnapshot, "foreground");
 
       setTimeout(() => {
@@ -1164,7 +1160,7 @@ export function useChatController({
     clearActiveRunState,
     clearForegroundRunRecoveryTimer,
     dbg,
-    gateway,
+    adapter,
     history.historyLimitRef,
     history.loadHistory,
     history.refreshSessions,
@@ -1210,7 +1206,7 @@ export function useChatController({
         scheduleForegroundRefresh(awayMs, hasRunningChat);
         if (hasRunningChat) {
           if (awayMs >= 12_000 || connectionState !== "ready") {
-            void gateway.probeConnection();
+            void adapter?.probe();
           }
           if (history.sessionKey) {
             void requestRunRecovery(history.sessionKey, "app-active");
@@ -1235,7 +1231,7 @@ export function useChatController({
     clearForegroundRunRecoveryTimer,
     clearPendingRunTimeout,
     connectionState,
-    gateway,
+    adapter,
     history.sessionKey,
     recoverForegroundRunIfStuck,
     requestRunRecovery,
@@ -1248,10 +1244,10 @@ export function useChatController({
   useEffect(() => {
     const wasFocused = prevFocusedRef.current;
     prevFocusedRef.current = isFocused;
-    if (isFocused && !wasFocused && hasGatewayConfig) {
+    if (isFocused && !wasFocused && hasAdapter) {
       autoRefresh();
     }
-  }, [isFocused, autoRefresh, hasGatewayConfig]);
+  }, [isFocused, autoRefresh, hasAdapter]);
 
   useEffect(() => {
     if (!isSending) {
@@ -1310,7 +1306,7 @@ export function useChatController({
           dbg(
             `watchdog:reconnect session=${sessionKey} runId=${runId.slice(0, 8)} idleMs=${idleMs}`,
           );
-        gateway.reconnect();
+        reconnectAdapter(adapter);
       }
     }, 4_000);
 
@@ -1319,7 +1315,7 @@ export function useChatController({
     clearActiveRunState,
     connectionState,
     dbg,
-    gateway,
+    adapter,
     history.sessionKey,
     isSending,
     requestRunRecovery,
@@ -1444,16 +1440,10 @@ export function useChatController({
           }
           void (async () => {
             let finalText = update.finalMessage?.text ?? probe.latestText;
-            if (!finalText.trim()) {
+            if (!finalText.trim() && adapter) {
               try {
-                const historyResult = await gateway.fetchHistory(probe.sessionKey, 8);
-                const assistant = [...historyResult.messages]
-                  .reverse()
-                  .find((message) => (
-                    message.role === "assistant"
-                    && !isAssistantDeliveryMirrorMessage(message)
-                  ));
-                finalText = extractAssistantDisplayText(assistant?.content);
+                const historyResult = await adapter.loadSession(probe.sessionKey, { limit: 8 });
+                finalText = latestVisibleAssistant(historyResult)?.text ?? "";
               } catch {
                 finalText = probe.latestText;
               }
@@ -1475,7 +1465,7 @@ export function useChatController({
           return false;
       }
     },
-    [finishSilentCommandProbe, gateway],
+    [adapter, finishSilentCommandProbe],
   );
 
   const schedulePostStreamHistoryRefresh = useCallback(() => {
@@ -1892,16 +1882,7 @@ export function useChatController({
       case "session_info_update":
         history.setSessions((previous) => {
           const existing = previous.find((session) => session.key === update.session.key);
-          const partial: SessionInfo = {
-            key: update.session.key,
-            title: update.session.title,
-            label: update.session.title,
-            lastMessagePreview: update.session.preview,
-            updatedAt: update.session.updatedAt,
-            channel: update.session.channel,
-            model: update.session.model,
-            spawnedBy: update.session.parentSessionKey,
-          };
+          const partial = mapAdapterSessionPatch(update.session);
           if (!existing) return [...previous, partial];
           return previous.map((session) =>
             session.key === update.session.key ? { ...session, ...partial } : session,
@@ -2070,10 +2051,11 @@ export function useChatController({
       }
 
       try {
+        if (!adapter) return false;
         const ok =
           connectionState === "ready"
-            ? await gateway.probeConnection(SEND_FAST_PROBE_TIMEOUT_MS)
-            : await gateway.probeConnection();
+            ? await adapter.probe(SEND_FAST_PROBE_TIMEOUT_MS)
+            : await adapter.probe();
         if (ok) {
           markTransportConfirmed();
         } else {
@@ -2087,7 +2069,7 @@ export function useChatController({
       }
     }, [
       connectionState,
-      gateway,
+      adapter,
       isNetworkLikelyOffline,
       markTransportConfirmed,
       SEND_FAST_PROBE_TIMEOUT_MS,
@@ -2114,26 +2096,24 @@ export function useChatController({
   const submitMessage = useCallback(
     (text: string, images: PendingImage[]) => {
       const sessionKey = history.sessionKey;
-      if (!sessionKey) return;
+      if (!sessionKey || !adapter) return;
       const localTimestamp = Date.now();
       const idempotencyKey = `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-      const realImages = images.filter((i) => i.mimeType.startsWith("image/"));
-      const files = images.filter((i) => !i.mimeType.startsWith("image/"));
-      const fileNames = files
-        .map((f) => (f as PendingImageWithFile).fileName ?? "File")
-        .join(", ");
-      const autoText = [
-        realImages.length > 0
-          ? `📷 ${realImages.length} image${realImages.length > 1 ? "s" : ""}`
-          : "",
-        files.length > 0 ? `📎 ${fileNames}` : "",
-      ]
-        .filter(Boolean)
-        .join(" · ");
+      const realImages = images.filter((image) => isImageAttachmentMimeType(image.mimeType));
+      const files = images.filter((image) => !isImageAttachmentMimeType(image.mimeType));
+      const fallbackKey = resolveAttachmentOnlyFallbackKey(images);
+      const attachmentFallbackCopy = {
+        'Look at this image': t('Look at this image', { ns: 'chat' }),
+        'Look at these images': t('Look at these images', { ns: 'chat' }),
+        'Review this file': t('Review this file', { ns: 'chat' }),
+        'Review these files': t('Review these files', { ns: 'chat' }),
+        'Review these attachments': t('Review these attachments', { ns: 'chat' }),
+      } as const;
+      const fallbackText = fallbackKey ? attachmentFallbackCopy[fallbackKey] : '';
       const uiMsg: UiMessage = {
         id: `usr_${localTimestamp}`,
         role: "user",
-        text: text || autoText || "",
+        text: text || fallbackText,
         idempotencyKey,
         timestampMs: localTimestamp,
         imageUris:
@@ -2148,6 +2128,7 @@ export function useChatController({
                 height: i.height ?? 0,
               }))
             : undefined,
+        fileAttachments: buildUiFileAttachments(files),
       };
       if (!shouldHideMessage(uiMsg)) {
         history.setMessages((prev) => [...prev, uiMsg]);
@@ -2175,39 +2156,29 @@ export function useChatController({
       setIsSending(true);
       armPendingRunTimeout();
 
-      if (images.length > 0 && !shouldHideMessage(uiMsg)) {
+      if (realImages.length > 0 && !shouldHideMessage(uiMsg)) {
         cacheMessageImages(
           sessionKey,
           uiMsg.text,
-          images.map((image) => ({
+          realImages.map((image) => ({
             base64: image.base64,
-            mimeType: image.mimeType,
+            mimeType: normalizeAttachmentMimeType(image.mimeType),
             width: image.width,
             height: image.height,
           })),
           { timestamp: localTimestamp, role: "user", idempotencyKey },
         )
           .then(() =>
-            dbg(`cache write ok: ts=${localTimestamp} images=${images.length}`),
+            dbg(`cache write ok: ts=${localTimestamp} images=${realImages.length}`),
           )
           .catch((err) => dbg(`cache write failed: ${String(err)}`));
       }
 
-      const attachments =
-        images.length > 0
-          ? images.map((image) => ({
-              type: (image as PendingImageWithFile).fileName ? "file" : "image",
-              mimeType: image.mimeType,
-              content: image.base64,
-              ...((image as PendingImageWithFile).fileName
-                ? { fileName: (image as PendingImageWithFile).fileName }
-                : {}),
-            }))
-          : undefined;
+      const attachments = buildPromptAttachments(images);
 
-      const effectiveText = text || (attachments ? "Look at this image" : " ");
-      gateway
-        .sendChat(sessionKey, effectiveText, attachments, { idempotencyKey })
+      const effectiveText = text || fallbackText || " ";
+      adapter
+        .prompt(sessionKey, { text: effectiveText, attachments, idempotencyKey })
         .then(({ runId: serverRunId }) => {
           markTransportConfirmed();
           if (
@@ -2257,7 +2228,7 @@ export function useChatController({
           ]);
         });
     },
-    [dbg, gateway, history, markTransportConfirmed],
+    [adapter, dbg, history, markTransportConfirmed, t],
   );
 
   const submitMessageWithConnectionCheck = useCallback(
@@ -2328,11 +2299,10 @@ export function useChatController({
     setModelPickerVisible,
   } = useChatModelPicker({
     connectionState,
-    gateway,
+    adapter,
     sessionKey: history.sessionKey,
     setInput,
     setSessions: history.setSessions,
-    submitMessage: submitMessageWithConnectionCheck,
   });
 
   const runSilentCommandProbe = useCallback(
@@ -2361,10 +2331,14 @@ export function useChatController({
             });
             return;
           }
-          gateway
-            .sendChat(sessionKey, commandText, undefined, {
-              idempotencyKey: runId,
-            })
+          if (!adapter) {
+            finishSilentCommandProbe(runId, {
+              error: new Error("Gateway is not connected."),
+            });
+            return;
+          }
+          adapter
+            .prompt(sessionKey, { text: commandText, idempotencyKey: runId })
             .catch((err: unknown) => {
               finishSilentCommandProbe(runId, {
                 error: err instanceof Error ? err : new Error(String(err)),
@@ -2382,7 +2356,7 @@ export function useChatController({
     [
       ensureConnectionReadyForSend,
       finishSilentCommandProbe,
-      gateway,
+      adapter,
       history.sessionKey,
     ],
   );
@@ -2422,8 +2396,8 @@ export function useChatController({
         has_text: text.length > 0,
         text_length: text.length,
         attachment_count: images.length,
-        image_count: images.filter((image) => image.mimeType.startsWith("image/")).length,
-        file_count: images.filter((image) => !image.mimeType.startsWith("image/")).length,
+        image_count: images.filter((image) => isImageAttachmentMimeType(image.mimeType)).length,
+        file_count: images.filter((image) => !isImageAttachmentMimeType(image.mimeType)).length,
         attachment_formats: summarizeAttachmentFormats(images) ?? undefined,
         is_command: text.startsWith("/"),
         slash_command: extractSlashCommand(text) ?? undefined,
@@ -2710,7 +2684,7 @@ export function useChatController({
     [openSession],
   );
 
-  // React to agent switches from outside Chat (e.g. AgentDetailScreen)
+  // React to agent switches from outside Chat.
   useEffect(() => {
     if (!pendingAgentSwitch) return;
     const mainKey = `agent:${pendingAgentSwitch}:main`;
@@ -2783,7 +2757,9 @@ export function useChatController({
       );
       if (!targetSession) {
         try {
-          latestSessions = await gateway.listSessions({ limit: 200 });
+          latestSessions = adapter
+            ? (await adapter.listSessions(currentAgentId)).map(mapAdapterSession)
+            : [];
           if (cancelled) return;
           history.setSessions(latestSessions);
           targetSession = latestSessions.find(
@@ -2811,7 +2787,8 @@ export function useChatController({
     };
   }, [
     clearChatSessionRequest,
-    gateway,
+    adapter,
+    currentAgentId,
     history.sessionKey,
     history.sessions,
     history.setSessions,
@@ -2838,7 +2815,9 @@ export function useChatController({
       let targetSession = latestSessions.find((session) => session.key === targetKey);
       if (!targetSession) {
         try {
-          latestSessions = await gateway.listSessions({ limit: 200 });
+          latestSessions = adapter
+            ? (await adapter.listSessions(currentAgentId)).map(mapAdapterSession)
+            : [];
           if (cancelled) return;
           history.setSessions(latestSessions);
           targetSession = latestSessions.find((session) => session.key === targetKey);
@@ -2864,7 +2843,8 @@ export function useChatController({
     };
   }, [
     clearPendingChatNotificationOpen,
-    gateway,
+    adapter,
+    currentAgentId,
     history.historyLoaded,
     history.sessionKey,
     history.sessions,
@@ -2881,8 +2861,8 @@ export function useChatController({
 
   const handlePairingRetry = useCallback(() => {
     setPairingPending(false);
-    gateway.reconnect();
-  }, [gateway]);
+    reconnectAdapter(adapter);
+  }, [adapter]);
 
   const listData = useMemo((): UiMessage[] => {
     return buildLiveRunListData({
@@ -2910,63 +2890,47 @@ export function useChatController({
             : m,
         ),
       );
-      gateway.resolveExecApproval(id, decision).catch(() => {});
+      adapter?.management?.approvals?.resolveExec(id, decision).catch(() => {});
     },
-    [gateway, history],
+    [adapter, history],
   );
 
   const abortCurrentRun = useCallback(() => {
     if (!history.sessionKey) return;
-    if (!gateway.getBackendCapabilities().chatAbort) return;
-
-    Alert.alert(
-      t("Stop Agent"),
-      t(
-        "Are you sure you want to stop the agent? This will interrupt the current task.",
-      ),
-      [
-        { text: t("Cancel"), style: "cancel" },
-        {
-          text: t("Stop"),
-          style: "destructive",
-          onPress: () => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid);
-            const runIdAtAbort = currentRunIdRef.current;
-            gateway
-              .abortChat(history.sessionKey!, runIdAtAbort ?? undefined)
-              .catch((err) => {
-                dbg(`Abort failed: ${String(err)}`);
-              });
-            // Local fallback: if no terminal event clears the run within 5s,
-            // force-clear the stuck state so the UI becomes responsive.
-            setTimeout(() => {
-              if (!currentRunIdRef.current) return; // Already cleared
-              if (runIdAtAbort && currentRunIdRef.current !== runIdAtAbort)
-                return; // Different run
-              const sessionKey = sessionKeyRef.current;
-              if (sessionKey) {
-                sessionRunStateRef.current.delete(sessionKey);
-              }
-              currentRunIdRef.current = null;
-              streamStartedAtRef.current = null;
-              clearTransientRunPresentation();
-              setIsSending(false);
-              setActivityLabel(null);
-              dbg("Abort fallback: force-cleared stuck run state");
-            }, 5000);
-          },
-        },
-      ],
-    );
-  }, [gateway, history.sessionKey, dbg]);
+    if (!adapter?.capabilities.abort) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid);
+    const runIdAtAbort = currentRunIdRef.current;
+    adapter
+      .cancel(history.sessionKey, runIdAtAbort ?? undefined)
+      .catch((err) => {
+        dbg(`Abort failed: ${String(err)}`);
+      });
+    // Local fallback: if no terminal event clears the run within 5s,
+    // force-clear the stuck state so the UI becomes responsive.
+    setTimeout(() => {
+      if (!currentRunIdRef.current) return; // Already cleared
+      if (runIdAtAbort && currentRunIdRef.current !== runIdAtAbort)
+        return; // Different run
+      const sessionKey = sessionKeyRef.current;
+      if (sessionKey) {
+        sessionRunStateRef.current.delete(sessionKey);
+      }
+      currentRunIdRef.current = null;
+      streamStartedAtRef.current = null;
+      clearTransientRunPresentation();
+      setIsSending(false);
+      setActivityLabel(null);
+      dbg("Abort fallback: force-cleared stuck run state");
+    }, 5000);
+  }, [adapter, clearTransientRunPresentation, dbg, history.sessionKey]);
 
   const handleRefresh = useCallback(async () => {
     if (connectionState !== "ready") {
-      const ok = await gateway.probeConnection();
+      const ok = await adapter?.probe();
       if (!ok) return;
     }
     await history.onRefresh();
-  }, [connectionState, gateway, history]);
+  }, [adapter, connectionState, history]);
 
   return {
     connectionState,
@@ -2996,6 +2960,8 @@ export function useChatController({
     pickImage,
     takePhoto,
     pickFile,
+    onPasteFiles,
+    onPasteFailed,
     removePendingImage,
     canAddMoreImages,
     preview,
@@ -3050,7 +3016,7 @@ export function useChatController({
     activityLabel,
     thinkingLevelOptions,
     abortCurrentRun,
-    canAbortCurrentRun: gateway.getBackendCapabilities().chatAbort,
+    canAbortCurrentRun: adapter?.capabilities.abort === true,
     resolveApproval,
     agentActivityRef,
     agentActiveCount,

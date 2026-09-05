@@ -94,6 +94,28 @@ describe('preserveOptimisticAssistantMessage', () => {
     ]);
   });
 
+  it('does not conflate a file-bearing optimistic message with text-only history', () => {
+    const optimistic: UiMessage = {
+      id: 'usr_3000',
+      role: 'user',
+      text: 'Review this file',
+      timestampMs: 3_000,
+      fileAttachments: [{
+        mimeType: 'application/pdf',
+        fileName: 'spec.pdf',
+        uri: 'file:///spec.pdf',
+      }],
+    };
+    const history: UiMessage[] = [
+      { id: 'history-user', role: 'user', text: 'Review this file' },
+    ];
+
+    expect(preserveOptimisticAssistantMessage([optimistic], history)).toEqual([
+      ...history,
+      optimistic,
+    ]);
+  });
+
   it('drops an optimistic image-only message once matching history arrives with the same idempotency key', () => {
     const previousMessages: UiMessage[] = [
       { id: 'u1', role: 'user', text: 'Older question', timestampMs: 1_000 },

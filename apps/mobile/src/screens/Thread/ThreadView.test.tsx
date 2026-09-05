@@ -4,6 +4,7 @@ import { CAPABILITY_MATRIX, type Capabilities } from '@clawket/agent-protocol';
 import { builtInAccents } from '../../theme/accents';
 import { buildTheme } from '../../theme/theme';
 import { FontSize, Radius, Space } from '../../theme/tokens';
+import type { ComposerHandle } from '../../components/ui/Composer';
 import type { UiMessage } from '../../types/chat';
 import { ThreadView, type ThreadCopy, type ThreadViewProps } from './ThreadView';
 
@@ -30,6 +31,7 @@ jest.mock('react-native', () => {
       OS: 'ios',
       select: (values: Record<string, unknown>) => values.ios ?? values.default,
     },
+    Image: host('Image'),
     Pressable: host('Pressable'),
     StyleSheet: {
       absoluteFillObject: {},
@@ -134,6 +136,50 @@ jest.mock('../../theme', () => ({
   }),
 }));
 
+jest.mock('../../components/chat/PendingImageBar', () => {
+  const ReactRuntime = require('react');
+  const { View } = require('react-native');
+  return {
+    PendingImageBar: (props: Record<string, unknown>) => ReactRuntime.createElement(
+      View,
+      { ...props, testID: 'thread-pending-attachments' },
+    ),
+  };
+});
+
+jest.mock('../../components/chat/SlashSuggestions', () => {
+  const ReactRuntime = require('react');
+  const { View } = require('react-native');
+  return {
+    SlashSuggestions: (props: Record<string, unknown>) => ReactRuntime.createElement(
+      View,
+      { ...props, testID: 'thread-slash-suggestions' },
+    ),
+  };
+});
+
+jest.mock('../../components/chat/ThinkingLevelMenu', () => {
+  const ReactRuntime = require('react');
+  const { View } = require('react-native');
+  return {
+    ThinkingLevelMenu: ({ children, ...props }: Record<string, unknown>) => ReactRuntime.createElement(
+      View,
+      { ...props, testID: 'thread-thinking-menu' },
+      children,
+    ),
+  };
+});
+
+jest.mock('../../components/chat/ToolDetailModal', () => {
+  const ReactRuntime = require('react');
+  const { View } = require('react-native');
+  return {
+    ToolDetailModal: (props: Record<string, unknown>) => props.visible
+      ? ReactRuntime.createElement(View, { ...props, testID: 'thread-tool-detail' })
+      : null,
+  };
+});
+
 function flattenStyle(value: unknown): Record<string, unknown> {
   if (!value) return {};
   if (!Array.isArray(value)) return value as Record<string, unknown>;
@@ -155,6 +201,7 @@ const copy: ThreadCopy = {
   locked: 'Multiple agents require Pro',
   viewPro: 'View Pro',
   retry: 'Retry',
+  file: 'File',
   tool: 'Tool',
   toolRunning: 'Running',
   toolCompleted: 'Completed',
@@ -165,10 +212,13 @@ const copy: ThreadCopy = {
   allowed: 'Allowed',
   denied: 'Denied',
   expired: 'Expired',
+  logs: 'Logs',
   formatAsk: (name) => `Ask ${name}`,
   formatEmpty: (name) => `Start a conversation with ${name}`,
   formatAttachments: (count) => `${count} attachments`,
+  formatRunDetail: (status, time) => time ? `${status} · ${time}` : status,
   formatModelContext: (model, remaining) => `${model} · ${remaining}% left`,
+  formatThinkingLevel: (level) => level,
 };
 
 function createProps(overrides: Partial<ThreadViewProps> = {}): ThreadViewProps {
@@ -195,7 +245,6 @@ function createProps(overrides: Partial<ThreadViewProps> = {}): ThreadViewProps 
     onOpenPaywall: jest.fn(),
     onErrorAction: jest.fn(),
     onLoadMoreHistory: jest.fn(),
-    onOpenRun: jest.fn(),
     onOpenAttachments: jest.fn(),
     onResolveApproval: jest.fn(),
     ...overrides,
@@ -303,8 +352,9 @@ describe('ThreadView', () => {
     const onSend = jest.fn();
     const onOpenAddMenu = jest.fn();
     const onVoice = jest.fn();
+    const onPasteFiles = jest.fn();
+    const onPasteFailed = jest.fn();
     const onLoadMoreHistory = jest.fn();
-    const onOpenRun = jest.fn();
     const onOpenAttachments = jest.fn();
     const onResolveApproval = jest.fn();
     const messages: UiMessage[] = [
@@ -319,7 +369,16 @@ describe('ThreadView', () => {
           status: 'pending',
         },
       },
-      { id: 'tool-1', role: 'tool', text: '', toolName: 'exec', toolStatus: 'running' },
+      {
+        id: 'tool-1',
+        role: 'tool',
+        text: '',
+        toolName: 'exec',
+        toolStatus: 'running',
+        toolArgs: '{"command":"npm test"}',
+        toolDetail: 'Running tests',
+        toolStartedAt: 100,
+      },
       { id: 'system-1', role: 'system', text: 'Connection restored' },
       { id: 'assistant-1', role: 'assistant', text: 'Working now', streaming: true },
       { id: 'user-1', role: 'user', text: '', imageUris: ['file://one.jpg'] },
@@ -333,8 +392,9 @@ describe('ThreadView', () => {
       onSend,
       onOpenAddMenu,
       onVoice,
+      onPasteFiles,
+      onPasteFailed,
       onLoadMoreHistory,
-      onOpenRun,
       onOpenAttachments,
       onResolveApproval,
     })} />);
@@ -349,12 +409,20 @@ describe('ThreadView', () => {
     fireEvent.press(view.getByTestId('thread-screen-header-pill'));
     fireEvent.press(view.getByTestId('thread-screen-settings'));
     fireEvent.changeText(view.getByTestId('thread-screen-composer-input'), 'New draft');
+    const pastedFile = {
+      uri: 'file:///tmp/pasted.pdf',
+      fileName: 'pasted.pdf',
+      fileSize: 512,
+      type: 'application/pdf',
+    };
+    fireEvent(view.getByTestId('thread-screen-composer-input'), 'paste', null, [pastedFile]);
+    fireEvent(view.getByTestId('thread-screen-composer-input'), 'paste', 'native error', []);
     fireEvent.press(view.getByTestId('thread-screen-composer-add'));
     fireEvent.press(view.getByTestId('thread-screen-composer-voice'));
     fireEvent.press(view.getByTestId('thread-screen-composer-primary'));
     view.getByTestId('thread-screen-timeline').props.onEndReached();
     fireEvent.press(view.getByTestId('thread-run-tool-1'));
-    fireEvent.press(view.getByText('1 attachments'));
+    fireEvent.press(view.getByLabelText('1 attachments'));
     fireEvent.press(view.getByTestId('thread-approval-approval-1-primary'));
     fireEvent(view.getByTestId('thread-approval-approval-1-primary'), 'longPress');
     fireEvent.press(view.getByTestId('thread-approval-approval-1-secondary'));
@@ -363,17 +431,140 @@ describe('ThreadView', () => {
     expect(onOpenSessionPanel).toHaveBeenCalledTimes(1);
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
     expect(onChangeInput).toHaveBeenCalledWith('New draft');
+    expect(onPasteFiles).toHaveBeenCalledWith([pastedFile]);
+    expect(onPasteFailed).toHaveBeenCalledTimes(1);
     expect(onOpenAddMenu).toHaveBeenCalledTimes(1);
     expect(onVoice).toHaveBeenCalledTimes(1);
     expect(onSend).toHaveBeenCalledTimes(1);
     expect(onLoadMoreHistory).toHaveBeenCalledTimes(1);
-    expect(onOpenRun).toHaveBeenCalledWith(messages[1]);
+    expect(view.getByTestId('thread-tool-detail').props).toMatchObject({
+      name: 'exec',
+      status: 'running',
+      args: '{"command":"npm test"}',
+      detail: 'Running tests',
+      startedAtMs: 100,
+    });
     expect(onOpenAttachments).toHaveBeenCalledWith(messages[4]);
     expect(onResolveApproval.mock.calls).toEqual([
       ['request-1', 'allow-once'],
       ['request-1', 'allow-always'],
       ['request-1', 'deny'],
     ]);
+  });
+
+  it('renders dated subagent and Cron cards without treating tool details as sessions', () => {
+    const onOpenRunSession = jest.fn();
+    const onOpenRunLogs = jest.fn();
+    const newer = new Date(2026, 8, 5, 11).getTime();
+    const older = new Date(2026, 8, 4, 23).getTime();
+    const view = render(<ThreadView {...createProps({
+      locale: 'en-US',
+      messages: [{
+        id: 'tool-details',
+        role: 'tool',
+        text: '',
+        timestampMs: newer + 1,
+        toolName: 'read',
+        toolStatus: 'success',
+        toolDetail: 'package.json',
+      }],
+      runCards: [
+        {
+          id: 'agent:atlas:subagent:worker',
+          kind: 'subagent',
+          sessionKey: 'agent:atlas:subagent:worker',
+          agentId: 'atlas',
+          title: 'Release worker',
+          status: 'streaming',
+          statusLabel: 'Running',
+          timeLabel: '11:00 AM',
+          updatedAt: newer,
+        },
+        {
+          id: 'nightly-run',
+          kind: 'cron',
+          sessionKey: 'agent:atlas:cron:nightly',
+          jobId: 'nightly',
+          agentId: 'atlas',
+          title: 'Nightly report',
+          status: 'failed',
+          statusLabel: 'Failed',
+          timeLabel: '11:00 PM',
+          updatedAt: older,
+          canOpenLogs: true,
+        },
+        {
+          id: 'hermes-digest-run',
+          kind: 'cron',
+          jobId: 'hermes-digest',
+          agentId: 'atlas',
+          title: 'Hermes digest',
+          status: 'succeeded',
+          statusLabel: 'Succeeded',
+          timeLabel: '10:55 AM',
+          updatedAt: newer - 300_000,
+        },
+      ],
+      onOpenRunSession,
+      onOpenRunLogs,
+    })} />);
+
+    expect(view.getByTestId(
+      'thread-subagent-run-agent:atlas:subagent:worker-detail',
+    ).props.children).toEqual(expect.arrayContaining(['11:00 AM']));
+    expect(view.getByTestId(
+      'thread-cron-run-nightly-run-detail',
+    ).props.children).toEqual(expect.arrayContaining(['11:00 PM']));
+    expect(view.getByTestId(
+      'thread-cron-run-hermes-digest-run-detail',
+    ).props.children).toEqual(expect.arrayContaining(['10:55 AM']));
+    expect(view.getByTestId('thread-cron-run-hermes-digest-run').props.onPress).toBeUndefined();
+    expect(view.getAllByTestId(/^thread-date:/)).toHaveLength(2);
+    expect(flattenStyle(
+      view.getByTestId('thread-cron-run-nightly-run-status').props.style,
+    )).toMatchObject({ backgroundColor: buildTheme('light', 'light', builtInAccents.iceBlue).colors.bad });
+    expect(flattenStyle(
+      view.getByTestId('thread-cron-run-nightly-run-detail-status').props.style,
+    )).toMatchObject({ color: buildTheme('light', 'light', builtInAccents.iceBlue).colors.bad });
+    expect(flattenStyle(
+      view.getByTestId('thread-cron-run-nightly-run-detail').props.style,
+    )).toMatchObject({ color: buildTheme('light', 'light', builtInAccents.iceBlue).colors.inkSecondary });
+
+    fireEvent.press(view.getByTestId('thread-subagent-run-agent:atlas:subagent:worker'));
+    expect(onOpenRunSession).toHaveBeenCalledWith(
+      'agent:atlas:subagent:worker',
+      'atlas',
+      'subagent',
+    );
+
+    fireEvent.press(view.getByTestId('thread-cron-run-nightly-run'));
+    expect(onOpenRunSession).toHaveBeenLastCalledWith(
+      'agent:atlas:cron:nightly',
+      'atlas',
+      'cron',
+    );
+
+    fireEvent.press(view.getByTestId('thread-run-tool-details'));
+    expect(view.getByTestId('thread-tool-detail').props.detail).toBe('package.json');
+    expect(onOpenRunSession).toHaveBeenCalledTimes(2);
+
+    fireEvent.press(view.getByText('Logs'));
+    expect(onOpenRunLogs).toHaveBeenCalledWith('nightly', 'atlas');
+  });
+
+  it('binds the controller composer handle to the canonical input', () => {
+    const composerRef = React.createRef<ComposerHandle>();
+    const onChangeInput = jest.fn();
+    const view = render(<ThreadView {...createProps({ composerRef, onChangeInput })} />);
+
+    expect(composerRef.current).toEqual(expect.objectContaining({
+      focus: expect.any(Function),
+      blur: expect.any(Function),
+      clear: expect.any(Function),
+    }));
+    act(() => composerRef.current?.clear());
+    expect(onChangeInput).toHaveBeenCalledWith('');
+    expect(view.getByTestId('thread-screen-composer-input')).toBeTruthy();
   });
 
   it('renders assistant Markdown with shared styles and routes links through chat Markdown', () => {
@@ -421,8 +612,145 @@ describe('ThreadView', () => {
     })} />);
 
     expect(view.queryByTestId('thread-bubble-attachment-only')).toBeNull();
-    fireEvent.press(view.getByText('2 attachments'));
+    fireEvent.press(view.getByLabelText('2 attachments'));
     expect(onOpenAttachments).toHaveBeenCalledWith(message);
+  });
+
+  it('renders files separately from the image gallery for text, file-only, and mixed messages', () => {
+    const view = render(<ThreadView {...createProps({
+      messages: [
+        {
+          id: 'custom-file',
+          role: 'user',
+          text: 'Summarize this spec',
+          fileAttachments: [{
+            mimeType: 'application/pdf',
+            fileName: 'spec.pdf',
+            uri: 'file:///spec.pdf',
+          }],
+        },
+        {
+          id: 'file-only',
+          role: 'assistant',
+          text: '',
+          fileAttachments: [{ mimeType: 'text/plain' }],
+        },
+        {
+          id: 'mixed',
+          role: 'user',
+          text: '',
+          imageUris: ['file:///photo.png'],
+          fileAttachments: [{ mimeType: 'text/plain', fileName: 'notes.txt' }],
+        },
+      ],
+    })} />);
+
+    expect(view.getByText('Summarize this spec')).toBeTruthy();
+    expect(view.getByText('spec.pdf')).toBeTruthy();
+    expect(view.getByText('File')).toBeTruthy();
+    expect(view.getByText('notes.txt')).toBeTruthy();
+    expect(view.queryByTestId('thread-attachments-custom-file')).toBeNull();
+    expect(view.queryByTestId('thread-attachments-file-only')).toBeNull();
+    expect(view.getByTestId('thread-attachments-mixed')).toBeTruthy();
+    expect(view.getByTestId('thread-file-custom-file-0').props.onPress).toBeUndefined();
+    expect(view.getByTestId('thread-file-file-only-0').props.onPress).toBeUndefined();
+  });
+
+  it('wires pending attachments, slash commands, thinking, favorites, and message actions', () => {
+    const onOpenPendingAttachment = jest.fn();
+    const onRemovePendingAttachment = jest.fn();
+    const onPickImage = jest.fn();
+    const onTakePhoto = jest.fn();
+    const onChooseFile = jest.fn();
+    const onSelectSlashCommand = jest.fn();
+    const onDismissSlashSuggestions = jest.fn();
+    const onSelectThinkingLevel = jest.fn();
+    const onMessageLongPress = jest.fn();
+    const message: UiMessage = {
+      id: 'favorite-1',
+      role: 'assistant',
+      text: 'Keep this answer',
+    };
+    const command = {
+      key: 'status',
+      command: '/status',
+      description: 'Show session status',
+      action: 'send' as const,
+    };
+    const view = render(<ThreadView {...createProps({
+      messages: [message],
+      input: '/st',
+      favoriteMessageIds: new Set([message.id]),
+      onMessageLongPress,
+      pendingAttachments: [{
+        uri: 'file://pending.jpg',
+        base64: 'preview',
+        mimeType: 'image/jpeg',
+      }],
+      canAddMoreAttachments: true,
+      onOpenPendingAttachment,
+      onRemovePendingAttachment,
+      onPickImage,
+      onTakePhoto,
+      onChooseFile,
+      slashSuggestions: [command],
+      showSlashSuggestions: true,
+      onSelectSlashCommand,
+      onDismissSlashSuggestions,
+      thinkingLevel: 'high',
+      thinkingLevelOptions: ['off', 'low', 'high'],
+      onSelectThinkingLevel,
+    })} />);
+
+    const pending = view.getByTestId('thread-pending-attachments');
+    expect(pending.props).toMatchObject({ canAddMore: true, attachDisabled: false });
+    act(() => pending.props.onOpenPreview(0));
+    act(() => pending.props.onRemove(0));
+    act(() => pending.props.onPickImage());
+    act(() => pending.props.onTakePhoto());
+    act(() => pending.props.onChooseFile());
+    expect(onOpenPendingAttachment).toHaveBeenCalledWith(0);
+    expect(onRemovePendingAttachment).toHaveBeenCalledWith(0);
+    expect(onPickImage).toHaveBeenCalledTimes(1);
+    expect(onTakePhoto).toHaveBeenCalledTimes(1);
+    expect(onChooseFile).toHaveBeenCalledTimes(1);
+
+    const slash = view.getByTestId('thread-slash-suggestions');
+    expect(slash.props.suggestions).toEqual([command]);
+    act(() => slash.props.onSelect(command));
+    expect(onSelectSlashCommand).toHaveBeenCalledWith(command);
+    fireEvent.press(view.getByTestId('thread-screen-composer-region').findByProps({ accessible: false }));
+    expect(onDismissSlashSuggestions).toHaveBeenCalledTimes(1);
+
+    expect(view.getByTestId('thread-screen-thinking-level')).toBeTruthy();
+    act(() => view.getByTestId('thread-thinking-menu').props.onSelect('low'));
+    expect(onSelectThinkingLevel).toHaveBeenCalledWith('low');
+    expect(view.getByTestId(`thread-favorite-${message.id}`)).toBeTruthy();
+    fireEvent(view.getByTestId(`thread-message-${message.id}`), 'longPress');
+    expect(onMessageLongPress).toHaveBeenCalledWith(message);
+  });
+
+  it('keeps the Hermes pending-image bar usable without a file chooser', () => {
+    const onPickImage = jest.fn();
+    const onTakePhoto = jest.fn();
+    const view = render(<ThreadView {...createProps({
+      capabilities: { ...CAPABILITY_MATRIX.hermes },
+      pendingAttachments: [{
+        uri: 'file://pending.png',
+        base64: 'preview',
+        mimeType: ' Image/PNG ',
+      }],
+      canAddMoreAttachments: true,
+      onOpenPendingAttachment: jest.fn(),
+      onRemovePendingAttachment: jest.fn(),
+      onPickImage,
+      onTakePhoto,
+    })} />);
+
+    const pending = view.getByTestId('thread-pending-attachments');
+    expect(pending.props.onPickImage).toBe(onPickImage);
+    expect(pending.props.onTakePhoto).toBe(onTakePhoto);
+    expect(pending.props.onChooseFile).toBeUndefined();
   });
 
   it('shows a stop action during a run and suppresses unsupported controls by capability', () => {
@@ -466,6 +794,7 @@ describe('ThreadView', () => {
       input: '',
     })} />);
     expect(unsupported.queryByTestId('thread-screen-composer-add')).toBeNull();
+    expect(unsupported.getByTestId('thread-screen-composer-input').type).toBe('TextInput');
     expect(unsupported.queryByTestId('thread-approval-approval-hidden')).toBeNull();
     expect(unsupported.queryByText('Sonnet')).toBeNull();
     expect(unsupported.getByTestId('thread-screen-header-pill').props.onPress).toBeUndefined();

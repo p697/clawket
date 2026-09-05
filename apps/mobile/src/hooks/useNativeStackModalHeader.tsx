@@ -79,7 +79,7 @@ export function NativeStackModalHeader({
   const headerTransparent = headerTransparentOverride ?? options.headerTransparent ?? false;
   const backgroundColor = headerTransparent
     ? 'transparent'
-    : headerBackgroundColorOverride ?? theme.colors.background;
+    : headerBackgroundColorOverride ?? theme.colors.canvas;
   const isIOSSheetPresentation = Platform.OS === 'ios'
     && SHEET_PRESENTATIONS.includes(options.presentation);
   const topInsetBehavior = topInsetBehaviorOverride
@@ -88,14 +88,14 @@ export function NativeStackModalHeader({
     ?? (CLOSE_PRESENTATIONS.includes(options.presentation) ? 'close' : 'back');
   const leftContent = options.headerLeft
     ? options.headerLeft({
-        tintColor: theme.colors.textMuted,
+        tintColor: theme.colors.inkSecondary,
         canGoBack: !!back,
       })
     : undefined;
   const rightContent = rightContentOverride !== undefined
     ? rightContentOverride
     : options.headerRight?.({
-        tintColor: theme.colors.textMuted,
+        tintColor: theme.colors.inkSecondary,
         canGoBack: !!back,
       });
 
@@ -126,7 +126,7 @@ export function useNativeStackModalHeader({
   showBorder,
 }: Props): void {
   const { theme } = useAppTheme();
-  const resolvedHeaderBackground = headerBackgroundColor ?? theme.colors.background;
+  const resolvedHeaderBackground = headerBackgroundColor ?? theme.colors.canvas;
 
   useLayoutEffect(() => {
     const options: NativeStackNavigationOptions = {

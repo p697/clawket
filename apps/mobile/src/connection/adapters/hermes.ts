@@ -1,6 +1,7 @@
 import {
   AdapterError,
   resolveCapabilities,
+  supportsPromptAttachment,
   type AgentDescriptor,
   type ConnectionRecord,
   type CronJob,
@@ -34,10 +35,12 @@ import {
   type GatewayAdapterOptions,
   type GatewaySessionRecord,
 } from './gateway-adapter';
+import { HERMES_GATEWAY_PROTOCOL_PROFILE } from './gateway-profiles';
 import {
   extractGatewayMessageText,
   type GatewayAdapterEvent,
 } from './gateway-session-update';
+import type { ConnectionAdapterRuntimeMetadata } from '../runtime-details';
 
 export const HERMES_MULTI_SESSION_CAPABILITY = 'hermes.multi-session.v2';
 
@@ -46,6 +49,8 @@ export class HermesAdapter extends GatewayAdapterBase {
 
   private healthObserved = false;
   private bridgeName: string | undefined;
+  private bridgeVersion: string | undefined;
+  private bridgeCapabilities: ReadonlyArray<string> = Object.freeze([]);
   private readonly commandRuns = new Map<string, { sessionKey: string; command: string }>();
 
   constructor(record: ConnectionRecord, options: GatewayAdapterOptions = {}) {
@@ -53,6 +58,7 @@ export class HermesAdapter extends GatewayAdapterBase {
       record,
       gatewayConfig: toHermesGatewayConfig(record),
       backendCapabilities: 'hermes',
+      protocolProfile: HERMES_GATEWAY_PROTOCOL_PROFILE,
       fallbackSessionKey: 'main',
       options,
     });
@@ -61,8 +67,21 @@ export class HermesAdapter extends GatewayAdapterBase {
 
   public override disconnect(): void {
     this.healthObserved = false;
+    this.bridgeVersion = undefined;
+    this.bridgeCapabilities = Object.freeze([]);
     this.commandRuns.clear();
     super.disconnect();
+  }
+
+  public override getConnectionRuntimeMetadata(): ConnectionAdapterRuntimeMetadata {
+    const metadata = super.getConnectionRuntimeMetadata();
+    return {
+      ...metadata,
+      bridgeVersion: this.bridgeVersion,
+      bridgeCapabilities: this.bridgeCapabilities.length > 0
+        ? this.bridgeCapabilities
+        : metadata.bridgeCapabilities,
+    };
   }
 
   public override async probe(timeoutMs?: number): Promise<boolean> {
@@ -88,7 +107,9 @@ export class HermesAdapter extends GatewayAdapterBase {
   }
 
   public async prompt(key: string, input: PromptInput): Promise<{ runId: string }> {
-    if (input.attachments?.some((attachment) => attachment.type !== 'image')) {
+    if (input.attachments?.some((attachment) => (
+      !supportsPromptAttachment(this.capabilities, attachment)
+    ))) {
       throw new AdapterError('unsupported', 'Hermes supports image attachments only');
     }
     const command = isHermesCommand(input.text)
@@ -159,9 +180,11 @@ export class HermesAdapter extends GatewayAdapterBase {
   }
 
   protected override handleGatewayHealth(payload: GatewayEvents['health']): void {
+    this.bridgeVersion = readString(payload.bridgeVersion);
     const capabilities = Array.isArray(payload.capabilities)
       ? payload.capabilities.filter((value): value is string => typeof value === 'string')
       : [];
+    this.bridgeCapabilities = Object.freeze([...capabilities]);
     const supportsMultiSession = capabilities.includes(HERMES_MULTI_SESSION_CAPABILITY);
     this.currentCapabilities = resolveCapabilities('hermes', supportsMultiSession
       ? undefined
@@ -192,6 +215,8 @@ export class HermesAdapter extends GatewayAdapterBase {
   protected override handleGatewayConnectionTransition(state: LegacyConnectionState): void {
     if (state === 'connecting' || state === 'reconnecting' || state === 'closed') {
       this.healthObserved = false;
+      this.bridgeVersion = undefined;
+      this.bridgeCapabilities = Object.freeze([]);
     }
   }
 
@@ -424,16 +449,18 @@ export function mapHermesSession(
     updatedAt: normalizeSessionUpdatedAt(session.updatedAt),
     preview: session.lastMessagePreview,
     model: session.model,
+    modelProvider: session.modelProvider,
+    sessionId: session.sessionId,
     hasActiveRun: session.hasActiveRun === true,
     attention: session.attention ?? null,
     parentSessionKey: session.parentSessionKey || session.spawnedBy,
     source,
     allowedActions: nativeReadOnly
-      ? { rename: false, reset: false, delete: false, pin: false }
+      ? { rename: false, reset: false, delete: false, pin: true }
       : {
           rename: actions?.rename ?? true,
           reset: actions?.reset ?? true,
-          delete: isMain ? false : (actions?.delete ?? true),
+          delete: actions?.delete ?? true,
           pin: actions?.pin ?? true,
         },
   };
@@ -449,7 +476,7 @@ export function legacyHermesMainSession(connectionId: string): SessionDescriptor
     updatedAt: null,
     hasActiveRun: false,
     source: 'bridge',
-    allowedActions: { rename: false, reset: false, delete: false, pin: false },
+    allowedActions: { rename: false, reset: false, delete: false, pin: true },
   };
 }
 

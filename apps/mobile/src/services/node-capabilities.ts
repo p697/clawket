@@ -34,6 +34,18 @@ export const DEFAULT_NODE_CAPABILITY_TOGGLES: NodeCapabilityToggles = {
   'media.save': true,
 };
 
+export function shouldStartNodeSidecar(input: Readonly<{
+  activeConnectionId: string | null;
+  activeState: string;
+  nodeEnabled: boolean;
+  supportsNodes: boolean;
+}>): boolean {
+  return Boolean(input.activeConnectionId)
+    && input.activeState === 'ready'
+    && input.nodeEnabled
+    && input.supportsNodes;
+}
+
 function readBoolean(record: Record<string, unknown>, key: string, fallback: boolean): boolean {
   const value = record[key];
   return typeof value === 'boolean' ? value : fallback;

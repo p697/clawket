@@ -15,6 +15,10 @@ import {
   type WebSocketCloseEventLike,
   type WebSocketLike,
 } from '../transports';
+import {
+  HERMES_GATEWAY_PROTOCOL_PROFILE,
+  OPENCLAW_GATEWAY_PROTOCOL_PROFILE,
+} from '../adapters/gateway-profiles';
 import { GatewayProtocolClient } from './gateway-client';
 
 class FakeSocket implements WebSocketLike {
@@ -66,7 +70,7 @@ function deterministicIdentity(): DeviceIdentity {
   };
 }
 
-function harness() {
+function harness(profile = OPENCLAW_GATEWAY_PROTOCOL_PROFILE) {
   const identity = deterministicIdentity();
   const sockets: Array<{ url: string; socket: FakeSocket }> = [];
   let nextId = 0;
@@ -76,6 +80,7 @@ function harness() {
     deleteDeviceToken: jest.fn(async () => undefined),
   };
   const client = new GatewayProtocolClient({
+    profile,
     identityProvider: async () => identity,
     credentialStore,
     requestId: () => `request-${++nextId}`,
@@ -106,6 +111,95 @@ function sentJson(socket: FakeSocket): Array<Record<string, any>> {
 }
 
 describe('GatewayProtocolClient recorded protocol', () => {
+  it('forgets its in-memory device identity during a device reset', async () => {
+    const identity = deterministicIdentity();
+    const identityProvider = jest.fn(async () => identity);
+    const client = new GatewayProtocolClient({
+      profile: OPENCLAW_GATEWAY_PROTOCOL_PROFILE,
+      identityProvider,
+    });
+
+    await client.getDeviceIdentity();
+    await client.getDeviceIdentity();
+    expect(identityProvider).toHaveBeenCalledTimes(1);
+
+    client.resetDeviceIdentity();
+    await client.getDeviceIdentity();
+    expect(identityProvider).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps configured credentials, device identity, and transport URL out of enumerable state', async () => {
+    const { client, identity, sockets } = harness();
+    const credentials = {
+      token: 'private-gateway-token',
+      password: 'private-gateway-password',
+      bootstrapToken: 'private-bootstrap-token',
+      clientToken: 'private-relay-client-token',
+    };
+    client.configure({
+      url: 'wss://private-gateway.invalid/ws',
+      token: credentials.token,
+      password: credentials.password,
+      bootstrap: {
+        token: credentials.bootstrapToken,
+        strategy: 'mobile-setup',
+      },
+      backendKind: 'openclaw',
+      transportKind: 'relay',
+      relay: {
+        serverUrl: 'wss://private-relay.invalid',
+        gatewayId: 'private-gateway-id',
+        clientToken: credentials.clientToken,
+      },
+    });
+    client.connect();
+    await waitFor(() => sockets.length === 1);
+
+    const serialized = JSON.stringify(client);
+    expect(Reflect.ownKeys(client)).not.toEqual(expect.arrayContaining([
+      'config',
+      'identity',
+      'options',
+      'transport',
+    ]));
+    for (const secret of [
+      credentials.token,
+      credentials.password,
+      credentials.bootstrapToken,
+      credentials.clientToken,
+      identity.secretKeyHex,
+    ]) {
+      expect(serialized).not.toContain(secret);
+    }
+    client.disconnect();
+  });
+
+  it('takes the current-model method from the adapter profile rather than legacy config fields', async () => {
+    const client = new GatewayProtocolClient({
+      profile: HERMES_GATEWAY_PROTOCOL_PROFILE,
+    });
+    client.configure({
+      url: 'ws://127.0.0.1:8787/v1/hermes/ws',
+      backendKind: 'openclaw',
+      transportKind: 'local',
+    });
+    const sendRequest = jest.spyOn(
+      client as unknown as {
+        sendRequest(method: string, params: object): Promise<unknown>;
+      },
+      'sendRequest',
+    ).mockResolvedValue({
+      currentModel: 'fixture-model',
+      currentProvider: 'fixture-provider',
+    });
+
+    await expect(client.getCurrentModelState()).resolves.toMatchObject({
+      currentModel: 'fixture-model',
+      currentProvider: 'fixture-provider',
+    });
+    expect(sendRequest).toHaveBeenCalledWith('model.current', {});
+  });
+
   it('signs the recorded OpenClaw challenge and gates requests on connect success', async () => {
     const { client, identity, sockets } = harness();
     client.configure({
@@ -216,10 +310,15 @@ describe('GatewayProtocolClient recorded protocol', () => {
       type: 'res',
       id: request.id,
       ok: true,
-      payload: { server: { version: 'fixture', connId: 'relay' } },
-      meta: { capabilities: ['bridge.capabilities.v2'] },
+      payload: { server: { version: 'openclaw-gateway-2026.9.5', connId: 'relay' } },
+      meta: {
+        capabilities: ['bridge.capabilities.v2'],
+        bridgeVersion: ' 3.0.0 ',
+      },
     });
     await waitFor(() => client.getConnectionState() === 'ready');
+    expect(client.getGatewayInfo()?.version).toBe('openclaw-gateway-2026.9.5');
+    expect(client.getConnectResponseBridgeVersion()).toBe('3.0.0');
     expect(client.getConnectResponseCapabilities()).toEqual(['bridge.capabilities.v2']);
 
     const beforeTick = socket.sent.length;
@@ -231,7 +330,7 @@ describe('GatewayProtocolClient recorded protocol', () => {
   });
 
   it('waits for the recorded Hermes health frame and cannot revive after disconnect', async () => {
-    const { client, sockets } = harness();
+    const { client, sockets } = harness(HERMES_GATEWAY_PROTOCOL_PROFILE);
     const order: string[] = [];
     client.on('connection', ({ state }) => order.push(`connection:${state}`));
     client.on('health', () => order.push('health'));
@@ -288,9 +387,19 @@ describe('GatewayProtocolClient recorded protocol', () => {
       type: 'res',
       id: connect.id,
       ok: true,
-      payload: { features: { methods: ['sessions.subscribe'] } },
+      payload: {
+        server: { version: 'openclaw-gateway-direct', connId: 'direct' },
+        features: { methods: ['sessions.subscribe'] },
+      },
+      meta: {
+        capabilities: ['bridge.capabilities.v2'],
+        bridgeVersion: 'must-not-be-trusted-on-direct',
+      },
     });
     await waitFor(() => sentJson(socket).some((entry) => entry.method === 'sessions.subscribe'));
+    expect(client.getGatewayInfo()?.version).toBe('openclaw-gateway-direct');
+    expect(client.getConnectResponseBridgeVersion()).toBeUndefined();
+    expect(client.getConnectResponseCapabilities()).toBeUndefined();
     const subscribe = sentJson(socket).find((entry) => entry.method === 'sessions.subscribe')!;
     socket.receive({ type: 'res', id: subscribe.id, ok: true, payload: {} });
     const sessions = [{ key: 'agent:main:main', title: 'Recorded Main' }];

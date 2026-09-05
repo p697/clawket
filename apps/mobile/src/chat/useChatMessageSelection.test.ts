@@ -2,6 +2,7 @@ import { act, renderHook } from '@testing-library/react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useChatMessageSelection } from './useChatMessageSelection';
 import { UiMessage } from '../types/chat';
+import { Motion } from '../theme/tokens';
 
 jest.mock('expo-clipboard', () => ({
   setStringAsync: jest.fn(() => Promise.resolve()),
@@ -10,6 +11,10 @@ jest.mock('expo-clipboard', () => ({
 jest.mock('react-native', () => ({
   StyleSheet: {
     hairlineWidth: 1,
+  },
+  Easing: {
+    cubic: 'cubic',
+    out: (value: string) => `out(${value})`,
   },
   Animated: {
     Value: class {
@@ -23,9 +28,9 @@ jest.mock('react-native', () => ({
         return 0;
       }
     },
-    spring: () => ({
+    timing: jest.fn(() => ({
       start: jest.fn(),
-    }),
+    })),
   },
 }));
 
@@ -73,6 +78,7 @@ describe('useChatMessageSelection', () => {
   });
 
   it('shows selection overlay when message and frames are both set', () => {
+    const { Animated } = require('react-native');
     const m1 = createMessage({ id: 'm1', role: 'assistant', text: 'hello' });
     const { result } = renderHook(() =>
       useChatMessageSelection({
@@ -90,6 +96,15 @@ describe('useChatMessageSelection', () => {
 
     expect(result.current.selectedMessageVisible).toBe(true);
     expect(result.current.selectedMessage?.id).toBe('m1');
+    expect(Animated.timing).toHaveBeenLastCalledWith(
+      result.current.selectionAnim,
+      {
+        toValue: 1,
+        duration: Motion.duration.normal,
+        easing: 'out(cubic)',
+        useNativeDriver: true,
+      },
+    );
   });
 
   it('copies trimmed message text and resets copied state after delay', async () => {

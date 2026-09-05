@@ -1,6 +1,9 @@
 import { act, renderHook } from '@testing-library/react-native';
 import * as Network from 'expo-network';
+import * as DocumentPicker from 'expo-document-picker';
+import { CAPABILITY_MATRIX } from '@clawket/agent-protocol';
 import { analyticsEvents } from '../services/analytics/events';
+import { cacheMessageImages } from '../services/image-cache';
 import { StorageService } from '../services/storage';
 import { useAdapterChatEvents } from './useAdapterChatEvents';
 import { useChatController as useChatControllerImpl } from './useChatController';
@@ -141,6 +144,10 @@ jest.mock('../hooks/useChatAutoCache', () => ({
   useChatAutoCache: jest.fn(),
 }));
 
+jest.mock('../services/image-cache', () => ({
+  cacheMessageImages: jest.fn().mockResolvedValue([]),
+}));
+
 const mockAppContext: any = {
   activeGatewayConfigId: null,
   mainSessionKey: 'agent:main:main',
@@ -221,40 +228,44 @@ jest.mock('../services/analytics/events', () => ({
   },
 }));
 
-function createGateway(connectionState: 'ready' | 'connecting' = 'ready') {
+function createAdapter(
+  connectionState: 'ready' | 'connecting' = 'ready',
+  backendKind: 'openclaw' | 'hermes' = 'openclaw',
+) {
+  const resolveExec = jest.fn().mockResolvedValue(undefined);
   return {
-    getConnectionState: jest.fn(() => connectionState),
-    getBackendKind: jest.fn(() => 'openclaw' as const),
-    getBackendCapabilities: jest.fn(() => ({ chatAbort: true })),
-    getBaseUrl: jest.fn(() => ''),
-    fetchIdentity: jest.fn().mockResolvedValue({}),
-    probeConnection: jest.fn().mockResolvedValue(true),
-    reconnect: jest.fn(),
-    sendChat: jest.fn().mockResolvedValue({ runId: 'run-1' }),
-    fetchHistory: jest.fn().mockResolvedValue({ messages: [] }),
-    listSessions: jest.fn().mockResolvedValue([]),
-    resolveExecApproval: jest.fn().mockResolvedValue(undefined),
-    abortChat: jest.fn().mockResolvedValue(undefined),
-    on: jest.fn(() => jest.fn()),
-  };
-}
-
-function createAdapter(connectionState: 'ready' | 'connecting' = 'ready') {
-  return {
+    connection: {
+      id: 'connection-1',
+      backendKind,
+      transportKind: 'relay' as const,
+      label: 'OpenClaw',
+      createdAt: 1,
+      isFreeSlot: false,
+    },
+    capabilities: { ...CAPABILITY_MATRIX[backendKind] },
     state: connectionState,
+    connect: jest.fn().mockResolvedValue(undefined),
+    disconnect: jest.fn(),
+    probe: jest.fn().mockResolvedValue(true),
+    prompt: jest.fn().mockResolvedValue({ runId: 'run-1' }),
+    loadSession: jest.fn().mockResolvedValue({
+      key: 'agent:main:main',
+      messages: [],
+      hasActiveRun: false,
+    }),
+    listSessions: jest.fn().mockResolvedValue([]),
     listAgents: jest.fn().mockResolvedValue([]),
+    cancel: jest.fn().mockResolvedValue(undefined),
+    management: {
+      approvals: { resolveExec },
+      models: { listThinkingLevels: () => ['off', 'low', 'high'] },
+    },
     on: jest.fn(() => jest.fn()),
   };
 }
 
 function useChatController(options: Record<string, any>) {
-  const connectionState = options.gateway.getConnectionState() as 'ready' | 'connecting';
-  return useChatControllerImpl({
-    ...options,
-    adapter: options.adapter === undefined
-      ? createAdapter(connectionState)
-      : options.adapter,
-  } as any);
+  return useChatControllerImpl(options as any);
 }
 
 describe('useChatController contract', () => {
@@ -279,11 +290,10 @@ describe('useChatController contract', () => {
   });
 
   it('exposes stable public fields and forwards extracted hook outputs', () => {
-    const gateway = createGateway();
+    const adapter = createAdapter();
     const { result } = renderHook(() =>
       useChatController({
-        gateway: gateway as any,
-        config: null,
+        adapter: adapter as any,
         debugMode: false,
         showAgentAvatar: true,
       } as any),
@@ -294,6 +304,8 @@ describe('useChatController contract', () => {
         connectionState: 'ready',
         input: '',
         setInput: expect.any(Function),
+        onPasteFiles: expect.any(Function),
+        onPasteFailed: expect.any(Function),
         onSend: expect.any(Function),
         onRefresh: expect.any(Function),
         switchSession: expect.any(Function),
@@ -314,12 +326,9 @@ describe('useChatController contract', () => {
   });
 
   it('stays idle and subscribes safely while the active adapter is null', () => {
-    const gateway = createGateway();
     const { result } = renderHook(() =>
       useChatController({
         adapter: null,
-        gateway: gateway as any,
-        config: null,
         debugMode: false,
         showAgentAvatar: true,
       }),
@@ -342,14 +351,10 @@ describe('useChatController contract', () => {
       agentAvatarUri: 'https://example.com/avatar.png',
     } as any);
 
-    const gateway = createGateway('connecting');
+    const adapter = createAdapter('connecting');
     const { result } = renderHook(() =>
       useChatController({
-        gateway: gateway as any,
-        config: {
-          mode: 'local',
-          url: 'http://localhost:3000',
-        } as any,
+        adapter: adapter as any,
         debugMode: false,
         showAgentAvatar: true,
       } as any),
@@ -376,14 +381,10 @@ describe('useChatController contract', () => {
       agentAvatarUri: 'https://example.com/cached-avatar.png',
     } as any);
 
-    const gateway = createGateway('connecting');
+    const adapter = createAdapter('connecting');
     const { result } = renderHook(() =>
       useChatController({
-        gateway: gateway as any,
-        config: {
-          mode: 'local',
-          url: 'http://localhost:3000',
-        } as any,
+        adapter: adapter as any,
         debugMode: false,
         showAgentAvatar: true,
       } as any),
@@ -421,16 +422,10 @@ describe('useChatController contract', () => {
       agentAvatarUri: 'https://example.com/cached-avatar.png',
     } as any);
 
-    const gateway = createGateway('connecting');
+    const adapter = createAdapter('connecting');
     const { result } = renderHook(() =>
       useChatController({
-        gateway: gateway as any,
-        config: {
-          mode: 'hermes',
-          backendKind: 'hermes',
-          url: 'http://localhost:4319/v1/hermes/ws',
-          hermes: { bridgeUrl: 'http://localhost:4319' },
-        } as any,
+        adapter: adapter as any,
         debugMode: false,
         showAgentAvatar: true,
       } as any),
@@ -452,15 +447,11 @@ describe('useChatController contract', () => {
       { key: 'agent:main:main', kind: 'direct' as const },
       { key: 'agent:main:dm:alice', kind: 'direct' as const, sessionId: 'sess-alice' },
     ] as any;
-    const gateway = createGateway('ready');
+    const adapter = createAdapter('ready');
 
     const { result } = renderHook(() =>
       useChatController({
-        gateway: gateway as any,
-        config: {
-          mode: 'local',
-          url: 'http://localhost:3000',
-        } as any,
+        adapter: adapter as any,
         debugMode: false,
         showAgentAvatar: true,
       } as any),
@@ -480,11 +471,10 @@ describe('useChatController contract', () => {
   });
 
   it('runs probe then refresh when onRefresh is invoked while disconnected', async () => {
-    const gateway = createGateway('connecting');
+    const adapter = createAdapter('connecting');
     const { result } = renderHook(() =>
       useChatController({
-        gateway: gateway as any,
-        config: null,
+        adapter: adapter as any,
         debugMode: false,
         showAgentAvatar: true,
       } as any),
@@ -494,17 +484,16 @@ describe('useChatController contract', () => {
       await result.current.onRefresh();
     });
 
-    expect(gateway.probeConnection).toHaveBeenCalledTimes(1);
+    expect(adapter.probe).toHaveBeenCalledTimes(1);
     expect(historyMock.onRefresh).toHaveBeenCalledTimes(1);
   });
 
   it('blocks send when send preflight probe fails', async () => {
-    const gateway = createGateway('ready');
-    gateway.probeConnection.mockResolvedValue(false);
+    const adapter = createAdapter('ready');
+    adapter.probe.mockResolvedValue(false);
     const { result } = renderHook(() =>
       useChatController({
-        gateway: gateway as any,
-        config: null,
+        adapter: adapter as any,
         debugMode: false,
         showAgentAvatar: true,
       } as any),
@@ -519,18 +508,17 @@ describe('useChatController contract', () => {
       await Promise.resolve();
     });
 
-    expect(gateway.probeConnection).toHaveBeenCalledTimes(1);
-    expect(gateway.sendChat).not.toHaveBeenCalled();
+    expect(adapter.probe).toHaveBeenCalledTimes(1);
+    expect(adapter.prompt).not.toHaveBeenCalled();
     expect(result.current.input).toBe('hello');
   });
 
   it('sends after send preflight probe succeeds', async () => {
-    const gateway = createGateway('ready');
-    gateway.probeConnection.mockResolvedValue(true);
+    const adapter = createAdapter('ready');
+    adapter.probe.mockResolvedValue(true);
     const { result } = renderHook(() =>
       useChatController({
-        gateway: gateway as any,
-        config: null,
+        adapter: adapter as any,
         debugMode: false,
         showAgentAvatar: true,
       } as any),
@@ -545,13 +533,194 @@ describe('useChatController contract', () => {
       await Promise.resolve();
     });
 
-    expect(gateway.probeConnection).toHaveBeenCalledTimes(1);
-    expect(gateway.sendChat).toHaveBeenCalledTimes(1);
+    expect(adapter.probe).toHaveBeenCalledTimes(1);
+    expect(adapter.prompt).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['openclaw', 'hermes'] as const)(
+    'keeps a named pasted image image-typed when sending through %s',
+    async (backendKind) => {
+      const adapter = createAdapter('ready', backendKind);
+      imagePickerHookMock.pendingImages = [{
+        uri: 'file:///tmp/pasted.png',
+        base64: 'cGl4ZWxz',
+        mimeType: 'image/png',
+        fileName: 'pasted.png',
+      }];
+
+      const { result } = renderHook(() =>
+        useChatController({
+          adapter: adapter as any,
+          debugMode: false,
+          showAgentAvatar: true,
+        } as any),
+      );
+
+      await act(async () => {
+        result.current.onSend();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(adapter.prompt).toHaveBeenCalledWith(
+        'agent:main:main',
+        expect.objectContaining({
+          text: 'Look at this image',
+          attachments: [{
+            type: 'image',
+            mimeType: 'image/png',
+            content: expect.any(String),
+          }],
+        }),
+      );
+    },
+  );
+
+  it.each([
+    {
+      kind: 'image-only',
+      attachments: [{ uri: 'file:///photo.png', base64: 'a', mimeType: ' Image/PNG ' }],
+      expectedText: 'Look at this image',
+    },
+    {
+      kind: 'file-only',
+      attachments: [{
+        uri: 'file:///spec.pdf',
+        base64: 'b',
+        mimeType: ' Application/PDF ',
+        fileName: 'spec.pdf',
+      }],
+      expectedText: 'Review this file',
+    },
+    {
+      kind: 'mixed',
+      attachments: [
+        { uri: 'file:///photo.png', base64: 'a', mimeType: ' Image/PNG ' },
+        {
+          uri: 'file:///notes.txt',
+          base64: 'b',
+          mimeType: ' Text/Plain ',
+          fileName: 'notes.txt',
+        },
+      ],
+      expectedText: 'Review these attachments',
+    },
+  ])('uses localized $kind fallback copy for attachment-only sends', async ({
+    attachments,
+    expectedText,
+  }) => {
+    const adapter = createAdapter('ready', 'openclaw');
+    imagePickerHookMock.pendingImages = attachments;
+    const { result } = renderHook(() => useChatController({
+      adapter: adapter as any,
+      debugMode: false,
+      showAgentAvatar: true,
+    } as any));
+
+    await act(async () => {
+      result.current.onSend();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(adapter.prompt).toHaveBeenCalledWith(
+      'agent:main:main',
+      expect.objectContaining({ text: expectedText }),
+    );
+    expect(historyMock.messages).toContainEqual(expect.objectContaining({
+      role: 'user',
+      text: expectedText,
+    }));
+  });
+
+  it('keeps an ordinary attachment file-typed when sending through OpenClaw', async () => {
+    const adapter = createAdapter('ready', 'openclaw');
+    imagePickerHookMock.pendingImages = [{
+      uri: 'file:///tmp/spec.pdf',
+      base64: 'cGRm',
+      mimeType: 'application/pdf',
+      fileName: ' spec.pdf ',
+    }];
+
+    const { result } = renderHook(() =>
+      useChatController({
+        adapter: adapter as any,
+        debugMode: false,
+        showAgentAvatar: true,
+      } as any),
+    );
+
+    await act(async () => {
+      result.current.setInput('Summarize the attached spec');
+    });
+    await act(async () => {
+      result.current.onSend();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(adapter.prompt).toHaveBeenCalledWith(
+      'agent:main:main',
+      expect.objectContaining({
+        text: 'Summarize the attached spec',
+        attachments: [{
+          type: 'file',
+          mimeType: 'application/pdf',
+          content: 'cGRm',
+          name: 'spec.pdf',
+        }],
+      }),
+    );
+    expect(historyMock.messages).toContainEqual(expect.objectContaining({
+      role: 'user',
+      text: 'Summarize the attached spec',
+      imageUris: undefined,
+      fileAttachments: [{
+        uri: 'file:///tmp/spec.pdf',
+        mimeType: 'application/pdf',
+        fileName: 'spec.pdf',
+      }],
+    }));
+    expect(cacheMessageImages).not.toHaveBeenCalled();
+  });
+
+  it('opens the file picker only when the adapter declares non-image file support', async () => {
+    const picker = DocumentPicker.getDocumentAsync as jest.MockedFunction<
+      typeof DocumentPicker.getDocumentAsync
+    >;
+    const hermes = createAdapter('ready', 'hermes');
+    const hermesController = renderHook(() =>
+      useChatController({
+        adapter: hermes as any,
+        debugMode: false,
+        showAgentAvatar: true,
+      } as any),
+    );
+
+    await act(async () => {
+      await hermesController.result.current.pickFile();
+    });
+    expect(picker).not.toHaveBeenCalled();
+    expect(hermesController.result.current.pickImage).toBe(imagePickerHookMock.pickImage);
+    hermesController.unmount();
+
+    const openclaw = createAdapter('ready', 'openclaw');
+    const openclawController = renderHook(() =>
+      useChatController({
+        adapter: openclaw as any,
+        debugMode: false,
+        showAgentAvatar: true,
+      } as any),
+    );
+    await act(async () => {
+      await openclawController.result.current.pickFile();
+    });
+    expect(picker).toHaveBeenCalledTimes(1);
   });
 
   it('captures send analytics with text length and attachment summary', async () => {
-    const gateway = createGateway('ready');
-    gateway.probeConnection.mockResolvedValue(true);
+    const adapter = createAdapter('ready');
+    adapter.probe.mockResolvedValue(true);
     imagePickerHookMock.pendingImages = [
       { uri: 'file:///one.jpg', base64: 'a', mimeType: 'image/jpeg' },
       {
@@ -565,8 +734,7 @@ describe('useChatController contract', () => {
 
     const { result } = renderHook(() =>
       useChatController({
-        gateway: gateway as any,
-        config: null,
+        adapter: adapter as any,
         debugMode: false,
         showAgentAvatar: true,
       } as any),
@@ -592,12 +760,26 @@ describe('useChatController contract', () => {
       is_command: false,
       session_key_present: true,
     });
+    expect(cacheMessageImages).toHaveBeenCalledWith(
+      'agent:main:main',
+      'hello',
+      [
+        expect.objectContaining({ mimeType: 'image/jpeg' }),
+        expect.objectContaining({ mimeType: 'image/png' }),
+      ],
+      expect.objectContaining({ role: 'user' }),
+    );
+    const cachedAttachments = (cacheMessageImages as jest.Mock).mock.calls[0]?.[2];
+    expect(cachedAttachments).toHaveLength(2);
+    expect(cachedAttachments).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ mimeType: 'application/pdf' }),
+    ]));
   });
 
   it('ignores a rapid duplicate send tap before disabled state commits', async () => {
     let resolveSend: ((value: { runId: string }) => void) | null = null;
-    const gateway = createGateway('ready');
-    gateway.sendChat.mockImplementation(
+    const adapter = createAdapter('ready');
+    adapter.prompt.mockImplementation(
       () =>
         new Promise<{ runId: string }>((resolve) => {
           resolveSend = resolve;
@@ -606,8 +788,7 @@ describe('useChatController contract', () => {
 
     const { result } = renderHook(() =>
       useChatController({
-        gateway: gateway as any,
-        config: null,
+        adapter: adapter as any,
         debugMode: false,
         showAgentAvatar: true,
       } as any),
@@ -626,7 +807,7 @@ describe('useChatController contract', () => {
       await Promise.resolve();
     });
 
-    expect(gateway.sendChat).toHaveBeenCalledTimes(1);
+    expect(adapter.prompt).toHaveBeenCalledTimes(1);
     expect(mockedAnalytics.chatSendTapped).toHaveBeenCalledTimes(1);
 
     await act(async () => {
@@ -636,15 +817,14 @@ describe('useChatController contract', () => {
   });
 
   it('releases the send tap guard after a failed preflight so the next tap can retry', async () => {
-    const gateway = createGateway('ready');
-    gateway.probeConnection
+    const adapter = createAdapter('ready');
+    adapter.probe
       .mockResolvedValueOnce(false)
       .mockResolvedValueOnce(true);
 
     const { result } = renderHook(() =>
       useChatController({
-        gateway: gateway as any,
-        config: null,
+        adapter: adapter as any,
         debugMode: false,
         showAgentAvatar: true,
       } as any),
@@ -662,7 +842,7 @@ describe('useChatController contract', () => {
       await Promise.resolve();
     });
 
-    expect(gateway.sendChat).not.toHaveBeenCalled();
+    expect(adapter.prompt).not.toHaveBeenCalled();
 
     await act(async () => {
       staleOnSend();
@@ -670,18 +850,17 @@ describe('useChatController contract', () => {
       await Promise.resolve();
     });
 
-    expect(gateway.probeConnection).toHaveBeenCalledTimes(2);
-    expect(gateway.sendChat).toHaveBeenCalledTimes(1);
+    expect(adapter.probe).toHaveBeenCalledTimes(2);
+    expect(adapter.prompt).toHaveBeenCalledTimes(1);
   });
 
   it('captures slash command metadata when sending a typed command', async () => {
-    const gateway = createGateway('ready');
-    gateway.probeConnection.mockResolvedValue(true);
+    const adapter = createAdapter('ready');
+    adapter.probe.mockResolvedValue(true);
 
     const { result } = renderHook(() =>
       useChatController({
-        gateway: gateway as any,
-        config: null,
+        adapter: adapter as any,
         debugMode: false,
         showAgentAvatar: true,
       } as any),
@@ -710,12 +889,11 @@ describe('useChatController contract', () => {
   });
 
   it('captures slash command selection from suggestions', async () => {
-    const gateway = createGateway('ready');
+    const adapter = createAdapter('ready');
 
     const { result } = renderHook(() =>
       useChatController({
-        gateway: gateway as any,
-        config: null,
+        adapter: adapter as any,
         debugMode: false,
         showAgentAvatar: true,
       } as any),
@@ -740,12 +918,11 @@ describe('useChatController contract', () => {
   });
 
   it('captures exec approval decisions', async () => {
-    const gateway = createGateway('ready');
+    const adapter = createAdapter('ready');
 
     const { result } = renderHook(() =>
       useChatController({
-        gateway: gateway as any,
-        config: null,
+        adapter: adapter as any,
         debugMode: false,
         showAgentAvatar: true,
       } as any),
@@ -759,16 +936,15 @@ describe('useChatController contract', () => {
       decision: 'allow-once',
       source: 'approval_card',
     });
-    expect(gateway.resolveExecApproval).toHaveBeenCalledWith('approval-1', 'allow-once');
+    expect(adapter.management.approvals.resolveExec).toHaveBeenCalledWith('approval-1', 'allow-once');
   });
 
   it('skips a second probe when transport was just confirmed healthy', async () => {
-    const gateway = createGateway('ready');
-    gateway.probeConnection.mockResolvedValue(true);
+    const adapter = createAdapter('ready');
+    adapter.probe.mockResolvedValue(true);
     const { result } = renderHook(() =>
       useChatController({
-        gateway: gateway as any,
-        config: null,
+        adapter: adapter as any,
         debugMode: false,
         showAgentAvatar: true,
       } as any),
@@ -792,12 +968,12 @@ describe('useChatController contract', () => {
       await Promise.resolve();
     });
 
-    expect(gateway.probeConnection).toHaveBeenCalledTimes(1);
-    expect(gateway.sendChat).toHaveBeenCalledTimes(2);
+    expect(adapter.probe).toHaveBeenCalledTimes(1);
+    expect(adapter.prompt).toHaveBeenCalledTimes(2);
   });
 
   it('blocks send when network is offline even if connection state is ready', async () => {
-    const gateway = createGateway('ready');
+    const adapter = createAdapter('ready');
     jest.mocked(Network.getNetworkStateAsync).mockResolvedValueOnce({
       type: 'NONE' as any,
       isConnected: false,
@@ -806,8 +982,7 @@ describe('useChatController contract', () => {
 
     const { result } = renderHook(() =>
       useChatController({
-        gateway: gateway as any,
-        config: null,
+        adapter: adapter as any,
         debugMode: false,
         showAgentAvatar: true,
       } as any),
@@ -821,18 +996,16 @@ describe('useChatController contract', () => {
       await Promise.resolve();
     });
 
-    expect(gateway.sendChat).not.toHaveBeenCalled();
-    expect(gateway.probeConnection).not.toHaveBeenCalled();
+    expect(adapter.prompt).not.toHaveBeenCalled();
+    expect(adapter.probe).not.toHaveBeenCalled();
     expect(result.current.input).toBe('hello');
   });
 
-  it('clears sending state when gateway cache scope changes', async () => {
-    const gateway = createGateway('ready');
-    mockAppContext.activeGatewayConfigId = 'cfg:one';
+  it('clears sending state when adapter cache scope changes', async () => {
+    let adapter = createAdapter('ready');
     const { result, rerender } = renderHook(() =>
       useChatController({
-        gateway: gateway as any,
-        config: null,
+        adapter: adapter as any,
         debugMode: false,
         showAgentAvatar: true,
       } as any),
@@ -849,20 +1022,21 @@ describe('useChatController contract', () => {
     expect(result.current.isSending).toBe(true);
 
     await act(async () => {
-      mockAppContext.activeGatewayConfigId = 'cfg:two';
+      adapter = {
+        ...createAdapter('ready'),
+        connection: { ...adapter.connection, id: 'connection-2' },
+      };
       rerender(undefined);
     });
     expect(result.current.isSending).toBe(false);
     expect(result.current.activityLabel).toBeNull();
   });
 
-  it('keeps sending state when gateway cache scope does not change', async () => {
-    const gateway = createGateway('ready');
-    mockAppContext.activeGatewayConfigId = 'cfg:stable';
+  it('keeps sending state when adapter cache scope does not change', async () => {
+    const adapter = createAdapter('ready');
     const { result, rerender } = renderHook(() =>
       useChatController({
-        gateway: gateway as any,
-        config: null,
+        adapter: adapter as any,
         debugMode: false,
         showAgentAvatar: true,
       } as any),
@@ -879,14 +1053,13 @@ describe('useChatController contract', () => {
     expect(result.current.isSending).toBe(true);
 
     await act(async () => {
-      mockAppContext.activeGatewayConfigId = 'cfg:stable';
       rerender(undefined);
     });
     expect(result.current.isSending).toBe(true);
   });
 
   it('does not derive sending from running-tool rows before history loads', async () => {
-    const gateway = createGateway('ready');
+    const adapter = createAdapter('ready');
     historyMock.historyLoaded = false;
     historyMock.messages = [
       {
@@ -900,8 +1073,7 @@ describe('useChatController contract', () => {
 
     const { result } = renderHook(() =>
       useChatController({
-        gateway: gateway as any,
-        config: null,
+        adapter: adapter as any,
         debugMode: false,
         showAgentAvatar: true,
       } as any),
@@ -914,14 +1086,13 @@ describe('useChatController contract', () => {
   });
 
   it('still derives sending from running-tool rows after history loads', async () => {
-    const gateway = createGateway('ready');
+    const adapter = createAdapter('ready');
     historyMock.historyLoaded = true;
     historyMock.messages = [];
 
     const { result, rerender } = renderHook(() =>
       useChatController({
-        gateway: gateway as any,
-        config: null,
+        adapter: adapter as any,
         debugMode: false,
         showAgentAvatar: true,
       } as any),
@@ -950,7 +1121,7 @@ describe('useChatController contract', () => {
   });
 
   it('does not leak sending state when switching session before history loads', async () => {
-    const gateway = createGateway('ready');
+    const adapter = createAdapter('ready');
     historyMock.historyLoaded = true;
     historyMock.sessionKey = 'agent:main:main';
     historyMock.messages = [
@@ -966,8 +1137,7 @@ describe('useChatController contract', () => {
 
     const { result, rerender } = renderHook(() =>
       useChatController({
-        gateway: gateway as any,
-        config: null,
+        adapter: adapter as any,
         debugMode: false,
         showAgentAvatar: true,
       } as any),
@@ -991,7 +1161,7 @@ describe('useChatController contract', () => {
   });
 
   it('restores active run state when switching away from an agent and back', async () => {
-    const gateway = createGateway('ready');
+    const adapter = createAdapter('ready');
     historyMock.historyLoaded = true;
     historyMock.sessionKey = 'agent:main:main';
     historyMock.sessions = [
@@ -1002,8 +1172,7 @@ describe('useChatController contract', () => {
 
     const { result, rerender } = renderHook(() =>
       useChatController({
-        gateway: gateway as any,
-        config: null,
+        adapter: adapter as any,
         debugMode: false,
         showAgentAvatar: true,
       } as any),
@@ -1038,13 +1207,10 @@ describe('useChatController contract', () => {
   });
 
   it('drives connection and session state from adapter events', async () => {
-    const gateway = createGateway('connecting');
     const adapter = createAdapter('connecting');
     const { result } = renderHook(() =>
       useChatController({
         adapter,
-        gateway: gateway as any,
-        config: null,
         debugMode: false,
         showAgentAvatar: true,
       }),
@@ -1078,20 +1244,56 @@ describe('useChatController contract', () => {
     expect(historyMock.loadSessionsAndHistory).toHaveBeenCalledTimes(1);
     expect(historyMock.sessions).toEqual([
       expect.objectContaining({
+        connectionId: 'connection-1',
+        agentId: 'main',
         key: 'agent:main:main',
-        kind: 'global',
+        kind: 'main',
         title: 'Main thread',
         lastMessagePreview: 'Latest reply',
+        hasActiveRun: false,
+        allowedActions: {
+          rename: true,
+          reset: true,
+          delete: false,
+          pin: true,
+        },
       }),
     ]);
+
+    await act(async () => {
+      eventParams!.onUpdate?.({
+        type: 'session_info_update',
+        session: {
+          connectionId: 'connection-1',
+          agentId: 'main',
+          key: 'agent:main:cron:daily-report',
+          kind: 'cron',
+          title: 'Daily report',
+          hasActiveRun: false,
+          attention: 'cron_failed',
+          parentSessionKey: 'agent:main:main',
+        },
+      });
+      await Promise.resolve();
+    });
+    expect(historyMock.sessions).toContainEqual(expect.objectContaining({
+      connectionId: 'connection-1',
+      agentId: 'main',
+      key: 'agent:main:cron:daily-report',
+      kind: 'cron',
+      title: 'Daily report',
+      hasActiveRun: false,
+      attention: 'cron_failed',
+      parentSessionKey: 'agent:main:main',
+      spawnedBy: 'agent:main:main',
+    }));
   });
 
   it('renders adapter run chunks and tools, then commits the final message', async () => {
-    const gateway = createGateway('ready');
+    const adapter = createAdapter('ready');
     const { result } = renderHook(() =>
       useChatController({
-        gateway: gateway as any,
-        config: null,
+        adapter: adapter as any,
         debugMode: false,
         showAgentAvatar: true,
       } as any),
@@ -1198,11 +1400,10 @@ describe('useChatController contract', () => {
   });
 
   it('handles cancelled and errored adapter runs without leaving sending state stuck', async () => {
-    const gateway = createGateway('ready');
+    const adapter = createAdapter('ready');
     const { result } = renderHook(() =>
       useChatController({
-        gateway: gateway as any,
-        config: null,
+        adapter: adapter as any,
         debugMode: false,
         showAgentAvatar: true,
       } as any),
@@ -1289,11 +1490,10 @@ describe('useChatController contract', () => {
 
   it('applies adapter approvals and reconciled history to the current session', async () => {
     mockAppContext.execApprovalEnabled = true;
-    const gateway = createGateway('ready');
+    const adapter = createAdapter('ready');
     const { result } = renderHook(() =>
       useChatController({
-        gateway: gateway as any,
-        config: null,
+        adapter: adapter as any,
         debugMode: false,
         showAgentAvatar: true,
       } as any),
@@ -1368,11 +1568,10 @@ describe('useChatController contract', () => {
   });
 
   it('avoids duplicate history recovery for a terminal adapter tool update', async () => {
-    const gateway = createGateway('ready');
+    const adapter = createAdapter('ready');
     const { rerender } = renderHook(() =>
       useChatController({
-        gateway: gateway as any,
-        config: null,
+        adapter: adapter as any,
         debugMode: false,
         showAgentAvatar: true,
       } as any),

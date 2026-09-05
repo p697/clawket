@@ -1,28 +1,10 @@
-import type { GatewayScanPayload } from '../../connection/pairing/gateway-scan-flow';
 import {
-  assessOnboardingQr,
   getOnboardingPairingCommand,
   normalizePairableBackendKind,
   ONBOARDING_DOCUMENTATION_URLS,
   resolveOnboardingAdapterError,
-  resolveOnboardingQrBackend,
   resolveOnboardingRouteStatus,
 } from './route-model';
-
-function payload(overrides: Partial<GatewayScanPayload> = {}): GatewayScanPayload {
-  return {
-    url: 'wss://relay.example/ws',
-    backendKind: 'openclaw',
-    transportKind: 'relay',
-    mode: 'relay',
-    relay: {
-      serverUrl: 'https://registry.example',
-      gatewayId: 'gateway-1',
-      accessCode: 'secret',
-    },
-    ...overrides,
-  };
-}
 
 describe('Onboarding route model', () => {
   it('uses the environment-specific pairing command and official documentation', () => {
@@ -36,36 +18,6 @@ describe('Onboarding route model', () => {
     expect(normalizePairableBackendKind('hermes')).toBe('hermes');
     expect(normalizePairableBackendKind('openclaw')).toBe('openclaw');
     expect(normalizePairableBackendKind('youmind')).toBe('openclaw');
-  });
-
-  it('resolves legacy OpenClaw and explicit Hermes QR payloads', () => {
-    expect(resolveOnboardingQrBackend(payload())).toBe('openclaw');
-    expect(resolveOnboardingQrBackend(payload({
-      backendKind: 'hermes',
-      mode: 'hermes',
-      hermes: { bridgeUrl: 'http://127.0.0.1:8642' },
-    }))).toBe('hermes');
-    expect(resolveOnboardingQrBackend({
-      url: 'ws://192.0.2.1:18789',
-      token: 'token',
-    })).toBe('openclaw');
-  });
-
-  it('rejects backend mismatches and conflicting QR hints', () => {
-    expect(assessOnboardingQr(payload(), 'hermes')).toEqual({
-      kind: 'rejected',
-      reason: 'backend_mismatch',
-      backendKind: 'openclaw',
-    });
-    expect(assessOnboardingQr(payload({
-      backendKind: 'openclaw',
-      mode: 'hermes',
-      hermes: { bridgeUrl: 'http://127.0.0.1:8642' },
-    }), 'openclaw')).toEqual({
-      kind: 'rejected',
-      reason: 'invalid_backend',
-      backendKind: null,
-    });
   });
 
   it('maps transport failures to stable adapter errors', () => {

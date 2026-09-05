@@ -12,3 +12,12 @@ export {
   type RosterModelOptions,
   type RosterPageState,
 } from './model';
+export {
+  assembleRosterAddActions,
+  assembleRosterRowActions,
+  isRosterAgentMuted,
+  renameRosterSession,
+  resolveRosterCreateAgentTarget,
+  type RosterAddAction,
+  type RosterRowAction,
+} from './actions';

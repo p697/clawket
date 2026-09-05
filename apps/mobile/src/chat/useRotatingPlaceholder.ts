@@ -5,28 +5,7 @@ import { useTranslation } from 'react-i18next';
  * i18n keys for the rotating "agent is working" placeholder messages.
  * Each key maps to a fun, personality-rich line in all 6 locales.
  */
-const AGENT_WORKING_KEYS = [
-  'agent_working_1',
-  'agent_working_2',
-  'agent_working_3',
-  'agent_working_4',
-  'agent_working_5',
-  'agent_working_6',
-  'agent_working_7',
-  'agent_working_8',
-  'agent_working_9',
-  'agent_working_10',
-  'agent_working_11',
-  'agent_working_12',
-  'agent_working_13',
-  'agent_working_14',
-  'agent_working_15',
-  'agent_working_16',
-  'agent_working_17',
-  'agent_working_18',
-  'agent_working_19',
-  'agent_working_20',
-] as const;
+const AGENT_WORKING_MESSAGE_COUNT = 20;
 
 const ROTATE_INTERVAL_MS = 3000;
 
@@ -46,13 +25,13 @@ function pickRandomIndex(exclude: number, length: number): number {
 export function useRotatingPlaceholder(active: boolean): string {
   const { t } = useTranslation('chat');
   const [index, setIndex] = useState(() =>
-    Math.floor(Math.random() * AGENT_WORKING_KEYS.length),
+    Math.floor(Math.random() * AGENT_WORKING_MESSAGE_COUNT),
   );
   const indexRef = useRef(index);
   indexRef.current = index;
 
   const rotate = useCallback(() => {
-    setIndex((prev) => pickRandomIndex(prev, AGENT_WORKING_KEYS.length));
+    setIndex((prev) => pickRandomIndex(prev, AGENT_WORKING_MESSAGE_COUNT));
   }, []);
 
   // Pick a fresh random message each time we become active
@@ -68,5 +47,27 @@ export function useRotatingPlaceholder(active: boolean): string {
     return () => clearInterval(timer);
   }, [active, rotate]);
 
-  return t(AGENT_WORKING_KEYS[index]);
+  const messages = [
+    t('agent_working_1'),
+    t('agent_working_2'),
+    t('agent_working_3'),
+    t('agent_working_4'),
+    t('agent_working_5'),
+    t('agent_working_6'),
+    t('agent_working_7'),
+    t('agent_working_8'),
+    t('agent_working_9'),
+    t('agent_working_10'),
+    t('agent_working_11'),
+    t('agent_working_12'),
+    t('agent_working_13'),
+    t('agent_working_14'),
+    t('agent_working_15'),
+    t('agent_working_16'),
+    t('agent_working_17'),
+    t('agent_working_18'),
+    t('agent_working_19'),
+    t('agent_working_20'),
+  ];
+  return messages[index] ?? messages[0];
 }

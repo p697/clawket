@@ -106,7 +106,7 @@
                 "rename": false,
                 "reset": false,
                 "delete": false,
-                "pin": false
+                "pin": true
               },
               "warnings": []
             }
@@ -356,7 +356,7 @@
                 "rename": false,
                 "reset": false,
                 "delete": false,
-                "pin": false
+                "pin": true
               },
               "warnings": []
             }

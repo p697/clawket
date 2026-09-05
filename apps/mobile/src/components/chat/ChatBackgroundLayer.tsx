@@ -29,7 +29,7 @@ export function ChatBackgroundLayer({
       style={[
         styles.root,
         {
-          backgroundColor: theme.colors.background,
+          backgroundColor: theme.colors.canvas,
           borderRadius,
         },
         style,

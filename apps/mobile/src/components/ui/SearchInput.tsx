@@ -3,7 +3,6 @@ import {
   Pressable,
   type StyleProp,
   StyleSheet,
-  TextInput,
   View,
   type ViewStyle,
 } from 'react-native';
@@ -20,6 +19,7 @@ import {
   Space,
 } from '../../theme/tokens';
 import { createFloatingSurfaceStyle } from './FloatingButton';
+import { CompositionSafeTextInput } from './CompositionSafeTextInput';
 
 export type SearchInputProps = {
   value: string;
@@ -54,7 +54,7 @@ export function SearchInput({
   return (
     <View testID={testID} style={[styles.wrap, chrome, style]}>
       <Search size={IconSize.sm} color={theme.colors.inkTertiary} strokeWidth={2} />
-      <TextInput
+      <CompositionSafeTextInput
         testID={testID ? `${testID}-input` : undefined}
         style={styles.input}
         value={value}

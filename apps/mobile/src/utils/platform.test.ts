@@ -1,23 +1,29 @@
-import { Platform } from 'react-native';
-
 describe('platform utils', () => {
-  const mutablePlatform = Platform as typeof Platform & { isMacCatalyst?: boolean };
-  const originalOS = mutablePlatform.OS;
-  const originalIsMacCatalyst = mutablePlatform.isMacCatalyst;
+  type MutablePlatform = typeof import('react-native').Platform & {
+    isMacCatalyst?: boolean;
+    isPad?: boolean;
+  };
 
   afterEach(() => {
-    mutablePlatform.OS = originalOS;
-    mutablePlatform.isMacCatalyst = originalIsMacCatalyst;
     jest.resetModules();
   });
 
-  it('detects Mac Catalyst as macOS runtime', async () => {
-    mutablePlatform.OS = 'ios';
-    mutablePlatform.isMacCatalyst = true;
+  async function loadPlatformUtils(overrides: Partial<MutablePlatform>) {
+    jest.resetModules();
+    const mutablePlatform = require('react-native').Platform as MutablePlatform;
+    Object.assign(mutablePlatform, overrides);
+    return import('./platform');
+  }
 
-    const platformUtils = await import('./platform');
+  it('detects Mac Catalyst as macOS runtime', async () => {
+    const platformUtils = await loadPlatformUtils({
+      OS: 'ios',
+      isMacCatalyst: true,
+      isPad: true,
+    });
 
     expect(platformUtils.isMacCatalyst).toBe(true);
+    expect(platformUtils.isIPad).toBe(false);
     expect(platformUtils.getRuntimePlatform()).toBe('macos');
     expect(platformUtils.getRuntimeSystemName()).toBe('macOS');
     expect(platformUtils.getRuntimeDeviceFamily()).toBe('mac');
@@ -25,15 +31,32 @@ describe('platform utils', () => {
   });
 
   it('keeps standard iOS runtime unchanged', async () => {
-    mutablePlatform.OS = 'ios';
-    mutablePlatform.isMacCatalyst = false;
-
-    const platformUtils = await import('./platform');
+    const platformUtils = await loadPlatformUtils({
+      OS: 'ios',
+      isMacCatalyst: false,
+      isPad: false,
+    });
 
     expect(platformUtils.isMacCatalyst).toBe(false);
+    expect(platformUtils.isIPad).toBe(false);
     expect(platformUtils.getRuntimePlatform()).toBe('ios');
     expect(platformUtils.getRuntimeSystemName()).toBe('iOS');
     expect(platformUtils.getRuntimeDeviceFamily()).toBe('iphone');
+    expect(platformUtils.getRuntimeClientId()).toBe('openclaw-ios');
+  });
+
+  it('distinguishes iPad presentation from Mac Catalyst', async () => {
+    const platformUtils = await loadPlatformUtils({
+      OS: 'ios',
+      isMacCatalyst: false,
+      isPad: true,
+    });
+
+    expect(platformUtils.isIPad).toBe(true);
+    expect(platformUtils.isMacCatalyst).toBe(false);
+    expect(platformUtils.getRuntimePlatform()).toBe('ios');
+    expect(platformUtils.getRuntimeSystemName()).toBe('iPadOS');
+    expect(platformUtils.getRuntimeDeviceFamily()).toBe('ipad');
     expect(platformUtils.getRuntimeClientId()).toBe('openclaw-ios');
   });
 });

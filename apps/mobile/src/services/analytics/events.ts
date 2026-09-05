@@ -237,26 +237,6 @@ export const analyticsEvents = {
     captureAnalyticsEvent('discover_search_changed', properties);
   },
 
-  discoverSkillOpened(properties: {
-    source: string;
-    location: 'home' | 'search' | 'detail';
-  }): void {
-    captureAnalyticsEvent('discover_skill_opened', properties);
-  },
-
-  discoverInstallTapped(properties: {
-    source: string;
-    location: 'detail' | 'webview';
-  }): void {
-    captureAnalyticsEvent('discover_install_tapped', properties);
-  },
-
-  discoverExternalOpened(properties: {
-    source: string;
-  }): void {
-    captureAnalyticsEvent('discover_external_opened', properties);
-  },
-
   pairRequestResolved(properties: {
     target: 'device' | 'node';
     decision: 'approve' | 'reject';
@@ -278,21 +258,6 @@ export const analyticsEvents = {
     source: string;
   }): void {
     captureAnalyticsEvent('youmind_sign_in_resolved', properties);
-  },
-
-  youMindMaterialAddTapped(properties: {
-    action: 'link' | 'photo' | 'camera';
-    source: string;
-  }): void {
-    captureAnalyticsEvent('youmind_material_add_tapped', properties);
-  },
-
-  youMindMaterialAddResolved(properties: {
-    action: 'link' | 'photo' | 'camera';
-    result: 'started' | 'success' | 'failure';
-    source: string;
-  }): void {
-    captureAnalyticsEvent('youmind_material_add_resolved', properties);
   },
 
   cronSaveSucceeded(properties: {
@@ -348,21 +313,6 @@ export const analyticsEvents = {
     has_agent_id: boolean;
   }): void {
     captureAnalyticsEvent('chat_reply_notification_opened', properties);
-  },
-
-  liveSessionOpened(properties: {
-    role: string;
-    status: string;
-    source: 'team_activity' | 'recent_activity' | 'attention';
-  }): void {
-    captureAnalyticsEvent('live_session_opened', properties);
-  },
-
-  liveAttentionOpened(properties: {
-    kind: string;
-    count: number;
-  }): void {
-    captureAnalyticsEvent('live_attention_opened', properties);
   },
 
   consoleEntryTapped(properties: {

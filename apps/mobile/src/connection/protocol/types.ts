@@ -76,6 +76,7 @@ export type DeviceTokenStorageScope = {
   serverUrl?: string | null;
   gatewayId?: string | null;
   gatewayUrl?: string | null;
+  role?: string | null;
 };
 
 export type DeviceTokenRecord = {
@@ -105,7 +106,39 @@ export type GatewayProtocolClientIdentity = {
   displayName?: string;
 };
 
+export type GatewayProtocolHealthReadiness =
+  | { state: 'ready' }
+  | {
+      state: 'error';
+      code: string;
+      message: string;
+      retryable?: boolean;
+    };
+
+/**
+ * Backend protocol differences selected by the adapter that owns the client.
+ * The protocol client consumes these values without inferring a backend from
+ * legacy configuration fields.
+ */
+export type GatewayProtocolProfile = Readonly<{
+  relayIdQueryParam: 'gatewayId' | 'bridgeId';
+  baseUrlSocketPathPattern: RegExp;
+  challengeEvent?: string;
+  healthReadiness?: (
+    payload: GatewayProtocolEvents['health'],
+    context: Readonly<{ hasPayload: boolean }>,
+  ) => GatewayProtocolHealthReadiness;
+  readinessTimeoutOption: 'handshakeTimeoutMs' | 'directFirstFrameTimeoutMs';
+  readinessTimeoutMs: number;
+  readinessTimeoutError: Readonly<{
+    code: string;
+    message: string;
+  }>;
+  currentModelMethod: 'model.get' | 'model.current';
+}>;
+
 export type GatewayProtocolClientOptions = {
+  profile: GatewayProtocolProfile;
   webSocketFactory?: WebSocketFactory;
   identityProvider?: () => Promise<DeviceIdentity>;
   credentialStore?: GatewayProtocolCredentialStore;

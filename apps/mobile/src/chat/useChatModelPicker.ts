@@ -2,29 +2,17 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useIsFocused } from '@react-navigation/native';
 import { analyticsEvents } from '../services/analytics/events';
 import { useAppContext } from '../contexts/AppContext';
-import type { ModelProviderInfo } from '@clawket/agent-protocol';
-import { ConnectionState, GatewayBackendKind, SessionInfo } from '../types';
+import type {
+  AgentAdapter,
+  ModelProviderInfo,
+  ModelSelectionState,
+} from '@clawket/agent-protocol';
+import { ConnectionState, SessionInfo } from '../types';
 
 export type ModelInfo = {
   id: string;
   name: string;
   provider: string;
-};
-
-type ModelSelectionState = {
-  currentModel: string;
-  currentProvider: string;
-  currentBaseUrl?: string;
-  note?: string | null;
-  models: ModelInfo[];
-  providers?: ModelProviderInfo[];
-};
-
-type CurrentModelState = {
-  currentModel: string;
-  currentProvider: string;
-  currentBaseUrl?: string;
-  note?: string | null;
 };
 
 function resolveProviderModel(model: ModelInfo): string {
@@ -36,34 +24,20 @@ function resolveProviderModel(model: ModelInfo): string {
 
 type Props = {
   connectionState: ConnectionState;
-  gateway: {
-    listModels: () => Promise<ModelInfo[]>;
-    listSessions?: (opts?: { limit?: number }) => Promise<SessionInfo[]>;
-    getCurrentModelState?: () => Promise<CurrentModelState>;
-    getModelSelectionState: () => Promise<ModelSelectionState>;
-    setModelSelection: (params: {
-      model: string;
-      provider?: string;
-      scope?: 'global' | 'session';
-      sessionKey?: string | null;
-    }) => Promise<ModelSelectionState>;
-    getBackendKind: () => GatewayBackendKind;
-  };
+  adapter: AgentAdapter | null;
   sessionKey: string | null;
   setInput: (value: string) => void;
   setSessions: (updater: (prev: SessionInfo[]) => SessionInfo[]) => void;
-  submitMessage: (text: string, images: []) => Promise<boolean> | boolean | void;
 };
 
 export function useChatModelPicker({
   connectionState,
-  gateway,
+  adapter,
   sessionKey,
   setInput,
   setSessions,
-  submitMessage,
 }: Props) {
-  const { foregroundEpoch, gatewayEpoch } = useAppContext();
+  const { foregroundEpoch } = useAppContext();
   const isFocused = useIsFocused();
   const [modelPickerVisible, setModelPickerVisible] = useState(false);
   const [modelPickerLoading, setModelPickerLoading] = useState(false);
@@ -73,30 +47,37 @@ export function useChatModelPicker({
   const [currentModel, setCurrentModel] = useState<string | null>(null);
   const [currentModelProvider, setCurrentModelProvider] = useState<string | null>(null);
   const lastForegroundEpochRef = useRef<number | null>(null);
+  const requestContextRef = useRef({ adapter, connectionState, sessionKey });
+  const modelLoadRequestRef = useRef(0);
+  const modelRefreshRequestRef = useRef(0);
+  const modelSelectionRequestRef = useRef(0);
+  requestContextRef.current = { adapter, connectionState, sessionKey };
 
-  // Hermes and OpenClaw expose different model-selection APIs on the
-  // gateway client: Hermes uses `getModelSelectionState` / `setModelSelection`
-  // with global scope, while OpenClaw lists models via `listModels` and
-  // reads the current model from the session list. This boolean is the
-  // single source of truth for that dispatch — the callbacks below read
-  // it instead of calling `gateway.getBackendKind()` inline. The backend
-  // cannot change without a new `gateway` reference, which is already in
-  // each callback's dep list, so callback memoization stays correct.
-  const usesHermesModelApi = gateway.getBackendKind() === 'hermes';
+  const isCurrentAdapterRequest = useCallback((
+    requestAdapter: AgentAdapter,
+    connectionId: string,
+    requestSessionKey?: string | null,
+  ): boolean => {
+    const current = requestContextRef.current;
+    return current.connectionState === 'ready'
+      && current.adapter === requestAdapter
+      && current.adapter.connection.id === connectionId
+      && (requestSessionKey === undefined || current.sessionKey === requestSessionKey);
+  }, []);
 
-  const hydrateHermesModelSelection = useCallback((selection: ModelSelectionState) => {
-    setAvailableModels(selection.models ?? []);
+  const hydrateModelSelection = useCallback((selection: ModelSelectionState) => {
+    setAvailableModels((previous) => selection.models?.length ? selection.models : previous);
     setAvailableProviders(selection.providers ?? []);
     setCurrentModel(selection.currentModel?.trim() || null);
     setCurrentModelProvider(selection.currentProvider?.trim() || null);
   }, []);
 
-  const hydrateOpenClawModels = useCallback((models: ModelInfo[]) => {
+  const hydrateModels = useCallback((models: ModelInfo[]) => {
     setAvailableModels(models);
     setAvailableProviders([]);
   }, []);
 
-  const hydrateOpenClawCurrentModel = useCallback((sessions: SessionInfo[]) => {
+  const hydrateCurrentModelFromSessions = useCallback((sessions: SessionInfo[]) => {
     const trimmedSessionKey = sessionKey?.trim() || null;
     const selected = trimmedSessionKey
       ? sessions.find((session) => session.key === trimmedSessionKey) ?? null
@@ -107,62 +88,103 @@ export function useChatModelPicker({
   }, [sessionKey]);
 
   const loadModelsForPicker = useCallback(async () => {
-    if (connectionState !== 'ready') {
+    const requestId = ++modelLoadRequestRef.current;
+    const requestAdapter = adapter;
+    const models = requestAdapter?.management?.models;
+    if (connectionState !== 'ready' || !requestAdapter?.capabilities.models || !models?.list) {
       setModelPickerError('Gateway is not connected.');
       setAvailableModels([]);
       setAvailableProviders([]);
       setModelPickerLoading(false);
       return;
     }
+    const connectionId = requestAdapter.connection.id;
+    const isCurrent = () => (
+      requestId === modelLoadRequestRef.current
+      && isCurrentAdapterRequest(requestAdapter, connectionId)
+    );
 
     setModelPickerLoading(true);
     setModelPickerError(null);
     try {
-      if (usesHermesModelApi) {
-        hydrateHermesModelSelection(await gateway.getModelSelectionState());
-      } else {
-        hydrateOpenClawModels(await gateway.listModels());
+      const available = await models.list();
+      if (!isCurrent()) return;
+      hydrateModels(available);
+      if (models.getSelection) {
+        const selection = await models.getSelection();
+        if (!isCurrent()) return;
+        hydrateModelSelection(selection);
       }
     } catch (err: unknown) {
+      if (!isCurrent()) return;
       const msg = err instanceof Error ? err.message : String(err);
       setModelPickerError(msg || 'Failed to load models.');
       setAvailableModels([]);
       setAvailableProviders([]);
     } finally {
-      setModelPickerLoading(false);
+      if (isCurrent()) setModelPickerLoading(false);
     }
-  }, [connectionState, gateway, usesHermesModelApi, hydrateHermesModelSelection, hydrateOpenClawModels]);
+  }, [
+    adapter,
+    connectionState,
+    hydrateModelSelection,
+    hydrateModels,
+    isCurrentAdapterRequest,
+  ]);
 
   const refreshCurrentModel = useCallback(async () => {
-    if (!usesHermesModelApi) {
-      if (connectionState !== 'ready' || typeof gateway.listSessions !== 'function') return;
-      try {
-        hydrateOpenClawCurrentModel(await gateway.listSessions({ limit: 100 }));
-      } catch {
-        // Keep the last visible state; model refresh should be non-disruptive in chat.
-      }
-      return;
-    }
-    if (connectionState !== 'ready') return;
+    const requestId = ++modelRefreshRequestRef.current;
+    const requestAdapter = adapter;
+    if (connectionState !== 'ready' || !requestAdapter?.capabilities.models) return;
+    const connectionId = requestAdapter.connection.id;
+    const requestSessionKey = sessionKey;
+    const isCurrent = () => (
+      requestId === modelRefreshRequestRef.current
+      && isCurrentAdapterRequest(requestAdapter, connectionId, requestSessionKey)
+    );
     try {
-      const currentState = typeof gateway.getCurrentModelState === 'function'
-        ? await gateway.getCurrentModelState()
-        : await gateway.getModelSelectionState();
-      setCurrentModel(currentState.currentModel?.trim() || null);
-      setCurrentModelProvider(currentState.currentProvider?.trim() || null);
+      const getSelection = requestAdapter.management?.models?.getSelection;
+      if (getSelection) {
+        const currentState = await getSelection();
+        if (!isCurrent()) return;
+        const selectedModel = currentState.currentModel?.trim();
+        if (selectedModel) {
+          setCurrentModel(selectedModel);
+          setCurrentModelProvider(currentState.currentProvider?.trim() || null);
+          return;
+        }
+      }
+      if (!isCurrent()) return;
+      const sessions = (await requestAdapter.listSessions()).map((session): SessionInfo => ({
+        key: session.key,
+        model: session.model,
+        modelProvider: session.modelProvider,
+      }));
+      if (!isCurrent()) return;
+      hydrateCurrentModelFromSessions(sessions);
     } catch {
       // Keep the last visible state; model refresh should be non-disruptive in chat.
     }
-  }, [connectionState, gateway, usesHermesModelApi, hydrateOpenClawCurrentModel]);
+  }, [
+    adapter,
+    connectionState,
+    hydrateCurrentModelFromSessions,
+    isCurrentAdapterRequest,
+    sessionKey,
+  ]);
 
   const openModelPicker = useCallback((): boolean => {
-    if (connectionState !== 'ready') {
+    if (
+      connectionState !== 'ready'
+      || !adapter?.capabilities.models
+      || !adapter.management?.models?.list
+    ) {
       return false;
     }
     setModelPickerVisible(true);
     void loadModelsForPicker();
     return true;
-  }, [connectionState, loadModelsForPicker]);
+  }, [adapter, connectionState, loadModelsForPicker]);
 
   const retryModelPickerLoad = useCallback(() => {
     void loadModelsForPicker();
@@ -170,7 +192,14 @@ export function useChatModelPicker({
 
   useEffect(() => {
     void refreshCurrentModel();
-  }, [gatewayEpoch, refreshCurrentModel, sessionKey]);
+  }, [refreshCurrentModel, sessionKey]);
+
+  useEffect(() => {
+    setModelPickerLoading(false);
+    setModelPickerError(null);
+    setAvailableModels([]);
+    setAvailableProviders([]);
+  }, [adapter]);
 
   useEffect(() => {
     if (!isFocused) return;
@@ -199,31 +228,12 @@ export function useChatModelPicker({
       session_key_present: Boolean(sessionKey),
     });
 
-    if (usesHermesModelApi) {
-      setCurrentModel(modelId || null);
-      setCurrentModelProvider(providerId ?? null);
-      setModelPickerVisible(false);
-      if (connectionState !== 'ready') {
-        return;
-      }
-      void gateway.setModelSelection({
-        model: modelId,
-        ...(providerId ? { provider: providerId } : {}),
-        scope: 'global',
-      }).then((selection) => {
-        hydrateHermesModelSelection(selection);
-      }).catch((err: unknown) => {
-        const msg = err instanceof Error ? err.message : String(err);
-        setModelPickerError(msg || 'Failed to switch model.');
-        void refreshCurrentModel();
-      });
-      return;
-    }
-
-    // Optimistically update current session's model label so ChatHeader updates immediately
+    // Optimistically update the current session so the thread header responds immediately.
     const slashIdx = providerModel.indexOf('/');
     const model = slashIdx >= 0 ? providerModel.slice(slashIdx + 1) : providerModel;
     const provider = slashIdx >= 0 ? providerModel.slice(0, slashIdx) : undefined;
+    const previousModel = currentModel;
+    const previousProvider = currentModelProvider;
     setCurrentModel(model || null);
     setCurrentModelProvider(provider ?? null);
     setSessions((prev) =>
@@ -234,28 +244,65 @@ export function useChatModelPicker({
       ),
     );
 
-    if (connectionState !== 'ready' || !sessionKey) {
+    const requestAdapter = adapter;
+    const setSelection = requestAdapter?.management?.models?.setSelection;
+    const selectionScope = requestAdapter?.capabilities.modelPerSession ? 'session' : 'global';
+    if (
+      connectionState !== 'ready'
+      || !requestAdapter
+      || !setSelection
+      || (selectionScope === 'session' && !sessionKey)
+    ) {
       setModelPickerVisible(false);
       setInput(`/model ${providerModel}`);
       return;
     }
 
+    const requestId = ++modelSelectionRequestRef.current;
+    const connectionId = requestAdapter.connection.id;
+    const requestSessionKey = sessionKey;
+    const isCurrent = () => (
+      requestId === modelSelectionRequestRef.current
+      && isCurrentAdapterRequest(requestAdapter, connectionId, requestSessionKey)
+    );
     setModelPickerVisible(false);
-    void Promise.resolve(submitMessage(`/model ${providerModel}`, [])).then((sent) => {
-      if (sent === false) {
-        setInput(`/model ${providerModel}`);
-      }
+    void setSelection({
+      model: modelId,
+      ...(providerId ? { provider: providerId } : {}),
+      scope: selectionScope,
+      ...(selectionScope === 'session' ? { sessionKey } : {}),
+    }).then((selection) => {
+      if (!isCurrent()) return;
+      hydrateModelSelection(selection);
+    }).catch((err: unknown) => {
+      if (!isCurrent()) return;
+      const msg = err instanceof Error ? err.message : String(err);
+      setCurrentModel(previousModel);
+      setCurrentModelProvider(previousProvider);
+      setSessions((prev) => prev.map((session) => (
+        session.key === requestSessionKey
+          ? {
+            ...session,
+            model: previousModel ?? undefined,
+            modelProvider: previousProvider ?? undefined,
+          }
+          : session
+      )));
+      setModelPickerError(msg || 'Failed to switch model.');
+      setModelPickerVisible(true);
+      void refreshCurrentModel();
     });
   }, [
+    adapter,
     connectionState,
-    gateway,
-    usesHermesModelApi,
-    hydrateHermesModelSelection,
+    currentModel,
+    currentModelProvider,
+    hydrateModelSelection,
+    isCurrentAdapterRequest,
     refreshCurrentModel,
     sessionKey,
     setInput,
     setSessions,
-    submitMessage,
   ]);
 
   const currentModelHeaderLabel = currentModel

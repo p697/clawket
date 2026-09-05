@@ -99,6 +99,8 @@ export interface SessionDescriptor {
   updatedAt: number | null;
   preview?: string;
   model?: string;
+  modelProvider?: string;
+  sessionId?: string;
   hasActiveRun: boolean;
   attention?: 'approval' | 'error' | 'cron_failed' | null;
   parentSessionKey?: string;
@@ -151,9 +153,13 @@ export interface ChatMessage {
   tool?: {
     name: string;
     status: 'running' | 'success' | 'error';
+    callId?: string;
     summary?: string;
     input?: unknown;
     output?: unknown;
+    durationMs?: number;
+    startedAtMs?: number;
+    finishedAtMs?: number;
   };
 }
 
@@ -162,6 +168,8 @@ export interface SessionHistory {
   messages: ChatMessage[];
   nextCursor?: string;
   hasActiveRun: boolean;
+  sessionId?: string;
+  thinkingLevel?: string;
 }
 
 export interface FinalMessage {

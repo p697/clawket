@@ -1,23 +1,28 @@
 import { useEffect } from 'react';
 import { Platform } from 'react-native';
+import type { ConnectionDescriptor } from '@clawket/agent-protocol';
 import { useAppTheme } from '../theme';
 import { posthogClient } from '../services/analytics/posthog';
-import { resolveGatewayBackendKind, resolveGatewayTransportKind } from '@clawket/agent-protocol';
 import { StorageService } from '../services/storage';
-import type { GatewayConfig } from '../types';
 
 type Args = {
-  config: GatewayConfig | null;
-  currentAgentId: string;
+  connections: ReadonlyArray<ConnectionDescriptor>;
+  activeConnectionId: string | null;
+  isPro: boolean;
+  graceActive?: boolean;
 };
 
-function resolveGatewayMode(config: GatewayConfig | null): string {
-  if (!config?.url) return 'unconfigured';
-  return `${resolveGatewayBackendKind(config)}:${resolveGatewayTransportKind(config)}`;
-}
-
-export function usePostHogIdentity({ config, currentAgentId }: Args): void {
+export function usePostHogIdentity({
+  connections,
+  activeConnectionId,
+  isPro,
+  graceActive = false,
+}: Args): void {
   const { accentId, mode, resolvedScheme } = useAppTheme();
+  const activeConnection = connections.find((connection) => connection.id === activeConnectionId) ?? null;
+  const backendKinds = [...new Set(connections.map((connection) => connection.backendKind))]
+    .sort()
+    .join(',');
 
   useEffect(() => {
     const client = posthogClient;
@@ -44,12 +49,31 @@ export function usePostHogIdentity({ config, currentAgentId }: Args): void {
     if (!client) return;
     void client.register({
       app_platform: Platform.OS,
-      current_agent_id: currentAgentId,
-      gateway_mode: resolveGatewayMode(config),
-      has_gateway_config: Boolean(config?.url),
+      connection_count: connections.length,
+      backend_kinds: backendKinds,
+      active_backend: activeConnection?.backendKind ?? 'unconfigured',
+      active_transport: activeConnection?.transportKind ?? 'unconfigured',
+      is_pro: isPro,
+      is_premium: isPro,
+      grace_active: graceActive,
+      // Kept for one transition release; active_backend/active_transport replace it.
+      gateway_mode: activeConnection
+        ? `${activeConnection.backendKind}:${activeConnection.transportKind}`
+        : 'unconfigured',
+      has_gateway_config: connections.length > 0,
       theme_accent_id: accentId,
       theme_mode: mode,
       theme_scheme: resolvedScheme,
     }).catch(() => {});
-  }, [accentId, config?.backendKind, config?.transportKind, config?.mode, config?.url, currentAgentId, mode, resolvedScheme]);
+  }, [
+    accentId,
+    activeConnection?.backendKind,
+    activeConnection?.transportKind,
+    backendKinds,
+    connections.length,
+    graceActive,
+    isPro,
+    mode,
+    resolvedScheme,
+  ]);
 }

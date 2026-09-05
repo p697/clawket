@@ -1,6 +1,5 @@
 import React from 'react';
 import {
-  Image,
   Platform,
   Pressable,
   ScrollView,
@@ -13,10 +12,8 @@ import {
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useAppTheme } from '../../theme';
-import { FontSize, FontWeight, Radius, Space, createSurfaceStyle } from '../../theme/tokens';
+import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
 import { Button, Card, FormTextInput } from '../ui';
-
-const YOUMIND_GOOGLE_ICON = require('../../../assets/youmind-google.png');
 
 type SignInFieldKey = 'optionEmail' | 'email' | 'code';
 
@@ -26,17 +23,11 @@ export function YouMindSignInCard({
   code,
   busy,
   otpSent,
-  appleAvailable,
-  googleAvailable,
-  appleBusy,
-  googleBusy,
   emailBusy,
   onBack,
   onEditEmail,
   onChangeEmail,
   onChangeCode,
-  onAppleSignIn,
-  onGoogleSignIn,
   onSendCode,
   onVerify,
   rootStyle,
@@ -48,17 +39,11 @@ export function YouMindSignInCard({
   code: string;
   busy: boolean;
   otpSent: boolean;
-  appleAvailable: boolean;
-  googleAvailable: boolean;
-  appleBusy: boolean;
-  googleBusy: boolean;
   emailBusy: boolean;
   onBack: () => void;
   onEditEmail: () => void;
   onChangeEmail: (value: string) => void;
   onChangeCode: (value: string) => void;
-  onAppleSignIn: () => void;
-  onGoogleSignIn: () => void;
   onSendCode: () => void;
   onVerify: () => Promise<boolean>;
   rootStyle?: StyleProp<ViewStyle>;
@@ -68,8 +53,8 @@ export function YouMindSignInCard({
   const { t } = useTranslation(['chat', 'common']);
   const { theme } = useAppTheme();
   const styles = React.useMemo(
-    () => createStyles(theme.colors, theme.scheme),
-    [theme.colors, theme.scheme],
+    () => createStyles(theme.colors),
+    [theme.colors],
   );
   const scrollRef = React.useRef<ScrollView | null>(null);
   const fieldOffsetsRef = React.useRef<Partial<Record<SignInFieldKey, number>>>({});
@@ -105,43 +90,6 @@ export function YouMindSignInCard({
           {step === 'options' ? (
             <>
               <Text style={styles.title}>{t('Sign in to YouMind')}</Text>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.socialButton,
-                  pressed && styles.primaryButtonPressed,
-                  (!appleAvailable || appleBusy || busy) && styles.buttonDisabled,
-                ]}
-                onPress={onAppleSignIn}
-                disabled={!appleAvailable || appleBusy || busy}
-              >
-                <View style={styles.socialButtonContent}>
-                  <Text style={styles.appleLogo}></Text>
-                  <Text style={styles.socialButtonText}>
-                    {appleBusy ? t('Loading...', { ns: 'common' }) : t('Continue with Apple')}
-                  </Text>
-                </View>
-              </Pressable>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.socialButton,
-                  pressed && styles.primaryButtonPressed,
-                  (!googleAvailable || googleBusy || busy) && styles.buttonDisabled,
-                ]}
-                onPress={onGoogleSignIn}
-                disabled={!googleAvailable || googleBusy || busy}
-              >
-                <View style={styles.socialButtonContent}>
-                  <Image source={YOUMIND_GOOGLE_ICON} style={styles.googleLogo} resizeMode="contain" />
-                  <Text style={styles.socialButtonText}>
-                    {googleBusy ? t('Loading...', { ns: 'common' }) : t('Continue with Google')}
-                  </Text>
-                </View>
-              </Pressable>
-              <View style={styles.dividerRow}>
-                <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>{t('or')}</Text>
-                <View style={styles.dividerLine} />
-              </View>
               <View onLayout={(event) => handleFieldLayout('optionEmail', event)}>
                 <FormTextInput
                   value={email}
@@ -168,7 +116,7 @@ export function YouMindSignInCard({
                 onPress={onBack}
                 style={({ pressed }) => [styles.inlineBackButton, pressed && styles.inlineBackButtonPressed]}
               >
-                <Text style={styles.inlineBackButtonText}>{t('Back')}</Text>
+                <Text style={styles.inlineBackButtonText}>{t('Back', { ns: 'common' })}</Text>
               </Pressable>
               <Text style={styles.title}>{t('Sign in with email')}</Text>
               {!otpSent ? (
@@ -222,10 +170,7 @@ export function YouMindSignInCard({
   );
 }
 
-function createStyles(
-  colors: ReturnType<typeof useAppTheme>['theme']['colors'],
-  scheme: ReturnType<typeof useAppTheme>['theme']['scheme'],
-) {
+function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors']) {
   return StyleSheet.create({
     root: {
       width: '100%',
@@ -234,63 +179,16 @@ function createStyles(
       paddingBottom: Space.lg,
     },
     card: {
-      borderRadius: Radius.lg,
+      borderRadius: Radius.card,
       gap: Space.md,
       marginHorizontal: Space.sm,
     },
     title: {
-      color: colors.text,
-      fontSize: FontSize.xxl,
+      color: colors.ink,
+      fontSize: FontSize.title,
       fontWeight: FontWeight.semibold,
       letterSpacing: -0.7,
       textAlign: 'center',
-    },
-    socialButton: {
-      borderRadius: Radius.lg,
-      paddingHorizontal: Space.md,
-      paddingVertical: Space.md,
-      ...createSurfaceStyle(colors, scheme, 'flat'),
-    },
-    socialButtonContent: {
-      alignItems: 'center',
-      flexDirection: 'row',
-      gap: Space.sm,
-      justifyContent: 'center',
-    },
-    socialButtonText: {
-      color: colors.text,
-      fontSize: FontSize.base,
-      fontWeight: FontWeight.medium,
-    },
-    appleLogo: {
-      color: colors.text,
-      fontSize: FontSize.xl,
-    },
-    googleLogo: {
-      height: 18,
-      width: 18,
-    },
-    dividerRow: {
-      alignItems: 'center',
-      flexDirection: 'row',
-      gap: Space.sm,
-      marginVertical: Space.xs,
-    },
-    dividerLine: {
-      backgroundColor: colors.border,
-      flex: 1,
-      height: 1,
-    },
-    dividerText: {
-      color: colors.textSubtle,
-      fontSize: FontSize.sm,
-      textTransform: 'uppercase',
-    },
-    primaryButtonPressed: {
-      opacity: 0.88,
-    },
-    buttonDisabled: {
-      opacity: 0.45,
     },
     inlineBackButton: {
       alignSelf: 'flex-start',
@@ -300,9 +198,9 @@ function createStyles(
       opacity: 0.7,
     },
     inlineBackButtonText: {
-      color: colors.primary,
-      fontSize: FontSize.base,
-      fontWeight: FontWeight.medium,
+      color: colors.accent,
+      fontSize: FontSize.secondary,
+      fontWeight: FontWeight.semibold,
     },
     secondaryActions: {
       flexDirection: 'row',
@@ -311,8 +209,8 @@ function createStyles(
     },
     secondaryButton: {
       alignItems: 'center',
-      borderColor: colors.border,
-      borderRadius: Radius.lg,
+      borderColor: colors.line,
+      borderRadius: Radius.full,
       borderWidth: StyleSheet.hairlineWidth,
       flex: 1,
       justifyContent: 'center',
@@ -320,9 +218,9 @@ function createStyles(
       paddingHorizontal: Space.md,
     },
     secondaryButtonText: {
-      color: colors.text,
-      fontSize: FontSize.base,
-      fontWeight: FontWeight.medium,
+      color: colors.ink,
+      fontSize: FontSize.secondary,
+      fontWeight: FontWeight.semibold,
     },
   });
 }

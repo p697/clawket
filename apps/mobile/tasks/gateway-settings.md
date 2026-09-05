@@ -96,15 +96,15 @@ Insert the new section in the ScrollView between the GATEWAY CONNECTION section 
 
 ### Interaction patterns
 - Use `ActionSheetIOS.showActionSheetWithOptions` on iOS and `Alert.alert` on Android for simple pickers (heartbeat interval), matching the existing Theme picker pattern in ConfigScreenLayout.tsx
-- For Active Hours, use a ModalSheet (already available as a component) with two scroll pickers for start/end hour
-- For Default Model, use ActionSheetIOS/Alert if model count ≤ 10, otherwise use a ModalSheet with a scrollable list
+- For Active Hours, use the shared `Sheet` with two scroll pickers for start/end hour
+- For Default Model, use ActionSheetIOS/Alert if model count ≤ 10, otherwise use the shared `Sheet` with a scrollable list
 - Show a loading state while fetching config (subtle spinner or skeleton)
 - Show the section only when a gateway is connected; hide it when disconnected
 
 ### Styling
 - Follow exactly the same styling patterns already used in ConfigScreenLayout.tsx (card, row, divider, sectionHeader, etc.)
 - Use the existing theme system (`useAppTheme`, `theme.colors`, factory pattern for styles)
-- Use existing UI components where possible (`ModalSheet`, `ChevronRight` icon, etc.)
+- Use existing UI components where possible (`Sheet`, `ChevronRight` icon, etc.)
 
 ## Important constraints
 - All code comments, variable names, and user-facing text must be in English

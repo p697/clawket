@@ -83,7 +83,7 @@ const MemoBar = React.memo(function MemoBar({
 
 function SvgBarChartComponent({ data, mode, height = DEFAULT_HEIGHT, width }: Props): React.JSX.Element {
   const { theme } = useAppTheme();
-  const { t } = useTranslation('console');
+  const { t } = useTranslation('settings');
   const [animProgress, setAnimProgress] = useState(0);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const rafRef = useRef<number | null>(null);
@@ -216,15 +216,15 @@ function SvgBarChartComponent({ data, mode, height = DEFAULT_HEIGHT, width }: Pr
                 y1={y}
                 x2={chartWidth - PADDING_RIGHT}
                 y2={y}
-                stroke={theme.colors.chartGrid}
+                stroke={theme.colors.line}
                 strokeWidth={1}
                 strokeDasharray="4,4"
               />
               <SvgText
                 x={PADDING_LEFT - 6}
                 y={y + 4}
-                fontSize={FontSize.micro}
-                fill={theme.colors.textSubtle}
+                fontSize={FontSize.caption}
+                fill={theme.colors.inkTertiary}
                 textAnchor="end"
               >
                 {formatLabel(tick)}
@@ -250,7 +250,7 @@ function SvgBarChartComponent({ data, mode, height = DEFAULT_HEIGHT, width }: Pr
               y={y}
               width={computedBarWidth}
               barHeight={barHeight}
-              fill={theme.colors.primary}
+              fill={theme.colors.accent}
               opacity={selectedIndex === null || selectedIndex === index ? 1 : 0.4}
               accessibilityLabel={label}
             />
@@ -265,8 +265,8 @@ function SvgBarChartComponent({ data, mode, height = DEFAULT_HEIGHT, width }: Pr
               key={`label-${point.date}`}
               x={x}
               y={height - 6}
-              fontSize={FontSize.nano}
-              fill={theme.colors.textMuted}
+              fontSize={FontSize.caption}
+              fill={theme.colors.inkSecondary}
               textAnchor="middle"
             >
               {formatDayLabel(point.date)}
@@ -328,8 +328,8 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       justifyContent: 'center',
     },
     emptyText: {
-      fontSize: FontSize.md,
-      color: colors.textMuted,
+      fontSize: FontSize.caption,
+      color: colors.inkSecondary,
     },
     tapOverlay: {
       flexDirection: 'row',
@@ -343,20 +343,20 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       position: 'absolute',
       top: 4,
       width: 100,
-      backgroundColor: colors.text,
-      borderRadius: Radius.sm,
+      backgroundColor: colors.ink,
+      borderRadius: Radius.card,
       paddingHorizontal: Space.sm,
       paddingVertical: Space.xs,
       alignItems: 'center',
     },
     tooltipDate: {
-      fontSize: FontSize.xs,
-      color: colors.background,
+      fontSize: FontSize.caption,
+      color: colors.canvas,
     },
     tooltipValue: {
-      fontSize: FontSize.sm,
+      fontSize: FontSize.caption,
       fontWeight: FontWeight.semibold,
-      color: colors.background,
+      color: colors.canvas,
     },
   });
 }

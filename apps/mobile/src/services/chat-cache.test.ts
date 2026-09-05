@@ -61,6 +61,9 @@ beforeEach(() => {
       return Promise.resolve();
     },
   );
+  (AsyncStorage.getAllKeys as jest.Mock).mockImplementation(() =>
+    Promise.resolve(Object.keys(store)),
+  );
   (AsyncStorage.clear as jest.Mock).mockImplementation(() => {
     store = {};
     return Promise.resolve();
@@ -113,6 +116,11 @@ describe("ChatCacheService", () => {
           idempotencyKey: "run_123",
           imageUris: ["file:///photo.png"],
           imageMetas: [{ uri: "file:///photo.png", width: 100, height: 100 }],
+          fileAttachments: [{
+            uri: "file:///spec.pdf",
+            mimeType: "application/pdf",
+            fileName: "spec.pdf",
+          }],
           streaming: true,
           approval: {
             id: "a1",
@@ -136,6 +144,11 @@ describe("ChatCacheService", () => {
       expect(result[0].imageMetas).toEqual([
         { uri: "file:///photo.png", width: 100, height: 100 },
       ]);
+      expect(result[0].fileAttachments).toEqual([{
+        uri: "file:///spec.pdf",
+        mimeType: "application/pdf",
+        fileName: "spec.pdf",
+      }]);
       expect(result[0].usage).toEqual({ inputTokens: 10, outputTokens: 20 });
       expect((result[0] as any).streaming).toBeUndefined();
       expect((result[0] as any).approval).toBeUndefined();
@@ -681,6 +694,73 @@ describe("ChatCacheService", () => {
 
       const sessions = await ChatCacheService.listSessions();
       expect(sessions).toHaveLength(0);
+    });
+  });
+
+  describe("clearConnection", () => {
+    it("removes all indexed and orphaned chunks for one connection only", async () => {
+      await ChatCacheService.saveMessages(
+        {
+          gatewayConfigId: "gw1",
+          agentId: "a1",
+          sessionKey: "main",
+          sessionId: "old",
+        },
+        [makeMsg({ id: "gw1-old", text: "First connection old" })],
+      );
+      await ChatCacheService.saveMessages(
+        {
+          gatewayConfigId: "gw1",
+          agentId: "a1",
+          sessionKey: "main",
+          sessionId: "new",
+        },
+        [makeMsg({ id: "gw1-new", text: "First connection new" })],
+      );
+      await ChatCacheService.saveMessages(
+        { gatewayConfigId: "gw2", agentId: "a1", sessionKey: "main" },
+        [makeMsg({ id: "gw2", text: "Second connection" })],
+      );
+      store["clawket.chatCache.msgs.gw1::orphan::rev:stale::chunk:0"] =
+        JSON.stringify([makeMsg({ id: "orphan", text: "Orphaned secret" })]);
+
+      await ChatCacheService.clearConnection("gw1");
+
+      expect(Object.keys(store).some((key) => (
+        key.startsWith("clawket.chatCache.msgs.gw1::")
+      ))).toBe(false);
+      expect(Object.keys(store).some((key) => (
+        key.startsWith("clawket.chatCache.msgs.gw2::")
+      ))).toBe(true);
+      await expect(ChatCacheService.listSessions()).resolves.toEqual([
+        expect.objectContaining({ gatewayConfigId: "gw2" }),
+      ]);
+      await expect(
+        ChatCacheService.getMessages("gw1", "a1", "main", "old"),
+      ).resolves.toEqual([]);
+      await expect(
+        ChatCacheService.getMessages("gw2", "a1", "main"),
+      ).resolves.toEqual([expect.objectContaining({ text: "Second connection" })]);
+    });
+
+    it("fails before changing cache state when storage cannot be enumerated", async () => {
+      await ChatCacheService.saveMessages(
+        { gatewayConfigId: "gw1", agentId: "a1", sessionKey: "main" },
+        [makeMsg({ id: "gw1", text: "Keep after failure" })],
+      );
+      (AsyncStorage.getAllKeys as jest.Mock).mockRejectedValueOnce(
+        new Error("storage unavailable"),
+      );
+
+      await expect(ChatCacheService.clearConnection("gw1")).rejects.toThrow(
+        "storage unavailable",
+      );
+      await expect(ChatCacheService.getMessages("gw1", "a1", "main")).resolves.toEqual([
+        expect.objectContaining({ text: "Keep after failure" }),
+      ]);
+      await expect(ChatCacheService.clearConnection(" ")).rejects.toThrow(
+        "Connection id is required",
+      );
     });
   });
 

@@ -7,6 +7,7 @@ import {
   AccountSettingsSectionScreen,
   type AccountSettingsSectionScreenProps,
 } from './AccountSettingsSectionScreen';
+import { resolveAccountSettingsRuntimeStatus } from './model';
 
 const lightColors = {
   canvas: '#FFFFFF',
@@ -103,6 +104,12 @@ jest.mock('../../theme', () => ({
   useAppTheme: () => ({ theme: mockTheme }),
 }));
 
+jest.mock('../../services/app-icon', () => ({
+  getCurrentAppIconAsync: jest.fn(async () => 'default'),
+  isAppIconChangeSupportedAsync: jest.fn(async () => true),
+  setCurrentAppIconAsync: jest.fn(async () => undefined),
+}));
+
 jest.mock('../../components/ui/Banner', () => {
   const ReactRuntime = require('react');
   const { Pressable, Text, View } = require('react-native');
@@ -136,6 +143,78 @@ jest.mock('../../components/ui/FloatingButton', () => {
       onPress: () => void;
       accessibilityLabel: string;
     }) => ReactRuntime.createElement(Pressable, { testID, onPress, accessibilityLabel }),
+  };
+});
+
+jest.mock('../../components/ui/Button', () => {
+  const ReactRuntime = require('react');
+  const { Pressable, Text } = require('react-native');
+  return {
+    Button: ({ testID, label, onPress }: {
+      testID?: string;
+      label: string;
+      onPress: () => void;
+    }) => ReactRuntime.createElement(
+      Pressable,
+      { testID, onPress },
+      ReactRuntime.createElement(Text, null, label),
+    ),
+  };
+});
+
+jest.mock('../../components/ui/ConfirmationModal', () => {
+  const ReactRuntime = require('react');
+  return {
+    ConfirmationModal: ({
+      visible,
+      testID,
+      title,
+      message,
+      onClose,
+      onConfirm,
+    }: {
+      visible: boolean;
+      testID: string;
+      title: string;
+      message: string;
+      onClose: () => void;
+      onConfirm: () => void;
+    }) => visible
+      ? ReactRuntime.createElement(
+        'ConfirmationModal',
+        { testID },
+        ReactRuntime.createElement('ConfirmationTitle', null, title),
+        ReactRuntime.createElement('ConfirmationMessage', null, message),
+        ReactRuntime.createElement('ConfirmationCancel', {
+          testID: `${testID}-cancel`,
+          onPress: onClose,
+        }),
+        ReactRuntime.createElement('ConfirmationConfirm', {
+          testID: `${testID}-confirm`,
+          onPress: onConfirm,
+        }),
+      )
+      : null,
+  };
+});
+
+jest.mock('../../components/ui/Sheet', () => {
+  const ReactRuntime = require('react');
+  const { Text, View } = require('react-native');
+  return {
+    Sheet: ({ visible, testID, title, children }: {
+      visible: boolean;
+      testID?: string;
+      title?: string;
+      children: React.ReactNode;
+    }) => visible
+      ? ReactRuntime.createElement(
+        View,
+        { testID },
+        title ? ReactRuntime.createElement(Text, null, title) : null,
+        children,
+      )
+      : null,
   };
 });
 
@@ -250,16 +329,20 @@ describe('AccountSettingsSectionScreen', () => {
     expect(view.getByText('2026.9.5')).toBeTruthy();
 
     fireEvent.press(view.getByTestId('account-settings-section-back'));
-    fireEvent.press(view.getByTestId('account-settings-section-row-studio-open'));
     fireEvent.press(view.getByTestId('account-settings-section-row-studio-reconnect'));
+    fireEvent.press(view.getByTestId('account-settings-section-row-studio-remove'));
+
+    expect(view.getByTestId('account-settings-remove-confirm')).toBeTruthy();
+    expect(view.getByText('Are you sure you want to delete "Studio"?')).toBeTruthy();
+    fireEvent.press(view.getByTestId('account-settings-remove-action'));
 
     expect(onBack).toHaveBeenCalledTimes(1);
     expect(onAction).toHaveBeenNthCalledWith(1, {
-      action: 'open-connection',
+      action: 'reconnect-connection',
       connectionId: 'studio',
     });
     expect(onAction).toHaveBeenNthCalledWith(2, {
-      action: 'reconnect-connection',
+      action: 'remove-connection',
       connectionId: 'studio',
     });
   });
@@ -349,6 +432,21 @@ describe('AccountSettingsSectionScreen', () => {
     expect(onOpenPaywall).toHaveBeenCalledWith('gatewayConnections');
   });
 
+  it('keeps cached section rows under a production-derived offline state', () => {
+    const status = resolveAccountSettingsRuntimeStatus({
+      connectionInitialized: true,
+      connectionSwitching: false,
+      connectionCount: 1,
+      activeConnectionId: 'studio',
+      activeState: 'offline',
+      permissionsLoading: false,
+    });
+    const view = render(<AccountSettingsSectionScreen {...createProps()} status={status} />);
+
+    expect(view.getByTestId('account-settings-section-offline')).toBeTruthy();
+    expect(view.getByText('Studio')).toBeTruthy();
+  });
+
   it('keeps Pro locks distinct from disabled capability rows', () => {
     const onOpenPaywall = jest.fn();
     const onAction = jest.fn();
@@ -417,6 +515,36 @@ describe('AccountSettingsSectionScreen', () => {
     expect(view.getByText('Design System')).toBeTruthy();
     expect(view.getByText('Clear Cache')).toBeTruthy();
     expect(view.getByText('Reset Device')).toBeTruthy();
+  });
+
+  it('requires app-owned confirmation before clearing cache or resetting the device', () => {
+    const onAction = jest.fn();
+    const view = render(
+      <AccountSettingsSectionScreen
+        {...createProps({
+          section: 'developer',
+          data: { debugMode: true },
+          onAction,
+        })}
+      />,
+    );
+
+    fireEvent.press(view.getByTestId('account-settings-section-row-clear-cache'));
+    expect(onAction).not.toHaveBeenCalled();
+    expect(view.getByTestId('account-settings-clear-cache-confirmation')).toBeTruthy();
+    fireEvent.press(view.getByTestId('account-settings-clear-cache-confirmation-cancel'));
+    expect(view.queryByTestId('account-settings-clear-cache-confirmation')).toBeNull();
+
+    fireEvent.press(view.getByTestId('account-settings-section-row-clear-cache'));
+    fireEvent.press(view.getByTestId('account-settings-clear-cache-confirmation-confirm'));
+    expect(onAction).toHaveBeenLastCalledWith({ action: 'clear-cache' });
+    expect(view.queryByTestId('account-settings-clear-cache-confirmation')).toBeNull();
+
+    fireEvent.press(view.getByTestId('account-settings-section-row-reset-device'));
+    expect(onAction).toHaveBeenCalledTimes(1);
+    expect(view.getByTestId('account-settings-reset-device-confirmation')).toBeTruthy();
+    fireEvent.press(view.getByTestId('account-settings-reset-device-confirmation-confirm'));
+    expect(onAction).toHaveBeenLastCalledWith({ action: 'reset-device' });
   });
 
   it('stays within the settings typography budget and adds no row borders', () => {

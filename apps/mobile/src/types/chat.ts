@@ -15,6 +15,13 @@ export type ToolPresentation =
     originalImageUris?: string[];
   };
 
+/** Lightweight non-image attachment metadata safe for UI and local chat cache. */
+export type UiFileAttachment = {
+  mimeType: string;
+  fileName?: string;
+  uri?: string;
+};
+
 export type UiMessage = {
   id: string;
   role: 'user' | 'assistant' | 'system' | 'tool';
@@ -28,6 +35,7 @@ export type UiMessage = {
   streaming?: boolean;
   imageUris?: string[];
   imageMetas?: ImageMeta[];
+  fileAttachments?: UiFileAttachment[];
   modelLabel?: string;
   usage?: MessageUsage;
   toolName?: string;
@@ -53,6 +61,7 @@ export type PendingImage = {
   uri: string;
   base64: string;
   mimeType: string;
+  fileName?: string;
   width?: number;
   height?: number;
 };

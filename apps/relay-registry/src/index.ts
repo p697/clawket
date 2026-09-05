@@ -24,6 +24,7 @@ import {
   type SecurePairingResolveResponse,
   type HermesPairAccessCodeRequest,
   type HermesPairAccessCodeResponse,
+  type HermesPairCodeClaimRequest,
   type HermesPairClaimRequest,
   type HermesPairClaimResponse,
   type HermesPairRegisterRequest,
@@ -172,6 +173,14 @@ export default {
       return response;
     }
 
+    if (policy.backend === 'hermes'
+      && request.method === 'POST'
+      && url.pathname === '/v1/hermes/pair/claim-code') {
+      response = withCors(await handleHermesPairCodeClaim(request, env, policy));
+      logRegistryTelemetry(policy, 'http_request', request, url, response.status, Date.now() - startedAt);
+      return response;
+    }
+
     if (policy.backend === 'openclaw' && request.method === 'POST' && url.pathname === '/v1/pair/session') {
       response = withCors(await handlePairingSessionCreate(request, env));
       logRegistryTelemetry(policy, 'http_request', request, url, response.status, Date.now() - startedAt);
@@ -247,6 +256,7 @@ async function handlePairRegister(
   const principalId = `${policy.principalIdPrefix}${crypto.randomUUID().replace(/-/g, '')}`;
   const relaySecret = generateRelaySecret(policy);
   const accessCode = generateAccessCode();
+  const accessCodeHash = await sha256Hex(accessCode);
   const accessCodeExpiresAt = new Date(
     Date.now() + parsePositiveInt(env.PAIR_ACCESS_CODE_TTL_SEC, ACCESS_CODE_TTL_FALLBACK_SEC) * 1000,
   ).toISOString();
@@ -257,13 +267,17 @@ async function handlePairRegister(
     region,
     displayName: body?.displayName?.trim() || null,
     relaySecretHash: await sha256Hex(relaySecret),
-    accessCodeHash: await sha256Hex(accessCode),
+    accessCodeHash,
     accessCodeExpiresAt,
     createdAt: now,
     updatedAt: now,
   });
 
-  await putPairRecord(routesKv(env, policy), policy, record);
+  const kv = routesKv(env, policy);
+  await putPairRecord(kv, policy, record);
+  if (policy.backend === 'hermes') {
+    await putDirectAccessCodeLookup(kv, accessCodeHash, principalId, accessCodeExpiresAt);
+  }
 
   const response = {
     [policy.principalParam]: principalId,
@@ -306,6 +320,7 @@ async function handlePairAccessCode(
   const nextAccessCodeExpiresAt = new Date(
     Date.now() + parsePositiveInt(env.PAIR_ACCESS_CODE_TTL_SEC, ACCESS_CODE_TTL_FALLBACK_SEC) * 1000,
   ).toISOString();
+  const previousAccessCodeHash = record.accessCodeHash;
   let next: PairPrincipalRecord;
   if (policy.backend === 'openclaw') {
     const gateway = record as PairGatewayRecord;
@@ -335,6 +350,14 @@ async function handlePairAccessCode(
     };
   }
   await putPairRecord(kv, policy, next);
+  if (policy.backend === 'hermes') {
+    await Promise.all([
+      putDirectAccessCodeLookup(kv, nextAccessCodeHash, principalId, nextAccessCodeExpiresAt),
+      ...(previousAccessCodeHash && previousAccessCodeHash !== nextAccessCodeHash
+        ? [kv.delete(directAccessCodeLookupKey(previousAccessCodeHash))]
+        : []),
+    ]);
+  }
 
   const response = {
     [policy.principalParam]: principalId,
@@ -360,6 +383,42 @@ async function handlePairClaim(
   const normalizedAccessCode = normalizeAccessCode(body?.accessCode);
   if (!normalizedAccessCode) return errorResponse('INVALID_ACCESS_CODE', 'accessCode is required', 400);
 
+  return claimPairAccessCode(
+    env,
+    policy,
+    principalId,
+    normalizedAccessCode,
+    body?.clientLabel,
+  );
+}
+
+async function handleHermesPairCodeClaim(
+  request: Request,
+  env: Env,
+  policy: RegistryBackendPolicy,
+): Promise<Response> {
+  if (await consumePairingResolveAttempt(request, env, policy)) {
+    return errorResponse('PAIRING_CODE_RATE_LIMITED', 'Too many pairing code attempts. Try again later.', 429);
+  }
+  const body = await readJson<HermesPairCodeClaimRequest>(request);
+  const accessCode = normalizeAccessCode(body?.accessCode);
+  if (!accessCode) return errorResponse('INVALID_ACCESS_CODE', 'accessCode is required', 400);
+  const kv = routesKv(env, policy);
+  const principalId = await kv.get(directAccessCodeLookupKey(await sha256Hex(accessCode)));
+  if (!principalId) {
+    return errorResponse('PAIRING_CODE_NOT_FOUND', 'Pairing code is invalid or expired', 404);
+  }
+  return claimPairAccessCode(env, policy, principalId, accessCode, body?.clientLabel);
+}
+
+async function claimPairAccessCode(
+  env: Env,
+  policy: RegistryBackendPolicy,
+  principalId: string,
+  normalizedAccessCode: string,
+  clientLabel?: string | null,
+): Promise<Response> {
+
   const kv = routesKv(env, policy);
   const lookup = await getPairRecord(kv, policy, principalId);
   if (!lookup.ok) return pairingRecordCorruptResponse(policy, lookup.principalId);
@@ -378,7 +437,7 @@ async function handlePairClaim(
   }
 
   const now = new Date().toISOString();
-  const issued = await mintClientToken(policy, record, env, body?.clientLabel, now);
+  const issued = await mintClientToken(policy, record, env, clientLabel, now);
   let next: PairPrincipalRecord;
   if (policy.backend === 'openclaw') {
     const gateway = record as PairGatewayRecord;
@@ -404,6 +463,9 @@ async function handlePairClaim(
     };
   }
   await putPairRecord(kv, policy, next);
+  if (policy.backend === 'hermes') {
+    await kv.delete(directAccessCodeLookupKey(codeHash));
+  }
   await syncClientTokensToRelay(env, policy, next);
   return jsonResponse(buildPairClaimResponse(policy, next, issued.clientToken), 200);
 }
@@ -964,6 +1026,21 @@ function pairingSessionShortCodeKey(lookup: string): string {
   return `pair-session-short-code:${lookup}`;
 }
 
+function directAccessCodeLookupKey(codeHash: string): string {
+  return `pair-access-code:${codeHash}`;
+}
+
+function putDirectAccessCodeLookup(
+  kv: KVNamespace,
+  codeHash: string,
+  principalId: string,
+  expiresAt: string,
+): Promise<void> {
+  return kv.put(directAccessCodeLookupKey(codeHash), principalId, {
+    expirationTtl: expirationTtlSeconds(expiresAt),
+  });
+}
+
 async function securePairingCodeLookup(env: Env, codeHash: string): Promise<string> {
   const secret = env.PAIRING_TICKET_SECRET?.trim() ?? '';
   if (!isSecurePairingSecretConfigured(secret)) {
@@ -1056,13 +1133,17 @@ function resolvePairingPublicBase(request: Request, env: Env): string {
   return new URL(request.url).origin;
 }
 
-async function consumePairingResolveAttempt(request: Request, env: Env): Promise<boolean> {
+async function consumePairingResolveAttempt(
+  request: Request,
+  env: Env,
+  policy: RegistryBackendPolicy = OPENCLAW_REGISTRY_POLICY,
+): Promise<boolean> {
   const forwarded = request.headers.get('cf-connecting-ip')?.trim()
     || request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
     || 'unknown';
   const window = Math.floor(Date.now() / (10 * 60 * 1000));
   const key = `pair-session-attempt:${await sha256Hex(forwarded)}:${window}`;
-  const kv = openClawRoutesKv(env);
+  const kv = routesKv(env, policy);
   const current = Number.parseInt(await kv.get(key) ?? '0', 10) || 0;
   const max = parsePositiveInt(
     env.PAIR_SESSION_RESOLVE_MAX_ATTEMPTS,

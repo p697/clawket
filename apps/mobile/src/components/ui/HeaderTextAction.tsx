@@ -32,7 +32,7 @@ export function HeaderTextAction({
       <Text
         style={[
           styles.label,
-          { color: disabled ? theme.colors.textSubtle : theme.colors.textMuted },
+          { color: disabled ? theme.colors.inkTertiary : theme.colors.inkSecondary },
         ]}
       >
         {label}
@@ -52,8 +52,8 @@ const styles = StyleSheet.create({
   },
   label: {
     textAlign: 'center',
-    fontSize: FontSize.base,
-    lineHeight: LineHeight.base,
+    fontSize: FontSize.secondary,
+    lineHeight: LineHeight.secondary,
     fontWeight: FontWeight.semibold,
   },
 });

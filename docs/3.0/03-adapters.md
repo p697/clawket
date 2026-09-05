@@ -9,6 +9,8 @@
 - `transportKind = relay`：`RelayWsTransport`（从 `gateway-relay.ts` + `gateway.ts` 抽出）：注册表引导（`relay-pairing.ts`）、`connect.start` + challenge、tick / pong（声明 `relay.client-pong.v1`）、退避 `RECONNECT_BASE_MS × 1.7^n`，上限 `RECONNECT_MAX_MS`，只在 `connect_ready` 后重置（根 AGENTS.md Relay Liveness 规则 4）。
 - `local / tailscale / cloudflare / custom`：`DirectWsTransport`，首个有效帧后重置退避。
 - 三段状态：`connecting`（socket）→ `handshaking`（connect 请求已发）→ `ready`（收到 connect 响应且 `ok`）。
+- 安全配对返回的 OpenClaw device token 按连接与角色共同隔离存储：主适配器只读取 `operator`，Node sidecar 只读取 `node`；移动端 bootstrap 一次返回多角色 token 时分别持久化，任何一方的失效清理不得删除另一方。
+- 连接设置里的 Bridge 运行信息只读取 Relay 双方协商 `bridge.capabilities.v2` 后响应 meta 的 `bridgeVersion` / `capabilities`。Direct OpenClaw、未协商或旧 Bridge 显示未知；Gateway `server.version` 仅作为 Gateway 信息保留，不映射成 Bridge 版本。
 
 ### 1.2 方法映射
 
@@ -17,7 +19,7 @@
 | `listAgents` | `agents.list`（现有 `fetchIdentity` 逐个补名字与 emoji）；`isMain = agentId === 'main'`（或配置的 mainKey） |
 | `listSessions(agentId)` | `sessions.list` 过滤 `agent:<id>:` 前缀；`kind` 由 key 推断：`:main` → main，`:cron:` → cron，`:subagent:` → subagent，含 channel 字段 → channel，`kind==='direct'` → direct，`'group'` → group |
 | `loadSession` | `chat.history`（limit）；本地 `chat-cache` 合并（现有 `historyMergePolicy`） |
-| `prompt` | `chat.send`；附件走现有 `preparePendingImagesForSend` |
+| `prompt` | `chat.send`；支持图片与非图片文件，附件走现有 `preparePendingImagesForSend` |
 | `cancel` | `chat.abort` |
 | `patchSession / resetSession / deleteSession` | `sessions.patch` / `sessions.reset` / `sessions.delete` |
 | `management.*` | 现有 `model.*`、`models.list`、`skills.*`、`cron.*`、`agents.*`、`agents.files.*`、`sessions.usage`、`usage.cost`、`tools.catalog`、`node.*`、`device.*`、config / permissions / diagnostics / backups 的现有请求 |
@@ -72,6 +74,8 @@
 
 连接就绪后读握手 meta 的 `capabilities`：含 `hermes.multi-session.v2` → 会话相关能力保持 true；否则降级为单一 `main`，`sessions* = false`，并在 `ConnectionDescriptor` 上标记 `bridgeOutdated = true`（设置页连接组据此显示升级提示）。
 
+Hermes 的 Bridge 版本与能力从 HTTP / WebSocket health 读取；进入重连、关闭或显式断开时立即清空，避免沿用旧实例的运行信息。旧 Bridge 没有字段时显示未知。
+
 ### 2.3 方法映射
 
 | 契约 | Bridge 方法 |
@@ -79,7 +83,7 @@
 | `listAgents` | 固定一个：`{ agentId: 'hermes', name: 连接 label 或 Bridge 返回的名字, emoji: '🪽' 可由用户改, isMain: true, mainSessionKey: 'main' }` |
 | `listSessions` | `sessions.list` |
 | `loadSession` | `chat.history`（分页） |
-| `prompt` | `chat.send`（附件按 PR #27 的 `attachments` 字段） |
+| `prompt` | `chat.send`（附件按 PR #27 的 `attachments` 字段，仅支持 MIME 为 `image/*` 的 `type=image` 项） |
 | `cancel` | `chat.abort` |
 | `createSession / patch / reset / delete` | `sessions.create / patch / reset / delete` |
 | `management` | `models.list` + `hermes.*.get/set`（全局模型、思考、reasoning、fast）；`skills.*`；`hermes.cron.jobs.*`（含 create）；`agents.files.*`；`sessions.usage` / `usage.cost` |

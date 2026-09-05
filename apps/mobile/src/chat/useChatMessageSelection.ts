@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated } from 'react-native';
+import { Animated, Easing } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { MessageSelectionFrames } from '../components/MessageBubble';
 import type { UiMessage } from '../types/chat';
-import { Space, SpringPreset } from '../theme/tokens';
+import { Motion, Space } from '../theme/tokens';
 import { sanitizeDisplayText, sanitizeUserMessageText } from '../utils/chat-message';
 
 type Props = {
@@ -49,11 +49,10 @@ export function useChatMessageSelection({ isFavoritedMessage, listData, onToggle
 
   useEffect(() => {
     const shouldShow = !!selectedMessageId && !!selectedFrames && !!selectedMessage;
-    Animated.spring(selectionAnim, {
+    Animated.timing(selectionAnim, {
       toValue: shouldShow ? 1 : 0,
-      damping: SpringPreset.sheet.damping,
-      stiffness: SpringPreset.sheet.stiffness,
-      mass: 0.85,
+      duration: Motion.duration.normal,
+      easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start();
   }, [selectedFrames, selectedMessage, selectedMessageId, selectionAnim]);
@@ -97,7 +96,7 @@ export function useChatMessageSelection({ isFavoritedMessage, listData, onToggle
     copyResetTimerRef.current = setTimeout(() => setCopiedSelected(false), 1200);
   }, [hasSelectedMessageText, selectedMessageText]);
 
-  const copyButtonSize = Space.xxxl - 2;
+  const copyButtonSize = Space.xxl - 2;
 
   const toggleSelectedMessageFavorite = useCallback(async () => {
     if (!selectedMessage) return { favorited: false, favoriteKey: null };

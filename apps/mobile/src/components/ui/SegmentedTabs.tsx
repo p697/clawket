@@ -20,6 +20,8 @@ import {
   createThemedShadowStyle,
 } from '../../theme/tokens';
 
+const SEGMENTED_COMPACT_HEIGHT = 32;
+
 export type SegmentedTabItem<T extends string = string> = {
   key: T;
   label: string;
@@ -113,7 +115,7 @@ function createStyles(
       alignItems: 'stretch',
     },
     containerCompact: {
-      minHeight: Space.xxl,
+      minHeight: SEGMENTED_COMPACT_HEIGHT,
       padding: 0,
     },
     containerText: {
@@ -121,14 +123,14 @@ function createStyles(
     },
     tab: {
       flex: 1,
-      minHeight: ControlSize.compact,
+      minHeight: ControlSize.pill,
       paddingHorizontal: Space.md,
       borderRadius: Radius.full,
       alignItems: 'center',
       justifyContent: 'center',
     },
     tabCompact: {
-      minHeight: Space.xxl,
+      minHeight: SEGMENTED_COMPACT_HEIGHT,
       paddingHorizontal: Space.sm,
     },
     tabSelected: {

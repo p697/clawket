@@ -10,7 +10,6 @@ import {
   OpenClawAdapter,
   YouMindSpriteAdapter,
 } from './index';
-import { GatewayProtocolClient } from '../protocol';
 
 function record(backendKind: BackendKind): ConnectionRecord {
   const id = `${backendKind}-connection`;
@@ -59,25 +58,4 @@ describe('createConnectionAdapter', () => {
 
     adapter.disconnect();
   });
-
-  it.each(['openclaw', 'hermes'] as const)(
-    'injects one shared protocol client into the %s strangler adapter',
-    (kind) => {
-      const value = record(kind);
-      const gateway = new GatewayProtocolClient();
-      const configure = jest.spyOn(gateway, 'configure');
-
-      const adapter = createConnectionAdapter(
-        value,
-        descriptor(value, false),
-        { gateway },
-      );
-
-      expect(configure).toHaveBeenCalledTimes(1);
-      expect(configure).toHaveBeenCalledWith(expect.objectContaining({
-        backendKind: kind,
-      }));
-      adapter.disconnect();
-    },
-  );
 });

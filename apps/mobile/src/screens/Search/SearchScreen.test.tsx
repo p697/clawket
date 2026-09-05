@@ -172,6 +172,7 @@ describe('SearchScreen connection container', () => {
       freeConnectionId: 'connection',
       activeAdapter: adapter,
       activeState: 'ready',
+      connectionDetails: {},
       roster: mockRoster,
       error: null,
     };

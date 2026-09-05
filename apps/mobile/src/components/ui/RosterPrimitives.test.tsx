@@ -1,5 +1,6 @@
 import React from 'react';
 import { render } from '@testing-library/react-native';
+import { View } from 'react-native';
 import { Search } from 'lucide-react-native';
 import { builtInAccents } from '../../theme/accents';
 import { buildTheme } from '../../theme/theme';
@@ -11,6 +12,7 @@ import {
   Motion,
   Radius,
   Shadow,
+  Space,
 } from '../../theme/tokens';
 import {
   AgentAvatar,
@@ -19,6 +21,7 @@ import {
   getAgentPaletteIndex,
 } from './AgentAvatar';
 import { Banner } from './Banner';
+import { Card } from './Card';
 import { FloatingButton, FLOATING_BUTTON_ICON_SIZE } from './FloatingButton';
 import { HeaderPill } from './HeaderPill';
 import { RosterRow } from './RosterRow';
@@ -301,6 +304,25 @@ describe.each(['light', 'dark'] as const)('%s roster primitives', (scheme) => {
     });
     const badResult = render(<Banner testID="bad" tone="bad" message="Connection failed" />);
     expect(flattenStyle(badResult.getByTestId('bad').props.style).backgroundColor).toBe(theme.colors.badSoft);
+  });
+
+  it('keeps Card on one canonical surface after removing tone variants', () => {
+    const theme = activeTheme(scheme);
+    const result = render(
+      <Card onPress={jest.fn()} padding="lg">
+        <View testID="card-content" />
+      </Card>,
+    );
+    const root = result.UNSAFE_root.findAll(
+      (node: typeof result.UNSAFE_root) => flattenStyle(node.props.style).padding === Space.lg,
+    )[0];
+
+    expect(root).toBeDefined();
+    expect(flattenStyle(root!.props.style)).toMatchObject({
+      padding: Space.lg,
+      borderRadius: Radius.card,
+      backgroundColor: theme.colors.surface,
+    });
   });
 });
 

@@ -14,10 +14,23 @@ type Props = {
   t: (key: string) => string;
 };
 
+function translateEntryCopy(t: Props['t'], key: string): string {
+  if (key === 'Clawket 3.0') return t('chat:Clawket 3.0');
+  if (key === 'Every agent and session in one roster.') {
+    return t('chat:Every agent and session in one roster.');
+  }
+  if (key === 'Clawket 3.0 + Pro') return t('chat:Clawket 3.0 + Pro');
+  if (key === 'Unlimited connections, agents, management, logs, files, and search.') {
+    return t('chat:Unlimited connections, agents, management, logs, files, and search.');
+  }
+  if (key === 'New') return t('chat:New');
+  return key;
+}
+
 function TagBadge({ label, colors }: { label: string; colors: AppTheme['colors'] }) {
   const isNew = label === 'New';
-  const bgColor = isNew ? colors.primarySoft : colors.surfaceMuted;
-  const textColor = isNew ? colors.primary : colors.textMuted;
+  const bgColor = isNew ? colors.accentSoft : colors.surface;
+  const textColor = isNew ? colors.accent : colors.inkSecondary;
 
   return (
     <View style={[styles.badge, { backgroundColor: bgColor }]}>
@@ -47,22 +60,22 @@ export function AppUpdateAnnouncementEntryList({ entries, colors, onEntryPress, 
             <View style={stylesWithTheme.entryCopy}>
               <View style={stylesWithTheme.entryTitleRow}>
                 <Text style={stylesWithTheme.entryTitle} numberOfLines={1}>
-                  {t(entry.title)}
+                  {translateEntryCopy(t, entry.title)}
                 </Text>
                 {entry.tag ? (
-                  <TagBadge label={t(entry.tag)} colors={colors} />
+                  <TagBadge label={translateEntryCopy(t, entry.tag)} colors={colors} />
                 ) : null}
               </View>
               {entry.subtitle ? (
                 <Text style={stylesWithTheme.entrySubtitle}>
-                  {t(entry.subtitle)}
+                  {translateEntryCopy(t, entry.subtitle)}
                 </Text>
               ) : null}
             </View>
             {isNavigable ? (
               <ChevronRight
                 size={18}
-                color={colors.textSubtle}
+                color={colors.inkTertiary}
                 strokeWidth={2}
               />
             ) : null}
@@ -94,7 +107,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   badgeText: {
-    fontSize: FontSize.xs,
+    fontSize: FontSize.caption,
     fontWeight: FontWeight.semibold,
   },
 });
@@ -102,8 +115,8 @@ const styles = StyleSheet.create({
 function createStyles(colors: AppTheme['colors']) {
   return StyleSheet.create({
     entries: {
-      borderRadius: Radius.md,
-      backgroundColor: colors.surfaceMuted,
+      borderRadius: Radius.card,
+      backgroundColor: colors.surface,
       overflow: 'hidden',
     },
     entryRow: {
@@ -115,7 +128,7 @@ function createStyles(colors: AppTheme['colors']) {
     },
     entryBorder: {
       borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: colors.border,
+      borderBottomColor: colors.line,
     },
     entryPressed: {
       opacity: 0.7,
@@ -123,13 +136,13 @@ function createStyles(colors: AppTheme['colors']) {
     entryEmojiContainer: {
       width: 40,
       height: 40,
-      borderRadius: Radius.sm,
+      borderRadius: Radius.avatarSettings,
       backgroundColor: colors.surface,
       alignItems: 'center',
       justifyContent: 'center',
     },
     entryEmoji: {
-      fontSize: FontSize.xl,
+      fontSize: FontSize.body,
     },
     entryCopy: {
       flex: 1,
@@ -141,14 +154,14 @@ function createStyles(colors: AppTheme['colors']) {
       gap: Space.sm,
     },
     entryTitle: {
-      color: colors.text,
-      fontSize: FontSize.base,
+      color: colors.ink,
+      fontSize: FontSize.secondary,
       fontWeight: FontWeight.semibold,
       flexShrink: 1,
     },
     entrySubtitle: {
-      color: colors.textMuted,
-      fontSize: FontSize.md,
+      color: colors.inkSecondary,
+      fontSize: FontSize.caption,
       lineHeight: 18,
     },
   });

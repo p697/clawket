@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { AgentAdapter } from '@clawket/agent-protocol';
 import { StorageService, LastOpenedSessionSnapshot } from '../services/storage';
 import { SessionInfo } from '../types';
 import { AgentInfo } from '../types/agent';
@@ -7,20 +8,10 @@ import {
   isBackendScopedMainSessionKey,
   isSessionKeyInAgentScope,
   sanitizeSnapshotForAgent,
-} from '../utils/agent-session-scope';
+} from '../connection/session-scope';
 import { agentIdFromSessionKey } from './agentActivity';
 import { buildInitialAgentIdentity } from './chatControllerUtils';
 import { pickAgentIdentityAvatarUri, resolveAgentAvatarUri } from '../utils/agent-avatar-uri';
-
-type GatewayLike = {
-  fetchIdentity: (agentId: string) => Promise<{
-    name?: string;
-    emoji?: string;
-    avatar?: string;
-  }>;
-  getBaseUrl: () => string | null;
-  getConnectionState: () => string;
-};
 
 export type ChatAgentIdentity = {
   displayName: string;
@@ -56,7 +47,7 @@ type Params = {
   cacheAgentName?: string;
   currentAgentId: string;
   currentSessionInfo?: SessionInfo;
-  gateway: GatewayLike;
+  adapter: AgentAdapter | null;
   gatewayConfigId: string | null;
   initialPreview?: LastOpenedSessionSnapshot | null;
   mainSessionKey: string;
@@ -68,7 +59,7 @@ export function useChatAgentIdentity({
   cacheAgentName,
   currentAgentId,
   currentSessionInfo,
-  gateway,
+  adapter,
   gatewayConfigId,
   initialPreview,
   mainSessionKey,
@@ -82,8 +73,8 @@ export function useChatAgentIdentity({
   const lastPersistedAgentIdentityRef = useRef<string | null>(null);
 
   const resolveAvatarUri = useCallback(
-    (avatar: string | null | undefined): string | null => resolveAgentAvatarUri(avatar, gateway.getBaseUrl.bind(gateway)),
-    [gateway],
+    (avatar: string | null | undefined): string | null => resolveAgentAvatarUri(avatar, () => null),
+    [],
   );
 
   useEffect(() => {
@@ -141,7 +132,7 @@ export function useChatAgentIdentity({
     }
 
     const emoji = agentInfo?.identity?.emoji ?? null;
-    const avatarUri = pickAgentIdentityAvatarUri(agentInfo?.identity, gateway.getBaseUrl.bind(gateway));
+    const avatarUri = pickAgentIdentityAvatarUri(agentInfo?.identity, () => null);
 
     if (agents.length > 0) {
       setAgentIdentity((prev) => mergeAgentIdentity(prev, {
@@ -159,17 +150,19 @@ export function useChatAgentIdentity({
       });
     }
 
-    if (gateway.getConnectionState() !== 'ready') return undefined;
+    if (adapter?.state !== 'ready') return undefined;
 
     const timer = setTimeout(() => {
-      gateway.fetchIdentity(currentAgentId)
-        .then((identity) => {
+      adapter.listAgents()
+        .then((listedAgents) => {
+          const identity = listedAgents.find((agent) => agent.agentId === currentAgentId);
+          if (!identity) return;
           setAgentIdentity((prev) => {
             const name = identity.name?.trim() || prev.displayName;
             const nextEmoji = identity.emoji || prev.emoji;
             let nextAvatar = prev.avatarUri;
-            if (!nextAvatar && identity.avatar) {
-              const resolved = resolveAvatarUri(identity.avatar);
+            if (!nextAvatar && identity.avatarUrl) {
+              const resolved = resolveAvatarUri(identity.avatarUrl);
               if (resolved) nextAvatar = resolved;
             }
             return mergeAgentIdentity(prev, {
@@ -185,7 +178,7 @@ export function useChatAgentIdentity({
     return () => {
       clearTimeout(timer);
     };
-  }, [agents, cacheAgentName, currentAgentId, gateway, resolveAvatarUri]);
+  }, [adapter, agents, cacheAgentName, currentAgentId, resolveAvatarUri]);
 
   useEffect(() => {
     if (sessionKey) {

@@ -1,12 +1,19 @@
-import { InteractionManager, Platform } from 'react-native';
+import { InteractionManager, Linking, Platform } from 'react-native';
 import * as StoreReview from 'expo-store-review';
 import { APP_PACKAGE_VERSION } from '../constants/app-version';
+import { publicAppLinks } from '../config/public';
 import { AutoAppReviewState, StorageService } from './storage';
 
 export type AutoAppReviewTrigger =
   | 'agent_created'
   | 'cron_created'
   | 'model_added';
+
+export type ManualAppReviewResult =
+  | 'review_prompt'
+  | 'store_page'
+  | 'unavailable'
+  | 'error';
 
 const MIN_FIRST_USE_AGE_MS = 24 * 60 * 60 * 1000;
 const MIN_BETWEEN_ATTEMPTS_MS = 30 * 24 * 60 * 60 * 1000;
@@ -95,3 +102,24 @@ export function scheduleAutomaticAppReview(
   }, options?.delayMs ?? DEFAULT_DELAY_MS);
 }
 
+export async function requestManualAppReview(): Promise<ManualAppReviewResult> {
+  const configuredStoreUrl = Platform.OS === 'ios' && publicAppLinks.iosAppStoreId
+    ? `itms-apps://itunes.apple.com/app/id${publicAppLinks.iosAppStoreId}?action=write-review`
+    : null;
+
+  try {
+    if (await StoreReview.isAvailableAsync()) {
+      await StoreReview.requestReview();
+      return 'review_prompt';
+    }
+
+    const storeUrl = configuredStoreUrl ?? StoreReview.storeUrl();
+    if (storeUrl && await Linking.canOpenURL(storeUrl)) {
+      await Linking.openURL(storeUrl);
+      return 'store_page';
+    }
+    return 'unavailable';
+  } catch {
+    return 'error';
+  }
+}

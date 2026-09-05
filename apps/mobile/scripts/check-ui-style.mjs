@@ -11,40 +11,143 @@ const ts = require('typescript');
 const BASELINE_PATH = join(ROOT, 'scripts', 'ui-style-baseline.json');
 const SCAN_DIRS = ['src/screens', 'src/components'];
 const UPDATE = process.argv.includes('--update');
-const TAB_BAR_HEIGHT_ALLOWED_FILES = new Set([
-  'src/screens/ChatScreen/hooks/useChatKeyboardLayout.ts',
-]);
 const NATIVE_SWITCH_ALLOWED_FILES = new Set([
   'src/components/ui/ThemedSwitch.tsx',
-  // Share-poster controls deliberately mirror the exported artifact instead of
-  // inheriting the application settings chrome.
-  'src/screens/ChatScreen/components/ChatSharePosterModal.tsx',
 ]);
 const NATIVE_TEXT_INPUT_ALLOWED_FILES = new Set([
-  // Canonical 3.0 composer owns multiline sizing, paste, microphone, and
-  // streaming controls; ordinary form fields still go through shared chrome.
-  'src/components/ui/Composer.tsx',
-  'src/components/ui/FormTextInput.tsx',
-  'src/components/ui/SearchInput.tsx',
-  // These are editors/composers with selection, accessory, or streaming
-  // behavior that is intentionally outside ordinary form-field chrome.
-  'src/components/chat/ChatComposer.tsx',
-  'src/components/console/FileEditorView.tsx',
-  'src/screens/ConsoleScreen/SkillContentScreen.tsx',
+  // This is the sole stock TextInput host. Search, forms, and Composer compose
+  // it rather than controlling native text directly.
+  'src/components/ui/CompositionSafeTextInput.tsx',
 ]);
 const RAW_SHADOW_ALLOWED_FILES = new Set([
   // This preview intentionally renders the user's selected chat presentation,
   // including its optional shadow, rather than ordinary application chrome.
   'src/components/chat/ChatAppearancePreviewCard.tsx',
 ]);
-const EMOJI_LITERAL_ALLOWED_FILES = new Set([
-  // These literals are user-selectable Agent avatar content, not interface
-  // icons. AgentAvatar renders the chosen value as identity data.
-  'src/components/agents/EmojiPicker.tsx',
+const AGENT_PALETTE_ALLOWED_FILES = new Set([
+  'src/components/ui/AgentAvatar.tsx',
 ]);
+const SHEET_CHROME_ALLOWED_DIR_PREFIX = 'src/components/ui/';
+const SHEET_CHROME_PRIMITIVES = new Set([
+  'AdaptiveBottomSheetModal',
+  'AdaptiveBottomSheetModalRef',
+  'SHEET_TIMING_CONFIG',
+  'SheetBackdrop',
+  'SheetDragHandle',
+  'SheetHeader',
+  'SheetHeaderProps',
+  'ThemedFullWindowOverlay',
+  'useSheetBackgroundStyle',
+]);
+const SHEET_CHROME_MODULE_STEMS = new Set([
+  'AdaptiveBottomSheetModal',
+  'SheetBackdrop',
+  'SheetHeader',
+  'ThemedFullWindowOverlay',
+]);
+const EMOJI_LITERAL_ALLOWED_FILES = new Set();
 const SCREEN_DIR_PREFIX = 'src/screens/';
 const SCREEN_FONT_SIZE_LIMIT = 3;
 const EMOJI_LITERAL_RE = /\p{Extended_Pictographic}/u;
+const CANONICAL_TOKEN_MEMBERS = new Map([
+  ['FontSize', new Set(['display', 'title', 'body', 'secondary', 'caption'])],
+  ['LineHeight', new Set(['display', 'title', 'body', 'secondary', 'caption'])],
+  ['FontWeight', new Set(['regular', 'semibold'])],
+  ['Space', new Set(['xs', 'sm', 'md', 'lg', 'xl', 'xxl'])],
+  ['Radius', new Set([
+    'bubble',
+    'card',
+    'settingsGroup',
+    'avatarRoster',
+    'avatarHeader',
+    'avatarSettings',
+    'avatarSheet',
+    'xl',
+    'bottomSheet',
+    'sheet',
+    'full',
+  ])],
+  ['ControlSize', new Set(['pill', 'floatingButton', 'settingsRow', 'rosterRow'])],
+]);
+const CANONICAL_THEME_COLORS = new Set([
+  'canvas',
+  'canvasGrouped',
+  'surface',
+  'surfaceFloating',
+  'ink',
+  'inkSecondary',
+  'inkTertiary',
+  'line',
+  'accent',
+  'accentSoft',
+  'onAccent',
+  'scrim',
+  'good',
+  'goodSoft',
+  'warn',
+  'warnSoft',
+  'bad',
+  'badSoft',
+]);
+const REMOVED_TOKEN_ALIASES = new Set([
+  'SpringPreset',
+  'TimingPreset',
+]);
+const LEGACY_THEME_COLORS = new Set([
+  'background',
+  'surfaceMuted',
+  'surfaceElevated',
+  'border',
+  'borderStrong',
+  'text',
+  'textMuted',
+  'textSubtle',
+  'accent50',
+  'accent100',
+  'accent200',
+  'accent500',
+  'accent700',
+  'primary',
+  'primaryText',
+  'primarySoft',
+  'searchHighlightBg',
+  'success',
+  'successSoft',
+  'warning',
+  'warningSoft',
+  'error',
+  'errorSoft',
+  'info',
+  'infoSoft',
+  'overlay',
+  'debugOverlay',
+  'debugText',
+  'bubbleUser',
+  'bubbleAssistant',
+  'bubbleSystem',
+  'bubbleSystemText',
+  'inputBackground',
+  'imageAddBorder',
+  'imageAddText',
+  'chatPreviewMask',
+  'sidebarBackdrop',
+  'iconOnColor',
+  'sessionBadgeSubagent',
+  'sessionBadgeCron',
+  'sessionBadgeTelegram',
+  'sessionBadgeDiscord',
+  'sessionBadgeSlack',
+  'usageCostOutput',
+  'usageCostInput',
+  'usageCostCacheWrite',
+  'usageCostCacheRead',
+  'badgeModel',
+  'badgeThinking',
+  'badgeTools',
+  'badgePrompts',
+  'chartGrid',
+  'shadow',
+]);
 
 const RULES = {
   'border-radius-literal': 'borderRadius numeric literal — use Radius tokens',
@@ -64,12 +167,12 @@ const M5_RULE_IDS = [
   'screen-font-size-budget',
 ];
 
-function walk(dir, files = []) {
+function walk(dir, files = [], includeTests = false) {
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
     if (statSync(full).isDirectory()) {
-      walk(full, files);
-    } else if (/\.(ts|tsx)$/.test(entry) && !/\.test\.(ts|tsx)$/.test(entry)) {
+      walk(full, files, includeTests);
+    } else if (/\.(ts|tsx)$/.test(entry) && (includeTests || !/\.test\.(ts|tsx)$/.test(entry))) {
       files.push(full);
     }
   }
@@ -82,6 +185,168 @@ function propertyName(node) {
     return name.text;
   }
   return null;
+}
+
+function exactMemberFailures(rel, label, actual, expected) {
+  const failures = [];
+  for (const name of actual) {
+    if (!expected.has(name)) failures.push(`${rel}: ${label} defines noncanonical member ${name}`);
+  }
+  for (const name of expected) {
+    if (!actual.has(name)) failures.push(`${rel}: ${label} is missing canonical member ${name}`);
+  }
+  return failures;
+}
+
+function isThemeColorReceiver(expression, sourceFile, aliases) {
+  const current = unwrap(expression);
+  if (ts.isIdentifier(current) && aliases.has(current.text)) return true;
+  const text = current.getText(sourceFile);
+  return text === 'colors'
+    || text === 'theme.colors'
+    || text === 'LOADING_THEME.colors'
+    || text === 'light.colors'
+    || text === 'dark.colors';
+}
+
+function collectThemeColorAliases(sourceFile) {
+  const aliases = new Set(['colors']);
+  const candidates = [];
+  const visit = (node) => {
+    if (ts.isParameter(node) && ts.isIdentifier(node.name) && node.type) {
+      const type = node.type.getText(sourceFile);
+      if (/\b(?:AppThemeColors|CanonicalThemeColors)\b|AppTheme\[['"]colors['"]\]/.test(type)) {
+        aliases.add(node.name.text);
+      }
+    }
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
+      candidates.push(node);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+
+  let changed;
+  do {
+    changed = false;
+    for (const declaration of candidates) {
+      if (
+        !aliases.has(declaration.name.text)
+        && isThemeColorReceiver(declaration.initializer, sourceFile, aliases)
+      ) {
+        aliases.add(declaration.name.text);
+        changed = true;
+      }
+    }
+  } while (changed);
+  return aliases;
+}
+
+export function validateCanonicalTokenUsage(rel, source) {
+  const sourceFile = ts.createSourceFile(
+    rel,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    rel.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  );
+  const failures = (sourceFile.parseDiagnostics ?? []).map((diagnostic) => (
+    `${rel}: canonical token validation parse failed: ${ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n')}`
+  ));
+  const themeColorAliases = collectThemeColorAliases(sourceFile);
+  const lineOf = (node) => sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
+  const add = (node, message) => failures.push(`${rel}:${lineOf(node)} ${message}`);
+
+  const visit = (node) => {
+    if (ts.isIdentifier(node) && REMOVED_TOKEN_ALIASES.has(node.text)) {
+      add(node, `${node.text} is a removed token alias; use Motion with ease-out`);
+    }
+    if (ts.isPropertyAccessExpression(node) && ts.isIdentifier(node.expression)) {
+      const allowed = CANONICAL_TOKEN_MEMBERS.get(node.expression.text);
+      if (allowed && !allowed.has(node.name.text)) {
+        add(node, `${node.expression.text}.${node.name.text} is not a canonical 3.0 token`);
+      }
+    }
+    if (
+      ts.isPropertyAccessExpression(node)
+      && isThemeColorReceiver(node.expression, sourceFile, themeColorAliases)
+      && LEGACY_THEME_COLORS.has(node.name.text)
+    ) {
+      add(node, `${node.name.text} is a removed theme color alias`);
+    }
+    if (
+      ts.isElementAccessExpression(node)
+      && node.argumentExpression
+      && (ts.isStringLiteral(node.argumentExpression) || ts.isNoSubstitutionTemplateLiteral(node.argumentExpression))
+      && isThemeColorReceiver(node.expression, sourceFile, themeColorAliases)
+      && LEGACY_THEME_COLORS.has(node.argumentExpression.text)
+    ) {
+      add(node, `${node.argumentExpression.text} is a removed theme color alias`);
+    }
+    if (
+      ts.isVariableDeclaration(node)
+      && ts.isObjectBindingPattern(node.name)
+      && node.initializer
+      && isThemeColorReceiver(node.initializer, sourceFile, themeColorAliases)
+    ) {
+      for (const element of node.name.elements) {
+        const name = element.propertyName
+          ? propertyName({ name: element.propertyName })
+          : propertyName(element);
+        if (name && LEGACY_THEME_COLORS.has(name)) {
+          add(element, `${name} is a removed theme color alias`);
+        }
+      }
+    }
+    if (ts.isIdentifier(node) && node.text === 'LegacyThemeColorAliases') {
+      add(node, 'LegacyThemeColorAliases is removed');
+    }
+
+    if (
+      rel === 'src/theme/tokens.ts'
+      && ts.isVariableDeclaration(node)
+      && ts.isIdentifier(node.name)
+      && CANONICAL_TOKEN_MEMBERS.has(node.name.text)
+      && node.initializer
+    ) {
+      const initializer = unwrap(node.initializer);
+      if (!ts.isObjectLiteralExpression(initializer)) {
+        add(node, `${node.name.text} must be an object literal so canonical members can be audited`);
+      } else {
+        const actual = new Set(initializer.properties.map(propertyName).filter(Boolean));
+        failures.push(...exactMemberFailures(
+          rel,
+          node.name.text,
+          actual,
+          CANONICAL_TOKEN_MEMBERS.get(node.name.text),
+        ));
+      }
+    }
+
+    if (
+      rel === 'src/theme/theme.ts'
+      && ts.isTypeAliasDeclaration(node)
+      && node.name.text === 'CanonicalThemeColors'
+    ) {
+      if (!ts.isTypeLiteralNode(node.type)) {
+        add(node, 'CanonicalThemeColors must be a type literal so semantic members can be audited');
+      } else {
+        const actual = new Set(node.type.members.map(propertyName).filter(Boolean));
+        failures.push(...exactMemberFailures(rel, 'CanonicalThemeColors', actual, CANONICAL_THEME_COLORS));
+      }
+    }
+
+    if (
+      rel === 'src/theme/theme.ts'
+      && (ts.isPropertySignature(node) || ts.isPropertyAssignment(node))
+      && LEGACY_THEME_COLORS.has(propertyName(node))
+    ) {
+      add(node, `${propertyName(node)} must not be defined in the 3.0 theme palette`);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return failures;
 }
 
 function declarationName(node) {
@@ -417,8 +682,7 @@ export function validateBottomTabSafety(appSource, packageJson) {
 
 export function validateTabBarHeightUsage(rel, source) {
   if (!/\buseTabBarHeight\b/.test(source)) return [];
-  if (TAB_BAR_HEIGHT_ALLOWED_FILES.has(rel)) return [];
-  return [`${rel}: useTabBarHeight is reserved for physical overlays and keyboard policies; JS tab scenes already exclude the bar`];
+  return [`${rel}: useTabBarHeight is not allowed after the single-root-stack migration`];
 }
 
 export function validateNativeSwitchUsage(rel, source) {
@@ -428,9 +692,53 @@ export function validateNativeSwitchUsage(rel, source) {
 }
 
 export function validateNativeTextInputUsage(rel, source) {
-  if (!/<TextInput\b/.test(source)) return [];
   if (NATIVE_TEXT_INPUT_ALLOWED_FILES.has(rel)) return [];
-  return [`${rel}: native TextInput is reserved for FormTextInput, SearchInput, and documented editor/composer exceptions`];
+  const sourceFile = ts.createSourceFile(
+    rel,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX,
+  );
+  const directImports = new Set();
+  const namespaceImports = new Set();
+
+  for (const statement of sourceFile.statements) {
+    if (
+      !ts.isImportDeclaration(statement)
+      || !ts.isStringLiteral(statement.moduleSpecifier)
+      || statement.moduleSpecifier.text !== 'react-native'
+    ) continue;
+    const bindings = statement.importClause?.namedBindings;
+    if (bindings && ts.isNamedImports(bindings)) {
+      for (const specifier of bindings.elements) {
+        if ((specifier.propertyName ?? specifier.name).text === 'TextInput') {
+          directImports.add(specifier.name.text);
+        }
+      }
+    } else if (bindings && ts.isNamespaceImport(bindings)) {
+      namespaceImports.add(bindings.name.text);
+    }
+  }
+
+  let foundNativeHost = false;
+  const visit = (node) => {
+    if (foundNativeHost) return;
+    if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
+      const tagName = node.tagName.getText(sourceFile);
+      const isNativeHost = directImports.has(tagName)
+        || [...namespaceImports].some((name) => tagName === `${name}.TextInput`);
+      if (isNativeHost) {
+        foundNativeHost = true;
+        return;
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return foundNativeHost
+    ? [`${rel}: native TextInput is reserved for CompositionSafeTextInput`]
+    : [];
 }
 
 export function validateRawShadowUsage(rel, source) {
@@ -442,6 +750,66 @@ export function validateRawShadowUsage(rel, source) {
   return hasRawShadow
     ? [`${rel}: raw Shadow tokens must go through createThemedShadowStyle/createSurfaceStyle for dark-mode safety`]
     : [];
+}
+
+export function validateAgentPaletteOwnership(rel, source) {
+  if (AGENT_PALETTE_ALLOWED_FILES.has(rel) || !/\bagentPalette\b/u.test(source)) return [];
+  return [`${rel}: agentPalette is reserved for AgentAvatar; use a semantic ink color`];
+}
+
+export function validateSheetChromeOwnership(rel, source) {
+  if (rel.startsWith(SHEET_CHROME_ALLOWED_DIR_PREFIX)) return [];
+  const sourceFile = ts.createSourceFile(
+    rel,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    rel.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  );
+  const failures = [];
+  const namespaceImports = new Set();
+  const lineOf = (node) => sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
+  const add = (node, name) => failures.push(
+    `${rel}:${lineOf(node)} sheet chrome primitive ${name} is reserved for src/components/ui; compose Sheet instead`,
+  );
+
+  for (const statement of sourceFile.statements) {
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
+    const moduleName = statement.moduleSpecifier.text;
+    const moduleStem = moduleName.split('/').at(-1);
+    const importsUiBarrel = /(?:^|\/)ui(?:\/index)?$/.test(moduleName);
+    const importsChromeModule = moduleStem && SHEET_CHROME_MODULE_STEMS.has(moduleStem);
+    if (importsChromeModule) {
+      add(statement.moduleSpecifier, moduleStem);
+      continue;
+    }
+    if (!importsUiBarrel) continue;
+    const bindings = statement.importClause?.namedBindings;
+    if (bindings && ts.isNamedImports(bindings)) {
+      for (const specifier of bindings.elements) {
+        const importedName = (specifier.propertyName ?? specifier.name).text;
+        if (SHEET_CHROME_PRIMITIVES.has(importedName)) add(specifier, importedName);
+      }
+    } else if (bindings && ts.isNamespaceImport(bindings)) {
+      namespaceImports.add(bindings.name.text);
+    }
+  }
+
+  if (namespaceImports.size > 0) {
+    const visit = (node) => {
+      if (
+        ts.isPropertyAccessExpression(node)
+        && ts.isIdentifier(node.expression)
+        && namespaceImports.has(node.expression.text)
+        && SHEET_CHROME_PRIMITIVES.has(node.name.text)
+      ) {
+        add(node, node.name.text);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(sourceFile);
+  }
+  return failures;
 }
 
 export function validateBaseline(value) {
@@ -526,12 +894,29 @@ for (const file of files) {
   hardFailures.push(...validateNativeSwitchUsage(rel, source));
   hardFailures.push(...validateNativeTextInputUsage(rel, source));
   hardFailures.push(...validateRawShadowUsage(rel, source));
+  hardFailures.push(...validateAgentPaletteOwnership(rel, source));
+  hardFailures.push(...validateSheetChromeOwnership(rel, source));
   for (const { ruleId, line } of result.violations) {
     const fileCounts = (counts[rel] ??= {});
     fileCounts[ruleId] = (fileCounts[ruleId] ?? 0) + 1;
     const fileDetails = (details[rel] ??= {});
     (fileDetails[ruleId] ??= []).push(`${rel}:${line} ${RULES[ruleId]}`);
   }
+}
+
+let canonicalTokenScanCount = 0;
+try {
+  const sourceFiles = walk(join(ROOT, 'src'), [], true);
+  if (sourceFiles.length === 0) throw new Error('src contains no TypeScript sources');
+  canonicalTokenScanCount = sourceFiles.length + 1;
+  for (const file of sourceFiles) {
+    const rel = relative(ROOT, file);
+    const source = readFileSync(file, 'utf8');
+    if (!source.trim()) hardFailures.push(`${rel}: token-audited source file is empty`);
+    hardFailures.push(...validateCanonicalTokenUsage(rel, source));
+  }
+} catch (error) {
+  hardFailures.push(`cannot validate canonical token usage: ${error instanceof Error ? error.message : String(error)}`);
 }
 
 try {
@@ -543,6 +928,7 @@ try {
   if (!packageJson || typeof packageJson !== 'object' || Array.isArray(packageJson)) {
     throw new Error('package.json root must be an object');
   }
+  hardFailures.push(...validateCanonicalTokenUsage('App.tsx', appSource));
   hardFailures.push(...validateBottomTabSafety(appSource, packageJson));
 } catch (error) {
   hardFailures.push(`cannot validate bottom-tab safety: ${error instanceof Error ? error.message : String(error)}`);
@@ -550,6 +936,7 @@ try {
 
 const scopeSummary = SCAN_DIRS.map((dir) => `${dir}=${scopeCounts[dir] ?? 0}`).join(', ');
 console.log(`[check-ui-style] scanned ${files.length} UI source files (${scopeSummary})`);
+console.log(`[check-ui-style] canonical token coverage: ${canonicalTokenScanCount} production/test TypeScript sources`);
 console.log(`[check-ui-style] M5 rule coverage: list-row and emoji=${files.length} files; screen FontSize=${scopeCounts['src/screens'] ?? 0} files`);
 console.log(`[check-ui-style] M5 tracked debt: ${M5_RULE_IDS.map((ruleId) => {
   let violations = 0;

@@ -7,6 +7,20 @@ import { cleanupTempDirectories, createTempDirectory } from './test-helpers.js';
 afterEach(cleanupTempDirectories);
 
 describe('HermesBridgeSessionStore', () => {
+  it('advertises every action for a Bridge-owned main session', async () => {
+    const directory = await createTempDirectory();
+    const store = new HermesBridgeSessionStore(join(directory, 'sessions.json'));
+    store.createSession({ key: 'main', title: 'Hermes' });
+
+    expect(store.listSessions(1)[0]).toMatchObject({
+      key: 'main',
+      source: 'bridge',
+      kind: 'main',
+      allowedActions: { rename: true, reset: true, delete: true, pin: true },
+    });
+    await store.flush();
+  });
+
   it('keeps one key-to-current-session index and rotates the id on reset', async () => {
     const directory = await createTempDirectory();
     const store = new HermesBridgeSessionStore(join(directory, 'sessions.json'));

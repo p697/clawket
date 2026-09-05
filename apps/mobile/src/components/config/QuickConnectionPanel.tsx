@@ -3,7 +3,7 @@ import { StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { Cloud, Link2 } from 'lucide-react-native';
 import { useAppTheme } from '../../theme';
-import { ControlSize, FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
+import { FontSize, FontWeight, HitSize, Radius, Space } from '../../theme/tokens';
 import { Button, Card } from '../ui';
 
 type QuickConnectionTarget = 'local' | 'youmind';
@@ -28,19 +28,19 @@ export function QuickConnectionPanel({ onSelectTarget, style }: Props): React.JS
   const cards = useMemo<QuickConnectionCard[]>(() => [
     {
       key: 'local',
-      icon: <Link2 size={18} color={theme.colors.primary} strokeWidth={2.1} />,
+      icon: <Link2 size={18} color={theme.colors.accent} strokeWidth={2.1} />,
       title: t('Local Agents'),
       description: t('Run the Clawket pairing command on your computer, then enter the code it shows.'),
       badges: [t('OpenClaw'), t('Hermes')],
     },
     {
       key: 'youmind',
-      icon: <Cloud size={18} color={theme.colors.primary} strokeWidth={2.1} />,
+      icon: <Cloud size={18} color={theme.colors.accent} strokeWidth={2.1} />,
       title: t('Cloud Agents'),
       description: t('Sign in directly on this device. No computer setup required.'),
       badges: [t('YouMind')],
     },
-  ], [t, theme.colors.primary]);
+  ], [t, theme.colors.accent]);
 
   return (
     <View style={style}>
@@ -81,14 +81,14 @@ export function QuickConnectionPanel({ onSelectTarget, style }: Props): React.JS
 function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors']) {
   return StyleSheet.create({
     quickHint: {
-      fontSize: FontSize.md,
-      color: colors.textMuted,
+      fontSize: FontSize.caption,
+      color: colors.inkSecondary,
       lineHeight: 20,
       marginBottom: Space.lg,
       textAlign: 'center',
     },
     quickGroupCard: {
-      borderRadius: Radius.lg,
+      borderRadius: Radius.card,
       marginBottom: Space.md,
     },
     quickGroupHeader: {
@@ -101,21 +101,21 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       gap: Space.xs,
     },
     quickGroupIcon: {
-      width: ControlSize.compact,
-      height: ControlSize.compact,
+      width: HitSize.sm,
+      height: HitSize.sm,
       borderRadius: Radius.full,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: colors.primarySoft,
+      backgroundColor: colors.accentSoft,
     },
     quickGroupTitle: {
-      color: colors.text,
-      fontSize: FontSize.base,
+      color: colors.ink,
+      fontSize: FontSize.secondary,
       fontWeight: FontWeight.semibold,
     },
     quickGroupSubtitle: {
-      color: colors.textMuted,
-      fontSize: FontSize.sm,
+      color: colors.inkSecondary,
+      fontSize: FontSize.caption,
       lineHeight: 18,
     },
     quickBadgeRow: {
@@ -126,14 +126,14 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       marginBottom: Space.sm,
     },
     quickBadge: {
-      backgroundColor: colors.surfaceMuted,
+      backgroundColor: colors.surface,
       borderRadius: Radius.full,
       paddingHorizontal: Space.sm,
       paddingVertical: 6,
     },
     quickBadgeText: {
-      color: colors.text,
-      fontSize: FontSize.xs,
+      color: colors.ink,
+      fontSize: FontSize.caption,
       fontWeight: FontWeight.semibold,
     },
     quickAction: {

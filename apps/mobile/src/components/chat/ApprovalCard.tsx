@@ -58,18 +58,18 @@ export function ApprovalCard({
     const resolvedStatus = status === 'pending' ? 'expired' : status;
     const icon =
       resolvedStatus === 'allowed'
-        ? <ShieldCheck size={14} color={theme.colors.success} strokeWidth={2} />
+        ? <ShieldCheck size={14} color={theme.colors.good} strokeWidth={2} />
         : resolvedStatus === 'denied'
-        ? <ShieldX size={14} color={theme.colors.error} strokeWidth={2} />
-        : <Timer size={14} color={theme.colors.textSubtle} strokeWidth={2} />;
+        ? <ShieldX size={14} color={theme.colors.bad} strokeWidth={2} />
+        : <Timer size={14} color={theme.colors.inkTertiary} strokeWidth={2} />;
     const label =
       resolvedStatus === 'allowed' ? 'Allowed' : resolvedStatus === 'denied' ? 'Denied' : 'Expired';
     const labelColor =
       resolvedStatus === 'allowed'
-        ? theme.colors.success
+        ? theme.colors.good
         : resolvedStatus === 'denied'
-        ? theme.colors.error
-        : theme.colors.textSubtle;
+        ? theme.colors.bad
+        : theme.colors.inkTertiary;
 
     return (
       <View style={styles.row}>
@@ -86,7 +86,7 @@ export function ApprovalCard({
     <View style={styles.row}>
       <View style={styles.card}>
         <View style={styles.header}>
-          <Shield size={16} color={theme.colors.warning} strokeWidth={2} />
+          <Shield size={16} color={theme.colors.warn} strokeWidth={2} />
           <Text style={styles.title}>Command Approval</Text>
         </View>
 
@@ -99,7 +99,7 @@ export function ApprovalCard({
         )}
 
         <View style={styles.timerRow}>
-          <Timer size={12} color={theme.colors.textSubtle} strokeWidth={2} />
+          <Timer size={12} color={theme.colors.inkTertiary} strokeWidth={2} />
           <Text style={styles.timerText}>Expires in {formatCountdown(remaining)}</Text>
         </View>
 
@@ -137,9 +137,9 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'],
     },
     card: {
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.warning,
+      borderColor: colors.warn,
       backgroundColor: colors.surface,
-      borderRadius: Radius.md,
+      borderRadius: Radius.card,
       padding: Space.md,
       marginLeft: reserveAvatarSlot ? AGENT_AVATAR_SLOT_WIDTH : 0,
       gap: Space.sm,
@@ -150,27 +150,27 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'],
       gap: Space.sm,
     },
     title: {
-      color: colors.text,
-      fontSize: FontSize.base,
+      color: colors.ink,
+      fontSize: FontSize.secondary,
       fontWeight: FontWeight.semibold,
     },
     commandBlock: {
-      backgroundColor: colors.surfaceMuted,
-      borderRadius: Radius.sm,
+      backgroundColor: colors.surface,
+      borderRadius: Radius.card,
       paddingHorizontal: Space.sm + 2,
       paddingVertical: Space.sm,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
+      borderColor: colors.line,
     },
     commandText: {
-      color: colors.text,
-      fontSize: FontSize.sm,
+      color: colors.ink,
+      fontSize: FontSize.caption,
       fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace' }),
       lineHeight: 17,
     },
     meta: {
-      color: colors.textSubtle,
-      fontSize: FontSize.xs,
+      color: colors.inkTertiary,
+      fontSize: FontSize.caption,
       fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace' }),
     },
     timerRow: {
@@ -179,8 +179,8 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'],
       gap: Space.xs,
     },
     timerText: {
-      color: colors.textSubtle,
-      fontSize: FontSize.xs,
+      color: colors.inkTertiary,
+      fontSize: FontSize.caption,
     },
     actions: {
       flexDirection: 'row',
@@ -191,43 +191,43 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'],
       flex: 1,
       alignItems: 'center',
       paddingVertical: Space.sm,
-      borderRadius: Radius.sm,
+      borderRadius: Radius.full,
       borderWidth: StyleSheet.hairlineWidth,
     },
     denyBtn: {
-      borderColor: colors.error,
+      borderColor: colors.bad,
       backgroundColor: colors.surface,
     },
     denyBtnPressed: {
-      backgroundColor: colors.surfaceMuted,
+      backgroundColor: colors.surface,
     },
     denyText: {
-      color: colors.error,
-      fontSize: FontSize.sm,
+      color: colors.bad,
+      fontSize: FontSize.caption,
       fontWeight: FontWeight.semibold,
     },
     allowOnceBtn: {
-      borderColor: colors.primary,
-      backgroundColor: colors.primary,
+      borderColor: colors.accent,
+      backgroundColor: colors.accent,
     },
     allowOnceBtnPressed: {
       opacity: 0.88,
     },
     allowOnceText: {
-      color: colors.primaryText,
-      fontSize: FontSize.sm,
+      color: colors.onAccent,
+      fontSize: FontSize.caption,
       fontWeight: FontWeight.semibold,
     },
     allowAlwaysBtn: {
-      borderColor: colors.success,
+      borderColor: colors.good,
       backgroundColor: colors.surface,
     },
     allowAlwaysBtnPressed: {
-      backgroundColor: colors.surfaceMuted,
+      backgroundColor: colors.surface,
     },
     allowAlwaysText: {
-      color: colors.success,
-      fontSize: FontSize.sm,
+      color: colors.good,
+      fontSize: FontSize.caption,
       fontWeight: FontWeight.semibold,
     },
     // Resolved compact state
@@ -236,21 +236,21 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'],
       alignItems: 'center',
       gap: Space.sm - 2,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
-      backgroundColor: colors.surfaceMuted,
-      borderRadius: Radius.sm,
+      borderColor: colors.line,
+      backgroundColor: colors.surface,
+      borderRadius: Radius.card,
       paddingHorizontal: Space.sm + 2,
       paddingVertical: Space.sm,
       marginLeft: reserveAvatarSlot ? AGENT_AVATAR_SLOT_WIDTH : 0,
     },
     resolvedText: {
-      fontSize: FontSize.md,
+      fontSize: FontSize.caption,
       fontWeight: FontWeight.semibold,
     },
     resolvedCommand: {
       flex: 1,
-      color: colors.textMuted,
-      fontSize: FontSize.md,
+      color: colors.inkSecondary,
+      fontSize: FontSize.caption,
       fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace' }),
     },
   });

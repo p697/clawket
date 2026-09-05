@@ -3,7 +3,7 @@ import * as Clipboard from 'expo-clipboard';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Copy } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
-import { ModalSheet } from '../ui';
+import { Sheet } from '../ui';
 import { useAppTheme } from '../../theme';
 import { MessageUsage } from '../../types/chat';
 import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
@@ -73,8 +73,8 @@ function CopyButton({ text, colors }: { text: string; colors: ReturnType<typeof 
         top: Space.xs,
         right: Space.xs,
         padding: Space.xs,
-        borderRadius: Radius.sm,
-        backgroundColor: copied ? colors.primarySoft : 'transparent',
+        borderRadius: Radius.full,
+        backgroundColor: copied ? colors.accentSoft : 'transparent',
       }}
       onPress={async () => {
         await Clipboard.setStringAsync(text);
@@ -83,8 +83,8 @@ function CopyButton({ text, colors }: { text: string; colors: ReturnType<typeof 
       }}
     >
       {copied
-        ? <Text style={{ fontSize: FontSize.xs, color: colors.primary, fontWeight: FontWeight.semibold }}>✓</Text>
-        : <Copy size={13} color={colors.textSubtle} strokeWidth={2} />}
+        ? <Text style={{ fontSize: FontSize.caption, color: colors.accent, fontWeight: FontWeight.semibold }}>✓</Text>
+        : <Copy size={13} color={colors.inkTertiary} strokeWidth={2} />}
     </TouchableOpacity>
   );
 }
@@ -92,14 +92,14 @@ function CopyButton({ text, colors }: { text: string; colors: ReturnType<typeof 
 function DurationBadge({ ms, colors }: { ms: number; colors: ReturnType<typeof useAppTheme>['theme']['colors'] }) {
   return (
     <Text style={{
-      color: colors.textMuted,
-      fontSize: FontSize.sm,
+      color: colors.inkSecondary,
+      fontSize: FontSize.caption,
       fontFamily: 'monospace',
       marginRight: Space.sm,
-      backgroundColor: colors.surfaceMuted,
+      backgroundColor: colors.surface,
       paddingHorizontal: Space.xs + 2,
       paddingVertical: 2,
-      borderRadius: Radius.sm,
+      borderRadius: Radius.full,
       overflow: 'hidden',
     }}>
       {formatDuration(ms)}
@@ -157,7 +157,15 @@ export function ToolDetailModal({
   const showTimeSection = typeof s.startedAtMs === 'number' || typeof s.finishedAtMs === 'number';
 
   return (
-    <ModalSheet visible={visible} onClose={onClose} title={s.name} headerRight={durationBadge} maxHeight="70%">
+    <Sheet
+      visible={visible}
+      onClose={onClose}
+      closeAccessibilityLabel={t('Close', { ns: 'common' })}
+      title={s.name}
+      headerRight={durationBadge}
+      maxHeight="70%"
+      testID="tool-detail-sheet"
+    >
       <ScrollView style={styles.modalScroll}>
         {hasArgs && (
           <View style={styles.section}>
@@ -205,7 +213,7 @@ export function ToolDetailModal({
           </View>
         )}
       </ScrollView>
-    </ModalSheet>
+    </Sheet>
   );
 }
 
@@ -221,24 +229,24 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       marginBottom: Space.md,
     },
     sectionLabel: {
-      color: colors.textMuted,
-      fontSize: FontSize.sm,
+      color: colors.inkSecondary,
+      fontSize: FontSize.caption,
       fontWeight: FontWeight.semibold,
       textTransform: 'uppercase',
       letterSpacing: 0.5,
       marginBottom: Space.xs,
     },
     codeBlock: {
-      backgroundColor: colors.surfaceMuted,
+      backgroundColor: colors.surface,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
-      borderRadius: Radius.sm,
+      borderColor: colors.line,
+      borderRadius: Radius.card,
       padding: Space.sm + 2,
       paddingRight: Space.lg + Space.sm,
     },
     codeText: {
-      color: colors.text,
-      fontSize: FontSize.sm,
+      color: colors.ink,
+      fontSize: FontSize.caption,
       lineHeight: 17,
       fontFamily: 'monospace',
     },
@@ -248,13 +256,13 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       gap: Space.md,
     },
     usageItem: {
-      color: colors.text,
-      fontSize: FontSize.sm,
+      color: colors.ink,
+      fontSize: FontSize.caption,
       fontFamily: 'monospace',
     },
     timeItem: {
-      color: colors.text,
-      fontSize: FontSize.sm,
+      color: colors.ink,
+      fontSize: FontSize.caption,
       fontFamily: 'monospace',
       marginBottom: Space.xs,
     },
@@ -262,8 +270,8 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       marginTop: Space.lg,
     },
     emptyText: {
-      color: colors.textMuted,
-      fontSize: FontSize.md,
+      color: colors.inkSecondary,
+      fontSize: FontSize.caption,
       fontStyle: 'italic',
     },
   });

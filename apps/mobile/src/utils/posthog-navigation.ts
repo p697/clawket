@@ -17,8 +17,8 @@ type ScreenDefinition = {
     | 'onboarding'
     | 'roster'
     | 'thread'
-    | 'agent_settings'
-    | 'account_settings'
+    | 'settings'
+    | 'account'
     | 'search'
     | 'paywall';
   kind: 'root' | 'detail' | 'modal';
@@ -45,10 +45,11 @@ export const TRACKED_SCREEN_DEFINITIONS: Record<string, ScreenDefinition> = {
   Onboarding: { name: 'Onboarding', area: 'onboarding', kind: 'root' },
   Roster: { name: 'Roster', area: 'roster', kind: 'root' },
   Thread: { name: 'Thread', area: 'thread', kind: 'detail' },
-  AgentSettings: { name: 'Agent Settings', area: 'agent_settings', kind: 'root' },
-  AgentSettingsSection: { name: 'Agent Settings Section', area: 'agent_settings', kind: 'detail' },
-  AccountSettings: { name: 'Account Settings', area: 'account_settings', kind: 'root' },
-  AccountSettingsSection: { name: 'Account Settings Section', area: 'account_settings', kind: 'detail' },
+  AgentSettings: { name: 'AgentSettings', area: 'settings', kind: 'root' },
+  AgentSettingsSection: { name: 'AgentSettings', area: 'settings', kind: 'detail' },
+  AccountSettings: { name: 'AccountSettings', area: 'account', kind: 'root' },
+  AccountSettingsSection: { name: 'AccountSettings', area: 'account', kind: 'detail' },
+  ChatAppearance: { name: 'ChatAppearance', area: 'account', kind: 'detail' },
   Search: { name: 'Search', area: 'search', kind: 'root' },
   MessageDetail: { name: 'Message Detail', area: 'search', kind: 'detail' },
   Paywall: { name: 'Paywall', area: 'paywall', kind: 'modal' },
@@ -116,8 +117,13 @@ export function getTrackedScreen(state: NavigationState | undefined): TrackedScr
   const snapshot = getActiveRouteSnapshot(state as NavigationLikeState | undefined);
   if (!snapshot) return null;
 
-  const definition = TRACKED_SCREEN_DEFINITIONS[snapshot.leafName];
-  if (!definition) return null;
+  const baseDefinition = TRACKED_SCREEN_DEFINITIONS[snapshot.leafName];
+  if (!baseDefinition) return null;
+  const definition = resolveParameterizedDefinition(
+    snapshot.leafName,
+    snapshot.leafParams,
+    baseDefinition,
+  );
 
   return {
     name: definition.name,
@@ -133,4 +139,57 @@ export function getTrackedScreen(state: NavigationState | undefined): TrackedScr
       ...buildParamPresenceProperties(snapshot.leafParams),
     },
   };
+}
+
+const AGENT_SETTINGS_SECTION_NAMES: Readonly<Record<string, string>> = Object.freeze({
+  identity: 'Identity',
+  models: 'Models',
+  skills: 'Skills',
+  cron: 'Cron',
+  files: 'Files',
+  usage: 'Usage',
+  connection: 'ConnectionStatus',
+  openclaw: 'OpenClawManage',
+  tools: 'Tools',
+  'channels-devices': 'ChannelsDevices',
+  logs: 'Logs',
+});
+
+const ACCOUNT_SETTINGS_SECTION_NAMES: Readonly<Record<string, string>> = Object.freeze({
+  pro: 'AccountPro',
+  connections: 'AccountConnections',
+  appearance: 'AccountAppearance',
+  voice: 'AccountVoice',
+  notifications: 'AccountNotifications',
+  help: 'AccountHelp',
+  community: 'AccountCommunity',
+  about: 'AccountAbout',
+  developer: 'AccountDeveloper',
+});
+
+function resolveParameterizedDefinition(
+  routeName: string,
+  params: unknown,
+  fallback: ScreenDefinition,
+): ScreenDefinition {
+  const section = readStringParam(params, 'section');
+  if (routeName === 'AgentSettingsSection' && section) {
+    return {
+      ...fallback,
+      name: AGENT_SETTINGS_SECTION_NAMES[section] ?? fallback.name,
+    };
+  }
+  if (routeName === 'AccountSettingsSection' && section) {
+    return {
+      ...fallback,
+      name: ACCOUNT_SETTINGS_SECTION_NAMES[section] ?? fallback.name,
+    };
+  }
+  return fallback;
+}
+
+function readStringParam(params: unknown, key: string): string | null {
+  if (!params || typeof params !== 'object' || Array.isArray(params)) return null;
+  const value = (params as Record<string, unknown>)[key];
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
 }

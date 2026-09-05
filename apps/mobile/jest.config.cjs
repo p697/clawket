@@ -15,6 +15,7 @@ const config = {
   testEnvironment: 'node',
   moduleNameMapper: {
     '^react-native$': '<rootDir>/__mocks__/react-native.ts',
+    '^@mattermost/react-native-paste-input$': '<rootDir>/__mocks__/react-native-paste-input.tsx',
   },
 };
 

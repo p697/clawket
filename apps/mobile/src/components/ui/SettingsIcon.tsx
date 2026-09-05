@@ -2,7 +2,9 @@ import React, { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import type { LucideIcon } from 'lucide-react-native';
 import { useAppTheme } from '../../theme';
-import { ControlSize, Radius } from '../../theme/tokens';
+import { Radius } from '../../theme/tokens';
+
+const SETTINGS_ICON_SIZE = 32;
 
 export type SettingsIconTone = 'accent' | 'info' | 'success' | 'warning' | 'danger' | 'neutral';
 
@@ -24,12 +26,12 @@ export function SettingsIcon({
   const { theme } = useAppTheme();
   const palette = useMemo(() => {
     switch (tone) {
-      case 'info': return { foreground: theme.colors.info, background: theme.colors.infoSoft };
-      case 'success': return { foreground: theme.colors.success, background: theme.colors.successSoft };
-      case 'warning': return { foreground: theme.colors.warning, background: theme.colors.warningSoft };
-      case 'danger': return { foreground: theme.colors.error, background: theme.colors.errorSoft };
-      case 'neutral': return { foreground: theme.colors.textMuted, background: theme.colors.surfaceMuted };
-      default: return { foreground: theme.colors.primary, background: theme.colors.primarySoft };
+      case 'info': return { foreground: theme.colors.accent, background: theme.colors.accentSoft };
+      case 'success': return { foreground: theme.colors.good, background: theme.colors.goodSoft };
+      case 'warning': return { foreground: theme.colors.warn, background: theme.colors.warnSoft };
+      case 'danger': return { foreground: theme.colors.bad, background: theme.colors.badSoft };
+      case 'neutral': return { foreground: theme.colors.inkSecondary, background: theme.colors.surface };
+      default: return { foreground: theme.colors.accent, background: theme.colors.accentSoft };
     }
   }, [theme.colors, tone]);
 
@@ -47,9 +49,9 @@ export function SettingsIcon({
 
 const styles = StyleSheet.create({
   badge: {
-    width: ControlSize.settingsIcon,
-    height: ControlSize.settingsIcon,
-    borderRadius: Radius.md,
+    width: SETTINGS_ICON_SIZE,
+    height: SETTINGS_ICON_SIZE,
+    borderRadius: Radius.avatarSheet,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,

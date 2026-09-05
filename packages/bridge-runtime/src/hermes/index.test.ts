@@ -9,8 +9,16 @@ import {
   initializeHermesStateDb,
 } from './test-helpers.js';
 
+const bridges: HermesLocalBridge[] = [];
+
+function trackBridge(bridge: HermesLocalBridge): HermesLocalBridge {
+  bridges.push(bridge);
+  return bridge;
+}
+
 afterEach(async () => {
   vi.unstubAllGlobals();
+  await Promise.all(bridges.splice(0).map((bridge) => bridge.stop()));
   await cleanupTempDirectories();
 });
 
@@ -24,7 +32,7 @@ async function createBridgeWithDb(input?: {
   return {
     directory,
     dbPath,
-    bridge: new HermesLocalBridge({
+    bridge: trackBridge(new HermesLocalBridge({
       hermesStateDbPath: dbPath,
       hermesHomePath: join(directory, 'home'),
       hermesSourcePath: join(directory, 'missing-source'),
@@ -32,7 +40,7 @@ async function createBridgeWithDb(input?: {
       sessionStorePath: join(directory, 'sessions.json'),
       usageLedgerPath: join(directory, 'usage.json'),
       startHermesIfNeeded: false,
-    }),
+    })),
   };
 }
 
@@ -62,7 +70,7 @@ describe('HermesLocalBridge multi-session protocol', () => {
     expect(listed.sessions[0]).toMatchObject({
       preview: '',
       source: 'native',
-      allowedActions: { rename: false, reset: false, delete: false, pin: false },
+      allowedActions: { rename: false, reset: false, delete: false, pin: true },
     });
     await expect(bridge.dispatchRequest('sessions.delete', { key: 'native' })).rejects.toThrow(/read-only/);
     await expect(bridge.dispatchRequest('sessions.patch', { title: 'oops' })).rejects.toThrow(/requires key/);
@@ -111,13 +119,13 @@ describe('HermesLocalBridge multi-session protocol', () => {
   it('keeps an old cursor stable while local same-timestamp messages are partially persisted', async () => {
     const directory = await createTempDirectory();
     const dbPath = join(directory, 'state.db');
-    const bridge = new HermesLocalBridge({
+    const bridge = trackBridge(new HermesLocalBridge({
       hermesStateDbPath: dbPath,
       hermesHomePath: join(directory, 'home'),
       hermesSourcePath: join(directory, 'missing'),
       hermesPythonPath: 'python3',
       sessionStorePath: join(directory, 'sessions.json'),
-    });
+    }));
     const created = await bridge.dispatchRequest('sessions.create', { title: 'Migrating' }) as any;
     for (let index = 1; index <= 5; index += 1) {
       bridge.sessionStore.appendMessage(created.session.key, {
@@ -171,13 +179,13 @@ describe('HermesLocalBridge multi-session protocol', () => {
   it('matches a partially persisted repeated message to the nearest local timestamp', async () => {
     const directory = await createTempDirectory();
     const dbPath = join(directory, 'state.db');
-    const bridge = new HermesLocalBridge({
+    const bridge = trackBridge(new HermesLocalBridge({
       hermesStateDbPath: dbPath,
       hermesHomePath: join(directory, 'home'),
       hermesSourcePath: join(directory, 'missing'),
       hermesPythonPath: 'python3',
       sessionStorePath: join(directory, 'sessions.json'),
-    });
+    }));
     const created = await bridge.dispatchRequest('sessions.create', { title: 'Repeated' }) as any;
     bridge.sessionStore.appendMessage(created.session.key, {
       role: 'user',
@@ -209,13 +217,13 @@ describe('HermesLocalBridge multi-session protocol', () => {
   it('keeps a repeated local cursor stable when a later same-timestamp native row appears', async () => {
     const directory = await createTempDirectory();
     const dbPath = join(directory, 'state.db');
-    const bridge = new HermesLocalBridge({
+    const bridge = trackBridge(new HermesLocalBridge({
       hermesStateDbPath: dbPath,
       hermesHomePath: join(directory, 'home'),
       hermesSourcePath: join(directory, 'missing'),
       hermesPythonPath: 'python3',
       sessionStorePath: join(directory, 'sessions.json'),
-    });
+    }));
     const created = await bridge.dispatchRequest('sessions.create', { title: 'Repeated cursor' }) as any;
     for (let index = 1; index <= 4; index += 1) {
       bridge.sessionStore.appendMessage(created.session.key, {
@@ -271,7 +279,7 @@ describe('HermesLocalBridge multi-session protocol', () => {
       sessionStorePath: join(directory, 'sessions.json'),
       usageLedgerPath: join(directory, 'usage.json'),
     };
-    const firstBridge = new HermesLocalBridge(options);
+    const firstBridge = trackBridge(new HermesLocalBridge(options));
     const created = await firstBridge.dispatchRequest('sessions.create', { title: 'Repeat' }) as any;
     await firstBridge.sessionStore.flush();
     initializeHermesStateDb(dbPath, [{ id: created.session.sessionId, source: 'api_server' }], [{
@@ -286,7 +294,7 @@ describe('HermesLocalBridge multi-session protocol', () => {
         ? Response.json({ run_id: 'repeat-run' })
         : new Response('data: {"event":"run.completed","output":"done"}\n\n')
     )));
-    const restarted = new HermesLocalBridge(options);
+    const restarted = trackBridge(new HermesLocalBridge(options));
     await restarted.dispatchRequest('chat.send', {
       sessionKey: created.session.key,
       message: 'same',
@@ -394,13 +402,13 @@ describe('HermesLocalBridge multi-session protocol', () => {
     const directory = await createTempDirectory();
     const dbPath = join(directory, 'state.db');
     await writeFile(dbPath, 'broken sqlite');
-    const bridge = new HermesLocalBridge({
+    const bridge = trackBridge(new HermesLocalBridge({
       hermesStateDbPath: dbPath,
       hermesHomePath: join(directory, 'home'),
       hermesSourcePath: join(directory, 'missing'),
       hermesPythonPath: 'python3',
       sessionStorePath: join(directory, 'sessions.json'),
-    });
+    }));
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
     await expect(bridge.dispatchRequest('chat.send', {
@@ -424,7 +432,7 @@ describe('HermesLocalBridge multi-session protocol', () => {
       usageLedgerPath: join(directory, 'usage.json'),
       startHermesIfNeeded: false,
     };
-    const first = new HermesLocalBridge(options);
+    const first = trackBridge(new HermesLocalBridge(options));
     const created = await first.dispatchRequest('sessions.create', { title: 'Persisted' }) as any;
     await first.sessionStore.flush();
     initializeHermesStateDb(dbPath, [{
@@ -438,7 +446,7 @@ describe('HermesLocalBridge multi-session protocol', () => {
       timestamp: 50,
     }]);
 
-    const restarted = new HermesLocalBridge(options);
+    const restarted = trackBridge(new HermesLocalBridge(options));
     const listed = await restarted.dispatchRequest('sessions.list', { limit: 10 }) as any;
     expect(listed.sessions).toEqual([
       expect.objectContaining({

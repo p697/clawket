@@ -17,16 +17,13 @@ export {
   VERIFICATION_CODE_LENGTH,
 } from './model';
 export {
-  assessOnboardingQr,
   getOnboardingPairingCommand,
   normalizePairableBackendKind,
   ONBOARDING_DOCUMENTATION_URLS,
   resolveOnboardingAdapterError,
-  resolveOnboardingQrBackend,
   resolveOnboardingRouteStatus,
 } from './route-model';
 export type {
-  OnboardingQrAssessment,
   OnboardingRouteOperation,
 } from './route-model';
 export type {

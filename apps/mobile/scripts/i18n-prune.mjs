@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import {
+  existsSync,
   readdirSync,
   readFileSync,
   renameSync,
@@ -21,7 +22,6 @@ export const SUPPORTED_LOCALES = Object.freeze([
 ]);
 
 export const SUPPORTED_NAMESPACE_LAYOUTS = Object.freeze([
-  Object.freeze(['chat', 'common', 'config', 'console']),
   Object.freeze(['chat', 'common', 'config', 'settings']),
 ]);
 
@@ -278,6 +278,8 @@ export function listSourceFiles(root) {
     }
   };
   visit(sourceRoot);
+  const appEntry = join(root, 'App.tsx');
+  if (existsSync(appEntry) && shouldScanSourceFile(appEntry)) files.push(appEntry);
   if (files.length === 0) throw new Error(`no TypeScript source files found under ${sourceRoot}`);
   return stable(files);
 }

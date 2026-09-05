@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { spawn, type ChildProcess } from 'node:child_process';
 import WebSocket, { WebSocketServer } from 'ws';
 import { WEBSOCKET_FRAME_LIMIT_BYTES } from '../frame-limit.js';
+import { normalizeBridgeVersion } from '../protocol.js';
 import { HermesCommandMethods, type HermesModelState } from './commands.js';
 import { HermesCronMethods } from './cron.js';
 import { HermesHttpServerMethods, probeHermesApi, type HermesLocalBridgeClient } from './http-server.js';
@@ -80,6 +81,7 @@ export type HermesLocalBridgeOptions = {
   apiKey?: string | null;
   bridgeToken?: string | null;
   displayName?: string | null;
+  bridgeVersion?: string;
   sessionStorePath?: string;
   usageLedgerPath?: string;
   hermesStateDbPath?: string;
@@ -100,6 +102,7 @@ export class HermesLocalBridge {
   readonly apiKey: string | null;
   readonly bridgeToken: string;
   readonly displayName: string;
+  readonly bridgeVersion: string | undefined;
   readonly hermesSourcePath: string;
   readonly hermesHomePath: string;
   readonly hermesPythonPath: string;
@@ -129,6 +132,7 @@ export class HermesLocalBridge {
     this.apiKey = options.apiKey?.trim() || null;
     this.bridgeToken = options.bridgeToken?.trim() || randomUUID();
     this.displayName = options.displayName?.trim() || DEFAULT_AGENT_NAME;
+    this.bridgeVersion = normalizeBridgeVersion(options.bridgeVersion);
     this.hermesSourcePath = options.hermesSourcePath?.trim() || DEFAULT_HERMES_SOURCE_PATH;
     this.hermesHomePath = options.hermesHomePath?.trim() || DEFAULT_HERMES_HOME_PATH;
     this.pythonRunner = new HermesPythonRunner({
@@ -421,6 +425,7 @@ export class HermesLocalBridge {
       hermesApiReachable: reachable,
       mode: 'hermes',
       capabilities: [...HERMES_BRIDGE_CAPABILITIES],
+      ...(this.bridgeVersion ? { bridgeVersion: this.bridgeVersion } : {}),
     });
   }
 
@@ -646,6 +651,7 @@ export class HermesLocalBridge {
           ts: Date.now(),
           hermesApiReachable: this.snapshot.hermesApiReachable,
           capabilities: [...HERMES_BRIDGE_CAPABILITIES],
+          ...(this.bridgeVersion ? { bridgeVersion: this.bridgeVersion } : {}),
         });
       case 'sessions.list': {
         const defaults = this.getHermesSessionListDefaults();

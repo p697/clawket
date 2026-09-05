@@ -56,4 +56,28 @@ describe('HermesRelayPairingService', () => {
       accessCode: 'ABCD23',
     })).rejects.toThrow('This Hermes Relay QR code has expired. Generate a new QR code in Clawket Bridge and try again.');
   });
+
+  it('claims a six-character code without a bridge id', async () => {
+    global.fetch = jest.fn().mockResolvedValue(new Response(JSON.stringify({
+      bridgeId: 'hbg_456',
+      relayUrl: 'wss://hermes-relay.example.com/ws',
+      clientToken: 'hct_456',
+      displayName: 'Hermes Studio',
+      region: 'sg',
+    }), { status: 200 })) as jest.Mock;
+
+    await expect(HermesRelayPairingService.claimCode({
+      serverUrl: 'https://hermes-registry.example.com/',
+      pairingCode: 'ab2c34',
+    })).resolves.toMatchObject({
+      bridgeId: 'hbg_456',
+      clientToken: 'hct_456',
+    });
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://hermes-registry.example.com/v1/hermes/pair/claim-code',
+      expect.objectContaining({
+        body: JSON.stringify({ accessCode: 'AB2C34', clientLabel: null }),
+      }),
+    );
+  });
 });

@@ -101,16 +101,16 @@ export function SwipeableGatewayRow({
     ...resolvedExtraActions,
     {
       key: 'edit',
-      backgroundColor: colors.primary,
+      backgroundColor: colors.accent,
       icon: Pencil,
-      iconColor: colors.primaryText,
+      iconColor: colors.onAccent,
       onPress: handleEdit,
     },
     {
       key: 'delete',
-      backgroundColor: colors.error,
+      backgroundColor: colors.bad,
       icon: Trash2,
-      iconColor: colors.iconOnColor,
+      iconColor: colors.onAccent,
       onPress: handleDelete,
     },
   ];

@@ -1,5 +1,6 @@
 import React from 'react';
 import { fireEvent, render } from '@testing-library/react-native';
+import { FontSize } from '../../theme/tokens';
 import type { SearchResult, SearchSection } from './model';
 import { SearchView, type SearchViewProps } from './SearchView';
 
@@ -142,6 +143,19 @@ function flattenStyle(style: unknown): Record<string, unknown> {
   return Object.assign({}, ...style.map(flattenStyle));
 }
 
+type RenderNode = Readonly<{ props: Readonly<Record<string, unknown>> }>;
+
+function renderedFontSizes(view: ReturnType<typeof render>): ReadonlyArray<number> {
+  const sizes = new Set<number>();
+  view.UNSAFE_root
+    .findAll((node: RenderNode) => Boolean(node.props.style))
+    .forEach((node: RenderNode) => {
+      const fontSize = flattenStyle(node.props.style).fontSize;
+      if (typeof fontSize === 'number') sizes.add(fontSize);
+    });
+  return [...sizes].sort((left, right) => left - right);
+}
+
 function result(kind: SearchResult['kind'], patch: Partial<SearchResult> = {}): SearchResult {
   const base = {
     id: `${kind}-id`,
@@ -236,6 +250,22 @@ describe('SearchView', () => {
     mockTheme = { scheme: 'dark', colors: darkColors };
     first.rerender(<SearchView {...props()} />);
     expect(flattenStyle(first.getByTestId('search-view').props.style).backgroundColor).toBe('#0C0C0D');
+  });
+
+  it('keeps the visible copy within the search typography budget and result rows borderless', () => {
+    const view = render(<SearchView {...props()} />);
+
+    expect(renderedFontSizes(view)).toEqual([
+      FontSize.caption,
+      FontSize.secondary,
+      FontSize.body,
+    ].sort((left, right) => left - right));
+    sections.flatMap((section) => section.results).forEach((entry) => {
+      const style = flattenStyle(
+        view.getByTestId(`search-result-${entry.kind}-${entry.id}`).props.style,
+      );
+      expect(style.borderWidth).toBeUndefined();
+    });
   });
 
   it('renders recent searches for an empty query and restores one on press', () => {

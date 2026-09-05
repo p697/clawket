@@ -48,24 +48,23 @@ export async function runHermesPreviewSmoke({
     checks.push('hermes-preview-register');
 
     const claimed = await requestJson(
-      new URL('/v1/hermes/pair/claim', registryBaseUrl),
+      new URL('/v1/hermes/pair/claim-code', registryBaseUrl),
       {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          bridgeId: registered.bridgeId,
           accessCode: registered.accessCode,
           clientLabel: 'Hermes Preview smoke client',
         }),
       },
-      'Hermes Preview claim',
+      'Hermes Preview code claim',
     );
     requireString(claimed, 'clientToken');
     requireString(claimed, 'relayUrl', /^wss?:\/\//);
     if (claimed.bridgeId !== registered.bridgeId) {
-      throw new Error('Hermes Preview claim returned a different bridge identity');
+      throw new Error('Hermes Preview code claim returned a different bridge identity');
     }
-    checks.push('hermes-preview-claim');
+    checks.push('hermes-preview-code-claim');
 
     await requestJson(
       relayHttpUrl(registered.relayUrl, '/v1/health'),

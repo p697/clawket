@@ -1,6 +1,11 @@
-import type { AdapterErrorCode, Capabilities } from '@clawket/agent-protocol';
+import type { AdapterErrorCode, Capabilities, CronJob } from '@clawket/agent-protocol';
+import type { UiMessage } from '../../types/chat';
 import {
+  buildCronRunSeeds,
+  buildThreadTimelineItems,
   deriveThreadContentState,
+  formatThreadLocalDate,
+  formatThreadLocalTime,
   resolveContextRemainingPercent,
   resolveThreadErrorCode,
   resolveThreadErrorDetail,
@@ -144,5 +149,181 @@ describe('Thread model', () => {
     expect(resolveThreadErrorDetail('  relay unavailable  ')).toBe('relay unavailable');
     expect(resolveThreadErrorDetail({ message: '  handshake failed  ' }))
       .toBe('handshake failed');
+  });
+
+  it('projects only Cron runs owned by the current thread and preserves failure state', () => {
+    const currentSessionKey = 'agent:atlas:main';
+    const createJob = (id: string, agentId: string, name: string): CronJob => ({
+      id,
+      agentId,
+      sessionKey: `agent:${agentId}:cron:${id}`,
+      name,
+      enabled: true,
+      createdAtMs: 1,
+      updatedAtMs: 1,
+      schedule: { kind: 'cron', expr: '0 * * * *' },
+      sessionTarget: 'isolated',
+      wakeMode: 'now',
+      payload: { kind: 'agentTurn', message: 'Run' },
+      state: {},
+    });
+
+    expect(buildCronRunSeeds({
+      entries: [
+        {
+          ts: 300,
+          jobId: 'daily-report',
+          action: 'finished',
+          status: 'error',
+          jobName: '[Cron] Daily report',
+          sessionKey: 'agent:atlas:cron:daily-report',
+        },
+        {
+          ts: 400,
+          jobId: 'heartbeat',
+          action: 'finished',
+          status: 'ok',
+          jobName: 'Cron: Heartbeat',
+          sessionKey: 'agent:atlas:cron:heartbeat',
+        },
+        {
+          ts: 200,
+          jobId: 'daily-report',
+          action: 'finished',
+          status: 'ok',
+        },
+        {
+          ts: 500,
+          jobId: 'other-job',
+          action: 'finished',
+          status: 'error',
+          sessionKey: 'agent:other:cron:other-job',
+        },
+      ],
+      jobs: [
+        createJob('daily-report', 'atlas', 'Daily report'),
+        createJob('heartbeat', 'atlas', 'Heartbeat'),
+        createJob('other-job', 'other', 'Other job'),
+      ],
+      currentSessionKey,
+      currentAgentId: 'atlas',
+      isMainAgent: false,
+      fallbackTitle: 'Cron',
+    })).toEqual([
+      expect.objectContaining({
+        id: 'heartbeat:400',
+        sessionKey: 'agent:atlas:cron:heartbeat',
+        agentId: 'atlas',
+        title: 'Heartbeat',
+        status: 'succeeded',
+      }),
+      expect.objectContaining({
+        id: 'daily-report:300',
+        sessionKey: 'agent:atlas:cron:daily-report',
+        agentId: 'atlas',
+        title: 'Daily report',
+        status: 'failed',
+      }),
+    ]);
+  });
+
+  it('keeps a main-agent Cron result visible without inventing a Hermes session target', () => {
+    const job: CronJob = {
+      id: 'hermes-digest',
+      name: 'Digest',
+      enabled: true,
+      createdAtMs: 1,
+      updatedAtMs: 1,
+      schedule: { kind: 'every', everyMs: 60_000 },
+      sessionTarget: 'main',
+      wakeMode: 'now',
+      payload: { kind: 'systemEvent', text: 'Digest' },
+      state: {},
+    };
+    const params = {
+      entries: [{
+        ts: 500,
+        jobId: job.id,
+        action: 'finished' as const,
+        status: 'ok' as const,
+        jobName: 'Digest',
+      }],
+      jobs: [job],
+      currentSessionKey: 'main',
+      currentAgentId: 'main',
+      fallbackTitle: 'Cron',
+    };
+
+    expect(buildCronRunSeeds({ ...params, isMainAgent: true })).toEqual([
+      expect.objectContaining({
+        id: 'hermes-digest:500',
+        jobId: 'hermes-digest',
+        status: 'succeeded',
+      }),
+    ]);
+    expect(buildCronRunSeeds({ ...params, currentAgentId: 'worker', isMainAgent: false }))
+      .toEqual([]);
+    expect(buildCronRunSeeds({ ...params, isMainAgent: true })[0])
+      .not.toHaveProperty('sessionKey');
+  });
+
+  it('builds a stable newest-first inverted timeline with local-date separators', () => {
+    const older = new Date(2026, 8, 4, 10, 15).getTime();
+    const runAt = new Date(2026, 8, 5, 9, 30).getTime();
+    const newer = new Date(2026, 8, 5, 10, 45).getTime();
+    const messages: UiMessage[] = [
+      { id: 'newer', role: 'assistant', text: 'Newer', timestampMs: newer },
+      { id: 'older', role: 'assistant', text: 'Older', timestampMs: older },
+    ];
+    const timeline = buildThreadTimelineItems({
+      messages,
+      runs: [{
+        id: 'agent:atlas:subagent:worker',
+        kind: 'subagent',
+        sessionKey: 'agent:atlas:subagent:worker',
+        agentId: 'atlas',
+        title: 'Worker',
+        status: 'streaming',
+        statusLabel: 'Running',
+        timeLabel: formatThreadLocalTime(runAt, 'en-US'),
+        updatedAt: runAt,
+      }],
+      locale: 'en-US',
+    });
+
+    expect(timeline.map((item) => item.key)).toEqual([
+      'message:newer',
+      'run:subagent:agent:atlas:subagent:worker',
+      'date:2026-09-05',
+      'message:older',
+      'date:2026-09-04',
+    ]);
+    expect(timeline.filter((item) => item.type === 'date').map((item) => item.label)).toEqual([
+      formatThreadLocalDate(newer, 'en-US'),
+      formatThreadLocalDate(older, 'en-US'),
+    ]);
+    expect(formatThreadLocalTime(runAt, 'en-US')).toBe(
+      new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' }).format(runAt),
+    );
+  });
+
+  it('keeps input order stable when timeline timestamps are equal or absent', () => {
+    const timestampMs = new Date(2026, 8, 5, 12).getTime();
+    const timeline = buildThreadTimelineItems({
+      messages: [
+        { id: 'first', role: 'assistant', text: 'First', timestampMs },
+        { id: 'second', role: 'assistant', text: 'Second', timestampMs },
+        { id: 'without-time', role: 'system', text: 'Legacy event' },
+      ],
+      runs: [],
+      locale: 'en-US',
+    });
+
+    expect(timeline.map((item) => item.key)).toEqual([
+      'message:first',
+      'message:second',
+      'date:2026-09-05',
+      'message:without-time',
+    ]);
   });
 });

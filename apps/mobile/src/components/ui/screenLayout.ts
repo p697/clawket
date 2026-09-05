@@ -18,8 +18,8 @@ export const ScreenLayout = {
   listTop: Space.md,
   cardTop: Space.md,
   horizontal: Space.lg,
-  bottom: Space.xxxl - Space.sm,
-  emptyBottom: Space.xxxl,
+  bottom: Space.xxl - Space.sm,
+  emptyBottom: Space.xxl,
 } as const;
 
 export function createListContentStyle({
@@ -38,7 +38,7 @@ export function createListContentStyle({
 
 export function createCardContentStyle({
   top = ScreenLayout.cardTop,
-  bottom = Space.xxxl,
+  bottom = Space.xxl,
   horizontal = ScreenLayout.horizontal,
 }: ContentOptions = {}): ViewStyle {
   return {

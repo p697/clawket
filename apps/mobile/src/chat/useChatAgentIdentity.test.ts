@@ -1,4 +1,5 @@
 import { act, renderHook } from '@testing-library/react-native';
+import { resolveCapabilities, type AgentAdapter } from '@clawket/agent-protocol';
 import { StorageService } from '../services/storage';
 import { useChatAgentIdentity } from './useChatAgentIdentity';
 
@@ -11,12 +12,36 @@ jest.mock('../services/storage', () => ({
   },
 }));
 
-function createGateway(connectionState: 'ready' | 'connecting' = 'connecting') {
-  return {
-    fetchIdentity: jest.fn().mockResolvedValue({}),
-    getBaseUrl: jest.fn(() => 'https://example.com'),
-    getConnectionState: jest.fn(() => connectionState),
+function createAdapter(connectionState: 'ready' | 'connecting' = 'connecting') {
+  const listAgents = jest.fn().mockResolvedValue([{
+    connectionId: 'connection-1',
+    agentId: 'main',
+    name: 'Main',
+    isMain: true,
+    mainSessionKey: 'agent:main:main',
+  }]);
+  const adapter = {
+    connection: {
+      id: 'connection-1',
+      backendKind: 'openclaw' as const,
+      transportKind: 'relay' as const,
+      label: 'OpenClaw',
+      createdAt: 1,
+      isFreeSlot: false,
+    },
+    capabilities: resolveCapabilities('openclaw'),
+    state: connectionState,
+    connect: jest.fn().mockResolvedValue(undefined),
+    disconnect: jest.fn(),
+    probe: jest.fn().mockResolvedValue(true),
+    listAgents,
+    listSessions: jest.fn().mockResolvedValue([]),
+    loadSession: jest.fn().mockResolvedValue({ key: 'main', messages: [], hasActiveRun: false }),
+    prompt: jest.fn().mockResolvedValue({ runId: 'run-1' }),
+    cancel: jest.fn().mockResolvedValue(undefined),
+    on: jest.fn(() => jest.fn()),
   };
+  return adapter as typeof adapter & AgentAdapter;
 }
 
 describe('useChatAgentIdentity', () => {
@@ -24,7 +49,7 @@ describe('useChatAgentIdentity', () => {
     jest.clearAllMocks();
   });
 
-  it('hydrates identity from cached storage before the gateway reconnects', async () => {
+  it('hydrates identity from cached storage before the adapter reconnects', async () => {
     const mockedStorage = StorageService as jest.Mocked<typeof StorageService>;
     const agents: any[] = [];
     mockedStorage.getLastOpenedSessionSnapshot.mockResolvedValueOnce({
@@ -43,13 +68,13 @@ describe('useChatAgentIdentity', () => {
       agentAvatarUri: 'https://example.com/cached.png',
     } as any);
 
-    const gateway = createGateway('connecting');
+    const adapter = createAdapter('connecting');
     const { result } = renderHook(() => useChatAgentIdentity({
       agents,
       cacheAgentName: undefined,
       currentAgentId: 'main',
       currentSessionInfo: undefined,
-      gateway,
+      adapter,
       gatewayConfigId: 'cfg:one',
       initialPreview: null,
       mainSessionKey: 'agent:main:main',
@@ -70,7 +95,7 @@ describe('useChatAgentIdentity', () => {
 
   it('updates identity from loaded agent metadata and persists the cache', async () => {
     const mockedStorage = StorageService as jest.Mocked<typeof StorageService>;
-    const gateway = createGateway('ready');
+    const adapter = createAdapter('ready');
     const agents = [
       {
         id: 'main',
@@ -78,7 +103,7 @@ describe('useChatAgentIdentity', () => {
         identity: {
           name: 'Main Agent',
           emoji: '🤖',
-          avatar: '/avatar.png',
+          avatarUrl: 'https://example.com/avatar.png',
         },
       },
     ];
@@ -92,7 +117,7 @@ describe('useChatAgentIdentity', () => {
         kind: 'unknown',
         sessionId: 'sess-1',
       },
-      gateway,
+      adapter,
       gatewayConfigId: 'cfg:one',
       initialPreview: null,
       mainSessionKey: 'agent:main:main',
@@ -131,13 +156,13 @@ describe('useChatAgentIdentity', () => {
       agentAvatarUri: 'https://example.com/cached-main.png',
     } as any);
 
-    const gateway = createGateway('connecting');
+    const adapter = createAdapter('connecting');
     const { result } = renderHook(() => useChatAgentIdentity({
       agents,
       cacheAgentName: undefined,
       currentAgentId: 'main',
       currentSessionInfo: undefined,
-      gateway,
+      adapter,
       gatewayConfigId: 'cfg:one',
       initialPreview: null,
       mainSessionKey: 'agent:main:main',
@@ -158,7 +183,7 @@ describe('useChatAgentIdentity', () => {
 
   it('persists last-session snapshot and agent cache for a non-main session in the current agent scope', async () => {
     const mockedStorage = StorageService as jest.Mocked<typeof StorageService>;
-    const gateway = createGateway('connecting');
+    const adapter = createAdapter('connecting');
 
     renderHook(() => useChatAgentIdentity({
       agents: [
@@ -168,7 +193,7 @@ describe('useChatAgentIdentity', () => {
           identity: {
             name: 'Writer Agent',
             emoji: '✍️',
-            avatar: '/avatar.png',
+            avatarUrl: 'https://example.com/avatar.png',
           },
         },
       ],
@@ -179,7 +204,7 @@ describe('useChatAgentIdentity', () => {
         kind: 'unknown',
         sessionId: 'sess-writer',
       },
-      gateway,
+      adapter,
       gatewayConfigId: 'cfg:one',
       initialPreview: null,
       mainSessionKey: 'agent:writer:main',
@@ -211,7 +236,7 @@ describe('useChatAgentIdentity', () => {
 
   it('does not hydrate or persist identity when the visible session belongs to another agent', async () => {
     const mockedStorage = StorageService as jest.Mocked<typeof StorageService>;
-    const gateway = createGateway('connecting');
+    const adapter = createAdapter('connecting');
 
     renderHook(() => useChatAgentIdentity({
       agents: [],
@@ -222,7 +247,7 @@ describe('useChatAgentIdentity', () => {
         kind: 'unknown',
         sessionId: 'sess-writer',
       },
-      gateway,
+      adapter,
       gatewayConfigId: 'cfg:one',
       initialPreview: null,
       mainSessionKey: 'agent:main:main',
@@ -242,7 +267,7 @@ describe('useChatAgentIdentity', () => {
 
   it('treats Hermes sessions as in scope when using a backend-scoped main session key', async () => {
     const mockedStorage = StorageService as jest.Mocked<typeof StorageService>;
-    const gateway = createGateway('connecting');
+    const adapter = createAdapter('connecting');
 
     renderHook(() => useChatAgentIdentity({
       agents: [],
@@ -253,7 +278,7 @@ describe('useChatAgentIdentity', () => {
         kind: 'unknown',
         sessionId: '20260411_122441_d40735',
       },
-      gateway,
+      adapter,
       gatewayConfigId: 'cfg:hermes',
       initialPreview: null,
       mainSessionKey: 'main',
@@ -275,37 +300,37 @@ describe('useChatAgentIdentity', () => {
     );
   });
 
-  it('delays gateway identity fetch after ready to avoid contending with session sync', async () => {
+  it('delays adapter identity fetch after ready to avoid contending with session sync', async () => {
     jest.useFakeTimers();
-    const gateway = createGateway('ready');
+    const adapter = createAdapter('ready');
 
     renderHook(() => useChatAgentIdentity({
       agents: [],
       cacheAgentName: undefined,
       currentAgentId: 'main',
       currentSessionInfo: undefined,
-      gateway,
+      adapter,
       gatewayConfigId: 'cfg:one',
       initialPreview: null,
       mainSessionKey: 'agent:main:main',
       sessionKey: 'agent:main:main',
     }));
 
-    expect(gateway.fetchIdentity).not.toHaveBeenCalled();
+    expect(adapter.listAgents).not.toHaveBeenCalled();
 
     await act(async () => {
       jest.advanceTimersByTime(1499);
       await Promise.resolve();
     });
 
-    expect(gateway.fetchIdentity).not.toHaveBeenCalled();
+    expect(adapter.listAgents).not.toHaveBeenCalled();
 
     await act(async () => {
       jest.advanceTimersByTime(1);
       await Promise.resolve();
     });
 
-    expect(gateway.fetchIdentity).toHaveBeenCalledWith('main');
+    expect(adapter.listAgents).toHaveBeenCalledWith();
     jest.useRealTimers();
   });
 
@@ -327,13 +352,13 @@ describe('useChatAgentIdentity', () => {
       agentAvatarUri: 'https://example.com/cached-openclaw.png',
     } as any);
 
-    const gateway = createGateway('connecting');
+    const adapter = createAdapter('connecting');
     const { result } = renderHook(() => useChatAgentIdentity({
       agents: [],
       cacheAgentName: undefined,
       currentAgentId: 'main',
       currentSessionInfo: undefined,
-      gateway,
+      adapter,
       gatewayConfigId: 'cfg:hermes',
       initialPreview: null,
       mainSessionKey: 'main',

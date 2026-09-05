@@ -143,6 +143,38 @@ describe('hermes relay runtime helpers', () => {
     await runtime.stop();
   });
 
+  it('forwards Bridge-version health frames byte-identically', async () => {
+    const sockets: FakeSocket[] = [];
+    const runtime = new HermesRelayRuntime({
+      config: createConfig(),
+      bridgeUrl: 'ws://127.0.0.1:4319/v1/hermes/ws?token=secret',
+      createWebSocket: (url, options) => {
+        const socket = new FakeSocket(url, options);
+        sockets.push(socket);
+        return socket as never;
+      },
+    });
+
+    runtime.start();
+    const relaySocket = sockets[0];
+    relaySocket.open();
+    const bridgeSocket = sockets[1];
+    bridgeSocket.open();
+
+    const initialHealth = '{"type":"event","event":"health","payload":{"status":"ok","bridgeVersion":"3.0.0-test"}}';
+    bridgeSocket.pushText(initialHealth);
+    expect(relaySocket.sent).toEqual([initialHealth]);
+
+    const healthRequest = '{"type":"req","id":"client-health","method":"health","params":{}}';
+    relaySocket.pushText(healthRequest);
+    expect(bridgeSocket.sent).toContain(healthRequest);
+    const healthResponse = '{"type":"res","id":"client-health","ok":true,"payload":{"status":"ok","bridgeVersion":"3.0.0-test"}}';
+    bridgeSocket.pushText(healthResponse);
+    expect(relaySocket.sent).toEqual([initialHealth, healthResponse]);
+
+    await runtime.stop();
+  });
+
   it('enforces the 8 MiB frame boundary on both Hermes relay sockets', async () => {
     const sockets: FakeSocket[] = [];
     const runtime = new HermesRelayRuntime({

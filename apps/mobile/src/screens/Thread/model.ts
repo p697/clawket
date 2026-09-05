@@ -2,8 +2,12 @@ import type {
   AdapterErrorCode,
   Capabilities,
   ConnectionState as AdapterConnectionState,
+  CronJob,
+  CronOperations,
+  CronRunLogEntry,
 } from '@clawket/agent-protocol';
 import type { ConnectionState as LegacyConnectionState } from '../../types';
+import type { UiMessage } from '../../types/chat';
 
 export type ThreadContentState =
   | Readonly<{ kind: 'loading' }>
@@ -25,6 +29,296 @@ export type ThreadErrorInput = Readonly<{
 }>;
 
 export type ThreadConnectionState = AdapterConnectionState | LegacyConnectionState;
+
+export type ThreadRunStatus =
+  | 'streaming'
+  | 'tool_calling'
+  | 'completed'
+  | 'succeeded'
+  | 'failed'
+  | 'skipped';
+
+export type ThreadRunCard = Readonly<{
+  id: string;
+  kind: 'subagent' | 'cron';
+  sessionKey?: string;
+  jobId?: string;
+  agentId?: string;
+  title: string;
+  status: ThreadRunStatus;
+  statusLabel: string;
+  timeLabel: string;
+  updatedAt: number;
+  canOpenLogs?: boolean;
+}>;
+
+export type ThreadRunSeed = Omit<ThreadRunCard, 'statusLabel' | 'timeLabel' | 'canOpenLogs'>;
+
+export type ThreadTimelineItem =
+  | Readonly<{
+      type: 'message';
+      key: string;
+      timestampMs?: number;
+      message: UiMessage;
+    }>
+  | Readonly<{
+      type: 'run';
+      key: string;
+      timestampMs: number;
+      run: ThreadRunCard;
+    }>
+  | Readonly<{
+      type: 'date';
+      key: string;
+      timestampMs: number;
+      label: string;
+    }>;
+
+function validTimestamp(value: number | null | undefined): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? value
+    : undefined;
+}
+
+function messageTimestamp(message: UiMessage): number | undefined {
+  return validTimestamp(message.timestampMs)
+    ?? validTimestamp(message.toolFinishedAt)
+    ?? validTimestamp(message.toolStartedAt);
+}
+
+function localDateKey(timestampMs: number): string {
+  const date = new Date(timestampMs);
+  const year = String(date.getFullYear()).padStart(4, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+export function formatThreadLocalDate(timestampMs: number, locale?: string): string {
+  const timestamp = validTimestamp(timestampMs);
+  if (!timestamp) return '';
+  return new Intl.DateTimeFormat(locale || undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  }).format(timestamp);
+}
+
+export function formatThreadLocalTime(timestampMs: number, locale?: string): string {
+  const timestamp = validTimestamp(timestampMs);
+  if (!timestamp) return '';
+  return new Intl.DateTimeFormat(locale || undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(timestamp);
+}
+
+function agentIdFromSessionKey(sessionKey: string | null | undefined): string | undefined {
+  const match = sessionKey?.match(/^agent:([^:]+):/);
+  return match?.[1];
+}
+
+function cronJobBelongsToAgent(
+  job: CronJob,
+  currentAgentId: string,
+  isMainAgent: boolean,
+): boolean {
+  const jobAgentId = job.agentId?.trim();
+  if (jobAgentId) return jobAgentId === currentAgentId;
+  const sessionAgentId = agentIdFromSessionKey(job.sessionKey);
+  if (sessionAgentId) return sessionAgentId === currentAgentId;
+  return isMainAgent;
+}
+
+function cronRunSessionBelongsToAgent(
+  sessionKey: string | undefined,
+  currentSessionKey: string,
+  currentAgentId: string,
+): boolean {
+  if (!sessionKey) return true;
+  if (sessionKey === currentSessionKey) return true;
+  const sessionAgentId = agentIdFromSessionKey(sessionKey);
+  return sessionAgentId === undefined || sessionAgentId === currentAgentId;
+}
+
+export function buildCronRunSeeds(params: Readonly<{
+  entries: ReadonlyArray<CronRunLogEntry>;
+  jobs: ReadonlyArray<CronJob>;
+  currentSessionKey: string;
+  currentAgentId: string;
+  isMainAgent: boolean;
+  fallbackTitle: string;
+}>): ThreadRunSeed[] {
+  const jobs = params.jobs.filter((job) => (
+    cronJobBelongsToAgent(job, params.currentAgentId, params.isMainAgent)
+  ));
+  const jobsById = new Map(jobs.map((job) => [job.id, job]));
+  const seenJobIds = new Set<string>();
+  const seeds: ThreadRunSeed[] = [];
+  for (const entry of [...params.entries].sort((left, right) => right.ts - left.ts)) {
+    const job = jobsById.get(entry.jobId);
+    if (!job || seenJobIds.has(entry.jobId)) continue;
+    const updatedAt = validTimestamp(entry.runAtMs) ?? validTimestamp(entry.ts);
+    if (updatedAt === undefined) continue;
+    const sessionKey = entry.sessionKey?.trim() || job.sessionKey?.trim() || undefined;
+    if (!cronRunSessionBelongsToAgent(
+      sessionKey,
+      params.currentSessionKey,
+      params.currentAgentId,
+    )) continue;
+    const rawTitle = entry.jobName?.trim() || job.name.trim() || params.fallbackTitle;
+    const title = rawTitle.replace(/^(?:\[Cron\]|Cron)\s*:?\s*/i, '').trim()
+      || params.fallbackTitle;
+    const status: ThreadRunStatus = entry.status === 'error'
+      ? 'failed'
+      : entry.status === 'skipped'
+        ? 'skipped'
+        : entry.status === 'ok'
+          ? 'succeeded'
+          : 'completed';
+    seeds.push({
+      id: `${entry.jobId}:${updatedAt}`,
+      kind: 'cron',
+      ...(sessionKey ? { sessionKey } : {}),
+      jobId: entry.jobId,
+      agentId: params.currentAgentId,
+      title,
+      status,
+      updatedAt,
+    });
+    seenJobIds.add(entry.jobId);
+  }
+  return seeds;
+}
+
+const THREAD_CRON_PAGE_LIMIT = 100;
+const THREAD_CRON_MAX_JOB_PAGES = 30;
+
+export async function loadThreadCronRunSeeds(params: Readonly<{
+  operations: CronOperations;
+  currentSessionKey: string;
+  currentAgentId: string;
+  isMainAgent: boolean;
+  fallbackTitle: string;
+}>): Promise<ThreadRunSeed[]> {
+  if (!params.operations.list || !params.operations.runs) return [];
+  const [firstJobs, runPage] = await Promise.all([
+    params.operations.list({
+      includeDisabled: true,
+      limit: THREAD_CRON_PAGE_LIMIT,
+      offset: 0,
+      sortBy: 'updatedAtMs',
+      sortDir: 'desc',
+    }),
+    params.operations.runs({
+      scope: 'all',
+      limit: THREAD_CRON_PAGE_LIMIT,
+      offset: 0,
+      sortDir: 'desc',
+    }),
+  ]);
+  const jobs = [...firstJobs.jobs];
+  let page = firstJobs;
+  for (let index = 1; index < THREAD_CRON_MAX_JOB_PAGES; index += 1) {
+    if (!page.hasMore || page.nextOffset === null || page.nextOffset <= page.offset) break;
+    page = await params.operations.list({
+      includeDisabled: true,
+      limit: THREAD_CRON_PAGE_LIMIT,
+      offset: page.nextOffset,
+      sortBy: 'updatedAtMs',
+      sortDir: 'desc',
+    });
+    jobs.push(...page.jobs);
+  }
+  return buildCronRunSeeds({
+    entries: runPage.entries,
+    jobs,
+    currentSessionKey: params.currentSessionKey,
+    currentAgentId: params.currentAgentId,
+    isMainAgent: params.isMainAgent,
+    fallbackTitle: params.fallbackTitle,
+  });
+}
+
+export function buildThreadTimelineItems(params: Readonly<{
+  messages: ReadonlyArray<UiMessage>;
+  runs: ReadonlyArray<ThreadRunCard>;
+  locale?: string;
+}>): ThreadTimelineItem[] {
+  const messageItems = params.messages.map((message) => ({
+    timestampMs: messageTimestamp(message),
+    item: {
+      type: 'message' as const,
+      key: `message:${message.id}`,
+      timestampMs: messageTimestamp(message),
+      message,
+    },
+  }));
+  const runItems = params.runs
+    .map((run, order) => ({
+      order,
+      timestampMs: validTimestamp(run.updatedAt),
+      item: {
+        type: 'run' as const,
+        key: `run:${run.kind}:${run.id}`,
+        timestampMs: validTimestamp(run.updatedAt) ?? 0,
+        run,
+      },
+    }))
+    .sort((left, right) => {
+      if (left.timestampMs !== undefined && right.timestampMs !== undefined) {
+        return right.timestampMs - left.timestampMs || left.order - right.order;
+      }
+      if (left.timestampMs !== undefined) return -1;
+      if (right.timestampMs !== undefined) return 1;
+      return left.order - right.order;
+    });
+
+  const merged: Array<(typeof messageItems)[number] | (typeof runItems)[number]> = [];
+  let runIndex = 0;
+  for (const message of messageItems) {
+    if (message.timestampMs !== undefined) {
+      while (
+        runIndex < runItems.length
+        && runItems[runIndex]!.timestampMs !== undefined
+        && runItems[runIndex]!.timestampMs! > message.timestampMs
+      ) {
+        merged.push(runItems[runIndex]!);
+        runIndex += 1;
+      }
+    }
+    merged.push(message);
+  }
+  merged.push(...runItems.slice(runIndex));
+
+  const nextKnownTimestamp: Array<number | undefined> = new Array(merged.length);
+  let nextTimestamp: number | undefined;
+  for (let index = merged.length - 1; index >= 0; index -= 1) {
+    nextKnownTimestamp[index] = nextTimestamp;
+    if (merged[index]!.timestampMs !== undefined) {
+      nextTimestamp = merged[index]!.timestampMs;
+    }
+  }
+  const timeline: ThreadTimelineItem[] = [];
+  const emittedDates = new Set<string>();
+  for (let index = 0; index < merged.length; index++) {
+    const current = merged[index]!;
+    timeline.push(current.item);
+    if (current.timestampMs === undefined) continue;
+    const currentDateKey = localDateKey(current.timestampMs);
+    const laterTimestamp = nextKnownTimestamp[index];
+    const nextDateKey = laterTimestamp === undefined ? null : localDateKey(laterTimestamp);
+    if (currentDateKey === nextDateKey || emittedDates.has(currentDateKey)) continue;
+    timeline.push({
+      type: 'date',
+      key: `date:${currentDateKey}`,
+      timestampMs: current.timestampMs,
+      label: formatThreadLocalDate(current.timestampMs, params.locale),
+    });
+    emittedDates.add(currentDateKey);
+  }
+  return timeline;
+}
 
 export type DeriveThreadContentStateInput = Readonly<{
   locked?: boolean;

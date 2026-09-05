@@ -44,9 +44,11 @@ export type RootStackParamList = {
     connectionId: string;
     agentId: string;
     section: AgentSettingsSection;
+    action?: 'create-agent';
   };
   AccountSettings: undefined;
   AccountSettingsSection: { section: AccountSettingsSection };
+  ChatAppearance: undefined;
   Search: { query?: string } | undefined;
   MessageDetail: {
     connectionId: string;
@@ -64,6 +66,7 @@ export const ROOT_ROUTE_NAMES = [
   'AgentSettingsSection',
   'AccountSettings',
   'AccountSettingsSection',
+  'ChatAppearance',
   'Search',
   'MessageDetail',
   'Paywall',

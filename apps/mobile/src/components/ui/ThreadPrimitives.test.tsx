@@ -1,5 +1,6 @@
 import React from 'react';
 import { fireEvent, render } from '@testing-library/react-native';
+import { BottomSheetModal, BottomSheetView } from '@gorhom/bottom-sheet';
 import { ArrowUp, Lock, Square } from 'lucide-react-native';
 import { builtInAccents } from '../../theme/accents';
 import { buildTheme } from '../../theme/theme';
@@ -8,6 +9,7 @@ import {
   ControlSize,
   FontSize,
   LineHeight,
+  Motion,
   Radius,
   Shadow,
   Space,
@@ -17,7 +19,12 @@ import { Bubble } from './Bubble';
 import { Composer } from './Composer';
 import { RunCard } from './RunCard';
 import { SettingsDivider, SettingsGroup, SettingsRow } from './SettingsGroup';
-import { Sheet } from './Sheet';
+import {
+  SHEET_TIMING_CONFIG,
+  Sheet,
+  resolveSheetContentHeightLimit,
+  resolveSheetMaxHeight,
+} from './Sheet';
 
 let mockScheme: 'light' | 'dark' = 'light';
 
@@ -30,7 +37,12 @@ jest.mock('react-native', () => {
   );
   return {
     Modal: primitive('Modal'),
-    Platform: { OS: 'ios', select: (options: Record<string, unknown>) => options.ios ?? options.default },
+    Platform: {
+      OS: 'ios',
+      isMacCatalyst: false,
+      isPad: false,
+      select: (options: Record<string, unknown>) => options.ios ?? options.default,
+    },
     Pressable: primitive('Pressable'),
     StyleSheet: {
       absoluteFillObject: {
@@ -46,6 +58,7 @@ jest.mock('react-native', () => {
     },
     Text: primitive('Text'),
     TextInput: primitive('TextInput'),
+    useWindowDimensions: () => ({ width: 375, height: 812, scale: 3, fontScale: 1 }),
     View: primitive('View'),
   };
 });
@@ -59,6 +72,12 @@ jest.mock('react-native-reanimated', () => {
   );
   return {
     __esModule: true,
+    Easing: {
+      cubic: (value: number) => value ** 3,
+      out: (easing: (value: number) => number) => (
+        (value: number) => 1 - easing(1 - value)
+      ),
+    },
     default: {
       View: animatedPrimitive('AnimatedView'),
       createAnimatedComponent: (Component: React.ComponentType<unknown>) => Component,
@@ -85,14 +104,20 @@ jest.mock('lucide-react-native', () => {
 });
 
 jest.mock('../../theme', () => {
+  const ReactRuntime = require('react');
   const { buildTheme: createTheme } = jest.requireActual('../../theme/theme');
   const { builtInAccents: accents } = jest.requireActual('../../theme/accents');
   return {
+    ThemeContext: ReactRuntime.createContext(null),
     useAppTheme: () => ({
       theme: createTheme(mockScheme, mockScheme, accents.iceBlue),
     }),
   };
 });
+
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
+}));
 
 let consoleErrorSpy: jest.SpyInstance;
 
@@ -169,7 +194,9 @@ describe.each(['light', 'dark'] as const)('%s thread primitives', (scheme) => {
       <RunCard
         testID="run"
         title="Nightly sync"
-        detail="Failed · 2m"
+        statusLabel="Failed"
+        statusTone="bad"
+        detail="2m"
         tone="bad"
         onPress={onPress}
       />,
@@ -183,6 +210,14 @@ describe.each(['light', 'dark'] as const)('%s thread primitives', (scheme) => {
     expect(flattenStyle(result.getByTestId('run-status').props.style)).toMatchObject({
       width: BorderWidth.emphasis,
       backgroundColor: theme.colors.bad,
+    });
+    expect(flattenStyle(result.getByTestId('run-detail').props.style)).toMatchObject({
+      color: theme.colors.inkSecondary,
+      fontSize: FontSize.caption,
+      lineHeight: LineHeight.caption,
+    });
+    expect(flattenStyle(result.getByTestId('run-detail-status').props.style)).toMatchObject({
+      color: theme.colors.bad,
     });
     fireEvent.press(result.getByTestId('run'));
     expect(onPress).toHaveBeenCalledTimes(1);
@@ -232,6 +267,8 @@ describe.each(['light', 'dark'] as const)('%s thread primitives', (scheme) => {
     const theme = activeTheme(scheme);
     const send = jest.fn();
     const stop = jest.fn();
+    const onPasteFiles = jest.fn();
+    const onPasteFailed = jest.fn();
     const labels = { add: 'Add', voice: 'Voice', send: 'Send', stop: 'Stop' };
     const result = render(
       <Composer
@@ -242,6 +279,8 @@ describe.each(['light', 'dark'] as const)('%s thread primitives', (scheme) => {
         onChangeText={jest.fn()}
         onAddPress={jest.fn()}
         onVoicePress={jest.fn()}
+        onPasteFiles={onPasteFiles}
+        onPasteFailed={onPasteFailed}
         onSend={send}
         onStop={stop}
       />,
@@ -260,12 +299,23 @@ describe.each(['light', 'dark'] as const)('%s thread primitives', (scheme) => {
       expect(inputShell.borderColor).toBe(theme.colors.line);
     }
     const input = result.getByTestId('composer-input');
+    expect(input.type).toBe('PasteInput');
     expect(input.props).toMatchObject({ multiline: true, scrollEnabled: true });
     expect(flattenStyle(input.props.style)).toMatchObject({
       fontSize: FontSize.body,
       lineHeight: LineHeight.body,
       maxHeight: LineHeight.body * 5,
     });
+    const pastedFile = {
+      uri: 'file:///tmp/pasted.png',
+      fileName: 'pasted.png',
+      fileSize: 512,
+      type: 'image/png',
+    };
+    fireEvent(input, 'paste', null, [pastedFile]);
+    fireEvent(input, 'paste', 'native error', []);
+    expect(onPasteFiles).toHaveBeenCalledWith([pastedFile]);
+    expect(onPasteFailed).toHaveBeenCalledTimes(1);
     expect(flattenStyle(result.getByTestId('composer-add').props.style).width)
       .toBe(ControlSize.floatingButton);
     expect(flattenStyle(result.getByTestId('composer-primary').props.style).backgroundColor)
@@ -286,6 +336,7 @@ describe.each(['light', 'dark'] as const)('%s thread primitives', (scheme) => {
         isRunning
       />,
     );
+    expect(result.getByTestId('composer-input').type).toBe('TextInput');
     expect(flattenStyle(result.getByTestId('composer-primary').props.style).backgroundColor)
       .toBe(theme.colors.ink);
     expect(result.UNSAFE_getByType(Square)).toBeTruthy();
@@ -314,18 +365,91 @@ describe.each(['light', 'dark'] as const)('%s thread primitives', (scheme) => {
       borderTopRightRadius: Radius.bottomSheet,
     });
     expect(sheetStyle).not.toHaveProperty('borderWidth');
-    expect(flattenStyle(result.getByTestId('sheet-handle').props.style)).toMatchObject({
-      width: ControlSize.compact,
+    expect(result.UNSAFE_getByType(BottomSheetView).props.testID).toBe('sheet');
+    expect(sheetStyle.maxHeight).toBeCloseTo(resolveSheetContentHeightLimit(812 * 0.9));
+    expect(flattenStyle(result.getByTestId('sheet-handle', {
+      includeHiddenElements: true,
+    }).props.style)).toMatchObject({
+      width: 36,
       height: Space.xs,
       backgroundColor: theme.colors.line,
     });
-    expect(flattenStyle(result.getByTestId('sheet-backdrop').props.style)).toMatchObject({
-      backgroundColor: scheme === 'dark' ? theme.colors.canvas : theme.colors.ink,
-      opacity: 0.4,
+    expect(flattenStyle(result.getByTestId('sheet-backdrop', {
+      includeHiddenElements: true,
+    }).props.style)).toMatchObject({
+      backgroundColor: theme.colors.scrim,
     });
     expect(result.getByTestId('sheet-close')).toBeTruthy();
-    fireEvent.press(result.getByTestId('sheet-backdrop'));
+    fireEvent.press(result.getByTestId('sheet-backdrop', {
+      includeHiddenElements: true,
+    }));
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses one 320ms timing and keeps disabled backdrop dismissal inert', () => {
+    const onClose = jest.fn();
+    const result = render(
+      <Sheet
+        testID="locked-sheet"
+        visible
+        title="Locked"
+        closeAccessibilityLabel="Close"
+        dismissOnBackdropPress={false}
+        onClose={onClose}
+      >
+        <></>
+      </Sheet>,
+    );
+
+    expect(SHEET_TIMING_CONFIG).toMatchObject({
+      duration: Motion.duration.slow,
+      reduceMotion: 'system',
+    });
+    expect((SHEET_TIMING_CONFIG.easing as (value: number) => number)(0.5)).toBeGreaterThan(0.5);
+    expect(Motion.duration.slow).toBe(320);
+    expect(resolveSheetMaxHeight('75%', 800)).toBe(600);
+    expect(resolveSheetMaxHeight(900, 800)).toBe(800);
+    expect(resolveSheetMaxHeight('auto', 800)).toBe(800);
+    expect(resolveSheetContentHeightLimit(600)).toBe(600 - Space.lg);
+    expect(resolveSheetContentHeightLimit(900, 720)).toBe(720 - Space.lg);
+    const backdrop = result.getByTestId('locked-sheet-backdrop', {
+      includeHiddenElements: true,
+    });
+    expect(backdrop.props.disabled).toBe(true);
+    fireEvent.press(backdrop);
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('supports fixed detents with a fill-height body and caller keyboard behavior', () => {
+    const result = render(
+      <Sheet
+        testID="fixed-sheet"
+        visible
+        title="Models"
+        closeAccessibilityLabel="Close"
+        onClose={jest.fn()}
+        snapPoints={['58%', '92%']}
+        keyboardBehavior="extend"
+        keyboardBlurBehavior="none"
+        androidKeyboardInputMode="adjustResize"
+      >
+        <></>
+      </Sheet>,
+    );
+
+    expect(result.UNSAFE_getByType(BottomSheetModal).props).toMatchObject({
+      enableDynamicSizing: false,
+      index: 0,
+      snapPoints: ['58%', '92%'],
+      keyboardBehavior: 'extend',
+      keyboardBlurBehavior: 'none',
+      android_keyboardInputMode: 'adjustResize',
+      overrideReduceMotion: 'system',
+    });
+    expect(flattenStyle(result.getByTestId('fixed-sheet').props.style)).toMatchObject({
+      flex: 1,
+    });
+    expect(result.UNSAFE_queryAllByType(BottomSheetView)).toHaveLength(0);
   });
 
   it('keeps settings rows borderless and reserves the hairline for dividers', () => {

@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // Mock theme module to avoid TSX parsing issues
 jest.mock('../theme', () => ({
   defaultAccentId: 'iceBlue',
-  isAccentScale: jest.fn(() => false),
+  isBuiltInAccentId: jest.fn(() => false),
 }));
 
 import { StorageService, type NodeInvokeAuditEntry } from './storage';

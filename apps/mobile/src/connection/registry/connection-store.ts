@@ -68,6 +68,11 @@ export type NewConnectionRecord = Omit<ConnectionRecord, 'id' | 'createdAt'> & {
 
 export type ConnectionRecordReplacement = Omit<ConnectionRecord, 'id' | 'createdAt'>;
 
+export type ConnectionUpsertResult = Readonly<{
+  connection: ConnectionDescriptor;
+  created: boolean;
+}>;
+
 export type ConnectionRecordPatch = Partial<
   Pick<ConnectionRecord, 'backendKind' | 'transportKind' | 'label' | 'url'>
 > & {
@@ -105,7 +110,8 @@ export interface SecureConnectionStorage {
 }
 
 export interface LegacyConnectionStorage {
-  getGatewayConfigsState(): Promise<GatewayConfigsState>;
+  readLegacyGatewayConfigsState(): Promise<GatewayConfigsState>;
+  migrateLegacyYouMindState(url: string, scopeKey: string): Promise<void>;
 }
 
 export interface ConnectionStoreOptions {
@@ -405,6 +411,127 @@ function patchRecord(record: ConnectionRecord, patch: ConnectionRecordPatch): Co
   return normalizeConnectionRecord(next);
 }
 
+function mergeConnectionCredential(
+  next: string | undefined,
+  existing: string | undefined,
+): string | undefined {
+  return readOptionalString(next) ?? readOptionalString(existing);
+}
+
+function mergeConnectionAuth(
+  existing: ConnectionRecord['auth'],
+  next: ConnectionRecord['auth'],
+): ConnectionRecord['auth'] {
+  const token = mergeConnectionCredential(next?.token, existing?.token);
+  const password = mergeConnectionCredential(next?.password, existing?.password);
+  return token || password ? { ...(token ? { token } : {}), ...(password ? { password } : {}) } : undefined;
+}
+
+function mergeConnectionRelay(
+  existing: ConnectionRecord['relay'],
+  next: ConnectionRecord['relay'],
+): ConnectionRecord['relay'] {
+  if (!next) return existing;
+  const clientToken = mergeConnectionCredential(next.clientToken, existing?.clientToken);
+  const displayName = readNonEmptyString(next.displayName) ?? readNonEmptyString(existing?.displayName);
+  const protocolVersion = next.protocolVersion ?? existing?.protocolVersion;
+  const supportsBootstrap = next.supportsBootstrap ?? existing?.supportsBootstrap;
+  return {
+    serverUrl: next.serverUrl,
+    gatewayId: next.gatewayId,
+    ...(clientToken ? { clientToken } : {}),
+    ...(displayName ? { displayName } : {}),
+    ...(protocolVersion !== undefined ? { protocolVersion } : {}),
+    ...(supportsBootstrap !== undefined ? { supportsBootstrap } : {}),
+  };
+}
+
+function mergeConnectionHermes(
+  existing: ConnectionRecord['hermes'],
+  next: ConnectionRecord['hermes'],
+): ConnectionRecord['hermes'] {
+  if (!next) return existing;
+  const displayName = readNonEmptyString(next.displayName) ?? readNonEmptyString(existing?.displayName);
+  return {
+    bridgeUrl: next.bridgeUrl,
+    ...(displayName ? { displayName } : {}),
+  };
+}
+
+function normalizeConnectionIdentityUrl(value: string | undefined): string | null {
+  const trimmed = value?.trim().replace(/\/+$/, '');
+  if (!trimmed) return null;
+  try {
+    const parsed = new URL(trimmed);
+    const pathname = parsed.pathname.replace(/\/+$/, '');
+    return `${parsed.protocol.toLowerCase()}//${parsed.host.toLowerCase()}${pathname}${parsed.search}`;
+  } catch {
+    return trimmed;
+  }
+}
+
+function findConnectionIdentityIndex(
+  records: ReadonlyArray<ConnectionRecord>,
+  input: NewConnectionRecord,
+): number {
+  const explicitId = readNonEmptyString(input.id);
+  if (explicitId) {
+    const explicitIndex = records.findIndex((record) => (
+      record.id === explicitId
+      && record.backendKind === input.backendKind
+      && (record.transportKind === 'relay') === (input.transportKind === 'relay')
+    ));
+    if (explicitIndex >= 0) return explicitIndex;
+  }
+  if (input.transportKind === 'relay' && input.relay) {
+    const serverUrl = normalizeConnectionIdentityUrl(input.relay.serverUrl);
+    const gatewayId = input.relay.gatewayId.trim();
+    return records.findIndex((record) => (
+      record.backendKind === input.backendKind
+      && record.transportKind === 'relay'
+      && normalizeConnectionIdentityUrl(record.relay?.serverUrl) === serverUrl
+      && record.relay?.gatewayId.trim() === gatewayId
+    ));
+  }
+  if (input.backendKind === 'openclaw' || input.backendKind === 'hermes') {
+    const endpointUrl = normalizeConnectionIdentityUrl(
+      input.backendKind === 'hermes' ? input.hermes?.bridgeUrl ?? input.url : input.url,
+    );
+    return records.findIndex((record) => (
+      record.backendKind === input.backendKind
+      && record.transportKind !== 'relay'
+      && normalizeConnectionIdentityUrl(
+        record.backendKind === 'hermes' ? record.hermes?.bridgeUrl ?? record.url : record.url,
+      ) === endpointUrl
+    ));
+  }
+  return -1;
+}
+
+function mergeConnectionRecord(
+  existing: ConnectionRecord,
+  input: NewConnectionRecord,
+): ConnectionRecord | null {
+  return normalizeConnectionRecord({
+    ...existing,
+    backendKind: input.backendKind,
+    transportKind: input.transportKind,
+    // Re-pairing refreshes connection material, but must not erase a name the
+    // person may have customized after the original pairing.
+    label: existing.label,
+    environment: input.environment ?? existing.environment,
+    url: input.url,
+    auth: mergeConnectionAuth(existing.auth, input.auth),
+    bootstrap: input.bootstrap ?? existing.bootstrap,
+    relay: mergeConnectionRelay(existing.relay, input.relay),
+    hermes: mergeConnectionHermes(existing.hermes, input.hermes),
+    youmind: input.youmind ?? existing.youmind,
+    debugMode: input.debugMode ?? existing.debugMode,
+    id: existing.id,
+    createdAt: existing.createdAt,
+  });
+}
+
 function createDescriptor(
   record: ConnectionRecord,
   freeConnectionId: string | null,
@@ -424,10 +551,6 @@ function createDescriptor(
 
 function serializeSnapshot(revision: number, state: RegistryState): string {
   return JSON.stringify({ version: STORAGE_VERSION, revision, state } satisfies PersistedRegistrySnapshot);
-}
-
-function sameRegistryState(left: RegistryState, right: RegistryState): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 export function createConnectionId(now: number, randomValue: number): string {
@@ -479,27 +602,6 @@ export class ConnectionStore {
     });
   }
 
-  /** Import edits made by the legacy connection form during the M4 strangler. */
-  async syncLegacyState(): Promise<ConnectionStoreSnapshot> {
-    return this.enqueue(async () => {
-      const current = await this.readOrMigrate();
-      const legacyRaw = await this.secureStorage.getItemAsync(
-        LEGACY_CONFIGS_STORAGE_KEY,
-        SECURE_OPTIONS,
-      );
-      const legacy = await this.legacyStorage.getGatewayConfigsState();
-      const state = migrateLegacyState(legacy, readLegacySupplements(legacyRaw));
-      if (sameRegistryState(current.state, state)) {
-        this.publish(current.state, current.revision);
-        return this.snapshot;
-      }
-      const revision = current.revision + 1;
-      await this.persist(current, state, revision);
-      this.publish(state, revision);
-      return this.snapshot;
-    });
-  }
-
   async add(input: NewConnectionRecord): Promise<ConnectionDescriptor> {
     return this.mutate((state) => {
       let id = readNonEmptyString(input.id) ?? createConnectionId(this.now(), this.random());
@@ -522,6 +624,59 @@ export class ConnectionStore {
       return {
         state: nextState,
         result: () => createDescriptor(record, nextState.freeConnectionId, false),
+      };
+    });
+  }
+
+  async upsert(input: NewConnectionRecord): Promise<ConnectionUpsertResult> {
+    return this.mutate<ConnectionUpsertResult>((state) => {
+      const index = findConnectionIdentityIndex(state.records, input);
+      if (index < 0) {
+        let id = readNonEmptyString(input.id) ?? createConnectionId(this.now(), this.random());
+        let suffix = 2;
+        const usedIds = new Set(state.records.map((record) => record.id));
+        const baseId = id;
+        while (usedIds.has(id)) {
+          id = `${baseId}_${suffix}`;
+          suffix += 1;
+        }
+        const record = normalizeConnectionRecord({
+          ...input,
+          id,
+          createdAt: input.createdAt ?? this.now(),
+        });
+        if (!record) throw new Error('Invalid connection record.');
+        const nextState: RegistryState = {
+          activeConnectionId: state.activeConnectionId ?? record.id,
+          freeConnectionId: state.freeConnectionId ?? state.activeConnectionId ?? record.id,
+          records: [...state.records, record],
+        };
+        return {
+          state: nextState,
+          result: () => ({
+            connection: createDescriptor(record, nextState.freeConnectionId, false),
+            created: true,
+          }),
+        };
+      }
+
+      const existing = state.records[index];
+      const record = mergeConnectionRecord(existing, input);
+      if (!record) throw new Error('Invalid connection record.');
+      const records = [...state.records];
+      records[index] = record;
+      const changed = JSON.stringify(existing) !== JSON.stringify(record);
+      return {
+        state: changed ? { ...state, records } : state,
+        changed,
+        result: () => ({
+          connection: createDescriptor(
+            record,
+            state.freeConnectionId,
+            this.bridgeOutdated.get(record.id) === true,
+          ),
+          created: false,
+        }),
       };
     });
   }
@@ -675,6 +830,19 @@ export class ConnectionStore {
     });
   }
 
+  /**
+   * Returns credential-bearing connection material for trusted runtime
+   * sidecars. Credentials deliberately remain absent from getSnapshot().
+   */
+  async getRuntimeRecord(connectionId: string): Promise<ConnectionRecord> {
+    return this.enqueue(async () => {
+      const persisted = await this.readOrMigrate();
+      const record = persisted.state.records.find((candidate) => candidate.id === connectionId);
+      if (!record) throw new ConnectionNotFoundError(connectionId);
+      return cloneRecord(record);
+    });
+  }
+
   setBridgeOutdated(connectionId: string, outdated: boolean): void {
     if (!this.state?.records.some((record) => record.id === connectionId)) return;
     if (outdated) this.bridgeOutdated.set(connectionId, true);
@@ -720,8 +888,16 @@ export class ConnectionStore {
     if (rollback) return rollback;
 
     const legacyRaw = await this.secureStorage.getItemAsync(LEGACY_CONFIGS_STORAGE_KEY, SECURE_OPTIONS);
-    const legacy = await this.legacyStorage.getGatewayConfigsState();
+    const legacy = await this.legacyStorage.readLegacyGatewayConfigsState();
     const state = migrateLegacyState(legacy, readLegacySupplements(legacyRaw));
+    for (const record of state.records) {
+      if (record.backendKind === 'youmind') {
+        await this.legacyStorage.migrateLegacyYouMindState(
+          record.url,
+          record.youmind?.authScopeKey ?? record.id,
+        );
+      }
+    }
     const migrated: PersistedRegistrySnapshot = {
       version: STORAGE_VERSION,
       revision: 1,

@@ -2,19 +2,25 @@ import type {
   AgentAdapter,
   AgentDescriptor,
   ConnectionDescriptor,
+  ConnectionRecord,
   ConnectionState,
   SessionDescriptor,
 } from '@clawket/agent-protocol';
 import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { analyticsEvents } from '../services/analytics/events';
+import { ChatCacheService } from '../services/chat-cache';
+import { SessionPreferencesService } from '../services/session-preferences';
+import { StorageService } from '../services/storage';
 
 import {
+  ConnectionNotFoundError,
   connectionStore,
   type ConnectionAdapterFactory,
   type ConnectionRecordPatch,
   type ConnectionRecordReplacement,
   type ConnectionStore,
   type ConnectionStoreSnapshot,
+  type ConnectionUpsertResult,
   type NewConnectionRecord,
 } from './registry/connection-store';
 import {
@@ -31,10 +37,13 @@ import {
   type UnreadWatermarks,
 } from './registry/unread-watermarks';
 import { createConnectionAdapter } from './adapters';
-import type { GatewayClient } from './protocol';
+import {
+  readConnectionRuntimeMetadata,
+  type ConnectionRuntimeDetails,
+} from './runtime-details';
 
 export type ConnectionRuntimeFailure = Readonly<{
-  operation: 'load' | 'connect' | 'roster' | 'probe';
+  operation: 'load' | 'connect' | 'roster' | 'probe' | 'remove';
   connectionId?: string;
   message: string;
 }>;
@@ -49,6 +58,7 @@ export type ConnectionRuntimeSnapshot = Readonly<{
   freeConnectionId: string | null;
   activeAdapter: AgentAdapter | null;
   activeState: ConnectionState;
+  connectionDetails: Readonly<Record<string, ConnectionRuntimeDetails>>;
   roster: ReadonlyArray<RosterConnectionGroup>;
   error: ConnectionRuntimeFailure | null;
 }>;
@@ -57,6 +67,7 @@ type ConnectionStorePort = Pick<
   ConnectionStore,
   | 'add'
   | 'createAdapter'
+  | 'getRuntimeRecord'
   | 'getSnapshot'
   | 'load'
   | 'remove'
@@ -65,11 +76,20 @@ type ConnectionStorePort = Pick<
   | 'setActive'
   | 'setFreeConnection'
   | 'subscribe'
-  | 'syncLegacyState'
   | 'update'
+  | 'upsert'
 >;
 
 type RosterCachePort = Pick<RosterCache, 'getMany' | 'remove' | 'set'>;
+type ConnectionChatCachePort = Pick<typeof ChatCacheService, 'clearConnection'>;
+type ConnectionSessionPreferencesPort = Pick<
+  typeof SessionPreferencesService,
+  'clearConnection'
+>;
+type ConnectionCredentialStorePort = Pick<
+  typeof StorageService,
+  'deleteDeviceToken' | 'getIdentity'
+>;
 type UnreadWatermarksPort = Pick<
   UnreadWatermarks,
   'clearConnection' | 'get' | 'markOpened' | 'markPromptSucceeded'
@@ -78,6 +98,9 @@ type UnreadWatermarksPort = Pick<
 export interface ConnectionCoordinatorOptions {
   store?: ConnectionStorePort;
   cache?: RosterCachePort;
+  chatCache?: ConnectionChatCachePort;
+  sessionPreferences?: ConnectionSessionPreferencesPort;
+  credentialStore?: ConnectionCredentialStorePort;
   watermarks?: UnreadWatermarksPort;
   adapterFactory?: ConnectionAdapterFactory;
   now?: () => number;
@@ -114,6 +137,7 @@ type ActiveAdapterEntry = {
   rosterRefreshInFlight: Promise<void> | null;
   probeInFlight: Promise<boolean> | null;
   maintenanceTail: Promise<void>;
+  sessionSnapshotRevision: number;
 };
 
 export const DEFAULT_ROSTER_REFRESH_INTERVAL_MS = 30_000;
@@ -121,6 +145,10 @@ export const DEFAULT_HERMES_PROBE_INTERVAL_MS = 15_000;
 
 const EMPTY_CONNECTIONS = Object.freeze([]) as ReadonlyArray<ConnectionDescriptor>;
 const EMPTY_ROSTER = Object.freeze([]) as ReadonlyArray<RosterConnectionGroup>;
+const EMPTY_CONNECTION_DETAILS = Object.freeze({}) as Readonly<Record<
+  string,
+  ConnectionRuntimeDetails
+>>;
 
 const INITIAL_SNAPSHOT: ConnectionRuntimeSnapshot = Object.freeze({
   revision: 0,
@@ -132,6 +160,7 @@ const INITIAL_SNAPSHOT: ConnectionRuntimeSnapshot = Object.freeze({
   freeConnectionId: null,
   activeAdapter: null,
   activeState: 'idle',
+  connectionDetails: EMPTY_CONNECTION_DETAILS,
   roster: EMPTY_ROSTER,
   error: null,
 });
@@ -143,6 +172,9 @@ const INITIAL_SNAPSHOT: ConnectionRuntimeSnapshot = Object.freeze({
 export class ConnectionCoordinator {
   private readonly store: ConnectionStorePort;
   private readonly cache: RosterCachePort;
+  private readonly chatCache: ConnectionChatCachePort;
+  private readonly sessionPreferences: ConnectionSessionPreferencesPort;
+  private readonly credentialStore: ConnectionCredentialStorePort;
   private readonly watermarks: UnreadWatermarksPort;
   private readonly now: () => number;
   private readonly telemetry: ConnectionTelemetry;
@@ -150,6 +182,7 @@ export class ConnectionCoordinator {
   private readonly hermesProbeIntervalMs: number | null;
   private readonly listeners = new Set<() => void>();
   private readonly rosterInputs = new Map<string, RosterSnapshotInput>();
+  private readonly connectionDetails = new Map<string, ConnectionRuntimeDetails>();
 
   private adapterFactory: ConnectionAdapterFactory | null;
   private adapterFactoryRevision = 0;
@@ -166,6 +199,9 @@ export class ConnectionCoordinator {
   constructor(options: ConnectionCoordinatorOptions = {}) {
     this.store = options.store ?? connectionStore;
     this.cache = options.cache ?? rosterCache;
+    this.chatCache = options.chatCache ?? ChatCacheService;
+    this.sessionPreferences = options.sessionPreferences ?? SessionPreferencesService;
+    this.credentialStore = options.credentialStore ?? StorageService;
     this.watermarks = options.watermarks ?? unreadWatermarks;
     this.adapterFactory = options.adapterFactory ?? null;
     this.now = options.now ?? Date.now;
@@ -190,6 +226,14 @@ export class ConnectionCoordinator {
   getAdapter(connectionId: string | null | undefined): AgentAdapter | null {
     if (!connectionId || this.active?.connectionId !== connectionId) return null;
     return this.active.adapter;
+  }
+
+  /**
+   * Trusted-runtime escape hatch for credential-dependent sidecars. The
+   * returned record is a defensive clone and is never published in snapshots.
+   */
+  async getRuntimeConnectionRecord(connectionId: string): Promise<ConnectionRecord> {
+    return this.store.getRuntimeRecord(connectionId);
   }
 
   setAdapterFactory(factory: ConnectionAdapterFactory): void {
@@ -255,6 +299,16 @@ export class ConnectionCoordinator {
     return descriptor;
   }
 
+  async upsertConnection(input: NewConnectionRecord): Promise<ConnectionUpsertResult> {
+    const result = await this.store.upsert(input);
+    if (!result.created && this.active?.connectionId === result.connection.id) {
+      this.disconnectActiveImmediately();
+      this.scheduleReconcile();
+    }
+    await this.whenIdle();
+    return result;
+  }
+
   async replaceConnection(
     connectionId: string,
     replacement: ConnectionRecordReplacement,
@@ -282,16 +336,54 @@ export class ConnectionCoordinator {
   }
 
   async removeConnection(connectionId: string): Promise<boolean> {
+    let record: ConnectionRecord;
+    try {
+      record = await this.store.getRuntimeRecord(connectionId);
+    } catch (error) {
+      if (error instanceof ConnectionNotFoundError) return false;
+      throw error;
+    }
     const removed = await this.store.remove(connectionId);
     if (!removed) return false;
     this.rosterInputs.delete(connectionId);
-    await Promise.allSettled([
+    this.connectionDetails.delete(connectionId);
+    const cleanupPromise = Promise.allSettled([
       this.cache.remove(connectionId),
+      this.chatCache.clearConnection(connectionId),
+      this.sessionPreferences.clearConnection(connectionId),
       this.watermarks.clearConnection(connectionId),
+      this.clearConnectionDeviceTokens(record),
     ]);
-    this.publish();
     await this.whenIdle();
+    const cleanup = await cleanupPromise;
+    if (cleanup.some((result) => result.status === 'rejected')) {
+      this.error = failure(
+        'remove',
+        new Error('Connection data was removed, but some local data cleanup failed.'),
+        connectionId,
+      );
+    }
+    this.publish();
     return true;
+  }
+
+  private async clearConnectionDeviceTokens(record: ConnectionRecord): Promise<void> {
+    // HTTP-stream connections do not use Gateway device identities.
+    if (record.transportKind === 'https') return;
+    const identity = await this.credentialStore.getIdentity();
+    if (!identity) return;
+    const baseScope = record.transportKind === 'relay'
+      && record.relay?.serverUrl?.trim()
+      && record.relay.gatewayId?.trim()
+      ? {
+        serverUrl: record.relay.serverUrl.trim().replace(/\/+$/, ''),
+        gatewayId: record.relay.gatewayId.trim(),
+      }
+      : { gatewayUrl: record.url.trim().replace(/\/+$/, '') };
+    await Promise.all([
+      this.credentialStore.deleteDeviceToken(identity.deviceId, baseScope),
+      this.credentialStore.deleteDeviceToken(identity.deviceId, { ...baseScope, role: 'node' }),
+    ]);
   }
 
   async setFreeConnection(connectionId: string): Promise<ConnectionRuntimeSnapshot> {
@@ -308,12 +400,6 @@ export class ConnectionCoordinator {
     return this.snapshot;
   }
 
-  async syncLegacyConnections(): Promise<ConnectionRuntimeSnapshot> {
-    await this.store.syncLegacyState();
-    await this.whenIdle();
-    return this.snapshot;
-  }
-
   async refreshRoster(): Promise<ReadonlyArray<RosterConnectionGroup>> {
     await this.enqueue(async () => {
       const entry = this.active;
@@ -323,8 +409,19 @@ export class ConnectionCoordinator {
   }
 
   async probeActive(timeoutMs?: number): Promise<boolean> {
-    const entry = this.active;
-    if (!entry) return false;
+    let entry = this.active;
+    if (!entry) {
+      if (
+        !this.started
+        || !this.adapterFactory
+        || !this.store.getSnapshot().activeConnectionId
+      ) return false;
+      this.nextConnectReason = 'retry';
+      this.scheduleReconcile();
+      await this.whenIdle();
+      entry = this.active;
+      if (!entry) return false;
+    }
     return this.probeEntry(entry, timeoutMs);
   }
 
@@ -407,6 +504,7 @@ export class ConnectionCoordinator {
 
   private async reconcileActiveAdapter(storeSnapshot: ConnectionStoreSnapshot): Promise<void> {
     if (!this.started) return;
+    if (this.store.getSnapshot() !== storeSnapshot) return;
     this.publishStoreSnapshot(storeSnapshot);
     const connectionId = storeSnapshot.activeConnectionId;
     const factory = this.adapterFactory;
@@ -457,6 +555,7 @@ export class ConnectionCoordinator {
       rosterRefreshInFlight: null,
       probeInFlight: null,
       maintenanceTail: Promise.resolve(),
+      sessionSnapshotRevision: 0,
     };
     const connectReason = this.nextConnectReason;
     this.nextConnectReason = 'retry';
@@ -466,6 +565,9 @@ export class ConnectionCoordinator {
         if (this.active !== entry) return;
         if (state === 'reconnecting' && entry.lastState !== 'reconnecting') {
           this.telemetry.reconnect(adapter.connection, 'socket_close');
+        }
+        if (state === 'ready' && entry.lastState !== 'ready') {
+          this.captureConnectionReady(entry);
         }
         entry.lastState = state;
         this.publish();
@@ -481,6 +583,7 @@ export class ConnectionCoordinator {
     try {
       await adapter.connect();
       if (this.active !== entry) return;
+      if (adapter.state === 'ready') this.captureConnectionReady(entry);
       this.telemetry.ready(
         adapter.connection,
         Math.max(0, this.now() - entry.connectStartedAt),
@@ -509,21 +612,30 @@ export class ConnectionCoordinator {
     for (const connectionId of this.rosterInputs.keys()) {
       if (!descriptorById.has(connectionId)) this.rosterInputs.delete(connectionId);
     }
+    for (const connectionId of this.connectionDetails.keys()) {
+      if (!descriptorById.has(connectionId)) this.connectionDetails.delete(connectionId);
+    }
     let cached: Awaited<ReturnType<RosterCachePort['getMany']>> = EMPTY_CACHED_ROSTERS;
     try {
       cached = await this.cache.getMany(descriptors.map((connection) => connection.id));
     } catch (error) {
-      this.error = failure('roster', error, storeSnapshot.activeConnectionId ?? undefined);
+      if (this.store.getSnapshot() === storeSnapshot) {
+        this.error = failure('roster', error, storeSnapshot.activeConnectionId ?? undefined);
+      }
     }
+    if (!this.started || this.store.getSnapshot() !== storeSnapshot) return;
     const cachedById = new Map(cached.map((entry) => [entry.connectionId, entry]));
     let activeWatermarks: SessionWatermarks = {};
     if (storeSnapshot.activeConnectionId) {
       try {
         activeWatermarks = await this.watermarks.get(storeSnapshot.activeConnectionId);
       } catch (error) {
-        this.error = failure('roster', error, storeSnapshot.activeConnectionId);
+        if (this.store.getSnapshot() === storeSnapshot) {
+          this.error = failure('roster', error, storeSnapshot.activeConnectionId);
+        }
       }
     }
+    if (!this.started || this.store.getSnapshot() !== storeSnapshot) return;
 
     for (const connection of descriptors) {
       const current = this.rosterInputs.get(connection.id);
@@ -538,6 +650,16 @@ export class ConnectionCoordinator {
         continue;
       }
       const entry = cachedById.get(connection.id);
+      if (entry?.savedAt && entry.savedAt > 0) {
+        const currentDetails = this.connectionDetails.get(connection.id);
+        if (entry.savedAt > (currentDetails?.lastReadyAt ?? 0)) {
+          this.connectionDetails.set(connection.id, Object.freeze({
+            lastReadyAt: entry.savedAt,
+            bridgeVersion: currentDetails?.bridgeVersion ?? null,
+            bridgeCapabilities: currentDetails?.bridgeCapabilities ?? Object.freeze([]),
+          }));
+        }
+      }
       this.rosterInputs.set(connection.id, {
         connection,
         agents: entry?.agents ?? EMPTY_AGENTS,
@@ -569,6 +691,7 @@ export class ConnectionCoordinator {
 
   private async performActiveRosterRefresh(entry: ActiveAdapterEntry): Promise<void> {
     try {
+      const sessionSnapshotRevision = entry.sessionSnapshotRevision;
       const [agents, sessions, watermarks] = await Promise.all([
         entry.adapter.listAgents(),
         entry.adapter.listSessions(),
@@ -578,10 +701,14 @@ export class ConnectionCoordinator {
       const connection = this.connectionDescriptor(entry.connectionId);
       if (!connection) return;
       const syncedAt = this.now();
+      const acceptedSessions = entry.sessionSnapshotRevision === sessionSnapshotRevision
+        ? cloneSessions(sessions)
+        : cloneSessions(this.rosterInputs.get(entry.connectionId)?.sessions ?? sessions);
+      const acceptedSessionRevision = entry.sessionSnapshotRevision;
       this.rosterInputs.set(entry.connectionId, {
         connection,
         agents: cloneAgents(agents),
-        sessions: cloneSessions(sessions),
+        sessions: acceptedSessions,
         source: 'live',
         syncedAt,
         watermarks,
@@ -591,10 +718,11 @@ export class ConnectionCoordinator {
       const cacheSnapshot = await this.cache.set(
         entry.connectionId,
         agents,
-        sessions,
+        acceptedSessions,
         entry.adapter.state,
       );
       if (this.active !== entry) return;
+      if (entry.sessionSnapshotRevision !== acceptedSessionRevision) return;
       this.rosterInputs.set(entry.connectionId, {
         connection,
         agents: cacheSnapshot.agents,
@@ -618,6 +746,7 @@ export class ConnectionCoordinator {
     const existing = this.rosterInputs.get(entry.connectionId);
     const connection = this.connectionDescriptor(entry.connectionId);
     if (!connection || this.active !== entry) return;
+    entry.sessionSnapshotRevision += 1;
     const next: RosterSnapshotInput = {
       connection,
       agents: existing?.agents ?? EMPTY_AGENTS,
@@ -652,12 +781,35 @@ export class ConnectionCoordinator {
     if (!entry) return;
     this.active = null;
     this.clearActiveMaintenance(entry);
-    for (const unsubscribe of entry.unsubscribers.splice(0)) unsubscribe();
+    let cleanupFailed = false;
+    for (const unsubscribe of entry.unsubscribers.splice(0)) {
+      try {
+        unsubscribe();
+      } catch {
+        cleanupFailed = true;
+      }
+    }
     const roster = this.rosterInputs.get(entry.connectionId);
     if (roster?.source === 'live') {
       this.rosterInputs.set(entry.connectionId, { ...roster, source: 'cache' });
     }
-    disposeAdapter(entry.adapter);
+    try {
+      disposeAdapter(entry.adapter);
+    } catch {
+      cleanupFailed = true;
+      try {
+        entry.adapter.disconnect();
+      } catch {
+        // The coordinator still publishes the detached state and continues the switch.
+      }
+    }
+    if (cleanupFailed) {
+      this.error = failure(
+        'connect',
+        new Error('The previous connection did not shut down cleanly.'),
+        entry.connectionId,
+      );
+    }
     this.publish({ switching: false });
   }
 
@@ -714,6 +866,16 @@ export class ConnectionCoordinator {
     ) ?? null;
   }
 
+  private captureConnectionReady(entry: ActiveAdapterEntry): void {
+    if (this.active !== entry) return;
+    const metadata = readConnectionRuntimeMetadata(entry.adapter);
+    this.connectionDetails.set(entry.connectionId, Object.freeze({
+      lastReadyAt: this.now(),
+      bridgeVersion: metadata.bridgeVersion,
+      bridgeCapabilities: metadata.bridgeCapabilities,
+    }));
+  }
+
   private publishStoreSnapshot(
     storeSnapshot: ConnectionStoreSnapshot,
     patch: Partial<Pick<ConnectionRuntimeSnapshot, 'switching'>> = {},
@@ -745,6 +907,7 @@ export class ConnectionCoordinator {
         : patch.freeConnectionId,
       activeAdapter: this.active?.adapter ?? null,
       activeState: this.active?.adapter.state ?? 'idle',
+      connectionDetails: freezeConnectionDetails(this.connectionDetails),
       roster,
       error: this.error,
     });
@@ -761,6 +924,12 @@ export class ConnectionCoordinator {
 const EMPTY_AGENTS = Object.freeze([]) as ReadonlyArray<AgentDescriptor>;
 const EMPTY_SESSIONS = Object.freeze([]) as ReadonlyArray<SessionDescriptor>;
 const EMPTY_CACHED_ROSTERS = Object.freeze([]) as ReadonlyArray<RosterCacheSnapshot>;
+
+function freezeConnectionDetails(
+  details: ReadonlyMap<string, ConnectionRuntimeDetails>,
+): Readonly<Record<string, ConnectionRuntimeDetails>> {
+  return Object.freeze(Object.fromEntries(details));
+}
 
 function cloneAgents(agents: ReadonlyArray<AgentDescriptor>): AgentDescriptor[] {
   return agents.map((agent) => ({ ...agent }));
@@ -860,20 +1029,6 @@ export function configureConnectionRuntime(
   return defaultCoordinator;
 }
 
-/**
- * M4 strangler bridge for screens still issuing Gateway management requests.
- * The coordinator remains the sole lifecycle owner while old screens and the
- * active adapter temporarily share one protocol client and therefore one
- * transport. M5 removes this once every screen consumes AgentAdapter directly.
- */
-export function configureConnectionRuntimeGateway(
-  gateway: GatewayClient,
-): ConnectionCoordinator {
-  return configureConnectionRuntime((record, descriptor) => (
-    createConnectionAdapter(record, descriptor, { gateway })
-  ));
-}
-
 export async function resetConnectionRuntimeForTests(
   options: ConnectionCoordinatorOptions = {},
 ): Promise<ConnectionCoordinator> {
@@ -919,9 +1074,32 @@ export type {
   ConnectionAdapterFactory,
   ConnectionRecordPatch,
   ConnectionRecordReplacement,
+  ConnectionUpsertResult,
   NewConnectionRecord,
   RosterConnectionGroup,
+  ConnectionRuntimeDetails,
 };
+
+export {
+  connectBackendPairingCode,
+  connectBackendPairingLink,
+  connectBackendPairingPayload,
+} from './pairing/backend-pairing-profile';
+export type {
+  BackendCodePairingInput,
+  BackendLinkPairingInput,
+  BackendPairingPayload,
+  BackendPairingResult,
+  BackendPayloadPairingInput,
+  PairingBackendKind,
+} from './pairing/backend-pairing-profile';
+export { createYouMindOnboardingConnection } from './pairing/youmind-onboarding-profile';
+export type {
+  YouMindEmailAuthClient,
+  YouMindOnboardingAuthSession,
+  YouMindOnboardingConnection,
+  YouMindOnboardingResult,
+} from './pairing/youmind-onboarding-profile';
 
 function disposeAdapter(adapter: AgentAdapter): void {
   const disposable = adapter as AgentAdapter & { dispose?: () => void };

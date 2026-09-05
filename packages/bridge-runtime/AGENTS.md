@@ -37,9 +37,10 @@ Keep each Hermes implementation file and each Hermes test file at or below 1,200
 
 1. Advertise `bridge.capabilities.v2` and `hermes.multi-session.v2` only while their complete behavior is implemented. Hermes handshake and health surfaces must agree; missing capability metadata keeps v1 behavior.
 2. OpenClaw's closed RequestFrame schema does not accept top-level `meta`. Consume and remove Bridge-owned connect metadata before the Gateway leg, and advertise Bridge capabilities only on the matching negotiated success response.
-3. Encode Hermes image attachments as one OpenAI-style user message whose content contains the text part followed by `image_url` data-URL parts; keep the current user turn out of `conversation_history`. Reject malformed or unsupported input before starting a run.
-4. `chat.abort` owns an `AbortController` for the matching `/v1/runs` request and emits one terminal raw `chat` event with `state: 'aborted'`; the App maps that state to `chatAborted`. Do not report success while leaving the run active.
-5. Validate all `hermes.cron.jobs.create` parameters before invoking Hermes. Model selection remains global, never session-scoped.
+3. `bridgeVersion` means the running Clawket CLI package version. Normalize it before publication, include it only on a negotiated successful OpenClaw connect response or a Hermes health surface, and omit it for blank/invalid values and legacy peers. Never forward a Gateway-supplied `bridgeVersion` or infer it from the Gateway's `server.version`.
+4. Encode Hermes image attachments as one OpenAI-style user message whose content contains the text part followed by `image_url` data-URL parts; keep the current user turn out of `conversation_history`. Reject malformed or unsupported input before starting a run.
+5. `chat.abort` owns an `AbortController` for the matching `/v1/runs` request and emits one terminal raw `chat` event with `state: 'aborted'`; the App maps that state to `chatAborted`. Do not report success while leaving the run active.
+6. Validate all `hermes.cron.jobs.create` parameters before invoking Hermes. Model selection remains global, never session-scoped.
 
 ## Python Resolution
 

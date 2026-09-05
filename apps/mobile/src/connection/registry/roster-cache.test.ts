@@ -68,6 +68,14 @@ class MemoryCacheStorage implements RosterCacheStorage {
   }
 }
 
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((next) => {
+    resolve = next;
+  });
+  return { promise, resolve };
+}
+
 describe('RosterCache', () => {
   it('round-trips a credential-free tier-zero snapshot through StorageService primitives', async () => {
     const storage = new MemoryCacheStorage();
@@ -136,6 +144,61 @@ describe('RosterCache', () => {
     const snapshots = await cache.getMany(['a', 'missing', 'b']);
 
     expect(snapshots.map((snapshot) => snapshot.connectionId)).toEqual(['a', 'b']);
+  });
+
+  it('serializes writes so a newer roster snapshot cannot be overwritten by a slow prior write', async () => {
+    const storage = new MemoryCacheStorage();
+    const cache = new RosterCache({ storage, now: () => 100 });
+    const firstWrite = deferred<void>();
+    const originalSet = storage.setDashboardCache.bind(storage);
+    const setDashboardCache = jest.spyOn(storage, 'setDashboardCache')
+      .mockImplementationOnce(async (scopeKey, entry) => {
+        await firstWrite.promise;
+        await originalSet(scopeKey, entry);
+      })
+      .mockImplementation(originalSet);
+
+    const older = cache.set('a', [agent('a', 'main')], [
+      session('a', 'main', 'main:main', 10, { preview: 'older' }),
+    ]);
+    await Promise.resolve();
+    const newer = cache.set('a', [agent('a', 'main')], [
+      session('a', 'main', 'main:main', 20, { preview: 'newer' }),
+    ]);
+
+    expect(setDashboardCache).toHaveBeenCalledTimes(1);
+    firstWrite.resolve();
+    await Promise.all([older, newer]);
+
+    await expect(cache.get('a')).resolves.toMatchObject({
+      sessions: [expect.objectContaining({ updatedAt: 20, preview: 'newer' })],
+    });
+  });
+
+  it('serializes removal behind an in-flight write so the tombstone remains final', async () => {
+    const storage = new MemoryCacheStorage();
+    const cache = new RosterCache({ storage, now: () => 100 });
+    const firstWrite = deferred<void>();
+    const originalSet = storage.setDashboardCache.bind(storage);
+    const setDashboardCache = jest.spyOn(storage, 'setDashboardCache')
+      .mockImplementationOnce(async (scopeKey, entry) => {
+        await firstWrite.promise;
+        await originalSet(scopeKey, entry);
+      })
+      .mockImplementation(originalSet);
+
+    const write = cache.set('a', [agent('a', 'main')], [
+      session('a', 'main', 'main:main', 10),
+    ]);
+    await Promise.resolve();
+    const removal = cache.remove('a');
+
+    expect(setDashboardCache).toHaveBeenCalledTimes(1);
+    firstWrite.resolve();
+    await Promise.all([write, removal]);
+
+    expect(setDashboardCache).toHaveBeenCalledTimes(2);
+    await expect(cache.get('a')).resolves.toBeNull();
   });
 });
 

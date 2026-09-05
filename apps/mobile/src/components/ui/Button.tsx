@@ -17,6 +17,7 @@ import {
   ControlSize,
   FontSize,
   FontWeight,
+  HitSize,
   Radius,
   Space,
   createSurfaceStyle,
@@ -60,12 +61,12 @@ export function Button({
   );
   const isDisabled = disabled || loading;
   const contentColor = variant === 'primary'
-    ? theme.colors.primaryText
+    ? theme.colors.onAccent
     : variant === 'destructive'
-      ? theme.colors.error
+      ? theme.colors.bad
       : variant === 'ghost'
-        ? theme.colors.text
-        : theme.colors.primary;
+        ? theme.colors.ink
+        : theme.colors.accent;
   const iconSize = size === 'sm' ? 14 : size === 'lg' ? 18 : 16;
 
   const handlePress = useCallback<NonNullable<PressableProps['onPress']>>((event) => {
@@ -112,16 +113,16 @@ function createStyles(
       alignItems: 'center',
       justifyContent: 'center',
       position: 'relative',
-      borderRadius: Radius.md,
+      borderRadius: Radius.full,
       paddingHorizontal: Space.lg,
     },
-    sizeSM: { minHeight: ControlSize.compact, paddingHorizontal: Space.md },
-    sizeMD: { minHeight: ControlSize.standard },
-    sizeLG: { minHeight: ControlSize.large, paddingHorizontal: Space.xl },
+    sizeSM: { minHeight: HitSize.sm, paddingHorizontal: Space.md },
+    sizeMD: { minHeight: ControlSize.floatingButton },
+    sizeLG: { minHeight: HitSize.lg, paddingHorizontal: Space.xl },
     primary: {
       ...createSurfaceStyle(colors, scheme, 'raised'),
-      borderColor: colors.primary,
-      backgroundColor: colors.primary,
+      borderColor: colors.accent,
+      backgroundColor: colors.accent,
     },
     secondary: {
       ...createSurfaceStyle(colors, scheme, 'flat'),
@@ -131,10 +132,10 @@ function createStyles(
     },
     destructive: {
       ...createSurfaceStyle(colors, scheme, 'flat'),
-      backgroundColor: colors.errorSoft,
+      backgroundColor: colors.badSoft,
     },
     primaryPressed: { opacity: 0.84 },
-    surfacePressed: { backgroundColor: colors.surfaceMuted },
+    surfacePressed: { backgroundColor: colors.surface },
     disabled: { opacity: 0.45 },
     content: {
       flexDirection: 'row',
@@ -144,8 +145,8 @@ function createStyles(
     },
     contentHidden: { opacity: 0 },
     spinner: { position: 'absolute' },
-    label: { fontSize: FontSize.base, fontWeight: FontWeight.semibold },
-    labelSM: { fontSize: FontSize.md },
-    labelLG: { fontSize: FontSize.lg },
+    label: { fontSize: FontSize.secondary, fontWeight: FontWeight.semibold },
+    labelSM: { fontSize: FontSize.caption },
+    labelLG: { fontSize: FontSize.body },
   });
 }

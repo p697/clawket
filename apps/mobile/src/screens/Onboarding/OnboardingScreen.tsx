@@ -58,7 +58,7 @@ export type OnboardingScreenProps = Readonly<{
   onClose?: () => void;
   onCopyCommand?: (command: string) => MaybePromise<void>;
   onPastePairingCode?: (backendKind: PairableBackendKind) => MaybePromise<string | null>;
-  onSubmitPairing: (submission: PairingSubmission) => void;
+  onSubmitPairing: (submission: PairingSubmission) => MaybePromise<void>;
   onScanQr: (expectedBackendKind: PairableBackendKind) => void;
   onOpenPairingHelp?: (backendKind: PairableBackendKind) => void;
   onOpenYouMind: () => void;
@@ -74,6 +74,13 @@ const BACKEND_OPTIONS: ReadonlyArray<{
   { kind: 'openclaw', icon: Bot },
   { kind: 'hermes', icon: Feather },
 ];
+
+const PAIRING_INPUT_PRESENTATION: Readonly<Record<PairableBackendKind, {
+  keyboardType: 'number-pad' | 'ascii-capable';
+}>> = {
+  openclaw: { keyboardType: 'number-pad' },
+  hermes: { keyboardType: 'ascii-capable' },
+};
 
 export function OnboardingScreen({
   initialBackend = 'openclaw',
@@ -99,6 +106,7 @@ export function OnboardingScreen({
   const [pairingCode, setPairingCode] = useState('');
   const [docsExpanded, setDocsExpanded] = useState(false);
   const viewedRef = useRef(false);
+  const submitInFlightRef = useRef(false);
   const backendOptions = useMemo(() => [
     { ...BACKEND_OPTIONS[0], label: t('OpenClaw') },
     { ...BACKEND_OPTIONS[1], label: t('Hermes') },
@@ -118,6 +126,11 @@ export function OnboardingScreen({
     setBackendKind(initialBackend);
   }, [initialBackend]);
 
+  const connecting = status.kind === 'connecting';
+  useEffect(() => {
+    if (!connecting) submitInFlightRef.current = false;
+  }, [connecting]);
+
   if (status.kind === 'loading') {
     return (
       <OnboardingSkeleton
@@ -128,18 +141,34 @@ export function OnboardingScreen({
     );
   }
 
-  const connecting = status.kind === 'connecting';
-  const pairingReady = isVerificationCodeComplete(pairingCode) && !connecting;
+  const pairingReady = isVerificationCodeComplete(pairingCode, backendKind) && !connecting;
+  const pairingInput = PAIRING_INPUT_PRESENTATION[backendKind];
+  const pairingPlaceholder: Readonly<Record<PairableBackendKind, string>> = {
+    openclaw: t('123 456'),
+    hermes: t('ABC 234'),
+  };
 
   const submitPairing = () => {
+    if (!pairingReady || submitInFlightRef.current) return;
     const submission = createPairingSubmission(backendKind, pairingCode);
-    if (submission) onSubmitPairing(submission);
+    if (!submission) return;
+    submitInFlightRef.current = true;
+    try {
+      const pending = onSubmitPairing(submission);
+      void Promise.resolve(pending).then(
+        () => { submitInFlightRef.current = false; },
+        () => { submitInFlightRef.current = false; },
+      );
+    } catch (error) {
+      submitInFlightRef.current = false;
+      throw error;
+    }
   };
 
   const pastePairingCode = async () => {
     const pasted = await onPastePairingCode?.(backendKind);
     if (pasted !== null && pasted !== undefined) {
-      setPairingCode(normalizeVerificationCode(pasted));
+      setPairingCode(normalizeVerificationCode(pasted, backendKind));
     }
   };
 
@@ -206,10 +235,13 @@ export function OnboardingScreen({
                 testID={`onboarding-backend-${backend.kind}`}
                 icon={backend.icon}
                 label={backend.label}
-                selected={Object.is(backendKind, backend.kind)}
-                onPress={() => setBackendKind(backend.kind)}
+                selected={backend.kind === backendKind}
+                onPress={() => {
+                  setBackendKind(backend.kind);
+                  setPairingCode('');
+                }}
               />
-              {Object.is(backendKind, backend.kind) ? (
+              {backend.kind === backendKind ? (
                 <View testID="onboarding-command" style={styles.commandRow}>
                   <Text
                     accessibilityLabel={t('Pairing command')}
@@ -248,14 +280,16 @@ export function OnboardingScreen({
               testID="onboarding-pairing-code"
               accessibilityLabel={t('Pairing code')}
               autoComplete="one-time-code"
+              autoCapitalize="characters"
               autoCorrect={false}
-              keyboardType="number-pad"
+              editable={!connecting}
+              keyboardType={pairingInput.keyboardType}
               maxLength={7}
-              onChangeText={(value) => setPairingCode(normalizeVerificationCode(value))}
+              onChangeText={(value) => setPairingCode(normalizeVerificationCode(value, backendKind))}
               onSubmitEditing={submitPairing}
-              placeholder={t('123 456')}
+              placeholder={pairingPlaceholder[backendKind]}
               returnKeyType="go"
-              value={formatVerificationCode(pairingCode)}
+              value={formatVerificationCode(pairingCode, backendKind)}
               containerStyle={styles.codeInput}
               inputStyle={styles.codeInputText}
             />

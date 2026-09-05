@@ -1,4 +1,9 @@
-import { PendingImage } from '../types/chat';
+import {
+  isImageAttachmentMimeType,
+  normalizeAttachmentMimeType,
+  type PromptAttachment,
+} from '@clawket/agent-protocol';
+import type { PendingImage, UiFileAttachment } from '../types/chat';
 import {
   isSilentReplyPrefixText,
   isSilentReplyText,
@@ -30,12 +35,74 @@ export function summarizeAttachmentFormats(images: PendingImage[]): string | nul
   const formats = Array.from(
     new Set(
       images
-        .map((image) => image.mimeType.trim().toLowerCase())
+        .map((image) => normalizeAttachmentMimeType(image.mimeType, ''))
         .filter(Boolean),
     ),
   ).sort();
 
   return formats.length > 0 ? formats.join(',') : null;
+}
+
+/**
+ * Builds the backend-neutral prompt payload. MIME decides whether an attachment
+ * is an image; native paste APIs also give images a file name, so using the
+ * presence of that name would incorrectly downgrade pasted images to files.
+ */
+export function buildPromptAttachments(
+  images: readonly PendingImage[],
+): PromptAttachment[] | undefined {
+  if (images.length === 0) return undefined;
+
+  return images.map((image) => {
+    const mimeType = normalizeAttachmentMimeType(image.mimeType);
+    const isImage = isImageAttachmentMimeType(mimeType);
+    const name = image.fileName?.trim();
+    return {
+      type: isImage ? 'image' : 'file',
+      mimeType,
+      content: image.base64,
+      ...(!isImage && name ? { name } : {}),
+    };
+  });
+}
+
+export type AttachmentOnlyFallbackKey =
+  | 'Look at this image'
+  | 'Look at these images'
+  | 'Review this file'
+  | 'Review these files'
+  | 'Review these attachments';
+
+/** Selects localized copy for a prompt containing attachments but no typed text. */
+export function resolveAttachmentOnlyFallbackKey(
+  attachments: readonly PendingImage[],
+): AttachmentOnlyFallbackKey | null {
+  const imageCount = attachments.filter((attachment) => (
+    isImageAttachmentMimeType(attachment.mimeType)
+  )).length;
+  const fileCount = attachments.length - imageCount;
+  if (imageCount > 0 && fileCount > 0) return 'Review these attachments';
+  if (imageCount > 0) return imageCount === 1 ? 'Look at this image' : 'Look at these images';
+  if (fileCount > 0) return fileCount === 1 ? 'Review this file' : 'Review these files';
+  return null;
+}
+
+/** Drops file payload bytes while retaining metadata needed by the timeline. */
+export function buildUiFileAttachments(
+  attachments: readonly PendingImage[],
+): UiFileAttachment[] | undefined {
+  const files = attachments
+    .filter((attachment) => !isImageAttachmentMimeType(attachment.mimeType))
+    .map((attachment) => {
+      const fileName = attachment.fileName?.trim();
+      const uri = attachment.uri.trim();
+      return {
+        mimeType: normalizeAttachmentMimeType(attachment.mimeType),
+        ...(fileName ? { fileName } : {}),
+        ...(uri ? { uri } : {}),
+      };
+    });
+  return files.length > 0 ? files : undefined;
 }
 
 export function extractSlashCommand(text: string): string | null {

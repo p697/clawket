@@ -5,6 +5,7 @@ import type {
   ManagementOperations,
 } from '@clawket/agent-protocol';
 import type { AgentSettingsSection } from '../../navigation/root-stack';
+import type { ConnectionRuntimeDetails } from '../../connection/runtime-details';
 
 export type AgentSettingsSectionState =
   | 'loading'
@@ -31,6 +32,9 @@ export type AgentSettingsSectionAction =
   | 'usage.activity'
   | 'usage.cost'
   | 'connection.status'
+  | 'connection.last-ready'
+  | 'connection.bridge-version'
+  | 'connection.bridge-capabilities'
   | 'connection.environment'
   | 'connection.reconnect'
   | 'connection.remove'
@@ -52,6 +56,7 @@ export type AgentSettingsSectionRowDescriptor = Readonly<{
   actionable: boolean;
   availableOffline: boolean;
   locked: boolean;
+  attention: boolean;
   paywallReason?: string;
 }>;
 
@@ -78,6 +83,8 @@ export type BuildAgentSettingsSectionModelInput = Readonly<{
   connectionState: ConnectionState;
   isPro: boolean;
   permissionDenied?: boolean;
+  connectionDetails?: ConnectionRuntimeDetails;
+  locale?: string;
 }>;
 
 type CapabilityGate = Readonly<{
@@ -95,6 +102,7 @@ type RowDefinition = Readonly<{
   requiresPro?: boolean;
   paywallReason?: string;
   value?: (input: BuildAgentSettingsSectionModelInput) => string | undefined;
+  attention?: (input: BuildAgentSettingsSectionModelInput) => boolean;
   showWhenUnsupported?: boolean;
 }>;
 
@@ -282,11 +290,49 @@ const SECTION_DEFINITIONS: Readonly<Record<AgentSettingsSection, SectionDefiniti
           actionable: false,
           availableOffline: true,
           value: ({ connectionState }) => connectionStateLabel(connectionState),
+          attention: ({ connectionState }) => connectionState !== 'ready',
+        },
+        {
+          id: 'connection.last-ready',
+          title: 'Last ready',
+          actionable: false,
+          availableOffline: true,
+          value: ({ connectionDetails, locale }) => formatAgentSettingsLastReady(
+            connectionDetails?.lastReadyAt,
+            locale,
+          ),
+        },
+        {
+          id: 'connection.bridge-version',
+          title: 'Bridge version',
+          actionable: false,
+          availableOffline: true,
+          value: ({ connectionDetails }) => connectionDetails?.bridgeVersion ?? '—',
+        },
+        {
+          id: 'connection.bridge-capabilities',
+          title: 'Bridge capabilities',
+          actionable: false,
+          availableOffline: true,
+          value: ({ connectionDetails }) => connectionDetails?.bridgeCapabilities.join(', ') || '—',
         },
         {
           id: 'connection.reconnect',
           title: 'Reconnect',
           availableOffline: true,
+        },
+      ],
+    }, {
+      id: 'environment',
+      rows: [
+        {
+          id: 'connection.environment',
+          title: 'Environment',
+          actionable: false,
+          availableOffline: true,
+          value: ({ connection }) => connection.environment === 'preview'
+            ? 'Preview'
+            : 'Production',
         },
         {
           id: 'connection.remove',
@@ -294,17 +340,6 @@ const SECTION_DEFINITIONS: Readonly<Record<AgentSettingsSection, SectionDefiniti
           availableOffline: true,
         },
       ],
-    }, {
-      id: 'environment',
-      rows: [{
-        id: 'connection.environment',
-        title: 'Environment',
-        actionable: false,
-        availableOffline: true,
-        value: ({ connection }) => connection.environment === 'preview'
-          ? 'Preview'
-          : 'Production',
-      }],
     }],
   },
   openclaw: {
@@ -496,6 +531,7 @@ function buildRow(
     actionable: definition.actionable !== false,
     availableOffline: definition.availableOffline === true,
     locked,
+    attention: definition.attention?.(input) ?? false,
     ...(definition.paywallReason ? { paywallReason: definition.paywallReason } : {}),
   }];
 }
@@ -526,5 +562,23 @@ function connectionStateLabel(state: ConnectionState): string {
       return 'Connecting';
     default:
       return 'Offline';
+  }
+}
+
+export function formatAgentSettingsLastReady(
+  timestampMs: number | null | undefined,
+  locale?: string,
+): string {
+  if (!timestampMs || !Number.isFinite(timestampMs) || timestampMs < 0) return '—';
+  try {
+    return new Intl.DateTimeFormat(locale || undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    }).format(new Date(timestampMs));
+  } catch {
+    return new Date(timestampMs).toISOString();
   }
 }

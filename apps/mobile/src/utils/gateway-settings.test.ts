@@ -1,4 +1,4 @@
-import { buildDmScopePatch, buildGatewayRuntimePatch, parseDmScope, parseGatewayRuntimeSettings } from './gateway-settings';
+import { buildGatewayRuntimePatch, parseGatewayRuntimeSettings } from './gateway-settings';
 
 describe('parseGatewayRuntimeSettings', () => {
   it('returns empty settings when config is missing', () => {
@@ -193,42 +193,6 @@ describe('buildGatewayRuntimePatch', () => {
           thinkingDefault: null,
         },
       },
-    });
-  });
-});
-
-describe('parseDmScope', () => {
-  it('returns main when config is null', () => {
-    expect(parseDmScope(null)).toBe('main');
-  });
-
-  it('returns main when session.dmScope is missing', () => {
-    expect(parseDmScope({ session: {} })).toBe('main');
-  });
-
-  it('parses valid dmScope values', () => {
-    expect(parseDmScope({ session: { dmScope: 'per-peer' } })).toBe('per-peer');
-    expect(parseDmScope({ session: { dmScope: 'per-channel-peer' } })).toBe('per-channel-peer');
-    expect(parseDmScope({ session: { dmScope: 'per-account-channel-peer' } })).toBe('per-account-channel-peer');
-    expect(parseDmScope({ session: { dmScope: 'main' } })).toBe('main');
-  });
-
-  it('returns main for invalid dmScope values', () => {
-    expect(parseDmScope({ session: { dmScope: 'invalid' } })).toBe('main');
-    expect(parseDmScope({ session: { dmScope: 123 } })).toBe('main');
-  });
-});
-
-describe('buildDmScopePatch', () => {
-  it('builds a session.dmScope patch', () => {
-    expect(buildDmScopePatch('per-channel-peer')).toEqual({
-      session: { dmScope: 'per-channel-peer' },
-    });
-  });
-
-  it('builds main scope patch', () => {
-    expect(buildDmScopePatch('main')).toEqual({
-      session: { dmScope: 'main' },
     });
   });
 });

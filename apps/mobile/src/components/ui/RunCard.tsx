@@ -24,6 +24,8 @@ export type RunCardTone = 'accent' | 'bad' | 'warn';
 export type RunCardProps = {
   title: string;
   detail?: string;
+  statusLabel?: string;
+  statusTone?: RunCardTone;
   tone?: RunCardTone;
   onPress?: () => void;
   disabled?: boolean;
@@ -36,6 +38,8 @@ export type RunCardProps = {
 export function RunCard({
   title,
   detail,
+  statusLabel,
+  statusTone,
   tone = 'accent',
   onPress,
   disabled = false,
@@ -54,7 +58,24 @@ export function RunCard({
       />
       <View style={styles.copy}>
         <Text style={styles.title} numberOfLines={1}>{title}</Text>
-        {detail ? <Text style={styles.detail} numberOfLines={1}>{detail}</Text> : null}
+        {statusLabel || detail ? (
+          <Text
+            testID={testID ? `${testID}-detail` : undefined}
+            style={styles.detail}
+            numberOfLines={1}
+          >
+            {statusLabel ? (
+              <Text
+                testID={testID ? `${testID}-detail-status` : undefined}
+                style={statusTone ? { color: theme.colors[statusTone] } : undefined}
+              >
+                {statusLabel}
+              </Text>
+            ) : null}
+            {statusLabel && detail ? ' · ' : null}
+            {detail}
+          </Text>
+        ) : null}
       </View>
       {trailing ?? (onPress ? (
         <ChevronRight

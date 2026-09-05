@@ -10,6 +10,56 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
   multiRemove: jest.fn(() => Promise.resolve()),
 }));
 
+// Keep Reanimated's ESM runtime out of the Node test environment. Individual
+// animation tests can still replace this baseline mock with a stricter factory.
+jest.mock('react-native-reanimated', () => {
+  const React = require('react');
+  const primitive = (name: string) => React.forwardRef(
+    ({ children, ...props }: { children?: React.ReactNode } & Record<string, unknown>, ref: React.Ref<unknown>) => (
+      React.createElement(name, { ...props, ref }, children)
+    ),
+  );
+  const identity = <T>(value: T): T => value;
+  const easingIdentity = (value: number): number => value;
+
+  const Animated = {
+    Image: primitive('AnimatedImage'),
+    ScrollView: primitive('AnimatedScrollView'),
+    Text: primitive('AnimatedText'),
+    View: primitive('AnimatedView'),
+    createAnimatedComponent: identity,
+  };
+
+  return {
+    __esModule: true,
+    default: Animated,
+    cancelAnimation: jest.fn(),
+    Easing: {
+      bezier: () => easingIdentity,
+      cubic: (value: number) => value ** 3,
+      ease: easingIdentity,
+      in: identity,
+      inOut: identity,
+      linear: easingIdentity,
+      out: identity,
+      quad: (value: number) => value ** 2,
+    },
+    interpolate: (_value: number, _input: number[], output: unknown[]) => output[0],
+    interpolateColor: (_value: number, _input: number[], output: unknown[]) => output[0],
+    makeMutable: <T>(value: T) => ({ value }),
+    ReduceMotion: { Always: 'always', Never: 'never', System: 'system' },
+    runOnJS: identity,
+    useAnimatedStyle: (factory: () => unknown) => factory(),
+    useReducedMotion: () => false,
+    useSharedValue: <T>(value: T) => ({ value }),
+    withDelay: (_delay: number, value: unknown) => value,
+    withRepeat: (value: unknown) => value,
+    withSequence: (...values: unknown[]) => values.at(-1),
+    withSpring: identity,
+    withTiming: identity,
+  };
+});
+
 // Mock expo-linking
 jest.mock('expo-linking', () => ({
   getInitialURL: jest.fn(() => Promise.resolve(null)),
@@ -252,23 +302,68 @@ jest.mock('@gorhom/bottom-sheet', () => {
   const { View, TextInput, SectionList } = require('react-native');
 
   const BottomSheetModal = React.forwardRef(function BottomSheetModal(
-    { children }: { children: React.ReactNode },
+    {
+      children,
+      handleComponent: HandleComponent,
+      backdropComponent: BackdropComponent,
+      onDismiss,
+      ...props
+    }: {
+      children: React.ReactNode | ((params: { data?: unknown }) => React.ReactNode);
+      handleComponent?: React.ComponentType;
+      backdropComponent?: React.ComponentType<{
+        animatedIndex: { value: number };
+        animatedPosition: { value: number };
+      }>;
+      onDismiss?: () => void;
+    } & Record<string, unknown>,
     ref: React.Ref<{ present: () => void; dismiss: () => void }>,
   ) {
+    const [presented, setPresented] = React.useState(false);
     React.useImperativeHandle(ref, () => ({
-      present: jest.fn(),
-      dismiss: jest.fn(),
+      present: jest.fn(() => setPresented(true)),
+      dismiss: jest.fn(() => {
+        setPresented(false);
+        onDismiss?.();
+      }),
     }));
-    return React.createElement(View, null, children);
+    if (!presented) {
+      return null;
+    }
+    const backdropVariables = {
+      animatedIndex: { value: 0 },
+      animatedPosition: { value: 0 },
+    };
+    return React.createElement(
+      View,
+      props,
+      BackdropComponent
+        ? React.createElement(BackdropComponent, backdropVariables)
+        : null,
+      HandleComponent ? React.createElement(HandleComponent) : null,
+      typeof children === 'function' ? children({}) : children,
+    );
   });
+
+  function BottomSheetView({
+    children,
+    ...props
+  }: {
+    children?: React.ReactNode;
+  } & Record<string, unknown>) {
+    return React.createElement(View, props, children);
+  }
 
   return {
     __esModule: true,
-    BottomSheetBackdrop: ({ children }: { children?: React.ReactNode }) => React.createElement(View, null, children),
+    BottomSheetBackdrop: ({ children, ...props }: {
+      children?: React.ReactNode;
+    } & Record<string, unknown>) => React.createElement(View, props, children),
     BottomSheetModal,
     BottomSheetModalProvider: ({ children }: { children: React.ReactNode }) => children,
     BottomSheetSectionList: SectionList,
     BottomSheetTextInput: TextInput,
+    BottomSheetView,
   };
 });
 

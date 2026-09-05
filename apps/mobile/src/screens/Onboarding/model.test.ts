@@ -11,6 +11,7 @@ import {
 describe('Onboarding model', () => {
   it('normalizes typed and pasted pairing codes to six digits', () => {
     expect(normalizeVerificationCode(' 12a3-45 67 ')).toBe('123456');
+    expect(normalizeVerificationCode(' ab1c-2o34 ', 'hermes')).toBe('ABC234');
     expect(normalizeVerificationCode('')).toBe('');
   });
 
@@ -18,12 +19,14 @@ describe('Onboarding model', () => {
     expect(formatVerificationCode('12')).toBe('12');
     expect(formatVerificationCode('123')).toBe('123');
     expect(formatVerificationCode('123456')).toBe('123 456');
+    expect(formatVerificationCode('abc234', 'hermes')).toBe('ABC 234');
   });
 
   it('accepts only complete six-digit verification codes', () => {
     expect(isVerificationCodeComplete('123 456')).toBe(true);
     expect(isVerificationCodeComplete('12345')).toBe(false);
     expect(isVerificationCodeComplete('1234567')).toBe(true);
+    expect(isVerificationCodeComplete('ABC 234', 'hermes')).toBe(true);
   });
 
   it('keeps backend and transport identities separate in pairing submissions', () => {
@@ -32,10 +35,10 @@ describe('Onboarding model', () => {
       transportKind: 'relay',
       code: '123456',
     });
-    expect(createPairingSubmission('hermes', '654321')).toEqual({
+    expect(createPairingSubmission('hermes', 'abc234')).toEqual({
       backendKind: 'hermes',
       transportKind: 'relay',
-      code: '654321',
+      code: 'ABC234',
     });
     expect(createPairingSubmission('hermes', '12345')).toBeNull();
   });

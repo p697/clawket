@@ -49,7 +49,8 @@ describe('mapAdapterChatMessage', () => {
       attachments: [
         { type: 'image', mimeType: 'image/jpeg', uri: 'file:///one.jpg' },
         { type: 'image', mimeType: 'image/png', content: 'data:image/png;base64,two' },
-        { type: 'file', mimeType: 'text/plain', content: 'ignored-by-current-ui', name: 'a.txt' },
+        { type: 'image', mimeType: 'image/webp', content: 'three' },
+        { type: 'file', mimeType: ' Text/Plain ', content: 'not-retained-by-ui', name: ' a.txt ' },
       ],
       provider: 'provider',
       model: 'model',
@@ -61,7 +62,12 @@ describe('mapAdapterChatMessage', () => {
       userSkill: { id: 'review', name: 'Review' },
       idempotencyKey: 'idem-1',
       timestampMs: 11,
-      imageUris: ['file:///one.jpg', 'data:image/png;base64,two'],
+      imageUris: [
+        'file:///one.jpg',
+        'data:image/png;base64,two',
+        'data:image/webp;base64,three',
+      ],
+      fileAttachments: [{ mimeType: 'text/plain', fileName: 'a.txt' }],
       modelLabel: 'provider/model',
       usage: {
         inputTokens: 2,
@@ -84,9 +90,13 @@ describe('mapAdapterChatMessage', () => {
       tool: {
         name: 'read',
         status: 'success',
+        callId: 'call-1',
         summary: 'Read file',
         input: { path: '/tmp/file' },
         output: { lines: 2 },
+        durationMs: 50,
+        startedAtMs: 100,
+        finishedAtMs: 150,
       },
     })).toMatchObject({
       id: 'tool-1',
@@ -95,6 +105,9 @@ describe('mapAdapterChatMessage', () => {
       toolSummary: 'Read file',
       toolArgs: '{\n  "path": "/tmp/file"\n}',
       toolDetail: '{\n  "lines": 2\n}',
+      toolDurationMs: 50,
+      toolStartedAt: 100,
+      toolFinishedAt: 150,
     });
   });
 

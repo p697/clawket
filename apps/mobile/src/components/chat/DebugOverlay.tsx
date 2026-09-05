@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useAppTheme } from '../../theme';
-import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
+import { FontSize, FontWeight, PresentationColor, Radius, Space } from '../../theme/tokens';
 
 type Props = {
   logs: string[];
@@ -63,8 +63,8 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       left: Space.sm,
       right: Space.sm,
       maxHeight: 260,
-      backgroundColor: colors.debugOverlay,
-      borderRadius: Radius.sm,
+      backgroundColor: PresentationColor.mediaOverlayStrong,
+      borderRadius: Radius.card,
       padding: Space.sm,
       zIndex: 999,
     },
@@ -80,25 +80,25 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     copyButton: {
       paddingHorizontal: Space.sm,
       paddingVertical: Space.xs,
-      borderRadius: Radius.sm,
+      borderRadius: Radius.full,
       backgroundColor: colors.surface,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
+      borderColor: colors.line,
     },
     copyButtonPressed: {
       opacity: 0.84,
     },
     copyButtonText: {
-      color: colors.text,
-      fontSize: FontSize.sm,
+      color: colors.ink,
+      fontSize: FontSize.caption,
       fontWeight: FontWeight.semibold,
     },
     debugScroll: {
       maxHeight: 244,
     },
     debugText: {
-      color: colors.debugText,
-      fontSize: FontSize.micro,
+      color: colors.good,
+      fontSize: FontSize.caption,
       fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
       lineHeight: 14,
     },

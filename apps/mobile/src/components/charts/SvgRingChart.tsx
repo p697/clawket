@@ -32,7 +32,7 @@ export function SvgRingChart({
   strokeWidth = DEFAULT_STROKE_WIDTH,
 }: Props): React.JSX.Element {
   const { theme } = useAppTheme();
-  const { t } = useTranslation('console');
+  const { t } = useTranslation('settings');
   const [animProgress, setAnimProgress] = useState(0);
   const rafRef = useRef<number | null>(null);
   const startTimeRef = useRef<number>(0);
@@ -122,7 +122,7 @@ export function SvgRingChart({
             cx={cx}
             cy={cy}
             r={r}
-            stroke={theme.colors.chartGrid}
+            stroke={theme.colors.line}
             strokeWidth={strokeWidth}
             fill="none"
             accessibilityLabel={t('No cost data')}
@@ -174,13 +174,13 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       justifyContent: 'center',
     },
     centerValue: {
-      fontSize: FontSize.xl,
-      fontWeight: FontWeight.bold,
-      color: colors.text,
+      fontSize: FontSize.body,
+      fontWeight: FontWeight.semibold,
+      color: colors.ink,
     },
     centerLabel: {
-      fontSize: FontSize.xs,
-      color: colors.textMuted,
+      fontSize: FontSize.caption,
+      color: colors.inkSecondary,
       marginTop: 2,
     },
     legend: {
@@ -202,8 +202,8 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       marginRight: Space.xs + 2,
     },
     legendLabel: {
-      fontSize: FontSize.sm,
-      color: colors.textMuted,
+      fontSize: FontSize.caption,
+      color: colors.inkSecondary,
     },
   });
 }

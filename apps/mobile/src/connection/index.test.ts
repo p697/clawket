@@ -18,6 +18,7 @@ import {
   type ConnectionCoordinatorOptions,
   type ConnectionTelemetry,
 } from './index';
+import { createConnectionAdapter } from './adapters';
 
 class MemorySecureStorage implements SecureConnectionStorage {
   private readonly values = new Map<string, string>();
@@ -49,9 +50,10 @@ class MemoryDashboardStorage implements RosterCacheStorage {
 }
 
 const legacyStorage: LegacyConnectionStorage = {
-  async getGatewayConfigsState() {
+  async readLegacyGatewayConfigsState() {
     return { activeId: null, configs: [] };
   },
+  async migrateLegacyYouMindState() {},
 };
 
 function connectionInput(id: string) {
@@ -136,6 +138,12 @@ function instrumentAdapter(
     events.push(`disconnect:${descriptor.id}`);
     disconnect();
   };
+  Object.assign(adapter, {
+    getConnectionRuntimeMetadata: () => ({
+      bridgeVersion: `bridge-${descriptor.id}`,
+      bridgeCapabilities: ['bridge.capabilities.v2', `backend.${descriptor.backendKind}.v2`],
+    }),
+  });
   return adapter;
 }
 
@@ -144,6 +152,10 @@ async function createHarness(
   maintenance: Pick<
     ConnectionCoordinatorOptions,
     'rosterRefreshIntervalMs' | 'hermesProbeIntervalMs'
+  > = {},
+  runtimeOptions: Pick<
+    ConnectionCoordinatorOptions,
+    'chatCache' | 'credentialStore' | 'sessionPreferences'
   > = {},
 ) {
   const { secureStorage, store } = await createStoreHarness();
@@ -164,6 +176,7 @@ async function createHarness(
     ...(withFactory ? { adapterFactory: factory } : {}),
     now: () => 50,
     ...maintenance,
+    ...runtimeOptions,
   });
   return { adapters, cache, coordinator, events, factory, secureStorage, store, watermarks };
 }
@@ -209,6 +222,70 @@ function deferred<T>() {
 }
 
 describe('ConnectionCoordinator', () => {
+  it('reads isolated credential records for trusted runtime consumers', async () => {
+    const harness = await createHarness(false);
+    await harness.store.update('alpha', {
+      auth: { token: 'alpha-runtime-token', password: 'alpha-runtime-password' },
+    });
+
+    const first = await harness.coordinator.getRuntimeConnectionRecord('alpha');
+    expect(first.auth).toEqual({
+      token: 'alpha-runtime-token',
+      password: 'alpha-runtime-password',
+    });
+    expect(JSON.stringify(harness.coordinator.getSnapshot())).not.toContain('alpha-runtime-token');
+
+    first.auth!.token = 'mutated-outside-coordinator';
+    const second = await harness.coordinator.getRuntimeConnectionRecord('alpha');
+    expect(second.auth?.token).toBe('alpha-runtime-token');
+    await expect(
+      harness.coordinator.getRuntimeConnectionRecord('missing-runtime-record'),
+    ).rejects.toBeInstanceOf(Error);
+  });
+
+  it('keeps real adapter credentials out of the published runtime snapshot', async () => {
+    const { store } = await createStoreHarness();
+    await store.update('alpha', {
+      auth: {
+        token: 'snapshot-auth-secret',
+        password: 'snapshot-password-secret',
+      },
+      bootstrap: {
+        token: 'snapshot-bootstrap-secret',
+        strategy: 'legacy-bound',
+      },
+      relay: {
+        serverUrl: 'https://alpha.example',
+        gatewayId: 'gw_alpha',
+        clientToken: 'snapshot-relay-secret',
+      },
+    });
+    const dashboardStorage = new MemoryDashboardStorage();
+    const coordinator = new ConnectionCoordinator({
+      store,
+      cache: new RosterCache({ storage: dashboardStorage }),
+      watermarks: new UnreadWatermarks({ storage: dashboardStorage }),
+      chatCache: { clearConnection: async () => undefined },
+      adapterFactory: (record, descriptor) => {
+        const adapter = createConnectionAdapter(record, descriptor);
+        adapter.connect = async () => undefined;
+        adapter.listAgents = async () => [];
+        adapter.listSessions = async () => [];
+        return adapter;
+      },
+    });
+
+    await coordinator.start();
+
+    const serialized = JSON.stringify(coordinator.getSnapshot());
+    expect(serialized).not.toContain('snapshot-auth-secret');
+    expect(serialized).not.toContain('snapshot-password-secret');
+    expect(serialized).not.toContain('snapshot-bootstrap-secret');
+    expect(serialized).not.toContain('snapshot-relay-secret');
+    expect(coordinator.getSnapshot().activeAdapter?.connection.id).toBe('alpha');
+    await coordinator.stop();
+  });
+
   it('connects only the active adapter and serves inactive roster rows from cache', async () => {
     const harness = await createHarness();
     await harness.cache.set('beta', [agent('beta')], [session('beta', 30)]);
@@ -225,6 +302,32 @@ describe('ConnectionCoordinator', () => {
     expect(snapshot.roster.find((group) => group.connection.id === 'beta')?.source).toBe('cache');
     expect(snapshot.roster.find((group) => group.connection.id === 'alpha')?.unreadCount).toBe(1);
     expect(snapshot.roster.find((group) => group.connection.id === 'beta')?.unreadCount).toBe(0);
+    expect(snapshot.connectionDetails.beta).toEqual({
+      lastReadyAt: 50,
+      bridgeVersion: null,
+      bridgeCapabilities: [],
+    });
+  });
+
+  it('projects handshake metadata and retains last-ready evidence while offline', async () => {
+    const harness = await createHarness();
+
+    await harness.coordinator.start();
+
+    expect(harness.coordinator.getSnapshot().connectionDetails.alpha).toEqual({
+      lastReadyAt: 50,
+      bridgeVersion: 'bridge-alpha',
+      bridgeCapabilities: ['bridge.capabilities.v2', 'backend.openclaw.v2'],
+    });
+
+    harness.adapters[0]?.disconnect();
+
+    expect(harness.coordinator.getSnapshot()).toMatchObject({ activeState: 'idle' });
+    expect(harness.coordinator.getSnapshot().connectionDetails.alpha).toEqual({
+      lastReadyAt: 50,
+      bridgeVersion: 'bridge-alpha',
+      bridgeCapabilities: ['bridge.capabilities.v2', 'backend.openclaw.v2'],
+    });
   });
 
   it('disconnects the old adapter before connecting the newly active one', async () => {
@@ -270,6 +373,35 @@ describe('ConnectionCoordinator', () => {
     await harness.coordinator.activate('alpha');
 
     expect(harness.events).toEqual(['connect:alpha']);
+  });
+
+  it('reconnects an active pairing after upserting its stable Relay identity', async () => {
+    const harness = await createHarness();
+    await harness.coordinator.start();
+
+    const saved = await harness.coordinator.upsertConnection({
+      ...connectionInput('alpha'),
+      label: 'Updated alpha',
+      url: 'wss://alpha-new.example/ws',
+      relay: {
+        ...connectionInput('alpha').relay,
+        clientToken: 'gct_alpha_new',
+      },
+    });
+
+    expect(saved).toMatchObject({
+      created: false,
+      connection: { id: 'alpha', label: 'alpha' },
+    });
+    expect(harness.events).toEqual([
+      'connect:alpha',
+      'disconnect:alpha',
+      'connect:alpha',
+    ]);
+    expect(harness.coordinator.getSnapshot()).toMatchObject({
+      activeConnectionId: 'alpha',
+      activeState: 'ready',
+    });
   });
 
   it('disconnects an in-flight adapter before a rapid switch can connect another', async () => {
@@ -329,6 +461,154 @@ describe('ConnectionCoordinator', () => {
     expect(harness.events).toEqual(['connect:alpha']);
   });
 
+  it('clears only the removed connection chat cache after the registry commit', async () => {
+    const clearConnection = jest.fn(async (_connectionId: string) => undefined);
+    const harness = await createHarness(true, {}, {
+      chatCache: { clearConnection },
+    });
+    await harness.coordinator.start();
+
+    await expect(harness.coordinator.removeConnection('beta')).resolves.toBe(true);
+
+    expect(clearConnection).toHaveBeenCalledTimes(1);
+    expect(clearConnection).toHaveBeenCalledWith('beta');
+    expect(harness.store.getSnapshot().connections.map((connection) => connection.id)).toEqual([
+      'alpha',
+    ]);
+    expect(harness.coordinator.getSnapshot().error).toBeNull();
+  });
+
+  it('clears only the removed connection session preferences after the registry commit', async () => {
+    const clearConnection = jest.fn(async (_connectionId: string) => undefined);
+    const harness = await createHarness(true, {}, {
+      sessionPreferences: { clearConnection },
+    });
+    await harness.coordinator.start();
+
+    await expect(harness.coordinator.removeConnection('beta')).resolves.toBe(true);
+
+    expect(clearConnection).toHaveBeenCalledTimes(1);
+    expect(clearConnection).toHaveBeenCalledWith('beta');
+    expect(harness.store.getSnapshot().connections.map((connection) => connection.id)).toEqual([
+      'alpha',
+    ]);
+    expect(harness.coordinator.getSnapshot().error).toBeNull();
+  });
+
+  it('clears operator and node device tokens only for the removed connection scope', async () => {
+    const deleteDeviceToken = jest.fn(async () => undefined);
+    const harness = await createHarness(true, {}, {
+      credentialStore: {
+        getIdentity: async () => ({
+          deviceId: 'device-1',
+          publicKeyHex: 'public',
+          secretKeyHex: 'secret',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        }),
+        deleteDeviceToken,
+      },
+    });
+    await harness.coordinator.start();
+
+    await expect(harness.coordinator.removeConnection('beta')).resolves.toBe(true);
+
+    expect(deleteDeviceToken).toHaveBeenCalledTimes(2);
+    expect(deleteDeviceToken).toHaveBeenNthCalledWith(1, 'device-1', {
+      serverUrl: 'https://beta.example',
+      gatewayId: 'gw_beta',
+    });
+    expect(deleteDeviceToken).toHaveBeenNthCalledWith(2, 'device-1', {
+      serverUrl: 'https://beta.example',
+      gatewayId: 'gw_beta',
+      role: 'node',
+    });
+  });
+
+  it('clears both device-token roles using the normalized direct Gateway URL', async () => {
+    const deleteDeviceToken = jest.fn(async () => undefined);
+    const harness = await createHarness(true, {}, {
+      credentialStore: {
+        getIdentity: async () => ({
+          deviceId: 'device-1',
+          publicKeyHex: 'public',
+          secretKeyHex: 'secret',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        }),
+        deleteDeviceToken,
+      },
+    });
+    await harness.store.update('beta', {
+      transportKind: 'local',
+      url: 'wss://beta-gateway.example/ws///',
+      relay: null,
+    });
+    await harness.coordinator.start();
+
+    await expect(harness.coordinator.removeConnection('beta')).resolves.toBe(true);
+
+    expect(deleteDeviceToken).toHaveBeenNthCalledWith(1, 'device-1', {
+      gatewayUrl: 'wss://beta-gateway.example/ws',
+    });
+    expect(deleteDeviceToken).toHaveBeenNthCalledWith(2, 'device-1', {
+      gatewayUrl: 'wss://beta-gateway.example/ws',
+      role: 'node',
+    });
+  });
+
+  it('keeps a committed removal and reports device-token cleanup failure', async () => {
+    const harness = await createHarness(true, {}, {
+      credentialStore: {
+        getIdentity: async () => ({
+          deviceId: 'device-1',
+          publicKeyHex: 'public',
+          secretKeyHex: 'secret',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        }),
+        deleteDeviceToken: async () => {
+          throw new Error('keychain unavailable');
+        },
+      },
+    });
+    await harness.coordinator.start();
+
+    await expect(harness.coordinator.removeConnection('alpha')).resolves.toBe(true);
+
+    expect(harness.store.getSnapshot().connections.map((connection) => connection.id)).toEqual([
+      'beta',
+    ]);
+    expect(harness.coordinator.getSnapshot().error).toMatchObject({
+      operation: 'remove',
+      connectionId: 'alpha',
+    });
+  });
+
+  it('keeps a committed removal and reports local cache cleanup failure', async () => {
+    const clearConnection = jest.fn(async () => {
+      throw new Error('cache unavailable');
+    });
+    const harness = await createHarness(true, {}, {
+      chatCache: { clearConnection },
+    });
+    await harness.coordinator.start();
+
+    await expect(harness.coordinator.removeConnection('alpha')).resolves.toBe(true);
+
+    expect(clearConnection).toHaveBeenCalledWith('alpha');
+    expect(harness.store.getSnapshot()).toMatchObject({
+      activeConnectionId: 'beta',
+      connections: [expect.objectContaining({ id: 'beta' })],
+    });
+    expect(harness.coordinator.getSnapshot()).toMatchObject({
+      activeConnectionId: 'beta',
+      activeState: 'ready',
+      error: {
+        operation: 'remove',
+        connectionId: 'alpha',
+        message: 'Connection data was removed, but some local data cleanup failed.',
+      },
+    });
+  });
+
   it('can load descriptors and cache before the adapter factory is configured', async () => {
     const harness = await createHarness(false);
     await harness.cache.set('beta', [agent('beta')], [session('beta', 30)]);
@@ -347,6 +627,90 @@ describe('ConnectionCoordinator', () => {
     expect(harness.events).toEqual(['connect:alpha']);
     expect(harness.coordinator.getAdapter('alpha')?.state).toBe('ready');
     expect(harness.coordinator.getAdapter('beta')).toBeNull();
+  });
+
+  it('reconciles a missing active adapter when retry probes after factory failure', async () => {
+    const harness = await createHarness(false);
+    let factoryAttempts = 0;
+    harness.coordinator.setAdapterFactory((_record, descriptor) => {
+      factoryAttempts += 1;
+      if (factoryAttempts === 1) throw new Error('factory unavailable');
+      return instrumentAdapter(descriptor, harness.events);
+    });
+
+    await harness.coordinator.start();
+    expect(harness.coordinator.getSnapshot()).toMatchObject({
+      activeConnectionId: 'alpha',
+      activeAdapter: null,
+      error: { operation: 'connect', connectionId: 'alpha' },
+    });
+
+    await expect(harness.coordinator.probeActive()).resolves.toBe(true);
+
+    expect(factoryAttempts).toBe(2);
+    expect(harness.coordinator.getSnapshot()).toMatchObject({
+      activeConnectionId: 'alpha',
+      activeState: 'ready',
+      error: null,
+    });
+  });
+
+  it('never republishes a stale active id when a switch overtakes cache hydration', async () => {
+    const { store } = await createStoreHarness();
+    const dashboardStorage = new MemoryDashboardStorage();
+    const cache = new RosterCache({ storage: dashboardStorage });
+    const pendingCache = deferred<Awaited<ReturnType<RosterCache['getMany']>>>();
+    const getMany = jest.spyOn(cache, 'getMany').mockImplementationOnce(
+      () => pendingCache.promise,
+    );
+    const coordinator = new ConnectionCoordinator({
+      store,
+      cache,
+      watermarks: new UnreadWatermarks({ storage: dashboardStorage }),
+      adapterFactory: (_record, descriptor) => instrumentAdapter(descriptor, []),
+      chatCache: { clearConnection: async () => undefined },
+    });
+    const observedActiveIds: Array<string | null> = [];
+    const unsubscribe = coordinator.subscribe(() => {
+      observedActiveIds.push(coordinator.getSnapshot().activeConnectionId);
+    });
+
+    const started = coordinator.start();
+    for (let attempt = 0; attempt < 10 && getMany.mock.calls.length === 0; attempt += 1) {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+    expect(getMany).toHaveBeenCalledTimes(1);
+    await store.setActive('beta');
+    const switchedAt = observedActiveIds.length - 1;
+
+    pendingCache.resolve([]);
+    await started;
+    await coordinator.whenIdle();
+
+    expect(observedActiveIds[switchedAt]).toBe('beta');
+    expect(observedActiveIds.slice(switchedAt)).not.toContain('alpha');
+    expect(coordinator.getSnapshot()).toMatchObject({
+      activeConnectionId: 'beta',
+      activeState: 'ready',
+    });
+    unsubscribe();
+    await coordinator.stop();
+  });
+
+  it('continues a switch when adapter cleanup throws', async () => {
+    const harness = await createHarness();
+    await harness.coordinator.start();
+    const alpha = harness.adapters[0] as AgentAdapter & { dispose?: () => void };
+    alpha.dispose = jest.fn(() => {
+      throw new Error('dispose failed');
+    });
+
+    await expect(harness.coordinator.activate('beta')).resolves.toMatchObject({
+      activeConnectionId: 'beta',
+      activeState: 'ready',
+    });
+    expect(harness.coordinator.getAdapter('alpha')).toBeNull();
+    expect(harness.coordinator.getAdapter('beta')?.state).toBe('ready');
   });
 
   it('updates unread state when a thread is opened without affecting cached connections', async () => {
@@ -497,5 +861,38 @@ describe('ConnectionCoordinator', () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+
+  it('does not let a slow roster poll overwrite a newer pushed session snapshot', async () => {
+    const harness = await createHarness();
+    await harness.coordinator.start();
+    const adapter = harness.adapters[0];
+    const pendingSessions = deferred<SessionDescriptor[]>();
+    const listSessions = jest.spyOn(adapter, 'listSessions')
+      .mockImplementationOnce(() => pendingSessions.promise);
+
+    const refresh = harness.coordinator.refreshRoster();
+    for (let attempt = 0; attempt < 10 && listSessions.mock.calls.length === 0; attempt += 1) {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+    expect(listSessions).toHaveBeenCalledTimes(1);
+
+    const created = await adapter.createSession?.('main', { title: 'Pushed session' });
+    expect(created).toBeDefined();
+    expect(
+      harness.coordinator.getSnapshot().roster
+        .find((group) => group.connection.id === 'alpha')
+        ?.agents[0]?.sessions.map((candidate) => candidate.key),
+    ).toContain(created?.key);
+
+    pendingSessions.resolve([session('alpha', 20)]);
+    await refresh;
+
+    expect(
+      harness.coordinator.getSnapshot().roster
+        .find((group) => group.connection.id === 'alpha')
+        ?.agents[0]?.sessions.map((candidate) => candidate.key),
+    ).toContain(created?.key);
+    await harness.coordinator.stop();
   });
 });

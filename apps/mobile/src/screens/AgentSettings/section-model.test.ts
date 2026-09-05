@@ -7,6 +7,7 @@ import {
 import type { AgentSettingsSection } from '../../navigation/root-stack';
 import {
   buildAgentSettingsSectionModel,
+  formatAgentSettingsLastReady,
   getAgentSettingsSectionTitle,
   isAgentSettingsSectionLocked,
   isAgentSettingsSectionSupported,
@@ -121,7 +122,42 @@ describe('AgentSettings section model', () => {
       'channels-devices.devices',
       'channels-devices.nodes',
     ]);
+    expect(actions('connection')).toEqual([
+      'connection.status',
+      'connection.last-ready',
+      'connection.bridge-version',
+      'connection.bridge-capabilities',
+      'connection.reconnect',
+      'connection.environment',
+      'connection.remove',
+    ]);
     expect(sections.every((section) => model(section).supported)).toBe(true);
+  });
+
+  it('renders connection runtime projection and marks non-ready status for attention', () => {
+    const lastReadyAt = Date.UTC(2026, 8, 5, 7, 30);
+    const connectionModel = model('connection', {
+      connectionState: 'offline',
+      connectionDetails: {
+        lastReadyAt,
+        bridgeVersion: '2026.9.5',
+        bridgeCapabilities: ['bridge.capabilities.v2', 'hermes.multi-session.v2'],
+      },
+      locale: 'en-US',
+    });
+    const rows = connectionModel.groups.flatMap((group) => group.rows);
+
+    expect(rows).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'connection.status', value: 'Offline', attention: true }),
+      expect.objectContaining({ id: 'connection.last-ready', value: expect.stringContaining('2026') }),
+      expect.objectContaining({ id: 'connection.bridge-version', value: '2026.9.5' }),
+      expect.objectContaining({
+        id: 'connection.bridge-capabilities',
+        value: 'bridge.capabilities.v2, hermes.multi-session.v2',
+      }),
+    ]));
+    expect(formatAgentSettingsLastReady(null, 'en-US')).toBe('—');
+    expect(formatAgentSettingsLastReady(Number.NaN, 'en-US')).toBe('—');
   });
 
   it('uses capability metadata for both section and child visibility', () => {

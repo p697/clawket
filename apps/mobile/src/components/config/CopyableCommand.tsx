@@ -32,8 +32,8 @@ export function CopyableCommand({
         {command}
       </Text>
       {copied
-        ? <Check size={14} color={theme.colors.success} strokeWidth={2.5} style={styles.icon} />
-        : <Copy size={14} color={theme.colors.textSubtle} strokeWidth={2} style={styles.icon} />
+        ? <Check size={14} color={theme.colors.good} strokeWidth={2.5} style={styles.icon} />
+        : <Copy size={14} color={theme.colors.inkTertiary} strokeWidth={2} style={styles.icon} />
       }
     </TouchableOpacity>
   );
@@ -44,10 +44,10 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     container: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: colors.surfaceElevated,
+      backgroundColor: colors.surfaceFloating,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
-      borderRadius: Radius.sm,
+      borderColor: colors.line,
+      borderRadius: Radius.card,
       paddingLeft: Space.md,
       paddingRight: Space.sm,
       paddingVertical: Space.sm,
@@ -60,8 +60,8 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     text: {
       flex: 1,
       fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace' }),
-      fontSize: FontSize.sm,
-      color: colors.textMuted,
+      fontSize: FontSize.caption,
+      color: colors.inkSecondary,
     },
     textMultiline: {
       lineHeight: 20,

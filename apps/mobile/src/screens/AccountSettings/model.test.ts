@@ -3,6 +3,7 @@ import {
   buildAccountSettingsGroups,
   getConnectionValueKeys,
   resolveAccountSettingsCapabilities,
+  resolveAccountSettingsRuntimeStatus,
   type AccountSettingsLabels,
 } from './model';
 
@@ -32,6 +33,42 @@ function connection(
 }
 
 describe('AccountSettings model', () => {
+  it('derives every page state from bootstrap, connection, and permission context', () => {
+    const ready = {
+      connectionInitialized: true,
+      connectionSwitching: false,
+      connectionCount: 1,
+      activeConnectionId: 'connection-one',
+      activeState: 'ready' as const,
+      permissionsLoading: false,
+      permissionReason: null,
+    };
+
+    expect(resolveAccountSettingsRuntimeStatus({
+      ...ready,
+      permissionsLoading: true,
+    })).toEqual({ kind: 'loading' });
+    expect(resolveAccountSettingsRuntimeStatus({
+      ...ready,
+      connectionCount: 0,
+      activeConnectionId: null,
+      activeState: 'idle',
+    })).toEqual({ kind: 'empty' });
+    expect(resolveAccountSettingsRuntimeStatus({
+      ...ready,
+      activeState: 'reconnecting',
+    })).toEqual({ kind: 'offline' });
+    expect(resolveAccountSettingsRuntimeStatus({
+      ...ready,
+      permissionReason: 'gatewayConnections',
+    })).toEqual({ kind: 'permission', reason: 'gatewayConnections' });
+    expect(resolveAccountSettingsRuntimeStatus({
+      ...ready,
+      connectionErrorCode: 'probe',
+    })).toEqual({ kind: 'error', code: 'probe' });
+    expect(resolveAccountSettingsRuntimeStatus(ready)).toEqual({ kind: 'ready' });
+  });
+
   it('builds every specified group and keeps backend and transport identity separate', () => {
     const groups = buildAccountSettingsGroups({
       connections: [connection()],

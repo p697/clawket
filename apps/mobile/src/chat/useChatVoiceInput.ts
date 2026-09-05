@@ -1,6 +1,6 @@
 import { RefObject, useCallback, useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
-import { ChatComposerHandle } from '../components/chat/ChatComposer';
+import type { ComposerHandle } from '../components/ui/Composer';
 import { analyticsEvents } from '../services/analytics/events';
 import {
   addSpeechRecognitionErrorListener,
@@ -23,10 +23,10 @@ import {
 } from '../services/speech/speechText';
 import { SpeechRecognitionLanguage } from '../types';
 
-type Translate = (key: string) => string;
+type Translate = (key: string, options?: Record<string, unknown>) => string;
 
 type Props = {
-  composerRef: RefObject<ChatComposerHandle | null>;
+  composerRef: RefObject<ComposerHandle | null>;
   input: string;
   speechRecognitionLanguage: SpeechRecognitionLanguage;
   setInput: (value: string) => void;
@@ -100,7 +100,10 @@ export function useChatVoiceInput({
       voiceInputBaseTextRef.current = '';
       voiceInputDraftStateRef.current = createSpeechDraftState();
       setVoiceInputLevel(0);
-      Alert.alert(t('Voice input failed'), message || t('Unable to transcribe speech right now.'));
+      Alert.alert(
+        t('Voice input failed', { ns: 'chat' }),
+        message || t('Unable to transcribe speech right now.', { ns: 'chat' }),
+      );
     });
 
     return () => {
@@ -137,7 +140,10 @@ export function useChatVoiceInput({
 
     if (!voiceInputSupported) {
       analyticsEvents.chatVoiceInputFailed({ code: 'ERR_SPEECH_UNAVAILABLE', stage: 'availability' });
-      Alert.alert(t('Voice input unavailable'), t('Speech recognition is not available on this device.'));
+      Alert.alert(
+        t('Voice input unavailable', { ns: 'chat' }),
+        t('Speech recognition is not available on this device.', { ns: 'chat' }),
+      );
       return;
     }
 
@@ -161,7 +167,10 @@ export function useChatVoiceInput({
         voiceInputBaseTextRef.current = '';
         voiceInputDraftStateRef.current = createSpeechDraftState();
         setVoiceInputLevel(0);
-        Alert.alert(t('Voice input unavailable'), t('Microphone access is required to transcribe speech.'));
+        Alert.alert(
+          t('Voice input unavailable', { ns: 'chat' }),
+          t('Microphone access is required to transcribe speech.', { ns: 'chat' }),
+        );
         return;
       }
       if (!permissions.speechGranted) {
@@ -170,7 +179,10 @@ export function useChatVoiceInput({
         voiceInputBaseTextRef.current = '';
         voiceInputDraftStateRef.current = createSpeechDraftState();
         setVoiceInputLevel(0);
-        Alert.alert(t('Voice input unavailable'), t('Speech recognition access is required to transcribe speech.'));
+        Alert.alert(
+          t('Voice input unavailable', { ns: 'chat' }),
+          t('Speech recognition access is required to transcribe speech.', { ns: 'chat' }),
+        );
         return;
       }
 
@@ -181,7 +193,10 @@ export function useChatVoiceInput({
         voiceInputBaseTextRef.current = '';
         voiceInputDraftStateRef.current = createSpeechDraftState();
         setVoiceInputLevel(0);
-        Alert.alert(t('Voice input unavailable'), t('Speech recognition is not available on this device.'));
+        Alert.alert(
+          t('Voice input unavailable', { ns: 'chat' }),
+          t('Speech recognition is not available on this device.', { ns: 'chat' }),
+        );
         return;
       }
 
@@ -194,8 +209,8 @@ export function useChatVoiceInput({
       setVoiceInputLevel(0);
       const message = error instanceof Error && error.message
         ? error.message
-        : t('Unable to transcribe speech right now.');
-      Alert.alert(t('Voice input failed'), message);
+        : t('Unable to transcribe speech right now.', { ns: 'chat' });
+      Alert.alert(t('Voice input failed', { ns: 'chat' }), message);
     }
   }, [composerRef, input, speechRecognitionLanguage, t, voiceInputActive, voiceInputSupported]);
 

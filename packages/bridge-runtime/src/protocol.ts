@@ -166,6 +166,15 @@ export function normalizeConnectCapabilities(value: unknown): string[] {
   return capabilities;
 }
 
+export function normalizeBridgeVersion(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const version = value.trim();
+  if (!version || version.length > 128 || /[\u0000-\u001f\u007f]/.test(version)) {
+    return undefined;
+  }
+  return version;
+}
+
 export function parsePairingRequestFromError(text: string, nowMs = Date.now()): PendingPairRequest | null {
   try {
     const parsed = JSON.parse(text) as {

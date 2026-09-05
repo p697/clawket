@@ -83,7 +83,6 @@ export type AccountSettingsSectionData = Readonly<{
 }>;
 
 export type AccountSettingsSectionAction = AccountSettingsAction
-  | 'open-connection'
   | 'reconnect-connection'
   | 'remove-connection'
   | 'set-reply-notifications'
@@ -101,8 +100,8 @@ export type AccountSettingsSectionRow = Readonly<{
   title?: string;
   valueKey?: string;
   value?: string;
-  titleNamespace?: 'common' | 'config' | 'console';
-  valueNamespace?: 'common' | 'config' | 'console';
+  titleNamespace?: 'common' | 'config' | 'settings';
+  valueNamespace?: 'common' | 'config' | 'settings';
   kind: 'navigation' | 'toggle' | 'value';
   action?: AccountSettingsSectionAction;
   toggle?: 'replyNotifications' | 'debugMode';
@@ -190,7 +189,7 @@ function gateRow(
     locked: false,
     value: undefined,
     valueKey: 'Unavailable',
-    valueNamespace: 'console',
+    valueNamespace: 'settings',
   };
 }
 
@@ -215,7 +214,7 @@ function buildConnectionGroups(
       {
         id: `${connection.id}-environment`,
         titleKey: 'Environment',
-        titleNamespace: 'console',
+        titleNamespace: 'settings',
         valueKey: environment,
         kind: 'value',
       },
@@ -274,12 +273,6 @@ function buildConnectionGroups(
     }
 
     rows.push(
-      gateRow(navigationRow(
-        `${connection.id}-open`,
-        'Edit Connection',
-        'open-connection',
-        { connectionId: connection.id },
-      ), capabilities.connectionManagement),
       gateRow(navigationRow(
         `${connection.id}-reconnect`,
         'Reconnect',
@@ -387,12 +380,12 @@ function buildSectionGroups(
           toggle: 'debugMode',
           action: 'set-debug-mode',
         },
-        ...(data.debugMode ? [gateRow(navigationRow(
-          'preview-environment',
-          'Relay Environment',
-          'preview-environment',
-          { value: labels.previewEnvironment },
-        ), capabilities.previewEnvironment)] : []),
+        ...(data.debugMode ? [gateRow({
+          id: 'preview-environment',
+          titleKey: 'Relay Environment',
+          value: labels.previewEnvironment,
+          kind: 'value',
+        }, capabilities.previewEnvironment)] : []),
         gateRow(navigationRow(
           'design-system',
           'Design System',

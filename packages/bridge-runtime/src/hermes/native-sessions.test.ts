@@ -13,7 +13,7 @@ import {
 afterEach(cleanupTempDirectories);
 
 describe('HermesNativeSessionReader', () => {
-  it('uses read-only SQLite, excludes the Bridge namespace, and reports native actions as disabled', async () => {
+  it('uses read-only SQLite, excludes the Bridge namespace, and keeps only local pin available', async () => {
     const directory = await createTempDirectory();
     const dbPath = join(directory, 'state.db');
     initializeHermesStateDb(dbPath, [
@@ -40,7 +40,7 @@ describe('HermesNativeSessionReader', () => {
         kind: 'main',
         preview: 'two',
         lastMessagePreview: 'two',
-        allowedActions: { rename: false, reset: false, delete: false, pin: false },
+        allowedActions: { rename: false, reset: false, delete: false, pin: true },
       }),
     ]);
     const history = reader.readHistoryBySessionId('main');

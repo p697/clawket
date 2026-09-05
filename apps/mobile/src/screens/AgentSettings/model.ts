@@ -70,7 +70,10 @@ type RowDefinition = Readonly<{
     summary: AgentSettingsSummary,
     connectionState: ConnectionState,
   ) => string | undefined;
-  attention?: (summary: AgentSettingsSummary) => boolean;
+  attention?: (
+    summary: AgentSettingsSummary,
+    connectionState: ConnectionState,
+  ) => boolean;
 }>;
 
 const BACKEND_LABELS: Readonly<Record<ConnectionDescriptor['backendKind'], string>> = {
@@ -128,6 +131,7 @@ const CONNECTION_ROWS: ReadonlyArray<RowDefinition> = [
     id: 'connection',
     title: 'Connection',
     value: (_summary, connectionState) => CONNECTION_STATE_LABELS[connectionState],
+    attention: (_summary, connectionState) => connectionState !== 'ready',
   },
   {
     id: 'openclaw',
@@ -188,7 +192,7 @@ export function buildAgentSettingsModel(
     identity: {
       name: input.agent.name,
       detail: identityDetail,
-      editable: input.capabilities.agentEdit && !permissionDenied,
+      editable: (input.capabilities.agentEdit || input.capabilities.files) && !permissionDenied,
       locked: permissionDenied,
     },
     groups: [
@@ -234,7 +238,7 @@ function buildRows(
       section: definition.id,
       title: definition.title,
       value: definition.value(summary, connectionState),
-      attention: definition.attention?.(summary) ?? false,
+      attention: definition.attention?.(summary, connectionState) ?? false,
       locked: permissionDenied || (definition.requiresPro === true && !isPro),
     }));
 }

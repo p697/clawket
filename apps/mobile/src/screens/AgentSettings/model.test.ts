@@ -122,6 +122,7 @@ describe('Agent settings descriptor model', () => {
       'usage',
       'connection',
     ]);
+    expect(hermes.identity.editable).toBe(true);
 
     const sprite = buildAgentSettingsModel({
       connection: connection('youmind'),
@@ -149,7 +150,7 @@ describe('Agent settings descriptor model', () => {
       isPro: true,
     });
     expect(model.groups[1]?.rows).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: 'connection', value: 'Offline' }),
+      expect.objectContaining({ id: 'connection', value: 'Offline', attention: true }),
       expect.objectContaining({ id: 'channels-devices' }),
     ]));
   });

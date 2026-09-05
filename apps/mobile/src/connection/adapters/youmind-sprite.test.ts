@@ -57,6 +57,22 @@ function createAdapter(api: YouMindSpriteApi, options: {
 }
 
 describe('YouMindSpriteAdapter', () => {
+  it('keeps the auth scope and API client out of enumerable adapter state', () => {
+    const authScopeKey = 'private-youmind-auth-scope';
+    const adapter = new YouMindSpriteAdapter({
+      id: 'private-youmind',
+      backendKind: 'youmind',
+      transportKind: 'https',
+      label: 'Private Sprite',
+      createdAt: 1,
+      url: 'https://private-youmind.invalid',
+      youmind: { authScopeKey },
+    }, { api: createApi() });
+
+    expect(Reflect.ownKeys(adapter)).not.toEqual(expect.arrayContaining(['record', 'api']));
+    expect(JSON.stringify(adapter)).not.toContain(authScopeKey);
+  });
+
   it('connects and exposes one credential-free Sprite agent and session', async () => {
     const api = createApi();
     const adapter = createAdapter(api);

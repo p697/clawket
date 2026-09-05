@@ -17,6 +17,9 @@ export type RosterDisplayRow = Readonly<{
   working: boolean;
   cached: boolean;
   locked: boolean;
+  agentPinned: boolean;
+  muted: boolean;
+  allowedActions?: SessionDescriptor['allowedActions'];
 }>;
 
 export type RosterPageState =
@@ -29,6 +32,10 @@ export type RosterPageState =
 
 export type RosterModelOptions = Readonly<{
   pinnedSessionKeys?: Readonly<Record<string, ReadonlyArray<string>>>;
+  agentPreferences?: Readonly<Record<string, Readonly<{
+    agentPinned: boolean;
+    muted: boolean;
+  }>>>;
   canAccessAgent?: (connectionId: string, agentId: string) => boolean;
 }>;
 
@@ -44,6 +51,8 @@ function buildPinnedRows(
   sessions: ReadonlyArray<SessionDescriptor>,
   pinnedKeys: ReadonlyArray<string>,
   locked: boolean,
+  agentPinned: boolean,
+  muted: boolean,
 ): RosterDisplayRow[] {
   const rank = new Map(pinnedKeys.map((key, index) => [key, index]));
   return sessions
@@ -67,7 +76,24 @@ function buildPinnedRows(
       working: session.hasActiveRun,
       cached: group.source === 'cache',
       locked,
+      agentPinned,
+      muted,
+      allowedActions: { ...session.allowedActions },
     }));
+}
+
+function compareAgentPriority(
+  connectionId: string,
+  preferences: RosterModelOptions['agentPreferences'],
+  left: RosterConnectionGroup['agents'][number],
+  right: RosterConnectionGroup['agents'][number],
+): number {
+  const leftPinned = preferences?.[`${connectionId}:${left.agent.agentId}`]?.agentPinned === true;
+  const rightPinned = preferences?.[`${connectionId}:${right.agent.agentId}`]?.agentPinned === true;
+  return Number(rightPinned) - Number(leftPinned)
+    || Number(right.attentionCount > 0) - Number(left.attentionCount > 0)
+    || Number(right.hasUnread) - Number(left.hasUnread)
+    || (right.updatedAt ?? 0) - (left.updatedAt ?? 0);
 }
 
 /**
@@ -83,8 +109,21 @@ export function buildRosterRows(
   const rows: RosterDisplayRow[] = [];
 
   for (const group of groups) {
-    for (const summary of group.agents) {
+    const sortedAgents = group.agents
+      .map((summary, index) => ({ summary, index }))
+      .sort((left, right) => (
+        compareAgentPriority(
+          group.connection.id,
+          options.agentPreferences,
+          left.summary,
+          right.summary,
+        ) || left.index - right.index
+      ));
+    for (const { summary } of sortedAgents) {
       const { agent } = summary;
+      const preferences = options.agentPreferences?.[
+        `${group.connection.id}:${agent.agentId}`
+      ];
       const locked = !canAccessAgent(group.connection.id, agent.agentId);
       rows.push({
         key: `agent:${group.connection.id}:${agent.agentId}`,
@@ -102,6 +141,8 @@ export function buildRosterRows(
         working: summary.sessions.some((session) => session.hasActiveRun),
         cached: group.source === 'cache',
         locked,
+        agentPinned: preferences?.agentPinned === true,
+        muted: preferences?.muted === true,
       });
       rows.push(...buildPinnedRows(
         group,
@@ -109,6 +150,8 @@ export function buildRosterRows(
         summary.sessions,
         options.pinnedSessionKeys?.[`${group.connection.id}:${agent.agentId}`] ?? [],
         locked,
+        preferences?.agentPinned === true,
+        preferences?.muted === true,
       ));
     }
   }

@@ -25,7 +25,7 @@ export function ModalScreenLayout({
   contentStyle,
 }: Props): React.JSX.Element {
   const { theme } = useAppTheme();
-  const styles = useMemo(() => createStyles(theme.colors.background), [theme.colors.background]);
+  const styles = useMemo(() => createStyles(theme.colors.canvas), [theme.colors.canvas]);
 
   return (
     <View style={[styles.root, style]}>

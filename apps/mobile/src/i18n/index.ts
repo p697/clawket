@@ -5,32 +5,32 @@ import { getLocales } from 'expo-localization';
 import en_common from './locales/en/common.json';
 import en_chat from './locales/en/chat.json';
 import en_config from './locales/en/config.json';
-import en_console from './locales/en/console.json';
+import en_settings from './locales/en/settings.json';
 
 import zh_common from './locales/zh-Hans/common.json';
 import zh_chat from './locales/zh-Hans/chat.json';
 import zh_config from './locales/zh-Hans/config.json';
-import zh_console from './locales/zh-Hans/console.json';
+import zh_settings from './locales/zh-Hans/settings.json';
 
 import ja_common from './locales/ja/common.json';
 import ja_chat from './locales/ja/chat.json';
 import ja_config from './locales/ja/config.json';
-import ja_console from './locales/ja/console.json';
+import ja_settings from './locales/ja/settings.json';
 
 import ko_common from './locales/ko/common.json';
 import ko_chat from './locales/ko/chat.json';
 import ko_config from './locales/ko/config.json';
-import ko_console from './locales/ko/console.json';
+import ko_settings from './locales/ko/settings.json';
 
 import de_common from './locales/de/common.json';
 import de_chat from './locales/de/chat.json';
 import de_config from './locales/de/config.json';
-import de_console from './locales/de/console.json';
+import de_settings from './locales/de/settings.json';
 
 import es_common from './locales/es/common.json';
 import es_chat from './locales/es/chat.json';
 import es_config from './locales/es/config.json';
-import es_console from './locales/es/console.json';
+import es_settings from './locales/es/settings.json';
 
 const SUPPORTED_LOCALES = ['en', 'zh-Hans', 'ja', 'ko', 'de', 'es'] as const;
 
@@ -47,44 +47,44 @@ function resolveLocale(code: string): string {
 i18n.use(initReactI18next).init({
   lng: resolveLocale(deviceLang),
   fallbackLng: 'en',
-  ns: ['common', 'chat', 'config', 'console'],
+  ns: ['common', 'chat', 'config', 'settings'],
   defaultNS: 'common',
   resources: {
     en: {
       common: en_common,
       chat: en_chat,
       config: en_config,
-      console: en_console,
+      settings: en_settings,
     },
     'zh-Hans': {
       common: zh_common,
       chat: zh_chat,
       config: zh_config,
-      console: zh_console,
+      settings: zh_settings,
     },
     ja: {
       common: ja_common,
       chat: ja_chat,
       config: ja_config,
-      console: ja_console,
+      settings: ja_settings,
     },
     ko: {
       common: ko_common,
       chat: ko_chat,
       config: ko_config,
-      console: ko_console,
+      settings: ko_settings,
     },
     de: {
       common: de_common,
       chat: de_chat,
       config: de_config,
-      console: de_console,
+      settings: de_settings,
     },
     es: {
       common: es_common,
       chat: es_chat,
       config: es_config,
-      console: es_console,
+      settings: es_settings,
     },
   },
   keySeparator: false,

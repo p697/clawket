@@ -11,8 +11,8 @@ export function LoadingState({ message }: Props): React.JSX.Element {
   const { theme } = useAppTheme();
   return (
     <View style={styles.root}>
-      <ActivityIndicator size="large" color={theme.colors.primary} />
-      {message ? <Text style={[styles.text, { color: theme.colors.textMuted }]}>{message}</Text> : null}
+      <ActivityIndicator size="large" color={theme.colors.accent} />
+      {message ? <Text style={[styles.text, { color: theme.colors.inkSecondary }]}>{message}</Text> : null}
     </View>
   );
 }
@@ -26,7 +26,7 @@ const styles = StyleSheet.create({
   },
   text: {
     marginTop: Space.md,
-    fontSize: FontSize.md,
+    fontSize: FontSize.caption,
     textAlign: 'center',
   },
 });

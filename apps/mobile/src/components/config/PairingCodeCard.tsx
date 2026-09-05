@@ -109,8 +109,8 @@ export function PairingCodeCard({
       >
         <Text style={styles.otherMethodsLabel}>{t('Other connection methods')}</Text>
         {otherMethodsExpanded
-          ? <ChevronDown size={16} color={theme.colors.textSubtle} strokeWidth={2} />
-          : <ChevronRight size={16} color={theme.colors.textSubtle} strokeWidth={2} />}
+          ? <ChevronDown size={16} color={theme.colors.inkTertiary} strokeWidth={2} />
+          : <ChevronRight size={16} color={theme.colors.inkTertiary} strokeWidth={2} />}
       </TouchableOpacity>
 
       {otherMethodsExpanded ? (
@@ -142,20 +142,20 @@ function createStyles(
   return StyleSheet.create({
     card: {
       ...createSurfaceStyle(colors, scheme, 'flat'),
-      borderRadius: Radius.md,
+      borderRadius: Radius.card,
       padding: Space.lg,
       gap: Space.md,
     },
     title: {
-      color: colors.text,
-      fontSize: FontSize.base,
+      color: colors.ink,
+      fontSize: FontSize.secondary,
       fontWeight: FontWeight.semibold,
-      lineHeight: LineHeight.base,
+      lineHeight: LineHeight.secondary,
     },
     description: {
-      color: colors.textMuted,
-      fontSize: FontSize.md,
-      lineHeight: LineHeight.md,
+      color: colors.inkSecondary,
+      fontSize: FontSize.caption,
+      lineHeight: LineHeight.caption,
     },
     step: {
       gap: Space.md,
@@ -167,40 +167,40 @@ function createStyles(
     },
     stepBadge: {
       alignItems: 'center',
-      backgroundColor: colors.primary,
+      backgroundColor: colors.accent,
       borderRadius: Radius.full,
       height: 26,
       justifyContent: 'center',
       width: 26,
     },
     stepBadgeText: {
-      color: colors.iconOnColor,
-      fontSize: FontSize.sm,
-      fontWeight: FontWeight.bold,
+      color: colors.onAccent,
+      fontSize: FontSize.caption,
+      fontWeight: FontWeight.semibold,
     },
     stepTitle: {
-      color: colors.text,
+      color: colors.ink,
       flex: 1,
-      fontSize: FontSize.base,
+      fontSize: FontSize.secondary,
       fontWeight: FontWeight.semibold,
-      lineHeight: LineHeight.base,
+      lineHeight: LineHeight.secondary,
     },
     stepDescription: {
-      color: colors.textMuted,
-      fontSize: FontSize.md,
-      lineHeight: LineHeight.md,
+      color: colors.inkSecondary,
+      fontSize: FontSize.caption,
+      lineHeight: LineHeight.caption,
     },
     hint: {
-      color: colors.textSubtle,
-      fontSize: FontSize.sm,
+      color: colors.inkTertiary,
+      fontSize: FontSize.caption,
       lineHeight: 18,
     },
     divider: {
-      backgroundColor: colors.border,
+      backgroundColor: colors.line,
       height: StyleSheet.hairlineWidth,
     },
     otherMethodsDivider: {
-      backgroundColor: colors.border,
+      backgroundColor: colors.line,
       height: StyleSheet.hairlineWidth,
       marginTop: Space.xs,
     },
@@ -211,9 +211,9 @@ function createStyles(
       minHeight: 36,
     },
     otherMethodsLabel: {
-      color: colors.textMuted,
-      fontSize: FontSize.md,
-      fontWeight: FontWeight.medium,
+      color: colors.inkSecondary,
+      fontSize: FontSize.caption,
+      fontWeight: FontWeight.semibold,
     },
     otherMethodsActions: {
       gap: Space.sm,

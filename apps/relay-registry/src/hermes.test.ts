@@ -18,7 +18,7 @@ const fetchHandler = worker.fetch as (request: Request, env: unknown) => Promise
 const ACCESS_CODE_PATTERN = /^[ABCDEFGHJKMNPQRSTVWXYZ23456789]{6}$/;
 
 class MemoryKV {
-  private readonly map = new Map<string, string>();
+  readonly map = new Map<string, string>();
 
   async get(key: string): Promise<string | null> {
     return this.map.get(key) ?? null;
@@ -26,6 +26,10 @@ class MemoryKV {
 
   async put(key: string, value: string): Promise<void> {
     this.map.set(key, value);
+  }
+
+  async delete(key: string): Promise<void> {
+    this.map.delete(key);
   }
 }
 
@@ -52,6 +56,91 @@ function createAlwaysAllowRegisterLimiter() {
 }
 
 describe('Hermes registry worker', () => {
+  it('resolves a single-use pairing code without exposing or requesting the bridge id', async () => {
+    const env = createEnv();
+    const registerRes = await fetchHandler(new Request('https://registry.example.com/v1/hermes/pair/register', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ displayName: 'Studio Mac' }),
+    }), env);
+    const registered = await registerRes.json() as {
+      bridgeId: string;
+      accessCode: string;
+    };
+
+    const claimRes = await fetchHandler(new Request('https://registry.example.com/v1/hermes/pair/claim-code', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'cf-connecting-ip': '203.0.113.8',
+      },
+      body: JSON.stringify({ accessCode: registered.accessCode, clientLabel: 'iPhone' }),
+    }), env);
+    expect(claimRes.status).toBe(200);
+    await expect(claimRes.json()).resolves.toMatchObject({
+      bridgeId: registered.bridgeId,
+      clientToken: expect.stringMatching(/^hct_/),
+    });
+
+    const reusedRes = await fetchHandler(new Request('https://registry.example.com/v1/hermes/pair/claim-code', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'cf-connecting-ip': '203.0.113.8',
+      },
+      body: JSON.stringify({ accessCode: registered.accessCode }),
+    }), env);
+    expect(reusedRes.status).toBe(404);
+    await expect(reusedRes.json()).resolves.toEqual({
+      error: {
+        code: 'PAIRING_CODE_NOT_FOUND',
+        message: 'Pairing code is invalid or expired',
+      },
+    });
+  });
+
+  it('invalidates the code lookup on refresh and rate-limits blind resolution', async () => {
+    const env = createEnv();
+    const registerRes = await fetchHandler(new Request('https://registry.example.com/v1/hermes/pair/register', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    }), env);
+    const registered = await registerRes.json() as {
+      bridgeId: string;
+      relaySecret: string;
+      accessCode: string;
+    };
+    const refreshRes = await fetchHandler(new Request('https://registry.example.com/v1/hermes/pair/access-code', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        bridgeId: registered.bridgeId,
+        relaySecret: registered.relaySecret,
+      }),
+    }), env);
+    const refreshed = await refreshRes.json() as { accessCode: string };
+
+    const resolve = (accessCode: string, sourceIp = '198.51.100.9') => fetchHandler(new Request(
+      'https://registry.example.com/v1/hermes/pair/claim-code',
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'cf-connecting-ip': sourceIp,
+        },
+        body: JSON.stringify({ accessCode }),
+      },
+    ), env);
+    expect((await resolve(registered.accessCode)).status).toBe(404);
+    expect((await resolve('AAAAAA')).status).toBe(404);
+    expect((await resolve('BBBBBB')).status).toBe(404);
+    expect((await resolve('CCCCCC')).status).toBe(404);
+    expect((await resolve('DDDDDD')).status).toBe(404);
+    expect((await resolve(refreshed.accessCode)).status).toBe(429);
+    expect((await resolve(refreshed.accessCode, '198.51.100.10')).status).toBe(200);
+  });
+
   it('registers a gateway and claims a single-use access code', async () => {
     const env = createEnv();
     const registerRes = await fetchHandler(new Request('https://registry.example.com/v1/hermes/pair/register', {

@@ -70,6 +70,7 @@ function expectPass(label, input, marker = 'ui-style check passed') {
     result.status !== 0
     || !result.stdout.includes(marker)
     || !result.stdout.includes('[check-ui-style] scanned 2 UI source files')
+    || !result.stdout.includes('[check-ui-style] canonical token coverage:')
     || !result.stdout.includes('[check-ui-style] M5 tracked debt:')
   ) {
     failures.push(`${label}: expected pass, got ${result.status}: ${(result.stdout + result.stderr).trim()}`);
@@ -110,6 +111,34 @@ expectFailure('local numeric aliases remain visible', {
   source: 'const LABEL = 14; export const styles = { label: { fontSize: LABEL } };\n',
 }, 'font-size-literal');
 
+expectFailure('removed structural token aliases fail closed', {
+  source: "import { FontSize } from '../theme/tokens'; export const size = FontSize.md;\n",
+}, 'FontSize.md is not a canonical 3.0 token');
+
+expectFailure('removed spring motion alias fails closed', {
+  source: "import { SpringPreset } from '../theme/tokens'; export const motion = SpringPreset.sheet;\n",
+}, 'SpringPreset is a removed token alias');
+
+expectFailure('removed timing motion alias fails closed', {
+  source: "import { TimingPreset } from '../theme/tokens'; export const motion = TimingPreset.fast;\n",
+}, 'TimingPreset is a removed token alias');
+
+expectFailure('removed semantic color aliases fail closed', {
+  source: 'export const color = (colors) => colors.primary;\n',
+}, 'primary is a removed theme color alias');
+
+expectFailure('aliased theme colors cannot bypass the semantic color gate', {
+  source: 'export const color = (theme) => { const c = theme.colors as Record<string, string>; return c.primary; };\n',
+}, 'primary is a removed theme color alias');
+
+expectFailure('destructured theme colors cannot bypass the semantic color gate', {
+  source: 'export const color = (theme) => { const { primary: action } = theme.colors; return action; };\n',
+}, 'primary is a removed theme color alias');
+
+expectFailure('the removed legacy theme type cannot return', {
+  source: 'export type LegacyThemeColorAliases = { primary: string };\n',
+}, 'LegacyThemeColorAliases is removed');
+
 expectFailure('native keyboard avoider is ratcheted', {
   source: "import { KeyboardAvoidingView } from 'react-native'; export const x = KeyboardAvoidingView;\n",
 }, 'native-keyboard-avoider');
@@ -124,7 +153,7 @@ expectFailure('native bottom-tab adapter import is forbidden', {
 
 expectFailure('screen content cannot reserve JS tab height again', {
   source: "import { useTabBarHeight } from '../hooks/useTabBarHeight'; export const x = useTabBarHeight;\n",
-}, 'useTabBarHeight is reserved');
+}, 'useTabBarHeight is not allowed after the single-root-stack migration');
 
 expectFailure('native switches cannot bypass the themed control', {
   source: "import { Switch } from 'react-native'; export const x = <Switch value />;\n",
@@ -134,9 +163,51 @@ expectFailure('native text inputs cannot bypass shared field chrome', {
   source: "import { TextInput } from 'react-native'; export const x = <TextInput />;\n",
 }, 'native TextInput is reserved');
 
-expectPass('canonical Composer may own its composition-safe native input', {
-  componentFile: 'ui/Composer.tsx',
+expectFailure('aliased native text inputs cannot bypass composition safety', {
+  source: "import { TextInput as NativeInput, View } from 'react-native'; export const x = <><NativeInput /><View /></>;\n",
+}, 'native TextInput is reserved');
+
+expectFailure('namespace native text inputs cannot bypass composition safety', {
+  source: "import * as RN from 'react-native'; export const x = <RN.TextInput />;\n",
+}, 'native TextInput is reserved');
+
+expectPass('TextInput type references are not mistaken for native JSX hosts', {
+  source: "import type { TextInput } from 'react-native'; export type Ref = TextInput;\n",
+});
+
+expectPass('CompositionSafeTextInput owns the sole native input host', {
+  componentFile: 'ui/CompositionSafeTextInput.tsx',
   source: "import { TextInput } from 'react-native'; export const x = <TextInput />;\n",
+});
+
+expectFailure('business components cannot assemble sheet chrome from the UI barrel', {
+  componentFile: 'chat/ModelPickerModal.tsx',
+  source: "import { SheetHeader as Header } from '../ui'; export const x = <Header closeAccessibilityLabel='Close' onClose={() => {}} />;\n",
+}, 'sheet chrome primitive SheetHeader is reserved');
+
+expectFailure('business components cannot import sheet chrome modules directly', {
+  componentFile: 'chat/ModelPickerModal.tsx',
+  source: "import { SheetBackdrop } from '../ui/SheetBackdrop'; export const x = SheetBackdrop;\n",
+}, 'sheet chrome primitive SheetBackdrop is reserved');
+
+expectFailure('namespace imports cannot bypass sheet chrome ownership', {
+  componentFile: 'chat/ModelPickerModal.tsx',
+  source: "import * as UI from '../ui'; export const x = UI.AdaptiveBottomSheetModal;\n",
+}, 'sheet chrome primitive AdaptiveBottomSheetModal is reserved');
+
+expectPass('canonical UI primitives may own sheet chrome', {
+  componentFile: 'ui/Sheet.tsx',
+  source: "import { SheetHeader } from './SheetHeader'; export const x = SheetHeader;\n",
+});
+
+expectFailure('business components cannot use the avatar-only agent palette', {
+  componentFile: 'chat/ModelPickerModal.tsx',
+  source: "import { agentPalette } from '../../theme/theme'; export const color = agentPalette[0];\n",
+}, 'agentPalette is reserved for AgentAvatar');
+
+expectPass('AgentAvatar owns the deterministic agent palette', {
+  componentFile: 'ui/AgentAvatar.tsx',
+  source: "import { agentPalette } from '../../theme/theme'; export const color = agentPalette[0];\n",
 });
 
 expectFailure('raw shadows cannot bypass dark-mode surface semantics', {
@@ -167,11 +238,6 @@ expectPass('non-row semantic surfaces may still use a hairline borderWidth', {
 expectFailure('emoji literals cannot stand in for interface icons', {
   source: "const SEARCH_ICON = '🔎'; export const icon = SEARCH_ICON;\n",
 }, 'emoji-icon-literal');
-
-expectPass('avatar emoji choices remain identity content', {
-  componentFile: 'agents/EmojiPicker.tsx',
-  source: "const EMOJI_OPTIONS = ['🦊', '🐼']; export const values = EMOJI_OPTIONS;\n",
-});
 
 expectPass('emoji-bearing protocol text is not mistaken for an icon', {
   source: "export const imagePlaceholder = '📷 Image';\n",
@@ -233,6 +299,10 @@ expectFailure('empty UI source fails loudly', {
 expectFailure('malformed UI source fails loudly', {
   source: 'export const broken = <View>;\n',
 }, 'parse failed');
+
+expectFailure('corrupted token source fails closed', {
+  source: "import { FontSize } from '../theme/tokens'; export const broken = FontSize.;\n",
+}, 'canonical token validation parse failed');
 
 if (failures.length) {
   console.error('[check-ui-style-selftest] failed');

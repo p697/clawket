@@ -36,10 +36,12 @@ class MemorySecureStorage implements SecureConnectionStorage {
 }
 
 function legacyStorage(state: GatewayConfigsState = { activeId: null, configs: [] }): LegacyConnectionStorage & {
-  getGatewayConfigsState: jest.Mock<Promise<GatewayConfigsState>, []>;
+  readLegacyGatewayConfigsState: jest.Mock<Promise<GatewayConfigsState>, []>;
+  migrateLegacyYouMindState: jest.Mock<Promise<void>, [string, string]>;
 } {
   return {
-    getGatewayConfigsState: jest.fn(async () => state),
+    readLegacyGatewayConfigsState: jest.fn(async () => state),
+    migrateLegacyYouMindState: jest.fn(async (_url: string, _scopeKey: string) => undefined),
   };
 }
 
@@ -102,7 +104,7 @@ describe('ConnectionStore', () => {
     expect(JSON.stringify(first)).not.toContain('sanitized-openclaw-token');
     expect(JSON.stringify(first)).not.toContain('gct_sanitized_openclaw');
     expect(JSON.stringify(first)).not.toContain('sanitized-bootstrap-token');
-    expect(legacy.getGatewayConfigsState).toHaveBeenCalledTimes(1);
+    expect(legacy.readLegacyGatewayConfigsState).toHaveBeenCalledTimes(1);
 
     const persisted = JSON.parse(secureStorage.values.get(CURRENT_KEY) ?? '{}');
     expect(persisted.state.records[0]).toMatchObject({
@@ -119,17 +121,65 @@ describe('ConnectionStore', () => {
       transportKind: 'https',
       youmind: { authScopeKey: 'youmind:sanitized@example.invalid' },
     });
+    expect(legacy.migrateLegacyYouMindState).toHaveBeenCalledTimes(1);
+    expect(legacy.migrateLegacyYouMindState).toHaveBeenCalledWith(
+      'https://youmind.com',
+      'youmind:sanitized@example.invalid',
+    );
     expect(secureStorage.values.has(ROLLBACK_KEY)).toBe(true);
     expect(secureStorage.values.get(LEGACY_KEY)).toBe(legacyRaw);
 
     const forbiddenLegacy = {
-      getGatewayConfigsState: jest.fn(async () => {
+      readLegacyGatewayConfigsState: jest.fn(async () => {
         throw new Error('legacy migration must not repeat');
+      }),
+      migrateLegacyYouMindState: jest.fn(async () => {
+        throw new Error('YouMind migration must not repeat');
       }),
     };
     const restarted = new ConnectionStore({ secureStorage, legacyStorage: forbiddenLegacy });
     await expect(restarted.load()).resolves.toEqual(first);
-    expect(forbiddenLegacy.getGatewayConfigsState).not.toHaveBeenCalled();
+    expect(forbiddenLegacy.readLegacyGatewayConfigsState).not.toHaveBeenCalled();
+  });
+
+  it('retries the initial registry migration when legacy YouMind auth migration fails', async () => {
+    const secureStorage = new MemorySecureStorage();
+    const legacy = legacyStorage({
+      activeId: 'legacy-sprite',
+      configs: [{
+        id: 'legacy-sprite',
+        name: 'Legacy sprite',
+        backendKind: 'youmind',
+        transportKind: 'custom',
+        mode: 'custom',
+        url: 'https://youmind.example.test',
+        createdAt: 10,
+        updatedAt: 20,
+      }],
+    });
+    legacy.migrateLegacyYouMindState
+      .mockRejectedValueOnce(new Error('legacy auth copy failed'))
+      .mockResolvedValue(undefined);
+    const store = new ConnectionStore({ secureStorage, legacyStorage: legacy });
+
+    await expect(store.load()).rejects.toThrow('legacy auth copy failed');
+    expect(secureStorage.values.has(CURRENT_KEY)).toBe(false);
+    expect(secureStorage.values.has(ROLLBACK_KEY)).toBe(false);
+
+    await expect(store.load()).resolves.toMatchObject({
+      activeConnectionId: 'legacy-sprite',
+      connections: [expect.objectContaining({
+        id: 'legacy-sprite',
+        backendKind: 'youmind',
+      })],
+    });
+    expect(legacy.migrateLegacyYouMindState).toHaveBeenCalledTimes(2);
+    expect(legacy.migrateLegacyYouMindState).toHaveBeenLastCalledWith(
+      'https://youmind.example.test',
+      'cfg:legacy-sprite',
+    );
+    expect(secureStorage.values.has(CURRENT_KEY)).toBe(true);
+    expect(secureStorage.values.has(ROLLBACK_KEY)).toBe(true);
   });
 
   it('keeps exactly one active connection while preserving the independently selected free slot', async () => {
@@ -177,47 +227,143 @@ describe('ConnectionStore', () => {
     await expect(store.setActive('missing')).rejects.toBeInstanceOf(ConnectionNotFoundError);
   });
 
-  it('imports legacy editor changes atomically without exposing credentials in descriptors', async () => {
+  it('upserts a Relay identity without duplicating it or dropping existing credentials', async () => {
     const secureStorage = new MemorySecureStorage();
-    let legacyState: GatewayConfigsState = { activeId: null, configs: [] };
-    const legacy: LegacyConnectionStorage = {
-      getGatewayConfigsState: jest.fn(async () => legacyState),
-    };
-    const store = new ConnectionStore({ secureStorage, legacyStorage: legacy });
-    await store.load();
-    legacyState = {
-      activeId: 'edited',
-      configs: [{
-        id: 'edited',
-        name: 'Edited connection',
-        backendKind: 'openclaw',
-        transportKind: 'local',
-        mode: 'local',
-        url: 'ws://127.0.0.1:18789/ws',
-        token: 'editor-secret',
-        createdAt: 10,
-        updatedAt: 20,
-      }],
-    };
-
-    const imported = await store.syncLegacyState();
-
-    expect(imported).toMatchObject({
-      activeConnectionId: 'edited',
-      connections: [expect.objectContaining({
-        id: 'edited',
-        backendKind: 'openclaw',
-        label: 'Edited connection',
-      })],
+    const store = new ConnectionStore({
+      secureStorage,
+      legacyStorage: legacyStorage(),
+      now: () => 100,
+      random: () => 0,
     });
-    expect(JSON.stringify(imported)).not.toContain('editor-secret');
-    const persisted = JSON.parse(secureStorage.values.get(CURRENT_KEY) ?? '{}');
-    expect(persisted.state.records[0].auth.token).toBe('editor-secret');
-    expect(secureStorage.values.has(ROLLBACK_KEY)).toBe(true);
+    const first = await store.upsert({
+      ...openClawInput('First', 'old-token'),
+      id: 'stable-relay',
+    });
+    const updated = await store.upsert({
+      backendKind: 'openclaw',
+      transportKind: 'relay',
+      label: 'Renamed relay',
+      environment: 'preview',
+      url: 'wss://new-relay.example/ws',
+      auth: { token: 'new-token' },
+      relay: {
+        serverUrl: 'https://first.example/',
+        gatewayId: 'gw_First',
+        clientToken: 'new-client-token',
+      },
+      debugMode: true,
+    });
 
-    const revision = imported.revision;
-    await store.syncLegacyState();
-    expect(store.getSnapshot().revision).toBe(revision);
+    expect(first).toMatchObject({ created: true, connection: { id: 'stable-relay' } });
+    expect(updated).toMatchObject({
+      created: false,
+      connection: { id: 'stable-relay', label: 'First' },
+    });
+    expect(store.getSnapshot().connections).toHaveLength(1);
+    await store.createAdapter('stable-relay', (record, descriptor) => {
+      expect(record).toMatchObject({
+        auth: { token: 'new-token', password: 'First-password' },
+        bootstrap: { token: 'First-bootstrap', strategy: 'legacy-bound' },
+        relay: {
+          serverUrl: 'https://first.example/',
+          gatewayId: 'gw_First',
+          clientToken: 'new-client-token',
+        },
+        debugMode: true,
+      });
+      return createMockAdapter({ connection: descriptor });
+    });
+  });
+
+  it('upserts the same direct Hermes bridge while keeping its stable record identity', async () => {
+    const store = new ConnectionStore({
+      secureStorage: new MemorySecureStorage(),
+      legacyStorage: legacyStorage(),
+      now: () => 200,
+      random: () => 0,
+    });
+    const first = await store.upsert({
+      id: 'hermes-stable',
+      backendKind: 'hermes',
+      transportKind: 'local',
+      label: 'Hermes local',
+      url: 'ws://127.0.0.1:8789/v1/hermes/ws',
+      auth: { token: 'keep-me' },
+      hermes: {
+        bridgeUrl: 'ws://127.0.0.1:8789/v1/hermes/ws',
+        displayName: 'Original Hermes',
+      },
+    });
+    const second = await store.upsert({
+      backendKind: 'hermes',
+      transportKind: 'local',
+      label: 'Hermes refreshed',
+      url: 'ws://127.0.0.1:8789/v1/hermes/ws/',
+      hermes: { bridgeUrl: 'ws://127.0.0.1:8789/v1/hermes/ws/' },
+    });
+
+    expect(first.created).toBe(true);
+    expect(second).toMatchObject({
+      created: false,
+      connection: { id: 'hermes-stable', label: 'Hermes local' },
+    });
+    expect(store.getSnapshot().connections).toHaveLength(1);
+    await store.createAdapter('hermes-stable', (record, descriptor) => {
+      expect(record.auth?.token).toBe('keep-me');
+      expect(record.hermes?.displayName).toBe('Original Hermes');
+      return createMockAdapter({ connection: descriptor });
+    });
+  });
+
+  it('upserts direct OpenClaw endpoints and explicit record ids without creating duplicates', async () => {
+    const store = new ConnectionStore({
+      secureStorage: new MemorySecureStorage(),
+      legacyStorage: legacyStorage(),
+      now: () => 300,
+      random: () => 0,
+    });
+    const direct = await store.upsert({
+      id: 'openclaw-direct',
+      backendKind: 'openclaw',
+      transportKind: 'local',
+      label: 'Local OpenClaw',
+      url: 'ws://127.0.0.1:18789/ws',
+      auth: { token: 'old-direct-token' },
+    });
+    const refreshed = await store.upsert({
+      backendKind: 'openclaw',
+      transportKind: 'custom',
+      label: 'Refreshed OpenClaw',
+      url: 'ws://127.0.0.1:18789/ws/',
+      auth: { token: 'new-direct-token' },
+    });
+    const explicit = await store.upsert({
+      id: 'openclaw-direct',
+      backendKind: 'openclaw',
+      transportKind: 'custom',
+      label: 'Explicit refresh',
+      url: 'wss://new-endpoint.example/ws',
+      auth: { password: 'new-password' },
+    });
+
+    expect(direct.created).toBe(true);
+    expect(refreshed).toMatchObject({
+      created: false,
+      connection: { id: 'openclaw-direct', label: 'Local OpenClaw' },
+    });
+    expect(explicit).toMatchObject({
+      created: false,
+      connection: { id: 'openclaw-direct', label: 'Local OpenClaw' },
+    });
+    expect(store.getSnapshot().connections).toHaveLength(1);
+    await store.createAdapter('openclaw-direct', (record, descriptor) => {
+      expect(record).toMatchObject({
+        transportKind: 'custom',
+        url: 'wss://new-endpoint.example/ws',
+        auth: { token: 'new-direct-token', password: 'new-password' },
+      });
+      return createMockAdapter({ connection: descriptor });
+    });
   });
 
   it('does not label a custom relay registry as an official production or preview environment', async () => {
@@ -287,6 +433,41 @@ describe('ConnectionStore', () => {
       expect(record.bootstrap).toBeUndefined();
       return createMockAdapter({ connection: descriptor });
     });
+  });
+
+  it('returns a defensive credential-bearing clone only through the runtime API', async () => {
+    const store = new ConnectionStore({
+      secureStorage: new MemorySecureStorage(),
+      legacyStorage: legacyStorage(),
+      now: () => 100,
+      random: () => 0,
+    });
+    const connection = await store.add({
+      ...openClawInput('Runtime', 'runtime-secret'),
+      id: 'runtime-record',
+    });
+
+    const first = await store.getRuntimeRecord(connection.id);
+    expect(first).toMatchObject({
+      id: 'runtime-record',
+      auth: { token: 'runtime-secret', password: 'Runtime-password' },
+      bootstrap: { token: 'Runtime-bootstrap' },
+      relay: { clientToken: 'gct_Runtime' },
+    });
+    expect(JSON.stringify(store.getSnapshot())).not.toContain('runtime-secret');
+
+    first.auth!.token = 'caller-mutated-token';
+    first.relay!.clientToken = 'caller-mutated-relay-token';
+    const second = await store.getRuntimeRecord(connection.id);
+    expect(second.auth?.token).toBe('runtime-secret');
+    expect(second.relay?.clientToken).toBe('gct_Runtime');
+    expect(second).not.toBe(first);
+    expect(second.auth).not.toBe(first.auth);
+    expect(second.relay).not.toBe(first.relay);
+
+    await expect(store.getRuntimeRecord('missing-runtime-record')).rejects.toEqual(
+      new ConnectionNotFoundError('missing-runtime-record'),
+    );
   });
 
   it('rejects invalid patches without changing the committed state', async () => {

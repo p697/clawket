@@ -18,23 +18,23 @@ function isPrimitiveJsonValue(value: JsonValue): value is string | number | bool
 
 function JsonPrimitive({ value, isLast }: { value: string | number | boolean | null; isLast: boolean }): React.JSX.Element {
   const { theme } = useAppTheme();
-  const c = theme.colors as Record<string, string>;
+  const c = theme.colors;
 
   if (value === null) {
-    return <Text style={[s.value, { color: c.textSubtle }]}>null{isLast ? '' : ','}</Text>;
+    return <Text style={[s.value, { color: c.inkTertiary }]}>null{isLast ? '' : ','}</Text>;
   }
   if (typeof value === 'boolean') {
-    return <Text style={[s.value, { color: c.warning }]}>{String(value)}{isLast ? '' : ','}</Text>;
+    return <Text style={[s.value, { color: c.warn }]}>{String(value)}{isLast ? '' : ','}</Text>;
   }
   if (typeof value === 'number') {
-    return <Text style={[s.value, { color: c.warning }]}>{value}{isLast ? '' : ','}</Text>;
+    return <Text style={[s.value, { color: c.warn }]}>{value}{isLast ? '' : ','}</Text>;
   }
-  return <Text style={[s.value, { color: c.success }]}>&quot;{value}&quot;{isLast ? '' : ','}</Text>;
+  return <Text style={[s.value, { color: c.good }]}>&quot;{value}&quot;{isLast ? '' : ','}</Text>;
 }
 
 function JsonNode({ value, depth, isLast }: NodeProps): React.JSX.Element {
   const { theme } = useAppTheme();
-  const c = theme.colors as Record<string, string>;
+  const c = theme.colors;
   const [collapsed, setCollapsed] = useState(depth >= 2);
 
   const indent = depth * Space.md;
@@ -53,15 +53,15 @@ function JsonNode({ value, depth, isLast }: NodeProps): React.JSX.Element {
   const count = entries.length;
 
   if (count === 0) {
-    return <Text style={[s.value, { color: c.textMuted }]}>{open}{close}{isLast ? '' : ','}</Text>;
+    return <Text style={[s.value, { color: c.inkSecondary }]}>{open}{close}{isLast ? '' : ','}</Text>;
   }
 
   return (
     <View>
       <Pressable onPress={() => setCollapsed(v => !v)} style={s.row}>
-        <Text style={[s.bracket, { color: c.textMuted, paddingLeft: indent }]}>
+        <Text style={[s.bracket, { color: c.inkSecondary, paddingLeft: indent }]}>
           {collapsed ? '▶ ' : '▼ '}{open}
-          {collapsed ? <Text style={{ color: c.textSubtle }}> {count} item{count !== 1 ? 's' : ''} </Text> : null}
+          {collapsed ? <Text style={{ color: c.inkTertiary }}> {count} item{count !== 1 ? 's' : ''} </Text> : null}
           {collapsed ? close : null}
           {isLast || collapsed ? '' : ''}
         </Text>
@@ -72,20 +72,20 @@ function JsonNode({ value, depth, isLast }: NodeProps): React.JSX.Element {
             !isArray && isPrimitiveJsonValue(val) ? (
               <View key={key} style={{ paddingLeft: indent + 12 }}>
                 <Text style={s.line}>
-                  <Text style={[s.key, { color: c.primary }]}>&quot;{key}&quot;: </Text>
+                  <Text style={[s.key, { color: c.accent }]}>&quot;{key}&quot;: </Text>
                   <JsonPrimitive value={val} isLast={i === count - 1} />
                 </Text>
               </View>
             ) : (
               <View key={key} style={[s.row, { paddingLeft: indent + 12 }]}>
                 {!isArray && (
-                  <Text style={[s.key, { color: c.primary }]}>&quot;{key}&quot;: </Text>
+                  <Text style={[s.key, { color: c.accent }]}>&quot;{key}&quot;: </Text>
                 )}
                 <JsonNode value={val} depth={depth + 1} isLast={i === count - 1} />
               </View>
             )
           ))}
-          <Text style={[s.bracket, { color: c.textMuted, paddingLeft: indent }]}>
+          <Text style={[s.bracket, { color: c.inkSecondary, paddingLeft: indent }]}>
             {close}{isLast ? '' : ','}
           </Text>
         </View>
@@ -100,13 +100,13 @@ interface JsonTreeProps {
 
 export function JsonTree({ text }: JsonTreeProps): React.JSX.Element {
   const { theme } = useAppTheme();
-  const c = theme.colors as Record<string, string>;
+  const c = theme.colors;
 
   let parsed: JsonValue;
   try {
     parsed = JSON.parse(text);
   } catch {
-    return <Text style={[s.fallback, { color: c.textMuted }]}>{text}</Text>;
+    return <Text style={[s.fallback, { color: c.inkSecondary }]}>{text}</Text>;
   }
 
   return (
@@ -127,28 +127,28 @@ const s = StyleSheet.create({
   },
   key: {
     fontFamily: MONOSPACE_FONT,
-    fontSize: FontSize.sm,
+    fontSize: FontSize.caption,
     lineHeight: 20,
   },
   line: {
     fontFamily: MONOSPACE_FONT,
-    fontSize: FontSize.sm,
+    fontSize: FontSize.caption,
     lineHeight: 20,
   },
   value: {
     fontFamily: MONOSPACE_FONT,
-    fontSize: FontSize.sm,
+    fontSize: FontSize.caption,
     lineHeight: 20,
     flexShrink: 1,
   },
   bracket: {
     fontFamily: MONOSPACE_FONT,
-    fontSize: FontSize.sm,
+    fontSize: FontSize.caption,
     lineHeight: 20,
   },
   fallback: {
     fontFamily: MONOSPACE_FONT,
-    fontSize: FontSize.sm,
+    fontSize: FontSize.caption,
     lineHeight: 18,
   },
 });

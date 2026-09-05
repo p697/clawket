@@ -46,6 +46,7 @@ import {
   type AgentSettingsRowDescriptor,
   type AgentSettingsSummary,
 } from './model';
+import { translateAgentSettingsKey } from './translation';
 
 export type AgentSettingsNavigate = (
   route: 'AgentSettingsSection',
@@ -76,6 +77,32 @@ export type AgentSettingsScreenProps = Omit<
   initialSummary?: AgentSettingsSummary;
   permissionDenied?: boolean;
 }>;
+
+export function AgentSettingsRouteLoading({
+  onBack,
+}: Readonly<{ onBack: () => void }>): React.JSX.Element {
+  const { t } = useTranslation(['common', 'settings']);
+  const { theme } = useAppTheme();
+  const insets = useSafeAreaInsets();
+  const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
+
+  return (
+    <View
+      testID="agent-settings-route-loading"
+      style={[styles.screen, { paddingTop: insets.top }]}
+    >
+      <AgentSettingsHeader
+        backLabel={t('Back', { ns: 'common' })}
+        title={translateAgentSettingsKey(t, 'Agent settings')}
+        onBack={onBack}
+      />
+      <AgentSettingsLoading
+        bottomInset={insets.bottom}
+        loadingLabel={t('Loading...', { ns: 'common' })}
+      />
+    </View>
+  );
+}
 
 export function AgentSettingsScreen({
   adapter,
@@ -171,7 +198,7 @@ export function AgentSettingsView({
   onOpenPro,
   onRetry,
 }: AgentSettingsViewProps): React.JSX.Element {
-  const { t } = useTranslation(['common', 'console', 'config']);
+  const { t } = useTranslation(['common', 'settings', 'config']);
   const { theme } = useAppTheme();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
@@ -216,18 +243,11 @@ export function AgentSettingsView({
       testID="agent-settings-screen"
       style={[styles.screen, { paddingTop: insets.top }]}
     >
-      <View testID="agent-settings-header" style={styles.header}>
-        <FloatingButton
-          testID="agent-settings-back"
-          icon={ChevronLeft}
-          accessibilityLabel={t('Back', { ns: 'common' })}
-          onPress={onBack}
-        />
-        <Text testID="agent-settings-title" style={styles.headerTitle} numberOfLines={1}>
-          {t('Agent settings')}
-        </Text>
-        <View style={styles.headerSlot} />
-      </View>
+      <AgentSettingsHeader
+        backLabel={t('Back', { ns: 'common' })}
+        title={translateAgentSettingsKey(t, 'Agent settings')}
+        onBack={onBack}
+      />
 
       {state === 'loading' ? (
         <AgentSettingsLoading
@@ -236,7 +256,7 @@ export function AgentSettingsView({
         />
       ) : state === 'empty' || !agent || !model ? (
         <View testID="agent-settings-empty" style={styles.centeredState}>
-          <Text style={styles.stateText}>{t('Agent unavailable')}</Text>
+          <Text style={styles.stateText}>{translateAgentSettingsKey(t, 'Agent unavailable')}</Text>
         </View>
       ) : (
         <ScrollView
@@ -251,8 +271,8 @@ export function AgentSettingsView({
           {state === 'offline' ? (
             <Banner
               testID="agent-settings-offline"
-              message={t('Offline · reconnecting')}
-              actionLabel={t('Reconnect')}
+              message={translateAgentSettingsKey(t, 'Offline · reconnecting')}
+              actionLabel={translateAgentSettingsKey(t, 'Reconnect')}
               onAction={onRetry}
             />
           ) : null}
@@ -260,7 +280,7 @@ export function AgentSettingsView({
             <Banner
               testID="agent-settings-error"
               tone="bad"
-              message={errorMessage || t('Settings could not load')}
+              message={errorMessage || translateAgentSettingsKey(t, 'Settings could not load')}
               actionLabel={t('Retry', { ns: 'common' })}
               onAction={onRetry}
             />
@@ -268,7 +288,7 @@ export function AgentSettingsView({
           {state === 'permission' ? (
             <Banner
               testID="agent-settings-permission"
-              message={t('Pro required for this agent')}
+              message={translateAgentSettingsKey(t, 'Pro required for this agent')}
               actionLabel={t('Unlock', { ns: 'common' })}
               onAction={() => onOpenPro('identity')}
             />
@@ -307,7 +327,7 @@ export function AgentSettingsView({
             <SettingsSection
               key={group.id}
               group={group}
-              translate={t}
+              translate={(key) => translateAgentSettingsKey(t, key)}
               onOpenRow={openRow}
             />
           ))}
@@ -317,7 +337,34 @@ export function AgentSettingsView({
   );
 }
 
-type Translate = ReturnType<typeof useTranslation>['t'];
+function AgentSettingsHeader({
+  backLabel,
+  title,
+  onBack,
+}: Readonly<{
+  backLabel: string;
+  title: string;
+  onBack: () => void;
+}>): React.JSX.Element {
+  const { theme } = useAppTheme();
+  const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
+  return (
+    <View testID="agent-settings-header" style={styles.header}>
+      <FloatingButton
+        testID="agent-settings-back"
+        icon={ChevronLeft}
+        accessibilityLabel={backLabel}
+        onPress={onBack}
+      />
+      <Text testID="agent-settings-title" style={styles.headerTitle} numberOfLines={1}>
+        {title}
+      </Text>
+      <View style={styles.headerSlot} />
+    </View>
+  );
+}
+
+type Translate = (key: string) => string;
 
 function SettingsSection({
   group,

@@ -4,7 +4,6 @@ import { EdgeInsets } from 'react-native-safe-area-context';
 import { useGenericKeyboardHandler, useKeyboardState } from 'react-native-keyboard-controller';
 import { Gesture } from 'react-native-gesture-handler';
 import { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
-import { useTabBarHeight } from '../hooks/useTabBarHeight';
 import { Space } from '../theme/tokens';
 import { getChatKeyboardBottomPadding } from './chatKeyboardLayout';
 
@@ -14,7 +13,6 @@ type Props = {
 };
 
 export function useChatKeyboardLayout({ insets, screenHeight }: Props) {
-  const tabBarHeight = useTabBarHeight();
   const composerBottomPadding = Space.md;
   const androidKeyboardGap = Space.sm;
   const keyboardHeightSV = useSharedValue(0);
@@ -65,14 +63,12 @@ export function useChatKeyboardLayout({ insets, screenHeight }: Props) {
   const animatedRootStyle = useAnimatedStyle(() => {
     if (composerFocusedSV.value) {
       return {
-        // The JS tab navigator already ends the scene above the tab bar.
-        // Subtract the physical bar height from keyboard overlap so the
-        // composer is lifted exactly once. Android keeps a small IME gap.
+        // The root stack fills the screen, so the composer follows the full
+        // keyboard overlap. Android keeps a small IME gap.
         paddingBottom: getChatKeyboardBottomPadding({
           platform: Platform.OS,
           keyboardHeight: keyboardHeightSV.value,
           bottomInset: insets.bottom,
-          tabBarHeight,
           androidKeyboardGap,
         }),
       };

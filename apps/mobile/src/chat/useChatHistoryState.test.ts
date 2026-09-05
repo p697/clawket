@@ -79,16 +79,16 @@ describe('useChatHistoryState', () => {
 
   it('keeps a newer session switch when refresh resolves with an older captured key', async () => {
     const listSessionsDeferred = deferred<Array<ReturnType<typeof createSession>>>();
-    const gateway = {
+    const adapter = {
       listSessions: jest.fn(() => listSessionsDeferred.promise),
-      fetchHistory: jest.fn().mockResolvedValue({ messages: [] }),
-      getConnectionState: jest.fn().mockReturnValue('ready'),
+      loadSession: jest.fn().mockResolvedValue({ messages: [] }),
+      state: 'ready',
     };
 
     const { result } = renderHook(() => {
       const sessionKeyRef = useRef<string | null>('agent:main:previous');
       const state = useChatHistoryState({
-        gateway: gateway as any,
+        adapter: adapter as any,
         dbg: jest.fn(),
         t: translate,
         sessionKeyRef,
@@ -121,21 +121,21 @@ describe('useChatHistoryState', () => {
 
     expect(result.current.state.sessionKey).toBe('agent:main:channel:target');
     expect(result.current.sessionKeyRef.current).toBe('agent:main:channel:target');
-    expect(gateway.fetchHistory).toHaveBeenCalledWith('agent:main:channel:target', 50);
+    expect(adapter.loadSession).toHaveBeenCalledWith('agent:main:channel:target', { limit: 50 });
   });
 
   it('optimistically enters the Hermes main session before sessions.list resolves', async () => {
     const listSessionsDeferred = deferred<Array<ReturnType<typeof createSession>>>();
-    const gateway = {
+    const adapter = {
       listSessions: jest.fn(() => listSessionsDeferred.promise),
-      fetchHistory: jest.fn().mockResolvedValue({ messages: [] }),
-      getConnectionState: jest.fn().mockReturnValue('ready'),
+      loadSession: jest.fn().mockResolvedValue({ messages: [] }),
+      state: 'ready',
     };
 
     const { result } = renderHook(() => {
       const sessionKeyRef = useRef<string | null>(null);
       const state = useChatHistoryState({
-        gateway: gateway as any,
+        adapter: adapter as any,
         dbg: jest.fn(),
         t: translate,
         sessionKeyRef,
@@ -154,7 +154,7 @@ describe('useChatHistoryState', () => {
 
     expect(result.current.state.sessionKey).toBe('main');
     expect(result.current.sessionKeyRef.current).toBe('main');
-    expect(gateway.fetchHistory).toHaveBeenCalledWith('main', 50);
+    expect(adapter.loadSession).toHaveBeenCalledWith('main', { limit: 50 });
 
     await act(async () => {
       listSessionsDeferred.resolve([createSession('main')]);
@@ -166,16 +166,16 @@ describe('useChatHistoryState', () => {
   });
 
   it('reloads only the current session history for lightweight refresh', async () => {
-    const gateway = {
+    const adapter = {
       listSessions: jest.fn().mockResolvedValue([]),
-      fetchHistory: jest.fn().mockResolvedValue({ messages: [] }),
-      getConnectionState: jest.fn().mockReturnValue('ready'),
+      loadSession: jest.fn().mockResolvedValue({ messages: [] }),
+      state: 'ready',
     };
 
     const { result } = renderHook(() => {
       const sessionKeyRef = useRef<string | null>('agent:main:main');
       const state = useChatHistoryState({
-        gateway: gateway as any,
+        adapter: adapter as any,
         dbg: jest.fn(),
         t: translate,
         sessionKeyRef,
@@ -191,24 +191,24 @@ describe('useChatHistoryState', () => {
       await result.current.state.refreshCurrentSessionHistory();
     });
 
-    expect(gateway.fetchHistory).toHaveBeenCalledWith('agent:main:main', 50);
-    expect(gateway.listSessions).not.toHaveBeenCalled();
+    expect(adapter.loadSession).toHaveBeenCalledWith('agent:main:main', { limit: 50 });
+    expect(adapter.listSessions).not.toHaveBeenCalled();
     expect(result.current.state.sessionKey).toBe('agent:main:main');
     expect(result.current.sessionKeyRef.current).toBe('agent:main:main');
   });
 
   it('deduplicates concurrent loadHistory calls for the same session and limit', async () => {
-    const fetchHistoryDeferred = deferred<{ messages: Array<{ role: string; content: string }> }>();
-    const gateway = {
+    const loadSessionDeferred = deferred<{ messages: Array<{ role: string; content: string }> }>();
+    const adapter = {
       listSessions: jest.fn().mockResolvedValue([]),
-      fetchHistory: jest.fn(() => fetchHistoryDeferred.promise),
-      getConnectionState: jest.fn().mockReturnValue('ready'),
+      loadSession: jest.fn(() => loadSessionDeferred.promise),
+      state: 'ready',
     };
 
     const { result } = renderHook(() => {
       const sessionKeyRef = useRef<string | null>('agent:main:main');
       const state = useChatHistoryState({
-        gateway: gateway as any,
+        adapter: adapter as any,
         dbg: jest.fn(),
         t: translate,
         sessionKeyRef,
@@ -228,10 +228,10 @@ describe('useChatHistoryState', () => {
       await Promise.resolve();
     });
 
-    expect(gateway.fetchHistory).toHaveBeenCalledTimes(1);
+    expect(adapter.loadSession).toHaveBeenCalledTimes(1);
 
     await act(async () => {
-      fetchHistoryDeferred.resolve({
+      loadSessionDeferred.resolve({
         messages: [{ role: 'assistant', content: 'reply' }],
       });
       await Promise.all([firstPromise!, secondPromise!]);
@@ -241,9 +241,9 @@ describe('useChatHistoryState', () => {
   });
 
   it('filters delivery-mirror assistant history entries during loadHistory', async () => {
-    const gateway = {
+    const adapter = {
       listSessions: jest.fn().mockResolvedValue([]),
-      fetchHistory: jest.fn().mockResolvedValue({
+      loadSession: jest.fn().mockResolvedValue({
         messages: [
           {
             role: 'assistant',
@@ -261,13 +261,13 @@ describe('useChatHistoryState', () => {
           },
         ],
       }),
-      getConnectionState: jest.fn().mockReturnValue('ready'),
+      state: 'ready',
     };
 
     const { result } = renderHook(() => {
       const sessionKeyRef = useRef<string | null>('agent:main:main');
       const state = useChatHistoryState({
-        gateway: gateway as any,
+        adapter: adapter as any,
         dbg: jest.fn(),
         t: translate,
         sessionKeyRef,
@@ -287,18 +287,123 @@ describe('useChatHistoryState', () => {
     expect(result.current.state.messages[0]?.modelLabel).toBe('openai/gpt-5');
   });
 
-  it('deduplicates concurrent reconcileLatestAssistantFromHistory calls for the same session', async () => {
-    const fetchHistoryDeferred = deferred<{ messages: Array<{ role: string; content: string; timestamp?: number }> }>();
-    const gateway = {
+  it('renders normalized adapter text, image and file attachments, and paired tool history', async () => {
+    const adapter = {
       listSessions: jest.fn().mockResolvedValue([]),
-      fetchHistory: jest.fn(() => fetchHistoryDeferred.promise),
-      getConnectionState: jest.fn().mockReturnValue('ready'),
+      loadSession: jest.fn().mockResolvedValue({
+        key: 'agent:main:main',
+        hasActiveRun: false,
+        messages: [
+          {
+            id: 'user-1',
+            role: 'user',
+            text: 'inspect',
+            timestampMs: 1_000,
+            attachments: [
+              { type: 'image', mimeType: 'image/png', content: 'pixels' },
+              {
+                type: 'file',
+                mimeType: ' Application/PDF ',
+                content: 'pdf-bytes-must-not-enter-image-gallery',
+                name: ' spec.pdf ',
+              },
+            ],
+          },
+          {
+            id: 'assistant-tool',
+            role: 'assistant',
+            text: '',
+            timestampMs: 2_000,
+            tool: {
+              name: 'read',
+              status: 'running',
+              callId: 'call-1',
+              input: { path: '/tmp/file' },
+              startedAtMs: 2_000,
+            },
+          },
+          {
+            id: 'tool-result',
+            role: 'tool',
+            text: 'two lines',
+            timestampMs: 2_050,
+            tool: {
+              name: 'read',
+              status: 'success',
+              callId: 'call-1',
+              output: { lines: 2 },
+              durationMs: 50,
+              startedAtMs: 2_000,
+              finishedAtMs: 2_050,
+            },
+          },
+          {
+            id: 'assistant-1',
+            role: 'assistant',
+            text: 'done',
+            timestampMs: 3_000,
+            provider: 'openai',
+            model: 'gpt-5',
+          },
+        ],
+      }),
+      state: 'ready',
     };
 
     const { result } = renderHook(() => {
       const sessionKeyRef = useRef<string | null>('agent:main:main');
       const state = useChatHistoryState({
-        gateway: gateway as any,
+        adapter: adapter as any,
+        dbg: jest.fn(),
+        t: translate,
+        sessionKeyRef,
+        mainSessionKey: 'agent:main:main',
+        gatewayConfigId: null,
+        currentAgentId: 'main',
+      });
+      return { state, sessionKeyRef };
+    });
+
+    await act(async () => {
+      result.current.state.setSessionKey('agent:main:main');
+      await result.current.state.loadHistory('agent:main:main', 12);
+    });
+
+    expect(result.current.state.messages).toEqual([
+      expect.objectContaining({
+        role: 'user',
+        text: 'inspect',
+        imageUris: ['data:image/png;base64,pixels'],
+        fileAttachments: [{ mimeType: 'application/pdf', fileName: 'spec.pdf' }],
+      }),
+      expect.objectContaining({
+        id: 'toolcall_call-1',
+        role: 'tool',
+        toolName: 'read',
+        toolStatus: 'success',
+        toolDetail: 'two lines',
+        toolDurationMs: 50,
+      }),
+      expect.objectContaining({
+        role: 'assistant',
+        text: 'done',
+        modelLabel: 'openai/gpt-5',
+      }),
+    ]);
+  });
+
+  it('deduplicates concurrent reconcileLatestAssistantFromHistory calls for the same session', async () => {
+    const loadSessionDeferred = deferred<{ messages: Array<{ role: string; content: string; timestamp?: number }> }>();
+    const adapter = {
+      listSessions: jest.fn().mockResolvedValue([]),
+      loadSession: jest.fn(() => loadSessionDeferred.promise),
+      state: 'ready',
+    };
+
+    const { result } = renderHook(() => {
+      const sessionKeyRef = useRef<string | null>('agent:main:main');
+      const state = useChatHistoryState({
+        adapter: adapter as any,
         dbg: jest.fn(),
         t: translate,
         sessionKeyRef,
@@ -325,10 +430,10 @@ describe('useChatHistoryState', () => {
       await Promise.resolve();
     });
 
-    expect(gateway.fetchHistory).toHaveBeenCalledTimes(1);
+    expect(adapter.loadSession).toHaveBeenCalledTimes(1);
 
     await act(async () => {
-      fetchHistoryDeferred.resolve({
+      loadSessionDeferred.resolve({
         messages: [{ role: 'assistant', content: 'reply', timestamp: 1_000 }],
       });
       await Promise.all([firstPromise!, secondPromise!]);
@@ -338,9 +443,9 @@ describe('useChatHistoryState', () => {
   });
 
   it('ignores delivery-mirror entries when reconciling the latest assistant from history', async () => {
-    const gateway = {
+    const adapter = {
       listSessions: jest.fn().mockResolvedValue([]),
-      fetchHistory: jest.fn().mockResolvedValue({
+      loadSession: jest.fn().mockResolvedValue({
         messages: [
           {
             role: 'assistant',
@@ -358,13 +463,13 @@ describe('useChatHistoryState', () => {
           },
         ],
       }),
-      getConnectionState: jest.fn().mockReturnValue('ready'),
+      state: 'ready',
     };
 
     const { result } = renderHook(() => {
       const sessionKeyRef = useRef<string | null>('agent:main:main');
       const state = useChatHistoryState({
-        gateway: gateway as any,
+        adapter: adapter as any,
         dbg: jest.fn(),
         t: translate,
         sessionKeyRef,
@@ -389,18 +494,18 @@ describe('useChatHistoryState', () => {
   it('does not merge reconcile requests with different append semantics', async () => {
     const firstDeferred = deferred<{ messages: Array<{ role: string; content: string; timestamp?: number }> }>();
     const secondDeferred = deferred<{ messages: Array<{ role: string; content: string; timestamp?: number }> }>();
-    const gateway = {
+    const adapter = {
       listSessions: jest.fn().mockResolvedValue([]),
-      fetchHistory: jest.fn()
+      loadSession: jest.fn()
         .mockImplementationOnce(() => firstDeferred.promise)
         .mockImplementationOnce(() => secondDeferred.promise),
-      getConnectionState: jest.fn().mockReturnValue('ready'),
+      state: 'ready',
     };
 
     const { result } = renderHook(() => {
       const sessionKeyRef = useRef<string | null>('agent:main:main');
       const state = useChatHistoryState({
-        gateway: gateway as any,
+        adapter: adapter as any,
         dbg: jest.fn(),
         t: translate,
         sessionKeyRef,
@@ -428,7 +533,7 @@ describe('useChatHistoryState', () => {
       await Promise.resolve();
     });
 
-    expect(gateway.fetchHistory).toHaveBeenCalledTimes(2);
+    expect(adapter.loadSession).toHaveBeenCalledTimes(2);
 
     await act(async () => {
       firstDeferred.resolve({
@@ -443,10 +548,10 @@ describe('useChatHistoryState', () => {
     expect(result.current.state.messages.map((message) => message.text)).toEqual(['reply']);
   });
 
-  it('loads older local cached messages after gateway history is exhausted', async () => {
-    const gateway = {
+  it('loads older local cached messages after adapter history is exhausted', async () => {
+    const adapter = {
       listSessions: jest.fn().mockResolvedValue([]),
-      fetchHistory: jest.fn()
+      loadSession: jest.fn()
         .mockResolvedValueOnce({
           sessionId: 'sess-current',
           messages: [
@@ -461,7 +566,7 @@ describe('useChatHistoryState', () => {
             { role: 'assistant', content: 'new generation reply', timestamp: 4_000 },
           ],
         }),
-      getConnectionState: jest.fn().mockReturnValue('ready'),
+      state: 'ready',
     };
     (ChatCacheService.getTimelinePage as jest.Mock).mockResolvedValueOnce({
       messages: [
@@ -474,7 +579,7 @@ describe('useChatHistoryState', () => {
     const { result } = renderHook(() => {
       const sessionKeyRef = useRef<string | null>('agent:main:main');
       const state = useChatHistoryState({
-        gateway: gateway as any,
+        adapter: adapter as any,
         dbg: jest.fn(),
         t: translate,
         sessionKeyRef,
@@ -501,10 +606,10 @@ describe('useChatHistoryState', () => {
     ]);
   });
 
-  it('keeps prepended local history visible after a gateway refresh reloads the current session', async () => {
-    const gateway = {
+  it('keeps prepended local history visible after a adapter refresh reloads the current session', async () => {
+    const adapter = {
       listSessions: jest.fn().mockResolvedValue([]),
-      fetchHistory: jest.fn()
+      loadSession: jest.fn()
         .mockResolvedValueOnce({
           sessionId: 'sess-current',
           messages: [
@@ -526,7 +631,7 @@ describe('useChatHistoryState', () => {
             { role: 'assistant', content: 'recent reply', timestamp: 4_000 },
           ],
         }),
-      getConnectionState: jest.fn().mockReturnValue('ready'),
+      state: 'ready',
     };
     (ChatCacheService.getTimelinePage as jest.Mock).mockResolvedValueOnce({
       messages: [
@@ -539,7 +644,7 @@ describe('useChatHistoryState', () => {
     const { result } = renderHook(() => {
       const sessionKeyRef = useRef<string | null>('agent:main:main');
       const state = useChatHistoryState({
-        gateway: gateway as any,
+        adapter: adapter as any,
         dbg: jest.fn(),
         t: translate,
         sessionKeyRef,
@@ -569,23 +674,23 @@ describe('useChatHistoryState', () => {
     ]);
   });
 
-  it('filters assistant NO_REPLY messages from gateway history while keeping user NO_REPLY text', async () => {
-    const gateway = {
+  it('filters assistant NO_REPLY messages from adapter history while keeping user NO_REPLY text', async () => {
+    const adapter = {
       listSessions: jest.fn().mockResolvedValue([]),
-      fetchHistory: jest.fn().mockResolvedValue({
+      loadSession: jest.fn().mockResolvedValue({
         messages: [
           { role: 'user', content: 'NO_REPLY' },
           { role: 'assistant', content: 'NO_REPLY' },
           { role: 'assistant', content: 'visible reply' },
         ],
       }),
-      getConnectionState: jest.fn().mockReturnValue('ready'),
+      state: 'ready',
     };
 
     const { result } = renderHook(() => {
       const sessionKeyRef = useRef<string | null>('agent:main:main');
       const state = useChatHistoryState({
-        gateway: gateway as any,
+        adapter: adapter as any,
         dbg: jest.fn(),
         t: translate,
         sessionKeyRef,
@@ -607,22 +712,22 @@ describe('useChatHistoryState', () => {
     ]);
   });
 
-  it('filters assistant NO_ placeholder messages from gateway history', async () => {
-    const gateway = {
+  it('filters assistant NO_ placeholder messages from adapter history', async () => {
+    const adapter = {
       listSessions: jest.fn().mockResolvedValue([]),
-      fetchHistory: jest.fn().mockResolvedValue({
+      loadSession: jest.fn().mockResolvedValue({
         messages: [
           { role: 'assistant', content: 'NO_' },
           { role: 'assistant', content: 'visible reply' },
         ],
       }),
-      getConnectionState: jest.fn().mockReturnValue('ready'),
+      state: 'ready',
     };
 
     const { result } = renderHook(() => {
       const sessionKeyRef = useRef<string | null>('agent:main:main');
       const state = useChatHistoryState({
-        gateway: gateway as any,
+        adapter: adapter as any,
         dbg: jest.fn(),
         t: translate,
         sessionKeyRef,
@@ -643,22 +748,22 @@ describe('useChatHistoryState', () => {
     ]);
   });
 
-  it('filters user messages that start with the OpenClaw runtime context prefix from gateway history', async () => {
-    const gateway = {
+  it('filters user messages that start with the OpenClaw runtime context prefix from adapter history', async () => {
+    const adapter = {
       listSessions: jest.fn().mockResolvedValue([]),
-      fetchHistory: jest.fn().mockResolvedValue({
+      loadSession: jest.fn().mockResolvedValue({
         messages: [
           { role: 'user', content: 'OpenClaw runtime context\n\ninternal' },
           { role: 'assistant', content: 'visible reply' },
         ],
       }),
-      getConnectionState: jest.fn().mockReturnValue('ready'),
+      state: 'ready',
     };
 
     const { result } = renderHook(() => {
       const sessionKeyRef = useRef<string | null>('agent:main:main');
       const state = useChatHistoryState({
-        gateway: gateway as any,
+        adapter: adapter as any,
         dbg: jest.fn(),
         t: translate,
         sessionKeyRef,
@@ -680,22 +785,22 @@ describe('useChatHistoryState', () => {
   });
 
   it('keeps repeated user messages when text is identical but history items are distinct', async () => {
-    const gateway = {
+    const adapter = {
       listSessions: jest.fn().mockResolvedValue([]),
-      fetchHistory: jest.fn().mockResolvedValue({
+      loadSession: jest.fn().mockResolvedValue({
         messages: [
           { role: 'user', content: 'same text', timestamp: 1_000 },
           { role: 'user', content: 'same text', timestamp: 2_000 },
           { role: 'assistant', content: 'reply' },
         ],
       }),
-      getConnectionState: jest.fn().mockReturnValue('ready'),
+      state: 'ready',
     };
 
     const { result } = renderHook(() => {
       const sessionKeyRef = useRef<string | null>('agent:main:main');
       const state = useChatHistoryState({
-        gateway: gateway as any,
+        adapter: adapter as any,
         dbg: jest.fn(),
         t: translate,
         sessionKeyRef,
@@ -719,9 +824,9 @@ describe('useChatHistoryState', () => {
   });
 
   it('renders persisted tool results from history', async () => {
-    const gateway = {
+    const adapter = {
       listSessions: jest.fn().mockResolvedValue([]),
-      fetchHistory: jest.fn().mockResolvedValue({
+      loadSession: jest.fn().mockResolvedValue({
         messages: [
           { role: 'user', content: 'check weather', timestamp: 1_000 },
           {
@@ -735,13 +840,13 @@ describe('useChatHistoryState', () => {
           { role: 'assistant', content: 'It is sunny.', timestamp: 2_000 },
         ],
       }),
-      getConnectionState: jest.fn().mockReturnValue('ready'),
+      state: 'ready',
     };
 
     const { result } = renderHook(() => {
       const sessionKeyRef = useRef<string | null>('agent:main:main');
       const state = useChatHistoryState({
-        gateway: gateway as any,
+        adapter: adapter as any,
         dbg: jest.fn(),
         t: translate,
         sessionKeyRef,
@@ -770,9 +875,9 @@ describe('useChatHistoryState', () => {
   });
 
   it('keeps persisted tool timing and args details from history', async () => {
-    const gateway = {
+    const adapter = {
       listSessions: jest.fn().mockResolvedValue([]),
-      fetchHistory: jest.fn().mockResolvedValue({
+      loadSession: jest.fn().mockResolvedValue({
         messages: [
           {
             role: 'toolResult',
@@ -788,13 +893,13 @@ describe('useChatHistoryState', () => {
           },
         ],
       }),
-      getConnectionState: jest.fn().mockReturnValue('ready'),
+      state: 'ready',
     };
 
     const { result } = renderHook(() => {
       const sessionKeyRef = useRef<string | null>('agent:main:main');
       const state = useChatHistoryState({
-        gateway: gateway as any,
+        adapter: adapter as any,
         dbg: jest.fn(),
         t: translate,
         sessionKeyRef,
@@ -824,22 +929,22 @@ describe('useChatHistoryState', () => {
     ]);
   });
 
-  it('clears in-memory history when the gateway scope changes', async () => {
-    const gateway = {
+  it('clears in-memory history when the adapter scope changes', async () => {
+    const adapter = {
       listSessions: jest.fn().mockResolvedValue([]),
-      fetchHistory: jest.fn().mockResolvedValue({
+      loadSession: jest.fn().mockResolvedValue({
         messages: [
           { role: 'user', content: 'message on gw-1' },
         ],
       }),
-      getConnectionState: jest.fn().mockReturnValue('ready'),
+      state: 'ready',
     };
 
     const { result, rerender } = renderHook(
       ({ gatewayConfigId }: { gatewayConfigId: string | null }) => {
         const sessionKeyRef = useRef<string | null>('agent:main:main');
         const state = useChatHistoryState({
-          gateway: gateway as any,
+          adapter: adapter as any,
           dbg: jest.fn(),
           t: translate,
           sessionKeyRef,
@@ -877,10 +982,10 @@ describe('useChatHistoryState', () => {
   });
 
   it('restores startup preview session metadata from the current agent scoped snapshot', async () => {
-    const gateway = {
+    const adapter = {
       listSessions: jest.fn().mockResolvedValue([]),
-      fetchHistory: jest.fn().mockResolvedValue({ messages: [] }),
-      getConnectionState: jest.fn().mockReturnValue('connecting'),
+      loadSession: jest.fn().mockResolvedValue({ messages: [] }),
+      state: 'connecting',
     };
     (StorageService.getLastOpenedSessionSnapshot as jest.Mock).mockResolvedValue({
       sessionKey: 'agent:writer:dm:alice',
@@ -902,7 +1007,7 @@ describe('useChatHistoryState', () => {
     const { result } = renderHook(() => {
       const sessionKeyRef = useRef<string | null>(null);
       const state = useChatHistoryState({
-        gateway: gateway as any,
+        adapter: adapter as any,
         dbg: jest.fn(),
         t: translate,
         sessionKeyRef,
@@ -934,10 +1039,10 @@ describe('useChatHistoryState', () => {
   });
 
   it('ignores a snapshot from another agent and restores the current agent main preview instead', async () => {
-    const gateway = {
+    const adapter = {
       listSessions: jest.fn().mockResolvedValue([]),
-      fetchHistory: jest.fn().mockResolvedValue({ messages: [] }),
-      getConnectionState: jest.fn().mockReturnValue('connecting'),
+      loadSession: jest.fn().mockResolvedValue({ messages: [] }),
+      state: 'connecting',
     };
     (StorageService.getLastOpenedSessionSnapshot as jest.Mock).mockResolvedValue({
       sessionKey: 'agent:writer:dm:alice',
@@ -977,7 +1082,7 @@ describe('useChatHistoryState', () => {
     const { result } = renderHook(() => {
       const sessionKeyRef = useRef<string | null>(null);
       const state = useChatHistoryState({
-        gateway: gateway as any,
+        adapter: adapter as any,
         dbg: jest.fn(),
         t: translate,
         sessionKeyRef,
@@ -1015,7 +1120,7 @@ describe('shouldSuppressHistoryLoadError', () => {
 });
 
 describe('buildCachedPreviewSessions', () => {
-  it('returns recent cached sessions for the active gateway and agent scope', () => {
+  it('returns recent cached sessions for the active adapter and agent scope', () => {
     const result = buildCachedPreviewSessions(
       [
         {

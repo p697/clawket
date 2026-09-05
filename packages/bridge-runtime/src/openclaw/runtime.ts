@@ -27,6 +27,7 @@ import {
   parsePairingRequestFromError,
   parsePairResolvedEvent,
   parseResponseEnvelopeMeta,
+  normalizeBridgeVersion,
   normalizeConnectCapabilities,
   type PendingPairRequest,
 } from '../protocol.js';
@@ -85,6 +86,7 @@ export type BridgeRuntimeSnapshot = {
 export type BridgeRuntimeOptions = {
   config: PairingConfig;
   gatewayUrl: string;
+  bridgeVersion?: string;
   reconnectBaseDelayMs?: number;
   reconnectMaxDelayMs?: number;
   gatewayRetryDelayMs?: number;
@@ -148,9 +150,11 @@ export class BridgeRuntime {
   private clientDemandStartedAtMs: number | null = null;
   private gatewayConnectedAtMs: number | null = null;
   private readonly inFlightConnectHandshakes = new Map<string, InFlightConnectHandshake>();
+  private readonly bridgeVersion: string | undefined;
   private readonly snapshot: BridgeRuntimeSnapshot;
 
   constructor(private readonly options: BridgeRuntimeOptions) {
+    this.bridgeVersion = normalizeBridgeVersion(options.bridgeVersion);
     this.snapshot = {
       running: false,
       relayConnected: false,
@@ -752,7 +756,7 @@ export class BridgeRuntime {
       }
       const pending = this.inFlightConnectHandshakes.get(response.id);
       if (response.ok && pending?.bridgeCapabilitiesRequested) {
-        relayText = patchConnectResponseBridgeCapabilities(text).text;
+        relayText = patchConnectResponseBridgeCapabilities(text, this.bridgeVersion).text;
       }
       this.observeGatewayResponse(response);
     }
@@ -1473,6 +1477,7 @@ export function stripConnectRequestBridgeMeta(
 
 export function patchConnectResponseBridgeCapabilities(
   text: string,
+  bridgeVersion?: string,
 ): { text: string; patched: boolean } {
   try {
     const parsed = JSON.parse(text) as {
@@ -1485,7 +1490,9 @@ export function patchConnectResponseBridgeCapabilities(
       return { text, patched: false };
     }
     const meta = isRuntimeRecord(parsed.meta) ? parsed.meta : {};
+    const { bridgeVersion: _gatewayBridgeVersion, ...preservedMeta } = meta;
     const capabilities = normalizeConnectCapabilities(meta.capabilities);
+    const normalizedBridgeVersion = normalizeBridgeVersion(bridgeVersion);
     if (!capabilities.includes(BRIDGE_CAPABILITIES_V2)) {
       capabilities.push(BRIDGE_CAPABILITIES_V2);
     }
@@ -1493,8 +1500,9 @@ export function patchConnectResponseBridgeCapabilities(
       text: JSON.stringify({
         ...parsed,
         meta: {
-          ...meta,
+          ...preservedMeta,
           capabilities,
+          ...(normalizedBridgeVersion ? { bridgeVersion: normalizedBridgeVersion } : {}),
         },
       }),
       patched: true,

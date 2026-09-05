@@ -22,40 +22,59 @@ export const HermesRelayPairingService = {
     accessCode: string;
     clientLabel?: string | null;
   }): Promise<HermesRelayPairingClaimResult> {
-    const response = await fetch(`${normalizeHttpBase(input.serverUrl)}/v1/hermes/pair/claim`, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        accept: 'application/json',
-      },
-      body: JSON.stringify({
-        bridgeId: input.bridgeId,
-        accessCode: input.accessCode,
-        clientLabel: input.clientLabel ?? null,
-      }),
+    return claimHermesRelay('/v1/hermes/pair/claim', input.serverUrl, {
+      bridgeId: input.bridgeId,
+      accessCode: input.accessCode,
+      clientLabel: input.clientLabel ?? null,
     });
+  },
 
-    if (!response.ok) {
-      throw await toRelayError(response, 'Failed to claim Hermes Relay pairing code.');
-    }
-
-    const payload = await response.json() as HermesPairClaimResponse;
-    const bridgeId = payload.bridgeId?.trim() ?? '';
-    const relayUrl = payload.relayUrl?.trim() ?? '';
-    const clientToken = payload.clientToken?.trim() ?? '';
-    if (!bridgeId || !relayUrl || !clientToken) {
-      throw new Error('Hermes pairing response missing relay connection fields.');
-    }
-
-    return {
-      bridgeId,
-      relayUrl,
-      clientToken,
-      displayName: typeof payload.displayName === 'string' ? payload.displayName : null,
-      region: typeof payload.region === 'string' ? payload.region : null,
-    };
+  async claimCode(input: {
+    serverUrl: string;
+    pairingCode: string;
+    clientLabel?: string | null;
+  }): Promise<HermesRelayPairingClaimResult> {
+    return claimHermesRelay('/v1/hermes/pair/claim-code', input.serverUrl, {
+      accessCode: input.pairingCode.trim().toUpperCase(),
+      clientLabel: input.clientLabel ?? null,
+    });
   },
 };
+
+async function claimHermesRelay(
+  path: '/v1/hermes/pair/claim' | '/v1/hermes/pair/claim-code',
+  serverUrl: string,
+  body: Record<string, unknown>,
+): Promise<HermesRelayPairingClaimResult> {
+  const response = await fetch(`${normalizeHttpBase(serverUrl)}${path}`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      accept: 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    throw await toRelayError(response, 'Failed to claim Hermes Relay pairing code.');
+  }
+
+  const payload = await response.json() as HermesPairClaimResponse;
+  const bridgeId = payload.bridgeId?.trim() ?? '';
+  const relayUrl = payload.relayUrl?.trim() ?? '';
+  const clientToken = payload.clientToken?.trim() ?? '';
+  if (!bridgeId || !relayUrl || !clientToken) {
+    throw new Error('Hermes pairing response missing relay connection fields.');
+  }
+
+  return {
+    bridgeId,
+    relayUrl,
+    clientToken,
+    displayName: typeof payload.displayName === 'string' ? payload.displayName : null,
+    region: typeof payload.region === 'string' ? payload.region : null,
+  };
+}
 
 function normalizeHttpBase(url: string): string {
   const trimmed = url.trim();

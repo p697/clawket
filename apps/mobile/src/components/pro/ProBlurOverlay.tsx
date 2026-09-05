@@ -12,7 +12,7 @@ type Props = {
 };
 
 export function ProBlurOverlay({ onUpgrade, description }: Props): React.JSX.Element {
-  const { t } = useTranslation('console');
+  const { t } = useTranslation('settings');
   const { theme, resolvedScheme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme.colors), [theme]);
 
@@ -23,7 +23,7 @@ export function ProBlurOverlay({ onUpgrade, description }: Props): React.JSX.Ele
       style={styles.root}
     >
       <View style={styles.content}>
-        <Lock size={28} color={theme.colors.primary} strokeWidth={2} />
+        <Lock size={28} color={theme.colors.accent} strokeWidth={2} />
         {description ? (
           <Text style={styles.description}>{description}</Text>
         ) : null}
@@ -52,9 +52,9 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       maxWidth: '55%',
     },
     description: {
-      fontSize: FontSize.base,
-      fontWeight: FontWeight.medium,
-      color: colors.text,
+      fontSize: FontSize.secondary,
+      fontWeight: FontWeight.semibold,
+      color: colors.ink,
       textAlign: 'center',
       lineHeight: 22,
     },
@@ -62,16 +62,16 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       marginTop: Space.sm,
       paddingVertical: 11,
       paddingHorizontal: Space.xl + Space.lg,
-      borderRadius: Radius.md,
-      backgroundColor: colors.primary,
+      borderRadius: Radius.full,
+      backgroundColor: colors.accent,
     },
     buttonPressed: {
       opacity: 0.88,
     },
     buttonText: {
-      fontSize: FontSize.base,
+      fontSize: FontSize.secondary,
       fontWeight: FontWeight.semibold,
-      color: colors.primaryText,
+      color: colors.onAccent,
     },
   });
 }

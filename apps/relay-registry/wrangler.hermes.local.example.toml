@@ -11,6 +11,7 @@ RELAY_BACKEND = "hermes"
 RELAY_REGION_MAP = "{\"cn\":\"wss://hermes-relay.example.com/ws\",\"sg\":\"wss://hermes-relay.example.com/ws\",\"us\":\"wss://hermes-relay.example.com/ws\",\"eu\":\"wss://hermes-relay.example.com/ws\"}"
 PAIR_ACCESS_CODE_TTL_SEC = "600"
 PAIR_CLIENT_TOKEN_MAX = "8"
+PAIR_SESSION_RESOLVE_MAX_ATTEMPTS = "5"
 
 [[durable_objects.bindings]]
 name = "PAIR_REGISTER_LIMITER"

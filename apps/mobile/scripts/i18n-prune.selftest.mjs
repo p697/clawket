@@ -35,9 +35,9 @@ const fixtureCatalogs = {
     'Retain config': 'Retain config',
     'Dead config': 'Dead config',
   },
-  console: {
-    'Used console': 'Used console',
-    'Dead console': 'Dead console',
+  settings: {
+    'Used settings': 'Used settings',
+    'Dead settings': 'Dead settings',
   },
 };
 
@@ -77,8 +77,18 @@ export function Example({ runtimeKey, level }) {
   t(runtimeKey);
   t(\`thinking_\${level}\`, { ns: 'chat' });
   i18n.t('Used chat', { ns: 'chat' });
-  i18n.t('Used console', { ns: 'console' });
+  i18n.t('Used settings', { ns: 'settings' });
   return <Trans ns="config" i18nKey="Used config" />;
+}
+`,
+    'utf8',
+  );
+  writeFileSync(
+    join(root, 'App.tsx'),
+    `import i18n from './src/i18n';
+
+export function App() {
+  return i18n.t('Dead config', { ns: 'config' });
 }
 `,
     'utf8',
@@ -100,17 +110,19 @@ function snapshotLocales(root) {
 test('validates the six-locale, four-namespace catalog matrix', () => {
   const result = validateCatalogs(makeCatalogMatrix());
   assert.deepEqual(result.errors, []);
-  assert.deepEqual(result.namespaces, ['chat', 'common', 'config', 'console']);
+  assert.deepEqual(result.namespaces, ['chat', 'common', 'config', 'settings']);
   assert.equal(result.catalogKeyCount, 11);
 
-  const settingsLayout = makeCatalogMatrix();
+  const legacyConsoleLayout = makeCatalogMatrix();
   for (const locale of SUPPORTED_LOCALES) {
-    settingsLayout[locale].settings = settingsLayout[locale].console;
-    delete settingsLayout[locale].console;
+    legacyConsoleLayout[locale].console = legacyConsoleLayout[locale].settings;
+    delete legacyConsoleLayout[locale].settings;
   }
-  const renamed = validateCatalogs(settingsLayout);
-  assert.deepEqual(renamed.errors, []);
-  assert.deepEqual(renamed.namespaces, ['chat', 'common', 'config', 'settings']);
+  assert.ok(
+    validateCatalogs(legacyConsoleLayout).errors.some(
+      (error) => error.includes('expected exactly one supported four-namespace layout'),
+    ),
+  );
 });
 
 test('fails closed for corrupted, empty, duplicate, missing, and inconsistent inputs', () => {
@@ -159,8 +171,7 @@ test('reports deterministically without writing and protects dynamic and retaine
   assert.deepEqual(snapshotLocales(root), before);
   assert.deepEqual(result.report.analysis.removable, [
     'chat:Dead chat',
-    'config:Dead config',
-    'console:Dead console',
+    'settings:Dead settings',
   ]);
   assert.deepEqual(result.report.analysis.retained, [
     'chat:thinking_high',
@@ -171,7 +182,7 @@ test('reports deterministically without writing and protects dynamic and retaine
     'common:Dynamic common',
   ]);
   assert.deepEqual(result.report.analysis.protectedNamespaces, ['common']);
-  assert.match(output[0], /files=1 locales=6 namespaces=4 catalog_keys=11/u);
+  assert.match(output[0], /files=2 locales=6 namespaces=4 catalog_keys=11/u);
   assert.ok(output.some((line) => line === 'UNUSED remove chat:Dead chat'));
 });
 
@@ -196,7 +207,7 @@ test('strict fails on actionable debt and explicit write removes only proven-unu
     error: () => {},
   });
   assert.equal(write.exitCode, 0);
-  assert.deepEqual(write.writeResult, { filesWritten: 18, keysRemoved: 3 });
+  assert.deepEqual(write.writeResult, { filesWritten: 12, keysRemoved: 2 });
 
   const loaded = loadLocaleCatalogs(root);
   assert.deepEqual(loaded.errors, []);
@@ -206,8 +217,8 @@ test('strict fails on actionable debt and explicit write removes only proven-unu
     assert.ok('thinking_high' in loaded.catalogs[locale].chat);
     assert.ok('Retain config' in loaded.catalogs[locale].config);
     assert.ok(!('Dead chat' in loaded.catalogs[locale].chat));
-    assert.ok(!('Dead config' in loaded.catalogs[locale].config));
-    assert.ok(!('Dead console' in loaded.catalogs[locale].console));
+    assert.ok('Dead config' in loaded.catalogs[locale].config);
+    assert.ok(!('Dead settings' in loaded.catalogs[locale].settings));
   }
 });
 

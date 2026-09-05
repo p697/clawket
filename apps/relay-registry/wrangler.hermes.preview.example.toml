@@ -14,6 +14,7 @@ RELAY_BACKEND = "hermes"
 RELAY_REGION_MAP = "{\"cn\":\"wss://clawket-hermes-relay-preview.example.workers.dev/ws\",\"sg\":\"wss://clawket-hermes-relay-preview.example.workers.dev/ws\",\"us\":\"wss://clawket-hermes-relay-preview.example.workers.dev/ws\",\"eu\":\"wss://clawket-hermes-relay-preview.example.workers.dev/ws\"}"
 PAIR_ACCESS_CODE_TTL_SEC = "600"
 PAIR_CLIENT_TOKEN_MAX = "8"
+PAIR_SESSION_RESOLVE_MAX_ATTEMPTS = "5"
 
 [[durable_objects.bindings]]
 name = "PAIR_REGISTER_LIMITER"

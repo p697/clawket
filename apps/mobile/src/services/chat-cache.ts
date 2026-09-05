@@ -15,6 +15,7 @@ export type CachedMessage = {
   timestampMs?: number;
   imageUris?: string[];
   imageMetas?: UiMessage["imageMetas"];
+  fileAttachments?: UiMessage["fileAttachments"];
   modelLabel?: string;
   usage?: UiMessage["usage"];
   toolName?: string;
@@ -140,6 +141,7 @@ function toSlim(msg: UiMessage): CachedMessage {
   if (msg.timestampMs) slim.timestampMs = msg.timestampMs;
   if (msg.imageUris?.length) slim.imageUris = msg.imageUris;
   if (msg.imageMetas?.length) slim.imageMetas = msg.imageMetas;
+  if (msg.fileAttachments?.length) slim.fileAttachments = msg.fileAttachments;
   if (msg.modelLabel) slim.modelLabel = msg.modelLabel;
   if (msg.usage) slim.usage = msg.usage;
   if (msg.toolName) slim.toolName = msg.toolName;
@@ -530,6 +532,26 @@ async function removeGenerationStorage(storageKey: string): Promise<void> {
   });
 }
 
+async function removeStorageKeysStrict(keys: ReadonlyArray<string>): Promise<void> {
+  if (keys.length === 0) return;
+  try {
+    await AsyncStorage.multiRemove([...keys]);
+    return;
+  } catch {
+    let removalFailed = false;
+    for (const key of keys) {
+      try {
+        await AsyncStorage.removeItem(key);
+      } catch {
+        removalFailed = true;
+      }
+    }
+    if (removalFailed) {
+      throw new Error("Failed to remove chat cache entries.");
+    }
+  }
+}
+
 function findMessageIndexById(messages: CachedMessage[], id: string): number {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     if (messages[index]?.id === id) return index;
@@ -801,6 +823,29 @@ export const ChatCacheService = {
       for (const item of matched) {
         await removeIndexedSessionUnsafe(item.storageKey);
       }
+    });
+  },
+
+  /**
+   * Delete every cached generation owned by one connection while preserving
+   * other connections. Scanning storage also removes orphaned revision chunks
+   * that are no longer reachable from the cache index.
+   */
+  async clearConnection(gatewayConfigId: string): Promise<void> {
+    const normalizedConnectionId = gatewayConfigId.trim();
+    if (!normalizedConnectionId) {
+      throw new Error("Connection id is required.");
+    }
+    await runWithIndexLock(async () => {
+      const index = await readIndex();
+      const storagePrefix = `${MSG_PREFIX}${normalizedConnectionId}::`;
+      const allKeys = await AsyncStorage.getAllKeys();
+      const connectionKeys = allKeys.filter((key) => key.startsWith(storagePrefix));
+
+      // Remove message payloads first. If the following index commit fails,
+      // normal index sanitation observes the missing manifests and heals it.
+      await removeStorageKeysStrict(connectionKeys);
+      await writeIndex(index.filter((item) => item.gatewayConfigId !== normalizedConnectionId));
     });
   },
 

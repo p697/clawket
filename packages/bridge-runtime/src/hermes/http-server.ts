@@ -30,6 +30,7 @@ export type HermesHttpContextSnapshot = {
 export abstract class HermesHttpServerMethods {
   declare apiBaseUrl: string;
   declare apiKey: string | null;
+  declare bridgeVersion: string | undefined;
   declare bridgeToken: string;
   declare clients: Set<HermesLocalBridgeClient>;
   declare snapshot: HermesHttpContextSnapshot;
@@ -51,6 +52,7 @@ export abstract class HermesHttpServerMethods {
         hermesApiBaseUrl: this.apiBaseUrl,
         hermesApiReachable: reachable,
         capabilities: [...HERMES_BRIDGE_CAPABILITIES],
+        ...(this.bridgeVersion ? { bridgeVersion: this.bridgeVersion } : {}),
       });
       return;
     }
@@ -101,6 +103,7 @@ export abstract class HermesHttpServerMethods {
       hermesApiReachable: this.snapshot.hermesApiReachable,
       mode: 'hermes',
       capabilities: [...HERMES_BRIDGE_CAPABILITIES],
+      ...(this.bridgeVersion ? { bridgeVersion: this.bridgeVersion } : {}),
     });
   }
 

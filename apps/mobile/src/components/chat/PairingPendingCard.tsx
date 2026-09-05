@@ -45,7 +45,7 @@ export function PairingPendingCard({ approveCommand, copied, onCopy, connectionM
         )}
 
         <View style={styles.pairingStatusRow}>
-          <ActivityIndicator size="small" color={theme.colors.textMuted} />
+          <ActivityIndicator size="small" color={theme.colors.inkSecondary} />
           <Text style={styles.pairingStatusText}>{t('Waiting for approval\u2026')}</Text>
         </View>
 
@@ -68,32 +68,32 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       paddingHorizontal: Space.xl,
     },
     pairingCard: {
-      borderRadius: Radius.md,
+      borderRadius: Radius.card,
       width: '100%',
       alignItems: 'center',
     },
     pairingEmoji: {
-      fontSize: FontSize.hero,
+      fontSize: FontSize.display,
       marginBottom: 16,
     },
     pairingTitle: {
-      fontSize: FontSize.displaySm,
-      fontWeight: FontWeight.bold,
-      color: colors.text,
+      fontSize: FontSize.title,
+      fontWeight: FontWeight.semibold,
+      color: colors.ink,
       marginBottom: Space.sm,
     },
     pairingDesc: {
-      fontSize: FontSize.bodySm,
-      color: colors.textMuted,
+      fontSize: FontSize.secondary,
+      color: colors.inkSecondary,
       textAlign: 'center',
-      lineHeight: LineHeight.md,
+      lineHeight: LineHeight.caption,
       marginBottom: Space.lg + Space.xs,
     },
     commandContainer: {
-      backgroundColor: colors.surfaceElevated,
-      borderRadius: Radius.sm + 2,
+      backgroundColor: colors.surfaceFloating,
+      borderRadius: Radius.card,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
+      borderColor: colors.line,
       paddingVertical: Space.lg - 2,
       paddingHorizontal: Space.lg,
       width: '100%',
@@ -101,8 +101,8 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     commandText: {
       fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace' }),
-      fontSize: FontSize.md,
-      color: colors.textMuted,
+      fontSize: FontSize.caption,
+      color: colors.inkSecondary,
       textAlign: 'center',
     },
     copyBtn: {
@@ -115,13 +115,13 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       marginBottom: 8,
     },
     pairingStatusText: {
-      fontSize: FontSize.md,
-      color: colors.textMuted,
+      fontSize: FontSize.caption,
+      color: colors.inkSecondary,
       marginLeft: Space.sm,
     },
     pairingHint: {
-      fontSize: FontSize.sm,
-      color: colors.textSubtle,
+      fontSize: FontSize.caption,
+      color: colors.inkTertiary,
       textAlign: 'center',
     },
     retryBtn: {

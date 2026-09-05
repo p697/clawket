@@ -67,4 +67,62 @@ describe('posthog navigation tracking', () => {
 
     expect(getTrackedScreen(state as never)).toBeNull();
   });
+
+  it.each([
+    ['identity', 'Identity'],
+    ['models', 'Models'],
+    ['skills', 'Skills'],
+    ['cron', 'Cron'],
+    ['files', 'Files'],
+    ['usage', 'Usage'],
+    ['connection', 'ConnectionStatus'],
+    ['openclaw', 'OpenClawManage'],
+    ['tools', 'Tools'],
+    ['channels-devices', 'ChannelsDevices'],
+    ['logs', 'Logs'],
+  ])('names the %s Agent Settings destination', (section, name) => {
+    const state = {
+      index: 0,
+      routes: [{
+        key: `agent-settings-${section}`,
+        name: 'AgentSettingsSection',
+        params: { section, connectionId: 'private', agentId: 'private' },
+      }],
+    };
+
+    const tracked = getTrackedScreen(state as never);
+    expect(tracked).toMatchObject({
+      name,
+      area: 'settings',
+      kind: 'detail',
+      properties: {
+        screen_area: 'settings',
+        screen_kind: 'detail',
+        has_section: true,
+        has_connection_id: true,
+        has_agent_id: true,
+      },
+    });
+    expect(JSON.stringify(tracked)).not.toContain('private');
+  });
+
+  it('uses the account screen area and a stable section name', () => {
+    const state = {
+      index: 0,
+      routes: [{
+        key: 'account-help',
+        name: 'AccountSettingsSection',
+        params: { section: 'help' },
+      }],
+    };
+
+    expect(getTrackedScreen(state as never)).toMatchObject({
+      name: 'AccountHelp',
+      area: 'account',
+      properties: {
+        screen_area: 'account',
+        has_section: true,
+      },
+    });
+  });
 });

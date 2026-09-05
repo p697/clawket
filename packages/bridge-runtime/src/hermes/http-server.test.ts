@@ -95,7 +95,7 @@ describe('HermesLocalBridge WebSocket frame limit', () => {
 });
 
 describe('HermesLocalBridge capability advertisement', () => {
-  it('returns the same capabilities over HTTP and the initial WebSocket health event', async () => {
+  it('returns the same Bridge version and capabilities across every health path', async () => {
     const port = await reserveAvailablePort();
     const stateDir = await mkdtemp(join(tmpdir(), 'clawket-hermes-capabilities-'));
     const bridge = new HermesLocalBridge({
@@ -103,6 +103,7 @@ describe('HermesLocalBridge capability advertisement', () => {
       port,
       apiBaseUrl: 'http://127.0.0.1:1',
       bridgeToken: 'capabilities-test',
+      bridgeVersion: ' 3.0.0-test ',
       startHermesIfNeeded: false,
       hermesSourcePath: join(stateDir, 'missing-hermes-source'),
       hermesHomePath: join(stateDir, 'home'),
@@ -114,6 +115,7 @@ describe('HermesLocalBridge capability advertisement', () => {
       await bridge.start();
       const health = await fetch(`${bridge.getHttpUrl()}/v1/hermes/health`).then((response) => response.json()) as any;
       expect(health.capabilities).toEqual(['bridge.capabilities.v2', 'hermes.multi-session.v2']);
+      expect(health.bridgeVersion).toBe('3.0.0-test');
 
       const socket = new WebSocket(bridge.getWsUrl());
       const [data] = await once(socket, 'message') as [WebSocket.RawData];
@@ -121,11 +123,53 @@ describe('HermesLocalBridge capability advertisement', () => {
       expect(initial).toMatchObject({
         type: 'event',
         event: 'health',
-        payload: { capabilities: ['bridge.capabilities.v2', 'hermes.multi-session.v2'] },
+        payload: {
+          capabilities: ['bridge.capabilities.v2', 'hermes.multi-session.v2'],
+          bridgeVersion: '3.0.0-test',
+        },
+      });
+
+      const responsePromise = once(socket, 'message');
+      socket.send(JSON.stringify({ type: 'req', id: 'health-1', method: 'health', params: {} }));
+      const [responseData] = await responsePromise as [WebSocket.RawData];
+      expect(JSON.parse(responseData.toString())).toMatchObject({
+        type: 'res',
+        id: 'health-1',
+        ok: true,
+        payload: {
+          capabilities: ['bridge.capabilities.v2', 'hermes.multi-session.v2'],
+          bridgeVersion: '3.0.0-test',
+        },
+      });
+
+      const periodicPromise = once(socket, 'message');
+      await bridge.refreshHermesHealth();
+      const [periodicData] = await periodicPromise as [WebSocket.RawData];
+      expect(JSON.parse(periodicData.toString())).toMatchObject({
+        type: 'event',
+        event: 'health',
+        payload: { bridgeVersion: '3.0.0-test' },
       });
       socket.close();
     } finally {
       await bridge.stop();
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it('omits an invalid blank Bridge version from health responses', async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), 'clawket-hermes-blank-version-'));
+    try {
+      const bridge = new HermesLocalBridge({
+        bridgeVersion: ' \n ',
+        sessionStorePath: join(stateDir, 'sessions.json'),
+        usageLedgerPath: join(stateDir, 'usage.json'),
+        hermesStateDbPath: join(stateDir, 'state.db'),
+      });
+
+      const health = await bridge.dispatchRequest('health', {}) as Record<string, unknown>;
+      expect(health).not.toHaveProperty('bridgeVersion');
+    } finally {
       await rm(stateDir, { recursive: true, force: true });
     }
   });

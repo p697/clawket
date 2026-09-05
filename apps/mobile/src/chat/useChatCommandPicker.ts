@@ -8,12 +8,12 @@ export type CommandPickerOption = {
   isCurrent: boolean;
 };
 
-const COMMAND_PICKER_CONFIG: Record<CommandPickerKind, { probeCommand: string; title: string }> = {
-  think: { probeCommand: '/think', title: 'Thinking' },
-  reasoning: { probeCommand: '/reasoning', title: 'Reasoning' },
+const COMMAND_PICKER_CONFIG: Record<CommandPickerKind, { probeCommand: string }> = {
+  think: { probeCommand: '/think' },
+  reasoning: { probeCommand: '/reasoning' },
   // `/fast` is handled by OpenClaw as a text command and does not include options.
   // Probe `/fast:` so the inline-directive path returns the selectable options list.
-  fast: { probeCommand: '/fast:', title: 'Fast' },
+  fast: { probeCommand: '/fast:' },
 };
 
 function parseCommandOptionsFromText(text: string): { current: string | null; options: string[] } {
@@ -39,8 +39,18 @@ type Props = {
   setInput: (value: string) => void;
   setThinkingLevel: (value: string | null) => void;
   submitMessage: (text: string, images: []) => Promise<boolean> | boolean | void;
-  t: (key: string) => string;
+  t: (key: string, options?: Record<string, unknown>) => string;
 };
+
+function translateCommandPickerTitle(
+  kind: CommandPickerKind | null,
+  t: Props['t'],
+): string {
+  if (kind === 'think') return t('Thinking', { ns: 'chat' });
+  if (kind === 'reasoning') return t('Reasoning', { ns: 'chat' });
+  if (kind === 'fast') return t('Fast', { ns: 'chat' });
+  return t('Options', { ns: 'chat' });
+}
 
 export function useChatCommandPicker({
   connectionState,
@@ -60,7 +70,7 @@ export function useChatCommandPicker({
 
   const loadCommandPickerOptions = useCallback(async (kind: CommandPickerKind) => {
     if (connectionState !== 'ready' || !sessionKey) {
-      setCommandPickerError(t('Gateway is not connected'));
+      setCommandPickerError(t('Gateway is not connected', { ns: 'chat' }));
       setCommandPickerOptions([]);
       setCommandPickerLoading(false);
       return;
@@ -75,7 +85,7 @@ export function useChatCommandPicker({
       const probeText = await runSilentCommandProbe(COMMAND_PICKER_CONFIG[kind].probeCommand);
       const parsed = parseCommandOptionsFromText(probeText);
       if (parsed.options.length === 0) {
-        throw new Error(t('No options available'));
+        throw new Error(t('No options available', { ns: 'chat' }));
       }
       if (commandPickerRequestIdRef.current !== requestId) return;
       setCommandPickerOptions(
@@ -87,7 +97,7 @@ export function useChatCommandPicker({
     } catch (err: unknown) {
       if (commandPickerRequestIdRef.current !== requestId) return;
       const msg = err instanceof Error ? err.message : String(err);
-      setCommandPickerError(msg || t('Failed to load options'));
+      setCommandPickerError(msg || t('Failed to load options', { ns: 'chat' }));
       setCommandPickerOptions([]);
     } finally {
       if (commandPickerRequestIdRef.current === requestId) {
@@ -144,10 +154,10 @@ export function useChatCommandPicker({
     });
   }, [closeCommandPicker, commandPickerKind, connectionState, sessionKey, setInput, setThinkingLevel, submitMessage]);
 
-  const commandPickerTitle = useMemo(() => {
-    if (!commandPickerKind) return t('Options');
-    return t(COMMAND_PICKER_CONFIG[commandPickerKind].title);
-  }, [commandPickerKind, t]);
+  const commandPickerTitle = useMemo(
+    () => translateCommandPickerTitle(commandPickerKind, t),
+    [commandPickerKind, t],
+  );
 
   return {
     closeCommandPicker,

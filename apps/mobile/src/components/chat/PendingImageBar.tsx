@@ -1,11 +1,12 @@
 import React, { useMemo } from 'react';
-import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { FileText, Plus, X } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
+import { isImageAttachmentMimeType } from '@clawket/agent-protocol';
 import { PendingImage } from '../../types/chat';
-import { BorderWidth, FontSize, FontWeight } from '../../theme/tokens';
+import { BorderWidth, FontSize, FontWeight, HitSize, IconSize } from '../../theme/tokens';
 import { useAppTheme } from '../../theme';
 import { Radius, Space } from '../../theme/tokens';
-import { CircleButton } from '../ui';
 import { AttachmentMenu } from './AttachmentMenu';
 
 type Props = {
@@ -16,14 +17,15 @@ type Props = {
   onRemove: (index: number) => void;
   onPickImage: () => void | Promise<void>;
   onTakePhoto: () => void | Promise<void>;
-  onChooseFile: () => void | Promise<void>;
+  onChooseFile?: () => void | Promise<void>;
 };
 
 function isFileAttachment(img: PendingImage): boolean {
-  return !img.mimeType.startsWith('image/');
+  return !isImageAttachmentMimeType(img.mimeType);
 }
 
 export function PendingImageBar({ images, canAddMore, attachDisabled = false, onOpenPreview, onRemove, onPickImage, onTakePhoto, onChooseFile }: Props): React.JSX.Element {
+  const { t } = useTranslation('chat');
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme.colors), [theme]);
   const { colors } = theme;
@@ -34,23 +36,37 @@ export function PendingImageBar({ images, canAddMore, attachDisabled = false, on
         <View key={`${img.uri}_${idx}`} style={styles.imagePreviewItem}>
           <TouchableOpacity activeOpacity={0.9} onPress={() => onOpenPreview(idx)}>
             {isFileAttachment(img) ? (
-              <View style={[styles.imagePreviewThumb, styles.fileThumb]}>
-                <FileText size={20} color={colors.textMuted} strokeWidth={1.8} />
+              <View
+                testID={`pending-attachment-file-${idx}`}
+                style={[styles.imagePreviewThumb, styles.fileThumb]}
+              >
+                <FileText size={20} color={colors.inkSecondary} strokeWidth={1.8} />
                 <Text style={styles.fileThumbName} numberOfLines={1}>
-                  {(img as PendingImage & { fileName?: string }).fileName ?? 'File'}
+                  {img.fileName?.trim() || t('File', { ns: 'chat' })}
                 </Text>
               </View>
             ) : (
-              <Image source={{ uri: img.uri }} style={styles.imagePreviewThumb} />
+              <Image
+                testID={`pending-attachment-image-${idx}`}
+                source={{ uri: img.uri }}
+                style={styles.imagePreviewThumb}
+              />
             )}
           </TouchableOpacity>
-          <CircleButton
-            icon={<X size={12} color={colors.primaryText} strokeWidth={2.3} />}
+          <Pressable
+            testID={`pending-attachment-remove-${idx}`}
+            accessibilityRole="button"
+            accessibilityLabel={t('Remove', { ns: 'common' })}
             onPress={() => onRemove(idx)}
-            size={20}
-            color={colors.error}
-            style={styles.imagePreviewItemRemove}
-          />
+            style={styles.imagePreviewItemRemoveHitTarget}
+          >
+            <View
+              testID={`pending-attachment-remove-${idx}-visual`}
+              style={styles.imagePreviewItemRemoveVisual}
+            >
+              <X size={12} color={colors.onAccent} strokeWidth={2.3} />
+            </View>
+          </Pressable>
         </View>
       ))}
       {canAddMore && (
@@ -62,7 +78,7 @@ export function PendingImageBar({ images, canAddMore, attachDisabled = false, on
           onChooseFile={onChooseFile}
         >
           <View style={styles.imagePreviewAddTrigger}>
-            <Plus size={20} color={attachDisabled ? colors.textSubtle : colors.imageAddText} strokeWidth={2.2} />
+            <Plus size={20} color={attachDisabled ? colors.inkTertiary : colors.inkTertiary} strokeWidth={2.2} />
           </View>
         </AttachmentMenu>
       )}
@@ -76,7 +92,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: colors.surface,
-      borderTopColor: colors.border,
+      borderTopColor: colors.line,
       borderTopWidth: 1,
       paddingHorizontal: 10,
       paddingVertical: Space.sm,
@@ -88,32 +104,45 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     imagePreviewThumb: {
       width: 48,
       height: 48,
-      borderRadius: Radius.sm,
-      backgroundColor: colors.surfaceMuted,
+      borderRadius: Radius.card,
+      backgroundColor: colors.surface,
     },
     fileThumb: {
       alignItems: 'center',
       justifyContent: 'center',
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
+      borderColor: colors.line,
       paddingHorizontal: 2,
     },
     fileThumbName: {
-      fontSize: FontSize.nano,
-      color: colors.textMuted,
-      fontWeight: FontWeight.medium,
+      fontSize: FontSize.caption,
+      color: colors.inkSecondary,
+      fontWeight: FontWeight.semibold,
       marginTop: 1,
       maxWidth: 44,
     },
-    imagePreviewItemRemove: {
+    imagePreviewItemRemoveHitTarget: {
       position: 'absolute',
-      top: -6,
-      right: -6,
+      top: -Space.lg,
+      right: -Space.lg,
+      width: HitSize.md,
+      height: HitSize.md,
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 1,
+    },
+    imagePreviewItemRemoveVisual: {
+      width: IconSize.md,
+      height: IconSize.md,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: Radius.full,
+      backgroundColor: colors.bad,
     },
     imagePreviewAdd: {
-      borderRadius: Radius.sm,
+      borderRadius: Radius.card,
       borderWidth: BorderWidth.strong,
-      borderColor: colors.imageAddBorder,
+      borderColor: colors.line,
       borderStyle: 'dashed',
     },
     imagePreviewAddTrigger: {

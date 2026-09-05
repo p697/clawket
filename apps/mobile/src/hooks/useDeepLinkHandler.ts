@@ -2,49 +2,60 @@ import { useEffect, useRef } from 'react';
 import { Alert } from 'react-native';
 import * as Linking from 'expo-linking';
 import { NavigationContainerRefWithCurrent } from '@react-navigation/native';
+import {
+  buildGatewayDefaultName,
+  type AgentAdapter,
+} from '@clawket/agent-protocol';
 import { parseDeepLink, DeepLinkAction } from '../services/deepLinks';
-import { resolveGatewayCacheScopeId } from '../services/gateway-cache-scope';
-import { GatewayClient } from '../connection/protocol';
-import { StorageService } from '../services/storage';
-import { GatewayConfig } from '../types';
+import { createCompositeHash } from '../services/crypto-hash';
+import { getConnectionRuntime } from '../connection';
 import type { RootStackParamList } from '../navigation/root-stack';
 import { useGatewayScanner } from '../contexts/GatewayScannerContext';
 
 export type DeepLinkDeps = {
   rootNavigationRef: NavigationContainerRefWithCurrent<RootStackParamList>;
-  gateway: GatewayClient;
+  activeAdapter?: AgentAdapter | null;
   activeConnectionId: string | null;
   currentAgentId: string;
   mainSessionKey: string;
-  onSaved: (next: GatewayConfig, nextGatewayScopeId?: string | null) => void;
+  requestConfirmation: (request: DeepLinkConfirmationRequest) => void;
 };
 
-function describeAction(action: DeepLinkAction): { title: string; message: string } {
-  switch (action.type) {
-    case 'agent':
-      return { title: 'Send Message', message: `Send "${action.message}" to agent?` };
-    case 'session':
-      return { title: 'Open Session', message: `Navigate to session "${action.key}"?` };
-    case 'config':
-      return { title: 'Open Settings', message: 'Open the settings screen?' };
-    case 'connect':
-      return {
-        title: 'Connect to Server',
-        message: `Connect to ${action.url}? This will change your active gateway connection.`,
-      };
-    case 'pair':
-      return { title: 'Connect to Computer', message: 'Open this secure pairing invitation?' };
-  }
+export type DeepLinkConfirmationRequest = Readonly<{
+  action: Exclude<DeepLinkAction, { type: 'pair' }>;
+  onConfirm: () => void;
+}>;
+
+export function createDeepLinkPromptIdempotencyKey(input: Readonly<{
+  connectionId: string;
+  agentId: string;
+  sessionKey: string;
+  message: string;
+  receivedAtMs: number;
+}>): string {
+  const timestamp = Number.isFinite(input.receivedAtMs)
+    ? Math.max(0, Math.trunc(input.receivedAtMs)).toString(36)
+    : '0';
+  const fingerprint = createCompositeHash([
+    input.connectionId,
+    input.agentId,
+    input.sessionKey,
+    input.message,
+  ]);
+  return `deeplink_${timestamp}_${fingerprint}`;
 }
 
-function executeAction(action: DeepLinkAction, deps: DeepLinkDeps) {
+async function executeAction(
+  action: DeepLinkAction,
+  deps: DeepLinkDeps,
+  promptIdempotencyKey?: string,
+): Promise<void> {
   const {
     rootNavigationRef,
-    gateway,
+    activeAdapter,
     activeConnectionId,
     currentAgentId,
     mainSessionKey,
-    onSaved,
   } = deps;
 
   switch (action.type) {
@@ -62,9 +73,27 @@ function executeAction(action: DeepLinkAction, deps: DeepLinkDeps) {
           from: 'notification',
         });
       }
-      Promise.resolve(gateway.sendChat(sessionKey, action.message)).catch(() => {
+      const adapter = activeAdapter?.connection.id === activeConnectionId
+        ? activeAdapter
+        : getConnectionRuntime().getAdapter(activeConnectionId);
+      if (!adapter) {
         Alert.alert('Send Failed', 'Connection is not ready. Please try again in the thread.');
-      });
+        break;
+      }
+      try {
+        await adapter.prompt(sessionKey, {
+          text: action.message,
+          idempotencyKey: promptIdempotencyKey ?? createDeepLinkPromptIdempotencyKey({
+            connectionId: activeConnectionId,
+            agentId: currentAgentId,
+            sessionKey,
+            message: action.message,
+            receivedAtMs: Date.now(),
+          }),
+        });
+      } catch {
+        Alert.alert('Send Failed', 'Connection is not ready. Please try again in the thread.');
+      }
       break;
     }
     case 'session': {
@@ -89,9 +118,31 @@ function executeAction(action: DeepLinkAction, deps: DeepLinkDeps) {
       break;
     }
     case 'connect': {
-      const config: GatewayConfig = { url: action.url, token: action.token, password: action.password };
-      StorageService.setGatewayConfig(config);
-      onSaved(config, resolveGatewayCacheScopeId({ config }));
+      const runtime = getConnectionRuntime();
+      const url = action.url.trim();
+      const auth = action.token || action.password
+        ? {
+          ...(action.token ? { token: action.token } : {}),
+          ...(action.password ? { password: action.password } : {}),
+        }
+        : undefined;
+      try {
+        const saved = await runtime.upsertConnection({
+          backendKind: 'openclaw',
+          transportKind: 'custom',
+          label: buildGatewayDefaultName({
+            backendKind: 'openclaw',
+            transportKind: 'custom',
+            url,
+            index: runtime.getSnapshot().connections.length + 1,
+          }),
+          url,
+          ...(auth ? { auth } : {}),
+        });
+        await runtime.activate(saved.connection.id);
+      } catch {
+        Alert.alert('Connection Failed', 'Could not save this connection. Try again.');
+      }
       break;
     }
     case 'pair':
@@ -115,11 +166,21 @@ export function useDeepLinkHandler(deps: DeepLinkDeps) {
       return;
     }
 
-    const { title, message } = describeAction(action);
-    Alert.alert(title, message, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Confirm', onPress: () => executeAction(action, deps) },
-    ]);
+    const promptIdempotencyKey = action.type === 'agent' && deps.activeConnectionId
+      ? createDeepLinkPromptIdempotencyKey({
+        connectionId: deps.activeConnectionId,
+        agentId: deps.currentAgentId,
+        sessionKey: action.sessionKey ?? deps.mainSessionKey,
+        message: action.message,
+        receivedAtMs: Date.now(),
+      })
+      : undefined;
+    deps.requestConfirmation({
+      action,
+      onConfirm: () => {
+        void executeAction(action, deps, promptIdempotencyKey);
+      },
+    });
   };
 
   useEffect(() => {
@@ -137,11 +198,11 @@ export function useDeepLinkHandler(deps: DeepLinkDeps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     connectPairingLink,
+    deps.activeAdapter,
     deps.activeConnectionId,
     deps.currentAgentId,
-    deps.gateway,
     deps.mainSessionKey,
-    deps.onSaved,
+    deps.requestConfirmation,
     deps.rootNavigationRef,
   ]);
 }

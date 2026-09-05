@@ -9,7 +9,6 @@ import {
   Radius,
   Shadow,
   Space,
-  TimingPreset,
 } from './tokens';
 
 function relativeLuminance(hex: string): number {
@@ -53,6 +52,8 @@ describe('Clawket 3.0 theme tokens', () => {
       line: '#E6E6EA',
       accent: '#1F5EFF',
       accentSoft: 'rgba(31,94,255,0.1)',
+      onAccent: '#FFFFFF',
+      scrim: 'rgba(0,0,0,0.4)',
       good: '#178A6A',
       goodSoft: 'rgba(23,138,106,0.12)',
       warn: '#D9791C',
@@ -71,6 +72,8 @@ describe('Clawket 3.0 theme tokens', () => {
       line: '#2A2A2F',
       accent: '#6B95FF',
       accentSoft: 'rgba(107,149,255,0.16)',
+      onAccent: '#0C0C0D',
+      scrim: 'rgba(0,0,0,0.4)',
       good: '#2FA07C',
       goodSoft: 'rgba(47,160,124,0.2)',
       warn: '#D07F30',
@@ -90,21 +93,30 @@ describe('Clawket 3.0 theme tokens', () => {
     ]);
   });
 
-  it('keeps old color names as aliases of their canonical semantics', () => {
+  it('exposes only canonical semantic colors', () => {
+    const expectedKeys = [
+      'accent',
+      'accentSoft',
+      'bad',
+      'badSoft',
+      'canvas',
+      'canvasGrouped',
+      'good',
+      'goodSoft',
+      'ink',
+      'inkSecondary',
+      'inkTertiary',
+      'line',
+      'onAccent',
+      'scrim',
+      'surface',
+      'surfaceFloating',
+      'warn',
+      'warnSoft',
+    ];
     for (const scheme of ['light', 'dark'] as const) {
       const colors = buildTheme(scheme, scheme, builtInAccents[defaultAccentId]).colors;
-      expect(colors.background).toBe(colors.canvas);
-      expect(colors.surfaceMuted).toBe(colors.surface);
-      expect(colors.surfaceElevated).toBe(colors.surfaceFloating);
-      expect(colors.border).toBe(colors.line);
-      expect(colors.text).toBe(colors.ink);
-      expect(colors.textMuted).toBe(colors.inkSecondary);
-      expect(colors.textSubtle).toBe(colors.inkTertiary);
-      expect(colors.primary).toBe(colors.accent);
-      expect(colors.primarySoft).toBe(colors.accentSoft);
-      expect(colors.success).toBe(colors.good);
-      expect(colors.warning).toBe(colors.warn);
-      expect(colors.error).toBe(colors.bad);
+      expect(Object.keys(colors).sort()).toEqual(expectedKeys);
     }
   });
 
@@ -138,7 +150,7 @@ describe('Clawket 3.0 theme tokens', () => {
     expect([...new Set(Object.values(FontWeight))].sort()).toEqual(['400', '600']);
     expect([...new Set(Object.values(Space))].sort((a, b) => a - b))
       .toEqual([4, 8, 12, 16, 24, 32]);
-    expect(Radius).toMatchObject({
+    expect(Radius).toEqual({
       bubble: 20,
       card: 16,
       settingsGroup: 14,
@@ -151,7 +163,7 @@ describe('Clawket 3.0 theme tokens', () => {
       sheet: 36,
       full: 9999,
     });
-    expect(ControlSize).toMatchObject({
+    expect(ControlSize).toEqual({
       pill: 40,
       floatingButton: 44,
       settingsRow: 52,
@@ -165,7 +177,6 @@ describe('Clawket 3.0 theme tokens', () => {
       avatarWorkingLoop: 1_200,
       avatarDoneFade: 3_000,
     });
-    expect(TimingPreset).toBe(Motion.duration);
     expect(Shadow.floating).toEqual({
       shadowColor: '#111113',
       shadowOffset: { width: 0, height: 2 },

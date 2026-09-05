@@ -3,7 +3,6 @@ import type {
   BackendKind,
   ConnectionState,
 } from '@clawket/agent-protocol';
-import type { GatewayScanPayload } from '../../connection/pairing/gateway-scan-flow';
 import type { RelayServiceEnvironment } from '../../types';
 import type {
   OnboardingConnectionPhase,
@@ -30,14 +29,6 @@ const ADAPTER_ERROR_CODES = new Set<AdapterErrorCode>([
   'server',
 ]);
 
-export type OnboardingQrAssessment =
-  | Readonly<{ kind: 'accepted'; backendKind: PairableBackendKind }>
-  | Readonly<{
-      kind: 'rejected';
-      reason: 'invalid_backend' | 'backend_mismatch';
-      backendKind: PairableBackendKind | null;
-    }>;
-
 export type OnboardingRouteOperation = Readonly<{
   active: boolean;
   phase: OnboardingConnectionPhase;
@@ -47,7 +38,12 @@ export type OnboardingRouteOperation = Readonly<{
 export function normalizePairableBackendKind(
   backendKind: BackendKind | null | undefined,
 ): PairableBackendKind {
-  return backendKind === 'hermes' ? 'hermes' : 'openclaw';
+  const normalized: Readonly<Record<BackendKind, PairableBackendKind>> = {
+    openclaw: 'openclaw',
+    hermes: 'hermes',
+    youmind: 'openclaw',
+  };
+  return normalized[backendKind ?? 'openclaw'];
 }
 
 export function getOnboardingPairingCommand(
@@ -56,58 +52,6 @@ export function getOnboardingPairingCommand(
   return environment === 'preview'
     ? 'npx @p697/clawket pair --preview'
     : 'npx @p697/clawket pair';
-}
-
-/**
- * Resolves every backend hint instead of trusting the legacy mode fallback.
- * Conflicting hints are rejected so a QR selected under one backend cannot be
- * silently saved as the other backend.
- */
-export function resolveOnboardingQrBackend(
-  payload: GatewayScanPayload,
-): PairableBackendKind | null {
-  const hints = new Set<PairableBackendKind>();
-
-  if (payload.backendKind !== undefined) {
-    if (payload.backendKind !== 'openclaw' && payload.backendKind !== 'hermes') {
-      return null;
-    }
-    hints.add(payload.backendKind);
-  }
-
-  if (payload.mode === 'hermes') {
-    hints.add('hermes');
-  } else if (payload.mode !== undefined) {
-    hints.add('openclaw');
-  }
-
-  if (payload.hermes) hints.add('hermes');
-
-  if (hints.size === 0) {
-    const hasLegacyOpenClawShape = Boolean(
-      payload.relay
-      || payload.token
-      || payload.password
-      || payload.bootstrap,
-    );
-    if (hasLegacyOpenClawShape) hints.add('openclaw');
-  }
-
-  return hints.size === 1 ? [...hints][0] : null;
-}
-
-export function assessOnboardingQr(
-  payload: GatewayScanPayload,
-  expectedBackendKind: PairableBackendKind,
-): OnboardingQrAssessment {
-  const backendKind = resolveOnboardingQrBackend(payload);
-  if (!backendKind) {
-    return { kind: 'rejected', reason: 'invalid_backend', backendKind: null };
-  }
-  if (backendKind !== expectedBackendKind) {
-    return { kind: 'rejected', reason: 'backend_mismatch', backendKind };
-  }
-  return { kind: 'accepted', backendKind };
 }
 
 export function resolveOnboardingAdapterError(error: unknown): AdapterErrorCode {

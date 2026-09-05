@@ -171,7 +171,7 @@ export function ProPaywallOverlay({ visible, onClose }: Props): React.JSX.Elemen
       >
         <View style={styles.headerRow}>
           <View style={styles.badge}>
-            <ShieldCheck size={16} color={theme.colors.primary} strokeWidth={2.2} />
+            <ShieldCheck size={16} color={theme.colors.accent} strokeWidth={2.2} />
             <Text style={styles.badgeText}>
               {isPro ? t('You are already a Pro subscriber.') : t('Unlock')}
             </Text>
@@ -181,7 +181,7 @@ export function ProPaywallOverlay({ visible, onClose }: Props): React.JSX.Elemen
             style={({ pressed }) => [styles.closeButton, pressed && styles.closeButtonPressed]}
             hitSlop={10}
           >
-            <X size={18} color={theme.colors.textMuted} strokeWidth={2.2} />
+            <X size={18} color={theme.colors.inkSecondary} strokeWidth={2.2} />
           </Pressable>
         </View>
 
@@ -216,7 +216,7 @@ export function ProPaywallOverlay({ visible, onClose }: Props): React.JSX.Elemen
                     <View style={styles.planTitleRow}>
                       <Text style={styles.planTitle}>{formatPackageLabel(item.packageType, t)}</Text>
                       {isCurrentPlan ? (
-                        <Check size={14} color={theme.colors.primary} strokeWidth={2.6} />
+                        <Check size={14} color={theme.colors.accent} strokeWidth={2.6} />
                       ) : null}
                     </View>
                     <Text style={styles.planPrice}>{item.priceString}</Text>
@@ -251,7 +251,7 @@ export function ProPaywallOverlay({ visible, onClose }: Props): React.JSX.Elemen
 
         {(isLoading || offeringsLoading) && paywallPackages.length === 0 ? (
           <View style={styles.loadingRow}>
-            <ActivityIndicator size="small" color={theme.colors.primary} />
+            <ActivityIndicator size="small" color={theme.colors.accent} />
             <Text style={styles.loadingText}>{t('Subscription options are loading...')}</Text>
           </View>
         ) : null}
@@ -287,7 +287,7 @@ export function ProPaywallOverlay({ visible, onClose }: Props): React.JSX.Elemen
           ]}
         >
           {purchasePending ? (
-            <ActivityIndicator size="small" color={theme.colors.primaryText} />
+            <ActivityIndicator size="small" color={theme.colors.onAccent} />
           ) : (
             <Text style={styles.primaryCtaText}>
               {formatPrimaryCtaLabel(selectedPackage?.packageType, selectedPackage?.priceString, t)}
@@ -327,10 +327,10 @@ export function ProPaywallOverlay({ visible, onClose }: Props): React.JSX.Elemen
           hitSlop={8}
         >
           {restorePending ? (
-            <ActivityIndicator size="small" color={theme.colors.textMuted} />
+            <ActivityIndicator size="small" color={theme.colors.inkSecondary} />
           ) : (
             <>
-              <RefreshCcw size={13} color={theme.colors.textMuted} strokeWidth={2} />
+              <RefreshCcw size={13} color={theme.colors.inkSecondary} strokeWidth={2} />
               <Text style={styles.restoreLinkText}>{t('Restore Purchases')}</Text>
             </>
           )}
@@ -451,7 +451,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       ...StyleSheet.absoluteFillObject,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: colors.overlay,
+      backgroundColor: colors.scrim,
       padding: Space.xl,
     },
     backdropTap: {
@@ -460,10 +460,10 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     card: {
       width: '100%',
       maxWidth: 460,
-      borderRadius: Radius.lg,
-      backgroundColor: colors.surfaceElevated,
+      borderRadius: Radius.card,
+      backgroundColor: colors.surfaceFloating,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
+      borderColor: colors.line,
       paddingHorizontal: Space.xl,
       paddingVertical: Space.xl,
       gap: Space.lg,
@@ -480,12 +480,12 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       paddingHorizontal: Space.sm,
       paddingVertical: Space.xs,
       borderRadius: Radius.full,
-      backgroundColor: colors.primarySoft,
+      backgroundColor: colors.accentSoft,
     },
     badgeText: {
-      fontSize: FontSize.sm,
+      fontSize: FontSize.caption,
       fontWeight: FontWeight.semibold,
-      color: colors.primary,
+      color: colors.accent,
     },
     closeButton: {
       width: 36,
@@ -493,31 +493,31 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       borderRadius: Radius.full,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: colors.surfaceMuted,
+      backgroundColor: colors.surface,
     },
     closeButtonPressed: {
       opacity: 0.82,
     },
     title: {
-      fontSize: FontSize.xxxl,
+      fontSize: FontSize.display,
       lineHeight: 32,
-      fontWeight: FontWeight.bold,
-      color: colors.text,
+      fontWeight: FontWeight.semibold,
+      color: colors.ink,
     },
     planGrid: {
       gap: Space.sm,
     },
     planCard: {
       gap: Space.xs,
-      borderRadius: Radius.md,
+      borderRadius: Radius.card,
       padding: Space.md,
-      backgroundColor: colors.surfaceMuted,
+      backgroundColor: colors.surface,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
+      borderColor: colors.line,
     },
     planCardSelected: {
-      borderColor: colors.primary,
-      backgroundColor: colors.primarySoft,
+      borderColor: colors.accent,
+      backgroundColor: colors.accentSoft,
     },
     planCardPressed: {
       opacity: 0.92,
@@ -538,18 +538,18 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       flexShrink: 1,
     },
     planTitle: {
-      fontSize: FontSize.base,
+      fontSize: FontSize.secondary,
       fontWeight: FontWeight.semibold,
-      color: colors.text,
+      color: colors.ink,
     },
     planPrice: {
-      fontSize: FontSize.base,
+      fontSize: FontSize.secondary,
       fontWeight: FontWeight.semibold,
-      color: colors.primary,
+      color: colors.accent,
     },
     planMeta: {
-      fontSize: FontSize.md,
-      color: colors.textMuted,
+      fontSize: FontSize.caption,
+      color: colors.inkSecondary,
     },
     featureList: {
       gap: Space.xs,
@@ -561,41 +561,41 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       paddingVertical: Space.sm,
     },
     featureEmoji: {
-      fontSize: FontSize.displaySm,
+      fontSize: FontSize.title,
       width: 28,
       textAlign: 'center',
     },
     featureText: {
       flex: 1,
-      fontSize: FontSize.base,
-      color: colors.text,
-      fontWeight: FontWeight.medium,
+      fontSize: FontSize.secondary,
+      color: colors.ink,
+      fontWeight: FontWeight.semibold,
     },
     errorBanner: {
-      borderRadius: Radius.md,
+      borderRadius: Radius.card,
       paddingHorizontal: Space.md,
       paddingVertical: Space.sm,
-      backgroundColor: colors.surfaceMuted,
+      backgroundColor: colors.surface,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.error,
+      borderColor: colors.bad,
     },
     errorBannerText: {
-      fontSize: FontSize.md,
-      color: colors.error,
-      fontWeight: FontWeight.medium,
+      fontSize: FontSize.caption,
+      color: colors.bad,
+      fontWeight: FontWeight.semibold,
     },
     successBanner: {
-      borderRadius: Radius.md,
+      borderRadius: Radius.card,
       paddingHorizontal: Space.md,
       paddingVertical: Space.sm,
-      backgroundColor: colors.primarySoft,
+      backgroundColor: colors.accentSoft,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.primary,
+      borderColor: colors.accent,
     },
     successBannerText: {
-      fontSize: FontSize.md,
-      color: colors.primary,
-      fontWeight: FontWeight.medium,
+      fontSize: FontSize.caption,
+      color: colors.accent,
+      fontWeight: FontWeight.semibold,
     },
     loadingRow: {
       flexDirection: 'row',
@@ -603,15 +603,15 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       gap: Space.sm,
     },
     loadingText: {
-      fontSize: FontSize.md,
-      color: colors.textMuted,
+      fontSize: FontSize.caption,
+      color: colors.inkSecondary,
     },
     primaryCta: {
-      borderRadius: Radius.md,
+      borderRadius: Radius.full,
       paddingVertical: 11,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: colors.primary,
+      backgroundColor: colors.accent,
       minHeight: 48,
     },
     primaryCtaDisabled: {
@@ -621,9 +621,9 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       opacity: 0.88,
     },
     primaryCtaText: {
-      fontSize: FontSize.base,
+      fontSize: FontSize.secondary,
       fontWeight: FontWeight.semibold,
-      color: colors.primaryText,
+      color: colors.onAccent,
     },
     restoreLink: {
       flexDirection: 'row',
@@ -639,8 +639,8 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       opacity: 0.6,
     },
     restoreLinkText: {
-      fontSize: FontSize.md,
-      color: colors.textMuted,
+      fontSize: FontSize.caption,
+      color: colors.inkSecondary,
     },
     legalSection: {
       alignItems: 'center',
@@ -648,10 +648,10 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       marginTop: -Space.sm,
     },
     legalNote: {
-      fontSize: FontSize.xs,
+      fontSize: FontSize.caption,
       lineHeight: 15,
       textAlign: 'center',
-      color: colors.textSubtle,
+      color: colors.inkTertiary,
     },
     legalLinksRow: {
       flexDirection: 'row',
@@ -663,15 +663,15 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     legalLinkButton: {
       paddingHorizontal: Space.xs,
       paddingVertical: 2,
-      borderRadius: Radius.sm,
+      borderRadius: Radius.full,
     },
     legalLinkButtonPressed: {
       opacity: 0.7,
     },
     legalLinkText: {
-      fontSize: FontSize.xs,
+      fontSize: FontSize.caption,
       lineHeight: 15,
-      color: colors.textMuted,
+      color: colors.inkSecondary,
     },
   });
 }

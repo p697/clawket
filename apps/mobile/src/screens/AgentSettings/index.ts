@@ -1,5 +1,6 @@
 export {
   AgentSettingsScreen,
+  AgentSettingsRouteLoading,
   AgentSettingsView,
 } from './AgentSettingsScreen';
 export type {
@@ -40,6 +41,26 @@ export {
   isAgentSettingsSectionLocked,
   resolveAgentSettingsSectionState,
 } from './section-model';
+export { ModelsSection } from './ModelsSection';
+export type { ModelsSectionProps } from './ModelsSection';
+export { SkillsSection } from './SkillsSection';
+export type { SkillsSectionProps } from './SkillsSection';
+export { CronSection } from './CronSection';
+export type { CronSectionProps } from './CronSection';
+export { FilesSection } from './FilesSection';
+export type { FilesSectionProps } from './FilesSection';
+export { UsageSection } from './UsageSection';
+export type { UsageSectionProps } from './UsageSection';
+export { IdentitySection } from './IdentitySection';
+export type { IdentitySectionProps } from './IdentitySection';
+export { ToolsSection } from './ToolsSection';
+export type { ToolsSectionProps } from './ToolsSection';
+export { ChannelsDevicesSection } from './ChannelsDevicesSection';
+export type { ChannelsDevicesSectionProps } from './ChannelsDevicesSection';
+export { LogsSection } from './LogsSection';
+export type { LogsSectionProps } from './LogsSection';
+export { OpenClawManageScreen } from './OpenClawManageScreen';
+export type { OpenClawManageScreenProps } from './OpenClawManageScreen';
 export type {
   AgentSettingsSectionAction,
   AgentSettingsSectionGroupDescriptor,
