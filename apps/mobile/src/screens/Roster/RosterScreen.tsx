@@ -39,7 +39,10 @@ import {
   Radius,
   Space,
 } from '../../theme/tokens';
-import { relativeTime } from '../../utils/chat-message';
+import {
+  relativeTime,
+  type RelativeTimeTranslator,
+} from '../../utils/chat-message';
 import {
   buildRosterRows,
   resolveRosterPageState,
@@ -328,13 +331,31 @@ export function RosterView({
   const headerInsets = useMemo(() => ({
     paddingTop: insets.top + Space.sm,
   }), [insets.top]);
+  const translateRelativeTime = useCallback<RelativeTimeTranslator>((key, count) => {
+    switch (key) {
+      case 'just now':
+        return t('just now');
+      case '{{count}}m ago':
+        return t('{{count}}m ago', { count });
+      case '{{count}}h ago':
+        return t('{{count}}h ago', { count });
+      case 'Yesterday':
+        return t('Yesterday');
+      case '{{count}}d ago':
+        return t('{{count}}d ago', { count });
+      case '{{count}}w ago':
+        return t('{{count}}w ago', { count });
+      case '{{count}}mo ago':
+        return t('{{count}}mo ago', { count });
+    }
+  }, [t]);
   const renderRow = useCallback<ListRenderItem<RosterDisplayRow>>(({ item }) => {
     const activeConnectionOffline = item.connectionId === activeConnectionId
       && (showOfflineBanner ?? state === 'offline');
     const open = item.locked ? onOpenLockedRow : onOpenRow;
     const timeLabel = relativeTime(
       item.cached ? item.syncedAt : item.updatedAt,
-      (key, count) => count === undefined ? t(key) : t(key, { count }),
+      translateRelativeTime,
     );
     return (
       <RosterRow
@@ -367,6 +388,7 @@ export function RosterView({
     showOfflineBanner,
     state,
     t,
+    translateRelativeTime,
   ]);
 
   return (
