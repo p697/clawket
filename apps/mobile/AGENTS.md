@@ -190,3 +190,5 @@ A rejected prompt acknowledgement is not proof of backend rejection. Preserve on
 ## Local model connection
 
 The `local-model` backend is Preview-only and uses the shared chat UI with its own adapter. Six-digit codes and compact QR payloads must retain backend identity through claim. Model switching is global; image controls follow live vision capability. Unsupported Agent management remains capability-gated. `dev:android` and `build:android:preview` use Node scripts on Windows and macOS; debug builds do not publish.
+
+Local-model Relay handshakes use `health`, not the OpenClaw challenge-triggering `connect`; direct sockets retain token-authenticated `connect`. Failed handshakes use transport backoff, and 30-second ticks allow three missed intervals. Keep idle and failure-recovery regressions beside the adapter.

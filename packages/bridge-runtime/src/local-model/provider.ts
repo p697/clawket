@@ -50,14 +50,20 @@ export class LocalModelProvider {
     return response;
   }
 
-  async inspect(timeoutMs = 10_000): Promise<{ models: string[]; vision: boolean }> {
+  async inspect(timeoutMs = 10_000, allowModelLoad = false): Promise<{ models: string[]; vision: boolean }> {
     const signal = AbortSignal.timeout(timeoutMs);
     const response = await this.request('/v1/models', { signal });
-    const body = await response.json() as { data?: Array<{ id?: unknown }> };
+    const body = await response.json() as { data?: Array<{ id?: unknown; status?: { value?: string } }> };
     const models = (body.data ?? []).flatMap((m) => typeof m.id === 'string' && m.id ? [m.id] : []);
     if (!models.length) throw new Error('Model service returned no available models');
     let vision = false;
     if (this.config.engine === 'llamacpp') {
+      const selected = body.data?.find(model => model.id === (this.config.model ?? models[0]));
+      // llama.cpp router exposes state in /v1/models. Do not let a short health
+      // probe implicitly cold-load a large model through /props?model=... .
+      if (!allowModelLoad && selected?.status?.value && selected.status.value !== 'loaded') {
+        throw new Error('Model is not loaded. Select it again to load it before chatting.');
+      }
       const query = this.config.model ? `?model=${encodeURIComponent(this.config.model)}` : '';
       const props = await (await this.request('/props' + query, { signal })).json() as { modalities?: { vision?: boolean } };
       vision = props.modalities?.vision === true;

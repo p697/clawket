@@ -68,7 +68,7 @@ export class LocalModelConversation extends EventEmitter {
     if (!provider) throw new Error('Unknown configured model');
     this.mutation = true;
     try {
-      const capability = await provider.inspect(180_000);
+      const capability = await provider.inspect(180_000, true);
       if (this.stopped) throw new Error('Local model bridge is stopped');
       if (provider.config.model && !capability.models.includes(provider.config.model)) throw new Error('Configured model is unavailable');
       const previous = this.saved.selected;

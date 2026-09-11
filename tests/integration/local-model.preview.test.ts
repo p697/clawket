@@ -25,6 +25,7 @@ it.skipIf(process.env.CLAWKET_LOCAL_MODEL_PREVIEW_SMOKE !== '1')('CLI six-digit 
   let adapter: LocalModelAdapter | undefined;
   const startedAt = Date.now();
   const trace: unknown[] = [];
+  let socketCount = 0;
   try {
     const code = await new Promise<string>((resolve, reject) => {
       let text = '';
@@ -53,7 +54,8 @@ it.skipIf(process.env.CLAWKET_LOCAL_MODEL_PREVIEW_SMOKE !== '1')('CLI six-digit 
     pairing.close();
     const claimed=await post('/v1/pair/claim',{gatewayId:qr.g,accessCode:qr.a,clientLabel:'Windows mobile-adapter real Preview test'});
     adapter=new LocalModelAdapter({id:randomUUID(),backendKind:'local-model',transportKind:'relay',label:'Preview local model',url:claimed.relayUrl,createdAt:Date.now(),environment:'preview',relay:{gatewayId:claimed.gatewayId,clientToken:claimed.clientToken,serverUrl:registry}}, {webSocketFactory:url=>{
-      const ws=new WebSocket(url);ws.on('close',(code,reason)=>trace.push({close:code,reason:reason.toString()}));
+      const socketId=++socketCount;
+      const ws=new WebSocket(url);ws.on('close',(code,reason)=>trace.push({socketId,close:code,reason:reason.toString()}));
       ws.on('message',data=>{try{const f=JSON.parse(data.toString());if(f.type==='res')trace.push({response:f.ok,error:f.error?.message,backend:f.payload?.backend});}catch{}});
       return ws as unknown as WebSocketLike;
     }});
@@ -74,6 +76,16 @@ it.skipIf(process.env.CLAWKET_LOCAL_MODEL_PREVIEW_SMOKE !== '1')('CLI six-digit 
     adapter.disconnect();await adapter.connect();
     expect((await adapter.loadSession('main')).messages.at(-1)?.text).toBe(text);
     const extra: Record<string,unknown> = {};
+    // No application RPCs during this interval: only negotiated tick/pong.
+    const idleStart = trace.length;
+    const idleSocketId = socketCount;
+    await new Promise(resolve => setTimeout(resolve, 95_000));
+    expect(adapter.state).toBe('ready');
+    expect(socketCount).toBe(idleSocketId);
+    expect(trace.slice(idleStart).filter((entry: any) => (entry.socketId === idleSocketId && entry.close !== undefined) || (entry.state && entry.state !== 'ready'))).toEqual([]);
+    expect((await adapter.loadSession('main')).messages.at(-1)?.text).toBe(text);
+    extra.idleWithoutReconnectMs = 95_000;
+
     if (process.env.CLAWKET_TEST_VISION_MODEL) {
       const switchAt=Date.now();
       await adapter.management.models!.setSelection!({model:process.env.CLAWKET_TEST_VISION_MODEL,scope:'global'});

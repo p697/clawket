@@ -9,6 +9,11 @@
 - 公网 Preview 真实 Flash-Next → Qwen vision → Flash-Next 测试两轮通过；原 8080 服务已恢复。详情、命令和限制见 [本地模型连接](15-local-model.md)。
 - Windows Android arm64 调试 APK 构建通过（532 Gradle tasks）；compat 36/36、真实 Worker 集成通过。`npm run check:required` 全绿；打包验证通过；两个 lockfile 的 audit 均无 high/critical。真机与 macOS 运行尚不作为已验收。未发布 Production/npm/商店。
 
+### PR #30 稳定性复核
+
+- 确认并修复 Relay challenge 误触发、握手失败立即重连、45 秒心跳窗口与冷加载健康检查的问题；未更改已有 OpenClaw/Hermes 握手策略。
+- 新增回归测试在旧代码上失败、修复后通过；Node engines 更正为 >=20.3.0。公网 95 秒空闲无断线/无新建 socket 后读取历史通过；完整 required、36 项 compat、真实 Worker 集成、打包验证与新增直连测试均通过。
+
 ## 当前状态
 
 - 2026-09-06 体验复核：用户真机反馈未通过；当前进入研究/设计讨论，M8 自动完成不代表可发布。用户授权推翻旧工程、产品与 UI 决策，以实际体验为准；保留安全和兼容性约束。见 [体验复核与方向建议](11-experience-review.md)。

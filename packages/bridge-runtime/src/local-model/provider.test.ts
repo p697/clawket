@@ -6,6 +6,17 @@ function bytes(parts: Uint8Array[]) {
 }
 
 describe('local model protocol boundaries', () => {
+  it('does not cold-load a router model during health or prompt validation', async () => {
+    const calls: string[] = [];
+    const provider = new LocalModelProvider({ id: 'a', name: 'A', model: 'a', baseUrl: 'http://localhost:1', contextWindow: 8192, engine: 'llamacpp' }, async input => {
+      calls.push(String(input));
+      return Response.json(String(input).includes('/props') ? { modalities: { vision: true } } : { data: [{ id: 'a', status: { value: 'unloaded' } }] });
+    });
+    await expect(provider.inspect()).rejects.toThrow('not loaded');
+    expect(calls).toEqual(['http://localhost:1/v1/models']);
+    expect(await provider.inspect(180_000, true)).toEqual({ models: ['a'], vision: true });
+    expect(calls.at(-1)).toBe('http://localhost:1/props?model=a');
+  });
   it('decodes Chinese split at every UTF-8 byte and CRLF boundary', async () => {
     const raw = new TextEncoder().encode(': heartbeat\r\ndata: {"text":"你好"}\r\n\r\ndata: [DONE]\r\n\r\n');
     const events = [];

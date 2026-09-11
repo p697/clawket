@@ -126,3 +126,24 @@ devices are connected. iOS native builds still require macOS/Xcode.
   acceptance tasks; Windows adapter tests do not establish those results.
 - Only isolated local-model Preview Workers were deployed. Production, npm and
   app stores were not published; delivery is a pull request.
+
+## Review follow-up: idle and outage stability
+
+Relay handshakes use `health` to avoid OpenClaw challenge tracking; direct
+connections still authenticate with `connect`. Backend handshake failure uses
+exponential reconnect backoff, reset only after successful handshake. The local
+adapter allows three 30-second heartbeat intervals before declaring a dead link.
+
+Health probes inspect the router's advertised model state and reject unloaded
+presets without invoking the auto-loading props endpoint. Explicit model
+selection retains its 180-second loading budget. Standalone llama.cpp endpoints
+without router state keep live capability discovery.
+
+The CLI minimum is Node 20.3.0 because [AbortSignal.any](https://nodejs.org/api/globals.html#static-method-abortsignalanysignals)
+was added in that version; Node 22 remains the documented development version.
+
+Verified with the actual Mobile adapter against public Preview: one socket stayed
+ready for 95 seconds with only heartbeat traffic, no reconnect or replacement,
+and history remained readable afterwards. The test distinguishes late close
+events from deliberately retired sockets. Full required checks, 36 compatibility
+replays, real-Worker integration and CLI package verification also passed.

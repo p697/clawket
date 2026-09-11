@@ -39,7 +39,8 @@ export class LocalModelAdapter implements AgentAdapter {
       url.searchParams.set('token', record.relay.clientToken);
       url.searchParams.set('capabilities', 'relay.client-pong.v1');
     }
-    this.transport = new RelayWsTransport({ url: url.toString(), webSocketFactory: options.webSocketFactory });
+    this.transport = new RelayWsTransport({ url: url.toString(), webSocketFactory: options.webSocketFactory,
+      tickIntervalMs: 30_000, missedTickTolerance: 3 });
     this.transport.onOpen(() => { void this.handshake(); });
     this.transport.onMessage(data => this.receive(data));
     this.transport.onStateChange(change => {
@@ -68,14 +69,16 @@ export class LocalModelAdapter implements AgentAdapter {
   private async handshake(): Promise<void> {
     const epoch = ++this.epoch;
     try {
-      const health = await this.rpc<{ backend: string; vision: boolean; model: string }>('connect', { token: this.record.auth?.token, capabilities: ['relay.client-pong.v1'] });
+      // Relay authenticates its socket; only direct connections need connect/token.
+      // A Relay connect request starts OpenClaw's challenge lifecycle.
+      const health = await this.rpc<{ backend: string; vision: boolean; model: string }>(this.record.transportKind === 'relay' ? 'health' : 'connect', { token: this.record.auth?.token });
       if (epoch !== this.epoch) return;
       if (health.backend !== 'local-model') throw new AdapterError('unsupported', 'Endpoint is not a local model Bridge');
       this.capabilities.attachments = health.vision === true;
       this.model = health.model;
       this.transport.markReady(); this.setState('ready');
     } catch {
-      if (epoch === this.epoch) this.transport.reconnect();
+      if (epoch === this.epoch) this.transport.retryHandshake();
     }
   }
 

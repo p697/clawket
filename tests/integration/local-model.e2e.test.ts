@@ -84,7 +84,7 @@ it('pairs using the six-digit proof, streams chat, restores history and switches
       const id = randomUUID(); client.ws.send(JSON.stringify({ type: 'req', id, method, params }));
       const frame = await client.inbox.nextJson(f => f.id === id); expect(frame.ok).toBe(true); return frame.payload as any;
     };
-    expect((await rpc('connect')).backend).toBe('local-model');
+    expect((await rpc('health')).backend).toBe('local-model');
     const observer = await socket(clientUrl(claimed.relayUrl, claimed.gatewayId, claimed.clientToken)); sockets.push(observer.ws);
     const params = { sessionKey: 'main', text: 'Hello', idempotencyKey: randomUUID() };
     const sent = await rpc('chat.send', params);
