@@ -51,8 +51,8 @@ export function ScreenHeader({
         ? Platform.OS === 'android'
           ? topInset
           : Math.min(topInset, Space.lg)
-        : topInset;
-  const resolvedShowBorder = showBorder ?? dismissStyle !== 'close';
+        : topInset + Space.sm;
+  const resolvedShowBorder = showBorder ?? false;
 
   return (
     <View
@@ -61,8 +61,8 @@ export function ScreenHeader({
         styles.headerOuter,
         {
           paddingTop: resolvedTopPadding,
-          backgroundColor: colors.surface,
-          borderBottomColor: colors.border,
+          backgroundColor: colors.canvas,
+          borderBottomColor: colors.line,
           borderBottomWidth: resolvedShowBorder ? StyleSheet.hairlineWidth : 0,
         },
         style,
@@ -70,9 +70,9 @@ export function ScreenHeader({
     >
       <View style={styles.headerRow}>
         <View style={styles.titleLayer} pointerEvents="none">
-          <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>{title}</Text>
+          <Text style={[styles.title, { color: colors.ink }]} numberOfLines={1}>{title}</Text>
           {subtitle ? (
-            <Text style={[styles.subtitle, { color: colors.textMuted }]} numberOfLines={1}>
+            <Text style={[styles.subtitle, { color: colors.inkSecondary }]} numberOfLines={1}>
               {subtitle}
             </Text>
           ) : null}
@@ -99,7 +99,7 @@ export function ScreenHeader({
 const styles = StyleSheet.create({
   headerOuter: {
     paddingHorizontal: Space.lg,
-    paddingBottom: 2,
+    paddingBottom: Space.md,
   },
   headerRow: {
     flexDirection: 'row',
@@ -121,16 +121,16 @@ const styles = StyleSheet.create({
   },
   title: {
     textAlign: 'center',
-    fontSize: FontSize.lg,
-    lineHeight: LineHeight.lg,
+    fontSize: FontSize.title,
+    lineHeight: LineHeight.title,
     fontWeight: FontWeight.semibold,
   },
   subtitle: {
     marginTop: 2,
     textAlign: 'center',
-    fontSize: FontSize.sm,
-    lineHeight: LineHeight.sm,
-    fontWeight: FontWeight.medium,
+    fontSize: FontSize.caption,
+    lineHeight: LineHeight.caption,
+    fontWeight: FontWeight.semibold,
   },
   rightSlot: {
     minWidth: 44,

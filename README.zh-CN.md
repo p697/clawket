@@ -10,7 +10,7 @@
 
 [English README](./README.md)
 
-Clawket 是一个开源的移动端应用，用来随时随地管理你的 AI Agent。目前同时支持 [OpenClaw](https://github.com/openclaw/openclaw) 和 [Hermes](https://github.com/NousResearch/hermes-agent)，支持 iOS 和 Android。
+Clawket 3.0 是「自托管 Agent 的会话控制塔」：一屏看清每个 Agent 在做什么，一步进入对话，需要时随时接管。它在 iOS 和 Android 上支持 [OpenClaw](https://github.com/openclaw/openclaw)、[Hermes](https://github.com/NousResearch/hermes-agent) 与 YouMind 精灵聊天。
 
 <p align="center">
   <a href="https://apps.apple.com/app/id6759597015">
@@ -23,10 +23,12 @@ Clawket 是一个开源的移动端应用，用来随时随地管理你的 AI Ag
 
 ## 核心特性
 
-- **📱 OpenClaw 移动端** — 聊天、管理 Agent、配置模型、设置定时任务、监控 Session，全部在手机上完成
-- **🔒 默认安全** — Token 认证 + TLS 加密传输，Relay 和直连模式均支持
-- **🌐 灵活连接** — 支持云端 Relay、局域网直连、Tailscale，无需端口转发
-- **🖥️ 完整远程控制台** — 管理 Agent、Channel、Skill、文件、设备、日志，不用碰终端
+- **📱 一张 Agent 花名册** — 跨连接查看最近活动、未读和需要处理的事项
+- **💬 一条持续线程** — 聊天、查看运行与审批，并在同一运行时内切换会话
+- **🛠️ 后端能力驱动** — 只显示各后端真正支持的模型、技能、定时、文件、设备与日志能力
+- **✨ YouMind 精灵聊天** — 专用适配器提供文本、历史、流式与中止，不把精灵当成 Relay 后端
+- **🔒 隐私优先** — Relay 只转发不保存消息；本地消息缓存按连接隔离
+- **🌐 灵活连接** — 支持 Relay、局域网、Tailscale 与自定义端点
 - **🏗️ 可自托管** — 自建 Relay 基础设施，或跳过它直接局域网 / Tailscale 直连
 - **📦 开源 Monorepo** — 移动端（Expo/React Native）、Relay Workers（Cloudflare）、Bridge CLI，一个仓库，从源码构建
 
@@ -44,25 +46,27 @@ Clawket 是一个开源的移动端应用，用来随时随地管理你的 AI Ag
 └──────────────────┘                                  └──────────────┘
 ```
 
-Clawket 支持两种连接方式：
+对 OpenClaw 与 Hermes，Clawket 支持两种连接方式：
 
 - **Relay 模式** — 使用 `relay-registry` + `relay-worker`，适合云端转发和自动配对。
 - **直连模式** — 通过局域网 IP、Tailscale IP 或自定义 gateway URL 直连，不需要部署 relay 基础设施。
 
+YouMind 精灵使用独立的 HTTPS 适配器。它是受支持的聊天后端，不是 Relay 服务实例或传输类型。
+
 ## 工作方式
 
 1. 在你的 Mac/PC 上运行 `clawket pair`，Bridge 会自动检测本机可用的后端，并输出一个或多个限时二维码。
-2. 如果你想走本地直连而不是 Relay，可以运行 `clawket pair --local`。
+2. 如果你想走本地直连而不是 Relay，可以运行 `clawket pair local`（`--local` 仍作为兼容别名保留）。
 3. 用 Clawket App 扫描二维码，信任该设备。
 4. Relay 模式下，Registry 校验配对，Relay Worker 在手机和 Bridge 之间实时转发 WebSocket 流量。
-5. 直连模式下，App 通过局域网、Tailscale 或其他直连地址连接到本地 bridge，不需要 Relay。
+5. 直连模式下，App 通过局域网、Tailscale 或其他直连地址连接到后端端点，不需要 Relay。
 6. 首次配对后，后续重连自动完成。
 
 当前配对行为：
 
-- 如果机器上只有 OpenClaw，`clawket pair` 和 `clawket pair --local` 的行为与之前一致。
-- 如果机器上只有 Hermes，`clawket pair` 和 `clawket pair --local` 会生成 Hermes 本地 bridge 的二维码。
-- 如果机器上同时有 OpenClaw 和 Hermes，Clawket 会分别输出两个二维码，并明确标注对应后端。
+- `clawket pair` 对每个检测到的后端默认使用 Relay，并分别输出带标签的配对结果。
+- Hermes Relay 配对成功后，CLI 还会尝试启动由 Clawket 管理的本地 Bridge 与 Relay runtime，让配对码立即可用。
+- `clawket pair local` 是显式的纯本地路径，也会为每个支持本地连接的后端分别输出结果。
 
 ## 仓库结构
 
@@ -72,9 +76,12 @@ Clawket 支持两种连接方式：
 | `apps/relay-registry` | Cloudflare Registry Worker |
 | `apps/relay-worker` | Cloudflare Relay Worker |
 | `apps/bridge-cli` | 可发布的 `@p697/clawket` Bridge CLI |
+| `packages/agent-protocol` | 后端无关的适配器契约、能力与测试 fixture |
 | `packages/bridge-core` | Pairing / Config / Service 共享能力 |
 | `packages/bridge-runtime` | Bridge Runtime |
 | `packages/relay-shared` | Relay 共享协议与类型 |
+
+两个 Relay 工作区通过同一套策略驱动的代码部署 OpenClaw 与 Hermes；各后端的 Production 和 Preview 仍分别使用独立的 Worker 服务、KV、Durable Object 与凭据。
 
 ## 快速开始
 
@@ -89,6 +96,8 @@ npm install
 npm run mobile:sync:native
 npm run mobile:dev:ios
 ```
+
+这会同步原生工程并启动 iOS 开发构建。
 
 运行 Android 开发版：
 
@@ -109,21 +118,21 @@ clawket pair
 
 这条命令会自动检测本机上的 OpenClaw 和 Hermes：
 
-- OpenClaw 默认走 Relay 配对
-- Hermes 当前默认走本地 bridge 配对
+- OpenClaw 与 Hermes 默认都走 Relay 配对
+- Hermes 配对还会尝试启动由 Clawket 管理的本地 Bridge 与 Relay runtime
 - 如果两个后端都存在，会分别输出一个二维码
 
 如果你不想部署 relay，直接走本地配对：
 
 ```bash
-clawket pair --local
+clawket pair local
 ```
 
 如果你想强制指定某个后端：
 
 ```bash
 clawket pair --backend hermes
-clawket pair --local --backend hermes
+clawket pair local --backend hermes
 ```
 
 然后在 App 里扫描生成的二维码即可。
@@ -215,14 +224,14 @@ Clawket 的公共仓库默认就可以 clone 下来自行运行，不依赖官�
 
 自托管关键默认行为：
 
-- `clawket pair` 需要 `--server` 或 `CLAWKET_REGISTRY_URL` — 没有硬编码的 Registry
-- `clawket pair --local` 无需任何 Cloudflare 基础设施
+- 自托管 OpenClaw Registry 通过 `--server` 或 `CLAWKET_REGISTRY_URL` 选择，源码 checkout 不硬编码该端点
+- `clawket pair local` 无需任何 Cloudflare 基础设施
 - OpenClaw 配对状态继续保留在旧的配置文件里，Hermes 使用独立状态文件，因此 bridge 升级不会直接破坏已有的 OpenClaw 配对
 - 仓库里的 `wrangler.toml` 只保留占位绑定和 `example.com` 端点
 - 如果 analytics、support、legal 等值为空，App 会自动隐藏或禁用对应集成
 - 如果 RevenueCat 未配置，App 会跳过订阅计费并默认解锁 Pro
 
-完整的分发边界说明请阅读 [SELF_HOSTING_MODEL.md](./SELF_HOSTING_MODEL.md)。
+完整的分发边界说明请阅读 [docs/self-hosting.md](./docs/self-hosting.md)。
 
 ### 自托管文档
 
@@ -230,6 +239,13 @@ Clawket 的公共仓库默认就可以 clone 下来自行运行，不依赖官�
 - [docs/relay/CONFIGURATION.md](./docs/relay/CONFIGURATION.md)
 - [docs/relay/LOCAL-DEVELOPMENT.md](./docs/relay/LOCAL-DEVELOPMENT.md)
 - [docs/relay/ARCHITECTURE.md](./docs/relay/ARCHITECTURE.md)
+
+## 隐私
+
+- Relay 只转发实时流量，不持久化消息内容。
+- 消息缓存只保存在设备上；删除连接时会清除该连接的缓存。
+- 产品埋点只使用低基数的诊断与使用事件，不包含消息正文、提示词、原始 ID、凭据或含密钥的 URL。
+- 配对凭据和仅发布时使用的服务密钥不会进入仓库。
 
 ## 验证
 

@@ -1,0 +1,117 @@
+{
+  "schemaVersion": 1,
+  "id": "relay-hermes-v1",
+  "backend": "hermes",
+  "recordedAt": "2026-09-05T00:00:00.000Z",
+  "description": "Hermes Relay websocket upgrade, local Bridge health event, and sessions.list request/response sequence.",
+  "captureMethod": "Frames were extracted from the pinned Hermes client and HermesRelayRuntime implementations, sanitized, then replayed through real Hermes Registry and Relay Wrangler dev processes plus an in-process runtime.",
+  "sources": [
+    {
+      "label": "2.1.0 shipped production build",
+      "commit": "c2bfe068da15837d94dce70c3247fb39759e9c59",
+      "provenance": "production-build"
+    },
+    {
+      "label": "latest pre-3.0 client/server capability snapshot",
+      "commit": "d9c1adae8192839c78cb6e10091551cf342c3a93",
+      "provenance": "pre-3.0-snapshot"
+    },
+    {
+      "label": "latest pre-3.0 Bridge runtime snapshot",
+      "commit": "9cf26e59dc6269292e8b6769ba1db47023157597",
+      "provenance": "pre-3.0-snapshot"
+    }
+  ],
+  "ignoredPaths": ["/payload/ts"],
+  "frames": [
+    {
+      "sequence": 1,
+      "label": "bridge.connection",
+      "kind": "connection",
+      "direction": "bridge-to-relay",
+      "payload": {
+        "path": "/ws",
+        "query": { "bridgeId": "$capture:bridgeId:bridge-id", "role": "gateway", "clientId": "compat-hermes-runtime" },
+        "authorization": "$capture:bridgeAuthorization:nonempty-string"
+      }
+    },
+    {
+      "sequence": 2,
+      "label": "client.connection",
+      "kind": "connection",
+      "direction": "client-to-relay",
+      "annotation": "Hermes transport becomes ready on websocket open; it does not use OpenClaw connect/connect.start or connect.challenge.",
+      "payload": {
+        "path": "/ws",
+        "query": { "bridgeId": "$ref:bridgeId", "role": "client", "clientId": "compat-hermes-ios", "token": "$capture:clientToken:nonempty-string" }
+      }
+    },
+    {
+      "sequence": 3,
+      "label": "health.event",
+      "kind": "websocket",
+      "direction": "relay-to-client",
+      "payload": { "type": "event", "event": "health", "payload": { "status": "ok", "hermesApiReachable": true, "mode": "hermes", "ts": 1778198400000 } }
+    },
+    {
+      "sequence": 4,
+      "label": "sessions-list.request",
+      "kind": "websocket",
+      "direction": "client-to-relay",
+      "payload": { "type": "req", "id": "hermes-sessions-v1", "method": "sessions.list", "params": { "limit": 100, "includeLastMessage": true, "includeDerivedTitles": true } }
+    },
+    {
+      "sequence": 5,
+      "label": "sessions-list.bridge-receive",
+      "kind": "websocket",
+      "direction": "bridge-to-local",
+      "payload": { "type": "req", "id": "hermes-sessions-v1", "method": "sessions.list", "params": { "limit": 100, "includeLastMessage": true, "includeDerivedTitles": true } }
+    },
+    {
+      "sequence": 6,
+      "label": "sessions-list.bridge-response",
+      "kind": "websocket",
+      "direction": "local-to-bridge",
+      "payload": {
+        "type": "res",
+        "id": "hermes-sessions-v1",
+        "ok": true,
+        "payload": {
+          "sessions": [
+            {
+              "key": "agent:main:main",
+              "sessionId": "main",
+              "title": "Main",
+              "label": "Main",
+              "updatedAt": 1778198400000,
+              "lastMessagePreview": ""
+            }
+          ]
+        }
+      }
+    },
+    {
+      "sequence": 7,
+      "label": "sessions-list.response",
+      "kind": "websocket",
+      "direction": "relay-to-client",
+      "payload": {
+        "type": "res",
+        "id": "hermes-sessions-v1",
+        "ok": true,
+        "payload": {
+          "sessions": [
+            {
+              "key": "agent:main:main",
+              "sessionId": "main",
+              "title": "Main",
+              "label": "Main",
+              "updatedAt": 1778198400000,
+              "lastMessagePreview": ""
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -1,5 +1,7 @@
 # macOS Dev
 
+> macOS and Mac Catalyst remain outside the Clawket 3.0 release scope. These development scripts are retained for future work only.
+
 Use the Mac Catalyst development script:
 
 ```bash

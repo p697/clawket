@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Clawket 3.0 样张</title>
+<style>
+  :root {
+    --canvas:#FFFFFF; --canvasGrouped:#F5F5F7; --surface:#F2F2F4; --surfaceFloating:#FFFFFF;
+    --ink:#111113; --ink2:#6B6B72; --ink3:#A3A3AB; --line:#E6E6EA;
+    --accent:#1F5EFF; --accentSoft:rgba(31,94,255,.10);
+    --good:#178A6A; --warn:#D9791C; --bad:#D64545; --badSoft:rgba(214,69,69,.12);
+    --shadow:0 2px 12px rgba(17,17,19,.08);
+    --pageBg:#E9EAEE;
+  }
+  [data-theme="dark"] {
+    --canvas:#0C0C0D; --canvasGrouped:#0C0C0D; --surface:#1A1A1D; --surfaceFloating:#222225;
+    --ink:#F3F3F5; --ink2:#9A9AA3; --ink3:#6A6A73; --line:#2A2A2F;
+    --accent:#6B95FF; --accentSoft:rgba(107,149,255,.16);
+    --good:#2FA07C; --warn:#D07F30; --bad:#E06060; --badSoft:rgba(224,96,96,.2);
+    --shadow:none;
+    --pageBg:#050506;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--pageBg); font-family:-apple-system,"SF Pro Text","PingFang SC","Helvetica Neue",Roboto,"Noto Sans SC",sans-serif; color:var(--ink); -webkit-font-smoothing:antialiased; }
+  .bar { display:flex; align-items:center; gap:12px; padding:18px 28px; color:var(--ink2); font-size:13px; }
+  .bar b { color:var(--ink); font-size:15px; font-weight:600; margin-right:auto; }
+  .bar button { font:inherit; font-size:13px; padding:6px 12px; border-radius:999px; border:1px solid var(--line); background:var(--surfaceFloating); color:var(--ink); cursor:pointer; }
+  .stage { display:flex; gap:28px; padding:8px 28px 40px; overflow-x:auto; align-items:flex-start; }
+  .phone { flex:0 0 390px; width:390px; height:844px; border-radius:44px; background:var(--canvas); position:relative; overflow:hidden; box-shadow:0 20px 60px -20px rgba(0,0,0,.35), 0 0 0 1px rgba(0,0,0,.06); }
+  [data-theme="dark"] .phone { box-shadow:0 20px 60px -20px rgba(0,0,0,.8), 0 0 0 1px rgba(255,255,255,.06); }
+  .phone.grouped { background:var(--canvasGrouped); }
+  .cap { flex:0 0 390px; }
+  .cap p { margin:10px 0 0; font-size:13px; color:var(--ink2); line-height:1.5; }
+  .cap b { color:var(--ink); }
+  .status { height:54px; display:flex; justify-content:space-between; align-items:flex-end; padding:0 34px 8px; font-size:15px; font-weight:600; }
+  .status .t { letter-spacing:-.2px; }
+  .status .r { font-size:12px; font-weight:500; letter-spacing:.5px; }
+  .home { position:absolute; left:50%; bottom:8px; width:134px; height:5px; border-radius:3px; background:var(--ink); opacity:.9; transform:translateX(-50%); }
+
+  /* floating controls */
+  .fbtn { width:44px; height:44px; border-radius:22px; background:var(--surfaceFloating); box-shadow:var(--shadow); display:flex; align-items:center; justify-content:center; position:relative; }
+  [data-theme="dark"] .fbtn, [data-theme="dark"] .pill, [data-theme="dark"] .input { box-shadow:none; border:1px solid var(--line); }
+  .fbtn svg { width:22px; height:22px; stroke:var(--ink); stroke-width:1.75; fill:none; stroke-linecap:round; stroke-linejoin:round; }
+  .fbtn .dot { position:absolute; right:2px; top:2px; width:10px; height:10px; border-radius:5px; background:var(--accent); border:2px solid var(--canvas); }
+  .topbar { display:flex; align-items:center; justify-content:space-between; padding:6px 16px 0; }
+  .topbar .grp { display:flex; gap:10px; }
+  .pill { height:40px; border-radius:20px; background:var(--surfaceFloating); box-shadow:var(--shadow); display:flex; align-items:center; gap:8px; padding:0 14px 0 6px; }
+  .pill .name { font-size:17px; font-weight:600; line-height:20px; }
+  .pill .sub { font-size:13px; color:var(--ink2); line-height:16px; }
+
+  /* avatar */
+  .av { position:relative; flex:0 0 auto; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:600; }
+  .av.l { width:56px; height:56px; border-radius:18px; font-size:28px; }
+  .av.m { width:44px; height:44px; border-radius:14px; font-size:22px; }
+  .av.s { width:28px; height:28px; border-radius:9px; font-size:15px; }
+  .av.xs { width:32px; height:32px; border-radius:10px; font-size:17px; }
+  .av.locked { filter:saturate(.4); opacity:.75; }
+  .ring { position:absolute; inset:-4px; border-radius:22px; border:2px solid transparent; border-top-color:var(--accent); border-right-color:var(--accent); animation:spin 1.2s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .badge { position:absolute; right:-3px; bottom:-3px; width:14px; height:14px; border-radius:7px; border:2px solid var(--canvas); }
+  .badge.bad { background:var(--bad); }
+  .badge.good { background:var(--good); }
+  .chan { position:absolute; right:-4px; bottom:-4px; width:22px; height:22px; border-radius:8px; background:var(--surfaceFloating); border:2px solid var(--canvas); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; color:var(--ink); }
+  .lock { position:absolute; right:-4px; bottom:-4px; width:22px; height:22px; border-radius:11px; background:var(--surfaceFloating); border:2px solid var(--canvas); display:flex; align-items:center; justify-content:center; }
+  .lock svg { width:12px; height:12px; stroke:var(--ink2); stroke-width:2; fill:none; }
+
+  /* roster */
+  .roster { padding:14px 0 0; }
+  .row { display:flex; align-items:center; gap:14px; height:88px; padding:0 16px; }
+  .row .txt { flex:1; min-width:0; }
+  .row .n { font-size:17px; font-weight:600; line-height:22px; }
+  .row .p { font-size:15px; color:var(--ink2); line-height:20px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px; }
+  .row .tr { display:flex; flex-direction:column; align-items:flex-end; gap:8px; min-width:44px; }
+  .row .tm { font-size:13px; color:var(--ink3); line-height:18px; }
+  .row .ud { width:8px; height:8px; border-radius:4px; background:var(--accent); }
+  .row .cnt { min-width:20px; height:20px; padding:0 6px; border-radius:10px; background:var(--bad); color:#fff; font-size:13px; font-weight:600; display:flex; align-items:center; justify-content:center; }
+  .row.locked .n, .row.locked .p { color:var(--ink3); }
+
+  /* thread */
+  .thread { position:absolute; inset:0; display:flex; flex-direction:column; }
+  .thread .hdr { position:absolute; top:54px; left:0; right:0; z-index:3; }
+  .thread .fade { position:absolute; top:100px; left:0; right:0; height:32px; background:linear-gradient(var(--canvas), transparent); z-index:2; pointer-events:none; }
+  .msgs { position:absolute; top:0; bottom:88px; left:0; right:0; overflow:hidden; padding:118px 16px 16px; display:flex; flex-direction:column; gap:6px; }
+  .bub { max-width:82%; padding:11px 15px; border-radius:20px; font-size:17px; line-height:24px; }
+  .bub.me { align-self:flex-end; background:var(--accentSoft); }
+  .bub.ai { align-self:flex-start; background:var(--surface); }
+  .gap { height:10px; }
+  .sys { display:flex; justify-content:center; align-items:center; gap:6px; padding:6px 0; font-size:13px; color:var(--ink2); }
+  .sys svg { width:14px; height:14px; stroke:var(--ink2); stroke-width:1.75; fill:none; stroke-linecap:round; }
+  .card { align-self:stretch; background:var(--surface); border-radius:16px; padding:12px 14px 12px 16px; position:relative; overflow:hidden; display:flex; align-items:center; gap:12px; }
+  .card::before { content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--accent); }
+  .card.warn::before { background:var(--warn); }
+  .card .t { font-size:15px; font-weight:600; line-height:20px; }
+  .card .s { font-size:13px; color:var(--ink2); line-height:18px; margin-top:2px; }
+  .card .mono { font-family:"SF Mono",ui-monospace,Menlo,monospace; font-size:13px; color:var(--ink2); margin-top:4px; }
+  .card .flex { flex:1; min-width:0; }
+  .card svg.chev { width:18px; height:18px; stroke:var(--ink3); stroke-width:1.75; fill:none; }
+  .btns { display:flex; gap:8px; margin-top:10px; }
+  .btn { height:36px; padding:0 18px; border-radius:18px; font-size:15px; font-weight:600; display:flex; align-items:center; }
+  .btn.pri { background:var(--ink); color:var(--canvas); }
+  .btn.sec { background:var(--surfaceFloating); color:var(--ink); box-shadow:var(--shadow); }
+  [data-theme="dark"] .btn.sec { border:1px solid var(--line); }
+  .composer { position:absolute; left:0; right:0; bottom:22px; padding:8px 16px; display:flex; align-items:center; gap:10px; background:var(--canvas); }
+  .input { flex:1; height:44px; border-radius:22px; background:var(--surfaceFloating); box-shadow:var(--shadow); display:flex; align-items:center; padding:0 12px 0 18px; color:var(--ink3); font-size:17px; }
+  .input svg { margin-left:auto; width:22px; height:22px; stroke:var(--ink2); stroke-width:1.75; fill:none; stroke-linecap:round; }
+  .send { width:44px; height:44px; border-radius:22px; background:var(--accent); display:flex; align-items:center; justify-content:center; }
+  .send svg { width:20px; height:20px; stroke:#fff; stroke-width:2.2; fill:none; stroke-linecap:round; stroke-linejoin:round; }
+
+  /* sheet */
+  .dim { position:absolute; inset:0; background:rgba(0,0,0,.4); z-index:4; }
+  .sheet { position:absolute; left:0; right:0; bottom:0; height:78%; background:var(--surface); border-radius:20px 20px 0 0; z-index:5; padding:8px 16px 0; overflow:hidden; }
+  .handle { width:36px; height:4px; border-radius:2px; background:var(--line); margin:0 auto 12px; }
+  .seg { display:flex; background:var(--canvas); border-radius:22px; height:44px; padding:4px; margin-bottom:12px; }
+  .seg span { flex:1; display:flex; align-items:center; justify-content:center; font-size:17px; border-radius:18px; color:var(--ink2); }
+  .seg span.on { background:var(--surfaceFloating); color:var(--ink); font-weight:600; box-shadow:var(--shadow); }
+  .chips { display:flex; gap:8px; margin-bottom:8px; }
+  .chip { height:32px; padding:0 14px; border-radius:16px; background:var(--canvas); font-size:15px; display:flex; align-items:center; gap:6px; color:var(--ink2); }
+  .chip.on { background:var(--ink); color:var(--canvas); font-weight:600; }
+  .chip i { width:6px; height:6px; border-radius:3px; background:var(--bad); }
+  .ghead { display:flex; align-items:center; gap:8px; height:44px; font-size:17px; font-weight:600; }
+  .ghead .c { margin-left:auto; color:var(--ink3); font-weight:400; font-size:15px; }
+  .ghead svg { width:16px; height:16px; stroke:var(--ink2); stroke-width:2; fill:none; }
+  .sec-t { font-size:15px; color:var(--ink2); padding:10px 0 4px 24px; }
+  .sec-t.sub { padding-left:40px; font-size:13px; }
+  .srow { display:flex; align-items:center; gap:10px; height:44px; padding-left:24px; }
+  .srow.sub { padding-left:40px; }
+  .srow .d { width:6px; height:6px; border-radius:3px; background:var(--ink3); flex:0 0 auto; }
+  .srow .d.on { background:var(--good); }
+  .srow .d.bad { background:var(--bad); }
+  .srow .t { flex:1; font-size:17px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .srow .t.n { font-weight:400; color:var(--ink2); }
+  .srow .tm { font-size:13px; color:var(--ink3); }
+
+  /* settings */
+  .set { padding:10px 16px 0; }
+  .set h1 { font-size:20px; font-weight:600; margin:14px 0 18px 4px; }
+  .id { display:flex; align-items:center; gap:14px; background:var(--surfaceFloating); border-radius:14px; padding:14px 16px; margin-bottom:24px; }
+  .id .n { font-size:17px; font-weight:600; line-height:22px; }
+  .id .s { font-size:15px; color:var(--ink2); line-height:20px; }
+  .id svg { margin-left:auto; width:18px; height:18px; stroke:var(--ink3); stroke-width:1.75; fill:none; }
+  .grp-t { font-size:15px; color:var(--ink2); margin:0 0 8px 16px; }
+  .grp { background:var(--surfaceFloating); border-radius:14px; margin-bottom:24px; overflow:hidden; }
+  .grp .r { display:flex; align-items:center; height:52px; padding:0 16px; gap:8px; font-size:17px; }
+  .grp .r + .r { border-top:1px solid var(--line); }
+  .grp .v { margin-left:auto; color:var(--ink2); font-size:15px; display:flex; align-items:center; gap:8px; }
+  .grp .v i { width:6px; height:6px; border-radius:3px; background:var(--bad); }
+  .grp .v.off { color:var(--bad); }
+  .grp svg { width:18px; height:18px; stroke:var(--ink3); stroke-width:1.75; fill:none; flex:0 0 auto; }
+  .grp svg.lk { stroke:var(--accent); }
+</style>
+</head>
+<body>
+<div class="bar"><b>Clawket 3.0 样张 · 花名册 / 线程 / 会话面板 / Agent 设置</b><span>风格参照，不是像素依据 · 尺寸以 05 token 表与 youmind-mobile 组件为准</span><button onclick="var r=document.documentElement;r.getAttribute('data-theme')==='dark'?r.removeAttribute('data-theme'):r.setAttribute('data-theme','dark')">切换深浅色</button></div>
+<div class="stage">
+
+<!-- ===== 1 花名册 ===== -->
+<div class="cap">
+<div class="phone">
+  <div class="status"><span class="t">17:23</span><span class="r">●●● ᯤ 100</span></div>
+  <div class="topbar">
+    <div class="fbtn"><div class="av s" style="background:#7A5AF8;width:32px;height:32px;border-radius:11px;font-size:16px">🙂</div><div class="dot"></div></div>
+    <div class="grp">
+      <div class="fbtn"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></div>
+      <div class="fbtn"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></div>
+    </div>
+  </div>
+  <div class="roster">
+    <div class="row"><div class="av l" style="background:#1F5EFF">😈<div class="ring"></div></div><div class="txt"><div class="n">Lucy</div><div class="p">桌面端口径坐实：platform='desktop' 独立上报</div></div><div class="tr"><div class="tm">刚刚</div><div class="ud"></div></div></div>
+    <div class="row"><div class="av l" style="background:#1F5EFF">😈<div class="chan">S</div></div><div class="txt"><div class="n">#critical-alert</div><div class="p">允许运行 exec？</div></div><div class="tr"><div class="tm">4 分钟前</div><div class="cnt">1</div></div></div>
+    <div class="row"><div class="av l" style="background:#D9791C">🪽<div class="badge good"></div></div><div class="txt"><div class="n">Hermes</div><div class="p">调研 PostHog 做完了，结论在上面</div></div><div class="tr"><div class="tm">17:20</div></div></div>
+    <div class="row"><div class="av l" style="background:#178A6A">🛠️</div><div class="txt"><div class="n">Coder</div><div class="p">compute.py 重构完成，跑了测试</div></div><div class="tr"><div class="tm">星期二</div></div></div>
+    <div class="row"><div class="av l" style="background:#1C8FA3">✨</div><div class="txt"><div class="n">小方</div><div class="p">如果你接受「只在 Cursor 进过的频道、写…</div></div><div class="tr"><div class="tm">星期二</div></div></div>
+    <div class="row locked"><div class="av l locked" style="background:#E2477B">📝<div class="lock"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div></div><div class="txt"><div class="n">Writer</div><div class="p">#dev 今天主要这几件：发布 生产 hotfix</div></div><div class="tr"><div class="tm">星期一</div></div></div>
+  </div>
+  <div class="home"></div>
+</div>
+<p><b>花名册。</b>没有标题，没有分割线，没有标签。每行三样：名字、预览、时间。状态在头像上：Lucy 的环在转（工作中），Hermes 右下绿点（刚完成），#critical-alert 是置顶的渠道会话（头像带 S 徽标）加红色未读数，Writer 是免费用户看到的锁定 Agent。</p>
+</div>
+
+<!-- ===== 2 线程 ===== -->
+<div class="cap">
+<div class="phone">
+  <div class="thread">
+    <div class="status" style="position:relative;z-index:3"><span class="t">17:23</span><span class="r">●●● ᯤ 100</span></div>
+    <div class="hdr"><div class="topbar">
+      <div class="fbtn"><svg viewBox="0 0 24 24"><path d="m15 5-7 7 7 7"/></svg></div>
+      <div class="pill"><div class="av s" style="background:#1F5EFF">😈</div><div><div class="name">Lucy</div><div class="sub">deepseek-v4-flash · 剩 54%</div></div></div>
+      <div class="fbtn"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></div>
+    </div></div>
+    <div class="fade"></div>
+    <div class="msgs">
+      <div class="bub me">先把桌面端 SQL 用 PostHog 实测验证，同时确认 exec 工具是否可用。</div>
+      <div class="gap"></div>
+      <div class="sys"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>定时任务 release-duty-daily 运行失败 · 日志</div>
+      <div class="bub ai">接收进程死了，所以 Webhook 根本没收到事件。我先拉起来，再看 thread。</div>
+      <div class="gap"></div>
+      <div class="card"><div class="flex"><div class="t">子 Agent · 采集脚本</div><div class="s">运行中 · 12 秒</div></div><svg class="chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></div>
+      <div class="card warn"><div class="flex"><div class="t">允许运行 exec？</div><div class="mono">rm -rf build/ && npm run build</div><div class="btns"><div class="btn pri">允许</div><div class="btn sec">拒绝</div></div></div></div>
+      <div class="gap"></div>
+      <div class="bub ai">桌面端口径坐实：platform='desktop' 独立上报（$lib 为空），9/3 DAU=70，不与 web/ext/mobile 重叠。数据齐了，开始改脚本。</div>
+    </div>
+    <div class="composer">
+      <div class="fbtn"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></div>
+      <div class="input">向 Lucy 提问<svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></div>
+      <div class="send"><svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg></div>
+    </div>
+    <div class="home"></div>
+  </div>
+</div>
+<p><b>线程。</b>头部是浮着的三样：返回、带头像的胶囊、齿轮。胶囊里除了名字只有一行灰字（模型 · 上下文剩余），这是全 App 唯一的头部辅文字。定时任务失败是一行系统事件；子 Agent 运行和审批是两张卡，各一行标题一行灰字，审批卡多一行命令和两颗按钮。输入区：圆形加号、胶囊输入框、发送键。</p>
+</div>
+
+<!-- ===== 3 会话面板 ===== -->
+<div class="cap">
+<div class="phone">
+  <div class="thread">
+    <div class="status" style="position:relative;z-index:3"><span class="t">17:23</span><span class="r">●●● ᯤ 100</span></div>
+    <div class="hdr"><div class="topbar">
+      <div class="fbtn"><svg viewBox="0 0 24 24"><path d="m15 5-7 7 7 7"/></svg></div>
+      <div class="pill"><div class="av s" style="background:#1F5EFF">😈</div><div><div class="name">Lucy</div><div class="sub">deepseek-v4-flash · 剩 54%</div></div></div>
+      <div class="fbtn"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/></svg></div>
+    </div></div>
+    <div class="msgs"><div class="bub me">先把桌面端 SQL 用 PostHog 实测验证</div><div class="bub ai">接收进程死了，所以 Webhook 根本没收到事件。</div></div>
+    <div class="dim"></div>
+    <div class="sheet">
+      <div class="handle"></div>
+      <div class="seg"><span class="on">分组</span><span>列表</span></div>
+      <div class="chips"><div class="chip on">全部</div><div class="chip"><i></i>需要你 1</div><div class="chip">工作中 2</div></div>
+      <div class="ghead"><svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>Lucy<span class="c">7</span></div>
+      <div class="sec-t">主会话</div>
+      <div class="srow"><div class="d on"></div><div class="t">main</div><div class="tm">刚刚</div></div>
+      <div class="sec-t">渠道</div>
+      <div class="sec-t sub">Slack</div>
+      <div class="srow sub"><div class="d bad"></div><div class="t">#critical-alert</div><div class="tm">4 分钟前</div></div>
+      <div class="srow sub"><div class="d"></div><div class="t n">#dev</div><div class="tm">星期二</div></div>
+      <div class="sec-t sub">Discord</div>
+      <div class="srow sub"><div class="d"></div><div class="t n">#general</div><div class="tm">昨天</div></div>
+      <div class="sec-t">子 Agent</div>
+      <div class="srow"><div class="d on"></div><div class="t">采集脚本</div><div class="tm">12 秒</div></div>
+      <div class="srow"><div class="d"></div><div class="t n">已完成 12</div></div>
+      <div class="sec-t">定时</div>
+      <div class="srow"><div class="d bad"></div><div class="t">release-duty-daily</div><div class="tm">07:00</div></div>
+      <div class="srow"><div class="d"></div><div class="t n">YouMind 日报</div><div class="tm">明天 07:00</div></div>
+      <div class="ghead" style="margin-top:6px"><svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg>Coder<span class="c">6</span></div>
+      <div class="ghead"><svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg>Hermes<span class="c">12</span></div>
+    </div>
+    <div class="home"></div>
+  </div>
+</div>
+<p><b>会话面板。</b>分组模式：Agent 名和数字做分组标题，当前 Agent 展开；分节只有名称；每行是状态点、标题、时间，没有预览、没有类型标签、没有来源。粗体表示有新内容，灰色表示已读。三个筛选 chip 只在会话超过一屏时出现。</p>
+</div>
+
+<!-- ===== 4 Agent 设置 ===== -->
+<div class="cap">
+<div class="phone grouped">
+  <div class="status"><span class="t">17:23</span><span class="r">●●● ᯤ 100</span></div>
+  <div class="topbar"><div class="fbtn"><svg viewBox="0 0 24 24"><path d="m15 5-7 7 7 7"/></svg></div><div></div></div>
+  <div class="set">
+    <h1>Lucy</h1>
+    <div class="id"><div class="av m" style="background:#1F5EFF">😈</div><div><div class="n">Lucy</div><div class="s">lucy · OpenClaw</div></div><svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></div>
+    <div class="grp">
+      <div class="r">模型<span class="v">deepseek-v4-flash</span><svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></div>
+      <div class="r">技能<span class="v">105</span><svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></div>
+      <div class="r">定时任务<span class="v"><i></i>6</span><svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></div>
+      <div class="r">文件<span class="v"></span><svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></div>
+      <div class="r">用量<span class="v">$1.2</span><svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></div>
+    </div>
+    <div class="grp-t">lucy</div>
+    <div class="grp">
+      <div class="r">连接<span class="v">在线</span><svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></div>
+      <div class="r">OpenClaw 管理<span class="v"></span><svg class="lk" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div>
+      <div class="r">工具<span class="v">63</span><svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></div>
+      <div class="r">渠道与设备<span class="v"><i></i>1</span><svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></div>
+      <div class="r">日志<span class="v"></span><svg class="lk" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div>
+    </div>
+  </div>
+  <div class="home"></div>
+</div>
+<p><b>Agent 设置。</b>浅灰底加白色分组卡。每行只有标题和一个尾值：模型名、数字、在线、锁。有失败的定时任务、有待处理配对的渠道，只在尾值前加一个红点。分组标题只写连接名。</p>
+</div>
+
+</div>
+</body>
+</html>

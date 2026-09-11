@@ -1,8 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-type SessionPreferenceState = {
+export type AgentRosterPreferences = Readonly<{
   pinnedSessionKeys: string[];
-};
+  agentPinned: boolean;
+  muted: boolean;
+}>;
+
+type SessionPreferenceState = AgentRosterPreferences;
 
 const SESSION_PREFERENCES_PREFIX = 'clawket.sessionPreferences.v1.';
 
@@ -12,22 +16,26 @@ function makeScopeKey(gatewayConfigId: string, agentId: string): string {
 
 function normalizeState(value: unknown): SessionPreferenceState {
   if (!value || typeof value !== 'object') {
-    return { pinnedSessionKeys: [] };
+    return { pinnedSessionKeys: [], agentPinned: false, muted: false };
   }
   const record = value as Record<string, unknown>;
   const pinnedSessionKeys = Array.isArray(record.pinnedSessionKeys)
     ? Array.from(new Set(record.pinnedSessionKeys.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)))
     : [];
-  return { pinnedSessionKeys };
+  return {
+    pinnedSessionKeys,
+    agentPinned: record.agentPinned === true,
+    muted: record.muted === true,
+  };
 }
 
 async function readState(gatewayConfigId: string, agentId: string): Promise<SessionPreferenceState> {
   try {
     const raw = await AsyncStorage.getItem(makeScopeKey(gatewayConfigId, agentId));
-    if (!raw) return { pinnedSessionKeys: [] };
+    if (!raw) return { pinnedSessionKeys: [], agentPinned: false, muted: false };
     return normalizeState(JSON.parse(raw));
   } catch {
-    return { pinnedSessionKeys: [] };
+    return { pinnedSessionKeys: [], agentPinned: false, muted: false };
   }
 }
 
@@ -36,6 +44,21 @@ async function writeState(gatewayConfigId: string, agentId: string, state: Sessi
 }
 
 export const SessionPreferencesService = {
+  async clearConnection(gatewayConfigId: string): Promise<void> {
+    const connectionPrefix = `${SESSION_PREFERENCES_PREFIX}${gatewayConfigId}::`;
+    const keys = (await AsyncStorage.getAllKeys()).filter((key) => (
+      key.startsWith(connectionPrefix)
+    ));
+    if (keys.length > 0) await AsyncStorage.multiRemove(keys);
+  },
+
+  async getAgentPreferences(
+    gatewayConfigId: string,
+    agentId: string,
+  ): Promise<AgentRosterPreferences> {
+    return readState(gatewayConfigId, agentId);
+  },
+
   async getPinnedSessionKeys(gatewayConfigId: string, agentId: string): Promise<string[]> {
     const state = await readState(gatewayConfigId, agentId);
     return state.pinnedSessionKeys;
@@ -46,7 +69,7 @@ export const SessionPreferencesService = {
     const next = pinned
       ? Array.from(new Set([sessionKey, ...state.pinnedSessionKeys]))
       : state.pinnedSessionKeys.filter((item) => item !== sessionKey);
-    await writeState(gatewayConfigId, agentId, { pinnedSessionKeys: next });
+    await writeState(gatewayConfigId, agentId, { ...state, pinnedSessionKeys: next });
     return next;
   },
 
@@ -58,5 +81,47 @@ export const SessionPreferencesService = {
 
   async clearSession(gatewayConfigId: string, agentId: string, sessionKey: string): Promise<void> {
     await this.setPinnedSession(gatewayConfigId, agentId, sessionKey, false);
+  },
+
+  async setAgentPinned(
+    gatewayConfigId: string,
+    agentId: string,
+    pinned: boolean,
+  ): Promise<AgentRosterPreferences> {
+    const state = await readState(gatewayConfigId, agentId);
+    const next = { ...state, agentPinned: pinned };
+    await writeState(gatewayConfigId, agentId, next);
+    return next;
+  },
+
+  async toggleAgentPinned(
+    gatewayConfigId: string,
+    agentId: string,
+  ): Promise<AgentRosterPreferences> {
+    const state = await readState(gatewayConfigId, agentId);
+    const next = { ...state, agentPinned: !state.agentPinned };
+    await writeState(gatewayConfigId, agentId, next);
+    return next;
+  },
+
+  async setAgentMuted(
+    gatewayConfigId: string,
+    agentId: string,
+    muted: boolean,
+  ): Promise<AgentRosterPreferences> {
+    const state = await readState(gatewayConfigId, agentId);
+    const next = { ...state, muted };
+    await writeState(gatewayConfigId, agentId, next);
+    return next;
+  },
+
+  async toggleAgentMuted(
+    gatewayConfigId: string,
+    agentId: string,
+  ): Promise<AgentRosterPreferences> {
+    const state = await readState(gatewayConfigId, agentId);
+    const next = { ...state, muted: !state.muted };
+    await writeState(gatewayConfigId, agentId, next);
+    return next;
   },
 };

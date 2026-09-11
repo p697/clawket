@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <title>Clawket Pro · 四种可能</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="studio-header">
+    <a class="wordmark" href="index.html">clawket<span>Design studies / 03</span></a>
+    <nav aria-label="方案"><button data-design="a">A 光场</button><button data-design="b">B 纸间</button><button data-design="c">C 折光</button><button data-design="d">D 全景</button></nav>
+    <button id="compare" class="studio-button">并排比较 ↗</button>
+  </header>
+  <main class="studio">
+    <aside class="editorial">
+      <div class="eyebrow">CLAWKET PRO · PAYWALL EXPLORATIONS</div>
+      <h1 id="study-title"></h1>
+      <p class="intro" id="study-summary"></p>
+      <div class="study-meta" id="study-meta"></div>
+      <div id="layout-study" class="layout-study">
+        <span class="context-label">字号与布局对照</span>
+        <div class="layout-options" role="group" aria-label="字号与布局对照">
+          <button data-layout-choice="current" aria-pressed="false">原排版示意</button>
+          <button data-layout-choice="refined" aria-pressed="true">居中成组 · 推荐</button>
+        </div>
+        <p class="small-note">权益从 15 调至 17，整组居中、内部左对齐。两种排版共用最新文案，便于比较。</p>
+      </div>
+      <label class="context-label" for="language">预览语言 · 使用 App 文案</label>
+      <select id="language"><option value="en">English</option><option value="zh-Hans">简体中文</option><option value="de">Deutsch</option><option value="es">Español</option><option value="ja">日本語</option><option value="ko">한국어</option></select>
+      <label class="context-label" for="context">从哪里进入付费墙</label>
+      <select id="context"><option value="general">首次了解 Pro</option><option value="history">查看完整会话</option><option value="connections">添加连接</option><option value="agents">创建 Agent · OpenClaw</option></select>
+      <p class="small-note">切换入口，观察主标题、权益顺序和顶部画面。套餐、关闭和购买按钮均可体验。</p>
+      <a class="research-link" href="research.html">阅读研究与设计取舍 <span>↗</span></a>
+      <p class="prototype-note">交互原型 · 不会发起真实购买<br>价格沿用截图；月付采用仓库示例价。</p>
+    </aside>
+    <section id="gallery" aria-label="付费墙原型"></section>
+  </main>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <script src="art.js"></script>
+  <script src="locales.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

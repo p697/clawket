@@ -23,3 +23,6 @@ apps/mobile/ios/build/
 
 apps/*/wrangler.local.toml
 apps/*/wrangler.*.local.toml
+
+# Clawket 3.0 implementation evidence (local only)
+docs/3.0/evidence/

@@ -1,23 +1,37 @@
 import { useEffect } from 'react';
 import { Platform } from 'react-native';
+import type { ConnectionDescriptor } from '@clawket/agent-protocol';
 import { useAppTheme } from '../theme';
 import { posthogClient } from '../services/analytics/posthog';
-import { resolveGatewayBackendKind, resolveGatewayTransportKind } from '../services/gateway-backends';
+import {
+  buildAnalyticsSuperProperties,
+  REMOVED_ANALYTICS_PERSON_PROPERTIES,
+  REMOVED_ANALYTICS_SUPER_PROPERTIES,
+} from '../services/analytics/super-properties';
 import { StorageService } from '../services/storage';
-import type { GatewayConfig } from '../types';
 
 type Args = {
-  config: GatewayConfig | null;
-  currentAgentId: string;
+  connections: ReadonlyArray<ConnectionDescriptor>;
+  activeConnectionId: string | null;
+  isPro: boolean;
+  graceActive?: boolean;
 };
 
-function resolveGatewayMode(config: GatewayConfig | null): string {
-  if (!config?.url) return 'unconfigured';
-  return `${resolveGatewayBackendKind(config)}:${resolveGatewayTransportKind(config)}`;
-}
+export function usePostHogIdentity({
+  connections,
+  activeConnectionId,
+  isPro,
+  graceActive = false,
+}: Args): void {
+  const { accentId, mode } = useAppTheme();
 
-export function usePostHogIdentity({ config, currentAgentId }: Args): void {
-  const { accentId, mode, resolvedScheme } = useAppTheme();
+  useEffect(() => {
+    const client = posthogClient;
+    if (!client || typeof client.unregister !== 'function') return;
+    void Promise.all(
+      REMOVED_ANALYTICS_SUPER_PROPERTIES.map((property) => client.unregister(property)),
+    ).catch(() => {});
+  }, []);
 
   useEffect(() => {
     const client = posthogClient;
@@ -27,10 +41,10 @@ export function usePostHogIdentity({ config, currentAgentId }: Args): void {
     StorageService.getIdentity()
       .then((identity) => {
         if (cancelled || !identity?.deviceId) return;
-        return client.identify(identity.deviceId, {
-          device_id: identity.deviceId,
-          device_identity_created_at: identity.createdAt,
-        });
+        client.identify(identity.deviceId);
+        if (typeof client.unsetPersonProperties === 'function') {
+          client.unsetPersonProperties([...REMOVED_ANALYTICS_PERSON_PROPERTIES], false);
+        }
       })
       .catch(() => {});
 
@@ -42,14 +56,21 @@ export function usePostHogIdentity({ config, currentAgentId }: Args): void {
   useEffect(() => {
     const client = posthogClient;
     if (!client) return;
-    void client.register({
-      app_platform: Platform.OS,
-      current_agent_id: currentAgentId,
-      gateway_mode: resolveGatewayMode(config),
-      has_gateway_config: Boolean(config?.url),
-      theme_accent_id: accentId,
-      theme_mode: mode,
-      theme_scheme: resolvedScheme,
-    }).catch(() => {});
-  }, [accentId, config?.backendKind, config?.transportKind, config?.mode, config?.url, currentAgentId, mode, resolvedScheme]);
+    void client.register(buildAnalyticsSuperProperties({
+      platform: Platform.OS === 'android' ? 'android' : 'ios',
+      connections,
+      activeConnectionId,
+      isPro,
+      graceActive,
+      themeMode: mode,
+      themeAccentId: accentId,
+    })).catch(() => {});
+  }, [
+    accentId,
+    activeConnectionId,
+    connections,
+    graceActive,
+    isPro,
+    mode,
+  ]);
 }

@@ -1,6 +1,6 @@
 # Local Development
 
-This guide covers local development for the registry worker and relay worker. It does not require any private infrastructure.
+This guide covers local development for the Registry and Relay source workspaces. Their configs select `RELAY_BACKEND=openclaw|hermes`; Production and Preview each deploy isolated service pairs for both backends. Local development does not require private infrastructure.
 
 ## 1. Install Dependencies
 
@@ -129,7 +129,7 @@ These scripts automatically prefer `wrangler.local.toml` when present.
 
 ## 11. Hermes Relay Local Development
 
-Hermes relay uses separate workers and separate Wrangler configs:
+Hermes relay uses the same Registry and Relay source workspaces as OpenClaw, selected by `RELAY_BACKEND=hermes`. It still deploys as separate services with separate Wrangler configs and resources:
 
 ```bash
 npm run relay:dev:hermes-registry
@@ -148,6 +148,7 @@ Important:
 1. Keep Hermes KV and DO resources separate from OpenClaw.
 2. Do not point Hermes local configs at the production OpenClaw registry or relay.
 3. Do not replace the existing OpenClaw workers when testing Hermes relay rollout.
+4. Keep the Registry's `PAIR_REGISTER_LIMITER` binding and SQLite migration in every local config; it enforces the 10-per-hour registration limit without KV counters.
 
 ### Hermes Relay End-To-End Smoke Flow
 
@@ -183,7 +184,7 @@ Recommended manual verification order:
 1. Pair with `bridge:pair:relay:hermes`
 2. Start the bridge-to-relay runtime with `bridge:run:relay:hermes`
 3. Open the saved Hermes connection in Clawket
-4. Verify chat connect, Console entry, and reconnect after background/foreground
+4. Verify chat, supported Agent Settings rows, and reconnect after background/foreground
 
 ### Hermes Relay On A Real Device
 

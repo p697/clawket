@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { listPairPrerequisiteFailures, summarizeDoctorReport, type CliDoctorReport } from './diagnostics.js';
+import {
+  listPairPrerequisiteFailures,
+  normalizeBridgeCapabilities,
+  parseHermesBridgeHealth,
+  summarizeDoctorReport,
+  type CliDoctorReport,
+} from './diagnostics.js';
 import { parseLookbackToMs } from './log-parse.js';
 
 describe('diagnostics helpers', () => {
@@ -97,6 +103,37 @@ describe('diagnostics helpers', () => {
       findings: [],
     });
   });
+
+  it('normalizes capability lists without rejecting future values', () => {
+    expect(normalizeBridgeCapabilities([
+      ' bridge.capabilities.v2 ',
+      'hermes.multi-session.v2',
+      'bridge.capabilities.v2',
+      '',
+      42,
+      'future.bridge-capability.v3',
+    ])).toEqual([
+      'bridge.capabilities.v2',
+      'hermes.multi-session.v2',
+      'future.bridge-capability.v3',
+    ]);
+    expect(normalizeBridgeCapabilities(undefined)).toEqual([]);
+  });
+
+  it('keeps old Hermes health payloads compatible when capabilities are absent', () => {
+    expect(parseHermesBridgeHealth({ hermesApiReachable: true })).toEqual({
+      hermesApiReachable: true,
+      capabilities: [],
+    });
+    expect(parseHermesBridgeHealth({
+      hermesApiReachable: true,
+      capabilities: ['bridge.capabilities.v2', 'hermes.multi-session.v2'],
+    })).toEqual({
+      hermesApiReachable: true,
+      capabilities: ['bridge.capabilities.v2', 'hermes.multi-session.v2'],
+    });
+    expect(parseHermesBridgeHealth(null)).toBeNull();
+  });
 });
 
 function buildReport(overrides: Partial<CliDoctorReport> = {}): CliDoctorReport {
@@ -112,6 +149,7 @@ function buildReport(overrides: Partial<CliDoctorReport> = {}): CliDoctorReport 
     servicePath: '/tmp/service.plist',
     logPath: '/tmp/bridge-cli.log',
     errorLogPath: '/tmp/bridge-cli-error.log',
+    openclawBridgeCapabilities: ['bridge.capabilities.v2'],
     openclawConfigDir: '/tmp/.openclaw',
     openclawMediaDir: '/tmp/.openclaw/media',
     openclawConfigFound: true,
@@ -128,6 +166,7 @@ function buildReport(overrides: Partial<CliDoctorReport> = {}): CliDoctorReport 
     hermesBridgeHealthUrl: 'http://127.0.0.1:4321/health',
     hermesBridgeReachable: true,
     hermesApiReachable: true,
+    hermesBridgeCapabilities: ['bridge.capabilities.v2', 'hermes.multi-session.v2'],
     hermesBridgeRuntimeRunning: true,
     hermesRelayConfigPath: '/tmp/.clawket/hermes-relay.json',
     hermesRelayPaired: true,

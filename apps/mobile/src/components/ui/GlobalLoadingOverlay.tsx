@@ -28,10 +28,10 @@ export function GlobalLoadingOverlay({ visible, message }: Props): React.JSX.Ele
   if (!visible) return null;
 
   const content = (
-    <Animated.View style={[styles.overlay, { opacity, backgroundColor: theme.colors.overlay }]} pointerEvents="auto">
+    <Animated.View style={[styles.overlay, { opacity, backgroundColor: theme.colors.scrim }]} pointerEvents="auto">
       <View style={[styles.card, createSurfaceStyle(theme.colors, theme.scheme, 'overlay')]}>
-        <ActivityIndicator size="small" color={theme.colors.primary} />
-        <Text style={[styles.label, { color: theme.colors.text }]}>{displayMessage}</Text>
+        <ActivityIndicator size="small" color={theme.colors.accent} />
+        <Text style={[styles.label, { color: theme.colors.ink }]}>{displayMessage}</Text>
       </View>
     </Animated.View>
   );
@@ -61,10 +61,10 @@ const styles = StyleSheet.create({
     gap: Space.md,
     paddingHorizontal: Space.xl,
     paddingVertical: Space.lg,
-    borderRadius: Radius.md,
+    borderRadius: Radius.card,
   },
   label: {
-    fontSize: FontSize.base,
+    fontSize: FontSize.secondary,
     fontWeight: FontWeight.semibold,
   },
 });

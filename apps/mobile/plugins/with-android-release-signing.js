@@ -2,6 +2,8 @@ const { withAppBuildGradle, withDangerousMod } = require('expo/config-plugins');
 const fs = require('fs');
 const path = require('path');
 
+const RELEASE_TASK_PREDICATE = 'task.name?.toLowerCase()?.contains("release")';
+
 const SIGNING_BLOCK = `def releaseKeystorePropertiesFile = rootProject.file("app/keystore.properties")
 def releaseKeystoreProperties = new Properties()
 def releaseKeystorePropertiesLoaded = false
@@ -42,7 +44,7 @@ def isEasBuild = (System.getenv("EAS_BUILD") ?: "false").toString().toBoolean()
 
 gradle.taskGraph.whenReady { graph ->
     def releaseTaskRequested = graph.allTasks.any { task ->
-        task.name?.toLowerCase()?.contains("release") || task.name?.toLowerCase()?.contains("bundle")
+        ${RELEASE_TASK_PREDICATE}
     }
 
     if (releaseTaskRequested && !hasReleaseSigningConfig && !allowDebugReleaseSigning && !isEasBuild) {
@@ -72,35 +74,6 @@ const RELEASE_SIGNING_BRANCH = `            if (hasReleaseSigningConfig) {
                 signingConfig signingConfigs.debug
             }`;
 const DEBUG_SIGNING_LINE = `            signingConfig signingConfigs.debug`;
-const MISAPPLIED_BUILD_TYPES_BLOCK = `    buildTypes {
-        debug {
-            if (hasReleaseSigningConfig) {
-                signingConfig signingConfigs.release
-            } else {
-                signingConfig signingConfigs.debug
-            }
-        }
-        release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            if (hasReleaseSigningConfig) {
-                signingConfig signingConfigs.release
-            } else {
-                signingConfig signingConfigs.debug
-            }`;
-
-const CORRECT_BUILD_TYPES_BLOCK = `    buildTypes {
-        debug {
-            signingConfig signingConfigs.debug
-        }
-        release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            if (hasReleaseSigningConfig) {
-                signingConfig signingConfigs.release
-            } else {
-                signingConfig signingConfigs.debug
-            }`;
 
 const KEYSTORE_PROPERTIES_EXAMPLE = `storeFile=/absolute/path/to/clawket-upload.keystore
 storePassword=replace-me
@@ -108,38 +81,66 @@ keyAlias=upload
 keyPassword=replace-me
 `;
 
-function normalizeDebugBuildType(src) {
-  return src.replace(
-    `    buildTypes {
-        debug {
-            if (hasReleaseSigningConfig) {
-                signingConfig signingConfigs.release
-            } else {
-                signingConfig signingConfigs.debug
-            }
-        }
-        release {`,
-    `    buildTypes {
-        debug {
-${DEBUG_SIGNING_LINE}
-        }
-        release {`,
-  );
+function findGroovyBlockRange(src, header, fromIndex = 0) {
+  const headerIndex = src.indexOf(header, fromIndex);
+  if (headerIndex === -1) {
+    throw new Error(`Android build.gradle is missing required block: ${header.trim()}`);
+  }
+
+  const openingBraceIndex = src.indexOf('{', headerIndex + header.length - 1);
+  if (openingBraceIndex === -1) {
+    throw new Error(`Android build.gradle has a malformed block: ${header.trim()}`);
+  }
+
+  let depth = 0;
+  for (let index = openingBraceIndex; index < src.length; index += 1) {
+    if (src[index] === '{') {
+      depth += 1;
+    } else if (src[index] === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        return { start: headerIndex, end: index + 1 };
+      }
+    }
+  }
+
+  throw new Error(`Android build.gradle has an unterminated block: ${header.trim()}`);
 }
 
-function replaceReleaseSigningConfig(src) {
-  return src.replace(
-    /(        release \{\n(?:.*\n)*?)(            signingConfig signingConfigs\.debug)/,
-    (_, prefix) => `${prefix}${RELEASE_SIGNING_BRANCH}`,
-  );
+function updateBuildTypes(src) {
+  const buildTypesRange = findGroovyBlockRange(src, '    buildTypes {');
+  let buildTypesBlock = src.slice(buildTypesRange.start, buildTypesRange.end);
+
+  const debugRange = findGroovyBlockRange(buildTypesBlock, '        debug {');
+  let debugBlock = buildTypesBlock.slice(debugRange.start, debugRange.end);
+  if (debugBlock.includes(RELEASE_SIGNING_BRANCH)) {
+    debugBlock = debugBlock.replace(RELEASE_SIGNING_BRANCH, DEBUG_SIGNING_LINE);
+  }
+  if (!debugBlock.includes(DEBUG_SIGNING_LINE)) {
+    throw new Error('Android debug build type is missing its debug signing config.');
+  }
+  buildTypesBlock = `${buildTypesBlock.slice(0, debugRange.start)}${debugBlock}${buildTypesBlock.slice(debugRange.end)}`;
+
+  const releaseRange = findGroovyBlockRange(buildTypesBlock, '        release {');
+  let releaseBlock = buildTypesBlock.slice(releaseRange.start, releaseRange.end);
+  if (!releaseBlock.includes(RELEASE_SIGNING_BRANCH)) {
+    if (!releaseBlock.includes(DEBUG_SIGNING_LINE)) {
+      throw new Error('Android release build type is missing its signing config anchor.');
+    }
+    releaseBlock = releaseBlock.replace(DEBUG_SIGNING_LINE, RELEASE_SIGNING_BRANCH);
+  }
+  buildTypesBlock = `${buildTypesBlock.slice(0, releaseRange.start)}${releaseBlock}${buildTypesBlock.slice(releaseRange.end)}`;
+
+  return `${src.slice(0, buildTypesRange.start)}${buildTypesBlock}${src.slice(buildTypesRange.end)}`;
 }
 
 function applyReleaseSigningToGradle(src) {
   let next = src;
 
-  next = next.replace(MISAPPLIED_BUILD_TYPES_BLOCK, CORRECT_BUILD_TYPES_BLOCK);
-
   if (!next.includes('def releaseKeystorePropertiesFile = rootProject.file("app/keystore.properties")')) {
+    if (!next.includes('def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()')) {
+      throw new Error('Android build.gradle is missing the projectRoot signing insertion anchor.');
+    }
     next = next.replace(
       'def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()',
       `def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()\n${SIGNING_BLOCK}`,
@@ -147,27 +148,33 @@ function applyReleaseSigningToGradle(src) {
   }
 
   if (!next.includes('if (hasReleaseSigningConfig) {\n            release {')) {
+    const debugSigningConfig = `        debug {
+            storeFile file('debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }`;
+    if (!next.includes(debugSigningConfig)) {
+      throw new Error('Android build.gradle is missing the debug signing config insertion anchor.');
+    }
     next = next.replace(
-      `        debug {
-            storeFile file('debug.keystore')
-            storePassword 'android'
-            keyAlias 'androiddebugkey'
-            keyPassword 'android'
-        }`,
-      `        debug {
-            storeFile file('debug.keystore')
-            storePassword 'android'
-            keyAlias 'androiddebugkey'
-            keyPassword 'android'
-        }
+      debugSigningConfig,
+      `${debugSigningConfig}
 ${SIGNING_CONFIG_BLOCK}`,
     );
   }
 
-  next = normalizeDebugBuildType(next);
-  next = replaceReleaseSigningConfig(next);
+  next = updateBuildTypes(next);
+
+  if (!next.includes(RELEASE_TASK_PREDICATE) || next.includes('contains("bundle")')) {
+    throw new Error('Android release task guard is missing or still matches debug bundle tasks.');
+  }
 
   return next;
+}
+
+function isReleaseTaskName(taskName) {
+  return typeof taskName === 'string' && taskName.toLowerCase().includes('release');
 }
 
 function withAndroidReleaseSigning(config) {
@@ -194,3 +201,5 @@ function withAndroidReleaseSigning(config) {
 }
 
 module.exports = withAndroidReleaseSigning;
+module.exports.applyReleaseSigningToGradle = applyReleaseSigningToGradle;
+module.exports.isReleaseTaskName = isReleaseTaskName;

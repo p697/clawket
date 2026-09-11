@@ -1,5 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  Animated,
+  Easing,
+  FlatList,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { useTranslation } from 'react-i18next';
 import { SlashCommand } from '../../data/slash-commands';
@@ -7,12 +15,18 @@ import { useAppTheme } from '../../theme';
 import {
   FontSize,
   FontWeight,
+  Motion,
   Radius,
   Shadow,
   Space,
-  TimingPreset,
   createThemedShadowStyle,
 } from '../../theme/tokens';
+
+export const SLASH_SUGGESTION_TIMING_CONFIG = {
+  duration: Motion.duration.fast,
+  easing: Easing.out(Easing.cubic),
+  useNativeDriver: true,
+} as const;
 
 type Props = {
   visible: boolean;
@@ -43,6 +57,32 @@ export function SlashSuggestions({ visible, inputValue, suggestions, maxHeight, 
   const { t } = useTranslation('chat');
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme.colors, theme.scheme), [theme]);
+  const translatedDescriptions = useMemo<Record<string, string>>(() => ({
+    'Show session status': t('Show session status'),
+    'Browse and switch models': t('Browse and switch models'),
+    'Compact session context': t('Compact session context'),
+    'Set thinking level (off/low/medium/high)': t('Set thinking level (off/low/medium/high)'),
+    'Toggle fast mode': t('Toggle fast mode'),
+    'Start a new session': t('Start a new session'),
+    'Reset current session': t('Reset current session'),
+    'Stop current generation': t('Stop current generation'),
+    'Toggle reasoning mode': t('Toggle reasoning mode'),
+    'Toggle elevated permissions': t('Toggle elevated permissions'),
+    'Show token usage stats': t('Show token usage stats'),
+    'Show context window usage': t('Show context window usage'),
+    'Show current session info': t('Show current session info'),
+    'List available agents': t('List available agents'),
+    'List all commands': t('List all commands'),
+    'Kill running subagents': t('Kill running subagents'),
+    'Send instruction to a subagent': t('Send instruction to a subagent'),
+    'Send message to another session': t('Send message to another session'),
+    'Text-to-speech': t('Text-to-speech'),
+    'Show or change queue mode': t('Show or change queue mode'),
+    'Show available commands': t('Show available commands'),
+    'Switch to a specific model': t('Switch to a specific model'),
+    'Toggle verbose mode': t('Toggle verbose mode'),
+    'Restart the gateway': t('Restart the gateway'),
+  }), [t]);
   const anim = useRef(new Animated.Value(0)).current;
   const show = visible && suggestions.length > 0;
   const [rendered, setRendered] = useState(show);
@@ -57,16 +97,14 @@ export function SlashSuggestions({ visible, inputValue, suggestions, maxHeight, 
       setRendered(true);
       Animated.timing(anim, {
         toValue: 1,
-        duration: 120,
-        useNativeDriver: true,
+        ...SLASH_SUGGESTION_TIMING_CONFIG,
       }).start();
       return;
     }
 
     Animated.timing(anim, {
       toValue: 0,
-      duration: 80,
-      useNativeDriver: true,
+      ...SLASH_SUGGESTION_TIMING_CONFIG,
     }).start(({ finished }) => {
       if (finished) {
         setRendered(false);
@@ -122,7 +160,9 @@ export function SlashSuggestions({ visible, inputValue, suggestions, maxHeight, 
                   <Text style={styles.command}>{rest}</Text>
                 </Text>
               </View>
-              <Text style={styles.description} numberOfLines={1} ellipsizeMode="tail">{t(item.description)}</Text>
+              <Text style={styles.description} numberOfLines={1} ellipsizeMode="tail">
+                {translatedDescriptions[item.description] ?? item.description}
+              </Text>
             </Pressable>
           );
         }}
@@ -138,15 +178,15 @@ function createStyles(
 ) {
   return StyleSheet.create({
     popup: {
-      borderRadius: Radius.md,
-      backgroundColor: colors.surfaceElevated,
+      borderRadius: Radius.card,
+      backgroundColor: colors.surfaceFloating,
       ...createThemedShadowStyle(colors, scheme, Shadow.sm),
     },
     popupInner: {
-      borderRadius: Radius.md,
+      borderRadius: Radius.card,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
-      backgroundColor: colors.surfaceElevated,
+      borderColor: colors.line,
+      backgroundColor: colors.surfaceFloating,
       overflow: 'hidden',
       paddingTop: Space.xs,
       paddingBottom: Space.xs,
@@ -156,14 +196,14 @@ function createStyles(
       paddingHorizontal: Space.lg - 2,
       paddingVertical: Space.sm,
       justifyContent: 'center',
-      backgroundColor: colors.surfaceElevated,
+      backgroundColor: colors.surfaceFloating,
     },
     rowPressed: {
-      backgroundColor: colors.surfaceMuted,
+      backgroundColor: colors.surface,
     },
     rowDivider: {
       borderBottomWidth: 1,
-      borderBottomColor: colors.border,
+      borderBottomColor: colors.line,
     },
     rowTop: {
       flexDirection: 'row',
@@ -171,19 +211,19 @@ function createStyles(
       justifyContent: 'space-between',
     },
     command: {
-      color: colors.text,
-      fontSize: FontSize.bodySm,
-      fontWeight: FontWeight.bold,
+      color: colors.ink,
+      fontSize: FontSize.secondary,
+      fontWeight: FontWeight.semibold,
       flexShrink: 1,
     },
     commandHighlight: {
-      color: colors.primary,
-      fontSize: FontSize.bodySm,
-      fontWeight: FontWeight.bold,
+      color: colors.accent,
+      fontSize: FontSize.secondary,
+      fontWeight: FontWeight.semibold,
     },
     description: {
-      color: colors.textMuted,
-      fontSize: FontSize.sm,
+      color: colors.inkSecondary,
+      fontSize: FontSize.caption,
       marginTop: 2,
     },
   });

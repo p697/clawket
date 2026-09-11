@@ -1,29 +1,37 @@
 import React, { forwardRef, useMemo } from 'react';
 import {
-  StyleProp,
+  type StyleProp,
+  Platform,
   StyleSheet,
-  TextInput,
-  TextInputProps,
-  TextStyle,
+  type TextInput,
+  Text,
+  type TextStyle,
   View,
-  ViewStyle,
+  type ViewStyle,
 } from 'react-native';
+import { CircleAlert } from 'lucide-react-native';
 import { useAppTheme } from '../../theme';
 import {
   ControlSize,
   FontSize,
+  IconSize,
   LineHeight,
   Radius,
   Space,
   createSurfaceStyle,
 } from '../../theme/tokens';
+import {
+  CompositionSafeTextInput,
+  type CompositionSafeTextInputProps,
+} from './CompositionSafeTextInput';
 
-type Props = Omit<TextInputProps, 'style'> & {
+type Props = Omit<CompositionSafeTextInputProps, 'style'> & {
   containerStyle?: StyleProp<ViewStyle>;
   inputStyle?: StyleProp<TextStyle>;
   invalid?: boolean;
+  errorMessage?: string;
   minHeight?: number;
-  surface?: 'raised' | 'sunken';
+  surface?: 'raised' | 'sunken' | 'quiet';
 };
 
 export const FormTextInput = forwardRef<TextInput, Props>(function FormTextInput(
@@ -31,10 +39,11 @@ export const FormTextInput = forwardRef<TextInput, Props>(function FormTextInput
     containerStyle,
     inputStyle,
     invalid = false,
+    errorMessage,
     minHeight,
     multiline = false,
     placeholderTextColor,
-    surface = 'raised',
+    surface = 'quiet',
     ...rest
   },
   ref,
@@ -44,18 +53,19 @@ export const FormTextInput = forwardRef<TextInput, Props>(function FormTextInput
     () => createStyles(theme.colors, theme.scheme),
     [theme.colors, theme.scheme],
   );
-  return (
+  const field = (
     <View style={[
       styles.field,
-      surface === 'sunken' ? styles.sunken : styles.raised,
-      invalid ? styles.invalid : null,
+      surface === 'quiet' ? styles.quiet : surface === 'sunken' ? styles.sunken : styles.raised,
+      invalid && !errorMessage ? styles.invalid : null,
       containerStyle,
     ]}>
-      <TextInput
+      <CompositionSafeTextInput
         ref={ref}
         {...rest}
+        accessibilityHint={errorMessage ?? rest.accessibilityHint}
         multiline={multiline}
-        placeholderTextColor={placeholderTextColor ?? theme.colors.textSubtle}
+        placeholderTextColor={placeholderTextColor ?? theme.colors.inkTertiary}
         textAlignVertical={multiline ? 'top' : undefined}
         style={[
           styles.input,
@@ -66,6 +76,14 @@ export const FormTextInput = forwardRef<TextInput, Props>(function FormTextInput
       />
     </View>
   );
+  if (!errorMessage) return field;
+  return <View style={styles.stack}>
+    {field}
+    <View accessibilityRole="alert" style={styles.error}>
+      <CircleAlert size={IconSize.sm} color={theme.colors.bad} />
+      <Text style={[styles.errorText, { color: theme.colors.inkSecondary }]}>{errorMessage}</Text>
+    </View>
+  </View>;
 });
 
 function createStyles(
@@ -73,21 +91,30 @@ function createStyles(
   scheme: ReturnType<typeof useAppTheme>['theme']['scheme'],
 ) {
   return StyleSheet.create({
-    field: { borderRadius: Radius.md, overflow: 'hidden' },
+    stack: { gap: Space.sm },
+    error: { flexDirection: 'row', alignItems: 'center', gap: Space.sm, paddingHorizontal: Space.xs },
+    errorText: { flex: 1, fontSize: FontSize.caption, lineHeight: LineHeight.caption },
+    field: { borderRadius: Radius.settingsGroup, overflow: 'hidden' },
+    quiet: { backgroundColor: colors.surface },
     raised: { ...createSurfaceStyle(colors, scheme, 'raised') },
     sunken: {
-      backgroundColor: colors.surfaceMuted,
+      backgroundColor: colors.canvasGrouped,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
+      borderColor: colors.line,
     },
-    invalid: { borderColor: colors.error },
+    invalid: { borderColor: colors.bad },
     input: {
-      color: colors.text,
-      fontSize: FontSize.base,
-      lineHeight: LineHeight.base,
+      color: colors.ink,
+      fontSize: FontSize.secondary,
       paddingHorizontal: Space.md,
     },
-    singleLine: { minHeight: ControlSize.field, paddingVertical: 0 },
-    multiline: { minHeight: 120, paddingVertical: Space.md },
+    // UITextField centers its natural font metrics; a forced paragraph line height
+    // adds baseline slack on iOS. Keep explicit leading only for multiline/Android.
+    singleLine: {
+      minHeight: ControlSize.floatingButton,
+      paddingVertical: 0,
+      ...(Platform.OS === 'ios' ? {} : { lineHeight: LineHeight.secondary }),
+    },
+    multiline: { minHeight: 120, paddingVertical: Space.md, lineHeight: LineHeight.secondary },
   });
 }

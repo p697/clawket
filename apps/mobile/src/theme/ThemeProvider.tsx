@@ -1,26 +1,24 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { Appearance, useColorScheme } from 'react-native';
 import { AccentColorId, ThemeMode } from '../types';
-import { AccentScale, resolveAccentScale } from './accents';
-import { AppTheme, buildTheme, resolveThemeScheme, ThemeScheme } from './theme';
+import { resolveAccentScale } from './accents';
+import { AppTheme, buildInterfaceTheme, resolveThemeScheme, ThemeScheme } from './theme';
 
-type ThemeContextValue = {
+export type ThemeContextValue = {
   theme: AppTheme;
   mode: ThemeMode;
   accentId: AccentColorId;
-  customAccent?: AccentScale | null;
   systemScheme: ThemeScheme;
   resolvedScheme: ThemeScheme;
   setMode: (mode: ThemeMode) => void;
   setAccentId: (accentId: AccentColorId) => void;
 };
 
-const ThemeContext = createContext<ThemeContextValue | null>(null);
+export const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 type Props = {
   mode: ThemeMode;
   accentId: AccentColorId;
-  customAccent?: AccentScale | null;
   setMode: (mode: ThemeMode) => void;
   setAccentId: (accentId: AccentColorId) => void;
   children: React.ReactNode;
@@ -41,7 +39,6 @@ function normalizeScheme(
 export function AppThemeProvider({
   mode,
   accentId,
-  customAccent,
   setMode,
   setAccentId,
   children,
@@ -70,18 +67,17 @@ export function AppThemeProvider({
 
   const value = useMemo<ThemeContextValue>(() => {
     const resolvedScheme = resolveThemeScheme(mode, systemScheme);
-    const accent = resolveAccentScale(accentId, customAccent);
+    const accent = resolveAccentScale(accentId);
     return {
       mode,
       accentId,
-      customAccent,
       systemScheme,
       resolvedScheme,
       setMode,
       setAccentId,
-      theme: buildTheme(mode, systemScheme, accent),
+      theme: buildInterfaceTheme(mode, systemScheme, accent),
     };
-  }, [mode, accentId, customAccent, setMode, setAccentId, systemScheme]);
+  }, [mode, accentId, setMode, setAccentId, systemScheme]);
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }

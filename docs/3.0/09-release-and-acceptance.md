@@ -1,0 +1,120 @@
+# 09 · 发布与验收
+
+## 1. 发布顺序
+
+1. Preview：`relay:deploy:preview-registry` → `relay:deploy:preview-worker` → Hermes Preview 的两个实例；Bridge 用本机 `npm pack` 的 tarball；App 以 Debug 模式指向 Preview。通宵运行到此为止。
+2. 在 Preview 完成 §3 清单（可自动验证的项由实现者做并记录；界面与真机项由人做）。
+3. 人确认 Preview 清单（次日）。
+4. Production 服务端：`relay:deploy:registry` → `relay:deploy:worker` → `relay:deploy:hermes-registry` → `relay:deploy:hermes-worker`（后两者首次由合一代码部署，先 `wrangler versions upload` 再 `deploy`，保留一键回滚到上一版本的命令写进 `PROGRESS.md`）。
+5. 立即用 2.1.x 老 App 在 Production 验证：配对、聊天、重连、Hermes 连接；任一失败 → 回滚到上一版本并记录。
+6. `bridge:publish` 正式版 `@p697/clawket@3.0.0`。
+7. （人）TestFlight / Play 内测提交；商店文案与截图；隐私标签（数据不收集：消息；收集：诊断、使用数据，与用户身份不关联）。
+8. （人）真人验收（§3 清单抽验）。
+9. 双端正式发布；48 小时观察（§4）。
+
+回滚：服务端用 Cloudflare 版本回滚；Bridge 用 npm `latest` 指回旧版；App 无法回滚，所以 App 只在服务端与 Bridge 稳定 48 小时后提交审核。
+
+## 2. 老 App 验证脚本（人手上要有一台装着 2.1.2 的设备）
+
+- 打开 2.1.2 → 连接自动恢复 → 发一条消息 → 收到回复 → 后台 2 分钟回前台 → 仍连接 → 打开 Console 的 Sessions Board → 正常。
+- 2.1.2 扫新版 `clawket pair` 输出的二维码 → 配对成功。
+- Hermes：2.1.2 连新 Bridge → 聊天正常（单会话）。
+
+## 3. 验收清单（实现者做可自动验证的项并记录；界面观感与真机由人）
+
+状态约定：`[x] AUTO` 只表示该行可自动验证的部分已完成，不代表同行的真机、控制台或视觉部分已通过；这些剩余部分显式写作 `HUMAN 待人` 并进入 `PROGRESS.md` 的 HUMAN TODO。纯人类项目保持 `[ ] HUMAN`。机器证据、Preview 版本与回滚锚点见 `PROGRESS.md` 的 M8 完成证据。
+
+### 3.1 首启与连接
+
+- [x] **AUTO 完成；HUMAN 待人：双端卸载重装。** 全新安装打开 → 首启引导（引导期间不弹付费墙）
+- [x] **AUTO 完成；HUMAN 待人：双端真实输入。** 六位码配对 OpenClaw（Relay）→ 连接就绪进花名册 → 弹一次通用版付费墙 → 关闭后 main 线程自动打开（`06` §3 状态机）
+- [x] **AUTO 完成；HUMAN 待人：真机相机与相册。** 二维码扫描（折叠入口）→ 配对成功
+- [x] **AUTO 完成；HUMAN 待人：真实 LAN / Tailscale。** 直连 / Tailscale URL 配对 → 成功
+- [x] **AUTO 完成；HUMAN 待人：真实双 transport 与旧 Bridge。** Hermes 配对（Relay 与本地各一次）→ 成功；老 Bridge 时显示升级提示
+- [x] **AUTO 完成；HUMAN 待人：真实邮箱、账户与 CDN 头像。** YouMind 邮箱验证码登录 → 精灵出现在花名册（名字、头像正确，副标题 YouMind）
+- [x] **AUTO 完成；HUMAN 待人：真实故障复现。** 配对码过期 / Bridge 未运行 / 无网络三种失败分别显示对应文案与动作
+- [x] **AUTO 完成；HUMAN 待人：真机打开链接。** 「还没有 Agent」链接只指向官方文档
+
+### 3.2 花名册
+
+- [x] **AUTO 完成；HUMAN 待人：双主题视觉与触控。** 行内容：头像状态环、名字、预览、时间、未读点、需要你徽标
+- [x] **AUTO 完成；HUMAN 待人：真机多主机时序。** 多连接：其他连接的行显示「上次同步」，无未读；点进去连接并刷新
+- [x] **AUTO 完成；HUMAN 待人：overlay 视觉。** 置顶会话行出现在 Agent 下方，使用 Lucide `Pin`；取消置顶即消失
+- [x] **AUTO 完成；HUMAN 待人：真实计时与重启。** 免费用户：非免费连接整组带锁、免费连接里非 main Agent 带锁，点开分别弹 `gatewayConnections` / `agents`；账户设置里切换免费连接受 24 小时限制；宽限期横幅倒计时正确
+- [x] **AUTO 完成；HUMAN 待人：手势与真实网络。** 下拉刷新；离线横幅；长按菜单
+- [x] **AUTO 完成；HUMAN 待人：完整手势路径。** 「+」：添加连接 → 引导模态；第 2 个连接弹付费墙 `gatewayConnections`
+
+### 3.3 线程
+
+- [x] **AUTO 完成；HUMAN 待人：长名称与实时布局。** 头部胶囊：名字、模型、上下文剩余；运行中变「正在用 …」；离线变灰
+- [x] **AUTO 完成；HUMAN 待人：三后端真机响应。** 发送、流式、停止键中止（三种后端各一次）
+- [x] **AUTO 完成；HUMAN 待人：照片选择/相机与真实交付。** 附件：OpenClaw 与 Hermes 发图成功；YouMind 无附件入口
+- [x] **AUTO 完成；HUMAN 待人：真实任务与日志。** 子 Agent 运行卡出现并可打开；Cron 结果卡出现；失败带查看日志（Pro）
+- [x] **AUTO 完成；HUMAN 待人：真实审批生命周期。** exec 审批卡：允许 / 拒绝 / 长按总是允许；配对请求卡
+- [x] **AUTO 完成；HUMAN 待人：长实时历史。** 上拉加载更早历史；压缩系统事件行
+- [x] **AUTO 完成；HUMAN 待人：真实 Sprite 账户与网络。** YouMind：首次进入自动开场（不显示 WakeUp）；中止；断网后恢复对账
+- [x] **AUTO 完成；HUMAN 待人：真实命令。** Hermes：斜杠命令回执为系统事件行
+- [x] **AUTO 完成；HUMAN 待人：OS 辅助功能视觉检查。** 减动效开启时无位移动画，且跳过会话交叉淡入
+
+### 3.4 会话面板
+
+- [x] **AUTO 完成；HUMAN 待人：密集真实数据视觉。** 分组模式：当前 Agent 展开、其他折叠；五类分节；折叠计数
+- [x] **AUTO 完成；HUMAN 待人：触控与布局。** 列表模式：紧凑行、摘要、类型 chip、搜索
+- [x] **AUTO 完成；HUMAN 待人：破坏性动作 UX。** 长按：置顶到花名册 / 重命名 / 重置 / 删除（二次确认）
+- [x] **AUTO 完成；HUMAN 待人：真实 Hermes 主机。** Hermes 多会话：新建、重命名、删除、切换
+- [x] **AUTO 完成；HUMAN 待人：视觉流畅度。** 切换会话后线程 200 ms 交叉淡入，头部更新；减动效时跳过
+
+### 3.5 设置
+
+- [x] **AUTO 完成；HUMAN 待人：真实值与视觉。** Agent 设置：Agent 组 5 行、连接组 5 行按能力显隐；Hermes 7 行；YouMind 只读身份 + 连接状态，邮箱只在私有 route-scoped Agent Settings 显示
+- [x] **AUTO 完成；HUMAN 待人：真实 OpenClaw/Hermes 各保存一次。** 每个二级页可打开并保存一次：模型、技能（已安装 / 发现 / 安装）、定时（含心跳、创建、运行）、文件（编辑保存 Pro）、用量、OpenClaw 管理四分段（Pro）、工具、渠道与设备（配对请求）、日志（Pro）
+- [x] **AUTO 完成；HUMAN 待人：OS 图标/语音/通知。** 账户设置：Pro 状态、连接增删、主题 / 强调色 / 聊天外观 / 图标（Pro）、语音、通知、帮助链接、社区、关于、开发者（Debug、Preview、设计系统、重置）
+
+### 3.6 搜索
+
+- [x] **AUTO 完成；HUMAN 待人：大型真实 cache。** 全局搜索：Agent / 会话 / 消息 / 收藏分节；消息详情 Pro 门槛；「在线程中查看」跳转正确
+- [x] **AUTO 完成；HUMAN 待人：真机多主机检查。** 面板内搜索限本连接
+
+### 3.7 付费墙
+
+- [x] **AUTO 完成；HUMAN 待人：双端冷启动。** 冷启动后活动连接就绪时弹一次（引导期间、无连接就绪、有待审批时不弹；同进程内重连与后台切回不弹）
+- [x] **AUTO 完成；HUMAN 待人：英雄图视觉签字。** 六个情境触发各一次；英雄图与文案正确
+- [x] **AUTO 完成；HUMAN 待人：控制台本地化商品。** 年付默认选中，折合月价与省百分比正确；展开月付
+- [x] **AUTO 完成；HUMAN 待人：App Store / Play sandbox。** 沙盒购买成功 → 页内成功态 → 自动继续被拦动作；恢复购买；取消不报错
+- [ ] **HUMAN 待人：无安全本地替代。** Android 沙盒购买（license tester）
+
+### 3.8 视觉与双端
+
+- [x] **AUTO 完成；HUMAN 待人：六强调色 × 三主题真机检查。** 浅色 / 深色 / 跟随系统；六种强调色
+- [ ] **HUMAN 待人：无截图/构建可替代主观同屏检查。** iOS 与 Android 同屏对比：头部、花名册行、气泡、面板、设置分组一致
+- [x] **AUTO 完成；HUMAN 待人：渲染确认。** 无分割线、无卡片边框、无 emoji 图标；`check:design-system` 通过
+- [x] **AUTO 完成；HUMAN 待人：本地化截断检查。** 文案预算：每屏默认只有两档字；设置行无副标题、尾值只有一个值；面板行无文字标签；空态与横幅一句话
+- [x] **AUTO 完成 token / 静态规则；HUMAN 待人：整体视觉判断。** 四屏与 `docs/3.0/mockups` 的整体气质一致（白底、浮动控件、方块头像、两层字、颜色只在头像上），尺寸以 token 表为准
+- [x] **AUTO 完成；HUMAN 待人：手势与呈现检查。** 所有页面级返回 / 关闭 / 标题 / Tab / 弹层 / 确认框为自绘组件（`05` §11），无系统导航栏按钮；全 App 的 Tab 都是全圆胶囊 `Segmented`
+- [x] **AUTO 完成；HUMAN 待人：语境与截断。** 六种语言切换无缺 key（strict `i18n-prune` 与缺 key 检查通过：6 locales × 4 namespaces、992 keys / 5,952 translations、missing/removable/dynamic protected 均为 0）
+
+### 3.9 服务端
+
+- [x] **AUTO 完成。** 未知 OpenClaw gatewayId 与 Hermes bridgeId 连 `/ws` 返回 404 且 DO 未创建
+- [x] **AUTO 完成 live 上限与 replay；HUMAN 待人：老/新真机附件端到端。** 9 MiB 帧被拒（1009）；1.5 MB 图片附件经 Relay 正常送达（老客户端与新客户端各一次）
+- [x] **AUTO 完成。** 注册限速在线精确返回 429
+- [x] **AUTO 完成。** Hermes Preview 实例由合一代码提供，心跳 30 秒
+- [x] **AUTO 完成：compat 5 files / 35 tests；HUMAN 待人：已发布 2.1.2 真机脚本。** `test:compat` 全绿；老 App 脚本（§2）通过
+- [ ] **HUMAN 待人：Preview `workers.dev` 无 Production zone WAF；见 `HT-M2-1`。** WAF 四条规则与三条告警已配置（HT-1，人）
+
+### 3.10 减法
+
+- [x] **AUTO 完成。** `metrics:loc`：已报告与基线的差值；高于基线时有说明
+- [x] **AUTO 完成。** knip 报告为空或每条有理由
+- [x] **AUTO 完成。** 删除清单（`10`）全部执行
+- [x] **AUTO 完成。** `check:required`、`test`、`test:compat` 全绿
+
+## 4. 发布后 48 小时
+
+每天记录：`connect_ready` p90、`connect_failed` 按 code、`reconnect` 率、崩溃率（Expo / 商店后台）、`paywall_launch_shown → purchase` 转化、Android 成交率。任何一项相对 Preview 恶化 > 50% → 先修连接稳定性。
+
+## 5. 商店文案（供 HT-5）
+
+- 副标题：OpenClaw 与 Hermes 的手机控制塔
+- 描述首段：看清每个 Agent 在做什么，随时接管。连接你自己电脑上的 OpenClaw 或 Hermes，聊天、管理会话、定时任务、技能与模型；官方 App 用来聊，Clawket 用来管。
+- 隐私：消息只保存在你的设备上；Relay 只转发，不落盘。

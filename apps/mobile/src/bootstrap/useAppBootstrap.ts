@@ -1,13 +1,14 @@
-import { useEffect, useState } from 'react';
-import { GatewayClient } from '../services/gateway';
-import { getGatewayBackendCapabilities, resolveGatewayBackendKind, resolveGlobalMainSessionKey } from '../services/gateway-backends';
-import { resolveGatewayCacheScopeId } from '../services/gateway-cache-scope';
+import { useEffect, useRef, useState } from 'react';
+import {
+  resolveGlobalMainSessionKey,
+  type ConnectionDescriptor,
+} from '@clawket/agent-protocol';
 import { NodeClient } from '../services/node-client';
 import { LastOpenedSessionSnapshot, StorageService } from '../services/storage';
 import { DEFAULT_NODE_CAPABILITY_TOGGLES, NodeCapabilityToggles } from '../services/node-capabilities';
-import { AccentColorId, ChatAppearanceSettings, GatewayConfig, SpeechRecognitionLanguage, ThemeMode } from '../types';
-import { AccentScale, defaultAccentId } from '../theme';
-import { DEFAULT_CHAT_APPEARANCE } from '../features/chat-appearance/defaults';
+import { AccentColorId, ChatAppearanceSettings, SpeechRecognitionLanguage, ThemeMode } from '../types';
+import { defaultAccentId } from '../theme';
+import { DEFAULT_CHAT_APPEARANCE, DEFAULT_CHAT_FONT_SIZE } from '../features/chat-appearance/defaults';
 import {
   buildPrimarySessionPreview,
   PRIMARY_CACHED_AGENT_ID,
@@ -16,11 +17,12 @@ import {
   isBackendScopedMainSessionKey,
   resolveMainSessionKey,
   sanitizeSnapshotForAgent,
-} from '../utils/agent-session-scope';
+} from '../connection/session-scope';
 
 type Props = {
-  gateway: GatewayClient;
   nodeClient: NodeClient;
+  connection: ConnectionDescriptor | null;
+  connectionsInitialized: boolean;
 };
 
 function buildAgentPreview(
@@ -32,7 +34,10 @@ function buildAgentPreview(
     agentAvatarUri?: string;
   } | null,
 ): LastOpenedSessionSnapshot {
-  if (agentId === PRIMARY_CACHED_AGENT_ID) {
+  if (
+    agentId === PRIMARY_CACHED_AGENT_ID
+    && resolveGlobalMainSessionKey(backendKind) === null
+  ) {
     return buildPrimarySessionPreview(identity);
   }
 
@@ -48,50 +53,39 @@ function buildAgentPreview(
   };
 }
 
-export function useAppBootstrap({ gateway, nodeClient }: Props) {
-  const [config, setConfig] = useState<GatewayConfig | null>(null);
-  const [activeGatewayConfigId, setActiveGatewayConfigId] = useState<string | null>(null);
+export function useAppBootstrap({
+  nodeClient,
+  connection,
+  connectionsInitialized,
+}: Props) {
   const [nodeEnabled, setNodeEnabled] = useState(false);
   const [nodeCapabilityToggles, setNodeCapabilityToggles] = useState<NodeCapabilityToggles>(
     DEFAULT_NODE_CAPABILITY_TOGGLES,
   );
   const [debugMode, setDebugMode] = useState(false);
-  const [showAgentAvatar, setShowAgentAvatar] = useState(true);
+  const [showAgentAvatar, setShowAgentAvatar] = useState(false);
   const [showModelUsage, setShowModelUsage] = useState(true);
   const [execApprovalEnabled, setExecApprovalEnabled] = useState(false);
-  const [canvasEnabled, setCanvasEnabled] = useState(true);
-  const [chatFontSize, setChatFontSize] = useState(16);
+  const [chatFontSize, setChatFontSize] = useState(DEFAULT_CHAT_FONT_SIZE);
   const [chatAppearance, setChatAppearance] = useState<ChatAppearanceSettings>(DEFAULT_CHAT_APPEARANCE);
   const [speechRecognitionLanguage, setSpeechRecognitionLanguage] = useState<SpeechRecognitionLanguage>('system');
   const [themeMode, setThemeMode] = useState<ThemeMode>('system');
   const [accentId, setAccentId] = useState<AccentColorId>(defaultAccentId);
-  const [customAccent, setCustomAccent] = useState<AccentScale | null>(null);
   const [loading, setLoading] = useState(true);
   const [initialAgentId, setInitialAgentId] = useState<string | null>(null);
   const [initialChatPreview, setInitialChatPreview] = useState<LastOpenedSessionSnapshot | null>(null);
+  const [preferencesLoaded, setPreferencesLoaded] = useState(false);
+  const [savedCurrentAgentId, setSavedCurrentAgentId] = useState<string | null>(null);
+  const initialSessionHydratedRef = useRef(false);
 
   useEffect(() => {
-    const gatewayConfigsStatePromise = StorageService.getGatewayConfigsState();
-    const configPromise = StorageService.getGatewayConfig();
-    configPromise.then((saved) => {
-      setConfig(saved);
-      gateway.configure(saved);
-      if (saved?.url && getGatewayBackendCapabilities(saved).gatewayConnection) {
-        gateway.connect();
-      }
-    });
-
     Promise.all([
-      gatewayConfigsStatePromise,
-      configPromise,
       StorageService.getDebugMode(),
       StorageService.getShowAgentAvatar(),
       StorageService.getThemeMode(),
       StorageService.getAccentColor(),
-      StorageService.getCustomAccentScale(),
       StorageService.getShowModelUsage(),
       StorageService.getExecApprovalEnabled(),
-      StorageService.getCanvasEnabled(),
       StorageService.getChatFontSize(),
       StorageService.getChatAppearance(),
       StorageService.getSpeechRecognitionLanguage(),
@@ -100,99 +94,105 @@ export function useAppBootstrap({ gateway, nodeClient }: Props) {
       StorageService.getCurrentAgentId(),
     ])
       .then(([
-        gatewayConfigsState,
-        savedConfig,
         debug,
         showAvatar,
         savedThemeMode,
         savedAccentId,
-        savedCustomAccent,
         savedShowModelUsage,
         savedExecApproval,
-        savedCanvasEnabled,
         savedChatFontSize,
         savedChatAppearance,
         savedSpeechRecognitionLanguage,
         savedNodeEnabled,
         savedNodeCapabilityToggles,
-        savedCurrentAgentId,
+        currentAgentId,
       ]) => {
-        const gatewayScopeId = resolveGatewayCacheScopeId({
-          activeConfigId: gatewayConfigsState.activeId,
-          config: savedConfig,
-        });
-        const backendKind = resolveGatewayBackendKind(savedConfig);
-        if (backendKind === 'youmind' && savedConfig?.url && gatewayConfigsState.activeId) {
-          void StorageService.migrateLegacyYouMindState(savedConfig.url, gatewayConfigsState.activeId);
-        }
-        // Hermes phase 1 uses a single global 'main' agent; OpenClaw
-        // restores whichever agent the user had last open. The helper
-        // keeps the dispatch centralized and returns null for OpenClaw
-        // so the legacy fallback path is preserved exactly.
-        const globalMainSessionKey = resolveGlobalMainSessionKey(backendKind);
-        const initialAgent = globalMainSessionKey
-          ?? (savedCurrentAgentId?.trim() || PRIMARY_CACHED_AGENT_ID);
-        setActiveGatewayConfigId(gatewayScopeId);
         setDebugMode(debug);
         setShowAgentAvatar(showAvatar);
         setShowModelUsage(savedShowModelUsage);
         setExecApprovalEnabled(savedExecApproval);
-        setCanvasEnabled(savedCanvasEnabled);
         setChatFontSize(savedChatFontSize);
         setChatAppearance(savedChatAppearance);
         setSpeechRecognitionLanguage(savedSpeechRecognitionLanguage);
         setThemeMode(savedThemeMode);
         setAccentId(savedAccentId);
-        setCustomAccent(savedCustomAccent);
         setNodeEnabled(savedNodeEnabled);
         setNodeCapabilityToggles(savedNodeCapabilityToggles);
-        return StorageService.getLastOpenedSessionSnapshot(gatewayScopeId, initialAgent)
-          .catch(() => null)
-          .then(async (rawSnapshot) => {
-            const snapshot = sanitizeSnapshotForAgent(rawSnapshot, initialAgent, {
-              mainSessionKey: globalMainSessionKey,
-            });
-            const cachedAgentIdentity = await StorageService.getCachedAgentIdentity(
-              gatewayScopeId,
-              initialAgent,
-            ).catch(() => null);
-            const allowCachedIdentityFallback = !isBackendScopedMainSessionKey(globalMainSessionKey) || Boolean(snapshot);
-            setInitialChatPreview(
-              snapshot
-                ? {
-                  ...snapshot,
-                  agentName: snapshot.agentName ?? cachedAgentIdentity?.agentName,
-                  agentEmoji: snapshot.agentEmoji ?? cachedAgentIdentity?.agentEmoji,
-                  agentAvatarUri: snapshot.agentAvatarUri ?? cachedAgentIdentity?.agentAvatarUri,
-                }
-                : buildAgentPreview(
-                  initialAgent,
-                  backendKind,
-                  allowCachedIdentityFallback ? cachedAgentIdentity : null,
-                ),
-            );
-            setInitialAgentId(initialAgent);
-          })
-          .catch(() => {
-            setInitialAgentId(initialAgent);
-          });
+        setSavedCurrentAgentId(currentAgentId);
       })
-      .finally(() => setLoading(false));
+      .finally(() => setPreferencesLoaded(true));
 
     return () => {
-      gateway.disconnect();
       nodeClient.disconnect();
     };
-  }, [gateway, nodeClient]);
+  }, [nodeClient]);
+
+  useEffect(() => {
+    if (
+      !preferencesLoaded
+      || !connectionsInitialized
+      || initialSessionHydratedRef.current
+    ) {
+      return;
+    }
+    initialSessionHydratedRef.current = true;
+
+    const backendKind = connection?.backendKind ?? 'openclaw';
+    const globalMainSessionKey = resolveGlobalMainSessionKey(backendKind);
+    const initialAgent = globalMainSessionKey
+      ?? (savedCurrentAgentId?.trim() || PRIMARY_CACHED_AGENT_ID);
+    const connectionId = connection?.id ?? null;
+
+    if (!connectionId) {
+      setInitialAgentId(initialAgent);
+      setInitialChatPreview(buildAgentPreview(initialAgent, backendKind));
+      setLoading(false);
+      return;
+    }
+
+    void StorageService.getLastOpenedSessionSnapshot(connectionId, initialAgent)
+      .catch(() => null)
+      .then(async (rawSnapshot) => {
+        const snapshot = sanitizeSnapshotForAgent(rawSnapshot, initialAgent, {
+          mainSessionKey: globalMainSessionKey,
+        });
+        const cachedAgentIdentity = await StorageService.getCachedAgentIdentity(
+          connectionId,
+          initialAgent,
+        ).catch(() => null);
+        const allowCachedIdentityFallback = !isBackendScopedMainSessionKey(globalMainSessionKey)
+          || Boolean(snapshot);
+        setInitialChatPreview(
+          snapshot
+            ? {
+              ...snapshot,
+              agentName: snapshot.agentName ?? cachedAgentIdentity?.agentName,
+              agentEmoji: snapshot.agentEmoji ?? cachedAgentIdentity?.agentEmoji,
+              agentAvatarUri: snapshot.agentAvatarUri ?? cachedAgentIdentity?.agentAvatarUri,
+            }
+            : buildAgentPreview(
+              initialAgent,
+              backendKind,
+              allowCachedIdentityFallback ? cachedAgentIdentity : null,
+            ),
+        );
+        setInitialAgentId(initialAgent);
+      })
+      .catch(() => {
+        setInitialAgentId(initialAgent);
+      })
+      .finally(() => setLoading(false));
+  }, [
+    connection,
+    connectionsInitialized,
+    preferencesLoaded,
+    savedCurrentAgentId,
+  ]);
 
   return {
     accentId,
-    activeGatewayConfigId,
-    canvasEnabled,
     chatFontSize,
     chatAppearance,
-    config,
-    customAccent,
     debugMode,
     execApprovalEnabled,
     initialAgentId,
@@ -201,12 +201,8 @@ export function useAppBootstrap({ gateway, nodeClient }: Props) {
     nodeCapabilityToggles,
     nodeEnabled,
     setAccentId,
-    setActiveGatewayConfigId,
-    setCanvasEnabled,
     setChatFontSize,
     setChatAppearance,
-    setConfig,
-    setCustomAccent,
     setDebugMode,
     setExecApprovalEnabled,
     setNodeCapabilityToggles,

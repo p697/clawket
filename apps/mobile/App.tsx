@@ -1,81 +1,96 @@
 import 'react-native-get-random-values';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, AppStateStatus, Platform, StyleSheet, View } from 'react-native';
-import { useTranslation } from 'react-i18next';
+import {
+  ActivityIndicator,
+  Alert,
+  AppState,
+  type AppStateStatus,
+  Linking,
+  Platform,
+  Share,
+  StyleSheet,
+  View,
+} from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as Notifications from 'expo-notifications';
-import {
-  Activity,
-  LayoutGrid,
-  MessageCircle,
-  Settings,
-  SquareTerminal,
-  UserRound,
-  type LucideIcon,
-} from 'lucide-react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   createNavigationContainerRef,
   DarkTheme as NavigationDarkTheme,
   DefaultTheme as NavigationDefaultTheme,
-  LinkingOptions,
   NavigationContainer,
-  NavigatorScreenParams,
+  StackActions,
   NavigationState,
   Theme as NavigationTheme,
 } from '@react-navigation/native';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import {
   createNativeStackNavigator,
-  type NativeStackHeaderProps,
+  type NativeStackScreenProps,
 } from '@react-navigation/native-stack';
-import { ConfigTab } from './src/screens/ConfigScreen/ConfigTab';
-import { ChatTab } from './src/screens/ChatScreen/ChatTab';
-import { ConsoleTab } from './src/screens/ConsoleScreen/ConsoleTab';
-import { ProfileTab } from './src/screens/ProfileScreen/ProfileTab';
-import { OpenClawPermissionsScreen } from './src/screens/ConfigScreen/OpenClawPermissionsScreen';
-import {
-  renderConsoleModalScreens,
-  type ConsoleStackParamList,
-  useConsoleRootModalScreenOptions,
-} from './src/screens/ConsoleScreen/sharedNavigator';
-import { LiveTab } from './src/screens/LiveScreen/LiveTab';
 import { AppContextProvider } from './src/contexts/AppContext';
 import { GlobalLoadingOverlayProvider, useGlobalLoadingOverlay } from './src/contexts/GlobalLoadingOverlayContext';
 import { GatewayScannerProvider } from './src/contexts/GatewayScannerContext';
 import { NodeCameraCaptureProvider } from './src/contexts/NodeCameraCaptureContext';
 import { ProPaywallProvider, useProPaywall } from './src/contexts/ProPaywallContext';
 import { GlobalLoadingOverlay } from './src/components/ui';
+import { DeepLinkConfirmationModal } from './src/components/DeepLinkConfirmationModal';
 import { ProPaywallOverlay } from './src/components/pro/ProPaywallOverlay';
 import { loadAgentAvatars } from './src/services/agent-avatar';
-import * as Linking from 'expo-linking';
-import * as Sharing from 'expo-sharing';
-import { GatewayClient } from './src/services/gateway';
+import {
+  getConnectionRuntime,
+  loadConnectionIdentityDetail,
+  useConnections,
+} from './src/connection';
+import {
+  CAPABILITY_KEYS,
+  resolveCapabilities,
+  type Capabilities,
+} from '@clawket/agent-protocol';
 import { NodeClient } from './src/services/node-client';
 import { dispatchNodeInvoke } from './src/services/node-invoke-dispatcher';
-import { NodeCapabilityToggles } from './src/services/node-capabilities';
+import {
+  NodeCapabilityToggles,
+  shouldStartNodeSidecar,
+} from './src/services/node-capabilities';
 import { shouldProbeGatewayOnForegroundResume } from './src/services/foregroundReconnectPolicy';
-import { shouldRunGatewayKeepAlive } from './src/services/gatewayKeepAlivePolicy';
 import { logAppTelemetry } from './src/services/app-telemetry';
 import {
   extractChatNotificationOpenPayload,
   getChatNotificationResponseIdentifier,
-  initializeChatNotifications,
+  loadChatReplyNotificationsEnabled,
   scheduleChatReplyNotification,
+  setChatReplyNotificationsEnabled,
   shouldShowChatReplyNotification,
 } from './src/services/chat-notifications';
 import { StorageService } from './src/services/storage';
-import { getGatewayBackendCapabilities, resolveGatewayBackendKind, resolveGlobalMainSessionKey } from './src/services/gateway-backends';
-import { resolveGatewayCacheScopeId } from './src/services/gateway-cache-scope';
+import {
+  clearAccountCache,
+  resetAccountDevice,
+} from './src/services/account-maintenance';
+import { resolveGlobalMainSessionKey } from '@clawket/agent-protocol';
+import {
+  SessionPreferencesService,
+  type AgentRosterPreferences,
+} from './src/services/session-preferences';
 import { analyticsEvents } from './src/services/analytics/events';
-import { useDeepLinkHandler, type DeepLinkDeps } from './src/hooks/useDeepLinkHandler';
-import { NativeStackModalHeader } from './src/hooks/useNativeStackModalHeader';
-import { isClawketHandledDeepLink } from './src/services/deepLinks';
+import {
+  requestManualAppReview,
+  scheduleAutomaticAppReviewForColdStart,
+} from './src/services/auto-app-review';
+import i18n from './src/i18n';
+import { useTranslation } from 'react-i18next';
+import {
+  useDeepLinkHandler,
+  type DeepLinkConfirmationRequest,
+  type DeepLinkDeps,
+} from './src/hooks/useDeepLinkHandler';
+import { useProEntitlement } from './src/hooks/useProEntitlement';
 import { usePostHogIdentity } from './src/hooks/usePostHogIdentity';
 import { usePostHogScreenTracking } from './src/hooks/usePostHogScreenTracking';
-import { ChatAppearanceSettings, GatewayConfig, SpeechRecognitionLanguage } from './src/types';
+import { ChatAppearanceSettings, SpeechRecognitionLanguage } from './src/types';
 import type { AgentInfo } from './src/types/agent';
 import { buildTheme, builtInAccents, defaultAccentId, useAppTheme } from './src/theme';
+import { APP_PACKAGE_VERSION } from './src/constants/app-version';
+import { getCurrentAppIconAsync, type AppIconVariant } from './src/services/app-icon';
 import { AppProviders } from './src/bootstrap/AppProviders';
 import { useAppBootstrap } from './src/bootstrap/useAppBootstrap';
 import { getActiveLeafRouteName } from './src/utils/posthog-navigation';
@@ -84,59 +99,118 @@ import {
   isAssistantSilentReplyMessage,
   sanitizeSilentPreviewText,
 } from './src/utils/chat-message';
-import { resolveMainSessionKey } from './src/utils/agent-session-scope';
-import { normalizeAccessibleAgentId } from './src/utils/pro';
-import { getRootTabBarMetrics } from './src/navigation/root-tab-bar';
-import { FontSize, FontWeight, LineHeight, Radius } from './src/theme/tokens';
+import {
+  resolveConnectedThreadTarget,
+  resolveMainSessionKey,
+} from './src/connection/session-scope';
+import {
+  canAddGatewayConnection,
+  canCreateAgent as canCreateProAgent,
+  canUseAgent,
+  canUseConnection,
+  isGraceActive,
+  normalizeProFeature,
+} from './src/utils/pro';
+import type {
+  AccountSettingsSection,
+  AgentSettingsSection,
+  RootStackParamList,
+} from './src/navigation/root-stack';
+import { findAgentChatReturnIndex } from './src/navigation/root-stack';
+import {
+  buildRosterRows,
+  isRosterAgentMuted,
+  renameRosterSession,
+  resolveRosterCreateAgentTarget,
+  RosterScreen,
+  type RosterDisplayRow,
+} from './src/screens/Roster';
+import {
+  findPendingApprovalTarget,
+  isApprovalScanFresh,
+  resolveStartupNavigation,
+  type StartupThreadTarget,
+} from './src/navigation/launch-paywall';
+import {
+  PaywallContinuationCoordinator,
+} from './src/navigation/paywall-continuation';
+import { ThreadScreen } from './src/screens/Thread';
+import {
+  SessionPanel,
+  type SessionPanelAction,
+  type SessionPanelRow,
+} from './src/screens/SessionPanel';
+import {
+  AgentSettingsRuntimeScreen,
+  AgentSettingsRouteLoading,
+  AgentSettingsSectionScreen,
+  type AgentSettingsSectionActionResolver,
+} from './src/screens/AgentSettings';
+import {
+  AccountSettingsScreen,
+  AccountSettingsSectionScreen,
+  ChatAppearanceScreen,
+  HelpCenterScreen,
+  ReleaseNotesHistoryScreen,
+  resolveAccountSettingsRuntimeStatus,
+  type AccountSettingsAction,
+  type AccountSettingsSectionActionRequest,
+} from './src/screens/AccountSettings';
+import { SearchScreen, MessageDetailScreen } from './src/screens/Search';
+import { OnboardingRoute } from './src/screens/Onboarding/OnboardingRoute';
+import { publicAppLinks } from './src/config/public';
+import { CLAWKET_GITHUB_REPO_URL } from './src/config/app-links';
+import type { ProFeature } from './src/utils/pro';
 
-type RootTabParamList = {
-  Chat: undefined;
-  Live: undefined;
-  Console: undefined;
-  Profile: undefined;
-  My: undefined;
-};
-
-type RootStackParamList = {
-  MainTabs: NavigatorScreenParams<RootTabParamList> | undefined;
-  OpenClawPermissions: undefined;
-} & ConsoleStackParamList;
+import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
+import { ConnectionsScreen } from './src/screens/Connection/ConnectionsScreen';
+import { DesignSystemScreen } from './src/screens/AccountSettings/DesignSystemScreen';
+import { ConnectionScreen } from './src/screens/Connection/ConnectionScreen';
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
-const Tab = createBottomTabNavigator<RootTabParamList>();
 const LOADING_THEME = buildTheme('light', 'light', builtInAccents[defaultAccentId]);
+const NO_CAPABILITIES = Object.freeze(Object.fromEntries(
+  CAPABILITY_KEYS.map((capability) => [capability, false]),
+)) as unknown as Capabilities;
 
-const ROOT_TAB_ICON_SIZE = 23;
-
-function renderRootTabIcon(Icon: LucideIcon) {
-  return ({ color, focused }: { color: string; focused: boolean; size: number }) => (
-    <Icon
-      color={color}
-      size={ROOT_TAB_ICON_SIZE}
-      strokeWidth={focused ? 2.35 : 2}
-    />
-  );
-}
-
-const rootTabIcons = {
-  Chat: renderRootTabIcon(MessageCircle),
-  Live: renderRootTabIcon(Activity),
-  ConsoleGrid: renderRootTabIcon(LayoutGrid),
-  ConsoleTerminal: renderRootTabIcon(SquareTerminal),
-  Profile: renderRootTabIcon(UserRound),
-  My: renderRootTabIcon(Settings),
-};
+const ACCOUNT_ACTION_SECTION: Readonly<Partial<Record<
+  AccountSettingsAction,
+  AccountSettingsSection
+>>> = Object.freeze({
+  'theme': 'appearance',
+  'accent': 'appearance',
+  'chat-appearance': 'appearance',
+  'app-icon': 'appearance',
+  'speech-language': 'voice',
+  'help-center': 'help',
+  'openclaw-docs': 'help',
+  'hermes-docs': 'help',
+  'release-notes': 'help',
+  'openclaw-releases': 'help',
+  'feedback': 'help',
+  'share': 'community',
+  'rate': 'community',
+  'discord': 'community',
+  'wecom': 'community',
+  'repository': 'about',
+  'privacy': 'about',
+  'terms': 'about',
+  'preview-environment': 'developer',
+  'design-system': 'developer',
+  'clear-cache': 'developer',
+  'reset-device': 'developer',
+});
 export default function App(): React.JSX.Element {
-  const [gateway] = useState(() => new GatewayClient());
+  const [connectionRuntime] = useState(() => getConnectionRuntime());
+  const connectionSnapshot = useConnections();
+  const activeConnection = connectionSnapshot.connections.find(
+    (connection) => connection.id === connectionSnapshot.activeConnectionId,
+  ) ?? null;
   const [nodeClient] = useState(() => new NodeClient());
   const {
     accentId,
-    activeGatewayConfigId,
-    canvasEnabled,
     chatFontSize,
     chatAppearance,
-    config,
-    customAccent,
     debugMode,
     execApprovalEnabled,
     initialAgentId,
@@ -145,12 +219,8 @@ export default function App(): React.JSX.Element {
     nodeCapabilityToggles,
     nodeEnabled,
     setAccentId,
-    setActiveGatewayConfigId,
-    setCanvasEnabled,
     setChatFontSize,
     setChatAppearance,
-    setConfig,
-    setCustomAccent,
     setDebugMode,
     setExecApprovalEnabled,
     setNodeCapabilityToggles,
@@ -163,12 +233,25 @@ export default function App(): React.JSX.Element {
     showModelUsage,
     speechRecognitionLanguage,
     themeMode,
-  } = useAppBootstrap({ gateway, nodeClient });
+  } = useAppBootstrap({
+    nodeClient,
+    connection: activeConnection,
+    connectionsInitialized: connectionSnapshot.initialized,
+  });
+
+  useEffect(() => {
+    void connectionRuntime.start();
+    return () => { void connectionRuntime.stop(); };
+  }, [connectionRuntime]);
+
+  useEffect(() => {
+    if (!__DEV__) void scheduleAutomaticAppReviewForColdStart();
+  }, []);
 
   if (loading) {
     return (
-      <View style={[loadingStyles.loading, { backgroundColor: LOADING_THEME.colors.background }]}>
-        <ActivityIndicator size="large" color={LOADING_THEME.colors.primary} />
+      <View style={[loadingStyles.loading, { backgroundColor: LOADING_THEME.colors.canvas }]}>
+        <ActivityIndicator size="large" color={LOADING_THEME.colors.accent} />
         <StatusBar style="auto" />
       </View>
     );
@@ -178,21 +261,16 @@ export default function App(): React.JSX.Element {
     <AppProviders
       mode={themeMode}
       accentId={accentId}
-      customAccent={customAccent}
       onModeChange={setThemeMode}
       onAccentChange={setAccentId}
     >
       <ProPaywallProvider>
         <AppContent
-          gateway={gateway}
-          activeGatewayConfigId={activeGatewayConfigId}
           nodeClient={nodeClient}
-          config={config}
           debugMode={debugMode}
           showAgentAvatar={showAgentAvatar}
           showModelUsage={showModelUsage}
           execApprovalEnabled={execApprovalEnabled}
-          canvasEnabled={canvasEnabled}
           nodeEnabled={nodeEnabled}
           nodeCapabilityToggles={nodeCapabilityToggles}
           chatFontSize={chatFontSize}
@@ -216,10 +294,6 @@ export default function App(): React.JSX.Element {
             setExecApprovalEnabled(enabled);
             StorageService.setExecApprovalEnabled(enabled);
           }}
-          onCanvasToggle={(enabled) => {
-            setCanvasEnabled(enabled);
-            StorageService.setCanvasEnabled(enabled);
-          }}
           onNodeEnabledToggle={(enabled) => {
             setNodeEnabled(enabled);
             StorageService.setNodeEnabled(enabled);
@@ -232,34 +306,19 @@ export default function App(): React.JSX.Element {
             setChatFontSize(size);
             StorageService.setChatFontSize(size);
           }}
-          onChatAppearanceChange={(settings) => {
+          onChatAppearanceChange={async (settings) => {
+            await StorageService.setChatAppearance(settings);
             setChatAppearance(settings);
-            StorageService.setChatAppearance(settings);
           }}
           onSpeechRecognitionLanguageChange={(language) => {
             setSpeechRecognitionLanguage(language);
             StorageService.setSpeechRecognitionLanguage(language);
-          }}
-          onSaved={(next, nextGatewayScopeId) => {
-            setConfig(next);
-            gateway.configure(next);
-            setActiveGatewayConfigId(
-              nextGatewayScopeId
-              ?? resolveGatewayCacheScopeId({ config: next }),
-            );
-          }}
-          onReset={() => {
-            setConfig(null);
-            setActiveGatewayConfigId(null);
-            gateway.configure(null);
           }}
         />
       </ProPaywallProvider>
     </AppProviders>
   );
 }
-
-const GATEWAY_KEEPALIVE_INTERVAL_MS = 5_000;
 
 function resolveNodeInvokeSource(req: {
   source?: string;
@@ -274,12 +333,6 @@ function resolveNodeInvokeSource(req: {
   if (req.requestedByDeviceId?.trim()) return `device:${req.requestedByDeviceId.trim()}`;
   if (req.requestedByConnId?.trim()) return `conn:${req.requestedByConnId.trim()}`;
   return 'gateway';
-}
-
-function getMainTabsState(state: NavigationState | undefined): NavigationState | undefined {
-  if (!state) return undefined;
-  const mainTabsRoute = state.routes.find((route) => route.name === 'MainTabs');
-  return mainTabsRoute?.state as NavigationState | undefined;
 }
 
 function agentIdFromSessionKey(sessionKey: string | null | undefined): string | null {
@@ -303,15 +356,11 @@ function resolveAgentNotificationName(sessionKey: string, agents: AgentInfo[], c
 }
 
 type AppContentProps = {
-  gateway: GatewayClient;
-  activeGatewayConfigId: string | null;
   nodeClient: NodeClient;
-  config: GatewayConfig | null;
   debugMode: boolean;
   showAgentAvatar: boolean;
   showModelUsage: boolean;
   execApprovalEnabled: boolean;
-  canvasEnabled: boolean;
   nodeEnabled: boolean;
   nodeCapabilityToggles: NodeCapabilityToggles;
   chatFontSize: number;
@@ -323,26 +372,19 @@ type AppContentProps = {
   onShowAgentAvatarToggle: (show: boolean) => void;
   onShowModelUsageToggle: (enabled: boolean) => void;
   onExecApprovalToggle: (enabled: boolean) => void;
-  onCanvasToggle: (enabled: boolean) => void;
   onNodeEnabledToggle: (enabled: boolean) => void;
   onNodeCapabilityTogglesChange: (toggles: NodeCapabilityToggles) => void;
   onChatFontSizeChange: (size: number) => void;
-  onChatAppearanceChange: (settings: ChatAppearanceSettings) => void;
+  onChatAppearanceChange: (settings: ChatAppearanceSettings) => void | Promise<void>;
   onSpeechRecognitionLanguageChange: (language: SpeechRecognitionLanguage) => void;
-  onSaved: (next: GatewayConfig, nextGatewayScopeId?: string | null) => void;
-  onReset: () => void;
 };
 
 function AppContent({
-  gateway,
-  activeGatewayConfigId,
   nodeClient,
-  config,
   debugMode,
   showAgentAvatar,
   showModelUsage,
   execApprovalEnabled,
-  canvasEnabled,
   nodeEnabled,
   nodeCapabilityToggles,
   chatFontSize,
@@ -354,31 +396,32 @@ function AppContent({
   onShowAgentAvatarToggle,
   onShowModelUsageToggle,
   onExecApprovalToggle,
-  onCanvasToggle,
   onNodeEnabledToggle,
   onNodeCapabilityTogglesChange,
   onChatFontSizeChange,
   onChatAppearanceChange,
   onSpeechRecognitionLanguageChange,
-  onSaved,
-  onReset,
 }: AppContentProps): React.JSX.Element {
-  const { theme } = useAppTheme();
-  const { t } = useTranslation('common');
-  const { isPro } = useProPaywall();
+  const { t: translate } = useTranslation();
+  const { theme, mode: activeThemeMode, accentId: activeAccentId } = useAppTheme();
+  const {
+    isPro,
+    isLoading: accountPermissionsLoading,
+    visible: paywallVisible,
+    hidePaywall,
+    restorePurchases,
+    showPaywall,
+  } = useProPaywall();
+  const connections = useConnections();
   const rootNavigationRef = useMemo(() => createNavigationContainerRef<RootStackParamList>(), []);
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [agentAvatars, setAgentAvatars] = useState<Record<string, string>>({});
   const [currentAgentId, setCurrentAgentIdState] = useState<string>(initialAgentId ?? 'main');
   const [pendingAgentSwitch, setPendingAgentSwitch] = useState<string | null>(null);
-  const [hasUnreadChat, setHasUnreadChat] = useState(false);
-  const [gatewayEpoch, setGatewayEpoch] = useState(0);
   const [foregroundEpoch, setForegroundEpoch] = useState(0);
-  const hasUnreadChatRef = useRef(false);
-  const activeTabRef = useRef<string>('Chat');
+  const activeRouteRef = useRef<keyof RootStackParamList>('Roster');
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const backgroundedAtRef = useRef<number | null>(null);
-  const gatewayKeepAliveTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Load saved agent avatars on mount
   useEffect(() => { loadAgentAvatars().then(setAgentAvatars).catch(() => {}); }, []);
@@ -386,12 +429,6 @@ function AppContent({
     sessionKey: string;
     requestedAt: number;
     sourceRole?: string;
-  } | null>(null);
-  const [chatSidebarRequest, setChatSidebarRequest] = useState<{
-    requestedAt: number;
-    tab: 'sessions' | 'subagents' | 'cron';
-    channel?: string;
-    openDrawer: boolean;
   } | null>(null);
   const [pendingChatNotificationOpen, setPendingChatNotificationOpen] = useState<{
     requestedAt: number;
@@ -402,63 +439,220 @@ function AppContent({
   const [pendingChatInput, setPendingChatInput] = useState<string | null>(null);
   const [pendingMainSessionSwitch, setPendingMainSessionSwitch] = useState(false);
   const [pendingAddGateway, setPendingAddGateway] = useState(false);
+  const [sessionPanelVisible, setSessionPanelVisible] = useState(false);
+  const [threadContext, setThreadContext] = useState<RootStackParamList['Thread'] | null>(null);
+  const [pinnedSessionKeys, setPinnedSessionKeys] = useState<Readonly<
+    Record<string, ReadonlyArray<string>>
+  >>({});
+  const [agentPreferences, setAgentPreferences] = useState<Readonly<
+    Record<string, AgentRosterPreferences>
+  >>({});
+  const [replyNotificationsEnabled, setReplyNotificationsEnabled] = useState(false);
+  const [currentAppIcon, setCurrentAppIcon] = useState<AppIconVariant>('default');
   const [navigationReady, setNavigationReady] = useState(false);
+  const [activeRouteName, setActiveRouteName] = useState<keyof RootStackParamList | null>(null);
+  const [rosterRenderedAt, setRosterRenderedAt] = useState<number | null>(null);
+  const [pendingAutoOpen, setPendingAutoOpen] = useState<StartupThreadTarget | null>(null);
   const handledNotificationResponseIdsRef = useRef(new Set<string>());
+  const paywallContinuationCoordinatorRef = useRef(new PaywallContinuationCoordinator());
+  const rosterViewTrackedRef = useRef(false);
+  const presentPaywall = useCallback((
+    feature: ProFeature,
+    onContinue?: () => void | Promise<void>,
+  ): boolean => {
+    if (paywallVisible) return false;
+    if (isPro) {
+      if (onContinue) void Promise.resolve(onContinue()).catch(() => undefined);
+      return false;
+    }
+    return paywallContinuationCoordinatorRef.current.tryPresent(
+      () => showPaywall(feature),
+      onContinue,
+    );
+  }, [isPro, paywallVisible, showPaywall]);
+  const dismissPaywall = useCallback(() => {
+    paywallContinuationCoordinatorRef.current.clear();
+    hidePaywall();
+  }, [hidePaywall]);
+  const continueAfterPaywall = useCallback(() => {
+    const continuation = paywallContinuationCoordinatorRef.current.take();
+    if (continuation) void Promise.resolve(continuation()).catch(() => undefined);
+  }, []);
+  const {
+    entitlement,
+    loading: entitlementLoading,
+    switching: freeConnectionSwitching,
+    nextFreeConnectionSwitchAt,
+    switchFreeConnection,
+  } = useProEntitlement({
+    isPro,
+    subscriptionLoading: accountPermissionsLoading,
+    connections: connections.connections,
+    activeConnectionId: connections.activeConnectionId,
+    registryFreeConnectionId: connections.freeConnectionId,
+    roster: connections.roster,
+    foregroundEpoch,
+  });
+  const permissionsLoading = accountPermissionsLoading || entitlementLoading;
+  const canAddConnectionWithEntitlement = canAddGatewayConnection(
+    connections.connections.length,
+    entitlement,
+  );
+  const canAccessConnection = useCallback((connectionId: string) => {
+    const connection = connections.connections.find(({ id }) => id === connectionId);
+    return Boolean(connection && canUseConnection(connection, entitlement));
+  }, [connections.connections, entitlement]);
+  const canAccessRosterAgent = useCallback((connectionId: string, targetAgentId: string) => {
+    const connection = connections.connections.find(({ id }) => id === connectionId);
+    if (!connection) return false;
+    if (entitlement.isPro) return true;
+    const agent = connections.roster.find((group) => (
+      group.connection.id === connectionId
+    ))?.agents.find(({ agent: candidate }) => candidate.agentId === targetAgentId)?.agent;
+    return Boolean(agent && canUseAgent(agent, connection, entitlement));
+  }, [connections.connections, connections.roster, entitlement]);
+  const rosterAnalyticsRows = useMemo(() => buildRosterRows(connections.roster, {
+    pinnedSessionKeys,
+    agentPreferences,
+    canAccessAgent: canAccessRosterAgent,
+  }), [agentPreferences, canAccessRosterAgent, connections.roster, pinnedSessionKeys]);
+  const activeConnection = useMemo(() => connections.connections.find(
+    (connection) => connection.id === connections.activeConnectionId,
+  ) ?? null, [connections.activeConnectionId, connections.connections]);
 
   useEffect(() => {
-    initializeChatNotifications();
+    let active = true;
+    void loadChatReplyNotificationsEnabled().then((enabled) => {
+      if (active) setReplyNotificationsEnabled(enabled);
+    });
+    return () => {
+      active = false;
+    };
   }, []);
 
-  // Mark unread when chatFinal arrives while not on Chat tab
   useEffect(() => {
-    if (!getGatewayBackendCapabilities(config).gatewayConnection) {
-      return () => {};
-    }
-    const off = gateway.on('chatFinal', () => {
-      if (activeTabRef.current !== 'Chat') {
-        hasUnreadChatRef.current = true;
-        setHasUnreadChat(true);
-      }
-    });
-    return off;
-  }, [config, gateway]);
+    let active = true;
+    void getCurrentAppIconAsync().then((icon) => {
+      if (active) setCurrentAppIcon(icon);
+    }).catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
 
-  // Track whether a full-bleed WebView screen (e.g. Docs) is active
-  const [isWebViewScreen, setIsWebViewScreen] = useState(false);
-  const { trackInitialScreen, trackScreenState } = usePostHogScreenTracking({
+  const preferenceScopes = useMemo(() => connections.roster.flatMap((group) => (
+    group.agents.map(({ agent }) => ({
+      connectionId: group.connection.id,
+      agentId: agent.agentId,
+    }))
+  )), [connections.roster]);
+
+  useEffect(() => {
+    let active = true;
+    void Promise.all(preferenceScopes.map(async ({ connectionId, agentId }) => {
+      const preferences = await SessionPreferencesService.getAgentPreferences(connectionId, agentId);
+      return [`${connectionId}:${agentId}`, preferences] as const;
+    })).then((entries) => {
+      if (!active) return;
+      setAgentPreferences(Object.fromEntries(entries));
+      setPinnedSessionKeys(Object.fromEntries(entries.map(([scope, preferences]) => (
+        [scope, preferences.pinnedSessionKeys] as const
+      ))));
+    });
+    return () => {
+      active = false;
+    };
+  }, [preferenceScopes]);
+
+  const { trackInitialScreen, trackScreenState, trackManualScreen } = usePostHogScreenTracking({
     rootNavigationRef,
+    activeBackend: activeConnection?.backendKind,
   });
+  const manualScreenVisibilityRef = useRef({ sessionPanel: false, paywall: false });
+
+  useEffect(() => {
+    if (sessionPanelVisible && !manualScreenVisibilityRef.current.sessionPanel) {
+      trackManualScreen('SessionPanel');
+    }
+    manualScreenVisibilityRef.current.sessionPanel = sessionPanelVisible;
+  }, [sessionPanelVisible, trackManualScreen]);
+
+  useEffect(() => {
+    if (paywallVisible && !manualScreenVisibilityRef.current.paywall) {
+      trackManualScreen('Paywall');
+    }
+    manualScreenVisibilityRef.current.paywall = paywallVisible;
+  }, [paywallVisible, trackManualScreen]);
+
+  const activeAdapter = connections.activeAdapter;
+  const activeCapabilities = activeAdapter?.capabilities
+    ?? (activeConnection ? resolveCapabilities(activeConnection.backendKind) : NO_CAPABILITIES);
+
+  useEffect(() => {
+    if (entitlementLoading || entitlement.isPro || isGraceActive(entitlement)) return;
+    if (!activeConnection || canUseConnection(activeConnection, entitlement)) return;
+    const freeConnectionId = entitlement.freeConnectionId;
+    if (!freeConnectionId || freeConnectionId === activeConnection.id) return;
+    void getConnectionRuntime().activate(freeConnectionId).catch(() => undefined);
+  }, [activeConnection, entitlement, entitlementLoading]);
 
   usePostHogIdentity({
-    config,
-    currentAgentId,
+    connections: connections.connections,
+    activeConnectionId: connections.activeConnectionId,
+    isPro,
+    graceActive: isGraceActive(entitlement),
   });
 
-  // Track active tab and clear unread when navigating to Chat
   const handleNavigationStateChange = useCallback((state: NavigationState | undefined) => {
     if (!state) return;
     trackScreenState(state);
-    const mainTabsState = getMainTabsState(state);
-    const activeTabRoute = mainTabsState?.routes[mainTabsState.index ?? 0];
-    if (activeTabRoute) {
-      activeTabRef.current = activeTabRoute.name;
+    const routeName = getActiveLeafRouteName(state);
+    if (routeName) {
+      activeRouteRef.current = routeName as keyof RootStackParamList;
+      setActiveRouteName(routeName as keyof RootStackParamList);
     }
-    if (activeTabRoute?.name === 'Chat' && hasUnreadChatRef.current) {
-      hasUnreadChatRef.current = false;
-      setHasUnreadChat(false);
-    }
-    setIsWebViewScreen(getActiveLeafRouteName(state) === 'Docs');
   }, [trackScreenState]);
 
-  const backendCapabilities = useMemo(() => getGatewayBackendCapabilities(config), [config]);
-  const backendKind = useMemo(() => resolveGatewayBackendKind(config), [config]);
-  const showLiveTab = backendCapabilities.gatewayConnection;
-  const showConsoleTab = backendCapabilities.consoleRoot;
-  const showProfileTab = backendKind === 'youmind';
-  const consoleTabLabel = backendKind === 'youmind' ? t('Workspace') : t('Console');
+  useEffect(() => {
+    if (activeRouteName !== 'Roster') {
+      rosterViewTrackedRef.current = false;
+      return;
+    }
+    if (
+      rosterViewTrackedRef.current
+      || !connections.initialized
+      || (connections.connections.length > 0 && connections.roster.length === 0)
+    ) {
+      return;
+    }
+    rosterViewTrackedRef.current = true;
+    analyticsEvents.rosterViewed({
+      connection_count: connections.connections.length,
+      agent_count: connections.roster.reduce((total, group) => total + group.agents.length, 0),
+      pinned_count: rosterAnalyticsRows.filter((row) => row.kind === 'pinned_session').length,
+      unread_count: connections.roster.reduce((total, group) => (
+        total + group.agents.reduce((subtotal, summary) => subtotal + summary.unreadCount, 0)
+      ), 0),
+      attention_count: connections.roster.reduce((total, group) => (
+        total + group.agents.reduce((subtotal, summary) => subtotal + summary.attentionCount, 0)
+      ), 0),
+    });
+  }, [
+    activeRouteName,
+    connections.connections.length,
+    connections.initialized,
+    connections.roster,
+    rosterAnalyticsRows,
+  ]);
+
   const mainSessionKey = useMemo(
-    () => resolveMainSessionKey(currentAgentId, { mainSessionKey: resolveGlobalMainSessionKey(config) }),
-    [config, currentAgentId],
+    () => connections.roster
+      .find((group) => group.connection.id === activeConnection?.id)
+      ?.agents.find(({ agent }) => agent.agentId === currentAgentId)?.agent.mainSessionKey
+      ?? resolveMainSessionKey(currentAgentId, {
+        mainSessionKey: resolveGlobalMainSessionKey(activeConnection?.backendKind),
+      }),
+    [activeConnection?.id, activeConnection?.backendKind, connections.roster, currentAgentId],
   );
   const isMultiAgent = agents.length > 1;
 
@@ -468,17 +662,23 @@ function AppContent({
   }, []);
 
   useEffect(() => {
-    const normalized = normalizeAccessibleAgentId(currentAgentId, isPro);
-    if (normalized === currentAgentId) return;
-    setCurrentAgentIdState(normalized);
-    StorageService.setCurrentAgentId(normalized);
-  }, [currentAgentId, isPro]);
-
-  useEffect(() => {
-    if (backendKind === 'openclaw' || currentAgentId === 'main') return;
-    setCurrentAgentIdState('main');
-    StorageService.setCurrentAgentId('main');
-  }, [backendKind, currentAgentId]);
+    if (!activeConnection || entitlementLoading) return;
+    const group = connections.roster.find(({ connection }) => connection.id === activeConnection.id);
+    const currentAgent = group?.agents.find(({ agent }) => agent.agentId === currentAgentId)?.agent;
+    if (!currentAgent || canUseAgent(currentAgent, activeConnection, entitlement)) return;
+    const accessibleMain = group?.agents.find(({ agent }) => (
+      agent.isMain && canUseAgent(agent, activeConnection, entitlement)
+    ))?.agent.agentId;
+    if (!accessibleMain || accessibleMain === currentAgentId) return;
+    setCurrentAgentIdState(accessibleMain);
+    StorageService.setCurrentAgentId(accessibleMain);
+  }, [
+    activeConnection,
+    connections.roster,
+    currentAgentId,
+    entitlement,
+    entitlementLoading,
+  ]);
 
   const switchAgent = useCallback((id: string) => {
     setCurrentAgentIdState(id);
@@ -490,54 +690,20 @@ function AppContent({
     setPendingAgentSwitch(null);
   }, []);
 
-  const clearGatewayKeepAliveTimer = useCallback(() => {
-    if (!gatewayKeepAliveTimerRef.current) return;
-    clearInterval(gatewayKeepAliveTimerRef.current);
-    gatewayKeepAliveTimerRef.current = null;
-  }, []);
-
-  const syncGatewayKeepAlive = useCallback(() => {
-    const hasGatewayConfig = Boolean(config?.url) && backendCapabilities.gatewayConnection;
-    const shouldRun = hasGatewayConfig && shouldRunGatewayKeepAlive(gateway.getConnectionState(), appStateRef.current);
-    if (!shouldRun) {
-      clearGatewayKeepAliveTimer();
-      return;
-    }
-    if (gatewayKeepAliveTimerRef.current) return;
-
-    gatewayKeepAliveTimerRef.current = setInterval(() => {
-      const stillRunnable = Boolean(config?.url)
-        && backendCapabilities.gatewayConnection
-        && shouldRunGatewayKeepAlive(gateway.getConnectionState(), appStateRef.current);
-      if (!stillRunnable) {
-        clearGatewayKeepAliveTimer();
-        return;
-      }
-      gateway.request('last-heartbeat', {}).catch(() => {});
-    }, GATEWAY_KEEPALIVE_INTERVAL_MS);
-  }, [backendCapabilities.gatewayConnection, clearGatewayKeepAliveTimer, config?.url, gateway]);
-
-  // Increment gatewayEpoch when connection becomes ready after a switch.
-  // This ensures data-reload effects fire only after the new gateway is connected.
+  // Refresh device-local avatar state once the single active adapter becomes ready.
   const prevReadyRef = useRef(true);
   useEffect(() => {
-    const off = gateway.on('connection', ({ state: connState }) => {
-      if (connState === 'ready') {
-        if (!prevReadyRef.current) {
-          setGatewayEpoch(e => e + 1);
-          loadAgentAvatars().then(setAgentAvatars).catch(() => {});
-        }
-        prevReadyRef.current = true;
-      } else {
-        prevReadyRef.current = false;
+    if (connections.activeState === 'ready') {
+      if (!prevReadyRef.current) {
+        loadAgentAvatars().then(setAgentAvatars).catch(() => {});
       }
-      syncGatewayKeepAlive();
-    });
-    return off;
-  }, [gateway, syncGatewayKeepAlive]);
+      prevReadyRef.current = true;
+      return;
+    }
+    prevReadyRef.current = false;
+  }, [connections.activeConnectionId, connections.activeState]);
 
-  // Restore gateway transport when app returns to foreground.
-  // This avoids stale sockets across all tabs without eagerly fetching tab data.
+  // Ask the coordinator to verify the only live transport after foreground resume.
   useEffect(() => {
     const sub = AppState.addEventListener('change', (nextState: AppStateStatus) => {
       const prevState = appStateRef.current;
@@ -545,22 +711,22 @@ function AppContent({
       logAppTelemetry('app_lifecycle', 'app_state_change', {
         prevState,
         nextState,
-        hasGatewayConfig: Boolean(config?.url),
-        connectionState: gateway.getConnectionState(),
+        hasGatewayConfig: Boolean(connections.activeConnectionId),
+        connectionState: connections.activeState,
       });
 
+      getConnectionRuntime().setAppActive(nextState === 'active');
       if (nextState === 'background' || nextState === 'inactive') {
         backgroundedAtRef.current = Date.now();
-        syncGatewayKeepAlive();
         return;
       }
       if (nextState !== 'active' || prevState === 'active') return;
-      if (!config?.url || !backendCapabilities.gatewayConnection) return;
+      if (!connections.activeConnectionId || !activeAdapter) return;
 
       const awayMs = backgroundedAtRef.current ? Date.now() - backgroundedAtRef.current : 0;
       backgroundedAtRef.current = null;
       setForegroundEpoch((prev) => prev + 1);
-      const state = gateway.getConnectionState();
+      const state = connections.activeState;
       const shouldProbe = shouldProbeGatewayOnForegroundResume({
         platformOs: Platform.OS,
         awayMs,
@@ -573,32 +739,58 @@ function AppContent({
         shouldProbe,
       });
       if (shouldProbe) {
-        void gateway.probeConnection();
+        void getConnectionRuntime().probeActive(undefined, 'foreground');
       }
-      syncGatewayKeepAlive();
     });
     return () => sub.remove();
-  }, [backendCapabilities.gatewayConnection, config?.url, gateway, syncGatewayKeepAlive]);
+  }, [activeAdapter, connections.activeConnectionId, connections.activeState]);
 
+  // The node sidecar receives a defensive credential clone from the registry;
+  // credentials never enter the React connection snapshot.
   useEffect(() => {
-    syncGatewayKeepAlive();
-    return () => {
-      clearGatewayKeepAliveTimer();
-    };
-  }, [clearGatewayKeepAliveTimer, syncGatewayKeepAlive]);
-
-  // NodeClient lifecycle — connect/disconnect based on config + nodeEnabled
-  useEffect(() => {
+    let cancelled = false;
     nodeClient.setCapabilityToggles(nodeCapabilityToggles);
+    nodeClient.disconnect();
+    nodeClient.configure(null);
 
-    if (config?.url && nodeEnabled && backendCapabilities.gatewayConnection) {
-      nodeClient.configure(config);
-      nodeClient.disconnect();
-      nodeClient.connect();
-    } else {
-      nodeClient.disconnect();
+    const connectionId = connections.activeConnectionId;
+    if (!connectionId || !shouldStartNodeSidecar({
+      activeConnectionId: connectionId,
+      activeState: connections.activeState,
+      nodeEnabled,
+      supportsNodes: activeAdapter?.capabilities.nodes === true,
+    })) {
+      return () => {
+        cancelled = true;
+        nodeClient.disconnect();
+      };
     }
-  }, [backendCapabilities.gatewayConnection, nodeClient, config, nodeEnabled, nodeCapabilityToggles]);
+
+    void getConnectionRuntime().getRuntimeConnectionRecord(connectionId)
+      .then((record) => {
+        if (cancelled) return;
+        nodeClient.configure(record);
+        nodeClient.connect();
+      })
+      .catch(() => {
+        if (cancelled) return;
+        nodeClient.configure(null);
+        nodeClient.disconnect();
+      });
+
+    return () => {
+      cancelled = true;
+      nodeClient.disconnect();
+    };
+  }, [
+    activeAdapter,
+    connections.activeConnectionId,
+    connections.activeState,
+    connections.connectionsRevision,
+    nodeCapabilityToggles,
+    nodeClient,
+    nodeEnabled,
+  ]);
 
   // NodeClient invoke dispatch
   useEffect(() => {
@@ -630,8 +822,9 @@ function AppContent({
     agentId?: string;
     runId?: string;
   }) => {
-    if (payload.agentId && payload.agentId !== currentAgentId) {
-      setCurrentAgentId(payload.agentId);
+    const targetAgentId = payload.agentId ?? agentIdFromSessionKey(payload.sessionKey) ?? currentAgentId;
+    if (targetAgentId !== currentAgentId) {
+      setCurrentAgentId(targetAgentId);
     }
     setPendingChatNotificationOpen({
       requestedAt: Date.now(),
@@ -639,13 +832,22 @@ function AppContent({
       agentId: payload.agentId,
       runId: payload.runId,
     });
-    if (navigationReady && rootNavigationRef.isReady()) {
-      rootNavigationRef.navigate('MainTabs', { screen: 'Chat' });
+    if (navigationReady && rootNavigationRef.isReady() && connections.activeConnectionId) {
+      rootNavigationRef.navigate('Thread', {
+        connectionId: connections.activeConnectionId,
+        agentId: targetAgentId,
+        sessionKey: payload.sessionKey,
+        from: 'notification',
+      });
     }
-  }, [currentAgentId, navigationReady, rootNavigationRef, setCurrentAgentId]);
+  }, [connections.activeConnectionId, currentAgentId, navigationReady, rootNavigationRef, setCurrentAgentId]);
 
   useEffect(() => {
-    if (Platform.OS !== 'ios' || !backendCapabilities.gatewayConnection) return;
+    if (
+      Platform.OS !== 'ios'
+      || !activeCapabilities.chat
+      || activeCapabilities.replyNotifications !== true
+    ) return;
 
     const handleNotificationResponse = (
       response: Notifications.NotificationResponse | null | undefined,
@@ -676,24 +878,43 @@ function AppContent({
     return () => {
       subscription.remove();
     };
-  }, [backendCapabilities.gatewayConnection, openChatFromNotification]);
+  }, [activeCapabilities.chat, activeCapabilities.replyNotifications, openChatFromNotification]);
 
   useEffect(() => {
-    if (Platform.OS !== 'ios' || !backendCapabilities.gatewayConnection) return;
+    if (
+      Platform.OS !== 'ios'
+      || !activeAdapter
+      || !activeCapabilities.chat
+      || activeCapabilities.replyNotifications !== true
+    ) return;
 
-    const off = gateway.on('chatFinal', ({ sessionKey, message, runId }) => {
+    const off = activeAdapter.on('update', (update) => {
+      if (update.type !== 'run_finished' || !update.message) return;
+      const { sessionKey, message, runId } = update;
       if (!sessionKey) return;
       if (isAssistantSilentReplyMessage(message)) return;
       const previewText = sanitizeSilentPreviewText(
         extractAssistantDisplayText(message?.content),
       );
       const appState = appStateRef.current;
-      const activeTab = activeTabRef.current;
+      const activeTab = activeRouteRef.current === 'Thread' ? 'Chat' : activeRouteRef.current;
       if (!shouldShowChatReplyNotification({ activeTab, appState })) {
         return;
       }
 
-      const agentId = agentIdFromSessionKey(sessionKey) ?? undefined;
+      const targetAgentId = agentIdFromSessionKey(sessionKey) ?? currentAgentId;
+      if (!connections.activeConnectionId
+        || !canAccessRosterAgent(connections.activeConnectionId, targetAgentId)) {
+        return;
+      }
+      if (isRosterAgentMuted({
+        preferences: agentPreferences,
+        connectionId: connections.activeConnectionId,
+        agentId: targetAgentId,
+      })) {
+        return;
+      }
+      const agentId = targetAgentId || undefined;
       const agentName = resolveAgentNotificationName(sessionKey, agents, currentAgentId);
 
       void scheduleChatReplyNotification({
@@ -714,26 +935,67 @@ function AppContent({
     });
 
     return off;
-  }, [agents, backendCapabilities.gatewayConnection, currentAgentId, gateway]);
+  }, [
+    activeAdapter,
+    activeCapabilities.chat,
+    activeCapabilities.replyNotifications,
+    agentPreferences,
+    agents,
+    canAccessRosterAgent,
+    connections.activeConnectionId,
+    currentAgentId,
+  ]);
 
   useEffect(() => {
-    if (!navigationReady || !pendingChatNotificationOpen) return;
+    if (entitlementLoading || !navigationReady || !pendingChatNotificationOpen) return;
     if (!rootNavigationRef.isReady()) return;
-    rootNavigationRef.navigate('MainTabs', { screen: 'Chat' });
-  }, [navigationReady, pendingChatNotificationOpen, rootNavigationRef]);
+    if (!connections.activeConnectionId) return;
+    const targetAgentId = pendingChatNotificationOpen.agentId
+      ?? agentIdFromSessionKey(pendingChatNotificationOpen.sessionKey)
+      ?? currentAgentId;
+    if (!canAccessRosterAgent(connections.activeConnectionId, targetAgentId)) {
+      const target: RootStackParamList['Thread'] = {
+        connectionId: connections.activeConnectionId,
+        agentId: targetAgentId,
+        sessionKey: pendingChatNotificationOpen.sessionKey,
+        from: 'notification',
+      };
+      setPendingChatNotificationOpen(null);
+      presentPaywall(
+        canAccessConnection(connections.activeConnectionId)
+          ? 'agents'
+          : 'gatewayConnections',
+        () => {
+          if (rootNavigationRef.isReady()) rootNavigationRef.navigate('Thread', target);
+        },
+      );
+      return;
+    }
+    rootNavigationRef.navigate('Thread', {
+      connectionId: connections.activeConnectionId,
+      agentId: targetAgentId,
+      sessionKey: pendingChatNotificationOpen.sessionKey,
+      from: 'notification',
+    });
+  }, [
+    canAccessConnection,
+    canAccessRosterAgent,
+    connections.activeConnectionId,
+    currentAgentId,
+    entitlementLoading,
+    navigationReady,
+    pendingChatNotificationOpen,
+    rootNavigationRef,
+    presentPaywall,
+  ]);
 
   const appContextValue = useMemo(
     () => ({
-      gateway,
-      activeGatewayConfigId,
-      gatewayEpoch,
       foregroundEpoch,
-      config,
       debugMode,
       showAgentAvatar,
       showModelUsage,
       execApprovalEnabled,
-      canvasEnabled,
       nodeEnabled,
       onNodeEnabledToggle,
       nodeCapabilityToggles,
@@ -742,7 +1004,6 @@ function AppContent({
       chatAppearance,
       speechRecognitionLanguage,
       chatSessionRequest,
-      chatSidebarRequest,
       pendingChatNotificationOpen,
       agents,
       agentAvatars,
@@ -760,7 +1021,6 @@ function AppContent({
       onShowAgentAvatarToggle,
       onShowModelUsageToggle,
       onExecApprovalToggle,
-      onCanvasToggle,
       onChatFontSizeChange,
       onChatAppearanceChange,
       requestChatSession: (sessionKey: string, sourceRole?: string) => {
@@ -772,21 +1032,6 @@ function AppContent({
       },
       clearChatSessionRequest: () => {
         setChatSessionRequest(null);
-      },
-      requestChatSidebar: (params?: { tab?: 'sessions' | 'subagents' | 'cron'; channel?: string; openDrawer?: boolean }) => {
-        const normalizedChannel = params?.channel?.trim().toLowerCase() || undefined;
-        setChatSidebarRequest({
-          requestedAt: Date.now(),
-          tab: params?.tab ?? 'sessions',
-          channel: normalizedChannel,
-          openDrawer: params?.openDrawer ?? true,
-        });
-        if (rootNavigationRef.isReady()) {
-          rootNavigationRef.navigate('MainTabs', { screen: 'Chat' });
-        }
-      },
-      clearChatSidebarRequest: () => {
-        setChatSidebarRequest(null);
       },
       requestOpenChatFromNotification: (params: {
         sessionKey: string;
@@ -801,10 +1046,24 @@ function AppContent({
       pendingChatInput,
       pendingMainSessionSwitch,
       requestChatWithInput: (text: string) => {
+        if (!connections.activeConnectionId
+          || !canAccessRosterAgent(connections.activeConnectionId, currentAgentId)) {
+          if (connections.activeConnectionId) {
+            presentPaywall(canAccessConnection(connections.activeConnectionId)
+              ? 'agents'
+              : 'gatewayConnections');
+          }
+          return;
+        }
         setPendingChatInput(text);
         setPendingMainSessionSwitch(true);
-        if (rootNavigationRef.isReady()) {
-          rootNavigationRef.navigate('MainTabs', { screen: 'Chat' });
+        if (rootNavigationRef.isReady() && connections.activeConnectionId) {
+          rootNavigationRef.navigate('Thread', {
+            connectionId: connections.activeConnectionId,
+            agentId: currentAgentId,
+            sessionKey: mainSessionKey,
+            from: 'notification',
+          });
         }
       },
       clearPendingChatInput: () => {
@@ -815,29 +1074,31 @@ function AppContent({
       },
       pendingAddGateway,
       requestAddGateway: () => {
+        if (!canAddConnectionWithEntitlement) {
+          presentPaywall('gatewayConnections', () => setPendingAddGateway(true));
+          return;
+        }
         setPendingAddGateway(true);
       },
       clearPendingAddGateway: () => {
         setPendingAddGateway(false);
       },
       onSpeechRecognitionLanguageChange,
-      onSaved,
-      onReset,
     }),
     [
       agentAvatars,
       agents,
-      activeGatewayConfigId,
-      canvasEnabled,
       chatAppearance,
       chatFontSize,
-      chatSidebarRequest,
-      config,
+      canAddConnectionWithEntitlement,
+      canAccessConnection,
+      canAccessRosterAgent,
+      connections.activeConnectionId,
       currentAgentId,
       debugMode,
       execApprovalEnabled,
-      gateway,
       showAgentAvatar,
+      presentPaywall,
       nodeEnabled,
       nodeCapabilityToggles,
       pendingAddGateway,
@@ -849,7 +1110,6 @@ function AppContent({
       pendingMainSessionSwitch,
       openChatFromNotification,
       onDebugToggle,
-      onCanvasToggle,
       onChatAppearanceChange,
       onChatFontSizeChange,
       onNodeEnabledToggle,
@@ -858,9 +1118,6 @@ function AppContent({
       onSpeechRecognitionLanguageChange,
       onShowAgentAvatarToggle,
       onShowModelUsageToggle,
-      onReset,
-      onSaved,
-      gatewayEpoch,
       foregroundEpoch,
       rootNavigationRef,
       setCurrentAgentId,
@@ -874,255 +1131,1173 @@ function AppContent({
 
   const navigationTheme = useMemo<NavigationTheme>(() => {
     const base = theme.scheme === 'dark' ? NavigationDarkTheme : NavigationDefaultTheme;
-
     return {
       ...base,
       colors: {
         ...base.colors,
-        primary: theme.colors.primary,
-        background: theme.colors.background,
+        primary: theme.colors.accent,
+        background: theme.colors.canvas,
         card: theme.colors.surface,
-        text: theme.colors.text,
-        border: theme.colors.border,
-        notification: theme.colors.primary,
+        text: theme.colors.ink,
+        border: theme.colors.line,
+        notification: theme.colors.accent,
       },
     };
   }, [theme]);
 
-  const insets = useSafeAreaInsets();
-  const rootTabBarMetrics = useMemo(
-    () => getRootTabBarMetrics(Platform.OS, insets.bottom),
-    [insets.bottom],
-  );
-  const rootTabBarBackground = isWebViewScreen
-    ? theme.colors.surfaceElevated
-    : theme.colors.surface;
-  const rootTabBarStyle = useMemo(
-    () => ({
-      backgroundColor: rootTabBarBackground,
-      borderTopColor: theme.colors.border,
-      borderTopWidth: StyleSheet.hairlineWidth,
-      ...(Platform.OS === 'android'
-        ? {
-          height: rootTabBarMetrics.height,
-          paddingTop: rootTabBarMetrics.paddingTop,
-          paddingBottom: rootTabBarMetrics.paddingBottom,
-        }
-        : null),
-    }),
-    [rootTabBarBackground, rootTabBarMetrics, theme.colors.border],
-  );
+  const settingsConnections = useMemo(() => connections.connections.map((connection) => ({
+    ...connection,
+    locked: !canUseConnection(connection, entitlement),
+  })), [connections.connections, entitlement]);
+  const canAddSettingsConnection = canAddConnectionWithEntitlement;
+  const accountSettingsStatus = useMemo(() => resolveAccountSettingsRuntimeStatus({
+    connectionInitialized: connections.initialized,
+    connectionSwitching: connections.switching,
+    connectionCount: settingsConnections.length,
+    activeConnectionId: connections.activeConnectionId,
+    activeState: connections.activeState,
+    connectionErrorCode: connections.error?.operation,
+    permissionsLoading,
+    permissionReason: canAddSettingsConnection ? null : 'gatewayConnections',
+  }), [
+    permissionsLoading,
+    canAddSettingsConnection,
+    connections.activeConnectionId,
+    connections.activeState,
+    connections.error?.operation,
+    connections.initialized,
+    connections.switching,
+    settingsConnections.length,
+  ]);
 
-  // Share intent linking config excludes app-controlled pairing and action links.
-  const shareIntentLinking = useMemo<LinkingOptions<RootStackParamList>>(() => ({
-    prefixes: [Linking.createURL('/')],
-    config: {
-      screens: {
-        MainTabs: {
-          screens: {
-            Chat: 'handle-share',
-          },
-        },
-      },
-    },
-    async getInitialURL() {
-      const url = await Linking.getInitialURL();
-      if (url && isClawketHandledDeepLink(url)) return null;
-      if (url && new URL(url).hostname === 'expo-sharing') {
-        return Linking.createURL('/handle-share');
-      }
-      return url;
-    },
-    subscribe(listener: (url: string) => void) {
-      const sub = Linking.addEventListener('url', ({ url }) => {
-        if (isClawketHandledDeepLink(url)) return;
-        if (new URL(url).hostname === 'expo-sharing') {
-          listener(Linking.createURL('/handle-share'));
-        } else {
-          listener(url);
-        }
-      });
-      return () => sub.remove();
-    },
-  }), []);
-
-  const rootConsoleModalScreenOptions = useConsoleRootModalScreenOptions();
-  const rootModalScreenOptions = useMemo(() => {
-    if (Platform.OS !== 'ios') {
-      return {
-        animation: 'slide_from_right' as const,
-        contentStyle: { backgroundColor: theme.colors.background },
-        headerShown: true,
-        header: (props: NativeStackHeaderProps) => (
-          <NativeStackModalHeader {...props} dismissStyleOverride="close" />
-        ),
-      };
-    }
+  const accountSettingsLabels = useMemo(() => {
+    const themeLabels = {
+      system: i18n.t('Follow System', { ns: 'config' }),
+      light: i18n.t('Light', { ns: 'config' }),
+      dark: i18n.t('Dark', { ns: 'config' }),
+    } as const;
+    const accentLabels = {
+      iceBlue: i18n.t('Blue', { ns: 'config' }),
+      jadeGreen: i18n.t('Green', { ns: 'config' }),
+      oceanTeal: i18n.t('Teal', { ns: 'config' }),
+      sunsetOrange: i18n.t('Orange', { ns: 'config' }),
+      rosePink: i18n.t('Pink', { ns: 'config' }),
+      royalPurple: i18n.t('Purple', { ns: 'config' }),
+    } as const;
+    const speechLabels = {
+      system: i18n.t('Follow System', { ns: 'config' }),
+      en: i18n.t('English', { ns: 'config' }),
+      'zh-Hans': i18n.t('Simplified Chinese', { ns: 'config' }),
+      ja: i18n.t('Japanese', { ns: 'config' }),
+      ko: i18n.t('Korean', { ns: 'config' }),
+      de: i18n.t('German', { ns: 'config' }),
+      es: i18n.t('Spanish', { ns: 'config' }),
+    } as const;
+    const appearanceLabels = {
+      solid: i18n.t('Solid', { ns: 'config' }),
+      soft: i18n.t('Soft', { ns: 'config' }),
+      glass: i18n.t('Glass', { ns: 'config' }),
+    } as const;
     return {
-      animation: 'slide_from_bottom' as const,
-      presentation: 'modal' as const,
-      contentStyle: { backgroundColor: theme.colors.background },
-      gestureEnabled: true,
-      headerShown: true,
-      header: (props: NativeStackHeaderProps) => (
-        <NativeStackModalHeader {...props} dismissStyleOverride="close" />
-      ),
+      theme: themeLabels[activeThemeMode],
+      accent: accentLabels[activeAccentId],
+      chatAppearance: appearanceLabels[chatAppearance.bubbles.style],
+      appIcon: i18n.t(currentAppIcon === 'black' ? 'Dark' : 'Light', { ns: 'config' }),
+      speechLanguage: speechLabels[speechRecognitionLanguage],
+      appVersion: APP_PACKAGE_VERSION,
+      previewEnvironment: i18n.t(debugMode ? 'Preview' : 'Production', { ns: 'config' }),
     };
-  }, [theme.colors.background]);
+  }, [
+    translate,
+    activeAccentId,
+    activeThemeMode,
+    chatAppearance.bubbles.style,
+    currentAppIcon,
+    debugMode,
+    speechRecognitionLanguage,
+  ]);
+
+  const [connectionHosts, setConnectionHosts] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let active = true;
+    void Promise.all(connections.connections.map(async (connection) => {
+      try {
+        const record = await getConnectionRuntime().getRuntimeConnectionRecord(connection.id);
+        return [connection.id, new URL(record.url).host] as const;
+      } catch { return [connection.id, ''] as const; }
+    })).then((entries) => { if (active) setConnectionHosts(Object.fromEntries(entries)); });
+    return () => { active = false; };
+  }, [connections.connections]);
+
+  const settingsSectionConnections = useMemo(() => settingsConnections.map((connection) => ({
+    ...connection,
+    state: connection.id === connections.activeConnectionId ? connections.activeState : 'idle' as const,
+    supportsRelayStats: connection.transportKind === 'relay',
+    serverHost: connectionHosts[connection.id],
+    isFreeConnection: connection.id === entitlement.freeConnectionId,
+    freeSwitchAvailable: nextFreeConnectionSwitchAt === null
+      || entitlement.now >= nextFreeConnectionSwitchAt,
+    freeSwitchStatus: nextFreeConnectionSwitchAt !== null
+      && entitlement.now < nextFreeConnectionSwitchAt
+      ? i18n.t('Available {{time}}', {
+          ns: 'config',
+          time: new Date(nextFreeConnectionSwitchAt).toLocaleString(i18n.language),
+        })
+      : undefined,
+    freeSwitching: freeConnectionSwitching,
+  })), [
+    connections.activeConnectionId,
+    connections.activeState,
+    entitlement.freeConnectionId,
+    entitlement.now,
+    freeConnectionSwitching,
+    nextFreeConnectionSwitchAt,
+    settingsConnections,
+    connectionHosts,
+    translate,
+  ]);
+
+  const graceDaysLeft = isGraceActive(entitlement)
+    ? Math.max(1, Math.ceil(((entitlement.graceUntil ?? entitlement.now) - entitlement.now)
+      / (24 * 60 * 60 * 1_000)))
+    : null;
+  const rosterGraceBanner = graceDaysLeft === null ? undefined : {
+    message: i18n.t('{{count}} days of Pro access left', {
+      ns: 'common',
+      count: graceDaysLeft,
+    }),
+    actionLabel: i18n.t('View Pro', { ns: 'common' }),
+  };
+  const graceAnalyticsRef = useRef<{
+    graceUntil: number | null;
+    wasActive: boolean | null;
+    viewedFor: number | null;
+  }>({ graceUntil: null, wasActive: null, viewedFor: null });
+  useEffect(() => {
+    if (entitlementLoading) return;
+    const active = isGraceActive(entitlement);
+    const previous = graceAnalyticsRef.current;
+    if (active && entitlement.graceUntil !== null && previous.viewedFor !== entitlement.graceUntil) {
+      analyticsEvents.graceBannerViewed({ days_left: graceDaysLeft ?? 1 });
+      previous.viewedFor = entitlement.graceUntil;
+    }
+    if (previous.wasActive === true && !active) {
+      analyticsEvents.graceExpired({ days_left: 0 });
+    }
+    previous.graceUntil = entitlement.graceUntil;
+    previous.wasActive = active;
+  }, [entitlement, entitlementLoading, graceDaysLeft]);
+
+  const pendingApprovalTarget = useMemo(() => findPendingApprovalTarget(
+    connections.roster,
+    connections.activeConnectionId,
+  ), [connections.activeConnectionId, connections.roster]);
+  const activeRosterGroup = connections.roster.find((group) => (
+    group.connection.id === connections.activeConnectionId
+  ));
+  const activeConnectionReadyAt = connections.activeConnectionId
+    ? connections.connectionDetails[connections.activeConnectionId]?.lastReadyAt ?? null
+    : null;
+  const approvalScanReady = isApprovalScanFresh(
+    activeRosterGroup?.source,
+    activeRosterGroup?.syncedAt,
+    activeConnectionReadyAt,
+  );
+
+  useEffect(() => {
+    if (activeRouteName === 'Roster' && rosterRenderedAt === null) {
+      setRosterRenderedAt(Date.now());
+    }
+  }, [activeRouteName, rosterRenderedAt]);
+
+  const openStartupThread = useCallback((target: StartupThreadTarget) => {
+    if (!rootNavigationRef.isReady()) return;
+    activeRouteRef.current = 'Thread';
+    setActiveRouteName('Thread');
+    setPendingAutoOpen(null);
+    rootNavigationRef.navigate('Thread', target);
+  }, [rootNavigationRef]);
+
+  useEffect(() => {
+    if (!navigationReady || activeRouteName !== 'Roster' || paywallVisible) return;
+    const action = resolveStartupNavigation({
+      rosterRendered: rosterRenderedAt !== null,
+      approvalScanReady,
+      activeState: connections.activeState,
+      subscriptionLoading: permissionsLoading,
+      isPro,
+      launchPaywallShownThisProcess: connections.launchPaywallShownThisProcess,
+      pendingAutoOpen,
+      pendingApproval: pendingApprovalTarget,
+    });
+    if (action.type === 'open_thread') {
+      getConnectionRuntime().markLaunchPaywallShown();
+      openStartupThread(action.target);
+    }
+  }, [navigationReady, activeRouteName, paywallVisible, rosterRenderedAt,
+    approvalScanReady, connections.activeState, connections.launchPaywallShownThisProcess,
+    permissionsLoading, isPro, pendingAutoOpen, pendingApprovalTarget, openStartupThread]);
+
+  const handleToggleRosterAgentPinned = useCallback(async (row: RosterDisplayRow) => {
+    if (!canAccessRosterAgent(row.connectionId, row.agentId)) {
+      presentPaywall(canAccessConnection(row.connectionId) ? 'agents' : 'gatewayConnections');
+      return;
+    }
+    const scope = `${row.connectionId}:${row.agentId}`;
+    const preferences = await SessionPreferencesService.toggleAgentPinned(
+      row.connectionId,
+      row.agentId,
+    );
+    setAgentPreferences((current) => ({ ...current, [scope]: preferences }));
+    analyticsEvents.rosterPinToggled({
+      action: row.agentPinned ? 'unpin' : 'pin',
+      kind: 'agent',
+    });
+  }, [canAccessConnection, canAccessRosterAgent, presentPaywall]);
+
+  const handleToggleRosterAgentMuted = useCallback(async (row: RosterDisplayRow) => {
+    if (!canAccessRosterAgent(row.connectionId, row.agentId)) {
+      presentPaywall(canAccessConnection(row.connectionId) ? 'agents' : 'gatewayConnections');
+      return;
+    }
+    const scope = `${row.connectionId}:${row.agentId}`;
+    const preferences = await SessionPreferencesService.toggleAgentMuted(
+      row.connectionId,
+      row.agentId,
+    );
+    setAgentPreferences((current) => ({ ...current, [scope]: preferences }));
+  }, [canAccessConnection, canAccessRosterAgent, presentPaywall]);
+
+  const handleRosterSessionUnpin = useCallback(async (row: RosterDisplayRow) => {
+    if (!canAccessRosterAgent(row.connectionId, row.agentId)) {
+      presentPaywall(canAccessConnection(row.connectionId) ? 'agents' : 'gatewayConnections');
+      return;
+    }
+    const scope = `${row.connectionId}:${row.agentId}`;
+    const keys = await SessionPreferencesService.setPinnedSession(
+      row.connectionId,
+      row.agentId,
+      row.sessionKey,
+      false,
+    );
+    setPinnedSessionKeys((current) => ({ ...current, [scope]: keys }));
+    analyticsEvents.rosterPinToggled({ action: 'unpin', kind: 'session' });
+  }, [canAccessConnection, canAccessRosterAgent, presentPaywall]);
+
+  const handleRosterSessionRename = useCallback(async (
+    row: RosterDisplayRow,
+    title: string,
+  ) => {
+    if (!canAccessRosterAgent(row.connectionId, row.agentId)) {
+      presentPaywall(canAccessConnection(row.connectionId) ? 'agents' : 'gatewayConnections');
+      return;
+    }
+    const adapter = getConnectionRuntime().getAdapter(row.connectionId);
+    await renameRosterSession({
+      adapter,
+      row,
+      title,
+      refreshRoster: () => getConnectionRuntime().refreshRoster(),
+    });
+  }, [canAccessConnection, canAccessRosterAgent, presentPaywall]);
+
+  const handleRosterConnectionRemove = useCallback(async (row: RosterDisplayRow) => {
+    const wasLastConnection = connections.connections.length === 1;
+    const removed = await getConnectionRuntime().removeConnection(row.connectionId);
+    if (!removed || !wasLastConnection || !rootNavigationRef.isReady()) return;
+    rootNavigationRef.reset({
+      index: 0,
+      routes: [{ name: 'Onboarding', params: { presentation: 'root' } }],
+    });
+  }, [connections.connections.length, rootNavigationRef]);
+
+  const handleSessionAction = useCallback(async (
+    row: SessionPanelRow,
+    action: SessionPanelAction,
+    payload?: { title: string },
+  ) => {
+    if (!canAccessRosterAgent(row.connectionId, row.agentId)) {
+      presentPaywall(canAccessConnection(row.connectionId) ? 'agents' : 'gatewayConnections');
+      return;
+    }
+    if (action === 'pin') {
+      const scope = `${row.connectionId}:${row.agentId}`;
+      const keys = await SessionPreferencesService.togglePinnedSession(
+        row.connectionId,
+        row.agentId,
+        row.key,
+      );
+      setPinnedSessionKeys((current) => ({ ...current, [scope]: keys }));
+      return;
+    }
+    const adapter = getConnectionRuntime().getAdapter(row.connectionId);
+    if (!adapter) return;
+    if (action === 'rename' && payload?.title) {
+      await adapter.patchSession?.(row.key, { title: payload.title });
+    }
+    if (action === 'reset') await adapter.resetSession?.(row.key);
+    if (action === 'delete') {
+      await adapter.deleteSession?.(row.key);
+      await SessionPreferencesService.clearSession(row.connectionId, row.agentId, row.key);
+    }
+    await getConnectionRuntime().refreshRoster();
+  }, [canAccessConnection, canAccessRosterAgent, presentPaywall]);
+
+  const openExternalUrl = useCallback((url: string | null | undefined) => {
+    if (url) void Linking.openURL(url).catch(() => undefined);
+  }, []);
+
+  const updateReplyNotifications = useCallback((enabled: boolean) => {
+    setReplyNotificationsEnabled(enabled);
+    void setChatReplyNotificationsEnabled(enabled).catch(() => {
+      setReplyNotificationsEnabled(!enabled);
+    });
+  }, []);
+
+  const handleAccountSectionAction = useCallback((
+    request: AccountSettingsSectionActionRequest,
+    navigation: { navigate: typeof rootNavigationRef.navigate; dispatch: typeof rootNavigationRef.dispatch },
+  ) => {
+    switch (request.action) {
+      case 'set-reply-notifications':
+        updateReplyNotifications(request.enabled === true);
+        return;
+      case 'set-debug-mode':
+        onDebugToggle(request.enabled === true);
+        return;
+      case 'view-pro':
+        presentPaywall('settingsMembershipPreview');
+        return;
+      case 'restore-purchases':
+        void restorePurchases();
+        return;
+      case 'add-connection':
+        navigation.navigate('Onboarding', { presentation: 'modal' });
+        return;
+      case 'chat-appearance':
+        navigation.navigate('ChatAppearance');
+        return;
+      case 'release-notes':
+        navigation.navigate('ReleaseNotes');
+        return;
+      case 'advanced-settings':
+        navigation.dispatch(StackActions.push('AccountSettingsSection', { section: 'developer' }));
+        return;
+      case 'design-system':
+        navigation.navigate('DesignSystem');
+        return;
+      case 'reconnect-connection':
+        if (request.connectionId) {
+          void getConnectionRuntime().reconnectConnection(request.connectionId);
+        }
+        return;
+      case 'set-free-connection':
+        if (request.connectionId) {
+          void switchFreeConnection(request.connectionId).then(async (result) => {
+            if (result.ok) {
+              if (result.changed) await getConnectionRuntime().activate(request.connectionId!);
+              return;
+            }
+            Alert.alert(
+              i18n.t('Unable to switch free connection', { ns: 'config' }),
+              result.reason === 'cooldown' && result.retryAt !== null
+                ? i18n.t('You can switch again at {{time}}.', {
+                    ns: 'config',
+                    time: new Date(result.retryAt).toLocaleString(i18n.language),
+                  })
+                : i18n.t('Please try again later.', { ns: 'common' }),
+            );
+          }).catch(() => {
+            Alert.alert(
+              i18n.t('Unable to switch free connection', { ns: 'config' }),
+              i18n.t('Please try again later.', { ns: 'common' }),
+            );
+          });
+        }
+        return;
+      case 'remove-connection':
+        if (request.connectionId) {
+          const wasLastConnection = connections.connections.length === 1;
+          void getConnectionRuntime().removeConnection(request.connectionId).then((removed) => {
+            if (removed && wasLastConnection && rootNavigationRef.isReady()) {
+              rootNavigationRef.reset({
+                index: 0,
+                routes: [{ name: 'Onboarding', params: { presentation: 'root' } }],
+              });
+            }
+          });
+        }
+        return;
+      case 'help-center':
+        navigation.navigate('HelpCenter');
+        return;
+      case 'wecom':
+        navigation.navigate('HelpCenter', { community: 'wecom' });
+        return;
+      case 'openclaw-docs':
+        openExternalUrl(publicAppLinks.docsUrl ?? 'https://docs.openclaw.ai');
+        return;
+      case 'hermes-docs':
+        openExternalUrl('https://hermes-agent.nousresearch.com/docs/getting-started/quickstart');
+        return;
+      case 'openclaw-releases':
+        openExternalUrl(publicAppLinks.openClawReleasesUrl);
+        return;
+      case 'feedback':
+        openExternalUrl(publicAppLinks.supportEmail ? `mailto:${publicAppLinks.supportEmail}` : null);
+        return;
+      case 'discord':
+        openExternalUrl(publicAppLinks.discordInviteUrl);
+        return;
+      case 'repository':
+        openExternalUrl(CLAWKET_GITHUB_REPO_URL);
+        return;
+      case 'privacy':
+        openExternalUrl(publicAppLinks.privacyPolicyUrl);
+        return;
+      case 'terms':
+        openExternalUrl(publicAppLinks.termsOfUseUrl);
+        return;
+      case 'share':
+        void Share.share({ message: CLAWKET_GITHUB_REPO_URL });
+        return;
+      case 'rate':
+        void requestManualAppReview().then((result) => {
+          analyticsEvents.appRatingTapped({ source: 'config_support', result });
+          if (result === 'unavailable' || result === 'error') {
+            Alert.alert(
+              i18n.t('Unable to open rating', { ns: 'config' }),
+              i18n.t('Rating is temporarily unavailable on this device. Please try again later.', {
+                ns: 'config',
+              }),
+            );
+          }
+        });
+        return;
+      case 'clear-cache':
+        void clearAccountCache().then(() => {
+          Alert.alert(
+            i18n.t('Done', { ns: 'common' }),
+            i18n.t('Cache cleared.', { ns: 'config' }),
+          );
+        });
+        return;
+      case 'reset-device':
+        void (async () => {
+          const runtime = getConnectionRuntime();
+          await resetAccountDevice({
+            connectionIds: connections.connections.map((connection) => connection.id),
+            removeConnection: (connectionId) => runtime.removeConnection(connectionId),
+          });
+          if (rootNavigationRef.isReady()) {
+            rootNavigationRef.reset({
+              index: 0,
+              routes: [{ name: 'Onboarding', params: { presentation: 'root' } }],
+            });
+          }
+        })();
+        return;
+      default:
+        return;
+    }
+  }, [
+    connections.connections,
+    onDebugToggle,
+    openExternalUrl,
+    restorePurchases,
+    rootNavigationRef.navigate,
+    presentPaywall,
+    switchFreeConnection,
+    updateReplyNotifications,
+  ]);
+
+  const resolveAgentSettingsAction = useCallback<AgentSettingsSectionActionResolver>(async (
+    request,
+    context,
+  ) => {
+    if (request.action === 'connection.reconnect') {
+      if (!canAccessRosterAgent(context.connection.id, context.agent.agentId)) {
+        presentPaywall(
+          canAccessConnection(context.connection.id) ? 'agents' : 'gatewayConnections',
+          async () => {
+            await getConnectionRuntime().reconnectConnection(context.connection.id);
+          },
+        );
+        return;
+      }
+      await getConnectionRuntime().reconnectConnection(context.connection.id);
+      return;
+    }
+    if (request.action === 'connection.remove') {
+      const removed = await getConnectionRuntime().removeConnection(context.connection.id);
+      if (!removed || !rootNavigationRef.isReady()) return;
+      if (connections.connections.length === 1) {
+        rootNavigationRef.reset({
+          index: 0,
+          routes: [{ name: 'Onboarding', params: { presentation: 'root' } }],
+        });
+        return;
+      }
+      rootNavigationRef.navigate('Roster');
+    }
+  }, [
+    canAccessConnection,
+    canAccessRosterAgent,
+    connections.connections.length,
+    rootNavigationRef,
+    presentPaywall,
+  ]);
+
+  if (!connections.initialized) {
+    return (
+      <View style={[loadingStyles.loading, { backgroundColor: theme.colors.canvas }]}>
+        <ActivityIndicator size="large" color={theme.colors.accent} />
+        <StatusBar style={theme.scheme === 'dark' ? 'light' : 'dark'} />
+      </View>
+    );
+  }
 
   return (
     <AppContextProvider value={appContextValue}>
-    <GlobalLoadingOverlayProvider>
-    <GatewayScannerProvider>
-    <AppDeepLinkHandler
-      rootNavigationRef={rootNavigationRef}
-      gateway={gateway}
-      mainSessionKey={mainSessionKey}
-      onSaved={onSaved}
-      requestChatSidebar={appContextValue.requestChatSidebar}
-    />
-    <NodeCameraCaptureProvider>
-      <NavigationContainer
-        ref={rootNavigationRef}
-        theme={navigationTheme}
-        linking={shareIntentLinking}
-        onReady={() => {
-          setNavigationReady(true);
-          trackInitialScreen();
-        }}
-        onStateChange={handleNavigationStateChange}
-      >
-        <StatusBar style={theme.scheme === 'dark' ? 'light' : 'dark'} />
-        <RootStack.Navigator
-          screenOptions={{
-            headerShown: false,
-            header: (props: NativeStackHeaderProps) => <NativeStackModalHeader {...props} />,
-            headerBackTitle: '',
-            headerBackButtonDisplayMode: 'minimal',
-          }}
-        >
-          <RootStack.Screen
-            name="MainTabs"
-            options={{
-              headerShown: false,
-              title: '',
-            }}
-          >
-            {() => (
-              <Tab.Navigator
+      <GlobalLoadingOverlayProvider>
+        <GatewayScannerProvider>
+          {!permissionsLoading ? (
+            <AppDeepLinkHandler
+              rootNavigationRef={rootNavigationRef}
+              activeConnectionId={connections.activeConnectionId}
+              activeAdapter={connections.activeAdapter}
+              currentAgentId={currentAgentId}
+              mainSessionKey={mainSessionKey}
+              canAddConnection={canAddSettingsConnection}
+              activeAccessDeniedReason={activeConnection && !canAccessConnection(activeConnection.id)
+                ? 'gatewayConnections'
+                : activeConnection && !canAccessRosterAgent(activeConnection.id, currentAgentId)
+                  ? 'agents'
+                  : null}
+              onOpenPaywall={presentPaywall}
+            />
+          ) : null}
+          <NodeCameraCaptureProvider>
+            <NavigationContainer
+              ref={rootNavigationRef}
+              theme={navigationTheme}
+              onReady={() => {
+                setNavigationReady(true);
+                const routeName = rootNavigationRef.getCurrentRoute()?.name;
+                if (routeName) {
+                  activeRouteRef.current = routeName;
+                  setActiveRouteName(routeName);
+                }
+                trackInitialScreen();
+              }}
+              onStateChange={handleNavigationStateChange}
+            >
+              <BottomSheetModalProvider>
+              <StatusBar style={theme.scheme === 'dark' ? 'light' : 'dark'} />
+              <RootStack.Navigator
+                initialRouteName={connections.connections.length > 0 ? 'Roster' : 'Onboarding'}
                 screenOptions={{
                   headerShown: false,
-                  sceneStyle: { backgroundColor: theme.colors.background },
-                  tabBarActiveTintColor: theme.colors.primary,
-                  tabBarInactiveTintColor: theme.colors.textMuted,
-                  tabBarStyle: rootTabBarStyle,
-                  tabBarLabelStyle: {
-                    fontSize: FontSize.xs,
-                    fontWeight: FontWeight.semibold,
-                    lineHeight: LineHeight.xs,
-                    marginTop: 2,
-                  },
-                  tabBarIconStyle: {
-                    marginTop: 4,
-                    marginBottom: 1,
-                  },
-                  tabBarItemStyle: {
-                    paddingVertical: 0,
-                  },
-                  tabBarBadgeStyle: {
-                    backgroundColor: theme.colors.primary,
-                    borderRadius: Radius.full,
-                    height: 7,
-                    minWidth: 7,
-                    paddingHorizontal: 0,
-                  },
+                  contentStyle: { backgroundColor: theme.colors.canvas },
                 }}
               >
-                <Tab.Screen
-                  name="Chat"
-                  component={ChatTab}
-                  listeners={{
-                    tabPress: () => {
-                      hasUnreadChatRef.current = false;
-                      setHasUnreadChat(false);
-                    },
+                <RootStack.Screen name="Onboarding">
+                  {(props) => (
+                    <OnboardingRoute
+                      {...props}
+                      onViewed={() => analyticsEvents.onboardingViewed({
+                        source: props.route.params?.presentation === 'modal'
+                          ? 'add_connection'
+                          : 'first_run',
+                      })}
+                      onPairingCodeSubmitted={({ lengthOk }) => {
+                        analyticsEvents.pairingCodeSubmitted({ length_ok: lengthOk });
+                      }}
+                      onDocsOpened={(backend) => analyticsEvents.onboardingDocsOpened({ backend })}
+                      onAgentPromptCopied={(backend) => analyticsEvents.onboardingAgentPromptCopied({ backend })}
+                      onScanQrTapped={() => analyticsEvents.gatewayScanQrTapped({
+                        source: props.route.params?.presentation === 'modal'
+                          ? 'add_connection'
+                          : 'first_run',
+                      })}
+                      onOpenPaywall={(reason, onContinue) => presentPaywall(reason, onContinue)}
+                      onConnected={({ connectionId, backendKind }) => {
+                        const rosterGroup = getConnectionRuntime().getSnapshot().roster.find((group) => (
+                          group.connection.id === connectionId
+                        ));
+                        const target = resolveConnectedThreadTarget(
+                          backendKind,
+                          rosterGroup?.agents.map((summary) => summary.agent),
+                        );
+                        setCurrentAgentId(target.agentId);
+                        setPendingAutoOpen({
+                          connectionId,
+                          agentId: target.agentId,
+                          sessionKey: target.sessionKey,
+                          from: 'onboarding',
+                        });
+                        props.navigation.reset({
+                          index: 0,
+                          routes: [{ name: 'Roster' }],
+                        });
+                      }}
+                    />
+                  )}
+                </RootStack.Screen>
+                <RootStack.Screen name="Roster">
+                  {({ navigation }) => (
+                    <RosterScreen
+                      pinnedSessionKeys={pinnedSessionKeys}
+                      agentPreferences={agentPreferences}
+                      canAccessAgent={canAccessRosterAgent}
+                      graceBanner={rosterGraceBanner}
+                      canCreateAgent={activeCapabilities.agentCreate === true
+                        && Boolean(activeAdapter?.management?.agents?.create)}
+                      addConnectionLocked={!canAddSettingsConnection}
+                      canRenamePinnedSession={connections.activeState === 'ready'
+                        && activeCapabilities.sessionRename === true
+                        && Boolean(activeAdapter?.patchSession)}
+                      isPro={isPro}
+                      onOpenAccount={() => navigation.navigate('AccountSettings')}
+                      onSearch={() => navigation.navigate('Search')}
+                      onAdd={() => {
+                        if (!canAddSettingsConnection) {
+                          presentPaywall('gatewayConnections', () => {
+                            navigation.navigate('Onboarding', { presentation: 'modal' });
+                          });
+                          return;
+                        }
+                        navigation.navigate('Onboarding', { presentation: 'modal' });
+                      }}
+                      onCreateAgent={() => {
+                        const target = resolveRosterCreateAgentTarget({
+                          activeConnectionId: connections.activeConnectionId,
+                          currentAgentId,
+                          roster: connections.roster,
+                        });
+                        if (!target) return;
+                        const openCreateAgent = () => navigation.navigate('AgentSettingsSection', {
+                          connectionId: target.connectionId,
+                          agentId: target.agentId,
+                          section: 'identity',
+                          action: 'create-agent',
+                        });
+                        if (!canCreateProAgent(entitlement)) {
+                          presentPaywall('agents', openCreateAgent);
+                          return;
+                        }
+                        openCreateAgent();
+                      }}
+                      onCreateAgentLocked={() => {
+                        const target = resolveRosterCreateAgentTarget({
+                          activeConnectionId: connections.activeConnectionId,
+                          currentAgentId,
+                          roster: connections.roster,
+                        });
+                        presentPaywall('agents', target ? () => {
+                          navigation.navigate('AgentSettingsSection', {
+                            connectionId: target.connectionId,
+                            agentId: target.agentId,
+                            section: 'identity',
+                            action: 'create-agent',
+                          });
+                        } : undefined);
+                      }}
+                      onOpenRow={(row: RosterDisplayRow) => {
+                        analyticsEvents.rosterRowOpened({
+                          kind: row.kind,
+                          unread: row.unreadCount > 0,
+                          attention: Boolean(row.attention),
+                          locked: row.locked,
+                          cached: row.cached,
+                        });
+                        if (!canAccessRosterAgent(row.connectionId, row.agentId)) {
+                          presentPaywall(
+                            canAccessConnection(row.connectionId) ? 'agents' : 'gatewayConnections',
+                            () => navigation.navigate('Thread', {
+                              connectionId: row.connectionId,
+                              agentId: row.agentId,
+                              sessionKey: row.sessionKey,
+                              from: 'roster',
+                            }),
+                          );
+                          return;
+                        }
+                        navigation.navigate('Thread', {
+                          connectionId: row.connectionId,
+                          agentId: row.agentId,
+                          sessionKey: row.sessionKey,
+                          from: 'roster',
+                        });
+                      }}
+                      onOpenLockedRow={(row: RosterDisplayRow) => {
+                        analyticsEvents.rosterRowOpened({
+                          kind: row.kind,
+                          unread: row.unreadCount > 0,
+                          attention: Boolean(row.attention),
+                          locked: true,
+                          cached: row.cached,
+                        });
+                        presentPaywall(
+                          canAccessConnection(row.connectionId) ? 'agents' : 'gatewayConnections',
+                          () => navigation.navigate('Thread', {
+                            connectionId: row.connectionId,
+                            agentId: row.agentId,
+                            sessionKey: row.sessionKey,
+                            from: 'roster',
+                          }),
+                        );
+                      }}
+                      onToggleAgentPinned={handleToggleRosterAgentPinned}
+                      onToggleAgentMuted={handleToggleRosterAgentMuted}
+                      onRemoveConnection={handleRosterConnectionRemove}
+                      onUnpinSession={handleRosterSessionUnpin}
+                      onRenameSession={handleRosterSessionRename}
+                      onGraceAction={() => presentPaywall('settingsMembershipPreview')}
+                      onOpenPro={() => presentPaywall('settingsMembershipPreview')}
+                    />
+                  )}
+                </RootStack.Screen>
+                <RootStack.Screen name="Thread">
+                  {(props) => (
+                    <ThreadScreen
+                      {...props}
+                      sessionHistoryGraceActive={isGraceActive(entitlement)}
+                      locked={!canAccessRosterAgent(
+                        props.route.params.connectionId,
+                        props.route.params.agentId,
+                      )}
+                      lockedReason={canAccessConnection(props.route.params.connectionId)
+                        ? 'agents'
+                        : 'gatewayConnections'}
+                      onOpenSessionPanel={() => {
+                        if (!canAccessRosterAgent(
+                          props.route.params.connectionId,
+                          props.route.params.agentId,
+                        )) {
+                          presentPaywall(
+                            canAccessConnection(props.route.params.connectionId)
+                              ? 'agents'
+                              : 'gatewayConnections',
+                            () => {
+                              setThreadContext(props.route.params);
+                              setSessionPanelVisible(true);
+                            },
+                          );
+                          return;
+                        }
+                        setThreadContext(props.route.params);
+                        setSessionPanelVisible(true);
+                      }}
+                      onOpenRunSession={(sessionKey, agentId, _kind, runContext) => {
+                        const targetAgentId = agentId ?? props.route.params.agentId;
+                        if (!canAccessRosterAgent(props.route.params.connectionId, targetAgentId)) {
+                          presentPaywall(
+                            canAccessConnection(props.route.params.connectionId)
+                              ? 'agents'
+                              : 'gatewayConnections',
+                            () => {
+                              const target: RootStackParamList['Thread'] = {
+                                connectionId: props.route.params.connectionId,
+                                agentId: targetAgentId,
+                                sessionKey,
+                                runContext,
+                                from: 'panel',
+                              };
+                              setThreadContext(target);
+                              setCurrentAgentId(target.agentId);
+                              props.navigation.push('Thread', target);
+                            },
+                          );
+                          return;
+                        }
+                        const target: RootStackParamList['Thread'] = {
+                          connectionId: props.route.params.connectionId,
+                          agentId: targetAgentId,
+                          sessionKey,
+                          runContext,
+                          from: 'panel',
+                        };
+                        setThreadContext(target);
+                        setCurrentAgentId(target.agentId);
+                        props.navigation.push('Thread', target);
+                      }}
+                      onOpenRunLogs={(_sessionKey, agentId) => {
+                        props.navigation.push('AgentSettingsSection', {
+                          connectionId: props.route.params.connectionId,
+                          agentId: agentId ?? props.route.params.agentId,
+                          section: 'logs',
+                        });
+                      }}
+                      onThreadOpened={setThreadContext}
+                    />
+                  )}
+                </RootStack.Screen>
+                <RootStack.Screen name="AgentSettings">
+                  {({ navigation, route }) => {
+                    const group = connections.roster.find((candidate) => (
+                      candidate.connection.id === route.params.connectionId
+                    ));
+                    const connection = connections.connections.find((candidate) => (
+                      candidate.id === route.params.connectionId
+                    )) ?? group?.connection;
+                    const agent = group?.agents.find((candidate) => (
+                      candidate.agent.agentId === route.params.agentId
+                    ))?.agent ?? null;
+                    const adapter = connections.activeConnectionId === route.params.connectionId
+                      ? connections.activeAdapter
+                      : null;
+                    if (!connection) {
+                      return <AgentSettingsRouteLoading onBack={navigation.goBack} />;
+                    }
+                    const permissionDenied = Boolean(agent && !canAccessRosterAgent(
+                      connection.id,
+                      agent.agentId,
+                    ));
+                    return (
+                      <AgentSettingsRuntimeScreen
+                        adapter={adapter}
+                        connection={connection}
+                        agent={agent}
+                        capabilities={adapter?.capabilities ?? resolveCapabilities(connection.backendKind)}
+                        isPro={isPro}
+                        loadIdentityDetail={loadConnectionIdentityDetail}
+                        permissionDenied={permissionDenied}
+                        onBack={navigation.goBack}
+                        onContinueChat={() => {
+                          if (!agent) return;
+                          const state = navigation.getState();
+                          const previous = findAgentChatReturnIndex(state, connection.id, agent.agentId);
+                          if (previous >= 0) navigation.pop(state.index - previous);
+                          else navigation.navigate('Thread', { connectionId: connection.id, agentId: agent.agentId, sessionKey: agent.mainSessionKey, from: 'roster' });
+                        }}
+                        onNavigate={(name, params) => {
+                          if (params.section === 'connection') navigation.navigate('Connection', { connectionId: params.connectionId });
+                          else navigation.navigate(name, params);
+                        }}
+                        onOpenPro={(section, onContinue) => presentPaywall(
+                          permissionDenied
+                            ? (canAccessConnection(connection.id) ? 'agents' : 'gatewayConnections')
+                            : resolveAgentPaywallFeature(section),
+                          onContinue,
+                        )}
+                        onRetry={() => {
+                          if (!canAccessRosterAgent(connection.id, agent?.agentId ?? route.params.agentId)) {
+                            presentPaywall(
+                              canAccessConnection(connection.id) ? 'agents' : 'gatewayConnections',
+                              async () => {
+                                await getConnectionRuntime().activate(connection.id);
+                                await getConnectionRuntime().probeActive();
+                              },
+                            );
+                            return;
+                          }
+                          void getConnectionRuntime().activate(connection.id)
+                            .then(() => getConnectionRuntime().probeActive());
+                        }}
+                      />
+                    );
                   }}
-                  options={{
-                    tabBarLabel: t('Chat'),
-                    tabBarBadge: hasUnreadChat ? '' : undefined,
-                    tabBarIcon: rootTabIcons.Chat,
+                </RootStack.Screen>
+                <RootStack.Screen name="AgentSettingsSection">
+                  {(props) => {
+                    const permissionDenied = !canAccessRosterAgent(
+                      props.route.params.connectionId,
+                      props.route.params.agentId,
+                    );
+                    return (
+                      <AgentSettingsSectionScreen
+                        {...props}
+                        isPro={isPro}
+                        permissionDenied={permissionDenied}
+                        resolveAction={resolveAgentSettingsAction}
+                        onOpenPaywall={(reason, onContinue) => presentPaywall(
+                          permissionDenied
+                            ? (canAccessConnection(props.route.params.connectionId)
+                              ? 'agents'
+                              : 'gatewayConnections')
+                            : normalizePaywallFeature(reason),
+                          onContinue,
+                        )}
+                      />
+                    );
                   }}
+                </RootStack.Screen>
+                <RootStack.Screen name="Connections">
+                  {({ navigation }) => <ConnectionsScreen onBack={navigation.goBack}
+                    onAdd={() => navigation.navigate('Onboarding', { presentation: 'modal' })}
+                    onOpen={(connectionId) => navigation.navigate('Connection', { connectionId })} />}
+                </RootStack.Screen>
+                <RootStack.Screen name="DesignSystem">
+                  {({ navigation }) => <DesignSystemScreen onBack={navigation.goBack} />}
+                </RootStack.Screen>
+                <RootStack.Screen name="Connection">
+                  {({ navigation, route }) => {
+                    const connection = connections.connections.find((item) => item.id === route.params.connectionId);
+                    if (!connection) return <AgentSettingsRouteLoading onBack={navigation.goBack} />;
+                    const runtime = getConnectionRuntime();
+                    const resume = async (reconnect = false) => {
+                      const action = () => reconnect ? runtime.reconnectConnection(connection.id) : runtime.activate(connection.id);
+                      if (!canAccessConnection(connection.id)) {
+                        presentPaywall('gatewayConnections', async () => { await action(); });
+                        return;
+                      }
+                      await action();
+                    };
+                    return <ConnectionScreen connection={connection}
+                      state={connections.activeConnectionId === connection.id ? connections.activeState : 'offline'}
+                      paused={connections.pausedConnectionIds?.includes(connection.id) ?? false}
+                      agentNames={connections.roster.find((group) => group.connection.id === connection.id)?.agents.map(({ agent }) => agent.name) ?? []}
+                      onBack={navigation.goBack} onReconnect={() => resume(true)} onResume={() => resume()}
+                      onPause={() => runtime.pauseConnection(connection.id)}
+                      onRemove={async () => {
+                        await runtime.removeConnection(connection.id);
+                        if (runtime.getSnapshot().connections.length === 0) navigation.reset({ index: 0, routes: [{ name: 'Onboarding', params: { presentation: 'root' } }] });
+                        else navigation.navigate('Roster');
+                      }}
+                      onDetails={() => navigation.navigate('AccountSettingsSection', { section: 'connections', connectionId: connection.id })} />;
+                  }}
+                </RootStack.Screen>
+                <RootStack.Screen name="AccountSettings">
+                  {({ navigation }) => (
+                    <AccountSettingsScreen
+                      status={accountSettingsStatus}
+                      connections={settingsConnections}
+                      labels={accountSettingsLabels}
+                      isPro={isPro}
+                      canAddConnection={canAddSettingsConnection}
+                      replyNotificationsEnabled={replyNotificationsEnabled}
+                      debugMode={debugMode}
+                      onBack={navigation.goBack}
+                      onOpenSection={(section) => section === 'connections' ? navigation.navigate('Connections') : navigation.navigate('AccountSettingsSection', { section })}
+                      onRetry={() => { void getConnectionRuntime().probeActive(); }}
+                      onOpenAction={(action) => {
+                        if (action === 'view-pro') {
+                          presentPaywall('settingsMembershipPreview');
+                          return;
+                        }
+                        if (action === 'restore-purchases') {
+                          void restorePurchases();
+                          return;
+                        }
+                        if (action === 'add-connection') {
+                          navigation.navigate('Onboarding', { presentation: 'modal' });
+                          return;
+                        }
+                        const section = ACCOUNT_ACTION_SECTION[action];
+                        if (section) navigation.navigate('AccountSettingsSection', { section });
+                      }}
+                      onOpenConnection={(connectionId) => {
+                        navigation.navigate('Connection', { connectionId });
+                      }}
+                      onOpenPaywall={(reason, onContinue) => presentPaywall(
+                        normalizePaywallFeature(reason),
+                        onContinue,
+                      )}
+                      onReplyNotificationsChange={updateReplyNotifications}
+                      onDebugModeChange={onDebugToggle}
+                    />
+                  )}
+                </RootStack.Screen>
+                <RootStack.Screen name="AccountSettingsSection">
+                  {({ navigation, route }) => (
+                    <AccountSettingsSectionScreen
+                      section={route.params.section}
+                      status={route.params.section === 'connections' ? accountSettingsStatus : { kind: 'ready' }}
+                      data={{
+                        connections: settingsSectionConnections,
+                        connectionId: route.params.connectionId,
+                        isPro,
+                        canAddConnection: canAddSettingsConnection,
+                        replyNotificationsEnabled,
+                        debugMode,
+                        labels: accountSettingsLabels,
+                      }}
+                      onBack={navigation.goBack}
+                      onRetry={() => { void getConnectionRuntime().probeActive(); }}
+                      onAction={(request) => handleAccountSectionAction(request, navigation)}
+                      onPreferenceChanged={(preference, value) => {
+                        if (preference === 'app-icon' && (value === 'default' || value === 'black')) {
+                          setCurrentAppIcon(value);
+                        }
+                      }}
+                      onOpenPaywall={(reason, onContinue) => presentPaywall(
+                        normalizePaywallFeature(reason),
+                        onContinue,
+                      )}
+                    />
+                  )}
+                </RootStack.Screen>
+                <RootStack.Screen name="HelpCenter">
+                  {({ navigation, route }) => <HelpCenterScreen onBack={navigation.goBack} initialCommunity={route.params?.community} />}
+                </RootStack.Screen>
+                <RootStack.Screen name="ChatAppearance">
+                  {({ navigation }) => (
+                    <ChatAppearanceScreen onBack={navigation.goBack} />
+                  )}
+                </RootStack.Screen>
+                <RootStack.Screen name="ReleaseNotes">
+                  {({ navigation }) => (
+                    <ReleaseNotesHistoryScreen
+                      onBack={navigation.goBack}
+                      onOpenPaywall={() => presentPaywall('settingsMembershipPreview')}
+                    />
+                  )}
+                </RootStack.Screen>
+                <RootStack.Screen name="Search">
+                  {(props) => (
+                    <SearchScreen
+                      {...props}
+                      resolveThreadLockedReason={(connectionId, agentId) => {
+                        if (!canAccessConnection(connectionId)) return 'gatewayConnections';
+                        if (!canAccessRosterAgent(connectionId, agentId)) return 'agents';
+                        return null;
+                      }}
+                      onOpenPaywall={(reason, onContinue) => presentPaywall(
+                        normalizePaywallFeature(reason),
+                        onContinue,
+                      )}
+                    />
+                  )}
+                </RootStack.Screen>
+                <RootStack.Screen name="MessageDetail" component={MessageDetailScreen} />
+                <RootStack.Screen
+                  name="Paywall"
+                  component={PaywallRouteBridge}
+                  options={{ presentation: 'fullScreenModal', gestureEnabled: true }}
                 />
-                {showLiveTab ? (
-                  <Tab.Screen
-                    name="Live"
-                    component={LiveTab}
-                    options={{
-                      tabBarLabel: t('Live'),
-                      tabBarIcon: rootTabIcons.Live,
-                    }}
-                  />
-                ) : null}
-                {showConsoleTab ? (
-                  <Tab.Screen
-                    name="Console"
-                    component={ConsoleTab}
-                    options={{
-                      tabBarLabel: consoleTabLabel,
-                      tabBarIcon: backendKind === 'youmind'
-                        ? rootTabIcons.ConsoleGrid
-                        : rootTabIcons.ConsoleTerminal,
-                    }}
-                  />
-                ) : null}
-                {showProfileTab ? (
-                  <Tab.Screen
-                    name="Profile"
-                    component={ProfileTab}
-                    options={{
-                      tabBarLabel: t('Profile'),
-                      tabBarIcon: rootTabIcons.Profile,
-                    }}
-                  />
-                ) : null}
-                <Tab.Screen
-                  name="My"
-                  component={ConfigTab}
-                  options={{
-                    tabBarLabel: backendKind === 'youmind' ? t('Settings') : t('Setting'),
-                    tabBarIcon: rootTabIcons.My,
-                  }}
-                />
-              </Tab.Navigator>
-            )}
-          </RootStack.Screen>
-          <RootStack.Screen
-            name="OpenClawPermissions"
-            component={OpenClawPermissionsScreen}
-            options={rootModalScreenOptions}
-          />
-          <React.Fragment>
-            {renderConsoleModalScreens({
-              ...rootConsoleModalScreenOptions,
-              renderScreen: (name, component, options) => (
-                <RootStack.Screen key={name} name={name} component={component} options={options} />
-              ),
-            })}
-          </React.Fragment>
-        </RootStack.Navigator>
-      </NavigationContainer>
-      <GlobalGatewayOverlay />
-      <GlobalProPaywallOverlay />
-    </NodeCameraCaptureProvider>
-    </GatewayScannerProvider>
-    </GlobalLoadingOverlayProvider>
+              </RootStack.Navigator>
+              <SessionPanel
+                visible={sessionPanelVisible}
+                currentAgentId={threadContext?.agentId ?? currentAgentId}
+                currentSessionKey={threadContext?.sessionKey ?? mainSessionKey}
+                permissionDenied={threadContext
+                  ? !canAccessRosterAgent(threadContext.connectionId, threadContext.agentId)
+                  : false}
+                onClose={() => setSessionPanelVisible(false)}
+                onSelectSession={(row) => {
+                  if (!canAccessRosterAgent(row.connectionId, row.agentId)) {
+                    presentPaywall(
+                      canAccessConnection(row.connectionId) ? 'agents' : 'gatewayConnections',
+                      () => {
+                        const params: RootStackParamList['Thread'] = {
+                          connectionId: row.connectionId,
+                          agentId: row.agentId,
+                          sessionKey: row.key,
+                          from: 'panel',
+                        };
+                        setThreadContext(params);
+                        setCurrentAgentId(row.agentId);
+                        if (rootNavigationRef.isReady()) rootNavigationRef.navigate('Thread', params);
+                      },
+                    );
+                    return;
+                  }
+                  const params: RootStackParamList['Thread'] = {
+                    connectionId: row.connectionId,
+                    agentId: row.agentId,
+                    sessionKey: row.key,
+                    from: 'panel',
+                  };
+                  setThreadContext(params);
+                  setCurrentAgentId(row.agentId);
+                  if (rootNavigationRef.isReady()) rootNavigationRef.navigate('Thread', params);
+                }}
+                onSessionAction={handleSessionAction}
+                onOpenPermission={() => presentPaywall(
+                  threadContext && !canAccessConnection(threadContext.connectionId)
+                    ? 'gatewayConnections'
+                    : 'agents',
+                )}
+              />
+              </BottomSheetModalProvider>
+            </NavigationContainer>
+            <GlobalGatewayOverlay />
+            <GlobalProPaywallOverlay
+              onDismiss={dismissPaywall}
+              onContinue={continueAfterPaywall}
+            />
+          </NodeCameraCaptureProvider>
+        </GatewayScannerProvider>
+      </GlobalLoadingOverlayProvider>
     </AppContextProvider>
   );
 }
 
-function AppDeepLinkHandler(props: DeepLinkDeps): null {
-  useDeepLinkHandler(props);
-  return null;
+function AppDeepLinkHandler(
+  props: Omit<DeepLinkDeps, 'requestConfirmation'>,
+): React.JSX.Element | null {
+  const [request, setRequest] = useState<DeepLinkConfirmationRequest | null>(null);
+  const requestConfirmation = useCallback((next: DeepLinkConfirmationRequest) => {
+    setRequest(next);
+  }, []);
+  useDeepLinkHandler({ ...props, requestConfirmation });
+
+  return (
+    <DeepLinkConfirmationModal
+      request={request}
+      onClose={() => setRequest(null)}
+    />
+  );
+}
+
+function normalizePaywallFeature(reason: string): ProFeature {
+  switch (reason) {
+    case 'gatewayConnections':
+    case 'appIcons':
+    case 'configBackups':
+    case 'configManage':
+    case 'configBackupCreate':
+    case 'configBackupRestore':
+    case 'openclawDiagnostics':
+    case 'openclawPermissions':
+    case 'agents':
+    case 'coreFileEditing':
+    case 'logs':
+    case 'usage':
+    case 'messageHistory':
+    case 'sessionHistory':
+    case 'launch':
+    case 'settingsMembershipPreview':
+      return normalizeProFeature(reason);
+    default:
+      return 'settingsMembershipPreview';
+  }
+}
+
+function resolveAgentPaywallFeature(section: AgentSettingsSection): ProFeature {
+  if (section === 'files') return 'coreFileEditing';
+  if (section === 'logs') return 'logs';
+  if (section === 'usage') return 'usage';
+  if (section === 'openclaw') return 'configManage';
+  return 'agents';
+}
+
+function PaywallRouteBridge({
+  navigation,
+  route,
+}: NativeStackScreenProps<RootStackParamList, 'Paywall'>): React.JSX.Element {
+  const { theme } = useAppTheme();
+  const { isPro, showPaywall, visible } = useProPaywall();
+  const openedRef = useRef(false);
+
+  useEffect(() => {
+    if (isPro) {
+      navigation.goBack();
+      return;
+    }
+    showPaywall(normalizePaywallFeature(route.params?.reason ?? 'settingsMembershipPreview'));
+  }, [isPro, navigation, route.params?.reason, showPaywall]);
+
+  useEffect(() => {
+    if (visible) {
+      openedRef.current = true;
+      return;
+    }
+    if (openedRef.current && navigation.canGoBack()) navigation.goBack();
+  }, [navigation, visible]);
+
+  return <View style={[loadingStyles.loading, { backgroundColor: theme.colors.canvas }]} />;
 }
 
 function GlobalGatewayOverlay(): React.JSX.Element | null {
@@ -1130,9 +2305,21 @@ function GlobalGatewayOverlay(): React.JSX.Element | null {
   return <GlobalLoadingOverlay visible={!!loadingMessage} message={loadingMessage ?? undefined} />;
 }
 
-function GlobalProPaywallOverlay(): React.JSX.Element | null {
-  const { visible, hidePaywall } = useProPaywall();
-  return <ProPaywallOverlay visible={visible} onClose={hidePaywall} />;
+function GlobalProPaywallOverlay({
+  onDismiss,
+  onContinue,
+}: Readonly<{
+  onDismiss: () => void;
+  onContinue: () => void;
+}>): React.JSX.Element | null {
+  const { visible } = useProPaywall();
+  return (
+    <ProPaywallOverlay
+      visible={visible}
+      onClose={onDismiss}
+      onContinue={onContinue}
+    />
+  );
 }
 
 const loadingStyles = StyleSheet.create({

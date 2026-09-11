@@ -16,8 +16,8 @@ import {
   ChatAppearanceSettings,
   ThemeMode,
 } from '../types';
-import { AccentScale, defaultAccentId, isAccentScale } from '../theme/accents';
-import { DEFAULT_CHAT_APPEARANCE, normalizeChatAppearanceSettings } from '../features/chat-appearance/defaults';
+import { defaultAccentId, isBuiltInAccentId } from '../theme/accents';
+import { DEFAULT_CHAT_APPEARANCE, DEFAULT_CHAT_FONT_SIZE, normalizeChatAppearanceSettings } from '../features/chat-appearance/defaults';
 import {
   resolveExistingStoredChatBackgroundImagePath,
   toStoredChatBackgroundImagePath,
@@ -32,11 +32,16 @@ import {
   isGatewayTransportKind,
   resolveGatewayBackendKind,
   resolveGatewayTransportKind,
-  selectByBackend,
   toLegacyGatewayMode,
-} from './gateway-backends';
-import { resolveSavedGatewayName } from './gateway-config-name';
+} from '@clawket/agent-protocol';
+import { resolveSavedGatewayName } from '../connection/registry/connection-name';
 import type { ProSubscriptionSnapshot } from './pro-subscription';
+import {
+  normalizeAutoAppReviewState,
+  type AutoAppReviewState,
+} from './auto-app-review-state';
+
+export type { AutoAppReviewState } from './auto-app-review-state';
 
 export type NodeInvokeAuditEntry = {
   id: string;
@@ -97,28 +102,12 @@ export type GatewayConfigBackupSummary = {
   createdAt: number;
 };
 
-export type AutoAppReviewState = {
-  firstSeenAtMs: number;
-  lastAttemptAtMs?: number;
-  lastAttemptVersion?: string;
-};
-
-export type SkillListSortMode = 'name' | 'createdAsc' | 'createdDesc' | 'updatedAsc' | 'updatedDesc';
-
-// Exported so that callers (e.g. SkillListScreen's useState initializer)
-// can share the same default without duplicating the backend mapping.
-// Uses `selectByBackend` so the dispatch stays centralized in one spot.
-export function getDefaultSkillListSortMode(backendKind: GatewayBackendKind): SkillListSortMode {
-  return selectByBackend<SkillListSortMode>(backendKind, {
-    openclaw: 'name',
-    hermes: 'createdDesc',
-  });
-}
-
 export type DeviceTokenStorageScope = {
   serverUrl?: string | null;
   gatewayId?: string | null;
   gatewayUrl?: string | null;
+  /** Operator keeps the legacy key; other roles are isolated suffixes. */
+  role?: string | null;
 };
 
 export type DeviceTokenRecord = {
@@ -158,11 +147,9 @@ const KEYS = {
   showAgentAvatar: 'clawket.showAgentAvatar.v1',
   themeMode: 'clawket.themeMode.v1',
   accentColor: 'clawket.accentColor.v1',
-  customAccentScale: 'clawket.customAccentScale.v1',
   currentAgentId: 'clawket.currentAgentId.v1',
   showModelUsage: 'clawket.showModelUsage.v1',
   execApproval: 'clawket.execApproval.v1',
-  canvasEnabled: 'clawket.canvasEnabled.v1',
   chatFontSize: 'clawket.chatFontSize.v1',
   chatAppearance: 'clawket.chatAppearance.v1',
   speechRecognitionLanguage: 'clawket.speechRecognitionLanguage.v1',
@@ -177,10 +164,8 @@ const KEYS = {
   proSubscriptionSnapshot: 'clawket.proSubscriptionSnapshot.v1',
   lifetimeUpgradeAnnouncementShown: 'clawket.lifetimeUpgradeAnnouncementShown.v1',
   autoAppReviewState: 'clawket.autoAppReviewState.v1',
-  skillListSortModePrefix: 'clawket.skillListSortMode.v1',
   youmindAuthPrefix: 'clawket.youmind.auth.v1',
   youmindDeviceId: 'clawket.youmind.deviceId.v1',
-  youmindLastBoardPrefix: 'clawket.youmind.lastBoard.v1',
 } as const;
 
 const NODE_INVOKE_AUDIT_KEY = 'clawket.nodeInvokeAudit.v1';
@@ -192,8 +177,6 @@ const GATEWAY_CONFIG_BACKUP_PREFIX = 'clawket.gatewayConfigBackup.v1.';
 const SECURE_OPTIONS: SecureStore.SecureStoreOptions = {
   keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
 };
-
-const EMPTY_PROFILE = { url: '', token: undefined, password: undefined };
 
 function lastSessionKeyStorageKey(scopeId?: string): string {
   const normalizedScope = scopeId?.trim();
@@ -210,10 +193,6 @@ function lastOpenedSessionSnapshotStorageKey(scopeId: string, agentId?: string):
 
 function cachedAgentIdentityStorageKey(scopeId: string, agentId: string): string {
   return `${KEYS.cachedAgentIdentityPrefix}.${scopeId}::${agentId}`;
-}
-
-function skillListSortModeStorageKey(backendKind: GatewayBackendKind): string {
-  return `${KEYS.skillListSortModePrefix}.${backendKind}`;
 }
 
 function normalizeYouMindScope(url: string): string {
@@ -253,20 +232,6 @@ function youmindLegacyAuthStorageKey(url: string): string {
   return `${KEYS.youmindAuthPrefix}.${normalizeYouMindScope(url)}`;
 }
 
-function youmindLastBoardStorageKey(url: string, scopeKey?: string | null): string {
-  return `${KEYS.youmindLastBoardPrefix}.${normalizeYouMindScopedStorageKey(url, scopeKey)}`;
-}
-
-function youmindPrefixedScopeLastBoardStorageKey(url: string, scopeKey?: string | null): string | null {
-  const trimmed = scopeKey?.trim();
-  if (!trimmed || trimmed.startsWith('cfg:')) return null;
-  return `${KEYS.youmindLastBoardPrefix}.${normalizeYouMindScopedStorageKey(url, `cfg:${trimmed}`)}`;
-}
-
-function youmindLegacyLastBoardStorageKey(url: string): string {
-  return `${KEYS.youmindLastBoardPrefix}.${normalizeYouMindScope(url)}`;
-}
-
 function normalizeDeviceTokenScopePart(value: string | null | undefined): string {
   return (value ?? '').trim().replace(/\/+$/, '');
 }
@@ -277,18 +242,20 @@ function legacyDeviceTokenStorageKey(deviceId: string): string {
 
 function deviceTokenStorageKey(deviceId: string, scope?: DeviceTokenStorageScope): string {
   const normalizedDeviceId = deviceId.trim();
+  const role = normalizeDeviceTokenScopePart(scope?.role).toLowerCase();
+  const roleSuffix = role && role !== 'operator' ? `_role_${sha256(role)}` : '';
   const serverUrl = normalizeDeviceTokenScopePart(scope?.serverUrl);
   const gatewayId = normalizeDeviceTokenScopePart(scope?.gatewayId);
   if (serverUrl && gatewayId) {
-    return `${legacyDeviceTokenStorageKey(normalizedDeviceId)}_relay_${sha256(`${serverUrl}::${gatewayId}`)}`;
+    return `${legacyDeviceTokenStorageKey(normalizedDeviceId)}_relay_${sha256(`${serverUrl}::${gatewayId}`)}${roleSuffix}`;
   }
 
   const gatewayUrl = normalizeDeviceTokenScopePart(scope?.gatewayUrl);
   if (gatewayUrl) {
-    return `${legacyDeviceTokenStorageKey(normalizedDeviceId)}_url_${sha256(gatewayUrl)}`;
+    return `${legacyDeviceTokenStorageKey(normalizedDeviceId)}_url_${sha256(gatewayUrl)}${roleSuffix}`;
   }
 
-  return legacyDeviceTokenStorageKey(normalizedDeviceId);
+  return `${legacyDeviceTokenStorageKey(normalizedDeviceId)}${roleSuffix}`;
 }
 
 function normalizeDeviceTokenRecord(value: string | null): DeviceTokenRecord | null {
@@ -327,6 +294,9 @@ async function readStoredDeviceTokenValue(
   const scopedKey = deviceTokenStorageKey(deviceId, scope);
   const scopedValue = await SecureStore.getItemAsync(scopedKey, SECURE_OPTIONS);
   if (scopedValue) return scopedValue;
+  const role = normalizeDeviceTokenScopePart(scope?.role).toLowerCase();
+  // A legacy token has operator semantics. Never offer it to another role.
+  if (role && role !== 'operator') return null;
   if (scopedKey === legacyDeviceTokenStorageKey(deviceId)) return scopedValue;
   return SecureStore.getItemAsync(legacyDeviceTokenStorageKey(deviceId), SECURE_OPTIONS);
 }
@@ -356,24 +326,6 @@ function normalizeLastOpenedSessionSnapshot(value: unknown): LastOpenedSessionSn
     agentName: agentName || undefined,
     agentEmoji: agentEmoji || undefined,
     agentAvatarUri: agentAvatarUri || undefined,
-  };
-}
-
-function normalizeAutoAppReviewState(value: unknown): AutoAppReviewState | null {
-  if (!value || typeof value !== 'object') return null;
-  const record = value as Record<string, unknown>;
-  const firstSeenAtMs = typeof record.firstSeenAtMs === 'number' ? record.firstSeenAtMs : NaN;
-  if (!Number.isFinite(firstSeenAtMs) || firstSeenAtMs <= 0) return null;
-  const lastAttemptAtMs = typeof record.lastAttemptAtMs === 'number' && Number.isFinite(record.lastAttemptAtMs)
-    ? record.lastAttemptAtMs
-    : undefined;
-  const lastAttemptVersion = typeof record.lastAttemptVersion === 'string'
-    ? record.lastAttemptVersion.trim() || undefined
-    : undefined;
-  return {
-    firstSeenAtMs,
-    ...(lastAttemptAtMs !== undefined ? { lastAttemptAtMs } : {}),
-    ...(lastAttemptVersion ? { lastAttemptVersion } : {}),
   };
 }
 
@@ -553,7 +505,9 @@ function normalizeProfiles(value: unknown): GatewayProfilesConfig | null {
   if (!value || typeof value !== 'object') return null;
   const record = value as Record<string, unknown>;
   const readProfile = (raw: unknown) => {
-    if (!raw || typeof raw !== 'object') return { ...EMPTY_PROFILE };
+    if (!raw || typeof raw !== 'object') {
+      return { url: '', token: undefined, password: undefined };
+    }
     const profile = raw as Record<string, unknown>;
     const url = typeof profile.url === 'string' ? profile.url : '';
     const token = typeof profile.token === 'string' && profile.token.trim() ? profile.token : undefined;
@@ -667,24 +621,6 @@ function buildStateFromLegacyProfiles(profiles: GatewayProfilesConfig): GatewayC
   };
 }
 
-function buildLegacyProfilesFromState(state: GatewayConfigsState): GatewayProfilesConfig {
-  const empty = { ...EMPTY_PROFILE };
-  const activeConfig = state.activeId ? state.configs.find((item) => item.id === state.activeId) : null;
-  const activeMode: GatewayProfileMode = activeConfig?.mode === 'tailscale' || activeConfig?.mode === 'cloudflare'
-    ? activeConfig.mode
-    : 'local';
-  const localConfig = state.configs.find((item) => item.mode === 'local')
-    ?? state.configs.find((item) => item.mode === 'custom');
-  const tailscaleConfig = state.configs.find((item) => item.mode === 'tailscale');
-  const cloudflareConfig = state.configs.find((item) => item.mode === 'cloudflare');
-  return {
-    activeMode,
-    local: localConfig ? { url: localConfig.url, token: localConfig.token, password: localConfig.password } : { ...empty },
-    tailscale: tailscaleConfig ? { url: tailscaleConfig.url, token: tailscaleConfig.token, password: tailscaleConfig.password } : { ...empty },
-    cloudflare: cloudflareConfig ? { url: cloudflareConfig.url, token: cloudflareConfig.token, password: cloudflareConfig.password } : { ...empty },
-  };
-}
-
 function normalizeSavedPrompt(value: unknown): SavedPrompt | null {
   if (!value || typeof value !== 'object') return null;
   const record = value as Record<string, unknown>;
@@ -724,13 +660,12 @@ async function getJson<T>(key: string): Promise<T | null> {
 }
 
 export const StorageService = {
-  async setGatewayConfigsState(state: GatewayConfigsState): Promise<void> {
-    const normalized = normalizeGatewayConfigsState(state) ?? { activeId: null, configs: [] };
-    await setJson(KEYS.gatewayConfigsState, normalized);
-    await setJson(KEYS.gatewayProfilesConfig, buildLegacyProfilesFromState(normalized));
-  },
-
-  async getGatewayConfigsState(): Promise<GatewayConfigsState> {
+  /**
+   * Read-only migration source for connection data written by 2.1.x.
+   * ConnectionStore owns the v3 registry and intentionally retains these keys
+   * for one release so a downgrade can still recover the previous config.
+   */
+  async readLegacyGatewayConfigsState(): Promise<GatewayConfigsState> {
     const latestRaw = await getJson<unknown>(KEYS.gatewayConfigsState);
     const latest = normalizeGatewayConfigsState(latestRaw);
     if (latest) return latest;
@@ -738,15 +673,13 @@ export const StorageService = {
     const profilesRaw = await getJson<unknown>(KEYS.gatewayProfilesConfig);
     const normalizedProfiles = normalizeProfiles(profilesRaw);
     if (normalizedProfiles) {
-      const migrated = buildStateFromLegacyProfiles(normalizedProfiles);
-      await this.setGatewayConfigsState(migrated);
-      return migrated;
+      return buildStateFromLegacyProfiles(normalizedProfiles);
     }
 
     const legacy = await getJson<GatewayConfig>(KEYS.gatewayConfig);
     if (legacy?.url?.trim()) {
       const now = Date.now();
-      const migrated: GatewayConfigsState = {
+      return {
         activeId: 'legacy_single',
         configs: [
           {
@@ -764,8 +697,6 @@ export const StorageService = {
           },
         ],
       };
-      await this.setGatewayConfigsState(migrated);
-      return migrated;
     }
     return { activeId: null, configs: [] };
   },
@@ -782,120 +713,7 @@ export const StorageService = {
     await SecureStore.deleteItemAsync(KEYS.identity, SECURE_OPTIONS);
   },
 
-  async setGatewayProfilesConfig(config: GatewayProfilesConfig): Promise<void> {
-    await setJson(KEYS.gatewayProfilesConfig, config);
-    const migrated = buildStateFromLegacyProfiles(config);
-    await setJson(KEYS.gatewayConfigsState, migrated);
-  },
-
-  async getGatewayProfilesConfig(): Promise<GatewayProfilesConfig | null> {
-    const state = await this.getGatewayConfigsState();
-    if (state.configs.length > 0) {
-      return buildLegacyProfilesFromState(state);
-    }
-
-    const profilesRaw = await getJson<unknown>(KEYS.gatewayProfilesConfig);
-    const normalized = normalizeProfiles(profilesRaw);
-    if (normalized) {
-      // Backward compatibility for profiles saved before cloudflare mode existed.
-      if (!normalized.cloudflare) {
-        normalized.cloudflare = { url: '', token: undefined, password: undefined };
-      }
-      return normalized;
-    }
-
-    const legacy = await getJson<GatewayConfig>(KEYS.gatewayConfig);
-    if (!legacy?.url) return null;
-
-    const migrated: GatewayProfilesConfig = {
-      activeMode: 'local',
-      local: {
-        url: legacy.url,
-        token: legacy.token,
-        password: legacy.password,
-      },
-      tailscale: { ...EMPTY_PROFILE },
-      cloudflare: { ...EMPTY_PROFILE },
-    };
-    await setJson(KEYS.gatewayProfilesConfig, migrated);
-    return migrated;
-  },
-
-  async setGatewayConfig(config: GatewayConfig): Promise<void> {
-    await setJson(KEYS.gatewayConfig, config);
-    const state = await this.getGatewayConfigsState();
-    const now = Date.now();
-    if (state.activeId) {
-      const nextConfigs = state.configs.map((item) => {
-        if (item.id !== state.activeId) return item;
-        return {
-          ...item,
-          backendKind: config.backendKind ?? item.backendKind,
-          transportKind: config.transportKind ?? item.transportKind,
-          url: config.url,
-          token: config.token,
-          password: config.password,
-          bootstrap: config.bootstrap,
-          mode: config.mode ?? item.mode,
-          hermes: config.hermes,
-          relay: config.relay,
-          updatedAt: now,
-        };
-      });
-      await this.setGatewayConfigsState({ activeId: state.activeId, configs: nextConfigs });
-      return;
-    }
-
-    const created: SavedGatewayConfig = {
-      id: `gateway_${now}`,
-      name: 'Gateway',
-      backendKind: config.backendKind,
-      transportKind: config.transportKind,
-      mode: config.mode ?? 'custom',
-      url: config.url,
-      token: config.token,
-      password: config.password,
-      bootstrap: config.bootstrap,
-      hermes: config.hermes,
-      relay: config.relay,
-      createdAt: now,
-      updatedAt: now,
-    };
-    await this.setGatewayConfigsState({ activeId: created.id, configs: [created] });
-  },
-
-  async getGatewayConfig(): Promise<GatewayConfig | null> {
-    const state = await this.getGatewayConfigsState();
-    const active = state.activeId ? state.configs.find((item) => item.id === state.activeId) : null;
-    if (active?.url) {
-      return {
-        url: active.url,
-        token: active.token,
-        password: active.password,
-        bootstrap: active.bootstrap,
-        backendKind: active.backendKind,
-        transportKind: active.transportKind,
-        mode: active.mode,
-        hermes: active.hermes,
-        relay: active.relay,
-      };
-    }
-
-    const profiles = await this.getGatewayProfilesConfig();
-    if (profiles) {
-      const activeProfile = profiles[profiles.activeMode];
-      if (!activeProfile.url) return null;
-      return {
-        url: activeProfile.url,
-        token: activeProfile.token,
-        password: activeProfile.password,
-        mode: profiles.activeMode,
-      };
-    }
-    return getJson<GatewayConfig>(KEYS.gatewayConfig);
-  },
-
-  async clearGatewayConfig(): Promise<void> {
+  async clearLegacyGatewayConfig(): Promise<void> {
     await SecureStore.deleteItemAsync(KEYS.gatewayConfig, SECURE_OPTIONS);
     await SecureStore.deleteItemAsync(KEYS.gatewayProfilesConfig, SECURE_OPTIONS);
     await SecureStore.deleteItemAsync(KEYS.gatewayConfigsState, SECURE_OPTIONS);
@@ -941,40 +759,6 @@ export const StorageService = {
     }
   },
 
-  async setYouMindLastOpenedBoardId(url: string, boardId: string | null, scopeKey?: string | null): Promise<void> {
-    const key = youmindLastBoardStorageKey(url, scopeKey);
-    const normalized = boardId?.trim();
-    if (!normalized) {
-      await AsyncStorage.removeItem(key);
-      return;
-    }
-    await AsyncStorage.setItem(key, normalized);
-  },
-
-  async getYouMindLastOpenedBoardId(
-    url: string,
-    scopeKey?: string | null,
-    options?: { allowLegacyFallback?: boolean },
-  ): Promise<string | null> {
-    const primaryKey = youmindLastBoardStorageKey(url, scopeKey);
-    let value = await AsyncStorage.getItem(primaryKey);
-    if (!value) {
-      const prefixedScopeKey = youmindPrefixedScopeLastBoardStorageKey(url, scopeKey);
-      if (prefixedScopeKey) {
-        const prefixedValue = await AsyncStorage.getItem(prefixedScopeKey);
-        if (prefixedValue?.trim()) {
-          value = prefixedValue.trim();
-          await AsyncStorage.setItem(primaryKey, value);
-        }
-      }
-    }
-    if (!value && options?.allowLegacyFallback && scopeKey?.trim()) {
-      value = await AsyncStorage.getItem(youmindLegacyLastBoardStorageKey(url));
-    }
-    const normalized = value?.trim();
-    return normalized || null;
-  },
-
   async migrateLegacyYouMindState(url: string, scopeKey: string): Promise<void> {
     const normalizedScope = scopeKey.trim();
     if (!normalizedScope) return;
@@ -993,19 +777,6 @@ export const StorageService = {
       await setJson(scopedSessionKey, legacySession);
     }
 
-    const scopedBoardKey = youmindLastBoardStorageKey(url, normalizedScope);
-    const prefixedScopedBoardKey = youmindPrefixedScopeLastBoardStorageKey(url, normalizedScope);
-    const legacyBoardKey = youmindLegacyLastBoardStorageKey(url);
-    const [scopedBoardId, prefixedScopedBoardId, legacyBoardId] = await Promise.all([
-      AsyncStorage.getItem(scopedBoardKey),
-      prefixedScopedBoardKey ? AsyncStorage.getItem(prefixedScopedBoardKey) : Promise.resolve(null),
-      AsyncStorage.getItem(legacyBoardKey),
-    ]);
-    if (!scopedBoardId && prefixedScopedBoardId?.trim()) {
-      await AsyncStorage.setItem(scopedBoardKey, prefixedScopedBoardId.trim());
-    } else if (!scopedBoardId && legacyBoardId?.trim()) {
-      await AsyncStorage.setItem(scopedBoardKey, legacyBoardId.trim());
-    }
   },
 
   async setYouMindDeviceId(deviceId: string): Promise<void> {
@@ -1124,6 +895,8 @@ export const StorageService = {
   async deleteDeviceToken(deviceId: string, scope?: DeviceTokenStorageScope): Promise<void> {
     const scopedKey = deviceTokenStorageKey(deviceId, scope);
     await SecureStore.deleteItemAsync(scopedKey, SECURE_OPTIONS);
+    const role = normalizeDeviceTokenScopePart(scope?.role).toLowerCase();
+    if (role && role !== 'operator') return;
     const legacyKey = legacyDeviceTokenStorageKey(deviceId);
     if (legacyKey !== scopedKey) {
       await SecureStore.deleteItemAsync(legacyKey, SECURE_OPTIONS);
@@ -1154,7 +927,8 @@ export const StorageService = {
 
   async getShowAgentAvatar(): Promise<boolean> {
     const raw = await SecureStore.getItemAsync(KEYS.showAgentAvatar, SECURE_OPTIONS);
-    return raw !== '0';
+    // Signatures in the timeline are opt-in; the Thread header already carries the identity.
+    return raw === '1';
   },
 
   async setThemeMode(mode: ThemeMode): Promise<void> {
@@ -1173,22 +947,8 @@ export const StorageService = {
 
   async getAccentColor(): Promise<AccentColorId> {
     const raw = await SecureStore.getItemAsync(KEYS.accentColor, SECURE_OPTIONS);
-    if (raw === 'iceBlue' || raw === 'jadeGreen' || raw === 'sunsetOrange' || raw === 'rosePink' || raw === 'royalPurple' || raw === 'custom') return raw;
+    if (raw && isBuiltInAccentId(raw)) return raw;
     return defaultAccentId;
-  },
-
-  async setCustomAccentScale(accentScale: AccentScale | null): Promise<void> {
-    if (!accentScale) {
-      await SecureStore.deleteItemAsync(KEYS.customAccentScale, SECURE_OPTIONS);
-      return;
-    }
-    await setJson(KEYS.customAccentScale, accentScale);
-  },
-
-  async getCustomAccentScale(): Promise<AccentScale | null> {
-    const parsed = await getJson<unknown>(KEYS.customAccentScale);
-    if (!parsed) return null;
-    return isAccentScale(parsed) ? parsed : null;
   },
 
   async setCurrentAgentId(id: string): Promise<void> {
@@ -1218,25 +978,15 @@ export const StorageService = {
     return raw === '1'; // default OFF
   },
 
-  async setCanvasEnabled(enabled: boolean): Promise<void> {
-    await SecureStore.setItemAsync(KEYS.canvasEnabled, enabled ? '1' : '0', SECURE_OPTIONS);
-  },
-
-  async getCanvasEnabled(): Promise<boolean> {
-    const raw = await SecureStore.getItemAsync(KEYS.canvasEnabled, SECURE_OPTIONS);
-    // Default ON — canvas is enabled unless explicitly disabled
-    return raw !== '0';
-  },
-
   async setChatFontSize(size: number): Promise<void> {
     await SecureStore.setItemAsync(KEYS.chatFontSize, String(size), SECURE_OPTIONS);
   },
 
   async getChatFontSize(): Promise<number> {
     const raw = await SecureStore.getItemAsync(KEYS.chatFontSize, SECURE_OPTIONS);
-    if (!raw) return 16;
+    if (!raw) return DEFAULT_CHAT_FONT_SIZE;
     const parsed = parseInt(raw, 10);
-    if (Number.isNaN(parsed) || parsed < 12 || parsed > 20) return 16;
+    if (Number.isNaN(parsed) || parsed < 12 || parsed > 20) return DEFAULT_CHAT_FONT_SIZE;
     return parsed;
   },
 
@@ -1378,29 +1128,9 @@ export const StorageService = {
     const normalizedScope = scopeId.trim();
     const normalized = normalizeCachedAgentIdentitySnapshot(identity);
     if (!normalizedScope || !normalized) return;
-    let payload = normalized;
-    try {
-      const existingRaw = await AsyncStorage.getItem(
-        cachedAgentIdentityStorageKey(normalizedScope, normalized.agentId),
-      );
-      if (existingRaw) {
-        const existing = normalizeCachedAgentIdentitySnapshot(JSON.parse(existingRaw));
-        if (existing) {
-          payload = {
-            agentId: normalized.agentId,
-            updatedAt: normalized.updatedAt,
-            agentName: normalized.agentName ?? existing.agentName,
-            agentEmoji: normalized.agentEmoji ?? existing.agentEmoji,
-            agentAvatarUri: normalized.agentAvatarUri ?? existing.agentAvatarUri,
-          };
-        }
-      }
-    } catch {
-      payload = normalized;
-    }
     await AsyncStorage.setItem(
       cachedAgentIdentityStorageKey(normalizedScope, normalized.agentId),
-      JSON.stringify(payload),
+      JSON.stringify(normalized),
     );
   },
 
@@ -1514,40 +1244,10 @@ export const StorageService = {
 
   async setAutoAppReviewState(state: AutoAppReviewState): Promise<void> {
     const normalized = normalizeAutoAppReviewState(state);
-    if (!normalized) return;
-    try {
-      await AsyncStorage.setItem(KEYS.autoAppReviewState, JSON.stringify(normalized));
-    } catch {
-      // Best-effort cache only.
-    }
-  },
-
-  async getSkillListSortMode(backendKind: GatewayBackendKind): Promise<SkillListSortMode> {
-    try {
-      const raw = await AsyncStorage.getItem(skillListSortModeStorageKey(backendKind));
-      if (
-        raw === 'name'
-        || raw === 'createdAsc'
-        || raw === 'createdDesc'
-        || raw === 'updatedAsc'
-        || raw === 'updatedDesc'
-      ) {
-        return raw;
-      }
-      if (raw === 'created') return 'createdAsc';
-      if (raw === 'updated') return 'updatedDesc';
-    } catch {
-      // Best-effort preference only.
-    }
-    return getDefaultSkillListSortMode(backendKind);
-  },
-
-  async setSkillListSortMode(backendKind: GatewayBackendKind, sortMode: SkillListSortMode): Promise<void> {
-    try {
-      await AsyncStorage.setItem(skillListSortModeStorageKey(backendKind), sortMode);
-    } catch {
-      // Best-effort preference only.
-    }
+    if (!normalized) throw new Error('Invalid automatic app review state');
+    // Unlike display caches, this write gates a one-time native side effect. Let
+    // callers observe failure so a prompt is never shown without durable state.
+    await AsyncStorage.setItem(KEYS.autoAppReviewState, JSON.stringify(normalized));
   },
 
   async appendNodeInvokeAudit(entry: NodeInvokeAuditEntry): Promise<void> {

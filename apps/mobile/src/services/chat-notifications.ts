@@ -1,5 +1,6 @@
 import { AppState, AppStateStatus, Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import i18next from '../i18n';
 
 export type ChatNotificationOpenPayload = {
@@ -28,22 +29,40 @@ type ChatNotificationRequest = {
   sessionKey: string;
 };
 
-const CHAT_REPLY_NOTIFICATIONS_ENABLED = false;
+const CHAT_REPLY_NOTIFICATIONS_KEY = 'clawket.chatReplyNotifications.v1';
 
 let notificationHandlerInitialized = false;
+let chatReplyNotificationsEnabled = false;
 const recentNotificationKeys = new Map<string, number>();
 const RECENT_NOTIFICATION_TTL_MS = 60_000;
 
 export function areChatReplyNotificationsEnabled(): boolean {
-  return CHAT_REPLY_NOTIFICATIONS_ENABLED;
+  return chatReplyNotificationsEnabled;
+}
+
+export async function loadChatReplyNotificationsEnabled(): Promise<boolean> {
+  try {
+    chatReplyNotificationsEnabled = await AsyncStorage.getItem(CHAT_REPLY_NOTIFICATIONS_KEY) === 'true';
+  } catch {
+    chatReplyNotificationsEnabled = false;
+  }
+  initializeChatNotifications();
+  return chatReplyNotificationsEnabled;
+}
+
+export async function setChatReplyNotificationsEnabled(enabled: boolean): Promise<void> {
+  chatReplyNotificationsEnabled = enabled;
+  await AsyncStorage.setItem(CHAT_REPLY_NOTIFICATIONS_KEY, enabled ? 'true' : 'false');
+  initializeChatNotifications();
 }
 
 export function shouldShowChatReplyNotification(params: {
   activeTab: string;
   appState: AppStateStatus;
 }): boolean {
-  if (!CHAT_REPLY_NOTIFICATIONS_ENABLED) return false;
-  return params.activeTab !== 'Chat' || params.appState !== 'active';
+  if (!chatReplyNotificationsEnabled) return false;
+  const threadVisible = params.activeTab === 'Thread' || params.activeTab === 'Chat';
+  return !threadVisible || params.appState !== 'active';
 }
 
 export function buildChatReplyNotificationTitle(agentName: string): string {
@@ -80,7 +99,7 @@ function makeRecentNotificationKey(request: ChatNotificationRequest): string {
 }
 
 export function initializeChatNotifications(): void {
-  if (!CHAT_REPLY_NOTIFICATIONS_ENABLED) return;
+  if (!chatReplyNotificationsEnabled) return;
   if (Platform.OS !== 'ios' || notificationHandlerInitialized) return;
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
@@ -94,7 +113,7 @@ export function initializeChatNotifications(): void {
 }
 
 export async function ensureChatNotificationPermissions(): Promise<boolean> {
-  if (!CHAT_REPLY_NOTIFICATIONS_ENABLED) return false;
+  if (!chatReplyNotificationsEnabled) return false;
   if (Platform.OS !== 'ios') return false;
   let permissions = await Notifications.getPermissionsAsync();
   if (permissions.granted) return true;
@@ -106,7 +125,7 @@ export async function ensureChatNotificationPermissions(): Promise<boolean> {
 export async function scheduleChatReplyNotification(
   request: ChatNotificationRequest,
 ): Promise<boolean> {
-  if (!CHAT_REPLY_NOTIFICATIONS_ENABLED) return false;
+  if (!chatReplyNotificationsEnabled) return false;
   if (Platform.OS !== 'ios') return false;
   initializeChatNotifications();
   const hasPermission = await ensureChatNotificationPermissions();

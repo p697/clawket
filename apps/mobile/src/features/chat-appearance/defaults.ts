@@ -3,6 +3,8 @@ import type { ChatAppearanceSettings, ChatBubbleStyle } from '../../types/chat-a
 const DEFAULT_BLUR = 8;
 const DEFAULT_OPACITY = 1;
 
+export const DEFAULT_CHAT_FONT_SIZE = 17;
+
 function clamp(value: number, min: number, max: number): number {
   if (!Number.isFinite(value)) return min;
   return Math.min(max, Math.max(min, value));

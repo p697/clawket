@@ -17,10 +17,20 @@ export type RevenueCatConfig = {
 };
 
 const PRIMARY_PAYWALL_PACKAGE_TYPES = [
-  'MONTHLY',
   'ANNUAL',
   'LIFETIME',
+  'MONTHLY',
 ] as const;
+
+export type ProOfferingMetadata = Readonly<{
+  defaultPackage: 'annual' | 'monthly';
+  socialProof: boolean;
+}>;
+
+export const DEFAULT_PRO_OFFERING_METADATA: ProOfferingMetadata = {
+  defaultPackage: 'annual',
+  socialProof: true,
+};
 
 const LIFETIME_UPGRADE_CUTOFF_PACIFIC_ISO = '2026-04-18T07:00:00.000Z';
 const LIFETIME_UPGRADE_CUTOFF_PACIFIC_MS = Date.parse(LIFETIME_UPGRADE_CUTOFF_PACIFIC_ISO);
@@ -62,6 +72,32 @@ export type ProSubscriptionSnapshot = {
   verification: string | null;
 };
 
+export function getProSubscriptionExpirationMs(
+  snapshot: ProSubscriptionSnapshot | null,
+): number | null {
+  if (!snapshot?.isActive || snapshot.expirationDate === null) return null;
+  if (typeof snapshot.expirationDate !== 'string') return 0;
+  const expirationMs = Date.parse(snapshot.expirationDate);
+  return Number.isFinite(expirationMs) ? expirationMs : 0;
+}
+
+export function isProSubscriptionSnapshotActiveAt(
+  snapshot: ProSubscriptionSnapshot | null,
+  now: number,
+): boolean {
+  if (!snapshot?.isActive || !Number.isFinite(now)) return false;
+  const expirationMs = getProSubscriptionExpirationMs(snapshot);
+  return expirationMs === null || now < expirationMs;
+}
+
+export function normalizeProSubscriptionSnapshotAt(
+  snapshot: ProSubscriptionSnapshot | null,
+  now: number,
+): ProSubscriptionSnapshot | null {
+  if (!snapshot?.isActive || isProSubscriptionSnapshotActiveAt(snapshot, now)) return snapshot;
+  return { ...snapshot, isActive: false };
+}
+
 export type ProPaywallPackage = {
   offeringIdentifier: string;
   packageIdentifier: string;
@@ -69,8 +105,11 @@ export type ProPaywallPackage = {
   productIdentifier: string | null;
   title: string;
   description: string;
+  price: number | null;
   priceString: string;
+  pricePerMonth: number | null;
   pricePerMonthString: string | null;
+  offeringMetadata: ProOfferingMetadata;
   package: PurchasesPackage;
 };
 
@@ -85,6 +124,12 @@ export type ProPurchaseErrorCode =
   | 'purchaseUnavailable'
   | 'notConfigured'
   | 'unknown';
+
+export type ProPurchaseFailureReason =
+  | 'cancelled'
+  | 'pending'
+  | 'offerings_unavailable'
+  | `store_error:${string}`;
 
 export type RevenueCatDiagnostics = {
   buildEnabled: boolean;
@@ -409,10 +454,32 @@ export function selectRevenueCatOffering(
   offerings: PurchasesOfferings,
   config: RevenueCatConfig,
 ): PurchasesOffering | null {
-  if (config.offeringId) {
-    return offerings.all[config.offeringId] ?? null;
-  }
-  return offerings.current;
+  const configuredOfferingId = config.offeringId?.trim();
+  const configuredCustomOffering = configuredOfferingId
+    && configuredOfferingId !== 'default'
+    && configuredOfferingId !== 'pro'
+    ? offerings.all[configuredOfferingId] ?? null
+    : null;
+  return configuredCustomOffering
+    ?? offerings.current
+    ?? offerings.all.pro
+    ?? (configuredOfferingId ? offerings.all[configuredOfferingId] ?? null : null);
+}
+
+export function resolveProOfferingMetadata(
+  offering: Pick<PurchasesOffering, 'metadata'> | null | undefined,
+): ProOfferingMetadata {
+  const defaultPackageValue = offering?.metadata?.default_package;
+  const socialProofValue = offering?.metadata?.social_proof;
+  return {
+    defaultPackage: typeof defaultPackageValue === 'string'
+      && defaultPackageValue.trim().toLowerCase() === 'monthly'
+      ? 'monthly'
+      : 'annual',
+    socialProof: typeof socialProofValue === 'boolean'
+      ? socialProofValue
+      : DEFAULT_PRO_OFFERING_METADATA.socialProof,
+  };
 }
 
 export function selectRevenueCatPackages(
@@ -423,10 +490,9 @@ export function selectRevenueCatPackages(
   if (!offering) return [];
 
   const prioritized = [
-    config.packageId ? offering.availablePackages.find((item) => item.identifier === config.packageId) ?? null : null,
-    offering.monthly,
     offering.annual,
     offering.lifetime,
+    offering.monthly,
     ...offering.availablePackages,
   ].filter((item): item is PurchasesPackage => Boolean(item));
 
@@ -440,20 +506,24 @@ export function selectRevenueCatPackages(
     return primaryPaywallPackages;
   }
 
-  return unique.slice(0, 1);
+  const configuredFallback = config.packageId
+    ? unique.find((item) => item.identifier === config.packageId) ?? null
+    : null;
+  return configuredFallback ? [configuredFallback] : unique.slice(0, 1);
 }
 
 export function selectDefaultRevenueCatPackage(
   packages: ProPaywallPackage[],
-  config: RevenueCatConfig,
+  _config: RevenueCatConfig,
 ): ProPaywallPackage | null {
   if (packages.length === 0) return null;
-  if (config.packageId) {
-    return packages.find((item) => item.packageIdentifier === config.packageId) ?? packages[0];
-  }
-  return packages.find((item) => item.packageType === 'MONTHLY')
+  const defaultPackage = packages[0]?.offeringMetadata?.defaultPackage
+    ?? DEFAULT_PRO_OFFERING_METADATA.defaultPackage;
+  const preferredType = defaultPackage === 'monthly' ? 'MONTHLY' : 'ANNUAL';
+  return packages.find((item) => item.packageType === preferredType)
     ?? packages.find((item) => item.packageType === 'ANNUAL')
     ?? packages.find((item) => item.packageType === 'LIFETIME')
+    ?? packages.find((item) => item.packageType === 'MONTHLY')
     ?? packages[0];
 }
 
@@ -585,7 +655,14 @@ export function isRevenueCatPackagePurchaseLocked(
   return isRecurringProPackageType(targetPackage.packageType);
 }
 
-export function toProPaywallPackage(aPackage: PurchasesPackage): ProPaywallPackage {
+function finitePrice(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+export function toProPaywallPackage(
+  aPackage: PurchasesPackage,
+  offeringMetadata: ProOfferingMetadata = DEFAULT_PRO_OFFERING_METADATA,
+): ProPaywallPackage {
   return {
     offeringIdentifier: aPackage.presentedOfferingContext?.offeringIdentifier ?? aPackage.offeringIdentifier,
     packageIdentifier: aPackage.identifier,
@@ -593,8 +670,11 @@ export function toProPaywallPackage(aPackage: PurchasesPackage): ProPaywallPacka
     productIdentifier: aPackage.product.identifier ?? null,
     title: aPackage.product.title,
     description: aPackage.product.description,
+    price: finitePrice(aPackage.product.price),
     priceString: aPackage.product.priceString,
+    pricePerMonth: finitePrice(aPackage.product.pricePerMonth),
     pricePerMonthString: aPackage.product.pricePerMonthString,
+    offeringMetadata,
     package: aPackage,
   };
 }
@@ -611,6 +691,52 @@ export function classifyProPurchaseError(error: unknown): ProPurchaseErrorCode {
   }
   if (code === PURCHASES_ERROR_CODE.INVALID_CREDENTIALS_ERROR) return 'notConfigured';
   return 'unknown';
+}
+
+function normalizeStoreErrorCode(value: unknown): string | null {
+  if (typeof value !== 'string' && typeof value !== 'number') return null;
+  const normalized = String(value)
+    .trim()
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .replace(/[^a-zA-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .toUpperCase()
+    .slice(0, 64);
+  return normalized || null;
+}
+
+function embeddedStoreErrorCode(error: unknown): string | null {
+  const candidate = error as Partial<PurchasesError> | null | undefined;
+  const messages = [candidate?.underlyingErrorMessage, candidate?.message];
+  for (const message of messages) {
+    if (typeof message !== 'string') continue;
+    const match = message.match(/\b(?:ITEM|BILLING|STORE|PRODUCT|NETWORK)_[A-Z0-9_]+\b/i);
+    if (match) return normalizeStoreErrorCode(match[0]);
+  }
+  return null;
+}
+
+function revenueCatErrorName(code: unknown): string | null {
+  if (typeof code !== 'string') return null;
+  const entry = Object.entries(PURCHASES_ERROR_CODE)
+    .find(([, value]) => value === code);
+  return entry?.[0] ?? null;
+}
+
+export function classifyProPurchaseFailureReason(error: unknown): ProPurchaseFailureReason {
+  const candidate = error as Partial<PurchasesError> | null | undefined;
+  const code = candidate?.code;
+  if (code === PURCHASES_ERROR_CODE.PURCHASE_CANCELLED_ERROR) return 'cancelled';
+  if (code === PURCHASES_ERROR_CODE.PAYMENT_PENDING_ERROR) return 'pending';
+
+  const readableCode = candidate?.userInfo?.readableErrorCode
+    ?? candidate?.readableErrorCode;
+  const storeCode = embeddedStoreErrorCode(error)
+    ?? normalizeStoreErrorCode(readableCode)
+    ?? normalizeStoreErrorCode(revenueCatErrorName(code))
+    ?? normalizeStoreErrorCode(code)
+    ?? 'UNKNOWN';
+  return `store_error:${storeCode}`;
 }
 
 export const ProSubscriptionService = {
@@ -668,7 +794,10 @@ export const ProSubscriptionService = {
     }
     try {
       const offerings = await retryOnce(() => Purchases.getOfferings());
-      const packages = selectRevenueCatPackages(offerings, config).map(toProPaywallPackage);
+      const offering = selectRevenueCatOffering(offerings, config);
+      const metadata = resolveProOfferingMetadata(offering);
+      const packages = selectRevenueCatPackages(offerings, config)
+        .map((aPackage) => toProPaywallPackage(aPackage, metadata));
       updateRevenueCatDiagnostics({
         offeringsStatus: 'ok',
         offeringsCount: packages.length,

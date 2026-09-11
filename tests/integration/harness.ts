@@ -29,20 +29,29 @@ export class WranglerDevProcess {
   private readonly configPath: string;
   private readonly port: number;
   private readonly envFilePath: string;
+  private readonly persistencePath: string;
   private proc: ChildProcessWithoutNullStreams | null = null;
   private logs = '';
 
-  private constructor(cwd: string, configPath: string, port: number, envFilePath: string) {
+  private constructor(
+    cwd: string,
+    configPath: string,
+    port: number,
+    envFilePath: string,
+    persistencePath: string,
+  ) {
     this.cwd = cwd;
     this.configPath = configPath;
     this.port = port;
     this.envFilePath = envFilePath;
+    this.persistencePath = persistencePath;
   }
 
   static async start(params: {
     cwd: string;
     configPath: string;
     port: number;
+    persistencePath?: string;
     envVars?: Record<string, string>;
   }): Promise<WranglerDevProcess> {
     const tempDir = await mkdtemp(join(tmpdir(), 'clawket-relay-it-'));
@@ -52,7 +61,13 @@ export class WranglerDevProcess {
       .join('\n');
     await writeFile(envFilePath, envLines, 'utf8');
 
-    const runner = new WranglerDevProcess(params.cwd, params.configPath, params.port, envFilePath);
+    const runner = new WranglerDevProcess(
+      params.cwd,
+      params.configPath,
+      params.port,
+      envFilePath,
+      params.persistencePath ?? join(tempDir, 'state'),
+    );
     await runner.boot();
     return runner;
   }
@@ -100,6 +115,8 @@ export class WranglerDevProcess {
       '--ip',
       '127.0.0.1',
       '--local',
+      '--persist-to',
+      this.persistencePath,
       '--log-level',
       'error',
       '--show-interactive-dev-session',

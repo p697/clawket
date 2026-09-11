@@ -10,6 +10,7 @@ export function getQuickConnectAgentPrompt(
   pairCommand = MANUAL_PAIR_CMD,
 ): string {
   return t('Please run {{installCommand}} to install the open-source Clawket CLI, then run {{pairCommand}}, and tell me the pairing code shown in the terminal.', {
+    ns: 'chat',
     installCommand: MANUAL_INSTALL_CMD,
     pairCommand,
   });
@@ -20,12 +21,12 @@ export function getQuickConnectGuideSteps(
 ): Array<{ title: string; description: string }> {
   return [
     {
-      title: t('Step 1'),
-      description: t('Copy this message to your agent.'),
+      title: t('Step 1', { ns: 'chat' }),
+      description: t('Copy this message to your agent.', { ns: 'chat' }),
     },
     {
-      title: t('Step 2'),
-      description: t('Enter the pairing code in Clawket.'),
+      title: t('Step 2', { ns: 'chat' }),
+      description: t('Enter the pairing code in Clawket.', { ns: 'chat' }),
     },
   ];
 }

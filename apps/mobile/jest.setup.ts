@@ -1,3 +1,10 @@
+// SVG is a native drawing host. Preserve geometry props for component assertions.
+jest.mock('react-native-svg', () => {
+  const React = require('react');
+  const host = (name: string) => ({ children, ...props }: any) => React.createElement(name, props, children);
+  return { __esModule: true, default: host('Svg'), Path: host('Path') };
+});
+
 // Mock AsyncStorage
 jest.mock('@react-native-async-storage/async-storage', () => ({
   getItem: jest.fn(() => Promise.resolve(null)),
@@ -10,37 +17,75 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
   multiRemove: jest.fn(() => Promise.resolve()),
 }));
 
+// Keep Reanimated's ESM runtime out of the Node test environment. Individual
+// animation tests can still replace this baseline mock with a stricter factory.
+jest.mock('react-native-reanimated', () => {
+  const React = require('react');
+  const primitive = (name: string) => React.forwardRef(
+    ({ children, ...props }: { children?: React.ReactNode } & Record<string, unknown>, ref: React.Ref<unknown>) => (
+      React.createElement(name, { ...props, ref }, children)
+    ),
+  );
+  const identity = <T>(value: T): T => value;
+  const easingIdentity = (value: number): number => value;
+
+  const Animated = {
+    Image: primitive('AnimatedImage'),
+    ScrollView: primitive('AnimatedScrollView'),
+    Text: primitive('AnimatedText'),
+    View: primitive('AnimatedView'),
+    createAnimatedComponent: identity,
+  };
+  // Layout/entering presets are chainable builders; tests only need them to exist.
+  const layoutAnimation = (name: string) => {
+    const animation: Record<string, unknown> = { name };
+    for (const method of ['duration', 'delay', 'easing', 'reduceMotion', 'springify', 'withInitialValues']) {
+      animation[method] = () => animation;
+    }
+    return animation;
+  };
+
+  return {
+    __esModule: true,
+    default: Animated,
+    cancelAnimation: jest.fn(),
+    FadeIn: layoutAnimation('FadeIn'),
+    FadeOut: layoutAnimation('FadeOut'),
+    LinearTransition: layoutAnimation('LinearTransition'),
+    Easing: {
+      bezier: () => easingIdentity,
+      cubic: (value: number) => value ** 3,
+      ease: easingIdentity,
+      in: identity,
+      inOut: identity,
+      linear: easingIdentity,
+      out: identity,
+      quad: (value: number) => value ** 2,
+    },
+    interpolate: (_value: number, _input: number[], output: unknown[]) => output[0],
+    interpolateColor: (_value: number, _input: number[], output: unknown[]) => output[0],
+    makeMutable: <T>(value: T) => ({ value }),
+    ReduceMotion: { Always: 'always', Never: 'never', System: 'system' },
+    runOnJS: identity,
+    scrollTo: jest.fn(),
+    useAnimatedRef: () => ({ current: null }),
+    useAnimatedStyle: (factory: () => unknown) => factory(),
+    useScrollOffset: () => ({ value: 0 }),
+    useReducedMotion: () => false,
+    useSharedValue: <T>(value: T) => ({ value }),
+    withDelay: (_delay: number, value: unknown) => value,
+    withRepeat: (value: unknown) => value,
+    withSequence: (...values: unknown[]) => values.at(-1),
+    withSpring: identity,
+    withTiming: identity,
+  };
+});
+
 // Mock expo-linking
 jest.mock('expo-linking', () => ({
   getInitialURL: jest.fn(() => Promise.resolve(null)),
   addEventListener: jest.fn(() => ({ remove: jest.fn() })),
   createURL: jest.fn((path: string) => `clawket://${path}`),
-}));
-
-// Mock expo-apple-authentication
-jest.mock('expo-apple-authentication', () => ({
-  isAvailableAsync: jest.fn(() => Promise.resolve(true)),
-  signInAsync: jest.fn(() => Promise.resolve({
-    identityToken: 'apple-id-token',
-  })),
-  AppleAuthenticationScope: {
-    EMAIL: 'EMAIL',
-    FULL_NAME: 'FULL_NAME',
-  },
-}));
-
-// Mock expo-auth-session/providers/google
-jest.mock('expo-auth-session/providers/google', () => ({
-  useIdTokenAuthRequest: jest.fn(() => ([
-    { url: 'https://accounts.google.com' },
-    null,
-    jest.fn(() => Promise.resolve({
-      type: 'success',
-      params: {
-        id_token: 'google-id-token',
-      },
-    })),
-  ])),
 }));
 
 // Mock expo-camera
@@ -83,16 +128,6 @@ jest.mock('expo-application', () => ({
   nativeBuildVersion: '1',
   getIosIdForVendorAsync: jest.fn(() => Promise.resolve(null)),
   androidId: null,
-}));
-
-// Mock expo-constants
-jest.mock('expo-constants', () => ({
-  __esModule: true,
-  default: {
-    expoConfig: { extra: {} },
-    sessionId: 'jest-session',
-  },
-  expoConfig: { extra: {} },
 }));
 
 // Mock expo-device
@@ -241,6 +276,25 @@ jest.mock('@react-native-menu/menu', () => ({
   MenuView: ({ children }: { children: unknown }) => children,
 }));
 
+// Mock react-native-keyboard-controller: its module init touches Animated, which
+// partial react-native mocks omit. Tests that exercise keyboard behavior override this.
+jest.mock('react-native-keyboard-controller', () => {
+  const ReactRuntime = require('react');
+  const passthrough = (host: string) => ReactRuntime.forwardRef(
+    ({ children, ...props }: Record<string, unknown>, ref: unknown) => ReactRuntime.createElement(
+      require('react-native')[host],
+      { ...props, ref },
+      children,
+    ),
+  );
+  return {
+    KeyboardProvider: ({ children }: { children: unknown }) => children,
+    KeyboardAvoidingView: passthrough('View'),
+    KeyboardAwareScrollView: passthrough('ScrollView'),
+    useKeyboardHandler: jest.fn(),
+  };
+});
+
 // Mock react-native-screens
 jest.mock('react-native-screens', () => ({
   FullWindowOverlay: ({ children }: { children: React.ReactNode }) => children,
@@ -252,23 +306,72 @@ jest.mock('@gorhom/bottom-sheet', () => {
   const { View, TextInput, SectionList } = require('react-native');
 
   const BottomSheetModal = React.forwardRef(function BottomSheetModal(
-    { children }: { children: React.ReactNode },
+    {
+      children,
+      handleComponent: HandleComponent,
+      backdropComponent: BackdropComponent,
+      onDismiss,
+      ...props
+    }: {
+      children: React.ReactNode | ((params: { data?: unknown }) => React.ReactNode);
+      handleComponent?: React.ComponentType;
+      backdropComponent?: React.ComponentType<{
+        animatedIndex: { value: number };
+        animatedPosition: { value: number };
+      }>;
+      onDismiss?: () => void;
+    } & Record<string, unknown>,
     ref: React.Ref<{ present: () => void; dismiss: () => void }>,
   ) {
+    const [presented, setPresented] = React.useState(false);
+    const dismissedBeforeMount = React.useRef(false);
     React.useImperativeHandle(ref, () => ({
-      present: jest.fn(),
-      dismiss: jest.fn(),
+      present: jest.fn(() => { if (!dismissedBeforeMount.current) setPresented(true); }),
+      dismiss: jest.fn(() => {
+        if (!presented) dismissedBeforeMount.current = true;
+        setPresented(false);
+        onDismiss?.();
+      }),
     }));
-    return React.createElement(View, null, children);
+    if (!presented) {
+      return null;
+    }
+    const backdropVariables = {
+      animatedIndex: { value: 0 },
+      animatedPosition: { value: 0 },
+    };
+    return React.createElement(
+      View,
+      props,
+      BackdropComponent
+        ? React.createElement(BackdropComponent, backdropVariables)
+        : null,
+      HandleComponent ? React.createElement(HandleComponent) : null,
+      typeof children === 'function' ? children({}) : children,
+    );
   });
+
+  function BottomSheetView({
+    children,
+    ...props
+  }: {
+    children?: React.ReactNode;
+  } & Record<string, unknown>) {
+    return React.createElement(View, props, children);
+  }
 
   return {
     __esModule: true,
-    BottomSheetBackdrop: ({ children }: { children?: React.ReactNode }) => React.createElement(View, null, children),
+    BottomSheetBackdrop: ({ children, ...props }: {
+      children?: React.ReactNode;
+    } & Record<string, unknown>) => React.createElement(View, props, children),
     BottomSheetModal,
     BottomSheetModalProvider: ({ children }: { children: React.ReactNode }) => children,
+    BottomSheetFlatList: ({ data = [], renderItem, ListHeaderComponent, ...props }: any) => React.createElement(View, props,
+      ListHeaderComponent, ...data.map((item: any, index: number) => React.createElement(React.Fragment, { key: item.key ?? index }, renderItem({ item, index })))),
     BottomSheetSectionList: SectionList,
     BottomSheetTextInput: TextInput,
+    BottomSheetView,
   };
 });
 
@@ -387,39 +490,6 @@ jest.mock('react-native-purchases', () => {
   };
 });
 
-jest.mock('react-native-draggable-flatlist', () => {
-  const React = require('react');
-  const { View } = require('react-native');
-
-  const MockDraggableFlatList = ({
-    data,
-    renderItem,
-  }: {
-    data: Array<unknown>;
-    renderItem: (params: { item: unknown; getIndex: () => number; drag: () => void; isActive: boolean }) => React.ReactNode;
-  }) => React.createElement(
-    View,
-    null,
-    data.map((item, index) =>
-      React.createElement(
-        React.Fragment,
-        { key: String(index) },
-        renderItem({
-          item,
-          getIndex: () => index,
-          drag: jest.fn(),
-          isActive: false,
-        }),
-      )),
-  );
-
-  return {
-    __esModule: true,
-    default: MockDraggableFlatList,
-    ScaleDecorator: ({ children }: { children: React.ReactNode }) => children,
-  };
-});
-
 // Mock posthog-react-native
 jest.mock('posthog-react-native', () => {
   const client = {
@@ -450,3 +520,22 @@ if (!globalThis.crypto.getRandomValues) {
     return array;
   };
 }
+
+// Metro resolves official platform artwork to numeric native asset handles.
+jest.mock('./assets/brands/openclaw.png', () => 301);
+jest.mock('./assets/brands/hermes.png', () => 302);
+jest.mock('./assets/brands/youmind.png', () => 303);
+
+jest.mock('./assets/icon.png', () => 304);
+jest.mock('./assets/app-icons/black/app-icon-black-1024.png', () => 305);
+
+// Bundled model manufacturer artwork.
+jest.mock('./assets/model-icons/select_model_chatgpt.png', () => 401);
+jest.mock('./assets/model-icons/select_model_claude.png', () => 402);
+jest.mock('./assets/model-icons/select_model_gemini.png', () => 403);
+jest.mock('./assets/model-icons/select_model_deepseek.png', () => 404);
+jest.mock('./assets/model-icons/select_model_qwen.png', () => 405);
+jest.mock('./assets/model-icons/select_model_grok.png', () => 406);
+jest.mock('./assets/model-icons/select_model_kimi.png', () => 407);
+jest.mock('./assets/model-icons/select_model_minimax.png', () => 408);
+jest.mock('./assets/model-icons/zhipuai.png', () => 409);

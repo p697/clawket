@@ -1,19 +1,8 @@
 import React from 'react';
-import { GatewayClient } from '../services/gateway';
 import { LastOpenedSessionSnapshot } from '../services/storage';
-import { GatewayConfig } from '../types';
 import type { AgentInfo } from '../types/agent';
 import type { NodeCapabilityToggles } from '../services/node-capabilities';
 import type { ChatAppearanceSettings, SpeechRecognitionLanguage } from '../types';
-
-export type SessionSidebarTab = 'sessions' | 'subagents' | 'cron';
-
-export type ChatSidebarRequest = {
-  requestedAt: number;
-  tab: SessionSidebarTab;
-  channel?: string;
-  openDrawer: boolean;
-};
 
 export type ChatNotificationOpenRequest = {
   requestedAt: number;
@@ -23,11 +12,7 @@ export type ChatNotificationOpenRequest = {
 };
 
 export type AppContextType = {
-  gateway: GatewayClient;
-  activeGatewayConfigId: string | null;
-  gatewayEpoch: number;
   foregroundEpoch: number;
-  config: GatewayConfig | null;
   debugMode: boolean;
   showAgentAvatar: boolean;
   chatSessionRequest: {
@@ -35,7 +20,6 @@ export type AppContextType = {
     requestedAt: number;
     sourceRole?: string;
   } | null;
-  chatSidebarRequest: ChatSidebarRequest | null;
   pendingChatNotificationOpen: ChatNotificationOpenRequest | null;
   agents: AgentInfo[];
   currentAgentId: string;
@@ -53,7 +37,6 @@ export type AppContextType = {
   setAgents: (agents: AgentInfo[]) => void;
   showModelUsage: boolean;
   execApprovalEnabled: boolean;
-  canvasEnabled: boolean;
   chatFontSize: number;
   chatAppearance: ChatAppearanceSettings;
   speechRecognitionLanguage: SpeechRecognitionLanguage;
@@ -61,18 +44,15 @@ export type AppContextType = {
   onShowAgentAvatarToggle: (show: boolean) => void;
   onShowModelUsageToggle: (enabled: boolean) => void;
   onExecApprovalToggle: (enabled: boolean) => void;
-  onCanvasToggle: (enabled: boolean) => void;
   nodeEnabled: boolean;
   onNodeEnabledToggle: (enabled: boolean) => void;
   nodeCapabilityToggles: NodeCapabilityToggles;
   onNodeCapabilityTogglesChange: (toggles: NodeCapabilityToggles) => void;
   onChatFontSizeChange: (size: number) => void;
-  onChatAppearanceChange: (settings: ChatAppearanceSettings) => void;
+  onChatAppearanceChange: (settings: ChatAppearanceSettings) => void | Promise<void>;
   onSpeechRecognitionLanguageChange: (language: SpeechRecognitionLanguage) => void;
   requestChatSession: (sessionKey: string, sourceRole?: string) => void;
   clearChatSessionRequest: () => void;
-  requestChatSidebar: (params?: { tab?: SessionSidebarTab; channel?: string; openDrawer?: boolean }) => void;
-  clearChatSidebarRequest: () => void;
   requestOpenChatFromNotification: (params: {
     sessionKey: string;
     agentId?: string;
@@ -87,8 +67,6 @@ export type AppContextType = {
   pendingAddGateway: boolean;
   requestAddGateway: () => void;
   clearPendingAddGateway: () => void;
-  onSaved: (next: GatewayConfig, nextGatewayScopeId?: string | null) => void;
-  onReset: () => void;
 };
 
 const AppContext = React.createContext<AppContextType | null>(null);

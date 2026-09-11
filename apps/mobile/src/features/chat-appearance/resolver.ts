@@ -60,11 +60,26 @@ function withAlpha(color: string, alpha: number): string {
   return `rgba(${Math.round(rgb.r)},${Math.round(rgb.g)},${Math.round(rgb.b)},${clamp(alpha, 0, 1)})`;
 }
 
+/** Resolve the tint onto a stable canvas before applying material opacity.
+ * Replacing accentSoft's alpha turns a 10% tint into a saturated fill.
+ * A stable backing also protects text when a wallpaper is enabled.
+ */
+function resolveTintSurface(tint: string, canvas: string): string {
+  const rgb = parseHexColor(tint) ?? parseRgbColor(tint);
+  const base = parseHexColor(canvas) ?? parseRgbColor(canvas);
+  if (!rgb || !base) return canvas;
+  const alphaMatch = tint.match(/rgba\([^)]*,\s*([\d.]+)\s*\)/i);
+  const alpha = alphaMatch ? clamp(Number(alphaMatch[1]), 0, 1) : 1;
+  const blend = (front: number, back: number) => Math.round(front * alpha + back * (1 - alpha));
+  return `rgb(${blend(rgb.r, base.r)},${blend(rgb.g, base.g)},${blend(rgb.b, base.b)})`;
+}
+
 export function resolveChatBubbleAppearance(
   theme: AppTheme,
   settings: ChatAppearanceSettings,
 ): ResolvedChatAppearance {
   const { colors, scheme } = theme;
+  const userSurface = resolveTintSurface(colors.accentSoft, colors.canvas);
   const softOpacity = clamp(settings.bubbles.opacity, 0.78, 1);
   const glassUserOpacity = clamp(softOpacity - 0.1, 0.72, 0.9);
   const glassAssistantOpacity = clamp(softOpacity - 0.16, 0.66, 0.84);
@@ -74,14 +89,14 @@ export function resolveChatBubbleAppearance(
     case 'soft':
       return {
         userBubble: {
-          backgroundColor: withAlpha(colors.bubbleUser, softOpacity),
-          borderColor: withAlpha(colors.primary, settings.background.enabled ? 0.16 : 0),
+          backgroundColor: withAlpha(userSurface, softOpacity),
+          borderColor: withAlpha(colors.accent, settings.background.enabled ? 0.16 : 0),
           borderWidth: settings.background.enabled ? 1 : 0,
           shadow: false,
         },
         assistantBubble: {
-          backgroundColor: withAlpha(colors.bubbleAssistant, clamp(softOpacity - 0.04, 0.82, 0.96)),
-          borderColor: withAlpha(colors.borderStrong, settings.background.enabled ? 0.22 : 0),
+          backgroundColor: withAlpha(colors.surface, clamp(softOpacity - 0.04, 0.82, 0.96)),
+          borderColor: withAlpha(colors.line, settings.background.enabled ? 0.22 : 0),
           borderWidth: settings.background.enabled ? 1 : 0,
           shadow: false,
         },
@@ -89,14 +104,14 @@ export function resolveChatBubbleAppearance(
     case 'glass':
       return {
         userBubble: {
-          backgroundColor: withAlpha(colors.bubbleUser, glassUserOpacity),
-          borderColor: withAlpha(colors.primary, scheme === 'dark' ? 0.42 : 0.26),
+          backgroundColor: withAlpha(userSurface, glassUserOpacity),
+          borderColor: withAlpha(colors.accent, scheme === 'dark' ? 0.42 : 0.26),
           borderWidth: 1,
           shadow: true,
         },
         assistantBubble: {
-          backgroundColor: withAlpha(colors.surfaceElevated, glassAssistantOpacity),
-          borderColor: withAlpha(colors.borderStrong, borderAlpha),
+          backgroundColor: withAlpha(colors.surfaceFloating, glassAssistantOpacity),
+          borderColor: withAlpha(colors.line, borderAlpha),
           borderWidth: 1,
           shadow: true,
         },
@@ -105,13 +120,13 @@ export function resolveChatBubbleAppearance(
     default:
       return {
         userBubble: {
-          backgroundColor: colors.bubbleUser,
+          backgroundColor: userSurface,
           borderColor: 'transparent',
           borderWidth: 0,
           shadow: false,
         },
         assistantBubble: {
-          backgroundColor: colors.bubbleAssistant,
+          backgroundColor: colors.surface,
           borderColor: 'transparent',
           borderWidth: 0,
           shadow: false,
@@ -125,11 +140,11 @@ export function resolveChatMetaAppearance(theme: AppTheme): ResolvedChatMetaAppe
 
   return {
     backgroundColor: withAlpha(
-      scheme === 'dark' ? colors.surfaceElevated : colors.surface,
+      scheme === 'dark' ? colors.surfaceFloating : colors.surface,
       scheme === 'dark' ? 0.72 : 0.82,
     ),
     borderColor: withAlpha(
-      scheme === 'dark' ? colors.borderStrong : colors.border,
+      scheme === 'dark' ? colors.line : colors.line,
       scheme === 'dark' ? 0.42 : 0.58,
     ),
     shadow: scheme === 'light',

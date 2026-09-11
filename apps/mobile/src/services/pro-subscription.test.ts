@@ -1,10 +1,15 @@
 import {
   classifyProPurchaseError,
+  classifyProPurchaseFailureReason,
   deriveProSubscriptionSnapshot,
+  getProSubscriptionExpirationMs,
   hasLifetimeProAccess,
+  isProSubscriptionSnapshotActiveAt,
   isRevenueCatPackagePurchaseLocked,
+  normalizeProSubscriptionSnapshotAt,
   resetRevenueCatForTests,
   resolveRevenueCatConfig,
+  resolveProOfferingMetadata,
   selectActiveRecurringRevenueCatPackage,
   selectDefaultRevenueCatPackage,
   selectDisplayedRevenueCatPackage,
@@ -257,6 +262,8 @@ describe('buildAnalyticsSubscriptionProperties', () => {
       subscription_status: 'pro',
       subscription_type: 'yearly',
       subscription_tenure_bucket: '31_90d',
+      is_pro: true,
+      is_premium: true,
     });
   });
 
@@ -265,6 +272,8 @@ describe('buildAnalyticsSubscriptionProperties', () => {
       subscription_status: 'free',
       subscription_type: 'none',
       subscription_tenure_bucket: 'none',
+      is_pro: false,
+      is_premium: false,
     });
   });
 });
@@ -277,7 +286,9 @@ describe('selectRevenueCatPackages', () => {
       identifier: 'monthly',
       title: 'Clawket Pro Monthly',
       description: 'Unlock Pro',
+      price: 2.99,
       priceString: '$2.99',
+      pricePerMonth: 2.99,
       pricePerMonthString: '$2.99',
     },
   } as any;
@@ -288,7 +299,9 @@ describe('selectRevenueCatPackages', () => {
       identifier: 'yearly',
       title: 'Clawket Pro Annual',
       description: 'Unlock Pro',
+      price: 23.99,
       priceString: '$29.99',
+      pricePerMonth: 2,
       pricePerMonthString: '$2.49',
     },
   } as any;
@@ -299,12 +312,14 @@ describe('selectRevenueCatPackages', () => {
       identifier: 'lifetime',
       title: 'Clawket Pro Lifetime',
       description: 'Unlock Pro forever',
+      price: 49.99,
       priceString: '$79.99',
+      pricePerMonth: null,
       pricePerMonthString: null,
     },
   } as any;
 
-  it('returns monthly, annual, and lifetime packages in a stable order', () => {
+  it('returns annual, lifetime, and monthly packages in the product order', () => {
     expect(selectRevenueCatPackages({
       all: {
         default: {
@@ -320,7 +335,7 @@ describe('selectRevenueCatPackages', () => {
       apiKey: 'key',
       entitlementId: 'pro',
       offeringId: 'default',
-    })).toEqual([monthlyPackage, annualPackage, lifetimePackage]);
+    })).toEqual([annualPackage, lifetimePackage, monthlyPackage]);
   });
 
   it('falls back to the first available package when no monthly or annual package exists', () => {
@@ -349,17 +364,132 @@ describe('selectRevenueCatPackages', () => {
     })).toEqual([customPackage]);
   });
 
-  it('prefers the configured package id as the default selected package', () => {
-    const packages = [toProPaywallPackage(monthlyPackage), toProPaywallPackage(annualPackage)];
+  it('uses the RevenueCat current offering so targeting and experiment assignments remain authoritative', () => {
+    const proOffering = {
+      identifier: 'pro',
+      metadata: {},
+      availablePackages: [annualPackage],
+      annual: annualPackage,
+      monthly: null,
+      lifetime: null,
+    };
+    expect(selectRevenueCatPackages({
+      all: { pro: proOffering },
+      current: {
+        identifier: 'other',
+        metadata: {},
+        availablePackages: [monthlyPackage],
+        annual: null,
+        monthly: monthlyPackage,
+        lifetime: null,
+      },
+    } as any, { apiKey: 'key', entitlementId: 'pro' })).toEqual([monthlyPackage]);
+  });
+
+  it('keeps a current experiment variant authoritative over the pro and legacy configured offering ids', () => {
+    const proOffering = {
+      identifier: 'pro',
+      metadata: { default_package: 'monthly' },
+      availablePackages: [monthlyPackage],
+      annual: null,
+      monthly: monthlyPackage,
+      lifetime: null,
+    };
+    const legacyOffering = {
+      identifier: 'default',
+      metadata: {},
+      availablePackages: [annualPackage],
+      annual: annualPackage,
+      monthly: null,
+      lifetime: null,
+    };
+    expect(selectRevenueCatPackages({
+      all: { pro: proOffering, default: legacyOffering },
+      current: legacyOffering,
+    } as any, {
+      apiKey: 'key',
+      entitlementId: 'pro',
+      offeringId: 'default',
+    })).toEqual([annualPackage]);
+  });
+
+  it('falls back to the named pro offering when RevenueCat has no current assignment', () => {
+    const proOffering = {
+      identifier: 'pro',
+      metadata: {},
+      availablePackages: [annualPackage],
+      annual: annualPackage,
+      monthly: null,
+      lifetime: null,
+    };
+    expect(selectRevenueCatPackages({
+      all: { pro: proOffering },
+      current: null,
+    } as any, { apiKey: 'key', entitlementId: 'pro' })).toEqual([annualPackage]);
+  });
+
+  it('honors an explicitly configured non-default custom offering over pro', () => {
+    const proOffering = {
+      identifier: 'pro',
+      metadata: {},
+      availablePackages: [annualPackage],
+      annual: annualPackage,
+      monthly: null,
+      lifetime: null,
+    };
+    const customOffering = {
+      identifier: 'team-promo',
+      metadata: { default_package: 'monthly' },
+      availablePackages: [monthlyPackage],
+      annual: null,
+      monthly: monthlyPackage,
+      lifetime: null,
+    };
+    expect(selectRevenueCatPackages({
+      all: { pro: proOffering, 'team-promo': customOffering },
+      current: proOffering,
+    } as any, {
+      apiKey: 'key',
+      entitlementId: 'pro',
+      offeringId: 'team-promo',
+    })).toEqual([monthlyPackage]);
+  });
+
+  it('normalizes supported offering metadata and fails safe on malformed values', () => {
+    expect(resolveProOfferingMetadata({
+      metadata: { default_package: 'monthly', social_proof: false },
+    })).toEqual({ defaultPackage: 'monthly', socialProof: false });
+    expect(resolveProOfferingMetadata({
+      metadata: { default_package: 'weekly', social_proof: 'false' },
+    })).toEqual({ defaultPackage: 'annual', socialProof: true });
+  });
+
+  it('keeps offering metadata authoritative over the legacy configured package id', () => {
+    const packages = [
+      toProPaywallPackage(monthlyPackage, { defaultPackage: 'annual', socialProof: true }),
+      toProPaywallPackage(annualPackage, { defaultPackage: 'annual', socialProof: true }),
+    ];
     expect(selectDefaultRevenueCatPackage(packages, {
       apiKey: 'key',
       entitlementId: 'pro',
-      packageId: '$rc_annual',
+      packageId: '$rc_monthly',
     })?.packageIdentifier).toBe('$rc_annual');
   });
 
-  it('defaults to the monthly package when no package id is configured', () => {
+  it('defaults to annual when offering metadata is absent', () => {
     const packages = [toProPaywallPackage(annualPackage), toProPaywallPackage(monthlyPackage)];
+    expect(selectDefaultRevenueCatPackage(packages, {
+      apiKey: 'key',
+      entitlementId: 'pro',
+    })?.packageIdentifier).toBe('$rc_annual');
+  });
+
+  it('selects monthly when the offering metadata requests it', () => {
+    const metadata = { defaultPackage: 'monthly' as const, socialProof: false };
+    const packages = [
+      toProPaywallPackage(annualPackage, metadata),
+      toProPaywallPackage(monthlyPackage, metadata),
+    ];
     expect(selectDefaultRevenueCatPackage(packages, {
       apiKey: 'key',
       entitlementId: 'pro',
@@ -810,6 +940,47 @@ describe('selectRevenueCatPackages', () => {
 
 });
 
+describe('subscription snapshot expiration', () => {
+  const activeSnapshot: ProSubscriptionSnapshot = {
+    isActive: true,
+    entitlementId: 'pro',
+    productIdentifier: 'annual',
+    productPlanIdentifier: null,
+    activeSubscriptionProductIdentifiers: ['annual'],
+    purchasedProductIdentifiers: ['annual'],
+    nonSubscriptionProductIdentifiers: [],
+    originalPurchaseDate: null,
+    latestPurchaseDate: null,
+    expirationDate: '2026-09-05T00:00:01.000Z',
+    willRenew: false,
+    store: 'APP_STORE',
+    managementURL: null,
+    originalAppUserId: null,
+    requestDate: null,
+    verification: null,
+  };
+
+  it('locks a cached subscription at the exact expiration boundary', () => {
+    const expirationMs = Date.parse(activeSnapshot.expirationDate!);
+    expect(getProSubscriptionExpirationMs(activeSnapshot)).toBe(expirationMs);
+    expect(isProSubscriptionSnapshotActiveAt(activeSnapshot, expirationMs - 1)).toBe(true);
+    expect(isProSubscriptionSnapshotActiveAt(activeSnapshot, expirationMs)).toBe(false);
+    expect(normalizeProSubscriptionSnapshotAt(activeSnapshot, expirationMs)).toEqual({
+      ...activeSnapshot,
+      isActive: false,
+    });
+  });
+
+  it('keeps lifetime access and fails closed on malformed expiration data', () => {
+    const lifetime = { ...activeSnapshot, expirationDate: null };
+    expect(isProSubscriptionSnapshotActiveAt(lifetime, Date.now())).toBe(true);
+    expect(isProSubscriptionSnapshotActiveAt({
+      ...activeSnapshot,
+      expirationDate: 'not-a-date',
+    }, Date.now())).toBe(false);
+  });
+});
+
 describe('classifyProPurchaseError', () => {
   it('maps RevenueCat error codes to UI states', () => {
     expect(classifyProPurchaseError({ code: '1' })).toBe('cancelled');
@@ -817,5 +988,16 @@ describe('classifyProPurchaseError', () => {
     expect(classifyProPurchaseError({ code: '5' })).toBe('purchaseUnavailable');
     expect(classifyProPurchaseError({ code: '11' })).toBe('notConfigured');
     expect(classifyProPurchaseError(new Error('boom'))).toBe('unknown');
+  });
+
+  it('maps cancellation, pending, and store errors to analytics-safe reasons', () => {
+    expect(classifyProPurchaseFailureReason({ code: '1' })).toBe('cancelled');
+    expect(classifyProPurchaseFailureReason({ code: '20' })).toBe('pending');
+    expect(classifyProPurchaseFailureReason({
+      code: '5',
+      underlyingErrorMessage: 'Billing response: ITEM_UNAVAILABLE',
+    })).toBe('store_error:ITEM_UNAVAILABLE');
+    expect(classifyProPurchaseFailureReason({ code: '10' })).toBe('store_error:10');
+    expect(classifyProPurchaseFailureReason(new Error('boom'))).toBe('store_error:UNKNOWN');
   });
 });

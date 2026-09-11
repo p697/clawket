@@ -108,7 +108,7 @@ fi
 echo "Validating Android public release config..."
 (
   cd "$ROOT_DIR"
-  node scripts/check-public-config.mjs --platform=android
+  CLAWKET_REQUIRE_POSTHOG=1 CLAWKET_REQUIRE_REVENUECAT=1 node scripts/check-public-config.mjs --platform=android
 )
 
 echo "Restoring Android signing config..."

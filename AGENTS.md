@@ -2,12 +2,20 @@
 
 This repository is the Clawket monorepo.
 
+## Clawket 3.0 Program Rule
+
+1. `docs/3.0/` is the single implementation source for the 3.0 rebuild. Read `docs/3.0/README.md` first, then `docs/3.0/00-decisions.md` (product decisions; implementation may deviate only under the README deviation rules) and `docs/3.0/08-milestones.md` (execution order).
+2. `docs/3.0/PROGRESS.md` is the shared progress log. Read it at the start of every session and update it after every milestone.
+3. Do not block on humans: record human-only work in the `HUMAN TODO` table of `docs/3.0/PROGRESS.md` and continue. Do not expand scope beyond the spec.
+4. The v1 client protocol replay tests in `tests/compat/` are a deployment gate for Relay, Registry, and Bridge. Never deploy on a red run.
+
 ## Working Principles
 
 1. Treat the current code, tests, deploy scripts, and product behavior as the source of truth; historical documentation is supporting context only.
 2. Preserve unrelated work in a dirty tree. Do not reformat, revert, or opportunistically rewrite files outside the task.
 3. Prefer stability and explicit compatibility over broad cleanup, especially across the OpenClaw and Hermes paths.
 4. Keep prompts, documentation, and implementation rules concise and non-duplicative. Put detailed workspace rules in the closest workspace document.
+5. Keep production files, exports, and direct dependencies consumer-backed. Document string-loaded entry points, bundle externals, and other static-analysis exceptions instead of deleting them blindly.
 
 ## AGENTS / CLAUDE Source Rule
 
@@ -21,9 +29,16 @@ This repository is the Clawket monorepo.
 | `apps/relay-registry` | Cloudflare registry worker |
 | `apps/relay-worker` | Cloudflare relay worker |
 | `apps/bridge-cli` | Publishable bridge CLI |
+| `packages/agent-protocol` | Pure TypeScript agent descriptors, adapter contracts, capabilities, and fixtures |
 | `packages/bridge-core` | Bridge shared helpers |
 | `packages/bridge-runtime` | Bridge runtime |
 | `packages/relay-shared` | Relay shared protocol/types |
+
+## Agent Protocol Package Rule
+
+1. `packages/agent-protocol` is the backend-neutral contract boundary shared by Mobile and Bridge. Keep it pure TypeScript with no React Native or backend runtime dependency.
+2. Define backend capabilities centrally in that package. Runtime adapters may downgrade declared capabilities, but must never advertise unsupported operations or upgrade the product matrix.
+3. Keep transport identity separate from backend identity in all protocol descriptors and fixtures.
 
 ## External Dependency
 
@@ -54,9 +69,21 @@ During the OpenClaw + Hermes coexistence period, treat backend identity and tran
 ## Relay Liveness Compatibility Rule
 
 1. Client liveness must be capability-negotiated. Only clients advertising `relay.client-pong.v1` may be expired for missing Relay pong acknowledgements.
-2. Legacy clients must not be disconnected solely because they have not sent application traffic; socket failure and handshake-specific timeouts remain valid cleanup signals.
+2. Client pong expiry must allow at least three configured heartbeat intervals, including before the first tick; shorter overrides must be clamped to that floor. Legacy clients must not be disconnected solely because they have not sent application traffic; socket failure and handshake-specific timeouts remain valid cleanup signals.
 3. A Bridge or local Gateway reconnect must force any stale client transport to reconnect when its existing backend session can no longer be resumed safely.
 4. Successful health evidence must reset reconnect backoff. A raw WebSocket `open` event is not sufficient proof of a completed backend handshake.
+
+## Relay Hibernation Rule
+
+Active client routing must survive Durable Object hibernation through WebSocket attachments. Rehydrate only authenticated full-client sockets; never promote restricted pairing sockets or guess between ambiguous clients. Preserve routing markers when updating heartbeat or handshake attachments. Cover both backend policies with memory-discard recovery tests.
+
+## Relay Resource Safety Rule
+
+1. Relay `/ws` requests must prove the backend-specific pairing record exists before resolving a room Durable Object. Keep the bounded 60-second existence cache free of credentials and request-scoped state.
+2. Relay, Bridge, and App use the same 8 MiB application-frame limit. Relay closes strictly larger frames with `1009` / `frame_too_large`; Bridge normalizes the `ws` hard-limit error to the same stable code, and App rejects it before send. The nominal 5 MiB image flow must remain below the wire limit.
+3. Registry registration is limited to 10 attempts per hashed source IP per fixed hour using a strongly consistent counter. Never store or log the raw source IP for this limit.
+4. Unclaimed registration records expire after 24 hours; successful claim restores the existing 365-day lifetime.
+5. Relay health and the post-authentication `relay.ready` control frame advertise `relay.frame-limit.v2`; older peers must remain able to ignore the additive control frame.
 
 ## Preview Service Environment Rule
 
@@ -130,3 +157,17 @@ When implementation, architecture, or release behavior changes, update the close
 2. Hermes support in those commands must be additive and limited to Clawket-managed Hermes bridge and relay runtimes.
 3. `stop` and `uninstall` should stop Hermes runtimes without deleting Hermes config; `reset` remains the command that clears local Hermes state.
 4. Hermes-only users must be able to use lifecycle commands without requiring an OpenClaw pairing config.
+
+## Connection Diagnostics Rule
+
+Relay socket diagnostics use a server-generated per-socket UUID persisted in WebSocket attachments; never derive it from credentials or user/device identity. Preserve it across attachment updates and hibernation. Keep raw IDs and secrets redacted. Pairing/connection triage follows `docs/3.0/20-connection-diagnostics.md`; distinguish local logs, cloud logs and measured end-to-end evidence.
+
+## Independent OpenClaw Client Channels
+
+Negotiated `bridge.client-sockets.v1` uses authenticated owner secondary sockets bound to server-generated full-client socket diagnostic IDs. Keep each local Gateway handshake isolated, preserve raw 8 MiB frames, and reconstruct routes from attachments after hibernation. Restricted pairing sockets cannot become channel targets. Hermes and legacy owners retain their existing policies.
+
+Before handling any frame, verify that its WebSocket is still the current owner, client, pairing client or secondary channel. Buffered frames and late close/error events from replaced sockets must not alter the replacement's routing, rate limits or heartbeat watchdog. Replacement logs link only validated server-generated diagnostic UUIDs; distinguish owner/channel/client sockets and include close codes without logging peer-supplied close text.
+
+## Worker Toolchain Audit
+
+Keep Wrangler on a security-patched v4 release (current minimum 4.131.0) with its matching Miniflare/workerd dependencies. Do not force a transitive native override to hide an audit finding; validate the resolved lockfile with both dependency audits and v1 replay after toolchain changes.

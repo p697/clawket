@@ -12,7 +12,7 @@ function resolvePresentation(
 export function resolveUsageCostSummaryDisplay(params: {
   usageResult: UsageResult | null;
   costSummary: CostSummary | null;
-  t: TFunction<'console'>;
+  t: TFunction<'settings'>;
 }): {
   valueLabel: string;
   subtitle: string | null;
@@ -22,7 +22,7 @@ export function resolveUsageCostSummaryDisplay(params: {
   const { usageResult, costSummary, t } = params;
   const presentation = resolvePresentation(usageResult, costSummary);
   const totalCost = costSummary?.totals?.totalCost ?? usageResult?.totals?.totalCost ?? 0;
-  const subtitle = t('View usage details');
+  const subtitle = t('View usage details', { ns: 'settings' });
 
   switch (presentation?.mode) {
     case 'included':
@@ -34,17 +34,17 @@ export function resolveUsageCostSummaryDisplay(params: {
       };
     case 'unknown':
       return {
-        valueLabel: t('Unknown'),
+        valueLabel: t('Unknown', { ns: 'settings' }),
         subtitle,
-        bannerTitle: t('Cost unavailable'),
-        bannerBody: t('Hermes tracked token usage, but it could not determine a reliable dollar cost for this route.'),
+        bannerTitle: t('Cost unavailable', { ns: 'settings' }),
+        bannerBody: t('Hermes tracked token usage, but it could not determine a reliable dollar cost for this route.', { ns: 'settings' }),
       };
     case 'mixed':
       return {
-        valueLabel: totalCost > 0 ? formatCost(totalCost) : t('Mixed'),
+        valueLabel: totalCost > 0 ? formatCost(totalCost) : t('Mixed', { ns: 'settings' }),
         subtitle,
-        bannerTitle: t('Mixed cost sources'),
-        bannerBody: t('This range mixes priced usage with included or unpriced routes, so the dollar total is only a partial view.'),
+        bannerTitle: t('Mixed cost sources', { ns: 'settings' }),
+        bannerBody: t('This range mixes priced usage with included or unpriced routes, so the dollar total is only a partial view.', { ns: 'settings' }),
       };
     case 'actual':
       return {
@@ -57,8 +57,8 @@ export function resolveUsageCostSummaryDisplay(params: {
       return {
         valueLabel: formatCost(totalCost),
         subtitle,
-        bannerTitle: t('Estimated cost'),
-        bannerBody: t('Hermes is showing an estimate for this route rather than a reconciled bill.'),
+        bannerTitle: t('Estimated cost', { ns: 'settings' }),
+        bannerBody: t('Hermes is showing an estimate for this route rather than a reconciled bill.', { ns: 'settings' }),
       };
     case 'currency':
     default:
@@ -73,15 +73,15 @@ export function resolveUsageCostSummaryDisplay(params: {
 
 export function resolveUsageSessionCostLabel(params: {
   session: UsageSessionEntry;
-  t: TFunction<'console'>;
+  t: TFunction<'settings'>;
 }): string {
   const { session, t } = params;
   const totalCost = session.usage?.totalCost ?? 0;
   const costStatus = (session.usage?.costStatus ?? '').trim().toLowerCase();
 
-  if (costStatus === 'included') return t('Included');
-  if (costStatus === 'unknown') return t('Unknown');
-  if (costStatus === 'estimated' && totalCost <= 0) return t('Estimated');
+  if (costStatus === 'included') return t('Included', { ns: 'settings' });
+  if (costStatus === 'unknown') return t('Unknown', { ns: 'settings' });
+  if (costStatus === 'estimated' && totalCost <= 0) return t('Estimated', { ns: 'settings' });
   return formatCost(totalCost);
 }
 
@@ -89,7 +89,7 @@ export function resolveDashboardCostDisplay(params: {
   usageResult: UsageResult | null;
   costSummary: CostSummary | null;
   fallbackCostLabel: string | null;
-  t: TFunction<'console'>;
+  t: TFunction<'settings'>;
 }): {
   valueLabel: string | null;
   badge: string | null;
@@ -101,11 +101,17 @@ export function resolveDashboardCostDisplay(params: {
     case 'included':
       return { valueLabel: fallbackCostLabel, badge: null };
     case 'unknown':
-      return { valueLabel: t('Unknown'), badge: t('Unpriced') };
+      return {
+        valueLabel: t('Unknown', { ns: 'settings' }),
+        badge: t('Unpriced', { ns: 'settings' }),
+      };
     case 'estimated':
-      return { valueLabel: fallbackCostLabel, badge: t('Estimated') };
+      return { valueLabel: fallbackCostLabel, badge: t('Estimated', { ns: 'settings' }) };
     case 'mixed':
-      return { valueLabel: fallbackCostLabel ?? t('Mixed'), badge: t('Partial') };
+      return {
+        valueLabel: fallbackCostLabel ?? t('Mixed', { ns: 'settings' }),
+        badge: t('Partial', { ns: 'settings' }),
+      };
     default:
       return { valueLabel: fallbackCostLabel, badge: null };
   }

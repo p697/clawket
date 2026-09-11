@@ -1,9 +1,14 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, renameSync } from "node:fs";
+import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { loadBridgeCliEnv } from "./load-env.mjs";
+import {
+  computeCliBuildProvenance,
+  stampBundleBuildProvenance,
+} from "./verify-package.mjs";
 
 loadBridgeCliEnv();
 
@@ -62,3 +67,11 @@ const bundledEntrypointJs = path.join(appDir, "dist", "index.js");
 if (existsSync(bundledEntrypointMjs)) {
   renameSync(bundledEntrypointMjs, bundledEntrypointJs);
 }
+
+const provenance = await computeCliBuildProvenance({ repositoryRoot: rootDir });
+const bundle = await readFile(bundledEntrypointJs, "utf8");
+await writeFile(
+  bundledEntrypointJs,
+  stampBundleBuildProvenance(bundle, provenance.digest),
+  "utf8",
+);

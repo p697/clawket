@@ -4,11 +4,11 @@
 
 This repository provides the relay control plane and realtime transport for Clawket remote connectivity.
 
-High-level flow:
+High-level flow for either backend:
 
-1. A gateway host registers with the registry worker and receives `gatewayId`, `relaySecret`, `relayUrl`, and a one-time `accessCode`.
+1. A gateway or bridge host registers with its backend-specific Registry instance and receives a principal ID, `relaySecret`, `relayUrl`, and a one-time `accessCode`.
 2. A client claims that `accessCode` and receives a long-lived `clientToken`.
-3. Both sides connect to the relay worker over WebSocket using the shared `gatewayId`.
+3. Both sides connect to the matching Relay instance over WebSocket using the shared principal ID.
 4. The relay worker verifies pairing credentials and forwards messages between the connected client sockets and the gateway socket.
 
 The relay transport is intentionally separate from billing or entitlement decisions. Pairing and relay auth depend only on pairing records.
@@ -21,11 +21,12 @@ Path: `apps/relay-registry`
 
 Responsibilities:
 
-1. Issue pairing credentials.
-2. Store pairing records in Cloudflare KV under `pair-gateway:<gatewayId>`.
+1. Select the OpenClaw or Hermes contract through `RELAY_BACKEND` and issue matching pairing credentials.
+2. Store pairing records in the backend's isolated Cloudflare KV namespace.
 3. Verify `relaySecret` and `clientToken` values for relay auth.
 4. Mint one-time `accessCode` values and long-lived client tokens.
 5. Optionally push fresh client-token hashes into the target relay room for strong-consistency auth immediately after claim.
+6. Enforce a persistent, per-IP registration limit before creating a pairing record.
 
 Public HTTP routes:
 
@@ -38,17 +39,10 @@ Notes:
 
 1. One-time pairing `accessCode` values are 6-character uppercase codes from `ABCDEFGHJKMNPQRSTVWXYZ23456789`.
 2. Claim remains backward-compatible with older unclaimed 6-digit numeric access codes.
+3. An unclaimed registration expires after 24 hours; a successful claim extends the record to 365 days.
+4. Registration is limited to 10 attempts per source IP per hour. The raw IP address is hashed before selecting its dedicated limiter object and is never logged.
 
-### Hermes Registry Worker
-
-Path: `apps/hermes-relay-registry`
-
-Responsibilities:
-
-1. Issue Hermes relay pairing credentials.
-2. Store Hermes pairing records in Cloudflare KV under `hermes-pair-bridge:<bridgeId>`.
-3. Verify Hermes `relaySecret` and `clientToken` values for relay auth.
-4. Keep Hermes rollout isolated from OpenClaw registry APIs and storage.
+The same workspace serves the isolated Hermes Registry instance. Its public routes are:
 
 Public HTTP routes:
 
@@ -63,11 +57,13 @@ Path: `apps/relay-worker`
 
 Responsibilities:
 
-1. Route each `gatewayId` to a Durable Object room.
+1. Select the OpenClaw or Hermes contract through `RELAY_BACKEND` and route each principal to the backend's Durable Object class.
 2. Accept both gateway and client WebSocket connections.
 3. Forward application payloads bidirectionally.
 4. Route relay control envelopes while preserving target-client delivery boundaries.
 5. Persist room metadata needed for reconnect recovery, including mirrored client-token hashes and pending handshake state.
+6. Reject unknown principals before creating a room and cache successful bounded existence checks for 60 seconds; misses remain uncached so a newly registered principal is not hidden by KV propagation.
+7. Enforce an 8 MiB application-frame limit and advertise `relay.frame-limit.v2` in health and `relay.ready`.
 
 WebSocket auth:
 
@@ -75,16 +71,7 @@ WebSocket auth:
 2. New clients may send `Authorization: Bearer <token>`.
 3. Telemetry must not log tokens or user-correlatable identifiers.
 
-### Hermes Relay Worker
-
-Path: `apps/hermes-relay-worker`
-
-Responsibilities:
-
-1. Route each `bridgeId` to a Hermes Durable Object room.
-2. Accept Hermes bridge and client WebSocket connections.
-3. Verify Hermes pairing credentials against Hermes registry state only.
-4. Keep Hermes relay rooms, bindings, and DO classes isolated from OpenClaw.
+The same workspace exports `RelayRoom` and `HermesRelayRoom`. Deployments bind only the class and KV namespace for their backend. Hermes uses a 30-second heartbeat and probes its Bridge only while clients are attached.
 
 ### Gateway Runtime
 
@@ -93,6 +80,42 @@ The gateway-side bridge runtime lives in this monorepo:
 - `apps/bridge-cli`
 - `packages/bridge-core`
 - `packages/bridge-runtime`
+
+## Hermes Instances
+
+OpenClaw and Hermes share the two Worker source workspaces, selected by `RELAY_BACKEND`, but deploy as four isolated service pairs:
+
+| Environment | Registry | Relay | Backend |
+|---|---|---|---|
+| OpenClaw Production | `clawket-registry` | `clawket-relay` | `openclaw` |
+| OpenClaw Preview | `clawket-registry-preview` | `clawket-relay-preview` | `openclaw` |
+| Hermes Production | `clawket-hermes-registry` | `clawket-hermes-relay` | `hermes` |
+| Hermes Preview | `clawket-hermes-registry-preview` | `clawket-hermes-relay-preview` | `hermes` |
+
+Sharing code never merges deployment or compatibility boundaries. Hermes retains:
+
+1. `/v1/hermes/pair/*`, `/v1/hermes/verify/:bridgeId`, and the internal Hermes Relay routes.
+2. `bridgeId` plus the `hbg_`, `hrs_`, and `hct_` credential prefixes.
+3. `hermes-pair-bridge:<bridgeId>` KV keys.
+4. `HERMES_ROOM` and the `HermesRelayRoom` Durable Object class.
+5. `~/.clawket/hermes-relay.json` for its local pairing state.
+
+The historical Hermes owner wire role remains `gateway`, while product semantics identify it as a bridge. Backend-specific identity, storage codecs, route prefixes, room bindings, replacement reasons, liveness, and safe telemetry fields belong to the centralized backend policy or a narrow lifecycle override; callers must not scatter backend checks.
+
+Mobile represents this path as `backendKind: 'hermes'` plus `transportKind: 'relay'`. The default `clawket pair` flow uses Hermes Relay and attempts to start the Clawket-managed local Bridge and Relay runtime; `clawket pair local` is the explicit local-only path.
+
+### Local Hermes Bridge contract
+
+The local Bridge owns capability negotiation, logical sessions, active-run cancellation, and translation to Hermes HTTP APIs. Relay only transports frames.
+
+- A bounded request/response probe determines readiness; a listening socket or WebSocket `open` event alone is not health evidence.
+- Health and the first WebSocket health event advertise `bridge.capabilities.v2` and `hermes.multi-session.v2` only while their complete behavior exists. Missing or unknown capability metadata keeps the single-`main` compatibility path.
+- Clawket may create, rename, reset, and delete only Bridge-owned session metadata. Hermes native sessions remain read-only; reset rotates the backing session ID, and native read failure degrades to Bridge-owned sessions with a warning.
+- `chat.history` uses an opaque cursor bound to the backing session. `chat.abort` owns the matching active request controller, replies once, and emits one terminal aborted chat state.
+- Image attachments are validated before a run and translated into one OpenAI-style user message with text followed by `image_url` data-URL parts. The current turn stays out of `conversation_history`, and the shared 8 MiB frame limit still applies.
+- Hermes cron creation is global rather than session-scoped. The Bridge validates required fields and execution input before invoking Hermes and fails closed when no persisted job can be read back.
+
+Every Registry or Relay deployment runs `tests/compat` first. A valid release also requires both backend configurations and tests to pass, Preview smoke tests to use isolated resources, and account-bound values to remain in ignored local configs or Cloudflare secrets.
 
 ## Public Contracts
 
@@ -203,6 +226,8 @@ Rules:
 2. Multiple client sockets may be connected to the same room.
 3. Gateway-targeted control envelopes are delivered only to their declared `targetClientId`.
 4. Offline replay of general gateway payloads is not part of the current transport contract.
+5. The Registry pairing record must exist before Relay resolves the room ID; unknown principals receive `404 UNKNOWN_GATEWAY` without a Durable Object invocation.
+6. A message larger than 8 MiB closes the sender with code `1009` and reason `frame_too_large`.
 
 ## Storage Model
 
@@ -226,6 +251,8 @@ Each relay room stores only room-scoped transport metadata, for example:
 2. Mirrored client-token hashes.
 3. Pending handshake artifacts with bounded lifetime.
 
+Each Registry deployment also binds `PairRegisterRateLimiter`, sharded one object per hashed source IP. Its SQLite state preserves the fixed one-hour window across isolate eviction, and its alarm removes expired counter state.
+
 ## Privacy And Logging Constraints
 
 Public deployments should keep these constraints intact:
@@ -236,7 +263,8 @@ Public deployments should keep these constraints intact:
 
 ## Deployment Boundaries
 
-1. Registry and relay are separate Worker services and may be deployed independently.
-2. Both services must use resources in the operator's own Cloudflare account.
-3. Checked-in `wrangler.toml` files use open-source-safe placeholders for account-bound bindings.
-4. Hermes relay services are separate from OpenClaw relay services and must not replace the existing OpenClaw workers.
+1. Registry and Relay are separate Worker services and may be deployed independently.
+2. OpenClaw and Hermes use the same source workspaces but remain separate Worker services with independent KV, Durable Objects, credentials, logs, and rollback paths.
+3. Production and Preview are isolated service environments for each backend.
+4. All services must use resources in the operator's own Cloudflare account.
+5. Checked-in Wrangler files use open-source-safe placeholders for account-bound bindings.

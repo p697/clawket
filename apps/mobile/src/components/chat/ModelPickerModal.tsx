@@ -1,28 +1,32 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Platform,
   Pressable,
-  SectionListData,
+  type SectionListData,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from 'react-native';
-import {
-  BottomSheetBackdrop,
-  BottomSheetModal,
-  BottomSheetSectionList,
-  BottomSheetTextInput,
-} from '@gorhom/bottom-sheet';
-import * as Haptics from 'expo-haptics';
+import { BottomSheetSectionList } from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
-import { Check, Orbit, Search, X } from 'lucide-react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { FullWindowOverlay } from 'react-native-screens';
-import { IconButton } from '../ui';
+import { Check, Search } from 'lucide-react-native';
+import {
+  Button,
+  CompositionSafeBottomSheetTextInput,
+  Sheet,
+} from '../ui';
 import { useAppTheme } from '../../theme';
-import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
+import {
+  ControlSize,
+  FontSize,
+  FontWeight,
+  IconSize,
+  LineHeight,
+  Radius,
+  Space,
+} from '../../theme/tokens';
+import { ModelIcon } from './ModelIcon';
+import { triggerLightImpact } from '../../services/haptics';
 import {
   buildModelSections,
   isModelSelected,
@@ -59,20 +63,6 @@ const DEFAULT_MODEL: ModelInfo = { id: '', name: 'Default', provider: '' };
 
 export { resolveProviderModel };
 
-function ModalContainer({ children }: React.PropsWithChildren): React.JSX.Element {
-  if (Platform.OS !== 'ios') {
-    return <>{children}</>;
-  }
-
-  return (
-    <FullWindowOverlay>
-      <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-        {children}
-      </View>
-    </FullWindowOverlay>
-  );
-}
-
 export function ModelPickerModal({
   visible,
   onClose,
@@ -90,12 +80,10 @@ export function ModelPickerModal({
 }: Props): React.JSX.Element {
   const { t } = useTranslation('chat');
   const { theme } = useAppTheme();
-  const insets = useSafeAreaInsets();
-  const styles = useMemo(() => createStyles(theme.colors), [theme]);
-  const bottomSheetRef = useRef<BottomSheetModal>(null);
+  const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const snapPoints = useMemo(() => ['58%', '92%'], []);
+  const snapPoints = useMemo(() => ['68%', '92%'], []);
   const modelSections = useMemo(
     () => buildModelSections(models, searchQuery, providers),
     [models, providers, searchQuery],
@@ -108,41 +96,15 @@ export function ModelPickerModal({
   const hasVisibleProviders = modelSections.length > 0;
 
   useEffect(() => {
-    if (visible) {
-      setSearchQuery('');
-      requestAnimationFrame(() => {
-        bottomSheetRef.current?.present();
-      });
-      return;
-    }
-
-    bottomSheetRef.current?.dismiss();
+    setSearchQuery('');
   }, [visible]);
 
-  const handleClose = useCallback(() => {
-    setSearchQuery('');
-    onClose();
-  }, [onClose]);
-
   const handleSelectModel = useCallback((model: ModelInfo) => {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    triggerLightImpact();
     onSelectModel(model);
     setSearchQuery('');
-    bottomSheetRef.current?.dismiss();
-  }, [onSelectModel]);
-
-  const renderBackdrop = useCallback(
-    (props: React.ComponentProps<typeof BottomSheetBackdrop>) => (
-      <BottomSheetBackdrop
-        {...props}
-        appearsOnIndex={0}
-        disappearsOnIndex={-1}
-        opacity={theme.scheme === 'dark' ? 0.58 : 0.34}
-        pressBehavior="close"
-      />
-    ),
-    [theme.scheme],
-  );
+    onClose();
+  }, [onClose, onSelectModel]);
 
   const renderModelRow = useCallback(({ item }: { item: ModelInfo }) => {
     const selected = isModelSelected({
@@ -151,47 +113,60 @@ export function ModelPickerModal({
       defaultModel,
       defaultProvider,
     });
-    const subtitle = item.id.trim() || item.name.trim();
+    const modelKey = `${normalizeModelProvider(item.provider)}:${item.id || item.name}`;
     return (
       <Pressable
+        testID={`model-picker-row-${modelKey}`}
+        accessibilityRole="button"
+        accessibilityState={{ selected }}
         onPress={() => handleSelectModel(item)}
         style={({ pressed }) => [styles.modelRow, pressed && styles.modelRowPressed]}
       >
         <View style={styles.modelIconWrap}>
-          <Orbit size={16} color={theme.colors.badgeModel} strokeWidth={2} />
+          <ModelIcon {...item} testID={`model-picker-icon-${modelKey}`} />
         </View>
         <View style={styles.modelTextWrap}>
-          <View style={styles.modelTitleRow}>
-            <Text style={styles.modelTitle} numberOfLines={1}>
-              {item.name || item.id}
-            </Text>
-            {selected ? (
-              <View style={styles.currentBadge}>
-                <Text style={styles.currentBadgeText}>{t('Current')}</Text>
-              </View>
-            ) : null}
-          </View>
-          <Text style={styles.modelSubtitle} numberOfLines={1}>
-            {subtitle}
+          <Text style={styles.modelTitle} numberOfLines={1}>
+            {item.name || item.id}
           </Text>
         </View>
         <View style={styles.selectionMarkWrap}>
           {selected ? (
-            <Check size={18} color={theme.colors.primary} strokeWidth={2.6} />
+            <Check
+              testID={`model-picker-selected-${modelKey}`}
+              size={18}
+              color={theme.colors.accent}
+              strokeWidth={2.6}
+            />
           ) : null}
         </View>
       </Pressable>
     );
-  }, [defaultModel, defaultProvider, handleSelectModel, selectedModelId, styles, t, theme.colors.primary]);
+  }, [
+    defaultModel,
+    defaultProvider,
+    handleSelectModel,
+    selectedModelId,
+    styles,
+    theme.colors.accent,
+    theme.colors.inkSecondary,
+  ]);
 
-  const renderSectionHeader = useCallback(({ section }: { section: SectionListData<ModelInfo, ModelSection> }) => (
+  const renderSectionHeader = useCallback(({
+    section,
+  }: {
+    section: SectionListData<ModelInfo, ModelSection>;
+  }) => (
     <View style={styles.sectionHeader}>
       <Text style={styles.sectionHeaderText}>{section.title}</Text>
-      <Text style={styles.sectionHeaderCount}>{section.totalModels}</Text>
     </View>
   ), [styles]);
 
-  const renderSectionFooter = useCallback(({ section }: { section: SectionListData<ModelInfo, ModelSection> }) => {
+  const renderSectionFooter = useCallback(({
+    section,
+  }: {
+    section: SectionListData<ModelInfo, ModelSection>;
+  }) => {
     if (section.data.length > 0) return null;
     return (
       <View style={styles.sectionEmptyWrap}>
@@ -203,13 +178,14 @@ export function ModelPickerModal({
   const renderControls = useCallback(() => (
     <View style={styles.listHeader}>
       <View style={styles.searchWrap}>
-        <Search size={16} color={theme.colors.textSubtle} strokeWidth={2} />
-        <BottomSheetTextInput
+        <Search size={16} color={theme.colors.inkTertiary} strokeWidth={2} />
+        <CompositionSafeBottomSheetTextInput
+          testID="model-picker-search"
           style={styles.searchInput}
           value={searchQuery}
           onChangeText={setSearchQuery}
           placeholder={t('Search models...')}
-          placeholderTextColor={theme.colors.textSubtle}
+          placeholderTextColor={theme.colors.inkTertiary}
           autoCapitalize="none"
           autoCorrect={false}
           clearButtonMode="while-editing"
@@ -217,12 +193,20 @@ export function ModelPickerModal({
       </View>
       {showDefaultRow ? (
         <Pressable
+          testID="model-picker-row-default"
+          accessibilityRole="button"
+          accessibilityState={{ selected: selectedModelId === '' }}
           onPress={() => handleSelectModel(DEFAULT_MODEL)}
           style={({ pressed }) => [styles.defaultRow, pressed && styles.modelRowPressed]}
         >
           <Text style={styles.defaultRowTitle}>{t('Default')}</Text>
           {selectedModelId === '' ? (
-            <Check size={18} color={theme.colors.primary} strokeWidth={2.4} />
+            <Check
+              testID="model-picker-selected-default"
+              size={18}
+              color={theme.colors.accent}
+              strokeWidth={2.4}
+            />
           ) : null}
         </Pressable>
       ) : null}
@@ -234,12 +218,14 @@ export function ModelPickerModal({
     showDefaultRow,
     styles,
     t,
-    theme.colors.primary,
-    theme.colors.textSubtle,
+    theme.colors.accent,
+    theme.colors.inkTertiary,
   ]);
 
   const renderEmptyState = useCallback(() => {
-    const label = searchQuery.trim().length > 0 ? t('No models found') : t('No models available');
+    const label = searchQuery.trim().length > 0
+      ? t('No models found')
+      : t('No models available');
     return (
       <View style={styles.stateWrap}>
         <Text style={styles.stateText}>{label}</Text>
@@ -249,147 +235,110 @@ export function ModelPickerModal({
 
   const content = loading ? (
     <View style={styles.stateWrap}>
-      <ActivityIndicator size="small" color={theme.colors.primary} />
+      <ActivityIndicator size="small" color={theme.colors.accent} />
       <Text style={styles.stateText}>{t('Loading models...')}</Text>
     </View>
   ) : error ? (
     <View style={styles.stateWrap}>
       <Text style={styles.stateText}>{error}</Text>
       {onRetry ? (
-        <TouchableOpacity style={styles.retryBtn} onPress={onRetry}>
-          <Text style={styles.retryText}>{t('Retry')}</Text>
-        </TouchableOpacity>
+        <Button
+          label={t('Retry')}
+          variant="secondary"
+          size="sm"
+          onPress={onRetry}
+        />
       ) : null}
     </View>
   ) : (
-      <BottomSheetSectionList
-        sections={modelSections}
-        keyExtractor={(item: ModelInfo) => `${normalizeModelProvider(item.provider)}:${item.id || item.name}`}
-        renderItem={renderModelRow}
-        renderSectionHeader={renderSectionHeader}
-        renderSectionFooter={renderSectionFooter}
-        ListEmptyComponent={!showDefaultRow && !hasVisibleProviders && !hasVisibleModels ? renderEmptyState : null}
-        contentContainerStyle={styles.listContent}
-        stickySectionHeadersEnabled
-        keyboardDismissMode="on-drag"
-        keyboardShouldPersistTaps="always"
-        initialNumToRender={18}
-        maxToRenderPerBatch={24}
-        windowSize={10}
-        removeClippedSubviews
-        showsVerticalScrollIndicator
-      />
+    <BottomSheetSectionList
+      sections={modelSections}
+      keyExtractor={(item: ModelInfo) => (
+        `${normalizeModelProvider(item.provider)}:${item.id || item.name}`
+      )}
+      renderItem={renderModelRow}
+      renderSectionHeader={renderSectionHeader}
+      renderSectionFooter={renderSectionFooter}
+      ListEmptyComponent={
+        !showDefaultRow && !hasVisibleProviders && !hasVisibleModels
+          ? renderEmptyState
+          : null
+      }
+      contentContainerStyle={styles.listContent}
+      stickySectionHeadersEnabled
+      keyboardDismissMode="on-drag"
+      keyboardShouldPersistTaps="always"
+      initialNumToRender={18}
+      maxToRenderPerBatch={24}
+      windowSize={10}
+      removeClippedSubviews
+      showsVerticalScrollIndicator
+    />
   );
 
   return (
-    <BottomSheetModal
-      ref={bottomSheetRef}
-      index={0}
+    <Sheet
+      testID="model-picker"
+      visible={visible}
+      title={title ?? t('Models')}
+      closeAccessibilityLabel={t('Close', { ns: 'common' })}
+      onClose={onClose}
       snapPoints={snapPoints}
-      enableDynamicSizing={false}
-      enablePanDownToClose
-      backdropComponent={renderBackdrop}
-      handleIndicatorStyle={styles.handleIndicator}
-      backgroundStyle={styles.sheetBackground}
-      containerComponent={ModalContainer}
-      onDismiss={handleClose}
-      topInset={Math.max(insets.top, Space.sm)}
       keyboardBehavior="extend"
       keyboardBlurBehavior="none"
-      android_keyboardInputMode="adjustResize"
+      androidKeyboardInputMode="adjustResize"
+      style={styles.sheetContent}
     >
-      <View style={styles.sheetContent}>
-        <View style={styles.header}>
-          <View style={styles.headerSpacer} />
-          <Text style={styles.headerTitle} numberOfLines={1}>
-            {title ?? t('Models')}
-          </Text>
-          <IconButton
-            icon={<X size={20} color={theme.colors.textMuted} strokeWidth={2} />}
-            onPress={() => bottomSheetRef.current?.dismiss()}
-            size={32}
-          />
-        </View>
-        {!loading && !error ? renderControls() : null}
-        {content}
-      </View>
-    </BottomSheetModal>
+      {!loading && !error ? renderControls() : null}
+      {content}
+    </Sheet>
   );
 }
 
 function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors']) {
   return StyleSheet.create({
-    sheetBackground: {
-      backgroundColor: colors.surface,
-      borderTopLeftRadius: 28,
-      borderTopRightRadius: 28,
-    },
-    handleIndicator: {
-      width: 44,
-      backgroundColor: colors.borderStrong,
-    },
     sheetContent: {
       flex: 1,
-      backgroundColor: colors.surface,
-    },
-    header: {
-      height: 48,
-      paddingHorizontal: Space.md,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-    },
-    headerSpacer: {
-      width: 32,
-      height: 32,
-    },
-    headerTitle: {
-      flex: 1,
-      textAlign: 'center',
-      color: colors.text,
-      fontSize: FontSize.base,
-      fontWeight: FontWeight.semibold,
+      backgroundColor: colors.canvas,
     },
     listHeader: {
       paddingHorizontal: Space.lg,
       paddingBottom: Space.xs,
       gap: Space.xs,
-      backgroundColor: colors.surface,
+      backgroundColor: colors.canvas,
     },
     searchWrap: {
+      minHeight: ControlSize.floatingButton,
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: colors.inputBackground,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
-      borderRadius: Radius.lg,
+      backgroundColor: colors.surface,
+      borderRadius: Radius.full,
       paddingHorizontal: Space.md,
       gap: Space.xs,
     },
     searchInput: {
       flex: 1,
-      fontSize: FontSize.md,
-      color: colors.text,
-      paddingVertical: 10,
+      fontSize: FontSize.secondary,
+      color: colors.ink,
+      paddingVertical: Space.sm,
     },
     defaultRow: {
-      minHeight: 42,
+      minHeight: ControlSize.floatingButton,
       paddingHorizontal: Space.md,
-      borderRadius: Radius.md,
-      backgroundColor: colors.surfaceMuted,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
+      borderRadius: Radius.full,
+      backgroundColor: colors.surface,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
     },
     defaultRowTitle: {
-      color: colors.text,
-      fontSize: FontSize.md,
-      fontWeight: FontWeight.medium,
+      color: colors.ink,
+      fontSize: FontSize.caption,
+      lineHeight: LineHeight.caption,
+      fontWeight: FontWeight.semibold,
     },
     listContent: {
-      paddingBottom: Space.xxxl,
+      paddingBottom: Space.xxl,
     },
     sectionHeader: {
       paddingHorizontal: Space.lg,
@@ -398,53 +347,39 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      backgroundColor: colors.surface,
+      backgroundColor: colors.canvas,
     },
     sectionHeaderText: {
-      color: colors.textMuted,
-      fontSize: FontSize.md,
+      color: colors.inkSecondary,
+      fontSize: FontSize.caption,
+      lineHeight: LineHeight.caption,
       fontWeight: FontWeight.semibold,
-    },
-    sectionHeaderCount: {
-      minWidth: 22,
-      paddingHorizontal: 6,
-      paddingVertical: 2,
-      borderRadius: Radius.full,
-      backgroundColor: colors.surfaceMuted,
-      color: colors.textSubtle,
-      fontSize: FontSize.xs,
-      textAlign: 'center',
-      overflow: 'hidden',
     },
     sectionEmptyWrap: {
       marginHorizontal: Space.lg,
       paddingHorizontal: Space.xs,
       paddingBottom: Space.sm,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: colors.border,
     },
     sectionEmptyText: {
-      color: colors.textSubtle,
-      fontSize: FontSize.sm,
-      lineHeight: 20,
+      color: colors.inkTertiary,
+      fontSize: FontSize.caption,
+      lineHeight: LineHeight.caption,
     },
     modelRow: {
-      minHeight: 56,
+      minHeight: ControlSize.floatingButton,
       marginHorizontal: Space.lg,
       paddingHorizontal: Space.xs,
-      paddingVertical: Space.sm + 2,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: colors.border,
+      paddingVertical: Space.sm,
       flexDirection: 'row',
       alignItems: 'center',
       gap: Space.sm,
-      backgroundColor: colors.surface,
+      backgroundColor: colors.canvas,
     },
     modelRowPressed: {
-      backgroundColor: colors.surfaceMuted,
+      backgroundColor: colors.surface,
     },
     modelIconWrap: {
-      width: 22,
+      width: IconSize.lg,
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -452,32 +387,12 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       flex: 1,
       minWidth: 0,
     },
-    modelTitleRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-    },
     modelTitle: {
       flexShrink: 1,
-      color: colors.text,
-      fontSize: FontSize.base,
+      color: colors.ink,
+      fontSize: FontSize.secondary,
+      lineHeight: LineHeight.secondary,
       fontWeight: FontWeight.semibold,
-    },
-    currentBadge: {
-      borderRadius: Radius.full,
-      paddingHorizontal: 6,
-      paddingVertical: 2,
-      backgroundColor: colors.primarySoft,
-    },
-    currentBadgeText: {
-      color: colors.primary,
-      fontSize: FontSize.xs,
-      fontWeight: FontWeight.medium,
-    },
-    modelSubtitle: {
-      marginTop: 1,
-      color: colors.textMuted,
-      fontSize: FontSize.sm,
     },
     selectionMarkWrap: {
       width: 20,
@@ -489,27 +404,13 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       paddingHorizontal: Space.xl,
       alignItems: 'center',
       justifyContent: 'center',
+      gap: Space.sm,
     },
     stateText: {
-      marginTop: Space.sm,
-      color: colors.textMuted,
-      fontSize: FontSize.base,
+      color: colors.inkSecondary,
+      fontSize: FontSize.secondary,
+      lineHeight: LineHeight.secondary,
       textAlign: 'center',
-      lineHeight: 21,
-    },
-    retryBtn: {
-      marginTop: Space.md,
-      paddingHorizontal: 14,
-      paddingVertical: Space.sm,
-      borderRadius: Radius.md,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.borderStrong,
-      backgroundColor: colors.surfaceMuted,
-    },
-    retryText: {
-      color: colors.text,
-      fontSize: FontSize.md,
-      fontWeight: FontWeight.semibold,
     },
   });
 }

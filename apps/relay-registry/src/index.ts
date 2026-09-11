@@ -22,10 +22,27 @@ import {
   type PairingSessionResolveRequest,
   type SecurePairingResolveRequest,
   type SecurePairingResolveResponse,
+  type HermesPairAccessCodeRequest,
+  type HermesPairAccessCodeResponse,
+  type HermesPairCodeClaimRequest,
+  type HermesPairClaimRequest,
+  type HermesPairClaimResponse,
+  type HermesPairRegisterRequest,
+  type HermesPairRegisterResponse,
 } from '@clawket/shared';
+import {
+  OPENCLAW_REGISTRY_POLICY,
+  resolveRegistryBackendPolicy,
+  type RegistryBackendPolicy,
+} from './backend-policy';
+import { PairRegisterRateLimiter } from './pair-register-rate-limiter';
+
+export { PairRegisterRateLimiter } from './pair-register-rate-limiter';
 
 interface Env {
-  ROUTES_KV: KVNamespace;
+  RELAY_BACKEND?: string;
+  ROUTES_KV?: KVNamespace;
+  HERMES_ROUTES_KV?: KVNamespace;
   RELAY_REGION_MAP: string;
   PAIR_ACCESS_CODE_TTL_SEC?: string;
   PAIR_CLIENT_TOKEN_MAX?: string;
@@ -37,6 +54,7 @@ interface Env {
   ANDROID_APP_LINK_SHA256_CERT_FINGERPRINTS?: string;
   PAIRING_SYNC_SECRET?: string;
   RELAY_SYNC_SERVICE?: Fetcher;
+  PAIR_REGISTER_LIMITER: DurableObjectNamespace<PairRegisterRateLimiter>;
 }
 
 type PairClientTokenRecord = {
@@ -62,9 +80,28 @@ type PairGatewayRecord = {
   updatedAt: string;
 };
 
+type PairBridgeRecord = {
+  bridgeId: string;
+  relayUrl: string;
+  region: string;
+  displayName: string | null;
+  relaySecretHash: string;
+  accessCodeHash: string | null;
+  accessCodeExpiresAt: string | null;
+  clientTokens: PairClientTokenRecord[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+type PairPrincipalRecord = PairGatewayRecord | PairBridgeRecord;
+
 type PairGatewayLookupResult =
   | { ok: true; record: PairGatewayRecord | null }
   | { ok: false; gatewayId: string };
+
+type PairPrincipalLookupResult =
+  | { ok: true; record: PairPrincipalRecord | null }
+  | { ok: false; principalId: string };
 
 const ACCESS_CODE_TTL_FALLBACK_SEC = 10 * 60;
 const PAIR_CLIENT_TOKEN_MAX_FALLBACK = 8;
@@ -73,6 +110,8 @@ const ACCESS_CODE_LENGTH = 6;
 const ACCESS_CODE_RANDOM_LIMIT = Math.floor(256 / ACCESS_CODE_ALPHABET.length) * ACCESS_CODE_ALPHABET.length;
 const PAIR_SESSION_RESOLVE_MAX_ATTEMPTS_FALLBACK = 5;
 const PAIR_SESSION_MAX_CIPHERTEXT_LENGTH = 64 * 1024;
+const UNCLAIMED_PAIR_RECORD_TTL_SEC = 24 * 60 * 60;
+const CLAIMED_PAIR_RECORD_TTL_SEC = 365 * 24 * 60 * 60;
 
 type PairingSessionRecord = {
   sessionId: string;
@@ -90,92 +129,122 @@ export default {
     const startedAt = Date.now();
     if (request.method === 'OPTIONS') return handleCors();
 
+    const policy = resolveRegistryBackendPolicy(env.RELAY_BACKEND);
     const url = new URL(request.url);
     let response: Response;
 
     if (request.method === 'GET' && url.pathname === '/v1/health') {
       response = withCors(jsonResponse({ ok: true, regions: Object.keys(readRelayMap(env)) }));
-      logRegistryTelemetry('http_request', request, url, response.status, Date.now() - startedAt);
+      logRegistryTelemetry(policy, 'http_request', request, url, response.status, Date.now() - startedAt);
       return response;
     }
 
-    if (request.method === 'GET' && url.pathname === '/.well-known/apple-app-site-association') {
+    if (policy.backend === 'openclaw'
+      && request.method === 'GET'
+      && url.pathname === '/.well-known/apple-app-site-association') {
       response = appleAppSiteAssociationResponse(env);
-      logRegistryTelemetry('http_request', request, url, response.status, Date.now() - startedAt);
+      logRegistryTelemetry(policy, 'http_request', request, url, response.status, Date.now() - startedAt);
       return response;
     }
 
-    if (request.method === 'GET' && url.pathname === '/.well-known/assetlinks.json') {
+    if (policy.backend === 'openclaw'
+      && request.method === 'GET'
+      && url.pathname === '/.well-known/assetlinks.json') {
       response = androidAssetLinksResponse(env);
-      logRegistryTelemetry('http_request', request, url, response.status, Date.now() - startedAt);
+      logRegistryTelemetry(policy, 'http_request', request, url, response.status, Date.now() - startedAt);
       return response;
     }
 
-    if (request.method === 'POST' && url.pathname === '/v1/pair/register') {
-      response = withCors(await handlePairRegister(request, env));
-      logRegistryTelemetry('http_request', request, url, response.status, Date.now() - startedAt);
+    if (request.method === 'POST' && url.pathname === `${policy.pairBasePath}/register`) {
+      response = withCors(await handlePairRegister(request, env, policy));
+      logRegistryTelemetry(policy, 'http_request', request, url, response.status, Date.now() - startedAt);
       return response;
     }
 
-    if (request.method === 'POST' && url.pathname === '/v1/pair/access-code') {
-      response = withCors(await handlePairAccessCode(request, env));
-      logRegistryTelemetry('http_request', request, url, response.status, Date.now() - startedAt);
+    if (request.method === 'POST' && url.pathname === `${policy.pairBasePath}/access-code`) {
+      response = withCors(await handlePairAccessCode(request, env, policy));
+      logRegistryTelemetry(policy, 'http_request', request, url, response.status, Date.now() - startedAt);
       return response;
     }
 
-    if (request.method === 'POST' && url.pathname === '/v1/pair/claim') {
-      response = withCors(await handlePairClaim(request, env));
-      logRegistryTelemetry('http_request', request, url, response.status, Date.now() - startedAt);
+    if (request.method === 'POST' && url.pathname === `${policy.pairBasePath}/claim`) {
+      response = withCors(await handlePairClaim(request, env, policy));
+      logRegistryTelemetry(policy, 'http_request', request, url, response.status, Date.now() - startedAt);
       return response;
     }
 
-    if (request.method === 'POST' && url.pathname === '/v1/pair/session') {
+    if (policy.backend === 'hermes'
+      && request.method === 'POST'
+      && url.pathname === '/v1/hermes/pair/claim-code') {
+      response = withCors(await handleHermesPairCodeClaim(request, env, policy));
+      logRegistryTelemetry(policy, 'http_request', request, url, response.status, Date.now() - startedAt);
+      return response;
+    }
+
+    if (policy.backend === 'openclaw' && request.method === 'POST' && url.pathname === '/v1/pair/session') {
       response = withCors(await handlePairingSessionCreate(request, env));
-      logRegistryTelemetry('http_request', request, url, response.status, Date.now() - startedAt);
+      logRegistryTelemetry(policy, 'http_request', request, url, response.status, Date.now() - startedAt);
       return response;
     }
 
-    if (request.method === 'POST' && url.pathname === '/v1/pair/session/resolve') {
+    if (policy.backend === 'openclaw'
+      && request.method === 'POST'
+      && url.pathname === '/v1/pair/session/resolve') {
       response = withCors(await handlePairingSessionResolve(request, env));
-      logRegistryTelemetry('http_request', request, url, response.status, Date.now() - startedAt);
+      logRegistryTelemetry(policy, 'http_request', request, url, response.status, Date.now() - startedAt);
       return response;
     }
 
-    if (request.method === 'POST' && url.pathname === '/v2/pair/session/resolve') {
+    if (policy.backend === 'openclaw'
+      && request.method === 'POST'
+      && url.pathname === '/v2/pair/session/resolve') {
       response = withCors(await handleSecurePairingSessionResolve(request, env));
-      logRegistryTelemetry('http_request', request, url, response.status, Date.now() - startedAt);
+      logRegistryTelemetry(policy, 'http_request', request, url, response.status, Date.now() - startedAt);
       return response;
     }
 
-    if (request.method === 'GET' && url.pathname.startsWith('/v1/pair/session/')) {
+    if (policy.backend === 'openclaw'
+      && request.method === 'GET'
+      && url.pathname.startsWith('/v1/pair/session/')) {
       const sessionId = decodeURIComponent(url.pathname.slice('/v1/pair/session/'.length));
       response = withCors(await handlePairingSessionRead(env, sessionId, 'link'));
-      logRegistryTelemetry('http_request', request, url, response.status, Date.now() - startedAt);
+      logRegistryTelemetry(policy, 'http_request', request, url, response.status, Date.now() - startedAt);
       return response;
     }
 
-    if (request.method === 'GET' && url.pathname.startsWith('/pair/')) {
+    if (policy.backend === 'openclaw' && request.method === 'GET' && url.pathname.startsWith('/pair/')) {
       const sessionId = decodeURIComponent(url.pathname.slice('/pair/'.length));
       response = await handlePairingLandingPage(env, sessionId, url.origin);
-      logRegistryTelemetry('http_request', request, url, response.status, Date.now() - startedAt);
+      logRegistryTelemetry(policy, 'http_request', request, url, response.status, Date.now() - startedAt);
       return response;
     }
 
-    if (request.method === 'GET' && url.pathname.startsWith('/v1/verify/')) {
-      const gatewayId = decodeURIComponent(url.pathname.slice('/v1/verify/'.length));
-      response = withCors(await handleVerify(request, env, gatewayId));
-      logRegistryTelemetry('http_request', request, url, response.status, Date.now() - startedAt);
+    if (request.method === 'GET' && url.pathname.startsWith(policy.verifyPathPrefix)) {
+      const principalId = decodeURIComponent(url.pathname.slice(policy.verifyPathPrefix.length));
+      response = withCors(await handleVerify(request, env, policy, principalId));
+      logRegistryTelemetry(policy, 'http_request', request, url, response.status, Date.now() - startedAt);
       return response;
     }
 
     response = withCors(errorResponse('NOT_FOUND', 'Route not found', 404));
-    logRegistryTelemetry('http_request', request, url, response.status, Date.now() - startedAt);
+    logRegistryTelemetry(policy, 'http_request', request, url, response.status, Date.now() - startedAt);
     return response;
   },
 } satisfies ExportedHandler<Env>;
 
-async function handlePairRegister(request: Request, env: Env): Promise<Response> {
-  const body = await readJson<PairRegisterRequest>(request);
+async function handlePairRegister(
+  request: Request,
+  env: Env,
+  policy: RegistryBackendPolicy,
+): Promise<Response> {
+  if (await consumePairRegisterAttempt(request, env)) {
+    return errorResponse(
+      'PAIRING_REGISTER_RATE_LIMITED',
+      'Too many pairing registration attempts. Try again later.',
+      429,
+    );
+  }
+  const body = await readJson<PairRegisterRequest | HermesPairRegisterRequest>(request);
   const relayMap = readRelayMap(env);
   const region = resolveRegion(request, body?.preferredRegion ?? undefined);
   const relayUrl = resolveRelayUrl(relayMap, region);
@@ -184,52 +253,61 @@ async function handlePairRegister(request: Request, env: Env): Promise<Response>
   }
 
   const now = new Date().toISOString();
-  const gatewayId = `gw_${crypto.randomUUID().replace(/-/g, '')}`;
-  const relaySecret = generateRelaySecret();
+  const principalId = `${policy.principalIdPrefix}${crypto.randomUUID().replace(/-/g, '')}`;
+  const relaySecret = generateRelaySecret(policy);
   const accessCode = generateAccessCode();
+  const accessCodeHash = await sha256Hex(accessCode);
   const accessCodeExpiresAt = new Date(
     Date.now() + parsePositiveInt(env.PAIR_ACCESS_CODE_TTL_SEC, ACCESS_CODE_TTL_FALLBACK_SEC) * 1000,
   ).toISOString();
 
-  const record: PairGatewayRecord = {
-    gatewayId,
+  const record = createPairRecord(policy, {
+    principalId,
     relayUrl,
     region,
     displayName: body?.displayName?.trim() || null,
     relaySecretHash: await sha256Hex(relaySecret),
-    accessCodeHash: await sha256Hex(accessCode),
+    accessCodeHash,
     accessCodeExpiresAt,
-    pairingSessionId: null,
-    pairingSessionCodeHash: null,
-    pairingSessionShortCodeLookup: null,
-    clientTokens: [],
     createdAt: now,
     updatedAt: now,
-  };
+  });
 
-  await putPairGateway(env.ROUTES_KV, record);
+  const kv = routesKv(env, policy);
+  await putPairRecord(kv, policy, record);
+  if (policy.backend === 'hermes') {
+    await putDirectAccessCodeLookup(kv, accessCodeHash, principalId, accessCodeExpiresAt);
+  }
 
-  const response: PairRegisterResponse = {
-    gatewayId,
+  const response = {
+    [policy.principalParam]: principalId,
     relaySecret,
     relayUrl,
     accessCode,
     accessCodeExpiresAt,
     displayName: record.displayName,
     region,
-  };
+  } as unknown as PairRegisterResponse | HermesPairRegisterResponse;
   return jsonResponse(response, 200);
 }
 
-async function handlePairAccessCode(request: Request, env: Env): Promise<Response> {
-  const body = await readJson<PairAccessCodeRequest>(request);
-  if (!body?.gatewayId?.trim()) return errorResponse('INVALID_GATEWAY_ID', 'gatewayId is required', 400);
+async function handlePairAccessCode(
+  request: Request,
+  env: Env,
+  policy: RegistryBackendPolicy,
+): Promise<Response> {
+  const body = await readJson<PairAccessCodeRequest | HermesPairAccessCodeRequest>(request);
+  const principalId = requestPrincipalId(body, policy)?.trim();
+  if (!principalId) {
+    return errorResponse(policy.errors.invalidPrincipal, `${policy.principalParam} is required`, 400);
+  }
   if (!body?.relaySecret?.trim()) return errorResponse('INVALID_RELAY_SECRET', 'relaySecret is required', 400);
 
-  const gatewayLookup = await getPairGateway(env.ROUTES_KV, body.gatewayId.trim());
-  if (!gatewayLookup.ok) return pairingRecordCorruptResponse(gatewayLookup.gatewayId);
-  const record = gatewayLookup.record;
-  if (!record) return errorResponse('GATEWAY_NOT_FOUND', 'Gateway not found', 404);
+  const kv = routesKv(env, policy);
+  const lookup = await getPairRecord(kv, policy, principalId);
+  if (!lookup.ok) return pairingRecordCorruptResponse(policy, lookup.principalId);
+  const record = lookup.record;
+  if (!record) return errorResponse(policy.errors.principalNotFound, `${policy.principalLabel} not found`, 404);
   if (await sha256Hex(body.relaySecret.trim()) !== record.relaySecretHash) {
     return errorResponse('UNAUTHORIZED', 'Invalid relay secret', 401);
   }
@@ -238,51 +316,118 @@ async function handlePairAccessCode(request: Request, env: Env): Promise<Respons
   const nextDisplayName = body.displayName === undefined
     ? record.displayName
     : body.displayName?.trim() || null;
-  const next: PairGatewayRecord = {
-    ...record,
-    displayName: nextDisplayName,
-    accessCodeHash: await sha256Hex(accessCode),
-    accessCodeExpiresAt: new Date(
-      Date.now() + parsePositiveInt(env.PAIR_ACCESS_CODE_TTL_SEC, ACCESS_CODE_TTL_FALLBACK_SEC) * 1000,
-    ).toISOString(),
-    pairingSessionId: null,
-    pairingSessionCodeHash: null,
-    pairingSessionShortCodeLookup: null,
-    updatedAt: new Date().toISOString(),
-  };
-  await deletePairingSession(
-    env.ROUTES_KV,
-    record.pairingSessionId,
-    record.pairingSessionCodeHash,
-    record.pairingSessionShortCodeLookup,
-  );
-  await putPairGateway(env.ROUTES_KV, next);
+  const nextAccessCodeHash = await sha256Hex(accessCode);
+  const nextAccessCodeExpiresAt = new Date(
+    Date.now() + parsePositiveInt(env.PAIR_ACCESS_CODE_TTL_SEC, ACCESS_CODE_TTL_FALLBACK_SEC) * 1000,
+  ).toISOString();
+  const previousAccessCodeHash = record.accessCodeHash;
+  let next: PairPrincipalRecord;
+  if (policy.backend === 'openclaw') {
+    const gateway = record as PairGatewayRecord;
+    next = {
+      ...gateway,
+      displayName: nextDisplayName,
+      accessCodeHash: nextAccessCodeHash,
+      accessCodeExpiresAt: nextAccessCodeExpiresAt,
+      pairingSessionId: null,
+      pairingSessionCodeHash: null,
+      pairingSessionShortCodeLookup: null,
+      updatedAt: new Date().toISOString(),
+    };
+    await deletePairingSession(
+      kv,
+      gateway.pairingSessionId,
+      gateway.pairingSessionCodeHash,
+      gateway.pairingSessionShortCodeLookup,
+    );
+  } else {
+    next = {
+      ...record,
+      displayName: nextDisplayName,
+      accessCodeHash: nextAccessCodeHash,
+      accessCodeExpiresAt: nextAccessCodeExpiresAt,
+      updatedAt: new Date().toISOString(),
+    };
+  }
+  await putPairRecord(kv, policy, next);
+  if (policy.backend === 'hermes') {
+    await Promise.all([
+      putDirectAccessCodeLookup(kv, nextAccessCodeHash, principalId, nextAccessCodeExpiresAt),
+      ...(previousAccessCodeHash && previousAccessCodeHash !== nextAccessCodeHash
+        ? [kv.delete(directAccessCodeLookupKey(previousAccessCodeHash))]
+        : []),
+    ]);
+  }
 
-  const response: PairAccessCodeResponse = {
-    gatewayId: next.gatewayId,
+  const response = {
+    [policy.principalParam]: principalId,
     relayUrl: next.relayUrl,
     accessCode,
     accessCodeExpiresAt: next.accessCodeExpiresAt as string,
     displayName: next.displayName,
     region: next.region,
-  };
+  } as unknown as PairAccessCodeResponse | HermesPairAccessCodeResponse;
   return jsonResponse(response, 200);
 }
 
-async function handlePairClaim(request: Request, env: Env): Promise<Response> {
-  const body = await readJson<PairClaimRequest>(request);
-  if (!body?.gatewayId?.trim()) return errorResponse('INVALID_GATEWAY_ID', 'gatewayId is required', 400);
+async function handlePairClaim(
+  request: Request,
+  env: Env,
+  policy: RegistryBackendPolicy,
+): Promise<Response> {
+  const body = await readJson<PairClaimRequest | HermesPairClaimRequest>(request);
+  const principalId = requestPrincipalId(body, policy)?.trim();
+  if (!principalId) {
+    return errorResponse(policy.errors.invalidPrincipal, `${policy.principalParam} is required`, 400);
+  }
   const normalizedAccessCode = normalizeAccessCode(body?.accessCode);
   if (!normalizedAccessCode) return errorResponse('INVALID_ACCESS_CODE', 'accessCode is required', 400);
 
-  const gatewayLookup = await getPairGateway(env.ROUTES_KV, body.gatewayId.trim());
-  if (!gatewayLookup.ok) return pairingRecordCorruptResponse(gatewayLookup.gatewayId);
-  const record = gatewayLookup.record;
-  if (!record) return errorResponse('GATEWAY_NOT_FOUND', 'Gateway not found', 404);
+  return claimPairAccessCode(
+    env,
+    policy,
+    principalId,
+    normalizedAccessCode,
+    body?.clientLabel,
+  );
+}
+
+async function handleHermesPairCodeClaim(
+  request: Request,
+  env: Env,
+  policy: RegistryBackendPolicy,
+): Promise<Response> {
+  if (await consumePairingResolveAttempt(request, env, policy)) {
+    return errorResponse('PAIRING_CODE_RATE_LIMITED', 'Too many pairing code attempts. Try again later.', 429);
+  }
+  const body = await readJson<HermesPairCodeClaimRequest>(request);
+  const accessCode = normalizeAccessCode(body?.accessCode);
+  if (!accessCode) return errorResponse('INVALID_ACCESS_CODE', 'accessCode is required', 400);
+  const kv = routesKv(env, policy);
+  const principalId = await kv.get(directAccessCodeLookupKey(await sha256Hex(accessCode)));
+  if (!principalId) {
+    return errorResponse('PAIRING_CODE_NOT_FOUND', 'Pairing code is invalid or expired', 404);
+  }
+  return claimPairAccessCode(env, policy, principalId, accessCode, body?.clientLabel);
+}
+
+async function claimPairAccessCode(
+  env: Env,
+  policy: RegistryBackendPolicy,
+  principalId: string,
+  normalizedAccessCode: string,
+  clientLabel?: string | null,
+): Promise<Response> {
+
+  const kv = routesKv(env, policy);
+  const lookup = await getPairRecord(kv, policy, principalId);
+  if (!lookup.ok) return pairingRecordCorruptResponse(policy, lookup.principalId);
+  const record = lookup.record;
+  if (!record) return errorResponse(policy.errors.principalNotFound, `${policy.principalLabel} not found`, 404);
 
   const codeHash = await sha256Hex(normalizedAccessCode);
   if (!record.accessCodeHash || !record.accessCodeExpiresAt) {
-    return errorResponse('ACCESS_CODE_REQUIRED', 'Gateway does not have an active access code', 409);
+    return errorResponse('ACCESS_CODE_REQUIRED', `${policy.principalLabel} does not have an active access code`, 409);
   }
   if (Date.parse(record.accessCodeExpiresAt) <= Date.now()) {
     return errorResponse('ACCESS_CODE_EXPIRED', 'Access code expired', 410);
@@ -292,24 +437,37 @@ async function handlePairClaim(request: Request, env: Env): Promise<Response> {
   }
 
   const now = new Date().toISOString();
-  const issued = await mintClientToken(record, env, body.clientLabel, now);
-  const next: PairGatewayRecord = {
-    ...issued.record,
-    accessCodeHash: null,
-    accessCodeExpiresAt: null,
-    pairingSessionId: null,
-    pairingSessionCodeHash: null,
-    pairingSessionShortCodeLookup: null,
-  };
-  await deletePairingSession(
-    env.ROUTES_KV,
-    record.pairingSessionId,
-    record.pairingSessionCodeHash,
-    record.pairingSessionShortCodeLookup,
-  );
-  await putPairGateway(env.ROUTES_KV, next);
-  await syncClientTokensToRelay(env, next);
-  return jsonResponse(buildPairClaimResponse(next, issued.clientToken), 200);
+  const issued = await mintClientToken(policy, record, env, clientLabel, now);
+  let next: PairPrincipalRecord;
+  if (policy.backend === 'openclaw') {
+    const gateway = record as PairGatewayRecord;
+    next = {
+      ...issued.record,
+      accessCodeHash: null,
+      accessCodeExpiresAt: null,
+      pairingSessionId: null,
+      pairingSessionCodeHash: null,
+      pairingSessionShortCodeLookup: null,
+    } as PairGatewayRecord;
+    await deletePairingSession(
+      kv,
+      gateway.pairingSessionId,
+      gateway.pairingSessionCodeHash,
+      gateway.pairingSessionShortCodeLookup,
+    );
+  } else {
+    next = {
+      ...issued.record,
+      accessCodeHash: null,
+      accessCodeExpiresAt: null,
+    };
+  }
+  await putPairRecord(kv, policy, next);
+  if (policy.backend === 'hermes') {
+    await kv.delete(directAccessCodeLookupKey(codeHash));
+  }
+  await syncClientTokensToRelay(env, policy, next);
+  return jsonResponse(buildPairClaimResponse(policy, next, issued.clientToken), 200);
 }
 
 async function handlePairingSessionCreate(request: Request, env: Env): Promise<Response> {
@@ -328,8 +486,8 @@ async function handlePairingSessionCreate(request: Request, env: Env): Promise<R
     return errorResponse('INVALID_PAIRING_PAYLOAD', 'Encrypted pairing payload is invalid', 400);
   }
 
-  const gatewayLookup = await getPairGateway(env.ROUTES_KV, gatewayId);
-  if (!gatewayLookup.ok) return pairingRecordCorruptResponse(gatewayLookup.gatewayId);
+  const gatewayLookup = await getPairGateway(openClawRoutesKv(env), gatewayId);
+  if (!gatewayLookup.ok) return pairingRecordCorruptResponse(OPENCLAW_REGISTRY_POLICY, gatewayLookup.gatewayId);
   const gateway = gatewayLookup.record;
   if (!gateway) return errorResponse('GATEWAY_NOT_FOUND', 'Gateway not found', 404);
   if (await sha256Hex(relaySecret) !== gateway.relaySecretHash) {
@@ -351,7 +509,7 @@ async function handlePairingSessionCreate(request: Request, env: Env): Promise<R
     ? await securePairingCodeLookup(env, shortCodeHash)
     : null;
   await deletePairingSession(
-    env.ROUTES_KV,
+    openClawRoutesKv(env),
     gateway.pairingSessionId,
     gateway.pairingSessionCodeHash,
     gateway.pairingSessionShortCodeLookup,
@@ -369,12 +527,12 @@ async function handlePairingSessionCreate(request: Request, env: Env): Promise<R
   };
   const ttl = expirationTtlSeconds(record.expiresAt);
   await Promise.all([
-    env.ROUTES_KV.put(pairingSessionKey(sessionId), JSON.stringify(record), { expirationTtl: ttl }),
-    env.ROUTES_KV.put(pairingSessionCodeKey(codeHash), sessionId, { expirationTtl: ttl }),
+    openClawRoutesKv(env).put(pairingSessionKey(sessionId), JSON.stringify(record), { expirationTtl: ttl }),
+    openClawRoutesKv(env).put(pairingSessionCodeKey(codeHash), sessionId, { expirationTtl: ttl }),
     ...(shortCodeLookup
-      ? [env.ROUTES_KV.put(pairingSessionShortCodeKey(shortCodeLookup), sessionId, { expirationTtl: ttl })]
+      ? [openClawRoutesKv(env).put(pairingSessionShortCodeKey(shortCodeLookup), sessionId, { expirationTtl: ttl })]
       : []),
-    putPairGateway(env.ROUTES_KV, {
+    putPairGateway(openClawRoutesKv(env), {
       ...gateway,
       pairingSessionId: sessionId,
       pairingSessionCodeHash: codeHash,
@@ -398,7 +556,7 @@ async function handlePairingSessionRead(
   sessionId: string,
   payloadKind: 'link' | 'code',
 ): Promise<Response> {
-  const record = await readPairingSession(env.ROUTES_KV, sessionId);
+  const record = await readPairingSession(openClawRoutesKv(env), sessionId);
   if (!record) return errorResponse('PAIRING_SESSION_NOT_FOUND', 'Pairing session not found or expired', 404);
   const response: PairingSessionReadResponse = {
     sessionId: record.sessionId,
@@ -416,7 +574,7 @@ async function handlePairingSessionResolve(request: Request, env: Env): Promise<
   const body = await readJson<PairingSessionResolveRequest>(request);
   const codeHash = body?.codeHash?.trim().toLowerCase() ?? '';
   if (!isSha256Hex(codeHash)) return errorResponse('INVALID_PAIRING_CODE', 'Pairing code is invalid', 400);
-  const sessionId = await env.ROUTES_KV.get(pairingSessionCodeKey(codeHash));
+  const sessionId = await openClawRoutesKv(env).get(pairingSessionCodeKey(codeHash));
   if (!sessionId) return errorResponse('PAIRING_SESSION_NOT_FOUND', 'Pairing code is invalid or expired', 404);
   return handlePairingSessionRead(env, sessionId, 'code');
 }
@@ -433,14 +591,14 @@ async function handleSecurePairingSessionResolve(request: Request, env: Env): Pr
   const codeHash = body?.codeHash?.trim().toLowerCase() ?? '';
   if (!isSha256Hex(codeHash)) return errorResponse('INVALID_PAIRING_CODE', 'Pairing code is invalid', 400);
   const lookup = await securePairingCodeLookup(env, codeHash);
-  const sessionId = await env.ROUTES_KV.get(pairingSessionShortCodeKey(lookup));
+  const sessionId = await openClawRoutesKv(env).get(pairingSessionShortCodeKey(lookup));
   if (!sessionId) return errorResponse('PAIRING_SESSION_NOT_FOUND', 'Pairing code is invalid or expired', 404);
-  const record = await readPairingSession(env.ROUTES_KV, sessionId);
+  const record = await readPairingSession(openClawRoutesKv(env), sessionId);
   if (!record || record.shortCodeLookup !== lookup) {
     return errorResponse('PAIRING_SESSION_NOT_FOUND', 'Pairing code is invalid or expired', 404);
   }
-  const gatewayLookup = await getPairGateway(env.ROUTES_KV, record.gatewayId);
-  if (!gatewayLookup.ok) return pairingRecordCorruptResponse(gatewayLookup.gatewayId);
+  const gatewayLookup = await getPairGateway(openClawRoutesKv(env), record.gatewayId);
+  if (!gatewayLookup.ok) return pairingRecordCorruptResponse(OPENCLAW_REGISTRY_POLICY, gatewayLookup.gatewayId);
   const gateway = gatewayLookup.record;
   if (!gateway || gateway.pairingSessionId !== record.sessionId) {
     return errorResponse('PAIRING_SESSION_NOT_FOUND', 'Pairing code is invalid or expired', 404);
@@ -467,7 +625,7 @@ async function handleSecurePairingSessionResolve(request: Request, env: Env): Pr
 }
 
 async function handlePairingLandingPage(env: Env, sessionId: string, requestOrigin: string): Promise<Response> {
-  const record = await readPairingSession(env.ROUTES_KV, sessionId);
+  const record = await readPairingSession(openClawRoutesKv(env), sessionId);
   if (!record) return htmlResponse(renderExpiredPairingPage(), 404);
   return htmlResponse(renderPairingPage({
     sessionId: record.sessionId,
@@ -477,78 +635,137 @@ async function handlePairingLandingPage(env: Env, sessionId: string, requestOrig
   }));
 }
 
-async function handleVerify(request: Request, env: Env, gatewayId: string): Promise<Response> {
-  if (!gatewayId.trim()) return errorResponse('INVALID_GATEWAY_ID', 'gatewayId is required', 400);
+async function handleVerify(
+  request: Request,
+  env: Env,
+  policy: RegistryBackendPolicy,
+  principalId: string,
+): Promise<Response> {
+  if (!principalId.trim()) {
+    return errorResponse(policy.errors.invalidPrincipal, `${policy.principalParam} is required`, 400);
+  }
   const token = readBearerToken(request);
   if (!token) return errorResponse('UNAUTHORIZED', 'Missing token for verify', 401);
 
-  const gatewayLookup = await getPairGateway(env.ROUTES_KV, gatewayId.trim());
-  if (!gatewayLookup.ok) return pairingRecordCorruptResponse(gatewayLookup.gatewayId);
-  const gateway = gatewayLookup.record;
-  if (!gateway) return errorResponse('GATEWAY_NOT_FOUND', 'Gateway not found', 404);
+  const lookup = await getPairRecord(routesKv(env, policy), policy, principalId.trim());
+  if (!lookup.ok) return pairingRecordCorruptResponse(policy, lookup.principalId);
+  const record = lookup.record;
+  if (!record) return errorResponse(policy.errors.principalNotFound, `${policy.principalLabel} not found`, 404);
 
   const tokenHash = await sha256Hex(token);
-  if (tokenHash === gateway.relaySecretHash) {
+  if (tokenHash === record.relaySecretHash) {
+    // Hermes has always used the gateway/client wire-role vocabulary even though
+    // its semantic owner is a bridge. M2a must preserve that public response.
     return jsonResponse({ ok: true, role: 'gateway' }, 200);
   }
-  if (gateway.clientTokens.some((item) => item.hash === tokenHash)) {
+  if (record.clientTokens.some((item) => item.hash === tokenHash)) {
     return jsonResponse({ ok: true, role: 'client' }, 200);
   }
   return errorResponse('UNAUTHORIZED', 'Invalid pairing token', 401);
 }
 
 async function getPairGateway(routesKv: KVNamespace, gatewayId: string): Promise<PairGatewayLookupResult> {
-  const raw = await routesKv.get(pairGatewayKey(gatewayId));
+  const lookup = await getPairRecord(routesKv, OPENCLAW_REGISTRY_POLICY, gatewayId);
+  if (!lookup.ok) return { ok: false, gatewayId: lookup.principalId };
+  return { ok: true, record: lookup.record as PairGatewayRecord | null };
+}
+
+async function getPairRecord(
+  kv: KVNamespace,
+  policy: RegistryBackendPolicy,
+  principalId: string,
+): Promise<PairPrincipalLookupResult> {
+  const raw = await kv.get(pairRecordKey(policy, principalId));
   if (!raw) return { ok: true, record: null };
   try {
     const parsed = JSON.parse(raw) as Record<string, unknown> | null;
-    if (!parsed || typeof parsed.gatewayId !== 'string' || typeof parsed.relaySecretHash !== 'string') {
-      return { ok: false, gatewayId };
+    if (!parsed
+      || typeof parsed[policy.principalParam] !== 'string'
+      || typeof parsed.relaySecretHash !== 'string') {
+      return { ok: false, principalId };
     }
     const clientTokens = Array.isArray(parsed.clientTokens) ? parsed.clientTokens : [];
+    const common = {
+      relayUrl: typeof parsed.relayUrl === 'string' ? parsed.relayUrl : '',
+      region: typeof parsed.region === 'string' ? parsed.region : 'us',
+      displayName: typeof parsed.displayName === 'string' ? parsed.displayName : null,
+      relaySecretHash: parsed.relaySecretHash,
+      accessCodeHash: typeof parsed.accessCodeHash === 'string' ? parsed.accessCodeHash : null,
+      accessCodeExpiresAt: typeof parsed.accessCodeExpiresAt === 'string' ? parsed.accessCodeExpiresAt : null,
+      // Tolerate legacy stored fields such as reusableCodes or issuedByReusableCodeId.
+      clientTokens: clientTokens
+        .filter((item): item is Record<string, unknown> => (
+          typeof item === 'object' && item !== null && typeof item.hash === 'string'
+        ))
+        .map((item) => ({
+          hash: item.hash as string,
+          label: typeof item.label === 'string' ? item.label : null,
+          createdAt: typeof item.createdAt === 'string' ? item.createdAt : new Date().toISOString(),
+          lastUsedAt: typeof item.lastUsedAt === 'string' ? item.lastUsedAt : null,
+        })),
+      createdAt: typeof parsed.createdAt === 'string' ? parsed.createdAt : new Date().toISOString(),
+      updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date().toISOString(),
+    };
+
+    if (policy.backend === 'hermes') {
+      return {
+        ok: true,
+        record: {
+          bridgeId: parsed.bridgeId as string,
+          ...common,
+        },
+      };
+    }
+
     return {
       ok: true,
       record: {
-        gatewayId: parsed.gatewayId,
-        relayUrl: typeof parsed.relayUrl === 'string' ? parsed.relayUrl : '',
-        region: typeof parsed.region === 'string' ? parsed.region : 'us',
-        displayName: typeof parsed.displayName === 'string' ? parsed.displayName : null,
-        relaySecretHash: parsed.relaySecretHash,
-        accessCodeHash: typeof parsed.accessCodeHash === 'string' ? parsed.accessCodeHash : null,
-        accessCodeExpiresAt: typeof parsed.accessCodeExpiresAt === 'string' ? parsed.accessCodeExpiresAt : null,
+        gatewayId: parsed.gatewayId as string,
+        relayUrl: common.relayUrl,
+        region: common.region,
+        displayName: common.displayName,
+        relaySecretHash: common.relaySecretHash,
+        accessCodeHash: common.accessCodeHash,
+        accessCodeExpiresAt: common.accessCodeExpiresAt,
         pairingSessionId: typeof parsed.pairingSessionId === 'string' ? parsed.pairingSessionId : null,
         pairingSessionCodeHash: typeof parsed.pairingSessionCodeHash === 'string' ? parsed.pairingSessionCodeHash : null,
         pairingSessionShortCodeLookup: typeof parsed.pairingSessionShortCodeLookup === 'string'
           ? parsed.pairingSessionShortCodeLookup
           : null,
-        // Tolerate legacy stored fields such as reusableCodes or issuedByReusableCodeId.
-        clientTokens: clientTokens
-          .filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null && typeof item.hash === 'string')
-          .map((item) => ({
-            hash: item.hash as string,
-            label: typeof item.label === 'string' ? item.label : null,
-            createdAt: typeof item.createdAt === 'string' ? item.createdAt : new Date().toISOString(),
-            lastUsedAt: typeof item.lastUsedAt === 'string' ? item.lastUsedAt : null,
-          })),
-        createdAt: typeof parsed.createdAt === 'string' ? parsed.createdAt : new Date().toISOString(),
-        updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date().toISOString(),
+        clientTokens: common.clientTokens,
+        createdAt: common.createdAt,
+        updatedAt: common.updatedAt,
       },
     };
   } catch {
-    return { ok: false, gatewayId };
+    return { ok: false, principalId };
   }
 }
 
 async function putPairGateway(routesKv: KVNamespace, record: PairGatewayRecord): Promise<void> {
-  await routesKv.put(pairGatewayKey(record.gatewayId), JSON.stringify(record), {
-    expirationTtl: 365 * 24 * 3600,
+  await putPairRecord(routesKv, OPENCLAW_REGISTRY_POLICY, record);
+}
+
+async function putPairRecord(
+  kv: KVNamespace,
+  policy: RegistryBackendPolicy,
+  record: PairPrincipalRecord,
+): Promise<void> {
+  await kv.put(pairRecordKey(policy, recordPrincipalId(record, policy)), JSON.stringify(record), {
+    expirationTtl: record.clientTokens.length > 0
+      ? CLAIMED_PAIR_RECORD_TTL_SEC
+      : UNCLAIMED_PAIR_RECORD_TTL_SEC,
   });
 }
 
-async function syncClientTokensToRelay(env: Env, record: PairGatewayRecord): Promise<void> {
+async function syncClientTokensToRelay(
+  env: Env,
+  policy: RegistryBackendPolicy,
+  record: PairPrincipalRecord,
+): Promise<void> {
   const secret = env.PAIRING_SYNC_SECRET?.trim() ?? '';
   if (!secret) return;
-  const endpoint = buildRelayPairingSyncUrl(record.relayUrl);
+  const endpoint = buildRelayPairingSyncUrl(record.relayUrl, policy);
   if (!endpoint) return;
   try {
     const requestInit: RequestInit = {
@@ -558,17 +775,17 @@ async function syncClientTokensToRelay(env: Env, record: PairGatewayRecord): Pro
         'x-clawket-pairing-sync-secret': secret,
       },
       body: JSON.stringify({
-        gatewayId: record.gatewayId,
+        [policy.principalParam]: recordPrincipalId(record, policy),
         clientTokenHashes: record.clientTokens.map((item) => item.hash),
         updatedAt: Date.now(),
       }),
     };
-    const response = env.RELAY_SYNC_SERVICE
+    const response = policy.useRelaySyncServiceBinding && env.RELAY_SYNC_SERVICE
       ? await env.RELAY_SYNC_SERVICE.fetch(endpoint, requestInit)
       : await fetch(endpoint, requestInit);
     if (!response.ok) {
       console.warn(JSON.stringify({
-        scope: 'registry_worker',
+        scope: policy.telemetryScope,
         event: 'relay_token_sync_failed',
         ts: new Date().toISOString(),
         status: response.status,
@@ -576,7 +793,7 @@ async function syncClientTokensToRelay(env: Env, record: PairGatewayRecord): Pro
     }
   } catch (error) {
     console.warn(JSON.stringify({
-      scope: 'registry_worker',
+      scope: policy.telemetryScope,
       event: 'relay_token_sync_failed',
       ts: new Date().toISOString(),
       message: error instanceof Error ? error.message : String(error),
@@ -584,13 +801,13 @@ async function syncClientTokensToRelay(env: Env, record: PairGatewayRecord): Pro
   }
 }
 
-function buildRelayPairingSyncUrl(relayUrl: string): string | null {
+function buildRelayPairingSyncUrl(relayUrl: string, policy: RegistryBackendPolicy): string | null {
   const trimmed = relayUrl.trim();
   if (!trimmed) return null;
   try {
     const parsed = new URL(trimmed);
     parsed.protocol = parsed.protocol === 'wss:' ? 'https:' : 'http:';
-    parsed.pathname = '/v1/internal/pairing/client-tokens';
+    parsed.pathname = policy.relaySyncPath;
     parsed.search = '';
     parsed.hash = '';
     return parsed.toString();
@@ -632,15 +849,20 @@ function readRelayMap(env: Env): Record<string, string> {
   };
 }
 
-function normalizeRequestPath(pathname: string): string {
-  if (pathname.startsWith('/v1/verify/')) return '/v1/verify/:gatewayId';
-  if (pathname === '/v1/pair/session/resolve') return pathname;
-  if (pathname.startsWith('/v1/pair/session/')) return '/v1/pair/session/:sessionId';
-  if (pathname.startsWith('/pair/')) return '/pair/:sessionId';
+function normalizeRequestPath(policy: RegistryBackendPolicy, pathname: string): string {
+  if (pathname.startsWith(policy.verifyPathPrefix)) {
+    return `${policy.verifyPathPrefix}:${policy.principalParam}`;
+  }
+  if (policy.backend === 'openclaw') {
+    if (pathname === '/v1/pair/session/resolve') return pathname;
+    if (pathname.startsWith('/v1/pair/session/')) return '/v1/pair/session/:sessionId';
+    if (pathname.startsWith('/pair/')) return '/pair/:sessionId';
+  }
   return pathname;
 }
 
 function logRegistryTelemetry(
+  policy: RegistryBackendPolicy,
   event: string,
   request: Request,
   url: URL,
@@ -649,11 +871,11 @@ function logRegistryTelemetry(
   extra?: Record<string, unknown>,
 ): void {
   console.log(JSON.stringify({
-    scope: 'registry_worker',
+    scope: policy.telemetryScope,
     event,
     ts: new Date().toISOString(),
     method: request.method,
-    path: normalizeRequestPath(url.pathname),
+    path: normalizeRequestPath(policy, url.pathname),
     status,
     elapsedMs,
     ...extra,
@@ -677,13 +899,81 @@ function safeParseJson<T>(raw: string | null, fallback: T): T {
   }
 }
 
+function routesKv(env: Env, policy: RegistryBackendPolicy): KVNamespace {
+  const binding = env[policy.kvBinding];
+  if (!binding) throw new Error(`Missing Registry KV binding: ${policy.kvBinding}`);
+  return binding;
+}
+
+function openClawRoutesKv(env: Env): KVNamespace {
+  return routesKv(env, OPENCLAW_REGISTRY_POLICY);
+}
+
+function requestPrincipalId(
+  body: PairAccessCodeRequest | HermesPairAccessCodeRequest | PairClaimRequest | HermesPairClaimRequest | null,
+  policy: RegistryBackendPolicy,
+): string | undefined {
+  return (body as unknown as Record<string, string | undefined> | null)?.[policy.principalParam];
+}
+
+function recordPrincipalId(record: PairPrincipalRecord, policy: RegistryBackendPolicy): string {
+  return (record as unknown as Record<string, string>)[policy.principalParam];
+}
+
+function createPairRecord(
+  policy: RegistryBackendPolicy,
+  input: {
+    principalId: string;
+    relayUrl: string;
+    region: string;
+    displayName: string | null;
+    relaySecretHash: string;
+    accessCodeHash: string;
+    accessCodeExpiresAt: string;
+    createdAt: string;
+    updatedAt: string;
+  },
+): PairPrincipalRecord {
+  if (policy.backend === 'hermes') {
+    return {
+      bridgeId: input.principalId,
+      relayUrl: input.relayUrl,
+      region: input.region,
+      displayName: input.displayName,
+      relaySecretHash: input.relaySecretHash,
+      accessCodeHash: input.accessCodeHash,
+      accessCodeExpiresAt: input.accessCodeExpiresAt,
+      clientTokens: [],
+      createdAt: input.createdAt,
+      updatedAt: input.updatedAt,
+    };
+  }
+
+  return {
+    gatewayId: input.principalId,
+    relayUrl: input.relayUrl,
+    region: input.region,
+    displayName: input.displayName,
+    relaySecretHash: input.relaySecretHash,
+    accessCodeHash: input.accessCodeHash,
+    accessCodeExpiresAt: input.accessCodeExpiresAt,
+    pairingSessionId: null,
+    pairingSessionCodeHash: null,
+    pairingSessionShortCodeLookup: null,
+    clientTokens: [],
+    createdAt: input.createdAt,
+    updatedAt: input.updatedAt,
+  };
+}
+
 async function mintClientToken(
-  record: PairGatewayRecord,
+  policy: RegistryBackendPolicy,
+  record: PairPrincipalRecord,
   env: Env,
   clientLabel: string | null | undefined,
   now: string,
-): Promise<{ record: PairGatewayRecord; clientToken: string }> {
-  const clientToken = generateClientToken();
+): Promise<{ record: PairPrincipalRecord; clientToken: string }> {
+  const clientToken = generateClientToken(policy);
   return {
     clientToken,
     record: {
@@ -702,18 +992,26 @@ async function mintClientToken(
   };
 }
 
-function buildPairClaimResponse(record: PairGatewayRecord, clientToken: string): PairClaimResponse {
+function buildPairClaimResponse(
+  policy: RegistryBackendPolicy,
+  record: PairPrincipalRecord,
+  clientToken: string,
+): PairClaimResponse | HermesPairClaimResponse {
   return {
-    gatewayId: record.gatewayId,
+    [policy.principalParam]: recordPrincipalId(record, policy),
     relayUrl: record.relayUrl,
     clientToken,
     displayName: record.displayName,
     region: record.region,
-  };
+  } as unknown as PairClaimResponse | HermesPairClaimResponse;
 }
 
 function pairGatewayKey(gatewayId: string): string {
-  return `pair-gateway:${gatewayId}`;
+  return pairRecordKey(OPENCLAW_REGISTRY_POLICY, gatewayId);
+}
+
+function pairRecordKey(policy: RegistryBackendPolicy, principalId: string): string {
+  return `${policy.pairKeyPrefix}${principalId}`;
 }
 
 function pairingSessionKey(sessionId: string): string {
@@ -726,6 +1024,21 @@ function pairingSessionCodeKey(codeHash: string): string {
 
 function pairingSessionShortCodeKey(lookup: string): string {
   return `pair-session-short-code:${lookup}`;
+}
+
+function directAccessCodeLookupKey(codeHash: string): string {
+  return `pair-access-code:${codeHash}`;
+}
+
+function putDirectAccessCodeLookup(
+  kv: KVNamespace,
+  codeHash: string,
+  principalId: string,
+  expiresAt: string,
+): Promise<void> {
+  return kv.put(directAccessCodeLookupKey(codeHash), principalId, {
+    expirationTtl: expirationTtlSeconds(expiresAt),
+  });
 }
 
 async function securePairingCodeLookup(env: Env, codeHash: string): Promise<string> {
@@ -820,20 +1133,32 @@ function resolvePairingPublicBase(request: Request, env: Env): string {
   return new URL(request.url).origin;
 }
 
-async function consumePairingResolveAttempt(request: Request, env: Env): Promise<boolean> {
+async function consumePairingResolveAttempt(
+  request: Request,
+  env: Env,
+  policy: RegistryBackendPolicy = OPENCLAW_REGISTRY_POLICY,
+): Promise<boolean> {
   const forwarded = request.headers.get('cf-connecting-ip')?.trim()
     || request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
     || 'unknown';
   const window = Math.floor(Date.now() / (10 * 60 * 1000));
   const key = `pair-session-attempt:${await sha256Hex(forwarded)}:${window}`;
-  const current = Number.parseInt(await env.ROUTES_KV.get(key) ?? '0', 10) || 0;
+  const kv = routesKv(env, policy);
+  const current = Number.parseInt(await kv.get(key) ?? '0', 10) || 0;
   const max = parsePositiveInt(
     env.PAIR_SESSION_RESOLVE_MAX_ATTEMPTS,
     PAIR_SESSION_RESOLVE_MAX_ATTEMPTS_FALLBACK,
   );
   if (current >= max) return true;
-  await env.ROUTES_KV.put(key, String(current + 1), { expirationTtl: 20 * 60 });
+  await kv.put(key, String(current + 1), { expirationTtl: 20 * 60 });
   return false;
+}
+
+async function consumePairRegisterAttempt(request: Request, env: Env): Promise<boolean> {
+  const sourceIp = request.headers.get('CF-Connecting-IP')?.trim() ?? '';
+  const ipHash = await sha256Hex(sourceIp);
+  const result = await env.PAIR_REGISTER_LIMITER.getByName(ipHash).consume(Date.now());
+  return !result.allowed;
 }
 
 function generatePairingSessionId(): string {
@@ -841,10 +1166,10 @@ function generatePairingSessionId(): string {
   return `ps_${Array.from(bytes).map((value) => value.toString(16).padStart(2, '0')).join('')}`;
 }
 
-function pairingRecordCorruptResponse(gatewayId: string): Response {
+function pairingRecordCorruptResponse(policy: RegistryBackendPolicy, principalId: string): Response {
   return errorResponse(
     'PAIRING_RECORD_CORRUPT',
-    `Stored pairing record for ${gatewayId} is invalid. Reset the bridge pairing and pair again.`,
+    policy.errors.corruptRecordMessage(principalId),
     500,
   );
 }
@@ -867,12 +1192,12 @@ function normalizeAccessCode(value: unknown): string {
   return value.trim().toUpperCase();
 }
 
-function generateRelaySecret(): string {
-  return `grs_${crypto.randomUUID().replace(/-/g, '')}${crypto.randomUUID().replace(/-/g, '')}`;
+function generateRelaySecret(policy: RegistryBackendPolicy): string {
+  return `${policy.relaySecretPrefix}${crypto.randomUUID().replace(/-/g, '')}${crypto.randomUUID().replace(/-/g, '')}`;
 }
 
-function generateClientToken(): string {
-  return `gct_${crypto.randomUUID().replace(/-/g, '')}${crypto.randomUUID().replace(/-/g, '')}`;
+function generateClientToken(policy: RegistryBackendPolicy): string {
+  return `${policy.clientTokenPrefix}${crypto.randomUUID().replace(/-/g, '')}${crypto.randomUUID().replace(/-/g, '')}`;
 }
 
 function appleAppSiteAssociationResponse(env: Env): Response {

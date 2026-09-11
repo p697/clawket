@@ -1,17 +1,20 @@
+import { selectActiveClient } from './runtime';
 import {
   GATEWAY_OWNER_KEY,
   GATEWAY_OWNER_TOUCH_INTERVAL_MS,
   MIRRORED_CLIENT_TOKEN_HASHES_KEY,
   ROOM_META_KEY,
   SOCKET_CLOSE_CODES,
-  type GatewayOwnerRecord,
   type MirroredClientTokenHashesRecord,
+  type PairBridgeRecord,
   type PairGatewayRecord,
+  type PairRecord,
   type RoomMetaRecord,
   type SocketAttachment,
 } from './types';
 import type { RelayRuntime } from './runtime';
-import { logRelayTelemetry } from './telemetry';
+import { logRuntimeTelemetry } from './telemetry';
+import { HERMES_BACKEND_POLICY, OPENCLAW_BACKEND_POLICY } from '../backend-policy';
 
 export type RehydrateSummary = {
   totalSocketCount: number;
@@ -19,7 +22,8 @@ export type RehydrateSummary = {
   orphanSocketsClosed: number;
   nonOpenSocketsClosed: number;
   duplicateSocketsClosed: number;
-  hasGateway: boolean;
+  hasGateway?: boolean;
+  hasBridge?: boolean;
 };
 
 type ReconcileSocketsOptions = {
@@ -28,36 +32,52 @@ type ReconcileSocketsOptions = {
 
 export async function loadRoomMeta(runtime: RelayRuntime): Promise<void> {
   const raw = await runtime.state.storage.get<RoomMetaRecord>(ROOM_META_KEY);
-  if (!raw || typeof raw.gatewayId !== 'string' || !raw.gatewayId.trim()) {
-    runtime.roomGatewayId = null;
-    return;
-  }
-  runtime.roomGatewayId = raw.gatewayId;
+  const principalId = raw?.[runtime.policy.principalRecordField];
+  runtime.roomPrincipalId = typeof principalId === 'string' && principalId.trim() ? principalId : null;
 }
 
-export async function storeRoomMeta(runtime: RelayRuntime, gatewayId: string): Promise<void> {
-  if (runtime.roomGatewayId === gatewayId) return;
-  runtime.roomGatewayId = gatewayId;
-  await runtime.state.storage.put(ROOM_META_KEY, { gatewayId });
+export async function storeRoomMeta(runtime: RelayRuntime, principalId: string): Promise<void> {
+  if (runtime.roomPrincipalId === principalId) return;
+  runtime.roomPrincipalId = principalId;
+  await runtime.state.storage.put(ROOM_META_KEY, {
+    [runtime.policy.principalRecordField]: principalId,
+  });
 }
 
-export async function loadPairGatewayRecord(
+async function loadPairRecord(
   routesKv: KVNamespace,
-  gatewayId: string | null | undefined,
-): Promise<PairGatewayRecord | null> {
-  const normalized = gatewayId?.trim() ?? '';
+  principalId: string | null | undefined,
+  policy: typeof OPENCLAW_BACKEND_POLICY | typeof HERMES_BACKEND_POLICY,
+): Promise<PairRecord | null> {
+  const normalized = principalId?.trim() ?? '';
   if (!normalized) return null;
-  const raw = await routesKv.get(`pair-gateway:${normalized}`);
+  const raw = await routesKv.get(`${policy.kvKeys.pair}${normalized}`);
   if (!raw) return null;
   try {
-    const parsed = JSON.parse(raw) as PairGatewayRecord;
-    if (!parsed || typeof parsed.gatewayId !== 'string' || typeof parsed.relaySecretHash !== 'string') {
+    const parsed = JSON.parse(raw) as PairRecord;
+    if (!parsed
+      || typeof parsed[policy.principalRecordField] !== 'string'
+      || typeof parsed.relaySecretHash !== 'string') {
       return null;
     }
     return parsed;
   } catch {
     return null;
   }
+}
+
+export async function loadPairGatewayRecord(
+  routesKv: KVNamespace,
+  gatewayId: string | null | undefined,
+): Promise<PairGatewayRecord | null> {
+  return await loadPairRecord(routesKv, gatewayId, OPENCLAW_BACKEND_POLICY) as PairGatewayRecord | null;
+}
+
+export async function loadPairBridgeRecord(
+  routesKv: KVNamespace,
+  bridgeId: string | null | undefined,
+): Promise<PairBridgeRecord | null> {
+  return await loadPairRecord(routesKv, bridgeId, HERMES_BACKEND_POLICY) as PairBridgeRecord | null;
 }
 
 export async function loadMirroredClientTokenHashes(runtime: RelayRuntime): Promise<void> {
@@ -68,8 +88,7 @@ export async function loadMirroredClientTokenHashes(runtime: RelayRuntime): Prom
     return;
   }
   runtime.mirroredClientTokenHashes = new Set(
-    raw.hashes
-      .filter((item): item is string => typeof item === 'string' && item.trim().length > 0),
+    raw.hashes.filter((item): item is string => typeof item === 'string' && item.trim().length > 0),
   );
   runtime.mirroredClientTokenHashesUpdatedAt = typeof raw.updatedAt === 'number' ? raw.updatedAt : 0;
 }
@@ -80,8 +99,7 @@ export async function storeMirroredClientTokenHashes(
   updatedAt = Date.now(),
 ): Promise<void> {
   const normalized = Array.from(new Set(
-    hashes
-      .filter((item): item is string => typeof item === 'string' && item.trim().length > 0),
+    hashes.filter((item): item is string => typeof item === 'string' && item.trim().length > 0),
   ));
   runtime.mirroredClientTokenHashes = new Set(normalized);
   runtime.mirroredClientTokenHashesUpdatedAt = updatedAt;
@@ -92,35 +110,46 @@ export async function storeMirroredClientTokenHashes(
 }
 
 export async function loadGatewayOwner(runtime: RelayRuntime): Promise<void> {
-  const raw = await runtime.state.storage.get<GatewayOwnerRecord>(GATEWAY_OWNER_KEY);
-  if (!raw || typeof raw.gatewayId !== 'string' || typeof raw.seenAt !== 'number') {
-    runtime.gatewayOwner = null;
+  const raw = await runtime.state.storage.get<Record<string, unknown>>(GATEWAY_OWNER_KEY);
+  const principalId = raw?.[runtime.policy.principalRecordField];
+  const seenAt = raw?.seenAt;
+  if (typeof principalId !== 'string' || typeof seenAt !== 'number') {
+    runtime.owner = null;
     return;
   }
-  runtime.gatewayOwner = raw;
-  runtime.gatewayOwnerTouchedAt = raw.seenAt;
+  runtime.owner = { principalId, seenAt };
+  runtime.ownerTouchedAt = seenAt;
 }
 
-export async function touchGatewayOwner(runtime: RelayRuntime, gatewayId: string, force = false): Promise<void> {
+export async function touchGatewayOwner(runtime: RelayRuntime, principalId: string, force = false): Promise<void> {
   const now = Date.now();
   if (!force
-    && runtime.gatewayOwner?.gatewayId === gatewayId
-    && now - runtime.gatewayOwnerTouchedAt < GATEWAY_OWNER_TOUCH_INTERVAL_MS) {
+    && runtime.owner?.principalId === principalId
+    && now - runtime.ownerTouchedAt < GATEWAY_OWNER_TOUCH_INTERVAL_MS) {
     return;
   }
-  runtime.gatewayOwner = {
-    gatewayId,
+  runtime.owner = { principalId, seenAt: now };
+  runtime.ownerTouchedAt = now;
+  await runtime.state.storage.put(GATEWAY_OWNER_KEY, {
+    [runtime.policy.principalRecordField]: principalId,
     seenAt: now,
-  };
-  runtime.gatewayOwnerTouchedAt = now;
-  await runtime.state.storage.put(GATEWAY_OWNER_KEY, runtime.gatewayOwner);
+  });
 }
 
-export function canAcceptGatewayOwner(runtime: RelayRuntime, gatewayId: string, now: number, leaseMs: number): boolean {
-  if (!runtime.gatewayOwner) return true;
-  if (runtime.gatewayOwner.gatewayId === gatewayId) return true;
-  return now - runtime.gatewayOwner.seenAt > leaseMs;
+export function canAcceptGatewayOwner(
+  runtime: RelayRuntime,
+  principalId: string,
+  now: number,
+  leaseMs: number,
+): boolean {
+  if (!runtime.owner) return true;
+  if (runtime.owner.principalId === principalId) return true;
+  return now - runtime.owner.seenAt > leaseMs;
 }
+
+export const loadBridgeOwner = loadGatewayOwner;
+export const touchBridgeOwner = touchGatewayOwner;
+export const canAcceptBridgeOwner = canAcceptGatewayOwner;
 
 function closeSocketBestEffort(ws: WebSocket, reason: 'orphan_socket' | 'dead_socket' | 'duplicate_socket'): void {
   try {
@@ -173,6 +202,7 @@ export function reconcileSockets(runtime: RelayRuntime, options: ReconcileSocket
       closeSocketBestEffort(ws, 'dead_socket');
       continue;
     }
+    if (attachment.role === 'gateway' && attachment.targetConnectionId && runtime.policy.backend === 'openclaw') continue;
     if (attachment.role === 'gateway') {
       if (!gatewayCandidate) {
         gatewayCandidate = { socket: ws, connectedAt: attachment.connectedAt };
@@ -197,12 +227,13 @@ export function reconcileSockets(runtime: RelayRuntime, options: ReconcileSocket
     }
 
     const existing = clientCandidates.get(attachment.clientId);
+    const candidate = {
+      socket: ws,
+      connectedAt: attachment.connectedAt,
+      pairing: runtime.policy.securePairing && attachment.authScope === 'pairing',
+    };
     if (!existing) {
-      clientCandidates.set(attachment.clientId, {
-        socket: ws,
-        connectedAt: attachment.connectedAt,
-        pairing: attachment.authScope === 'pairing',
-      });
+      clientCandidates.set(attachment.clientId, candidate);
       continue;
     }
     const nextWins = shouldPreferSocketCandidate({
@@ -215,11 +246,7 @@ export function reconcileSockets(runtime: RelayRuntime, options: ReconcileSocket
     if (nextWins) {
       duplicateSocketsClosed += 1;
       closeSocketBestEffort(existing.socket, 'duplicate_socket');
-      clientCandidates.set(attachment.clientId, {
-        socket: ws,
-        connectedAt: attachment.connectedAt,
-        pairing: attachment.authScope === 'pairing',
-      });
+      clientCandidates.set(attachment.clientId, candidate);
     } else {
       duplicateSocketsClosed += 1;
       closeSocketBestEffort(ws, 'duplicate_socket');
@@ -241,21 +268,32 @@ export function reconcileSockets(runtime: RelayRuntime, options: ReconcileSocket
     );
   }
 
+  // WebSockets survive hibernation while ordinary fields do not. A socket's
+  // persisted route marker is authoritative; never promote a pairing-only socket.
+  if (!runtime.activeClientId || !runtime.clients.has(runtime.activeClientId)) {
+    const marked = [...runtime.clients].filter(([, socket]) => (
+      (socket.deserializeAttachment() as SocketAttachment | null)?.activeClient === true
+    ));
+    const onlyClient = runtime.clients.size === 1 ? runtime.clients.keys().next().value : null;
+    selectActiveClient(runtime, marked.length === 1 ? marked[0][0] : onlyClient ?? null);
+  }
+
+  const hasOwner = Boolean(runtime.gatewaySocket?.readyState === WebSocket.OPEN);
   const summary: RehydrateSummary = {
     totalSocketCount: sockets.length,
     openClientCount: runtime.clients.size,
     orphanSocketsClosed,
     nonOpenSocketsClosed,
     duplicateSocketsClosed,
-    hasGateway: Boolean(runtime.gatewaySocket?.readyState === WebSocket.OPEN),
+    [runtime.policy.ownerPresentField]: hasOwner,
   };
-  logRelayTelemetry('relay_worker', 'rehydrate_summary', {
+  logRuntimeTelemetry(runtime, 'rehydrate_summary', {
     totalSocketCount: summary.totalSocketCount,
     openClientCount: summary.openClientCount,
     orphanSocketsClosed: summary.orphanSocketsClosed,
     nonOpenSocketsClosed: summary.nonOpenSocketsClosed,
     duplicateSocketsClosed: summary.duplicateSocketsClosed,
-    hasGateway: summary.hasGateway,
+    [runtime.policy.ownerPresentField]: hasOwner,
     pendingConnectStarts: runtime.pendingConnectStarts.size,
     awaitingChallengeCount: runtime.awaitingChallenge.size,
     hasPendingChallenge: Boolean(runtime.pendingChallenge),

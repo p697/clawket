@@ -4,6 +4,7 @@ compatibility_date = "2026-03-03"
 workers_dev = true
 
 [vars]
+RELAY_BACKEND = "openclaw"
 # Checked-in templates must not point at the official hosted deployment by default.
 # Replace these example endpoints and account-bound resource IDs before deploys or
 # remote-binding workflows in your own account.
@@ -18,7 +19,15 @@ APPLE_APP_IDS = "TEAMID.com.example.clawket"
 ANDROID_APP_LINK_PACKAGE = "com.example.clawket"
 ANDROID_APP_LINK_SHA256_CERT_FINGERPRINTS = ""
 
+[[durable_objects.bindings]]
+name = "PAIR_REGISTER_LIMITER"
+class_name = "PairRegisterRateLimiter"
+
 [[kv_namespaces]]
 binding = "ROUTES_KV"
 id = "00000000000000000000000000000000"
 preview_id = "00000000000000000000000000000000"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["PairRegisterRateLimiter"]

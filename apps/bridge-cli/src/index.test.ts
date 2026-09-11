@@ -34,6 +34,9 @@ const {
   buildHermesRelayWsUrlMock,
   getHermesProcessLogPathsMock,
   readRecentCliLogsMock,
+  buildDoctorReportMock,
+  summarizeDoctorReportMock,
+  writeServiceStateMock,
 } = vi.hoisted(() => ({
   bridgeRuntimeCtorMock: vi.fn(),
   pairGatewayMock: vi.fn(),
@@ -63,11 +66,14 @@ const {
     relayErrorLogPath: '/tmp/hermes-relay-error.log',
   })),
   readRecentCliLogsMock: vi.fn<() => string[]>(() => []),
+  buildDoctorReportMock: vi.fn(),
+  summarizeDoctorReportMock: vi.fn(() => ({ overall: 'healthy', findings: [] })),
   installServiceMock: vi.fn(),
   restartServiceMock: vi.fn(),
   stopRuntimeProcessesMock: vi.fn(),
   stopServiceMock: vi.fn(),
   uninstallServiceMock: vi.fn(),
+  writeServiceStateMock: vi.fn(),
   getServiceStatusMock: vi.fn(() => ({
     installed: true,
     running: true,
@@ -86,9 +92,10 @@ vi.mock('qrcode-terminal', () => ({
 }));
 
 vi.mock('./diagnostics.js', () => ({
-  buildDoctorReport: vi.fn(),
+  buildDoctorReport: buildDoctorReportMock,
   ensurePairPrerequisites: vi.fn(),
   readRecentCliLogs: readRecentCliLogsMock,
+  summarizeDoctorReport: summarizeDoctorReportMock,
 }));
 
 vi.mock('./log-parse.js', () => ({
@@ -155,7 +162,7 @@ vi.mock('@clawket/bridge-core', () => ({
   stopService: stopServiceMock,
   uninstallService: uninstallServiceMock,
   unregisterRuntimeProcess: vi.fn(),
-  writeServiceState: vi.fn(),
+  writeServiceState: writeServiceStateMock,
   SECURE_PAIRING_V2_CAPABILITY: 'pairing.secure-short-code.v2',
 }));
 
@@ -171,6 +178,7 @@ vi.mock('@clawket/bridge-runtime', () => ({
   readOpenClawInfo: readOpenClawInfoMock,
   resolveGatewayAuth: resolveGatewayAuthMock,
   resolveGatewayUrl: vi.fn(() => 'ws://127.0.0.1:18789'),
+  resolveHermesSourcePath: vi.fn(() => join(process.env.HOME as string, '.hermes', 'hermes-agent')),
   restartOpenClawGateway: vi.fn(),
 }));
 
@@ -316,6 +324,46 @@ describe('cli pairing output', () => {
     expect(consoleErrorSpy).not.toHaveBeenCalled();
   });
 
+  it('prints OpenClaw and Hermes Bridge capabilities in status output', async () => {
+    process.argv = ['node', 'clawket', 'status'];
+    buildDoctorReportMock.mockResolvedValue({
+      paired: true,
+      hermesRelayPaired: true,
+      hermesBridgeConfigFound: true,
+      openclawBridgeCapabilities: ['bridge.capabilities.v2'],
+      hermesBridgeCapabilities: ['bridge.capabilities.v2', 'hermes.multi-session.v2'],
+    });
+
+    await import('./index.js');
+
+    await vi.waitFor(() => {
+      expect(buildDoctorReportMock).toHaveBeenCalledTimes(1);
+    });
+    expect(consoleLogSpy).toHaveBeenCalledWith('Bridge Capabilities: bridge.capabilities.v2');
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      'Bridge Capabilities: bridge.capabilities.v2, hermes.multi-session.v2',
+    );
+  });
+
+  it('prints empty Bridge capability lists for legacy status and doctor payloads', async () => {
+    process.argv = ['node', 'clawket', 'doctor'];
+    buildDoctorReportMock.mockResolvedValue({
+      paired: true,
+      hermesRelayPaired: true,
+      hermesBridgeConfigFound: true,
+      openclawBridgeCapabilities: [],
+      hermesBridgeCapabilities: [],
+    });
+
+    await import('./index.js');
+
+    await vi.waitFor(() => {
+      expect(buildDoctorReportMock).toHaveBeenCalledTimes(1);
+    });
+    expect(consoleLogSpy.mock.calls.filter(([line]) => line === 'Bridge capabilities: -')).toHaveLength(2);
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+  });
+
   it('requires an explicit registry server when pairing in a source checkout', async () => {
     process.argv = ['node', 'clawket', 'pair'];
     vi.stubEnv('CLAWKET_REGISTRY_URL', '');
@@ -382,6 +430,9 @@ describe('cli pairing output', () => {
       expect(killSpy).toHaveBeenCalledWith(40160, 'SIGTERM');
       expect(hermesLocalBridgeCtorMock).toHaveBeenCalledTimes(1);
     });
+    expect(hermesLocalBridgeCtorMock).toHaveBeenCalledWith(expect.objectContaining({
+      bridgeVersion: '0.0.0-test',
+    }));
 
     killSpy.mockRestore();
     exitSpy.mockRestore();
@@ -773,6 +824,7 @@ describe('cli pairing output', () => {
       expect(qrcodeGenerateMock).toHaveBeenCalledWith('{"version":1,"kind":"clawket_hermes_pair"}', { small: true });
     });
     expect(consoleLogSpy).toHaveBeenCalledWith('Hermes Bridge ID: hbg_123');
+    expect(consoleLogSpy).toHaveBeenCalledWith('Pairing code: ABCD23');
   });
 
   it('defaults clawket pair --backend hermes to Hermes relay on the production registry', async () => {
@@ -1075,6 +1127,14 @@ describe('cli pairing output', () => {
       expect(spawnMock).toHaveBeenCalledTimes(2);
       expect(bridgeRuntimeCtorMock).toHaveBeenCalledTimes(1);
     });
+    expect(bridgeRuntimeCtorMock).toHaveBeenCalledWith(expect.objectContaining({
+      bridgeVersion: '0.0.0-test',
+    }));
+
+    expect(writeServiceStateMock).toHaveBeenCalledWith(process.pid, [
+      'pairing.secure-short-code.v2',
+      'bridge.capabilities.v2',
+    ]);
 
     expect(spawnMock).toHaveBeenNthCalledWith(
       1,

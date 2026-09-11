@@ -1,27 +1,31 @@
 import {
   AWAITING_CHALLENGE_TTL_DEFAULT_MS,
-  CLIENT_PONG_TIMEOUT_DEFAULT_MS,
+  type AwaitingChallengeEntry,
+  type BackendPolicy,
   type Env,
-  type GatewayOwnerRecord,
+  type OwnerRecord,
   type PendingChallenge,
   type PendingConnectStart,
   type RateState,
-  type AwaitingChallengeEntry,
+  type SocketAttachment,
 } from './types';
 import { parsePositiveInt } from './utils';
 
 export class RelayRuntime {
   gatewaySocket: WebSocket | null = null;
   gatewayLastActivityAt = 0;
+  pendingGatewayPingAt = 0;
+  gatewayPingCapability: 'unknown' | 'supported' | 'unsupported' = 'unknown';
   readonly clients = new Map<string, WebSocket>();
   readonly pairingClients = new Map<string, WebSocket>();
   readonly rate = new WeakMap<WebSocket, RateState>();
-  gatewayOwner: GatewayOwnerRecord | null = null;
-  gatewayOwnerTouchedAt = 0;
-  roomGatewayId: string | null = null;
+  owner: OwnerRecord | null = null;
+  ownerTouchedAt = 0;
+  roomPrincipalId: string | null = null;
   readonly connectStartAtByClientId = new Map<string, number>();
   readonly pendingConnectStarts = new Map<string, PendingConnectStart>();
   readonly connectReqClientByReqId = new Map<string, string>();
+  readonly requestClientByReqId = new Map<string, string>();
   readonly awaitingChallenge = new Map<string, AwaitingChallengeEntry>();
   readonly clientLastActivityAtById = new Map<string, number>();
   mirroredClientTokenHashes = new Set<string>();
@@ -33,6 +37,7 @@ export class RelayRuntime {
   constructor(
     readonly state: DurableObjectState,
     readonly env: Env,
+    readonly policy: BackendPolicy,
   ) {}
 
   awaitingChallengeTtlMs(): number {
@@ -40,7 +45,13 @@ export class RelayRuntime {
   }
 
   clientPongTimeoutMs(): number {
-    return parsePositiveInt(this.env.CLIENT_PONG_TIMEOUT_MS, CLIENT_PONG_TIMEOUT_DEFAULT_MS);
+    const interval = parsePositiveInt(this.env.HEARTBEAT_INTERVAL_MS, this.policy.heartbeatIntervalMs);
+    // A pong can only follow a server tick. Leave room for scheduling/network
+    // jitter and missed ticks, including the first tick after client attachment.
+    return Math.max(
+      parsePositiveInt(this.env.CLIENT_PONG_TIMEOUT_MS, this.policy.clientPongTimeoutMs),
+      interval * 3,
+    );
   }
 
   objectId(): string | null {
@@ -49,6 +60,40 @@ export class RelayRuntime {
     } catch {
       return null;
     }
+  }
+
+  // Compatibility aliases keep the two existing test suites readable while
+  // the shared runtime follows the wire protocol's historical gateway role.
+  get bridgeSocket(): WebSocket | null {
+    return this.gatewaySocket;
+  }
+
+  set bridgeSocket(value: WebSocket | null) {
+    this.gatewaySocket = value;
+  }
+
+  get bridgeLastActivityAt(): number {
+    return this.gatewayLastActivityAt;
+  }
+
+  set bridgeLastActivityAt(value: number) {
+    this.gatewayLastActivityAt = value;
+  }
+
+  get roomGatewayId(): string | null {
+    return this.roomPrincipalId;
+  }
+
+  set roomGatewayId(value: string | null) {
+    this.roomPrincipalId = value;
+  }
+
+  get roomBridgeId(): string | null {
+    return this.roomPrincipalId;
+  }
+
+  set roomBridgeId(value: string | null) {
+    this.roomPrincipalId = value;
   }
 }
 
@@ -64,4 +109,19 @@ export function touchClientSocketActivity(runtime: RelayRuntime, ws: WebSocket, 
 
 export function touchGatewayActivity(runtime: RelayRuntime, at = Date.now()): void {
   runtime.gatewayLastActivityAt = Math.max(runtime.gatewayLastActivityAt, at);
+}
+
+export const touchBridgeActivity = touchGatewayActivity;
+
+/** Persist the selected route on sockets, without storing messages or credentials. */
+export function selectActiveClient(runtime: RelayRuntime, clientId: string | null): void {
+  runtime.activeClientId = clientId;
+  for (const [id, socket] of runtime.clients) {
+    const attachment = socket.deserializeAttachment() as SocketAttachment | null;
+    if (!attachment || attachment.role !== 'client' || attachment.authScope === 'pairing') continue;
+    const activeClient = id === clientId;
+    if (attachment.activeClient !== activeClient) {
+      socket.serializeAttachment({ ...attachment, activeClient });
+    }
+  }
 }

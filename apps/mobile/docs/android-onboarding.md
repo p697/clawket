@@ -77,7 +77,7 @@ That script rebuilds `android/app/keystore.properties` from:
 
 Do not commit the restored `keystore.properties` file.
 
-After `npm install`, the repo now also auto-runs `./scripts/patch-android-native-deps.sh` to re-apply the Android Kotlin source-set fix needed by `@react-native-menu/menu` and `react-native-keyboard-controller` on the current Expo / React Native toolchain.
+After `npm install`, the repo now also auto-runs `./scripts/patch-android-native-deps.sh` to re-apply the Android Kotlin source-set fix needed by `@react-native-menu/menu` and `react-native-keyboard-controller` on the current Expo / React Native toolchain. The patcher supports both a standalone mobile install and dependencies hoisted by a root workspace `npm ci`.
 
 ## Required Env Values For Google Play Builds
 
@@ -95,12 +95,13 @@ At minimum, confirm these are populated in `apps/mobile/.env.local`:
 EXPO_PUBLIC_REVENUECAT_ENABLED=true
 EXPO_PUBLIC_REVENUECAT_GOOGLE_API_KEY=...
 EXPO_PUBLIC_REVENUECAT_PRO_ENTITLEMENT_ID=Clawket Pro
-EXPO_PUBLIC_REVENUECAT_PRO_OFFERING_ID=default
-EXPO_PUBLIC_REVENUECAT_PRO_PACKAGE_ID=$rc_monthly
+EXPO_PUBLIC_REVENUECAT_PRO_OFFERING_ID=pro
 EXPO_PUBLIC_SUPPORT_EMAIL=...
 EXPO_PUBLIC_PRIVACY_POLICY_URL=...
 EXPO_PUBLIC_TERMS_OF_USE_URL=...
 ```
+
+The standard 3.0 paywall reads RevenueCat's customer-specific current Offering so Experiments and Targeting remain effective. The control Offering is `pro`; every experiment variant must expose annual, lifetime, and monthly packages and metadata keys `default_package` (`annual` or `monthly`) and boolean `social_proof`. Leave `EXPO_PUBLIC_REVENUECAT_PRO_PACKAGE_ID` unset; it is only a legacy fallback for an Offering without those standard package types.
 
 And confirm these are not enabled for store builds:
 

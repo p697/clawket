@@ -1,4 +1,4 @@
-import { type EventSubscription, requireOptionalNativeModule } from 'expo-modules-core';
+import { requireOptionalNativeModule } from 'expo';
 import { Platform } from 'react-native';
 
 export type SpeechRecognitionState = 'idle' | 'listening';
@@ -26,6 +26,10 @@ type SpeechRecognitionLevelEvent = {
   level: number;
 };
 
+type SpeechRecognitionSubscription = {
+  remove(): void;
+};
+
 type NativeSpeechRecognitionModule = {
   isAvailableAsync(localeIdentifier?: string | null): Promise<boolean>;
   requestPermissionsAsync(): Promise<SpeechRecognitionPermissions>;
@@ -34,19 +38,19 @@ type NativeSpeechRecognitionModule = {
   addListener(
     eventName: 'onSpeechResult',
     listener: (event: SpeechRecognitionResultEvent) => void
-  ): EventSubscription;
+  ): SpeechRecognitionSubscription;
   addListener(
     eventName: 'onSpeechState',
     listener: (event: SpeechRecognitionStateEvent) => void
-  ): EventSubscription;
+  ): SpeechRecognitionSubscription;
   addListener(
     eventName: 'onSpeechError',
     listener: (event: SpeechRecognitionErrorEvent) => void
-  ): EventSubscription;
+  ): SpeechRecognitionSubscription;
   addListener(
     eventName: 'onSpeechLevel',
     listener: (event: SpeechRecognitionLevelEvent) => void
-  ): EventSubscription;
+  ): SpeechRecognitionSubscription;
 };
 
 const nativeModule = requireOptionalNativeModule<NativeSpeechRecognitionModule>(
@@ -89,7 +93,7 @@ export async function stopSpeechRecognitionAsync(): Promise<void> {
 
 export function addSpeechRecognitionResultListener(
   listener: (event: SpeechRecognitionResultEvent) => void
-): EventSubscription | null {
+): SpeechRecognitionSubscription | null {
   if (!nativeModule) {
     return null;
   }
@@ -98,7 +102,7 @@ export function addSpeechRecognitionResultListener(
 
 export function addSpeechRecognitionStateListener(
   listener: (event: SpeechRecognitionStateEvent) => void
-): EventSubscription | null {
+): SpeechRecognitionSubscription | null {
   if (!nativeModule) {
     return null;
   }
@@ -107,7 +111,7 @@ export function addSpeechRecognitionStateListener(
 
 export function addSpeechRecognitionErrorListener(
   listener: (event: SpeechRecognitionErrorEvent) => void
-): EventSubscription | null {
+): SpeechRecognitionSubscription | null {
   if (!nativeModule) {
     return null;
   }
@@ -116,7 +120,7 @@ export function addSpeechRecognitionErrorListener(
 
 export function addSpeechRecognitionLevelListener(
   listener: (event: SpeechRecognitionLevelEvent) => void
-): EventSubscription | null {
+): SpeechRecognitionSubscription | null {
   if (!nativeModule) {
     return null;
   }

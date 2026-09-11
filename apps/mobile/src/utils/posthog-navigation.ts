@@ -1,4 +1,5 @@
 import type { NavigationState } from '@react-navigation/native';
+import type { BackendKind } from '@clawket/agent-protocol';
 
 type NavigationLikeRoute = {
   key?: string;
@@ -13,17 +14,26 @@ type NavigationLikeState = {
 };
 
 type ScreenDefinition = {
-  area: 'chat' | 'discover' | 'live' | 'console' | 'settings';
-  kind: 'root' | 'list' | 'detail' | 'editor' | 'webview';
+  area:
+    | 'onboarding'
+    | 'roster'
+    | 'thread'
+    | 'settings'
+    | 'account'
+    | 'search'
+    | 'paywall';
+  kind: 'root' | 'detail' | 'modal';
   name: string;
-  tab: 'Chat' | 'Live' | 'Console' | 'My';
 };
 
 type ActiveRouteSnapshot = {
-  chain: string[];
   leafKey: string;
   leafName: string;
   leafParams: unknown;
+};
+
+export type ScreenTrackingContext = {
+  backend?: BackendKind | null;
 };
 
 export type TrackedScreen = {
@@ -31,54 +41,29 @@ export type TrackedScreen = {
   kind: ScreenDefinition['kind'];
   name: string;
   routeName: string;
-  tab: ScreenDefinition['tab'];
   uniqueKey: string;
-  properties: Record<string, boolean | string>;
+  properties: {
+    screen_area: ScreenDefinition['area'];
+    screen_kind: ScreenDefinition['kind'];
+    backend: BackendKind | 'unconfigured';
+  };
 };
 
 export const TRACKED_SCREEN_DEFINITIONS: Record<string, ScreenDefinition> = {
-  ChatMain: { name: 'Chat', area: 'chat', tab: 'Chat', kind: 'root' },
-  DiscoverHome: { name: 'Discover', area: 'discover', tab: 'Console', kind: 'root' },
-  DiscoverDetail: { name: 'Discover Detail', area: 'discover', tab: 'Console', kind: 'detail' },
-  DiscoverClawHubBrowse: { name: 'Discover ClawHub Browse', area: 'discover', tab: 'Console', kind: 'list' },
-  DiscoverSkillsShBrowse: { name: 'Discover skills.sh Browse', area: 'discover', tab: 'Console', kind: 'list' },
-  Live: { name: 'Live', area: 'live', tab: 'Live', kind: 'root' },
-  ConsoleMenu: { name: 'Console', area: 'console', tab: 'Console', kind: 'root' },
-  ConfigHome: { name: 'Settings', area: 'settings', tab: 'My', kind: 'root' },
-  ChatAppearance: { name: 'Chat Appearance', area: 'settings', tab: 'My', kind: 'editor' },
-  OpenClawConfig: { name: 'OpenClaw Config', area: 'settings', tab: 'My', kind: 'list' },
-  OpenClawPermissionRepair: { name: 'OpenClaw Permission Repair', area: 'settings', tab: 'My', kind: 'detail' },
-  OpenClawReleases: { name: 'OpenClaw Releases', area: 'settings', tab: 'My', kind: 'webview' },
-  FileList: { name: 'Files', area: 'console', tab: 'Console', kind: 'list' },
-  FileEditor: { name: 'File Editor', area: 'console', tab: 'Console', kind: 'editor' },
-  CronList: { name: 'Cron Jobs', area: 'console', tab: 'Console', kind: 'list' },
-  CronDetail: { name: 'Cron Detail', area: 'console', tab: 'Console', kind: 'detail' },
-  CronEditor: { name: 'Cron Editor', area: 'console', tab: 'Console', kind: 'editor' },
-  CronWizard: { name: 'Cron Wizard', area: 'console', tab: 'Console', kind: 'editor' },
-  SkillList: { name: 'Skills', area: 'console', tab: 'Console', kind: 'list' },
-  SkillDetail: { name: 'Skill Detail', area: 'console', tab: 'Console', kind: 'detail' },
-  Logs: { name: 'Logs', area: 'console', tab: 'Console', kind: 'list' },
-  Usage: { name: 'Usage', area: 'console', tab: 'Console', kind: 'list' },
-  ModelList: { name: 'Models', area: 'console', tab: 'Console', kind: 'list' },
-  Channels: { name: 'Channels', area: 'console', tab: 'Console', kind: 'list' },
-  Nodes: { name: 'Nodes', area: 'console', tab: 'Console', kind: 'list' },
-  Devices: { name: 'Devices', area: 'console', tab: 'Console', kind: 'list' },
-  NodeDetail: { name: 'Node Detail', area: 'console', tab: 'Console', kind: 'detail' },
-  ToolList: { name: 'Tools', area: 'console', tab: 'Console', kind: 'list' },
-  AgentList: { name: 'Agents', area: 'console', tab: 'Console', kind: 'list' },
-  AgentDetail: { name: 'Agent Detail', area: 'console', tab: 'Console', kind: 'detail' },
-  AgentUserInfo: { name: 'Agent User Info', area: 'console', tab: 'Console', kind: 'editor' },
-  ClawHub: { name: 'ClawHub', area: 'console', tab: 'Console', kind: 'webview' },
-  Docs: { name: 'Docs', area: 'console', tab: 'Console', kind: 'webview' },
-  HeartbeatSettings: { name: 'Heartbeat Settings', area: 'console', tab: 'Console', kind: 'editor' },
-  ChatHistory: { name: 'Chat History', area: 'console', tab: 'Console', kind: 'list' },
-  SessionsBoard: { name: 'Sessions Board', area: 'console', tab: 'Console', kind: 'list' },
-  AgentSessionsBoard: { name: 'Agent & Session Board', area: 'console', tab: 'Console', kind: 'list' },
-  ChatHistoryDetail: { name: 'Chat History Detail', area: 'console', tab: 'Console', kind: 'detail' },
-  FavoriteMessageDetail: { name: 'Favorite Message Detail', area: 'console', tab: 'Console', kind: 'detail' },
-  YouMindBoardDetail: { name: 'YouMind Board Detail', area: 'console', tab: 'Console', kind: 'detail' },
-  YouMindBoardItemWebView: { name: 'YouMind Board Item', area: 'console', tab: 'Console', kind: 'webview' },
-  YouMindBoardPicker: { name: 'YouMind Board Picker', area: 'console', tab: 'Console', kind: 'list' },
+  Onboarding: { name: 'Onboarding', area: 'onboarding', kind: 'root' },
+  Roster: { name: 'Roster', area: 'roster', kind: 'root' },
+  Thread: { name: 'Thread', area: 'thread', kind: 'detail' },
+  SessionPanel: { name: 'SessionPanel', area: 'thread', kind: 'modal' },
+  AgentSettings: { name: 'AgentSettings', area: 'settings', kind: 'root' },
+  AgentSettingsSection: { name: 'AgentSettings', area: 'settings', kind: 'detail' },
+  AccountSettings: { name: 'AccountSettings', area: 'account', kind: 'root' },
+  AccountSettingsSection: { name: 'AccountSettings', area: 'account', kind: 'detail' },
+  ReleaseNotes: { name: 'ReleaseNotes', area: 'account', kind: 'detail' },
+  HelpCenter: { name: 'HelpCenter', area: 'account', kind: 'detail' },
+  ChatAppearance: { name: 'ChatAppearance', area: 'account', kind: 'detail' },
+  Search: { name: 'Search', area: 'search', kind: 'root' },
+  MessageDetail: { name: 'Message Detail', area: 'search', kind: 'detail' },
+  Paywall: { name: 'Paywall', area: 'paywall', kind: 'modal' },
 };
 
 function isNavigationState(value: unknown): value is NavigationLikeState {
@@ -89,38 +74,16 @@ function isNavigationState(value: unknown): value is NavigationLikeState {
   );
 }
 
-function isParamPresent(value: unknown): boolean {
-  if (value === null || value === undefined) return false;
-  if (typeof value === 'string') return value.trim().length > 0;
-  if (Array.isArray(value)) return value.length > 0;
-  return true;
-}
-
-function toSnakeCase(value: string): string {
-  return value.replace(/([a-z0-9])([A-Z])/g, '$1_$2').replace(/[\s-]+/g, '_').toLowerCase();
-}
-
-function buildParamPresenceProperties(params: unknown): Record<string, boolean> {
-  if (!params || typeof params !== 'object' || Array.isArray(params)) return {};
-  return Object.entries(params).reduce<Record<string, boolean>>((acc, [key, value]) => {
-    acc[`has_${toSnakeCase(key)}`] = isParamPresent(value);
-    return acc;
-  }, {});
-}
-
 function getActiveRouteSnapshot(
   state: NavigationLikeState | undefined,
-  parentChain: string[] = [],
 ): ActiveRouteSnapshot | null {
   if (!state) return null;
   const activeRoute = state.routes[state.index ?? 0];
   if (!activeRoute) return null;
 
-  const nextChain = [...parentChain, activeRoute.name];
   const nestedState = isNavigationState(activeRoute.state) ? activeRoute.state : undefined;
   if (nestedState) {
-    return getActiveRouteSnapshot(nestedState, nextChain) ?? {
-      chain: nextChain,
+    return getActiveRouteSnapshot(nestedState) ?? {
       leafKey: activeRoute.key ?? activeRoute.name,
       leafName: activeRoute.name,
       leafParams: activeRoute.params,
@@ -128,7 +91,6 @@ function getActiveRouteSnapshot(
   }
 
   return {
-    chain: nextChain,
     leafKey: activeRoute.key ?? activeRoute.name,
     leafName: activeRoute.name,
     leafParams: activeRoute.params,
@@ -139,27 +101,101 @@ export function getActiveLeafRouteName(state: NavigationState | undefined): stri
   return getActiveRouteSnapshot(state as NavigationLikeState | undefined)?.leafName;
 }
 
-export function getTrackedScreen(state: NavigationState | undefined): TrackedScreen | null {
+export function getTrackedScreen(
+  state: NavigationState | undefined,
+  context: ScreenTrackingContext = {},
+): TrackedScreen | null {
   const snapshot = getActiveRouteSnapshot(state as NavigationLikeState | undefined);
   if (!snapshot) return null;
 
-  const definition = TRACKED_SCREEN_DEFINITIONS[snapshot.leafName];
-  if (!definition) return null;
+  const baseDefinition = TRACKED_SCREEN_DEFINITIONS[snapshot.leafName];
+  if (!baseDefinition) return null;
+  const definition = resolveParameterizedDefinition(
+    snapshot.leafName,
+    snapshot.leafParams,
+    baseDefinition,
+  );
 
+  return buildTrackedScreen(snapshot.leafName, snapshot.leafKey, definition, context);
+}
+
+export function getManualTrackedScreen(
+  routeName: 'SessionPanel' | 'Paywall',
+  context: ScreenTrackingContext = {},
+): TrackedScreen {
+  const definition = TRACKED_SCREEN_DEFINITIONS[routeName];
+  return buildTrackedScreen(routeName, `manual:${routeName}`, definition, context);
+}
+
+function buildTrackedScreen(
+  routeName: string,
+  routeKey: string,
+  definition: ScreenDefinition,
+  context: ScreenTrackingContext,
+): TrackedScreen {
   return {
     name: definition.name,
-    routeName: snapshot.leafName,
+    routeName,
     area: definition.area,
     kind: definition.kind,
-    tab: definition.tab,
-    uniqueKey: snapshot.leafKey,
+    uniqueKey: `${routeKey}:${definition.name}`,
     properties: {
-      navigation_path: snapshot.chain.join(' > '),
       screen_area: definition.area,
       screen_kind: definition.kind,
-      screen_route: snapshot.leafName,
-      screen_tab: definition.tab,
-      ...buildParamPresenceProperties(snapshot.leafParams),
+      backend: context.backend ?? 'unconfigured',
     },
   };
+}
+
+const AGENT_SETTINGS_SECTION_NAMES: Readonly<Record<string, string>> = Object.freeze({
+  identity: 'Identity',
+  models: 'Models',
+  skills: 'Skills',
+  cron: 'Cron',
+  files: 'Files',
+  usage: 'Usage',
+  connection: 'ConnectionStatus',
+  openclaw: 'OpenClawManage',
+  tools: 'Tools',
+  'channels-devices': 'ChannelsDevices',
+  logs: 'Logs',
+});
+
+const ACCOUNT_SETTINGS_SECTION_NAMES: Readonly<Record<string, string>> = Object.freeze({
+  pro: 'AccountPro',
+  connections: 'AccountConnections',
+  appearance: 'AccountAppearance',
+  voice: 'AccountVoice',
+  notifications: 'AccountNotifications',
+  help: 'AccountHelp',
+  community: 'AccountCommunity',
+  about: 'AccountAbout',
+  developer: 'AccountDeveloper',
+});
+
+function resolveParameterizedDefinition(
+  routeName: string,
+  params: unknown,
+  fallback: ScreenDefinition,
+): ScreenDefinition {
+  const section = readStringParam(params, 'section');
+  if (routeName === 'AgentSettingsSection' && section) {
+    return {
+      ...fallback,
+      name: AGENT_SETTINGS_SECTION_NAMES[section] ?? fallback.name,
+    };
+  }
+  if (routeName === 'AccountSettingsSection' && section) {
+    return {
+      ...fallback,
+      name: ACCOUNT_SETTINGS_SECTION_NAMES[section] ?? fallback.name,
+    };
+  }
+  return fallback;
+}
+
+function readStringParam(params: unknown, key: string): string | null {
+  if (!params || typeof params !== 'object' || Array.isArray(params)) return null;
+  const value = (params as Record<string, unknown>)[key];
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
 }

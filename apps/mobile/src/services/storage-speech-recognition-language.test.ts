@@ -2,7 +2,7 @@ import * as SecureStore from 'expo-secure-store';
 
 jest.mock('../theme', () => ({
   defaultAccentId: 'iceBlue',
-  isAccentScale: jest.fn(() => false),
+  isBuiltInAccentId: jest.fn(() => false),
 }));
 
 import { StorageService } from './storage';

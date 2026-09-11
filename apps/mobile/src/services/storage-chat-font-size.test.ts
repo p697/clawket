@@ -2,7 +2,7 @@ import * as SecureStore from 'expo-secure-store';
 
 jest.mock('../theme', () => ({
   defaultAccentId: 'iceBlue',
-  isAccentScale: jest.fn(() => false),
+  isBuiltInAccentId: jest.fn(() => false),
 }));
 
 import { StorageService } from './storage';
@@ -14,15 +14,15 @@ describe('StorageService chat font size', () => {
     jest.clearAllMocks();
   });
 
-  it('returns 16 when no chat font size has been saved', async () => {
+  it('returns 17 when no chat font size has been saved', async () => {
     mockGetItemAsync.mockResolvedValueOnce(null);
 
-    await expect(StorageService.getChatFontSize()).resolves.toBe(16);
+    await expect(StorageService.getChatFontSize()).resolves.toBe(17);
   });
 
-  it('returns 16 when the stored chat font size is invalid', async () => {
+  it('returns 17 when the stored chat font size is invalid', async () => {
     mockGetItemAsync.mockResolvedValueOnce('abc');
 
-    await expect(StorageService.getChatFontSize()).resolves.toBe(16);
+    await expect(StorageService.getChatFontSize()).resolves.toBe(17);
   });
 });

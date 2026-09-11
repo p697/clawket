@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react';
 import { ChatCacheService } from '../services/chat-cache';
-import { resolveGatewayCacheScopeId } from '../services/gateway-cache-scope';
 import { UiMessage } from '../types/chat';
 
 type Params = {

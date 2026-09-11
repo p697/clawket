@@ -6,6 +6,7 @@ import {
   extractText,
   extractImageUris,
   extractImageRawData,
+  extractFileAttachments,
   hasImageBlocks,
   extractIdempotencyKey,
   isAssistantDeliveryMirrorMessage,
@@ -333,6 +334,30 @@ describe('extractImageRawData', () => {
   });
 });
 
+describe('extractFileAttachments', () => {
+  it('extracts normalized display metadata without retaining file payload bytes', () => {
+    expect(extractFileAttachments([
+      { type: 'text', text: 'Review this' },
+      {
+        type: 'FILE',
+        data: 'pdf-base64',
+        mime_type: ' Application/PDF ',
+        name: ' spec.pdf ',
+        uri: ' file:///spec.pdf ',
+      },
+    ])).toEqual([{
+      mimeType: 'application/pdf',
+      fileName: 'spec.pdf',
+      uri: 'file:///spec.pdf',
+    }]);
+  });
+
+  it('returns undefined when there are no file blocks', () => {
+    expect(extractFileAttachments('not-blocks')).toBeUndefined();
+    expect(extractFileAttachments([{ type: 'image', data: 'pixels' }])).toBeUndefined();
+  });
+});
+
 describe('hasImageBlocks', () => {
   it('returns false for non-array', () => {
     expect(hasImageBlocks('string')).toBe(false);
@@ -575,5 +600,16 @@ describe('relativeTime', () => {
 
   it('returns months', () => {
     expect(relativeTime(Date.now() - 60 * 86_400_000)).toBe('2mo');
+  });
+
+  it('delegates compact labels to the provided translator', () => {
+    const translate = jest.fn((key: string, count?: number) => (
+      count === undefined ? `translated:${key}` : `translated:${key}:${count}`
+    ));
+
+    expect(relativeTime(Date.now() - 3 * 3_600_000, translate)).toBe(
+      'translated:{{count}}h ago:3',
+    );
+    expect(translate).toHaveBeenCalledWith('{{count}}h ago', 3);
   });
 });

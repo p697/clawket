@@ -1,0 +1,480 @@
+{
+  "schema": "clawket.hermes.recorded-packets.v1",
+  "source": {
+    "repository": "https://github.com/NousResearch/hermes-agent.git",
+    "commit": "7d426e6536910c5fedb7cd4a9a9010527b264de1",
+    "evidence": [
+      "hermes_state.py",
+      "gateway/platforms/api_server.py"
+    ]
+  },
+  "recordedAt": "2026-09-04T19:50:10Z",
+  "sanitization": "Connection tokens, generated UUIDs, user text, timestamps, and host paths were replaced with deterministic fixture values or capture placeholders.",
+  "capture": {
+    "kind": "controlled-local-websocket-replay",
+    "realDevice": false,
+    "note": "This is a sanitized protocol recording replayed against a real HermesLocalBridge WebSocket boundary; it is not a phone, simulator, Preview, or live Hermes capture."
+  },
+  "nativeState": {
+    "sessions": [
+      {
+        "id": "native-recorded-session",
+        "source": "cli",
+        "model": "fixture-model",
+        "billingProvider": "fixture-provider",
+        "startedAt": 1700000000,
+        "title": "Recorded native session"
+      }
+    ],
+    "messages": [
+      {
+        "id": 10,
+        "sessionId": "native-recorded-session",
+        "role": "user",
+        "content": "oldest-message",
+        "timestamp": 1700000000
+      },
+      {
+        "id": 11,
+        "sessionId": "native-recorded-session",
+        "role": "assistant",
+        "content": "same-timestamp-older-id",
+        "timestamp": 1700000001
+      },
+      {
+        "id": 12,
+        "sessionId": "native-recorded-session",
+        "role": "user",
+        "content": "same-timestamp-newer-id",
+        "timestamp": 1700000001
+      },
+      {
+        "id": 13,
+        "sessionId": "native-recorded-session",
+        "role": "assistant",
+        "content": "newest-message",
+        "timestamp": 1700000002
+      }
+    ]
+  },
+  "firstFrame": {
+    "type": "event",
+    "event": "health",
+    "payload": {
+      "status": "ok",
+      "ts": "{{any:number}}",
+      "hermesApiReachable": true,
+      "mode": "hermes",
+      "capabilities": [
+        "bridge.capabilities.v2",
+        "hermes.multi-session.v2"
+      ]
+    }
+  },
+  "packets": [
+    {
+      "label": "sessions.list.initial",
+      "request": {
+        "type": "req",
+        "id": "list-initial",
+        "method": "sessions.list",
+        "params": {
+          "limit": 10
+        }
+      },
+      "expect": {
+        "type": "res",
+        "id": "list-initial",
+        "ok": true,
+        "payload": {
+          "sessions": [
+            {
+              "key": "native-recorded-session",
+              "sessionId": "native-recorded-session",
+              "title": "Recorded native session",
+              "label": "Recorded native session",
+              "updatedAt": 1700000002000,
+              "lastMessagePreview": "newest-message",
+              "preview": "newest-message",
+              "channel": "cli",
+              "model": "fixture-model",
+              "modelProvider": "fixture-provider",
+              "source": "native",
+              "kind": "direct",
+              "hasActiveRun": false,
+              "allowedActions": {
+                "rename": false,
+                "reset": false,
+                "delete": false,
+                "pin": true
+              },
+              "warnings": []
+            }
+          ],
+          "warnings": []
+        }
+      }
+    },
+    {
+      "label": "sessions.create",
+      "request": {
+        "type": "req",
+        "id": "create-one",
+        "method": "sessions.create",
+        "params": {
+          "title": "Recorded bridge session"
+        }
+      },
+      "captureValues": {
+        "created.key": "payload.session.key",
+        "created.sessionId": "payload.session.sessionId"
+      },
+      "expect": {
+        "type": "res",
+        "id": "create-one",
+        "ok": true,
+        "payload": {
+          "session": {
+            "key": "{{created.key}}",
+            "sessionId": "{{created.sessionId}}",
+            "title": "Recorded bridge session",
+            "label": "Recorded bridge session",
+            "updatedAt": "{{any:number}}",
+            "lastMessagePreview": "",
+            "preview": "",
+            "source": "bridge",
+            "kind": "direct",
+            "hasActiveRun": false,
+            "allowedActions": {
+              "rename": true,
+              "reset": true,
+              "delete": true,
+              "pin": true
+            },
+            "warnings": []
+          }
+        }
+      }
+    },
+    {
+      "label": "sessions.patch.title",
+      "request": {
+        "type": "req",
+        "id": "patch-title",
+        "method": "sessions.patch",
+        "params": {
+          "key": "{{created.key}}",
+          "title": "Title field wins"
+        }
+      },
+      "expect": {
+        "type": "res",
+        "id": "patch-title",
+        "ok": true,
+        "payload": {
+          "ok": true,
+          "key": "{{created.key}}"
+        }
+      }
+    },
+    {
+      "label": "sessions.list.after-title",
+      "request": {
+        "type": "req",
+        "id": "list-after-title",
+        "method": "sessions.list",
+        "params": {
+          "limit": 1
+        }
+      },
+      "expect": {
+        "type": "res",
+        "id": "list-after-title",
+        "ok": true,
+        "payload": {
+          "sessions": [
+            {
+              "key": "{{created.key}}",
+              "sessionId": "{{created.sessionId}}",
+              "title": "Title field wins",
+              "label": "Title field wins",
+              "updatedAt": "{{any:number}}",
+              "lastMessagePreview": "",
+              "preview": "",
+              "source": "bridge",
+              "kind": "direct",
+              "hasActiveRun": false,
+              "allowedActions": {
+                "rename": true,
+                "reset": true,
+                "delete": true,
+                "pin": true
+              },
+              "warnings": []
+            }
+          ],
+          "warnings": []
+        }
+      }
+    },
+    {
+      "label": "sessions.patch.legacy-label",
+      "request": {
+        "type": "req",
+        "id": "patch-label",
+        "method": "sessions.patch",
+        "params": {
+          "key": "{{created.key}}",
+          "label": "Legacy label remains accepted"
+        }
+      },
+      "expect": {
+        "type": "res",
+        "id": "patch-label",
+        "ok": true,
+        "payload": {
+          "ok": true,
+          "key": "{{created.key}}"
+        }
+      }
+    },
+    {
+      "label": "sessions.list.after-legacy-label",
+      "request": {
+        "type": "req",
+        "id": "list-after-label",
+        "method": "sessions.list",
+        "params": {
+          "limit": 1
+        }
+      },
+      "expect": {
+        "type": "res",
+        "id": "list-after-label",
+        "ok": true,
+        "payload": {
+          "sessions": [
+            {
+              "key": "{{created.key}}",
+              "sessionId": "{{created.sessionId}}",
+              "title": "Legacy label remains accepted",
+              "label": "Legacy label remains accepted",
+              "updatedAt": "{{any:number}}",
+              "lastMessagePreview": "",
+              "preview": "",
+              "source": "bridge",
+              "kind": "direct",
+              "hasActiveRun": false,
+              "allowedActions": {
+                "rename": true,
+                "reset": true,
+                "delete": true,
+                "pin": true
+              },
+              "warnings": []
+            }
+          ],
+          "warnings": []
+        }
+      }
+    },
+    {
+      "label": "sessions.reset",
+      "request": {
+        "type": "req",
+        "id": "reset-one",
+        "method": "sessions.reset",
+        "params": {
+          "key": "{{created.key}}"
+        }
+      },
+      "captureValues": {
+        "reset.sessionId": "payload.sessionId"
+      },
+      "expect": {
+        "type": "res",
+        "id": "reset-one",
+        "ok": true,
+        "payload": {
+          "ok": true,
+          "key": "{{created.key}}",
+          "sessionId": "{{reset.sessionId}}"
+        }
+      }
+    },
+    {
+      "label": "sessions.delete",
+      "request": {
+        "type": "req",
+        "id": "delete-one",
+        "method": "sessions.delete",
+        "params": {
+          "key": "{{created.key}}"
+        }
+      },
+      "expect": {
+        "type": "res",
+        "id": "delete-one",
+        "ok": true,
+        "payload": {
+          "ok": true,
+          "key": "{{created.key}}"
+        }
+      }
+    },
+    {
+      "label": "sessions.list.after-delete",
+      "request": {
+        "type": "req",
+        "id": "list-after-delete",
+        "method": "sessions.list",
+        "params": {
+          "limit": 10
+        }
+      },
+      "expect": {
+        "type": "res",
+        "id": "list-after-delete",
+        "ok": true,
+        "payload": {
+          "sessions": [
+            {
+              "key": "native-recorded-session",
+              "sessionId": "native-recorded-session",
+              "title": "Recorded native session",
+              "label": "Recorded native session",
+              "updatedAt": 1700000002000,
+              "lastMessagePreview": "newest-message",
+              "preview": "newest-message",
+              "channel": "cli",
+              "model": "fixture-model",
+              "modelProvider": "fixture-provider",
+              "source": "native",
+              "kind": "direct",
+              "hasActiveRun": false,
+              "allowedActions": {
+                "rename": false,
+                "reset": false,
+                "delete": false,
+                "pin": true
+              },
+              "warnings": []
+            }
+          ],
+          "warnings": []
+        }
+      }
+    },
+    {
+      "label": "chat.history.page-1",
+      "request": {
+        "type": "req",
+        "id": "history-page-1",
+        "method": "chat.history",
+        "params": {
+          "sessionKey": "native-recorded-session",
+          "limit": 2
+        }
+      },
+      "captureValues": {
+        "history.cursor": "payload.nextCursor"
+      },
+      "expect": {
+        "type": "res",
+        "id": "history-page-1",
+        "ok": true,
+        "payload": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "same-timestamp-newer-id",
+              "timestamp": 1700000001000
+            },
+            {
+              "role": "assistant",
+              "content": "newest-message",
+              "timestamp": 1700000002000,
+              "model": "fixture-model",
+              "provider": "fixture-provider"
+            }
+          ],
+          "sessionId": "native-recorded-session",
+          "thinkingLevel": "medium",
+          "nextCursor": "{{history.cursor}}"
+        }
+      }
+    },
+    {
+      "label": "chat.history.page-2",
+      "request": {
+        "type": "req",
+        "id": "history-page-2",
+        "method": "chat.history",
+        "params": {
+          "sessionKey": "native-recorded-session",
+          "limit": 2,
+          "cursor": "{{history.cursor}}"
+        }
+      },
+      "expect": {
+        "type": "res",
+        "id": "history-page-2",
+        "ok": true,
+        "payload": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "oldest-message",
+              "timestamp": 1700000000000
+            },
+            {
+              "role": "assistant",
+              "content": "same-timestamp-older-id",
+              "timestamp": 1700000001000,
+              "model": "fixture-model",
+              "provider": "fixture-provider"
+            }
+          ],
+          "sessionId": "native-recorded-session",
+          "thinkingLevel": "medium"
+        }
+      }
+    },
+    {
+      "label": "chat.history.bad-cursor",
+      "request": {
+        "type": "req",
+        "id": "history-bad-cursor",
+        "method": "chat.history",
+        "params": {
+          "sessionKey": "native-recorded-session",
+          "limit": 2,
+          "cursor": "not-a-valid-recorded-cursor"
+        }
+      },
+      "expect": {
+        "type": "res",
+        "id": "history-bad-cursor",
+        "ok": false,
+        "error": {
+          "code": "request_failed",
+          "message": "chat.history cursor is invalid or belongs to another session."
+        }
+      }
+    }
+  ],
+  "assertions": {
+    "notEqualCaptures": [
+      [
+        "created.sessionId",
+        "reset.sessionId"
+      ]
+    ],
+    "historyOrder": [
+      "oldest-message",
+      "same-timestamp-older-id",
+      "same-timestamp-newer-id",
+      "newest-message"
+    ]
+  }
+}

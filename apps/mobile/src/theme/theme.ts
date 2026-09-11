@@ -3,188 +3,102 @@ import { AccentScale, AccentToneScale } from './accents';
 
 export type ThemeScheme = 'light' | 'dark';
 
+export const agentPalette = [
+  '#1F5EFF',
+  '#D9791C',
+  '#178A6A',
+  '#E2477B',
+  '#7A5AF8',
+  '#1C8FA3',
+  '#8A5A3C',
+  '#5B6673',
+] as const;
+
+export type CanonicalThemeColors = {
+  canvas: string;
+  canvasGrouped: string;
+  surface: string;
+  surfaceFloating: string;
+  ink: string;
+  inkSecondary: string;
+  inkTertiary: string;
+  line: string;
+  accent: string;
+  accentSoft: string;
+  onAccent: string;
+  scrim: string;
+  good: string;
+  goodSoft: string;
+  warn: string;
+  warnSoft: string;
+  bad: string;
+  badSoft: string;
+};
+
+export type AppThemeColors = CanonicalThemeColors;
+
 export type AppTheme = {
   scheme: ThemeScheme;
   mode: ThemeMode;
-  colors: {
-    background: string;
-    surface: string;
-    surfaceMuted: string;
-    surfaceElevated: string;
-    border: string;
-    borderStrong: string;
-    text: string;
-    textMuted: string;
-    textSubtle: string;
-    accent50: string;
-    accent100: string;
-    accent200: string;
-    accent500: string;
-    accent700: string;
-    primary: string;
-    primaryText: string;
-    primarySoft: string;
-    searchHighlightBg: string;
-    success: string;
-    successSoft: string;
-    warning: string;
-    warningSoft: string;
-    error: string;
-    errorSoft: string;
-    info: string;
-    infoSoft: string;
-    overlay: string;
-    debugOverlay: string;
-    debugText: string;
-    bubbleUser: string;
-    bubbleAssistant: string;
-    bubbleSystem: string;
-    bubbleSystemText: string;
-    inputBackground: string;
-    imageAddBorder: string;
-    imageAddText: string;
-    chatPreviewMask: string;
-    sidebarBackdrop: string;
-    iconOnColor: string;
-    sessionBadgeSubagent: string;
-    sessionBadgeCron: string;
-    sessionBadgeTelegram: string;
-    sessionBadgeDiscord: string;
-    sessionBadgeSlack: string;
-    usageCostOutput: string;
-    usageCostInput: string;
-    usageCostCacheWrite: string;
-    usageCostCacheRead: string;
-    badgeModel: string;
-    badgeThinking: string;
-    badgeTools: string;
-    badgePrompts: string;
-    chartGrid: string;
-    shadow: string;
-  };
+  colors: AppThemeColors;
+  /** Conversation palette; application controls remain neutral. */
+  chatColors?: AppThemeColors;
 };
 
-type Palette = AppTheme['colors'];
-type DerivedAccentKeys =
-  | 'accent50'
-  | 'accent100'
-  | 'accent200'
-  | 'accent500'
-  | 'accent700'
-  | 'primary'
-  | 'primaryText'
-  | 'primarySoft'
-  | 'searchHighlightBg'
-  | 'bubbleUser';
-type FixedPalette = Omit<Palette, DerivedAccentKeys>;
+type FixedPalette = Omit<AppThemeColors, 'accent' | 'accentSoft'>;
 
-const lightPalette: FixedPalette = {
-  background: '#F6F7F8',
-  surface: '#FFFFFF',
-  surfaceMuted: '#F2F3F5',
-  surfaceElevated: '#FFFFFF',
-  border: '#E5E7EB',
-  borderStrong: '#D4D8DE',
-  text: '#111318',
-  textMuted: '#5E6673',
-  textSubtle: '#8A93A1',
-  success: '#22C55E',
-  successSoft: '#E9F8EE',
-  warning: '#F59E0B',
-  warningSoft: '#FFF3D6',
-  error: '#EF4444',
-  errorSoft: '#FFECEE',
-  info: '#3978D4',
-  infoSoft: '#EAF2FF',
-  overlay: 'rgba(0,0,0,0.45)',
-  debugOverlay: 'rgba(0,0,0,0.85)',
-  debugText: '#22C55E',
-  bubbleAssistant: '#FFFFFF',
-  bubbleSystem: '#FEF3C7',
-  bubbleSystemText: '#92400E',
-  inputBackground: '#FFFFFF',
-  imageAddBorder: '#CBD5E1',
-  imageAddText: '#94A3B8',
-  chatPreviewMask: 'rgba(0,0,0,0.96)',
-  sidebarBackdrop: 'rgba(0,0,0,0.35)',
-  iconOnColor: '#FFFFFF',
-  sessionBadgeSubagent: '#8B5CF6',
-  sessionBadgeCron: '#F59E0B',
-  sessionBadgeTelegram: '#2AABEE',
-  sessionBadgeDiscord: '#5865F2',
-  sessionBadgeSlack: '#4A154B',
-  usageCostOutput: '#F87171',
-  usageCostInput: '#60A5FA',
-  usageCostCacheWrite: '#FBBF24',
-  usageCostCacheRead: '#34D399',
-  badgeModel: '#8B5CF6',
-  badgeThinking: '#F59E0B',
-  badgeTools: '#3B82F6',
-  badgePrompts: '#22C55E',
-  chartGrid: '#E5E5EA',
-  shadow: '#071218',
-};
+const lightCanonical = {
+  canvas: '#FFFFFF',
+  canvasGrouped: '#F5F5F7',
+  surface: '#F2F2F4',
+  surfaceFloating: '#FFFFFF',
+  ink: '#111113',
+  inkSecondary: '#6B6B72',
+  inkTertiary: '#A3A3AB',
+  line: '#E6E6EA',
+  onAccent: '#FFFFFF',
+  scrim: 'rgba(0,0,0,0.4)',
+  good: '#178A6A',
+  goodSoft: 'rgba(23,138,106,0.12)',
+  warn: '#D9791C',
+  warnSoft: 'rgba(217,121,28,0.12)',
+  bad: '#D64545',
+  badSoft: 'rgba(214,69,69,0.12)',
+} as const;
 
-const darkPalette: FixedPalette = {
-  background: '#0E1013',
-  surface: '#15181C',
-  surfaceMuted: '#1B1F24',
-  surfaceElevated: '#232830',
-  border: '#2A3038',
-  borderStrong: '#3A424D',
-  text: '#ECEFF3',
-  textMuted: '#A7B0BC',
-  textSubtle: '#7C8796',
-  success: '#34D399',
-  successSoft: '#163024',
-  warning: '#FBBF24',
-  warningSoft: '#392B12',
-  error: '#F87171',
-  errorSoft: '#3A1D24',
-  info: '#78A9E8',
-  infoSoft: '#18263A',
-  overlay: 'rgba(0,0,0,0.6)',
-  debugOverlay: 'rgba(5,8,14,0.92)',
-  debugText: '#4ADE80',
-  bubbleAssistant: '#1B1F24',
-  bubbleSystem: '#3C2F14',
-  bubbleSystemText: '#FDE68A',
-  inputBackground: '#232830',
-  imageAddBorder: '#3A424D',
-  imageAddText: '#A7B0BC',
-  chatPreviewMask: 'rgba(2,4,8,0.98)',
-  sidebarBackdrop: 'rgba(0,0,0,0.5)',
-  iconOnColor: '#FFFFFF',
-  sessionBadgeSubagent: '#8B5CF6',
-  sessionBadgeCron: '#F59E0B',
-  sessionBadgeTelegram: '#2AABEE',
-  sessionBadgeDiscord: '#5865F2',
-  sessionBadgeSlack: '#4A154B',
-  usageCostOutput: '#F87171',
-  usageCostInput: '#60A5FA',
-  usageCostCacheWrite: '#FBBF24',
-  usageCostCacheRead: '#34D399',
-  badgeModel: '#A78BFA',
-  badgeThinking: '#FBBF24',
-  badgeTools: '#60A5FA',
-  badgePrompts: '#34D399',
-  chartGrid: '#38383A',
-  shadow: '#000000',
-};
+const darkCanonical = {
+  canvas: '#0C0C0D',
+  canvasGrouped: '#0C0C0D',
+  surface: '#1A1A1D',
+  surfaceFloating: '#222225',
+  ink: '#F3F3F5',
+  inkSecondary: '#9A9AA3',
+  inkTertiary: '#6A6A73',
+  line: '#2A2A2F',
+  onAccent: '#0C0C0D',
+  scrim: 'rgba(0,0,0,0.4)',
+  good: '#2FA07C',
+  goodSoft: 'rgba(47,160,124,0.2)',
+  warn: '#D07F30',
+  warnSoft: 'rgba(208,127,48,0.2)',
+  bad: '#E06060',
+  badSoft: 'rgba(224,96,96,0.2)',
+} as const;
+
+const lightPalette: FixedPalette = lightCanonical;
+const darkPalette: FixedPalette = darkCanonical;
+
+// Native-owned attributed input text must resolve color on trait changes too,
+// without replacing marked text when only the app appearance changes.
+export const inputInkVariants = { light: lightCanonical.ink, dark: darkCanonical.ink };
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } {
   const normalized = hex.replace('#', '');
-  const raw =
-    normalized.length === 3
-      ? normalized
-          .split('')
-          .map((part) => `${part}${part}`)
-          .join('')
-      : normalized;
+  const raw = normalized.length === 3
+    ? normalized.split('').map((part) => `${part}${part}`).join('')
+    : normalized;
   const value = Number.parseInt(raw, 16);
-  if (!Number.isFinite(value) || raw.length !== 6) {
-    return { r: 0, g: 0, b: 0 };
-  }
+  if (!Number.isFinite(value) || raw.length !== 6) return { r: 0, g: 0, b: 0 };
   return {
     r: (value >> 16) & 255,
     g: (value >> 8) & 255,
@@ -201,23 +115,12 @@ function applyAccentPalette(
   scheme: ThemeScheme,
   fixedPalette: FixedPalette,
   accent: AccentToneScale,
-): Palette {
+): AppThemeColors {
+  const accentSoft = withAlpha(accent.accent500, scheme === 'dark' ? 0.16 : 0.1);
   return {
     ...fixedPalette,
-    accent50: accent.accent50,
-    accent100: accent.accent100,
-    accent200: accent.accent200,
-    accent500: accent.accent500,
-    accent700: accent.accent700,
-    primary: accent.accent500,
-    primaryText: scheme === 'dark' ? accent.accent50 : '#FFFFFF',
-    primarySoft: scheme === 'dark'
-      ? withAlpha(accent.accent500, 0.16)
-      : withAlpha(accent.accent500, 0.1),
-    searchHighlightBg: scheme === 'dark'
-      ? withAlpha(accent.accent500, 0.28)
-      : withAlpha(accent.accent500, 0.18),
-    bubbleUser: scheme === 'dark' ? withAlpha(accent.accent500, 0.18) : accent.accent100,
+    accent: accent.accent500,
+    accentSoft,
   };
 }
 
@@ -229,10 +132,23 @@ export function buildTheme(mode: ThemeMode, systemScheme: ThemeScheme, accent: A
   const scheme = resolveThemeScheme(mode, systemScheme);
   const fixedPalette = scheme === 'dark' ? darkPalette : lightPalette;
   const accentPalette = scheme === 'dark' ? accent.dark : accent.light;
-  const colors = applyAccentPalette(scheme, fixedPalette, accentPalette);
   return {
     scheme,
     mode,
-    colors,
+    colors: applyAccentPalette(scheme, fixedPalette, accentPalette),
   };
+}
+
+/** Separate interface appearance from the user's saved conversation color. */
+export function buildInterfaceTheme(mode: ThemeMode, systemScheme: ThemeScheme, accent: AccentScale): AppTheme {
+  const chat = buildTheme(mode, systemScheme, accent);
+  return {
+    ...chat,
+    chatColors: chat.colors,
+    colors: { ...chat.colors, accent: chat.colors.ink, accentSoft: chat.colors.surface, onAccent: chat.colors.canvas },
+  };
+}
+
+export function resolveChatTheme(theme: AppTheme): AppTheme {
+  return theme.chatColors ? { ...theme, colors: theme.chatColors } : theme;
 }

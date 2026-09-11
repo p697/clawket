@@ -3,7 +3,7 @@ import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TouchableOpac
 import * as Haptics from 'expo-haptics';
 import { Check } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
-import { ModalSheet } from '../ui';
+import { Sheet } from '../ui';
 import { useAppTheme } from '../../theme';
 import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
 
@@ -42,10 +42,17 @@ export function CommandOptionPickerModal({
   if (!visible) return null;
 
   return (
-    <ModalSheet visible={visible} onClose={onClose} title={title} maxHeight="50%">
+    <Sheet
+      visible={visible}
+      onClose={onClose}
+      closeAccessibilityLabel={t('Close', { ns: 'common' })}
+      title={title}
+      maxHeight="50%"
+      testID="command-option-sheet"
+    >
       {loading ? (
         <View style={styles.stateWrap}>
-          <ActivityIndicator size="small" color={theme.colors.primary} />
+          <ActivityIndicator size="small" color={theme.colors.accent} />
           <Text style={styles.stateText}>{t('Loading options...')}</Text>
         </View>
       ) : error ? (
@@ -75,13 +82,13 @@ export function CommandOptionPickerModal({
             >
               <Text style={[styles.rowTitle, item.isCurrent && styles.rowTitleActive]}>{item.value}</Text>
               {item.isCurrent && (
-                <Check size={18} color={theme.colors.primary} strokeWidth={2.5} />
+                <Check size={18} color={theme.colors.accent} strokeWidth={2.5} />
               )}
             </Pressable>
           )}
         />
       )}
-    </ModalSheet>
+    </Sheet>
   );
 }
 
@@ -90,26 +97,26 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     row: {
       height: 48,
       borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: colors.border,
+      borderBottomColor: colors.line,
       paddingHorizontal: Space.lg,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
     },
     rowPressed: {
-      backgroundColor: colors.surfaceMuted,
+      backgroundColor: colors.surface,
     },
     rowDisabled: {
       opacity: 0.55,
     },
     rowTitle: {
-      color: colors.text,
-      fontSize: FontSize.base,
-      fontWeight: FontWeight.medium,
+      color: colors.ink,
+      fontSize: FontSize.secondary,
+      fontWeight: FontWeight.semibold,
       flexShrink: 1,
     },
     rowTitleActive: {
-      color: colors.primary,
+      color: colors.accent,
       fontWeight: FontWeight.semibold,
     },
     stateWrap: {
@@ -119,8 +126,8 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       paddingHorizontal: Space.xl,
     },
     stateText: {
-      color: colors.textMuted,
-      fontSize: FontSize.bodySm,
+      color: colors.inkSecondary,
+      fontSize: FontSize.secondary,
       textAlign: 'center',
       lineHeight: 20,
     },
@@ -128,14 +135,14 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       marginTop: Space.md,
       paddingHorizontal: 14,
       paddingVertical: Space.sm,
-      borderRadius: Radius.sm + 2,
+      borderRadius: Radius.full,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.borderStrong,
-      backgroundColor: colors.surfaceMuted,
+      borderColor: colors.line,
+      backgroundColor: colors.surface,
     },
     retryText: {
-      color: colors.text,
-      fontSize: FontSize.md,
+      color: colors.ink,
+      fontSize: FontSize.caption,
       fontWeight: FontWeight.semibold,
     },
   });

@@ -19,6 +19,7 @@ export type ConnectHandshakeMeta = {
   method: 'connect' | 'connect.start';
   minProtocol: number | null;
   maxProtocol: number | null;
+  capabilities: string[] | null;
   noncePresent: boolean;
   nonceLength: number | null;
   authFields: string[];
@@ -117,6 +118,7 @@ export function parseConnectHandshakeMeta(text: string): ConnectHandshakeMeta | 
       type?: unknown;
       method?: unknown;
       id?: unknown;
+      meta?: unknown;
       params?: {
         minProtocol?: unknown;
         maxProtocol?: unknown;
@@ -130,11 +132,15 @@ export function parseConnectHandshakeMeta(text: string): ConnectHandshakeMeta | 
     if (parsed.method !== 'connect' && parsed.method !== 'connect.start') return null;
     const nonce = parsed.params?.device?.nonce;
     const auth = parsed.params?.auth;
+    const capabilities = isRecord(parsed.meta) && Array.isArray(parsed.meta.capabilities)
+      ? normalizeConnectCapabilities(parsed.meta.capabilities)
+      : null;
     return {
       id: typeof parsed.id === 'string' && parsed.id.trim() ? parsed.id.trim() : null,
       method: parsed.method,
       minProtocol: readProtocolVersion(parsed.params?.minProtocol),
       maxProtocol: readProtocolVersion(parsed.params?.maxProtocol),
+      capabilities,
       noncePresent: typeof nonce === 'string' && nonce.length > 0,
       nonceLength: typeof nonce === 'string' ? nonce.length : null,
       authFields: auth && typeof auth === 'object'
@@ -144,6 +150,29 @@ export function parseConnectHandshakeMeta(text: string): ConnectHandshakeMeta | 
   } catch {
     return null;
   }
+}
+
+export function normalizeConnectCapabilities(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const capabilities: string[] = [];
+  const seen = new Set<string>();
+  for (const candidate of value) {
+    if (typeof candidate !== 'string') continue;
+    const capability = candidate.trim();
+    if (!capability || seen.has(capability)) continue;
+    seen.add(capability);
+    capabilities.push(capability);
+  }
+  return capabilities;
+}
+
+export function normalizeBridgeVersion(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const version = value.trim();
+  if (!version || version.length > 128 || /[\u0000-\u001f\u007f]/.test(version)) {
+    return undefined;
+  }
+  return version;
 }
 
 export function parsePairingRequestFromError(text: string, nowMs = Date.now()): PendingPairRequest | null {

@@ -1,3 +1,4 @@
+import { resolveChatTheme } from '../theme/theme';
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Animated, Image, Platform, Pressable, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { EnrichedMarkdownText } from 'react-native-enriched-markdown';
@@ -159,7 +160,7 @@ function ImageGrid({
       <TouchableOpacity activeOpacity={0.9} onPress={() => onPress?.(0)}>
         <Image
           source={{ uri: uris[0] }}
-          style={{ width: layout.width, height: layout.height, borderRadius: Radius.sm + 2 }}
+          style={{ width: layout.width, height: layout.height, borderRadius: Radius.card }}
           resizeMode="cover"
         />
       </TouchableOpacity>
@@ -177,7 +178,7 @@ function ImageGrid({
         >
           <Image
             source={{ uri: uris[index] }}
-            style={{ width: rect.width, height: rect.height, borderRadius: Radius.sm }}
+            style={{ width: rect.width, height: rect.height, borderRadius: Radius.card }}
             resizeMode="cover"
           />
         </TouchableOpacity>
@@ -204,7 +205,7 @@ function Avatar({ uri }: { uri?: string }): React.JSX.Element | null {
 }
 
 const avatarStyles = StyleSheet.create({
-  img: { width: AGENT_AVATAR_SIZE, height: AGENT_AVATAR_SIZE, borderRadius: Radius.sm },
+  img: { width: AGENT_AVATAR_SIZE, height: AGENT_AVATAR_SIZE, borderRadius: Radius.full },
   placeholder: {
     width: AGENT_AVATAR_SIZE,
     height: AGENT_AVATAR_SIZE,
@@ -212,7 +213,7 @@ const avatarStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  placeholderText: { fontSize: FontSize.bodySm, fontWeight: FontWeight.semibold },
+  placeholderText: { fontSize: FontSize.secondary, fontWeight: FontWeight.semibold },
 });
 
 function MessageBubbleComponent({
@@ -242,9 +243,10 @@ function MessageBubbleComponent({
   chatFontSize,
 }: Props): React.JSX.Element {
   const { t } = useTranslation('chat');
-  const { theme } = useAppTheme();
+  const { theme: interfaceTheme } = useAppTheme();
+  const theme = useMemo(() => resolveChatTheme(interfaceTheme), [interfaceTheme]);
   const { chatAppearance } = useAppContext();
-  const effectiveFontSize = chatFontSize ?? FontSize.base;
+  const effectiveFontSize = chatFontSize ?? FontSize.secondary;
   const styles = useMemo(() => createStyles(theme.colors, theme.scheme, effectiveFontSize), [theme, effectiveFontSize]);
   const markdownStyle = useMemo(() => createChatMarkdownStyle(theme.colors, effectiveFontSize), [theme, effectiveFontSize]);
   const resolvedBubbleAppearance = useMemo(
@@ -346,7 +348,7 @@ function MessageBubbleComponent({
         >
           {userSkill ? (
             <View style={styles.userSkillRow}>
-              <Lightbulb size={14} color={theme.colors.primary} />
+              <Lightbulb size={14} color={theme.colors.accent} />
               <Text style={styles.userSkillText} numberOfLines={1}>
                 {userSkill.name}
               </Text>
@@ -354,7 +356,7 @@ function MessageBubbleComponent({
           ) : null}
           {userSkill && (hasImages || hasText) && <View style={{ height: 6 }} />}
           {hasImages && (
-            <View style={{ overflow: 'hidden', borderRadius: Radius.md, marginHorizontal: -2 }}>
+            <View style={{ overflow: 'hidden', borderRadius: Radius.card, marginHorizontal: -2 }}>
               <ImageGrid uris={imageUris} metas={imageMetas} maxWidth={imageGridWidth - 4} onPress={(index) => onImagePress?.(imageUris, index)} />
             </View>
           )}
@@ -408,8 +410,8 @@ function MessageBubbleComponent({
           {avatarUri?.trim()
             ? <Avatar uri={avatarUri} />
             : (
-              <View style={[avatarStyles.placeholder, { backgroundColor: theme.colors.primary }]}>
-                <Text style={[avatarStyles.placeholderText, { color: theme.colors.iconOnColor }]}>{(displayName || 'A').charAt(0).toUpperCase()}</Text>
+              <View style={[avatarStyles.placeholder, { backgroundColor: theme.colors.accent }]}>
+                <Text style={[avatarStyles.placeholderText, { color: theme.colors.onAccent }]}>{(displayName || 'A').charAt(0).toUpperCase()}</Text>
               </View>
             )}
         </Pressable>
@@ -441,7 +443,7 @@ function MessageBubbleComponent({
             </Text>
             {isFavorited ? (
               <View style={styles.favoriteBadge}>
-                <Star size={12} color={theme.colors.warning} fill={theme.colors.warning} strokeWidth={2.1} />
+                <Star size={12} color={theme.colors.warn} fill={theme.colors.warn} strokeWidth={2.1} />
               </View>
             ) : null}
             {showModelUsage && !!modelLabel && (
@@ -476,7 +478,7 @@ function MessageBubbleComponent({
         >
           <StreamingFadeMask streaming={streaming}>
             {hasImages && (
-              <View style={{ overflow: 'hidden', borderRadius: Radius.sm + 2, marginHorizontal: -2 }}>
+              <View style={{ overflow: 'hidden', borderRadius: Radius.card, marginHorizontal: -2 }}>
                 <ImageGrid uris={imageUris} metas={imageMetas} maxWidth={imageGridWidth - 4} onPress={(index) => onImagePress?.(imageUris, index)} />
               </View>
             )}
@@ -545,7 +547,7 @@ export const MessageBubble = React.memo(MessageBubbleComponent, arePropsEqual);
 function createStyles(
   colors: ReturnType<typeof useAppTheme>['theme']['colors'],
   scheme: ReturnType<typeof useAppTheme>['theme']['scheme'],
-  fontSize: number = FontSize.base,
+  fontSize: number = FontSize.secondary,
 ) {
   return StyleSheet.create({
     row: {
@@ -594,12 +596,12 @@ function createStyles(
       ...createThemedShadowStyle(colors, scheme, Shadow.sm),
     },
     assistantName: {
-      fontSize: FontSize.sm,
-      color: colors.textMuted,
+      fontSize: FontSize.caption,
+      color: colors.inkSecondary,
       marginLeft: Space.xs,
     },
     assistantNameWallpaper: {
-      color: colors.text,
+      color: colors.ink,
       marginLeft: 0,
     },
     favoriteBadge: {
@@ -608,28 +610,28 @@ function createStyles(
       alignItems: 'center',
     },
     modelLabel: {
-      fontSize: FontSize.xs,
-      color: colors.textSubtle,
+      fontSize: FontSize.caption,
+      color: colors.inkTertiary,
       marginLeft: Space.sm,
       opacity: 0.7,
     },
     modelLabelWallpaper: {
-      color: colors.textMuted,
+      color: colors.inkSecondary,
       opacity: 1,
     },
     usageBadge: {
-      fontSize: FontSize.xs,
-      color: colors.textSubtle,
+      fontSize: FontSize.caption,
+      color: colors.inkTertiary,
       marginLeft: 'auto' as const,
       fontFamily: 'monospace',
       opacity: 0.7,
     },
     assistantNameOverlay: {
-      color: colors.primaryText,
-      fontWeight: FontWeight.bold,
+      color: colors.onAccent,
+      fontWeight: FontWeight.semibold,
     },
     bubble: {
-      borderRadius: Radius.md + 2,
+      borderRadius: Radius.bubble,
       paddingHorizontal: BUBBLE_PADDING_HORIZONTAL,
       paddingVertical: BUBBLE_PADDING_VERTICAL,
       borderWidth: 0,
@@ -638,31 +640,31 @@ function createStyles(
       ...createThemedShadowStyle(colors, scheme, Shadow.sm),
     },
     bubbleUser: {
-      backgroundColor: colors.bubbleUser,
+      backgroundColor: colors.accentSoft,
       position: 'relative',
     },
     bubbleAssistant: {
-      backgroundColor: colors.bubbleAssistant,
+      backgroundColor: colors.surface,
       alignSelf: 'flex-start' as const,
     },
     bubbleAssistantReservedWidth: {
       minWidth: 240,
     },
     bubbleSystem: {
-      backgroundColor: colors.bubbleSystem,
+      backgroundColor: colors.surface,
       alignSelf: 'center',
       maxWidth: '90%',
     },
     bubbleSelected: {
       borderWidth: BorderWidth.strong,
-      borderColor: colors.primary,
+      borderColor: colors.accent,
     },
     text: {
       fontSize,
       lineHeight: Math.round(fontSize * 1.47),
     },
     textUser: {
-      color: colors.text,
+      color: colors.ink,
     },
     userSkillRow: {
       alignSelf: 'flex-start',
@@ -672,49 +674,49 @@ function createStyles(
       maxWidth: '100%',
     },
     userSkillText: {
-      color: colors.primary,
-      fontSize: Math.max(FontSize.xs, fontSize - 2),
-      fontWeight: FontWeight.medium,
+      color: colors.accent,
+      fontSize: Math.max(FontSize.caption, fontSize - 2),
+      fontWeight: FontWeight.semibold,
       flexShrink: 1,
     },
     textSystem: {
-      color: colors.bubbleSystemText,
-      fontSize: FontSize.md,
+      color: colors.inkSecondary,
+      fontSize: FontSize.caption,
     },
     textAssistant: {
-      color: colors.text,
+      color: colors.ink,
     },
     loadingText: {
-      color: colors.textMuted,
-      fontSize: FontSize.bodySm,
+      color: colors.inkSecondary,
+      fontSize: FontSize.secondary,
       fontStyle: 'italic',
     },
     timestampSpacer: {
       color: 'transparent',
-      fontSize: FontSize.micro,
+      fontSize: FontSize.caption,
     },
     timestampOverlay: {
       position: 'absolute',
       right: BUBBLE_PADDING_HORIZONTAL,
       bottom: BUBBLE_PADDING_VERTICAL,
-      fontSize: FontSize.micro,
+      fontSize: FontSize.caption,
       lineHeight: 12,
     },
     timestampInline: {
-      fontSize: FontSize.micro,
+      fontSize: FontSize.caption,
       lineHeight: 12,
     },
     timestampBelow: {
-      fontSize: FontSize.micro,
+      fontSize: FontSize.caption,
       alignSelf: 'flex-end',
       marginTop: Space.xs,
     },
     timestampUser: {
-      color: colors.textMuted,
+      color: colors.inkSecondary,
       opacity: 0.72,
     },
     timestampAssistant: {
-      color: colors.textSubtle,
+      color: colors.inkTertiary,
       opacity: 0.85,
     },
   });

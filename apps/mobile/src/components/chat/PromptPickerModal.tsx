@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert,
   FlatList,
   Keyboard,
   Platform,
@@ -12,7 +11,7 @@ import {
 import * as Haptics from 'expo-haptics';
 import { ChevronLeft, Pin, Plus } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
-import { Button, FormTextInput, ModalSheet } from '../ui';
+import { Button, ConfirmationModal, FormTextInput, Sheet } from '../ui';
 import { SwipeableGatewayRow, SwipeableMethods } from '../config/SwipeableGatewayRow';
 import { useAppTheme } from '../../theme';
 import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
@@ -24,15 +23,12 @@ type Props = {
   onSelectPrompt: (text: string) => void;
 };
 
-const DEFAULT_PROMPT_KEYS = ['prompt_intro', 'prompt_cron_status', 'prompt_heartbeat'] as const;
-
 function buildDefaultPrompts(t: (key: string) => string): SavedPrompt[] {
-  return DEFAULT_PROMPT_KEYS.map((key) => ({
-    id: `default_${key}`,
-    text: t(key),
-    createdAt: 0,
-    updatedAt: 0,
-  }));
+  return [
+    { id: 'default_prompt_intro', text: t('prompt_intro'), createdAt: 0, updatedAt: 0 },
+    { id: 'default_prompt_cron_status', text: t('prompt_cron_status'), createdAt: 0, updatedAt: 0 },
+    { id: 'default_prompt_heartbeat', text: t('prompt_heartbeat'), createdAt: 0, updatedAt: 0 },
+  ];
 }
 
 function pinPrompt(prompts: SavedPrompt[], promptId: string): SavedPrompt[] {
@@ -60,16 +56,18 @@ export function PromptPickerModal({ visible, onClose, onSelectPrompt }: Props): 
   const { t } = useTranslation('chat');
 
   return (
-    <ModalSheet
+    <Sheet
       visible={visible}
       onClose={onClose}
+      closeAccessibilityLabel={t('Close', { ns: 'common' })}
       title={t('Prompts')}
       maxHeight="75%"
+      testID="prompt-picker-sheet"
     >
       {visible ? (
         <PromptPickerContent onClose={onClose} onSelectPrompt={onSelectPrompt} />
       ) : null}
-    </ModalSheet>
+    </Sheet>
   );
 }
 
@@ -89,6 +87,7 @@ function PromptPickerContent({
   const [loaded, setLoaded] = useState(false);
   const [editorVisible, setEditorVisible] = useState(false);
   const [editingPrompt, setEditingPrompt] = useState<SavedPrompt | null>(null);
+  const [deleteCandidate, setDeleteCandidate] = useState<SavedPrompt | null>(null);
   const [editorText, setEditorText] = useState('');
   const [keyboardHeight, setKeyboardHeight] = useState(0);
 
@@ -166,23 +165,16 @@ function PromptPickerContent({
   }, []);
 
   const handleDelete = useCallback((prompt: SavedPrompt) => {
-    Alert.alert(
-      t('Delete'),
-      prompt.text.slice(0, 100) + (prompt.text.length > 100 ? '...' : ''),
-      [
-        { text: t('Cancel'), style: 'cancel' },
-        {
-          text: t('Delete'),
-          style: 'destructive',
-          onPress: async () => {
-            const next = prompts.filter((p) => p.id !== prompt.id);
-            setPrompts(next);
-            await StorageService.setUserPrompts(next);
-          },
-        },
-      ],
-    );
-  }, [t, prompts]);
+    setDeleteCandidate(prompt);
+  }, []);
+
+  const confirmDelete = useCallback(() => {
+    if (!deleteCandidate) return;
+    const next = prompts.filter((prompt) => prompt.id !== deleteCandidate.id);
+    setDeleteCandidate(null);
+    setPrompts(next);
+    void StorageService.setUserPrompts(next);
+  }, [deleteCandidate, prompts]);
 
   const handleTogglePin = useCallback(async (prompt: SavedPrompt) => {
     const next = prompt.pinnedAt
@@ -268,7 +260,8 @@ function PromptPickerContent({
   if (!loaded) return <View style={styles.content} />;
 
   return (
-    <View style={styles.content}>
+    <>
+      <View style={styles.content}>
       {prompts.length === 0 ? (
         <View style={styles.emptyWrap}>
           <Text style={styles.emptyTitle}>{t('No custom prompts yet')}</Text>
@@ -287,7 +280,7 @@ function PromptPickerContent({
                 onDelete={() => handleDelete(item)}
                 extraActions={[{
                   key: item.pinnedAt ? 'unpin' : 'pin',
-                  backgroundColor: colors.textMuted,
+                  backgroundColor: colors.inkSecondary,
                   icon: Pin,
                   iconColor: colors.surface,
                   onPress: () => { void handleTogglePin(item); },
@@ -299,7 +292,7 @@ function PromptPickerContent({
                 onSwipeOpen={() => handleSwipeOpen(item.id)}
               >
                 <Pressable
-                  style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.surfaceMuted }]}
+                  style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.surface }]}
                   onPress={() => handleSelect(item)}
                 >
                   <View style={styles.rowContent}>
@@ -307,9 +300,9 @@ function PromptPickerContent({
                       {item.text}
                     </Text>
                     {item.pinnedAt ? (
-                      <Pin size={14} color={colors.textMuted} strokeWidth={2} />
+                      <Pin size={14} color={colors.inkSecondary} strokeWidth={2} />
                     ) : null}
-                    <ChevronLeft size={14} color={colors.textSubtle} strokeWidth={1.5} />
+                    <ChevronLeft size={14} color={colors.inkTertiary} strokeWidth={1.5} />
                   </View>
                 </Pressable>
               </SwipeableGatewayRow>
@@ -320,14 +313,26 @@ function PromptPickerContent({
       )}
       <View style={styles.addButtonWrap}>
         <Pressable
-          style={({ pressed }) => [styles.addButton, { backgroundColor: colors.primary }, pressed && { opacity: 0.88 }]}
+          style={({ pressed }) => [styles.addButton, { backgroundColor: colors.accent }, pressed && { opacity: 0.88 }]}
           onPress={handleAdd}
         >
-          <Plus size={15} color={colors.primaryText} strokeWidth={2} />
-          <Text style={[styles.addButtonText, { color: colors.primaryText }]}>{t('Add Prompt')}</Text>
+          <Plus size={15} color={colors.onAccent} strokeWidth={2} />
+          <Text style={[styles.addButtonText, { color: colors.onAccent }]}>{t('Add Prompt')}</Text>
         </Pressable>
       </View>
-    </View>
+      </View>
+      <ConfirmationModal
+        visible={deleteCandidate != null}
+        title={t('Delete')}
+        message={deleteCandidate?.text ?? ''}
+        cancelLabel={t('Cancel')}
+        confirmLabel={t('Delete')}
+        onClose={() => setDeleteCandidate(null)}
+        onConfirm={confirmDelete}
+        destructive
+        testID="prompt-delete-confirmation"
+      />
+    </>
   );
 }
 
@@ -348,13 +353,13 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     rowText: {
       flex: 1,
-      fontSize: FontSize.base,
-      color: colors.text,
+      fontSize: FontSize.secondary,
+      color: colors.ink,
       lineHeight: 20,
     },
     divider: {
       height: StyleSheet.hairlineWidth,
-      backgroundColor: colors.borderStrong,
+      backgroundColor: colors.line,
       marginLeft: Space.lg,
     },
     list: {
@@ -366,13 +371,13 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       paddingHorizontal: Space.lg,
     },
     emptyTitle: {
-      fontSize: FontSize.md,
-      color: colors.textMuted,
-      fontWeight: FontWeight.medium,
+      fontSize: FontSize.caption,
+      color: colors.inkSecondary,
+      fontWeight: FontWeight.semibold,
     },
     emptySubtitle: {
-      fontSize: FontSize.sm,
-      color: colors.textSubtle,
+      fontSize: FontSize.caption,
+      color: colors.inkTertiary,
       marginTop: Space.xs,
     },
     addButtonWrap: {
@@ -385,10 +390,10 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       justifyContent: 'center',
       gap: Space.sm,
       paddingVertical: 11,
-      borderRadius: Radius.md,
+      borderRadius: Radius.full,
     },
     addButtonText: {
-      fontSize: FontSize.base,
+      fontSize: FontSize.secondary,
       fontWeight: FontWeight.semibold,
     },
     // Editor
@@ -399,9 +404,9 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       paddingVertical: Space.sm,
     },
     editorTitle: {
-      fontSize: FontSize.base,
+      fontSize: FontSize.secondary,
       fontWeight: FontWeight.semibold,
-      color: colors.text,
+      color: colors.ink,
     },
     editorInput: {
       marginTop: Space.sm,

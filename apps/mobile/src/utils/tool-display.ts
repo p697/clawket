@@ -1,13 +1,17 @@
 type Translate = (key: string, options?: Record<string, unknown>) => string;
 
-function resolveToolDetail(name: string, args?: unknown): string | undefined {
+export function resolveToolDetail(name: string, args?: unknown): string | undefined {
+  if (typeof args === 'string') {
+    const raw = args;
+    try { args = JSON.parse(raw); } catch { return undefined; }
+  }
   if (!args || typeof args !== 'object') return undefined;
   const a = args as Record<string, unknown>;
   const lowerName = name.toLowerCase();
 
   let detail: string | undefined;
   if (lowerName === 'exec' || lowerName === 'bash') {
-    detail = typeof a.command === 'string' ? a.command : undefined;
+    detail = typeof a.command === 'string' ? a.command : typeof a.cmd === 'string' ? a.cmd : undefined;
   } else if (lowerName === 'read' || lowerName === 'write' || lowerName === 'edit') {
     detail = typeof a.path === 'string'
       ? a.path
@@ -44,15 +48,17 @@ function withTrimmedDetail(base: string, detail?: string): string {
 export function formatToolDisplayName(name: string, t?: Translate): string {
   const plain = name.replace(/_/g, ' ');
   if (!t) return plain;
-  const lower = name.toLowerCase();
-  if (lower === 'exec' || lower === 'bash') return t('Command');
-  if (lower === 'read') return t('Read file');
-  if (lower === 'write' || lower === 'edit') return t('Write file');
-  if (lower === 'web_search') return t('Web Search');
-  if (lower === 'web_fetch') return t('Web Fetch');
-  if (lower === 'browser') return t('Browse');
-  if (lower === 'message') return t('Message');
-  return plain;
+  const localName = name.replace(/^mcp__.+?__/, '');
+  const lower = localName.toLowerCase();
+  if (lower === 'session_status') return t('Session status', { ns: 'chat' });
+  if (lower === 'exec' || lower === 'bash') return t('Command', { ns: 'chat' });
+  if (lower === 'read' || lower === 'read_file') return t('Read file', { ns: 'chat' });
+  if (lower === 'write' || lower === 'edit' || lower === 'apply_patch' || lower === 'write_file' || lower === 'edit_file') return t('Write file', { ns: 'chat' });
+  if (lower === 'web_search') return t('Web Search', { ns: 'chat' });
+  if (lower === 'web_fetch') return t('Web Fetch', { ns: 'chat' });
+  if (lower === 'browser') return t('Browse', { ns: 'chat' });
+  if (lower === 'message') return t('Message', { ns: 'chat' });
+  return localName.replace(/_+/g, ' ').trim();
 }
 
 /**
@@ -64,14 +70,14 @@ export function formatToolActivity(
   t: Translate,
 ): string {
   const lower = name.toLowerCase();
-  if (lower === 'exec' || lower === 'bash') return t('Running command');
-  if (lower === 'read') return t('Reading file');
-  if (lower === 'write' || lower === 'edit') return t('Writing file');
-  if (lower === 'web_search') return t('Searching web');
-  if (lower === 'web_fetch') return t('Web fetching');
-  if (lower === 'browser') return t('Browsing');
-  if (lower === 'message') return t('Messaging');
-  return t('Using {{toolName}}', { toolName: name });
+  if (lower === 'exec' || lower === 'bash') return t('Running command', { ns: 'chat' });
+  if (lower === 'read' || lower === 'read_file') return t('Reading file', { ns: 'chat' });
+  if (lower === 'write' || lower === 'edit' || lower === 'apply_patch' || lower === 'write_file' || lower === 'edit_file') return t('Writing file', { ns: 'chat' });
+  if (lower === 'web_search') return t('Searching web', { ns: 'chat' });
+  if (lower === 'web_fetch') return t('Web fetching', { ns: 'chat' });
+  if (lower === 'browser') return t('Browsing', { ns: 'chat' });
+  if (lower === 'message') return t('Messaging', { ns: 'chat' });
+  return t('Using {{toolName}}', { ns: 'chat', toolName: name });
 }
 
 /** Strip status wrapper (Running/Failed/Completed) from a tool summary. */
@@ -84,8 +90,12 @@ export function stripToolStatusPrefix(summary: string, t?: Translate): string {
   // Try stripping localized status wrappers by rendering a placeholder
   // through the template and removing the surrounding text.
   const placeholder = '\x00';
-  for (const key of ['Running {{name}}', 'Failed {{name}}', 'Completed {{name}}']) {
-    const wrapped = t(key, { name: placeholder });
+  const localizedWrappers = [
+    t('Running {{name}}', { ns: 'chat', name: placeholder }),
+    t('Failed {{name}}', { ns: 'chat', name: placeholder }),
+    t('Completed {{name}}', { ns: 'chat', name: placeholder }),
+  ];
+  for (const wrapped of localizedWrappers) {
     const idx = wrapped.indexOf(placeholder);
     if (idx < 0) continue;
     const before = wrapped.slice(0, idx);

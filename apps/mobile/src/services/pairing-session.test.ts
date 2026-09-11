@@ -7,6 +7,11 @@ import {
   resolvePairingLink,
 } from './pairing-session';
 import { OFFICIAL_PRODUCTION_REGISTRY_URL } from './relay-environment';
+import {
+  FRAME_TOO_LARGE_CLOSE_CODE,
+  FRAME_TOO_LARGE_ERROR_CODE,
+  WEBSOCKET_FRAME_LIMIT_BYTES,
+} from './websocket-frame-limit';
 
 function toBase64Url(value: Uint8Array): string {
   return Buffer.from(value).toString('base64url');
@@ -154,6 +159,56 @@ describe('pairing sessions', () => {
       })).resolves.toMatchObject({ rawQrPayload: payload, displayName: 'Studio Mac' });
       const requestBody = JSON.parse((fetch as jest.Mock).mock.calls[0][1].body);
       expect(requestBody).toEqual({ codeHash: sha256(code) });
+    } finally {
+      global.WebSocket = originalWebSocket;
+    }
+  });
+
+  it('rejects an oversized secure-pairing frame before decoding it', async () => {
+    const code = '123456';
+    const sessionId = `ps_${'a'.repeat(64)}`;
+    jest.spyOn(global, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      protocol: 2,
+      sessionId,
+      gatewayId: 'gw_secure_pairing',
+      relayUrl: 'wss://relay.clawket.ai/ws',
+      relayTicket: 'cpt2.test.signature',
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      displayName: 'Studio Mac',
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+
+    const originalWebSocket = global.WebSocket;
+    const closeSpy = jest.fn();
+    class OversizedPairingWebSocket {
+      onopen: (() => void) | null = null;
+      onmessage: ((event: { data: string }) => void) | null = null;
+      onerror: (() => void) | null = null;
+      onclose: (() => void) | null = null;
+      close = closeSpy;
+
+      constructor(_url: string) {
+        queueMicrotask(() => this.onopen?.());
+      }
+
+      send(_raw: string): void {
+        queueMicrotask(() => this.onmessage?.({
+          data: 'a'.repeat(WEBSOCKET_FRAME_LIMIT_BYTES + 1),
+        }));
+      }
+    }
+    global.WebSocket = OversizedPairingWebSocket as unknown as typeof WebSocket;
+    try {
+      await expect(resolvePairingCode({
+        serverUrl: OFFICIAL_PRODUCTION_REGISTRY_URL,
+        pairingCode: code,
+      })).rejects.toMatchObject({
+        code: FRAME_TOO_LARGE_ERROR_CODE,
+        message: FRAME_TOO_LARGE_ERROR_CODE,
+      });
+      expect(closeSpy).toHaveBeenCalledWith(
+        FRAME_TOO_LARGE_CLOSE_CODE,
+        FRAME_TOO_LARGE_ERROR_CODE,
+      );
     } finally {
       global.WebSocket = originalWebSocket;
     }

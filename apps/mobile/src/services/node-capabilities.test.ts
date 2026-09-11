@@ -1,6 +1,7 @@
 import {
   DEFAULT_NODE_CAPABILITY_TOGGLES,
   normalizeNodeCapabilityToggles,
+  shouldStartNodeSidecar,
 } from './node-capabilities';
 
 describe('normalizeNodeCapabilityToggles', () => {
@@ -67,5 +68,45 @@ describe('normalizeNodeCapabilityToggles', () => {
       'clipboard.write': false,
       'media.save': true,
     });
+  });
+});
+
+describe('shouldStartNodeSidecar', () => {
+  it('waits for the primary adapter handshake before starting the Node role', () => {
+    for (const activeState of ['idle', 'connecting', 'reconnecting', 'offline']) {
+      expect(shouldStartNodeSidecar({
+        activeConnectionId: 'gateway',
+        activeState,
+        nodeEnabled: true,
+        supportsNodes: true,
+      })).toBe(false);
+    }
+    expect(shouldStartNodeSidecar({
+      activeConnectionId: 'gateway',
+      activeState: 'ready',
+      nodeEnabled: true,
+      supportsNodes: true,
+    })).toBe(true);
+  });
+
+  it('still requires an active connection, user opt-in, and Node capability', () => {
+    expect(shouldStartNodeSidecar({
+      activeConnectionId: null,
+      activeState: 'ready',
+      nodeEnabled: true,
+      supportsNodes: true,
+    })).toBe(false);
+    expect(shouldStartNodeSidecar({
+      activeConnectionId: 'gateway',
+      activeState: 'ready',
+      nodeEnabled: false,
+      supportsNodes: true,
+    })).toBe(false);
+    expect(shouldStartNodeSidecar({
+      activeConnectionId: 'gateway',
+      activeState: 'ready',
+      nodeEnabled: true,
+      supportsNodes: false,
+    })).toBe(false);
   });
 });

@@ -57,18 +57,17 @@ export function formatCronSchedule(schedule: CronSchedule): string {
 // Human-readable, i18n-aware schedule description
 // ---------------------------------------------------------------------------
 
-const DOW_KEY_BY_NUM: Record<number, string> = {
-  0: 'weekday_Sun',
-  1: 'weekday_Mon',
-  2: 'weekday_Tue',
-  3: 'weekday_Wed',
-  4: 'weekday_Thu',
-  5: 'weekday_Fri',
-  6: 'weekday_Sat',
-  7: 'weekday_Sun',
-};
-
 type TFn = (key: string, opts?: Record<string, string | number>) => string;
+
+function translateWeekday(day: number, t: TFn): string {
+  if (day === 1) return t('weekday_Mon', { ns: 'settings' });
+  if (day === 2) return t('weekday_Tue', { ns: 'settings' });
+  if (day === 3) return t('weekday_Wed', { ns: 'settings' });
+  if (day === 4) return t('weekday_Thu', { ns: 'settings' });
+  if (day === 5) return t('weekday_Fri', { ns: 'settings' });
+  if (day === 6) return t('weekday_Sat', { ns: 'settings' });
+  return t('weekday_Sun', { ns: 'settings' });
+}
 
 function pad2(n: number): string {
   return String(n).padStart(2, '0');
@@ -76,7 +75,7 @@ function pad2(n: number): string {
 
 /**
  * Convert a CronSchedule into a single human-readable sentence,
- * using the provided i18n `t` function (console namespace).
+ * using the provided i18n `t` function (settings namespace).
  */
 export function describeScheduleHuman(schedule: CronSchedule, t: TFn): string {
   // --- "at" (one-time) ---
@@ -85,23 +84,26 @@ export function describeScheduleHuman(schedule: CronSchedule, t: TFn): string {
     if (!Number.isFinite(ms)) return schedule.at;
     const d = new Date(ms);
     const datetime = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
-    return t('schedule_once_at', { datetime });
+    return t('schedule_once_at', { ns: 'settings', datetime });
   }
 
   // --- "every" (interval) ---
   if (schedule.kind === 'every') {
     const ms = schedule.everyMs;
     if (ms > 0 && ms % DAY_MS === 0) {
-      return t('schedule_every_n_days', { count: ms / DAY_MS });
+      return t('schedule_every_n_days', { ns: 'settings', count: ms / DAY_MS });
     }
     if (ms > 0 && ms % HOUR_MS === 0) {
-      return t('schedule_every_n_hours', { count: ms / HOUR_MS });
+      return t('schedule_every_n_hours', { ns: 'settings', count: ms / HOUR_MS });
     }
     if (ms > 0 && ms % MINUTE_MS === 0) {
-      return t('schedule_every_n_minutes', { count: ms / MINUTE_MS });
+      return t('schedule_every_n_minutes', { ns: 'settings', count: ms / MINUTE_MS });
     }
     // sub-minute or fractional
-    return t('schedule_every_n_minutes', { count: Number((ms / MINUTE_MS).toFixed(1)) });
+    return t('schedule_every_n_minutes', {
+      ns: 'settings',
+      count: Number((ms / MINUTE_MS).toFixed(1)),
+    });
   }
 
   // --- "cron" expression ---
@@ -123,14 +125,14 @@ function describeCronScheduleHuman(expr: string, t: TFn): string {
     const step = Number(minF.slice(2));
     if (Number.isFinite(step) && step > 0) {
       return step === 1
-        ? t('schedule_every_minute')
-        : t('schedule_every_n_minutes', { count: step });
+        ? t('schedule_every_minute', { ns: 'settings' })
+        : t('schedule_every_n_minutes', { ns: 'settings', count: step });
     }
   }
 
   // Every minute: * * * * *
   if (minF === '*' && hourF === '*' && domF === '*' && monF === '*' && dowF === '*') {
-    return t('schedule_every_minute');
+    return t('schedule_every_minute', { ns: 'settings' });
   }
 
   // Try to extract a single HH:MM time
@@ -144,29 +146,29 @@ function describeCronScheduleHuman(expr: string, t: TFn): string {
 
     // Daily: M H * * *
     if (domF === '*' && monF === '*' && dowF === '*') {
-      return t('schedule_daily_at', { time });
+      return t('schedule_daily_at', { ns: 'settings', time });
     }
 
     // Weekly single day: M H * * D (D is a single digit)
     if (domF === '*' && monF === '*' && /^[0-7]$/.test(dowF)) {
-      const weekday = t(DOW_KEY_BY_NUM[Number(dowF)] ?? 'weekday_Sun');
-      return t('schedule_weekday_at', { weekday, time });
+      const weekday = translateWeekday(Number(dowF), t);
+      return t('schedule_weekday_at', { ns: 'settings', weekday, time });
     }
 
     // Weekly multi-day: M H * * 1,3,5
     if (domF === '*' && monF === '*' && /^[0-7](,[0-7])+$/.test(dowF)) {
-      const days = dowF.split(',').map((d) => t(DOW_KEY_BY_NUM[Number(d)] ?? 'weekday_Sun'));
+      const days = dowF.split(',').map((d) => translateWeekday(Number(d), t));
       const weekday = days.join(', ');
-      return t('schedule_weekday_at', { weekday, time });
+      return t('schedule_weekday_at', { ns: 'settings', weekday, time });
     }
 
     // Weekday range: M H * * 1-5
     if (domF === '*' && monF === '*' && /^[0-7]-[0-7]$/.test(dowF)) {
       const [start, end] = dowF.split('-').map(Number);
-      const startDay = t(DOW_KEY_BY_NUM[start] ?? 'weekday_Sun');
-      const endDay = t(DOW_KEY_BY_NUM[end] ?? 'weekday_Sun');
+      const startDay = translateWeekday(start, t);
+      const endDay = translateWeekday(end, t);
       const weekday = `${startDay}–${endDay}`;
-      return t('schedule_weekday_at', { weekday, time });
+      return t('schedule_weekday_at', { ns: 'settings', weekday, time });
     }
   }
 

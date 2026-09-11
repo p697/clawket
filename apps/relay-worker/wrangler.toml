@@ -4,6 +4,7 @@ compatibility_date = "2026-03-03"
 workers_dev = true
 
 [vars]
+RELAY_BACKEND = "openclaw"
 # Checked-in templates must not point at the official hosted deployment by default.
 # Replace these example endpoints and account-bound resource IDs before deploys or
 # remote-binding workflows in your own account.

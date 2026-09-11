@@ -1,7 +1,10 @@
 import {
+  OFFICIAL_HERMES_PREVIEW_REGISTRY_URL,
+  OFFICIAL_HERMES_PRODUCTION_REGISTRY_URL,
   OFFICIAL_PREVIEW_REGISTRY_URL,
   OFFICIAL_PRODUCTION_REGISTRY_URL,
   assessRelayEnvironmentSelection,
+  getOfficialHermesRegistryUrl,
   getOfficialRelayRegistryUrl,
   getRelayPairCommand,
   resolveOfficialRelayEnvironment,
@@ -11,6 +14,8 @@ describe('relay environment selection', () => {
   it('recognizes official production and Preview registry URLs', () => {
     expect(resolveOfficialRelayEnvironment(OFFICIAL_PRODUCTION_REGISTRY_URL)).toBe('production');
     expect(resolveOfficialRelayEnvironment(`${OFFICIAL_PREVIEW_REGISTRY_URL}/v1/pair/claim`)).toBe('preview');
+    expect(resolveOfficialRelayEnvironment(OFFICIAL_HERMES_PRODUCTION_REGISTRY_URL)).toBe('production');
+    expect(resolveOfficialRelayEnvironment(`${OFFICIAL_HERMES_PREVIEW_REGISTRY_URL}/v1/hermes/pair/claim`)).toBe('preview');
     expect(resolveOfficialRelayEnvironment('https://self-hosted.example.com')).toBeNull();
   });
 
@@ -39,5 +44,7 @@ describe('relay environment selection', () => {
     expect(getRelayPairCommand('preview')).toBe('clawket pair --preview');
     expect(getOfficialRelayRegistryUrl('preview')).toBe(OFFICIAL_PREVIEW_REGISTRY_URL);
     expect(getOfficialRelayRegistryUrl('production')).toBe(OFFICIAL_PRODUCTION_REGISTRY_URL);
+    expect(getOfficialHermesRegistryUrl('preview')).toBe(OFFICIAL_HERMES_PREVIEW_REGISTRY_URL);
+    expect(getOfficialHermesRegistryUrl('production')).toBe(OFFICIAL_HERMES_PRODUCTION_REGISTRY_URL);
   });
 });

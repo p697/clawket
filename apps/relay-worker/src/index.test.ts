@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import relayWorker, { __testing, RelayRoom } from './index';
+import relayWorker, { __testing, RelayRoom, HermesRelayRoom } from './index';
 import { resolveClientLabelFromToken } from './relay/auth';
 import { authorizeRelayToken } from './relay/auth';
 import { issuePairingRelayTicket } from '@clawket/shared';
+import { isRelayFrameTooLarge } from './relay/frames';
+import { RELAY_FRAME_MAX_BYTES } from './relay/types';
 
 class MemoryKV {
   private map = new Map<string, string>();
@@ -64,6 +66,8 @@ class FakeStorage {
     return deleted;
   }
 
+  async getAlarm(): Promise<number | null> { return this.alarmAt; }
+
   async deleteAlarm(): Promise<void> {
     this.alarmAt = null;
   }
@@ -108,9 +112,11 @@ class FakeWebSocket {
 function createRelayRoomWithSockets(
   sockets: FakeWebSocket[] = [],
   envOverrides: Partial<ConstructorParameters<typeof RelayRoom>[1]> = {},
-): { room: RelayRoom; storage: FakeStorage; kv: MemoryKV } {
+  Room: typeof RelayRoom = RelayRoom,
+): { room: RelayRoom; storage: FakeStorage; kv: MemoryKV; ready: Promise<unknown> } {
   const storage = new FakeStorage();
   const kv = new MemoryKV();
+  let ready: Promise<unknown> = Promise.resolve();
   const state = {
     id: {
       toString: () => 'test-object-id',
@@ -118,7 +124,7 @@ function createRelayRoomWithSockets(
     storage,
     getWebSockets: () => sockets as unknown as WebSocket[],
     blockConcurrencyWhile: (fn: () => Promise<unknown>) => {
-      void fn();
+      ready = fn();
     },
   } as unknown as DurableObjectState;
   const env = {
@@ -127,23 +133,81 @@ function createRelayRoomWithSockets(
     HEARTBEAT_INTERVAL_MS: '30000',
     ...envOverrides,
   } as unknown as ConstructorParameters<typeof RelayRoom>[1];
+  const room = new Room(state, env);
   return {
-    room: new RelayRoom(state, env),
+    room,
     storage,
     kv,
+    ready,
   };
 }
 
 describe('relay worker helpers', () => {
+  it.each([RelayRoom, HermesRelayRoom])('ignores late owner close events for the current heartbeat (%s)', async (Room) => {
+    const owner = new FakeWebSocket({ attachment: { role: 'gateway', clientId: 'owner', connectedAt: 2 } });
+    const client = new FakeWebSocket({ attachment: { role: 'client', clientId: 'phone', connectedAt: 2 } });
+    const stale = new FakeWebSocket({ attachment: { role: 'gateway', clientId: 'owner', connectedAt: 1 } });
+    const { room, ready } = createRelayRoomWithSockets([owner, client], {}, Room);
+    await ready;
+    const runtime = (room as unknown as { runtime: { pendingGatewayPingAt: number; gatewayPingCapability: string; gatewaySocket: unknown } }).runtime;
+    runtime.pendingGatewayPingAt = 1234;
+    runtime.gatewayPingCapability = 'supported';
+    await room.webSocketClose(stale as never, 4001, 'replaced_by_new_gateway');
+    expect(runtime.gatewaySocket).toBe(owner);
+    expect(runtime.pendingGatewayPingAt).toBe(1234);
+    expect(runtime.gatewayPingCapability).toBe('supported');
+    expect(client.closeCalls).toEqual([]);
+  });
+
+  it.each([RelayRoom, HermesRelayRoom])('keeps the replacement client on a late close after rehydration (%s)', async (Room) => {
+    const owner = new FakeWebSocket({ attachment: { role: 'gateway', clientId: 'owner', connectedAt: 2 } });
+    const replacement = new FakeWebSocket({ attachment: { role: 'client', clientId: 'phone', connectedAt: 3 } });
+    const stale = new FakeWebSocket({ attachment: { role: 'client', clientId: 'phone', connectedAt: 1 } });
+    const { room, ready } = createRelayRoomWithSockets([owner, replacement], {}, Room);
+    await ready;
+    const runtime = (room as unknown as { runtime: { clients: Map<string, unknown> } }).runtime;
+    await room.webSocketClose(stale as never, 4002, 'replaced_by_new_client_socket');
+    expect(runtime.clients.get('phone')).toBe(replacement);
+    expect(replacement.closeCalls).toEqual([]);
+    expect(owner.sent).toEqual([]);
+  });
+
+  it.each([RelayRoom, HermesRelayRoom])('drops buffered messages from superseded sockets before routing (%s)', async (Room) => {
+    const owner = new FakeWebSocket({ attachment: { role: 'gateway', clientId: 'owner', connectedAt: 2 } });
+    const client = new FakeWebSocket({ attachment: { role: 'client', clientId: 'phone', connectedAt: 2 } });
+    const staleOwner = new FakeWebSocket({ attachment: { role: 'gateway', clientId: 'owner', connectedAt: 1 } });
+    const staleClient = new FakeWebSocket({ attachment: { role: 'client', clientId: 'phone', connectedAt: 1 } });
+    const { room, ready } = createRelayRoomWithSockets([owner, client], {}, Room);
+    await ready;
+    await room.webSocketMessage(staleClient as never, '{"type":"req","id":"stale","method":"chat.send","params":{}}');
+    await room.webSocketMessage(staleOwner as never, '{"type":"res","id":"stale","ok":true,"payload":{}}');
+    expect(owner.sent).toEqual([]);
+    expect(client.sent).toEqual([]);
+  });
+
   it('advertises secure pairing only when the ticket secret is strong enough', async () => {
     const fetchHandler = relayWorker.fetch as (request: Request, env: unknown) => Promise<Response>;
     const withoutSecret = await fetchHandler(new Request('https://relay.example/v1/health'), {});
-    await expect(withoutSecret.json()).resolves.toMatchObject({ capabilities: [] });
+    await expect(withoutSecret.json()).resolves.toMatchObject({
+      capabilities: ['relay.frame-limit.v2'],
+    });
     const withSecret = await fetchHandler(new Request('https://relay.example/v1/health'), {
       PAIRING_TICKET_SECRET: 'test-pairing-ticket-secret-that-is-long-enough',
     });
     await expect(withSecret.json()).resolves.toMatchObject({
-      capabilities: ['pairing.secure-short-code.v2'],
+      capabilities: ['pairing.secure-short-code.v2', 'relay.frame-limit.v2'],
+    });
+  });
+
+  it('serializes relay.ready as the additive capability control envelope', () => {
+    const socket = new FakeWebSocket();
+    __testing.sendRelayReady(socket as never);
+
+    expect(socket.sent).toHaveLength(1);
+    expect(JSON.parse(socket.sent[0].slice(__testing.CONTROL_PREFIX.length))).toEqual({
+      type: 'control',
+      event: 'relay.ready',
+      payload: { capabilities: ['relay.frame-limit.v2'] },
     });
   });
 
@@ -187,6 +251,59 @@ describe('relay worker helpers', () => {
     const bytes = new TextEncoder().encode('world').buffer;
     expect(__testing.normalizeMessage(bytes)).toBe('world');
   });
+
+  it('accepts UTF-8 text and binary frames at the strict 8 MiB boundary', async () => {
+    expect(__testing.relayFrameByteLength('Aé😀\ud800')).toBe(10);
+    const utf8Boundary = 'é'.repeat(RELAY_FRAME_MAX_BYTES / 2);
+    expect(__testing.relayFrameByteLength(utf8Boundary)).toBe(RELAY_FRAME_MAX_BYTES);
+    expect(isRelayFrameTooLarge(utf8Boundary)).toBe(false);
+    expect(isRelayFrameTooLarge(`${utf8Boundary}é`)).toBe(true);
+
+    const binaryBoundary = new ArrayBuffer(RELAY_FRAME_MAX_BYTES);
+    expect(isRelayFrameTooLarge(binaryBoundary)).toBe(false);
+    expect(isRelayFrameTooLarge(new ArrayBuffer(RELAY_FRAME_MAX_BYTES + 1))).toBe(true);
+
+    const { room } = createRelayRoomWithSockets();
+    const socket = new FakeWebSocket();
+    await room.webSocketMessage(socket as never, utf8Boundary);
+    await room.webSocketMessage(socket as never, binaryBoundary);
+    expect(socket.closeCalls).toEqual([]);
+  });
+
+  it.each(['text', 'binary'] as const)(
+    'closes oversized %s frames with 1009 and structured telemetry',
+    async (frameType) => {
+      const { room } = createRelayRoomWithSockets();
+      const socket = new FakeWebSocket({
+        attachment: { role: 'gateway', clientId: 'gw-frame-limit', connectedAt: 1 },
+      });
+      const message = frameType === 'text'
+        ? `${'é'.repeat(RELAY_FRAME_MAX_BYTES / 2)}é`
+        : new ArrayBuffer(RELAY_FRAME_MAX_BYTES + 1);
+      const expectedBytes = frameType === 'text' ? RELAY_FRAME_MAX_BYTES + 2 : RELAY_FRAME_MAX_BYTES + 1;
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      try {
+        await room.webSocketMessage(socket as never, message);
+        expect(socket.closeCalls).toEqual([
+          { code: __testing.SocketCloseCode.FRAME_TOO_LARGE, reason: 'frame_too_large' },
+        ]);
+        const telemetry = consoleSpy.mock.calls
+          .map(([line]) => JSON.parse(String(line)) as Record<string, unknown>)
+          .find((entry) => entry.event === 'frame_too_large');
+        expect(telemetry).toMatchObject({
+          scope: 'relay_worker',
+          event: 'frame_too_large',
+          role: 'gateway',
+          frameBytes: expectedBytes,
+          frameLimitBytes: RELAY_FRAME_MAX_BYTES,
+          frameType,
+        });
+      } finally {
+        consoleSpy.mockRestore();
+      }
+    },
+  );
 
   it('detects connect.start and connect.challenge frames', () => {
     expect(
@@ -904,7 +1021,8 @@ describe('relay worker helpers', () => {
         lastPongAt: 2,
       },
     });
-    const { room } = createRelayRoomWithSockets();
+    const { room, ready } = createRelayRoomWithSockets([gatewaySocket, clientSocket]);
+    await ready;
     const relay = room as unknown as {
       runtime: { gatewaySocket: FakeWebSocket | null };
       webSocketMessage: (ws: WebSocket, message: string | ArrayBuffer) => Promise<void>;
@@ -960,7 +1078,8 @@ describe('relay worker helpers', () => {
     const clientSocket = new FakeWebSocket({
       attachment: { role: 'client', clientId: 'ios-control', connectedAt: 2, traceId: 'trace-ios' },
     });
-    const { room } = createRelayRoomWithSockets();
+    const { room, ready } = createRelayRoomWithSockets([gatewaySocket, clientSocket]);
+    await ready;
     const relay = room as unknown as {
       runtime: {
         gatewaySocket: FakeWebSocket | null;
@@ -999,7 +1118,8 @@ describe('relay worker helpers', () => {
     const otherClient = new FakeWebSocket({
       attachment: { role: 'client', clientId: 'ios-other', connectedAt: 3 },
     });
-    const { room } = createRelayRoomWithSockets();
+    const { room, ready } = createRelayRoomWithSockets([gatewaySocket, targetClient, otherClient]);
+    await ready;
     const relay = room as unknown as {
       runtime: {
         clients: Map<string, FakeWebSocket>;
@@ -1033,7 +1153,8 @@ describe('relay worker helpers', () => {
     const gatewaySocket = new FakeWebSocket({
       attachment: { role: 'gateway', clientId: 'gw-main', connectedAt: 1 },
     });
-    const { room } = createRelayRoomWithSockets();
+    const { room, ready } = createRelayRoomWithSockets([gatewaySocket]);
+    await ready;
     const relay = room as unknown as {
       runtime: {
         clients: Map<string, FakeWebSocket>;
@@ -1057,7 +1178,8 @@ describe('relay worker helpers', () => {
     const gatewaySocket = new FakeWebSocket({
       attachment: { role: 'gateway', clientId: 'gw-drop', connectedAt: 1 },
     });
-    const { room } = createRelayRoomWithSockets();
+    const { room, ready } = createRelayRoomWithSockets([gatewaySocket]);
+    await ready;
     const relay = room as unknown as {
       webSocketMessage: (ws: WebSocket, message: string | ArrayBuffer) => Promise<void>;
     };

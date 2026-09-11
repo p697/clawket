@@ -7,7 +7,6 @@ type Props = {
   onPress?: () => void;
   disabled?: boolean;
   elevation?: SurfaceElevation;
-  tone?: 'default' | 'muted' | 'elevated';
   selected?: boolean;
   padding?: 'none' | 'sm' | 'md' | 'lg';
   style?: StyleProp<ViewStyle>;
@@ -18,7 +17,6 @@ export function Card({
   onPress,
   disabled,
   elevation = 'flat',
-  tone = 'default',
   selected = false,
   padding = 'md',
   style,
@@ -32,7 +30,6 @@ export function Card({
   const chrome = [
     styles.card,
     styles[`padding${padding.toUpperCase()}` as 'paddingNONE' | 'paddingSM' | 'paddingMD' | 'paddingLG'],
-    tone === 'muted' ? styles.muted : tone === 'elevated' ? styles.elevated : null,
     selected ? styles.selected : null,
   ];
 
@@ -61,18 +58,17 @@ function createStyles(
 ) {
   return StyleSheet.create({
     card: {
-      borderRadius: Radius.md,
-      ...createSurfaceStyle(colors, scheme, elevation),
+      borderRadius: Radius.card,
+      backgroundColor: colors.surface,
+      ...(elevation === 'flat' ? {} : createSurfaceStyle(colors, scheme, elevation)),
     },
     paddingNONE: { padding: 0 },
     paddingSM: { padding: Space.sm },
     paddingMD: { padding: Space.md },
     paddingLG: { padding: Space.lg },
-    muted: { backgroundColor: colors.surfaceMuted },
-    elevated: { backgroundColor: colors.surfaceElevated },
-    selected: { backgroundColor: colors.primarySoft },
+    selected: { backgroundColor: colors.accentSoft },
     cardPressed: {
-      backgroundColor: colors.surfaceMuted,
+      backgroundColor: colors.surface,
     },
   });
 }

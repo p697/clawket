@@ -26,7 +26,36 @@ export type PostHogDiagnostics = {
   host: string | null;
   apiKeyMasked: string | null;
   clientInitialized: boolean;
+  recentEvents: ReadonlyArray<PostHogDiagnosticEvent>;
 };
+
+export type PostHogDiagnosticEvent = {
+  kind: 'event' | 'screen';
+  name: string;
+  properties: Readonly<Record<string, boolean | number | string>>;
+};
+
+const MAX_DIAGNOSTIC_EVENTS = 20;
+const recentEvents: PostHogDiagnosticEvent[] = [];
+
+export function recordPostHogDiagnosticEvent(
+  kind: PostHogDiagnosticEvent['kind'],
+  name: string,
+  properties: Record<string, boolean | number | string>,
+): void {
+  recentEvents.push({ kind, name, properties: { ...properties } });
+  if (recentEvents.length > MAX_DIAGNOSTIC_EVENTS) {
+    recentEvents.splice(0, recentEvents.length - MAX_DIAGNOSTIC_EVENTS);
+  }
+}
+
+export function capturePostHogScreen(
+  name: string,
+  properties: Record<string, boolean | number | string>,
+): Promise<void> {
+  recordPostHogDiagnosticEvent('screen', name, properties);
+  return posthogClient?.screen(name, properties).then(() => undefined) ?? Promise.resolve();
+}
 
 function maskSecret(value: string | null | undefined): string | null {
   const trimmed = value?.trim();
@@ -41,5 +70,9 @@ export function getPostHogDiagnostics(): PostHogDiagnostics {
     host: posthogConfig?.host ?? null,
     apiKeyMasked: maskSecret(posthogConfig?.apiKey),
     clientInitialized: Boolean(posthogClient),
+    recentEvents: recentEvents.map((event) => ({
+      ...event,
+      properties: { ...event.properties },
+    })),
   };
 }

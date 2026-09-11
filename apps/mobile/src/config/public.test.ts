@@ -2,6 +2,7 @@ import {
   buildSupportEmailUrl,
   resolvePublicAnalyticsConfig,
   resolvePublicAppLinks,
+  resolvePublicPaywallSocialProof,
   resolvePublicRevenueCatConfig,
   resolvePublicYouMindAuthConfig,
 } from './public';
@@ -96,6 +97,26 @@ describe('resolvePublicRevenueCatConfig', () => {
   });
 });
 
+describe('resolvePublicPaywallSocialProof', () => {
+  it('exposes the reviewed rating and quote defaults', () => {
+    expect(resolvePublicPaywallSocialProof()).toEqual({
+      rating: 4.4,
+      quote: 'Updated quickly, always stays ahead',
+    });
+  });
+
+  it('fails safe when an update is blank or outside the rating range', () => {
+    expect(resolvePublicPaywallSocialProof({ rating: Number.NaN, quote: '   ' })).toEqual({
+      rating: 4.4,
+      quote: 'Updated quickly, always stays ahead',
+    });
+    expect(resolvePublicPaywallSocialProof({ rating: 5, quote: ' Fresh quote ' })).toEqual({
+      rating: 5,
+      quote: 'Fresh quote',
+    });
+  });
+});
+
 describe('buildSupportEmailUrl', () => {
   it('builds a mailto link when an email is present', () => {
     expect(buildSupportEmailUrl('support@example.com')).toBe('mailto:support@example.com');
@@ -106,23 +127,14 @@ describe('buildSupportEmailUrl', () => {
 describe('resolvePublicYouMindAuthConfig', () => {
   it('returns null for every field when no env overrides are provided', () => {
     expect(resolvePublicYouMindAuthConfig({} as NodeJS.ProcessEnv)).toEqual({
-      googleIosClientId: null,
-      googleAndroidClientId: null,
-      googleWebClientId: null,
       appSecret: null,
     });
   });
 
-  it('reads explicit Google client ids from env', () => {
+  it('reads the OTP request signing secret from env', () => {
     expect(resolvePublicYouMindAuthConfig({
-      EXPO_PUBLIC_YOUMIND_GOOGLE_IOS_CLIENT_ID: 'ios-client-id',
-      EXPO_PUBLIC_YOUMIND_GOOGLE_ANDROID_CLIENT_ID: 'android-client-id',
-      EXPO_PUBLIC_YOUMIND_GOOGLE_WEB_CLIENT_ID: 'web-client-id',
       EXPO_PUBLIC_YOUMIND_APP_SECRET: 'app-secret',
     } as unknown as NodeJS.ProcessEnv)).toEqual({
-      googleIosClientId: 'ios-client-id',
-      googleAndroidClientId: 'android-client-id',
-      googleWebClientId: 'web-client-id',
       appSecret: 'app-secret',
     });
   });

@@ -3,7 +3,7 @@ import { FlatList, Pressable, StyleSheet, Text } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { useTranslation } from 'react-i18next';
 import { Check } from 'lucide-react-native';
-import { ModalSheet } from '../ui';
+import { Sheet } from '../ui';
 import { useAppTheme } from '../../theme';
 import { FontSize, FontWeight, Space } from '../../theme/tokens';
 import { THINKING_LEVELS } from '../../utils/gateway-settings';
@@ -34,7 +34,14 @@ export function ThinkingLevelPickerModal({
   const normalizedCurrent = current || 'off';
 
   return (
-    <ModalSheet visible={visible} onClose={onClose} title={t('Thinking Level')} maxHeight="50%">
+    <Sheet
+      visible={visible}
+      onClose={onClose}
+      closeAccessibilityLabel={t('Close', { ns: 'common' })}
+      title={t('Thinking Level')}
+      maxHeight="50%"
+      testID="thinking-level-sheet"
+    >
       <FlatList
         data={staticOptions}
         keyExtractor={(item) => item.value}
@@ -55,13 +62,13 @@ export function ThinkingLevelPickerModal({
             >
               <Text style={[styles.rowTitle, isActive && styles.rowTitleActive]}>{t(`thinking_${item.value}`)}</Text>
               {isActive && (
-                <Check size={18} color={theme.colors.primary} strokeWidth={2.5} />
+                <Check size={18} color={theme.colors.accent} strokeWidth={2.5} />
               )}
             </Pressable>
           );
         }}
       />
-    </ModalSheet>
+    </Sheet>
   );
 }
 
@@ -70,26 +77,26 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     row: {
       height: 48,
       borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: colors.border,
+      borderBottomColor: colors.line,
       paddingHorizontal: Space.lg,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
     },
     rowPressed: {
-      backgroundColor: colors.surfaceMuted,
+      backgroundColor: colors.surface,
     },
     rowDisabled: {
       opacity: 0.55,
     },
     rowTitle: {
-      color: colors.text,
-      fontSize: FontSize.base,
-      fontWeight: FontWeight.medium,
+      color: colors.ink,
+      fontSize: FontSize.secondary,
+      fontWeight: FontWeight.semibold,
       flexShrink: 1,
     },
     rowTitleActive: {
-      color: colors.primary,
+      color: colors.accent,
       fontWeight: FontWeight.semibold,
     },
   });

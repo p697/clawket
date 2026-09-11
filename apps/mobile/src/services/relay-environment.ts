@@ -2,6 +2,8 @@ import type { RelayServiceEnvironment } from '../types';
 
 export const OFFICIAL_PRODUCTION_REGISTRY_URL = 'https://registry.clawket.ai';
 export const OFFICIAL_PREVIEW_REGISTRY_URL = 'https://clawket-registry-preview.clawket.workers.dev';
+export const OFFICIAL_HERMES_PRODUCTION_REGISTRY_URL = 'https://hermes-registry.clawket.ai';
+export const OFFICIAL_HERMES_PREVIEW_REGISTRY_URL = 'https://clawket-hermes-registry-preview.clawket.workers.dev';
 
 export type RelayEnvironmentSelectionIssue =
   | 'preview_requires_debug_mode'
@@ -10,8 +12,8 @@ export type RelayEnvironmentSelectionIssue =
 export function resolveOfficialRelayEnvironment(serverUrl?: string): RelayServiceEnvironment | null {
   const origin = normalizeOrigin(serverUrl);
   if (!origin) return null;
-  if (origin === normalizeOrigin(OFFICIAL_PREVIEW_REGISTRY_URL)) return 'preview';
-  if (origin === normalizeOrigin(OFFICIAL_PRODUCTION_REGISTRY_URL)) return 'production';
+  if (OFFICIAL_PREVIEW_REGISTRY_ORIGINS.has(origin)) return 'preview';
+  if (OFFICIAL_PRODUCTION_REGISTRY_ORIGINS.has(origin)) return 'production';
   return null;
 }
 
@@ -38,6 +40,22 @@ export function getRelayPairCommand(environment: RelayServiceEnvironment): strin
 export function getOfficialRelayRegistryUrl(environment: RelayServiceEnvironment): string {
   return environment === 'preview' ? OFFICIAL_PREVIEW_REGISTRY_URL : OFFICIAL_PRODUCTION_REGISTRY_URL;
 }
+
+export function getOfficialHermesRegistryUrl(environment: RelayServiceEnvironment): string {
+  return environment === 'preview'
+    ? OFFICIAL_HERMES_PREVIEW_REGISTRY_URL
+    : OFFICIAL_HERMES_PRODUCTION_REGISTRY_URL;
+}
+
+const OFFICIAL_PREVIEW_REGISTRY_ORIGINS = new Set([
+  normalizeOrigin(OFFICIAL_PREVIEW_REGISTRY_URL),
+  normalizeOrigin(OFFICIAL_HERMES_PREVIEW_REGISTRY_URL),
+]);
+
+const OFFICIAL_PRODUCTION_REGISTRY_ORIGINS = new Set([
+  normalizeOrigin(OFFICIAL_PRODUCTION_REGISTRY_URL),
+  normalizeOrigin(OFFICIAL_HERMES_PRODUCTION_REGISTRY_URL),
+]);
 
 function normalizeOrigin(value?: string): string | null {
   const trimmed = value?.trim();

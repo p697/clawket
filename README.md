@@ -10,7 +10,7 @@
 
 [中文说明](./README.zh-CN.md)
 
-Clawket is an open-source mobile app for managing your AI agents on the go. It currently supports [OpenClaw](https://github.com/openclaw/openclaw) and [Hermes](https://github.com/NousResearch/hermes-agent), and is available on iOS and Android.
+Clawket 3.0 is the session control tower for self-hosted agents: see what every agent is doing, enter a conversation in one step, and take control when needed. It supports [OpenClaw](https://github.com/openclaw/openclaw), [Hermes](https://github.com/NousResearch/hermes-agent), and chat with YouMind Sprite on iOS and Android.
 
 <p align="center">
   <a href="https://apps.apple.com/app/id6759597015">
@@ -23,10 +23,12 @@ Clawket is an open-source mobile app for managing your AI agents on the go. It c
 
 ## Key Features
 
-- **📱 Mobile control for OpenClaw** — Chat, manage agents, configure models, schedule cron jobs, and monitor sessions — all from your phone
-- **🔒 Secure by default** — Token-based authentication + TLS encryption for both relay and direct connections
-- **🌐 Flexible connectivity** — Connect via cloud relay, local network, or Tailscale — no port forwarding needed
-- **🖥️ Full remote console** — Manage agents, channels, skills, files, devices, and logs without touching a terminal
+- **📱 One agent roster** — See recent activity, unread work, and items that need attention across connections
+- **💬 One continuous thread** — Chat, inspect runs and approvals, and switch sessions without a second runtime
+- **🛠️ Backend-aware controls** — Manage the models, skills, schedules, files, devices, and logs each backend actually supports
+- **✨ YouMind Sprite chat** — A dedicated adapter provides text chat, history, streaming, and abort without treating Sprite as a Relay backend
+- **🔒 Private by design** — Relay forwards traffic without storing messages; local message caches are scoped to each connection
+- **🌐 Flexible connectivity** — Connect through Relay, a local network, Tailscale, or a custom endpoint
 - **🏗️ Self-hostable** — Run your own relay infrastructure, or skip it entirely with direct LAN/Tailscale connections
 - **📦 Open source monorepo** — Mobile app (Expo/React Native), relay workers (Cloudflare), and bridge CLI — all in one repo, build from source
 
@@ -44,25 +46,27 @@ Clawket is an open-source mobile app for managing your AI agents on the go. It c
 └──────────────────┘                                  └──────────────┘
 ```
 
-Clawket supports two connection paths:
+For OpenClaw and Hermes, Clawket supports two connection paths:
 
 - **Relay mode** — Use `relay-registry` + `relay-worker` for a cloud-backed connection with automatic pairing.
 - **Direct mode** — Connect directly via LAN IP, Tailscale IP, or any custom gateway URL — no relay infrastructure needed.
 
+YouMind Sprite uses its own HTTPS adapter. It is a supported chat backend, not a Relay service instance or transport kind.
+
 ## How It Works
 
 1. Run `clawket pair` on your Mac/PC — the bridge auto-detects which local backends are available and prints one or more time-limited QR codes.
-2. Run `clawket pair --local` if you want direct local pairing instead of relay-backed pairing.
+2. Run `clawket pair local` if you want direct local pairing instead of relay-backed pairing (`--local` remains a compatibility alias).
 3. Scan the QR with the Clawket mobile app to trust that machine.
 4. In relay mode, the registry verifies the pairing and the relay worker carries real-time WebSocket traffic between your phone and the bridge.
-5. In direct mode, the app connects straight to your backend bridge over LAN, Tailscale, or another direct URL — no relay needed.
+5. In direct mode, the app connects straight to your backend endpoint over LAN, Tailscale, or another direct URL — no relay needed.
 6. After the first pairing, reconnection is automatic.
 
 Current pairing behavior:
 
-- If the machine only has OpenClaw, `clawket pair` and `clawket pair --local` behave the same as before.
-- If the machine only has Hermes, `clawket pair` and `clawket pair --local` generate a Hermes local bridge QR.
-- If the machine has both OpenClaw and Hermes, Clawket prints one QR per backend and clearly labels them.
+- `clawket pair` uses Relay for every detected backend and prints one labeled result per backend.
+- After Hermes Relay pairing, the CLI also tries to start the Clawket-managed local bridge and Relay runtime so the code is immediately usable.
+- `clawket pair local` is the explicit local-only path and likewise prints one result per detected local-capable backend.
 
 ## Workspace Layout
 
@@ -72,9 +76,12 @@ Current pairing behavior:
 | `apps/relay-registry` | Cloudflare registry worker |
 | `apps/relay-worker` | Cloudflare relay worker |
 | `apps/bridge-cli` | Publishable `@p697/clawket` bridge CLI |
+| `packages/agent-protocol` | Backend-neutral adapter contracts, capabilities, and fixtures |
 | `packages/bridge-core` | Pairing / config / service helpers |
 | `packages/bridge-runtime` | Bridge runtime |
 | `packages/relay-shared` | Shared relay protocol & types |
+
+The two Relay workspaces deploy OpenClaw and Hermes from one policy-driven codebase. Production and Preview still use separate Worker services, KV namespaces, Durable Object namespaces, and credentials for each backend.
 
 ## Quick Start
 
@@ -90,7 +97,7 @@ npm run mobile:sync:native
 npm run mobile:dev:ios
 ```
 
-This command prepares the embedded Office web assets and launches the iOS dev build.
+This synchronizes the native project and launches the iOS development build.
 
 For Android development:
 
@@ -111,21 +118,21 @@ clawket pair
 
 This command auto-detects OpenClaw and Hermes on the machine:
 
-- OpenClaw uses relay pairing by default
-- Hermes uses local bridge pairing for now
+- OpenClaw and Hermes use Relay pairing by default
+- Hermes pairing also tries to start its Clawket-managed local bridge and Relay runtime
 - If both are available, you get one QR code per backend
 
 For direct local pairing without relay infrastructure:
 
 ```bash
-clawket pair --local
+clawket pair local
 ```
 
 To force a specific backend:
 
 ```bash
 clawket pair --backend hermes
-clawket pair --local --backend hermes
+clawket pair local --backend hermes
 ```
 
 Then scan the generated QR code in the app.
@@ -217,14 +224,14 @@ Clawket is designed so the public repository can be cloned and run without depen
 
 Key defaults for self-hosters:
 
-- `clawket pair` requires `--server` or `CLAWKET_REGISTRY_URL` — no hardcoded registry
-- `clawket pair --local` works without any Cloudflare infrastructure
+- A self-hosted OpenClaw Registry is selected with `--server` or `CLAWKET_REGISTRY_URL`; its endpoint is not hardcoded in the source checkout
+- `clawket pair local` works without any Cloudflare infrastructure
 - OpenClaw pairing state remains in its legacy config, while Hermes pairing state is stored separately, so upgrading the bridge does not break existing OpenClaw pairings
 - Checked-in `wrangler.toml` files use placeholder bindings and `example.com` endpoints only
 - If analytics, support, or legal links are unset, the app disables or hides those integrations
 - If RevenueCat is unset, the app skips subscription billing and defaults to unlocked Pro access
 
-For the full distribution model, read [SELF_HOSTING_MODEL.md](./SELF_HOSTING_MODEL.md).
+For the full distribution model, read [docs/self-hosting.md](./docs/self-hosting.md).
 
 ### Self-Hosting Docs
 
@@ -232,6 +239,13 @@ For the full distribution model, read [SELF_HOSTING_MODEL.md](./SELF_HOSTING_MOD
 - [docs/relay/CONFIGURATION.md](./docs/relay/CONFIGURATION.md)
 - [docs/relay/LOCAL-DEVELOPMENT.md](./docs/relay/LOCAL-DEVELOPMENT.md)
 - [docs/relay/ARCHITECTURE.md](./docs/relay/ARCHITECTURE.md)
+
+## Privacy
+
+- Relay forwards live traffic and does not persist message content.
+- Message caches stay on the device and deleting a connection clears that connection's cache.
+- Product analytics use low-cardinality diagnostics and usage events; they do not include message text, prompts, raw identifiers, credentials, or secret-bearing URLs.
+- Pairing credentials and release-only service keys stay out of the repository.
 
 ## Verification
 

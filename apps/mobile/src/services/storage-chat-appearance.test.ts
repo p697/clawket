@@ -3,7 +3,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 
 jest.mock('../theme', () => ({
   defaultAccentId: 'iceBlue',
-  isAccentScale: jest.fn(() => false),
+  isBuiltInAccentId: jest.fn(() => false),
 }));
 
 import { StorageService } from './storage';

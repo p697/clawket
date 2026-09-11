@@ -1,14 +1,17 @@
 {
-  "src/screens/ChatScreen/components/ChatSharePosterModal.tsx": {
-    "border-radius-literal": 3,
-    "hardcoded-color": 13,
-    "font-size-literal": 10,
-    "border-width-literal": 6
+  "src/components/chat/ChatAppearancePreviewCard.tsx": {
+    "list-row-border-width": 1
   },
-  "src/screens/ConsoleScreen/StatsPosterModal.tsx": {
-    "border-radius-literal": 4,
-    "hardcoded-color": 3,
-    "font-size-literal": 10,
-    "border-width-literal": 2
+  "src/components/chat/JsonTree.tsx": {
+    "emoji-icon-literal": 1
+  },
+  "src/components/chat/PairingPendingCard.tsx": {
+    "emoji-icon-literal": 1
+  },
+  "src/components/MessageBubble.tsx": {
+    "list-row-border-width": 1
+  },
+  "src/components/pro/ProPaywallOverlay.tsx": {
+    "emoji-icon-literal": 5
   }
 }

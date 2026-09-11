@@ -5,16 +5,18 @@ import * as ImagePicker from 'expo-image-picker';
 import i18n from '../i18n';
 import { useAppContext } from './AppContext';
 import { useGatewayOverlay } from './GatewayOverlayContext';
-import { QRScannerScreen } from '../screens/ConfigScreen/QRScannerScreen';
-import { parseQRPayload, type QRScanResult } from '../screens/ConfigScreen/qrPayload';
+import { ConfirmationModal } from '../components/ui/ConfirmationModal';
+import { QRScannerScreen } from '../connection/pairing/QRScannerScreen';
+import { parseQRPayload, type QRScanResult } from '../connection/pairing/qrPayload';
 import {
+  assessPairingPayload,
   claimRelayPairing,
-  createGatewayConfigFromScan,
-  reconnectGatewayWithOverlay,
-  toRuntimeConfig,
   type GatewayScanPayload,
-} from '../hooks/gatewayScanFlow';
-import { isUnsupportedDirectLocalTlsConfig, shouldSuppressDuplicatePairingAlert } from '../hooks/gatewayConfigForm.utils';
+  type PairingBackendKind,
+} from '../connection/pairing/gateway-scan-flow';
+import { savePairedConnection } from '../connection/pairing/save-paired-connection';
+import { getConnectionRuntime } from '../connection';
+import { isUnsupportedDirectLocalTlsConfig, shouldSuppressDuplicatePairingAlert } from '../connection/pairing/connection-form-utils';
 import { getGatewayCameraPermissionAction } from '../utils/gateway-camera-permission';
 import { isMacCatalyst } from '../utils/platform';
 import {
@@ -26,17 +28,34 @@ import {
 } from '../services/pairing-session';
 import { resolveOfficialRelayEnvironment } from '../services/relay-environment';
 import { analyticsEvents } from '../services/analytics/events';
+import type { RelayServiceEnvironment } from '../types';
 
 type GatewayScannerOptions = {
   onScanned: (result: QRScanResult) => void | Promise<void>;
   onCancel?: () => void;
 };
 
+type PendingPairingConfirmation = Readonly<{
+  displayName: string;
+  payload: GatewayScanPayload;
+  resolve: (connected: boolean) => void;
+}>;
+
+type SecurePairingExpectation = Readonly<{
+  expectedBackendKind?: PairingBackendKind;
+  environment?: RelayServiceEnvironment;
+}>;
+
 type GatewayScannerContextType = {
   openGatewayScanner: (options: GatewayScannerOptions) => void;
   importGatewayQrImage: (options?: GatewayScannerOptions) => Promise<void>;
-  connectPairingLink: (url: string) => Promise<boolean>;
-  connectPairingCode: (input: { serverUrl: string; pairingCode: string }) => Promise<boolean>;
+  connectPairingLink: (url: string, expectation?: SecurePairingExpectation) => Promise<boolean>;
+  connectPairingCode: (input: {
+    serverUrl: string;
+    pairingCode: string;
+    expectedBackendKind?: PairingBackendKind;
+    environment?: RelayServiceEnvironment;
+  }) => Promise<boolean>;
 };
 
 const GatewayScannerContext = React.createContext<GatewayScannerContextType | null>(null);
@@ -44,15 +63,16 @@ const GatewayScannerContext = React.createContext<GatewayScannerContextType | nu
 export function GatewayScannerProvider({ children }: { children: React.ReactNode }): React.JSX.Element {
   const [scannerVisible, setScannerVisible] = useState(false);
   const [scannerOptions, setScannerOptions] = useState<GatewayScannerOptions | null>(null);
+  const [pendingPairingConfirmation, setPendingPairingConfirmation] = useState<
+    PendingPairingConfirmation | null
+  >(null);
   const relayClaimInFlightRef = useRef<Map<string, Promise<GatewayScanPayload>>>(new Map());
+  const pendingPairingConfirmationRef = useRef<PendingPairingConfirmation | null>(null);
   const lastPairingAlertRef = useRef<{ message: string; atMs: number }>({ message: '', atMs: 0 });
-  const switchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const {
     pendingAddGateway,
     clearPendingAddGateway,
-    gateway,
     debugMode,
-    onSaved,
   } = useAppContext();
   const { showOverlay, hideOverlay } = useGatewayOverlay();
 
@@ -70,7 +90,7 @@ export function GatewayScannerProvider({ children }: { children: React.ReactNode
     }
     lastPairingAlertRef.current = { message, atMs: now };
     hideOverlay();
-    Alert.alert('Pairing Failed', message);
+    Alert.alert(i18n.t('Connection failed', { ns: 'common' }), message);
   }, [hideOverlay]);
 
   const connectFromScan = useCallback(async (payload: GatewayScanPayload): Promise<boolean> => {
@@ -94,65 +114,84 @@ export function GatewayScannerProvider({ children }: { children: React.ReactNode
       return false;
     }
 
-    let created;
     try {
-      ({ created } = await createGatewayConfigFromScan({
+      await savePairedConnection({
+        runtime: getConnectionRuntime(),
         payload: resolved,
         debugMode,
-      }));
+        source: 'gateway_scanner',
+      });
     } catch {
       showPairingFailedAlert(i18n.t('Could not save this connection. Try again.', { ns: 'config' }));
       return false;
     }
-
-    reconnectGatewayWithOverlay({
-      gateway,
-      runtimeConfig: toRuntimeConfig(created, debugMode),
-      onSaved,
-      showOverlay,
-      hideOverlay,
-      message: i18n.t('Switching Gateway...', { ns: 'common' }),
-      switchTimerRef,
-    });
+    hideOverlay();
     return true;
-  }, [debugMode, gateway, hideOverlay, onSaved, showOverlay, showPairingFailedAlert]);
+  }, [debugMode, hideOverlay, showOverlay, showPairingFailedAlert]);
 
   const createFromScan = useCallback(async (payload: GatewayScanPayload): Promise<void> => {
     await connectFromScan(payload);
   }, [connectFromScan]);
 
-  const confirmResolvedPairing = useCallback((resolved: ResolvedPairingSession): Promise<boolean> => {
+  const confirmResolvedPairing = useCallback((
+    resolved: ResolvedPairingSession,
+    expectation?: SecurePairingExpectation,
+  ): Promise<boolean> => {
     const parsed = parseQRPayload(resolved.rawQrPayload);
     if (!parsed) {
       showPairingFailedAlert(i18n.t('This pairing invitation does not contain valid connection info.', { ns: 'config' }));
       return Promise.resolve(false);
     }
-    if (resolveOfficialRelayEnvironment(resolved.serverUrl) === 'preview' && !debugMode) {
-      showPairingFailedAlert(i18n.t('Enable Debug Mode before pairing with the Preview environment.', { ns: 'config' }));
+    const assessment = assessPairingPayload({
+      payload: parsed,
+      expectedBackendKind: expectation?.expectedBackendKind ?? 'openclaw',
+      selectedEnvironment: expectation?.environment ?? (debugMode ? 'preview' : 'production'),
+      debugMode,
+      sourceServerUrl: resolved.serverUrl,
+    });
+    if (assessment.kind === 'rejected') {
+      const message = assessment.reason === 'preview_requires_debug_mode'
+        ? i18n.t('Enable Debug Mode before pairing with the Preview environment.', { ns: 'config' })
+        : i18n.t('This pairing invitation does not contain valid connection info.', { ns: 'config' });
+      showPairingFailedAlert(message);
       return Promise.resolve(false);
     }
     const displayName = resolved.displayName?.trim()
       || parsed.relay?.displayName?.trim()
       || i18n.t('your computer', { ns: 'config' });
-    return new Promise((resolve) => {
-      Alert.alert(
-        i18n.t('Connect to {{name}}?', { ns: 'config', name: displayName }),
-        i18n.t('This secure pairing invitation will add the computer to Clawket.', { ns: 'config' }),
-        [
-          { text: i18n.t('Cancel', { ns: 'common' }), style: 'cancel', onPress: () => resolve(false) },
-          {
-            text: i18n.t('Connect', { ns: 'config' }),
-            onPress: () => {
-              void connectFromScan(parsed).then(resolve);
-            },
-          },
-        ],
-        { onDismiss: () => resolve(false) },
-      );
+    return new Promise<boolean>((resolve) => {
+      pendingPairingConfirmationRef.current?.resolve(false);
+      const pending = { displayName, payload: parsed, resolve };
+      pendingPairingConfirmationRef.current = pending;
+      setPendingPairingConfirmation(pending);
     });
-  }, [connectFromScan, debugMode, showPairingFailedAlert]);
+  }, [debugMode, showPairingFailedAlert]);
 
-  const connectPairingLink = useCallback(async (url: string): Promise<boolean> => {
+  const dismissPairingConfirmation = useCallback(() => {
+    const pending = pendingPairingConfirmationRef.current;
+    pendingPairingConfirmationRef.current = null;
+    setPendingPairingConfirmation(null);
+    pending?.resolve(false);
+  }, []);
+
+  const acceptPairingConfirmation = useCallback(() => {
+    const pending = pendingPairingConfirmationRef.current;
+    pendingPairingConfirmationRef.current = null;
+    setPendingPairingConfirmation(null);
+    if (!pending) return;
+    void connectFromScan(pending.payload).then(pending.resolve, () => pending.resolve(false));
+  }, [connectFromScan]);
+
+  useEffect(() => () => {
+    const pending = pendingPairingConfirmationRef.current;
+    pendingPairingConfirmationRef.current = null;
+    pending?.resolve(false);
+  }, []);
+
+  const connectPairingLink = useCallback(async (
+    url: string,
+    expectation?: SecurePairingExpectation,
+  ): Promise<boolean> => {
     const descriptor = parsePairingLink(url);
     if (!descriptor) return false;
     const environment = resolveOfficialRelayEnvironment(descriptor.serverUrl) ?? 'production';
@@ -160,7 +199,7 @@ export function GatewayScannerProvider({ children }: { children: React.ReactNode
     try {
       const resolved = await resolvePairingLink(url);
       hideOverlay();
-      const connected = await confirmResolvedPairing(resolved);
+      const connected = await confirmResolvedPairing(resolved, expectation);
       analyticsEvents.gatewaySecurePairingFinished({ method: 'link', environment, connected });
       return connected;
     } catch (error) {
@@ -174,10 +213,15 @@ export function GatewayScannerProvider({ children }: { children: React.ReactNode
   const connectPairingCode = useCallback(async (input: {
     serverUrl: string;
     pairingCode: string;
+    expectedBackendKind?: PairingBackendKind;
+    environment?: RelayServiceEnvironment;
   }): Promise<boolean> => {
     const environment = resolveOfficialRelayEnvironment(input.serverUrl) ?? 'production';
     try {
-      const connected = await confirmResolvedPairing(await resolvePairingCode(input));
+      const connected = await confirmResolvedPairing(await resolvePairingCode(input), {
+        expectedBackendKind: input.expectedBackendKind,
+        environment: input.environment,
+      });
       analyticsEvents.gatewaySecurePairingFinished({ method: 'code', environment, connected });
       return connected;
     } catch (error) {
@@ -311,6 +355,23 @@ export function GatewayScannerProvider({ children }: { children: React.ReactNode
       <Modal visible={scannerVisible} animationType="slide" presentationStyle="fullScreen">
         <QRScannerScreen onScanned={handleScanned} onCancel={handleCancel} />
       </Modal>
+      <ConfirmationModal
+        visible={pendingPairingConfirmation !== null}
+        title={i18n.t('Connect to {{name}}?', {
+          ns: 'config',
+          name: pendingPairingConfirmation?.displayName
+            ?? i18n.t('your computer', { ns: 'config' }),
+        })}
+        message={i18n.t(
+          'This secure pairing invitation will add the computer to Clawket.',
+          { ns: 'config' },
+        )}
+        cancelLabel={i18n.t('Cancel', { ns: 'common' })}
+        confirmLabel={i18n.t('Connect', { ns: 'config' })}
+        testID="gateway-secure-pairing-confirmation"
+        onClose={dismissPairingConfirmation}
+        onConfirm={acceptPairingConfirmation}
+      />
     </GatewayScannerContext.Provider>
   );
 }

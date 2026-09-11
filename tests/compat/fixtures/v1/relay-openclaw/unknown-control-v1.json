@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "id": "openclaw-2.1x-unknown-control-v1",
+  "backend": "openclaw",
+  "recordedAt": "2026-09-05T00:00:00.000Z",
+  "description": "Pinned 2.1.x App message dispatchers ignore an additive relay.ready control event and continue routing the next ordinary Gateway frame.",
+  "captureMethod": "The exact handleRawMessage and handleRelayControlFrame methods plus parseRelayControlFrame are extracted from each pinned Git commit, transpiled in memory, and executed with observable socket and downstream-dispatch boundaries.",
+  "sources": [
+    {
+      "label": "2.1.0 shipped production client source",
+      "commit": "c2bfe068da15837d94dce70c3247fb39759e9c59",
+      "provenance": "production-build"
+    },
+    {
+      "label": "2.1.1 inferred client protocol source",
+      "commit": "31a857abe4aaa362ec335213c8e381135d3ef0a0",
+      "provenance": "inferred-protocol"
+    },
+    {
+      "label": "2.1.2 version anchor client source",
+      "commit": "3e37a72e95615ace91c387571f0ef62acadd92e5",
+      "provenance": "version-bump"
+    },
+    {
+      "label": "latest pre-3.0 client source",
+      "commit": "d9c1adae8192839c78cb6e10091551cf342c3a93",
+      "provenance": "pre-3.0-snapshot"
+    }
+  ],
+  "ignoredPaths": [],
+  "frames": [
+    {
+      "sequence": 1,
+      "label": "relay-ready.unknown-control",
+      "kind": "websocket",
+      "direction": "relay-to-client",
+      "annotation": "relay.ready is a future additive control event and is intentionally unknown to the pinned 2.1.x handlers.",
+      "payload": "__clawket_relay_control__:{\"type\":\"control\",\"event\":\"relay.ready\",\"payload\":{\"capabilities\":[\"bridge.capabilities.v2\"]}}"
+    },
+    {
+      "sequence": 2,
+      "label": "relay-ready.follow-up",
+      "kind": "websocket",
+      "direction": "relay-to-client",
+      "payload": {
+        "type": "event",
+        "event": "connect.challenge",
+        "payload": {
+          "nonce": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "ts": 1778198400400
+        }
+      }
+    }
+  ]
+}

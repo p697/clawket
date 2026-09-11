@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { execFileSync, spawn } from 'node:child_process';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
+import { resolveHermesSourcePath } from '@clawket/bridge-runtime';
 import { setTimeout as delay } from 'node:timers/promises';
 import qrcodeTerminal from 'qrcode-terminal';
 import {
@@ -70,11 +71,21 @@ import {
 
 const HERMES_SERVICE_WATCHDOG_INTERVAL_MS = 30_000;
 const PREVIEW_REGISTRY_URL = 'https://clawket-registry-preview.clawket.workers.dev';
+// bridge-runtime is already bundled into the published CLI, but relay-shared is
+// not a CLI dependency. Keep this wire value local until those package
+// boundaries converge instead of widening the published dependency surface.
+const BRIDGE_CAPABILITIES_V2 = 'bridge.capabilities.v2';
 
 async function main(): Promise<void> {
   const [, , command = 'help', ...args] = process.argv;
   const isServiceMode = hasFlag(args, '--service');
   const jsonOutput = hasFlag(args, '--json');
+
+  // Help must be side-effect free for every command, including nested commands.
+  if (command === '--help' || command === '-h' || hasFlag(args, '--help') || hasFlag(args, '-h')) {
+    printHelp();
+    return;
+  }
 
   if (command === 'hermes') {
     await handleHermesCommand(args, jsonOutput);
@@ -128,6 +139,7 @@ async function main(): Promise<void> {
         transport: 'relay',
         bridgeId: paired.config.bridgeId,
         relayUrl: paired.config.relayUrl,
+        pairingCode: paired.accessCode,
         accessCodeExpiresAt: paired.accessCodeExpiresAt,
         qrImagePath,
       });
@@ -135,6 +147,7 @@ async function main(): Promise<void> {
       console.log(`Hermes Bridge ID: ${paired.config.bridgeId}`);
       console.log('\nScan this Hermes Relay QR in the Clawket app:\n');
       qrcodeTerminal.generate(paired.qrPayload, { small: true });
+      console.log(`Pairing code: ${paired.accessCode}`);
       console.log(`Expires: ${formatLocalTime(paired.accessCodeExpiresAt)}`);
       console.log(`QR image: ${qrImagePath}`);
     }
@@ -261,13 +274,19 @@ async function main(): Promise<void> {
     }
 
     if (isServiceMode) {
-      writeServiceState(process.pid, [SECURE_PAIRING_V2_CAPABILITY]);
+      writeServiceState(process.pid, [
+        SECURE_PAIRING_V2_CAPABILITY,
+        BRIDGE_CAPABILITIES_V2,
+      ]);
     }
 
+    const bridgeVersion = readCliVersion();
     const runtimes = runtimeConfigs.map(({ environment, config }) => {
       const runtime = new BridgeRuntime({
+        clientChannels: true,
         config,
         gatewayUrl,
+        bridgeVersion,
         onLog: (line) => {
           emitRuntimeLine(`[clawket:${environment}] ${line}`);
         },
@@ -615,7 +634,7 @@ function canPairHermes(): boolean {
 }
 
 function resolveDefaultHermesSourcePath(): string {
-  return join(homedir(), '.hermes', 'hermes-agent');
+  return resolveHermesSourcePath();
 }
 
 async function handleHermesCommand(args: string[], jsonOutput: boolean): Promise<void> {
@@ -1006,6 +1025,7 @@ async function performHermesRelayPairing(args: string[]): Promise<PairSuccessRes
     summaryLines: [
       `Hermes Bridge ID: ${paired.config.bridgeId}`,
       `Hermes Relay URL: ${paired.config.relayUrl}`,
+      `Pairing code: ${paired.accessCode}`,
       `Expires: ${formatLocalTime(paired.accessCodeExpiresAt)}`,
       `QR image: ${qrImagePath}`,
       runtimeMessage,
@@ -1016,6 +1036,7 @@ async function performHermesRelayPairing(args: string[]): Promise<PairSuccessRes
       transport: 'relay',
       bridgeId: paired.config.bridgeId,
       relayUrl: paired.config.relayUrl,
+      pairingCode: paired.accessCode,
       accessCodeExpiresAt: paired.accessCodeExpiresAt,
       qrImagePath,
       runtimeMessage,
@@ -1260,6 +1281,7 @@ async function printStatus(): Promise<void> {
   console.log(`Service Path: ${report.servicePath || '-'}`);
   console.log(`CLI Log: ${report.logPath}`);
   console.log(`CLI Error Log: ${report.errorLogPath}`);
+  console.log(`Bridge Capabilities: ${formatCapabilityList(report.openclawBridgeCapabilities)}`);
   console.log('');
   console.log('[OpenClaw Preview]');
   console.log(`Paired: ${previewConfig ? 'yes' : 'no'}`);
@@ -1275,6 +1297,7 @@ async function printStatus(): Promise<void> {
   console.log(`Bridge Health: ${report.hermesBridgeHealthUrl ?? '-'}`);
   console.log(`Bridge Reachable: ${report.hermesBridgeReachable ? 'yes' : 'no'}`);
   console.log(`Hermes API Reachable: ${report.hermesApiReachable == null ? '-' : report.hermesApiReachable ? 'yes' : 'no'}`);
+  console.log(`Bridge Capabilities: ${formatCapabilityList(report.hermesBridgeCapabilities)}`);
   console.log(`Relay Paired: ${report.hermesRelayPaired ? 'yes' : 'no'} (${report.hermesRelayConfigPath})`);
   console.log(`Relay Server: ${report.hermesRelayServerUrl ?? '-'}`);
   console.log(`Relay URL: ${report.hermesRelayUrl ?? '-'}`);
@@ -1380,6 +1403,7 @@ async function startHermesBridgeRuntime(options: HermesBridgeRuntimeOptions): Pr
     port,
     apiBaseUrl,
     bridgeToken: token,
+    bridgeVersion: readCliVersion(),
     startHermesIfNeeded,
     onLog: (line) => {
       console.log(`[${Date.now()}] [hermes] ${line}`);
@@ -1737,6 +1761,7 @@ function printDoctorReport(report: Awaited<ReturnType<typeof buildDoctorReport>>
   console.log(`Service path: ${report.servicePath || '-'}`);
   console.log(`Log path: ${report.logPath}`);
   console.log(`Error log path: ${report.errorLogPath}`);
+  console.log(`Bridge capabilities: ${formatCapabilityList(report.openclawBridgeCapabilities)}`);
   console.log(`OpenClaw dir: ${report.openclawConfigDir}`);
   console.log(`OpenClaw media: ${report.openclawMediaDir}`);
   console.log(`OpenClaw config: ${report.openclawConfigFound ? 'found' : 'missing'}`);
@@ -1752,6 +1777,7 @@ function printDoctorReport(report: Awaited<ReturnType<typeof buildDoctorReport>>
   console.log(`Bridge health: ${report.hermesBridgeHealthUrl ?? '-'}`);
   console.log(`Bridge reachable: ${report.hermesBridgeReachable ? 'yes' : 'no'}`);
   console.log(`Hermes API reachable: ${report.hermesApiReachable == null ? '-' : report.hermesApiReachable ? 'yes' : 'no'}`);
+  console.log(`Bridge capabilities: ${formatCapabilityList(report.hermesBridgeCapabilities)}`);
   console.log(`Relay paired: ${report.hermesRelayPaired ? 'yes' : 'no'} (${report.hermesRelayConfigPath})`);
   console.log(`Relay server: ${report.hermesRelayServerUrl ?? '-'}`);
   console.log(`Relay URL: ${report.hermesRelayUrl ?? '-'}`);
@@ -1760,6 +1786,10 @@ function printDoctorReport(report: Awaited<ReturnType<typeof buildDoctorReport>>
   console.log(`Hermes bridge error log: ${report.hermesBridgeErrorLogPath}`);
   console.log(`Hermes relay log: ${report.hermesRelayLogPath}`);
   console.log(`Hermes relay error log: ${report.hermesRelayErrorLogPath}`);
+}
+
+function formatCapabilityList(capabilities: readonly string[]): string {
+  return capabilities.length > 0 ? capabilities.join(', ') : '-';
 }
 
 function requirePairingConfig(environment: PairingEnvironment = 'production') {

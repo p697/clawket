@@ -2,18 +2,17 @@
   "expo": {
     "name": "Clawket",
     "slug": "clawket",
-    "version": "2.1.2",
+    "version": "3.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": false,
+      "supportsTablet": true,
       "bundleIdentifier": "com.p697.clawket",
       "associatedDomains": [
         "applinks:registry.clawket.ai",
@@ -82,7 +81,6 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-apple-authentication",
       "expo-secure-store",
       [
         "expo-location",
@@ -127,6 +125,7 @@
       "./plugins/with-locales",
       "./plugins/with-alternate-app-icons",
       "./plugins/with-android-release-signing",
+      "./plugins/with-paste-input-setup",
       "./plugins/with-xcode-env"
     ],
     "scheme": "clawket",

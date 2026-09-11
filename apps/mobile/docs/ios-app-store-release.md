@@ -1,6 +1,6 @@
 # iOS App Store Release Checklist
 
-This document tracks the local Xcode release process and App Store Connect items needed to ship Clawket with RevenueCat-powered subscriptions.
+This document tracks the local Xcode release process and App Store Connect items needed to ship Clawket with RevenueCat-powered subscriptions and lifetime access.
 
 ## Current App Identifiers
 
@@ -9,14 +9,16 @@ This document tracks the local Xcode release process and App Store Connect items
 - Apple Team ID: keep local to the release environment
 - App Store Connect app ID: keep local to the release environment
 - RevenueCat entitlement: `Clawket Pro`
-- RevenueCat offering: `default`
+- RevenueCat control offering: `pro`
 - RevenueCat packages:
-  - `$rc_monthly`
   - `$rc_annual`
+  - `$rc_lifetime`
+  - `$rc_monthly`
 - App Store subscription group: `Clawket Pro`
 - App Store products:
   - `com.p697.clawket.pro.monthly`
   - `com.p697.clawket.pro.yearly`
+  - `com.p697.clawket.pro.lifetime`
 
 ## 1. App Store Connect Checklist
 
@@ -30,11 +32,12 @@ This document tracks the local Xcode release process and App Store Connect items
 
 - [ ] `Clawket Pro Monthly` is configured
 - [ ] `Clawket Pro Yearly` is configured
-- [ ] Both are in the same subscription group: `Clawket Pro`
-- [ ] Both have pricing configured
-- [ ] Both have required localizations
-- [ ] Both have a review screenshot
-- [ ] Both are attached to the app version that will be submitted for review
+- [ ] Monthly and Yearly are in the same subscription group: `Clawket Pro`
+- [ ] `Clawket Pro Lifetime` is configured as a non-consumable In-App Purchase at USD $49.99, with automatic storefront conversion
+- [ ] All three products have pricing configured
+- [ ] All three products have required localizations
+- [ ] All three products have a review screenshot
+- [ ] All three products are attached to the app version that will be submitted for review
 
 ### App metadata
 
@@ -51,10 +54,15 @@ This document tracks the local Xcode release process and App Store Connect items
 - [ ] App Store app exists in RevenueCat
 - [ ] In-App Purchase Key is uploaded
 - [ ] App Store Connect API Key is uploaded
-- [ ] `default` offering uses:
-  - [ ] `$rc_monthly` -> `com.p697.clawket.pro.monthly`
+- [ ] Control offering `pro` exposes packages in annual, lifetime, monthly order:
   - [ ] `$rc_annual` -> `com.p697.clawket.pro.yearly`
-- [ ] `Clawket Pro` entitlement is attached to both products
+  - [ ] `$rc_lifetime` -> `com.p697.clawket.pro.lifetime`
+  - [ ] `$rc_monthly` -> `com.p697.clawket.pro.monthly`
+- [ ] Every experiment Offering exposes the same three package types
+- [ ] Offering metadata contains `default_package` (`annual` or `monthly`) and boolean `social_proof`
+- [ ] Experiment variants cover `default_package: annual` vs `monthly` and `social_proof: true` vs `false`; lifetime pricing is not varied
+- [ ] RevenueCat serves the assigned customer-specific current Offering so Experiments and Targeting remain authoritative
+- [ ] `Clawket Pro` entitlement is attached to all three products
 - [ ] No app build is using `EXPO_PUBLIC_REVENUECAT_TEST_API_KEY`
 
 ## 3. Local Build Environment Checklist
@@ -63,7 +71,8 @@ This document tracks the local Xcode release process and App Store Connect items
 - [ ] `npm run config:check:ios` passes
 - [ ] `.env.local` or local shell environment contains `EXPO_PUBLIC_REVENUECAT_APPLE_API_KEY`
 - [ ] `.env.local` or local shell environment contains `EXPO_PUBLIC_REVENUECAT_PRO_ENTITLEMENT_ID=Clawket Pro`
-- [ ] `.env.local` or local shell environment contains `EXPO_PUBLIC_REVENUECAT_PRO_OFFERING_ID=default`
+- [ ] `.env.local` or local shell environment contains `EXPO_PUBLIC_REVENUECAT_PRO_OFFERING_ID=pro` as the fallback when no current Offering is assigned
+- [ ] `EXPO_PUBLIC_REVENUECAT_PRO_PACKAGE_ID` is unset for the standard 3.0 Offering; it is only a legacy fallback for an Offering without standard package types
 - [ ] `EXPO_PUBLIC_REVENUECAT_TEST_API_KEY` is not set for TestFlight / production
 - [ ] `EXPO_PUBLIC_UNLOCK_PRO` is not set for TestFlight / production
 - [ ] `ios/.xcode.env` still contains the generated env-source block for `.env` and `.env.local`
@@ -146,6 +155,7 @@ Before submitting to App Review, verify on a TestFlight or store-distribution bu
 - [ ] Free user sees the Pro paywall at the correct gated entry points
 - [ ] Monthly purchase succeeds
 - [ ] Yearly purchase succeeds
+- [ ] Lifetime purchase succeeds and remains active after app restart
 - [ ] Restore purchases succeeds after reinstall
 - [ ] Membership card shows the correct plan type
 - [ ] Existing Pro user sees the read-only paywall state
@@ -168,7 +178,7 @@ This is expected before App Review. These warnings should disappear after the su
 4. Archive locally in Xcode
 5. Upload to TestFlight from Xcode Organizer
 6. Confirm the build appears in App Store Connect / TestFlight
-7. Re-run monthly / yearly / restore validation
+7. Re-run monthly / yearly / lifetime / restore validation
 8. Archive and upload the final review build locally from Xcode
-9. Attach both subscription products to the app version
+9. Attach all three products to the app version
 10. Submit the app version for review

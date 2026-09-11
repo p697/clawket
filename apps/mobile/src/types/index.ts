@@ -1,3 +1,5 @@
+import type { SessionActions, SessionKind } from '@clawket/agent-protocol';
+
 // ---- Core UI types ----
 
 export type ChatRole = 'user' | 'assistant' | 'system' | 'tool';
@@ -95,7 +97,7 @@ export interface GatewayConfigsState {
 
 export type ThemeMode = 'system' | 'light' | 'dark';
 export type SpeechRecognitionLanguage = 'system' | 'en' | 'zh-Hans' | 'ja' | 'ko' | 'de' | 'es';
-export type AccentColorId = 'iceBlue' | 'jadeGreen' | 'oceanTeal' | 'sunsetOrange' | 'rosePink' | 'royalPurple' | 'custom';
+export type AccentColorId = 'iceBlue' | 'jadeGreen' | 'oceanTeal' | 'sunsetOrange' | 'rosePink' | 'royalPurple';
 export type {
   ChatAppearanceSettings,
   ChatBackgroundFillMode,
@@ -153,10 +155,14 @@ export interface HelloOkPayload {
 // ---- API Params / Responses ----
 
 export interface SessionInfo {
+  connectionId?: string;
+  agentId?: string;
   key: string;
   sessionId?: string;
+  parentSessionKey?: string;
+  /** Transitional alias retained for legacy Gateway session payloads. */
   spawnedBy?: string;
-  kind?: 'direct' | 'group' | 'global' | 'unknown';
+  kind?: SessionKind | 'global' | 'unknown';
   label?: string;
   title?: string;
   displayName?: string;
@@ -171,6 +177,10 @@ export interface SessionInfo {
   totalTokens?: number;
   totalTokensFresh?: boolean;
   contextTokens?: number;
+  hasActiveRun?: boolean;
+  attention?: 'approval' | 'error' | 'cron_failed' | null;
+  source?: 'bridge' | 'native';
+  allowedActions?: SessionActions;
 }
 
 export interface SessionsListPayload {
@@ -379,8 +389,6 @@ export function isGatewayFrame(value: unknown): value is GatewayFrame {
 }
 
 export * from './cron';
-export type { LogEntry, LogLevel } from './logs';
-export { LOG_LEVELS } from './logs';
 export * from './skills';
 export type {
   UsageResult,

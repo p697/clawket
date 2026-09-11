@@ -3,11 +3,20 @@ import {
   buildChatReplyNotificationBody,
   extractChatNotificationOpenPayload,
   getChatNotificationResponseIdentifier,
+  loadChatReplyNotificationsEnabled,
+  setChatReplyNotificationsEnabled,
   shouldShowChatReplyNotification,
 } from './chat-notifications';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 describe('chat notifications', () => {
-  it('disables chat reply notifications globally', () => {
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    jest.mocked(AsyncStorage.getItem).mockResolvedValue(null);
+    await setChatReplyNotificationsEnabled(false);
+  });
+
+  it('keeps chat reply notifications disabled by default', () => {
     expect(areChatReplyNotificationsEnabled()).toBe(false);
   });
 
@@ -20,6 +29,32 @@ describe('chat notifications', () => {
       activeTab: 'Chat',
       appState: 'background',
     })).toBe(false);
+  });
+
+  it('persists the account preference and enables background replies', async () => {
+    await setChatReplyNotificationsEnabled(true);
+
+    expect(areChatReplyNotificationsEnabled()).toBe(true);
+    expect(shouldShowChatReplyNotification({
+      activeTab: 'Thread',
+      appState: 'active',
+    })).toBe(false);
+    expect(shouldShowChatReplyNotification({
+      activeTab: 'Roster',
+      appState: 'active',
+    })).toBe(true);
+    expect(shouldShowChatReplyNotification({
+      activeTab: 'Thread',
+      appState: 'background',
+    })).toBe(true);
+
+    expect(AsyncStorage.setItem).toHaveBeenCalledWith(
+      'clawket.chatReplyNotifications.v1',
+      'true',
+    );
+    await setChatReplyNotificationsEnabled(false);
+    jest.mocked(AsyncStorage.getItem).mockResolvedValueOnce('true');
+    await expect(loadChatReplyNotificationsEnabled()).resolves.toBe(true);
   });
 
   it('falls back to a generic body when preview text is missing', () => {

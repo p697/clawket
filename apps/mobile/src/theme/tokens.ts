@@ -8,58 +8,42 @@ export const Space = {
   lg: 16,
   xl: 24,
   xxl: 32,
-  xxxl: 48,
 } as const;
 
 // ─── Typography ───
 export const FontSize = {
-  nano: 9,
-  micro: 10,
-  xs: 11,
-  sm: 12,
-  md: 13,
-  bodySm: 14,
-  base: 15,
-  lg: 16,
-  xl: 18,
-  displaySm: 20,
-  xxl: 22,
-  emoji: 24,
-  displayMd: 26,
-  xxxl: 28,
-  displayHero: 32,
-  displayLg: 36,
-  hero: 48,
+  display: 28,
+  title: 20,
+  body: 17,
+  secondary: 15,
+  caption: 13,
 } as const;
 
 export const LineHeight = {
-  xs: 14,
-  sm: 16,
-  md: 18,
-  bodySm: 20,
-  base: 21,
-  lg: 22,
-  xl: 24,
-  xxl: 28,
-  xxxl: 34,
+  display: 34,
+  title: 26,
+  body: 24,
+  secondary: 20,
+  caption: 18,
 } as const;
 
 export const FontWeight = {
   regular: '400' as const,
-  medium: '500' as const,
   semibold: '600' as const,
-  bold: '700' as const,
 };
 
 // ─── Border Radius ───
 export const Radius = {
-  none: 0,
-  micro: 2,
-  xs: 4,
-  sm: 8,
-  md: 12,
-  lg: 18,
-  xl: 24,
+  bubble: 20,
+  card: 16,
+  settingsGroup: 14,
+  avatarRoster: 18,
+  avatarHeader: 9,
+  avatarSettings: 14,
+  avatarSheet: 10,
+  xl: 22,
+  bottomSheet: 28,
+  sheet: 36,
   full: 9999,
 } as const;
 
@@ -101,6 +85,12 @@ export const IconSize = {
   lg: 24,
 } as const;
 
+// ─── Status Indicators ───
+export const StatusSize = {
+  dot: 6,
+  attention: 12,
+} as const;
+
 // ─── Touch Targets ───
 export const HitSize = {
   sm: 36,
@@ -112,16 +102,21 @@ export const HitSize = {
 // Component chrome should consume these metrics rather than creating local
 // heights/paddings. Product-specific composites may still own their layout.
 export const ControlSize = {
-  compact: 36,
-  standard: 44,
-  large: 48,
-  field: 48,
-  settingsRow: 56,
-  settingsIcon: 32,
+  pill: 40,
+  floatingButton: 44,
+  settingsRow: 52,
+  rosterRow: 88,
 } as const;
 
 // ─── Elevation (shadows) ───
 export const Shadow = {
+  floating: {
+    shadowColor: '#111113',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 5,
+    elevation: 2,
+  },
   xs: {
     shadowColor: '#071218',
     shadowOffset: { width: 0, height: 1 },
@@ -153,16 +148,14 @@ export const Shadow = {
 } as const;
 
 type ThemedShadowColors = {
-  border: string;
-  shadow: string;
+  line: string;
 };
 
 export type SurfaceElevation = 'flat' | 'raised' | 'floating' | 'overlay';
 
 type SurfaceColors = ThemedShadowColors & {
   surface: string;
-  surfaceMuted: string;
-  surfaceElevated: string;
+  surfaceFloating: string;
 };
 
 /**
@@ -177,8 +170,7 @@ export function createThemedShadowStyle(
   if (scheme === 'dark') {
     return {
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
-      shadowColor: colors.shadow,
+      borderColor: colors.line,
       shadowOffset: shadow.shadowOffset,
       shadowOpacity: 0,
       shadowRadius: shadow.shadowRadius,
@@ -187,7 +179,7 @@ export function createThemedShadowStyle(
   }
   return {
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    borderColor: colors.line,
     ...shadow,
   };
 }
@@ -210,13 +202,13 @@ export function createSurfaceStyle(
   elevation: SurfaceElevation = 'flat',
 ): ViewStyle {
   const backgroundColor = elevation === 'overlay'
-    ? colors.surfaceElevated
+    ? colors.surfaceFloating
     : colors.surface;
   if (elevation === 'flat') {
     return {
       backgroundColor,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
+      borderColor: colors.line,
     };
   }
   const shadow = elevation === 'raised'
@@ -230,18 +222,19 @@ export function createSurfaceStyle(
   };
 }
 
-// ─── Animation Presets ───
-export const SpringPreset = {
-  /** Snappy UI feedback — buttons, toggles, small movements */
-  snappy: { damping: 20, stiffness: 300, mass: 0.8 },
-  /** Standard sheet/modal entrance */
-  sheet: { damping: 22, stiffness: 220, mass: 0.9 },
-  /** Gentle float — tooltips, fade-ins */
-  gentle: { damping: 18, stiffness: 160, mass: 1.0 },
-} as const;
-
-export const TimingPreset = {
-  fast: 150,
-  normal: 250,
-  slow: 400,
+export const Motion = {
+  duration: {
+    fast: 120,
+    normal: 200,
+    slow: 320,
+  },
+  easing: 'easeOut',
+  pressedScale: 0.96,
+  messageEnterOffset: 4,
+  avatarWorkingLoop: 1_200,
+  companionBreath: 1_400,
+  companionGaze: 1_200,
+  companionBlinkPause: 3_200,
+  companionCuriosity: 9_600,
+  avatarDoneFade: 3_000,
 } as const;

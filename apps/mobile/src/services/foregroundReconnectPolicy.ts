@@ -1,11 +1,13 @@
-import type { ConnectionState } from '../types';
+import type { ConnectionState as AdapterConnectionState } from '@clawket/agent-protocol';
+
+type ForegroundConnectionState = AdapterConnectionState | 'pairing_pending' | 'closed';
 
 export const APP_FOREGROUND_PROBE_AWAY_MS = 60_000;
 
 export function shouldProbeGatewayOnForegroundResume(input: {
   platformOs: string;
   awayMs: number;
-  connectionState: ConnectionState;
+  connectionState: ForegroundConnectionState;
 }): boolean {
   if (input.connectionState === 'pairing_pending') {
     return false;

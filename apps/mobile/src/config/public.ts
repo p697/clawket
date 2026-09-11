@@ -21,9 +21,6 @@ type PublicEnv = Partial<Record<
   | 'EXPO_PUBLIC_REVENUECAT_PRO_OFFERING_ID'
   | 'EXPO_PUBLIC_REVENUECAT_PRO_PACKAGE_ID'
   | 'EXPO_PUBLIC_REVENUECAT_TEST_API_KEY'
-  | 'EXPO_PUBLIC_YOUMIND_GOOGLE_IOS_CLIENT_ID'
-  | 'EXPO_PUBLIC_YOUMIND_GOOGLE_ANDROID_CLIENT_ID'
-  | 'EXPO_PUBLIC_YOUMIND_GOOGLE_WEB_CLIENT_ID'
   | 'EXPO_PUBLIC_YOUMIND_APP_SECRET',
   string | undefined
 >> & Partial<NodeJS.ProcessEnv>;
@@ -47,9 +44,6 @@ const STATIC_PUBLIC_ENV: PublicEnv = {
   EXPO_PUBLIC_REVENUECAT_PRO_OFFERING_ID: process.env.EXPO_PUBLIC_REVENUECAT_PRO_OFFERING_ID,
   EXPO_PUBLIC_REVENUECAT_PRO_PACKAGE_ID: process.env.EXPO_PUBLIC_REVENUECAT_PRO_PACKAGE_ID,
   EXPO_PUBLIC_REVENUECAT_TEST_API_KEY: process.env.EXPO_PUBLIC_REVENUECAT_TEST_API_KEY,
-  EXPO_PUBLIC_YOUMIND_GOOGLE_IOS_CLIENT_ID: process.env.EXPO_PUBLIC_YOUMIND_GOOGLE_IOS_CLIENT_ID,
-  EXPO_PUBLIC_YOUMIND_GOOGLE_ANDROID_CLIENT_ID: process.env.EXPO_PUBLIC_YOUMIND_GOOGLE_ANDROID_CLIENT_ID,
-  EXPO_PUBLIC_YOUMIND_GOOGLE_WEB_CLIENT_ID: process.env.EXPO_PUBLIC_YOUMIND_GOOGLE_WEB_CLIENT_ID,
   EXPO_PUBLIC_YOUMIND_APP_SECRET: process.env.EXPO_PUBLIC_YOUMIND_APP_SECRET,
 };
 
@@ -104,11 +98,33 @@ export type PublicRevenueCatConfig = {
 };
 
 export type PublicYouMindAuthConfig = {
-  googleIosClientId: string | null;
-  googleAndroidClientId: string | null;
-  googleWebClientId: string | null;
   appSecret: string | null;
 };
+
+export type PublicPaywallSocialProof = Readonly<{
+  rating: number;
+  quote: string;
+}>;
+
+const DEFAULT_PAYWALL_SOCIAL_PROOF: PublicPaywallSocialProof = {
+  rating: 4.4,
+  quote: 'Updated quickly, always stays ahead',
+};
+
+export function resolvePublicPaywallSocialProof(
+  value: Partial<PublicPaywallSocialProof> = DEFAULT_PAYWALL_SOCIAL_PROOF,
+): PublicPaywallSocialProof {
+  const rating = typeof value.rating === 'number'
+    && Number.isFinite(value.rating)
+    && value.rating > 0
+    && value.rating <= 5
+    ? value.rating
+    : DEFAULT_PAYWALL_SOCIAL_PROOF.rating;
+  const quote = typeof value.quote === 'string' && value.quote.trim()
+    ? value.quote.trim()
+    : DEFAULT_PAYWALL_SOCIAL_PROOF.quote;
+  return { rating, quote };
+}
 
 export function resolvePublicAppLinks(env: PublicEnv = STATIC_PUBLIC_ENV): PublicAppLinks {
   return {
@@ -164,9 +180,6 @@ export function resolvePublicRevenueCatConfig(env: PublicEnv = STATIC_PUBLIC_ENV
 
 export function resolvePublicYouMindAuthConfig(env: PublicEnv = STATIC_PUBLIC_ENV): PublicYouMindAuthConfig {
   return {
-    googleIosClientId: readOptionalEnv('EXPO_PUBLIC_YOUMIND_GOOGLE_IOS_CLIENT_ID', env),
-    googleAndroidClientId: readOptionalEnv('EXPO_PUBLIC_YOUMIND_GOOGLE_ANDROID_CLIENT_ID', env),
-    googleWebClientId: readOptionalEnv('EXPO_PUBLIC_YOUMIND_GOOGLE_WEB_CLIENT_ID', env),
     appSecret: readOptionalEnv('EXPO_PUBLIC_YOUMIND_APP_SECRET', env),
   };
 }
@@ -178,5 +191,6 @@ export function buildSupportEmailUrl(email: string | null): string | null {
 
 export const publicAppLinks = resolvePublicAppLinks();
 export const publicAnalyticsConfig = resolvePublicAnalyticsConfig();
+export const publicPaywallSocialProof = resolvePublicPaywallSocialProof();
 export const publicRevenueCatConfig = resolvePublicRevenueCatConfig();
 export const publicYouMindAuthConfig = resolvePublicYouMindAuthConfig();

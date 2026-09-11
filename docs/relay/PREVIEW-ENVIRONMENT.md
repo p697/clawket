@@ -28,7 +28,9 @@ Production and Preview have separate:
 - Bridge pairing files and access codes
 - gateway/client credentials
 
-Preview is still `backendKind=openclaw` with `transportKind=relay`. Environment must not be modeled as another transport. Hermes remains on its own workers and is not enrolled into this environment.
+The product-facing Preview selector is still `backendKind=openclaw` with `transportKind=relay`. Environment must not be modeled as another transport. A separately named Hermes Preview Registry/Relay pair exists for infrastructure acceptance, but it does not enroll Hermes into the OpenClaw Preview product environment or share any bindings with it.
+
+OpenClaw Preview configs set `RELAY_BACKEND=openclaw`; the separate Hermes Preview configs set `RELAY_BACKEND=hermes`. Together with their Production counterparts, they form four isolated service pairs from the same two source workspaces.
 
 The installed Bridge service reads both `~/.clawket/bridge-cli.json` and `~/.clawket/bridge-cli.preview.json`. When both exist it runs independent Relay runtimes, allowing Production and Preview connections to stay available at the same time.
 
@@ -39,9 +41,11 @@ Copy the checked-in examples to ignored account-bound configs:
 ```bash
 cp apps/relay-registry/wrangler.preview.example.toml apps/relay-registry/wrangler.preview.local.toml
 cp apps/relay-worker/wrangler.preview.example.toml apps/relay-worker/wrangler.preview.local.toml
+cp apps/relay-registry/wrangler.hermes.preview.example.toml apps/relay-registry/wrangler.hermes.preview.local.toml
+cp apps/relay-worker/wrangler.hermes.preview.example.toml apps/relay-worker/wrangler.hermes.preview.local.toml
 ```
 
-Use Preview-only KV and Durable Object resources. Configure the Registry `RELAY_SYNC_SERVICE` binding to the Preview Relay and set the same `PAIRING_SYNC_SECRET` on both workers.
+Use separate Preview-only KV and Durable Object resources for each backend. Configure the OpenClaw Registry `RELAY_SYNC_SERVICE` binding to the OpenClaw Preview Relay and set the same `PAIRING_SYNC_SECRET` on that pair. Never bind the Hermes Preview pair to the OpenClaw Preview KV or room namespace. Every Registry config also needs its own `PAIR_REGISTER_LIMITER` Durable Object namespace.
 
 For six-digit pairing, generate one random secret of at least 32 characters and set it as the `PAIRING_TICKET_SECRET` Wrangler secret on both Preview workers. Do not place it in `[vars]`, source control, terminal output, or test reports. Relay health advertises the secure-pairing capability only when this secret is valid, and Registry checks that live capability before it shows a six-digit code.
 
@@ -54,6 +58,8 @@ Deploy only Preview:
 ```bash
 npm run relay:deploy:preview-worker
 npm run relay:deploy:preview-registry
+npm run relay:deploy:hermes-preview-worker
+npm run relay:deploy:hermes-preview-registry
 ```
 
 Deploying Relay first is the fastest rollout path. Release ordering is nevertheless compatibility-safe: new Relay with old Registry is inert; new Registry with an old or unavailable Relay automatically falls back to the legacy code; new App and Bridge retain QR/link and legacy-code support.
@@ -66,9 +72,10 @@ With a local Preview Bridge paired and running, execute:
 
 ```bash
 npm run relay:test:preview-product
+npm run relay:test:preview-hermes
 ```
 
-The smoke test refreshes a real Preview access code; completes the six-digit proof and ephemeral-key handshake; decrypts the invitation locally; verifies invitation invalidation after claim, Relay client authentication, Bridge presence, and delivery of an OpenClaw `connect.challenge`. It prints only sanitized check names and never prints credentials.
+The OpenClaw smoke test refreshes a real Preview access code; completes the six-digit proof and ephemeral-key handshake; decrypts the invitation locally; verifies invitation invalidation after claim, Relay client authentication, Bridge presence, and delivery of an OpenClaw `connect.challenge`. The Hermes smoke test independently verifies Registry health, register/claim, Relay auth, session forwarding, and Bridge status. Both print only sanitized check names and never print credentials.
 
 Before a Production promotion, also run:
 

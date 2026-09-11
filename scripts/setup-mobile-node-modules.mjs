@@ -12,6 +12,7 @@ const copiedPackages = new Set(['react-native']);
 const links = new Set([
   ...Object.keys(mobilePackageJson.dependencies ?? {}),
   ...Object.keys(mobilePackageJson.devDependencies ?? {}),
+  'expo-modules-core',
   'react-native-safe-area-context',
 ]);
 

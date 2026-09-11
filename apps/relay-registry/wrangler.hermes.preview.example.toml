@@ -1,0 +1,29 @@
+name = "clawket-hermes-registry-preview"
+main = "src/index.ts"
+compatibility_date = "2026-03-03"
+workers_dev = true
+account_id = "00000000000000000000000000000000"
+
+[observability]
+enabled = true
+
+[vars]
+RELAY_BACKEND = "hermes"
+# Create a dedicated Hermes Preview KV namespace and keep its ID only in the
+# ignored wrangler.hermes.preview.local.toml copied from this template.
+RELAY_REGION_MAP = "{\"cn\":\"wss://clawket-hermes-relay-preview.example.workers.dev/ws\",\"sg\":\"wss://clawket-hermes-relay-preview.example.workers.dev/ws\",\"us\":\"wss://clawket-hermes-relay-preview.example.workers.dev/ws\",\"eu\":\"wss://clawket-hermes-relay-preview.example.workers.dev/ws\"}"
+PAIR_ACCESS_CODE_TTL_SEC = "600"
+PAIR_CLIENT_TOKEN_MAX = "8"
+PAIR_SESSION_RESOLVE_MAX_ATTEMPTS = "5"
+
+[[durable_objects.bindings]]
+name = "PAIR_REGISTER_LIMITER"
+class_name = "PairRegisterRateLimiter"
+
+[[kv_namespaces]]
+binding = "HERMES_ROUTES_KV"
+id = "00000000000000000000000000000000"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["PairRegisterRateLimiter"]

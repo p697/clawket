@@ -4,12 +4,12 @@ import { sha256 } from 'js-sha256';
 
 jest.mock('../theme', () => ({
   defaultAccentId: 'iceBlue',
-  isAccentScale: jest.fn(() => false),
+  isBuiltInAccentId: jest.fn(() => false),
 }));
 
 import { StorageService } from './storage';
 
-describe('StorageService gateway config backups', () => {
+describe('StorageService legacy connections and config backups', () => {
   const mockedAsyncStorage = AsyncStorage as jest.Mocked<typeof AsyncStorage>;
   const mockedSecureStore = SecureStore as jest.Mocked<typeof SecureStore>;
   let secureStoreValues: Record<string, string>;
@@ -113,8 +113,8 @@ describe('StorageService gateway config backups', () => {
     );
   });
 
-  it('persists relay configs with clientToken even when no legacy token or password is present', async () => {
-    await StorageService.setGatewayConfigsState({
+  it('reads the latest legacy Relay config without rewriting its retained key', async () => {
+    const retainedValue = JSON.stringify({
       activeId: 'relay_1',
       configs: [{
         id: 'relay_1',
@@ -132,24 +132,32 @@ describe('StorageService gateway config backups', () => {
         updatedAt: 1,
       }],
     });
+    secureStoreValues['clawket.gatewayConfigsState.v1'] = retainedValue;
 
-    await expect(StorageService.getGatewayConfig()).resolves.toEqual({
-      url: 'wss://relay.example.com/ws',
-      token: undefined,
-      password: undefined,
-      backendKind: 'openclaw',
-      transportKind: 'relay',
-      mode: 'relay',
-      hermes: undefined,
-      relay: {
-        serverUrl: 'https://registry.example.com',
-        gatewayId: 'gw_123',
-        clientToken: 'gct_new',
-        displayName: undefined,
-        protocolVersion: 2,
-        supportsBootstrap: true,
-      },
+    await expect(StorageService.readLegacyGatewayConfigsState()).resolves.toEqual({
+      activeId: 'relay_1',
+      configs: [expect.objectContaining({
+        id: 'relay_1',
+        url: 'wss://relay.example.com/ws',
+        token: undefined,
+        password: undefined,
+        backendKind: 'openclaw',
+        transportKind: 'relay',
+        mode: 'relay',
+        hermes: undefined,
+        relay: {
+          serverUrl: 'https://registry.example.com',
+          gatewayId: 'gw_123',
+          clientToken: 'gct_new',
+          displayName: undefined,
+          protocolVersion: 2,
+          supportsBootstrap: true,
+        },
+      })],
     });
+    expect(secureStoreValues['clawket.gatewayConfigsState.v1']).toBe(retainedValue);
+    expect(mockedSecureStore.setItemAsync).not.toHaveBeenCalled();
+    expect(mockedSecureStore.deleteItemAsync).not.toHaveBeenCalled();
   });
 
   it('migrates legacy profile configs with explicit OpenClaw backend and transport metadata', async () => {
@@ -168,7 +176,7 @@ describe('StorageService gateway config backups', () => {
       },
     });
 
-    const state = await StorageService.getGatewayConfigsState();
+    const state = await StorageService.readLegacyGatewayConfigsState();
 
     expect(state.activeId).toBe('legacy_tailscale');
     expect(state.configs).toEqual([
@@ -189,6 +197,8 @@ describe('StorageService gateway config backups', () => {
         token: 'tailscale-token',
       }),
     ]);
+    expect(mockedSecureStore.setItemAsync).not.toHaveBeenCalled();
+    expect(mockedSecureStore.deleteItemAsync).not.toHaveBeenCalled();
   });
 
   it('migrates the legacy single gateway config with explicit OpenClaw metadata', async () => {
@@ -198,7 +208,7 @@ describe('StorageService gateway config backups', () => {
       password: 'legacy-password',
     });
 
-    const state = await StorageService.getGatewayConfigsState();
+    const state = await StorageService.readLegacyGatewayConfigsState();
 
     expect(state).toEqual({
       activeId: 'legacy_single',
@@ -215,6 +225,26 @@ describe('StorageService gateway config backups', () => {
         }),
       ],
     });
+    expect(mockedSecureStore.setItemAsync).not.toHaveBeenCalled();
+    expect(mockedSecureStore.deleteItemAsync).not.toHaveBeenCalled();
+  });
+
+  it('clears all retained legacy connection keys only during an explicit device reset', async () => {
+    secureStoreValues['clawket.gatewayConfig.v1'] = '{"url":"ws://legacy"}';
+    secureStoreValues['clawket.gatewayProfilesConfig.v1'] = '{"activeMode":"local"}';
+    secureStoreValues['clawket.gatewayConfigsState.v1'] = '{"activeId":null,"configs":[]}';
+    secureStoreValues['clawket.identity.v1'] = '{"deviceId":"keep"}';
+
+    await StorageService.clearLegacyGatewayConfig();
+
+    expect(secureStoreValues).toEqual({
+      'clawket.identity.v1': '{"deviceId":"keep"}',
+    });
+    expect(mockedSecureStore.deleteItemAsync.mock.calls.map(([key]) => key)).toEqual([
+      'clawket.gatewayConfig.v1',
+      'clawket.gatewayProfilesConfig.v1',
+      'clawket.gatewayConfigsState.v1',
+    ]);
   });
 
   it('stores relay device tokens under a gateway-scoped key', async () => {
@@ -248,6 +278,39 @@ describe('StorageService gateway config backups', () => {
     })).resolves.toBe('token-b');
   });
 
+  it('keeps operator and node device tokens isolated on the same connection', async () => {
+    const connectionScope = {
+      serverUrl: 'https://registry.example.com',
+      gatewayId: 'gw_alpha',
+    };
+    await StorageService.setDeviceTokenRecord('device-1', {
+      token: 'operator-token',
+      role: 'operator',
+      scopes: ['operator.read'],
+    }, connectionScope);
+    await StorageService.setDeviceTokenRecord('device-1', {
+      token: 'node-token',
+      role: 'node',
+      scopes: [],
+    }, { ...connectionScope, role: 'node' });
+
+    await expect(StorageService.getDeviceTokenRecord('device-1', connectionScope)).resolves.toMatchObject({
+      token: 'operator-token',
+      role: 'operator',
+    });
+    await expect(StorageService.getDeviceTokenRecord('device-1', {
+      ...connectionScope,
+      role: 'node',
+    })).resolves.toMatchObject({
+      token: 'node-token',
+      role: 'node',
+    });
+    expect(Object.keys(secureStoreValues)).toEqual(expect.arrayContaining([
+      `clawket.deviceToken.device-1_relay_${sha256('https://registry.example.com::gw_alpha')}`,
+      `clawket.deviceToken.device-1_relay_${sha256('https://registry.example.com::gw_alpha')}_role_${sha256('node')}`,
+    ]));
+  });
+
   it('falls back to the legacy unscoped device token key when no scoped token exists', async () => {
     secureStoreValues['clawket.deviceToken.device-1'] = 'legacy-token';
 
@@ -255,6 +318,16 @@ describe('StorageService gateway config backups', () => {
       serverUrl: 'https://registry.example.com',
       gatewayId: 'gw_alpha',
     })).resolves.toBe('legacy-token');
+  });
+
+  it('never offers a legacy operator token to a node role lookup', async () => {
+    secureStoreValues['clawket.deviceToken.device-1'] = 'legacy-token';
+
+    await expect(StorageService.getDeviceToken('device-1', {
+      serverUrl: 'https://registry.example.com',
+      gatewayId: 'gw_alpha',
+      role: 'node',
+    })).resolves.toBeNull();
   });
 
   it('migrates raw device tokens to operator records with unknown scopes', async () => {
@@ -307,6 +380,62 @@ describe('StorageService gateway config backups', () => {
     expect(secureStoreValues).toEqual({});
   });
 
+  it('deletes a rejected node token without deleting operator credentials', async () => {
+    const operatorKey = `clawket.deviceToken.device-1_relay_${sha256('https://registry.example.com::gw_alpha')}`;
+    const nodeKey = `${operatorKey}_role_${sha256('node')}`;
+    secureStoreValues[operatorKey] = 'operator-token';
+    secureStoreValues[nodeKey] = 'node-token';
+    secureStoreValues['clawket.deviceToken.device-1'] = 'legacy-operator-token';
+
+    await StorageService.deleteDeviceToken('device-1', {
+      serverUrl: 'https://registry.example.com',
+      gatewayId: 'gw_alpha',
+      role: 'node',
+    });
+
+    expect(secureStoreValues).toEqual({
+      [operatorKey]: 'operator-token',
+      'clawket.deviceToken.device-1': 'legacy-operator-token',
+    });
+  });
+
+  it('clears both roles for one relay without touching another relay scope', async () => {
+    const alphaScope = {
+      serverUrl: 'https://registry.example.com',
+      gatewayId: 'gw_alpha',
+    };
+    const betaScope = {
+      serverUrl: 'https://registry.example.com',
+      gatewayId: 'gw_beta',
+    };
+    for (const [scope, suffix] of [[alphaScope, 'alpha'], [betaScope, 'beta']] as const) {
+      await StorageService.setDeviceTokenRecord('device-1', {
+        token: `operator-${suffix}`,
+        role: 'operator',
+        scopes: ['operator.read'],
+      }, scope);
+      await StorageService.setDeviceTokenRecord('device-1', {
+        token: `node-${suffix}`,
+        role: 'node',
+        scopes: [],
+      }, { ...scope, role: 'node' });
+    }
+
+    await StorageService.deleteDeviceToken('device-1', alphaScope);
+    await StorageService.deleteDeviceToken('device-1', { ...alphaScope, role: 'node' });
+
+    await expect(StorageService.getDeviceToken('device-1', alphaScope)).resolves.toBeNull();
+    await expect(StorageService.getDeviceToken('device-1', {
+      ...alphaScope,
+      role: 'node',
+    })).resolves.toBeNull();
+    await expect(StorageService.getDeviceToken('device-1', betaScope)).resolves.toBe('operator-beta');
+    await expect(StorageService.getDeviceToken('device-1', {
+      ...betaScope,
+      role: 'node',
+    })).resolves.toBe('node-beta');
+  });
+
   it('persists the lifetime upgrade announcement shown flag', async () => {
     mockedAsyncStorage.getItem.mockResolvedValueOnce(null);
     await expect(StorageService.hasLifetimeUpgradeAnnouncementBeenShown()).resolves.toBe(false);
@@ -324,5 +453,55 @@ describe('StorageService gateway config backups', () => {
     expect(mockedAsyncStorage.removeItem).toHaveBeenCalledWith(
       'clawket.lifetimeUpgradeAnnouncementShown.v1',
     );
+  });
+
+  it('normalizes and persists the automatic review launch state', async () => {
+    mockedAsyncStorage.getItem.mockResolvedValueOnce(JSON.stringify({
+      version: 2,
+      firstSuccessfulSendAtMs: 100,
+      coldStartsAfterFirstSuccessfulSend: 2,
+    }));
+    await expect(StorageService.getAutoAppReviewState()).resolves.toEqual({
+      version: 2,
+      firstSuccessfulSendAtMs: 100,
+      coldStartsAfterFirstSuccessfulSend: 2,
+    });
+
+    await StorageService.setAutoAppReviewState({
+      version: 2,
+      firstSuccessfulSendAtMs: 100,
+      coldStartsAfterFirstSuccessfulSend: 3,
+      reviewPendingAtMs: 400,
+    });
+    expect(mockedAsyncStorage.setItem).toHaveBeenCalledWith(
+      'clawket.autoAppReviewState.v1',
+      JSON.stringify({
+        version: 2,
+        coldStartsAfterFirstSuccessfulSend: 3,
+        firstSuccessfulSendAtMs: 100,
+        reviewPendingAtMs: 400,
+      }),
+    );
+
+    mockedAsyncStorage.getItem.mockResolvedValueOnce(JSON.stringify({
+      firstSeenAtMs: 10,
+      lastAttemptAtMs: 20,
+      lastAttemptVersion: '2.1.2',
+    }));
+    await expect(StorageService.getAutoAppReviewState()).resolves.toEqual({
+      version: 2,
+      coldStartsAfterFirstSuccessfulSend: 0,
+      reviewAttemptedAtMs: 20,
+    });
+  });
+
+  it('surfaces automatic review state write failures to its side-effect gate', async () => {
+    mockedAsyncStorage.setItem.mockRejectedValueOnce(new Error('disk full'));
+
+    await expect(StorageService.setAutoAppReviewState({
+      version: 2,
+      firstSuccessfulSendAtMs: 100,
+      coldStartsAfterFirstSuccessfulSend: 1,
+    })).rejects.toThrow('disk full');
   });
 });

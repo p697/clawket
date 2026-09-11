@@ -17,16 +17,19 @@ import {
   ControlSize,
   FontSize,
   FontWeight,
+  HitSize,
   Radius,
   Space,
   createSurfaceStyle,
 } from '../../theme/tokens';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'destructive';
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'destructive' | 'neutral' | 'text';
 export type ButtonSize = 'sm' | 'md' | 'lg';
 
 type Props = Omit<PressableProps, 'children' | 'style'> & {
   label: string;
+  /** Allow long translations and accessibility text sizes to grow the button vertically. */
+  multiline?: boolean;
   variant?: ButtonVariant;
   size?: ButtonSize;
   icon?: LucideIcon;
@@ -40,6 +43,7 @@ type Props = Omit<PressableProps, 'children' | 'style'> & {
 
 export function Button({
   label,
+  multiline = false,
   variant = 'primary',
   size = 'md',
   icon: Icon,
@@ -59,13 +63,13 @@ export function Button({
     [theme.colors, theme.scheme],
   );
   const isDisabled = disabled || loading;
-  const contentColor = variant === 'primary'
-    ? theme.colors.primaryText
+  const contentColor = variant === 'text' ? theme.colors.inkSecondary : variant === 'neutral' || variant === 'primary'
+    ? disabled && !loading ? theme.colors.inkTertiary : theme.colors.canvas
     : variant === 'destructive'
-      ? theme.colors.error
+      ? theme.colors.bad
       : variant === 'ghost'
-        ? theme.colors.text
-        : theme.colors.primary;
+        ? theme.colors.ink
+        : theme.colors.ink;
   const iconSize = size === 'sm' ? 14 : size === 'lg' ? 18 : 16;
 
   const handlePress = useCallback<NonNullable<PressableProps['onPress']>>((event) => {
@@ -82,19 +86,20 @@ export function Button({
       onPress={handlePress}
       style={({ pressed }) => [
         styles.base,
+        multiline ? styles.multiline : null,
         styles[`size${size.toUpperCase()}` as 'sizeSM' | 'sizeMD' | 'sizeLG'],
         styles[variant],
         pressed && !isDisabled
-          ? variant === 'primary' ? styles.primaryPressed : styles.surfacePressed
+          ? variant === 'primary' || variant === 'neutral' ? styles.primaryPressed : styles.surfacePressed
           : null,
-        isDisabled ? styles.disabled : null,
+        isDisabled ? variant === 'neutral' || variant === 'primary' ? loading ? null : styles.neutralDisabled : styles.disabled : null,
         style,
       ]}
       {...rest}
     >
-      <View style={[styles.content, loading ? styles.contentHidden : null]}>
+      <View style={[styles.content, multiline ? styles.multilineContent : null, loading ? styles.contentHidden : null]}>
         {Icon ? <Icon size={iconSize} color={contentColor} strokeWidth={2} /> : null}
-        <Text style={[styles.label, size === 'sm' ? styles.labelSM : size === 'lg' ? styles.labelLG : null, { color: contentColor }, textStyle]} numberOfLines={1}>
+        <Text style={[styles.label, size === 'sm' ? styles.labelSM : size === 'lg' ? styles.labelLG : null, variant === 'text' ? styles.textLabel : null, { color: contentColor }, multiline ? styles.multilineLabel : null, textStyle]} numberOfLines={multiline ? undefined : 1}>
           {label}
         </Text>
       </View>
@@ -112,29 +117,30 @@ function createStyles(
       alignItems: 'center',
       justifyContent: 'center',
       position: 'relative',
-      borderRadius: Radius.md,
+      borderRadius: Radius.full,
       paddingHorizontal: Space.lg,
     },
-    sizeSM: { minHeight: ControlSize.compact, paddingHorizontal: Space.md },
-    sizeMD: { minHeight: ControlSize.standard },
-    sizeLG: { minHeight: ControlSize.large, paddingHorizontal: Space.xl },
-    primary: {
-      ...createSurfaceStyle(colors, scheme, 'raised'),
-      borderColor: colors.primary,
-      backgroundColor: colors.primary,
-    },
-    secondary: {
-      ...createSurfaceStyle(colors, scheme, 'flat'),
-    },
+    multilineContent: { alignSelf: 'stretch' },
+    multiline: { paddingVertical: Space.md },
+    multilineLabel: { flexShrink: 1, textAlign: 'center' },
+    sizeSM: { minHeight: HitSize.sm, paddingHorizontal: Space.md },
+    sizeMD: { minHeight: ControlSize.floatingButton },
+    sizeLG: { minHeight: ControlSize.settingsRow, paddingHorizontal: Space.xl },
+    primary: { backgroundColor: colors.ink },
+    neutral: { backgroundColor: colors.ink },
+    neutralDisabled: { backgroundColor: colors.surface },
+    secondary: { backgroundColor: colors.surface },
     ghost: {
       backgroundColor: 'transparent',
     },
+    text: { backgroundColor: 'transparent' },
+    textLabel: { fontWeight: FontWeight.regular },
     destructive: {
       ...createSurfaceStyle(colors, scheme, 'flat'),
-      backgroundColor: colors.errorSoft,
+      backgroundColor: colors.badSoft,
     },
     primaryPressed: { opacity: 0.84 },
-    surfacePressed: { backgroundColor: colors.surfaceMuted },
+    surfacePressed: { backgroundColor: colors.surface },
     disabled: { opacity: 0.45 },
     content: {
       flexDirection: 'row',
@@ -144,8 +150,8 @@ function createStyles(
     },
     contentHidden: { opacity: 0 },
     spinner: { position: 'absolute' },
-    label: { fontSize: FontSize.base, fontWeight: FontWeight.semibold },
-    labelSM: { fontSize: FontSize.md },
-    labelLG: { fontSize: FontSize.lg },
+    label: { fontSize: FontSize.secondary, fontWeight: FontWeight.semibold },
+    labelSM: { fontSize: FontSize.caption },
+    labelLG: { fontSize: FontSize.body },
   });
 }

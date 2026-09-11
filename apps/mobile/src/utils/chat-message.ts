@@ -1,5 +1,6 @@
 import i18next from 'i18next';
-import { UiMessage } from '../types/chat';
+import { normalizeAttachmentMimeType } from '@clawket/agent-protocol';
+import type { UiFileAttachment, UiMessage } from '../types/chat';
 import { SessionInfo } from '../types';
 
 export const SILENT_REPLY_TOKEN = 'NO_REPLY';
@@ -251,6 +252,10 @@ export function extractImageUris(content: unknown): string[] | undefined {
   const uris: string[] = [];
   for (const block of content) {
     if (block.type !== 'image') continue;
+    if (typeof block.uri === 'string' && block.uri.trim()) {
+      uris.push(block.uri);
+      continue;
+    }
     const data = block.data ?? block.source?.data;
     const mimeType = block.mimeType ?? block.source?.media_type ?? 'image/jpeg';
     if (data && typeof data === 'string') {
@@ -272,6 +277,33 @@ export function extractImageRawData(content: unknown): Array<{ base64: string; m
     }
   }
   return results.length > 0 ? results : undefined;
+}
+
+/** Reads display-safe file metadata without retaining base64 payloads. */
+export function extractFileAttachments(content: unknown): UiFileAttachment[] | undefined {
+  if (!Array.isArray(content)) return undefined;
+  const files: UiFileAttachment[] = [];
+  for (const value of content) {
+    if (!value || typeof value !== 'object') continue;
+    const block = value as Record<string, unknown>;
+    if (String(block.type ?? '').toLowerCase() !== 'file') continue;
+    const source = block.source && typeof block.source === 'object'
+      ? block.source as Record<string, unknown>
+      : undefined;
+    const rawMimeType = block.mimeType ?? block.mime_type ?? source?.media_type;
+    const rawFileName = block.name ?? block.fileName;
+    const rawUri = block.uri;
+    const fileName = typeof rawFileName === 'string' ? rawFileName.trim() : '';
+    const uri = typeof rawUri === 'string' ? rawUri.trim() : '';
+    files.push({
+      mimeType: normalizeAttachmentMimeType(
+        typeof rawMimeType === 'string' ? rawMimeType : undefined,
+      ),
+      ...(fileName ? { fileName } : {}),
+      ...(uri ? { uri } : {}),
+    });
+  }
+  return files.length > 0 ? files : undefined;
 }
 
 export function hasImageBlocks(content: unknown): boolean {
@@ -370,14 +402,12 @@ function cleanDetail(raw: string): string {
 }
 
 const LEGACY_MAIN_SESSION_LABEL = 'Main Session';
-const MAIN_SESSION_LABEL_KEY = 'Main session';
-
 function localizedMainSessionLabel(): string {
-  return i18next.t(MAIN_SESSION_LABEL_KEY, { ns: 'chat', defaultValue: MAIN_SESSION_LABEL_KEY }) || MAIN_SESSION_LABEL_KEY;
+  return i18next.t('Main session', { ns: 'chat', defaultValue: 'Main session' }) || 'Main session';
 }
 
 function isSyntheticMainSessionLabel(label: string): boolean {
-  return label === LEGACY_MAIN_SESSION_LABEL || label === MAIN_SESSION_LABEL_KEY;
+  return label === LEGACY_MAIN_SESSION_LABEL || label === 'Main session';
 }
 
 export function formatMainSessionLabel(agentName?: string | null): string {
@@ -513,20 +543,39 @@ export function sessionLabel(s: SessionInfo, options?: { currentAgentName?: stri
   return parts.length > 1 ? parts.slice(1).join(':') : s.key;
 }
 
-/** Format a timestamp as relative time (e.g. "3m ago", "2h ago", "Yesterday"). */
-export function relativeTime(timestampMs: number | null | undefined): string {
+export type RelativeTimeTranslationKey =
+  | 'just now'
+  | '{{count}}m ago'
+  | '{{count}}h ago'
+  | 'Yesterday'
+  | '{{count}}d ago'
+  | '{{count}}w ago'
+  | '{{count}}mo ago';
+
+export type RelativeTimeTranslator = (
+  key: RelativeTimeTranslationKey,
+  count?: number,
+) => string;
+
+/** Format a timestamp as relative time, optionally using localized compact labels. */
+export function relativeTime(
+  timestampMs: number | null | undefined,
+  translate?: RelativeTimeTranslator,
+): string {
   if (!timestampMs) return '';
   const diff = Date.now() - timestampMs;
-  if (diff < 0) return 'now';
+  if (diff < 0) return translate?.('just now') ?? 'now';
   const seconds = Math.floor(diff / 1000);
-  if (seconds < 60) return 'now';
+  if (seconds < 60) return translate?.('just now') ?? 'now';
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m`;
+  if (minutes < 60) return translate?.('{{count}}m ago', minutes) ?? `${minutes}m`;
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h`;
+  if (hours < 24) return translate?.('{{count}}h ago', hours) ?? `${hours}h`;
   const days = Math.floor(hours / 24);
-  if (days === 1) return 'Yesterday';
-  if (days < 7) return `${days}d`;
-  if (days < 30) return `${Math.floor(days / 7)}w`;
-  return `${Math.floor(days / 30)}mo`;
+  if (days === 1) return translate?.('Yesterday') ?? 'Yesterday';
+  if (days < 7) return translate?.('{{count}}d ago', days) ?? `${days}d`;
+  const weeks = Math.floor(days / 7);
+  if (days < 30) return translate?.('{{count}}w ago', weeks) ?? `${weeks}w`;
+  const months = Math.floor(days / 30);
+  return translate?.('{{count}}mo ago', months) ?? `${months}mo`;
 }

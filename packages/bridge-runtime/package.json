@@ -1,6 +1,6 @@
 {
   "name": "@clawket/bridge-runtime",
-  "version": "0.3.1",
+  "version": "3.0.0",
   "private": true,
   "type": "module",
   "license": "AGPL-3.0-only",
@@ -16,14 +16,15 @@
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run src",
-    "test:required": "vitest run src --exclude src/hermes.test.ts",
-    "test:hermes-integration": "vitest run src/hermes.test.ts"
+    "test": "vitest run src --no-file-parallelism",
+    "test:required": "vitest run src --exclude '**/*.integration.test.ts'",
+    "test:hermes-integration": "vitest run src/hermes/*.integration.test.ts --no-file-parallelism"
   },
   "dependencies": {
-    "@clawket/bridge-core": "0.3.1",
+    "@clawket/agent-protocol": "3.0.0",
+    "@clawket/bridge-core": "3.0.0",
     "tweetnacl": "^1.0.3",
-    "ws": "^8.18.3"
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "@types/ws": "^8.18.1"

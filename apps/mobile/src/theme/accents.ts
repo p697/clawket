@@ -15,103 +15,103 @@ export type AccentScale = {
   dark: AccentToneScale;
 };
 
-export type BuiltInAccentColorId = Exclude<AccentColorId, 'custom'>;
+export type BuiltInAccentColorId = AccentColorId;
 
 export const builtInAccents: Record<BuiltInAccentColorId, AccentScale> = {
   iceBlue: {
     light: {
-      accent50: '#F0F7FB',
-      accent100: '#E1EFF7',
-      accent200: '#B0D8E8',
-      accent500: '#5BA4C9',
-      accent700: '#3A7FA8',
+      accent50: '#EEF3FF',
+      accent100: '#DCE6FF',
+      accent200: '#B8CAFF',
+      accent500: '#1F5EFF',
+      accent700: '#1748C7',
     },
     dark: {
-      accent50: '#111A20',
-      accent100: '#17222A',
-      accent200: '#243540',
-      accent500: '#86AABD',
-      accent700: '#A9C4D2',
+      accent50: '#10172A',
+      accent100: '#16213F',
+      accent200: '#243866',
+      accent500: '#6B95FF',
+      accent700: '#A9C0FF',
     },
   },
   jadeGreen: {
     light: {
-      accent50: '#F0FAF4',
-      accent100: '#DCEEE4',
-      accent200: '#A3D9B8',
-      accent500: '#4CAF7D',
-      accent700: '#2E8B5E',
+      accent50: '#ECF8F3',
+      accent100: '#D8F0E6',
+      accent200: '#A8DBC8',
+      accent500: '#147A5B',
+      accent700: '#0F5F47',
     },
     dark: {
-      accent50: '#131C17',
-      accent100: '#1A261F',
-      accent200: '#273A30',
-      accent500: '#78AF8F',
-      accent700: '#9AC4AE',
+      accent50: '#0E1C17',
+      accent100: '#142820',
+      accent200: '#224437',
+      accent500: '#52C49A',
+      accent700: '#91DEC3',
     },
   },
   oceanTeal: {
     light: {
-      accent50: '#F0F9F9',
-      accent100: '#DDF0F0',
-      accent200: '#A8D8D8',
-      accent500: '#4DA8A8',
-      accent700: '#2E8585',
+      accent50: '#ECF8FA',
+      accent100: '#D8F0F3',
+      accent200: '#A4D8DE',
+      accent500: '#0F7180',
+      accent700: '#0B5864',
     },
     dark: {
-      accent50: '#121B1B',
-      accent100: '#182424',
-      accent200: '#253939',
-      accent500: '#79B1AB',
-      accent700: '#9CC7C1',
+      accent50: '#0D1B1E',
+      accent100: '#13272B',
+      accent200: '#21434A',
+      accent500: '#55C2D0',
+      accent700: '#92DCE4',
     },
   },
   sunsetOrange: {
     light: {
-      accent50: '#FFF5F0',
-      accent100: '#FFE8DB',
-      accent200: '#FFCAA8',
-      accent500: '#E8853A',
-      accent700: '#C06A24',
+      accent50: '#FFF5EC',
+      accent100: '#FDE7D3',
+      accent200: '#F7C79C',
+      accent500: '#A85312',
+      accent700: '#843F0C',
     },
     dark: {
-      accent50: '#211710',
-      accent100: '#2B1F17',
-      accent200: '#433125',
-      accent500: '#D59A6E',
-      accent700: '#E4B48E',
+      accent50: '#21170F',
+      accent100: '#302013',
+      accent200: '#50351F',
+      accent500: '#F1A45B',
+      accent700: '#F7C993',
     },
   },
   rosePink: {
     light: {
-      accent50: '#FDF2F5',
-      accent100: '#FAE0E8',
-      accent200: '#F2B0C4',
-      accent500: '#D45D82',
-      accent700: '#B33D62',
+      accent50: '#FDF0F5',
+      accent100: '#F9DDE8',
+      accent200: '#F1AFC7',
+      accent500: '#B12D62',
+      accent700: '#8D214C',
     },
     dark: {
-      accent50: '#1D1519',
-      accent100: '#281C22',
-      accent200: '#3F2C34',
-      accent500: '#CB88A0',
-      accent700: '#DBA8B9',
+      accent50: '#211318',
+      accent100: '#301B23',
+      accent200: '#512D3A',
+      accent500: '#F0709F',
+      accent700: '#F5ABC4',
     },
   },
   royalPurple: {
     light: {
-      accent50: '#F5F0FA',
-      accent100: '#E8DDF5',
-      accent200: '#C6ADE6',
-      accent500: '#8B5CC8',
-      accent700: '#6B3FA8',
+      accent50: '#F4F0FD',
+      accent100: '#E8DEFA',
+      accent200: '#CBB8F2',
+      accent500: '#6C43C2',
+      accent700: '#533197',
     },
     dark: {
-      accent50: '#18141D',
-      accent100: '#211B28',
-      accent200: '#342A3F',
-      accent500: '#A591C5',
-      accent700: '#C1B3D8',
+      accent50: '#181320',
+      accent100: '#241B33',
+      accent200: '#3D2D57',
+      accent500: '#A98BFF',
+      accent700: '#CBB9FF',
     },
   },
 };
@@ -124,27 +124,7 @@ export function isBuiltInAccentId(value: string): value is BuiltInAccentColorId 
 
 export function resolveAccentScale(
   accentId: AccentColorId,
-  customAccent?: AccentScale | null,
 ): AccentScale {
-  if (accentId === 'custom' && customAccent) return customAccent;
   if (isBuiltInAccentId(accentId)) return builtInAccents[accentId];
   return builtInAccents[defaultAccentId];
-}
-
-function isAccentToneScale(value: unknown): value is AccentToneScale {
-  if (!value || typeof value !== 'object') return false;
-  const v = value as Record<string, unknown>;
-  return (
-    typeof v['accent50'] === 'string' &&
-    typeof v['accent100'] === 'string' &&
-    typeof v['accent200'] === 'string' &&
-    typeof v['accent500'] === 'string' &&
-    typeof v['accent700'] === 'string'
-  );
-}
-
-export function isAccentScale(value: unknown): value is AccentScale {
-  if (!value || typeof value !== 'object') return false;
-  const v = value as Record<string, unknown>;
-  return isAccentToneScale(v['light']) && isAccentToneScale(v['dark']);
 }
