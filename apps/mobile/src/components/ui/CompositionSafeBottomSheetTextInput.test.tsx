@@ -105,3 +105,10 @@ describe('CompositionSafeBottomSheetTextInput', () => {
     expect(view.getByTestId('input').props.defaultValue).toBeUndefined();
   });
 });
+
+it('uses the same explicit normal tracking inside sheets', () => {
+  const view = render(<CompositionSafeBottomSheetTextInput testID="tracking" value="" placeholder="搜索" />);
+  expect(Object.assign({}, ...view.getByTestId('tracking').props.style.flat(Infinity)).letterSpacing).toBe(0);
+  view.rerender(<CompositionSafeBottomSheetTextInput testID="tracking" value="" style={{ letterSpacing: 4 }} />);
+  expect(Object.assign({}, ...view.getByTestId('tracking').props.style.flat(Infinity)).letterSpacing).toBe(4);
+});

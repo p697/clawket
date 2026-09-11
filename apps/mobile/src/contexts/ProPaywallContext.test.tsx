@@ -159,6 +159,28 @@ describe('ProPaywallProvider state machine', () => {
     jest.useRealTimers();
   });
 
+  it.each([false, true])('settles initial loading when the SDK listener wins the refresh race (Pro=%s)', async (isActive) => {
+    const pending = deferred<{ customerInfo: object; snapshot: ProSubscriptionSnapshot }>();
+    mockGetCustomerInfo.mockReturnValueOnce(pending.promise);
+    const authoritative = { ...FREE_SNAPSHOT, isActive };
+    mockDeriveProSubscriptionSnapshot.mockReturnValue(authoritative);
+    render(<ProPaywallProvider><Capture /></ProPaywallProvider>);
+    await waitFor(() => {
+      expect(mockGetCustomerInfo).toHaveBeenCalled();
+      expect(Purchases.addCustomerInfoUpdateListener).toHaveBeenCalled();
+    });
+    expect(current?.isLoading).toBe(true);
+    const listener = (Purchases.addCustomerInfoUpdateListener as jest.Mock).mock.calls.at(-1)[0];
+    await act(async () => { listener({}); });
+    expect(current?.isLoading).toBe(false);
+    expect(current?.isPro).toBe(isActive);
+    await act(async () => {
+      pending.resolve({ customerInfo: {}, snapshot: { ...FREE_SNAPSHOT, isActive: !isActive } });
+    });
+    expect(current?.isLoading).toBe(false);
+    expect(current?.snapshot).toEqual(authoritative);
+  });
+
   it('holds the success state for two seconds, then closes and resolves purchase success', async () => {
     mockPurchasePro.mockResolvedValue({ customerInfo: {}, snapshot: PRO_SNAPSHOT });
     await renderProvider();

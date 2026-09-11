@@ -5,6 +5,9 @@ import {
   type DiscoverResult,
   type HeartbeatSettings,
   type ManagementOperations,
+  type ModelSelectionState,
+  type ModelSelectionWrite,
+  type ModelSelectionWriteResult,
   type PromptInput,
   type SessionDescriptor,
   type ToolPolicy,
@@ -119,9 +122,12 @@ export class OpenClawAdapter extends GatewayAdapterBase {
       const identity: { name?: string; avatar?: string; emoji?: string } = await this.invoke(
         () => this.gateway.fetchIdentity(agent.id),
       ).catch(() => ({}));
-      const mainSessionKey = agent.id === result.defaultId && result.mainKey
-        ? result.mainKey
-        : `agent:${agent.id}:main`;
+      // agents.list reports the configured alias, sessions.list uses a scoped key.
+      // Keep other agents scoped even when an older peer returns a fully qualified key.
+      const mainAlias = result.mainKey?.trim() || 'main';
+      const mainSessionKey = mainAlias.startsWith('agent:')
+        ? (agent.id === result.defaultId ? mainAlias : `agent:${agent.id}:main`)
+        : `agent:${agent.id}:${mainAlias.toLowerCase()}`;
       const avatar = identity.avatar || agent.identity?.avatarUrl || agent.identity?.avatar;
       return {
         connectionId: this.connection.id,
@@ -258,12 +264,53 @@ export class OpenClawAdapter extends GatewayAdapterBase {
     }
   }
 
+  private async readModelSelection(sessionKey?: string | null): Promise<ModelSelectionState> {
+    const models = await this.gateway.listModels();
+    let modelRef = '';
+    let provider = '';
+    if (sessionKey) {
+      const session = (await this.gateway.listSessions()).find((item) => item.key === sessionKey);
+      modelRef = session?.model?.trim() ?? '';
+      provider = session?.modelProvider?.trim() ?? '';
+    } else {
+      const { config } = await this.gateway.getConfig();
+      const agents = config?.agents as { defaults?: { model?: string | { primary?: string } } } | undefined;
+      const model = agents?.defaults?.model;
+      modelRef = (typeof model === 'string' ? model : model?.primary)?.trim() ?? '';
+    }
+    const slash = modelRef.indexOf('/');
+    if (slash >= 0) {
+      provider ||= modelRef.slice(0, slash);
+      modelRef = modelRef.slice(slash + 1);
+    }
+    return { currentModel: modelRef, currentProvider: provider, currentBaseUrl: '', models };
+  }
+
+  private async writeModelSelection(input: ModelSelectionWrite): Promise<ModelSelectionWriteResult> {
+    const model = input.model.trim();
+    const reference = model.includes('/') || !input.provider ? model : `${input.provider}/${model}`;
+    if (!model) throw new AdapterError('server', 'A model is required');
+    const scope = input.scope ?? 'global';
+    if (scope === 'session') {
+      if (!input.sessionKey) throw new AdapterError('server', 'A session is required');
+      await this.gateway.request('sessions.patch', { key: input.sessionKey, model: reference });
+    } else {
+      const { hash } = await this.gateway.getConfig();
+      if (!hash) throw new AdapterError('server', 'Configuration version is unavailable');
+      const result = await this.gateway.patchConfig(JSON.stringify({ agents: { defaults: { model: { primary: reference } } } }), hash);
+      if (!result.ok) throw new AdapterError('server', 'Gateway rejected model selection');
+    }
+    const slash = reference.indexOf('/');
+    return { ok: true, scope, currentModel: slash < 0 ? reference : reference.slice(slash + 1),
+      currentProvider: slash < 0 ? '' : reference.slice(0, slash), currentBaseUrl: '', models: [] };
+  }
+
   private createManagementOperations(): ManagementOperations {
     return {
       models: {
         list: () => this.invoke(() => this.gateway.listModels()),
-        getSelection: () => this.invoke(() => this.gateway.getModelSelectionState()),
-        setSelection: (params) => this.invoke(() => this.gateway.setModelSelection(params)),
+        getSelection: (sessionKey) => this.invoke(() => this.readModelSelection(sessionKey)),
+        setSelection: (params) => this.invoke(() => this.writeModelSelection(params)),
         listThinkingLevels: () => ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'adaptive'],
       },
       skills: {

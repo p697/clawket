@@ -4,7 +4,7 @@ import PasteInput, {
   type PastedFile,
   type PasteTextInputInstance,
 } from '@mattermost/react-native-paste-input';
-import type { CompositionSafeTextInputProps } from './CompositionSafeTextInput';
+import { NATIVE_INPUT_TEXT_DEFAULTS, type CompositionSafeTextInputProps } from './CompositionSafeTextInput';
 import { useCompositionSafeTextInput } from './useCompositionSafeTextInput';
 
 export type { PastedFile };
@@ -46,6 +46,7 @@ export const PasteCapableTextInput = React.forwardRef<
   return (
     <PasteInput
       {...props}
+      style={[NATIVE_INPUT_TEXT_DEFAULTS, props.style]}
       ref={bindings.handleInputRef as unknown as React.Ref<PasteTextInputInstance>}
       {...bindings.valueProps}
       onChangeText={bindings.handleChangeText}

@@ -18,6 +18,7 @@ import {
   DarkTheme as NavigationDarkTheme,
   DefaultTheme as NavigationDefaultTheme,
   NavigationContainer,
+  StackActions,
   NavigationState,
   Theme as NavigationTheme,
 } from '@react-navigation/native';
@@ -76,6 +77,7 @@ import {
   scheduleAutomaticAppReviewForColdStart,
 } from './src/services/auto-app-review';
 import i18n from './src/i18n';
+import { useTranslation } from 'react-i18next';
 import {
   useDeepLinkHandler,
   type DeepLinkConfirmationRequest,
@@ -89,11 +91,6 @@ import type { AgentInfo } from './src/types/agent';
 import { buildTheme, builtInAccents, defaultAccentId, useAppTheme } from './src/theme';
 import { APP_PACKAGE_VERSION } from './src/constants/app-version';
 import { getCurrentAppIconAsync, type AppIconVariant } from './src/services/app-icon';
-import {
-  getCurrentAppVersion,
-  markCurrentAppUpdateAnnouncementShown,
-  shouldShowCurrentAppUpdateAnnouncement,
-} from './src/services/app-update-announcement';
 import { AppProviders } from './src/bootstrap/AppProviders';
 import { useAppBootstrap } from './src/bootstrap/useAppBootstrap';
 import { getActiveLeafRouteName } from './src/utils/posthog-navigation';
@@ -119,6 +116,7 @@ import type {
   AgentSettingsSection,
   RootStackParamList,
 } from './src/navigation/root-stack';
+import { findAgentChatReturnIndex } from './src/navigation/root-stack';
 import {
   buildRosterRows,
   isRosterAgentMuted,
@@ -130,12 +128,10 @@ import {
 import {
   findPendingApprovalTarget,
   isApprovalScanFresh,
-  remainingLaunchPaywallDelay,
   resolveStartupNavigation,
   type StartupThreadTarget,
 } from './src/navigation/launch-paywall';
 import {
-  consumeAcceptedPaywallPresentation,
   PaywallContinuationCoordinator,
 } from './src/navigation/paywall-continuation';
 import { ThreadScreen } from './src/screens/Thread';
@@ -154,6 +150,7 @@ import {
   AccountSettingsScreen,
   AccountSettingsSectionScreen,
   ChatAppearanceScreen,
+  HelpCenterScreen,
   ReleaseNotesHistoryScreen,
   resolveAccountSettingsRuntimeStatus,
   type AccountSettingsAction,
@@ -164,6 +161,11 @@ import { OnboardingRoute } from './src/screens/Onboarding/OnboardingRoute';
 import { publicAppLinks } from './src/config/public';
 import { CLAWKET_GITHUB_REPO_URL } from './src/config/app-links';
 import type { ProFeature } from './src/utils/pro';
+
+import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
+import { ConnectionsScreen } from './src/screens/Connection/ConnectionsScreen';
+import { DesignSystemScreen } from './src/screens/AccountSettings/DesignSystemScreen';
+import { ConnectionScreen } from './src/screens/Connection/ConnectionScreen';
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 const LOADING_THEME = buildTheme('light', 'light', builtInAccents[defaultAccentId]);
@@ -237,12 +239,13 @@ export default function App(): React.JSX.Element {
     connectionsInitialized: connectionSnapshot.initialized,
   });
 
-  useEffect(() => () => {
-    void connectionRuntime.stop();
+  useEffect(() => {
+    void connectionRuntime.start();
+    return () => { void connectionRuntime.stop(); };
   }, [connectionRuntime]);
 
   useEffect(() => {
-    void scheduleAutomaticAppReviewForColdStart();
+    if (!__DEV__) void scheduleAutomaticAppReviewForColdStart();
   }, []);
 
   if (loading) {
@@ -303,9 +306,9 @@ export default function App(): React.JSX.Element {
             setChatFontSize(size);
             StorageService.setChatFontSize(size);
           }}
-          onChatAppearanceChange={(settings) => {
+          onChatAppearanceChange={async (settings) => {
+            await StorageService.setChatAppearance(settings);
             setChatAppearance(settings);
-            StorageService.setChatAppearance(settings);
           }}
           onSpeechRecognitionLanguageChange={(language) => {
             setSpeechRecognitionLanguage(language);
@@ -372,7 +375,7 @@ type AppContentProps = {
   onNodeEnabledToggle: (enabled: boolean) => void;
   onNodeCapabilityTogglesChange: (toggles: NodeCapabilityToggles) => void;
   onChatFontSizeChange: (size: number) => void;
-  onChatAppearanceChange: (settings: ChatAppearanceSettings) => void;
+  onChatAppearanceChange: (settings: ChatAppearanceSettings) => void | Promise<void>;
   onSpeechRecognitionLanguageChange: (language: SpeechRecognitionLanguage) => void;
 };
 
@@ -399,6 +402,7 @@ function AppContent({
   onChatAppearanceChange,
   onSpeechRecognitionLanguageChange,
 }: AppContentProps): React.JSX.Element {
+  const { t: translate } = useTranslation();
   const { theme, mode: activeThemeMode, accentId: activeAccentId } = useAppTheme();
   const {
     isPro,
@@ -407,7 +411,6 @@ function AppContent({
     hidePaywall,
     restorePurchases,
     showPaywall,
-    showThreePointZeroIntro,
   } = useProPaywall();
   const connections = useConnections();
   const rootNavigationRef = useMemo(() => createNavigationContainerRef<RootStackParamList>(), []);
@@ -450,15 +453,7 @@ function AppContent({
   const [activeRouteName, setActiveRouteName] = useState<keyof RootStackParamList | null>(null);
   const [rosterRenderedAt, setRosterRenderedAt] = useState<number | null>(null);
   const [pendingAutoOpen, setPendingAutoOpen] = useState<StartupThreadTarget | null>(null);
-  const [startupAnnouncementLoading, setStartupAnnouncementLoading] = useState(true);
-  const [threePointZeroIntroPending, setThreePointZeroIntroPending] = useState(false);
   const handledNotificationResponseIdsRef = useRef(new Set<string>());
-  const launchPaywallPhaseRef = useRef<'idle' | 'opening' | 'visible'>('idle');
-  const launchPaywallKindRef = useRef<Readonly<{
-    kind: 'generic' | 'threePointZeroIntro';
-    firstRun: boolean;
-  }> | null>(null);
-  const initialConnectionCountRef = useRef(connections.connections.length);
   const paywallContinuationCoordinatorRef = useRef(new PaywallContinuationCoordinator());
   const rosterViewTrackedRef = useRef(false);
   const presentPaywall = useCallback((
@@ -534,36 +529,6 @@ function AppContent({
       active = false;
     };
   }, []);
-
-  useEffect(() => {
-    let active = true;
-    const version = getCurrentAppVersion();
-    if (debugMode || !/^3\.0(?:\.|$)/.test(version)) {
-      setStartupAnnouncementLoading(false);
-      return () => {
-        active = false;
-      };
-    }
-    void (async () => {
-      const shouldShow = await shouldShowCurrentAppUpdateAnnouncement(false);
-      if (!shouldShow) return;
-      if (initialConnectionCountRef.current === 0) {
-        await markCurrentAppUpdateAnnouncementShown();
-        return;
-      }
-      if (
-        active
-        && !getConnectionRuntime().getSnapshot().launchPaywallShownThisProcess
-      ) {
-        setThreePointZeroIntroPending(true);
-      }
-    })().catch(() => undefined).finally(() => {
-      if (active) setStartupAnnouncementLoading(false);
-    });
-    return () => {
-      active = false;
-    };
-  }, [debugMode]);
 
   useEffect(() => {
     let active = true;
@@ -681,10 +646,13 @@ function AppContent({
   ]);
 
   const mainSessionKey = useMemo(
-    () => resolveMainSessionKey(currentAgentId, {
-      mainSessionKey: resolveGlobalMainSessionKey(activeConnection?.backendKind),
-    }),
-    [activeConnection?.backendKind, currentAgentId],
+    () => connections.roster
+      .find((group) => group.connection.id === activeConnection?.id)
+      ?.agents.find(({ agent }) => agent.agentId === currentAgentId)?.agent.mainSessionKey
+      ?? resolveMainSessionKey(currentAgentId, {
+        mainSessionKey: resolveGlobalMainSessionKey(activeConnection?.backendKind),
+      }),
+    [activeConnection?.id, activeConnection?.backendKind, connections.roster, currentAgentId],
   );
   const isMultiAgent = agents.length > 1;
 
@@ -747,6 +715,7 @@ function AppContent({
         connectionState: connections.activeState,
       });
 
+      getConnectionRuntime().setAppActive(nextState === 'active');
       if (nextState === 'background' || nextState === 'inactive') {
         backgroundedAtRef.current = Date.now();
         return;
@@ -1239,6 +1208,7 @@ function AppContent({
       previewEnvironment: i18n.t(debugMode ? 'Preview' : 'Production', { ns: 'config' }),
     };
   }, [
+    translate,
     activeAccentId,
     activeThemeMode,
     chatAppearance.bubbles.style,
@@ -1247,10 +1217,23 @@ function AppContent({
     speechRecognitionLanguage,
   ]);
 
+  const [connectionHosts, setConnectionHosts] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let active = true;
+    void Promise.all(connections.connections.map(async (connection) => {
+      try {
+        const record = await getConnectionRuntime().getRuntimeConnectionRecord(connection.id);
+        return [connection.id, new URL(record.url).host] as const;
+      } catch { return [connection.id, ''] as const; }
+    })).then((entries) => { if (active) setConnectionHosts(Object.fromEntries(entries)); });
+    return () => { active = false; };
+  }, [connections.connections]);
+
   const settingsSectionConnections = useMemo(() => settingsConnections.map((connection) => ({
     ...connection,
     state: connection.id === connections.activeConnectionId ? connections.activeState : 'idle' as const,
     supportsRelayStats: connection.transportKind === 'relay',
+    serverHost: connectionHosts[connection.id],
     isFreeConnection: connection.id === entitlement.freeConnectionId,
     freeSwitchAvailable: nextFreeConnectionSwitchAt === null
       || entitlement.now >= nextFreeConnectionSwitchAt,
@@ -1270,6 +1253,8 @@ function AppContent({
     freeConnectionSwitching,
     nextFreeConnectionSwitchAt,
     settingsConnections,
+    connectionHosts,
+    translate,
   ]);
 
   const graceDaysLeft = isGraceActive(entitlement)
@@ -1334,128 +1319,24 @@ function AppContent({
   }, [rootNavigationRef]);
 
   useEffect(() => {
-    if (!navigationReady || activeRouteName !== 'Roster') return;
-    if (paywallVisible || launchPaywallPhaseRef.current !== 'idle') return;
-
+    if (!navigationReady || activeRouteName !== 'Roster' || paywallVisible) return;
     const action = resolveStartupNavigation({
       rosterRendered: rosterRenderedAt !== null,
       approvalScanReady,
       activeState: connections.activeState,
-      subscriptionLoading: permissionsLoading || startupAnnouncementLoading,
+      subscriptionLoading: permissionsLoading,
       isPro,
       launchPaywallShownThisProcess: connections.launchPaywallShownThisProcess,
       pendingAutoOpen,
       pendingApproval: pendingApprovalTarget,
-      threePointZeroIntroPending,
     });
-
     if (action.type === 'open_thread') {
-      if (action.skipLaunchPaywall) {
-        getConnectionRuntime().markLaunchPaywallShown();
-        setThreePointZeroIntroPending(false);
-        openStartupThread(action.target);
-        return;
-      }
-    }
-    if (action.type === 'show_three_point_zero_intro') {
-      consumeAcceptedPaywallPresentation(showThreePointZeroIntro, () => {
-        getConnectionRuntime().markLaunchPaywallShown();
-        setThreePointZeroIntroPending(false);
-        launchPaywallKindRef.current = { kind: 'threePointZeroIntro', firstRun: false };
-        launchPaywallPhaseRef.current = 'opening';
-        void markCurrentAppUpdateAnnouncementShown().catch(() => undefined);
-      });
-      return;
-    }
-    if (action.type === 'open_thread') {
+      getConnectionRuntime().markLaunchPaywallShown();
       openStartupThread(action.target);
-      return;
     }
-    if (action.type !== 'show_launch_paywall') return;
-
-    const firstRun = pendingAutoOpen?.from === 'onboarding';
-    const timer = setTimeout(() => {
-      if (activeRouteRef.current !== 'Roster') return;
-      const runtime = getConnectionRuntime();
-      const latest = runtime.getSnapshot();
-      if (latest.activeState !== 'ready' || latest.launchPaywallShownThisProcess) return;
-      const latestReadyAt = latest.activeConnectionId
-        ? latest.connectionDetails[latest.activeConnectionId]?.lastReadyAt ?? null
-        : null;
-      const latestRosterGroup = latest.roster.find((group) => (
-        group.connection.id === latest.activeConnectionId
-      ));
-      if (!isApprovalScanFresh(
-        latestRosterGroup?.source,
-        latestRosterGroup?.syncedAt,
-        latestReadyAt,
-      )) return;
-      const latestApprovalTarget = findPendingApprovalTarget(
-        latest.roster,
-        latest.activeConnectionId,
-      );
-      if (latestApprovalTarget) {
-        runtime.markLaunchPaywallShown();
-        setThreePointZeroIntroPending(false);
-        openStartupThread(latestApprovalTarget);
-        return;
-      }
-      consumeAcceptedPaywallPresentation(() => presentPaywall('launch'), () => {
-        if (!runtime.markLaunchPaywallShown()) return;
-        launchPaywallKindRef.current = { kind: 'generic', firstRun };
-        launchPaywallPhaseRef.current = 'opening';
-        analyticsEvents.paywallLaunchShown({ variant: 'generic', first_run: firstRun });
-      });
-    }, remainingLaunchPaywallDelay(
-      Date.now(),
-      activeConnectionReadyAt,
-      rosterRenderedAt,
-    ));
-    return () => clearTimeout(timer);
-  }, [
-    activeRouteName,
-    activeConnectionReadyAt,
-    approvalScanReady,
-    connections.activeState,
-    connections.launchPaywallShownThisProcess,
-    isPro,
-    navigationReady,
-    openStartupThread,
-    paywallVisible,
-    pendingApprovalTarget,
-    pendingAutoOpen,
-    permissionsLoading,
-    presentPaywall,
-    rosterRenderedAt,
-    showThreePointZeroIntro,
-    startupAnnouncementLoading,
-    threePointZeroIntroPending,
-  ]);
-
-  useEffect(() => {
-    const phase = launchPaywallPhaseRef.current;
-    if (phase === 'opening' && paywallVisible) {
-      launchPaywallPhaseRef.current = 'visible';
-      return;
-    }
-    if (phase === 'opening' && isPro) {
-      launchPaywallPhaseRef.current = 'idle';
-      launchPaywallKindRef.current = null;
-      if (pendingAutoOpen) openStartupThread(pendingAutoOpen);
-      return;
-    }
-    if (phase !== 'visible' || paywallVisible) return;
-    launchPaywallPhaseRef.current = 'idle';
-    const launch = launchPaywallKindRef.current;
-    launchPaywallKindRef.current = null;
-    if (launch?.kind === 'generic') {
-      analyticsEvents.paywallLaunchClosed({
-        variant: 'generic',
-        first_run: launch.firstRun,
-      });
-    }
-    if (pendingAutoOpen) openStartupThread(pendingAutoOpen);
-  }, [isPro, openStartupThread, paywallVisible, pendingAutoOpen]);
+  }, [navigationReady, activeRouteName, paywallVisible, rosterRenderedAt,
+    approvalScanReady, connections.activeState, connections.launchPaywallShownThisProcess,
+    permissionsLoading, isPro, pendingAutoOpen, pendingApprovalTarget, openStartupThread]);
 
   const handleToggleRosterAgentPinned = useCallback(async (row: RosterDisplayRow) => {
     if (!canAccessRosterAgent(row.connectionId, row.agentId)) {
@@ -1575,7 +1456,7 @@ function AppContent({
 
   const handleAccountSectionAction = useCallback((
     request: AccountSettingsSectionActionRequest,
-    navigation: { navigate: typeof rootNavigationRef.navigate },
+    navigation: { navigate: typeof rootNavigationRef.navigate; dispatch: typeof rootNavigationRef.dispatch },
   ) => {
     switch (request.action) {
       case 'set-reply-notifications':
@@ -1599,10 +1480,15 @@ function AppContent({
       case 'release-notes':
         navigation.navigate('ReleaseNotes');
         return;
+      case 'advanced-settings':
+        navigation.dispatch(StackActions.push('AccountSettingsSection', { section: 'developer' }));
+        return;
+      case 'design-system':
+        navigation.navigate('DesignSystem');
+        return;
       case 'reconnect-connection':
         if (request.connectionId) {
-          void getConnectionRuntime().activate(request.connectionId)
-            .then(() => getConnectionRuntime().probeActive());
+          void getConnectionRuntime().reconnectConnection(request.connectionId);
         }
         return;
       case 'set-free-connection':
@@ -1643,6 +1529,11 @@ function AppContent({
         }
         return;
       case 'help-center':
+        navigation.navigate('HelpCenter');
+        return;
+      case 'wecom':
+        navigation.navigate('HelpCenter', { community: 'wecom' });
+        return;
       case 'openclaw-docs':
         openExternalUrl(publicAppLinks.docsUrl ?? 'https://docs.openclaw.ai');
         return;
@@ -1729,14 +1620,12 @@ function AppContent({
         presentPaywall(
           canAccessConnection(context.connection.id) ? 'agents' : 'gatewayConnections',
           async () => {
-            await getConnectionRuntime().activate(context.connection.id);
-            await getConnectionRuntime().probeActive();
+            await getConnectionRuntime().reconnectConnection(context.connection.id);
           },
         );
         return;
       }
-      await getConnectionRuntime().activate(context.connection.id);
-      await getConnectionRuntime().probeActive();
+      await getConnectionRuntime().reconnectConnection(context.connection.id);
       return;
     }
     if (request.action === 'connection.remove') {
@@ -1803,6 +1692,7 @@ function AppContent({
               }}
               onStateChange={handleNavigationStateChange}
             >
+              <BottomSheetModalProvider>
               <StatusBar style={theme.scheme === 'dark' ? 'light' : 'dark'} />
               <RootStack.Navigator
                 initialRouteName={connections.connections.length > 0 ? 'Roster' : 'Onboarding'}
@@ -1824,6 +1714,7 @@ function AppContent({
                         analyticsEvents.pairingCodeSubmitted({ length_ok: lengthOk });
                       }}
                       onDocsOpened={(backend) => analyticsEvents.onboardingDocsOpened({ backend })}
+                      onAgentPromptCopied={(backend) => analyticsEvents.onboardingAgentPromptCopied({ backend })}
                       onScanQrTapped={() => analyticsEvents.gatewayScanQrTapped({
                         source: props.route.params?.presentation === 'modal'
                           ? 'add_connection'
@@ -1862,6 +1753,7 @@ function AppContent({
                       graceBanner={rosterGraceBanner}
                       canCreateAgent={activeCapabilities.agentCreate === true
                         && Boolean(activeAdapter?.management?.agents?.create)}
+                      addConnectionLocked={!canAddSettingsConnection}
                       canRenamePinnedSession={connections.activeState === 'ready'
                         && activeCapabilities.sessionRename === true
                         && Boolean(activeAdapter?.patchSession)}
@@ -1970,6 +1862,7 @@ function AppContent({
                   {(props) => (
                     <ThreadScreen
                       {...props}
+                      sessionHistoryGraceActive={isGraceActive(entitlement)}
                       locked={!canAccessRosterAgent(
                         props.route.params.connectionId,
                         props.route.params.agentId,
@@ -1996,7 +1889,7 @@ function AppContent({
                         setThreadContext(props.route.params);
                         setSessionPanelVisible(true);
                       }}
-                      onOpenRunSession={(sessionKey, agentId) => {
+                      onOpenRunSession={(sessionKey, agentId, _kind, runContext) => {
                         const targetAgentId = agentId ?? props.route.params.agentId;
                         if (!canAccessRosterAgent(props.route.params.connectionId, targetAgentId)) {
                           presentPaywall(
@@ -2008,6 +1901,7 @@ function AppContent({
                                 connectionId: props.route.params.connectionId,
                                 agentId: targetAgentId,
                                 sessionKey,
+                                runContext,
                                 from: 'panel',
                               };
                               setThreadContext(target);
@@ -2021,6 +1915,7 @@ function AppContent({
                           connectionId: props.route.params.connectionId,
                           agentId: targetAgentId,
                           sessionKey,
+                          runContext,
                           from: 'panel',
                         };
                         setThreadContext(target);
@@ -2069,7 +1964,17 @@ function AppContent({
                         loadIdentityDetail={loadConnectionIdentityDetail}
                         permissionDenied={permissionDenied}
                         onBack={navigation.goBack}
-                        onNavigate={navigation.navigate}
+                        onContinueChat={() => {
+                          if (!agent) return;
+                          const state = navigation.getState();
+                          const previous = findAgentChatReturnIndex(state, connection.id, agent.agentId);
+                          if (previous >= 0) navigation.pop(state.index - previous);
+                          else navigation.navigate('Thread', { connectionId: connection.id, agentId: agent.agentId, sessionKey: agent.mainSessionKey, from: 'roster' });
+                        }}
+                        onNavigate={(name, params) => {
+                          if (params.section === 'connection') navigation.navigate('Connection', { connectionId: params.connectionId });
+                          else navigation.navigate(name, params);
+                        }}
                         onOpenPro={(section, onContinue) => presentPaywall(
                           permissionDenied
                             ? (canAccessConnection(connection.id) ? 'agents' : 'gatewayConnections')
@@ -2118,6 +2023,41 @@ function AppContent({
                     );
                   }}
                 </RootStack.Screen>
+                <RootStack.Screen name="Connections">
+                  {({ navigation }) => <ConnectionsScreen onBack={navigation.goBack}
+                    onAdd={() => navigation.navigate('Onboarding', { presentation: 'modal' })}
+                    onOpen={(connectionId) => navigation.navigate('Connection', { connectionId })} />}
+                </RootStack.Screen>
+                <RootStack.Screen name="DesignSystem">
+                  {({ navigation }) => <DesignSystemScreen onBack={navigation.goBack} />}
+                </RootStack.Screen>
+                <RootStack.Screen name="Connection">
+                  {({ navigation, route }) => {
+                    const connection = connections.connections.find((item) => item.id === route.params.connectionId);
+                    if (!connection) return <AgentSettingsRouteLoading onBack={navigation.goBack} />;
+                    const runtime = getConnectionRuntime();
+                    const resume = async (reconnect = false) => {
+                      const action = () => reconnect ? runtime.reconnectConnection(connection.id) : runtime.activate(connection.id);
+                      if (!canAccessConnection(connection.id)) {
+                        presentPaywall('gatewayConnections', async () => { await action(); });
+                        return;
+                      }
+                      await action();
+                    };
+                    return <ConnectionScreen connection={connection}
+                      state={connections.activeConnectionId === connection.id ? connections.activeState : 'offline'}
+                      paused={connections.pausedConnectionIds?.includes(connection.id) ?? false}
+                      agentNames={connections.roster.find((group) => group.connection.id === connection.id)?.agents.map(({ agent }) => agent.name) ?? []}
+                      onBack={navigation.goBack} onReconnect={() => resume(true)} onResume={() => resume()}
+                      onPause={() => runtime.pauseConnection(connection.id)}
+                      onRemove={async () => {
+                        await runtime.removeConnection(connection.id);
+                        if (runtime.getSnapshot().connections.length === 0) navigation.reset({ index: 0, routes: [{ name: 'Onboarding', params: { presentation: 'root' } }] });
+                        else navigation.navigate('Roster');
+                      }}
+                      onDetails={() => navigation.navigate('AccountSettingsSection', { section: 'connections', connectionId: connection.id })} />;
+                  }}
+                </RootStack.Screen>
                 <RootStack.Screen name="AccountSettings">
                   {({ navigation }) => (
                     <AccountSettingsScreen
@@ -2129,6 +2069,7 @@ function AppContent({
                       replyNotificationsEnabled={replyNotificationsEnabled}
                       debugMode={debugMode}
                       onBack={navigation.goBack}
+                      onOpenSection={(section) => section === 'connections' ? navigation.navigate('Connections') : navigation.navigate('AccountSettingsSection', { section })}
                       onRetry={() => { void getConnectionRuntime().probeActive(); }}
                       onOpenAction={(action) => {
                         if (action === 'view-pro') {
@@ -2147,8 +2088,7 @@ function AppContent({
                         if (section) navigation.navigate('AccountSettingsSection', { section });
                       }}
                       onOpenConnection={(connectionId) => {
-                        void getConnectionRuntime().activate(connectionId);
-                        navigation.navigate('AccountSettingsSection', { section: 'connections' });
+                        navigation.navigate('Connection', { connectionId });
                       }}
                       onOpenPaywall={(reason, onContinue) => presentPaywall(
                         normalizePaywallFeature(reason),
@@ -2163,9 +2103,10 @@ function AppContent({
                   {({ navigation, route }) => (
                     <AccountSettingsSectionScreen
                       section={route.params.section}
-                      status={accountSettingsStatus}
+                      status={route.params.section === 'connections' ? accountSettingsStatus : { kind: 'ready' }}
                       data={{
                         connections: settingsSectionConnections,
+                        connectionId: route.params.connectionId,
                         isPro,
                         canAddConnection: canAddSettingsConnection,
                         replyNotificationsEnabled,
@@ -2187,6 +2128,9 @@ function AppContent({
                     />
                   )}
                 </RootStack.Screen>
+                <RootStack.Screen name="HelpCenter">
+                  {({ navigation, route }) => <HelpCenterScreen onBack={navigation.goBack} initialCommunity={route.params?.community} />}
+                </RootStack.Screen>
                 <RootStack.Screen name="ChatAppearance">
                   {({ navigation }) => (
                     <ChatAppearanceScreen onBack={navigation.goBack} />
@@ -2196,7 +2140,7 @@ function AppContent({
                   {({ navigation }) => (
                     <ReleaseNotesHistoryScreen
                       onBack={navigation.goBack}
-                      onOpenPaywall={(feature) => presentPaywall(feature)}
+                      onOpenPaywall={() => presentPaywall('settingsMembershipPreview')}
                     />
                   )}
                 </RootStack.Screen>
@@ -2266,6 +2210,7 @@ function AppContent({
                     : 'agents',
                 )}
               />
+              </BottomSheetModalProvider>
             </NavigationContainer>
             <GlobalGatewayOverlay />
             <GlobalProPaywallOverlay
@@ -2311,6 +2256,7 @@ function normalizePaywallFeature(reason: string): ProFeature {
     case 'logs':
     case 'usage':
     case 'messageHistory':
+    case 'sessionHistory':
     case 'launch':
     case 'settingsMembershipPreview':
       return normalizeProFeature(reason);

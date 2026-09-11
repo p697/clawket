@@ -45,6 +45,39 @@ async function createBridgeWithDb(input?: {
 }
 
 describe('HermesLocalBridge multi-session protocol', () => {
+  it('does not replace a running gateway that rejects the configured credential', async () => {
+    const bridge = trackBridge(new HermesLocalBridge({ startHermesIfNeeded: true }));
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 401 }));
+    const start = vi.spyOn(bridge, 'startHermesGatewayProcess');
+    await expect(bridge.ensureHermesApiReady()).resolves.toBe(false);
+    expect(start).not.toHaveBeenCalled();
+    expect(bridge.snapshot.lastError).toContain('rejected the configured API key');
+  });
+  it('keeps the managed API credential stable across Bridge restarts and isolated by scope', () => {
+    const options = { bridgeToken: 'persistent-random-bridge-token', hermesHomePath: '/tmp/hermes-qa' };
+    const first = trackBridge(new HermesLocalBridge(options));
+    const restarted = trackBridge(new HermesLocalBridge(options));
+    const another = trackBridge(new HermesLocalBridge({ ...options, apiBaseUrl: 'http://127.0.0.1:8643' }));
+    expect(first.apiKey).toMatch(/^[a-f0-9]{64}$/);
+    expect(restarted.apiKey).toBe(first.apiKey);
+    expect(first.apiKey).not.toBe(first.bridgeToken);
+    expect(another.apiKey).not.toBe(first.apiKey);
+    expect(trackBridge(new HermesLocalBridge({ ...options, apiKey: 'explicit-key' })).apiKey).toBe('explicit-key');
+  });
+
+  it('reports a missing Hermes executable without an unhandled child-process error', async () => {
+    const root = await createTempDirectory();
+    const bridge = trackBridge(new HermesLocalBridge({
+      hermesCommand: join(root, 'missing-hermes'), hermesSourcePath: root, hermesHomePath: root,
+      sessionStorePath: join(root, 'sessions.json'), usageLedgerPath: join(root, 'usage.json'),
+    }));
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('unreachable')));
+    await expect(bridge.startHermesGatewayProcess()).resolves.toBe(false);
+    expect(bridge.hermesChild).toBeNull();
+    expect(bridge.snapshot.lastError).toMatch(/Hermes command was not found/);
+    expect(bridge.apiKey).toBeTruthy();
+  });
+
   it('creates, renames through title and legacy label, resets, and deletes only Bridge-owned sessions', async () => {
     const { bridge } = await createBridgeWithDb({
       sessions: [

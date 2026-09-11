@@ -38,12 +38,12 @@
     "shell-quote": "1.10.0"
   },
   "scripts": {
-    "postinstall": "node scripts/setup-mobile-node-modules.mjs && node apps/mobile/scripts/patch-paste-input-podspec.mjs",
+    "postinstall": "node scripts/setup-mobile-node-modules.mjs && node apps/mobile/scripts/patch-paste-input-podspec.mjs && node apps/mobile/scripts/patch-expo-permissions.mjs",
     "check:docs": "node scripts/check-agent-docs.mjs && node --test scripts/check-agent-docs.test.mjs",
     "check:required": "npm run typecheck && npm run test:required && npm run mobile:check:design-system && npm run --workspace clawket i18n:check && npm run check:docs",
     "typecheck": "npm run protocol:typecheck && npm run mobile:typecheck && npm run relay:typecheck && npm run bridge:typecheck",
     "test": "npm run protocol:test && npm run mobile:test -- --runInBand && npm run relay:test && npm run bridge:test",
-    "test:required": "npm run protocol:test:coverage && npm run mobile:test -- --runInBand && npm run relay:test && npm run bridge:test:required && node --test apps/mobile/scripts/android-release-signing.test.mjs apps/mobile/scripts/check-public-config.test.mjs apps/mobile/scripts/patch-android-native-deps.test.mjs apps/mobile/scripts/patch-paste-input-podspec.test.mjs scripts/bridge/publish-cli.test.mjs scripts/metrics/loc.test.mjs scripts/relay/hermes-device-dev.test.mjs scripts/relay/preview-hermes-smoke.test.mjs scripts/relay/run-wrangler.test.mjs scripts/setup-mobile-node-modules.test.mjs",
+    "test:required": "npm run protocol:test:coverage && npm run mobile:test -- --runInBand && npm run relay:test && npm run bridge:test:required && node --test apps/mobile/scripts/android-release-signing.test.mjs apps/mobile/scripts/check-public-config.test.mjs apps/mobile/scripts/patch-android-native-deps.test.mjs apps/mobile/scripts/patch-paste-input-podspec.test.mjs apps/mobile/scripts/patch-expo-permissions.test.mjs scripts/bridge/publish-cli.test.mjs scripts/metrics/loc.test.mjs scripts/relay/hermes-device-dev.test.mjs scripts/relay/preview-hermes-smoke.test.mjs scripts/relay/run-wrangler.test.mjs scripts/setup-mobile-node-modules.test.mjs",
     "test:compat": "vitest run --config tests/compat/vitest.config.ts",
     "metrics:loc": "node scripts/metrics/loc.mjs",
     "build": "npm run bridge:build",
@@ -63,7 +63,7 @@
     "mobile:config:check:ios": "npm run --workspace clawket config:check:ios",
     "mobile:typecheck": "npm run --workspace clawket typecheck",
     "mobile:check:design-system": "npm run --workspace clawket check:design-system",
-    "mobile:test": "npm run --workspace clawket test",
+    "mobile:test": "npm run --workspace clawket test --",
     "protocol:typecheck": "npm run --workspace @clawket/agent-protocol typecheck",
     "protocol:test": "npm run --workspace @clawket/agent-protocol test",
     "protocol:test:coverage": "npm run --workspace @clawket/agent-protocol test:coverage",

@@ -18,11 +18,11 @@ export function useSheetBackgroundStyle(): ViewStyle {
   const { theme } = useAppTheme();
   return useMemo(
     () => ({
-      backgroundColor: theme.colors.surface,
+      backgroundColor: theme.colors.canvas,
       borderTopLeftRadius: Radius.bottomSheet,
       borderTopRightRadius: Radius.bottomSheet,
     }),
-    [theme.colors.surface],
+    [theme.colors.canvas],
   );
 }
 

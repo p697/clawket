@@ -10,7 +10,7 @@ import {
 import { ChevronRight } from 'lucide-react-native';
 import { useAppTheme } from '../../theme';
 import {
-  BorderWidth,
+  ControlSize,
   FontSize,
   FontWeight,
   IconSize,
@@ -23,6 +23,7 @@ export type RunCardTone = 'accent' | 'bad' | 'warn';
 
 export type RunCardProps = {
   title: string;
+  icon?: React.ComponentType<{ size: number; color: string; strokeWidth: number }>;
   detail?: string;
   statusLabel?: string;
   statusTone?: RunCardTone;
@@ -37,6 +38,7 @@ export type RunCardProps = {
 
 export function RunCard({
   title,
+  icon: Icon,
   detail,
   statusLabel,
   statusTone,
@@ -52,12 +54,9 @@ export function RunCard({
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
   const content = (
     <>
-      <View
-        testID={testID ? `${testID}-status` : undefined}
-        style={[styles.status, { backgroundColor: theme.colors[tone] }]}
-      />
+      {Icon ? <Icon size={IconSize.md} color={theme.colors.inkSecondary} strokeWidth={1.75} /> : null}
       <View style={styles.copy}>
-        <Text style={styles.title} numberOfLines={1}>{title}</Text>
+        <Text style={styles.title} numberOfLines={2}>{title}</Text>
         {statusLabel || detail ? (
           <Text
             testID={testID ? `${testID}-detail` : undefined}
@@ -121,12 +120,8 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       backgroundColor: colors.surface,
       borderRadius: Radius.card,
       paddingVertical: Space.md,
-      paddingRight: Space.md,
-    },
-    status: {
-      alignSelf: 'stretch',
-      width: BorderWidth.emphasis,
-      borderRadius: Radius.full,
+      paddingHorizontal: Space.md,
+      minHeight: ControlSize.settingsRow,
     },
     copy: {
       flex: 1,

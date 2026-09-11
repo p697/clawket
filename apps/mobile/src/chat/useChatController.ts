@@ -1,3 +1,5 @@
+import { rememberUncertainSend, recoverUncertainSends, useUncertainSends } from './sendRecovery';
+import { describeReplyFailure, sanitizeReplyFailure } from './reply-failure';
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AppState,
@@ -65,7 +67,7 @@ import {
 } from "./childSessionActivity";
 import { resolveCachedAgentIdentity } from "./cacheAgentIdentity";
 import { shouldClearComposerInput } from "./composerClearPolicy";
-import { canSendMessage } from "./composerInteractionPolicy";
+import { canQueueMessage, canSendMessage } from "./composerInteractionPolicy";
 import { deriveCurrentSessionActivity } from "./currentSessionActivity";
 import { hasCompletedAssistantForRememberedRun } from "./runStateValidation";
 import { useChatHistoryState } from "./useChatHistoryState";
@@ -96,7 +98,7 @@ import { useChatModelPicker } from "./useChatModelPicker";
 import { useChatCommandPicker } from "./useChatCommandPicker";
 import { isMacCatalyst } from "../utils/platform";
 import {
-  buildUiFileAttachments,
+  buildUserUiMessage,
   extractSlashCommand,
   readFileAsBase64,
   buildPromptAttachments,
@@ -105,6 +107,15 @@ import {
   summarizeAttachmentFormats,
 } from "./chatControllerUtils";
 import { useChatComposerDraft } from "./useChatComposerDraft";
+import { useChatMessageQueue } from "./useChatMessageQueue";
+import {
+  canEnqueueMessage,
+  holdMessageQueue,
+  markQueuedMessageSending,
+  nextDeliverableMessage,
+  queuedMessageDelivery,
+  removeQueuedMessage,
+} from "./messageQueue";
 import { useChatPasteAttachments } from "./useChatPasteAttachments";
 import { useChatAgentIdentity } from "./useChatAgentIdentity";
 import { useBufferedDebugLog } from "./useBufferedDebugLog";
@@ -220,21 +231,35 @@ function shouldMergeFinalMessage(
 }
 
 export function useChatController({
+  readOnly = false,
   adapter,
+  routeSessionKey,
   debugMode,
   showAgentAvatar,
   chatSessionRequest,
   clearChatSessionRequest,
 }: ChatControllerOptions) {
+  const readOnlyRef = useRef(readOnly);
+  readOnlyRef.current = readOnly;
   const appContext = useAppContext();
-  const { t, i18n } = useTranslation("chat");
+  const { t } = useTranslation("chat");
   const { speechRecognitionLanguage } = appContext;
   const [connectionState, setConnectionState] = useState<ConnectionState>(
     adapter ? mapAdapterConnectionState(adapter.state) : "idle",
   );
   const [input, setInput] = useState("");
+  const [sendFailure, setSendFailureMessage] = useState<string | null>(null);
+  const [sendFailureDetails, setSendFailureDetails] = useState<string | null>(null);
+  const setSendFailure = useCallback((message: string | null) => {
+    setSendFailureMessage(message);
+    setSendFailureDetails(null);
+  }, []);
   const composerRef = useRef<ComposerHandle>(null);
   const [isSending, setIsSending] = useState(false);
+  // Delivery evidence for the user's own bubbles: optimistic ids whose prompt
+  // the backend has not answered yet, and whether the current run was reported.
+  const [unconfirmedMessageIds, setUnconfirmedMessageIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [runAcknowledged, setRunAcknowledged] = useState(false);
   const [isPreparingSend, setIsPreparingSend] = useState(false);
   const [pairingPending, setPairingPending] = useState(false);
   const [pairApprovalProjection, setPairApprovalProjection] = useState<Readonly<{
@@ -341,7 +366,7 @@ export function useChatController({
     [adapter],
   );
 
-  const sessionKeyRef = useRef<string | null>(null);
+  const sessionKeyRef = useRef<string | null>(routeSessionKey ?? null);
   const lastAdapterStateRef = useRef<AdapterConnectionState>("idle");
   const lastAdapterRef = useRef<AgentAdapter | null>(adapter);
   const sendPreflightInFlightRef = useRef(false);
@@ -552,6 +577,7 @@ export function useChatController({
     gatewayConfigId,
     currentAgentId,
     initialPreview: initialChatPreview,
+    routeSessionKey,
   });
 
   useEffect(() => {
@@ -614,6 +640,15 @@ export function useChatController({
     mainSessionKey,
     sessionKey: history.sessionKey,
   });
+  const messageQueue = useChatMessageQueue({
+    connectionId: adapter?.connection.id ?? null,
+    sessionKey: history.sessionKey,
+  });
+  const uncertainSends = useUncertainSends(messageQueue.scopeKey, history.messages);
+  const recoverableMessages = useMemo(
+    () => recoverUncertainSends(history.messages, uncertainSends),
+    [history.messages, uncertainSends],
+  );
   useChatAutoCache({
     gatewayConfigId,
     agentId: cacheAgentIdentity.agentId,
@@ -622,7 +657,7 @@ export function useChatController({
     sessionKey: history.sessionKey,
     sessionId: currentSessionInfo?.sessionId,
     sessionLabel: cacheSessionLabel,
-    messages: history.messages,
+    messages: recoverableMessages,
     historyLoaded: history.historyLoaded,
   });
 
@@ -656,6 +691,15 @@ export function useChatController({
     sessionKey: history.sessionKey,
     setInput,
   });
+
+  const messageQueueRef = useRef(messageQueue);
+  messageQueueRef.current = messageQueue;
+  const holdQueuedMessages = useCallback((reason: "abort" | "run_error" | "send_failed" | "preflight_failed") => {
+    const current = messageQueueRef.current.readCurrent();
+    if (current.items.length === 0 || (current.held && current.sendingId === null)) return;
+    messageQueueRef.current.hold();
+    analyticsEvents.chatQueueHeld({ reason, queue_length: current.items.length });
+  }, []);
 
   const clearActiveRunState = useCallback(
     (sessionKey: string | null, reason: string, runId?: string | null) => {
@@ -979,6 +1023,9 @@ export function useChatController({
     sessionKeyRef.current = history.sessionKey;
     clearPostStreamHistoryRefreshTimer();
     clearTransientRunPresentation();
+    // Delivery glyphs are per turn; a remembered run must prove itself again.
+    setUnconfirmedMessageIds(new Set());
+    setRunAcknowledged(false);
     restoreRunStateForSession(history.sessionKey);
   }, [
     clearPostStreamHistoryRefreshTimer,
@@ -1119,6 +1166,8 @@ export function useChatController({
     // keeping remembered run state would leak stale "thinking" to new scopes.
     sessionRunStateRef.current.clear();
     pendingOptimisticRunIdsRef.current.clear();
+    setUnconfirmedMessageIds(new Set());
+    setRunAcknowledged(false);
     agentActivityRef.current.clear();
     childSessionActivityRef.current.clear();
     runRecoveryInFlightRef.current = null;
@@ -1233,7 +1282,7 @@ export function useChatController({
     const onHide = Keyboard.addListener(hideEvt, () =>
       setKeyboardVisible(false),
     );
-    // Dismiss keyboard + reconnect/refresh when app returns from background
+    // Preserve editing focus while reconnecting/refreshing on foreground.
     const appStateSub = AppState.addEventListener(
       "change",
       (nextState: AppStateStatus) => {
@@ -1245,9 +1294,6 @@ export function useChatController({
           return;
         }
         if (nextState !== "active" || prevState === "active") return;
-
-        Keyboard.dismiss();
-        setKeyboardVisible(false);
 
         const awayMs = backgroundedAtRef.current
           ? Date.now() - backgroundedAtRef.current
@@ -1674,6 +1720,7 @@ export function useChatController({
         streamStartedAtRef.current = Date.now();
       }
       setIsSending(true);
+      setRunAcknowledged(true);
       return true;
     };
 
@@ -1889,6 +1936,10 @@ export function useChatController({
         setActivityLabel(null);
         if (update.stopReason !== "cancelled" && update.stopReason !== "error") {
           schedulePostStreamHistoryRefresh();
+        } else {
+          // An interrupted or failed turn must not trigger the next queued
+          // message on its own; the user decides whether it still applies.
+          holdQueuedMessages(update.stopReason === "cancelled" ? "abort" : "run_error");
         }
         return;
       }
@@ -1975,9 +2026,16 @@ export function useChatController({
             update.runId,
           );
         }
-        history.setMessages((previous) =>
-          appendUniqueMessage(previous, update.message),
-        );
+        if (update.runId) {
+          const failure = describeReplyFailure(update.errorMessage, update.code);
+          setSendFailure(t(failure.summaryKey));
+          setSendFailureDetails(failure.details || null);
+          holdQueuedMessages("run_error");
+        } else if (update.sessionKey) {
+          history.setMessages((previous) => appendUniqueMessage(previous, update.message));
+        }
+        // Connection-scoped failures belong to the reconnect banner, not every
+        // open transcript. Retry loops must never create persistent chat messages.
         return;
       }
     }
@@ -1992,6 +2050,7 @@ export function useChatController({
     currentAgentId,
     execApprovalEnabled,
     history,
+    holdQueuedMessages,
     markRunSignal,
     markTransportConfirmed,
     onAgentActiveCountChange,
@@ -2048,26 +2107,49 @@ export function useChatController({
     }
   }, [currentAgentId]);
 
-  const canSend = useMemo(
+  const hasComposerContent = !!input.trim() || pendingImages.length > 0;
+  const canQueue = useMemo(
     () =>
-      canSendMessage({
+      !readOnly && canQueueMessage({
         connectionState,
         hasSession: !!history.sessionKey,
-        hasContent: !!input.trim() || pendingImages.length > 0,
-        isSending: isSending || isPreparingSend || voiceInputActive,
-        refreshingConversation: history.refreshing,
-        refreshingSessions: history.refreshingSessions,
+        hasContent: hasComposerContent,
+        isSending,
+        composerAvailable: !isPreparingSend && !voiceInputActive,
+        queueHasCapacity: canEnqueueMessage(messageQueue.state),
       }),
     [
       connectionState,
+      hasComposerContent,
+      history.sessionKey,
+      isPreparingSend,
+      isSending,
+      messageQueue.state,
+      readOnly,
+      voiceInputActive,
+    ],
+  );
+  const canSend = useMemo(
+    () =>
+      canQueue || (!readOnly && canSendMessage({
+        connectionState,
+        hasSession: !!history.sessionKey,
+        hasContent: hasComposerContent,
+        isSending: isSending || isPreparingSend || voiceInputActive,
+        refreshingConversation: history.refreshing,
+        refreshingSessions: history.refreshingSessions,
+      })),
+    [
+      canQueue,
+      connectionState,
+      hasComposerContent,
       history.refreshing,
       history.refreshingSessions,
       history.sessionKey,
-      input,
       isPreparingSend,
-      pendingImages.length,
       isSending,
       voiceInputActive,
+      readOnly,
     ],
   );
 
@@ -2150,13 +2232,15 @@ export function useChatController({
   }, [isPreparingSend, isSending, releaseSendTriggerGuard]);
 
   const submitMessage = useCallback(
-    (text: string, images: PendingImage[]) => {
+    (text: string, images: PendingImage[], options?: { messageId?: string }) => {
       const sessionKey = history.sessionKey;
       if (!sessionKey || !adapter) return;
+      const sourceQueue = { store: messageQueue.store, scopeKey: messageQueue.scopeKey };
       const localTimestamp = Date.now();
+      setScrollToBottomRequestAt(localTimestamp);
+      setSendFailure(null);
       const idempotencyKey = `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
       const realImages = images.filter((image) => isImageAttachmentMimeType(image.mimeType));
-      const files = images.filter((image) => !isImageAttachmentMimeType(image.mimeType));
       const fallbackKey = resolveAttachmentOnlyFallbackKey(images);
       const attachmentFallbackCopy = {
         'Look at this image': t('Look at this image', { ns: 'chat' }),
@@ -2166,32 +2250,22 @@ export function useChatController({
         'Review these attachments': t('Review these attachments', { ns: 'chat' }),
       } as const;
       const fallbackText = fallbackKey ? attachmentFallbackCopy[fallbackKey] : '';
-      const uiMsg: UiMessage = {
-        id: `usr_${localTimestamp}`,
-        role: "user",
+      const uiMsg = buildUserUiMessage({
+        // A queued message keeps its id so its bubble settles in place once sent.
+        id: options?.messageId ?? `usr_${localTimestamp}`,
         text: text || fallbackText,
+        images,
         idempotencyKey,
         timestampMs: localTimestamp,
-        imageUris:
-          realImages.length > 0
-            ? realImages.map((image) => image.uri)
-            : undefined,
-        imageMetas:
-          realImages.length > 0
-            ? realImages.map((i) => ({
-                uri: i.uri,
-                width: i.width ?? 0,
-                height: i.height ?? 0,
-              }))
-            : undefined,
-        fileAttachments: buildUiFileAttachments(files),
-      };
+      });
       if (!shouldHideMessage(uiMsg)) {
         history.setMessages((prev) => [...prev, uiMsg]);
+        setUnconfirmedMessageIds((previous) => new Set(previous).add(uiMsg.id));
       }
 
       const claimsActiveRun = !currentRunIdRef.current;
       if (claimsActiveRun) {
+        setRunAcknowledged(false);
         clearTransientRunPresentation({ preserveCurrentStream: true });
         currentRunIdRef.current = idempotencyKey;
         streamStartedAtRef.current = localTimestamp;
@@ -2238,6 +2312,12 @@ export function useChatController({
         .then(({ runId: serverRunId }) => {
           void recordSuccessfulSendForAutomaticReview();
           markTransportConfirmed();
+          setUnconfirmedMessageIds((previous) => {
+            if (!previous.has(uiMsg.id)) return previous;
+            const next = new Set(previous);
+            next.delete(uiMsg.id);
+            return next;
+          });
           if (
             pendingOptimisticRunIdsRef.current.get(sessionKey) ===
             idempotencyKey
@@ -2260,7 +2340,13 @@ export function useChatController({
             }
           }
         })
-        .catch((err: unknown) => {
+        .catch((error: unknown) => {
+          setUnconfirmedMessageIds((previous) => {
+            if (!previous.has(uiMsg.id)) return previous;
+            const next = new Set(previous);
+            next.delete(uiMsg.id);
+            return next;
+          });
           if (
             pendingOptimisticRunIdsRef.current.get(sessionKey) ===
             idempotencyKey
@@ -2274,26 +2360,30 @@ export function useChatController({
             streamStartedAtRef.current = null;
             sessionRunStateRef.current.delete(sessionKey);
           }
-          const msg = err instanceof Error ? err.message : String(err);
-          history.setMessages((prev) => [
-            ...prev,
-            {
-              id: `err_${Date.now()}`,
-              role: "system",
-              text: `Send failed: ${msg}`,
-            },
-          ]);
+          sourceQueue.store.update(sourceQueue.scopeKey, holdMessageQueue);
+          rememberUncertainSend(sourceQueue.scopeKey, uiMsg);
+          if (messageQueueRef.current.scopeKey !== sourceQueue.scopeKey) return;
+          setSendFailure(t('Sending failed. Check the conversation before trying again.'));
+          const details = sanitizeReplyFailure(error instanceof Error ? error.message : String(error ?? ''));
+          setSendFailureDetails(details || null);
+          // Preserve one recoverable bubble; refilling the composer invites duplicate sends.
         });
     },
-    [adapter, dbg, history, markTransportConfirmed, t],
+    [adapter, dbg, history, messageQueue.store, messageQueue.scopeKey, markTransportConfirmed, t],
   );
 
   const submitMessageWithConnectionCheck = useCallback(
     async (
       text: string,
       images: PendingImage[],
-      options?: { triggerGuardHeld?: boolean },
+      options?: {
+        triggerGuardHeld?: boolean;
+        messageId?: string;
+        /** Last check after the asynchronous preflight; false skips the send quietly. */
+        beforeSubmit?: () => boolean;
+      },
     ): Promise<boolean> => {
+      if (readOnlyRef.current) return false;
       const triggerGuardHeld = options?.triggerGuardHeld === true;
       const acquiredGuardLocally = !triggerGuardHeld;
       if (acquiredGuardLocally && !acquireSendTriggerGuard()) return false;
@@ -2315,12 +2405,17 @@ export function useChatController({
       setIsPreparingSend(true);
       try {
         const ready = await ensureConnectionReadyForSend();
-        if (!ready) return false;
+        if (!ready) {
+          setSendFailure(t('Sending failed. Check the conversation before trying again.'));
+          return false;
+        }
         const prepared = await preparePendingImagesForSend(images);
         if (prepared.changed) {
           setPendingImages(prepared.images);
         }
-        submitMessage(text, prepared.images);
+        if (readOnlyRef.current) return false;
+        if (options?.beforeSubmit && !options.beforeSubmit()) return false;
+        submitMessage(text, prepared.images, { messageId: options?.messageId });
         shouldReleaseTriggerGuard = false;
         return true;
       } finally {
@@ -2338,6 +2433,7 @@ export function useChatController({
       releaseSendTriggerGuard,
       setPendingImages,
       submitMessage,
+      t,
     ],
   );
 
@@ -2439,6 +2535,7 @@ export function useChatController({
   });
 
   const onSend = useCallback(() => {
+    if (readOnlyRef.current) return;
     void (async () => {
       const text = input.trim();
       const images = [...pendingImages];
@@ -2505,28 +2602,53 @@ export function useChatController({
         return;
       }
 
+      const clearComposer = () => {
+        // Clear input without remounting TextInput (preserves keyboard)
+        if (shouldClearComposerInput("send-button")) {
+          setInput("");
+          composerRef.current?.clear();
+        }
+        clearPendingImages();
+        clearPersistedDraft();
+      };
+
+      if (isSending) {
+        // The Agent is still replying: keep the message on the device and
+        // deliver it in order once this turn settles.
+        const queued = messageQueue.enqueue({ text, images });
+        releaseSendTriggerGuard();
+        if (!queued) return;
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        analyticsEvents.chatMessageQueued({
+          backend: adapter?.connection.backendKind,
+          queue_length: messageQueue.readCurrent().items.length,
+          has_attachments: images.length > 0,
+        });
+        setScrollToBottomRequestAt(Date.now());
+        clearComposer();
+        return;
+      }
+
       // Haptic feedback — crisp impact
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid);
 
+      // Sending something new is the user's answer to a paused queue.
+      messageQueue.release();
       const sent = await submitMessageWithConnectionCheck(text, images, {
         triggerGuardHeld: true,
       });
       if (!sent) return;
-
-      // Clear input without remounting TextInput (preserves keyboard)
-      if (shouldClearComposerInput("send-button")) {
-        setInput("");
-        composerRef.current?.clear();
-      }
-      clearPendingImages();
-      clearPersistedDraft();
+      clearComposer();
     })();
   }, [
+    adapter,
     clearPendingImages,
     clearPersistedDraft,
     acquireSendTriggerGuard,
     history.sessionKey,
     input,
+    isSending,
+    messageQueue,
     openCommandPicker,
     openModelPicker,
     pendingImages,
@@ -2534,6 +2656,79 @@ export function useChatController({
     submitMessageWithConnectionCheck,
     voiceInputActive,
   ]);
+
+  // Deliver the head of the queue as soon as the session is idle again. The
+  // same locks that gate a manual send apply, so a queued message never races
+  // the post-reply history refresh; the sending marker keeps its bubble in
+  // place until history adopts the optimistic message with the same id.
+  const queueDeliveryReady = !readOnly
+    && history.historyLoaded
+    && canSendMessage({
+      connectionState,
+      hasSession: !!history.sessionKey,
+      hasContent: true,
+      isSending: isSending || isPreparingSend,
+      refreshingConversation: history.refreshing,
+      refreshingSessions: history.refreshingSessions,
+    });
+  const nextQueuedMessage = queueDeliveryReady
+    ? nextDeliverableMessage(messageQueue.state)
+    : null;
+  const queueDeliveryInFlightRef = useRef(false);
+  useEffect(() => {
+    if (!nextQueuedMessage || queueDeliveryInFlightRef.current) return;
+    const item = nextQueuedMessage;
+    const { scopeKey, store } = messageQueue;
+    const stillQueued = () => store.read(scopeKey).items.some((entry) => entry.id === item.id);
+    queueDeliveryInFlightRef.current = true;
+    store.update(scopeKey, (current) => markQueuedMessageSending(current, item.id));
+    void (async () => {
+      let sent = false;
+      try {
+        sent = await submitMessageWithConnectionCheck(item.text, [...item.images], {
+          messageId: item.id,
+          beforeSubmit: stillQueued,
+        });
+      } finally {
+        queueDeliveryInFlightRef.current = false;
+        if (sent) {
+          store.update(scopeKey, (current) => removeQueuedMessage(current, item.id));
+          analyticsEvents.chatQueuedMessageDelivered({
+            backend: adapter?.connection.backendKind,
+            wait_ms: Math.max(0, Date.now() - item.createdAt),
+            remaining: store.read(scopeKey).items.length,
+          });
+        } else if (stillQueued()) {
+          store.update(scopeKey, holdMessageQueue);
+          analyticsEvents.chatQueueHeld({
+            reason: "preflight_failed",
+            queue_length: store.read(scopeKey).items.length,
+          });
+        }
+      }
+    })();
+  }, [adapter, messageQueue, nextQueuedMessage, submitMessageWithConnectionCheck]);
+
+  const editQueuedMessage = useCallback((id: string) => {
+    const item = messageQueue.remove(id);
+    if (!item) return;
+    analyticsEvents.chatQueuedMessageEdited({ backend: adapter?.connection.backendKind });
+    setInput((previous) => (previous.trim() ? `${item.text}\n\n${previous}` : item.text));
+    if (item.images.length > 0) {
+      setPendingImages((previous: PendingImage[]) => [...item.images, ...previous].slice(0, MAX_IMAGES));
+    }
+    composerRef.current?.focus();
+  }, [adapter, messageQueue, setPendingImages]);
+
+  const removeQueuedMessageById = useCallback((id: string) => {
+    if (!messageQueue.remove(id)) return;
+    analyticsEvents.chatQueuedMessageRemoved({ backend: adapter?.connection.backendKind });
+  }, [adapter, messageQueue]);
+
+  const sendQueuedMessageNow = useCallback((id: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid);
+    messageQueue.promote(id);
+  }, [messageQueue]);
 
   const onSelectSlashCommand = useCallback(
     (command: SlashCommand) => {
@@ -2696,6 +2891,7 @@ export function useChatController({
       }
       sessionKeyRef.current = session.key;
       history.setSessionKey(session.key);
+      setSendFailure(null);
       history.setHistoryLoaded(false);
       if (options?.clearInput !== false) {
         setInput("");
@@ -2798,50 +2994,18 @@ export function useChatController({
   }, [history.historyLoaded, history.sessionKey]);
 
   useEffect(() => {
-    const targetKey = chatSessionRequest?.sessionKey?.trim();
+    const targetKey = routeSessionKey ?? chatSessionRequest?.sessionKey?.trim();
     if (!targetKey) return;
     if (history.sessionKey === targetKey) {
-      clearChatSessionRequest?.();
+      if (chatSessionRequest) clearChatSessionRequest?.();
       return;
     }
 
-    let cancelled = false;
-
-    const openRequestedSession = async () => {
-      let latestSessions = history.sessions;
-      let targetSession = latestSessions.find(
-        (session) => session.key === targetKey,
-      );
-      if (!targetSession) {
-        try {
-          latestSessions = adapter
-            ? (await adapter.listSessions(currentAgentId)).map(mapAdapterSession)
-            : [];
-          if (cancelled) return;
-          history.setSessions(latestSessions);
-          targetSession = latestSessions.find(
-            (session) => session.key === targetKey,
-          );
-        } catch {
-          // Ignore and fall back to opening the key directly.
-        }
-      }
-
-      if (cancelled) return;
-      switchSession(
-        targetSession ?? {
-          key: targetKey,
-          kind: "unknown",
-          label: targetKey,
-        },
-      );
-      clearChatSessionRequest?.();
-    };
-
-    void openRequestedSession();
-    return () => {
-      cancelled = true;
-    };
+    const targetSession = history.sessions.find((session) => session.key === targetKey);
+    // The navigation target is already authoritative. Metadata refresh must not
+    // delay switching the visible conversation or keep another Agent's history.
+    switchSession(targetSession ?? { key: targetKey, kind: "unknown", label: targetKey });
+    if (chatSessionRequest) clearChatSessionRequest?.();
   }, [
     clearChatSessionRequest,
     adapter,
@@ -2850,6 +3014,7 @@ export function useChatController({
     history.sessions,
     history.setSessions,
     chatSessionRequest,
+    routeSessionKey,
     switchSession,
   ]);
 
@@ -2923,7 +3088,7 @@ export function useChatController({
 
   const listData = useMemo((): UiMessage[] => {
     const sessionMessages = buildLiveRunListData({
-      historyMessages: history.messages,
+      historyMessages: recoverableMessages,
       streamSegments: chatStreamSegments,
       toolMessages: chatToolMessages,
       liveStreamText: chatStream,
@@ -2940,8 +3105,22 @@ export function useChatController({
       timestampMs: approval.receivedAtMs,
       approval,
     }));
-    return mergeNewestFirstMessages(sessionMessages, pairMessages);
-  }, [adapter, chatStream, chatStreamSegments, chatToolMessages, history.messages, pairApprovalProjection]);
+    const merged = mergeNewestFirstMessages(sessionMessages, pairMessages);
+    if (messageQueue.state.items.length === 0) return merged;
+    // Queued bubbles are untimed and sit below everything else; an item whose
+    // optimistic message already entered history is rendered from history.
+    const known = new Set(history.messages.map((message) => message.id));
+    const queued = messageQueue.state.items
+      .filter((item) => !known.has(item.id))
+      .map((item) => buildUserUiMessage({
+        id: item.id,
+        text: item.text,
+        images: item.images,
+        delivery: queuedMessageDelivery(messageQueue.state, item.id),
+      }))
+      .reverse();
+    return queued.length > 0 ? mergeNewestFirstMessages(queued, merged) : merged;
+  }, [adapter, chatStream, chatStreamSegments, chatToolMessages, history.messages, messageQueue.state, pairApprovalProjection, recoverableMessages]);
 
   const resolveApproval = useCallback(
     (
@@ -3005,6 +3184,9 @@ export function useChatController({
     if (!history.sessionKey) return;
     if (!adapter?.capabilities.abort) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid);
+    // Stopping is a decision about what comes next; pause the queue before
+    // any terminal event can settle the run.
+    holdQueuedMessages("abort");
     const runIdAtAbort = currentRunIdRef.current;
     adapter
       .cancel(history.sessionKey, runIdAtAbort ?? undefined)
@@ -3028,7 +3210,7 @@ export function useChatController({
       setActivityLabel(null);
       dbg("Abort fallback: force-cleared stuck run state");
     }, 5000);
-  }, [adapter, clearTransientRunPresentation, dbg, history.sessionKey]);
+  }, [adapter, clearTransientRunPresentation, dbg, history.sessionKey, holdQueuedMessages]);
 
   const handleRefresh = useCallback(async () => {
     if (connectionState !== "ready") {
@@ -3040,6 +3222,9 @@ export function useChatController({
 
   return {
     connectionState,
+    sendFailure,
+    sendFailureDetails,
+    clearSendFailure: () => setSendFailure(null),
     input,
     setInput,
     composerRef,
@@ -3120,9 +3305,17 @@ export function useChatController({
     listData,
     approveCommand: APPROVE_COMMAND,
     activityLabel,
+    unconfirmedMessageIds,
+    runAcknowledged,
     thinkingLevelOptions,
     abortCurrentRun,
     canAbortCurrentRun: adapter?.capabilities.abort === true,
+    queuedMessages: messageQueue.state.items,
+    queueHeld: messageQueue.state.held,
+    canSendQueuedNow: queueDeliveryReady && messageQueue.state.held,
+    editQueuedMessage,
+    removeQueuedMessage: removeQueuedMessageById,
+    sendQueuedMessageNow,
     resolveApproval,
     agentActivityRef,
     agentActiveCount,

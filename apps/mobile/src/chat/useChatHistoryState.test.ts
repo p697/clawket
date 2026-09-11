@@ -77,6 +77,27 @@ describe('useChatHistoryState', () => {
     consoleErrorSpy.mockRestore();
   });
 
+  it.each(['openclaw', 'hermes'])('keeps an explicit %s task route even when absent from the session index', async (backendKind) => {
+    const key = 'agent:main:cron:archived:run:123';
+    const adapter = {
+      connection: { backendKind }, state: 'ready',
+      listSessions: jest.fn().mockResolvedValue([createSession('agent:main:main')]),
+      loadSession: jest.fn().mockResolvedValue({ messages: [] }),
+    };
+    const { result } = renderHook(() => {
+      const sessionKeyRef = useRef<string | null>(key);
+      return useChatHistoryState({ adapter: adapter as any, dbg: jest.fn(), t: translate,
+        sessionKeyRef, mainSessionKey: 'agent:main:main', gatewayConfigId: null,
+        currentAgentId: 'main', routeSessionKey: key });
+    });
+    await act(async () => { await result.current.loadSessionsAndHistory(); });
+    expect(result.current.sessionKey).toBe(key);
+    expect(result.current.historyLoaded).toBe(true);
+    await act(async () => { await result.current.onRefresh(); await result.current.refreshSessions(); });
+    expect(result.current.sessionKey).toBe(key);
+    expect(adapter.loadSession.mock.calls.every(([session]) => session === key)).toBe(true);
+  });
+
   it('keeps a newer session switch when refresh resolves with an older captured key', async () => {
     const listSessionsDeferred = deferred<Array<ReturnType<typeof createSession>>>();
     const adapter = {
@@ -285,6 +306,68 @@ describe('useChatHistoryState', () => {
 
     expect(result.current.state.messages.map((message) => message.text)).toEqual(['reply']);
     expect(result.current.state.messages[0]?.modelLabel).toBe('openai/gpt-5');
+  });
+
+  it.each(['openclaw', 'hermes'])('keeps missing %s tool results unknown without inventing output', async backendKind => {
+    const key = 'agent:main:main';
+    const adapter = { connection: { backendKind }, state: 'ready',
+      listSessions: jest.fn().mockResolvedValue([]),
+      loadSession: jest.fn().mockResolvedValue({ key, hasActiveRun: true, messages: [
+        { id: 'old-call', role: 'assistant', text: '', timestampMs: 1000,
+          tool: { name: 'read', callId: 'old', status: 'running', input: { path: 'a' } } },
+        { id: 'new-user', role: 'user', text: 'continue', timestampMs: 2000 },
+        { id: 'new-call', role: 'assistant', text: '', timestampMs: 3000,
+          tool: { name: 'read', callId: 'new', status: 'running' } },
+        { id: 'cached-missing', role: 'tool', text: '', timestampMs: 4000,
+          tool: { name: 'read', callId: 'cached', status: 'unknown', summary: 'Read a file' } },
+      ] }),
+    };
+    const { result } = renderHook(() => {
+      const sessionKeyRef = useRef<string | null>(key);
+      return useChatHistoryState({ adapter: adapter as any, dbg: jest.fn(), t: translate,
+        sessionKeyRef, mainSessionKey: key, gatewayConfigId: null, currentAgentId: 'main' });
+    });
+    await act(async () => { result.current.setSessionKey(key); await result.current.loadHistory(key, 12); });
+    expect(result.current.messages.find(message => message.id === 'toolcall_old')?.toolStatus).toBe('unknown');
+    expect(result.current.messages.find(message => message.id === 'toolcall_new')?.toolStatus).toBe('running');
+    expect(result.current.messages.find(message => message.id === 'toolresult_cached')).toMatchObject({
+      toolStatus: 'unknown', toolDetail: undefined,
+    });
+  });
+
+  it.each(['openclaw', 'hermes'].flatMap(backendKind =>
+    [false, true, undefined].map(hasActiveRun => ({ backendKind, hasActiveRun })),
+  ))('reconciles latest $backendKind tools with active run $hasActiveRun', async ({ backendKind, hasActiveRun }) => {
+    const key = 'agent:main:main';
+    const adapter = { connection: { backendKind }, state: 'ready',
+      listSessions: jest.fn().mockResolvedValue([]),
+      loadSession: jest.fn().mockResolvedValue({ key, hasActiveRun, messages: [
+        { id: 'user', role: 'user', text: 'Remember this', timestampMs: 1000 },
+        { id: 'call', role: 'assistant', text: '', timestampMs: 2000,
+          tool: { name: 'read', callId: 'unpaired', status: 'running', input: { path: 'notes.md' } } },
+        { id: 'cached-call', role: 'tool', text: '', timestampMs: 2500,
+          tool: { name: 'write', callId: 'cached', status: 'running' } },
+        { id: 'success', role: 'tool', text: 'Saved', timestampMs: 3000,
+          tool: { name: 'write', callId: 'saved', status: 'success' } },
+        { id: 'error', role: 'tool', text: 'Denied', timestampMs: 3500,
+          tool: { name: 'exec', callId: 'denied', status: 'error' } },
+        { id: 'reply', role: 'assistant', text: 'Remembered.', timestampMs: 4000 },
+      ] }),
+    };
+    const { result } = renderHook(() => {
+      const sessionKeyRef = useRef<string | null>(key);
+      return useChatHistoryState({ adapter: adapter as any, dbg: jest.fn(), t: translate,
+        sessionKeyRef, mainSessionKey: key, gatewayConfigId: null, currentAgentId: 'main' });
+    });
+    await act(async () => { result.current.setSessionKey(key); await result.current.loadHistory(key, 12); });
+    const expected = hasActiveRun === false ? 'unknown' : 'running';
+    expect(result.current.messages.find(message => message.id === 'toolcall_unpaired')).toMatchObject({
+      toolStatus: expected, toolArgs: JSON.stringify({ path: 'notes.md' }, null, 2),
+    });
+    expect(result.current.messages.find(message => message.id === 'toolresult_cached')?.toolStatus).toBe(expected);
+    expect(result.current.messages.find(message => message.id === 'toolresult_saved')?.toolStatus).toBe('success');
+    expect(result.current.messages.find(message => message.id === 'toolresult_denied')?.toolStatus).toBe('error');
+    expect(result.current.messages.some(message => message.text === 'Remembered.')).toBe(true);
   });
 
   it('renders normalized adapter text, image and file attachments, and paired tool history', async () => {

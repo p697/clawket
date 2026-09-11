@@ -15,6 +15,13 @@ export const ONBOARDING_DOCUMENTATION_URLS: Readonly<Record<PairableBackendKind,
   hermes: 'https://hermes-agent.nousresearch.com/docs/getting-started/quickstart',
 });
 
+/** Official product homepages for the "No agent yet?" entry; pairing help keeps the documentation URLs above. */
+export const ONBOARDING_WEBSITE_URLS: Readonly<Record<BackendKind, string>> = Object.freeze({
+  openclaw: 'https://openclaw.ai',
+  hermes: 'https://hermes-agent.nousresearch.com',
+  youmind: 'https://youmind.com',
+});
+
 const ADAPTER_ERROR_CODES = new Set<AdapterErrorCode>([
   'unauthorized',
   'pairing_required',

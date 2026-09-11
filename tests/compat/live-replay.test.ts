@@ -271,6 +271,51 @@ describe('v1 compatibility live replay', () => {
     expect(consumed.status).toBe(404);
   });
 
+  it('isolates two legacy clients through negotiated owner channels and reconnects either independently', async () => {
+    const paired = await pairOpenClaw('Multi-client replay');
+    const port = await getFreePort();
+    let sequence = 0;
+    const server = await startWebSocketServer(port, socket => {
+      const nonce = String(++sequence);
+      socket.send(JSON.stringify({ type: 'event', event: 'connect.challenge', payload: { nonce, ts: Date.now() } }));
+      socket.on('message', data => {
+        const request = JSON.parse(toText(data));
+        socket.send(JSON.stringify({ type: 'res', id: request.id, ok: true, payload: { nonce } }));
+      });
+    });
+    const runtime = new BridgeRuntime({
+      clientChannels: true,
+      config: { ...paired, serverUrl: openClawRegistry.baseUrl, instanceId: 'multi-client-owner', displayName: 'Multi-client replay', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+      gatewayUrl: `ws://127.0.0.1:${port}`,
+      reconnectBaseDelayMs: 100, reconnectMaxDelayMs: 500,
+    });
+    const clients: WebSocketInbox[] = [];
+    try {
+      runtime.start();
+      await waitFor(() => runtime.getSnapshot().relayConnected, 'owner connected');
+      for (const id of ['multi-a', 'multi-b']) clients.push(await openOpenClawClient(paired, id));
+      const nonces: unknown[] = [];
+      for (const client of clients) {
+        const challenge = await client.nextJson(frame => frame.event === 'connect.challenge');
+        nonces.push(requireRecord(challenge.payload, 'challenge').nonce);
+        client.socket.send(JSON.stringify({ type: 'req', id: 'same-id', method: 'connect', params: {} }));
+        const response = await client.nextJson(frame => frame.id === 'same-id');
+        expect(requireRecord(response.payload, 'response').nonce).toBe(nonces.at(-1));
+      }
+      expect(new Set(nonces).size).toBe(2);
+      closeWebSocket(clients[0]);
+      clients[0] = await openOpenClawClient(paired, 'multi-a');
+      await clients[0].nextJson(frame => frame.event === 'connect.challenge');
+      clients[1].socket.send(JSON.stringify({ type: 'req', id: 'still-alive', method: 'sessions.list', params: {} }));
+      const response = await clients[1].nextJson(frame => frame.id === 'still-alive');
+      expect(requireRecord(response.payload, 'still alive').nonce).toBe(nonces[1]);
+    } finally {
+      clients.forEach(closeWebSocket);
+      await runtime.stop();
+      await closeWebSocketServer(server);
+    }
+  });
+
   it('replays OpenClaw frames through Wrangler Relay and an in-process BridgeRuntime', async () => {
     const assertOpenClaw = createFixtureAsserter(openClawFixture);
     const assertBridge = createFixtureAsserter(bridgeFixture);

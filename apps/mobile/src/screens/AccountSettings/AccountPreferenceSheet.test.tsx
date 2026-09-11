@@ -11,6 +11,11 @@ import {
   setCurrentAppIconAsync,
 } from '../../services/app-icon';
 
+const mockSetLanguage = jest.fn();
+jest.mock('../../i18n/AppLanguageProvider', () => ({
+  useAppLanguage: () => ({ language: 'system', setLanguage: mockSetLanguage }),
+}));
+
 const mockSetMode = jest.fn();
 const mockSetAccentId = jest.fn();
 const mockSetSpeechLanguage = jest.fn();
@@ -36,6 +41,7 @@ jest.mock('react-native', () => {
       flatten: (style: unknown) => style,
       hairlineWidth: 1,
     },
+    Image: host('Image'),
     Text: host('Text'),
     View: host('View'),
   };
@@ -137,8 +143,9 @@ describe('AccountPreferenceSheet', () => {
     consoleErrorSpy.mockRestore();
   });
 
-  it('recognizes only the four local preference actions', () => {
+  it('recognizes only the local preference actions', () => {
     expect([
+      'app-language',
       'theme',
       'accent',
       'speech-language',
@@ -173,6 +180,21 @@ describe('AccountPreferenceSheet', () => {
     expect(onChanged).toHaveBeenNthCalledWith(1, 'theme', 'dark');
     expect(onChanged).toHaveBeenNthCalledWith(2, 'accent', 'jadeGreen');
     expect(onChanged).toHaveBeenNthCalledWith(3, 'speech-language', 'ja');
+  });
+
+  it('changes app language independently of voice and exposes save failures', async () => {
+    const onClose = jest.fn();
+    mockSetLanguage.mockResolvedValueOnce(undefined);
+    const view = render(<AccountPreferenceSheet preference="app-language" onClose={onClose} />);
+    expect(view.getByText('日本語')).toBeTruthy();
+    fireEvent.press(view.getByTestId('account-preference-ja'));
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(mockSetLanguage).toHaveBeenCalledWith('ja');
+    expect(mockSetSpeechLanguage).not.toHaveBeenCalled();
+    mockSetLanguage.mockRejectedValueOnce(new Error('storage unavailable'));
+    fireEvent.press(view.getByTestId('account-preference-system'));
+    await waitFor(() => expect(view.getByText('Unable to change app language')).toBeTruthy());
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it('loads native icon support and applies a Pro icon selection', async () => {

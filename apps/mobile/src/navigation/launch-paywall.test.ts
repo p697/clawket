@@ -46,21 +46,12 @@ describe('resolveStartupNavigation', () => {
     expect(resolveStartupNavigation(input({ subscriptionLoading: true }))).toEqual({ type: 'wait' });
   });
 
-  it('shows the generic launch paywall once a free user is ready', () => {
-    expect(resolveStartupNavigation(input())).toEqual({ type: 'show_launch_paywall' });
+  it('keeps free users on the roster and opens their paired agent without a promotion', () => {
+    expect(resolveStartupNavigation(input())).toEqual({ type: 'stay' });
     expect(resolveStartupNavigation(input({ pendingAutoOpen: onboardingTarget })))
-      .toEqual({ type: 'show_launch_paywall' });
-  });
-
-  it('shows the one-time 3.0 intro instead of the generic launch paywall, including for Pro', () => {
-    expect(resolveStartupNavigation(input({ threePointZeroIntroPending: true }))).toEqual({
-      type: 'show_three_point_zero_intro',
-    });
-    expect(resolveStartupNavigation(input({
-      isPro: true,
-      pendingAutoOpen: onboardingTarget,
-      threePointZeroIntroPending: true,
-    }))).toEqual({ type: 'show_three_point_zero_intro' });
+      .toEqual({ type: 'open_thread', target: onboardingTarget, skipLaunchPaywall: false });
+    expect(resolveStartupNavigation(input({ threePointZeroIntroPending: true })))
+      .toEqual({ type: 'stay' });
   });
 
   it('opens a pending onboarding thread after the launch opportunity was consumed', () => {

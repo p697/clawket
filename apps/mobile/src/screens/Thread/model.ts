@@ -8,11 +8,13 @@ import type {
 } from '@clawket/agent-protocol';
 import type { ConnectionState as LegacyConnectionState } from '../../types';
 import type { UiMessage } from '../../types/chat';
+import { formatThreadTimestamp, localDayNumber, THREAD_TIME_GAP_MS } from './timestamps';
 
 export type ThreadContentState =
   | Readonly<{ kind: 'loading' }>
   | Readonly<{ kind: 'empty' }>
   | Readonly<{ kind: 'ready' }>
+  | Readonly<{ kind: 'reconnecting' }>
   | Readonly<{ kind: 'offline' }>
   | Readonly<{ kind: 'locked' }>
   | Readonly<{
@@ -50,11 +52,13 @@ export type ThreadRunCard = Readonly<{
   timeLabel: string;
   updatedAt: number;
   canOpenLogs?: boolean;
+  summary?: string;
 }>;
 
 export type ThreadRunSeed = Omit<ThreadRunCard, 'statusLabel' | 'timeLabel' | 'canOpenLogs'>;
 
 export type ThreadTimelineItem =
+  | Readonly<{ type: 'tools'; key: string; messages: ReadonlyArray<UiMessage>; timestampMs?: number }>
   | Readonly<{
       type: 'message';
       key: string;
@@ -75,7 +79,7 @@ export type ThreadTimelineItem =
     }>;
 
 function validTimestamp(value: number | null | undefined): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 && Number.isFinite(new Date(value).getTime())
     ? value
     : undefined;
 }
@@ -84,24 +88,6 @@ function messageTimestamp(message: UiMessage): number | undefined {
   return validTimestamp(message.timestampMs)
     ?? validTimestamp(message.toolFinishedAt)
     ?? validTimestamp(message.toolStartedAt);
-}
-
-function localDateKey(timestampMs: number): string {
-  const date = new Date(timestampMs);
-  const year = String(date.getFullYear()).padStart(4, '0');
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-export function formatThreadLocalDate(timestampMs: number, locale?: string): string {
-  const timestamp = validTimestamp(timestampMs);
-  if (!timestamp) return '';
-  return new Intl.DateTimeFormat(locale || undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  }).format(timestamp);
 }
 
 export function formatThreadLocalTime(timestampMs: number, locale?: string): string {
@@ -184,6 +170,7 @@ export function buildCronRunSeeds(params: Readonly<{
       agentId: params.currentAgentId,
       title,
       status,
+      summary: entry.error?.trim() || entry.summary?.trim() || undefined,
       updatedAt,
     });
     seenJobIds.add(entry.jobId);
@@ -244,6 +231,8 @@ export function buildThreadTimelineItems(params: Readonly<{
   messages: ReadonlyArray<UiMessage>;
   runs: ReadonlyArray<ThreadRunCard>;
   locale?: string;
+  nowMs?: number;
+  yesterdayLabel?: string;
 }>): ThreadTimelineItem[] {
   const messageItems = params.messages.map((message) => ({
     timestampMs: messageTimestamp(message),
@@ -291,37 +280,38 @@ export function buildThreadTimelineItems(params: Readonly<{
   }
   merged.push(...runItems.slice(runIndex));
 
-  const nextKnownTimestamp: Array<number | undefined> = new Array(merged.length);
-  let nextTimestamp: number | undefined;
-  for (let index = merged.length - 1; index >= 0; index -= 1) {
-    nextKnownTimestamp[index] = nextTimestamp;
-    if (merged[index]!.timestampMs !== undefined) {
-      nextTimestamp = merged[index]!.timestampMs;
-    }
-  }
   const timeline: ThreadTimelineItem[] = [];
-  const emittedDates = new Set<string>();
-  for (let index = 0; index < merged.length; index++) {
+  let previousTimestamp: number | undefined;
+  // Walk oldest-first to compare adjacent timed rows, never elapsed time since
+  // the last separator. Preserve source order and ignore untimed/system rows.
+  for (let index = merged.length - 1; index >= 0; index -= 1) {
     const current = merged[index]!;
+    const timestamp = current.item.type === 'message' && current.item.message.role === 'system'
+      ? undefined : current.timestampMs;
+    if (timestamp !== undefined) {
+      if (previousTimestamp === undefined
+        || localDayNumber(timestamp) !== localDayNumber(previousTimestamp)
+        || timestamp - previousTimestamp >= THREAD_TIME_GAP_MS) {
+        timeline.push({
+          type: 'date',
+          // Server echoes can correct optimistic time without remounting rows.
+          key: `date:${current.item.key}`,
+          timestampMs: timestamp,
+          label: formatThreadTimestamp(timestamp, params.locale, params.nowMs, params.yesterdayLabel),
+        });
+      }
+      previousTimestamp = timestamp;
+    }
     timeline.push(current.item);
-    if (current.timestampMs === undefined) continue;
-    const currentDateKey = localDateKey(current.timestampMs);
-    const laterTimestamp = nextKnownTimestamp[index];
-    const nextDateKey = laterTimestamp === undefined ? null : localDateKey(laterTimestamp);
-    if (currentDateKey === nextDateKey || emittedDates.has(currentDateKey)) continue;
-    timeline.push({
-      type: 'date',
-      key: `date:${currentDateKey}`,
-      timestampMs: current.timestampMs,
-      label: formatThreadLocalDate(current.timestampMs, params.locale),
-    });
-    emittedDates.add(currentDateKey);
   }
+  timeline.reverse();
   return timeline;
 }
 
 export type DeriveThreadContentStateInput = Readonly<{
   locked?: boolean;
+  paused?: boolean;
+  recovering?: boolean;
   switching?: boolean;
   targetSessionReady?: boolean;
   historyLoaded: boolean;
@@ -332,6 +322,8 @@ export type DeriveThreadContentStateInput = Readonly<{
 
 export function deriveThreadContentState({
   locked = false,
+  paused = false,
+  recovering = false,
   switching = false,
   targetSessionReady = true,
   historyLoaded,
@@ -340,6 +332,8 @@ export function deriveThreadContentState({
   error,
 }: DeriveThreadContentStateInput): ThreadContentState {
   if (locked) return { kind: 'locked' };
+  if (paused) return { kind: 'offline' };
+  if (recovering) return { kind: 'reconnecting' };
   if (error) return { kind: 'error', ...error };
 
   const offline = connectionState === 'offline'
@@ -347,6 +341,8 @@ export function deriveThreadContentState({
     || connectionState === 'closed'
     || connectionState === 'reconnecting';
   if (offline) return { kind: 'offline' };
+  // Keep scoped cached messages visible while reconnecting or refreshing history.
+  if (hasMessages && !switching && targetSessionReady) return { kind: 'ready' };
 
   if (
     switching
@@ -418,10 +414,9 @@ export function resolveThreadHeaderSubtitle({
   if (!capabilities.models) return '';
 
   const normalizedModel = model?.trim() ?? '';
-  if (!normalizedModel) return '';
   const remainingPercent = resolveContextRemainingPercent(contextUsed, contextWindow);
   return remainingPercent === null
-    ? normalizedModel
+    ? ''
     : formatModelContext(normalizedModel, remainingPercent);
 }
 
@@ -489,4 +484,27 @@ export function resolveThreadErrorDetail(error: unknown): string | undefined {
   if (!error || typeof error !== 'object' || !('message' in error)) return undefined;
   const message = (error as { message?: unknown }).message;
   return typeof message === 'string' ? message.trim() || undefined : undefined;
+}
+
+/** Input is newest-first. The oldest call anchors a group while new calls arrive. */
+export function groupThreadTools(items: ThreadTimelineItem[], expanded: ReadonlySet<string>): ThreadTimelineItem[] {
+  const result: ThreadTimelineItem[] = [];
+  for (let index = 0; index < items.length;) {
+    const item = items[index]!;
+    if (item.type !== 'message' || item.message.role !== 'tool' || item.message.approval || item.message.toolPresentation?.length || item.message.imageUris?.length || item.message.toolStatus === 'error') {
+      result.push(item); index += 1; continue;
+    }
+    const calls: Extract<ThreadTimelineItem, { type: 'message' }>[] = [];
+    while (index < items.length) {
+      const next = items[index]!;
+      if (next.type !== 'message' || next.message.role !== 'tool' || next.message.approval || next.message.toolPresentation?.length || next.message.imageUris?.length || next.message.toolStatus === 'error') break;
+      calls.push(next); index += 1;
+    }
+    if (calls.length < 2) { result.push(...calls); continue; }
+    const key = `tools:${calls[calls.length - 1]!.message.id}`;
+    // Inverted list: children follow the summary visually, newest first in data.
+    if (expanded.has(key)) result.push(...calls);
+    result.push({ type: 'tools', key, timestampMs: item.timestampMs, messages: calls.map((call) => call.message) });
+  }
+  return result;
 }

@@ -68,8 +68,8 @@ export type BackendPayloadPairingInput = BackendPairingContext & Readonly<{
 }>;
 
 type BackendPairingProfile = Readonly<{
-  connectCode(input: BackendCodePairingInput): Promise<BackendPairingResult>;
-  connectLink(input: BackendLinkPairingInput): Promise<BackendPairingResult>;
+  connectCode(input: BackendCodePairingInput): Promise<BackendPairingResult | null>;
+  connectLink(input: BackendLinkPairingInput): Promise<BackendPairingResult | null>;
   reportsCodeOutcome: boolean;
 }>;
 
@@ -83,9 +83,8 @@ const BACKEND_PAIRING_PROFILES: Readonly<Record<PairingBackendKind, BackendPairi
         expectedBackendKind: input.backendKind,
         environment: input.environment,
       });
-      if (!connected) {
-        throw new AdapterError('pairing_expired', 'OpenClaw pairing code was not accepted.');
-      }
+      // The invitation owner has already presented failure feedback, or the user cancelled.
+      if (!connected) return null;
       return requireExpectedActiveConnection('openclaw', input.runtime);
     },
     async connectLink(input) {
@@ -104,9 +103,7 @@ const BACKEND_PAIRING_PROFILES: Readonly<Record<PairingBackendKind, BackendPairi
         expectedBackendKind: input.backendKind,
         environment: input.environment,
       });
-      if (!connected) {
-        throw new AdapterError('pairing_expired', 'OpenClaw pairing link was not accepted.');
-      }
+      if (!connected) return null;
       return requireExpectedActiveConnection('openclaw', input.runtime);
     },
   },
@@ -146,7 +143,7 @@ const BACKEND_PAIRING_PROFILES: Readonly<Record<PairingBackendKind, BackendPairi
 
 export async function connectBackendPairingCode(
   input: BackendCodePairingInput,
-): Promise<BackendPairingResult> {
+): Promise<BackendPairingResult | null> {
   const profile = BACKEND_PAIRING_PROFILES[input.backendKind];
   try {
     const result = await profile.connectCode(input);
@@ -172,7 +169,7 @@ export async function connectBackendPairingCode(
 
 export function connectBackendPairingLink(
   input: BackendLinkPairingInput,
-): Promise<BackendPairingResult> {
+): Promise<BackendPairingResult | null> {
   return BACKEND_PAIRING_PROFILES[input.backendKind].connectLink(input);
 }
 

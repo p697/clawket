@@ -16,6 +16,21 @@ import {
 
 const mockLoadSummary = jest.fn();
 
+jest.mock('../../components/ui/Sheet', () => ({ Sheet: ({ visible, children, onAfterClose }: any) => {
+  const ReactRuntime = require('react');
+  const previous = ReactRuntime.useRef(false);
+  ReactRuntime.useEffect(() => {
+    if (!visible && previous.current) onAfterClose?.();
+    previous.current = visible;
+  }, [visible, onAfterClose]);
+  return visible ? children : null;
+} }));
+jest.mock('../../components/ui/Button', () => {
+  const ReactRuntime = require('react');
+  const { Pressable, Text } = require('react-native');
+  return { Button: ({ label, onPress, testID }: any) => ReactRuntime.createElement(Pressable, { onPress, testID }, ReactRuntime.createElement(Text, null, label)) };
+});
+
 jest.mock('react-native', () => {
   const ReactRuntime = require('react');
   const host = (name: string) => ReactRuntime.forwardRef(
@@ -44,7 +59,7 @@ jest.mock('react-native', () => {
   };
 });
 
-jest.mock('lucide-react-native', () => ({ ChevronLeft: () => null }));
+jest.mock('lucide-react-native', () => new Proxy({}, { get: () => () => null }));
 
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
@@ -241,9 +256,11 @@ describe('AgentSettingsView shallow states', () => {
       />,
     );
 
-    expect(view.getByTestId('agent-settings-loading')).toBeTruthy();
+    expect(view.queryByTestId('agent-settings-loading')).toBeNull();
+    expect(view.getByTestId('agent-settings-row-skills')).toBeTruthy();
+    fireEvent.press(view.getByTestId('agent-profile-advanced'));
     await waitFor(() => expect(view.getByText('loaded-model')).toBeTruthy());
-    expect(mockLoadSummary).toHaveBeenCalledWith(adapter, agent);
+    expect(mockLoadSummary).toHaveBeenCalledWith(adapter, agent, expect.any(Number), expect.any(Function));
   });
 
   it('renders the authenticated YouMind email through the route-scoped container', async () => {
@@ -277,7 +294,7 @@ describe('AgentSettingsView shallow states', () => {
 
     await waitFor(() => expect(view.getByText('owner@example.com')).toBeTruthy());
     expect(loadIdentityDetail).toHaveBeenCalledWith(youmindConnection);
-    expect(view.getByTestId('agent-settings-identity').props.onPress).toBeUndefined();
+    expect(view.queryByTestId('agent-settings-identity')).toBeNull();
   });
 
   it('does not expose a locked Agent to management summary calls', async () => {

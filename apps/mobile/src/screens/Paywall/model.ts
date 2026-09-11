@@ -4,20 +4,25 @@ import type { ProFeature } from '../../utils/pro';
 export type PaywallTrigger = ProFeature | 'launch';
 export type PaywallMode = 'purchase' | 'threePointZeroIntro';
 export type PaywallHero = 'connections' | 'agents' | 'manage' | 'logsFiles' | 'search' | 'generic';
-export type PaywallBenefitKind = 'connections' | 'agents' | 'manage' | 'logsFiles' | 'search' | 'combined';
+export type PaywallBenefitKind = 'connections' | 'agents' | 'manage' | 'logsFiles' | 'search' | 'combined' | 'memory' | 'sessions';
 export type PaywallTitleKey =
+  | 'More possibilities with your Agents'
+  | 'Explore your Agent conversations'
   | 'Clawket 3.0'
   | 'Every Agent in your pocket'
   | 'Bring every Agent into the roster'
   | 'Fix your OpenClaw from your phone'
   | 'Read logs and edit files without going back to your computer'
-  | 'Find any message again';
+  | 'Find any message again'
+  | 'Every conversation, in full';
 export type PaywallSubtitleKey =
+  | 'Take your AI world with you.'
   | 'Your agent control tower, rebuilt.'
   | 'OpenClaw and Hermes together, ready whenever you are.'
   | 'Agents beyond main are a Pro feature.'
   | '{{feature}} is a Pro feature.'
-  | 'Message details across sessions are a Pro feature.';
+  | 'Message details across sessions are a Pro feature.'
+  | 'Read complete channel, task and subagent conversations, and reply where supported.';
 export type PaywallSubtitleFeatureKey =
   | 'Permissions'
   | 'Config backups'
@@ -31,6 +36,10 @@ export type PaywallActionKey =
   | 'editing this file'
   | 'opening this message';
 export type PaywallBenefitKey =
+  | 'Conversations across channels and tasks'
+  | "Shape your Agent's personality and memory"
+  | 'Configure, back up and diagnose your Agents'
+  | 'More Agents, unlimited connections'
   | 'Fix OpenClaw from your phone'
   | 'Logs, files, and search'
   | 'Unlimited connections and Agents'
@@ -67,34 +76,32 @@ export type ThreePointZeroIntroContent = Readonly<{
 
 const REPAIR_BENEFIT = {
   kind: 'manage',
-  labelKey: 'Fix OpenClaw from your phone',
+  labelKey: 'Configure, back up and diagnose your Agents',
 } as const;
 
-const LOGS_BENEFIT = {
-  kind: 'logsFiles',
-  labelKey: 'Logs, files, and search',
-} as const;
+const SESSION_BENEFIT = { kind: 'sessions', labelKey: 'Conversations across channels and tasks' } as const;
+const MEMORY_BENEFIT = { kind: 'memory', labelKey: "Shape your Agent's personality and memory" } as const;
 
 const COMBINED_BENEFIT = {
   kind: 'combined',
-  labelKey: 'Unlimited connections and Agents',
+  labelKey: 'More Agents, unlimited connections',
 } as const;
 
 function contextualBenefits(
   first: Readonly<{ kind: PaywallBenefitKind; labelKey: PaywallBenefitKey }>,
 ): PaywallContent['benefits'] {
-  const candidates = [first, REPAIR_BENEFIT, LOGS_BENEFIT, COMBINED_BENEFIT];
+  const candidates = [first, COMBINED_BENEFIT, SESSION_BENEFIT, MEMORY_BENEFIT, REPAIR_BENEFIT];
   const seen = new Set<PaywallBenefitKind>();
   return candidates.filter((benefit) => {
     const duplicateCategory = benefit.kind === 'combined'
-      ? seen.has('combined') || (seen.has('connections') && seen.has('agents'))
+      ? seen.has('combined') || seen.has('connections') || seen.has('agents')
       : seen.has(benefit.kind)
         || (benefit.kind === 'logsFiles' && seen.has('search'))
         || (benefit.kind === 'search' && seen.has('logsFiles'));
     if (duplicateCategory) return false;
     seen.add(benefit.kind);
     return true;
-  }).slice(0, 3);
+  }).slice(0, 4);
 }
 
 function manageContent(featureKey: PaywallSubtitleFeatureKey): PaywallContent {
@@ -151,6 +158,15 @@ export function resolvePaywallContent(trigger: PaywallTrigger | null): PaywallCo
         actionKey: trigger === 'logs' ? 'viewing logs' : 'editing this file',
         benefits: contextualBenefits({ kind: 'logsFiles', labelKey: 'Logs and file editing' }),
       };
+    case 'sessionHistory':
+      return {
+        hero: 'agents',
+        titleKey: 'Explore your Agent conversations',
+        subtitleKey: 'Take your AI world with you.',
+        subtitleFeatureKey: null,
+        actionKey: null,
+        benefits: contextualBenefits(SESSION_BENEFIT),
+      };
     case 'messageHistory':
       return {
         hero: 'search',
@@ -168,11 +184,11 @@ export function resolvePaywallContent(trigger: PaywallTrigger | null): PaywallCo
     default:
       return {
         hero: 'generic',
-        titleKey: 'Every Agent in your pocket',
-        subtitleKey: null,
+        titleKey: 'More possibilities with your Agents',
+        subtitleKey: 'Take your AI world with you.',
         subtitleFeatureKey: null,
         actionKey: null,
-        benefits: contextualBenefits({ kind: 'combined', labelKey: 'Unlimited connections and Agents' }),
+        benefits: contextualBenefits({ kind: 'combined', labelKey: 'More Agents, unlimited connections' }),
       };
   }
 }
@@ -199,19 +215,6 @@ export function orderPaywallPackages(packages: readonly ProPaywallPackage[]): Pr
   return [...packages].sort((left, right) => (
     (PACKAGE_ORDER[left.packageType] ?? 99) - (PACKAGE_ORDER[right.packageType] ?? 99)
   ));
-}
-
-export function calculateAnnualSavings(packages: readonly ProPaywallPackage[]): number | null {
-  const annualPrice = packages.find((item) => item.packageType === 'ANNUAL')?.price;
-  const monthlyPrice = packages.find((item) => item.packageType === 'MONTHLY')?.price;
-  if (annualPrice == null || monthlyPrice == null || monthlyPrice <= 0) return null;
-  const savings = ((monthlyPrice * 12) - annualPrice) / (monthlyPrice * 12);
-  if (!Number.isFinite(savings) || savings <= 0) return null;
-  return Math.min(99, Math.round(savings * 100));
-}
-
-export function shouldShowPaywallSocialProof(packages: readonly ProPaywallPackage[]): boolean {
-  return packages[0]?.offeringMetadata?.socialProof ?? true;
 }
 
 export function paywallFailureMessageKey(

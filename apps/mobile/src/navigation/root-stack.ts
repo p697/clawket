@@ -38,6 +38,7 @@ export type RootStackParamList = {
     agentId: string;
     sessionKey: string;
     from: ThreadOrigin;
+    runContext?: { title: string; kind: 'cron' | 'subagent'; statusLabel: string; summary?: string };
   };
   AgentSettings: { connectionId: string; agentId: string };
   AgentSettingsSection: {
@@ -46,10 +47,14 @@ export type RootStackParamList = {
     section: AgentSettingsSection;
     action?: 'create-agent';
   };
+  Connections: undefined;
+  Connection: { connectionId: string };
   AccountSettings: undefined;
-  AccountSettingsSection: { section: AccountSettingsSection };
+  DesignSystem: undefined;
+  AccountSettingsSection: { section: AccountSettingsSection; connectionId?: string };
   ReleaseNotes: undefined;
   ChatAppearance: undefined;
+  HelpCenter: { community?: 'wecom' } | undefined;
   Search: { query?: string } | undefined;
   MessageDetail: {
     connectionId: string;
@@ -65,11 +70,30 @@ export const ROOT_ROUTE_NAMES = [
   'Thread',
   'AgentSettings',
   'AgentSettingsSection',
+  'Connections',
+  'Connection',
   'AccountSettings',
+  'DesignSystem',
   'AccountSettingsSection',
   'ReleaseNotes',
   'ChatAppearance',
+  'HelpCenter',
   'Search',
   'MessageDetail',
   'Paywall',
 ] as const satisfies ReadonlyArray<keyof RootStackParamList>;
+
+/** Reuse the owner's current conversation, including a task route and scroll state. */
+export function findAgentChatReturnIndex(
+  state: { index: number; routes: ReadonlyArray<{ name: string; params?: unknown }> },
+  connectionId: string,
+  agentId: string,
+): number {
+  for (let index = Math.min(state.index - 1, state.routes.length - 1); index >= 0; index--) {
+    const route = state.routes[index];
+    if (route.name !== 'Thread' || !route.params || typeof route.params !== 'object') continue;
+    const params = route.params as Partial<RootStackParamList['Thread']>;
+    if (params.connectionId === connectionId && params.agentId === agentId) return index;
+  }
+  return -1;
+}

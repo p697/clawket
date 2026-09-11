@@ -2,6 +2,7 @@ import {
   getOnboardingPairingCommand,
   normalizePairableBackendKind,
   ONBOARDING_DOCUMENTATION_URLS,
+  ONBOARDING_WEBSITE_URLS,
   resolveOnboardingAdapterError,
   resolveOnboardingRouteStatus,
 } from './route-model';
@@ -12,6 +13,11 @@ describe('Onboarding route model', () => {
     expect(getOnboardingPairingCommand('preview')).toBe('npx @p697/clawket pair --preview');
     expect(ONBOARDING_DOCUMENTATION_URLS.openclaw).toBe('https://docs.openclaw.ai/install');
     expect(ONBOARDING_DOCUMENTATION_URLS.hermes).toContain('hermes-agent.nousresearch.com/docs/');
+    expect(ONBOARDING_WEBSITE_URLS).toEqual({
+      openclaw: 'https://openclaw.ai',
+      hermes: 'https://hermes-agent.nousresearch.com',
+      youmind: 'https://youmind.com',
+    });
   });
 
   it('normalizes non-pairable route backends without treating YouMind as a transport', () => {

@@ -41,6 +41,8 @@ export type AppTheme = {
   scheme: ThemeScheme;
   mode: ThemeMode;
   colors: AppThemeColors;
+  /** Conversation palette; application controls remain neutral. */
+  chatColors?: AppThemeColors;
 };
 
 type FixedPalette = Omit<AppThemeColors, 'accent' | 'accentSoft'>;
@@ -85,6 +87,10 @@ const darkCanonical = {
 
 const lightPalette: FixedPalette = lightCanonical;
 const darkPalette: FixedPalette = darkCanonical;
+
+// Native-owned attributed input text must resolve color on trait changes too,
+// without replacing marked text when only the app appearance changes.
+export const inputInkVariants = { light: lightCanonical.ink, dark: darkCanonical.ink };
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } {
   const normalized = hex.replace('#', '');
@@ -131,4 +137,18 @@ export function buildTheme(mode: ThemeMode, systemScheme: ThemeScheme, accent: A
     mode,
     colors: applyAccentPalette(scheme, fixedPalette, accentPalette),
   };
+}
+
+/** Separate interface appearance from the user's saved conversation color. */
+export function buildInterfaceTheme(mode: ThemeMode, systemScheme: ThemeScheme, accent: AccentScale): AppTheme {
+  const chat = buildTheme(mode, systemScheme, accent);
+  return {
+    ...chat,
+    chatColors: chat.colors,
+    colors: { ...chat.colors, accent: chat.colors.ink, accentSoft: chat.colors.surface, onAccent: chat.colors.canvas },
+  };
+}
+
+export function resolveChatTheme(theme: AppTheme): AppTheme {
+  return theme.chatColors ? { ...theme, colors: theme.chatColors } : theme;
 }

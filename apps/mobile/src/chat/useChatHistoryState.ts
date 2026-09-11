@@ -31,7 +31,7 @@ import { HISTORY_PAGE_SIZE } from './constants';
 import { mapAdapterSession } from './adapterChatMapping';
 import { shouldSuppressHistoryLoadError } from './historyErrorPolicy';
 import { shouldPreserveOptimisticAssistant } from './cacheHydrationPolicy';
-import { preserveOptimisticAssistantMessage } from './historyMergePolicy';
+import { preserveOptimisticAssistantMessage, prependOlderCachedMessages } from './historyMergePolicy';
 import { shouldRestoreCacheBeforeHistoryRefresh } from './historyRefreshPolicy';
 import { ReconcileAssistantOptions, shouldAppendReconciledAssistant } from './historyReconcile';
 import { selectSessionForCurrentAgent } from './sessionSelection';
@@ -180,11 +180,7 @@ function summarizeMessages(label: string, list: UiMessage[]): string {
 }
 
 function prependUniqueMessages(previousMessages: UiMessage[], olderMessages: UiMessage[]): UiMessage[] {
-  if (olderMessages.length === 0) return previousMessages;
-  const existingIds = new Set(previousMessages.map((message) => message.id));
-  const prependable = olderMessages.filter((message) => !existingIds.has(message.id));
-  if (prependable.length === 0) return previousMessages;
-  return [...prependable, ...previousMessages];
+  return prependOlderCachedMessages(previousMessages, olderMessages);
 }
 
 function requireAdapter(adapter: AgentAdapter | null): AgentAdapter {
@@ -233,7 +229,8 @@ function projectHistoryMessage(message: ChatMessage): Record<string, unknown> {
     return {
       ...raw,
       role: 'toolResult',
-      content: message.text || message.tool?.summary || '',
+      content: message.text || '',
+      toolStatus: message.tool?.status,
       timestamp: message.timestampMs,
       toolCallId: message.tool?.callId ?? message.id.replace(/^tool(?:call|result)_/, ''),
       name: message.tool?.name ?? 'tool',
@@ -277,6 +274,7 @@ type Params = {
   gatewayConfigId: string | null;
   currentAgentId: string;
   initialPreview?: LastOpenedSessionSnapshot | null;
+  routeSessionKey?: string;
 };
 
 export function useChatHistoryState({
@@ -288,10 +286,11 @@ export function useChatHistoryState({
   gatewayConfigId,
   currentAgentId,
   initialPreview,
+  routeSessionKey,
 }: Params) {
   const initialPreviewSession = buildSnapshotPreviewSession(initialPreview ?? null);
   const [messages, setMessages] = useState<UiMessage[]>([]);
-  const [sessionKey, setSessionKey] = useState<string | null>(initialPreview?.sessionKey ?? null);
+  const [sessionKey, setSessionKey] = useState<string | null>(routeSessionKey ?? initialPreview?.sessionKey ?? null);
   const [sessions, setSessions] = useState<SessionInfo[]>(initialPreviewSession);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshingSessions, setRefreshingSessions] = useState(false);
@@ -795,7 +794,8 @@ export function useChatHistoryState({
             uiMessages[existingIdx] = {
               ...existing,
               toolName: existing.toolName ?? name,
-              toolStatus: hasError ? 'error' : 'success',
+              toolStatus: msgRecord.toolStatus === 'unknown' ? 'unknown'
+                : msgRecord.toolStatus === 'running' ? 'running' : hasError ? 'error' : 'success',
               toolSummary: hasError
                 ? t('Failed {{name}}', { ns: 'chat', name: baseSummary })
                 : t('Completed {{name}}', { ns: 'chat', name: baseSummary }),
@@ -812,7 +812,8 @@ export function useChatHistoryState({
               role: 'tool',
               text: '',
               toolName: name,
-              toolStatus: hasError ? 'error' : 'success',
+              toolStatus: msgRecord.toolStatus === 'unknown' ? 'unknown'
+                : msgRecord.toolStatus === 'running' ? 'running' : hasError ? 'error' : 'success',
               toolSummary: hasError
                 ? t('Failed {{name}}', { ns: 'chat', name: baseSummary })
                 : t('Completed {{name}}', { ns: 'chat', name: baseSummary }),
@@ -829,6 +830,18 @@ export function useChatHistoryState({
         if (message.role !== 'user' && message.role !== 'assistant' && message.role !== 'toolResult') continue;
       }
       flushAssistantTurn();
+
+      // An explicitly inactive session also closes the latest turn, even if the
+      // user has not sent another message. Missing results are not proof of success.
+      const lastUserIndex = uiMessages.findLastIndex(item => item.role === 'user');
+      const inactiveToolBoundary = historyResult.hasActiveRun === false
+        ? uiMessages.length
+        : lastUserIndex;
+      for (let index = 0; index < inactiveToolBoundary; index++) {
+        if (uiMessages[index].role === 'tool' && uiMessages[index].toolStatus === 'running') {
+          uiMessages[index] = { ...uiMessages[index], toolStatus: 'unknown' };
+        }
+      }
 
       if (toCache.length > 0) {
         for (const item of toCache) {
@@ -914,7 +927,9 @@ export function useChatHistoryState({
       const currentMessages = messagesRef.current;
       const currentHistoryLoaded = historyLoadedRef.current;
 
-      const selected = selectSessionForCurrentAgent({
+      const selected = routeSessionKey
+        ? list.find((session) => session.key === routeSessionKey) ?? { key: routeSessionKey, kind: 'unknown' as const }
+        : selectSessionForCurrentAgent({
         sessions: list,
         mainSessionKey,
         currentKey,
@@ -966,7 +981,7 @@ export function useChatHistoryState({
     } finally {
       setRefreshing(false);
     }
-  }, [adapter, currentAgentId, dbg, loadHistory, mainSessionKey, restoreCachedMessages, sessionKeyRef]);
+  }, [adapter, currentAgentId, dbg, loadHistory, mainSessionKey, routeSessionKey, restoreCachedMessages, sessionKeyRef]);
 
   const onLoadMoreHistory = useCallback(async () => {
     if (!sessionKey || loadingMoreHistory || refreshing || !hasMoreHistory) return;
@@ -1144,7 +1159,7 @@ export function useChatHistoryState({
     if (snapshotPreview.length > 0) {
       setSessions((prev) => (prev.length > 0 ? prev : snapshotPreview));
     }
-    const preferredKey = (
+    const preferredKey = routeSessionKey ?? (
       currentKey && isSessionKeyInAgentScope(currentKey, currentAgentId, { mainSessionKey })
         ? currentKey
         : snapshot?.sessionKey
@@ -1174,7 +1189,9 @@ export function useChatHistoryState({
         count: list.length,
       });
       setSessions(list);
-      const selected = selectSessionForCurrentAgent({
+      const selected = routeSessionKey
+        ? list.find((session) => session.key === routeSessionKey) ?? { key: routeSessionKey, kind: 'unknown' as const }
+        : selectSessionForCurrentAgent({
         sessions: list,
         mainSessionKey,
         currentKey: sessionKeyRef.current,
@@ -1226,7 +1243,7 @@ export function useChatHistoryState({
       void restoreCachedMessages(fallbackKey, { clearWhenEmpty: true });
       loadHistory(fallbackKey, HISTORY_PAGE_SIZE);
     }
-  }, [adapter, currentAgentId, gatewayConfigId, loadHistory, mainSessionKey, restoreCachedMessages]);
+  }, [adapter, currentAgentId, gatewayConfigId, loadHistory, mainSessionKey, routeSessionKey, restoreCachedMessages]);
 
   const refreshCurrentSessionHistory = useCallback(async () => {
     const currentKey = sessionKeyRef.current;
@@ -1266,7 +1283,9 @@ export function useChatHistoryState({
         const list = await listAdapterSessions(adapter, currentAgentId);
         setSessions(list);
 
-        const selected = selectSessionForCurrentAgent({
+        const selected = routeSessionKey
+        ? list.find((session) => session.key === routeSessionKey) ?? { key: routeSessionKey, kind: 'unknown' as const }
+        : selectSessionForCurrentAgent({
           sessions: list,
           mainSessionKey,
           currentKey,
@@ -1288,7 +1307,7 @@ export function useChatHistoryState({
       } finally {
         setRefreshingSessions(false);
       }
-    }, [adapter, currentAgentId, gatewayConfigId, loadHistory, mainSessionKey, restoreCachedMessages, sessionKeyRef]),
+    }, [adapter, currentAgentId, gatewayConfigId, loadHistory, mainSessionKey, routeSessionKey, restoreCachedMessages, sessionKeyRef]),
     reconcileLatestAssistantFromHistory,
   };
 }

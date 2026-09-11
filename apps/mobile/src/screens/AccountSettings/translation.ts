@@ -6,6 +6,9 @@ export type AccountSettingsTranslator = (
 ) => string;
 
 function translateCommon(t: AccountSettingsTranslator, key: string): string {
+  if (key === 'Advanced settings') return t('Advanced settings', { ns: 'config' });
+  if (key === 'Chat & notifications') return t('Chat & notifications', { ns: 'config' });
+  if (key === 'Help & feedback') return t('Help & feedback', { ns: 'config' });
   if (key === 'Offline') return t('Offline', { ns: 'common' });
   if (key === 'Connecting') return t('Connecting', { ns: 'common' });
   if (key === 'Online') return t('Online', { ns: 'common' });
@@ -17,12 +20,16 @@ function translateCommon(t: AccountSettingsTranslator, key: string): string {
 }
 
 function translateSettings(t: AccountSettingsTranslator, key: string): string {
+  if (key === 'Server address') return t('Server address', { ns: 'settings' });
   if (key === 'Environment') return t('Environment', { ns: 'settings' });
   if (key === 'Unavailable') return t('Unavailable', { ns: 'settings' });
   return key;
 }
 
 function translateConfig(t: AccountSettingsTranslator, key: string): string {
+  if (key === 'Advanced settings') return t('Advanced settings', { ns: 'config' });
+  if (key === 'Chat & notifications') return t('Chat & notifications', { ns: 'config' });
+  if (key === 'Help & feedback') return t('Help & feedback', { ns: 'config' });
   if (key === 'Pro') return t('Pro', { ns: 'config' });
   if (key === 'Clawket Pro') return t('Clawket Pro', { ns: 'config' });
   if (key === 'Active') return t('Active', { ns: 'config' });
@@ -32,6 +39,7 @@ function translateConfig(t: AccountSettingsTranslator, key: string): string {
   if (key === 'Add Connection') return t('Add Connection', { ns: 'config' });
   if (key === 'Theme') return t('Theme', { ns: 'config' });
   if (key === 'Accent Color') return t('Accent Color', { ns: 'config' });
+  if (key === 'Chat theme') return t('Chat theme', { ns: 'config' });
   if (key === 'Chat Appearance') return t('Chat Appearance', { ns: 'config' });
   if (key === 'App Icon') return t('App Icon', { ns: 'config' });
   if (key === 'Appearance') return t('Appearance', { ns: 'config' });
@@ -64,6 +72,7 @@ function translateConfig(t: AccountSettingsTranslator, key: string): string {
   if (key === 'Developer') return t('Developer', { ns: 'config' });
   if (key === 'Backend') return t('Backend', { ns: 'config' });
   if (key === 'Transport') return t('Transport', { ns: 'config' });
+  if (key === 'Server address') return t('Server address', { ns: 'settings' });
   if (key === 'Environment') return t('Environment', { ns: 'settings' });
   if (key === 'Status') return t('Status', { ns: 'config' });
   if (key === 'Relay') return t('Relay', { ns: 'config' });

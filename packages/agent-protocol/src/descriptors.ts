@@ -152,7 +152,7 @@ export interface ChatMessage {
   usage?: Usage;
   tool?: {
     name: string;
-    status: 'running' | 'success' | 'error';
+    status: 'running' | 'success' | 'error' | 'unknown';
     callId?: string;
     summary?: string;
     input?: unknown;

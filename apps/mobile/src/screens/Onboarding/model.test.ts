@@ -1,4 +1,5 @@
 import {
+  buildAgentPairingPrompt,
   createPairingSubmission,
   formatVerificationCode,
   isPlausibleEmail,
@@ -9,9 +10,18 @@ import {
 } from './model';
 
 describe('Onboarding model', () => {
-  it('normalizes typed and pasted pairing codes to six digits', () => {
-    expect(normalizeVerificationCode(' 12a3-45 67 ')).toBe('123456');
-    expect(normalizeVerificationCode(' ab1c-2o34 ', 'hermes')).toBe('ABC234');
+  it('builds an agent message that names the open-source CLI, the exact command, and the printed code line', () => {
+    const t = (key: string, options: { ns: 'config'; pairCommand: string }) => key.replace('{{pairCommand}}', options.pairCommand);
+    const prompt = buildAgentPairingPrompt(t, 'npx @p697/clawket pair --preview');
+    expect(prompt).toContain('npx @p697/clawket pair --preview');
+    expect(prompt).toContain('open-source');
+    expect(prompt).toContain('"Pairing code:"');
+    expect(buildAgentPairingPrompt(t)).toContain('npx @p697/clawket pair');
+  });
+
+  it('removes separators without silently changing malformed invitation values', () => {
+    expect(normalizeVerificationCode(' 12a3-45 67 ')).toBe('12A34567');
+    expect(normalizeVerificationCode(' ab1c-2o34 ', 'hermes')).toBe('AB1C2O34');
     expect(normalizeVerificationCode('')).toBe('');
   });
 
@@ -25,8 +35,16 @@ describe('Onboarding model', () => {
   it('accepts only complete six-digit verification codes', () => {
     expect(isVerificationCodeComplete('123 456')).toBe(true);
     expect(isVerificationCodeComplete('12345')).toBe(false);
-    expect(isVerificationCodeComplete('1234567')).toBe(true);
+    expect(isVerificationCodeComplete('1234567')).toBe(false);
+    expect(isVerificationCodeComplete('ab1c-2o34', 'hermes')).toBe(false);
     expect(isVerificationCodeComplete('ABC 234', 'hermes')).toBe(true);
+  });
+
+  it('preserves legacy encrypted OpenClaw codes without changing Hermes code semantics', () => {
+    const legacy = 'ABCD EFGH JKMN';
+    expect(formatVerificationCode(legacy)).toBe(legacy);
+    expect(createPairingSubmission('openclaw', legacy)?.code).toBe('ABCDEFGHJKMN');
+    expect(createPairingSubmission('hermes', legacy)).toBeNull();
   });
 
   it('keeps backend and transport identities separate in pairing submissions', () => {

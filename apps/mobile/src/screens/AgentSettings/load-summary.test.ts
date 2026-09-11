@@ -115,7 +115,7 @@ describe('Agent settings summary loader', () => {
     });
     expect(skillStatus).toHaveBeenCalledWith('main');
     expect(cronList).toHaveBeenCalledWith({ includeDisabled: true, limit: 200, offset: 0 });
-    expect(cost).toHaveBeenCalledWith({ startDate: '2026-09-05', endDate: '2026-09-05' });
+    expect(cost).toHaveBeenCalledWith({ startDate: '2026-09-05', endDate: '2026-09-05', agentId: 'main' });
     expect(catalog).toHaveBeenCalledWith('main');
   });
 

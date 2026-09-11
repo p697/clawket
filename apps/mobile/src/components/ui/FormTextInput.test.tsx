@@ -21,9 +21,12 @@ jest.mock('react-native', () => {
       hairlineWidth: 1,
     },
     TextInput: primitive('TextInput'),
+    Text: primitive('Text'),
     View: primitive('View'),
   };
 });
+
+jest.mock('lucide-react-native', () => ({ CircleAlert: 'CircleAlert' }));
 
 jest.mock('../../theme', () => ({
   useAppTheme: () => ({
@@ -61,10 +64,21 @@ describe('FormTextInput', () => {
 
     expect(input.props.value).toBeUndefined();
     expect(input.props.defaultValue).toBe('拼音');
+    expect(flattenStyle(input.props.style).lineHeight).toBeUndefined();
     expect(flattenStyle(input.props.style)).toMatchObject({
       minHeight: ControlSize.floatingButton,
       fontSize: FontSize.secondary,
-      lineHeight: LineHeight.secondary,
     });
   });
+
+  it('retains explicit leading for multiline fields', () => {
+    const view = render(<FormTextInput testID="multiline" multiline value="First line\nSecond line" />);
+    expect(flattenStyle(view.getByTestId('multiline').props.style).lineHeight).toBe(LineHeight.secondary);
+  });
+});
+
+it('exposes the correction without replacing composition-safe input ownership', () => {
+  const view = render(<FormTextInput testID="error-field" value="123" surface="quiet" invalid errorMessage="Enter six digits" />);
+  expect(view.getByTestId('error-field').props.accessibilityHint).toBe('Enter six digits');
+  expect(view.getByText('Enter six digits')).toBeTruthy();
 });

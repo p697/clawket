@@ -90,7 +90,7 @@ export function GatewayScannerProvider({ children }: { children: React.ReactNode
     }
     lastPairingAlertRef.current = { message, atMs: now };
     hideOverlay();
-    Alert.alert('Pairing Failed', message);
+    Alert.alert(i18n.t('Connection failed', { ns: 'common' }), message);
   }, [hideOverlay]);
 
   const connectFromScan = useCallback(async (payload: GatewayScanPayload): Promise<boolean> => {

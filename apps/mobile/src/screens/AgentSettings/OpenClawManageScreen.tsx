@@ -285,7 +285,7 @@ export function OpenClawManageScreen({
       setSheetError(null);
       setSheet({ kind: 'configuration-confirm', raw });
     } catch {
-      setSheetError(t('common:Save Failed'));
+      setSheetError(t('Save Failed', { ns: 'common' }));
     }
   }, [configurationDraft, t]);
 
@@ -300,15 +300,15 @@ export function OpenClawManageScreen({
     setSheetError(null);
     try {
       const result = await setConfig(raw, configuration.hash);
-      if (!result.ok) throw new Error(t('common:Save Failed'));
+      if (!result.ok) throw new Error(t('Save Failed', { ns: 'common' }));
       const parsed = JSON.parse(raw) as Record<string, unknown>;
       setConfiguration({ config: result.config ?? parsed, hash: null });
       setLoaded((current) => ({ ...current, configuration: false }));
-      setNotice(t('common:Saved'));
+      setNotice(t('Saved', { ns: 'common' }));
       setSheet(null);
       if (adapter.state === 'ready') await loadTab('configuration');
     } catch (error: unknown) {
-      setSheetError(translateError(error, t('common:Save Failed')));
+      setSheetError(translateError(error, t('Save Failed', { ns: 'common' })));
     } finally {
       setBusy(null);
     }
@@ -400,7 +400,7 @@ export function OpenClawManageScreen({
       await restore(backup.id);
       setConfiguration(null);
       setLoaded((current) => ({ ...current, configuration: false }));
-      setNotice(t('common:Saved'));
+      setNotice(t('Saved', { ns: 'common' }));
       setSheet(null);
     } catch (error: unknown) {
       setSheetError(translateError(error, t('Unable to load backups')));
@@ -423,7 +423,7 @@ export function OpenClawManageScreen({
     if (!loaded[activeTab]) {
       return online || errors[activeTab]
         ? null
-        : <SectionEmpty testID="openclaw-manage-offline-empty" message={t('common:Offline')} />;
+        : <SectionEmpty testID="openclaw-manage-offline-empty" message={t('Offline', { ns: 'common' })} />;
     }
     if (activeTab === 'configuration') {
       return (
@@ -507,13 +507,13 @@ export function OpenClawManageScreen({
           <FloatingButton
             testID="openclaw-manage-back"
             icon={ChevronLeft}
-            appearance="quiet"
-            accessibilityLabel={t('common:Back')}
+            appearance="plain"
+            accessibilityLabel={t('Back', { ns: 'common' })}
             onPress={onBack}
           />
         </View>
         <Text style={styles.headerTitle} numberOfLines={1}>
-          {t('common:OpenClaw management')}
+          {t('OpenClaw management', { ns: 'common' })}
         </Text>
         <View style={styles.headerSide} />
       </View>
@@ -549,15 +549,15 @@ export function OpenClawManageScreen({
             {!hasAccess ? (
               <Banner
                 testID="openclaw-manage-locked"
-                message={t('common:Pro required for this agent')}
-                actionLabel={t('common:View Pro')}
+                message={t('Pro required for this agent', { ns: 'common' })}
+                actionLabel={t('View Pro', { ns: 'common' })}
                 onAction={() => onOpenPaywall(paywallFeatureForTab(activeTab))}
               />
             ) : !online ? (
               <Banner
                 testID="openclaw-manage-offline"
                 message={t('Offline · showing cached settings', { ns: 'config' })}
-                actionLabel={t('common:Retry')}
+                actionLabel={t('Retry', { ns: 'common' })}
                 onAction={() => { void retry(); }}
               />
             ) : null}
@@ -566,7 +566,7 @@ export function OpenClawManageScreen({
                 testID="openclaw-manage-error"
                 tone="bad"
                 message={errors[activeTab] ?? ''}
-                actionLabel={t('common:Retry')}
+                actionLabel={t('Retry', { ns: 'common' })}
                 onAction={() => { void retry(); }}
               />
             ) : null}
@@ -580,7 +580,7 @@ export function OpenClawManageScreen({
         visible={sheet?.kind === 'configuration-edit'}
         testID="openclaw-configuration-editor"
         title={t('Current OpenClaw config')}
-        closeAccessibilityLabel={t('common:Close')}
+        closeAccessibilityLabel={t('Close', { ns: 'common' })}
         onClose={closeSheet}
         dismissOnBackdropPress={!busy}
       >
@@ -599,14 +599,14 @@ export function OpenClawManageScreen({
           <View style={styles.actionRow}>
             <Button
               testID="openclaw-configuration-cancel"
-              label={t('common:Cancel')}
+              label={t('Cancel', { ns: 'common' })}
               variant="secondary"
               onPress={closeSheet}
               style={styles.actionButton}
             />
             <Button
               testID="openclaw-configuration-review"
-              label={t('common:Save')}
+              label={t('Save', { ns: 'common' })}
               onPress={reviewConfiguration}
               style={styles.actionButton}
             />
@@ -617,18 +617,18 @@ export function OpenClawManageScreen({
       <Sheet
         visible={sheet?.kind === 'configuration-confirm'}
         testID="openclaw-configuration-confirm"
-        title={t('common:Confirm Save')}
-        closeAccessibilityLabel={t('common:Close')}
+        title={t('Confirm Save', { ns: 'common' })}
+        closeAccessibilityLabel={t('Close', { ns: 'common' })}
         onClose={closeSheet}
         dismissOnBackdropPress={!busy}
       >
         <ConfirmationContent
           testIDPrefix="openclaw-configuration-confirm"
-          message={t('common:This will restart Gateway. Continue?')}
+          message={t('This will restart Gateway. Continue?', { ns: 'common' })}
           error={sheetError}
           busy={busy === 'configuration'}
-          cancelLabel={t('common:Cancel')}
-          confirmLabel={t('common:Save')}
+          cancelLabel={t('Cancel', { ns: 'common' })}
+          confirmLabel={t('Save', { ns: 'common' })}
           onCancel={closeSheet}
           onConfirm={() => {
             if (sheet?.kind === 'configuration-confirm') {
@@ -642,7 +642,7 @@ export function OpenClawManageScreen({
         visible={sheet?.kind === 'repair'}
         testID="openclaw-repair-confirm"
         title={t('Repair agent permissions?')}
-        closeAccessibilityLabel={t('common:Close')}
+        closeAccessibilityLabel={t('Close', { ns: 'common' })}
         onClose={closeSheet}
         dismissOnBackdropPress={!busy}
       >
@@ -651,7 +651,7 @@ export function OpenClawManageScreen({
           message={t('This will fully enable command access for the current agent, set command permission level to Full, and set command confirmation mode to Unknown Only. OpenClaw Gateway will restart. Continue?')}
           error={sheetError}
           busy={busy === 'repair'}
-          cancelLabel={t('common:Cancel')}
+          cancelLabel={t('Cancel', { ns: 'common' })}
           confirmLabel={t('Repair Now')}
           onCancel={closeSheet}
           onConfirm={() => {
@@ -664,7 +664,7 @@ export function OpenClawManageScreen({
         visible={sheet?.kind === 'restore'}
         testID="openclaw-restore-confirm"
         title={t('Restore Backup')}
-        closeAccessibilityLabel={t('common:Close')}
+        closeAccessibilityLabel={t('Close', { ns: 'common' })}
         onClose={closeSheet}
         dismissOnBackdropPress={!busy}
       >
@@ -673,7 +673,7 @@ export function OpenClawManageScreen({
           message={t('Restore this config backup to OpenClaw? This will replace the current OpenClaw config and restart Gateway.')}
           error={sheetError}
           busy={Boolean(busy?.startsWith('backup-restore:'))}
-          cancelLabel={t('common:Cancel')}
+          cancelLabel={t('Cancel', { ns: 'common' })}
           confirmLabel={t('Restore')}
           onCancel={closeSheet}
           onConfirm={() => {
@@ -686,7 +686,7 @@ export function OpenClawManageScreen({
         visible={sheet?.kind === 'approval'}
         testID="openclaw-approval-sheet"
         title={t('Allow exec?', { ns: 'chat' })}
-        closeAccessibilityLabel={t('common:Close')}
+        closeAccessibilityLabel={t('Close', { ns: 'common' })}
         onClose={closeSheet}
         dismissOnBackdropPress={!busy}
       >
@@ -736,14 +736,14 @@ export function OpenClawManageScreen({
         visible={sheet?.kind === 'detail'}
         testID="openclaw-detail-sheet"
         title={sheet?.kind === 'detail' ? sheet.title : undefined}
-        closeAccessibilityLabel={t('common:Close')}
+        closeAccessibilityLabel={t('Close', { ns: 'common' })}
         onClose={closeSheet}
       >
         <View style={styles.sheetContent}>
           <Text selectable style={styles.detailText}>
             {sheet?.kind === 'detail' ? sheet.body : ''}
           </Text>
-          <Button label={t('common:Done')} onPress={closeSheet} />
+          <Button label={t('Done', { ns: 'common' })} onPress={closeSheet} />
         </View>
       </Sheet>
     </View>

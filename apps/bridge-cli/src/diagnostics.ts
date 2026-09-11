@@ -15,6 +15,7 @@ import {
   getOpenClawMediaDir,
   readOpenClawInfo,
   resolveGatewayUrl,
+  resolveHermesSourcePath,
 } from '@clawket/bridge-runtime';
 import { parseLookbackToMs } from './log-parse.js';
 
@@ -170,7 +171,7 @@ export async function buildDoctorReport(): Promise<CliDoctorReport> {
   const openclaw = readOpenClawInfo();
   const localGatewayUrl = resolveGatewayUrl();
   const localGatewayReachable = await checkGatewayReachable(localGatewayUrl);
-  const hermesSourcePath = `${homedir()}/.hermes/hermes-agent`;
+  const hermesSourcePath = resolveHermesSourcePath();
   const hermesSourceFound = existsSync(hermesSourcePath);
   const hermesBridgeConfigPath = `${homedir()}/.clawket/hermes-bridge.json`;
   const hermesBridgeConfig = readHermesBridgeConfig(hermesBridgeConfigPath);

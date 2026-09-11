@@ -77,6 +77,7 @@ export type HelpCenterScreenProps = Readonly<{
   onBack: () => void;
   onOpenUrl?: (url: string) => Promise<void> | void;
   showWecomEntry?: boolean;
+  initialCommunity?: 'wecom';
 }>;
 
 export type HelpCenterCommunityEntry = 'discord' | 'wecom';
@@ -261,15 +262,16 @@ function TopicSheet({
 
 export function HelpCenterScreen({
   onBack,
+  initialCommunity,
   onOpenUrl = openUrlWithLinking,
   showWecomEntry = shouldShowWecomSupportEntry(),
 }: HelpCenterScreenProps): React.JSX.Element {
   const { t } = useTranslation(['config', 'common']);
   const { theme } = useAppTheme();
   const insets = useSafeAreaInsets();
-  const [activeTab, setActiveTab] = useState<HelpTab>('connect');
+  const [activeTab, setActiveTab] = useState<HelpTab>(initialCommunity ? 'official' : 'connect');
   const [topic, setTopic] = useState<HelpTopic | null>(null);
-  const [wecomVisible, setWecomVisible] = useState(false);
+  const [wecomVisible, setWecomVisible] = useState(initialCommunity === 'wecom');
   const [wecomSaveState, setWecomSaveState] = useState<WecomSaveState>('idle');
   const [linkErrorVisible, setLinkErrorVisible] = useState(false);
 

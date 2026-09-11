@@ -4,6 +4,13 @@ import { useChatVoiceInput } from './useChatVoiceInput';
 import { analyticsEvents } from '../services/analytics/events';
 import * as speechRecognition from '../services/speech/speechRecognition';
 
+// The global reanimated mock recreates shared values on every render; the hook
+// relies on the real hook's stable identity, so mirror that here.
+jest.mock('react-native-reanimated', () => {
+  const { useRef } = require('react');
+  return { useSharedValue: <T,>(initial: T) => useRef({ value: initial }).current };
+});
+
 jest.mock('../services/analytics/events', () => ({
   analyticsEvents: {
     chatVoiceInputFailed: jest.fn(),
@@ -243,5 +250,58 @@ describe('useChatVoiceInput', () => {
       locale: 'system',
       source: 'chat_composer',
     });
+  });
+
+  it('streams the microphone level through a shared value and resets it when recognition ends', async () => {
+    mockedSpeech.isSpeechRecognitionSupported.mockReturnValue(true);
+    mockedSpeech.getSpeechRecognitionAvailabilityAsync.mockResolvedValue(true);
+    let levelListener: ((event: { level: number }) => void) | undefined;
+    let stateListener: ((event: { state: 'idle' | 'listening' }) => void) | undefined;
+    mockedSpeech.addSpeechRecognitionLevelListener.mockImplementation((listener) => {
+      levelListener = listener;
+      return { remove: jest.fn() };
+    });
+    mockedSpeech.addSpeechRecognitionStateListener.mockImplementation((listener) => {
+      stateListener = listener;
+      return { remove: jest.fn() };
+    });
+
+    let renders = 0;
+    const { result } = renderHook(() => {
+      renders += 1;
+      return useChatVoiceInput({
+        composerRef: { current: { blur: jest.fn() } as any },
+        input: '',
+        speechRecognitionLanguage: 'en',
+        setInput: jest.fn(),
+        t: (key: string) => key,
+      });
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const level = result.current.voiceInputLevel;
+
+    act(() => stateListener?.({ state: 'listening' }));
+    expect(result.current.voiceInputState).toBe('listening');
+    expect(result.current.voiceInputActive).toBe(true);
+
+    const rendersBeforeLevel = renders;
+    // A quiet room settles the adaptive floor; speech then fills the meter.
+    for (let index = 0; index < 10; index += 1) {
+      act(() => levelListener?.({ level: 0.005 }));
+    }
+    expect(level.value).toBeLessThan(0.05);
+    act(() => levelListener?.({ level: 0.3 }));
+    act(() => levelListener?.({ level: 0.3 }));
+    // Level samples write into the same shared value instead of producing React state.
+    expect(result.current.voiceInputLevel).toBe(level);
+    expect(level.value).toBeGreaterThan(0.7);
+    expect(level.value).toBeLessThanOrEqual(1);
+    expect(renders).toBe(rendersBeforeLevel);
+
+    act(() => stateListener?.({ state: 'idle' }));
+    expect(result.current.voiceInputState).toBe('idle');
+    expect(level.value).toBe(0);
   });
 });

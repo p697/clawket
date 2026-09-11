@@ -113,8 +113,8 @@ export const Shadow = {
   floating: {
     shadowColor: '#111113',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
+    shadowOpacity: 0.04,
+    shadowRadius: 5,
     elevation: 2,
   },
   xs: {
@@ -232,5 +232,9 @@ export const Motion = {
   pressedScale: 0.96,
   messageEnterOffset: 4,
   avatarWorkingLoop: 1_200,
+  companionBreath: 1_400,
+  companionGaze: 1_200,
+  companionBlinkPause: 3_200,
+  companionCuriosity: 9_600,
   avatarDoneFade: 3_000,
 } as const;

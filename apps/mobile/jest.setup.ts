@@ -1,3 +1,10 @@
+// SVG is a native drawing host. Preserve geometry props for component assertions.
+jest.mock('react-native-svg', () => {
+  const React = require('react');
+  const host = (name: string) => ({ children, ...props }: any) => React.createElement(name, props, children);
+  return { __esModule: true, default: host('Svg'), Path: host('Path') };
+});
+
 // Mock AsyncStorage
 jest.mock('@react-native-async-storage/async-storage', () => ({
   getItem: jest.fn(() => Promise.resolve(null)),
@@ -29,11 +36,22 @@ jest.mock('react-native-reanimated', () => {
     View: primitive('AnimatedView'),
     createAnimatedComponent: identity,
   };
+  // Layout/entering presets are chainable builders; tests only need them to exist.
+  const layoutAnimation = (name: string) => {
+    const animation: Record<string, unknown> = { name };
+    for (const method of ['duration', 'delay', 'easing', 'reduceMotion', 'springify', 'withInitialValues']) {
+      animation[method] = () => animation;
+    }
+    return animation;
+  };
 
   return {
     __esModule: true,
     default: Animated,
     cancelAnimation: jest.fn(),
+    FadeIn: layoutAnimation('FadeIn'),
+    FadeOut: layoutAnimation('FadeOut'),
+    LinearTransition: layoutAnimation('LinearTransition'),
     Easing: {
       bezier: () => easingIdentity,
       cubic: (value: number) => value ** 3,
@@ -49,7 +67,10 @@ jest.mock('react-native-reanimated', () => {
     makeMutable: <T>(value: T) => ({ value }),
     ReduceMotion: { Always: 'always', Never: 'never', System: 'system' },
     runOnJS: identity,
+    scrollTo: jest.fn(),
+    useAnimatedRef: () => ({ current: null }),
     useAnimatedStyle: (factory: () => unknown) => factory(),
+    useScrollOffset: () => ({ value: 0 }),
     useReducedMotion: () => false,
     useSharedValue: <T>(value: T) => ({ value }),
     withDelay: (_delay: number, value: unknown) => value,
@@ -255,6 +276,25 @@ jest.mock('@react-native-menu/menu', () => ({
   MenuView: ({ children }: { children: unknown }) => children,
 }));
 
+// Mock react-native-keyboard-controller: its module init touches Animated, which
+// partial react-native mocks omit. Tests that exercise keyboard behavior override this.
+jest.mock('react-native-keyboard-controller', () => {
+  const ReactRuntime = require('react');
+  const passthrough = (host: string) => ReactRuntime.forwardRef(
+    ({ children, ...props }: Record<string, unknown>, ref: unknown) => ReactRuntime.createElement(
+      require('react-native')[host],
+      { ...props, ref },
+      children,
+    ),
+  );
+  return {
+    KeyboardProvider: ({ children }: { children: unknown }) => children,
+    KeyboardAvoidingView: passthrough('View'),
+    KeyboardAwareScrollView: passthrough('ScrollView'),
+    useKeyboardHandler: jest.fn(),
+  };
+});
+
 // Mock react-native-screens
 jest.mock('react-native-screens', () => ({
   FullWindowOverlay: ({ children }: { children: React.ReactNode }) => children,
@@ -284,9 +324,11 @@ jest.mock('@gorhom/bottom-sheet', () => {
     ref: React.Ref<{ present: () => void; dismiss: () => void }>,
   ) {
     const [presented, setPresented] = React.useState(false);
+    const dismissedBeforeMount = React.useRef(false);
     React.useImperativeHandle(ref, () => ({
-      present: jest.fn(() => setPresented(true)),
+      present: jest.fn(() => { if (!dismissedBeforeMount.current) setPresented(true); }),
       dismiss: jest.fn(() => {
+        if (!presented) dismissedBeforeMount.current = true;
         setPresented(false);
         onDismiss?.();
       }),
@@ -325,6 +367,8 @@ jest.mock('@gorhom/bottom-sheet', () => {
     } & Record<string, unknown>) => React.createElement(View, props, children),
     BottomSheetModal,
     BottomSheetModalProvider: ({ children }: { children: React.ReactNode }) => children,
+    BottomSheetFlatList: ({ data = [], renderItem, ListHeaderComponent, ...props }: any) => React.createElement(View, props,
+      ListHeaderComponent, ...data.map((item: any, index: number) => React.createElement(React.Fragment, { key: item.key ?? index }, renderItem({ item, index })))),
     BottomSheetSectionList: SectionList,
     BottomSheetTextInput: TextInput,
     BottomSheetView,
@@ -476,3 +520,22 @@ if (!globalThis.crypto.getRandomValues) {
     return array;
   };
 }
+
+// Metro resolves official platform artwork to numeric native asset handles.
+jest.mock('./assets/brands/openclaw.png', () => 301);
+jest.mock('./assets/brands/hermes.png', () => 302);
+jest.mock('./assets/brands/youmind.png', () => 303);
+
+jest.mock('./assets/icon.png', () => 304);
+jest.mock('./assets/app-icons/black/app-icon-black-1024.png', () => 305);
+
+// Bundled model manufacturer artwork.
+jest.mock('./assets/model-icons/select_model_chatgpt.png', () => 401);
+jest.mock('./assets/model-icons/select_model_claude.png', () => 402);
+jest.mock('./assets/model-icons/select_model_gemini.png', () => 403);
+jest.mock('./assets/model-icons/select_model_deepseek.png', () => 404);
+jest.mock('./assets/model-icons/select_model_qwen.png', () => 405);
+jest.mock('./assets/model-icons/select_model_grok.png', () => 406);
+jest.mock('./assets/model-icons/select_model_kimi.png', () => 407);
+jest.mock('./assets/model-icons/select_model_minimax.png', () => 408);
+jest.mock('./assets/model-icons/zhipuai.png', () => 409);

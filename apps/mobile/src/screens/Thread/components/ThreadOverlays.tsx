@@ -12,8 +12,6 @@ import { PromptPickerModal } from '../../../components/chat/PromptPickerModal';
 import { ThinkingLevelPickerModal } from '../../../components/chat/ThinkingLevelPickerModal';
 import { AppUpdateAnnouncementSheet } from './AppUpdateAnnouncementSheet';
 import { ThreadAddSheet } from './ThreadAddSheet';
-import { ThreadMessageActionsSheet } from './ThreadMessageActionsSheet';
-import { ConfirmationModal } from '../../../components/ui';
 
 type PreviewState = Readonly<{
   visible: boolean;
@@ -37,12 +35,6 @@ export type ThreadOverlaysProps = Readonly<{
   onChooseFile?: () => void;
   onOpenSkills?: () => void;
   onOpenPrompts?: () => void;
-  selectedMessage: UiMessage | null;
-  selectedMessageFavorited: boolean;
-  onCloseMessageActions: () => void;
-  onCopyMessage: (message: UiMessage) => void;
-  onToggleFavorite: (message: UiMessage) => void;
-  onShareMessage: (message: UiMessage) => void;
   shareMessage: UiMessage | null;
   agentName: string;
   agentEmoji?: string;
@@ -93,15 +85,6 @@ export type ThreadOverlaysProps = Readonly<{
     onClose: () => void;
     onEntryPress: (entry: AppUpdateAnnouncement['entries'][number]) => void;
   }>;
-  stopConfirmation: Readonly<{
-    visible: boolean;
-    title: string;
-    message: string;
-    cancelLabel: string;
-    confirmLabel: string;
-    onClose: () => void;
-    onConfirm: () => void;
-  }>;
 }>;
 
 export function ThreadOverlays({
@@ -114,12 +97,6 @@ export function ThreadOverlays({
   onChooseFile,
   onOpenSkills,
   onOpenPrompts,
-  selectedMessage,
-  selectedMessageFavorited,
-  onCloseMessageActions,
-  onCopyMessage,
-  onToggleFavorite,
-  onShareMessage,
   shareMessage,
   agentName,
   agentEmoji,
@@ -132,7 +109,6 @@ export function ThreadOverlays({
   promptPicker,
   thinkingPicker,
   announcement,
-  stopConfirmation,
 }: ThreadOverlaysProps): React.JSX.Element {
   return (
     <>
@@ -146,15 +122,6 @@ export function ThreadOverlays({
         onChooseFile={onChooseFile}
         onOpenSkills={onOpenSkills}
         onOpenPrompts={onOpenPrompts}
-      />
-      <ThreadMessageActionsSheet
-        visible={Boolean(selectedMessage)}
-        message={selectedMessage}
-        favorited={selectedMessageFavorited}
-        onClose={onCloseMessageActions}
-        onCopy={onCopyMessage}
-        onToggleFavorite={onToggleFavorite}
-        onShare={onShareMessage}
       />
       <ChatSharePosterModal
         visible={Boolean(shareMessage)}
@@ -220,17 +187,6 @@ export function ThreadOverlays({
         currentVersion={announcement.currentVersion}
         onClose={announcement.onClose}
         onEntryPress={announcement.onEntryPress}
-      />
-      <ConfirmationModal
-        visible={stopConfirmation.visible}
-        title={stopConfirmation.title}
-        message={stopConfirmation.message}
-        cancelLabel={stopConfirmation.cancelLabel}
-        confirmLabel={stopConfirmation.confirmLabel}
-        onClose={stopConfirmation.onClose}
-        onConfirm={stopConfirmation.onConfirm}
-        destructive
-        testID="thread-stop-confirmation"
       />
     </>
   );

@@ -129,16 +129,14 @@ function mapSpriteInsert(
   state: YouMindSpriteChunkState,
 ): SessionUpdate[] {
   if (dataType === 'Generation') {
-    const id = readString(data.id);
-    if (id) state.runId = id;
+    // A generation and its assistant messages have distinct server IDs. Keep
+    // the adapter run ID returned by prompt() stable for the entire stream.
     return startRun(sessionKey, state);
   }
 
   if (dataType === 'Message') {
     const role = readString(data.role);
-    const id = readString(data.id);
     if (role !== 'assistant') return [];
-    if (id) state.runId = id;
     const updates: SessionUpdate[] = startRun(sessionKey, state);
     const blocks = Array.isArray(data.blocks) ? data.blocks : [];
     for (const block of blocks) {

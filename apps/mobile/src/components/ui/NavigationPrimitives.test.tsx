@@ -5,8 +5,12 @@ import { builtInAccents } from '../../theme/accents';
 import { buildTheme } from '../../theme/theme';
 import { ControlSize, FontSize, Radius } from '../../theme/tokens';
 import { ConfirmationModal } from './ConfirmationModal';
+import { Button } from './Button';
 import { SearchInput } from './SearchInput';
 import { SegmentedTabs } from './SegmentedTabs';
+import { FloatingButton } from './FloatingButton';
+import { ThemedSwitch } from './ThemedSwitch';
+import { Search } from 'lucide-react-native';
 import { Sheet } from './Sheet';
 
 let mockScheme: 'light' | 'dark' = 'light';
@@ -34,6 +38,7 @@ jest.mock('react-native', () => {
     return result;
   };
   return {
+    ActivityIndicator: primitive('ActivityIndicator'),
     Modal: primitive('Modal'),
     Platform: {
       OS: 'ios',
@@ -48,6 +53,7 @@ jest.mock('react-native', () => {
       flatten,
       hairlineWidth: 1,
     },
+    Switch: primitive('Switch'),
     Text: primitive('Text'),
     TextInput: primitive('TextInput'),
     useWindowDimensions: () => ({ width: 375, height: 812, scale: 3, fontScale: 1 }),
@@ -111,6 +117,23 @@ function flattened(style: unknown): Record<string, unknown> {
 describe.each(['light', 'dark'] as const)('%s navigation primitives', (scheme) => {
   beforeEach(() => {
     mockScheme = scheme;
+  });
+
+  it('keeps a loading neutral action distinct from an unavailable action', () => {
+    const onPress = jest.fn();
+    const theme = buildTheme(scheme, scheme, builtInAccents.iceBlue);
+    const view = render(<Button testID="neutral-action" label="Connect" variant="neutral" loading onPress={onPress} />);
+    const loading = view.getByTestId('neutral-action');
+    expect(flattened(loading.props.style)).toMatchObject({ backgroundColor: theme.colors.ink });
+    expect(flattened(loading.props.style).opacity).toBeUndefined();
+    expect(loading.props.accessibilityState).toMatchObject({ disabled: true, busy: true });
+    expect(loading.props.disabled).toBe(true);
+    view.rerender(<Button testID="neutral-action" label="Connect" variant="neutral" disabled onPress={onPress} />);
+    expect(flattened(view.getByTestId('neutral-action').props.style).backgroundColor).toBe(theme.colors.surface);
+    expect(view.getByTestId('neutral-action').props.accessibilityState.busy).toBe(false);
+    view.rerender(<Button testID="neutral-action" label="Connect" variant="neutral" onPress={onPress} />);
+    fireEvent.press(view.getByTestId('neutral-action'));
+    expect(onPress).toHaveBeenCalledTimes(1);
   });
 
   it('uses the canonical full-round 44pt segmented control', () => {
@@ -196,6 +219,20 @@ describe.each(['light', 'dark'] as const)('%s navigation primitives', (scheme) =
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it('opens a sheet that initially mounts hidden and can reopen it after dismissal', () => {
+    const onClose = jest.fn();
+    const content = (visible: boolean) => <Sheet visible={visible} onClose={onClose}
+      closeAccessibilityLabel="Close" title="Add" testID="first-open"><Text>Connect agent</Text></Sheet>;
+    const result = render(content(false));
+    expect(onClose).not.toHaveBeenCalled();
+    result.rerender(content(true));
+    expect(result.getByText('Connect agent')).toBeTruthy();
+    result.rerender(content(false));
+    expect(result.queryByText('Connect agent')).toBeNull();
+    result.rerender(content(true));
+    expect(result.getByText('Connect agent')).toBeTruthy();
+  });
+
   it('keeps destructive confirmation in app-owned centered chrome', () => {
     const onClose = jest.fn();
     const onConfirm = jest.fn();
@@ -224,5 +261,30 @@ describe.each(['light', 'dark'] as const)('%s navigation primitives', (scheme) =
     expect(onConfirm).toHaveBeenCalledTimes(1);
     fireEvent.press(result.getByTestId('delete-confirmation-backdrop'));
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe.each(['light', 'dark'] as const)('review controls in %s', (scheme) => {
+  beforeEach(() => { mockScheme = scheme; });
+
+  it('never remounts or invents a false value for an enabled switch', () => {
+    const onChange = jest.fn();
+    const view = render(<ThemedSwitch testID="switch" value tone="neutral" onValueChange={onChange} />);
+    const native = view.getByTestId('switch');
+    expect(native.props.value).toBe(true);
+    view.rerender(<ThemedSwitch testID="switch" value={false} tone="neutral" onValueChange={onChange} />);
+    expect(view.getByTestId('switch')).toBe(native);
+    fireEvent(view.getByTestId('switch'), 'valueChange', true);
+    expect(onChange).toHaveBeenCalledWith(true);
+    view.rerender(<ThemedSwitch testID="switch" value tone="neutral" onValueChange={onChange} />);
+    expect(view.getByTestId('switch')).toBe(native);
+    expect(native.props.value).toBe(true);
+  });
+
+  it('preserves the quiet disabled surface and dims only its glyph', () => {
+    const view = render(<FloatingButton testID="circle" icon={Search} appearance="quiet" disabled accessibilityLabel="Search" onPress={jest.fn()} />);
+    expect(view.getByTestId('circle').props.disabled).toBe(true);
+    expect(StyleSheet.flatten(view.getByTestId('circle').props.style).opacity).toBe(1);
+    expect(view.UNSAFE_getByType(Search).props.color).toBe(buildTheme(scheme, scheme, builtInAccents.iceBlue).colors.inkTertiary);
   });
 });

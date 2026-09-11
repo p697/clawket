@@ -28,3 +28,16 @@ describe('relay telemetry', () => {
     expect(payload.secret).toBeUndefined();
   });
 });
+
+it.each(['relay_worker', 'hermes_relay_worker'] as const)('keeps only a generated diagnostic UUID for %s', (scope) => {
+  const spy = vi.spyOn(console, 'log').mockImplementation(() => {});
+  try {
+    const diagnosticId = '01234567-89ab-4def-8abc-0123456789ab';
+    logRelayTelemetry(scope, 'client_socket_replaced', { diagnosticId, previousDiagnosticId: diagnosticId, token: 'private-token' });
+    expect(JSON.parse(String(spy.mock.calls.at(-1)?.[0]))).toMatchObject({ diagnosticId, previousDiagnosticId: diagnosticId });
+    logRelayTelemetry(scope, 'client_socket_replaced', { diagnosticId: 'token=private-token', previousDiagnosticId: 'raw-device-id' });
+    const result = JSON.parse(String(spy.mock.calls.at(-1)?.[0]));
+    expect(result.diagnosticId).toBeUndefined();
+    expect(result.previousDiagnosticId).toBeUndefined();
+  } finally { spy.mockRestore(); }
+});

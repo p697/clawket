@@ -1,5 +1,5 @@
 import React, { Fragment, useEffect, useMemo, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Image, StyleSheet, View } from 'react-native';
 import { Check } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 
@@ -18,16 +18,18 @@ import {
   useAppTheme,
   type BuiltInAccentColorId,
 } from '../../theme';
-import { IconSize, Radius, Space } from '../../theme/tokens';
+import { ControlSize, IconSize, Radius, Space } from '../../theme/tokens';
 import type {
   SpeechRecognitionLanguage,
   ThemeMode,
 } from '../../types';
+import { useAppLanguage } from '../../i18n/AppLanguageProvider';
+import { APP_LANGUAGES, APP_LANGUAGE_NAMES, type AppLanguage } from '../../i18n/language';
 import type { AccountSettingsAction } from './model';
 
 export type AccountPreferenceAction = Extract<
   AccountSettingsAction,
-  'theme' | 'accent' | 'speech-language' | 'app-icon'
+  'app-language' | 'theme' | 'accent' | 'speech-language' | 'app-icon'
 >;
 
 type PreferenceOption = Readonly<{
@@ -41,7 +43,8 @@ type PreferenceOption = Readonly<{
 export function isAccountPreferenceAction(
   action: string,
 ): action is AccountPreferenceAction {
-  return action === 'theme'
+  return action === 'app-language'
+    || action === 'theme'
     || action === 'accent'
     || action === 'speech-language'
     || action === 'app-icon';
@@ -59,6 +62,7 @@ export function AccountPreferenceSheet({
   const { t } = useTranslation(['config', 'common']);
   const { theme, mode, accentId, setMode, setAccentId } = useAppTheme();
   const app = useAppContext();
+  const { language, setLanguage } = useAppLanguage();
   const [appIcon, setAppIcon] = useState<AppIconVariant>('default');
   const [appIconSupported, setAppIconSupported] = useState(false);
   const [pending, setPending] = useState(false);
@@ -84,6 +88,26 @@ export function AccountPreferenceSheet({
   }, [preference]);
 
   const options = useMemo<ReadonlyArray<PreferenceOption>>(() => {
+    if (preference === 'app-language') {
+      return (['system', ...APP_LANGUAGES] as AppLanguage[]).map((id) => ({
+        id,
+        label: id === 'system' ? t('Follow System') : APP_LANGUAGE_NAMES[id],
+        selected: id === language,
+        onSelect: async () => {
+          setPending(true);
+          setErrorMessage(null);
+          try {
+            await setLanguage(id);
+            return true;
+          } catch {
+            setErrorMessage(t('Unable to change app language'));
+            return false;
+          } finally {
+            setPending(false);
+          }
+        },
+      }));
+    }
     if (preference === 'theme') {
       const values: ReadonlyArray<Readonly<{ id: ThemeMode; label: string }>> = [
         { id: 'system', label: t('Follow System') },
@@ -152,6 +176,8 @@ export function AccountPreferenceSheet({
       },
     }));
   }, [
+    language,
+    setLanguage,
     accentId,
     app.onSpeechRecognitionLanguageChange,
     app.speechRecognitionLanguage,
@@ -166,7 +192,9 @@ export function AccountPreferenceSheet({
     theme.scheme,
   ]);
 
-  const title = preference === 'theme'
+  const title = preference === 'app-language'
+    ? t('App language')
+    : preference === 'theme'
     ? t('Theme')
     : preference === 'accent'
       ? t('Accent Color')
@@ -197,7 +225,7 @@ export function AccountPreferenceSheet({
               <SettingsRow
                 testID={`account-preference-${option.id}`}
                 title={option.label}
-                disabled={preference === 'app-icon' && (!appIconSupported || pending)}
+                disabled={pending || (preference === 'app-icon' && !appIconSupported)}
                 onPress={() => {
                   void Promise.resolve(option.onSelect()).then((didSelect) => {
                     if (didSelect !== false) {
@@ -206,7 +234,9 @@ export function AccountPreferenceSheet({
                     }
                   }).catch(() => undefined);
                 }}
-                leading={option.swatch ? (
+                leading={preference === 'app-icon' ? <Image accessible={false} source={option.id === 'black'
+                  ? require('../../../assets/app-icons/black/app-icon-black-1024.png')
+                  : require('../../../assets/icon.png')} style={styles.appIcon} /> : option.swatch ? (
                   <View style={[styles.swatch, { backgroundColor: option.swatch }]} />
                 ) : undefined}
                 trailing={option.selected ? (
@@ -227,6 +257,7 @@ const styles = StyleSheet.create({
     paddingBottom: Space.xxl,
     gap: Space.md,
   },
+  appIcon: { width: ControlSize.pill, height: ControlSize.pill, borderRadius: Radius.settingsGroup },
   swatch: {
     width: IconSize.md,
     height: IconSize.md,

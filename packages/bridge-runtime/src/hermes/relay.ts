@@ -18,6 +18,7 @@ const DEFAULT_BRIDGE_HEALTH_PROBE_INTERVAL_MS = 15_000;
 const DEFAULT_BRIDGE_STATUS_POLL_INTERVAL_MS = 90_000;
 const RELAY_STABILITY_RESET_MS = 30_000;
 const TRACEABLE_RELAY_METHODS = new Set([
+  'health',
   'sessions.list',
   'chat.history',
   'last-heartbeat',
@@ -47,6 +48,8 @@ export type HermesRelayRuntimeOptions = {
   bridgeStatusPollIntervalMs?: number;
   bridgeHealthProbeIntervalMs?: number;
   bridgeHealthProbeTimeoutMs?: number;
+  relayPingIntervalMs?: number;
+  relayPongTimeoutMs?: number;
   createWebSocket?: (url: string, options?: HermesSocketConnectOptions) => WebSocket;
   fetchImpl?: typeof fetch;
   onStatus?: (snapshot: HermesRelayRuntimeSnapshot) => void;
@@ -66,6 +69,9 @@ export class HermesRelayRuntime {
   private bridgeStatusTimer: NodeJS.Timeout | null = null;
   private bridgeHealthProbeTimer: NodeJS.Timeout | null = null;
   private relayStabilityTimer: NodeJS.Timeout | null = null;
+  private relayPingTimer: NodeJS.Timeout | null = null;
+  private pendingRelayPing: { nonce: string; timeout: NodeJS.Timeout } | null = null;
+  private relayPingSeq = 0;
   private readonly relaySession = new RelaySessionState();
   private readonly bridgeSession = new RelaySessionState();
   private relayAttempt = 0;
@@ -108,6 +114,7 @@ export class HermesRelayRuntime {
 
   async stop(): Promise<void> {
     this.stopped = true;
+    this.clearRelayPing();
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     if (this.bridgeReconnectTimer) clearTimeout(this.bridgeReconnectTimer);
     if (this.bridgeStatusTimer) clearTimeout(this.bridgeStatusTimer);
@@ -158,11 +165,21 @@ export class HermesRelayRuntime {
       this.relayActivityAfterOpen = false;
       this.log(`relay connected attempt=${attempt}`);
       this.scheduleRelayStabilityReset(relay);
+      this.scheduleRelayPing(relay);
       this.connectBridge();
       this.scheduleBridgeStatusProbe();
+      this.scheduleBridgeHealthProbe();
+    });
+
+    relay.on('pong', (data: Buffer) => {
+      if (this.relaySocket !== relay || data.toString() !== this.pendingRelayPing?.nonce) return;
+      clearTimeout(this.pendingRelayPing.timeout);
+      this.pendingRelayPing = null;
+      this.scheduleRelayPing(relay);
     });
 
     relay.on('message', (data: RawData, isBinary: boolean) => {
+      if (this.relaySocket !== relay || this.stopped) return;
       this.handleRelayMessage(data, isBinary);
     });
 
@@ -182,6 +199,7 @@ export class HermesRelayRuntime {
         return;
       }
       this.relaySocket = null;
+      this.clearRelayPing();
       this.clearRelayStabilityReset();
       this.updateSnapshot({
         relayConnected: false,
@@ -566,6 +584,7 @@ export class HermesRelayRuntime {
     if (!relay) return;
 
     this.relaySocket = null;
+    this.clearRelayPing();
     this.clearRelayStabilityReset();
     this.clearBridgeStatusProbe();
     this.clearPendingBridgeHealthProbe();
@@ -584,6 +603,39 @@ export class HermesRelayRuntime {
     if (!this.stopped) {
       this.scheduleRelayReconnect();
     }
+  }
+
+  // Local Bridge probes cannot detect a half-open cloud socket. A transport
+  // ping/pong keeps that leg live even when Relay application heartbeats sleep.
+  // Pong proves transport reachability only; it must not mark the backend ready.
+  private scheduleRelayPing(relay: WebSocket): void {
+    if (this.stopped || this.relaySocket !== relay || this.relayPingTimer || this.pendingRelayPing) return;
+    this.relayPingTimer = setTimeout(() => {
+      this.relayPingTimer = null;
+      if (this.stopped || this.relaySocket !== relay || relay.readyState !== WebSocket.OPEN) return;
+      const nonce = `clawket-${++this.relayPingSeq}`;
+      const timeout = setTimeout(() => {
+        if (this.relaySocket !== relay || this.pendingRelayPing?.nonce !== nonce) return;
+        this.log('relay transport pong timed out; recycling cloud socket');
+        this.recycleRelaySocket('relay transport pong timed out');
+        // A half-open connection cannot complete a graceful close handshake.
+        relay.terminate();
+      }, this.options.relayPongTimeoutMs ?? 10_000);
+      this.pendingRelayPing = { nonce, timeout };
+      try {
+        relay.ping(nonce);
+      } catch {
+        this.recycleRelaySocket('relay transport ping failed');
+        relay.terminate();
+      }
+    }, this.options.relayPingIntervalMs ?? 15_000);
+  }
+
+  private clearRelayPing(): void {
+    if (this.relayPingTimer) clearTimeout(this.relayPingTimer);
+    if (this.pendingRelayPing) clearTimeout(this.pendingRelayPing.timeout);
+    this.relayPingTimer = null;
+    this.pendingRelayPing = null;
   }
 
   private scheduleRelayStabilityReset(relay: WebSocket): void {

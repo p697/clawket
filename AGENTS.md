@@ -69,9 +69,13 @@ During the OpenClaw + Hermes coexistence period, treat backend identity and tran
 ## Relay Liveness Compatibility Rule
 
 1. Client liveness must be capability-negotiated. Only clients advertising `relay.client-pong.v1` may be expired for missing Relay pong acknowledgements.
-2. Legacy clients must not be disconnected solely because they have not sent application traffic; socket failure and handshake-specific timeouts remain valid cleanup signals.
+2. Client pong expiry must allow at least three configured heartbeat intervals, including before the first tick; shorter overrides must be clamped to that floor. Legacy clients must not be disconnected solely because they have not sent application traffic; socket failure and handshake-specific timeouts remain valid cleanup signals.
 3. A Bridge or local Gateway reconnect must force any stale client transport to reconnect when its existing backend session can no longer be resumed safely.
 4. Successful health evidence must reset reconnect backoff. A raw WebSocket `open` event is not sufficient proof of a completed backend handshake.
+
+## Relay Hibernation Rule
+
+Active client routing must survive Durable Object hibernation through WebSocket attachments. Rehydrate only authenticated full-client sockets; never promote restricted pairing sockets or guess between ambiguous clients. Preserve routing markers when updating heartbeat or handshake attachments. Cover both backend policies with memory-discard recovery tests.
 
 ## Relay Resource Safety Rule
 
@@ -153,3 +157,13 @@ When implementation, architecture, or release behavior changes, update the close
 2. Hermes support in those commands must be additive and limited to Clawket-managed Hermes bridge and relay runtimes.
 3. `stop` and `uninstall` should stop Hermes runtimes without deleting Hermes config; `reset` remains the command that clears local Hermes state.
 4. Hermes-only users must be able to use lifecycle commands without requiring an OpenClaw pairing config.
+
+## Connection Diagnostics Rule
+
+Relay socket diagnostics use a server-generated per-socket UUID persisted in WebSocket attachments; never derive it from credentials or user/device identity. Preserve it across attachment updates and hibernation. Keep raw IDs and secrets redacted. Pairing/connection triage follows `docs/3.0/20-connection-diagnostics.md`; distinguish local logs, cloud logs and measured end-to-end evidence.
+
+## Independent OpenClaw Client Channels
+
+Negotiated `bridge.client-sockets.v1` uses authenticated owner secondary sockets bound to server-generated full-client socket diagnostic IDs. Keep each local Gateway handshake isolated, preserve raw 8 MiB frames, and reconstruct routes from attachments after hibernation. Restricted pairing sockets cannot become channel targets. Hermes and legacy owners retain their existing policies.
+
+Before handling any frame, verify that its WebSocket is still the current owner, client, pairing client or secondary channel. Buffered frames and late close/error events from replaced sockets must not alter the replacement's routing, rate limits or heartbeat watchdog. Replacement logs link only validated server-generated diagnostic UUIDs; distinguish owner/channel/client sockets and include close codes without logging peer-supplied close text.

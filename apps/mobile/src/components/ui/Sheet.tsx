@@ -49,6 +49,7 @@ export const SHEET_TIMING_CONFIG: WithTimingConfig = {
 export type SheetProps = {
   visible: boolean;
   onClose: () => void;
+  onAfterClose?: () => void;
   closeAccessibilityLabel: string;
   title?: string;
   headerRight?: React.ReactNode;
@@ -110,6 +111,7 @@ export function resolveSheetContentHeightLimit(
 export function Sheet({
   visible,
   onClose,
+  onAfterClose,
   closeAccessibilityLabel,
   title,
   headerRight,
@@ -129,10 +131,13 @@ export function Sheet({
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const modalRef = useRef<AdaptiveBottomSheetModalRef>(null);
+  const presentedRef = useRef(false);
   const visibleRef = useRef(visible);
   const onCloseRef = useRef(onClose);
+  const onAfterCloseRef = useRef(onAfterClose);
   visibleRef.current = visible;
   onCloseRef.current = onClose;
+  onAfterCloseRef.current = onAfterClose;
 
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
   const backgroundStyle = useSheetBackgroundStyle();
@@ -171,17 +176,23 @@ export function Sheet({
 
   useEffect(() => {
     if (visible) {
+      presentedRef.current = true;
       modalRef.current?.present();
-    } else {
+    } else if (presentedRef.current) {
+      presentedRef.current = false;
       modalRef.current?.dismiss();
     }
   }, [visible]);
 
   const handleDismiss = useCallback(() => {
+    presentedRef.current = false;
     if (visibleRef.current) {
       onCloseRef.current();
     }
+    onAfterCloseRef.current?.();
   }, []);
+
+  const close = useCallback(() => onCloseRef.current(), []);
 
   const renderBackdrop = useCallback(
     (props: React.ComponentProps<typeof SheetBackdrop>) => (
@@ -189,10 +200,10 @@ export function Sheet({
         {...props}
         testID={testID ? `${testID}-backdrop` : undefined}
         dismissOnPress={dismissOnBackdropPress}
-        onBackdropPress={onClose}
+        onBackdropPress={close}
       />
     ),
-    [dismissOnBackdropPress, onClose, testID],
+    [dismissOnBackdropPress, close, testID],
   );
 
   const renderHandle = useCallback(
@@ -223,6 +234,7 @@ export function Sheet({
   return (
     <AdaptiveBottomSheetModal
       ref={modalRef}
+      accessible={false}
       index={initialIndex}
       enableDynamicSizing={!usesFixedSnapPoints}
       maxDynamicContentSize={usesFixedSnapPoints ? undefined : maxDynamicContentSize}
@@ -243,7 +255,7 @@ export function Sheet({
       {usesFixedSnapPoints ? (
         <View
           testID={testID}
-          style={[styles.sheet, styles.fixedSheet, style]}
+          style={[styles.sheet, styles.fixedSheet, { paddingBottom: Math.max(insets.bottom, Space.md) }, style]}
           accessibilityViewIsModal
         >
           {sheetContent}
@@ -251,7 +263,7 @@ export function Sheet({
       ) : (
         <BottomSheetView
           testID={testID}
-          style={[styles.sheet, style, contentViewportStyle]}
+          style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, Space.md) }, style, contentViewportStyle]}
           accessibilityViewIsModal
         >
           {sheetContent}
@@ -267,7 +279,7 @@ function createStyles(
   return StyleSheet.create({
     sheet: {
       overflow: 'hidden',
-      backgroundColor: colors.surface,
+      backgroundColor: colors.canvas,
       borderTopLeftRadius: Radius.bottomSheet,
       borderTopRightRadius: Radius.bottomSheet,
     },

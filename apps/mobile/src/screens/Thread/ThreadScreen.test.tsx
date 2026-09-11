@@ -17,6 +17,9 @@ let mockConnections: Record<string, unknown>;
 let mockApp: Record<string, unknown>;
 let mockController: Record<string, unknown>;
 let mockIsPro = true;
+let mockSubscriptionLoading = false;
+let mockFocused = true;
+let mockScopedApp: Record<string, unknown> | null = null;
 const mockToggleFavorite = jest.fn(async () => ({ favorited: true, favoriteKey: 'favorite-1' }));
 const mockIsFavoritedMessage = jest.fn(() => false);
 const mockedAnalyticsEvents = analyticsEvents as jest.Mocked<typeof analyticsEvents>;
@@ -28,6 +31,7 @@ const mockedShouldShowCurrentAppUpdateAnnouncement = shouldShowCurrentAppUpdateA
 >;
 
 const mockRuntime = {
+  markSessionOpened: jest.fn(async () => ({})),
   activate: jest.fn(async () => undefined),
   probeActive: jest.fn(async () => true),
   getSnapshot: jest.fn(() => ({ activeConnectionId: 'connection-1' })),
@@ -63,12 +67,18 @@ jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 24, right: 0, bottom: 16, left: 0 }),
 }));
 
-jest.mock('../../contexts/AppContext', () => ({
-  useAppContext: () => mockApp,
-}));
+jest.mock('@react-navigation/native', () => ({ useIsFocused: () => mockFocused }));
+jest.mock('../../contexts/AppContext', () => {
+  const ReactRuntime = require('react');
+  const Context = ReactRuntime.createContext(null);
+  return {
+    AppContextProvider: ({ value, children }: any) => ReactRuntime.createElement(Context.Provider, { value }, children),
+    useAppContext: () => ReactRuntime.useContext(Context) ?? mockApp,
+  };
+});
 
 jest.mock('../../contexts/ProPaywallContext', () => ({
-  useProPaywall: () => ({ isPro: mockIsPro }),
+  useProPaywall: () => ({ isPro: mockIsPro, isLoading: mockSubscriptionLoading }),
 }));
 
 jest.mock('../../connection', () => ({
@@ -77,7 +87,10 @@ jest.mock('../../connection', () => ({
 }));
 
 jest.mock('../../chat/useChatController', () => ({
-  useChatController: () => mockController,
+  useChatController: () => {
+    mockScopedApp = require('../../contexts/AppContext').useAppContext();
+    return mockController;
+  },
 }));
 
 jest.mock('../../chat/useMessageFavorites', () => ({
@@ -100,6 +113,8 @@ jest.mock('../../services/analytics/events', () => ({
     chatAbortTapped: jest.fn(),
     runCardOpened: jest.fn(),
     threadOpened: jest.fn(),
+    threadLoadState: jest.fn(),
+    sessionPreviewViewed: jest.fn(),
   },
 }));
 
@@ -137,6 +152,12 @@ function createNavigationProps(): ThreadScreenProps {
     navigation: {
       goBack: jest.fn(),
       navigate: jest.fn(),
+      replace: jest.fn(),
+      pop: jest.fn(),
+      getState: jest.fn(() => ({ index: 1, routes: [
+        { name: 'Thread', params: { connectionId: 'connection-1', agentId: 'atlas', sessionKey: 'agent:atlas:main' } },
+        { name: 'Thread' },
+      ] })),
     },
     route: {
       key: 'Thread-key',
@@ -234,6 +255,8 @@ function createController(): Record<string, unknown> {
     thinkingLevel: 'off',
     thinkingLevelOptions: ['off', 'low', 'medium', 'high'],
     toggleVoiceInput: jest.fn(),
+    voiceInputLevel: { value: 0 },
+    voiceInputState: 'idle',
     voiceInputSupported: true,
   };
 }
@@ -260,6 +283,8 @@ describe('ThreadScreen connection container', () => {
   let consoleErrorSpy: jest.SpyInstance;
 
   beforeEach(() => {
+    mockFocused = true;
+    mockScopedApp = null;
     mockThreadViewProps = null;
     mockThreadOverlayProps = null;
     mockConnections = {
@@ -274,9 +299,11 @@ describe('ThreadScreen connection container', () => {
     mockApp = createApp();
     mockController = createController();
     mockIsPro = true;
+    mockSubscriptionLoading = false;
     adapter.capabilities = { ...CAPABILITY_MATRIX.openclaw };
     adapter.management.cron = {};
     adapter.cancel.mockClear();
+    mockRuntime.markSessionOpened.mockClear();
     mockRuntime.activate.mockClear();
     mockRuntime.probeActive.mockClear();
     mockRuntime.getSnapshot.mockReturnValue({ activeConnectionId: 'connection-1' });
@@ -285,6 +312,7 @@ describe('ThreadScreen connection container', () => {
     mockedAnalyticsEvents.chatAbortTapped.mockClear();
     mockedAnalyticsEvents.runCardOpened.mockClear();
     mockedAnalyticsEvents.threadOpened.mockClear();
+    mockedAnalyticsEvents.threadLoadState.mockClear();
     mockedGetCurrentAppUpdateAnnouncement.mockClear();
     mockedShouldShowCurrentAppUpdateAnnouncement.mockClear();
     consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation((message?: unknown) => {
@@ -294,6 +322,188 @@ describe('ThreadScreen connection container', () => {
 
   afterEach(() => {
     consoleErrorSpy.mockRestore();
+  });
+
+  it.each(['openclaw', 'hermes'] as const)('shows scoped cached %s preview while network history is pending', (backend) => {
+    mockIsPro = false;
+    mockConnections.activeAdapter = { ...adapter, connection: { ...adapter.connection, backendKind: backend } };
+    const props = createNavigationProps();
+    props.route = { ...props.route, params: { ...props.route.params, sessionKey: 'channel-one' } };
+    mockController.sessionKey = 'channel-one';
+    mockController.historyLoaded = false;
+    mockController.listData = [{ id: 'cached', role: 'assistant', text: 'Cached reply' }];
+    render(<ThreadScreen {...props} />);
+    expect(mockThreadViewProps?.messages).toEqual(mockController.listData);
+    expect(mockThreadViewProps?.state.kind).toBe('ready');
+    expect(mockThreadViewProps?.sessionPreview?.loading).toBe(false);
+  });
+
+  it.each(['empty', 'tools', 'different-session'] as const)('shows loading when %s data cannot produce a preview yet', (scenario) => {
+    mockIsPro = false;
+    const props = createNavigationProps();
+    props.route = { ...props.route, params: { ...props.route.params, sessionKey: 'channel-one' } };
+    mockController.sessionKey = scenario === 'different-session' ? 'other' : 'channel-one';
+    mockController.historyLoaded = false;
+    mockController.listData = scenario === 'empty' ? [] : [{
+      id: 'not-visible', role: scenario === 'tools' ? 'tool' : 'assistant', text: 'Not ready',
+    }];
+    render(<ThreadScreen {...props} />);
+    expect(mockThreadViewProps?.messages).toEqual([]);
+    expect(mockThreadViewProps?.state.kind).toBe('loading');
+    expect(mockThreadViewProps?.sessionPreview?.loading).toBe(true);
+  });
+
+  it.each(['openclaw', 'hermes'] as const)('shows the safe %s preview while subscription lookup is pending', (backend) => {
+    mockIsPro = false;
+    mockSubscriptionLoading = true;
+    mockConnections.activeAdapter = { ...adapter, connection: { ...adapter.connection, backendKind: backend } };
+    const props = createNavigationProps();
+    props.route = { ...props.route, params: { ...props.route.params, sessionKey: 'channel-one' } };
+    mockController.sessionKey = 'channel-one';
+    mockController.listData = [
+      { id: 'latest', role: 'assistant', text: 'Latest reply' },
+      { id: 'question', role: 'user', text: 'Latest question' },
+      { id: 'older', role: 'assistant', text: 'Must remain hidden' },
+    ];
+    const view = render(<ThreadScreen {...props} />);
+    expect(mockThreadViewProps?.messages.map((m) => m.id)).toEqual(['latest', 'question']);
+    expect(mockThreadViewProps?.state.kind).toBe('ready');
+    expect(mockThreadViewProps?.sessionPreview?.loading).toBe(false);
+    expect(mockThreadViewProps?.canSend).toBe(false);
+    expect(mockThreadViewProps?.onLoadMoreHistory).toBeUndefined();
+    expect(mockedAnalyticsEvents.threadLoadState).toHaveBeenLastCalledWith({
+      backend, phase: 'ready', history_loaded: true, subscription_loading: true,
+      target_session_ready: true, preview_only: true, elapsed_ms: expect.any(Number),
+    });
+    const diagnosticCalls = mockedAnalyticsEvents.threadLoadState.mock.calls.length;
+    mockController.listData = [...(mockController.listData as object[])];
+    view.rerender(<ThreadScreen {...props} />);
+    expect(mockedAnalyticsEvents.threadLoadState).toHaveBeenCalledTimes(diagnosticCalls);
+    mockSubscriptionLoading = false;
+    mockIsPro = true;
+    view.rerender(<ThreadScreen {...props} />);
+    expect(mockThreadViewProps?.messages).toHaveLength(3);
+    expect(mockThreadViewProps?.sessionPreview).toBeUndefined();
+    expect(mockRuntime.activate).not.toHaveBeenCalled();
+  });
+
+  it.each(['openclaw', 'hermes'] as const)('previews non-main %s sessions and unlocks in place', (backend) => {
+    mockIsPro = false;
+    mockConnections.activeAdapter = { ...adapter, connection: { ...adapter.connection, backendKind: backend } };
+    const props = createNavigationProps();
+    props.route = { ...props.route, params: { ...props.route.params, sessionKey: 'agent:atlas:slack:channel:one', from: 'notification' } };
+    mockController.sessionKey = props.route.params.sessionKey;
+    mockController.listData = [
+      { id: 'new', role: 'assistant', text: 'Latest reply' },
+      { id: 'question', role: 'user', text: 'Latest question' },
+      { id: 'old', role: 'assistant', text: 'Hidden history' },
+    ];
+    const view = render(<ThreadScreen {...props} />);
+    expect(mockThreadViewProps?.messages.map((m) => m.id)).toEqual(['new', 'question']);
+    expect(mockThreadViewProps?.sessionPreview?.hasHiddenHistory).toBe(true);
+    expect(mockThreadViewProps?.onLoadMoreHistory).toBeUndefined();
+    expect(mockThreadViewProps?.canSend).toBe(false);
+    act(() => mockThreadViewProps?.sessionPreview?.onMain());
+    expect(props.navigation.pop).toHaveBeenCalledWith(1);
+    act(() => mockThreadViewProps?.sessionPreview?.onUpgrade());
+    expect(props.navigation.navigate).toHaveBeenCalledWith('Paywall', { reason: 'sessionHistory' });
+    mockIsPro = true;
+    view.rerender(<ThreadScreen {...props} />);
+    expect(mockThreadViewProps?.messages).toHaveLength(3);
+    expect(mockThreadViewProps?.sessionPreview).toBeUndefined();
+    expect(mockThreadViewProps?.onLoadMoreHistory).toBe(mockController.onLoadMoreHistory);
+    expect(mockRuntime.activate).not.toHaveBeenCalled();
+  });
+
+  it('replaces a directly opened preview with main chat when no main route exists', () => {
+    mockIsPro = false;
+    const props = createNavigationProps();
+    props.route = { ...props.route, params: { ...props.route.params, sessionKey: 'agent:atlas:cron:one' } };
+    mockController.sessionKey = props.route.params.sessionKey;
+    jest.mocked(props.navigation.getState).mockReturnValue({ index: 0, routes: [{ name: 'Thread' }] } as any);
+    render(<ThreadScreen {...props} />);
+    act(() => mockThreadViewProps?.sessionPreview?.onMain());
+    expect(props.navigation.replace).toHaveBeenCalledWith('Thread', {
+      connectionId: 'connection-1', agentId: 'atlas', sessionKey: 'agent:atlas:main', from: 'panel', runContext: undefined,
+    });
+  });
+
+  it('keeps main conversations and the existing grace period complete', () => {
+    mockIsPro = false;
+    const props = createNavigationProps();
+    const view = render(<ThreadScreen {...props} />);
+    expect(mockThreadViewProps?.sessionPreview).toBeUndefined();
+    props.route = { ...props.route, params: { ...props.route.params, sessionKey: 'agent:atlas:cron:one' } };
+    mockController.sessionKey = props.route.params.sessionKey;
+    view.rerender(<ThreadScreen {...props} sessionHistoryGraceActive />);
+    expect(mockThreadViewProps?.sessionPreview).toBeUndefined();
+  });
+
+  it('marks only the visible route as read and advances when its history updates', async () => {
+    mockController.historyLoaded = false;
+    const props = createNavigationProps();
+    const view = render(<ThreadScreen {...props} />);
+    expect(mockRuntime.markSessionOpened).not.toHaveBeenCalled();
+    mockController.historyLoaded = true;
+    mockController.sessions = [{ key: 'agent:atlas:main', updatedAt: 120 }];
+    view.rerender(<ThreadScreen {...props} />);
+    await act(async () => Promise.resolve());
+    expect(mockRuntime.markSessionOpened).toHaveBeenLastCalledWith({
+      connectionId: 'connection-1', key: 'agent:atlas:main', updatedAt: 120,
+    });
+    const calls = mockRuntime.markSessionOpened.mock.calls.length;
+    view.rerender(<ThreadScreen {...props} />);
+    expect(mockRuntime.markSessionOpened).toHaveBeenCalledTimes(calls);
+    mockFocused = false;
+    mockController.sessions = [{ key: 'agent:atlas:main', updatedAt: 150 }];
+    view.rerender(<ThreadScreen {...props} />);
+    expect(mockRuntime.markSessionOpened).toHaveBeenCalledTimes(calls);
+    mockFocused = true;
+    view.rerender(<ThreadScreen {...props} />);
+    await act(async () => Promise.resolve());
+    expect(mockRuntime.markSessionOpened).toHaveBeenLastCalledWith({
+      connectionId: 'connection-1', key: 'agent:atlas:main', updatedAt: 150,
+    });
+  });
+
+  it('scopes the first controller render to its route and discards an unrelated preview', () => {
+    mockApp.currentAgentId = 'lucy';
+    mockApp.mainSessionKey = 'agent:lucy:main';
+    mockApp.initialChatPreview = { sessionKey: 'agent:lucy:main', messages: [{ text: 'private history' }] };
+    mockApp.chatSessionRequest = { sessionKey: 'agent:lucy:main', requestedAt: 1 };
+    render(<ThreadScreen {...createNavigationProps()} />);
+    expect(mockScopedApp).toMatchObject({
+      currentAgentId: 'atlas', mainSessionKey: 'agent:atlas:main',
+      initialChatPreview: null, chatSessionRequest: null, pendingAgentSwitch: null,
+    });
+  });
+
+  it('does not let a retained background thread consume global navigation or input', () => {
+    mockFocused = false;
+    mockApp.pendingChatInput = 'draft for the foreground agent';
+    mockApp.pendingChatNotificationOpen = { sessionKey: 'agent:atlas:main', requestedAt: 1 };
+    mockApp.pendingMainSessionSwitch = true;
+    render(<ThreadScreen {...createNavigationProps()} />);
+    expect(mockScopedApp).toMatchObject({
+      pendingChatInput: null, pendingChatNotificationOpen: null, pendingMainSessionSwitch: false,
+    });
+    expect(mockApp.setCurrentAgentId).not.toHaveBeenCalled();
+    expect(mockApp.requestChatSession).not.toHaveBeenCalled();
+    expect(mockRuntime.activate).not.toHaveBeenCalled();
+  });
+
+  it('retains the adapter and visible timeline across a secondary route and back', () => {
+    const props = createNavigationProps();
+    const view = render(<ThreadScreen {...props} />);
+    const visibleMessages = mockThreadViewProps?.messages;
+    mockFocused = false;
+    view.rerender(<ThreadScreen {...props} />);
+    expect(mockThreadViewProps?.messages).toBe(visibleMessages);
+    expect(mockThreadViewProps?.capabilities).toBe(adapter.capabilities);
+    mockFocused = true;
+    view.rerender(<ThreadScreen {...props} />);
+    expect(mockThreadViewProps?.messages).toBe(visibleMessages);
+    expect(mockApp.requestChatSession).not.toHaveBeenCalled();
   });
 
   it('binds the target route, active adapter capabilities, controller, and navigation actions', () => {
@@ -309,7 +519,7 @@ describe('ThreadScreen connection container', () => {
     );
 
     expect(mockApp.setCurrentAgentId).toHaveBeenCalledWith('atlas');
-    expect(mockApp.requestChatSession).toHaveBeenCalledWith('agent:atlas:main', 'roster');
+    expect(mockApp.requestChatSession).not.toHaveBeenCalled();
     expect(onThreadOpened).toHaveBeenCalledWith({
       connectionId: 'connection-1',
       agentId: 'atlas',
@@ -355,12 +565,9 @@ describe('ThreadScreen connection container', () => {
     act(() => mockThreadViewProps?.onOpenPaywall?.());
     expect(props.navigation.navigate).toHaveBeenCalledWith('Paywall', { reason: 'agents' });
     act(() => mockThreadViewProps?.onCancel?.());
-    expect(mockThreadOverlayProps?.stopConfirmation.visible).toBe(true);
     expect(adapter.cancel).not.toHaveBeenCalled();
-    act(() => mockThreadOverlayProps?.stopConfirmation.onConfirm());
     expect(mockController.abortCurrentRun).toHaveBeenCalledTimes(1);
     expect(mockedAnalyticsEvents.chatAbortTapped).toHaveBeenCalledWith({ backend: 'openclaw' });
-    expect(mockThreadOverlayProps?.stopConfirmation.visible).toBe(false);
   });
 
   it('prefers route-scoped roster identity over same-id agents from another connection', () => {
@@ -619,6 +826,18 @@ describe('ThreadScreen connection container', () => {
           canOpenLogs: true,
         }),
       ]));
+    const callsBeforeChatUpdate = (adapter.management.cron.list as jest.Mock).mock.calls.length;
+    mockController.sessions = (mockController.sessions as Array<Record<string, unknown>>).map((session) => (
+      session.key === 'agent:atlas:main' ? { ...session, updatedAt: now + 1, totalTokens: 99 } : session
+    ));
+    view.rerender(<ThreadScreen {...createNavigationProps()} onOpenRunSession={onOpenRunSession} onOpenRunLogs={onOpenRunLogs} />);
+    expect((adapter.management.cron.list as jest.Mock).mock.calls).toHaveLength(callsBeforeChatUpdate);
+    expect(mockThreadViewProps?.runCards?.some((run) => run.jobId === 'nightly')).toBe(true);
+    (adapter.management.cron.list as jest.Mock).mockRejectedValueOnce(new Error('temporary offline'));
+    mockApp = { ...mockApp, foregroundEpoch: 2 };
+    await act(async () => { view.rerender(<ThreadScreen {...createNavigationProps()} onOpenRunSession={onOpenRunSession} onOpenRunLogs={onOpenRunLogs} />); });
+    expect(mockThreadViewProps?.runCards?.some((run) => run.jobId === 'nightly')).toBe(true);
+
     expect(mockThreadViewProps?.locale).toBe('en');
     expect(mockThreadViewProps?.onOpenRunSession).toBeDefined();
     expect(mockThreadViewProps?.onOpenRunLogs).toBe(onOpenRunLogs);
@@ -627,7 +846,7 @@ describe('ThreadScreen connection container', () => {
       'atlas',
       'subagent',
     ));
-    expect(onOpenRunSession).toHaveBeenCalledWith(childSessionKey, 'atlas', 'subagent');
+    expect(onOpenRunSession).toHaveBeenCalledWith(childSessionKey, 'atlas', 'subagent', undefined);
     expect(mockedAnalyticsEvents.runCardOpened).toHaveBeenCalledWith({ kind: 'subagent' });
 
     view.unmount();

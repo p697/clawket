@@ -13,6 +13,7 @@ import {
   ControlSize,
   FontSize,
   FontWeight,
+  HitSize,
   LineHeight,
   Radius,
   Shadow,
@@ -20,7 +21,7 @@ import {
   createThemedShadowStyle,
 } from '../../theme/tokens';
 
-const SEGMENTED_COMPACT_HEIGHT = 32;
+const SEGMENTED_COMPACT_HEIGHT = HitSize.sm;
 
 export type SegmentedTabItem<T extends string = string> = {
   key: T;
@@ -115,8 +116,8 @@ function createStyles(
       alignItems: 'stretch',
     },
     containerCompact: {
-      minHeight: SEGMENTED_COMPACT_HEIGHT,
-      padding: 0,
+      minHeight: ControlSize.floatingButton,
+      padding: Space.xs,
     },
     containerText: {
       backgroundColor: 'transparent',

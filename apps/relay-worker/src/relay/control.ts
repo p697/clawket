@@ -1,3 +1,4 @@
+import { hasClientChannels, syncClientChannels } from './client-channels';
 import { RELAY_FRAME_LIMIT_V2 } from '@clawket/shared';
 import {
   CONTROL_PREFIX,
@@ -13,6 +14,9 @@ export function replaceGateway(runtime: RelayRuntime, nextGateway: WebSocket): v
     && runtime.gatewaySocket !== nextGateway
     && runtime.gatewaySocket.readyState === WebSocket.OPEN) {
     runtime.pendingChallenge = null;
+    for (const channel of runtime.state.getWebSockets()) {
+      if ((channel.deserializeAttachment() as SocketAttachment | null)?.targetConnectionId) channel.close(1012, 'owner_replaced');
+    }
     runtime.gatewaySocket.close(SOCKET_CLOSE_CODES.REPLACED_BY_NEW_GATEWAY, runtime.policy.ownerReplacedReason);
   }
   runtime.gatewaySocket = nextGateway;
@@ -59,6 +63,10 @@ export function sendControlToGateway(
   payload?: Record<string, unknown>,
 ): void {
   if (!runtime.gatewaySocket || runtime.gatewaySocket.readyState !== WebSocket.OPEN) return;
+  if (hasClientChannels(runtime) && ['client_count', 'client_connected', 'client_disconnected'].includes(event)) {
+    syncClientChannels(runtime);
+    return;
+  }
   runtime.gatewaySocket.send(serializeControlEnvelope({
     type: 'control',
     event,

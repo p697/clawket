@@ -133,6 +133,33 @@ function areLikelySameUserMessage(a: UiMessage, b: UiMessage): boolean {
   return false;
 }
 
+/** Cached optimistic IDs must not reappear when paging across a server boundary. */
+export function prependOlderCachedMessages(current: UiMessage[], older: UiMessage[]): UiMessage[] {
+  const ids = new Set(current.map((message) => message.id));
+  const matched = new Set<string>();
+  const prependable = older.filter((message) => {
+    if (ids.has(message.id)) return false;
+    ids.add(message.id);
+    const optimisticUser = message.role === 'user' && /^usr_\d/.test(message.id);
+    const optimisticAssistant = message.role === 'assistant' && /^(final_|abort_)/.test(message.id);
+    if (!optimisticUser && !optimisticAssistant) return true;
+    const serverMatch = current.find((candidate) => {
+      if (candidate.role !== message.role || /^(usr_\d|final_|abort_)/.test(candidate.id) || matched.has(candidate.id)) return false;
+      if (areMessagesLinkedByIdempotency(message, candidate)) return true;
+      if (message.imageUris?.length || message.fileAttachments?.length
+        || candidate.imageUris?.length || candidate.fileAttachments?.length) return false;
+      if (optimisticUser) return areLikelySameUserMessage(message, candidate);
+      return message.text.trim().length > 0 && message.text === candidate.text
+        && Boolean(message.timestampMs && candidate.timestampMs)
+        && Math.abs(message.timestampMs! - candidate.timestampMs!) <= SAME_TURN_REPLACEMENT_GRACE_MS;
+    });
+    if (!serverMatch) return true;
+    matched.add(serverMatch.id);
+    return false;
+  });
+  return prependable.length ? [...prependable, ...current] : current;
+}
+
 function hasMissingUserMatchMetadata(message: UiMessage): boolean {
   return !message.idempotencyKey || !message.timestampMs;
 }

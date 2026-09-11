@@ -415,6 +415,30 @@ describe('GatewayAdapter lifecycle boundaries', () => {
 });
 
 describe('mergeGatewayHistory', () => {
+  it('replaces an optimistic send and its cache copy with one confirmed server message', () => {
+    const remote = [{ id: 'server-user', role: 'user' as const, text: 'Hello', timestampMs: 10_140 }];
+    expect(mergeGatewayHistory(remote, [
+      { id: 'usr_10000', role: 'user', text: 'Hello', timestampMs: 10_000 },
+      { id: 'h_user_10140_copy', role: 'user', text: 'Hello', timestampMs: 10_140 },
+    ])).toEqual(remote);
+    expect(mergeGatewayHistory(remote, [
+      { id: 'usr_10000', role: 'user', text: 'Hello', timestampMs: 10_000 },
+      { id: 'usr_11000', role: 'user', text: 'Hello', timestampMs: 11_000 },
+    ]).map((message) => message.id)).toEqual(['server-user', 'usr_11000']);
+  });
+
+  it('reconciles confirmed cache copies with server timestamps without collapsing repeated sends', () => {
+    const remote = [
+      { id: 'server-u', role: 'user' as const, text: 'Received', timestampMs: 10_000 },
+      { id: 'server-a', role: 'assistant' as const, text: 'OK', timestampMs: 11_000 },
+    ];
+    const pending = { id: 'u_pending', role: 'user' as const, text: 'Received', timestampMs: 11_200 };
+    expect(mergeGatewayHistory(remote, [
+      { ...remote[0], id: 'h_user_local', timestampMs: 10_264 },
+      { ...remote[1], id: 'h_assistant_local', timestampMs: 11_340 }, pending,
+    ])).toEqual([...remote, pending]);
+  });
+
   it('keeps the remote canonical message and only the optimistic cache tail', () => {
     expect(mergeGatewayHistory(
       [
@@ -461,4 +485,33 @@ describe('mapGatewayHistoryMessage', () => {
       },
     });
   });
+});
+
+describe('history reconciliation ordering regression', () => {
+  it('keeps untimed cached tools before new chat and converges without duplicate IDs', () => {
+    const oldTool = { id: 'toolresult_old', role: 'tool' as const, text: '', tool: { name: 'bash', status: 'success' as const, callId: 'old' } };
+    const remote = [
+      { id: 'user-new', role: 'user' as const, text: 'hi', timestampMs: 100_000 },
+      { id: 'assistant-new', role: 'assistant' as const, text: 'hello', timestampMs: 101_000 },
+    ];
+    const merged = mergeGatewayHistory(remote, [oldTool, ...remote, oldTool]);
+    expect(merged.map((message) => message.id)).toEqual(['toolresult_old', 'user-new', 'assistant-new']);
+    expect(mergeGatewayHistory(remote, merged)).toEqual(merged);
+  });
+
+  it('uses a stable call identity when cached and remote tool IDs differ', () => {
+    const tool = { name: 'bash', status: 'success' as const, callId: 'call-1' };
+    const remote = [{ id: 'canonical', role: 'tool' as const, text: 'ok', timestampMs: 100_000, tool }];
+    expect(mergeGatewayHistory(remote, [{ id: 'toolresult_call-1', role: 'tool', text: '', tool }])).toEqual(remote);
+  });
+
+  it('reads ISO timestamps without discarding tool chronology', () => {
+    expect(mapGatewayHistoryMessage('main', { role: 'toolResult', timestamp: '2026-09-06T01:00:00Z', content: 'done', name: 'bash' }, 0)?.timestampMs)
+      .toBe(Date.parse('2026-09-06T01:00:00Z'));
+  });
+});
+
+it('reconciles final replies timed at run start with history timed at completion', () => {
+  const remote = [{ id: 'reply', role: 'assistant' as const, text: 'Test received', timestampMs: 112_000 }];
+  expect(mergeGatewayHistory(remote, [{ id: 'final_run', role: 'assistant', text: 'Test received', timestampMs: 100_000 }])).toEqual(remote);
 });

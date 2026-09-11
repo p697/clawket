@@ -16,7 +16,7 @@ import {
 } from './frames';
 import { logRuntimeTelemetry } from './telemetry';
 import type { RelayRuntime } from './runtime';
-import { touchClientActivity, touchGatewayActivity } from './runtime';
+import { selectActiveClient, touchClientActivity, touchGatewayActivity } from './runtime';
 import { dropClientState, ensureHeartbeat, prunePendingConnectStarts } from './heartbeat';
 import {
   logControlRoutingTelemetry,
@@ -135,6 +135,7 @@ export function tryDeliverChallenge(
     payload.relayLegMs = Math.max(0, now - connectStartAt);
     runtime.connectStartAtByClientId.delete(challengeClientId);
   }
+  payload.diagnosticId = challengeAttachment?.diagnosticId;
   logRuntimeTelemetry(runtime, 'challenge_delivered', payload);
   return true;
 }
@@ -261,7 +262,7 @@ export async function handleGatewayMessage(
           role: 'gateway',
           clientCount: runtime.clients.size,
         });
-        await ensureHeartbeat(runtime);
+        await ensureHeartbeat(runtime, { resetDeadline: true });
         return;
       }
       if (runtime.policy.reconnectClientsOnOwnerRequest
@@ -317,6 +318,7 @@ export async function handleGatewayMessage(
         targetClient.send(text);
         touchClientActivity(runtime, targetClientId);
         logRuntimeTelemetry(runtime, 'connect_response_delivered', {
+          diagnosticId: (targetClient.deserializeAttachment() as SocketAttachment | null)?.diagnosticId,
           role: 'gateway',
           matchedRequest: true,
         });
@@ -405,7 +407,7 @@ export function handleClientConnected(runtime: RelayRuntime, clientId: string, s
   runtime.clients.set(clientId, server);
   touchClientActivity(runtime, clientId);
   if (!runtime.activeClientId) {
-    runtime.activeClientId = clientId;
+    selectActiveClient(runtime, clientId);
   }
   if (!runtime.challengeClientId) {
     runtime.challengeClientId = clientId;
@@ -441,7 +443,7 @@ export function prepareClientMessage(runtime: RelayRuntime, attachment: SocketAt
   const requestFrame = parseRequestFrame(text);
   if (isConnectStart) {
     if (runtime.activeClientId !== attachment.clientId) {
-      runtime.activeClientId = attachment.clientId;
+      selectActiveClient(runtime, attachment.clientId);
       logRuntimeTelemetry(runtime, 'active_client_switched', {
         role: 'client',
         reason: 'connect_start',
@@ -453,7 +455,7 @@ export function prepareClientMessage(runtime: RelayRuntime, attachment: SocketAt
   } else if (runtime.policy.routeRequestsByOrigin) {
     if (requestFrame) runtime.requestClientByReqId.set(requestFrame.id, attachment.clientId);
     if (runtime.activeClientId !== attachment.clientId) {
-      runtime.activeClientId = attachment.clientId;
+      selectActiveClient(runtime, attachment.clientId);
       logRuntimeTelemetry(runtime, 'active_client_switched', {
         role: 'client',
         reason: requestFrame ? `request:${requestFrame.method}` : 'client_message',
@@ -490,8 +492,10 @@ export function acknowledgeClientPong(
 
 export function clearClientChallengeMarker(ws: WebSocket, attachment: SocketAttachment): void {
   if (!attachment.challengeDeliveredAt) return;
-  delete attachment.challengeDeliveredAt;
-  ws.serializeAttachment(attachment);
+  const current = ws.deserializeAttachment() as SocketAttachment | null;
+  if (!current) return;
+  delete current.challengeDeliveredAt;
+  ws.serializeAttachment(current);
 }
 
 export function forwardClientMessageToGateway(
@@ -510,6 +514,8 @@ export function forwardClientMessageToGateway(
       runtime.connectReqClientByReqId.set(connectReqId, attachment.clientId);
     }
     logRuntimeTelemetry(runtime, 'connect_start_forward', {
+      diagnosticId: attachment.diagnosticId,
+      sinceSocketOpenMs: Math.max(0, queuedAt - attachment.connectedAt),
       role: 'client',
       hasRequestId: Boolean(connectReqId),
       clientCount: runtime.clients.size,

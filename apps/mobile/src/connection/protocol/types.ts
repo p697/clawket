@@ -137,6 +137,7 @@ export type GatewayProtocolProfile = Readonly<{
   relayIdQueryParam: 'gatewayId' | 'bridgeId';
   baseUrlSocketPathPattern: RegExp;
   challengeEvent?: string;
+  relayHealthRequestMethod?: 'health';
   healthReadiness?: (
     payload: GatewayProtocolEvents['health'],
     context: Readonly<{ hasPayload: boolean }>,

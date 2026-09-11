@@ -386,11 +386,10 @@ function SkillDetailSheet({
           {installed ? (
             <>
               <SettingsRow
-                title={t('Active', { ns: 'settings' })}
+                title={t('Status', { ns: 'settings' })}
                 value={translateSkillAvailability(skillAvailability(installed), t)}
               />
-              <SettingsDivider inset="content" />
-              <SettingsRow title={installed.source} value={installed.skillKey} />
+
             </>
           ) : discovered ? (
             <>

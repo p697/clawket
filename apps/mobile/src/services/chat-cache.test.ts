@@ -82,6 +82,15 @@ function makeMsg(overrides: Partial<UiMessage> = {}): UiMessage {
 
 describe("ChatCacheService", () => {
   describe("saveMessages + getMessages", () => {
+    it("preserves uncertain delivery when restoring the local cache", async () => {
+      await ChatCacheService.saveMessages(
+        { gatewayConfigId: "gw1", agentId: "agent1", sessionKey: "agent:agent1:main" },
+        [makeMsg({ sendUncertain: true })],
+      );
+      const restored = await ChatCacheService.getMessages("gw1", "agent1", "agent:agent1:main");
+      expect(restored[0].sendUncertain).toBe(true);
+    });
+
     it("saves and retrieves messages", async () => {
       const messages: UiMessage[] = [
         makeMsg({ id: "1", text: "Hello" }),

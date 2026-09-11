@@ -153,6 +153,7 @@ function SectionGroupView({
               <SettingsRow
                 testID={`account-settings-section-row-${row.id}`}
                 title={title}
+                destructive={row.action === 'reset-device' || row.action === 'remove-connection'}
                 value={resolveRowValue(row, t)}
                 locked={row.locked}
                 disabled={row.disabled}

@@ -8,6 +8,7 @@ import {
   resolveRelayAuthToken,
   SECURE_PAIRING_V2_CAPABILITY,
 } from '@clawket/shared';
+import { CLIENT_CHANNELS, hasClientChannels, channelClient, clientChannel, routeClientChannel } from './relay/client-channels';
 import { authorizeRelayToken, isRelayTokenAuthorized, sha256Hex } from './relay/auth';
 import {
   isAwaitingChallengeExpired,
@@ -244,6 +245,17 @@ class BaseRelayRoom {
       return errorResponse('UNAUTHORIZED', 'Invalid token for relay connection', 401);
     }
 
+    const targetConnectionId = url.searchParams.get('targetConnectionId') || undefined;
+    if (targetConnectionId && (policy.backend !== 'openclaw' || query.role !== 'gateway'
+      || !hasClientChannels(this.runtime) || !channelClient(this.runtime, targetConnectionId)
+      || query.clientId !== (this.runtime.gatewaySocket?.deserializeAttachment() as SocketAttachment | null)?.clientId)) {
+      return errorResponse('INVALID_CLIENT_CHANNEL', 'Client connection is no longer available', 409);
+    }
+    if (query.role === 'client' && authorization.authScope !== 'pairing'
+      && hasClientChannels(this.runtime) && this.runtime.clients.size >= 128
+      && !this.runtime.clients.has(query.clientId || '')) {
+      return errorResponse('CLIENT_LIMIT_REACHED', 'Too many simultaneous client connections', 429);
+    }
     const pair = new WebSocketPair();
     const client = pair[0];
     const server = pair[1];
@@ -264,6 +276,10 @@ class BaseRelayRoom {
 
     const clientId = query.role === 'gateway' ? ownerClientId : (query.clientId || crypto.randomUUID());
     const attachment: SocketAttachment = {
+      diagnosticId: crypto.randomUUID(),
+      ...(targetConnectionId ? { targetConnectionId } : {}),
+      ...(query.role === 'gateway' && policy.backend === 'openclaw' && !targetConnectionId
+        && parseCapabilities(url).includes(CLIENT_CHANNELS) ? { capabilities: [CLIENT_CHANNELS] } : {}),
       role: query.role,
       clientId,
       connectedAt: Date.now(),
@@ -279,13 +295,16 @@ class BaseRelayRoom {
         : {}),
     };
 
+    if (targetConnectionId) clientChannel(this.runtime, targetConnectionId)?.close(1000, 'channel_replaced');
     // Keep the constructor-rehydrated map intact until the public replacement
     // branch has closed the previous peer with the backend-specific reason.
     this.runtime.state.acceptWebSocket(server);
     server.serializeAttachment(attachment);
     sendRelayReady(server);
 
-    if (query.role === 'gateway') {
+    if (targetConnectionId) {
+      server.send('__clawket_relay_control__:' + JSON.stringify({ type: 'control', event: 'client_count', count: 1 }));
+    } else if (query.role === 'gateway') {
       replaceGateway(this.runtime, server);
       touchGatewayActivity(this.runtime, attachment.connectedAt);
       await touchGatewayOwner(this.runtime, clientId, true);
@@ -301,6 +320,8 @@ class BaseRelayRoom {
       if (previousClient && previousClient !== server && previousClient.readyState === WebSocket.OPEN) {
         previousClient.close(SOCKET_CLOSE_CODES.REPLACED_BY_NEW_CLIENT_SOCKET, 'replaced_by_new_client_socket');
         logRuntimeTelemetry(this.runtime, 'client_socket_replaced', {
+          diagnosticId: attachment.diagnosticId,
+          previousDiagnosticId: (previousClient.deserializeAttachment() as SocketAttachment | null)?.diagnosticId,
           role: query.role,
           clientCount: this.runtime.clients.size,
         });
@@ -309,6 +330,8 @@ class BaseRelayRoom {
     }
 
     logRuntimeTelemetry(this.runtime, 'ws_connected', {
+      diagnosticId: attachment.diagnosticId,
+      socketKind: targetConnectionId ? 'channel' : query.role === 'gateway' ? 'owner' : 'client',
       role: query.role,
       authSource,
       authPath: authorization.path,
@@ -339,6 +362,16 @@ class BaseRelayRoom {
       return;
     }
     if (!attachment) return;
+    // A closed/replaced peer may still deliver buffered frames. Authenticate the
+    // socket incarnation before it can touch liveness, rate limits or routing.
+    const currentSocket = attachment.role === 'gateway'
+      ? attachment.targetConnectionId
+        ? clientChannel(this.runtime, attachment.targetConnectionId)
+        : this.runtime.gatewaySocket
+      : this.runtime.policy.securePairing && attachment.authScope === 'pairing'
+        ? this.runtime.pairingClients.get(attachment.clientId)
+        : this.runtime.clients.get(attachment.clientId);
+    if (currentSocket !== ws) return;
     const text = normalizeMessage(message);
     if (text == null) return;
 
@@ -357,6 +390,13 @@ class BaseRelayRoom {
     }
     if (!allowMessage(this.runtime, ws, attachment, text)) {
       ws.close(SOCKET_CLOSE_CODES.RATE_LIMITED, 'rate_limited');
+      return;
+    }
+    if (routeClientChannel(this.runtime, ws, attachment, text)) {
+      if (attachment.role === 'gateway' && attachment.targetConnectionId) {
+        touchGatewayActivity(this.runtime);
+        await touchGatewayOwner(this.runtime, attachment.clientId);
+      }
       return;
     }
     if (attachment.role === 'gateway') {
@@ -384,7 +424,7 @@ class BaseRelayRoom {
   }
 
   async webSocketClose(ws: WebSocket, code: number, reason: string): Promise<void> {
-    await this.removeSocket(ws, 'close');
+    await this.removeSocket(ws, 'close', code);
     try {
       ws.close(code, reason);
     } catch {
@@ -497,17 +537,30 @@ class BaseRelayRoom {
     });
   }
 
-  private async removeSocket(ws: WebSocket, reason: 'close' | 'error'): Promise<void> {
+  private async removeSocket(ws: WebSocket, reason: 'close' | 'error', closeCode?: number): Promise<void> {
     const attachment = ws.deserializeAttachment() as SocketAttachment | null;
     if (!attachment) return;
     const { policy } = this.runtime;
 
+    if (attachment.targetConnectionId) {
+      // Only the current channel may retire its associated client, never another device.
+      const replacement = clientChannel(this.runtime, attachment.targetConnectionId);
+      if (!replacement || replacement === ws) channelClient(this.runtime, attachment.targetConnectionId)?.close(1012, 'backend_channel_closed');
+      logRuntimeTelemetry(this.runtime, 'ws_disconnected', {
+        diagnosticId: attachment.diagnosticId,
+        socketKind: 'channel', role: attachment.role, reason, closeCode,
+        superseded: Boolean(replacement && replacement !== ws),
+        socketAgeMs: Math.max(0, Date.now() - attachment.connectedAt),
+        clientCount: this.runtime.clients.size,
+      });
+      return;
+    }
     if (attachment.role === 'gateway') {
-      if (policy.watchdog !== 'none') {
-        this.runtime.pendingGatewayPingAt = 0;
-        this.runtime.gatewayPingCapability = 'unknown';
-      }
       if (this.runtime.gatewaySocket === ws) {
+        if (policy.watchdog !== 'none') {
+          this.runtime.pendingGatewayPingAt = 0;
+          this.runtime.gatewayPingCapability = 'unknown';
+        }
         this.runtime.gatewaySocket = null;
         this.runtime.pendingChallenge = null;
         await touchGatewayOwner(this.runtime, attachment.clientId, true);
@@ -540,13 +593,16 @@ class BaseRelayRoom {
     }
 
     logRuntimeTelemetry(this.runtime, 'ws_disconnected', {
+      diagnosticId: attachment.diagnosticId,
       role: attachment.role,
+      socketKind: attachment.role === 'gateway' ? 'owner' : 'client',
       reason,
+      closeCode,
+      socketAgeMs: Math.max(0, Date.now() - attachment.connectedAt),
       clientCount: this.runtime.clients.size,
       [policy.ownerPresentField]: Boolean(this.runtime.gatewaySocket?.readyState === WebSocket.OPEN),
       ...(policy.traceHints ? {
         traceHint: toTraceHint(attachment.traceId),
-        socketAgeMs: Date.now() - attachment.connectedAt,
       } : {}),
     });
     await ensureHeartbeat(this.runtime);

@@ -20,7 +20,7 @@ type Props = {
 function resolveIconColor(tone: Tone, colors: ReturnType<typeof useAppTheme>['theme']['colors']): string {
   if (tone === 'accent') return colors.accent;
   if (tone === 'destructive') return colors.bad;
-  return colors.inkSecondary;
+  return colors.ink;
 }
 
 export function HeaderActionButton({
@@ -28,7 +28,7 @@ export function HeaderActionButton({
   onPress,
   disabled = false,
   tone = 'default',
-  size = 18,
+  size = 22,
   strokeWidth = 2,
   buttonSize = 44,
   accessibilityLabel,
@@ -45,7 +45,7 @@ export function HeaderActionButton({
       icon={Icon}
       onPress={onPress}
       disabled={disabled}
-      appearance="surface"
+      appearance="bare"
       size={buttonSize <= 36 ? 'sm' : 'md'}
       iconSize={size}
       iconColor={color}

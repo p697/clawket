@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text } from 'react-native';
 import { useAppTheme } from '../../theme';
-import { FontSize, FontWeight, LineHeight, Space } from '../../theme/tokens';
+import { ControlSize, FontSize, FontWeight, LineHeight, Space } from '../../theme/tokens';
 
 type Props = {
   label: string;
@@ -20,6 +20,8 @@ export function HeaderTextAction({
 
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ disabled }}
       onPress={onPress}
       disabled={disabled}
       hitSlop={10}
@@ -43,6 +45,7 @@ export function HeaderTextAction({
 
 const styles = StyleSheet.create({
   pressable: {
+    minHeight: ControlSize.floatingButton,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: Space.xs,

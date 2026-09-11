@@ -1,3 +1,4 @@
+import { resolveChatTheme } from '../theme/theme';
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Animated, Image, Platform, Pressable, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { EnrichedMarkdownText } from 'react-native-enriched-markdown';
@@ -204,7 +205,7 @@ function Avatar({ uri }: { uri?: string }): React.JSX.Element | null {
 }
 
 const avatarStyles = StyleSheet.create({
-  img: { width: AGENT_AVATAR_SIZE, height: AGENT_AVATAR_SIZE, borderRadius: Radius.avatarSheet },
+  img: { width: AGENT_AVATAR_SIZE, height: AGENT_AVATAR_SIZE, borderRadius: Radius.full },
   placeholder: {
     width: AGENT_AVATAR_SIZE,
     height: AGENT_AVATAR_SIZE,
@@ -242,7 +243,8 @@ function MessageBubbleComponent({
   chatFontSize,
 }: Props): React.JSX.Element {
   const { t } = useTranslation('chat');
-  const { theme } = useAppTheme();
+  const { theme: interfaceTheme } = useAppTheme();
+  const theme = useMemo(() => resolveChatTheme(interfaceTheme), [interfaceTheme]);
   const { chatAppearance } = useAppContext();
   const effectiveFontSize = chatFontSize ?? FontSize.secondary;
   const styles = useMemo(() => createStyles(theme.colors, theme.scheme, effectiveFontSize), [theme, effectiveFontSize]);

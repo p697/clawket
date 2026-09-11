@@ -1,11 +1,9 @@
 import type { ProPaywallPackage } from '../../services/pro-subscription';
 import {
   THREE_POINT_ZERO_INTRO_CONTENT,
-  calculateAnnualSavings,
   orderPaywallPackages,
   paywallFailureMessageKey,
   resolvePaywallContent,
-  shouldShowPaywallSocialProof,
 } from './model';
 
 function paywallPackage(
@@ -44,16 +42,17 @@ describe('Paywall model', () => {
     expect(resolvePaywallContent(feature).hero).toBe(hero);
   });
 
-  it('returns exactly three contextual benefits without a duplicate category', () => {
+  it('returns exactly four contextual benefits without a duplicate category', () => {
     for (const feature of ['gatewayConnections', 'agents', 'configBackups', 'logs', 'messageHistory'] as const) {
       const benefits = resolvePaywallContent(feature).benefits;
-      expect(benefits).toHaveLength(3);
-      expect(new Set(benefits.map((item) => item.kind)).size).toBe(3);
+      expect(benefits).toHaveLength(4);
+      expect(new Set(benefits.map((item) => item.kind)).size).toBe(4);
     }
     expect(resolvePaywallContent('messageHistory').benefits.map((item) => item.kind)).toEqual([
       'search',
-      'manage',
       'combined',
+      'sessions',
+      'memory',
     ]);
   });
 
@@ -63,7 +62,7 @@ describe('Paywall model', () => {
     expect(THREE_POINT_ZERO_INTRO_CONTENT.benefits).toHaveLength(4);
   });
 
-  it('orders plans annual, lifetime, monthly and computes live annual savings', () => {
+  it('orders plans annual, lifetime, monthly', () => {
     const packages = [
       paywallPackage('MONTHLY', 3),
       paywallPackage('LIFETIME', 49.99),
@@ -74,20 +73,6 @@ describe('Paywall model', () => {
       'LIFETIME',
       'MONTHLY',
     ]);
-    expect(calculateAnnualSavings(packages)).toBe(33);
-  });
-
-  it('omits savings for missing or non-discounted monthly comparison data', () => {
-    expect(calculateAnnualSavings([paywallPackage('ANNUAL', 24)])).toBeNull();
-    expect(calculateAnnualSavings([
-      paywallPackage('ANNUAL', 36),
-      paywallPackage('MONTHLY', 3),
-    ])).toBeNull();
-  });
-
-  it('uses offering metadata for social proof visibility', () => {
-    expect(shouldShowPaywallSocialProof([paywallPackage('ANNUAL', 24, false)])).toBe(false);
-    expect(shouldShowPaywallSocialProof([])).toBe(true);
   });
 
   it('keeps cancellation silent and maps other failure states to one line', () => {
@@ -96,5 +81,13 @@ describe('Paywall model', () => {
     expect(paywallFailureMessageKey('offerings_unavailable', 'purchase')).toBe('Unable to load subscription options right now.');
     expect(paywallFailureMessageKey('store_error:ITEM_UNAVAILABLE', 'purchase')).toBe('Unable to complete your purchase right now.');
     expect(paywallFailureMessageKey('store_error:NETWORK_ERROR', 'restore')).toBe('Unable to restore your purchases right now.');
+  });
+});
+
+it('explains full session access instead of generic message search at the session gate', () => {
+  expect(resolvePaywallContent('sessionHistory')).toMatchObject({
+    titleKey: 'Explore your Agent conversations',
+    subtitleKey: 'Take your AI world with you.',
+    actionKey: null,
   });
 });

@@ -1,15 +1,12 @@
-import React from 'react';
-import { Camera, FileText, Images, Lightbulb, Sparkles } from 'lucide-react-native';
+import React, { useRef } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Camera, FileText, Images, Lightbulb, Sparkles, type LucideIcon } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { isMacCatalyst } from '../../../utils/platform';
 import { useAppTheme } from '../../../theme';
-import { IconSize } from '../../../theme/tokens';
+import { FontSize, FontWeight, IconSize, LineHeight, Radius, Space } from '../../../theme/tokens';
 import { Sheet } from '../../../components/ui/Sheet';
-import {
-  SettingsDivider,
-  SettingsGroup,
-  SettingsRow,
-} from '../../../components/ui/SettingsGroup';
+import { SettingsRow } from '../../../components/ui/SettingsGroup';
 
 export type ThreadAddSheetProps = Readonly<{
   visible: boolean;
@@ -24,98 +21,61 @@ export type ThreadAddSheetProps = Readonly<{
 }>;
 
 export function ThreadAddSheet({
-  visible,
-  attachmentsEnabled,
-  skillsEnabled,
-  onClose,
-  onPickImage,
-  onTakePhoto,
-  onChooseFile,
-  onOpenSkills,
-  onOpenPrompts,
+  visible, attachmentsEnabled, skillsEnabled, onClose, onPickImage,
+  onTakePhoto, onChooseFile, onOpenSkills, onOpenPrompts,
 }: ThreadAddSheetProps): React.JSX.Element {
   const { t } = useTranslation(['chat', 'common']);
   const { theme } = useAppTheme();
-  const iconColor = theme.colors.inkSecondary;
+  const pendingAction = useRef<(() => void) | null>(null);
   const run = (action: () => void) => {
+    if (pendingAction.current) return;
+    pendingAction.current = action;
     onClose();
-    action();
   };
-
-  const rows: React.ReactNode[] = [];
-  const addRow = (key: string, row: React.ReactNode) => {
-    if (rows.length > 0) rows.push(<SettingsDivider key={`${key}-divider`} inset="content" />);
-    rows.push(row);
+  const afterClose = () => {
+    const action = pendingAction.current;
+    pendingAction.current = null;
+    action?.();
   };
-
+  const attachments: { key: string; title: string; icon: LucideIcon; action: () => void }[] = [];
   if (attachmentsEnabled) {
-    addRow('library', (
-      <SettingsRow
-        key="library"
-        testID="thread-add-photo-library"
-        title={t('Photo Library', { ns: 'chat' })}
-        leading={<Images size={IconSize.md} color={iconColor} strokeWidth={2} />}
-        onPress={() => run(onPickImage)}
-      />
-    ));
-    if (!isMacCatalyst) {
-      addRow('camera', (
-        <SettingsRow
-          key="camera"
-          testID="thread-add-camera"
-          title={t('Take Photo', { ns: 'chat' })}
-          leading={<Camera size={IconSize.md} color={iconColor} strokeWidth={2} />}
-          onPress={() => run(onTakePhoto)}
-        />
-      ));
-    }
-    if (onChooseFile) {
-      addRow('file', (
-        <SettingsRow
-          key="file"
-          testID="thread-add-file"
-          title={t('Choose File', { ns: 'chat' })}
-          leading={<FileText size={IconSize.md} color={iconColor} strokeWidth={2} />}
-          onPress={() => run(onChooseFile)}
-        />
-      ));
-    }
+    attachments.push({ key: 'photo-library', title: t('Photo Library'), icon: Images, action: onPickImage });
+    if (!isMacCatalyst) attachments.push({ key: 'camera', title: t('Take Photo'), icon: Camera, action: onTakePhoto });
+    if (onChooseFile) attachments.push({ key: 'file', title: t('Choose File'), icon: FileText, action: onChooseFile });
   }
-
-  if (skillsEnabled && onOpenSkills) {
-    addRow('skills', (
-      <SettingsRow
-        key="skills"
-        testID="thread-add-skills"
-        title={t('Skills', { ns: 'common' })}
-        leading={<Sparkles size={IconSize.md} color={iconColor} strokeWidth={2} />}
-        onPress={() => run(onOpenSkills)}
-      />
-    ));
-  }
-
-  if (onOpenPrompts) {
-    addRow('prompts', (
-      <SettingsRow
-        key="prompts"
-        testID="thread-add-prompts"
-        title={t('Prompts', { ns: 'chat' })}
-        leading={<Lightbulb size={IconSize.md} color={iconColor} strokeWidth={2} />}
-        onPress={() => run(onOpenPrompts)}
-      />
-    ));
-  }
-
   return (
-    <Sheet
-      visible={visible}
-      onClose={onClose}
+    <Sheet visible={visible} onClose={onClose} onAfterClose={afterClose}
       closeAccessibilityLabel={t('Close', { ns: 'common' })}
-      title={t('Add', { ns: 'common' })}
-      maxHeight="75%"
-      testID="thread-add-sheet"
-    >
-      <SettingsGroup>{rows}</SettingsGroup>
+      title={t('Add', { ns: 'common' })} maxHeight="75%" testID="thread-add-sheet">
+      <View style={styles.content}>
+        {attachments.length > 0 ? <View style={styles.attachments}>
+          {attachments.map(({ key, title, icon: Icon, action }) => (
+            <Pressable key={key} testID={`thread-add-${key}`} accessibilityRole="button"
+              accessibilityLabel={title} onPress={() => run(action)}
+              style={({ pressed }) => [styles.tile, { backgroundColor: pressed ? theme.colors.surfaceFloating : theme.colors.surface }]}>
+              <Icon size={IconSize.lg} color={theme.colors.ink} strokeWidth={1.75} />
+              <Text style={[styles.label, { color: theme.colors.ink }]}>{title}</Text>
+            </Pressable>
+          ))}
+        </View> : null}
+        <View>
+          {skillsEnabled && onOpenSkills ? <SettingsRow testID="thread-add-skills"
+            title={t('Skills', { ns: 'common' })}
+            leading={<Sparkles size={IconSize.md} color={theme.colors.inkSecondary} strokeWidth={1.75} />}
+            onPress={() => run(onOpenSkills)} /> : null}
+          {onOpenPrompts ? <SettingsRow testID="thread-add-prompts" title={t('Prompts')}
+            leading={<Lightbulb size={IconSize.md} color={theme.colors.inkSecondary} strokeWidth={1.75} />}
+            onPress={() => run(onOpenPrompts)} /> : null}
+        </View>
+      </View>
     </Sheet>
   );
 }
+
+const styles = StyleSheet.create({
+  content: { paddingHorizontal: Space.xl, paddingTop: Space.md, gap: Space.md },
+  attachments: { flexDirection: 'row', gap: Space.sm },
+  tile: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: Space.xl,
+    paddingHorizontal: Space.sm, gap: Space.md, borderRadius: Radius.card },
+  label: { fontSize: FontSize.caption, lineHeight: LineHeight.caption, fontWeight: FontWeight.semibold, textAlign: 'center' },
+});

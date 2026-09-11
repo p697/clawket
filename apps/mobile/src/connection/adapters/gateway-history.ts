@@ -30,6 +30,7 @@ export function mapGatewayHistoryMessage(
   const content = value.content;
   const id = readNonEmptyString(value.id)
     || readNonEmptyString(value.messageId)
+    || (isRecord(value.__openclaw) ? readNonEmptyString(value.__openclaw.id) : undefined)
     || `${sessionKey}:history:${timestampMs ?? 'unknown'}:${index}`;
   const message: ChatMessage = {
     id,
@@ -55,6 +56,16 @@ export function mergeGatewayHistory(
   remoteMessages: ChatMessage[],
   cachedMessages: ChatMessage[],
 ): ChatMessage[] {
+  const unique = (messages: ChatMessage[]) => {
+    const seen = new Set<string>();
+    return messages.filter((message) => {
+      if (seen.has(message.id)) return false;
+      seen.add(message.id);
+      return true;
+    });
+  };
+  remoteMessages = unique(remoteMessages);
+  cachedMessages = unique(cachedMessages);
   if (cachedMessages.length === 0) return remoteMessages;
   if (remoteMessages.length === 0) return cachedMessages;
 
@@ -70,26 +81,58 @@ export function mergeGatewayHistory(
   const earliestRemoteTimestamp = remoteTimestamps.length > 0
     ? Math.min(...remoteTimestamps)
     : undefined;
+  const matchedRemote = new Set<number>();
   const optimisticCacheTail = cachedMessages.filter((message) => {
     if (remoteIds.has(message.id)) return false;
+    if (message.tool?.callId && remoteMessages.some((remote) => remote.tool?.callId === message.tool?.callId
+      && remote.role === message.role)) return false;
     if (message.idempotencyKey && remoteIdempotencyKeys.has(message.idempotencyKey)) return false;
+    // Local optimistic IDs/timestamps differ from the Gateway's persisted IDs.
+    // Match copies one-to-one so a repeated user message is never collapsed.
+    const optimisticUser = message.role === 'user' && /^usr_\d+/.test(message.id);
+    const optimisticAssistant = message.role === 'assistant' && /^(final_|abort_)/.test(message.id);
+    const optimistic = optimisticUser || optimisticAssistant;
+    const confirmedCopy = message.id.startsWith('h_') || optimisticAssistant;
+    const canonicalIndex = remoteMessages.findIndex((remote, index) => (
+      (!optimistic || !matchedRemote.has(index))
+      && (optimisticUser || confirmedCopy)
+      && remote.role === message.role
+      && remote.text === message.text
+      && (remote.text.length > 0 || Boolean(remote.tool?.callId && remote.tool.callId === message.tool?.callId))
+      && typeof remote.timestampMs === 'number'
+      && typeof message.timestampMs === 'number'
+      && Math.abs(remote.timestampMs - message.timestampMs) <= (optimistic ? 60_000 : 2_000)
+      && (!message.tool || remote.tool?.callId === message.tool.callId)
+      && (!message.attachments?.length || remote.attachments?.length === message.attachments.length)
+    ));
+    if (canonicalIndex >= 0) {
+      if (optimistic) matchedRemote.add(canonicalIndex);
+      return false;
+    }
     return earliestRemoteTimestamp === undefined
       || message.timestampMs === undefined
       || message.timestampMs >= earliestRemoteTimestamp;
   });
 
-  return [...remoteMessages, ...optimisticCacheTail]
+  // Untimed cached activity predates the authoritative snapshot. Appending it
+  // after new replies made old tools look newest on every reconciliation.
+  const untimed = optimisticCacheTail.filter((message) => message.timestampMs === undefined);
+  const timed = optimisticCacheTail.filter((message) => message.timestampMs !== undefined);
+  return [...untimed, ...remoteMessages, ...timed]
     .map((message, index) => ({ message, index }))
     .sort((left, right) => {
       const leftTimestamp = left.message.timestampMs;
       const rightTimestamp = right.message.timestampMs;
-      if (leftTimestamp === undefined || rightTimestamp === undefined) return left.index - right.index;
+      if (leftTimestamp === undefined && rightTimestamp === undefined) return left.index - right.index;
+      if (leftTimestamp === undefined) return -1;
+      if (rightTimestamp === undefined) return 1;
       return leftTimestamp - rightTimestamp || left.index - right.index;
     })
     .map(({ message }) => message);
 }
 
 function cachedMessageToChatMessage(message: CachedMessage): ChatMessage {
+  const timestampMs = message.timestampMs ?? message.toolFinishedAt ?? message.toolStartedAt;
   const attachments: NonNullable<ChatMessage['attachments']> = [
     ...(message.imageUris ?? []).map((uri) => ({
       type: 'image' as const,
@@ -107,7 +150,7 @@ function cachedMessageToChatMessage(message: CachedMessage): ChatMessage {
     id: message.id,
     role: message.role,
     text: message.text,
-    ...(message.timestampMs !== undefined ? { timestampMs: message.timestampMs } : {}),
+    ...(timestampMs !== undefined ? { timestampMs } : {}),
     ...(message.idempotencyKey ? { idempotencyKey: message.idempotencyKey } : {}),
     ...(message.modelLabel ? { model: message.modelLabel } : {}),
     ...(message.usage
@@ -248,6 +291,10 @@ function normalizeRole(value: unknown): ChatMessage['role'] {
 }
 
 function normalizeTimestamp(value: unknown): number | undefined {
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
   if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
   return value > 0 && value < 10_000_000_000 ? value * 1_000 : value;
 }

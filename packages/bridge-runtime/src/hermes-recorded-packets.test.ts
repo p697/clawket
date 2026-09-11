@@ -204,7 +204,7 @@ describe('Hermes M3 recorded packet contract', () => {
     let eventStreamSignal: AbortSignal | undefined;
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      if (url === 'http://hermes.fixture/health') {
+      if (url === 'http://hermes.fixture/v1/models') {
         return new Response('{"ok":true}', { status: 200 });
       }
       if (url === 'http://hermes.fixture/v1/runs') {
@@ -399,7 +399,7 @@ async function reservePort(): Promise<number> {
 function stubHermesHealthOnly(): void {
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
-    if (url === 'http://hermes.fixture/health') {
+    if (url === 'http://hermes.fixture/v1/models') {
       return new Response('{"ok":true}', { status: 200 });
     }
     throw new Error(`Unexpected controlled Hermes fetch: ${url}`);

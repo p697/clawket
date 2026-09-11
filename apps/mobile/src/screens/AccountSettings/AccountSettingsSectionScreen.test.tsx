@@ -76,6 +76,7 @@ jest.mock('react-native', () => {
       hairlineWidth: 1,
     },
     Switch: host('Switch'),
+    Image: host('Image'),
     Text: host('Text'),
     View: host('View'),
   };
@@ -490,7 +491,7 @@ describe('AccountSettingsSectionScreen', () => {
     expect(onOpenPaywall).toHaveBeenCalledWith('gatewayConnections');
   });
 
-  it('keeps cached section rows under a production-derived offline state', () => {
+  it('keeps local section rows available without reporting an unrelated Agent outage', () => {
     const status = resolveAccountSettingsRuntimeStatus({
       connectionInitialized: true,
       connectionSwitching: false,
@@ -501,7 +502,7 @@ describe('AccountSettingsSectionScreen', () => {
     });
     const view = render(<AccountSettingsSectionScreen {...createProps()} status={status} />);
 
-    expect(view.getByTestId('account-settings-section-offline')).toBeTruthy();
+    expect(view.queryByTestId('account-settings-section-offline')).toBeNull();
     expect(view.getByText('Studio')).toBeTruthy();
   });
 

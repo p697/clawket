@@ -580,6 +580,26 @@ describe('openclaw auth resolution', () => {
     });
   });
 
+  it.each([false, true])('preserves current doctor findings when CLI failure is %s', async (failed) => {
+    fsMock.existsSync.mockImplementation((path) => path === '/Users/tester/.openclaw/openclaw.json');
+    childProcessMock.execFile.mockImplementation((_command, _args, _options, callback) => {
+      const error = failed ? Object.assign(new Error('exit 1'), { code: 1 }) : null;
+      callback(error, JSON.stringify({
+        ok: !failed, checksRun: 2, checksSkipped: 0,
+        findings: [
+          { checkId: 'gateway-auth', severity: 'error', message: 'Missing auth', fixHint: 'Configure auth' },
+          { checkId: 'plugin-config', severity: 'warning', message: 'Review plugin' },
+        ],
+      }), '');
+    });
+    await expect(runOpenClawDoctor()).resolves.toEqual({
+      ok: !failed, summary: '', checks: [
+        { name: 'gateway-auth', status: 'fail', message: 'Missing auth\n\nConfigure auth' },
+        { name: 'plugin-config', status: 'warn', message: 'Review plugin' },
+      ],
+    });
+  });
+
   it('falls back to plain doctor output when json mode is unsupported', async () => {
     fsMock.existsSync.mockImplementation((path) => path === '/Users/tester/.openclaw/openclaw.json');
     childProcessMock.execFile.mockImplementation((_command, args, _options, callback) => {

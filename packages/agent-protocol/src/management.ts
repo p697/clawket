@@ -45,7 +45,7 @@ export interface ModelSelectionWrite {
 
 export interface ModelSelectionWriteResult extends ModelSelectionState {
   ok: boolean;
-  scope: 'global';
+  scope: 'global' | 'session';
 }
 
 export type ThinkingLevel =
@@ -354,6 +354,7 @@ export type AgentFileSummary = Omit<AgentFile, 'content'>;
 export interface UsageQuery {
   startDate: string;
   endDate: string;
+  agentId?: string;
 }
 
 export type CostQuery = UsageQuery;
@@ -700,7 +701,7 @@ export interface LogPage {
 
 export type ModelsOperations = Partial<{
     list(): Promise<ModelInfo[]>;
-    getSelection(): Promise<ModelSelectionState>;
+    getSelection(sessionKey?: string | null): Promise<ModelSelectionState>;
     setSelection(params: ModelSelectionWrite): Promise<ModelSelectionWriteResult>;
     listThinkingLevels(): ThinkingLevel[];
 }>;

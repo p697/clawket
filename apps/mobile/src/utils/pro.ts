@@ -18,6 +18,7 @@ export type ProFeature =
   | 'logs'
   | 'usage'
   | 'messageHistory'
+  | 'sessionHistory'
   | 'launch'
   | 'settingsMembershipPreview';
 

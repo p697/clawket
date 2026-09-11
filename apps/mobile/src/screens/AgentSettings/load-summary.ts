@@ -9,6 +9,7 @@ export async function loadAgentSettingsSummary(
   adapter: AgentAdapter,
   agent: AgentDescriptor,
   now: number = Date.now(),
+  onProgress?: (summary: AgentSettingsSummary) => void,
 ): Promise<AgentSettingsSummary> {
   const summary: MutableSummary = {};
   const management = adapter.management;
@@ -44,7 +45,7 @@ export async function loadAgentSettingsSummary(
   if (adapter.capabilities.cost && management?.usage?.cost) {
     tasks.push(ignoreFailure(async () => {
       const date = formatLocalDate(now);
-      const result = await management.usage?.cost?.({ startDate: date, endDate: date });
+      const result = await management.usage?.cost?.({ startDate: date, endDate: date, agentId: agent.agentId });
       const total = result?.totals?.totalCost;
       if (total !== undefined) summary.todayCostUsd = total;
     }));
@@ -74,7 +75,10 @@ export async function loadAgentSettingsSummary(
     }));
   }
 
-  await Promise.all(tasks);
+  await Promise.all(tasks.map(async (task) => {
+    await task;
+    onProgress?.({ ...summary });
+  }));
   return summary;
 }
 

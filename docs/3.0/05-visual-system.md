@@ -66,12 +66,12 @@ iOS 用系统 SF Pro，Android 用 Roboto，中文走系统 CJK；不引入第�
 |---|---|
 | `FloatingButton` | 44 圆，`surfaceFloating` + `shadowFloating`，Lucide 图标 22 / 1.75 描边、`ink`；按下缩放 0.96；可带徽标（accent 点或 bad 数字） |
 | `HeaderPill` | 高 40 全圆，`surfaceFloating` + 阴影，内容：头像 28 + 名字 `name` + 副标题 `caption inkSecondary`；副标题变化用 100 ms 淡入淡出（沿用现有头部动画） |
-| `AgentAvatar` | 圆角方块，底色 `agentPalette[hash]`，内容 emoji（若有）或 1–2 字首字母（白，600）；状态环：`working` = 2pt accent 环 1.2 s 顺时针扫描（reduce-motion 时静止实线）；`attention` = 右下 12 圆点 `warn` / `bad` 带 2pt canvas 边；`done` = 右下 `good` 圆点 3 s 后淡出；`offline` = 整体去饱和 60%；`locked` = 去饱和 + 右下锁 |
+| `AgentAvatar` | 圆角方块，底色 `agentPalette[hash]`，内容 emoji（若有）或 1–2 字首字母（白，600）；状态环：`working` = 右下小型静态活动标记（三条短竖线），不旋转头像外轮廓（2026-09-06 用户验收修订）；`attention` = 右下 12 圆点 `warn` / `bad` 带 2pt canvas 边；`done` = 右下 `good` 圆点 3 s 后淡出；`offline` = 整体去饱和 60%；`locked` = 去饱和 + 右下锁 |
 | `Bubble` | 助手：`surface` 底、`ink` 字、圆角 20、左对齐；用户：`accentSoft` 底、`ink` 字、右对齐；Markdown 渲染沿用现有 `chatMarkdown` |
 | `SystemEventRow` | 居中，`caption inkSecondary`，前置 Lucide 14；可点带右箭头 |
 | `RunCard` | `surface` 底、圆角 16、左 3pt 状态色竖条（accent / bad / warn）、标题 `secondary 600`、说明 `caption`、右箭头 |
 | `ApprovalCard` | 同 RunCard 外形 + 命令预览（等宽 13）+ 底部两颗胶囊：主 `ink` 底白字、次 `surfaceFloating`；过期态整体 60% |
-| `Composer` | 左 `FloatingButton`「+」；中胶囊输入框 `surfaceFloating`，占位 `inkTertiary`；框内右麦克风；有文字时框外 accent 圆形发送键，运行中变 `ink` 停止键；多行自动增高到 5 行 |
+| `Composer` | 安静底色与统一 40pt 按钮视觉 / 44pt 点击区域；输入自动增高到五行，第三行出现展开按钮；全屏编辑保留同一个原生输入框、草稿与光标，附件归入输入区；发送 / 停止使用无浮动阴影的 ink 主操作。2026-09-06 按负责人授权升级，详见 `16-composer-upgrade.md`。 |
 | `Sheet` | 底部弹层，圆角 20，`surface` 底，把手 36×4 `line`；背景压暗 40%；320 ms 推上 |
 | `SettingsGroup` / `SettingsRow` | 白卡圆角 14；行高 52，标题 `name 400`（17/400）、副标题 `caption`、右箭头 / 锁；行间 `line` 发丝线，首尾无线 |
 | `RosterRow` | 见 `04` §2；无边框；按下 `surface` 底 120 ms |

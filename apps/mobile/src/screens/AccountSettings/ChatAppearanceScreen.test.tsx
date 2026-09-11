@@ -26,6 +26,7 @@ const lightColors = {
   badSoft: '#F9E7E7',
 };
 
+const mockSetAccentId = jest.fn();
 const mockUseAppContext = jest.fn();
 const mockChatAppearanceOpened = jest.fn();
 const mockChatAppearanceSaved = jest.fn();
@@ -107,7 +108,7 @@ jest.mock('../../theme', () => {
   const ReactRuntime = require('react');
   return {
     ThemeContext: ReactRuntime.createContext(null),
-    useAppTheme: () => ({ theme: { scheme: 'light', colors: lightColors } }),
+    useAppTheme: () => ({ theme: { scheme: 'light', colors: lightColors }, accentId: 'iceBlue', setAccentId: mockSetAccentId }),
   };
 });
 
@@ -263,7 +264,6 @@ describe('ChatAppearanceScreen', () => {
     const view = render(<ChatAppearanceScreen onBack={onBack} />);
 
     fireEvent(view.getByTestId('chat-appearance-agent-avatar'), 'valueChange', false);
-    fireEvent(view.getByTestId('chat-appearance-model-name'), 'valueChange', false);
     fireEvent.press(view.getByTestId('chat-appearance-bubble-style-soft'));
     fireEvent.press(view.getByTestId('chat-appearance-font-size'));
     fireEvent.press(view.getByTestId('chat-appearance-font-size-18'));
@@ -289,7 +289,6 @@ describe('ChatAppearanceScreen', () => {
       bubbles: { style: 'soft', opacity: 0.84 },
     }));
     expect(context.onShowAgentAvatarToggle).toHaveBeenCalledWith(false);
-    expect(context.onShowModelUsageToggle).toHaveBeenCalledWith(false);
     expect(context.onChatFontSizeChange).toHaveBeenCalledWith(18);
     expect(mockChatAppearanceSaved).toHaveBeenCalledWith(expect.objectContaining({
       has_background_image: true,
@@ -330,6 +329,25 @@ describe('ChatAppearanceScreen', () => {
     }));
   });
 
+  it('preserves the old wallpaper when preference persistence fails and removes the staged copy', async () => {
+    const onBack = jest.fn();
+    mockUseAppContext.mockReturnValue(createContext({
+      chatAppearance: appearance({ background: {
+        enabled: true, imagePath: 'file:///stored/old.jpg', blur: 8, dim: 0, fillMode: 'cover',
+      } }),
+      onChatAppearanceChange: jest.fn().mockRejectedValue(new Error('Storage unavailable')),
+    }));
+    const view = render(<ChatAppearanceScreen onBack={onBack} />);
+    fireEvent.press(view.getByTestId('chat-appearance-background'));
+    await waitFor(() => expect(mockPickChatBackgroundImage).toHaveBeenCalled());
+    fireEvent.press(view.getByText('Save'));
+    await waitFor(() => expect(view.getByText('Unable to save chat appearance')).toBeTruthy());
+    expect(mockDeletePersistedChatBackgroundImage).toHaveBeenCalledWith('file:///stored/background.jpg');
+    expect(mockDeletePersistedChatBackgroundImage).not.toHaveBeenCalledWith('file:///stored/old.jpg');
+    expect(onBack).not.toHaveBeenCalled();
+    expect(mockChatAppearanceSaved).not.toHaveBeenCalled();
+  });
+
   it('shows an app-owned error sheet when the photo picker fails', async () => {
     mockPickChatBackgroundImage.mockRejectedValueOnce(new Error('denied'));
     const view = render(<ChatAppearanceScreen onBack={jest.fn()} />);
@@ -342,4 +360,33 @@ describe('ChatAppearanceScreen', () => {
     fireEvent.press(view.getByText('Done'));
     expect(view.queryByTestId('chat-appearance-error-sheet')).toBeNull();
   });
+});
+
+
+it('previews a color draft locally and commits it only on Save', async () => {
+  mockSetAccentId.mockClear();
+  mockUseAppContext.mockReturnValue(createContext());
+  const onBack = jest.fn();
+  const view = render(<ChatAppearanceScreen onBack={onBack} />);
+  fireEvent.press(view.getByTestId('chat-theme-color-rosePink'));
+  expect(view.getByTestId('chat-appearance-preview-card').props.accentId).toBe('rosePink');
+  expect(mockSetAccentId).not.toHaveBeenCalled();
+  fireEvent.press(view.getByTestId('chat-appearance-back'));
+  fireEvent.press(view.getByText('Keep Editing'));
+  expect(mockSetAccentId).not.toHaveBeenCalled();
+  fireEvent.press(view.getByText('Save'));
+  await waitFor(() => expect(onBack).toHaveBeenCalledTimes(1));
+  expect(mockSetAccentId).toHaveBeenCalledWith('rosePink');
+});
+
+it('discards a color draft without changing the saved accent', () => {
+  mockSetAccentId.mockClear();
+  mockUseAppContext.mockReturnValue(createContext());
+  const onBack = jest.fn();
+  const view = render(<ChatAppearanceScreen onBack={onBack} />);
+  fireEvent.press(view.getByTestId('chat-theme-color-rosePink'));
+  fireEvent.press(view.getByTestId('chat-appearance-back'));
+  fireEvent.press(view.getByText('Discard'));
+  expect(onBack).toHaveBeenCalledTimes(1);
+  expect(mockSetAccentId).not.toHaveBeenCalled();
 });

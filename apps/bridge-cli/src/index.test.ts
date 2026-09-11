@@ -178,6 +178,7 @@ vi.mock('@clawket/bridge-runtime', () => ({
   readOpenClawInfo: readOpenClawInfoMock,
   resolveGatewayAuth: resolveGatewayAuthMock,
   resolveGatewayUrl: vi.fn(() => 'ws://127.0.0.1:18789'),
+  resolveHermesSourcePath: vi.fn(() => join(process.env.HOME as string, '.hermes', 'hermes-agent')),
   restartOpenClawGateway: vi.fn(),
 }));
 

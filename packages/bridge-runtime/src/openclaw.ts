@@ -638,30 +638,32 @@ export async function readOpenClawPermissions(): Promise<OpenClawPermissionsResu
   };
 }
 
+function parseDoctorJson(output: string): OpenClawDoctorResult {
+  const parsed = parseEmbeddedJsonValue(output) as Record<string, unknown>;
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Invalid doctor report');
+  const entries = Array.isArray(parsed.checks) ? parsed.checks
+    : Array.isArray(parsed.findings) ? parsed.findings : null;
+  if (!entries) return { ok: parsed.ok === true, checks: [], summary: '', raw: output };
+  const checks = entries
+    .filter((entry): entry is Record<string, unknown> => typeof entry === 'object' && entry !== null)
+    .map((entry) => ({
+      name: typeof entry.name === 'string' ? entry.name
+        : typeof entry.checkId === 'string' ? entry.checkId : 'unknown',
+      status: typeof entry.status === 'string' ? entry.status
+        : entry.severity === 'error' ? 'fail' : entry.severity === 'warning' ? 'warn' : 'skip',
+      message: [entry.message, entry.requirement, entry.fixHint]
+        .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+        .join('\n\n') || undefined,
+    }));
+  return { ok: parsed.ok === true, checks, summary: typeof parsed.summary === 'string' ? parsed.summary : '' };
+}
+
 export async function runOpenClawDoctor(): Promise<OpenClawDoctorResult> {
   const openclaw = resolveOpenClawPaths();
   try {
     const { stdout, stderr } = await runOpenClawCli(['doctor', '--json'], openclaw);
     try {
-      const parsed = parseEmbeddedJsonValue(collectCliOutput([stdout, stderr])) as {
-        ok?: boolean;
-        checks?: unknown[];
-        summary?: string;
-      };
-      const checks: OpenClawDoctorCheckResult[] = Array.isArray(parsed.checks)
-        ? parsed.checks
-          .filter((c): c is Record<string, unknown> => typeof c === 'object' && c != null)
-          .map((c) => ({
-            name: typeof c.name === 'string' ? c.name : 'unknown',
-            status: typeof c.status === 'string' ? c.status : 'unknown',
-            message: typeof c.message === 'string' ? c.message : undefined,
-          }))
-        : [];
-      return {
-        ok: parsed.ok === true,
-        checks,
-        summary: typeof parsed.summary === 'string' ? parsed.summary : '',
-      };
+      return parseDoctorJson(collectCliOutput([stdout, stderr]));
     } catch {
       // --json not supported or output not JSON; return raw stdout
       return {
@@ -680,25 +682,7 @@ export async function runOpenClawDoctor(): Promise<OpenClawDoctorResult> {
           // Fall through to the plain-text doctor invocation below for older OpenClaw versions.
         } else {
           try {
-            const parsed = parseEmbeddedJsonValue(output) as {
-              ok?: boolean;
-              checks?: unknown[];
-              summary?: string;
-            };
-            const checks: OpenClawDoctorCheckResult[] = Array.isArray(parsed.checks)
-              ? parsed.checks
-                .filter((c): c is Record<string, unknown> => typeof c === 'object' && c != null)
-                .map((c) => ({
-                  name: typeof c.name === 'string' ? c.name : 'unknown',
-                  status: typeof c.status === 'string' ? c.status : 'unknown',
-                  message: typeof c.message === 'string' ? c.message : undefined,
-                }))
-              : [];
-            return {
-              ok: parsed.ok === true,
-              checks,
-              summary: typeof parsed.summary === 'string' ? parsed.summary : '',
-            };
+            return parseDoctorJson(output);
           } catch {
             return {
               ok: false,

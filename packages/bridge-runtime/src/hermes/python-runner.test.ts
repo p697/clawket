@@ -1,38 +1,21 @@
-import { mkdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
-import { resolveHermesPythonPath } from './python-runner.js';
-import { cleanupTempDirectories, createTempDirectory } from './test-helpers.js';
+import { describe, expect, it } from 'vitest';
+import { HermesPythonRunner } from './python-runner.js';
 
-afterEach(cleanupTempDirectories);
+const runner = new HermesPythonRunner({ hermesSourcePath: '/nonexistent-hermes-fixture',
+  hermesHomePath: '/nonexistent-hermes-home', hermesPythonPath: 'python3' });
 
-describe('resolveHermesPythonPath', () => {
-  it('honors explicit and environment overrides first', async () => {
-    const root = await createTempDirectory();
-    expect(resolveHermesPythonPath({
-      hermesSourcePath: root,
-      hermesHomePath: root,
-      hermesPythonPath: '/explicit/python',
-      env: { HERMES_PYTHON_PATH: '/env/python' },
-    })).toBe('/explicit/python');
-    expect(resolveHermesPythonPath({
-      hermesSourcePath: root,
-      hermesHomePath: root,
-      env: { HERMES_PYTHON_PATH: '/env/python' },
-    })).toBe('/env/python');
-  });
-
-  it('falls back through source venvs and the official Hermes home venv', async () => {
-    const root = await createTempDirectory();
-    const source = join(root, 'source');
-    const home = join(root, 'home');
-    const official = join(home, 'venvs', 'hermes-dev', 'bin', 'python');
-    await mkdir(join(home, 'venvs', 'hermes-dev', 'bin'), { recursive: true });
-    await writeFile(official, '');
-    expect(resolveHermesPythonPath({ hermesSourcePath: source, hermesHomePath: home, env: {} })).toBe(official);
-    const sourceVenv = join(source, '.venv', 'bin', 'python');
-    await mkdir(join(source, '.venv', 'bin'), { recursive: true });
-    await writeFile(sourceVenv, '');
-    expect(resolveHermesPythonPath({ hermesSourcePath: source, hermesHomePath: home, env: {} })).toBe(sourceVenv);
+describe('Hermes subprocess error boundary', () => {
+  it('keeps Python source and sensitive exception values out of client error messages', async () => {
+    const script = 'raise ValueError("private-fixture-sentinel")';
+    try {
+      await runner.run(script);
+      throw new Error('Expected subprocess failure');
+    } catch (error) {
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toBe('Hermes operation failed (ValueError). Check Bridge diagnostics.');
+      expect((error as Error).message).not.toContain('private-fixture-sentinel');
+      expect((error as Error).message).not.toContain(script);
+      expect((error as Error).cause).toBeDefined();
+    }
   });
 });

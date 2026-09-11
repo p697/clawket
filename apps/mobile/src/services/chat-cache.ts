@@ -11,6 +11,7 @@ export type CachedMessage = {
   id: string;
   role: "user" | "assistant" | "system" | "tool";
   text: string;
+  sendUncertain?: boolean;
   idempotencyKey?: string;
   timestampMs?: number;
   imageUris?: string[];
@@ -19,7 +20,7 @@ export type CachedMessage = {
   modelLabel?: string;
   usage?: UiMessage["usage"];
   toolName?: string;
-  toolStatus?: "running" | "success" | "error";
+  toolStatus?: "running" | "success" | "error" | "unknown";
   toolSummary?: string;
   toolArgs?: string;
   toolDetail?: string;
@@ -137,6 +138,7 @@ function toSlim(msg: UiMessage): CachedMessage {
     role: msg.role,
     text: msg.text,
   };
+  if (msg.sendUncertain) slim.sendUncertain = true;
   if (msg.idempotencyKey) slim.idempotencyKey = msg.idempotencyKey;
   if (msg.timestampMs) slim.timestampMs = msg.timestampMs;
   if (msg.imageUris?.length) slim.imageUris = msg.imageUris;

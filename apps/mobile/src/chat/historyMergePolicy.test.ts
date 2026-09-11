@@ -1,5 +1,27 @@
 import { UiMessage } from '../types/chat';
-import { preserveOptimisticAssistantMessage } from './historyMergePolicy';
+import { preserveOptimisticAssistantMessage, prependOlderCachedMessages } from './historyMergePolicy';
+
+describe('prependOlderCachedMessages', () => {
+  const server: UiMessage = { id: 'h_user_server', role: 'user', text: 'Hello', timestampMs: 70_000 };
+  const cached: UiMessage = { id: 'usr_64000', role: 'user', text: 'Hello', timestampMs: 64_000 };
+  it('does not restore an optimistic copy after the server assigns its timestamp and ID', () => {
+    expect(prependOlderCachedMessages([server], [cached])).toEqual([server]);
+  });
+  it('preserves a second intentional send and older messages outside the matching window', () => {
+    const second = { ...cached, id: 'usr_65000', timestampMs: 65_000 };
+    const old = { ...cached, id: 'usr_1000', timestampMs: 1_000 };
+    expect(prependOlderCachedMessages([server], [old, cached, second])).toEqual([old, second, server]);
+  });
+  it('does not collapse different attachments based on text and time alone', () => {
+    const image = { ...cached, imageUris: ['file://test.png'] };
+    expect(prependOlderCachedMessages([server], [image])).toEqual([image, server]);
+  });
+  it('matches attachment echoes only by their explicit idempotency key', () => {
+    const image = { ...cached, imageUris: ['file://test.png'], idempotencyKey: 'same-send' };
+    const echo = { ...server, idempotencyKey: 'same-send' };
+    expect(prependOlderCachedMessages([echo], [image])).toEqual([echo]);
+  });
+});
 
 describe('preserveOptimisticAssistantMessage', () => {
   it('preserves a local optimistic user message when refreshed history is still stale', () => {
@@ -261,4 +283,9 @@ describe('preserveOptimisticAssistantMessage', () => {
       { id: 'tool2', role: 'tool', text: '', toolName: 'search', toolStatus: 'success' },
     ]);
   });
+});
+
+it('does not resurrect a streamed final reply when paging cached history', () => {
+  const current = [{ id: 'h_assistant_server', role: 'assistant' as const, text: 'Test received', timestampMs: 112_000 }];
+  expect(prependOlderCachedMessages(current, [{ id: 'final_run', role: 'assistant', text: 'Test received', timestampMs: 100_000 }])).toEqual(current);
 });

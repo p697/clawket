@@ -17,7 +17,7 @@ import {
   ThemeMode,
 } from '../types';
 import { defaultAccentId, isBuiltInAccentId } from '../theme/accents';
-import { DEFAULT_CHAT_APPEARANCE, normalizeChatAppearanceSettings } from '../features/chat-appearance/defaults';
+import { DEFAULT_CHAT_APPEARANCE, DEFAULT_CHAT_FONT_SIZE, normalizeChatAppearanceSettings } from '../features/chat-appearance/defaults';
 import {
   resolveExistingStoredChatBackgroundImagePath,
   toStoredChatBackgroundImagePath,
@@ -927,7 +927,8 @@ export const StorageService = {
 
   async getShowAgentAvatar(): Promise<boolean> {
     const raw = await SecureStore.getItemAsync(KEYS.showAgentAvatar, SECURE_OPTIONS);
-    return raw !== '0';
+    // Signatures in the timeline are opt-in; the Thread header already carries the identity.
+    return raw === '1';
   },
 
   async setThemeMode(mode: ThemeMode): Promise<void> {
@@ -983,9 +984,9 @@ export const StorageService = {
 
   async getChatFontSize(): Promise<number> {
     const raw = await SecureStore.getItemAsync(KEYS.chatFontSize, SECURE_OPTIONS);
-    if (!raw) return 16;
+    if (!raw) return DEFAULT_CHAT_FONT_SIZE;
     const parsed = parseInt(raw, 10);
-    if (Number.isNaN(parsed) || parsed < 12 || parsed > 20) return 16;
+    if (Number.isNaN(parsed) || parsed < 12 || parsed > 20) return DEFAULT_CHAT_FONT_SIZE;
     return parsed;
   },
 

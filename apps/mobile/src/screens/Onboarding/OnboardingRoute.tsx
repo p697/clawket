@@ -27,6 +27,7 @@ import { useProPaywall } from '../../contexts/ProPaywallContext';
 import type { RootStackParamList } from '../../navigation/root-stack';
 import type { RelayServiceEnvironment } from '../../types';
 import { OnboardingScreen } from './OnboardingScreen';
+import { WelcomeScreen } from './WelcomeScreen';
 import { YouMindOnboardingScreen } from './YouMindOnboardingScreen';
 import type {
   OnboardingConnectionPhase,
@@ -37,9 +38,11 @@ import {
   getOnboardingPairingCommand,
   normalizePairableBackendKind,
   ONBOARDING_DOCUMENTATION_URLS,
+  ONBOARDING_WEBSITE_URLS,
   resolveOnboardingAdapterError,
   resolveOnboardingRouteStatus,
 } from './route-model';
+import { isVerificationCodeComplete } from './model';
 
 type NavigationProps = NativeStackScreenProps<RootStackParamList, 'Onboarding'>;
 
@@ -52,7 +55,8 @@ export type OnboardingRouteProps = NavigationProps & Readonly<{
   onConnected?: (result: OnboardingConnectedResult) => void;
   onOpenYouMind?: () => void;
   onViewed?: () => void;
-  onDocsOpened?: (backendKind: PairableBackendKind) => void;
+  onDocsOpened?: (backendKind: BackendKind) => void;
+  onAgentPromptCopied?: (backendKind: PairableBackendKind) => void;
   onPairingCodeSubmitted?: (input: {
     backendKind: PairableBackendKind;
     lengthOk: boolean;
@@ -84,6 +88,7 @@ export function OnboardingRoute({
   onOpenYouMind,
   onViewed,
   onDocsOpened,
+  onAgentPromptCopied,
   onPairingCodeSubmitted,
   onScanQrTapped,
   onOpenPaywall,
@@ -95,10 +100,12 @@ export function OnboardingRoute({
     connectPairingCode: connectSecurePairingCode,
     connectPairingLink: connectSecurePairingLink,
     openGatewayScanner,
+    importGatewayQrImage,
   } = useGatewayScanner();
   const { isPro, requirePro } = useProPaywall();
   const environment: RelayServiceEnvironment = debugMode ? 'preview' : 'production';
   const initialBackend = normalizePairableBackendKind(route.params?.initialBackend);
+  const [setupVisible, setSetupVisible] = useState(Boolean(route.params?.presentation === 'modal' || route.params?.initialBackend || route.params?.pairingUrl));
   const [operation, setOperation] = useState<PairingOperation>(() => ({
     ...INITIAL_OPERATION,
     backendKind: initialBackend,
@@ -152,10 +159,14 @@ export function OnboardingRoute({
 
   const awaitRuntimeConnection = useCallback(async (
     requestId: number,
-    result: BackendPairingResult,
+    result: BackendPairingResult | null,
   ) => {
     const snapshot = getConnectionRuntime().getSnapshot();
     if (requestId !== requestIdRef.current) return;
+    if (!result) {
+      setOperation((current) => ({ ...current, active: false, errorCode: undefined }));
+      return;
+    }
     const connectionId = result.connectionId;
     const descriptor = snapshot.connections.find((connection) => connection.id === connectionId);
     if (!descriptor) {
@@ -175,7 +186,7 @@ export function OnboardingRoute({
       if (!acquirePairingRequest()) return;
       onPairingCodeSubmitted?.({
         backendKind: submission.backendKind,
-        lengthOk: submission.code.length === 6,
+        lengthOk: isVerificationCodeComplete(submission.code, submission.backendKind),
       });
       lastActionRef.current = () => { void perform(); };
       const requestId = beginOperation(submission.backendKind);
@@ -249,7 +260,7 @@ export function OnboardingRoute({
     releasePairingRequest,
   ]);
 
-  const scanQr = useCallback((expectedBackendKind: PairableBackendKind) => {
+  const scanQr = useCallback((expectedBackendKind: PairableBackendKind, importImage = false) => {
     const perform = () => {
       if (pairingRequestInFlightRef.current) return;
       onScanQrTapped?.(expectedBackendKind);
@@ -259,13 +270,14 @@ export function OnboardingRoute({
         backendKind: expectedBackendKind,
         errorCode: undefined,
       }));
-      openGatewayScanner({
+      const openScanner = importImage ? importGatewayQrImage : openGatewayScanner;
+      void openScanner({
         onScanned: (result) => connectScannedPayload(result, expectedBackendKind),
       });
     };
     if (!canBeginPairing(perform)) return;
     perform();
-  }, [canBeginPairing, connectScannedPayload, onScanQrTapped, openGatewayScanner]);
+  }, [canBeginPairing, connectScannedPayload, onScanQrTapped, openGatewayScanner, importGatewayQrImage]);
 
   const connectFromPairingLink = useCallback(async (url: string) => {
     const perform = async () => {
@@ -370,6 +382,11 @@ export function OnboardingRoute({
     void Linking.openURL(ONBOARDING_DOCUMENTATION_URLS[backendKind]);
   }, [onDocsOpened]);
 
+  const openWebsite = useCallback((backendKind: BackendKind) => {
+    onDocsOpened?.(backendKind);
+    void Linking.openURL(ONBOARDING_WEBSITE_URLS[backendKind]);
+  }, [onDocsOpened]);
+
   const openYouMind = useCallback(() => {
     const perform = () => {
       onOpenYouMind?.();
@@ -411,23 +428,42 @@ export function OnboardingRoute({
     );
   }
 
+  if (!setupVisible && !operation.active && !operation.errorCode && !route.params?.pairingUrl) {
+    return <WelcomeScreen onSettings={() => navigation.navigate('AccountSettings')} onConnect={() => setSetupVisible(true)} onClose={close} />;
+  }
+
   return (
     <OnboardingScreen
-      initialBackend={initialBackend}
+      initialBackend={operation.active || operation.errorCode ? operation.backendKind : route.params?.initialBackend ? initialBackend : undefined}
       status={status}
       environment={environment}
       pairingCommand={getOnboardingPairingCommand(environment)}
       onViewed={onViewed}
-      onClose={close}
+      onClose={close ?? (() => {
+        requestIdRef.current += 1;
+        setOperation({ ...INITIAL_OPERATION, backendKind: initialBackend });
+        setSetupVisible(false);
+      })}
       onCopyCommand={async (command) => {
         await Clipboard.setStringAsync(command);
       }}
-      onPastePairingCode={() => Clipboard.getStringAsync()}
+      onCopyAgentPrompt={async (prompt, backend) => {
+        await Clipboard.setStringAsync(prompt);
+        onAgentPromptCopied?.(backend);
+      }}
+      onPastePairingCode={async () => {
+        const pasted = (await Clipboard.getStringAsync()).trim();
+        if (/^(https?:\/\/|clawket:\/\/)/i.test(pasted)) {
+          await connectFromPairingLink(pasted);
+          return null;
+        }
+        return pasted;
+      }}
       onSubmitPairing={submitPairing}
       onScanQr={scanQr}
-      onOpenPairingHelp={openDocs}
+      onImportQr={(backend) => scanQr(backend, true)}
       onOpenYouMind={openYouMind}
-      onOpenDocs={openDocs}
+      onOpenWebsite={openWebsite}
       onErrorAction={(code) => {
         if (code === 'bridge_offline') {
           openDocs(operation.backendKind);

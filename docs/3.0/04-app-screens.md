@@ -29,19 +29,22 @@
 
 **职责**：把「54% 装了没连上」变成连上。只在没有任何连接时作为根路由；添加连接时以模态复用。
 
-**结构**（默认态只有标题一档 + 一行灰字）：
+**结构**（选择态只有标题一档，无灰字副标题；进入配对步骤后才出现一行灰字）：
 1. 标题（display）：「把 Clawket 连到你的 Agent」/ `Connect Clawket to your agent`；下面一行灰字（secondary）：「需要一台运行 OpenClaw 或 Hermes 的电脑」/ `You need a computer running OpenClaw or Hermes`。没有别的解释。
-2. 两个选择行：「OpenClaw」「Hermes」，只有名字与图标，无副标题。选中后该行下方展开一行等宽命令 `npx @p697/clawket pair` 与复制键，其余说明进「?」帮助。
-3. 六位码输入（自动分组 3+3，粘贴自动填充，剪贴板检测提示一句话）。
+2. 两个选择行：「OpenClaw」「Hermes」，只有名字与图标，无副标题。选中后进入配对步骤（标题「连接 OpenClaw / Hermes」，无灰字副标题）。步骤 01「拿到配对码」/ `Get a pairing code` 用一个 44 点 `SegmentedTabs` 二选一，默认选中「发给我的 Agent」/ `Send to my agent`（产品鼓励的路径）：
+   - Agent 路径：一个 surface 文本块展示发给电脑上 Agent 的自然语言消息（说明这是开源 Clawket CLI、要运行的确切命令、并把打印出的 `Pairing code:` 那一行回给用户），下方一个 44 点 neutral 按钮「复制这段话」/ `Copy this message`（Copy 图标，带触感），复制后 1.5 秒内显示「已复制」+ 对勾再恢复；再下一行灰字提示粘贴给平时聊天的 Agent（如 Telegram 里的 OpenClaw / Hermes）即可收到配对码。
+   - 「自己运行命令」/ `Run it myself`：一句「打开终端，运行下面的命令。」+ 等宽命令块 `npx @p697/clawket pair` 与复制键，复制键同样 1.5 秒对勾后恢复。
+   旧的「在哪里运行？」文档链接已移除，`bridge_offline` 报错动作仍指向官方文档。
+3. 六位码输入（自动分组 3+3，粘贴自动填充，剪贴板检测提示一句话）。键盘弹起时（iOS）页面用 keyboard-controller 的 padding `KeyboardAvoidingView` 收缩视口，并用 `useKeyboardRevealScroll` 把「配对码输入框 + 连接按钮」这一组刚好推到键盘上方 16 点：只滚实测的差额、按键盘真实高度进度插值，第三方键盘二次改高度时只补增量。Android 保持 adjustResize。不用 RN `automaticallyAdjustKeyboardInsets`（第三方键盘过渡帧会按整个键盘高度过滚），也不用库的 `KeyboardAwareScrollView`（它缓存的输入框位置在滚动后不刷新，键盘改高度时会二次叠加滚动并弹回）。数字键盘不再设 `returnKeyType`，避免 RN 自动附加的 Go 工具条再改一次键盘 frame。
 4. 主按钮「连接」/ `Connect`；下方一个文字键「扫描二维码」/ `Scan QR code`（折叠的兼容路径）。
 5. 第三个选择行：「YouMind 精灵」/ `YouMind Sprite`，无副标题 → 邮箱验证码页（邮箱 → 六位验证码 → 完成）。
-6. 底部一个文字链接：「还没有 Agent？」/ `No agent yet?` → 选择 OpenClaw 文档 / Hermes 文档（仅官方链接）。
+6. 底部一个文字链接：「还没有 Agent？」/ `No agent yet?` → 展开 OpenClaw / Hermes / YouMind 三个文字键，各自直接打开官网首页（`openclaw.ai`、`hermes-agent.nousresearch.com`、`youmind.com`），不进安装/快速上手文档。埋点沿用 `onboarding_docs_opened{ backend }`。
 
 **状态**：连接中（按钮 loading，副标题「正在通过 Relay 连接…」/ `Connecting through Relay…`，三段进度：已连上 Relay → 等待 Bridge → 就绪）；失败（错误码文案 + 动作）；Preview 环境提示（Debug 模式下显示黄色「Preview」标签，沿用现有环境校验）。
 
 **成功**：保存连接 → 跳花名册 → 连接就绪 → 若应弹自动付费墙（`06` §3 状态机）则先弹，关闭后再自动打开 main 线程；不应弹则直接打开 main 线程。
 
-**埋点**：`onboarding_viewed`、`pairing_code_submitted{ length_ok }`、`gateway_connect_saved`（现有）、`gateway_secure_pairing_finished`（现有）、`onboarding_docs_opened{ backend }`。
+**埋点**：`onboarding_viewed`、`pairing_code_submitted{ length_ok }`、`gateway_connect_saved`（现有）、`gateway_secure_pairing_finished`（现有）、`onboarding_docs_opened{ backend }`、`onboarding_agent_prompt_copied{ backend }`。
 
 ## 2. 花名册 `Roster`
 
@@ -60,7 +63,7 @@
 
 **手势**：点行 → 线程；长按 Agent 行 → 菜单：置顶 / 取消置顶（Agent 级）、静音、移除连接（仅当该连接只有这一个 Agent）；长按置顶会话行 → 取消置顶 / 重命名。下拉刷新 → 对活动连接 `listSessions` + `probe`。
 
-**「+」菜单**：添加连接（→ 引导模态）、新建 Agent（活动连接支持 `agentCreate` 时；免费用户 → 付费墙 `agents`）。
+**「+」菜单**（2026-09-11 修订）：底部弹层，用引导页同款 `ChoiceRow`（52 图标块 + 标题 body 600 + 一行 `secondary` 说明 + 右侧箭头 / Pro 锁），不再是设置行文本。两项：添加连接（`MonitorSmartphone`，说明「连接 OpenClaw、Hermes 或 YouMind 精灵」→ 引导模态；免费用户已有一个连接时行尾显示锁，点击 → 付费墙 `gatewayConnections`）、新建 Agent（`Bot`，说明「在 {活动连接名} 上再建一个智能体」，无名称时写「当前连接」；仅活动连接支持 `agentCreate` 时显示；免费用户行尾显示锁，点击 → 付费墙 `agents`）。只剩一项时「+」直接进引导模态，不弹层。
 
 **状态**：首次加载骨架 6 行；无连接 → 不会到这里（根路由是引导）；活动连接错误 → 顶部横幅 + 行保留缓存。
 
@@ -84,7 +87,7 @@
 - 流式输出：光标闪烁；不做逐字动画。
 - 加载更早历史：顶部上拉。
 
-**输入区**：左圆形「+」（附件：照片、相机、文件；技能；提示词——按能力显隐）；胶囊输入框，占位「向 {name} 提问」/ `Ask {name}`；框内右侧麦克风（语音输入沿用现有）；有文字时框外 accent 圆形发送键；运行中变 ink 圆形停止键（`cancel`）。思考等级 chip 位于输入框上方，仅在后端支持且用户开过时显示（沿用现有 ThinkingLevel 组件）。斜杠命令建议沿用现有 `SlashSuggestions`。
+**输入区**：左圆形「+」（附件：照片、相机、文件；技能；提示词——按能力显隐）；胶囊输入框，占位「向 {name} 提问」/ `Ask {name}`；框内右侧麦克风（语音输入沿用现有）；有文字时框外 accent 圆形发送键；运行中变 ink 圆形停止键（`cancel`）；运行中已有草稿时停止键退为次级圆形、右侧再出现发送键，点击把消息放入本机队列（气泡下方「排队中」说明，本轮回复结束、历史刷新完成后按序自动发出；停止 / 回复失败 / 发送失败后队列变为「已暂停」，点气泡可「立即发送 / 编辑 / 移除」；队列上限 10 条，三种后端共用同一套本机队列，不向后端发第二个并发 prompt）。思考等级 chip 位于输入框上方，仅在后端支持且用户开过时显示（沿用现有 ThinkingLevel 组件）。斜杠命令建议沿用现有 `SlashSuggestions`。
 
 **状态**：历史加载骨架 3 条；空会话显示居中一句「和 {name} 开始对话」；错误横幅在时间线顶部；离线时输入框可编辑但发送键禁用并提示；无权限（锁定 Agent）→ 整页替换为付费墙（情境版 `agents`）。
 

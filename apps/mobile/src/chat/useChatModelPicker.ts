@@ -46,7 +46,6 @@ export function useChatModelPicker({
   const [availableProviders, setAvailableProviders] = useState<ModelProviderInfo[]>([]);
   const [currentModel, setCurrentModel] = useState<string | null>(null);
   const [currentModelProvider, setCurrentModelProvider] = useState<string | null>(null);
-  const lastForegroundEpochRef = useRef<number | null>(null);
   const requestContextRef = useRef({ adapter, connectionState, sessionKey });
   const modelLoadRequestRef = useRef(0);
   const modelRefreshRequestRef = useRef(0);
@@ -111,7 +110,7 @@ export function useChatModelPicker({
       if (!isCurrent()) return;
       hydrateModels(available);
       if (models.getSelection) {
-        const selection = await models.getSelection();
+        const selection = await models.getSelection(requestAdapter.capabilities.modelPerSession ? sessionKey : undefined);
         if (!isCurrent()) return;
         hydrateModelSelection(selection);
       }
@@ -130,6 +129,7 @@ export function useChatModelPicker({
     hydrateModelSelection,
     hydrateModels,
     isCurrentAdapterRequest,
+    sessionKey,
   ]);
 
   const refreshCurrentModel = useCallback(async () => {
@@ -145,7 +145,7 @@ export function useChatModelPicker({
     try {
       const getSelection = requestAdapter.management?.models?.getSelection;
       if (getSelection) {
-        const currentState = await getSelection();
+        const currentState = await getSelection(requestAdapter.capabilities.modelPerSession ? requestSessionKey : undefined);
         if (!isCurrent()) return;
         const selectedModel = currentState.currentModel?.trim();
         if (selectedModel) {
@@ -191,10 +191,6 @@ export function useChatModelPicker({
   }, [loadModelsForPicker]);
 
   useEffect(() => {
-    void refreshCurrentModel();
-  }, [refreshCurrentModel, sessionKey]);
-
-  useEffect(() => {
     setModelPickerLoading(false);
     setModelPickerError(null);
     setAvailableModels([]);
@@ -203,13 +199,6 @@ export function useChatModelPicker({
 
   useEffect(() => {
     if (!isFocused) return;
-    void refreshCurrentModel();
-  }, [isFocused, refreshCurrentModel]);
-
-  useEffect(() => {
-    if (!isFocused) return;
-    if (lastForegroundEpochRef.current === foregroundEpoch) return;
-    lastForegroundEpochRef.current = foregroundEpoch;
     void refreshCurrentModel();
   }, [foregroundEpoch, isFocused, refreshCurrentModel]);
 

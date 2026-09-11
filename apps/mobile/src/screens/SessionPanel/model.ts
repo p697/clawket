@@ -14,10 +14,8 @@ import {
   type SessionBoardStatus,
 } from './list-model';
 
-export const SESSION_PANEL_VISIBLE_ROW_CAPACITY = 8;
 
 export type SessionPanelMode = 'grouped' | 'list';
-export type SessionPanelQuickFilter = 'all' | 'attention' | 'working';
 export type SessionPanelKindFilter = 'all' | SessionBoardKind;
 export type SessionPanelAction = keyof SessionActions;
 export type SessionPanelRenamePayload = Readonly<{
@@ -113,14 +111,11 @@ export function filterSessionPanelRows(
   rows: ReadonlyArray<SessionPanelRow>,
   options: Readonly<{
     query: string;
-    quickFilter: SessionPanelQuickFilter;
     kindFilter: SessionPanelKindFilter;
   }>,
 ): ReadonlyArray<SessionPanelRow> {
   const query = options.query.trim().toLowerCase();
   return rows.filter((row) => {
-    if (options.quickFilter === 'attention' && row.attention === null) return false;
-    if (options.quickFilter === 'working' && !row.hasActiveRun) return false;
     if (options.kindFilter !== 'all' && row.kind !== options.kindFilter) return false;
     return !query || row.searchableText.includes(query);
   });
@@ -212,13 +207,6 @@ export function availableSessionActions(
   if (row.allowedActions.reset && capabilities.sessionReset) actions.push('reset');
   if (row.allowedActions.delete && capabilities.sessionDelete) actions.push('delete');
   return actions;
-}
-
-export function shouldShowSessionPanelQuickFilters(
-  rowCount: number,
-  visibleCapacity = SESSION_PANEL_VISIBLE_ROW_CAPACITY,
-): boolean {
-  return rowCount > Math.max(0, visibleCapacity);
 }
 
 export function normalizeSessionRenameTitle(

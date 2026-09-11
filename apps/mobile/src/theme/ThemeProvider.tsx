@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from '
 import { Appearance, useColorScheme } from 'react-native';
 import { AccentColorId, ThemeMode } from '../types';
 import { resolveAccentScale } from './accents';
-import { AppTheme, buildTheme, resolveThemeScheme, ThemeScheme } from './theme';
+import { AppTheme, buildInterfaceTheme, resolveThemeScheme, ThemeScheme } from './theme';
 
 export type ThemeContextValue = {
   theme: AppTheme;
@@ -75,7 +75,7 @@ export function AppThemeProvider({
       resolvedScheme,
       setMode,
       setAccentId,
-      theme: buildTheme(mode, systemScheme, accent),
+      theme: buildInterfaceTheme(mode, systemScheme, accent),
     };
   }, [mode, accentId, setMode, setAccentId, systemScheme]);
 

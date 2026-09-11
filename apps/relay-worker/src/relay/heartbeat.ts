@@ -1,3 +1,4 @@
+import { selectActiveClient } from './runtime';
 import {
   CLIENT_PONG_CAPABILITY,
   CONNECT_START_BUFFER_TTL_MS,
@@ -15,7 +16,7 @@ import type { RelayRuntime } from './runtime';
 import { parsePositiveInt } from './utils';
 import { sendControlToGateway } from './control';
 
-export async function ensureHeartbeat(runtime: RelayRuntime): Promise<void> {
+export async function ensureHeartbeat(runtime: RelayRuntime, options: { resetDeadline?: boolean } = {}): Promise<void> {
   const interval = parsePositiveInt(runtime.env.HEARTBEAT_INTERVAL_MS, runtime.policy.heartbeatIntervalMs);
   if (!hasOpenClients(runtime)) {
     await runtime.state.storage.deleteAlarm();
@@ -30,6 +31,10 @@ export async function ensureHeartbeat(runtime: RelayRuntime): Promise<void> {
     );
     nextAlarmAt = Math.min(nextAlarmAt, runtime.pendingGatewayPingAt + timeoutMs);
   }
+  // Constructor rehydration may run for every frame. Keep the existing earlier
+  // deadline, otherwise steady traffic postpones ticks until clients expire.
+  const scheduledAt = await runtime.state.storage.getAlarm();
+  if (!options.resetDeadline && scheduledAt !== null && scheduledAt > now && scheduledAt <= nextAlarmAt) return;
   await runtime.state.storage.setAlarm(nextAlarmAt);
 }
 
@@ -206,7 +211,7 @@ export function dropClientState(runtime: RelayRuntime, clientId: string, reason:
     runtime.activeClientId = null;
     for (const [nextClientId, nextClient] of runtime.clients.entries()) {
       if (nextClient.readyState === WebSocket.OPEN) {
-        runtime.activeClientId = nextClientId;
+        selectActiveClient(runtime, nextClientId);
         break;
       }
     }

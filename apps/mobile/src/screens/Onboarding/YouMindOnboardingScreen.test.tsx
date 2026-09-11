@@ -19,6 +19,8 @@ jest.mock('react-native', () => {
     ReactRuntime.createElement(name, props, children)
   );
   return {
+    Platform: { OS: 'ios' },
+    ScrollView: host('ScrollView'),
     Pressable: host('Pressable'),
     Text: host('Text'),
     View: host('View'),
@@ -28,6 +30,8 @@ jest.mock('react-native', () => {
     },
   };
 });
+
+jest.mock('react-native-keyboard-controller', () => ({ KeyboardAvoidingView: require('react-native').View }));
 
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 24, bottom: 16, left: 0, right: 0 }),

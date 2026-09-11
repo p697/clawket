@@ -9,6 +9,11 @@ import {
 } from './AccountSettingsScreen';
 import { resolveAccountSettingsRuntimeStatus } from './model';
 
+jest.mock('./AccountPreferenceSheet', () => {
+  const ReactRuntime = require('react');
+  return { AccountPreferenceSheet: (props: Record<string, unknown>) => ReactRuntime.createElement('PreferenceSheet', { ...props, testID: 'language-sheet' }) };
+});
+
 const lightColors = {
   canvas: '#FFFFFF',
   canvasGrouped: '#F5F5F7',
@@ -192,6 +197,7 @@ function createProps(
     },
     onBack: jest.fn(),
     onOpenAction: jest.fn(),
+    onOpenSection: jest.fn(),
     onOpenConnection: jest.fn(),
     onOpenPaywall: jest.fn(),
     onReplyNotificationsChange: jest.fn(),
@@ -229,62 +235,23 @@ describe('AccountSettingsScreen', () => {
     consoleErrorSpy.mockRestore();
   });
 
-  it('renders all descriptor groups and routes navigation, locks, and toggles through callbacks', () => {
+  it('keeps the home compact and routes all categories and membership', () => {
+    const onOpenSection = jest.fn();
     const onBack = jest.fn();
-    const onOpenAction = jest.fn();
-    const onOpenConnection = jest.fn();
-    const onOpenPaywall = jest.fn();
-    const onReplyNotificationsChange = jest.fn();
-    const onDebugModeChange = jest.fn();
-    const view = render(
-      <AccountSettingsScreen
-        {...createProps({
-          debugMode: true,
-          onBack,
-          onOpenAction,
-          onOpenConnection,
-          onOpenPaywall,
-          onReplyNotificationsChange,
-          onDebugModeChange,
-        })}
-      />,
-    );
-
+    const view = render(<AccountSettingsScreen {...createProps({ onOpenSection, onBack })} />);
+    fireEvent.press(view.getByTestId('account-settings-app-language'));
+    expect(view.getByTestId('language-sheet').props.preference).toBe('app-language');
     expect(view.getByText('Settings')).toBeTruthy();
-    expect(view.getByText('OpenClaw · Relay · Production')).toBeTruthy();
-    expect(view.getByText('Preview')).toBeTruthy();
-    expect(view.getByTestId('account-settings-row-preview-environment')).toBeTruthy();
-    expect(view.getByTestId('account-settings-row-app-icon')).toBeTruthy();
-    expect(view.getByTestId('account-settings-row-pro-status-lock-icon')).toBeTruthy();
-
+    expect(view.queryByTestId('account-settings-row-theme')).toBeNull();
+    expect(view.queryByTestId('account-settings-toggle-debugMode')).toBeNull();
+    for (const section of ['connections', 'appearance', 'notifications', 'help', 'about']) {
+      fireEvent.press(view.getByTestId(`account-settings-category-${section}`));
+      expect(onOpenSection).toHaveBeenLastCalledWith(section);
+    }
+    fireEvent.press(view.getByTestId('account-settings-membership'));
+    expect(onOpenSection).toHaveBeenLastCalledWith('pro');
     fireEvent.press(view.getByTestId('account-settings-back'));
-    fireEvent.press(view.getByTestId('account-settings-row-pro-status'));
-    expect(onOpenPaywall).toHaveBeenLastCalledWith('generic');
-    fireEvent.press(view.getByTestId('account-settings-row-restore-purchases'));
-    fireEvent.press(view.getByTestId('account-settings-row-connection-home'));
-    fireEvent.press(view.getByTestId('account-settings-row-connection-work'));
-    fireEvent.press(view.getByTestId('account-settings-row-add-connection'));
-    fireEvent.press(view.getByTestId('account-settings-row-app-icon'));
-    fireEvent(view.getByTestId('account-settings-toggle-replyNotifications'), 'valueChange', true);
-    fireEvent(view.getByTestId('account-settings-toggle-debugMode'), 'valueChange', false);
-
     expect(onBack).toHaveBeenCalledTimes(1);
-    expect(onOpenAction).toHaveBeenCalledWith('restore-purchases');
-    expect(onOpenConnection).toHaveBeenCalledWith('home');
-    expect(onOpenPaywall).toHaveBeenCalledWith('gatewayConnections', expect.any(Function));
-    expect(onOpenPaywall).toHaveBeenCalledWith('appIcons', expect.any(Function));
-    const connectionContinuation = onOpenPaywall.mock.calls.find(
-      ([reason]) => reason === 'gatewayConnections',
-    )?.[1];
-    const appIconContinuation = onOpenPaywall.mock.calls.find(
-      ([reason]) => reason === 'appIcons',
-    )?.[1];
-    connectionContinuation?.();
-    appIconContinuation?.();
-    expect(onOpenConnection).toHaveBeenCalledWith('work');
-    expect(onOpenAction).toHaveBeenCalledWith('app-icon');
-    expect(onReplyNotificationsChange).toHaveBeenCalledWith(true);
-    expect(onDebugModeChange).toHaveBeenCalledWith(false);
   });
 
   it('renders the dark grouped canvas and capability degradation without backend branches', () => {
@@ -309,15 +276,15 @@ describe('AccountSettingsScreen', () => {
     expect(flattenStyle(view.getByTestId('account-settings-screen').props.style)).toEqual(
       expect.objectContaining({ backgroundColor: darkColors.canvasGrouped }),
     );
-    expect(view.queryByTestId('account-settings-group-pro')).toBeNull();
+    expect(view.queryByTestId('account-settings-category-pro')).toBeNull();
     expect(view.queryByTestId('account-settings-row-app-icon')).toBeNull();
-    expect(view.queryByTestId('account-settings-group-voice')).toBeNull();
-    expect(view.queryByTestId('account-settings-group-notifications')).toBeNull();
-    expect(view.queryByTestId('account-settings-group-help')).toBeNull();
-    expect(view.queryByTestId('account-settings-group-community')).toBeNull();
-    expect(view.queryByTestId('account-settings-group-developer')).toBeNull();
-    expect(view.getByTestId('account-settings-group-connections')).toBeTruthy();
-    expect(view.getByTestId('account-settings-group-about')).toBeTruthy();
+    expect(view.queryByTestId('account-settings-category-voice')).toBeNull();
+    expect(view.queryByTestId('account-settings-category-notifications')).toBeNull();
+    expect(view.queryByTestId('account-settings-category-help')).toBeNull();
+    expect(view.queryByTestId('account-settings-category-community')).toBeNull();
+    expect(view.queryByTestId('account-settings-category-developer')).toBeNull();
+    expect(view.getByTestId('account-settings-category-connections')).toBeTruthy();
+    expect(view.getByTestId('account-settings-category-about')).toBeTruthy();
   });
 
   it('covers loading, empty, error, offline cached, and permission-paywall states', () => {
@@ -329,7 +296,7 @@ describe('AccountSettingsScreen', () => {
 
     expect(view.getByTestId('account-settings-loading')).toBeTruthy();
     expect(view.getAllByLabelText('Loading settings')).toHaveLength(4);
-    expect(view.queryByTestId('account-settings-group-connections')).toBeNull();
+    expect(view.queryByTestId('account-settings-category-connections')).toBeNull();
 
     view.rerender(<AccountSettingsScreen {...props} status={{ kind: 'empty' }} />);
     expect(view.getByTestId('account-settings-empty')).toBeTruthy();
@@ -340,13 +307,13 @@ describe('AccountSettingsScreen', () => {
       <AccountSettingsScreen {...props} status={{ kind: 'error', code: 'timeout' }} />,
     );
     expect(view.getByText('Settings unavailable · timeout')).toBeTruthy();
-    expect(view.getByTestId('account-settings-group-connections')).toBeTruthy();
+    expect(view.getByTestId('account-settings-category-connections')).toBeTruthy();
     fireEvent.press(view.getByTestId('account-settings-error-action'));
     expect(onRetry).toHaveBeenCalledTimes(1);
 
     view.rerender(<AccountSettingsScreen {...props} status={{ kind: 'offline' }} />);
     expect(view.getByText('Offline · showing cached settings')).toBeTruthy();
-    expect(view.getByText('Home')).toBeTruthy();
+    expect(view.getByText('My connections')).toBeTruthy();
 
     view.rerender(
       <AccountSettingsScreen
@@ -370,9 +337,9 @@ describe('AccountSettingsScreen', () => {
     });
     const view = render(<AccountSettingsScreen {...createProps()} status={status} />);
 
-    expect(view.getByTestId('account-settings-permission')).toBeTruthy();
+    expect(view.queryByTestId('account-settings-permission')).toBeNull();
     expect(view.queryByTestId('account-settings-pro-banner')).toBeNull();
-    expect(view.getByTestId('account-settings-group-connections')).toBeTruthy();
+    expect(view.getByTestId('account-settings-category-connections')).toBeTruthy();
   });
 
   it('uses only the settings title, row, and tail typography tiers on the light surface', () => {

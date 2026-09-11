@@ -241,5 +241,17 @@
   "No files found": "ファイルが見つかりません",
   "Pause": "一時停止",
   "Unknown model": "不明なモデル",
-  "Skipped": "スキップ済み"
+  "Skipped": "スキップ済み",
+  "Agent profile": "エージェント情報",
+  "Advanced management": "詳細管理",
+  "Personality & memory": "個性とメモリ",
+  "Continue chatting": "会話を続ける",
+  "Server address": "サーバーアドレス",
+  "Minimal tools": "最小限のツール",
+  "Coding tools": "コーディングツール",
+  "All tools": "すべてのツール",
+  "Execution tools": "実行ツール",
+  "Web tools": "ウェブツール",
+  "Interface tools": "画面操作ツール",
+  "Automation tools": "自動化ツール"
 }

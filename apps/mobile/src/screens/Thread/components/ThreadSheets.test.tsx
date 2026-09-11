@@ -1,8 +1,6 @@
 import React from 'react';
 import { fireEvent, render } from '@testing-library/react-native';
-import type { UiMessage } from '../../../types/chat';
 import { ThreadAddSheet } from './ThreadAddSheet';
-import { ThreadMessageActionsSheet } from './ThreadMessageActionsSheet';
 
 jest.mock('react-native', () => {
   const ReactRuntime = require('react');
@@ -51,11 +49,12 @@ jest.mock('../../../components/ui/Sheet', () => {
   const ReactRuntime = require('react');
   const { View } = require('react-native');
   return {
-    Sheet: ({ children, testID, visible }: {
+    Sheet: ({ children, testID, visible, onAfterClose }: {
       children: React.ReactNode;
       testID?: string;
       visible: boolean;
-    }) => visible ? ReactRuntime.createElement(View, { testID }, children) : null,
+      onAfterClose?: () => void;
+    }) => visible ? ReactRuntime.createElement(View, { testID, onAfterClose }, children) : null,
   };
 });
 
@@ -110,6 +109,13 @@ describe('Thread sheets', () => {
     expect(view.getByTestId('thread-add-prompts')).toBeTruthy();
     fireEvent.press(view.getByTestId('thread-add-photo-library'));
     expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onPickImage).not.toHaveBeenCalled();
+    fireEvent.press(view.getByTestId('thread-add-prompts'));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    fireEvent(view.getByTestId('thread-add-sheet'), 'afterClose');
+    expect(onPickImage).toHaveBeenCalledTimes(1);
+    expect(onOpenPrompts).not.toHaveBeenCalled();
+    fireEvent(view.getByTestId('thread-add-sheet'), 'afterClose');
     expect(onPickImage).toHaveBeenCalledTimes(1);
     expect(onClose.mock.invocationCallOrder[0]).toBeLessThan(onPickImage.mock.invocationCallOrder[0]);
 
@@ -146,34 +152,5 @@ describe('Thread sheets', () => {
     expect(view.queryByTestId('thread-add-file')).toBeNull();
     expect(view.queryByTestId('thread-add-skills')).toBeNull();
     expect(view.getByTestId('thread-add-prompts')).toBeTruthy();
-  });
-
-  it('routes copy, favorite, and share actions for the selected message', () => {
-    const message: UiMessage = { id: 'answer-1', role: 'assistant', text: 'Ship it.' };
-    const onClose = jest.fn();
-    const onCopy = jest.fn();
-    const onToggleFavorite = jest.fn();
-    const onShare = jest.fn();
-    const props = {
-      visible: true,
-      message,
-      favorited: false,
-      onClose,
-      onCopy,
-      onToggleFavorite,
-      onShare,
-    };
-    const view = render(<ThreadMessageActionsSheet {...props} />);
-
-    fireEvent.press(view.getByTestId('thread-message-copy'));
-    expect(onCopy).toHaveBeenCalledWith(message);
-    fireEvent.press(view.getByTestId('thread-message-favorite'));
-    expect(onToggleFavorite).toHaveBeenCalledWith(message);
-    fireEvent.press(view.getByTestId('thread-message-share'));
-    expect(onShare).toHaveBeenCalledWith(message);
-    expect(onClose).toHaveBeenCalledTimes(3);
-
-    view.rerender(<ThreadMessageActionsSheet {...props} message={null} />);
-    expect(view.queryByTestId('thread-message-actions')).toBeNull();
   });
 });

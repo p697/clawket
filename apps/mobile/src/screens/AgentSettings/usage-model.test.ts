@@ -53,9 +53,23 @@ describe('Agent usage model', () => {
     expect(summary.messages).toBe(4);
     expect(summary.toolCalls).toBe(3);
     expect(summary.sessions).toBe(1);
-    expect(summary.daily).toEqual([{ date: '2026-09-05', tokens: 1_000, cost: 1.25 }]);
+    expect(summary.daily).toEqual([
+      { date: '2026-09-05', tokens: 1_000, cost: 1.25 },
+      { date: '2026-09-04', tokens: 900, cost: 1 },
+    ]);
     expect(hasUsageData(summary)).toBe(true);
     expect(hasUsageData(buildUsageSummary(null, null))).toBe(false);
+  });
+
+  it('does not replace measured usage with zero-token billing totals', () => {
+    const zeroTokens = { ...totals, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0 };
+    const summary = buildUsageSummary(usage, {
+      totals: zeroTokens, daily: [{ date: '2026-09-04', ...zeroTokens }],
+    });
+    expect(summary.totals?.totalTokens).toBe(1000);
+    expect(summary.totals?.input).toBe(800);
+    expect(summary.totals?.totalCost).toBe(1.25);
+    expect(summary.daily).toEqual([{ date: '2026-09-04', tokens: 900, cost: 1.25 }]);
   });
 
   it('formats compact token and cost values', () => {

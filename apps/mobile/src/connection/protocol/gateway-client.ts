@@ -1,3 +1,4 @@
+import { analyticsEvents } from '../../services/analytics/events';
 import type {
   DoctorResult,
   PermissionsReport,
@@ -226,6 +227,10 @@ export class GatewayProtocolClient {
   private readonly now: () => number;
   private epoch = 0;
   private handshakeSerial = 0;
+  private lastChallengeNonce: string | null = null;
+  private connectionPhaseStartedAt = 0;
+  private connectionAttemptStartedAt = 0;
+  private connectionAttempt = 0;
   private manuallyClosed = false;
   private pairingPending = false;
   private pendingSelfPairRequestId: string | null = null;
@@ -395,10 +400,18 @@ export class GatewayProtocolClient {
   public async probeConnection(timeoutMs = 5_000): Promise<boolean> {
     if (this.manuallyClosed) return false;
     if (this.state === 'ready' && this.#transport?.isSocketOpen) {
+      const epoch = this.epoch;
+      const serial = this.handshakeSerial;
+      const transport = this.#transport;
+      const isCurrent = () => !this.manuallyClosed && this.epoch === epoch
+        && this.handshakeSerial === serial && this.#transport === transport;
       try {
         await this.sendRequest('health', {}, timeoutMs);
-        return true;
+        return isCurrent();
       } catch {
+        // Disposal rejects pending probes too. A retired adapter must never
+        // reconnect and compete with its replacement for the same Relay ID.
+        if (!isCurrent()) return false;
         this.reconnect();
         return this.waitForReady(Math.max(timeoutMs, 8_000));
       }
@@ -520,6 +533,11 @@ export class GatewayProtocolClient {
   private handleTransportOpen(epoch: number): void {
     if (epoch !== this.epoch || this.manuallyClosed) return;
     this.handshakeSerial += 1;
+    this.lastChallengeNonce = null;
+    this.connectionAttempt += 1;
+    this.connectionAttemptStartedAt = this.now();
+    this.connectionPhaseStartedAt = this.now();
+    this.traceConnectionPhase('socket_open');
     this.connectRequestInFlight = false;
     this.connectRequestCompleted = false;
     this.activeConnectAuthSource = null;
@@ -530,6 +548,19 @@ export class GatewayProtocolClient {
     const timeoutMs = this.#options[this.profile.readinessTimeoutOption]
       ?? this.profile.readinessTimeoutMs;
     this.startReadinessTimer(epoch, serial, timeoutMs);
+    // The relay's Bridge socket predates this client. Its initial health event
+    // may already have passed; ask the live Bridge instead of replaying stale health.
+    if (this.route === 'relay' && this.profile.relayHealthRequestMethod) {
+      void this.sendRequest<GatewayProtocolEvents['health']>(
+        this.profile.relayHealthRequestMethod, {}, timeoutMs, true,
+      ).then((health) => {
+        if (epoch !== this.epoch || serial !== this.handshakeSerial || this.manuallyClosed || this.state === 'ready') return;
+        this.handleTransportMessage({ type: 'event', event: 'health', payload: health }, epoch);
+      }).catch(() => {
+        // The shared readiness timer owns failure/reconnect. A legacy unsolicited
+        // health event can still complete the handshake before that deadline.
+      });
+    }
   }
 
   private handleTransportMessage(raw: unknown, epoch: number): void {
@@ -559,7 +590,24 @@ export class GatewayProtocolClient {
     if (frame.type !== 'event' || typeof frame.event !== 'string') return;
 
     if (frame.event === this.profile.challengeEvent) {
-      if (this.connectRequestCompleted || this.connectRequestInFlight) return;
+      const nonce = isRecord(frame.payload) ? readString(frame.payload.nonce) : undefined;
+      if (this.connectRequestInFlight || (nonce && nonce === this.lastChallengeNonce)) return;
+      if (this.connectRequestCompleted) {
+        // A different challenge means the backend socket was replaced beneath
+        // this Relay connection. Authenticate it instead of ignoring it forever.
+        this.traceConnectionPhase('backend_restarted');
+        if (!(this.#transport instanceof RelayWsTransport)) {
+          this.reconnect();
+          return;
+        }
+        this.rejectPendingRequests('Backend connection restarted', 'connection_restarted');
+        this.rejectPendingControls('Backend connection restarted');
+        this.handleTransportOpen(epoch);
+        this.setState('challenging');
+        if (this.#transport instanceof RelayWsTransport) this.#transport.markHandshakeStarted();
+      }
+      this.lastChallengeNonce = nonce ?? null;
+      this.traceConnectionPhase('challenge_received');
       this.connectRequestInFlight = true;
       const serial = this.handshakeSerial;
       void this.handleOpenClawChallenge(frame.payload, epoch, serial)
@@ -672,6 +720,7 @@ export class GatewayProtocolClient {
     const publicKey = bytesToBase64Url(hexToBytes(identity.publicKeyHex));
     const plan = await this.resolveConnectPlan(identity, publicKey, epoch, serial);
     this.assertCurrentHandshake(epoch, serial);
+    this.traceConnectionPhase('credentials_ready');
     this.activeConnectAuthSource = plan.auth.source;
     const client = this.#options.client ?? {
       id: getRuntimeClientId(),
@@ -728,6 +777,7 @@ export class GatewayProtocolClient {
     );
     this.assertCurrentHandshake(epoch, serial);
 
+    this.traceConnectionPhase('authenticated');
     const helloAuth = response?.auth;
     const responseRole = readString(helloAuth?.role) ?? plan.role;
     const responseScopes = normalizeStrings(helloAuth?.scopes);
@@ -759,6 +809,7 @@ export class GatewayProtocolClient {
           message: 'Secure connection setup did not return an operator device token.',
         });
       }
+      this.traceConnectionPhase('bootstrap_handoff');
       this.reconnect();
       return;
     }
@@ -1134,9 +1185,28 @@ export class GatewayProtocolClient {
     this.pendingControls.clear();
   }
 
+  private traceConnectionPhase(phase: Parameters<typeof analyticsEvents.connectPhase>[0]['phase']): void {
+    if (!this.connectionAttempt) return;
+    const now = this.now();
+    try {
+      analyticsEvents.connectPhase({
+        protocol: this.profile.challengeEvent ? 'challenge' : 'health',
+        route: this.route,
+        phase,
+        elapsed_ms: Math.max(0, now - this.connectionAttemptStartedAt),
+        phase_ms: Math.max(0, now - this.connectionPhaseStartedAt),
+        attempt: this.connectionAttempt,
+      });
+    } catch {
+      // Diagnostics must never interrupt authentication or socket recovery.
+    }
+    this.connectionPhaseStartedAt = now;
+  }
+
   private setState(state: import('../../types').ConnectionState, reason?: string): void {
     if (this.state === state && !reason) return;
     this.state = state;
+    if (state === 'ready' || state === 'reconnecting' || state === 'closed') this.traceConnectionPhase(state);
     this.emit('connection', { state, ...(reason ? { reason } : {}) });
   }
 
@@ -1144,6 +1214,7 @@ export class GatewayProtocolClient {
     event: K,
     payload: GatewayProtocolEvents[K],
   ): void {
+    if (event === 'error') this.traceConnectionPhase('error');
     const listeners = this.listeners[event] as Set<GatewayProtocolListener<GatewayProtocolEvents[K]>>;
     for (const listener of listeners) {
       try {
@@ -1602,10 +1673,12 @@ export class GatewayProtocolClient {
   public async fetchUsage(input: {
     startDate: string;
     endDate: string;
+    agentId?: string;
   }): Promise<UsageResult> {
     return this.request('sessions.usage', {
       startDate: input.startDate,
       endDate: input.endDate,
+      ...(input.agentId ? { agentId: input.agentId } : {}),
       limit: 500,
       includeContextWeight: false,
     });
@@ -1614,6 +1687,7 @@ export class GatewayProtocolClient {
   public async fetchCostSummary(input: {
     startDate: string;
     endDate: string;
+    agentId?: string;
   }): Promise<CostSummary> {
     return this.request('usage.cost', input);
   }

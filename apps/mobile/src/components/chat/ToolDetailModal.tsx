@@ -1,19 +1,21 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as Clipboard from 'expo-clipboard';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { Copy } from 'lucide-react-native';
+import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Check, ChevronDown, ChevronRight, CircleAlert, Clock3, Copy } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
-import { Sheet } from '../ui';
+import { FloatingButton, Sheet } from '../ui';
 import { useAppTheme } from '../../theme';
-import { MessageUsage } from '../../types/chat';
-import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
+import type { MessageUsage } from '../../types/chat';
+import { ControlSize, FontSize, FontWeight, IconSize, LineHeight, Radius, Space } from '../../theme/tokens';
+import { formatToolDisplayName } from '../../utils/tool-display';
 import { JsonTree } from './JsonTree';
+import { formatToolDuration, prepareToolPayload } from './tool-detail-model';
 
 type Props = {
   visible: boolean;
   onClose: () => void;
   name: string;
-  status: 'running' | 'success' | 'error';
+  status: 'running' | 'success' | 'error' | 'unknown';
   args?: string;
   detail?: string;
   durationMs?: number;
@@ -22,257 +24,112 @@ type Props = {
   usage?: MessageUsage;
 };
 
-function formatJson(raw: string): string {
-  const trimmed = raw.trim();
-  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-    try {
-      return JSON.stringify(JSON.parse(trimmed), null, 2);
-    } catch {
-      return trimmed;
-    }
-  }
-  return trimmed;
-}
-
-function isStructuredJson(raw: string): boolean {
-  const trimmed = raw.trim();
-  if (!trimmed) return false;
-  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return false;
-  try {
-    const parsed = JSON.parse(trimmed);
-    return typeof parsed === 'object' && parsed !== null;
-  } catch {
-    return false;
-  }
-}
-
-function formatDuration(ms: number): string {
-  const formatDecimal = (value: number): string => value.toFixed(2).replace(/\.?0+$/, '');
-  if (ms < 1000) return `${formatDecimal(ms)}ms`;
-  const s = ms / 1000;
-  if (s < 60) return `${formatDecimal(s)}s`;
-  const m = Math.floor(s / 60);
-  const remainS = s % 60;
-  return `${m}m${formatDecimal(remainS)}s`;
-}
-
-function formatTokenCount(n?: number): string {
-  if (n === undefined || n === null) return '0';
-  if (n < 1000) return String(n);
-  if (n < 1_000_000) return `${(n / 1000).toFixed(1).replace(/\.0$/, '')}K`;
-  return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
-}
-
-function CopyButton({ text, colors }: { text: string; colors: ReturnType<typeof useAppTheme>['theme']['colors'] }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <TouchableOpacity
-      activeOpacity={0.7}
-      style={{
-        position: 'absolute',
-        top: Space.xs,
-        right: Space.xs,
-        padding: Space.xs,
-        borderRadius: Radius.full,
-        backgroundColor: copied ? colors.accentSoft : 'transparent',
-      }}
-      onPress={async () => {
-        await Clipboard.setStringAsync(text);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
-      }}
-    >
-      {copied
-        ? <Text style={{ fontSize: FontSize.caption, color: colors.accent, fontWeight: FontWeight.semibold }}>✓</Text>
-        : <Copy size={13} color={colors.inkTertiary} strokeWidth={2} />}
-    </TouchableOpacity>
-  );
-}
-
-function DurationBadge({ ms, colors }: { ms: number; colors: ReturnType<typeof useAppTheme>['theme']['colors'] }) {
-  return (
-    <Text style={{
-      color: colors.inkSecondary,
-      fontSize: FontSize.caption,
-      fontFamily: 'monospace',
-      marginRight: Space.sm,
-      backgroundColor: colors.surface,
-      paddingHorizontal: Space.xs + 2,
-      paddingVertical: 2,
-      borderRadius: Radius.full,
-      overflow: 'hidden',
-    }}>
-      {formatDuration(ms)}
-    </Text>
-  );
-}
-
-export function ToolDetailModal({
-  visible,
-  onClose,
-  name,
-  status,
-  args,
-  detail,
-  durationMs,
-  startedAtMs,
-  finishedAtMs,
-  usage,
-}: Props): React.JSX.Element {
+function PayloadSection({ label, raw, testID }: { label: string; raw: string; testID: string }) {
   const { t } = useTranslation('chat');
   const { theme } = useAppTheme();
-  const styles = useMemo(() => createStyles(theme.colors), [theme]);
-
-  // Snapshot props while visible so content doesn't collapse during fade-out
-  const snapshot = useRef({ name, status, args, detail, durationMs, startedAtMs, finishedAtMs, usage });
-  useEffect(() => {
-    if (visible) {
-      snapshot.current = { name, status, args, detail, durationMs, startedAtMs, finishedAtMs, usage };
-    }
-  }, [visible, name, status, args, detail, durationMs, startedAtMs, finishedAtMs, usage]);
-  const s = visible ? { name, status, args, detail, durationMs, startedAtMs, finishedAtMs, usage } : snapshot.current;
-
-  const hasArgs = !!s.args && s.args.trim().length > 0;
-  const hasOutput = !!s.detail && s.detail.trim().length > 0;
-  const formattedArgs = hasArgs ? formatJson(s.args!) : '';
-  const formattedOutput = hasOutput ? formatJson(s.detail!) : '';
-  const argsIsJson = hasArgs ? isStructuredJson(s.args!) : false;
-  const outputIsJson = hasOutput ? isStructuredJson(s.detail!) : false;
-
-  const durationBadge = typeof s.durationMs === 'number' && s.status !== 'running'
-    ? <DurationBadge ms={s.durationMs} colors={theme.colors} />
-    : undefined;
-
-  const formatDateTime = (timestampMs: number): string => {
-    return new Intl.DateTimeFormat(undefined, {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    }).format(new Date(timestampMs));
+  const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
+  const [limit, setLimit] = useState(6000);
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle');
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  useEffect(() => { setLimit(6000); setCopyState('idle'); }, [raw]);
+  const payload = useMemo(() => prepareToolPayload(raw, limit), [raw, limit]);
+  const copy = async () => {
+    clearTimeout(timer.current);
+    try { await Clipboard.setStringAsync(raw); setCopyState('copied'); }
+    catch { setCopyState('error'); }
+    timer.current = setTimeout(() => setCopyState('idle'), 2000);
   };
+  return <View style={styles.section} testID={testID}>
+    <View style={styles.sectionHeading}>
+      <Text style={styles.sectionLabel}>{label}</Text>
+      {copyState !== 'idle' ? <Text accessibilityLiveRegion="polite" style={styles.caption}>
+        {copyState === 'copied' ? t('Copied') : t('Copy failed')}
+      </Text> : null}
+      <FloatingButton icon={copyState === 'copied' ? Check : Copy} onPress={() => void copy()}
+        appearance="plain" iconSize={IconSize.sm} accessibilityLabel={t('Copy {{section}}', { section: label })}
+        testID={`${testID}-copy`} />
+    </View>
+    <View style={styles.payload}>
+      {payload.structured ? <JsonTree text={payload.text} /> : <Text selectable style={styles.code}>{payload.text}</Text>}
+    </View>
+    {payload.truncated ? <Pressable accessibilityRole="button" onPress={() => setLimit(n => n + 6000)}
+      testID={`${testID}-more`} style={styles.disclosure}>
+      <Text style={styles.secondary}>{t('Show more')}</Text><ChevronDown size={IconSize.sm} color={theme.colors.inkSecondary} />
+    </Pressable> : null}
+  </View>;
+}
 
-  const showTimeSection = typeof s.startedAtMs === 'number' || typeof s.finishedAtMs === 'number';
-
-  return (
-    <Sheet
-      visible={visible}
-      onClose={onClose}
-      closeAccessibilityLabel={t('Close', { ns: 'common' })}
-      title={s.name}
-      headerRight={durationBadge}
-      maxHeight="70%"
-      testID="tool-detail-sheet"
-    >
-      <ScrollView style={styles.modalScroll}>
-        {hasArgs && (
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>{t('Input')}</Text>
-            <View style={styles.codeBlock}>
-              {argsIsJson
-                ? <JsonTree text={formattedArgs} />
-                : <Text style={styles.codeText}>{formattedArgs}</Text>}
-              <CopyButton text={s.args!} colors={theme.colors} />
-            </View>
-          </View>
-        )}
-        {hasOutput && (
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>{t('Output')}</Text>
-            <View style={styles.codeBlock}>
-              {outputIsJson
-                ? <JsonTree text={formattedOutput} />
-                : <Text style={styles.codeText}>{formattedOutput}</Text>}
-              <CopyButton text={s.detail!} colors={theme.colors} />
-            </View>
-          </View>
-        )}
-        {s.usage && (s.usage.inputTokens || s.usage.outputTokens || s.usage.totalTokens) ? (
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>{t('Usage')}</Text>
-            <View style={styles.usageRow}>
-              {typeof s.usage.inputTokens === 'number' && <Text style={styles.usageItem}>{t('Input')}: {formatTokenCount(s.usage.inputTokens)}</Text>}
-              {typeof s.usage.outputTokens === 'number' && <Text style={styles.usageItem}>{t('Output')}: {formatTokenCount(s.usage.outputTokens)}</Text>}
-              {typeof s.usage.totalTokens === 'number' && <Text style={styles.usageItem}>{t('Total')}: {formatTokenCount(s.usage.totalTokens)}</Text>}
-            </View>
-          </View>
-        ) : null}
-        {!hasArgs && !hasOutput && !s.usage && (
-          <Text style={styles.emptyText}>{t('No output — tool completed successfully.')}</Text>
-        )}
-        {showTimeSection && (
-          <View style={[styles.section, styles.timeSection]}>
-            {typeof s.startedAtMs === 'number' && (
-              <Text style={styles.timeItem}>{t('Started')}: {formatDateTime(s.startedAtMs)}</Text>
-            )}
-            {typeof s.finishedAtMs === 'number' && (
-              <Text style={styles.timeItem}>{t('Finished')}: {formatDateTime(s.finishedAtMs)}</Text>
-            )}
-          </View>
-        )}
-      </ScrollView>
-    </Sheet>
-  );
+export function ToolDetailModal(props: Props): React.JSX.Element {
+  const { visible, onClose } = props;
+  const { t, i18n } = useTranslation('chat');
+  const { theme } = useAppTheme();
+  const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
+  const snapshot = useRef(props);
+  useEffect(() => { if (visible) snapshot.current = props; }, [visible, props]);
+  const s = visible ? props : snapshot.current;
+  const [expanded, setExpanded] = useState(false);
+  useEffect(() => { if (visible) setExpanded(false); }, [visible, s.name, s.startedAtMs]);
+  const title = formatToolDisplayName(s.name, t);
+  const duration = s.status === 'running' ? undefined : formatToolDuration(s.durationMs);
+  const statusLabel = s.status === 'running' ? t('Running') : s.status === 'error' ? t('Failed') : s.status === 'unknown' ? t('Result unavailable') : t('Completed');
+  const StateIcon = s.status === 'error' || s.status === 'unknown' ? CircleAlert : Check;
+  const stateColor = s.status === 'error' ? theme.colors.bad : theme.colors.inkSecondary;
+  const date = (ms?: number) => typeof ms === 'number' && Number.isFinite(ms) && ms > 0
+    ? new Intl.DateTimeFormat(i18n.language, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(ms)
+    : undefined;
+  const metadata = [
+    [t('Tool identifier'), s.name], [t('Started'), date(s.startedAtMs)], [t('Finished'), date(s.finishedAtMs)],
+    [t('Input tokens'), s.usage?.inputTokens?.toLocaleString(i18n.language)],
+    [t('Output tokens'), s.usage?.outputTokens?.toLocaleString(i18n.language)],
+    [t('Total tokens'), s.usage?.totalTokens?.toLocaleString(i18n.language)],
+  ].filter((row): row is [string, string] => typeof row[1] === 'string');
+  return <Sheet visible={visible} onClose={onClose} title={title}
+    closeAccessibilityLabel={t('Close', { ns: 'common' })} maxHeight="85%" contentStyle={styles.scroll} testID="tool-detail-sheet">
+    <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <View style={styles.statusRow}>
+        {s.status === 'running' ? <ActivityIndicator size="small" color={stateColor} /> : <StateIcon size={IconSize.sm} color={stateColor} />}
+        <Text style={[styles.secondary, { color: stateColor }]}>{statusLabel}</Text>
+        {duration ? <View style={styles.duration}><Clock3 size={IconSize.sm} color={theme.colors.inkTertiary} />
+          <Text numberOfLines={1} style={styles.caption} testID="tool-detail-duration">{duration}</Text></View> : null}
+      </View>
+      {s.args?.trim() ? <PayloadSection key={`input-${s.name}-${s.startedAtMs}`} label={t('Input')} raw={s.args} testID="tool-detail-input" /> : null}
+      {s.detail?.trim() ? <PayloadSection key={`output-${s.name}-${s.startedAtMs}`} label={t('Output')} raw={s.detail} testID="tool-detail-output" />
+        : <View style={styles.empty}><Text style={styles.secondary}>
+          {s.status === 'running' ? t('Waiting for output…') : t('No output recorded.')}
+        </Text></View>}
+      <Pressable accessibilityRole="button" accessibilityState={{ expanded }} onPress={() => setExpanded(v => !v)}
+        style={styles.disclosure} testID="tool-detail-metadata-toggle">
+        <Text style={styles.secondary}>{t('Execution details')}</Text>
+        {expanded ? <ChevronDown size={IconSize.sm} color={theme.colors.inkSecondary} /> : <ChevronRight size={IconSize.sm} color={theme.colors.inkSecondary} />}
+      </Pressable>
+      {expanded ? <View style={styles.metadata} testID="tool-detail-metadata">
+        {metadata.map(([label, value]) => <View key={label} style={styles.metadataRow}>
+          <Text style={styles.caption}>{label}</Text><Text selectable style={styles.metadataValue}>{value}</Text>
+        </View>)}
+      </View> : null}
+    </ScrollView>
+  </Sheet>;
 }
 
 function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors']) {
   return StyleSheet.create({
-    modalScroll: {
-      paddingHorizontal: Space.md,
-      paddingBottom: Space.md,
-      paddingTop: 0,
-      marginBottom: Space.xs,
-    },
-    section: {
-      marginBottom: Space.md,
-    },
-    sectionLabel: {
-      color: colors.inkSecondary,
-      fontSize: FontSize.caption,
-      fontWeight: FontWeight.semibold,
-      textTransform: 'uppercase',
-      letterSpacing: 0.5,
-      marginBottom: Space.xs,
-    },
-    codeBlock: {
-      backgroundColor: colors.surface,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.line,
-      borderRadius: Radius.card,
-      padding: Space.sm + 2,
-      paddingRight: Space.lg + Space.sm,
-    },
-    codeText: {
-      color: colors.ink,
-      fontSize: FontSize.caption,
-      lineHeight: 17,
-      fontFamily: 'monospace',
-    },
-    usageRow: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: Space.md,
-    },
-    usageItem: {
-      color: colors.ink,
-      fontSize: FontSize.caption,
-      fontFamily: 'monospace',
-    },
-    timeItem: {
-      color: colors.ink,
-      fontSize: FontSize.caption,
-      fontFamily: 'monospace',
-      marginBottom: Space.xs,
-    },
-    timeSection: {
-      marginTop: Space.lg,
-    },
-    emptyText: {
-      color: colors.inkSecondary,
-      fontSize: FontSize.caption,
-      fontStyle: 'italic',
-    },
+    scroll: { flexShrink: 1 },
+    content: { paddingHorizontal: Space.xl, paddingBottom: Space.lg, gap: Space.sm },
+    statusRow: { flexDirection: 'row', alignItems: 'center', gap: Space.sm, paddingVertical: Space.sm },
+    secondary: { color: colors.inkSecondary, fontSize: FontSize.secondary, lineHeight: LineHeight.secondary },
+    caption: { color: colors.inkSecondary, fontSize: FontSize.caption, lineHeight: LineHeight.caption },
+    duration: { flexDirection: 'row', alignItems: 'center', gap: Space.xs, marginLeft: 'auto', flexShrink: 0 },
+    section: { gap: Space.xs },
+    sectionHeading: { flexDirection: 'row', alignItems: 'center', gap: Space.sm, minHeight: ControlSize.floatingButton },
+    sectionLabel: { flex: 1, color: colors.ink, fontSize: FontSize.secondary, lineHeight: LineHeight.secondary, fontWeight: FontWeight.semibold },
+    payload: { backgroundColor: colors.surface, borderRadius: Radius.settingsGroup, padding: Space.lg },
+    code: { color: colors.ink, fontSize: FontSize.caption, lineHeight: LineHeight.secondary,
+      fontFamily: Platform.select({ ios: 'Menlo', default: 'monospace' }) },
+    empty: { paddingVertical: Space.lg },
+    disclosure: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Space.sm, minHeight: ControlSize.floatingButton },
+    metadata: { gap: Space.md, paddingBottom: Space.sm },
+    metadataRow: { gap: Space.xs },
+    metadataValue: { color: colors.inkSecondary, fontSize: FontSize.caption, lineHeight: LineHeight.caption },
   });
 }

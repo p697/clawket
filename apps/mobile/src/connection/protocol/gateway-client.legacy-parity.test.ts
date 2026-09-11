@@ -682,7 +682,7 @@ describe('GatewayProtocolClient migrated parity', () => {
       client.disconnect();
 
       expect(states).toContain('closed');
-      expect(client.getConnectionState()).toBe('closed');
+      expect((client as unknown as { state: string }).state).toBe('closed');
     });
   });
 
@@ -1452,6 +1452,34 @@ describe('GatewayProtocolClient migrated parity', () => {
       expect(createdWs.send).toHaveBeenCalledTimes(2);
       const connectFrame = JSON.parse(createdWs.send.mock.calls[1][0] as string);
       expect(connectFrame.params.auth).toEqual({ bootstrapToken: 'bootstrap-token' });
+    });
+
+    it('authenticates a replaced backend on the existing relay and ignores duplicate challenges', async () => {
+      mockDeviceIdentity();
+      client.configure({ url: 'wss://relay.example.com/ws', token: 'private-token', mode: 'relay', relay: { serverUrl: 'https://registry.example.com', gatewayId: 'test-gateway', clientToken: 'private-client-token' } });
+      client.connect();
+      await flushPromises();
+      createdWs.onopen!();
+      const socket = createdWs;
+      const challenge = (nonce: string) => socket.onmessage!({ data: JSON.stringify({
+        type: 'event', event: 'connect.challenge', payload: { nonce, ts: 1_800_000_000_000 },
+      }) });
+      const accept = () => {
+        const calls = socket.send.mock.calls.map(([raw]) => String(raw)).filter((raw) => raw.startsWith('{')).map((raw) => JSON.parse(raw));
+        const request = calls.filter((frame) => frame.method === 'connect').at(-1);
+        socket.onmessage!({ data: JSON.stringify({ type: 'res', id: request.id, ok: true, payload: {} }) });
+      };
+      challenge('first-nonce'); await flushPromises(); accept(); await flushPromises();
+      expect(client.getConnectionState()).toBe('ready');
+      const sent = socket.send.mock.calls.length;
+      challenge('first-nonce'); await flushPromises();
+      expect(socket.send).toHaveBeenCalledTimes(sent);
+      challenge('replacement-nonce'); await flushPromises();
+      expect(socket.send).toHaveBeenCalledTimes(sent + 1);
+      expect(client.getConnectionState()).toBe('challenging');
+      accept(); await flushPromises();
+      expect(client.getConnectionState()).toBe('ready');
+      expect(createdWs).toBe(socket);
     });
 
     it('silently exchanges official mobile setup credentials for an operator device token', async () => {
@@ -2651,6 +2679,42 @@ describe('GatewayProtocolClient migrated parity', () => {
   });
 
   describe('stale transport recovery', () => {
+    it.each([OPENCLAW_GATEWAY_PROTOCOL_PROFILE, HERMES_GATEWAY_PROTOCOL_PROFILE])(
+      'does not resurrect a disposed client when an in-flight probe rejects (%#)', async profile => {
+        client.configure({ url: 'wss://example.com' }, profile);
+        client.connect();
+        (client as unknown as { state: string }).state = 'ready';
+        let rejectProbe!: (error: Error) => void;
+        jest.spyOn(client as any, 'sendRequest').mockImplementation(() => new Promise((_, reject) => { rejectProbe = reject; }));
+        const reconnect = jest.spyOn(client, 'reconnect');
+        const pending = client.probeConnection();
+        client.disconnect();
+        rejectProbe(new Error('Connection closed'));
+        await expect(pending).resolves.toBe(false);
+        expect(reconnect).not.toHaveBeenCalled();
+        jest.advanceTimersByTime(30_000);
+        expect((client as unknown as { state: string }).state).toBe('closed');
+      },
+    );
+
+    it.each(['resolve', 'reject'] as const)('ignores a stale probe %s after explicit reconnect', async outcome => {
+      client.configure({ url: 'wss://example.com' });
+      client.connect();
+      (client as unknown as { state: string }).state = 'ready';
+      let resolveProbe!: (value: unknown) => void;
+      let rejectProbe!: (error: Error) => void;
+      jest.spyOn(client as any, 'sendRequest').mockImplementation(() => new Promise((resolve, reject) => {
+        resolveProbe = resolve; rejectProbe = reject;
+      }));
+      const reconnect = jest.spyOn(client, 'reconnect');
+      const pending = client.probeConnection();
+      client.reconnect();
+      if (outcome === 'resolve') resolveProbe({});
+      else rejectProbe(new Error('old probe failed'));
+      await expect(pending).resolves.toBe(false);
+      expect(reconnect).toHaveBeenCalledTimes(1);
+    });
+
     it('probes a healthy ready connection without forcing reconnect', async () => {
       client.configure({ url: 'wss://example.com' });
       client.connect();
@@ -2693,4 +2757,16 @@ describe('GatewayProtocolClient migrated parity', () => {
       expect((globalThis as any).WebSocket).toHaveBeenCalledTimes(1);
     });
   });
+});
+
+it('includes an explicit Agent owner in both OpenClaw usage requests', async () => {
+  const client = new GatewayProtocolClient({ profile: OPENCLAW_GATEWAY_PROTOCOL_PROFILE });
+  const request = jest.spyOn(client, 'request').mockResolvedValue({});
+  const input = { startDate: '2026-09-06', endDate: '2026-09-06', agentId: 'ui-operator' };
+  await client.fetchUsage(input);
+  await client.fetchCostSummary(input);
+  expect(request).toHaveBeenNthCalledWith(1, 'sessions.usage', {
+    ...input, limit: 500, includeContextWeight: false,
+  });
+  expect(request).toHaveBeenNthCalledWith(2, 'usage.cost', input);
 });

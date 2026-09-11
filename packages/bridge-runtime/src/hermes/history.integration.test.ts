@@ -644,7 +644,7 @@ describe('Hermes history and stream integration', () => {
       { status: 200, headers: { 'content-type': 'text/event-stream' } },
     )));
 
-    await (bridge as any).streamRunEvents('run_1', 'main', 'clawket-hermes:main', 900);
+    await (bridge as any).streamRunEvents('run_1', 'main', 'clawket-hermes:main', 900, new AbortController().signal);
 
     const history = sessionStore.getHistory('main', 50);
     expect(history.messages).toContainEqual(expect.objectContaining({

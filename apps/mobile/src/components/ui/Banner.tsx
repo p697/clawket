@@ -21,7 +21,7 @@ import {
 
 const PRESSED_OPACITY = 0.72;
 
-export type BannerTone = 'warn' | 'bad';
+export type BannerTone = 'warn' | 'bad' | 'neutral';
 
 export type BannerProps = Readonly<{
   message: string;
@@ -36,7 +36,7 @@ export type BannerProps = Readonly<{
 
 export function Banner({
   message,
-  tone = 'warn',
+  tone = 'neutral',
   icon: Icon,
   actionLabel,
   onAction,
@@ -45,8 +45,8 @@ export function Banner({
   testID,
 }: BannerProps): React.JSX.Element {
   const { theme } = useAppTheme();
-  const backgroundColor = tone === 'bad' ? theme.colors.badSoft : theme.colors.warnSoft;
-  const toneColor = tone === 'bad' ? theme.colors.bad : theme.colors.warn;
+  const backgroundColor = tone === 'neutral' ? theme.colors.surface : tone === 'bad' ? theme.colors.badSoft : theme.colors.warnSoft;
+  const toneColor = tone === 'neutral' ? theme.colors.inkSecondary : tone === 'bad' ? theme.colors.bad : theme.colors.warn;
 
   return (
     <View
@@ -67,7 +67,7 @@ export function Banner({
             accessibilityLabel={actionLabel}
             onPress={onAction}
             hitSlop={Space.sm}
-            style={({ pressed }) => pressed ? styles.pressed : null}
+            style={({ pressed }) => [styles.actionTarget, pressed ? styles.pressed : null]}
           >
             <Text style={[styles.action, { color: theme.colors.ink }]} numberOfLines={1}>
               {actionLabel}
@@ -93,6 +93,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Space.sm,
   },
+  actionTarget: { minHeight: ControlSize.floatingButton, minWidth: ControlSize.floatingButton, justifyContent: 'center', alignItems: 'center' },
   message: {
     flex: 1,
     fontSize: FontSize.caption,

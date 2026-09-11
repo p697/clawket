@@ -1,5 +1,6 @@
 import { RefObject, useCallback, useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
+import { useSharedValue } from 'react-native-reanimated';
 import type { ComposerHandle } from '../components/ui/Composer';
 import { analyticsEvents } from '../services/analytics/events';
 import {
@@ -14,6 +15,7 @@ import {
   startSpeechRecognitionAsync,
   stopSpeechRecognitionAsync,
 } from '../services/speech/speechRecognition';
+import { createSpeechLevelState, processSpeechLevel } from '../services/speech/speechLevel';
 import {
   applySpeechRecognitionResult,
   buildSpeechDraftText,
@@ -42,7 +44,10 @@ export function useChatVoiceInput({
 }: Props) {
   const [voiceInputSupported, setVoiceInputSupported] = useState(false);
   const [voiceInputState, setVoiceInputState] = useState<'idle' | 'authorizing' | SpeechRecognitionState>('idle');
-  const [voiceInputLevel, setVoiceInputLevel] = useState(0);
+  // Microphone level arrives ~20 times per second; a shared value keeps that
+  // off the React render path so only the composer halo reacts to it.
+  const voiceInputLevel = useSharedValue(0);
+  const voiceInputLevelStateRef = useRef(createSpeechLevelState());
   const voiceInputBaseTextRef = useRef('');
   const voiceInputDraftStateRef = useRef(createSpeechDraftState());
 
@@ -86,12 +91,15 @@ export function useChatVoiceInput({
       if (state === 'idle') {
         voiceInputBaseTextRef.current = '';
         voiceInputDraftStateRef.current = createSpeechDraftState();
-        setVoiceInputLevel(0);
+        voiceInputLevel.value = 0;
+        voiceInputLevelStateRef.current = createSpeechLevelState();
       }
     });
 
     const levelSubscription = addSpeechRecognitionLevelListener(({ level }) => {
-      setVoiceInputLevel(level);
+      const processed = processSpeechLevel(voiceInputLevelStateRef.current, level);
+      voiceInputLevelStateRef.current = processed.state;
+      voiceInputLevel.value = processed.level;
     });
 
     const errorSubscription = addSpeechRecognitionErrorListener(({ code, message }) => {
@@ -99,7 +107,8 @@ export function useChatVoiceInput({
       setVoiceInputState('idle');
       voiceInputBaseTextRef.current = '';
       voiceInputDraftStateRef.current = createSpeechDraftState();
-      setVoiceInputLevel(0);
+      voiceInputLevel.value = 0;
+      voiceInputLevelStateRef.current = createSpeechLevelState();
       Alert.alert(
         t('Voice input failed', { ns: 'chat' }),
         message || t('Unable to transcribe speech right now.', { ns: 'chat' }),
@@ -114,7 +123,7 @@ export function useChatVoiceInput({
       errorSubscription?.remove();
       void stopSpeechRecognitionAsync().catch(() => {});
     };
-  }, [setInput, speechRecognitionLanguage, t]);
+  }, [setInput, speechRecognitionLanguage, t, voiceInputLevel]);
 
   const voiceInputActive = voiceInputState !== 'idle';
   const voiceInputDisabled = false;
@@ -157,6 +166,7 @@ export function useChatVoiceInput({
     composerRef.current?.blur();
     voiceInputBaseTextRef.current = input;
     voiceInputDraftStateRef.current = createSpeechDraftState();
+    voiceInputLevelStateRef.current = createSpeechLevelState();
     setVoiceInputState('authorizing');
 
     try {
@@ -166,7 +176,8 @@ export function useChatVoiceInput({
         setVoiceInputState('idle');
         voiceInputBaseTextRef.current = '';
         voiceInputDraftStateRef.current = createSpeechDraftState();
-        setVoiceInputLevel(0);
+        voiceInputLevel.value = 0;
+        voiceInputLevelStateRef.current = createSpeechLevelState();
         Alert.alert(
           t('Voice input unavailable', { ns: 'chat' }),
           t('Microphone access is required to transcribe speech.', { ns: 'chat' }),
@@ -178,7 +189,8 @@ export function useChatVoiceInput({
         setVoiceInputState('idle');
         voiceInputBaseTextRef.current = '';
         voiceInputDraftStateRef.current = createSpeechDraftState();
-        setVoiceInputLevel(0);
+        voiceInputLevel.value = 0;
+        voiceInputLevelStateRef.current = createSpeechLevelState();
         Alert.alert(
           t('Voice input unavailable', { ns: 'chat' }),
           t('Speech recognition access is required to transcribe speech.', { ns: 'chat' }),
@@ -192,7 +204,8 @@ export function useChatVoiceInput({
         setVoiceInputState('idle');
         voiceInputBaseTextRef.current = '';
         voiceInputDraftStateRef.current = createSpeechDraftState();
-        setVoiceInputLevel(0);
+        voiceInputLevel.value = 0;
+        voiceInputLevelStateRef.current = createSpeechLevelState();
         Alert.alert(
           t('Voice input unavailable', { ns: 'chat' }),
           t('Speech recognition is not available on this device.', { ns: 'chat' }),
@@ -206,13 +219,14 @@ export function useChatVoiceInput({
       setVoiceInputState('idle');
       voiceInputBaseTextRef.current = '';
       voiceInputDraftStateRef.current = createSpeechDraftState();
-      setVoiceInputLevel(0);
+      voiceInputLevel.value = 0;
+      voiceInputLevelStateRef.current = createSpeechLevelState();
       const message = error instanceof Error && error.message
         ? error.message
         : t('Unable to transcribe speech right now.', { ns: 'chat' });
       Alert.alert(t('Voice input failed', { ns: 'chat' }), message);
     }
-  }, [composerRef, input, speechRecognitionLanguage, t, voiceInputActive, voiceInputSupported]);
+  }, [composerRef, input, speechRecognitionLanguage, t, voiceInputActive, voiceInputLevel, voiceInputSupported]);
 
   return {
     toggleVoiceInput,

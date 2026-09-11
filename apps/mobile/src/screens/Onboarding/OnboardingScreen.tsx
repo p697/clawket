@@ -1,25 +1,26 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Pressable,
-  ScrollView,
+  Keyboard,
+  Platform,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import Reanimated from 'react-native-reanimated';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  Bot,
+  Check,
   CheckCircle2,
   Circle,
-  CircleHelp,
-  ClipboardPaste,
   Copy,
-  Feather,
+  ImagePlus,
+  Palette,
   QrCode,
-  Sparkles,
-  X,
+  WifiOff,
 } from 'lucide-react-native';
+import type { BackendKind } from '@clawket/agent-protocol';
 import { useAppTheme } from '../../theme';
 import {
   ControlSize,
@@ -27,15 +28,19 @@ import {
   FontWeight,
   IconSize,
   LineHeight,
-  Radius,
   Space,
 } from '../../theme/tokens';
+import { PlatformMark } from '../../components/ui/PlatformMark';
 import { Banner } from '../../components/ui/Banner';
 import { Button } from '../../components/ui/Button';
 import { FloatingButton } from '../../components/ui/FloatingButton';
 import { FormTextInput } from '../../components/ui/FormTextInput';
+import { FlowHeader, PageIntro, ChoiceRow, FormStep, CommandBlock } from '../../components/ui/SetupPrimitives';
+import { SegmentedTabs } from '../../components/ui/SegmentedTabs';
+import { useKeyboardRevealScroll } from '../../components/ui/useKeyboardRevealScroll';
 import { Skeleton } from '../../components/ui/Skeleton';
 import {
+  buildAgentPairingPrompt,
   createPairingSubmission,
   formatVerificationCode,
   isVerificationCodeComplete,
@@ -56,23 +61,45 @@ export type OnboardingScreenProps = Readonly<{
   pairingCommand?: string;
   onViewed?: () => void;
   onClose?: () => void;
+  onOpenDesignSystem?: () => void;
   onCopyCommand?: (command: string) => MaybePromise<void>;
+  onCopyAgentPrompt?: (prompt: string, backendKind: PairableBackendKind) => MaybePromise<void>;
   onPastePairingCode?: (backendKind: PairableBackendKind) => MaybePromise<string | null>;
   onSubmitPairing: (submission: PairingSubmission) => MaybePromise<void>;
   onScanQr: (expectedBackendKind: PairableBackendKind) => void;
-  onOpenPairingHelp?: (backendKind: PairableBackendKind) => void;
+  onImportQr?: (expectedBackendKind: PairableBackendKind) => void;
   onOpenYouMind: () => void;
-  onOpenDocs: (backendKind: PairableBackendKind) => void;
+  onOpenWebsite: (backendKind: BackendKind) => void;
   onErrorAction?: (status: Extract<OnboardingStatus, { kind: 'error' }>['code']) => void;
   onRetry?: () => void;
 }>;
 
+/** How long a copy action shows its confirmation before the control returns to normal. */
+const COPY_FEEDBACK_MS = 1500;
+
+/** Space kept between the pairing field + Connect action and the top of the keyboard. */
+const KEYBOARD_CLEARANCE = Space.lg;
+
+type PairingMethod = 'agent' | 'terminal';
+
+/** True for a short window after `flash()`; the timer resets on repeat and clears on unmount. */
+function useCopiedFlash(): [boolean, () => void] {
+  const [copied, setCopied] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
+  const flash = useCallback(() => {
+    setCopied(true);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => { timerRef.current = null; setCopied(false); }, COPY_FEEDBACK_MS);
+  }, []);
+  return [copied, flash];
+}
+
 const BACKEND_OPTIONS: ReadonlyArray<{
   kind: PairableBackendKind;
-  icon: typeof Bot;
 }> = [
-  { kind: 'openclaw', icon: Bot },
-  { kind: 'hermes', icon: Feather },
+  { kind: 'openclaw' },
+  { kind: 'hermes' },
 ];
 
 const PAIRING_INPUT_PRESENTATION: Readonly<Record<PairableBackendKind, {
@@ -83,34 +110,54 @@ const PAIRING_INPUT_PRESENTATION: Readonly<Record<PairableBackendKind, {
 };
 
 export function OnboardingScreen({
-  initialBackend = 'openclaw',
+  initialBackend,
   status = { kind: 'idle' },
   environment = 'production',
   pairingCommand = PAIRING_COMMAND,
   onViewed,
   onClose,
+  onOpenDesignSystem,
   onCopyCommand,
+  onCopyAgentPrompt,
   onPastePairingCode,
   onSubmitPairing,
   onScanQr,
-  onOpenPairingHelp,
+  onImportQr,
   onOpenYouMind,
-  onOpenDocs,
+  onOpenWebsite,
   onErrorAction,
   onRetry,
 }: OnboardingScreenProps): React.JSX.Element {
   const { t } = useTranslation('config');
   const { theme } = useAppTheme();
   const insets = useSafeAreaInsets();
-  const [backendKind, setBackendKind] = useState<PairableBackendKind>(initialBackend);
+  // iOS: the padding KeyboardAvoidingView shrinks the viewport with the keyboard's real frame;
+  // the reveal scroll moves only the measured shortfall, in step with the keyboard, so a
+  // third-party keyboard changing height afterwards adds an increment instead of a re-scroll.
+  const keyboardReveal = useKeyboardRevealScroll({ clearance: KEYBOARD_CLEARANCE, enabled: Platform.OS === 'ios' });
+  const [backendKind, setBackendKind] = useState<PairableBackendKind>(initialBackend ?? 'openclaw');
   const [pairingCode, setPairingCode] = useState('');
+  const [choosing, setChoosing] = useState(!initialBackend);
+  const [copied, flashCopied] = useCopiedFlash();
+  const [agentPromptCopied, flashAgentPromptCopied] = useCopiedFlash();
+  const [pairingMethod, setPairingMethod] = useState<PairingMethod>('agent');
+  const [localError, setLocalError] = useState(false);
   const [docsExpanded, setDocsExpanded] = useState(false);
   const viewedRef = useRef(false);
   const submitInFlightRef = useRef(false);
+  const agentPrompt = useMemo(() => buildAgentPairingPrompt(t, pairingCommand), [pairingCommand, t]);
+  const pairingMethodTabs = useMemo((): Array<{ key: PairingMethod; label: string }> => [
+    { key: 'agent', label: t('Send to my agent') },
+    { key: 'terminal', label: t('Run it myself') },
+  ], [t]);
   const backendOptions = useMemo(() => [
     { ...BACKEND_OPTIONS[0], label: t('OpenClaw') },
     { ...BACKEND_OPTIONS[1], label: t('Hermes') },
   ] as const, [t]);
+  const websiteOptions = useMemo((): ReadonlyArray<{ kind: BackendKind; label: string }> => [
+    ...backendOptions,
+    { kind: 'youmind', label: t('YouMind') },
+  ], [backendOptions, t]);
   const styles = useMemo(
     () => createStyles(theme.colors),
     [theme.colors],
@@ -123,7 +170,7 @@ export function OnboardingScreen({
   }, [onViewed]);
 
   useEffect(() => {
-    setBackendKind(initialBackend);
+    if (initialBackend) { setBackendKind(initialBackend); setChoosing(false); }
   }, [initialBackend]);
 
   const connecting = status.kind === 'connecting';
@@ -152,6 +199,7 @@ export function OnboardingScreen({
     if (!pairingReady || submitInFlightRef.current) return;
     const submission = createPairingSubmission(backendKind, pairingCode);
     if (!submission) return;
+    Keyboard.dismiss();
     submitInFlightRef.current = true;
     try {
       const pending = onSubmitPairing(submission);
@@ -172,225 +220,84 @@ export function OnboardingScreen({
     }
   };
 
+  const resetPairingStep = () => {
+    setPairingCode(''); setLocalError(false);
+  };
+  const goBack = () => {
+    if (!choosing && !connecting) { setChoosing(true); resetPairingStep(); }
+    else onClose?.();
+  };
+  const chooseBackend = (kind: PairableBackendKind) => {
+    setBackendKind(kind); setChoosing(false); resetPairingStep();
+  };
+  const copyAgentPrompt = () => {
+    if (!onCopyAgentPrompt) return;
+    void Promise.resolve(onCopyAgentPrompt(agentPrompt, backendKind)).then(flashAgentPromptCopied, () => setLocalError(true));
+  };
+  const backendLabel = backendKind === 'openclaw' ? 'OpenClaw' : 'Hermes';
+  const agentMethod = Boolean(onCopyAgentPrompt) && pairingMethod === 'agent';
   return (
-    <View
-      testID="onboarding-screen"
-      style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom }]}
-    >
-      <ScrollView
-        automaticallyAdjustContentInsets={false}
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.topRow}>
-          {environment === 'preview' ? (
-            <View testID="onboarding-preview" style={styles.previewBadge}>
-              <Text style={styles.previewText}>{t('Preview')}</Text>
-            </View>
-          ) : <View />}
-          {onClose ? (
-            <FloatingButton
-              testID="onboarding-close"
-              icon={X}
-              appearance="surface"
-              accessibilityLabel={t('Close', { ns: 'common' })}
-              onPress={onClose}
-            />
-          ) : null}
-        </View>
-
-        <View style={styles.intro}>
-          <Text testID="onboarding-title" style={styles.title}>
-            {t('Connect Clawket to your agent')}
-          </Text>
-          <Text testID="onboarding-subtitle" style={styles.subtitle}>
-            {connecting
-              ? t('Connecting through Relay…')
-              : t('You need a computer running OpenClaw or Hermes')}
-          </Text>
-        </View>
-
-        {status.kind === 'offline' ? (
-          <Banner
-            testID="onboarding-offline"
-            message={t('No network')}
-            actionLabel={onRetry ? t('Retry', { ns: 'common' }) : undefined}
-            onAction={onRetry}
-          />
-        ) : null}
-
-        {status.kind === 'error' ? (
-          <ErrorBanner
-            code={status.code}
-            backendKind={backendKind}
-            onAction={onErrorAction}
-          />
-        ) : null}
-
-        <View testID="onboarding-backends" style={styles.backendList}>
-          {backendOptions.map((backend) => (
-            <View key={backend.kind}>
-              <BackendChoiceRow
-                testID={`onboarding-backend-${backend.kind}`}
-                icon={backend.icon}
-                label={backend.label}
-                selected={backend.kind === backendKind}
-                onPress={() => {
-                  setBackendKind(backend.kind);
-                  setPairingCode('');
-                }}
-              />
-              {backend.kind === backendKind ? (
-                <View testID="onboarding-command" style={styles.commandRow}>
-                  <Text
-                    accessibilityLabel={t('Pairing command')}
-                    numberOfLines={1}
-                    selectable
-                    style={styles.command}
-                  >
-                    {pairingCommand}
-                  </Text>
-                  {onOpenPairingHelp ? (
-                    <FloatingButton
-                      icon={CircleHelp}
-                      appearance="quiet"
-                      accessibilityLabel={t('Pairing help')}
-                      onPress={() => onOpenPairingHelp(backendKind)}
-                    />
-                  ) : null}
-                  {onCopyCommand ? (
-                    <FloatingButton
-                      testID="onboarding-copy-command"
-                      icon={Copy}
-                      appearance="quiet"
-                      accessibilityLabel={t('Copy command')}
-                      onPress={() => { void onCopyCommand(pairingCommand); }}
-                    />
-                  ) : null}
-                </View>
-              ) : null}
-            </View>
-          ))}
-        </View>
-
-        <View style={styles.codeSection}>
-          <View style={styles.codeRow}>
-            <FormTextInput
-              testID="onboarding-pairing-code"
-              accessibilityLabel={t('Pairing code')}
-              autoComplete="one-time-code"
-              autoCapitalize="characters"
-              autoCorrect={false}
-              editable={!connecting}
-              keyboardType={pairingInput.keyboardType}
-              maxLength={7}
-              onChangeText={(value) => setPairingCode(normalizeVerificationCode(value, backendKind))}
-              onSubmitEditing={submitPairing}
-              placeholder={pairingPlaceholder[backendKind]}
-              returnKeyType="go"
-              value={formatVerificationCode(pairingCode, backendKind)}
-              containerStyle={styles.codeInput}
-              inputStyle={styles.codeInputText}
-            />
-            {onPastePairingCode ? (
-              <FloatingButton
-                testID="onboarding-paste-code"
-                icon={ClipboardPaste}
-                appearance="surface"
-                accessibilityLabel={t('Paste pairing code')}
-                onPress={() => { void pastePairingCode(); }}
-              />
-            ) : null}
+    <View testID="onboarding-screen" style={[styles.screen, { paddingTop: insets.top }]}>
+      <FlowHeader onBack={connecting ? onClose : onClose || !choosing ? goBack : undefined} testID="onboarding-close"
+        title={environment === 'preview' ? t('Preview') : undefined}
+        right={onOpenDesignSystem ? <FloatingButton icon={Palette} appearance="plain" accessibilityLabel={t('Design language')} onPress={onOpenDesignSystem} /> : undefined} />
+      <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <Reanimated.ScrollView ref={keyboardReveal.scrollRef} testID="onboarding-scroll"
+        automaticallyAdjustContentInsets={false} keyboardDismissMode="interactive"
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + Space.xl }]}
+        keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        <PageIntro title={choosing ? t('Connect your agent') : t('Connect {{backend}}', { backend: backendKind === 'openclaw' ? 'OpenClaw' : 'Hermes' })} />
+        {status.kind === 'offline' ? <Banner tone="neutral" icon={WifiOff} testID="onboarding-offline" message={t('No network')} actionLabel={onRetry ? t('Retry', { ns: 'common' }) : undefined} onAction={onRetry} /> : null}
+        {status.kind === 'error' ? <ErrorBanner code={status.code} backendKind={backendKind} onAction={onErrorAction} /> : null}
+        {localError ? <Banner tone="bad" message={t('Please try again later.', { ns: 'common' })} /> : null}
+        {choosing ? <>
+          <View testID="onboarding-backends" style={styles.backendList}>
+            {backendOptions.map((backend) => <ChoiceRow key={backend.kind} testID={`onboarding-backend-${backend.kind}`} leading={<PlatformMark platform={backend.kind} />} title={backend.label}
+              onPress={() => chooseBackend(backend.kind)} />)}
+            <ChoiceRow testID="onboarding-youmind" leading={<PlatformMark platform="youmind" />} title={t('YouMind Sprite')} onPress={onOpenYouMind} />
           </View>
-          <Button
-            testID="onboarding-connect"
-            label={t('Connect')}
-            loading={connecting}
-            disabled={!pairingReady}
-            onPress={submitPairing}
-          />
-          <Button
-            testID="onboarding-scan-qr"
-            label={t('Scan QR Code')}
-            icon={QrCode}
-            variant="ghost"
-            disabled={connecting}
-            onPress={() => onScanQr(backendKind)}
-          />
-        </View>
-
-        {connecting ? (
-          <ConnectionProgress phase={status.phase} />
-        ) : null}
-
-        <View style={styles.secondaryActions}>
-          <BackendChoiceRow
-            testID="onboarding-youmind"
-            icon={Sparkles}
-            label={t('YouMind Sprite')}
-            selected={false}
-            onPress={onOpenYouMind}
-          />
-          <Button
-            testID="onboarding-docs-toggle"
-            label={t('No agent yet?')}
-            variant="ghost"
-            onPress={() => setDocsExpanded((expanded) => !expanded)}
-          />
-          {docsExpanded ? (
-            <View testID="onboarding-doc-options" style={styles.docsList}>
-              {backendOptions.map((backend) => (
-                <BackendChoiceRow
-                  key={backend.kind}
-                  testID={`onboarding-doc-${backend.kind}`}
-                  icon={backend.icon}
-                  label={backend.label}
-                  selected={false}
-                  onPress={() => onOpenDocs(backend.kind)}
-                />
-              ))}
+          <View style={styles.secondaryActions}>
+            <Button testID="onboarding-docs-toggle" label={t('No agent yet?')} variant="text" onPress={() => setDocsExpanded((expanded) => !expanded)} />
+            {docsExpanded ? <View testID="onboarding-doc-options" style={styles.docsList}>{websiteOptions.map((backend) => <Button key={backend.kind} testID={`onboarding-doc-${backend.kind}`} label={backend.label} variant="text" onPress={() => onOpenWebsite(backend.kind)} />)}</View> : null}
+          </View>
+        </> : <>
+          <FormStep number="01" title={t('Get a pairing code')}>
+            {onCopyAgentPrompt ? <SegmentedTabs testID="onboarding-pairing-method" size="sm" tabs={pairingMethodTabs} active={pairingMethod} onSwitch={setPairingMethod} /> : null}
+            {agentMethod ? <>
+              <CommandBlock prose command={agentPrompt} accessibilityLabel={t('Message for your agent')} testID="onboarding-agent-prompt" />
+              <Button testID="onboarding-copy-agent-prompt" label={agentPromptCopied ? t('Copied') : t('Copy this message')} icon={agentPromptCopied ? Check : Copy}
+                variant="neutral" haptic accessibilityLabel={t('Copy this message')} onPress={copyAgentPrompt} />
+              <Text style={styles.subtitle}>{t('Paste it to the agent you already chat with, like {{backend}} in Telegram. It will reply with the pairing code.', { backend: backendLabel })}</Text>
+            </> : <>
+              <Text style={styles.subtitle}>{t('Open Terminal and run this command.')}</Text>
+              <CommandBlock command={pairingCommand} copied={copied} onCopy={onCopyCommand ? () => {
+                void Promise.resolve(onCopyCommand(pairingCommand)).then(flashCopied, () => setLocalError(true));
+              } : undefined} />
+            </>}
+          </FormStep>
+          <FormStep number="02" title={t('Enter the pairing code')}
+            action={onPastePairingCode ? <Button testID="onboarding-paste-code" label={t('Paste')} variant="text" disabled={connecting} onPress={() => { void pastePairingCode().catch(() => setLocalError(true)); }} /> : undefined}>
+            <View ref={keyboardReveal.anchorRef} testID="onboarding-keyboard-anchor" style={styles.keyboardAnchor} onLayout={keyboardReveal.measureAnchor}>
+              <FormTextInput testID="onboarding-pairing-code" accessibilityLabel={t('Pairing code')} surface="quiet"
+                autoComplete="one-time-code" autoCapitalize="characters" autoCorrect={false} editable={!connecting}
+                keyboardType={pairingInput.keyboardType} maxLength={backendKind === 'openclaw' ? 14 : 7}
+                onChangeText={(value) => setPairingCode(normalizeVerificationCode(value, backendKind))}
+                onFocus={keyboardReveal.measureAnchor} onSubmitEditing={submitPairing} placeholder={pairingPlaceholder[backendKind]}
+                // A number pad has no return key; React Native would add an accessory toolbar for it,
+                // which changes the keyboard frame again. The Connect button below stays visible instead.
+                returnKeyType={pairingInput.keyboardType === 'number-pad' ? undefined : 'go'}
+                value={formatVerificationCode(pairingCode, backendKind)} minHeight={ControlSize.settingsRow} inputStyle={styles.codeInputText} />
+              <Button testID="onboarding-connect" label={t('Connect')} variant="neutral" size="lg" loading={connecting} disabled={!pairingReady} onPress={submitPairing} />
             </View>
-          ) : null}
-        </View>
-      </ScrollView>
+          </FormStep>
+          {connecting ? <ConnectionProgress phase={status.phase} /> : <View style={styles.alternatives}>
+            <Button testID="onboarding-scan-qr" label={t('Scan to connect')} icon={QrCode} variant="text" onPress={() => onScanQr(backendKind)} />
+            {onImportQr ? <Button testID="onboarding-import-qr" label={t('Choose from photos')} icon={ImagePlus} variant="text" onPress={() => onImportQr(backendKind)} /> : null}
+          </View>}
+        </>}
+      </Reanimated.ScrollView>
+      </KeyboardAvoidingView>
     </View>
-  );
-}
-
-type BackendChoiceRowProps = Readonly<{
-  testID: string;
-  icon: typeof Bot;
-  label: string;
-  selected: boolean;
-  onPress: () => void;
-}>;
-
-function BackendChoiceRow({
-  testID,
-  icon: Icon,
-  label,
-  selected,
-  onPress,
-}: BackendChoiceRowProps): React.JSX.Element {
-  const { theme } = useAppTheme();
-  const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
-  return (
-    <Pressable
-      testID={testID}
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.choiceRow,
-        { backgroundColor: selected ? theme.colors.accentSoft : theme.colors.surface },
-        pressed ? styles.pressed : null,
-      ]}
-    >
-      <Icon size={IconSize.md} color={theme.colors.ink} strokeWidth={1.75} />
-      <Text style={styles.choiceLabel}>{label}</Text>
-      {selected ? <CheckCircle2 size={IconSize.sm} color={theme.colors.accent} /> : null}
-    </Pressable>
   );
 }
 
@@ -468,16 +375,7 @@ function OnboardingSkeleton({
       testID="onboarding-loading"
       style={[styles.screen, styles.skeletonScreen, { paddingTop: topInset, paddingBottom: bottomInset }]}
     >
-      {onClose ? (
-        <View style={styles.skeletonClose}>
-          <FloatingButton
-            icon={X}
-            appearance="surface"
-            accessibilityLabel={t('Close', { ns: 'common' })}
-            onPress={onClose}
-          />
-        </View>
-      ) : null}
+      <FlowHeader onBack={onClose} />
       <Skeleton testID="onboarding-skeleton-title" accessibilityLabel={t('Loading...', { ns: 'common' })} style={styles.skeletonTitle} />
       <Skeleton style={styles.skeletonSubtitle} />
       <View style={styles.skeletonRows}>
@@ -547,112 +445,14 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       flex: 1,
       backgroundColor: colors.canvas,
     },
-    content: {
-      flexGrow: 1,
-      paddingHorizontal: Space.lg,
-      paddingBottom: Space.xl,
-      gap: Space.xl,
-    },
-    topRow: {
-      minHeight: ControlSize.floatingButton,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      marginTop: Space.sm,
-    },
-    previewBadge: {
-      minHeight: Space.xxl,
-      borderRadius: Radius.full,
-      backgroundColor: colors.warnSoft,
-      paddingHorizontal: Space.md,
-      justifyContent: 'center',
-    },
-    previewText: {
-      color: colors.warn,
-      fontSize: FontSize.secondary,
-      lineHeight: LineHeight.secondary,
-      fontWeight: FontWeight.semibold,
-    },
-    intro: {
-      gap: Space.sm,
-    },
-    title: {
-      color: colors.ink,
-      fontSize: FontSize.display,
-      lineHeight: LineHeight.display,
-      fontWeight: FontWeight.semibold,
-    },
-    subtitle: {
-      color: colors.inkSecondary,
-      fontSize: FontSize.secondary,
-      lineHeight: LineHeight.secondary,
-      fontWeight: FontWeight.regular,
-    },
-    backendList: {
-      gap: Space.sm,
-    },
-    choiceRow: {
-      minHeight: ControlSize.settingsRow,
-      borderRadius: Radius.card,
-      paddingHorizontal: Space.lg,
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: Space.md,
-    },
-    pressed: {
-      opacity: 0.72,
-    },
-    choiceLabel: {
-      flex: 1,
-      color: colors.ink,
-      fontSize: FontSize.secondary,
-      lineHeight: LineHeight.secondary,
-      fontWeight: FontWeight.semibold,
-    },
-    commandRow: {
-      minHeight: ControlSize.settingsRow,
-      marginTop: Space.xs,
-      marginHorizontal: Space.sm,
-      borderRadius: Radius.card,
-      backgroundColor: colors.surface,
-      paddingLeft: Space.md,
-      paddingRight: Space.xs,
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: Space.xs,
-    },
-    command: {
-      flex: 1,
-      color: colors.ink,
-      fontSize: FontSize.secondary,
-      lineHeight: LineHeight.secondary,
-      fontWeight: FontWeight.regular,
-      fontFamily: 'monospace',
-    },
-    codeSection: {
-      gap: Space.sm,
-    },
-    codeRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: Space.sm,
-    },
-    codeInput: {
-      flex: 1,
-    },
-    codeInputText: {
-      fontSize: FontSize.secondary,
-      lineHeight: LineHeight.secondary,
-      fontVariant: ['tabular-nums'],
-      letterSpacing: Space.xs,
-    },
-    secondaryActions: {
-      marginTop: 'auto',
-      gap: Space.sm,
-    },
-    docsList: {
-      gap: Space.sm,
-    },
+    content: { flexGrow: 1, paddingHorizontal: Space.xl, gap: Space.xl },
+    subtitle: { color: colors.inkSecondary, fontSize: FontSize.secondary, lineHeight: LineHeight.secondary, fontWeight: FontWeight.regular },
+    backendList: { gap: Space.sm },
+    keyboardAnchor: { gap: Space.md },
+    codeInputText: { fontSize: FontSize.title, lineHeight: LineHeight.title, fontVariant: ['tabular-nums'], letterSpacing: Space.xs, textAlign: 'center' },
+    secondaryActions: { marginTop: Space.xl, gap: Space.sm },
+    docsList: { flexDirection: 'row', justifyContent: 'center' },
+    alternatives: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: Space.xs },
     progress: {
       flexDirection: 'row',
       justifyContent: 'space-between',

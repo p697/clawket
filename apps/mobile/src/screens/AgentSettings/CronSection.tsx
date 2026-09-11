@@ -21,6 +21,7 @@ import { Sheet } from '../../components/ui/Sheet';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { ThemedSwitch } from '../../components/ui/ThemedSwitch';
 import { useAppTheme } from '../../theme';
+import { formatDurationMs } from '../../utils/cron';
 import {
   ControlSize,
   FontSize,
@@ -294,6 +295,7 @@ export function CronSection({
                 <SettingsRow
                   testID={`agent-cron-run-${run.jobId}-${run.ts}`}
                   title={run.jobName ?? jobs?.find((job) => job.id === run.jobId)?.name ?? run.jobId}
+                  subtitle={formatTimestamp(run.runAtMs ?? run.ts)}
                   value={translateCronRunStatus(cronRunStatus(run), t)}
                   attention={run.status === 'error'}
                   showChevron
@@ -425,7 +427,7 @@ function CronJobSheet({
           <SettingsGroup>
             <SettingsRow
               title={t('Schedule', { ns: 'settings' })}
-              value={formatCronSchedule(job.schedule)}
+              subtitle={formatCronSchedule(job.schedule)}
             />
             <SettingsDivider inset="content" />
             <SettingsRow
@@ -692,20 +694,23 @@ function CronRunSheet({
       testID="agent-cron-run-detail"
       visible={run !== null}
       title={t('Execution Record', { ns: 'settings' })}
+      maxHeight="85%"
+      contentStyle={styles.runScroll}
       closeAccessibilityLabel={t('Back', { ns: 'common' })}
       onClose={onClose}
     >
       {run ? (
-        <View style={styles.sheetContent}>
+        <ScrollView style={styles.runScroll} contentContainerStyle={styles.sheetContent}>
           <SettingsGroup>
             <SettingsRow
               title={run.jobName ?? run.jobId}
+              subtitle={formatTimestamp(run.runAtMs ?? run.ts)}
               value={translateCronRunStatus(cronRunStatus(run), t)}
             />
             <SettingsDivider inset="content" />
             <SettingsRow
               title={t('Duration', { ns: 'settings' })}
-              value={run.durationMs == null ? '—' : `${run.durationMs} ms`}
+              value={formatDurationMs(run.durationMs)}
             />
             {run.model ? (
               <>
@@ -715,9 +720,9 @@ function CronRunSheet({
             ) : null}
           </SettingsGroup>
           {run.error || run.summary ? (
-            <Text style={styles.detailText}>{run.error ?? run.summary}</Text>
+            <Text selectable style={styles.runText}>{run.error ?? run.summary}</Text>
           ) : null}
-        </View>
+        </ScrollView>
       ) : null}
     </Sheet>
   );
@@ -832,6 +837,13 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       lineHeight: LineHeight.secondary,
       fontWeight: FontWeight.regular,
       textAlign: 'center',
+    },
+    runScroll: { flexShrink: 1 },
+    runText: {
+      color: colors.ink,
+      fontSize: FontSize.body,
+      lineHeight: LineHeight.body,
+      fontWeight: FontWeight.regular,
     },
     actionRow: {
       flexDirection: 'row',

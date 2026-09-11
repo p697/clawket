@@ -293,3 +293,22 @@ describe('aggregateRoster', () => {
     expect(groups[0].agents.map((entry) => entry.agent.agentId)).toEqual(['main']);
   });
 });
+
+it.each(['openclaw', 'hermes', 'youmind'] as const)('counts only canonical main-chat unread for %s', (backendKind) => {
+  const input = {
+    connection: { ...connection('a', 1), backendKind },
+    source: 'live' as const,
+    syncedAt: 200,
+    agents: [agent('a', 'main')],
+    sessions: [
+      session('a', 'main', 'main:main', 100),
+      ...Array.from({ length: 120 }, (_, i) => session('a', 'main', `channel:${i}`, 200, { kind: 'channel' })),
+      session('a', 'main', 'cron', 200, { kind: 'cron', attention: 'cron_failed' }),
+    ],
+    watermarks: {},
+  };
+  expect(aggregateRoster([input], 'a')[0].agents[0]).toMatchObject({ unreadCount: 1, attentionCount: 1 });
+  expect(aggregateRoster([{ ...input, watermarks: { 'main:main': 100 } }], 'a')[0].agents[0])
+    .toMatchObject({ unreadCount: 0, attentionCount: 1 });
+  expect(aggregateRoster([{ ...input, sessions: input.sessions.filter((entry) => entry.key !== 'main:main') }], 'a')[0].agents[0].unreadCount).toBe(0);
+});

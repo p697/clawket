@@ -268,6 +268,11 @@ function buildAgentSummary(
   const signals = summarizeSessionSignals(agentSessions, watermarks, {
     unreadEnabled: liveSignalsEnabled,
   });
+  const mainUnreadCount = summarizeSessionSignals(
+    agentSessions.filter((session) => session.key === agent.mainSessionKey),
+    watermarks,
+    { unreadEnabled: liveSignalsEnabled },
+  ).unreadCount;
   const recentSession = [...agentSessions].sort(
     (a, b) => activityValue(b.updatedAt) - activityValue(a.updatedAt) || a.key.localeCompare(b.key),
   )[0];
@@ -279,8 +284,8 @@ function buildAgentSummary(
     ...(mainSession?.preview ? { preview: mainSession.preview } : {}),
     updatedAt: mainSession?.updatedAt ?? null,
     lastActivityAt: signals.lastActivityAt,
-    unreadCount: signals.unreadCount,
-    hasUnread: signals.unreadCount > 0,
+    unreadCount: mainUnreadCount,
+    hasUnread: mainUnreadCount > 0,
     attentionCount: liveSignalsEnabled ? signals.attentionCount : 0,
     attention: liveSignalsEnabled ? signals.attention : null,
   });

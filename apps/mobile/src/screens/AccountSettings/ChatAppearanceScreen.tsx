@@ -10,6 +10,9 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ChatColorPicker } from '../../components/chat/ChatColorPicker';
+import { defaultAccentId } from '../../theme/accents';
+import type { AccentColorId } from '../../types';
 import { ChatAppearancePreviewCard } from '../../components/chat/ChatAppearancePreviewCard';
 import { Button } from '../../components/ui/Button';
 import { FloatingButton } from '../../components/ui/FloatingButton';
@@ -23,7 +26,7 @@ import {
 import { Sheet } from '../../components/ui/Sheet';
 import { ThemedSwitch } from '../../components/ui/ThemedSwitch';
 import { useAppContext } from '../../contexts/AppContext';
-import { DEFAULT_CHAT_APPEARANCE } from '../../features/chat-appearance/defaults';
+import { DEFAULT_CHAT_APPEARANCE, DEFAULT_CHAT_FONT_SIZE } from '../../features/chat-appearance/defaults';
 import {
   deletePersistedChatBackgroundImage,
   persistChatBackgroundImage,
@@ -51,8 +54,8 @@ export type ChatAppearanceScreenProps = Readonly<{
 type AppearanceDraftSnapshot = Readonly<{
   appearance: ChatAppearanceSettings;
   showAgentAvatar: boolean;
-  showModelUsage: boolean;
   chatFontSize: number;
+  accentId: AccentColorId;
 }>;
 
 type ValueSheetKind = 'blur' | 'opacity' | 'font-size';
@@ -69,9 +72,9 @@ function serializeDraft(snapshot: AppearanceDraftSnapshot): string {
 function buildDefaultDraftSnapshot(): AppearanceDraftSnapshot {
   return {
     appearance: DEFAULT_CHAT_APPEARANCE,
-    showAgentAvatar: true,
-    showModelUsage: true,
-    chatFontSize: 16,
+    showAgentAvatar: false,
+    chatFontSize: DEFAULT_CHAT_FONT_SIZE,
+    accentId: defaultAccentId,
   };
 }
 
@@ -84,9 +87,10 @@ function SettingsSection({
   children: React.ReactNode;
   testID?: string;
 }>): React.JSX.Element {
+  const { theme } = useAppTheme();
   return (
     <View testID={testID} style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
+      <Text style={[styles.sectionTitle, { color: theme.colors.inkSecondary }]}>{title}</Text>
       {children}
     </View>
   );
@@ -160,7 +164,7 @@ export function ChatAppearanceScreen({
   onBack,
 }: ChatAppearanceScreenProps): React.JSX.Element {
   const { t } = useTranslation(['config', 'common']);
-  const { theme } = useAppTheme();
+  const { theme, accentId, setAccentId } = useAppTheme();
   const insets = useSafeAreaInsets();
   const {
     chatAppearance,
@@ -168,7 +172,6 @@ export function ChatAppearanceScreen({
     showAgentAvatar,
     onShowAgentAvatarToggle,
     showModelUsage,
-    onShowModelUsageToggle,
     chatFontSize,
     onChatFontSizeChange,
   } = useAppContext();
@@ -176,14 +179,14 @@ export function ChatAppearanceScreen({
   const initialSnapshotRef = useRef<AppearanceDraftSnapshot>({
     appearance: chatAppearance,
     showAgentAvatar,
-    showModelUsage,
     chatFontSize,
+    accentId,
   });
   const initialSerializedRef = useRef(serializeDraft(initialSnapshotRef.current));
   const initialBackgroundPathRef = useRef(chatAppearance.background.imagePath);
+  const [draftAccentId, setDraftAccentId] = useState(accentId);
   const [draftAppearance, setDraftAppearance] = useState(chatAppearance);
   const [draftShowAgentAvatar, setDraftShowAgentAvatar] = useState(showAgentAvatar);
-  const [draftShowModelUsage, setDraftShowModelUsage] = useState(showModelUsage);
   const [draftChatFontSize, setDraftChatFontSize] = useState(chatFontSize);
   const [pickedBackgroundUri, setPickedBackgroundUri] = useState<string | null>(null);
   const [valueSheet, setValueSheet] = useState<ValueSheetKind | null>(null);
@@ -208,13 +211,13 @@ export function ChatAppearanceScreen({
       },
     },
     showAgentAvatar: draftShowAgentAvatar,
-    showModelUsage: draftShowModelUsage,
     chatFontSize: draftChatFontSize,
+    accentId: draftAccentId,
   }), [
     draftAppearance,
+    draftAccentId,
     draftChatFontSize,
     draftShowAgentAvatar,
-    draftShowModelUsage,
     hasBackgroundImage,
     previewBackgroundUri,
   ]);
@@ -266,8 +269,8 @@ export function ChatAppearanceScreen({
   const handleReset = useCallback(() => {
     const defaults = buildDefaultDraftSnapshot();
     setDraftAppearance(defaults.appearance);
+    setDraftAccentId(defaults.accentId);
     setDraftShowAgentAvatar(defaults.showAgentAvatar);
-    setDraftShowModelUsage(defaults.showModelUsage);
     setDraftChatFontSize(defaults.chatFontSize);
     setPickedBackgroundUri(null);
   }, []);
@@ -275,6 +278,8 @@ export function ChatAppearanceScreen({
   const handleSave = useCallback(async () => {
     if (!isDirty || saving) return;
     setSaving(true);
+    let stagedImagePath: string | undefined;
+    let appearanceCommitted = false;
     try {
       const previousImagePath = initialBackgroundPathRef.current;
       let nextImagePath = draftAppearance.background.enabled
@@ -282,11 +287,9 @@ export function ChatAppearanceScreen({
         : undefined;
       if (draftAppearance.background.enabled && pickedBackgroundUri) {
         nextImagePath = await persistChatBackgroundImage(pickedBackgroundUri);
+        stagedImagePath = nextImagePath;
       }
       if (!draftAppearance.background.enabled) nextImagePath = undefined;
-      if (previousImagePath && previousImagePath !== nextImagePath) {
-        await deletePersistedChatBackgroundImage(previousImagePath);
-      }
 
       const nextAppearance: ChatAppearanceSettings = {
         ...draftAppearance,
@@ -298,12 +301,14 @@ export function ChatAppearanceScreen({
           fillMode: 'cover',
         },
       };
-      onChatAppearanceChange(nextAppearance);
+      await onChatAppearanceChange(nextAppearance);
+      appearanceCommitted = true;
+      if (previousImagePath && previousImagePath !== nextImagePath) {
+        await deletePersistedChatBackgroundImage(previousImagePath);
+      }
+      if (draftAccentId !== accentId) setAccentId(draftAccentId);
       if (draftShowAgentAvatar !== showAgentAvatar) {
         onShowAgentAvatarToggle(draftShowAgentAvatar);
-      }
-      if (draftShowModelUsage !== showModelUsage) {
-        onShowModelUsageToggle(draftShowModelUsage);
       }
       if (draftChatFontSize !== chatFontSize) {
         onChatFontSizeChange(draftChatFontSize);
@@ -315,27 +320,33 @@ export function ChatAppearanceScreen({
         bubble_opacity: nextAppearance.bubbles.opacity,
         blur: nextAppearance.background.blur,
         show_agent_avatar: draftShowAgentAvatar,
-        show_model_name: draftShowModelUsage,
+        // Per-message model labels were removed from the timeline; the stored
+        // preference is reported unchanged until the key is retired.
+        show_model_name: showModelUsage,
         chat_font_size: draftChatFontSize,
       });
       onBack();
     } catch {
+      if (stagedImagePath && !appearanceCommitted) {
+        await deletePersistedChatBackgroundImage(stagedImagePath);
+      }
       setErrorKind('save');
     } finally {
       setSaving(false);
     }
   }, [
+    accentId,
+    draftAccentId,
+    setAccentId,
     chatFontSize,
     draftAppearance,
     draftChatFontSize,
     draftShowAgentAvatar,
-    draftShowModelUsage,
     isDirty,
     onBack,
     onChatAppearanceChange,
     onChatFontSizeChange,
     onShowAgentAvatarToggle,
-    onShowModelUsageToggle,
     pickedBackgroundUri,
     saving,
     showAgentAvatar,
@@ -386,7 +397,7 @@ export function ChatAppearanceScreen({
             onPress={requestBack}
           />
         </View>
-        <Text style={[styles.title, { color: theme.colors.ink }]}>{t('Chat Appearance')}</Text>
+        <Text style={[styles.title, { color: theme.colors.ink }]}>{t('Chat theme')}</Text>
         <View style={[styles.headerSide, styles.headerTrailing]}>
           <HeaderTextAction
             label={saving ? t('common:Saving...') : t('common:Save')}
@@ -403,12 +414,16 @@ export function ChatAppearanceScreen({
       >
         <SettingsSection title={t('Preview')} testID="chat-appearance-preview">
           <ChatAppearancePreviewCard
+            accentId={draftAccentId}
             appearance={draftSnapshot.appearance}
             backgroundImageUri={previewBackgroundUri}
             chatFontSize={draftChatFontSize}
             showAgentAvatar={draftShowAgentAvatar}
-            showModelUsage={draftShowModelUsage}
           />
+        </SettingsSection>
+
+        <SettingsSection title={t('Color')}>
+          <ChatColorPicker value={draftAccentId} onChange={setDraftAccentId} />
         </SettingsSection>
 
         <SettingsSection title={t('Wallpaper')}>
@@ -484,18 +499,6 @@ export function ChatAppearanceScreen({
                   accessibilityLabel={t('Show Agent Avatar')}
                   value={draftShowAgentAvatar}
                   onValueChange={setDraftShowAgentAvatar}
-                />
-              )}
-            />
-            <SettingsDivider inset="content" />
-            <SettingsRow
-              title={t('Show Model Name')}
-              trailing={(
-                <ThemedSwitch
-                  testID="chat-appearance-model-name"
-                  accessibilityLabel={t('Show Model Name')}
-                  value={draftShowModelUsage}
-                  onValueChange={setDraftShowModelUsage}
                 />
               )}
             />
@@ -597,7 +600,7 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: Space.lg,
-    gap: Space.lg,
+    gap: Space.xl,
   },
   section: { gap: Space.sm },
   sectionTitle: {

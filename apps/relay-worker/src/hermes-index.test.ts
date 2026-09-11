@@ -63,6 +63,8 @@ class FakeStorage {
     return deleted;
   }
 
+  async getAlarm(): Promise<number | null> { return this.alarmAt; }
+
   async deleteAlarm(): Promise<void> {
     this.alarmAt = null;
   }
@@ -107,9 +109,10 @@ class FakeWebSocket {
 function createHermesRelayRoomWithSockets(
   sockets: FakeWebSocket[] = [],
   envOverrides: Partial<ConstructorParameters<typeof HermesRelayRoom>[1]> = {},
-): { room: HermesRelayRoom; storage: FakeStorage; kv: MemoryKV } {
+): { room: HermesRelayRoom; storage: FakeStorage; kv: MemoryKV; ready: Promise<unknown> } {
   const storage = new FakeStorage();
   const kv = new MemoryKV();
+  let ready: Promise<unknown> = Promise.resolve();
   const state = {
     id: {
       toString: () => 'test-object-id',
@@ -117,7 +120,7 @@ function createHermesRelayRoomWithSockets(
     storage,
     getWebSockets: () => sockets as unknown as WebSocket[],
     blockConcurrencyWhile: (fn: () => Promise<unknown>) => {
-      void fn();
+      ready = fn();
     },
   } as unknown as DurableObjectState;
   const env = {
@@ -126,11 +129,8 @@ function createHermesRelayRoomWithSockets(
     HEARTBEAT_INTERVAL_MS: '30000',
     ...envOverrides,
   } as unknown as ConstructorParameters<typeof HermesRelayRoom>[1];
-  return {
-    room: new HermesRelayRoom(state, env),
-    storage,
-    kv,
-  };
+  const room = new HermesRelayRoom(state, env);
+  return { room, storage, kv, ready };
 }
 
 describe('relay worker helpers', () => {
@@ -847,7 +847,7 @@ describe('relay worker helpers', () => {
     relay.runtime.clientLastActivityAtById.set('client-legacy', 1);
     relay.runtime.clientLastActivityAtById.set('client-capable', 1);
 
-    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(40_000);
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(100_000);
     try {
       await relay.alarm();
     } finally {
@@ -873,7 +873,8 @@ describe('relay worker helpers', () => {
         lastPongAt: 2,
       },
     });
-    const { room } = createHermesRelayRoomWithSockets();
+    const { room, ready } = createHermesRelayRoomWithSockets([bridgeSocket, clientSocket]);
+    await ready;
     const relay = room as unknown as {
       runtime: { bridgeSocket: FakeWebSocket | null };
       webSocketMessage: (ws: WebSocket, message: string | ArrayBuffer) => Promise<void>;
@@ -1080,7 +1081,8 @@ describe('relay worker helpers', () => {
     const clientSocket = new FakeWebSocket({
       attachment: { role: 'client', clientId: 'ios-control', connectedAt: 2, traceId: 'trace-ios' },
     });
-    const { room } = createHermesRelayRoomWithSockets();
+    const { room, ready } = createHermesRelayRoomWithSockets([bridgeSocket, clientSocket]);
+    await ready;
     const relay = room as unknown as {
       runtime: {
         bridgeSocket: FakeWebSocket | null;
@@ -1119,7 +1121,8 @@ describe('relay worker helpers', () => {
     const otherClient = new FakeWebSocket({
       attachment: { role: 'client', clientId: 'ios-other', connectedAt: 3 },
     });
-    const { room } = createHermesRelayRoomWithSockets();
+    const { room, ready } = createHermesRelayRoomWithSockets([bridgeSocket, targetClient, otherClient]);
+    await ready;
     const relay = room as unknown as {
       runtime: {
         clients: Map<string, FakeWebSocket>;
@@ -1153,7 +1156,8 @@ describe('relay worker helpers', () => {
     const bridgeSocket = new FakeWebSocket({
       attachment: { role: 'gateway', clientId: 'gw-main', connectedAt: 1 },
     });
-    const { room } = createHermesRelayRoomWithSockets();
+    const { room, ready } = createHermesRelayRoomWithSockets([bridgeSocket]);
+    await ready;
     const relay = room as unknown as {
       runtime: {
         clients: Map<string, FakeWebSocket>;
@@ -1177,7 +1181,8 @@ describe('relay worker helpers', () => {
     const bridgeSocket = new FakeWebSocket({
       attachment: { role: 'gateway', clientId: 'gw-drop', connectedAt: 1 },
     });
-    const { room } = createHermesRelayRoomWithSockets();
+    const { room, ready } = createHermesRelayRoomWithSockets([bridgeSocket]);
+    await ready;
     const relay = room as unknown as {
       webSocketMessage: (ws: WebSocket, message: string | ArrayBuffer) => Promise<void>;
     };

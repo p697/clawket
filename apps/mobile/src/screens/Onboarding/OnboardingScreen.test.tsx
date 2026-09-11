@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { FontSize, Radius } from '../../theme/tokens';
 import { OnboardingScreen, type OnboardingScreenProps } from './OnboardingScreen';
 
@@ -49,10 +49,14 @@ jest.mock('react-native', () => {
     ),
   );
   return {
+    Platform: { OS: 'ios' },
+    Keyboard: { dismiss: jest.fn() },
+    useWindowDimensions: () => ({ width: 402, height: 874, scale: 3, fontScale: 1 }),
     Pressable: host('Pressable'),
     ScrollView: host('ScrollView'),
     Text: host('Text'),
     TextInput: host('TextInput'),
+    Image: host('Image'),
     View: host('View'),
     StyleSheet: {
       create: <T,>(styles: T) => styles,
@@ -64,6 +68,11 @@ jest.mock('react-native', () => {
 
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 24, bottom: 16, left: 0, right: 0 }),
+}));
+
+jest.mock('react-native-keyboard-controller', () => ({
+  KeyboardAvoidingView: require('react-native').View,
+  useKeyboardHandler: jest.fn(),
 }));
 
 jest.mock('react-i18next', () => ({
@@ -158,10 +167,12 @@ function flattenStyle(value: unknown): Record<string, unknown> {
 
 function createProps(overrides: Partial<OnboardingScreenProps> = {}): OnboardingScreenProps {
   return {
+    initialBackend: 'openclaw',
     onSubmitPairing: jest.fn(),
     onScanQr: jest.fn(),
     onOpenYouMind: jest.fn(),
-    onOpenDocs: jest.fn(),
+    onOpenWebsite: jest.fn(),
+    onCopyAgentPrompt: jest.fn(),
     ...overrides,
   };
 }
@@ -180,23 +191,25 @@ describe('OnboardingScreen', () => {
     consoleErrorSpy.mockRestore();
   });
 
-  it('renders the first-launch premise and keeps the command under the selected backend', () => {
-    const view = render(<OnboardingScreen {...createProps()} />);
-
-    expect(view.getByText('Connect Clawket to your agent')).toBeTruthy();
-    expect(view.getByText('You need a computer running OpenClaw or Hermes')).toBeTruthy();
-    expect(view.getByText('npx @p697/clawket pair')).toBeTruthy();
-    expect(view.getByTestId('onboarding-backend-openclaw').props.accessibilityState).toEqual({ selected: true });
-    expect(view.getByTestId('onboarding-backend-hermes').props.accessibilityState).toEqual({ selected: false });
-    expect(view.queryByTestId('onboarding-doc-options')).toBeNull();
+  it('separates backend selection from pairing and returns without retaining a stale code', () => {
+    const view = render(<OnboardingScreen {...createProps({ initialBackend: undefined })} />);
+    expect(view.getByText('Connect your agent')).toBeTruthy();
+    expect(view.queryByTestId('onboarding-pairing-code')).toBeNull();
+    fireEvent.press(view.getByTestId('onboarding-backend-openclaw'));
+    expect(view.getByTestId('onboarding-agent-prompt')).toBeTruthy();
+    expect(view.queryByTestId('onboarding-youmind')).toBeNull();
+    fireEvent.changeText(view.getByTestId('onboarding-pairing-code'), '123456');
+    fireEvent.press(view.getByTestId('onboarding-close'));
+    fireEvent.press(view.getByTestId('onboarding-backend-hermes'));
+    expect(view.getByTestId('onboarding-pairing-code').props.value).toBe('');
   });
 
   it('submits normalized manual codes with separate Hermes and Relay identities', () => {
     const onSubmitPairing = jest.fn();
-    const view = render(<OnboardingScreen {...createProps({ onSubmitPairing })} />);
+    const view = render(<OnboardingScreen {...createProps({ onSubmitPairing, initialBackend: undefined })} />);
 
     fireEvent.press(view.getByTestId('onboarding-backend-hermes'));
-    fireEvent.changeText(view.getByTestId('onboarding-pairing-code'), 'ab1c-2o34');
+    fireEvent.changeText(view.getByTestId('onboarding-pairing-code'), 'abc-234');
     expect(view.getByTestId('onboarding-pairing-code').props.value).toBe('ABC 234');
     fireEvent.press(view.getByTestId('onboarding-connect'));
 
@@ -252,41 +265,117 @@ describe('OnboardingScreen', () => {
     expect(onSubmitPairing).toHaveBeenCalledWith(expect.objectContaining({ code: '987654' }));
   });
 
-  it('renders and copies an environment-specific pairing command', () => {
-    const onCopyCommand = jest.fn();
-    const view = render(
-      <OnboardingScreen
-        {...createProps({
-          environment: 'preview',
-          pairingCommand: 'npx @p697/clawket pair --preview',
-          onCopyCommand,
-        })}
-      />,
-    );
+  it('anchors the pairing code and Connect action for keyboard reveal without the number-pad accessory bar', () => {
+    const { useKeyboardHandler } = require('react-native-keyboard-controller') as { useKeyboardHandler: jest.Mock };
+    useKeyboardHandler.mockClear();
+    const view = render(<OnboardingScreen {...createProps()} />);
+    const scroll = view.getByTestId('onboarding-scroll');
+    expect(scroll.props.automaticallyAdjustKeyboardInsets).toBeUndefined();
+    expect(scroll.props.keyboardShouldPersistTaps).toBe('handled');
+    const anchor = view.getByTestId('onboarding-keyboard-anchor');
+    expect(anchor.findByProps({ testID: 'onboarding-pairing-code' })).toBeTruthy();
+    expect(anchor.findByProps({ testID: 'onboarding-connect' })).toBeTruthy();
+    // OpenClaw's number pad relies on the visible Connect button; Hermes keeps the native Go key.
+    expect(view.getByTestId('onboarding-pairing-code').props.returnKeyType).toBeUndefined();
+    expect(useKeyboardHandler).toHaveBeenCalledTimes(1);
+    const handler = useKeyboardHandler.mock.calls[0][0];
+    expect(typeof handler.onStart).toBe('function');
+    expect(typeof handler.onMove).toBe('function');
+    expect(typeof handler.onEnd).toBe('function');
 
-    expect(view.getByText('npx @p697/clawket pair --preview')).toBeTruthy();
-    fireEvent.press(view.getByTestId('onboarding-copy-command'));
-    expect(onCopyCommand).toHaveBeenCalledWith('npx @p697/clawket pair --preview');
+    const hermes = render(<OnboardingScreen {...createProps({ initialBackend: 'hermes' })} />);
+    expect(hermes.getByTestId('onboarding-pairing-code').props.returnKeyType).toBe('go');
   });
 
-  it('routes QR, YouMind, and official documentation actions through callbacks', () => {
+  it('renders and copies an environment-specific pairing command, confirming briefly', async () => {
+    jest.useFakeTimers();
+    try {
+      const onCopyCommand = jest.fn().mockResolvedValue(undefined);
+      const view = render(
+        <OnboardingScreen
+          {...createProps({
+            environment: 'preview',
+            pairingCommand: 'npx @p697/clawket pair --preview',
+            onCopyCommand,
+            onCopyAgentPrompt: undefined,
+          })}
+        />,
+      );
+
+      // Without an agent handler the step offers only the terminal path, with no method switch.
+      expect(view.queryByTestId('onboarding-pairing-method')).toBeNull();
+      expect(view.getByText('npx @p697/clawket pair --preview')).toBeTruthy();
+      fireEvent.press(view.getByTestId('onboarding-copy-command'));
+      expect(onCopyCommand).toHaveBeenCalledWith('npx @p697/clawket pair --preview');
+      await act(async () => { await Promise.resolve(); });
+      expect(view.getByTestId('onboarding-copy-command').props.accessibilityLabel).toBe('Copied');
+      act(() => { jest.advanceTimersByTime(1500); });
+      expect(view.getByTestId('onboarding-copy-command').props.accessibilityLabel).toBe('Copy command');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('leads with the agent message, copies it with a transient confirmation, and keeps the terminal path one switch away', async () => {
+    jest.useFakeTimers();
+    try {
+      const onCopyAgentPrompt = jest.fn().mockResolvedValue(undefined);
+      const onCopyCommand = jest.fn().mockResolvedValue(undefined);
+      const view = render(
+        <OnboardingScreen
+          {...createProps({
+            initialBackend: 'hermes',
+            pairingCommand: 'npx @p697/clawket pair --preview',
+            onCopyAgentPrompt,
+            onCopyCommand,
+          })}
+        />,
+      );
+
+      expect(view.getByTestId('onboarding-pairing-method-agent').props.accessibilityState).toEqual({ selected: true });
+      expect(view.queryByTestId('onboarding-command')).toBeNull();
+      // The test translator returns raw keys; interpolation is covered in model.test.ts.
+      const prompt = view.getByTestId('onboarding-agent-prompt').findByProps({ accessibilityLabel: 'Message for your agent' }).props.children as string;
+      expect(prompt).toContain('{{pairCommand}}');
+
+      fireEvent.press(view.getByTestId('onboarding-copy-agent-prompt'));
+      expect(onCopyAgentPrompt).toHaveBeenCalledWith(prompt, 'hermes');
+      await act(async () => { await Promise.resolve(); });
+      expect(view.getByText('Copied')).toBeTruthy();
+      act(() => { jest.advanceTimersByTime(1500); });
+      expect(view.queryByText('Copied')).toBeNull();
+      expect(view.getByText('Copy this message')).toBeTruthy();
+
+      fireEvent.press(view.getByTestId('onboarding-pairing-method-terminal'));
+      expect(view.queryByTestId('onboarding-agent-prompt')).toBeNull();
+      expect(view.getByText('npx @p697/clawket pair --preview')).toBeTruthy();
+      fireEvent.press(view.getByTestId('onboarding-copy-command'));
+      expect(onCopyCommand).toHaveBeenCalledWith('npx @p697/clawket pair --preview');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('routes QR, YouMind, and official website actions through callbacks', () => {
     const onScanQr = jest.fn();
     const onOpenYouMind = jest.fn();
-    const onOpenDocs = jest.fn();
+    const onOpenWebsite = jest.fn();
     const view = render(
-      <OnboardingScreen {...createProps({ onScanQr, onOpenYouMind, onOpenDocs })} />,
+      <OnboardingScreen {...createProps({ onScanQr, onOpenYouMind, onOpenWebsite, initialBackend: undefined })} />,
     );
 
     fireEvent.press(view.getByTestId('onboarding-backend-hermes'));
     fireEvent.press(view.getByTestId('onboarding-scan-qr'));
+    fireEvent.press(view.getByTestId('onboarding-close'));
     fireEvent.press(view.getByTestId('onboarding-youmind'));
     fireEvent.press(view.getByTestId('onboarding-docs-toggle'));
     fireEvent.press(view.getByTestId('onboarding-doc-openclaw'));
     fireEvent.press(view.getByTestId('onboarding-doc-hermes'));
+    fireEvent.press(view.getByTestId('onboarding-doc-youmind'));
 
     expect(onScanQr).toHaveBeenCalledWith('hermes');
     expect(onOpenYouMind).toHaveBeenCalledTimes(1);
-    expect(onOpenDocs.mock.calls).toEqual([['openclaw'], ['hermes']]);
+    expect(onOpenWebsite.mock.calls).toEqual([['openclaw'], ['hermes'], ['youmind']]);
   });
 
   it('renders loading, offline, error, and connecting states without replacing cached form content', () => {
@@ -302,7 +391,7 @@ describe('OnboardingScreen', () => {
       <OnboardingScreen {...createProps({ status: { kind: 'offline' }, onRetry })} />,
     );
     expect(offline.getByTestId('onboarding-offline')).toBeTruthy();
-    expect(offline.getByTestId('onboarding-backends')).toBeTruthy();
+    expect(offline.getByTestId('onboarding-pairing-code')).toBeTruthy();
     fireEvent.press(offline.getByTestId('onboarding-offline-action'));
     expect(onRetry).toHaveBeenCalledTimes(1);
     offline.unmount();
@@ -327,7 +416,7 @@ describe('OnboardingScreen', () => {
         {...createProps({ status: { kind: 'connecting', phase: 'waiting_bridge' } })}
       />,
     );
-    expect(connecting.getByText('Connecting through Relay…')).toBeTruthy();
+    expect(connecting.getByText('Connect {{backend}}')).toBeTruthy();
     expect(connecting.getByTestId('onboarding-progress')).toBeTruthy();
     expect(connecting.getByTestId('onboarding-connect').props.accessibilityState).toEqual({
       disabled: true,
@@ -335,21 +424,17 @@ describe('OnboardingScreen', () => {
     });
   });
 
-  it('uses the same canonical token hierarchy in light and dark schemes', () => {
-    const light = render(<OnboardingScreen {...createProps({ environment: 'preview' })} />);
-    expect(flattenStyle(light.getByTestId('onboarding-screen').props.style).backgroundColor).toBe(mockLightColors.canvas);
-    expect(flattenStyle(light.getByTestId('onboarding-title').props.style).fontSize).toBe(FontSize.display);
-    expect(flattenStyle(light.getByTestId('onboarding-subtitle').props.style).fontSize).toBe(FontSize.secondary);
-    const choiceStyle = flattenStyle(light.getByTestId('onboarding-backend-openclaw').props.style);
-    expect(choiceStyle.borderRadius).toBe(Radius.card);
-    expect(choiceStyle).not.toHaveProperty('borderWidth');
-    expect(light.getByTestId('onboarding-preview')).toBeTruthy();
-    light.unmount();
-
-    mockTheme = { scheme: 'dark', colors: mockDarkColors };
-    const dark = render(<OnboardingScreen {...createProps()} />);
-    expect(flattenStyle(dark.getByTestId('onboarding-screen').props.style).backgroundColor).toBe(mockDarkColors.canvas);
-    expect(flattenStyle(dark.getByTestId('onboarding-title').props.style).color).toBe(mockDarkColors.ink);
+  it('uses the shared intro and borderless choices in both color schemes', () => {
+    for (const scheme of ['light', 'dark'] as const) {
+      mockTheme = { scheme, colors: scheme === 'light' ? mockLightColors : mockDarkColors };
+      const view = render(<OnboardingScreen {...createProps({ initialBackend: undefined })} />);
+      expect(flattenStyle(view.getByTestId('onboarding-screen').props.style).backgroundColor).toBe(mockTheme.colors.canvas);
+      expect(flattenStyle(view.getByText('Connect your agent').props.style)).toMatchObject({ fontSize: FontSize.display, color: mockTheme.colors.ink });
+      const choiceStyle = flattenStyle(view.getByTestId('onboarding-backend-openclaw').props.style);
+      expect(choiceStyle.borderRadius).toBe(Radius.card);
+      expect(choiceStyle).not.toHaveProperty('borderWidth');
+      view.unmount();
+    }
   });
 
   it('reports a page view once per mount', () => {

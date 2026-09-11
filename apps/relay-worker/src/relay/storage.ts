@@ -1,3 +1,4 @@
+import { selectActiveClient } from './runtime';
 import {
   GATEWAY_OWNER_KEY,
   GATEWAY_OWNER_TOUCH_INTERVAL_MS,
@@ -201,6 +202,7 @@ export function reconcileSockets(runtime: RelayRuntime, options: ReconcileSocket
       closeSocketBestEffort(ws, 'dead_socket');
       continue;
     }
+    if (attachment.role === 'gateway' && attachment.targetConnectionId && runtime.policy.backend === 'openclaw') continue;
     if (attachment.role === 'gateway') {
       if (!gatewayCandidate) {
         gatewayCandidate = { socket: ws, connectedAt: attachment.connectedAt };
@@ -264,6 +266,16 @@ export function reconcileSockets(runtime: RelayRuntime, options: ReconcileSocket
         ? Math.max(previousActivityAt, candidate.connectedAt, attachmentTimestamp(candidate.socket, 'lastPongAt'))
         : Math.max(candidate.connectedAt, attachmentTimestamp(candidate.socket, 'lastPongAt')),
     );
+  }
+
+  // WebSockets survive hibernation while ordinary fields do not. A socket's
+  // persisted route marker is authoritative; never promote a pairing-only socket.
+  if (!runtime.activeClientId || !runtime.clients.has(runtime.activeClientId)) {
+    const marked = [...runtime.clients].filter(([, socket]) => (
+      (socket.deserializeAttachment() as SocketAttachment | null)?.activeClient === true
+    ));
+    const onlyClient = runtime.clients.size === 1 ? runtime.clients.keys().next().value : null;
+    selectActiveClient(runtime, marked.length === 1 ? marked[0][0] : onlyClient ?? null);
   }
 
   const hasOwner = Boolean(runtime.gatewaySocket?.readyState === WebSocket.OPEN);

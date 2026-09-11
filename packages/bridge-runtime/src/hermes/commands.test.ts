@@ -7,7 +7,7 @@ import { cleanupTempDirectories, createTempDirectory } from './test-helpers.js';
 afterEach(cleanupTempDirectories);
 
 describe('Hermes model API signature compatibility', () => {
-  for (const signature of ['legacy', 'custom-providers'] as const) {
+  for (const signature of ['legacy', 'custom-providers', 'five-flags'] as const) {
     it(`switches a custom provider with the ${signature} switch_model signature`, async () => {
       const root = await createTempDirectory();
       const source = join(root, 'source');
@@ -21,7 +21,7 @@ describe('Hermes model API signature compatibility', () => {
         usageLedgerPath: join(root, 'usage.json'),
       });
 
-      expect(bridge.executeModelCommand(
+      expect(await bridge.executeModelCommand(
         '/model next-model --provider custom:fake-provider --global',
       )).toContain('Model switched to next-model.');
     });
@@ -30,7 +30,7 @@ describe('Hermes model API signature compatibility', () => {
 
 async function writeFakeHermesModules(
   source: string,
-  signature: 'legacy' | 'custom-providers',
+  signature: 'legacy' | 'custom-providers' | 'five-flags',
 ): Promise<void> {
   const packageDir = join(source, 'hermes_cli');
   await mkdir(packageDir, { recursive: true });
@@ -54,7 +54,7 @@ async function writeFakeHermesModules(
   ]);
 }
 
-function buildFakeModelSwitchModule(signature: 'legacy' | 'custom-providers'): string {
+function buildFakeModelSwitchModule(signature: 'legacy' | 'custom-providers' | 'five-flags'): string {
   const listSignature = signature === 'legacy'
     ? 'current_provider, user_providers=None, max_models=50'
     : 'current_provider, user_providers=None, custom_providers=None, max_models=50';
@@ -71,7 +71,7 @@ function buildFakeModelSwitchModule(signature: 'legacy' | 'custom-providers'): s
     '  parts = raw_args.split(" --provider ", 1)',
     '  model = parts[0].replace(" --global", "").strip()',
     '  provider = parts[1].split()[0] if len(parts) > 1 else ""',
-    '  return model, provider, True',
+    signature === 'five-flags' ? '  return model, provider, True, False, False' : '  return model, provider, True',
     `def switch_model(${switchSignature}):`,
     `  ${compatibilityAssertion}`,
     '  return SimpleNamespace(',

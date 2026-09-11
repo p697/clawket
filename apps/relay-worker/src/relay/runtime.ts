@@ -7,6 +7,7 @@ import {
   type PendingChallenge,
   type PendingConnectStart,
   type RateState,
+  type SocketAttachment,
 } from './types';
 import { parsePositiveInt } from './utils';
 
@@ -44,7 +45,13 @@ export class RelayRuntime {
   }
 
   clientPongTimeoutMs(): number {
-    return parsePositiveInt(this.env.CLIENT_PONG_TIMEOUT_MS, this.policy.clientPongTimeoutMs);
+    const interval = parsePositiveInt(this.env.HEARTBEAT_INTERVAL_MS, this.policy.heartbeatIntervalMs);
+    // A pong can only follow a server tick. Leave room for scheduling/network
+    // jitter and missed ticks, including the first tick after client attachment.
+    return Math.max(
+      parsePositiveInt(this.env.CLIENT_PONG_TIMEOUT_MS, this.policy.clientPongTimeoutMs),
+      interval * 3,
+    );
   }
 
   objectId(): string | null {
@@ -105,3 +112,16 @@ export function touchGatewayActivity(runtime: RelayRuntime, at = Date.now()): vo
 }
 
 export const touchBridgeActivity = touchGatewayActivity;
+
+/** Persist the selected route on sockets, without storing messages or credentials. */
+export function selectActiveClient(runtime: RelayRuntime, clientId: string | null): void {
+  runtime.activeClientId = clientId;
+  for (const [id, socket] of runtime.clients) {
+    const attachment = socket.deserializeAttachment() as SocketAttachment | null;
+    if (!attachment || attachment.role !== 'client' || attachment.authScope === 'pairing') continue;
+    const activeClient = id === clientId;
+    if (attachment.activeClient !== activeClient) {
+      socket.serializeAttachment({ ...attachment, activeClient });
+    }
+  }
+}

@@ -241,5 +241,17 @@
   "No files found": "Keine Dateien gefunden",
   "Pause": "Pausieren",
   "Unknown model": "Unbekanntes Modell",
-  "Skipped": "Übersprungen"
+  "Skipped": "Übersprungen",
+  "Agent profile": "Agent-Profil",
+  "Advanced management": "Erweiterte Verwaltung",
+  "Personality & memory": "Persönlichkeit & Gedächtnis",
+  "Continue chatting": "Weiterchatten",
+  "Server address": "Serveradresse",
+  "Minimal tools": "Minimale Werkzeuge",
+  "Coding tools": "Programmierwerkzeuge",
+  "All tools": "Alle Werkzeuge",
+  "Execution tools": "Ausführungswerkzeuge",
+  "Web tools": "Web-Werkzeuge",
+  "Interface tools": "Oberflächenwerkzeuge",
+  "Automation tools": "Automatisierungswerkzeuge"
 }

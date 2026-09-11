@@ -25,7 +25,7 @@ export function selectSessionForCurrentAgent({
     return currentSelected ?? cachedSelected ?? main ?? sessions[0] ?? null;
   }
 
-  const agentPrefix = mainSessionKey.replace(/:main$/, ':');
+  const agentPrefix = mainSessionKey.split(':').slice(0, 2).join(':') + ':';
   const currentSelected = (
     currentKey && currentKey.startsWith(agentPrefix)
       ? sessions.find((item) => item.key === currentKey)

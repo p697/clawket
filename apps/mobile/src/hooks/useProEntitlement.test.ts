@@ -101,6 +101,16 @@ describe('useProEntitlement', () => {
     });
   });
 
+  it('resolves the free connection while the subscription service is still loading', async () => {
+    const { result } = renderHook(() => useProEntitlement({
+      isPro: false, subscriptionLoading: true, connections: [connection],
+      activeConnectionId: 'home', registryFreeConnectionId: 'home', roster: [], foregroundEpoch: 0,
+    }));
+    await waitFor(() => expect(result.current.entitlement.freeConnectionId).toBe('home'));
+    expect(result.current.entitlement.isPro).toBe(false);
+    expect(result.current.loading).toBe(true);
+  });
+
   it('persists a free switch, updates access immediately, and exposes its cooldown', async () => {
     const work = { ...connection, id: 'work', label: 'Work' };
     const switched = {

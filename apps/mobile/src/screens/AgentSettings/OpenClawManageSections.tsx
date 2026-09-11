@@ -84,7 +84,7 @@ export function ConfigurationSection({
       {canEdit ? (
         <Button
           testID="openclaw-configuration-edit"
-          label={t('common:Edit')}
+          label={t('Edit', { ns: 'common' })}
           variant="secondary"
           disabled={!online}
           onPress={onEdit}
@@ -396,7 +396,7 @@ export function BackupsSection({
       {canCreate ? (
         <Button
           testID="openclaw-backup-create"
-          label={busy ? t('Creating backup...') : t('common:Create')}
+          label={busy ? t('Creating backup...') : t('Create', { ns: 'common' })}
           loading={busy}
           disabled={!online}
           onPress={onCreate}

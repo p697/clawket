@@ -1,5 +1,7 @@
 import { Platform } from 'react-native';
+import * as Application from 'expo-application';
 import { sha256 } from 'js-sha256';
+import { APP_PACKAGE_VERSION } from '../../constants/app-version';
 import { publicYouMindAuthConfig } from '../../config/public';
 import {
   StorageService,
@@ -369,7 +371,9 @@ export class YouMindSpriteApiClient implements YouMindSpriteApi {
       'x-use-camel-case': 'true',
       'x-client-type': this.platform === 'android' ? 'mobile_android' : 'mobile_ios',
       'x-device-id': deviceId,
-      'User-Agent': `Clawket/3.0 (${this.platform})`,
+      // YouMind's signed native-client contract requires this structured prefix.
+      // Keep Clawket's identity and actual version explicit within that contract.
+      'User-Agent': `YouMindClawket/${Application.nativeApplicationVersion?.trim() || APP_PACKAGE_VERSION} (Clawket; ${this.platform === 'android' ? 'Android' : 'iOS'} ${Platform.Version || '0'}; Build ${Application.nativeBuildVersion?.trim() || '0'}; ${typeof __DEV__ !== 'undefined' && __DEV__ ? 'Development' : 'AppStore'})`,
     };
   }
 }

@@ -1,5 +1,5 @@
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { fireEvent, render } from '@testing-library/react-native';
 import { View } from 'react-native';
 import { Search } from 'lucide-react-native';
 import { builtInAccents } from '../../theme/accents';
@@ -8,6 +8,7 @@ import {
   BorderWidth,
   ControlSize,
   FontSize,
+  IconSize,
   LineHeight,
   Motion,
   Radius,
@@ -24,6 +25,8 @@ import { Banner } from './Banner';
 import { Card } from './Card';
 import { FloatingButton, FLOATING_BUTTON_ICON_SIZE } from './FloatingButton';
 import { HeaderPill } from './HeaderPill';
+import { Companion } from './Companion';
+import { ProEntryButton, PRO_ENTRY_COMPANION_SIZE, PRO_ENTRY_HEIGHT, PRO_ENTRY_HIT_SLOP } from './ProEntryButton';
 import { RosterRow } from './RosterRow';
 import { Skeleton } from './Skeleton';
 import { SystemEventRow, SYSTEM_EVENT_ICON_SIZE } from './SystemEventRow';
@@ -97,6 +100,11 @@ jest.mock('lucide-react-native', () => {
     Search: icon('Search'),
     UsersRound: icon('UsersRound'),
   };
+});
+
+jest.mock('./Companion', () => {
+  const ReactRuntime = require('react');
+  return { Companion: (props: Record<string, unknown>) => ReactRuntime.createElement('Companion', props) };
 });
 
 jest.mock('../../theme', () => {
@@ -186,7 +194,7 @@ describe.each(['light', 'dark'] as const)('%s roster primitives', (scheme) => {
       width: ControlSize.floatingButton,
       height: ControlSize.floatingButton,
       borderRadius: Radius.full,
-      backgroundColor: theme.colors.surfaceFloating,
+      backgroundColor: 'transparent',
     });
     expect(root.props.android_ripple).toBeUndefined();
     expect(result.UNSAFE_getByType(Search).props).toMatchObject({
@@ -196,15 +204,8 @@ describe.each(['light', 'dark'] as const)('%s roster primitives', (scheme) => {
     });
     expect(result.getByText('99+')).toBeTruthy();
     expect(flattenStyle(result.getByTestId('floating-badge').props.style).backgroundColor).toBe(theme.colors.bad);
-    if (scheme === 'light') {
-      expect(style.shadowRadius).toBe(Shadow.floating.shadowRadius);
-      expect(style.elevation).toBe(Shadow.floating.elevation);
-    } else {
-      expect(style.borderWidth).toBe(BorderWidth.hairline);
-      expect(style.borderColor).toBe(theme.colors.line);
-      expect(style.shadowOpacity).toBe(0);
-      expect(style.elevation).toBe(0);
-    }
+    expect(style.shadowOpacity ?? 0).toBe(0);
+    expect(style.borderWidth ?? 0).toBe(0);
 
     const inkResult = render(
       <FloatingButton
@@ -219,6 +220,58 @@ describe.each(['light', 'dark'] as const)('%s roster primitives', (scheme) => {
     expect(flattenStyle(inkResult.getByTestId('ink-floating').props.style).backgroundColor).toBe(theme.colors.ink);
     expect(inkResult.UNSAFE_getByType(Search).props.color).toBe(theme.colors.canvas);
     expect(flattenStyle(inkResult.getByTestId('ink-floating-badge').props.style).backgroundColor).toBe(theme.colors.accent);
+  });
+
+  it('renders the Pro entry as a 32pt ink capsule with a 44pt target and the inverse curious Companion', () => {
+    const theme = activeTheme(scheme);
+    const onPress = jest.fn();
+    const result = render(
+      <ProEntryButton
+        testID="pro-entry"
+        label="Pro"
+        accessibilityLabel="View Pro"
+        onPress={onPress}
+      />,
+    );
+    const root = result.getByTestId('pro-entry');
+    const style = flattenStyle(root.props.style);
+
+    expect(root.props.accessibilityRole).toBe('button');
+    expect(root.props.accessibilityLabel).toBe('View Pro');
+    expect(PRO_ENTRY_HEIGHT).toBe(32);
+    expect(root.props.hitSlop).toBe(PRO_ENTRY_HIT_SLOP);
+    expect(PRO_ENTRY_HEIGHT + 2 * PRO_ENTRY_HIT_SLOP).toBe(ControlSize.floatingButton);
+    expect(PRO_ENTRY_COMPANION_SIZE).toBe(IconSize.md);
+    expect(style).toMatchObject({
+      height: PRO_ENTRY_HEIGHT,
+      borderRadius: Radius.full,
+      backgroundColor: theme.colors.ink,
+      paddingLeft: Space.sm,
+      paddingRight: Space.md,
+      gap: Space.sm,
+    });
+    if (scheme === 'dark') {
+      expect(style).toMatchObject({ borderWidth: BorderWidth.hairline, borderColor: theme.colors.line });
+    } else {
+      expect(style).toMatchObject({ shadowOpacity: Shadow.floating.shadowOpacity });
+    }
+    expect(result.UNSAFE_getByType(Companion).props).toMatchObject({
+      testID: 'pro-entry-companion',
+      size: PRO_ENTRY_COMPANION_SIZE,
+      pose: 'curious',
+      tone: 'inverse',
+    });
+    expect(flattenStyle(result.getByText('Pro').props.style)).toMatchObject({
+      color: theme.colors.canvas,
+      fontSize: FontSize.secondary,
+      lineHeight: LineHeight.secondary,
+    });
+
+    fireEvent(root, 'pressIn');
+    fireEvent(root, 'pressOut');
+    fireEvent.press(root);
+    expect(onPress).toHaveBeenCalledTimes(1);
+    expect(mockWithTiming).toHaveBeenCalledWith(Motion.pressedScale, { duration: Motion.duration.fast });
   });
 
   it('renders the header pill at 40pt with a 28pt Agent avatar', () => {
@@ -239,13 +292,37 @@ describe.each(['light', 'dark'] as const)('%s roster primitives', (scheme) => {
     expect(style).toMatchObject({
       height: ControlSize.pill,
       borderRadius: Radius.full,
-      backgroundColor: theme.colors.surfaceFloating,
+      backgroundColor: theme.colors.surface,
     });
     expect(avatarStyle).toMatchObject({
       width: AGENT_AVATAR_METRICS.header.size,
       height: AGENT_AVATAR_METRICS.header.size,
     });
     expect(root.props.android_ripple).toBeUndefined();
+  });
+
+  it('replaces the header subtitle with lifting dots while the Agent works', () => {
+    const theme = activeTheme(scheme);
+    const result = render(
+      <HeaderPill testID="header-pill" agentId="main" name="Main" subtitle="Thinking…" working />,
+    );
+    expect(result.queryByText('Thinking…')).toBeNull();
+    const dots = result.getByTestId('header-pill-working');
+    expect(dots.props.accessibilityRole).toBe('progressbar');
+    expect(result.getAllByTestId(/typing-dot-\d/)).toHaveLength(3);
+    expect(flattenStyle(result.getByTestId('typing-dot-0').props.style)).toMatchObject({
+      width: Space.xs,
+      height: Space.xs,
+      borderRadius: Radius.full,
+      backgroundColor: theme.colors.inkSecondary,
+    });
+    // No avatar badge competes with the dots.
+    expect(result.queryByTestId('header-pill-avatar-working')).toBeNull();
+
+    result.rerender(<HeaderPill testID="header-pill" agentId="main" name="Main" subtitle="Model · 54%" />);
+    // The subtitle is an Animated.Text host in this mock, so match it by props.
+    expect(result.UNSAFE_getByProps({ children: 'Model · 54%' })).toBeTruthy();
+    expect(result.queryByTestId('header-pill-working')).toBeNull();
   });
 
   it('renders a borderless 88pt roster row with tokenized pressed feedback', () => {
@@ -287,6 +364,13 @@ describe.each(['light', 'dark'] as const)('%s roster primitives', (scheme) => {
     expect(result.getByTestId('roster-row-avatar').props.accessibilityLabel).toBe('Owning Agent');
     expect(result.getByTestId('roster-row-avatar-overlay')).toBeTruthy();
     expect(result.getByTestId('roster-row-avatar-overlay-icon')).toBeTruthy();
+  });
+
+  it('can show an honest unread dot without inventing a message count', () => {
+    const result = render(<RosterRow testID="unread" agentId="main" name="Main" preview="Reply"
+      unreadCount={1} unreadIndicator="dot" onPress={jest.fn()} />);
+    expect(result.getByTestId('unread-unread')).toBeTruthy();
+    expect(result.queryByText('1')).toBeNull();
   });
 
   it('shows cached sync and lock state without stale attention or unread badges', () => {
@@ -339,8 +423,13 @@ describe.each(['light', 'dark'] as const)('%s roster primitives', (scheme) => {
     expect(flattenStyle(warnResult.getByTestId('warn').props.style)).toMatchObject({
       minHeight: ControlSize.floatingButton,
       borderRadius: Radius.card,
-      backgroundColor: theme.colors.warnSoft,
+      backgroundColor: theme.colors.surface,
     });
+    const retry = jest.fn();
+    const neutral = render(<Banner testID="neutral" tone="neutral" message="Offline" actionLabel="Retry" onAction={retry} />);
+    expect(flattenStyle(neutral.getByTestId('neutral').props.style).backgroundColor).toBe(theme.colors.surface);
+    fireEvent.press(neutral.getByTestId('neutral-action'));
+    expect(retry).toHaveBeenCalledTimes(1);
     const badResult = render(<Banner testID="bad" tone="bad" message="Connection failed" />);
     expect(flattenStyle(badResult.getByTestId('bad').props.style).backgroundColor).toBe(theme.colors.badSoft);
   });
@@ -411,29 +500,19 @@ describe('AgentAvatar states and motion', () => {
     expect(image.getByText('✨')).toBeTruthy();
   });
 
-  it('animates the working scan ring and makes it solid for reduced motion', () => {
+  it('uses a stable activity badge without rotating the avatar silhouette', () => {
     const theme = activeTheme('light');
-    const animated = render(
-      <AgentAvatar testID="avatar" agentId="main" name="Main" status="working" />,
-    );
-    const animatedRing = flattenStyle(animated.getByTestId('avatar-working-ring').props.style);
-    expect(animatedRing).toMatchObject({
-      borderWidth: BorderWidth.strong,
-      borderColor: theme.colors.accent,
-      borderBottomColor: theme.colors.accentSoft,
-      borderLeftColor: theme.colors.accentSoft,
+    const result = render(<AgentAvatar testID="avatar" agentId="main" name="Main" status="working" />);
+    expect(result.queryByTestId('avatar-working-ring')).toBeNull();
+    expect(flattenStyle(result.getByTestId('avatar-working').props.style)).toMatchObject({
+      width: Space.lg, height: Space.lg, backgroundColor: theme.colors.ink,
     });
-    expect(mockWithRepeat).toHaveBeenCalled();
-    animated.unmount();
-
+    expect(mockWithRepeat).not.toHaveBeenCalled();
+    result.rerender(<AgentAvatar testID="avatar" agentId="main" name="Main" status="idle" />);
+    expect(result.queryByTestId('avatar-working')).toBeNull();
     mockReducedMotion = true;
-    mockWithRepeat.mockClear();
-    const reduced = render(
-      <AgentAvatar testID="reduced" agentId="main" name="Main" status="working" />,
-    );
-    const reducedRing = flattenStyle(reduced.getByTestId('reduced-working-ring').props.style);
-    expect(reducedRing.borderBottomColor).toBe(theme.colors.accent);
-    expect(reducedRing.borderLeftColor).toBe(theme.colors.accent);
+    result.rerender(<AgentAvatar testID="avatar" agentId="main" name="Main" status="working" />);
+    expect(result.getByTestId('avatar-working')).toBeTruthy();
     expect(mockWithRepeat).not.toHaveBeenCalled();
   });
 

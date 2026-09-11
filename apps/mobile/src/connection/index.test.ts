@@ -22,6 +22,8 @@ import {
   type ConnectionTelemetry,
 } from './index';
 import { createConnectionAdapter } from './adapters';
+import { enqueueMessage, getMessageQueueStore, messageQueueScopeKey } from '../chat/messageQueue';
+import { ownConnectionRuntime } from './runtime-owner';
 
 class MemorySecureStorage implements SecureConnectionStorage {
   private readonly values = new Map<string, string>();
@@ -197,6 +199,7 @@ async function createMaintenanceHarness(
   await store.add({ ...connectionInput('alpha'), backendKind });
   const dashboardStorage = new MemoryDashboardStorage();
   let adapter: AgentAdapter | null = null;
+  let pausedIds: ReadonlyArray<string> = [];
   const coordinator = new ConnectionCoordinator({
     store,
     cache: new RosterCache({ storage: dashboardStorage }),
@@ -205,6 +208,7 @@ async function createMaintenanceHarness(
       adapter = instrumentAdapter(descriptor, []);
       return adapter;
     },
+    pausedStore: { read: async () => pausedIds, write: async (ids) => { pausedIds = ids; } },
     ...maintenance,
   });
   return {
@@ -266,6 +270,73 @@ async function flushMaintenance(): Promise<void> {
 }
 
 describe('ConnectionCoordinator', () => {
+  it.each(['openclaw', 'hermes'] as const)(
+    'retires the previous process owner before a hot-reloaded %s runtime starts',
+    async (backendKind) => {
+      jest.useFakeTimers();
+      const scope = {};
+      const old = await createMaintenanceHarness(backendKind, {
+        rosterRefreshIntervalMs: 1_000, hermesProbeIntervalMs: 1_000,
+      });
+      const next = await createMaintenanceHarness(backendKind, {
+        rosterRefreshIntervalMs: 1_000, hermesProbeIntervalMs: 1_000,
+      });
+      try {
+        ownConnectionRuntime(old.coordinator, scope);
+        await old.coordinator.start();
+        const adapter = old.getAdapter();
+        const disconnect = jest.spyOn(adapter, 'disconnect');
+        const reconnect = jest.spyOn(adapter, 'connect');
+        ownConnectionRuntime(next.coordinator, scope);
+        // Cleanup happens synchronously, before queued storage work settles.
+        expect(disconnect).toHaveBeenCalledTimes(1);
+        expect(old.coordinator.getSnapshot().activeAdapter).toBeNull();
+        await old.coordinator.start();
+        await next.coordinator.start();
+        await jest.advanceTimersByTimeAsync(5_000);
+        expect(reconnect).not.toHaveBeenCalled();
+        expect(next.coordinator.getSnapshot().activeState).toBe('ready');
+        // Reclaiming the same instance must not disconnect a healthy session.
+        ownConnectionRuntime(next.coordinator, scope);
+        expect(next.coordinator.getSnapshot().activeState).toBe('ready');
+      } finally {
+        await old.coordinator.stop();
+        await next.coordinator.stop();
+        jest.useRealTimers();
+      }
+    },
+  );
+
+  it('survives overlapping cleanup and restart without losing initialized state', async () => {
+    const { coordinator } = await createHarness();
+    await coordinator.start();
+    await Promise.all([coordinator.stop(), coordinator.start()]);
+    expect(coordinator.getSnapshot()).toMatchObject({ initialized: true, activeState: 'ready' });
+    await coordinator.stop();
+  });
+
+  it.each(['openclaw', 'hermes'] as const)('keeps a paused %s connection offline across restart and probes', async (backendKind) => {
+    const { coordinator } = await createMaintenanceHarness(backendKind, {
+      rosterRefreshIntervalMs: 0, hermesProbeIntervalMs: 0,
+    });
+    await coordinator.start();
+    const first = coordinator.getSnapshot().activeAdapter;
+    await coordinator.pauseConnection('alpha');
+    expect(coordinator.getSnapshot()).toMatchObject({ activeAdapter: null, pausedConnectionIds: ['alpha'] });
+    await coordinator.probeActive();
+    await coordinator.stop();
+    await coordinator.start();
+    expect(coordinator.getSnapshot().activeAdapter).toBeNull();
+    await coordinator.activate('alpha');
+    expect(coordinator.getSnapshot().activeState).toBe('ready');
+    expect(coordinator.getSnapshot().activeAdapter).not.toBe(first);
+    const resumed = coordinator.getSnapshot().activeAdapter;
+    await coordinator.reconnectConnection('alpha');
+    expect(coordinator.getSnapshot().activeAdapter).not.toBe(resumed);
+    expect(coordinator.getSnapshot().activeState).toBe('ready');
+    await coordinator.stop();
+  });
+
   it('claims the launch paywall at most once for the coordinator process', async () => {
     const harness = await createHarness(false);
 
@@ -787,11 +858,17 @@ describe('ConnectionCoordinator', () => {
       chatCache: { clearConnection },
     });
     await harness.coordinator.start();
+    const queueStore = getMessageQueueStore();
+    const queuedItem = { id: 'usr_1_q1', text: 'later', images: [], createdAt: 1 };
+    queueStore.update(messageQueueScopeKey('beta', 'main'), (state) => enqueueMessage(state, queuedItem));
+    queueStore.update(messageQueueScopeKey('alpha', 'main'), (state) => enqueueMessage(state, queuedItem));
 
     await expect(harness.coordinator.removeConnection('beta')).resolves.toBe(true);
 
     expect(clearConnection).toHaveBeenCalledTimes(1);
     expect(clearConnection).toHaveBeenCalledWith('beta');
+    expect(queueStore.read(messageQueueScopeKey('beta', 'main')).items).toHaveLength(0);
+    expect(queueStore.read(messageQueueScopeKey('alpha', 'main')).items).toHaveLength(1);
     expect(harness.store.getSnapshot().connections.map((connection) => connection.id)).toEqual([
       'alpha',
     ]);
@@ -1319,5 +1396,50 @@ describe('ConnectionCoordinator', () => {
         ?.agents[0]?.sessions.map((candidate) => candidate.key),
     ).toContain(created?.key);
     await harness.coordinator.stop();
+  });
+});
+
+
+describe('foreground recovery presentation for both backends', () => {
+  it.each(['openclaw', 'hermes'] as const)('keeps healthy %s ready during a pending foreground probe', async (backendKind) => {
+    const harness = await createMaintenanceHarness(backendKind, { rosterRefreshIntervalMs: 0, hermesProbeIntervalMs: 0 });
+    try {
+      await harness.coordinator.start();
+      const pending = deferred<boolean>();
+      jest.spyOn(harness.getAdapter(), 'probe').mockReturnValue(pending.promise);
+      const probe = harness.coordinator.probeActive(undefined, 'foreground');
+      await Promise.resolve();
+      expect(harness.coordinator.getSnapshot()).toMatchObject({ recovering: false, recoveryFailed: false, error: null });
+      pending.resolve(true);
+      await probe;
+      expect(harness.coordinator.getSnapshot()).toMatchObject({ recovering: false, error: null });
+    } finally { await harness.coordinator.stop(); }
+  });
+
+  it.each(['openclaw', 'hermes'] as const)('keeps %s transient failures quiet until the recovery deadline', async (backendKind) => {
+    jest.useFakeTimers();
+    const harness = await createMaintenanceHarness(backendKind, { rosterRefreshIntervalMs: 0, hermesProbeIntervalMs: 0 });
+    try {
+      await harness.coordinator.start();
+      const adapter = harness.getAdapter();
+      jest.spyOn(adapter, 'probe').mockRejectedValue(new Error('health timed out'));
+      await harness.coordinator.probeActive(undefined, 'foreground');
+      expect(harness.coordinator.getSnapshot()).toMatchObject({ recovering: true, error: null });
+      jest.advanceTimersByTime(20_000);
+      expect(harness.coordinator.getSnapshot()).toMatchObject({ recovering: false, recoveryFailed: true, error: { operation: 'probe' } });
+      harness.coordinator.setAppActive(false);
+      jest.advanceTimersByTime(120_000);
+      harness.coordinator.setAppActive(true);
+      expect(harness.coordinator.getSnapshot()).toMatchObject({ recovering: true, error: null });
+      jest.spyOn(adapter, 'probe').mockResolvedValue(true);
+      await harness.coordinator.probeActive(undefined, 'foreground');
+      expect(harness.coordinator.getSnapshot()).toMatchObject({ recovering: false, recoveryFailed: false, error: null });
+      await harness.coordinator.pauseConnection('alpha');
+      await harness.coordinator.probeActive(undefined, 'foreground');
+      expect(harness.coordinator.getSnapshot()).toMatchObject({ recovering: false, activeAdapter: null });
+    } finally {
+      await harness.coordinator.stop();
+      jest.useRealTimers();
+    }
   });
 });

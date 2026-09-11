@@ -43,16 +43,33 @@ export function YouMindSignInPanel({
   const [authBusy, setAuthBusy] = React.useState(false);
   const [authError, setAuthError] = React.useState<string | null>(null);
 
+  const requestBusy = React.useRef(false);
+  const completed = React.useRef(false);
+  const [resendUntil, setResendUntil] = React.useState(0);
+  const [resendCountdown, setResendCountdown] = React.useState(0);
+  React.useEffect(() => {
+    if (!resendUntil) return;
+    const tick = () => setResendCountdown(Math.max(0, Math.ceil((resendUntil - Date.now()) / 1000)));
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [resendUntil]);
+
   const handleSendCode = React.useCallback(async () => {
+    if (requestBusy.current || completed.current || (otpSent && Date.now() < resendUntil)) return;
     if (!email.trim()) {
       setAuthError(t('Please enter your YouMind email first.', { ns: 'chat' }));
       return;
     }
+    requestBusy.current = true;
     setAuthError(null);
     analyticsEvents.youMindSignInTapped({ method: 'email', source: otpSent ? 'otp' : source });
     setAuthBusy(true);
     try {
-      await client.sendOtp(email);
+      await client.sendOtp(email.trim());
+      setEmail(email.trim());
+      setCode('');
+      setResendUntil(Date.now() + 60000);
       setOtpSent(true);
       setSignInStep('email');
     } catch (error) {
@@ -61,22 +78,26 @@ export function YouMindSignInPanel({
         ? error.message
         : t('Unable to send code', { ns: 'chat' }));
     } finally {
+      requestBusy.current = false;
       setAuthBusy(false);
     }
-  }, [client, email, otpSent, source, t]);
+  }, [client, email, otpSent, resendUntil, source, t]);
 
-  const handleVerify = React.useCallback(async () => {
-    if (!email.trim() || !code.trim()) {
+  const handleVerify = React.useCallback(async (submittedCode = code) => {
+    if (requestBusy.current || completed.current) return false;
+    if (!email.trim() || !/^\d{6}$/.test(submittedCode)) {
       setAuthError(t('Enter both your email and the verification code.', { ns: 'chat' }));
       return false;
     }
+    requestBusy.current = true;
     setAuthError(null);
     analyticsEvents.youMindSignInTapped({ method: 'email', source: 'otp' });
     setAuthBusy(true);
     try {
-      const session = await client.verifyOtp(email, code);
+      const session = await client.verifyOtp(email.trim(), submittedCode);
       analyticsEvents.youMindSignInResolved({ method: 'email', result: 'success', source: 'otp' });
       await onSignedIn?.(session);
+      completed.current = true;
       return true;
     } catch (error) {
       analyticsEvents.youMindSignInResolved({ method: 'email', result: 'failure', source: 'otp' });
@@ -85,6 +106,7 @@ export function YouMindSignInPanel({
         : t('Unable to sign in', { ns: 'chat' }));
       return false;
     } finally {
+      requestBusy.current = false;
       setAuthBusy(false);
     }
   }, [client, code, email, onSignedIn, t]);
@@ -142,6 +164,8 @@ export function YouMindSignInPanel({
           busy={authBusy}
           otpSent={otpSent}
           emailBusy={authBusy}
+          resendCountdown={resendCountdown}
+          invalid={Boolean(authError)}
           onBack={() => {
             if (authBusy) return;
             setSignInStep('options');
@@ -151,7 +175,7 @@ export function YouMindSignInPanel({
             setAuthError(null);
             setOtpSent(false);
             setCode('');
-            setSignInStep('email');
+            setSignInStep('options');
           }}
           onChangeEmail={(value) => {
             setAuthError(null);
@@ -193,7 +217,8 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     centered: {
       flex: 1,
-      justifyContent: 'center',
+      paddingTop: Space.xxl,
+      paddingBottom: Space.xxl,
       paddingHorizontal: Space.xl,
     },
     inlineBackButton: {
@@ -246,7 +271,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     websitePrompt: {
       alignItems: 'center',
       alignSelf: 'center',
-      marginTop: Space.lg,
+      marginTop: Space.xxl,
       maxWidth: 520,
       paddingHorizontal: Space.lg,
       width: '100%',
@@ -260,7 +285,9 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       borderRadius: Radius.full,
       marginTop: Space.sm,
       paddingHorizontal: Space.sm,
-      paddingVertical: Space.xs,
+      paddingVertical: Space.md,
+      minHeight: 44,
+      justifyContent: 'center',
     },
     websitePromptLinkPressed: {
       opacity: 0.72,

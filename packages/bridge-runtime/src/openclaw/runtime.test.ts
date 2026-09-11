@@ -1108,6 +1108,84 @@ describe('bridge runtime protocol helpers', () => {
     await runtime.stop();
   });
 
+  it('recycles the full relay after a challenge receives no connect, instead of repeating local timeouts', async () => {
+    vi.useFakeTimers();
+    const sockets: FakeSocket[] = [];
+    const logs: string[] = [];
+    const runtime = new BridgeRuntime({
+      config: BASE_CONFIG, gatewayUrl: 'ws://127.0.0.1:18789',
+      onLog: (line) => logs.push(line),
+      createWebSocket: (url) => { const socket = new FakeSocket(url); sockets.push(socket); return socket; },
+    });
+    try {
+      runtime.start();
+      const relay = sockets[0];
+      relay.open();
+      relay.message('__clawket_relay_control__:{"event":"client_connected","count":1}');
+      const gateway = sockets[1];
+      gateway.open();
+      gateway.message(JSON.stringify({ type: 'event', event: 'connect.challenge', payload: { nonce: 'private-nonce' } }));
+      await vi.advanceTimersByTimeAsync(7_999);
+      expect(relay.readyState).toBe(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(relay.readyState).toBe(3);
+      expect(logs).toContain('connection phase=challenge_wait code=connect_request_missing elapsedMs=8000 action=relay_recycle');
+      expect(logs.join(' ')).not.toContain('private-nonce');
+      expect(logs.some((line) => line.startsWith('relay reconnect scheduled'))).toBe(true);
+    } finally { await runtime.stop(); vi.useRealTimers(); }
+  });
+
+  it('does not mistake slow bootstrap issuance for a lost challenge', async () => {
+    vi.useFakeTimers();
+    const sockets: FakeSocket[] = [];
+    let finish!: (value: { token: string; expiresAtMs: number; strategy: 'mobile-setup'; access: 'full' }) => void;
+    const issued = new Promise<{ token: string; expiresAtMs: number; strategy: 'mobile-setup'; access: 'full' }>((resolve) => { finish = resolve; });
+    const runtime = new BridgeRuntime({
+      config: BASE_CONFIG, gatewayUrl: 'ws://127.0.0.1:18789',
+      issueOpenClawBootstrapToken: () => issued,
+      createWebSocket: (url) => { const socket = new FakeSocket(url); sockets.push(socket); return socket; },
+    });
+    try {
+      runtime.start();
+      const relay = sockets[0]; relay.open();
+      relay.message('__clawket_relay_control__:{"event":"client_connected","count":1}');
+      const gateway = sockets[1]; gateway.open();
+      gateway.message('{"type":"event","event":"connect.challenge"}');
+      relay.message(`__clawket_relay_control__:${JSON.stringify({
+        event: 'bootstrap.request', requestId: 'bootstrap-test', sourceClientId: 'client-test',
+        payload: { deviceId: 'test-device', publicKey: 'test-public-key', role: 'operator', scopes: ['operator.read'], capabilities: [OPENCLAW_MOBILE_SETUP_CAPABILITY] },
+      })}`);
+      await vi.advanceTimersByTimeAsync(12_000);
+      expect(relay.readyState).toBe(1);
+      finish({ token: 'private-token', expiresAtMs: Date.now() + 60_000, strategy: 'mobile-setup', access: 'full' });
+      await vi.advanceTimersByTimeAsync(7_999);
+      expect(relay.readyState).toBe(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(relay.readyState).toBe(3);
+    } finally { await runtime.stop(); vi.useRealTimers(); }
+  });
+
+  it.each(['connect', 'disconnect', 'stop'])('cancels the challenge watchdog on %s', async (action) => {
+    vi.useFakeTimers();
+    const sockets: FakeSocket[] = [];
+    const runtime = new BridgeRuntime({
+      config: BASE_CONFIG, gatewayUrl: 'ws://127.0.0.1:18789',
+      createWebSocket: (url) => { const socket = new FakeSocket(url); sockets.push(socket); return socket; },
+    });
+    try {
+      runtime.start();
+      const relay = sockets[0]; relay.open();
+      relay.message('__clawket_relay_control__:{"event":"client_connected","count":1}');
+      const gateway = sockets[1]; gateway.open();
+      gateway.message('{"type":"event","event":"connect.challenge"}');
+      if (action === 'connect') relay.message('{"type":"req","id":"test-connect","method":"connect","params":{}}');
+      if (action === 'disconnect') relay.message('__clawket_relay_control__:{"event":"client_disconnected"}');
+      if (action === 'stop') await runtime.stop();
+      await vi.advanceTimersByTimeAsync(8_001);
+      expect(relay.readyState).toBe(action === 'stop' ? 2 : 1);
+    } finally { await runtime.stop(); vi.useRealTimers(); }
+  });
+
   it('backs off gateway reconnect attempts after repeated failures', async () => {
     vi.useFakeTimers();
     const sockets: FakeSocket[] = [];
@@ -1601,4 +1679,60 @@ describe('bridge runtime protocol helpers', () => {
 
     await runtime.stop();
   });
+});
+
+it('negotiates independent client runtimes and retires only the disconnected channel', async () => {
+  const sockets: FakeSocket[] = [];
+  const runtime = new BridgeRuntime({ clientChannels: true, config: BASE_CONFIG, gatewayUrl: 'ws://localhost:18789', createWebSocket: (url, options) => {
+    const socket = new FakeSocket(url, options); sockets.push(socket); return socket;
+  } });
+  const ids = ['11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222'];
+  runtime.start();
+  sockets[0].open();
+  const sync = (clients: string[]) => sockets[0].emit('message', Buffer.from('__clawket_relay_control__:' + JSON.stringify({ event: 'client.sockets', payload: { clients } })), false);
+  sync(ids);
+  expect(sockets).toHaveLength(3);
+  expect(new URL(sockets[1].url).searchParams.get('targetConnectionId')).toBe(ids[0]);
+  expect(new URL(sockets[2].url).searchParams.get('targetConnectionId')).toBe(ids[1]);
+  sync([ids[1]]);
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(sockets[1].closeCalls).toBe(1);
+  expect(sockets[2].closeCalls).toBe(0);
+  sync([ids[1]]);
+  await expect(runtime.approvePairRequest('retired-request')).rejects.toThrow('no longer available');
+  await expect(runtime.rejectPairRequest('retired-request')).rejects.toThrow('no longer available');
+  expect(sockets).toHaveLength(3);
+  await runtime.stop();
+  expect(sockets[2].closeCalls).toBe(1);
+});
+
+it.each([false, true])('keeps connected pairing decisions routed to the correct gateway (channels: %s)', async (channels) => {
+  const sockets: FakeSocket[] = [];
+  const runtime = new BridgeRuntime({ clientChannels: channels, config: BASE_CONFIG, gatewayUrl: 'ws://localhost:18789', createWebSocket: (url, options) => {
+    const socket = new FakeSocket(url, options); sockets.push(socket); return socket;
+  } });
+  try {
+    runtime.start();
+    sockets[0].open();
+    if (channels) {
+      sockets[0].message('__clawket_relay_control__:' + JSON.stringify({ event: 'client.sockets', payload: { clients: ['11111111-1111-4111-8111-111111111111'] } }));
+      sockets[1].open();
+    }
+    const relay = sockets[channels ? 1 : 0];
+    relay.message(JSON.stringify({ type: 'req', id: 'connect-1', method: 'connect', params: {} }));
+    await delay(10);
+    const gateway = sockets.find((socket) => socket.url === 'ws://localhost:18789');
+    expect(gateway).toBeDefined();
+    gateway!.open();
+    gateway!.message(JSON.stringify({ type: 'res', id: 'connect-1', ok: false, error: { code: 'NOT_PAIRED', message: 'pairing required', details: { requestId: 'pair-live' } } }));
+    await delay(10);
+    expect(runtime.getSnapshot().pendingPairRequests.some((request) => request.requestId === 'pair-live')).toBe(true);
+    await runtime.approvePairRequest('pair-live');
+    await runtime.rejectPairRequest('pair-live');
+    const methods = gateway!.sent.map((frame) => { try { return JSON.parse(String(frame)).method; } catch { return null; } });
+    expect(methods).toContain('device.pair.approve');
+    expect(methods).toContain('device.pair.reject');
+    expect(sockets.filter((socket) => socket.url === 'ws://localhost:18789')).toHaveLength(1);
+  } finally { await runtime.stop(); }
 });

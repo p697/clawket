@@ -80,3 +80,11 @@ describe('composition-safe input components', () => {
     expect(onPasteFailed).toHaveBeenCalledTimes(1);
   });
 });
+
+it('resets native tracking after a spaced field while preserving explicit overrides', () => {
+  const view = render(<CompositionSafeTextInput testID="tracking" value="" placeholder="123 456" style={{ letterSpacing: 4 }} />);
+  const style = () => Object.assign({}, ...view.getByTestId('tracking').props.style.flat(Infinity));
+  expect(style().letterSpacing).toBe(4);
+  view.rerender(<CompositionSafeTextInput testID="tracking" value="" placeholder="搜索组件" />);
+  expect(style().letterSpacing).toBe(0);
+});

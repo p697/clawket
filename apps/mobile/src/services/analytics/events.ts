@@ -41,10 +41,12 @@ export const ANALYTICS_EVENT_PROPERTY_WHITELIST = Object.freeze({
   onboarding_viewed: ['source'],
   pairing_code_submitted: ['length_ok'],
   onboarding_docs_opened: ['backend'],
+  onboarding_agent_prompt_copied: ['backend'],
   gateway_connect_saved: ['backend', 'transport', 'source'],
   gateway_scan_qr_tapped: ['source'],
   gateway_secure_pairing_finished: ['method', 'environment', 'connected'],
   connect_attempt: ['backend', 'transport', 'reason'],
+  connect_phase: ['protocol', 'route', 'phase', 'elapsed_ms', 'phase_ms', 'attempt'],
   connect_ready: ['backend', 'transport', 'elapsed_ms', 'attempt'],
   connect_failed: ['backend', 'transport', 'code', 'stage', 'attempt'],
   reconnect: ['backend', 'transport', 'reason'],
@@ -52,6 +54,8 @@ export const ANALYTICS_EVENT_PROPERTY_WHITELIST = Object.freeze({
   roster_row_opened: ['kind', 'unread', 'attention', 'locked', 'cached'],
   roster_pin_toggled: ['action', 'kind'],
   thread_opened: ['backend', 'kind', 'from'],
+  thread_load_state: ['backend', 'phase', 'history_loaded', 'subscription_loading', 'target_session_ready', 'preview_only', 'elapsed_ms'],
+  session_preview_viewed: ['backend', 'kind'],
   chat_send_tapped: [
     'backend',
     'has_text',
@@ -65,6 +69,11 @@ export const ANALYTICS_EVENT_PROPERTY_WHITELIST = Object.freeze({
     'session_key_present',
   ],
   chat_abort_tapped: ['backend'],
+  chat_message_queued: ['backend', 'queue_length', 'has_attachments'],
+  chat_queued_message_delivered: ['backend', 'wait_ms', 'remaining'],
+  chat_queued_message_edited: ['backend'],
+  chat_queued_message_removed: ['backend'],
+  chat_queue_held: ['reason', 'queue_length'],
   run_card_opened: ['kind'],
   approval_resolved: ['kind', 'decision'],
   session_panel_opened: ['mode', 'session_count'],
@@ -267,6 +276,10 @@ export const analyticsEvents = {
     captureAnalyticsEvent('onboarding_docs_opened', properties);
   },
 
+  onboardingAgentPromptCopied(properties: { backend: AnalyticsBackend }): void {
+    captureAnalyticsEvent('onboarding_agent_prompt_copied', properties);
+  },
+
   gatewayConnectSaved(properties: {
     backend?: AnalyticsBackend;
     transport?: AnalyticsTransport;
@@ -294,6 +307,18 @@ export const analyticsEvents = {
     connected: boolean;
   }): void {
     captureAnalyticsEvent('gateway_secure_pairing_finished', properties);
+  },
+
+  connectPhase(properties: {
+    protocol: 'challenge' | 'health';
+    route: 'relay' | 'direct';
+    phase: 'socket_open' | 'challenge_received' | 'credentials_ready' | 'authenticated'
+      | 'bootstrap_handoff' | 'backend_restarted' | 'ready' | 'reconnecting' | 'closed' | 'error';
+    elapsed_ms: number;
+    phase_ms: number;
+    attempt: number;
+  }): void {
+    captureAnalyticsEvent('connect_phase', properties);
   },
 
   connectAttempt(properties: {
@@ -363,6 +388,22 @@ export const analyticsEvents = {
     captureAnalyticsEvent('thread_opened', properties);
   },
 
+  sessionPreviewViewed(properties: { backend: AnalyticsBackend; kind: SessionKind }): void {
+    captureAnalyticsEvent('session_preview_viewed', properties);
+  },
+
+  threadLoadState(properties: {
+    backend: AnalyticsBackend;
+    phase: 'loading' | 'ready' | 'empty' | 'reconnecting' | 'offline' | 'locked' | 'error';
+    history_loaded: boolean;
+    subscription_loading: boolean;
+    target_session_ready: boolean;
+    preview_only: boolean;
+    elapsed_ms: number;
+  }): void {
+    captureAnalyticsEvent('thread_load_state', properties);
+  },
+
   chatSendTapped(properties: {
     backend?: AnalyticsBackend;
     has_text: boolean;
@@ -382,6 +423,37 @@ export const analyticsEvents = {
 
   chatAbortTapped(properties: { backend: AnalyticsBackend }): void {
     captureAnalyticsEvent('chat_abort_tapped', properties);
+  },
+
+  chatMessageQueued(properties: {
+    backend?: AnalyticsBackend;
+    queue_length: number;
+    has_attachments: boolean;
+  }): void {
+    captureAnalyticsEvent('chat_message_queued', properties);
+  },
+
+  chatQueuedMessageDelivered(properties: {
+    backend?: AnalyticsBackend;
+    wait_ms: number;
+    remaining: number;
+  }): void {
+    captureAnalyticsEvent('chat_queued_message_delivered', properties);
+  },
+
+  chatQueuedMessageEdited(properties: { backend?: AnalyticsBackend }): void {
+    captureAnalyticsEvent('chat_queued_message_edited', properties);
+  },
+
+  chatQueuedMessageRemoved(properties: { backend?: AnalyticsBackend }): void {
+    captureAnalyticsEvent('chat_queued_message_removed', properties);
+  },
+
+  chatQueueHeld(properties: {
+    reason: 'abort' | 'run_error' | 'send_failed' | 'preflight_failed';
+    queue_length: number;
+  }): void {
+    captureAnalyticsEvent('chat_queue_held', properties);
   },
 
   runCardOpened(properties: { kind: 'subagent' | 'cron' }): void {

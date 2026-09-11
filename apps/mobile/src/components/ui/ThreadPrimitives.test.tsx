@@ -1,6 +1,7 @@
 import React from 'react';
 import { fireEvent, render } from '@testing-library/react-native';
-import { BottomSheetModal, BottomSheetView } from '@gorhom/bottom-sheet';
+import { BottomSheetBackdrop, BottomSheetModal, BottomSheetView } from '@gorhom/bottom-sheet';
+import type { SharedValue } from 'react-native-reanimated';
 import { ArrowUp, Lock, Square } from 'lucide-react-native';
 import { builtInAccents } from '../../theme/accents';
 import { buildTheme } from '../../theme/theme';
@@ -14,6 +15,7 @@ import {
   Shadow,
   Space,
 } from '../../theme/tokens';
+import { triggerLightImpact } from '../../services/haptics';
 import { ApprovalCard } from './ApprovalCard';
 import { Bubble } from './Bubble';
 import { Composer } from './Composer';
@@ -27,6 +29,7 @@ import {
 } from './Sheet';
 
 let mockScheme: 'light' | 'dark' = 'light';
+let mockReducedMotion = false;
 
 jest.mock('react-native', () => {
   const ReactRuntime = require('react');
@@ -36,6 +39,9 @@ jest.mock('react-native', () => {
     ),
   );
   return {
+    DynamicColorIOS: (variants: unknown) => ({ dynamic: variants }),
+    Keyboard: { dismiss: jest.fn() },
+    PanResponder: { create: (config: Record<string, unknown>) => ({ panHandlers: { __config: config } }) },
     Modal: primitive('Modal'),
     Platform: {
       OS: 'ios',
@@ -82,9 +88,12 @@ jest.mock('react-native-reanimated', () => {
       View: animatedPrimitive('AnimatedView'),
       createAnimatedComponent: (Component: React.ComponentType<unknown>) => Component,
     },
+    FadeIn: { duration: () => ({ name: 'FadeIn' }) },
+    LinearTransition: { duration: () => ({ name: 'LinearTransition' }) },
     useAnimatedStyle: (factory: () => unknown) => factory(),
-    useReducedMotion: () => false,
+    useReducedMotion: () => mockReducedMotion,
     useSharedValue: (value: unknown) => ({ value }),
+    withSpring: jest.fn((value: unknown) => value),
     withTiming: jest.fn((value: unknown) => value),
   };
 });
@@ -94,6 +103,9 @@ jest.mock('lucide-react-native', () => {
   const icon = (name: string) => (props: Record<string, unknown>) => ReactRuntime.createElement(name, props);
   return {
     ArrowUp: icon('ArrowUp'),
+    Maximize2: icon('Maximize2'),
+    Minimize2: icon('Minimize2'),
+    ChevronDown: icon('ChevronDown'),
     ChevronRight: icon('ChevronRight'),
     Lock: icon('Lock'),
     Mic: icon('Mic'),
@@ -117,6 +129,10 @@ jest.mock('../../theme', () => {
 
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
+}));
+
+jest.mock('../../services/haptics', () => ({
+  triggerLightImpact: jest.fn(),
 }));
 
 let consoleErrorSpy: jest.SpyInstance;
@@ -167,12 +183,12 @@ describe.each(['light', 'dark'] as const)('%s thread primitives', (scheme) => {
     const assistant = render(<Bubble testID="assistant" role="assistant">Hello</Bubble>);
     const assistantStyle = flattenStyle(assistant.getByTestId('assistant').props.style);
     expect(assistantStyle).toMatchObject({
-      maxWidth: '82%',
+      maxWidth: '92%',
       borderRadius: Radius.bubble,
       backgroundColor: theme.colors.surface,
       alignSelf: 'flex-start',
     });
-    expect(assistantStyle).not.toHaveProperty('borderWidth');
+    expect(assistantStyle.borderWidth).toBe(0);
     expect(flattenStyle(assistant.getByText('Hello').props.style)).toMatchObject({
       color: theme.colors.ink,
       fontSize: FontSize.body,
@@ -181,13 +197,13 @@ describe.each(['light', 'dark'] as const)('%s thread primitives', (scheme) => {
 
     const user = render(<Bubble testID="user" role="user">Hi</Bubble>);
     expect(flattenStyle(user.getByTestId('user').props.style)).toMatchObject({
-      backgroundColor: theme.colors.accentSoft,
+      backgroundColor: scheme === 'light' ? 'rgb(233,239,255)' : 'rgb(27,34,52)',
       alignSelf: 'flex-end',
       borderRadius: Radius.bubble,
     });
   });
 
-  it('renders a borderless run card with a tokenized status rail', () => {
+  it('renders a borderless run event without a status rail', () => {
     const theme = activeTheme(scheme);
     const onPress = jest.fn();
     const result = render(
@@ -207,10 +223,7 @@ describe.each(['light', 'dark'] as const)('%s thread primitives', (scheme) => {
       borderRadius: Radius.card,
     });
     expect(cardStyle).not.toHaveProperty('borderWidth');
-    expect(flattenStyle(result.getByTestId('run-status').props.style)).toMatchObject({
-      width: BorderWidth.emphasis,
-      backgroundColor: theme.colors.bad,
-    });
+    expect(result.queryByTestId('run-status')).toBeNull();
     expect(flattenStyle(result.getByTestId('run-detail').props.style)).toMatchObject({
       color: theme.colors.inkSecondary,
       fontSize: FontSize.caption,
@@ -286,25 +299,17 @@ describe.each(['light', 'dark'] as const)('%s thread primitives', (scheme) => {
       />,
     );
     const inputShell = flattenStyle(result.getByTestId('composer-input-shell').props.style);
-    expect(inputShell).toMatchObject({
-      minHeight: ControlSize.floatingButton,
-      borderRadius: Radius.full,
-      backgroundColor: theme.colors.surfaceFloating,
+    expect(inputShell).toMatchObject({ minHeight: ControlSize.pill });
+    expect(flattenStyle(result.getByTestId('composer').props.style)).toMatchObject({
+      borderRadius: Radius.bubble, backgroundColor: theme.colors.surface,
     });
-    if (scheme === 'light') {
-      expect(inputShell.shadowRadius).toBe(Shadow.floating.shadowRadius);
-      expect(inputShell.elevation).toBe(Shadow.floating.elevation);
-    } else {
-      expect(inputShell.borderWidth).toBe(BorderWidth.hairline);
-      expect(inputShell.borderColor).toBe(theme.colors.line);
-    }
     const input = result.getByTestId('composer-input');
     expect(input.type).toBe('PasteInput');
-    expect(input.props).toMatchObject({ multiline: true, scrollEnabled: true });
+    expect(input.props).toMatchObject({ multiline: true, scrollEnabled: false });
     expect(flattenStyle(input.props.style)).toMatchObject({
       fontSize: FontSize.body,
       lineHeight: LineHeight.body,
-      maxHeight: LineHeight.body * 5,
+      paddingVertical: Space.sm,
     });
     const pastedFile = {
       uri: 'file:///tmp/pasted.png',
@@ -318,8 +323,8 @@ describe.each(['light', 'dark'] as const)('%s thread primitives', (scheme) => {
     expect(onPasteFailed).toHaveBeenCalledTimes(1);
     expect(flattenStyle(result.getByTestId('composer-add').props.style).width)
       .toBe(ControlSize.floatingButton);
-    expect(flattenStyle(result.getByTestId('composer-primary').props.style).backgroundColor)
-      .toBe(theme.colors.accent);
+    expect(flattenStyle(result.getByTestId('composer-primary-surface').props.style).backgroundColor)
+      .toBe(theme.colors.ink);
     expect(result.UNSAFE_getByType(ArrowUp)).toBeTruthy();
     fireEvent.press(result.getByTestId('composer-primary'));
     expect(send).toHaveBeenCalledTimes(1);
@@ -337,11 +342,134 @@ describe.each(['light', 'dark'] as const)('%s thread primitives', (scheme) => {
       />,
     );
     expect(result.getByTestId('composer-input').type).toBe('TextInput');
-    expect(flattenStyle(result.getByTestId('composer-primary').props.style).backgroundColor)
+    expect(flattenStyle(result.getByTestId('composer-primary-surface').props.style).backgroundColor)
       .toBe(theme.colors.ink);
     expect(result.UNSAFE_getByType(Square)).toBeTruthy();
     fireEvent.press(result.getByTestId('composer-primary'));
     expect(stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps Stop reachable and adds a queue Send once a draft exists during a run', () => {
+    const theme = activeTheme(scheme);
+    const send = jest.fn();
+    const stop = jest.fn();
+    const labels = { add: 'Add', voice: 'Voice', send: 'Send', stop: 'Stop', queue: 'Send after this reply' };
+    const props = {
+      testID: 'composer', placeholder: 'Ask Main', accessibilityLabels: labels,
+      onChangeText: jest.fn(), onSend: send, onStop: stop, onVoicePress: jest.fn(), isRunning: true,
+    };
+    const view = render(<Composer {...props} value="" />);
+    // No draft: Stop stays the single primary control, no dictation entry.
+    expect(view.queryByTestId('composer-stop')).toBeNull();
+    expect(view.queryByTestId('composer-voice')).toBeNull();
+    expect(view.getByTestId('composer-primary').props.accessibilityLabel).toBe('Stop');
+
+    view.rerender(<Composer {...props} value="also check the tests" />);
+    const stopAction = view.getByTestId('composer-stop');
+    expect(stopAction.props.accessibilityLabel).toBe('Stop');
+    expect(flattenStyle(view.getByTestId('composer-stop-surface').props.style).backgroundColor)
+      .toBe(theme.colors.canvas);
+    const primary = view.getByTestId('composer-primary');
+    expect(primary.props.accessibilityLabel).toBe('Send after this reply');
+    expect(primary.props.accessibilityState).toEqual({ disabled: false });
+    expect(flattenStyle(view.getByTestId('composer-primary-surface').props.style).backgroundColor)
+      .toBe(theme.colors.ink);
+    expect(view.UNSAFE_getByType(ArrowUp)).toBeTruthy();
+    expect(view.UNSAFE_getByType(Square)).toBeTruthy();
+    fireEvent.press(primary);
+    expect(send).toHaveBeenCalledTimes(1);
+    fireEvent.press(stopAction);
+    expect(stop).toHaveBeenCalledTimes(1);
+
+    // Without queue capacity the queue Send waits, but Stop remains available.
+    view.rerender(<Composer {...props} value="also check the tests" canSend={false} />);
+    expect(view.getByTestId('composer-primary').props.accessibilityState).toEqual({ disabled: true });
+    expect(view.getByTestId('composer-stop')).toBeTruthy();
+
+    // Without an abort capability the draft still reaches the queue.
+    view.rerender(<Composer {...props} value="also check the tests" onStop={undefined} />);
+    expect(view.queryByTestId('composer-stop')).toBeNull();
+    expect(view.getByTestId('composer-primary').props.accessibilityLabel).toBe('Send after this reply');
+  });
+
+  it('keeps a stop-dictation control in the trailing slot for the whole dictation lifetime', () => {
+    const theme = activeTheme(scheme);
+    const onVoicePress = jest.fn();
+    const onSend = jest.fn();
+    const level = { value: 0 } as SharedValue<number>;
+    (triggerLightImpact as jest.Mock).mockClear();
+    const labels = { add: 'Add', voice: 'Voice', stopVoice: 'Stop voice input', send: 'Send', stop: 'Stop' };
+    const props = { testID: 'composer', placeholder: 'Listening…', accessibilityLabels: labels,
+      onChangeText: jest.fn(), onSend, onVoicePress, canSend: false };
+
+    // Idle + empty draft: the quiet mic is offered and a tap confirms with haptics.
+    const view = render(<Composer {...props} value="" />);
+    fireEvent.press(view.getByTestId('composer-voice'));
+    expect(onVoicePress).toHaveBeenCalledTimes(1);
+    expect(triggerLightImpact).toHaveBeenCalledTimes(1);
+
+    // Authorizing: the slot immediately turns into the stop control, marked busy.
+    view.rerender(<Composer {...props} value="" voiceState="authorizing" voiceLevel={level} />);
+    expect(view.queryByTestId('composer-voice')).toBeNull();
+    expect(view.queryByTestId('composer-primary')).toBeNull();
+    const stopControl = view.getByTestId('composer-voice-stop');
+    expect(stopControl.props.accessibilityLabel).toBe('Stop voice input');
+    expect(stopControl.props.accessibilityState).toEqual({ busy: true });
+    expect(flattenStyle(stopControl.props.style).width).toBe(ControlSize.floatingButton);
+    // The control is tinted with the conversation accent, never the alert color.
+    expect(flattenStyle(view.getByTestId('composer-voice-stop-surface').props.style)).toMatchObject({
+      width: ControlSize.pill, height: ControlSize.pill, backgroundColor: theme.colors.accent,
+    });
+    expect(theme.colors.accent).not.toBe(theme.colors.bad);
+    expect(view.UNSAFE_getByType(Square).props.color).toBe(theme.colors.onAccent);
+
+    // Listening with transcript text: Send must not displace the stop control, and the
+    // draft is locked so manual edits cannot race the next transcript.
+    view.rerender(<Composer {...props} value="Hello from dictation" voiceState="listening" voiceLevel={level} />);
+    expect(view.queryByTestId('composer-primary')).toBeNull();
+    expect(view.getByTestId('composer-voice-stop').props.accessibilityState).toEqual({ busy: false });
+    expect(view.getByTestId('composer-input').props.editable).toBe(false);
+    expect(flattenStyle(view.getByTestId('composer-input-shell').props.style).opacity).toBeUndefined();
+
+    // Both glow layers follow the microphone level rather than looping on their own.
+    const haloScale = (halo: Record<string, unknown>) => (halo.transform as ReadonlyArray<{ scale: number }>)[0].scale;
+    const restHalo = flattenStyle(view.getByTestId('composer-voice-stop-halo').props.style);
+    const restOuter = flattenStyle(view.getByTestId('composer-voice-stop-halo-outer').props.style);
+    expect(restHalo.backgroundColor).toBe(theme.colors.accent);
+    expect(restOuter.backgroundColor).toBe(theme.colors.accent);
+    expect(haloScale(restOuter)).toBeGreaterThan(haloScale(restHalo));
+    level.value = 1;
+    view.rerender(<Composer {...props} value="Hello from dictation" voiceState="listening" voiceLevel={level} />);
+    const peakHalo = flattenStyle(view.getByTestId('composer-voice-stop-halo').props.style);
+    const peakOuter = flattenStyle(view.getByTestId('composer-voice-stop-halo-outer').props.style);
+    expect(peakHalo.opacity as number).toBeGreaterThan(restHalo.opacity as number);
+    expect(haloScale(peakHalo)).toBeGreaterThan(haloScale(restHalo));
+    expect(haloScale(peakOuter)).toBeGreaterThan(haloScale(restOuter));
+    // The outer layer stays the softest and reaches at most the toolbar padding (60pt).
+    expect(peakOuter.opacity as number).toBeLessThan(peakHalo.opacity as number);
+    expect(haloScale(peakOuter) * ControlSize.pill).toBeLessThanOrEqual(ControlSize.pill + Space.sm * 2 + Space.xs);
+    expect(haloScale(flattenStyle(view.getByTestId('composer-voice-stop-surface').props.style))).toBeGreaterThan(1);
+
+    fireEvent.press(view.getByTestId('composer-voice-stop'));
+    expect(onVoicePress).toHaveBeenCalledTimes(2);
+    expect(triggerLightImpact).toHaveBeenCalledTimes(2);
+
+    // Back to idle with text: the slot becomes the ordinary Send action again.
+    view.rerender(<Composer {...props} value="Hello from dictation" canSend />);
+    expect(view.queryByTestId('composer-voice-stop')).toBeNull();
+    fireEvent.press(view.getByTestId('composer-primary'));
+    expect(onSend).toHaveBeenCalledTimes(1);
+    expect(view.getByTestId('composer-input').props.editable).toBe(true);
+
+    // Reduced motion keeps a static rim instead of a level-driven halo.
+    mockReducedMotion = true;
+    try {
+      level.value = 1;
+      view.rerender(<Composer {...props} value="Hello" voiceState="listening" voiceLevel={level} />);
+      expect(flattenStyle(view.getByTestId('composer-voice-stop-halo').props.style)).toMatchObject(restHalo);
+    } finally {
+      mockReducedMotion = false;
+    }
   });
 
   it('renders bottom sheet chrome with one 40 percent backdrop and a visible close action', () => {
@@ -360,7 +488,7 @@ describe.each(['light', 'dark'] as const)('%s thread primitives', (scheme) => {
     );
     const sheetStyle = flattenStyle(result.getByTestId('sheet').props.style);
     expect(sheetStyle).toMatchObject({
-      backgroundColor: theme.colors.surface,
+      backgroundColor: theme.colors.canvas,
       borderTopLeftRadius: Radius.bottomSheet,
       borderTopRightRadius: Radius.bottomSheet,
     });
@@ -374,9 +502,7 @@ describe.each(['light', 'dark'] as const)('%s thread primitives', (scheme) => {
       height: Space.xs,
       backgroundColor: theme.colors.line,
     });
-    expect(flattenStyle(result.getByTestId('sheet-backdrop', {
-      includeHiddenElements: true,
-    }).props.style)).toMatchObject({
+    expect(flattenStyle(result.UNSAFE_getByType(BottomSheetBackdrop).props.style)).toMatchObject({
       backgroundColor: theme.colors.scrim,
     });
     expect(result.getByTestId('sheet-close')).toBeTruthy();
@@ -494,5 +620,45 @@ describe.each(['light', 'dark'] as const)('%s thread primitives', (scheme) => {
       backgroundColor: theme.colors.line,
       marginLeft: Space.lg,
     });
+  });
+});
+
+describe('long-form composer', () => {
+  const labels = { add: 'Add', voice: 'Voice', send: 'Send', stop: 'Stop' };
+  it('offers expansion from the third visual line and retains the same native input', () => {
+    const onExpandedChange = jest.fn();
+    const onSend = jest.fn();
+    const props = { testID: 'editor', value: 'A wrapped draft', placeholder: 'Message', accessibilityLabels: labels,
+      onChangeText: jest.fn(), onSend, onExpandedChange };
+    const view = render(<Composer {...props} />);
+    const nativeInput = view.getByTestId('editor-input');
+    fireEvent(view.getByTestId('editor-measurement', { includeHiddenElements: true }), 'textLayout', { nativeEvent: { lines: [{}, {}] } });
+    expect(view.queryByTestId('editor-expand')).toBeNull();
+    fireEvent(view.getByTestId('editor-measurement', { includeHiddenElements: true }), 'textLayout', { nativeEvent: { lines: [{}, {}, {}] } });
+    fireEvent.press(view.getByTestId('editor-expand'));
+    expect(onExpandedChange).toHaveBeenCalledWith(true);
+    view.rerender(<Composer {...props} expanded />);
+    expect(view.getByTestId('editor-input')).toBe(nativeInput);
+    expect(nativeInput.props.submitBehavior).toBe('newline');
+    expect(nativeInput.props.scrollEnabled).toBe(true);
+    fireEvent.press(view.getByTestId('editor-collapse'));
+    expect(onExpandedChange).toHaveBeenLastCalledWith(false);
+    view.rerender(<Composer {...props} />);
+    expect(view.getByTestId('editor-input')).toBe(nativeInput);
+    expect(flattenStyle(view.getByTestId('editor-input-shell').props.style)).toMatchObject({ flexGrow: 0, flexShrink: 0, flexBasis: 'auto' });
+    expect(flattenStyle(view.getByTestId('editor-measurement', { includeHiddenElements: true }).props.style).height).toBe(LineHeight.body * 6);
+    expect(onSend).not.toHaveBeenCalled();
+  });
+  it('keeps the primary action slot stable and supports attachment-only messages', () => {
+    const onSend = jest.fn();
+    const props = { testID: 'editor', value: '', placeholder: 'Message', accessibilityLabels: labels,
+      onChangeText: jest.fn(), onSend };
+    const view = render(<Composer {...props} />);
+    expect(view.getByTestId('editor-primary').props.accessibilityState.disabled).toBe(true);
+    view.rerender(<Composer {...props} hasAttachments />);
+    fireEvent.press(view.getByTestId('editor-primary'));
+    expect(onSend).toHaveBeenCalledTimes(1);
+    view.rerender(<Composer {...props} hasAttachments canSend={false} />);
+    expect(view.getByTestId('editor-primary').props.accessibilityState.disabled).toBe(true);
   });
 });

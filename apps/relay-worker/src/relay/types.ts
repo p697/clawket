@@ -56,6 +56,10 @@ export type BackendPolicy = {
 };
 
 export type SocketAttachment = {
+  /** Server-generated per-socket diagnostic marker; never an identity or credential. */
+  diagnosticId?: string;
+  /** Authenticated owner channel bound to one full-client socket incarnation. */
+  targetConnectionId?: string;
   role: 'gateway' | 'client';
   clientId: string;
   connectedAt: number;
@@ -63,6 +67,8 @@ export type SocketAttachment = {
   clientLabel?: string | null;
   capabilities?: string[];
   lastPongAt?: number;
+  /** Routing identity survives Durable Object hibernation; never contains payloads. */
+  activeClient?: boolean;
   challengeDeliveredAt?: number;
   authScope?: 'full' | 'pairing';
   pairingSessionId?: string;

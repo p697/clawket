@@ -51,8 +51,8 @@ export function ScreenHeader({
         ? Platform.OS === 'android'
           ? topInset
           : Math.min(topInset, Space.lg)
-        : topInset;
-  const resolvedShowBorder = showBorder ?? dismissStyle !== 'close';
+        : topInset + Space.sm;
+  const resolvedShowBorder = showBorder ?? false;
 
   return (
     <View
@@ -61,7 +61,7 @@ export function ScreenHeader({
         styles.headerOuter,
         {
           paddingTop: resolvedTopPadding,
-          backgroundColor: colors.surface,
+          backgroundColor: colors.canvas,
           borderBottomColor: colors.line,
           borderBottomWidth: resolvedShowBorder ? StyleSheet.hairlineWidth : 0,
         },
@@ -99,7 +99,7 @@ export function ScreenHeader({
 const styles = StyleSheet.create({
   headerOuter: {
     paddingHorizontal: Space.lg,
-    paddingBottom: 2,
+    paddingBottom: Space.md,
   },
   headerRow: {
     flexDirection: 'row',
@@ -121,8 +121,8 @@ const styles = StyleSheet.create({
   },
   title: {
     textAlign: 'center',
-    fontSize: FontSize.body,
-    lineHeight: LineHeight.body,
+    fontSize: FontSize.title,
+    lineHeight: LineHeight.title,
     fontWeight: FontWeight.semibold,
   },
   subtitle: {

@@ -36,29 +36,12 @@ export function resolveAccountSettingsRuntimeStatus(
 ): AccountSettingsPageStatus {
   if (
     !input.connectionInitialized
-    || input.permissionsLoading
-    || input.connectionSwitching
-    || input.activeState === 'connecting'
-    || input.activeState === 'handshaking'
   ) {
     return { kind: 'loading' };
   }
-  const errorCode = input.connectionErrorCode?.trim();
-  if (errorCode || input.activeState === 'error') {
-    return { kind: 'error', code: errorCode || 'connection_error' };
-  }
   if (input.connectionCount <= 0) return { kind: 'empty' };
-  if (
-    !input.activeConnectionId
-    || input.activeState === 'idle'
-    || input.activeState === 'offline'
-    || input.activeState === 'reconnecting'
-  ) {
-    return { kind: 'offline' };
-  }
-  if (input.permissionReason) {
-    return { kind: 'permission', reason: input.permissionReason };
-  }
+  // Local preferences stay available regardless of Agent connectivity or the
+  // entitlement to add another connection. Those states belong to their page.
   return { kind: 'ready' };
 }
 
@@ -106,6 +89,7 @@ export type AccountSettingsAction =
   | 'accent'
   | 'chat-appearance'
   | 'app-icon'
+  | 'app-language'
   | 'speech-language'
   | 'help-center'
   | 'openclaw-docs'
@@ -277,10 +261,9 @@ export function buildAccountSettingsGroups({
   if (capabilities.appearance) {
     const rows: AccountSettingsRow[] = [
       { id: 'theme', titleKey: 'Theme', value: labels.theme, action: 'theme', kind: 'navigation' },
-      { id: 'accent', titleKey: 'Accent Color', value: labels.accent, action: 'accent', kind: 'navigation' },
       {
         id: 'chat-appearance',
-        titleKey: 'Chat Appearance',
+        titleKey: 'Chat theme',
         value: labels.chatAppearance,
         action: 'chat-appearance',
         kind: 'navigation',

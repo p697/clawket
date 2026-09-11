@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  StatusBar,
   Platform,
   Pressable,
   ScrollView,
@@ -10,27 +11,18 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import {
-  Bot,
-  Check,
-  Files,
-  Network,
-  RotateCcw,
-  Search,
-  Sparkles,
-  Wrench,
-  X,
-  type LucideIcon,
-} from 'lucide-react-native';
+import { Check, X } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
-import { publicPaywallSocialProof } from '../../config/public';
+import { buildPaywallTheme } from '../../theme/paywall';
+import { PaywallLumenHero } from '../../components/pro/PaywallLumenHero';
+import { Companion } from '../../components/ui/Companion';
+import { PaywallBenefits } from '../../components/pro/PaywallBenefits';
 import { PaywallPlanCard } from '../../components/pro/PaywallPlanCard';
-import { AgentAvatar } from '../../components/ui/AgentAvatar';
 import { Button } from '../../components/ui/Button';
 import { Skeleton } from '../../components/ui/Skeleton';
 import type { ProPaywallPhase } from '../../contexts/ProPaywallContext';
 import type { ProPaywallPackage, ProPurchaseFailureReason } from '../../services/pro-subscription';
-import { useAppTheme } from '../../theme';
+import { ThemeContext, useAppTheme } from '../../theme';
 import {
   ControlSize,
   FontSize,
@@ -44,16 +36,11 @@ import {
 import type { ProFeature } from '../../utils/pro';
 import {
   THREE_POINT_ZERO_INTRO_CONTENT,
-  calculateAnnualSavings,
   orderPaywallPackages,
   paywallFailureMessageKey,
   resolvePaywallContent,
-  shouldShowPaywallSocialProof,
-  type PaywallActionKey,
   type PaywallBenefitKey,
-  type PaywallBenefitKind,
   type PaywallFailureMessageKey,
-  type PaywallHero,
   type PaywallMode,
   type PaywallSubtitleFeatureKey,
   type PaywallSubtitleKey,
@@ -81,16 +68,13 @@ type Props = Readonly<{
   onOpenPrivacy: () => void;
 }>;
 
-const BENEFIT_ICONS: Readonly<Record<PaywallBenefitKind, LucideIcon>> = {
-  connections: Network,
-  agents: Bot,
-  manage: Wrench,
-  logsFiles: Files,
-  search: Search,
-  combined: Sparkles,
-};
+export function PaywallScreen(props: Props): React.JSX.Element {
+  const parent = useAppTheme();
+  const presentation = useMemo(() => ({ ...parent, theme: buildPaywallTheme(parent.theme), resolvedScheme: 'dark' as const }), [parent]);
+  return <ThemeContext.Provider value={presentation}><PaywallPresentation {...props} /></ThemeContext.Provider>;
+}
 
-export function PaywallScreen({
+function PaywallPresentation({
   mode,
   blockedFeature,
   phase,
@@ -112,7 +96,7 @@ export function PaywallScreen({
 }: Props): React.JSX.Element {
   const { t } = useTranslation(['common']);
   const { theme } = useAppTheme();
-  const { height } = useWindowDimensions();
+  const { height, width, fontScale } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
   const content = useMemo(() => resolvePaywallContent(blockedFeature), [blockedFeature]);
@@ -138,9 +122,7 @@ export function PaywallScreen({
   const failureMessage = phase === 'failure' && failureMessageKey
     ? translatePaywallFailure(failureMessageKey, t)
     : null;
-  const annualSavings = calculateAnnualSavings(orderedPackages);
-  const showSocialProof = !isIntro && shouldShowPaywallSocialProof(orderedPackages);
-  const heroHeight = Math.min(184, Math.max(120, Math.round(height * 0.22)));
+  const heroHeight = Math.min(164, Math.max(104, height - 700));
 
   useEffect(() => {
     if (selectedPackage?.packageType === 'MONTHLY') setMonthlyVisible(true);
@@ -158,6 +140,7 @@ export function PaywallScreen({
         { paddingTop: insets.top, paddingBottom: Math.max(insets.bottom, Space.md) },
       ]}
     >
+      <StatusBar barStyle="light-content" />
       <View style={styles.header}>
         <Pressable
           testID="paywall-close"
@@ -168,9 +151,14 @@ export function PaywallScreen({
           style={({ pressed }) => [styles.headerButton, pressed ? styles.pressed : null]}
         >
           <View style={styles.closeCircle}>
-            <X size={IconSize.sm} color={theme.colors.inkTertiary} strokeWidth={2.2} />
+            <X size={IconSize.sm} color={theme.colors.inkSecondary} strokeWidth={2.2} />
           </View>
         </Pressable>
+        <View pointerEvents="none" style={styles.wordmark}>
+          <Companion size={IconSize.md} />
+          {width >= 360 && fontScale < 1.2 ? <Text style={styles.brandText}>clawket</Text> : null}
+          {!isIntro ? <Text style={styles.proLabel}>Pro</Text> : null}
+        </View>
         {!isIntro ? (
           <Pressable
             testID="paywall-restore"
@@ -185,8 +173,7 @@ export function PaywallScreen({
               <ActivityIndicator size="small" color={theme.colors.inkSecondary} />
             ) : (
               <>
-                <RotateCcw size={IconSize.sm} color={theme.colors.inkSecondary} strokeWidth={2} />
-                <Text style={styles.restoreText}>{t('Restore Purchases')}</Text>
+                <Text style={styles.restoreText}>{t('Restore')}</Text>
               </>
             )}
           </Pressable>
@@ -194,21 +181,22 @@ export function PaywallScreen({
       </View>
 
       <ScrollView
-        testID="paywall-benefits-scroll"
+        testID="paywall-layout-scroll"
         style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={styles.flowContent}
         bounces={false}
-        showsVerticalScrollIndicator={false}
+      >
+      <View
+        testID="paywall-benefits-scroll"
+        style={styles.scrollContent}
       >
         <View
           testID={`paywall-hero-${hero}`}
           accessible={false}
           style={[styles.hero, { height: heroHeight }]}
         >
-          <View style={[styles.heroOrb, styles.heroOrbLeft, { backgroundColor: theme.colors.accent }]} />
-          <View style={[styles.heroOrb, styles.heroOrbRight, { backgroundColor: theme.colors.accent }]} />
-          <View style={[styles.heroOrbSmall, { backgroundColor: theme.colors.accent }]} />
-          <PaywallHeroArtwork hero={hero} success={isSuccess} styles={styles} />
+          <PaywallLumenHero hero={hero} success={isSuccess} />
+          {isSuccess ? <View testID="paywall-hero-success" style={styles.successMark}><Check size={IconSize.lg} color={theme.colors.good}/></View> : null}
         </View>
 
         <View style={styles.heading}>
@@ -217,28 +205,12 @@ export function PaywallScreen({
         </View>
 
         {!isSuccess ? (
-          <View testID="paywall-benefits" style={styles.benefits}>
-            {benefits.map((benefit) => {
-              const BenefitIcon = BENEFIT_ICONS[benefit.kind];
-              return (
-                <View key={benefit.labelKey} style={styles.benefitRow}>
-                  <BenefitIcon size={18} color={theme.colors.accent} strokeWidth={2} />
-                  <Text style={styles.benefitText}>{translatePaywallBenefit(benefit.labelKey, t)}</Text>
-                </View>
-              );
-            })}
-          </View>
+          <PaywallBenefits items={benefits.map(benefit => ({
+            kind: benefit.kind, label: translatePaywallBenefit(benefit.labelKey, t),
+          }))}/>
         ) : null}
 
-        {showSocialProof && !isSuccess ? (
-          <Text testID="paywall-social-proof" style={styles.socialProof} numberOfLines={2}>
-            {t('★★★★★ {{rating}} · “{{quote}}”', {
-              rating: publicPaywallSocialProof.rating,
-              quote: translateSocialProofQuote(publicPaywallSocialProof.quote, t),
-            })}
-          </Text>
-        ) : null}
-      </ScrollView>
+      </View>
 
       <View pointerEvents={interactionLocked ? 'none' : 'auto'} style={styles.footer}>
         {isIntro ? (
@@ -263,17 +235,18 @@ export function PaywallScreen({
                 <Button label={t('Retry')} variant="secondary" size="sm" onPress={onRetry} />
               </View>
             ) : (
-              <View style={styles.plans}>
+              <View style={[styles.plans, width >= 360 && fontScale < 1.2 && displayedPackages.length <= 2 ? styles.plansRow : null]}>
                 {displayedPackages.map((item) => (
                   <PaywallPlanCard
                     key={item.packageIdentifier}
                     testID={`paywall-plan-${item.packageType.toLowerCase()}`}
+                    compact={width >= 360 && fontScale < 1.2 && displayedPackages.length <= 2}
                     title={formatPackageTitle(item.packageType, t)}
                     price={item.priceString}
-                    detail={formatPackageDetail(item, annualSavings, t)}
-                    badge={item.packageType === 'ANNUAL' ? t('Best value') : null}
+                    detail={formatPackageDetail(item, t)}
+                    badge={item.packageType === 'ANNUAL' ? t('Recommended') : null}
                     selected={item.packageIdentifier === selectedPackageId}
-                    disabled={disabledPackageIds.includes(item.packageIdentifier)}
+                    disabled={interactionLocked || disabledPackageIds.includes(item.packageIdentifier)}
                     onPress={() => onSelectPackage(item.packageIdentifier)}
                   />
                 ))}
@@ -284,6 +257,7 @@ export function PaywallScreen({
               <Pressable
                 testID="paywall-show-monthly"
                 accessibilityRole="button"
+                disabled={interactionLocked}
                 onPress={() => setMonthlyVisible(true)}
                 style={({ pressed }) => [styles.monthlyButton, pressed ? styles.pressed : null]}
               >
@@ -297,19 +271,16 @@ export function PaywallScreen({
 
             <Button
               testID="paywall-purchase"
-              label={formatPurchaseLabel(selectedPackage, content.actionKey, t)}
+              multiline
+              label={t('Start Clawket Pro')}
               size="lg"
               loading={phase === 'purchasing'}
-              disabled={purchaseDisabled || phase === 'loading' || phase === 'unavailable' || !selectedPackage}
+              disabled={interactionLocked || purchaseDisabled || phase === 'loading' || phase === 'unavailable' || !selectedPackage}
               onPress={onPurchase}
             />
 
+            {selectedPackage ? <Text testID="paywall-billing" accessibilityHint={selectedPackage.packageType === 'LIFETIME' ? undefined : Platform.OS === 'android' ? t('Cancel anytime in Google Play') : t('Cancel anytime in the App Store')} style={styles.billingText}>{formatBilling(selectedPackage, t)}</Text> : null}
             <View style={styles.legalRow}>
-              <Text style={styles.legalText}>
-                {Platform.OS === 'android'
-                  ? t('Cancel anytime in Google Play')
-                  : t('Cancel anytime in the App Store')}
-              </Text>
               <Pressable accessibilityRole="link" onPress={onOpenTerms} style={styles.legalLink}>
                 <Text style={styles.legalLinkText}>{t('Terms')}</Text>
               </Pressable>
@@ -320,141 +291,9 @@ export function PaywallScreen({
           </>
         )}
       </View>
+      </ScrollView>
     </View>
   );
-}
-
-function PaywallHeroArtwork({
-  hero,
-  success,
-  styles,
-}: Readonly<{
-  hero: PaywallHero;
-  success: boolean;
-  styles: ReturnType<typeof createStyles>;
-}>): React.JSX.Element {
-  const { theme } = useAppTheme();
-
-  if (success) {
-    return (
-      <View testID="paywall-hero-success" style={styles.heroIconSurface}>
-        <Check size={40} color={theme.colors.good} strokeWidth={2.4} />
-      </View>
-    );
-  }
-
-  switch (hero) {
-    case 'connections':
-      return (
-        <View testID="paywall-hero-connections-link" style={styles.heroArtworkRow}>
-          <AgentAvatar agentId="openclaw" name="OpenClaw" variant="settings" />
-          <View style={[styles.heroConnectionLink, { backgroundColor: theme.colors.accent }]}>
-            <View style={[styles.heroConnectionDot, { backgroundColor: theme.colors.accent }]} />
-          </View>
-          <View style={styles.heroIconSurface}>
-            <Network size={IconSize.lg} color={theme.colors.ink} strokeWidth={2} />
-          </View>
-          <View style={[styles.heroConnectionLink, { backgroundColor: theme.colors.accent }]}>
-            <View style={[styles.heroConnectionDot, { backgroundColor: theme.colors.accent }]} />
-          </View>
-          <AgentAvatar agentId="hermes" name="Hermes" variant="settings" />
-        </View>
-      );
-    case 'agents':
-      return (
-        <View testID="paywall-hero-agents-cluster" style={styles.heroAgentCluster}>
-          <AgentAvatar
-            agentId="research"
-            name="Research"
-            variant="settings"
-            style={styles.heroAgentLeft}
-          />
-          <AgentAvatar agentId="main" name="Main" variant="roster" style={styles.heroAgentCenter} />
-          <AgentAvatar
-            agentId="builder"
-            name="Builder"
-            variant="settings"
-            style={styles.heroAgentRight}
-          />
-        </View>
-      );
-    case 'manage':
-      return (
-        <View testID="paywall-hero-manage-repair-loop" style={styles.heroArtworkRow}>
-          <View style={[styles.heroSatelliteSurface, { backgroundColor: theme.colors.goodSoft }]}>
-            <Check size={IconSize.md} color={theme.colors.good} strokeWidth={2.2} />
-          </View>
-          <View style={styles.heroIconSurface}>
-            <Wrench size={40} color={theme.colors.ink} strokeWidth={2} />
-          </View>
-          <View style={[styles.heroSatelliteSurface, { backgroundColor: theme.colors.accentSoft }]}>
-            <RotateCcw size={IconSize.md} color={theme.colors.accent} strokeWidth={2.2} />
-          </View>
-        </View>
-      );
-    case 'logsFiles':
-      return (
-        <View testID="paywall-hero-logs-files-stack" style={styles.heroDocumentStack}>
-          <View style={styles.heroDocumentCard}>
-            <Files size={IconSize.lg} color={theme.colors.ink} strokeWidth={2} />
-            <View style={[styles.heroDocumentLine, { backgroundColor: theme.colors.inkTertiary }]} />
-            <View style={[styles.heroDocumentLineShort, { backgroundColor: theme.colors.inkTertiary }]} />
-          </View>
-          <View style={[styles.heroDocumentCard, styles.heroDocumentCardRaised]}>
-            <View style={styles.heroLogRow}>
-              <View style={[styles.heroLogDot, { backgroundColor: theme.colors.good }]} />
-              <View style={[styles.heroLogLine, { backgroundColor: theme.colors.inkSecondary }]} />
-            </View>
-            <View style={styles.heroLogRow}>
-              <View style={[styles.heroLogDot, { backgroundColor: theme.colors.accent }]} />
-              <View style={[styles.heroLogLineShort, { backgroundColor: theme.colors.inkSecondary }]} />
-            </View>
-            <View style={styles.heroLogRow}>
-              <View style={[styles.heroLogDot, { backgroundColor: theme.colors.warn }]} />
-              <View style={[styles.heroLogLine, { backgroundColor: theme.colors.inkSecondary }]} />
-            </View>
-          </View>
-        </View>
-      );
-    case 'search':
-      return (
-        <View testID="paywall-hero-search-results" style={styles.heroSearchArtwork}>
-          <View style={styles.heroSearchResults}>
-            <View style={styles.heroSearchRow}>
-              <View style={[styles.heroSearchAvatar, { backgroundColor: theme.colors.accent }]} />
-              <View style={[styles.heroSearchLine, { backgroundColor: theme.colors.inkTertiary }]} />
-            </View>
-            <View style={styles.heroSearchRow}>
-              <View style={[styles.heroSearchAvatar, { backgroundColor: theme.colors.good }]} />
-              <View style={[styles.heroSearchLineShort, { backgroundColor: theme.colors.inkTertiary }]} />
-            </View>
-            <View style={styles.heroSearchRow}>
-              <View style={[styles.heroSearchAvatar, { backgroundColor: theme.colors.warn }]} />
-              <View style={[styles.heroSearchLine, { backgroundColor: theme.colors.inkTertiary }]} />
-            </View>
-          </View>
-          <View style={styles.heroSearchLens}>
-            <Search size={40} color={theme.colors.ink} strokeWidth={2.2} />
-          </View>
-        </View>
-      );
-    case 'generic':
-      return (
-        <View testID="paywall-hero-generic-control-tower" style={styles.heroArtworkRow}>
-          <View style={styles.heroAvatarColumn}>
-            <AgentAvatar agentId="writer" name="Writer" variant="sheet" />
-            <AgentAvatar agentId="operator" name="Operator" variant="sheet" />
-          </View>
-          <View style={styles.heroIconSurface}>
-            <Sparkles size={40} color={theme.colors.ink} strokeWidth={2} />
-          </View>
-          <View style={styles.heroAvatarColumn}>
-            <AgentAvatar agentId="designer" name="Designer" variant="sheet" />
-            <AgentAvatar agentId="analyst" name="Analyst" variant="sheet" />
-          </View>
-        </View>
-      );
-  }
 }
 
 type Translate = (key: string, options?: Record<string, unknown>) => string;
@@ -468,40 +307,28 @@ function formatPackageTitle(packageType: string, t: Translate): string {
 
 function formatPackageDetail(
   item: ProPaywallPackage,
-  annualSavings: number | null,
   t: Translate,
 ): string | null {
   if (item.packageType === 'LIFETIME') return t('One-time purchase');
   if (item.packageType === 'MONTHLY') return t('Billed monthly');
   if (item.packageType !== 'ANNUAL' || !item.pricePerMonthString) return null;
-  return annualSavings == null
-    ? t('{{price}} / month', { price: item.pricePerMonthString })
-    : t('{{price}} / month · Save {{savings}}%', {
-      price: item.pricePerMonthString,
-      savings: annualSavings,
-    });
+  return t('{{price}} / month', { price: item.pricePerMonthString });
 }
 
-function formatPurchaseLabel(
-  selectedPackage: ProPaywallPackage | null,
-  actionKey: PaywallActionKey | null,
-  t: Translate,
-): string {
-  if (actionKey) {
-    return t('Unlock Pro to continue {{action}}', { action: translatePaywallAction(actionKey, t) });
-  }
-  if (!selectedPackage) return t('Unlock Pro');
-  if (selectedPackage.packageType === 'ANNUAL') {
-    return t('Unlock Pro · {{price}} / year', { price: selectedPackage.priceString });
-  }
-  if (selectedPackage.packageType === 'MONTHLY') {
-    return t('Unlock Pro · {{price}} / month', { price: selectedPackage.priceString });
-  }
-  return t('Unlock Pro · {{price}}', { price: selectedPackage.priceString });
+function formatBilling(item: ProPaywallPackage, t: Translate): string {
+  if (item.packageType === 'LIFETIME') return t('{{price}} · One-time purchase', { price: item.priceString });
+  const price = item.packageType === 'ANNUAL'
+    ? t('{{price}} / year · Renews automatically', { price: item.priceString })
+    : item.packageType === 'MONTHLY'
+      ? t('{{price}} / month · Renews automatically', { price: item.priceString })
+      : item.priceString;
+  return `${price} · ${t('Cancel anytime')}`;
 }
 
 function translatePaywallTitle(key: PaywallTitleKey, t: Translate): string {
   switch (key) {
+    case 'More possibilities with your Agents': return t('More possibilities with your Agents');
+    case 'Explore your Agent conversations': return t('Explore your Agent conversations');
     case 'Clawket 3.0': return t('Clawket 3.0');
     case 'Every Agent in your pocket': return t('Every Agent in your pocket');
     case 'Bring every Agent into the roster': return t('Bring every Agent into the roster');
@@ -509,6 +336,7 @@ function translatePaywallTitle(key: PaywallTitleKey, t: Translate): string {
     case 'Read logs and edit files without going back to your computer':
       return t('Read logs and edit files without going back to your computer');
     case 'Find any message again': return t('Find any message again');
+    case 'Every conversation, in full': return t('Every conversation, in full');
   }
 }
 
@@ -518,12 +346,15 @@ function translatePaywallSubtitle(
   t: Translate,
 ): string {
   switch (key) {
+    case 'Take your AI world with you.': return t('Take your AI world with you.');
     case 'Your agent control tower, rebuilt.':
       return t('Your agent control tower, rebuilt.');
     case 'OpenClaw and Hermes together, ready whenever you are.':
       return t('OpenClaw and Hermes together, ready whenever you are.');
     case 'Agents beyond main are a Pro feature.':
       return t('Agents beyond main are a Pro feature.');
+    case 'Read complete channel, task and subagent conversations, and reply where supported.':
+      return t('Read complete channel, task and subagent conversations, and reply where supported.');
     case 'Message details across sessions are a Pro feature.':
       return t('Message details across sessions are a Pro feature.');
     case '{{feature}} is a Pro feature.':
@@ -544,6 +375,10 @@ function translatePaywallSubtitleFeature(key: PaywallSubtitleFeatureKey, t: Tran
 
 function translatePaywallBenefit(key: PaywallBenefitKey, t: Translate): string {
   switch (key) {
+    case 'Conversations across channels and tasks': return t('Conversations across channels and tasks');
+    case "Shape your Agent's personality and memory": return t("Shape your Agent's personality and memory");
+    case 'Configure, back up and diagnose your Agents': return t('Configure, back up and diagnose your Agents');
+    case 'More Agents, unlimited connections': return t('More Agents, unlimited connections');
     case 'Fix OpenClaw from your phone': return t('Fix OpenClaw from your phone');
     case 'Logs, files, and search': return t('Logs, files, and search');
     case 'Unlimited connections and Agents': return t('Unlimited connections and Agents');
@@ -560,17 +395,6 @@ function translatePaywallBenefit(key: PaywallBenefitKey, t: Translate): string {
   }
 }
 
-function translatePaywallAction(key: PaywallActionKey, t: Translate): string {
-  switch (key) {
-    case 'adding another connection': return t('adding another connection');
-    case 'with this Agent': return t('with this Agent');
-    case 'managing OpenClaw': return t('managing OpenClaw');
-    case 'viewing logs': return t('viewing logs');
-    case 'editing this file': return t('editing this file');
-    case 'opening this message': return t('opening this message');
-  }
-}
-
 function translatePaywallFailure(key: PaywallFailureMessageKey, t: Translate): string {
   switch (key) {
     case 'Your purchase is pending approval.': return t('Your purchase is pending approval.');
@@ -583,15 +407,13 @@ function translatePaywallFailure(key: PaywallFailureMessageKey, t: Translate): s
   }
 }
 
-function translateSocialProofQuote(quote: string, t: Translate): string {
-  return quote === 'Updated quickly, always stays ahead'
-    ? t('Updated quickly, always stays ahead')
-    : quote;
-}
-
 function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors']) {
   return StyleSheet.create({
     screen: { flex: 1, backgroundColor: colors.canvas },
+    wordmark: { position: 'absolute', left: '33%', right: '33%', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: Space.sm },
+    brandText: { color: colors.ink, fontSize: FontSize.body, fontWeight: FontWeight.semibold },
+    proLabel: { color: colors.inkSecondary, fontSize: FontSize.caption, fontWeight: FontWeight.semibold },
+    successMark: { position: 'absolute', right: Space.xl, bottom: Space.md },
     header: {
       minHeight: ControlSize.floatingButton,
       paddingHorizontal: Space.lg,
@@ -611,9 +433,9 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       borderRadius: Radius.full,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: colors.surface,
     },
     restoreButton: {
+      maxWidth: '33%',
       minHeight: HitSize.md,
       flexDirection: 'row',
       alignItems: 'center',
@@ -622,6 +444,8 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       paddingLeft: Space.md,
     },
     restoreText: {
+      flexShrink: 1,
+      textAlign: 'right',
       color: colors.inkSecondary,
       fontSize: FontSize.caption,
       lineHeight: LineHeight.caption,
@@ -629,181 +453,31 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     pressed: { opacity: 0.65 },
     scroll: { flex: 1 },
-    scrollContent: { paddingHorizontal: Space.xl, paddingBottom: Space.md, gap: Space.lg },
+    flowContent: { flexGrow: 1 },
+    scrollContent: { paddingHorizontal: Space.xl, paddingBottom: Space.xl, gap: Space.md },
     hero: {
-      borderRadius: Radius.card,
-      backgroundColor: colors.surface,
       overflow: 'hidden',
       alignItems: 'center',
       justifyContent: 'center',
     },
-    heroOrb: { position: 'absolute', width: 112, height: 112, borderRadius: Radius.full, opacity: 0.22 },
-    heroOrbLeft: { left: -Space.xxl, bottom: -Space.xl },
-    heroOrbRight: { right: -Space.xl, top: -Space.xxl },
-    heroOrbSmall: { position: 'absolute', width: 48, height: 48, borderRadius: Radius.full, opacity: 0.2, left: '54%', top: Space.md },
-    heroIconSurface: {
-      width: 76,
-      height: 76,
-      borderRadius: Radius.xl,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: colors.surfaceFloating,
-    },
-    heroArtworkRow: {
-      width: '100%',
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: Space.sm,
-    },
-    heroConnectionLink: {
-      width: Space.xxl,
-      height: Space.xs,
-      borderRadius: Radius.full,
-      justifyContent: 'center',
-      opacity: 0.4,
-    },
-    heroConnectionDot: {
-      width: Space.sm,
-      height: Space.sm,
-      borderRadius: Radius.full,
-      alignSelf: 'center',
-    },
-    heroAgentCluster: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: Space.sm,
-    },
-    heroAgentLeft: { transform: [{ rotate: '-8deg' }] },
-    heroAgentCenter: { transform: [{ translateY: -Space.sm }] },
-    heroAgentRight: { transform: [{ rotate: '8deg' }] },
-    heroSatelliteSurface: {
-      width: ControlSize.floatingButton,
-      height: ControlSize.floatingButton,
-      borderRadius: Radius.full,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    heroDocumentStack: {
-      width: '100%',
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: Space.md,
-    },
-    heroDocumentCard: {
-      width: 112,
-      height: 84,
-      borderRadius: Radius.card,
-      padding: Space.md,
-      justifyContent: 'center',
-      gap: Space.sm,
-      backgroundColor: colors.surfaceFloating,
-    },
-    heroDocumentCardRaised: { transform: [{ translateY: -Space.sm }] },
-    heroDocumentLine: {
-      width: '72%',
-      height: Space.xs,
-      borderRadius: Radius.full,
-      opacity: 0.44,
-    },
-    heroDocumentLineShort: {
-      width: '46%',
-      height: Space.xs,
-      borderRadius: Radius.full,
-      opacity: 0.34,
-    },
-    heroLogRow: { flexDirection: 'row', alignItems: 'center', gap: Space.sm },
-    heroLogDot: { width: Space.sm, height: Space.sm, borderRadius: Radius.full },
-    heroLogLine: {
-      flex: 1,
-      height: Space.xs,
-      borderRadius: Radius.full,
-      opacity: 0.44,
-    },
-    heroLogLineShort: {
-      width: '48%',
-      height: Space.xs,
-      borderRadius: Radius.full,
-      opacity: 0.34,
-    },
-    heroSearchArtwork: {
-      width: '100%',
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    heroSearchResults: {
-      width: '62%',
-      borderRadius: Radius.card,
-      padding: Space.md,
-      gap: Space.sm,
-      backgroundColor: colors.surfaceFloating,
-    },
-    heroSearchRow: { flexDirection: 'row', alignItems: 'center', gap: Space.sm },
-    heroSearchAvatar: {
-      width: Space.lg,
-      height: Space.lg,
-      borderRadius: Radius.avatarHeader,
-    },
-    heroSearchLine: {
-      flex: 1,
-      height: Space.xs,
-      borderRadius: Radius.full,
-      opacity: 0.38,
-    },
-    heroSearchLineShort: {
-      width: '46%',
-      height: Space.xs,
-      borderRadius: Radius.full,
-      opacity: 0.3,
-    },
-    heroSearchLens: {
-      position: 'absolute',
-      right: '14%',
-      width: 68,
-      height: 68,
-      borderRadius: Radius.full,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: colors.surfaceFloating,
-    },
-    heroAvatarColumn: { gap: Space.sm },
-    heading: { gap: Space.xs },
+    heading: { gap: Space.md, alignItems: 'center', paddingBottom: Space.sm },
     title: {
+      textAlign: 'center',
       color: colors.ink,
       fontSize: FontSize.display,
       lineHeight: LineHeight.display,
-      fontWeight: FontWeight.semibold,
+      fontWeight: FontWeight.regular,
     },
     subtitle: {
+      textAlign: 'center',
       color: colors.inkSecondary,
-      fontSize: FontSize.secondary,
-      lineHeight: LineHeight.secondary,
+      fontSize: FontSize.body,
+      lineHeight: LineHeight.body,
       fontWeight: FontWeight.regular,
     },
-    benefits: { gap: Space.xs },
-    benefitRow: {
-      minHeight: Space.xxl,
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: Space.md,
-    },
-    benefitText: {
-      flex: 1,
-      color: colors.ink,
-      fontSize: FontSize.secondary,
-      lineHeight: LineHeight.secondary,
-      fontWeight: FontWeight.regular,
-    },
-    socialProof: {
-      color: colors.inkSecondary,
-      fontSize: FontSize.caption,
-      lineHeight: LineHeight.caption,
-      fontWeight: FontWeight.regular,
-    },
-    footer: { paddingHorizontal: Space.xl, gap: Space.sm },
+    footer: { marginTop: 'auto', paddingHorizontal: Space.xl, gap: Space.xs },
     plans: { gap: Space.sm },
+    plansRow: { flexDirection: 'row', alignItems: 'stretch' },
     planSkeleton: { minHeight: ControlSize.settingsRow },
     unavailable: { flexDirection: 'row', alignItems: 'center', gap: Space.md },
     feedbackText: {
@@ -813,7 +487,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       lineHeight: LineHeight.caption,
       fontWeight: FontWeight.regular,
     },
-    monthlyButton: { minHeight: HitSize.sm, alignSelf: 'center', justifyContent: 'center', paddingHorizontal: Space.md },
+    monthlyButton: { minHeight: HitSize.md, alignSelf: 'center', justifyContent: 'center', paddingHorizontal: Space.md },
     monthlyText: {
       color: colors.inkSecondary,
       fontSize: FontSize.caption,
@@ -828,8 +502,9 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       textAlign: 'center',
     },
     legalRow: { minHeight: HitSize.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: Space.xs },
+    billingText: { marginTop: Space.xs, textAlign: 'center', color: colors.inkSecondary, fontSize: FontSize.caption, lineHeight: LineHeight.caption },
     legalText: { color: colors.inkTertiary, fontSize: FontSize.caption, lineHeight: LineHeight.caption, fontWeight: FontWeight.regular },
-    legalLink: { minHeight: HitSize.sm, justifyContent: 'center', paddingHorizontal: Space.xs },
+    legalLink: { minHeight: HitSize.md, justifyContent: 'center', paddingHorizontal: Space.xs },
     legalLinkText: { color: colors.inkSecondary, fontSize: FontSize.caption, lineHeight: LineHeight.caption, fontWeight: FontWeight.regular },
     successProgress: { height: Space.xs, borderRadius: Radius.full, backgroundColor: colors.good },
   });

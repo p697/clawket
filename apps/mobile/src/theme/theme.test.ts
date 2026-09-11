@@ -1,5 +1,5 @@
 import { builtInAccents, defaultAccentId } from './accents';
-import { agentPalette, buildTheme } from './theme';
+import { agentPalette, buildTheme, buildInterfaceTheme, resolveChatTheme } from './theme';
 import {
   ControlSize,
   FontSize,
@@ -176,13 +176,30 @@ describe('Clawket 3.0 theme tokens', () => {
       messageEnterOffset: 4,
       avatarWorkingLoop: 1_200,
       avatarDoneFade: 3_000,
+      companionBreath: 1_400,
+      companionGaze: 1_200,
+      companionBlinkPause: 3_200,
+      companionCuriosity: 9_600,
     });
     expect(Shadow.floating).toEqual({
       shadowColor: '#111113',
       shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.08,
-      shadowRadius: 12,
+      shadowOpacity: 0.04,
+      shadowRadius: 5,
       elevation: 2,
     });
+  });
+});
+
+
+describe('conversation color scope', () => {
+  it.each(['light', 'dark'] as const)('keeps %s interface controls unchanged across all chat colors', (scheme) => {
+    const baseline = buildInterfaceTheme(scheme, scheme, builtInAccents.iceBlue);
+    for (const accent of Object.values(builtInAccents)) {
+      const theme = buildInterfaceTheme(scheme, scheme, accent);
+      expect(theme.colors).toEqual(baseline.colors);
+      expect(resolveChatTheme(theme).colors.accent).toBe(accent[scheme].accent500);
+      expect(theme.colors.onAccent).toBe(theme.colors.canvas);
+    }
   });
 });

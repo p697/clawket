@@ -109,7 +109,7 @@ describe('YouMindSpriteAdapter', () => {
     adapter.on('update', (update) => updates.push(update));
 
     const history = await adapter.loadSession('main', { limit: 500, cursor: 'before' });
-    await adapter.prompt('main', prompt('hello'));
+    const started = await adapter.prompt('main', prompt('hello'));
     await flushAsync(30);
 
     expect(api.loadSpriteSession).toHaveBeenCalledWith(expect.objectContaining({
@@ -124,7 +124,7 @@ describe('YouMindSpriteAdapter', () => {
       text: 'hello',
     }));
     expect(updates).toEqual(expect.arrayContaining([
-      expect.objectContaining({ type: 'run_started', runId: 'assistant-stream-1' }),
+      expect.objectContaining({ type: 'run_started', runId: started.runId }),
       expect.objectContaining({ type: 'agent_message_chunk', text: 'Final answer' }),
       expect.objectContaining({ type: 'run_finished', stopReason: 'end_turn' }),
     ]));

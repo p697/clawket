@@ -106,14 +106,14 @@ export class HermesNativeSessionReader {
     return warnings;
   }
 
-  listSessions(limit: number, isActive: (key: string) => boolean = () => false): HermesSessionListEntry[] {
+  async listSessions(limit: number, isActive: (key: string) => boolean = () => false): Promise<HermesSessionListEntry[]> {
     if (!existsSync(this.stateDbPath)) return [];
     try {
-      const parsed = this.python.run<unknown>(LIST_SESSIONS_SCRIPT, {
+      const parsed = (await this.python.run<unknown>(LIST_SESSIONS_SCRIPT, {
         dbPath: this.stateDbPath,
         limit: Math.max(1, limit),
         excludedPrefix: BRIDGE_SESSION_PREFIX,
-      });
+      }));
       if (!Array.isArray(parsed)) throw new Error('native session query returned a non-array payload');
       return parsed.flatMap((entry) => {
         const normalized = normalizeNativeSessionEntry(entry, isActive);
@@ -125,13 +125,13 @@ export class HermesNativeSessionReader {
     }
   }
 
-  findSession(key: string, isActive: (key: string) => boolean = () => false): HermesSessionListEntry | null {
+  async findSession(key: string, isActive: (key: string) => boolean = () => false): Promise<HermesSessionListEntry | null> {
     if (!key || key.startsWith(BRIDGE_SESSION_PREFIX) || !existsSync(this.stateDbPath)) return null;
     try {
-      const parsed = this.python.run<unknown>(FIND_SESSION_SCRIPT, {
+      const parsed = (await this.python.run<unknown>(FIND_SESSION_SCRIPT, {
         dbPath: this.stateDbPath,
         sessionId: key,
-      });
+      }));
       return normalizeNativeSessionEntry(parsed, isActive);
     } catch (error) {
       this.warn(`Hermes native session lookup is unavailable (read-only query failed): ${formatReaderError(error)}`);
@@ -139,13 +139,13 @@ export class HermesNativeSessionReader {
     }
   }
 
-  readHistoryBySessionId(sessionId: string): HermesNativeHistory | null {
+  async readHistoryBySessionId(sessionId: string): Promise<HermesNativeHistory | null> {
     if (!existsSync(this.stateDbPath)) return null;
     try {
-      const parsed = this.python.run<unknown>(READ_HISTORY_SCRIPT, {
+      const parsed = (await this.python.run<unknown>(READ_HISTORY_SCRIPT, {
         dbPath: this.stateDbPath,
         sessionId,
-      });
+      }));
       if (parsed == null) return null;
       if (!isRecord(parsed)) throw new Error('native history query returned a malformed payload');
       const resolvedSessionId = readString(parsed.sessionId);

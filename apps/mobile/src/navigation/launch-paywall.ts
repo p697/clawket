@@ -74,14 +74,6 @@ export function resolveStartupNavigation(
 
   if (input.subscriptionLoading) return { type: 'wait' };
 
-  if (input.threePointZeroIntroPending) {
-    return { type: 'show_three_point_zero_intro' };
-  }
-
-  if (!input.isPro) {
-    return { type: 'show_launch_paywall' };
-  }
-
   if (input.pendingAutoOpen) {
     return {
       type: 'open_thread',

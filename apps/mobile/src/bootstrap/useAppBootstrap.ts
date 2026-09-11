@@ -8,7 +8,7 @@ import { LastOpenedSessionSnapshot, StorageService } from '../services/storage';
 import { DEFAULT_NODE_CAPABILITY_TOGGLES, NodeCapabilityToggles } from '../services/node-capabilities';
 import { AccentColorId, ChatAppearanceSettings, SpeechRecognitionLanguage, ThemeMode } from '../types';
 import { defaultAccentId } from '../theme';
-import { DEFAULT_CHAT_APPEARANCE } from '../features/chat-appearance/defaults';
+import { DEFAULT_CHAT_APPEARANCE, DEFAULT_CHAT_FONT_SIZE } from '../features/chat-appearance/defaults';
 import {
   buildPrimarySessionPreview,
   PRIMARY_CACHED_AGENT_ID,
@@ -63,10 +63,10 @@ export function useAppBootstrap({
     DEFAULT_NODE_CAPABILITY_TOGGLES,
   );
   const [debugMode, setDebugMode] = useState(false);
-  const [showAgentAvatar, setShowAgentAvatar] = useState(true);
+  const [showAgentAvatar, setShowAgentAvatar] = useState(false);
   const [showModelUsage, setShowModelUsage] = useState(true);
   const [execApprovalEnabled, setExecApprovalEnabled] = useState(false);
-  const [chatFontSize, setChatFontSize] = useState(16);
+  const [chatFontSize, setChatFontSize] = useState(DEFAULT_CHAT_FONT_SIZE);
   const [chatAppearance, setChatAppearance] = useState<ChatAppearanceSettings>(DEFAULT_CHAT_APPEARANCE);
   const [speechRecognitionLanguage, setSpeechRecognitionLanguage] = useState<SpeechRecognitionLanguage>('system');
   const [themeMode, setThemeMode] = useState<ThemeMode>('system');

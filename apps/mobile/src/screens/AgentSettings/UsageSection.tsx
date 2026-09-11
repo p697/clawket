@@ -67,8 +67,8 @@ export function UsageSection({
     setLoading(true);
     try {
       const [nextUsage, nextCost] = await Promise.all([
-        operations.sessions(range),
-        canShowCost && operations.cost ? operations.cost(range) : Promise.resolve(null),
+        operations.sessions({ ...range, agentId: agent.agentId }),
+        canShowCost && operations.cost ? operations.cost({ ...range, agentId: agent.agentId }) : Promise.resolve(null),
       ]);
       setUsage(nextUsage);
       setCost(nextCost);
@@ -78,7 +78,7 @@ export function UsageSection({
     } finally {
       setLoading(false);
     }
-  }, [canShowCost, operations, range, t]);
+  }, [agent.agentId, canShowCost, operations, range, t]);
 
   useEffect(() => {
     void load();

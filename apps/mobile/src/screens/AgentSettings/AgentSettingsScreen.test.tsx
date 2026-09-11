@@ -55,6 +55,21 @@ const darkColors = {
 let mockTheme = { scheme: 'light' as 'light' | 'dark', colors: lightColors };
 const mockedAnalyticsEvents = analyticsEvents as jest.Mocked<typeof analyticsEvents>;
 
+jest.mock('../../components/ui/Sheet', () => ({ Sheet: ({ visible, children, onAfterClose }: any) => {
+  const ReactRuntime = require('react');
+  const previous = ReactRuntime.useRef(false);
+  ReactRuntime.useEffect(() => {
+    if (!visible && previous.current) onAfterClose?.();
+    previous.current = visible;
+  }, [visible, onAfterClose]);
+  return visible ? children : null;
+} }));
+jest.mock('../../components/ui/Button', () => {
+  const ReactRuntime = require('react');
+  const { Pressable, Text } = require('react-native');
+  return { Button: ({ label, onPress, testID }: any) => ReactRuntime.createElement(Pressable, { onPress, testID }, ReactRuntime.createElement(Text, null, label)) };
+});
+
 jest.mock('react-native', () => {
   const ReactRuntime = require('react');
   const host = (name: string) => ReactRuntime.forwardRef(
@@ -218,10 +233,12 @@ describe('AgentSettingsView deep rendering', () => {
       borderRadius: Radius.settingsGroup,
     });
     expect(view.getByText('Studio · OpenClaw')).toBeTruthy();
+    expect(view.queryByTestId('agent-settings-row-models')).toBeNull();
+    fireEvent.press(view.getByTestId('agent-profile-advanced'));
     expect(view.getByText('model-one')).toBeTruthy();
     expect(view.getByTestId('agent-settings-row-cron-attention')).toBeTruthy();
     expect(view.getByTestId('agent-settings-row-channels-devices-attention')).toBeTruthy();
-    expect(flattenStyle(view.getByTestId('agent-settings-agent-group').props.style))
+    expect(flattenStyle(view.getAllByTestId('agent-settings-agent-group')[0].props.style))
       .not.toHaveProperty('borderWidth');
 
     fireEvent.press(view.getByTestId('agent-settings-identity'));
@@ -242,7 +259,9 @@ describe('AgentSettingsView deep rendering', () => {
     const onOpenPro = jest.fn();
     const free = render(<AgentSettingsView {...props({ onNavigate, onOpenPro })} />);
 
+    fireEvent.press(free.getByTestId('agent-profile-advanced'));
     fireEvent.press(free.getByTestId('agent-settings-row-openclaw'));
+    fireEvent.press(free.getByTestId('agent-profile-advanced'));
     fireEvent.press(free.getByTestId('agent-settings-row-logs'));
     expect(onOpenPro).toHaveBeenCalledWith('logs', expect.any(Function));
     expect(onNavigate).toHaveBeenCalledWith('AgentSettingsSection', {
@@ -260,6 +279,7 @@ describe('AgentSettingsView deep rendering', () => {
     free.unmount();
 
     const pro = render(<AgentSettingsView {...props({ isPro: true, onNavigate, onOpenPro })} />);
+    fireEvent.press(pro.getByTestId('agent-profile-advanced'));
     fireEvent.press(pro.getByTestId('agent-settings-row-openclaw'));
     expect(onNavigate).toHaveBeenLastCalledWith('AgentSettingsSection', {
       connectionId: 'connection-one',
@@ -289,6 +309,7 @@ describe('AgentSettingsView deep rendering', () => {
     );
     expect(view.getByTestId('agent-settings-offline')).toBeTruthy();
     expect(view.getByTestId('agent-settings-identity')).toBeTruthy();
+    fireEvent.press(view.getByTestId('agent-profile-advanced'));
     expect(view.getByTestId('agent-settings-row-models')).toBeTruthy();
     expect(view.getByText('Offline')).toBeTruthy();
     fireEvent.press(view.getByTestId('agent-settings-offline-action'));
@@ -328,7 +349,7 @@ describe('AgentSettingsView deep rendering', () => {
       .toBe(darkColors.canvasGrouped);
     expect(flattenStyle(view.getByTestId('agent-settings-title').props.style).color)
       .toBe(darkColors.ink);
-    expect(flattenStyle(view.getByTestId('agent-settings-agent-group').props.style).backgroundColor)
+    expect(flattenStyle(view.getAllByTestId('agent-settings-agent-group')[0].props.style).backgroundColor)
       .toBe(darkColors.surfaceFloating);
   });
 
@@ -341,6 +362,7 @@ describe('AgentSettingsView deep rendering', () => {
     expect(view.queryByTestId('agent-settings-row-models')).toBeNull();
     expect(view.queryByTestId('agent-settings-row-openclaw')).toBeNull();
     expect(view.getByTestId('agent-settings-row-connection')).toBeTruthy();
+    fireEvent.press(view.getByTestId('agent-profile-advanced'));
     expect(view.getByTestId('agent-settings-row-channels-devices')).toBeTruthy();
   });
 });

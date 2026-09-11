@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as Clipboard from 'expo-clipboard';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
+import { useIsFocused } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   CAPABILITY_KEYS,
@@ -12,7 +13,7 @@ import {
   type SessionKind,
 } from '@clawket/agent-protocol';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useAppContext } from '../../contexts/AppContext';
+import { AppContextProvider, useAppContext } from '../../contexts/AppContext';
 import { useProPaywall } from '../../contexts/ProPaywallContext';
 import {
   getConnectionRuntime,
@@ -55,6 +56,7 @@ import {
   type ThreadRunCard,
   type ThreadRunSeed,
 } from './model';
+import { isMainConversation, projectSessionPreview, type SessionPreviewSnapshot } from '../../utils/session-preview';
 import { ThreadOverlays } from './components/ThreadOverlays';
 
 const NO_CAPABILITIES = Object.freeze(Object.fromEntries(
@@ -65,6 +67,7 @@ type NavigationProps = NativeStackScreenProps<RootStackParamList, 'Thread'>;
 
 export type ThreadScreenProps = NavigationProps & Readonly<{
   locked?: boolean;
+  sessionHistoryGraceActive?: boolean;
   lockedReason?: 'gatewayConnections' | 'agents';
   onOpenSessionPanel?: () => void;
   onOpenAddMenu?: () => void;
@@ -72,6 +75,7 @@ export type ThreadScreenProps = NavigationProps & Readonly<{
     sessionKey: string,
     agentId: string | undefined,
     kind: ThreadRunCard['kind'],
+    context?: Pick<ThreadRunCard, 'title' | 'kind' | 'statusLabel' | 'summary'>,
   ) => void;
   onOpenRunLogs?: (jobId: string, agentId?: string) => void;
   onOpenAttachments?: ThreadViewProps['onOpenAttachments'];
@@ -83,10 +87,38 @@ export type ThreadScreenProps = NavigationProps & Readonly<{
   }) => void;
 }>;
 
-export function ThreadScreen({
+export function ThreadScreen(props: ThreadScreenProps): React.JSX.Element {
+  const app = useAppContext();
+  const snapshot = useConnections();
+  const focused = useIsFocused();
+  const { connectionId, agentId, sessionKey } = props.route.params;
+  const agent = snapshot.roster.find((group) => group.connection.id === connectionId)
+    ?.agents.find((row) => row.agent.agentId === agentId)?.agent;
+  const scoped = useMemo(() => ({
+    ...app,
+    currentAgentId: agentId,
+    mainSessionKey: agent?.mainSessionKey ?? `agent:${agentId}:main`,
+    initialChatPreview: null,
+    pendingAgentSwitch: null,
+    chatSessionRequest: focused && app.chatSessionRequest?.sessionKey === sessionKey ? app.chatSessionRequest : null,
+    pendingChatNotificationOpen: focused ? app.pendingChatNotificationOpen : null,
+    pendingChatInput: focused ? app.pendingChatInput : null,
+    pendingMainSessionSwitch: focused && app.pendingMainSessionSwitch,
+  }), [app, agentId, agent?.mainSessionKey, connectionId, focused, sessionKey]);
+  useEffect(() => {
+    if (focused && app.currentAgentId !== agentId) app.setCurrentAgentId(agentId);
+  }, [focused, app.currentAgentId, app.setCurrentAgentId, agentId]);
+  return <AppContextProvider value={scoped}>
+    <ThreadScreenContent key={`${connectionId}:${agentId}`} {...props} focused={focused} />
+  </AppContextProvider>;
+}
+
+function ThreadScreenContent({
   navigation,
   route,
+  focused,
   locked = false,
+  sessionHistoryGraceActive = false,
   lockedReason = 'agents',
   onOpenSessionPanel,
   onOpenAddMenu,
@@ -94,9 +126,9 @@ export function ThreadScreen({
   onOpenRunLogs,
   onOpenAttachments,
   onThreadOpened,
-}: ThreadScreenProps): React.JSX.Element {
+}: ThreadScreenProps & { focused: boolean }): React.JSX.Element {
   const app = useAppContext();
-  const { isPro } = useProPaywall();
+  const { isPro, isLoading: subscriptionLoading } = useProPaywall();
   const connections = useConnections();
   const insets = useSafeAreaInsets();
   const { t, i18n } = useTranslation(['chat', 'common', 'settings']);
@@ -105,22 +137,23 @@ export function ThreadScreen({
   }> | null>(null);
   const [addSheetVisible, setAddSheetVisible] = useState(false);
   const [promptPickerVisible, setPromptPickerVisible] = useState(false);
-  const [selectedMessage, setSelectedMessage] = useState<UiMessage | null>(null);
   const [shareMessage, setShareMessage] = useState<UiMessage | null>(null);
   const [announcement, setAnnouncement] = useState<AppUpdateAnnouncement | null>(null);
   const [announcementVisible, setAnnouncementVisible] = useState(false);
-  const [stopConfirmationVisible, setStopConfirmationVisible] = useState(false);
-  const [cronRunSeeds, setCronRunSeeds] = useState<ThreadRunSeed[]>([]);
+  const [cronActivity, setCronActivity] = useState<{ scope: string; runs: ThreadRunSeed[] }>({ scope: '', runs: [] });
   const currentVersion = useMemo(() => getCurrentAppVersion(), []);
   const openedKeyRef = useRef<string | null>(null);
   const analyticsOpenedKeyRef = useRef<string | null>(null);
-  const requestedSessionKeyRef = useRef<string | null>(null);
   const { connectionId, agentId, sessionKey, from } = route.params;
   const routeIsActive = connections.activeConnectionId === connectionId;
   const adapter = routeIsActive && !locked ? connections.activeAdapter : null;
   const capabilities = adapter?.capabilities ?? NO_CAPABILITIES;
   const fileAttachmentsEnabled = supportsFileAttachments(capabilities);
-  const copy = useMemo(() => createThreadCopy(t), [t]);
+  const paused = connections.pausedConnectionIds?.includes(connectionId) ?? false;
+  const copy = useMemo(() => ({
+    ...createThreadCopy(t),
+    ...(paused ? { offline: t('Connection paused', { ns: 'config' }), reconnect: t('Resume connection', { ns: 'config' }) } : {}),
+  }), [paused, t]);
 
   useEffect(() => {
     setAnnouncementVisible(false);
@@ -132,7 +165,7 @@ export function ThreadScreen({
   }, [app.debugMode, currentVersion]);
 
   useEffect(() => {
-    if (!connections.initialized || routeIsActive || locked) return;
+    if (!focused || !connections.initialized || routeIsActive || locked) return;
     let cancelled = false;
     setActivationFailure(null);
     void getConnectionRuntime().activate(connectionId).catch((error: unknown) => {
@@ -142,18 +175,12 @@ export function ThreadScreen({
     return () => {
       cancelled = true;
     };
-  }, [connectionId, connections.initialized, locked, routeIsActive]);
+  }, [connectionId, connections.initialized, focused, locked, routeIsActive]);
 
   useEffect(() => {
     if (app.currentAgentId !== agentId) app.setCurrentAgentId(agentId);
   }, [agentId, app.currentAgentId, app.setCurrentAgentId]);
 
-  useEffect(() => {
-    const requestKey = `${connectionId}:${agentId}:${sessionKey}:${from}`;
-    if (requestedSessionKeyRef.current === requestKey) return;
-    requestedSessionKeyRef.current = requestKey;
-    app.requestChatSession(sessionKey, from);
-  }, [agentId, app.requestChatSession, connectionId, from, sessionKey]);
 
   useEffect(() => {
     const openedKey = `${connectionId}:${sessionKey}:${from}`;
@@ -163,21 +190,48 @@ export function ThreadScreen({
   }, [agentId, connectionId, from, onThreadOpened, sessionKey]);
 
   useEffect(() => {
-    setSelectedMessage(null);
     setShareMessage(null);
     setAddSheetVisible(false);
     setPromptPickerVisible(false);
-    setStopConfirmationVisible(false);
   }, [connectionId, sessionKey]);
 
+  const rosterSession = connections.roster.find((group) => group.connection.id === connectionId)
+    ?.agents.find((row) => row.agent.agentId === agentId)?.sessions?.find((session) => session.key === sessionKey);
+  const mainConversation = isMainConversation({ sessionKey, mainSessionKey: app.mainSessionKey, kind: rosterSession?.kind });
+  const sessionPreview = !locked && !mainConversation && !isPro && !sessionHistoryGraceActive;
+  const previewSnapshot = useRef<SessionPreviewSnapshot | null>(null);
   const controller = useChatController({
     adapter,
+    routeSessionKey: sessionKey,
+    readOnly: sessionPreview,
     debugMode: app.debugMode,
     showAgentAvatar: app.showAgentAvatar,
     chatSessionRequest: app.chatSessionRequest,
     clearChatSessionRequest: app.clearChatSessionRequest,
   });
   const currentSession = controller.sessions.find((session) => session.key === sessionKey);
+  const lastReadRevisionRef = useRef<string | null>(null);
+  const rosterSessionUpdatedAt = connections.roster
+    .find((group) => group.connection.id === connectionId)
+    ?.agents.find((summary) => summary.agent.agentId === agentId)
+    ?.sessions?.find((session) => session.key === sessionKey)?.updatedAt;
+  const readUpdatedAt = Math.max(currentSession?.updatedAt ?? 0, rosterSessionUpdatedAt ?? 0);
+  useEffect(() => {
+    if (!focused) {
+      lastReadRevisionRef.current = null;
+      return;
+    }
+    if (!routeIsActive || locked || !controller.historyLoaded || controller.sessionKey !== sessionKey) return;
+    const revision = `${connectionId}:${sessionKey}:${readUpdatedAt}`;
+    if (lastReadRevisionRef.current === revision) return;
+    lastReadRevisionRef.current = revision;
+    void getConnectionRuntime().markSessionOpened({
+      connectionId, key: sessionKey, updatedAt: readUpdatedAt || null,
+    }).catch(() => {
+      if (lastReadRevisionRef.current === revision) lastReadRevisionRef.current = null;
+    });
+  }, [connectionId, sessionKey, readUpdatedAt, focused, routeIsActive, locked, controller.historyLoaded, controller.sessionKey]);
+
   const analyticsBackend = adapter?.connection.backendKind
     ?? connections.connections.find((connection) => connection.id === connectionId)?.backendKind;
   useEffect(() => {
@@ -209,11 +263,15 @@ export function ThreadScreen({
     ?? controller.agentAvatarUri
     ?? agent?.identity?.avatarUrl;
   const locale = i18n.resolvedLanguage || i18n.language;
-  const isMainThread = currentSession?.kind === 'main'
-    || sessionKey === app.mainSessionKey
-    || sessionKey === 'main'
-    || /^agent:[^:]+:main$/.test(sessionKey);
+  const isMainThread = mainConversation;
   const cronFallbackTitle = t('Cron', { ns: 'common' });
+  const cronScope = `${connectionId}:${agentId}:${sessionKey}`;
+  const cronRunSeeds = cronActivity.scope === cronScope && isMainThread ? cronActivity.runs : [];
+  // Chat token/preview updates must not reload every job or clear the timeline.
+  const cronSessionsRevision = controller.sessions
+    .filter((session) => session.key.includes(':cron:'))
+    .map((session) => `${session.key}:${session.updatedAt ?? ''}`)
+    .sort().join('|');
   const childSessionCards = useMemo(() => buildChildSessionActivityCards({
     currentSessionKey: controller.sessionKey,
     currentAgentId: agentId,
@@ -242,10 +300,8 @@ export function ThreadScreen({
       || !operations?.list
       || !operations.runs
     ) {
-      setCronRunSeeds([]);
       return undefined;
     }
-    setCronRunSeeds([]);
     let cancelled = false;
     void loadThreadCronRunSeeds({
       operations,
@@ -254,9 +310,9 @@ export function ThreadScreen({
       isMainAgent: currentRosterAgent?.isMain ?? agentId === 'main',
       fallbackTitle: cronFallbackTitle,
     }).then((runs) => {
-      if (!cancelled) setCronRunSeeds(runs);
+      if (!cancelled) setCronActivity({ scope: cronScope, runs });
     }).catch(() => {
-      if (!cancelled) setCronRunSeeds([]);
+      // Keep the last successful activity snapshot during transient failures.
     });
     return () => {
       cancelled = true;
@@ -268,7 +324,8 @@ export function ThreadScreen({
     capabilities.cron,
     controller.connectionState,
     controller.sessionKey,
-    controller.sessions,
+    cronSessionsRevision,
+    cronScope,
     cronFallbackTitle,
     currentRosterAgent?.isMain,
     isMainThread,
@@ -324,19 +381,52 @@ export function ThreadScreen({
     }, delay);
     return () => clearTimeout(timer);
   }, [childSessionCards, controller.clearChildSessionActivities]);
+  const previewReady = controller.historyLoaded && controller.sessionKey === sessionKey;
+  // Scoped cache is usable before the network refresh finishes.
+  // Free preview is safe before billing resolves. Subscription lookup must not
+  // hide already-loaded messages or masquerade as a history/network request.
+  const previewContentAvailable = controller.sessionKey === sessionKey;
+  const projection = sessionPreview && previewContentAvailable
+    ? projectSessionPreview(`${connectionId}:${agentId}:${sessionKey}`, controller.listData, previewSnapshot.current, controller.hasMoreHistory)
+    : null;
+  if (projection) previewSnapshot.current = projection.snapshot;
+  else if (!sessionPreview) previewSnapshot.current = null;
+  const visibleMessages = sessionPreview ? projection?.messages ?? [] : controller.listData;
+  const previewEventScope = useRef<string | null>(null);
+  useEffect(() => {
+    if (!sessionPreview || !previewReady || !focused || !analyticsBackend) return;
+    const scope = `${connectionId}:${sessionKey}`;
+    if (previewEventScope.current === scope) return;
+    previewEventScope.current = scope;
+    analyticsEvents.sessionPreviewViewed({ backend: analyticsBackend, kind: normalizeAnalyticsSessionKind(currentSession?.kind, sessionKey) });
+  }, [sessionPreview, previewReady, focused, analyticsBackend, connectionId, sessionKey, currentSession?.kind]);
+  const openSessionPaywall = () => navigation.navigate('Paywall', { reason: 'sessionHistory' });
+  const returnToMain = () => {
+    const stack = navigation.getState();
+    for (let index = stack.index - 1; index >= 0; index--) {
+      const previous = stack.routes[index];
+      if (previous.name !== 'Thread') continue;
+      const params = previous.params as RootStackParamList['Thread'] | undefined;
+      if (params?.connectionId === connectionId && params.agentId === agentId
+        && params.sessionKey === app.mainSessionKey) {
+        navigation.pop(stack.index - index);
+        return;
+      }
+    }
+    navigation.replace('Thread', {
+      connectionId, agentId, sessionKey: app.mainSessionKey, from: 'panel', runContext: undefined,
+    });
+  };
   const gatewayConfigId = adapter?.connection.id ?? null;
   const favorites = useMessageFavorites({
     agentEmoji: agent?.identity?.emoji,
     agentId,
     agentName,
     gatewayConfigId,
-    listData: controller.listData,
+    listData: visibleMessages,
     sessionKey: controller.sessionKey,
     sessionLabel: currentSession?.title ?? currentSession?.label,
   });
-  const selectedMessageFavorited = selectedMessage
-    ? favorites.isFavoritedMessage(selectedMessage)
-    : false;
   const connectionError = connections.error
     && (!connections.error.connectionId || connections.error.connectionId === connectionId)
     ? connections.error.message
@@ -348,17 +438,46 @@ export function ThreadScreen({
       : null;
   const state = deriveThreadContentState({
     locked,
+    paused,
+    recovering: routeIsActive && connections.recovering,
     switching: connections.switching || !routeIsActive,
     targetSessionReady: controller.sessionKey === sessionKey,
     historyLoaded: controller.historyLoaded,
-    hasMessages: controller.listData.length > 0 || runCards.length > 0,
-    connectionState: controller.connectionState,
+    hasMessages: visibleMessages.length > 0
+      || (!sessionPreview && runCards.length > 0)
+      || (previewReady && Boolean(projection?.hasHiddenHistory)),
+    connectionState: connections.recoveryFailed ? 'offline' : controller.connectionState,
     error,
   });
+
+  const loadDiagnosticRef = useRef<{ scope: string; signature: string; startedAt: number } | null>(null);
+  const targetSessionReady = controller.sessionKey === sessionKey;
+  useEffect(() => {
+    if (!focused || !analyticsBackend) return;
+    const scope = `${connectionId}:${agentId}:${sessionKey}`;
+    const signature = [state.kind, controller.historyLoaded, subscriptionLoading, targetSessionReady, sessionPreview].join(':');
+    const previous = loadDiagnosticRef.current;
+    if (previous?.scope === scope && previous.signature === signature) return;
+    const startedAt = previous?.scope === scope ? previous.startedAt : Date.now();
+    loadDiagnosticRef.current = { scope, signature, startedAt };
+    analyticsEvents.threadLoadState({
+      backend: analyticsBackend,
+      phase: state.kind,
+      history_loaded: controller.historyLoaded,
+      subscription_loading: subscriptionLoading,
+      target_session_ready: targetSessionReady,
+      preview_only: sessionPreview,
+      elapsed_ms: Math.max(0, Date.now() - startedAt),
+    });
+  }, [focused, analyticsBackend, connectionId, agentId, sessionKey, state.kind, controller.historyLoaded, subscriptionLoading, targetSessionReady, sessionPreview]);
 
   const retry = () => {
     setActivationFailure(null);
     void (async () => {
+      if (paused) {
+        await getConnectionRuntime().reconnectConnection(connectionId);
+        return;
+      }
       if (getConnectionRuntime().getSnapshot().activeConnectionId !== connectionId) {
         await getConnectionRuntime().activate(connectionId);
         return;
@@ -368,21 +487,21 @@ export function ThreadScreen({
       setActivationFailure({ error: retryError });
     });
   };
-  const requestCancelCurrentRun = controller.canAbortCurrentRun && controller.sessionKey
-    ? () => setStopConfirmationVisible(true)
-    : undefined;
-  const confirmCancelCurrentRun = useCallback(() => {
-    setStopConfirmationVisible(false);
+  const cancelCurrentRun = useCallback(() => {
     if (analyticsBackend) analyticsEvents.chatAbortTapped({ backend: analyticsBackend });
     controller.abortCurrentRun();
   }, [analyticsBackend, controller]);
+  const requestCancelCurrentRun = controller.canAbortCurrentRun && controller.sessionKey
+    ? cancelCurrentRun
+    : undefined;
   const openRunSession = useCallback((
     targetSessionKey: string,
     targetAgentId: string | undefined,
     kind: ThreadRunCard['kind'],
+    context?: Pick<ThreadRunCard, 'title' | 'kind' | 'statusLabel' | 'summary'>,
   ) => {
     analyticsEvents.runCardOpened({ kind });
-    onOpenRunSession?.(targetSessionKey, targetAgentId, kind);
+    onOpenRunSession?.(targetSessionKey, targetAgentId, kind, context);
   }, [onOpenRunSession]);
 
   const closeAnnouncement = useCallback(() => {
@@ -430,14 +549,35 @@ export function ThreadScreen({
     if (text.trim()) void Clipboard.setStringAsync(text.trim());
   }, []);
 
-  const handleToggleFavorite = useCallback((message: UiMessage) => {
-    void favorites.toggleFavorite(message).catch(() => undefined);
-  }, [favorites]);
+  // Depend on the stable callback, not the per-render favorites object, so
+  // the timeline's renderItem identity survives streaming re-renders.
+  const toggleFavorite = favorites.toggleFavorite;
+  const handleToggleFavorite = useCallback((message: UiMessage) => (
+    toggleFavorite(message)
+  ), [toggleFavorite]);
 
   const handleShareMessage = useCallback((message: UiMessage) => {
-    setSelectedMessage(null);
     setShareMessage(message);
   }, []);
+
+  const messageActions = useMemo(() => ({
+    onCopy: handleCopyMessage,
+    onToggleFavorite: handleToggleFavorite,
+    onShare: handleShareMessage,
+  }), [handleCopyMessage, handleShareMessage, handleToggleFavorite]);
+
+  const {
+    canSendQueuedNow,
+    editQueuedMessage,
+    removeQueuedMessage,
+    sendQueuedMessageNow,
+  } = controller;
+  const queuedMessageActions = useMemo(() => ({
+    canSendNow: canSendQueuedNow,
+    onSendNow: (message: UiMessage) => sendQueuedMessageNow(message.id),
+    onEdit: (message: UiMessage) => editQueuedMessage(message.id),
+    onRemove: (message: UiMessage) => removeQueuedMessage(message.id),
+  }), [canSendQueuedNow, editQueuedMessage, removeQueuedMessage, sendQueuedMessageNow]);
 
   const handleOpenMessageAttachments = useCallback((message: UiMessage) => {
     if (onOpenAttachments) {
@@ -482,13 +622,20 @@ export function ThreadScreen({
   return (
     <>
       <ThreadView
+        connectingLabel={controller.connectionState !== 'ready' ? t('Connecting', { ns: 'common' }) : undefined}
+        chatAppearance={app.chatAppearance}
+        chatFontSize={app.chatFontSize}
+        showAgentAvatar={app.showAgentAvatar}
+        onOpenModelPicker={!sessionPreview && capabilities.models ? () => { controller.openModelPicker(); } : undefined}
         agentId={agentId}
         agentName={agentName}
         sessionKey={controller.sessionKey ?? sessionKey}
+        scrollToBottomRequestAt={controller.scrollToBottomRequestAt}
         agentEmoji={agentEmoji}
         agentAvatarUrl={agentAvatarUrl}
-        sessionTitle={currentSession?.title ?? currentSession?.label}
-        isMainSession={sessionKey === app.mainSessionKey}
+        sessionTitle={route.params.runContext?.title ?? currentSession?.title ?? currentSession?.label}
+        runContext={sessionPreview && route.params.runContext ? { ...route.params.runContext, summary: undefined } : route.params.runContext}
+        isMainSession={mainConversation}
         model={controller.currentModelHeaderLabel}
         contextUsed={currentSession?.totalTokensFresh === false
           ? undefined
@@ -497,15 +644,24 @@ export function ThreadScreen({
         activityLabel={controller.activityLabel}
         capabilities={capabilities}
         state={state}
-        messages={controller.listData}
-        compactionNotice={controller.compactionNotice}
-        runCards={runCards}
+        messages={visibleMessages}
+        sessionPreview={sessionPreview ? {
+          hasHiddenHistory: Boolean(projection?.hasHiddenHistory),
+          loading: state.kind === 'loading' || (state.kind === 'reconnecting' && visibleMessages.length === 0),
+          onUpgrade: openSessionPaywall,
+          onMain: returnToMain,
+        } : undefined}
+        compactionNotice={sessionPreview ? undefined : controller.compactionNotice}
+        sendFailure={controller.sendFailure}
+        sendFailureDetails={controller.sendFailureDetails}
+        onDismissSendFailure={controller.clearSendFailure}
+        runCards={sessionPreview ? [] : runCards}
         locale={locale}
         input={controller.input}
         composerRef={controller.composerRef}
         isRunning={controller.isSending}
-        canSend={controller.canSend}
-        loadingMoreHistory={controller.loadingMoreHistory}
+        canSend={!sessionPreview && controller.canSend}
+        loadingMoreHistory={!sessionPreview && controller.loadingMoreHistory}
         topInset={insets.top}
         bottomInset={insets.bottom}
         copy={copy}
@@ -513,19 +669,24 @@ export function ThreadScreen({
         onOpenSessionPanel={onOpenSessionPanel}
         onOpenSettings={() => navigation.navigate('AgentSettings', { connectionId, agentId })}
         onChangeInput={controller.setInput}
-        onSend={controller.onSend}
+        onSend={sessionPreview ? openSessionPaywall : controller.onSend}
         onCancel={requestCancelCurrentRun}
         onOpenAddMenu={capabilities.attachments || capabilities.skills ? handleOpenAddMenu : undefined}
         onVoice={controller.voiceInputSupported ? controller.toggleVoiceInput : undefined}
+        voiceState={controller.voiceInputState}
+        voiceLevel={controller.voiceInputLevel}
         onRetry={retry}
         onOpenPaywall={() => navigation.navigate('Paywall', { reason: lockedReason })}
         onErrorAction={() => retry()}
-        onLoadMoreHistory={controller.hasMoreHistory ? controller.onLoadMoreHistory : undefined}
+        onLoadMoreHistory={!sessionPreview && controller.hasMoreHistory ? controller.onLoadMoreHistory : undefined}
         onOpenRunSession={onOpenRunSession ? openRunSession : undefined}
         onOpenRunLogs={onOpenRunLogs}
         onOpenAttachments={handleOpenMessageAttachments}
-        onMessageLongPress={setSelectedMessage}
+        messageActions={messageActions}
+        queuedMessageActions={sessionPreview ? undefined : queuedMessageActions}
         favoriteMessageIds={favorites.favoriteMessageIdSet}
+        unconfirmedMessageIds={controller.unconfirmedMessageIds}
+        runAcknowledged={controller.runAcknowledged}
         pendingAttachments={controller.pendingImages}
         canAddMoreAttachments={controller.canAddMoreImages}
         onOpenPendingAttachment={handleOpenPendingAttachment}
@@ -545,7 +706,7 @@ export function ThreadScreen({
         onResolveApproval={controller.resolveApproval}
       />
       <ThreadOverlays
-        addVisible={addSheetVisible}
+        addVisible={!sessionPreview && addSheetVisible}
         attachmentsEnabled={capabilities.attachments}
         skillsEnabled={capabilities.skills}
         onCloseAdd={() => setAddSheetVisible(false)}
@@ -558,20 +719,14 @@ export function ThreadScreen({
           section: 'skills',
         }) : undefined}
         onOpenPrompts={() => setPromptPickerVisible(true)}
-        selectedMessage={selectedMessage}
-        selectedMessageFavorited={selectedMessageFavorited}
-        onCloseMessageActions={() => setSelectedMessage(null)}
-        onCopyMessage={handleCopyMessage}
-        onToggleFavorite={handleToggleFavorite}
-        onShareMessage={handleShareMessage}
-        shareMessage={shareMessage}
+        shareMessage={shareMessage && visibleMessages.some((message) => message.id === shareMessage.id) ? shareMessage : null}
         agentName={agentName}
         agentEmoji={agent?.identity?.emoji}
         agentAvatarUri={controller.agentAvatarUri ?? undefined}
         shareProductLabel={shareProductLabel}
         onCloseShare={() => setShareMessage(null)}
         preview={{
-          visible: controller.preview.previewVisible,
+          visible: controller.preview.previewVisible && (!sessionPreview || visibleMessages.some((message) => message.imageUris?.some((uri) => controller.preview.previewUris.includes(uri)))),
           uris: controller.preview.previewUris,
           index: controller.preview.previewIndex,
           width: controller.preview.screenWidth,
@@ -582,7 +737,7 @@ export function ThreadScreen({
           onIndexChange: controller.preview.setPreviewIndex,
         }}
         modelPicker={{
-          visible: controller.modelPickerVisible,
+          visible: !sessionPreview && controller.modelPickerVisible,
           loading: controller.modelPickerLoading,
           error: controller.modelPickerError,
           models: controller.availableModels,
@@ -594,7 +749,7 @@ export function ThreadScreen({
           onSelect: controller.onSelectModel,
         }}
         commandPicker={{
-          visible: controller.commandPickerVisible,
+          visible: !sessionPreview && controller.commandPickerVisible,
           title: controller.commandPickerTitle,
           loading: controller.commandPickerLoading,
           error: controller.commandPickerError,
@@ -605,12 +760,12 @@ export function ThreadScreen({
           onSelect: controller.onSelectCommandOption,
         }}
         promptPicker={{
-          visible: promptPickerVisible,
+          visible: !sessionPreview && promptPickerVisible,
           onClose: () => setPromptPickerVisible(false),
           onSelect: handleSelectPrompt,
         }}
         thinkingPicker={{
-          visible: controller.staticThinkPickerVisible,
+          visible: !sessionPreview && controller.staticThinkPickerVisible,
           current: controller.thinkingLevel ?? '',
           options: controller.thinkingLevelOptions,
           onClose: controller.closeStaticThinkPicker,
@@ -623,18 +778,6 @@ export function ThreadScreen({
           currentVersion,
           onClose: closeAnnouncement,
           onEntryPress: handleAnnouncementEntryPress,
-        }}
-        stopConfirmation={{
-          visible: stopConfirmationVisible,
-          title: t('Stop Agent', { ns: 'chat' }),
-          message: t(
-            'Are you sure you want to stop the agent? This will interrupt the current task.',
-            { ns: 'chat' },
-          ),
-          cancelLabel: t('Cancel', { ns: 'common' }),
-          confirmLabel: t('Stop', { ns: 'chat' }),
-          onClose: () => setStopConfirmationVisible(false),
-          onConfirm: confirmCancelCurrentRun,
         }}
       />
     </>
@@ -700,12 +843,23 @@ export function createThreadError(t: TFunction, error?: unknown): ThreadErrorInp
 export function createThreadCopy(t: TFunction): ThreadCopy {
   return {
     back: t('Back', { ns: 'common' }),
+    close: t('Close', { ns: 'common' }),
     settings: t('Agent settings', { ns: 'chat' }),
     openSessions: t('Open sessions', { ns: 'chat' }),
     add: t('Add', { ns: 'common' }),
     voice: t('Voice input', { ns: 'chat' }),
+    stopVoice: t('Stop voice input', { ns: 'chat' }),
+    listening: t('Listening…', { ns: 'chat' }),
+    preparingVoice: t('Preparing voice input…', { ns: 'chat' }),
     send: t('Send', { ns: 'chat' }),
     stop: t('Stop', { ns: 'chat' }),
+    queueSend: t('Send after this reply', { ns: 'chat' }),
+    queued: t('Queued', { ns: 'chat' }),
+    sending: t('Sending…', { ns: 'chat' }),
+    paused: t('Paused', { ns: 'chat' }),
+    sent: t('Sent', { ns: 'chat' }),
+    delivered: t('Delivered', { ns: 'chat' }),
+    uncertain: t('Send unconfirmed', { ns: 'chat' }),
     reconnect: t('Reconnect', { ns: 'chat' }),
     offline: t('Offline · reconnecting', { ns: 'chat' }),
     thinking: t('Thinking…', { ns: 'chat' }),
@@ -734,6 +888,7 @@ export function createThreadCopy(t: TFunction): ThreadCopy {
       ? t('{{status}} · {{time}}', { ns: 'chat', status, time })
       : status,
     logs: t('Logs', { ns: 'common' }),
+    chooseModel: t('Models', { ns: 'settings' }),
     formatModelContext: (model, remainingPercent) => t('{{model}} · {{percent}}% left', {
       ns: 'chat',
       model,

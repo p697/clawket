@@ -112,7 +112,7 @@ function validateIsoTimestamp(value: unknown, field: string): string | null {
 
 export abstract class HermesCronMethods {
   declare hermesHomePath: string;
-  declare runHermesPython: <T>(script: string, stdinPayload?: unknown) => T;
+  declare runHermesPython: <T>(script: string, stdinPayload?: unknown) => Promise<T>;
 
   async listHermesCronJobs(payload: Record<string, unknown>): Promise<HermesCronJob[]> {
     const includeDisabled = readBoolean(payload.includeDisabled) ?? true;
@@ -136,7 +136,7 @@ export abstract class HermesCronMethods {
     if (!prompt && skills.length === 0) {
       throw new Error('Hermes scheduled tasks require prompt or at least one skill.');
     }
-    const result = this.runHermesCronTool('create', {
+    const result = (await this.runHermesCronTool('create', {
       name: requireNonEmptyString(readString(payload.name), 'Task name is required.'),
       schedule: requireNonEmptyString(readString(payload.schedule), 'Schedule is required.'),
       prompt: prompt || '',
@@ -144,7 +144,7 @@ export abstract class HermesCronMethods {
       skills,
       repeat: validateRepeat(payload.repeat),
       script: validateOptionalString(payload.script, 'script'),
-    });
+    }));
     const jobId = readString((isRecord(result) ? result.job_id : null));
     if (!jobId) {
       throw new Error('Hermes scheduled task creation did not return a job_id.');
@@ -170,7 +170,7 @@ export abstract class HermesCronMethods {
     if (payload.skills !== undefined) updates.skills = validateStringArray(payload.skills, 'skills');
     if (payload.repeat !== undefined) updates.repeat = validateRepeat(payload.repeat);
     if (payload.script !== undefined) updates.script = readString(payload.script) || '';
-    this.runHermesCronTool('update', updates);
+    (await this.runHermesCronTool('update', updates));
     this.applyHermesCronJobOverrides(jobId, {
       nextRunAt: payload.startAt === undefined ? undefined : validateIsoTimestamp(payload.startAt, 'startAt'),
       scheduleDisplay: payload.scheduleDisplay === undefined ? undefined : (readString(payload.scheduleDisplay) || null),
@@ -179,22 +179,22 @@ export abstract class HermesCronMethods {
   }
 
   async pauseHermesCronJob(jobId: string | null): Promise<HermesCronJob | null> {
-    return this.runHermesCronJobAction(jobId, 'pause');
+    return (await this.runHermesCronJobAction(jobId, 'pause'));
   }
 
   async resumeHermesCronJob(jobId: string | null): Promise<HermesCronJob | null> {
-    return this.runHermesCronJobAction(jobId, 'resume');
+    return (await this.runHermesCronJobAction(jobId, 'resume'));
   }
 
   async runHermesCronJob(jobId: string | null): Promise<HermesCronJob | null> {
-    return this.runHermesCronJobAction(jobId, 'run');
+    return (await this.runHermesCronJobAction(jobId, 'run'));
   }
 
   async removeHermesCronJob(jobId: string | null): Promise<boolean> {
     if (!jobId) {
       throw new Error('hermes.cron.jobs.remove requires jobId.');
     }
-    const result = this.runHermesCronTool('remove', { jobId });
+    const result = (await this.runHermesCronTool('remove', { jobId }));
     return Boolean(result.success);
   }
 
@@ -202,7 +202,7 @@ export abstract class HermesCronMethods {
     if (!jobId) {
       throw new Error(`hermes.cron.jobs.${action} requires jobId.`);
     }
-    this.runHermesCronTool(action, { jobId });
+    (await this.runHermesCronTool(action, { jobId }));
     return this.readHermesCronJobsFromDisk()[jobId] ?? null;
   }
 
@@ -338,11 +338,11 @@ export abstract class HermesCronMethods {
     return parseHermesCronOutput(jobId, fileName, content, outputPath, job?.name);
   }
 
-  runHermesCronTool(
+  async runHermesCronTool(
     action: 'create' | 'update' | 'pause' | 'resume' | 'run' | 'remove',
     payload: Record<string, unknown>,
-  ): { success?: boolean; job?: unknown; removed_job?: unknown; job_id?: unknown; error?: unknown } {
-    const result = this.runHermesPython<{
+  ): Promise<{ success?: boolean; job?: unknown; removed_job?: unknown; job_id?: unknown; error?: unknown }> {
+    const result = (await this.runHermesPython<{
       success?: boolean;
       job?: unknown;
       removed_job?: unknown;
@@ -368,7 +368,7 @@ export abstract class HermesCronMethods {
         'print(result)',
       ].join('\n'),
       { ...payload, action },
-    );
+    ));
     if (result.success === false) {
       throw new Error(readString(result.error) || `Failed to ${action} Hermes scheduled task.`);
     }

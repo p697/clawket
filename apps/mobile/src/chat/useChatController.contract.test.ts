@@ -1,3 +1,4 @@
+import { clearUncertainSends } from './sendRecovery';
 import { act, renderHook } from '@testing-library/react-native';
 import * as Network from 'expo-network';
 import * as DocumentPicker from 'expo-document-picker';
@@ -52,7 +53,7 @@ const voiceInputHookMock = {
   toggleVoiceInput: jest.fn(),
   voiceInputActive: false,
   voiceInputDisabled: false,
-  voiceInputLevel: 0.42,
+  voiceInputLevel: { value: 0.42 },
   voiceInputState: 'idle' as const,
   voiceInputSupported: true,
 };
@@ -321,6 +322,7 @@ describe('useChatController contract', () => {
       }
     });
     jest.clearAllMocks();
+    clearUncertainSends('connection-1');
     resetMockState();
   });
 
@@ -590,6 +592,18 @@ describe('useChatController contract', () => {
     expect(historyMock.onRefresh).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps read-only session drafts without prompting or probing', async () => {
+    const adapter = createAdapter('ready');
+    const { result } = renderHook(() => useChatController({
+      adapter: adapter as any, readOnly: true, debugMode: false, showAgentAvatar: true,
+    } as any));
+    await act(async () => { result.current.setInput('Keep this draft'); });
+    await act(async () => { result.current.onSend(); });
+    expect(adapter.prompt).not.toHaveBeenCalled();
+    expect(adapter.probe).not.toHaveBeenCalled();
+    expect(result.current.input).toBe('Keep this draft');
+  });
+
   it('blocks send when send preflight probe fails', async () => {
     const adapter = createAdapter('ready');
     adapter.probe.mockResolvedValue(false);
@@ -614,6 +628,7 @@ describe('useChatController contract', () => {
     expect(adapter.prompt).not.toHaveBeenCalled();
     expect(recordSuccessfulSendForAutomaticReview).not.toHaveBeenCalled();
     expect(result.current.input).toBe('hello');
+    expect(result.current.sendFailure).toBe('Sending failed. Check the conversation before trying again.');
   });
 
   it('sends after send preflight probe succeeds', async () => {
@@ -639,6 +654,47 @@ describe('useChatController contract', () => {
     expect(adapter.probe).toHaveBeenCalledTimes(1);
     expect(adapter.prompt).toHaveBeenCalledTimes(1);
     expect(recordSuccessfulSendForAutomaticReview).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([false, true])('keeps one uncertain bubble without refilling the composer (new draft: %s)', async (hasNewDraft) => {
+    const adapter = createAdapter('ready');
+    let rejectSend: (error: Error) => void = () => undefined;
+    adapter.prompt.mockImplementation(() => new Promise((_resolve, reject) => { rejectSend = reject; }));
+    const { result } = renderHook(() => useChatController({
+      adapter: adapter as any, debugMode: false, showAgentAvatar: true,
+    } as any));
+    await act(async () => { result.current.setInput('Original draft'); });
+    await act(async () => { result.current.onSend(); await Promise.resolve(); });
+    if (hasNewDraft) await act(async () => { result.current.setInput('New draft'); });
+    await act(async () => { rejectSend(new Error('Private backend response')); await Promise.resolve(); });
+    expect(result.current.input).toBe(hasNewDraft ? 'New draft' : '');
+    expect(result.current.listData.filter((message) => message.text === 'Original draft')).toHaveLength(1);
+    expect(result.current.listData.find((message) => message.text === 'Original draft')?.sendUncertain).toBe(true);
+    expect(result.current.isSending).toBe(false);
+    expect(result.current.sendFailure).toBe('Sending failed. Check the conversation before trying again.');
+    expect(historyMock.messages.some((message) => message.text.includes('Private backend response'))).toBe(false);
+  });
+
+  it('keeps a late send failure in the original session without changing the new draft', async () => {
+    const adapter = createAdapter('ready');
+    let rejectSend: (error: Error) => void = () => undefined;
+    adapter.prompt.mockImplementation(() => new Promise((_resolve, reject) => { rejectSend = reject; }));
+    const { result, rerender } = renderHook(() => useChatController({
+      adapter: adapter as any, debugMode: false, showAgentAvatar: true,
+    } as any));
+    await act(async () => { result.current.setInput('Source message'); });
+    await act(async () => { result.current.onSend(); await Promise.resolve(); });
+    historyMock.sessionKey = 'agent:main:other';
+    historyMock.messages = [];
+    rerender(undefined);
+    await act(async () => { result.current.setInput('Other draft'); });
+    await act(async () => { rejectSend(new Error('socket closed')); await Promise.resolve(); });
+    expect(result.current.input).toBe('Other draft');
+    expect(result.current.sendFailure).toBeNull();
+    expect(result.current.listData.some((message) => message.text === 'Source message')).toBe(false);
+    historyMock.sessionKey = 'agent:main:main';
+    rerender(undefined);
+    expect(result.current.listData.find((message) => message.text === 'Source message')?.sendUncertain).toBe(true);
   });
 
   it.each(['openclaw', 'hermes'] as const)(
@@ -1274,6 +1330,8 @@ describe('useChatController contract', () => {
       } as any),
     );
 
+    const eventParams = jest.mocked(useAdapterChatEvents).mock.calls.at(-1)?.[0];
+
     await act(async () => {
       result.current.setInput('hello-1');
     });
@@ -1282,6 +1340,20 @@ describe('useChatController contract', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
+    // Finish the first turn; a send during a run would join the queue instead.
+    await act(async () => {
+      eventParams!.onUpdate?.({
+        type: 'run_finished',
+        sessionKey: 'agent:main:main',
+        runId: 'run-1',
+        stopReason: 'end_turn',
+        activeRunId: null,
+        isSending: false,
+        finalMessage: { id: 'final_run-1', role: 'assistant', text: 'Hi', timestampMs: 10 },
+      });
+      await Promise.resolve();
+    });
+    expect(result.current.isSending).toBe(false);
 
     await act(async () => {
       result.current.setInput('hello-2');
@@ -1807,9 +1879,11 @@ describe('useChatController contract', () => {
     });
 
     expect(result.current.isSending).toBe(false);
-    expect(historyMock.messages).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: 'error_run-error_500', text: 'Backend failed' }),
-    ]));
+    expect(historyMock.messages.some((message) => message.id === 'error_run-error_500')).toBe(false);
+    expect(result.current.sendFailure).toBe("The agent couldn't complete this reply. Please try again.");
+    expect(result.current.sendFailureDetails).toBe('Backend failed');
+    act(() => result.current.clearSendFailure());
+    expect(result.current.sendFailureDetails).toBeNull();
   });
 
   it('shows compaction temporarily and keeps handshake pairing state separate from pair cards', async () => {

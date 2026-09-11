@@ -347,7 +347,11 @@ export function ProPaywallProvider({ children }: { children: React.ReactNode }):
       const listener = (customerInfo: ProPurchaseResult['customerInfo']) => {
         if (activePaywallOperationRef.current) return;
         subscriptionRequestIdRef.current += 1;
-        void applySnapshot(deriveProSubscriptionSnapshot(customerInfo, config.entitlementId));
+        // This authoritative result supersedes an in-flight refresh, including
+        // its finally block. Settle loading here instead of waiting on that stale request.
+        setIsLoading(false);
+        void applySnapshot(deriveProSubscriptionSnapshot(customerInfo, config.entitlementId))
+          .catch(() => undefined); // The in-memory entitlement remains usable if persistence fails.
       };
 
       paywallListenerRef.current = listener;

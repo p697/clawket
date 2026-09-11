@@ -16,13 +16,26 @@ export function useChatComposerDraft({
 }: Params) {
   const draftSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draftLoadedKeyRef = useRef<string | null>(null);
+  const pendingDraftRef = useRef<{ agentId: string; sessionKey: string; input: string } | null>(null);
+
+  // Flush the last keystrokes when leaving a scope; the debounce alone loses
+  // edits made immediately before navigating back or switching conversations.
+  useEffect(() => () => {
+    const pending = pendingDraftRef.current;
+    if (pending && pending.agentId === currentAgentId && pending.sessionKey === sessionKey) {
+      pendingDraftRef.current = null;
+      StorageService.setComposerDraft(pending.agentId, pending.sessionKey, pending.input).catch(() => {});
+    }
+  }, [currentAgentId, sessionKey]);
 
   useEffect(() => {
     if (!sessionKey || !currentAgentId) return;
     if (draftLoadedKeyRef.current !== `${currentAgentId}-${sessionKey}`) return;
 
     if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current);
+    pendingDraftRef.current = { agentId: currentAgentId, sessionKey, input };
     draftSaveTimerRef.current = setTimeout(() => {
+      pendingDraftRef.current = null;
       StorageService.setComposerDraft(currentAgentId, sessionKey, input).catch(() => {});
     }, 300);
 
@@ -57,6 +70,8 @@ export function useChatComposerDraft({
   return {
     clearPersistedDraft: () => {
       if (!sessionKey || !currentAgentId) return;
+      if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current);
+      pendingDraftRef.current = null;
       StorageService.setComposerDraft(currentAgentId, sessionKey, '').catch(() => {});
     },
     resetDraftLoadState: () => {

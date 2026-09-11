@@ -10,12 +10,9 @@ import {
 import { Lock } from 'lucide-react-native';
 import Animated, {
   cancelAnimation,
-  Easing,
   useAnimatedStyle,
-  useReducedMotion,
   useSharedValue,
   withDelay,
-  withRepeat,
   withTiming,
 } from 'react-native-reanimated';
 import { useAppTheme } from '../../theme';
@@ -46,32 +43,31 @@ type AvatarMetrics = Readonly<{
 export const AGENT_AVATAR_METRICS: Readonly<Record<AgentAvatarVariant, AvatarMetrics>> = {
   roster: {
     size: ControlSize.settingsRow + Space.xs,
-    radius: Radius.avatarRoster,
+    radius: Radius.full,
     fontSize: FontSize.title,
     lineHeight: LineHeight.title,
   },
   header: {
     size: ControlSize.pill - Space.md,
-    radius: Radius.avatarHeader,
+    radius: Radius.full,
     fontSize: FontSize.caption,
     lineHeight: LineHeight.caption,
   },
   settings: {
     size: ControlSize.floatingButton,
-    radius: Radius.avatarSettings,
+    radius: Radius.full,
     fontSize: FontSize.body,
     lineHeight: LineHeight.body,
   },
   sheet: {
     size: Space.xxl,
-    radius: Radius.avatarSheet,
+    radius: Radius.full,
     fontSize: FontSize.secondary,
     lineHeight: LineHeight.secondary,
   },
 };
 
 const AVATAR_MUTED_SATURATION = 0.4;
-const FULL_ROTATION_DEGREES = 360;
 
 export type AgentAvatarProps = Readonly<{
   agentId: string;
@@ -115,8 +111,6 @@ export function AgentAvatar({
   testID,
 }: AgentAvatarProps): React.JSX.Element {
   const { theme } = useAppTheme();
-  const reduceMotion = useReducedMotion();
-  const rotation = useSharedValue(0);
   const doneOpacity = useSharedValue(status === 'done' ? 1 : 0);
   const metrics = AGENT_AVATAR_METRICS[variant];
   const paletteColor = agentPalette[getAgentPaletteIndex(agentId)] ?? agentPalette[0];
@@ -133,22 +127,6 @@ export function AgentAvatar({
   );
 
   useEffect(() => {
-    cancelAnimation(rotation);
-    rotation.value = 0;
-    if (status === 'working' && !reduceMotion) {
-      rotation.value = withRepeat(
-        withTiming(FULL_ROTATION_DEGREES, {
-          duration: Motion.avatarWorkingLoop,
-          easing: Easing.linear,
-        }),
-        -1,
-        false,
-      );
-    }
-    return () => cancelAnimation(rotation);
-  }, [reduceMotion, rotation, status]);
-
-  useEffect(() => {
     cancelAnimation(doneOpacity);
     if (status !== 'done') {
       doneOpacity.value = 0;
@@ -162,9 +140,6 @@ export function AgentAvatar({
     return () => cancelAnimation(doneOpacity);
   }, [doneOpacity, status]);
 
-  const rotatingRingStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${rotation.value}deg` }],
-  }));
   const doneDotStyle = useAnimatedStyle(() => ({ opacity: doneOpacity.value }));
   const isMuted = status === 'offline' || status === 'locked';
   const statusDotColor = attentionTone === 'bad' ? theme.colors.bad : theme.colors.warn;
@@ -181,22 +156,6 @@ export function AgentAvatar({
         style,
       ]}
     >
-      {status === 'working' ? (
-        <Animated.View
-          testID={testID ? `${testID}-working-ring` : undefined}
-          pointerEvents="none"
-          style={[
-            styles.workingRing,
-            {
-              borderRadius: metrics.radius + BorderWidth.strong,
-              borderColor: theme.colors.accent,
-              borderBottomColor: reduceMotion ? theme.colors.accent : theme.colors.accentSoft,
-              borderLeftColor: reduceMotion ? theme.colors.accent : theme.colors.accentSoft,
-            },
-            rotatingRingStyle,
-          ]}
-        />
-      ) : null}
       <View
         testID={testID ? `${testID}-fill` : undefined}
         style={[
@@ -222,6 +181,17 @@ export function AgentAvatar({
           />
         ) : null}
       </View>
+      {status === 'working' ? (
+        <View
+          testID={testID ? `${testID}-working` : undefined}
+          pointerEvents="none"
+          style={[styles.workingBadge, { backgroundColor: theme.colors.ink, borderColor: theme.colors.canvas }]}
+        >
+          {[Space.xs, Space.sm, Space.xs].map((height, index) => (
+            <View key={index} style={[styles.workingBar, { height, backgroundColor: theme.colors.canvas }]} />
+          ))}
+        </View>
+      ) : null}
       {status === 'attention' ? (
         <View
           testID={testID ? `${testID}-attention` : undefined}
@@ -285,13 +255,22 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  workingRing: {
+  workingBadge: {
     position: 'absolute',
-    top: -BorderWidth.strong,
     right: -BorderWidth.strong,
     bottom: -BorderWidth.strong,
-    left: -BorderWidth.strong,
+    width: Space.lg,
+    height: Space.lg,
+    borderRadius: Radius.full,
     borderWidth: BorderWidth.strong,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: BorderWidth.strong,
+  },
+  workingBar: {
+    width: BorderWidth.strong,
+    borderRadius: Radius.full,
   },
   statusDot: {
     position: 'absolute',

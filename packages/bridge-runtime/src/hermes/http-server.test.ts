@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import WebSocket from 'ws';
 import { describe, expect, it, vi } from 'vitest';
+import { probeHermesApi } from './http-server.js';
 import { HermesLocalBridge } from './index.js';
 import {
   FRAME_TOO_LARGE_ERROR_CODE,
@@ -172,5 +173,19 @@ describe('HermesLocalBridge capability advertisement', () => {
     } finally {
       await rm(stateDir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('Hermes authenticated readiness', () => {
+  it('does not mistake a public health response for usable API credentials', async () => {
+    const fetchMock = vi.fn(async (url: string, options?: RequestInit) => new Response('{}', {
+      status: url.endsWith('/health') || options?.headers && (options.headers as Record<string, string>).authorization === 'Bearer valid-key' ? 200 : 401,
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      expect(await probeHermesApi('http://127.0.0.1:8642', 'wrong-key')).toBe(false);
+      expect(await probeHermesApi('http://127.0.0.1:8642', 'valid-key')).toBe(true);
+      expect(fetchMock.mock.calls.every(([url]) => url.endsWith('/v1/models'))).toBe(true);
+    } finally { vi.unstubAllGlobals(); }
   });
 });

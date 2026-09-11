@@ -87,6 +87,8 @@ export type BridgeRuntimeOptions = {
   config: PairingConfig;
   gatewayUrl: string;
   bridgeVersion?: string;
+  /** Additive owner negotiation; legacy runtime consumers retain the v1 wire. */
+  clientChannels?: boolean;
   reconnectBaseDelayMs?: number;
   reconnectMaxDelayMs?: number;
   gatewayRetryDelayMs?: number;
@@ -120,6 +122,7 @@ const GATEWAY_RETRY_MAX_DELAY_MS = 15_000;
 const RECONNECT_BASE_DELAY_MS = 1_000;
 const RECONNECT_MAX_DELAY_MS = 15_000;
 const CONNECT_HANDSHAKE_WARN_DELAY_MS = 8_000;
+const CHALLENGE_WAIT_TIMEOUT_MS = 8_000;
 const MAX_PENDING_GATEWAY_MESSAGES = 256;
 const MAX_DEVICE_DETAILS = 32;
 const MAX_PENDING_PAIR_REQUESTS = 16;
@@ -133,6 +136,8 @@ const STARTUP_SIDECARS_CONNECT_RETRY_MAX_DELAY_MS = 3_000;
 export const OPENCLAW_MOBILE_SETUP_CAPABILITY = 'openclaw.bootstrap.mobile-setup.v1';
 
 export class BridgeRuntime {
+  private readonly clientRuntimes = new Map<string, BridgeRuntime>();
+  private clientChannelsNegotiated = false;
   private relaySocket: RuntimeSocket | null = null;
   private gatewaySocket: RuntimeSocket | null = null;
   private relayConnecting = false;
@@ -143,6 +148,8 @@ export class BridgeRuntime {
   private gatewayRetryTimer: NodeJS.Timeout | null = null;
   private gatewayRetryAttempt = 0;
   private heartbeatTimer: NodeJS.Timeout | null = null;
+  private challengeWaitTimer: NodeJS.Timeout | null = null;
+  private bootstrapRequestsInFlight = 0;
   private pendingGatewayMessages: PendingGatewayMessage[] = [];
   private gatewayHandshakeStarted = false;
   private gatewayCloseBoundaryPending = false;
@@ -153,7 +160,7 @@ export class BridgeRuntime {
   private readonly bridgeVersion: string | undefined;
   private readonly snapshot: BridgeRuntimeSnapshot;
 
-  constructor(private readonly options: BridgeRuntimeOptions) {
+  constructor(private readonly options: BridgeRuntimeOptions, private readonly targetConnectionId?: string) {
     this.bridgeVersion = normalizeBridgeVersion(options.bridgeVersion);
     this.snapshot = {
       running: false,
@@ -187,6 +194,7 @@ export class BridgeRuntime {
     if (this.stopped) return;
     this.stopped = true;
     this.clearTimers();
+    await this.stopClientRuntimes();
     this.relaySocket?.close();
     this.gatewaySocket?.close();
     this.relaySocket = null;
@@ -212,11 +220,21 @@ export class BridgeRuntime {
   }
 
   async approvePairRequest(requestId: string): Promise<void> {
+    const child = [...this.clientRuntimes.values()].find(runtime => runtime.getSnapshot().pendingPairRequests.some(request => request.requestId === requestId));
+    if (child) { await child.approvePairRequest(requestId); return; }
+    if (this.clientChannelsNegotiated && !this.targetConnectionId) {
+      throw new Error('Pairing request is no longer available on a connected client channel');
+    }
     this.sendGatewayRequest('device.pair.approve', { requestId });
     this.markPairRequestResolved(requestId, 'approved');
   }
 
   async rejectPairRequest(requestId: string): Promise<void> {
+    const child = [...this.clientRuntimes.values()].find(runtime => runtime.getSnapshot().pendingPairRequests.some(request => request.requestId === requestId));
+    if (child) { await child.rejectPairRequest(requestId); return; }
+    if (this.clientChannelsNegotiated && !this.targetConnectionId) {
+      throw new Error('Pairing request is no longer available on a connected client channel');
+    }
     this.sendGatewayRequest('device.pair.reject', { requestId });
     this.markPairRequestResolved(requestId, 'rejected');
   }
@@ -233,7 +251,10 @@ export class BridgeRuntime {
     if (this.stopped || this.relayConnecting || this.isRelayOpen()) return;
     this.relayConnecting = true;
     const attempt = this.relaySessionState.beginConnectAttempt();
-    const relayUrl = buildRelayWsUrl(this.options.config);
+    const channelUrl = new URL(buildRelayWsUrl(this.options.config));
+    if (this.targetConnectionId) channelUrl.searchParams.set('targetConnectionId', this.targetConnectionId);
+    else if (this.options.clientChannels) channelUrl.searchParams.set('capabilities', 'bridge.client-sockets.v1');
+    const relayUrl = channelUrl.toString();
     const relayHeaders = buildRelayWsHeaders(this.options.config);
     this.log(
       `relay connect attempt=${attempt} url=${redactRelayWsUrl(relayUrl)} ` +
@@ -261,6 +282,7 @@ export class BridgeRuntime {
     });
 
     relay.on('message', (data: RawData, isBinary: boolean) => {
+      if (this.relaySocket !== relay || this.stopped) return;
       void this.handleRelayMessage(data, isBinary);
     });
 
@@ -282,10 +304,13 @@ export class BridgeRuntime {
     });
 
     relay.once('close', (code: number, reason: Buffer) => {
+      if (this.relaySocket !== relay) return;
       if (this.relaySocket === relay) {
         this.relaySocket = null;
       }
       this.relayConnecting = false;
+      void this.stopClientRuntimes();
+      this.clientChannelsNegotiated = false;
       this.stopHeartbeat();
       this.clientDemandStartedAtMs = null;
       this.gatewayConnectedAtMs = null;
@@ -299,6 +324,12 @@ export class BridgeRuntime {
       this.closeGateway();
       this.scheduleRelayReconnect();
     });
+  }
+
+  private async stopClientRuntimes(): Promise<void> {
+    const children = [...this.clientRuntimes.values()];
+    this.clientRuntimes.clear();
+    await Promise.all(children.map(child => child.stop()));
   }
 
   private async handleRelayMessage(data: RawData, isBinary: boolean): Promise<void> {
@@ -331,6 +362,40 @@ export class BridgeRuntime {
     targetClientId?: string;
     count?: number;
   }): Promise<void> {
+    if (control.event === 'client.sockets' && this.options.clientChannels && !this.targetConnectionId) {
+      const ids = control.payload?.clients;
+      if (!Array.isArray(ids) || ids.length > 128 || ids.some(id => typeof id !== 'string' || !/^[0-9a-f-]{36}$/i.test(id))) return;
+      this.clientChannelsNegotiated = true;
+      this.closeGateway();
+      for (const [id, child] of this.clientRuntimes) {
+        if (!ids.includes(id)) {
+          this.clientRuntimes.delete(id);
+          void child.stop();
+        }
+      }
+      for (const id of ids as string[]) {
+        if (this.clientRuntimes.has(id)) continue;
+        const child = new BridgeRuntime({
+          ...this.options,
+          onStatus: () => {
+            if (!this.stopped) {
+              const snapshots = [...this.clientRuntimes.values()].map(runtime => runtime.getSnapshot());
+              this.updateSnapshot({
+                gatewayConnected: snapshots.some(snapshot => snapshot.gatewayConnected),
+                connectedDevices: snapshots.flatMap(snapshot => snapshot.connectedDevices).slice(-MAX_DEVICE_DETAILS),
+                pendingPairRequests: snapshots.flatMap(snapshot => snapshot.pendingPairRequests).slice(-MAX_PENDING_PAIR_REQUESTS),
+              });
+            }
+          },
+          onLog: line => this.log(`channel=${id} ${line}`),
+        }, id);
+        this.clientRuntimes.set(id, child);
+        child.start();
+      }
+      this.updateSnapshot({ clientCount: ids.length, lastError: null });
+      this.log(`connection phase=client_channels count=${ids.length}`);
+      return;
+    }
     if (control.event === 'bootstrap.request') {
       await this.handleBootstrapRequest(control);
       return;
@@ -357,6 +422,7 @@ export class BridgeRuntime {
     }
 
     const { event, count } = control;
+    if (this.clientChannelsNegotiated && ['client_connected', 'client_count', 'client_disconnected'].includes(event)) return;
     if (event === 'client_connected' || event === 'client_count') {
       const previousClientCount = this.snapshot.clientCount;
       const clientCount = count ?? Math.max(1, this.snapshot.clientCount);
@@ -365,6 +431,8 @@ export class BridgeRuntime {
       }
       this.updateSnapshot({ clientCount });
       if (clientCount === 0) {
+        this.clientDemandStartedAtMs = null;
+        this.clearChallengeWait();
         this.gatewayHandshakeStarted = false;
         this.markDevicesRecent();
         this.dropStaleIdleGatewayQueue();
@@ -405,6 +473,8 @@ export class BridgeRuntime {
       return;
     }
     if (event === 'client_disconnected') {
+      this.clientDemandStartedAtMs = null;
+      this.clearChallengeWait();
       this.gatewayHandshakeStarted = false;
       this.updateSnapshot({ clientCount: 0 });
       this.markDevicesRecent();
@@ -451,6 +521,9 @@ export class BridgeRuntime {
       return;
     }
 
+    const bootstrapStartedAt = Date.now();
+    this.bootstrapRequestsInFlight += 1;
+    this.clearChallengeWait();
     try {
       const { capabilities, ...bootstrapRequest } = parsed.value;
       const supportsMobileSetup = capabilities.includes(OPENCLAW_MOBILE_SETUP_CAPABILITY);
@@ -463,7 +536,7 @@ export class BridgeRuntime {
       });
       this.log(
         `relay bootstrap token issued requestId=${requestId} targetClientId=${replyTargetClientId || '<none>'} ` +
-        `expiresAtMs=${issued.expiresAtMs}`,
+        `elapsedMs=${Date.now() - bootstrapStartedAt}`,
       );
       this.sendRelayControl({
         event: 'bootstrap.issued',
@@ -488,6 +561,9 @@ export class BridgeRuntime {
           message,
         },
       });
+    } finally {
+      this.bootstrapRequestsInFlight -= 1;
+      this.startChallengeWait();
     }
   }
 
@@ -679,6 +755,7 @@ export class BridgeRuntime {
     });
 
     gateway.on('message', (data: RawData, isBinary: boolean) => {
+      if (this.gatewaySocket !== gateway || this.stopped) return;
       this.handleGatewayMessage(data, isBinary);
     });
 
@@ -694,6 +771,8 @@ export class BridgeRuntime {
     });
 
     gateway.once('close', (code: number, reason: Buffer) => {
+      if (this.gatewaySocket !== gateway) return;
+      this.clearChallengeWait();
       const wasExpectedClose = this.gatewayCloseExpected;
       const queuedConnectRequests = summarizePendingGatewayMessages(this.pendingGatewayMessages).connectRequests;
       const reconnectAfterClose = this.gatewayCloseBoundaryPending
@@ -740,6 +819,12 @@ export class BridgeRuntime {
     }
     const text = normalizeText(data);
     if (text == null) return;
+    // A missing connect request cannot be fixed by repeatedly opening only
+    // the local socket: the Relay may still route challenges to a stale client.
+    if (isGatewayChallenge(text)) {
+      this.log(`connection phase=challenge_forwarded sinceGatewayOpenMs=${this.elapsedSince(this.gatewayConnectedAtMs)}`);
+      this.startChallengeWait();
+    }
     const pairReq = parsePairingRequestFromError(text);
     if (pairReq) {
       this.addPendingPairRequest(pairReq);
@@ -795,6 +880,7 @@ export class BridgeRuntime {
       const patched = patchOpenClawConnectRequest(message.text, readOpenClawInfo());
       const meta = parseConnectHandshakeMeta(patched.text);
       if (meta) {
+        this.clearChallengeWait();
         if (meta.id) {
           this.inFlightConnectHandshakes.set(meta.id, {
             method: meta.method,
@@ -938,6 +1024,7 @@ export class BridgeRuntime {
   }
 
   private closeGateway(reconnectAfterClose = false): void {
+    this.clearChallengeWait();
     if (this.gatewayRetryTimer) {
       clearTimeout(this.gatewayRetryTimer);
       this.gatewayRetryTimer = null;
@@ -1249,7 +1336,32 @@ export class BridgeRuntime {
     return this.gatewaySocket?.readyState === WebSocket.OPEN;
   }
 
+  private startChallengeWait(): void {
+    this.clearChallengeWait();
+    const gateway = this.gatewaySocket;
+    const relay = this.relaySocket;
+    if (this.stopped || !this.isGatewayOpen() || !this.isRelayOpen()
+      || this.gatewayHandshakeStarted || this.bootstrapRequestsInFlight > 0
+      || this.snapshot.clientCount === 0) return;
+    const startedAtMs = Date.now();
+    this.challengeWaitTimer = setTimeout(() => {
+      this.challengeWaitTimer = null;
+      if (this.stopped || this.gatewaySocket !== gateway || this.relaySocket !== relay
+        || this.gatewayHandshakeStarted || this.snapshot.clientCount === 0) return;
+      this.log(`connection phase=challenge_wait code=connect_request_missing elapsedMs=${Date.now() - startedAtMs} action=relay_recycle`);
+      // Closing the owner transport also resets routing on old Relay versions.
+      // Keep the existing backoff; a socket open is not health evidence.
+      relay?.terminate();
+    }, CHALLENGE_WAIT_TIMEOUT_MS);
+  }
+
+  private clearChallengeWait(): void {
+    if (this.challengeWaitTimer) clearTimeout(this.challengeWaitTimer);
+    this.challengeWaitTimer = null;
+  }
+
   private clearTimers(): void {
+    this.clearChallengeWait();
     this.stopHeartbeat();
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
@@ -1799,4 +1911,13 @@ function normalizeBinary(data: RawData): Buffer {
   if (typeof data === 'string') return Buffer.from(data, 'utf8');
   if (Array.isArray(data)) return Buffer.concat(data);
   return Buffer.from(data);
+}
+
+function isGatewayChallenge(text: string): boolean {
+  try {
+    const frame = JSON.parse(text);
+    return frame?.type === 'event' && frame.event === 'connect.challenge';
+  } catch {
+    return false;
+  }
 }

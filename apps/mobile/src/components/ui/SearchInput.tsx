@@ -19,6 +19,7 @@ import {
   Space,
 } from '../../theme/tokens';
 import { createFloatingSurfaceStyle } from './FloatingButton';
+import { CompositionSafeBottomSheetTextInput } from './CompositionSafeBottomSheetTextInput';
 import { CompositionSafeTextInput } from './CompositionSafeTextInput';
 
 export type SearchInputProps = {
@@ -47,14 +48,15 @@ export function SearchInput({
   const { theme } = useAppTheme();
   const { t } = useTranslation('common');
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
+  const Input = inSheet ? CompositionSafeBottomSheetTextInput : CompositionSafeTextInput;
   const chrome = inSheet
-    ? { backgroundColor: theme.colors.surfaceFloating }
+    ? { backgroundColor: theme.colors.surface }
     : createFloatingSurfaceStyle(theme.colors, theme.scheme);
 
   return (
     <View testID={testID} style={[styles.wrap, chrome, style]}>
       <Search size={IconSize.sm} color={theme.colors.inkTertiary} strokeWidth={2} />
-      <CompositionSafeTextInput
+      <Input
         testID={testID ? `${testID}-input` : undefined}
         style={styles.input}
         value={value}

@@ -56,6 +56,13 @@ describe('selectSessionForCurrentAgent', () => {
     expect(result?.key).toBe('agent:main:main');
   });
 
+  it('keeps a selected channel when the main alias is customized', () => {
+    const sessions = [makeSession('agent:lucy:daily'), makeSession('agent:lucy:telegram:1')];
+    expect(selectSessionForCurrentAgent({
+      sessions, mainSessionKey: 'agent:lucy:daily', currentKey: 'agent:lucy:telegram:1',
+    })?.key).toBe('agent:lucy:telegram:1');
+  });
+
   it('never picks a session from another agent', () => {
     const sessions = [
       makeSession('agent:other:main'),

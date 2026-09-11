@@ -13,10 +13,10 @@ import type {
 import {
   ControlSize,
   FontSize,
-  LineHeight,
   Radius,
   Space,
 } from '../../theme/tokens';
+import { PRO_ENTRY_HEIGHT } from '../../components/ui/ProEntryButton';
 import {
   RosterScreen,
   type RosterScreenProps,
@@ -153,13 +153,16 @@ jest.mock('react-native-reanimated', () => {
     Easing: {
       ease: 'ease',
       linear: 'linear',
+      cubic: 'cubic',
       inOut: (value: unknown) => value,
+      out: (value: unknown) => value,
     },
     interpolateColor: jest.fn((_value: number, _input: number[], output: string[]) => output[0]),
     useAnimatedStyle: (factory: () => unknown) => factory(),
     useReducedMotion: () => false,
     useSharedValue: (value: unknown) => ({ value }),
     withDelay: jest.fn((_delay: number, value: unknown) => value),
+    withSequence: jest.fn((...values: unknown[]) => values[values.length - 1]),
     withRepeat: jest.fn((value: unknown) => value),
     withTiming: jest.fn((value: unknown) => value),
   };
@@ -177,9 +180,9 @@ jest.mock('react-native-safe-area-context', () => ({
 
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string, options?: Readonly<{ count?: number }>) => (
+    t: (key: string, options?: Readonly<Record<string, unknown>>) => (
       mockCommonTranslations[key] ?? key
-    ).replace('{{count}}', String(options?.count ?? '')),
+    ).replace(/\{\{(\w+)\}\}/g, (_match, name: string) => String(options?.[name] ?? '')),
   }),
 }));
 
@@ -199,9 +202,14 @@ jest.mock('../../connection', () => ({
 jest.mock('../../components/ui/Sheet', () => {
   const ReactRuntime = require('react');
   return {
-    Sheet: ({ visible, children, testID }: Record<string, unknown>) => (
-      visible ? ReactRuntime.createElement('View', { testID }, children) : null
-    ),
+    Sheet: ({ visible, children, testID, onAfterClose }: Record<string, unknown>) => {
+      const wasVisible = ReactRuntime.useRef(false);
+      ReactRuntime.useEffect(() => {
+        if (!visible && wasVisible.current) (onAfterClose as (() => void) | undefined)?.();
+        wasVisible.current = visible;
+      }, [visible, onAfterClose]);
+      return visible ? ReactRuntime.createElement('View', { testID }, children) : null;
+    },
   };
 });
 
@@ -451,7 +459,7 @@ describe('RosterScreen', () => {
     fireEvent.press(view.getByTestId('roster-account'));
     fireEvent.press(view.getByTestId('roster-search'));
     fireEvent.press(view.getByTestId('roster-add'));
-    fireEvent.press(view.getByTestId('roster-action-add_connection'));
+    expect(view.queryByTestId('roster-add-sheet')).toBeNull();
     fireEvent.press(view.getByTestId('roster-row-agent:live:main'));
     fireEvent.press(view.getByTestId('roster-row-agent:cached:builder'));
     fireEvent(view.getByTestId('roster-row-agent:live:main'), 'longPress');
@@ -530,7 +538,7 @@ describe('RosterScreen', () => {
     );
   });
 
-  it('overlays the free Pro entry on the single account control while preserving attention priority', () => {
+  it('places the free Pro entry beside the account control in the header row while preserving attention priority', () => {
     const onOpenAccount = jest.fn();
     const onOpenPro = jest.fn();
     const screenProps = props({
@@ -542,15 +550,20 @@ describe('RosterScreen', () => {
 
     expect(view.getByText('Pro')).toBeTruthy();
     expect(view.getByTestId('roster-account-badge')).toBeTruthy();
-    expect(flattenStyle(view.getByTestId('roster-account-control').props.style)).toMatchObject({
-      width: ControlSize.floatingButton,
-      height: ControlSize.floatingButton,
-      position: 'relative',
+    const pro = view.getByTestId('roster-pro');
+    expect(pro.props.accessibilityLabel).toBe('View Pro');
+    const proStyle = flattenStyle(pro.props.style);
+    expect(proStyle).toMatchObject({
+      height: PRO_ENTRY_HEIGHT,
+      borderRadius: Radius.full,
+      flexDirection: 'row',
     });
-    expect(flattenStyle(view.getByTestId('roster-pro').props.style)).toMatchObject({
-      position: 'absolute',
-      height: LineHeight.caption,
-    });
+    expect(proStyle.position).toBeUndefined();
+    expect(pro.parent?.parent?.props.testID ?? pro.parent?.props.testID).not.toBe('roster-account');
+    const header = view.getByTestId('roster-header');
+    const accountGroup = header.props.children[0];
+    expect(accountGroup.props.children[0].props.testID).toBe('roster-account');
+    expect(accountGroup.props.children[1].props.testID).toBe('roster-pro');
     fireEvent.press(view.getByTestId('roster-account'));
     fireEvent.press(view.getByTestId('roster-pro'));
     expect(onOpenAccount).toHaveBeenCalledTimes(1);
@@ -589,6 +602,10 @@ describe('RosterScreen', () => {
 
     fireEvent.press(view.getByTestId('roster-add'));
     expect(view.getByTestId('roster-action-add_connection')).toBeTruthy();
+    expect(view.getByText('Connect OpenClaw, Hermes or YouMind Sprite')).toBeTruthy();
+    expect(view.getByText('Create another agent on live')).toBeTruthy();
+    expect(view.queryByTestId('roster-action-add_connection-lock-icon')).toBeNull();
+    expect(view.getByTestId('roster-action-create_agent-lock-icon')).toBeTruthy();
     fireEvent.press(view.getByTestId('roster-action-create_agent'));
     expect(onCreateAgentLocked).toHaveBeenCalledTimes(1);
     expect(onOpenPro).not.toHaveBeenCalled();
@@ -596,6 +613,7 @@ describe('RosterScreen', () => {
 
     view.rerender(<RosterScreen {...screenProps} isPro />);
     fireEvent.press(view.getByTestId('roster-add'));
+    expect(view.queryByTestId('roster-action-create_agent-lock-icon')).toBeNull();
     fireEvent.press(view.getByTestId('roster-action-create_agent'));
     expect(onCreateAgent).toHaveBeenCalledTimes(1);
 
@@ -612,6 +630,36 @@ describe('RosterScreen', () => {
     expect(onRemoveConnection).not.toHaveBeenCalled();
     fireEvent.press(view.getByTestId('roster-remove-connection-confirm'));
     expect(onRemoveConnection).toHaveBeenCalledWith(expect.objectContaining({ connectionId: 'live' }));
+  });
+
+  it('marks a locked add-connection choice and still routes it through onAdd', () => {
+    mockRoster = [group('live', 'live', [agent('live', 'main')])];
+    mockConnections = snapshot({ roster: mockRoster });
+    const onAdd = jest.fn();
+    const view = render(<RosterScreen {...props({
+      canCreateAgent: true,
+      addConnectionLocked: true,
+      onAdd,
+      onCreateAgent: jest.fn(),
+    })} />);
+
+    fireEvent.press(view.getByTestId('roster-add'));
+    expect(view.getByTestId('roster-action-add_connection-lock-icon')).toBeTruthy();
+    expect(view.getByTestId('roster-action-add_connection').props.accessibilityLabel).toBe(
+      'Add Connection, Connect OpenClaw, Hermes or YouMind Sprite',
+    );
+    fireEvent.press(view.getByTestId('roster-action-add_connection'));
+    expect(onAdd).toHaveBeenCalledTimes(1);
+    expect(view.queryByTestId('roster-add-sheet')).toBeNull();
+  });
+
+  it('describes agent creation generically when the active connection has no label', () => {
+    mockRoster = [{ ...group('live', 'live', [agent('live', 'main')]), connection: { ...connection('live'), label: '  ' } }];
+    mockConnections = snapshot({ roster: mockRoster });
+    const view = render(<RosterScreen {...props({ canCreateAgent: true, onCreateAgent: jest.fn() })} />);
+
+    fireEvent.press(view.getByTestId('roster-add'));
+    expect(view.getByText('Create another agent on this connection')).toBeTruthy();
   });
 
   it('unpins and capability-gates a real pinned-session rename action', async () => {
@@ -649,18 +697,11 @@ describe('RosterScreen', () => {
     );
   });
 
-  it('covers loading and empty states with tokenized six-row skeletons', () => {
+  it('covers accessible companion loading and empty states', () => {
     mockConnections = snapshot({ initialized: false });
     const loading = render(<RosterScreen {...props()} />);
     expect(loading.getByTestId('roster-loading')).toBeTruthy();
-    expect(loading.getAllByLabelText('Loading agents')).toHaveLength(6);
-    const avatar = loading.getAllByLabelText('Loading agents')[0];
-    expect(flattenStyle(avatar.props.style)).toMatchObject({
-      width: ControlSize.settingsRow + Space.xs,
-      height: ControlSize.settingsRow + Space.xs,
-      borderRadius: Radius.avatarRoster,
-      backgroundColor: lightColors.surface,
-    });
+    expect(loading.getByLabelText('Loading agents').props.accessibilityState).toEqual({ busy: true });
     loading.unmount();
 
     mockRoster = [{ ...group('live'), agents: [] }];
@@ -731,6 +772,17 @@ describe('RosterScreen', () => {
     });
     const light = render(<RosterScreen {...screenProps} />);
     expect(flattenStyle(light.getByTestId('roster-screen').props.style).backgroundColor).toBe(lightColors.canvas);
+    expect(flattenStyle(light.getByTestId('roster-add').props.style)).toMatchObject({
+      position: 'absolute',
+      width: 64,
+      height: 64,
+      borderRadius: Radius.full,
+      backgroundColor: lightColors.ink,
+    });
+    expect(light.getByTestId('roster-header').findAllByProps({ testID: 'roster-add' })).toHaveLength(0);
+    const addBottom = flattenStyle(light.getByTestId('roster-add').props.style).bottom as number;
+    expect(flattenStyle(light.getByTestId('roster-list').props.contentContainerStyle).paddingBottom)
+      .toBe(addBottom + 64 + Space.lg);
     expect(flattenStyle(light.getByTestId('roster-account').props.style)).toMatchObject({
       width: ControlSize.floatingButton,
       height: ControlSize.floatingButton,
@@ -752,10 +804,13 @@ describe('RosterScreen', () => {
     mockTheme = { scheme: 'dark', colors: darkColors };
     const dark = render(<RosterScreen {...screenProps} />);
     expect(flattenStyle(dark.getByTestId('roster-screen').props.style).backgroundColor).toBe(darkColors.canvas);
+    expect(flattenStyle(dark.getByTestId('roster-add').props.style)).toMatchObject({
+      width: 64,
+      height: 64,
+      backgroundColor: darkColors.ink,
+    });
     expect(flattenStyle(dark.getByTestId('roster-account').props.style)).toMatchObject({
-      backgroundColor: darkColors.surfaceFloating,
-      borderWidth: 1,
-      borderColor: darkColors.line,
+      backgroundColor: 'transparent',
     });
     expect(renderedFontSizes(dark)).toEqual([
       FontSize.caption,

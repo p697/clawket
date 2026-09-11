@@ -18,6 +18,9 @@ class FakeSocket extends EventEmitter {
 
   readyState = FakeSocket.CONNECTING;
   sent: Array<string | Buffer> = [];
+  autoPong = true;
+  pings: string[] = [];
+  terminated = false;
   closeCode?: number;
   closeReason?: string;
 
@@ -37,6 +40,16 @@ class FakeSocket extends EventEmitter {
     this.closeReason = reason;
     this.readyState = FakeSocket.CLOSED;
     this.emit('close', code, Buffer.from(reason));
+  }
+
+  ping(data: string): void {
+    this.pings.push(data);
+    if (this.autoPong) this.emit('pong', Buffer.from(data));
+  }
+
+  terminate(): void {
+    this.terminated = true;
+    this.close(1006);
   }
 
   open(): void {
@@ -67,6 +80,85 @@ function createConfig() {
 }
 
 describe('hermes relay runtime helpers', () => {
+  it('recycles a half-open cloud socket even while local Bridge health succeeds', async () => {
+    vi.useFakeTimers();
+    const sockets: FakeSocket[] = [];
+    const runtime = new HermesRelayRuntime({
+      config: createConfig(),
+      bridgeUrl: 'ws://127.0.0.1:4319/v1/hermes/ws?token=test',
+      relayPingIntervalMs: 100,
+      relayPongTimeoutMs: 50,
+      bridgeHealthProbeIntervalMs: 30,
+      reconnectBaseDelayMs: 10,
+      createWebSocket: (url, options) => {
+        const socket = new FakeSocket(url, options);
+        sockets.push(socket);
+        return socket as never;
+      },
+    });
+    try {
+      runtime.start();
+      const relay = sockets[0];
+      relay.autoPong = false;
+      relay.open();
+      const bridge = sockets[1];
+      bridge.open();
+      await vi.advanceTimersByTimeAsync(30);
+      const probe = JSON.parse(String(bridge.sent[0]));
+      bridge.pushText(JSON.stringify({ type: 'res', id: probe.id, ok: true, payload: { status: 'ok' } }));
+      await vi.advanceTimersByTimeAsync(70);
+      expect(relay.pings).toHaveLength(1);
+      relay.emit('pong', Buffer.from('unrelated'));
+      await vi.advanceTimersByTimeAsync(50);
+      expect(relay.terminated).toBe(true);
+      expect(runtime.getSnapshot().relayConnected).toBe(false);
+      expect(runtime.getSnapshot().lastError).toBe('relay transport pong timed out');
+      await vi.advanceTimersByTimeAsync(20);
+      expect(sockets).toHaveLength(3);
+      sockets[2].open();
+      await vi.advanceTimersByTimeAsync(400);
+      expect(sockets[2].pings.length).toBeGreaterThan(1);
+      expect(sockets[2].terminated).toBe(false);
+      // A late old-socket frame must not enter the new backend connection.
+      const sent = bridge.sent.length;
+      relay.pushText('{"type":"req","id":"stale","method":"chat.send"}');
+      expect(bridge.sent).toHaveLength(sent);
+    } finally {
+      await runtime.stop();
+      expect(vi.getTimerCount()).toBe(0);
+      vi.useRealTimers();
+    }
+  });
+
+  it('cleans up a pending cloud pong deadline when stopped', async () => {
+    vi.useFakeTimers();
+    const sockets: FakeSocket[] = [];
+    const runtime = new HermesRelayRuntime({
+      config: createConfig(),
+      bridgeUrl: 'ws://127.0.0.1:4319/v1/hermes/ws?token=test',
+      relayPingIntervalMs: 100,
+      createWebSocket: (url, options) => {
+        const socket = new FakeSocket(url, options);
+        socket.autoPong = false;
+        sockets.push(socket);
+        return socket as never;
+      },
+    });
+    try {
+      runtime.start();
+      sockets[0].open();
+      await vi.advanceTimersByTimeAsync(100);
+      await runtime.stop();
+      expect(vi.getTimerCount()).toBe(0);
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(sockets).toHaveLength(2);
+      expect(sockets[0].terminated).toBe(false);
+    } finally {
+      await runtime.stop();
+      vi.useRealTimers();
+    }
+  });
+
   it('does not reset reconnect backoff from a raw stable WebSocket open', async () => {
     vi.useFakeTimers();
     const sockets: FakeSocket[] = [];
@@ -88,6 +180,44 @@ describe('hermes relay runtime helpers', () => {
       expect(logs).not.toContain('relay stable window reached; reconnect backoff reset');
     } finally {
       await runtime.stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it('resumes local health probes when cloud reconnect reuses the local socket', async () => {
+    vi.useFakeTimers();
+    const sockets: FakeSocket[] = [];
+    let hasBridge = false;
+    const runtime = new HermesRelayRuntime({
+      config: createConfig(),
+      bridgeUrl: 'ws://127.0.0.1:4319/v1/hermes/ws?token=test',
+      bridgeStatusPollIntervalMs: 100,
+      bridgeHealthProbeIntervalMs: 30,
+      reconnectBaseDelayMs: 1_000,
+      fetchImpl: vi.fn(async () => ({ ok: true, json: async () => ({ hasBridge }) })) as unknown as typeof fetch,
+      createWebSocket: (url, options) => {
+        const socket = new FakeSocket(url, options);
+        sockets.push(socket);
+        return socket as never;
+      },
+    });
+    try {
+      runtime.start();
+      sockets[0].open();
+      const local = sockets[1];
+      local.open();
+      await vi.advanceTimersByTimeAsync(1_100);
+      expect(sockets).toHaveLength(3);
+      expect(local.readyState).toBe(FakeSocket.OPEN);
+      const before = local.sent.length;
+      hasBridge = true;
+      sockets[2].open();
+      await vi.advanceTimersByTimeAsync(30);
+      expect(local.sent.length).toBeGreaterThan(before);
+      expect(JSON.parse(String(local.sent.at(-1))).method).toBe('health');
+    } finally {
+      await runtime.stop();
+      expect(vi.getTimerCount()).toBe(0);
       vi.useRealTimers();
     }
   });

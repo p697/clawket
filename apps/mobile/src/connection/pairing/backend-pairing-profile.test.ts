@@ -99,6 +99,24 @@ describe('backend pairing profiles', () => {
     expect(mockPairingFinished).not.toHaveBeenCalled();
   });
 
+  it.each(['code', 'link'] as const)('does not invent an expiry after handled %s feedback or cancellation', async (method) => {
+    const secureInvitation = createSecureInvitation();
+    secureInvitation.connectCode.mockResolvedValue(false);
+    secureInvitation.connectLink.mockResolvedValue(false);
+    const input = {
+      backendKind: 'openclaw' as const,
+      environment: 'production' as const,
+      debugMode: false,
+      runtime: createRuntime(),
+      secureInvitation,
+    };
+    const result = method === 'code'
+      ? await connectBackendPairingCode({ ...input, pairingCode: '123456' })
+      : await connectBackendPairingLink({ ...input, url: `https://registry.clawket.ai/pair/ps_test#k=${'A'.repeat(43)}` });
+    expect(result).toBeNull();
+    expect(mockSavePairedConnection).not.toHaveBeenCalled();
+  });
+
   it('routes an accepted OpenClaw link through the secure invitation profile', async () => {
     const runtime = createRuntime('openclaw-link-connection');
     const secureInvitation = createSecureInvitation();

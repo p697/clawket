@@ -22,6 +22,8 @@ PostHog 项目 337268；SDK 与集中式 `src/services/analytics/events.ts` 沿�
 
 ## 3. 事件表
 
+`thread_load_state`：仅在可见聊天的加载状态变化或 session 范围切换时记录 `backend`、`phase`（loading/ready/empty/reconnecting/offline/locked/error）、`history_loaded`、`subscription_loading`、`target_session_ready`、`preview_only`、`elapsed_ms`（当前挂载 session 从首次记录起的时间）。用于区分网络、历史和订阅状态；不记录原始 session/连接标识、消息或凭据，不随流式文字刷新重复上报。
+
 | 事件 | 属性 | 触发 |
 |---|---|---|
 | `onboarding_viewed` | `source: first_run|add_connection` | 引导页显示 |
@@ -36,8 +38,13 @@ PostHog 项目 337268；SDK 与集中式 `src/services/analytics/events.ts` 沿�
 | `roster_row_opened` | `kind`, `unread`, `attention`, `locked`, `cached` | 点行 |
 | `roster_pin_toggled` | `action: pin|unpin`, `kind` | |
 | `thread_opened` | `backend`, `kind`, `from: roster|panel|search|notification|deeplink` | |
+| `session_preview_viewed` | `backend`, `kind` | 非主会话免费预览曝光；升级沿用 `blocked_feature=sessionHistory` 的付费漏斗 |
 | `chat_send_tapped`（现有） | 现有 + `backend` | |
 | `chat_abort_tapped` | `backend` | 停止键 |
+| `chat_message_queued` | `backend`, `queue_length`, `has_attachments` | Agent 回复中发送，消息进入本机队列 |
+| `chat_queued_message_delivered` | `backend`, `wait_ms`, `remaining` | 队列消息在会话空闲后实际发出 |
+| `chat_queued_message_edited` / `chat_queued_message_removed` | `backend` | 队列气泡菜单里的编辑 / 移除 |
+| `chat_queue_held` | `reason: abort|run_error|send_failed|preflight_failed`, `queue_length` | 队列因停止或失败暂停自动发送 |
 | `run_card_opened` | `kind: subagent|cron` | |
 | `approval_resolved` | `kind: exec|plugin|pair`, `decision` | 合并现有两事件 |
 | `session_panel_opened` | `mode: grouped|list`, `session_count` | |

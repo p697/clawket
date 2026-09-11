@@ -1,12 +1,13 @@
 import { createServer, type Server as HttpServer } from 'node:http';
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn, type ChildProcess } from 'node:child_process';
+import { resolveHermesCommand, resolveHermesSourcePath } from './installation.js';
 import WebSocket, { WebSocketServer } from 'ws';
 import { WEBSOCKET_FRAME_LIMIT_BYTES } from '../frame-limit.js';
 import { normalizeBridgeVersion } from '../protocol.js';
 import { HermesCommandMethods, type HermesModelState } from './commands.js';
 import { HermesCronMethods } from './cron.js';
-import { HermesHttpServerMethods, probeHermesApi, type HermesLocalBridgeClient } from './http-server.js';
+import { HermesHttpServerMethods, inspectHermesApi, probeHermesApi, type HermesLocalBridgeClient } from './http-server.js';
 import { HermesManagementMethods } from './management.js';
 import {
   HermesNativeSessionReader,
@@ -36,7 +37,6 @@ import {
   DEFAULT_BRIDGE_PORT,
   DEFAULT_HERMES_API_BASE_URL,
   DEFAULT_HERMES_HOME_PATH,
-  DEFAULT_HERMES_SOURCE_PATH,
   DEFAULT_SESSION_ID,
   HEALTH_POLL_INTERVAL_MS,
   HERMES_BOOT_TIMEOUT_MS,
@@ -99,7 +99,7 @@ export class HermesLocalBridge {
   readonly host: string;
   readonly port: number;
   readonly apiBaseUrl: string;
-  readonly apiKey: string | null;
+  apiKey: string | null;
   readonly bridgeToken: string;
   readonly displayName: string;
   readonly bridgeVersion: string | undefined;
@@ -120,6 +120,7 @@ export class HermesLocalBridge {
   healthTimer: NodeJS.Timeout | null = null;
   wsHeartbeatTimer: NodeJS.Timeout | null = null;
   hermesChild: ChildProcess | null = null;
+  modelStateReadVersion = 0;
   modelStateCache: { value: HermesModelState; expiresAt: number } | null = null;
   readonly contextWindowCache = new Map<string, number | null>();
   bridgeRequestSeq = 0;
@@ -129,12 +130,17 @@ export class HermesLocalBridge {
     this.host = normalizeHost(options.host);
     this.port = normalizePort(options.port);
     this.apiBaseUrl = normalizeHttpBase(options.apiBaseUrl ?? DEFAULT_HERMES_API_BASE_URL);
-    this.apiKey = options.apiKey?.trim() || null;
     this.bridgeToken = options.bridgeToken?.trim() || randomUUID();
     this.displayName = options.displayName?.trim() || DEFAULT_AGENT_NAME;
     this.bridgeVersion = normalizeBridgeVersion(options.bridgeVersion);
-    this.hermesSourcePath = options.hermesSourcePath?.trim() || DEFAULT_HERMES_SOURCE_PATH;
+    this.hermesSourcePath = options.hermesSourcePath?.trim() || resolveHermesSourcePath();
     this.hermesHomePath = options.hermesHomePath?.trim() || DEFAULT_HERMES_HOME_PATH;
+    // The CLI persists the bridge token. Derive a separate, scope-bound API key
+    // so a Clawket-owned gateway can survive a Bridge restart without losing auth.
+    this.apiKey = options.apiKey?.trim() || process.env.CLAWKET_HERMES_API_KEY?.trim()
+      || createHash('sha256').update(JSON.stringify([
+        'clawket-hermes-api-v1', this.bridgeToken, this.apiBaseUrl, this.hermesHomePath,
+      ])).digest('hex');
     this.pythonRunner = new HermesPythonRunner({
       hermesSourcePath: this.hermesSourcePath,
       hermesHomePath: this.hermesHomePath,
@@ -183,6 +189,7 @@ export class HermesLocalBridge {
     if (this.httpServer) {
       return;
     }
+    this.pythonRunner.resume();
 
     this.logPerf('bridge_start_begin', {
       apiBaseUrl: this.apiBaseUrl,
@@ -256,6 +263,8 @@ export class HermesLocalBridge {
   }
 
   async stop(): Promise<void> {
+    this.operationGeneration += 1;
+    this.pythonRunner.stop();
     if (this.tickTimer) {
       clearInterval(this.tickTimer);
       this.tickTimer = null;
@@ -313,7 +322,8 @@ export class HermesLocalBridge {
 
   async ensureHermesApiReady(): Promise<boolean> {
     const startedAt = Date.now();
-    if (await probeHermesApi(this.apiBaseUrl, this.apiKey)) {
+    const apiStatus = await inspectHermesApi(this.apiBaseUrl, this.apiKey);
+    if (apiStatus === 'ready') {
       this.updateSnapshot({ hermesApiReachable: true, lastError: null });
       this.logPerf('hermes_api_probe', {
         result: 'warm',
@@ -321,6 +331,12 @@ export class HermesLocalBridge {
       });
       this.log(`reusing Hermes API already running at ${this.apiBaseUrl}`);
       return true;
+    }
+
+    if (apiStatus === 'unauthorized') {
+      this.updateSnapshot({ hermesApiReachable: false, lastError: 'The running Hermes API rejected the configured API key. Set CLAWKET_HERMES_API_KEY to its API_SERVER_KEY, or explicitly restart the gateway with clawket hermes run --restart-hermes.' });
+      this.logPerf('hermes_api_probe', { result: 'unauthorized', elapsedMs: Date.now() - startedAt });
+      return false;
     }
 
     if (this.options.startHermesIfNeeded === false) {
@@ -342,7 +358,7 @@ export class HermesLocalBridge {
   }
 
   async startHermesGatewayProcess(): Promise<boolean> {
-    const command = this.options.hermesCommand?.trim() || 'hermes';
+    const command = this.options.hermesCommand?.trim() || resolveHermesCommand();
     const startedAt = Date.now();
     this.logPerf('hermes_api_cold_start_begin', {
       command,
@@ -358,9 +374,14 @@ export class HermesLocalBridge {
     // with `CLAWKET_HERMES_VERBOSE=1`; verbose output may contain
     // sensitive data and must not be shared.
     const verboseHermesStdio = process.env.CLAWKET_HERMES_VERBOSE === '1';
+    // Current Hermes requires an authenticated API even on loopback. A key for
+    // our child is scoped separately from the bridge token and reused by API requests.
+    this.apiKey ??= randomUUID();
     const hermesChildEnv: NodeJS.ProcessEnv = {
       ...process.env,
-      API_SERVER_ENABLED: '1',
+      HERMES_HOME: this.hermesHomePath,
+      API_SERVER_ENABLED: 'true',
+      API_SERVER_KEY: this.apiKey,
       API_SERVER_HOST: extractHostname(this.apiBaseUrl),
       API_SERVER_PORT: String(extractPort(this.apiBaseUrl)),
     };
@@ -370,6 +391,17 @@ export class HermesLocalBridge {
     this.hermesChild = spawn(command, ['gateway', 'run', '--replace'], {
       env: hermesChildEnv,
       stdio: verboseHermesStdio ? 'pipe' : 'ignore',
+    });
+
+    let spawnFailure: Error | null = null;
+    const child = this.hermesChild;
+    child.once('error', (error: NodeJS.ErrnoException) => {
+      spawnFailure = new Error(error.code === 'ENOENT'
+        ? 'Hermes command was not found. Install Hermes and restart the Clawket bridge.'
+        : `Hermes could not start (${error.code ?? 'spawn_failed'}).`);
+      this.updateSnapshot({ hermesApiReachable: false, lastError: spawnFailure.message });
+      if (this.hermesChild === child) this.hermesChild = null;
+      this.log(spawnFailure.message);
     });
 
     if (verboseHermesStdio) {
@@ -388,11 +420,12 @@ export class HermesLocalBridge {
     }
     this.hermesChild.once('exit', (code) => {
       this.log(`hermes gateway exited code=${code ?? 'null'}`);
-      this.hermesChild = null;
+      if (this.hermesChild === child) this.hermesChild = null;
     });
 
     const startMs = Date.now();
     while (Date.now() - startMs < HERMES_BOOT_TIMEOUT_MS) {
+      if (spawnFailure) return false;
       if (await probeHermesApi(this.apiBaseUrl, this.apiKey)) {
         this.updateSnapshot({ hermesApiReachable: true, lastError: null });
         this.logPerf('hermes_api_cold_start_ready', {
@@ -432,22 +465,22 @@ export class HermesLocalBridge {
   async prewarmBridgeState(): Promise<void> {
     const startedAt = Date.now();
     this.logPerf('bridge_prewarm_begin');
-    const tasks: Array<() => void> = [
-      () => {
-        this.listHermesSessions(24);
+    const tasks: Array<() => Promise<void>> = [
+      async () => {
+        (await this.listHermesSessions(24));
       },
-      () => {
+      async () => {
         const mainSession = this.sessionStore.findSession(DEFAULT_SESSION_ID);
-        if (mainSession) this.getHermesSessionHistory(mainSession.key, 24);
+        if (mainSession) (await this.getHermesSessionHistory(mainSession.key, 24));
       },
-      () => {
-        this.readHermesModelState({ caller: 'prewarm' });
+      async () => {
+        (await this.readHermesModelState({ caller: 'prewarm' }));
       },
     ];
 
     await Promise.allSettled(tasks.map(async (task) => {
       try {
-        task();
+        await task();
       } catch (error) {
         this.log(`bridge prewarm skipped: ${formatError(error)}`);
       }
@@ -458,47 +491,48 @@ export class HermesLocalBridge {
   }
 
 
-  runHermesPython<T>(script: string, stdinPayload?: unknown): T {
-    return this.pythonRunner.run<T>(script, stdinPayload);
+  async runHermesPython<T>(script: string, stdinPayload?: unknown): Promise<T> {
+    return (await this.pythonRunner.run<T>(script, stdinPayload));
   }
 
-  listHermesSessions(limit: number): HermesSessionListEntry[] {
+  async listHermesSessions(limit: number): Promise<HermesSessionListEntry[]> {
     const active = (key: string) => [...this.activeRuns.values()].some((run) => run.sessionKey === key);
-    const bridgeSessions = this.sessionStore.listSessions(limit, active).map((session) => {
-      const backing = this.nativeSessions.readHistoryBySessionId(session.sessionId);
+    const bridgeSessions: HermesSessionListEntry[] = [];
+    for (const session of this.sessionStore.listSessions(limit, active)) {
+      const backing = (await this.nativeSessions.readHistoryBySessionId(session.sessionId));
       const lastMessage = backing?.messages.at(-1);
       const preview = lastMessage ? normalizeHermesHistoryContent(lastMessage.content) : session.preview;
-      return {
+      bridgeSessions.push({
         ...session,
         updatedAt: Math.max(session.updatedAt, backing?.updatedAt ?? 0),
         preview,
         lastMessagePreview: preview,
         model: lastMessage?.model ?? session.model,
         modelProvider: lastMessage?.provider ?? session.modelProvider,
-      };
-    });
+      });
+    }
     const bridgeKeys = new Set(bridgeSessions.map((session) => session.key));
-    const nativeSessions = this.nativeSessions
-      .listSessions(Math.max(limit, limit + bridgeSessions.length), active)
+    const nativeSessions = (await this.nativeSessions
+      .listSessions(Math.max(limit, limit + bridgeSessions.length), active))
       .filter((session) => !bridgeKeys.has(session.key));
     return [...bridgeSessions, ...nativeSessions]
       .sort((left, right) => right.updatedAt - left.updatedAt)
       .slice(0, limit);
   }
 
-  isNativeOnlySession(key: string): boolean {
+  async isNativeOnlySession(key: string): Promise<boolean> {
     if (this.sessionStore.owns(key)) return false;
-    return this.nativeSessions.findSession(key) !== null;
+    return (await this.nativeSessions.findSession(key)) !== null;
   }
 
-  getHermesSessionListDefaults(): { contextTokens?: number } | undefined {
+  async getHermesSessionListDefaults(): Promise<{ contextTokens?: number } | undefined> {
     try {
-      const current = this.readHermesCurrentModelState();
-      const contextTokens = this.resolveHermesContextWindow({
+      const current = (await this.readHermesCurrentModelState());
+      const contextTokens = (await this.resolveHermesContextWindow({
         model: current.currentModel,
         provider: current.currentProvider,
         baseUrl: current.currentBaseUrl,
-      });
+      }));
       return typeof contextTokens === 'number' && Number.isFinite(contextTokens) && contextTokens > 0
         ? { contextTokens }
         : undefined;
@@ -508,27 +542,27 @@ export class HermesLocalBridge {
     }
   }
 
-  getHermesSessionHistory(
+  async getHermesSessionHistory(
     key: string,
     limit: number,
     rawCursor?: unknown,
-  ): { messages: HermesHistoryMessage[]; sessionId: string; thinkingLevel: string; nextCursor?: string } {
+  ): Promise<{ messages: HermesHistoryMessage[]; sessionId: string; thinkingLevel: string; nextCursor?: string }> {
     const bridgeSession = this.sessionStore.findSession(key);
     const nativeListEntry = bridgeSession
       ? null
-      : this.nativeSessions.findSession(key);
+      : (await this.nativeSessions.findSession(key));
     if (!bridgeSession && !nativeListEntry) {
       if (key === DEFAULT_SESSION_ID) {
         return {
           messages: [],
           sessionId: DEFAULT_SESSION_ID,
-          thinkingLevel: this.getSafeHermesThinkingLevel(),
+          thinkingLevel: (await this.getSafeHermesThinkingLevel()),
         };
       }
       throw new Error(`Hermes session not found: ${key}`);
     }
     const sessionId = bridgeSession?.sessionId ?? nativeListEntry!.sessionId;
-    const native = this.nativeSessions.readHistoryBySessionId(sessionId);
+    const native = (await this.nativeSessions.readHistoryBySessionId(sessionId));
     const nativeMessages = native?.messages ?? [];
     const localMessages: HermesHistoryMessage[] = (bridgeSession?.messages ?? [])
       .map((message) => ({
@@ -570,7 +604,7 @@ export class HermesLocalBridge {
     return {
       messages: page,
       sessionId,
-      thinkingLevel: this.getSafeHermesThinkingLevel(),
+      thinkingLevel: (await this.getSafeHermesThinkingLevel()),
       ...(hasOlder && first ? {
         nextCursor: encodeHermesHistoryCursor({
           version: 1,
@@ -582,9 +616,9 @@ export class HermesLocalBridge {
     };
   }
 
-  getSafeHermesThinkingLevel(): string {
+  async getSafeHermesThinkingLevel(): Promise<string> {
     try {
-      return this.getHermesThinkingLevel();
+      return (await this.getHermesThinkingLevel());
     } catch (error) {
       this.sessionWarnings.push(`Hermes thinking state is unavailable: ${formatError(error)}`);
       return 'medium';
@@ -623,7 +657,29 @@ export class HermesLocalBridge {
     return { ok: true, key };
   }
 
+  private operationGeneration = 0;
+  private mutationTail: Promise<unknown> = Promise.resolve();
+  private queuedMutations = 0;
+
   async dispatchRequest(method: string, params: unknown): Promise<unknown> {
+    // Keep whole config/session mutations serialized after making Python nonblocking.
+    // Read-only requests and health must never wait behind these operations.
+    if (/^(model\.set|skills\.(update|delete|content\.update)|hermes\.(reasoning|fast)\.set|hermes\.cron\.jobs\.(create|update|pause|resume|run|remove)|chat\.send)$/.test(method)) {
+      if (this.queuedMutations >= 32) throw new Error('Hermes is busy. Try again shortly.');
+      this.queuedMutations += 1;
+      const generation = this.operationGeneration;
+      const operation = this.mutationTail.catch(() => undefined).then(() => {
+        if (generation !== this.operationGeneration) throw new Error('Hermes operation cancelled.');
+        return this.dispatchRequestNow(method, params);
+      });
+      this.mutationTail = operation;
+      try { return await operation; }
+      finally { this.queuedMutations -= 1; }
+    }
+    return this.dispatchRequestNow(method, params);
+  }
+
+  private async dispatchRequestNow(method: string, params: unknown): Promise<unknown> {
     const payload = isRecord(params) ? params : {};
     const shouldTracePerf = method === 'health'
       || method === 'last-heartbeat'
@@ -654,8 +710,8 @@ export class HermesLocalBridge {
           ...(this.bridgeVersion ? { bridgeVersion: this.bridgeVersion } : {}),
         });
       case 'sessions.list': {
-        const defaults = this.getHermesSessionListDefaults();
-        const sessions = this.listHermesSessions(readPositiveInt(payload.limit, 100));
+        const defaults = (await this.getHermesSessionListDefaults());
+        const sessions = (await this.listHermesSessions(readPositiveInt(payload.limit, 100)));
         const warnings = [...this.nativeSessions.consumeWarnings(), ...this.sessionWarnings.splice(0)];
         return this.traceBridgeRequest(method, requestStartedAt, requestSeq, {
           defaults,
@@ -668,14 +724,14 @@ export class HermesLocalBridge {
       case 'chat.history': {
         const sessionKey = readString(payload.sessionKey);
         if (!sessionKey) throw new Error('chat.history requires sessionKey.');
-        return this.traceBridgeRequest(method, requestStartedAt, requestSeq, this.getHermesSessionHistory(
+        return this.traceBridgeRequest(method, requestStartedAt, requestSeq, (await this.getHermesSessionHistory(
           sessionKey,
           readPositiveInt(payload.limit, 50),
           payload.cursor,
-        ));
+        )));
       }
       case 'chat.send':
-        return this.traceBridgeRequest(method, requestStartedAt, requestSeq, this.handleChatSend(payload));
+        return this.traceBridgeRequest(method, requestStartedAt, requestSeq, (await this.handleChatSend(payload)));
       case 'sessions.reset': {
         const key = readString(payload.key);
         if (!key) throw new Error('sessions.reset requires key.');
@@ -739,48 +795,48 @@ export class HermesLocalBridge {
         );
         return { ok: true };
       case 'skills.status':
-        return this.getHermesSkillsStatus(readString(payload.agentId) || 'main');
+        return (await this.getHermesSkillsStatus(readString(payload.agentId) || 'main'));
       case 'skills.get':
-        return this.getHermesSkillDetail(
+        return (await this.getHermesSkillDetail(
           readString(payload.agentId) || 'main',
           readString(payload.skillKey),
           readString(payload.filePath),
-        );
+        ));
       case 'skills.update':
-        return this.updateHermesSkill(readString(payload.agentId) || 'main', payload);
+        return (await this.updateHermesSkill(readString(payload.agentId) || 'main', payload));
       case 'skills.delete':
-        return this.deleteHermesSkill(
+        return (await this.deleteHermesSkill(
           readString(payload.agentId) || 'main',
           readString(payload.skillKey),
-        );
+        ));
       case 'skills.content.update':
-        return this.updateHermesSkillContent(
+        return (await this.updateHermesSkillContent(
           readString(payload.agentId) || 'main',
           readString(payload.skillKey),
           readString(payload.content) ?? '',
-        );
+        ));
       case 'sessions.usage':
         return this.readHermesUsageBundle(payload).usageResult;
       case 'usage.cost':
         return this.readHermesUsageBundle(payload).costSummary;
       case 'models.list':
         return {
-          models: this.readHermesModelState({ caller: 'models.list' }).models,
+          models: (await this.readHermesModelState({ caller: 'models.list' })).models,
         };
       case 'model.current':
-        return this.readHermesCurrentModelState();
+        return (await this.readHermesCurrentModelState());
       case 'model.get':
-        return this.readHermesModelState({ caller: 'model.get' });
+        return (await this.readHermesModelState({ caller: 'model.get' }));
       case 'model.set':
-        return this.setHermesModel(payload);
+        return (await this.setHermesModel(payload));
       case 'hermes.reasoning.get':
-        return this.getHermesReasoningPayload();
+        return (await this.getHermesReasoningPayload());
       case 'hermes.reasoning.set':
-        return this.setHermesReasoningPayload(payload);
+        return (await this.setHermesReasoningPayload(payload));
       case 'hermes.fast.get':
-        return this.getHermesFastModePayload();
+        return (await this.getHermesFastModePayload());
       case 'hermes.fast.set':
-        return this.setHermesFastModePayload(payload);
+        return (await this.setHermesFastModePayload(payload));
       case 'hermes.cron.jobs.list':
         return {
           jobs: await this.listHermesCronJobs(payload),

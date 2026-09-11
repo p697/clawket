@@ -1,3 +1,4 @@
+import { clearUncertainSends } from '../chat/sendRecovery';
 import type {
   AgentAdapter,
   AgentDescriptor,
@@ -8,6 +9,7 @@ import type {
 } from '@clawket/agent-protocol';
 import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { analyticsEvents } from '../services/analytics/events';
+import { getMessageQueueStore } from '../chat/messageQueue';
 import { ChatCacheService } from '../services/chat-cache';
 import { SessionPreferencesService } from '../services/session-preferences';
 import {
@@ -41,6 +43,9 @@ import {
   type UnreadWatermarks,
 } from './registry/unread-watermarks';
 import { createConnectionAdapter } from './adapters';
+import { ConnectionRecoveryWindow, requiresConnectionAction } from './recovery-window';
+import { pausedConnectionStore, type PausedConnectionStore } from './registry/paused-connections';
+import { ownConnectionRuntime } from './runtime-owner';
 import {
   readConnectionRuntimeMetadata,
   type ConnectionRuntimeDetails,
@@ -63,6 +68,9 @@ export type ConnectionRuntimeSnapshot = Readonly<{
   freeConnectionId: string | null;
   activeAdapter: AgentAdapter | null;
   activeState: ConnectionState;
+  recovering?: boolean;
+  recoveryFailed?: boolean;
+  pausedConnectionIds?: ReadonlyArray<string>;
   connectionDetails: Readonly<Record<string, ConnectionRuntimeDetails>>;
   roster: ReadonlyArray<RosterConnectionGroup>;
   error: ConnectionRuntimeFailure | null;
@@ -102,6 +110,7 @@ type UnreadWatermarksPort = Pick<
 
 export interface ConnectionCoordinatorOptions {
   store?: ConnectionStorePort;
+  pausedStore?: PausedConnectionStore;
   cache?: RosterCachePort;
   chatCache?: ConnectionChatCachePort;
   sessionPreferences?: ConnectionSessionPreferencesPort;
@@ -203,20 +212,32 @@ export class ConnectionCoordinator {
   private readonly rosterInputs = new Map<string, RosterSnapshotInput>();
   private readonly connectionDetails = new Map<string, ConnectionRuntimeDetails>();
 
+  private readonly pausedStore: PausedConnectionStore;
+  private pausedIds: ReadonlyArray<string> = [];
+  private rosterMemo: { inputs: RosterSnapshotInput[]; activeId: string | null; value: ReadonlyArray<RosterConnectionGroup> } | null = null;
   private adapterFactory: ConnectionAdapterFactory | null;
   private adapterFactoryRevision = 0;
   private active: ActiveAdapterEntry | null = null;
   private storeUnsubscribe: (() => void) | null = null;
   private operation: Promise<void> = Promise.resolve();
   private startPromise: Promise<ConnectionRuntimeSnapshot> | null = null;
+  private retired = false;
   private reconcileScheduled = false;
   private started = false;
+  private lifecycleRevision = 0;
   private snapshot: ConnectionRuntimeSnapshot = INITIAL_SNAPSHOT;
   private error: ConnectionRuntimeFailure | null = null;
   private nextConnectReason: ConnectReason = 'launch';
+  private readonly recovery = new ConnectionRecoveryWindow(() => this.publish());
+
+  setAppActive(active: boolean): void {
+    this.recovery.setActive(active);
+    this.publish();
+  }
 
   constructor(options: ConnectionCoordinatorOptions = {}) {
     this.store = options.store ?? connectionStore;
+    this.pausedStore = options.pausedStore ?? pausedConnectionStore;
     this.cache = options.cache ?? rosterCache;
     this.chatCache = options.chatCache ?? ChatCacheService;
     this.sessionPreferences = options.sessionPreferences ?? SessionPreferencesService;
@@ -265,17 +286,23 @@ export class ConnectionCoordinator {
   }
 
   async start(): Promise<ConnectionRuntimeSnapshot> {
+    if (this.retired) return this.snapshot;
     if (this.startPromise) return this.startPromise;
     this.started = true;
+    const lifecycleRevision = ++this.lifecycleRevision;
     this.startPromise = this.enqueue(async () => {
       try {
         const storeSnapshot = await this.store.load();
-        if (!this.started) return this.snapshot;
+        this.pausedIds = await this.pausedStore.read();
+        if (!this.started || lifecycleRevision !== this.lifecycleRevision) return this.snapshot;
         this.storeUnsubscribe ??= this.store.subscribe(this.handleStoreChange);
         await this.hydrateRosterCaches(storeSnapshot);
-        await this.reconcileActiveAdapter(storeSnapshot);
+        if (!this.started || lifecycleRevision !== this.lifecycleRevision) return this.snapshot;
         this.publish({ initialized: true });
+        await this.reconcileActiveAdapter(storeSnapshot);
+        if (this.started && lifecycleRevision === this.lifecycleRevision) this.publish({ initialized: true });
       } catch (error) {
+        if (!this.started || lifecycleRevision !== this.lifecycleRevision) return this.snapshot;
         this.error = failure('load', error);
         this.publish({ initialized: true, switching: false });
       }
@@ -284,15 +311,24 @@ export class ConnectionCoordinator {
     return this.startPromise;
   }
 
+  /** A superseded process owner must never be revived by a stale React effect. */
+  retire(): void {
+    this.retired = true;
+    void this.stop().catch(() => undefined);
+  }
+
   async stop(): Promise<void> {
     this.started = false;
+    const lifecycleRevision = ++this.lifecycleRevision;
     this.startPromise = null;
     this.storeUnsubscribe?.();
     this.storeUnsubscribe = null;
     this.disconnectActiveImmediately();
-    await this.whenIdle();
-    this.error = null;
-    this.publish({ initialized: false, switching: false });
+    await this.enqueue(async () => {
+      if (lifecycleRevision !== this.lifecycleRevision) return;
+      this.error = null;
+      this.publish({ initialized: false, switching: false });
+    });
   }
 
   async whenIdle(): Promise<void> {
@@ -307,8 +343,39 @@ export class ConnectionCoordinator {
     if (this.store.getSnapshot().activeConnectionId !== connectionId) {
       this.nextConnectReason = 'switch';
     }
+    if (this.pausedIds.includes(connectionId)) {
+      const next = this.pausedIds.filter((id) => id !== connectionId);
+      await this.pausedStore.write(next);
+      this.pausedIds = next;
+    }
     await this.store.setActive(connectionId);
+    this.scheduleReconcile();
     await this.whenIdle();
+    return this.snapshot;
+  }
+
+  async pauseConnection(connectionId: string): Promise<void> {
+    await this.store.getRuntimeRecord(connectionId);
+    await this.enqueue(async () => {
+      const next = [...new Set([...this.pausedIds, connectionId])];
+      await this.pausedStore.write(next);
+      this.pausedIds = next;
+      if (this.active?.connectionId === connectionId) this.disconnectActiveImmediately();
+      this.publish({ switching: false });
+    });
+  }
+
+  /** An explicit user reconnect always creates a fresh adapter and backend handshake. */
+  async reconnectConnection(connectionId: string): Promise<ConnectionRuntimeSnapshot> {
+    const alreadyActive = this.active?.connectionId === connectionId;
+    await this.activate(connectionId);
+    if (!alreadyActive) return this.snapshot;
+    await this.enqueue(async () => {
+      if (this.store.getSnapshot().activeConnectionId !== connectionId) return;
+      this.nextConnectReason = 'manual';
+      this.disconnectActiveImmediately();
+      await this.reconcileActiveAdapter(this.store.getSnapshot());
+    });
     return this.snapshot;
   }
 
@@ -364,9 +431,14 @@ export class ConnectionCoordinator {
     }
     const removed = await this.store.remove(connectionId);
     if (!removed) return false;
+    this.pausedIds = this.pausedIds.filter((id) => id !== connectionId);
     this.rosterInputs.delete(connectionId);
     this.connectionDetails.delete(connectionId);
+    // Undelivered composer queues belong to the connection; drop them with it.
+    getMessageQueueStore().clearConnection(connectionId);
+    clearUncertainSends(connectionId);
     const cleanupPromise = Promise.allSettled([
+      this.pausedStore.write(this.pausedIds),
       this.cache.remove(connectionId),
       this.chatCache.clearConnection(connectionId),
       this.sessionPreferences.clearConnection(connectionId),
@@ -455,6 +527,10 @@ export class ConnectionCoordinator {
       entry = this.active;
       if (!entry) return false;
     }
+    if (this.recovery.phase === 'failed') {
+      this.recovery.begin(true);
+      this.publish();
+    }
     return this.probeEntry(entry, timeoutMs, reconnectReason);
   }
 
@@ -467,8 +543,8 @@ export class ConnectionCoordinator {
       const healthy = await entry.adapter.probe(timeoutMs);
       if (!healthy && this.active === entry) {
         this.telemetry.reconnect(entry.adapter.connection, reconnectReason);
-        this.error = failure('probe', new Error('Active connection probe failed.'), entry.connectionId);
-        this.publish({ switching: true });
+        this.recovery.begin();
+        this.publish();
         entry.adapter.disconnect();
         await entry.adapter.connect();
         if (this.active === entry) {
@@ -477,9 +553,16 @@ export class ConnectionCoordinator {
           this.publish({ switching: false });
         }
       }
+      if (healthy && this.active === entry) {
+        this.recovery.finish();
+        if (this.error?.operation === 'probe' || this.error?.operation === 'connect') this.error = null;
+        this.publish();
+      }
       return healthy;
     } catch (error) {
       if (this.active === entry) {
+        this.recovery.begin();
+        if (requiresConnectionAction(String(error))) this.recovery.fail();
         this.error = failure('probe', error, entry.connectionId);
         this.publish({ switching: false });
       }
@@ -514,6 +597,7 @@ export class ConnectionCoordinator {
     const needsSwitch = Boolean(
       storeSnapshot.activeConnectionId
       && this.adapterFactory
+      && !this.pausedIds.includes(storeSnapshot.activeConnectionId)
       && (
         this.active?.connectionId !== storeSnapshot.activeConnectionId
         || this.active.factoryRevision !== this.adapterFactoryRevision
@@ -543,7 +627,7 @@ export class ConnectionCoordinator {
     const connectionId = storeSnapshot.activeConnectionId;
     const factory = this.adapterFactory;
     const factoryRevision = this.adapterFactoryRevision;
-    if (!connectionId || !factory) {
+    if (!connectionId || !factory || this.pausedIds.includes(connectionId)) {
       this.disconnectActiveImmediately();
       this.publish({ switching: false });
       return;
@@ -568,6 +652,7 @@ export class ConnectionCoordinator {
         },
       ));
     } catch (error) {
+      if (requiresConnectionAction(String(error))) this.recovery.fail();
       this.error = failure('connect', error, connectionId);
       this.publish({ switching: false });
       return;
@@ -618,6 +703,8 @@ export class ConnectionCoordinator {
         }
         const enteredReady = state === 'ready' && entry.lastState !== 'ready';
         if (state !== 'ready') {
+          if (entry.hasReportedReady) this.recovery.begin();
+          if (requiresConnectionAction(reason)) this.recovery.fail();
           entry.readyRefresh = null;
           const roster = this.rosterInputs.get(entry.connectionId);
           if (roster?.source === 'live') {
@@ -655,6 +742,7 @@ export class ConnectionCoordinator {
         connectionFailureStage(entry.lastState),
         entry.attempt,
       );
+      if (requiresConnectionAction(String(error))) this.recovery.fail();
       this.error = failure('connect', error, connectionId);
       this.publish({ switching: false });
     }
@@ -840,6 +928,7 @@ export class ConnectionCoordinator {
   }
 
   private disconnectActiveImmediately(): void {
+    this.recovery.finish();
     const entry = this.active;
     if (!entry) return;
     this.active = null;
@@ -946,6 +1035,7 @@ export class ConnectionCoordinator {
    */
   private handleActiveReady(entry: ActiveAdapterEntry): Promise<void> {
     if (this.active !== entry || entry.adapter.state !== 'ready') return Promise.resolve();
+    this.recovery.finish();
     if (entry.readyRefresh) return entry.readyRefresh;
 
     entry.readyRevision += 1;
@@ -994,7 +1084,13 @@ export class ConnectionCoordinator {
     const activeConnectionId = patch.activeConnectionId === undefined
       ? storeSnapshot.activeConnectionId
       : patch.activeConnectionId;
-    const roster = aggregateRoster([...this.rosterInputs.values()], activeConnectionId);
+    const inputs = [...this.rosterInputs.values()];
+    if (!this.rosterMemo || this.rosterMemo.activeId !== activeConnectionId
+      || inputs.length !== this.rosterMemo.inputs.length
+      || inputs.some((input, index) => input !== this.rosterMemo!.inputs[index])) {
+      this.rosterMemo = { inputs, activeId: activeConnectionId, value: aggregateRoster(inputs, activeConnectionId) };
+    }
+    const roster = this.rosterMemo.value;
     this.snapshot = Object.freeze({
       revision: this.snapshot.revision + 1,
       initialized: patch.initialized ?? this.snapshot.initialized,
@@ -1009,9 +1105,12 @@ export class ConnectionCoordinator {
         : patch.freeConnectionId,
       activeAdapter: this.active?.adapter ?? null,
       activeState: this.active?.adapter.state ?? 'idle',
+      recovering: this.recovery.phase === 'recovering',
+      recoveryFailed: this.recovery.phase === 'failed',
+      pausedConnectionIds: this.pausedIds,
       connectionDetails: freezeConnectionDetails(this.connectionDetails),
       roster,
-      error: this.error,
+      error: this.recovery.phase === 'recovering' ? null : this.error,
     });
     for (const listener of this.listeners) listener();
   }
@@ -1136,9 +1235,9 @@ const defaultAdapterFactory: ConnectionAdapterFactory = (
   onSpriteGreetingSent: () => analyticsEvents.spriteGreetingSent(),
 });
 
-let defaultCoordinator = new ConnectionCoordinator({
+let defaultCoordinator = ownConnectionRuntime(new ConnectionCoordinator({
   adapterFactory: defaultAdapterFactory,
-});
+}));
 
 export function getConnectionRuntime(): ConnectionCoordinator {
   return defaultCoordinator;
@@ -1192,7 +1291,7 @@ export async function resetConnectionRuntimeForTests(
   options: ConnectionCoordinatorOptions = {},
 ): Promise<ConnectionCoordinator> {
   await defaultCoordinator.stop();
-  defaultCoordinator = new ConnectionCoordinator(options);
+  defaultCoordinator = ownConnectionRuntime(new ConnectionCoordinator(options));
   return defaultCoordinator;
 }
 

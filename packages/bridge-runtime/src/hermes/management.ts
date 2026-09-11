@@ -1,3 +1,4 @@
+import { HERMES_SKILLS_COMPAT_PYTHON } from './skills-compat.js';
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import {
@@ -85,7 +86,7 @@ type HermesSkillContentDetail = {
 export abstract class HermesManagementMethods {
   declare hermesHomePath: string;
   declare hermesSourcePath: string;
-  declare runHermesPython: <T>(script: string, stdinPayload?: unknown) => T;
+  declare runHermesPython: <T>(script: string, stdinPayload?: unknown) => Promise<T>;
 
   listHermesAgentFiles(agentId: string): Array<{
     name: string;
@@ -169,14 +170,14 @@ export abstract class HermesManagementMethods {
     }
   }
 
-  getHermesSkillsStatus(agentId: string): HermesSkillStatusReport {
+  async getHermesSkillsStatus(agentId: string): Promise<HermesSkillStatusReport> {
     this.assertSupportedHermesAgentId(agentId);
-    return this.runHermesPython<HermesSkillStatusReport>(
+    return (await this.runHermesPython<HermesSkillStatusReport>(
       [
         'import json, os',
         'from pathlib import Path',
         'from agent.skill_utils import get_external_skills_dirs',
-        'from tools.skills_tool import SKILLS_DIR, _parse_frontmatter, _get_required_environment_variables, _collect_prerequisite_values, load_env, skill_matches_platform',
+        ...HERMES_SKILLS_COMPAT_PYTHON,
         'def resolve_created_at(path: Path):',
         '  try:',
         '    stat = path.stat()',
@@ -325,20 +326,20 @@ export abstract class HermesManagementMethods {
         '  "skills": skills,',
         '}))',
       ].join('\n'),
-    );
+    ));
   }
 
-  getHermesSkillDetail(
+  async getHermesSkillDetail(
     agentId: string,
     skillKey: string | null,
     filePath: string | null,
-  ): HermesSkillContentDetail {
+  ): Promise<HermesSkillContentDetail> {
     this.assertSupportedHermesAgentId(agentId);
     const normalizedSkillKey = skillKey?.trim();
     if (!normalizedSkillKey) {
       throw new Error('skills.get requires skillKey.');
     }
-    const result = this.runHermesPython<HermesSkillContentDetail & {
+    const result = (await this.runHermesPython<HermesSkillContentDetail & {
       success?: boolean;
       error?: string;
     }>(
@@ -346,7 +347,7 @@ export abstract class HermesManagementMethods {
         'import json',
         'from pathlib import Path',
         'from agent.skill_utils import get_external_skills_dirs',
-        'from tools.skills_tool import SKILLS_DIR, _parse_frontmatter',
+        ...HERMES_SKILLS_COMPAT_PYTHON,
         'payload = json.loads(input() or "{}")',
         'skill_key = str(payload.get("skillKey") or "").strip()',
         'file_path = payload.get("filePath")',
@@ -443,7 +444,7 @@ export abstract class HermesManagementMethods {
         skillKey: normalizedSkillKey,
         ...(filePath?.trim() ? { filePath: filePath.trim() } : {}),
       },
-    );
+    ));
     if (result.success === false) {
       throw new Error(readString(result.error) || 'Failed to load Hermes skill.');
     }
@@ -460,17 +461,17 @@ export abstract class HermesManagementMethods {
     };
   }
 
-  updateHermesSkill(agentId: string, payload: Record<string, unknown>): {
+  async updateHermesSkill(agentId: string, payload: Record<string, unknown>): Promise<{
     ok: boolean;
     skillKey: string;
     config: Record<string, unknown>;
-  } {
+  }> {
     this.assertSupportedHermesAgentId(agentId);
     const skillKey = readString(payload.skillKey)?.trim();
     if (!skillKey) {
       throw new Error('skills.update requires skillKey.');
     }
-    const result = this.runHermesPython<{
+    const result = (await this.runHermesPython<{
       ok?: boolean;
       skillKey?: string;
       config?: Record<string, unknown>;
@@ -480,7 +481,8 @@ export abstract class HermesManagementMethods {
         'import json',
         'from pathlib import Path',
         'from hermes_cli.config import load_config, save_config',
-        'from tools.skills_tool import load_env, _find_all_skills',
+        'from tools.skills_tool import _find_all_skills',
+        ...HERMES_SKILLS_COMPAT_PYTHON,
         'from tools.skill_manager_tool import _find_skill',
         'payload = json.loads(input() or "{}")',
         'skill_key = str(payload.get("skillKey") or "").strip()',
@@ -508,7 +510,6 @@ export abstract class HermesManagementMethods {
         '  skill_md = Path(skill_dir) / "SKILL.md"',
         '  primary_env = None',
         '  try:',
-        '    from tools.skills_tool import _parse_frontmatter, _get_required_environment_variables, _collect_prerequisite_values',
         '    content = skill_md.read_text(encoding="utf-8")',
         '    frontmatter, _ = _parse_frontmatter(content)',
         '    legacy_env, _ = _collect_prerequisite_values(frontmatter)',
@@ -544,7 +545,7 @@ export abstract class HermesManagementMethods {
         ...(payload.apiKey !== undefined ? { apiKey: payload.apiKey } : {}),
         ...(isRecord(payload.env) ? { env: payload.env } : {}),
       },
-    );
+    ));
     if (result.ok === false) {
       throw new Error(readString(result.error) || 'Failed to update Hermes skill.');
     }
@@ -555,19 +556,19 @@ export abstract class HermesManagementMethods {
     };
   }
 
-  deleteHermesSkill(
+  async deleteHermesSkill(
     agentId: string,
     skillKey: string | null,
-  ): {
+  ): Promise<{
     ok: boolean;
     skillKey: string;
-  } {
+  }> {
     this.assertSupportedHermesAgentId(agentId);
     const normalizedSkillKey = skillKey?.trim();
     if (!normalizedSkillKey) {
       throw new Error('skills.delete requires skillKey.');
     }
-    const result = this.runHermesPython<{
+    const result = (await this.runHermesPython<{
       success?: boolean;
       ok?: boolean;
       error?: string;
@@ -603,7 +604,7 @@ export abstract class HermesManagementMethods {
         'print(json.dumps(result))',
       ].join('\n'),
       { skillKey: normalizedSkillKey },
-    );
+    ));
     if (result.success === false || result.ok === false) {
       throw new Error(readString(result.error) || 'Failed to delete Hermes skill.');
     }
@@ -613,21 +614,21 @@ export abstract class HermesManagementMethods {
     };
   }
 
-  updateHermesSkillContent(
+  async updateHermesSkillContent(
     agentId: string,
     skillKey: string | null,
     content: string,
-  ): {
+  ): Promise<{
     ok: boolean;
     skillKey: string;
     path: string;
-  } {
+  }> {
     this.assertSupportedHermesAgentId(agentId);
     const normalizedSkillKey = skillKey?.trim();
     if (!normalizedSkillKey) {
       throw new Error('skills.content.update requires skillKey.');
     }
-    const result = this.runHermesPython<{
+    const result = (await this.runHermesPython<{
       success?: boolean;
       error?: string;
       path?: string;
@@ -651,7 +652,7 @@ export abstract class HermesManagementMethods {
         skillKey: normalizedSkillKey,
         content,
       },
-    );
+    ));
     if (result.success === false) {
       throw new Error(readString(result.error) || 'Failed to update Hermes skill content.');
     }

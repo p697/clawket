@@ -40,7 +40,9 @@ Keep each Hermes implementation file and each Hermes test file at or below 1,200
 3. `bridgeVersion` means the running Clawket CLI package version. Normalize it before publication, include it only on a negotiated successful OpenClaw connect response or a Hermes health surface, and omit it for blank/invalid values and legacy peers. Never forward a Gateway-supplied `bridgeVersion` or infer it from the Gateway's `server.version`.
 4. Encode Hermes image attachments as one OpenAI-style user message whose content contains the text part followed by `image_url` data-URL parts; keep the current user turn out of `conversation_history`. Reject malformed or unsupported input before starting a run.
 5. `chat.abort` owns an `AbortController` for the matching `/v1/runs` request and emits one terminal raw `chat` event with `state: 'aborted'`; the App maps that state to `chatAborted`. Do not report success while leaving the run active.
-6. Validate all `hermes.cron.jobs.create` parameters before invoking Hermes. Model selection remains global, never session-scoped.
+6. Model flag parsing accepts both the legacy three-field and newer five-field Hermes tuples; consume only the needed fields and preserve global scope. Python subprocess failures must not put command scripts or payloads into client error messages.
+7. Validate all `hermes.cron.jobs.create` parameters before invoking Hermes. Model selection remains global, never session-scoped.
+8. OpenClaw diagnostics accept legacy `checks` and current `findings` reports, including nonzero CLI exits. Preserve finding severity and repair hints; never discard an unrecognized report into an empty issue list.
 
 ## Python Resolution
 
@@ -53,7 +55,15 @@ Resolve the Hermes Python executable in this order:
 5. `<hermesHomePath>/venvs/hermes-dev/bin/python`.
 6. `python3`.
 
+The shared Hermes Python runner must yield the Node event loop, bound duration/concurrency, cancel owned children on stop, and keep errors credential-free. Serialize whole configuration mutations while health bypasses their queue; cancellation during asynchronous history preparation or terminal hydration must not start work or restore stale replies. Skills helpers support both the legacy tools module and current split agent utilities through the shared compatibility preamble.
+
 Subprocesses set `HERMES_HOME` and prepend `hermesSourcePath` to `PYTHONPATH`. Do not mutate the external Hermes checkout.
+
+Installation discovery honors explicit runtime options and `HERMES_SOURCE_PATH` / `HERMES_COMMAND`. Otherwise prefer the current official `~/.local/share/hermes-agent` checkout, retain the legacy `~/.hermes/hermes-agent` fallback, and find the executable on PATH or at `~/.local/bin/hermes`. CLI detection and runtime discovery share this resolver.
+
+The managed Hermes API uses an explicit API key when supplied, otherwise a deterministic SHA-256 derivation of the persisted Bridge token, API URL and Hermes home scope. Pass it to the owned gateway as `API_SERVER_KEY`; never print it. Readiness probes use authenticated `/v1/models`, not the public health endpoint. An already-running API returning 401/403 must report a credential mismatch and must not trigger an automatic replacement. Handle child spawn errors without crashing the Bridge.
+
+Hermes Relay checks cloud socket reachability with matched WebSocket ping/pong independently of local Bridge health. Recycle half-open cloud sockets and clear probe deadlines on stop/replacement; transport pong must not mark the backend ready or reset backend handshake backoff. Ignore frames from replaced cloud sockets.
 
 ## Test Boundary
 
@@ -62,3 +72,11 @@ Subprocesses set `HERMES_HOME` and prepend `hermesSourcePath` to `PYTHONPATH`. D
 3. `npm test` is the broad suite and includes both self-contained and integration tests. Do not silently skip an external integration test or replace it with a stub to obtain a green run.
 4. Keep tests beside the module they cover and add regressions for both OpenClaw and Hermes whenever shared Relay or frame behavior changes.
 5. Export only runtime contracts consumed outside their implementation module. Keep implementation-only helpers and record shapes private so the published surface does not grow accidentally.
+
+## OpenClaw handshake recovery
+
+A forwarded challenge with client demand but no connect request has an 8-second watchdog. Suspend it during bootstrap credential issuance and cancel it on connect, disconnect, replacement, or stop. On expiry recycle the Relay owner transport so legacy cloud routing also resets; preserve reconnect backoff until authenticated health. Ignore events from replaced sockets. Log only stage, stable failure code and durations; never log challenge nonces or credentials.
+
+Managed CLI runtimes opt into `bridge.client-sockets.v1`. With a supporting Relay, each authenticated client socket gets a child runtime with its own local Gateway handshake; the owner only coordinates lifecycle and restricted pairing. Retire children on socket incarnation removal, owner loss, or stop. Never reuse an authenticated Gateway socket for another client. Legacy runtime consumers and older Relays retain the v1 path.
+
+In negotiated client-channel mode, pairing approve/reject must target a live child owning the request. If that child has gone, return an unavailable-request error; never fall back to the owner's unhandshaken Gateway. Legacy mode keeps its existing routing.

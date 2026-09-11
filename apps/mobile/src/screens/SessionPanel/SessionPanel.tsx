@@ -7,7 +7,6 @@ import React, {
 } from 'react';
 import {
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -16,9 +15,9 @@ import {
   ChevronDown,
   ChevronRight,
   Filter,
-  Plus,
   Search,
 } from 'lucide-react-native';
+import { BottomSheetFlatList } from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import type { AgentDescriptor, Capabilities } from '@clawket/agent-protocol';
 
@@ -52,14 +51,12 @@ import {
   filterSessionPanelRows,
   normalizeSessionRenameTitle,
   resolveSessionPanelPageState,
-  shouldShowSessionPanelQuickFilters,
   summarizeSessionPanelRows,
   type SessionPanelAction,
   type SessionPanelAgentGroup,
   type SessionPanelKindFilter,
   type SessionPanelMode,
   type SessionPanelPageState,
-  type SessionPanelQuickFilter,
   type SessionPanelRenamePayload,
   type SessionPanelRow,
   type SessionPanelSection,
@@ -91,15 +88,13 @@ export type SessionPanelViewProps = Readonly<{
   currentSessionKey: string;
   capabilities: Pick<
     Capabilities,
-    'sessionCreate' | 'sessionRename' | 'sessionReset' | 'sessionDelete'
+    'sessionRename' | 'sessionReset' | 'sessionDelete'
   >;
   bridgeOutdated?: boolean;
   initialMode?: SessionPanelMode;
   kindFilter?: SessionPanelKindFilter;
-  visibleRowCapacity?: number;
   onClose: () => void;
   onSelectSession: (row: SessionPanelRow) => MaybePromise;
-  onCreateSession?: (agentId: string) => MaybePromise;
   onSessionAction?: SessionPanelActionHandler;
   onOpenKindFilter?: (current: SessionPanelKindFilter) => void;
   onRetry?: () => MaybePromise;
@@ -115,10 +110,8 @@ export type SessionPanelProps = Readonly<{
   permissionDenied?: boolean;
   initialMode?: SessionPanelMode;
   kindFilter?: SessionPanelKindFilter;
-  visibleRowCapacity?: number;
   onClose: () => void;
   onSelectSession: (row: SessionPanelRow) => MaybePromise;
-  onCreateSession?: (agentId: string) => MaybePromise;
   onSessionAction?: SessionPanelActionHandler;
   onOpenKindFilter?: (current: SessionPanelKindFilter) => void;
   onModeChange?: (mode: SessionPanelMode) => void;
@@ -153,6 +146,7 @@ function SessionRow({
   onOpenActions: (row: SessionPanelRow) => void;
 }>): React.JSX.Element {
   const { theme } = useAppTheme();
+  const { t } = useTranslation('common');
   const actions = availableSessionActions(row, capabilities);
   const Icon = resolveSessionKindIcon(row.kind);
   const dotColor = row.attention !== null
@@ -191,7 +185,7 @@ function SessionRow({
         style={[styles.rowTitle, { color: theme.colors.ink }]}
         numberOfLines={1}
       >
-        {row.title}
+        {row.kind === 'main' ? t('Main session') : row.title === row.key ? t('New session') : row.title}
       </Text>
       <Text
         style={[styles.rowTime, { color: theme.colors.inkTertiary }]}
@@ -203,124 +197,15 @@ function SessionRow({
   );
 }
 
-function PanelSection({
-  section,
-  currentSessionKey,
-  completedExpanded,
-  capabilities,
-  onToggleCompleted,
-  onSelect,
-  onOpenActions,
-}: Readonly<{
-  section: SessionPanelSection;
-  currentSessionKey: string;
-  completedExpanded: boolean;
-  capabilities: SessionPanelViewProps['capabilities'];
-  onToggleCompleted: () => void;
-  onSelect: (row: SessionPanelRow) => void;
-  onOpenActions: (row: SessionPanelRow) => void;
-}>): React.JSX.Element {
-  const { t } = useTranslation('common');
-  const { theme } = useAppTheme();
-  const completed = section.completedRows ?? [];
-
-  return (
-    <View testID={`session-panel-section-${section.kind}`} style={styles.section}>
-      <Text style={[styles.sectionTitle, { color: theme.colors.inkSecondary }]}>
-        {sectionLabel(section.kind, t)}
-      </Text>
-      {section.channelGroups?.map((channel) => (
-        <View key={channel.key} style={styles.channelGroup}>
-          <Text style={[styles.channelTitle, { color: theme.colors.inkSecondary }]}>
-            {channel.label ?? t('Other channels')}
-          </Text>
-          {channel.rows.map((row) => (
-            <SessionRow
-              key={row.id}
-              row={row}
-              listMode={false}
-              selected={row.key === currentSessionKey}
-              capabilities={capabilities}
-              onPress={() => onSelect(row)}
-              onOpenActions={onOpenActions}
-            />
-          ))}
-        </View>
-      ))}
-      {section.rows.map((row) => (
-        <SessionRow
-          key={row.id}
-          row={row}
-          listMode={false}
-          selected={row.key === currentSessionKey}
-          capabilities={capabilities}
-          onPress={() => onSelect(row)}
-          onOpenActions={onOpenActions}
-        />
-      ))}
-      {completed.length ? (
-        <>
-          <Pressable
-            testID="session-panel-completed-toggle"
-            accessibilityRole="button"
-            accessibilityState={{ expanded: completedExpanded }}
-            onPress={onToggleCompleted}
-            style={({ pressed }) => [styles.completedRow, pressed ? styles.pressed : null]}
-          >
-            {completedExpanded ? (
-              <ChevronDown size={IconSize.sm} color={theme.colors.inkSecondary} />
-            ) : (
-              <ChevronRight size={IconSize.sm} color={theme.colors.inkSecondary} />
-            )}
-            <Text style={[styles.completedText, { color: theme.colors.inkSecondary }]}>
-              {t('Completed {{count}}', { count: completed.length })}
-            </Text>
-          </Pressable>
-          {completedExpanded ? completed.map((row) => (
-            <SessionRow
-              key={row.id}
-              row={row}
-              listMode={false}
-              selected={row.key === currentSessionKey}
-              capabilities={capabilities}
-              onPress={() => onSelect(row)}
-              onOpenActions={onOpenActions}
-            />
-          )) : null}
-        </>
-      ) : null}
-    </View>
-  );
-}
-
 function AgentGroup({
   group,
   expanded,
-  completedExpanded,
-  currentAgentId,
-  currentSessionKey,
-  canCreate,
-  capabilities,
   onToggle,
-  onToggleCompleted,
-  onCreate,
-  onSelect,
-  onOpenActions,
 }: Readonly<{
   group: SessionPanelAgentGroup;
   expanded: boolean;
-  completedExpanded: boolean;
-  currentAgentId: string;
-  currentSessionKey: string;
-  canCreate: boolean;
-  capabilities: SessionPanelViewProps['capabilities'];
   onToggle: () => void;
-  onToggleCompleted: () => void;
-  onCreate: () => void;
-  onSelect: (row: SessionPanelRow) => void;
-  onOpenActions: (row: SessionPanelRow) => void;
 }>): React.JSX.Element {
-  const { t } = useTranslation('common');
   const { theme } = useAppTheme();
   return (
     <View testID={`session-panel-agent-${group.agent.agentId}`}>
@@ -342,32 +227,7 @@ function AgentGroup({
         <Text style={[styles.agentCount, { color: theme.colors.inkSecondary }]}>
           {group.count}
         </Text>
-        {group.agent.agentId === currentAgentId && canCreate ? (
-          <FloatingButton
-            testID={`session-panel-agent-${group.agent.agentId}-create`}
-            icon={Plus}
-            appearance="quiet"
-            accessibilityLabel={t('New session')}
-            onPress={onCreate}
-          />
-        ) : null}
       </Pressable>
-      {expanded ? (
-        <View style={styles.sections}>
-          {group.sections.map((section) => (
-            <PanelSection
-              key={section.kind}
-              section={section}
-              currentSessionKey={currentSessionKey}
-              completedExpanded={completedExpanded}
-              capabilities={capabilities}
-              onToggleCompleted={onToggleCompleted}
-              onSelect={onSelect}
-              onOpenActions={onOpenActions}
-            />
-          ))}
-        </View>
-      ) : null}
     </View>
   );
 }
@@ -402,11 +262,13 @@ function SessionActionSheet({
   capabilities,
   onClose,
   onChoose,
+  onAfterClose,
 }: Readonly<{
   row: SessionPanelRow | null;
   capabilities: SessionPanelViewProps['capabilities'];
   onClose: () => void;
   onChoose: (action: SessionPanelAction) => void;
+  onAfterClose: () => void;
 }>): React.JSX.Element {
   const { t } = useTranslation('common');
   const { theme } = useAppTheme();
@@ -414,6 +276,7 @@ function SessionActionSheet({
   return (
     <Sheet
       testID="session-panel-actions"
+      onAfterClose={onAfterClose}
       visible={row !== null}
       title={t('Session actions')}
       closeAccessibilityLabel={t('Close')}
@@ -563,10 +426,8 @@ export function SessionPanelView({
   bridgeOutdated = false,
   initialMode,
   kindFilter = 'all',
-  visibleRowCapacity,
   onClose,
   onSelectSession,
-  onCreateSession,
   onSessionAction,
   onOpenKindFilter,
   onRetry,
@@ -579,7 +440,6 @@ export function SessionPanelView({
   const [mode, setMode] = useState<SessionPanelMode>(initialMode ?? rememberedPanelMode);
   const [query, setQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
-  const [quickFilter, setQuickFilter] = useState<SessionPanelQuickFilter>('all');
   const [expandedAgentIds, setExpandedAgentIds] = useState<ReadonlySet<string>>(
     () => new Set([currentAgentId]),
   );
@@ -609,9 +469,8 @@ export function SessionPanelView({
 
   const filteredRows = useMemo(() => filterSessionPanelRows(rows, {
     query,
-    quickFilter,
     kindFilter,
-  }), [kindFilter, query, quickFilter, rows]);
+  }), [kindFilter, query, rows]);
   useEffect(() => {
     if (!visible || !query.trim()) return undefined;
     const resultKinds = [...new Set(filteredRows.map((row) => row.kind))].sort().join(',') || 'none';
@@ -629,8 +488,7 @@ export function SessionPanelView({
     [agents, currentAgentId, filteredRows],
   );
   const summary = useMemo(() => summarizeSessionPanelRows(filteredRows), [filteredRows]);
-  const showFilters = shouldShowSessionPanelQuickFilters(rows.length, visibleRowCapacity);
-  const autoExpand = query.trim().length > 0 || quickFilter !== 'all' || kindFilter !== 'all';
+  const autoExpand = query.trim().length > 0 || kindFilter !== 'all';
 
   const switchMode = useCallback((next: SessionPanelMode) => {
     rememberedPanelMode = next;
@@ -646,26 +504,36 @@ export function SessionPanelView({
     });
     void Promise.resolve(onSelectSession(row)).then(onClose, () => undefined);
   }, [onClose, onSelectSession]);
-  const create = useCallback(() => {
-    if (!onCreateSession) return;
-    analyticsEvents.sessionAction({ action: 'create' });
-    void Promise.resolve(onCreateSession(currentAgentId)).catch(() => undefined);
-  }, [currentAgentId, onCreateSession]);
-  const chooseAction = useCallback((action: SessionPanelAction) => {
-    if (!actionRow) return;
+  const pendingSessionAction = useRef<(() => void) | null>(null);
+  const finishSessionAction = useCallback(() => {
+    const action = pendingSessionAction.current;
+    pendingSessionAction.current = null;
+    if (visible) action?.();
+  }, [visible]);
+  useEffect(() => {
+    if (visible) return;
+    pendingSessionAction.current = null;
     setActionRow(null);
-    if (action === 'reset' || action === 'delete') {
-      setConfirmation({ row: actionRow, action });
-      return;
-    }
-    if (action === 'rename') {
-      setRenameRow(actionRow);
-      return;
-    }
-    if (onSessionAction) {
-      analyticsEvents.sessionAction({ action });
-      void Promise.resolve(onSessionAction(actionRow, action)).catch(() => undefined);
-    }
+    setRenameRow(null);
+    setConfirmation(null);
+  }, [visible]);
+  const chooseAction = useCallback((action: SessionPanelAction) => {
+    if (!actionRow || pendingSessionAction.current) return;
+    pendingSessionAction.current = () => {
+      if (action === 'reset' || action === 'delete') {
+        setConfirmation({ row: actionRow, action });
+        return;
+      }
+      if (action === 'rename') {
+        setRenameRow(actionRow);
+        return;
+      }
+      if (onSessionAction) {
+        analyticsEvents.sessionAction({ action });
+        void Promise.resolve(onSessionAction(actionRow, action)).catch(() => undefined);
+      }
+    };
+    setActionRow(null);
   }, [actionRow, onSessionAction]);
   const confirmAction = useCallback(() => {
     if (!confirmation) return;
@@ -682,20 +550,58 @@ export function SessionPanelView({
     return onSessionAction(row, 'rename', { title });
   }, [onSessionAction]);
 
+  const listItems = useMemo(() => {
+    const items: React.ReactElement[] = [];
+    if (state === 'permission') return items;
+    const appendRow = (row: SessionPanelRow) => items.push(<SessionRow key={row.id}
+      row={row} listMode={mode === 'list'} selected={row.key === currentSessionKey}
+      capabilities={capabilities} onPress={() => select(row)} onOpenActions={setActionRow} />);
+    if (mode === 'list') { filteredRows.forEach(appendRow); return items; }
+    for (const group of groups) {
+      const id = group.agent.agentId;
+      const expanded = autoExpand || expandedAgentIds.has(id);
+      const completedExpanded = completedExpandedAgentIds.has(id);
+      const toggleCompleted = () => setCompletedExpandedAgentIds((current) => {
+        const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next;
+      });
+      items.push(<AgentGroup key={`agent:${id}`} group={group} expanded={expanded}
+        onToggle={() => setExpandedAgentIds((current) => {
+          const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next;
+        })} />);
+      if (!expanded) continue;
+      for (const section of group.sections) {
+        if (section.kind !== 'main' && section.kind !== 'channel') items.push(<Text key={`${id}:${section.kind}`} testID={`session-panel-section-${section.kind}`}
+          style={[styles.sectionTitle, { color: theme.colors.inkSecondary }]}>{sectionLabel(section.kind, t)}</Text>);
+        for (const channel of section.channelGroups ?? []) {
+          items.push(<Text key={`${id}:channel:${channel.key}`} style={[styles.sectionTitle, { color: theme.colors.inkSecondary }]}>
+            {channel.label ?? t('Other channels')}</Text>);
+          channel.rows.forEach(appendRow);
+        }
+        section.rows.forEach(appendRow);
+        if (section.completedRows?.length) {
+          items.push(<Pressable key={`${id}:completed`} testID="session-panel-completed-toggle" accessibilityRole="button"
+            accessibilityState={{ expanded: completedExpanded }} onPress={toggleCompleted} style={styles.completedRow}>
+            {completedExpanded ? <ChevronDown size={IconSize.sm} color={theme.colors.inkSecondary} /> : <ChevronRight size={IconSize.sm} color={theme.colors.inkSecondary} />}
+            <Text style={[styles.completedText, { color: theme.colors.inkSecondary }]}>{t('Completed {{count}}', { count: section.completedRows.length })}</Text>
+          </Pressable>);
+          if (completedExpanded) section.completedRows.forEach(appendRow);
+        }
+      }
+    }
+    return items;
+  }, [state, mode, filteredRows, currentSessionKey, capabilities, select, groups, autoExpand,
+    expandedAgentIds, completedExpandedAgentIds, currentAgentId, t, theme.colors]);
+
   const modeTabs = useMemo(() => [
     { key: 'grouped' as const, label: t('Grouped') },
     { key: 'list' as const, label: t('List') },
-  ], [t]);
-  const filterTabs = useMemo(() => [
-    { key: 'all' as const, label: t('All') },
-    { key: 'attention' as const, label: t('Needs you') },
-    { key: 'working' as const, label: t('Working') },
   ], [t]);
 
   return (
     <>
       <Sheet
         testID="session-panel"
+        snapPoints={['93%']}
         visible={visible}
         title={t('Sessions')}
         closeAccessibilityLabel={t('Close sessions')}
@@ -729,24 +635,21 @@ export function SessionPanelView({
               onClear={() => setQuery('')}
             />
           ) : null}
-          {showFilters ? (
-            <SegmentedTabs
-              testID="session-panel-quick-filter"
-              size="sm"
-              tabs={filterTabs}
-              active={quickFilter}
-              onSwitch={setQuickFilter}
-            />
-          ) : null}
         </View>
 
         {state === 'loading' ? <PanelLoading /> : (
-          <ScrollView
+          <BottomSheetFlatList
             testID="session-panel-scroll"
+            data={listItems}
+            keyExtractor={(item: React.ReactElement) => String(item.key)}
+            renderItem={({ item }: { item: React.ReactElement }) => item}
+            initialNumToRender={12}
+            maxToRenderPerBatch={12}
+            windowSize={5}
+            keyboardShouldPersistTaps="handled"
             contentContainerStyle={styles.scrollContent}
-            automaticallyAdjustContentInsets={false}
             showsVerticalScrollIndicator={false}
-          >
+            ListHeaderComponent={<View>
             {state === 'offline' ? (
               <Banner
                 testID="session-panel-offline"
@@ -786,9 +689,6 @@ export function SessionPanelView({
                 <Text style={[styles.emptyText, { color: theme.colors.inkSecondary }]}>
                   {rows.length ? t('No matching sessions') : t('No sessions yet')}
                 </Text>
-                {capabilities.sessionCreate && onCreateSession ? (
-                  <Button label={t('New session')} onPress={create} />
-                ) : null}
               </View>
             ) : null}
 
@@ -809,52 +709,12 @@ export function SessionPanelView({
                     />
                   ) : null}
                 </View>
-                {filteredRows.map((row) => (
-                  <SessionRow
-                    key={row.id}
-                    row={row}
-                    listMode
-                    selected={row.key === currentSessionKey}
-                    capabilities={capabilities}
-                    onPress={() => select(row)}
-                    onOpenActions={setActionRow}
-                  />
-                ))}
               </View>
             ) : null}
 
-            {state !== 'permission' && filteredRows.length > 0 && mode === 'grouped' ? (
-              <View testID="session-panel-grouped-mode">
-                {groups.map((group) => (
-                  <AgentGroup
-                    key={group.agent.agentId}
-                    group={group}
-                    expanded={autoExpand || expandedAgentIds.has(group.agent.agentId)}
-                    completedExpanded={completedExpandedAgentIds.has(group.agent.agentId)}
-                    currentAgentId={currentAgentId}
-                    currentSessionKey={currentSessionKey}
-                    canCreate={capabilities.sessionCreate && Boolean(onCreateSession)}
-                    capabilities={capabilities}
-                    onToggle={() => setExpandedAgentIds((current) => {
-                      const next = new Set(current);
-                      if (next.has(group.agent.agentId)) next.delete(group.agent.agentId);
-                      else next.add(group.agent.agentId);
-                      return next;
-                    })}
-                    onToggleCompleted={() => setCompletedExpandedAgentIds((current) => {
-                      const next = new Set(current);
-                      if (next.has(group.agent.agentId)) next.delete(group.agent.agentId);
-                      else next.add(group.agent.agentId);
-                      return next;
-                    })}
-                    onCreate={create}
-                    onSelect={select}
-                    onOpenActions={setActionRow}
-                  />
-                ))}
-              </View>
-            ) : null}
-          </ScrollView>
+            {mode === 'grouped' ? <View testID="session-panel-grouped-mode" /> : null}
+            </View>}
+          />
         )}
       </Sheet>
 
@@ -863,6 +723,7 @@ export function SessionPanelView({
         capabilities={capabilities}
         onClose={() => setActionRow(null)}
         onChoose={chooseAction}
+        onAfterClose={finishSessionAction}
       />
       <ConfirmActionSheet
         pending={confirmation}
@@ -885,10 +746,8 @@ export function SessionPanel({
   permissionDenied = false,
   initialMode,
   kindFilter,
-  visibleRowCapacity,
   onClose,
   onSelectSession,
-  onCreateSession,
   onSessionAction,
   onOpenKindFilter,
   onModeChange,
@@ -908,7 +767,6 @@ export function SessionPanel({
   const adapter = connections.activeAdapter;
   const capabilities = adapter?.capabilities ?? {
     ...MUTATION_CAPABILITIES_OFF,
-    sessionCreate: false,
   };
   const state = resolveSessionPanelPageState({
     initialized: connections.initialized,
@@ -917,24 +775,6 @@ export function SessionPanel({
     activeState: connections.activeState,
     hasError: connections.error !== null,
   });
-  const createSession = onCreateSession ?? (adapter?.createSession && group
-    ? async (agentId: string) => {
-      const session = await adapter.createSession?.(agentId);
-      await getConnectionRuntime().refreshRoster();
-      const row = session
-        ? buildSessionPanelRows({
-          ...group,
-          agents: group.agents.map((summary) => summary.agent.agentId === agentId
-            ? { ...summary, sessions: [...summary.sessions, session] }
-            : summary),
-        }).find((candidate) => candidate.key === session.key)
-        : undefined;
-      if (row) {
-        await onSelectSession(row);
-        onClose();
-      }
-    }
-    : undefined);
 
   return (
     <SessionPanelView
@@ -948,10 +788,8 @@ export function SessionPanel({
       bridgeOutdated={group?.connection.bridgeOutdated === true}
       initialMode={initialMode}
       kindFilter={kindFilter}
-      visibleRowCapacity={visibleRowCapacity}
       onClose={onClose}
       onSelectSession={onSelectSession}
-      onCreateSession={createSession}
       onSessionAction={onSessionAction}
       onOpenKindFilter={onOpenKindFilter}
       onRetry={() => Promise.all([

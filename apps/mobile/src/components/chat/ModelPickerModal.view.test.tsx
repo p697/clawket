@@ -12,6 +12,7 @@ jest.mock('react-native', () => {
   );
   return {
     ActivityIndicator: primitive('ActivityIndicator'),
+    Image: primitive('Image'),
     Pressable: primitive('Pressable'),
     StyleSheet: {
       create: <T extends Record<string, unknown>>(styles: T) => styles,
@@ -179,12 +180,21 @@ describe('ModelPickerModal view', () => {
     jest.clearAllMocks();
   });
 
+  it('shows the same manufacturer artwork in picker rows with an unknown fallback', () => {
+    const view = renderPicker({ providers: undefined, models: [...models, { id: 'private', name: 'Private', provider: 'custom' }] });
+    expect(view.getByTestId('model-picker-icon-openai:gpt-5-api').props.source).toBe(401);
+    expect(view.getByTestId('model-picker-icon-anthropic:claude-sonnet').props.source).toBe(402);
+    expect(view.getByTestId('model-picker-icon-custom:private').props.source).toBeUndefined();
+    fireEvent.press(view.getByTestId('model-picker-row-anthropic:claude-sonnet'));
+    expect(view.onSelectModel).toHaveBeenCalledWith(models[1]);
+  });
+
   it('uses canonical fixed-detent Sheet chrome and keeps sheet-safe list behavior', () => {
     const view = renderPicker();
     const sheet = view.getByTestId('model-picker-shell');
     expect(sheet.props).toMatchObject({
       canonicalSheet: true,
-      snapPoints: ['58%', '92%'],
+      snapPoints: ['68%', '92%'],
       keyboardBehavior: 'extend',
       keyboardBlurBehavior: 'none',
       androidKeyboardInputMode: 'adjustResize',

@@ -23,11 +23,13 @@ import {
   createSurfaceStyle,
 } from '../../theme/tokens';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'destructive';
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'destructive' | 'neutral' | 'text';
 export type ButtonSize = 'sm' | 'md' | 'lg';
 
 type Props = Omit<PressableProps, 'children' | 'style'> & {
   label: string;
+  /** Allow long translations and accessibility text sizes to grow the button vertically. */
+  multiline?: boolean;
   variant?: ButtonVariant;
   size?: ButtonSize;
   icon?: LucideIcon;
@@ -41,6 +43,7 @@ type Props = Omit<PressableProps, 'children' | 'style'> & {
 
 export function Button({
   label,
+  multiline = false,
   variant = 'primary',
   size = 'md',
   icon: Icon,
@@ -60,13 +63,13 @@ export function Button({
     [theme.colors, theme.scheme],
   );
   const isDisabled = disabled || loading;
-  const contentColor = variant === 'primary'
-    ? theme.colors.onAccent
+  const contentColor = variant === 'text' ? theme.colors.inkSecondary : variant === 'neutral' || variant === 'primary'
+    ? disabled && !loading ? theme.colors.inkTertiary : theme.colors.canvas
     : variant === 'destructive'
       ? theme.colors.bad
       : variant === 'ghost'
         ? theme.colors.ink
-        : theme.colors.accent;
+        : theme.colors.ink;
   const iconSize = size === 'sm' ? 14 : size === 'lg' ? 18 : 16;
 
   const handlePress = useCallback<NonNullable<PressableProps['onPress']>>((event) => {
@@ -83,19 +86,20 @@ export function Button({
       onPress={handlePress}
       style={({ pressed }) => [
         styles.base,
+        multiline ? styles.multiline : null,
         styles[`size${size.toUpperCase()}` as 'sizeSM' | 'sizeMD' | 'sizeLG'],
         styles[variant],
         pressed && !isDisabled
-          ? variant === 'primary' ? styles.primaryPressed : styles.surfacePressed
+          ? variant === 'primary' || variant === 'neutral' ? styles.primaryPressed : styles.surfacePressed
           : null,
-        isDisabled ? styles.disabled : null,
+        isDisabled ? variant === 'neutral' || variant === 'primary' ? loading ? null : styles.neutralDisabled : styles.disabled : null,
         style,
       ]}
       {...rest}
     >
-      <View style={[styles.content, loading ? styles.contentHidden : null]}>
+      <View style={[styles.content, multiline ? styles.multilineContent : null, loading ? styles.contentHidden : null]}>
         {Icon ? <Icon size={iconSize} color={contentColor} strokeWidth={2} /> : null}
-        <Text style={[styles.label, size === 'sm' ? styles.labelSM : size === 'lg' ? styles.labelLG : null, { color: contentColor }, textStyle]} numberOfLines={1}>
+        <Text style={[styles.label, size === 'sm' ? styles.labelSM : size === 'lg' ? styles.labelLG : null, variant === 'text' ? styles.textLabel : null, { color: contentColor }, multiline ? styles.multilineLabel : null, textStyle]} numberOfLines={multiline ? undefined : 1}>
           {label}
         </Text>
       </View>
@@ -116,20 +120,21 @@ function createStyles(
       borderRadius: Radius.full,
       paddingHorizontal: Space.lg,
     },
+    multilineContent: { alignSelf: 'stretch' },
+    multiline: { paddingVertical: Space.md },
+    multilineLabel: { flexShrink: 1, textAlign: 'center' },
     sizeSM: { minHeight: HitSize.sm, paddingHorizontal: Space.md },
     sizeMD: { minHeight: ControlSize.floatingButton },
-    sizeLG: { minHeight: HitSize.lg, paddingHorizontal: Space.xl },
-    primary: {
-      ...createSurfaceStyle(colors, scheme, 'raised'),
-      borderColor: colors.accent,
-      backgroundColor: colors.accent,
-    },
-    secondary: {
-      ...createSurfaceStyle(colors, scheme, 'flat'),
-    },
+    sizeLG: { minHeight: ControlSize.settingsRow, paddingHorizontal: Space.xl },
+    primary: { backgroundColor: colors.ink },
+    neutral: { backgroundColor: colors.ink },
+    neutralDisabled: { backgroundColor: colors.surface },
+    secondary: { backgroundColor: colors.surface },
     ghost: {
       backgroundColor: 'transparent',
     },
+    text: { backgroundColor: 'transparent' },
+    textLabel: { fontWeight: FontWeight.regular },
     destructive: {
       ...createSurfaceStyle(colors, scheme, 'flat'),
       backgroundColor: colors.badSoft,

@@ -60,6 +60,7 @@ export type AccountSettingsRelayStats = Readonly<{
 export type AccountSettingsSectionConnection = AccountSettingsConnection & Readonly<{
   state?: ConnectionState;
   supportsRelayStats?: boolean;
+  serverHost?: string;
   relayStats?: AccountSettingsRelayStats;
   isFreeConnection?: boolean;
   freeSwitchAvailable?: boolean;
@@ -79,6 +80,7 @@ export type AccountSettingsSectionLabels = Readonly<{
 
 export type AccountSettingsSectionData = Readonly<{
   connections?: ReadonlyArray<AccountSettingsSectionConnection>;
+  connectionId?: string;
   labels?: Partial<AccountSettingsSectionLabels>;
   isPro?: boolean;
   canAddConnection?: boolean;
@@ -87,6 +89,7 @@ export type AccountSettingsSectionData = Readonly<{
 }>;
 
 export type AccountSettingsSectionAction = AccountSettingsAction
+  | 'advanced-settings'
   | 'reconnect-connection'
   | 'remove-connection'
   | 'set-free-connection'
@@ -157,8 +160,8 @@ const SECTION_TITLE_KEYS: Readonly<Record<AccountSettingsDetailSection, string>>
     connections: 'Connections',
     appearance: 'Appearance',
     voice: 'Voice',
-    notifications: 'Notifications',
-    help: 'Help',
+    notifications: 'Chat & notifications',
+    help: 'Help & feedback',
     community: 'Community',
     about: 'About',
     developer: 'Developer',
@@ -210,7 +213,9 @@ function buildConnectionGroups(
   data: AccountSettingsSectionData,
   capabilities: AccountSettingsSectionCapabilities,
 ): ReadonlyArray<AccountSettingsSectionGroup> {
-  const connections = data.connections ?? [];
+  const connections = (data.connections ?? []).filter((connection) => (
+    !data.connectionId || connection.id === data.connectionId
+  ));
   const groups = connections.map((connection) => {
     const [backend, transport, environment] = getConnectionValueKeys(connection);
     const rows: AccountSettingsSectionRow[] = [
@@ -224,6 +229,8 @@ function buildConnectionGroups(
         kind: 'value',
       },
     ];
+
+    if (connection.serverHost) rows.push({ id: `${connection.id}-server`, titleKey: 'Server address', titleNamespace: 'settings', value: connection.serverHost, kind: 'value' });
 
     if (connection.state) {
       rows.push({
@@ -277,7 +284,7 @@ function buildConnectionGroups(
       }
     }
 
-    rows.push(
+    if (!data.connectionId) rows.push(
       gateRow(navigationRow(
         `${connection.id}-reconnect`,
         'Reconnect',
@@ -316,7 +323,7 @@ function buildConnectionGroups(
     return group(`connection-${connection.id}`, rows, connection.label);
   });
 
-  groups.push(group('connection-add', [navigationRow(
+  if (!data.connectionId) groups.push(group('connection-add', [navigationRow(
     'add-connection',
     'Add Connection',
     'add-connection',
@@ -349,8 +356,7 @@ function buildSectionGroups(
     case 'appearance':
       return [group('appearance', [
         navigationRow('theme', 'Theme', 'theme', { value: labels.theme }),
-        navigationRow('accent', 'Accent Color', 'accent', { value: labels.accent }),
-        navigationRow('chat-appearance', 'Chat Appearance', 'chat-appearance', {
+        navigationRow('chat-appearance', 'Chat theme', 'chat-appearance', {
           value: labels.chatAppearance,
         }),
         gateRow(navigationRow('app-icon', 'App Icon', 'app-icon', {
@@ -367,6 +373,7 @@ function buildSectionGroups(
       ])];
     case 'notifications':
       return [group('notifications', [
+        gateRow(navigationRow('speech-language', 'Recognition Language', 'speech-language', { value: labels.speechLanguage }), capabilities.voice),
         {
           id: 'reply-notifications',
           titleKey: 'Reply Notifications',
@@ -378,11 +385,13 @@ function buildSectionGroups(
     case 'help':
       return [group('help', [
         navigationRow('help-center', 'Help Center', 'help-center'),
-        navigationRow('openclaw-docs', 'OpenClaw Documentation', 'openclaw-docs'),
-        navigationRow('hermes-docs', 'Hermes Documentation', 'hermes-docs'),
-        navigationRow('release-notes', 'Release Notes', 'release-notes'),
-        navigationRow('openclaw-releases', 'OpenClaw Releases', 'openclaw-releases'),
         navigationRow('feedback', 'Send Feedback', 'feedback'),
+        navigationRow('release-notes', 'Release Notes', 'release-notes'),
+      ]), group('community', [
+        gateRow(navigationRow('discord', 'Discord', 'discord'), capabilities.community),
+        gateRow(navigationRow('wecom', 'WeCom', 'wecom'), capabilities.community && capabilities.wecom),
+        gateRow(navigationRow('share', 'Share Clawket', 'share'), capabilities.community),
+        gateRow(navigationRow('rate', 'Rate Clawket', 'rate'), capabilities.community),
       ])];
     case 'community':
       return [group('community', [
@@ -397,6 +406,7 @@ function buildSectionGroups(
         navigationRow('repository', 'Open Source Repository', 'repository'),
         navigationRow('privacy', 'Privacy Policy', 'privacy'),
         navigationRow('terms', 'Terms of Use', 'terms'),
+        gateRow(navigationRow('advanced-settings', 'Advanced settings', 'advanced-settings'), capabilities.developer),
       ])];
     case 'developer':
       return [group('developer', [

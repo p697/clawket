@@ -123,11 +123,11 @@ jest.mock('../../components/ui/Sheet', () => {
   const ReactRuntime = require('react');
   const { Text, View } = require('react-native');
   return {
-    Sheet: ({ visible, testID, title, headerRight, children }: Record<string, unknown>) => (
+    Sheet: ({ visible, testID, title, headerRight, children, onAfterClose }: Record<string, unknown>) => (
       visible
         ? ReactRuntime.createElement(
           View,
-          { testID },
+          { testID, onAfterClose },
           title ? ReactRuntime.createElement(Text, null, title) : null,
           headerRight,
           children,
@@ -313,7 +313,6 @@ function roster(): RosterConnectionGroup {
 const source = roster();
 const rows = buildSessionPanelRows(source, { now: 1_000_000 });
 const capabilities = {
-  sessionCreate: true,
   sessionRename: true,
   sessionReset: true,
   sessionDelete: true,
@@ -331,7 +330,6 @@ function props(patch: Partial<SessionPanelViewProps> = {}): SessionPanelViewProp
     initialMode: 'grouped',
     onClose: jest.fn(),
     onSelectSession: jest.fn(),
-    onCreateSession: jest.fn(),
     onSessionAction: jest.fn(),
     ...patch,
   };
@@ -346,6 +344,14 @@ function renderedFontSizes(view: ReturnType<typeof render>): ReadonlyArray<numbe
     if (typeof value === 'number') sizes.add(value);
   });
   return [...sizes].sort((left, right) => left - right);
+}
+
+function chooseAfterDismiss(view: ReturnType<typeof render>, action: string) {
+  const afterClose = view.getByTestId('session-panel-actions').props.onAfterClose;
+  fireEvent.press(view.getByTestId(`session-panel-action-${action}`));
+  expect(view.queryByTestId('session-panel-rename')).toBeNull();
+  expect(view.queryByTestId('session-panel-confirm')).toBeNull();
+  act(() => afterClose());
 }
 
 describe('SessionPanelView', () => {
@@ -369,7 +375,7 @@ describe('SessionPanelView', () => {
       mode: 'grouped',
       session_count: rows.length,
     });
-    expect(view.getByText('Main thread')).toBeTruthy();
+    expect(view.getByText('Main session')).toBeTruthy();
     expect(view.queryByText('Builder thread')).toBeNull();
     expect(view.getByText('Completed 1')).toBeTruthy();
     expect(view.queryByText('Completed research')).toBeNull();
@@ -377,17 +383,17 @@ describe('SessionPanelView', () => {
     fireEvent.press(view.getByTestId('session-panel-completed-toggle'));
     expect(view.getByText('Completed research')).toBeTruthy();
     fireEvent.press(view.getByTestId('session-panel-agent-builder-toggle'));
-    expect(view.getByText('Builder thread')).toBeTruthy();
+    expect(view.getAllByText('Main session')).toHaveLength(2);
   });
 
   it('switches to compact list, reports summary, searches, and opens kind filter', async () => {
     const onOpenKindFilter = jest.fn();
     const view = render(
       <SessionPanelView
-        {...props({ visibleRowCapacity: 2, onOpenKindFilter })}
+        {...props({ onOpenKindFilter })}
       />,
     );
-    expect(view.getByTestId('session-panel-quick-filter')).toBeTruthy();
+    expect(view.queryByTestId('session-panel-quick-filter')).toBeNull();
     fireEvent.press(view.getByTestId('session-panel-mode-list'));
     expect(mockedAnalyticsEvents.sessionPanelModeChanged).toHaveBeenCalledWith({ mode: 'list' });
     expect(view.getByTestId('session-panel-list-mode')).toBeTruthy();
@@ -399,7 +405,7 @@ describe('SessionPanelView', () => {
     fireEvent.press(view.getByTestId('session-panel-search-toggle'));
     fireEvent.changeText(view.getByTestId('session-panel-search'), 'daily');
     expect(view.getByText('Daily report')).toBeTruthy();
-    expect(view.queryByText('Main thread')).toBeNull();
+    expect(view.queryByText('Main session')).toBeNull();
     await waitFor(() => expect(mockedAnalyticsEvents.searchPerformed).toHaveBeenCalledWith({
       scope: 'panel',
       has_results: true,
@@ -428,11 +434,11 @@ describe('SessionPanelView', () => {
     });
 
     fireEvent(view.getByTestId(`session-panel-row-${mainRow.id}`), 'longPress');
-    fireEvent.press(view.getByTestId('session-panel-action-pin'));
+    chooseAfterDismiss(view, 'pin');
     expect(onSessionAction).toHaveBeenCalledWith(mainRow, 'pin');
 
     fireEvent(view.getByTestId(`session-panel-row-${mainRow.id}`), 'longPress');
-    fireEvent.press(view.getByTestId('session-panel-action-reset'));
+    chooseAfterDismiss(view, 'reset');
     await act(async () => {
       fireEvent.press(view.getByLabelText('Reset'));
     });
@@ -440,7 +446,7 @@ describe('SessionPanelView', () => {
 
     fireEvent(view.getByTestId(`session-panel-row-${mainRow.id}`), 'longPress');
     expect(view.getByTestId('session-panel-actions')).toBeTruthy();
-    fireEvent.press(view.getByTestId('session-panel-action-delete'));
+    chooseAfterDismiss(view, 'delete');
     expect(view.getByTestId('session-panel-confirm')).toBeTruthy();
     await act(async () => {
       fireEvent.press(view.getByLabelText('Delete'));
@@ -461,7 +467,7 @@ describe('SessionPanelView', () => {
     );
 
     fireEvent(view.getByTestId(`session-panel-row-${mainRow.id}`), 'longPress');
-    fireEvent.press(view.getByTestId('session-panel-action-rename'));
+    chooseAfterDismiss(view, 'rename');
 
     expect(view.getByTestId('session-panel-rename')).toBeTruthy();
     expect(view.getByTestId('session-panel-rename-input').props.value).toBe(mainRow.title);
@@ -490,7 +496,7 @@ describe('SessionPanelView', () => {
     );
 
     fireEvent(view.getByTestId(`session-panel-row-${mainRow.id}`), 'longPress');
-    fireEvent.press(view.getByTestId('session-panel-action-rename'));
+    chooseAfterDismiss(view, 'rename');
     fireEvent.changeText(view.getByTestId('session-panel-rename-input'), '   ');
     expect(view.getByLabelText('Save').props.disabled).toBe(true);
 
@@ -512,15 +518,15 @@ describe('SessionPanelView', () => {
 
     view.rerender(<SessionPanelView {...props({ state: 'error' })} />);
     expect(view.getByTestId('session-panel-error')).toBeTruthy();
-    expect(view.getByText('Main thread')).toBeTruthy();
+    expect(view.getByText('Main session')).toBeTruthy();
 
     view.rerender(<SessionPanelView {...props({ state: 'offline' })} />);
     expect(view.getByTestId('session-panel-offline')).toBeTruthy();
-    expect(view.getByText('Main thread')).toBeTruthy();
+    expect(view.getByText('Main session')).toBeTruthy();
 
     view.rerender(<SessionPanelView {...props({ state: 'permission' })} />);
     expect(view.getByTestId('session-panel-permission')).toBeTruthy();
-    expect(view.queryByText('Main thread')).toBeNull();
+    expect(view.queryByText('Main session')).toBeNull();
 
     view.rerender(<SessionPanelView {...props({ bridgeOutdated: true })} />);
     expect(view.getByTestId('session-panel-bridge-outdated')).toBeTruthy();
@@ -539,4 +545,12 @@ describe('SessionPanelView', () => {
       FontSize.body,
     ]);
   });
+});
+
+it('does not offer session creation in groups or the empty state', () => {
+  const view = render(<SessionPanelView {...props()} />);
+  expect(view.queryByTestId('session-panel-agent-main-create')).toBeNull();
+  expect(view.queryByText('New session')).toBeNull();
+  view.rerender(<SessionPanelView {...props({ rows: [], agents: [] })} />);
+  expect(view.queryByText('New session')).toBeNull();
 });

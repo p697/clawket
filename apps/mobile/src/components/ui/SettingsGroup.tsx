@@ -35,6 +35,7 @@ export type SettingsRowProps = {
   showChevron?: boolean;
   locked?: boolean;
   attention?: boolean;
+  destructive?: boolean;
   onPress?: () => void;
   disabled?: boolean;
   layout?: 'row' | 'column';
@@ -64,6 +65,7 @@ export function SettingsRow({
   showChevron = false,
   locked = false,
   attention = false,
+  destructive = false,
   onPress,
   disabled = false,
   layout = 'row',
@@ -78,12 +80,12 @@ export function SettingsRow({
     <>
       {leading}
       <View style={styles.copy}>
-        {title ? <Text style={styles.title} numberOfLines={1}>{title}</Text> : null}
-        {subtitle ? <Text style={styles.subtitle} numberOfLines={1}>{subtitle}</Text> : null}
+        {title ? <Text style={[styles.title, destructive ? { color: theme.colors.bad } : null]} numberOfLines={2}>{title}</Text> : null}
+        {subtitle ? <Text style={styles.subtitle} numberOfLines={2}>{subtitle}</Text> : null}
       </View>
       <View style={styles.tail}>
         {attention ? <View testID={testID ? `${testID}-attention` : undefined} style={styles.attention} /> : null}
-        {value ? <Text style={styles.value} numberOfLines={1}>{value}</Text> : null}
+        {value ? <Text style={styles.value} numberOfLines={2}>{value}</Text> : null}
         {trailing ?? (locked ? (
           <Lock
             testID={testID ? `${testID}-lock-icon` : undefined}
@@ -187,7 +189,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       fontWeight: FontWeight.regular,
     },
     tail: {
-      maxWidth: '50%',
+      maxWidth: '44%',
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'flex-end',

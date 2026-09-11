@@ -1,15 +1,18 @@
+jest.mock('../../components/ui/Sheet', () => ({ Sheet: ({ visible, children, ...props }: any) => visible ? React.createElement(require('react-native').View, props, children) : null }));
 import React from 'react';
 import { act, fireEvent, render } from '@testing-library/react-native';
 import { CAPABILITY_MATRIX, type Capabilities } from '@clawket/agent-protocol';
 import { builtInAccents } from '../../theme/accents';
 import { buildTheme } from '../../theme/theme';
 import { FontSize, Motion, Radius, Space } from '../../theme/tokens';
+import type { SharedValue } from 'react-native-reanimated';
 import type { ComposerHandle } from '../../components/ui/Composer';
 import type { UiMessage } from '../../types/chat';
 import { ThreadView, type ThreadCopy, type ThreadViewProps } from './ThreadView';
 
 let mockScheme: 'light' | 'dark' = 'light';
 let mockReducedMotion = false;
+const mockScrollToEnd = jest.fn();
 
 jest.mock('react-native', () => {
   const ReactRuntime = require('react');
@@ -25,6 +28,11 @@ jest.mock('react-native', () => {
     ),
   );
   return {
+    DynamicColorIOS: (variants: unknown) => ({ dynamic: variants }),
+    Keyboard: { dismiss: jest.fn() },
+    PanResponder: { create: (config: Record<string, unknown>) => ({ panHandlers: { __config: config } }) },
+    BackHandler: { addEventListener: jest.fn(() => ({ remove: jest.fn() })) },
+    useWindowDimensions: () => ({ width: 393, height: 852, scale: 3, fontScale: 1 }),
     Linking: {
       openURL: jest.fn(),
     },
@@ -33,6 +41,7 @@ jest.mock('react-native', () => {
       select: (values: Record<string, unknown>) => values.ios ?? values.default,
     },
     Image: host('Image'),
+    ActivityIndicator: host('ActivityIndicator'),
     Pressable: host('Pressable'),
     StyleSheet: {
       absoluteFillObject: {
@@ -49,8 +58,13 @@ jest.mock('react-native', () => {
     Text: host('Text'),
     TextInput: host('TextInput'),
     View: host('View'),
+    ScrollView: host('ScrollView'),
   };
 });
+
+jest.mock('react-i18next', () => ({
+  useTranslation: () => ({ t: (key: string, options?: Record<string, unknown>) => key === 'Yesterday' ? require(`../../i18n/locales/${options?.lng === 'zh-Hans' ? 'zh-Hans' : String(options?.lng || 'en').split('-')[0]}/common.json`).Yesterday : key.replace('{{count}}', String(options?.count ?? '')).replace('{{percent}}', String(options?.percent ?? '')) }),
+}));
 
 jest.mock('react-native-enriched-markdown', () => {
   const ReactRuntime = require('react');
@@ -93,9 +107,11 @@ jest.mock('@shopify/flash-list', () => {
       renderItem: (info: { item: unknown; index: number; target: string }) => React.ReactNode;
       ListHeaderComponent?: React.ReactNode;
       ListFooterComponent?: React.ReactNode;
-    }, ref: unknown) => ReactRuntime.createElement(
+    }, ref: unknown) => {
+      ReactRuntime.useImperativeHandle(ref, () => ({ scrollToEnd: mockScrollToEnd }));
+      return ReactRuntime.createElement(
       View,
-      { ...props, ref },
+      { ...props, data },
       ...data.map((item, index) => ReactRuntime.createElement(
         ReactRuntime.Fragment,
         { key: (item as { id?: string }).id ?? index },
@@ -103,7 +119,7 @@ jest.mock('@shopify/flash-list', () => {
       )),
       ListHeaderComponent,
       ListFooterComponent,
-    )),
+    ); }),
   };
 });
 
@@ -147,6 +163,7 @@ jest.mock('react-native-reanimated', () => {
     },
     FadeIn: createLayoutAnimation('FadeIn'),
     FadeOut: createLayoutAnimation('FadeOut'),
+    LinearTransition: createLayoutAnimation('LinearTransition'),
     ReduceMotion: {
       Always: 'always',
       Never: 'never',
@@ -158,6 +175,7 @@ jest.mock('react-native-reanimated', () => {
     withDelay: jest.fn((_delay: number, value: unknown) => value),
     withRepeat: jest.fn((value: unknown) => value),
     withSequence: jest.fn((...values: unknown[]) => values.at(-1)),
+    withSpring: jest.fn((value: unknown) => value),
     withTiming: jest.fn((value: unknown) => value),
   };
 });
@@ -220,6 +238,21 @@ jest.mock('../../components/chat/ToolDetailModal', () => {
   };
 });
 
+jest.mock('./components/ThreadMessageActionsOverlay', () => {
+  const ReactRuntime = require('react');
+  const { View } = require('react-native');
+  return {
+    ThreadMessageActionsOverlay: (props: Record<string, unknown>) => props.selection
+      ? ReactRuntime.createElement(View, { ...props, testID: 'thread-message-actions' })
+      : null,
+  };
+});
+
+jest.mock('../../services/haptics', () => ({
+  triggerLightImpact: jest.fn(),
+  triggerSelectionHaptic: jest.fn(),
+}));
+
 function flattenStyle(value: unknown): Record<string, unknown> {
   if (!value) return {};
   if (!Array.isArray(value)) return value as Record<string, unknown>;
@@ -232,8 +265,17 @@ const copy: ThreadCopy = {
   openSessions: 'Open sessions',
   add: 'Add',
   voice: 'Voice input',
+  stopVoice: 'Stop voice input',
+  listening: 'Listening…',
+  preparingVoice: 'Preparing voice input…',
   send: 'Send',
   stop: 'Stop',
+  queueSend: 'Send after this reply',
+  queued: 'Queued',
+  sending: 'Sending…',
+  paused: 'Paused',
+  sent: 'Sent',
+  delivered: 'Delivered',
   reconnect: 'Reconnect',
   offline: 'Offline · reconnecting',
   thinking: 'Thinking…',
@@ -312,6 +354,97 @@ describe('ThreadView', () => {
     consoleErrorSpy.mockRestore();
   });
 
+  it('shows the companion loader and honest footer copy while a preview is pending', () => {
+    const props = createProps({
+      state: { kind: 'loading' }, messages: [],
+      sessionPreview: { loading: true, hasHiddenHistory: false, onUpgrade: jest.fn(), onMain: jest.fn() },
+    });
+    const view = render(<ThreadView {...props} />);
+    expect(view.getByTestId('thread-history-loading')).toBeTruthy();
+    expect(view.queryByText('Latest messages · read-only preview')).toBeNull();
+    expect(view.queryByTestId('session-preview-history')).toBeNull();
+    expect(view.queryByTestId('thread-screen-timeline')).toBeNull();
+  });
+
+  it.each(['light', 'dark'] as const)('shows a read-only preview and explicit upgrade in %s mode', (scheme) => {
+    mockScheme = scheme;
+    const onUpgrade = jest.fn();
+    const onMain = jest.fn();
+    const props = createProps({
+      sessionPreview: { hasHiddenHistory: true, onUpgrade, onMain },
+      messages: [{ id: 'visible', role: 'assistant', text: 'Visible preview' }],
+    });
+    const view = render(<ThreadView {...props} />);
+    expect(view.getByText('Visible preview')).toBeTruthy();
+    expect(view.queryByTestId('thread-composer')).toBeNull();
+    expect(view.getByTestId('session-preview-history')).toBeTruthy();
+    fireEvent.press(view.getByTestId('session-preview-upgrade'));
+    expect(onUpgrade).toHaveBeenCalledTimes(1);
+    fireEvent.press(view.getByLabelText('Back to main chat'));
+    expect(onMain).toHaveBeenCalledTimes(1);
+    view.rerender(<ThreadView {...props} sessionPreview={{ hasHiddenHistory: false, onUpgrade, onMain }} />);
+    expect(view.queryByTestId('session-preview-history')).toBeNull();
+    expect(view.getByTestId('session-preview-footer')).toBeTruthy();
+  });
+
+  it('opens actionable reply diagnostics without polluting the transcript', () => {
+    const dismiss = jest.fn();
+    const view = render(<ThreadView {...createProps({
+      sendFailure: 'Model authentication failed. Sign in again on your computer.',
+      sendFailureDetails: 'OAuth session expired. Run claude auth login.',
+      onDismissSendFailure: dismiss,
+    })} />);
+    expect(view.queryByTestId('reply-failure-diagnostic')).toBeNull();
+    fireEvent.press(view.getByTestId('thread-screen-send-error-action'));
+    expect(view.getByTestId('reply-failure-diagnostic').props.children).toContain('claude auth login');
+    expect(view.getByText('Ready to help.')).toBeTruthy();
+    view.unmount();
+  });
+
+  it.each(['light', 'dark'] as const)('keeps the %s timeline and editable draft mounted through reconnect', (scheme) => {
+    mockScheme = scheme;
+    const props = createProps();
+    const view = render(<ThreadView {...props} />);
+    const input = view.getByTestId('thread-screen-composer-input');
+    mockScrollToEnd.mockClear();
+    view.rerender(<ThreadView {...props} state={{ kind: 'reconnecting' }} />);
+    expect(view.getByText('Reconnecting…')).toBeTruthy();
+    expect(view.getByText('Ready to help.')).toBeTruthy();
+    expect(view.queryByTestId('thread-screen-error')).toBeNull();
+    expect(view.queryByTestId('thread-screen-offline')).toBeNull();
+    expect(view.getByTestId('thread-screen-composer-input')).toBe(input);
+    expect(input.props.editable).toBe(true);
+    expect(view.getByTestId('thread-screen-composer-primary').props.accessibilityState.disabled).toBe(true);
+    expect(mockScrollToEnd).not.toHaveBeenCalled();
+    view.rerender(<ThreadView {...props} />);
+    expect(view.queryByText('Reconnecting…')).toBeNull();
+    expect(view.getByTestId('thread-screen-composer-primary').props.accessibilityState.disabled).toBe(false);
+    view.unmount();
+  });
+
+  it.each(['light', 'dark'] as const)('renders readable time groups and refreshes midnight labels in %s', (scheme) => {
+    mockScheme = scheme;
+    jest.useFakeTimers();
+    const timestampMs = new Date(2026, 8, 7, 23, 59).getTime();
+    jest.setSystemTime(timestampMs);
+    const props = createProps({ locale: 'zh-Hans', messages: [
+      { id: 'timed', role: 'user', text: 'Hello', timestampMs },
+    ] });
+    const view = render(<ThreadView {...props} />);
+    const label = () => view.getByTestId('thread-date:message:timed');
+    expect(label().props.children).toBe('23:59');
+    expect(flattenStyle(label().props.style)).toMatchObject({
+      color: buildTheme(scheme, scheme, builtInAccents.iceBlue).colors.inkSecondary,
+      backgroundColor: buildTheme(scheme, scheme, builtInAccents.iceBlue).colors.canvas,
+      textAlign: 'center',
+    });
+    act(() => jest.advanceTimersByTime(60_000));
+    expect(label().props.children).toBe('昨天 23:59');
+    view.rerender(<ThreadView {...props} locale="de" />);
+    expect(label().props.children).toBe('Gestern 23:59');
+    view.unmount();
+  });
+
   it.each(['light', 'dark'] as const)('deep-renders canonical thread chrome in %s mode', (scheme) => {
     mockScheme = scheme;
     const props = createProps({
@@ -329,18 +462,132 @@ describe('ThreadView', () => {
     });
     expect(flattenStyle(view.getByTestId('thread-screen-header-pill').props.style)).toMatchObject({
       borderRadius: Radius.full,
-      backgroundColor: theme.colors.surfaceFloating,
+      backgroundColor: theme.colors.surface,
     });
-    expect(view.getByText('Sonnet · 54% left')).toBeTruthy();
+    expect(view.getByText('Context remaining: 54%')).toBeTruthy();
     expect(view.getByTestId('thread-markdown-message-1').props.markdownStyle.paragraph.fontSize)
       .toBe(FontSize.body);
-    expect(view.getByTestId('thread-screen-timeline').props.inverted).toBe(true);
+    expect(view.getByTestId('thread-screen-timeline').props.inverted).toBeUndefined();
+    expect(view.getByTestId('thread-screen-timeline').props.maintainVisibleContentPosition.startRenderingFromBottom).toBe(true);
+  });
+
+  it.each(['light', 'dark'] as const)('updates manufacturer artwork and preserves model capability in %s mode', (scheme) => {
+    mockScheme = scheme;
+    const props = createProps({ model: 'openrouter/anthropic/claude-sonnet-4-6', onOpenModelPicker: jest.fn() });
+    const view = render(<ThreadView {...props} />);
+    expect(view.getByTestId('thread-model-icon').props.source).toBe(402);
+    expect(view.getByTestId('thread-model-icon').props.accessible).toBe(false);
+    fireEvent.press(view.getByTestId('thread-model-picker'));
+    expect(props.onOpenModelPicker).toHaveBeenCalledTimes(1);
+    view.rerender(<ThreadView {...props} model="openai/gpt-5.4" />);
+    expect(view.getByTestId('thread-model-icon').props.source).toBe(401);
+    view.rerender(<ThreadView {...props} model="custom/private-model" />);
+    expect(view.getByTestId('thread-model-icon').props.color).toBe(buildTheme(scheme, scheme, builtInAccents.iceBlue).colors.inkSecondary);
+    view.rerender(<ThreadView {...props} capabilities={{ ...props.capabilities, models: false }} />);
+    expect(view.queryByTestId('thread-model-picker')).toBeNull();
+  });
+
+  it('uses the saved text size and stamps replies with their time instead of a model label', () => {
+    const view = render(<ThreadView {...createProps({
+      chatFontSize: 20,
+      showAgentAvatar: false,
+      model: 'Current model',
+      messages: [{ id: 'recorded', role: 'assistant', text: 'Earlier reply', modelLabel: 'Original model', timestampMs: Date.now() }],
+    })} />);
+    expect(view.queryByText('Original model')).toBeNull();
+    expect(view.queryByText('Current model')).toBeNull();
+    expect(view.getByTestId('thread-markdown-recorded').props.markdownStyle.paragraph.fontSize).toBe(20);
+    expect(view.getByTestId('thread-message-recorded').props.accessibilityLabel).toBe('Earlier reply');
+    expect(view.getByTestId('thread-meta-recorded')).toBeTruthy();
+    expect(view.queryByTestId('thread-meta-recorded-status')).toBeNull();
+    expect(view.queryByText('Atlas', { includeHiddenElements: true })).toBeTruthy();
+  });
+
+  it('keeps the reply bubble present from send until the first token', () => {
+    const sent: UiMessage = { id: 'usr_1', role: 'user', text: 'Hello', timestampMs: Date.now() };
+    const messageActions = { onCopy: jest.fn(), onToggleFavorite: jest.fn(), onShare: jest.fn() };
+    const view = render(<ThreadView {...createProps({ messages: [sent], isRunning: true, activityLabel: null, input: '', messageActions })} />);
+    // Thinking placeholder shares the live stream id so the row never remounts.
+    expect(view.getByTestId('thread-thinking-streaming')).toHaveTextContent('Thinking…');
+    // Nothing to copy or share yet, so the placeholder has no long-press menu while the sent turn keeps its own.
+    expect(view.getByTestId('thread-message-streaming').props.onLongPress).toBeUndefined();
+    expect(view.getByTestId('thread-message-usr_1').props.onLongPress).toBeDefined();
+    // The header says it with lifting dots, not a second "Thinking…" and not an avatar badge.
+    expect(view.getByTestId('thread-screen-header-pill-working')).toBeTruthy();
+    expect(view.getAllByText('Thinking…')).toHaveLength(1);
+    expect(view.queryByTestId('thread-screen-header-pill-avatar-working')).toBeNull();
+    expect(view.getByTestId('thread-bubble-streaming')).toBeTruthy();
+    expect(flattenStyle(view.getByTestId('thread-bubble-streaming').props.style).minWidth).toBeGreaterThan(0);
+
+    view.rerender(<ThreadView {...createProps({ messages: [sent], isRunning: true, activityLabel: 'Using exec…', input: '' })} />);
+    expect(view.getByTestId('thread-thinking-streaming')).toHaveTextContent('Using exec…');
+
+    const streaming: UiMessage = { id: 'streaming', role: 'assistant', text: 'Partial', streaming: true };
+    view.rerender(<ThreadView {...createProps({ messages: [streaming, sent], isRunning: true, input: '' })} />);
+    expect(view.queryByTestId('thread-thinking-streaming')).toBeNull();
+    expect(view.getAllByTestId('thread-bubble-streaming')).toHaveLength(1);
+    expect(view.getByTestId('thread-markdown-streaming').props.streamingAnimation).toBe(true);
+
+    view.rerender(<ThreadView {...createProps({ messages: [sent], isRunning: false })} />);
+    expect(view.queryByTestId('thread-thinking-streaming')).toBeNull();
+    // Locked and preview threads never show a placeholder.
+    view.rerender(<ThreadView {...createProps({ messages: [sent], isRunning: true, state: { kind: 'locked' }, input: '' })} />);
+    expect(view.queryByTestId('thread-thinking-streaming')).toBeNull();
+  });
+
+  it('marks the user’s own messages with Telegram-style delivery glyphs', () => {
+    const now = Date.now();
+    const turn: UiMessage = { id: 'usr_9', role: 'user', text: 'Ping', timestampMs: now };
+    const view = render(<ThreadView {...createProps({
+      messages: [turn],
+      isRunning: true,
+      input: '',
+      unconfirmedMessageIds: new Set(['usr_9']),
+    })} />);
+    expect(view.getByTestId('thread-meta-usr_9-status').props.accessibilityLabel).toBe('Sending…');
+    expect(view.getByTestId('thread-message-usr_9').props.accessibilityLabel).toBe('Ping · Sending…');
+
+    view.rerender(<ThreadView {...createProps({ messages: [turn], isRunning: true, input: '', unconfirmedMessageIds: new Set() })} />);
+    expect(view.getByTestId('thread-meta-usr_9-status').props.accessibilityLabel).toBe('Sent');
+
+    view.rerender(<ThreadView {...createProps({ messages: [turn], isRunning: true, input: '', runAcknowledged: true })} />);
+    expect(view.getByTestId('thread-meta-usr_9-status').props.accessibilityLabel).toBe('Delivered');
+    expect(view.getByTestId('thread-message-usr_9').props.accessibilityLabel).toBe('Ping · Delivered');
+
+    const reply: UiMessage = { id: 'a1', role: 'assistant', text: 'Pong', timestampMs: now };
+    view.rerender(<ThreadView {...createProps({ messages: [reply, turn] })} />);
+    expect(view.getByTestId('thread-meta-usr_9-status').props.accessibilityLabel).toBe('Delivered');
+    expect(view.queryByTestId('thread-meta-a1-status')).toBeNull();
+
+    // Attachment-only sends carry the meta as a row below the gallery.
+    const photo: UiMessage = { id: 'usr_10', role: 'user', text: '', imageUris: ['file:///a.jpg'], timestampMs: now };
+    view.rerender(<ThreadView {...createProps({ messages: [photo, reply, turn], runAcknowledged: true })} />);
+    expect(view.queryByTestId('thread-bubble-usr_10')).toBeNull();
+    expect(view.getByTestId('thread-meta-usr_10-status').props.accessibilityLabel).toBe('Delivered');
+  });
+
+  it('arms an entrance only for rows that arrive at the tail after mount', () => {
+    const older: UiMessage = { id: 'a0', role: 'assistant', text: 'Earlier' };
+    const view = render(<ThreadView {...createProps({ messages: [older] })} />);
+    expect(flattenStyle(view.getByTestId('thread-entrance-a0').props.style).opacity).toBe(1);
+
+    const sent: UiMessage = { id: 'usr_2', role: 'user', text: 'New' };
+    view.rerender(<ThreadView {...createProps({ messages: [sent, older], isRunning: true, input: '' })} />);
+    expect(flattenStyle(view.getByTestId('thread-entrance-usr_2').props.style).opacity).toBe(0);
+    expect(flattenStyle(view.getByTestId('thread-entrance-streaming').props.style).opacity).toBe(0);
+    expect(flattenStyle(view.getByTestId('thread-entrance-a0').props.style).opacity).toBe(1);
+
+    // History paged in above the reader never animates.
+    const paged: UiMessage = { id: 'h0', role: 'user', text: 'Long ago' };
+    view.rerender(<ThreadView {...createProps({ messages: [sent, older, paged], isRunning: true, input: '' })} />);
+    expect(flattenStyle(view.getByTestId('thread-entrance-h0').props.style).opacity).toBe(1);
   });
 
   it('renders loading, empty, error, offline-cache, and locked permission states', () => {
     const loading = render(<ThreadView {...createProps({ state: { kind: 'loading' } })} />);
     expect(loading.getByTestId('thread-history-loading')).toBeTruthy();
-    expect(loading.getAllByTestId(/thread-history-skeleton-/)).toHaveLength(3);
+    expect(loading.getByTestId('thread-history-loading').props.accessibilityRole).toBe('progressbar');
+    expect(loading.queryAllByTestId(/thread-history-skeleton-/)).toHaveLength(0);
     loading.unmount();
 
     const empty = render(<ThreadView {...createProps({ state: { kind: 'empty' }, messages: [] })} />);
@@ -452,7 +699,7 @@ describe('ThreadView', () => {
 
     fireEvent.press(view.getByTestId('thread-screen-back'));
     fireEvent.press(view.getByTestId('thread-screen-header-pill'));
-    fireEvent.press(view.getByTestId('thread-screen-settings'));
+    fireEvent.press(view.getByTestId('thread-screen-sessions'));
     fireEvent.changeText(view.getByTestId('thread-screen-composer-input'), 'New draft');
     const pastedFile = {
       uri: 'file:///tmp/pasted.pdf',
@@ -463,9 +710,9 @@ describe('ThreadView', () => {
     fireEvent(view.getByTestId('thread-screen-composer-input'), 'paste', null, [pastedFile]);
     fireEvent(view.getByTestId('thread-screen-composer-input'), 'paste', 'native error', []);
     fireEvent.press(view.getByTestId('thread-screen-composer-add'));
-    fireEvent.press(view.getByTestId('thread-screen-composer-voice'));
+    expect(view.queryByTestId('thread-screen-composer-voice')).toBeNull();
     fireEvent.press(view.getByTestId('thread-screen-composer-primary'));
-    view.getByTestId('thread-screen-timeline').props.onEndReached();
+    view.getByTestId('thread-screen-timeline').props.onStartReached();
     fireEvent.press(view.getByTestId('thread-run-tool-1'));
     fireEvent.press(view.getByLabelText('1 attachments'));
     fireEvent.press(view.getByTestId('thread-approval-approval-1-primary'));
@@ -479,6 +726,8 @@ describe('ThreadView', () => {
     expect(onPasteFiles).toHaveBeenCalledWith([pastedFile]);
     expect(onPasteFailed).toHaveBeenCalledTimes(1);
     expect(onOpenAddMenu).toHaveBeenCalledTimes(1);
+    const emptyComposer = render(<ThreadView {...createProps({ input: '', onVoice })} />);
+    fireEvent.press(emptyComposer.getByTestId('thread-screen-composer-voice'));
     expect(onVoice).toHaveBeenCalledTimes(1);
     expect(onSend).toHaveBeenCalledTimes(1);
     expect(onLoadMoreHistory).toHaveBeenCalledTimes(1);
@@ -495,6 +744,34 @@ describe('ThreadView', () => {
       ['request-1', 'allow-always'],
       ['request-1', 'deny'],
     ]);
+  });
+
+  it('shows dictation progress in the composer and keeps a stop control while listening', () => {
+    const onVoice = jest.fn();
+    const level = { value: 0.5 } as SharedValue<number>;
+    const view = render(<ThreadView {...createProps({ input: '', onVoice, voiceState: 'authorizing', voiceLevel: level })} />);
+    expect(view.getByTestId('thread-screen-composer-input').props.placeholder).toBe('Preparing voice input…');
+    expect(view.queryByTestId('thread-screen-composer-voice')).toBeNull();
+    expect(view.getByTestId('thread-screen-composer-voice-stop').props.accessibilityLabel).toBe('Stop voice input');
+
+    view.rerender(<ThreadView {...createProps({ input: 'Dictated draft', onVoice, voiceState: 'listening', voiceLevel: level })} />);
+    const input = view.getByTestId('thread-screen-composer-input');
+    expect(input.props.placeholder).toBe('Listening…');
+    expect(input.props.editable).toBe(false);
+    expect(view.queryByTestId('thread-screen-composer-primary')).toBeNull();
+    fireEvent.press(view.getByTestId('thread-screen-composer-voice-stop'));
+    expect(onVoice).toHaveBeenCalledTimes(1);
+
+    view.rerender(<ThreadView {...createProps({ input: 'Dictated draft', onVoice, voiceState: 'idle', voiceLevel: level })} />);
+    expect(view.getByTestId('thread-screen-composer-input').props.placeholder).toBe('Ask Atlas');
+    expect(view.getByTestId('thread-screen-composer-input').props.editable).toBe(true);
+    expect(view.queryByTestId('thread-screen-composer-voice-stop')).toBeNull();
+    expect(view.getByTestId('thread-screen-composer-primary')).toBeTruthy();
+
+    // Without a voice handler the state is ignored and the ordinary placeholder stays.
+    view.rerender(<ThreadView {...createProps({ input: '', onVoice: undefined, voiceState: 'listening' })} />);
+    expect(view.getByTestId('thread-screen-composer-input').props.placeholder).toBe('Ask Atlas');
+    expect(view.queryByTestId('thread-screen-composer-voice-stop')).toBeNull();
   });
 
   it('renders pair requests behind pairRequests without the exec long-press action', () => {
@@ -719,11 +996,10 @@ describe('ThreadView', () => {
     expect(view.getByTestId(
       'thread-cron-run-hermes-digest-run-detail',
     ).props.children).toEqual(expect.arrayContaining(['10:55 AM']));
-    expect(view.getByTestId('thread-cron-run-hermes-digest-run').props.onPress).toBeUndefined();
-    expect(view.getAllByTestId(/^thread-date:/)).toHaveLength(2);
-    expect(flattenStyle(
-      view.getByTestId('thread-cron-run-nightly-run-status').props.style,
-    )).toMatchObject({ backgroundColor: buildTheme('light', 'light', builtInAccents.iceBlue).colors.bad });
+    fireEvent.press(view.getByTestId('thread-cron-run-hermes-digest-run'));
+    expect(view.getByTestId('thread-run-result')).toBeTruthy();
+    expect(view.getAllByTestId(/^thread-date:/)).toHaveLength(3);
+    expect(view.queryByTestId('thread-cron-run-nightly-run-status')).toBeNull();
     expect(flattenStyle(
       view.getByTestId('thread-cron-run-nightly-run-detail-status').props.style,
     )).toMatchObject({ color: buildTheme('light', 'light', builtInAccents.iceBlue).colors.bad });
@@ -736,6 +1012,7 @@ describe('ThreadView', () => {
       'agent:atlas:subagent:worker',
       'atlas',
       'subagent',
+      expect.objectContaining({ kind: 'subagent' }),
     );
 
     fireEvent.press(view.getByTestId('thread-cron-run-nightly-run'));
@@ -743,6 +1020,7 @@ describe('ThreadView', () => {
       'agent:atlas:cron:nightly',
       'atlas',
       'cron',
+      expect.objectContaining({ kind: 'cron' }),
     );
 
     fireEvent.press(view.getByTestId('thread-run-tool-details'));
@@ -866,7 +1144,7 @@ describe('ThreadView', () => {
     const onSelectSlashCommand = jest.fn();
     const onDismissSlashSuggestions = jest.fn();
     const onSelectThinkingLevel = jest.fn();
-    const onMessageLongPress = jest.fn();
+    const messageActions = { onCopy: jest.fn(), onToggleFavorite: jest.fn(), onShare: jest.fn() };
     const message: UiMessage = {
       id: 'favorite-1',
       role: 'assistant',
@@ -882,7 +1160,7 @@ describe('ThreadView', () => {
       messages: [message],
       input: '/st',
       favoriteMessageIds: new Set([message.id]),
-      onMessageLongPress,
+      messageActions,
       pendingAttachments: [{
         uri: 'file://pending.jpg',
         base64: 'preview',
@@ -920,15 +1198,162 @@ describe('ThreadView', () => {
     expect(slash.props.suggestions).toEqual([command]);
     act(() => slash.props.onSelect(command));
     expect(onSelectSlashCommand).toHaveBeenCalledWith(command);
-    fireEvent.press(view.getByTestId('thread-screen-composer-region').findByProps({ accessible: false }));
+    fireEvent.press(view.getByTestId('thread-screen-dismiss-slash-suggestions'));
     expect(onDismissSlashSuggestions).toHaveBeenCalledTimes(1);
 
     expect(view.getByTestId('thread-screen-thinking-level')).toBeTruthy();
     act(() => view.getByTestId('thread-thinking-menu').props.onSelect('low'));
     expect(onSelectThinkingLevel).toHaveBeenCalledWith('low');
     expect(view.getByTestId(`thread-favorite-${message.id}`)).toBeTruthy();
+    expect(view.queryByTestId('thread-message-actions')).toBeNull();
+    const { triggerLightImpact } = require('../../services/haptics');
+    triggerLightImpact.mockClear();
     fireEvent(view.getByTestId(`thread-message-${message.id}`), 'longPress');
-    expect(onMessageLongPress).toHaveBeenCalledWith(message);
+    expect(triggerLightImpact).toHaveBeenCalledTimes(1);
+    expect(require('react-native').Keyboard.dismiss).toHaveBeenCalled();
+    const overlay = view.getByTestId('thread-message-actions');
+    expect(overlay.props.selection).toMatchObject({ messageId: message.id, role: 'assistant', anchor: null });
+    expect(typeof overlay.props.selection.remeasure).toBe('function');
+    expect(overlay.props.message).toBe(message);
+    expect(overlay.props.favorited).toBe(true);
+    expect(overlay.props.contentInset).toBe(Space.lg);
+    expect(overlay.props.onCopy).toBe(messageActions.onCopy);
+    expect(overlay.props.onToggleFavorite).toBe(messageActions.onToggleFavorite);
+    expect(overlay.props.onShare).toBe(messageActions.onShare);
+    // A stale measurement closure reports nothing instead of the wrong frame.
+    const measured = jest.fn();
+    overlay.props.selection.remeasure(measured);
+    expect(measured).toHaveBeenCalledWith(null);
+    act(() => overlay.props.onClosed());
+    expect(view.queryByTestId('thread-message-actions')).toBeNull();
+  });
+
+  it('lifts only the message block into the actions overlay and drops identity chrome', () => {
+    const messageActions = { onCopy: jest.fn(), onToggleFavorite: jest.fn(), onShare: jest.fn() };
+    const message: UiMessage = { id: 'reply-1', role: 'assistant', text: 'Lifted reply', modelLabel: 'Recorded model' };
+    const view = render(<ThreadView {...createProps({
+      messages: [message],
+      showAgentAvatar: true,
+      messageActions,
+      favoriteMessageIds: new Set([message.id]),
+    })} />);
+    // The optional signature shows the name only; the model label is gone for good.
+    expect(view.getAllByText('Atlas').length).toBeGreaterThan(1);
+    expect(view.queryByText('Recorded model')).toBeNull();
+    fireEvent(view.getByTestId(`thread-message-${message.id}`), 'longPress');
+    const overlay = view.getByTestId('thread-message-actions');
+    const clone = render(<>{overlay.props.renderMessage(message, 320)}</>);
+    expect(clone.queryByText('Atlas')).toBeNull();
+    expect(clone.queryByText('Recorded model')).toBeNull();
+    expect(clone.getByTestId(`thread-bubble-${message.id}`)).toBeTruthy();
+    expect(clone.getByTestId(`thread-favorite-${message.id}`)).toBeTruthy();
+    expect(flattenStyle(clone.toJSON()?.props.style)).toMatchObject({
+      width: 320,
+      paddingHorizontal: Space.lg,
+      paddingTop: Space.lg,
+      paddingBottom: Space.md,
+    });
+  });
+
+  it('does not arm the long-press gesture or overlay without message actions', () => {
+    const message: UiMessage = { id: 'plain-1', role: 'user', text: 'No menu here' };
+    const view = render(<ThreadView {...createProps({ messages: [message] })} />);
+    const row = view.getByTestId(`thread-message-${message.id}`);
+    expect(row.props.onLongPress).toBeUndefined();
+    expect(row.props.accessibilityRole).toBeUndefined();
+    expect(row.props.accessibilityActions).toBeUndefined();
+    expect(view.queryByTestId('thread-message-actions')).toBeNull();
+  });
+
+  it('exposes the message actions to assistive technology as a long-press action', () => {
+    const messageActions = { onCopy: jest.fn(), onToggleFavorite: jest.fn(), onShare: jest.fn() };
+    const message: UiMessage = { id: 'a11y-1', role: 'assistant', text: 'Reachable reply' };
+    const view = render(<ThreadView {...createProps({ messages: [message], messageActions })} />);
+    const row = view.getByTestId(`thread-message-${message.id}`);
+    expect(row.props.accessibilityActions).toEqual([{ name: 'longpress' }]);
+    act(() => row.props.onAccessibilityAction({ nativeEvent: { actionName: 'activate' } }));
+    expect(view.queryByTestId('thread-message-actions')).toBeNull();
+    act(() => row.props.onAccessibilityAction({ nativeEvent: { actionName: 'longpress' } }));
+    expect(view.getByTestId('thread-message-actions').props.selection.messageId).toBe(message.id);
+  });
+
+  it('closes the actions overlay when the session changes', () => {
+    const messageActions = { onCopy: jest.fn(), onToggleFavorite: jest.fn(), onShare: jest.fn() };
+    const message: UiMessage = { id: 'switch-1', role: 'user', text: 'Before switch' };
+    const view = render(<ThreadView {...createProps({ messages: [message], messageActions })} />);
+    fireEvent(view.getByTestId(`thread-message-${message.id}`), 'longPress');
+    expect(view.getByTestId('thread-message-actions').props.selection.role).toBe('user');
+    view.rerender(<ThreadView {...createProps({ messages: [message], messageActions, sessionKey: 'agent:atlas:other' })} />);
+    expect(view.queryByTestId('thread-message-actions')).toBeNull();
+  });
+
+  it('renders queued messages dimmed with a state caption and opens their actions on tap', () => {
+    const messageActions = { onCopy: jest.fn(), onToggleFavorite: jest.fn(), onShare: jest.fn() };
+    const queuedMessageActions = {
+      canSendNow: false,
+      onSendNow: jest.fn(),
+      onEdit: jest.fn(),
+      onRemove: jest.fn(),
+    };
+    const sent: UiMessage = { id: 'sent-1', role: 'user', text: 'Already sent', timestampMs: 1_000 };
+    const queued: UiMessage = { id: 'usr_2_q1', role: 'user', text: 'Later please', delivery: 'queued' };
+    const view = render(<ThreadView {...createProps({
+      messages: [queued, sent],
+      isRunning: true,
+      input: 'draft',
+      canSend: true,
+      onCancel: jest.fn(),
+      messageActions,
+      queuedMessageActions,
+    })} />);
+
+    // The queued bubble sits after the sent one and is visibly provisional.
+    expect(view.getByText('Queued')).toBeTruthy();
+    expect(view.getByTestId('thread-delivery-caption-usr_2_q1')).toBeTruthy();
+    expect(view.getByTestId('thread-message-usr_2_q1').props.accessibilityLabel).toBe('Later please · Queued');
+    expect(view.queryByTestId('thread-delivery-caption-sent-1')).toBeNull();
+    expect(flattenStyle(view.getByTestId('thread-delivery-usr_2_q1').props.style).opacity).toBeLessThan(1);
+    expect(flattenStyle(view.getByTestId('thread-delivery-sent-1').props.style).opacity).toBe(1);
+    // The draft exposes both Stop and the queue Send while the run is active.
+    expect(view.getByTestId('thread-screen-composer-stop')).toBeTruthy();
+    expect(view.getByTestId('thread-screen-composer-primary').props.accessibilityLabel).toBe('Send after this reply');
+
+    // A plain tap opens the same lifted menu as a long press, with queue actions attached.
+    expect(view.getByTestId('thread-message-sent-1').props.onPress).toBeUndefined();
+    fireEvent.press(view.getByTestId('thread-message-usr_2_q1'));
+    const overlay = view.getByTestId('thread-message-actions');
+    expect(overlay.props.selection).toMatchObject({ messageId: queued.id, role: 'user' });
+    expect(overlay.props.queuedActions).toMatchObject({ canSendNow: false, editable: true });
+    act(() => overlay.props.queuedActions.onEdit(queued));
+    expect(queuedMessageActions.onEdit).toHaveBeenCalledWith(queued);
+    act(() => overlay.props.onClosed());
+
+    // Paused and sending states change the caption and lock editing while sending.
+    view.rerender(<ThreadView {...createProps({
+      messages: [{ ...queued, delivery: 'held' }, sent],
+      messageActions,
+      queuedMessageActions: { ...queuedMessageActions, canSendNow: true },
+    })} />);
+    expect(view.getByText('Paused')).toBeTruthy();
+    fireEvent.press(view.getByTestId('thread-message-usr_2_q1'));
+    expect(view.getByTestId('thread-message-actions').props.queuedActions).toMatchObject({ canSendNow: true, editable: true });
+    act(() => view.getByTestId('thread-message-actions').props.onClosed());
+
+    view.rerender(<ThreadView {...createProps({
+      messages: [{ ...queued, delivery: 'sending' }, sent],
+      messageActions,
+      queuedMessageActions: { ...queuedMessageActions, canSendNow: true },
+    })} />);
+    expect(view.getByText('Sending…')).toBeTruthy();
+    fireEvent.press(view.getByTestId('thread-message-usr_2_q1'));
+    expect(view.getByTestId('thread-message-actions').props.queuedActions).toMatchObject({ canSendNow: false, editable: false });
+    act(() => view.getByTestId('thread-message-actions').props.onClosed());
+
+    // Without queue actions a queued bubble is inert on tap and has no overlay actions.
+    view.rerender(<ThreadView {...createProps({ messages: [queued, sent], messageActions })} />);
+    expect(view.getByTestId('thread-message-usr_2_q1').props.onPress).toBeUndefined();
+    fireEvent(view.getByTestId('thread-message-usr_2_q1'), 'longPress');
+    expect(view.getByTestId('thread-message-actions').props.queuedActions).toBeUndefined();
   });
 
   it('keeps the Hermes pending-image bar usable without a file chooser', () => {
@@ -962,7 +1387,8 @@ describe('ThreadView', () => {
       activityLabel: 'Using exec…',
       onCancel,
     })} />);
-    expect(running.getByText('Using exec…')).toBeTruthy();
+    // Header subtitle and the reply placeholder both carry the live activity.
+    expect(running.getAllByText('Using exec…').length).toBeGreaterThanOrEqual(1);
     fireEvent.press(running.getByTestId('thread-screen-composer-primary'));
     expect(onCancel).toHaveBeenCalledTimes(1);
     running.unmount();
@@ -998,7 +1424,8 @@ describe('ThreadView', () => {
     expect(unsupported.getByTestId('thread-screen-composer-input').type).toBe('TextInput');
     expect(unsupported.queryByTestId('thread-approval-approval-hidden')).toBeNull();
     expect(unsupported.queryByText('Sonnet')).toBeNull();
-    expect(unsupported.getByTestId('thread-screen-header-pill').props.onPress).toBeUndefined();
+    expect(unsupported.queryByTestId('thread-screen-sessions')).toBeNull();
+    expect(unsupported.getByTestId('thread-screen-header-pill').props.onPress).toBeDefined();
     expect(unsupported.getByTestId('thread-screen-composer-primary').props.accessibilityState)
       .toEqual({ disabled: true });
   });
@@ -1034,4 +1461,139 @@ describe('ThreadView', () => {
       .toEqual({ disabled: true });
     expect(view.getByText('Expired')).toBeTruthy();
   });
+});
+
+it('keeps expanded tool activity open through updates and opens full tool details', () => {
+  const first: UiMessage = { id: 'a', role: 'tool', text: '', toolName: 'bash', toolArgs: JSON.stringify({ command: 'git status' }), toolStatus: 'success' };
+  const second: UiMessage = { ...first, id: 'b', toolStatus: 'running' };
+  const props = createProps({ messages: [second, first] });
+  const view = render(<ThreadView {...props} />);
+  expect(view.queryByTestId('thread-run-a')).toBeNull();
+  mockScrollToEnd.mockClear();
+  fireEvent.press(view.getByTestId('tools:a'));
+  expect(view.getByTestId('tools:a').props.accessibilityState).toEqual({ expanded: true });
+  const timeline = view.getByTestId('thread-screen-timeline');
+  expect(timeline.props.data.map((item: any) => item.key)).toEqual(['tools:a', 'message:a', 'message:b']);
+  expect(timeline.props.maintainVisibleContentPosition.autoscrollToBottomThreshold).toBeUndefined();
+  fireEvent.scroll(timeline, scrollEvent(0));
+  act(() => timeline.props.onContentSizeChange(400, 2300));
+  expect(view.getByTestId('thread-screen-scroll-to-bottom')).toBeTruthy();
+  expect(mockScrollToEnd).not.toHaveBeenCalled();
+  view.rerender(<ThreadView {...props} messages={[{ ...first, id: 'c' }, { ...second, toolStatus: 'success' }, first]} />);
+  expect(view.getByTestId('tools:a').props.accessibilityState).toEqual({ expanded: true });
+  expect(view.getByTestId('thread-screen-timeline').props.data.map((item: any) => item.key)).toEqual(['tools:a', 'message:a', 'message:b', 'message:c']);
+  expect(view.getByTestId('thread-run-c')).toBeTruthy();
+  fireEvent.press(view.getByTestId('thread-run-a'));
+  expect(view.getByTestId('thread-tool-detail').props.args).toEqual(JSON.stringify({ command: 'git status' }));
+});
+
+it('uses a human title for a new session whose backend title is only its internal key', () => {
+  const key = 'agent:main:dashboard:new-session';
+  const view = render(<ThreadView {...createProps({ sessionKey: key, sessionTitle: key, isMainSession: false })} />);
+  expect(view.getByText('Atlas · New session')).toBeTruthy();
+  expect(view.queryByText(key)).toBeNull();
+});
+
+it('preserves the native draft and timeline while entering and leaving full-screen composition', () => {
+  const view = render(<ThreadView {...createProps({ input: 'First\nSecond\nThird' })} />);
+  const input = view.getByTestId('thread-screen-composer-input');
+  const timeline = view.getByTestId('thread-screen-timeline');
+  fireEvent(view.getByTestId('thread-screen-composer-region'), 'layout', { nativeEvent: { layout: { height: 172 } } });
+  mockScrollToEnd.mockClear();
+  fireEvent.press(view.getByTestId('thread-screen-composer-expand'));
+  expect(view.getByTestId('thread-screen-composer-input')).toBe(input);
+  expect(view.getByTestId('thread-screen-timeline', { includeHiddenElements: true })).toBe(timeline);
+  expect(view.getByTestId('thread-screen-composer-placeholder', { includeHiddenElements: true }).props.style.height).toBe(172);
+  expect(view.queryByTestId('thread-screen-back')).toBeNull();
+  fireEvent.press(view.getByTestId('thread-screen-composer-collapse'));
+  expect(view.getByTestId('thread-screen-composer-input')).toBe(input);
+  expect(mockScrollToEnd).not.toHaveBeenCalled();
+});
+
+it('follows keyboard and composer size changes only when the reader was at the bottom', () => {
+  const view = render(<ThreadView {...createProps()} />);
+  const list = view.getByTestId('thread-screen-timeline');
+  mockScrollToEnd.mockClear();
+  fireEvent(list, 'layout', { nativeEvent: { layout: { height: 360 } } });
+  expect(mockScrollToEnd).toHaveBeenCalledWith({ animated: false });
+  mockScrollToEnd.mockClear();
+  fireEvent(list, 'scrollBeginDrag');
+  fireEvent(list, 'layout', { nativeEvent: { layout: { height: 300 } } });
+  expect(mockScrollToEnd).not.toHaveBeenCalled();
+});
+
+const scrollEvent = (remaining: number) => ({ nativeEvent: {
+  contentSize: { height: 2000, width: 393 },
+  layoutMeasurement: { height: 600, width: 393 },
+  contentOffset: { y: 1400 - remaining, x: 0 },
+} });
+
+it.each(['light', 'dark'] as const)('reveals the bottom action during scrolling without threshold flicker (%s)', (scheme) => {
+  mockScheme = scheme;
+  const view = render(<ThreadView {...createProps()} />);
+  const list = view.getByTestId('thread-screen-timeline');
+  const visible = () => view.getByTestId('thread-screen-scroll-to-bottom-container', { includeHiddenElements: true }).props.pointerEvents === 'auto';
+  expect(visible()).toBe(false);
+  fireEvent(list, 'scrollBeginDrag');
+  fireEvent.scroll(list, scrollEvent(100));
+  expect(visible()).toBe(true);
+  fireEvent.scroll(list, scrollEvent(70));
+  expect(visible()).toBe(true);
+  fireEvent(list, 'momentumScrollEnd', scrollEvent(10));
+  expect(visible()).toBe(false);
+  fireEvent.scroll(list, scrollEvent(-30));
+  expect(visible()).toBe(false);
+  mockScheme = 'light';
+});
+
+it('performs one native animated return, defers streaming snaps, then resumes bottom following', () => {
+  const view = render(<ThreadView {...createProps()} />);
+  const list = view.getByTestId('thread-screen-timeline');
+  fireEvent(list, 'scrollBeginDrag');
+  fireEvent.scroll(list, scrollEvent(800));
+  mockScrollToEnd.mockClear();
+  fireEvent.press(view.getByTestId('thread-screen-scroll-to-bottom'));
+  expect(mockScrollToEnd).toHaveBeenCalledTimes(1);
+  expect(mockScrollToEnd).toHaveBeenLastCalledWith({ animated: true });
+  fireEvent.scroll(list, scrollEvent(300));
+  fireEvent(list, 'contentSizeChange', 393, 2100);
+  fireEvent(list, 'layout', { nativeEvent: { layout: { height: 600 } } });
+  expect(mockScrollToEnd).toHaveBeenCalledTimes(1);
+  fireEvent(list, 'momentumScrollEnd', scrollEvent(100));
+  expect(mockScrollToEnd).toHaveBeenLastCalledWith({ animated: false });
+  mockScrollToEnd.mockClear();
+  fireEvent(list, 'contentSizeChange', 393, 2200);
+  expect(mockScrollToEnd).toHaveBeenCalledWith({ animated: false });
+});
+
+it('lets a new drag interrupt the return and resets the action when switching sessions', () => {
+  const props = createProps();
+  const view = render(<ThreadView {...props} />);
+  const list = view.getByTestId('thread-screen-timeline');
+  fireEvent(list, 'scrollBeginDrag');
+  fireEvent.scroll(list, scrollEvent(900));
+  fireEvent.press(view.getByTestId('thread-screen-scroll-to-bottom'));
+  fireEvent(list, 'scrollBeginDrag');
+  fireEvent.scroll(list, scrollEvent(500));
+  mockScrollToEnd.mockClear();
+  fireEvent(list, 'momentumScrollEnd', scrollEvent(500));
+  fireEvent(list, 'contentSizeChange', 393, 2100);
+  expect(mockScrollToEnd).not.toHaveBeenCalled();
+  expect(view.getByTestId('thread-screen-scroll-to-bottom')).toBeTruthy();
+  view.rerender(<ThreadView {...props} sessionKey="another-session" />);
+  expect(view.queryByTestId('thread-screen-scroll-to-bottom')).toBeNull();
+});
+
+it('returns immediately under reduced motion and keeps following subsequent content', () => {
+  mockReducedMotion = true;
+  const view = render(<ThreadView {...createProps()} />);
+  const list = view.getByTestId('thread-screen-timeline');
+  fireEvent(list, 'scrollBeginDrag');
+  fireEvent.scroll(list, scrollEvent(800));
+  mockScrollToEnd.mockClear();
+  fireEvent.press(view.getByTestId('thread-screen-scroll-to-bottom'));
+  expect(mockScrollToEnd).toHaveBeenLastCalledWith({ animated: false });
+  fireEvent(list, 'contentSizeChange', 393, 2100);
+  expect(mockScrollToEnd).toHaveBeenCalledTimes(2);
+  mockReducedMotion = false;
 });

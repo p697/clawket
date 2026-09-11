@@ -1,10 +1,10 @@
+import { formatThreadTimestamp } from './timestamps';
 import type { AdapterErrorCode, Capabilities, CronJob } from '@clawket/agent-protocol';
 import type { UiMessage } from '../../types/chat';
 import {
   buildCronRunSeeds,
   buildThreadTimelineItems,
   deriveThreadContentState,
-  formatThreadLocalDate,
   formatThreadLocalTime,
   resolveContextRemainingPercent,
   resolveThreadErrorCode,
@@ -33,6 +33,9 @@ const ADAPTER_ERROR_CODES = [
 ] as const satisfies readonly AdapterErrorCode[];
 
 describe('Thread model', () => {
+  it('shows a resumable paused state instead of waiting forever for an absent adapter', () => {
+    expect(deriveThreadContentState({ paused: true, historyLoaded: false, hasMessages: false, connectionState: 'idle', targetSessionReady: false })).toEqual({ kind: 'offline' });
+  });
   it('prioritizes locked and actionable error states over runtime content', () => {
     expect(deriveThreadContentState({
       locked: true,
@@ -72,7 +75,7 @@ describe('Thread model', () => {
       historyLoaded: true,
       hasMessages: true,
       connectionState: 'connecting',
-    })).toEqual({ kind: 'loading' });
+    })).toEqual({ kind: 'ready' });
     expect(deriveThreadContentState({
       historyLoaded: true,
       hasMessages: false,
@@ -293,14 +296,16 @@ describe('Thread model', () => {
 
     expect(timeline.map((item) => item.key)).toEqual([
       'message:newer',
+      'date:message:newer',
       'run:subagent:agent:atlas:subagent:worker',
-      'date:2026-09-05',
+      'date:run:subagent:agent:atlas:subagent:worker',
       'message:older',
-      'date:2026-09-04',
+      'date:message:older',
     ]);
     expect(timeline.filter((item) => item.type === 'date').map((item) => item.label)).toEqual([
-      formatThreadLocalDate(newer, 'en-US'),
-      formatThreadLocalDate(older, 'en-US'),
+      formatThreadTimestamp(newer, 'en-US'),
+      formatThreadTimestamp(runAt, 'en-US'),
+      formatThreadTimestamp(older, 'en-US'),
     ]);
     expect(formatThreadLocalTime(runAt, 'en-US')).toBe(
       new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' }).format(runAt),
@@ -322,8 +327,14 @@ describe('Thread model', () => {
     expect(timeline.map((item) => item.key)).toEqual([
       'message:first',
       'message:second',
-      'date:2026-09-05',
+      'date:message:second',
       'message:without-time',
     ]);
   });
+});
+
+
+it('preserves cached content during recovery before surfacing a failure', () => {
+  expect(deriveThreadContentState({ recovering: true, switching: true, historyLoaded: true, hasMessages: true, connectionState: 'reconnecting', error: { code: 'timeout', message: 'health timed out' } })).toEqual({ kind: 'reconnecting' });
+  expect(deriveThreadContentState({ paused: true, recovering: true, historyLoaded: true, hasMessages: true, connectionState: 'idle' })).toEqual({ kind: 'offline' });
 });

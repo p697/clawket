@@ -33,11 +33,12 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export const FLOATING_BUTTON_ICON_SIZE = ControlSize.floatingButton / 2;
 export const FLOATING_BUTTON_STROKE_WIDTH = 1.75;
+export const FLOATING_PRIMARY_BUTTON_SIZE = 64;
 
 const DISABLED_OPACITY = 0.4;
 const PRESSED_OPACITY = 0.88;
 
-export type FloatingButtonAppearance = 'surface' | 'quiet' | 'accent' | 'ink' | 'destructive';
+export type FloatingButtonAppearance = 'surface' | 'quiet' | 'plain' | 'accent' | 'ink' | 'destructive';
 
 export type FloatingButtonBadge = Readonly<{
   tone: 'accent' | 'bad';
@@ -49,6 +50,7 @@ export type FloatingButtonProps = Readonly<{
   onPress: () => void;
   accessibilityLabel: string;
   appearance?: FloatingButtonAppearance;
+  size?: 'default' | 'primary';
   disabled?: boolean;
   badge?: FloatingButtonBadge;
   iconSize?: number;
@@ -88,6 +90,7 @@ export function resolveFloatingButtonChrome(
   appearance: FloatingButtonAppearance,
 ): FloatingButtonChrome {
   const lifted = createFloatingSurfaceStyle(colors, scheme);
+  if (appearance === 'plain') return { surface: { backgroundColor: 'transparent' }, iconColor: colors.ink };
   if (appearance === 'quiet') {
     return {
       surface: { backgroundColor: colors.surface },
@@ -127,10 +130,11 @@ export function FloatingButton({
   icon: Icon,
   onPress,
   accessibilityLabel,
-  appearance = 'surface',
+  appearance = 'plain',
+  size = 'default',
   disabled = false,
   badge,
-  iconSize = FLOATING_BUTTON_ICON_SIZE,
+  iconSize,
   iconColor,
   strokeWidth = FLOATING_BUTTON_STROKE_WIDTH,
   style,
@@ -145,7 +149,7 @@ export function FloatingButton({
     [appearance, theme.colors, theme.scheme],
   );
   const animatedStyle = useAnimatedStyle(() => ({
-    opacity: pressedOpacity.value,
+    opacity: disabled ? (appearance === 'quiet' ? 1 : DISABLED_OPACITY) : pressedOpacity.value,
     transform: [{ scale: scale.value }],
   }));
   const handlePressIn = useCallback(() => {
@@ -174,14 +178,14 @@ export function FloatingButton({
       style={[
         styles.button,
         chrome.surface,
-        disabled ? styles.disabled : null,
+        size === 'primary' ? styles.primaryButton : null,
         style,
         animatedStyle,
       ]}
     >
       <Icon
-        size={iconSize}
-        color={iconColor ?? chrome.iconColor}
+        size={iconSize ?? (size === 'primary' ? FLOATING_PRIMARY_BUTTON_SIZE / 2 : FLOATING_BUTTON_ICON_SIZE)}
+        color={disabled && appearance === 'quiet' ? theme.colors.inkTertiary : iconColor ?? chrome.iconColor}
         strokeWidth={strokeWidth}
       />
       {badge ? (
@@ -213,8 +217,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  disabled: {
-    opacity: DISABLED_OPACITY,
+  primaryButton: {
+    width: FLOATING_PRIMARY_BUTTON_SIZE,
+    height: FLOATING_PRIMARY_BUTTON_SIZE,
   },
   dotBadge: {
     position: 'absolute',

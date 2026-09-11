@@ -33,7 +33,7 @@ function connection(
 }
 
 describe('AccountSettings model', () => {
-  it('derives every page state from bootstrap, connection, and permission context', () => {
+  it('keeps local preferences available through connection failures and membership changes', () => {
     const ready = {
       connectionInitialized: true,
       connectionSwitching: false,
@@ -47,7 +47,8 @@ describe('AccountSettings model', () => {
     expect(resolveAccountSettingsRuntimeStatus({
       ...ready,
       permissionsLoading: true,
-    })).toEqual({ kind: 'loading' });
+    })).toEqual({ kind: 'ready' });
+    expect(resolveAccountSettingsRuntimeStatus({ ...ready, connectionInitialized: false })).toEqual({ kind: 'loading' });
     expect(resolveAccountSettingsRuntimeStatus({
       ...ready,
       connectionCount: 0,
@@ -57,15 +58,15 @@ describe('AccountSettings model', () => {
     expect(resolveAccountSettingsRuntimeStatus({
       ...ready,
       activeState: 'reconnecting',
-    })).toEqual({ kind: 'offline' });
+    })).toEqual({ kind: 'ready' });
     expect(resolveAccountSettingsRuntimeStatus({
       ...ready,
       permissionReason: 'gatewayConnections',
-    })).toEqual({ kind: 'permission', reason: 'gatewayConnections' });
+    })).toEqual({ kind: 'ready' });
     expect(resolveAccountSettingsRuntimeStatus({
       ...ready,
       connectionErrorCode: 'probe',
-    })).toEqual({ kind: 'error', code: 'probe' });
+    })).toEqual({ kind: 'ready' });
     expect(resolveAccountSettingsRuntimeStatus(ready)).toEqual({ kind: 'ready' });
   });
 
@@ -140,7 +141,6 @@ describe('AccountSettings model', () => {
     ]);
     expect(groups.find((group) => group.id === 'appearance')?.rows.map((row) => row.id)).toEqual([
       'theme',
-      'accent',
       'chat-appearance',
     ]);
   });

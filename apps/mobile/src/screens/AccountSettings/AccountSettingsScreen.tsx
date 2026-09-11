@@ -1,14 +1,18 @@
-import React, { Fragment, useMemo } from 'react';
+import React, { Fragment, useMemo, useState } from 'react';
 import {
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-import { ChevronLeft } from 'lucide-react-native';
+import { Languages, ChevronLeft, Cable, SlidersHorizontal, MessageCircle, CircleHelp, Info, Sparkles } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AccountPreferenceSheet } from './AccountPreferenceSheet';
+import { useAppLanguage } from '../../i18n/AppLanguageProvider';
+import { APP_LANGUAGE_NAMES } from '../../i18n/language';
+import type { AccountSettingsSection } from '../../navigation/root-stack';
 import { Banner } from '../../components/ui/Banner';
 import { FloatingButton } from '../../components/ui/FloatingButton';
 import {
@@ -17,7 +21,6 @@ import {
   SettingsRow,
 } from '../../components/ui/SettingsGroup';
 import { Skeleton } from '../../components/ui/Skeleton';
-import { ThemedSwitch } from '../../components/ui/ThemedSwitch';
 import { useAppTheme } from '../../theme';
 import {
   ControlSize,
@@ -27,17 +30,13 @@ import {
   Space,
 } from '../../theme/tokens';
 import {
-  buildAccountSettingsGroups,
   resolveAccountSettingsCapabilities,
   type AccountSettingsAction,
   type AccountSettingsCapabilities,
   type AccountSettingsConnection,
-  type AccountSettingsGroup,
   type AccountSettingsLabels,
   type AccountSettingsPageStatus,
-  type AccountSettingsRow,
 } from './model';
-import { translateAccountSettingsKey } from './translation';
 
 export type AccountSettingsScreenProps = Readonly<{
   status?: AccountSettingsPageStatus;
@@ -49,6 +48,7 @@ export type AccountSettingsScreenProps = Readonly<{
   replyNotificationsEnabled?: boolean;
   debugMode?: boolean;
   onBack: () => void;
+  onOpenSection?: (section: AccountSettingsSection) => void;
   onRetry?: () => void;
   onOpenAction: (action: AccountSettingsAction) => void;
   onOpenConnection: (connectionId: string) => void;
@@ -58,18 +58,6 @@ export type AccountSettingsScreenProps = Readonly<{
   ) => void;
   onReplyNotificationsChange: (enabled: boolean) => void;
   onDebugModeChange: (enabled: boolean) => void;
-}>;
-
-type SettingsGroupViewProps = Readonly<{
-  group: AccountSettingsGroup;
-  isPro: boolean;
-  replyNotificationsEnabled: boolean;
-  debugMode: boolean;
-  onOpenAction: AccountSettingsScreenProps['onOpenAction'];
-  onOpenConnection: AccountSettingsScreenProps['onOpenConnection'];
-  onOpenPaywall: AccountSettingsScreenProps['onOpenPaywall'];
-  onReplyNotificationsChange: AccountSettingsScreenProps['onReplyNotificationsChange'];
-  onDebugModeChange: AccountSettingsScreenProps['onDebugModeChange'];
 }>;
 
 const SETTINGS_SKELETON_GROUPS = Object.freeze(['one', 'two', 'three', 'four']);
@@ -91,102 +79,6 @@ function SettingsLoading(): React.JSX.Element {
           />
         </View>
       ))}
-    </View>
-  );
-}
-
-function resolveRowTitle(
-  row: AccountSettingsRow,
-  t: (key: string, options?: Record<string, unknown>) => string,
-): string {
-  return row.title ?? (row.titleKey ? translateAccountSettingsKey(t, row.titleKey) : '');
-}
-
-function resolveRowValue(
-  row: AccountSettingsRow,
-  t: (key: string, options?: Record<string, unknown>) => string,
-): string | undefined {
-  if (row.valueKeys) {
-    return row.valueKeys.map((key) => translateAccountSettingsKey(t, key)).join(' · ');
-  }
-  if (row.valueKey) return translateAccountSettingsKey(t, row.valueKey);
-  return row.value;
-}
-
-function SettingsGroupView({
-  group,
-  isPro,
-  replyNotificationsEnabled,
-  debugMode,
-  onOpenAction,
-  onOpenConnection,
-  onOpenPaywall,
-  onReplyNotificationsChange,
-  onDebugModeChange,
-}: SettingsGroupViewProps): React.JSX.Element {
-  const { t } = useTranslation('config');
-
-  const openRow = (row: AccountSettingsRow) => {
-    if (row.action === 'view-pro' && !isPro) {
-      onOpenPaywall('generic');
-      return;
-    }
-    if (row.locked) {
-      onOpenPaywall(
-        row.action === 'app-icon' ? 'appIcons' : 'gatewayConnections',
-        row.connectionId
-          ? () => onOpenConnection(row.connectionId!)
-          : row.action
-            ? () => onOpenAction(row.action!)
-            : undefined,
-      );
-      return;
-    }
-    if (row.connectionId) {
-      onOpenConnection(row.connectionId);
-      return;
-    }
-    if (row.action) onOpenAction(row.action);
-  };
-
-  return (
-    <View testID={`account-settings-group-${group.id}`} style={styles.groupSection}>
-      <Text style={styles.groupTitle}>{translateAccountSettingsKey(t, group.titleKey)}</Text>
-      <SettingsGroup>
-        {group.rows.map((row, index) => {
-          const title = resolveRowTitle(row, t);
-          const value = resolveRowValue(row, t);
-          const toggleValue = row.toggle === 'replyNotifications'
-            ? replyNotificationsEnabled
-            : debugMode;
-          const onToggle = row.toggle === 'replyNotifications'
-            ? onReplyNotificationsChange
-            : onDebugModeChange;
-
-          return (
-            <Fragment key={row.id}>
-              {index > 0 ? <SettingsDivider inset="content" /> : null}
-              <SettingsRow
-                testID={`account-settings-row-${row.id}`}
-                title={title}
-                value={value}
-                attention={row.attention}
-                locked={row.locked}
-                showChevron={row.kind === 'navigation' && !row.locked}
-                onPress={row.kind === 'navigation' ? () => openRow(row) : undefined}
-                trailing={row.kind === 'toggle' ? (
-                  <ThemedSwitch
-                    testID={`account-settings-toggle-${row.toggle}`}
-                    accessibilityLabel={title}
-                    value={toggleValue}
-                    onValueChange={onToggle}
-                  />
-                ) : undefined}
-              />
-            </Fragment>
-          );
-        })}
-      </SettingsGroup>
     </View>
   );
 }
@@ -259,18 +151,17 @@ export function AccountSettingsScreen({
   labels: labelOverrides,
   isPro = false,
   canAddConnection = true,
-  replyNotificationsEnabled = false,
   debugMode = false,
   onBack,
+  onOpenSection,
   onRetry,
   onOpenAction,
-  onOpenConnection,
   onOpenPaywall,
-  onReplyNotificationsChange,
-  onDebugModeChange,
 }: AccountSettingsScreenProps): React.JSX.Element {
   const { t } = useTranslation('config');
   const { theme } = useAppTheme();
+  const { language } = useAppLanguage();
+  const [languagePickerVisible, setLanguagePickerVisible] = useState(false);
   const insets = useSafeAreaInsets();
   const capabilities = useMemo(
     () => resolveAccountSettingsCapabilities(capabilityOverrides),
@@ -285,14 +176,6 @@ export function AccountSettingsScreen({
     appVersion: labelOverrides?.appVersion ?? t('Unknown'),
     previewEnvironment: labelOverrides?.previewEnvironment ?? t(debugMode ? 'Preview' : 'Production'),
   }), [debugMode, labelOverrides, t]);
-  const groups = useMemo(() => buildAccountSettingsGroups({
-    connections,
-    capabilities,
-    labels,
-    isPro,
-    canAddConnection,
-    debugMode,
-  }), [canAddConnection, capabilities, connections, debugMode, isPro, labels]);
   const contentInsets = useMemo(() => ({
     paddingBottom: insets.bottom + Space.xl,
   }), [insets.bottom]);
@@ -331,31 +214,41 @@ export function AccountSettingsScreen({
               onOpenAction={onOpenAction}
               onOpenPaywall={onOpenPaywall}
             />
-            {!isPro && capabilities.subscription && status.kind !== 'permission' ? (
-              <Banner
-                testID="account-settings-pro-banner"
-                message={t('Unlock every connection and agent')}
-                actionLabel={t('View Pro')}
-                onAction={() => onOpenPaywall('generic')}
-              />
+            {capabilities.subscription ? (
+              <SettingsGroup>
+                <SettingsRow testID="account-settings-membership" title={t('Clawket Pro')}
+                  leading={<Sparkles size={20} color={theme.colors.accent} />}
+                  value={isPro ? t('Active') : t('View Pro')} showChevron
+                  onPress={() => onOpenSection?.('pro')} />
+              </SettingsGroup>
             ) : null}
-            {groups.map((group) => (
-              <SettingsGroupView
-                key={group.id}
-                group={group}
-                isPro={isPro}
-                replyNotificationsEnabled={replyNotificationsEnabled}
-                debugMode={debugMode}
-                onOpenAction={onOpenAction}
-                onOpenConnection={onOpenConnection}
-                onOpenPaywall={onOpenPaywall}
-                onReplyNotificationsChange={onReplyNotificationsChange}
-                onDebugModeChange={onDebugModeChange}
-              />
-            ))}
+            <SettingsGroup testID="account-settings-categories">
+              {[
+                { section: 'connections' as const, title: t('My connections'), icon: Cable, enabled: capabilities.connections, value: String(connections.length) },
+                { section: 'appearance' as const, title: t('Appearance'), icon: SlidersHorizontal, enabled: capabilities.appearance, value: labels.theme },
+                { section: 'notifications' as const, title: t('Chat & notifications'), icon: MessageCircle, enabled: capabilities.notifications || capabilities.voice },
+                { section: 'help' as const, title: t('Help & feedback'), icon: CircleHelp, enabled: capabilities.help || capabilities.community },
+                { section: 'about' as const, title: t('About'), icon: Info, enabled: capabilities.about },
+              ].filter((entry) => entry.enabled).map((entry, index) => (
+                <Fragment key={entry.section}>
+                  {index > 0 ? <SettingsDivider inset="icon" /> : null}
+                  <SettingsRow testID={`account-settings-category-${entry.section}`} title={entry.title}
+                    value={entry.value} leading={<entry.icon size={20} color={theme.colors.inkSecondary} />}
+                    showChevron onPress={() => onOpenSection?.(entry.section)} />
+                </Fragment>
+              ))}
+              <SettingsDivider inset="icon" />
+              <SettingsRow testID="account-settings-app-language" title={t('App language')}
+                value={language === 'system' ? t('Follow System') : APP_LANGUAGE_NAMES[language]}
+                leading={<Languages size={20} color={theme.colors.inkSecondary} />}
+                showChevron onPress={() => setLanguagePickerVisible(true)} />
+            </SettingsGroup>
           </>
         )}
       </ScrollView>
+      {languagePickerVisible ? (
+        <AccountPreferenceSheet preference="app-language" onClose={() => setLanguagePickerVisible(false)} />
+      ) : null}
     </View>
   );
 }

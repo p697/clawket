@@ -12,6 +12,7 @@ When improving the local Hermes testing flow:
 4. QR generation, PNG export, and terminal QR output should all come from the same CLI flow so local testing, docs, and future automation stay aligned.
 5. If a watch mode is added for Hermes local development, keep its watch scope narrow to bridge-only sources and config (`apps/bridge-cli`, `packages/bridge-core`, `packages/bridge-runtime`), and do not rebuild on unrelated app changes.
 6. Treat `clawket pair local` as a shared product entrypoint. If multiple local-capable backends are installed, emit one local pairing result per detected backend from the same command so the user can choose which QR to scan.
+7. Use Bridge Runtime's shared Hermes installation resolver for pairing detection and doctor output. Honor explicit source/command overrides and the current official installation directory without requiring a user to edit shell PATH.
 
 ## CLI Observability Rule
 
@@ -55,3 +56,5 @@ When expanding `start`, `install`, `restart`, `stop`, or `uninstall`:
 4. A six-digit code must use `pairing.secure-short-code.v2`; never derive the payload encryption key directly from six digits.
 5. Keep the legacy 12-character encrypted code and compact QR internally for version skew. Only advertise the six-digit code after the Registry explicitly returns the version-2 capability.
 6. The installed service must advertise its secure-pairing responder capability. A new CLI may restart an older running service once to load the responder, but subsequent code refreshes must not create duplicate runtimes.
+
+Managed OpenClaw runtimes advertise additive independent-client channel support. The Relay must negotiate it before the runtime allocates per-client Gateway connections; older Relay deployments continue using the legacy transport.

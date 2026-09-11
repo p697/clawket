@@ -160,6 +160,23 @@ function buildInput() {
 }
 
 describe('global Search model', () => {
+  it('keeps non-main search results discoverable without exposing locked excerpts', () => {
+    const input = buildInput();
+    const otherSession = 'agent:main:slack:channel:one';
+    const restricted = {
+      ...input,
+      isPro: false,
+      messageMatches: [{ meta: cachedMeta('home', otherSession, 350), matches: [cachedMessage('secret', 'launch secret history', 500)] }],
+      favorites: [{ ...favorite('home'), sessionKey: otherSession }],
+    };
+    const results = buildSearchModel(restricted).sections.flatMap((section) => section.results);
+    const excerpts = results.filter((result) => result.kind === 'message' || result.kind === 'favorite');
+    expect(excerpts).toHaveLength(2);
+    expect(excerpts.every((result) => result.text === '' && result.lockedReason)).toBe(true);
+    const unlocked = buildSearchModel({ ...restricted, isPro: true }).sections.flatMap((section) => section.results);
+    expect(unlocked.find((result) => result.kind === 'message')).toMatchObject({ text: 'launch secret history' });
+  });
+
   it('builds all four result sections across live and cached connections', () => {
     const model = buildSearchModel(buildInput());
 

@@ -55,6 +55,8 @@ export type UiMessage = {
     id: string;
     name: string;
   };
+  /** Local acknowledgement failed; server acceptance is unknown. */
+  sendUncertain?: boolean;
   idempotencyKey?: string;
   timestampMs?: number;
   streaming?: boolean;
@@ -64,7 +66,7 @@ export type UiMessage = {
   modelLabel?: string;
   usage?: MessageUsage;
   toolName?: string;
-  toolStatus?: 'running' | 'success' | 'error';
+  toolStatus?: 'running' | 'success' | 'error' | 'unknown';
   toolSummary?: string;
   toolArgs?: string;
   toolDetail?: string;
@@ -73,6 +75,8 @@ export type UiMessage = {
   toolFinishedAt?: number;
   toolPresentation?: ToolPresentation[];
   approval?: UiApproval;
+  /** Local outbox state for a user message that has not been delivered yet. */
+  delivery?: 'queued' | 'sending' | 'held';
 };
 
 export type PendingImage = {

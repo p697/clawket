@@ -52,6 +52,7 @@ export type RosterRowProps = Readonly<{
   attentionTone?: AgentAttentionTone;
   timeLabel?: string;
   unreadCount?: number;
+  unreadIndicator?: 'count' | 'dot';
   attention?: boolean;
   locked?: boolean;
   cached?: boolean;
@@ -75,6 +76,7 @@ export function RosterRow({
   attentionTone = 'bad',
   timeLabel,
   unreadCount = 0,
+  unreadIndicator = 'count',
   attention = false,
   locked = false,
   cached = false,
@@ -203,11 +205,11 @@ export function RosterRow({
         ) : unreadCount > 0 ? (
           <View
             testID={testID ? `${testID}-unread` : undefined}
-            style={[styles.unreadBadge, { backgroundColor: theme.colors.accent }]}
+            style={[unreadIndicator === 'dot' ? styles.attentionDot : styles.unreadBadge, { backgroundColor: theme.colors.ink }]}
           >
-            <Text style={[styles.unreadText, { color: theme.colors.canvas }]}>
+            {unreadIndicator === 'count' ? <Text style={[styles.unreadText, { color: theme.colors.canvas }]}>
               {formatFloatingButtonBadgeCount(unreadCount)}
-            </Text>
+            </Text> : null}
           </View>
         ) : timeLabel ? (
           <Text style={[styles.time, { color: theme.colors.inkTertiary }]} numberOfLines={1}>

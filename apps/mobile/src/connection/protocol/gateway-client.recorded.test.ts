@@ -329,6 +329,24 @@ describe('GatewayProtocolClient recorded protocol', () => {
     client.disconnect();
   });
 
+  it('requests fresh Hermes Relay health when the initial Bridge event predates the client', async () => {
+    const { client, sockets } = harness(HERMES_GATEWAY_PROTOCOL_PROFILE);
+    client.configure({ url: 'https://hermes-relay.fixture.invalid', backendKind: 'hermes', transportKind: 'relay',
+      relay: { serverUrl: 'https://registry.fixture.invalid', gatewayId: 'bridge-id',
+        clientToken: 'fixture-client-token', supportsBootstrap: false } });
+    client.connect();
+    await waitFor(() => sockets.length === 1);
+    const socket = sockets[0].socket;
+    socket.open();
+    expect(client.getConnectionState()).toBe('challenging');
+    const health = sentJson(socket).find((entry) => entry.method === 'health');
+    expect(health).toBeDefined();
+    if (!health) throw new Error('Missing Hermes health request');
+    socket.receive({ type: 'res', id: health.id, ok: true, payload: frame(hermesFixture, 'health.event').payload });
+    await waitFor(() => client.getConnectionState() === 'ready');
+    client.disconnect();
+  });
+
   it('waits for the recorded Hermes health frame and cannot revive after disconnect', async () => {
     const { client, sockets } = harness(HERMES_GATEWAY_PROTOCOL_PROFILE);
     const order: string[] = [];

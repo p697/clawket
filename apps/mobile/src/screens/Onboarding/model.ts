@@ -1,12 +1,20 @@
 import type { AdapterErrorCode, BackendKind, TransportKind } from '@clawket/agent-protocol';
 
 export const PAIRING_COMMAND = 'npx @p697/clawket pair';
+
+/**
+ * Message the user pastes to the agent already running on their computer so it
+ * runs the pairing command for them and replies with the printed pairing code.
+ */
+export function buildAgentPairingPrompt(
+  t: (key: string, options: { ns: 'config'; pairCommand: string }) => string,
+  pairCommand: string = PAIRING_COMMAND,
+): string {
+  return t('Please run {{pairCommand}} on this computer. It installs the open-source Clawket CLI and pairs it with my phone. When it finishes, send me the pairing code it prints (the line that starts with "Pairing code:").', { ns: 'config', pairCommand });
+}
 export const VERIFICATION_CODE_LENGTH = 6;
 
-const PAIRING_CODE_FILTERS: Readonly<Record<PairableBackendKind, RegExp>> = {
-  openclaw: /\D/g,
-  hermes: /[^A-HJ-KM-NP-TV-Z2-9]/g,
-};
+const LEGACY_PAIRING_CODE = /^[ABCDEFGHJKMNPQRSTVWXYZ2-9]{12}$/;
 
 export type PairableBackendKind = Extract<BackendKind, 'openclaw' | 'hermes'>;
 
@@ -37,11 +45,11 @@ const BACKEND_OFFLINE_MESSAGE: Record<PairableBackendKind, string> = {
 
 export function normalizeVerificationCode(
   value: string,
-  backendKind: PairableBackendKind = 'openclaw',
+  _backendKind: PairableBackendKind = 'openclaw',
 ): string {
-  const normalized = value.toUpperCase();
-  const characters = normalized.replace(PAIRING_CODE_FILTERS[backendKind], '');
-  return characters.slice(0, VERIFICATION_CODE_LENGTH);
+  // Strip presentation separators only. Never turn malformed pasted content
+  // into a different valid invitation by dropping characters or truncating it.
+  return value.toUpperCase().replace(/[\s-]/g, '');
 }
 
 export function formatVerificationCode(
@@ -49,6 +57,9 @@ export function formatVerificationCode(
   backendKind: PairableBackendKind = 'openclaw',
 ): string {
   const normalized = normalizeVerificationCode(value, backendKind);
+  if (backendKind === 'openclaw' && LEGACY_PAIRING_CODE.test(normalized)) {
+    return normalized.match(/.{4}/g)!.join(' ');
+  }
   if (normalized.length <= 3) return normalized;
   return `${normalized.slice(0, 3)} ${normalized.slice(3)}`;
 }
@@ -57,7 +68,10 @@ export function isVerificationCodeComplete(
   value: string,
   backendKind: PairableBackendKind = 'openclaw',
 ): boolean {
-  return normalizeVerificationCode(value, backendKind).length === VERIFICATION_CODE_LENGTH;
+  const code = normalizeVerificationCode(value, backendKind);
+  return backendKind === 'openclaw'
+    ? /^\d{6}$/.test(code) || LEGACY_PAIRING_CODE.test(code)
+    : /^[A-HJ-KM-NP-TV-Z2-9]{6}$/.test(code);
 }
 
 export function createPairingSubmission(

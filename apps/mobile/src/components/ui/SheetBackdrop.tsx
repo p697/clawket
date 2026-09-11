@@ -30,15 +30,11 @@ export function SheetBackdrop({
       disappearsOnIndex={-1}
       opacity={1}
       pressBehavior="none"
-      style={style}
+      style={[style, backdropStyle]}
+      accessible={false}
     >
-      <Pressable
-        testID={testID}
-        accessible={false}
-        disabled={!dismissOnPress}
-        onPress={dismissOnPress ? onBackdropPress : undefined}
-        style={[StyleSheet.absoluteFillObject, backdropStyle]}
-      />
+      <Pressable testID={testID} accessible={false} disabled={!dismissOnPress}
+        onPress={dismissOnPress ? onBackdropPress : undefined} style={StyleSheet.absoluteFillObject} />
     </BottomSheetBackdrop>
   );
 }

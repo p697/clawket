@@ -47,6 +47,7 @@ describe('YouMindSpriteApiClient', () => {
       'x-app-id': '0',
       'x-timestamp': '100000',
       'x-signature': expect.any(String),
+      'User-Agent': expect.stringMatching(/^YouMindClawket\/\d+\.\d+\.\d+ \(Clawket; iOS [^;]+; Build \d+; (Development|AppStore)\)$/),
     }));
     expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({
       email: 'person@example.invalid',

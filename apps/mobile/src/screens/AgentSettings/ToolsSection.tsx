@@ -69,6 +69,21 @@ export function ToolsSection({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmVisible, setConfirmVisible] = useState(false);
+  const catalogLabels = useMemo<Record<string, string>>(() => ({
+    Minimal: t('Minimal tools', { ns: 'settings' }),
+    Coding: t('Coding tools', { ns: 'settings' }),
+    Messaging: t('Messaging', { ns: 'settings' }),
+    Full: t('All tools', { ns: 'settings' }),
+    Files: t('Files', { ns: 'common' }),
+    Runtime: t('Execution tools', { ns: 'settings' }),
+    Web: t('Web tools', { ns: 'settings' }),
+    Memory: t('Memory', { ns: 'settings' }),
+    Sessions: t('Sessions', { ns: 'common' }),
+    UI: t('Interface tools', { ns: 'settings' }),
+    Automation: t('Automation tools', { ns: 'settings' }),
+    Nodes: t('Nodes', { ns: 'settings' }),
+    Agents: t('Agents', { ns: 'common' }),
+  }), [t]);
 
   const load = useCallback(async () => {
     if (!supported || !online || !operations?.catalog) {
@@ -110,8 +125,10 @@ export function ToolsSection({
   }, [load]);
 
   const groups = useMemo(
-    () => catalog ? filterToolCatalog(catalog, query) : [],
-    [catalog, query],
+    () => catalog ? filterToolCatalog({ ...catalog, groups: catalog.groups.map(group => ({
+      ...group, label: catalogLabels[group.label] ?? group.label,
+    })) }, query) : [],
+    [catalog, catalogLabels, query],
   );
   const totalTools = catalog ? countCatalogTools(catalog) : 0;
   const enabledTools = catalog ? countEnabledTools(catalog, draftPolicy) : 0;
@@ -216,7 +233,7 @@ export function ToolsSection({
                   {index ? <SettingsDivider inset="content" /> : null}
                   <SettingsRow
                     testID={`agent-tools-profile-${profile.id}`}
-                    title={profile.label}
+                    title={catalogLabels[profile.label] ?? profile.label}
                     trailing={activeProfile === profile.id ? (
                       <Check
                         testID={`agent-tools-profile-current-${profile.id}`}

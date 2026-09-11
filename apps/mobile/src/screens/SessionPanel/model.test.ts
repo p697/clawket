@@ -13,7 +13,6 @@ import {
   filterSessionPanelRows,
   normalizeSessionRenameTitle,
   resolveSessionPanelPageState,
-  shouldShowSessionPanelQuickFilters,
   summarizeSessionPanelRows,
 } from './model';
 
@@ -125,17 +124,17 @@ describe('SessionPanel model', () => {
     });
   });
 
-  it('filters by query, attention, working, and canonical kind', () => {
+  it('filters by query and canonical kind while retaining all activity states', () => {
     const rows = buildSessionPanelRows(roster(), { now: 1_000_000 });
     expect(filterSessionPanelRows(rows, {
-      query: 'telegram', quickFilter: 'all', kindFilter: 'all',
+      query: 'telegram', kindFilter: 'all',
     }).map((row) => row.channelLabel)).toEqual(['Telegram']);
     expect(filterSessionPanelRows(rows, {
-      query: '', quickFilter: 'attention', kindFilter: 'all',
-    })).toHaveLength(1);
+      query: '', kindFilter: 'all',
+    })).toHaveLength(rows.length);
     expect(filterSessionPanelRows(rows, {
-      query: '', quickFilter: 'working', kindFilter: 'subagent',
-    }).map((row) => row.title)).toEqual(['subagent working']);
+      query: '', kindFilter: 'subagent',
+    }).map((row) => row.title)).toEqual(['subagent working', 'subagent done']);
   });
 
   it('puts the current Agent first and creates five semantic sections', () => {
@@ -183,12 +182,6 @@ describe('SessionPanel model', () => {
       sessionReset: true,
       sessionDelete: false,
     })).toEqual(['pin', 'reset']);
-  });
-
-  it('shows the three quick filters only beyond one visible screen', () => {
-    expect(shouldShowSessionPanelQuickFilters(8)).toBe(false);
-    expect(shouldShowSessionPanelQuickFilters(9)).toBe(true);
-    expect(shouldShowSessionPanelQuickFilters(4, 3)).toBe(true);
   });
 
   it('normalizes rename drafts and rejects blank or unchanged titles', () => {

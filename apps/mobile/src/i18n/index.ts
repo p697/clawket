@@ -1,6 +1,6 @@
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
-import { getLocales } from 'expo-localization';
+import { resolveAppLocale } from './language';
 
 import en_common from './locales/en/common.json';
 import en_chat from './locales/en/chat.json';
@@ -32,20 +32,8 @@ import es_chat from './locales/es/chat.json';
 import es_config from './locales/es/config.json';
 import es_settings from './locales/es/settings.json';
 
-const SUPPORTED_LOCALES = ['en', 'zh-Hans', 'ja', 'ko', 'de', 'es'] as const;
-
-const deviceLang = getLocales()[0]?.languageCode ?? 'en';
-
-// Map device language code to our supported locales.
-// Chinese variants (zh-Hans, zh-Hant, zh) all resolve to zh-Hans for now.
-function resolveLocale(code: string): string {
-  if (code.startsWith('zh')) return 'zh-Hans';
-  if ((SUPPORTED_LOCALES as readonly string[]).includes(code)) return code;
-  return 'en';
-}
-
 i18n.use(initReactI18next).init({
-  lng: resolveLocale(deviceLang),
+  lng: resolveAppLocale('system'),
   fallbackLng: 'en',
   ns: ['common', 'chat', 'config', 'settings'],
   defaultNS: 'common',

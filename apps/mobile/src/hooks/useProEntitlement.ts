@@ -81,7 +81,6 @@ export function useProEntitlement({
   }, []);
 
   useEffect(() => {
-    if (subscriptionLoading) return;
     let cancelled = false;
     const now = Date.now();
     setRuntime((current) => ({ ...current, now }));

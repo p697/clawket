@@ -345,8 +345,8 @@ export class HermesAdapter extends GatewayAdapterBase {
         },
       },
       usage: {
-        sessions: (params) => this.invoke(() => this.gateway.fetchUsage(params)),
-        cost: (params) => this.invoke(() => this.gateway.fetchCostSummary(params)),
+        sessions: ({ startDate, endDate }) => this.invoke(() => this.gateway.fetchUsage({ startDate, endDate })),
+        cost: ({ startDate, endDate }) => this.invoke(() => this.gateway.fetchCostSummary({ startDate, endDate })),
       },
     };
   }

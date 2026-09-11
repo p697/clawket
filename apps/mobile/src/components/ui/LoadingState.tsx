@@ -1,18 +1,21 @@
 import React from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { useAppTheme } from '../../theme';
-import { FontSize, Space } from '../../theme/tokens';
+import { FontSize, LineHeight, Space } from '../../theme/tokens';
+import { Companion, type CompanionPose } from './Companion';
 
 type Props = {
   message?: string;
+  pose?: CompanionPose;
+  testID?: string;
 };
 
-export function LoadingState({ message }: Props): React.JSX.Element {
+export function LoadingState({ message, pose = 'loading', testID }: Props): React.JSX.Element {
   const { theme } = useAppTheme();
   return (
-    <View style={styles.root}>
-      <ActivityIndicator size="large" color={theme.colors.accent} />
-      {message ? <Text style={[styles.text, { color: theme.colors.inkSecondary }]}>{message}</Text> : null}
+    <View testID={testID} style={styles.root} accessible accessibilityRole="progressbar" accessibilityLabel={message} accessibilityState={{ busy: true }}>
+      <Companion pose={pose} />
+      {message ? <Text style={[styles.text, { color: theme.colors.ink }]}>{message}</Text> : null}
     </View>
   );
 }
@@ -25,8 +28,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: Space.xl,
   },
   text: {
-    marginTop: Space.md,
-    fontSize: FontSize.caption,
+      marginTop: Space.xl,
+      fontSize: FontSize.secondary,
+      lineHeight: LineHeight.secondary,
     textAlign: 'center',
   },
 });

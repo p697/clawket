@@ -241,5 +241,17 @@
   "No files found": "未找到文件",
   "Pause": "暂停",
   "Unknown model": "未知模型",
-  "Skipped": "已跳过"
+  "Skipped": "已跳过",
+  "Agent profile": "智能体资料",
+  "Advanced management": "高级管理",
+  "Personality & memory": "个性与记忆",
+  "Continue chatting": "继续聊天",
+  "Server address": "服务地址",
+  "Minimal tools": "精简工具",
+  "Coding tools": "编程工具",
+  "All tools": "全部工具",
+  "Execution tools": "执行工具",
+  "Web tools": "网页工具",
+  "Interface tools": "界面工具",
+  "Automation tools": "自动化工具"
 }

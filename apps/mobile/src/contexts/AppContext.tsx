@@ -49,7 +49,7 @@ export type AppContextType = {
   nodeCapabilityToggles: NodeCapabilityToggles;
   onNodeCapabilityTogglesChange: (toggles: NodeCapabilityToggles) => void;
   onChatFontSizeChange: (size: number) => void;
-  onChatAppearanceChange: (settings: ChatAppearanceSettings) => void;
+  onChatAppearanceChange: (settings: ChatAppearanceSettings) => void | Promise<void>;
   onSpeechRecognitionLanguageChange: (language: SpeechRecognitionLanguage) => void;
   requestChatSession: (sessionKey: string, sourceRole?: string) => void;
   clearChatSessionRequest: () => void;

@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { execFileSync, spawn } from 'node:child_process';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
+import { resolveHermesSourcePath } from '@clawket/bridge-runtime';
 import { setTimeout as delay } from 'node:timers/promises';
 import qrcodeTerminal from 'qrcode-terminal';
 import {
@@ -79,6 +80,12 @@ async function main(): Promise<void> {
   const [, , command = 'help', ...args] = process.argv;
   const isServiceMode = hasFlag(args, '--service');
   const jsonOutput = hasFlag(args, '--json');
+
+  // Help must be side-effect free for every command, including nested commands.
+  if (command === '--help' || command === '-h' || hasFlag(args, '--help') || hasFlag(args, '-h')) {
+    printHelp();
+    return;
+  }
 
   if (command === 'hermes') {
     await handleHermesCommand(args, jsonOutput);
@@ -276,6 +283,7 @@ async function main(): Promise<void> {
     const bridgeVersion = readCliVersion();
     const runtimes = runtimeConfigs.map(({ environment, config }) => {
       const runtime = new BridgeRuntime({
+        clientChannels: true,
         config,
         gatewayUrl,
         bridgeVersion,
@@ -626,7 +634,7 @@ function canPairHermes(): boolean {
 }
 
 function resolveDefaultHermesSourcePath(): string {
-  return join(homedir(), '.hermes', 'hermes-agent');
+  return resolveHermesSourcePath();
 }
 
 async function handleHermesCommand(args: string[], jsonOutput: boolean): Promise<void> {

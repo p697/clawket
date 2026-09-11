@@ -31,7 +31,7 @@ describe('HermesNativeSessionReader', () => {
     });
     const reader = new HermesNativeSessionReader(dbPath, runner);
 
-    const sessions = reader.listSessions(20);
+    const sessions = await reader.listSessions(20);
     expect(sessions).toEqual([
       expect.objectContaining({
         key: 'main',
@@ -43,7 +43,7 @@ describe('HermesNativeSessionReader', () => {
         allowedActions: { rename: false, reset: false, delete: false, pin: true },
       }),
     ]);
-    const history = reader.readHistoryBySessionId('main');
+    const history = await reader.readHistoryBySessionId('main');
     expect(history?.messages.map((message) => message.content)).toEqual(['one', 'two']);
     expect(new Set(history?.messages.map((message) => message._cursorId)).size).toBe(2);
     expect(await checksum(dbPath)).toBe(before);
@@ -58,7 +58,7 @@ describe('HermesNativeSessionReader', () => {
       hermesHomePath: directory,
       hermesPythonPath: 'python3',
     }));
-    expect(reader.listSessions(5)).toEqual([]);
+    expect(await reader.listSessions(5)).toEqual([]);
     expect(reader.consumeWarnings()[0]).toMatch(/read-only query failed/);
   });
 });

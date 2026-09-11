@@ -10,7 +10,6 @@ import {
   type WebSocketFrameData,
 } from '../frame-limit.js';
 import {
-  DEFAULT_HERMES_API_HEALTH_PATH,
   HERMES_BRIDGE_CAPABILITIES,
   SLOW_BRIDGE_REQUEST_LOG_THRESHOLD_MS,
   formatError,
@@ -244,16 +243,25 @@ export async function probeHermesApi(
   apiKey: string | null,
   options?: { timeoutMs?: number },
 ): Promise<boolean> {
+  return await inspectHermesApi(apiBaseUrl, apiKey, options) === 'ready';
+}
+
+export async function inspectHermesApi(
+  apiBaseUrl: string,
+  apiKey: string | null,
+  options?: { timeoutMs?: number },
+): Promise<'ready' | 'unauthorized' | 'unreachable'> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), options?.timeoutMs ?? 3_000);
   try {
-    const response = await fetch(`${apiBaseUrl}${DEFAULT_HERMES_API_HEALTH_PATH}`, {
+    const response = await fetch(`${apiBaseUrl}/v1/models`, {
       headers: apiKey ? { authorization: `Bearer ${apiKey}` } : undefined,
       signal: controller.signal,
     });
-    return response.ok;
+    if (response.status === 401 || response.status === 403) return 'unauthorized';
+    return response.ok ? 'ready' : 'unreachable';
   } catch {
-    return false;
+    return 'unreachable';
   } finally {
     clearTimeout(timer);
   }

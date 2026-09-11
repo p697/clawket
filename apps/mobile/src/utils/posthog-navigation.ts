@@ -59,6 +59,7 @@ export const TRACKED_SCREEN_DEFINITIONS: Record<string, ScreenDefinition> = {
   AccountSettings: { name: 'AccountSettings', area: 'account', kind: 'root' },
   AccountSettingsSection: { name: 'AccountSettings', area: 'account', kind: 'detail' },
   ReleaseNotes: { name: 'ReleaseNotes', area: 'account', kind: 'detail' },
+  HelpCenter: { name: 'HelpCenter', area: 'account', kind: 'detail' },
   ChatAppearance: { name: 'ChatAppearance', area: 'account', kind: 'detail' },
   Search: { name: 'Search', area: 'search', kind: 'root' },
   MessageDetail: { name: 'Message Detail', area: 'search', kind: 'detail' },

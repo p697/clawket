@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { ArrowLeft } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -40,7 +41,7 @@ export function YouMindOnboardingScreen({
         <FloatingButton
           testID="youmind-onboarding-back"
           icon={ArrowLeft}
-          appearance="quiet"
+          appearance="plain"
           accessibilityLabel={t('Back', { ns: 'common' })}
           onPress={onBack}
         />
@@ -49,12 +50,16 @@ export function YouMindOnboardingScreen({
         </Text>
         <View style={styles.headerSpacer} />
       </View>
-      <YouMindSignInPanel
-        client={client}
-        source="onboarding"
-        onSignedIn={onSignedIn}
-        centered
-      />
+      <KeyboardAvoidingView style={styles.content} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+          <YouMindSignInPanel
+            client={client}
+            source="onboarding"
+            onSignedIn={onSignedIn}
+            centered
+          />
+        </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -65,6 +70,8 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       backgroundColor: colors.canvas,
       flex: 1,
     },
+    content: { flex: 1 },
+    scrollContent: { flexGrow: 1 },
     header: {
       alignItems: 'center',
       flexDirection: 'row',

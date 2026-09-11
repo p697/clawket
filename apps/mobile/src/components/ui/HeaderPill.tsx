@@ -1,3 +1,4 @@
+import type { LucideIcon } from 'lucide-react-native';
 import React, { useEffect, useMemo } from 'react';
 import { Pressable, StyleProp, StyleSheet, Text, type ViewStyle, View } from 'react-native';
 import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
@@ -12,15 +13,18 @@ import {
   Space,
 } from '../../theme/tokens';
 import { AgentAvatar, type AgentAttentionTone, type AgentAvatarStatus } from './AgentAvatar';
-import { createFloatingSurfaceStyle } from './FloatingButton';
+import { TypingDots } from './TypingDots';
 
 const PRESSED_OPACITY = 0.88;
 
 export type HeaderPillProps = Readonly<{
+  icon?: LucideIcon;
   agentId: string;
   name: string;
   avatarName?: string;
   subtitle: string;
+  /** The Agent is composing: the subtitle slot shows three lifting dots instead of text. */
+  working?: boolean;
   emoji?: string | null;
   avatarUrl?: string | null;
   status?: AgentAvatarStatus;
@@ -32,10 +36,12 @@ export type HeaderPillProps = Readonly<{
 }>;
 
 export function HeaderPill({
+  icon: Icon,
   agentId,
   name,
   avatarName,
   subtitle,
+  working = false,
   emoji,
   avatarUrl,
   status = 'idle',
@@ -48,7 +54,7 @@ export function HeaderPill({
   const { theme } = useAppTheme();
   const subtitleOpacity = useSharedValue(1);
   const chrome = useMemo(
-    () => createFloatingSurfaceStyle(theme.colors, theme.scheme),
+    () => ({ backgroundColor: theme.colors.surface }),
     [theme.colors, theme.scheme],
   );
   const subtitleAnimatedStyle = useAnimatedStyle(() => ({ opacity: subtitleOpacity.value }));
@@ -58,11 +64,11 @@ export function HeaderPill({
     subtitleOpacity.value = 0;
     subtitleOpacity.value = withTiming(1, { duration: Motion.duration.fast });
     return () => cancelAnimation(subtitleOpacity);
-  }, [subtitle, subtitleOpacity]);
+  }, [subtitle, subtitleOpacity, working]);
 
   const content = (
     <>
-      <AgentAvatar
+      {Icon ? <Icon size={24} color={theme.colors.inkSecondary} strokeWidth={1.5} /> : <AgentAvatar
         testID={testID ? `${testID}-avatar` : undefined}
         agentId={agentId}
         name={avatarName ?? name}
@@ -71,17 +77,21 @@ export function HeaderPill({
         variant="header"
         status={status}
         attentionTone={attentionTone}
-      />
+      />}
       <View style={styles.labels}>
         <Text style={[styles.name, { color: theme.colors.ink }]} numberOfLines={1}>
           {name}
         </Text>
-        <Animated.Text
+        {working ? (
+          <Animated.View style={subtitleAnimatedStyle}>
+            <TypingDots testID={testID ? `${testID}-working` : undefined} />
+          </Animated.View>
+        ) : subtitle.trim() ? <Animated.Text
           style={[styles.subtitle, { color: theme.colors.inkSecondary }, subtitleAnimatedStyle]}
           numberOfLines={1}
         >
           {subtitle}
-        </Animated.Text>
+        </Animated.Text> : null}
       </View>
     </>
   );

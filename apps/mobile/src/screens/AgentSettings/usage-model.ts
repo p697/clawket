@@ -32,29 +32,37 @@ export function buildUsageSummary(
   usage: UsageResult | null,
   cost: CostSummary | null,
 ): UsageSummary {
-  const totals = cost?.totals ?? usage?.totals ?? null;
+  const totals = usage?.totals && cost?.totals ? {
+    ...cost.totals,
+    input: usage.totals.input,
+    output: usage.totals.output,
+    cacheRead: usage.totals.cacheRead,
+    cacheWrite: usage.totals.cacheWrite,
+    totalTokens: usage.totals.totalTokens,
+  } : usage?.totals ?? cost?.totals ?? null;
   const messages = usage?.aggregates?.messages.total ?? 0;
   const tools = usage?.aggregates?.tools;
   const costDaily = cost?.daily ?? [];
   const usageDaily = usage?.aggregates?.daily ?? [];
-  const daily = costDaily.length
-    ? costDaily.map((entry) => ({
-      date: entry.date,
-      tokens: entry.totalTokens,
-      cost: entry.totalCost,
-    }))
-    : usageDaily.map((entry) => ({
+  const dailyByDate = new Map(usageDaily.map((entry) => [entry.date, {
       date: entry.date,
       tokens: entry.tokens,
       cost: entry.cost,
-    }));
+    }]));
+  for (const entry of costDaily) {
+    dailyByDate.set(entry.date, {
+      date: entry.date,
+      tokens: dailyByDate.get(entry.date)?.tokens ?? entry.totalTokens,
+      cost: entry.totalCost,
+    });
+  }
   return {
     totals,
     messages,
     toolCalls: tools?.totalCalls ?? 0,
     uniqueTools: tools?.uniqueTools ?? 0,
     sessions: usage?.sessions?.filter((entry) => entry.usage !== null).length ?? 0,
-    daily: [...daily].sort((left, right) => right.date.localeCompare(left.date)),
+    daily: [...dailyByDate.values()].sort((left, right) => right.date.localeCompare(left.date)),
     topModels: [...(usage?.aggregates?.byModel ?? [])]
       .sort((left, right) => right.totals.totalTokens - left.totals.totalTokens)
       .slice(0, 5),

@@ -1,4 +1,4 @@
-import { canSendMessage, isComposerActionLocked, isComposerInputEditable } from './composerInteractionPolicy';
+import { canQueueMessage, canSendMessage, isComposerActionLocked, isComposerInputEditable } from './composerInteractionPolicy';
 
 describe('isComposerInputEditable', () => {
   it('keeps the input editable while streaming when voice input is inactive', () => {
@@ -84,5 +84,29 @@ describe('canSendMessage', () => {
       ...base,
       refreshingConversation: true,
     })).toBe(false);
+  });
+});
+
+describe('canQueueMessage', () => {
+  const base = {
+    connectionState: 'ready' as const,
+    hasSession: true,
+    hasContent: true,
+    isSending: true,
+    composerAvailable: true,
+    queueHasCapacity: true,
+  };
+
+  it('allows queueing only while a run is active on a ready session', () => {
+    expect(canQueueMessage(base)).toBe(true);
+    expect(canQueueMessage({ ...base, isSending: false })).toBe(false);
+    expect(canQueueMessage({ ...base, hasContent: false })).toBe(false);
+    expect(canQueueMessage({ ...base, hasSession: false })).toBe(false);
+    expect(canQueueMessage({ ...base, connectionState: 'reconnecting' })).toBe(false);
+  });
+
+  it('respects the queue capacity and composer ownership', () => {
+    expect(canQueueMessage({ ...base, queueHasCapacity: false })).toBe(false);
+    expect(canQueueMessage({ ...base, composerAvailable: false })).toBe(false);
   });
 });

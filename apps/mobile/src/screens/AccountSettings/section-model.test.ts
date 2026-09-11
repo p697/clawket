@@ -33,6 +33,23 @@ function connection(
 }
 
 describe('AccountSettings section model', () => {
+  it('keeps advanced connection details scoped without duplicating lifecycle controls', () => {
+    const model = buildAccountSettingsSectionModel({
+      section: 'connections',
+      labels,
+      data: {
+        connectionId: 'hermes',
+        isPro: false,
+        connections: [connection(), connection({ id: 'hermes', backendKind: 'hermes', label: 'Hermes' })],
+      },
+    });
+    expect(model.groups.map(({ id }) => id)).toEqual(['connection-hermes']);
+    const rows = model.groups.flatMap(({ rows }) => rows);
+    expect(rows.find(({ id }) => id === 'hermes-backend')?.valueKey).toBe('Hermes');
+    expect(rows.some(({ action }) => action === 'set-free-connection')).toBe(true);
+    expect(rows.some(({ action }) => ['reconnect-connection', 'remove-connection', 'add-connection'].includes(action ?? ''))).toBe(false);
+  });
+
   it('builds every root and fine-grained descriptor route', () => {
     const sections: ReadonlyArray<AccountSettingsDetailSection> = [
       'pro',
@@ -56,8 +73,8 @@ describe('AccountSettings section model', () => {
       'Connections',
       'Appearance',
       'Voice',
-      'Notifications',
-      'Help',
+      'Chat & notifications',
+      'Help & feedback',
       'Community',
       'About',
       'Developer',

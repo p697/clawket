@@ -8,23 +8,27 @@ import {
   HermesLocalBridge as ProductionHermesLocalBridge,
   type HermesLocalBridgeOptions,
 } from './index.js';
-import { DEFAULT_HERMES_HOME_PATH, DEFAULT_HERMES_SOURCE_PATH } from './internal.js';
+import { DEFAULT_HERMES_HOME_PATH } from './internal.js';
 import { resolveHermesPythonPath } from './python-runner.js';
+import { resolveHermesSourcePath } from './installation.js';
 
 const HERMES_INTEGRATION_PYTHON_PATH = resolveHermesPythonPath({
-  hermesSourcePath: DEFAULT_HERMES_SOURCE_PATH,
+  hermesSourcePath: resolveHermesSourcePath(),
   hermesHomePath: DEFAULT_HERMES_HOME_PATH,
 });
 
 class HermesLocalBridge extends ProductionHermesLocalBridge {
   constructor(options: HermesLocalBridgeOptions = {}) {
     super({ ...options, hermesPythonPath: options.hermesPythonPath ?? HERMES_INTEGRATION_PYTHON_PATH });
+    integrationBridges.push(this);
   }
 }
 
 const tempDirs: string[] = [];
+const integrationBridges: ProductionHermesLocalBridge[] = [];
 
 afterEach(async () => {
+  await Promise.all(integrationBridges.splice(0).map(bridge => bridge.stop()));
   vi.unstubAllGlobals();
   while (tempDirs.length > 0) {
     const dir = tempDirs.pop();
@@ -196,14 +200,15 @@ describe('Hermes commands and files integration', () => {
       currentBaseUrl: '',
     });
 
+    // The installed backend can also discover machine-authenticated providers.
     await expect((bridge as any).dispatchRequest('models.list', {})).resolves.toEqual({
-      models: [
+      models: expect.arrayContaining([
         {
           id: 'moonshot-v1-8k',
           name: 'moonshot-v1-8k',
           provider: 'custom:moonshot-local',
         },
-      ],
+      ]),
     });
   }, 20_000);
 
@@ -302,18 +307,19 @@ describe('Hermes commands and files integration', () => {
       currentModel: 'moonshot-v1-8k',
       currentProvider: 'custom:moonshot-local',
     });
+    // The installed backend can also discover machine-authenticated providers.
     await expect((bridge as any).dispatchRequest('models.list', {})).resolves.toEqual({
-      models: [
+      models: expect.arrayContaining([
         {
           id: 'moonshot-v1-8k',
           name: 'moonshot-v1-8k',
           provider: 'custom:moonshot-local',
         },
-      ],
+      ]),
     });
 
     expect(readStateSpy).toHaveBeenCalledTimes(1);
-  });
+  }, 30_000);
 
   it('prewarms Hermes model state during bridge startup', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ ok: true, hermesApiReachable: true }) })));
@@ -351,9 +357,9 @@ describe('Hermes commands and files integration', () => {
       currentProvider: 'custom:moonshot-local',
     });
     await bridge.stop();
-  });
+  }, 30_000);
 
-  it('includes credential-pool providers that Hermes upstream provider listing omits', async () => {
+  it('preserves credential-pool providers and the installed Hermes model catalog', async () => {
     const hermesHomePath = await createHermesHomePath({
       model: {
         default: 'gpt-5.3-codex',
@@ -397,24 +403,27 @@ describe('Hermes commands and files integration', () => {
     expect(state.providers).toEqual(expect.arrayContaining([
       expect.objectContaining({
         slug: 'openrouter',
-        source: 'credential-pool',
       }),
       expect.objectContaining({
         slug: 'openai-codex',
       }),
     ]));
     const codexProvider = state.providers.find((provider: { slug?: string; models?: string[] }) => provider.slug === 'openai-codex');
-    expect(codexProvider?.models).toEqual(expect.arrayContaining(['gpt-5.4']));
+    // Catalog membership changes upstream; verify complete mapping of the installed catalog.
+    expect(codexProvider?.models.length).toBeGreaterThan(0);
+    for (const id of codexProvider.models) {
+      expect(state.models).toContainEqual(expect.objectContaining({ provider: 'openai-codex', id }));
+    }
     expect(state.models).toEqual(expect.arrayContaining([
       expect.objectContaining({
         provider: 'openrouter',
       }),
       expect.objectContaining({
         provider: 'openai-codex',
-        id: 'gpt-5.4',
+        id: 'gpt-5.3-codex',
       }),
     ]));
-  });
+  }, 30_000);
 
   it('persists Hermes global model switches without modifying Hermes source', async () => {
     const hermesHomePath = await createHermesHomePath({

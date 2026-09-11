@@ -5,7 +5,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { ChevronLeft } from 'lucide-react-native';
+import { ChevronLeft, SlidersHorizontal, Fingerprint, MessageCircle } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type {
@@ -16,6 +16,8 @@ import type {
   ConnectionState,
 } from '@clawket/agent-protocol';
 import { AgentAvatar } from '../../components/ui/AgentAvatar';
+import { Button } from '../../components/ui/Button';
+import { Sheet } from '../../components/ui/Sheet';
 import { Banner } from '../../components/ui/Banner';
 import { FloatingButton } from '../../components/ui/FloatingButton';
 import {
@@ -65,6 +67,7 @@ export type AgentSettingsViewProps = Readonly<{
   identityDetail?: string;
   errorMessage?: string;
   onBack: () => void;
+  onContinueChat?: () => void;
   onNavigate: AgentSettingsNavigate;
   onOpenPro: (section: AgentSettingsSection, onContinue?: () => void) => void;
   onRetry: () => void;
@@ -137,7 +140,7 @@ export function AgentSettingsRouteLoading({
     >
       <AgentSettingsHeader
         backLabel={t('Back', { ns: 'common' })}
-        title={translateAgentSettingsKey(t, 'Agent settings')}
+        title={t('Agent profile', { ns: 'settings' })}
         onBack={onBack}
       />
       <AgentSettingsLoading
@@ -171,9 +174,8 @@ export function AgentSettingsScreen({
   const summary = loadedSummary?.key === summaryKey
     ? loadedSummary.value
     : initialSummary;
-  const initialized = agent === null
-    || connectionState !== 'ready'
-    || summary !== undefined;
+  // Optional counts must never hold navigation hostage.
+  const initialized = true;
 
   useEffect(() => {
     setConnectionState(accessibleAdapter?.state ?? 'offline');
@@ -189,7 +191,7 @@ export function AgentSettingsScreen({
     if (!accessibleAdapter || !agent || !summaryKey || connectionState !== 'ready') return undefined;
 
     let active = true;
-    void loadAgentSettingsSummary(accessibleAdapter, agent).then((nextSummary) => {
+    const applySummary = (nextSummary: AgentSettingsSummary) => {
       if (!active) return;
       setLoadedSummary((previous) => ({
         key: summaryKey,
@@ -198,11 +200,12 @@ export function AgentSettingsScreen({
           ...nextSummary,
         },
       }));
-    });
+    };
+    void loadAgentSettingsSummary(accessibleAdapter, agent, Date.now(), applySummary).then(applySummary);
     return () => {
       active = false;
     };
-  }, [accessibleAdapter, agent, connectionState, initialSummary, summaryKey]);
+  }, [accessibleAdapter, agent?.agentId, connectionState, summaryKey]);
 
   const state = resolveAgentSettingsPageState({
     initialized,
@@ -239,6 +242,7 @@ export function AgentSettingsView({
   identityDetail,
   errorMessage,
   onBack,
+  onContinueChat,
   onNavigate,
   onOpenPro,
   onRetry,
@@ -247,6 +251,8 @@ export function AgentSettingsView({
   const { theme } = useAppTheme();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
+  const [advancedVisible, setAdvancedVisible] = useState(false);
+  const afterAdvancedCloseRef = useRef<(() => void) | null>(null);
   const trackedConnectionRef = useRef<string | null>(null);
   useEffect(() => {
     const key = `${connection.id}:${connection.backendKind}`;
@@ -283,17 +289,18 @@ export function AgentSettingsView({
   };
 
   const openRow = (row: AgentSettingsRowDescriptor) => {
-    const onContinue = () => navigate(row.section);
-    analyticsEvents.settingsRowOpened({
-      row: row.id,
-      locked: row.locked,
-      backend: connection.backendKind,
-    });
-    if (row.locked) {
-      onOpenPro(row.section, onContinue);
+    const open = () => {
+      const onContinue = () => navigate(row.section);
+      analyticsEvents.settingsRowOpened({ row: row.id, locked: row.locked, backend: connection.backendKind });
+      if (row.locked) onOpenPro(row.section, onContinue);
+      else onContinue();
+    };
+    if (advancedVisible) {
+      afterAdvancedCloseRef.current = open;
+      setAdvancedVisible(false);
       return;
     }
-    onContinue();
+    open();
   };
 
   const openIdentity = () => {
@@ -317,7 +324,7 @@ export function AgentSettingsView({
     >
       <AgentSettingsHeader
         backLabel={t('Back', { ns: 'common' })}
-        title={translateAgentSettingsKey(t, 'Agent settings')}
+        title={t('Agent profile', { ns: 'settings' })}
         onBack={onBack}
       />
 
@@ -366,46 +373,51 @@ export function AgentSettingsView({
             />
           ) : null}
 
-          <SettingsGroup testID="agent-settings-identity-group">
-            <SettingsRow
-              testID="agent-settings-identity"
-              leading={(
-                <AgentAvatar
-                  testID="agent-settings-avatar"
-                  agentId={agent.agentId}
-                  name={model.identity.name}
-                  emoji={agent.emoji}
-                  avatarUrl={agent.avatarUrl}
-                  variant="settings"
-                  status={model.identity.locked
-                    ? 'locked'
-                    : state === 'offline'
-                      ? 'offline'
-                      : 'idle'}
-                />
-              )}
-              title={model.identity.name}
-              subtitle={model.identity.detail}
-              locked={model.identity.locked}
-              showChevron={model.identity.editable}
-              onPress={model.identity.locked
-                ? openIdentity
-                : model.identity.editable
-                  ? openIdentity
-                  : undefined}
-            />
-          </SettingsGroup>
-
+          <View style={styles.profileHero}>
+            <AgentAvatar testID="agent-settings-avatar" agentId={agent.agentId}
+              name={model.identity.name} emoji={agent.emoji} avatarUrl={agent.avatarUrl}
+              variant="roster" status={model.identity.locked ? 'locked' : state === 'offline' ? 'offline' : 'idle'} />
+            <Text style={styles.profileName}>{model.identity.name}</Text>
+            <Text style={styles.profileDetail}>{model.identity.detail}</Text>
+            <Button testID="agent-profile-chat" label={t('Continue chatting', { ns: 'settings' })}
+              icon={MessageCircle} onPress={onContinueChat ?? onBack} />
+          </View>
+          {model.identity.editable || model.identity.locked ? (
+            <SettingsGroup testID="agent-settings-identity-group">
+              <SettingsRow testID="agent-settings-identity" title={t('Personality & memory', { ns: 'settings' })}
+                leading={<Fingerprint size={20} color={theme.colors.inkSecondary} />}
+                locked={model.identity.locked} showChevron onPress={openIdentity} />
+            </SettingsGroup>
+          ) : null}
           {model.groups.map((group) => (
-            <SettingsSection
-              key={group.id}
-              group={group}
-              translate={(key) => translateAgentSettingsKey(t, key)}
-              onOpenRow={openRow}
-            />
+            <SettingsSection key={group.id} group={{ ...group,
+              rows: group.rows.filter((row) => ['skills', 'cron', 'files', 'connection'].includes(row.id)),
+            }} translate={(key) => translateAgentSettingsKey(t, key)} onOpenRow={openRow} />
           ))}
+          {model.groups.some((group) => group.rows.some((row) => !['skills', 'cron', 'files', 'connection'].includes(row.id))) ? (
+            <SettingsGroup>
+              <SettingsRow testID="agent-profile-advanced" title={t('Advanced management', { ns: 'settings' })}
+                leading={<SlidersHorizontal size={20} color={theme.colors.inkSecondary} />}
+                showChevron onPress={() => setAdvancedVisible(true)} />
+            </SettingsGroup>
+          ) : null}
         </ScrollView>
       )}
+      {model ? (
+        <Sheet visible={advancedVisible} onClose={() => setAdvancedVisible(false)} title={t('Advanced management', { ns: 'settings' })}
+          onAfterClose={() => {
+            const action = afterAdvancedCloseRef.current;
+            afterAdvancedCloseRef.current = null;
+            action?.();
+          }}
+          closeAccessibilityLabel={t('Close', { ns: 'common' })}>
+          <ScrollView contentContainerStyle={styles.content}>
+            {model.groups.map((group) => <SettingsSection key={group.id} group={{ ...group,
+              rows: group.rows.filter((row) => !['skills', 'cron', 'files', 'connection'].includes(row.id)),
+            }} translate={(key) => translateAgentSettingsKey(t, key)} onOpenRow={openRow} />)}
+          </ScrollView>
+        </Sheet>
+      ) : null}
     </View>
   );
 }
@@ -522,6 +534,9 @@ function AgentSettingsLoading({
 
 function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors']) {
   return StyleSheet.create({
+    profileHero: { alignItems: 'center', gap: Space.md, paddingVertical: Space.lg },
+    profileName: { color: colors.ink, fontSize: FontSize.title, lineHeight: LineHeight.title, fontWeight: FontWeight.semibold, textAlign: 'center' },
+    profileDetail: { color: colors.inkSecondary, fontSize: FontSize.secondary, lineHeight: LineHeight.secondary, textAlign: 'center' },
     screen: {
       flex: 1,
       backgroundColor: colors.canvasGrouped,
@@ -586,7 +601,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     avatarSkeleton: {
       width: ControlSize.floatingButton,
       height: ControlSize.floatingButton,
-      borderRadius: Radius.avatarSettings,
+      borderRadius: Radius.full,
     },
     skeletonCopy: {
       flex: 1,

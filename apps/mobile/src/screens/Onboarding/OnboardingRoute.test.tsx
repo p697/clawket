@@ -32,6 +32,8 @@ const mockClipboardSetString = jest.fn(async (_value: string) => true);
 const mockClipboardGetString = jest.fn(async () => '123456');
 const mockOpenUrl = jest.fn(async (_url: string) => true);
 
+jest.mock('./WelcomeScreen', () => ({ WelcomeScreen: () => null }));
+
 jest.mock('react-native', () => {
   const ReactRuntime = require('react');
   return {
@@ -106,7 +108,7 @@ function createProps(overrides: Partial<OnboardingRouteProps> = {}): OnboardingR
     route: {
       key: 'Onboarding-key',
       name: 'Onboarding',
-      params: undefined,
+      params: { initialBackend: 'openclaw' },
     },
     ...overrides,
   } as unknown as OnboardingRouteProps;
@@ -195,6 +197,17 @@ describe('OnboardingRoute', () => {
   });
 
   afterEach(() => consoleErrorSpy.mockRestore());
+
+  it('returns to an editable form after invitation feedback without announcing a connection or false expiry', async () => {
+    mockConnectBackendPairingCode.mockResolvedValue(null);
+    const onConnected = jest.fn();
+    render(<OnboardingRoute {...createProps({ onConnected })} />);
+    await act(async () => {
+      await mockScreenProps?.onSubmitPairing({ backendKind: 'openclaw', transportKind: 'relay', code: '123456' });
+    });
+    expect(mockScreenProps?.status).toEqual({ kind: 'idle' });
+    expect(onConnected).not.toHaveBeenCalled();
+  });
 
   it('resolves an OpenClaw short code against Production and announces only a ready connection', async () => {
     const onConnected = jest.fn();
@@ -479,9 +492,23 @@ describe('OnboardingRoute', () => {
     ));
   });
 
+  it('routes a pasted invitation through secure link pairing without putting it in the code field', async () => {
+    const invitation = 'https://clawket.ai/pair/example#test-fragment';
+    mockClipboardGetString.mockResolvedValueOnce(` ${invitation} `);
+    render(<OnboardingRoute {...createProps()} />);
+    let pasted: string | null | undefined;
+    await act(async () => {
+      pasted = await mockScreenProps?.onPastePairingCode?.('openclaw');
+    });
+    expect(pasted).toBeNull();
+    expect(mockConnectBackendPairingLink).toHaveBeenCalledWith(expect.objectContaining({ url: invitation }));
+    expect(mockConnectBackendPairingCode).not.toHaveBeenCalled();
+  });
+
   it('binds clipboard, official docs, YouMind, modal close, and offline retry', async () => {
     const onOpenYouMind = jest.fn();
     const onDocsOpened = jest.fn();
+    const onAgentPromptCopied = jest.fn();
     const navigation = { goBack: jest.fn(), navigate: jest.fn() };
     mockPro = { ...mockPro, isPro: true };
     mockRuntime = connectionSnapshot({ state: 'offline' });
@@ -490,10 +517,11 @@ describe('OnboardingRoute', () => {
       route: {
         key: 'Onboarding-key',
         name: 'Onboarding',
-        params: { presentation: 'modal' },
+        params: { presentation: 'modal', initialBackend: 'openclaw' },
       } as never,
       onOpenYouMind,
       onDocsOpened,
+      onAgentPromptCopied,
     });
     render(<OnboardingRoute {...props} />);
     expect(mockScreenProps?.status).toEqual({ kind: 'offline' });
@@ -504,9 +532,19 @@ describe('OnboardingRoute', () => {
     });
     expect(mockClipboardSetString).toHaveBeenCalledWith('copy me');
     expect(mockClipboardGetString).toHaveBeenCalledTimes(1);
-    act(() => mockScreenProps?.onOpenDocs('openclaw'));
+    act(() => mockScreenProps?.onErrorAction?.('bridge_offline'));
     expect(mockOpenUrl).toHaveBeenCalledWith('https://docs.openclaw.ai/install');
     expect(onDocsOpened).toHaveBeenCalledWith('openclaw');
+    await act(async () => {
+      await mockScreenProps?.onCopyAgentPrompt?.('run it for me', 'openclaw');
+    });
+    expect(mockClipboardSetString).toHaveBeenLastCalledWith('run it for me');
+    expect(onAgentPromptCopied).toHaveBeenCalledWith('openclaw');
+    act(() => mockScreenProps?.onOpenWebsite('hermes'));
+    expect(mockOpenUrl).toHaveBeenCalledWith('https://hermes-agent.nousresearch.com');
+    act(() => mockScreenProps?.onOpenWebsite('youmind'));
+    expect(mockOpenUrl).toHaveBeenCalledWith('https://youmind.com');
+    expect(onDocsOpened).toHaveBeenLastCalledWith('youmind');
     act(() => mockScreenProps?.onOpenYouMind());
     expect(onOpenYouMind).toHaveBeenCalledTimes(1);
     expect(mockCreateYouMindOnboardingConnection).toHaveBeenCalledWith({

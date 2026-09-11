@@ -66,9 +66,10 @@ export type HermesFastModeState = {
 
 export abstract class HermesCommandMethods {
   declare sessionStore: HermesBridgeSessionStore;
+  declare modelStateReadVersion: number;
   declare modelStateCache: { value: HermesModelState; expiresAt: number } | null;
   declare contextWindowCache: Map<string, number | null>;
-  declare runHermesPython: <T>(script: string, stdinPayload?: unknown) => T;
+  declare runHermesPython: <T>(script: string, stdinPayload?: unknown) => Promise<T>;
   declare broadcastEvent: (event: string, payload: unknown) => void;
   declare sendAgentLifecycleStart: (runId: string, sessionKey: string) => void;
   declare sendChatError: (runId: string, sessionKey: string, message: string) => void;
@@ -76,18 +77,18 @@ export abstract class HermesCommandMethods {
   declare log: (line: string) => void;
 
 
-  executeModelCommand(rawCommand: string): string {
+  async executeModelCommand(rawCommand: string): Promise<string> {
     const normalizedCommand = canonicalizeHermesModelCommand(
       rawCommand,
-      this.readHermesModelState({ caller: 'model.command' }).providers,
+      (await this.readHermesModelState({ caller: 'model.command' })).providers,
     );
     const rawArgs = normalizedCommand.replace(/^\/model\b/i, '').trim();
     if (!rawArgs) {
-      const state = this.readHermesModelState({ caller: 'model.command' });
+      const state = (await this.readHermesModelState({ caller: 'model.command' }));
       return formatHermesModelSummary(state);
     }
 
-    const switchPayload = this.runHermesPython<{
+    const switchPayload = (await this.runHermesPython<{
       ok?: boolean;
       error?: string;
       result?: {
@@ -211,7 +212,7 @@ export abstract class HermesCommandMethods {
         'current_model = model_cfg.get("default", "") if isinstance(model_cfg, dict) else ""',
         'current_provider = model_cfg.get("provider", "openrouter") if isinstance(model_cfg, dict) else "openrouter"',
         'current_base_url = model_cfg.get("base_url", "") if isinstance(model_cfg, dict) else ""',
-        'model_input, explicit_provider, persist_global = parse_model_flags(payload.get("raw_args", ""))',
+        'model_input, explicit_provider = parse_model_flags(payload.get("raw_args", ""))[:2]',
         'user_providers = dict(cfg.get("providers") or {}) if isinstance(cfg.get("providers"), dict) else {}',
         'for custom_provider in cfg.get("custom_providers") or []:',
         '  if not isinstance(custom_provider, dict):',
@@ -263,7 +264,7 @@ export abstract class HermesCommandMethods {
         '}, "state": state}))',
       ].join('\n'),
       { raw_args: rawArgs },
-    );
+    ));
 
     if (!switchPayload.ok) {
       throw new Error(readString(switchPayload.error) || 'Failed to switch Hermes model.');
@@ -282,13 +283,14 @@ export abstract class HermesCommandMethods {
     ].filter(Boolean).join('\n');
   }
 
-  readHermesModelState(options: { forceRefresh?: boolean; caller?: string } = {}): HermesModelState {
+  async readHermesModelState(options: { forceRefresh?: boolean; caller?: string } = {}): Promise<HermesModelState> {
     if (!options.forceRefresh && this.modelStateCache && this.modelStateCache.expiresAt > Date.now()) {
       return this.modelStateCache.value;
     }
 
+    const readVersion = ++this.modelStateReadVersion;
     const startedAt = Date.now();
-    const payload = this.runHermesPython<unknown>(
+    const payload = (await this.runHermesPython<unknown>(
       [
         'import inspect, json',
         'import time',
@@ -428,7 +430,7 @@ export abstract class HermesCommandMethods {
         '  "_debugModelCount": len(models),',
         '}))',
       ].join('\n'),
-    );
+    ));
     const payloadRecord = isRecord(payload) ? payload : {};
     const debugTimings = isRecord(payloadRecord._debugTimings) ? payloadRecord._debugTimings : null;
     const totalMs = Number(debugTimings?.totalMs);
@@ -452,18 +454,18 @@ export abstract class HermesCommandMethods {
       );
     }
     const state = normalizeHermesModelState(payload);
-    this.modelStateCache = {
+    if (readVersion === this.modelStateReadVersion) this.modelStateCache = {
       value: state,
       expiresAt: Date.now() + HERMES_MODEL_STATE_CACHE_TTL_MS,
     };
     return state;
   }
 
-  resolveHermesContextWindow(input: {
+  async resolveHermesContextWindow(input: {
     model?: string;
     provider?: string;
     baseUrl?: string;
-  }): number | undefined {
+  }): Promise<number | undefined> {
     const model = input.model?.trim() || '';
     if (!model) return undefined;
     const provider = input.provider?.trim() || '';
@@ -475,7 +477,7 @@ export abstract class HermesCommandMethods {
     }
 
     try {
-      const result = this.runHermesPython<{ contextTokens?: number | null }>(
+      const result = (await this.runHermesPython<{ contextTokens?: number | null }>(
         [
           'import json',
           'from agent.model_metadata import get_model_context_length',
@@ -499,7 +501,7 @@ export abstract class HermesCommandMethods {
           'print(json.dumps({"contextTokens": context_tokens}))',
         ].join('\n'),
         { model, provider, baseUrl },
-      );
+      ));
       const contextTokens = typeof result?.contextTokens === 'number'
         && Number.isFinite(result.contextTokens)
         && result.contextTokens > 0
@@ -513,8 +515,8 @@ export abstract class HermesCommandMethods {
     }
   }
 
-  readHermesCurrentModelState(): HermesCurrentModelState {
-    const payload = this.runHermesPython<unknown>(
+  async readHermesCurrentModelState(): Promise<HermesCurrentModelState> {
+    const payload = (await this.runHermesPython<unknown>(
       [
         'import json',
         'from hermes_cli.config import load_config',
@@ -530,7 +532,7 @@ export abstract class HermesCommandMethods {
         '  "note": None,',
         '}))',
       ].join('\n'),
-    );
+    ));
 
     const record = isRecord(payload) ? payload : {};
     return {
@@ -541,13 +543,13 @@ export abstract class HermesCommandMethods {
     };
   }
 
-  setHermesModel(payload: Record<string, unknown>): HermesModelSetResult {
+  async setHermesModel(payload: Record<string, unknown>): Promise<HermesModelSetResult> {
     const scope = readString(payload.scope) || 'global';
     if (scope !== 'global') {
       throw new Error('Hermes bridge supports global model switching only.');
     }
 
-    const state = this.readHermesModelState({ caller: 'model.set' });
+    const state = (await this.readHermesModelState({ caller: 'model.set' }));
     const providerInput = readString(payload.provider);
     const provider = providerInput
       ? canonicalizeHermesProviderSlug(providerInput, state.providers)
@@ -563,8 +565,8 @@ export abstract class HermesCommandMethods {
     const command = provider
       ? `/model ${model} --provider ${provider} --global`
       : `/model ${model} --global`;
-    this.executeModelCommand(command);
-    const nextState = this.readHermesModelState({ forceRefresh: true, caller: 'model.set' });
+    (await this.executeModelCommand(command));
+    const nextState = (await this.readHermesModelState({ forceRefresh: true, caller: 'model.set' }));
 
     return {
       ok: true,
@@ -578,29 +580,29 @@ export abstract class HermesCommandMethods {
     };
   }
 
-  getHermesThinkingLevel(): string {
-    const state = this.readHermesReasoningState();
+  async getHermesThinkingLevel(): Promise<string> {
+    const state = (await this.readHermesReasoningState());
     return state.effort === 'none' ? 'off' : state.effort;
   }
 
-  getHermesReasoningPayload(): {
+  async getHermesReasoningPayload(): Promise<{
     level: string;
     rawLevel: string;
     showReasoning: boolean;
-  } {
-    const state = this.readHermesReasoningState();
+  }> {
+    const state = (await this.readHermesReasoningState());
     return {
-      level: this.getHermesThinkingLevel(),
+      level: (await this.getHermesThinkingLevel()),
       rawLevel: state.effort,
       showReasoning: state.display,
     };
   }
 
-  setHermesReasoningPayload(payload: Record<string, unknown>): {
+  async setHermesReasoningPayload(payload: Record<string, unknown>): Promise<{
     level: string;
     rawLevel: string;
     showReasoning: boolean;
-  } {
+  }> {
     const requestedLevel = normalizeThinkingLevelAlias(
       readString(payload.level)
       || readString(payload.thinkingLevel)
@@ -611,14 +613,14 @@ export abstract class HermesCommandMethods {
       throw new Error('hermes.reasoning.set requires a level or showReasoning value.');
     }
 
-    const current = this.readHermesReasoningState();
+    const current = (await this.readHermesReasoningState());
     const nextEffort: HermesReasoningState['effort'] = requestedLevel
       ? (requestedLevel === 'off' ? 'none' : requestedLevel as HermesReasoningState['effort'])
       : current.effort;
-    const next = this.setHermesReasoningState({
+    const next = (await this.setHermesReasoningState({
       effort: nextEffort,
       display: requestedShowReasoning ?? current.display,
-    });
+    }));
     return {
       level: next.effort === 'none' ? 'off' : next.effort,
       rawLevel: next.effort,
@@ -626,8 +628,8 @@ export abstract class HermesCommandMethods {
     };
   }
 
-  readHermesReasoningState(): HermesReasoningState {
-    const payload = this.runHermesPython<unknown>(
+  async readHermesReasoningState(): Promise<HermesReasoningState> {
+    const payload = (await this.runHermesPython<unknown>(
       [
         'import json',
         'from hermes_cli.config import load_config',
@@ -649,7 +651,7 @@ export abstract class HermesCommandMethods {
         '  "display": display,',
         '}))',
       ].join('\n'),
-    );
+    ));
     const record = isRecord(payload) ? payload : {};
     const effort = readString(record.effort).toLowerCase();
     return {
@@ -658,8 +660,8 @@ export abstract class HermesCommandMethods {
     };
   }
 
-  setHermesReasoningState(next: HermesReasoningState): HermesReasoningState {
-    const payload = this.runHermesPython<unknown>(
+  async setHermesReasoningState(next: HermesReasoningState): Promise<HermesReasoningState> {
+    const payload = (await this.runHermesPython<unknown>(
       [
         'import json',
         'import os',
@@ -685,7 +687,7 @@ export abstract class HermesCommandMethods {
         '}))',
       ].join('\n'),
       next,
-    );
+    ));
     const record = isRecord(payload) ? payload : {};
     const effort = readString(record.effort).toLowerCase();
     return {
@@ -694,8 +696,8 @@ export abstract class HermesCommandMethods {
     };
   }
 
-  readHermesFastModeState(): HermesFastModeState {
-    const payload = this.runHermesPython<unknown>(
+  async readHermesFastModeState(): Promise<HermesFastModeState> {
+    const payload = (await this.runHermesPython<unknown>(
       [
         'import json',
         'from hermes_cli.config import load_config',
@@ -712,7 +714,7 @@ export abstract class HermesCommandMethods {
         '  "supported": supported,',
         '}))',
       ].join('\n'),
-    );
+    ));
     const record = isRecord(payload) ? payload : {};
     return {
       enabled: record.enabled === true,
@@ -720,8 +722,8 @@ export abstract class HermesCommandMethods {
     };
   }
 
-  setHermesFastModeState(enabled: boolean): HermesFastModeState {
-    const payload = this.runHermesPython<unknown>(
+  async setHermesFastModeState(enabled: boolean): Promise<HermesFastModeState> {
+    const payload = (await this.runHermesPython<unknown>(
       [
         'import json',
         'import os',
@@ -753,7 +755,7 @@ export abstract class HermesCommandMethods {
         '}))',
       ].join('\n'),
       { enabled },
-    );
+    ));
     const record = isRecord(payload) ? payload : {};
     return {
       enabled: record.enabled === true,
@@ -761,32 +763,32 @@ export abstract class HermesCommandMethods {
     };
   }
 
-  getHermesFastModePayload(): HermesFastModeState {
-    return this.readHermesFastModeState();
+  async getHermesFastModePayload(): Promise<HermesFastModeState> {
+    return (await this.readHermesFastModeState());
   }
 
-  setHermesFastModePayload(payload: Record<string, unknown>): HermesFastModeState {
+  async setHermesFastModePayload(payload: Record<string, unknown>): Promise<HermesFastModeState> {
     const enabled = readBoolean(payload.enabled);
     if (enabled == null) {
       throw new Error('hermes.fast.set requires an enabled boolean.');
     }
-    return this.setHermesFastModeState(enabled);
+    return (await this.setHermesFastModeState(enabled));
   }
 
-  executeReasoningCommand(rawCommand: string): string {
+  async executeReasoningCommand(rawCommand: string): Promise<string> {
     const normalizedCommand = rawCommand.trim();
     const rawArgs = normalizedCommand.replace(/^\/reasoning\b/i, '').trim();
-    const currentState = this.readHermesReasoningState();
+    const currentState = (await this.readHermesReasoningState());
     if (!rawArgs) {
       return formatHermesReasoningSummary(currentState);
     }
 
     const arg = normalizeThinkingLevelAlias(rawArgs);
     if (arg === 'show' || arg === 'on') {
-      const nextState = this.setHermesReasoningState({
+      const nextState = (await this.setHermesReasoningState({
         effort: currentState.effort,
         display: true,
-      });
+      }));
       return [
         'Reasoning display turned on.',
         '',
@@ -794,10 +796,10 @@ export abstract class HermesCommandMethods {
       ].join('\n');
     }
     if (arg === 'hide' || arg === 'off-display') {
-      const nextState = this.setHermesReasoningState({
+      const nextState = (await this.setHermesReasoningState({
         effort: currentState.effort,
         display: false,
-      });
+      }));
       return [
         'Reasoning display turned off.',
         '',
@@ -807,10 +809,10 @@ export abstract class HermesCommandMethods {
     if (!isHermesReasoningEffort(arg)) {
       throw new Error('Valid reasoning levels: none, minimal, low, medium, high, xhigh, show, hide.');
     }
-    const nextState = this.setHermesReasoningState({
+    const nextState = (await this.setHermesReasoningState({
       effort: arg,
       display: currentState.display,
-    });
+    }));
     return [
       `Reasoning effort set to ${formatHermesReasoningEffortLabel(nextState.effort)}.`,
       '',
@@ -818,10 +820,10 @@ export abstract class HermesCommandMethods {
     ].join('\n');
   }
 
-  executeThinkingCommand(rawCommand: string): string {
+  async executeThinkingCommand(rawCommand: string): Promise<string> {
     const normalizedCommand = rawCommand.trim();
     const rawArgs = normalizedCommand.replace(/^\/think\b/i, '').trim();
-    const currentState = this.readHermesReasoningState();
+    const currentState = (await this.readHermesReasoningState());
     if (!rawArgs) {
       return formatHermesThinkingSummary(currentState);
     }
@@ -829,10 +831,10 @@ export abstract class HermesCommandMethods {
     if (!isHermesReasoningEffort(normalizedLevel)) {
       throw new Error('Valid thinking levels: off, minimal, low, medium, high, xhigh.');
     }
-    const nextState = this.setHermesReasoningState({
+    const nextState = (await this.setHermesReasoningState({
       effort: normalizedLevel,
       display: currentState.display,
-    });
+    }));
     return [
       `Thinking level set to ${formatHermesThinkingLevelLabel(nextState.effort)}.`,
       '',
@@ -840,10 +842,10 @@ export abstract class HermesCommandMethods {
     ].join('\n');
   }
 
-  executeFastCommand(rawCommand: string): string {
+  async executeFastCommand(rawCommand: string): Promise<string> {
     const normalizedCommand = rawCommand.trim().replace(/:$/, '');
     const rawArgs = normalizedCommand.replace(/^\/fast\b/i, '').trim().toLowerCase();
-    const currentState = this.readHermesFastModeState();
+    const currentState = (await this.readHermesFastModeState());
     if (!currentState.supported) {
       throw new Error('Fast mode is only available for models that support it.');
     }
@@ -853,7 +855,7 @@ export abstract class HermesCommandMethods {
     if (!isHermesFastModeValue(rawArgs)) {
       throw new Error('Valid fast mode values: on, off, fast, normal, status.');
     }
-    const nextState = this.setHermesFastModeState(rawArgs === 'on' || rawArgs === 'fast');
+    const nextState = (await this.setHermesFastModeState(rawArgs === 'on' || rawArgs === 'fast'));
     return [
       `Fast mode turned ${nextState.enabled ? 'on' : 'off'}.`,
       '',

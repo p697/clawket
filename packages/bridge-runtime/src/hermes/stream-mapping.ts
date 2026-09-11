@@ -78,15 +78,15 @@ export abstract class HermesStreamMethods {
   declare activeRuns: Map<string, HermesActiveRun>;
   declare pendingRunStarts: Map<string, HermesPendingRunStart>;
   declare options: { hermesStateDbPath?: string };
-  declare executeModelCommand: (command: string) => string;
-  declare executeThinkingCommand: (command: string) => string;
-  declare executeReasoningCommand: (command: string) => string;
-  declare executeFastCommand: (command: string) => string;
+  declare executeModelCommand: (command: string) => Promise<string>;
+  declare executeThinkingCommand: (command: string) => Promise<string>;
+  declare executeReasoningCommand: (command: string) => Promise<string>;
+  declare executeFastCommand: (command: string) => Promise<string>;
   declare readHermesSessionUsageSnapshot: (sessionId: string) => HermesObservedSessionUsageSnapshot | null;
   declare recordHermesRunUsageDelta: (input: { sessionKey: string; sessionId: string; observedAtMs: number; baseline: HermesObservedSessionUsageSnapshot | null }) => void;
-  declare runHermesPython: <T>(script: string, stdinPayload?: unknown) => T;
-  declare getHermesSessionHistory: (key: string, limit: number, cursor?: unknown) => { messages: HermesHistoryMessage[]; sessionId: string; thinkingLevel: string; nextCursor?: string };
-  declare isNativeOnlySession: (key: string) => boolean;
+  declare runHermesPython: <T>(script: string, stdinPayload?: unknown) => Promise<T>;
+  declare getHermesSessionHistory: (key: string, limit: number, cursor?: unknown) => Promise<{ messages: HermesHistoryMessage[]; sessionId: string; thinkingLevel: string; nextCursor?: string }>;
+  declare isNativeOnlySession: (key: string) => Promise<boolean>;
   declare updateSnapshot: (patch: { sessionCount?: number }) => void;
   declare broadcastEvent: (event: string, payload: unknown) => void;
 
@@ -107,7 +107,7 @@ export abstract class HermesStreamMethods {
     }
 
     if (sessionKey !== DEFAULT_SESSION_ID && !this.sessionStore.owns(sessionKey)) {
-      if (this.isNativeOnlySession(sessionKey)) {
+      if ((await this.isNativeOnlySession(sessionKey))) {
         throw new Error(`Hermes native session is read-only: ${sessionKey}`);
       }
       throw new Error(`Hermes Bridge session not found; create it before sending: ${sessionKey}`);
@@ -115,49 +115,19 @@ export abstract class HermesStreamMethods {
     const session = this.sessionStore.ensureSession(sessionKey);
 
     if (isModelCommand(text)) {
-      return this.handleModelCommand(sessionKey, text, idempotencyKey || undefined);
+      return (await this.handleModelCommand(sessionKey, text, idempotencyKey || undefined));
     }
 
     if (isThinkingCommand(text)) {
-      return this.handleThinkingCommand(sessionKey, text, idempotencyKey || undefined);
+      return (await this.handleThinkingCommand(sessionKey, text, idempotencyKey || undefined));
     }
 
     if (isReasoningCommand(text)) {
-      return this.handleReasoningCommand(sessionKey, text, idempotencyKey || undefined);
+      return (await this.handleReasoningCommand(sessionKey, text, idempotencyKey || undefined));
     }
 
     if (isFastCommand(text)) {
-      return this.handleFastCommand(sessionKey, text, idempotencyKey || undefined);
-    }
-
-    const priorHistory = this.getHermesSessionHistory(sessionKey, 0).messages.map((message) => ({
-      role: message.role,
-      content: message.content,
-    }));
-    const nativeBoundaryId = this.nativeSessions
-      .readHistoryBySessionId(session.sessionId)
-      ?.messages.at(-1)?._nativeId;
-    this.sessionStore.appendMessage(sessionKey, {
-      role: 'user',
-      content: text,
-      ts: Date.now(),
-      idempotencyKey: idempotencyKey || undefined,
-      _nativeBoundaryId: nativeBoundaryId,
-    });
-    this.updateSnapshot({ sessionCount: this.sessionStore.count() });
-
-    let input: string | Array<Record<string, unknown>>;
-    if (imageAttachments.length > 0) {
-      const parts: Array<Record<string, unknown>> = [{ type: 'text', text }];
-      for (const att of imageAttachments) {
-        parts.push({
-          type: 'image_url',
-          image_url: { url: `data:${att.mimeType};base64,${att.content}` },
-        });
-      }
-      input = [{ role: 'user', content: parts }];
-    } else {
-      input = text;
+      return (await this.handleFastCommand(sessionKey, text, idempotencyKey || undefined));
     }
 
     const abortController = new AbortController();
@@ -166,6 +136,39 @@ export abstract class HermesStreamMethods {
     this.pendingRunStarts.set(requestId, { requestId, sessionKey, sessionId, abortController });
     let runId: string;
     try {
+      const priorHistory = (await this.getHermesSessionHistory(sessionKey, 0)).messages.map((message) => ({
+        role: message.role,
+        content: message.content,
+      }));
+      const nativeBoundaryId = (await this.nativeSessions
+        .readHistoryBySessionId(session.sessionId))
+        ?.messages.at(-1)?._nativeId;
+      if (abortController.signal.aborted || this.sessionStore.findSession(sessionKey)?.sessionId !== session.sessionId) {
+        throw new Error('Hermes run start was aborted.');
+      }
+      this.sessionStore.appendMessage(sessionKey, {
+        role: 'user',
+        content: text,
+        ts: Date.now(),
+        idempotencyKey: idempotencyKey || undefined,
+        _nativeBoundaryId: nativeBoundaryId,
+      });
+      this.updateSnapshot({ sessionCount: this.sessionStore.count() });
+
+      let input: string | Array<Record<string, unknown>>;
+      if (imageAttachments.length > 0) {
+        const parts: Array<Record<string, unknown>> = [{ type: 'text', text }];
+        for (const att of imageAttachments) {
+          parts.push({
+            type: 'image_url',
+            image_url: { url: `data:${att.mimeType};base64,${att.content}` },
+          });
+        }
+        input = [{ role: 'user', content: parts }];
+      } else {
+        input = text;
+      }
+
       const startResponse = await fetch(`${this.apiBaseUrl}/v1/runs`, {
         method: 'POST',
         headers: buildHermesApiHeaders(this.apiKey),
@@ -209,15 +212,15 @@ export abstract class HermesStreamMethods {
     return { runId };
   }
 
-  handleModelCommand(
+  async handleModelCommand(
     sessionKey: string,
     rawCommand: string,
     preferredRunId?: string,
-  ): { runId: string } {
+  ): Promise<{ runId: string }> {
     const runId = preferredRunId || randomUUID();
     this.sendAgentLifecycleStart(runId, sessionKey);
     try {
-      const responseText = this.executeModelCommand(rawCommand);
+      const responseText = (await this.executeModelCommand(rawCommand));
       const timestamp = Date.now();
       this.sessionStore.appendMessage(sessionKey, {
         role: 'assistant',
@@ -243,15 +246,15 @@ export abstract class HermesStreamMethods {
     }
   }
 
-  handleThinkingCommand(
+  async handleThinkingCommand(
     sessionKey: string,
     rawCommand: string,
     preferredRunId?: string,
-  ): { runId: string } {
+  ): Promise<{ runId: string }> {
     const runId = preferredRunId || randomUUID();
     this.sendAgentLifecycleStart(runId, sessionKey);
     try {
-      const responseText = this.executeThinkingCommand(rawCommand);
+      const responseText = (await this.executeThinkingCommand(rawCommand));
       const timestamp = Date.now();
       this.sessionStore.appendMessage(sessionKey, {
         role: 'assistant',
@@ -277,15 +280,15 @@ export abstract class HermesStreamMethods {
     }
   }
 
-  handleReasoningCommand(
+  async handleReasoningCommand(
     sessionKey: string,
     rawCommand: string,
     preferredRunId?: string,
-  ): { runId: string } {
+  ): Promise<{ runId: string }> {
     const runId = preferredRunId || randomUUID();
     this.sendAgentLifecycleStart(runId, sessionKey);
     try {
-      const responseText = this.executeReasoningCommand(rawCommand);
+      const responseText = (await this.executeReasoningCommand(rawCommand));
       const timestamp = Date.now();
       this.sessionStore.appendMessage(sessionKey, {
         role: 'assistant',
@@ -311,15 +314,15 @@ export abstract class HermesStreamMethods {
     }
   }
 
-  handleFastCommand(
+  async handleFastCommand(
     sessionKey: string,
     rawCommand: string,
     preferredRunId?: string,
-  ): { runId: string } {
+  ): Promise<{ runId: string }> {
     const runId = preferredRunId || randomUUID();
     this.sendAgentLifecycleStart(runId, sessionKey);
     try {
-      const responseText = this.executeFastCommand(rawCommand);
+      const responseText = (await this.executeFastCommand(rawCommand));
       const timestamp = Date.now();
       this.sessionStore.appendMessage(sessionKey, {
         role: 'assistant',
@@ -524,7 +527,9 @@ export abstract class HermesStreamMethods {
               sessionId,
               runStartedAtMs,
               completedTools,
+              signal,
             });
+            if (signal.aborted) return;
             this.recordHermesRunUsageDelta({
               sessionKey,
               sessionId,
@@ -572,7 +577,9 @@ export abstract class HermesStreamMethods {
           sessionId,
           runStartedAtMs,
           completedTools,
+          signal,
         });
+        if (signal.aborted) return;
         this.recordHermesRunUsageDelta({
           sessionKey,
           sessionId,
@@ -610,8 +617,9 @@ export abstract class HermesStreamMethods {
           seq,
           assistantText,
           completedTools,
+          signal,
         });
-        if (!finalized) {
+        if (!finalized && !signal.aborted) {
           this.sendChatError(
             runId,
             sessionKey,
@@ -620,7 +628,7 @@ export abstract class HermesStreamMethods {
         }
       }
     } catch (error) {
-      if (isAbortError(error)) {
+      if (isAbortError(error) || signal.aborted) {
         return;
       }
       this.sendChatError(runId, sessionKey, `Hermes events stream failed: ${formatError(error)}`);
@@ -634,6 +642,7 @@ export abstract class HermesStreamMethods {
     sessionKey: string;
     sessionId: string;
     runStartedAtMs: number;
+    signal: AbortSignal;
     seq: number;
     assistantText: string;
     completedTools: Array<{
@@ -649,6 +658,7 @@ export abstract class HermesStreamMethods {
       sessionId: params.sessionId,
       runStartedAtMs: params.runStartedAtMs,
       completedTools: params.completedTools,
+      signal: params.signal,
     });
 
     this.recordHermesRunUsageDelta({
@@ -658,7 +668,8 @@ export abstract class HermesStreamMethods {
       baseline: this.activeRuns.get(params.runId)?.usageBaseline ?? null,
     });
 
-    const history = this.getHermesSessionHistory(params.sessionKey, 24);
+    const history = (await this.getHermesSessionHistory(params.sessionKey, 24));
+    if (params.signal.aborted) return true;
     const historyOutput = [...history.messages]
       .reverse()
       .find((message) => (
@@ -780,6 +791,7 @@ export abstract class HermesStreamMethods {
     sessionKey: string;
     sessionId: string;
     runStartedAtMs: number;
+    signal: AbortSignal;
     completedTools: Array<{
       toolCallId: string;
       toolName: string;
@@ -787,11 +799,11 @@ export abstract class HermesStreamMethods {
       toolDurationMs?: number;
     }>;
   }): Promise<void> {
-    const toolOutputs = this.readHermesToolOutputsFromLocalState(
+    const toolOutputs = (await this.readHermesToolOutputsFromLocalState(
       params.sessionId,
       params.runStartedAtMs,
-    );
-    if (toolOutputs.length === 0 || params.completedTools.length === 0) {
+    ));
+    if (params.signal.aborted || toolOutputs.length === 0 || params.completedTools.length === 0) {
       return;
     }
 
@@ -827,17 +839,17 @@ export abstract class HermesStreamMethods {
     }
   }
 
-  readHermesToolOutputsFromLocalState(
+  async readHermesToolOutputsFromLocalState(
     sessionId: string,
     runStartedAtMs: number,
-  ): Array<{ toolCallId?: string; toolName?: string; content: string; timestampMs: number }> {
+  ): Promise<Array<{ toolCallId?: string; toolName?: string; content: string; timestampMs: number }>> {
     const stateDbPath = this.options.hermesStateDbPath?.trim() || HERMES_STATE_DB_PATH;
     if (!existsSync(stateDbPath)) {
       return [];
     }
 
     try {
-      const parsed = this.runHermesPython<unknown>(
+      const parsed = (await this.runHermesPython<unknown>(
         [
           'import json, pathlib, sqlite3, sys',
           'payload = json.loads(sys.stdin.read() or "{}")',
@@ -871,7 +883,7 @@ export abstract class HermesStreamMethods {
           sessionId,
           sinceTs: Math.max(0, runStartedAtMs - 1_000) / 1_000,
         },
-      );
+      ));
       if (!Array.isArray(parsed)) {
         return [];
       }

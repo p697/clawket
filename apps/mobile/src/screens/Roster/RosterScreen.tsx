@@ -1,14 +1,13 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   FlatList,
-  Pressable,
   RefreshControl,
   StyleSheet,
   Text,
   View,
   type ListRenderItem,
 } from 'react-native';
-import { Plus, Search, UserRound } from 'lucide-react-native';
+import { Bot, MonitorSmartphone, Plus, Search, UserRound } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -21,15 +20,17 @@ import { Banner } from '../../components/ui/Banner';
 import { Button } from '../../components/ui/Button';
 import { CompositionSafeBottomSheetTextInput } from '../../components/ui/CompositionSafeBottomSheetTextInput';
 import { ConfirmationModal } from '../../components/ui/ConfirmationModal';
-import { FloatingButton, type FloatingButtonBadge } from '../../components/ui/FloatingButton';
+import { FloatingButton, FLOATING_PRIMARY_BUTTON_SIZE, type FloatingButtonBadge } from '../../components/ui/FloatingButton';
+import { ProEntryButton } from '../../components/ui/ProEntryButton';
 import { RosterRow } from '../../components/ui/RosterRow';
 import {
   SettingsDivider,
   SettingsGroup,
   SettingsRow,
 } from '../../components/ui/SettingsGroup';
+import { ChoiceRow } from '../../components/ui/SetupPrimitives';
 import { Sheet } from '../../components/ui/Sheet';
-import { Skeleton } from '../../components/ui/Skeleton';
+import { LoadingState } from '../../components/ui/LoadingState';
 import { useAppTheme } from '../../theme';
 import {
   ControlSize,
@@ -59,14 +60,7 @@ import {
 
 type MaybePromise = void | Promise<void>;
 
-const ROSTER_SKELETON_KEYS = Object.freeze([
-  'one',
-  'two',
-  'three',
-  'four',
-  'five',
-  'six',
-]);
+
 
 export type RosterGraceBanner = Readonly<{
   message: string;
@@ -81,6 +75,7 @@ export type RosterViewProps = Readonly<{
   graceBanner?: RosterGraceBanner;
   accountBadge?: FloatingButtonBadge;
   showProEntry?: boolean;
+  recovering?: boolean;
   showOfflineBanner?: boolean;
   showErrorBanner?: boolean;
   onOpenAccount: () => void;
@@ -99,6 +94,8 @@ export type RosterScreenProps = Readonly<{
   agentPreferences?: RosterModelOptions['agentPreferences'];
   canAccessAgent?: RosterModelOptions['canAccessAgent'];
   canCreateAgent?: boolean;
+  /** Free tier already holds its one connection; the row shows the Pro lock and `onAdd` opens the paywall. */
+  addConnectionLocked?: boolean;
   canRenamePinnedSession?: boolean;
   graceBanner?: RosterGraceBanner;
   isPro?: boolean;
@@ -145,6 +142,53 @@ function ActionRows({
   );
 }
 
+/**
+ * The add sheet is the product's main growth entry, so each option explains
+ * what it creates and which level of the roster it lands on.
+ */
+function RosterAddChoices({
+  actions,
+  addConnectionLocked,
+  createAgentLocked,
+  connectionLabel,
+  onPress,
+}: Readonly<{
+  actions: ReadonlyArray<RosterAddAction>;
+  addConnectionLocked: boolean;
+  createAgentLocked: boolean;
+  connectionLabel: string | null;
+  onPress: (action: RosterAddAction) => void;
+}>): React.JSX.Element {
+  const { t } = useTranslation(['chat', 'config']);
+  return (
+    <View style={styles.addChoices}>
+      {actions.map((action) => (action === 'create_agent' ? (
+        <ChoiceRow
+          key={action}
+          testID="roster-action-create_agent"
+          icon={Bot}
+          title={t('New Agent', { ns: 'chat' })}
+          description={connectionLabel
+            ? t('Create another agent on {{connection}}', { ns: 'config', connection: connectionLabel })
+            : t('Create another agent on this connection', { ns: 'config' })}
+          locked={createAgentLocked}
+          onPress={() => onPress(action)}
+        />
+      ) : (
+        <ChoiceRow
+          key={action}
+          testID="roster-action-add_connection"
+          icon={MonitorSmartphone}
+          title={t('Add Connection', { ns: 'config' })}
+          description={t('Connect OpenClaw, Hermes or YouMind Sprite', { ns: 'config' })}
+          locked={addConnectionLocked}
+          onPress={() => onPress(action)}
+        />
+      )))}
+    </View>
+  );
+}
+
 function resolveAccountBadge(attentionCount: number): FloatingButtonBadge | undefined {
   if (attentionCount > 0) {
     return { tone: 'bad', count: attentionCount };
@@ -158,44 +202,30 @@ function RosterHeader({
   onOpenAccount,
   onOpenPro,
   onSearch,
-  onAdd,
 }: Pick<
   RosterViewProps,
-  'accountBadge' | 'showProEntry' | 'onOpenAccount' | 'onOpenPro' | 'onSearch' | 'onAdd'
+  'accountBadge' | 'showProEntry' | 'onOpenAccount' | 'onOpenPro' | 'onSearch'
 >): React.JSX.Element {
   const { t } = useTranslation(['common', 'config']);
-  const { theme } = useAppTheme();
 
   return (
     <View testID="roster-header" pointerEvents="box-none" style={styles.headerRow}>
       <View style={styles.accountActions}>
-        <View testID="roster-account-control" style={styles.accountControl}>
-          <FloatingButton
-            testID="roster-account"
-            icon={UserRound}
-            badge={accountBadge}
-            accessibilityLabel={t('Account settings')}
-            onPress={onOpenAccount}
+        <FloatingButton
+          testID="roster-account"
+          icon={UserRound}
+          badge={accountBadge}
+          accessibilityLabel={t('Account settings')}
+          onPress={onOpenAccount}
+        />
+        {showProEntry && onOpenPro ? (
+          <ProEntryButton
+            testID="roster-pro"
+            label={t('Pro', { ns: 'config' })}
+            accessibilityLabel={t('View Pro', { ns: 'common' })}
+            onPress={onOpenPro}
           />
-          {showProEntry && onOpenPro ? (
-            <Pressable
-              testID="roster-pro"
-              accessibilityRole="button"
-              accessibilityLabel={t('View Pro', { ns: 'common' })}
-              hitSlop={Space.md}
-              onPress={onOpenPro}
-              style={({ pressed }) => [
-                styles.proBadge,
-                { backgroundColor: theme.colors.ink },
-                pressed ? styles.proBadgePressed : null,
-              ]}
-            >
-              <Text style={[styles.proBadgeText, { color: theme.colors.canvas }]}>
-                {t('Pro', { ns: 'config' })}
-              </Text>
-            </Pressable>
-          ) : null}
-        </View>
+        ) : null}
       </View>
       <View style={styles.headerActions}>
         <FloatingButton
@@ -204,12 +234,6 @@ function RosterHeader({
           accessibilityLabel={t('Search')}
           onPress={onSearch}
         />
-        <FloatingButton
-          testID="roster-add"
-          icon={Plus}
-          accessibilityLabel={t('Add')}
-          onPress={onAdd}
-        />
       </View>
     </View>
   );
@@ -217,30 +241,14 @@ function RosterHeader({
 
 function RosterLoading(): React.JSX.Element {
   const { t } = useTranslation('common');
-
-  return (
-    <View testID="roster-loading" style={styles.loadingList}>
-      {ROSTER_SKELETON_KEYS.map((key) => (
-        <View key={key} testID={`roster-skeleton-${key}`} style={styles.skeletonRow}>
-          <Skeleton
-            accessibilityLabel={t('Loading agents')}
-            style={styles.skeletonAvatar}
-          />
-          <View style={styles.skeletonCopy}>
-            <Skeleton style={styles.skeletonName} />
-            <Skeleton style={styles.skeletonPreview} />
-          </View>
-          <Skeleton style={styles.skeletonTime} />
-        </View>
-      ))}
-    </View>
-  );
+  return <LoadingState testID="roster-loading" message={t('Loading agents')} pose="connecting" />;
 }
 
 function RosterBanners({
   state,
   graceBanner,
   showOfflineBanner,
+  recovering,
   showErrorBanner,
   onRefresh,
   onGraceAction,
@@ -249,6 +257,7 @@ function RosterBanners({
   RosterViewProps,
   | 'state'
   | 'graceBanner'
+  | 'recovering'
   | 'showOfflineBanner'
   | 'showErrorBanner'
   | 'onRefresh'
@@ -260,7 +269,7 @@ function RosterBanners({
   const error = showErrorBanner ?? state === 'error';
   const permission = state === 'permission';
 
-  if (!graceBanner && !offline && !error && !permission) return null;
+  if (!graceBanner && !recovering && !offline && !error && !permission) return null;
 
   return (
     <View testID="roster-banners" style={styles.banners}>
@@ -272,6 +281,7 @@ function RosterBanners({
           onAction={onGraceAction}
         />
       ) : null}
+      {recovering ? <Banner testID="roster-reconnecting" tone="neutral" message={t('Reconnecting…')} /> : null}
       {offline ? (
         <Banner
           testID="roster-offline-banner"
@@ -310,6 +320,7 @@ export function RosterView({
   accountBadge,
   showProEntry = false,
   showOfflineBanner,
+  recovering,
   showErrorBanner,
   onOpenAccount,
   onSearch,
@@ -326,7 +337,7 @@ export function RosterView({
   const insets = useSafeAreaInsets();
   const contentInsets = useMemo(() => ({
     paddingTop: insets.top + ControlSize.floatingButton + Space.xl,
-    paddingBottom: insets.bottom + Space.lg,
+    paddingBottom: insets.bottom + Space.xl + FLOATING_PRIMARY_BUTTON_SIZE + Space.lg,
   }), [insets.bottom, insets.top]);
   const headerInsets = useMemo(() => ({
     paddingTop: insets.top + Space.sm,
@@ -371,11 +382,12 @@ export function RosterView({
         avatarStatus={activeConnectionOffline ? 'offline' : item.working ? 'working' : 'idle'}
         timeLabel={timeLabel}
         unreadCount={item.unreadCount}
+        unreadIndicator="dot"
         attention={item.attention !== null}
         attentionTone="bad"
         cached={item.cached}
         locked={item.locked}
-        accessibilityLabel={item.cached ? `${item.name}, ${t('Last synced')}` : item.name}
+        accessibilityLabel={item.cached ? `${item.name}, ${t('Last synced')}` : [item.name, item.working ? t('Working') : null, item.unreadCount > 0 ? t('Unread messages') : null].filter(Boolean).join(', ')}
         onPress={() => open(item)}
         {...(onLongPressRow ? { onLongPress: () => onLongPressRow(item) } : {})}
       />
@@ -386,6 +398,7 @@ export function RosterView({
     onOpenLockedRow,
     onOpenRow,
     showOfflineBanner,
+  recovering,
     state,
     t,
     translateRelativeTime,
@@ -400,7 +413,6 @@ export function RosterView({
           onOpenAccount={onOpenAccount}
           onOpenPro={onOpenPro}
           onSearch={onSearch}
-          onAdd={onAdd}
         />
       </View>
       {state === 'loading' ? (
@@ -423,6 +435,7 @@ export function RosterView({
             <RosterBanners
               state={state}
               graceBanner={graceBanner}
+              recovering={recovering}
               showOfflineBanner={showOfflineBanner}
               showErrorBanner={showErrorBanner}
               onRefresh={onRefresh}
@@ -447,6 +460,18 @@ export function RosterView({
           showsVerticalScrollIndicator={false}
         />
       )}
+      <FloatingButton
+        testID="roster-add"
+        icon={Plus}
+        size="primary"
+        appearance="ink"
+        accessibilityLabel={t('Add Connection', { ns: 'config' })}
+        onPress={onAdd}
+        style={[styles.addButton, {
+          right: insets.right + Space.xl,
+          bottom: insets.bottom + Space.xl,
+        }]}
+      />
     </View>
   );
 }
@@ -456,6 +481,7 @@ export function RosterScreen({
   agentPreferences,
   canAccessAgent,
   canCreateAgent = false,
+  addConnectionLocked = false,
   canRenamePinnedSession = false,
   graceBanner,
   isPro = false,
@@ -482,6 +508,7 @@ export function RosterScreen({
   const roster = useRoster();
   const [refreshing, setRefreshing] = useState(false);
   const [addVisible, setAddVisible] = useState(false);
+  const afterAddCloseRef = useRef<(() => void) | undefined>(undefined);
   const [actionRow, setActionRow] = useState<RosterDisplayRow | null>(null);
   const [removeRow, setRemoveRow] = useState<RosterDisplayRow | null>(null);
   const [renameRow, setRenameRow] = useState<RosterDisplayRow | null>(null);
@@ -501,8 +528,8 @@ export function RosterScreen({
     hasError: connections.error !== null,
     allRowsLocked,
   });
-  const offline = connections.activeState === 'offline'
-    || connections.activeState === 'reconnecting';
+  const offline = !connections.recovering && (connections.recoveryFailed || connections.activeState === 'offline'
+    || connections.activeState === 'reconnecting');
   const accountBadge = resolveAccountBadge(accountAttentionCount);
   const refresh = useCallback(async () => {
     if (refreshing) return;
@@ -540,12 +567,11 @@ export function RosterScreen({
     roster,
   ]);
   const closeLabel = t('Close', { ns: 'common' });
-  const addActionLabel = useCallback((action: string) => {
-    switch (action as RosterAddAction) {
-      case 'create_agent': return t('New Agent', { ns: 'chat' });
-      default: return t('Add Connection', { ns: 'config' });
-    }
-  }, [t]);
+  const activeConnectionLabel = useMemo(() => {
+    const group = roster.find((item) => item.connection.id === connections.activeConnectionId);
+    const label = group?.connection.label.trim() ?? '';
+    return label.length > 0 ? label : null;
+  }, [connections.activeConnectionId, roster]);
   const rowActionLabel = useCallback((action: string) => {
     switch (action as RosterRowAction) {
       case 'pin_agent': return t('Pin Agent', { ns: 'common' });
@@ -557,18 +583,17 @@ export function RosterScreen({
       default: return t('Rename', { ns: 'common' });
     }
   }, [t]);
-  const handleAddAction = useCallback((value: string) => {
-    const action = value as RosterAddAction;
+  const handleAddAction = useCallback((action: RosterAddAction) => {
     setAddVisible(false);
     if (action === 'add_connection') {
-      onAdd();
+      afterAddCloseRef.current = onAdd;
       return;
     }
     if (!isPro) {
-      (onCreateAgentLocked ?? onOpenPro)?.();
+      afterAddCloseRef.current = onCreateAgentLocked ?? onOpenPro;
       return;
     }
-    onCreateAgent?.();
+    afterAddCloseRef.current = onCreateAgent;
   }, [isPro, onAdd, onCreateAgent, onCreateAgentLocked, onOpenPro]);
   const handleLongPressRow = useCallback((row: RosterDisplayRow) => {
     onLongPressRow?.(row);
@@ -624,11 +649,12 @@ export function RosterScreen({
         graceBanner={graceBanner}
         accountBadge={accountBadge}
         showProEntry={!isPro}
+        recovering={connections.recovering}
         showOfflineBanner={offline}
         showErrorBanner={connections.error !== null && !offline}
         onOpenAccount={onOpenAccount}
         onSearch={onSearch}
-        onAdd={() => setAddVisible(true)}
+        onAdd={() => addActions.length === 1 ? onAdd() : setAddVisible(true)}
         onOpenRow={onOpenRow}
         onOpenLockedRow={onOpenLockedRow}
         onLongPressRow={handleLongPressRow}
@@ -639,12 +665,23 @@ export function RosterScreen({
       <Sheet
         testID="roster-add-sheet"
         visible={addVisible}
+        onAfterClose={() => {
+          const action = afterAddCloseRef.current;
+          afterAddCloseRef.current = undefined;
+          action?.();
+        }}
         onClose={() => setAddVisible(false)}
         closeAccessibilityLabel={closeLabel}
         title={t('Add', { ns: 'common' })}
         maxHeight="55%"
       >
-        <ActionRows actions={addActions} label={addActionLabel} onPress={handleAddAction} />
+        <RosterAddChoices
+          actions={addActions}
+          addConnectionLocked={addConnectionLocked}
+          createAgentLocked={!isPro}
+          connectionLabel={activeConnectionLabel}
+          onPress={handleAddAction}
+        />
       </Sheet>
       <Sheet
         testID="roster-row-actions"
@@ -728,6 +765,9 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
   },
+  addButton: {
+    position: 'absolute',
+  },
   header: {
     position: 'absolute',
     top: 0,
@@ -749,30 +789,7 @@ const styles = StyleSheet.create({
   accountActions: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  accountControl: {
-    width: ControlSize.floatingButton,
-    height: ControlSize.floatingButton,
-    position: 'relative',
-  },
-  proBadge: {
-    position: 'absolute',
-    right: -Space.sm,
-    bottom: -Space.xs,
-    minWidth: LineHeight.caption + Space.sm,
-    height: LineHeight.caption,
-    paddingHorizontal: Space.xs,
-    borderRadius: Radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  proBadgePressed: {
-    opacity: 0.8,
-  },
-  proBadgeText: {
-    fontSize: FontSize.caption,
-    lineHeight: LineHeight.caption,
-    fontWeight: FontWeight.semibold,
+    gap: Space.sm,
   },
   list: {
     flex: 1,
@@ -796,36 +813,10 @@ const styles = StyleSheet.create({
     fontWeight: FontWeight.regular,
     textAlign: 'center',
   },
-  loadingList: {
-    flex: 1,
-  },
-  skeletonRow: {
-    height: ControlSize.rosterRow,
-    paddingHorizontal: Space.lg,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Space.md,
-  },
-  skeletonAvatar: {
-    width: ControlSize.settingsRow + Space.xs,
-    height: ControlSize.settingsRow + Space.xs,
-    borderRadius: Radius.avatarRoster,
-  },
-  skeletonCopy: {
-    flex: 1,
+  addChoices: {
+    paddingHorizontal: Space.xl,
+    paddingTop: Space.sm,
     gap: Space.sm,
-  },
-  skeletonName: {
-    width: '40%',
-    height: LineHeight.body,
-  },
-  skeletonPreview: {
-    width: '72%',
-    height: LineHeight.secondary,
-  },
-  skeletonTime: {
-    width: Space.xxl,
-    height: LineHeight.caption,
   },
   renameContent: {
     paddingHorizontal: Space.lg,

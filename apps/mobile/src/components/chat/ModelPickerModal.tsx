@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { BottomSheetSectionList } from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
-import { Check, Orbit, Search } from 'lucide-react-native';
+import { Check, Search } from 'lucide-react-native';
 import {
   Button,
   CompositionSafeBottomSheetTextInput,
@@ -20,10 +20,12 @@ import {
   ControlSize,
   FontSize,
   FontWeight,
+  IconSize,
   LineHeight,
   Radius,
   Space,
 } from '../../theme/tokens';
+import { ModelIcon } from './ModelIcon';
 import { triggerLightImpact } from '../../services/haptics';
 import {
   buildModelSections,
@@ -81,7 +83,7 @@ export function ModelPickerModal({
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const snapPoints = useMemo(() => ['58%', '92%'], []);
+  const snapPoints = useMemo(() => ['68%', '92%'], []);
   const modelSections = useMemo(
     () => buildModelSections(models, searchQuery, providers),
     [models, providers, searchQuery],
@@ -121,7 +123,7 @@ export function ModelPickerModal({
         style={({ pressed }) => [styles.modelRow, pressed && styles.modelRowPressed]}
       >
         <View style={styles.modelIconWrap}>
-          <Orbit size={16} color={theme.colors.inkSecondary} strokeWidth={2} />
+          <ModelIcon {...item} testID={`model-picker-icon-${modelKey}`} />
         </View>
         <View style={styles.modelTextWrap}>
           <Text style={styles.modelTitle} numberOfLines={1}>
@@ -297,27 +299,26 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
   return StyleSheet.create({
     sheetContent: {
       flex: 1,
-      backgroundColor: colors.surface,
+      backgroundColor: colors.canvas,
     },
     listHeader: {
       paddingHorizontal: Space.lg,
       paddingBottom: Space.xs,
       gap: Space.xs,
-      backgroundColor: colors.surface,
+      backgroundColor: colors.canvas,
     },
     searchWrap: {
       minHeight: ControlSize.floatingButton,
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: colors.surfaceFloating,
+      backgroundColor: colors.surface,
       borderRadius: Radius.full,
       paddingHorizontal: Space.md,
       gap: Space.xs,
     },
     searchInput: {
       flex: 1,
-      fontSize: FontSize.caption,
-      lineHeight: LineHeight.caption,
+      fontSize: FontSize.secondary,
       color: colors.ink,
       paddingVertical: Space.sm,
     },
@@ -325,7 +326,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       minHeight: ControlSize.floatingButton,
       paddingHorizontal: Space.md,
       borderRadius: Radius.full,
-      backgroundColor: colors.surfaceFloating,
+      backgroundColor: colors.surface,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
@@ -346,7 +347,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      backgroundColor: colors.surface,
+      backgroundColor: colors.canvas,
     },
     sectionHeaderText: {
       color: colors.inkSecondary,
@@ -365,20 +366,20 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       lineHeight: LineHeight.caption,
     },
     modelRow: {
-      minHeight: ControlSize.settingsRow,
+      minHeight: ControlSize.floatingButton,
       marginHorizontal: Space.lg,
       paddingHorizontal: Space.xs,
-      paddingVertical: Space.md,
+      paddingVertical: Space.sm,
       flexDirection: 'row',
       alignItems: 'center',
       gap: Space.sm,
-      backgroundColor: colors.surface,
+      backgroundColor: colors.canvas,
     },
     modelRowPressed: {
-      backgroundColor: colors.surfaceFloating,
+      backgroundColor: colors.surface,
     },
     modelIconWrap: {
-      width: 22,
+      width: IconSize.lg,
       alignItems: 'center',
       justifyContent: 'center',
     },

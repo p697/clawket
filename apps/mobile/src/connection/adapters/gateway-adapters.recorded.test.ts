@@ -123,7 +123,7 @@ class RecordedGateway {
   public async listAgents(): Promise<any> {
     return {
       defaultId: 'main',
-      mainKey: 'agent:main:main',
+      mainKey: 'main',
       agents: [{ id: 'main', name: 'Main Agent', identity: { emoji: 'M' } }],
     };
   }
@@ -173,6 +173,40 @@ function packet(label: string): any {
 }
 
 describe('OpenClawAdapter recorded v1 boundary', () => {
+  it.each(['main', 'daily'])('scopes the gateway main alias %s to each agent', async (alias) => {
+    const fake = new RecordedGateway();
+    fake.listAgents = async () => ({
+      defaultId: 'lucy', mainKey: alias,
+      agents: [{ id: 'lucy' }, { id: 'operator' }],
+    });
+    const adapter = new OpenClawAdapter(connection('openclaw'), { gateway: gateway(fake) });
+    const agents = await adapter.listAgents();
+    expect(agents.map((agent) => agent.mainSessionKey)).toEqual([
+      `agent:lucy:${alias}`, `agent:operator:${alias}`,
+    ]);
+  });
+
+  it('reads and writes OpenClaw selection through its supported session and config APIs', async () => {
+    const fake = new RecordedGateway();
+    fake.sessions = [{ key: 'agent:main:main', model: 'gpt-5.6-sol', modelProvider: 'openai' }];
+    const catalog = [{ id: 'gpt-5.6-sol', name: 'GPT', provider: 'openai' }];
+    const listModels = jest.fn(async () => catalog);
+    const getConfig = jest.fn(async () => ({ hash: 'version-1', config: { agents: { defaults: { model: { primary: 'openai/gpt-5.6-sol' } } } } }));
+    const patchConfig = jest.fn(async () => ({ ok: true }));
+    Object.assign(fake, { listModels, getConfig, patchConfig });
+    const adapter = new OpenClawAdapter(connection('openclaw'), { gateway: gateway(fake) });
+    await expect(adapter.management.models!.getSelection!('agent:main:main')).resolves.toMatchObject({
+      currentModel: 'gpt-5.6-sol', currentProvider: 'openai', models: catalog,
+    });
+    await expect(adapter.management.models!.setSelection!({ scope: 'session', sessionKey: 'agent:main:main', model: 'next', provider: 'openai' }))
+      .resolves.toMatchObject({ scope: 'session', currentModel: 'next' });
+    expect(fake.requests).toEqual([{ method: 'sessions.patch', params: { key: 'agent:main:main', model: 'openai/next' } }]);
+    await expect(adapter.management.models!.getSelection!()).resolves.toMatchObject({ currentModel: 'gpt-5.6-sol' });
+    await adapter.management.models!.setSelection!({ scope: 'global', model: 'next', provider: 'openai' });
+    expect(patchConfig).toHaveBeenCalledWith(JSON.stringify({ agents: { defaults: { model: { primary: 'openai/next' } } } }), 'version-1');
+    expect(fake.requests.some(({ method }) => method === 'model.get' || method === 'model.set')).toBe(false);
+  });
+
   it('keeps channel deletion outside the App even when legacy metadata omits its policy', () => {
     const session = mapOpenClawSession('openclaw-recorded', {
       key: 'agent:main:channel:recorded',
@@ -545,4 +579,20 @@ describe('HermesAdapter recorded M3 boundary', () => {
     expect(adapter.capabilities.sessions).toBe(true);
     expect(HERMES_MULTI_SESSION_CAPABILITY).toBe('hermes.multi-session.v2');
   });
+});
+
+it.each(['openclaw', 'hermes'] as const)('keeps %s usage requests in the backend-owned agent scope', async (backend) => {
+  const fake = Object.assign(new RecordedGateway(), {
+    fetchUsage: jest.fn(async () => ({})),
+    fetchCostSummary: jest.fn(async () => ({})),
+  });
+  const adapter = backend === 'openclaw'
+    ? new OpenClawAdapter(connection(backend), { gateway: gateway(fake) })
+    : new HermesAdapter(connection(backend), { gateway: gateway(fake) });
+  const dates = { startDate: '2026-09-06', endDate: '2026-09-06' };
+  const input = { ...dates, agentId: backend === 'openclaw' ? 'ui-operator' : 'hermes' };
+  await adapter.management.usage?.sessions?.(input);
+  await adapter.management.usage?.cost?.(input);
+  expect(fake.fetchUsage).toHaveBeenCalledWith(backend === 'openclaw' ? input : dates);
+  expect(fake.fetchCostSummary).toHaveBeenCalledWith(backend === 'openclaw' ? input : dates);
 });

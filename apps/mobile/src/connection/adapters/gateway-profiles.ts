@@ -15,6 +15,7 @@ export const OPENCLAW_GATEWAY_PROTOCOL_PROFILE: GatewayProtocolProfile = Object.
 
 export const HERMES_GATEWAY_PROTOCOL_PROFILE: GatewayProtocolProfile = Object.freeze({
   relayIdQueryParam: 'bridgeId',
+  relayHealthRequestMethod: 'health',
   baseUrlSocketPathPattern: /\/v1\/hermes\/ws\/?$/,
   healthReadiness: (payload, { hasPayload }) => {
     const status = typeof payload.status === 'string'

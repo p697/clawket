@@ -149,7 +149,7 @@ jest.mock('./useChatVoiceInput', () => ({
     toggleVoiceInput: jest.fn(),
     voiceInputActive: false,
     voiceInputDisabled: false,
-    voiceInputLevel: 0,
+    voiceInputLevel: { value: 0 },
     voiceInputState: 'idle',
     voiceInputSupported: true,
   })),
@@ -417,7 +417,7 @@ describe('useChatController adapter event migration', () => {
     expect(result.current.childSessionActivityRef.current.size).toBe(0);
   });
 
-  it('keeps the dedicated direct local TLS explanation visible through an adapter error', () => {
+  it('keeps session-scoped local TLS explanations in their transcript', () => {
     const { handlers } = renderController();
     const explanation = 'Direct local TLS adapter connections are not supported in Clawket mobile yet. Disable OpenClaw adapter TLS for LAN pairing, or use Relay/Tailscale instead.';
 
@@ -427,12 +427,24 @@ describe('useChatController adapter event migration', () => {
         type: 'error',
         code: 'network',
         message: explanation,
+        sessionKey: 'agent:main:main',
       }, { now: () => 500 }));
     });
 
     expect(historyMock.messages).toEqual([
       expect.objectContaining({ role: 'system', text: explanation }),
     ]);
+  });
+
+  it('does not persist reconnect failures into conversation history', () => {
+    const { handlers } = renderController();
+    act(() => {
+      handlers.onState?.('reconnecting');
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        handlers.onUpdate?.(mapAdapterSessionUpdate({ type: 'error', code: 'timeout', message: 'Health timeout' }, { now: () => 500 + attempt }));
+      }
+    });
+    expect(historyMock.messages).toEqual([]);
   });
 
   it.each<AdapterErrorCode>([
@@ -457,6 +469,7 @@ describe('useChatController adapter event migration', () => {
         type: 'error',
         code,
         message: text,
+        sessionKey: 'agent:main:main',
       }, { now: () => 600 }));
     });
 

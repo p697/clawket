@@ -22,6 +22,7 @@ type Props = Readonly<{
   disabled?: boolean;
   onPress: () => void;
   testID?: string;
+  compact?: boolean;
 }>;
 
 export function PaywallPlanCard({
@@ -33,6 +34,7 @@ export function PaywallPlanCard({
   disabled = false,
   onPress,
   testID,
+  compact = false,
 }: Props): React.JSX.Element {
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
@@ -41,18 +43,19 @@ export function PaywallPlanCard({
     <Pressable
       testID={testID}
       accessibilityRole="radio"
-      accessibilityLabel={`${title}, ${price}`}
+      accessibilityLabel={[title, price, detail].filter(Boolean).join(', ')}
       accessibilityState={{ checked: selected, disabled }}
       disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => [
         styles.card,
+        compact ? styles.compact : null,
         selected ? styles.selected : styles.unselected,
         disabled ? styles.disabled : null,
         pressed && !disabled ? styles.pressed : null,
       ]}
     >
-      <View style={styles.copy}>
+      <View testID={testID ? `${testID}-copy` : undefined} style={compact ? styles.compactCopy : styles.copy}>
         <View style={styles.titleRow}>
           <Text style={styles.title}>{title}</Text>
           {badge ? (
@@ -61,12 +64,13 @@ export function PaywallPlanCard({
             </View>
           ) : null}
         </View>
-        {detail ? <Text style={styles.detail} numberOfLines={1}>{detail}</Text> : null}
+        {!compact && detail ? <Text style={styles.detail}>{detail}</Text> : null}
       </View>
-      <View style={styles.priceGroup}>
+      <View testID={testID ? `${testID}-price` : undefined} style={[styles.priceGroup, compact ? styles.compactPriceGroup : null]}>
         <Text style={styles.price}>{price}</Text>
-        {selected ? <Check size={IconSize.sm} color={theme.colors.accent} strokeWidth={2.5} /> : null}
+        {!compact && selected ? <Check size={IconSize.sm} color={theme.colors.accent} strokeWidth={2.5} /> : null}
       </View>
+      {compact && detail ? <Text style={styles.detail}>{detail}</Text> : null}
     </Pressable>
   );
 }
@@ -79,51 +83,63 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       paddingHorizontal: Space.lg,
       paddingVertical: Space.sm,
       flexDirection: 'row',
+      flexWrap: 'wrap',
       alignItems: 'center',
       justifyContent: 'space-between',
       gap: Space.md,
     },
     selected: {
-      borderWidth: BorderWidth.strong,
+      borderWidth: BorderWidth.hairline,
       borderColor: colors.accent,
       backgroundColor: colors.accentSoft,
     },
     unselected: {
-      backgroundColor: colors.surfaceFloating,
+      borderWidth: BorderWidth.hairline,
+      borderColor: colors.line,
+      backgroundColor: colors.canvas,
     },
+    compact: { flex: 1, minWidth: 0, flexDirection: 'column', flexWrap: 'nowrap', alignItems: 'stretch', justifyContent: 'flex-start', padding: Space.md, gap: Space.sm, borderRadius: Radius.card },
     disabled: { opacity: 0.45 },
     pressed: { opacity: 0.78 },
     copy: { flex: 1, minWidth: 0 },
-    titleRow: { flexDirection: 'row', alignItems: 'center', gap: Space.sm },
+    // Never inherit flex: 1 into a vertical title block: Yoga can collapse its height.
+    compactCopy: { flexShrink: 0, minWidth: 0 },
+    compactPriceGroup: { flexShrink: 0 },
+    titleRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: Space.sm },
     title: {
+      flexShrink: 1,
       color: colors.ink,
-      fontSize: FontSize.body,
-      lineHeight: LineHeight.body,
+      fontSize: FontSize.caption,
+      lineHeight: LineHeight.caption,
       fontWeight: FontWeight.semibold,
     },
     badge: {
-      backgroundColor: colors.accent,
+      maxWidth: '100%',
+      flexShrink: 0,
+      backgroundColor: colors.surfaceFloating,
       borderRadius: Radius.full,
       paddingHorizontal: Space.sm,
-      paddingVertical: Space.xs,
+      paddingVertical: 0,
     },
     badgeText: {
-      color: colors.onAccent,
+      color: colors.inkSecondary,
       fontSize: FontSize.caption,
       lineHeight: LineHeight.caption,
       fontWeight: FontWeight.semibold,
     },
     detail: {
+      flexShrink: 0,
       color: colors.inkSecondary,
-      fontSize: FontSize.secondary,
-      lineHeight: LineHeight.secondary,
+      fontSize: FontSize.caption,
+      lineHeight: LineHeight.caption,
       fontWeight: FontWeight.regular,
     },
-    priceGroup: { flexDirection: 'row', alignItems: 'center', gap: Space.sm },
+    priceGroup: { flexShrink: 1, flexDirection: 'row', alignItems: 'center', gap: Space.sm },
     price: {
+      flexShrink: 1,
       color: colors.ink,
-      fontSize: FontSize.body,
-      lineHeight: LineHeight.body,
+      fontSize: FontSize.title,
+      lineHeight: LineHeight.title,
       fontWeight: FontWeight.semibold,
     },
   });

@@ -17,7 +17,7 @@ type Props = Readonly<{
   onContinue?: (source: ProPaywallContinueSource) => void;
 }>;
 
-type PaywallTriggerScreen = 'roster' | 'settings' | 'account' | 'search';
+type PaywallTriggerScreen = 'thread' | 'roster' | 'settings' | 'account' | 'search';
 
 type PurchasePaywallAnalyticsContext = Readonly<{
   blocked_feature: ProFeature | null;
@@ -250,6 +250,7 @@ function buildPurchasePaywallAnalyticsContext(
 }
 
 function resolvePaywallTriggerScreen(blockedFeature: ProFeature | null): PaywallTriggerScreen {
+  if (blockedFeature === 'sessionHistory') return 'thread';
   if (blockedFeature === 'messageHistory') return 'search';
   if (blockedFeature === 'appIcons' || blockedFeature === 'settingsMembershipPreview') return 'account';
   if (blockedFeature === 'agents' || blockedFeature === 'gatewayConnections' || blockedFeature === 'launch') {

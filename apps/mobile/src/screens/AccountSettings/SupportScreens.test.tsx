@@ -231,7 +231,7 @@ describe('AccountSettings support screens', () => {
     consoleErrorSpy.mockRestore();
   });
 
-  it('keeps all three default views on grouped canvas with the three-size budget', () => {
+  it('keeps support pages compact while the gallery exposes the shared type hierarchy', () => {
     const screens = [
       render(<HelpCenterScreen onBack={jest.fn()} showWecomEntry />),
       render(<ReleaseNotesHistoryScreen onBack={jest.fn()} />),
@@ -245,9 +245,9 @@ describe('AccountSettings support screens', () => {
 
     screens.forEach((view, index) => {
       expect(flattenStyle(view.getByTestId(rootIds[index]).props.style)).toEqual(
-        expect.objectContaining({ backgroundColor: lightColors.canvasGrouped }),
+        expect.objectContaining({ backgroundColor: index === 2 ? lightColors.canvas : lightColors.canvasGrouped }),
       );
-      expect(renderedFontSizes(view)).toEqual([
+      expect(renderedFontSizes(view)).toEqual(index === 2 ? [FontSize.caption, FontSize.secondary, FontSize.body, FontSize.title, FontSize.display] : [
         FontSize.secondary,
         FontSize.body,
         FontSize.title,
@@ -370,6 +370,7 @@ describe('AccountSettings support screens', () => {
   it('keeps theme, token, control, and sheet samples interactive', () => {
     const view = render(<DesignSystemScreen onBack={jest.fn()} />);
 
+    fireEvent.press(view.getByTestId('design-system-tabs-theme'));
     fireEvent.press(view.getByTestId('design-system-theme-dark'));
     fireEvent.press(view.getByTestId('design-system-accent-jadeGreen'));
     expect(mockSetMode).toHaveBeenCalledWith('dark');

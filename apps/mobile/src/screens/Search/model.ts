@@ -1,3 +1,4 @@
+import { isMainConversation } from '../../utils/session-preview';
 import type {
   Capabilities,
   ConnectionDescriptor,
@@ -287,6 +288,16 @@ function buildSessionResults(
   return [...results.values()].sort(resultSort);
 }
 
+function isMainSearchSession(input: SearchModelInput, connectionId: string, agentId: string, sessionKey: string): boolean {
+  const agent = input.roster.find((group) => group.connection.id === connectionId)
+    ?.agents.find((row) => row.agent.agentId === agentId);
+  return isMainConversation({
+    sessionKey,
+    mainSessionKey: agent?.agent.mainSessionKey,
+    kind: agent?.sessions.find((session) => session.key === sessionKey)?.kind,
+  });
+}
+
 function buildMessageResults(
   input: SearchModelInput,
   query: string,
@@ -317,7 +328,8 @@ function buildMessageResults(
         updatedAt: message.timestampMs ?? meta.lastMessageMs ?? meta.updatedAt,
         source: 'cache',
         messageId: message.id,
-        text: message.text || message.toolSummary || message.toolName || '',
+        text: !input.isPro && !isMainSearchSession(input, meta.gatewayConfigId, meta.agentId, meta.sessionKey)
+          ? '' : message.text || message.toolSummary || message.toolName || '',
         ...(lockedReason ? { lockedReason } : {}),
       });
     }
@@ -359,7 +371,8 @@ function buildFavoriteResults(
       source: 'cache',
       favoriteKey: favorite.favoriteKey,
       messageId: favorite.messageId,
-      text: favorite.text || favorite.toolSummary || favorite.toolName || '',
+      text: !input.isPro && !isMainSearchSession(input, favorite.gatewayConfigId, favorite.agentId, favorite.sessionKey)
+        ? '' : favorite.text || favorite.toolSummary || favorite.toolName || '',
       ...(lockedReason ? { lockedReason } : {}),
     });
   }

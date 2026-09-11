@@ -3,7 +3,7 @@ import {
   normalizeAttachmentMimeType,
   type PromptAttachment,
 } from '@clawket/agent-protocol';
-import type { PendingImage, UiFileAttachment } from '../types/chat';
+import type { PendingImage, UiFileAttachment, UiMessage } from '../types/chat';
 import {
   isSilentReplyPrefixText,
   isSilentReplyText,
@@ -103,6 +103,32 @@ export function buildUiFileAttachments(
       };
     });
   return files.length > 0 ? files : undefined;
+}
+
+/** Local user bubble shared by optimistic sends and the pre-send queue. */
+export function buildUserUiMessage(params: {
+  id: string;
+  text: string;
+  images: readonly PendingImage[];
+  timestampMs?: number;
+  idempotencyKey?: string;
+  delivery?: UiMessage['delivery'];
+}): UiMessage {
+  const realImages = params.images.filter((image) => isImageAttachmentMimeType(image.mimeType));
+  const files = params.images.filter((image) => !isImageAttachmentMimeType(image.mimeType));
+  return {
+    id: params.id,
+    role: 'user',
+    text: params.text,
+    ...(params.idempotencyKey ? { idempotencyKey: params.idempotencyKey } : {}),
+    ...(params.timestampMs !== undefined ? { timestampMs: params.timestampMs } : {}),
+    ...(params.delivery ? { delivery: params.delivery } : {}),
+    imageUris: realImages.length > 0 ? realImages.map((image) => image.uri) : undefined,
+    imageMetas: realImages.length > 0
+      ? realImages.map((image) => ({ uri: image.uri, width: image.width ?? 0, height: image.height ?? 0 }))
+      : undefined,
+    fileAttachments: buildUiFileAttachments(files),
+  };
 }
 
 export function extractSlashCommand(text: string): string | null {
