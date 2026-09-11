@@ -167,3 +167,7 @@ Relay socket diagnostics use a server-generated per-socket UUID persisted in Web
 Negotiated `bridge.client-sockets.v1` uses authenticated owner secondary sockets bound to server-generated full-client socket diagnostic IDs. Keep each local Gateway handshake isolated, preserve raw 8 MiB frames, and reconstruct routes from attachments after hibernation. Restricted pairing sockets cannot become channel targets. Hermes and legacy owners retain their existing policies.
 
 Before handling any frame, verify that its WebSocket is still the current owner, client, pairing client or secondary channel. Buffered frames and late close/error events from replaced sockets must not alter the replacement's routing, rate limits or heartbeat watchdog. Replacement logs link only validated server-generated diagnostic UUIDs; distinguish owner/channel/client sockets and include close codes without logging peer-supplied close text.
+
+## Worker Toolchain Audit
+
+Keep Wrangler on a security-patched v4 release (current minimum 4.131.0) with its matching Miniflare/workerd dependencies. Do not force a transitive native override to hide an audit finding; validate the resolved lockfile with both dependency audits and v1 replay after toolchain changes.
