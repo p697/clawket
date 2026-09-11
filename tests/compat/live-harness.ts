@@ -1,4 +1,4 @@
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { spawn, execFile, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -66,6 +66,10 @@ export class CompatWranglerDevProcess {
     const child = this.process;
     this.process = null;
     if (child && child.exitCode == null) {
+      if (process.platform === 'win32' && child.pid) {
+        // Stop only this test's Wrangler tree, including workerd holding SQLite files.
+        await new Promise<void>((resolve) => execFile('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true }, () => resolve()));
+      }
       child.kill('SIGTERM');
       await Promise.race([
         new Promise<void>((resolve) => child.once('exit', () => resolve())),
@@ -74,7 +78,7 @@ export class CompatWranglerDevProcess {
         }),
       ]);
     }
-    await rm(this.tempDirectory, { recursive: true, force: true });
+    await rm(this.tempDirectory, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   }
 
   private async startProcess(): Promise<void> {
@@ -97,6 +101,7 @@ export class CompatWranglerDevProcess {
       '--show-interactive-dev-session', 'false',
       '--env-file', this.envFilePath,
     ], {
+      windowsHide: true,
       cwd: this.cwd,
       env: process.env,
       stdio: ['ignore', 'pipe', 'pipe'],

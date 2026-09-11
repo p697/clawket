@@ -15,6 +15,7 @@ import { tmpdir } from 'node:os';
 import { basename, join, relative, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
+import { npmInvocation } from '../../scripts/node-command.mjs';
 
 const execFileAsync = promisify(execFile);
 const CACHE_SCHEMA_VERSION = 2;
@@ -465,8 +466,18 @@ async function buildAndCache(params: {
     '--loglevel=error',
   ], 180_000);
   await verifyInstalledVersions(params.worktree, params.historicalInstall.dependencyVersions);
-  await run(params.worktree, 'npm', ['run', '--workspace', '@clawket/bridge-core', 'build'], 120_000);
-  await run(params.worktree, 'npm', ['run', '--workspace', '@clawket/bridge-runtime', 'build'], 120_000);
+  for (const name of ['bridge-core', 'bridge-runtime']) {
+    if (process.platform === 'win32') {
+      // Execute the pinned compiler against untouched historical sources. Its
+      // package script's `rm -rf dist` is Unix-only; this worktree is fresh.
+      const directory = join(params.worktree, 'packages', name);
+      const manifest = JSON.parse(await readFile(join(directory, 'package.json'), 'utf8'));
+      if (manifest.scripts?.build !== 'rm -rf dist && tsc -p tsconfig.json') throw new Error('Unreviewed historical build command');
+      await run(directory, process.execPath, [join(params.worktree, 'node_modules/typescript/bin/tsc'), '-p', 'tsconfig.json'], 120_000);
+    } else {
+      await run(params.worktree, 'npm', ['run', '--workspace', `@clawket/${name}`, 'build'], 120_000);
+    }
+  }
 
   const stagingDirectory = await mkdtemp(join(params.cacheRoot, '.staging-'));
   try {
@@ -651,7 +662,9 @@ function assertDeclaredEquivalence(prepared: PreparedLegacyBridge[]): void {
 
 async function run(cwd: string, executable: string, args: string[], timeout: number): Promise<string> {
   try {
+    if (executable === 'npm') [executable, args] = npmInvocation(args);
     const { stdout, stderr } = await execFileAsync(executable, args, {
+      windowsHide: true,
       cwd,
       env: process.env,
       encoding: 'utf8',

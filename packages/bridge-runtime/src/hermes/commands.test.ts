@@ -16,7 +16,7 @@ describe('Hermes model API signature compatibility', () => {
       const bridge = new HermesLocalBridge({
         hermesSourcePath: source,
         hermesHomePath: home,
-        hermesPythonPath: 'python3',
+        hermesPythonPath: (process.platform === 'win32' ? 'python' : 'python3'),
         sessionStorePath: join(root, 'sessions.json'),
         usageLedgerPath: join(root, 'usage.json'),
       });

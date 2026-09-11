@@ -80,6 +80,7 @@ const BACKEND_LABELS: Readonly<Record<ConnectionDescriptor['backendKind'], strin
   openclaw: 'OpenClaw',
   hermes: 'Hermes',
   youmind: 'YouMind',
+  'local-model': 'Local model',
 };
 
 const CONNECTION_STATE_LABELS: Readonly<Record<ConnectionState, string>> = {

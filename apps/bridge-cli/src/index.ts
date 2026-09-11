@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { handleLocalModelCommand } from './local-model.js';
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { execFileSync, spawn } from 'node:child_process';
@@ -89,6 +90,16 @@ async function main(): Promise<void> {
 
   if (command === 'hermes') {
     await handleHermesCommand(args, jsonOutput);
+    return;
+  }
+
+  if (command === 'local-model') {
+    await handleLocalModelCommand(args);
+    return;
+  }
+
+  if (command === 'pair' && readFlag(args, '--backend') === 'local-model') {
+    await handleLocalModelCommand(['pair', ...args]);
     return;
   }
 
@@ -2230,6 +2241,9 @@ function openPairingPage(url: string): void {
 
 function printHelp(): void {
   console.log([
+    'clawket local-model pair [--preview] [--base-url <http://127.0.0.1:8080>] [--engine <llamacpp|ollama|openai-compatible>] [--endpoints <file.json>] [--config <file.json>] [--qr-file <file.png>]',
+    'clawket local-model pair --llama-server <executable> --models-preset <file.ini> [--base-url <loopback-url>]',
+    'clawket local-model run [--config <file.json>]',
     'clawket pair [--preview] [--backend <openclaw|hermes>] [--server <url>] [--name <displayName>] [--public-host <192.168.x.x>] [--port <4319>] [--qr-file <path>] [--no-open] [--json] [--force]',
     'clawket pair local [--backend <openclaw|hermes>] [--url <ws://host:port>] [--public-host <192.168.x.x>] [--port <4319>] [--qr-file <path>] [--json]',
     'clawket pair --local [--backend <openclaw|hermes>] [--url <ws://host:port>] [--public-host <192.168.x.x>] [--port <4319>] [--qr-file <path>] [--json]',

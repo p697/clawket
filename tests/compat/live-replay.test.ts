@@ -170,9 +170,9 @@ afterAll(async () => {
     hermesRelay?.stop(),
     hermesRegistry?.stop(),
   ]);
-  if (isolatedOpenClawState) await rm(isolatedOpenClawState, { recursive: true, force: true });
-  if (openClawPersistence) await rm(openClawPersistence, { recursive: true, force: true });
-  if (hermesPersistence) await rm(hermesPersistence, { recursive: true, force: true });
+  if (isolatedOpenClawState) await rm(isolatedOpenClawState, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
+  if (openClawPersistence) await rm(openClawPersistence, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
+  if (hermesPersistence) await rm(hermesPersistence, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
   for (const name of isolatedEnvNames) {
     const previous = savedOpenClawEnv.get(name);
     if (previous === undefined) delete process.env[name];

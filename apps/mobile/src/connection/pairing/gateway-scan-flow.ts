@@ -38,7 +38,7 @@ export type GatewayScanPayload = {
   };
 };
 
-export type PairingBackendKind = Extract<GatewayBackendKind, 'openclaw' | 'hermes'>;
+export type PairingBackendKind = Extract<GatewayBackendKind, 'openclaw' | 'hermes' | 'local-model'>;
 
 export type PairingPayloadAssessment =
   | Readonly<{ kind: 'accepted'; backendKind: PairingBackendKind }>
@@ -63,7 +63,7 @@ export function resolvePairingPayloadBackend(
   const hints = new Set<PairingBackendKind>();
 
   if (payload.backendKind !== undefined) {
-    if (payload.backendKind !== 'openclaw' && payload.backendKind !== 'hermes') {
+    if (payload.backendKind !== 'openclaw' && payload.backendKind !== 'hermes' && payload.backendKind !== 'local-model') {
       return null;
     }
     hints.add(payload.backendKind);
@@ -71,7 +71,7 @@ export function resolvePairingPayloadBackend(
 
   if (payload.mode === 'hermes') {
     hints.add('hermes');
-  } else if (payload.mode !== undefined) {
+  } else if (payload.mode !== undefined && !(payload.backendKind === 'local-model' && payload.mode === 'relay')) {
     hints.add('openclaw');
   }
 
@@ -186,7 +186,7 @@ async function claimOpenClawRelay(
   const relayUrl = claimed.relayUrl.trim();
   return {
     url: relayUrl,
-    backendKind: 'openclaw',
+    backendKind: payload.backendKind === 'local-model' ? 'local-model' : 'openclaw',
     transportKind: 'relay',
     token: payload.token,
     password: payload.password,

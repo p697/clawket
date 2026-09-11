@@ -2,6 +2,13 @@
 
 > 实现者维护。每次开工先读；每完成一个里程碑更新。人类只读这一份文件了解进度。
 
+## 本地模型连接扩展（2026-09-11）
+
+- 用户授权新增 local-model 后端，分支 `feat/local-model-bridge`；交付仅 PR，禁止正式生产发布。
+- 已实现独立 Preview 六位码/QR、实际 Mobile adapter、流式聊天、持久历史、取消、全局模型切换和实时图片能力；Windows 构建及 Python/路径测试适配。
+- 公网 Preview 真实 Flash-Next → Qwen vision → Flash-Next 测试两轮通过；原 8080 服务已恢复。详情、命令和限制见 [本地模型连接](15-local-model.md)。
+- Windows Android arm64 调试 APK 构建通过（532 Gradle tasks）；compat 36/36、真实 Worker 集成通过。`npm run check:required` 全绿；打包验证通过；两个 lockfile 的 audit 均无 high/critical。真机与 macOS 运行尚不作为已验收。未发布 Production/npm/商店。
+
 ## 当前状态
 
 - 2026-09-06 体验复核：用户真机反馈未通过；当前进入研究/设计讨论，M8 自动完成不代表可发布。用户授权推翻旧工程、产品与 UI 决策，以实际体验为准；保留安全和兼容性约束。见 [体验复核与方向建议](11-experience-review.md)。

@@ -56,7 +56,7 @@ async function createHermesHomePath(config?: Record<string, unknown>): Promise<s
   tempDirs.push(dir);
   if (config) {
     const configJson = JSON.stringify(config);
-    execFileSync('python3', [
+    execFileSync((process.platform === 'win32' ? 'python' : 'python3'), [
       '-c',
       [
         'import json, pathlib, sys',
@@ -94,7 +94,7 @@ async function createHermesHomePath(config?: Record<string, unknown>): Promise<s
 describe('Hermes history and stream integration', () => {
   it('lists Hermes native sessions from state.db and keeps bridge keys stable', async () => {
     const hermesStateDbPath = await createHermesStateDbPath();
-    execFileSync('python3', [
+    execFileSync((process.platform === 'win32' ? 'python' : 'python3'), [
       '-c',
       [
         'import sqlite3, sys',
@@ -145,7 +145,7 @@ describe('Hermes history and stream integration', () => {
 
   it('filters Bridge-owned namespace rows without hiding unrelated api_server sessions', async () => {
     const hermesStateDbPath = await createHermesStateDbPath();
-    execFileSync('python3', [
+    execFileSync((process.platform === 'win32' ? 'python' : 'python3'), [
       '-c',
       [
         'import sqlite3, sys',
@@ -200,7 +200,7 @@ describe('Hermes history and stream integration', () => {
         base_url: 'https://chatgpt.com/backend-api/codex',
       },
     });
-    execFileSync('python3', [
+    execFileSync((process.platform === 'win32' ? 'python' : 'python3'), [
       '-c',
       [
         'import sqlite3, sys',
@@ -250,7 +250,7 @@ describe('Hermes history and stream integration', () => {
   it('loads Hermes native history from state.db and preserves tool calls', async () => {
     const hermesStateDbPath = await createHermesStateDbPath();
     const hermesHomePath = await createHermesHomePath();
-    execFileSync('python3', [
+    execFileSync((process.platform === 'win32' ? 'python' : 'python3'), [
       '-c',
       [
         'import sqlite3, sys',
@@ -328,7 +328,7 @@ describe('Hermes history and stream integration', () => {
         updatedAt: 1_000_000,
       }],
     }));
-    execFileSync('python3', [
+    execFileSync((process.platform === 'win32' ? 'python' : 'python3'), [
       '-c',
       [
         'import sqlite3, sys',
@@ -595,7 +595,7 @@ describe('Hermes history and stream integration', () => {
 
   it('hydrates missing tool output from local Hermes state without changing Hermes source', async () => {
     const hermesStateDbPath = await createHermesStateDbPath();
-    execFileSync('python3', [
+    execFileSync((process.platform === 'win32' ? 'python' : 'python3'), [
       '-c',
       [
         'import json, sqlite3, sys',

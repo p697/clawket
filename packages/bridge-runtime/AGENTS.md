@@ -1,6 +1,6 @@
 # Bridge Runtime
 
-OpenClaw and Hermes runtime implementations for the Clawket Bridge. Keep backend identity separate from Relay transport state.
+OpenClaw, Hermes, and local-model runtime implementations for the Clawket Bridge. Keep backend identity separate from Relay transport state.
 
 ## Module Map
 
@@ -53,7 +53,9 @@ Resolve the Hermes Python executable in this order:
 3. `<hermesSourcePath>/.venv/bin/python`.
 4. `<hermesSourcePath>/venv/bin/python`.
 5. `<hermesHomePath>/venvs/hermes-dev/bin/python`.
-6. `python3`.
+6. `python` on Windows, `python3` on POSIX.
+
+Windows virtual environments use `Scripts/python.exe` in the same candidate order.
 
 The shared Hermes Python runner must yield the Node event loop, bound duration/concurrency, cancel owned children on stop, and keep errors credential-free. Serialize whole configuration mutations while health bypasses their queue; cancellation during asynchronous history preparation or terminal hydration must not start work or restore stale replies. Skills helpers support both the legacy tools module and current split agent utilities through the shared compatibility preamble.
 
@@ -80,3 +82,7 @@ A forwarded challenge with client demand but no connect request has an 8-second 
 Managed CLI runtimes opt into `bridge.client-sockets.v1`. With a supporting Relay, each authenticated client socket gets a child runtime with its own local Gateway handshake; the owner only coordinates lifecycle and restricted pairing. Retire children on socket incarnation removal, owner loss, or stop. Never reuse an authenticated Gateway socket for another client. Legacy runtime consumers and older Relays retain the v1 path.
 
 In negotiated client-channel mode, pairing approve/reject must target a live child owning the request. If that child has gone, return an unavailable-request error; never fall back to the owner's unhandshaken Gateway. Legacy mode keeps its existing routing.
+
+## Local model runtime
+
+`src/local-model/` implements OpenAI-compatible streaming, one durable main conversation, live vision probing and the isolated Preview Relay owner. Persist before acknowledgement, reject conflicting idempotency keys, cancel the actual upstream request, and never replay interrupted runs. Model selection is global and excludes in-flight generation. Do not advertise Agent tools. See `../../docs/3.0/15-local-model.md`.

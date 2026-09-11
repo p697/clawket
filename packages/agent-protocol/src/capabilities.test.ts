@@ -19,6 +19,7 @@ function enabled(backend: keyof typeof CAPABILITY_MATRIX): Capability[] {
 describe('canonical capability contract', () => {
   it('publishes the frozen product matrix without conflating Hermes with legacy UI flags', () => {
     expect(enabled('openclaw')).toEqual(CAPABILITY_KEYS);
+    expect(enabled('local-model')).toEqual(['chat', 'abort', 'history', 'attachments', 'replyNotifications', 'models']);
     expect(enabled('hermes')).toEqual([
       'chat',
       'abort',

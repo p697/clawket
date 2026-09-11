@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { lstatSync, readFileSync, readlinkSync, readdirSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -15,7 +16,7 @@ function discoverAgentPaths(root, directory = root, paths = []) {
       }
       continue;
     }
-    if (entry.name === 'AGENTS.md') paths.push(relative(root, join(directory, entry.name)));
+    if (entry.name === 'AGENTS.md') paths.push(relative(root, join(directory, entry.name)).replaceAll('\\', '/'));
   }
   return paths.sort();
 }
@@ -67,6 +68,10 @@ export function validateAgentDocRecords(records) {
   return failures;
 }
 
+export function isGitSymlinkPlaceholder(entry, content) {
+  return /^120000 [a-f0-9]+ 0\t[^\r\n]+$/.test(entry) && content === 'AGENTS.md';
+}
+
 export function readAgentDocRecords(root = REPOSITORY_ROOT) {
   return discoverAgentPaths(root).map((agentPath) => {
     const directory = dirname(join(root, agentPath));
@@ -77,6 +82,16 @@ export function readAgentDocRecords(root = REPOSITORY_ROOT) {
       const stat = lstatSync(claudePath);
       claudeKind = stat.isSymbolicLink() ? 'symlink' : 'file';
       if (stat.isSymbolicLink()) claudeTarget = readlinkSync(claudePath);
+      else if (process.platform === 'win32') {
+        // Git materializes symlinks as exact target text when Windows lacks
+        // symlink privileges. Verify the index mode as well as working bytes;
+        // copied instruction documents must still fail closed.
+        const gitPath = relative(root, claudePath).replaceAll('\\', '/');
+        const entry = execFileSync('git', ['ls-files', '--stage', '--', gitPath], { cwd: root, encoding: 'utf8', windowsHide: true }).trim();
+        if (isGitSymlinkPlaceholder(entry, readFileSync(claudePath, 'utf8'))) {
+          claudeKind = 'symlink'; claudeTarget = 'AGENTS.md';
+        }
+      }
     } catch {
       // A missing compatibility document is reported by the validator.
     }

@@ -70,7 +70,7 @@ async function createCronBridge(): Promise<{ bridge: HermesLocalBridge; jobsPath
     bridge: new HermesLocalBridge({
       hermesHomePath,
       hermesSourcePath: join(directory, 'missing'),
-      hermesPythonPath: 'python3',
+      hermesPythonPath: (process.platform === 'win32' ? 'python' : 'python3'),
       hermesStateDbPath: dbPath,
       sessionStorePath: join(directory, 'sessions.json'),
       usageLedgerPath: join(directory, 'usage.json'),

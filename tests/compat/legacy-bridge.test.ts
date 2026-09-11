@@ -104,8 +104,8 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await Promise.allSettled([relay?.stop(), registry?.stop()]);
-  if (isolatedOpenClawState) await rm(isolatedOpenClawState, { recursive: true, force: true });
-  if (servicePersistence) await rm(servicePersistence, { recursive: true, force: true });
+  if (isolatedOpenClawState) await rm(isolatedOpenClawState, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
+  if (servicePersistence) await rm(servicePersistence, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
   for (const name of isolatedEnvNames) {
     const previous = savedOpenClawEnv.get(name);
     if (previous === undefined) delete process.env[name];

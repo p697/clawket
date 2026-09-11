@@ -168,6 +168,7 @@ const BACKEND_LABELS: Readonly<Record<BackendKind, string>> = Object.freeze({
   openclaw: 'OpenClaw',
   hermes: 'Hermes',
   youmind: 'YouMind Sprite',
+  'local-model': 'Local model',
 });
 
 const TRANSPORT_LABELS: Readonly<Record<TransportKind, string>> = Object.freeze({

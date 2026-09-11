@@ -186,3 +186,7 @@ Paywall uses the owner-approved Lumen presentation: a scoped dark semantic theme
 ## Send acknowledgement and foreground probes
 
 A rejected prompt acknowledgement is not proof of backend rejection. Preserve one session/connection-scoped uncertain bubble (including attachment references); do not label it sent or automatically refill/replay it. Late failures must hold only the originating queue. Matching backend identity may settle uncertainty. Keep the uncertain flag in local chat cache, and clear in-memory recovery on connection removal. Healthy foreground probes stay ready; only actual failure or adapter recovery changes presentation. Corrupt pause preferences must not prevent registry startup; salvage valid IDs without rewriting a failed read.
+
+## Local model connection
+
+The `local-model` backend is Preview-only and uses the shared chat UI with its own adapter. Six-digit codes and compact QR payloads must retain backend identity through claim. Model switching is global; image controls follow live vision capability. Unsupported Agent management remains capability-gated. `dev:android` and `build:android:preview` use Node scripts on Windows and macOS; debug builds do not publish.

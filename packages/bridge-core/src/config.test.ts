@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PairingConfig } from './config.js';
 
@@ -33,6 +34,18 @@ async function loadConfigModule(homeDir: string) {
   return import('./config.js');
 }
 
+async function expectPrivate(path: string, mode: number) {
+  if (process.platform !== 'win32') {
+    expect((await stat(path)).mode & 0o777).toBe(mode);
+    return;
+  }
+  // Windows exposes synthetic POSIX mode bits. Check its actual access rules.
+  const broadAccess = execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
+    "$rules=(Get-Acl -LiteralPath $env:CLAWKET_TEST_ACL_PATH).Access; @($rules | Where-Object { $_.AccessControlType -eq 'Allow' -and $_.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value -in @('S-1-1-0','S-1-5-11','S-1-5-32-545') }).Count"],
+    { env: { ...process.env, CLAWKET_TEST_ACL_PATH: path }, encoding: 'utf8', windowsHide: true });
+  expect(Number(broadAccess.trim())).toBe(0);
+}
+
 describe('pairing config permissions', () => {
   it('writes the pairing config with user-private directory and file modes', async () => {
     const homeDir = await mkdtemp(join(tmpdir(), 'clawket-bridge-config-write-'));
@@ -41,11 +54,9 @@ describe('pairing config permissions', () => {
     const { getPairingConfigDir, getPairingConfigPath, writePairingConfig } = await loadConfigModule(homeDir);
     writePairingConfig(BASE_CONFIG);
 
-    const dirStat = await stat(getPairingConfigDir());
-    const fileStat = await stat(getPairingConfigPath());
 
-    expect(dirStat.mode & 0o777).toBe(0o700);
-    expect(fileStat.mode & 0o777).toBe(0o600);
+    await expectPrivate(getPairingConfigDir(), 0o700);
+    await expectPrivate(getPairingConfigPath(), 0o600);
     expect(JSON.parse(await readFile(getPairingConfigPath(), 'utf8'))).toMatchObject(BASE_CONFIG);
   });
 
@@ -64,10 +75,8 @@ describe('pairing config permissions', () => {
     const { readPairingConfig } = await loadConfigModule(homeDir);
     expect(readPairingConfig()).toMatchObject(BASE_CONFIG);
 
-    const dirStat = await stat(configDir);
-    const fileStat = await stat(configPath);
-    expect(dirStat.mode & 0o777).toBe(0o700);
-    expect(fileStat.mode & 0o777).toBe(0o600);
+    await expectPrivate(configDir, 0o700);
+    await expectPrivate(configPath, 0o600);
   });
 
   it('keeps Preview pairing state in a separate private config file', async () => {
@@ -80,6 +89,6 @@ describe('pairing config permissions', () => {
     expect(getPairingConfigPath('preview')).toBe(join(homeDir, '.clawket', 'bridge-cli.preview.json'));
     expect(readPairingConfig()).toBeNull();
     expect(readPairingConfig('preview')).toMatchObject(BASE_CONFIG);
-    expect((await stat(getPairingConfigPath('preview'))).mode & 0o777).toBe(0o600);
+    await expectPrivate(getPairingConfigPath('preview'), 0o600);
   });
 });

@@ -1,5 +1,5 @@
 import { readdir, readFile } from 'node:fs/promises';
-import { dirname, join, relative } from 'node:path';
+import { dirname, join, relative, isAbsolute, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateCompatFixture, type CompatFixture } from './schema';
 
@@ -7,7 +7,8 @@ const FIXTURE_ROOT = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', '
 
 export async function loadCompatFixture(pathWithinV1: string): Promise<CompatFixture> {
   const path = join(FIXTURE_ROOT, pathWithinV1);
-  if (!path.startsWith(`${FIXTURE_ROOT}/`)) {
+  const within = relative(FIXTURE_ROOT, path);
+  if (!within || within === '..' || within.startsWith(`..${sep}`) || isAbsolute(within)) {
     throw new Error(`Fixture path escapes v1 root: ${pathWithinV1}`);
   }
   const parsed = JSON.parse(await readFile(path, 'utf8')) as unknown;
@@ -17,7 +18,7 @@ export async function loadCompatFixture(pathWithinV1: string): Promise<CompatFix
 export async function loadAllCompatFixtures(): Promise<Array<{ path: string; fixture: CompatFixture }>> {
   const paths = await walkJson(FIXTURE_ROOT);
   return Promise.all(paths.map(async (path) => ({
-    path: relative(FIXTURE_ROOT, path),
+    path: relative(FIXTURE_ROOT, path).split(sep).join('/'),
     fixture: validateCompatFixture(JSON.parse(await readFile(path, 'utf8')) as unknown),
   })));
 }
