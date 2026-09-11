@@ -1,6 +1,6 @@
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { buildPairingQrPayload, type PairingInfo } from '@clawket/bridge-core';
 import { resolveQrOutputPath, writePairingQrPng } from './qr-file.js';
@@ -35,7 +35,7 @@ describe('qr file helpers', () => {
   it('resolves relative output paths to absolute paths', () => {
     const path = resolveQrOutputPath(PAIRING.config.gatewayId, 'tmp/bridge.png');
     expect(path).toMatch(/tmp[/\\]bridge\.png$/);
-    expect(path.startsWith('/')).toBe(true);
+    expect(isAbsolute(path)).toBe(true);
   });
 
   it('writes a PNG QR artifact for an alphanumeric access code payload', async () => {

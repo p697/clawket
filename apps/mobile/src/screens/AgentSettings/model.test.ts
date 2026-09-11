@@ -17,13 +17,14 @@ const NOW = new Date(2026, 8, 11, 12, 0, 0).getTime();
 const TRANSPORT_BY_BACKEND: Readonly<Record<ConnectionDescriptor['backendKind'], ConnectionDescriptor['transportKind']>> = {
   openclaw: 'relay',
   hermes: 'relay',
-  youmind: 'https',
+  'local-model': 'relay', youmind: 'https',
 };
 
 const MAIN_SESSION_BY_BACKEND: Readonly<Record<ConnectionDescriptor['backendKind'], string>> = {
   openclaw: 'agent:main:main',
   hermes: 'main',
   youmind: 'main',
+  'local-model': 'main',
 };
 
 function connection(

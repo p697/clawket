@@ -368,5 +368,7 @@
   "Unable to change app language": "앱 언어를 변경할 수 없습니다",
   "Connect OpenClaw, Hermes or YouMind Sprite": "OpenClaw, Hermes 또는 YouMind 스프라이트 연결",
   "Create another agent on {{connection}}": "{{connection}}에 에이전트 추가",
-  "Create another agent on this connection": "이 연결에 에이전트 추가"
+  "Create another agent on this connection": "이 연결에 에이전트 추가",
+  "Local model": "로컬 모델",
+  "Local model is not responding": "로컬 모델이 응답하지 않습니다"
 }

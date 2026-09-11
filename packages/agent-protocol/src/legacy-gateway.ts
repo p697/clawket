@@ -139,6 +139,7 @@ const LEGACY_BACKENDS: Record<GatewayBackendKind, GatewayBackendDescriptor> = {
   openclaw: { kind: 'openclaw', label: 'OpenClaw', capabilities: OPENCLAW_LEGACY_CAPABILITIES },
   hermes: { kind: 'hermes', label: 'Hermes', capabilities: HERMES_LEGACY_CAPABILITIES },
   youmind: { kind: 'youmind', label: 'YouMind', capabilities: YOUMIND_LEGACY_CAPABILITIES },
+  'local-model': { kind: 'local-model', label: 'Local model', capabilities: { ...YOUMIND_LEGACY_CAPABILITIES, modelCatalog: true, modelSelection: true, chatAttachments: true } },
 };
 
 const OPENCLAW_THINKING_LEVELS: ThinkingLevel[] = [
@@ -161,7 +162,7 @@ export function isGatewayTransportKind(value: unknown): value is GatewayTranspor
 }
 
 export function isGatewayBackendKind(value: unknown): value is GatewayBackendKind {
-  return value === 'openclaw' || value === 'hermes' || value === 'youmind';
+  return value === 'openclaw' || value === 'hermes' || value === 'youmind' || value === 'local-model';
 }
 
 export function resolveGatewayBackendKind(value: LegacyGatewayLike | null | undefined): GatewayBackendKind {
@@ -222,6 +223,7 @@ export function selectByBackend<T>(
 export function resolveGlobalMainSessionKey(
   input: LegacyGatewayLike | GatewayBackendKind | null | undefined,
 ): string | null {
+  if (resolveGatewayBackendKind(typeof input === 'string' ? { backendKind: input } : input) === 'local-model') return 'main';
   return selectByBackend(input, { openclaw: null, hermes: 'main', youmind: 'main' });
 }
 

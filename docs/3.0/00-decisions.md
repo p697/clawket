@@ -7,7 +7,7 @@
 | 项 | 决策 |
 |---|---|
 | 一句话 | Clawket 3.0 是「自托管 Agent 的会话控制塔」：一屏看清所有 Agent 在做什么，一步进入对话，需要时管住它。 |
-| 支持的后端 | OpenClaw（第一优先）、Hermes（并列第二）、YouMind 精灵（只做聊天）。不再新增第四个后端，但架构必须让新增后端只需要写一个适配器。 |
+| 支持的后端 | OpenClaw、Hermes、YouMind 精灵，以及 2026-09-11 用户授权新增的 `local-model`。本地模型先在独立 Preview 验证聊天、Relay、模型切换和图片；不扩展 Agent 工具能力。详见 [本地模型连接](15-local-model.md)。 |
 | 平台 | iOS 与 Android 同步发布，一套 UI，无 Liquid Glass、无 SF Symbols、无 Material 涟漪。 |
 | 版本号 | 3.0 既是项目代号也是发布版本号：App `3.0.0`（必须高于线上的 2.1.x，商店才视为升级）、`@p697/clawket` `3.0.0`、`bridge-runtime` 与 `bridge-core` `3.0.0`。线上老客户端以 PostHog 为准主要是 2.1.1 与 2.1.0，兼容目标是 2.1.0 / 2.1.1 / 2.1.2 三个版本。 |
 | 与官方 OpenClaw App 的关系 | 不对抗，附着：官方 App 聊，Clawket 管。商店文案：「OpenClaw 与 Hermes 的手机控制塔——看清每个 Agent 在做什么，随时接管。」 |

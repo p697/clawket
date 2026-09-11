@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { HermesPythonRunner } from './python-runner.js';
 
 const runner = new HermesPythonRunner({ hermesSourcePath: '/nonexistent-hermes-fixture',
-  hermesHomePath: '/nonexistent-hermes-home', hermesPythonPath: 'python3' });
+  hermesHomePath: '/nonexistent-hermes-home', hermesPythonPath: (process.platform === 'win32' ? 'python' : 'python3') });
 
 describe('Hermes subprocess error boundary', () => {
   it('keeps Python source and sensitive exception values out of client error messages', async () => {

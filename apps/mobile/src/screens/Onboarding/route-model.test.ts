@@ -17,11 +17,13 @@ describe('Onboarding route model', () => {
       openclaw: 'https://openclaw.ai',
       hermes: 'https://hermes-agent.nousresearch.com',
       youmind: 'https://youmind.com',
+      'local-model': 'https://github.com/p697/clawket',
     });
   });
 
   it('normalizes non-pairable route backends without treating YouMind as a transport', () => {
     expect(normalizePairableBackendKind('hermes')).toBe('hermes');
+    expect(normalizePairableBackendKind('local-model')).toBe('local-model');
     expect(normalizePairableBackendKind('openclaw')).toBe('openclaw');
     expect(normalizePairableBackendKind('youmind')).toBe('openclaw');
   });

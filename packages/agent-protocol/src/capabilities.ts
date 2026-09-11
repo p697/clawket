@@ -226,6 +226,11 @@ export const CAPABILITY_MATRIX: Record<BackendKind, Capabilities> = {
   openclaw: OPENCLAW_CAPABILITIES,
   hermes: HERMES_CAPABILITIES,
   youmind: YOUMIND_CAPABILITIES,
+  'local-model': {
+    ...YOUMIND_CAPABILITIES,
+    chat: true, abort: true, history: true, attachments: true,
+    models: true, replyNotifications: true,
+  },
 };
 
 export type AttachmentCapabilities = Pick<

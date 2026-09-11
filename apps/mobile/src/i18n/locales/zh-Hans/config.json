@@ -368,5 +368,7 @@
   "Unable to change app language": "无法更改 App 语言",
   "Connect OpenClaw, Hermes or YouMind Sprite": "连接 OpenClaw、Hermes 或 YouMind 精灵",
   "Create another agent on {{connection}}": "在 {{connection}} 上再建一个智能体",
-  "Create another agent on this connection": "在当前连接上再建一个智能体"
+  "Create another agent on this connection": "在当前连接上再建一个智能体",
+  "Local model": "本地模型",
+  "Local model is not responding": "本地模型没有响应"
 }

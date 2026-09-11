@@ -10,6 +10,7 @@ import type { ConnectionAdapterFactoryContext } from '../registry/connection-sto
 import { HermesAdapter } from './hermes';
 import { OpenClawAdapter } from './openclaw';
 import { YouMindSpriteAdapter } from './youmind-sprite';
+import { LocalModelAdapter } from './local-model';
 
 type CreateConnectionAdapterOptions = ConnectionAdapterFactoryContext & Readonly<{
   gateway?: GatewayClient;
@@ -27,6 +28,8 @@ export function createConnectionAdapter(
 ): AgentAdapter {
   const isFreeSlot = descriptor.isFreeSlot;
   switch (record.backendKind) {
+    case 'local-model':
+      return new LocalModelAdapter(record, { isFreeSlot });
     case 'openclaw':
       return new OpenClawAdapter(record, {
         isFreeSlot,

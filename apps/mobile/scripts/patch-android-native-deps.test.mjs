@@ -8,7 +8,7 @@ import { promisify } from 'node:util';
 import test from 'node:test';
 
 const execFileAsync = promisify(execFile);
-const scriptPath = fileURLToPath(new URL('./patch-android-native-deps.sh', import.meta.url));
+const scriptPath = fileURLToPath(new URL('./patch-android-native-deps.mjs', import.meta.url));
 const menuNeedle = `      // MenuViewManager
       if (getReactNativeMinorVersion() <= 75) {
         java.srcDirs += "src/reactNativeVersionPatch/MenuViewManager/75"
@@ -74,7 +74,7 @@ async function createFixture({ hoisted, corruptMenu = false }) {
 }
 
 async function runPatch(mobileRoot) {
-  return execFileAsync('bash', [scriptPath], {
+  return execFileAsync(process.execPath, [scriptPath], {
     env: { ...process.env, CLAWKET_MOBILE_ROOT: mobileRoot },
     encoding: 'utf8',
   });

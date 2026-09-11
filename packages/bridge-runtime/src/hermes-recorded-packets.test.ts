@@ -357,7 +357,7 @@ async function startControlledBridge(directory: string, stateDbPath: string): Pr
     hermesStateDbPath: stateDbPath,
     hermesHomePath: join(directory, 'hermes-home'),
     hermesSourcePath: join(directory, 'hermes-source'),
-    hermesPythonPath: 'python3',
+    hermesPythonPath: (process.platform === 'win32' ? 'python' : 'python3'),
     startHermesIfNeeded: false,
   });
   Object.assign(bridge, {
@@ -407,7 +407,7 @@ function stubHermesHealthOnly(): void {
 }
 
 function createNativeStateDb(path: string, state: NativeStateFixture): void {
-  execFileSync('python3', ['-c', CREATE_NATIVE_STATE_DB, path], {
+  execFileSync((process.platform === 'win32' ? 'python' : 'python3'), ['-c', CREATE_NATIVE_STATE_DB, path], {
     encoding: 'utf8',
     input: JSON.stringify(state),
     stdio: ['pipe', 'pipe', 'pipe'],

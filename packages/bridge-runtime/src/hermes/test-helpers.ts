@@ -30,14 +30,14 @@ export function initializeHermesStateDb(
     toolName?: string;
   }> = [],
 ): void {
-  execFileSync('python3', ['-c', STATE_DB_SCRIPT, dbPath, JSON.stringify({ sessions, messages })]);
+  execFileSync((process.platform === 'win32' ? 'python' : 'python3'), ['-c', STATE_DB_SCRIPT, dbPath, JSON.stringify({ sessions, messages })]);
 }
 
 export function appendHermesMessage(
   dbPath: string,
   message: { sessionId: string; role: string; content: string; timestamp: number },
 ): void {
-  execFileSync('python3', [
+  execFileSync((process.platform === 'win32' ? 'python' : 'python3'), [
     '-c',
     [
       'import json, sqlite3, sys',

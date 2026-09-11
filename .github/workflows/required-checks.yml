@@ -7,6 +7,30 @@ on:
       - main
 
 jobs:
+  desktop-bridge:
+    name: Bridge and Relay compatibility (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci
+      - run: npm run bridge:build
+      - run: npm run bridge:test:required
+      - run: npm run test:compat
+      - run: npx vitest run tests/integration/local-model.e2e.test.ts
+
   required:
     name: Typecheck, tests, design system, and docs
     runs-on: ubuntu-latest

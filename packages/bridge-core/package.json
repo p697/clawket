@@ -17,7 +17,7 @@
     "tweetnacl": "^1.0.3"
   },
   "scripts": {
-    "build": "rm -rf dist && tsc -p tsconfig.json",
+    "build": "node ../../scripts/build-typescript.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --passWithNoTests"
   }

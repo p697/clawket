@@ -168,6 +168,7 @@ describe('runtime process registry', () => {
   });
 
   it('ignores Hermes runtime commands when scanning for OpenClaw runtimes', async () => {
+    vi.stubGlobal('process', { ...process, platform: 'linux' });
     vi.resetModules();
     vi.spyOn(process, 'kill').mockImplementation(() => true as never);
     vi.doMock('node:child_process', async () => {

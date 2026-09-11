@@ -47,6 +47,8 @@ vi.mock('node:child_process', () => childProcessMock);
 vi.mock('node:fs', () => fsMock);
 vi.mock('node:fs/promises', () => fsPromisesMock);
 vi.mock('node:os', () => osMock);
+// These mocked paths deliberately describe a POSIX host.
+vi.mock('node:path', async () => (await vi.importActual<typeof import('node:path')>('node:path')).posix);
 
 const TLS_CERT_PEM = `-----BEGIN CERTIFICATE-----
 MIIDCTCCAfGgAwIBAgIUel0Lv05cjrViyI/H3tABBJxM7NgwDQYJKoZIhvcNAQEL

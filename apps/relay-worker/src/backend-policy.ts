@@ -137,9 +137,17 @@ export const HERMES_BACKEND_POLICY: BackendPolicy = {
   traceHints: true,
 };
 
+// Local model traffic uses origin-routed RPC and the existing secure pairing wire.
+// Bind ROOM/ROUTES_KV only to this deployment's isolated resources.
+export const LOCAL_MODEL_BACKEND_POLICY: BackendPolicy = {
+  ...OPENCLAW_BACKEND_POLICY, backend: 'local-model',
+  routeRequestsByOrigin: true, rejectRequestWithoutOwner: true,
+};
+
 export function policyForBackend(backend: string | undefined): BackendPolicy {
   if (backend === undefined) return OPENCLAW_BACKEND_POLICY;
   if (backend === 'openclaw') return OPENCLAW_BACKEND_POLICY;
+  if (backend === 'local-model') return LOCAL_MODEL_BACKEND_POLICY;
   if (backend === 'hermes') return HERMES_BACKEND_POLICY;
   throw new Error(`Unsupported RELAY_BACKEND: ${backend}`);
 }

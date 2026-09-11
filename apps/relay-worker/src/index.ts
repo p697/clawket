@@ -33,6 +33,7 @@ import {
 import {
   HERMES_BACKEND_POLICY,
   OPENCLAW_BACKEND_POLICY,
+  LOCAL_MODEL_BACKEND_POLICY,
   clearPrincipalExistenceCache,
   pairedPrincipalExists,
   policyForBackend,
@@ -612,6 +613,12 @@ class BaseRelayRoom {
 export class RelayRoom extends BaseRelayRoom {
   constructor(state: DurableObjectState, env: Env) {
     super(state, env, OPENCLAW_BACKEND_POLICY);
+  }
+}
+
+export class LocalModelRelayRoom extends BaseRelayRoom {
+  constructor(state: DurableObjectState, env: Env) {
+    super(state, env, LOCAL_MODEL_BACKEND_POLICY);
   }
 }
 

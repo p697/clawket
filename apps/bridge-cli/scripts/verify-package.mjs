@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { npmInvocation } from "../../../scripts/node-command.mjs";
 import { createHash } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
@@ -167,7 +168,9 @@ export async function verifyPackage({
   env = process.env,
   spawn = spawnSync,
 } = {}) {
-  const pack = spawn("npm", ["pack", "--json", "--dry-run", "--ignore-scripts"], {
+  const packArgs = ["pack", "--json", "--dry-run", "--ignore-scripts"];
+  const [npmCommand, npmArgs] = spawn === spawnSync ? npmInvocation(packArgs, env) : ["npm", packArgs];
+  const pack = spawn(npmCommand, npmArgs, {
     cwd: packageDirectory,
     encoding: "utf8",
   });

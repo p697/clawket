@@ -392,7 +392,7 @@ describe('hermes relay runtime helpers', () => {
     expect(logs).toContain('bridge status probe reported hasBridge=false; recycling relay socket');
     expect(relaySocket.readyState).toBe(FakeSocket.CLOSED);
     expect(bridgeSocket.readyState).toBe(FakeSocket.OPEN);
-    expect(sockets.length).toBeGreaterThanOrEqual(3);
+    await vi.waitFor(() => expect(sockets.length).toBeGreaterThanOrEqual(3));
     expect(sockets[2]?.url).toContain('wss://relay.example.com/ws');
 
     await runtime.stop();

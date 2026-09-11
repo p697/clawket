@@ -55,7 +55,7 @@ async function createHermesHomePath(config?: Record<string, unknown>): Promise<s
   tempDirs.push(dir);
   if (config) {
     const configJson = JSON.stringify(config);
-    execFileSync('python3', [
+    execFileSync((process.platform === 'win32' ? 'python' : 'python3'), [
       '-c',
       [
         'import json, pathlib, sys',
@@ -93,7 +93,7 @@ async function createHermesHomePath(config?: Record<string, unknown>): Promise<s
 describe('Hermes usage integration', () => {
   it('aggregates Hermes usage and cost from state.db without modifying Hermes source', async () => {
     const hermesStateDbPath = await createHermesStateDbPath();
-    execFileSync('python3', [
+    execFileSync((process.platform === 'win32' ? 'python' : 'python3'), [
       '-c',
       [
         'import datetime',
@@ -196,7 +196,7 @@ describe('Hermes usage integration', () => {
   it('uses the Clawket Hermes usage ledger for long-lived sessions that started before today', async () => {
     const hermesStateDbPath = await createHermesStateDbPath();
     const usageLedgerPath = await createUsageLedgerPath();
-    execFileSync('python3', [
+    execFileSync((process.platform === 'win32' ? 'python' : 'python3'), [
       '-c',
       [
         'import datetime',

@@ -104,7 +104,7 @@ export class WranglerDevProcess {
 
   private async boot(): Promise<void> {
     const args = [
-      'wrangler',
+      join(this.cwd, 'node_modules', 'wrangler', 'bin', 'wrangler.js'),
       'dev',
       '--config',
       this.configPath,
@@ -125,7 +125,8 @@ export class WranglerDevProcess {
       this.envFilePath,
     ];
 
-    this.proc = spawn('npx', args, {
+    this.proc = spawn(process.execPath, args, {
+      windowsHide: true,
       cwd: this.cwd,
       env: process.env,
       stdio: ['ignore', 'pipe', 'pipe'],

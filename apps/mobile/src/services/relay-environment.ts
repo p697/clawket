@@ -4,6 +4,7 @@ export const OFFICIAL_PRODUCTION_REGISTRY_URL = 'https://registry.clawket.ai';
 export const OFFICIAL_PREVIEW_REGISTRY_URL = 'https://clawket-registry-preview.clawket.workers.dev';
 export const OFFICIAL_HERMES_PRODUCTION_REGISTRY_URL = 'https://hermes-registry.clawket.ai';
 export const OFFICIAL_HERMES_PREVIEW_REGISTRY_URL = 'https://clawket-hermes-registry-preview.clawket.workers.dev';
+export const OFFICIAL_LOCAL_MODEL_PREVIEW_REGISTRY_URL = 'https://clawket-local-model-registry-preview.clawket.workers.dev';
 
 export type RelayEnvironmentSelectionIssue =
   | 'preview_requires_debug_mode'
@@ -48,6 +49,7 @@ export function getOfficialHermesRegistryUrl(environment: RelayServiceEnvironmen
 }
 
 const OFFICIAL_PREVIEW_REGISTRY_ORIGINS = new Set([
+  normalizeOrigin(OFFICIAL_LOCAL_MODEL_PREVIEW_REGISTRY_URL),
   normalizeOrigin(OFFICIAL_PREVIEW_REGISTRY_URL),
   normalizeOrigin(OFFICIAL_HERMES_PREVIEW_REGISTRY_URL),
 ]);

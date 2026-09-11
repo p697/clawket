@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
+import path from 'node:path';
 
 import { runCompatGate, runWrangler, shouldRunCompatGate } from './run-wrangler.mjs';
 
 const WORKSPACE_ROOT = '/workspace';
-const WRANGLER_BIN = '/workspace/node_modules/.bin/wrangler';
-const CONFIG_PATH = '/workspace/apps/relay-worker/wrangler.local.toml';
-const HERMES_CONFIG_PATH = '/workspace/apps/relay-worker/wrangler.hermes.local.toml';
+const WRANGLER_BIN = path.join(WORKSPACE_ROOT, 'node_modules/.bin/wrangler');
+const CONFIG_PATH = path.join(WORKSPACE_ROOT, 'apps/relay-worker/wrangler.local.toml');
+const HERMES_CONFIG_PATH = path.join(WORKSPACE_ROOT, 'apps/relay-worker/wrangler.hermes.local.toml');
 const DEPLOY_WORKSPACE_MANIFESTS = new Map([
   ['apps/relay-worker/package.json', 'relay-worker'],
   ['apps/relay-registry/package.json', 'relay-registry'],
@@ -212,7 +213,7 @@ function readTomlJsonMap(source, key) {
 function readArrayTables(source, name) {
   const tables = [];
   let current = null;
-  for (const line of source.split('\n')) {
+  for (const line of source.split(/\r?\n/)) {
     const header = line.match(/^\[\[([^\]]+)\]\]$/);
     if (header) {
       current = header[1] === name ? {} : null;

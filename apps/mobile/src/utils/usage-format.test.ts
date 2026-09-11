@@ -81,9 +81,8 @@ describe('formatCost', () => {
 describe('formatDayLabel', () => {
   it('formats valid YYYY-MM-DD date string', () => {
     const result = formatDayLabel('2024-01-15');
-    // locale-dependent, but should contain "Jan" and "15"
-    expect(result).toContain('Jan');
-    expect(result).toContain('15');
+    // The app follows the device locale; Chinese Windows does not spell January "Jan".
+    expect(result).toBe(new Date(Date.UTC(2024, 0, 15)).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }));
   });
 
   it('returns input for invalid format', () => {

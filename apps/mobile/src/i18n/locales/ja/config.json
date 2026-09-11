@@ -368,5 +368,7 @@
   "Unable to change app language": "Appの言語を変更できません",
   "Connect OpenClaw, Hermes or YouMind Sprite": "OpenClaw、Hermes、YouMindスプライトを接続",
   "Create another agent on {{connection}}": "{{connection}} にエージェントを追加",
-  "Create another agent on this connection": "この接続にエージェントを追加"
+  "Create another agent on this connection": "この接続にエージェントを追加",
+  "Local model": "ローカルモデル",
+  "Local model is not responding": "ローカルモデルが応答していません"
 }

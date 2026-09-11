@@ -1,10 +1,11 @@
-export type RegistryBackend = 'openclaw' | 'hermes';
+export type RegistryBackend = 'openclaw' | 'hermes' | 'local-model';
 
 export type RegistryKvBinding = 'ROUTES_KV' | 'HERMES_ROUTES_KV';
 export type RegistryPrincipalParam = 'gatewayId' | 'bridgeId';
 
 export type RegistryBackendPolicy = {
   backend: RegistryBackend;
+  wireProtocol: 'gateway' | 'hermes';
   principalParam: RegistryPrincipalParam;
   principalLabel: 'Gateway' | 'Bridge';
   principalIdPrefix: 'gw_' | 'hbg_';
@@ -26,6 +27,7 @@ export type RegistryBackendPolicy = {
 
 export const OPENCLAW_REGISTRY_POLICY: RegistryBackendPolicy = {
   backend: 'openclaw',
+  wireProtocol: 'gateway',
   principalParam: 'gatewayId',
   principalLabel: 'Gateway',
   principalIdPrefix: 'gw_',
@@ -49,6 +51,7 @@ export const OPENCLAW_REGISTRY_POLICY: RegistryBackendPolicy = {
 
 export const HERMES_REGISTRY_POLICY: RegistryBackendPolicy = {
   backend: 'hermes',
+  wireProtocol: 'hermes',
   principalParam: 'bridgeId',
   principalLabel: 'Bridge',
   principalIdPrefix: 'hbg_',
@@ -70,9 +73,15 @@ export const HERMES_REGISTRY_POLICY: RegistryBackendPolicy = {
   },
 };
 
+// Same secure pairing wire protocol; deployed with isolated KV and service bindings.
+export const LOCAL_MODEL_REGISTRY_POLICY: RegistryBackendPolicy = {
+  ...OPENCLAW_REGISTRY_POLICY, backend: 'local-model',
+};
+
 export function resolveRegistryBackendPolicy(value: string | undefined): RegistryBackendPolicy {
   if (value === undefined) return OPENCLAW_REGISTRY_POLICY;
   if (value === 'openclaw') return OPENCLAW_REGISTRY_POLICY;
+  if (value === 'local-model') return LOCAL_MODEL_REGISTRY_POLICY;
   if (value === 'hermes') return HERMES_REGISTRY_POLICY;
   throw new Error(`Unsupported RELAY_BACKEND: ${value}`);
 }

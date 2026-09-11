@@ -220,6 +220,19 @@ describe('OnboardingScreen', () => {
     });
   });
 
+  it('offers local models only in Preview and submits all six digits including zero and one', () => {
+    const onSubmitPairing = jest.fn();
+    const view = render(<OnboardingScreen {...createProps({ initialBackend: undefined, onSubmitPairing })} />);
+    expect(view.queryByTestId('onboarding-backend-local-model')).toBeNull();
+    view.rerender(<OnboardingScreen {...createProps({ initialBackend: undefined, environment: 'preview', onSubmitPairing })} />);
+    fireEvent.press(view.getByTestId('onboarding-backend-local-model'));
+    expect(view.queryByTestId('onboarding-agent-prompt')).toBeNull();
+    expect(view.getByText('npx @p697/clawket pair --backend local-model --preview')).toBeTruthy();
+    fireEvent.changeText(view.getByTestId('onboarding-pairing-code'), '001234');
+    fireEvent.press(view.getByTestId('onboarding-connect'));
+    expect(onSubmitPairing).toHaveBeenCalledWith({ backendKind: 'local-model', transportKind: 'relay', code: '001234' });
+  });
+
   it('shares one synchronous readiness guard across Enter, button, and input state', () => {
     const onSubmitPairing = jest.fn(() => new Promise<void>(() => undefined));
     const props = createProps({ onSubmitPairing });

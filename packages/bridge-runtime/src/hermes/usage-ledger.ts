@@ -203,7 +203,7 @@ export abstract class HermesUsageMethods {
     }
 
     const raw = execFileSync(
-      'python3',
+      (process.platform === 'win32' ? 'python' : 'python3'),
       [
         '-c',
         [
@@ -530,7 +530,7 @@ export abstract class HermesUsageMethods {
 
     try {
       const raw = execFileSync(
-        'python3',
+        (process.platform === 'win32' ? 'python' : 'python3'),
         [
           '-c',
           [
