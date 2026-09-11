@@ -78,6 +78,11 @@ jest.mock('react-native-enriched-markdown', () => {
   };
 });
 
+// The word pacer is unit-tested in src/chat; here the stream renders as it arrives.
+jest.mock('../../chat/useSmoothedStreamText', () => ({
+  useSmoothedStreamText: (text: string) => text,
+}));
+
 jest.mock('react-native-keyboard-controller', () => {
   const ReactRuntime = require('react');
   const { View } = require('react-native');
@@ -298,7 +303,7 @@ const copy: ThreadCopy = {
   denied: 'Denied',
   expired: 'Expired',
   logs: 'Logs',
-  formatAsk: (name) => `Ask ${name}`,
+  placeholder: 'Message',
   formatEmpty: (name) => `Start a conversation with ${name}`,
   formatAttachments: (count) => `${count} attachments`,
   formatRunDetail: (status, time) => time ? `${status} · ${time}` : status,
@@ -522,11 +527,20 @@ describe('ThreadView', () => {
     view.rerender(<ThreadView {...createProps({ messages: [sent], isRunning: true, activityLabel: 'Using exec…', input: '' })} />);
     expect(view.getByTestId('thread-thinking-streaming')).toHaveTextContent('Using exec…');
 
-    const streaming: UiMessage = { id: 'streaming', role: 'assistant', text: 'Partial', streaming: true };
+    const streaming: UiMessage = { id: 'streaming', role: 'assistant', text: 'Partial **bo', streaming: true };
     view.rerender(<ThreadView {...createProps({ messages: [streaming, sent], isRunning: true, input: '' })} />);
     expect(view.queryByTestId('thread-thinking-streaming')).toBeNull();
     expect(view.getAllByTestId('thread-bubble-streaming')).toHaveLength(1);
     expect(view.getByTestId('thread-markdown-streaming').props.streamingAnimation).toBe(true);
+    // Open syntax is terminated while streaming so styling never flickers, and
+    // no cursor glyph is appended to absorb the native tail fade.
+    expect(view.getByTestId('thread-markdown-streaming').props.markdown).toBe('Partial **bo**');
+    expect(view.queryByTestId('thread-stream-cursor-streaming', { includeHiddenElements: true })).toBeNull();
+
+    const settled: UiMessage = { id: 'assistant-9', role: 'assistant', text: 'Partial **bold**', timestampMs: Date.now() };
+    view.rerender(<ThreadView {...createProps({ messages: [settled, sent], isRunning: false })} />);
+    expect(view.getByTestId('thread-markdown-assistant-9').props.streamingAnimation).toBe(false);
+    expect(view.getByTestId('thread-markdown-assistant-9').props.markdown).toBe('Partial **bold**');
 
     view.rerender(<ThreadView {...createProps({ messages: [sent], isRunning: false })} />);
     expect(view.queryByTestId('thread-thinking-streaming')).toBeNull();
@@ -692,10 +706,11 @@ describe('ThreadView', () => {
     })} />);
 
     expect(view.getByTestId('thread-markdown-assistant-1').props.streamingAnimation).toBe(true);
-    expect(view.getByTestId(
+    // No synthetic cursor: the native tail fade is the only streaming signal.
+    expect(view.queryByTestId(
       'thread-stream-cursor-assistant-1',
       { includeHiddenElements: true },
-    )).toBeTruthy();
+    )).toBeNull();
 
     fireEvent.press(view.getByTestId('thread-screen-back'));
     fireEvent.press(view.getByTestId('thread-screen-header-pill'));
@@ -763,14 +778,14 @@ describe('ThreadView', () => {
     expect(onVoice).toHaveBeenCalledTimes(1);
 
     view.rerender(<ThreadView {...createProps({ input: 'Dictated draft', onVoice, voiceState: 'idle', voiceLevel: level })} />);
-    expect(view.getByTestId('thread-screen-composer-input').props.placeholder).toBe('Ask Atlas');
+    expect(view.getByTestId('thread-screen-composer-input').props.placeholder).toBe('Message');
     expect(view.getByTestId('thread-screen-composer-input').props.editable).toBe(true);
     expect(view.queryByTestId('thread-screen-composer-voice-stop')).toBeNull();
     expect(view.getByTestId('thread-screen-composer-primary')).toBeTruthy();
 
     // Without a voice handler the state is ignored and the ordinary placeholder stays.
     view.rerender(<ThreadView {...createProps({ input: '', onVoice: undefined, voiceState: 'listening' })} />);
-    expect(view.getByTestId('thread-screen-composer-input').props.placeholder).toBe('Ask Atlas');
+    expect(view.getByTestId('thread-screen-composer-input').props.placeholder).toBe('Message');
     expect(view.queryByTestId('thread-screen-composer-voice-stop')).toBeNull();
   });
 
@@ -1417,6 +1432,7 @@ describe('ThreadView', () => {
         },
       }],
       onOpenSessionPanel,
+      onOpenAddMenu: undefined,
       isRunning: true,
       input: '',
     })} />);

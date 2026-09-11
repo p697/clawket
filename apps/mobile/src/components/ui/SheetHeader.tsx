@@ -38,6 +38,8 @@ export function SheetDragHandle({ testID }: { testID?: string }): React.JSX.Elem
 
 export type SheetHeaderProps = {
   title?: string;
+  /** Replaces the centered title text, e.g. the Session Panel's Agent pill. */
+  titleContent?: React.ReactNode;
   onClose: () => void;
   closeAccessibilityLabel: string;
   right?: React.ReactNode;
@@ -46,6 +48,7 @@ export type SheetHeaderProps = {
 
 export function SheetHeader({
   title,
+  titleContent,
   onClose,
   closeAccessibilityLabel,
   right,
@@ -65,7 +68,11 @@ export function SheetHeader({
           testID={testID ? `${testID}-close` : undefined}
         />
       </View>
-      <Text style={styles.title} numberOfLines={1}>{title}</Text>
+      {titleContent ? (
+        <View style={styles.titleSlot}>{titleContent}</View>
+      ) : (
+        <Text style={styles.title} numberOfLines={1}>{title}</Text>
+      )}
       <View style={[styles.sideSlot, styles.trailingSlot]}>{right}</View>
     </View>
   );
@@ -107,6 +114,12 @@ function createHeaderStyles(
     },
     trailingSlot: {
       alignItems: 'flex-end',
+    },
+    titleSlot: {
+      flex: 1,
+      minWidth: 0,
+      alignItems: 'center',
+      paddingHorizontal: Space.sm,
     },
     title: {
       flex: 1,

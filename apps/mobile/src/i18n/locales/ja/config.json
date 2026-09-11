@@ -293,7 +293,7 @@
   "Providers": "プロバイダー",
   "Providers and cost": "プロバイダーと料金",
   "Installed": "インストール済み",
-  "New scheduled task": "新しい定期タスク",
+  "New cron job": "新しい Cron ジョブ",
   "Agent files": "エージェントファイル",
   "Edit files": "ファイルを編集",
   "Activity": "アクティビティ",

@@ -8,15 +8,10 @@ import type {
 import type { RosterConnectionGroup } from '../../connection';
 import {
   buildSessionDescriptorBoardRows,
-  summarizeSessionBoardRows,
-  type SessionBoardKind,
   type SessionBoardRow,
   type SessionBoardStatus,
 } from './list-model';
 
-
-export type SessionPanelMode = 'grouped' | 'list';
-export type SessionPanelKindFilter = 'all' | SessionBoardKind;
 export type SessionPanelAction = keyof SessionActions;
 export type SessionPanelRenamePayload = Readonly<{
   title: string;
@@ -39,32 +34,34 @@ export type SessionPanelRow = SessionBoardRow & Readonly<{
   attention: Exclude<SessionDescriptor['attention'], undefined>;
   source: Exclude<SessionDescriptor['source'], undefined> | null;
   allowedActions: SessionActions;
+  pinned: boolean;
+  unread: boolean;
 }>;
 
-export type SessionPanelChannelGroup = Readonly<{
-  key: string;
+/** Kind chips beside the channel chips; `all` and `channel:<label>` complete the set. */
+export type SessionPanelKindFilter = 'direct_group' | 'subagent' | 'cron';
+export type SessionPanelFilter = 'all' | SessionPanelKindFilter | `channel:${string}`;
+
+export type SessionPanelChip = Readonly<{
+  key: SessionPanelFilter;
+  /** Channel display label; kind chips and `all` carry `null` and are translated by the view. */
   label: string | null;
-  rows: ReadonlyArray<SessionPanelRow>;
+  count: number;
 }>;
 
-export type SessionPanelSection = Readonly<{
-  kind: 'main' | 'channel' | 'direct_group' | 'subagent' | 'cron';
-  rows: ReadonlyArray<SessionPanelRow>;
-  channelGroups?: ReadonlyArray<SessionPanelChannelGroup>;
-  completedRows?: ReadonlyArray<SessionPanelRow>;
-}>;
+export type SessionPanelListItem =
+  | Readonly<{ type: 'row'; row: SessionPanelRow }>
+  | Readonly<{ type: 'subagents'; count: number }>;
 
-export type SessionPanelAgentGroup = Readonly<{
+export type SessionPanelAgentOption = Readonly<{
   agent: AgentDescriptor;
   count: number;
-  sections: ReadonlyArray<SessionPanelSection>;
 }>;
 
-export type SessionPanelSummary = Readonly<{
-  active: number;
-  recent: number;
-  idle: number;
-}>;
+export type SessionPanelFilterKind = 'all' | 'channel' | SessionPanelKindFilter;
+
+const CHANNEL_FILTER_PREFIX = 'channel:';
+const KIND_FILTER_ORDER: ReadonlyArray<SessionPanelKindFilter> = ['direct_group', 'subagent', 'cron'];
 
 function statusRank(status: SessionBoardStatus): number {
   if (status === 'active') return 3;
@@ -73,125 +70,161 @@ function statusRank(status: SessionBoardStatus): number {
 }
 
 function compareRows(a: SessionPanelRow, b: SessionPanelRow): number {
-  return statusRank(b.status) - statusRank(a.status)
+  return Number(b.kind === 'main') - Number(a.kind === 'main')
+    || Number(b.pinned) - Number(a.pinned)
+    || statusRank(b.status) - statusRank(a.status)
     || Number(b.hasActiveRun) - Number(a.hasActiveRun)
     || b.updatedAt - a.updatedAt
     || a.key.localeCompare(b.key);
 }
 
+export function channelFilterKey(channelLabel: string): `channel:${string}` {
+  return `${CHANNEL_FILTER_PREFIX}${channelLabel.toLowerCase()}`;
+}
+
+export function resolveSessionPanelFilterKind(filter: SessionPanelFilter): SessionPanelFilterKind {
+  if (filter.startsWith(CHANNEL_FILTER_PREFIX)) return 'channel';
+  return filter as SessionPanelFilterKind;
+}
+
+function kindFilterOf(row: SessionPanelRow): SessionPanelKindFilter | null {
+  if (row.kind === 'subagent') return 'subagent';
+  if (row.kind === 'cron') return 'cron';
+  if (row.kind === 'direct' || row.kind === 'group' || row.kind === 'other') return 'direct_group';
+  return null;
+}
+
+function matchesFilter(row: SessionPanelRow, filter: SessionPanelFilter): boolean {
+  if (filter === 'all') return true;
+  if (filter.startsWith(CHANNEL_FILTER_PREFIX)) {
+    return row.kind === 'channel'
+      && row.channelLabel !== null
+      && channelFilterKey(row.channelLabel) === filter;
+  }
+  return kindFilterOf(row) === filter;
+}
+
 export function buildSessionPanelRows(
   group: RosterConnectionGroup | null | undefined,
-  options?: { now?: number },
+  options?: Readonly<{
+    now?: number;
+    pinnedSessionKeys?: Readonly<Record<string, ReadonlyArray<string>>>;
+  }>,
 ): ReadonlyArray<SessionPanelRow> {
   if (!group) return Object.freeze([]);
   const sessions = group.agents.flatMap((summary) => summary.sessions);
   const boardByKey = new Map(
-    buildSessionDescriptorBoardRows(sessions, options).map((row) => [row.key, row]),
+    buildSessionDescriptorBoardRows(sessions, { now: options?.now }).map((row) => [row.key, row]),
   );
-  const rows: SessionPanelRow[] = group.agents.flatMap((summary) => summary.sessions.flatMap((session) => {
-    const board = boardByKey.get(session.key);
-    if (!board) return [];
-    return [{
-      ...board,
-      id: `${session.connectionId}:${session.agentId}:${session.key}`,
-      connectionId: session.connectionId,
-      agentId: session.agentId,
-      agentName: summary.agent.name,
-      channel: session.channel?.trim() || null,
-      hasActiveRun: session.hasActiveRun,
-      attention: session.attention ?? null,
-      source: session.source ?? null,
-      allowedActions: { ...session.allowedActions },
-    } satisfies SessionPanelRow];
-  }));
+  const rows: SessionPanelRow[] = group.agents.flatMap((summary) => {
+    const scope = `${summary.agent.connectionId}:${summary.agent.agentId}`;
+    const pinnedKeys = new Set(options?.pinnedSessionKeys?.[scope] ?? []);
+    const unreadKeys = new Set(summary.unreadSessionKeys ?? []);
+    return summary.sessions.flatMap((session) => {
+      const board = boardByKey.get(session.key);
+      if (!board) return [];
+      return [{
+        ...board,
+        id: `${session.connectionId}:${session.agentId}:${session.key}`,
+        connectionId: session.connectionId,
+        agentId: session.agentId,
+        agentName: summary.agent.name,
+        channel: session.channel?.trim() || null,
+        hasActiveRun: session.hasActiveRun,
+        attention: session.attention ?? null,
+        source: session.source ?? null,
+        allowedActions: { ...session.allowedActions },
+        pinned: pinnedKeys.has(session.key),
+        unread: unreadKeys.has(session.key),
+      } satisfies SessionPanelRow];
+    });
+  });
   return Object.freeze(rows.sort(compareRows));
+}
+
+/** The panel shows one Agent at a time; the header pill switches between them. */
+export function buildSessionPanelAgents(
+  rows: ReadonlyArray<SessionPanelRow>,
+  agents: ReadonlyArray<AgentDescriptor>,
+): ReadonlyArray<SessionPanelAgentOption> {
+  return agents.map((agent) => ({
+    agent,
+    count: rows.filter((row) => row.agentId === agent.agentId).length,
+  }));
+}
+
+/**
+ * Channel chips first (busiest channel first), then the kind chips that have rows.
+ * A panel with nothing but the main conversation returns no chips at all.
+ */
+export function buildSessionPanelChips(
+  rows: ReadonlyArray<SessionPanelRow>,
+): ReadonlyArray<SessionPanelChip> {
+  const channels = new Map<string, SessionPanelChip>();
+  const kinds = new Map<SessionPanelKindFilter, number>();
+  for (const row of rows) {
+    if (row.kind === 'channel' && row.channelLabel) {
+      const key = channelFilterKey(row.channelLabel);
+      const current = channels.get(key);
+      channels.set(key, {
+        key,
+        label: row.channelLabel,
+        count: (current?.count ?? 0) + 1,
+      });
+      continue;
+    }
+    const kind = kindFilterOf(row);
+    if (kind) kinds.set(kind, (kinds.get(kind) ?? 0) + 1);
+  }
+  const chips: SessionPanelChip[] = [
+    ...[...channels.values()].sort((left, right) => (
+      right.count - left.count || (left.label ?? '').localeCompare(right.label ?? '')
+    )),
+    ...KIND_FILTER_ORDER.flatMap((kind) => {
+      const count = kinds.get(kind);
+      return count ? [{ key: kind, label: null, count } satisfies SessionPanelChip] : [];
+    }),
+  ];
+  if (chips.length === 0) return Object.freeze([]);
+  return Object.freeze([{ key: 'all', label: null, count: rows.length }, ...chips]);
 }
 
 export function filterSessionPanelRows(
   rows: ReadonlyArray<SessionPanelRow>,
   options: Readonly<{
+    agentId: string;
+    filter: SessionPanelFilter;
     query: string;
-    kindFilter: SessionPanelKindFilter;
   }>,
 ): ReadonlyArray<SessionPanelRow> {
   const query = options.query.trim().toLowerCase();
-  return rows.filter((row) => {
-    if (options.kindFilter !== 'all' && row.kind !== options.kindFilter) return false;
-    return !query || row.searchableText.includes(query);
-  });
-}
-
-function channelGroups(rows: ReadonlyArray<SessionPanelRow>): ReadonlyArray<SessionPanelChannelGroup> {
-  const grouped = new Map<string, SessionPanelRow[]>();
-  for (const row of rows) {
-    const key = row.channelLabel?.toLowerCase() ?? '';
-    const current = grouped.get(key) ?? [];
-    current.push(row);
-    grouped.set(key, current);
-  }
-  return [...grouped.entries()]
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([key, channelRows]) => ({
-      key: key || 'other',
-      label: channelRows[0]?.channelLabel ?? null,
-      rows: channelRows.sort(compareRows),
-    }));
-}
-
-function buildSections(rows: ReadonlyArray<SessionPanelRow>): ReadonlyArray<SessionPanelSection> {
-  const main = rows.filter((row) => row.kind === 'main');
-  const channel = rows.filter((row) => row.kind === 'channel');
-  const directGroup = rows.filter((row) => (
-    row.kind === 'direct' || row.kind === 'group' || row.kind === 'other'
+  return rows.filter((row) => (
+    row.agentId === options.agentId
+    && matchesFilter(row, options.filter)
+    && (!query || row.searchableText.includes(query))
   ));
-  const subagent = rows.filter((row) => row.kind === 'subagent');
-  const runningSubagents = subagent.filter((row) => row.hasActiveRun);
-  const completedSubagents = subagent.filter((row) => !row.hasActiveRun);
-  const cron = rows.filter((row) => row.kind === 'cron');
-  const sections: SessionPanelSection[] = [];
-  if (main.length) sections.push({ kind: 'main', rows: main.sort(compareRows) });
-  if (channel.length) {
-    sections.push({ kind: 'channel', rows: [], channelGroups: channelGroups(channel) });
-  }
-  if (directGroup.length) {
-    sections.push({ kind: 'direct_group', rows: directGroup.sort(compareRows) });
-  }
-  if (subagent.length) {
-    sections.push({
-      kind: 'subagent',
-      rows: runningSubagents.sort(compareRows),
-      completedRows: completedSubagents.sort(compareRows),
-    });
-  }
-  if (cron.length) sections.push({ kind: 'cron', rows: cron.sort(compareRows) });
-  return sections;
 }
 
-export function buildSessionPanelGroups(
+/**
+ * Rows already carry the panel order. In the unfiltered list the finished
+ * sub-agent runs fold into one trailing row so live work stays visible.
+ */
+export function buildSessionPanelListItems(
   rows: ReadonlyArray<SessionPanelRow>,
-  agents: ReadonlyArray<AgentDescriptor>,
-  currentAgentId: string,
-): ReadonlyArray<SessionPanelAgentGroup> {
-  return agents
-    .map((agent, index) => ({ agent, index }))
-    .sort((left, right) => (
-      Number(right.agent.agentId === currentAgentId) - Number(left.agent.agentId === currentAgentId)
-      || left.index - right.index
-    ))
-    .map(({ agent }) => {
-      const agentRows = rows.filter((row) => row.agentId === agent.agentId);
-      return {
-        agent,
-        count: agentRows.length,
-        sections: buildSections(agentRows),
-      } satisfies SessionPanelAgentGroup;
-    });
-}
-
-export function summarizeSessionPanelRows(
-  rows: ReadonlyArray<SessionPanelRow>,
-): SessionPanelSummary {
-  return summarizeSessionBoardRows([...rows]);
+  filter: SessionPanelFilter,
+): ReadonlyArray<SessionPanelListItem> {
+  if (filter !== 'all') return rows.map((row) => ({ type: 'row', row }));
+  const items: SessionPanelListItem[] = [];
+  let completedSubagents = 0;
+  for (const row of rows) {
+    if (row.kind === 'subagent' && !row.hasActiveRun) {
+      completedSubagents += 1;
+      continue;
+    }
+    items.push({ type: 'row', row });
+  }
+  if (completedSubagents > 0) items.push({ type: 'subagents', count: completedSubagents });
+  return items;
 }
 
 export function availableSessionActions(

@@ -8,12 +8,15 @@ import type {
 import type { RosterConnectionGroup } from '../../connection';
 import {
   availableSessionActions,
-  buildSessionPanelGroups,
+  buildSessionPanelAgents,
+  buildSessionPanelChips,
+  buildSessionPanelListItems,
   buildSessionPanelRows,
+  channelFilterKey,
   filterSessionPanelRows,
   normalizeSessionRenameTitle,
+  resolveSessionPanelFilterKind,
   resolveSessionPanelPageState,
-  summarizeSessionPanelRows,
 } from './model';
 
 function connection(): ConnectionDescriptor {
@@ -61,9 +64,10 @@ function roster(): RosterConnectionGroup {
   const mainAgent = agent('main');
   const builder = agent('builder');
   const mainSessions = [
-    session('main', 'main', 'main', { updatedAt: 990_000 }),
+    session('main', 'main', 'main', { updatedAt: 990_000, preview: 'hello' }),
     session('main', 'channel', 'one', { channel: 'telegram', attention: 'approval', updatedAt: 800_000 }),
-    session('main', 'channel', 'two', { channel: 'discord', updatedAt: 700_000 }),
+    session('main', 'channel', 'two', { channel: 'discord', updatedAt: 700_000, preview: 'ping' }),
+    session('main', 'channel', 'three', { channel: 'discord', updatedAt: 650_000 }),
     session('main', 'direct', 'friend', { updatedAt: 600_000 }),
     session('main', 'subagent', 'working', { hasActiveRun: true, updatedAt: 980_000 }),
     session('main', 'subagent', 'done', { updatedAt: 500_000 }),
@@ -83,6 +87,7 @@ function roster(): RosterConnectionGroup {
         lastActivityAt: 990_000,
         unreadCount: 0,
         hasUnread: false,
+        unreadSessionKeys: ['agent:main:channel:two'],
         attentionCount: 1,
         attention: 'approval',
       },
@@ -104,6 +109,7 @@ function roster(): RosterConnectionGroup {
   };
 }
 
+const pinnedSessionKeys = { 'connection:main': ['agent:main:cron:daily'] };
 const mutationCapabilities = {
   sessionRename: true,
   sessionReset: true,
@@ -111,65 +117,102 @@ const mutationCapabilities = {
 } satisfies Pick<Capabilities, 'sessionRename' | 'sessionReset' | 'sessionDelete'>;
 
 describe('SessionPanel model', () => {
-  it('projects canonical descriptors into searchable status-sorted rows', () => {
-    const rows = buildSessionPanelRows(roster(), { now: 1_000_000 });
-    expect(rows).toHaveLength(8);
-    expect(rows.find((row) => row.kind === 'main')).toMatchObject({
+  it('projects canonical descriptors into rows with pin and unread state', () => {
+    const rows = buildSessionPanelRows(roster(), { now: 1_000_000, pinnedSessionKeys });
+    expect(rows).toHaveLength(9);
+    expect(rows.find((row) => row.kind === 'main' && row.agentId === 'main')).toMatchObject({
       status: 'active',
       agentName: 'Main',
+      preview: 'hello',
+      pinned: false,
+      unread: false,
     });
-    expect(rows.find((row) => row.kind === 'channel')).toMatchObject({
-      channelLabel: 'Telegram',
+    expect(rows.find((row) => row.key === 'agent:main:channel:two')).toMatchObject({
+      channelLabel: 'Discord',
+      unread: true,
+      pinned: false,
+    });
+    expect(rows.find((row) => row.kind === 'cron')).toMatchObject({ pinned: true });
+    expect(rows.find((row) => row.kind === 'channel' && row.channelLabel === 'Telegram')).toMatchObject({
       attention: 'approval',
     });
   });
 
-  it('filters by query and canonical kind while retaining all activity states', () => {
-    const rows = buildSessionPanelRows(roster(), { now: 1_000_000 });
-    expect(filterSessionPanelRows(rows, {
-      query: 'telegram', kindFilter: 'all',
-    }).map((row) => row.channelLabel)).toEqual(['Telegram']);
-    expect(filterSessionPanelRows(rows, {
-      query: '', kindFilter: 'all',
-    })).toHaveLength(rows.length);
-    expect(filterSessionPanelRows(rows, {
-      query: '', kindFilter: 'subagent',
-    }).map((row) => row.title)).toEqual(['subagent working', 'subagent done']);
+  it('orders the main conversation first, then pinned rows, then activity', () => {
+    const rows = buildSessionPanelRows(roster(), { now: 1_000_000, pinnedSessionKeys });
+    const mainRows = rows.filter((row) => row.agentId === 'main').map((row) => row.key);
+    expect(mainRows.slice(0, 3)).toEqual([
+      'agent:main:main',
+      'agent:main:cron:daily',
+      'agent:main:subagent:working',
+    ]);
+    expect(mainRows.at(-1)).toBe('agent:main:subagent:done');
   });
 
-  it('puts the current Agent first and creates five semantic sections', () => {
+  it('counts sessions per Agent for the header switcher', () => {
     const source = roster();
     const rows = buildSessionPanelRows(source, { now: 1_000_000 });
-    const groups = buildSessionPanelGroups(
-      rows,
-      source.agents.map((summary) => summary.agent),
-      'builder',
-    );
-    expect(groups.map((group) => group.agent.agentId)).toEqual(['builder', 'main']);
-    expect(groups[1]?.sections.map((section) => section.kind)).toEqual([
-      'main', 'channel', 'direct_group', 'subagent', 'cron',
+    expect(buildSessionPanelAgents(rows, source.agents.map((summary) => summary.agent))).toEqual([
+      { agent: source.agents[0]?.agent, count: 8 },
+      { agent: source.agents[1]?.agent, count: 1 },
     ]);
   });
 
-  it('groups channels and separates completed subagents behind a count', () => {
-    const source = roster();
-    const rows = buildSessionPanelRows(source, { now: 1_000_000 });
-    const [group] = buildSessionPanelGroups(
-      rows,
-      source.agents.map((summary) => summary.agent),
-      'main',
-    );
-    const channel = group?.sections.find((section) => section.kind === 'channel');
-    const subagents = group?.sections.find((section) => section.kind === 'subagent');
-    expect(channel?.channelGroups?.map((item) => item.label)).toEqual(['Discord', 'Telegram']);
-    expect(subagents?.rows).toHaveLength(1);
-    expect(subagents?.completedRows).toHaveLength(1);
+  it('builds channel chips busiest-first and kind chips after them', () => {
+    const rows = buildSessionPanelRows(roster(), { now: 1_000_000 });
+    const chips = buildSessionPanelChips(rows.filter((row) => row.agentId === 'main'));
+    expect(chips).toEqual([
+      { key: 'all', label: null, count: 8 },
+      { key: 'channel:discord', label: 'Discord', count: 2 },
+      { key: 'channel:telegram', label: 'Telegram', count: 1 },
+      { key: 'direct_group', label: null, count: 1 },
+      { key: 'subagent', label: null, count: 2 },
+      { key: 'cron', label: null, count: 1 },
+    ]);
+    expect(buildSessionPanelChips(rows.filter((row) => row.agentId === 'builder'))).toEqual([]);
   });
 
-  it('summarizes active, recent, and idle rows using the migrated board policy', () => {
-    expect(summarizeSessionPanelRows(
-      buildSessionPanelRows(roster(), { now: 1_000_000 }),
-    )).toEqual({ active: 2, recent: 5, idle: 1 });
+  it('filters by Agent, chip and query', () => {
+    const rows = buildSessionPanelRows(roster(), { now: 1_000_000 });
+    expect(filterSessionPanelRows(rows, {
+      agentId: 'main', filter: 'all', query: '',
+    })).toHaveLength(8);
+    expect(filterSessionPanelRows(rows, {
+      agentId: 'builder', filter: 'all', query: '',
+    }).map((row) => row.key)).toEqual(['agent:builder:main']);
+    expect(filterSessionPanelRows(rows, {
+      agentId: 'main', filter: channelFilterKey('Discord'), query: '',
+    }).map((row) => row.title)).toEqual(['channel two', 'channel three']);
+    expect(filterSessionPanelRows(rows, {
+      agentId: 'main', filter: 'subagent', query: '',
+    }).map((row) => row.title)).toEqual(['subagent working', 'subagent done']);
+    expect(filterSessionPanelRows(rows, {
+      agentId: 'main', filter: 'all', query: 'telegram',
+    }).map((row) => row.channelLabel)).toEqual(['Telegram']);
+    expect(filterSessionPanelRows(rows, {
+      agentId: 'main', filter: 'cron', query: 'nothing',
+    })).toEqual([]);
+  });
+
+  it('folds finished sub-agent runs into one trailing item only in the unfiltered list', () => {
+    const rows = buildSessionPanelRows(roster(), { now: 1_000_000 });
+    const mainRows = filterSessionPanelRows(rows, { agentId: 'main', filter: 'all', query: '' });
+    const items = buildSessionPanelListItems(mainRows, 'all');
+    expect(items).toHaveLength(8);
+    expect(items.at(-1)).toEqual({ type: 'subagents', count: 1 });
+    expect(items.filter((item) => item.type === 'row' && item.row.kind === 'subagent')).toHaveLength(1);
+
+    const subagentRows = filterSessionPanelRows(rows, { agentId: 'main', filter: 'subagent', query: '' });
+    expect(buildSessionPanelListItems(subagentRows, 'subagent')).toEqual([
+      { type: 'row', row: subagentRows[0] },
+      { type: 'row', row: subagentRows[1] },
+    ]);
+  });
+
+  it('maps filters to low-cardinality analytics kinds', () => {
+    expect(resolveSessionPanelFilterKind('all')).toBe('all');
+    expect(resolveSessionPanelFilterKind(channelFilterKey('Slack'))).toBe('channel');
+    expect(resolveSessionPanelFilterKind('cron')).toBe('cron');
   });
 
   it('gates mutation actions with row permissions and capabilities', () => {

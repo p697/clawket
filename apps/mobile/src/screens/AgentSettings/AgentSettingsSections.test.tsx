@@ -706,6 +706,35 @@ describe('AgentSettings functional sections', () => {
     ));
   });
 
+  it('opens the create editor once on mount with the Thread draft as the prompt', async () => {
+    const adapter = cronAdapter();
+    const operations = adapter.management!.cron!;
+    const view = render(
+      <CronSection adapter={adapter} agent={agent} online openCreateOnMount initialPrompt="Summarize my inbox" />,
+    );
+    await waitFor(() => expect(view.getByTestId('agent-cron-editor')).toBeTruthy());
+    expect(view.getByTestId('agent-cron-prompt').props.value).toBe('Summarize my inbox');
+
+    fireEvent.changeText(view.getByTestId('agent-cron-name'), 'Inbox digest');
+    fireEvent.changeText(view.getByTestId('agent-cron-schedule'), '1h');
+    fireEvent.press(view.getByTestId('agent-cron-save'));
+    await waitFor(() => expect(operations.add).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'Inbox digest', payload: { kind: 'systemEvent', text: 'Summarize my inbox' } }),
+    ));
+    await waitFor(() => expect(view.queryByTestId('agent-cron-editor')).toBeNull());
+
+    // A later manual "New cron job" starts blank instead of re-seeding the Thread draft.
+    fireEvent.press(view.getByTestId('agent-cron-create'));
+    await waitFor(() => expect(view.getByTestId('agent-cron-editor')).toBeTruthy());
+    expect(view.getByTestId('agent-cron-prompt').props.value).toBe('');
+
+    const readOnly = render(
+      <CronSection adapter={{ ...adapter, capabilities: { ...adapter.capabilities, cronCreate: false } }} agent={agent} online openCreateOnMount />,
+    );
+    await waitFor(() => expect(readOnly.queryByTestId('agent-cron-create')).toBeNull());
+    expect(readOnly.queryByTestId('agent-cron-editor')).toBeNull();
+  });
+
   it('reads and edits files, then routes the save gate to the Pro paywall', async () => {
     const list = jest.fn(async () => [{
       name: 'SOUL.md',

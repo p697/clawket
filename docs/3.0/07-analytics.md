@@ -45,10 +45,13 @@ PostHog 项目 337268；SDK 与集中式 `src/services/analytics/events.ts` 沿�
 | `chat_queued_message_delivered` | `backend`, `wait_ms`, `remaining` | 队列消息在会话空闲后实际发出 |
 | `chat_queued_message_edited` / `chat_queued_message_removed` | `backend` | 队列气泡菜单里的编辑 / 移除 |
 | `chat_queue_held` | `reason: abort|run_error|send_failed|preflight_failed`, `queue_length` | 队列因停止或失败暂停自动发送 |
+| `chat_add_menu_opened` | `backend`, `photo_access: unavailable|checking|undetermined|denied|granted` | 输入区「+」弹层打开（2026-09-11 新增，补上此前 Prompts 用量未知的缺口） |
+| `chat_add_menu_action` | `backend`, `action: photo-library|camera|file|recent-photos|skills|commands|schedule|tools`, `count` | 弹层里选中的动作；`count` 只在 `recent-photos` 时为附加的张数 |
 | `run_card_opened` | `kind: subagent|cron` | |
 | `approval_resolved` | `kind: exec|plugin|pair`, `decision` | 合并现有两事件 |
-| `session_panel_opened` | `mode: grouped|list`, `session_count` | |
-| `session_panel_mode_changed` | `mode` | |
+| `session_panel_opened` | `session_count` | |
+| `session_panel_filter_changed` | `filter: all|channel|direct_group|subagent|cron` | 渠道名不上报 |
+| `session_panel_agent_switched` | `session_count` | 头部胶囊切换 Agent |
 | `chat_session_selected`（现有） | 现有 + `from: panel|search` | |
 | `session_action` | `action: pin|rename|reset|delete|create` | |
 | `agent_settings_opened` | `backend` | |
@@ -74,7 +77,7 @@ PostHog 项目 337268；SDK 与集中式 `src/services/analytics/events.ts` 沿�
 1. 连接健康：`connect_ready` 的 p50 / p90 `elapsed_ms` 按后端 × 传输；`connect_failed` 按 `code`；`reconnect` 每活跃用户每小时。
 2. 激活漏斗：`Application Installed` → `gateway_connect_saved` → `thread_opened` → `chat_send_tapped`，按周队列。
 3. 付费：`paywall_viewed` → `paywall_subscribe_tapped` → `paywall_purchase_succeeded`，按 `hero` 与 `launch`；年付占比；Android 成交率。
-4. 花名册与面板：`roster_row_opened` 的 `kind` 分布；`session_panel_opened` 的 `mode` 分布。
+4. 花名册与面板：`roster_row_opened` 的 `kind` 分布；`session_panel_filter_changed` 的 `filter` 分布与 `session_panel_agent_switched` 的频次。
 
 ## 6. 校验
 

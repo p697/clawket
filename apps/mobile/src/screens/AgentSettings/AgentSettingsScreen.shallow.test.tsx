@@ -243,7 +243,7 @@ describe('AgentSettingsView shallow states', () => {
   });
 
   it('loads AgentAdapter management summary in the connected wrapper', async () => {
-    mockLoadSummary.mockResolvedValue({ currentModel: 'loaded-model' });
+    mockLoadSummary.mockResolvedValue({ modelCount: 12 });
     const adapter = createMockAdapter({
       connection,
       agents: [agent],
@@ -257,9 +257,8 @@ describe('AgentSettingsView shallow states', () => {
     );
 
     expect(view.queryByTestId('agent-settings-loading')).toBeNull();
-    expect(view.getByTestId('agent-settings-row-skills')).toBeTruthy();
-    fireEvent.press(view.getByTestId('agent-profile-advanced'));
-    await waitFor(() => expect(view.getByText('loaded-model')).toBeTruthy());
+    expect(view.getByTestId('agent-settings-stat-skills')).toBeTruthy();
+    await waitFor(() => expect(view.getByTestId('agent-settings-stat-models-value').props.children).toBe('12'));
     expect(mockLoadSummary).toHaveBeenCalledWith(adapter, agent, expect.any(Number), expect.any(Function));
   });
 

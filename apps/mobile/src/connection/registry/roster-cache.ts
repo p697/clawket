@@ -70,6 +70,8 @@ export type RosterAgentSummary = Readonly<{
   lastActivityAt: number | null;
   unreadCount: number;
   hasUnread: boolean;
+  /** Every unread ordinary session of this Agent; the roster badge itself only counts the main chat. */
+  unreadSessionKeys?: ReadonlyArray<string>;
   attentionCount: number;
   attention: SessionDescriptor['attention'];
 }>;
@@ -286,6 +288,7 @@ function buildAgentSummary(
     lastActivityAt: signals.lastActivityAt,
     unreadCount: mainUnreadCount,
     hasUnread: mainUnreadCount > 0,
+    unreadSessionKeys: signals.unreadSessionKeys,
     attentionCount: liveSignalsEnabled ? signals.attentionCount : 0,
     attention: liveSignalsEnabled ? signals.attention : null,
   });

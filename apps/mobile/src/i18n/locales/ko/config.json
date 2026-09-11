@@ -293,7 +293,7 @@
   "Providers": "제공자",
   "Providers and cost": "제공자 및 비용",
   "Installed": "설치됨",
-  "New scheduled task": "새 예약 작업",
+  "New cron job": "새 Cron 작업",
   "Agent files": "에이전트 파일",
   "Edit files": "파일 편집",
   "Activity": "활동",

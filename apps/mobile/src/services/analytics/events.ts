@@ -74,10 +74,13 @@ export const ANALYTICS_EVENT_PROPERTY_WHITELIST = Object.freeze({
   chat_queued_message_edited: ['backend'],
   chat_queued_message_removed: ['backend'],
   chat_queue_held: ['reason', 'queue_length'],
+  chat_add_menu_opened: ['backend', 'photo_access'],
+  chat_add_menu_action: ['backend', 'action', 'count'],
   run_card_opened: ['kind'],
   approval_resolved: ['kind', 'decision'],
-  session_panel_opened: ['mode', 'session_count'],
-  session_panel_mode_changed: ['mode'],
+  session_panel_opened: ['session_count'],
+  session_panel_filter_changed: ['filter'],
+  session_panel_agent_switched: ['session_count'],
   chat_session_selected: ['source', 'session_kind', 'from'],
   session_action: ['action'],
   agent_settings_opened: ['backend'],
@@ -467,12 +470,18 @@ export const analyticsEvents = {
     captureAnalyticsEvent('approval_resolved', properties);
   },
 
-  sessionPanelOpened(properties: { mode: 'grouped' | 'list'; session_count: number }): void {
+  sessionPanelOpened(properties: { session_count: number }): void {
     captureAnalyticsEvent('session_panel_opened', properties);
   },
 
-  sessionPanelModeChanged(properties: { mode: 'grouped' | 'list' }): void {
-    captureAnalyticsEvent('session_panel_mode_changed', properties);
+  sessionPanelFilterChanged(properties: {
+    filter: 'all' | 'channel' | 'direct_group' | 'subagent' | 'cron';
+  }): void {
+    captureAnalyticsEvent('session_panel_filter_changed', properties);
+  },
+
+  sessionPanelAgentSwitched(properties: { session_count: number }): void {
+    captureAnalyticsEvent('session_panel_agent_switched', properties);
   },
 
   chatSessionSelected(properties: {
@@ -641,6 +650,21 @@ export const analyticsEvents = {
     session_key_present: boolean;
   }): void {
     captureAnalyticsEvent('chat_model_selected', properties);
+  },
+
+  chatAddMenuOpened(properties: {
+    backend?: AnalyticsBackend;
+    photo_access: 'unavailable' | 'checking' | 'undetermined' | 'denied' | 'granted';
+  }): void {
+    captureAnalyticsEvent('chat_add_menu_opened', properties);
+  },
+
+  chatAddMenuAction(properties: {
+    backend?: AnalyticsBackend;
+    action: 'photo-library' | 'camera' | 'file' | 'recent-photos' | 'skills' | 'commands' | 'schedule' | 'tools';
+    count?: number;
+  }): void {
+    captureAnalyticsEvent('chat_add_menu_action', properties);
   },
 
   chatSlashCommandTriggered(properties: {

@@ -29,7 +29,7 @@ import {
   StatusSize,
 } from '../../theme/tokens';
 
-export type AgentAvatarVariant = 'roster' | 'header' | 'settings' | 'sheet';
+export type AgentAvatarVariant = 'roster' | 'header' | 'settings' | 'sheet' | 'panel';
 export type AgentAvatarStatus = 'idle' | 'working' | 'attention' | 'done' | 'offline' | 'locked';
 export type AgentAttentionTone = 'warn' | 'bad';
 
@@ -64,6 +64,12 @@ export const AGENT_AVATAR_METRICS: Readonly<Record<AgentAvatarVariant, AvatarMet
     radius: Radius.full,
     fontSize: FontSize.secondary,
     lineHeight: LineHeight.secondary,
+  },
+  panel: {
+    size: ControlSize.pill,
+    radius: Radius.full,
+    fontSize: FontSize.body,
+    lineHeight: LineHeight.body,
   },
 };
 
@@ -182,15 +188,7 @@ export function AgentAvatar({
         ) : null}
       </View>
       {status === 'working' ? (
-        <View
-          testID={testID ? `${testID}-working` : undefined}
-          pointerEvents="none"
-          style={[styles.workingBadge, { backgroundColor: theme.colors.ink, borderColor: theme.colors.canvas }]}
-        >
-          {[Space.xs, Space.sm, Space.xs].map((height, index) => (
-            <View key={index} style={[styles.workingBar, { height, backgroundColor: theme.colors.canvas }]} />
-          ))}
-        </View>
+        <AvatarWorkingBadge testID={testID ? `${testID}-working` : undefined} />
       ) : null}
       {status === 'attention' ? (
         <View
@@ -234,6 +232,22 @@ export function AgentAvatar({
           <Lock size={Space.md} color={theme.colors.inkSecondary} strokeWidth={BorderWidth.strong} />
         </View>
       ) : null}
+    </View>
+  );
+}
+
+/** Stationary lower-right activity marker shared by Agent avatars and session tiles. */
+export function AvatarWorkingBadge({ testID }: Readonly<{ testID?: string }>): React.JSX.Element {
+  const { theme } = useAppTheme();
+  return (
+    <View
+      testID={testID}
+      pointerEvents="none"
+      style={[styles.workingBadge, { backgroundColor: theme.colors.ink, borderColor: theme.colors.canvas }]}
+    >
+      {[Space.xs, Space.sm, Space.xs].map((height, index) => (
+        <View key={index} style={[styles.workingBar, { height, backgroundColor: theme.colors.canvas }]} />
+      ))}
     </View>
   );
 }

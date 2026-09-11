@@ -259,7 +259,15 @@ export function AgentSettingsSectionScreen({
     } else if (section === 'skills') {
       sectionContent = <SkillsSection adapter={adapter} agent={agent} online={online} />;
     } else if (section === 'cron') {
-      sectionContent = <CronSection adapter={adapter} agent={agent} online={online} />;
+      sectionContent = (
+        <CronSection
+          adapter={adapter}
+          agent={agent}
+          online={online}
+          openCreateOnMount={route.params.action === 'create-cron'}
+          initialPrompt={route.params.cronPrompt}
+        />
+      );
     } else if (section === 'files') {
       sectionContent = (
         <FilesSection

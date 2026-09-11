@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type {
@@ -50,6 +50,10 @@ export type CronSectionProps = Readonly<{
   adapter: AgentAdapter;
   agent: AgentDescriptor;
   online: boolean;
+  /** Opens the create editor once after mount (Thread Add sheet → Schedule a task). */
+  openCreateOnMount?: boolean;
+  /** Seeds the create editor's prompt with the Thread draft. */
+  initialPrompt?: string;
 }>;
 
 function translateCronDraftError(
@@ -85,6 +89,8 @@ export function CronSection({
   adapter,
   agent,
   online,
+  openCreateOnMount = false,
+  initialPrompt,
 }: CronSectionProps): React.JSX.Element {
   const { t } = useTranslation(['common', 'settings', 'config']);
   const { theme } = useAppTheme();
@@ -105,6 +111,22 @@ export function CronSection({
   const [heartbeatVisible, setHeartbeatVisible] = useState(false);
   const [deleteCandidate, setDeleteCandidate] = useState<CronJob | null>(null);
   const [busyAction, setBusyAction] = useState<BusyAction>(null);
+  // The Thread draft seeds only the editor opened on arrival; later "New cron
+  // job" taps start blank.
+  const [seedPrompt, setSeedPrompt] = useState<string | undefined>(undefined);
+  const handledOpenCreateRef = useRef(false);
+
+  useEffect(() => {
+    if (!openCreateOnMount || !canCreate || handledOpenCreateRef.current) return;
+    handledOpenCreateRef.current = true;
+    setSeedPrompt(initialPrompt);
+    setEditorSelection('new');
+  }, [canCreate, initialPrompt, openCreateOnMount]);
+
+  const closeEditor = useCallback(() => {
+    setEditorSelection(null);
+    setSeedPrompt(undefined);
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -158,13 +180,13 @@ export function CronSection({
         if (!canCreate || !operations?.add) return;
         await operations.add(buildCronJobCreate(draft, agent));
       }
-      setEditorSelection(null);
+      closeEditor();
       setSelectedJob(null);
       await load();
     } finally {
       setBusyAction(null);
     }
-  }, [agent, busyAction, canCreate, load, online, operations, t]);
+  }, [agent, busyAction, canCreate, closeEditor, load, online, operations, t]);
 
   const runJob = useCallback(async (job: CronJob) => {
     if (!online || busyAction || !operations?.run) return;
@@ -281,7 +303,7 @@ export function CronSection({
             {canCreate ? (
               <Button
                 testID="agent-cron-create"
-                label={t('New scheduled task', { ns: 'config' })}
+                label={t('New cron job', { ns: 'config' })}
                 disabled={!online}
                 onPress={() => setEditorSelection('new')}
               />
@@ -329,10 +351,11 @@ export function CronSection({
       />
       <CronEditorSheet
         selection={editorSelection}
+        initialPrompt={seedPrompt}
         online={online}
         saving={busyAction === 'save'}
         onClose={() => {
-          if (!busyAction) setEditorSelection(null);
+          if (!busyAction) closeEditor();
         }}
         onSave={saveJob}
       />
@@ -493,12 +516,14 @@ function CronJobSheet({
 
 function CronEditorSheet({
   selection,
+  initialPrompt,
   online,
   saving,
   onClose,
   onSave,
 }: Readonly<{
   selection: EditorSelection;
+  initialPrompt?: string;
   online: boolean;
   saving: boolean;
   onClose: () => void;
@@ -508,13 +533,17 @@ function CronEditorSheet({
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
   const job = selection && selection !== 'new' ? selection : null;
-  const [draft, setDraft] = useState<CronDraft>(() => cronDraftFromJob(job));
+  const seedDraft = useCallback((): CronDraft => {
+    const base = cronDraftFromJob(job);
+    return !job && initialPrompt ? { ...base, prompt: initialPrompt } : base;
+  }, [initialPrompt, job]);
+  const [draft, setDraft] = useState<CronDraft>(seedDraft);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setDraft(cronDraftFromJob(job));
+    setDraft(seedDraft());
     setError(null);
-  }, [job, selection]);
+  }, [seedDraft, selection]);
 
   const updateDraft = <Key extends keyof CronDraft>(key: Key, value: CronDraft[Key]) => {
     setDraft((current) => ({ ...current, [key]: value }));

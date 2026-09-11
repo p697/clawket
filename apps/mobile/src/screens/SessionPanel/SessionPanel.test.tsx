@@ -18,7 +18,7 @@ import {
   SessionPanelView,
   type SessionPanelViewProps,
 } from './SessionPanel';
-import { buildSessionPanelRows } from './model';
+import { buildSessionPanelRows, type SessionPanelRow } from './model';
 
 const lightColors = {
   canvas: '#FFFFFF',
@@ -108,7 +108,8 @@ jest.mock('../../services/analytics/events', () => ({
     chatSessionSelected: jest.fn(),
     searchPerformed: jest.fn(),
     sessionAction: jest.fn(),
-    sessionPanelModeChanged: jest.fn(),
+    sessionPanelAgentSwitched: jest.fn(),
+    sessionPanelFilterChanged: jest.fn(),
     sessionPanelOpened: jest.fn(),
   },
 }));
@@ -123,12 +124,12 @@ jest.mock('../../components/ui/Sheet', () => {
   const ReactRuntime = require('react');
   const { Text, View } = require('react-native');
   return {
-    Sheet: ({ visible, testID, title, headerRight, children, onAfterClose }: Record<string, unknown>) => (
+    Sheet: ({ visible, testID, title, titleContent, headerRight, children, onAfterClose }: Record<string, unknown>) => (
       visible
         ? ReactRuntime.createElement(
           View,
           { testID, onAfterClose },
-          title ? ReactRuntime.createElement(Text, null, title) : null,
+          titleContent ?? (title ? ReactRuntime.createElement(Text, null, title) : null),
           headerRight,
           children,
         )
@@ -145,23 +146,11 @@ jest.mock('../../components/ui/FloatingButton', () => {
   };
 });
 
-jest.mock('../../components/ui/SegmentedTabs', () => {
+jest.mock('../../components/ui/AgentAvatar', () => {
   const ReactRuntime = require('react');
-  const { Pressable, Text, View } = require('react-native');
   return {
-    SegmentedTabs: ({ tabs, onSwitch, testID }: {
-      tabs: ReadonlyArray<{ key: string; label: string }>;
-      onSwitch: (key: string) => void;
-      testID: string;
-    }) => ReactRuntime.createElement(
-      View,
-      { testID },
-      ...tabs.map((tab) => ReactRuntime.createElement(
-        Pressable,
-        { key: tab.key, testID: `${testID}-${tab.key}`, onPress: () => onSwitch(tab.key) },
-        ReactRuntime.createElement(Text, null, tab.label),
-      )),
-    ),
+    AgentAvatar: (props: Record<string, unknown>) => ReactRuntime.createElement('AgentAvatar', props),
+    AvatarWorkingBadge: (props: Record<string, unknown>) => ReactRuntime.createElement('AvatarWorkingBadge', props),
   };
 });
 
@@ -241,6 +230,7 @@ function agent(agentId: string): AgentDescriptor {
     connectionId: 'connection',
     agentId,
     name: agentId === 'main' ? 'Main' : 'Builder',
+    emoji: agentId === 'main' ? '🦞' : undefined,
     isMain: agentId === 'main',
     mainSessionKey: `agent:${agentId}:main`,
   };
@@ -270,14 +260,18 @@ function roster(): RosterConnectionGroup {
   const main = agent('main');
   const builder = agent('builder');
   const mainSessions = [
-    session('main', 'main', 'Main thread'),
-    session('main', 'channel', 'Operations', { channel: 'telegram', attention: 'approval' }),
+    session('main', 'main', 'Main thread', { preview: 'Shipping the panel today.' }),
+    session('main', 'channel', 'Operations', { channel: 'telegram', attention: 'approval', preview: 'Restart the registry?' }),
+    session('main', 'channel', 'Design', { channel: 'slack', preview: 'Colors look right now.', updatedAt: 940_000 }),
     session('main', 'direct', 'Lucy'),
     session('main', 'subagent', 'Research', { hasActiveRun: true }),
     session('main', 'subagent', 'Completed research', { updatedAt: 100_000 }),
     session('main', 'cron', 'Daily report'),
   ];
-  const builderSessions = [session('builder', 'main', 'Builder thread')];
+  const builderSessions = [
+    session('builder', 'main', 'Builder thread', { preview: 'Build 42 uploaded.' }),
+    session('builder', 'channel', 'Release', { channel: 'slack' }),
+  ];
   return {
     connection: connection(),
     source: 'live',
@@ -290,6 +284,7 @@ function roster(): RosterConnectionGroup {
         lastActivityAt: 950_000,
         unreadCount: 0,
         hasUnread: false,
+        unreadSessionKeys: ['agent:main:channel:Design'],
         attentionCount: 1,
         attention: 'approval',
       },
@@ -311,7 +306,10 @@ function roster(): RosterConnectionGroup {
 }
 
 const source = roster();
-const rows = buildSessionPanelRows(source, { now: 1_000_000 });
+const rows = buildSessionPanelRows(source, {
+  now: 1_000_000,
+  pinnedSessionKeys: { 'connection:main': ['agent:main:cron:Daily report'] },
+});
 const capabilities = {
   sessionRename: true,
   sessionReset: true,
@@ -327,7 +325,6 @@ function props(patch: Partial<SessionPanelViewProps> = {}): SessionPanelViewProp
     currentAgentId: 'main',
     currentSessionKey: 'agent:main:main',
     capabilities,
-    initialMode: 'grouped',
     onClose: jest.fn(),
     onSelectSession: jest.fn(),
     onSessionAction: jest.fn(),
@@ -344,6 +341,12 @@ function renderedFontSizes(view: ReturnType<typeof render>): ReadonlyArray<numbe
     if (typeof value === 'number') sizes.add(value);
   });
   return [...sizes].sort((left, right) => left - right);
+}
+
+function rowById(key: string, agentId = 'main'): SessionPanelRow {
+  const row = rows.find((candidate) => candidate.key === key && candidate.agentId === agentId);
+  if (!row) throw new Error(`Missing fixture row ${key}`);
+  return row;
 }
 
 function chooseAfterDismiss(view: ReturnType<typeof render>, action: string) {
@@ -369,39 +372,69 @@ describe('SessionPanelView', () => {
     consoleErrorSpy.mockRestore();
   });
 
-  it('expands the current Agent, keeps others folded, and reveals completed runs', () => {
+  it('shows the current Agent in the header pill with roster-style rows and chips', () => {
     const view = render(<SessionPanelView {...props()} />);
-    expect(mockedAnalyticsEvents.sessionPanelOpened).toHaveBeenCalledWith({
-      mode: 'grouped',
-      session_count: rows.length,
+    expect(mockedAnalyticsEvents.sessionPanelOpened).toHaveBeenCalledWith({ session_count: rows.length });
+    expect(view.queryByText('Sessions')).toBeNull();
+    expect(view.getByTestId('session-panel-agent-pill-avatar').props).toMatchObject({
+      agentId: 'main',
+      emoji: '🦞',
+      variant: 'header',
     });
-    expect(view.getByText('Main session')).toBeTruthy();
-    expect(view.queryByText('Builder thread')).toBeNull();
-    expect(view.getByText('Completed 1')).toBeTruthy();
-    expect(view.queryByText('Completed research')).toBeNull();
+    expect(view.getByLabelText('Switch Agent')).toBeTruthy();
 
-    fireEvent.press(view.getByTestId('session-panel-completed-toggle'));
+    // Main conversation first, with the Agent avatar and its preview; other Agents stay out of the list.
+    const mainRow = rowById('agent:main:main');
+    expect(view.getByText('Main session')).toBeTruthy();
+    expect(view.getByTestId(`session-panel-row-${mainRow.id}-avatar`).props).toMatchObject({
+      variant: 'panel',
+      emoji: '🦞',
+      status: 'idle',
+    });
+    expect(view.getByText('Shipping the panel today.')).toBeTruthy();
+    expect(view.queryByText('Builder thread')).toBeNull();
+
+    // Channel rows carry a monochrome platform glyph; pinned, unread, attention and working markers.
+    const design = rowById('agent:main:channel:Design');
+    expect(view.getByTestId(`session-panel-row-${design.id}-tile`)).toBeTruthy();
+    expect(view.getByTestId(`session-panel-row-${design.id}-unread`)).toBeTruthy();
+    expect(flattenStyle(view.getByTestId(`session-panel-row-${design.id}-preview`).props.style)).toMatchObject({
+      color: lightColors.ink,
+    });
+    const operations = rowById('agent:main:channel:Operations');
+    expect(view.getByTestId(`session-panel-row-${operations.id}-attention`)).toBeTruthy();
+    expect(view.queryByTestId(`session-panel-row-${operations.id}-unread`)).toBeNull();
+    const cron = rowById('agent:main:cron:Daily report');
+    expect(view.getByTestId(`session-panel-row-${cron.id}-pinned`)).toBeTruthy();
+    const research = rowById('agent:main:subagent:Research');
+    expect(view.getByTestId(`session-panel-row-${research.id}-working`)).toBeTruthy();
+
+    // Finished sub-agent runs fold into one trailing row that opens the Subagents chip.
+    expect(view.queryByText('Completed research')).toBeNull();
+    expect(view.getByTestId('session-panel-subagents')).toBeTruthy();
+    expect(view.getByTestId('session-panel-chip-all').props.accessibilityState).toEqual({ selected: true });
+    expect(view.getByTestId('session-panel-chip-channel:telegram')).toBeTruthy();
+    expect(view.getByTestId('session-panel-chip-channel:slack')).toBeTruthy();
+    expect(view.getByTestId('session-panel-chip-direct_group')).toBeTruthy();
+    expect(view.getByTestId('session-panel-chip-cron')).toBeTruthy();
+    fireEvent.press(view.getByTestId('session-panel-subagents'));
+    expect(mockedAnalyticsEvents.sessionPanelFilterChanged).toHaveBeenCalledWith({ filter: 'subagent' });
     expect(view.getByText('Completed research')).toBeTruthy();
-    fireEvent.press(view.getByTestId('session-panel-agent-builder-toggle'));
-    expect(view.getAllByText('Main session')).toHaveLength(2);
+    expect(view.queryByText('Main session')).toBeNull();
   });
 
-  it('switches to compact list, reports summary, searches, and opens kind filter', async () => {
-    const onOpenKindFilter = jest.fn();
-    const view = render(
-      <SessionPanelView
-        {...props({ onOpenKindFilter })}
-      />,
-    );
-    expect(view.queryByTestId('session-panel-quick-filter')).toBeNull();
-    fireEvent.press(view.getByTestId('session-panel-mode-list'));
-    expect(mockedAnalyticsEvents.sessionPanelModeChanged).toHaveBeenCalledWith({ mode: 'list' });
-    expect(view.getByTestId('session-panel-list-mode')).toBeTruthy();
-    expect(view.getByText('6 active · 0 recent · 1 idle')).toBeTruthy();
-    expect(view.getAllByTestId(/-icon$/)).toHaveLength(rows.length);
-    fireEvent.press(view.getByTestId('session-panel-kind-filter'));
-    expect(onOpenKindFilter).toHaveBeenCalledWith('all');
+  it('filters by channel chip and searches inside the current Agent', async () => {
+    const view = render(<SessionPanelView {...props()} />);
+    fireEvent.press(view.getByTestId('session-panel-chip-channel:slack'));
+    expect(mockedAnalyticsEvents.sessionPanelFilterChanged).toHaveBeenCalledWith({ filter: 'channel' });
+    expect(view.getByText('Design')).toBeTruthy();
+    expect(view.queryByText('Operations')).toBeNull();
+    expect(view.queryByText('Main session')).toBeNull();
+    expect(view.queryByTestId('session-panel-subagents')).toBeNull();
+    fireEvent.press(view.getByTestId('session-panel-chip-channel:slack'));
+    expect(mockedAnalyticsEvents.sessionPanelFilterChanged).toHaveBeenCalledTimes(1);
 
+    fireEvent.press(view.getByTestId('session-panel-chip-all'));
     fireEvent.press(view.getByTestId('session-panel-search-toggle'));
     fireEvent.changeText(view.getByTestId('session-panel-search'), 'daily');
     expect(view.getByText('Daily report')).toBeTruthy();
@@ -411,43 +444,99 @@ describe('SessionPanelView', () => {
       has_results: true,
       result_kinds: 'cron',
     }));
+    fireEvent.changeText(view.getByTestId('session-panel-search'), 'completed');
+    expect(view.getByText('Completed research')).toBeTruthy();
+    fireEvent.changeText(view.getByTestId('session-panel-search'), 'nothing here');
+    expect(view.getByText('No matching sessions')).toBeTruthy();
   });
 
-  it('selects and closes, then exposes capability-gated actions with destructive confirmation', async () => {
-    const onClose = jest.fn();
-    const onSelectSession = jest.fn(async () => undefined);
-    const onSessionAction = jest.fn(async () => undefined);
-    const mainRow = rows.find((row) => row.kind === 'main' && row.agentId === 'main')!;
+  it('switches the viewed Agent from the header pill without leaving the conversation', () => {
+    const onSelectSession = jest.fn();
+    const view = render(<SessionPanelView {...props({ onSelectSession })} />);
+    expect(view.queryByTestId('session-panel-agent-menu')).toBeNull();
+    fireEvent.press(view.getByTestId('session-panel-agent-pill'));
+    expect(view.getByTestId('session-panel-agent-main').props.accessibilityState).toEqual({ selected: true });
+    expect(view.getByTestId('session-panel-agent-builder').props.accessibilityState).toEqual({ selected: false });
+
+    fireEvent.press(view.getByTestId('session-panel-agent-builder'));
+    expect(mockedAnalyticsEvents.sessionPanelAgentSwitched).toHaveBeenCalledWith({ session_count: 2 });
+    expect(view.queryByTestId('session-panel-agent-menu')).toBeNull();
+    expect(view.getByTestId('session-panel-agent-pill-avatar').props.agentId).toBe('builder');
+    expect(view.queryByText('Builder thread')).toBeNull();
+    expect(view.getByText('Build 42 uploaded.')).toBeTruthy();
+    expect(view.queryByText('Shipping the panel today.')).toBeNull();
+    expect(view.getByTestId('session-panel-chip-channel:slack')).toBeTruthy();
+    expect(view.queryByTestId('session-panel-chip-channel:telegram')).toBeNull();
+    expect(onSelectSession).not.toHaveBeenCalled();
+
+    fireEvent.press(view.getByTestId('session-panel-agent-pill'));
+    fireEvent.press(view.getByTestId('session-panel-agent-menu-backdrop'));
+    expect(view.queryByTestId('session-panel-agent-menu')).toBeNull();
+
+    // Reopening returns to the conversation's own Agent and the full list.
+    view.rerender(<SessionPanelView {...props({ onSelectSession, visible: false })} />);
+    view.rerender(<SessionPanelView {...props({ onSelectSession })} />);
+    expect(view.getByTestId('session-panel-agent-pill-avatar').props.agentId).toBe('main');
+    expect(view.getByText('Main session')).toBeTruthy();
+  });
+
+  it('renders a static pill when the connection has one Agent and hides chips for a lone main chat', () => {
+    const builderOnly = source.agents[1]!;
     const view = render(
       <SessionPanelView
-        {...props({ onClose, onSelectSession, onSessionAction })}
+        {...props({
+          rows: rows.filter((row) => row.agentId === 'builder' && row.kind === 'main'),
+          agents: [builderOnly.agent],
+          currentAgentId: 'builder',
+          currentSessionKey: 'agent:builder:main',
+        })}
       />,
     );
+    expect(view.queryByLabelText('Switch Agent')).toBeNull();
+    expect(view.getByTestId('session-panel-agent-pill')).toBeTruthy();
+    expect(view.queryByTestId('session-panel-chips')).toBeNull();
+    expect(view.getByText('Main session')).toBeTruthy();
+  });
 
-    fireEvent.press(view.getByTestId(`session-panel-row-${mainRow.id}`));
-    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
-    expect(onSelectSession).toHaveBeenCalledWith(mainRow);
+  it('selects sessions and reports the panel as the source', async () => {
+    const onSelectSession = jest.fn(async () => undefined);
+    const onClose = jest.fn();
+    const view = render(<SessionPanelView {...props({ onSelectSession, onClose })} />);
+    const operations = rowById('agent:main:channel:Operations');
+    await act(async () => {
+      fireEvent.press(view.getByTestId(`session-panel-row-${operations.id}`));
+    });
+    expect(onSelectSession).toHaveBeenCalledWith(operations);
     expect(mockedAnalyticsEvents.chatSessionSelected).toHaveBeenCalledWith({
       source: 'panel',
-      session_kind: 'main',
+      session_kind: 'channel',
       from: 'panel',
     });
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+  });
 
-    fireEvent(view.getByTestId(`session-panel-row-${mainRow.id}`), 'longPress');
+  it('runs pin, reset and delete after the action sheet dismisses and labels pinned rows as Unpin', async () => {
+    const onSessionAction = jest.fn(async () => undefined);
+    const view = render(<SessionPanelView {...props({ onSessionAction })} />);
+    const mainRow = rowById('agent:main:main');
+    const cron = rowById('agent:main:cron:Daily report');
+
+    fireEvent(view.getByTestId(`session-panel-row-${cron.id}`), 'longPress');
+    expect(view.getByText('Unpin from roster')).toBeTruthy();
     chooseAfterDismiss(view, 'pin');
-    expect(onSessionAction).toHaveBeenCalledWith(mainRow, 'pin');
+    expect(onSessionAction).toHaveBeenCalledWith(cron, 'pin');
 
     fireEvent(view.getByTestId(`session-panel-row-${mainRow.id}`), 'longPress');
+    expect(view.getByText('Pin to roster')).toBeTruthy();
     chooseAfterDismiss(view, 'reset');
+    expect(view.getByTestId('session-panel-confirm')).toBeTruthy();
     await act(async () => {
       fireEvent.press(view.getByLabelText('Reset'));
     });
     expect(onSessionAction).toHaveBeenCalledWith(mainRow, 'reset');
 
     fireEvent(view.getByTestId(`session-panel-row-${mainRow.id}`), 'longPress');
-    expect(view.getByTestId('session-panel-actions')).toBeTruthy();
     chooseAfterDismiss(view, 'delete');
-    expect(view.getByTestId('session-panel-confirm')).toBeTruthy();
     await act(async () => {
       fireEvent.press(view.getByLabelText('Delete'));
     });
@@ -461,10 +550,8 @@ describe('SessionPanelView', () => {
 
   it('renames through a cross-platform editor and passes the trimmed title to the host', async () => {
     const onSessionAction = jest.fn(async () => undefined);
-    const mainRow = rows.find((row) => row.kind === 'main' && row.agentId === 'main')!;
-    const view = render(
-      <SessionPanelView {...props({ onSessionAction })} />,
-    );
+    const mainRow = rowById('agent:main:main');
+    const view = render(<SessionPanelView {...props({ onSessionAction })} />);
 
     fireEvent(view.getByTestId(`session-panel-row-${mainRow.id}`), 'longPress');
     chooseAfterDismiss(view, 'rename');
@@ -477,11 +564,7 @@ describe('SessionPanelView', () => {
       fireEvent.press(view.getByLabelText('Save'));
     });
 
-    expect(onSessionAction).toHaveBeenCalledWith(
-      mainRow,
-      'rename',
-      { title: 'Launch review' },
-    );
+    expect(onSessionAction).toHaveBeenCalledWith(mainRow, 'rename', { title: 'Launch review' });
     expect(mockedAnalyticsEvents.sessionAction).toHaveBeenCalledWith({ action: 'rename' });
     await waitFor(() => expect(view.queryByTestId('session-panel-rename')).toBeNull());
   });
@@ -490,10 +573,8 @@ describe('SessionPanelView', () => {
     const onSessionAction = jest.fn(async () => {
       throw new Error('rename failed');
     });
-    const mainRow = rows.find((row) => row.kind === 'main' && row.agentId === 'main')!;
-    const view = render(
-      <SessionPanelView {...props({ onSessionAction })} />,
-    );
+    const mainRow = rowById('agent:main:main');
+    const view = render(<SessionPanelView {...props({ onSessionAction })} />);
 
     fireEvent(view.getByTestId(`session-panel-row-${mainRow.id}`), 'longPress');
     chooseAfterDismiss(view, 'rename');
@@ -515,6 +596,7 @@ describe('SessionPanelView', () => {
 
     view.rerender(<SessionPanelView {...props({ state: 'empty', rows: [] })} />);
     expect(view.getByText('No sessions yet')).toBeTruthy();
+    expect(view.queryByTestId('session-panel-chips')).toBeNull();
 
     view.rerender(<SessionPanelView {...props({ state: 'error' })} />);
     expect(view.getByTestId('session-panel-error')).toBeTruthy();
@@ -527,18 +609,22 @@ describe('SessionPanelView', () => {
     view.rerender(<SessionPanelView {...props({ state: 'permission' })} />);
     expect(view.getByTestId('session-panel-permission')).toBeTruthy();
     expect(view.queryByText('Main session')).toBeNull();
+    expect(view.queryByTestId('session-panel-chips')).toBeNull();
 
     view.rerender(<SessionPanelView {...props({ bridgeOutdated: true })} />);
     expect(view.getByTestId('session-panel-bridge-outdated')).toBeTruthy();
   });
 
-  it('uses exactly the grouped title, row, and time tiers with borderless dark rows', () => {
+  it('uses exactly the title, preview, and time tiers with borderless dark rows and chips', () => {
     mockTheme = { scheme: 'dark', colors: darkColors };
     const view = render(<SessionPanelView {...props()} />);
-    const mainRow = rows.find((row) => row.kind === 'main' && row.agentId === 'main')!;
+    const mainRow = rowById('agent:main:main');
     const rowStyle = flattenStyle(view.getByTestId(`session-panel-row-${mainRow.id}`).props.style);
     expect(rowStyle).toEqual(expect.objectContaining({ backgroundColor: darkColors.accentSoft }));
     expect(rowStyle).not.toHaveProperty('borderWidth');
+    const chipStyle = flattenStyle(view.getByTestId('session-panel-chip-all').props.style);
+    expect(chipStyle).toEqual(expect.objectContaining({ backgroundColor: darkColors.ink }));
+    expect(chipStyle).not.toHaveProperty('borderWidth');
     expect(renderedFontSizes(view)).toEqual([
       FontSize.caption,
       FontSize.secondary,
@@ -547,10 +633,10 @@ describe('SessionPanelView', () => {
   });
 });
 
-it('does not offer session creation in groups or the empty state', () => {
+it('does not offer session creation in the header or the empty state', () => {
   const view = render(<SessionPanelView {...props()} />);
-  expect(view.queryByTestId('session-panel-agent-main-create')).toBeNull();
   expect(view.queryByText('New session')).toBeNull();
   view.rerender(<SessionPanelView {...props({ rows: [], agents: [] })} />);
   expect(view.queryByText('New session')).toBeNull();
+  expect(view.queryByTestId('session-panel-agent-pill')).toBeNull();
 });

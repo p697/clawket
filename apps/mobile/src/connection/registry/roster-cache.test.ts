@@ -248,6 +248,8 @@ describe('aggregateRoster', () => {
       unreadCount: 1,
       hasUnread: true,
     });
+    expect(groups[0].agents[0].unreadSessionKeys).toEqual(expect.arrayContaining(['main:main']));
+    expect(groups[2].agents[0].unreadSessionKeys).toEqual([]);
     expect(groups[1].unreadCount).toBe(0);
     expect(groups[2]).toMatchObject({
       attentionCount: 0,

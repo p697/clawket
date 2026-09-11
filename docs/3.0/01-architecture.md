@@ -144,6 +144,7 @@ export type Capabilities = {
   sessions: boolean; sessionCreate: boolean; sessionRename: boolean; sessionReset: boolean; sessionDelete: boolean;
   agents: boolean; agentEdit: boolean; agentCreate: boolean;
   models: boolean; modelPerSession: boolean; thinkingLevels: boolean;
+  slashCommands: boolean; // 后端解释完整 `/command` 目录（2026-09-11 新增，输入区「+」的「命令」行按它显隐；Hermes 只处理 /model /think /reasoning /fast 四条内联指令，其余会当普通消息发出，故为 false）
   skills: boolean; skillDiscover: boolean; skillInstall: boolean;
   cron: boolean; cronCreate: boolean; heartbeat: boolean;
   files: boolean; fileEdit: boolean;

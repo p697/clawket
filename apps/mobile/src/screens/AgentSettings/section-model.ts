@@ -201,7 +201,7 @@ const SECTION_DEFINITIONS: Readonly<Record<AgentSettingsSection, SectionDefiniti
     }],
   },
   cron: {
-    title: 'Scheduled tasks',
+    title: 'Cron jobs',
     gate: all('cron'),
     groups: [{
       id: 'cron',
@@ -216,14 +216,14 @@ const SECTION_DEFINITIONS: Readonly<Record<AgentSettingsSection, SectionDefiniti
         },
         {
           id: 'cron.tasks',
-          title: 'Scheduled tasks',
+          title: 'Cron jobs',
           gate: all('cron'),
           operation: (management) => Boolean(management?.cron?.list),
           value: ({ capabilities }) => capabilities.cronCreate ? undefined : 'Read only',
         },
         {
           id: 'cron.create',
-          title: 'New scheduled task',
+          title: 'New cron job',
           gate: all('cronCreate'),
           operation: (management) => Boolean(management?.cron?.add),
         },

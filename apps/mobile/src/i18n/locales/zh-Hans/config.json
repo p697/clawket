@@ -293,7 +293,7 @@
   "Providers": "提供方",
   "Providers and cost": "提供方与费用",
   "Installed": "已安装",
-  "New scheduled task": "新建定时任务",
+  "New cron job": "新建定时任务",
   "Agent files": "Agent 文件",
   "Edit files": "编辑文件",
   "Activity": "活动",

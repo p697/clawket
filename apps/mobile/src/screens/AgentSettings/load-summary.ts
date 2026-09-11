@@ -15,10 +15,10 @@ export async function loadAgentSettingsSummary(
   const management = adapter.management;
   const tasks: Array<Promise<void>> = [];
 
-  if (adapter.capabilities.models && management?.models?.getSelection) {
+  if (adapter.capabilities.models && management?.models?.list) {
     tasks.push(ignoreFailure(async () => {
-      const selection = await management.models?.getSelection?.();
-      if (selection) summary.currentModel = selection.currentModel;
+      const models = await management.models?.list?.();
+      if (models) summary.modelCount = models.length;
     }));
   }
 
@@ -38,7 +38,22 @@ export async function loadAgentSettingsSummary(
       });
       if (!result) return;
       summary.cronJobCount = result.total;
-      summary.hasCronFailure = result.jobs.some(hasCronFailure);
+      summary.cronFailureCount = result.jobs.filter(hasCronFailure).length;
+      summary.hasCronFailure = summary.cronFailureCount > 0;
+    }));
+  }
+
+  if (adapter.capabilities.heartbeat && management?.cron?.heartbeat?.last) {
+    tasks.push(ignoreFailure(async () => {
+      const status = await management.cron?.heartbeat?.last?.();
+      if (status) summary.lastHeartbeatAt = status.lastHeartbeatAt;
+    }));
+  }
+
+  if (adapter.capabilities.files && management?.agents?.files?.list) {
+    tasks.push(ignoreFailure(async () => {
+      const files = await management.agents?.files?.list?.(agent.agentId);
+      if (files) summary.fileCount = files.length;
     }));
   }
 
@@ -47,7 +62,10 @@ export async function loadAgentSettingsSummary(
       const date = formatLocalDate(now);
       const result = await management.usage?.cost?.({ startDate: date, endDate: date, agentId: agent.agentId });
       const total = result?.totals?.totalCost;
-      if (total !== undefined) summary.todayCostUsd = total;
+      // An "unknown" presentation means the backend counted tokens but could not price them.
+      if (total !== undefined && result?.costPresentation?.mode !== 'unknown') summary.todayCostUsd = total;
+      const tokens = result?.totals?.totalTokens;
+      if (tokens !== undefined) summary.todayTokens = tokens;
     }));
   }
 

@@ -21,6 +21,8 @@ import {
 } from '../../connection';
 import type { RootStackParamList, ThreadOrigin } from '../../navigation/root-stack';
 import { useChatController } from '../../chat/useChatController';
+import { MAX_IMAGES } from '../../chat/constants';
+import { SLASH_COMMANDS } from '../../data/slash-commands';
 import {
   buildChildSessionActivityCards,
   COMPLETED_CHILD_ACTIVITY_TTL_MS,
@@ -58,6 +60,7 @@ import {
 } from './model';
 import { isMainConversation, projectSessionPreview, type SessionPreviewSnapshot } from '../../utils/session-preview';
 import { ThreadOverlays } from './components/ThreadOverlays';
+import type { ThreadAddAction, ThreadAddSheetProps } from './components/ThreadAddSheet';
 
 const NO_CAPABILITIES = Object.freeze(Object.fromEntries(
   CAPABILITY_KEYS.map((capability) => [capability, false]),
@@ -136,7 +139,7 @@ function ThreadScreenContent({
     error: unknown;
   }> | null>(null);
   const [addSheetVisible, setAddSheetVisible] = useState(false);
-  const [promptPickerVisible, setPromptPickerVisible] = useState(false);
+  const [commandsSheetVisible, setCommandsSheetVisible] = useState(false);
   const [shareMessage, setShareMessage] = useState<UiMessage | null>(null);
   const [announcement, setAnnouncement] = useState<AppUpdateAnnouncement | null>(null);
   const [announcementVisible, setAnnouncementVisible] = useState(false);
@@ -192,7 +195,7 @@ function ThreadScreenContent({
   useEffect(() => {
     setShareMessage(null);
     setAddSheetVisible(false);
-    setPromptPickerVisible(false);
+    setCommandsSheetVisible(false);
   }, [connectionId, sessionKey]);
 
   const rosterSession = connections.roster.find((group) => group.connection.id === connectionId)
@@ -600,13 +603,6 @@ function ThreadScreenContent({
     }
   }, [controller.pendingImages, controller.preview]);
 
-  const handleSelectPrompt = useCallback((text: string) => {
-    controller.setInput((previous: string) => previous.trim()
-      ? `${previous}\n\n${text}`
-      : text);
-    setPromptPickerVisible(false);
-  }, [controller]);
-
   const handleOpenAddMenu = useCallback(() => {
     if (onOpenAddMenu) {
       onOpenAddMenu();
@@ -614,6 +610,45 @@ function ThreadScreenContent({
     }
     setAddSheetVisible(true);
   }, [onOpenAddMenu]);
+
+  const handleAddPresented = useCallback<NonNullable<ThreadAddSheetProps['onPresented']>>(({ photoAccess }) => {
+    analyticsEvents.chatAddMenuOpened({ backend: analyticsBackend, photo_access: photoAccess });
+  }, [analyticsBackend]);
+
+  const handleAddAction = useCallback((action: ThreadAddAction, count?: number) => {
+    analyticsEvents.chatAddMenuAction({ backend: analyticsBackend, action, count });
+  }, [analyticsBackend]);
+
+  const openAgentSection = useCallback((section: 'skills' | 'tools' | 'cron', action?: 'create-cron', cronPrompt?: string) => {
+    navigation.navigate('AgentSettingsSection', { connectionId, agentId, section, action, cronPrompt });
+  }, [agentId, connectionId, navigation]);
+
+  const openCommandsSheet = useCallback(() => setCommandsSheetVisible(true), []);
+
+  // Every Add sheet entry is capability-gated here so the sheet never offers
+  // an action the active backend cannot serve.
+  const addSheetActions = useMemo(() => ({
+    onOpenSkills: capabilities.skills ? () => openAgentSection('skills') : undefined,
+    onOpenCommands: capabilities.slashCommands && !sessionPreview ? openCommandsSheet : undefined,
+    onCreateScheduledTask: capabilities.cronCreate
+      ? () => openAgentSection('cron', 'create-cron', controller.input.trim() || undefined)
+      : undefined,
+    onOpenTools: capabilities.tools ? () => openAgentSection('tools') : undefined,
+  }), [
+    capabilities.cronCreate,
+    capabilities.skills,
+    capabilities.slashCommands,
+    capabilities.tools,
+    controller.input,
+    openAgentSection,
+    openCommandsSheet,
+    sessionPreview,
+  ]);
+  const addMenuAvailable = capabilities.attachments
+    || Boolean(addSheetActions.onOpenSkills)
+    || Boolean(addSheetActions.onOpenCommands)
+    || Boolean(addSheetActions.onCreateScheduledTask)
+    || Boolean(addSheetActions.onOpenTools);
 
   const shareProductLabel = connections.connections.find((connection) => (
     connection.id === connectionId
@@ -671,7 +706,7 @@ function ThreadScreenContent({
         onChangeInput={controller.setInput}
         onSend={sessionPreview ? openSessionPaywall : controller.onSend}
         onCancel={requestCancelCurrentRun}
-        onOpenAddMenu={capabilities.attachments || capabilities.skills ? handleOpenAddMenu : undefined}
+        onOpenAddMenu={addMenuAvailable ? handleOpenAddMenu : undefined}
         onVoice={controller.voiceInputSupported ? controller.toggleVoiceInput : undefined}
         voiceState={controller.voiceInputState}
         voiceLevel={controller.voiceInputLevel}
@@ -709,16 +744,18 @@ function ThreadScreenContent({
         addVisible={!sessionPreview && addSheetVisible}
         attachmentsEnabled={capabilities.attachments}
         skillsEnabled={capabilities.skills}
+        remainingAttachmentSlots={Math.max(0, MAX_IMAGES - controller.pendingImages.length)}
         onCloseAdd={() => setAddSheetVisible(false)}
         onPickImage={controller.pickImage}
         onTakePhoto={controller.takePhoto}
         onChooseFile={fileAttachmentsEnabled ? controller.pickFile : undefined}
-        onOpenSkills={capabilities.skills ? () => navigation.navigate('AgentSettingsSection', {
-          connectionId,
-          agentId,
-          section: 'skills',
-        }) : undefined}
-        onOpenPrompts={() => setPromptPickerVisible(true)}
+        onAttachRecentPhotos={capabilities.attachments ? controller.attachLocalImages : undefined}
+        onOpenSkills={addSheetActions.onOpenSkills}
+        onOpenCommands={addSheetActions.onOpenCommands}
+        onCreateScheduledTask={addSheetActions.onCreateScheduledTask}
+        onOpenTools={addSheetActions.onOpenTools}
+        onAddPresented={handleAddPresented}
+        onAddAction={handleAddAction}
         shareMessage={shareMessage && visibleMessages.some((message) => message.id === shareMessage.id) ? shareMessage : null}
         agentName={agentName}
         agentEmoji={agent?.identity?.emoji}
@@ -759,10 +796,11 @@ function ThreadScreenContent({
           onRetry: controller.retryCommandPickerLoad,
           onSelect: controller.onSelectCommandOption,
         }}
-        promptPicker={{
-          visible: !sessionPreview && promptPickerVisible,
-          onClose: () => setPromptPickerVisible(false),
-          onSelect: handleSelectPrompt,
+        commandsSheet={{
+          visible: !sessionPreview && commandsSheetVisible,
+          commands: SLASH_COMMANDS,
+          onClose: () => setCommandsSheetVisible(false),
+          onSelect: (command) => controller.onSelectSlashCommand(command, 'commands_sheet'),
         }}
         thinkingPicker={{
           visible: !sessionPreview && controller.staticThinkPickerVisible,
@@ -881,7 +919,7 @@ export function createThreadCopy(t: TFunction): ThreadCopy {
     allowed: t('Allowed', { ns: 'chat' }),
     denied: t('Denied', { ns: 'chat' }),
     expired: t('Expired', { ns: 'chat' }),
-    formatAsk: (name) => t('Ask {{name}}', { ns: 'chat', name }),
+    placeholder: t('Message...', { ns: 'chat' }),
     formatEmpty: (name) => t('Start a conversation with {{name}}', { ns: 'chat', name }),
     formatAttachments: (count) => t('{{count}} attachments', { ns: 'chat', count }),
     formatRunDetail: (status, time) => time

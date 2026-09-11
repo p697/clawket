@@ -14,6 +14,7 @@ import {
 } from '@clawket/agent-protocol';
 import { searchDiscoverSkills } from '../../features/discover';
 import { StorageService } from '../../services/storage';
+import { parseLastHeartbeat } from '../../utils/console-heartbeat';
 import type { ConnectionState as LegacyConnectionState, GatewayConfig } from '../../types';
 import {
   buildGatewayRuntimePatch,
@@ -333,6 +334,7 @@ export class OpenClawAdapter extends GatewayAdapterBase {
         heartbeat: {
           get: () => this.readHeartbeatSettings(),
           set: (settings) => this.writeHeartbeatSettings(settings),
+          last: () => this.invoke(async () => parseLastHeartbeat(await this.gateway.fetchLastHeartbeat())),
         },
       },
       agents: {

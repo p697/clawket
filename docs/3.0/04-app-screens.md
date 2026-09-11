@@ -87,7 +87,9 @@
 - 流式输出：光标闪烁；不做逐字动画。
 - 加载更早历史：顶部上拉。
 
-**输入区**：左圆形「+」（附件：照片、相机、文件；技能；提示词——按能力显隐）；胶囊输入框，占位「向 {name} 提问」/ `Ask {name}`；框内右侧麦克风（语音输入沿用现有）；有文字时框外 accent 圆形发送键；运行中变 ink 圆形停止键（`cancel`）；运行中已有草稿时停止键退为次级圆形、右侧再出现发送键，点击把消息放入本机队列（气泡下方「排队中」说明，本轮回复结束、历史刷新完成后按序自动发出；停止 / 回复失败 / 发送失败后队列变为「已暂停」，点气泡可「立即发送 / 编辑 / 移除」；队列上限 10 条，三种后端共用同一套本机队列，不向后端发第二个并发 prompt）。思考等级 chip 位于输入框上方，仅在后端支持且用户开过时显示（沿用现有 ThinkingLevel 组件）。斜杠命令建议沿用现有 `SlashSuggestions`。
+**输入区**：左圆形「+」（2026-09-11 负责人定稿的 Add 弹层，见下方「Add 弹层」）；胶囊输入框，占位「向 {name} 提问」/ `Ask {name}`；框内右侧麦克风（语音输入沿用现有）；有文字时框外 accent 圆形发送键；运行中变 ink 圆形停止键（`cancel`）；运行中已有草稿时停止键退为次级圆形、右侧再出现发送键，点击把消息放入本机队列（气泡下方「排队中」说明，本轮回复结束、历史刷新完成后按序自动发出；停止 / 回复失败 / 发送失败后队列变为「已暂停」，点气泡可「立即发送 / 编辑 / 移除」；队列上限 10 条，三种后端共用同一套本机队列，不向后端发第二个并发 prompt）。思考等级 chip 位于输入框上方，仅在后端支持且用户开过时显示（沿用现有 ThinkingLevel 组件）。斜杠命令建议沿用现有 `SlashSuggestions`。
+
+**Add 弹层**（2026-09-11 负责人定稿，参考 youmind-mobile `AddToChatSheet` 并要求超过它）：固定两档 detent（62% / 92%，上档只用于长列表滚动，不做上拉变网格——负责人 2026-09-12 决定与 youmind-mobile 保持一致），内容可滚，底部留白。第一段是媒体区：iOS 已授权相册时为横向「最近照片」条（第一格相机 tile，随后 12 张最近照片；照片可多选，右上角 accent 圆徽标显示选中序号，选满剩余附件槽位后其余变灰；选中后底部浮出 ink 主按钮「附加 N 张照片」，关闭动画完成后再以 JPEG 0.8 进入既有待发附件流；头部右侧「全部照片」quiet 圆钮进系统相册）；未授权（或 Android，因 Google Play 照片权限政策只走系统 Photo Picker）时为三格 tile「照片 / 相机 / 文件」，iOS 点「照片」原地申请权限，授权后不关弹层直接换成照片条，拒绝则退回系统选择器；打开后的前 320ms 与权限/加载未定时显示骨架 tile。内容左右边距 16，与头部关闭键对齐。第二段是细线分隔的两组能力显隐行（2026-09-12 负责人按 youmind-mobile 定稿并要求再松一点：48 高、无水平内边距、36 方框居中的 ink 图标、行尾 chevron）：「选择文件」（仅照片条模式且后端支持文件）、「技能」（`skills`，Puzzle 图标）、「命令」（`slashCommands`，仅 OpenClaw；Hermes Bridge 只解释 /model /think /reasoning /fast，其余会当普通消息发出，故不提供目录；打开 `CommandsSheet`：完整斜杠命令目录的标准弹层，说明为标题、`/命令` 为行尾值，选中后在弹层关闭完成后执行，`reset` / `restart` / `kill` 先经 ConfirmationModal 确认；输入框上方的「/」联想只在输入时出现、不再有强制展开态）；细线；「创建定时任务」（`cronCreate`，进 Cron 页并直接打开新建编辑器，提示词预填当前草稿）、「工具」（`tools`，进 Agent 设置 → Tools）。思考等级只留在输入框上方的 chip；「提示词」功能整体移除（2026-09-12 负责人决定，该功能从未埋点、无使用证据）。所有打开另一个模态或原生选择器的动作都在弹层关闭完成后执行。埋点 `chat_add_menu_opened` / `chat_add_menu_action`。
 
 **状态**：历史加载骨架 3 条；空会话显示居中一句「和 {name} 开始对话」；错误横幅在时间线顶部；离线时输入框可编辑但发送键禁用并提示；无权限（锁定 Agent）→ 整页替换为付费墙（情境版 `agents`）。
 
@@ -97,47 +99,50 @@
 
 ## 4. 会话面板 `SessionPanel`（底部弹层）
 
-**职责**：这台连接上的全部会话；切换与管理。
+**职责**：这台连接上的全部会话；切换与管理。一次只看一个 Agent。
 
-**结构**：把手；顶部 `Segmented`「分组 / 列表」（默认档：全圆 44 高胶囊，记忆上次选择）；搜索图标；筛选 chip 最多三个「全部 / 需要你 / 工作中」，仅在会话超过一屏时显示；内容区。
+**结构**（2026-09-11 产品负责人定稿，融合 3.0 花名册行与 2.0 侧边栏的 Agent 胶囊、渠道 chip）：把手；头部 = 关闭键 + 居中 **Agent 胶囊**（头像 28 + 名字 body 600 + 折叠箭头；连接只有一个 Agent 时无箭头、不可点）+ 搜索图标；点胶囊在面板内弹出 Agent 菜单（头像 32 + 名字 + 会话数，当前项打勾），选择后 chip 与列表切到该 Agent，不切换线程；每次打开面板回到当前线程的 Agent 与「全部」。下方一排横向 **渠道 chip**（全圆，36 高 + 4pt hitSlop）：「全部 n」+ 每个渠道一枚（按数量降序，带数量）+ 有内容时的「直聊与群 / 子 Agent / 定时」；只有主会话时不显示这一排。可选搜索框在 chip 下方。不再有「分组 / 列表」切换、Agent 分组标题行和渠道分节标题。
 
-**分组模式**：Agent 分组标题行 = 折叠箭头 + Agent 名 + 数字（不写状态词），当前 Agent 展开、其他折叠；组内分节标题只写名称（主会话、渠道、直聊与群、子 Agent、定时），渠道下按平台再分一层标题；行 = 6pt 状态点 + 标题（body 600）+ 时间（caption）；需要你的行在标题前加红点；不显示预览、模型、来源、类型标签。子 Agent 已完成项折叠为一行「已完成 12」。
+**行**（与花名册同一套语言）：40pt 圆形头像位（主会话 = Agent 头像；渠道 = `surface` 底 + 单色 Lucide 平台图标：Slack / Discord / Telegram / WhatsApp / 飞书，其余用渠道图标；子 Agent / 定时 / 直聊用类型图标；运行中在右下叠静态活动标）+ 标题（body 600，置顶行前置 16pt 图钉）+ 一行最后一条消息预览（secondary；未读时用 ink）+ 右侧时间（caption）与 12pt 圆点（需要你 = `bad`，未读 = `ink`；当前会话不显示未读）。排序：主会话永远第一，其后置顶，再按活跃度与时间。「全部」下已完成的子 Agent 折叠成一行「子 Agent · n ›」，点它等于选中「子 Agent」chip。
 
-**列表模式**：紧凑行 = 状态点 + 类型图标（16pt Lucide：主会话 / 渠道 / 子 Agent / Cron）+ 标题 + 时间，一行完；顶部一行灰字摘要「12 活跃 · 30 最近 · 46 空闲」；类型筛选放在右上「筛选」菜单里，不做 chip 行。数据层沿用老 `sessions-board.ts`。
-
-**动作**：点行 → 线程切换到该会话并收起面板；长按 → 置顶到花名册 / 重命名 / 重置 / 删除（按能力显隐；删除与重置二次确认）；分组标题点 → 展开 / 折叠；「新会话」按钮仅在 `sessionCreate` 为 true 时出现在当前 Agent 分组标题右侧。
+**动作**：点行 → 线程切换到该会话并收起面板；长按 → 置顶到花名册 / 取消置顶（按当前状态显示）/ 重命名 / 重置 / 删除（按能力显隐；删除与重置二次确认）。
 
 **状态**：加载骨架；空（「还没有会话」）；错误行内横幅；Hermes 老 Bridge：只有 main 一行，底部一句「升级 bridge 到 3.0 解锁多会话」。
 
-**埋点**：`session_panel_opened{ mode }`、`chat_session_selected`（现有，加 `from: panel`）、`session_panel_mode_changed`、`session_action{ action }`。
+**埋点**：`session_panel_opened{ session_count }`、`session_panel_filter_changed{ filter }`、`session_panel_agent_switched{ session_count }`、`chat_session_selected`（现有，加 `from: panel`）、`session_action{ action }`。
 
 ## 5. Agent 设置 `AgentSettings`
 
-**职责**：这个 Agent 的配置与它所在连接的管理。`canvasGrouped` 底 + 白色分组卡。
+**职责**：这个 Agent 的配置与它所在连接的管理。`canvasGrouped` 底 + 白色分组卡。2026-09-11 负责人按 2.0 控制台埋点（定时任务与费用是点击最狠的两张卡，模型 / 技能 / 记忆计数格次之）把页面改成「数字卡 + 行」的合稿，结构如下。
 
-**顶行（身份卡）**：头像 44 + 名字（body 600）+ 一行灰字（连接名 · 后端）；点 → 编辑页（名字、emoji、人格、记忆文件：复用现有 AgentDetail / AgentUserInfo / 记忆文件编辑，换皮）。YouMind：只读，灰字为邮箱。
+**头部**：左返回、中标题「Agent profile」、右 44pt 墨色圆形 `FloatingButton`（`MessageCircle`）= 继续聊天（回到该连接 + Agent 最近的会话）。页面内不再有主按钮胶囊。
 
-**行的形状**：左侧行标题（body 400），右侧一个尾值（secondary 灰）+ 箭头；没有副标题。需要注意的行在尾值前加红点；Pro 行的尾值位置是锁图标。
+**Hero（居中）**：56pt 圆形头像 + 名字（title 600）+ 一行灰字。灰字 = `后端 · Active {{age}}`（`heartbeat` 能力为 true 且 `cron.heartbeat.last()` 返回时间戳时，age 走 `formatConsoleHeartbeatAge`），否则退回 `连接名 · 后端`；YouMind 为邮箱。
 
-**Agent 组**（能力为 false 的行不渲染）：
+**数字卡（`stats`，按能力显隐，整卡可点，无箭头）**：
 
-| 行 | 尾值 | 目标 | 能力 |
-|---|---|---|---|
-| 模型 | 当前模型名 | 模型页：默认模型、思考等级；二级「提供方与成本」 | `models` |
-| 技能 | 已安装数 | 技能页：分段「已安装 / 发现」；发现内含 ClawHub 与 skills.sh 来源 | `skills` |
-| 定时任务 | 任务数（有失败时前置红点） | 定时页：列表顶部固定「心跳」项（`heartbeat`），同一套编辑器 | `cron` |
-| 文件 | 无 | 文件页（编辑保存为 Pro `coreFileEditing`） | `files` |
-| 用量 | 今日费用 | 用量页 | `usage` |
+| 卡 | 位置 | 大数 | 右侧小字（caption，只放一个数字） | 目标 | 能力 |
+|---|---|---|---|---|---|
+| Cron jobs | 第一排左 | 任务数 | 红色「{{count}} failed」（失败数 > 0 时） | 定时页 | `cron` |
+| Cost today | 第一排右 | 今日费用 `$x.xx` | 灰色「{{value}} tokens」 | 用量页 | `usage` |
+| Models | 第二排 | 模型数 | 无 | 模型页 | `models` |
+| Skills | 第二排 | 已安装数 | 无 | 技能页 | `skills` |
+| Files | 第二排 | 记忆文件数 | 无 | 文件页 | `files` |
 
-**连接组**（分节标题 = 连接名）：
+费用卡退化：后端给不出可靠美元数（`costPresentation.mode === 'unknown'`）时大数换成今日 tokens、标题改「Tokens today」、无小字；两者都没有时显示「—」。数字缺失一律「—」，不隐藏卡。无权限（permission）状态下小字位置换成锁。卡是 `SettingsGroup` + `SettingsRow layout="column"`：白底、14pt 圆角、52pt 以上、按下态复用行的 `surface`。
+
+**行**：身份行「Personality & memory」（`agentEdit || files`）→ 编辑页；连接组（分节标题 = 连接名）只在一级放「连接」一行（在线 / 离线，离线红点）；其余连接级行进「Advanced management」弹层：
 
 | 行 | 尾值 | 目标 | 能力 / 门槛 |
 |---|---|---|---|
-| 连接 | 在线 / 离线（离线为红色） | 连接页：状态、上次就绪时间、Bridge 版本与能力、重连、Preview 标签、删除连接 | 总是 |
-| OpenClaw 管理 | 锁（非 Pro）/ 无 | 分段页：配置 / 权限 / 诊断 / 备份（复用现有四个页面） | `configManage` · Pro |
+| OpenClaw 管理 | 锁（非 Pro）/ 无 | 分段页：配置 / 权限 / 诊断 / 备份 | `configManage` · Pro |
 | 工具 | 可用数 | 工具页 | `tools` |
 | 渠道与设备 | 待处理数（红点）/ 无 | 分段页：渠道 / 设备 / 节点 | `channels`、`devices`、`nodes` |
 | 日志 | 锁 / 无 | 日志页 | `logs` · Pro |
+
+行的形状不变：左标题（body 400）+ 一个尾值（secondary 灰）+ 箭头，没有副标题。命名沿用 2.0：`Cron jobs`（定时任务）、`New cron job`；不再用「Scheduled tasks」。
+
+**数据**：`load-summary.ts` 在 `ready` 时并行读 `models.list`、`skills.status`、`cron.list`（同时数失败）、`cron.heartbeat.last`、`agents.files.list`、`usage.cost(today)`（费用 + tokens）、`tools.catalog`、待处理配对；任一失败只缺对应数字。Hermes 无心跳、无工具 / 渠道 / 日志：灰字只写后端名，弹层里少三行，数字卡完全一样。
 
 点锁即付费墙；点行本身进入页面后被拦也弹付费墙（沿用现有 `showPaywall`）。
 

@@ -22,6 +22,12 @@ export interface Capabilities {
   /** Refines `models.setSelection` to permit `scope: 'session'`; it is not a separate operation. */
   modelPerSession: boolean;
   thinkingLevels: boolean;
+  /**
+   * Backend interprets the full `/command` catalog, so the App may offer it as
+   * a menu. Hermes handles only its inline directives (`/model`, `/think`,
+   * `/reasoning`, `/fast`) and posts anything else as a plain prompt.
+   */
+  slashCommands: boolean;
   skills: boolean;
   skillDiscover: boolean;
   /** Refines `AgentAdapter.prompt` skill installation; it is not a Management method. */
@@ -66,6 +72,7 @@ export const CAPABILITY_KEYS = [
   'models',
   'modelPerSession',
   'thinkingLevels',
+  'slashCommands',
   'skills',
   'skillDiscover',
   'skillInstall',
@@ -107,6 +114,7 @@ const OPENCLAW_CAPABILITIES: Capabilities = {
   models: true,
   modelPerSession: true,
   thinkingLevels: true,
+  slashCommands: true,
   skills: true,
   skillDiscover: true,
   skillInstall: true,
@@ -148,6 +156,7 @@ const HERMES_CAPABILITIES: Capabilities = {
   models: true,
   modelPerSession: false,
   thinkingLevels: true,
+  slashCommands: false,
   skills: true,
   skillDiscover: true,
   skillInstall: true,
@@ -189,6 +198,7 @@ const YOUMIND_CAPABILITIES: Capabilities = {
   models: false,
   modelPerSession: false,
   thinkingLevels: false,
+  slashCommands: false,
   skills: false,
   skillDiscover: false,
   skillInstall: false,

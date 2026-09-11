@@ -17,7 +17,6 @@ import { FlashList, type FlashListRef, type ListRenderItemInfo } from '@shopify/
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { EnrichedMarkdownText } from 'react-native-enriched-markdown';
 import Animated, {
-  cancelAnimation,
   Easing,
   FadeIn,
   FadeOut,
@@ -25,11 +24,10 @@ import Animated, {
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
-  withRepeat,
-  withSequence,
   withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
+import remend from 'remend';
 import type { Capabilities } from '@clawket/agent-protocol';
 import {
   ArrowDown,
@@ -120,8 +118,23 @@ import { isUsableAnchor, type MessageAnchorFrame } from './components/messageAct
 import { formatThreadClockTime, localDayNumber } from './timestamps';
 import { resolveUserMessageStatuses, type UserMessageStatus } from '../../chat/messageDelivery';
 import { useThreadMessageEntrance } from '../../chat/useThreadMessageEntrance';
+import { useSmoothedStreamText } from '../../chat/useSmoothedStreamText';
 
 const THREAD_MARKDOWN_FLAVOR = getChatMarkdownFlavor();
+// Terminates markdown syntax that is still open while tokens stream in, so a
+// half-typed `**bold` or `` `code `` never flickers between literal and styled.
+const STREAMING_REMEND_OPTIONS = {
+  bold: true,
+  italic: true,
+  boldItalic: true,
+  strikethrough: true,
+  links: true,
+  linkMode: 'text-only' as const,
+  images: true,
+  inlineCode: true,
+  katex: false,
+  setextHeadings: true,
+};
 const SESSION_CONTENT_FADE_IN = FadeIn
   .duration(Motion.duration.normal)
   .easing(Easing.out(Easing.cubic))
@@ -186,7 +199,8 @@ export type ThreadCopy = Readonly<{
   denied: string;
   expired: string;
   logs: string;
-  formatAsk: (name: string) => string;
+  /** Composer placeholder; one plain word, like a messenger. */
+  placeholder: string;
   formatEmpty: (name: string) => string;
   formatAttachments: (count: number) => string;
   formatRunDetail: (status: string, time: string) => string;
@@ -431,10 +445,11 @@ export function ThreadView({
   const avatarStatus = locked ? 'locked' : offline ? 'offline' : 'idle';
   const headerWorking = isRunning && state.kind !== 'reconnecting';
   const canOpenSessions = capabilities.sessions && Boolean(onOpenSessionPanel);
-  const canOpenAddMenu = (capabilities.attachments || capabilities.skills)
-    && Boolean(onOpenAddMenu);
+  // The screen decides availability from the full capability set (attachments,
+  // skills, commands, thinking, cron, tools); the view only needs the handler.
+  const canOpenAddMenu = Boolean(onOpenAddMenu);
   const canUseVoice = Boolean(onVoice);
-  const composerPlaceholder = !canUseVoice || voiceState === 'idle' ? copy.formatAsk(agentName)
+  const composerPlaceholder = !canUseVoice || voiceState === 'idle' ? copy.placeholder
     : voiceState === 'listening' ? copy.listening : copy.preparingVoice;
   const canCancel = capabilities.abort && Boolean(onCancel);
   const timelineClearance = Space.lg;
@@ -1281,6 +1296,7 @@ function UserBubble({
           <MessageMeta
             testID={`thread-meta-${message.id}`}
             time={time}
+            tone="accent"
             status={status}
             statusLabel={statusCopy(status, copy)}
             style={stylesStatic.metaOverlay}
@@ -1303,6 +1319,7 @@ function UserMessageMeta({
     <MessageMeta
       testID={`thread-meta-${message.id}`}
       time={time}
+      tone="accent"
       status={status}
       statusLabel={statusCopy(status, copy)}
       style={stylesStatic.metaRowUser}
@@ -1577,29 +1594,21 @@ function AssistantBubble({
   } else {
     revealRef.current.thinking = thinking;
   }
-  const cursorOpacity = useSharedValue(1);
-  const cursorStyle = useAnimatedStyle(() => ({ opacity: cursorOpacity.value }));
   const markdownStyle = useMemo(
     () => createChatMarkdownStyle(theme.colors, fontSize),
     [theme.colors, fontSize],
   );
-
-  useEffect(() => {
-    cancelAnimation(cursorOpacity);
-    if (!message.streaming || reduceMotion) {
-      cursorOpacity.value = 1;
-      return () => cancelAnimation(cursorOpacity);
-    }
-    cursorOpacity.value = withRepeat(
-      withSequence(
-        withTiming(0, { duration: Motion.duration.slow }),
-        withTiming(1, { duration: Motion.duration.slow }),
-      ),
-      -1,
-      false,
-    );
-    return () => cancelAnimation(cursorOpacity);
-  }, [cursorOpacity, message.streaming, reduceMotion]);
+  // Chunks land in socket-sized bursts; the pacer feeds the native markdown
+  // view word-sized increments so its tail fade-in reads as a cascade. Once
+  // the run ends the pacer drains the remainder, then the settled text shows.
+  const pacedText = useSmoothedStreamText(message.text, message.streaming === true);
+  const textAnimating = message.streaming === true || pacedText !== message.text;
+  const displayText = useMemo(() => {
+    if (!textAnimating) return message.text;
+    // No synthetic cursor: the native view animates only truly appended tail
+    // content, so a trailing glyph would absorb the fade and hide the effect.
+    return remend(pacedText, STREAMING_REMEND_OPTIONS);
+  }, [message.text, pacedText, textAnimating]);
 
   return (
     <View>
@@ -1616,26 +1625,13 @@ function AssistantBubble({
           <EnrichedMarkdownText
             testID={`thread-markdown-${message.id}`}
             flavor={THREAD_MARKDOWN_FLAVOR}
-            markdown={message.text}
+            markdown={displayText}
             markdownStyle={markdownStyle}
             onLinkPress={openChatMarkdownLink}
             selectable
-            streamingAnimation={message.streaming === true}
+            streamingAnimation={textAnimating}
           />
-          {message.streaming ? (
-            <Animated.Text
-              testID={`thread-stream-cursor-${message.id}`}
-              accessibilityElementsHidden
-              importantForAccessibility="no"
-              style={[
-                stylesStatic.streamingCursor,
-                { color: theme.colors.ink },
-                cursorStyle,
-              ]}
-            >
-              {'▍'}
-            </Animated.Text>
-          ) : time ? (
+          {textAnimating ? null : time ? (
             <MessageMeta testID={`thread-meta-${message.id}`} time={time} style={stylesStatic.metaRowAssistant} />
           ) : null}
         </Animated.View>
@@ -1659,11 +1655,6 @@ const stylesStatic = StyleSheet.create({
     fontSize: FontSize.caption, lineHeight: LineHeight.caption,
     paddingHorizontal: Space.sm, paddingVertical: Space.xs, borderRadius: Radius.full,
     overflow: 'hidden', textAlign: 'center',
-  },
-  streamingCursor: {
-    fontSize: FontSize.body,
-    lineHeight: LineHeight.body,
-    fontWeight: FontWeight.regular,
   },
   timelineItem: {
     paddingHorizontal: THREAD_ROW_INSET,
