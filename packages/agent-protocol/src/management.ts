@@ -290,6 +290,11 @@ export interface HeartbeatSettings {
   model: string;
 }
 
+export interface HeartbeatStatus {
+  /** Epoch milliseconds of the last completed heartbeat, or null when the backend has none. */
+  lastHeartbeatAt: number | null;
+}
+
 export interface AgentCreate {
   name: string;
   emoji?: string;
@@ -725,6 +730,8 @@ export type CronOperations = Partial<{
     heartbeat: {
       get(): Promise<HeartbeatSettings>;
       set(settings: HeartbeatSettings): Promise<void>;
+      /** Read-only last-heartbeat probe; only backends that report one implement it. */
+      last?(): Promise<HeartbeatStatus>;
     };
 }>;
 

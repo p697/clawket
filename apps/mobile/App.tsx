@@ -1959,6 +1959,7 @@ function AppContent({
                         adapter={adapter}
                         connection={connection}
                         agent={agent}
+                        agentCount={group?.agents.length}
                         capabilities={adapter?.capabilities ?? resolveCapabilities(connection.backendKind)}
                         isPro={isPro}
                         loadIdentityDetail={loadConnectionIdentityDetail}
@@ -2169,6 +2170,7 @@ function AppContent({
               </RootStack.Navigator>
               <SessionPanel
                 visible={sessionPanelVisible}
+                pinnedSessionKeys={pinnedSessionKeys}
                 currentAgentId={threadContext?.agentId ?? currentAgentId}
                 currentSessionKey={threadContext?.sessionKey ?? mainSessionKey}
                 permissionDenied={threadContext

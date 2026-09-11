@@ -91,7 +91,7 @@
       [
         "expo-media-library",
         {
-          "photosPermission": "Allow Clawket to save stats posters to your photo library.",
+          "photosPermission": "Allow Clawket to show your recent photos when attaching images and to save stats posters to your photo library.",
           "savePhotosPermission": "Allow Clawket to save stats posters to your photo library."
         }
       ],

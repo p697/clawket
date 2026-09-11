@@ -54,7 +54,7 @@ iOS 用系统 SF Pro，Android 用 Roboto，中文走系统 CJK；不引入第�
 | 浮动按钮 / 胶囊 / 输入框 | 全圆；圆形按钮 44；胶囊高 40 |
 | 卡片 | 16 |
 | 设置分组卡 | 14；卡内行高 52 |
-| 头像 | 花名册 56（圆角 18）；头部胶囊 28（圆角 9）；设置顶行 44（圆角 14）；面板行 32（圆角 10） |
+| 头像 | 花名册 56（圆角 18）；头部胶囊 28（圆角 9）；设置顶行 44（圆角 14）；面板菜单行 32（圆角 10）；会话面板行 40（全圆，渠道行同尺寸灰底图标位） |
 | 花名册行 | 高 88；横向内边距 16；头像与文字间距 14 |
 | 线程 | 同一发言者气泡间距 6；不同发言者 16；系统事件行上下 12；气泡最大宽 82% |
 | 页面横向内边距 | 16 |
@@ -117,8 +117,8 @@ Grok Bot 清爽的根源不是留白，而是**每个界面只有两层字**：�
 | 尾值不叙述 | 设置行右侧只放一个值：数字、名字、状态词或锁图标；不放句子（「105 · 发现更多」这类禁止）。 |
 | 一句话 | 空态、错误态、横幅、系统事件行都是一句话，≤ 16 个汉字 / 8 个英文词，配一个动作词。 |
 | 不重复 | 页面标题已表达的信息，不在正文再说一遍；头部胶囊里已有的名字，不在列表里重复。 |
-| 分节 | 列表默认不加分节标题；只有分组本身是信息时才加（会话面板的 Agent 分组、设置的 Agent 组 / 连接组），分节标题用 `secondary`，不用全大写。 |
-| 筛选 | 筛选 chip 最多 3 个，且列表不超过一屏时不显示。 |
+| 分节 | 列表默认不加分节标题；只有分组本身是信息时才加（设置的 Agent 组 / 连接组），分节标题用 `secondary`，不用全大写。会话面板不分节：Agent 靠头部胶囊切换，来源靠行首图标与渠道 chip。 |
+| 筛选 | 筛选 chip 最多 3 个，且列表不超过一屏时不显示。例外：会话面板的渠道 chip 一排按渠道数量生成、横向可滑，只有主会话时不显示（2026-09-11 产品负责人决定）。 |
 | 按钮 | 主按钮文案 ≤ 6 个汉字（付费墙允许带价格）；一屏最多一个主按钮。 |
 
 每屏预算（默认态可见文字，不含用户内容）：
@@ -127,7 +127,7 @@ Grok Bot 清爽的根源不是留白，而是**每个界面只有两层字**：�
 |---|---|---|
 | 花名册 | 名字（body 600）+ 预览 / 时间（secondary / caption） | 徽标数字 |
 | 线程 | 消息正文（body）+ 系统事件 / 时间（secondary / caption） | 头部胶囊的一行灰字（模型 · 上下文剩余）是产品负责人指定保留的唯一一处头部辅文字 |
-| 会话面板 | 标题（body 600）+ 时间（caption） | 分组标题（secondary） |
+| 会话面板 | 标题（body 600）+ 预览 / 时间（secondary / caption），与花名册同预算 | 头部 Agent 胶囊名字（body 600）、chip 文字（secondary）与数量（caption） |
 | Agent 设置 / 账户设置 | 行标题（body）+ 尾值（secondary） | 页面标题（title）、身份卡副标题一行 |
 | 首启引导 | 标题（display）+ 正文一行（secondary） | 按钮文字 |
 | 付费墙 | 标题（display）+ 收益 / 方案（body / secondary） | 法务小字（caption） |
@@ -147,7 +147,7 @@ Grok Bot 清爽的根源不是留白，而是**每个界面只有两层字**：�
 | `FloatingButton`（44 圆形按钮） | `src/components/ui/ActionButton.tsx`（`variant="icon"`，44×44，22pt 图标） | 保留 `appearance="quiet"`（在已抬升的表面内用）与按下态；阴影换成 `shadowFloating`；返回箭头用 `DirectionalChevronLeft`，不用系统返回 |
 | 页面头部 | `ScreenHeader` 的对称 44 槽位契约 + 我们的浮动布局 | 所有页面头部由内容拥有：左 44 槽、中标题或胶囊、右 44 槽；`native-stack` 的 `headerShown: false`，永远不用系统 header |
 | `Segmented`（分组 / 列表等） | `src/components/ui/SegmentedTabs.tsx` 原样移植 | **全圆胶囊**：轨道 `Radius.full`、高 44、下沉底色不描边；选中段抬升底色 + `Shadow.xs`（深色改发丝线）；`FontSize.base`，选中 600；`size="sm"` 为 32 高的紧凑档；`variant="text"` 为文字 Tab。全 App 所有 Tab 统一用它 |
-| `Sheet`（会话面板等底部弹层） | `AdaptiveBottomSheetModal` + `SheetHeader` / `SheetDragHandle` / `useSheetBackgroundStyle` + `SheetBackdrop` + `ThemedFullWindowOverlay` | 顶部 chrome 只走这一套：把手、圆角、关闭键 + 居中标题；iPad 自动居中面板 |
+| `Sheet`（会话面板等底部弹层） | `AdaptiveBottomSheetModal` + `SheetHeader` / `SheetDragHandle` / `useSheetBackgroundStyle` + `SheetBackdrop` + `ThemedFullWindowOverlay` | 顶部 chrome 只走这一套：把手、圆角、关闭键 + 居中标题（`titleContent` 可换成会话面板的 Agent 胶囊）；iPad 自动居中面板 |
 | 居中弹窗（二次确认、删除） | `ModalSheet` | 不用系统 `Alert` 做确认；`title` 自带关闭键 |
 | `SearchInput` | `src/components/ui/SearchInput.tsx` | 44 高胶囊，`Radius.full`；弹层内传 `inSheet` |
 | 文本输入 | `CompositionSafeTextInput` / `CompositionSafeBottomSheetTextInput` / `PasteCapableTextInput` | 中文输入法组合安全；输入框里粘贴图片走 `PasteCapableTextInput` |

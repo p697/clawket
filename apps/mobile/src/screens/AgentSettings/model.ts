@@ -5,6 +5,8 @@ import type {
   ConnectionState,
 } from '@clawket/agent-protocol';
 import type { AgentSettingsSection } from '../../navigation/root-stack';
+import { heartbeatMinutesAgo } from '../../utils/console-heartbeat';
+import { formatCompactTokenCount } from '../../utils/usage-format';
 
 export type AgentSettingsPageState =
   | 'loading'
@@ -15,18 +17,44 @@ export type AgentSettingsPageState =
   | 'ready';
 
 export type AgentSettingsSummary = Readonly<{
-  currentModel?: string;
+  modelCount?: number;
   installedSkillCount?: number;
   cronJobCount?: number;
+  cronFailureCount?: number;
   hasCronFailure?: boolean;
+  fileCount?: number;
+  /** Undefined when the backend reports no reliable dollar figure for today. */
   todayCostUsd?: number;
+  todayTokens?: number;
+  lastHeartbeatAt?: number | null;
   toolCount?: number;
   pendingConnectionCount?: number;
 }>;
 
+export type AgentSettingsStatId = 'cron' | 'usage' | 'models' | 'skills' | 'files';
+
+export type AgentSettingsStatDetail = Readonly<{
+  key: '{{count}} failed' | '{{value}} tokens';
+  params: Readonly<Record<string, string | number>>;
+  tone: 'bad' | 'neutral';
+}>;
+
+/** A tappable number card on the profile: one value, one label, at most one numeric caption. */
+export type AgentSettingsStatDescriptor = Readonly<{
+  id: AgentSettingsStatId;
+  section: AgentSettingsStatId;
+  placement: 'hero' | 'tile';
+  title: string;
+  value?: string;
+  detail?: AgentSettingsStatDetail;
+  attention: boolean;
+  locked: boolean;
+}>;
+
 export type AgentSettingsRowDescriptor = Readonly<{
-  id: Exclude<AgentSettingsSection, 'identity'>;
-  section: Exclude<AgentSettingsSection, 'identity'>;
+  id: Exclude<AgentSettingsSection, 'identity' | AgentSettingsStatId>;
+  section: Exclude<AgentSettingsSection, 'identity' | AgentSettingsStatId>;
+  placement: 'primary' | 'advanced';
   title: string;
   value?: string;
   attention: boolean;
@@ -34,7 +62,7 @@ export type AgentSettingsRowDescriptor = Readonly<{
 }>;
 
 export type AgentSettingsGroupDescriptor = Readonly<{
-  id: 'agent' | 'connection';
+  id: 'connection';
   title?: string;
   rows: ReadonlyArray<AgentSettingsRowDescriptor>;
 }>;
@@ -42,10 +70,15 @@ export type AgentSettingsGroupDescriptor = Readonly<{
 export type AgentSettingsModel = Readonly<{
   identity: Readonly<{
     name: string;
+    /** Fallback identity line: connection label · backend (or the YouMind email). */
     detail: string;
+    backendLabel: string;
+    /** Whole minutes since the last heartbeat, or null when the backend reports none. */
+    activeMinutesAgo: number | null;
     editable: boolean;
     locked: boolean;
   }>;
+  stats: ReadonlyArray<AgentSettingsStatDescriptor>;
   groups: ReadonlyArray<AgentSettingsGroupDescriptor>;
 }>;
 
@@ -58,13 +91,20 @@ export type BuildAgentSettingsModelInput = Readonly<{
   permissionDenied?: boolean;
   identityDetail?: string;
   summary?: AgentSettingsSummary;
+  /** Agents on this connection; the Gateway heartbeat is global, so it only describes a lone Agent. */
+  agentCount?: number;
+  now?: number;
 }>;
 
-type RowDefinition = Readonly<{
-  id: Exclude<AgentSettingsSection, 'identity'>;
-  title: string;
+type Gate = Readonly<{
   capabilities?: ReadonlyArray<keyof Capabilities>;
   capabilityMode?: 'all' | 'any';
+}>;
+
+type RowDefinition = Gate & Readonly<{
+  id: AgentSettingsRowDescriptor['id'];
+  placement: AgentSettingsRowDescriptor['placement'];
+  title: string;
   requiresPro?: boolean;
   value: (
     summary: AgentSettingsSummary,
@@ -74,6 +114,15 @@ type RowDefinition = Readonly<{
     summary: AgentSettingsSummary,
     connectionState: ConnectionState,
   ) => boolean;
+}>;
+
+type StatDefinition = Gate & Readonly<{
+  id: AgentSettingsStatId;
+  placement: AgentSettingsStatDescriptor['placement'];
+  title: (summary: AgentSettingsSummary) => string;
+  value: (summary: AgentSettingsSummary) => string | undefined;
+  detail?: (summary: AgentSettingsSummary) => AgentSettingsStatDetail | undefined;
+  attention?: (summary: AgentSettingsSummary) => boolean;
 }>;
 
 const BACKEND_LABELS: Readonly<Record<ConnectionDescriptor['backendKind'], string>> = {
@@ -92,61 +141,85 @@ const CONNECTION_STATE_LABELS: Readonly<Record<ConnectionState, string>> = {
   error: 'Offline',
 };
 
-const AGENT_ROWS: ReadonlyArray<RowDefinition> = [
-  {
-    id: 'models',
-    title: 'Models',
-    capabilities: ['models'],
-    value: (summary) => cleanValue(summary.currentModel),
-  },
-  {
-    id: 'skills',
-    title: 'Skills',
-    capabilities: ['skills'],
-    value: (summary) => formatCount(summary.installedSkillCount),
-  },
+/** Order is layout order: two hero cards first, then the tile row. */
+const STATS: ReadonlyArray<StatDefinition> = [
   {
     id: 'cron',
-    title: 'Scheduled tasks',
+    placement: 'hero',
     capabilities: ['cron'],
+    title: () => 'Cron jobs',
     value: (summary) => formatCount(summary.cronJobCount),
-    attention: (summary) => summary.hasCronFailure === true,
-  },
-  {
-    id: 'files',
-    title: 'Files',
-    capabilities: ['files'],
-    value: () => undefined,
+    detail: (summary) => {
+      const failed = formatCount(summary.cronFailureCount);
+      return failed && failed !== '0'
+        ? { key: '{{count}} failed', params: { count: Number(failed) }, tone: 'bad' }
+        : undefined;
+    },
+    attention: (summary) => summary.hasCronFailure === true || (summary.cronFailureCount ?? 0) > 0,
   },
   {
     id: 'usage',
-    title: 'Usage',
+    placement: 'hero',
     capabilities: ['usage'],
-    value: (summary) => formatUsd(summary.todayCostUsd),
+    title: (summary) => (formatUsd(summary.todayCostUsd) === undefined && formatTokens(summary.todayTokens) !== undefined
+      ? 'Tokens today'
+      : 'Cost today'),
+    value: (summary) => formatUsd(summary.todayCostUsd) ?? formatTokens(summary.todayTokens),
+    detail: (summary) => {
+      const tokens = formatTokens(summary.todayTokens);
+      return formatUsd(summary.todayCostUsd) !== undefined && tokens !== undefined
+        ? { key: '{{value}} tokens', params: { value: tokens }, tone: 'neutral' }
+        : undefined;
+    },
+  },
+  {
+    id: 'models',
+    placement: 'tile',
+    capabilities: ['models'],
+    title: () => 'Models',
+    value: (summary) => formatCount(summary.modelCount),
+  },
+  {
+    id: 'skills',
+    placement: 'tile',
+    capabilities: ['skills'],
+    title: () => 'Skills',
+    value: (summary) => formatCount(summary.installedSkillCount),
+  },
+  {
+    id: 'files',
+    placement: 'tile',
+    capabilities: ['files'],
+    title: () => 'Files',
+    value: (summary) => formatCount(summary.fileCount),
   },
 ];
 
 const CONNECTION_ROWS: ReadonlyArray<RowDefinition> = [
   {
     id: 'connection',
+    placement: 'primary',
     title: 'Connection',
     value: (_summary, connectionState) => CONNECTION_STATE_LABELS[connectionState],
     attention: (_summary, connectionState) => connectionState !== 'ready',
   },
   {
     id: 'openclaw',
+    placement: 'advanced',
     title: 'OpenClaw management',
     capabilities: ['configManage'],
     value: () => undefined,
   },
   {
     id: 'tools',
+    placement: 'advanced',
     title: 'Tools',
     capabilities: ['tools'],
     value: (summary) => formatCount(summary.toolCount),
   },
   {
     id: 'channels-devices',
+    placement: 'advanced',
     title: 'Channels & devices',
     capabilities: ['channels', 'devices', 'nodes'],
     capabilityMode: 'any',
@@ -157,6 +230,7 @@ const CONNECTION_ROWS: ReadonlyArray<RowDefinition> = [
   },
   {
     id: 'logs',
+    placement: 'advanced',
     title: 'Logs',
     capabilities: ['logs'],
     requiresPro: true,
@@ -184,28 +258,34 @@ export function buildAgentSettingsModel(
 ): AgentSettingsModel {
   const summary = input.summary ?? {};
   const permissionDenied = input.permissionDenied === true;
+  const backendLabel = BACKEND_LABELS[input.connection.backendKind];
   const identityDetail = cleanValue(input.identityDetail)
-    ?? `${input.connection.label} · ${BACKEND_LABELS[input.connection.backendKind]}`;
+    ?? `${input.connection.label} · ${backendLabel}`;
 
   return {
     identity: {
       name: input.agent.name,
       detail: identityDetail,
+      backendLabel,
+      activeMinutesAgo: input.capabilities.heartbeat && (input.agentCount ?? 1) <= 1
+        ? heartbeatMinutesAgo(summary.lastHeartbeatAt, input.now ?? Date.now())
+        : null,
       editable: (input.capabilities.agentEdit || input.capabilities.files) && !permissionDenied,
       locked: permissionDenied,
     },
+    stats: STATS
+      .filter((definition) => isDefinitionVisible(definition, input.capabilities))
+      .map((definition) => ({
+        id: definition.id,
+        section: definition.id,
+        placement: definition.placement,
+        title: definition.title(summary),
+        value: definition.value(summary),
+        detail: definition.detail?.(summary),
+        attention: definition.attention?.(summary) ?? false,
+        locked: permissionDenied,
+      })),
     groups: [
-      {
-        id: 'agent',
-        rows: buildRows(
-          AGENT_ROWS,
-          input.capabilities,
-          summary,
-          input.connectionState,
-          input.isPro,
-          permissionDenied,
-        ),
-      },
       {
         id: 'connection',
         title: input.connection.label,
@@ -235,6 +315,7 @@ function buildRows(
     .map((definition) => ({
       id: definition.id,
       section: definition.id,
+      placement: definition.placement,
       title: definition.title,
       value: definition.value(summary, connectionState),
       attention: definition.attention?.(summary, connectionState) ?? false,
@@ -243,7 +324,7 @@ function buildRows(
 }
 
 function isDefinitionVisible(
-  definition: RowDefinition,
+  definition: Gate,
   capabilities: Capabilities,
 ): boolean {
   if (!definition.capabilities) return true;
@@ -267,4 +348,9 @@ export function formatUsd(value: number | undefined): string | undefined {
   if (value === undefined || !Number.isFinite(value)) return undefined;
   const normalized = Math.max(0, value);
   return `$${normalized.toFixed(2)}`;
+}
+
+export function formatTokens(value: number | undefined): string | undefined {
+  if (value === undefined || !Number.isFinite(value)) return undefined;
+  return formatCompactTokenCount(Math.max(0, Math.trunc(value)));
 }

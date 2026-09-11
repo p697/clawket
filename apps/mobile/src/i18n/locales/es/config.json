@@ -293,7 +293,7 @@
   "Providers": "Proveedores",
   "Providers and cost": "Proveedores y coste",
   "Installed": "Instaladas",
-  "New scheduled task": "Nueva tarea programada",
+  "New cron job": "Nueva tarea cron",
   "Agent files": "Archivos del agente",
   "Edit files": "Editar archivos",
   "Activity": "Actividad",

@@ -1542,6 +1542,11 @@ export class GatewayProtocolClient {
     return this.request('cron.run', { id, mode });
   }
 
+  /** Raw Gateway `last-heartbeat` payload; callers normalize it with `parseLastHeartbeat`. */
+  public async fetchLastHeartbeat(): Promise<unknown> {
+    return this.request('last-heartbeat', {});
+  }
+
   public async listCronRuns(input: {
     scope?: 'job' | 'all';
     id?: string;

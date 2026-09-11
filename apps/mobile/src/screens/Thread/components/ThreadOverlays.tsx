@@ -8,10 +8,11 @@ import { ChatSharePosterModal } from '../../../components/chat/ChatSharePosterMo
 import { CommandOptionPickerModal } from '../../../components/chat/CommandOptionPickerModal';
 import { ImagePreviewModal } from '../../../components/chat/ImagePreviewModal';
 import { ModelPickerModal } from '../../../components/chat/ModelPickerModal';
-import { PromptPickerModal } from '../../../components/chat/PromptPickerModal';
 import { ThinkingLevelPickerModal } from '../../../components/chat/ThinkingLevelPickerModal';
+import { CommandsSheet } from '../../../components/chat/CommandsSheet';
+import type { SlashCommand } from '../../../data/slash-commands';
 import { AppUpdateAnnouncementSheet } from './AppUpdateAnnouncementSheet';
-import { ThreadAddSheet } from './ThreadAddSheet';
+import { ThreadAddSheet, type ThreadAddSheetProps } from './ThreadAddSheet';
 
 type PreviewState = Readonly<{
   visible: boolean;
@@ -29,12 +30,18 @@ export type ThreadOverlaysProps = Readonly<{
   addVisible: boolean;
   attachmentsEnabled: boolean;
   skillsEnabled: boolean;
+  remainingAttachmentSlots?: number;
   onCloseAdd: () => void;
   onPickImage: () => void;
   onTakePhoto: () => void;
   onChooseFile?: () => void;
+  onAttachRecentPhotos?: ThreadAddSheetProps['onAttachRecentPhotos'];
   onOpenSkills?: () => void;
-  onOpenPrompts?: () => void;
+  onOpenCommands?: () => void;
+  onCreateScheduledTask?: () => void;
+  onOpenTools?: () => void;
+  onAddPresented?: ThreadAddSheetProps['onPresented'];
+  onAddAction?: ThreadAddSheetProps['onAction'];
   shareMessage: UiMessage | null;
   agentName: string;
   agentEmoji?: string;
@@ -65,10 +72,11 @@ export type ThreadOverlaysProps = Readonly<{
     onRetry: () => void;
     onSelect: (value: string) => void;
   }>;
-  promptPicker: Readonly<{
+  commandsSheet: Readonly<{
     visible: boolean;
+    commands: readonly SlashCommand[];
     onClose: () => void;
-    onSelect: (text: string) => void;
+    onSelect: (command: SlashCommand) => void;
   }>;
   thinkingPicker: Readonly<{
     visible: boolean;
@@ -91,12 +99,18 @@ export function ThreadOverlays({
   addVisible,
   attachmentsEnabled,
   skillsEnabled,
+  remainingAttachmentSlots,
   onCloseAdd,
   onPickImage,
   onTakePhoto,
   onChooseFile,
+  onAttachRecentPhotos,
   onOpenSkills,
-  onOpenPrompts,
+  onOpenCommands,
+  onCreateScheduledTask,
+  onOpenTools,
+  onAddPresented,
+  onAddAction,
   shareMessage,
   agentName,
   agentEmoji,
@@ -106,7 +120,7 @@ export function ThreadOverlays({
   preview,
   modelPicker,
   commandPicker,
-  promptPicker,
+  commandsSheet,
   thinkingPicker,
   announcement,
 }: ThreadOverlaysProps): React.JSX.Element {
@@ -116,12 +130,18 @@ export function ThreadOverlays({
         visible={addVisible}
         attachmentsEnabled={attachmentsEnabled}
         skillsEnabled={skillsEnabled}
+        remainingAttachmentSlots={remainingAttachmentSlots}
         onClose={onCloseAdd}
         onPickImage={onPickImage}
         onTakePhoto={onTakePhoto}
         onChooseFile={onChooseFile}
+        onAttachRecentPhotos={onAttachRecentPhotos}
         onOpenSkills={onOpenSkills}
-        onOpenPrompts={onOpenPrompts}
+        onOpenCommands={onOpenCommands}
+        onCreateScheduledTask={onCreateScheduledTask}
+        onOpenTools={onOpenTools}
+        onPresented={onAddPresented}
+        onAction={onAddAction}
       />
       <ChatSharePosterModal
         visible={Boolean(shareMessage)}
@@ -168,10 +188,11 @@ export function ThreadOverlays({
         onRetry={commandPicker.onRetry}
         onSelectOption={commandPicker.onSelect}
       />
-      <PromptPickerModal
-        visible={promptPicker.visible}
-        onClose={promptPicker.onClose}
-        onSelectPrompt={promptPicker.onSelect}
+      <CommandsSheet
+        visible={commandsSheet.visible}
+        commands={commandsSheet.commands}
+        onClose={commandsSheet.onClose}
+        onSelect={commandsSheet.onSelect}
       />
       <ThinkingLevelPickerModal
         visible={thinkingPicker.visible}

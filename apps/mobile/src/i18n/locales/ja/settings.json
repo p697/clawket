@@ -253,5 +253,10 @@
   "Execution tools": "実行ツール",
   "Web tools": "ウェブツール",
   "Interface tools": "画面操作ツール",
-  "Automation tools": "自動化ツール"
+  "Automation tools": "自動化ツール",
+  "Cost today": "今日のコスト",
+  "Tokens today": "今日のトークン",
+  "Active {{age}}": "{{age}}に活動",
+  "{{count}} failed": "{{count}} 件失敗",
+  "{{value}} tokens": "{{value}} トークン"
 }

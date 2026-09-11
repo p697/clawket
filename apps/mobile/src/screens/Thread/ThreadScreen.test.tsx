@@ -111,6 +111,8 @@ jest.mock('../../services/app-update-announcement', () => ({
 jest.mock('../../services/analytics/events', () => ({
   analyticsEvents: {
     chatAbortTapped: jest.fn(),
+    chatAddMenuOpened: jest.fn(),
+    chatAddMenuAction: jest.fn(),
     runCardOpened: jest.fn(),
     threadOpened: jest.fn(),
     threadLoadState: jest.fn(),
@@ -222,6 +224,7 @@ function createController(): Record<string, unknown> {
     pendingImages: [],
     pickFile: jest.fn(),
     pickImage: jest.fn(),
+    attachLocalImages: jest.fn(),
     preview: {
       closePreview: jest.fn(),
       openPreview: jest.fn(),
@@ -903,6 +906,62 @@ describe('ThreadScreen connection container', () => {
     expect(mockThreadOverlayProps?.onPickImage).toBe(mockController.pickImage);
     expect(mockThreadOverlayProps?.onTakePhoto).toBe(mockController.takePhoto);
     expect(mockThreadOverlayProps?.onChooseFile).toBeUndefined();
+  });
+
+  it('gates every Add sheet entry by backend capability for OpenClaw, Hermes and YouMind', () => {
+    const props = createNavigationProps();
+    adapter.capabilities = { ...CAPABILITY_MATRIX.openclaw };
+    const view = render(<ThreadScreen {...props} />);
+
+    expect(mockThreadViewProps?.onOpenAddMenu).toBeDefined();
+    expect(mockThreadOverlayProps?.onAttachRecentPhotos).toBe(mockController.attachLocalImages);
+    expect(mockThreadOverlayProps?.remainingAttachmentSlots).toBe(6);
+    expect(mockThreadOverlayProps?.onOpenCommands).toBeDefined();
+    expect(mockThreadOverlayProps?.onOpenSkills).toBeDefined();
+    expect(mockThreadOverlayProps?.commandsSheet.visible).toBe(false);
+    act(() => mockThreadOverlayProps?.onOpenCommands?.());
+    expect(mockThreadOverlayProps?.commandsSheet.visible).toBe(true);
+    const command = { key: 'status', command: '/status', description: 'Show session status', action: 'send' as const };
+    act(() => mockThreadOverlayProps?.commandsSheet.onSelect(command));
+    expect(mockController.onSelectSlashCommand).toHaveBeenCalledWith(command, 'commands_sheet');
+    act(() => mockThreadOverlayProps?.commandsSheet.onClose());
+    expect(mockThreadOverlayProps?.commandsSheet.visible).toBe(false);
+    expect(mockThreadOverlayProps?.onCreateScheduledTask).toBeDefined();
+    expect(mockThreadOverlayProps?.onOpenTools).toBeDefined();
+
+    act(() => mockThreadOverlayProps?.onCreateScheduledTask?.());
+    expect(props.navigation.navigate).toHaveBeenCalledWith('AgentSettingsSection', {
+      connectionId: 'connection-1',
+      agentId: 'atlas',
+      section: 'cron',
+      action: 'create-cron',
+      cronPrompt: 'Draft',
+    });
+    act(() => mockThreadOverlayProps?.onOpenTools?.());
+    expect(props.navigation.navigate).toHaveBeenLastCalledWith('AgentSettingsSection', expect.objectContaining({ section: 'tools' }));
+    act(() => mockThreadOverlayProps?.onAddPresented?.({ photoAccess: 'granted' }));
+    expect(mockedAnalyticsEvents.chatAddMenuOpened).toHaveBeenCalledWith({ backend: 'openclaw', photo_access: 'granted' });
+    act(() => mockThreadOverlayProps?.onAddAction?.('recent-photos', 2));
+    expect(mockedAnalyticsEvents.chatAddMenuAction).toHaveBeenCalledWith({ backend: 'openclaw', action: 'recent-photos', count: 2 });
+
+    adapter.capabilities = { ...CAPABILITY_MATRIX.hermes };
+    view.rerender(<ThreadScreen {...props} />);
+    expect(mockThreadViewProps?.onOpenAddMenu).toBeDefined();
+    expect(mockThreadOverlayProps?.onAttachRecentPhotos).toBe(mockController.attachLocalImages);
+    // Hermes only interprets its inline directives; the OpenClaw catalog must not be offered.
+    expect(mockThreadOverlayProps?.onOpenCommands).toBeUndefined();
+    expect(mockThreadOverlayProps?.onOpenSkills).toBeDefined();
+    expect(mockThreadOverlayProps?.onCreateScheduledTask).toBeDefined();
+    expect(mockThreadOverlayProps?.onOpenTools).toBeUndefined();
+
+    adapter.capabilities = { ...CAPABILITY_MATRIX.youmind };
+    view.rerender(<ThreadScreen {...props} />);
+    expect(mockThreadViewProps?.onOpenAddMenu).toBeUndefined();
+    expect(mockThreadOverlayProps?.onAttachRecentPhotos).toBeUndefined();
+    expect(mockThreadOverlayProps?.onOpenCommands).toBeUndefined();
+    expect(mockThreadOverlayProps?.onOpenSkills).toBeUndefined();
+    expect(mockThreadOverlayProps?.onCreateScheduledTask).toBeUndefined();
+    expect(mockThreadOverlayProps?.onOpenTools).toBeUndefined();
   });
 
   it('activates an inactive route and keeps the view in loading with no optimistic capabilities', async () => {

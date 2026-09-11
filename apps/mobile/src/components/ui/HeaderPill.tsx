@@ -83,7 +83,7 @@ export function HeaderPill({
           {name}
         </Text>
         {working ? (
-          <Animated.View style={subtitleAnimatedStyle}>
+          <Animated.View style={[styles.working, subtitleAnimatedStyle]}>
             <TypingDots testID={testID ? `${testID}-working` : undefined} />
           </Animated.View>
         ) : subtitle.trim() ? <Animated.Text
@@ -137,6 +137,11 @@ const styles = StyleSheet.create({
     fontSize: FontSize.caption,
     lineHeight: LineHeight.caption,
     fontWeight: FontWeight.regular,
+  },
+  // The dots sit a step in from the name's left edge; flush-left they read
+  // as hanging off the pill (owner-requested 2026-09-11).
+  working: {
+    paddingLeft: Space.xs,
   },
   pressed: {
     opacity: PRESSED_OPACITY,

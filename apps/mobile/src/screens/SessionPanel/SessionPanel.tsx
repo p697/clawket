@@ -7,14 +7,16 @@ import React, {
 } from 'react';
 import {
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import {
+  Check,
   ChevronDown,
   ChevronRight,
-  Filter,
+  Pin,
   Search,
 } from 'lucide-react-native';
 import { BottomSheetFlatList } from '@gorhom/bottom-sheet';
@@ -22,13 +24,16 @@ import { useTranslation } from 'react-i18next';
 import type { AgentDescriptor, Capabilities } from '@clawket/agent-protocol';
 
 import { getConnectionRuntime, useConnections, useRoster } from '../../connection';
+import { AgentAvatar, AvatarWorkingBadge } from '../../components/ui/AgentAvatar';
 import { Banner } from '../../components/ui/Banner';
 import { Button } from '../../components/ui/Button';
 import { FloatingButton } from '../../components/ui/FloatingButton';
 import { FormTextInput } from '../../components/ui/FormTextInput';
 import { SearchInput } from '../../components/ui/SearchInput';
-import { SegmentedTabs } from '../../components/ui/SegmentedTabs';
-import { resolveSessionKindIcon } from '../../components/ui/sessionKindIcon';
+import {
+  resolveSessionChannelIcon,
+  resolveSessionKindIcon,
+} from '../../components/ui/sessionKindIcon';
 import { Sheet } from '../../components/ui/Sheet';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { useAppTheme } from '../../theme';
@@ -36,30 +41,35 @@ import {
   ControlSize,
   FontSize,
   FontWeight,
+  HitSize,
   IconSize,
   LineHeight,
   Radius,
+  Shadow,
   Space,
   StatusSize,
+  createThemedShadowStyle,
 } from '../../theme/tokens';
 import { relativeTime } from '../../utils/chat-message';
 import { analyticsEvents } from '../../services/analytics/events';
 import {
   availableSessionActions,
-  buildSessionPanelGroups,
+  buildSessionPanelAgents,
+  buildSessionPanelChips,
+  buildSessionPanelListItems,
   buildSessionPanelRows,
   filterSessionPanelRows,
   normalizeSessionRenameTitle,
+  resolveSessionPanelFilterKind,
   resolveSessionPanelPageState,
-  summarizeSessionPanelRows,
   type SessionPanelAction,
-  type SessionPanelAgentGroup,
-  type SessionPanelKindFilter,
-  type SessionPanelMode,
+  type SessionPanelAgentOption,
+  type SessionPanelChip,
+  type SessionPanelFilter,
+  type SessionPanelListItem,
   type SessionPanelPageState,
   type SessionPanelRenamePayload,
   type SessionPanelRow,
-  type SessionPanelSection,
 } from './model';
 
 type MaybePromise = void | Promise<void>;
@@ -68,6 +78,7 @@ type SessionPanelActionHandler = (
   action: SessionPanelAction,
   payload?: SessionPanelRenamePayload,
 ) => MaybePromise;
+type PinnedSessionKeys = Readonly<Record<string, ReadonlyArray<string>>>;
 
 const MUTATION_CAPABILITIES_OFF = Object.freeze({
   sessionRename: false,
@@ -77,7 +88,9 @@ const MUTATION_CAPABILITIES_OFF = Object.freeze({
 
 const PANEL_SKELETON_ROWS = Object.freeze(['one', 'two', 'three', 'four', 'five']);
 const PANEL_SEARCH_ANALYTICS_DEBOUNCE_MS = 400;
-let rememberedPanelMode: SessionPanelMode = 'grouped';
+/** Chips are 36 points tall; the slop restores the 44-point target. */
+const CHIP_HIT_SLOP = Object.freeze({ top: Space.xs, bottom: Space.xs });
+const CHIP_COUNT_SELECTED_OPACITY = 0.7;
 
 export type SessionPanelViewProps = Readonly<{
   visible: boolean;
@@ -91,14 +104,10 @@ export type SessionPanelViewProps = Readonly<{
     'sessionRename' | 'sessionReset' | 'sessionDelete'
   >;
   bridgeOutdated?: boolean;
-  initialMode?: SessionPanelMode;
-  kindFilter?: SessionPanelKindFilter;
   onClose: () => void;
   onSelectSession: (row: SessionPanelRow) => MaybePromise;
   onSessionAction?: SessionPanelActionHandler;
-  onOpenKindFilter?: (current: SessionPanelKindFilter) => void;
   onRetry?: () => MaybePromise;
-  onModeChange?: (mode: SessionPanelMode) => void;
   onOpenBridgeHelp?: () => void;
   onOpenPermission?: () => void;
 }>;
@@ -108,38 +117,79 @@ export type SessionPanelProps = Readonly<{
   currentAgentId: string;
   currentSessionKey: string;
   permissionDenied?: boolean;
-  initialMode?: SessionPanelMode;
-  kindFilter?: SessionPanelKindFilter;
+  pinnedSessionKeys?: PinnedSessionKeys;
   onClose: () => void;
   onSelectSession: (row: SessionPanelRow) => MaybePromise;
   onSessionAction?: SessionPanelActionHandler;
-  onOpenKindFilter?: (current: SessionPanelKindFilter) => void;
-  onModeChange?: (mode: SessionPanelMode) => void;
   onOpenBridgeHelp?: () => void;
   onOpenPermission?: () => void;
 }>;
 
-function sectionLabel(
-  section: SessionPanelSection['kind'],
-  t: ReturnType<typeof useTranslation>['t'],
-): string {
-  if (section === 'main') return t('Main session');
-  if (section === 'channel') return t('Channels');
-  if (section === 'direct_group') return t('Direct & groups');
-  if (section === 'subagent') return t('Subagents');
-  return t('Scheduled');
+type Translate = ReturnType<typeof useTranslation>['t'];
+
+function chipLabel(chip: SessionPanelChip, t: Translate): string {
+  if (chip.key === 'all') return t('All');
+  if (chip.key === 'direct_group') return t('Direct & groups');
+  if (chip.key === 'subagent') return t('Subagents');
+  if (chip.key === 'cron') return t('Scheduled');
+  return chip.label ?? t('Channels');
+}
+
+function rowTitle(row: SessionPanelRow, t: Translate): string {
+  if (row.kind === 'main') return t('Main session');
+  return row.title === row.key ? t('New session') : row.title;
+}
+
+function SessionTile({
+  row,
+  agent,
+}: Readonly<{ row: SessionPanelRow; agent: AgentDescriptor | null }>): React.JSX.Element {
+  const { theme } = useAppTheme();
+  if (row.kind === 'main') {
+    return (
+      <AgentAvatar
+        testID={`session-panel-row-${row.id}-avatar`}
+        agentId={row.agentId}
+        name={agent?.name ?? row.agentName}
+        emoji={agent?.emoji}
+        avatarUrl={agent?.avatarUrl}
+        variant="panel"
+        status={row.hasActiveRun ? 'working' : 'idle'}
+      />
+    );
+  }
+  const Icon = row.kind === 'channel'
+    ? resolveSessionChannelIcon(row.channel)
+    : resolveSessionKindIcon(row.kind);
+  return (
+    <View style={styles.tileSlot}>
+      <View
+        testID={`session-panel-row-${row.id}-tile`}
+        style={[styles.tile, { backgroundColor: theme.colors.surface }]}
+      >
+        <Icon
+          testID={`session-panel-row-${row.id}-icon`}
+          size={IconSize.md}
+          color={theme.colors.ink}
+        />
+      </View>
+      {row.hasActiveRun ? (
+        <AvatarWorkingBadge testID={`session-panel-row-${row.id}-working`} />
+      ) : null}
+    </View>
+  );
 }
 
 function SessionRow({
   row,
-  listMode,
+  agent,
   selected,
   capabilities,
   onPress,
   onOpenActions,
 }: Readonly<{
   row: SessionPanelRow;
-  listMode: boolean;
+  agent: AgentDescriptor | null;
   selected: boolean;
   capabilities: SessionPanelViewProps['capabilities'];
   onPress: () => void;
@@ -148,19 +198,14 @@ function SessionRow({
   const { theme } = useAppTheme();
   const { t } = useTranslation('common');
   const actions = availableSessionActions(row, capabilities);
-  const Icon = resolveSessionKindIcon(row.kind);
-  const dotColor = row.attention !== null
-    ? theme.colors.bad
-    : row.hasActiveRun
-      ? theme.colors.accent
-      : row.status === 'recent'
-        ? theme.colors.good
-        : theme.colors.inkTertiary;
+  const title = rowTitle(row, t);
+  const showUnread = row.unread && !selected && row.attention === null;
 
   return (
     <Pressable
       testID={`session-panel-row-${row.id}`}
       accessibilityRole="button"
+      accessibilityLabel={title}
       accessibilityState={{ selected }}
       onPress={onPress}
       onLongPress={actions.length ? () => onOpenActions(row) : undefined}
@@ -170,64 +215,257 @@ function SessionRow({
         pressed ? { backgroundColor: theme.colors.surfaceFloating } : null,
       ]}
     >
-      <View
-        testID={`session-panel-row-${row.id}-status`}
-        style={[styles.statusDot, { backgroundColor: dotColor }]}
-      />
-      {listMode ? (
-        <Icon
-          testID={`session-panel-row-${row.id}-icon`}
-          size={IconSize.sm}
-          color={theme.colors.inkSecondary}
-        />
-      ) : null}
+      <SessionTile row={row} agent={agent} />
+      <View style={styles.copy}>
+        <View style={styles.titleRow}>
+          {row.pinned ? (
+            <Pin
+              testID={`session-panel-row-${row.id}-pinned`}
+              size={IconSize.sm}
+              color={theme.colors.inkTertiary}
+            />
+          ) : null}
+          <Text style={[styles.rowTitle, { color: theme.colors.ink }]} numberOfLines={1}>
+            {title}
+          </Text>
+        </View>
+        {row.preview ? (
+          <Text
+            testID={`session-panel-row-${row.id}-preview`}
+            style={[
+              styles.rowPreview,
+              { color: showUnread ? theme.colors.ink : theme.colors.inkSecondary },
+            ]}
+            numberOfLines={1}
+          >
+            {row.preview}
+          </Text>
+        ) : null}
+      </View>
+      <View style={styles.trailing}>
+        <Text style={[styles.rowTime, { color: theme.colors.inkTertiary }]} numberOfLines={1}>
+          {relativeTime(row.updatedAt)}
+        </Text>
+        {row.attention !== null ? (
+          <View
+            testID={`session-panel-row-${row.id}-attention`}
+            style={[styles.signalDot, { backgroundColor: theme.colors.bad }]}
+          />
+        ) : showUnread ? (
+          <View
+            testID={`session-panel-row-${row.id}-unread`}
+            style={[styles.signalDot, { backgroundColor: theme.colors.ink }]}
+          />
+        ) : null}
+      </View>
+    </Pressable>
+  );
+}
+
+function SubagentsRow({
+  count,
+  onPress,
+}: Readonly<{ count: number; onPress: () => void }>): React.JSX.Element {
+  const { theme } = useAppTheme();
+  const { t } = useTranslation('common');
+  const Icon = resolveSessionKindIcon('subagent');
+  return (
+    <Pressable
+      testID="session-panel-subagents"
+      accessibilityRole="button"
+      accessibilityLabel={t('Subagents')}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.sessionRow,
+        pressed ? { backgroundColor: theme.colors.surfaceFloating } : null,
+      ]}
+    >
+      <View style={[styles.tile, { backgroundColor: theme.colors.surface }]}>
+        <Icon size={IconSize.md} color={theme.colors.ink} />
+      </View>
+      <Text style={[styles.rowTitle, styles.copy, { color: theme.colors.ink }]} numberOfLines={1}>
+        {t('Subagents')}
+      </Text>
+      <Text style={[styles.rowCount, { color: theme.colors.inkSecondary }]}>{count}</Text>
+      <ChevronRight size={IconSize.md} color={theme.colors.inkTertiary} />
+    </Pressable>
+  );
+}
+
+function FilterChip({
+  chip,
+  selected,
+  onPress,
+}: Readonly<{ chip: SessionPanelChip; selected: boolean; onPress: () => void }>): React.JSX.Element {
+  const { theme } = useAppTheme();
+  const { t } = useTranslation('common');
+  const label = chipLabel(chip, t);
+  return (
+    <Pressable
+      testID={`session-panel-chip-${chip.key}`}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ selected }}
+      hitSlop={CHIP_HIT_SLOP}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.chip,
+        { backgroundColor: selected ? theme.colors.ink : theme.colors.surface },
+        pressed ? styles.pressed : null,
+      ]}
+    >
       <Text
-        style={[styles.rowTitle, { color: theme.colors.ink }]}
+        style={[
+          styles.chipLabel,
+          {
+            color: selected ? theme.colors.canvas : theme.colors.ink,
+            fontWeight: selected ? FontWeight.semibold : FontWeight.regular,
+          },
+        ]}
         numberOfLines={1}
       >
-        {row.kind === 'main' ? t('Main session') : row.title === row.key ? t('New session') : row.title}
+        {label}
       </Text>
       <Text
-        style={[styles.rowTime, { color: theme.colors.inkTertiary }]}
-        numberOfLines={1}
+        style={[
+          styles.chipCount,
+          selected
+            ? { color: theme.colors.canvas, opacity: CHIP_COUNT_SELECTED_OPACITY }
+            : { color: theme.colors.inkSecondary },
+        ]}
       >
-        {relativeTime(row.updatedAt)}
+        {chip.count}
       </Text>
     </Pressable>
   );
 }
 
-function AgentGroup({
-  group,
+function AgentPill({
+  agent,
+  switchable,
   expanded,
-  onToggle,
+  onPress,
 }: Readonly<{
-  group: SessionPanelAgentGroup;
+  agent: AgentDescriptor;
+  switchable: boolean;
   expanded: boolean;
-  onToggle: () => void;
+  onPress: () => void;
 }>): React.JSX.Element {
   const { theme } = useAppTheme();
+  const { t } = useTranslation('common');
+  const content = (
+    <>
+      <AgentAvatar
+        testID="session-panel-agent-pill-avatar"
+        agentId={agent.agentId}
+        name={agent.name}
+        emoji={agent.emoji}
+        avatarUrl={agent.avatarUrl}
+        variant="header"
+      />
+      <Text style={[styles.agentName, { color: theme.colors.ink }]} numberOfLines={1}>
+        {agent.name}
+      </Text>
+      {switchable ? (
+        <ChevronDown size={IconSize.sm} color={theme.colors.inkSecondary} />
+      ) : null}
+    </>
+  );
+  const chrome = [styles.agentPill, { backgroundColor: theme.colors.surface }];
+  if (!switchable) {
+    return (
+      <View testID="session-panel-agent-pill" accessibilityLabel={agent.name} style={chrome}>
+        {content}
+      </View>
+    );
+  }
   return (
-    <View testID={`session-panel-agent-${group.agent.agentId}`}>
+    <Pressable
+      testID="session-panel-agent-pill"
+      accessibilityRole="button"
+      accessibilityLabel={t('Switch Agent')}
+      accessibilityState={{ expanded }}
+      onPress={onPress}
+      style={({ pressed }) => [...chrome, pressed ? styles.pressed : null]}
+    >
+      {content}
+    </Pressable>
+  );
+}
+
+function AgentMenu({
+  options,
+  activeAgentId,
+  onChoose,
+  onClose,
+}: Readonly<{
+  options: ReadonlyArray<SessionPanelAgentOption>;
+  activeAgentId: string;
+  onChoose: (option: SessionPanelAgentOption) => void;
+  onClose: () => void;
+}>): React.JSX.Element {
+  const { theme } = useAppTheme();
+  const { t } = useTranslation('common');
+  const card = useMemo(() => [
+    styles.agentMenu,
+    { backgroundColor: theme.colors.surfaceFloating },
+    createThemedShadowStyle(theme.colors, theme.scheme, Shadow.md),
+  ], [theme.colors, theme.scheme]);
+  return (
+    <View testID="session-panel-agent-menu" style={StyleSheet.absoluteFill}>
       <Pressable
-        testID={`session-panel-agent-${group.agent.agentId}-toggle`}
+        testID="session-panel-agent-menu-backdrop"
         accessibilityRole="button"
-        accessibilityState={{ expanded }}
-        onPress={onToggle}
-        style={({ pressed }) => [styles.agentHeader, pressed ? styles.pressed : null]}
-      >
-        {expanded ? (
-          <ChevronDown size={IconSize.sm} color={theme.colors.inkSecondary} />
-        ) : (
-          <ChevronRight size={IconSize.sm} color={theme.colors.inkSecondary} />
-        )}
-        <Text style={[styles.agentName, { color: theme.colors.ink }]} numberOfLines={1}>
-          {group.agent.name}
-        </Text>
-        <Text style={[styles.agentCount, { color: theme.colors.inkSecondary }]}>
-          {group.count}
-        </Text>
-      </Pressable>
+        accessibilityLabel={t('Close')}
+        style={StyleSheet.absoluteFill}
+        onPress={onClose}
+      />
+      <View style={card}>
+        {options.map((option) => {
+          const selected = option.agent.agentId === activeAgentId;
+          return (
+            <Pressable
+              key={option.agent.agentId}
+              testID={`session-panel-agent-${option.agent.agentId}`}
+              accessibilityRole="button"
+              accessibilityLabel={option.agent.name}
+              accessibilityState={{ selected }}
+              onPress={() => onChoose(option)}
+              style={({ pressed }) => [
+                styles.agentMenuRow,
+                pressed ? { backgroundColor: theme.colors.surface } : null,
+              ]}
+            >
+              <AgentAvatar
+                agentId={option.agent.agentId}
+                name={option.agent.name}
+                emoji={option.agent.emoji}
+                avatarUrl={option.agent.avatarUrl}
+                variant="sheet"
+              />
+              <Text
+                style={[
+                  styles.agentMenuName,
+                  {
+                    color: theme.colors.ink,
+                    fontWeight: selected ? FontWeight.semibold : FontWeight.regular,
+                  },
+                ]}
+                numberOfLines={1}
+              >
+                {option.agent.name}
+              </Text>
+              {selected ? (
+                <Check size={IconSize.md} color={theme.colors.ink} />
+              ) : (
+                <Text style={[styles.rowCount, { color: theme.colors.inkSecondary }]}>
+                  {option.count}
+                </Text>
+              )}
+            </Pressable>
+          );
+        })}
+      </View>
     </View>
   );
 }
@@ -238,8 +476,11 @@ function PanelLoading(): React.JSX.Element {
     <View testID="session-panel-loading" accessibilityLabel={t('Loading sessions')}>
       {PANEL_SKELETON_ROWS.map((key) => (
         <View key={key} style={styles.skeletonRow}>
-          <Skeleton style={styles.skeletonDot} />
-          <Skeleton style={styles.skeletonTitle} />
+          <Skeleton style={styles.skeletonTile} />
+          <View style={styles.skeletonCopy}>
+            <Skeleton style={styles.skeletonTitle} />
+            <Skeleton style={styles.skeletonPreview} />
+          </View>
           <Skeleton style={styles.skeletonTime} />
         </View>
       ))}
@@ -249,9 +490,10 @@ function PanelLoading(): React.JSX.Element {
 
 function actionLabel(
   action: SessionPanelAction,
-  t: ReturnType<typeof useTranslation>['t'],
+  pinned: boolean,
+  t: Translate,
 ): string {
-  if (action === 'pin') return t('Pin to roster');
+  if (action === 'pin') return pinned ? t('Unpin from roster') : t('Pin to roster');
   if (action === 'rename') return t('Rename');
   if (action === 'reset') return t('Reset');
   return t('Delete');
@@ -295,7 +537,7 @@ function SessionActionSheet({
               styles.actionText,
               { color: action === 'delete' ? theme.colors.bad : theme.colors.ink },
             ]}>
-              {actionLabel(action, t)}
+              {actionLabel(action, row?.pinned === true, t)}
             </Text>
           </Pressable>
         ))}
@@ -424,28 +666,20 @@ export function SessionPanelView({
   currentSessionKey,
   capabilities,
   bridgeOutdated = false,
-  initialMode,
-  kindFilter = 'all',
   onClose,
   onSelectSession,
   onSessionAction,
-  onOpenKindFilter,
   onRetry,
-  onModeChange,
   onOpenBridgeHelp,
   onOpenPermission,
 }: SessionPanelViewProps): React.JSX.Element {
   const { t } = useTranslation('common');
   const { theme } = useAppTheme();
-  const [mode, setMode] = useState<SessionPanelMode>(initialMode ?? rememberedPanelMode);
+  const [viewAgentId, setViewAgentId] = useState(currentAgentId);
+  const [filter, setFilter] = useState<SessionPanelFilter>('all');
   const [query, setQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
-  const [expandedAgentIds, setExpandedAgentIds] = useState<ReadonlySet<string>>(
-    () => new Set([currentAgentId]),
-  );
-  const [completedExpandedAgentIds, setCompletedExpandedAgentIds] = useState<ReadonlySet<string>>(
-    () => new Set(),
-  );
+  const [agentMenuOpen, setAgentMenuOpen] = useState(false);
   const [actionRow, setActionRow] = useState<SessionPanelRow | null>(null);
   const [confirmation, setConfirmation] = useState<Readonly<{
     row: SessionPanelRow;
@@ -460,19 +694,45 @@ export function SessionPanelView({
     }
     if (wasVisibleRef.current) return;
     wasVisibleRef.current = true;
-    analyticsEvents.sessionPanelOpened({ mode, session_count: rows.length });
-  }, [mode, rows.length, visible]);
+    analyticsEvents.sessionPanelOpened({ session_count: rows.length });
+  }, [rows.length, visible]);
 
+  // Each opening starts on the conversation's own Agent with the whole list.
   useEffect(() => {
-    setExpandedAgentIds((current) => new Set([...current, currentAgentId]));
-  }, [currentAgentId]);
+    if (!visible) return;
+    setViewAgentId(currentAgentId);
+    setFilter('all');
+    setAgentMenuOpen(false);
+  }, [currentAgentId, visible]);
 
+  const agentOptions = useMemo(() => buildSessionPanelAgents(rows, agents), [agents, rows]);
+  const viewAgent = useMemo(() => (
+    agents.find((agent) => agent.agentId === viewAgentId)
+      ?? agents.find((agent) => agent.agentId === currentAgentId)
+      ?? agents[0]
+      ?? null
+  ), [agents, currentAgentId, viewAgentId]);
+  const viewAgentIdResolved = viewAgent?.agentId ?? currentAgentId;
+  const agentRows = useMemo(
+    () => rows.filter((row) => row.agentId === viewAgentIdResolved),
+    [rows, viewAgentIdResolved],
+  );
+  const chips = useMemo(() => buildSessionPanelChips(agentRows), [agentRows]);
+  const activeFilter: SessionPanelFilter = chips.some((chip) => chip.key === filter) ? filter : 'all';
   const filteredRows = useMemo(() => filterSessionPanelRows(rows, {
+    agentId: viewAgentIdResolved,
+    filter: activeFilter,
     query,
-    kindFilter,
-  }), [kindFilter, query, rows]);
+  }), [activeFilter, query, rows, viewAgentIdResolved]);
+  const searching = query.trim().length > 0;
+  const listItems = useMemo<ReadonlyArray<SessionPanelListItem>>(() => (
+    searching
+      ? filteredRows.map((row) => ({ type: 'row', row }))
+      : buildSessionPanelListItems(filteredRows, activeFilter)
+  ), [activeFilter, filteredRows, searching]);
+
   useEffect(() => {
-    if (!visible || !query.trim()) return undefined;
+    if (!visible || !searching) return undefined;
     const resultKinds = [...new Set(filteredRows.map((row) => row.kind))].sort().join(',') || 'none';
     const timer = setTimeout(() => {
       analyticsEvents.searchPerformed({
@@ -482,20 +742,21 @@ export function SessionPanelView({
       });
     }, PANEL_SEARCH_ANALYTICS_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [filteredRows, query, visible]);
-  const groups = useMemo(
-    () => buildSessionPanelGroups(filteredRows, agents, currentAgentId),
-    [agents, currentAgentId, filteredRows],
-  );
-  const summary = useMemo(() => summarizeSessionPanelRows(filteredRows), [filteredRows]);
-  const autoExpand = query.trim().length > 0 || kindFilter !== 'all';
+  }, [filteredRows, searching, visible]);
 
-  const switchMode = useCallback((next: SessionPanelMode) => {
-    rememberedPanelMode = next;
-    setMode(next);
-    if (next !== mode) analyticsEvents.sessionPanelModeChanged({ mode: next });
-    onModeChange?.(next);
-  }, [mode, onModeChange]);
+  const chooseFilter = useCallback((next: SessionPanelFilter) => {
+    if (next !== activeFilter) {
+      analyticsEvents.sessionPanelFilterChanged({ filter: resolveSessionPanelFilterKind(next) });
+    }
+    setFilter(next);
+  }, [activeFilter]);
+  const chooseAgent = useCallback((option: SessionPanelAgentOption) => {
+    setAgentMenuOpen(false);
+    if (option.agent.agentId === viewAgentIdResolved) return;
+    analyticsEvents.sessionPanelAgentSwitched({ session_count: option.count });
+    setViewAgentId(option.agent.agentId);
+    setFilter('all');
+  }, [viewAgentIdResolved]);
   const select = useCallback((row: SessionPanelRow) => {
     analyticsEvents.chatSessionSelected({
       source: 'panel',
@@ -550,52 +811,27 @@ export function SessionPanelView({
     return onSessionAction(row, 'rename', { title });
   }, [onSessionAction]);
 
-  const listItems = useMemo(() => {
-    const items: React.ReactElement[] = [];
-    if (state === 'permission') return items;
-    const appendRow = (row: SessionPanelRow) => items.push(<SessionRow key={row.id}
-      row={row} listMode={mode === 'list'} selected={row.key === currentSessionKey}
-      capabilities={capabilities} onPress={() => select(row)} onOpenActions={setActionRow} />);
-    if (mode === 'list') { filteredRows.forEach(appendRow); return items; }
-    for (const group of groups) {
-      const id = group.agent.agentId;
-      const expanded = autoExpand || expandedAgentIds.has(id);
-      const completedExpanded = completedExpandedAgentIds.has(id);
-      const toggleCompleted = () => setCompletedExpandedAgentIds((current) => {
-        const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next;
-      });
-      items.push(<AgentGroup key={`agent:${id}`} group={group} expanded={expanded}
-        onToggle={() => setExpandedAgentIds((current) => {
-          const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next;
-        })} />);
-      if (!expanded) continue;
-      for (const section of group.sections) {
-        if (section.kind !== 'main' && section.kind !== 'channel') items.push(<Text key={`${id}:${section.kind}`} testID={`session-panel-section-${section.kind}`}
-          style={[styles.sectionTitle, { color: theme.colors.inkSecondary }]}>{sectionLabel(section.kind, t)}</Text>);
-        for (const channel of section.channelGroups ?? []) {
-          items.push(<Text key={`${id}:channel:${channel.key}`} style={[styles.sectionTitle, { color: theme.colors.inkSecondary }]}>
-            {channel.label ?? t('Other channels')}</Text>);
-          channel.rows.forEach(appendRow);
-        }
-        section.rows.forEach(appendRow);
-        if (section.completedRows?.length) {
-          items.push(<Pressable key={`${id}:completed`} testID="session-panel-completed-toggle" accessibilityRole="button"
-            accessibilityState={{ expanded: completedExpanded }} onPress={toggleCompleted} style={styles.completedRow}>
-            {completedExpanded ? <ChevronDown size={IconSize.sm} color={theme.colors.inkSecondary} /> : <ChevronRight size={IconSize.sm} color={theme.colors.inkSecondary} />}
-            <Text style={[styles.completedText, { color: theme.colors.inkSecondary }]}>{t('Completed {{count}}', { count: section.completedRows.length })}</Text>
-          </Pressable>);
-          if (completedExpanded) section.completedRows.forEach(appendRow);
-        }
-      }
+  const renderItem = useCallback(({ item }: { item: SessionPanelListItem }) => {
+    if (item.type === 'subagents') {
+      return <SubagentsRow count={item.count} onPress={() => chooseFilter('subagent')} />;
     }
-    return items;
-  }, [state, mode, filteredRows, currentSessionKey, capabilities, select, groups, autoExpand,
-    expandedAgentIds, completedExpandedAgentIds, currentAgentId, t, theme.colors]);
+    return (
+      <SessionRow
+        row={item.row}
+        agent={viewAgent}
+        selected={item.row.key === currentSessionKey}
+        capabilities={capabilities}
+        onPress={() => select(item.row)}
+        onOpenActions={setActionRow}
+      />
+    );
+  }, [capabilities, chooseFilter, currentSessionKey, select, viewAgent]);
+  const keyExtractor = useCallback((item: SessionPanelListItem) => (
+    item.type === 'row' ? item.row.id : 'subagents'
+  ), []);
 
-  const modeTabs = useMemo(() => [
-    { key: 'grouped' as const, label: t('Grouped') },
-    { key: 'list' as const, label: t('List') },
-  ], [t]);
+  const showList = state !== 'permission';
+  const switchable = agentOptions.length > 1;
 
   return (
     <>
@@ -604,6 +840,14 @@ export function SessionPanelView({
         snapPoints={['93%']}
         visible={visible}
         title={t('Sessions')}
+        titleContent={viewAgent ? (
+          <AgentPill
+            agent={viewAgent}
+            switchable={switchable}
+            expanded={agentMenuOpen}
+            onPress={() => setAgentMenuOpen((current) => !current)}
+          />
+        ) : undefined}
         closeAccessibilityLabel={t('Close sessions')}
         onClose={onClose}
         contentStyle={styles.sheetContent}
@@ -617,105 +861,109 @@ export function SessionPanelView({
           />
         )}
       >
-        <View style={styles.controls}>
-          <SegmentedTabs
-            testID="session-panel-mode"
-            tabs={modeTabs}
-            active={mode}
-            onSwitch={switchMode}
-          />
+        <View style={styles.body}>
+          {showList && chips.length > 0 ? (
+            <ScrollView
+              testID="session-panel-chips"
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              style={styles.chipStrip}
+              contentContainerStyle={styles.chipRow}
+            >
+              {chips.map((chip) => (
+                <FilterChip
+                  key={chip.key}
+                  chip={chip}
+                  selected={chip.key === activeFilter}
+                  onPress={() => chooseFilter(chip.key)}
+                />
+              ))}
+            </ScrollView>
+          ) : null}
           {searchOpen ? (
-            <SearchInput
-              testID="session-panel-search"
-              inSheet
-              autoFocus
-              value={query}
-              placeholder={t('Search sessions')}
-              onChangeText={setQuery}
-              onClear={() => setQuery('')}
+            <View style={styles.searchWrap}>
+              <SearchInput
+                testID="session-panel-search"
+                inSheet
+                autoFocus
+                value={query}
+                placeholder={t('Search sessions')}
+                onChangeText={setQuery}
+                onClear={() => setQuery('')}
+              />
+            </View>
+          ) : null}
+
+          {state === 'loading' ? <PanelLoading /> : (
+            <BottomSheetFlatList
+              testID="session-panel-scroll"
+              style={styles.list}
+              data={showList ? listItems : []}
+              keyExtractor={keyExtractor}
+              renderItem={renderItem}
+              initialNumToRender={12}
+              maxToRenderPerBatch={12}
+              windowSize={5}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={styles.scrollContent}
+              showsVerticalScrollIndicator={false}
+              ListHeaderComponent={(
+                <View>
+                  {state === 'offline' ? (
+                    <Banner
+                      testID="session-panel-offline"
+                      message={t('Offline · reconnecting')}
+                      actionLabel={onRetry ? t('Reconnect') : undefined}
+                      onAction={onRetry ? () => { void onRetry(); } : undefined}
+                    />
+                  ) : null}
+                  {state === 'error' ? (
+                    <Banner
+                      testID="session-panel-error"
+                      tone="bad"
+                      message={t('Sessions unavailable')}
+                      actionLabel={onRetry ? t('Retry') : undefined}
+                      onAction={onRetry ? () => { void onRetry(); } : undefined}
+                    />
+                  ) : null}
+                  {state === 'permission' ? (
+                    <Banner
+                      testID="session-panel-permission"
+                      message={t('Sessions require permission')}
+                      actionLabel={onOpenPermission ? t('View Pro') : undefined}
+                      onAction={onOpenPermission}
+                    />
+                  ) : null}
+                  {bridgeOutdated ? (
+                    <Banner
+                      testID="session-panel-bridge-outdated"
+                      message={t('Update bridge to 3.0 for more sessions')}
+                      actionLabel={onOpenBridgeHelp ? t('Update') : undefined}
+                      onAction={onOpenBridgeHelp}
+                    />
+                  ) : null}
+                  {showList && listItems.length === 0 ? (
+                    <View testID="session-panel-empty" style={styles.emptyState}>
+                      <Text style={[styles.emptyText, { color: theme.colors.inkSecondary }]}>
+                        {rows.length ? t('No matching sessions') : t('No sessions yet')}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+              )}
+            />
+          )}
+
+          {agentMenuOpen && switchable ? (
+            <AgentMenu
+              options={agentOptions}
+              activeAgentId={viewAgentIdResolved}
+              onChoose={chooseAgent}
+              onClose={() => setAgentMenuOpen(false)}
             />
           ) : null}
         </View>
-
-        {state === 'loading' ? <PanelLoading /> : (
-          <BottomSheetFlatList
-            testID="session-panel-scroll"
-            data={listItems}
-            keyExtractor={(item: React.ReactElement) => String(item.key)}
-            renderItem={({ item }: { item: React.ReactElement }) => item}
-            initialNumToRender={12}
-            maxToRenderPerBatch={12}
-            windowSize={5}
-            keyboardShouldPersistTaps="handled"
-            contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={false}
-            ListHeaderComponent={<View>
-            {state === 'offline' ? (
-              <Banner
-                testID="session-panel-offline"
-                message={t('Offline · reconnecting')}
-                actionLabel={onRetry ? t('Reconnect') : undefined}
-                onAction={onRetry ? () => { void onRetry(); } : undefined}
-              />
-            ) : null}
-            {state === 'error' ? (
-              <Banner
-                testID="session-panel-error"
-                tone="bad"
-                message={t('Sessions unavailable')}
-                actionLabel={onRetry ? t('Retry') : undefined}
-                onAction={onRetry ? () => { void onRetry(); } : undefined}
-              />
-            ) : null}
-            {state === 'permission' ? (
-              <Banner
-                testID="session-panel-permission"
-                message={t('Sessions require permission')}
-                actionLabel={onOpenPermission ? t('View Pro') : undefined}
-                onAction={onOpenPermission}
-              />
-            ) : null}
-            {bridgeOutdated ? (
-              <Banner
-                testID="session-panel-bridge-outdated"
-                message={t('Update bridge to 3.0 for more sessions')}
-                actionLabel={onOpenBridgeHelp ? t('Update') : undefined}
-                onAction={onOpenBridgeHelp}
-              />
-            ) : null}
-
-            {state !== 'permission' && filteredRows.length === 0 ? (
-              <View testID="session-panel-empty" style={styles.emptyState}>
-                <Text style={[styles.emptyText, { color: theme.colors.inkSecondary }]}>
-                  {rows.length ? t('No matching sessions') : t('No sessions yet')}
-                </Text>
-              </View>
-            ) : null}
-
-            {state !== 'permission' && filteredRows.length > 0 && mode === 'list' ? (
-              <View testID="session-panel-list-mode">
-                <View style={styles.summaryRow}>
-                  <Text style={[styles.summary, { color: theme.colors.inkSecondary }]}>
-                    {t('{{active}} active · {{recent}} recent · {{idle}} idle', summary)}
-                  </Text>
-                  {onOpenKindFilter ? (
-                    <FloatingButton
-                      testID="session-panel-kind-filter"
-                      icon={Filter}
-                      appearance="quiet"
-                      badge={kindFilter === 'all' ? undefined : { tone: 'accent' }}
-                      accessibilityLabel={t('Filter sessions')}
-                      onPress={() => onOpenKindFilter(kindFilter)}
-                    />
-                  ) : null}
-                </View>
-              </View>
-            ) : null}
-
-            {mode === 'grouped' ? <View testID="session-panel-grouped-mode" /> : null}
-            </View>}
-          />
-        )}
       </Sheet>
 
       <SessionActionSheet
@@ -744,13 +992,10 @@ export function SessionPanel({
   currentAgentId,
   currentSessionKey,
   permissionDenied = false,
-  initialMode,
-  kindFilter,
+  pinnedSessionKeys,
   onClose,
   onSelectSession,
   onSessionAction,
-  onOpenKindFilter,
-  onModeChange,
   onOpenBridgeHelp,
   onOpenPermission,
 }: SessionPanelProps): React.JSX.Element {
@@ -759,7 +1004,10 @@ export function SessionPanel({
   const group = roster.find((candidate) => (
     candidate.connection.id === connections.activeConnectionId
   ));
-  const rows = useMemo(() => buildSessionPanelRows(group), [group]);
+  const rows = useMemo(
+    () => buildSessionPanelRows(group, { pinnedSessionKeys }),
+    [group, pinnedSessionKeys],
+  );
   const agents = useMemo(
     () => group?.agents.map((summary) => summary.agent) ?? [],
     [group],
@@ -786,17 +1034,13 @@ export function SessionPanel({
       currentSessionKey={currentSessionKey}
       capabilities={capabilities}
       bridgeOutdated={group?.connection.bridgeOutdated === true}
-      initialMode={initialMode}
-      kindFilter={kindFilter}
       onClose={onClose}
       onSelectSession={onSelectSession}
       onSessionAction={onSessionAction}
-      onOpenKindFilter={onOpenKindFilter}
       onRetry={() => Promise.all([
         getConnectionRuntime().refreshRoster(),
         getConnectionRuntime().probeActive(),
       ]).then(() => undefined)}
-      onModeChange={onModeChange}
       onOpenBridgeHelp={onOpenBridgeHelp}
       onOpenPermission={onOpenPermission}
     />
@@ -807,34 +1051,145 @@ const styles = StyleSheet.create({
   sheetContent: {
     flexShrink: 1,
   },
-  controls: {
+  body: {
+    flex: 1,
+    minHeight: 0,
+  },
+  // A horizontal ScrollView grows by default; keep the strip one chip tall when the list is short.
+  chipStrip: {
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  chipRow: {
     paddingHorizontal: Space.lg,
-    paddingBottom: Space.sm,
+    paddingTop: Space.md,
+    paddingBottom: Space.md,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
     gap: Space.sm,
   },
-  scrollContent: {
-    paddingHorizontal: Space.lg,
-    paddingBottom: Space.xxl,
-    gap: Space.md,
-  },
-  sessionRow: {
-    minHeight: ControlSize.settingsRow,
-    paddingHorizontal: Space.sm,
-    borderRadius: Radius.card,
+  chip: {
+    height: HitSize.sm,
+    paddingHorizontal: Space.md,
+    borderRadius: Radius.full,
     flexDirection: 'row',
     alignItems: 'center',
     gap: Space.sm,
   },
-  statusDot: {
-    width: StatusSize.dot,
-    height: StatusSize.dot,
-    borderRadius: Radius.full,
+  chipLabel: {
+    fontSize: FontSize.secondary,
+    lineHeight: LineHeight.secondary,
   },
-  rowTitle: {
-    flex: 1,
+  chipCount: {
+    fontSize: FontSize.caption,
+    lineHeight: LineHeight.caption,
+    fontWeight: FontWeight.regular,
+    fontVariant: ['tabular-nums'],
+  },
+  searchWrap: {
+    paddingHorizontal: Space.lg,
+    paddingBottom: Space.sm,
+  },
+  agentPill: {
+    height: ControlSize.pill,
+    maxWidth: '100%',
+    borderRadius: Radius.full,
+    paddingLeft: Space.sm,
+    paddingRight: Space.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space.sm,
+  },
+  agentName: {
+    flexShrink: 1,
     fontSize: FontSize.body,
     lineHeight: LineHeight.body,
     fontWeight: FontWeight.semibold,
+  },
+  agentMenu: {
+    position: 'absolute',
+    top: Space.sm,
+    alignSelf: 'center',
+    minWidth: '60%',
+    maxWidth: '90%',
+    paddingVertical: Space.xs,
+    borderRadius: Radius.card,
+    overflow: 'hidden',
+  },
+  agentMenuRow: {
+    minHeight: ControlSize.settingsRow,
+    paddingLeft: Space.md,
+    paddingRight: Space.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space.md,
+  },
+  agentMenuName: {
+    flex: 1,
+    fontSize: FontSize.body,
+    lineHeight: LineHeight.body,
+  },
+  list: {
+    flex: 1,
+    minHeight: 0,
+  },
+  scrollContent: {
+    paddingHorizontal: Space.lg,
+    paddingTop: Space.xs,
+    paddingBottom: Space.xxl,
+    gap: Space.xs,
+  },
+  sessionRow: {
+    minHeight: ControlSize.settingsRow,
+    paddingHorizontal: Space.sm,
+    paddingVertical: Space.sm,
+    borderRadius: Radius.card,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space.md,
+  },
+  tileSlot: {
+    width: ControlSize.pill,
+    height: ControlSize.pill,
+    position: 'relative',
+  },
+  tile: {
+    width: ControlSize.pill,
+    height: ControlSize.pill,
+    borderRadius: Radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  copy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space.xs,
+  },
+  rowTitle: {
+    flexShrink: 1,
+    fontSize: FontSize.body,
+    lineHeight: LineHeight.body,
+    fontWeight: FontWeight.semibold,
+  },
+  rowPreview: {
+    fontSize: FontSize.secondary,
+    lineHeight: LineHeight.secondary,
+    fontWeight: FontWeight.regular,
+  },
+  rowCount: {
+    fontSize: FontSize.secondary,
+    lineHeight: LineHeight.secondary,
+    fontWeight: FontWeight.regular,
+    fontVariant: ['tabular-nums'],
+  },
+  trailing: {
+    alignSelf: 'flex-start',
+    alignItems: 'flex-end',
+    gap: Space.xs,
   },
   rowTime: {
     fontSize: FontSize.caption,
@@ -842,72 +1197,10 @@ const styles = StyleSheet.create({
     fontWeight: FontWeight.regular,
     fontVariant: ['tabular-nums'],
   },
-  agentHeader: {
-    minHeight: ControlSize.settingsRow,
-    paddingHorizontal: Space.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Space.sm,
-  },
-  agentName: {
-    flex: 1,
-    fontSize: FontSize.body,
-    lineHeight: LineHeight.body,
-    fontWeight: FontWeight.semibold,
-  },
-  agentCount: {
-    fontSize: FontSize.secondary,
-    lineHeight: LineHeight.secondary,
-    fontWeight: FontWeight.regular,
-    fontVariant: ['tabular-nums'],
-  },
-  sections: {
-    gap: Space.md,
-    paddingBottom: Space.lg,
-  },
-  section: {
-    gap: Space.xs,
-  },
-  sectionTitle: {
-    paddingHorizontal: Space.sm,
-    fontSize: FontSize.secondary,
-    lineHeight: LineHeight.secondary,
-    fontWeight: FontWeight.regular,
-  },
-  channelGroup: {
-    gap: Space.xs,
-  },
-  channelTitle: {
-    paddingHorizontal: Space.lg,
-    fontSize: FontSize.secondary,
-    lineHeight: LineHeight.secondary,
-    fontWeight: FontWeight.regular,
-  },
-  completedRow: {
-    minHeight: ControlSize.settingsRow,
-    paddingHorizontal: Space.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Space.sm,
-  },
-  completedText: {
-    fontSize: FontSize.secondary,
-    lineHeight: LineHeight.secondary,
-    fontWeight: FontWeight.regular,
-  },
-  summaryRow: {
-    minHeight: ControlSize.floatingButton,
-    paddingLeft: Space.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Space.sm,
-  },
-  summary: {
-    flex: 1,
-    fontSize: FontSize.secondary,
-    lineHeight: LineHeight.secondary,
-    fontWeight: FontWeight.regular,
-    fontVariant: ['tabular-nums'],
+  signalDot: {
+    width: StatusSize.attention,
+    height: StatusSize.attention,
+    borderRadius: Radius.full,
   },
   emptyState: {
     minHeight: ControlSize.rosterRow,
@@ -925,18 +1218,27 @@ const styles = StyleSheet.create({
   skeletonRow: {
     minHeight: ControlSize.settingsRow,
     paddingHorizontal: Space.xl,
+    paddingVertical: Space.sm,
     flexDirection: 'row',
     alignItems: 'center',
     gap: Space.md,
   },
-  skeletonDot: {
-    width: StatusSize.dot,
-    height: StatusSize.dot,
+  skeletonTile: {
+    width: ControlSize.pill,
+    height: ControlSize.pill,
     borderRadius: Radius.full,
   },
-  skeletonTitle: {
+  skeletonCopy: {
     flex: 1,
+    gap: Space.xs,
+  },
+  skeletonTitle: {
     height: LineHeight.body,
+    width: '55%',
+  },
+  skeletonPreview: {
+    height: LineHeight.secondary,
+    width: '80%',
   },
   skeletonTime: {
     width: Space.xxl,

@@ -253,5 +253,10 @@
   "Execution tools": "실행 도구",
   "Web tools": "웹 도구",
   "Interface tools": "화면 도구",
-  "Automation tools": "자동화 도구"
+  "Automation tools": "자동화 도구",
+  "Cost today": "오늘 비용",
+  "Tokens today": "오늘 토큰",
+  "Active {{age}}": "{{age}} 활동",
+  "{{count}} failed": "{{count}}개 실패",
+  "{{value}} tokens": "{{value}} 토큰"
 }

@@ -79,7 +79,7 @@ All paths below are local `evidence/rollout/` PNGs. A screenshot proves only the
 | Session panel | Shared tabs/sheet/header migrated | Groups/list/search/actions |
 | Global search / message detail | Shared input, rows and message palette migrated | Native result, empty, favorites and detail |
 | YouMind profile | `youmind-profile-light`; identity, chat and connection hierarchy reviewed | Dark |
-| OpenClaw / Hermes profile | Shared profile structure | Real capabilities and advanced sheet |
+| OpenClaw / Hermes profile | Stat-card profile (header chat button, Cron jobs / Cost today heroes, Models / Skills / Files tiles) rendered in light/dark render tests | Real counts, heartbeat line and advanced sheet on device |
 | Models / providers | Shared search, tabs, settings rows | Both backend sections |
 | Skills / discovery / detail | Shared search, lists and sheets | Long content, permissions and search |
 | Scheduled tasks / heartbeat / editors / runs | Shared rows, switches and sheets | Native detail/editor/keyboard |

@@ -95,7 +95,7 @@ describe('AgentSettings section model', () => {
       'Identity',
       'Models',
       'Skills',
-      'Scheduled tasks',
+      'Cron jobs',
       'Files',
       'Usage',
       'Connection',

@@ -253,5 +253,10 @@
   "Execution tools": "Ausführungswerkzeuge",
   "Web tools": "Web-Werkzeuge",
   "Interface tools": "Oberflächenwerkzeuge",
-  "Automation tools": "Automatisierungswerkzeuge"
+  "Automation tools": "Automatisierungswerkzeuge",
+  "Cost today": "Kosten heute",
+  "Tokens today": "Tokens heute",
+  "Active {{age}}": "Aktiv {{age}}",
+  "{{count}} failed": "{{count}} fehlgeschlagen",
+  "{{value}} tokens": "{{value}} Tokens"
 }

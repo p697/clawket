@@ -51,6 +51,7 @@ Generated `ios/` and `android/` projects are local build products in this reposi
 3. Use `npx expo install --check` as a compatibility signal, not as permission for an automatic major upgrade.
 4. Treat navigation, storage, networking, authentication, purchases, and animation upgrades as behavior changes requiring focused tests.
 5. Do not copy YouMind-only dependencies, release variants, Sentry wiring, or product-specific Metro aliases into Clawket without a Clawket requirement.
+6. `react-native-enriched-markdown` stays on an exact stable pin (1.0.2, Expo SDK 55 / React Native 0.83 compatible). Its `postinstall` needs network access to `registry.npmjs.org` and `github.com` to vendor tree-sitter grammar sources; a failed download degrades code highlighting to a clean no-op build. Feature flags live in the `enriched-markdown` block of `package.json` (root for the download, Mobile for the native build), not in an Expo plugin. The iOS parallel tail-fade patch (`scripts/patch-enriched-markdown-tail-fade.mjs`) is reviewed against that exact version and fails closed when the upstream file drifts.
 
 ## Documentation ownership
 

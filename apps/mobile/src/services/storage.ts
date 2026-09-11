@@ -54,14 +54,6 @@ export type NodeInvokeAuditEntry = {
   errorMessage?: string;
 };
 
-export type SavedPrompt = {
-  id: string;
-  text: string;
-  createdAt: number;
-  updatedAt: number;
-  pinnedAt?: number;
-};
-
 export type DashboardCacheEntry<T = Record<string, unknown>> = {
   version: 2;
   cacheKey: string;
@@ -158,9 +150,6 @@ const KEYS = {
   cachedAgentIdentityPrefix: 'clawket.cachedAgentIdentity.v1',
   nodeEnabled: 'clawket.nodeEnabled.v1',
   nodeCapabilityToggles: 'clawket.nodeCapabilityToggles.v1',
-  userPrompts: 'clawket.userPrompts.v1',
-  userPromptsSeeded: 'clawket.userPrompts.seeded.v1',
-  promptPeekShown: 'clawket.promptPeekShown.v1',
   proSubscriptionSnapshot: 'clawket.proSubscriptionSnapshot.v1',
   lifetimeUpgradeAnnouncementShown: 'clawket.lifetimeUpgradeAnnouncementShown.v1',
   autoAppReviewState: 'clawket.autoAppReviewState.v1',
@@ -619,30 +608,6 @@ function buildStateFromLegacyProfiles(profiles: GatewayProfilesConfig): GatewayC
     activeId: activeCandidate?.id ?? configs[0]?.id ?? null,
     configs,
   };
-}
-
-function normalizeSavedPrompt(value: unknown): SavedPrompt | null {
-  if (!value || typeof value !== 'object') return null;
-  const record = value as Record<string, unknown>;
-  const id = typeof record.id === 'string' ? record.id.trim() : '';
-  const text = typeof record.text === 'string' ? record.text.trim() : '';
-  const createdAtRaw = record.createdAt;
-  const updatedAtRaw = record.updatedAt;
-  const pinnedAtRaw = record.pinnedAt;
-  const createdAt = typeof createdAtRaw === 'number' && Number.isFinite(createdAtRaw) ? createdAtRaw : 0;
-  const updatedAt = typeof updatedAtRaw === 'number' && Number.isFinite(updatedAtRaw) ? updatedAtRaw : createdAt;
-  const pinnedAt = typeof pinnedAtRaw === 'number' && Number.isFinite(pinnedAtRaw) ? pinnedAtRaw : undefined;
-  if (!id || !text) return null;
-  const normalized: SavedPrompt = {
-    id,
-    text,
-    createdAt,
-    updatedAt,
-  };
-  if (typeof pinnedAt === 'number') {
-    normalized.pinnedAt = pinnedAt;
-  }
-  return normalized;
 }
 
 async function setJson<T>(key: string, value: T): Promise<void> {
@@ -1387,43 +1352,5 @@ export const StorageService = {
       return;
     }
     await AsyncStorage.setItem(this._cronAckedKey, JSON.stringify([...currentSet]));
-  },
-
-  // --- User prompts (AsyncStorage — non-sensitive, user-created prompt snippets) ---
-
-  async getUserPrompts(): Promise<SavedPrompt[]> {
-    try {
-      const raw = await AsyncStorage.getItem(KEYS.userPrompts);
-      if (!raw) return [];
-      const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) return [];
-      return parsed
-        .map((item) => normalizeSavedPrompt(item))
-        .filter((item): item is SavedPrompt => item !== null);
-    } catch {
-      return [];
-    }
-  },
-
-  async setUserPrompts(prompts: SavedPrompt[]): Promise<void> {
-    await AsyncStorage.setItem(KEYS.userPrompts, JSON.stringify(prompts));
-  },
-
-  async isUserPromptsSeeded(): Promise<boolean> {
-    const raw = await AsyncStorage.getItem(KEYS.userPromptsSeeded);
-    return raw === '1';
-  },
-
-  async markUserPromptsSeeded(): Promise<void> {
-    await AsyncStorage.setItem(KEYS.userPromptsSeeded, '1');
-  },
-
-  async isPromptPeekShown(): Promise<boolean> {
-    const raw = await AsyncStorage.getItem(KEYS.promptPeekShown);
-    return raw === '1';
-  },
-
-  async markPromptPeekShown(): Promise<void> {
-    await AsyncStorage.setItem(KEYS.promptPeekShown, '1');
   },
 };

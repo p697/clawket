@@ -185,11 +185,14 @@ function props(
     state: 'ready',
     isPro: false,
     summary: {
-      currentModel: 'model-one',
+      modelCount: 12,
       installedSkillCount: 3,
       cronJobCount: 2,
+      cronFailureCount: 1,
       hasCronFailure: true,
+      fileCount: 7,
       todayCostUsd: 0.5,
+      todayTokens: 965_200,
       toolCount: 4,
       pendingConnectionCount: 1,
     },
@@ -234,15 +237,48 @@ describe('AgentSettingsView deep rendering', () => {
     });
     expect(view.getByText('Studio · OpenClaw')).toBeTruthy();
     expect(view.queryByTestId('agent-settings-row-models')).toBeNull();
+    expect(view.queryByTestId('agent-settings-row-cron')).toBeNull();
+
+    // Stat cards: two heroes, then tiles, each a white settings group with one value and one label.
+    expect(view.getAllByTestId(/^agent-settings-stat-[a-z]+$/).map((node) => node.props.testID)).toEqual([
+      'agent-settings-stat-cron',
+      'agent-settings-stat-usage',
+      'agent-settings-stat-models',
+      'agent-settings-stat-skills',
+      'agent-settings-stat-files',
+    ]);
+    expect(flattenStyle(view.getByTestId('agent-settings-stat-cron').props.style)).toMatchObject({
+      backgroundColor: lightColors.surfaceFloating,
+      borderRadius: Radius.settingsGroup,
+    });
+    expect(view.getByTestId('agent-settings-stat-cron-value').props.children).toBe('2');
+    expect(flattenStyle(view.getByTestId('agent-settings-stat-cron-value').props.style)).toMatchObject({
+      fontSize: FontSize.title,
+      fontVariant: ['tabular-nums'],
+    });
+    expect(view.getByTestId('agent-settings-stat-cron-detail').props.children).toBe('{{count}} failed');
+    expect(flattenStyle(view.getByTestId('agent-settings-stat-cron-detail').props.style)).toMatchObject({
+      color: lightColors.bad,
+      fontSize: FontSize.caption,
+    });
+    expect(view.getByText('Cron jobs')).toBeTruthy();
+    expect(view.getByTestId('agent-settings-stat-usage-value').props.children).toBe('$0.50');
+    expect(view.getByTestId('agent-settings-stat-usage-detail').props.children).toBe('{{value}} tokens');
+    expect(flattenStyle(view.getByTestId('agent-settings-stat-usage-detail').props.style).color)
+      .toBe(lightColors.inkSecondary);
+    expect(view.getByTestId('agent-settings-stat-models-value').props.children).toBe('12');
+    expect(view.getByTestId('agent-settings-stat-files-value').props.children).toBe('7');
+    expect(view.queryByTestId('agent-settings-stat-models-detail')).toBeNull();
+
     fireEvent.press(view.getByTestId('agent-profile-advanced'));
-    expect(view.getByText('model-one')).toBeTruthy();
-    expect(view.getByTestId('agent-settings-row-cron-attention')).toBeTruthy();
+    expect(view.getByTestId('agent-settings-row-tools')).toBeTruthy();
+    expect(view.queryByTestId('agent-settings-row-usage')).toBeNull();
     expect(view.getByTestId('agent-settings-row-channels-devices-attention')).toBeTruthy();
-    expect(flattenStyle(view.getAllByTestId('agent-settings-agent-group')[0].props.style))
+    expect(flattenStyle(view.getAllByTestId('agent-settings-connection-group')[0].props.style))
       .not.toHaveProperty('borderWidth');
 
     fireEvent.press(view.getByTestId('agent-settings-identity'));
-    fireEvent.press(view.getByTestId('agent-settings-row-models'));
+    fireEvent.press(view.getByTestId('agent-settings-stat-models-row'));
     expect(onNavigate.mock.calls).toEqual([
       ['AgentSettingsSection', { connectionId: 'connection-one', agentId: 'main', section: 'identity' }],
       ['AgentSettingsSection', { connectionId: 'connection-one', agentId: 'main', section: 'models' }],
@@ -252,6 +288,31 @@ describe('AgentSettingsView deep rendering', () => {
       [{ row: 'identity', locked: false, backend: 'openclaw' }],
       [{ row: 'models', locked: false, backend: 'openclaw' }],
     ]);
+  });
+
+  it('continues chatting from the header and shows heartbeat activity in the identity line', () => {
+    const onContinueChat = jest.fn();
+    const now = Date.now();
+    const view = render(
+      <AgentSettingsView
+        {...props({
+          onContinueChat,
+          summary: { todayTokens: 4_200, lastHeartbeatAt: now - 19 * 60_000 },
+        })}
+      />,
+    );
+
+    fireEvent.press(view.getByTestId('agent-profile-chat'));
+    expect(onContinueChat).toHaveBeenCalledTimes(1);
+    expect(view.getByTestId('agent-profile-chat').props.accessibilityLabel).toBe('Continue chatting');
+    expect(view.getByTestId('agent-settings-identity-detail').props.children)
+      .toBe('OpenClaw · Active {{age}}');
+    expect(view.queryByText('Studio · OpenClaw')).toBeNull();
+    // Without a dollar figure the card leads with tokens and drops its caption.
+    expect(view.getByText('Tokens today')).toBeTruthy();
+    expect(view.getByTestId('agent-settings-stat-usage-value').props.children).toBe('4.2K');
+    expect(view.queryByTestId('agent-settings-stat-usage-detail')).toBeNull();
+    expect(view.getByTestId('agent-settings-stat-cron-value').props.children).toBe('—');
   });
 
   it('opens contextual management for free users while keeping logs Pro-gated', () => {
@@ -309,8 +370,9 @@ describe('AgentSettingsView deep rendering', () => {
     );
     expect(view.getByTestId('agent-settings-offline')).toBeTruthy();
     expect(view.getByTestId('agent-settings-identity')).toBeTruthy();
+    expect(view.getByTestId('agent-settings-stat-models-value').props.children).toBe('12');
     fireEvent.press(view.getByTestId('agent-profile-advanced'));
-    expect(view.getByTestId('agent-settings-row-models')).toBeTruthy();
+    expect(view.getByTestId('agent-settings-row-tools')).toBeTruthy();
     expect(view.getByText('Offline')).toBeTruthy();
     fireEvent.press(view.getByTestId('agent-settings-offline-action'));
     expect(onRetry).toHaveBeenCalledTimes(1);
@@ -333,8 +395,11 @@ describe('AgentSettingsView deep rendering', () => {
     expect(permission.getByTestId('agent-settings-permission')).toBeTruthy();
     fireEvent.press(permission.getByTestId('agent-settings-permission-action'));
     fireEvent.press(permission.getByTestId('agent-settings-row-connection'));
+    expect(permission.getByTestId('agent-settings-stat-cron-lock')).toBeTruthy();
+    fireEvent.press(permission.getByTestId('agent-settings-stat-cron-row'));
     expect(onOpenPro).toHaveBeenNthCalledWith(1, 'identity', expect.any(Function));
     expect(onOpenPro).toHaveBeenNthCalledWith(2, 'connection', expect.any(Function));
+    expect(onOpenPro).toHaveBeenNthCalledWith(3, 'cron', expect.any(Function));
     expect(mockedAnalyticsEvents.settingsRowOpened).toHaveBeenCalledWith({
       row: 'connection',
       locked: true,
@@ -349,8 +414,12 @@ describe('AgentSettingsView deep rendering', () => {
       .toBe(darkColors.canvasGrouped);
     expect(flattenStyle(view.getByTestId('agent-settings-title').props.style).color)
       .toBe(darkColors.ink);
-    expect(flattenStyle(view.getAllByTestId('agent-settings-agent-group')[0].props.style).backgroundColor)
+    expect(flattenStyle(view.getAllByTestId('agent-settings-connection-group')[0].props.style).backgroundColor)
       .toBe(darkColors.surfaceFloating);
+    expect(flattenStyle(view.getByTestId('agent-settings-stat-usage').props.style).backgroundColor)
+      .toBe(darkColors.surfaceFloating);
+    expect(flattenStyle(view.getByTestId('agent-settings-stat-cron-value').props.style).color)
+      .toBe(darkColors.ink);
   });
 
   it('does not render sections whose capability is false', () => {
@@ -359,7 +428,8 @@ describe('AgentSettingsView deep rendering', () => {
       devices: true,
     };
     const view = render(<AgentSettingsView {...props({ capabilities: disabled })} />);
-    expect(view.queryByTestId('agent-settings-row-models')).toBeNull();
+    expect(view.queryByTestId('agent-settings-stats')).toBeNull();
+    expect(view.queryByTestId('agent-settings-stat-models')).toBeNull();
     expect(view.queryByTestId('agent-settings-row-openclaw')).toBeNull();
     expect(view.getByTestId('agent-settings-row-connection')).toBeTruthy();
     fireEvent.press(view.getByTestId('agent-profile-advanced'));

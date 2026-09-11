@@ -45,7 +45,9 @@ export type RootStackParamList = {
     connectionId: string;
     agentId: string;
     section: AgentSettingsSection;
-    action?: 'create-agent';
+    action?: 'create-agent' | 'create-cron';
+    /** Draft prompt carried from the Thread composer into the new cron job editor. */
+    cronPrompt?: string;
   };
   Connections: undefined;
   Connection: { connectionId: string };

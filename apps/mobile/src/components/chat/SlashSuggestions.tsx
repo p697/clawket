@@ -9,12 +9,14 @@ import {
   View,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { useTranslation } from 'react-i18next';
 import { SlashCommand } from '../../data/slash-commands';
+import { useSlashCommandDescriptions } from './slashCommandCopy';
 import { useAppTheme } from '../../theme';
 import {
+  ControlSize,
   FontSize,
   FontWeight,
+  LineHeight,
   Motion,
   Radius,
   Shadow,
@@ -54,35 +56,9 @@ function splitCommandLabel(command: string, typedPrefix: string): { highlight: s
 }
 
 export function SlashSuggestions({ visible, inputValue, suggestions, maxHeight, onSelect }: Props): React.JSX.Element | null {
-  const { t } = useTranslation('chat');
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme.colors, theme.scheme), [theme]);
-  const translatedDescriptions = useMemo<Record<string, string>>(() => ({
-    'Show session status': t('Show session status'),
-    'Browse and switch models': t('Browse and switch models'),
-    'Compact session context': t('Compact session context'),
-    'Set thinking level (off/low/medium/high)': t('Set thinking level (off/low/medium/high)'),
-    'Toggle fast mode': t('Toggle fast mode'),
-    'Start a new session': t('Start a new session'),
-    'Reset current session': t('Reset current session'),
-    'Stop current generation': t('Stop current generation'),
-    'Toggle reasoning mode': t('Toggle reasoning mode'),
-    'Toggle elevated permissions': t('Toggle elevated permissions'),
-    'Show token usage stats': t('Show token usage stats'),
-    'Show context window usage': t('Show context window usage'),
-    'Show current session info': t('Show current session info'),
-    'List available agents': t('List available agents'),
-    'List all commands': t('List all commands'),
-    'Kill running subagents': t('Kill running subagents'),
-    'Send instruction to a subagent': t('Send instruction to a subagent'),
-    'Send message to another session': t('Send message to another session'),
-    'Text-to-speech': t('Text-to-speech'),
-    'Show or change queue mode': t('Show or change queue mode'),
-    'Show available commands': t('Show available commands'),
-    'Switch to a specific model': t('Switch to a specific model'),
-    'Toggle verbose mode': t('Toggle verbose mode'),
-    'Restart the gateway': t('Restart the gateway'),
-  }), [t]);
+  const describe = useSlashCommandDescriptions();
   const anim = useRef(new Animated.Value(0)).current;
   const show = visible && suggestions.length > 0;
   const [rendered, setRendered] = useState(show);
@@ -143,14 +119,13 @@ export function SlashSuggestions({ visible, inputValue, suggestions, maxHeight, 
         bounces={false}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={suggestions.length > 4}
-        renderItem={({ item, index }) => {
+        renderItem={({ item }) => {
           const { highlight, rest } = splitCommandLabel(item.command, typedPrefix);
           return (
             <Pressable
               onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onSelect(item); }}
               style={({ pressed }) => [
                 styles.row,
-                index < suggestions.length - 1 && styles.rowDivider,
                 pressed && styles.rowPressed,
               ]}
             >
@@ -161,7 +136,7 @@ export function SlashSuggestions({ visible, inputValue, suggestions, maxHeight, 
                 </Text>
               </View>
               <Text style={styles.description} numberOfLines={1} ellipsizeMode="tail">
-                {translatedDescriptions[item.description] ?? item.description}
+                {describe(item)}
               </Text>
             </Pressable>
           );
@@ -182,28 +157,22 @@ function createStyles(
       backgroundColor: colors.surfaceFloating,
       ...createThemedShadowStyle(colors, scheme, Shadow.sm),
     },
+    // Borderless floating list: rows separate by spacing and pressed color only.
     popupInner: {
       borderRadius: Radius.card,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.line,
       backgroundColor: colors.surfaceFloating,
       overflow: 'hidden',
-      paddingTop: Space.xs,
-      paddingBottom: Space.xs,
+      paddingVertical: Space.xs,
     },
     row: {
-      minHeight: 46,
-      paddingHorizontal: Space.lg - 2,
+      minHeight: ControlSize.floatingButton,
+      paddingHorizontal: Space.lg,
       paddingVertical: Space.sm,
       justifyContent: 'center',
-      backgroundColor: colors.surfaceFloating,
+      gap: Space.xs,
     },
     rowPressed: {
       backgroundColor: colors.surface,
-    },
-    rowDivider: {
-      borderBottomWidth: 1,
-      borderBottomColor: colors.line,
     },
     rowTop: {
       flexDirection: 'row',
@@ -213,18 +182,20 @@ function createStyles(
     command: {
       color: colors.ink,
       fontSize: FontSize.secondary,
+      lineHeight: LineHeight.secondary,
       fontWeight: FontWeight.semibold,
       flexShrink: 1,
     },
     commandHighlight: {
       color: colors.accent,
       fontSize: FontSize.secondary,
+      lineHeight: LineHeight.secondary,
       fontWeight: FontWeight.semibold,
     },
     description: {
       color: colors.inkSecondary,
       fontSize: FontSize.caption,
-      marginTop: 2,
+      lineHeight: LineHeight.caption,
     },
   });
 }

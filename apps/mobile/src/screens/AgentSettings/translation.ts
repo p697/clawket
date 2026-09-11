@@ -25,9 +25,11 @@ export function translateAgentSettingsKey(
   if (key === 'Skills') return t('Skills', { ns: 'common' });
   if (key === 'Installed') return t('Installed', { ns: 'config' });
   if (key === 'Discover') return t('Discover', { ns: 'common' });
-  if (key === 'Scheduled tasks') return t('Scheduled tasks', { ns: 'common' });
+  if (key === 'Cron jobs') return t('Cron jobs', { ns: 'common' });
+  if (key === 'Cost today') return t('Cost today', { ns: 'settings' });
+  if (key === 'Tokens today') return t('Tokens today', { ns: 'settings' });
   if (key === 'Heartbeat') return t('Heartbeat', { ns: 'settings' });
-  if (key === 'New scheduled task') return t('New scheduled task', { ns: 'config' });
+  if (key === 'New cron job') return t('New cron job', { ns: 'config' });
   if (key === 'Files') return t('Files', { ns: 'common' });
   if (key === 'Agent files') return t('Agent files', { ns: 'config' });
   if (key === 'Edit files') return t('Edit files', { ns: 'config' });

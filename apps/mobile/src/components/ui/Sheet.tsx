@@ -52,6 +52,7 @@ export type SheetProps = {
   onAfterClose?: () => void;
   closeAccessibilityLabel: string;
   title?: string;
+  titleContent?: React.ReactNode;
   headerRight?: React.ReactNode;
   children: React.ReactNode;
   maxHeight?: DimensionValue;
@@ -114,6 +115,7 @@ export function Sheet({
   onAfterClose,
   closeAccessibilityLabel,
   title,
+  titleContent,
   headerRight,
   children,
   maxHeight = '90%',
@@ -215,6 +217,7 @@ export function Sheet({
     <>
       <SheetHeader
         title={title}
+        titleContent={titleContent}
         onClose={onClose}
         closeAccessibilityLabel={closeAccessibilityLabel}
         right={headerRight}

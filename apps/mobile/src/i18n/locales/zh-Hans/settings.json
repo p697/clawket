@@ -253,5 +253,10 @@
   "Execution tools": "执行工具",
   "Web tools": "网页工具",
   "Interface tools": "界面工具",
-  "Automation tools": "自动化工具"
+  "Automation tools": "自动化工具",
+  "Cost today": "今日费用",
+  "Tokens today": "今日 Token",
+  "Active {{age}}": "{{age}}活跃",
+  "{{count}} failed": "{{count}} 个失败",
+  "{{value}} tokens": "{{value}} Token"
 }

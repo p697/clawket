@@ -273,13 +273,13 @@ export function useChatController({
   const [activityLabel, setActivityLabel] = useState<string | null>(null);
   const [slashSuggestionsDismissed, setSlashSuggestionsDismissed] =
     useState(false);
-  const [slashMenuForced, setSlashMenuForced] = useState(false);
   const [staticThinkPickerVisible, setStaticThinkPickerVisible] =
     useState(false);
   const {
     pendingImages,
     setPendingImages,
     pickImage,
+    attachLocalImages,
     clearPendingImages,
     removePendingImage,
     canAddMoreImages,
@@ -2731,9 +2731,8 @@ export function useChatController({
   }, [messageQueue]);
 
   const onSelectSlashCommand = useCallback(
-    (command: SlashCommand) => {
+    (command: SlashCommand, source: "slash_suggestions" | "commands_sheet" = "slash_suggestions") => {
       setSlashSuggestionsDismissed(false);
-      setSlashMenuForced(false);
 
       // Clear the input when user typed a slash-prefixed query (e.g. "/s")
       // so the suggestion popup dismisses and stale text is removed.
@@ -2746,7 +2745,7 @@ export function useChatController({
         command_key: command.key,
         command: command.command,
         action: command.action,
-        source: "slash_suggestions",
+        source,
         session_key_present: Boolean(history.sessionKey),
       });
 
@@ -2807,30 +2806,17 @@ export function useChatController({
 
   const dismissSlashSuggestions = useCallback(() => {
     setSlashSuggestionsDismissed(true);
-    setSlashMenuForced(false);
   }, []);
-
-  const openSlashMenu = useCallback(() => {
-    if (slashMenuForced) {
-      setSlashSuggestionsDismissed(true);
-      setSlashMenuForced(false);
-    } else {
-      setSlashSuggestionsDismissed(false);
-      setSlashMenuForced(true);
-    }
-  }, [slashMenuForced]);
 
   const slashToken = useMemo(() => {
     if (!input.startsWith("/")) return "";
     return input.slice(1).split(/\s/, 1)[0] ?? "";
   }, [input]);
 
+  // Typed autocomplete only; the Add sheet's Commands entry opens the full
+  // list in its own sheet.
   const slashSuggestions = useMemo(() => {
     if (slashSuggestionsDismissed) return [] as SlashCommand[];
-
-    // Button-triggered: show all commands
-    if (slashMenuForced && !input.startsWith("/")) return SLASH_COMMANDS;
-
     if (!input.startsWith("/")) return [] as SlashCommand[];
     if (/\s/.test(input.slice(1))) return [] as SlashCommand[];
 
@@ -2839,8 +2825,7 @@ export function useChatController({
     return SLASH_COMMANDS.filter((item) =>
       item.command.toLowerCase().startsWith(prefix),
     );
-    // .slice(0, 8);
-  }, [input, slashSuggestionsDismissed, slashMenuForced, slashToken]);
+  }, [input, slashSuggestionsDismissed, slashToken]);
 
   const showSlashSuggestions = slashSuggestions.length > 0;
 
@@ -3249,6 +3234,7 @@ export function useChatController({
     pendingImages,
     setPendingImages,
     pickImage,
+    attachLocalImages,
     takePhoto,
     pickFile,
     onPasteFiles,
@@ -3272,7 +3258,6 @@ export function useChatController({
     showSlashSuggestions,
     onSelectSlashCommand,
     dismissSlashSuggestions,
-    openSlashMenu,
     modelPickerVisible,
     setModelPickerVisible,
     modelPickerLoading,

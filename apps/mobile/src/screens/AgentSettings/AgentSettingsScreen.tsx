@@ -5,7 +5,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { ChevronLeft, SlidersHorizontal, Fingerprint, MessageCircle } from 'lucide-react-native';
+import { ChevronLeft, SlidersHorizontal, Fingerprint, Lock, MessageCircle } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type {
@@ -16,7 +16,6 @@ import type {
   ConnectionState,
 } from '@clawket/agent-protocol';
 import { AgentAvatar } from '../../components/ui/AgentAvatar';
-import { Button } from '../../components/ui/Button';
 import { Sheet } from '../../components/ui/Sheet';
 import { Banner } from '../../components/ui/Banner';
 import { FloatingButton } from '../../components/ui/FloatingButton';
@@ -36,10 +35,12 @@ import {
   ControlSize,
   FontSize,
   FontWeight,
+  IconSize,
   LineHeight,
   Radius,
   Space,
 } from '../../theme/tokens';
+import { formatConsoleHeartbeatAge } from '../../utils/console-heartbeat';
 import { loadAgentSettingsSummary } from './load-summary';
 import {
   buildAgentSettingsModel,
@@ -47,6 +48,7 @@ import {
   type AgentSettingsGroupDescriptor,
   type AgentSettingsPageState,
   type AgentSettingsRowDescriptor,
+  type AgentSettingsStatDescriptor,
   type AgentSettingsSummary,
 } from './model';
 import { translateAgentSettingsKey } from './translation';
@@ -65,6 +67,8 @@ export type AgentSettingsViewProps = Readonly<{
   isPro: boolean;
   summary?: AgentSettingsSummary;
   identityDetail?: string;
+  /** Agents on the connection; the shared Gateway heartbeat line shows only for a lone Agent. */
+  agentCount?: number;
   errorMessage?: string;
   onBack: () => void;
   onContinueChat?: () => void;
@@ -240,6 +244,7 @@ export function AgentSettingsView({
   isPro,
   summary,
   identityDetail,
+  agentCount,
   errorMessage,
   onBack,
   onContinueChat,
@@ -247,7 +252,7 @@ export function AgentSettingsView({
   onOpenPro,
   onRetry,
 }: AgentSettingsViewProps): React.JSX.Element {
-  const { t } = useTranslation(['common', 'settings', 'config']);
+  const { t, i18n } = useTranslation(['common', 'settings', 'config']);
   const { theme } = useAppTheme();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
@@ -269,7 +274,10 @@ export function AgentSettingsView({
     permissionDenied: state === 'permission',
     identityDetail,
     summary,
+    agentCount,
+    now: Date.now(),
   }) : null, [
+    agentCount,
     agent,
     capabilities,
     connection,
@@ -288,7 +296,7 @@ export function AgentSettingsView({
     });
   };
 
-  const openRow = (row: AgentSettingsRowDescriptor) => {
+  const openRow = (row: AgentSettingsRowDescriptor | AgentSettingsStatDescriptor) => {
     const open = () => {
       const onContinue = () => navigate(row.section);
       analyticsEvents.settingsRowOpened({ row: row.id, locked: row.locked, backend: connection.backendKind });
@@ -302,6 +310,18 @@ export function AgentSettingsView({
     }
     open();
   };
+
+  const identityDetailLabel = (() => {
+    if (!model) return '';
+    const minutes = model.identity.activeMinutesAgo;
+    if (minutes === null) return model.identity.detail;
+    const formatted = formatConsoleHeartbeatAge(minutes, i18n?.resolvedLanguage ?? i18n?.language ?? 'en');
+    const age = formatted.compactText
+      ?? (formatted.count === undefined
+        ? t(formatted.key, { ns: 'common' })
+        : t(formatted.key, { ns: 'common', count: formatted.count }));
+    return `${model.identity.backendLabel} · ${t('Active {{age}}', { ns: 'settings', age })}`;
+  })();
 
   const openIdentity = () => {
     const onContinue = () => navigate('identity');
@@ -326,6 +346,15 @@ export function AgentSettingsView({
         backLabel={t('Back', { ns: 'common' })}
         title={t('Agent profile', { ns: 'settings' })}
         onBack={onBack}
+        trailing={(
+          <FloatingButton
+            testID="agent-profile-chat"
+            icon={MessageCircle}
+            appearance="ink"
+            accessibilityLabel={t('Continue chatting', { ns: 'settings' })}
+            onPress={onContinueChat ?? onBack}
+          />
+        )}
       />
 
       {state === 'loading' ? (
@@ -378,10 +407,14 @@ export function AgentSettingsView({
               name={model.identity.name} emoji={agent.emoji} avatarUrl={agent.avatarUrl}
               variant="roster" status={model.identity.locked ? 'locked' : state === 'offline' ? 'offline' : 'idle'} />
             <Text style={styles.profileName}>{model.identity.name}</Text>
-            <Text style={styles.profileDetail}>{model.identity.detail}</Text>
-            <Button testID="agent-profile-chat" label={t('Continue chatting', { ns: 'settings' })}
-              icon={MessageCircle} onPress={onContinueChat ?? onBack} />
+            <Text testID="agent-settings-identity-detail" style={styles.profileDetail}>{identityDetailLabel}</Text>
           </View>
+          <AgentSettingsStats
+            stats={model.stats}
+            translate={(key) => translateAgentSettingsKey(t, key)}
+            translateDetail={(detail) => t(detail.key, { ns: 'settings', ...detail.params })}
+            onOpen={openRow}
+          />
           {model.identity.editable || model.identity.locked ? (
             <SettingsGroup testID="agent-settings-identity-group">
               <SettingsRow testID="agent-settings-identity" title={t('Personality & memory', { ns: 'settings' })}
@@ -391,10 +424,10 @@ export function AgentSettingsView({
           ) : null}
           {model.groups.map((group) => (
             <SettingsSection key={group.id} group={{ ...group,
-              rows: group.rows.filter((row) => ['skills', 'cron', 'files', 'connection'].includes(row.id)),
+              rows: group.rows.filter((row) => row.placement === 'primary'),
             }} translate={(key) => translateAgentSettingsKey(t, key)} onOpenRow={openRow} />
           ))}
-          {model.groups.some((group) => group.rows.some((row) => !['skills', 'cron', 'files', 'connection'].includes(row.id))) ? (
+          {model.groups.some((group) => group.rows.some((row) => row.placement === 'advanced')) ? (
             <SettingsGroup>
               <SettingsRow testID="agent-profile-advanced" title={t('Advanced management', { ns: 'settings' })}
                 leading={<SlidersHorizontal size={20} color={theme.colors.inkSecondary} />}
@@ -413,7 +446,7 @@ export function AgentSettingsView({
           closeAccessibilityLabel={t('Close', { ns: 'common' })}>
           <ScrollView contentContainerStyle={styles.content}>
             {model.groups.map((group) => <SettingsSection key={group.id} group={{ ...group,
-              rows: group.rows.filter((row) => !['skills', 'cron', 'files', 'connection'].includes(row.id)),
+              rows: group.rows.filter((row) => row.placement === 'advanced'),
             }} translate={(key) => translateAgentSettingsKey(t, key)} onOpenRow={openRow} />)}
           </ScrollView>
         </Sheet>
@@ -426,10 +459,12 @@ function AgentSettingsHeader({
   backLabel,
   title,
   onBack,
+  trailing,
 }: Readonly<{
   backLabel: string;
   title: string;
   onBack: () => void;
+  trailing?: React.ReactNode;
 }>): React.JSX.Element {
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
@@ -444,7 +479,75 @@ function AgentSettingsHeader({
       <Text testID="agent-settings-title" style={styles.headerTitle} numberOfLines={1}>
         {title}
       </Text>
-      <View style={styles.headerSlot} />
+      {trailing ?? <View style={styles.headerSlot} />}
+    </View>
+  );
+}
+
+type TranslateDetail = (detail: NonNullable<AgentSettingsStatDescriptor['detail']>) => string;
+
+/** Two hero cards on top, then a row of tiles; every card is one 44-point-plus target. */
+function AgentSettingsStats({
+  stats,
+  translate,
+  translateDetail,
+  onOpen,
+}: Readonly<{
+  stats: ReadonlyArray<AgentSettingsStatDescriptor>;
+  translate: Translate;
+  translateDetail: TranslateDetail;
+  onOpen: (stat: AgentSettingsStatDescriptor) => void;
+}>): React.JSX.Element | null {
+  const { theme } = useAppTheme();
+  const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
+  const heroes = stats.filter((stat) => stat.placement === 'hero');
+  const tiles = stats.filter((stat) => stat.placement === 'tile');
+  if (heroes.length === 0 && tiles.length === 0) return null;
+
+  const renderCard = (stat: AgentSettingsStatDescriptor) => (
+    <SettingsGroup key={stat.id} testID={`agent-settings-stat-${stat.id}`} style={styles.statCard}>
+      <SettingsRow
+        testID={`agent-settings-stat-${stat.id}-row`}
+        layout="column"
+        accessibilityLabel={`${translate(stat.title)} ${stat.value ?? ''}`.trim()}
+        onPress={() => onOpen(stat)}
+      >
+        <View style={styles.statBody}>
+          <View style={styles.statHead}>
+            <Text
+              testID={`agent-settings-stat-${stat.id}-value`}
+              style={styles.statValue}
+              numberOfLines={1}
+            >
+              {stat.value ?? '—'}
+            </Text>
+            {stat.locked ? (
+              <Lock
+                testID={`agent-settings-stat-${stat.id}-lock`}
+                size={IconSize.sm}
+                color={theme.colors.inkTertiary}
+                strokeWidth={2}
+              />
+            ) : stat.detail ? (
+              <Text
+                testID={`agent-settings-stat-${stat.id}-detail`}
+                style={[styles.statDetail, stat.detail.tone === 'bad' ? styles.statDetailBad : null]}
+                numberOfLines={1}
+              >
+                {translateDetail(stat.detail)}
+              </Text>
+            ) : null}
+          </View>
+          <Text style={styles.statLabel} numberOfLines={1}>{translate(stat.title)}</Text>
+        </View>
+      </SettingsRow>
+    </SettingsGroup>
+  );
+
+  return (
+    <View testID="agent-settings-stats" style={styles.stats}>
+      {heroes.length > 0 ? <View style={styles.statRow}>{heroes.map(renderCard)}</View> : null}
+      {tiles.length > 0 ? <View style={styles.statRow}>{tiles.map(renderCard)}</View> : null}
     </View>
   );
 }
@@ -535,6 +638,41 @@ function AgentSettingsLoading({
 function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors']) {
   return StyleSheet.create({
     profileHero: { alignItems: 'center', gap: Space.md, paddingVertical: Space.lg },
+    stats: { gap: Space.md },
+    statRow: { flexDirection: 'row', gap: Space.md, alignItems: 'stretch' },
+    statCard: { flex: 1, minWidth: 0 },
+    statBody: { paddingVertical: Space.xs, gap: Space.xs },
+    statHead: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: Space.sm,
+      minHeight: LineHeight.title,
+    },
+    statValue: {
+      flexShrink: 1,
+      color: colors.ink,
+      fontSize: FontSize.title,
+      lineHeight: LineHeight.title,
+      fontWeight: FontWeight.semibold,
+      fontVariant: ['tabular-nums'],
+    },
+    statDetail: {
+      flexShrink: 1,
+      color: colors.inkSecondary,
+      fontSize: FontSize.caption,
+      lineHeight: LineHeight.caption,
+      fontWeight: FontWeight.regular,
+      fontVariant: ['tabular-nums'],
+      textAlign: 'right',
+    },
+    statDetailBad: { color: colors.bad, fontWeight: FontWeight.semibold },
+    statLabel: {
+      color: colors.inkSecondary,
+      fontSize: FontSize.secondary,
+      lineHeight: LineHeight.secondary,
+      fontWeight: FontWeight.regular,
+    },
     profileName: { color: colors.ink, fontSize: FontSize.title, lineHeight: LineHeight.title, fontWeight: FontWeight.semibold, textAlign: 'center' },
     profileDetail: { color: colors.inkSecondary, fontSize: FontSize.secondary, lineHeight: LineHeight.secondary, textAlign: 'center' },
     screen: {
