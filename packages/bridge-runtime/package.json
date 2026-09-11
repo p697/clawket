@@ -14,7 +14,7 @@
     }
   },
   "scripts": {
-    "build": "rm -rf dist && tsc -p tsconfig.json",
+    "build": "node ../../scripts/build-typescript.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run src --no-file-parallelism",
     "test:required": "vitest run src --exclude '**/*.integration.test.ts'",

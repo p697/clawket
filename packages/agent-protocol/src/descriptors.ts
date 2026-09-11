@@ -1,4 +1,4 @@
-export type BackendKind = 'openclaw' | 'hermes' | 'youmind';
+export type BackendKind = 'openclaw' | 'hermes' | 'youmind' | 'local-model';
 
 export type TransportKind =
   | 'relay'

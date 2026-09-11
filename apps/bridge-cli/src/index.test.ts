@@ -190,8 +190,16 @@ describe('cli pairing output', () => {
 
   beforeEach(() => {
     vi.resetModules();
+    // Process listings below are mocked POSIX ps output.
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
     vi.clearAllMocks();
     vi.stubEnv('HOME', mkdtempSync(join(tmpdir(), 'clawket-cli-home-')));
+    getHermesProcessLogPathsMock.mockReturnValue({
+      bridgeLogPath: join(process.env.HOME!, 'hermes-bridge.log'),
+      bridgeErrorLogPath: join(process.env.HOME!, 'hermes-bridge-error.log'),
+      relayLogPath: join(process.env.HOME!, 'hermes-relay.log'),
+      relayErrorLogPath: join(process.env.HOME!, 'hermes-relay-error.log'),
+    });
     process.argv = ['node', 'clawket', 'refresh-code'];
     resolveGatewayAuthMock.mockReturnValue({ token: 'gateway-token', password: null });
     resolveLocalPairGatewayUrlMock.mockImplementation(({ explicitUrl }: { explicitUrl?: string | null }) => (
@@ -308,6 +316,7 @@ describe('cli pairing output', () => {
     consoleErrorSpy.mockRestore();
     global.fetch = originalFetch;
     vi.unstubAllEnvs();
+    vi.restoreAllMocks();
   });
 
   it('prints the standard refresh flow for alphanumeric access codes', async () => {
@@ -1063,7 +1072,7 @@ describe('cli pairing output', () => {
     });
 
     expect(spawnMock).not.toHaveBeenCalled();
-    expect(consoleLogSpy).toHaveBeenCalledWith('Hermes runtimes will be restored by the OpenClaw service launcher.');
+    await vi.waitFor(() => expect(consoleLogSpy).toHaveBeenCalledWith('Hermes runtimes will be restored by the OpenClaw service launcher.'));
   });
 
   it('restores managed Hermes runtimes when the OpenClaw service launcher starts run --service', async () => {
@@ -1090,7 +1099,7 @@ describe('cli pairing output', () => {
       updatedAt: '2026-04-11T00:00:00.000Z',
     }), 'utf8');
     writeFileSync(
-      '/tmp/hermes-relay.log',
+      getHermesProcessLogPathsMock().relayLogPath,
       '[9999999999999] [status] relay=up bridge=up\n',
       'utf8',
     );
@@ -1178,7 +1187,7 @@ describe('cli pairing output', () => {
       createdAt: '2026-04-11T00:00:00.000Z',
       updatedAt: '2026-04-11T00:00:00.000Z',
     }), 'utf8');
-    writeFileSync('/tmp/hermes-relay.log', '[9999999999999] [status] relay=up bridge=up\n', 'utf8');
+    writeFileSync(getHermesProcessLogPathsMock().relayLogPath, '[9999999999999] [status] relay=up bridge=up\n', 'utf8');
     vi.stubEnv('HOME', homeDir);
     process.argv = ['node', 'clawket', 'run', '--service'];
     readPairingConfigMock.mockReturnValue({

@@ -139,7 +139,7 @@ export default {
       return response;
     }
 
-    if (policy.backend === 'openclaw'
+    if (policy.wireProtocol === 'gateway'
       && request.method === 'GET'
       && url.pathname === '/.well-known/apple-app-site-association') {
       response = appleAppSiteAssociationResponse(env);
@@ -147,7 +147,7 @@ export default {
       return response;
     }
 
-    if (policy.backend === 'openclaw'
+    if (policy.wireProtocol === 'gateway'
       && request.method === 'GET'
       && url.pathname === '/.well-known/assetlinks.json') {
       response = androidAssetLinksResponse(env);
@@ -181,13 +181,13 @@ export default {
       return response;
     }
 
-    if (policy.backend === 'openclaw' && request.method === 'POST' && url.pathname === '/v1/pair/session') {
+    if (policy.wireProtocol === 'gateway' && request.method === 'POST' && url.pathname === '/v1/pair/session') {
       response = withCors(await handlePairingSessionCreate(request, env));
       logRegistryTelemetry(policy, 'http_request', request, url, response.status, Date.now() - startedAt);
       return response;
     }
 
-    if (policy.backend === 'openclaw'
+    if (policy.wireProtocol === 'gateway'
       && request.method === 'POST'
       && url.pathname === '/v1/pair/session/resolve') {
       response = withCors(await handlePairingSessionResolve(request, env));
@@ -195,7 +195,7 @@ export default {
       return response;
     }
 
-    if (policy.backend === 'openclaw'
+    if (policy.wireProtocol === 'gateway'
       && request.method === 'POST'
       && url.pathname === '/v2/pair/session/resolve') {
       response = withCors(await handleSecurePairingSessionResolve(request, env));
@@ -203,7 +203,7 @@ export default {
       return response;
     }
 
-    if (policy.backend === 'openclaw'
+    if (policy.wireProtocol === 'gateway'
       && request.method === 'GET'
       && url.pathname.startsWith('/v1/pair/session/')) {
       const sessionId = decodeURIComponent(url.pathname.slice('/v1/pair/session/'.length));
@@ -212,7 +212,7 @@ export default {
       return response;
     }
 
-    if (policy.backend === 'openclaw' && request.method === 'GET' && url.pathname.startsWith('/pair/')) {
+    if (policy.wireProtocol === 'gateway' && request.method === 'GET' && url.pathname.startsWith('/pair/')) {
       const sessionId = decodeURIComponent(url.pathname.slice('/pair/'.length));
       response = await handlePairingLandingPage(env, sessionId, url.origin);
       logRegistryTelemetry(policy, 'http_request', request, url, response.status, Date.now() - startedAt);
@@ -322,7 +322,7 @@ async function handlePairAccessCode(
   ).toISOString();
   const previousAccessCodeHash = record.accessCodeHash;
   let next: PairPrincipalRecord;
-  if (policy.backend === 'openclaw') {
+  if (policy.wireProtocol === 'gateway') {
     const gateway = record as PairGatewayRecord;
     next = {
       ...gateway,
@@ -439,7 +439,7 @@ async function claimPairAccessCode(
   const now = new Date().toISOString();
   const issued = await mintClientToken(policy, record, env, clientLabel, now);
   let next: PairPrincipalRecord;
-  if (policy.backend === 'openclaw') {
+  if (policy.wireProtocol === 'gateway') {
     const gateway = record as PairGatewayRecord;
     next = {
       ...issued.record,
@@ -853,7 +853,7 @@ function normalizeRequestPath(policy: RegistryBackendPolicy, pathname: string): 
   if (pathname.startsWith(policy.verifyPathPrefix)) {
     return `${policy.verifyPathPrefix}:${policy.principalParam}`;
   }
-  if (policy.backend === 'openclaw') {
+  if (policy.wireProtocol === 'gateway') {
     if (pathname === '/v1/pair/session/resolve') return pathname;
     if (pathname.startsWith('/v1/pair/session/')) return '/v1/pair/session/:sessionId';
     if (pathname.startsWith('/pair/')) return '/pair/:sessionId';

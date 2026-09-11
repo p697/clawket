@@ -72,7 +72,7 @@ async function createHermesHomePath(config?: Record<string, unknown>): Promise<s
   tempDirs.push(dir);
   if (config) {
     const configJson = JSON.stringify(config);
-    execFileSync('python3', [
+    execFileSync((process.platform === 'win32' ? 'python' : 'python3'), [
       '-c',
       [
         'import json, pathlib, sys',

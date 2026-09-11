@@ -1,6 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { validateAgentDocRecords } from './check-agent-docs.mjs';
+import { isGitSymlinkPlaceholder, validateAgentDocRecords } from './check-agent-docs.mjs';
+
+test('Windows placeholders require both the tracked symlink mode and exact target bytes', () => {
+  const entry = `120000 ${'a'.repeat(40)} 0\tapps/mobile/CLAUDE.md`;
+  assert.equal(isGitSymlinkPlaceholder(entry, 'AGENTS.md'), true);
+  assert.equal(isGitSymlinkPlaceholder(entry.replace('120000', '100644'), 'AGENTS.md'), false);
+  assert.equal(isGitSymlinkPlaceholder(entry, '# copied instructions'), false);
+  assert.equal(isGitSymlinkPlaceholder(entry, '../AGENTS.md'), false);
+  assert.equal(isGitSymlinkPlaceholder('', 'AGENTS.md'), false);
+});
 
 const rootContent = [
   '# Overview',

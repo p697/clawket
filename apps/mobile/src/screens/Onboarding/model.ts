@@ -16,7 +16,7 @@ export const VERIFICATION_CODE_LENGTH = 6;
 
 const LEGACY_PAIRING_CODE = /^[ABCDEFGHJKMNPQRSTVWXYZ2-9]{12}$/;
 
-export type PairableBackendKind = Extract<BackendKind, 'openclaw' | 'hermes'>;
+export type PairableBackendKind = Extract<BackendKind, 'openclaw' | 'hermes' | 'local-model'>;
 
 export type PairingSubmission = Readonly<{
   backendKind: PairableBackendKind;
@@ -41,6 +41,7 @@ export type OnboardingErrorPresentation = Readonly<{
 const BACKEND_OFFLINE_MESSAGE: Record<PairableBackendKind, string> = {
   openclaw: 'OpenClaw is not responding',
   hermes: 'Hermes is not responding',
+  'local-model': 'Local model is not responding',
 };
 
 export function normalizeVerificationCode(
@@ -69,6 +70,7 @@ export function isVerificationCodeComplete(
   backendKind: PairableBackendKind = 'openclaw',
 ): boolean {
   const code = normalizeVerificationCode(value, backendKind);
+  if (backendKind === 'local-model') return /^\d{6}$/.test(code);
   return backendKind === 'openclaw'
     ? /^\d{6}$/.test(code) || LEGACY_PAIRING_CODE.test(code)
     : /^[A-HJ-KM-NP-TV-Z2-9]{6}$/.test(code);

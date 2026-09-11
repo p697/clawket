@@ -27,7 +27,7 @@ for (const version of ['legacy', 'split'] as const) {
       version === 'legacy' ? parser.replace('parse_frontmatter', '_parse_frontmatter') + '\ndef skill_matches_platform(fm): return True\ndef _collect_prerequisite_values(fm): return ["SAMPLE_KEY"], ["missing-command-for-test"]' : '',
       version === 'legacy' ? 'def _get_required_environment_variables(fm, legacy): return [{"name": v} for v in legacy]' : 'def _get_required_environment_variables(fm): return [{"name": fm["prerequisites"]["env_vars"]}]',
     ].join('\n'));
-    const bridge = new HermesLocalBridge({ hermesSourcePath: source, hermesHomePath: home, hermesPythonPath: 'python3', sessionStorePath: join(root, 'sessions.json') });
+    const bridge = new HermesLocalBridge({ hermesSourcePath: source, hermesHomePath: home, hermesPythonPath: (process.platform === 'win32' ? 'python' : 'python3'), sessionStorePath: join(root, 'sessions.json') });
     const report = await bridge.dispatchRequest('skills.status', { agentId: 'main' });
     expect(report).toMatchObject({ skills: [{ name: 'sample', eligible: false, missing: { env: ['SAMPLE_KEY'], bins: ['missing-command-for-test'] } }] });
   });

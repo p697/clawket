@@ -1,6 +1,7 @@
 import { RelayPairingService } from '../../services/relay-pairing';
 import { HermesRelayPairingService } from '../registry/hermes-relay-pairing';
-import { claimRelayPairing, type GatewayScanPayload } from './gateway-scan-flow';
+import { claimRelayPairing, assessPairingPayload, resolvePairingPayloadBackend, type GatewayScanPayload } from './gateway-scan-flow';
+import { parseQRPayload } from './qrPayload';
 
 jest.mock('../../services/relay-pairing', () => ({
   RelayPairingService: { claim: jest.fn() },
@@ -13,6 +14,20 @@ jest.mock('../registry/hermes-relay-pairing', () => ({
 describe('gateway scan Relay claim', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  it('keeps local-model identity through compact QR parsing, Preview validation and claim', async () => {
+    const serverUrl = 'https://clawket-local-model-registry-preview.clawket.workers.dev';
+    const payload = parseQRPayload(JSON.stringify({ v: 2, k: 'cp', b: 'local-model', s: serverUrl, g: 'gw_123', a: 'ABC234' }))!;
+    expect(payload).toBeTruthy();
+    expect(resolvePairingPayloadBackend(payload)).toBe('local-model');
+    expect(assessPairingPayload({ payload, expectedBackendKind: 'local-model', selectedEnvironment: 'preview', debugMode: true })).toEqual({kind:'accepted',backendKind:'local-model'});
+    expect(assessPairingPayload({ payload, expectedBackendKind: 'openclaw', selectedEnvironment: 'preview', debugMode: true }).kind).toBe('rejected');
+    expect(assessPairingPayload({ payload, expectedBackendKind: 'local-model', selectedEnvironment: 'production', debugMode: false }).kind).toBe('rejected');
+    (RelayPairingService.claim as jest.Mock).mockResolvedValue({gatewayId:'gw_123',relayUrl:'wss://clawket-local-model-relay-preview.clawket.workers.dev/ws',clientToken:'gct_test'});
+    const claimed = await claimRelayPairing(payload, {current:new Map()});
+    expect(claimed.backendKind).toBe('local-model');
+    expect(resolvePairingPayloadBackend(claimed)).toBe('local-model');
   });
 
   it('returns an already claimed or direct QR payload unchanged', async () => {

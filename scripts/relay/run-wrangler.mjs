@@ -2,6 +2,21 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { npmInvocation } from '../node-command.mjs';
+
+/** Execute JS entrypoints directly: Windows cannot spawn .cmd without a shell. */
+function spawnWorkspaceCommand(command, args, options) {
+  if (process.platform === 'win32') {
+    if (command === 'npm.cmd') {
+      const [node, argv] = npmInvocation(args, options.env);
+      return spawnSync(node, argv, { windowsHide: true, ...options });
+    }
+    if (path.basename(command) === 'wrangler.cmd') {
+      return spawnSync(process.execPath, [path.resolve(path.dirname(command), '../wrangler/bin/wrangler.js'), ...args], { windowsHide: true, ...options });
+    }
+  }
+  return spawnSync(command, args, options);
+}
 
 const defaultWorkspaceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -12,7 +27,7 @@ export function shouldRunCompatGate(command) {
 export function runCompatGate({
   command,
   workspaceRoot,
-  spawn = spawnSync,
+  spawn = spawnWorkspaceCommand,
   platform = process.platform,
   env = process.env,
   logError = console.error,
@@ -46,7 +61,7 @@ export function runCompatGate({
 export function runWrangler(rawArgs, dependencies = {}) {
   const {
     workspaceRoot = defaultWorkspaceRoot,
-    spawn = spawnSync,
+    spawn = spawnWorkspaceCommand,
     exists = existsSync,
     readFile = readFileSync,
     platform = process.platform,
@@ -140,7 +155,7 @@ export function ensureAccountSelection({
   workspaceRoot,
   selectedConfig,
   selectedAccountId,
-  spawn = spawnSync,
+  spawn = spawnWorkspaceCommand,
   env = process.env,
   logError = console.error,
 }) {

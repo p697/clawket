@@ -19,7 +19,7 @@ This repository is the Clawket monorepo.
 
 ## AGENTS / CLAUDE Source Rule
 
-`AGENTS.md` is the only authored instruction source in each directory. A sibling `CLAUDE.md` must be a relative symlink to `AGENTS.md`, not a copied document. When adding a directory-level `AGENTS.md`, add the matching symlink and keep detailed rules in the closest applicable file.
+`AGENTS.md` is the only authored instruction source in each directory. A sibling `CLAUDE.md` must be a relative symlink to `AGENTS.md`, not a copied document. On Windows checkouts without symlink privileges, Git's exact `AGENTS.md` target placeholder is accepted only with index mode `120000`; authored copies remain invalid. When adding a directory-level `AGENTS.md`, add the matching symlink and keep detailed rules in the closest applicable file.
 
 ## Workspace Layout
 
@@ -87,7 +87,7 @@ Active client routing must survive Durable Object hibernation through WebSocket 
 
 ## Preview Service Environment Rule
 
-1. Preview is an OpenClaw Relay service environment, not a backend or transport kind. Keep `backendKind=openclaw` and `transportKind=relay` for both Production and Preview.
+1. Preview is a service environment, not a backend or transport kind. Preserve the chosen backend identity and `transportKind=relay`; the local-model extension uses dedicated Preview resources (see `docs/3.0/15-local-model.md`).
 2. Production and Preview must use isolated Registry, Relay, KV, Durable Object, pairing credentials, and local pairing files. A Preview deploy must never target Production bindings.
 3. Official QR codes are environment-checked by mobile. Custom/self-hosted Registry URLs remain supported and must not be misclassified as an official environment.
 4. The Bridge service may connect Production and Preview simultaneously, but failure in one environment must not stop the other runtime.

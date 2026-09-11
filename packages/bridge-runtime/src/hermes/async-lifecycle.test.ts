@@ -14,14 +14,14 @@ afterEach(async () => {
 });
 function runner(timeoutMs = 2000) {
   const value = new HermesPythonRunner({ hermesSourcePath: '/nonexistent-fixture',
-    hermesHomePath: '/nonexistent-home', hermesPythonPath: 'python3', timeoutMs });
+    hermesHomePath: '/nonexistent-home', hermesPythonPath: (process.platform === 'win32' ? 'python' : 'python3'), timeoutMs });
   runners.push(value);
   return value;
 }
 async function bridge() {
   const directory = await createTempDirectory();
   const value = new HermesLocalBridge({ hermesSourcePath: directory, hermesHomePath: directory,
-    hermesStateDbPath: join(directory, 'missing.db'), hermesPythonPath: 'python3',
+    hermesStateDbPath: join(directory, 'missing.db'), hermesPythonPath: (process.platform === 'win32' ? 'python' : 'python3'),
     sessionStorePath: join(directory, 'sessions.json'), usageLedgerPath: join(directory, 'usage.json') });
   bridges.push(value);
   return value;

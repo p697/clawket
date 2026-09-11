@@ -17,7 +17,7 @@
     "access": "public"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=20.3.0"
   },
   "scripts": {
     "build:bundle": "npm run --workspace @clawket/bridge-core build && npm run --workspace @clawket/bridge-runtime build && node scripts/build-bundle.mjs",

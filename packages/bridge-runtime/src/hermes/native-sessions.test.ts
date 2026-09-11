@@ -27,7 +27,7 @@ describe('HermesNativeSessionReader', () => {
     const runner = new HermesPythonRunner({
       hermesSourcePath: join(directory, 'missing-source'),
       hermesHomePath: join(directory, 'home'),
-      hermesPythonPath: 'python3',
+      hermesPythonPath: (process.platform === 'win32' ? 'python' : 'python3'),
     });
     const reader = new HermesNativeSessionReader(dbPath, runner);
 
@@ -56,7 +56,7 @@ describe('HermesNativeSessionReader', () => {
     const reader = new HermesNativeSessionReader(dbPath, new HermesPythonRunner({
       hermesSourcePath: directory,
       hermesHomePath: directory,
-      hermesPythonPath: 'python3',
+      hermesPythonPath: (process.platform === 'win32' ? 'python' : 'python3'),
     }));
     expect(await reader.listSessions(5)).toEqual([]);
     expect(reader.consumeWarnings()[0]).toMatch(/read-only query failed/);

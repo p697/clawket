@@ -17,7 +17,7 @@ describe('Hermes stream request mapping', () => {
       hermesStateDbPath: dbPath,
       hermesHomePath: join(directory, 'home'),
       hermesSourcePath: join(directory, 'missing'),
-      hermesPythonPath: 'python3',
+      hermesPythonPath: (process.platform === 'win32' ? 'python' : 'python3'),
       sessionStorePath: join(directory, 'sessions.json'),
       usageLedgerPath: join(directory, 'usage.json'),
     });
@@ -51,7 +51,7 @@ describe('Hermes stream request mapping', () => {
       hermesStateDbPath: dbPath,
       hermesHomePath: join(directory, 'home'),
       hermesSourcePath: join(directory, 'missing'),
-      hermesPythonPath: 'python3',
+      hermesPythonPath: (process.platform === 'win32' ? 'python' : 'python3'),
       sessionStorePath: join(directory, 'sessions.json'),
       usageLedgerPath: join(directory, 'usage.json'),
     };

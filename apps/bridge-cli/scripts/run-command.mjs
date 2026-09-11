@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import process from "node:process";
+import { spawnNpm } from "../../../scripts/node-command.mjs";
 
 const [command, ...args] = process.argv.slice(2);
 
@@ -8,9 +9,7 @@ if (!command) {
   process.exit(1);
 }
 
-const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
-
-const build = spawnSync(npmCommand, ["run", "build"], {
+const build = spawnNpm(["run", "build"], {
   cwd: process.cwd(),
   stdio: "inherit",
 });

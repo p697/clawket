@@ -36,7 +36,7 @@ async function createBridgeWithDb(input?: {
       hermesStateDbPath: dbPath,
       hermesHomePath: join(directory, 'home'),
       hermesSourcePath: join(directory, 'missing-source'),
-      hermesPythonPath: 'python3',
+      hermesPythonPath: (process.platform === 'win32' ? 'python' : 'python3'),
       sessionStorePath: join(directory, 'sessions.json'),
       usageLedgerPath: join(directory, 'usage.json'),
       startHermesIfNeeded: false,
@@ -156,7 +156,7 @@ describe('HermesLocalBridge multi-session protocol', () => {
       hermesStateDbPath: dbPath,
       hermesHomePath: join(directory, 'home'),
       hermesSourcePath: join(directory, 'missing'),
-      hermesPythonPath: 'python3',
+      hermesPythonPath: (process.platform === 'win32' ? 'python' : 'python3'),
       sessionStorePath: join(directory, 'sessions.json'),
     }));
     const created = await bridge.dispatchRequest('sessions.create', { title: 'Migrating' }) as any;
@@ -216,7 +216,7 @@ describe('HermesLocalBridge multi-session protocol', () => {
       hermesStateDbPath: dbPath,
       hermesHomePath: join(directory, 'home'),
       hermesSourcePath: join(directory, 'missing'),
-      hermesPythonPath: 'python3',
+      hermesPythonPath: (process.platform === 'win32' ? 'python' : 'python3'),
       sessionStorePath: join(directory, 'sessions.json'),
     }));
     const created = await bridge.dispatchRequest('sessions.create', { title: 'Repeated' }) as any;
@@ -254,7 +254,7 @@ describe('HermesLocalBridge multi-session protocol', () => {
       hermesStateDbPath: dbPath,
       hermesHomePath: join(directory, 'home'),
       hermesSourcePath: join(directory, 'missing'),
-      hermesPythonPath: 'python3',
+      hermesPythonPath: (process.platform === 'win32' ? 'python' : 'python3'),
       sessionStorePath: join(directory, 'sessions.json'),
     }));
     const created = await bridge.dispatchRequest('sessions.create', { title: 'Repeated cursor' }) as any;
@@ -308,7 +308,7 @@ describe('HermesLocalBridge multi-session protocol', () => {
       hermesStateDbPath: dbPath,
       hermesHomePath: join(directory, 'home'),
       hermesSourcePath: join(directory, 'missing'),
-      hermesPythonPath: 'python3',
+      hermesPythonPath: (process.platform === 'win32' ? 'python' : 'python3'),
       sessionStorePath: join(directory, 'sessions.json'),
       usageLedgerPath: join(directory, 'usage.json'),
     };
@@ -439,7 +439,7 @@ describe('HermesLocalBridge multi-session protocol', () => {
       hermesStateDbPath: dbPath,
       hermesHomePath: join(directory, 'home'),
       hermesSourcePath: join(directory, 'missing'),
-      hermesPythonPath: 'python3',
+      hermesPythonPath: (process.platform === 'win32' ? 'python' : 'python3'),
       sessionStorePath: join(directory, 'sessions.json'),
     }));
     const fetchMock = vi.fn();
@@ -460,7 +460,7 @@ describe('HermesLocalBridge multi-session protocol', () => {
       hermesStateDbPath: dbPath,
       hermesHomePath: join(directory, 'home'),
       hermesSourcePath: join(directory, 'missing-source'),
-      hermesPythonPath: 'python3',
+      hermesPythonPath: (process.platform === 'win32' ? 'python' : 'python3'),
       sessionStorePath,
       usageLedgerPath: join(directory, 'usage.json'),
       startHermesIfNeeded: false,

@@ -100,6 +100,7 @@ const BACKEND_OPTIONS: ReadonlyArray<{
 }> = [
   { kind: 'openclaw' },
   { kind: 'hermes' },
+  { kind: 'local-model' },
 ];
 
 const PAIRING_INPUT_PRESENTATION: Readonly<Record<PairableBackendKind, {
@@ -107,6 +108,7 @@ const PAIRING_INPUT_PRESENTATION: Readonly<Record<PairableBackendKind, {
 }>> = {
   openclaw: { keyboardType: 'number-pad' },
   hermes: { keyboardType: 'ascii-capable' },
+  'local-model': { keyboardType: 'number-pad' },
 };
 
 export function OnboardingScreen({
@@ -145,7 +147,10 @@ export function OnboardingScreen({
   const [docsExpanded, setDocsExpanded] = useState(false);
   const viewedRef = useRef(false);
   const submitInFlightRef = useRef(false);
-  const agentPrompt = useMemo(() => buildAgentPairingPrompt(t, pairingCommand), [pairingCommand, t]);
+  const effectiveCommand = backendKind === 'local-model'
+    ? 'npx @p697/clawket pair --backend local-model --preview'
+    : pairingCommand;
+  const agentPrompt = useMemo(() => buildAgentPairingPrompt(t, effectiveCommand), [effectiveCommand, t]);
   const pairingMethodTabs = useMemo((): Array<{ key: PairingMethod; label: string }> => [
     { key: 'agent', label: t('Send to my agent') },
     { key: 'terminal', label: t('Run it myself') },
@@ -153,7 +158,8 @@ export function OnboardingScreen({
   const backendOptions = useMemo(() => [
     { ...BACKEND_OPTIONS[0], label: t('OpenClaw') },
     { ...BACKEND_OPTIONS[1], label: t('Hermes') },
-  ] as const, [t]);
+    ...(environment === 'preview' ? [{ ...BACKEND_OPTIONS[2], label: t('Local model') }] : []),
+  ] as const, [environment, t]);
   const websiteOptions = useMemo((): ReadonlyArray<{ kind: BackendKind; label: string }> => [
     ...backendOptions,
     { kind: 'youmind', label: t('YouMind') },
@@ -193,6 +199,7 @@ export function OnboardingScreen({
   const pairingPlaceholder: Readonly<Record<PairableBackendKind, string>> = {
     openclaw: t('123 456'),
     hermes: t('ABC 234'),
+    'local-model': t('123 456'),
   };
 
   const submitPairing = () => {
@@ -234,8 +241,8 @@ export function OnboardingScreen({
     if (!onCopyAgentPrompt) return;
     void Promise.resolve(onCopyAgentPrompt(agentPrompt, backendKind)).then(flashAgentPromptCopied, () => setLocalError(true));
   };
-  const backendLabel = backendKind === 'openclaw' ? 'OpenClaw' : 'Hermes';
-  const agentMethod = Boolean(onCopyAgentPrompt) && pairingMethod === 'agent';
+  const backendLabel = backendKind === 'local-model' ? t('Local model') : backendKind === 'openclaw' ? 'OpenClaw' : 'Hermes';
+  const agentMethod = backendKind !== 'local-model' && Boolean(onCopyAgentPrompt) && pairingMethod === 'agent';
   return (
     <View testID="onboarding-screen" style={[styles.screen, { paddingTop: insets.top }]}>
       <FlowHeader onBack={connecting ? onClose : onClose || !choosing ? goBack : undefined} testID="onboarding-close"
@@ -246,7 +253,7 @@ export function OnboardingScreen({
         automaticallyAdjustContentInsets={false} keyboardDismissMode="interactive"
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + Space.xl }]}
         keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-        <PageIntro title={choosing ? t('Connect your agent') : t('Connect {{backend}}', { backend: backendKind === 'openclaw' ? 'OpenClaw' : 'Hermes' })} />
+        <PageIntro title={choosing ? t('Connect your agent') : t('Connect {{backend}}', { backend: backendLabel })} />
         {status.kind === 'offline' ? <Banner tone="neutral" icon={WifiOff} testID="onboarding-offline" message={t('No network')} actionLabel={onRetry ? t('Retry', { ns: 'common' }) : undefined} onAction={onRetry} /> : null}
         {status.kind === 'error' ? <ErrorBanner code={status.code} backendKind={backendKind} onAction={onErrorAction} /> : null}
         {localError ? <Banner tone="bad" message={t('Please try again later.', { ns: 'common' })} /> : null}
@@ -262,7 +269,7 @@ export function OnboardingScreen({
           </View>
         </> : <>
           <FormStep number="01" title={t('Get a pairing code')}>
-            {onCopyAgentPrompt ? <SegmentedTabs testID="onboarding-pairing-method" size="sm" tabs={pairingMethodTabs} active={pairingMethod} onSwitch={setPairingMethod} /> : null}
+            {onCopyAgentPrompt && backendKind !== 'local-model' ? <SegmentedTabs testID="onboarding-pairing-method" size="sm" tabs={pairingMethodTabs} active={pairingMethod} onSwitch={setPairingMethod} /> : null}
             {agentMethod ? <>
               <CommandBlock prose command={agentPrompt} accessibilityLabel={t('Message for your agent')} testID="onboarding-agent-prompt" />
               <Button testID="onboarding-copy-agent-prompt" label={agentPromptCopied ? t('Copied') : t('Copy this message')} icon={agentPromptCopied ? Check : Copy}
@@ -270,8 +277,8 @@ export function OnboardingScreen({
               <Text style={styles.subtitle}>{t('Paste it to the agent you already chat with, like {{backend}} in Telegram. It will reply with the pairing code.', { backend: backendLabel })}</Text>
             </> : <>
               <Text style={styles.subtitle}>{t('Open Terminal and run this command.')}</Text>
-              <CommandBlock command={pairingCommand} copied={copied} onCopy={onCopyCommand ? () => {
-                void Promise.resolve(onCopyCommand(pairingCommand)).then(flashCopied, () => setLocalError(true));
+              <CommandBlock command={effectiveCommand} copied={copied} onCopy={onCopyCommand ? () => {
+                void Promise.resolve(onCopyCommand(effectiveCommand)).then(flashCopied, () => setLocalError(true));
               } : undefined} />
             </>}
           </FormStep>

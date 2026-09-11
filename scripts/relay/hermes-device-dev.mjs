@@ -97,7 +97,7 @@ export function buildHermesDeviceConfig(input) {
   if (input.appName === 'relay-registry') {
     return [
       'name = "clawket-hermes-registry"',
-      `main = "${escapeTomlString(path.join(input.workspaceRoot, 'apps', 'relay-registry', 'src', 'index.ts'))}"`,
+      `main = "${escapeTomlString(path.join(input.workspaceRoot, 'apps', 'relay-registry', 'src', 'index.ts').replaceAll('\\', '/'))}"`,
       'compatibility_date = "2026-03-03"',
       'workers_dev = true',
       '',
@@ -122,7 +122,7 @@ export function buildHermesDeviceConfig(input) {
 
   return [
     'name = "clawket-hermes-relay"',
-    `main = "${escapeTomlString(path.join(input.workspaceRoot, 'apps', 'relay-worker', 'src', 'index.ts'))}"`,
+    `main = "${escapeTomlString(path.join(input.workspaceRoot, 'apps', 'relay-worker', 'src', 'index.ts').replaceAll('\\', '/'))}"`,
     'compatibility_date = "2026-03-03"',
     'workers_dev = true',
     '',

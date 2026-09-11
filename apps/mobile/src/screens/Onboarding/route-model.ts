@@ -13,6 +13,7 @@ import type {
 export const ONBOARDING_DOCUMENTATION_URLS: Readonly<Record<PairableBackendKind, string>> = Object.freeze({
   openclaw: 'https://docs.openclaw.ai/install',
   hermes: 'https://hermes-agent.nousresearch.com/docs/getting-started/quickstart',
+  'local-model': 'https://github.com/p697/clawket',
 });
 
 /** Official product homepages for the "No agent yet?" entry; pairing help keeps the documentation URLs above. */
@@ -20,6 +21,7 @@ export const ONBOARDING_WEBSITE_URLS: Readonly<Record<BackendKind, string>> = Ob
   openclaw: 'https://openclaw.ai',
   hermes: 'https://hermes-agent.nousresearch.com',
   youmind: 'https://youmind.com',
+  'local-model': 'https://github.com/p697/clawket',
 });
 
 const ADAPTER_ERROR_CODES = new Set<AdapterErrorCode>([
@@ -49,6 +51,7 @@ export function normalizePairableBackendKind(
     openclaw: 'openclaw',
     hermes: 'hermes',
     youmind: 'openclaw',
+    'local-model': 'local-model',
   };
   return normalized[backendKind ?? 'openclaw'];
 }

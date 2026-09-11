@@ -4,6 +4,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 import { loadBridgeCliEnv } from "./load-env.mjs";
 import {
   computeCliBuildProvenance,
@@ -24,7 +25,6 @@ const packagedRegistryUrl = readOptionalEnv("CLAWKET_PACKAGE_DEFAULT_REGISTRY_UR
 const packagedRegistryFallbackUrl = readOptionalEnv("CLAWKET_PACKAGE_DEFAULT_REGISTRY_FALLBACK_URL");
 
 const args = [
-  "tsup",
   "apps/bridge-cli/src/index.ts",
   "--format",
   "esm",
@@ -51,10 +51,13 @@ const args = [
   `--define.process.env.CLAWKET_PACKAGE_DEFAULT_REGISTRY_FALLBACK_URL=${JSON.stringify(packagedRegistryFallbackUrl)}`,
 ];
 
-const result = spawnSync("npx", args, {
+const require = createRequire(import.meta.url);
+const tsupEntry = path.join(path.dirname(require.resolve('tsup/package.json')), 'dist', 'cli-default.js');
+const result = spawnSync(process.execPath, [tsupEntry, ...args], {
   stdio: "inherit",
   env: process.env,
   cwd: rootDir,
+  windowsHide: true,
 });
 
 if (result.status !== 0) {

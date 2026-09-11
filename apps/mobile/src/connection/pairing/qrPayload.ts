@@ -191,6 +191,7 @@ export function parseQRPayload(raw: string): QRScanResult | null {
     return {
       url: relayUrl,
       token: token || undefined,
+      ...(payload.b === 'local-model' ? { backendKind: 'local-model' as const, transportKind: 'relay' as const } : {}),
       password: password || undefined,
       mode: 'relay',
       relay: {

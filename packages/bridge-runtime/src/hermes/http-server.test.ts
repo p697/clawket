@@ -108,7 +108,7 @@ describe('HermesLocalBridge capability advertisement', () => {
       startHermesIfNeeded: false,
       hermesSourcePath: join(stateDir, 'missing-hermes-source'),
       hermesHomePath: join(stateDir, 'home'),
-      hermesPythonPath: 'python3',
+      hermesPythonPath: (process.platform === 'win32' ? 'python' : 'python3'),
       sessionStorePath: join(stateDir, 'sessions.json'),
       usageLedgerPath: join(stateDir, 'usage.json'),
     });

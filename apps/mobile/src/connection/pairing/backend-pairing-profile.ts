@@ -7,6 +7,7 @@ import {
   assessRelayEnvironmentSelection,
   getOfficialHermesRegistryUrl,
   getOfficialRelayRegistryUrl,
+  OFFICIAL_LOCAL_MODEL_PREVIEW_REGISTRY_URL,
 } from '../../services/relay-environment';
 import { parsePairingLink } from '../../services/pairing-session';
 import type { RelayServiceEnvironment } from '../../types';
@@ -22,7 +23,7 @@ import {
   type PairingPayloadAssessment,
 } from './gateway-scan-flow';
 
-export type PairingBackendKind = Extract<BackendKind, 'openclaw' | 'hermes'>;
+export type PairingBackendKind = Extract<BackendKind, 'openclaw' | 'hermes' | 'local-model'>;
 
 export type BackendPairingResult = Readonly<{
   backendKind: PairingBackendKind;
@@ -74,6 +75,26 @@ type BackendPairingProfile = Readonly<{
 }>;
 
 const BACKEND_PAIRING_PROFILES: Readonly<Record<PairingBackendKind, BackendPairingProfile>> = {
+  'local-model': {
+    reportsCodeOutcome: false,
+    async connectCode(input) {
+      if (input.environment !== 'preview' || !input.debugMode) throw new AdapterError('unsupported', 'Local model pairing requires Preview mode');
+      const connected = await input.secureInvitation.connectCode({
+        serverUrl: OFFICIAL_LOCAL_MODEL_PREVIEW_REGISTRY_URL, pairingCode: input.pairingCode,
+        expectedBackendKind: 'local-model', environment: 'preview',
+      });
+      return connected ? requireExpectedActiveConnection('local-model', input.runtime) : null;
+    },
+    async connectLink(input) {
+      const descriptor = parsePairingLink(input.url);
+      if (!descriptor || input.environment !== 'preview' || !input.debugMode
+        || assessRelayEnvironmentSelection({ serverUrl: descriptor.serverUrl, selectedEnvironment: input.environment, debugMode: input.debugMode })) {
+        throw new AdapterError('unsupported', 'Local model pairing requires a matching Preview environment');
+      }
+      const connected = await input.secureInvitation.connectLink(input.url, { expectedBackendKind: 'local-model', environment: 'preview' });
+      return connected ? requireExpectedActiveConnection('local-model', input.runtime) : null;
+    },
+  },
   openclaw: {
     reportsCodeOutcome: false,
     async connectCode(input) {

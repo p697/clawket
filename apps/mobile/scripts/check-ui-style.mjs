@@ -885,7 +885,7 @@ const details = {};
 const hardFailures = [...sourceCollectionFailures];
 
 for (const file of files) {
-  const rel = relative(ROOT, file);
+  const rel = relative(ROOT, file).replaceAll('\\', '/');
   const source = readFileSync(file, 'utf8');
   if (!source.trim()) hardFailures.push(`${rel}: UI source file is empty`);
   const result = scanSource(rel, source);
@@ -910,7 +910,7 @@ try {
   if (sourceFiles.length === 0) throw new Error('src contains no TypeScript sources');
   canonicalTokenScanCount = sourceFiles.length + 1;
   for (const file of sourceFiles) {
-    const rel = relative(ROOT, file);
+    const rel = relative(ROOT, file).replaceAll('\\', '/');
     const source = readFileSync(file, 'utf8');
     if (!source.trim()) hardFailures.push(`${rel}: token-audited source file is empty`);
     hardFailures.push(...validateCanonicalTokenUsage(rel, source));

@@ -69,6 +69,11 @@ export class RelayWsTransport extends BaseWebSocketTransport {
     this.startHandshakeTimer();
   }
 
+  /** Backend rejection retains the same backoff as a failed socket attempt. */
+  public retryHandshake(): void {
+    this.forceReconnect(undefined, 'Backend handshake failed');
+  }
+
   protected handleSocketOpen(): void {
     this.setHandshaking();
     this.startHandshakeTimer();

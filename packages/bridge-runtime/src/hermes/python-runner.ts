@@ -20,12 +20,13 @@ export function resolveHermesPythonPath(options: HermesPythonRunnerOptions): str
   const env = options.env ?? process.env;
   const fromEnv = env.HERMES_PYTHON_PATH?.trim();
   if (fromEnv) return fromEnv;
+  const pythonParts = process.platform === 'win32' ? ['Scripts', 'python.exe'] : ['bin', 'python'];
   const candidates = [
-    join(options.hermesSourcePath, '.venv', 'bin', 'python'),
-    join(options.hermesSourcePath, 'venv', 'bin', 'python'),
-    join(options.hermesHomePath, 'venvs', 'hermes-dev', 'bin', 'python'),
+    join(options.hermesSourcePath, '.venv', ...pythonParts),
+    join(options.hermesSourcePath, 'venv', ...pythonParts),
+    join(options.hermesHomePath, 'venvs', 'hermes-dev', ...pythonParts),
   ];
-  return candidates.find((candidate) => existsSync(candidate)) ?? 'python3';
+  return candidates.find((candidate) => existsSync(candidate)) ?? (process.platform === 'win32' ? 'python' : 'python3');
 }
 
 export class HermesPythonRunner {
@@ -60,6 +61,7 @@ export class HermesPythonRunner {
           HERMES_HOME: this.options.hermesHomePath,
           PYTHONPATH: buildHermesPythonPath(this.options.hermesSourcePath, (this.options.env ?? process.env).PYTHONPATH),
         },
+        windowsHide: true,
         encoding: 'utf8',
         maxBuffer: 16 * 1024 * 1024,
         timeout: this.options.timeoutMs ?? 60_000,

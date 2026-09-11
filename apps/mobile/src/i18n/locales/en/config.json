@@ -368,5 +368,7 @@
   "Unable to change app language": "Unable to change app language",
   "Connect OpenClaw, Hermes or YouMind Sprite": "Connect OpenClaw, Hermes or YouMind Sprite",
   "Create another agent on {{connection}}": "Create another agent on {{connection}}",
-  "Create another agent on this connection": "Create another agent on this connection"
+  "Create another agent on this connection": "Create another agent on this connection",
+  "Local model": "Local model",
+  "Local model is not responding": "Local model is not responding"
 }
