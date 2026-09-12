@@ -7,7 +7,7 @@ const config = {
       diagnostics: false,
     }],
     // remend ships ESM only; Babel lowers it for the CommonJS test runtime.
-    'node_modules/remend/dist/index\\.js$': 'babel-jest',
+    'node_modules[/\\\\]remend[/\\\\]dist[/\\\\]index\\.js$': 'babel-jest',
   },
   transformIgnorePatterns: [
     'node_modules/(?!(tweetnacl|js-sha256|remend)/)',

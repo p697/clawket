@@ -88,3 +88,5 @@ In negotiated client-channel mode, pairing approve/reject must target a live chi
 `src/local-model/` implements OpenAI-compatible streaming, one durable main conversation, live vision probing and the isolated Preview Relay owner. Persist before acknowledgement, reject conflicting idempotency keys, cancel the actual upstream request, and never replay interrupted runs. Model selection is global and excludes in-flight generation. Do not advertise Agent tools. See `../../docs/3.0/15-local-model.md`.
 
 Local-model health probes must not cold-load an unloaded llama.cpp router preset. Explicit selection owns the longer model-load timeout; ordinary probes fail with an actionable message.
+
+Local-model Relay must bound application readiness after every WebSocket upgrade, retain backoff until authenticated `relay.ready`, ignore replaced socket callbacks, and clear all reconnect/readiness/heartbeat timers on stop. Diagnostic output is limited to fixed event names, stable error codes, retry counts and durations; never include close reason text or authentication URLs.

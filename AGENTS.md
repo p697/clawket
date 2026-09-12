@@ -127,6 +127,8 @@ When implementation, architecture, or release behavior changes, update the close
 4. New check logic should expose testable validation functions and include a corrupted-input regression test.
 5. Tests that require an external checkout or live service must have an explicit integration command and must not make the CI-safe gate depend on a developer's home directory. Keep the ordinary `npm test` command as the broader local suite.
 
+Windows ACL assertions must fail on command/module errors or missing paths. When invoking Windows PowerShell from PowerShell 7, resolve its security module from the invoked shell's `$PSHOME`; inherited module paths must not produce a false zero-access result.
+
 ## Hermes Implementation Boundaries
 
 1. Hermes adapter lifecycle state (run, session, stop) must be self-contained and deterministically cleanable inside the adapter layer.
