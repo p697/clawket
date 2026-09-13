@@ -932,4 +932,4 @@ Owner asked for the Telegram placeholder instead of "Ask Lucy". `ThreadCopy.form
 - Stop waits for child exit; Start waits through stopping owners and confirms the new supervisor. Added real-process concurrent and sequential Stop/Start regression.
 - Installer allocates fresh snapshot directories and checks CLI startup before activation. Windows-only failure-injection test preserves active/rollback manifests across repeated failed installs.
 - CLI tests now isolate both HOME and USERPROFILE: native Windows homedir ignored the previous HOME-only fixture, breaking Hermes watchdog CI. Production Hermes behavior is unchanged.
-- Validation in progress; no live service restart or cloud deployment for this review.
+- Local validation: full `check:required`, Bridge 292 tests, supervisor 3 real-process/diagnostic tests, and v1 replay 36 tests passed. Windows CI also passed the previously failing Hermes watchdog and new supervisor/installation-failure checks on the implementation commit; final PR-head CI remains the merge gate. No live service restart or cloud deployment for this review.
