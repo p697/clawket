@@ -933,3 +933,5 @@ Owner asked for the Telegram placeholder instead of "Ask Lucy". `ThreadCopy.form
 - Installer allocates fresh snapshot directories and checks CLI startup before activation. Windows-only failure-injection test preserves active/rollback manifests across repeated failed installs.
 - CLI tests now isolate both HOME and USERPROFILE: native Windows homedir ignored the previous HOME-only fixture, breaking Hermes watchdog CI. Production Hermes behavior is unchanged.
 - Local validation: full `check:required`, Bridge 292 tests, supervisor 3 real-process/diagnostic tests, and v1 replay 36 tests passed. Windows CI also passed the previously failing Hermes watchdog and new supervisor/installation-failure checks on the implementation commit; final PR-head CI remains the merge gate. No live service restart or cloud deployment for this review.
+
+- Final-head Windows rerun exposed a PowerShell cold-start timeout in the new missing-path ACL regression. Bounded the subprocess at 10 seconds and its test at 20 seconds; permission assertions remain fail-closed.
