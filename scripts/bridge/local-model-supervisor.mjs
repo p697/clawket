@@ -29,7 +29,7 @@ export async function control(config, action) {
   return new Promise((resolveResult, reject) => {
     const socket = connect(p.pipe);
     let data = '';
-    socket.setTimeout(3000, () => socket.destroy(new Error('Control timeout')));
+    socket.setTimeout(action === 'stop' ? 15_000 : 3000, () => socket.destroy(new Error('Control timeout')));
     socket.on('connect', () => socket.write(JSON.stringify({ action, token }) + '\n'));
     socket.on('data', chunk => { data += chunk; if (data.length > 4096) socket.destroy(new Error('Invalid control response')); });
     socket.on('end', () => { try { resolveResult(JSON.parse(data)); } catch { reject(new Error('Invalid control response')); } });
@@ -44,6 +44,7 @@ export async function supervise(config) {
   const token = randomBytes(32).toString('hex');
   let child = null, retry = null, stopping = false, attempts = 0, ready = false;
   let stopDeadline = null;
+  const stopClients = new Set();
   const log = (event, fields = {}) => {
     const file = join(p.directory, 'supervisor.jsonl');
     if (existsSync(file) && statSync(file).size > 1024 * 1024) renameSync(file, file + '.previous');
@@ -60,15 +61,22 @@ export async function supervise(config) {
       try {
         const request = JSON.parse(input);
         if (request.token !== token) { socket.destroy(); return; }
-        socket.end(JSON.stringify({ pid: process.pid, childPid: child?.pid ?? null, ready, stopping, attempts }));
-        if (request.action === 'stop') stop();
+        if (request.action === 'stop') {
+          socket.setTimeout(0); stopClients.add(socket);
+          socket.once('close', () => stopClients.delete(socket)); stop();
+        } else socket.end(JSON.stringify({ pid: process.pid, childPid: child?.pid ?? null, ready, stopping, attempts }));
       } catch { socket.destroy(); }
     });
   });
   await new Promise((yes, no) => { server.once('error', no); server.listen(p.pipe, yes); });
   // The exclusive pipe is acquired before publishing control state or spawning.
   writeFileSync(join(p.directory, 'control.json'), JSON.stringify({ token }), { mode: 0o600 });
-  const finished = () => { if (stopDeadline) clearTimeout(stopDeadline); server.close(); log('supervisor_stopped'); };
+  const finished = () => {
+    if (stopDeadline) clearTimeout(stopDeadline);
+    server.close();
+    for (const socket of stopClients) socket.end(JSON.stringify({ pid: process.pid, childPid: null, ready: false, stopping: true, attempts }));
+    stopClients.clear(); log('supervisor_stopped');
+  };
   function stop() {
     if (stopping) return;
     stopping = true; ready = false;
@@ -128,11 +136,23 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     if (!config) throw new Error('Config required');
     if (action === 'run') await supervise(config);
     else if (action === 'start') {
-      try { console.log(JSON.stringify(await control(config, 'status'))); }
-      catch {
-        const child = spawn(process.execPath, [fileURLToPath(import.meta.url), 'run', resolve(config)], { detached: true, windowsHide: true, stdio: 'ignore' });
-        child.unref(); console.log('Background start requested');
+      const deadline = Date.now() + 15_000;
+      let launched = false, running = null;
+      while (Date.now() < deadline) {
+        try {
+          const status = await control(config, 'status');
+          if (!status.stopping) { running = status; break; }
+        } catch (error) {
+          if (!['ENOENT', 'ECONNREFUSED'].includes(error?.code)) throw error;
+          if (!launched) {
+            const child = spawn(process.execPath, [fileURLToPath(import.meta.url), 'run', resolve(config)], { detached: true, windowsHide: true, stdio: 'ignore' });
+            child.on('error', () => {}); child.unref(); launched = true;
+          }
+        }
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
+      if (!running) throw new Error('Supervisor start timed out');
+      console.log(JSON.stringify(running));
     } else if (action === 'status' || action === 'stop') console.log(JSON.stringify(await control(config, action)));
     else throw new Error('Unsupported action');
   } catch (error) {

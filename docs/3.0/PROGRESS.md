@@ -926,3 +926,10 @@ Owner: the full-accent double check was ugly, but plain gray felt flat and the s
 ### 2026-09-12 — Composer placeholder: "Message"
 
 Owner asked for the Telegram placeholder instead of "Ask Lucy". `ThreadCopy.formatAsk` became a plain `placeholder` resolved from the existing `Message...` chat key, whose six values are now the messenger word without an ellipsis (`Message`, `输入消息`, `メッセージ`, `메시지`, `Nachricht`, `Mensaje`); the appearance preview shares it and `Ask {{name}}` is removed. Thread suites (147 tests), six-locale catalog and UI-style checks pass.
+
+### 2026-09-13 PR #32 stability review fixes
+
+- Stop waits for child exit; Start waits through stopping owners and confirms the new supervisor. Added real-process concurrent and sequential Stop/Start regression.
+- Installer allocates fresh snapshot directories and checks CLI startup before activation. Windows-only failure-injection test preserves active/rollback manifests across repeated failed installs.
+- CLI tests now isolate both HOME and USERPROFILE: native Windows homedir ignored the previous HOME-only fixture, breaking Hermes watchdog CI. Production Hermes behavior is unchanged.
+- Validation in progress; no live service restart or cloud deployment for this review.

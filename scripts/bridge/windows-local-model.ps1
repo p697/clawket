@@ -25,7 +25,7 @@ if ($Action -eq 'Install') {
   $NodePath = (Resolve-Path -LiteralPath $NodePath).Path
   $CliPath = (Resolve-Path -LiteralPath $CliPath).Path
   New-Item -ItemType Directory -Path $serviceDirectory -Force | Out-Null
-  $release = Join-Path $serviceDirectory ('releases/' + (Get-FileHash -LiteralPath $CliPath -Algorithm SHA256).Hash.Substring(0,16))
+  $release = Join-Path $serviceDirectory ('releases/' + [Guid]::NewGuid().ToString('N'))
   New-Item -ItemType Directory -Path $release -Force | Out-Null
   $installedCli = Join-Path $release 'index.mjs'
   Copy-Item -LiteralPath $CliPath -Destination $installedCli -Force
@@ -43,7 +43,9 @@ writeFileSync(join(process.argv[2], 'package.json'), JSON.stringify({private:tru
   if ($LASTEXITCODE -ne 0) { throw 'Cannot resolve CLI dependencies; installation not activated' }
   & (Join-Path (Split-Path $NodePath) 'npm.cmd') install --prefix $release --ignore-scripts --omit=dev --no-audit --no-fund
   if ($LASTEXITCODE -ne 0) { throw 'Cannot install CLI dependencies; installation not activated' }
-  # Immutable bundle snapshots permit rollback; pairing and history stay in place.
+  & $NodePath $installedCli --help | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw 'Installed CLI validation failed; installation not activated' }
+  # Each attempt uses a fresh directory; failed installs cannot damage a referenced snapshot.
   if (Test-Path -LiteralPath $manifestPath) {
     Copy-Item -LiteralPath $manifestPath -Destination ($manifestPath + '.previous') -Force
   }

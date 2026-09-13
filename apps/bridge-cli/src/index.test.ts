@@ -193,7 +193,9 @@ describe('cli pairing output', () => {
     // Process listings below are mocked POSIX ps output.
     vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
     vi.clearAllMocks();
-    vi.stubEnv('HOME', mkdtempSync(join(tmpdir(), 'clawket-cli-home-')));
+    const testHome = mkdtempSync(join(tmpdir(), 'clawket-cli-home-'));
+    vi.stubEnv('HOME', testHome);
+    vi.stubEnv('USERPROFILE', testHome);
     getHermesProcessLogPathsMock.mockReturnValue({
       bridgeLogPath: join(process.env.HOME!, 'hermes-bridge.log'),
       bridgeErrorLogPath: join(process.env.HOME!, 'hermes-bridge-error.log'),
@@ -486,6 +488,7 @@ describe('cli pairing output', () => {
       'utf8',
     );
     vi.stubEnv('HOME', homeDir);
+    vi.stubEnv('USERPROFILE', homeDir);
     process.argv = ['node', 'clawket', 'hermes', 'run', '--no-replace', '--token', 'new-token', '--port', '9999'];
     execFileSyncMock.mockReturnValue(`40160 ${process.argv[1]} hermes run --host 0.0.0.0 --port 4321\n`);
     const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined as never));
@@ -736,6 +739,7 @@ describe('cli pairing output', () => {
       'utf8',
     );
     vi.stubEnv('HOME', homeDir);
+    vi.stubEnv('USERPROFILE', homeDir);
     process.argv = [
       'node',
       'clawket',
@@ -765,6 +769,7 @@ describe('cli pairing output', () => {
     const homeDir = mkdtempSync(join(tmpdir(), 'clawket-cli-test-'));
     mkdirSync(join(homeDir, '.hermes', 'hermes-agent'), { recursive: true });
     vi.stubEnv('HOME', homeDir);
+    vi.stubEnv('USERPROFILE', homeDir);
     process.argv = [
       'node',
       'clawket',
@@ -1104,6 +1109,7 @@ describe('cli pairing output', () => {
       'utf8',
     );
     vi.stubEnv('HOME', homeDir);
+    vi.stubEnv('USERPROFILE', homeDir);
     process.argv = ['node', 'clawket', 'run', '--service'];
     readPairingConfigMock.mockImplementation((environment?: string) => environment === 'preview' ? null : ({
       serverUrl: 'https://registry.example.com',
@@ -1189,6 +1195,7 @@ describe('cli pairing output', () => {
     }), 'utf8');
     writeFileSync(getHermesProcessLogPathsMock().relayLogPath, '[9999999999999] [status] relay=up bridge=up\n', 'utf8');
     vi.stubEnv('HOME', homeDir);
+    vi.stubEnv('USERPROFILE', homeDir);
     process.argv = ['node', 'clawket', 'run', '--service'];
     readPairingConfigMock.mockReturnValue({
       serverUrl: 'https://registry.example.com',

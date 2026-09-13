@@ -67,3 +67,43 @@ test('real processes: exclusive owner, ready-only reset, graceful stop and no re
   const killed = once(daemon, 'exit'); daemon.kill(); await killed;
   await until(() => { try { process.kill(recovered.childPid, 0); return false; } catch { return true; } });
 });
+
+
+test('stop completion and immediate/concurrent start never leave the service offline', async t => {
+  const root = mkdtempSync(join(tmpdir(), 'clawket-restart-'));
+  const config = join(root, 'runtime.json');
+  const dir = join(root, 'windows-service');
+  mkdirSync(dir); writeFileSync(config, '{}');
+  const fixture = join(root, 'child.mjs');
+  writeFileSync(fixture, `
+    console.log('Local model Bridge is running. Keep this process open; press Ctrl+C to stop.');
+    process.on('message', () => setTimeout(() => process.exit(0), 800));
+    process.on('disconnect', () => process.exit(0));
+    setInterval(() => {}, 1000);
+  `);
+  writeFileSync(join(dir, 'installation.json'), JSON.stringify({ node: process.execPath, cli: fixture, config }));
+  const command = action => new Promise((resolve, reject) => {
+    const p = spawn(process.execPath, [fileURLToPath(supervisor), action, config]);
+    let output = ''; p.stdout.on('data', b => { output += b; });
+    p.on('error', reject); p.on('close', code => code === 0 ? resolve(JSON.parse(output)) : reject(new Error(`command failed: ${code}`)));
+  });
+  t.after(async () => { try { await control(config, 'stop'); } catch {} await pause(200); rmSync(root, { recursive: true, force: true }); });
+  await command('start');
+  const original = await until(async () => { const s = await control(config, 'status'); return s.ready && s; });
+  const stopping = control(config, 'stop');
+  await until(async () => (await control(config, 'status')).stopping);
+  const starts = Promise.all([command('start'), command('start')]);
+  const stopped = await stopping;
+  assert.equal(stopped.childPid, null);
+  assert.throws(() => process.kill(original.childPid, 0));
+  const [a, b] = await starts;
+  assert.equal(a.pid, b.pid); assert.notEqual(a.pid, original.pid);
+  await until(async () => (await control(config, 'status')).ready);
+  // The documented sequential Stop -> Start flow must also restore a fresh owner.
+  await command('stop'); await command('start');
+  const final = await until(async () => { const s = await control(config, 'status'); return s.ready && s; });
+  assert.notEqual(final.pid, a.pid);
+});
+
+// The existing desktop workflow runs this entry on both platforms.
+if (process.platform === 'win32') await import('./windows-local-model-install.test.mjs');
