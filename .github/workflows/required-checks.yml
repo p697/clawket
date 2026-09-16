@@ -28,6 +28,7 @@ jobs:
       - run: npm ci
       - run: npm run bridge:build
       - run: npm run bridge:test:required
+      - run: node --test scripts/bridge/local-model-supervisor.test.mjs
       - run: npm run test:compat
       - run: npx vitest run tests/integration/local-model.e2e.test.ts
 

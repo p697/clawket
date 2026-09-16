@@ -93,6 +93,8 @@ In negotiated client-channel mode, pairing approve/reject must target a live chi
 
 Local-model health probes must not cold-load an unloaded llama.cpp router preset. Explicit selection owns the longer model-load timeout; ordinary probes fail with an actionable message.
 
+Local-model Relay must bound application readiness after every WebSocket upgrade, retain backoff until authenticated `relay.ready`, ignore replaced socket callbacks, and clear all reconnect/readiness/heartbeat timers on stop. Diagnostic output is limited to fixed event names, stable error codes, retry counts and durations; never include close reason text or authentication URLs.
+
 ## Relay network configuration
 
 `CLAWKET_RELAY_PROXY_URL` explicitly enables HTTP(S) CONNECT for cloud Relay sockets across all three Bridge runtimes. Never apply it to local Gateway/model sockets or infer a proxy from unrelated environment variables. Validate once during runtime construction, redact invalid values, and bound the Relay handshake to 15 seconds.

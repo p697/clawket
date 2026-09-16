@@ -128,6 +128,8 @@ When implementation, architecture, or release behavior changes, update the close
 5. `test:release:compat` is the explicit release integration matrix: read-only production Worker exports are supplied through `CLAWKET_RELEASE_SNAPSHOTS`, exercised locally with historical and candidate Bridges. Missing snapshots must fail. Local code rollback is not proof of Cloudflare migration rollback.
 6. Tests that require an external checkout or live service must have an explicit integration command and must not make the CI-safe gate depend on a developer's home directory. Keep the ordinary `npm test` command as the broader local suite.
 
+Windows ACL assertions must fail on command/module errors or missing paths. When invoking Windows PowerShell from PowerShell 7, resolve its security module from the invoked shell's `$PSHOME`; inherited module paths must not produce a false zero-access result.
+
 ## Hermes Implementation Boundaries
 
 1. Hermes adapter lifecycle state (run, session, stop) must be self-contained and deterministically cleanable inside the adapter layer.

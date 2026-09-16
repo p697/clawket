@@ -41,12 +41,17 @@ async function expectPrivate(path: string, mode: number) {
   }
   // Windows exposes synthetic POSIX mode bits. Check its actual access rules.
   const broadAccess = execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
-    "$rules=(Get-Acl -LiteralPath $env:CLAWKET_TEST_ACL_PATH).Access; @($rules | Where-Object { $_.AccessControlType -eq 'Allow' -and $_.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value -in @('S-1-1-0','S-1-5-11','S-1-5-32-545') }).Count"],
-    { env: { ...process.env, CLAWKET_TEST_ACL_PATH: path }, encoding: 'utf8', windowsHide: true });
+    "$ErrorActionPreference='Stop'; Import-Module (Join-Path $PSHOME 'Modules/Microsoft.PowerShell.Security/Microsoft.PowerShell.Security.psd1') -Force; $rules=(Get-Acl -LiteralPath $env:CLAWKET_TEST_ACL_PATH).Access; @($rules | Where-Object { $_.AccessControlType -eq 'Allow' -and $_.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value -in @('S-1-1-0','S-1-5-11','S-1-5-32-545') }).Count"],
+    { env: { ...process.env, CLAWKET_TEST_ACL_PATH: path }, encoding: 'utf8', windowsHide: true, stdio: 'pipe', timeout: 10_000 });
   expect(Number(broadAccess.trim())).toBe(0);
 }
 
 describe('pairing config permissions', () => {
+  it('does not report an unreadable missing path as private', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'clawket-acl-missing-'));
+    tempDirs.push(directory);
+    await expect(expectPrivate(join(directory, 'missing'), 0o600)).rejects.toThrow();
+  }, 20_000); // PowerShell cold startup on hosted Windows can exceed Vitest's 5s default.
   it('writes the pairing config with user-private directory and file modes', async () => {
     const homeDir = await mkdtemp(join(tmpdir(), 'clawket-bridge-config-write-'));
     tempDirs.push(homeDir);

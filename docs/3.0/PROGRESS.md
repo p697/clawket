@@ -217,6 +217,13 @@
 - 翻译：13 个新语言（zh-Hant、fr、it、es-419、pt-BR、pt-PT、ru、uk、tr、vi、th、hi、ar）× 4 命名空间 × 1,107 key 全部人工翻译并校对；zh-Hant 以 zh-Hans 为底经 OpenCC 转换后按台湾用语逐项修订（設定/檔案/連線/權限/唯讀/QR Code 等）；es-419 与 pt-PT 分别基于 es 与 pt-BR 做地区化修订。顺带补译 ja/ko/de/es 中 18 条一直是英文的 YouMind 登录与权限状态文案。与 YouMind Mobile 重叠的 ~270 个 key 做了逐条对照，差异均为风格选择。
 - 验证：`i18n-prune --strict` 19 locales × 4 namespaces、1,107 keys / 21,033 translations、missing/removable/registry_errors 均为 0；`npm run check:required` 全绿（2026-09-12）：全部 workspace typecheck、Mobile 258 suites / 2,518 tests、Relay/Bridge 测试、170 个 UI 源文件的 design-system 检查、i18n strict 与 docs 检查。未提交、未部署。真机 RTL 与 13 种新语言的视觉走查、商店元数据属人类工作（HT-I18N-1/2）。
 
+## Windows local-model 隔夜恢复（2026-09-12）
+
+- 先保留现场：无 Bridge 进程、Windows Update 多次计划重启、无自动启动入口；时钟跳变 496 秒，不能精确断言第一次 1006 的原因。持续离线原因与当前网络证据见 [Windows 恢复记录](21-windows-local-model-recovery.md)。
+- 增加独立 Windows 登录启动与单实例守护、退避/IPC 清理、脱敏持久日志和重连就绪超时；仅 local-model，不改 Production 或 Mac 侧代理/手机退避工作。
+- 原配对恢复；三次重复启动保持单实例；停止释放资源；公网 owner lease HTTP 409 后约 61 秒自动恢复，实际模型请求成功。物理睡眠/重启、隔夜与真机端到端复验仍需记录，不能等同于本地 socket 实测。
+- required 全绿（Mobile 256 suites / 2,482 tests）、compat 36/36、包验证与真实模型恢复测试通过；加强 ACL 断言后 4 项复验通过。最终修复版已安装运行、配对哈希不变；详细结果见恢复记录。交付 PR，不做正式发布。
+
 ## 本地模型连接扩展（2026-09-11）
 
 - 用户授权新增 local-model 后端，分支 `feat/local-model-bridge`；交付仅 PR，禁止正式生产发布。
@@ -631,6 +638,7 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 | HT-NET-0912 | Windows local-model owner 断线根因 | 提供运行 Bridge 的终端末尾错误及进程是否存活；不含配对码/凭据 | 对齐 2026-09-11 18:37:20 UTC owner 断线及恢复后的 cloud owner/health | 待主机信息；Mac 已恢复，未假定 Windows 同因 |
 | HT-I18N-1 | 真机验收 13 种新语言与阿拉伯语 RTL。 | `npm run mobile:sync:native` 重新生成 iOS `.lproj` 与 Android `locale_config.xml` 后做 Release 构建；阿拉伯语冷启动、账户设置里在 ar 与 LTR 语言间来回切换（预期各重载一次）、根/栈导航、花名册与会话面板行、线程气泡与输入框、设置弹层；其余 12 种语言至少走欢迎/配对/花名册/线程/设置五页，关注长文案截断（de/ru/uk/fr 最长）。 | 无 chevron 方向错误、无手势反向、无被截断的按钮文案；发现的文案问题直接改对应 locale JSON 并重跑 `npm run i18n:check`。 | 待处理；本轮仅自动门禁，未做模拟器/真机走查 |
 | HT-I18N-2 | 为 13 种新语言准备商店元数据。 | App Store Connect 与 Google Play 各新增对应本地化（es-419 在 Apple 选 Spanish (Mexico)），名称、副标题、描述、关键词、截图与订阅商品本地化；商店文案不从 App 翻译 JSON 生成。 | 两商店本地化列表与 `apps/mobile/docs/localization.md` 的 19 种一致。 | 待处理；不阻塞代码合入 |
+| HT-LM-WIN-1 | 实际 Windows 睡眠/唤醒、重启登录和隔夜复验 | 在可手动唤醒时测试 S0 睡眠、重启并登录，再用现有 TestFlight 连接发送消息；保留 supervisor.jsonl 时间 | 仅一个 owner、恢复耗时与实际模型回复均通过 | 待验证；自动化已覆盖独立启动、重复启动、停止和受控 socket 中断，未冒充物理睡眠测试 |
 | HT-AUTH-1 | 真机验收新版 YouMind OTP 与键盘 | 用自己的邮箱走六位码自动填充、粘贴、错误后重试、切后台后重发倒计时，覆盖 iOS/Android 与浅深模式 | 无重复请求、键盘不遮挡、六格与输入一致；无需改动已有连接 | 待处理；本轮 native 已看到邮箱页，之后 CUA 返回 noWindowsAvailable，未发送验证码 |
 | HT-EX-1 | 解锁 Mac 以继续模拟器验收 | 本次 CUA 明确返回 Mac locked，自动解锁不可用；已通过当前任务请求解锁 | Release 模拟器可继续由 CUA 操作 | 已于 2026-09-06 17:37 恢复操作，本轮继续完成管理/外观页面走查和用量、诊断修复；当前不再以锁屏作为阻塞。拖动手势的自动化结果不可靠，真机滚动验收仍需保留 |
 | HT-UX-1 | 临时解除模拟器系统弹窗自动化障碍。 | 在模拟器 Safari 的“在 Clawket 中打开此页？”点“打开”。AX 只暴露 sheet，坐标点击返回 noWindowsAvailable；已发异步请求。 | App 打开设置，随后继续配对与页面实测。 | 待处理；代码诊断和方向草图继续进行，非产品权限审批 |
@@ -1232,6 +1240,15 @@ Writes keep native controls mounted and rows alphabetically stable, block duplic
 Validation: initial full `check:required` passed (Mobile 260 suites / 2,555 tests, all workspace types, protocol/runtime suites, design-system, strict 19-locale and documentation gates). Final focused UI/model/shared-search regression run passed 63 tests, including both OpenClaw and Hermes switches, failed writes/refresh, offline cache, scope changes, discovery races and dismiss-before-install-completion; final Mobile typecheck passed. Final complete `check:required` rerun passed with Mobile 260 suites / 2,559 tests, all workspace types/tests, design-system, 19-locale strict checks and docs checks. Native visual acceptance remains HT-SKILLS-0913; no simulator/device operated, release installed or service deployed.
 
 
+### 2026-09-13 PR #32 stability review fixes
+
+- Stop waits for child exit; Start waits through stopping owners and confirms the new supervisor. Added real-process concurrent and sequential Stop/Start regression.
+- Installer allocates fresh snapshot directories and checks CLI startup before activation. Windows-only failure-injection test preserves active/rollback manifests across repeated failed installs.
+- CLI tests now isolate both HOME and USERPROFILE: native Windows homedir ignored the previous HOME-only fixture, breaking Hermes watchdog CI. Production Hermes behavior is unchanged.
+- Local validation: full `check:required`, Bridge 292 tests, supervisor 3 real-process/diagnostic tests, and v1 replay 36 tests passed. Windows CI also passed the previously failing Hermes watchdog and new supervisor/installation-failure checks on the implementation commit; final PR-head CI remains the merge gate. No live service restart or cloud deployment for this review.
+
+- Final-head Windows rerun exposed a PowerShell cold-start timeout in the new missing-path ACL regression. Bounded the subprocess at 10 seconds and its test at 20 seconds; permission assertions remain fail-closed.
+
 ### 2026-09-14 — Session Panel row polish: one size down, 6-point signal dot
 
 Owner reviewed the merged Session Panel on device and found it noisy: too much text, too large, and the 12-point unread dot too heavy. Styles only, no behavior or model change. Rows now sit one tier below the roster (the 40-point tile sets the scale): `secondary` 600 title with the `caption` `inkTertiary` time on the same line, `caption` preview (ink when unread) with the unread / attention dot on the same line, the dot reduced to `StatusSize.dot` (6 points — its first consumer). Chip and Subagents counts move to `inkTertiary`; the Subagents chevron drops to `IconSize.sm`; skeleton lines follow the new line heights. Docs 04 §4, 05 copy budget and Mobile AGENTS updated to the new tiers.
@@ -1283,9 +1300,4 @@ Validation: 10 layout tests, 5 album component tests (including lazy size resolu
 ### 2026-09-14 — Restore paid skill source editing
 
 Owner requested restoring the 2.0 skill editor and confirming Memory monetization. Identity still gates USER/SOUL/MEMORY saves through coreFileEditing. Installed Skills now open default SKILL.md through the retained backend-neutral skills.get/content-update adapter contract; no generic file writes or backend/source changes. Details dismiss before source presentation. Both backends share selectable Markdown, Pencil/Check header controls, dirty close, retained failed drafts, write lock and stale continuation checks. The backend editable/binary flags gate changes independently of Pro. Ancillary linked-file editing is not advertised by the key-only write contract. Validation: complete check:required passed (Mobile 268 suites / 2,652 tests, workspace types/runtime tests, 181 UI sources, localization and docs). Targeted section/source/Pro regression: 46 tests passed for both backends, protected content and failed drafts. metrics:loc: whole dirty tree 110,565 production lines / 77,476 test lines / 329 test files, not a task delta; the added document component is consumer-backed. Owner performs device acceptance; no simulator, pairing or service deployment.
-for the owner's six-screenshot message and confirmed the 3×2 album in dark and light mode, viewer opening at `5 / 6` from the fifth tile, and long press lifting bubble plus album into the actions overlay. Noted separately: the Gateway history for that message carries no image blocks or truncation marker, so a second device shows the text only — a pre-existing cross-device limitation of the sender-side image cache, not changed here.
 
-
-### 2026-09-14 — Restore paid skill source editing
-
-Owner requested restoring the 2.0 skill editor and confirming Memory monetization. Identity still gates USER/SOUL/MEMORY saves through coreFileEditing. Installed Skills now open default SKILL.md through the retained backend-neutral skills.get/content-update adapter contract; no generic file writes or backend/source changes. Details dismiss before source presentation. Both backends share selectable Markdown, Pencil/Check header controls, dirty close, retained failed drafts, write lock and stale continuation checks. The backend editable/binary flags gate changes independently of Pro. Ancillary linked-file editing is not advertised by the key-only write contract. Validation: complete check:required passed (Mobile 268 suites / 2,652 tests, workspace types/runtime tests, 181 UI sources, localization and docs). Targeted section/source/Pro regression: 46 tests passed for both backends, protected content and failed drafts. metrics:loc: whole dirty tree 110,565 production lines / 77,476 test lines / 329 test files, not a task delta; the added document component is consumer-backed. Owner performs device acceptance; no simulator, pairing or service deployment.

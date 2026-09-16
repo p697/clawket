@@ -62,6 +62,13 @@ async function post<T>(url: string, body: object): Promise<T> {
 
 /** One foreground command keeps the Bridge and its secure pairing responder alive. */
 export async function handleLocalModelCommand(args: string[]): Promise<void> {
+  // A detached supervisor owns only this child. IPC loss must not leave an orphan.
+  let requestStop: (() => void) | undefined;
+  const supervisorStop = () => { if (requestStop) requestStop(); else process.exit(0); };
+  const supervisorMessage = (message: unknown) => {
+    if (message && typeof message === 'object' && (message as { type?: string }).type === 'clawket.local-model.stop') supervisorStop();
+  };
+  if (process.send) { process.once('disconnect', supervisorStop); process.on('message', supervisorMessage); }
   const command = args[0] ?? 'pair';
   if (!['pair', 'run'].includes(command)) throw new Error('Use local-model pair or local-model run');
   const directory = join(homedir(), '.clawket', 'local-model-preview');
@@ -125,7 +132,12 @@ export async function handleLocalModelCommand(args: string[]): Promise<void> {
     console.log('Local model Bridge is running. Keep this process open; press Ctrl+C to stop.');
     await new Promise<void>(resolve => {
       const stop = () => { process.off('SIGINT', stop); process.off('SIGTERM', stop); resolve(); };
+      requestStop = stop;
       process.once('SIGINT', stop); process.once('SIGTERM', stop);
     });
-  } finally { relay?.stop(); await server.stop(); }
+  } finally {
+    process.off('disconnect', supervisorStop); process.off('message', supervisorMessage);
+    relay?.stop(); await server.stop();
+    if (process.connected) process.disconnect();
+  }
 }

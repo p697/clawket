@@ -15,6 +15,7 @@ export class LocalModelRelay {
   private socket: WebSocket | null = null;
   private retry: ReturnType<typeof setTimeout> | null = null;
   private ping: ReturnType<typeof setInterval> | null = null;
+  private readiness: ReturnType<typeof setTimeout> | null = null;
   private stopped = true;
   private attempts = 0;
   private pending = 0;
@@ -51,7 +52,8 @@ export class LocalModelRelay {
     for (const waiter of this.readyWaiters) waiter.reject(new Error('Relay stopped'));
     if (this.retry) clearTimeout(this.retry);
     if (this.ping) clearInterval(this.ping);
-    this.retry = null; this.ping = null;
+    if (this.readiness) clearTimeout(this.readiness);
+    this.retry = null; this.ping = null; this.readiness = null;
     const socket = this.socket; this.socket = null; socket?.terminate();
     this.service.conversation.off('update', this.update);
   }
@@ -69,6 +71,11 @@ export class LocalModelRelay {
     socket.on('open', () => {
       if (this.socket !== socket || this.stopped) { socket.terminate(); return; }
       this.log('local-model relay transport connected');
+      this.readiness = setTimeout(() => {
+        if (this.socket === socket && !this.ready) {
+          this.log('local-model relay readiness timeout'); socket.terminate();
+        }
+      }, 15_000);
       this.ping = setInterval(() => {
         if (!alive) { socket.terminate(); return; }
         alive = false; socket.ping();
@@ -82,7 +89,9 @@ export class LocalModelRelay {
         try {
           const control = JSON.parse(text.slice(PREFIX.length));
           if (control.event === 'relay.ready') {
+            if (this.readiness) clearTimeout(this.readiness); this.readiness = null;
             this.attempts = 0; this.ready = true;
+            this.log('local-model relay ready');
             for (const waiter of this.readyWaiters) waiter.resolve();
           }
           if (control.event === 'pairing.secure.start') this.pair(control);
@@ -102,22 +111,24 @@ export class LocalModelRelay {
         } finally { this.pending--; }
       })();
     });
-    socket.on('error', error => {
+    socket.on('error', (error: Error & { code?: string }) => {
       if (this.socket !== socket || this.stopped) return;
-      const code = (error as NodeJS.ErrnoException).code;
-      const safeCode = typeof code === 'string' && /^[A-Z0-9_]{1,48}$/.test(code) ? code : 'transport_error';
-      this.log(`local-model relay transport error code=${safeCode}`);
+      const status = /^Unexpected server response: (\d{3})$/.exec(error.message)?.[1];
+      const code = status ? `HTTP_${status}` : /^[A-Z0-9_]{1,40}$/.test(error.code ?? '') ? error.code : 'WEBSOCKET_ERROR';
+      this.log(`local-model relay transport error code=${code}`);
     });
-    socket.on('close', code => {
+    socket.on('close', (code: number) => {
       if (this.socket !== socket) return;
+      this.log(`local-model relay closed code=${code}`);
       this.socket = null;
       this.ready = false;
       if (this.ping) clearInterval(this.ping);
-      this.ping = null;
+      if (this.readiness) clearTimeout(this.readiness);
+      this.ping = null; this.readiness = null;
       if (!this.stopped) {
-        const delay = Math.min(30_000, 1000 * 2 ** Math.min(++this.attempts, 5));
-        this.log(`local-model relay closed code=${code} attempt=${this.attempts} retryMs=${delay}`);
-        this.retry = setTimeout(() => this.connect(), delay);
+        const delayMs = Math.min(30_000, 1000 * 2 ** Math.min(++this.attempts, 5));
+        this.log(`local-model relay retry attempt=${this.attempts} delayMs=${delayMs}`);
+        this.retry = setTimeout(() => { this.retry = null; this.connect(); }, delayMs);
       }
     });
   }
