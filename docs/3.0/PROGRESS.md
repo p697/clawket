@@ -3,6 +3,13 @@
 > 实现者维护。每次开工先读；每完成一个里程碑更新。人类只读这一份文件了解进度。
 
 
+## Bridge CLI 测试在 Windows CI 上的偶发失败（2026-09-16）
+
+- #32、#33 合入后 `main` 的 `Bridge and Relay compatibility (windows-latest)` 轮流挂在 `apps/bridge-cli/src/index.test.ts` 的三个用例（服务启动恢复 Hermes、守护进程重启 relay、reset 不误杀），偶尔 macOS 也挂；`vi.waitFor` 1 秒超时。本地稳定复现：在 mock 设置与 `import('./index.js')` 之间加 400 ms 空档即三个都失败。根因是 `main()` 不被 await，上一个用例遗留的 pid 轮询（每 200 ms 调 `execFileSync`，最长 25 秒）在下一个用例里消费掉共享 `execFileSyncMock` 的 `mockReturnValueOnce` 队列；`vi.clearAllMocks()` 不清 once 队列，`vi.resetModules()` 也不重跑 `vi.mock` 工厂。慢的 Windows runner 只是把这个窗口拉大。
+- 修复只在测试侧：`execFileSync` / `spawn` / `getServiceStatus` / `readRecentCliLogs` 四个被后台轮询触达的 mock 改为每个用例新建实例，`beforeEach` 用 `vi.doMock` 重新注册三个模块工厂，遗留轮询继续打在旧实例上；`afterEach` 统一 `vi.useRealTimers()`，避免守护进程用例失败时假定时器泄漏拖垮后续用例。未改 CLI 实现，不影响 OpenClaw / Hermes 行为。
+- 验证：`index.test.ts` 27/27；同一探针（400 ms ×3、1500 ms ×1）在修复后全绿、在 `main` 版本上 3 个用例中 2 个失败；`npm run bridge:test:required` 与 `check:docs` 通过。规则记入 `apps/bridge-cli/AGENTS.md`。
+
+
 ## 付费墙文案与视觉重心（2026-09-16）
 
 聊天优先续改：负责人选定通用标题「和你的 Agent，聊得更多」/「More conversations with your Agents」，同步全部 19 语言，完整聊天/任务记录移至第一条权益，其次连接与 Agent 数量、人格记忆、OpenClaw 管理。继续不显示副标题；连接等专用场景、免费聊天、购买与布局不变。验证：完整 `check:required` 通过（Mobile 278 套 / 2,811 测试，19 语言和文档检查通过）；未操作模拟器。
