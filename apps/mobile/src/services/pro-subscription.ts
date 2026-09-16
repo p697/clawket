@@ -2,6 +2,8 @@ import { Platform } from 'react-native';
 import Purchases, {
   type CustomerInfo,
   PURCHASES_ERROR_CODE,
+  PRORATION_MODE,
+  type GoogleProductChangeInfo,
   type PurchasesError,
   type PurchasesOffering,
   type PurchasesOfferings,
@@ -49,6 +51,7 @@ function includesAnnualIdentifier(value: string): boolean {
 function includesLifetimeIdentifier(value: string): boolean {
   const normalized = value.toLowerCase();
   return normalized.includes('life')
+    || normalized.includes('buyout')
     || normalized.includes('forever')
     || normalized.includes('permanent');
 }
@@ -70,6 +73,8 @@ export type ProSubscriptionSnapshot = {
   originalAppUserId: string | null;
   requestDate: string | null;
   verification: string | null;
+  /** Separate from the entitlement: a lifetime purchase does not cancel recurring billing. */
+  subscriptions?: ReadonlyArray<{ productIdentifier: string; isActive: boolean; willRenew: boolean; store: string; expiresDate: string | null; ownershipType: string }>;
 };
 
 export function getProSubscriptionExpirationMs(
@@ -116,6 +121,8 @@ export type ProPaywallPackage = {
 export type ProPurchaseResult = {
   customerInfo: CustomerInfo;
   snapshot: ProSubscriptionSnapshot;
+  outcome?: 'activated' | 'scheduled' | 'unconfirmed';
+  requiresSubscriptionManagement?: boolean;
 };
 
 export type ProPurchaseErrorCode =
@@ -447,6 +454,10 @@ export function deriveProSubscriptionSnapshot(
     originalAppUserId: customerInfo.originalAppUserId ?? null,
     requestDate: customerInfo.requestDate ?? null,
     verification: activeEntitlement?.verification ?? entitlement?.verification ?? customerInfo.entitlements.verification ?? null,
+    subscriptions: Object.values(customerInfo.subscriptionsByProductIdentifier ?? {}).map((item) => ({
+      productIdentifier: item.productIdentifier, isActive: item.isActive, willRenew: item.willRenew,
+      store: item.store, expiresDate: item.expiresDate, ownershipType: item.ownershipType,
+    })),
   };
 }
 
@@ -531,6 +542,10 @@ export function selectActiveRecurringRevenueCatPackage(
   packages: ProPaywallPackage[],
   snapshot: ProSubscriptionSnapshot | null,
 ): ProPaywallPackage | null {
+  if (!snapshot?.isActive) return null;
+  const entitlementMatch = packages.find((item) => isRecurringProPackageType(item.packageType)
+    && matchesProProduct(item.productIdentifier, snapshot));
+  if (entitlementMatch) return entitlementMatch;
   const activeSubscriptionIdentifiers = (snapshot?.activeSubscriptionProductIdentifiers ?? [])
     .map((value) => value.toLowerCase());
   if (activeSubscriptionIdentifiers.length === 0) return null;
@@ -546,6 +561,7 @@ export function selectOwnedLifetimeRevenueCatPackage(
   packages: ProPaywallPackage[],
   snapshot: ProSubscriptionSnapshot | null,
 ): ProPaywallPackage | null {
+  if (!snapshot?.isActive || snapshot.expirationDate !== null) return null;
   const nonSubscriptionIdentifiers = (snapshot?.nonSubscriptionProductIdentifiers ?? [])
     .map((value) => value.toLowerCase());
   if (nonSubscriptionIdentifiers.length === 0) return null;
@@ -553,7 +569,8 @@ export function selectOwnedLifetimeRevenueCatPackage(
   const exactMatch = packages.find((item) => {
     if (item.packageType !== 'LIFETIME') return false;
     const packageIdentifier = item.productIdentifier?.toLowerCase();
-    return Boolean(packageIdentifier && nonSubscriptionIdentifiers.includes(packageIdentifier));
+    return Boolean(packageIdentifier && nonSubscriptionIdentifiers.includes(packageIdentifier)
+      && matchesProProduct(item.productIdentifier, snapshot));
   }) ?? null;
   if (exactMatch) return exactMatch;
 
@@ -652,7 +669,62 @@ export function isRevenueCatPackagePurchaseLocked(
     return false;
   }
 
-  return isRecurringProPackageType(targetPackage.packageType);
+  if (matchesProProduct(targetPackage.productIdentifier, snapshot)) return true;
+  if (!isProStoreCompatible(snapshot.store, Platform.OS)) return true;
+  if (!isRecurringProPackageType(targetPackage.packageType)) return false;
+  const current = selectActiveRecurringRevenueCatPackage(packages, snapshot);
+  return !current || current.productIdentifier === targetPackage.productIdentifier
+    || snapshot.subscriptions?.some((item) => item.isActive && item.ownershipType === 'FAMILY_SHARED') === true;
+}
+
+export function matchesProProduct(productIdentifier: string | null, snapshot: ProSubscriptionSnapshot): boolean {
+  if (!productIdentifier || !snapshot.productIdentifier) return false;
+  const combined = snapshot.productPlanIdentifier
+    ? `${snapshot.productIdentifier.split(':')[0]}:${snapshot.productPlanIdentifier}` : snapshot.productIdentifier;
+  return productIdentifier === combined || productIdentifier === snapshot.productIdentifier;
+}
+
+export function isProStoreCompatible(store: string | null, platform: string): boolean {
+  return store === 'TEST_STORE' || (platform === 'ios' && (store === 'APP_STORE' || store === 'MAC_APP_STORE'))
+    || (platform === 'android' && store === 'PLAY_STORE');
+}
+
+export function hasRenewingProSubscription(snapshot: ProSubscriptionSnapshot | null): boolean {
+  if (snapshot?.subscriptions?.length) return snapshot.subscriptions.some((item) => item.isActive && item.willRenew
+    && item.ownershipType !== 'FAMILY_SHARED');
+  return Boolean(snapshot?.isActive && snapshot.expirationDate && snapshot.willRenew);
+}
+
+export function proSubscriptionManagementUrl(snapshot: ProSubscriptionSnapshot | null): string | null {
+  if (snapshot?.managementURL) return snapshot.managementURL;
+  if (snapshot?.store === 'APP_STORE' || snapshot?.store === 'MAC_APP_STORE') return 'https://apps.apple.com/account/subscriptions';
+  if (snapshot?.store === 'PLAY_STORE') return 'https://play.google.com/store/account/subscriptions';
+  return null;
+}
+
+export function classifyProPurchaseOutcome(
+  target: ProPaywallPackage, before: ProSubscriptionSnapshot, after: ProSubscriptionSnapshot,
+  purchasedProductIdentifier: string,
+): NonNullable<ProPurchaseResult['outcome']> {
+  // A successful store purchase can schedule a same-tier billing-period change while
+  // CustomerInfo still describes the old entitlement. Never grant the target early.
+  if (before.isActive && after.isActive && before.expirationDate && isRecurringProPackageType(target.packageType)
+    && !matchesProProduct(target.productIdentifier, before)
+    && (purchasedProductIdentifier === target.productIdentifier || matchesProProduct(purchasedProductIdentifier, before))) return 'scheduled';
+  if (after.isActive && matchesProProduct(target.productIdentifier, after)
+    && (target.packageType !== 'LIFETIME' || after.expirationDate === null)) return 'activated';
+  return 'unconfirmed';
+}
+
+export function buildProGoogleProductChangeInfo(current: ProPaywallPackage, target: ProPaywallPackage): GoogleProductChangeInfo {
+  const oldProductIdentifier = current.productIdentifier?.split(':')[0];
+  if (!oldProductIdentifier || !target.productIdentifier) throw new Error('PLAN_CHANGE_UNAVAILABLE');
+  return {
+    oldProductIdentifier,
+    // Google rejects DEFERRED for base-plan changes within the same subscription.
+    prorationMode: oldProductIdentifier === target.productIdentifier.split(':')[0]
+      ? PRORATION_MODE.IMMEDIATE_WITHOUT_PRORATION : PRORATION_MODE.DEFERRED,
+  };
 }
 
 function finitePrice(value: unknown): number | null {
@@ -821,15 +893,33 @@ export const ProSubscriptionService = {
     }
   },
 
-  async purchasePro(aPackage: PurchasesPackage): Promise<ProPurchaseResult> {
+  async purchasePro(aPackage: PurchasesPackage, packages: ProPaywallPackage[]): Promise<ProPurchaseResult> {
     const config = await ensureRevenueCatConfigured();
     if (!config) {
       throw new Error('RevenueCat is not configured.');
     }
-    const result = await Purchases.purchasePackage(aPackage);
+    await Purchases.invalidateCustomerInfoCache();
+    const before = deriveProSubscriptionSnapshot(await Purchases.getCustomerInfo(), config.entitlementId);
+    const target = toProPaywallPackage(aPackage);
+    if (isRevenueCatPackagePurchaseLocked(target, packages, before)) {
+      throw new Error('PLAN_CHANGE_UNAVAILABLE');
+    }
+    const current = selectActiveRecurringRevenueCatPackage(packages, before);
+    let change: GoogleProductChangeInfo | undefined;
+    if (Platform.OS === 'android' && before.isActive && isRecurringProPackageType(target.packageType)) {
+      if (!current?.productIdentifier) throw new Error('PLAN_CHANGE_UNAVAILABLE');
+      change = buildProGoogleProductChangeInfo(current, target);
+    }
+    const result = change
+      ? await Purchases.purchasePackage(aPackage, null, change)
+      : await Purchases.purchasePackage(aPackage);
+    const snapshot = deriveProSubscriptionSnapshot(result.customerInfo, config.entitlementId);
     return {
       customerInfo: result.customerInfo,
-      snapshot: deriveProSubscriptionSnapshot(result.customerInfo, config.entitlementId),
+      snapshot,
+      outcome: classifyProPurchaseOutcome(target, before, snapshot, result.productIdentifier),
+      requiresSubscriptionManagement: target.packageType === 'LIFETIME'
+        && (hasRenewingProSubscription(before) || hasRenewingProSubscription(snapshot)),
     };
   },
 

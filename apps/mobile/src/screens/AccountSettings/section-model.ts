@@ -22,7 +22,6 @@ export type AccountSettingsSectionCapability =
   | 'notifications'
   | 'help'
   | 'community'
-  | 'wecom'
   | 'about'
   | 'developer'
   | 'previewEnvironment'
@@ -44,7 +43,6 @@ AccountSettingsSectionCapabilities = Object.freeze({
   notifications: true,
   help: true,
   community: true,
-  wecom: true,
   about: true,
   developer: true,
   previewEnvironment: true,
@@ -346,8 +344,6 @@ function buildSectionGroups(
       return [group('pro', [
         navigationRow('pro-status', 'Clawket Pro', 'view-pro', {
           valueKey: data.isPro ? 'Active' : 'Free',
-          locked: !data.isPro,
-          paywallReason: 'generic',
         }),
         navigationRow('restore-purchases', 'Restore Purchases', 'restore-purchases'),
       ])];
@@ -389,7 +385,6 @@ function buildSectionGroups(
         navigationRow('release-notes', 'Release Notes', 'release-notes'),
       ]), group('community', [
         gateRow(navigationRow('discord', 'Discord', 'discord'), capabilities.community),
-        gateRow(navigationRow('wecom', 'WeCom', 'wecom'), capabilities.community && capabilities.wecom),
         gateRow(navigationRow('share', 'Share Clawket', 'share'), capabilities.community),
         gateRow(navigationRow('rate', 'Rate Clawket', 'rate'), capabilities.community),
       ])];
@@ -398,7 +393,6 @@ function buildSectionGroups(
         navigationRow('share', 'Share Clawket', 'share'),
         navigationRow('rate', 'Rate Clawket', 'rate'),
         navigationRow('discord', 'Discord', 'discord'),
-        gateRow(navigationRow('wecom', 'WeCom', 'wecom'), capabilities.wecom),
       ])];
     case 'about':
       return [group('about', [
@@ -428,6 +422,11 @@ function buildSectionGroups(
           'Design System',
           'design-system',
         ), capabilities.designSystem),
+        ...(data.debugMode ? [navigationRow(
+          'preview-update-announcement',
+          'Preview update announcement',
+          'preview-update-announcement',
+        )] : []),
         navigationRow('clear-cache', 'Clear Cache', 'clear-cache'),
         navigationRow('reset-device', 'Reset Device', 'reset-device'),
       ])];

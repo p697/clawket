@@ -27,7 +27,7 @@ function resolveSubscriptionType(snapshot: ProSubscriptionSnapshot | null): Anal
     .toLowerCase();
 
   if (!raw) return 'unknown';
-  if (raw.includes('lifetime') || raw.includes('forever') || raw.includes('permanent')) return 'lifetime';
+  if (raw.includes('lifetime') || raw.includes('buyout') || raw.includes('forever') || raw.includes('permanent')) return 'lifetime';
   if (raw.includes('year') || raw.includes('annual')) return 'yearly';
   if (raw.includes('month')) return 'monthly';
   return 'unknown';

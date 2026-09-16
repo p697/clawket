@@ -36,7 +36,7 @@ Keep each Hermes implementation file and each Hermes test file at or below 1,200
 ## Protocol Boundaries
 
 1. Advertise `bridge.capabilities.v2` and `hermes.multi-session.v2` only while their complete behavior is implemented. Hermes handshake and health surfaces must agree; missing capability metadata keeps v1 behavior.
-2. OpenClaw's closed RequestFrame schema does not accept top-level `meta`. Consume and remove Bridge-owned connect metadata before the Gateway leg, and advertise Bridge capabilities only on the matching negotiated success response.
+2. OpenClaw's closed RequestFrame schema does not accept top-level `meta`. New Apps request Bridge capabilities through the existing `connect.params.caps` array so old Bridges remain usable. Accept that array and the pre-release top-level metadata format; consume/remove the latter before the Gateway leg. Advertise Bridge capabilities only on the matching negotiated success response.
 3. `bridgeVersion` means the running Clawket CLI package version. Normalize it before publication, include it only on a negotiated successful OpenClaw connect response or a Hermes health surface, and omit it for blank/invalid values and legacy peers. Never forward a Gateway-supplied `bridgeVersion` or infer it from the Gateway's `server.version`.
 4. Encode Hermes image attachments as one OpenAI-style user message whose content contains the text part followed by `image_url` data-URL parts; keep the current user turn out of `conversation_history`. Reject malformed or unsupported input before starting a run.
 5. `chat.abort` owns an `AbortController` for the matching `/v1/runs` request and emits one terminal raw `chat` event with `state: 'aborted'`; the App maps that state to `chatAborted`. Do not report success while leaving the run active.
@@ -67,6 +67,10 @@ The managed Hermes API uses an explicit API key when supplied, otherwise a deter
 
 Hermes Relay checks cloud socket reachability with matched WebSocket ping/pong independently of local Bridge health. Recycle half-open cloud sockets and clear probe deadlines on stop/replacement; transport pong must not mark the backend ready or reset backend handshake backoff. Ignore frames from replaced cloud sockets.
 
+Ignore late frames from replaced local Bridge sockets too. Cloud status probes are abortable, bounded to 10 seconds and owned by the requesting socket; stop/replacement cancels them. Only an explicit `hasBridge: false` from the current probe may recycle Relay, never a late result or malformed status payload.
+
+Only an explicit validated Relay client-count of zero may suppress local periodic `tick`/`health` events on the cloud leg. Preserve real messages, responses, local probes and Relay ping/pong. Reset presence to unknown on every new cloud socket so old servers and reconnects keep forwarding safely.
+
 ## Test Boundary
 
 1. `npm run test:required` is self-contained and must not inspect a developer home directory or external checkout.
@@ -90,3 +94,23 @@ In negotiated client-channel mode, pairing approve/reject must target a live chi
 Local-model health probes must not cold-load an unloaded llama.cpp router preset. Explicit selection owns the longer model-load timeout; ordinary probes fail with an actionable message.
 
 Local-model Relay must bound application readiness after every WebSocket upgrade, retain backoff until authenticated `relay.ready`, ignore replaced socket callbacks, and clear all reconnect/readiness/heartbeat timers on stop. Diagnostic output is limited to fixed event names, stable error codes, retry counts and durations; never include close reason text or authentication URLs.
+
+## Relay network configuration
+
+`CLAWKET_RELAY_PROXY_URL` explicitly enables HTTP(S) CONNECT for cloud Relay sockets across all three Bridge runtimes. Never apply it to local Gateway/model sockets or infer a proxy from unrelated environment variables. Validate once during runtime construction, redact invalid values, and bound the Relay handshake to 15 seconds.
+
+OpenClaw Relay heartbeat expiry logs bounded idle/timeout/scheduler-delay durations and queued-frame count without payloads. A pong from a retired socket must not refresh the current watchdog or reset backoff. These diagnostics do not add cloud requests or relax expiry.
+
+An OpenClaw secondary channel upgrade rejected with HTTP 409 refers to an unavailable client incarnation. Retire that child instead of retrying the same diagnostic ID; fresh owner `client.sockets` IDs create new children. Owner upgrade failures and transient non-409 failures retain bounded reconnect backoff. The incident log showed five futile 409 retries after the 13:36 UTC challenge watchdog; no retry is necessary for an identity the Relay has retired.
+
+## Managed Hermes API recovery
+
+An explicit user stop must POST to the scoped Hermes `/v1/runs/{run_id}/stop` before ending its local event stream. Bound the request; unsupported or failed upstream stop must remain visible and must not falsely report cancellation. An accepted stop request is not proof all tool processes have exited.
+
+After an API child owned by the current runtime exits, health checks may restart it with a 30-second initial cooldown and exponential backoff capped at five minutes. Coalesce health refreshes; guard asynchronous completions against stop. Never replace a live child, a warm externally owned API, or an API rejecting credentials. Recovery is local and must not create additional Relay probes.
+
+Hermes `/v1/runs` timestamps and durations use seconds; convert them to the millisecond protocol once at the stream boundary. Native tool IDs alias to live Bridge IDs during history reconciliation, including still-running calls when name, complete arguments and timestamp match uniquely; never guess between ambiguous calls. Persist only bounded identity metadata (512 aliases per session), validate on load and clear on reset; do not persist duplicate transcript content. Never emit a second tool row solely because native persistence used another ID, including after a Bridge restart.
+
+Hermes history includes session-scoped `hasActiveRun` and the existing `inFlightRun` snapshot (run ID, partial text, start time, abortability). Read live ownership after asynchronous history/model reads so a finished or cancelled run cannot be resurrected. Keep these snapshots in memory; they add no polling or persisted transcript copy.
+
+Hermes history may include additive `toolCallAliases` (native ID to live ID) from the bounded confirmed alias store, restricted to tools represented on that page. This lets newer clients reconcile older cached identities; older clients may ignore the field. Never infer aliases from truncated previews.

@@ -20,6 +20,8 @@ type Props = Readonly<{
   badge?: string | null;
   selected: boolean;
   disabled?: boolean;
+  /** The member's owned plan: locked like `disabled`, but stays legible instead of dimming. */
+  current?: boolean;
   onPress: () => void;
   testID?: string;
   compact?: boolean;
@@ -32,27 +34,29 @@ export function PaywallPlanCard({
   badge = null,
   selected,
   disabled = false,
+  current = false,
   onPress,
   testID,
   compact = false,
 }: Props): React.JSX.Element {
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
+  const locked = disabled || current;
 
   return (
     <Pressable
       testID={testID}
       accessibilityRole="radio"
-      accessibilityLabel={[title, price, detail].filter(Boolean).join(', ')}
-      accessibilityState={{ checked: selected, disabled }}
-      disabled={disabled}
+      accessibilityLabel={[title, price, detail, badge].filter(Boolean).join(', ')}
+      accessibilityState={{ checked: selected, disabled: locked }}
+      disabled={locked}
       onPress={onPress}
       style={({ pressed }) => [
         styles.card,
         compact ? styles.compact : null,
-        selected ? styles.selected : styles.unselected,
-        disabled ? styles.disabled : null,
-        pressed && !disabled ? styles.pressed : null,
+        selected ? styles.selected : current ? styles.current : styles.unselected,
+        disabled && !current ? styles.disabled : null,
+        pressed && !locked ? styles.pressed : null,
       ]}
     >
       <View testID={testID ? `${testID}-copy` : undefined} style={compact ? styles.compactCopy : styles.copy}>
@@ -97,6 +101,12 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       borderWidth: BorderWidth.hairline,
       borderColor: colors.line,
       backgroundColor: colors.canvas,
+    },
+    // Owned plan while another option is selected: raised, never dimmed, never accent-outlined.
+    current: {
+      borderWidth: BorderWidth.hairline,
+      borderColor: colors.line,
+      backgroundColor: colors.surface,
     },
     compact: { flex: 1, minWidth: 0, flexDirection: 'column', flexWrap: 'nowrap', alignItems: 'stretch', justifyContent: 'flex-start', padding: Space.md, gap: Space.sm, borderRadius: Radius.card },
     disabled: { opacity: 0.45 },

@@ -7,6 +7,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   CAPABILITY_KEYS,
   isImageAttachmentMimeType,
+  sessionActivityAt,
   supportsFileAttachments,
   type AdapterErrorCode,
   type Capabilities,
@@ -29,19 +30,13 @@ import {
   getChildSessionStatusLabel,
 } from '../../chat/childSessionActivity';
 import { useMessageFavorites } from '../../chat/useMessageFavorites';
-import {
-  getCurrentAppUpdateAnnouncement,
-  getCurrentAppVersion,
-} from '../../services/app-update-announcement';
 import { analyticsEvents } from '../../services/analytics/events';
-import type { AppUpdateAnnouncement } from '../../features/app-updates/releases';
 import type { UiMessage } from '../../types/chat';
 import {
   sanitizeDisplayText,
   sanitizeUserMessageText,
   sessionLabel,
 } from '../../utils/chat-message';
-import { openExternalUrl } from '../../utils/openExternalUrl';
 import {
   ThreadView,
   type ThreadCopy,
@@ -141,10 +136,7 @@ function ThreadScreenContent({
   const [addSheetVisible, setAddSheetVisible] = useState(false);
   const [commandsSheetVisible, setCommandsSheetVisible] = useState(false);
   const [shareMessage, setShareMessage] = useState<UiMessage | null>(null);
-  const [announcement, setAnnouncement] = useState<AppUpdateAnnouncement | null>(null);
-  const [announcementVisible, setAnnouncementVisible] = useState(false);
   const [cronActivity, setCronActivity] = useState<{ scope: string; runs: ThreadRunSeed[] }>({ scope: '', runs: [] });
-  const currentVersion = useMemo(() => getCurrentAppVersion(), []);
   const openedKeyRef = useRef<string | null>(null);
   const analyticsOpenedKeyRef = useRef<string | null>(null);
   const { connectionId, agentId, sessionKey, from } = route.params;
@@ -157,15 +149,6 @@ function ThreadScreenContent({
     ...createThreadCopy(t),
     ...(paused ? { offline: t('Connection paused', { ns: 'config' }), reconnect: t('Resume connection', { ns: 'config' }) } : {}),
   }), [paused, t]);
-
-  useEffect(() => {
-    setAnnouncementVisible(false);
-    if (!app.debugMode) {
-      setAnnouncement(null);
-      return;
-    }
-    setAnnouncement(getCurrentAppUpdateAnnouncement(currentVersion));
-  }, [app.debugMode, currentVersion]);
 
   useEffect(() => {
     if (!focused || !connections.initialized || routeIsActive || locked) return;
@@ -214,26 +197,35 @@ function ThreadScreenContent({
   });
   const currentSession = controller.sessions.find((session) => session.key === sessionKey);
   const lastReadRevisionRef = useRef<string | null>(null);
-  const rosterSessionUpdatedAt = connections.roster
-    .find((group) => group.connection.id === connectionId)
-    ?.agents.find((summary) => summary.agent.agentId === agentId)
-    ?.sessions?.find((session) => session.key === sessionKey)?.updatedAt;
-  const readUpdatedAt = Math.max(currentSession?.updatedAt ?? 0, rosterSessionUpdatedAt ?? 0);
+  // Read watermarks follow the same human-activity clock as roster unread, so a
+  // heartbeat or metadata patch neither re-flags this thread nor re-marks it.
+  const readActivityAt = Math.max(
+    currentSession
+      ? sessionActivityAt({
+        updatedAt: currentSession.updatedAt ?? null,
+        lastActivityAt: currentSession.lastActivityAt,
+      }) ?? 0
+      : 0,
+    rosterSession ? sessionActivityAt(rosterSession) ?? 0 : 0,
+  );
   useEffect(() => {
     if (!focused) {
       lastReadRevisionRef.current = null;
       return;
     }
     if (!routeIsActive || locked || !controller.historyLoaded || controller.sessionKey !== sessionKey) return;
-    const revision = `${connectionId}:${sessionKey}:${readUpdatedAt}`;
+    const revision = `${connectionId}:${sessionKey}:${readActivityAt}`;
     if (lastReadRevisionRef.current === revision) return;
     lastReadRevisionRef.current = revision;
     void getConnectionRuntime().markSessionOpened({
-      connectionId, key: sessionKey, updatedAt: readUpdatedAt || null,
+      connectionId,
+      key: sessionKey,
+      updatedAt: readActivityAt || null,
+      lastActivityAt: readActivityAt || null,
     }).catch(() => {
       if (lastReadRevisionRef.current === revision) lastReadRevisionRef.current = null;
     });
-  }, [connectionId, sessionKey, readUpdatedAt, focused, routeIsActive, locked, controller.historyLoaded, controller.sessionKey]);
+  }, [connectionId, sessionKey, readActivityAt, focused, routeIsActive, locked, controller.historyLoaded, controller.sessionKey]);
 
   const analyticsBackend = adapter?.connection.backendKind
     ?? connections.connections.find((connection) => connection.id === connectionId)?.backendKind;
@@ -431,6 +423,7 @@ function ThreadScreenContent({
     sessionLabel: currentSession?.title ?? currentSession?.label,
   });
   const connectionError = connections.error
+    && connections.error.operation !== 'roster'
     && (!connections.error.connectionId || connections.error.connectionId === connectionId)
     ? connections.error.message
     : null;
@@ -507,42 +500,6 @@ function ThreadScreenContent({
     onOpenRunSession?.(targetSessionKey, targetAgentId, kind, context);
   }, [onOpenRunSession]);
 
-  const closeAnnouncement = useCallback(() => {
-    setAnnouncementVisible(false);
-  }, []);
-
-  const handleAnnouncementEntryPress = useCallback((entry: AppUpdateAnnouncement['entries'][number]) => {
-    closeAnnouncement();
-    if (entry.action.type === 'none') return;
-    if (entry.action.type === 'open_url') {
-      void openExternalUrl(entry.action.url, () => undefined);
-      return;
-    }
-    if (entry.action.type === 'open_paywall') {
-      navigation.navigate('Paywall', { reason: entry.action.feature });
-      return;
-    }
-    if (entry.action.type === 'navigate_config_add_connection') {
-      navigation.navigate('Onboarding', {
-        presentation: 'modal',
-        initialBackend: entry.action.flow === 'youmind' ? 'youmind' : undefined,
-      });
-      return;
-    }
-    if (entry.action.type === 'navigate_config') {
-      if (entry.action.screen === 'ChatAppearance') {
-        navigation.navigate('AccountSettingsSection', { section: 'appearance' });
-      } else {
-        navigation.navigate('AgentSettingsSection', {
-          connectionId,
-          agentId,
-          section: 'openclaw',
-        });
-      }
-      return;
-    }
-  }, [agentId, closeAnnouncement, connectionId, navigation]);
-
   const handleCopyMessage = useCallback((message: UiMessage) => {
     const text = message.role === 'assistant'
       ? sanitizeDisplayText(message.text)
@@ -582,13 +539,13 @@ function ThreadScreenContent({
     onRemove: (message: UiMessage) => removeQueuedMessage(message.id),
   }), [canSendQueuedNow, editQueuedMessage, removeQueuedMessage, sendQueuedMessageNow]);
 
-  const handleOpenMessageAttachments = useCallback((message: UiMessage) => {
+  const handleOpenMessageAttachments = useCallback((message: UiMessage, index = 0) => {
     if (onOpenAttachments) {
-      onOpenAttachments(message);
+      onOpenAttachments(message, index);
       return;
     }
     const uris = message.imageUris ?? [];
-    if (uris.length > 0) controller.preview.openPreview(uris, 0);
+    if (uris.length > 0) controller.preview.openPreview(uris, Math.min(Math.max(index, 0), uris.length - 1));
   }, [controller.preview, onOpenAttachments]);
 
   const handleOpenPendingAttachment = useCallback((index: number) => {
@@ -666,6 +623,7 @@ function ThreadScreenContent({
         agentName={agentName}
         sessionKey={controller.sessionKey ?? sessionKey}
         scrollToBottomRequestAt={controller.scrollToBottomRequestAt}
+        messageSubmittedAt={controller.messageSubmittedAt}
         agentEmoji={agentEmoji}
         agentAvatarUrl={agentAvatarUrl}
         sessionTitle={route.params.runContext?.title ?? currentSession?.title ?? currentSession?.label}
@@ -809,14 +767,6 @@ function ThreadScreenContent({
           onClose: controller.closeStaticThinkPicker,
           onSelect: controller.onSelectStaticThinkLevel,
         }}
-        announcement={{
-          visible: announcementVisible,
-          value: announcement,
-          debugMode: app.debugMode,
-          currentVersion,
-          onClose: closeAnnouncement,
-          onEntryPress: handleAnnouncementEntryPress,
-        }}
       />
     </>
   );
@@ -922,6 +872,7 @@ export function createThreadCopy(t: TFunction): ThreadCopy {
     placeholder: t('Message...', { ns: 'chat' }),
     formatEmpty: (name) => t('Start a conversation with {{name}}', { ns: 'chat', name }),
     formatAttachments: (count) => t('{{count}} attachments', { ns: 'chat', count }),
+    formatPhotoPosition: (index, count) => t('Photo {{index}} of {{count}}', { ns: 'chat', index, count }),
     formatRunDetail: (status, time) => time
       ? t('{{status}} · {{time}}', { ns: 'chat', status, time })
       : status,

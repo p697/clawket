@@ -1,4 +1,4 @@
-import React, { Fragment, useCallback, useMemo } from 'react';
+import React, { Fragment, useCallback, useMemo, useState } from 'react';
 import { Platform, StyleSheet, Text, View } from 'react-native';
 import type {
   ApprovalRequest,
@@ -8,6 +8,7 @@ import type {
   PermissionsReport,
 } from '@clawket/agent-protocol';
 import {
+  Archive,
   CheckCircle2,
   CircleAlert,
   Code2,
@@ -18,12 +19,14 @@ import {
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '../../components/ui/Button';
+import { ProGate } from '../../components/pro/ProGate';
 import {
   SettingsDivider,
   SettingsGroup,
   SettingsRow,
 } from '../../components/ui/SettingsGroup';
-import { Skeleton } from '../../components/ui/Skeleton';
+import { LoadingState } from '../../components/ui/LoadingState';
+import { SettingsIcon } from '../../components/ui/SettingsIcon';
 import { useAppTheme } from '../../theme';
 import {
   ControlSize,
@@ -48,10 +51,23 @@ type DetailRequest = Readonly<{
   body: string;
 }>;
 
+/**
+ * Last-step Pro gate for a management section. `locked` sections still load
+ * and show real data; `open` presents the contextual paywall and runs the
+ * continuation once entitlement arrives.
+ */
+export type ManageSectionGate = Readonly<{
+  locked: boolean;
+  open: (continuation?: () => void) => void;
+}>;
+
+export const DIAGNOSTICS_FREE_CHECKS = 2;
+
 export type ConfigurationSectionProps = Readonly<{
   view: ConfigView | null;
   canEdit: boolean;
   online: boolean;
+  gate?: ManageSectionGate;
   onEdit: () => void;
 }>;
 
@@ -59,11 +75,14 @@ export function ConfigurationSection({
   view,
   canEdit,
   online,
+  gate,
   onEdit,
 }: ConfigurationSectionProps): React.JSX.Element {
   const { t } = useTranslation(['config', 'common']);
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
+
+  const [expanded, setExpanded] = useState<string | null>(null);
 
   if (!view?.config) {
     return (
@@ -76,18 +95,40 @@ export function ConfigurationSection({
 
   return (
     <View testID="openclaw-configuration-content" style={styles.stack}>
-      <View style={styles.codeBlock}>
-        <Text selectable style={styles.codeText}>
-          {JSON.stringify(view.config, null, 2)}
-        </Text>
-      </View>
+      {Object.entries(view.config).map(([key, value]) => (
+        <SettingsGroup key={key}>
+          <SettingsRow title={key} testID={`openclaw-config-key-${key}`}
+            showChevron selected={expanded === key}
+            onPress={() => setExpanded(current => current === key ? null : key)} />
+          {expanded === key ? (
+            gate?.locked ? (
+              <ProGate
+                testID={`openclaw-config-gate-${key}`}
+                title={t('Edit OpenClaw config from your phone')}
+                detail={t('View and edit every section, saved with a safe restart.')}
+                actionLabel={t('Unlock full configuration')}
+                surfaceColor={theme.colors.surfaceFloating}
+                onUnlock={() => gate.open()}
+              >
+                <View style={styles.codeBlock}>
+                  <Text style={styles.codeText}>{JSON.stringify(value, null, 2)}</Text>
+                </View>
+              </ProGate>
+            ) : (
+              <View style={styles.codeBlock}>
+                <Text selectable style={styles.codeText}>{JSON.stringify(value, null, 2)}</Text>
+              </View>
+            )
+          ) : null}
+        </SettingsGroup>
+      ))}
       {canEdit ? (
         <Button
           testID="openclaw-configuration-edit"
           label={t('Edit', { ns: 'common' })}
           variant="secondary"
           disabled={!online}
-          onPress={onEdit}
+          onPress={gate?.locked ? () => gate.open(onEdit) : onEdit}
         />
       ) : (
         <SettingsGroup>
@@ -109,6 +150,7 @@ export type PermissionsSectionProps = Readonly<{
   canRepair: boolean;
   online: boolean;
   repairing: boolean;
+  gate?: ManageSectionGate;
   onSelectApproval: (approval: Extract<ApprovalRequest, { kind: 'exec' }>) => void;
   onRepair: () => void;
   onShowDetail: (detail: DetailRequest) => void;
@@ -122,6 +164,7 @@ export function PermissionsSection({
   canRepair,
   online,
   repairing,
+  gate,
   onSelectApproval,
   onRepair,
   onShowDetail,
@@ -169,7 +212,7 @@ export function PermissionsSection({
     <View testID="openclaw-permissions-content" style={styles.stack}>
       {report ? (
         <>
-          <SettingsGroup testID="openclaw-permission-report">
+          <SettingsGroup density="comfortable" testID="openclaw-permission-report">
             {permissionRows.map((row, index) => {
               const Icon = row.icon;
               return (
@@ -179,33 +222,33 @@ export function PermissionsSection({
                     testID={`openclaw-permission-${row.key}`}
                     title={row.title}
                     value={row.value}
-                    leading={(
-                      <Icon
-                        size={IconSize.sm}
-                        color={theme.colors.inkSecondary}
-                        strokeWidth={2}
-                      />
-                    )}
+                    leading={<SettingsIcon icon={Icon} tone="neutral" size={20} strokeWidth={1.75} />}
                     showChevron={Boolean(row.detail)}
                     onPress={row.detail
-                      ? () => onShowDetail({ title: row.title, body: row.detail })
+                      ? () => {
+                        const showDetail = () => onShowDetail({ title: row.title, body: row.detail });
+                        if (gate?.locked) gate.open(showDetail);
+                        else showDetail();
+                      }
                       : undefined}
                   />
                 </Fragment>
               );
             })}
           </SettingsGroup>
-          <SettingsGroup testID="openclaw-permission-rules">
-            <SettingsRow
-              title={t('Command permission level')}
-              value={securityLabel(report.exec.effectiveSecurity, t)}
-            />
-            <SettingsDivider inset="content" />
-            <SettingsRow
-              title={t('Current confirmation')}
-              value={confirmationLabel(report.exec.effectiveAsk, t)}
-            />
-          </SettingsGroup>
+          {gate?.locked ? (
+            <ProGate
+              testID="openclaw-permissions-gate"
+              title={t('Repair permissions in one tap')}
+              detail={t('See why web, commands and code are blocked, then fix them.')}
+              actionLabel={t('Unlock permission details')}
+              onUnlock={() => gate.open()}
+            >
+              <PermissionRules report={report} />
+            </ProGate>
+          ) : (
+            <PermissionRules report={report} />
+          )}
           {canRepair ? (
             <Button
               testID="openclaw-permissions-repair"
@@ -213,16 +256,15 @@ export function PermissionsSection({
               variant="secondary"
               loading={repairing}
               disabled={!online}
-              onPress={onRepair}
+              onPress={gate?.locked ? () => gate.open(onRepair) : onRepair}
             />
           ) : null}
         </>
       ) : null}
 
-      <View style={styles.subsection}>
+      {approvals.length > 0 ? <View style={styles.subsection}>
         <Text style={styles.sectionTitle}>{t('Pending Requests', { ns: 'settings' })}</Text>
-        {approvals.length ? (
-          <SettingsGroup testID="openclaw-approvals-list">
+          <SettingsGroup density="comfortable" testID="openclaw-approvals-list">
             {approvals.map((approval, index) => {
               const expired = approval.expiresAtMs <= now;
               return (
@@ -241,14 +283,25 @@ export function PermissionsSection({
               );
             })}
           </SettingsGroup>
-        ) : (
-          <SectionEmpty
-            testID="openclaw-approvals-empty"
-            message={t('No available settings')}
-          />
-        )}
-      </View>
+      </View> : null}
     </View>
+  );
+}
+
+function PermissionRules({ report }: Readonly<{ report: PermissionsReport }>): React.JSX.Element {
+  const { t } = useTranslation(['config', 'common']);
+  return (
+    <SettingsGroup density="comfortable" testID="openclaw-permission-rules">
+      <SettingsRow
+        title={t('Command permission level')}
+        value={securityLabel(report.exec.effectiveSecurity, t)}
+      />
+      <SettingsDivider inset="content" />
+      <SettingsRow
+        title={t('Current confirmation')}
+        value={confirmationLabel(report.exec.effectiveAsk, t)}
+      />
+    </SettingsGroup>
   );
 }
 
@@ -257,6 +310,7 @@ export type DiagnosticsSectionProps = Readonly<{
   canRepair: boolean;
   online: boolean;
   repairing: boolean;
+  gate?: ManageSectionGate;
   onDiagnose: () => void;
   onRepair: () => void;
   onShowDetail: (detail: DetailRequest) => void;
@@ -267,6 +321,7 @@ export function DiagnosticsSection({
   canRepair,
   online,
   repairing,
+  gate,
   onDiagnose,
   onRepair,
   onShowDetail,
@@ -274,14 +329,13 @@ export function DiagnosticsSection({
   const { t } = useTranslation(['config', 'common']);
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
+  const checks = result?.checks ?? [];
+  const visibleChecks = gate?.locked ? checks.slice(0, DIAGNOSTICS_FREE_CHECKS) : checks;
+  const hiddenChecks = gate?.locked ? checks.slice(DIAGNOSTICS_FREE_CHECKS) : [];
 
   if (!result) {
     return (
       <View style={styles.stack}>
-        <SectionEmpty
-          testID="openclaw-diagnostics-empty"
-          message={t('No available settings')}
-        />
         <Button
           testID="openclaw-diagnostics-run"
           label={t('Diagnose')}
@@ -318,29 +372,41 @@ export function DiagnosticsSection({
         </Text>
       </View>
       {result.summary ? <Text style={styles.detailText}>{result.summary}</Text> : null}
-      {result.checks.length ? (
-        <SettingsGroup testID="openclaw-diagnostics-checks">
-          {result.checks.map((check, index) => (
-            <Fragment key={`${check.name}-${index}`}>
-              {index ? <SettingsDivider inset="content" /> : null}
-              <SettingsRow
-                testID={`openclaw-diagnostic-check-${index}`}
-                title={check.name}
-                value={diagnosticStatusLabel(check.status, t)}
-                leading={diagnosticIcon(check.status, theme.colors)}
-                showChevron={Boolean(check.message)}
-                onPress={check.message
-                  ? () => onShowDetail({ title: check.name, body: check.message ?? '' })
-                  : undefined}
-              />
-            </Fragment>
-          ))}
-        </SettingsGroup>
+      {visibleChecks.length ? (
+        <DiagnosticChecks
+          testID="openclaw-diagnostics-checks"
+          checks={visibleChecks}
+          onShowDetail={onShowDetail}
+        />
+      ) : null}
+      {hiddenChecks.length ? (
+        <ProGate
+          testID="openclaw-diagnostics-gate"
+          title={t('{{total}} more checks', { total: hiddenChecks.length })}
+          detail={t('Read every finding and attempt an automatic fix.')}
+          actionLabel={t('Unlock full diagnostics')}
+          onUnlock={() => gate?.open()}
+        >
+          <DiagnosticChecks
+            testID="openclaw-diagnostics-hidden-checks"
+            checks={hiddenChecks}
+            indexOffset={visibleChecks.length}
+            onShowDetail={onShowDetail}
+          />
+        </ProGate>
       ) : null}
       {result.raw ? (
-        <View style={styles.codeBlock}>
-          <Text selectable style={styles.codeText}>{result.raw}</Text>
-        </View>
+        <SettingsGroup density="comfortable">
+          <SettingsRow title={t('Details', { ns: 'chat' })} showChevron
+            testID="openclaw-diagnostics-details"
+            leading={<SettingsIcon icon={Code2} tone="neutral" size={20} strokeWidth={1.75} />}
+            locked={gate?.locked}
+            onPress={() => {
+              const showRaw = () => onShowDetail({ title: t('Diagnostics'), body: result.raw ?? '' });
+              if (gate?.locked) gate.open(showRaw);
+              else showRaw();
+            }} />
+        </SettingsGroup>
       ) : null}
       <View style={styles.buttonRow}>
         <Button
@@ -357,12 +423,48 @@ export function DiagnosticsSection({
             label={t('Attempt Fix')}
             loading={repairing}
             disabled={!online}
-            onPress={onRepair}
+            onPress={gate?.locked ? () => gate.open(onRepair) : onRepair}
             style={styles.buttonGrow}
           />
         ) : null}
       </View>
     </View>
+  );
+}
+
+function DiagnosticChecks({
+  checks,
+  indexOffset = 0,
+  testID,
+  onShowDetail,
+}: Readonly<{
+  checks: DoctorResult['checks'];
+  indexOffset?: number;
+  testID: string;
+  onShowDetail: (detail: DetailRequest) => void;
+}>): React.JSX.Element {
+  const { t } = useTranslation(['config', 'common']);
+  return (
+    <SettingsGroup density="comfortable" testID={testID}>
+      {checks.map((check, offset) => {
+        const index = indexOffset + offset;
+        return (
+          <Fragment key={`${check.name}-${index}`}>
+            {offset ? <SettingsDivider inset="content" /> : null}
+            <SettingsRow
+              testID={`openclaw-diagnostic-check-${index}`}
+              title={check.name}
+              value={diagnosticStatusLabel(check.status, t)}
+              leading={diagnosticIcon(check.status)}
+              showChevron={Boolean(check.message)}
+              onPress={check.message
+                ? () => onShowDetail({ title: check.name, body: check.message ?? '' })
+                : undefined}
+            />
+          </Fragment>
+        );
+      })}
+    </SettingsGroup>
   );
 }
 
@@ -372,6 +474,7 @@ export type BackupsSectionProps = Readonly<{
   canRestore: boolean;
   online: boolean;
   busy: boolean;
+  gate?: ManageSectionGate;
   onCreate: () => void;
   onSelectBackup: (backup: Backup) => void;
 }>;
@@ -382,10 +485,13 @@ export function BackupsSection({
   canRestore,
   online,
   busy,
+  gate,
   onCreate,
   onSelectBackup,
 }: BackupsSectionProps): React.JSX.Element {
   const { t, i18n } = useTranslation(['config', 'common']);
+  const { theme } = useAppTheme();
+  const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
   const formatDate = useCallback((createdAt: number) => new Intl.DateTimeFormat(
     i18n.language,
     { dateStyle: 'medium', timeStyle: 'short' },
@@ -393,17 +499,25 @@ export function BackupsSection({
 
   return (
     <View testID="openclaw-backups-content" style={stylesStatic.stack}>
+      <SettingsGroup density="comfortable" testID="openclaw-backups-intro">
+        <View style={styles.introRow}>
+          <SettingsIcon icon={Archive} tone="neutral" size={20} strokeWidth={1.75} />
+          <Text style={styles.introText}>
+            {t('Keeps a copy of the current OpenClaw config on this phone, so a bad change is one tap from undone.')}
+          </Text>
+        </View>
+      </SettingsGroup>
       {canCreate ? (
         <Button
           testID="openclaw-backup-create"
-          label={busy ? t('Creating backup...') : t('Create', { ns: 'common' })}
+          label={busy ? t('Creating backup...') : t('Create backup')}
           loading={busy}
           disabled={!online}
-          onPress={onCreate}
+          onPress={gate?.locked ? () => gate.open(onCreate) : onCreate}
         />
       ) : null}
       {backups?.length ? (
-        <SettingsGroup testID="openclaw-backups-list">
+        <SettingsGroup density="comfortable" testID="openclaw-backups-list">
           {backups.map((backup, index) => (
             <Fragment key={backup.id}>
               {index ? <SettingsDivider inset="content" /> : null}
@@ -421,21 +535,17 @@ export function BackupsSection({
       ) : (
         <SectionEmpty
           testID="openclaw-backups-empty"
-          message={t('No backups yet')}
+          message={t('No restore points yet. Create one before editing.')}
         />
       )}
     </View>
   );
 }
 
-export function ManageSectionLoading(): React.JSX.Element {
-  return (
-    <View testID="openclaw-manage-loading" style={stylesStatic.stack}>
-      <Skeleton style={stylesStatic.skeletonControl} />
-      <Skeleton style={stylesStatic.skeletonGroup} />
-      <Skeleton style={stylesStatic.skeletonGroup} />
-    </View>
-  );
+export function ManageSectionLoading({ diagnostics = false }: { diagnostics?: boolean }): React.JSX.Element {
+  const { t } = useTranslation(['config', 'common']);
+  return <LoadingState testID="openclaw-manage-loading"
+    message={diagnostics ? t('Running diagnostics…') : t('Loading settings')} />;
 }
 
 export function SectionEmpty({
@@ -480,17 +590,11 @@ function diagnosticStatusLabel(
   return status;
 }
 
-function diagnosticIcon(
-  status: string,
-  colors: ReturnType<typeof useAppTheme>['theme']['colors'],
-): React.JSX.Element {
-  if (status === 'pass') {
-    return <CheckCircle2 size={IconSize.sm} color={colors.good} strokeWidth={2} />;
-  }
-  if (status === 'warn') {
-    return <TriangleAlert size={IconSize.sm} color={colors.warn} strokeWidth={2} />;
-  }
-  return <CircleAlert size={IconSize.sm} color={colors.bad} strokeWidth={2} />;
+function diagnosticIcon(status: string): React.JSX.Element {
+  return <SettingsIcon
+    icon={status === 'pass' ? CheckCircle2 : status === 'warn' ? TriangleAlert : CircleAlert}
+    tone={status === 'pass' ? 'success' : status === 'warn' ? 'warning' : 'danger'}
+    size={20} strokeWidth={1.75} />;
 }
 
 function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors']) {
@@ -523,6 +627,19 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       flexDirection: 'row',
       alignItems: 'center',
       gap: Space.sm,
+    },
+    introRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: Space.md,
+      paddingHorizontal: Space.lg,
+      paddingVertical: Space.lg,
+    },
+    introText: {
+      flex: 1,
+      color: colors.inkSecondary,
+      fontSize: FontSize.body,
+      lineHeight: LineHeight.body,
     },
     summaryText: {
       flex: 1,
@@ -559,11 +676,5 @@ const stylesStatic = StyleSheet.create({
     textAlign: 'center',
     fontSize: FontSize.caption,
     lineHeight: LineHeight.caption,
-  },
-  skeletonControl: {
-    minHeight: ControlSize.floatingButton,
-  },
-  skeletonGroup: {
-    minHeight: ControlSize.settingsRow * 2,
   },
 });

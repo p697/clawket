@@ -15,6 +15,7 @@ export type HermesBridgeSessionMessage = {
   idempotencyKey?: string;
   toolName?: string;
   toolCallId?: string;
+  _nativeToolCallId?: string;
   isError?: boolean;
   toolArgs?: string;
   toolDurationMs?: number;
@@ -29,6 +30,7 @@ export type HermesBridgeSession = {
   title: string;
   updatedAt: number;
   messages: HermesBridgeSessionMessage[];
+  toolAliases?: Record<string, { toolCallId: string; toolName?: string }>;
 };
 
 export type HermesSessionActions = {
@@ -67,6 +69,7 @@ type HermesBridgePersistedSession = {
   sessionId: string;
   title: string;
   updatedAt: number;
+  toolAliases?: HermesBridgeSession['toolAliases'];
 };
 
 type HermesBridgePersistedState = {
@@ -117,6 +120,14 @@ export class HermesBridgeSessionStore {
     return this.state.sessions.find((session) => session.key === key);
   }
 
+  rememberToolAliases(key: string, aliases: NonNullable<HermesBridgeSession['toolAliases']>): void {
+    const session = this.requireSession(key);
+    const merged = cleanToolAliases({ ...session.toolAliases, ...aliases });
+    if (JSON.stringify(merged) === JSON.stringify(session.toolAliases ?? {})) return;
+    session.toolAliases = merged;
+    this.save();
+  }
+
   createSession(input: { key?: string | null; title?: string | null } = {}): HermesBridgeSession {
     const requestedKey = input.key?.trim();
     const key = requestedKey || randomUUID();
@@ -156,7 +167,7 @@ export class HermesBridgeSessionStore {
   updateToolResult(
     key: string,
     toolCallId: string,
-    patch: Partial<Pick<HermesBridgeSessionMessage, 'content'>>,
+    patch: Partial<Pick<HermesBridgeSessionMessage, 'content' | '_nativeToolCallId'>>,
   ): boolean {
     const session = this.requireSession(key);
     for (let index = session.messages.length - 1; index >= 0; index--) {
@@ -165,6 +176,7 @@ export class HermesBridgeSessionStore {
       session.messages[index] = {
         ...message,
         ...(patch.content !== undefined ? { content: patch.content } : {}),
+        ...(patch._nativeToolCallId ? { _nativeToolCallId: patch._nativeToolCallId } : {}),
       };
       this.save();
       return true;
@@ -204,6 +216,7 @@ export class HermesBridgeSessionStore {
     const session = this.requireSession(key);
     session.sessionId = createBridgeSessionId(key);
     session.messages = [];
+    session.toolAliases = {};
     session.updatedAt = Date.now();
     this.save();
     return session;
@@ -227,7 +240,7 @@ export class HermesBridgeSessionStore {
     try {
       const parsed = JSON.parse(readFileSync(this.filePath, 'utf8')) as Partial<HermesBridgePersistedState>;
       const sessions = Array.isArray(parsed.sessions)
-        ? parsed.sessions.filter(isPersistedSessionRecord).map((session) => ({ ...session, messages: [] }))
+        ? parsed.sessions.filter(isPersistedSessionRecord).map((session) => ({ ...session, toolAliases: cleanToolAliases(session.toolAliases), messages: [] }))
         : [];
       return { version: 1, sessions };
     } catch {
@@ -239,16 +252,29 @@ export class HermesBridgeSessionStore {
     this.persister.schedule(() => {
       const persisted: HermesBridgePersistedState = {
         version: 1,
-        sessions: this.state.sessions.map(({ key, sessionId, title, updatedAt }) => ({
+        sessions: this.state.sessions.map(({ key, sessionId, title, updatedAt, toolAliases }) => ({
           key,
           sessionId,
           title,
           updatedAt,
+          ...(toolAliases && Object.keys(toolAliases).length ? { toolAliases } : {}),
         })),
       };
       return `${JSON.stringify(persisted, null, 2)}\n`;
     });
   }
+}
+
+function cleanToolAliases(value: unknown): NonNullable<HermesBridgeSession['toolAliases']> {
+  if (!isRecord(value)) return {};
+  return Object.fromEntries(Object.entries(value).filter(([id, alias]) =>
+    id.length > 0 && id.length <= 256 && isRecord(alias)
+    && typeof alias.toolCallId === 'string' && alias.toolCallId.length > 0 && alias.toolCallId.length <= 256
+    && (alias.toolName === undefined || (typeof alias.toolName === 'string' && alias.toolName.length <= 256)),
+  ).slice(-512).map(([id, alias]) => {
+    const record = alias as { toolCallId: string; toolName?: string };
+    return [id, { toolCallId: record.toolCallId, ...(record.toolName ? { toolName: record.toolName } : {}) }];
+  }));
 }
 
 function isPersistedSessionRecord(value: unknown): value is HermesBridgePersistedSession {

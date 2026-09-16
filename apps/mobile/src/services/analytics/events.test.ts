@@ -1,6 +1,7 @@
 import {
   ANALYTICS_EVENT_PROPERTY_WHITELIST,
   ANALYTICS_GLOBAL_EVENT_PROPERTIES,
+  analyticsAgentDocument,
   analyticsEvents,
   sanitizeAnalyticsEventProperties,
 } from './events';
@@ -17,6 +18,7 @@ jest.mock('./posthog', () => ({
 }));
 
 const SPEC_EVENT_PROPERTIES: Readonly<Record<string, ReadonlyArray<string>>> = {
+  agent_file_activity: ['action', 'backend', 'document'],
   onboarding_viewed: ['source'],
   pairing_code_submitted: ['length_ok'],
   onboarding_agent_prompt_copied: ['backend'],
@@ -62,8 +64,11 @@ const SPEC_EVENT_PROPERTIES: Readonly<Record<string, ReadonlyArray<string>>> = {
   session_action: ['action'],
   agent_settings_opened: ['backend'],
   settings_row_opened: ['row', 'locked', 'backend'],
+  usage_range_changed: ['range', 'cached', 'locked'],
   search_performed: ['scope', 'has_results', 'result_kinds'],
   search_message_opened: ['is_pro'],
+  paywall_plan_change_submitted: ['package_id', 'package_type', 'price_string', 'blocked_feature', 'preview_only', 'hero', 'variant', 'trigger_screen', 'launch'],
+  paywall_manage_subscription_tapped: ['blocked_feature', 'preview_only', 'hero', 'variant', 'trigger_screen', 'launch'],
   paywall_viewed: [
     'blocked_feature',
     'package_count',
@@ -129,8 +134,10 @@ const SPEC_EVENT_PROPERTIES: Readonly<Record<string, ReadonlyArray<string>>> = {
     'launch',
     'reason',
   ],
-  paywall_launch_shown: ['variant', 'first_run'],
-  paywall_launch_closed: ['variant', 'first_run'],
+  app_update_announcement_shown: ['version', 'release_count', 'entry_count', 'source'],
+  app_update_announcement_closed: ['version', 'release_count', 'source', 'action', 'seconds_visible'],
+  app_update_announcement_entry_tapped: ['version', 'entry', 'action'],
+  release_notes_opened: ['release_count'],
   grace_banner_viewed: ['days_left'],
   grace_expired: ['days_left'],
   youmind_sign_in_tapped: ['method', 'source'],
@@ -408,4 +415,14 @@ describe('analytics event privacy boundary', () => {
     );
     expect(mockedPostHogClient.register).toHaveBeenCalledWith({ theme_accent_id: 'rosePink' });
   });
+});
+
+
+test('agent file editing telemetry excludes source content and unbounded labels', () => {
+  expect(sanitizeAnalyticsEventProperties('agent_file_activity', {
+    action: 'saved', backend: 'openclaw', document: 'memory', content: 'private source', agentId: 'private identity',
+  })).toEqual({ action: 'saved', backend: 'openclaw', document: 'memory' });
+  expect(sanitizeAnalyticsEventProperties('agent_file_activity', { document: 'private filename' })).toEqual({ document: 'other' });
+  expect(analyticsAgentDocument('SOUL.md')).toBe('soul');
+  expect(analyticsAgentDocument('notes/private.md')).toBe('other');
 });

@@ -39,6 +39,15 @@ export const Keyboard = {
   addListener: jest.fn(() => ({ remove: jest.fn() })),
 };
 
+export const I18nManager = {
+  isRTL: false,
+  doLeftAndRightSwapInRTL: true,
+  allowRTL: jest.fn(),
+  forceRTL: jest.fn(),
+  swapLeftAndRightInRTL: jest.fn(),
+  getConstants: () => ({ isRTL: I18nManager.isRTL, doLeftAndRightSwapInRTL: true }),
+};
+
 export default {
   Platform,
   Alert,
@@ -47,4 +56,5 @@ export default {
   useWindowDimensions,
   StyleSheet,
   Keyboard,
+  I18nManager,
 };

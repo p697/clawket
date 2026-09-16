@@ -1,6 +1,7 @@
 import React from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import { ChevronLeft, ChevronRight, Copy, Check, Lock, type LucideIcon } from 'lucide-react-native';
+import { Copy, Check, Lock, type LucideIcon } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight } from './DirectionalIcon';
 import { useTranslation } from 'react-i18next';
 import { useAppTheme } from '../../theme';
 import { ControlSize, FontSize, FontWeight, IconSize, LineHeight, Radius, Space } from '../../theme/tokens';

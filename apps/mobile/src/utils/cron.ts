@@ -162,6 +162,13 @@ function describeCronScheduleHuman(expr: string, t: TFn): string {
       return t('schedule_weekday_at', { ns: 'settings', weekday, time });
     }
 
+    // A visual weekly schedule may select several independent weekdays.
+    if (domF === '*' && monF === '*' && /^[0-7](?:,[0-7])+$/.test(dowF)) {
+      const weekday = [...new Set(dowF.split(',').map(day => Number(day) % 7))]
+        .map(day => translateWeekday(day, t)).join(', ');
+      return t('schedule_weekday_at', { ns: 'settings', weekday, time });
+    }
+
     // Weekday range: M H * * 1-5
     if (domF === '*' && monF === '*' && /^[0-7]-[0-7]$/.test(dowF)) {
       const [start, end] = dowF.split('-').map(Number);

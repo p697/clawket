@@ -292,6 +292,7 @@ export function SearchScreen({
       recentSearches={recentSearches}
       availableResultCount={model.availableResultCount}
       errorCode={errorCode}
+      reconnecting={runtime.recovering === true}
       topInset={insets.top}
       bottomInset={insets.bottom}
       onBack={() => navigation.goBack()}

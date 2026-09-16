@@ -59,7 +59,9 @@ function cloneMessage(message: ChatMessage): ChatMessage {
 }
 
 function cloneHistory(history: SessionHistory): SessionHistory {
-  return { ...history, messages: history.messages.map(cloneMessage) };
+  return { ...history, messages: history.messages.map(cloneMessage),
+    ...(history.activeRun ? { activeRun: { ...history.activeRun } } : {}),
+  };
 }
 
 function emptyConfig(): ConfigView {
@@ -93,6 +95,24 @@ function createManagement(
       : {}),
     ...(capabilities.thinkingLevels
       ? { listThinkingLevels: provided?.models?.listThinkingLevels ?? (() => []) }
+      : {}),
+    ...(capabilities.models && capabilities.modelManage
+      ? {
+          getCatalog: provided?.models?.getCatalog ?? (async () => ({
+            defaults: { primary: '', fallbacks: [], thinkingDefault: '' },
+            allowlist: null,
+            providers: [],
+          })),
+          saveCatalog: provided?.models?.saveCatalog ?? (async () => undefined),
+          addModel: provided?.models?.addModel ?? (async () => undefined),
+          inspectDeletion: provided?.models?.inspectDeletion ?? (async () => ({
+            canDelete: false,
+            blocks: [],
+            cleanupCount: 0,
+          })),
+          deleteModel: provided?.models?.deleteModel ?? (async () => undefined),
+          setCost: provided?.models?.setCost ?? (async () => undefined),
+        }
       : {}),
   };
 
@@ -484,6 +504,7 @@ export function createMockAdapter(fixture: MockAdapterFixture): MockAgentAdapter
         messages: source.messages.slice(offset, end).map(cloneMessage),
         ...(end < source.messages.length ? { nextCursor: String(end) } : {}),
         hasActiveRun: source.hasActiveRun,
+        ...(source.activeRun ? { activeRun: { ...source.activeRun } } : {}),
       };
     },
     async prompt(key: string, input: PromptInput) {

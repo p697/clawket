@@ -2,27 +2,28 @@ import type { ProPaywallPackage, ProPurchaseFailureReason } from '../../services
 import type { ProFeature } from '../../utils/pro';
 
 export type PaywallTrigger = ProFeature | 'launch';
-export type PaywallMode = 'purchase' | 'threePointZeroIntro';
+export type PaywallMode = 'purchase';
 export type PaywallHero = 'connections' | 'agents' | 'manage' | 'logsFiles' | 'search' | 'generic';
-export type PaywallBenefitKind = 'connections' | 'agents' | 'manage' | 'logsFiles' | 'search' | 'combined' | 'memory' | 'sessions';
+export type PaywallBenefitKind = 'connections' | 'agents' | 'manage' | 'logsFiles' | 'search' | 'combined' | 'memory' | 'sessions' | 'usage';
 export type PaywallTitleKey =
+  | 'Edit your Agent’s memory and files'
   | 'More possibilities with your Agents'
   | 'Explore your Agent conversations'
-  | 'Clawket 3.0'
   | 'Every Agent in your pocket'
   | 'Bring every Agent into the roster'
   | 'Fix your OpenClaw from your phone'
   | 'Read logs and edit files without going back to your computer'
+  | 'Choose which models your Agent uses'
   | 'Find any message again'
-  | 'Every conversation, in full';
+  | 'Every conversation, in full'
+  | 'See where every token goes';
 export type PaywallSubtitleKey =
-  | 'Take your AI world with you.'
-  | 'Your agent control tower, rebuilt.'
   | 'OpenClaw and Hermes together, ready whenever you are.'
   | 'Agents beyond main are a Pro feature.'
   | '{{feature}} is a Pro feature.'
   | 'Message details across sessions are a Pro feature.'
-  | 'Read complete channel, task and subagent conversations, and reply where supported.';
+  | 'Read complete channel, task and subagent conversations, and reply where supported.'
+  | '7-day and 30-day usage, cost and trends are a Pro feature.';
 export type PaywallSubtitleFeatureKey =
   | 'Permissions'
   | 'Config backups'
@@ -34,8 +35,11 @@ export type PaywallActionKey =
   | 'managing OpenClaw'
   | 'viewing logs'
   | 'editing this file'
-  | 'opening this message';
+  | 'managing models'
+  | 'opening this message'
+  | 'viewing usage trends';
 export type PaywallBenefitKey =
+  | 'Choose which models your Agent uses'
   | 'Conversations across channels and tasks'
   | "Shape your Agent's personality and memory"
   | 'Configure, back up and diagnose your Agents'
@@ -48,10 +52,7 @@ export type PaywallBenefitKey =
   | 'Unlimited Agents'
   | 'Logs and file editing'
   | 'Search across sessions and favorites'
-  | 'Every Agent and session in one roster'
-  | 'OpenClaw and Hermes side by side'
-  | 'Search across every conversation'
-  | 'Manage, diagnose, and repair from your phone';
+  | '7- and 30-day usage and cost trends';
 export type PaywallFailureMessageKey =
   | 'Your purchase is pending approval.'
   | 'Unable to load subscription options right now.'
@@ -64,13 +65,6 @@ export type PaywallContent = Readonly<{
   subtitleKey: PaywallSubtitleKey | null;
   subtitleFeatureKey: PaywallSubtitleFeatureKey | null;
   actionKey: PaywallActionKey | null;
-  benefits: readonly Readonly<{ kind: PaywallBenefitKind; labelKey: PaywallBenefitKey }>[];
-}>;
-
-export type ThreePointZeroIntroContent = Readonly<{
-  hero: 'generic';
-  titleKey: 'Clawket 3.0';
-  subtitleKey: 'Your agent control tower, rebuilt.';
   benefits: readonly Readonly<{ kind: PaywallBenefitKind; labelKey: PaywallBenefitKey }>[];
 }>;
 
@@ -136,7 +130,12 @@ export function resolvePaywallContent(trigger: PaywallTrigger | null): PaywallCo
         subtitleKey: 'Agents beyond main are a Pro feature.',
         subtitleFeatureKey: null,
         actionKey: 'with this Agent',
-        benefits: contextualBenefits({ kind: 'agents', labelKey: 'Unlimited Agents' }),
+        benefits: [
+          { kind: 'agents', labelKey: 'Unlimited Agents' },
+          { kind: 'connections', labelKey: 'Unlimited connections' },
+          SESSION_BENEFIT,
+          MEMORY_BENEFIT,
+        ],
       };
     case 'openclawPermissions':
       return manageContent('Permissions');
@@ -149,20 +148,40 @@ export function resolvePaywallContent(trigger: PaywallTrigger | null): PaywallCo
     case 'openclawDiagnostics':
       return manageContent('Diagnostics');
     case 'coreFileEditing':
+      return {
+        hero: 'logsFiles',
+        titleKey: 'Edit your Agent’s memory and files',
+        subtitleKey: null,
+        subtitleFeatureKey: null,
+        actionKey: 'editing this file',
+        benefits: contextualBenefits(MEMORY_BENEFIT),
+      };
     case 'logs':
       return {
         hero: 'logsFiles',
         titleKey: 'Read logs and edit files without going back to your computer',
         subtitleKey: null,
         subtitleFeatureKey: null,
-        actionKey: trigger === 'logs' ? 'viewing logs' : 'editing this file',
+        actionKey: 'viewing logs',
         benefits: contextualBenefits({ kind: 'logsFiles', labelKey: 'Logs and file editing' }),
+      };
+    case 'modelManage':
+      return {
+        hero: 'manage',
+        titleKey: 'Choose which models your Agent uses',
+        subtitleKey: null,
+        subtitleFeatureKey: null,
+        actionKey: 'managing models',
+        benefits: contextualBenefits({
+          kind: 'manage',
+          labelKey: 'Choose which models your Agent uses',
+        }),
       };
     case 'sessionHistory':
       return {
         hero: 'agents',
         titleKey: 'Explore your Agent conversations',
-        subtitleKey: 'Take your AI world with you.',
+        subtitleKey: 'Read complete channel, task and subagent conversations, and reply where supported.',
         subtitleFeatureKey: null,
         actionKey: null,
         benefits: contextualBenefits(SESSION_BENEFIT),
@@ -176,34 +195,30 @@ export function resolvePaywallContent(trigger: PaywallTrigger | null): PaywallCo
         actionKey: 'opening this message',
         benefits: contextualBenefits({ kind: 'search', labelKey: 'Search across sessions and favorites' }),
       };
+    case 'usage':
+      return {
+        hero: 'generic',
+        titleKey: 'See where every token goes',
+        subtitleKey: '7-day and 30-day usage, cost and trends are a Pro feature.',
+        subtitleFeatureKey: null,
+        actionKey: 'viewing usage trends',
+        benefits: contextualBenefits({ kind: 'usage', labelKey: '7- and 30-day usage and cost trends' }),
+      };
     case 'appIcons':
     case 'settingsMembershipPreview':
-    case 'usage':
     case 'launch':
     case null:
     default:
       return {
         hero: 'generic',
         titleKey: 'More possibilities with your Agents',
-        subtitleKey: 'Take your AI world with you.',
+        subtitleKey: null,
         subtitleFeatureKey: null,
         actionKey: null,
-        benefits: contextualBenefits({ kind: 'combined', labelKey: 'More Agents, unlimited connections' }),
+        benefits: contextualBenefits(SESSION_BENEFIT),
       };
   }
 }
-
-export const THREE_POINT_ZERO_INTRO_CONTENT: ThreePointZeroIntroContent = {
-  hero: 'generic',
-  titleKey: 'Clawket 3.0',
-  subtitleKey: 'Your agent control tower, rebuilt.',
-  benefits: [
-    { kind: 'agents', labelKey: 'Every Agent and session in one roster' },
-    { kind: 'connections', labelKey: 'OpenClaw and Hermes side by side' },
-    { kind: 'search', labelKey: 'Search across every conversation' },
-    { kind: 'manage', labelKey: 'Manage, diagnose, and repair from your phone' },
-  ],
-};
 
 const PACKAGE_ORDER: Readonly<Record<string, number>> = {
   ANNUAL: 0,

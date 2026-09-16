@@ -304,6 +304,10 @@ expectFailure('corrupted token source fails closed', {
   source: "import { FontSize } from '../theme/tokens'; export const broken = FontSize.;\n",
 }, 'canonical token validation parse failed');
 
+expectPass('comfortable settings rows use the scoped canonical metric', {
+  source: 'export const row = { minHeight: ControlSize.settingsRowComfortable };\n',
+});
+
 if (failures.length) {
   console.error('[check-ui-style-selftest] failed');
   for (const failure of failures) console.error(`- ${failure}`);

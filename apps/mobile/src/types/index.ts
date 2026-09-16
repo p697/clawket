@@ -169,6 +169,13 @@ export interface SessionInfo {
   derivedTitle?: string;
   lastMessagePreview?: string;
   updatedAt?: number | null;
+  /** OpenClaw: last user-facing run start or inbound user message; heartbeats do not move it. */
+  lastInteractionAt?: number;
+  /**
+   * OpenClaw wire: last completed run whose output reaches the user (cron counts,
+   * heartbeats do not). After adapter mapping: the descriptor's resolved activity time.
+   */
+  lastActivityAt?: number | null;
   channel?: string;
   model?: string;
   modelProvider?: string;

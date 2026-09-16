@@ -6,11 +6,12 @@ import {
 import {
   buildIdentityAgentPatch,
   buildIdentityFileContent,
-  buildUserFileContent,
   canCreateIdentityAgent,
   canEditIdentityFiles,
   canEditIdentityProfile,
   loadIdentityBundle,
+  normalizeIdentityProfile,
+  sameIdentityProfile,
   validateAgentCreateName,
   validateIdentityProfile,
 } from './identity-model';
@@ -25,16 +26,12 @@ const agent: AgentDescriptor = {
 };
 
 describe('identity model', () => {
-  it('loads management identity and core files with descriptor fallbacks', async () => {
+  it('loads the management identity and IDENTITY.md only, with descriptor fallbacks', async () => {
     const get = jest.fn(async (name: string) => ({
       name,
       path: `/${name}`,
       missing: false,
-      content: name === 'IDENTITY.md'
-        ? '- **Vibe:** Calm\n- **Emoji:** 🦉'
-        : name === 'USER.md'
-          ? '- **Name:** Lucy\n\n## Context\n\nBuilding Clawket\n\n---'
-          : `${name} content`,
+      content: '- **Vibe:** Calm\n- **Emoji:** 🦉',
     }));
     const operations: AgentsOperations = {
       list: jest.fn(async () => ({
@@ -45,37 +42,43 @@ describe('identity model', () => {
       files: { get },
     };
 
-    await expect(loadIdentityBundle(operations, agent)).resolves.toEqual(expect.objectContaining({
+    await expect(loadIdentityBundle(operations, agent)).resolves.toEqual({
       profile: expect.objectContaining({
         name: 'Writer',
         emoji: '🦉',
         vibe: 'Calm',
         avatar: 'avatar.png',
       }),
-      user: expect.objectContaining({ name: 'Lucy', context: 'Building Clawket' }),
-      contents: expect.objectContaining({
-        'SOUL.md': 'SOUL.md content',
-        'MEMORY.md': 'MEMORY.md content',
-      }),
-    }));
+      identityFile: '- **Vibe:** Calm\n- **Emoji:** 🦉',
+    });
+    // Persona, memory and user documents belong to the Files page; identity never reads them.
+    expect(get).toHaveBeenCalledTimes(1);
     expect(get).toHaveBeenCalledWith('IDENTITY.md', 'writer');
   });
 
-  it('keeps usable partial data and fails only when every available read fails', async () => {
-    const partial: AgentsOperations = {
+  it('treats a missing IDENTITY.md as empty and fails only when every available read fails', async () => {
+    const missing: AgentsOperations = {
       files: {
-        get: jest.fn(async (name: string) => {
-          if (name === 'SOUL.md') {
-            return { name, path: name, missing: false, content: 'Be kind.' };
-          }
-          throw new Error(`Missing ${name}`);
-        }),
+        get: jest.fn(async (name: string) => ({ name, path: name, missing: true })),
       },
     };
-    await expect(loadIdentityBundle(partial, agent)).resolves.toEqual(expect.objectContaining({
+    await expect(loadIdentityBundle(missing, agent)).resolves.toEqual({
       profile: expect.objectContaining({ name: 'Writer fallback', emoji: '✍️' }),
-      contents: expect.objectContaining({ 'SOUL.md': 'Be kind.', 'MEMORY.md': '' }),
-    }));
+      identityFile: '',
+    });
+
+    const partial: AgentsOperations = {
+      list: jest.fn(async () => ({
+        defaultId: 'main',
+        mainKey: 'main',
+        agents: [{ id: 'writer', name: 'Writer', identity: { emoji: '🦉' } }],
+      })),
+      files: { get: jest.fn(async () => { throw new Error('Missing IDENTITY.md'); }) },
+    };
+    await expect(loadIdentityBundle(partial, agent)).resolves.toEqual({
+      profile: expect.objectContaining({ name: 'Writer', emoji: '🦉' }),
+      identityFile: '',
+    });
 
     const failed: AgentsOperations = {
       files: { get: jest.fn(async () => { throw new Error('offline'); }) },
@@ -105,35 +108,52 @@ describe('identity model', () => {
     const next = {
       ...previous, name: ' Writer ', emoji: ' 🦉 ', vibe: ' Calm ', avatar: ' avatar.png ',
     };
-    expect(buildIdentityAgentPatch(previous, next)).toEqual({ name: 'Writer', avatar: 'avatar.png' });
+    // Name and emoji go to the Agent record (it outranks IDENTITY.md); avatar is never patched from the phone.
+    expect(buildIdentityAgentPatch(previous, next)).toEqual({ name: 'Writer', emoji: '🦉' });
+    expect(buildIdentityAgentPatch(next, { ...next, avatar: 'other.png' })).toEqual({});
     expect(buildIdentityFileContent(next)).toContain('- **Emoji:** 🦉');
+    expect(normalizeIdentityProfile(next)).toEqual({
+      ...previous, name: 'Writer', emoji: '🦉', vibe: 'Calm', avatar: 'avatar.png',
+    });
+    expect(normalizeIdentityProfile({ ...next, vibe: 'Warm,\n  curious\n\nand calm ' }).vibe)
+      .toBe('Warm, curious and calm');
+    expect(sameIdentityProfile(previous, { ...previous })).toBe(true);
+    expect(sameIdentityProfile(previous, next)).toBe(false);
   });
 
-  it('preserves unrelated USER.md prose while updating structured fields', () => {
-    const content = [
-      '# USER.md',
+  it('merges identity lines into an existing IDENTITY.md and keeps the rest of the file', () => {
+    const existing = [
+      '# IDENTITY.md - Who Am I?',
       '',
       '- **Name:** Old',
+      '- Creature: Owl',
+      '- **Vibe:** Calm',
+      '- **Vibe:** Duplicate',
+      '- **Avatar:** avatars/owl.png',
       '',
-      'Custom prose stays.',
+      'Some prose the Agent wrote about itself.',
       '',
-      '## Context',
-      '',
-      'Old context',
-      '',
-      '---',
     ].join('\n');
-    const updated = buildUserFileContent(content, {
-      name: 'Lucy',
-      whatToCallThem: 'Lucy',
-      pronouns: 'she',
-      timezone: 'Asia/Tokyo',
-      notes: 'Builder',
-      context: 'New context',
-    });
-    expect(updated).toContain('Custom prose stays.');
-    expect(updated).toContain('- **Name:** Lucy');
-    expect(updated).toContain('New context');
-    expect(updated).not.toContain('Old context');
+    const profile = {
+      name: 'Writer', emoji: '🦉', creature: 'Owl', vibe: 'Warm and curious', theme: '', avatar: 'avatars/owl.png',
+    };
+    expect(buildIdentityFileContent(profile, existing)).toBe([
+      '# IDENTITY.md - Who Am I?',
+      '',
+      '- **Name:** Writer',
+      '- Creature: Owl',
+      '- **Vibe:** Warm and curious',
+      '- **Avatar:** avatars/owl.png',
+      '- **Emoji:** 🦉',
+      '',
+      'Some prose the Agent wrote about itself.',
+      '',
+    ].join('\n'));
+    // Clearing the vibe removes its line; the avatar line is left to the desktop.
+    expect(buildIdentityFileContent({ ...profile, vibe: '', avatar: '' }, existing)).not.toContain('Vibe');
+    expect(buildIdentityFileContent({ ...profile, vibe: '', avatar: '' }, existing)).toContain('- **Avatar:** avatars/owl.png');
+    // No file yet: the standard template is generated.
+    expect(buildIdentityFileContent(profile, '  \n')).toContain('- **Vibe:** Warm and curious');
+    expect(buildIdentityFileContent(profile, '')).toContain('Save this file at the workspace root');
   });
 });

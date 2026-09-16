@@ -1,3 +1,4 @@
+import { useReplyEntranceDelay } from '../../chat/useReplyEntranceDelay';
 import { SessionPreviewNotice, SessionPreviewFooter } from './components/SessionPreviewNotice';
 import { useTranslation } from 'react-i18next';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
@@ -5,13 +6,14 @@ import {
   BackHandler,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
-  Image,
   Keyboard,
   Platform,
   Pressable,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
+  type ViewStyle,
 } from 'react-native';
 import { FlashList, type FlashListRef, type ListRenderItemInfo } from '@shopify/flash-list';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
@@ -34,17 +36,14 @@ import {
   Brain,
   CalendarClock,
   Bot,
-  ChevronLeft,
   CircleAlert,
-  Clock,
   Info,
   MessageCircle,
   Paperclip,
-  Pause,
   MessagesSquare,
   Star,
-  WifiOff,
 } from 'lucide-react-native';
+import { ChevronLeft } from '../../components/ui/DirectionalIcon';
 import type { PendingImage, UiMessage } from '../../types/chat';
 import type { SlashCommand } from '../../data/slash-commands';
 import type { ThinkingLevel } from '../../utils/gateway-settings';
@@ -52,6 +51,7 @@ import { useAppTheme } from '../../theme';
 import { ChatPresentationProvider, useChatPresentation, useConversationTheme } from '../../components/chat/ChatPresentation';
 import { ModelIcon } from '../../components/chat/ModelIcon';
 import { ChatMessageIdentity } from '../../components/chat/ChatMessageIdentity';
+import { MessageAttachmentAlbum } from '../../components/chat/MessageAttachmentAlbum';
 import { MessageEntrance } from '../../components/chat/MessageEntrance';
 import { MessageMeta, messageMetaSpacer } from '../../components/chat/MessageMeta';
 import { ThinkingIndicator } from '../../components/chat/ThinkingIndicator';
@@ -69,6 +69,7 @@ import {
 } from '../../theme/tokens';
 import { ApprovalCard } from '../../components/ui/ApprovalCard';
 import { Banner } from '../../components/ui/Banner';
+import { ConnectionStatusPill } from '../../components/ui/ConnectionStatusPill';
 import { Bubble, useBubbleTypography } from '../../components/ui/Bubble';
 import {
   Composer,
@@ -87,7 +88,7 @@ import { RunCard } from '../../components/ui/RunCard';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { LoadingState } from '../../components/ui/LoadingState';
 import { Companion } from '../../components/ui/Companion';
-import { SYSTEM_EVENT_ICON_SIZE, SYSTEM_EVENT_STROKE_WIDTH, SystemEventRow } from '../../components/ui/SystemEventRow';
+import { SystemEventRow } from '../../components/ui/SystemEventRow';
 import { triggerLightImpact } from '../../services/haptics';
 import { PendingImageBar } from '../../components/chat/PendingImageBar';
 import { SlashSuggestions } from '../../components/chat/SlashSuggestions';
@@ -104,8 +105,10 @@ import {
   resolveThreadHeaderName,
   resolveThreadHeaderSubtitle,
   type ThreadContentState,
+  type ThreadRowGap,
   type ThreadRunCard,
-  type ThreadTimelineItem,
+  type ThreadTimelineRow,
+  withThreadRhythm,
 } from './model';
 import {
   ThreadMessageActionsOverlay,
@@ -150,10 +153,6 @@ const SESSION_CONTENT_FADE_OUT = FadeOut
  */
 const REPLY_PLACEHOLDER_ID = 'streaming';
 const REPLY_PLACEHOLDER: UiMessage = { id: REPLY_PLACEHOLDER_ID, role: 'assistant', text: '', streaming: true };
-const REPLY_TEXT_FADE_IN = FadeIn
-  .duration(Motion.duration.normal)
-  .easing(Easing.out(Easing.cubic))
-  .reduceMotion(ReduceMotion.System);
 /** Live activity for the reply placeholder only, so other rows stay out of its re-render. */
 const ThreadLiveActivityContext = createContext('');
 
@@ -203,6 +202,8 @@ export type ThreadCopy = Readonly<{
   placeholder: string;
   formatEmpty: (name: string) => string;
   formatAttachments: (count: number) => string;
+  /** Spoken name of one photo inside a message album, e.g. “Photo 2 of 6”. */
+  formatPhotoPosition: (index: number, count: number) => string;
   formatRunDetail: (status: string, time: string) => string;
   formatModelContext: (model: string, remainingPercent: number) => string;
   formatThinkingLevel: (level: string) => string;
@@ -232,6 +233,7 @@ export type ThreadViewProps = Readonly<{
   agentName: string;
   sessionKey?: string | null;
   scrollToBottomRequestAt?: number | null;
+  messageSubmittedAt?: number | null;
   agentEmoji?: string | null;
   agentAvatarUrl?: string | null;
   sessionTitle?: string | null;
@@ -281,7 +283,7 @@ export type ThreadViewProps = Readonly<{
     context?: Pick<ThreadRunCard, 'title' | 'kind' | 'statusLabel' | 'summary'>,
   ) => void;
   onOpenRunLogs?: (jobId: string, agentId?: string) => void;
-  onOpenAttachments?: (message: UiMessage) => void;
+  onOpenAttachments?: (message: UiMessage, index?: number) => void;
   /** Long-press message actions; omitting this disables the gesture. */
   messageActions?: ThreadMessageActions;
   /** Tap/long-press actions for queued messages; requires `messageActions`. */
@@ -324,6 +326,7 @@ export function ThreadView({
   agentName,
   sessionKey,
   scrollToBottomRequestAt,
+  messageSubmittedAt,
   agentEmoji,
   agentAvatarUrl,
   sessionTitle,
@@ -427,10 +430,12 @@ export function ThreadView({
   const offline = state.kind === 'offline';
   const locked = state.kind === 'locked';
   const headerName = runContext?.title ?? resolveThreadHeaderName(agentName, sessionTitle && sessionTitle === sessionKey ? t('New session') : sessionTitle, isMainSession);
+  const replyEntrance = useReplyEntranceDelay(messages, sessionKey, messageSubmittedAt, reduceMotion);
+  const presentedRunning = isRunning && !replyEntrance.holding;
   const headerSubtitle = state.kind === 'reconnecting' ? t('Reconnecting…') : resolveThreadHeaderSubtitle({
     capabilities,
     state,
-    isRunning,
+    isRunning: presentedRunning,
     activityLabel,
     model,
     contextUsed,
@@ -443,7 +448,7 @@ export function ThreadView({
   // shows lifting dots where the subtitle sits, and the reply bubble carries
   // the actual activity.
   const avatarStatus = locked ? 'locked' : offline ? 'offline' : 'idle';
-  const headerWorking = isRunning && state.kind !== 'reconnecting';
+  const headerWorking = presentedRunning && state.kind !== 'reconnecting';
   const canOpenSessions = capabilities.sessions && Boolean(onOpenSessionPanel);
   // The screen decides availability from the full capability set (attachments,
   // skills, commands, thinking, cron, tools); the view only needs the handler.
@@ -460,23 +465,23 @@ export function ThreadView({
     return () => clearInterval(timer);
   }, []);
   const [expandedTools, setExpandedTools] = useState<ReadonlySet<string>>(new Set());
-  const showReplyPlaceholder = isRunning && !locked && !sessionPreview
+  const showReplyPlaceholder = presentedRunning && !locked && !sessionPreview
     && !messages.some((message) => message.id === REPLY_PLACEHOLDER_ID);
   const timelineMessages = useMemo(
-    () => showReplyPlaceholder ? [REPLY_PLACEHOLDER, ...messages] : messages,
-    [messages, showReplyPlaceholder],
+    () => showReplyPlaceholder ? [REPLY_PLACEHOLDER, ...replyEntrance.messages] : replyEntrance.messages,
+    [replyEntrance.messages, showReplyPlaceholder],
   );
-  const entranceIds = useThreadMessageEntrance(timelineMessages, sessionKey);
+  const { entranceIds, claimEntrance } = useThreadMessageEntrance(timelineMessages, sessionKey);
   const messageStatuses = useMemo(() => resolveUserMessageStatuses({
     messages, unconfirmedIds: unconfirmedMessageIds, runAcknowledged,
   }), [messages, unconfirmedMessageIds, runAcknowledged]);
   const liveActivity = activityLabel?.trim() || copy.thinking;
-  const timelineItems = useMemo(() => groupThreadTools(buildThreadTimelineItems({
+  const timelineItems = useMemo(() => withThreadRhythm(groupThreadTools(buildThreadTimelineItems({
     messages: timelineMessages,
     runs: runCards,
     locale,
     yesterdayLabel: t('Yesterday', { lng: locale }),
-  }), expandedTools).reverse(), [locale, timelineMessages, runCards, expandedTools, calendarDay, t]);
+  }), expandedTools)).reverse(), [locale, timelineMessages, runCards, expandedTools, calendarDay, t]);
   const followNewMessagesRef = useRef(true);
   const previewWasVisible = useRef(Boolean(sessionPreview));
   if (previewWasVisible.current && !sessionPreview) followNewMessagesRef.current = false;
@@ -485,7 +490,7 @@ export function ThreadView({
   const readerScrollingRef = useRef(false);
   const distanceFromBottomRef = useRef(0);
   const scrollMetricsRef = useRef({ height: 0, viewport: 0, offset: 0 });
-  const timelineRef = useRef<FlashListRef<ThreadTimelineItem>>(null);
+  const timelineRef = useRef<FlashListRef<ThreadTimelineRow>>(null);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const scrollButtonProgress = useSharedValue(0);
   useEffect(() => {
@@ -575,7 +580,7 @@ export function ThreadView({
   }, []);
   const clearMessageSelection = useCallback(() => setMessageSelection(null), []);
   const renderSelectedMessage = useCallback((message: UiMessage, width: number) => (
-    <View style={[stylesStatic.timelineItem, stylesStatic.chatMessageSpacing, { width }]}>
+    <View style={[stylesStatic.timelineItem, { width }]}>
       <ThreadMessageRowContent
         message={message}
         copy={copy}
@@ -592,9 +597,9 @@ export function ThreadView({
 
   const openTool = useCallback((message: UiMessage) => setSelectedToolMessageId(message.id), []);
   const renderMessage = useCallback(
-    ({ item, index }: ListRenderItemInfo<ThreadTimelineItem>) => {
+    ({ item, target }: ListRenderItemInfo<ThreadTimelineRow>) => {
       if (item.type === 'tools') {
-        return <View style={stylesStatic.timelineItem}>
+        return <View style={[stylesStatic.timelineItem, rowGapStyles[item.gapAbove]]}>
           <ToolGroupRow testID={item.key} count={item.messages.length}
             expanded={expandedTools.has(item.key)} running={item.messages.some((message) => message.toolStatus === 'running')}
             incomplete={item.messages.some((message) => message.toolStatus === 'unknown')}
@@ -612,7 +617,7 @@ export function ThreadView({
       }
       if (item.type === 'date') {
         return (
-          <View style={[stylesStatic.timeSeparator, index > 0 && stylesStatic.timeSeparatorBreak]}>
+          <View style={[stylesStatic.timeSeparator, rowGapStyles[item.gapAbove]]}>
             <Text testID={`thread-${item.key}`} style={[stylesStatic.timeLabel, {
               color: theme.colors.inkSecondary,
               backgroundColor: theme.colors.canvas,
@@ -624,6 +629,7 @@ export function ThreadView({
         return (
           <ThreadRunTimelineItem
             run={item.run}
+            gapAbove={item.gapAbove}
             copy={copy}
             onOpenSession={onOpenRunSession}
             onOpenResult={setSelectedRun}
@@ -634,10 +640,12 @@ export function ThreadView({
       return (
         <ThreadMessageTimelineItem
           message={item.message}
+          gapAbove={item.gapAbove}
           capabilities={capabilities}
           copy={copy}
           status={messageStatuses.get(item.message.id) ?? null}
-          animateEntrance={entranceIds.has(item.message.id)}
+          animateEntrance={target === 'Cell' && entranceIds.has(item.message.renderKey ?? item.message.id)}
+          claimEntrance={claimEntrance}
           onOpenTool={openTool}
           onOpenAttachments={onOpenAttachments}
           onLongPress={messageActions ? handleMessageLongPress : undefined}
@@ -653,6 +661,7 @@ export function ThreadView({
       expandedTools,
       copy,
       entranceIds,
+      claimEntrance,
       favoriteMessageIds,
       handleMessageLongPress,
       messageActions,
@@ -714,29 +723,6 @@ export function ThreadView({
           disabled={locked}
         /> : <View style={{ width: ControlSize.floatingButton }} pointerEvents="none" />}
       </View>
-
-      {state.kind === 'offline' ? (
-        <Banner
-          testID={`${testID}-offline`}
-          icon={WifiOff}
-          message={copy.offline}
-          actionLabel={onRetry ? copy.reconnect : undefined}
-          onAction={onRetry}
-          style={styles.banner}
-        />
-      ) : null}
-
-      {state.kind === 'error' ? (
-        <Banner
-          testID={`${testID}-error`}
-          icon={CircleAlert}
-          tone="bad"
-          message={state.message}
-          actionLabel={onErrorAction ? (state.actionLabel ?? copy.retry) : undefined}
-          onAction={onErrorAction ? () => onErrorAction(state) : undefined}
-          style={styles.banner}
-        />
-      ) : null}
 
       <View style={styles.timeline}>
         <ChatBackgroundLayer appearance={chatAppearance} />
@@ -815,7 +801,7 @@ export function ThreadView({
               onStartReached={onLoadMoreHistory}
               onStartReachedThreshold={0.3}
               ListFooterComponent={compactionNotice ? (
-                <View testID={`${testID}-compaction`} style={stylesStatic.timelineItem}>
+                <View testID={`${testID}-compaction`} style={[stylesStatic.timelineItem, rowGapStyles.turn]}>
                   <SystemEventRow icon={Info} label={compactionNotice} />
                 </View>
               ) : null}
@@ -845,6 +831,25 @@ export function ThreadView({
               onPress={scrollToBottom}
             />
           </Animated.View>
+        ) : null}
+        {/* The header pill already states offline; the floating capsule only carries the action. */}
+        {state.kind === 'offline' && onRetry ? (
+          <ConnectionStatusPill
+            testID={`${testID}-offline`}
+            status="offline"
+            actionLabel={copy.reconnect}
+            accessibilityLabel={`${copy.offline}, ${copy.reconnect}`}
+            onAction={onRetry}
+          />
+        ) : null}
+        {state.kind === 'error' ? (
+          <ConnectionStatusPill
+            testID={`${testID}-error`}
+            status="error"
+            message={state.message}
+            actionLabel={onErrorAction ? (state.actionLabel ?? copy.retry) : undefined}
+            onAction={onErrorAction ? () => onErrorAction(state) : undefined}
+          />
         ) : null}
       </View>
 
@@ -911,7 +916,7 @@ export function ThreadView({
               />
             ) : null}
             notice={composerExpanded && (offline || state.kind === 'error') ? (
-              <Banner tone="neutral" icon={WifiOff} message={copy.offline}
+              <ConnectionStatusPill placement="inline" status="offline" message={copy.offline}
                 actionLabel={onRetry ? copy.reconnect : undefined} onAction={onRetry} />
             ) : undefined}
             testID={`${testID}-composer`}
@@ -1010,12 +1015,14 @@ export function ThreadView({
 
 function ThreadRunTimelineItem({
   run,
+  gapAbove,
   copy,
   onOpenSession,
   onOpenResult,
   onOpenLogs,
 }: Readonly<{
   run: ThreadRunCard;
+  gapAbove: ThreadRowGap;
   copy: ThreadCopy;
   onOpenSession?: ThreadViewProps['onOpenRunSession'];
   onOpenResult: (run: ThreadRunCard) => void;
@@ -1030,7 +1037,7 @@ function ThreadRunTimelineItem({
     ? () => onOpenLogs(jobId, run.agentId)
     : undefined;
   return (
-    <View style={stylesStatic.timelineItem}>
+    <View style={[stylesStatic.timelineItem, rowGapStyles[gapAbove]]}>
       <RunCard
         testID={`thread-${run.kind}-run-${run.id}`}
         title={run.title}
@@ -1059,14 +1066,17 @@ function ThreadRunTimelineItem({
 
 type ThreadMessageTimelineItemProps = Readonly<{
   message: UiMessage;
+  /** Rhythm toward the older row above; owned by the timeline model. */
+  gapAbove: ThreadRowGap;
   capabilities: Capabilities;
   copy: ThreadCopy;
   /** Delivery glyph for the user's own settled messages. */
   status: UserMessageStatus | null;
   /** Plays the row's entrance once; latched per message id inside the row. */
   animateEntrance: boolean;
+  claimEntrance: (key: string) => boolean;
   onOpenTool: (message: UiMessage) => void;
-  onOpenAttachments?: (message: UiMessage) => void;
+  onOpenAttachments?: (message: UiMessage, index?: number) => void;
   onLongPress?: (
     message: UiMessage,
     anchor: MessageAnchorFrame | null,
@@ -1079,6 +1089,8 @@ type ThreadMessageTimelineItemProps = Readonly<{
 }>;
 
 function statusCopy(status: UserMessageStatus | null, copy: ThreadCopy): string {
+  if (status === 'queued') return copy.queued ?? '';
+  if (status === 'held') return copy.paused ?? '';
   if (status === 'uncertain') return copy.uncertain ?? '';
   if (status === 'sending') return copy.sending ?? '';
   if (status === 'sent') return copy.sent ?? '';
@@ -1092,10 +1104,12 @@ function statusCopy(status: UserMessageStatus | null, copy: ThreadCopy): string 
  */
 const ThreadMessageTimelineItem = React.memo(function ThreadMessageTimelineItem({
   message,
+  gapAbove,
   capabilities,
   copy,
   status,
   animateEntrance,
+  claimEntrance,
   onOpenTool,
   onOpenAttachments,
   onLongPress,
@@ -1172,10 +1186,10 @@ const ThreadMessageTimelineItem = React.memo(function ThreadMessageTimelineItem(
         onAccessibilityAction={actionable ? (event) => {
           if (event.nativeEvent.actionName === 'longpress') handleLongPress();
         } : undefined}
-        delayLongPress={220}
+        delayLongPress={MESSAGE_LONG_PRESS_DELAY}
         onPress={queuedTap ? handleLongPress : undefined}
         onLongPress={actionable ? handleLongPress : undefined}
-        style={[stylesStatic.timelineItem, stylesStatic.chatMessageSpacing]}
+        style={stylesStatic.timelineItem}
       >
         <ThreadMessageRowContent
           message={message}
@@ -1183,6 +1197,7 @@ const ThreadMessageTimelineItem = React.memo(function ThreadMessageTimelineItem(
           favorited={favorited}
           status={status}
           onOpenAttachments={onOpenAttachments}
+          onLongPress={actionable ? handleLongPress : undefined}
         />
       </Pressable>
     );
@@ -1190,15 +1205,20 @@ const ThreadMessageTimelineItem = React.memo(function ThreadMessageTimelineItem(
     return null;
   }
 
+  // The gap lives outside the measured row so the actions overlay clone,
+  // which renders the row alone, keeps identical geometry.
   return (
-    <MessageEntrance
-      testID={`thread-entrance-${message.id}`}
-      animationKey={message.id}
-      animate={animateEntrance}
-      motion={message.role === 'user' ? 'sent' : 'reply'}
-    >
-      {content}
-    </MessageEntrance>
+    <View style={rowGapStyles[gapAbove]}>
+      <MessageEntrance
+        testID={`thread-entrance-${message.id}`}
+        animationKey={message.renderKey ?? message.id}
+        animate={animateEntrance}
+        claimEntrance={claimEntrance}
+        motion={message.role === 'user' ? 'sent' : 'reply'}
+      >
+        {content}
+      </MessageEntrance>
+    </View>
   );
 });
 
@@ -1214,13 +1234,16 @@ function ThreadMessageRowContent({
   status = null,
   showIdentity = true,
   onOpenAttachments,
+  onLongPress,
 }: Readonly<{
   message: UiMessage;
   copy: ThreadCopy;
   favorited: boolean;
   status?: UserMessageStatus | null;
   showIdentity?: boolean;
-  onOpenAttachments?: (message: UiMessage) => void;
+  onOpenAttachments?: (message: UiMessage, index?: number) => void;
+  /** Row long-press forwarded to the album so photos open the same actions. */
+  onLongPress?: () => void;
 }>): React.JSX.Element | null {
   if (message.role !== 'assistant' && message.role !== 'user') return null;
   const attachmentCount = message.imageUris?.length ?? 0;
@@ -1228,7 +1251,7 @@ function ThreadMessageRowContent({
   // A reply that has produced no text yet still owns its bubble.
   const hasBubble = Boolean(message.text) || (message.role === 'assistant' && message.streaming === true);
   return (
-    <QueuedDeliveryFrame delivery={message.delivery} messageId={message.id}>
+    <View testID={`thread-delivery-${message.id}`} style={stylesStatic.deliveryFrame}>
       {hasBubble ? (
         message.role === 'assistant' ? (
           <AssistantBubble message={message} showIdentity={showIdentity} />
@@ -1246,29 +1269,26 @@ function ThreadMessageRowContent({
         />
       ))}
       {attachmentCount > 0 ? (
-        <ThreadAttachmentGallery
+        <ThreadMessageAlbum
           message={message}
-          label={copy.formatAttachments(attachmentCount)}
-          onPress={onOpenAttachments ? () => onOpenAttachments(message) : undefined}
+          copy={copy}
+          onOpenAttachments={onOpenAttachments}
+          onLongPress={onLongPress}
         />
       ) : null}
-      {!hasBubble && message.role === 'user' && !message.delivery ? (
+      {!hasBubble && message.role === 'user' ? (
         <UserMessageMeta message={message} status={status} copy={copy} />
       ) : null}
       {favorited ? (
         <FavoriteIndicator messageId={message.id} role={message.role} />
       ) : null}
-      {message.delivery ? (
-        <QueuedDeliveryCaption delivery={message.delivery} messageId={message.id} copy={copy} />
-      ) : null}
-    </QueuedDeliveryFrame>
+    </View>
   );
 }
 
-/** Clock label for a settled message; queued and streaming rows are untimed. */
+/** Local sends reserve their final clock/status geometry from the first frame. */
 function useMessageClock(message: UiMessage): string {
   const { locale } = useChatPresentation();
-  if (message.streaming || message.delivery) return '';
   return formatThreadClockTime(message.timestampMs, locale);
 }
 
@@ -1327,96 +1347,52 @@ function UserMessageMeta({
   );
 }
 
-const QUEUED_BUBBLE_OPACITY = 0.72;
-
-/**
- * Wraps a user message that is still in the local queue. The dim settles to
- * full opacity in place once the same bubble is adopted by history, so a
- * delivered message never jumps or remounts.
- */
-function QueuedDeliveryFrame({
-  delivery,
-  messageId,
-  children,
-}: Readonly<{
-  delivery: UiMessage['delivery'];
-  messageId: string;
-  children: React.ReactNode;
-}>): React.JSX.Element {
-  const reduceMotion = useReducedMotion();
-  const target = delivery ? QUEUED_BUBBLE_OPACITY : 1;
-  const opacity = useSharedValue(target);
-  useEffect(() => {
-    opacity.value = reduceMotion ? target : withTiming(target, { duration: Motion.duration.normal });
-  }, [opacity, reduceMotion, target]);
-  const style = useAnimatedStyle(() => ({ opacity: opacity.value }));
-  return (
-    <Animated.View testID={`thread-delivery-${messageId}`} style={[stylesStatic.deliveryFrame, style]}>
-      {children}
-    </Animated.View>
-  );
-}
-
 function deliveryLabel(delivery: NonNullable<UiMessage['delivery']>, copy: ThreadCopy): string {
   if (delivery === 'held') return copy.paused ?? '';
   if (delivery === 'sending') return copy.sending ?? '';
   return copy.queued ?? '';
 }
 
-function QueuedDeliveryCaption({
-  delivery,
-  messageId,
-  copy,
-}: Readonly<{
-  delivery: NonNullable<UiMessage['delivery']>;
-  messageId: string;
-  copy: ThreadCopy;
-}>): React.JSX.Element {
-  const { theme } = useAppTheme();
-  const Icon = delivery === 'held' ? Pause : Clock;
-  const label = deliveryLabel(delivery, copy);
-  return (
-    <View testID={`thread-delivery-caption-${messageId}`} style={stylesStatic.deliveryCaption}>
-      <Icon size={SYSTEM_EVENT_ICON_SIZE} color={theme.colors.inkTertiary} strokeWidth={SYSTEM_EVENT_STROKE_WIDTH} />
-      <Text style={[stylesStatic.deliveryCaptionText, { color: theme.colors.inkTertiary }]} numberOfLines={1}>
-        {label}
-      </Text>
-    </View>
-  );
+/** Album cap relative to the row content: narrower than the widest text bubble so photos read as an inset. */
+const MESSAGE_ALBUM_WIDTH_RATIO = 0.76;
+
+/**
+ * The album needs a number, not a percentage, to pack rows. The window width
+ * is the same for the timeline row and its overlay clone, so both compute an
+ * identical frame.
+ */
+function useMessageAlbumWidth(): number {
+  const { width } = useWindowDimensions();
+  return Math.round(Math.max(0, width - THREAD_ROW_INSET * 2) * MESSAGE_ALBUM_WIDTH_RATIO);
 }
 
-function ThreadAttachmentGallery({
+function ThreadMessageAlbum({
   message,
-  label,
-  onPress,
+  copy,
+  onOpenAttachments,
+  onLongPress,
 }: Readonly<{
   message: UiMessage;
-  label: string;
-  onPress?: () => void;
+  copy: ThreadCopy;
+  onOpenAttachments?: (message: UiMessage, index?: number) => void;
+  onLongPress?: () => void;
 }>): React.JSX.Element | null {
+  const maxWidth = useMessageAlbumWidth();
   const uris = message.imageUris ?? [];
   if (uris.length === 0) return null;
   return (
-    <Pressable
+    <MessageAttachmentAlbum
       testID={`thread-attachments-${message.id}`}
-      accessibilityRole={onPress ? 'button' : undefined}
-      accessibilityLabel={label}
-      onPress={onPress}
-      style={[
-        stylesStatic.attachmentGallery,
-        message.role === 'user' ? stylesStatic.attachmentGalleryUser : null,
-      ]}
-    >
-      {uris.slice(0, 3).map((uri, index) => (
-        <Image
-          key={`${uri}:${index}`}
-          source={{ uri }}
-          resizeMode="cover"
-          style={stylesStatic.attachmentImage}
-        />
-      ))}
-      {uris.length > 3 ? <SystemEventRow icon={Paperclip} label={label} /> : null}
-    </Pressable>
+      uris={uris}
+      metas={message.imageMetas}
+      maxWidth={maxWidth}
+      align={message.role === 'user' ? 'end' : 'start'}
+      label={copy.formatAttachments(uris.length)}
+      formatTileLabel={copy.formatPhotoPosition}
+      onPressImage={onOpenAttachments ? (index) => onOpenAttachments(message, index) : undefined}
+      onLongPress={onLongPress}
+      longPressDelay={MESSAGE_LONG_PRESS_DELAY}
+    />
   );
 }
 
@@ -1580,20 +1556,8 @@ function AssistantBubble({
 }): React.JSX.Element {
   const theme = useConversationTheme();
   const { fontSize, identity } = useChatPresentation();
-  const reduceMotion = useReducedMotion();
   const liveActivity = useContext(ThreadLiveActivityContext);
   const time = useMessageClock(message);
-  const thinking = message.streaming === true && message.text.trim().length === 0;
-  // The reply text fades in only when it replaces the thinking state in this
-  // very row; rows that mount with text (history, recycled cells) stay still.
-  const revealRef = useRef({ id: message.id, thinking, reveal: false });
-  if (revealRef.current.id !== message.id) {
-    revealRef.current = { id: message.id, thinking, reveal: false };
-  } else if (revealRef.current.thinking && !thinking) {
-    revealRef.current = { id: message.id, thinking, reveal: true };
-  } else {
-    revealRef.current.thinking = thinking;
-  }
   const markdownStyle = useMemo(
     () => createChatMarkdownStyle(theme.colors, fontSize),
     [theme.colors, fontSize],
@@ -1602,6 +1566,9 @@ function AssistantBubble({
   // view word-sized increments so its tail fade-in reads as a cascade. Once
   // the run ends the pacer drains the remainder, then the settled text shows.
   const pacedText = useSmoothedStreamText(message.text, message.streaming === true);
+  // Keep the placeholder until the pacer has visible text, never an empty
+  // markdown bubble between the first network chunk and its first shown word.
+  const thinking = message.streaming === true && pacedText.trim().length === 0;
   const textAnimating = message.streaming === true || pacedText !== message.text;
   const displayText = useMemo(() => {
     if (!textAnimating) return message.text;
@@ -1616,12 +1583,12 @@ function AssistantBubble({
     <Bubble
       testID={`thread-bubble-${message.id}`}
       role="assistant"
-      style={thinking ? stylesStatic.thinkingBubble : undefined}
+      style={stylesStatic.thinkingBubble}
     >
       {thinking ? (
         <ThinkingIndicator testID={`thread-thinking-${message.id}`} label={liveActivity} />
       ) : (
-        <Animated.View entering={revealRef.current.reveal && !reduceMotion ? REPLY_TEXT_FADE_IN : undefined}>
+        <View>
           <EnrichedMarkdownText
             testID={`thread-markdown-${message.id}`}
             flavor={THREAD_MARKDOWN_FLAVOR}
@@ -1631,10 +1598,16 @@ function AssistantBubble({
             selectable
             streamingAnimation={textAnimating}
           />
-          {textAnimating ? null : time ? (
-            <MessageMeta testID={`thread-meta-${message.id}`} time={time} style={stylesStatic.metaRowAssistant} />
+          {time ? (
+            <View
+              style={textAnimating ? stylesStatic.pendingMeta : undefined}
+              accessibilityElementsHidden={textAnimating}
+              importantForAccessibility={textAnimating ? 'no-hide-descendants' : 'auto'}
+            >
+              <MessageMeta testID={`thread-meta-${message.id}`} time={time} style={stylesStatic.metaRowAssistant} />
+            </View>
           ) : null}
-        </Animated.View>
+        </View>
       )}
     </Bubble>
     </View>
@@ -1646,11 +1619,25 @@ function AssistantBubble({
 const THREAD_ROW_INSET = Space.lg;
 // Lets assistive technology reach the message actions without a physical long press.
 const MESSAGE_ROW_ACCESSIBILITY_ACTIONS = [{ name: 'longpress' as const }];
+// Shared by the row and its photo tiles so the actions gesture feels identical.
+const MESSAGE_LONG_PRESS_DELAY = 220;
+
+// Timeline rhythm, one value per relation between a row and the older row
+// above it (see `ThreadRowGap`). Rows own no vertical padding of their own,
+// so any two neighbours are separated by exactly one of these values; the
+// list's own top/bottom insets frame the oldest and newest rows.
+const rowGapStyles = StyleSheet.create<Record<ThreadRowGap, ViewStyle>>({
+  none: {},
+  stack: { paddingTop: Space.sm },
+  turn: { paddingTop: Space.lg },
+  section: { paddingTop: Space.xl },
+});
 
 const stylesStatic = StyleSheet.create({
-  timeSeparator: { alignItems: 'center', paddingVertical: Space.md },
-  timeSeparatorBreak: { paddingTop: Space.xxl, marginTop: Space.sm },
-  chatMessageSpacing: { paddingTop: Space.lg, paddingBottom: Space.md },
+  pendingMeta: { opacity: 0 },
+  // A time label heads the group below it: its gap above comes from the
+  // rhythm, and it owns the space down to the first row of the group.
+  timeSeparator: { alignItems: 'center', paddingBottom: Space.md },
   timeLabel: {
     fontSize: FontSize.caption, lineHeight: LineHeight.caption,
     paddingHorizontal: Space.sm, paddingVertical: Space.xs, borderRadius: Radius.full,
@@ -1658,24 +1645,10 @@ const stylesStatic = StyleSheet.create({
   },
   timelineItem: {
     paddingHorizontal: THREAD_ROW_INSET,
-    paddingVertical: Space.xs,
     gap: Space.xs,
-  },
-  attachmentGallery: {
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    gap: Space.xs,
-  },
-  attachmentGalleryUser: {
-    alignSelf: 'flex-end',
   },
   fileAttachmentUser: {
     alignSelf: 'flex-end',
-  },
-  attachmentImage: {
-    width: ControlSize.rosterRow,
-    height: ControlSize.rosterRow,
-    borderRadius: Radius.card,
   },
   favoriteIndicator: {
     alignSelf: 'flex-start',
@@ -1685,18 +1658,6 @@ const stylesStatic = StyleSheet.create({
   },
   deliveryFrame: {
     gap: Space.xs,
-  },
-  deliveryCaption: {
-    alignSelf: 'flex-end',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Space.xs,
-    paddingHorizontal: Space.xs,
-  },
-  deliveryCaptionText: {
-    fontSize: FontSize.caption,
-    lineHeight: LineHeight.caption,
-    fontWeight: FontWeight.regular,
   },
   thinkingBubble: {
     minWidth: ControlSize.rosterRow,
@@ -1709,6 +1670,7 @@ const stylesStatic = StyleSheet.create({
   metaSpacer: {
     color: 'transparent',
     fontSize: FontSize.caption,
+    fontVariant: ['tabular-nums'],
   },
   metaOverlay: {
     position: 'absolute',

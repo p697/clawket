@@ -8,11 +8,8 @@ import {
   buildCronJobPatch,
   cronDraftFromJob,
   cronJobBelongsToAgent,
-  cronJobStatus,
   filterAgentCronRuns,
-  formatCronSchedule,
   loadAgentCronJobs,
-  parseCronSchedule,
   validateCronDraft,
 } from './cron-model';
 
@@ -76,11 +73,8 @@ describe('Agent cron model', () => {
   });
 
   it('parses common schedules and builds backend-neutral create payloads', () => {
-    expect(parseCronSchedule('every 2h')).toEqual({ kind: 'every', everyMs: 7_200_000 });
-    expect(parseCronSchedule('0 9 * * *')).toEqual({ kind: 'cron', expr: '0 9 * * *' });
-    expect(formatCronSchedule({ kind: 'every', everyMs: 86_400_000 })).toBe('every 1d');
 
-    const draft = { name: ' Brief ', schedule: '30m', prompt: ' Do it ', enabled: true };
+    const draft = { name: ' Brief ', schedule: { kind: 'every' as const, everyMs: 1_800_000 }, prompt: ' Do it ', enabled: true };
     expect(buildCronJobCreate(draft, mainAgent)).toMatchObject({
       name: 'Brief',
       sessionTarget: 'main',
@@ -93,8 +87,8 @@ describe('Agent cron model', () => {
     });
   });
 
-  it('validates drafts, preserves payload kind while editing, and derives statuses', () => {
-    expect(validateCronDraft({ name: '', schedule: '', prompt: '', enabled: true }))
+  it('validates drafts, preserves payload kind while editing, and retains the existing payload', () => {
+    expect(validateCronDraft({ ...cronDraftFromJob(), name: '' }))
       .toBe('Task name is required.');
     const existing = job();
     const draft = { ...cronDraftFromJob(existing), prompt: 'Updated', enabled: false };
@@ -102,8 +96,6 @@ describe('Agent cron model', () => {
       enabled: false,
       payload: { kind: 'systemEvent', text: 'Updated' },
     });
-    expect(cronJobStatus(job({ state: { lastRunStatus: 'error' } }))).toBe('Failed');
-    expect(cronJobStatus(job({ enabled: false }))).toBe('Disabled');
   });
 
   it('filters run records to loaded jobs and sorts newest first', () => {

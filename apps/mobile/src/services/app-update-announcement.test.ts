@@ -1,137 +1,109 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-  getCurrentAppUpdateAnnouncement,
+  LAST_ANNOUNCED_VERSION_STORAGE_KEY,
+  getAppUpdateAnnouncementPreview,
+  getAppUpdateAnnouncementStorageKey,
   getCurrentAppVersion,
-  markCurrentAppUpdateAnnouncementShown,
-  shouldShowCurrentAppUpdateAnnouncement,
+  markAppUpdateAnnouncementShown,
+  primeAppUpdateAnnouncementBaseline,
+  readLastAnnouncedAppVersion,
+  resolveLaunchAppUpdateAnnouncement,
 } from './app-update-announcement';
 import { APP_PACKAGE_VERSION } from '../constants/app-version';
-import * as releaseUpdates from '../features/app-updates/releases';
+import { DEFAULT_APP_UPDATE_DEBUG_HINT } from '../features/app-updates/releases';
 
 jest.mock('expo-application', () => ({
   nativeApplicationVersion: require('../../package.json').version,
 }));
 
+const mockedStorage = AsyncStorage as jest.Mocked<typeof AsyncStorage>;
+
+function storage(values: Record<string, string | null>) {
+  mockedStorage.getItem.mockImplementation(async (key: string) => values[key] ?? null);
+  mockedStorage.setItem.mockImplementation(async () => undefined);
+}
+
 describe('app update announcement service', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    storage({});
   });
 
   it('returns the current app version', () => {
     expect(getCurrentAppVersion()).toBe(APP_PACKAGE_VERSION);
   });
 
-  it('returns the current version release note entry when one exists', () => {
-    jest.spyOn(releaseUpdates, 'getAppUpdateRelease').mockReturnValueOnce({
-      version: APP_PACKAGE_VERSION,
-      entries: [{
-        id: 'current-release',
-        icon: 'rocket',
-        title: 'Current release',
-        action: { type: 'none' },
-      }],
+  it('announces 3.0.0 to a device upgraded from 2.x that has no baseline', async () => {
+    storage({ [getAppUpdateAnnouncementStorageKey('2.1.1')]: '1' });
+    const announcement = await resolveLaunchAppUpdateAnnouncement('3.0.0');
+    expect(announcement?.currentVersion).toBe('3.0.0');
+    expect(announcement?.releases.map((release) => release.version)).toEqual(['3.0.0']);
+    expect(announcement?.debugHint).toBeNull();
+  });
+
+  it('stays quiet once the current version was announced under either scheme', async () => {
+    storage({ [getAppUpdateAnnouncementStorageKey('3.0.0')]: '1' });
+    await expect(resolveLaunchAppUpdateAnnouncement('3.0.0')).resolves.toBeNull();
+
+    storage({ [LAST_ANNOUNCED_VERSION_STORAGE_KEY]: '3.0.0' });
+    await expect(resolveLaunchAppUpdateAnnouncement('3.0.0')).resolves.toBeNull();
+  });
+
+  it('stays quiet for silent releases, versions without notes and an empty version', async () => {
+    storage({ [LAST_ANNOUNCED_VERSION_STORAGE_KEY]: '2.1.0' });
+    await expect(resolveLaunchAppUpdateAnnouncement('2.1.1')).resolves.toBeNull();
+    await expect(resolveLaunchAppUpdateAnnouncement('')).resolves.toBeNull();
+    storage({ [LAST_ANNOUNCED_VERSION_STORAGE_KEY]: '3.0.0' });
+    await expect(resolveLaunchAppUpdateAnnouncement('9.9.9')).resolves.toBeNull();
+  });
+
+  it('still shows skipped notes on a later build that has none of its own', async () => {
+    storage({ [LAST_ANNOUNCED_VERSION_STORAGE_KEY]: '2.1.0' });
+    const announcement = await resolveLaunchAppUpdateAnnouncement('3.0.1');
+    expect(announcement?.currentVersion).toBe('3.0.1');
+    expect(announcement?.releases.map((release) => release.version)).toEqual(['3.0.0']);
+  });
+
+  it('merges every release skipped since the recorded baseline', async () => {
+    storage({ [LAST_ANNOUNCED_VERSION_STORAGE_KEY]: '1.9.0' });
+    const announcement = await resolveLaunchAppUpdateAnnouncement('2.1.0');
+    expect(announcement?.releases.map((release) => release.version)).toEqual(['2.1.0', '1.10.0']);
+  });
+
+  it('records both the legacy per-version flag and the new baseline when shown', async () => {
+    await markAppUpdateAnnouncementShown('3.0.0');
+    expect(mockedStorage.setItem).toHaveBeenCalledWith(getAppUpdateAnnouncementStorageKey('3.0.0'), '1');
+    expect(mockedStorage.setItem).toHaveBeenCalledWith(LAST_ANNOUNCED_VERSION_STORAGE_KEY, '3.0.0');
+    await markAppUpdateAnnouncementShown('  ');
+    expect(mockedStorage.setItem).toHaveBeenCalledTimes(2);
+  });
+
+  it('primes a fresh install once and never overwrites an existing baseline', async () => {
+    await expect(primeAppUpdateAnnouncementBaseline('3.0.0')).resolves.toBe(true);
+    expect(mockedStorage.setItem).toHaveBeenCalledWith(LAST_ANNOUNCED_VERSION_STORAGE_KEY, '3.0.0');
+
+    storage({ [LAST_ANNOUNCED_VERSION_STORAGE_KEY]: '2.1.0' });
+    mockedStorage.setItem.mockClear();
+    await expect(primeAppUpdateAnnouncementBaseline('3.0.0')).resolves.toBe(false);
+    expect(mockedStorage.setItem).not.toHaveBeenCalled();
+    await expect(readLastAnnouncedAppVersion()).resolves.toBe('2.1.0');
+  });
+
+  it('survives storage failures without blocking launch', async () => {
+    mockedStorage.getItem.mockRejectedValue(new Error('disk'));
+    mockedStorage.setItem.mockRejectedValue(new Error('disk'));
+    const announcement = await resolveLaunchAppUpdateAnnouncement('3.0.0');
+    expect(announcement?.releases.map((release) => release.version)).toEqual(['3.0.0']);
+    await expect(markAppUpdateAnnouncementShown('3.0.0')).resolves.toBeUndefined();
+  });
+
+  it('previews the current or newest release regardless of the cache', () => {
+    storage({ [LAST_ANNOUNCED_VERSION_STORAGE_KEY]: '3.0.0' });
+    expect(getAppUpdateAnnouncementPreview('3.0.0')).toMatchObject({
+      currentVersion: '3.0.0',
+      debugHint: DEFAULT_APP_UPDATE_DEBUG_HINT,
     });
-
-    expect(getCurrentAppUpdateAnnouncement()).toMatchObject({
-      entries: [expect.objectContaining({ id: 'current-release' })],
-    });
-  });
-
-  it('returns the release announcement for a version that exists in the unified history', () => {
-    expect(getCurrentAppUpdateAnnouncement('3.0.0')).not.toBeNull();
-  });
-
-  it('keeps only the Clawket 3.0 and 3.0 + Pro entries', () => {
-    expect(releaseUpdates.getAppUpdateReleaseHistory()).toHaveLength(1);
-    const entries = getCurrentAppUpdateAnnouncement('3.0.0')?.entries;
-    expect(entries?.map((entry) => entry.id)).toEqual([
-      'clawket-3-0',
-      'clawket-3-0-pro',
-    ]);
-    expect(entries ? entries[entries.length - 1]?.action : undefined).toEqual({
-      type: 'open_paywall',
-      feature: 'settingsMembershipPreview',
-    });
-  });
-
-  it('removes pre-3.0 release announcements from the history', () => {
-    expect(getCurrentAppUpdateAnnouncement('2.1.0')).toBeNull();
-    expect(getCurrentAppUpdateAnnouncement('1.9.0')).toBeNull();
-  });
-
-  it('returns null when the app version is not in the unified release history', () => {
-    expect(getCurrentAppUpdateAnnouncement('9.9.9')).toBeNull();
-  });
-
-  it('returns null when the app version is empty', () => {
-    expect(getCurrentAppUpdateAnnouncement('')).toBeNull();
-  });
-
-  it('auto-shows when the current app version has a matching unseen release note entry', async () => {
-    jest.spyOn(releaseUpdates, 'getAppUpdateRelease').mockReturnValueOnce({
-      version: APP_PACKAGE_VERSION,
-      entries: [{
-        id: 'current-release',
-        icon: 'rocket',
-        title: 'Current release',
-        action: { type: 'none' },
-      }],
-    });
-    jest.mocked(AsyncStorage.getItem).mockResolvedValueOnce(null);
-
-    await expect(shouldShowCurrentAppUpdateAnnouncement(false)).resolves.toBe(true);
-    expect(AsyncStorage.getItem).toHaveBeenCalled();
-  });
-
-  it('does not show the announcement again after it is marked as shown', async () => {
-    jest.mocked(AsyncStorage.getItem).mockResolvedValueOnce('1');
-
-    await expect(shouldShowCurrentAppUpdateAnnouncement(false)).resolves.toBe(false);
-  });
-
-  it('does not auto-show in debug mode', async () => {
-    await expect(shouldShowCurrentAppUpdateAnnouncement(true)).resolves.toBe(false);
-    expect(AsyncStorage.getItem).not.toHaveBeenCalled();
-  });
-
-  it('does not auto-show silent releases', async () => {
-    jest.spyOn(releaseUpdates, 'getAppUpdateRelease').mockReturnValueOnce({
-      version: APP_PACKAGE_VERSION,
-      releasedAt: '2026-03-23',
-      silent: true,
-      entries: [
-        {
-          id: 'silent-entry',
-          icon: 'sparkles',
-          title: 'Custom Chat Appearance',
-          subtitle: 'Add a custom chat background and adjust bubble opacity in Chat Appearance.',
-          action: {
-            type: 'navigate_config',
-            screen: 'ChatAppearance',
-          },
-        },
-      ],
-    });
-
-    await expect(shouldShowCurrentAppUpdateAnnouncement(false)).resolves.toBe(false);
-    expect(AsyncStorage.getItem).not.toHaveBeenCalled();
-  });
-
-  it('stores the shown flag for the current version', async () => {
-    jest.spyOn(releaseUpdates, 'getAppUpdateRelease').mockReturnValueOnce({
-      version: APP_PACKAGE_VERSION,
-      entries: [{
-        id: 'current-release',
-        icon: 'rocket',
-        title: 'Current release',
-        action: { type: 'none' },
-      }],
-    });
-    await markCurrentAppUpdateAnnouncementShown();
-
-    expect(AsyncStorage.setItem).toHaveBeenCalledWith(
-      `clawket.appUpdateAnnouncementSeen.v1:${APP_PACKAGE_VERSION}`,
-      '1',
-    );
+    expect(getAppUpdateAnnouncementPreview('9.9.9')?.releases[0]?.version).toBe('3.0.0');
+    expect(getAppUpdateAnnouncementPreview('1.9.0')?.releases[0]?.version).toBe('1.9.0');
   });
 });

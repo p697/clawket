@@ -27,10 +27,23 @@
         "CFBundleLocalizations": [
           "en",
           "zh-Hans",
+          "zh-Hant",
           "ja",
           "ko",
           "de",
-          "es"
+          "fr",
+          "es",
+          "es-419",
+          "it",
+          "pt-BR",
+          "pt-PT",
+          "ru",
+          "uk",
+          "tr",
+          "vi",
+          "th",
+          "hi",
+          "ar"
         ],
         "CFBundleDevelopmentRegion": "en",
         "UIPrefersShowingLanguageSettings": true
@@ -121,7 +134,33 @@
           }
         }
       ],
-      "expo-localization",
+      [
+        "expo-localization",
+        {
+          "supportsRTL": true,
+          "supportedLocales": [
+            "en",
+            "zh-Hans",
+            "zh-Hant",
+            "ja",
+            "ko",
+            "de",
+            "fr",
+            "es",
+            "es-419",
+            "it",
+            "pt-BR",
+            "pt-PT",
+            "ru",
+            "uk",
+            "tr",
+            "vi",
+            "th",
+            "hi",
+            "ar"
+          ]
+        }
+      ],
       "./plugins/with-locales",
       "./plugins/with-alternate-app-icons",
       "./plugins/with-android-release-signing",

@@ -1,11 +1,15 @@
 import React, {
+  createContext,
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useRef,
+  useState,
 } from 'react';
 import {
   type DimensionValue,
+  type LayoutChangeEvent,
   type StyleProp,
   StyleSheet,
   View,
@@ -13,6 +17,9 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import {
+  BottomSheetFooter,
+  BottomSheetFooterContainer,
+  type BottomSheetFooterProps,
   type BottomSheetModalProps,
   BottomSheetView,
 } from '@gorhom/bottom-sheet';
@@ -39,6 +46,31 @@ import {
 import { ThemedFullWindowOverlay } from './ThemedFullWindowOverlay';
 
 const REDUCE_MOTION_SYSTEM = 'system' as ReduceMotion;
+/** Air between the body and a pinned footer; the body reserves it too. */
+const FOOTER_TOP_PADDING = Space.sm;
+
+type SheetFooterSlot = Readonly<{
+  node: React.ReactNode;
+  style: ViewStyle;
+  onLayout: (event: LayoutChangeEvent) => void;
+  testID?: string;
+}>;
+
+const SheetFooterContext = createContext<SheetFooterSlot | null>(null);
+
+/**
+ * Gorhom remounts the footer whenever the component identity changes, so this
+ * stays a module-level component and reads the live slot through context.
+ */
+function SheetFooter(props: BottomSheetFooterProps): React.JSX.Element | null {
+  const slot = useContext(SheetFooterContext);
+  if (!slot) return null;
+  return (
+    <BottomSheetFooter {...props} style={slot.style}>
+      <View testID={slot.testID} onLayout={slot.onLayout}>{slot.node}</View>
+    </BottomSheetFooter>
+  );
+}
 
 export const SHEET_TIMING_CONFIG: WithTimingConfig = {
   duration: Motion.duration.slow,
@@ -55,6 +87,12 @@ export type SheetProps = {
   titleContent?: React.ReactNode;
   headerRight?: React.ReactNode;
   children: React.ReactNode;
+  /**
+   * Pinned to the visible bottom edge at every detent (fixed-snap content is
+   * laid out for the tallest one, so an inline footer hides below the fold).
+   * The body shrinks by the footer's measured height so nothing ends under it.
+   */
+  footer?: React.ReactNode;
   maxHeight?: DimensionValue;
   snapPoints?: BottomSheetModalProps['snapPoints'];
   initialIndex?: number;
@@ -118,6 +156,7 @@ export function Sheet({
   titleContent,
   headerRight,
   children,
+  footer,
   maxHeight = '90%',
   snapPoints,
   initialIndex = 0,
@@ -213,6 +252,36 @@ export function Sheet({
     [testID],
   );
 
+  // Gorhom tracks the sheet position for the footer; the footer carries the
+  // same bottom padding as the sheet so it clears the home indicator itself.
+  const bottomPadding = Math.max(insets.bottom, Space.md);
+  const [footerHeight, setFooterHeight] = useState(0);
+  const handleFooterLayout = useCallback(
+    (event: LayoutChangeEvent) => setFooterHeight(event.nativeEvent.layout.height),
+    [],
+  );
+  const footerStyle = useMemo<ViewStyle>(
+    () => ({ ...styles.footer, paddingBottom: bottomPadding }),
+    [bottomPadding, styles.footer],
+  );
+  const footerSlot = useMemo<SheetFooterSlot>(
+    () => ({
+      node: footer,
+      style: footerStyle,
+      onLayout: handleFooterLayout,
+      testID: testID ? `${testID}-footer` : undefined,
+    }),
+    [footer, footerStyle, handleFooterLayout, testID],
+  );
+  // Rendered inside the modal view (not through `footerComponent`) so the slot's
+  // context reaches it through the portal and VoiceOver does not treat it as a
+  // sibling hidden behind `accessibilityViewIsModal`.
+  const footerContainer = footer ? (
+    <SheetFooterContext.Provider value={footerSlot}>
+      <BottomSheetFooterContainer footerComponent={SheetFooter} />
+    </SheetFooterContext.Provider>
+  ) : null;
+
   const sheetContent = (
     <>
       <SheetHeader
@@ -224,13 +293,16 @@ export function Sheet({
         testID={testID}
       />
       <View
+        testID={testID ? `${testID}-body` : undefined}
         style={[
           (usesFixedSnapPoints || fixedIpadSheetHeight !== undefined) && styles.fixedBody,
           contentStyle,
+          footer ? { paddingBottom: footerHeight + FOOTER_TOP_PADDING } : null,
         ]}
       >
         {children}
       </View>
+      {footerContainer}
     </>
   );
 
@@ -258,7 +330,7 @@ export function Sheet({
       {usesFixedSnapPoints ? (
         <View
           testID={testID}
-          style={[styles.sheet, styles.fixedSheet, { paddingBottom: Math.max(insets.bottom, Space.md) }, style]}
+          style={[styles.sheet, styles.fixedSheet, { paddingBottom: bottomPadding }, style]}
           accessibilityViewIsModal
         >
           {sheetContent}
@@ -266,7 +338,7 @@ export function Sheet({
       ) : (
         <BottomSheetView
           testID={testID}
-          style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, Space.md) }, style, contentViewportStyle]}
+          style={[styles.sheet, { paddingBottom: bottomPadding }, style, contentViewportStyle]}
           accessibilityViewIsModal
         >
           {sheetContent}
@@ -292,6 +364,11 @@ function createStyles(
     },
     fixedSheet: {
       flex: 1,
+    },
+    footer: {
+      paddingHorizontal: Space.lg,
+      paddingTop: FOOTER_TOP_PADDING,
+      backgroundColor: colors.canvas,
     },
   });
 }

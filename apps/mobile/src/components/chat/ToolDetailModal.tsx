@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as Clipboard from 'expo-clipboard';
 import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Check, ChevronDown, ChevronRight, CircleAlert, Clock3, Copy } from 'lucide-react-native';
+import { Check, ChevronDown, CircleAlert, Clock3, Copy } from 'lucide-react-native';
+import { ChevronRight } from '../ui/DirectionalIcon';
 import { useTranslation } from 'react-i18next';
 import { FloatingButton, Sheet } from '../ui';
 import { useAppTheme } from '../../theme';

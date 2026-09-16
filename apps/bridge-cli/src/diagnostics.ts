@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { Socket } from 'node:net';
 import { homedir } from 'node:os';
 import {
@@ -423,9 +423,17 @@ function listHermesRelayRuntimePids(): number[] {
   return listPosixPidsMatching(/\bhermes\s+relay\s+run\b/);
 }
 
+export function resolveDiagnosticScriptPath(scriptPath: string): string {
+  try {
+    return realpathSync(scriptPath);
+  } catch {
+    return scriptPath;
+  }
+}
+
 function listPosixPidsMatching(pattern: RegExp): number[] {
   try {
-    const scriptPath = process.argv[1] ?? '';
+    const scriptPath = resolveDiagnosticScriptPath(process.argv[1] ?? '');
     if (!scriptPath) return [];
     const output = readPsOutput();
     return output

@@ -1,7 +1,16 @@
 import { UiMessage } from '../types/chat';
-import { preserveOptimisticAssistantMessage, prependOlderCachedMessages } from './historyMergePolicy';
+import { preserveMessagePresentation, preserveOptimisticAssistantMessage, prependOlderCachedMessages } from './historyMergePolicy';
 
 describe('prependOlderCachedMessages', () => {
+  it('does not resurrect cached tool-turn text while paging after a restart', () => {
+    const answer: UiMessage = { id: 'h_answer', historyMessageId: 'server-answer', role: 'assistant', text: 'Done', timestampMs: 70_000 };
+    expect(prependOlderCachedMessages([answer], [
+      { ...answer, id: 'old-row', timestampMs: 1_000 },
+      { id: 'stream_segment_65000_0', role: 'assistant', text: 'Done', timestampMs: 65_000 },
+    ])).toEqual([answer]);
+    const differentTurn = { ...answer, id: 'another-row', historyMessageId: 'another-answer' };
+    expect(prependOlderCachedMessages([answer], [differentTurn])).toEqual([differentTurn, answer]);
+  });
   const server: UiMessage = { id: 'h_user_server', role: 'user', text: 'Hello', timestampMs: 70_000 };
   const cached: UiMessage = { id: 'usr_64000', role: 'user', text: 'Hello', timestampMs: 64_000 };
   it('does not restore an optimistic copy after the server assigns its timestamp and ID', () => {
@@ -253,7 +262,7 @@ describe('preserveOptimisticAssistantMessage', () => {
     ]);
   });
 
-  it('collapses multiple assistant segments in the current turn into the local final', () => {
+  it('keeps transcript segments and tools and appends only the unseen final tail', () => {
     const previousMessages: UiMessage[] = [
       { id: 'u1', role: 'user', text: 'Check OpenClaw and Clawket', timestampMs: 10_000 },
       {
@@ -272,15 +281,7 @@ describe('preserveOptimisticAssistantMessage', () => {
     ];
 
     expect(preserveOptimisticAssistantMessage(previousMessages, nextMessages)).toEqual([
-      { id: 'u1', role: 'user', text: 'Check OpenClaw and Clawket', timestampMs: 10_000 },
-      {
-        id: 'final_run',
-        role: 'assistant',
-        text: 'First tool complete.\nSecond tool complete.\nFinal answer.',
-        timestampMs: 18_000,
-      },
-      { id: 'tool1', role: 'tool', text: '', toolName: 'search', toolStatus: 'success' },
-      { id: 'tool2', role: 'tool', text: '', toolName: 'search', toolStatus: 'success' },
+      ...nextMessages, { ...previousMessages[1], text: 'Final answer.' },
     ]);
   });
 });
@@ -288,4 +289,77 @@ describe('preserveOptimisticAssistantMessage', () => {
 it('does not resurrect a streamed final reply when paging cached history', () => {
   const current = [{ id: 'h_assistant_server', role: 'assistant' as const, text: 'Test received', timestampMs: 112_000 }];
   expect(prependOlderCachedMessages(current, [{ id: 'final_run', role: 'assistant', text: 'Test received', timestampMs: 100_000 }])).toEqual(current);
+});
+
+
+describe('preserveMessagePresentation', () => {
+  const local: UiMessage = {
+    id: 'usr_1000', renderKey: 'usr_1000', role: 'user', text: 'Photo',
+    timestampMs: 1000, idempotencyKey: 'send-1', sendUncertain: true,
+    imageUris: ['file://original.jpg'], imageMetas: [{ uri: 'file://original.jpg', width: 400, height: 300 }],
+  };
+  it('retains local geometry and row identity for an exact echo without changing the wire ID or delivery evidence', () => {
+    const echo: UiMessage = { id: 'history-server', role: 'user', text: 'Photo', timestampMs: 5000, idempotencyKey: 'send-1', imageUris: ['https://example.com/photo.jpg'] };
+    expect(preserveMessagePresentation([local], [echo])).toEqual([{
+      ...echo, renderKey: local.renderKey, timestampMs: local.timestampMs,
+      imageUris: local.imageUris, imageMetas: local.imageMetas,
+    }]);
+  });
+  it('does not carry presentation across equal text with missing, conflicting, ambiguous or other-role send keys', () => {
+    const echo: UiMessage = { id: 'server', role: 'user', text: 'Photo', timestampMs: 1001 };
+    for (const next of [echo, { ...echo, idempotencyKey: 'different' }, { ...echo, role: 'assistant' as const, idempotencyKey: 'send-1' }]) {
+      expect(preserveMessagePresentation([local], [next])).toEqual([next]);
+    }
+    const duplicate = { ...local, id: 'usr_1001', renderKey: 'usr_1001' };
+    const ambiguous = { ...echo, idempotencyKey: 'send-1' };
+    expect(preserveMessagePresentation([local, duplicate], [ambiguous])).toEqual([ambiguous]);
+    const duplicateEcho = { ...ambiguous, id: 'server-other' };
+    expect(preserveMessagePresentation([local], [ambiguous, duplicateEcho])).toEqual([ambiguous, duplicateEcho]);
+  });
+  it('keeps a finalized reply identity through history reconciliation', () => {
+    const final: UiMessage = { id: 'final_run', renderKey: 'reply:1000:0', role: 'assistant', text: 'Answer', timestampMs: 2000 };
+    const echo: UiMessage = { id: 'history-answer', role: 'assistant', text: 'Answer', timestampMs: 2100 };
+    const reconciled = preserveOptimisticAssistantMessage([final], [echo]);
+    expect(preserveMessagePresentation([final], reconciled)[0].renderKey).toBe(final.renderKey);
+  });
+});
+
+
+describe('live turn reconciliation', () => {
+  const user: UiMessage = { id: 'usr_1000', role: 'user', text: 'Check', idempotencyKey: 'send-1', timestampMs: 1000 };
+  const local: UiMessage[] = [user,
+    { id: 'segment', renderKey: 'reply:1000:0', presentationRunId: 'run', role: 'assistant', text: 'First.', timestampMs: 2000 },
+    { id: 'toolcall_one', presentationRunId: 'run', role: 'tool', text: '', toolName: 'read', toolStatus: 'success' },
+    { id: 'final_run', renderKey: 'reply:1000:1', presentationRunId: 'run', role: 'assistant', text: 'Answer.', timestampMs: 3000 },
+  ];
+  it('retains the same text/tool order through stale, split and aggregate history, including a later user turn', () => {
+    expect(preserveOptimisticAssistantMessage(local, [user])).toEqual(local);
+    const split: UiMessage[] = [{ ...user, id: 'remote-user' },
+      { id: 'remote-first', role: 'assistant', text: 'First.' },
+      { id: 'toolcall_one', role: 'tool', text: '', toolName: 'read', toolStatus: 'success', toolDetail: 'details' },
+      { id: 'remote-last', role: 'assistant', text: 'Answer.' }];
+    const merged = preserveOptimisticAssistantMessage(local, split);
+    expect(merged.map(message => message.text)).toEqual(['Check', 'First.', '', 'Answer.']);
+    expect(merged.map(message => message.renderKey)).toEqual([undefined, 'reply:1000:0', 'toolcall_one', 'reply:1000:1']);
+    expect(merged[2].toolDetail).toBe('details');
+    const later: UiMessage = { id: 'other-user', role: 'user', text: 'Next', idempotencyKey: 'send-2' };
+    const aggregate: UiMessage[] = [split[0], { id: 'aggregate', role: 'assistant', text: 'First.\nAnswer.' }, split[2], later];
+    const refreshed = preserveOptimisticAssistantMessage(merged, aggregate);
+    expect(refreshed.map(message => message.text)).toEqual(['Check', 'First.', '', 'Answer.', 'Next']);
+    expect(preserveOptimisticAssistantMessage(refreshed, aggregate)).toEqual(refreshed);
+  });
+  it('does not attach a local completed turn to another identical prompt', () => {
+    const other: UiMessage = { ...user, id: 'other-user', idempotencyKey: 'other-send' };
+    const next = [other, { id: 'other-answer', role: 'assistant' as const, text: 'Other answer' }];
+    const reconciled = preserveOptimisticAssistantMessage(local, next);
+    expect(reconciled.slice(0, 2)).toEqual(next);
+    expect(reconciled.filter(message => message.role === 'user')).toHaveLength(2);
+  });
+  it('does not drop a repeated short prompt against an older known message or conflicting send key', () => {
+    const old: UiMessage = { id: 'history-old', role: 'user', text: 'OK', timestampMs: 1000, idempotencyKey: 'old' };
+    const fresh: UiMessage = { id: 'usr_2000', renderKey: 'usr_2000', role: 'user', text: 'OK', timestampMs: 2000, idempotencyKey: 'fresh' };
+    expect(preserveOptimisticAssistantMessage([old, fresh], [old])).toEqual([old, fresh]);
+    const noMetadata = { ...old, timestampMs: undefined, idempotencyKey: undefined };
+    expect(preserveOptimisticAssistantMessage([noMetadata, fresh], [noMetadata])).toEqual([noMetadata, fresh]);
+  });
 });

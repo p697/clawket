@@ -56,13 +56,18 @@ PostHog 项目 337268；SDK 与集中式 `src/services/analytics/events.ts` 沿�
 | `session_action` | `action: pin|rename|reset|delete|create` | |
 | `agent_settings_opened` | `backend` | |
 | `settings_row_opened` | `row`, `locked`, `backend` | |
+| `usage_range_changed` | `range: today|7d|30d`, `cached`, `locked` | 用量页切换范围；`cached` 表示该范围已在内存缓存里，`locked` 表示免费用户看到的是 Pro 蒙层（2026-09-16 新增，补上 2.0 没有范围分布数据的缺口；蒙层按钮进入付费墙沿用 `paywall_viewed{ blocked_feature: usage }`） |
+| `agent_file_activity` | `action: edit|saved|failed`, `backend`, `document: agents|soul|identity|user|bootstrap|memory|other` | 文件页里编辑 Agent 工作区文件；`document` 是有界枚举，永不上报文件名、路径或内容（2026-09-16 由 `identity_file_activity` 改名并移到文件页，3.0 未发布，无历史数据） |
 | `search_performed` | `scope: global|panel`, `has_results`, `result_kinds` | 防抖后 |
 | `search_message_opened` | `is_pro` | 触发 Pro |
 | `paywall_viewed`（现有） | 现有 + `hero`, `variant`, `trigger_screen`, `launch: bool` | |
 | `paywall_closed`（现有） | + `seconds_on_paywall`, `plan_toggled` | |
 | `paywall_package_selected` / `paywall_subscribe_tapped` / `paywall_purchase_succeeded`（现有） | + `hero`, `variant` | |
 | `paywall_purchase_failed`（现有） | + `reason` | |
-| `paywall_launch_shown` / `paywall_launch_closed` | `variant`, `first_run: bool` | 连接就绪后的自动弹出单独统计 |
+| `app_update_announcement_shown` | `version`, `release_count`, `entry_count`, `source: launch|debug_preview` | 更新公告弹层曝光（2026-09-16 取代 `paywall_launch_shown`；`version` 只接受 `x.y.z`，其余归 `other`） |
+| `app_update_announcement_closed` | `version`, `release_count`, `source`, `action: dismiss|continue|entry`, `seconds_visible` | 弹层完全关闭后上报，用于看 2 秒内关闭率 |
+| `app_update_announcement_entry_tapped` | `version`, `entry`（条目 id 枚举）, `action: open_url|open_paywall` | 只有链接与 Pro 条目可点 |
+| `release_notes_opened` | `release_count` | 账户设置 → 更新日志页打开 |
 | `grace_banner_viewed` / `grace_expired` | `days_left` | |
 | `youmind_sign_in_tapped` / `youmind_sign_in_resolved`（现有） | `method` 固定 email | |
 | `sprite_greeting_sent` | — | 首次开场 |

@@ -64,3 +64,28 @@ it('tolerates a delayed 30-second tick but recovers from a dead connection', asy
   await jest.advanceTimersByTimeAsync(89999); expect(adapter.state).toBe('ready');
   await jest.advanceTimersByTimeAsync(1); expect(adapter.state).toBe('reconnecting');
 });
+
+it('paces missing-Bridge retries and repeated connect calls cannot bypass the wait', async () => {
+  const result = adapter.connect().catch(error => error);
+  sockets[0].open();
+  const request = JSON.parse(sockets[0].sent.at(-1)!);
+  sockets[0].onmessage?.({ data: JSON.stringify({ type: 'res', id: request.id, ok: false,
+    error: { code: 'BRIDGE_UNAVAILABLE', message: 'legacy backend name' } }) });
+  await jest.advanceTimersByTimeAsync(25000);
+  expect((await result).code).toBe('bridge_offline');
+  const retry = adapter.connect();
+  await jest.advanceTimersByTimeAsync(4999); expect(sockets).toHaveLength(1);
+  await jest.advanceTimersByTimeAsync(1); expect(sockets).toHaveLength(2);
+  sockets[1].open(); sockets[1].reply(); await retry;
+  expect(adapter.state).toBe('ready');
+});
+
+it('shares connection waiters and cancels them when the connection is switched', async () => {
+  const attempt = adapter.connect();
+  expect(adapter.connect()).toBe(attempt);
+  const result = attempt.catch(error => error);
+  adapter.disconnect();
+  expect((await result).code).toBe('bridge_offline');
+  await jest.advanceTimersByTimeAsync(120000);
+  expect(sockets).toHaveLength(1);
+});

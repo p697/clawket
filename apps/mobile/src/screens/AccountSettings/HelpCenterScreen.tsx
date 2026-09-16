@@ -28,6 +28,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { SettingsIcon } from '../../components/ui/SettingsIcon';
 import { Button } from '../../components/ui/Button';
 import { SegmentedTabs } from '../../components/ui/SegmentedTabs';
 import {
@@ -77,7 +78,6 @@ export type HelpCenterScreenProps = Readonly<{
   onBack: () => void;
   onOpenUrl?: (url: string) => Promise<void> | void;
   showWecomEntry?: boolean;
-  initialCommunity?: 'wecom';
 }>;
 
 export type HelpCenterCommunityEntry = 'discord' | 'wecom';
@@ -90,7 +90,10 @@ const OPENCLAW_DOCUMENTATION_URL = 'https://docs.openclaw.ai';
 const OPENCLAW_RELEASES_URL = 'https://github.com/openclaw/openclaw/releases';
 const LAN_DIRECT_CONFIG = `{
   "gateway": {
+    "mode": "local",
     "bind": "lan",
+    "tailscale": { "mode": "off" },
+    "controlUi": { "allowedOrigins": ["http://<lan-ip>:18789"] },
     "auth": {
       "mode": "token",
       "token": "replace-me"
@@ -99,7 +102,10 @@ const LAN_DIRECT_CONFIG = `{
 }`;
 const TAILNET_DIRECT_CONFIG = `{
   "gateway": {
+    "mode": "local",
     "bind": "tailnet",
+    "tailscale": { "mode": "off" },
+    "controlUi": { "allowedOrigins": ["http://<tailscale-ip>:18789"] },
     "auth": {
       "mode": "token",
       "token": "replace-me"
@@ -108,6 +114,7 @@ const TAILNET_DIRECT_CONFIG = `{
 }`;
 const TAILSCALE_SERVE_CONFIG = `{
   "gateway": {
+    "mode": "local",
     "bind": "loopback",
     "tailscale": {
       "mode": "serve"
@@ -190,21 +197,17 @@ function TopicRows({
 }>): React.JSX.Element {
   const { theme } = useAppTheme();
   return (
-    <SettingsGroup>
+    <SettingsGroup density="comfortable">
       {topics.map((topic, index) => {
         const Icon = topic.icon;
         return (
           <Fragment key={topic.id}>
-            {index > 0 ? <SettingsDivider inset="content" /> : null}
+            {index > 0 ? <SettingsDivider inset="icon" /> : null}
             <SettingsRow
               testID={`help-topic-row-${topic.id}`}
               title={topic.title}
               leading={(
-                <Icon
-                  size={IconSize.sm}
-                  color={theme.colors.inkSecondary}
-                  strokeWidth={2}
-                />
+                <SettingsIcon icon={Icon} tone="neutral" size={20} strokeWidth={1.75} />
               )}
               showChevron
               onPress={() => onSelect(topic)}
@@ -262,16 +265,15 @@ function TopicSheet({
 
 export function HelpCenterScreen({
   onBack,
-  initialCommunity,
   onOpenUrl = openUrlWithLinking,
   showWecomEntry = shouldShowWecomSupportEntry(),
 }: HelpCenterScreenProps): React.JSX.Element {
   const { t } = useTranslation(['config', 'common']);
   const { theme } = useAppTheme();
   const insets = useSafeAreaInsets();
-  const [activeTab, setActiveTab] = useState<HelpTab>(initialCommunity ? 'official' : 'connect');
+  const [activeTab, setActiveTab] = useState<HelpTab>('connect');
   const [topic, setTopic] = useState<HelpTopic | null>(null);
-  const [wecomVisible, setWecomVisible] = useState(initialCommunity === 'wecom');
+  const [wecomVisible, setWecomVisible] = useState(false);
   const [wecomSaveState, setWecomSaveState] = useState<WecomSaveState>('idle');
   const [linkErrorVisible, setLinkErrorVisible] = useState(false);
 
@@ -281,12 +283,17 @@ export function HelpCenterScreen({
     { key: 'official' as const, label: t('common:Official') },
   ], [t]);
 
+  const directSetup = t('OpenClaw only: merge these fields into the existing gateway configuration; do not replace the whole file. Replace address placeholders and use a strong private token instead of replace-me. Restart Gateway, then run the URL pairing command and scan its QR.');
+
   const connectTopics = useMemo<ReadonlyArray<HelpTopic>>(() => [
     {
       id: 'pair',
       title: t('How to Connect'),
       icon: Terminal,
-      paragraphs: [t('Follow these steps to connect Clawket to your OpenClaw.')],
+      paragraphs: [
+        t('Run these commands on the computer running OpenClaw or Hermes, with Node.js and npm installed. Pair uses Relay; pair local uses your local network.'),
+        t('In Add connection, choose the backend and enter its pairing code, or scan or import its QR. Local pairing uses QR. If both backends are installed, the CLI prints a result for each. Keep the host running.'),
+      ],
       commands: [
         { label: t('Remote connection command', { ns: 'chat' }), value: 'npx @p697/clawket pair' },
         { label: t('Same Wi-Fi pairing', { ns: 'chat' }), value: 'npx @p697/clawket pair local' },
@@ -296,10 +303,11 @@ export function HelpCenterScreen({
       id: 'lan',
       title: t('LAN direct'),
       icon: Router,
-      paragraphs: [t('Use this when your phone is on the same local network as the OpenClaw host.')],
+      paragraphs: [t('Use this when your phone is on the same local network as the OpenClaw host.'), directSetup],
       commands: [
         { label: t('Minimal openclaw.json example'), value: LAN_DIRECT_CONFIG },
-        { label: t('App URL'), value: 'ws://<lan-ip>:18789' },
+        { label: t('Restart Gateway'), value: 'openclaw gateway restart' },
+        { value: 'npx @p697/clawket pair local --backend openclaw --url "ws://<lan-ip>:18789"' },
       ],
     },
     {
@@ -309,10 +317,12 @@ export function HelpCenterScreen({
       paragraphs: [
         t('Use this when both devices are in the same tailnet and you are not using tailscale serve.'),
         t('Direct Tailnet bind does not use Serve or Funnel.'),
+        directSetup,
       ],
       commands: [
         { label: t('Minimal openclaw.json example'), value: TAILNET_DIRECT_CONFIG },
-        { label: t('App URL'), value: 'ws://<tailscale-ip>:18789' },
+        { label: t('Restart Gateway'), value: 'openclaw gateway restart' },
+        { value: 'npx @p697/clawket pair local --backend openclaw --url "ws://<tailscale-ip>:18789"' },
       ],
     },
     {
@@ -322,10 +332,13 @@ export function HelpCenterScreen({
       paragraphs: [
         t('Use this when you want Tailscale to publish HTTPS for the Gateway while OpenClaw stays on loopback.'),
         t('Tailscale Serve requires gateway.bind to stay on loopback.'),
+        t('For LAN, put the phone and host on the same network. For Tailscale, connect both devices to the same tailnet.'),
+        directSetup,
       ],
       commands: [
         { label: t('Minimal openclaw.json example'), value: TAILSCALE_SERVE_CONFIG },
-        { label: t('App URL'), value: 'wss://<magicdns-host>' },
+        { label: t('Restart Gateway'), value: 'openclaw gateway restart' },
+        { value: 'npx @p697/clawket pair local --backend openclaw --url "wss://<magicdns-host>"' },
       ],
     },
     {
@@ -333,7 +346,7 @@ export function HelpCenterScreen({
       title: t('Control UI / WebChat note'),
       icon: Globe2,
       paragraphs: [
-        t('gateway.controlUi.allowedOrigins is only for browser-based Control UI or WebChat on non-loopback addresses. Clawket app connection itself does not depend on this field.'),
+        t('Clawket does not use browser origin authentication, but some OpenClaw versions require allowedOrigins to start a non-loopback Gateway with Control UI enabled. Keep the exact browser origins in the examples.'),
         t('If you open Control UI over LAN or direct Tailnet bind, add the exact browser origin you open in Safari or Chrome.'),
         t('If you open Control UI through Tailscale Serve, the browser origin is your HTTPS MagicDNS host.'),
         t('For Tailscale Serve, keep using your Gateway token or password in Clawket. Tailscale identity header auth applies to browser Control UI or WebChat, not app login.'),
@@ -345,9 +358,21 @@ export function HelpCenterScreen({
         { label: t('Restart Gateway'), value: 'openclaw gateway restart' },
       ],
     },
-  ], [t]);
+  ], [t, directSetup]);
 
   const troubleshootingTopics = useMemo<ReadonlyArray<HelpTopic>>(() => [
+    {
+      id: 'bridge',
+      title: t('Check Clawket Bridge'),
+      icon: Terminal,
+      paragraphs: [t('For OpenClaw and Hermes, run these checks on the host. Status and doctor inspect Clawket services; logs follows their output until Ctrl+C. If a paired Bridge is stopped, use start. For local OpenClaw, also check Gateway below.')],
+      commands: [
+        { value: 'npx @p697/clawket status' },
+        { value: 'npx @p697/clawket doctor' },
+        { value: 'npx @p697/clawket logs --follow' },
+        { value: 'npx @p697/clawket start' },
+      ],
+    },
     {
       id: 'running',
       title: t('Check that OpenClaw is running'),
@@ -363,39 +388,45 @@ export function HelpCenterScreen({
       title: t('Verify network connectivity'),
       icon: Network,
       paragraphs: [
-        t('If using the default connection method, make sure your network connection is stable.'),
-        t('If using LAN connection, make sure your phone and your OpenClaw machine are on the same local network.'),
+        t('Relay needs internet access on both the phone and the host. Keep the host awake and the Clawket Bridge running.'),
+        t('For LAN, put the phone and host on the same network. For Tailscale, connect both devices to the same tailnet.'),
       ],
     },
     {
       id: 'firewall',
       title: t('Check firewall and port'),
       icon: ShieldCheck,
-      paragraphs: [t('The default WebSocket port is 18789. Make sure it is not blocked by a firewall or occupied by another process.')],
+      paragraphs: [t('Direct OpenClaw uses port 18789 by default; Hermes local pairing uses 4319. Use the port printed by the CLI. Relay does not require opening these ports to the internet.')],
     },
     {
       id: 'credentials',
       title: t('Verify auth credentials'),
       icon: ShieldCheck,
-      paragraphs: [t('Open openclaw.json on the host and confirm the auth token or password matches what you entered in the app.')],
+      paragraphs: [t('For OpenClaw, credentials may come from openclaw.json, environment variables or SecretRef. Do not copy a SecretRef as a token. After credentials change, run pairing again and use the new code or QR in Add connection. Hermes does not use openclaw.json.')],
     },
     {
       id: 'drops',
       title: t('Connection drops after a while'),
       icon: Wrench,
-      paragraphs: [t('This is usually caused by network changes (Wi-Fi switching, sleep mode). The app will automatically reconnect. If it persists, try restarting the Gateway from Settings.')],
+      commands: [{ value: 'npx @p697/clawket restart' }],
+      paragraphs: [t('After a network change, the app reconnects automatically. In Account settings, open Connections, select the connection and tap Reconnect or Resume connection. If it still fails, check the host and Bridge; restart a managed Bridge with the command below.')],
     },
     {
       id: 'auth-error',
       title: t('Auth error when connecting'),
       icon: Wrench,
-      paragraphs: [t('Double-check the auth token or password in your connection settings. If you recently regenerated credentials, update them in the app.')],
+      paragraphs: [t('If a pairing code has expired or was already used, run pairing again on the host. Select the matching backend in the app and use the new code or QR. Official Preview codes only work with Preview enabled.')],
     },
     {
       id: 'version',
       title: t('Gateway version mismatch'),
       icon: Wrench,
-      paragraphs: [t('Update OpenClaw on your host with: npm update -g @nicepkg/openclaw. Then restart the Gateway.')],
+      commands: [
+        { value: 'openclaw update' },
+        { value: 'openclaw gateway status' },
+        { label: t('Restart Gateway'), value: 'openclaw gateway restart' },
+      ],
+      paragraphs: [t('For OpenClaw only: run the update command on the host and follow its instructions. Then check Gateway status. If you changed its configuration, restart the installed Gateway service.')],
     },
   ], [t]);
 
@@ -513,21 +544,17 @@ export function HelpCenterScreen({
         ) : activeTab === 'troubleshooting' ? (
           <TopicRows topics={troubleshootingTopics} onSelect={setTopic} />
         ) : (
-          <SettingsGroup>
+          <SettingsGroup density="comfortable">
             {officialLinks.map((link, index) => {
               const Icon = link.icon;
               return (
                 <Fragment key={link.id}>
-                  {index > 0 ? <SettingsDivider inset="content" /> : null}
+                  {index > 0 ? <SettingsDivider inset="icon" /> : null}
                   <SettingsRow
                     testID={`help-official-${link.id}`}
                     title={link.title}
                     leading={(
-                      <Icon
-                        size={IconSize.sm}
-                        color={theme.colors.inkSecondary}
-                        strokeWidth={2}
-                      />
+                      <SettingsIcon icon={Icon} tone="neutral" size={20} strokeWidth={1.75} />
                     )}
                     showChevron
                     onPress={link.onPress}
@@ -608,7 +635,8 @@ const styles = StyleSheet.create({
   screen: { flex: 1 },
   content: {
     paddingHorizontal: Space.lg,
-    gap: Space.lg,
+    paddingTop: Space.sm,
+    gap: Space.xl,
   },
   sheetContent: {
     paddingHorizontal: Space.lg,

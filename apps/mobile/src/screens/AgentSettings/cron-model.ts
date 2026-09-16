@@ -6,19 +6,25 @@ import type {
   CronOperations,
   CronRunLogEntry,
   CronSchedule,
+  CronDelivery,
 } from '@clawket/agent-protocol';
+
+import { validateSchedule } from './cron-schedule';
 
 const PAGE_LIMIT = 100;
 const MAX_PAGES = 30;
 
 export type CronDraft = Readonly<{
   name: string;
-  schedule: string;
+  schedule: CronSchedule;
   prompt: string;
   enabled: boolean;
+  description?: string;
+  model?: string;
+  delivery?: CronDelivery;
 }>;
 
-export type CronDraftError = 'Task name is required.' | 'Schedule is required.' | 'Prompt is required.';
+export type CronDraftError = 'Task name is required.' | 'Prompt is required.' | 'Invalid schedule.' | 'Choose a future date.';
 
 export async function loadAgentCronJobs(
   operations: CronOperations | undefined,
@@ -61,17 +67,20 @@ export function filterAgentCronRuns(
 export function cronDraftFromJob(job?: CronJob | null): CronDraft {
   return {
     name: job?.name ?? '',
-    schedule: job ? formatCronSchedule(job.schedule) : '',
+    schedule: job?.schedule ?? { kind: 'cron', expr: '0 9 * * *' },
     prompt: job ? cronPayloadText(job) : '',
     enabled: job?.enabled ?? true,
+    description: job?.description ?? '',
+    model: job?.payload.kind === 'agentTurn' ? job.payload.model : undefined,
+    delivery: job?.delivery,
   };
 }
 
-export function validateCronDraft(draft: CronDraft): CronDraftError | null {
+export function validateCronDraft(draft: CronDraft, now = Date.now(), original?: CronJob | null): CronDraftError | null {
   if (!draft.name.trim()) return 'Task name is required.';
-  if (!draft.schedule.trim()) return 'Schedule is required.';
   if (!draft.prompt.trim()) return 'Prompt is required.';
-  return null;
+  return original && JSON.stringify(original.schedule) === JSON.stringify(draft.schedule)
+    ? null : validateSchedule(draft.schedule, now);
 }
 
 export function buildCronJobCreate(
@@ -82,14 +91,15 @@ export function buildCronJobCreate(
   return {
     ...(agent.isMain ? {} : { agentId: agent.agentId }),
     name: draft.name.trim(),
+    ...(draft.description?.trim() ? { description: draft.description.trim() } : {}),
     enabled: draft.enabled,
-    schedule: parseCronSchedule(draft.schedule),
+    schedule: draft.schedule,
     sessionTarget: agent.isMain ? 'main' : 'isolated',
     wakeMode: 'now',
     payload: agent.isMain
       ? { kind: 'systemEvent', text: prompt }
-      : { kind: 'agentTurn', message: prompt },
-    delivery: { mode: 'none' },
+      : { kind: 'agentTurn', message: prompt, ...(draft.model?.trim() ? { model: draft.model.trim() } : {}) },
+    delivery: draft.delivery ?? { mode: 'none' },
   };
 }
 
@@ -97,56 +107,22 @@ export function buildCronJobPatch(draft: CronDraft, job: CronJob): CronJobPatch 
   const prompt = draft.prompt.trim();
   return {
     name: draft.name.trim(),
+    ...(draft.description !== (job.description ?? '') ? { description: draft.description?.trim() ?? '' } : {}),
+    ...(JSON.stringify(draft.delivery) !== JSON.stringify(job.delivery) ? { delivery: draft.delivery } : {}),
     enabled: draft.enabled,
-    schedule: parseCronSchedule(draft.schedule),
+    ...(JSON.stringify(draft.schedule) === JSON.stringify(job.schedule) ? {} : { schedule: draft.schedule }),
     payload: job.payload.kind === 'systemEvent'
-      ? { kind: 'systemEvent', text: prompt }
-      : { ...job.payload, message: prompt },
+      ? { ...job.payload, text: prompt }
+      : { ...job.payload, message: prompt, ...(draft.model !== job.payload.model ? { model: draft.model?.trim() ?? '' } : {}) },
   };
-}
-
-export function parseCronSchedule(input: string): CronSchedule {
-  const value = input.trim();
-  const duration = value.match(/^(?:every\s+)?(\d+(?:\.\d+)?)\s*(m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days)$/i);
-  if (duration) {
-    const amount = Number(duration[1]);
-    const unit = duration[2]?.toLowerCase() ?? 'm';
-    const multiplier = unit.startsWith('d')
-      ? 86_400_000
-      : unit.startsWith('h')
-        ? 3_600_000
-        : 60_000;
-    return { kind: 'every', everyMs: Math.max(1, Math.round(amount * multiplier)) };
-  }
-  if (/^\d{4}-\d{2}-\d{2}(?:T|\s)/.test(value) && Number.isFinite(Date.parse(value))) {
-    return { kind: 'at', at: new Date(value).toISOString() };
-  }
-  return { kind: 'cron', expr: value };
-}
-
-export function formatCronSchedule(schedule: CronSchedule): string {
-  if (schedule.kind === 'cron') {
-    return schedule.tz ? `${schedule.expr} · ${schedule.tz}` : schedule.expr;
-  }
-  if (schedule.kind === 'at') return schedule.at;
-  const minutes = schedule.everyMs / 60_000;
-  if (minutes % 1_440 === 0) return `every ${minutes / 1_440}d`;
-  if (minutes % 60 === 0) return `every ${minutes / 60}h`;
-  return `every ${minutes}m`;
 }
 
 export function cronPayloadText(job: CronJob): string {
   return job.payload.kind === 'systemEvent' ? job.payload.text : job.payload.message;
 }
 
-export function cronJobStatus(job: CronJob): 'Failed' | 'Running' | 'Enabled' | 'Disabled' {
-  if (job.state.runningAtMs) return 'Running';
-  if ((job.state.lastRunStatus ?? job.state.lastStatus) === 'error') return 'Failed';
-  return job.enabled ? 'Enabled' : 'Disabled';
-}
-
-export function cronRunStatus(entry: CronRunLogEntry): 'Succeeded' | 'Failed' | 'Skipped' {
+export function cronRunStatus(entry: CronRunLogEntry): 'Succeeded' | 'Failed' | 'Skipped' | 'Unknown' {
   if (entry.status === 'ok') return 'Succeeded';
   if (entry.status === 'error') return 'Failed';
-  return 'Skipped';
+  return entry.status === 'skipped' ? 'Skipped' : 'Unknown';
 }

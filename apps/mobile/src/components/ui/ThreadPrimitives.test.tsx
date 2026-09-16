@@ -618,7 +618,7 @@ describe.each(['light', 'dark'] as const)('%s thread primitives', (scheme) => {
     expect(flattenStyle(result.getByTestId('settings-divider').props.style)).toMatchObject({
       height: BorderWidth.hairline,
       backgroundColor: theme.colors.line,
-      marginLeft: Space.lg,
+      marginStart: Space.lg,
     });
   });
 });
@@ -648,6 +648,22 @@ describe('long-form composer', () => {
     expect(flattenStyle(view.getByTestId('editor-input-shell').props.style)).toMatchObject({ flexGrow: 0, flexShrink: 0, flexBasis: 'auto' });
     expect(flattenStyle(view.getByTestId('editor-measurement', { includeHiddenElements: true }).props.style).height).toBe(LineHeight.body * 6);
     expect(onSend).not.toHaveBeenCalled();
+  });
+  it('counts a trailing Return as its own visual line so the caret line is never clipped', () => {
+    const props = { testID: 'editor', value: 'a wrapped draft\n', placeholder: 'Message', accessibilityLabels: labels,
+      onChangeText: jest.fn(), onSend: jest.fn(), onExpandedChange: jest.fn() };
+    const view = render(<Composer {...props} />);
+    const measurement = view.getByTestId('editor-measurement', { includeHiddenElements: true });
+    // iOS reports only the two laid-out fragments; the empty line holding the caret makes three.
+    fireEvent(measurement, 'textLayout', { nativeEvent: { lines: [{ text: 'a wrapped ' }, { text: 'draft\n' }] } });
+    expect(view.getByTestId('editor-expand')).toBeTruthy();
+    expect(view.getByTestId('editor-input').props.scrollEnabled).toBe(false);
+    // Six visible lines exceed the five-line compact cap, so the draft scrolls.
+    fireEvent(measurement, 'textLayout', { nativeEvent: { lines: [{}, {}, {}, {}, { text: 'draft\n' }] } });
+    expect(view.getByTestId('editor-input').props.scrollEnabled).toBe(true);
+    // Android already lists the empty trailing line; it must not be counted twice.
+    fireEvent(measurement, 'textLayout', { nativeEvent: { lines: [{}, {}, {}, { text: 'draft\n' }, { text: '' }] } });
+    expect(view.getByTestId('editor-input').props.scrollEnabled).toBe(false);
   });
   it('keeps the primary action slot stable and supports attachment-only messages', () => {
     const onSend = jest.fn();

@@ -20,7 +20,7 @@ function row(
     agentId: 'agent',
     sessionKey: 'agent:agent:main',
     name: 'Agent',
-    updatedAt: 1,
+    lastActivityAt: 1,
     syncedAt: null,
     unreadCount: 0,
     attention: null,

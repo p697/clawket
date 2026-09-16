@@ -1,3 +1,4 @@
+import { relayNetworkOptions } from '../relay-network.js';
 import WebSocket, { type RawData } from 'ws';
 import { RelaySessionState } from '../relay-session.js';
 import type { HermesRelayConfig } from '@clawket/bridge-core';
@@ -57,11 +58,14 @@ export type HermesRelayRuntimeOptions = {
 };
 
 type HermesSocketConnectOptions = {
+  agent?: WebSocket.ClientOptions['agent'];
+  handshakeTimeout?: number;
   headers?: Record<string, string>;
   maxPayload?: number;
 };
 
 export class HermesRelayRuntime {
+  private readonly relayNetwork = relayNetworkOptions();
   private relaySocket: WebSocket | null = null;
   private bridgeSocket: WebSocket | null = null;
   private reconnectTimer: NodeJS.Timeout | null = null;
@@ -77,11 +81,12 @@ export class HermesRelayRuntime {
   private relayAttempt = 0;
   private bridgeAttempt = 0;
   private stopped = true;
-  private bridgeStatusProbeInFlight = false;
+  private bridgeStatusProbe: AbortController | null = null;
   private readonly pendingBridgeMessages: Array<{ text?: string; data?: Buffer }> = [];
   private bridgeHealthProbeSeq = 0;
   private relayMessageSeq = 0;
   private relayActivityAfterOpen = false;
+  private relayClientCount: number | null = null;
   private pendingBridgeHealthProbe:
     | {
       id: string;
@@ -125,7 +130,7 @@ export class HermesRelayRuntime {
     this.bridgeStatusTimer = null;
     this.bridgeHealthProbeTimer = null;
     this.relayStabilityTimer = null;
-    this.bridgeStatusProbeInFlight = false;
+    this.clearBridgeStatusProbe();
     this.clearPendingBridgeHealthProbe();
     this.relaySocket?.close();
     this.bridgeSocket?.close();
@@ -151,6 +156,7 @@ export class HermesRelayRuntime {
     const attempt = this.relaySession.beginConnectAttempt();
     this.relayAttempt = attempt;
     const relay = this.createWebSocket(buildHermesRelayWsUrl(this.options.config), {
+      ...this.relayNetwork,
       headers: buildHermesRelayWsHeaders(this.options.config),
     });
     this.relaySocket = relay;
@@ -163,6 +169,7 @@ export class HermesRelayRuntime {
       }
       this.updateSnapshot({ relayConnected: true, lastError: null });
       this.relayActivityAfterOpen = false;
+      this.relayClientCount = null;
       this.log(`relay connected attempt=${attempt}`);
       this.scheduleRelayStabilityReset(relay);
       this.scheduleRelayPing(relay);
@@ -242,6 +249,7 @@ export class HermesRelayRuntime {
     });
 
     bridge.on('message', (data: RawData, isBinary: boolean) => {
+      if (this.stopped || this.bridgeSocket !== bridge) return;
       this.handleBridgeMessage(data, isBinary);
     });
 
@@ -299,7 +307,12 @@ export class HermesRelayRuntime {
 
   private handleRelayControl(text: string): void {
     try {
-      const parsed = JSON.parse(text.slice(RELAY_CONTROL_PREFIX.length)) as { event?: unknown; ts?: unknown };
+      const parsed = JSON.parse(text.slice(RELAY_CONTROL_PREFIX.length)) as { event?: unknown; ts?: unknown; count?: unknown };
+      if (['client_count', 'client_connected', 'client_disconnected'].includes(String(parsed?.event))
+        && typeof parsed.count === 'number' && Number.isSafeInteger(parsed.count) && parsed.count >= 0) {
+        this.relayClientCount = parsed.count;
+        return;
+      }
       if (parsed?.event !== 'gateway_ping') {
         return;
       }
@@ -332,6 +345,14 @@ export class HermesRelayRuntime {
     this.traceRelayFrame('bridge_in', text);
     if (this.handleBridgeHealthProbeResponse(text)) {
       return;
+    }
+    // Local health stays active; don't wake the cloud for periodic snapshots
+    // with no consumer. Unknown/legacy client presence keeps forwarding.
+    if (this.relayClientCount === 0) {
+      try {
+        const frame = JSON.parse(text);
+        if (frame?.type === 'event' && (frame.event === 'tick' || frame.event === 'health')) return;
+      } catch { /* Preserve non-JSON frames. */ }
     }
     if (!relay || relay.readyState !== WebSocket.OPEN) return;
     this.sendFrame(relay, text, 'relay_out');
@@ -446,6 +467,8 @@ export class HermesRelayRuntime {
       clearTimeout(this.bridgeStatusTimer);
       this.bridgeStatusTimer = null;
     }
+    this.bridgeStatusProbe?.abort();
+    this.bridgeStatusProbe = null;
   }
 
   private scheduleBridgeHealthProbe(): void {
@@ -469,30 +492,41 @@ export class HermesRelayRuntime {
   private async runBridgeStatusProbe(): Promise<void> {
     if (this.stopped) return;
     if (!this.isRelayOpen() || this.bridgeSocket?.readyState !== WebSocket.OPEN) return;
-    if (this.bridgeStatusProbeInFlight) return;
-    this.bridgeStatusProbeInFlight = true;
+    if (this.bridgeStatusProbe) return;
+    const relay = this.relaySocket;
+    const probe = new AbortController();
+    this.bridgeStatusProbe = probe;
+    const timeout = setTimeout(() => probe.abort(), 10_000);
     try {
       const response = await (this.options.fetchImpl ?? fetch)(buildHermesRelayBridgeStatusUrl(this.options.config), {
+        signal: probe.signal,
         headers: {
           authorization: `Bearer ${this.options.config.relaySecret}`,
           accept: 'application/json',
         },
       });
+      if (probe.signal.aborted || this.stopped || this.relaySocket !== relay) return;
       if (!response.ok) {
         this.log(`bridge status probe failed status=${response.status}`);
       } else {
         const payload = await response.json() as { hasBridge?: boolean };
-        if (!payload?.hasBridge) {
+        if (probe.signal.aborted || this.stopped || this.relaySocket !== relay) return;
+        if (payload?.hasBridge === false) {
           this.log('bridge status probe reported hasBridge=false; recycling relay socket');
           this.recycleRelaySocket('bridge status probe reported hasBridge=false');
           return;
         }
       }
     } catch (error) {
-      this.log(`bridge status probe error: ${String(error)}`);
+      if (!this.stopped && this.bridgeStatusProbe === probe) {
+        this.log(probe.signal.aborted ? 'bridge status probe timed out' : `bridge status probe error: ${String(error)}`);
+      }
     } finally {
-      this.bridgeStatusProbeInFlight = false;
-      this.scheduleBridgeStatusProbe();
+      clearTimeout(timeout);
+      if (this.bridgeStatusProbe === probe) {
+        this.bridgeStatusProbe = null;
+        this.scheduleBridgeStatusProbe();
+      }
     }
   }
 

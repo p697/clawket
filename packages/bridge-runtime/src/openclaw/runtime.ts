@@ -1,3 +1,4 @@
+import { relayNetworkOptions } from '../relay-network.js';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { PeerCertificate } from 'node:tls';
@@ -109,6 +110,8 @@ type RuntimeSocket = Pick<
 >;
 
 type RuntimeSocketConnectOptions = {
+  agent?: WebSocket.ClientOptions['agent'];
+  handshakeTimeout?: number;
   headers?: Record<string, string>;
   maxPayload?: number;
   rejectUnauthorized?: boolean;
@@ -136,6 +139,7 @@ const STARTUP_SIDECARS_CONNECT_RETRY_MAX_DELAY_MS = 3_000;
 export const OPENCLAW_MOBILE_SETUP_CAPABILITY = 'openclaw.bootstrap.mobile-setup.v1';
 
 export class BridgeRuntime {
+  private readonly relayNetwork = relayNetworkOptions();
   private readonly clientRuntimes = new Map<string, BridgeRuntime>();
   private clientChannelsNegotiated = false;
   private relaySocket: RuntimeSocket | null = null;
@@ -261,6 +265,7 @@ export class BridgeRuntime {
       `authorization=${redactAuthorizationHeader(relayHeaders.Authorization)}`,
     );
     const relay = this.createWebSocket(relayUrl, {
+      ...this.relayNetwork,
       headers: relayHeaders,
       maxPayload: WEBSOCKET_FRAME_LIMIT_BYTES,
     });
@@ -287,9 +292,25 @@ export class BridgeRuntime {
     });
 
     relay.on('pong', () => {
+      if (this.stopped || this.relaySocket !== relay) return;
       if (this.relaySessionState.confirmHealth()) {
         this.log('relay health confirmed; reconnect backoff reset');
       }
+    });
+
+    relay.once('unexpected-response', (_request: unknown, response: { statusCode?: number; destroy(): void }) => {
+      if (this.relaySocket !== relay || this.stopped) { response.destroy(); return; }
+      const status = response.statusCode;
+      if (this.targetConnectionId && status === 409) {
+        // This diagnostic socket identity cannot become valid again. The owner
+        // will create a fresh child when it receives the next client incarnation.
+        this.log('relay channel retired code=client_channel_unavailable httpStatus=409');
+        void this.stop();
+      } else {
+        this.log(`relay upgrade rejected httpStatus=${status ?? 'unknown'}`);
+        relay.terminate();
+      }
+      response.destroy();
     });
 
     relay.once('error', (error: Error) => {
@@ -1082,12 +1103,16 @@ export class BridgeRuntime {
     }
     const wsOptions: {
       maxPayload: number;
+      agent?: WebSocket.ClientOptions['agent'];
+      handshakeTimeout?: number;
       headers?: Record<string, string>;
       rejectUnauthorized?: boolean;
       checkServerIdentity?: never;
     } = {
       maxPayload: mergedOptions.maxPayload ?? WEBSOCKET_FRAME_LIMIT_BYTES,
       headers: mergedOptions.headers,
+      agent: mergedOptions.agent,
+      handshakeTimeout: mergedOptions.handshakeTimeout,
     };
     if (mergedOptions.rejectUnauthorized !== undefined) {
       wsOptions.rejectUnauthorized = mergedOptions.rejectUnauthorized;
@@ -1221,13 +1246,18 @@ export class BridgeRuntime {
 
   private startHeartbeat(): void {
     this.stopHeartbeat();
+    const intervalMs = this.options.heartbeatIntervalMs ?? HEARTBEAT_INTERVAL_MS;
+    let lastTickMs = Date.now();
     this.heartbeatTimer = setInterval(() => {
+      const nowMs = Date.now();
+      const schedulerDelayMs = Math.max(0, nowMs - lastTickMs - intervalMs);
+      lastTickMs = nowMs;
       const relay = this.relaySocket;
       if (!relay || relay.readyState !== WebSocket.OPEN) return;
       this.logSlowConnectHandshakes();
       const timeoutMs = this.options.heartbeatTimeoutMs ?? HEARTBEAT_TIMEOUT_MS;
       if (this.relaySessionState.heartbeatTimedOut(timeoutMs)) {
-        this.log('relay heartbeat timed out');
+        this.log(`relay heartbeat timed out idleMs=${this.relaySessionState.activityAgeMs(nowMs)} timeoutMs=${timeoutMs} schedulerDelayMs=${schedulerDelayMs} queued=${this.pendingGatewayMessages.length} socketKind=${this.targetConnectionId ? 'channel' : 'owner'}`);
         relay.terminate();
         return;
       }
@@ -1565,16 +1595,21 @@ export function stripConnectRequestBridgeMeta(
       type?: unknown;
       method?: unknown;
       meta?: unknown;
+      params?: unknown;
     };
     if (parsed.type !== 'req' || (parsed.method !== 'connect' && parsed.method !== 'connect.start')) {
       return { text, stripped: false, bridgeCapabilitiesRequested: false };
     }
+    const requestedViaCaps = isRuntimeRecord(parsed.params)
+      && Array.isArray(parsed.params.caps)
+      && normalizeConnectCapabilities(parsed.params.caps).includes(BRIDGE_CAPABILITIES_V2);
     if (!Object.prototype.hasOwnProperty.call(parsed, 'meta')) {
-      return { text, stripped: false, bridgeCapabilitiesRequested: false };
+      return { text, stripped: false, bridgeCapabilitiesRequested: requestedViaCaps };
     }
-    const bridgeCapabilitiesRequested = isRuntimeRecord(parsed.meta)
+    // Keep accepting the pre-release meta format while new clients use caps.
+    const bridgeCapabilitiesRequested = requestedViaCaps || (isRuntimeRecord(parsed.meta)
       && Array.isArray(parsed.meta.capabilities)
-      && normalizeConnectCapabilities(parsed.meta.capabilities).includes(BRIDGE_CAPABILITIES_V2);
+      && normalizeConnectCapabilities(parsed.meta.capabilities).includes(BRIDGE_CAPABILITIES_V2));
 
     const { meta: _bridgeMeta, ...gatewayRequest } = parsed;
     return {

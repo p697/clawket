@@ -5,14 +5,16 @@ import {
   Text,
   View,
 } from 'react-native';
-import { ChevronLeft } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Banner } from '../../components/ui/Banner';
+import { ConnectionStatusPill } from '../../components/ui/ConnectionStatusPill';
 import { Button } from '../../components/ui/Button';
 import { ConfirmationModal } from '../../components/ui/ConfirmationModal';
-import { FloatingButton } from '../../components/ui/FloatingButton';
+import { AccountSettingsPageHeader } from './AccountSettingsPageHeader';
+import { AccountProCard } from './AccountProCard';
+import { AccountSettingsRowIcon, accountSettingsRowHasIcon } from './AccountSettingsRowIcon';
 import { Sheet } from '../../components/ui/Sheet';
 import {
   SettingsDivider,
@@ -102,7 +104,6 @@ function SectionGroupView({
 }: SectionGroupViewProps): React.JSX.Element {
   const { t } = useTranslation('config');
   const { theme } = useAppTheme();
-
   const openAvailableRow = (row: AccountSettingsSectionRow) => {
     if (row.action && isAccountPreferenceAction(row.action)) {
       onOpenPreference(row.action);
@@ -141,18 +142,24 @@ function SectionGroupView({
           {group.title ?? translateAccountSettingsKey(t, group.titleKey ?? '')}
         </Text>
       ) : null}
-      <SettingsGroup>
-        {group.rows.map((row, index) => {
+      {group.id === 'pro' && group.rows[0]?.id === 'pro-status' ? (
+        <AccountProCard testID="account-settings-section-row-pro-status"
+          title={resolveRowTitle(group.rows[0], t)} status={resolveRowValue(group.rows[0], t) ?? ''}
+          onPress={() => openRow(group.rows[0])} />
+      ) : null}
+      <SettingsGroup density="comfortable">
+        {group.rows.filter((row) => row.id !== 'pro-status').map((row, index) => {
           const title = resolveRowTitle(row, t);
           const toggleValue = row.toggle === 'replyNotifications'
             ? data.replyNotificationsEnabled === true
             : data.debugMode === true;
           return (
             <Fragment key={row.id}>
-              {index > 0 ? <SettingsDivider inset="content" /> : null}
+              {index > 0 ? <SettingsDivider inset={accountSettingsRowHasIcon(row) ? "icon" : "content"} /> : null}
               <SettingsRow
                 testID={`account-settings-section-row-${row.id}`}
                 title={title}
+                leading={accountSettingsRowHasIcon(row) ? <AccountSettingsRowIcon row={row} /> : undefined}
                 destructive={row.action === 'reset-device' || row.action === 'remove-connection'}
                 value={resolveRowValue(row, t)}
                 locked={row.locked}
@@ -197,6 +204,40 @@ function SectionLoading(): React.JSX.Element {
   );
 }
 
+/** Connection state for the header title slot; product banners stay in the content flow. */
+function SectionConnectionStatus({
+  status,
+  onRetry,
+}: Readonly<{
+  status: AccountSettingsPageStatus;
+  onRetry?: () => void;
+}>): React.JSX.Element | null {
+  const { t } = useTranslation('config');
+  if (status.kind === 'offline') {
+    return (
+      <ConnectionStatusPill
+        testID="account-settings-section-offline"
+        placement="inline"
+        status="offline"
+        message={t('Offline · showing cached settings')}
+      />
+    );
+  }
+  if (status.kind === 'error') {
+    return (
+      <ConnectionStatusPill
+        testID="account-settings-section-error"
+        placement="inline"
+        status="error"
+        message={t('Settings unavailable · {{code}}', { code: status.code })}
+        actionLabel={onRetry ? t('Retry', { ns: 'common' }) : undefined}
+        onAction={onRetry}
+      />
+    );
+  }
+  return null;
+}
+
 function SectionStatus({
   status,
   onRetry,
@@ -207,25 +248,6 @@ function SectionStatus({
   onOpenPaywall: AccountSettingsSectionScreenProps['onOpenPaywall'];
 }>): React.JSX.Element | null {
   const { t } = useTranslation('config');
-  if (status.kind === 'offline') {
-    return (
-      <Banner
-        testID="account-settings-section-offline"
-        message={t('Offline · showing cached settings')}
-      />
-    );
-  }
-  if (status.kind === 'error') {
-    return (
-      <Banner
-        testID="account-settings-section-error"
-        tone="bad"
-        message={t('Settings unavailable · {{code}}', { code: status.code })}
-        actionLabel={onRetry ? t('Retry', { ns: 'common' }) : undefined}
-        onAction={onRetry}
-      />
-    );
-  }
   if (status.kind === 'empty') {
     return (
       <Banner
@@ -314,25 +336,11 @@ export function AccountSettingsSectionScreen({
         testID="account-settings-section-screen"
         style={[styles.screen, { backgroundColor: theme.colors.canvasGrouped }]}
       >
-        <View
-          testID="account-settings-section-header"
-          style={[styles.header, { paddingTop: insets.top + Space.sm }]}
-        >
-          <FloatingButton
-            testID="account-settings-section-back"
-            icon={ChevronLeft}
-            accessibilityLabel={t('Back', { ns: 'common' })}
-            onPress={onBack}
-          />
-          <Text
-            testID="account-settings-section-title"
-            style={[styles.title, { color: theme.colors.ink }]}
-            numberOfLines={1}
-          >
-            {translateAccountSettingsKey(t, model.titleKey)}
-          </Text>
-          <View style={styles.headerSlot} />
-        </View>
+        <AccountSettingsPageHeader testID="account-settings-section"
+          title={translateAccountSettingsKey(t, model.titleKey)} onBack={onBack}
+          status={status.kind === 'offline' || status.kind === 'error'
+            ? <SectionConnectionStatus status={status} onRetry={onRetry} />
+            : undefined} />
 
         {status.kind === 'loading' ? <SectionLoading /> : (
           <ScrollView
@@ -440,34 +448,16 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
   },
-  header: {
-    paddingHorizontal: Space.lg,
-    paddingBottom: Space.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  headerSlot: {
-    width: ControlSize.floatingButton,
-    height: ControlSize.floatingButton,
-  },
-  title: {
-    flex: 1,
-    marginHorizontal: Space.md,
-    textAlign: 'center',
-    fontSize: FontSize.title,
-    lineHeight: LineHeight.title,
-    fontWeight: FontWeight.semibold,
-  },
   content: {
     paddingHorizontal: Space.lg,
-    gap: Space.lg,
+    paddingTop: Space.sm,
+    gap: Space.xl,
   },
   groupSection: {
     gap: Space.sm,
   },
   groupTitle: {
-    paddingHorizontal: Space.xs,
+    paddingHorizontal: Space.lg,
     fontSize: FontSize.secondary,
     lineHeight: LineHeight.secondary,
     fontWeight: FontWeight.regular,

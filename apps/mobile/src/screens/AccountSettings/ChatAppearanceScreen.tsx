@@ -2,11 +2,15 @@ import React, { Fragment, useCallback, useEffect, useMemo, useRef, useState } fr
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   Check,
-  ChevronLeft,
+  Blend,
+  Droplets,
+  Type,
+  UserRound,
   ImagePlus,
   RotateCcw,
   Trash2,
 } from 'lucide-react-native';
+import { ChevronLeft } from '../../components/ui/DirectionalIcon';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -33,6 +37,7 @@ import {
   pickChatBackgroundImage,
 } from '../../features/chat-appearance/image-store';
 import { analyticsEvents } from '../../services/analytics/events';
+import { SettingsIcon } from '../../components/ui/SettingsIcon';
 import { useAppTheme } from '../../theme';
 import {
   ControlSize,
@@ -137,13 +142,14 @@ function ValuePickerSheet({
         contentContainerStyle={styles.sheetContent}
         showsVerticalScrollIndicator={false}
       >
-        <SettingsGroup>
+        <SettingsGroup density="comfortable">
           {values.map((value, index) => (
             <Fragment key={value}>
               {index > 0 ? <SettingsDivider inset="content" /> : null}
               <SettingsRow
                 testID={`chat-appearance-${kind}-${value}`}
                 title={formatValue(value)}
+                selected={value === current}
                 onPress={() => {
                   onSelect(value);
                   onClose();
@@ -427,12 +433,12 @@ export function ChatAppearanceScreen({
         </SettingsSection>
 
         <SettingsSection title={t('Wallpaper')}>
-          <SettingsGroup>
+          <SettingsGroup density="comfortable">
             <SettingsRow
               testID="chat-appearance-background"
               title={t('Background Image')}
               value={hasBackgroundImage ? t('Change Photo') : t('Choose Photo')}
-              leading={<ImagePlus size={IconSize.sm} color={theme.colors.inkSecondary} />}
+              leading={<SettingsIcon icon={ImagePlus} tone="neutral" size={20} strokeWidth={1.75} />}
               showChevron
               onPress={() => { void handlePickBackground(); }}
             />
@@ -442,7 +448,8 @@ export function ChatAppearanceScreen({
                 <SettingsRow
                   testID="chat-appearance-remove-background"
                   title={t('Remove Photo')}
-                  leading={<Trash2 size={IconSize.sm} color={theme.colors.bad} />}
+                  destructive
+                  leading={<SettingsIcon icon={Trash2} tone="neutral" size={20} strokeWidth={1.75} />}
                   onPress={handleRemoveBackground}
                 />
               </>
@@ -450,6 +457,7 @@ export function ChatAppearanceScreen({
             <SettingsDivider inset="content" />
             <SettingsRow
               testID="chat-appearance-blur"
+              leading={<SettingsIcon icon={Droplets} tone="neutral" size={20} strokeWidth={1.75} />}
               title={t('Blur')}
               value={t('{{value}} px', { value: Math.round(draftAppearance.background.blur) })}
               showChevron
@@ -460,7 +468,7 @@ export function ChatAppearanceScreen({
         </SettingsSection>
 
         <SettingsSection title={t('Bubbles')}>
-          <SettingsGroup>
+          <SettingsGroup density="comfortable">
             <SettingsRow layout="column">
               <Text style={[styles.rowTitle, { color: theme.colors.ink }]}>{t('Bubble Style')}</Text>
               <SegmentedTabs
@@ -479,6 +487,7 @@ export function ChatAppearanceScreen({
             <SettingsDivider inset="content" />
             <SettingsRow
               testID="chat-appearance-opacity"
+              leading={<SettingsIcon icon={Blend} tone="neutral" size={20} strokeWidth={1.75} />}
               title={t('Bubble Opacity')}
               value={t('{{value}}%', {
                 value: Math.round(draftAppearance.bubbles.opacity * 100),
@@ -490,9 +499,10 @@ export function ChatAppearanceScreen({
         </SettingsSection>
 
         <SettingsSection title={t('Chat Details')}>
-          <SettingsGroup>
+          <SettingsGroup density="comfortable">
             <SettingsRow
               title={t('Show Agent Avatar')}
+              leading={<SettingsIcon icon={UserRound} tone="neutral" size={20} strokeWidth={1.75} />}
               trailing={(
                 <ThemedSwitch
                   testID="chat-appearance-agent-avatar"
@@ -505,6 +515,7 @@ export function ChatAppearanceScreen({
             <SettingsDivider inset="content" />
             <SettingsRow
               testID="chat-appearance-font-size"
+              leading={<SettingsIcon icon={Type} tone="neutral" size={20} strokeWidth={1.75} />}
               title={t('Chat Font Size')}
               value={String(draftChatFontSize)}
               showChevron
@@ -513,11 +524,11 @@ export function ChatAppearanceScreen({
           </SettingsGroup>
         </SettingsSection>
 
-        <SettingsGroup>
+        <SettingsGroup density="comfortable">
           <SettingsRow
             testID="chat-appearance-reset"
             title={t('Reset to Default')}
-            leading={<RotateCcw size={IconSize.sm} color={theme.colors.inkSecondary} />}
+            leading={<SettingsIcon icon={RotateCcw} tone="neutral" size={20} strokeWidth={1.75} />}
             onPress={handleReset}
           />
         </SettingsGroup>
@@ -582,7 +593,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1 },
   header: {
     paddingHorizontal: Space.lg,
-    paddingBottom: Space.md,
+    paddingBottom: Space.lg,
     flexDirection: 'row',
     alignItems: 'center',
   },
@@ -600,11 +611,12 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: Space.lg,
+    paddingTop: Space.sm,
     gap: Space.xl,
   },
   section: { gap: Space.sm },
   sectionTitle: {
-    paddingHorizontal: Space.xs,
+    paddingHorizontal: Space.lg,
     fontSize: FontSize.secondary,
     lineHeight: LineHeight.secondary,
     fontWeight: FontWeight.regular,

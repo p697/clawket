@@ -79,3 +79,64 @@ describe('Agent usage model', () => {
     expect(formatUsageCost(0.01234)).toBe('$0.0123');
   });
 });
+
+describe('Agent usage presentation model', () => {
+  const {
+    buildUsageDailySeries,
+    buildUsageSegments,
+    computeCacheHitRate,
+    formatUsageDayLabel,
+    rankUsageModels,
+    resolveUsageMeasure,
+  } = jest.requireActual<typeof import('./usage-model')>('./usage-model');
+
+  it('leads with dollars only for a priced, non-zero range', () => {
+    const priced = buildUsageSummary(usage, cost);
+    expect(resolveUsageMeasure(priced, true)).toBe('cost');
+    expect(resolveUsageMeasure(priced, false)).toBe('tokens');
+    expect(resolveUsageMeasure(buildUsageSummary(usage, { ...cost, costPresentation: { mode: 'unknown' } }), true)).toBe('tokens');
+    expect(resolveUsageMeasure(buildUsageSummary(usage, { ...cost, costPresentation: { mode: 'included' } }), true)).toBe('tokens');
+    const free = buildUsageSummary({ ...usage, totals: { ...totals, totalCost: 0 } }, { totals: { ...totals, totalCost: 0 } });
+    expect(resolveUsageMeasure(free, true)).toBe('tokens');
+  });
+
+  it('orders priced segments by token price and token segments by flow', () => {
+    expect(buildUsageSegments(totals, 'cost').map((segment) => segment.key)).toEqual(['output', 'input', 'cacheWrite', 'cacheRead']);
+    expect(buildUsageSegments(totals, 'tokens')).toEqual([
+      { key: 'input', value: 800 },
+      { key: 'output', value: 200 },
+      { key: 'cacheRead', value: 0 },
+      { key: 'cacheWrite', value: 0 },
+    ]);
+    expect(buildUsageSegments(null, 'cost')).toEqual([]);
+  });
+
+  it('computes the cache hit rate from prompt tokens only', () => {
+    expect(computeCacheHitRate({ ...totals, input: 12_400, cacheRead: 58_900 })).toBe(83);
+    expect(computeCacheHitRate({ ...totals, input: 0, cacheRead: 0 })).toBeNull();
+    expect(computeCacheHitRate(null)).toBeNull();
+  });
+
+  it('pads the daily series to the full range and marks today', () => {
+    const summary = buildUsageSummary(usage, cost);
+    const series = buildUsageDailySeries(summary.daily, { startDate: '2026-09-03', endDate: '2026-09-05' }, 'tokens', '2026-09-05');
+    expect(series).toEqual([
+      { date: '2026-09-03', value: 0, today: false },
+      { date: '2026-09-04', value: 900, today: false },
+      { date: '2026-09-05', value: 1_000, today: true },
+    ]);
+    expect(buildUsageDailySeries(summary.daily, { startDate: '2026-09-04', endDate: '2026-09-05' }, 'cost', '2026-09-05').map((point) => point.value))
+      .toEqual([1, 1.25]);
+    expect(buildUsageDailySeries(summary.daily, { startDate: 'bad', endDate: '2026-09-05' }, 'cost', '2026-09-05')).toEqual([]);
+    expect(formatUsageDayLabel('2026-09-05')).toBe('9/5');
+    expect(formatUsageDayLabel('nope')).toBe('nope');
+  });
+
+  it('ranks models by the leading measure and formats a zero cost plainly', () => {
+    const cheap = { provider: 'openai', model: 'mini', count: 9, totals: { ...totals, totalTokens: 5_000, totalCost: 0.1 } };
+    const ranked = rankUsageModels([cheap, { provider: 'openai', model: 'gpt-5', count: 4, totals }], 'cost');
+    expect(ranked.map((entry) => entry.model)).toEqual(['gpt-5', 'mini']);
+    expect(rankUsageModels(ranked, 'tokens').map((entry) => entry.model)).toEqual(['mini', 'gpt-5']);
+    expect(formatUsageCost(0)).toBe('$0.00');
+  });
+});

@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { ChevronLeft } from 'lucide-react-native';
+import { ChevronLeft } from '../../components/ui/DirectionalIcon';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -18,12 +18,17 @@ type AccountSettingsPageHeaderProps = Readonly<{
   title: string;
   onBack: () => void;
   testID: string;
+  rightContent?: React.ReactNode;
+  /** Connection state; the title yields its slot so the header never grows. */
+  status?: React.ReactNode;
 }>;
 
 export function AccountSettingsPageHeader({
   title,
   onBack,
   testID,
+  rightContent,
+  status,
 }: AccountSettingsPageHeaderProps): React.JSX.Element {
   const { t } = useTranslation('common');
   const { theme } = useAppTheme();
@@ -43,13 +48,18 @@ export function AccountSettingsPageHeader({
           onPress={onBack}
         />
       </View>
-      <Text
-        numberOfLines={1}
-        style={[styles.title, { color: theme.colors.ink }]}
-      >
-        {title}
-      </Text>
-      <View style={styles.sideSlot} />
+      {status ? (
+        <View testID={`${testID}-header-status`} style={styles.status}>{status}</View>
+      ) : (
+        <Text
+          testID={`${testID}-title`}
+          numberOfLines={2}
+          style={[styles.title, { color: theme.colors.ink }]}
+        >
+          {title}
+        </Text>
+      )}
+      <View style={[styles.sideSlot, styles.rightSlot]}>{rightContent}</View>
     </View>
   );
 }
@@ -57,13 +67,20 @@ export function AccountSettingsPageHeader({
 const styles = StyleSheet.create({
   header: {
     paddingHorizontal: Space.lg,
-    paddingBottom: Space.md,
+    paddingBottom: Space.lg,
     flexDirection: 'row',
     alignItems: 'center',
   },
   sideSlot: {
     width: ControlSize.settingsRow,
     alignItems: 'flex-start',
+  },
+  rightSlot: { alignItems: 'flex-end' },
+  status: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   title: {
     flex: 1,

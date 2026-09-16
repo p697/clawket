@@ -167,6 +167,7 @@ describe('Clawket 3.0 theme tokens', () => {
       pill: 40,
       floatingButton: 44,
       settingsRow: 52,
+      settingsRowComfortable: 64,
       rosterRow: 88,
     });
     expect(Motion).toEqual({

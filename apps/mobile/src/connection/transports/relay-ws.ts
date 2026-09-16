@@ -70,8 +70,8 @@ export class RelayWsTransport extends BaseWebSocketTransport {
   }
 
   /** Backend rejection retains the same backoff as a failed socket attempt. */
-  public retryHandshake(): void {
-    this.forceReconnect(undefined, 'Backend handshake failed');
+  public retryHandshake(minimumDelayMs = 0): void {
+    this.forceReconnect(undefined, 'Backend handshake failed', minimumDelayMs);
   }
 
   protected handleSocketOpen(): void {

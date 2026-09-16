@@ -11,6 +11,7 @@ import { Bot, MonitorSmartphone, Plus, Search, UserRound } from 'lucide-react-na
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { YOUMIND_SPRITE_ENTRY_VISIBLE } from '../../config/features';
 import {
   getConnectionRuntime,
   useConnections,
@@ -18,6 +19,7 @@ import {
 } from '../../connection';
 import { Banner } from '../../components/ui/Banner';
 import { Button } from '../../components/ui/Button';
+import { ConnectionStatusPill } from '../../components/ui/ConnectionStatusPill';
 import { CompositionSafeBottomSheetTextInput } from '../../components/ui/CompositionSafeBottomSheetTextInput';
 import { ConfirmationModal } from '../../components/ui/ConfirmationModal';
 import { FloatingButton, FLOATING_PRIMARY_BUTTON_SIZE, type FloatingButtonBadge } from '../../components/ui/FloatingButton';
@@ -85,6 +87,7 @@ export type RosterViewProps = Readonly<{
   onOpenLockedRow: (row: RosterDisplayRow) => void;
   onLongPressRow?: (row: RosterDisplayRow) => void;
   onRefresh: () => MaybePromise;
+  onReconnect?: () => MaybePromise;
   onGraceAction?: () => void;
   onOpenPro?: () => void;
 }>;
@@ -180,7 +183,7 @@ function RosterAddChoices({
           testID="roster-action-add_connection"
           icon={MonitorSmartphone}
           title={t('Add Connection', { ns: 'config' })}
-          description={t('Connect OpenClaw, Hermes or YouMind Sprite', { ns: 'config' })}
+          description={t(YOUMIND_SPRITE_ENTRY_VISIBLE ? 'Connect OpenClaw, Hermes or YouMind Sprite' : 'Connect OpenClaw or Hermes', { ns: 'config' })}
           locked={addConnectionLocked}
           onPress={() => onPress(action)}
         />
@@ -199,13 +202,14 @@ function resolveAccountBadge(attentionCount: number): FloatingButtonBadge | unde
 function RosterHeader({
   accountBadge,
   showProEntry,
+  status,
   onOpenAccount,
   onOpenPro,
   onSearch,
 }: Pick<
   RosterViewProps,
   'accountBadge' | 'showProEntry' | 'onOpenAccount' | 'onOpenPro' | 'onSearch'
->): React.JSX.Element {
+> & Readonly<{ status?: React.ReactNode }>): React.JSX.Element {
   const { t } = useTranslation(['common', 'config']);
 
   return (
@@ -227,6 +231,10 @@ function RosterHeader({
           />
         ) : null}
       </View>
+      {/* The empty centre is where connection state lives: it never pushes the list. */}
+      <View testID="roster-header-status" pointerEvents="box-none" style={styles.headerStatusSlot}>
+        {status}
+      </View>
       <View style={styles.headerActions}>
         <FloatingButton
           testID="roster-search"
@@ -244,32 +252,85 @@ function RosterLoading(): React.JSX.Element {
   return <LoadingState testID="roster-loading" message={t('Loading agents')} pose="connecting" />;
 }
 
-function RosterBanners({
+/**
+ * Connection state in the header centre. The slot is narrow (account, Pro and
+ * search share the row), so the capsule carries the glyph plus one action
+ * word; the full status stays in the accessibility label.
+ */
+function RosterConnectionStatus({
   state,
-  graceBanner,
   showOfflineBanner,
   recovering,
   showErrorBanner,
   onRefresh,
+  onReconnect,
+}: Pick<
+  RosterViewProps,
+  | 'state'
+  | 'recovering'
+  | 'showOfflineBanner'
+  | 'showErrorBanner'
+  | 'onRefresh'
+  | 'onReconnect'
+>): React.JSX.Element | null {
+  const { t } = useTranslation('common');
+  const offline = showOfflineBanner ?? state === 'offline';
+  const error = showErrorBanner ?? state === 'error';
+  const reconnect = () => { void (onReconnect ?? onRefresh)(); };
+
+  if (recovering) {
+    return (
+      <ConnectionStatusPill
+        testID="roster-reconnecting"
+        placement="inline"
+        status="reconnecting"
+        message={t('Reconnecting…')}
+      />
+    );
+  }
+  if (offline) {
+    return (
+      <ConnectionStatusPill
+        testID="roster-offline-banner"
+        placement="inline"
+        status="offline"
+        actionLabel={t('Reconnect')}
+        accessibilityLabel={`${t('Offline · reconnecting')}, ${t('Reconnect')}`}
+        onAction={reconnect}
+      />
+    );
+  }
+  if (error) {
+    return (
+      <ConnectionStatusPill
+        testID="roster-error-banner"
+        placement="inline"
+        status="error"
+        actionLabel={t('Retry')}
+        accessibilityLabel={`${t('Connection unavailable')}, ${t('Retry')}`}
+        onAction={reconnect}
+      />
+    );
+  }
+  return null;
+}
+
+function RosterBanners({
+  state,
+  graceBanner,
   onGraceAction,
   onOpenPro,
 }: Pick<
   RosterViewProps,
   | 'state'
   | 'graceBanner'
-  | 'recovering'
-  | 'showOfflineBanner'
-  | 'showErrorBanner'
-  | 'onRefresh'
   | 'onGraceAction'
   | 'onOpenPro'
 >): React.JSX.Element | null {
   const { t } = useTranslation('common');
-  const offline = showOfflineBanner ?? state === 'offline';
-  const error = showErrorBanner ?? state === 'error';
   const permission = state === 'permission';
 
-  if (!graceBanner && !recovering && !offline && !error && !permission) return null;
+  if (!graceBanner && !permission) return null;
 
   return (
     <View testID="roster-banners" style={styles.banners}>
@@ -279,24 +340,6 @@ function RosterBanners({
           message={graceBanner.message}
           actionLabel={graceBanner.actionLabel}
           onAction={onGraceAction}
-        />
-      ) : null}
-      {recovering ? <Banner testID="roster-reconnecting" tone="neutral" message={t('Reconnecting…')} /> : null}
-      {offline ? (
-        <Banner
-          testID="roster-offline-banner"
-          message={t('Offline · reconnecting')}
-          actionLabel={t('Reconnect')}
-          onAction={() => { void onRefresh(); }}
-        />
-      ) : null}
-      {error ? (
-        <Banner
-          testID="roster-error-banner"
-          tone="bad"
-          message={t('Connection unavailable')}
-          actionLabel={t('Retry')}
-          onAction={() => { void onRefresh(); }}
         />
       ) : null}
       {permission ? (
@@ -329,6 +372,7 @@ export function RosterView({
   onOpenLockedRow,
   onLongPressRow,
   onRefresh,
+  onReconnect,
   onGraceAction,
   onOpenPro,
 }: RosterViewProps): React.JSX.Element {
@@ -365,7 +409,7 @@ export function RosterView({
       && (showOfflineBanner ?? state === 'offline');
     const open = item.locked ? onOpenLockedRow : onOpenRow;
     const timeLabel = relativeTime(
-      item.cached ? item.syncedAt : item.updatedAt,
+      item.cached ? item.syncedAt : item.lastActivityAt,
       translateRelativeTime,
     );
     return (
@@ -376,7 +420,10 @@ export function RosterView({
         avatarName={item.avatarName}
         emoji={item.emoji}
         avatarUrl={item.avatarUrl}
-        preview={item.subtitle?.label ?? item.preview ?? t('No activity yet')}
+        preview={!activeConnectionOffline && item.working
+          ? item.activity === 'thinking' ? t('Thinking…', { ns: 'chat' })
+            : item.activity === 'tool' ? t('Using tool', { ns: 'chat' }) : t('Working')
+          : item.subtitle?.label ?? item.preview ?? t('No activity yet')}
         pinned={item.kind === 'pinned_session'}
         sessionKind={item.sessionKind}
         avatarStatus={activeConnectionOffline ? 'offline' : item.working ? 'working' : 'idle'}
@@ -410,6 +457,16 @@ export function RosterView({
         <RosterHeader
           accountBadge={accountBadge}
           showProEntry={showProEntry}
+          status={(
+            <RosterConnectionStatus
+              state={state}
+              recovering={recovering}
+              showOfflineBanner={showOfflineBanner}
+              showErrorBanner={showErrorBanner}
+              onRefresh={onRefresh}
+              onReconnect={onReconnect}
+            />
+          )}
           onOpenAccount={onOpenAccount}
           onOpenPro={onOpenPro}
           onSearch={onSearch}
@@ -426,6 +483,7 @@ export function RosterView({
           keyExtractor={(item) => item.key}
           renderItem={renderRow}
           automaticallyAdjustContentInsets={false}
+          contentInsetAdjustmentBehavior="never"
           contentContainerStyle={[
             styles.listContent,
             contentInsets,
@@ -435,10 +493,6 @@ export function RosterView({
             <RosterBanners
               state={state}
               graceBanner={graceBanner}
-              recovering={recovering}
-              showOfflineBanner={showOfflineBanner}
-              showErrorBanner={showErrorBanner}
-              onRefresh={onRefresh}
               onGraceAction={onGraceAction}
               onOpenPro={onOpenPro}
             />
@@ -452,6 +506,7 @@ export function RosterView({
             <RefreshControl
               testID="roster-refresh-control"
               refreshing={refreshing}
+              progressViewOffset={contentInsets.paddingTop}
               tintColor={theme.colors.inkSecondary}
               colors={[theme.colors.inkSecondary]}
               onRefresh={() => { void onRefresh(); }}
@@ -507,6 +562,7 @@ export function RosterScreen({
   const connections = useConnections();
   const roster = useRoster();
   const [refreshing, setRefreshing] = useState(false);
+  const reconnectInFlight = useRef(false);
   const [addVisible, setAddVisible] = useState(false);
   const afterAddCloseRef = useRef<(() => void) | undefined>(undefined);
   const [actionRow, setActionRow] = useState<RosterDisplayRow | null>(null);
@@ -515,10 +571,11 @@ export function RosterScreen({
   const [renameDraft, setRenameDraft] = useState('');
   const [renaming, setRenaming] = useState(false);
   const rows = useMemo(() => buildRosterRows(roster, {
+    runActivities: connections.runActivities,
     ...(pinnedSessionKeys ? { pinnedSessionKeys } : {}),
     ...(agentPreferences ? { agentPreferences } : {}),
     ...(canAccessAgent ? { canAccessAgent } : {}),
-  }), [agentPreferences, canAccessAgent, pinnedSessionKeys, roster]);
+  }), [agentPreferences, canAccessAgent, pinnedSessionKeys, roster, connections.runActivities]);
   const allRowsLocked = rows.length > 0 && rows.every((row) => row.locked);
   const state = resolveRosterPageState({
     initialized: connections.initialized,
@@ -544,6 +601,21 @@ export function RosterScreen({
       setRefreshing(false);
     }
   }, [refreshing]);
+
+  const reconnect = useCallback(async () => {
+    const connectionId = connections.activeConnectionId;
+    if (!connectionId || reconnectInFlight.current) return;
+    reconnectInFlight.current = true;
+    try {
+      // A button retry is not a pull gesture. The runtime owns recovery UI and
+      // opens a fresh socket without expanding iOS RefreshControl's top inset.
+      await getConnectionRuntime().reconnectConnection(connectionId);
+    } catch {
+      // ConnectionRuntime publishes the actionable error; keep the retry usable.
+    } finally {
+      reconnectInFlight.current = false;
+    }
+  }, [connections.activeConnectionId]);
 
   const addActions = useMemo(
     () => assembleRosterAddActions({ canCreateAgent: canCreateAgent && Boolean(onCreateAgent) }),
@@ -659,6 +731,7 @@ export function RosterScreen({
         onOpenLockedRow={onOpenLockedRow}
         onLongPressRow={handleLongPressRow}
         onRefresh={refresh}
+        onReconnect={reconnect}
         onGraceAction={onGraceAction}
         onOpenPro={onOpenPro}
       />
@@ -785,6 +858,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Space.sm,
+  },
+  headerStatusSlot: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: Space.sm,
   },
   accountActions: {
     flexDirection: 'row',

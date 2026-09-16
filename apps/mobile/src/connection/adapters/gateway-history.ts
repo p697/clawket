@@ -1,5 +1,6 @@
 import type { ChatMessage } from '@clawket/agent-protocol';
 import { ChatCacheService, type CachedMessage } from '../../services/chat-cache';
+import { readMalformedToolName, stableMessageId, stripCliResumeContext } from '../../utils/chat-message';
 
 export type GatewayHistoryCache = {
   load(
@@ -9,6 +10,10 @@ export type GatewayHistoryCache = {
     limit: number,
   ): Promise<ChatMessage[]>;
 };
+
+// Cache-only provenance; never sent over the wire. Some older Gateways supply
+// page-relative fallback IDs, so keep the original projected row ID as well.
+type CachedHistoryMessage = ChatMessage & { cacheRowId?: string };
 
 export const DEFAULT_GATEWAY_HISTORY_CACHE: GatewayHistoryCache = {
   async load(connectionId, agentId, sessionKey, limit) {
@@ -28,6 +33,14 @@ export function mapGatewayHistoryMessage(
   const role = normalizeRole(value.role);
   const timestampMs = normalizeTimestamp(value.timestampMs ?? value.timestamp ?? value.ts);
   const content = value.content;
+  const rawKey = readNonEmptyString(value.idempotencyKey)
+    ?? (isRecord(value.__openclaw) ? readNonEmptyString(value.__openclaw.idempotencyKey) : undefined);
+  // OpenClaw persists its user transcript event under `${runId}:user`.
+  // Normalize only our generated send-key format with explicit OpenClaw metadata;
+  // arbitrary external/Hermes identities remain opaque.
+  const idempotencyKey = role === 'user' && isRecord(value.__openclaw)
+    && rawKey && /^\d{13}_[a-z0-9]{1,8}:user$/.test(rawKey)
+    ? rawKey.slice(0, -5) : rawKey;
   const id = readNonEmptyString(value.id)
     || readNonEmptyString(value.messageId)
     || (isRecord(value.__openclaw) ? readNonEmptyString(value.__openclaw.id) : undefined)
@@ -35,14 +48,20 @@ export function mapGatewayHistoryMessage(
   const message: ChatMessage = {
     id,
     role,
-    text: extractHistoryText(content),
+    text: role === 'user' && isRecord(value.__openclaw) && value.__openclaw.importedFrom === 'claude-cli'
+      ? stripCliResumeContext(extractHistoryText(content)) : extractHistoryText(content),
     ...(timestampMs !== undefined ? { timestampMs } : {}),
-    ...(readNonEmptyString(value.idempotencyKey)
-      ? { idempotencyKey: readNonEmptyString(value.idempotencyKey) }
-      : {}),
+    ...(idempotencyKey ? { idempotencyKey } : {}),
     ...(readNonEmptyString(value.provider) ? { provider: readNonEmptyString(value.provider) } : {}),
     ...(readNonEmptyString(value.model) ? { model: readNonEmptyString(value.model) } : {}),
   };
+  const malformedTool = role === 'assistant' && isRecord(value.__openclaw)
+    && value.__openclaw.importedFrom === 'claude-cli' ? readMalformedToolName(message.text) : undefined;
+  if (malformedTool && message.text.trimEnd().endsWith('</function_results>')) {
+    return { ...message, role: 'tool', text: '', tool: {
+      name: malformedTool, callId: `unverified:${id}`, status: 'unknown', input: message.text,
+    } };
+  }
   const usage = normalizeUsage(value.usage);
   if (usage) message.usage = usage;
   const attachments = extractHistoryAttachments(content);
@@ -52,10 +71,122 @@ export function mapGatewayHistoryMessage(
   return message;
 }
 
+/** CLI history may coalesce tool calls and results inside assistant/user content. */
+export function mapGatewayHistoryMessages(sessionKey: string, values: unknown[]): ChatMessage[] {
+  const messages: ChatMessage[] = [];
+  const names = new Map<string, string>();
+  values.forEach((value, index) => {
+    if (!isRecord(value) || !Array.isArray(value.content)
+        || (value.role !== 'assistant' && value.role !== 'user')) {
+      const mapped = mapGatewayHistoryMessage(sessionKey, value, index);
+      if (mapped) messages.push(mapped);
+      return;
+    }
+    const typeOf = (block: unknown) => isRecord(block) ? String(block.type ?? '').toLowerCase().replace(/_/g, '') : '';
+    const hasTools = value.content.some(block => ['toolcall', 'tooluse', 'toolresult'].includes(typeOf(block)));
+    if (!hasTools) {
+      const mapped = mapGatewayHistoryMessage(sessionKey, value, index);
+      if (mapped) messages.push(mapped);
+      return;
+    }
+    const base = mapGatewayHistoryMessage(sessionKey, { ...value, content: [] }, index)!;
+    const plain = value.content.filter(block => !['toolcall', 'tooluse', 'toolresult'].includes(typeOf(block)));
+    if (plain.length) {
+      const mapped = mapGatewayHistoryMessage(sessionKey, { ...value, content: plain }, index);
+      if (mapped) messages.push(mapped);
+    }
+    value.content.forEach((block, blockIndex) => {
+      if (!isRecord(block)) return;
+      const type = typeOf(block);
+      const callId = readNonEmptyString(block.tool_use_id) ?? readNonEmptyString(block.toolCallId)
+        ?? readNonEmptyString(block.tool_call_id) ?? readNonEmptyString(block.id);
+      if (!callId) return;
+      if (type === 'toolcall' || type === 'tooluse') {
+        const name = readNonEmptyString(block.name) ?? readNonEmptyString(block.toolName) ?? 'tool';
+        names.set(callId, name);
+        const mapped = mapGatewayHistoryMessage(sessionKey, { ...value, role: 'assistant',
+          id: `${base.id}:call:${blockIndex}`, content: [{ ...block, type: 'toolCall', id: callId, name }] }, index);
+        if (mapped) messages.push(mapped);
+      } else if (type === 'toolresult') {
+        const mapped = mapGatewayHistoryMessage(sessionKey, { ...value, role: 'toolResult',
+          id: `${base.id}:result:${blockIndex}`, toolCallId: callId,
+          toolName: readNonEmptyString(block.name) ?? names.get(callId) ?? 'tool',
+          content: block.content ?? block.output ?? block.result ?? '',
+          isError: block.is_error === true || block.isError === true,
+        }, index);
+        if (mapped) messages.push(mapped);
+      }
+    });
+  });
+  return messages;
+}
+
+/** OpenClaw CLI imports can persist both tool-separated text and a final rollup. */
+export function preserveOpenClawCliHistorySegments(
+  sessionKey: string, values: unknown[], messages: ChatMessage[],
+): ChatMessage[] {
+  const redundantIds = new Set<string>();
+  const finalMetadata = new Map<string, ChatMessage>();
+  let userSendKey: string | undefined;
+  let cliSessionId: string | undefined;
+  let segments: ChatMessage[] = [];
+  const normalized = (text: string) => text.replace(/\s+/g, ' ').trim();
+  values.forEach((value, index) => {
+    if (!isRecord(value)) return;
+    const meta = isRecord(value.__openclaw) ? value.__openclaw : {};
+    const message = mapGatewayHistoryMessage(sessionKey, value, index);
+    if (!message) return;
+    if (value.role === 'user' && message.text.trim()) {
+      userSendKey = readNonEmptyString(meta.idempotencyKey)?.replace(/:user$/, '');
+      cliSessionId = undefined;
+      segments = [];
+      return;
+    }
+    if (value.role !== 'assistant') return;
+    if (meta.importedFrom === 'claude-cli') {
+      const source = readNonEmptyString(meta.cliSessionId);
+      if (cliSessionId && cliSessionId !== source) segments = [];
+      cliSessionId = source;
+      if (message.role === 'assistant' && message.text.trim()) segments.push(message);
+      return;
+    }
+    const textOnly = typeof value.content === 'string' || (Array.isArray(value.content)
+      && value.content.every(block => isRecord(block) && block.type === 'text'));
+    if (userSendKey && cliSessionId && segments.length && textOnly
+      && value.provider === 'claude-cli' && meta.idempotencyKey === `cli-assistant:${userSendKey}`
+      && normalized(message.text) === normalized(segments.map(segment => segment.text).join('\n\n'))) {
+      redundantIds.add(message.id);
+      finalMetadata.set(segments[segments.length - 1].id, message);
+    }
+    segments = [];
+  });
+  return messages.filter(message => !redundantIds.has(message.id)).map(message => {
+    const final = finalMetadata.get(message.id);
+    return final ? { ...message, usage: final.usage ?? message.usage } : message;
+  });
+}
+
 export function mergeGatewayHistory(
   remoteMessages: ChatMessage[],
   cachedMessages: ChatMessage[],
+  options?: { openclawUserEchoes?: boolean; hermesToolAliases?: unknown },
 ): ChatMessage[] {
+  if (isRecord(options?.hermesToolAliases)) {
+    const aliases = new Map(Object.entries(options.hermesToolAliases).slice(0, 512)
+      .filter((entry): entry is [string, string] => entry[0].length > 0 && entry[0].length <= 256
+        && typeof entry[1] === 'string' && entry[1].length > 0 && entry[1].length <= 256));
+    cachedMessages = cachedMessages.map(message => {
+      const callId = message.tool?.callId && aliases.get(message.tool.callId);
+      return callId && remoteMessages.some(remote => remote.tool?.callId === callId
+        && remote.role === message.role && remote.tool.name === message.tool?.name)
+        ? { ...message, tool: { ...message.tool!, callId } } : message;
+    });
+  }
+  if (options?.openclawUserEchoes) {
+    cachedMessages = cachedMessages.map((message) => message.role === 'user'
+      && message.idempotencyKey && /^\d{13}_[a-z0-9]{1,8}:user$/.test(message.idempotencyKey)
+      ? { ...message, idempotencyKey: message.idempotencyKey.slice(0, -5) } : message);
+  }
   const unique = (messages: ChatMessage[]) => {
     const seen = new Set<string>();
     return messages.filter((message) => {
@@ -69,6 +200,14 @@ export function mergeGatewayHistory(
   if (cachedMessages.length === 0) return remoteMessages;
   if (remoteMessages.length === 0) return cachedMessages;
 
+  // A persisted echo can omit image bytes. Recover local attachments only by
+  // exact send identity, never by caption/time (two sends may share both).
+  remoteMessages = remoteMessages.map((remote) => {
+    if (remote.role !== 'user' || !remote.idempotencyKey || remote.attachments?.length) return remote;
+    const local = cachedMessages.find((cached) => cached.role === 'user'
+      && cached.idempotencyKey === remote.idempotencyKey && cached.attachments?.length);
+    return local ? { ...remote, attachments: local.attachments } : remote;
+  });
   const remoteIds = new Set(remoteMessages.map((message) => message.id));
   const remoteIdempotencyKeys = new Set(
     remoteMessages
@@ -81,27 +220,59 @@ export function mergeGatewayHistory(
   const earliestRemoteTimestamp = remoteTimestamps.length > 0
     ? Math.min(...remoteTimestamps)
     : undefined;
+  const precedingUsers = (messages: ChatMessage[]) => {
+    let user: ChatMessage | undefined;
+    return messages.map(message => {
+      if (message.role === 'user') user = message;
+      return user;
+    });
+  };
+  const remoteUsers = precedingUsers(remoteMessages);
+  const cachedUsers = precedingUsers(cachedMessages);
+  const sameUserTurn = (cached: ChatMessage | undefined, remote: ChatMessage | undefined) => {
+    // A truncated page can omit its user anchor. Keep the existing bounded
+    // fallback there; known different turns must never acknowledge each other.
+    if (!cached || !remote) return true;
+    if (cached.idempotencyKey && remote.idempotencyKey) return cached.idempotencyKey === remote.idempotencyKey;
+    if (cached.id === remote.id) return true;
+    if (cached.text !== remote.text || remote.timestampMs === undefined) return false;
+    const rowId = (cached as CachedHistoryMessage).cacheRowId ?? cached.id;
+    return rowId === stableMessageId('user', remote.timestampMs, remote.text)
+      || (cached.timestampMs !== undefined && Math.abs(cached.timestampMs - remote.timestampMs) <= 2_000);
+  };
   const matchedRemote = new Set<number>();
-  const optimisticCacheTail = cachedMessages.filter((message) => {
+  const optimisticCacheTail = cachedMessages.filter((message, cachedIndex) => {
     if (remoteIds.has(message.id)) return false;
     if (message.tool?.callId && remoteMessages.some((remote) => remote.tool?.callId === message.tool?.callId
       && remote.role === message.role)) return false;
     if (message.idempotencyKey && remoteIdempotencyKeys.has(message.idempotencyKey)) return false;
     // Local optimistic IDs/timestamps differ from the Gateway's persisted IDs.
     // Match copies one-to-one so a repeated user message is never collapsed.
-    const optimisticUser = message.role === 'user' && /^usr_\d+/.test(message.id);
-    const optimisticAssistant = message.role === 'assistant' && /^(final_|abort_)/.test(message.id);
+    const cacheRowId = (message as CachedHistoryMessage).cacheRowId ?? message.id;
+    const optimisticUser = message.role === 'user' && /^usr_\d+/.test(cacheRowId);
+    const optimisticAssistant = message.role === 'assistant' && /^(final_|abort_|stream_segment_)/.test(cacheRowId);
+    // Old cache-only finals were parsed again as history, baking the local
+    // completion time into a fresh h_ ID. They have no authoritative source ID.
+    const legacyProjectedAssistant = message.role === 'assistant'
+      && message.id === cacheRowId && /^h_assistant_/.test(cacheRowId);
     const optimistic = optimisticUser || optimisticAssistant;
-    const confirmedCopy = message.id.startsWith('h_') || optimisticAssistant;
+    const confirmedCopy = cacheRowId.startsWith('h_') || optimisticAssistant;
     const canonicalIndex = remoteMessages.findIndex((remote, index) => (
       (!optimistic || !matchedRemote.has(index))
+      && (message.role !== 'assistant' || sameUserTurn(cachedUsers[cachedIndex], remoteUsers[index]))
       && (optimisticUser || confirmedCopy)
       && remote.role === message.role
+      && !(remote.idempotencyKey && message.idempotencyKey && remote.idempotencyKey !== message.idempotencyKey)
       && remote.text === message.text
       && (remote.text.length > 0 || Boolean(remote.tool?.callId && remote.tool.callId === message.tool?.callId))
       && typeof remote.timestampMs === 'number'
       && typeof message.timestampMs === 'number'
-      && Math.abs(remote.timestampMs - message.timestampMs) <= (optimistic ? 60_000 : 2_000)
+      // Older caches kept the projected server ID but a live display timestamp.
+      // Recover that exact identity without widening text-only time matching.
+      && (cacheRowId === stableMessageId(remote.role, remote.timestampMs, remote.text)
+        || Math.abs(remote.timestampMs - message.timestampMs) <= (optimistic ? 60_000 : 2_000)
+        || (legacyProjectedAssistant && cachedUsers[cachedIndex] && remoteUsers[index]
+          && Math.abs(remote.timestampMs - message.timestampMs) <= 60_000))
       && (!message.tool || remote.tool?.callId === message.tool.callId)
       && (!message.attachments?.length || remote.attachments?.length === message.attachments.length)
     ));
@@ -131,7 +302,7 @@ export function mergeGatewayHistory(
     .map(({ message }) => message);
 }
 
-function cachedMessageToChatMessage(message: CachedMessage): ChatMessage {
+function cachedMessageToChatMessage(message: CachedMessage): CachedHistoryMessage {
   const timestampMs = message.timestampMs ?? message.toolFinishedAt ?? message.toolStartedAt;
   const attachments: NonNullable<ChatMessage['attachments']> = [
     ...(message.imageUris ?? []).map((uri) => ({
@@ -147,9 +318,10 @@ function cachedMessageToChatMessage(message: CachedMessage): ChatMessage {
     })),
   ];
   return {
-    id: message.id,
+    id: readNonEmptyString(message.historyMessageId) ?? message.id,
+    cacheRowId: message.id,
     role: message.role,
-    text: message.text,
+    text: message.role === 'user' ? stripCliResumeContext(message.text) : message.text,
     ...(timestampMs !== undefined ? { timestampMs } : {}),
     ...(message.idempotencyKey ? { idempotencyKey: message.idempotencyKey } : {}),
     ...(message.modelLabel ? { model: message.modelLabel } : {}),

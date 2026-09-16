@@ -8,7 +8,6 @@ import {
   markQueuedMessageSending,
   messageQueueScopeKey,
   promoteQueuedMessage,
-  releaseMessageQueue,
   removeQueuedMessage,
   type MessageQueueState,
   type MessageQueueStore,
@@ -33,7 +32,6 @@ export type ChatMessageQueue = Readonly<{
   remove: (id: string) => QueuedMessage | null;
   promote: (id: string) => void;
   hold: () => void;
-  release: () => void;
   markSending: (id: string | null) => void;
 }>;
 
@@ -76,9 +74,6 @@ export function useChatMessageQueue({ connectionId, sessionKey, store }: Params)
     },
     hold: () => {
       resolvedStore.update(scopeRef.current, holdMessageQueue);
-    },
-    release: () => {
-      resolvedStore.update(scopeRef.current, releaseMessageQueue);
     },
     markSending: (id) => {
       resolvedStore.update(scopeRef.current, (current) => markQueuedMessageSending(current, id));

@@ -29,6 +29,7 @@ Clawket 3.0 is the session control tower for self-hosted agents: see what every 
 - **✨ YouMind Sprite chat** — A dedicated adapter provides text chat, history, streaming, and abort without treating Sprite as a Relay backend
 - **🔒 Private by design** — Relay forwards traffic without storing messages; local message caches are scoped to each connection
 - **🌐 Flexible connectivity** — Connect through Relay, a local network, Tailscale, or a custom endpoint
+- **💻 Local model chat (Preview)** — Talk to a model running on your own computer through llama.cpp, Ollama, or any OpenAI-compatible server; the conversation stays on that computer
 - **🏗️ Self-hostable** — Run your own relay infrastructure, or skip it entirely with direct LAN/Tailscale connections
 - **📦 Open source monorepo** — Mobile app (Expo/React Native), relay workers (Cloudflare), and bridge CLI — all in one repo, build from source
 
@@ -137,6 +138,28 @@ clawket pair local --backend hermes
 
 Then scan the generated QR code in the app.
 
+### Chat with a Local Model (Preview)
+
+Clawket can also chat with a model that runs on your own computer: llama.cpp, Ollama, or any server that speaks the OpenAI chat API (LM Studio, vLLM, and others). A Bridge on that computer keeps the conversation and calls the model; the Relay only forwards frames. Chat history and model API keys never leave the computer.
+
+This is a Preview feature. In the app, open Account Settings → Advanced settings, turn on Debug Mode, set Relay Environment to Preview, then add a connection and choose Local model. The published npm CLI does not include it yet, so run the Bridge from this checkout with Node.js 22:
+
+```bash
+npm ci
+npm run bridge:build
+node apps/bridge-cli/dist/index.js local-model pair --preview
+```
+
+Start your model server before pairing. The defaults expect `llama-server` on port 8080; other servers need their engine and address:
+
+| Model server | Extra flags |
+| --- | --- |
+| llama.cpp (`llama-server`, port 8080) | none |
+| Ollama | `--engine ollama --base-url http://127.0.0.1:11434` |
+| LM Studio, vLLM, or another OpenAI-compatible server | `--engine openai-compatible --base-url http://127.0.0.1:<port>` |
+
+The Local model step in the app shows the same flags for each server. Keep the command running and type the six-digit code it prints into the app; `local-model run` restores the saved connection later. Options such as endpoint files, llama.cpp presets, image input, and the current limits are documented in [docs/3.0/15-local-model.md](./docs/3.0/15-local-model.md).
+
 ### Need More Than the Default Path?
 
 - If you only want to run the mobile app, the commands above are enough.
@@ -216,6 +239,7 @@ Choose the prerequisites that match what you want to do:
 - To run the iOS app locally: macOS, Xcode, Node.js 20+, and npm
 - To run the Android app locally: Node.js 20+, npm, and Android Studio
 - To use the published bridge CLI: Node.js 20+ and npm
+- To chat with a local model (Preview): Node.js 22, this checkout, and a running llama.cpp, Ollama, or OpenAI-compatible server
 - To run relay infrastructure: a Cloudflare account
 
 ## Self-Hosting

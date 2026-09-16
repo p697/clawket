@@ -105,6 +105,7 @@ export const ControlSize = {
   pill: 40,
   floatingButton: 44,
   settingsRow: 52,
+  settingsRowComfortable: 64,
   rosterRow: 88,
 } as const;
 

@@ -170,6 +170,13 @@ jest.mock('../../services/haptics', () => ({
   triggerLightImpact: jest.fn(),
 }));
 
+const mockReleaseNotesOpened = jest.fn();
+jest.mock('../../services/analytics/events', () => ({
+  analyticsEvents: {
+    releaseNotesOpened: (...args: unknown[]) => mockReleaseNotesOpened(...args),
+  },
+}));
+
 jest.mock('../../services/photo-library', () => ({
   saveBundledImageToPhotoLibrary: (...args: unknown[]) => mockSaveBundledImage(...args),
 }));
@@ -289,6 +296,42 @@ describe('AccountSettings support screens', () => {
     expect(view.getByText('openclaw doctor')).toBeTruthy();
   });
 
+  it.each([
+    ['lan', 'lan', 'off', 'http://<lan-ip>:18789', 'ws://<lan-ip>:18789'],
+    ['tailnet', 'tailnet', 'off', 'http://<tailscale-ip>:18789', 'ws://<tailscale-ip>:18789'],
+    ['tailscale-serve', 'loopback', 'serve', null, 'wss://<magicdns-host>'],
+  ])('copies a usable %s config and an explicitly addressed OpenClaw QR command', async (topic, bind, tailscale, origin, url) => {
+    const view = render(<HelpCenterScreen onBack={jest.fn()} />);
+    fireEvent.press(view.getByTestId(`help-topic-row-${topic}`));
+    fireEvent.press(view.getByTestId(`help-command-${topic}-0`));
+    await waitFor(() => expect(mockSetStringAsync).toHaveBeenCalledTimes(1));
+    const { gateway } = JSON.parse(mockSetStringAsync.mock.calls[0][0]);
+    expect(gateway).toMatchObject({ mode: 'local', bind, tailscale: { mode: tailscale }, auth: { mode: 'token' } });
+    if (origin) expect(gateway.controlUi.allowedOrigins).toContain(origin);
+    expect(view.getByText(/merge these fields into the existing gateway configuration/)).toBeTruthy();
+    fireEvent.press(view.getByTestId(`help-command-${topic}-2`));
+    await waitFor(() => expect(mockSetStringAsync).toHaveBeenLastCalledWith(
+      `npx @p697/clawket pair local --backend openclaw --url "${url}"`,
+    ));
+  });
+
+  it('offers host diagnostics for both backends and copies the official OpenClaw update command', async () => {
+    const view = render(<HelpCenterScreen onBack={jest.fn()} />);
+    fireEvent.press(view.getByTestId('help-center-tabs-troubleshooting'));
+    fireEvent.press(view.getByTestId('help-topic-row-bridge'));
+    expect(view.getByText(/For OpenClaw and Hermes, run these checks on the host/)).toBeTruthy();
+    for (const command of ['status', 'doctor', 'logs --follow', 'start']) {
+      expect(view.getByText(`npx @p697/clawket ${command}`)).toBeTruthy();
+    }
+    fireEvent.press(view.getByTestId('help-command-bridge-2'));
+    await waitFor(() => expect(mockSetStringAsync).toHaveBeenLastCalledWith('npx @p697/clawket logs --follow'));
+    fireEvent.press(view.getByTestId('help-topic-sheet-bridge-close'));
+    fireEvent.press(view.getByTestId('help-topic-row-version'));
+    fireEvent.press(view.getByTestId('help-command-version-0'));
+    await waitFor(() => expect(mockSetStringAsync).toHaveBeenLastCalledWith('openclaw update'));
+    expect(view.getByText('openclaw gateway status')).toBeTruthy();
+  });
+
   it('opens official support links and saves the WeCom QR without a system alert', async () => {
     const onBack = jest.fn();
     const onOpenUrl = jest.fn(async () => undefined);
@@ -343,28 +386,31 @@ describe('AccountSettings support screens', () => {
     });
   });
 
-  it('renders the 3.0 history and opens the membership paywall from its final entry', () => {
+  it('renders the whole release history newest first as plain, inert entries', () => {
     const onBack = jest.fn();
-    const onOpenPaywall = jest.fn();
-    const view = render(
-      <ReleaseNotesHistoryScreen
-        onBack={onBack}
-        onOpenPaywall={onOpenPaywall}
-      />,
-    );
+    mockReleaseNotesOpened.mockClear();
+    const view = render(<ReleaseNotesHistoryScreen onBack={onBack} />);
 
-    expect(view.getByText('v3.0.0')).toBeTruthy();
-    expect(view.getByText('Clawket 3.0')).toBeTruthy();
-    expect(view.getByText('Every agent and session in one roster.')).toBeTruthy();
-    expect(view.getByText('Clawket 3.0 + Pro')).toBeTruthy();
-    expect(view.getByText('Unlimited connections, agents, management, logs, files, and search.')).toBeTruthy();
+    const versions = view.getAllByText(/^v\d+\.\d+\.\d+$/).map((node) => node.props.children.join(''));
+    expect(versions[0]).toBe('v3.0.0');
+    expect(versions).toContain('v2.1.1');
+    expect(versions[versions.length - 1]).toBe('v1.1.0');
+    expect(view.getByText('All your Agents on one screen')).toBeTruthy();
+    expect(view.queryByText('Clawket Pro')).toBeNull();
+    expect(view.getByText('YouMind Connection')).toBeTruthy();
+    expect(view.getByText('Sessions Board')).toBeTruthy();
+    expect(view.getByText('Released Apr 17, 2026')).toBeTruthy();
     expect(formatReleaseDate('not-a-date', 'en')).toBe('not-a-date');
-    expect(view.getByTestId('release-notes-entry-clawket-3-0-pro').props.accessibilityRole).toBe('button');
+    view.getAllByTestId('release-notes-entry-open-source-github').forEach((node) => expect(node.props.accessibilityRole).toBeUndefined());
+    expect(mockReleaseNotesOpened).toHaveBeenCalledWith({ release_count: 11 });
 
-    fireEvent.press(view.getByTestId('release-notes-entry-clawket-3-0-pro'));
     fireEvent.press(view.getByTestId('release-notes-back'));
-    expect(onOpenPaywall).toHaveBeenCalledWith('settingsMembershipPreview');
     expect(onBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the empty state when no release is recorded', () => {
+    const view = render(<ReleaseNotesHistoryScreen onBack={jest.fn()} releases={[]} />);
+    expect(view.getByTestId('release-notes-empty')).toBeTruthy();
   });
 
   it('keeps theme, token, control, and sheet samples interactive', () => {

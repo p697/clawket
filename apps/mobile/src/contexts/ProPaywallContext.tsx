@@ -16,6 +16,7 @@ import {
   resolveRevenueCatConfig,
   selectDefaultRevenueCatPackage,
   selectDisplayedRevenueCatPackage,
+  isRevenueCatPackagePurchaseLocked,
 } from '../services/pro-subscription';
 import { StorageService } from '../services/storage';
 import { syncAnalyticsSubscriptionContext } from '../services/analytics/subscription-context';
@@ -34,6 +35,9 @@ export type ProPaywallErrorCode =
 
 export type ProPaywallStatusCode =
   | 'purchaseSuccess'
+  | 'planChangeScheduled'
+  | 'lifetimeManageSubscription'
+  | 'purchaseUnconfirmed'
   | 'restoreSuccess';
 
 export type ProPaywallPhase =
@@ -43,10 +47,11 @@ export type ProPaywallPhase =
   | 'purchasing'
   | 'restoring'
   | 'success'
+  | 'complete'
   | 'failure';
 
 export type ProPaywallActionResult =
-  | Readonly<{ success: true; reason: null }>
+  | Readonly<{ success: true; reason: null; outcome?: 'activated' | 'scheduled'; keepOpen?: boolean }>
   | Readonly<{ success: false; reason: ProPurchaseFailureReason }>;
 
 export type ProPaywallContextType = {
@@ -72,8 +77,6 @@ export type ProPaywallContextType = {
   failureReason: ProPurchaseFailureReason | null;
   failureOperation: 'purchase' | 'restore' | null;
   hidePaywall: () => void;
-  showThreePointZeroIntro: () => boolean;
-  completeThreePointZeroIntro: () => void;
   showPaywallPreview: () => void;
   showPaywall: (feature: ProFeature) => boolean;
   requirePro: (feature: ProFeature) => boolean;
@@ -409,6 +412,15 @@ export function ProPaywallProvider({ children }: { children: React.ReactNode }):
     }
   }, [paywallPackages, previewOnly, selectedPackageId, snapshot]);
 
+  useEffect(() => {
+    if (previewOnly || blockedFeature !== 'settingsMembershipPreview' || paywallPhase !== 'ready') return;
+    const selected = paywallPackages.find((item) => item.packageIdentifier === selectedPackageId) ?? null;
+    if (!isRevenueCatPackagePurchaseLocked(selected, paywallPackages, snapshot)) return;
+    const available = paywallPackages.find((item) => !isRevenueCatPackagePurchaseLocked(item, paywallPackages, snapshot));
+    const next = available ?? selectDisplayedRevenueCatPackage(paywallPackages, snapshot);
+    if (next && next.packageIdentifier !== selectedPackageId) setSelectedPackageId(next.packageIdentifier);
+  }, [blockedFeature, paywallPackages, paywallPhase, previewOnly, selectedPackageId, snapshot]);
+
   const clearFeedback = useCallback(() => {
     setErrorCode(null);
     setStatusCode(null);
@@ -441,7 +453,7 @@ export function ProPaywallProvider({ children }: { children: React.ReactNode }):
   const showPaywall = useCallback((feature: ProFeature): boolean => {
     if (
       debugOverrideEnabled
-      || isProSubscriptionSnapshotActiveAt(snapshot, Date.now())
+      || (feature !== 'settingsMembershipPreview' && isProSubscriptionSnapshotActiveAt(snapshot, Date.now()))
       || activePaywallOperationRef.current
       || paywallModeRef.current !== null
     ) {
@@ -456,23 +468,6 @@ export function ProPaywallProvider({ children }: { children: React.ReactNode }):
     setPaywallPhase(paywallPackages.length > 0 ? 'ready' : 'loading');
     return true;
   }, [clearFeedback, debugOverrideEnabled, paywallPackages.length, snapshot]);
-
-  const showThreePointZeroIntro = useCallback((): boolean => {
-    if (activePaywallOperationRef.current || paywallModeRef.current !== null) return false;
-    operationIdRef.current += 1;
-    clearFeedback();
-    setBlockedFeature(null);
-    setPreviewOnly(false);
-    paywallModeRef.current = 'threePointZeroIntro';
-    setPaywallMode('threePointZeroIntro');
-    setPaywallPhase('ready');
-    return true;
-  }, [clearFeedback]);
-
-  const completeThreePointZeroIntro = useCallback(() => {
-    if (paywallModeRef.current !== 'threePointZeroIntro') return;
-    hidePaywall();
-  }, [hidePaywall]);
 
   const requirePro = useCallback((feature: ProFeature) => {
     if (debugOverrideEnabled || isProSubscriptionSnapshotActiveAt(snapshot, Date.now())) return true;
@@ -526,8 +521,13 @@ export function ProPaywallProvider({ children }: { children: React.ReactNode }):
     subscriptionRequestIdRef.current += 1;
     setPaywallPhase('purchasing');
     try {
-      const result = await ProSubscriptionService.purchasePro(selectedPackage.package);
+      const result = await ProSubscriptionService.purchasePro(selectedPackage.package, paywallPackages);
       const appliedSnapshot = await applySnapshot(result.snapshot);
+      if (result.outcome === 'unconfirmed') {
+        setStatusCode('purchaseUnconfirmed');
+        setPaywallPhase('complete');
+        return { success: false, reason: 'pending' };
+      }
       if (!isProSubscriptionSnapshotActiveAt(appliedSnapshot, Date.now())) {
         setErrorCode('purchaseFailed');
         setFailureReason('store_error:ENTITLEMENT_INACTIVE');
@@ -535,8 +535,13 @@ export function ProPaywallProvider({ children }: { children: React.ReactNode }):
         setPaywallPhase('failure');
         return { success: false, reason: 'store_error:ENTITLEMENT_INACTIVE' };
       }
+      if (result.outcome === 'scheduled' || result.requiresSubscriptionManagement) {
+        setStatusCode(result.outcome === 'scheduled' ? 'planChangeScheduled' : 'lifetimeManageSubscription');
+        setPaywallPhase('complete');
+        return { success: true, reason: null, outcome: result.outcome ?? 'activated', keepOpen: true };
+      }
       await showSuccessThenClose(operationId, 'purchaseSuccess');
-      return { success: true, reason: null };
+      return { success: true, reason: null, outcome: result.outcome ?? 'activated' };
     } catch (error) {
       const reason = classifyProPurchaseFailureReason(error);
       setFailureReason(reason);
@@ -651,8 +656,6 @@ export function ProPaywallProvider({ children }: { children: React.ReactNode }):
       failureReason,
       failureOperation,
       hidePaywall,
-      showThreePointZeroIntro,
-      completeThreePointZeroIntro,
       showPaywallPreview,
       showPaywall,
       requirePro,
@@ -664,7 +667,6 @@ export function ProPaywallProvider({ children }: { children: React.ReactNode }):
     }),
     [
       blockedFeature,
-      completeThreePointZeroIntro,
       debugOverrideEnabled,
       errorCode,
       failureOperation,
@@ -693,7 +695,6 @@ export function ProPaywallProvider({ children }: { children: React.ReactNode }):
       showPaywall,
       snapshot,
       statusCode,
-      showThreePointZeroIntro,
     ],
   );
 

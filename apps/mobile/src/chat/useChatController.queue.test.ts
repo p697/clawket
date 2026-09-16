@@ -1,8 +1,10 @@
 import { act, renderHook } from '@testing-library/react-native';
+import { useIsFocused } from '@react-navigation/native';
 import * as Network from 'expo-network';
 import { resolveCapabilities, type BackendKind } from '@clawket/agent-protocol';
 import { analyticsEvents } from '../services/analytics/events';
-import { MESSAGE_QUEUE_LIMIT, resetMessageQueueStore } from './messageQueue';
+import { getMessageQueueStore, messageQueueScopeKey, MESSAGE_QUEUE_LIMIT, resetMessageQueueStore } from './messageQueue';
+import * as imagePreparation from './preparePendingImagesForSend';
 import { mapAdapterSessionUpdate, useAdapterChatEvents } from './useAdapterChatEvents';
 import { useChatController } from './useChatController';
 
@@ -207,7 +209,7 @@ jest.mock('../services/analytics/events', () => ({
   },
 }));
 
-function createAdapter(backendKind: BackendKind = 'openclaw') {
+function createAdapter(backendKind: BackendKind = 'openclaw', transportKind?: string) {
   const transportKinds = { openclaw: 'relay', hermes: 'relay', 'local-model': 'relay', youmind: 'https' } as const;
   let promptSeq = 0;
   return {
@@ -216,7 +218,7 @@ function createAdapter(backendKind: BackendKind = 'openclaw') {
     connection: {
       id: `${backendKind}-connection`,
       backendKind,
-      transportKind: transportKinds[backendKind],
+      transportKind: transportKind ?? transportKinds[backendKind],
       label: backendKind,
       createdAt: 1,
       isFreeSlot: true,
@@ -290,6 +292,13 @@ function queuedRows(result: { current: any }) {
   return result.current.listData.filter((message: any) => message.delivery);
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
+}
+
 describe('useChatController message queue', () => {
   let consoleErrorSpy: jest.SpyInstance;
   const mockedAnalytics = analyticsEvents as jest.Mocked<typeof analyticsEvents>;
@@ -300,6 +309,7 @@ describe('useChatController message queue', () => {
       if (typeof message === 'string' && message.includes('react-test-renderer is deprecated')) return;
     });
     jest.clearAllMocks();
+    jest.mocked(useIsFocused).mockReturnValue(true);
     resetMessageQueueStore();
     historyMock.sessionKey = SESSION_KEY;
     historyMock.sessions = [{ key: SESSION_KEY, kind: 'direct' as const }];
@@ -323,6 +333,248 @@ describe('useChatController message queue', () => {
     });
     jest.useRealTimers();
     consoleErrorSpy.mockRestore();
+    jest.restoreAllMocks();
+  });
+
+  it('does not clear a new live turn when a foreground history refresh finishes late', async () => {
+    const refresh = deferred<void>();
+    historyMock.onRefresh.mockReturnValueOnce(refresh.promise);
+    jest.mocked(useIsFocused).mockReturnValue(false);
+    const { result, handlers, rerender } = renderController();
+    jest.mocked(useIsFocused).mockReturnValue(true);
+    rerender(undefined);
+    expect(historyMock.onRefresh).toHaveBeenCalled();
+    await typeAndSend(result, 'Inspect');
+    act(() => {
+      handlers().onUpdate?.(mapAdapterSessionUpdate({ type: 'agent_message_chunk', sessionKey: SESSION_KEY, runId: 'run-1', text: 'Reading now.' }));
+      handlers().onUpdate?.(mapAdapterSessionUpdate({ type: 'tool_call', sessionKey: SESSION_KEY, runId: 'run-1', toolCallId: 'read', title: 'read', kind: 'read' }));
+    });
+    const before = result.current.listData;
+    await act(async () => { refresh.resolve(); });
+    expect(result.current.listData).toEqual(before);
+  });
+
+  it.each(['openclaw', 'hermes'] as const)('keeps %s text/tool boundaries through a batched final event and history refresh', async (backend) => {
+    const { result, handlers } = renderController(backend);
+    await typeAndSend(result, 'Inspect');
+    const user = result.current.listData.find(message => message.role === 'user')!;
+    const emit = (event: any) => handlers().onUpdate?.(mapAdapterSessionUpdate({ sessionKey: SESSION_KEY, runId: 'run-1', ...event }));
+    act(() => {
+      emit({ type: 'agent_message_chunk', text: 'First paragraph.' });
+      emit({ type: 'tool_call', toolCallId: 'a', title: 'read', kind: 'read' });
+      emit({ type: 'tool_call_update', toolCallId: 'a', status: 'success' });
+      emit({ type: 'tool_call', toolCallId: 'b', title: 'read', kind: 'read' });
+      emit({ type: 'tool_call_update', toolCallId: 'b', status: 'success' });
+      emit({ type: 'agent_message_chunk', text: 'Second paragraph.' });
+      emit({ type: 'tool_call', toolCallId: 'c', title: 'read', kind: 'read' });
+      emit({ type: 'tool_call_update', toolCallId: 'c', status: 'success' });
+      emit({ type: 'agent_message_chunk', text: 'Final answer.' });
+    });
+    const before = [...result.current.listData].reverse();
+    expect(before.map(message => message.text)).toEqual(['Inspect', 'First paragraph.', '', '', 'Second paragraph.', '', 'Final answer.']);
+    act(() => {
+      emit({ type: 'run_finished', stopReason: 'end_turn', message: { role: 'assistant', content: 'First paragraph.\nSecond paragraph.\nFinal answer.' } });
+    });
+    const finished = [...result.current.listData].reverse();
+    expect(finished.map(message => message.text)).toEqual(before.map(message => message.text));
+    expect(finished.map(message => message.renderKey ?? message.id)).toEqual(before.map(message => message.renderKey ?? message.id));
+    // An aggregate final payload/history snapshot must not collapse the shown rows.
+    act(() => handlers().onUpdate?.({ type: 'history_reconciled', sessionKey: SESSION_KEY,
+      history: { key: SESSION_KEY, messages: [], hasActiveRun: false }, hasActiveRun: false,
+      messages: [{ ...user, id: 'server-user' },
+        { id: 'server-answer', role: 'assistant', text: 'First paragraph.\nSecond paragraph.\nFinal answer.' },
+        ...finished.filter(message => message.role === 'tool')],
+    }));
+    expect([...result.current.listData].reverse().map(message => message.text)).toEqual(before.map(message => message.text));
+  });
+
+  it.each(['openclaw', 'hermes'] as const)(
+    '%s immediately shows one pending bubble before network or backend health resolves',
+    async (backendKind) => {
+      const network = deferred<Awaited<ReturnType<typeof Network.getNetworkStateAsync>>>();
+      const health = deferred<boolean>();
+      jest.mocked(Network.getNetworkStateAsync).mockReturnValueOnce(network.promise);
+      const { result, adapter, handlers } = renderController(backendKind);
+      // Expire the existing 3s health window without changing its policy.
+      jest.setSystemTime(Date.now() + 4_000);
+      adapter.probe.mockReturnValueOnce(health.promise);
+      act(() => { result.current.setInput('instant'); });
+      const send = result.current.onSend;
+      act(() => { send(); send(); });
+
+      expect(result.current.input).toBe('');
+      expect(result.current.listData[0]).toMatchObject({ text: 'instant', delivery: 'sending' });
+      expect(result.current.queuedMessages).toHaveLength(1);
+      const id = result.current.queuedMessages[0].id;
+      const pending = result.current.listData[0];
+      const scrollRequest = result.current.scrollToBottomRequestAt;
+      expect(result.current.isSending).toBe(false);
+      expect(adapter.prompt).not.toHaveBeenCalled();
+      expect(adapter.probe).not.toHaveBeenCalled();
+      await act(async () => {
+        network.resolve({ type: 'WIFI' as any, isConnected: true, isInternetReachable: true });
+      });
+      expect(adapter.probe).toHaveBeenCalledWith(1500);
+      expect(adapter.prompt).not.toHaveBeenCalled();
+      act(() => { result.current.setInput('next draft'); });
+      await act(async () => { health.resolve(true); });
+      expect(adapter.prompt).toHaveBeenCalledTimes(1);
+      expect(result.current.input).toBe('next draft');
+      expect(result.current.queuedMessages).toHaveLength(0);
+      expect(result.current.listData.filter((message) => message.id === id)).toHaveLength(1);
+      expect(result.current.listData.find((message) => message.id === id)).toMatchObject({
+        renderKey: pending.renderKey, timestampMs: pending.timestampMs, text: pending.text,
+      });
+      expect(result.current.listData.find((message) => message.id === id)?.delivery).toBeUndefined();
+      expect(result.current.scrollToBottomRequestAt).toBe(scrollRequest);
+      const replyKey = result.current.listData.find(message => message.id === 'streaming')?.renderKey;
+      expect(replyKey).toBeTruthy();
+      finishRun(handlers, 'run-1');
+      expect(result.current.listData.find(message => message.role === 'assistant')?.renderKey).toBe(replyKey);
+    },
+  );
+
+  it.each((['openclaw', 'hermes'] as const).flatMap((backend) =>
+    ['relay', 'local', 'tailscale', 'cloudflare', 'custom'].map((transport) => ({ backend, transport })),
+  ))('preserves failed preflight and explicit retry for $backend over $transport', async ({ backend, transport }) => {
+    const adapter = createAdapter(backend, transport);
+    const { result, rerender } = renderController(backend, adapter);
+    jest.setSystemTime(Date.now() + 4_000);
+    adapter.probe.mockResolvedValueOnce(false);
+    await typeAndSend(result, 'keep me');
+    expect(adapter.prompt).not.toHaveBeenCalled();
+    expect(result.current.input).toBe('');
+    expect(result.current.listData[0]).toMatchObject({ text: 'keep me', delivery: 'held' });
+    const id = result.current.queuedMessages[0].id;
+    rerender(undefined);
+    await flush();
+    expect(adapter.probe).toHaveBeenCalledTimes(1);
+    await act(async () => { result.current.sendQueuedMessageNow(id); });
+    expect(adapter.prompt).toHaveBeenCalledTimes(1);
+    expect(result.current.listData.filter((message) => message.text === 'keep me')).toHaveLength(1);
+    expect(result.current.listData.find((message) => message.id === id)?.sendUncertain).toBeUndefined();
+  });
+
+  it('keeps image preparation behind the bubble without overwriting the next draft attachments', async () => {
+    const preparation = deferred<Awaited<ReturnType<typeof imagePreparation.preparePendingImagesForSend>>>();
+    jest.spyOn(imagePreparation, 'preparePendingImagesForSend').mockReturnValueOnce(preparation.promise);
+    const original = { uri: 'file:///original.png', base64: 'AAA', mimeType: 'image/png', width: 400, height: 300 };
+    imagePickerMock.pendingImages = [original];
+    const { result, adapter } = renderController();
+    await typeAndSend(result, 'photo');
+    expect(result.current.input).toBe('');
+    expect(imagePickerMock.pendingImages).toEqual([]);
+    expect(result.current.listData[0]).toMatchObject({ text: 'photo', imageUris: [original.uri], delivery: 'sending' });
+    expect(adapter.prompt).not.toHaveBeenCalled();
+
+    const next = { uri: 'file:///next.png', base64: 'BBB', mimeType: 'image/png' };
+    imagePickerMock.pendingImages = [next];
+    act(() => { result.current.setInput('next'); });
+    await act(async () => {
+      preparation.resolve({ changed: true, images: [{ ...original, uri: 'file:///compressed.jpg', width: 200, height: 150, base64: 'CCC' }] });
+    });
+    expect(adapter.prompt).toHaveBeenCalledWith(SESSION_KEY, expect.objectContaining({
+      attachments: [expect.objectContaining({ content: 'CCC' })],
+    }));
+    expect(result.current.listData.find(message => message.role === 'user')).toMatchObject({ imageUris: [original.uri], imageMetas: [{ uri: original.uri, width: 400, height: 300 }] });
+    expect(result.current.input).toBe('next');
+    expect(imagePickerMock.pendingImages).toEqual([next]);
+  });
+
+  it('holds an unreadable attachment for editing without creating a run or losing the message', async () => {
+    jest.spyOn(imagePreparation, 'preparePendingImagesForSend').mockRejectedValueOnce(new Error('file unavailable'));
+    imagePickerMock.pendingImages = [{ uri: 'file:///missing.pdf', base64: '', mimeType: 'application/pdf' }];
+    const { result, adapter } = renderController();
+    await typeAndSend(result, 'document');
+    expect(adapter.prompt).not.toHaveBeenCalled();
+    expect(result.current.isSending).toBe(false);
+    expect(result.current.listData[0]).toMatchObject({ text: 'document', delivery: 'held' });
+    expect(result.current.sendFailure).toBeTruthy();
+    act(() => { result.current.editQueuedMessage(result.current.queuedMessages[0].id); });
+    expect(result.current.input).toBe('document');
+    expect(imagePickerMock.pendingImages[0].uri).toBe('file:///missing.pdf');
+  });
+
+  it.each(['session', 'adapter', 'unmount'] as const)(
+    'retires an in-flight preflight after %s changes and keeps the source bubble recoverable',
+    async (change) => {
+      const health = deferred<boolean>();
+      const adapter = createAdapter();
+      adapter.probe.mockReturnValueOnce(health.promise);
+      const { result, rerender, unmount } = renderHook(({ activeAdapter }: { activeAdapter: ReturnType<typeof createAdapter> }) => useChatController({
+        adapter: activeAdapter as any, debugMode: false, showAgentAvatar: true,
+      }), { initialProps: { activeAdapter: adapter } });
+      await typeAndSend(result, 'source');
+      expect(adapter.probe).toHaveBeenCalledTimes(1);
+      const replacement = createAdapter('hermes');
+      if (change === 'session') {
+        historyMock.sessionKey = 'agent:main:other';
+        rerender({ activeAdapter: adapter });
+        act(() => { result.current.setInput('other draft'); });
+      } else if (change === 'adapter') {
+        rerender({ activeAdapter: replacement });
+        act(() => { result.current.setInput('other draft'); });
+      } else unmount();
+      await act(async () => { health.resolve(true); });
+      expect(adapter.prompt).not.toHaveBeenCalled();
+      expect(replacement.prompt).not.toHaveBeenCalled();
+      const source = getMessageQueueStore().read(messageQueueScopeKey(adapter.connection.id, SESSION_KEY));
+      expect(source.held).toBe(true);
+      expect(source.items).toHaveLength(1);
+      if (change !== 'unmount') {
+        expect(result.current.input).toBe('other draft');
+        expect(result.current.sendFailure).toBeNull();
+        expect(result.current.listData.some((message) => message.text === 'source')).toBe(false);
+      }
+    },
+  );
+
+  it('does not send a local bubble removed during preflight', async () => {
+    const health = deferred<boolean>();
+    const { result, adapter } = renderController();
+    jest.setSystemTime(Date.now() + 4_000);
+    adapter.probe.mockReturnValueOnce(health.promise);
+    await typeAndSend(result, 'removed');
+    act(() => { result.current.removeQueuedMessage(result.current.queuedMessages[0].id); });
+    await act(async () => { health.resolve(true); });
+    expect(adapter.prompt).not.toHaveBeenCalled();
+    expect(result.current.queuedMessages).toHaveLength(0);
+  });
+
+  it.each(['openclaw', 'hermes'] as const)('never automatically replays an unacknowledged %s prompt', async (backend) => {
+    const acknowledgement = deferred<{ runId: string }>();
+    const { result, adapter, rerender } = renderController(backend);
+    adapter.prompt.mockReturnValueOnce(acknowledgement.promise);
+    await typeAndSend(result, 'receipt may be lost');
+    const id = result.current.listData.find((message) => message.role === 'user')!.id;
+    expect(result.current.unconfirmedMessageIds.has(id)).toBe(true);
+    expect(result.current.queuedMessages).toHaveLength(0);
+    act(() => { result.current.setInput('next draft'); });
+    await act(async () => { acknowledgement.reject(new Error('socket closed')); });
+    rerender(undefined);
+    await flush();
+    expect(adapter.prompt).toHaveBeenCalledTimes(1);
+    expect(result.current.input).toBe('next draft');
+    expect(result.current.listData.filter((message) => message.text === 'receipt may be lost')).toHaveLength(1);
+    expect(result.current.listData.find((message) => message.id === id)).toMatchObject({ sendUncertain: true });
+    expect(result.current.queuedMessages).toHaveLength(0);
+  });
+
+  it('holds the pending message if recovery discovers an existing remote run', async () => {
+    const health = deferred<boolean>();
+    const { result, adapter, handlers } = renderController();
+    jest.setSystemTime(Date.now() + 4_000);
+    adapter.probe.mockReturnValueOnce(health.promise);
+    await typeAndSend(result, 'after recovery');
+    act(() => {
+      handlers().onUpdate?.(mapAdapterSessionUpdate({
+        type: 'run_started', sessionKey: SESSION_KEY, runId: 'remote-run',
+      }, { now: () => Date.now() }));
+    });
+    await act(async () => { health.resolve(true); });
+    expect(adapter.prompt).not.toHaveBeenCalled();
+    expect(result.current.listData.find((message) => message.text === 'after recovery')).toMatchObject({ delivery: 'held' });
+    expect(result.current.isSending).toBe(true);
   });
 
   it.each(['openclaw', 'hermes', 'youmind'] as const)(
@@ -351,7 +603,7 @@ describe('useChatController message queue', () => {
         text: 'second',
         delivery: 'queued',
       });
-      expect(result.current.listData[0].timestampMs).toBeUndefined();
+      expect(result.current.listData[0].timestampMs).toBe(result.current.queuedMessages[0].createdAt);
       expect(mockedAnalytics.chatMessageQueued).toHaveBeenCalledWith({
         backend: backendKind,
         queue_length: 1,

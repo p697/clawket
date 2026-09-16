@@ -283,6 +283,6 @@ apps/mobile/src/
 ## 6. 老客户端兼容的架构保证
 
 - 传输层的 v1 握手实现与今天逐字节一致，由 `tests/compat` 锁定。
-- 新增行为一律经能力字符串协商：客户端在 `connect.start` 的 meta 里带 `capabilities`，Relay 在 `/v1/health` 与握手回包里带 `capabilities`，Bridge 在握手 meta 与健康接口里带 `capabilities`。任一方缺失即按 v1 行为。
+- 新增行为一律经能力字符串协商：OpenClaw 客户端在 `connect.params.caps` 声明能力（兼容旧 Bridge 的原样转发；不发送顶层 meta），Relay 在 `/v1/health` 与握手回包里带 `capabilities`，Bridge 在握手 meta 与健康接口里带 `capabilities`。任一方缺失即按 v1 行为。
 - App 对老 Bridge：`Capabilities` 降级，设置页连接组显示「升级 bridge 到 3.0 以解锁多会话」。
 - App 对老 Relay：不发 v2 帧，帧大小自限 256 KB。

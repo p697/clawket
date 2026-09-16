@@ -24,6 +24,10 @@ export class LocalModelAdapter implements AgentAdapter {
   private active = false;
   private sequence = 0;
   private epoch = 0;
+  private handshakeError: AdapterError | null = null;
+  private unavailableAttempts = 0;
+  private connectPromise: Promise<void> | null = null;
+  private cancelConnect: (() => void) | null = null;
   private pending = new Map<string, { resolve: (value: unknown) => void; reject: (reason: Error) => void; timer: ReturnType<typeof setTimeout> }>();
   private listeners: { [K in keyof Listeners]: Set<Listeners[K]> } = { update: new Set(), state: new Set(), sessions: new Set() };
 
@@ -76,23 +80,41 @@ export class LocalModelAdapter implements AgentAdapter {
       if (health.backend !== 'local-model') throw new AdapterError('unsupported', 'Endpoint is not a local model Bridge');
       this.capabilities.attachments = health.vision === true;
       this.model = health.model;
+      this.handshakeError = null; this.unavailableAttempts = 0;
       this.transport.markReady(); this.setState('ready');
-    } catch {
-      if (epoch === this.epoch) this.transport.retryHandshake();
+    } catch (error) {
+      if (epoch !== this.epoch) return;
+      this.handshakeError = error instanceof AdapterError ? error : null;
+      const unavailable = this.handshakeError?.code === 'bridge_offline';
+      // An absent computer cannot recover through rapid phone handshakes.
+      const delay = unavailable ? Math.min(120_000, 30_000 * 2 ** Math.min(this.unavailableAttempts++, 2)) : 0;
+      this.transport.retryHandshake(delay);
     }
   }
 
-  async connect(): Promise<void> {
-    if (this.state === 'ready') return;
+  connect(): Promise<void> {
+    if (this.state === 'ready') return Promise.resolve();
+    if (this.connectPromise) return this.connectPromise;
     const ready = new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => { off(); reject(new AdapterError('timeout', 'Local model Bridge did not become ready')); }, 25_000);
-      const off = this.on('state', state => { if (state === 'ready') { clearTimeout(timer); off(); resolve(); } });
+      const finish = (error?: Error) => {
+        clearTimeout(timer); off(); this.cancelConnect = null;
+        error ? reject(error) : resolve();
+      };
+      const timer = setTimeout(() => finish(this.handshakeError ?? new AdapterError('timeout', 'Local model Bridge did not become ready')), 25_000);
+      const off = this.on('state', state => { if (state === 'ready') finish(); });
+      this.cancelConnect = () => finish(new AdapterError('bridge_offline', 'Local model connection cancelled'));
     });
+    const attempt = ready.finally(() => { if (this.connectPromise === attempt) this.connectPromise = null; });
+    this.connectPromise = attempt;
     this.transport.connect();
-    return ready;
+    return attempt;
   }
 
-  disconnect(): void { this.epoch++; this.transport.disconnect(); this.rejectPending(); this.setState('offline'); }
+  disconnect(): void {
+    this.epoch++; this.cancelConnect?.(); this.connectPromise = null;
+    this.transport.disconnect(); this.rejectPending(); this.setState('offline');
+    this.handshakeError = null; this.unavailableAttempts = 0;
+  }
 
   async probe(): Promise<boolean> {
     const epoch = this.epoch;
@@ -144,13 +166,13 @@ export class LocalModelAdapter implements AgentAdapter {
   }
 
   private receive(data: unknown): void {
-    let frame: { type?: string; id?: string; ok?: boolean; payload?: unknown; event?: string; error?: { message?: string } };
+    let frame: { type?: string; id?: string; ok?: boolean; payload?: unknown; event?: string; error?: { code?: string; message?: string } };
     try { frame = JSON.parse(String(data)); } catch { return; }
     if (frame.type === 'res' && frame.id) {
       const pending = this.pending.get(frame.id); if (!pending) return;
       this.pending.delete(frame.id); clearTimeout(pending.timer);
       if (frame.ok) pending.resolve(frame.payload);
-      else pending.reject(new AdapterError('server', frame.error?.message ?? 'Local model request failed'));
+      else pending.reject(new AdapterError(frame.error?.code === 'BRIDGE_UNAVAILABLE' ? 'bridge_offline' : 'server', frame.error?.code === 'BRIDGE_UNAVAILABLE' ? 'Local model Bridge is offline. Keep the Bridge running on your computer.' : frame.error?.message ?? 'Local model request failed'));
     } else if (frame.type === 'event' && frame.event === 'local-model.update') {
       const update = frame.payload as SessionUpdate;
       if (!update || typeof update.type !== 'string') return;

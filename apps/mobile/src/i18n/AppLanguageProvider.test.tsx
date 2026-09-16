@@ -1,7 +1,8 @@
 import React from 'react';
 import { act, render, waitFor } from '@testing-library/react-native';
-import { AppState } from 'react-native';
+import { AppState, I18nManager } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { reloadAppAsync } from 'expo';
 import { getLocales } from 'expo-localization';
 import i18n from 'i18next';
 import { AppLanguageProvider, useAppLanguage } from './AppLanguageProvider';
@@ -55,9 +56,30 @@ describe('App language preferences', () => {
   it('falls back for invalid settings and unsupported system locales', () => {
     expect(parseAppLanguage('bogus')).toBe('system');
     expect(parseAppLanguage(null)).toBe('system');
-    jest.mocked(getLocales).mockReturnValue([{ languageCode: 'fr' }] as unknown as ReturnType<typeof getLocales>);
+    jest.mocked(getLocales).mockReturnValue([{ languageCode: 'sw' }] as unknown as ReturnType<typeof getLocales>);
     expect(resolveAppLocale('system')).toBe('en');
     jest.mocked(getLocales).mockReturnValue([{ languageCode: 'zh' }] as unknown as ReturnType<typeof getLocales>);
     expect(resolveAppLocale('system')).toBe('zh-Hans');
+  });
+
+  it('reloads only when the layout direction changes', async () => {
+    I18nManager.isRTL = false;
+    jest.mocked(AppState.addEventListener).mockReturnValue({ remove: jest.fn() } as never);
+    jest.mocked(AsyncStorage.getItem).mockResolvedValue('de');
+    mount();
+    await waitFor(() => expect(context.language).toBe('de'));
+    expect(reloadAppAsync).not.toHaveBeenCalled();
+    await act(async () => { await context.setLanguage('fr'); });
+    expect(I18nManager.forceRTL).not.toHaveBeenCalled();
+    expect(reloadAppAsync).not.toHaveBeenCalled();
+    await act(async () => { await context.setLanguage('ar'); });
+    expect(I18nManager.allowRTL).toHaveBeenCalledWith(true);
+    expect(I18nManager.forceRTL).toHaveBeenCalledWith(true);
+    expect(reloadAppAsync).toHaveBeenCalledTimes(1);
+    I18nManager.isRTL = true;
+    await act(async () => { await context.setLanguage('system'); });
+    expect(I18nManager.forceRTL).toHaveBeenLastCalledWith(false);
+    expect(reloadAppAsync).toHaveBeenCalledTimes(2);
+    I18nManager.isRTL = false;
   });
 });

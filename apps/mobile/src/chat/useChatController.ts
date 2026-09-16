@@ -73,6 +73,9 @@ import { hasCompletedAssistantForRememberedRun } from "./runStateValidation";
 import { useChatHistoryState } from "./useChatHistoryState";
 import {
   buildLiveRunListData,
+  liveReplyRenderKey,
+  finalReplyTail,
+  finishLiveRunPresentation,
   mergeNewestFirstMessages,
   StreamSegment,
 } from "./liveRunThread";
@@ -83,7 +86,7 @@ import {
   SessionRunState,
 } from "./sessionRunState";
 import { shouldAdoptPendingOptimisticRunId } from "./pendingOptimisticRun";
-import { preserveOptimisticAssistantMessage } from "./historyMergePolicy";
+import { preserveMessagePresentation, preserveOptimisticAssistantMessage } from "./historyMergePolicy";
 import {
   FOREGROUND_REFRESH_AFTER_RECONNECT_TIMEOUT_MS,
   getForegroundRefreshDelayMs,
@@ -417,6 +420,9 @@ export function useChatController({
     at: number;
   } | null>(null);
   const sessionRunStateRef = useRef<Map<string, SessionRunState>>(new Map());
+  const lastLiveRunEventRef = useRef<{ key: string; at: number } | null>(null);
+  const recoveredActiveSessionRef = useRef<string | null>(null);
+  const sessionAbortableRunRef = useRef<string | null>(null);
   const pendingOptimisticRunIdsRef = useRef<Map<string, string>>(new Map());
   const agentActivityRef = useRef<Map<string, AgentActivity>>(new Map());
   const childSessionActivityRef = useRef<Map<string, ChildSessionActivity>>(new Map());
@@ -495,11 +501,11 @@ export function useChatController({
   }, []);
 
   const clearTransientRunPresentation = useCallback(
-    (options?: { preserveCurrentStream?: boolean; preserveToolMessages?: boolean }) => {
+    (options?: { preserveCurrentStream?: boolean }) => {
+      chatStreamSegmentsRef.current = [];
       setChatStreamSegments([]);
-      if (!options?.preserveToolMessages) {
-        setChatToolMessages([]);
-      }
+      chatToolMessagesRef.current = [];
+      setChatToolMessages([]);
       if (options?.preserveCurrentStream) {
         return;
       }
@@ -515,14 +521,17 @@ export function useChatController({
       return;
     }
     const ts = timestampMs ?? Date.now();
-    setChatStreamSegments((prev) => [
-      ...prev,
-      {
-        id: `stream_segment_${ts}_${prev.length}`,
-        text: currentText,
-        timestampMs: ts,
-      },
-    ]);
+    const startedAt = streamStartedAtRef.current;
+    const runId = currentRunIdRef.current;
+    const previous = chatStreamSegmentsRef.current;
+    const next = [...previous, {
+      id: `stream_segment_${ts}_${previous.length}`,
+      ...(runId ? { renderKey: liveReplyRenderKey(startedAt, runId, previous.length) } : {}),
+      text: currentText, timestampMs: ts,
+      afterToolCount: chatToolMessagesRef.current.length,
+    }];
+    chatStreamSegmentsRef.current = next;
+    setChatStreamSegments(next);
     chatStreamRef.current = null;
     setChatStream(null);
   }, []);
@@ -694,6 +703,15 @@ export function useChatController({
 
   const messageQueueRef = useRef(messageQueue);
   messageQueueRef.current = messageQueue;
+  // A preflight may outlive navigation, an adapter replacement, or unmount.
+  // Even returning to the same session must not revive an old continuation.
+  const sendScope = useMemo(() => ({ active: true }), [adapter, messageQueue.scopeKey]);
+  const sendScopeRef = useRef(sendScope);
+  sendScopeRef.current = sendScope;
+  useEffect(() => {
+    sendScope.active = true;
+    return () => { sendScope.active = false; };
+  }, [sendScope]);
   const holdQueuedMessages = useCallback((reason: "abort" | "run_error" | "send_failed" | "preflight_failed") => {
     const current = messageQueueRef.current.readCurrent();
     if (current.items.length === 0 || (current.held && current.sendingId === null)) return;
@@ -708,6 +726,7 @@ export function useChatController({
           `[isSending] → false | reason=${reason} | runId=${(runId ?? currentRunIdRef.current)?.slice(0, 8) ?? "null"} | session=${sessionKey ?? "null"}`,
         );
       }
+      if (recoveredActiveSessionRef.current === sessionKey) recoveredActiveSessionRef.current = null;
       if (sessionKey) {
         pendingOptimisticRunIdsRef.current.delete(sessionKey);
         if (runId) {
@@ -756,7 +775,7 @@ export function useChatController({
         remembered,
       );
 
-      if (!derived.isSending) {
+      if (!derived.isSending && recoveredActiveSessionRef.current !== key) {
         if (currentRunIdRef.current || chatStreamRef.current) {
           clearActiveRunState(key, `${reason}:derived-idle`);
           return;
@@ -846,6 +865,7 @@ export function useChatController({
         const historyResult = await adapter.loadSession(sessionKey, { limit: 12 });
         if (sessionKeyRef.current !== sessionKey) return;
 
+        if (historyResult.hasActiveRun) return;
         const latestAssistant = latestVisibleAssistant(historyResult);
         const latestAssistantText = latestAssistant?.text ?? "";
         const latestAssistantTs = latestAssistant?.timestampMs ?? 0;
@@ -1044,19 +1064,12 @@ export function useChatController({
     chatStreamRef.current = chatStream;
   }, [chatStream]);
 
-  useEffect(() => {
-    chatStreamSegmentsRef.current = chatStreamSegments;
-  }, [chatStreamSegments]);
-
-  useEffect(() => {
-    chatToolMessagesRef.current = chatToolMessages;
-  }, [chatToolMessages]);
-
   // Track last refresh time to debounce auto-refreshes (min 5s apart)
   const lastAutoRefreshRef = useRef(0);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const backgroundedAtRef = useRef<number | null>(null);
   const pendingNotificationScrollSessionKeyRef = useRef<string | null>(null);
+  const [messageSubmittedAt, setMessageSubmittedAt] = useState<number | null>(null);
   const [scrollToBottomRequestAt, setScrollToBottomRequestAt] = useState<number | null>(null);
   const autoRefresh = useCallback(() => {
     if (!hasAdapter) {
@@ -1079,11 +1092,12 @@ export function useChatController({
     }
     lastAutoRefreshRef.current = now;
     dbg(`autoRefresh:start session=${history.sessionKey ?? "null"}`);
-    history
-      .onRefresh()
-      .finally(() =>
-        clearTransientRunPresentation({ preserveCurrentStream: true }),
-      );
+    const refreshedSessionKey = history.sessionKey;
+    history.onRefresh().finally(() => {
+      if (sessionKeyRef.current === refreshedSessionKey && !currentRunIdRef.current) {
+        clearTransientRunPresentation({ preserveCurrentStream: true });
+      }
+    });
   }, [
     clearTransientRunPresentation,
     dbg,
@@ -1165,6 +1179,9 @@ export function useChatController({
     // Session keys can overlap across gateways (e.g. agent:main:main), so
     // keeping remembered run state would leak stale "thinking" to new scopes.
     sessionRunStateRef.current.clear();
+    recoveredActiveSessionRef.current = null;
+    lastLiveRunEventRef.current = null;
+    sessionAbortableRunRef.current = null;
     pendingOptimisticRunIdsRef.current.clear();
     setUnconfirmedMessageIds(new Set());
     setRunAcknowledged(false);
@@ -1421,6 +1438,39 @@ export function useChatController({
   ]);
 
   useEffect(() => {
+    const snapshot = history.activitySnapshot;
+    if (!snapshot || snapshot.key !== history.sessionKey) return;
+    const live = lastLiveRunEventRef.current;
+    if (live?.key === snapshot.key && live.at >= snapshot.requestedAtMs) return;
+    if (!snapshot.hasActiveRun) {
+      recoveredActiveSessionRef.current = null;
+      clearActiveRunState(snapshot.key, "history-inactive");
+      return;
+    }
+    recoveredActiveSessionRef.current = snapshot.key;
+    const run = snapshot.activeRun;
+    if (run && (!currentRunIdRef.current || currentRunIdRef.current === run.runId)) {
+      const previous = sessionRunStateRef.current.get(snapshot.key);
+      const text = previous?.runId === run.runId && (previous.streamText?.length ?? 0) > run.text.length
+        ? previous.streamText : sanitizeVisibleStreamText(run.text);
+      const startedAt = (currentRunIdRef.current === run.runId ? streamStartedAtRef.current : null)
+        ?? (previous?.runId === run.runId ? previous.startedAt : null)
+        ?? run.startedAtMs ?? Date.now();
+      sessionRunStateRef.current.set(snapshot.key, {
+        runId: run.runId, streamText: text,
+        startedAt,
+      });
+      currentRunIdRef.current = run.runId;
+      streamStartedAtRef.current = startedAt;
+      sessionAbortableRunRef.current = run.sessionAbortable ? run.runId : null;
+      chatStreamRef.current = text;
+      setChatStream(text);
+      lastRunSignalAtRef.current = Date.now();
+    }
+    setIsSending(true);
+  }, [history.activitySnapshot, history.sessionKey, clearActiveRunState]);
+
+  useEffect(() => {
     syncDerivedSessionActivity("messages-or-session");
   }, [syncDerivedSessionActivity]);
 
@@ -1575,15 +1625,12 @@ export function useChatController({
       if (sessionKeyRef.current !== completedSessionKey) return;
       if (currentRunIdRef.current) return;
       if (streamStartedAtRef.current !== null) return;
-      requestVisibleHistoryReload(completedSessionKey, "post-stream")
-        .finally(() =>
-          clearTransientRunPresentation({ preserveCurrentStream: true }),
-        )
-        .catch(() => {});
+      // Completion already committed and cleared this run. An old refresh
+      // must never clear the next run that started while it was awaiting I/O.
+      requestVisibleHistoryReload(completedSessionKey, "post-stream").catch(() => {});
     }, POST_STREAM_HISTORY_REFRESH_DELAY_MS);
   }, [
     clearPostStreamHistoryRefreshTimer,
-    clearTransientRunPresentation,
     requestVisibleHistoryReload,
   ]);
 
@@ -1674,6 +1721,10 @@ export function useChatController({
 
   const handleAdapterUpdate = useCallback((update: AdapterChatUpdate) => {
     if (consumeSilentCommandUpdate(update)) return;
+    if ('runId' in update && update.runId && 'sessionKey' in update && update.sessionKey
+      && sessionKeysMatch(update.sessionKey, sessionKeyRef.current)) {
+      lastLiveRunEventRef.current = { key: update.sessionKey, at: Date.now() };
+    }
     if (update.type !== "error") markTransportConfirmed();
 
     const markActivityStarted = (sessionKey: string, runId: string) => {
@@ -1728,7 +1779,7 @@ export function useChatController({
       case "history_reconciled": {
         if (!matchesCurrentSession(update.sessionKey)) return;
         history.setMessages((previous) =>
-          preserveOptimisticAssistantMessage(previous, update.messages),
+          preserveMessagePresentation(previous, preserveOptimisticAssistantMessage(previous, update.messages)),
         );
         history.historyRawCountRef.current = update.history.messages.length;
         history.setHistoryLoaded(true);
@@ -1815,7 +1866,8 @@ export function useChatController({
           ...update.message,
           toolSummary: formatToolOneLinerLocalized(toolName, update.message.toolArgs, t),
         };
-        setChatToolMessages((previous) => withToolMessage(previous, message));
+        chatToolMessagesRef.current = withToolMessage(chatToolMessagesRef.current, message);
+        setChatToolMessages(chatToolMessagesRef.current);
         return;
       }
       case "tool_call_update": {
@@ -1848,7 +1900,8 @@ export function useChatController({
               : localizedSummary,
           toolDurationMs: durationMs,
         };
-        setChatToolMessages((previous) => withToolMessage(previous, message));
+        chatToolMessagesRef.current = withToolMessage(chatToolMessagesRef.current, message);
+        setChatToolMessages(chatToolMessagesRef.current);
         if (update.message.toolStatus === "running") return;
         clearToolSettledRecoveryTimer();
         requestVisibleHistoryReload(update.sessionKey, "tool-result").catch(() => {});
@@ -1863,6 +1916,7 @@ export function useChatController({
         return;
       }
       case "run_finished": {
+        if (recoveredActiveSessionRef.current === update.sessionKey) recoveredActiveSessionRef.current = null;
         markRunSignal();
         markActivityFinished(update.sessionKey, update.runId);
         if (!matchesCurrentSession(update.sessionKey)) return;
@@ -1875,43 +1929,42 @@ export function useChatController({
         }
         const activeRunStartedAt = streamStartedAtRef.current;
         const streamText = chatStreamRef.current ?? "";
-        if (update.stopReason === "cancelled") {
-          if (streamText.trim()) {
-            history.setMessages((previous) => appendUniqueMessage(previous, {
-              id: `abort_${update.runId}`,
-              role: "assistant",
-              text: streamText,
-              timestampMs: Date.now(),
-            }));
-          }
-          if (update.systemMessage) {
-            history.setMessages((previous) =>
-              appendUniqueMessage(previous, update.systemMessage!),
-            );
-          }
+        const segments = chatStreamSegmentsRef.current;
+        const tools = chatToolMessagesRef.current;
+        if (segments.length > 0 || tools.length > 0) {
+          const completed = update.stopReason !== "cancelled" && update.stopReason !== "error";
+          const finalText = completed
+            ? (update.finalMessage?.text || streamText) : streamText;
+          const rows = finishLiveRunPresentation({
+            segments, tools, tail: finalReplyTail(finalText, segments, streamText),
+            runId: update.runId, startedAt: activeRunStartedAt,
+            finalMessage: completed ? update.finalMessage : undefined,
+            cancelled: update.stopReason === "cancelled",
+          });
+          // Any history fetched during tools is reconciled inside this turn,
+          // then all live rows move into history together before clearing them.
+          history.setMessages((previous) => preserveOptimisticAssistantMessage(
+            [...previous.filter(message => !rows.some(row => row.id === message.id)), ...rows], previous,
+          ));
+        } else if (update.stopReason === "cancelled") {
+          if (streamText.trim()) history.setMessages((previous) => appendUniqueMessage(previous, {
+            id: `abort_${update.runId}`,
+            renderKey: liveReplyRenderKey(activeRunStartedAt, update.runId, 0),
+            role: "assistant", text: streamText, timestampMs: Date.now(),
+          }));
         } else if (update.stopReason !== "error") {
           const finalText = update.finalMessage?.text || streamText;
           if (finalText.trim()) {
             const finalMessage: UiMessage = {
-              ...(update.finalMessage ?? {
-                id: `final_${update.runId}`,
-                role: "assistant" as const,
-                text: finalText,
-                timestampMs: Date.now(),
-              }),
-              text: finalText,
+              ...(update.finalMessage ?? { id: `final_${update.runId}`, role: "assistant" as const, timestampMs: Date.now() }),
+              text: finalText, renderKey: liveReplyRenderKey(activeRunStartedAt, update.runId, 0),
             };
             history.setMessages((previous) => {
-              if (previous.some((message) => message.id === finalMessage.id)) {
-                return previous;
-              }
+              if (previous.some((message) => message.id === finalMessage.id)) return previous;
               for (let index = previous.length - 1; index >= 0; index -= 1) {
-                const candidate = previous[index];
-                if (!shouldMergeFinalMessage(candidate, finalText, activeRunStartedAt)) {
-                  continue;
-                }
+                if (!shouldMergeFinalMessage(previous[index], finalText, activeRunStartedAt)) continue;
                 const next = [...previous];
-                next[index] = { ...candidate, ...finalMessage };
+                next[index] = { ...previous[index], ...finalMessage };
                 return next;
               }
               return [...previous, finalMessage];
@@ -1919,19 +1972,16 @@ export function useChatController({
           } else {
             setTimeout(() => {
               history.reconcileLatestAssistantFromHistory(update.sessionKey, {
-                appendIfMissing: true,
-                minTimestampMs: activeRunStartedAt ?? undefined,
+                appendIfMissing: true, minTimestampMs: activeRunStartedAt ?? undefined,
               }).catch(() => {});
             }, 30);
           }
         }
+        if (update.systemMessage) history.setMessages((previous) => appendUniqueMessage(previous, update.systemMessage!));
         pendingOptimisticRunIdsRef.current.delete(update.sessionKey);
         currentRunIdRef.current = null;
         streamStartedAtRef.current = null;
-        clearTransientRunPresentation({
-          preserveCurrentStream: true,
-          preserveToolMessages: update.stopReason !== "cancelled",
-        });
+        clearTransientRunPresentation();
         setIsSending(false);
         setActivityLabel(null);
         if (update.stopReason !== "cancelled" && update.stopReason !== "error") {
@@ -2131,7 +2181,7 @@ export function useChatController({
   );
   const canSend = useMemo(
     () =>
-      canQueue || (!readOnly && canSendMessage({
+      canQueue || (!readOnly && canEnqueueMessage(messageQueue.state) && canSendMessage({
         connectionState,
         hasSession: !!history.sessionKey,
         hasContent: hasComposerContent,
@@ -2148,6 +2198,7 @@ export function useChatController({
       history.sessionKey,
       isPreparingSend,
       isSending,
+      messageQueue.state,
       voiceInputActive,
       readOnly,
     ],
@@ -2171,7 +2222,11 @@ export function useChatController({
 
   const ensureConnectionReadyForSend =
     useCallback(async (): Promise<boolean> => {
-      if (await isNetworkLikelyOffline()) {
+      const isCurrent = () => sendScope.active && sendScopeRef.current === sendScope;
+      if (!isCurrent()) return false;
+      const offline = await isNetworkLikelyOffline();
+      if (!isCurrent()) return false;
+      if (offline) {
         forceSendProbeUntilRef.current = Date.now() + SEND_FORCE_PROBE_GRACE_MS;
         return false;
       }
@@ -2194,6 +2249,7 @@ export function useChatController({
           connectionState === "ready"
             ? await adapter.probe(SEND_FAST_PROBE_TIMEOUT_MS)
             : await adapter.probe();
+        if (!isCurrent()) return false;
         if (ok) {
           markTransportConfirmed();
         } else {
@@ -2202,7 +2258,7 @@ export function useChatController({
         }
         return ok;
       } catch {
-        forceSendProbeUntilRef.current = Date.now() + SEND_FORCE_PROBE_GRACE_MS;
+        if (isCurrent()) forceSendProbeUntilRef.current = Date.now() + SEND_FORCE_PROBE_GRACE_MS;
         return false;
       }
     }, [
@@ -2210,6 +2266,7 @@ export function useChatController({
       adapter,
       isNetworkLikelyOffline,
       markTransportConfirmed,
+      sendScope,
       SEND_FAST_PROBE_TIMEOUT_MS,
       SEND_FORCE_PROBE_GRACE_MS,
       SEND_HEALTH_WINDOW_MS,
@@ -2231,16 +2288,7 @@ export function useChatController({
     releaseSendTriggerGuard();
   }, [isPreparingSend, isSending, releaseSendTriggerGuard]);
 
-  const submitMessage = useCallback(
-    (text: string, images: PendingImage[], options?: { messageId?: string }) => {
-      const sessionKey = history.sessionKey;
-      if (!sessionKey || !adapter) return;
-      const sourceQueue = { store: messageQueue.store, scopeKey: messageQueue.scopeKey };
-      const localTimestamp = Date.now();
-      setScrollToBottomRequestAt(localTimestamp);
-      setSendFailure(null);
-      const idempotencyKey = `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-      const realImages = images.filter((image) => isImageAttachmentMimeType(image.mimeType));
+  const getUserMessageText = useCallback((text: string, images: readonly PendingImage[]) => {
       const fallbackKey = resolveAttachmentOnlyFallbackKey(images);
       const attachmentFallbackCopy = {
         'Look at this image': t('Look at this image', { ns: 'chat' }),
@@ -2249,15 +2297,32 @@ export function useChatController({
         'Review these files': t('Review these files', { ns: 'chat' }),
         'Review these attachments': t('Review these attachments', { ns: 'chat' }),
       } as const;
-      const fallbackText = fallbackKey ? attachmentFallbackCopy[fallbackKey] : '';
+      return text || (fallbackKey ? attachmentFallbackCopy[fallbackKey] : '');
+  }, [t]);
+
+  const submitMessage = useCallback(
+    (text: string, images: PendingImage[], options?: { messageId?: string }) => {
+      const sessionKey = history.sessionKey;
+      if (!sessionKey || !adapter) return;
+      const sourceQueue = { store: messageQueue.store, scopeKey: messageQueue.scopeKey };
+      const queued = sourceQueue.store.read(sourceQueue.scopeKey).items.find((item) => item.id === options?.messageId);
+      const submittedAt = Date.now();
+      const localTimestamp = queued?.createdAt ?? submittedAt;
+      setMessageSubmittedAt(submittedAt);
+      if (!queued) setScrollToBottomRequestAt(submittedAt);
+      setSendFailure(null);
+      const idempotencyKey = `${submittedAt}_${Math.random().toString(36).slice(2, 10)}`;
+      const realImages = images.filter((image) => isImageAttachmentMimeType(image.mimeType));
+      const effectiveText = getUserMessageText(text, images);
       const uiMsg = buildUserUiMessage({
         // A queued message keeps its id so its bubble settles in place once sent.
         id: options?.messageId ?? `usr_${localTimestamp}`,
-        text: text || fallbackText,
-        images,
+        text: effectiveText,
+        images: queued?.images ?? images,
         idempotencyKey,
         timestampMs: localTimestamp,
       });
+      uiMsg.renderKey = uiMsg.id;
       if (!shouldHideMessage(uiMsg)) {
         history.setMessages((prev) => [...prev, uiMsg]);
         setUnconfirmedMessageIds((previous) => new Set(previous).add(uiMsg.id));
@@ -2268,14 +2333,14 @@ export function useChatController({
         setRunAcknowledged(false);
         clearTransientRunPresentation({ preserveCurrentStream: true });
         currentRunIdRef.current = idempotencyKey;
-        streamStartedAtRef.current = localTimestamp;
-        lastRunSignalAtRef.current = localTimestamp;
+        streamStartedAtRef.current = submittedAt;
+        lastRunSignalAtRef.current = submittedAt;
         chatStreamRef.current = "";
         setChatStream("");
         sessionRunStateRef.current.set(sessionKey, {
           runId: idempotencyKey,
           streamText: "",
-          startedAt: localTimestamp,
+          startedAt: submittedAt,
         });
         pendingOptimisticRunIdsRef.current.set(sessionKey, idempotencyKey);
       }
@@ -2306,9 +2371,8 @@ export function useChatController({
 
       const attachments = buildPromptAttachments(images);
 
-      const effectiveText = text || fallbackText || " ";
       adapter
-        .prompt(sessionKey, { text: effectiveText, attachments, idempotencyKey })
+        .prompt(sessionKey, { text: effectiveText || " ", attachments, idempotencyKey })
         .then(({ runId: serverRunId }) => {
           void recordSuccessfulSendForAutomaticReview();
           markTransportConfirmed();
@@ -2369,7 +2433,7 @@ export function useChatController({
           // Preserve one recoverable bubble; refilling the composer invites duplicate sends.
         });
     },
-    [adapter, dbg, history, messageQueue.store, messageQueue.scopeKey, markTransportConfirmed, t],
+    [adapter, dbg, getUserMessageText, history, messageQueue.store, messageQueue.scopeKey, markTransportConfirmed, t],
   );
 
   const submitMessageWithConnectionCheck = useCallback(
@@ -2394,7 +2458,7 @@ export function useChatController({
         }
         return false;
       }
-      if (!history.sessionKey) {
+      if (!history.sessionKey || !adapter) {
         if (acquiredGuardLocally) {
           releaseSendTriggerGuard();
         }
@@ -2403,24 +2467,35 @@ export function useChatController({
 
       sendPreflightInFlightRef.current = true;
       setIsPreparingSend(true);
+      const isCurrent = () => sendScope.active && sendScopeRef.current === sendScope;
       try {
         const ready = await ensureConnectionReadyForSend();
+        if (!isCurrent()) return false;
         if (!ready) {
           setSendFailure(t('Sending failed. Check the conversation before trying again.'));
           return false;
         }
         const prepared = await preparePendingImagesForSend(images);
-        if (prepared.changed) {
+        if (!isCurrent() || readOnlyRef.current) return false;
+        // Outbox attachments belong to this message, never to a newer draft.
+        if (prepared.changed && !options?.messageId) {
           setPendingImages(prepared.images);
         }
-        if (readOnlyRef.current) return false;
         if (options?.beforeSubmit && !options.beforeSubmit()) return false;
+        // Reconnection can discover a run that was already active remotely.
+        if (options?.messageId && currentRunIdRef.current) return false;
         submitMessage(text, prepared.images, { messageId: options?.messageId });
         shouldReleaseTriggerGuard = false;
         return true;
+      } catch (error) {
+        if (isCurrent()) {
+          setSendFailure(t('Sending failed. Check the conversation before trying again.'));
+          setSendFailureDetails(sanitizeReplyFailure(error instanceof Error ? error.message : String(error)) || null);
+        }
+        return false;
       } finally {
         sendPreflightInFlightRef.current = false;
-        setIsPreparingSend(false);
+        if (sendScopeRef.current.active) setIsPreparingSend(false);
         if (shouldReleaseTriggerGuard) {
           releaseSendTriggerGuard();
         }
@@ -2428,9 +2503,11 @@ export function useChatController({
     },
     [
       acquireSendTriggerGuard,
+      adapter,
       ensureConnectionReadyForSend,
       history.sessionKey,
       releaseSendTriggerGuard,
+      sendScope,
       setPendingImages,
       submitMessage,
       t,
@@ -2535,7 +2612,7 @@ export function useChatController({
   });
 
   const onSend = useCallback(() => {
-    if (readOnlyRef.current) return;
+    if (readOnlyRef.current || sendPreflightInFlightRef.current) return;
     void (async () => {
       const text = input.trim();
       const images = [...pendingImages];
@@ -2632,13 +2709,26 @@ export function useChatController({
       // Haptic feedback — crisp impact
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid);
 
-      // Sending something new is the user's answer to a paused queue.
-      messageQueue.release();
+      // Local acceptance is synchronous. Network checks and image preparation
+      // happen behind the visible bubble, with the existing delivery safeguards.
+      const queued = messageQueue.enqueue({ text, images });
+      if (!queued) {
+        releaseSendTriggerGuard();
+        return;
+      }
+      const { scopeKey, store } = messageQueue;
+      store.update(scopeKey, (current) => markQueuedMessageSending(current, queued.id));
+      setSendFailure(null);
+      setScrollToBottomRequestAt(queued.createdAt);
+      clearComposer();
       const sent = await submitMessageWithConnectionCheck(text, images, {
         triggerGuardHeld: true,
+        messageId: queued.id,
+        beforeSubmit: () => store.read(scopeKey).items.some((item) => item.id === queued.id),
       });
-      if (!sent) return;
-      clearComposer();
+      store.update(scopeKey, (current) => sent
+        ? removeQueuedMessage(current, queued.id)
+        : holdMessageQueue(current));
     })();
   }, [
     adapter,
@@ -3079,6 +3169,7 @@ export function useChatController({
       liveStreamText: chatStream,
       liveStreamStartedAt: streamStartedAtRef.current,
       activeRunId: currentRunIdRef.current,
+      includePlaceholder: true,
     });
     const pairApprovals = pairApprovalProjection.adapter === adapter
       ? pairApprovalProjection.entries
@@ -3092,20 +3183,21 @@ export function useChatController({
     }));
     const merged = mergeNewestFirstMessages(sessionMessages, pairMessages);
     if (messageQueue.state.items.length === 0) return merged;
-    // Queued bubbles are untimed and sit below everything else; an item whose
+    // Queued bubbles sit below everything else; an item whose
     // optimistic message already entered history is rendered from history.
     const known = new Set(history.messages.map((message) => message.id));
     const queued = messageQueue.state.items
       .filter((item) => !known.has(item.id))
-      .map((item) => buildUserUiMessage({
+      .map((item) => ({ ...buildUserUiMessage({
         id: item.id,
-        text: item.text,
+        text: getUserMessageText(item.text, item.images),
         images: item.images,
+        timestampMs: item.createdAt,
         delivery: queuedMessageDelivery(messageQueue.state, item.id),
-      }))
+      }), renderKey: item.id }))
       .reverse();
-    return queued.length > 0 ? mergeNewestFirstMessages(queued, merged) : merged;
-  }, [adapter, chatStream, chatStreamSegments, chatToolMessages, history.messages, messageQueue.state, pairApprovalProjection, recoverableMessages]);
+    return queued.length > 0 ? [...queued, ...merged] : merged;
+  }, [adapter, chatStream, chatStreamSegments, chatToolMessages, getUserMessageText, history.messages, messageQueue.state, pairApprovalProjection, recoverableMessages]);
 
   const resolveApproval = useCallback(
     (
@@ -3174,7 +3266,7 @@ export function useChatController({
     holdQueuedMessages("abort");
     const runIdAtAbort = currentRunIdRef.current;
     adapter
-      .cancel(history.sessionKey, runIdAtAbort ?? undefined)
+      .cancel(history.sessionKey, runIdAtAbort === sessionAbortableRunRef.current ? undefined : runIdAtAbort ?? undefined)
       .catch((err) => {
         dbg(`Abort failed: ${String(err)}`);
       });
@@ -3226,6 +3318,7 @@ export function useChatController({
     loadingMoreHistory: history.loadingMoreHistory,
     historyLoaded: history.historyLoaded,
     scrollToBottomRequestAt,
+    messageSubmittedAt,
     pairingPending,
     copied,
     debugLog,

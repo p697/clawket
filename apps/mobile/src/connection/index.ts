@@ -1,3 +1,4 @@
+import { updateRunActivities, type RunActivity } from './run-activity';
 import { clearUncertainSends } from '../chat/sendRecovery';
 import type {
   AgentAdapter,
@@ -41,6 +42,7 @@ import {
   unreadWatermarks,
   type SessionWatermarks,
   type UnreadWatermarks,
+  type WatermarkSession,
 } from './registry/unread-watermarks';
 import { createConnectionAdapter } from './adapters';
 import { ConnectionRecoveryWindow, requiresConnectionAction } from './recovery-window';
@@ -68,6 +70,7 @@ export type ConnectionRuntimeSnapshot = Readonly<{
   freeConnectionId: string | null;
   activeAdapter: AgentAdapter | null;
   activeState: ConnectionState;
+  runActivities?: ReadonlyArray<RunActivity>;
   recovering?: boolean;
   recoveryFailed?: boolean;
   pausedConnectionIds?: ReadonlyArray<string>;
@@ -228,6 +231,7 @@ export class ConnectionCoordinator {
   private snapshot: ConnectionRuntimeSnapshot = INITIAL_SNAPSHOT;
   private error: ConnectionRuntimeFailure | null = null;
   private nextConnectReason: ConnectReason = 'launch';
+  private runActivities: ReadonlyArray<RunActivity> = [];
   private readonly recovery = new ConnectionRecoveryWindow(() => this.publish());
 
   setAppActive(active: boolean): void {
@@ -445,7 +449,10 @@ export class ConnectionCoordinator {
       this.watermarks.clearConnection(connectionId),
       this.clearConnectionDeviceTokens(record),
     ]);
-    await this.whenIdle();
+    // Removal must not wait for the fallback connection's network handshake.
+    // Store reconciliation continues independently after the durable removal.
+    if (this.error?.connectionId === connectionId) this.error = null;
+    this.publish();
     const cleanup = await cleanupPromise;
     if (cleanup.some((result) => result.status === 'rejected')) {
       this.error = failure(
@@ -571,7 +578,7 @@ export class ConnectionCoordinator {
   }
 
   async markSessionOpened(
-    session: Pick<SessionDescriptor, 'connectionId' | 'key' | 'updatedAt'>,
+    session: WatermarkSession,
     openedAt = this.now(),
   ): Promise<SessionWatermarks> {
     const values = await this.watermarks.markOpened(session, openedAt);
@@ -580,7 +587,7 @@ export class ConnectionCoordinator {
   }
 
   async markPromptSucceeded(
-    session: Pick<SessionDescriptor, 'connectionId' | 'key' | 'updatedAt'>,
+    session: WatermarkSession,
     acceptedAt = this.now(),
   ): Promise<SessionWatermarks> {
     const values = await this.watermarks.markPromptSucceeded(session, acceptedAt);
@@ -703,6 +710,7 @@ export class ConnectionCoordinator {
         }
         const enteredReady = state === 'ready' && entry.lastState !== 'ready';
         if (state !== 'ready') {
+          this.runActivities = [];
           if (entry.hasReportedReady) this.recovery.begin();
           if (requiresConnectionAction(reason)) this.recovery.fail();
           entry.readyRefresh = null;
@@ -717,6 +725,13 @@ export class ConnectionCoordinator {
         } else {
           this.publish();
         }
+      }),
+      adapter.on('update', (update) => {
+        if (this.active !== entry) return;
+        const next = updateRunActivities(this.runActivities, entry.connectionId, update);
+        if (next === this.runActivities) return;
+        this.runActivities = next;
+        this.publish();
       }),
       adapter.on('sessions', (sessions) => {
         if (this.active === entry) this.acceptSessionSnapshot(entry, sessions);
@@ -932,6 +947,7 @@ export class ConnectionCoordinator {
     const entry = this.active;
     if (!entry) return;
     this.active = null;
+    this.runActivities = [];
     this.clearActiveMaintenance(entry);
     let cleanupFailed = false;
     for (const unsubscribe of entry.unsubscribers.splice(0)) {
@@ -1084,7 +1100,8 @@ export class ConnectionCoordinator {
     const activeConnectionId = patch.activeConnectionId === undefined
       ? storeSnapshot.activeConnectionId
       : patch.activeConnectionId;
-    const inputs = [...this.rosterInputs.values()];
+    const retainedIds = new Set(storeSnapshot.connections.map((connection) => connection.id));
+    const inputs = [...this.rosterInputs.values()].filter((input) => retainedIds.has(input.connection.id));
     if (!this.rosterMemo || this.rosterMemo.activeId !== activeConnectionId
       || inputs.length !== this.rosterMemo.inputs.length
       || inputs.some((input, index) => input !== this.rosterMemo!.inputs[index])) {
@@ -1105,6 +1122,7 @@ export class ConnectionCoordinator {
         : patch.freeConnectionId,
       activeAdapter: this.active?.adapter ?? null,
       activeState: this.active?.adapter.state ?? 'idle',
+      runActivities: this.runActivities,
       recovering: this.recovery.phase === 'recovering',
       recoveryFailed: this.recovery.phase === 'failed',
       pausedConnectionIds: this.pausedIds,

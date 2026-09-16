@@ -3,9 +3,17 @@ import { isSilentReplyPrefixText, isSilentReplyText } from '../utils/chat-messag
 
 export type StreamSegment = {
   id: string;
+  renderKey?: string;
   text: string;
   timestampMs: number;
+  /** Number of tool rows already present when this text segment ended. */
+  afterToolCount?: number;
 };
+
+/** Remains stable when an optimistic run ID is replaced by the server's ID. */
+export function liveReplyRenderKey(startedAt: number | null, runId: string, segment: number): string {
+  return `reply:${startedAt ?? runId}:${segment}`;
+}
 
 function finiteTimestamp(message: UiMessage): number | undefined {
   return typeof message.timestampMs === 'number' && Number.isFinite(message.timestampMs)
@@ -73,6 +81,7 @@ export function buildLiveRunListData(params: {
   liveStreamStartedAt: number | null;
   activeRunId: string | null;
   nowMs?: number;
+  includePlaceholder?: boolean;
 }): UiMessage[] {
   const seen = new Set<string>();
   const dedupedHistory: UiMessage[] = [];
@@ -86,24 +95,25 @@ export function buildLiveRunListData(params: {
   }
 
   const transient: UiMessage[] = [];
-  const maxTransientCount = Math.max(params.streamSegments.length, params.toolMessages.length);
-  for (let index = 0; index < maxTransientCount; index++) {
-    const streamSegment = params.streamSegments[index];
-    if (streamSegment?.text.trim() && !shouldHideSilentStreamText(streamSegment.text)) {
+  let toolIndex = 0;
+  const appendToolsUntil = (count: number) => {
+    while (toolIndex < count && toolIndex < params.toolMessages.length) {
+      const toolMessage = params.toolMessages[toolIndex++];
+      if (!seen.has(toolMessage.id)) transient.push(toolMessage);
+    }
+  };
+  params.streamSegments.forEach((segment, index) => {
+    appendToolsUntil(segment.afterToolCount ?? index);
+    if (segment.text.trim() && !shouldHideSilentStreamText(segment.text)) {
       transient.push({
-        id: streamSegment.id,
-        role: 'assistant',
-        text: streamSegment.text,
-        timestampMs: streamSegment.timestampMs,
-        streaming: true,
+        id: segment.id,
+        ...(segment.renderKey ? { renderKey: segment.renderKey } : {}),
+        role: 'assistant', text: segment.text,
+        timestampMs: segment.timestampMs, streaming: true,
       });
     }
-
-    const toolMessage = params.toolMessages[index];
-    if (toolMessage && !seen.has(toolMessage.id)) {
-      transient.push(toolMessage);
-    }
-  }
+  });
+  appendToolsUntil(params.toolMessages.length);
 
   const latestHistoryMessage = dedupedHistory[dedupedHistory.length - 1];
   const hasTerminalMessage = (
@@ -117,15 +127,56 @@ export function buildLiveRunListData(params: {
     liveStreamStartedAt: params.liveStreamStartedAt,
     nowMs,
   });
-  if (hasLiveStream && !hasTerminalMessage && !shouldHideSilentStreamText(params.liveStreamText)) {
+  const showPlaceholder = params.includePlaceholder && Boolean(params.activeRunId);
+  if ((hasLiveStream || showPlaceholder) && !hasTerminalMessage && !shouldHideSilentStreamText(params.liveStreamText)) {
     transient.push({
       id: 'streaming',
+      ...(params.includePlaceholder && params.activeRunId ? {
+        renderKey: liveReplyRenderKey(params.liveStreamStartedAt, params.activeRunId, params.streamSegments.length),
+      } : {}),
       role: 'assistant',
-      text: params.liveStreamText ?? '',
+      text: hasLiveStream ? params.liveStreamText ?? '' : '',
       streaming: true,
       timestampMs: params.liveStreamStartedAt ?? undefined,
     });
   }
 
   return [...dedupedHistory, ...transient].reverse();
+}
+
+
+/** A final payload may contain only the tail, or repeat all earlier text. */
+export function finalReplyTail(finalText: string, segments: ReadonlyArray<StreamSegment>, currentTail?: string): string {
+  if (currentTail && finalText === currentTail) return finalText;
+  let tail = finalText;
+  for (const segment of segments) {
+    const prefix = segment.text.trim();
+    if (!prefix) continue;
+    const trimmed = tail.trimStart();
+    // Only remove an exact ordered prefix, never a substring or a fuzzy match.
+    if (!trimmed.startsWith(prefix)) return finalText;
+    tail = trimmed.slice(prefix.length).trimStart();
+  }
+  return tail;
+}
+
+/** Commit the same live rows in one state transition; don't rebuild a flat answer. */
+export function finishLiveRunPresentation(params: {
+  segments: StreamSegment[]; tools: UiMessage[]; tail: string;
+  runId: string; startedAt: number | null; finalMessage?: UiMessage; cancelled?: boolean;
+}): UiMessage[] {
+  const rows = buildLiveRunListData({
+    historyMessages: [], streamSegments: params.segments, toolMessages: params.tools,
+    liveStreamText: null, liveStreamStartedAt: params.startedAt, activeRunId: null,
+  }).reverse().map(message => ({ ...message, streaming: false, presentationRunId: params.runId,
+    ...(message.role === 'tool' && message.toolStatus === 'running' ? { toolStatus: 'unknown' as const } : {}),
+  }));
+  if (params.tail.trim()) rows.push({
+    ...params.finalMessage,
+    id: params.finalMessage?.id ?? `${params.cancelled ? 'abort' : 'final'}_${params.runId}`,
+    renderKey: liveReplyRenderKey(params.startedAt, params.runId, params.segments.length),
+    role: 'assistant', text: params.tail, streaming: false, presentationRunId: params.runId,
+    timestampMs: params.finalMessage?.timestampMs ?? Date.now(),
+  });
+  return rows;
 }

@@ -447,6 +447,8 @@ export function mapHermesSession(
     title: sessionTitle(session),
     channel: session.channel,
     updatedAt: normalizeSessionUpdatedAt(session.updatedAt),
+    // Hermes `updated_ts` is the last message time; the Bridge never writes it for housekeeping.
+    lastActivityAt: normalizeSessionUpdatedAt(session.updatedAt),
     preview: session.lastMessagePreview,
     model: session.model,
     modelProvider: session.modelProvider,
@@ -474,6 +476,7 @@ export function legacyHermesMainSession(connectionId: string): SessionDescriptor
     kind: 'main',
     title: 'Main',
     updatedAt: null,
+    lastActivityAt: null,
     hasActiveRun: false,
     source: 'bridge',
     allowedActions: { rename: false, reset: false, delete: false, pin: true },

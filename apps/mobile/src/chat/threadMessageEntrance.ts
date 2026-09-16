@@ -29,11 +29,11 @@ export function getTailEntranceMessageIds(
   maxCount = MAX_TAIL_ENTRANCE_COUNT,
 ): string[] {
   if (previous.length === 0 || next.length === 0) return [];
-  const previousIds = new Set(previous.map((message) => message.id));
-  const nextIds = new Set(next.map((message) => message.id));
+  const previousIds = new Set(previous.map((message) => message.renderKey ?? message.id));
+  const nextIds = new Set(next.map((message) => message.renderKey ?? message.id));
   const tailNew: UiMessage[] = [];
   for (const message of next) {
-    if (previousIds.has(message.id)) break;
+    if (previousIds.has(message.renderKey ?? message.id)) break;
     tailNew.push(message);
   }
   if (tailNew.length === 0 || tailNew.length > maxCount) return [];
@@ -41,7 +41,7 @@ export function getTailEntranceMessageIds(
   const removedSignatures = new Map<string, number>();
   let removedStreamingReplies = 0;
   for (const message of previous) {
-    if (nextIds.has(message.id)) continue;
+    if (nextIds.has(message.renderKey ?? message.id)) continue;
     if (message.role === 'assistant' && message.streaming && message.text.trim().length > 0) removedStreamingReplies += 1;
     const signature = entranceSignature(message);
     removedSignatures.set(signature, (removedSignatures.get(signature) ?? 0) + 1);
@@ -59,7 +59,7 @@ export function getTailEntranceMessageIds(
       removedStreamingReplies -= 1;
       continue;
     }
-    ids.push(message.id);
+    ids.push(message.renderKey ?? message.id);
   }
   return ids;
 }

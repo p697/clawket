@@ -2,17 +2,17 @@
 
 ## 1. 发布顺序
 
-1. Preview：`relay:deploy:preview-registry` → `relay:deploy:preview-worker` → Hermes Preview 的两个实例；Bridge 用本机 `npm pack` 的 tarball；App 以 Debug 模式指向 Preview。通宵运行到此为止。
-2. 在 Preview 完成 §3 清单（可自动验证的项由实现者做并记录；界面与真机项由人做）。
-3. 人确认 Preview 清单（次日）。
-4. Production 服务端：`relay:deploy:registry` → `relay:deploy:worker` → `relay:deploy:hermes-registry` → `relay:deploy:hermes-worker`（后两者首次由合一代码部署，先 `wrangler versions upload` 再 `deploy`，保留一键回滚到上一版本的命令写进 `PROGRESS.md`）。
-5. 立即用 2.1.x 老 App 在 Production 验证：配对、聊天、重连、Hermes 连接；任一失败 → 回滚到上一版本并记录。
-6. `bridge:publish` 正式版 `@p697/clawket@3.0.0`。
-7. （人）TestFlight / Play 内测提交；商店文案与截图；隐私标签（数据不收集：消息；收集：诊断、使用数据，与用户身份不关联）。
-8. （人）真人验收（§3 清单抽验）。
-9. 双端正式发布；48 小时观察（§4）。
+服务端 → Bridge npm → App 的顺序成立，但服务端部署后仍需支持未升级的 App 和 Bridge；发布新版 npm 不会自动升级用户电脑。当前审计与实测矩阵见 [2026-09-14 发布兼容性报告](release-compatibility-2026-09-14.md)。
 
-回滚：服务端用 Cloudflare 版本回滚；Bridge 用 npm `latest` 指回旧版；App 无法回滚，所以 App 只在服务端与 Bridge 稳定 48 小时后提交审核。
+1. 固定候选提交和发布包，跑 `check:required`、`test:compat`、`relay:test:integration`、`bridge:cli:verify-package`。导出当时 Production 四个 Worker 的只读代码快照，用 `CLAWKET_RELEASE_SNAPSHOTS=<directory> npm run test:release:compat` 验证混合服务版本、旧/新 Bridge 与存量配对。快照缺失必须失败。
+2. Preview 部署 Registry → Relay，逐后端验证；OpenClaw 与 Hermes 的资源、凭据独立。完成旧 App 协议回放、新版 App 连接旧 Bridge 的测试，并在隔离候选服务上用实际已发布 2.x App 抽验。保存 Production 版本与恢复产物。
+3. **首次 Registry 迁移前准备恢复方案。** 新增 `PairRegisterRateLimiter` Durable Object 后，不能直接回滚到不导出该类的旧版本。先准备并验证保留新 DO 类、绑定、迁移及注册限速保护的恢复产物，或先建立支持迁移的兼容基线；故障时前向部署恢复产物。不得临时删除 DO 或限速来回退。
+4. 核对每个环境/后端的绑定与密钥。OpenClaw 六位码必须在对应 Registry/Relay 配置匹配且至少 32 字符的 `PAIRING_TICKET_SECRET`；只核对名称不会证明值相同，需实际配对验证。旧 QR / 12 位加密邀请兼容流程仍须保留。
+5. Production 按 OpenClaw Registry → Relay，再独立 Hermes Registry → Relay 升级；每个服务对完成存量连接恢复、新配对、发送/回复、历史、后台恢复检查后才继续。用实际已发布的 2.x App 抽验；失败即停止推进并使用预演过的恢复路径。
+6. 服务端稳定后发布 `@p697/clawket@3.0.0`。先小范围安装、重启和核对运行版本，再扩大。用户电脑仍可能长期运行旧 Bridge，新 App 不得因此失去基本连接/聊天。
+7. 服务端与 Bridge 稳定观察 48 小时后，按双端沙盒/购买/权限清单完成提审与正式发布；隐私标签以当前实际 SDK 和数据处理为准。
+
+恢复边界：未跨 DO 类生命周期迁移的服务可使用 Cloudflare 版本回滚；跨迁移按第 3 步前向恢复。npm `latest` 指回旧版只影响后续安装，已经装上新 Bridge 的主机需要显式安装指定旧版本并重启。App 商店无法即时回退，因此必须最后发布。[Cloudflare 回滚限制](https://developers.cloudflare.com/workers/versions-and-deployments/rollbacks/)
 
 ## 2. 老 App 验证脚本（人手上要有一台装着 2.1.2 的设备）
 
@@ -111,7 +111,7 @@
 
 ## 4. 发布后 48 小时
 
-每天记录：`connect_ready` p90、`connect_failed` 按 code、`reconnect` 率、崩溃率（Expo / 商店后台）、`paywall_launch_shown → purchase` 转化、Android 成交率。任何一项相对 Preview 恶化 > 50% → 先修连接稳定性。
+每天记录：`connect_ready` p90、`connect_failed` 按 code、`reconnect` 率、崩溃率（Expo / 商店后台）、`app_update_announcement_shown → paywall_viewed → purchase` 转化、Android 成交率。任何一项相对 Preview 恶化 > 50% → 先修连接稳定性。
 
 ## 5. 商店文案（供 HT-5）
 

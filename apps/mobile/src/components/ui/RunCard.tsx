@@ -7,7 +7,7 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
-import { ChevronRight } from 'lucide-react-native';
+import { ChevronRight } from './DirectionalIcon';
 import { useAppTheme } from '../../theme';
 import {
   ControlSize,

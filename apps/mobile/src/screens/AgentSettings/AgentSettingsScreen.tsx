@@ -5,7 +5,8 @@ import {
   Text,
   View,
 } from 'react-native';
-import { ChevronLeft, SlidersHorizontal, Fingerprint, Lock, MessageCircle } from 'lucide-react-native';
+import { Fingerprint, Lock, MessageCircle, Plug, Settings2, Wrench, Monitor, FileText } from 'lucide-react-native';
+import { ChevronLeft } from '../../components/ui/DirectionalIcon';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type {
@@ -16,8 +17,10 @@ import type {
   ConnectionState,
 } from '@clawket/agent-protocol';
 import { AgentAvatar } from '../../components/ui/AgentAvatar';
-import { Sheet } from '../../components/ui/Sheet';
+import { PlatformMark } from '../../components/ui/PlatformMark';
+import { SettingsIcon } from '../../components/ui/SettingsIcon';
 import { Banner } from '../../components/ui/Banner';
+import { ConnectionStatusPill } from '../../components/ui/ConnectionStatusPill';
 import { FloatingButton } from '../../components/ui/FloatingButton';
 import {
   SettingsDivider,
@@ -32,6 +35,7 @@ import type {
 import { analyticsEvents } from '../../services/analytics/events';
 import { useAppTheme } from '../../theme';
 import {
+  BorderWidth,
   ControlSize,
   FontSize,
   FontWeight,
@@ -70,6 +74,8 @@ export type AgentSettingsViewProps = Readonly<{
   /** Agents on the connection; the shared Gateway heartbeat line shows only for a lone Agent. */
   agentCount?: number;
   errorMessage?: string;
+  /** The runtime's foreground grace window is open: show quiet reconnecting instead of offline. */
+  reconnecting?: boolean;
   onBack: () => void;
   onContinueChat?: () => void;
   onNavigate: AgentSettingsNavigate;
@@ -246,6 +252,7 @@ export function AgentSettingsView({
   identityDetail,
   agentCount,
   errorMessage,
+  reconnecting = false,
   onBack,
   onContinueChat,
   onNavigate,
@@ -256,8 +263,6 @@ export function AgentSettingsView({
   const { theme } = useAppTheme();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
-  const [advancedVisible, setAdvancedVisible] = useState(false);
-  const afterAdvancedCloseRef = useRef<(() => void) | null>(null);
   const trackedConnectionRef = useRef<string | null>(null);
   useEffect(() => {
     const key = `${connection.id}:${connection.backendKind}`;
@@ -303,16 +308,13 @@ export function AgentSettingsView({
       if (row.locked) onOpenPro(row.section, onContinue);
       else onContinue();
     };
-    if (advancedVisible) {
-      afterAdvancedCloseRef.current = open;
-      setAdvancedVisible(false);
-      return;
-    }
     open();
   };
 
+  // The hero has no static line: the backend is the avatar's corner mark, so the grey text only
+  // appears when it carries something live (heartbeat age) or account-specific (YouMind email).
   const identityDetailLabel = (() => {
-    if (!model) return '';
+    if (!model) return undefined;
     const minutes = model.identity.activeMinutesAgo;
     if (minutes === null) return model.identity.detail;
     const formatted = formatConsoleHeartbeatAge(minutes, i18n?.resolvedLanguage ?? i18n?.language ?? 'en');
@@ -320,7 +322,7 @@ export function AgentSettingsView({
       ?? (formatted.count === undefined
         ? t(formatted.key, { ns: 'common' })
         : t(formatted.key, { ns: 'common', count: formatted.count }));
-    return `${model.identity.backendLabel} · ${t('Active {{age}}', { ns: 'settings', age })}`;
+    return t('Active {{age}}', { ns: 'settings', age });
   })();
 
   const openIdentity = () => {
@@ -336,6 +338,32 @@ export function AgentSettingsView({
     }
     onContinue();
   };
+  const connectionStatus = state === 'offline' && reconnecting ? (
+    <ConnectionStatusPill
+      testID="agent-settings-reconnecting"
+      placement="inline"
+      status="reconnecting"
+      message={t('Reconnecting…', { ns: 'common' })}
+    />
+  ) : state === 'offline' ? (
+    <ConnectionStatusPill
+      testID="agent-settings-offline"
+      placement="inline"
+      status="offline"
+      message={translateAgentSettingsKey(t, 'Offline · reconnecting')}
+      actionLabel={translateAgentSettingsKey(t, 'Reconnect')}
+      onAction={onRetry}
+    />
+  ) : state === 'error' ? (
+    <ConnectionStatusPill
+      testID="agent-settings-error"
+      placement="inline"
+      status="error"
+      message={errorMessage || translateAgentSettingsKey(t, 'Settings could not load')}
+      actionLabel={t('Retry', { ns: 'common' })}
+      onAction={onRetry}
+    />
+  ) : null;
 
   return (
     <View
@@ -345,6 +373,7 @@ export function AgentSettingsView({
       <AgentSettingsHeader
         backLabel={t('Back', { ns: 'common' })}
         title={t('Agent profile', { ns: 'settings' })}
+        status={connectionStatus}
         onBack={onBack}
         trailing={(
           <FloatingButton
@@ -376,23 +405,6 @@ export function AgentSettingsView({
           ]}
           showsVerticalScrollIndicator={false}
         >
-          {state === 'offline' ? (
-            <Banner
-              testID="agent-settings-offline"
-              message={translateAgentSettingsKey(t, 'Offline · reconnecting')}
-              actionLabel={translateAgentSettingsKey(t, 'Reconnect')}
-              onAction={onRetry}
-            />
-          ) : null}
-          {state === 'error' ? (
-            <Banner
-              testID="agent-settings-error"
-              tone="bad"
-              message={errorMessage || translateAgentSettingsKey(t, 'Settings could not load')}
-              actionLabel={t('Retry', { ns: 'common' })}
-              onAction={onRetry}
-            />
-          ) : null}
           {state === 'permission' ? (
             <Banner
               testID="agent-settings-permission"
@@ -403,11 +415,25 @@ export function AgentSettingsView({
           ) : null}
 
           <View style={styles.profileHero}>
-            <AgentAvatar testID="agent-settings-avatar" agentId={agent.agentId}
-              name={model.identity.name} emoji={agent.emoji} avatarUrl={agent.avatarUrl}
-              variant="roster" status={model.identity.locked ? 'locked' : state === 'offline' ? 'offline' : 'idle'} />
+            <View style={styles.profileAvatar}>
+              <AgentAvatar testID="agent-settings-avatar" agentId={agent.agentId}
+                name={model.identity.name} emoji={agent.emoji} avatarUrl={agent.avatarUrl}
+                variant="roster" status={model.identity.locked ? 'locked' : state === 'offline' ? 'offline' : 'idle'} />
+              {model.identity.locked ? null : (
+                <View
+                  testID="agent-settings-backend-mark"
+                  accessibilityRole="image"
+                  accessibilityLabel={model.identity.backendLabel}
+                  style={styles.backendMark}
+                >
+                  <PlatformMark platform={model.identity.backend} size={IconSize.md} />
+                </View>
+              )}
+            </View>
             <Text style={styles.profileName}>{model.identity.name}</Text>
-            <Text testID="agent-settings-identity-detail" style={styles.profileDetail}>{identityDetailLabel}</Text>
+            {identityDetailLabel ? (
+              <Text testID="agent-settings-identity-detail" style={styles.profileDetail}>{identityDetailLabel}</Text>
+            ) : null}
           </View>
           <AgentSettingsStats
             stats={model.stats}
@@ -416,53 +442,32 @@ export function AgentSettingsView({
             onOpen={openRow}
           />
           {model.identity.editable || model.identity.locked ? (
-            <SettingsGroup testID="agent-settings-identity-group">
-              <SettingsRow testID="agent-settings-identity" title={t('Personality & memory', { ns: 'settings' })}
-                leading={<Fingerprint size={20} color={theme.colors.inkSecondary} />}
+            <SettingsGroup density="comfortable" testID="agent-settings-identity-group">
+              <SettingsRow testID="agent-settings-identity" title={t('Identity', { ns: 'config' })}
+                leading={<SettingsIcon icon={Fingerprint} tone="neutral" size={20} strokeWidth={1.75} />}
                 locked={model.identity.locked} showChevron onPress={openIdentity} />
             </SettingsGroup>
           ) : null}
           {model.groups.map((group) => (
-            <SettingsSection key={group.id} group={{ ...group,
-              rows: group.rows.filter((row) => row.placement === 'primary'),
-            }} translate={(key) => translateAgentSettingsKey(t, key)} onOpenRow={openRow} />
+            <SettingsSection key={group.id} group={group} translate={(key) => translateAgentSettingsKey(t, key)} onOpenRow={openRow} />
           ))}
-          {model.groups.some((group) => group.rows.some((row) => row.placement === 'advanced')) ? (
-            <SettingsGroup>
-              <SettingsRow testID="agent-profile-advanced" title={t('Advanced management', { ns: 'settings' })}
-                leading={<SlidersHorizontal size={20} color={theme.colors.inkSecondary} />}
-                showChevron onPress={() => setAdvancedVisible(true)} />
-            </SettingsGroup>
-          ) : null}
         </ScrollView>
       )}
-      {model ? (
-        <Sheet visible={advancedVisible} onClose={() => setAdvancedVisible(false)} title={t('Advanced management', { ns: 'settings' })}
-          onAfterClose={() => {
-            const action = afterAdvancedCloseRef.current;
-            afterAdvancedCloseRef.current = null;
-            action?.();
-          }}
-          closeAccessibilityLabel={t('Close', { ns: 'common' })}>
-          <ScrollView contentContainerStyle={styles.content}>
-            {model.groups.map((group) => <SettingsSection key={group.id} group={{ ...group,
-              rows: group.rows.filter((row) => row.placement === 'advanced'),
-            }} translate={(key) => translateAgentSettingsKey(t, key)} onOpenRow={openRow} />)}
-          </ScrollView>
-        </Sheet>
-      ) : null}
     </View>
   );
 }
 
+/** The title yields its slot to connection state, so the header never grows or pushes content. */
 function AgentSettingsHeader({
   backLabel,
   title,
+  status,
   onBack,
   trailing,
 }: Readonly<{
   backLabel: string;
   title: string;
+  status?: React.ReactNode;
   onBack: () => void;
   trailing?: React.ReactNode;
 }>): React.JSX.Element {
@@ -476,9 +481,13 @@ function AgentSettingsHeader({
         accessibilityLabel={backLabel}
         onPress={onBack}
       />
-      <Text testID="agent-settings-title" style={styles.headerTitle} numberOfLines={1}>
-        {title}
-      </Text>
+      {status ? (
+        <View testID="agent-settings-header-status" style={styles.headerStatus}>{status}</View>
+      ) : (
+        <Text testID="agent-settings-title" style={styles.headerTitle} numberOfLines={1}>
+          {title}
+        </Text>
+      )}
       {trailing ?? <View style={styles.headerSlot} />}
     </View>
   );
@@ -563,36 +572,28 @@ function SettingsSection({
   translate: Translate;
   onOpenRow: (row: AgentSettingsRowDescriptor) => void;
 }>): React.JSX.Element | null {
-  const { theme } = useAppTheme();
-  const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
   if (group.rows.length === 0) return null;
 
   return (
-    <View testID={`agent-settings-${group.id}-section`} style={styles.section}>
-      {group.title ? (
-        <Text testID={`agent-settings-${group.id}-heading`} style={styles.sectionTitle}>
-          {group.title}
-        </Text>
-      ) : null}
-      <SettingsGroup testID={`agent-settings-${group.id}-group`}>
-        {group.rows.map((row, index) => (
-          <React.Fragment key={row.id}>
-            {index > 0 ? <SettingsDivider inset="content" /> : null}
-            <SettingsRow
-              testID={`agent-settings-row-${row.id}`}
-              title={translate(row.title)}
-              value={row.section === 'connection' && row.value
-                ? translate(row.value)
-                : row.value}
-              attention={row.attention}
-              locked={row.locked}
-              showChevron={!row.locked}
-              onPress={() => onOpenRow(row)}
-            />
-          </React.Fragment>
-        ))}
-      </SettingsGroup>
-    </View>
+    <SettingsGroup density="comfortable" testID={`agent-settings-${group.id}-group`}>
+      {group.rows.map((row, index) => (
+        <React.Fragment key={row.id}>
+          {index > 0 ? <SettingsDivider inset="content" /> : null}
+          <SettingsRow
+            testID={`agent-settings-row-${row.id}`}
+            title={translate(row.title)}
+            leading={<SettingsIcon icon={({ connection: Plug, openclaw: Settings2, tools: Wrench, 'channels-devices': Monitor, logs: FileText } as Record<string, typeof Plug>)[row.id] ?? Settings2} tone="neutral" size={20} strokeWidth={1.75} />}
+            value={row.section === 'connection' && row.value
+              ? translate(row.value)
+              : row.value}
+            attention={row.attention}
+            locked={row.locked}
+            showChevron={!row.locked}
+            onPress={() => onOpenRow(row)}
+          />
+        </React.Fragment>
+      ))}
+    </SettingsGroup>
   );
 }
 
@@ -637,7 +638,24 @@ function AgentSettingsLoading({
 
 function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors']) {
   return StyleSheet.create({
-    profileHero: { alignItems: 'center', gap: Space.md, paddingVertical: Space.lg },
+    // Owner trimmed the hero on 2026-09-16: 8 points off the top, 4 off the bottom.
+    profileHero: { alignItems: 'center', gap: Space.md, paddingTop: Space.sm, paddingBottom: Space.md },
+    profileAvatar: { position: 'relative', overflow: 'visible' },
+    // Corner mark cut out of the avatar by a ring in the page ground, like the roster status badges.
+    backendMark: {
+      position: 'absolute',
+      right: -Space.xs,
+      bottom: -Space.xs,
+      width: Space.xl,
+      height: Space.xl,
+      borderRadius: Radius.full,
+      borderWidth: BorderWidth.strong,
+      borderColor: colors.canvasGrouped,
+      backgroundColor: colors.surfaceFloating,
+      overflow: 'hidden',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
     stats: { gap: Space.md },
     statRow: { flexDirection: 'row', gap: Space.md, alignItems: 'stretch' },
     statCard: { flex: 1, minWidth: 0 },
@@ -700,20 +718,17 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       textAlign: 'center',
       marginHorizontal: Space.sm,
     },
+    headerStatus: {
+      flex: 1,
+      minWidth: 0,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginHorizontal: Space.sm,
+    },
     content: {
       paddingHorizontal: Space.lg,
       paddingTop: Space.xl,
       gap: Space.xl,
-    },
-    section: {
-      gap: Space.sm,
-    },
-    sectionTitle: {
-      color: colors.inkSecondary,
-      fontSize: FontSize.secondary,
-      lineHeight: LineHeight.secondary,
-      fontWeight: FontWeight.regular,
-      paddingHorizontal: Space.xs,
     },
     centeredState: {
       flex: 1,

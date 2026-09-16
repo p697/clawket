@@ -12,7 +12,6 @@ import {
   nextDeliverableMessage,
   promoteQueuedMessage,
   queuedMessageDelivery,
-  releaseMessageQueue,
   removeQueuedMessage,
   resetMessageQueueStore,
   type QueuedMessage,
@@ -63,7 +62,7 @@ describe('messageQueue model', () => {
     expect(promoteQueuedMessage(state, 'missing')).toBe(state);
   });
 
-  it('holds, releases, and clears an in-flight marker when held', () => {
+  it('clears an in-flight marker when held and resumes through Send now', () => {
     expect(holdMessageQueue(EMPTY_MESSAGE_QUEUE)).toBe(EMPTY_MESSAGE_QUEUE);
     let state = enqueueMessage(EMPTY_MESSAGE_QUEUE, item('a'));
     state = markQueuedMessageSending(state, 'a');
@@ -73,9 +72,8 @@ describe('messageQueue model', () => {
     expect(state).toEqual({ items: [item('a')], held: true, sendingId: null });
     expect(holdMessageQueue(state)).toBe(state);
     expect(nextDeliverableMessage(state)).toBeNull();
-    state = releaseMessageQueue(state);
+    state = promoteQueuedMessage(state, 'a');
     expect(state.held).toBe(false);
-    expect(releaseMessageQueue(state)).toBe(state);
     expect(nextDeliverableMessage(state)).toEqual(item('a'));
   });
 

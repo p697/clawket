@@ -77,6 +77,29 @@ describe('useChatHistoryState', () => {
     consoleErrorSpy.mockRestore();
   });
 
+  it.each(['openclaw', 'hermes'])('retains %s source identities when projecting text around tools', async (backendKind) => {
+    const key = 'agent:main:main';
+    const adapter = {
+      connection: { backendKind }, state: 'ready',
+      listSessions: jest.fn().mockResolvedValue([createSession(key)]),
+      loadSession: jest.fn().mockResolvedValue({ messages: [
+        { id: 'source-user', role: 'user', text: 'Check', timestampMs: 100_000 },
+        { id: 'source-first', role: 'assistant', text: 'Checking', timestampMs: 110_000 },
+        { id: 'source-tool', role: 'tool', text: '', timestampMs: 120_000,
+          tool: { name: 'read', callId: 'call-1', status: 'success' } },
+        { id: 'source-last', role: 'assistant', text: 'Finished', timestampMs: 130_000 },
+      ] }),
+    };
+    const { result } = renderHook(() => {
+      const sessionKeyRef = useRef<string | null>(key);
+      return useChatHistoryState({ adapter: adapter as any, dbg: jest.fn(), t: translate,
+        sessionKeyRef, mainSessionKey: key, gatewayConfigId: null, currentAgentId: 'main' });
+    });
+    await act(async () => { await result.current.loadSessionsAndHistory(); });
+    expect(result.current.messages.filter(message => message.role !== 'tool').map(message => message.historyMessageId))
+      .toEqual(['source-user', 'source-first', 'source-last']);
+  });
+
   it.each(['openclaw', 'hermes'])('keeps an explicit %s task route even when absent from the session index', async (backendKind) => {
     const key = 'agent:main:cron:archived:run:123';
     const adapter = {
@@ -1062,6 +1085,51 @@ describe('useChatHistoryState', () => {
     expect(result.current.sessionKeyRef.current).toBeNull();
     expect(result.current.state.sessions).toEqual([]);
     expect(result.current.state.historyLoaded).toBe(false);
+  });
+
+  it.each(['openclaw', 'hermes'])('keeps a new %s send when the first server history replaces an old cached preview', async (backendKind) => {
+    const key = 'agent:main:main';
+    const request = deferred<any>();
+    const adapter = { connection: { backendKind }, state: 'ready', loadSession: jest.fn(() => request.promise) };
+    (ChatCacheService.getTimelinePage as jest.Mock).mockResolvedValueOnce({ messages: [
+      { id: 'usr_1000', role: 'user', text: 'Old cached send', timestampMs: 1000 },
+      { id: 'final_old', role: 'assistant', text: 'Stale cached answer', timestampMs: 2000 },
+    ], hasMore: false });
+    const { result } = renderHook(() => {
+      const sessionKeyRef = useRef<string | null>(null);
+      return useChatHistoryState({ adapter: adapter as any, dbg: jest.fn(), t: translate, sessionKeyRef,
+        mainSessionKey: key, gatewayConfigId: 'gw-1', currentAgentId: 'main',
+        initialPreview: { sessionKey: key, agentId: 'main', updatedAt: 1000 } });
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(result.current.messages.map(message => message.text)).toEqual(['Old cached send', 'Stale cached answer']);
+    let load!: Promise<number>;
+    act(() => { load = result.current.loadHistory(key); });
+    const fresh = { id: 'usr_3000', renderKey: 'usr_3000', role: 'user' as const, text: 'New send', timestampMs: 3000, idempotencyKey: 'new-send' };
+    act(() => { result.current.setMessages(previous => [...previous, fresh]); });
+    await act(async () => { request.resolve({ key, messages: [], hasActiveRun: true }); await load; });
+    expect(result.current.messages).toEqual([fresh]);
+  });
+
+  it('keeps assistant text before tool calls embedded in the same history record', async () => {
+    const key = 'agent:main:main';
+    const adapter = { state: 'ready', loadSession: jest.fn().mockResolvedValue({ key, hasActiveRun: false, messages: [
+      { id: 'u', role: 'user', text: 'Inspect', timestampMs: 1000 },
+      { id: 'a', role: 'assistant', text: 'Reading the file.', timestampMs: 2000,
+        tool: { callId: 'read-1', name: 'read', status: 'running' } },
+      { id: 'r', role: 'tool', text: 'contents', timestampMs: 3000,
+        tool: { callId: 'read-1', name: 'read', status: 'success' } },
+      { id: 'b', role: 'assistant', text: 'Done.', timestampMs: 4000 },
+    ] }) };
+    const { result } = renderHook(() => {
+      const sessionKeyRef = useRef<string | null>(key);
+      return useChatHistoryState({ adapter: adapter as any, dbg: jest.fn(), t: translate, sessionKeyRef,
+        mainSessionKey: key, gatewayConfigId: null, currentAgentId: 'main' });
+    });
+    await act(async () => { await result.current.loadHistory(key); });
+    expect(result.current.messages.map(message => [message.role, message.text])).toEqual([
+      ['user', 'Inspect'], ['assistant', 'Reading the file.'], ['tool', ''], ['assistant', 'Done.'],
+    ]);
   });
 
   it('restores startup preview session metadata from the current agent scoped snapshot', async () => {

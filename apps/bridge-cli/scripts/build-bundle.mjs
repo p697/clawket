@@ -42,6 +42,8 @@ const args = [
   "--external",
   "qrcode",
   "--external",
+  "https-proxy-agent",
+  "--external",
   "ws",
   "--external",
   "qrcode-terminal",

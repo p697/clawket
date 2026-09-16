@@ -4,7 +4,6 @@ import { ProPaywallOverlay } from './ProPaywallOverlay';
 
 const mockPurchasePro = jest.fn();
 const mockRestorePurchases = jest.fn();
-const mockCompleteIntro = jest.fn();
 const mockRefreshOfferings = jest.fn();
 const mockSelectPackage = jest.fn();
 var mockAnalytics: Record<string, jest.Mock>;
@@ -36,18 +35,21 @@ jest.mock('../../services/analytics/events', () => {
     paywallPackageSelected: jest.fn(),
     paywallSubscribeTapped: jest.fn(),
     paywallPurchaseSucceeded: jest.fn(),
+    paywallPlanChangeSubmitted: jest.fn(),
+    paywallManageSubscriptionTapped: jest.fn(),
     paywallPurchaseFailed: jest.fn(),
     paywallRestoreTapped: jest.fn(),
     paywallRestoreSucceeded: jest.fn(),
     paywallRestoreFailed: jest.fn(),
-    paywallLaunchShown: jest.fn(),
-    paywallLaunchClosed: jest.fn(),
   };
   return { analyticsEvents: mockAnalytics };
 });
 
 jest.mock('../../services/pro-subscription', () => ({
   isRevenueCatPackagePurchaseLocked: () => false,
+  selectDisplayedRevenueCatPackage: () => null,
+  hasRenewingProSubscription: () => false,
+  proSubscriptionManagementUrl: () => 'https://apps.apple.com/account/subscriptions',
 }));
 
 jest.mock('../../config/public', () => ({
@@ -70,7 +72,6 @@ jest.mock('../../screens/Paywall/PaywallScreen', () => {
 function baseContext() {
   return {
     blockedFeature: 'agents',
-    completeThreePointZeroIntro: mockCompleteIntro,
     failureOperation: null,
     failureReason: null,
     paywallMode: 'purchase',
@@ -101,6 +102,16 @@ function deferred<T>(): Readonly<{
 }
 
 describe('ProPaywallOverlay', () => {
+  it('tracks a submitted plan change separately and leaves management feedback open', async () => {
+    mockContext = baseContext();
+    mockPurchasePro.mockResolvedValue({ success: true, reason: null, outcome: 'scheduled', keepOpen: true });
+    const onContinue = jest.fn();
+    const screen = render(<ProPaywallOverlay visible onClose={jest.fn()} onContinue={onContinue} />);
+    await act(async () => { screen.getByTestId('mock-paywall-screen').props.onPurchase(); });
+    expect(mockAnalytics.paywallPlanChangeSubmitted).toHaveBeenCalledTimes(1);
+    expect(mockAnalytics.paywallPurchaseSucceeded).not.toHaveBeenCalled();
+    expect(onContinue).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     jest.clearAllMocks();
     mockContext = baseContext();
@@ -310,22 +321,4 @@ describe('ProPaywallOverlay', () => {
     expect(onContinue).toHaveBeenCalledWith('restore');
   });
 
-  it('exposes a non-purchase 3.0 intro completion path', () => {
-    mockContext = { ...baseContext(), paywallMode: 'threePointZeroIntro', blockedFeature: null };
-    const onContinue = jest.fn();
-    const screen = render(<ProPaywallOverlay visible onClose={jest.fn()} onContinue={onContinue} />);
-
-    act(() => screen.getByTestId('mock-paywall-screen').props.onCompleteIntro());
-
-    expect(mockAnalytics.paywallLaunchShown).toHaveBeenCalledWith({
-      variant: 'three_point_zero_intro',
-      first_run: false,
-    });
-    expect(mockAnalytics.paywallLaunchClosed).toHaveBeenCalledWith({
-      variant: 'three_point_zero_intro',
-      first_run: false,
-    });
-    expect(mockCompleteIntro).toHaveBeenCalledTimes(1);
-    expect(onContinue).toHaveBeenCalledWith('threePointZeroIntro');
-  });
 });

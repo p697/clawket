@@ -89,6 +89,13 @@ jest.mock('../../theme', () => ({
   useAppTheme: () => ({ theme: mockTheme }),
 }));
 
+// Read through a getter so one test can flip the hidden YouMind Sprite entry
+// back on; the screen reads the flag at render time, never at module load.
+let mockYouMindEntryVisible = false;
+jest.mock('../../config/features', () => ({
+  get YOUMIND_SPRITE_ENTRY_VISIBLE() { return mockYouMindEntryVisible; },
+}));
+
 jest.mock('../../components/ui/Banner', () => {
   const ReactRuntime = require('react');
   const { Pressable, Text, View } = require('react-native');
@@ -182,6 +189,7 @@ describe('OnboardingScreen', () => {
 
   beforeEach(() => {
     mockTheme = { scheme: 'light', colors: mockLightColors };
+    mockYouMindEntryVisible = false;
     consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation((message?: unknown) => {
       if (typeof message === 'string' && message.includes('react-test-renderer is deprecated')) return;
     });
@@ -222,15 +230,47 @@ describe('OnboardingScreen', () => {
 
   it('offers local models only in Preview and submits all six digits including zero and one', () => {
     const onSubmitPairing = jest.fn();
-    const view = render(<OnboardingScreen {...createProps({ initialBackend: undefined, onSubmitPairing })} />);
+    const onOpenWebsite = jest.fn();
+    const view = render(<OnboardingScreen {...createProps({ initialBackend: undefined, onSubmitPairing, onOpenWebsite })} />);
     expect(view.queryByTestId('onboarding-backend-local-model')).toBeNull();
-    view.rerender(<OnboardingScreen {...createProps({ initialBackend: undefined, environment: 'preview', onSubmitPairing })} />);
+    view.rerender(<OnboardingScreen {...createProps({ initialBackend: undefined, environment: 'preview', onSubmitPairing, onOpenWebsite })} />);
+    // A local model is a server the user already runs; "No agent yet?" only lists products to install.
+    fireEvent.press(view.getByTestId('onboarding-docs-toggle'));
+    expect(view.getByTestId('onboarding-doc-openclaw')).toBeTruthy();
+    expect(view.queryByTestId('onboarding-doc-local-model')).toBeNull();
     fireEvent.press(view.getByTestId('onboarding-backend-local-model'));
     expect(view.queryByTestId('onboarding-agent-prompt')).toBeNull();
+    expect(view.queryByTestId('onboarding-pairing-method')).toBeNull();
     expect(view.getByText('npx @p697/clawket pair --backend local-model --preview')).toBeTruthy();
     fireEvent.changeText(view.getByTestId('onboarding-pairing-code'), '001234');
     fireEvent.press(view.getByTestId('onboarding-connect'));
     expect(onSubmitPairing).toHaveBeenCalledWith({ backendKind: 'local-model', transportKind: 'relay', code: '001234' });
+  });
+
+  it('lists the supported local model servers and adapts the command and hint to the chosen one', () => {
+    const onCopyCommand = jest.fn();
+    const view = render(<OnboardingScreen {...createProps({ initialBackend: 'local-model', environment: 'preview', onCopyCommand })} />);
+    const engineTabs = view.getByTestId('onboarding-local-model-engine');
+    expect(engineTabs).toBeTruthy();
+    expect(view.getByTestId('onboarding-local-model-engine-llamacpp').props.accessibilityState).toEqual({ selected: true });
+    expect(view.getByTestId('onboarding-command-hint').props.children).toBe('Start llama-server first (default port 8080), then run this in Terminal.');
+    expect(view.getByText('npx @p697/clawket pair --backend local-model --preview')).toBeTruthy();
+
+    fireEvent.press(view.getByTestId('onboarding-local-model-engine-ollama'));
+    expect(view.getByTestId('onboarding-command-hint').props.children).toBe('Make sure Ollama is running, then run this in Terminal.');
+    const ollamaCommand = 'npx @p697/clawket pair --backend local-model --engine ollama --base-url http://127.0.0.1:11434 --preview';
+    expect(view.getByText(ollamaCommand)).toBeTruthy();
+    fireEvent.press(view.getByTestId('onboarding-copy-command'));
+    expect(onCopyCommand).toHaveBeenCalledWith(ollamaCommand);
+
+    fireEvent.press(view.getByTestId('onboarding-local-model-engine-openai-compatible'));
+    expect(view.getByTestId('onboarding-command-hint').props.children).toContain('OpenAI-compatible server');
+    expect(view.getByText('npx @p697/clawket pair --backend local-model --engine openai-compatible --base-url http://127.0.0.1:1234 --preview')).toBeTruthy();
+
+    // OpenClaw keeps its generic terminal hint and never shows the engine switch.
+    view.rerender(<OnboardingScreen {...createProps({ initialBackend: 'openclaw', environment: 'preview', onCopyCommand, onCopyAgentPrompt: undefined })} />);
+    expect(view.queryByTestId('onboarding-local-model-engine')).toBeNull();
+    expect(view.getByTestId('onboarding-command-hint').props.children).toBe('Open Terminal and run this command.');
   });
 
   it('shares one synchronous readiness guard across Enter, button, and input state', () => {
@@ -369,7 +409,7 @@ describe('OnboardingScreen', () => {
     }
   });
 
-  it('routes QR, YouMind, and official website actions through callbacks', () => {
+  it('routes QR and official website actions through callbacks without any YouMind Sprite entry', () => {
     const onScanQr = jest.fn();
     const onOpenYouMind = jest.fn();
     const onOpenWebsite = jest.fn();
@@ -377,16 +417,35 @@ describe('OnboardingScreen', () => {
       <OnboardingScreen {...createProps({ onScanQr, onOpenYouMind, onOpenWebsite, initialBackend: undefined })} />,
     );
 
+    expect(view.queryByTestId('onboarding-youmind')).toBeNull();
+    expect(view.queryByText('YouMind Sprite')).toBeNull();
     fireEvent.press(view.getByTestId('onboarding-backend-hermes'));
     fireEvent.press(view.getByTestId('onboarding-scan-qr'));
     fireEvent.press(view.getByTestId('onboarding-close'));
+    fireEvent.press(view.getByTestId('onboarding-docs-toggle'));
+    fireEvent.press(view.getByTestId('onboarding-doc-openclaw'));
+    fireEvent.press(view.getByTestId('onboarding-doc-hermes'));
+    expect(view.queryByTestId('onboarding-doc-youmind')).toBeNull();
+
+    expect(onScanQr).toHaveBeenCalledWith('hermes');
+    expect(onOpenYouMind).not.toHaveBeenCalled();
+    expect(onOpenWebsite.mock.calls).toEqual([['openclaw'], ['hermes']]);
+  });
+
+  it('restores the YouMind Sprite row and website link when the entry flag is on', () => {
+    mockYouMindEntryVisible = true;
+    const onOpenYouMind = jest.fn();
+    const onOpenWebsite = jest.fn();
+    const view = render(
+      <OnboardingScreen {...createProps({ onOpenYouMind, onOpenWebsite, initialBackend: undefined })} />,
+    );
+
     fireEvent.press(view.getByTestId('onboarding-youmind'));
     fireEvent.press(view.getByTestId('onboarding-docs-toggle'));
     fireEvent.press(view.getByTestId('onboarding-doc-openclaw'));
     fireEvent.press(view.getByTestId('onboarding-doc-hermes'));
     fireEvent.press(view.getByTestId('onboarding-doc-youmind'));
 
-    expect(onScanQr).toHaveBeenCalledWith('hermes');
     expect(onOpenYouMind).toHaveBeenCalledTimes(1);
     expect(onOpenWebsite.mock.calls).toEqual([['openclaw'], ['hermes'], ['youmind']]);
   });

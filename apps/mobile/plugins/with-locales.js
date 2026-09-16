@@ -5,8 +5,9 @@
 const { withXcodeProject } = require('expo/config-plugins');
 const fs = require('fs');
 const path = require('path');
+const { SUPPORTED_LOCALES } = require('../src/i18n/supported-locales');
 
-const LOCALES = ['en', 'zh-Hans', 'ja', 'ko', 'de', 'es'];
+const LOCALES = SUPPORTED_LOCALES.map((locale) => locale.code);
 
 function withLocales(config) {
   return withXcodeProject(config, async (cfg) => {

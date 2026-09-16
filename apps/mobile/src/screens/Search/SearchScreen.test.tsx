@@ -138,7 +138,6 @@ const rosterGroup: RosterConnectionGroup = {
     agent: rosterAgent,
     sessions: [rosterSession],
     preview: 'Launch preview',
-    updatedAt: 100,
     lastActivityAt: 100,
     unreadCount: 0,
     hasUnread: false,

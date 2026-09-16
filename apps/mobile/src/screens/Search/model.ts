@@ -1,7 +1,8 @@
 import { isMainConversation } from '../../utils/session-preview';
-import type {
-  Capabilities,
-  ConnectionDescriptor,
+import {
+  sessionActivityAt,
+  type Capabilities,
+  type ConnectionDescriptor,
 } from '@clawket/agent-protocol';
 import type { RosterConnectionGroup } from '../../connection';
 import type {
@@ -196,7 +197,7 @@ function buildAgentResults(
         sessionKey: agent.mainSessionKey,
         title: agent.name,
         subtitle: connections.get(group.connection.id)?.label,
-        updatedAt: summary.updatedAt,
+        updatedAt: summary.lastActivityAt,
         source: group.source,
         ...(agent.emoji ? { emoji: agent.emoji } : {}),
         ...(agent.avatarUrl ? { avatarUrl: agent.avatarUrl } : {}),
@@ -247,7 +248,7 @@ function buildSessionResults(
           sessionKey: session.key,
           title: session.title,
           subtitle: summary.agent.name,
-          updatedAt: session.updatedAt,
+          updatedAt: sessionActivityAt(session),
           source: group.source,
           ...threadLockProperties(input, group.connection.id, summary.agent.agentId),
         });

@@ -68,7 +68,6 @@ function group(id: string, source: 'live' | 'cache' = 'live'): RosterConnectionG
         agent: main,
         sessions: mainSessions,
         preview: 'Main preview',
-        updatedAt: 100,
         lastActivityAt: 100,
         unreadCount: 2,
         hasUnread: true,
@@ -78,7 +77,6 @@ function group(id: string, source: 'live' | 'cache' = 'live'): RosterConnectionG
       {
         agent: builder,
         sessions: [session(id, 'builder', builder.mainSessionKey, { kind: 'main' })],
-        updatedAt: 90,
         lastActivityAt: 90,
         unreadCount: 0,
         hasUnread: false,
@@ -138,6 +136,17 @@ describe('Roster model', () => {
     ))).toBe(true);
   });
 
+  it('uses live work phases even before a session list snapshot catches up', () => {
+    const rows = buildRosterRows([group('one'), group('two'), group('cached', 'cache')], {
+      runActivities: [
+        { connectionId: 'one', sessionKey: 'agent:main:main', runId: 'r1', phase: 'tool' },
+        { connectionId: 'cached', sessionKey: 'agent:main:main', runId: 'r2', phase: 'thinking' },
+      ],
+    });
+    expect(rows.find((row) => row.connectionId === 'one' && row.agentId === 'main')).toMatchObject({ working: true, activity: 'tool' });
+    expect(rows.filter((row) => row.connectionId !== 'one').every((row) => !row.working)).toBe(true);
+  });
+
   it('projects registry-provided semantic subtitles without inspecting the backend', () => {
     const source = group('sprite');
     const rows = buildRosterRows([{
@@ -164,9 +173,11 @@ describe('Roster model', () => {
     expect(rows.find((row) => row.agentId === 'builder')?.locked).toBe(true);
   });
 
-  it('sorts Agents by local pin, attention, unread, and recent activity within each connection', () => {
+  it('lifts locally pinned Agents and otherwise keeps the registry activity order', () => {
     const source = group('one');
     const builder = source.agents[1];
+    // Registry order is by human activity; `quiet` is the most recent but has
+    // no unread or attention, `main` has both yet is older.
     const quiet = {
       ...source.agents[0],
       agent: { ...source.agents[0].agent, agentId: 'quiet', name: 'Quiet' },
@@ -174,11 +185,11 @@ describe('Roster model', () => {
       attentionCount: 0,
       hasUnread: false,
       unreadCount: 0,
-      updatedAt: 200,
+      lastActivityAt: 200,
     };
     const rows = buildRosterRows([{
       ...source,
-      agents: [builder, quiet, source.agents[0]],
+      agents: [quiet, source.agents[0], builder],
     }], {
       agentPreferences: {
         'one:builder': { agentPinned: true, muted: true },
@@ -187,10 +198,40 @@ describe('Roster model', () => {
 
     expect(rows.filter((row) => row.kind === 'agent').map((row) => row.agentId)).toEqual([
       'builder',
-      'main',
       'quiet',
+      'main',
     ]);
     expect(rows[0]).toMatchObject({ agentPinned: true, muted: true });
+    expect(rows.find((row) => row.agentId === 'main')).toMatchObject({
+      unreadCount: 2,
+      attention: 'approval',
+      lastActivityAt: 100,
+    });
+  });
+
+  it('keeps the same order for a cached snapshot and a live one', () => {
+    const live = group('one');
+    const cached = group('one', 'cache');
+    const order = (rows: ReturnType<typeof buildRosterRows>) => rows.map((row) => row.key);
+
+    expect(order(buildRosterRows([cached]))).toEqual(order(buildRosterRows([live])));
+  });
+
+  it('labels pinned session rows with their own human activity time', () => {
+    const source = group('one');
+    const channel = source.agents[0].sessions[1];
+    const rows = buildRosterRows([{
+      ...source,
+      agents: [{
+        ...source.agents[0],
+        sessions: [
+          source.agents[0].sessions[0],
+          { ...channel, updatedAt: 900, lastActivityAt: 300 },
+        ],
+      }, source.agents[1]],
+    }], { pinnedSessionKeys: { 'one:main': [channel.key] } });
+
+    expect(rows[1]).toMatchObject({ kind: 'pinned_session', lastActivityAt: 300 });
   });
 
   it.each([

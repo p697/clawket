@@ -8,18 +8,19 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import ts from 'typescript';
 
-export const SUPPORTED_LOCALES = Object.freeze([
-  'en',
-  'zh-Hans',
-  'ja',
-  'ko',
-  'de',
-  'es',
-]);
+const require = createRequire(import.meta.url);
+const { SUPPORTED_LOCALES: LOCALE_DEFINITIONS } = require('../src/i18n/supported-locales.js');
+
+export const SUPPORTED_LOCALES = Object.freeze(LOCALE_DEFINITIONS.map((locale) => locale.code));
+
+// A non-English catalog whose values mostly equal English is an untranslated
+// placeholder; real locales stay far below this share (about 11% at most).
+export const MAX_IDENTICAL_TO_ENGLISH_RATIO = 0.4;
 
 export const SUPPORTED_NAMESPACE_LAYOUTS = Object.freeze([
   Object.freeze(['chat', 'common', 'config', 'settings']),
@@ -29,6 +30,74 @@ export const DEFAULT_RETAIN_RULES = Object.freeze({
   exact: Object.freeze({}),
   prefixes: Object.freeze({}),
 });
+
+// Runtime-selected translation keys whose finite value set lives in a reviewed
+// literal table. Each entry names the `t(argument)` call site and the source
+// file that declares every possible key as a string literal. Unregistered
+// dynamic calls still protect their whole namespace from pruning.
+export const DYNAMIC_KEY_ORIGINS = Object.freeze([
+  Object.freeze({
+    file: 'src/chat/useChatController.ts',
+    argument: 'failure.summaryKey',
+    origin: 'src/chat/reply-failure.ts',
+  }),
+  Object.freeze({
+    file: 'src/components/chat/ChatColorPicker.tsx',
+    argument: 'label',
+    origin: 'src/components/chat/ChatColorPicker.tsx',
+  }),
+  Object.freeze({
+    file: 'src/screens/AgentSettings/AgentSettingsScreen.tsx',
+    argument: 'formatted.key',
+    origin: 'src/utils/console-heartbeat.ts',
+  }),
+  Object.freeze({
+    file: 'src/screens/AgentSettings/AgentSettingsScreen.tsx',
+    argument: 'detail.key',
+    origin: 'src/screens/AgentSettings/model.ts',
+  }),
+  Object.freeze({
+    file: 'src/screens/AgentSettings/OpenClawManageScreen.tsx',
+    argument: 'formatted.key',
+    origin: 'src/utils/console-heartbeat.ts',
+  }),
+  // Release-note copy lives in the release catalog; sheet, entry list and history read it dynamically.
+  Object.freeze({
+    file: 'src/features/app-updates/AppUpdateAnnouncementEntryList.tsx',
+    argument: 'entry.title',
+    origin: 'src/features/app-updates/releases.ts',
+  }),
+  Object.freeze({
+    file: 'src/features/app-updates/AppUpdateAnnouncementEntryList.tsx',
+    argument: 'entry.tag',
+    origin: 'src/features/app-updates/releases.ts',
+  }),
+  Object.freeze({
+    file: 'src/features/app-updates/AppUpdateAnnouncementEntryList.tsx',
+    argument: 'entry.subtitle',
+    origin: 'src/features/app-updates/releases.ts',
+  }),
+  Object.freeze({
+    file: 'src/features/app-updates/AppUpdateAnnouncementSheet.tsx',
+    argument: 'latest.title',
+    origin: 'src/features/app-updates/releases.ts',
+  }),
+  Object.freeze({
+    file: 'src/features/app-updates/AppUpdateAnnouncementSheet.tsx',
+    argument: 'latest.summary',
+    origin: 'src/features/app-updates/releases.ts',
+  }),
+  Object.freeze({
+    file: 'src/screens/AccountSettings/ReleaseNotesHistoryScreen.tsx',
+    argument: 'entry.title',
+    origin: 'src/features/app-updates/releases.ts',
+  }),
+  Object.freeze({
+    file: 'src/screens/AccountSettings/ReleaseNotesHistoryScreen.tsx',
+    argument: 'entry.subtitle',
+    origin: 'src/features/app-updates/releases.ts',
+  }),
+]);
 
 const SCRIPT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx']);
@@ -110,6 +179,52 @@ export function parseLocaleCatalog(source, label = 'locale catalog') {
   return parsed;
 }
 
+function interpolationTokens(value) {
+  if (typeof value !== 'string') return [];
+  return stable(new Set(Array.from(value.matchAll(/\{\{\s*([^{}]+?)\s*\}\}/gu), (match) => match[1])));
+}
+
+// app.json must register the same locale set for iOS bundle localizations and
+// the expo-localization plugin (Android locale config).
+export function validateAppConfig(source, label = 'app.json') {
+  const errors = [];
+  let parsed;
+  try {
+    parsed = JSON.parse(source);
+  } catch (error) {
+    return [`${label} is malformed JSON: ${error instanceof Error ? error.message : String(error)}`];
+  }
+  const expected = SUPPORTED_LOCALES.join('\0');
+  const bundleLocalizations = parsed?.expo?.ios?.infoPlist?.CFBundleLocalizations;
+  if (!Array.isArray(bundleLocalizations) || bundleLocalizations.join('\0') !== expected) {
+    errors.push(`${label}: expo.ios.infoPlist.CFBundleLocalizations must list exactly ${SUPPORTED_LOCALES.join(', ')}`);
+  }
+  const plugins = Array.isArray(parsed?.expo?.plugins) ? parsed.expo.plugins : [];
+  const localization = plugins.find((plugin) => Array.isArray(plugin) && plugin[0] === 'expo-localization');
+  const options = localization?.[1];
+  if (!isPlainObject(options) || options.supportsRTL !== true) {
+    errors.push(`${label}: expo-localization plugin must set supportsRTL: true`);
+  }
+  if (!Array.isArray(options?.supportedLocales) || options.supportedLocales.join('\0') !== expected) {
+    errors.push(`${label}: expo-localization supportedLocales must list exactly ${SUPPORTED_LOCALES.join(', ')}`);
+  }
+  return errors;
+}
+
+export function loadAppConfig(root) {
+  const path = join(root, 'app.json');
+  let source;
+  try {
+    source = readFileSync(path, 'utf8');
+  } catch (error) {
+    throw new Error(`cannot read ${path}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  const errors = validateAppConfig(source, relativeSourcePath(root, path));
+  if (errors.length > 0) {
+    throw new Error(`app config validation failed:\n${errors.map((error) => `- ${error}`).join('\n')}`);
+  }
+}
+
 function isSupportedNamespaceLayout(namespaces) {
   const signature = stable(namespaces).join('\0');
   return SUPPORTED_NAMESPACE_LAYOUTS.some((layout) => layout.join('\0') === signature);
@@ -128,7 +243,9 @@ export function validateCatalogs(catalogs) {
   if (missingLocales.length > 0) errors.push(`missing locales: ${missingLocales.join(', ')}`);
   if (extraLocales.length > 0) errors.push(`unexpected locales: ${extraLocales.join(', ')}`);
 
-  const referenceLocale = SUPPORTED_LOCALES.find((locale) => isPlainObject(catalogs[locale]));
+  const referenceLocale = isPlainObject(catalogs.en)
+    ? 'en'
+    : SUPPORTED_LOCALES.find((locale) => isPlainObject(catalogs[locale]));
   const namespaces = referenceLocale ? stable(Object.keys(catalogs[referenceLocale])) : [];
   if (!isSupportedNamespaceLayout(namespaces)) {
     errors.push(
@@ -178,6 +295,24 @@ export function validateCatalogs(catalogs) {
         }
         if (extra.length > 0) {
           errors.push(`${locale}/${namespace}: extra keys: ${extra.join(' | ')}`);
+        }
+        if (locale === referenceLocale || missing.length > 0 || extra.length > 0) continue;
+        let identical = 0;
+        for (const key of referenceKeys) {
+          if (catalog[key] === reference[key]) identical += 1;
+          const expectedTokens = interpolationTokens(reference[key]);
+          const actualTokens = interpolationTokens(catalog[key]);
+          if (expectedTokens.join('\0') !== actualTokens.join('\0')) {
+            errors.push(
+              `${locale}/${namespace}: interpolation tokens differ for ${JSON.stringify(key)} (expected ${expectedTokens.join(', ') || 'none'}, found ${actualTokens.join(', ') || 'none'})`,
+            );
+          }
+        }
+        const ratio = identical / referenceKeys.length;
+        if (ratio > MAX_IDENTICAL_TO_ENGLISH_RATIO) {
+          errors.push(
+            `${locale}/${namespace}: ${Math.round(ratio * 100)}% of values equal English; catalog looks untranslated`,
+          );
         }
       }
     }
@@ -372,30 +507,53 @@ function createNamespaceSets(namespaces) {
   return Object.fromEntries(namespaces.map((namespace) => [namespace, new Set()]));
 }
 
+function knownNamespaces(node, namespaces) {
+  const extracted = extractStaticStrings(node);
+  return extracted.values.filter((namespace) => namespaces.includes(namespace));
+}
+
+function fallbackNamespaces(namespaces) {
+  return namespaces.includes('common') ? ['common'] : [namespaces[0]];
+}
+
+// Namespaces used when a `t` call cannot be tied to a lexical `useTranslation`
+// binding: every namespace any translation hook in the file declares.
 function collectDefaultNamespaces(sourceFile, namespaces) {
   const found = [];
-  const addFirst = (argument) => {
-    const extracted = extractStaticStrings(argument);
-    const first = extracted.values.find((namespace) => namespaces.includes(namespace));
-    if (first && !found.includes(first)) found.push(first);
+  const add = (argument) => {
+    for (const namespace of knownNamespaces(argument, namespaces)) {
+      if (!found.includes(namespace)) found.push(namespace);
+    }
   };
   const visit = (node) => {
     if (ts.isCallExpression(node)) {
       const name = callName(node.expression);
-      if (name === 'useTranslation' || name === 'withTranslation') addFirst(node.arguments[0]);
-      if (name === 'getFixedT') addFirst(node.arguments[1]);
+      if (name === 'useTranslation' || name === 'withTranslation') add(node.arguments[0]);
+      if (name === 'getFixedT') add(node.arguments[1]);
     }
     if (ts.isJsxOpeningLikeElement(node) && node.tagName.getText(sourceFile) === 'Translation') {
-      addFirst(jsxAttributeExpression(jsxAttribute(node, 'ns')));
+      add(jsxAttributeExpression(jsxAttribute(node, 'ns')));
     }
     ts.forEachChild(node, visit);
   };
   visit(sourceFile);
-  return found.length > 0 ? found : namespaces.includes('common') ? ['common'] : [namespaces[0]];
+  return found.length > 0 ? found : fallbackNamespaces(namespaces);
 }
 
+function isScopeNode(node) {
+  return ts.isSourceFile(node) || ts.isFunctionLike(node) || ts.isBlock(node) || ts.isModuleBlock(node);
+}
+
+function enclosingScope(node) {
+  let scope = node.parent;
+  while (scope && !isScopeNode(scope)) scope = scope.parent;
+  return scope ?? null;
+}
+
+// Map each lexical scope to the `t` identifiers it declares through
+// `const { t } = useTranslation(...)`, keeping the full namespace lookup order.
 function collectTranslationBindings(sourceFile, namespaces) {
-  const bindings = new Map();
+  const scopes = new Map();
   const visit = (node) => {
     if (
       ts.isVariableDeclaration(node)
@@ -405,28 +563,32 @@ function collectTranslationBindings(sourceFile, namespaces) {
       && callName(unwrapExpression(node.initializer).expression) === 'useTranslation'
     ) {
       const call = unwrapExpression(node.initializer);
-      const extracted = extractStaticStrings(call.arguments[0]);
-      const namespace = extracted.values.find((value) => namespaces.includes(value))
-        ?? (namespaces.includes('common') ? 'common' : namespaces[0]);
+      const known = knownNamespaces(call.arguments[0], namespaces);
+      const resolved = known.length > 0 ? known : fallbackNamespaces(namespaces);
+      const scope = enclosingScope(node) ?? sourceFile;
       for (const element of node.name.elements) {
         const importedName = element.propertyName
           ? propertyNameText(element.propertyName)
           : propertyNameText(element.name);
         if (importedName !== 't' || !ts.isIdentifier(element.name)) continue;
-        const values = bindings.get(element.name.text) ?? new Set();
-        values.add(namespace);
-        bindings.set(element.name.text, values);
+        const bindings = scopes.get(scope) ?? new Map();
+        bindings.set(element.name.text, resolved);
+        scopes.set(scope, bindings);
       }
     }
     ts.forEachChild(node, visit);
   };
   visit(sourceFile);
-  return bindings;
+  return scopes;
 }
 
-function translationCallNamespaces(expression, bindings, defaults) {
+function translationCallNamespaces(call, scopes, defaults) {
+  const expression = call.expression;
   if (ts.isIdentifier(expression)) {
-    if (bindings.has(expression.text)) return stable(bindings.get(expression.text));
+    for (let scope = call.parent; scope; scope = scope.parent) {
+      const bound = scopes.get(scope)?.get(expression.text);
+      if (bound) return bound;
+    }
     return expression.text === 't' ? defaults : null;
   }
   if (ts.isPropertyAccessExpression(expression) && expression.name.text === 't') {
@@ -456,6 +618,10 @@ function normalizeKeyNamespace(key, targetNamespaces, namespaces) {
   return { key, namespaces: targetNamespaces };
 }
 
+function relativeSourcePath(root, path) {
+  return relative(root, path).split(sep).join('/');
+}
+
 function normalizeRetainRules(namespaces, rules = DEFAULT_RETAIN_RULES) {
   const exact = createNamespaceSets(namespaces);
   const prefixes = createNamespaceSets(namespaces);
@@ -466,7 +632,14 @@ function normalizeRetainRules(namespaces, rules = DEFAULT_RETAIN_RULES) {
   return { exact, prefixes };
 }
 
-export function analyzeSourceFiles({ files, root, catalogs, namespaces, retainRules }) {
+export function analyzeSourceFiles({
+  files,
+  root,
+  catalogs,
+  namespaces,
+  retainRules,
+  dynamicOrigins = DYNAMIC_KEY_ORIGINS,
+}) {
   if (!Array.isArray(files) || files.length === 0) {
     throw new Error('source file list is missing or empty');
   }
@@ -491,15 +664,26 @@ export function analyzeSourceFiles({ files, root, catalogs, namespaces, retainRu
   const protectedNamespaces = new Set();
   const dynamicCalls = [];
   const missingReferences = [];
+  const registryErrors = [];
   const parseErrors = [];
+  const literalKeysByFile = new Map();
+  const matchedOrigins = new Set();
 
+  // A key resolves through the binding's namespace order; it is missing only
+  // when none of the candidate namespaces defines it.
   const recordKey = (rawKey, targetNamespaces, location) => {
     const normalized = normalizeKeyNamespace(rawKey, targetNamespaces, namespaces);
-    for (const namespace of normalized.namespaces) {
-      if (catalogKeys[namespace]?.has(normalized.key)) referenced[namespace].add(normalized.key);
-      else missingReferences.push(`${namespace}:${normalized.key} @ ${location}`);
+    const hits = normalized.namespaces.filter((namespace) => catalogKeys[namespace]?.has(normalized.key));
+    if (hits.length === 0) {
+      missingReferences.push(`${normalized.namespaces.join('|')}:${normalized.key} @ ${location}`);
+      return;
     }
+    for (const namespace of hits) referenced[namespace].add(normalized.key);
   };
+
+  const registeredOrigin = (file, argumentText) => dynamicOrigins.find(
+    (entry) => entry.file === file && entry.argument === argumentText,
+  ) ?? null;
 
   for (const path of stable(files)) {
     const source = readFileSync(path, 'utf8');
@@ -513,24 +697,28 @@ export function analyzeSourceFiles({ files, root, catalogs, namespaces, retainRu
     if (sourceFile.parseDiagnostics.length > 0) {
       for (const diagnostic of sourceFile.parseDiagnostics) {
         parseErrors.push(
-          `${relative(root, path)}: ${ts.flattenDiagnosticMessageText(diagnostic.messageText, ' ')}`,
+          `${relativeSourcePath(root, path)}: ${ts.flattenDiagnosticMessageText(diagnostic.messageText, ' ')}`,
         );
       }
       continue;
     }
+    const file = relativeSourcePath(root, path);
     const defaults = collectDefaultNamespaces(sourceFile, namespaces);
-    const translationBindings = collectTranslationBindings(sourceFile, namespaces);
+    const translationScopes = collectTranslationBindings(sourceFile, namespaces);
+    const literalKeys = new Set();
+    literalKeysByFile.set(file, literalKeys);
 
     const visit = (node) => {
       if (ts.isStringLiteralLike(node)) {
         const matchingNamespaces = keyNamespaces.get(node.text);
         if (matchingNamespaces) {
+          literalKeys.add(node.text);
           for (const namespace of matchingNamespaces) referenced[namespace].add(node.text);
         }
       }
 
       const callNamespaces = ts.isCallExpression(node)
-        ? translationCallNamespaces(node.expression, translationBindings, defaults)
+        ? translationCallNamespaces(node, translationScopes, defaults)
         : null;
       if (ts.isCallExpression(node) && callNamespaces) {
         const argument = node.arguments[0];
@@ -541,9 +729,15 @@ export function analyzeSourceFiles({ files, root, catalogs, namespaces, retainRu
         for (const key of extracted.values) recordKey(key, resolved.namespaces, location);
         if (!extracted.complete) {
           const prefix = dynamicTemplatePrefix(argument);
+          const origin = argument && !prefix
+            ? registeredOrigin(file, argument.getText(sourceFile))
+            : null;
           if (prefix) {
             for (const namespace of resolved.namespaces) dynamicPrefixes[namespace].add(prefix);
             dynamicCalls.push(`${location} [${resolved.namespaces.join(',')}] prefix=${prefix}`);
+          } else if (origin) {
+            matchedOrigins.add(origin);
+            dynamicCalls.push(`${location} [${resolved.namespaces.join(',')}] origin=${origin.origin}`);
           } else {
             for (const namespace of resolved.namespaces) protectedNamespaces.add(namespace);
             dynamicCalls.push(`${location} [${resolved.namespaces.join(',')}] unresolved`);
@@ -581,6 +775,19 @@ export function analyzeSourceFiles({ files, root, catalogs, namespaces, retainRu
     throw new Error(`source parsing failed:\n${stable(parseErrors).map((error) => `- ${error}`).join('\n')}`);
   }
 
+  // The registry must describe live call sites backed by literal key tables;
+  // stale entries fail so pruning never trusts a table that moved away.
+  for (const entry of dynamicOrigins) {
+    const label = `${entry.file} t(${entry.argument})`;
+    if (!matchedOrigins.has(entry)) {
+      registryErrors.push(`${label}: no matching dynamic call was found`);
+      continue;
+    }
+    const originKeys = literalKeysByFile.get(entry.origin);
+    if (!originKeys) registryErrors.push(`${label}: origin ${entry.origin} was not scanned`);
+    else if (originKeys.size === 0) registryErrors.push(`${label}: origin ${entry.origin} declares no catalog keys`);
+  }
+
   const normalizedRetain = normalizeRetainRules(namespaces, retainRules);
   const unused = [];
   const removable = [];
@@ -612,6 +819,7 @@ export function analyzeSourceFiles({ files, root, catalogs, namespaces, retainRu
     dynamicCalls: stable(new Set(dynamicCalls)),
     protectedNamespaces: stable(protectedNamespaces),
     missingReferences: stable(new Set(missingReferences)),
+    registryErrors: stable(registryErrors),
   };
 }
 
@@ -734,13 +942,14 @@ export function writePrunedCatalogs({ catalogs, paths, removable }) {
 
 function printReport(report, log) {
   log(
-    `[i18n-prune] mode=${report.mode} files=${report.fileCount} locales=${SUPPORTED_LOCALES.length} namespaces=${report.namespaces.length} catalog_keys=${report.catalogKeyCount} translations=${report.catalogKeyCount * SUPPORTED_LOCALES.length} referenced=${report.analysis.referencedCount} unused=${report.analysis.unused.length} removable=${report.analysis.removable.length} retained=${report.analysis.retained.length} dynamic_protected=${report.analysis.dynamicProtected.length} missing=${report.analysis.missingReferences.length} dynamic_calls=${report.analysis.dynamicCalls.length}`,
+    `[i18n-prune] mode=${report.mode} files=${report.fileCount} locales=${SUPPORTED_LOCALES.length} namespaces=${report.namespaces.length} catalog_keys=${report.catalogKeyCount} translations=${report.catalogKeyCount * SUPPORTED_LOCALES.length} referenced=${report.analysis.referencedCount} unused=${report.analysis.unused.length} removable=${report.analysis.removable.length} retained=${report.analysis.retained.length} dynamic_protected=${report.analysis.dynamicProtected.length} missing=${report.analysis.missingReferences.length} dynamic_calls=${report.analysis.dynamicCalls.length} registry_errors=${report.analysis.registryErrors.length}`,
   );
   for (const key of report.analysis.removable) log(`UNUSED remove ${key}`);
   for (const key of report.analysis.retained) log(`UNUSED retain ${key}`);
   for (const key of report.analysis.dynamicProtected) log(`UNUSED dynamic-protected ${key}`);
   for (const reference of report.analysis.missingReferences) log(`MISSING ${reference}`);
   for (const call of report.analysis.dynamicCalls) log(`DYNAMIC ${call}`);
+  for (const error of report.analysis.registryErrors) log(`REGISTRY ${error}`);
   if (report.analysis.protectedNamespaces.length > 0) {
     log(`PROTECTED namespaces=${report.analysis.protectedNamespaces.join(',')}`);
   }
@@ -750,10 +959,12 @@ export function runI18nPrune({
   root = SCRIPT_ROOT,
   mode = 'report',
   retainRules = DEFAULT_RETAIN_RULES,
+  dynamicOrigins = DYNAMIC_KEY_ORIGINS,
   log = console.log,
   error = console.error,
 } = {}) {
   try {
+    loadAppConfig(root);
     const loaded = loadLocaleCatalogs(root);
     validateRetainNamespaces(retainRules, loaded.namespaces);
     if (mode === 'catalog') {
@@ -781,6 +992,7 @@ export function runI18nPrune({
       catalogs: loaded.catalogs,
       namespaces: loaded.namespaces,
       retainRules: mergedRetainRules,
+      dynamicOrigins,
     });
     const report = {
       mode,
@@ -792,8 +1004,8 @@ export function runI18nPrune({
     printReport(report, log);
 
     if (mode === 'write') {
-      if (analysis.missingReferences.length > 0) {
-        error('[i18n-prune] refusing --write because source references missing catalog keys');
+      if (analysis.missingReferences.length > 0 || analysis.registryErrors.length > 0) {
+        error('[i18n-prune] refusing --write because source references missing catalog keys or the dynamic origin registry is stale');
         return { exitCode: 1, report };
       }
       const result = writePrunedCatalogs({
@@ -810,7 +1022,8 @@ export function runI18nPrune({
     if (mode === 'strict') {
       const failed = analysis.removable.length > 0
         || analysis.missingReferences.length > 0
-        || analysis.protectedNamespaces.length > 0;
+        || analysis.protectedNamespaces.length > 0
+        || analysis.registryErrors.length > 0;
       if (failed) {
         error('[i18n-prune] strict check failed');
         return { exitCode: 1, report };

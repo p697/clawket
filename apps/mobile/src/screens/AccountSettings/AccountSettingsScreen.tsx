@@ -2,10 +2,9 @@ import React, { Fragment, useMemo, useState } from 'react';
 import {
   ScrollView,
   StyleSheet,
-  Text,
   View,
 } from 'react-native';
-import { Languages, ChevronLeft, Cable, SlidersHorizontal, MessageCircle, CircleHelp, Info, Sparkles } from 'lucide-react-native';
+import { Languages, Cable, Palette, Bell, CircleHelp, Info } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -14,7 +13,10 @@ import { useAppLanguage } from '../../i18n/AppLanguageProvider';
 import { APP_LANGUAGE_NAMES } from '../../i18n/language';
 import type { AccountSettingsSection } from '../../navigation/root-stack';
 import { Banner } from '../../components/ui/Banner';
-import { FloatingButton } from '../../components/ui/FloatingButton';
+import { ConnectionStatusPill } from '../../components/ui/ConnectionStatusPill';
+import { SettingsIcon } from '../../components/ui/SettingsIcon';
+import { AccountProCard } from './AccountProCard';
+import { AccountSettingsPageHeader } from './AccountSettingsPageHeader';
 import {
   SettingsDivider,
   SettingsGroup,
@@ -24,8 +26,6 @@ import { Skeleton } from '../../components/ui/Skeleton';
 import { useAppTheme } from '../../theme';
 import {
   ControlSize,
-  FontSize,
-  FontWeight,
   LineHeight,
   Space,
 } from '../../theme/tokens';
@@ -83,40 +83,54 @@ function SettingsLoading(): React.JSX.Element {
   );
 }
 
-function StatusBanner({
+/** Connection state for the header title slot; product banners stay in the content flow. */
+function ConnectionStatus({
   status,
-  canAddConnection,
   onRetry,
-  onOpenAction,
-  onOpenPaywall,
 }: Readonly<{
   status: AccountSettingsPageStatus;
-  canAddConnection: boolean;
   onRetry?: () => void;
-  onOpenAction: AccountSettingsScreenProps['onOpenAction'];
-  onOpenPaywall: AccountSettingsScreenProps['onOpenPaywall'];
 }>): React.JSX.Element | null {
   const { t } = useTranslation('config');
 
   if (status.kind === 'offline') {
     return (
-      <Banner
+      <ConnectionStatusPill
         testID="account-settings-offline"
+        placement="inline"
+        status="offline"
         message={t('Offline · showing cached settings')}
       />
     );
   }
   if (status.kind === 'error') {
     return (
-      <Banner
+      <ConnectionStatusPill
         testID="account-settings-error"
-        tone="bad"
+        placement="inline"
+        status="error"
         message={t('Settings unavailable · {{code}}', { code: status.code })}
         actionLabel={onRetry ? t('Retry', { ns: 'common' }) : undefined}
         onAction={onRetry}
       />
     );
   }
+  return null;
+}
+
+function StatusBanner({
+  status,
+  canAddConnection,
+  onOpenAction,
+  onOpenPaywall,
+}: Readonly<{
+  status: AccountSettingsPageStatus;
+  canAddConnection: boolean;
+  onOpenAction: AccountSettingsScreenProps['onOpenAction'];
+  onOpenPaywall: AccountSettingsScreenProps['onOpenPaywall'];
+}>): React.JSX.Element | null {
+  const { t } = useTranslation('config');
+
   if (status.kind === 'empty') {
     const addConnection = () => {
       if (canAddConnection) onOpenAction('add-connection');
@@ -179,25 +193,16 @@ export function AccountSettingsScreen({
   const contentInsets = useMemo(() => ({
     paddingBottom: insets.bottom + Space.xl,
   }), [insets.bottom]);
-  const headerInsets = useMemo(() => ({
-    paddingTop: insets.top + Space.sm,
-  }), [insets.top]);
 
   return (
     <View
       testID="account-settings-screen"
       style={[styles.screen, { backgroundColor: theme.colors.canvasGrouped }]}
     >
-      <View testID="account-settings-header" style={[styles.header, headerInsets]}>
-        <FloatingButton
-          testID="account-settings-back"
-          icon={ChevronLeft}
-          accessibilityLabel={t('Back', { ns: 'common' })}
-          onPress={onBack}
-        />
-        <Text style={[styles.title, { color: theme.colors.ink }]}>{t('Settings')}</Text>
-        <View style={styles.headerSlot} />
-      </View>
+      <AccountSettingsPageHeader testID="account-settings" title={t('Settings')} onBack={onBack}
+        status={status.kind === 'offline' || status.kind === 'error'
+          ? <ConnectionStatus status={status} onRetry={onRetry} />
+          : undefined} />
 
       <ScrollView
         testID="account-settings-scroll"
@@ -210,39 +215,44 @@ export function AccountSettingsScreen({
             <StatusBanner
               status={status}
               canAddConnection={canAddConnection}
-              onRetry={onRetry}
               onOpenAction={onOpenAction}
               onOpenPaywall={onOpenPaywall}
             />
             {capabilities.subscription ? (
-              <SettingsGroup>
-                <SettingsRow testID="account-settings-membership" title={t('Clawket Pro')}
-                  leading={<Sparkles size={20} color={theme.colors.accent} />}
-                  value={isPro ? t('Active') : t('View Pro')} showChevron
-                  onPress={() => onOpenSection?.('pro')} />
-              </SettingsGroup>
+              <AccountProCard testID="account-settings-membership" title={t('Clawket Pro')}
+                status={isPro ? t('Active') : t('View Pro')} onPress={() => onOpenSection?.('pro')} />
             ) : null}
-            <SettingsGroup testID="account-settings-categories">
+            <SettingsGroup density="comfortable" testID="account-settings-categories">
               {[
                 { section: 'connections' as const, title: t('My connections'), icon: Cable, enabled: capabilities.connections, value: String(connections.length) },
-                { section: 'appearance' as const, title: t('Appearance'), icon: SlidersHorizontal, enabled: capabilities.appearance, value: labels.theme },
-                { section: 'notifications' as const, title: t('Chat & notifications'), icon: MessageCircle, enabled: capabilities.notifications || capabilities.voice },
-                { section: 'help' as const, title: t('Help & feedback'), icon: CircleHelp, enabled: capabilities.help || capabilities.community },
-                { section: 'about' as const, title: t('About'), icon: Info, enabled: capabilities.about },
+                { section: 'appearance' as const, title: t('Appearance'), icon: Palette, enabled: capabilities.appearance, value: labels.theme },
+                { section: 'notifications' as const, title: t('Chat & notifications'), icon: Bell, enabled: capabilities.notifications || capabilities.voice },
+                { section: 'language' as const, title: t('App language'), icon: Languages, enabled: true,
+                  value: language === 'system' ? t('Follow System') : APP_LANGUAGE_NAMES[language] },
               ].filter((entry) => entry.enabled).map((entry, index) => (
                 <Fragment key={entry.section}>
                   {index > 0 ? <SettingsDivider inset="icon" /> : null}
-                  <SettingsRow testID={`account-settings-category-${entry.section}`} title={entry.title}
-                    value={entry.value} leading={<entry.icon size={20} color={theme.colors.inkSecondary} />}
-                    showChevron onPress={() => onOpenSection?.(entry.section)} />
+                  <SettingsRow testID={entry.section === 'language' ? 'account-settings-app-language' : `account-settings-category-${entry.section}`} title={entry.title}
+                    value={entry.value} leading={<SettingsIcon icon={entry.icon} tone="neutral" size={20} strokeWidth={1.75} />}
+                    showChevron onPress={() => entry.section === 'language' ? setLanguagePickerVisible(true) : onOpenSection?.(entry.section)} />
                 </Fragment>
               ))}
-              <SettingsDivider inset="icon" />
-              <SettingsRow testID="account-settings-app-language" title={t('App language')}
-                value={language === 'system' ? t('Follow System') : APP_LANGUAGE_NAMES[language]}
-                leading={<Languages size={20} color={theme.colors.inkSecondary} />}
-                showChevron onPress={() => setLanguagePickerVisible(true)} />
             </SettingsGroup>
+            {capabilities.help || capabilities.community || capabilities.about ? (
+              <SettingsGroup density="comfortable" testID="account-settings-support">
+                {[
+                  { section: 'help' as const, title: t('Help & feedback'), icon: CircleHelp, enabled: capabilities.help || capabilities.community },
+                  { section: 'about' as const, title: t('About'), icon: Info, enabled: capabilities.about },
+                ].filter((entry) => entry.enabled).map((entry, index) => (
+                  <Fragment key={entry.section}>
+                    {index > 0 ? <SettingsDivider inset="icon" /> : null}
+                    <SettingsRow testID={`account-settings-category-${entry.section}`} title={entry.title}
+                      leading={<SettingsIcon icon={entry.icon} tone="neutral" size={20} strokeWidth={1.75} />}
+                      showChevron onPress={() => onOpenSection?.(entry.section)} />
+                  </Fragment>
+                ))}
+              </SettingsGroup>
+            ) : null}
           </>
         )}
       </ScrollView>
@@ -257,34 +267,10 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
   },
-  header: {
-    paddingHorizontal: Space.lg,
-    paddingBottom: Space.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  headerSlot: {
-    width: ControlSize.floatingButton,
-    height: ControlSize.floatingButton,
-  },
-  title: {
-    fontSize: FontSize.title,
-    lineHeight: LineHeight.title,
-    fontWeight: FontWeight.semibold,
-  },
   content: {
     paddingHorizontal: Space.lg,
-    gap: Space.lg,
-  },
-  groupSection: {
-    gap: Space.sm,
-  },
-  groupTitle: {
-    paddingHorizontal: Space.xs,
-    fontSize: FontSize.secondary,
-    lineHeight: LineHeight.secondary,
-    fontWeight: FontWeight.regular,
+    paddingTop: Space.sm,
+    gap: Space.xl,
   },
   loadingGroups: {
     gap: Space.lg,

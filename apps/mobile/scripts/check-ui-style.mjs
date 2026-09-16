@@ -67,7 +67,7 @@ const CANONICAL_TOKEN_MEMBERS = new Map([
     'sheet',
     'full',
   ])],
-  ['ControlSize', new Set(['pill', 'floatingButton', 'settingsRow', 'rosterRow'])],
+  ['ControlSize', new Set(['pill', 'floatingButton', 'settingsRow', 'settingsRowComfortable', 'rosterRow'])],
 ]);
 const CANONICAL_THEME_COLORS = new Set([
   'canvas',

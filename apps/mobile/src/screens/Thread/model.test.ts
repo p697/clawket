@@ -5,6 +5,8 @@ import {
   buildCronRunSeeds,
   buildThreadTimelineItems,
   deriveThreadContentState,
+  groupThreadTools,
+  withThreadRhythm,
   formatThreadLocalTime,
   resolveContextRemainingPercent,
   resolveThreadErrorCode,
@@ -310,6 +312,48 @@ describe('Thread model', () => {
     expect(formatThreadLocalTime(runAt, 'en-US')).toBe(
       new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' }).format(runAt),
     );
+  });
+
+  it('spaces rows by voice: stacked within a turn, apart across turns, sectioned by time labels', () => {
+    const at = (minute: number) => new Date(2026, 8, 5, 12, minute).getTime();
+    const timeline = groupThreadTools(buildThreadTimelineItems({
+      messages: [
+        { id: 'reply', role: 'assistant', text: 'Done', timestampMs: at(10) },
+        { id: 'exec-2', role: 'tool', text: '', toolStatus: 'success', timestampMs: at(10) },
+        { id: 'exec-1', role: 'tool', text: '', toolStatus: 'success', timestampMs: at(10) },
+        { id: 'failed', role: 'tool', text: '', toolStatus: 'error', timestampMs: at(10) },
+        { id: 'ask', role: 'user', text: 'Check it', timestampMs: at(10) },
+        { id: 'again', role: 'user', text: 'Correction', timestampMs: at(0) },
+        { id: 'first', role: 'user', text: 'Hello', timestampMs: at(0) },
+        { id: 'notice', role: 'system', text: 'Context compacted', timestampMs: at(0) },
+      ],
+      runs: [],
+      locale: 'en-US',
+    }), new Set());
+
+    // Newest first, as the list data is built before it is reversed.
+    expect(withThreadRhythm(timeline).map((row) => [row.key, row.gapAbove])).toEqual([
+      ['message:reply', 'stack'],
+      ['tools:exec-1', 'stack'],
+      ['message:failed', 'turn'],
+      ['message:ask', 'none'],
+      ['date:message:ask', 'section'],
+      ['message:again', 'stack'],
+      ['message:first', 'none'],
+      ['date:message:first', 'section'],
+      // An untimed system notice gets no time label and sits under the list inset.
+      ['message:notice', 'none'],
+    ]);
+  });
+
+  it('keeps an approval prompt inside the Agent turn regardless of its wire role', () => {
+    const approval = { id: 'a', kind: 'exec', command: 'ls', status: 'pending', expiresAtMs: 1 } as NonNullable<UiMessage['approval']>;
+    const rows = withThreadRhythm([
+      { type: 'message', key: 'reply', message: { id: 'reply', role: 'assistant', text: 'Sure' } },
+      { type: 'message', key: 'approval', message: { id: 'approval', role: 'system', text: '', approval } },
+      { type: 'message', key: 'ask', message: { id: 'ask', role: 'user', text: 'Run it' } },
+    ]);
+    expect(rows.map((row) => row.gapAbove)).toEqual(['stack', 'turn', 'none']);
   });
 
   it('keeps input order stable when timeline timestamps are equal or absent', () => {

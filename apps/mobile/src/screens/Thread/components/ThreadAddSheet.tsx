@@ -2,7 +2,14 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Image, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { ScrollView as GestureScrollView } from 'react-native-gesture-handler';
-import Animated, { FadeIn, FadeOut, useReducedMotion } from 'react-native-reanimated';
+import Animated, {
+  Easing,
+  FadeIn,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import {
   CalendarClock,
   Camera,
@@ -82,6 +89,7 @@ const ROW_ICON_BOX = HitSize.sm;
 const SKELETON_TILE_COUNT = 3;
 const BADGE_SIZE = Space.xl;
 const DEFAULT_REMAINING_SLOTS = 6;
+const EASE_OUT = Easing.out(Easing.cubic);
 
 export function ThreadAddSheet({
   visible,
@@ -106,6 +114,7 @@ export function ThreadAddSheet({
   const reduceMotion = useReducedMotion();
   const [contentReady, setContentReady] = useState(false);
   const [selected, setSelected] = useState<readonly string[]>([]);
+  const footerProgress = useSharedValue(0);
   const pendingAction = useRef<(() => void) | null>(null);
   const presentedRef = useRef(false);
   const visibleRef = useRef(visible);
@@ -146,6 +155,19 @@ export function ThreadAddSheet({
     setSelected((current) => pruneOrderedSelection(current, allowed, selectionLimit));
   }, [recent.photos, selectionLimit]);
 
+  // The attach footer rises once per selection and leaves with the selection;
+  // a persistent shared value keeps later picks from replaying the rise.
+  const hasSelection = selected.length > 0;
+  useEffect(() => {
+    footerProgress.value = hasSelection && !reduceMotion
+      ? withTiming(1, { duration: Motion.duration.fast, easing: EASE_OUT })
+      : hasSelection ? 1 : 0;
+  }, [footerProgress, hasSelection, reduceMotion]);
+  const footerAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: footerProgress.value,
+    transform: [{ translateY: (1 - footerProgress.value) * Space.md }],
+  }));
+
   const run = useCallback((action: ThreadAddAction, callback: () => void, count?: number) => {
     // A closed sheet (e.g. session switch while the permission dialog was up)
     // never dismisses again, so queuing now would wedge every later action.
@@ -165,10 +187,10 @@ export function ThreadAddSheet({
     if (attachmentActionsDisabled) return;
     triggerSelectionHaptic();
     if (photoAccess === 'undetermined') {
-      // Ask inline; a grant swaps the tiles for the strip without closing.
-      void requestPhotoAccess().then((access) => {
-        if (access !== 'granted') run('photo-library', onPickImage);
-      });
+      // iOS may present its limited-library selector after authorization resolves.
+      // Remove our full-window overlay first and let that native flow finish;
+      // reopening Add then reads the granted subset (or offers the system picker).
+      run('photo-library', () => { void requestPhotoAccess(); });
       return;
     }
     run('photo-library', onPickImage);
@@ -209,7 +231,6 @@ export function ThreadAddSheet({
     ? t('Attach 1 photo')
     : t('Attach {{count}} photos', { count: selected.length });
   const fadeIn = reduceMotion ? undefined : FadeIn.duration(Motion.duration.fast);
-  const fadeOut = reduceMotion ? undefined : FadeOut.duration(Motion.duration.fast);
 
   const renderPhotoTile = (photo: RecentPhoto) => {
     const ordinal = selectionOrdinal(selected, photo.id);
@@ -324,6 +345,19 @@ export function ThreadAddSheet({
     onOpenTools ? menuRow('tools', 'tools', t('Tools'), SlidersHorizontal, onOpenTools) : null,
   ].filter(Boolean);
 
+  // Sheet pins this to the visible bottom edge at both detents; an inline
+  // footer would sit below the fold at 62% because the body is laid out for 92%.
+  const footer = hasSelection ? (
+    <Animated.View testID="thread-add-attach-footer" style={footerAnimatedStyle}>
+      <Button
+        testID="thread-add-attach-selected"
+        label={attachLabel}
+        disabled={attachmentActionsDisabled}
+        onPress={attachSelected}
+      />
+    </Animated.View>
+  ) : undefined;
+
   return (
     <Sheet
       visible={visible}
@@ -331,6 +365,7 @@ export function ThreadAddSheet({
       onAfterClose={afterClose}
       closeAccessibilityLabel={t('Close', { ns: 'common' })}
       title={t('Add', { ns: 'common' })}
+      footer={footer}
       headerRight={showsPhotoStrip ? (
         <FloatingButton
           testID="thread-add-all-photos"
@@ -344,28 +379,16 @@ export function ThreadAddSheet({
       snapPoints={THREAD_ADD_SHEET_SNAP_POINTS}
       testID="thread-add-sheet"
     >
-      <View style={styles.body}>
-        <BottomSheetScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.content}
-        >
-          {mediaSection}
-          {mediaSection && composeRows.length > 0 ? <SettingsDivider inset="none" /> : null}
-          {composeRows.length > 0 ? <View>{composeRows}</View> : null}
-          {(mediaSection || composeRows.length > 0) && agentRows.length > 0 ? <SettingsDivider inset="none" /> : null}
-          {agentRows.length > 0 ? <View>{agentRows}</View> : null}
-        </BottomSheetScrollView>
-        {selected.length > 0 ? (
-          <Animated.View testID="thread-add-attach-footer" entering={fadeIn} exiting={fadeOut} style={styles.footer}>
-            <Button
-              testID="thread-add-attach-selected"
-              label={attachLabel}
-              disabled={attachmentActionsDisabled}
-              onPress={attachSelected}
-            />
-          </Animated.View>
-        ) : null}
-      </View>
+      <BottomSheetScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.content}
+      >
+        {mediaSection}
+        {mediaSection && composeRows.length > 0 ? <SettingsDivider inset="none" /> : null}
+        {composeRows.length > 0 ? <View>{composeRows}</View> : null}
+        {(mediaSection || composeRows.length > 0) && agentRows.length > 0 ? <SettingsDivider inset="none" /> : null}
+        {agentRows.length > 0 ? <View>{agentRows}</View> : null}
+      </BottomSheetScrollView>
     </Sheet>
   );
 }
@@ -425,7 +448,6 @@ function ActionTile({
 
 function createStyles(colors: SheetColors) {
   return StyleSheet.create({
-    body: { flex: 1, minHeight: 0 },
     content: {
       paddingHorizontal: SHEET_HORIZONTAL_PADDING,
       paddingTop: Space.xs,
@@ -489,11 +511,6 @@ function createStyles(colors: SheetColors) {
       lineHeight: LineHeight.caption,
       fontWeight: FontWeight.semibold,
       fontVariant: ['tabular-nums'],
-    },
-    footer: {
-      paddingHorizontal: SHEET_HORIZONTAL_PADDING,
-      paddingTop: Space.sm,
-      backgroundColor: colors.canvas,
     },
   });
 }

@@ -17,7 +17,7 @@ const config = {
   testEnvironment: 'node',
   moduleNameMapper: {
     // remend exposes only an `import` export condition, which Jest's CommonJS resolver skips.
-    '^remend$': '<rootDir>/node_modules/remend/dist/index.js',
+    '^remend$': ['<rootDir>/node_modules/remend/dist/index.js', '<rootDir>/../../node_modules/remend/dist/index.js'],
     '^react-native$': '<rootDir>/__mocks__/react-native.ts',
     '^@mattermost/react-native-paste-input$': '<rootDir>/__mocks__/react-native-paste-input.tsx',
   },

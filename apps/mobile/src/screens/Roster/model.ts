@@ -1,4 +1,5 @@
-import type { SessionDescriptor } from '@clawket/agent-protocol';
+import type { RunActivity } from '../../connection/run-activity';
+import { sessionActivityAt, type SessionDescriptor } from '@clawket/agent-protocol';
 import type { RosterConnectionGroup } from '../../connection';
 
 export type RosterDisplayRow = Readonly<{
@@ -14,10 +15,12 @@ export type RosterDisplayRow = Readonly<{
   preview?: string;
   subtitle?: RosterConnectionGroup['agents'][number]['subtitle'];
   sessionKind?: SessionDescriptor['kind'];
-  updatedAt: number | null;
+  /** Latest human activity; both the row's time label and its position come from it. */
+  lastActivityAt: number | null;
   syncedAt: number | null;
   unreadCount: number;
   attention: SessionDescriptor['attention'];
+  activity?: RunActivity['phase'];
   working: boolean;
   cached: boolean;
   locked: boolean;
@@ -35,6 +38,7 @@ export type RosterPageState =
   | 'ready';
 
 export type RosterModelOptions = Readonly<{
+  runActivities?: ReadonlyArray<RunActivity>;
   pinnedSessionKeys?: Readonly<Record<string, ReadonlyArray<string>>>;
   agentPreferences?: Readonly<Record<string, Readonly<{
     agentPinned: boolean;
@@ -64,7 +68,7 @@ function buildPinnedRows(
     .filter((session) => rank.has(session.key) && session.allowedActions.pin)
     .sort((a, b) => (
       (rank.get(a.key) ?? Number.MAX_SAFE_INTEGER) - (rank.get(b.key) ?? Number.MAX_SAFE_INTEGER)
-      || (b.updatedAt ?? 0) - (a.updatedAt ?? 0)
+      || (sessionActivityAt(b) ?? 0) - (sessionActivityAt(a) ?? 0)
       || a.key.localeCompare(b.key)
     ))
     .map((session) => ({
@@ -79,7 +83,7 @@ function buildPinnedRows(
       ...(agent.avatarUrl ? { avatarUrl: agent.avatarUrl } : {}),
       ...(session.preview ? { preview: session.preview } : {}),
       sessionKind: session.kind,
-      updatedAt: session.updatedAt,
+      lastActivityAt: sessionActivityAt(session),
       syncedAt: cached ? group.syncedAt : null,
       unreadCount: 0,
       attention: cached ? null : session.attention,
@@ -92,25 +96,21 @@ function buildPinnedRows(
     }));
 }
 
-function compareAgentPriority(
+function isAgentPinned(
   connectionId: string,
   preferences: RosterModelOptions['agentPreferences'],
-  cached: boolean,
-  left: RosterConnectionGroup['agents'][number],
-  right: RosterConnectionGroup['agents'][number],
-): number {
-  const leftPinned = preferences?.[`${connectionId}:${left.agent.agentId}`]?.agentPinned === true;
-  const rightPinned = preferences?.[`${connectionId}:${right.agent.agentId}`]?.agentPinned === true;
-  return Number(rightPinned) - Number(leftPinned)
-    || (cached ? 0 : Number(right.attentionCount > 0) - Number(left.attentionCount > 0))
-    || (cached ? 0 : Number(right.hasUnread) - Number(left.hasUnread))
-    || (right.updatedAt ?? 0) - (left.updatedAt ?? 0);
+  agentId: string,
+): boolean {
+  return preferences?.[`${connectionId}:${agentId}`]?.agentPinned === true;
 }
 
 /**
  * Flattens connection-adjacent roster groups into the exact visual order used
- * by the 3.0 directory. Pinned sessions always remain directly below their
- * owning Agent and never split a connection group.
+ * by the 3.0 directory: the registry already orders Agents by latest human
+ * activity, and this layer only lifts locally pinned Agents to the top of their
+ * connection. Unread and attention are badges, never sort keys, so the order
+ * does not move on read, reconnect or connection switch. Pinned sessions always
+ * remain directly below their owning Agent and never split a connection group.
  */
 export function buildRosterRows(
   groups: ReadonlyArray<RosterConnectionGroup>,
@@ -124,13 +124,9 @@ export function buildRosterRows(
     const sortedAgents = group.agents
       .map((summary, index) => ({ summary, index }))
       .sort((left, right) => (
-        compareAgentPriority(
-          group.connection.id,
-          options.agentPreferences,
-          cached,
-          left.summary,
-          right.summary,
-        ) || left.index - right.index
+        Number(isAgentPinned(group.connection.id, options.agentPreferences, right.summary.agent.agentId))
+          - Number(isAgentPinned(group.connection.id, options.agentPreferences, left.summary.agent.agentId))
+        || left.index - right.index
       ));
     for (const { summary } of sortedAgents) {
       const { agent } = summary;
@@ -138,6 +134,8 @@ export function buildRosterRows(
         `${group.connection.id}:${agent.agentId}`
       ];
       const locked = !canAccessAgent(group.connection.id, agent.agentId);
+      const activity = !cached ? options.runActivities?.find((item) => item.connectionId === group.connection.id
+        && (item.sessionKey === agent.mainSessionKey || (item.sessionKey === 'main' && agent.isMain) || summary.sessions.some((session) => session.key === item.sessionKey)))?.phase : undefined;
       rows.push({
         key: `agent:${group.connection.id}:${agent.agentId}`,
         kind: 'agent',
@@ -153,11 +151,12 @@ export function buildRosterRows(
           : summary.preview
             ? { preview: summary.preview }
             : {}),
-        updatedAt: summary.updatedAt,
+        lastActivityAt: summary.lastActivityAt,
         syncedAt: cached ? group.syncedAt : null,
         unreadCount: cached ? 0 : summary.unreadCount,
         attention: cached ? null : summary.attention,
-        working: cached ? false : summary.sessions.some((session) => session.hasActiveRun),
+        activity,
+        working: cached ? false : Boolean(activity) || summary.sessions.some((session) => session.hasActiveRun),
         cached,
         locked,
         agentPinned: preferences?.agentPinned === true,

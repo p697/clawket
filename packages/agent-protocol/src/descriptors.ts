@@ -96,7 +96,16 @@ export interface SessionDescriptor {
   kind: SessionKind;
   title: string;
   channel?: string;
+  /** Last backend write to the session record; may move on housekeeping (heartbeats, metadata patches). */
   updatedAt: number | null;
+  /**
+   * Last activity a person took part in: a user message or a run whose output
+   * reaches the user. Adapters that can separate this from housekeeping must set
+   * it (`null` when the session never had such activity); adapters that cannot
+   * leave it undefined and consumers fall back to `updatedAt` via
+   * `sessionActivityAt`.
+   */
+  lastActivityAt?: number | null;
   preview?: string;
   model?: string;
   modelProvider?: string;
@@ -106,6 +115,26 @@ export interface SessionDescriptor {
   parentSessionKey?: string;
   source?: 'bridge' | 'native';
   allowedActions: SessionActions;
+}
+
+/** Session kinds a person takes part in; sub-agent and scheduled runs are background work. */
+export const HUMAN_SESSION_KINDS: ReadonlySet<SessionKind> = new Set<SessionKind>([
+  'main',
+  'channel',
+  'direct',
+  'group',
+  'other',
+]);
+
+/**
+ * Timestamp that orders and unread-marks a session: `lastActivityAt` when the
+ * adapter reports it, otherwise the backend `updatedAt`.
+ */
+export function sessionActivityAt(
+  session: Pick<SessionDescriptor, 'updatedAt' | 'lastActivityAt'>,
+): number | null {
+  const value = session.lastActivityAt === undefined ? session.updatedAt : session.lastActivityAt;
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
 }
 
 export interface PromptAttachment {
@@ -168,6 +197,8 @@ export interface SessionHistory {
   messages: ChatMessage[];
   nextCursor?: string;
   hasActiveRun: boolean;
+  /** Backend recovery snapshot; absent on peers that do not expose live runs. */
+  activeRun?: { runId: string; text: string; startedAtMs?: number; sessionAbortable?: boolean };
   sessionId?: string;
   thinkingLevel?: string;
 }

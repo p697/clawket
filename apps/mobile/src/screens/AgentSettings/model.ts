@@ -34,7 +34,7 @@ export type AgentSettingsSummary = Readonly<{
 export type AgentSettingsStatId = 'cron' | 'usage' | 'models' | 'skills' | 'files';
 
 export type AgentSettingsStatDetail = Readonly<{
-  key: '{{count}} failed' | '{{value}} tokens';
+  key: '{{count}} failed';
   params: Readonly<Record<string, string | number>>;
   tone: 'bad' | 'neutral';
 }>;
@@ -63,15 +63,16 @@ export type AgentSettingsRowDescriptor = Readonly<{
 
 export type AgentSettingsGroupDescriptor = Readonly<{
   id: 'connection';
-  title?: string;
   rows: ReadonlyArray<AgentSettingsRowDescriptor>;
 }>;
 
 export type AgentSettingsModel = Readonly<{
   identity: Readonly<{
     name: string;
-    /** Fallback identity line: connection label · backend (or the YouMind email). */
-    detail: string;
+    /** Account line supplied by the backend (the YouMind email); the hero shows no line otherwise. */
+    detail?: string;
+    /** Product the Agent lives on; rendered as the avatar's corner mark, never as a text line. */
+    backend: ConnectionDescriptor['backendKind'];
     backendLabel: string;
     /** Whole minutes since the last heartbeat, or null when the backend reports none. */
     activeMinutesAgo: number | null;
@@ -162,16 +163,12 @@ const STATS: ReadonlyArray<StatDefinition> = [
     id: 'usage',
     placement: 'hero',
     capabilities: ['usage'],
+    // Dollars only: a token caption competed with the amount for the card's width and both got
+    // ellipsised once the day's usage was non-trivial. Tokens remain the fallback headline number.
     title: (summary) => (formatUsd(summary.todayCostUsd) === undefined && formatTokens(summary.todayTokens) !== undefined
       ? 'Tokens today'
       : 'Cost today'),
     value: (summary) => formatUsd(summary.todayCostUsd) ?? formatTokens(summary.todayTokens),
-    detail: (summary) => {
-      const tokens = formatTokens(summary.todayTokens);
-      return formatUsd(summary.todayCostUsd) !== undefined && tokens !== undefined
-        ? { key: '{{value}} tokens', params: { value: tokens }, tone: 'neutral' }
-        : undefined;
-    },
   },
   {
     id: 'models',
@@ -191,7 +188,7 @@ const STATS: ReadonlyArray<StatDefinition> = [
     id: 'files',
     placement: 'tile',
     capabilities: ['files'],
-    title: () => 'Files',
+    title: () => 'Memory',
     value: (summary) => formatCount(summary.fileCount),
   },
 ];
@@ -230,11 +227,11 @@ const CONNECTION_ROWS: ReadonlyArray<RowDefinition> = [
     attention: (summary) => (summary.pendingConnectionCount ?? 0) > 0,
   },
   {
+    // Pro gates the live tail inside the page (last-step gate), not the row.
     id: 'logs',
     placement: 'advanced',
-    title: 'Logs',
+    title: 'OpenClaw logs',
     capabilities: ['logs'],
-    requiresPro: true,
     value: () => undefined,
   },
 ];
@@ -260,18 +257,17 @@ export function buildAgentSettingsModel(
   const summary = input.summary ?? {};
   const permissionDenied = input.permissionDenied === true;
   const backendLabel = BACKEND_LABELS[input.connection.backendKind];
-  const identityDetail = cleanValue(input.identityDetail)
-    ?? `${input.connection.label} · ${backendLabel}`;
 
   return {
     identity: {
       name: input.agent.name,
-      detail: identityDetail,
+      detail: cleanValue(input.identityDetail),
+      backend: input.connection.backendKind,
       backendLabel,
       activeMinutesAgo: input.capabilities.heartbeat && (input.agentCount ?? 1) <= 1
         ? heartbeatMinutesAgo(summary.lastHeartbeatAt, input.now ?? Date.now())
         : null,
-      editable: (input.capabilities.agentEdit || input.capabilities.files) && !permissionDenied,
+      editable: (input.capabilities.agentEdit || input.capabilities.agentCreate) && !permissionDenied,
       locked: permissionDenied,
     },
     stats: STATS
@@ -289,7 +285,6 @@ export function buildAgentSettingsModel(
     groups: [
       {
         id: 'connection',
-        title: input.connection.label,
         rows: buildRows(
           CONNECTION_ROWS,
           input.capabilities,

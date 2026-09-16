@@ -86,9 +86,11 @@ describe('Agent settings descriptor model', () => {
     // The Gateway heartbeat is one shared value; with several Agents it cannot be attributed.
     expect(buildAgentSettingsModel({ ...input, agentCount: 2 }).identity.activeMinutesAgo).toBeNull();
     expect(buildAgentSettingsModel({ ...input, agentCount: 1 }).identity.activeMinutesAgo).toBe(19);
+    // The backend is the avatar's corner mark; no `connection · backend` text line is composed.
     expect(model.identity).toEqual({
       name: 'Lucy',
-      detail: 'Studio · OpenClaw',
+      detail: undefined,
+      backend: 'openclaw',
       backendLabel: 'OpenClaw',
       activeMinutesAgo: 19,
       editable: true,
@@ -114,15 +116,16 @@ describe('Agent settings descriptor model', () => {
         id: 'usage',
         title: 'Cost today',
         value: '$1.20',
-        detail: { key: '{{value}} tokens', params: { value: '965.2K' }, tone: 'neutral' },
+        detail: undefined,
         attention: false,
       }),
       expect.objectContaining({ id: 'models', title: 'Models', value: '16', detail: undefined }),
       expect.objectContaining({ id: 'skills', title: 'Skills', value: '105' }),
-      expect.objectContaining({ id: 'files', title: 'Files', value: '7' }),
+      expect.objectContaining({ id: 'files', title: 'Memory', value: '7' }),
     ]);
     expect(model.groups).toHaveLength(1);
-    expect(model.groups[0]?.title).toBe('Studio');
+    // The connection group carries no heading; the connection label already names the roster group.
+    expect(model.groups[0]).not.toHaveProperty('title');
     expect(model.groups[0]?.rows.map((row) => [row.id, row.placement])).toEqual([
       ['connection', 'primary'],
       ['openclaw', 'advanced'],
@@ -135,7 +138,7 @@ describe('Agent settings descriptor model', () => {
       expect.objectContaining({ id: 'tools', value: '63' }),
       expect.objectContaining({ id: 'channels-devices', value: '1', attention: true }),
       expect.objectContaining({ id: 'openclaw', locked: false }),
-      expect.objectContaining({ id: 'logs', locked: true }),
+      expect.objectContaining({ id: 'logs', title: 'OpenClaw logs', locked: false }),
     ]));
   });
 
@@ -185,7 +188,8 @@ describe('Agent settings descriptor model', () => {
     });
     expect(hermes.stats.map((stat) => stat.id)).toEqual(['cron', 'usage', 'models', 'skills', 'files']);
     expect(hermes.groups.flatMap((group) => group.rows).map((row) => row.id)).toEqual(['connection']);
-    expect(hermes.identity.editable).toBe(true);
+    // Hermes cannot edit or create Agents, so the identity row never renders; its files live on the Files page.
+    expect(hermes.identity.editable).toBe(false);
     // Hermes declares no heartbeat, so a stray timestamp never becomes an activity line.
     expect(hermes.identity.activeMinutesAgo).toBeNull();
 
@@ -199,6 +203,7 @@ describe('Agent settings descriptor model', () => {
     });
     expect(sprite.identity).toMatchObject({
       detail: 'owner@example.com',
+      backend: 'youmind',
       editable: false,
     });
     expect(sprite.stats).toEqual([]);

@@ -12,6 +12,7 @@ import { ThreadView, type ThreadCopy, type ThreadViewProps } from './ThreadView'
 
 let mockScheme: 'light' | 'dark' = 'light';
 let mockReducedMotion = false;
+let mockPacedText: string | undefined;
 const mockScrollToEnd = jest.fn();
 
 jest.mock('react-native', () => {
@@ -80,7 +81,7 @@ jest.mock('react-native-enriched-markdown', () => {
 
 // The word pacer is unit-tested in src/chat; here the stream renders as it arrives.
 jest.mock('../../chat/useSmoothedStreamText', () => ({
-  useSmoothedStreamText: (text: string) => text,
+  useSmoothedStreamText: (text: string) => mockPacedText ?? text,
 }));
 
 jest.mock('react-native-keyboard-controller', () => {
@@ -119,7 +120,7 @@ jest.mock('@shopify/flash-list', () => {
       { ...props, data },
       ...data.map((item, index) => ReactRuntime.createElement(
         ReactRuntime.Fragment,
-        { key: (item as { id?: string }).id ?? index },
+        { key: (item as { key?: string }).key ?? index },
         renderItem({ item, index, target: 'Cell' }),
       )),
       ListHeaderComponent,
@@ -306,6 +307,7 @@ const copy: ThreadCopy = {
   placeholder: 'Message',
   formatEmpty: (name) => `Start a conversation with ${name}`,
   formatAttachments: (count) => `${count} attachments`,
+  formatPhotoPosition: (index, count) => `Photo ${index} of ${count}`,
   formatRunDetail: (status, time) => time ? `${status} · ${time}` : status,
   formatModelContext: (model, remaining) => `${model} · ${remaining}% left`,
   formatThinkingLevel: (level) => level,
@@ -347,6 +349,7 @@ describe('ThreadView', () => {
 
   beforeEach(() => {
     mockScheme = 'light';
+    mockPacedText = undefined;
     mockReducedMotion = false;
     require('react-native').Linking.openURL.mockClear();
     consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation((message?: unknown) => {
@@ -587,8 +590,8 @@ describe('ThreadView', () => {
 
     const sent: UiMessage = { id: 'usr_2', role: 'user', text: 'New' };
     view.rerender(<ThreadView {...createProps({ messages: [sent, older], isRunning: true, input: '' })} />);
-    expect(flattenStyle(view.getByTestId('thread-entrance-usr_2').props.style).opacity).toBe(0);
-    expect(flattenStyle(view.getByTestId('thread-entrance-streaming').props.style).opacity).toBe(0);
+    expect(flattenStyle(view.getByTestId('thread-entrance-usr_2').props.style).opacity).toBe(1);
+    expect(flattenStyle(view.getByTestId('thread-entrance-streaming').props.style).opacity).toBe(1);
     expect(flattenStyle(view.getByTestId('thread-entrance-a0').props.style).opacity).toBe(1);
 
     // History paged in above the reader never animates.
@@ -630,7 +633,11 @@ describe('ThreadView', () => {
       state: { kind: 'offline' },
       onRetry,
     })} />);
-    expect(offline.getAllByText('Offline · reconnecting')).toHaveLength(2);
+    // The header pill states offline once; the floating capsule only carries the action.
+    expect(offline.getAllByText('Offline · reconnecting')).toHaveLength(1);
+    expect(offline.getByTestId('thread-screen-offline-action').props.accessibilityLabel)
+      .toBe('Offline · reconnecting, Reconnect');
+    expect(offline.getByText('Reconnect')).toBeTruthy();
     expect(offline.getByText('Ready to help.')).toBeTruthy();
     expect(offline.getByTestId('thread-screen-composer-input').props.editable).toBe(true);
     expect(offline.getByTestId('thread-screen-composer-primary').props.accessibilityState)
@@ -729,7 +736,7 @@ describe('ThreadView', () => {
     fireEvent.press(view.getByTestId('thread-screen-composer-primary'));
     view.getByTestId('thread-screen-timeline').props.onStartReached();
     fireEvent.press(view.getByTestId('thread-run-tool-1'));
-    fireEvent.press(view.getByLabelText('1 attachments'));
+    fireEvent.press(view.getByLabelText('Photo 1 of 1'));
     fireEvent.press(view.getByTestId('thread-approval-approval-1-primary'));
     fireEvent(view.getByTestId('thread-approval-approval-1-primary'), 'longPress');
     fireEvent.press(view.getByTestId('thread-approval-approval-1-secondary'));
@@ -753,7 +760,7 @@ describe('ThreadView', () => {
       detail: 'Running tests',
       startedAtMs: 100,
     });
-    expect(onOpenAttachments).toHaveBeenCalledWith(messages[4]);
+    expect(onOpenAttachments).toHaveBeenCalledWith(messages[4], 0);
     expect(onResolveApproval.mock.calls).toEqual([
       ['request-1', 'allow-once'],
       ['request-1', 'allow-always'],
@@ -1106,8 +1113,78 @@ describe('ThreadView', () => {
     })} />);
 
     expect(view.queryByTestId('thread-bubble-attachment-only')).toBeNull();
-    fireEvent.press(view.getByLabelText('2 attachments'));
-    expect(onOpenAttachments).toHaveBeenCalledWith(message);
+    expect(view.getByLabelText('2 attachments')).toBeTruthy();
+    fireEvent.press(view.getByLabelText('Photo 2 of 2'));
+    expect(onOpenAttachments).toHaveBeenCalledWith(message, 1);
+  });
+
+  it('lays every attached photo out as one album and opens the viewer at the tapped photo', () => {
+    const onOpenAttachments = jest.fn();
+    const messageActions = { onCopy: jest.fn(), onToggleFavorite: jest.fn(), onShare: jest.fn() };
+    const uris = Array.from({ length: 6 }, (_, index) => `file://shot-${index}.jpg`);
+    const message: UiMessage = {
+      id: 'album-6',
+      role: 'user',
+      text: 'Here are the final screenshots.',
+      imageUris: uris,
+      // Known sizes lay out synchronously; portrait screenshots pack three per row.
+      imageMetas: uris.map((uri) => ({ uri, width: 1179, height: 2556 })),
+    };
+    const view = render(<ThreadView {...createProps({
+      messages: [message],
+      onOpenAttachments,
+      messageActions,
+    })} />);
+
+    // Content width is the 393-point window minus the 16-point row insets; the album takes 76% of it.
+    const albumWidth = Math.round((393 - Space.lg * 2) * 0.76);
+    const album = view.getByTestId('thread-attachments-album-6');
+    expect(flattenStyle(album.props.style)).toMatchObject({
+      width: albumWidth,
+      alignSelf: 'flex-end',
+      borderRadius: Radius.bubble,
+      overflow: 'hidden',
+    });
+    const tiles = uris.map((_, index) => view.getByTestId(`thread-attachments-album-6-${index}`));
+    expect(tiles).toHaveLength(6);
+    const frames = tiles.map((tile) => flattenStyle(tile.props.style));
+    // Two rows of three: no photo is dropped, the row spans the album, and rows stack below each other.
+    expect(new Set(frames.map((frame) => frame.top)).size).toBe(2);
+    expect(frames.slice(0, 3).reduce((sum, frame) => sum + (frame.width as number), 0) + 3 * 2).toBe(albumWidth);
+    expect(frames[3].top).toBe((frames[0].height as number) + 3);
+    expect(flattenStyle(album.props.style).height).toBe((frames[3].top as number) + (frames[3].height as number));
+
+    fireEvent.press(view.getByLabelText('Photo 5 of 6'));
+    expect(onOpenAttachments).toHaveBeenCalledWith(message, 4);
+    // A long press on a photo still lifts the message actions, like the bubble does.
+    fireEvent(tiles[2], 'longPress');
+    expect(view.getByTestId('thread-message-actions').props.selection.messageId).toBe(message.id);
+  });
+
+  it('shows a lone photo at its own aspect ratio instead of a square thumbnail', () => {
+    const wide: UiMessage = {
+      id: 'wide-1',
+      role: 'assistant',
+      text: '',
+      imageUris: ['file://chart.png'],
+      imageMetas: [{ uri: 'file://chart.png', width: 1600, height: 900 }],
+    };
+    const tall: UiMessage = {
+      id: 'tall-1',
+      role: 'user',
+      text: '',
+      imageUris: ['file://shot.png'],
+      imageMetas: [{ uri: 'file://shot.png', width: 1179, height: 2556 }],
+    };
+    const view = render(<ThreadView {...createProps({ messages: [wide, tall] })} />);
+    const albumWidth = Math.round((393 - Space.lg * 2) * 0.76);
+    const wideFrame = flattenStyle(view.getByTestId('thread-attachments-wide-1').props.style);
+    expect(wideFrame).toMatchObject({ width: albumWidth, alignSelf: 'flex-start' });
+    expect(wideFrame.height).toBeLessThan(albumWidth);
+    const tallFrame = flattenStyle(view.getByTestId('thread-attachments-tall-1').props.style);
+    expect(tallFrame.height).toBe(Math.round(albumWidth * 1.25));
+    expect(tallFrame.width).toBeLessThan(albumWidth);
+    expect(tallFrame.alignSelf).toBe('flex-end');
   });
 
   it('renders files separately from the image gallery for text, file-only, and mixed messages', () => {
@@ -1139,7 +1216,8 @@ describe('ThreadView', () => {
       ],
     })} />);
 
-    expect(view.getByText('Summarize this spec')).toBeTruthy();
+    // The nested invisible metadata reservation follows the visible body.
+    expect(view.getByText(/^Summarize this spec/)).toBeTruthy();
     expect(view.getByText('spec.pdf')).toBeTruthy();
     expect(view.getByText('File')).toBeTruthy();
     expect(view.getByText('notes.txt')).toBeTruthy();
@@ -1262,12 +1340,13 @@ describe('ThreadView', () => {
     expect(clone.queryByText('Recorded model')).toBeNull();
     expect(clone.getByTestId(`thread-bubble-${message.id}`)).toBeTruthy();
     expect(clone.getByTestId(`thread-favorite-${message.id}`)).toBeTruthy();
-    expect(flattenStyle(clone.toJSON()?.props.style)).toMatchObject({
-      width: 320,
-      paddingHorizontal: Space.lg,
-      paddingTop: Space.lg,
-      paddingBottom: Space.md,
-    });
+    // The row owns no vertical padding: the timeline rhythm lives outside the
+    // measured row, so the clone and the list row share one geometry.
+    const cloneStyle = flattenStyle(clone.toJSON()?.props.style);
+    expect(cloneStyle).toMatchObject({ width: 320, paddingHorizontal: Space.lg });
+    expect(cloneStyle.paddingTop).toBeUndefined();
+    expect(cloneStyle.paddingBottom).toBeUndefined();
+    expect(cloneStyle.paddingVertical).toBeUndefined();
   });
 
   it('does not arm the long-press gesture or overlay without message actions', () => {
@@ -1302,7 +1381,7 @@ describe('ThreadView', () => {
     expect(view.queryByTestId('thread-message-actions')).toBeNull();
   });
 
-  it('renders queued messages dimmed with a state caption and opens their actions on tap', () => {
+  it('keeps queued messages at full opacity with inline status and opens their actions on tap', () => {
     const messageActions = { onCopy: jest.fn(), onToggleFavorite: jest.fn(), onShare: jest.fn() };
     const queuedMessageActions = {
       canSendNow: false,
@@ -1322,13 +1401,13 @@ describe('ThreadView', () => {
       queuedMessageActions,
     })} />);
 
-    // The queued bubble sits after the sent one and is visibly provisional.
-    expect(view.getByText('Queued')).toBeTruthy();
-    expect(view.getByTestId('thread-delivery-caption-usr_2_q1')).toBeTruthy();
+    // Pending state uses the same inline metadata geometry as delivery confirmation.
+    expect(view.getByTestId('thread-meta-usr_2_q1-status').props.accessibilityLabel).toBe('Queued');
+    expect(view.queryByTestId('thread-delivery-caption-usr_2_q1')).toBeNull();
     expect(view.getByTestId('thread-message-usr_2_q1').props.accessibilityLabel).toBe('Later please · Queued');
     expect(view.queryByTestId('thread-delivery-caption-sent-1')).toBeNull();
-    expect(flattenStyle(view.getByTestId('thread-delivery-usr_2_q1').props.style).opacity).toBeLessThan(1);
-    expect(flattenStyle(view.getByTestId('thread-delivery-sent-1').props.style).opacity).toBe(1);
+    expect(flattenStyle(view.getByTestId('thread-delivery-usr_2_q1').props.style).opacity ?? 1).toBe(1);
+    expect(flattenStyle(view.getByTestId('thread-delivery-sent-1').props.style).opacity ?? 1).toBe(1);
     // The draft exposes both Stop and the queue Send while the run is active.
     expect(view.getByTestId('thread-screen-composer-stop')).toBeTruthy();
     expect(view.getByTestId('thread-screen-composer-primary').props.accessibilityLabel).toBe('Send after this reply');
@@ -1343,13 +1422,13 @@ describe('ThreadView', () => {
     expect(queuedMessageActions.onEdit).toHaveBeenCalledWith(queued);
     act(() => overlay.props.onClosed());
 
-    // Paused and sending states change the caption and lock editing while sending.
+    // Paused and sending states change the glyph and lock editing while sending.
     view.rerender(<ThreadView {...createProps({
       messages: [{ ...queued, delivery: 'held' }, sent],
       messageActions,
       queuedMessageActions: { ...queuedMessageActions, canSendNow: true },
     })} />);
-    expect(view.getByText('Paused')).toBeTruthy();
+    expect(view.getByTestId('thread-meta-usr_2_q1-status').props.accessibilityLabel).toBe('Paused');
     fireEvent.press(view.getByTestId('thread-message-usr_2_q1'));
     expect(view.getByTestId('thread-message-actions').props.queuedActions).toMatchObject({ canSendNow: true, editable: true });
     act(() => view.getByTestId('thread-message-actions').props.onClosed());
@@ -1359,7 +1438,7 @@ describe('ThreadView', () => {
       messageActions,
       queuedMessageActions: { ...queuedMessageActions, canSendNow: true },
     })} />);
-    expect(view.getByText('Sending…')).toBeTruthy();
+    expect(view.getByTestId('thread-meta-usr_2_q1-status').props.accessibilityLabel).toBe('Sending…');
     fireEvent.press(view.getByTestId('thread-message-usr_2_q1'));
     expect(view.getByTestId('thread-message-actions').props.queuedActions).toMatchObject({ canSendNow: false, editable: false });
     act(() => view.getByTestId('thread-message-actions').props.onClosed());
@@ -1560,6 +1639,7 @@ it.each(['light', 'dark'] as const)('reveals the bottom action during scrolling 
   fireEvent.scroll(list, scrollEvent(-30));
   expect(visible()).toBe(false);
   mockScheme = 'light';
+    mockPacedText = undefined;
 });
 
 it('performs one native animated return, defers streaming snaps, then resumes bottom following', () => {
@@ -1612,4 +1692,41 @@ it('returns immediately under reduced motion and keeps following subsequent cont
   fireEvent(list, 'contentSizeChange', 393, 2100);
   expect(mockScrollToEnd).toHaveBeenCalledTimes(2);
   mockReducedMotion = false;
+});
+
+
+describe('continuous message presentation', () => {
+  afterEach(() => { mockPacedText = undefined; });
+  it('retains the same outgoing native subtree and text reservation from pending through server echo', () => {
+    const pending: UiMessage = { id: 'usr_1', renderKey: 'usr_1', role: 'user', text: 'A message near the wrapping boundary', timestampMs: 1000, delivery: 'sending' };
+    const view = render(<ThreadView {...createProps({ messages: [pending] })} />);
+    const bubble = view.getByTestId('thread-bubble-usr_1');
+    const meta = view.getByTestId('thread-meta-usr_1');
+    const textBefore = bubble.findAllByType(require('react-native').Text).map((node: { props: { children: unknown } }) => typeof node.props.children === 'string' ? node.props.children : null);
+    const { delivery: _delivery, ...submitted } = pending;
+    view.rerender(<ThreadView {...createProps({ messages: [submitted] })} />);
+    expect(view.getByTestId('thread-bubble-usr_1') === bubble).toBe(true);
+    expect(bubble.findAllByType(require('react-native').Text).map((node: { props: { children: unknown } }) => typeof node.props.children === 'string' ? node.props.children : null)).toEqual(textBefore);
+    view.rerender(<ThreadView {...createProps({ messages: [{ ...submitted, id: 'history-1' }] })} />);
+    expect(view.getByTestId('thread-bubble-history-1') === bubble).toBe(true);
+    expect(view.getByTestId('thread-meta-history-1') === meta).toBe(true);
+  });
+  it('keeps thinking until paced text is visible and preserves markdown through finalization', () => {
+    const streaming: UiMessage = { id: 'streaming', renderKey: 'reply:1000:0', role: 'assistant', text: 'A complete reply', timestampMs: 1000, streaming: true };
+    mockPacedText = '';
+    const view = render(<ThreadView {...createProps({ messages: [streaming], isRunning: true })} />);
+    expect(view.getByTestId('thread-thinking-streaming')).toBeTruthy();
+    expect(view.queryByTestId('thread-markdown-streaming')).toBeNull();
+    mockPacedText = 'A complete';
+    view.rerender(<ThreadView {...createProps({ messages: [streaming], isRunning: true })} />);
+    const markdown = view.getByTestId('thread-markdown-streaming');
+    const meta = view.getByTestId('thread-meta-streaming', { includeHiddenElements: true });
+    expect(view.queryByTestId('thread-thinking-streaming')).toBeNull();
+    expect(markdown.props.markdown).toBe('A complete');
+    mockPacedText = undefined;
+    view.rerender(<ThreadView {...createProps({ messages: [{ ...streaming, id: 'final_run', streaming: false }] })} />);
+    expect(view.getByTestId('thread-markdown-final_run') === markdown).toBe(true);
+    expect(view.getByTestId('thread-meta-final_run') === meta).toBe(true);
+    expect(markdown.props.markdown).toBe('A complete reply');
+  });
 });

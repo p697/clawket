@@ -10,3 +10,9 @@ This package is the platform-neutral contract between Clawket UI and backend ada
 6. The package currently exposes TypeScript source for Metro/Jest. Node workspaces must use type-only imports until a compiled runtime export is added.
 7. Historical tool records may use `unknown` when no result was recorded. This is not success or a live run event; a summary is not an output payload.
 8. Usage queries may carry an Agent owner. OpenClaw queries from an Agent page must preserve that owner; single-Agent adapters retain their backend's native query shape.
+9. Optional `cronTimeZone` and `cronAdvanced` refine scheduled-task editing, not transport support. OpenClaw supports per-job timezone and advanced execution options (including creating paused jobs); Hermes does not. Missing flags fail closed; existing Cron schedule/payload metadata remains valid and must survive unrelated edits.
+10. Optional `modelManage` refines `models` with Gateway config editing (`getCatalog` / `saveCatalog` / `addModel` / `inspectDeletion` / `deleteModel` / `setCost`). OpenClaw declares it; Hermes, YouMind and local-model do not and keep only global `setSelection`. `ModelCatalogState.allowlist` is `null` when the backend has no allowlist, never an empty array. Missing flags fail closed.
+
+`SessionDescriptor.lastActivityAt` is the additive human-activity clock: adapters that can tell a user message or user-facing reply apart from record housekeeping (heartbeats, metadata patches) must set it, `null` when the session never had such activity; adapters that cannot leave it undefined so `sessionActivityAt` falls back to `updatedAt`. `HUMAN_SESSION_KINDS` names the session kinds a person takes part in. Consumers order and unread-mark on this clock only.
+
+`SessionHistory.activeRun` is an optional backend recovery snapshot (identity, visible text, start time and session-scoped cancellation hint). Peers without it retain their existing behavior; mocks clone it independently.

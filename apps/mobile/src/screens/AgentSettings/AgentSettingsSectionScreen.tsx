@@ -15,7 +15,8 @@ import {
   type Capabilities,
   type ConnectionDescriptor,
 } from '@clawket/agent-protocol';
-import { ChevronLeft } from 'lucide-react-native';
+import { ChevronLeft } from '../../components/ui/DirectionalIcon';
+import { Compass, Plus, Share } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -23,6 +24,7 @@ import {
   useConnections,
 } from '../../connection';
 import { Banner } from '../../components/ui/Banner';
+import { ConnectionStatusPill } from '../../components/ui/ConnectionStatusPill';
 import { ConfirmationModal } from '../../components/ui/ConfirmationModal';
 import { FloatingButton } from '../../components/ui/FloatingButton';
 import {
@@ -57,12 +59,13 @@ import {
   type AgentSettingsSectionRowDescriptor,
   type AgentSettingsSectionState,
 } from './section-model';
-import { ModelsSection } from './ModelsSection';
+import { ModelsScreen } from './ModelsScreen';
 import { SkillsSection } from './SkillsSection';
 import { CronSection } from './CronSection';
+import { CronEditorScreen } from './CronEditorScreen';
 import { FilesSection } from './FilesSection';
 import { UsageSection } from './UsageSection';
-import { IdentitySection } from './IdentitySection';
+import { IdentityScreen } from './IdentityScreen';
 import { ToolsSection } from './ToolsSection';
 import { ChannelsDevicesSection } from './ChannelsDevicesSection';
 import { LogsSection } from './LogsSection';
@@ -106,6 +109,8 @@ export type AgentSettingsSectionViewProps = Readonly<{
   connectionLabel?: string;
   state: AgentSettingsSectionState;
   errorMessage?: string;
+  /** The runtime's foreground grace window is open: show quiet reconnecting instead of offline. */
+  reconnecting?: boolean;
   pendingAction?: AgentSettingsSectionAction | null;
   onBack: () => void;
   onRetry: () => void;
@@ -113,6 +118,8 @@ export type AgentSettingsSectionViewProps = Readonly<{
   canResolveAction?: (action: AgentSettingsSectionAction) => boolean;
   onOpenPaywall: (reason: string, onContinue?: () => void) => void;
   sectionContent?: React.ReactNode;
+  title?: string;
+  headerRight?: React.ReactNode;
 }>;
 
 export function AgentSettingsSectionScreen({
@@ -127,9 +134,17 @@ export function AgentSettingsSectionScreen({
   const [activationError, setActivationError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<AgentSettingsSectionAction | null>(null);
-  const { i18n } = useTranslation();
+  const [skillsRefresh, setSkillsRefresh] = useState(0);
+  const [usagePosterRequest, setUsagePosterRequest] = useState(0);
+  const { t, i18n } = useTranslation('common');
   const locale = i18n?.resolvedLanguage;
   const { connectionId, agentId, section } = route.params;
+  const discoveringSkills = section === 'skills' && route.params.action === 'discover-skills';
+  const editingCron = section === 'cron' && (route.params.action === 'create-cron' || route.params.action === 'edit-cron');
+  useEffect(() => {
+    if ((section !== 'skills' && section !== 'cron') || discoveringSkills || editingCron) return;
+    return navigation.addListener('focus', () => setSkillsRefresh((value) => value + 1));
+  }, [discoveringSkills, editingCron, navigation, section]);
   const routeIsActive = runtime.activeConnectionId === connectionId;
   const adapter = routeIsActive && !permissionDenied ? runtime.activeAdapter : null;
   const connectionGroup = runtime.roster.find(
@@ -240,32 +255,30 @@ export function AgentSettingsSectionScreen({
   let sectionContent: React.ReactNode;
   if (adapter && agent) {
     const online = runtime.activeState === 'ready';
-    if (section === 'identity') {
+    if (section === 'skills') {
       sectionContent = (
-        <IdentitySection
+        <SkillsSection
+          isPro={isPro}
+          onOpenPaywall={openPaywall}
           adapter={adapter}
           agent={agent}
           online={online}
-          isPro={isPro}
-          openCreateOnMount={route.params.action === 'create-agent'}
-          onOpenPaywall={openPaywall}
-          onChanged={refreshRoster}
-          onCreated={() => navigation.navigate('Roster')}
-          onRemoved={finishAgentRemoval}
+          view={discoveringSkills ? 'discover' : 'installed'}
+          refreshKey={skillsRefresh}
+          onInstallRequested={() => navigation.navigate('Thread', {
+            connectionId, agentId, sessionKey: agent.mainSessionKey, from: 'roster',
+          })}
         />
       );
-    } else if (section === 'models') {
-      sectionContent = <ModelsSection adapter={adapter} agent={agent} online={online} />;
-    } else if (section === 'skills') {
-      sectionContent = <SkillsSection adapter={adapter} agent={agent} online={online} />;
     } else if (section === 'cron') {
       sectionContent = (
         <CronSection
           adapter={adapter}
           agent={agent}
           online={online}
-          openCreateOnMount={route.params.action === 'create-cron'}
-          initialPrompt={route.params.cronPrompt}
+          refreshKey={skillsRefresh}
+          onCreate={() => navigation.push('AgentSettingsSection', { connectionId, agentId, section: 'cron', action: 'create-cron' })}
+          onEdit={(cronJobId) => navigation.push('AgentSettingsSection', { connectionId, agentId, section: 'cron', action: 'edit-cron', cronJobId })}
         />
       );
     } else if (section === 'files') {
@@ -279,7 +292,16 @@ export function AgentSettingsSectionScreen({
         />
       );
     } else if (section === 'usage') {
-      sectionContent = <UsageSection adapter={adapter} agent={agent} online={online} />;
+      sectionContent = (
+        <UsageSection
+          adapter={adapter}
+          agent={agent}
+          online={online}
+          posterRequest={usagePosterRequest}
+          isPro={isPro}
+          onOpenPaywall={openPaywall}
+        />
+      );
     } else if (section === 'tools') {
       sectionContent = <ToolsSection adapter={adapter} agent={agent} online={online} />;
     } else if (section === 'channels-devices') {
@@ -289,7 +311,9 @@ export function AgentSettingsSectionScreen({
         <LogsSection
           adapter={adapter}
           online={online}
+          isPro={isPro}
           onReconnect={retry}
+          onOpenPaywall={openPaywall}
         />
       );
     }
@@ -341,6 +365,44 @@ export function AgentSettingsSectionScreen({
     );
   }
 
+  if (section === 'models' && adapter && agent && supported && !sectionLocked && state !== 'empty' && state !== 'loading') {
+    return (
+      <ModelsScreen
+        adapter={adapter}
+        agent={agent}
+        online={runtime.activeState === 'ready'}
+        navigation={navigation}
+        isPro={isPro}
+        onOpenPaywall={openPaywall}
+        onOpenProviderConfig={() => navigation.push('AgentSettingsSection', { connectionId, agentId, section: 'openclaw' })}
+      />
+    );
+  }
+
+  if (section === 'identity' && adapter && agent && supported && !sectionLocked && state !== 'empty' && state !== 'loading') {
+    return (
+      <IdentityScreen
+        adapter={adapter}
+        agent={agent}
+        online={runtime.activeState === 'ready'}
+        isPro={isPro}
+        navigation={navigation}
+        openCreateOnMount={route.params.action === 'create-agent'}
+        onOpenPaywall={openPaywall}
+        onChanged={refreshRoster}
+        onCreated={() => navigation.navigate('Roster')}
+        onRemoved={finishAgentRemoval}
+      />
+    );
+  }
+
+  if (editingCron && adapter && agent && supported && !sectionLocked && state !== 'empty' && state !== 'loading') {
+    return <CronEditorScreen adapter={adapter} agent={agent} online={runtime.activeState === 'ready'}
+      reconnecting={runtime.recovering === true}
+      jobId={route.params.action === 'edit-cron' ? route.params.cronJobId : undefined}
+      initialPrompt={route.params.cronPrompt} navigation={navigation} />;
+  }
+
   return (
     <AgentSettingsSectionView
       model={model}
@@ -348,6 +410,7 @@ export function AgentSettingsSectionScreen({
       connectionLabel={connection?.label}
       state={state}
       errorMessage={errorMessage}
+      reconnecting={runtime.recovering && runtime.activeConnectionId === connectionId}
       pendingAction={pendingAction}
       onBack={navigation.goBack}
       onRetry={retry}
@@ -355,6 +418,30 @@ export function AgentSettingsSectionScreen({
       canResolveAction={(action) => action === 'connection.reconnect' || Boolean(resolveAction)}
       onOpenPaywall={openPaywall}
       sectionContent={sectionContent}
+      title={discoveringSkills ? t('Discover') : undefined}
+      headerRight={section === 'skills' && agent && supported && !discoveringSkills && !sectionLocked
+        && adapter?.capabilities.skillDiscover && adapter.management?.skills?.discover ? (
+          <FloatingButton
+            testID="agent-skills-discover"
+            icon={Compass}
+            appearance="quiet"
+            accessibilityLabel={t('Discover')}
+            onPress={() => navigation.push('AgentSettingsSection', {
+              connectionId, agentId, section: 'skills', action: 'discover-skills',
+            })}
+          />
+        ) : section === 'cron' && agent && supported && !sectionLocked && adapter?.capabilities.cronCreate && adapter.management?.cron?.add ? (
+          <FloatingButton testID="agent-cron-new" icon={Plus} appearance="ink"
+            accessibilityLabel={t('New cron job', { ns: 'config' })} disabled={runtime.activeState !== 'ready'}
+            onPress={() => {
+              analyticsEvents.cronCreateTapped({ source: 'cron_header' });
+              navigation.push('AgentSettingsSection', { connectionId, agentId, section: 'cron', action: 'create-cron' });
+            }} />
+        ) : section === 'usage' && agent && supported && !sectionLocked && adapter?.management?.usage?.sessions ? (
+          <FloatingButton testID="agent-usage-share" icon={Share} appearance="quiet"
+            accessibilityLabel={t('Share', { ns: 'settings' })}
+            onPress={() => setUsagePosterRequest((value) => value + 1)} />
+        ) : undefined}
     />
   );
 }
@@ -365,6 +452,7 @@ export function AgentSettingsSectionView({
   connectionLabel,
   state,
   errorMessage,
+  reconnecting = false,
   pendingAction,
   onBack,
   onRetry,
@@ -372,6 +460,8 @@ export function AgentSettingsSectionView({
   canResolveAction,
   onOpenPaywall,
   sectionContent,
+  title,
+  headerRight,
 }: AgentSettingsSectionViewProps): React.JSX.Element {
   const { t } = useTranslation(['common', 'settings', 'config']);
   const { theme } = useAppTheme();
@@ -403,12 +493,43 @@ export function AgentSettingsSectionView({
     }
     openAvailableRow(row);
   };
+  // The title yields its slot to connection state so the header never grows. Logs, tools and
+  // channels present their own offline copy in place.
+  const sectionOwnsOffline = model.section === 'logs'
+    || model.section === 'tools'
+    || model.section === 'channels-devices';
+  const connectionStatus = state === 'offline' && !sectionOwnsOffline && reconnecting ? (
+    <ConnectionStatusPill
+      testID="agent-settings-section-reconnecting"
+      placement="inline"
+      status="reconnecting"
+      message={t('Reconnecting…', { ns: 'common' })}
+    />
+  ) : state === 'offline' && !sectionOwnsOffline ? (
+    <ConnectionStatusPill
+      testID="agent-settings-section-offline"
+      placement="inline"
+      status="offline"
+      message={translate('Offline · reconnecting')}
+      actionLabel={translate('Reconnect')}
+      onAction={onRetry}
+    />
+  ) : state === 'error' ? (
+    <ConnectionStatusPill
+      testID="agent-settings-section-error"
+      placement="inline"
+      status="error"
+      message={errorMessage || translate('Settings could not load')}
+      actionLabel={t('Retry', { ns: 'common' })}
+      onAction={onRetry}
+    />
+  ) : null;
 
   return (
     <>
       <View
         testID="agent-settings-section-screen"
-        style={[styles.screen, { paddingTop: insets.top }]}
+        style={[styles.screen, model.section === 'skills' || model.section === 'cron' ? styles.skillsScreen : null, { paddingTop: insets.top }]}
       >
         <View testID="agent-settings-section-header" style={styles.header}>
           <FloatingButton
@@ -417,14 +538,20 @@ export function AgentSettingsSectionView({
             accessibilityLabel={t('Back', { ns: 'common' })}
             onPress={onBack}
           />
-          <Text
-            testID="agent-settings-section-title"
-            style={styles.headerTitle}
-            numberOfLines={1}
-          >
-            {translate(model.title)}
-          </Text>
-          <View style={styles.headerSlot} />
+          {connectionStatus ? (
+            <View testID="agent-settings-section-header-status" style={styles.headerStatus}>
+              {connectionStatus}
+            </View>
+          ) : (
+            <Text
+              testID="agent-settings-section-title"
+              style={styles.headerTitle}
+              numberOfLines={1}
+            >
+              {title ?? translate(model.title)}
+            </Text>
+          )}
+          {headerRight ?? <View style={styles.headerSlot} />}
         </View>
 
         {state === 'loading' ? (
@@ -440,6 +567,8 @@ export function AgentSettingsSectionView({
           <ScrollView
             testID="agent-settings-section-content"
             automaticallyAdjustContentInsets={false}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
             contentContainerStyle={[
               styles.content,
               { paddingBottom: insets.bottom + Space.xl },
@@ -458,26 +587,6 @@ export function AgentSettingsSectionView({
               message={translate('Pro required for this setting')}
               actionLabel={t('Unlock', { ns: 'common' })}
               onAction={() => onOpenPaywall(model.paywallReason ?? 'agents')}
-            />
-          ) : null}
-          {state === 'error' ? (
-            <Banner
-              testID="agent-settings-section-error"
-              tone="bad"
-              message={errorMessage || translate('Settings could not load')}
-              actionLabel={t('Retry', { ns: 'common' })}
-              onAction={onRetry}
-            />
-          ) : null}
-          {state === 'offline'
-            && model.section !== 'logs'
-            && model.section !== 'tools'
-            && model.section !== 'channels-devices' ? (
-            <Banner
-              testID="agent-settings-section-offline"
-              message={translate('Offline · reconnecting')}
-              actionLabel={translate('Reconnect')}
-              onAction={onRetry}
             />
           ) : null}
 
@@ -655,6 +764,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       flex: 1,
       backgroundColor: colors.canvasGrouped,
     },
+    skillsScreen: { backgroundColor: colors.canvas },
     header: {
       minHeight: ControlSize.floatingButton,
       paddingHorizontal: Space.lg,
@@ -674,6 +784,13 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       lineHeight: LineHeight.title,
       fontWeight: FontWeight.semibold,
       textAlign: 'center',
+      marginHorizontal: Space.sm,
+    },
+    headerStatus: {
+      flex: 1,
+      minWidth: 0,
+      alignItems: 'center',
+      justifyContent: 'center',
       marginHorizontal: Space.sm,
     },
     content: {

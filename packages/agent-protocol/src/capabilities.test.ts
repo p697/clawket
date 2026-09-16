@@ -60,6 +60,13 @@ describe('canonical capability contract', () => {
     expect(resolveCapabilities('hermes', { fileAttachments: true }).fileAttachments).toBe(false);
     expect(resolveCapabilities('hermes', { replyNotifications: false }).replyNotifications).toBe(false);
     expect(resolveCapabilities('youmind', { replyNotifications: true }).replyNotifications).toBe(false);
+    expect(resolveCapabilities('openclaw', { cronTimeZone: false, cronAdvanced: false })).toMatchObject({ cronTimeZone: false, cronAdvanced: false });
+    expect(resolveCapabilities('hermes', { cronTimeZone: true, cronAdvanced: true }).cronTimeZone).toBeFalsy();
+    expect(resolveCapabilities('hermes', { cronTimeZone: true, cronAdvanced: true }).cronAdvanced).toBeFalsy();
+    expect(resolveCapabilities('openclaw').modelManage).toBe(true);
+    expect(resolveCapabilities('openclaw', { modelManage: false }).modelManage).toBe(false);
+    expect(resolveCapabilities('hermes', { modelManage: true }).modelManage).toBe(false);
+    expect(resolveCapabilities('local-model', { modelManage: true }).modelManage).toBeFalsy();
   });
 
   it('expresses image-only Hermes attachment support without weakening other backends', () => {

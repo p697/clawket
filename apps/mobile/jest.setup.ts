@@ -140,6 +140,13 @@ jest.mock('expo-device', () => ({
   isDevice: false,
 }));
 
+// The `expo` entry point ships TypeScript source; expose only the pieces the
+// app imports from it.
+jest.mock('expo', () => ({
+  reloadAppAsync: jest.fn(() => Promise.resolve()),
+  requireOptionalNativeModule: jest.fn(() => null),
+}));
+
 // Mock expo-localization
 jest.mock('expo-localization', () => ({
   getCalendars: jest.fn(() => [{ timeZone: 'America/Los_Angeles' }]),
@@ -369,6 +376,7 @@ jest.mock('@gorhom/bottom-sheet', () => {
     BottomSheetModalProvider: ({ children }: { children: React.ReactNode }) => children,
     BottomSheetFlatList: ({ data = [], renderItem, ListHeaderComponent, ...props }: any) => React.createElement(View, props,
       ListHeaderComponent, ...data.map((item: any, index: number) => React.createElement(React.Fragment, { key: item.key ?? index }, renderItem({ item, index })))),
+    BottomSheetScrollView: ({ children, contentContainerStyle: _contentContainerStyle, ...props }: any) => React.createElement(View, props, children),
     BottomSheetSectionList: SectionList,
     BottomSheetTextInput: TextInput,
     BottomSheetView,
@@ -455,6 +463,7 @@ jest.mock('react-native-purchases', () => {
     })),
     getOfferings: jest.fn(() => Promise.resolve({ all: {}, current: null })),
     purchasePackage: jest.fn(),
+    PRORATION_MODE: { DEFERRED: 6, IMMEDIATE_WITHOUT_PRORATION: 3 },
     restorePurchases: jest.fn(),
     addCustomerInfoUpdateListener: jest.fn(),
     removeCustomerInfoUpdateListener: jest.fn(() => true),

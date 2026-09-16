@@ -53,10 +53,10 @@ iOS 用系统 SF Pro，Android 用 Roboto，中文走系统 CJK；不引入第�
 | 气泡圆角 | 20 |
 | 浮动按钮 / 胶囊 / 输入框 | 全圆；圆形按钮 44；胶囊高 40 |
 | 卡片 | 16 |
-| 设置分组卡 | 14；卡内行高 52 |
+| 设置分组卡 | 默认 14 / 行高 52；账户设置及子页 comfortable 22 / 最小行高 64（2026-09-13 用户品质升级） |
 | 头像 | 花名册 56（圆角 18）；头部胶囊 28（圆角 9）；设置顶行 44（圆角 14）；面板菜单行 32（圆角 10）；会话面板行 40（全圆，渠道行同尺寸灰底图标位） |
 | 花名册行 | 高 88；横向内边距 16；头像与文字间距 14 |
-| 线程 | 同一发言者气泡间距 6；不同发言者 16；系统事件行上下 12；气泡最大宽 82% |
+| 线程 | 行本身无上下内边距，间距由时间线节奏统一给出（2026-09-16 负责人要求统一）：同一发言者相邻行 8（连续工具行、工具活动与其产出的回复、同一方连续气泡）；用户与 Agent 之间 16，系统事件行两侧 16；时间标签上方 24、下方 12；列表首尾各 16。消息内部（气泡 / 附件 / 收藏星）4。气泡最大宽 82% |
 | 页面横向内边距 | 16 |
 | 浮动头部 | 顶部安全区 + 8；下方 24 渐变遮罩 |
 
@@ -76,7 +76,8 @@ iOS 用系统 SF Pro，Android 用 Roboto，中文走系统 CJK；不引入第�
 | `SettingsGroup` / `SettingsRow` | 白卡圆角 14；行高 52，标题 `name 400`（17/400）、副标题 `caption`、右箭头 / 锁；行间 `line` 发丝线，首尾无线 |
 | `RosterRow` | 见 `04` §2；无边框；按下 `surface` 底 120 ms |
 | `Skeleton` | `surface` 底的圆角块，1.2 s 呼吸；用于全部加载态 |
-| `Banner` | 顶部横幅，`warnSoft` / `badSoft` 底，`caption`，右侧文字动作 |
+| `Banner` | 产品消息横幅（宽限期、Pro、不支持、Bridge 升级），`warnSoft` / `badSoft` 底，`caption`，右侧文字动作；不再承载连接状态 |
+| `ConnectionStatusPill` | 连接状态胶囊（2026-09-16 负责人要求）：40pt `surface` 胶囊（`inline`，放在页头中央或列表头）或悬浮版（`floating`，`surfaceFloating` + 浮起阴影），`caption` 文案 + 一个 600 动作词，整颗胶囊即 44pt 点击区；重连中呼吸文字、无动作；离线 `WifiOff`、错误红色 `CircleAlert`，底色保持中性。永不占布局高度：Roster 用页头空置中央，标题页由标题让位，Thread 悬浮在时间线顶部 |
 
 删除：`Card` 的 `tone` 变体、`IconButton`（迁完后）、`CircleButton`（并入 FloatingButton）、`ModalSheet`（并入 Sheet）、`SegmentedTabs` 若只剩面板使用则保留为 `Segmented`。
 
@@ -127,8 +128,9 @@ Grok Bot 清爽的根源不是留白，而是**每个界面只有两层字**：�
 |---|---|---|
 | 花名册 | 名字（body 600）+ 预览 / 时间（secondary / caption） | 徽标数字 |
 | 线程 | 消息正文（body）+ 系统事件 / 时间（secondary / caption） | 头部胶囊的一行灰字（模型 · 上下文剩余）是产品负责人指定保留的唯一一处头部辅文字 |
-| 会话面板 | 标题（body 600）+ 预览 / 时间（secondary / caption），与花名册同预算 | 头部 Agent 胶囊名字（body 600）、chip 文字（secondary）与数量（caption） |
+| 会话面板 | 标题（secondary 600）+ 预览 / 时间（caption），比花名册小一档，40pt 头像位定尺度；未读 / 需要你用 6pt `StatusSize.dot` | 头部 Agent 胶囊名字（body 600）、chip 文字（secondary）与数量（caption `inkTertiary`） |
 | Agent 设置 / 账户设置 | 行标题（body）+ 尾值（secondary） | 页面标题（title）、身份卡副标题一行 |
+| 技能管理（2026-09-13 负责人确认） | 技能名（body 600）+ 一行用途（secondary）+ 独立中性开关 | 88pt 最小行高；缺失项可增加一行 warning 图标/说明；无 Active 重复尾值，发现移至右上角 Compass。 |
 | 首启引导 | 标题（display）+ 正文一行（secondary） | 按钮文字 |
 | 付费墙 | 标题（display）+ 收益 / 方案（body / secondary） | 法务小字（caption） |
 

@@ -1,3 +1,4 @@
+import { relayNetworkOptions } from '../relay-network.js';
 import WebSocket from 'ws';
 import nacl from 'tweetnacl';
 import { randomUUID } from 'node:crypto';
@@ -10,6 +11,7 @@ export interface LocalModelInvitation { sessionId: string; codeKeyHex: string; q
 export interface LocalModelRelayConfig { relayUrl: string; gatewayId: string; relaySecret: string; invitation?: LocalModelInvitation }
 
 export class LocalModelRelay {
+  private readonly relayNetwork = relayNetworkOptions();
   private socket: WebSocket | null = null;
   private retry: ReturnType<typeof setTimeout> | null = null;
   private ping: ReturnType<typeof setInterval> | null = null;
@@ -63,7 +65,7 @@ export class LocalModelRelay {
     url.searchParams.set('gatewayId', this.config.gatewayId);
     url.searchParams.set('role', 'gateway');
     url.searchParams.set('clientId', this.instanceId);
-    const socket = new WebSocket(url, { headers: { Authorization: `Bearer ${this.config.relaySecret}` }, maxPayload: WEBSOCKET_FRAME_LIMIT_BYTES, handshakeTimeout: 15_000 });
+    const socket = new WebSocket(url, { ...this.relayNetwork, headers: { Authorization: `Bearer ${this.config.relaySecret}` }, maxPayload: WEBSOCKET_FRAME_LIMIT_BYTES, handshakeTimeout: 15_000 });
     this.socket = socket;
     let alive = true;
     socket.on('open', () => {

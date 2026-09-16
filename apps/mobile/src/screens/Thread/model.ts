@@ -238,7 +238,7 @@ export function buildThreadTimelineItems(params: Readonly<{
     timestampMs: messageTimestamp(message),
     item: {
       type: 'message' as const,
-      key: `message:${message.id}`,
+      key: `message:${message.renderKey ?? message.id}`,
       timestampMs: messageTimestamp(message),
       message,
     },
@@ -507,4 +507,38 @@ export function groupThreadTools(items: ThreadTimelineItem[], expanded: Readonly
     result.push({ type: 'tools', key, timestampMs: item.timestampMs, messages: calls.map((call) => call.message) });
   }
   return result;
+}
+
+/**
+ * Vertical rhythm of a timeline row: the gap it owns toward the older row
+ * above it. `stack` keeps one voice's rows together (consecutive tool calls,
+ * an activity stack and the reply it produced, repeated bubbles from one
+ * speaker), `turn` separates the user's voice from the Agent's, and
+ * `section` sets a time label apart from everything before it. The row after
+ * a time label owns nothing: the label carries its own gap below.
+ */
+export type ThreadRowGap = 'none' | 'stack' | 'turn' | 'section';
+
+export type ThreadTimelineRow = ThreadTimelineItem & Readonly<{ gapAbove: ThreadRowGap }>;
+
+type ThreadVoice = 'user' | 'agent' | 'system' | 'date';
+
+function timelineVoice(item: ThreadTimelineItem): ThreadVoice {
+  if (item.type === 'date') return 'date';
+  if (item.type !== 'message' || item.message.approval) return 'agent';
+  if (item.message.role === 'user') return 'user';
+  if (item.message.role === 'system') return 'system';
+  return 'agent';
+}
+
+/** Assigns every row its gap from the visually preceding (older, next in data) row. */
+export function withThreadRhythm(items: ReadonlyArray<ThreadTimelineItem>): ThreadTimelineRow[] {
+  return items.map((item, index) => {
+    const older = items[index + 1];
+    let gapAbove: ThreadRowGap;
+    if (!older || older.type === 'date') gapAbove = 'none';
+    else if (item.type === 'date') gapAbove = 'section';
+    else gapAbove = timelineVoice(item) === timelineVoice(older) ? 'stack' : 'turn';
+    return { ...item, gapAbove };
+  });
 }

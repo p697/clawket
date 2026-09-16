@@ -39,6 +39,7 @@ import {
   normalizePairableBackendKind,
   ONBOARDING_DOCUMENTATION_URLS,
   ONBOARDING_WEBSITE_URLS,
+  type OnboardingWebsiteBackendKind,
   resolveOnboardingAdapterError,
   resolveOnboardingRouteStatus,
 } from './route-model';
@@ -382,7 +383,7 @@ export function OnboardingRoute({
     void Linking.openURL(ONBOARDING_DOCUMENTATION_URLS[backendKind]);
   }, [onDocsOpened]);
 
-  const openWebsite = useCallback((backendKind: BackendKind) => {
+  const openWebsite = useCallback((backendKind: OnboardingWebsiteBackendKind) => {
     onDocsOpened?.(backendKind);
     void Linking.openURL(ONBOARDING_WEBSITE_URLS[backendKind]);
   }, [onDocsOpened]);

@@ -5,6 +5,7 @@ import {
   Alert,
   AppState,
   type AppStateStatus,
+  I18nManager,
   Linking,
   Platform,
   Share,
@@ -134,6 +135,17 @@ import {
 import {
   PaywallContinuationCoordinator,
 } from './src/navigation/paywall-continuation';
+import { AppUpdateAnnouncementSheet } from './src/features/app-updates/AppUpdateAnnouncementSheet';
+import type {
+  AppUpdateAnnouncement,
+  AppUpdateAnnouncementEntry,
+} from './src/features/app-updates/releases';
+import {
+  getAppUpdateAnnouncementPreview,
+  markAppUpdateAnnouncementShown,
+  primeAppUpdateAnnouncementBaseline,
+  resolveLaunchAppUpdateAnnouncement,
+} from './src/services/app-update-announcement';
 import { ThreadScreen } from './src/screens/Thread';
 import {
   SessionPanel,
@@ -191,15 +203,21 @@ const ACCOUNT_ACTION_SECTION: Readonly<Partial<Record<
   'share': 'community',
   'rate': 'community',
   'discord': 'community',
-  'wecom': 'community',
   'repository': 'about',
   'privacy': 'about',
   'terms': 'about',
   'preview-environment': 'developer',
   'design-system': 'developer',
+  'preview-update-announcement': 'developer',
   'clear-cache': 'developer',
   'reset-device': 'developer',
 });
+type AnnouncementPresentation = Readonly<{
+  announcement: AppUpdateAnnouncement;
+  source: 'launch' | 'debug_preview';
+  openedAtMs: number;
+}>;
+
 export default function App(): React.JSX.Element {
   const [connectionRuntime] = useState(() => getConnectionRuntime());
   const connectionSnapshot = useConnections();
@@ -453,6 +471,12 @@ function AppContent({
   const [activeRouteName, setActiveRouteName] = useState<keyof RootStackParamList | null>(null);
   const [rosterRenderedAt, setRosterRenderedAt] = useState<number | null>(null);
   const [pendingAutoOpen, setPendingAutoOpen] = useState<StartupThreadTarget | null>(null);
+  // `undefined` until the one-time cache has been read; `null` once nothing is due.
+  const [launchAnnouncement, setLaunchAnnouncement] = useState<AppUpdateAnnouncement | null | undefined>(undefined);
+  const [announcementPresentation, setAnnouncementPresentation] = useState<AnnouncementPresentation | null>(null);
+  const [announcementVisible, setAnnouncementVisible] = useState(false);
+  const announcementCloseActionRef = useRef<'dismiss' | 'continue' | 'entry'>('dismiss');
+  const announcementFollowUpRef = useRef<AppUpdateAnnouncementEntry['action'] | null>(null);
   const handledNotificationResponseIdsRef = useRef(new Set<string>());
   const paywallContinuationCoordinatorRef = useRef(new PaywallContinuationCoordinator());
   const rosterViewTrackedRef = useRef(false);
@@ -461,7 +485,7 @@ function AppContent({
     onContinue?: () => void | Promise<void>,
   ): boolean => {
     if (paywallVisible) return false;
-    if (isPro) {
+    if (isPro && feature !== 'settingsMembershipPreview') {
       if (onContinue) void Promise.resolve(onContinue()).catch(() => undefined);
       return false;
     }
@@ -477,6 +501,10 @@ function AppContent({
   const continueAfterPaywall = useCallback(() => {
     const continuation = paywallContinuationCoordinatorRef.current.take();
     if (continuation) void Promise.resolve(continuation()).catch(() => undefined);
+  }, []);
+
+  const openExternalUrl = useCallback((url: string | null | undefined) => {
+    if (url) void Linking.openURL(url).catch(() => undefined);
   }, []);
   const {
     entitlement,
@@ -1310,6 +1338,80 @@ function AppContent({
     }
   }, [activeRouteName, rosterRenderedAt]);
 
+  // A fresh install baselines the current version instead of announcing it; an
+  // upgrade (connections already exist) reads what the device skipped.
+  useEffect(() => {
+    if (!connections.initialized || launchAnnouncement !== undefined) return;
+    let cancelled = false;
+    const hadConnections = connections.connections.length > 0;
+    void (async () => {
+      if (!hadConnections) await primeAppUpdateAnnouncementBaseline();
+      const next = await resolveLaunchAppUpdateAnnouncement();
+      if (!cancelled) setLaunchAnnouncement(next);
+    })().catch(() => {
+      if (!cancelled) setLaunchAnnouncement(null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [connections.initialized, connections.connections.length, launchAnnouncement]);
+
+  const presentAnnouncement = useCallback((
+    announcement: AppUpdateAnnouncement,
+    source: AnnouncementPresentation['source'],
+  ) => {
+    announcementCloseActionRef.current = 'dismiss';
+    announcementFollowUpRef.current = null;
+    setAnnouncementPresentation({ announcement, source, openedAtMs: Date.now() });
+    setAnnouncementVisible(true);
+    analyticsEvents.appUpdateAnnouncementShown({
+      version: announcement.currentVersion,
+      release_count: announcement.releases.length,
+      entry_count: announcement.releases.reduce((total, release) => total + release.entries.length, 0),
+      source,
+    });
+    // Marked as soon as it is on screen so a crash or kill never replays it.
+    if (source === 'launch') void markAppUpdateAnnouncementShown(announcement.currentVersion);
+  }, []);
+
+  const closeAnnouncement = useCallback((action: 'dismiss' | 'continue' | 'entry') => {
+    announcementCloseActionRef.current = action;
+    setAnnouncementVisible(false);
+  }, []);
+
+  const handleAnnouncementEntryPress = useCallback((entry: AppUpdateAnnouncementEntry) => {
+    if (entry.action.type === 'none') return;
+    const presentation = announcementPresentation;
+    if (presentation) {
+      analyticsEvents.appUpdateAnnouncementEntryTapped({
+        version: presentation.announcement.currentVersion,
+        entry: entry.id,
+        action: entry.action.type,
+      });
+    }
+    announcementFollowUpRef.current = entry.action;
+    closeAnnouncement('entry');
+  }, [announcementPresentation, closeAnnouncement]);
+
+  // Runs after the sheet has fully dismissed so a paywall or link never stacks on it.
+  const handleAnnouncementAfterClose = useCallback(() => {
+    const presentation = announcementPresentation;
+    const followUp = announcementFollowUpRef.current;
+    announcementFollowUpRef.current = null;
+    setAnnouncementPresentation(null);
+    if (presentation) {
+      analyticsEvents.appUpdateAnnouncementClosed({
+        version: presentation.announcement.currentVersion,
+        release_count: presentation.announcement.releases.length,
+        source: presentation.source,
+        action: announcementCloseActionRef.current,
+        seconds_visible: Math.max(0, Math.round((Date.now() - presentation.openedAtMs) / 1_000)),
+      });
+    }
+    if (followUp?.type === 'open_paywall') presentPaywall(followUp.feature);
+    else if (followUp?.type === 'open_url') openExternalUrl(followUp.url);
+  }, [announcementPresentation, openExternalUrl, presentPaywall]);
+
   const openStartupThread = useCallback((target: StartupThreadTarget) => {
     if (!rootNavigationRef.isReady()) return;
     activeRouteRef.current = 'Thread';
@@ -1329,14 +1431,23 @@ function AppContent({
       launchPaywallShownThisProcess: connections.launchPaywallShownThisProcess,
       pendingAutoOpen,
       pendingApproval: pendingApprovalTarget,
+      updateAnnouncementPending: launchAnnouncement === undefined ? null : launchAnnouncement !== null,
     });
+    if (action.type === 'show_update_announcement') {
+      if (!launchAnnouncement || announcementPresentation) return;
+      getConnectionRuntime().markLaunchPaywallShown();
+      setLaunchAnnouncement(null);
+      presentAnnouncement(launchAnnouncement, 'launch');
+      return;
+    }
     if (action.type === 'open_thread') {
       getConnectionRuntime().markLaunchPaywallShown();
       openStartupThread(action.target);
     }
   }, [navigationReady, activeRouteName, paywallVisible, rosterRenderedAt,
     approvalScanReady, connections.activeState, connections.launchPaywallShownThisProcess,
-    permissionsLoading, isPro, pendingAutoOpen, pendingApprovalTarget, openStartupThread]);
+    permissionsLoading, isPro, pendingAutoOpen, pendingApprovalTarget, openStartupThread,
+    launchAnnouncement, announcementPresentation, presentAnnouncement]);
 
   const handleToggleRosterAgentPinned = useCallback(async (row: RosterDisplayRow) => {
     if (!canAccessRosterAgent(row.connectionId, row.agentId)) {
@@ -1401,15 +1512,22 @@ function AppContent({
     });
   }, [canAccessConnection, canAccessRosterAgent, presentPaywall]);
 
-  const handleRosterConnectionRemove = useCallback(async (row: RosterDisplayRow) => {
-    const wasLastConnection = connections.connections.length === 1;
-    const removed = await getConnectionRuntime().removeConnection(row.connectionId);
-    if (!removed || !wasLastConnection || !rootNavigationRef.isReady()) return;
+  const removeConnectionAndExit = useCallback(async (connectionId: string) => {
+    const runtime = getConnectionRuntime();
+    const removed = await runtime.removeConnection(connectionId);
+    if (!removed || !rootNavigationRef.isReady()) return;
+    // Removed connection routes cannot remain in the back stack.
     rootNavigationRef.reset({
       index: 0,
-      routes: [{ name: 'Onboarding', params: { presentation: 'root' } }],
+      routes: runtime.getSnapshot().connections.length === 0
+        ? [{ name: 'Onboarding', params: { presentation: 'root' } }]
+        : [{ name: 'Roster' }],
     });
-  }, [connections.connections.length, rootNavigationRef]);
+  }, [rootNavigationRef]);
+
+  const handleRosterConnectionRemove = useCallback(async (row: RosterDisplayRow) => {
+    await removeConnectionAndExit(row.connectionId);
+  }, [removeConnectionAndExit]);
 
   const handleSessionAction = useCallback(async (
     row: SessionPanelRow,
@@ -1442,10 +1560,6 @@ function AppContent({
     }
     await getConnectionRuntime().refreshRoster();
   }, [canAccessConnection, canAccessRosterAgent, presentPaywall]);
-
-  const openExternalUrl = useCallback((url: string | null | undefined) => {
-    if (url) void Linking.openURL(url).catch(() => undefined);
-  }, []);
 
   const updateReplyNotifications = useCallback((enabled: boolean) => {
     setReplyNotificationsEnabled(enabled);
@@ -1486,6 +1600,11 @@ function AppContent({
       case 'design-system':
         navigation.navigate('DesignSystem');
         return;
+      case 'preview-update-announcement': {
+        const preview = getAppUpdateAnnouncementPreview();
+        if (preview && !announcementPresentation) presentAnnouncement(preview, 'debug_preview');
+        return;
+      }
       case 'reconnect-connection':
         if (request.connectionId) {
           void getConnectionRuntime().reconnectConnection(request.connectionId);
@@ -1517,22 +1636,11 @@ function AppContent({
         return;
       case 'remove-connection':
         if (request.connectionId) {
-          const wasLastConnection = connections.connections.length === 1;
-          void getConnectionRuntime().removeConnection(request.connectionId).then((removed) => {
-            if (removed && wasLastConnection && rootNavigationRef.isReady()) {
-              rootNavigationRef.reset({
-                index: 0,
-                routes: [{ name: 'Onboarding', params: { presentation: 'root' } }],
-              });
-            }
-          });
+          void removeConnectionAndExit(request.connectionId);
         }
         return;
       case 'help-center':
         navigation.navigate('HelpCenter');
-        return;
-      case 'wecom':
-        navigation.navigate('HelpCenter', { community: 'wecom' });
         return;
       case 'openclaw-docs':
         openExternalUrl(publicAppLinks.docsUrl ?? 'https://docs.openclaw.ai');
@@ -1602,11 +1710,14 @@ function AppContent({
     }
   }, [
     connections.connections,
+    removeConnectionAndExit,
     onDebugToggle,
     openExternalUrl,
     restorePurchases,
     rootNavigationRef.navigate,
     presentPaywall,
+    presentAnnouncement,
+    announcementPresentation,
     switchFreeConnection,
     updateReplyNotifications,
   ]);
@@ -1629,21 +1740,12 @@ function AppContent({
       return;
     }
     if (request.action === 'connection.remove') {
-      const removed = await getConnectionRuntime().removeConnection(context.connection.id);
-      if (!removed || !rootNavigationRef.isReady()) return;
-      if (connections.connections.length === 1) {
-        rootNavigationRef.reset({
-          index: 0,
-          routes: [{ name: 'Onboarding', params: { presentation: 'root' } }],
-        });
-        return;
-      }
-      rootNavigationRef.navigate('Roster');
+      await removeConnectionAndExit(context.connection.id);
     }
   }, [
     canAccessConnection,
     canAccessRosterAgent,
-    connections.connections.length,
+    removeConnectionAndExit,
     rootNavigationRef,
     presentPaywall,
   ]);
@@ -1681,6 +1783,7 @@ function AppContent({
             <NavigationContainer
               ref={rootNavigationRef}
               theme={navigationTheme}
+              direction={I18nManager.isRTL ? 'rtl' : 'ltr'}
               onReady={() => {
                 setNavigationReady(true);
                 const routeName = rootNavigationRef.getCurrentRoute()?.name;
@@ -1960,6 +2063,7 @@ function AppContent({
                         connection={connection}
                         agent={agent}
                         agentCount={group?.agents.length}
+                        reconnecting={adapter !== null && connections.recovering}
                         capabilities={adapter?.capabilities ?? resolveCapabilities(connection.backendKind)}
                         isPro={isPro}
                         loadIdentityDetail={loadConnectionIdentityDetail}
@@ -2051,11 +2155,7 @@ function AppContent({
                       agentNames={connections.roster.find((group) => group.connection.id === connection.id)?.agents.map(({ agent }) => agent.name) ?? []}
                       onBack={navigation.goBack} onReconnect={() => resume(true)} onResume={() => resume()}
                       onPause={() => runtime.pauseConnection(connection.id)}
-                      onRemove={async () => {
-                        await runtime.removeConnection(connection.id);
-                        if (runtime.getSnapshot().connections.length === 0) navigation.reset({ index: 0, routes: [{ name: 'Onboarding', params: { presentation: 'root' } }] });
-                        else navigation.navigate('Roster');
-                      }}
+                      onRemove={() => removeConnectionAndExit(connection.id)}
                       onDetails={() => navigation.navigate('AccountSettingsSection', { section: 'connections', connectionId: connection.id })} />;
                   }}
                 </RootStack.Screen>
@@ -2130,7 +2230,7 @@ function AppContent({
                   )}
                 </RootStack.Screen>
                 <RootStack.Screen name="HelpCenter">
-                  {({ navigation, route }) => <HelpCenterScreen onBack={navigation.goBack} initialCommunity={route.params?.community} />}
+                  {({ navigation }) => <HelpCenterScreen onBack={navigation.goBack} />}
                 </RootStack.Screen>
                 <RootStack.Screen name="ChatAppearance">
                   {({ navigation }) => (
@@ -2139,10 +2239,7 @@ function AppContent({
                 </RootStack.Screen>
                 <RootStack.Screen name="ReleaseNotes">
                   {({ navigation }) => (
-                    <ReleaseNotesHistoryScreen
-                      onBack={navigation.goBack}
-                      onOpenPaywall={() => presentPaywall('settingsMembershipPreview')}
-                    />
+                    <ReleaseNotesHistoryScreen onBack={navigation.goBack} />
                   )}
                 </RootStack.Screen>
                 <RootStack.Screen name="Search">
@@ -2168,6 +2265,14 @@ function AppContent({
                   options={{ presentation: 'fullScreenModal', gestureEnabled: true }}
                 />
               </RootStack.Navigator>
+              <AppUpdateAnnouncementSheet
+                visible={announcementVisible}
+                announcement={announcementPresentation?.announcement ?? null}
+                onClose={() => closeAnnouncement('dismiss')}
+                onAfterClose={handleAnnouncementAfterClose}
+                onContinue={() => closeAnnouncement('continue')}
+                onEntryPress={handleAnnouncementEntryPress}
+              />
               <SessionPanel
                 visible={sessionPanelVisible}
                 pinnedSessionKeys={pinnedSessionKeys}
@@ -2284,11 +2389,12 @@ function PaywallRouteBridge({
   const openedRef = useRef(false);
 
   useEffect(() => {
-    if (isPro) {
+    const feature = normalizePaywallFeature(route.params?.reason ?? 'settingsMembershipPreview');
+    if (isPro && feature !== 'settingsMembershipPreview') {
       navigation.goBack();
       return;
     }
-    showPaywall(normalizePaywallFeature(route.params?.reason ?? 'settingsMembershipPreview'));
+    if (!openedRef.current) showPaywall(feature);
   }, [isPro, navigation, route.params?.reason, showPaywall]);
 
   useEffect(() => {

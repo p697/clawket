@@ -1,4 +1,4 @@
-import type { SessionDescriptor } from '@clawket/agent-protocol';
+import { HUMAN_SESSION_KINDS, sessionActivityAt, type SessionDescriptor } from '@clawket/agent-protocol';
 
 import {
   StorageService,
@@ -7,13 +7,6 @@ import {
 
 const WATERMARKS_VERSION = 1;
 const WATERMARK_SCOPE_PREFIX = 'connection-registry:unread-watermarks:v1:';
-const ORDINARY_UNREAD_KINDS = new Set<SessionDescriptor['kind']>([
-  'main',
-  'channel',
-  'direct',
-  'group',
-  'other',
-]);
 
 const ATTENTION_PRIORITY: Record<NonNullable<SessionDescriptor['attention']>, number> = {
   approval: 3,
@@ -81,15 +74,17 @@ function normalizeTimestamp(value: number): number {
   return value;
 }
 
+export type WatermarkSession = Pick<SessionDescriptor, 'connectionId' | 'key' | 'updatedAt' | 'lastActivityAt'>;
+
 export function isSessionUnread(
   session: SessionDescriptor,
   watermarks: SessionWatermarks,
   enabled = true,
 ): boolean {
-  if (!enabled || !ORDINARY_UNREAD_KINDS.has(session.kind)) return false;
-  const updatedAt = session.updatedAt;
-  if (updatedAt === null || !Number.isFinite(updatedAt) || updatedAt < 0) return false;
-  return updatedAt > (watermarks[session.key] ?? 0);
+  if (!enabled || !HUMAN_SESSION_KINDS.has(session.kind)) return false;
+  const activityAt = sessionActivityAt(session);
+  if (activityAt === null) return false;
+  return activityAt > (watermarks[session.key] ?? 0);
 }
 
 export function summarizeSessionSignals(
@@ -115,12 +110,11 @@ export function summarizeSessionSignals(
         attention = session.attention;
       }
     }
-    if (
-      session.updatedAt !== null
-      && Number.isFinite(session.updatedAt)
-      && (lastActivityAt === null || session.updatedAt > lastActivityAt)
-    ) {
-      lastActivityAt = session.updatedAt;
+    // Only sessions a person takes part in count as activity; sub-agent and
+    // cron runs are background work and stay out of roster recency.
+    const activityAt = HUMAN_SESSION_KINDS.has(session.kind) ? sessionActivityAt(session) : null;
+    if (activityAt !== null && (lastActivityAt === null || activityAt > lastActivityAt)) {
+      lastActivityAt = activityAt;
     }
   }
 
@@ -168,37 +162,37 @@ export class UnreadWatermarks {
   }
 
   async markSessionRead(
-    session: SessionDescriptor,
-    throughUpdatedAt = session.updatedAt ?? this.now(),
+    session: WatermarkSession,
+    throughActivityAt = sessionActivityAt(session) ?? this.now(),
   ): Promise<SessionWatermarks> {
-    return this.markRead(session.connectionId, session.key, throughUpdatedAt);
+    return this.markRead(session.connectionId, session.key, throughActivityAt);
   }
 
   async markPromptSucceeded(
-    session: Pick<SessionDescriptor, 'connectionId' | 'key' | 'updatedAt'>,
+    session: WatermarkSession,
     acceptedAt = this.now(),
   ): Promise<SessionWatermarks> {
     return this.markRead(
       session.connectionId,
       session.key,
-      Math.max(session.updatedAt ?? 0, acceptedAt),
+      Math.max(sessionActivityAt(session) ?? 0, acceptedAt),
     );
   }
 
   async markOpened(
-    session: Pick<SessionDescriptor, 'connectionId' | 'key' | 'updatedAt'>,
+    session: WatermarkSession,
     openedAt = this.now(),
   ): Promise<SessionWatermarks> {
     return this.markRead(
       session.connectionId,
       session.key,
-      Math.max(session.updatedAt ?? 0, openedAt),
+      Math.max(sessionActivityAt(session) ?? 0, openedAt),
     );
   }
 
   async markManyRead(
     connectionId: string,
-    sessions: ReadonlyArray<Pick<SessionDescriptor, 'connectionId' | 'key' | 'updatedAt'>>,
+    sessions: ReadonlyArray<WatermarkSession>,
   ): Promise<SessionWatermarks> {
     const normalizedConnectionId = connectionId.trim();
     if (!normalizedConnectionId) throw new Error('Connection id is required.');
@@ -206,8 +200,8 @@ export class UnreadWatermarks {
       const values = await this.read(normalizedConnectionId);
       for (const session of sessions) {
         if (session.connectionId !== normalizedConnectionId || !session.key.trim()) continue;
-        const timestamp = session.updatedAt;
-        if (timestamp === null || !Number.isFinite(timestamp) || timestamp < 0) continue;
+        const timestamp = sessionActivityAt(session);
+        if (timestamp === null) continue;
         values[session.key] = Math.max(values[session.key] ?? 0, timestamp);
       }
       await this.write(normalizedConnectionId, values);

@@ -596,6 +596,16 @@ describe('bridge runtime protocol helpers', () => {
     });
   });
 
+  it('negotiates Bridge capabilities through Gateway-compatible params.caps without rewriting v1 envelopes', () => {
+    for (const caps of [['tool-events', BRIDGE_CAPABILITIES_V2], ['tool-events'], BRIDGE_CAPABILITIES_V2, null]) {
+      const text = JSON.stringify({ type: 'req', id: 'caps-connect', method: 'connect', params: { caps } });
+      expect(stripConnectRequestBridgeMeta(text)).toEqual({
+        text, stripped: false,
+        bridgeCapabilitiesRequested: Array.isArray(caps) && caps.includes(BRIDGE_CAPABILITIES_V2),
+      });
+    }
+  });
+
   it('strips Bridge-owned request meta before Gateway while preserving envelope siblings', () => {
     const prepared = stripConnectRequestBridgeMeta(JSON.stringify({
       type: 'req',
@@ -1735,4 +1745,64 @@ it.each([false, true])('keeps connected pairing decisions routed to the correct 
     expect(methods).toContain('device.pair.reject');
     expect(sockets.filter((socket) => socket.url === 'ws://localhost:18789')).toHaveLength(1);
   } finally { await runtime.stop(); }
+});
+
+
+it('does not let a stale socket pong reset the replacement watchdog', async () => {
+  vi.useFakeTimers();
+  const sockets: FakeSocket[] = [];
+  const logs: string[] = [];
+  const runtime = new BridgeRuntime({ config: BASE_CONFIG, gatewayUrl: 'ws://127.0.0.1:18789',
+    heartbeatIntervalMs: 1000, heartbeatTimeoutMs: 3000, reconnectBaseDelayMs: 100,
+    onLog: line => logs.push(line), createWebSocket: url => { const socket = new FakeSocket(url); sockets.push(socket); return socket; } });
+  try {
+    runtime.start(); sockets[0].open();
+    sockets[0].closeFromRemote(1006, '');
+    await vi.advanceTimersByTimeAsync(100);
+    const replacement = sockets[1]; replacement.open();
+    await vi.advanceTimersByTimeAsync(3000);
+    sockets[0].emit('pong');
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(replacement.readyState).toBe(3);
+    expect(logs.some(line => /heartbeat timed out idleMs=4000 timeoutMs=3000 schedulerDelayMs=0/.test(line))).toBe(true);
+  } finally { await runtime.stop(); vi.useRealTimers(); }
+});
+
+
+it('retires an invalid client channel on HTTP 409 without retrying the expired identity', async () => {
+  vi.useFakeTimers();
+  const sockets: FakeSocket[] = [];
+  const logs: string[] = [];
+  const runtime = new BridgeRuntime({ config: BASE_CONFIG, gatewayUrl: 'ws://127.0.0.1:18789', clientChannels: true,
+    onLog: line => logs.push(line), createWebSocket: url => { const socket = new FakeSocket(url); sockets.push(socket); return socket; } });
+  let stopped: Promise<void> | undefined;
+  try {
+    runtime.start(); const owner = sockets[0]; owner.open();
+    const sendClients = (clients: string[]) => owner.message('__clawket_relay_control__:' + JSON.stringify({ event: 'client.sockets', payload: { clients } }));
+    sendClients(['11111111-1111-4111-8111-111111111111']);
+    const rejected = sockets[1];
+    const destroy = vi.fn();
+    rejected.emit('unexpected-response', {}, { statusCode: 409, destroy });
+    await vi.advanceTimersByTimeAsync(30000);
+    owner.emit('pong');
+    expect(sockets).toHaveLength(2);
+    expect(destroy).toHaveBeenCalledOnce();
+    expect(logs.some(line => line.includes('channel retired code=client_channel_unavailable'))).toBe(true);
+    sendClients(['22222222-2222-4222-8222-222222222222']);
+    expect(sockets).toHaveLength(3);
+    expect(sockets[2].url).toContain('22222222-2222-4222-8222-222222222222');
+  } finally { stopped = runtime.stop(); await vi.advanceTimersByTimeAsync(100); await stopped; vi.useRealTimers(); }
+});
+
+it('keeps normal owner retry behavior after an HTTP upgrade failure', async () => {
+  vi.useFakeTimers();
+  const sockets: FakeSocket[] = [];
+  const runtime = new BridgeRuntime({ config: BASE_CONFIG, gatewayUrl: 'ws://127.0.0.1:18789', reconnectBaseDelayMs: 100,
+    createWebSocket: url => { const socket = new FakeSocket(url); sockets.push(socket); return socket; } });
+  try {
+    runtime.start();
+    sockets[0].emit('unexpected-response', {}, { statusCode: 503, destroy: vi.fn() });
+    await vi.advanceTimersByTimeAsync(100);
+    expect(sockets).toHaveLength(2);
+  } finally { const stopped = runtime.stop(); await vi.advanceTimersByTimeAsync(100); await stopped; vi.useRealTimers(); }
 });

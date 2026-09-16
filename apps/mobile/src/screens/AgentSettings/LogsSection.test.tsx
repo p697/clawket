@@ -131,6 +131,30 @@ jest.mock('../../components/ui/SearchInput', () => {
   };
 });
 
+jest.mock('../../components/pro/ProGate', () => {
+  const ReactRuntime = require('react');
+  const { Pressable, Text, View } = require('react-native');
+  return {
+    ProGate: ({ testID, title, actionLabel, onUnlock, children }: {
+      testID?: string;
+      title: string;
+      actionLabel: string;
+      onUnlock: () => void;
+      children?: React.ReactNode;
+    }) => ReactRuntime.createElement(
+      View,
+      { testID },
+      ReactRuntime.createElement(Text, null, title),
+      children ? ReactRuntime.createElement(View, { testID: `${testID}-teaser` }, children) : null,
+      ReactRuntime.createElement(
+        Pressable,
+        { testID: `${testID}-action`, onPress: onUnlock },
+        ReactRuntime.createElement(Text, null, actionLabel),
+      ),
+    ),
+  };
+});
+
 jest.mock('../../components/ui/Skeleton', () => {
   const ReactRuntime = require('react');
   const { View } = require('react-native');
@@ -260,6 +284,54 @@ describe('LogsSection', () => {
     expect(view.getByText('Gateway ready')).toBeTruthy();
     fireEvent.press(view.getByTestId('agent-logs-refresh'));
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows free users the newest entries, veils the rest, and never tails live', async () => {
+    jest.useFakeTimers();
+    const lines = Array.from({ length: 9 }, (_, index) => JSON.stringify({
+      time: `2026-09-05T10:00:0${index}Z`,
+      _meta: { logLevelName: 'INFO', name: 'gateway' },
+      message: `Entry ${index}`,
+    }));
+    const fetch = jest.fn(async () => page(lines, 30, true));
+    const onOpenPaywall = jest.fn();
+    const view = render(
+      <LogsSection adapter={adapterWith(fetch)} online isPro={false} onOpenPaywall={onOpenPaywall} />,
+    );
+    await act(async () => undefined);
+    expect(fetch).toHaveBeenCalledTimes(1);
+
+    // Newest three entries are readable; the next four sit inside the decorative teaser.
+    expect(view.getByTestId('agent-log-entry-0')).toBeTruthy();
+    expect(view.getByText('Entry 8')).toBeTruthy();
+    expect(view.getByText('Entry 6')).toBeTruthy();
+    expect(view.getByTestId('agent-log-entry-3')).toBeTruthy();
+    expect(view.getByText('Entry 5')).toBeTruthy();
+    expect(view.getByText('Entry 2')).toBeTruthy();
+    expect(view.queryByText('Entry 1')).toBeNull();
+    expect(view.getByTestId('agent-logs-gate-teaser')).toBeTruthy();
+    expect(view.getByText('Watch OpenClaw run in real time')).toBeTruthy();
+
+    await act(async () => {
+      jest.advanceTimersByTime(6_000);
+      await Promise.resolve();
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+
+    fireEvent.press(view.getByTestId('agent-logs-refresh'));
+    await act(async () => undefined);
+    expect(fetch).toHaveBeenCalledTimes(2);
+
+    fireEvent.press(view.getByTestId('agent-logs-gate-action'));
+    expect(onOpenPaywall).toHaveBeenCalledWith('logs');
+  });
+
+  it('keeps the gate visible for free users even when the log is empty', async () => {
+    const fetch = jest.fn(async () => page([]));
+    const view = render(<LogsSection adapter={adapterWith(fetch)} online isPro={false} />);
+    await waitFor(() => expect(view.getByTestId('agent-logs-empty')).toBeTruthy());
+    expect(view.getByTestId('agent-logs-gate')).toBeTruthy();
+    expect(view.queryByTestId('agent-logs-gate-teaser')).toBeNull();
   });
 
   it('never fetches when the logs capability is absent', () => {

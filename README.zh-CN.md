@@ -29,6 +29,7 @@ Clawket 3.0 是「自托管 Agent 的会话控制塔」：一屏看清每个 Age
 - **✨ YouMind 精灵聊天** — 专用适配器提供文本、历史、流式与中止，不把精灵当成 Relay 后端
 - **🔒 隐私优先** — Relay 只转发不保存消息；本地消息缓存按连接隔离
 - **🌐 灵活连接** — 支持 Relay、局域网、Tailscale 与自定义端点
+- **💻 本地模型聊天（预览）** — 通过 llama.cpp、Ollama 或任意 OpenAI 兼容服务，和跑在你自己电脑上的模型聊天；对话留在那台电脑上
 - **🏗️ 可自托管** — 自建 Relay 基础设施，或跳过它直接局域网 / Tailscale 直连
 - **📦 开源 Monorepo** — 移动端（Expo/React Native）、Relay Workers（Cloudflare）、Bridge CLI，一个仓库，从源码构建
 
@@ -137,6 +138,28 @@ clawket pair local --backend hermes
 
 然后在 App 里扫描生成的二维码即可。
 
+### 连接本地模型（预览）
+
+Clawket 也可以和跑在你自己电脑上的模型聊天：llama.cpp、Ollama，或任何提供 OpenAI 聊天接口的服务（LM Studio、vLLM 等）。电脑上的 Bridge 保存对话并调用模型，Relay 只负责转发；聊天记录和模型 API key 不会离开这台电脑。
+
+这是预览功能。在 App 里打开「账户设置 → 高级设置」，开启「调试模式」，把「Relay 环境」设为「预览」，然后添加连接并选择「本地模型」。npm 上已发布的 CLI 还不包含这个功能，需要用 Node.js 22 从本仓库运行 Bridge：
+
+```bash
+npm ci
+npm run bridge:build
+node apps/bridge-cli/dist/index.js local-model pair --preview
+```
+
+配对前先启动你的模型服务。默认按 `llama-server` 的 8080 端口查找，其他服务需要指定引擎和地址：
+
+| 模型服务 | 额外参数 |
+| --- | --- |
+| llama.cpp（`llama-server`，8080 端口） | 无 |
+| Ollama | `--engine ollama --base-url http://127.0.0.1:11434` |
+| LM Studio、vLLM 或其他 OpenAI 兼容服务 | `--engine openai-compatible --base-url http://127.0.0.1:<端口>` |
+
+App 的「本地模型」步骤会针对每种服务显示同样的参数。保持命令运行，把它打印的六位配对码输入 App；之后用 `local-model run` 恢复已保存的连接。端点文件、llama.cpp 预设、图片输入以及当前限制见 [docs/3.0/15-local-model.md](./docs/3.0/15-local-model.md)。
+
 ### 什么时候继续往下看？
 
 - 如果你只是想把移动端跑起来，上面的命令已经够用。
@@ -216,6 +239,7 @@ npm run mobile:config:check
 - 本地运行 iOS App：macOS、Xcode、Node.js 20+、npm
 - 本地运行 Android App：Node.js 20+、npm、Android Studio
 - 使用官方发布的 bridge CLI：Node.js 20+、npm
+- 连接本地模型（预览）：Node.js 22、本仓库源码，以及一个运行中的 llama.cpp、Ollama 或 OpenAI 兼容服务
 - 运行 relay 基础设施：Cloudflare 账号
 
 ## 自托管

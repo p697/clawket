@@ -35,6 +35,13 @@ Options: `--base-url` (default `http://127.0.0.1:8080`), `--engine` (`llamacpp`,
 `ollama`, `openai-compatible`), `--endpoints path.json`, `--config path.json`,
 `--port` (Bridge port, default 17880), `--registry`, and `--name`.
 
+The Preview app's Local model step offers llama.cpp, Ollama and Other tabs and
+prints the matching command: Ollama adds `--engine ollama --base-url
+http://127.0.0.1:11434`, Other adds `--engine openai-compatible --base-url
+http://127.0.0.1:1234` (LM Studio's default; edit the port). When no server
+answers, the server rejects `/v1/models`, or it lists no models, the CLI names
+the address and what to start or pass instead of printing `fetch failed`.
+
 An endpoint file is an array of `{id,name,baseUrl,model,engine,contextWindow,
 maxOutputTokens,apiKey?,vision?}`. It stays on the computer. Without one, the CLI
 discovers `/v1/models`. Model switching selects only those configured models;

@@ -42,8 +42,8 @@ export {
   isAgentSettingsSectionLocked,
   resolveAgentSettingsSectionState,
 } from './section-model';
-export { ModelsSection } from './ModelsSection';
-export type { ModelsSectionProps } from './ModelsSection';
+export { ModelsScreen } from './ModelsScreen';
+export type { ModelsScreenProps } from './ModelsScreen';
 export { SkillsSection } from './SkillsSection';
 export type { SkillsSectionProps } from './SkillsSection';
 export { CronSection } from './CronSection';
@@ -52,8 +52,8 @@ export { FilesSection } from './FilesSection';
 export type { FilesSectionProps } from './FilesSection';
 export { UsageSection } from './UsageSection';
 export type { UsageSectionProps } from './UsageSection';
-export { IdentitySection } from './IdentitySection';
-export type { IdentitySectionProps } from './IdentitySection';
+export { IdentityScreen } from './IdentityScreen';
+export type { IdentityScreenProps } from './IdentityScreen';
 export { ToolsSection } from './ToolsSection';
 export type { ToolsSectionProps } from './ToolsSection';
 export { ChannelsDevicesSection } from './ChannelsDevicesSection';

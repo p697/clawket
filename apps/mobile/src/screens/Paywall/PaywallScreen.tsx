@@ -20,7 +20,7 @@ import { PaywallBenefits } from '../../components/pro/PaywallBenefits';
 import { PaywallPlanCard } from '../../components/pro/PaywallPlanCard';
 import { Button } from '../../components/ui/Button';
 import { Skeleton } from '../../components/ui/Skeleton';
-import type { ProPaywallPhase } from '../../contexts/ProPaywallContext';
+import type { ProPaywallPhase, ProPaywallStatusCode } from '../../contexts/ProPaywallContext';
 import type { ProPaywallPackage, ProPurchaseFailureReason } from '../../services/pro-subscription';
 import { ThemeContext, useAppTheme } from '../../theme';
 import {
@@ -35,20 +35,17 @@ import {
 } from '../../theme/tokens';
 import type { ProFeature } from '../../utils/pro';
 import {
-  THREE_POINT_ZERO_INTRO_CONTENT,
   orderPaywallPackages,
   paywallFailureMessageKey,
   resolvePaywallContent,
   type PaywallBenefitKey,
   type PaywallFailureMessageKey,
-  type PaywallMode,
   type PaywallSubtitleFeatureKey,
   type PaywallSubtitleKey,
   type PaywallTitleKey,
 } from './model';
 
 type Props = Readonly<{
-  mode: PaywallMode;
   blockedFeature: ProFeature | null;
   phase: ProPaywallPhase;
   packages: readonly ProPaywallPackage[];
@@ -58,12 +55,17 @@ type Props = Readonly<{
   disabledPackageIds?: readonly string[];
   purchaseDisabled?: boolean;
   restoreDisabled?: boolean;
+  isMember?: boolean;
+  currentPackageId?: string | null;
+  planChange?: boolean;
+  lifetimeRenewalWarning?: boolean;
+  statusCode?: ProPaywallStatusCode | null;
+  onManageSubscription?: () => void;
   onClose: () => void;
   onRestore: () => void;
   onRetry: () => void;
   onSelectPackage: (packageId: string) => void;
   onPurchase: () => void;
-  onCompleteIntro: () => void;
   onOpenTerms: () => void;
   onOpenPrivacy: () => void;
 }>;
@@ -75,7 +77,6 @@ export function PaywallScreen(props: Props): React.JSX.Element {
 }
 
 function PaywallPresentation({
-  mode,
   blockedFeature,
   phase,
   packages,
@@ -85,12 +86,17 @@ function PaywallPresentation({
   disabledPackageIds = [],
   purchaseDisabled = false,
   restoreDisabled = false,
+  isMember = false,
+  currentPackageId,
+  planChange = false,
+  lifetimeRenewalWarning = false,
+  statusCode,
+  onManageSubscription,
   onClose,
   onRestore,
   onRetry,
   onSelectPackage,
   onPurchase,
-  onCompleteIntro,
   onOpenTerms,
   onOpenPrivacy,
 }: Props): React.JSX.Element {
@@ -104,33 +110,54 @@ function PaywallPresentation({
   const selectedPackage = orderedPackages.find((item) => item.packageIdentifier === selectedPackageId) ?? null;
   const [monthlyVisible, setMonthlyVisible] = useState(selectedPackage?.packageType === 'MONTHLY');
   const interactionLocked = phase === 'purchasing' || phase === 'restoring' || phase === 'success';
-  const isIntro = mode === 'threePointZeroIntro';
   const isSuccess = phase === 'success';
-  const hero = isIntro ? THREE_POINT_ZERO_INTRO_CONTENT.hero : content.hero;
-  const benefits = isIntro ? THREE_POINT_ZERO_INTRO_CONTENT.benefits : content.benefits;
-  const title = isSuccess
+  const isComplete = phase === 'complete';
+  const hero = content.hero;
+  const benefits = content.benefits;
+  const title = isComplete
+    ? statusCode === 'planChangeScheduled' ? t('Plan change submitted')
+      : statusCode === 'lifetimeManageSubscription' ? t('Lifetime is active') : t('Purchase is being verified')
+    : isMember && !isSuccess ? t('Manage Clawket Pro') : isSuccess
     ? t("You're Pro")
-    : translatePaywallTitle(isIntro ? THREE_POINT_ZERO_INTRO_CONTENT.titleKey : content.titleKey, t);
-  const subtitle = isSuccess
+    : translatePaywallTitle(content.titleKey, t);
+  const subtitle = isComplete
+    ? statusCode === 'planChangeScheduled' ? t('Your store confirms when the new plan and price take effect.')
+      : statusCode === 'lifetimeManageSubscription' ? t('Lifetime does not cancel your existing subscription. Turn off its renewal in your store to avoid further charges.')
+        : t('Your current access is unchanged. Check your store before trying again.')
+    : isSuccess
     ? t('Everything is unlocked. Picking up where you left off...')
-    : isIntro
-      ? translatePaywallSubtitle(THREE_POINT_ZERO_INTRO_CONTENT.subtitleKey, null, t)
-      : content.subtitleKey
-        ? translatePaywallSubtitle(content.subtitleKey, content.subtitleFeatureKey, t)
-        : null;
+    : content.subtitleKey
+      ? translatePaywallSubtitle(content.subtitleKey, content.subtitleFeatureKey, t)
+      : null;
   const failureMessageKey = paywallFailureMessageKey(failureReason, failureOperation);
   const failureMessage = phase === 'failure' && failureMessageKey
     ? translatePaywallFailure(failureMessageKey, t)
     : null;
-  const heroHeight = Math.min(164, Math.max(104, height - 700));
+  const heroMinHeight = Math.min(164, Math.max(104, height - 700));
 
   useEffect(() => {
     if (selectedPackage?.packageType === 'MONTHLY') setMonthlyVisible(true);
   }, [selectedPackage?.packageType]);
 
-  const displayedPackages = orderedPackages.filter((item) => (
-    item.packageType !== 'MONTHLY' || monthlyVisible
-  ));
+  // Members see their owned plan plus every plan they can still move to; locked
+  // alternatives (lifetime owners, family sharing) are omitted rather than dimmed.
+  // Fall back to the full list when the owned plan cannot be matched to the catalog.
+  const memberPackages = isMember
+    ? orderedPackages.filter((item) => (
+      item.packageIdentifier === currentPackageId || !disabledPackageIds.includes(item.packageIdentifier)
+    ))
+    : [];
+  const displayedPackages = memberPackages.length > 0
+    ? memberPackages
+    : orderedPackages.filter((item) => item.packageType !== 'MONTHLY' || monthlyVisible || isMember);
+  const compactPlans = width >= 360 && fontScale < 1.2 && displayedPackages.length === 2;
+  const showMonthlyDisclosure = !isMember && !monthlyVisible
+    && orderedPackages.some((item) => item.packageType === 'MONTHLY');
+  // A member whose selection is the plan they already own has nothing to buy:
+  // the plan card carries the price and billing, so no checkout button is drawn.
+  const selectedIsCurrent = Boolean(
+    isMember && currentPackageId && selectedPackage?.packageIdentifier === currentPackageId,
+  );
 
   return (
     <View
@@ -157,27 +184,23 @@ function PaywallPresentation({
         <View pointerEvents="none" style={styles.wordmark}>
           <Companion size={IconSize.md} />
           {width >= 360 && fontScale < 1.2 ? <Text style={styles.brandText}>clawket</Text> : null}
-          {!isIntro ? <Text style={styles.proLabel}>Pro</Text> : null}
+          <Text style={styles.proLabel}>Pro</Text>
         </View>
-        {!isIntro ? (
-          <Pressable
-            testID="paywall-restore"
-            accessibilityRole="button"
-            accessibilityLabel={t('Restore Purchases')}
-            accessibilityState={{ disabled: interactionLocked || restoreDisabled, busy: phase === 'restoring' }}
-            disabled={interactionLocked || restoreDisabled}
-            onPress={onRestore}
-            style={({ pressed }) => [styles.restoreButton, pressed ? styles.pressed : null]}
-          >
-            {phase === 'restoring' ? (
-              <ActivityIndicator size="small" color={theme.colors.inkSecondary} />
-            ) : (
-              <>
-                <Text style={styles.restoreText}>{t('Restore')}</Text>
-              </>
-            )}
-          </Pressable>
-        ) : <View style={styles.headerButton} />}
+        <Pressable
+          testID="paywall-restore"
+          accessibilityRole="button"
+          accessibilityLabel={t('Restore Purchases')}
+          accessibilityState={{ disabled: interactionLocked || restoreDisabled, busy: phase === 'restoring' }}
+          disabled={interactionLocked || restoreDisabled}
+          onPress={onRestore}
+          style={({ pressed }) => [styles.restoreButton, pressed ? styles.pressed : null]}
+        >
+          {phase === 'restoring' ? (
+            <ActivityIndicator size="small" color={theme.colors.inkSecondary} />
+          ) : (
+            <Text style={styles.restoreText}>{t('Restore')}</Text>
+          )}
+        </Pressable>
       </View>
 
       <ScrollView
@@ -193,9 +216,11 @@ function PaywallPresentation({
         <View
           testID={`paywall-hero-${hero}`}
           accessible={false}
-          style={[styles.hero, { height: heroHeight }]}
+          style={[styles.hero, { minHeight: heroMinHeight }]}
         >
-          <PaywallLumenHero hero={hero} success={isSuccess} />
+          <View style={StyleSheet.absoluteFillObject}>
+            <PaywallLumenHero hero={hero} success={isSuccess} />
+          </View>
           {isSuccess ? <View testID="paywall-hero-success" style={styles.successMark}><Check size={IconSize.lg} color={theme.colors.good}/></View> : null}
         </View>
 
@@ -204,7 +229,7 @@ function PaywallPresentation({
           {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
         </View>
 
-        {!isSuccess ? (
+        {!isSuccess && !isComplete ? (
           <PaywallBenefits items={benefits.map(benefit => ({
             kind: benefit.kind, label: translatePaywallBenefit(benefit.labelKey, t),
           }))}/>
@@ -212,14 +237,12 @@ function PaywallPresentation({
 
       </View>
 
-      <View pointerEvents={interactionLocked ? 'none' : 'auto'} style={styles.footer}>
-        {isIntro ? (
-          <Button
-            testID="paywall-intro-continue"
-            label={t('Continue')}
-            size="lg"
-            onPress={onCompleteIntro}
-          />
+      <View testID="paywall-footer" pointerEvents={interactionLocked ? 'none' : 'auto'} style={styles.footer}>
+        {isComplete ? (
+          <>
+            {onManageSubscription ? <Button testID="paywall-manage-subscription" label={t('Manage subscription')} onPress={onManageSubscription} /> : null}
+            <Button testID="paywall-done" label={t('Done')} variant="secondary" onPress={onClose} />
+          </>
         ) : isSuccess ? (
           <View testID="paywall-success-progress" style={styles.successProgress} />
         ) : (
@@ -235,17 +258,18 @@ function PaywallPresentation({
                 <Button label={t('Retry')} variant="secondary" size="sm" onPress={onRetry} />
               </View>
             ) : (
-              <View style={[styles.plans, width >= 360 && fontScale < 1.2 && displayedPackages.length <= 2 ? styles.plansRow : null]}>
+              <View style={[styles.plans, compactPlans ? styles.plansRow : null]}>
                 {displayedPackages.map((item) => (
                   <PaywallPlanCard
                     key={item.packageIdentifier}
                     testID={`paywall-plan-${item.packageType.toLowerCase()}`}
-                    compact={width >= 360 && fontScale < 1.2 && displayedPackages.length <= 2}
+                    compact={compactPlans}
                     title={formatPackageTitle(item.packageType, t)}
                     price={item.priceString}
                     detail={formatPackageDetail(item, t)}
-                    badge={item.packageType === 'ANNUAL' ? t('Recommended') : null}
+                    badge={item.packageIdentifier === currentPackageId ? t('Current plan') : item.packageType === 'ANNUAL' ? t('Recommended') : null}
                     selected={item.packageIdentifier === selectedPackageId}
+                    current={isMember && item.packageIdentifier === currentPackageId}
                     disabled={interactionLocked || disabledPackageIds.includes(item.packageIdentifier)}
                     onPress={() => onSelectPackage(item.packageIdentifier)}
                   />
@@ -253,7 +277,7 @@ function PaywallPresentation({
               </View>
             )}
 
-            {!monthlyVisible && orderedPackages.some((item) => item.packageType === 'MONTHLY') ? (
+            {showMonthlyDisclosure ? (
               <Pressable
                 testID="paywall-show-monthly"
                 accessibilityRole="button"
@@ -265,21 +289,34 @@ function PaywallPresentation({
               </Pressable>
             ) : null}
 
-            {failureMessage ? (
-              <Text testID="paywall-failure" style={styles.failureText}>{failureMessage}</Text>
-            ) : null}
+            {selectedIsCurrent && !failureMessage && !lifetimeRenewalWarning ? null : (
+              <View testID="paywall-checkout" style={[styles.checkout, showMonthlyDisclosure ? null : styles.checkoutSpaced]}>
+                {failureMessage ? (
+                  <Text testID="paywall-failure" style={styles.failureText}>{failureMessage}</Text>
+                ) : null}
 
-            <Button
-              testID="paywall-purchase"
-              multiline
-              label={t('Start Clawket Pro')}
-              size="lg"
-              loading={phase === 'purchasing'}
-              disabled={interactionLocked || purchaseDisabled || phase === 'loading' || phase === 'unavailable' || !selectedPackage}
-              onPress={onPurchase}
-            />
+                {planChange ? <Text testID="paywall-change-timing" style={styles.billingText}>{t('Your store confirms when the new plan and price take effect.')}</Text> : null}
+                {lifetimeRenewalWarning ? <Text testID="paywall-lifetime-renewal-warning" style={styles.feedbackText}>{t('Lifetime does not cancel your existing subscription. Turn off its renewal in your store to avoid further charges.')}</Text> : null}
+                {selectedIsCurrent ? null : (
+                  <>
+                    <Button
+                      testID="paywall-purchase"
+                      multiline
+                      label={isMember && selectedPackage?.packageType === 'LIFETIME' ? t('Buy lifetime')
+                        : planChange ? selectedPackage?.packageType === 'ANNUAL' ? t('Change to annual') : t('Change to monthly')
+                          : blockedFeature === 'agents' ? t('Upgrade to use more Agents') : t('Start Clawket Pro')}
+                      size="lg"
+                      loading={phase === 'purchasing'}
+                      disabled={interactionLocked || purchaseDisabled || phase === 'loading' || phase === 'unavailable' || !selectedPackage}
+                      onPress={onPurchase}
+                    />
+                    {selectedPackage ? <Text testID="paywall-billing" accessibilityHint={selectedPackage.packageType === 'LIFETIME' ? undefined : Platform.OS === 'android' ? t('Cancel anytime in Google Play') : t('Cancel anytime in the App Store')} style={styles.billingText}>{formatBilling(selectedPackage, t)}</Text> : null}
+                  </>
+                )}
+              </View>
+            )}
 
-            {selectedPackage ? <Text testID="paywall-billing" accessibilityHint={selectedPackage.packageType === 'LIFETIME' ? undefined : Platform.OS === 'android' ? t('Cancel anytime in Google Play') : t('Cancel anytime in the App Store')} style={styles.billingText}>{formatBilling(selectedPackage, t)}</Text> : null}
+            {isMember && onManageSubscription ? <Button testID="paywall-manage-subscription" label={t('Manage subscription')} variant="secondary" style={styles.manageButton} onPress={onManageSubscription} /> : null}
             <View style={styles.legalRow}>
               <Pressable accessibilityRole="link" onPress={onOpenTerms} style={styles.legalLink}>
                 <Text style={styles.legalLinkText}>{t('Terms')}</Text>
@@ -327,16 +364,18 @@ function formatBilling(item: ProPaywallPackage, t: Translate): string {
 
 function translatePaywallTitle(key: PaywallTitleKey, t: Translate): string {
   switch (key) {
+    case 'Edit your Agent’s memory and files': return t('Edit your Agent’s memory and files');
     case 'More possibilities with your Agents': return t('More possibilities with your Agents');
     case 'Explore your Agent conversations': return t('Explore your Agent conversations');
-    case 'Clawket 3.0': return t('Clawket 3.0');
     case 'Every Agent in your pocket': return t('Every Agent in your pocket');
     case 'Bring every Agent into the roster': return t('Bring every Agent into the roster');
     case 'Fix your OpenClaw from your phone': return t('Fix your OpenClaw from your phone');
     case 'Read logs and edit files without going back to your computer':
       return t('Read logs and edit files without going back to your computer');
+    case 'Choose which models your Agent uses': return t('Choose which models your Agent uses');
     case 'Find any message again': return t('Find any message again');
     case 'Every conversation, in full': return t('Every conversation, in full');
+    case 'See where every token goes': return t('See where every token goes');
   }
 }
 
@@ -346,9 +385,6 @@ function translatePaywallSubtitle(
   t: Translate,
 ): string {
   switch (key) {
-    case 'Take your AI world with you.': return t('Take your AI world with you.');
-    case 'Your agent control tower, rebuilt.':
-      return t('Your agent control tower, rebuilt.');
     case 'OpenClaw and Hermes together, ready whenever you are.':
       return t('OpenClaw and Hermes together, ready whenever you are.');
     case 'Agents beyond main are a Pro feature.':
@@ -357,6 +393,8 @@ function translatePaywallSubtitle(
       return t('Read complete channel, task and subagent conversations, and reply where supported.');
     case 'Message details across sessions are a Pro feature.':
       return t('Message details across sessions are a Pro feature.');
+    case '7-day and 30-day usage, cost and trends are a Pro feature.':
+      return t('7-day and 30-day usage, cost and trends are a Pro feature.');
     case '{{feature}} is a Pro feature.':
       return t('{{feature}} is a Pro feature.', {
         feature: featureKey ? translatePaywallSubtitleFeature(featureKey, t) : '',
@@ -375,6 +413,7 @@ function translatePaywallSubtitleFeature(key: PaywallSubtitleFeatureKey, t: Tran
 
 function translatePaywallBenefit(key: PaywallBenefitKey, t: Translate): string {
   switch (key) {
+    case 'Choose which models your Agent uses': return t('Choose which models your Agent uses');
     case 'Conversations across channels and tasks': return t('Conversations across channels and tasks');
     case "Shape your Agent's personality and memory": return t("Shape your Agent's personality and memory");
     case 'Configure, back up and diagnose your Agents': return t('Configure, back up and diagnose your Agents');
@@ -387,11 +426,7 @@ function translatePaywallBenefit(key: PaywallBenefitKey, t: Translate): string {
     case 'Unlimited Agents': return t('Unlimited Agents');
     case 'Logs and file editing': return t('Logs and file editing');
     case 'Search across sessions and favorites': return t('Search across sessions and favorites');
-    case 'Every Agent and session in one roster': return t('Every Agent and session in one roster');
-    case 'OpenClaw and Hermes side by side': return t('OpenClaw and Hermes side by side');
-    case 'Search across every conversation': return t('Search across every conversation');
-    case 'Manage, diagnose, and repair from your phone':
-      return t('Manage, diagnose, and repair from your phone');
+    case '7- and 30-day usage and cost trends': return t('7- and 30-day usage and cost trends');
   }
 }
 
@@ -454,8 +489,10 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     pressed: { opacity: 0.65 },
     scroll: { flex: 1 },
     flowContent: { flexGrow: 1 },
-    scrollContent: { paddingHorizontal: Space.xl, paddingBottom: Space.xl, gap: Space.md },
+    scrollContent: { flexGrow: 1, paddingHorizontal: Space.xl, paddingBottom: Space.xxl, gap: Space.md },
+    // Extra height belongs above the copy, not between the benefits and plans.
     hero: {
+      flexGrow: 1,
       overflow: 'hidden',
       alignItems: 'center',
       justifyContent: 'center',
@@ -475,9 +512,13 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       lineHeight: LineHeight.body,
       fontWeight: FontWeight.regular,
     },
-    footer: { marginTop: 'auto', paddingHorizontal: Space.xl, gap: Space.xs },
+    footer: { paddingHorizontal: Space.xl, gap: Space.xs },
     plans: { gap: Space.sm },
     plansRow: { flexDirection: 'row', alignItems: 'stretch' },
+    checkout: { gap: Space.xs },
+    // Without the monthly disclosure between them, plans and checkout need their own breathing room.
+    checkoutSpaced: { marginTop: Space.md },
+    manageButton: { marginTop: Space.md },
     planSkeleton: { minHeight: ControlSize.settingsRow },
     unavailable: { flexDirection: 'row', alignItems: 'center', gap: Space.md },
     feedbackText: {

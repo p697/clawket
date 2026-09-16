@@ -35,37 +35,44 @@ export function canCreateAgent(e: Entitlement) { return e.isPro; }
 
 ## 2. 付费墙页面 `Paywall`
 
-全屏原生模态（`presentation: 'fullScreenModal'`，iOS 下滑可关），一屏放完不滚动（小屏设备允许收益区滚动，方案卡与按钮固定底部）。
+全屏原生模态。采用负责人认可的 Lumen 深色视觉：银色猫头、轻微浮动与眨眼、浅色主按钮；不显示评分或评论。完整内容与结账区共用纵向滚动，小屏与大字号不截断文案。
 
-**结构（自上而下）**：
-1. 顶栏：左 28 圆形关闭键（`inkTertiary`）；右「恢复购买」文字键（`caption`）。
-2. 英雄图区（高 ≈ 屏幕 22%，圆角 16，`surface` 底）：五套之一，由 `hero` 决定；唯一允许多色（`agentPalette`）与渐变的区域。
-3. 标题（`display`）+ 副标题（`secondary inkSecondary`）：按触发点取自下表。
-4. 收益 3 行（Lucide 图标 18 + `body`，每条 ≤ 10 个汉字）：第一条永远是触发点对应的能力。没有第四条，没有解释句。
-5. 社会证明一行（`caption`）：「★★★★★ 4.4 · “更新快，一直走在最前面”」；评分与引用来自 `src/config/public.ts` 的常量，便于更新。
-6. 方案卡两张（`SettingsGroup` 形状，选中卡 accent 2pt 描边 + `accentSoft` 底）：年付（默认选中；副标题「折合 {monthlyEquivalent} / 月 · 省 {savings}%」；右侧「最划算」chip）、终身（副标题「一次买断」）。
-7. 「查看月付方案」文字键 → 展开第三张卡（月付）；展开后可选。
-8. 主按钮（全宽胶囊，`ink` 底白字）：文案带价格：「开通 Pro · {price} / 年」；情境版：「开通 Pro，继续{action}」。
-9. 法务小字：「随时在 App Store 取消 · 条款 · 隐私」（Android：Google Play）。
+**2026-09-16 文案与布局定稿（替代旧的三条权益与固定底部布局）**：
 
-**英雄图与文案表**（`hero` 枚举）：
+1. 顶栏保留关闭与恢复购买。
+2. 猫头区域保留随屏高变化的 104–164 pt 最小高度；页面剩余高度分给该区域，不再空在权益与价格之间。插画按比例居中，动画继续遵守减少动态效果和后台暂停。
+3. 标题、副标题和四条权益作为阅读区；权益最后一行与价格卡间距固定为 32 pt。长文案自然换行，内容超高时整页滚动。
+4. 通用版采用聊天优先标题：「和你的 Agent，聊得更多」（英文：More conversations with your Agents）；不显示副标题（负责人真机反馈：与权益重复，删除后留出空间）。四条权益依次为查看聊天和任务的完整记录；连接数量、Agent 数量不限；修改 Agent 的人格与记忆；管理 OpenClaw 配置、备份和日志。
+5. 两张价格卡为「按年订阅」「终身使用」，月付折叠在「按月订阅」入口；年付月均前加「折合」，终身标「一次购买」。全部金额来自商店。
+6. 通用购买按钮为「升级到 Pro」，Agent 入口为「升级，使用更多 Agent」。周期、总价、自动续订和随时取消继续独立显示；终身不显示订阅取消说明。会员换方案、恢复购买与法务入口保持原行为。
 
-| `hero` | 触发点 `blocked_feature` | 标题 | 副标题 | 收益第一条 |
-|---|---|---|---|---|
-| `connections` | `gatewayConnections` | 把所有 Agent 装进一个口袋 | OpenClaw 与 Hermes 同屏，随时接管 | 不限连接数 |
-| `agents` | `agents` | 让每个 Agent 都出现在花名册 | main 之外的 Agent 属于 Pro | 不限 Agent 数 |
-| `manage` | `openclawPermissions` / `configBackups` / `openclawDiagnostics` / `configManage` | 从手机修好你的 OpenClaw | 你刚点的「{feature}」是 Pro 能力 | 一键修复权限与诊断 |
-| `logsFiles` | `logs` / `coreFileEditing` | 看日志、改文件，不用回电脑 | — | 日志与文件编辑 |
-| `search` | `messageHistory` | 找回任何一句话 | 跨会话搜索的消息详情属于 Pro | 跨会话搜索与收藏 |
-| `generic` | 冷启动 / 设置入口 / `appIcons` | 把所有 Agent 装进一个口袋 | OpenClaw 与 Hermes 同屏，随时接管 | 不限连接数 |
+**情境标题**（文案直接说明被拦动作，不出现「花名册」或 `main`，不承诺任意消息恢复或一键修好）：
 
-其余两条收益固定顺序：「从手机修好 OpenClaw」；「日志、文件与搜索」；当触发点已是其中之一时，用「不限连接与 Agent」补位。副标题只在情境版出现，通用版只有标题。
+| `blocked_feature` | 标题 | 补充说明 |
+|---|---|---|
+| `gatewayConnections` | 连接更多电脑或服务器 | 在一个 App 里，使用不同设备上的 OpenClaw 和 Hermes。 |
+| `agents` | 把其他 Agent 也用起来 | 免费版可用默认 Agent，升级后可使用更多 Agent。权益覆盖 Agent、连接、完整记录、记忆。 |
+| OpenClaw 权限 / 配置 / 备份 / 诊断 | 在手机上管理 OpenClaw | 升级后即可使用对应功能；首条权益为查看权限、诊断问题。 |
+| `coreFileEditing` | 在手机上修改记忆与文件 | 与日志入口拆开，保留人格、记忆和技能文件的共用编辑门槛。 |
+| `logs` | 在手机上查看 OpenClaw 日志 | 明确后端范围。 |
+| `modelManage` | 在手机上设置 Agent 的模型 | 首条权益也指向模型管理。 |
+| `sessionHistory` | 查看完整的聊天记录 | 查看其他聊天和任务的完整记录，支持回复时可继续对话。 |
+| `messageHistory` | 打开搜索到的完整消息 | 升级后即可查看搜索结果中的完整消息。 |
+| `usage` | 看看最近花了多少 | 查看最近 7 天、30 天的用量和费用变化。 |
+
+文案和排列不改变免费额度、能力矩阵或购买后续接。真机视觉验收由负责人完成，不启动模拟器。
 
 **状态**：加载 offering（骨架方案卡）；offering 不可用（文案 + 「重试」，按钮禁用）；购买中（按钮 loading，页面锁定）；成功（页内变成功态：标题「你已是 Pro」，2 秒后自动关闭并继续被拦动作）；失败（`reason` 为 cancelled 时静默回到页面；其他显示一行错误）；恢复成功 / 失败同理。
 
+2026-09-14 用户授权扩展：设置 → Clawket Pro → 会员卡始终可主动打开方案页，已付费用户可切换计费周期或另购终身版。当前方案标记并禁购；现有终身/历史赠送终身保护保持。购买前刷新商店状态；Google 同订阅基础方案切换使用下次账单日收费模式，跨订阅切换使用延期替换。iOS 同组同等级按商店规则切换。方案变更提交、终身购买后仍需管理原订阅、购买待核实使用可手动关闭的完成页，不触发 2 秒自动关闭或功能续接。新权益只来自 RevenueCat 当前 entitlement；终身不会自动取消原订阅，购买前后说明并提供商店管理链接。19 种语言保持一致。具体商品与验收见 `apps/mobile/docs/pro-plan-management.md`。
+
+埋点新增 `paywall_plan_change_submitted`（与购买事件相同套餐/情境属性，表示商店接受切换，不代表当场收款）与 `paywall_manage_subscription_tapped`（付费墙情境属性）。`paywall_purchase_succeeded` 保留给已核实的新购/买断权益；不发送交易凭证或用户交易标识。
+
 ## 3. 触发规则
 
-**情境触发（不限次数）**：`gatewayConnections`（添加第 2 个连接）、`agents`（锁定 Agent 打开、新建 Agent）、`openclawPermissions` / `configBackups` / `openclawDiagnostics` / `configManage`（OpenClaw 管理任一分段）、`logs`、`coreFileEditing`（文件保存）、`messageHistory`（搜索结果消息详情）、`appIcons`、设置页 Pro 行的锁图标。
+**情境触发（不限次数）**：`gatewayConnections`（添加第 2 个连接）、`agents`（锁定 Agent 打开、新建 Agent）、`openclawPermissions` / `configBackups` / `openclawDiagnostics` / `configManage`（OpenClaw 管理任一分段）、`logs`、`coreFileEditing`（文件保存）、`messageHistory`（搜索结果消息详情）、`usage`（用量页 7D / 30D 档位的蒙层与今天档趋势里过去几天的柱子；2026-09-16 负责人决定，今天档完整免费）、`modelManage`（模型页的任一写动作：开关、换默认 / 当前模型、备用、思考等级、加模型、成本、删除；2026-09-16 负责人决定，聊天输入框的会话级切换仍免费）、`appIcons`、设置页 Pro 行的锁图标。
+
+**最后一步拦截（2026-09-16 负责人决定）**：付费墙的前提是让用户先知道功能是什么、看到自己的真实数据，再在交付 Pro 价值的那一步拦。能预览的页面不在入口行上锁、不用一条横幅把整页遮掉。OpenClaw 管理：配置列真实 key，展开后 JSON 在 `ProGate` 遮罩下、编辑弹墙；权限显示三项真实状态，详情 / 规则组（遮罩）/ 修复弹墙；诊断免费运行，摘要与前 2 项可读，其余项遮罩（标题写数量），详情 / 尝试修复弹墙；备份列表免费，创建与恢复确认弹墙。运行日志（行名由「日志」改为「OpenClaw 运行日志」）最新 3 条可读，后 4 条遮罩，非 Pro 不轮询。`ProGate`＝真实内容降透明 + 向页面底色渐隐的 SVG 遮罩（无原生模糊依赖）+ 锁 + 一句功能说明 + 命名功能的解锁按钮；被拦动作带 continuation，购买 / 恢复后原地续做。锁定 Agent（`permissionDenied`）仍整页走 `agents` 门。用量页（2026-09-16 负责人决定「差点就看到」的蒙层而不是拦在入口）：今天档完整免费；7D / 30D 可以切进去，真实数据照常加载并渲染在 `ProGate` 之下（蒙层高六行，英雄卡与四张指标卡的数字若隐若现），锁 + 「看整周、整月的用量」+ 一句说明 + 命名功能的「解锁用量趋势」主按钮；今天档趋势图里点过去几天的柱子也直接弹墙；购买后蒙层随 `isPro` 即时消失，无需续做。
 
 **连接就绪触发（自动弹出）**：每个进程生命周期内，活动连接第一次触发 `connect_ready` 且 `Roster` 已渲染后 500 ms：若非 Pro 且无待处理审批 → 弹通用版（`hero: generic`，`blocked_feature: launch`）。同一进程内后续的重连或切换连接不再触发；从后台切回不算；没有连接就绪就不弹；购买或恢复成功后不再弹。实现为连接注册表上的一次性标记 `launchPaywallShownThisProcess`。
 
@@ -81,9 +88,9 @@ Roster 渲染完成 → 等 connect_ready（活动连接）
 connect_failed → 停留 Roster 显示离线横幅，不弹付费墙，pendingAutoOpen 保留到就绪
 ```
 
-**常驻入口**：花名册左上头像的「Pro」徽标；账户设置顶部横幅；版本更新公告末尾一条。
+**常驻入口**：花名册左上头像的「Pro」徽标；账户设置顶部横幅。（更新公告不再放 Pro 条目，负责人 2026-09-16 决定。）
 
-**历史用户**：升级到 3.0 的第一次启动，用「3.0 + Pro」介绍页替代当次更新公告（复用付费墙布局，英雄图 generic，标题「Clawket 3.0」，收益为 3.0 的四个变化）。
+**历史用户**（2026-09-16 负责人改定，取代原「3.0 + Pro 介绍页」）：升级后的第一次启动不再走付费墙布局，而是根层的「更新公告」弹层（`AppUpdateAnnouncementSheet`）：大号 `curious` Companion + 版本英雄文案 + 本版条目（3.0.0 为五条，不含 Pro；条目文案一行、小学生能读懂）；花名册渲染完、活动连接 ready、审批扫描新鲜且无待处理审批后弹，消耗本进程唯一的启动机会（`launchPaywallShownThisProcess`），同一次启动不再叠第二个模态。规则：`silent` 版本永不弹；本地记录「上次公告到的版本」，跳版用户一张弹层合并最多 3 个未公告版本；无记录的 2.x 升级只弹当前版本；全新安装把首个版本写成基线、不弹。开发者分组在 Debug 模式下提供「预览更新公告」行。原 `showThreePointZeroIntro` / `threePointZeroIntro` 模式已删除。
 
 ## 4. RevenueCat
 

@@ -120,3 +120,15 @@ export function managementErrorDetail(error: unknown, fallback: string): string 
   }
   return fallback;
 }
+
+/** Bound the reader UI even if an adapter fails to settle; late results cannot replace the retry. */
+export async function withManagementDeadline<T>(request: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([request, new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error('Management request timed out (35s).')), 35_000);
+    })]);
+  } finally {
+    clearTimeout(timer);
+  }
+}

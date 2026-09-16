@@ -114,7 +114,7 @@ export abstract class BaseWebSocketTransport {
   }
 
   public connect(): void {
-    if (this.opening) return;
+    if (this.opening || this.reconnectTimer) return;
     if (
       this.socket
       && (this.socket.readyState === WEB_SOCKET_CONNECTING || this.socket.readyState === WEB_SOCKET_OPEN)
@@ -174,12 +174,12 @@ export abstract class BaseWebSocketTransport {
     emitTo(this.errorListeners, error);
   }
 
-  protected forceReconnect(code?: number, reason?: string): void {
+  protected forceReconnect(code?: number, reason?: string, minimumDelayMs = 0): void {
     if (this.manuallyClosed) return;
     this.clearOpenTimer();
     this.onSocketTerminated();
     this.closeCurrentSocket(code, reason);
-    this.scheduleReconnect(reason);
+    this.scheduleReconnect(reason, minimumDelayMs);
   }
 
   protected abstract handleSocketOpen(attemptId: number): void;
@@ -271,7 +271,7 @@ export abstract class BaseWebSocketTransport {
     return true;
   }
 
-  private scheduleReconnect(reason?: string): void {
+  private scheduleReconnect(reason?: string, minimumDelayMs = 0): void {
     if (this.manuallyClosed || this.reconnectTimer) return;
     this.reconnectAttempts += 1;
     const exponentialDelay = Math.min(
@@ -279,7 +279,7 @@ export abstract class BaseWebSocketTransport {
       this.reconnectBaseMs * Math.pow(this.reconnectFactor, this.reconnectAttempts - 1),
     );
     const jitter = this.reconnectJitter ? 0.75 + this.random() * 0.5 : 1;
-    const delay = Math.floor(exponentialDelay * jitter);
+    const delay = Math.max(minimumDelayMs, Math.floor(exponentialDelay * jitter));
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       if (this.manuallyClosed) return;

@@ -2,7 +2,7 @@ import React from 'react';
 import { fireEvent, render } from '@testing-library/react-native';
 import type { ConnectionDescriptor } from '@clawket/agent-protocol';
 
-import { FontSize } from '../../theme/tokens';
+import { ControlSize, FontSize } from '../../theme/tokens';
 import {
   AccountSettingsScreen,
   type AccountSettingsScreenProps,
@@ -235,13 +235,17 @@ describe('AccountSettingsScreen', () => {
     consoleErrorSpy.mockRestore();
   });
 
-  it('keeps the home compact and routes all categories and membership', () => {
+  it('groups the home and routes all categories and membership', () => {
     const onOpenSection = jest.fn();
     const onBack = jest.fn();
     const view = render(<AccountSettingsScreen {...createProps({ onOpenSection, onBack })} />);
     fireEvent.press(view.getByTestId('account-settings-app-language'));
     expect(view.getByTestId('language-sheet').props.preference).toBe('app-language');
     expect(view.getByText('Settings')).toBeTruthy();
+    expect(view.getByTestId('account-settings-membership-companion', { includeHiddenElements: true })).toBeTruthy();
+    expect(view.getByTestId('account-settings-support')).toBeTruthy();
+    expect(flattenStyle(view.getByTestId('account-settings-category-appearance').props.style).minHeight)
+      .toBe(ControlSize.settingsRowComfortable);
     expect(view.queryByTestId('account-settings-row-theme')).toBeNull();
     expect(view.queryByTestId('account-settings-toggle-debugMode')).toBeNull();
     for (const section of ['connections', 'appearance', 'notifications', 'help', 'about']) {

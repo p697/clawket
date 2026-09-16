@@ -155,9 +155,22 @@ describe('AccountSettings section model', () => {
       'debug-mode',
       'preview-environment',
       'design-system',
+      'preview-update-announcement',
       'clear-cache',
       'reset-device',
     ]);
+    expect(developerModel.groups[0]?.rows.find((row) => row.id === 'preview-update-announcement')).toMatchObject({
+      kind: 'navigation',
+      action: 'preview-update-announcement',
+      titleKey: 'Preview update announcement',
+    });
+
+    const releaseDeveloperModel = buildAccountSettingsSectionModel({
+      section: 'developer',
+      labels,
+      data: { debugMode: false },
+    });
+    expect(releaseDeveloperModel.groups[0]?.rows.map((row) => row.id)).not.toContain('preview-update-announcement');
   });
 
   it('keeps paywall locks separate from backend capability gates', () => {

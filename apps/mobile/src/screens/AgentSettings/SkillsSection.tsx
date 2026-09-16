@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import type {
   AgentAdapter,
@@ -9,10 +10,12 @@ import type {
   SkillStatusReport,
   SkillsOperations,
 } from '@clawket/agent-protocol';
+import { SkillSourceSheet } from './SkillSourceSheet';
 import { Banner } from '../../components/ui/Banner';
 import { Button } from '../../components/ui/Button';
 import { SearchInput } from '../../components/ui/SearchInput';
-import { SegmentedTabs } from '../../components/ui/SegmentedTabs';
+import { ConfirmationModal } from '../../components/ui/ConfirmationModal';
+import { SkillRow, SkillSwitch, useSkillIssues } from './SkillRow';
 import {
   SettingsDivider,
   SettingsGroup,
@@ -55,18 +58,31 @@ export type SkillsSectionProps = Readonly<{
   adapter: AgentAdapter;
   agent: AgentDescriptor;
   online: boolean;
+  isPro?: boolean;
+  onOpenPaywall?: (reason: string, onContinue?: () => void) => void;
+  view?: SkillsView;
+  refreshKey?: number;
+  onInstallRequested?: () => void;
 }>;
 
-export function SkillsSection({
+export function SkillsSection(props: SkillsSectionProps): React.JSX.Element {
+  return <SkillsContent key={`${props.agent.connectionId}:${props.agent.agentId}:${props.view ?? 'installed'}`} {...props} />;
+}
+
+function SkillsContent({
   adapter,
   agent,
   online,
+  isPro = false,
+  onOpenPaywall,
+  view = 'installed',
+  refreshKey = 0,
+  onInstallRequested,
 }: SkillsSectionProps): React.JSX.Element {
   const { t } = useTranslation(['common', 'settings', 'config']);
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
   const operations = adapter.management?.skills;
-  const [view, setView] = useState<SkillsView>('installed');
   const [query, setQuery] = useState('');
   const [report, setReport] = useState<SkillStatusReport | null>(null);
   const [discovered, setDiscovered] = useState<ReadonlyArray<DiscoverSkillItem>>([]);
@@ -75,36 +91,66 @@ export function SkillsSection({
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selection, setSelection] = useState<SkillSelection | null>(null);
+  const selectionRef = useRef(selection);
+  selectionRef.current = selection;
   const [removeCandidate, setRemoveCandidate] = useState<SkillStatusEntry | null>(null);
   const [discoverEpoch, setDiscoverEpoch] = useState(0);
   const discoverRequest = useRef(0);
+  const installedRequest = useRef(0);
+  const hasReport = useRef(false);
+  const mutation = useRef(false);
+  const [sourceSkill, setSourceSkill] = useState<SkillStatusEntry | null>(null);
+  const pendingSource = useRef<SkillStatusEntry | null>(null);
+  const pendingRemove = useRef<SkillStatusEntry | null>(null);
+  const pendingInstall = useRef(false);
+  const scope = useMemo(() => ({ active: true }), [adapter]);
+  const currentScope = useRef(scope);
+  currentScope.current = scope;
+  const isCurrent = useCallback(() => scope.active && currentScope.current === scope, [scope]);
+  useEffect(() => {
+    scope.active = true;
+    setSourceSkill(null);
+    pendingSource.current = null;
+    setReport(null);
+    hasReport.current = false;
+    setError(null);
+    setDiscovered([]);
+    setLoadingInstalled(online && view === 'installed');
+    setSelection(null);
+    setRemoveCandidate(null);
+    setBusyKey(null);
+    mutation.current = false;
+    pendingRemove.current = null;
+    pendingInstall.current = false;
+    return () => { scope.active = false; };
+  }, [scope]);
   const canDiscover = adapter.capabilities.skillDiscover && Boolean(operations?.discover);
 
-  const loadInstalled = useCallback(async () => {
+  const loadInstalled = useCallback(async (quiet = false) => {
+    const request = ++installedRequest.current;
     if (!operations?.status) {
       setLoadingInstalled(false);
       return;
     }
-    setLoadingInstalled(true);
+    if (!quiet || !hasReport.current) setLoadingInstalled(true);
     try {
-      setReport(await operations.status(agent.agentId));
+      const next = await operations.status(agent.agentId);
+      if (!isCurrent() || request !== installedRequest.current) return;
+      hasReport.current = true;
+      setReport(next);
       setError(null);
     } catch (loadError: unknown) {
+      if (!isCurrent() || request !== installedRequest.current) return;
       setError(errorMessage(loadError, t('Failed to load skills', { ns: 'settings' })));
     } finally {
-      setLoadingInstalled(false);
+      if (isCurrent() && request === installedRequest.current) setLoadingInstalled(false);
     }
-  }, [agent.agentId, operations, t]);
+  }, [agent.agentId, isCurrent, operations, t]);
 
   useEffect(() => {
-    void loadInstalled();
-  }, [loadInstalled]);
-
-  useEffect(() => {
-    if (canDiscover || view !== 'discover') return;
-    setView('installed');
-    setQuery('');
-  }, [canDiscover, view]);
+    if (view === 'installed' && online) void loadInstalled(true);
+    else setLoadingInstalled(false);
+  }, [loadInstalled, online, refreshKey, view]);
 
   useEffect(() => {
     if (view !== 'discover' || !canDiscover) return undefined;
@@ -116,24 +162,24 @@ export function SkillsSection({
     const timeout = setTimeout(() => {
       void discover(query.trim()).then(
         (result) => {
-          if (!active || request !== discoverRequest.current) return;
+          if (!active || !isCurrent() || request !== discoverRequest.current) return;
           setDiscovered(result.items);
           setError(null);
         },
         (discoverError: unknown) => {
-          if (!active || request !== discoverRequest.current) return;
+          if (!active || !isCurrent() || request !== discoverRequest.current) return;
           setDiscovered([]);
           setError(errorMessage(discoverError, t('Failed to load skills', { ns: 'settings' })));
         },
       ).finally(() => {
-        if (active && request === discoverRequest.current) setLoadingDiscover(false);
+        if (active && isCurrent() && request === discoverRequest.current) setLoadingDiscover(false);
       });
     }, 250);
     return () => {
       active = false;
       clearTimeout(timeout);
     };
-  }, [canDiscover, discoverEpoch, operations, query, t, view]);
+  }, [canDiscover, discoverEpoch, isCurrent, operations, query, t, view]);
 
   const installed = useMemo(
     () => filterInstalledSkills(report?.skills ?? [], query),
@@ -143,51 +189,69 @@ export function SkillsSection({
     () => groupDiscoveredSkills(discovered),
     [discovered],
   );
-  const tabs = useMemo(() => [
-    { key: 'installed' as const, label: t('Installed', { ns: 'config' }) },
-    ...(canDiscover
-      ? [{ key: 'discover' as const, label: t('Discover', { ns: 'common' }) }]
-      : []),
-  ], [canDiscover, t]);
+  const selected = selection?.kind === 'installed'
+    ? report?.skills.find((skill) => skill.skillKey === selection.item.skillKey)
+    : null;
+  const currentSelection: SkillSelection | null = selection?.kind === 'installed'
+    ? selected ? { kind: 'installed', item: selected } : null
+    : selection;
+  const openSkill = useCallback((item: SkillStatusEntry) => {
+    setSelection({ kind: 'installed', item });
+  }, []);
 
   const toggleSkill = useCallback(async (skill: SkillStatusEntry) => {
-    if (!online || busyKey || !canToggleSkill(skill, adapter.capabilities, operations)) return;
+    if (!online || mutation.current || !canToggleSkill(skill, adapter.capabilities, operations)) return;
+    mutation.current = true;
+    installedRequest.current += 1;
     setBusyKey(skill.skillKey);
     setError(null);
     try {
-      await operations?.update?.(skill.skillKey, { enabled: skill.disabled });
-      setSelection(null);
-      await loadInstalled();
+      const result = await operations?.update?.(skill.skillKey, { enabled: skill.disabled });
+      if (!result?.ok) throw new Error(t('Failed to update skill', { ns: 'settings' }));
+      if (!isCurrent()) return;
+      // Commit the acknowledged value even if the follow-up status read fails.
+      setReport((previous) => previous ? { ...previous, skills: previous.skills.map((item) => (
+        item.skillKey === skill.skillKey ? { ...item, disabled: !skill.disabled } : item
+      )) } : previous);
+      await loadInstalled(true);
     } catch (updateError: unknown) {
-      setError(errorMessage(updateError, t('Failed to load skills', { ns: 'settings' })));
+      if (isCurrent()) setError(errorMessage(updateError, t('Failed to update skill', { ns: 'settings' })));
     } finally {
-      setBusyKey(null);
+      if (isCurrent()) { mutation.current = false; setBusyKey(null); }
     }
-  }, [adapter.capabilities, busyKey, loadInstalled, online, operations, t]);
+  }, [adapter.capabilities, isCurrent, loadInstalled, online, operations, t]);
 
   const removeSkill = useCallback(async () => {
     const skill = removeCandidate;
-    if (!skill || !online || busyKey
+    if (!skill || !online || mutation.current
       || !canRemoveSkill(skill, adapter.capabilities, operations)) return;
+    mutation.current = true;
+    installedRequest.current += 1;
+    setRemoveCandidate(null);
     setBusyKey(skill.skillKey);
     setError(null);
     try {
-      await operations?.remove?.(skill.skillKey, agent.agentId);
+      const result = await operations?.remove?.(skill.skillKey, agent.agentId);
+      if (!result?.ok) throw new Error(t('Failed to uninstall skill', { ns: 'settings' }));
+      if (!isCurrent()) return;
+      setReport((previous) => previous ? { ...previous, skills: previous.skills.filter((item) => item.skillKey !== skill.skillKey) } : previous);
       setRemoveCandidate(null);
       setSelection(null);
-      await loadInstalled();
+      await loadInstalled(true);
     } catch (removeError: unknown) {
-      setError(errorMessage(removeError, t('Failed to load skills', { ns: 'settings' })));
+      if (!isCurrent()) return;
+      setError(errorMessage(removeError, t('Failed to uninstall skill', { ns: 'settings' })));
       setRemoveCandidate(null);
     } finally {
-      setBusyKey(null);
+      if (isCurrent()) { mutation.current = false; setBusyKey(null); }
     }
-  }, [adapter.capabilities, agent.agentId, busyKey, loadInstalled, online, operations, removeCandidate, t]);
+  }, [adapter.capabilities, agent.agentId, isCurrent, loadInstalled, online, operations, removeCandidate, t]);
 
   const installSkill = useCallback(async (item: DiscoverSkillItem) => {
-    if (!online || busyKey || !adapter.capabilities.skillInstall) return;
+    if (!online || mutation.current || !adapter.capabilities.skillInstall) return;
     const prompt = buildSkillInstallPrompt(item);
     if (!prompt) return;
+    mutation.current = true;
     setBusyKey(item.id);
     setError(null);
     try {
@@ -195,31 +259,27 @@ export function SkillsSection({
         text: prompt,
         idempotencyKey: `skill-install:${Date.now()}:${item.id}`,
       });
-      setSelection(null);
+      if (!isCurrent()) return;
+      // Closing or changing the detail while the request runs cancels navigation,
+      // not the already-issued installation request.
+      if (selectionRef.current?.kind === 'discover' && selectionRef.current.item.id === item.id) {
+        pendingInstall.current = true;
+        setSelection(null);
+      }
     } catch (installError: unknown) {
-      setError(errorMessage(installError, t('Failed to load skills', { ns: 'settings' })));
+      if (isCurrent()) setError(errorMessage(installError, t('Failed to request installation', { ns: 'settings' })));
     } finally {
-      setBusyKey(null);
+      if (isCurrent()) { mutation.current = false; setBusyKey(null); }
     }
-  }, [adapter, agent.mainSessionKey, busyKey, online, t]);
+  }, [adapter, agent.mainSessionKey, isCurrent, online, t]);
 
   const loading = view === 'installed' ? loadingInstalled : loadingDiscover;
   return (
     <>
       <View testID="agent-skills-section" style={styles.root}>
-        <SegmentedTabs
-          testID="agent-skills-tabs"
-          tabs={tabs}
-          active={view}
-          onSwitch={(next) => {
-            setQuery('');
-            setError(null);
-            if (next === 'discover') setLoadingDiscover(true);
-            setView(next);
-          }}
-        />
         <SearchInput
           testID="agent-skills-search"
+          appearance="quiet"
           value={query}
           onChangeText={setQuery}
           placeholder={t('Search skills...', { ns: 'settings' })}
@@ -231,32 +291,38 @@ export function SkillsSection({
             message={error}
             actionLabel={t('Retry', { ns: 'common' })}
             onAction={() => {
-              if (view === 'installed') void loadInstalled();
+              if (mutation.current) return;
+              if (view === 'installed' && online) void loadInstalled(Boolean(report));
               else setDiscoverEpoch((current) => current + 1);
             }}
           />
         ) : null}
-        {loading ? <SkillsLoading /> : view === 'installed' ? (
-          installed.length ? (
-            <SettingsGroup testID="agent-skills-installed-list">
-              {installed.map((skill, index) => (
-                <React.Fragment key={skill.skillKey}>
-                  {index ? <SettingsDivider inset="content" /> : null}
-                  <SettingsRow
-                    testID={`agent-skill-installed-${skill.skillKey}`}
-                    title={skill.name}
-                    value={translateSkillAvailability(skillAvailability(skill), t)}
-                    showChevron
-                    onPress={() => setSelection({ kind: 'installed', item: skill })}
-                  />
-                </React.Fragment>
+        {view === 'discover' && !canDiscover ? (
+          <Banner message={t('Not supported by this backend', { ns: 'config' })} />
+        ) : loading ? <SkillsLoading /> : view === 'installed' ? (
+          report ? (
+            <View testID="agent-skills-installed-list">
+              <Text testID="agent-skills-summary" accessibilityLiveRegion="polite" style={styles.groupTitle}>
+                {t('{{total}} skills · {{enabled}} enabled', { ns: 'settings', total: report.skills.length, enabled: report.skills.filter((skill) => skill.always || !skill.disabled).length })}
+              </Text>
+              {installed.map((skill) => (
+                <SkillRow
+                  key={skill.skillKey}
+                  skill={skill}
+                  canToggle={canToggleSkill(skill, adapter.capabilities, operations)}
+                  disabled={!online || Boolean(busyKey)}
+                  busy={busyKey === skill.skillKey}
+                  onPress={openSkill}
+                  onToggle={toggleSkill}
+                />
               ))}
-            </SettingsGroup>
-          ) : (
+              {!installed.length ? <Text testID="agent-skills-empty" style={styles.emptyText}>{t('No skills found', { ns: 'settings' })}</Text> : null}
+            </View>
+          ) : !error ? (
             <Text testID="agent-skills-empty" style={styles.emptyText}>
-              {t('No skills found', { ns: 'settings' })}
+              {online ? t('No skills found', { ns: 'settings' }) : t('Offline', { ns: 'common' })}
             </Text>
-          )
+          ) : null
         ) : discoverGroups.length ? (
           <View style={styles.groups}>
             {discoverGroups.map((group) => (
@@ -264,20 +330,19 @@ export function SkillsSection({
                 <Text style={styles.groupTitle}>
                   {group.source === 'clawhub' ? 'ClawHub' : 'skills.sh'}
                 </Text>
-                <SettingsGroup>
-                  {group.items.map((item, index) => (
-                    <React.Fragment key={item.id}>
-                      {index ? <SettingsDivider inset="content" /> : null}
+                <View>
+                  {group.items.map((item) => (
                       <SettingsRow
+                        key={item.id}
                         testID={`agent-skill-discover-${item.id}`}
                         title={item.title}
-                        value={item.author}
+                        style={styles.discoverRow}
+                        subtitle={item.summary}
                         showChevron
                         onPress={() => setSelection({ kind: 'discover', item })}
                       />
-                    </React.Fragment>
                   ))}
-                </SettingsGroup>
+                </View>
               </View>
             ))}
           </View>
@@ -288,48 +353,44 @@ export function SkillsSection({
         )}
       </View>
 
+      {sourceSkill ? <SkillSourceSheet key={sourceSkill.skillKey} adapter={adapter} agentId={agent.agentId}
+        skill={sourceSkill} online={online} isPro={isPro} onOpenPaywall={onOpenPaywall} onClose={() => setSourceSkill(null)} /> : null}
       <SkillDetailSheet
-        selection={removeCandidate ? null : selection}
+        selection={currentSelection}
         adapter={adapter}
         online={online}
         busyKey={busyKey}
         operations={operations}
-        onClose={() => setSelection(null)}
+        error={error}
+        onClose={() => { selectionRef.current = null; setSelection(null); }}
+        onSource={(skill) => { pendingSource.current = skill; setSelection(null); }}
+        onAfterClose={() => {
+          if (!isCurrent()) return;
+          if (pendingSource.current) { setSourceSkill(pendingSource.current); pendingSource.current = null; }
+          if (pendingRemove.current) {
+            setRemoveCandidate(pendingRemove.current);
+            pendingRemove.current = null;
+          }
+          if (pendingInstall.current) {
+            pendingInstall.current = false;
+            onInstallRequested?.();
+          }
+        }}
         onToggle={(skill) => { void toggleSkill(skill); }}
-        onRemove={setRemoveCandidate}
+        onRemove={(skill) => { pendingRemove.current = skill; setSelection(null); }}
         onInstall={(item) => { void installSkill(item); }}
       />
-      <Sheet
+      <ConfirmationModal
         testID="agent-skill-remove-confirm"
         visible={removeCandidate !== null}
         title={t('Uninstall skill?', { ns: 'common' })}
-        closeAccessibilityLabel={t('Cancel', { ns: 'common' })}
-        dismissOnBackdropPress={!busyKey}
-        onClose={() => {
-          if (!busyKey) setRemoveCandidate(null);
-        }}
-      >
-        <View style={styles.confirmContent}>
-          <Text style={styles.detailText}>{t('This cannot be undone.', { ns: 'common' })}</Text>
-          <View style={styles.actionRow}>
-            <Button
-              label={t('Cancel', { ns: 'common' })}
-              variant="secondary"
-              disabled={Boolean(busyKey)}
-              onPress={() => setRemoveCandidate(null)}
-              style={styles.actionButton}
-            />
-            <Button
-              testID="agent-skill-remove-confirm-action"
-              label={t('Uninstall', { ns: 'common' })}
-              variant="destructive"
-              loading={Boolean(busyKey)}
-              onPress={() => { void removeSkill(); }}
-              style={styles.actionButton}
-            />
-          </View>
-        </View>
-      </Sheet>
+        message={`${removeCandidate?.name ?? ''}\n${t('This cannot be undone.', { ns: 'common' })}`}
+        cancelLabel={t('Cancel', { ns: 'common' })}
+        confirmLabel={t('Uninstall', { ns: 'common' })}
+        destructive
+        onClose={() => { if (!mutation.current) setRemoveCandidate(null); }}
+        onConfirm={() => { void removeSkill(); }}
+      />
     </>
   );
 }
@@ -340,20 +401,26 @@ function SkillDetailSheet({
   online,
   busyKey,
   operations,
+  error,
   onClose,
+  onAfterClose,
   onToggle,
   onRemove,
   onInstall,
+  onSource,
 }: Readonly<{
   selection: SkillSelection | null;
   adapter: AgentAdapter;
   online: boolean;
   busyKey: string | null;
   operations: SkillsOperations | undefined;
+  error: string | null;
   onClose: () => void;
+  onAfterClose: () => void;
   onToggle: (skill: SkillStatusEntry) => void;
   onRemove: (skill: SkillStatusEntry) => void;
   onInstall: (item: DiscoverSkillItem) => void;
+  onSource: (skill: SkillStatusEntry) => void;
 }>): React.JSX.Element {
   const { t } = useTranslation(['common', 'settings']);
   const { theme } = useAppTheme();
@@ -367,6 +434,7 @@ function SkillDetailSheet({
   const canRemove = installed
     ? canRemoveSkill(installed, adapter.capabilities, operations)
     : false;
+  const issues = useSkillIssues(installed);
   const canInstall = discovered !== null && adapter.capabilities.skillInstall;
 
   return (
@@ -374,11 +442,14 @@ function SkillDetailSheet({
       testID="agent-skill-detail"
       visible={selection !== null}
       title={installed?.name ?? discovered?.title ?? t('Skill', { ns: 'settings' })}
-      closeAccessibilityLabel={t('Back', { ns: 'common' })}
+      closeAccessibilityLabel={t('Close', { ns: 'common' })}
       dismissOnBackdropPress={!busyKey}
       onClose={onClose}
+      onAfterClose={onAfterClose}
+      snapPoints={['68%', '92%']}
     >
-      <View style={styles.detailContent}>
+      <BottomSheetScrollView contentContainerStyle={styles.detailContent}>
+        {error ? <Banner testID="agent-skill-detail-error" tone="bad" message={error} /> : null}
         <Text style={styles.detailText}>
           {installed?.description ?? discovered?.summary ?? ''}
         </Text>
@@ -386,10 +457,17 @@ function SkillDetailSheet({
           {installed ? (
             <>
               <SettingsRow
-                title={t('Status', { ns: 'settings' })}
-                value={translateSkillAvailability(skillAvailability(installed), t)}
+                title={t('Enabled', { ns: 'settings' })}
+                trailing={canToggle ? <SkillSwitch skill={installed} testID="agent-skill-toggle" disabled={!online || Boolean(busyKey)} busy={busyKey === itemKey} onToggle={onToggle} /> : undefined}
+                value={canToggle ? undefined : installed.always ? t('Always on', { ns: 'settings' }) : t(installed.disabled ? 'Disabled' : 'Enabled', { ns: 'settings' })}
               />
-
+              <SettingsDivider inset="content" />
+              <SettingsRow
+                title={t('Status', { ns: 'settings' })}
+                value={issues.length ? t('Unavailable', { ns: 'settings' }) : translateSkillAvailability(skillAvailability(installed), t)}
+              />
+              <SettingsDivider inset="content" />
+              <SettingsRow title={t('Source', { ns: 'settings' })} value={installed.source} />
             </>
           ) : discovered ? (
             <>
@@ -406,20 +484,12 @@ function SkillDetailSheet({
             </>
           ) : null}
         </SettingsGroup>
-        {installed && (canToggle || canRemove) ? (
+        {installed && adapter.capabilities.skills && operations?.get ? <SettingsGroup>
+          <SettingsRow testID="agent-skill-source" title="SKILL.md" showChevron disabled={!online || Boolean(busyKey)} onPress={() => onSource(installed)} />
+        </SettingsGroup> : null}
+        {issues.map((issue) => <Banner key={issue} tone="warn" message={issue} />)}
+        {installed && canRemove ? (
           <View style={styles.actionRow}>
-            {canToggle ? (
-              <Button
-                testID="agent-skill-toggle"
-                label={t(installed.disabled ? 'Enable' : 'Disable', { ns: 'common' })}
-                variant="secondary"
-                disabled={!online || Boolean(busyKey)}
-                loading={busyKey === itemKey}
-                onPress={() => onToggle(installed)}
-                style={styles.actionButton}
-              />
-            ) : null}
-            {canRemove ? (
               <Button
                 testID="agent-skill-remove"
                 label={t('Uninstall', { ns: 'common' })}
@@ -428,7 +498,6 @@ function SkillDetailSheet({
                 onPress={() => onRemove(installed)}
                 style={styles.actionButton}
               />
-            ) : null}
           </View>
         ) : null}
         {discovered && canInstall ? (
@@ -440,7 +509,7 @@ function SkillDetailSheet({
             onPress={() => onInstall(discovered)}
           />
         ) : null}
-      </View>
+      </BottomSheetScrollView>
     </Sheet>
   );
 }
@@ -467,7 +536,7 @@ function errorMessage(error: unknown, fallback: string): string {
 const stylesStatic = StyleSheet.create({
   loading: { gap: Space.sm },
   skeletonRow: {
-    minHeight: ControlSize.settingsRow,
+    minHeight: ControlSize.rosterRow,
     flexDirection: 'row',
     alignItems: 'center',
     gap: Space.lg,
@@ -479,6 +548,7 @@ const stylesStatic = StyleSheet.create({
 function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors']) {
   return StyleSheet.create({
     root: { gap: Space.lg },
+    discoverRow: { minHeight: ControlSize.rosterRow, paddingHorizontal: 0 },
     groups: { gap: Space.xl },
     groupWrap: { gap: Space.sm },
     groupTitle: {
@@ -506,12 +576,6 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       fontSize: FontSize.secondary,
       lineHeight: LineHeight.secondary,
       fontWeight: FontWeight.regular,
-      textAlign: 'center',
-    },
-    confirmContent: {
-      paddingHorizontal: Space.xl,
-      paddingBottom: Space.xxl,
-      gap: Space.xl,
     },
     actionRow: {
       flexDirection: 'row',

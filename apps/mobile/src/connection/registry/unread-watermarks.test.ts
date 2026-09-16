@@ -56,6 +56,24 @@ describe('unread session signals', () => {
     expect(isSessionUnread(session('active-main', 100, { hasActiveRun: true }), {})).toBe(true);
   });
 
+  it('reads unread from the human activity clock, not from record housekeeping', () => {
+    // A heartbeat poll moved `updatedAt` past the watermark; nobody wrote to the user.
+    expect(isSessionUnread(session('heartbeat', 900, { lastActivityAt: 100 }), { heartbeat: 100 })).toBe(false);
+    expect(isSessionUnread(session('never', 900, { lastActivityAt: null }), {})).toBe(false);
+    expect(isSessionUnread(session('reply', 900, { lastActivityAt: 101 }), { reply: 100 })).toBe(true);
+  });
+
+  it('measures lastActivityAt across human sessions only, on the activity clock', () => {
+    const summary = summarizeSessionSignals([
+      session('main', 900, { lastActivityAt: 100 }),
+      session('dm', 50, { kind: 'direct', lastActivityAt: 150 }),
+      session('cron', 5_000, { kind: 'cron' }),
+      session('sub', 6_000, { kind: 'subagent', lastActivityAt: 7_000 }),
+    ], {});
+
+    expect(summary.lastActivityAt).toBe(150);
+  });
+
   it('aggregates unique unread and attention sessions with deterministic priority', () => {
     const summary = summarizeSessionSignals([
       session('ordinary', 40),
@@ -128,6 +146,10 @@ describe('UnreadWatermarks', () => {
     await watermarks.markSessionRead(session('unobserved', null));
     await watermarks.markPromptSucceeded(session('prompt-null', null));
     await watermarks.markOpened(session('open-null', null));
+    // The activity clock wins over `updatedAt` when the adapter reports it,
+    // including a Gateway clock that runs ahead of the phone.
+    await watermarks.markSessionRead(session('activity', 900, { lastActivityAt: 260 }));
+    await watermarks.markOpened(session('open-ahead', 900, { lastActivityAt: 450 }));
 
     await expect(watermarks.get('connection-1')).resolves.toEqual({
       direct: 400,
@@ -135,6 +157,8 @@ describe('UnreadWatermarks', () => {
       unobserved: 400,
       'prompt-null': 400,
       'open-null': 400,
+      activity: 260,
+      'open-ahead': 450,
     });
   });
 
@@ -145,9 +169,11 @@ describe('UnreadWatermarks', () => {
       session('valid', 10),
       session('null', null),
       session('other', 30, { connectionId: 'connection-2' }),
+      session('activity', 40, { lastActivityAt: 20 }),
+      session('no-activity', 50, { lastActivityAt: null }),
     ]);
 
-    await expect(watermarks.get('connection-1')).resolves.toEqual({ valid: 10 });
+    await expect(watermarks.get('connection-1')).resolves.toEqual({ valid: 10, activity: 20 });
   });
 
   it('fails closed on corrupt persisted values and clears a connection by overwriting them', async () => {

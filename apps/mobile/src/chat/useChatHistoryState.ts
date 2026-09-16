@@ -31,7 +31,7 @@ import { HISTORY_PAGE_SIZE } from './constants';
 import { mapAdapterSession } from './adapterChatMapping';
 import { shouldSuppressHistoryLoadError } from './historyErrorPolicy';
 import { shouldPreserveOptimisticAssistant } from './cacheHydrationPolicy';
-import { preserveOptimisticAssistantMessage, prependOlderCachedMessages } from './historyMergePolicy';
+import { preserveMessagePresentation, preserveOptimisticAssistantMessage, prependOlderCachedMessages } from './historyMergePolicy';
 import { shouldRestoreCacheBeforeHistoryRefresh } from './historyRefreshPolicy';
 import { ReconcileAssistantOptions, shouldAppendReconciledAssistant } from './historyReconcile';
 import { selectSessionForCurrentAgent } from './sessionSelection';
@@ -144,6 +144,9 @@ function areUiMessagesEquivalent(prev: UiMessage[], next: UiMessage[]): boolean 
     const a = prev[index];
     const b = next[index];
     if (a.id !== b.id) return false;
+    if (a.historyMessageId !== b.historyMessageId) return false;
+    if (a.renderKey !== b.renderKey) return false;
+    if (a.presentationRunId !== b.presentationRunId) return false;
     if (a.role !== b.role) return false;
     if (a.text !== b.text) return false;
     if (a.idempotencyKey !== b.idempotencyKey) return false;
@@ -297,6 +300,7 @@ export function useChatHistoryState({
   const [hasMoreHistory, setHasMoreHistory] = useState(true);
   const [loadingMoreHistory, setLoadingMoreHistory] = useState(false);
   const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [activitySnapshot, setActivitySnapshot] = useState<(SessionHistory & { requestedAtMs: number }) | null>(null);
   const [thinkingLevel, setThinkingLevel] = useState<string | null>(null);
 
   const historyLimitRef = useRef(HISTORY_PAGE_SIZE);
@@ -307,6 +311,7 @@ export function useChatHistoryState({
   const historyReconcileInFlightRef = useRef(new Map<string, Promise<void>>());
   const startupPreviewRestoredRef = useRef(false);
   const cacheHydrationSessionKeyRef = useRef<string | null>(null);
+  const cacheHydrationMessageIdsRef = useRef(new Set<string>());
   const messagesRef = useRef<UiMessage[]>(messages);
   const historyLoadedRef = useRef(historyLoaded);
   const previousGatewayScopeRef = useRef<string | null>(gatewayConfigId);
@@ -340,6 +345,7 @@ export function useChatHistoryState({
     setHasMoreHistory(true);
     setLoadingMoreHistory(false);
     setHistoryLoaded(false);
+    setActivitySnapshot(null);
     setThinkingLevel(null);
     historyLimitRef.current = HISTORY_PAGE_SIZE;
     historyRawCountRef.current = 0;
@@ -356,6 +362,7 @@ export function useChatHistoryState({
   ): Promise<boolean> => {
     if (!gatewayConfigId) return false;
 
+    const visibleIdsAtStart = new Set(messagesRef.current.map(message => message.id));
     try {
       const cacheAgentId = agentIdFromSessionKey(key) ?? currentAgentId;
       const page = await ChatCacheService.getTimelinePage(gatewayConfigId, cacheAgentId, key, {
@@ -368,13 +375,18 @@ export function useChatHistoryState({
       const restored = page.messages.map(cachedMessageToUiMessage);
       if (restored.length === 0) {
         if (options?.clearWhenEmpty) {
-          setMessages([]);
+          setMessages(previous => previous.filter(message => !visibleIdsAtStart.has(message.id)));
         }
         localOlderMessagesRef.current = [];
         localHistoryPaging.resetLocalHistoryPaging(key);
         return false;
       }
-      setMessages((prev) => (areUiMessagesEquivalent(prev, restored) ? prev : restored));
+      cacheHydrationMessageIdsRef.current = new Set(restored.map(message => message.id));
+      setMessages((prev) => {
+        const fresh = prev.filter(message => !visibleIdsAtStart.has(message.id));
+        const merged = preserveMessagePresentation(fresh, preserveOptimisticAssistantMessage(fresh, restored));
+        return areUiMessagesEquivalent(prev, merged) ? prev : merged;
+      });
       localOlderMessagesRef.current = [];
       localHistoryPaging.resetLocalHistoryPaging(key);
       dbg(
@@ -384,7 +396,7 @@ export function useChatHistoryState({
       return true;
     } catch {
       if (options?.clearWhenEmpty) {
-        setMessages([]);
+        setMessages(previous => previous.filter(message => !visibleIdsAtStart.has(message.id)));
       }
       localOlderMessagesRef.current = [];
       localHistoryPaging.resetLocalHistoryPaging(key);
@@ -480,6 +492,7 @@ export function useChatHistoryState({
     );
 
     try {
+      const requestedAtMs = Date.now();
       const historyResult = await requireAdapter(adapter).loadSession(key, { limit });
       markHermesConnectTrace('history_fetch_done', {
         limit,
@@ -535,6 +548,7 @@ export function useChatHistoryState({
       let currentTurnImages: string[] = [];
       let currentTurnFiles: UiFileAttachment[] = [];
       let currentTurnTimestamp = 0;
+      let currentHistoryMessageId: string | undefined;
       let currentTurnModel = '';
       let hasAssistantTurn = false;
       const currentTurnHasContent = () => (
@@ -551,6 +565,7 @@ export function useChatHistoryState({
             || `${currentTurnImages.length}_img_${currentTurnFiles.length}_file`;
           uiMessages.push({
             id: stableMessageId('assistant', currentTurnTimestamp, idSeed),
+            historyMessageId: currentHistoryMessageId,
             role: 'assistant',
             text: currentTurnText,
             timestampMs: currentTurnTimestamp > 0 ? currentTurnTimestamp : undefined,
@@ -564,6 +579,7 @@ export function useChatHistoryState({
         currentTurnImages = [];
         currentTurnFiles = [];
         currentTurnTimestamp = 0;
+        currentHistoryMessageId = undefined;
         currentTurnModel = '';
         hasAssistantTurn = false;
       };
@@ -637,6 +653,7 @@ export function useChatHistoryState({
 
           uiMessages.push({
             id: userMsgId,
+            historyMessageId: typeof message.id === 'string' ? message.id : undefined,
             role: 'user',
             text: displayText,
             idempotencyKey,
@@ -680,6 +697,7 @@ export function useChatHistoryState({
           }
 
           hasAssistantTurn = true;
+          currentHistoryMessageId = typeof message.id === 'string' ? message.id : undefined;
           prevRole = 'assistant';
           if (msgTs > 0) currentTurnTimestamp = msgTs;
 
@@ -713,6 +731,8 @@ export function useChatHistoryState({
               const id = `toolcall_${toolCallId ?? `${msgTs}_${index}_${uiMessages.length}`}`;
               if (uiMessages.some((item) => item.id === id)) continue;
 
+              // Text in the same assistant record precedes its tool calls.
+              flushAssistantTurn();
               uiMessages.push({
                 id,
                 role: 'tool',
@@ -860,9 +880,12 @@ export function useChatHistoryState({
       });
       setMessages((prev) => {
         const lineageMergedMessages = prependUniqueMessages(uiMessages, localOlderMessagesRef.current);
-        const mergedMessages = allowOptimisticPreservation
-          ? preserveOptimisticAssistantMessage(prev, lineageMergedMessages)
-          : lineageMergedMessages;
+        // Exclude stale cached rows, not messages sent while initial hydration
+        // was in flight. The latter must remain visible even on an empty page.
+        const preservable = allowOptimisticPreservation ? prev
+          : prev.filter(message => !cacheHydrationMessageIdsRef.current.has(message.id));
+        const mergedMessages = preserveMessagePresentation(preservable,
+          preserveOptimisticAssistantMessage(preservable, lineageMergedMessages));
         dbg(
           `history:setMessages key=${key} allowPreserve=${allowOptimisticPreservation} `
           + `currentSessionId=${currentSessionId ?? 'none'} `
@@ -876,6 +899,7 @@ export function useChatHistoryState({
       if (cacheHydrationSessionKeyRef.current === key) {
         cacheHydrationSessionKeyRef.current = null;
       }
+      setActivitySnapshot({ ...historyResult, requestedAtMs });
       setHistoryLoaded(true);
       markHermesConnectTrace('history_loaded', {
         messageCount: uiMessages.length,
@@ -1263,6 +1287,7 @@ export function useChatHistoryState({
     hasMoreHistory,
     loadingMoreHistory,
     historyLoaded,
+    activitySnapshot,
     thinkingLevel,
     setThinkingLevel,
     historyLimitRef,

@@ -13,15 +13,20 @@ import type {
 export const ONBOARDING_DOCUMENTATION_URLS: Readonly<Record<PairableBackendKind, string>> = Object.freeze({
   openclaw: 'https://docs.openclaw.ai/install',
   hermes: 'https://hermes-agent.nousresearch.com/docs/getting-started/quickstart',
-  'local-model': 'https://github.com/p697/clawket',
+  'local-model': 'https://github.com/p697/clawket/blob/main/docs/3.0/15-local-model.md',
 });
 
+/**
+ * Backends with a product to install; a local model is a server the user already
+ * runs, so it has no "No agent yet?" destination.
+ */
+export type OnboardingWebsiteBackendKind = Exclude<BackendKind, 'local-model'>;
+
 /** Official product homepages for the "No agent yet?" entry; pairing help keeps the documentation URLs above. */
-export const ONBOARDING_WEBSITE_URLS: Readonly<Record<BackendKind, string>> = Object.freeze({
+export const ONBOARDING_WEBSITE_URLS: Readonly<Record<OnboardingWebsiteBackendKind, string>> = Object.freeze({
   openclaw: 'https://openclaw.ai',
   hermes: 'https://hermes-agent.nousresearch.com',
   youmind: 'https://youmind.com',
-  'local-model': 'https://github.com/p697/clawket',
 });
 
 const ADAPTER_ERROR_CODES = new Set<AdapterErrorCode>([

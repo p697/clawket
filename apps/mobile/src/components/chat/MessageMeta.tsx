@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
-import { Check, CheckCheck, Clock, CircleAlert } from 'lucide-react-native';
+import { Check, CheckCheck, Clock, CircleAlert, Pause } from 'lucide-react-native';
 import { FontSize, FontWeight, LineHeight, Space } from '../../theme/tokens';
 import type { UserMessageStatus } from '../../chat/messageDelivery';
 import { useConversationTheme } from './ChatPresentation';
@@ -39,7 +39,9 @@ export type MessageMetaProps = Readonly<{
 export function MessageMeta({ time, tone = 'neutral', status, statusLabel, style, testID }: MessageMetaProps): React.JSX.Element {
   const { colors } = useConversationTheme();
   const metaColor = tone === 'accent' ? colors.accent : colors.inkTertiary;
-  const Icon = status === 'delivered' ? CheckCheck : status === 'sent' ? Check : status === 'sending' ? Clock : status === 'uncertain' ? CircleAlert : null;
+  const Icon = status === 'delivered' ? CheckCheck : status === 'sent' ? Check
+    : status === 'sending' || status === 'queued' ? Clock : status === 'held' ? Pause
+      : status === 'uncertain' ? CircleAlert : null;
   const iconColor = status === 'uncertain' ? colors.warn : metaColor;
   return (
     <View testID={testID} style={[styles.row, tone === 'accent' ? styles.accentTone : null, style]} pointerEvents="none">
@@ -63,11 +65,11 @@ export function MessageMeta({ time, tone = 'neutral', status, statusLabel, style
  * covers glyphs; it wraps to a fresh line exactly when the meta would.
  */
 export function messageMetaSpacer(time: string, hasStatus: boolean): string {
-  // En spaces keep a fixed half-em width in every font: two lead the time, and
-  // three cover the 14-point glyph plus its 4-point gap at caption size.
-  const lead = '\u2002\u2002';
-  const glyphSlot = hasStatus ? '\u2002\u2002\u2002' : '';
-  return `${lead}${time}${glyphSlot}`;
+  // Reserve one indivisible run. Breakable/trailing en spaces let iOS trim
+  // the status slot, leaving the overlaid check marks on top of the body.
+  // Figure spaces use the same tabular-digit width as the visible clock.
+  const reservation = `\u2007${time}${hasStatus ? '\u2007\u2007\u2007' : ''}`;
+  return ` ${[...reservation].join('\u2060')}`;
 }
 
 const styles = StyleSheet.create({
@@ -86,6 +88,7 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   glyph: {
+    width: MESSAGE_META_ICON_SIZE,
     height: LineHeight.caption,
     justifyContent: 'center',
   },

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Platform, StyleSheet, Text, View, ViewStyle } from 'react-native';
-import { ChevronLeft, X } from 'lucide-react-native';
+import { X } from 'lucide-react-native';
+import { ChevronLeft } from './DirectionalIcon';
 import { useTranslation } from 'react-i18next';
 import { useAppTheme } from '../../theme';
 import { FontSize, FontWeight, LineHeight, Space } from '../../theme/tokens';
@@ -12,6 +13,8 @@ type Props = {
   onBack?: () => void;
   dismissStyle?: 'back' | 'close';
   subtitle?: string;
+  /** Connection state; the title yields its slot so the header never grows. */
+  status?: React.ReactNode;
   topInsetBehavior?: 'auto' | 'safe' | 'compact' | 'none';
   leftContent?: React.ReactNode;
   rightContent?: React.ReactNode;
@@ -27,6 +30,7 @@ export function ScreenHeader({
   onBack,
   dismissStyle = 'back',
   subtitle,
+  status,
   topInsetBehavior = 'auto',
   leftContent,
   rightContent,
@@ -69,13 +73,17 @@ export function ScreenHeader({
       ]}
     >
       <View style={styles.headerRow}>
-        <View style={styles.titleLayer} pointerEvents="none">
-          <Text style={[styles.title, { color: colors.ink }]} numberOfLines={1}>{title}</Text>
-          {subtitle ? (
-            <Text style={[styles.subtitle, { color: colors.inkSecondary }]} numberOfLines={1}>
-              {subtitle}
-            </Text>
-          ) : null}
+        <View style={styles.titleLayer} pointerEvents={status ? 'box-none' : 'none'}>
+          {status ? status : (
+            <>
+              <Text style={[styles.title, { color: colors.ink }]} numberOfLines={1}>{title}</Text>
+              {subtitle ? (
+                <Text style={[styles.subtitle, { color: colors.inkSecondary }]} numberOfLines={1}>
+                  {subtitle}
+                </Text>
+              ) : null}
+            </>
+          )}
         </View>
         <View style={[styles.leftSlot, leftSlotStyle]}>
           {leftContent ?? (onBack ? (

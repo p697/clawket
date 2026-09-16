@@ -11,9 +11,11 @@ import {
   mapHermesSession,
 } from './hermes';
 import {
+  hasOpenClawActivityTimestamps,
   mapOpenClawSession,
   OPENCLAW_BRIDGE_CAPABILITY,
   OpenClawAdapter,
+  resolveOpenClawActivityAt,
 } from './openclaw';
 import { readConnectionRuntimeMetadata } from '../runtime-details';
 
@@ -207,6 +209,76 @@ describe('OpenClawAdapter recorded v1 boundary', () => {
     expect(fake.requests.some(({ method }) => method === 'model.get' || method === 'model.set')).toBe(false);
   });
 
+  it('manages the OpenClaw model catalog through versioned config reads and writes', async () => {
+    const fake = new RecordedGateway();
+    const config = {
+      agents: { defaults: { model: { primary: 'openai/gpt' }, models: { 'openai/gpt': {} } } },
+      models: { providers: { openai: { baseUrl: 'https://api.openai.com/v1', models: [{ id: 'gpt', name: 'GPT' }] } } },
+    };
+    const listModels = jest.fn(async () => [{ id: 'gpt', name: 'GPT', provider: 'openai' }, { id: 'sonnet', name: 'Sonnet', provider: 'anthropic' }]);
+    const getConfig = jest.fn(async (): Promise<{ hash: string | null; config: Record<string, unknown> }> => ({ hash: 'v1', config }));
+    const patchConfig = jest.fn(async () => ({ ok: true }));
+    const setConfig = jest.fn(async () => ({ ok: true }));
+    Object.assign(fake, { listModels, getConfig, patchConfig, setConfig });
+    const adapter = new OpenClawAdapter(connection('openclaw'), { gateway: gateway(fake) });
+    const models = adapter.management.models!;
+
+    const catalog = await models.getCatalog!();
+    expect(catalog.defaults.primary).toBe('openai/gpt');
+    expect(catalog.allowlist).toEqual(['openai/gpt']);
+    expect(catalog.providers.map((provider) => [provider.slug, provider.explicit, provider.models.length])).toEqual([
+      ['anthropic', false, 1], ['openai', true, 1],
+    ]);
+
+    await models.saveCatalog!({ defaults: { primary: 'anthropic/sonnet', fallbacks: ['openai/gpt'], thinkingDefault: 'low' } });
+    expect(patchConfig).toHaveBeenLastCalledWith(JSON.stringify({
+      agents: { defaults: { model: { primary: 'anthropic/sonnet', fallbacks: ['openai/gpt'] }, thinkingDefault: 'low', models: { 'anthropic/sonnet': {} } } },
+    }), 'v1');
+    await models.saveCatalog!({});
+    getConfig.mockResolvedValueOnce({ hash: 'v1', config: { ...config, agents: { defaults: { model: { primary: 'openai/gpt', fallbacks: ['anthropic/sonnet', 'openai/mini'] } } } } });
+    await models.saveCatalog!({ defaults: { primary: 'openai/gpt', fallbacks: ['anthropic/sonnet'], thinkingDefault: '' } });
+    expect(patchConfig).toHaveBeenLastCalledWith(
+      JSON.stringify({ agents: { defaults: { model: { primary: 'openai/gpt', fallbacks: ['anthropic/sonnet'] } } } }),
+      'v1',
+      { replacePaths: ['agents.defaults.model.fallbacks'] },
+    );
+    expect(patchConfig).toHaveBeenCalledTimes(2);
+    expect(patchConfig.mock.calls[0]).toHaveLength(2);
+
+    await models.addModel!({ provider: 'openai', modelId: 'gpt-mini', modelName: '' });
+    expect(patchConfig).toHaveBeenLastCalledWith(JSON.stringify({
+      models: { providers: { openai: { models: [{ id: 'gpt-mini', name: 'gpt-mini' }] } } },
+      agents: { defaults: { models: { 'openai/gpt-mini': {} } } },
+    }), 'v1');
+    await expect(models.addModel!({ provider: 'openai', modelId: 'gpt', modelName: 'GPT' })).rejects.toMatchObject({ message: 'This model is already configured' });
+
+    await expect(models.inspectDeletion!({ provider: 'openai', modelId: 'gpt' })).resolves.toMatchObject({
+      canDelete: false, blocks: [{ reason: 'defaults_primary' }],
+    });
+    await expect(models.deleteModel!({ provider: 'openai', modelId: 'gpt' })).rejects.toMatchObject({ message: 'This model is still referenced by Gateway config' });
+    getConfig.mockResolvedValueOnce({ hash: 'v2', config: { ...config, agents: { defaults: { models: { 'openai/gpt': {} } } } } });
+    await models.deleteModel!({ provider: 'openai', modelId: 'gpt' });
+    expect(setConfig).toHaveBeenCalledWith(JSON.stringify({
+      agents: { defaults: { models: {} } },
+      models: { providers: { openai: { baseUrl: 'https://api.openai.com/v1', models: [] } } },
+    }), 'v2');
+
+    await models.setCost!({ provider: 'openai', modelId: 'gpt', modelName: 'GPT', cost: { input: 1, output: 2, cacheRead: 0, cacheWrite: 0 } });
+    expect(patchConfig).toHaveBeenLastCalledWith(JSON.stringify({
+      models: { providers: { openai: { models: [{ id: 'gpt', cost: { input: 1, output: 2, cacheRead: 0, cacheWrite: 0 } }] } } },
+    }), 'v1');
+    await expect(models.setCost!({ provider: 'anthropic', modelId: 'sonnet', modelName: 'Sonnet', cost: { input: 1, output: 2, cacheRead: 0, cacheWrite: 0 } }))
+      .rejects.toMatchObject({ message: 'Provider is not declared in Gateway config' });
+    await expect(models.setCost!({ provider: 'openai', modelId: 'gpt', modelName: 'GPT', cost: { input: -1, output: 2, cacheRead: 0, cacheWrite: 0 } }))
+      .rejects.toMatchObject({ message: 'Cost values must be non-negative numbers' });
+
+    getConfig.mockResolvedValueOnce({ hash: null, config });
+    await expect(models.saveCatalog!({ defaults: { primary: 'x/y', fallbacks: [], thinkingDefault: '' } })).rejects.toMatchObject({ message: 'Gateway config hash is missing' });
+    patchConfig.mockResolvedValueOnce({ ok: false });
+    await expect(models.saveCatalog!({ defaults: { primary: 'x/y', fallbacks: [], thinkingDefault: '' } })).rejects.toMatchObject({ message: 'Gateway rejected model settings' });
+    expect(fake.requests).toEqual([]);
+  });
+
   it('keeps channel deletion outside the App even when legacy metadata omits its policy', () => {
     const session = mapOpenClawSession('openclaw-recorded', {
       key: 'agent:main:channel:recorded',
@@ -220,6 +292,39 @@ describe('OpenClawAdapter recorded v1 boundary', () => {
       delete: false,
       pin: true,
     });
+  });
+
+  it('separates human activity from heartbeat housekeeping on a current Gateway list', async () => {
+    const fake = new RecordedGateway();
+    fake.onConnect = () => fake.emit('connection', { state: 'ready' });
+    fake.sessions = [
+      // Heartbeat-only main chat: 40 polls moved updatedAt, nobody ever wrote to the user.
+      { key: 'agent:main:main', title: 'Main', updatedAt: 900 },
+      // User turn started at 300, run completed at 320.
+      { key: 'agent:main:channel:general', title: '#general', channel: 'general', updatedAt: 950, lastInteractionAt: 300, lastActivityAt: 320 },
+      // Cron output counts as activity even without an interaction.
+      { key: 'agent:main:cron:daily', title: '[Cron] Daily', updatedAt: 960, lastActivityAt: 310 },
+    ];
+    const adapter = new OpenClawAdapter(connection('openclaw'), { gateway: gateway(fake) });
+    await adapter.connect();
+
+    const sessions = await adapter.listSessions('main');
+    expect(sessions.map((entry) => [entry.key, entry.updatedAt, entry.lastActivityAt])).toEqual([
+      ['agent:main:main', 900, null],
+      ['agent:main:channel:general', 950, 320],
+      ['agent:main:cron:daily', 960, 310],
+    ]);
+  });
+
+  it('resolves the activity clock per row and detects legacy lists', () => {
+    expect(hasOpenClawActivityTimestamps([{ updatedAt: 1 }, { updatedAt: 2 }])).toBe(false);
+    expect(hasOpenClawActivityTimestamps([{ updatedAt: 1 }, { updatedAt: 2, lastInteractionAt: 1 }])).toBe(true);
+    expect(resolveOpenClawActivityAt({ updatedAt: 500, lastInteractionAt: 200, lastActivityAt: 260 })).toBe(260);
+    expect(resolveOpenClawActivityAt({ updatedAt: 500, lastInteractionAt: 200 })).toBe(200);
+    expect(resolveOpenClawActivityAt({ updatedAt: 500 })).toBeNull();
+    expect(resolveOpenClawActivityAt({ updatedAt: 500 }, { legacyActivity: true })).toBe(500);
+    expect(resolveOpenClawActivityAt({ updatedAt: null }, { legacyActivity: true })).toBeNull();
+    expect(mapOpenClawSession('c', { key: 'agent:main:main', updatedAt: 500, lastActivityAt: 90 }).lastActivityAt).toBe(90);
   });
 
   it('keeps the recorded v1 prompt body and maps agents, sessions, and events', async () => {
@@ -251,6 +356,8 @@ describe('OpenClawAdapter recorded v1 boundary', () => {
     ]);
     expect(sessions[0].allowedActions.delete).toBe(false);
     expect(sessions[1].parentSessionKey).toBe('agent:main:main');
+    // A v1 Gateway reports no user-facing timestamps: activity falls back to updatedAt.
+    expect(sessions.map((entry) => entry.lastActivityAt)).toEqual([10, 9]);
 
     const recordedChat = openClawFixture.frames.find((frame) => frame.sequence === 20)?.payload as any;
     await expect(adapter.prompt('agent:main:main', {
@@ -280,7 +387,7 @@ describe('OpenClawAdapter recorded v1 boundary', () => {
     ]);
   });
 
-  it('advertises v2 once, then performs one byte-compatible no-meta fallback', async () => {
+  it.each(['unknown', 'v2', 'legacy'] as const)('performs one no-meta fallback from %s when the Bridge rejects capability metadata', async (mode) => {
     const fake = new RecordedGateway();
     fake.onConnect = (attempt) => {
       if (attempt === 1) {
@@ -296,7 +403,7 @@ describe('OpenClawAdapter recorded v1 boundary', () => {
     const persisted: string[] = [];
     const adapter = new OpenClawAdapter(connection('openclaw', 'fallback'), {
       gateway: gateway(fake),
-      bridgeCapabilityMode: 'unknown',
+      bridgeCapabilityMode: mode,
       onBridgeCapabilityMode: (mode) => { persisted.push(mode); },
     });
 
@@ -308,16 +415,16 @@ describe('OpenClawAdapter recorded v1 boundary', () => {
     ]);
     expect(fake.connectCalls).toBe(2);
     expect(adapter.negotiatedBridgeCapabilityMode).toBe('legacy');
-    expect(persisted).toEqual(['legacy']);
+    expect(persisted).toEqual(mode === 'legacy' ? [] : ['legacy']);
   });
 
-  it('keeps v2 mode only when the matching successful response advertises it', async () => {
+  it.each(['unknown', 'legacy'] as const)('learns upgraded Bridge capability from cached %s only on a matching success', async mode => {
     const fake = new RecordedGateway();
     fake.connectResponseCapabilities = [OPENCLAW_BRIDGE_CAPABILITY];
     fake.onConnect = () => fake.emit('connection', { state: 'ready' });
     const adapter = new OpenClawAdapter(connection('openclaw', 'v2'), {
       gateway: gateway(fake),
-      bridgeCapabilityMode: 'unknown',
+      bridgeCapabilityMode: mode,
     });
 
     await adapter.connect();
@@ -526,6 +633,18 @@ describe('HermesAdapter recorded M3 boundary', () => {
       delete: true,
       pin: true,
     });
+  });
+
+  it('reports Hermes last message time as the activity clock', () => {
+    expect(mapHermesSession('hermes-recorded', { key: 'main', updatedAt: 1_234 })).toMatchObject({
+      updatedAt: 1_234,
+      lastActivityAt: 1_234,
+    });
+    expect(mapHermesSession('hermes-recorded', { key: 'main' })).toMatchObject({
+      updatedAt: null,
+      lastActivityAt: null,
+    });
+    expect(legacyHermesMainSession('hermes-legacy').lastActivityAt).toBeNull();
   });
 
   it('renders a recorded local slash-command acknowledgement as a system event', async () => {

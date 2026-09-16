@@ -51,6 +51,7 @@ jest.mock('react-native', () => {
     ),
   );
   return {
+    BackHandler: { addEventListener: jest.fn(() => ({ remove: jest.fn() })) },
     Platform: {
       OS: 'ios',
       select: (options: Record<string, unknown>) => options.ios ?? options.default,
@@ -179,10 +180,12 @@ jest.mock('../../components/ui/SettingsGroup', () => {
     SettingsGroup: ({ children, testID }: { children: React.ReactNode; testID?: string }) => (
       ReactRuntime.createElement(View, { testID }, children)
     ),
-    SettingsRow: ({ testID, title, value, children, onPress, disabled }: {
+    SettingsRow: ({ testID, title, subtitle, value, attention, children, onPress, disabled }: {
       testID?: string;
       title?: string;
+      subtitle?: string;
       value?: string;
+      attention?: boolean;
       children?: React.ReactNode;
       onPress?: () => void;
       disabled?: boolean;
@@ -191,6 +194,8 @@ jest.mock('../../components/ui/SettingsGroup', () => {
       { testID, onPress: disabled ? undefined : onPress, disabled },
       children,
       title ? ReactRuntime.createElement(Text, null, title) : null,
+      subtitle ? ReactRuntime.createElement(Text, null, subtitle) : null,
+      attention ? ReactRuntime.createElement(View, { testID: testID ? `${testID}-attention` : undefined }) : null,
       value ? ReactRuntime.createElement(Text, null, value) : null,
     ),
   };
@@ -213,6 +218,30 @@ jest.mock('../../components/ui/Sheet', () => {
         children,
       )
       : null,
+  };
+});
+
+jest.mock('../../components/pro/ProGate', () => {
+  const ReactRuntime = require('react');
+  const { Pressable, Text, View } = require('react-native');
+  return {
+    ProGate: ({ testID, title, actionLabel, onUnlock, children }: {
+      testID?: string;
+      title: string;
+      actionLabel: string;
+      onUnlock: () => void;
+      children?: React.ReactNode;
+    }) => ReactRuntime.createElement(
+      View,
+      { testID },
+      ReactRuntime.createElement(Text, null, title),
+      children ? ReactRuntime.createElement(View, { testID: `${testID}-teaser` }, children) : null,
+      ReactRuntime.createElement(
+        Pressable,
+        { testID: `${testID}-action`, onPress: onUnlock },
+        ReactRuntime.createElement(Text, null, actionLabel),
+      ),
+    ),
   };
 });
 
@@ -402,6 +431,7 @@ function renderScreen(
     <OpenClawManageScreen
       adapter={harness.adapter}
       isPro
+      initialTab="configuration"
       onBack={onBack}
       onOpenPaywall={onOpenPaywall}
       {...overrides}
@@ -413,6 +443,81 @@ function renderScreen(
 describe('OpenClawManageScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  it('opens a readable management menu without fetching configuration and preserves loaded sections on return', async () => {
+    const harness = createAdapterHarness();
+    const screen = renderScreen(harness, { initialTab: undefined });
+    expect(harness.view).not.toHaveBeenCalled();
+    expect(harness.permissions).not.toHaveBeenCalled();
+    expect(harness.doctor).not.toHaveBeenCalled();
+    for (const section of ['configuration', 'permissions', 'diagnostics', 'backups']) {
+      expect(screen.getByTestId(`openclaw-manage-tabs-${section}`)).toBeTruthy();
+    }
+    // One card, four described entries: the menu says what each Pro section does.
+    expect(screen.getByTestId('openclaw-manage-menu')).toBeTruthy();
+    expect(screen.getByText('OpenClaw config')).toBeTruthy();
+    expect(screen.getByText('See and change every OpenClaw setting.')).toBeTruthy();
+    expect(screen.getByText('Check web and command access; fix it in one tap.')).toBeTruthy();
+    expect(screen.getByText('Give OpenClaw a check-up and auto-fix issues.')).toBeTruthy();
+    expect(screen.getByText('Keeps a copy on your phone so a bad change can be undone.')).toBeTruthy();
+    fireEvent.press(screen.getByTestId('openclaw-manage-tabs-configuration'));
+    await waitFor(() => expect(harness.view).toHaveBeenCalledTimes(1));
+    fireEvent.press(screen.getByTestId('openclaw-manage-back'));
+    expect(screen.onBack).not.toHaveBeenCalled();
+    fireEvent.press(screen.getByTestId('openclaw-manage-tabs-configuration'));
+    expect(harness.view).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the newest restore point age and pending approvals on the menu from local data only', async () => {
+    const harness = createAdapterHarness();
+    const now = Date.now();
+    harness.listBackups.mockResolvedValue([
+      { id: 'old', createdAt: now - 5 * 24 * 60 * 60_000 },
+      { id: 'new', createdAt: now - 3 * 24 * 60 * 60_000 },
+    ]);
+    const screen = renderScreen(harness, { initialTab: undefined });
+    // The local backup list is the only read the menu performs; Gateway sections stay untouched.
+    await waitFor(() => expect(harness.listBackups).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByText('{{count}}d ago')).toBeTruthy());
+    expect(harness.view).not.toHaveBeenCalled();
+    expect(harness.permissions).not.toHaveBeenCalled();
+    expect(harness.doctor).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('openclaw-manage-tabs-permissions-attention')).toBeNull();
+
+    act(() => harness.emitUpdate({
+      type: 'approval_requested',
+      approval: { kind: 'exec', id: 'approval-1', command: 'ls', expiresAtMs: now + 60_000 },
+    }));
+    expect(screen.getByTestId('openclaw-manage-tabs-permissions-attention')).toBeTruthy();
+    expect(screen.getByText('1')).toBeTruthy();
+
+    // Entering Backups reuses the list the menu already loaded.
+    fireEvent.press(screen.getByTestId('openclaw-manage-tabs-backups'));
+    await waitFor(() => expect(screen.getByTestId('openclaw-backup-new')).toBeTruthy());
+    expect(harness.listBackups).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows explicit diagnostic progress and renders a delayed result', async () => {
+    const harness = createAdapterHarness();
+    let finish: ((value: DoctorResult) => void) | undefined;
+    harness.doctor.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    const screen = renderScreen(harness, { initialTab: 'diagnostics' });
+    expect(screen.getByText('Running diagnostics…')).toBeTruthy();
+    expect(harness.doctor).toHaveBeenCalledTimes(1);
+    fireEvent.press(screen.getByTestId('openclaw-manage-back'));
+    fireEvent.press(screen.getByTestId('openclaw-manage-tabs-diagnostics'));
+    expect(harness.doctor).toHaveBeenCalledTimes(1);
+    await act(async () => finish?.({ ok: true, checks: [], summary: 'Done' }));
+    expect(screen.queryByTestId('openclaw-manage-loading')).toBeNull();
+    expect(screen.getByText('Done')).toBeTruthy();
+  });
+
+  it('does not present an empty approval inbox as missing settings', async () => {
+    const screen = renderScreen(createAdapterHarness(), { initialTab: 'permissions' });
+    await waitFor(() => expect(screen.getByTestId('openclaw-permissions-content')).toBeTruthy());
+    expect(screen.queryByText('Pending Requests')).toBeNull();
+    expect(screen.queryByTestId('openclaw-approvals-empty')).toBeNull();
   });
 
   it('loads configuration and requires a second confirmation before saving', async () => {
@@ -448,6 +553,7 @@ describe('OpenClawManageScreen', () => {
       screen.getByTestId('openclaw-configuration-content'),
     ).toBeTruthy());
 
+    fireEvent.press(screen.getByTestId('openclaw-manage-back'));
     fireEvent.press(screen.getByTestId('openclaw-manage-tabs-permissions'));
     await waitFor(() => expect(
       screen.getByTestId('openclaw-permission-report'),
@@ -473,12 +579,14 @@ describe('OpenClawManageScreen', () => {
       'allow-once',
     ));
 
+    fireEvent.press(screen.getByTestId('openclaw-manage-back'));
     fireEvent.press(screen.getByTestId('openclaw-manage-tabs-diagnostics'));
     await waitFor(() => expect(
       screen.getByTestId('openclaw-diagnostics-content'),
     ).toBeTruthy());
     expect(harness.doctor).toHaveBeenCalledTimes(1);
 
+    fireEvent.press(screen.getByTestId('openclaw-manage-back'));
     fireEvent.press(screen.getByTestId('openclaw-manage-tabs-backups'));
     await waitFor(() => expect(screen.getByTestId('openclaw-backups-empty')).toBeTruthy());
     expect(harness.listBackups).toHaveBeenCalledTimes(1);
@@ -510,6 +618,7 @@ describe('OpenClawManageScreen', () => {
       <OpenClawManageScreen
         adapter={second.adapter}
         isPro
+        initialTab="configuration"
         onBack={screen.onBack}
         onOpenPaywall={screen.onOpenPaywall}
       />,
@@ -528,7 +637,10 @@ describe('OpenClawManageScreen', () => {
     await waitFor(() => expect(
       screen.getByTestId('openclaw-configuration-content'),
     ).toBeTruthy());
+    expect(screen.queryByText(/current/)).toBeNull();
+    fireEvent.press(screen.getByTestId('openclaw-config-key-source'));
     expect(screen.getByText(/current/)).toBeTruthy();
+    expect(screen.queryByText(/stale/)).toBeNull();
   });
 
   it('renders a skeleton while loading and the explicit empty configuration state', async () => {
@@ -579,20 +691,106 @@ describe('OpenClawManageScreen', () => {
     fireEvent.press(screen.getByTestId('openclaw-manage-locked-action'));
     expect(screen.onOpenPaywall).toHaveBeenLastCalledWith('configManage');
 
+    fireEvent.press(screen.getByTestId('openclaw-manage-back'));
     fireEvent.press(screen.getByTestId('openclaw-manage-tabs-permissions'));
     fireEvent.press(screen.getByTestId('openclaw-manage-locked-action'));
     expect(screen.onOpenPaywall).toHaveBeenLastCalledWith('openclawPermissions');
 
+    fireEvent.press(screen.getByTestId('openclaw-manage-back'));
     fireEvent.press(screen.getByTestId('openclaw-manage-tabs-diagnostics'));
     fireEvent.press(screen.getByTestId('openclaw-manage-locked-action'));
     expect(screen.onOpenPaywall).toHaveBeenLastCalledWith('openclawDiagnostics');
 
+    fireEvent.press(screen.getByTestId('openclaw-manage-back'));
     fireEvent.press(screen.getByTestId('openclaw-manage-tabs-backups'));
     fireEvent.press(screen.getByTestId('openclaw-manage-locked-action'));
     expect(screen.onOpenPaywall).toHaveBeenLastCalledWith('configBackups');
     expect(harness.permissions).not.toHaveBeenCalled();
     expect(harness.doctor).not.toHaveBeenCalled();
     expect(harness.listBackups).not.toHaveBeenCalled();
+  });
+
+  it('previews real management data for free users and gates only the last step', async () => {
+    const harness = createAdapterHarness();
+    harness.doctor.mockResolvedValue({
+      ok: false,
+      summary: 'Two issues found.',
+      checks: [
+        { name: 'Gateway', status: 'pass', message: 'Ready' },
+        { name: 'Config', status: 'pass', message: 'Readable' },
+        { name: 'Sandbox', status: 'warn', message: 'Sandbox is off' },
+        { name: 'Allowlist', status: 'fail', message: 'Allowlist is empty' },
+      ],
+      raw: 'doctor: issues',
+    });
+    harness.listBackups.mockResolvedValue([{ id: 'backup-1', createdAt: 1_700_000_000_000 }]);
+    const screen = renderScreen(harness, { isPro: false });
+    const lastContinuation = () => screen.onOpenPaywall.mock.calls.at(-1)?.[1] as (() => void) | undefined;
+
+    // Configuration: keys load for free; an expanded key is veiled and Edit is gated.
+    await waitFor(() => expect(screen.getByTestId('openclaw-configuration-content')).toBeTruthy());
+    expect(screen.queryByTestId('openclaw-manage-locked')).toBeNull();
+    fireEvent.press(screen.getByTestId('openclaw-config-key-theme'));
+    expect(screen.getByTestId('openclaw-config-gate-theme-teaser')).toBeTruthy();
+    fireEvent.press(screen.getByTestId('openclaw-config-gate-theme-action'));
+    expect(screen.onOpenPaywall).toHaveBeenLastCalledWith('configManage', undefined);
+    fireEvent.press(screen.getByTestId('openclaw-configuration-edit'));
+    expect(screen.onOpenPaywall).toHaveBeenLastCalledWith('configManage', expect.any(Function));
+    expect(screen.queryByTestId('openclaw-configuration-editor')).toBeNull();
+    act(() => lastContinuation()?.());
+    expect(screen.getByTestId('openclaw-configuration-editor')).toBeTruthy();
+
+    // Permissions: statuses load for free; details, rules and repair are gated.
+    fireEvent.press(screen.getByTestId('openclaw-manage-back'));
+    fireEvent.press(screen.getByTestId('openclaw-manage-tabs-permissions'));
+    await waitFor(() => expect(screen.getByTestId('openclaw-permissions-content')).toBeTruthy());
+    expect(harness.permissions).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('openclaw-permission-web')).toBeTruthy();
+    expect(screen.getByTestId('openclaw-permissions-gate-teaser')).toBeTruthy();
+    fireEvent.press(screen.getByTestId('openclaw-permission-web'));
+    expect(screen.onOpenPaywall).toHaveBeenLastCalledWith('openclawPermissions', expect.any(Function));
+    expect(screen.queryByTestId('openclaw-detail-sheet')).toBeNull();
+    fireEvent.press(screen.getByTestId('openclaw-permissions-repair'));
+    expect(screen.onOpenPaywall).toHaveBeenLastCalledWith('openclawPermissions', expect.any(Function));
+    expect(screen.queryByTestId('openclaw-repair-confirm')).toBeNull();
+    expect(harness.repair).not.toHaveBeenCalled();
+
+    // Diagnostics: doctor runs for free; two checks are readable, the rest veiled.
+    fireEvent.press(screen.getByTestId('openclaw-manage-back'));
+    fireEvent.press(screen.getByTestId('openclaw-manage-tabs-diagnostics'));
+    await waitFor(() => expect(screen.getByTestId('openclaw-diagnostics-content')).toBeTruthy());
+    expect(harness.doctor).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('openclaw-diagnostic-check-0')).toBeTruthy();
+    expect(screen.getByTestId('openclaw-diagnostic-check-1')).toBeTruthy();
+    expect(screen.getByTestId('openclaw-diagnostics-gate-teaser')).toBeTruthy();
+    expect(screen.getByTestId('openclaw-diagnostics-hidden-checks')).toBeTruthy();
+    expect(screen.getByTestId('openclaw-diagnostic-check-3')).toBeTruthy();
+    fireEvent.press(screen.getByTestId('openclaw-diagnostics-details'));
+    expect(screen.onOpenPaywall).toHaveBeenLastCalledWith('openclawDiagnostics', expect.any(Function));
+    expect(screen.queryByTestId('openclaw-detail-sheet')).toBeNull();
+    fireEvent.press(screen.getByTestId('openclaw-diagnostics-repair'));
+    expect(screen.onOpenPaywall).toHaveBeenLastCalledWith('openclawDiagnostics', expect.any(Function));
+    expect(harness.repair).not.toHaveBeenCalled();
+    fireEvent.press(screen.getByTestId('openclaw-diagnostics-gate-action'));
+    expect(screen.onOpenPaywall).toHaveBeenLastCalledWith('openclawDiagnostics', undefined);
+
+    // Backups: the list is free; create and the restore confirmation are gated with continuations.
+    fireEvent.press(screen.getByTestId('openclaw-manage-back'));
+    fireEvent.press(screen.getByTestId('openclaw-manage-tabs-backups'));
+    await waitFor(() => expect(screen.getByTestId('openclaw-backups-list')).toBeTruthy());
+    fireEvent.press(screen.getByTestId('openclaw-backup-create'));
+    expect(screen.onOpenPaywall).toHaveBeenLastCalledWith('configBackups', expect.any(Function));
+    expect(harness.createBackup).not.toHaveBeenCalled();
+    await act(async () => { await lastContinuation()?.(); });
+    expect(harness.createBackup).toHaveBeenCalledTimes(1);
+
+    fireEvent.press(screen.getByTestId('openclaw-backup-backup-1'));
+    expect(screen.getByTestId('openclaw-restore-confirm')).toBeTruthy();
+    fireEvent.press(screen.getByTestId('openclaw-restore-confirm-action'));
+    expect(screen.onOpenPaywall).toHaveBeenLastCalledWith('configBackups', expect.any(Function));
+    expect(harness.restoreBackup).not.toHaveBeenCalled();
+    await act(async () => { await lastContinuation()?.(); });
+    expect(harness.restoreBackup).toHaveBeenCalledWith('backup-1');
   });
 
   it('does not call operations that runtime capabilities downgrade', () => {

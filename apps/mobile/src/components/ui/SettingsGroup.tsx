@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { createContext, useContext, useMemo } from 'react';
 import {
   Pressable,
   StyleProp,
@@ -7,7 +7,8 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
-import { ChevronRight, Lock } from 'lucide-react-native';
+import { Lock } from 'lucide-react-native';
+import { ChevronRight } from './DirectionalIcon';
 import { useAppTheme } from '../../theme';
 import {
   ControlSize,
@@ -21,6 +22,7 @@ import {
 
 export type SettingsGroupProps = {
   children: React.ReactNode;
+  density?: 'standard' | 'comfortable';
   style?: StyleProp<ViewStyle>;
   testID?: string;
 };
@@ -40,6 +42,7 @@ export type SettingsRowProps = {
   disabled?: boolean;
   layout?: 'row' | 'column';
   accessibilityLabel?: string;
+  selected?: boolean;
   style?: StyleProp<ViewStyle>;
   testID?: string;
 };
@@ -49,10 +52,16 @@ export type SettingsDividerProps = {
   testID?: string;
 };
 
-export function SettingsGroup({ children, style, testID }: SettingsGroupProps): React.JSX.Element {
+const SettingsDensity = createContext<'standard' | 'comfortable'>('standard');
+
+export function SettingsGroup({ children, density = 'standard', style, testID }: SettingsGroupProps): React.JSX.Element {
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
-  return <View testID={testID} style={[styles.group, style]}>{children}</View>;
+  return (
+    <SettingsDensity.Provider value={density}>
+      <View testID={testID} style={[styles.group, density === 'comfortable' ? styles.groupComfortable : null, style]}>{children}</View>
+    </SettingsDensity.Provider>
+  );
 }
 
 export function SettingsRow({
@@ -70,22 +79,25 @@ export function SettingsRow({
   disabled = false,
   layout = 'row',
   accessibilityLabel,
+  selected,
   style,
   testID,
 }: SettingsRowProps): React.JSX.Element {
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
+  const comfortable = useContext(SettingsDensity) === 'comfortable';
+  const rowStyle = [styles.row, comfortable ? styles.rowComfortable : null];
   const layoutStyle = layout === 'column' ? styles.rowColumn : styles.rowHorizontal;
   const content = children ?? (
     <>
-      {leading}
+      {comfortable && leading ? <View style={styles.leadingComfortable}>{leading}</View> : leading}
       <View style={styles.copy}>
-        {title ? <Text style={[styles.title, destructive ? { color: theme.colors.bad } : null]} numberOfLines={2}>{title}</Text> : null}
+        {title ? <Text style={[styles.title, destructive ? { color: theme.colors.bad } : null]} numberOfLines={comfortable ? undefined : 2}>{title}</Text> : null}
         {subtitle ? <Text style={styles.subtitle} numberOfLines={2}>{subtitle}</Text> : null}
       </View>
       <View style={styles.tail}>
         {attention ? <View testID={testID ? `${testID}-attention` : undefined} style={styles.attention} /> : null}
-        {value ? <Text style={styles.value} numberOfLines={2}>{value}</Text> : null}
+        {value ? <Text style={styles.value} numberOfLines={comfortable ? undefined : 2}>{value}</Text> : null}
         {trailing ?? (locked ? (
           <Lock
             testID={testID ? `${testID}-lock-icon` : undefined}
@@ -105,7 +117,7 @@ export function SettingsRow({
       <View
         testID={testID}
         accessibilityLabel={accessibilityLabel}
-        style={[styles.row, layoutStyle, disabled ? styles.disabled : null, style]}
+        style={[rowStyle, layoutStyle, disabled ? styles.disabled : null, style]}
       >
         {content}
       </View>
@@ -115,13 +127,14 @@ export function SettingsRow({
     <Pressable
       testID={testID}
       accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel ?? title}
-      accessibilityState={{ disabled }}
+      accessibilityLabel={accessibilityLabel ?? [title, value].filter(Boolean).join(', ')}
+      accessibilityState={{ disabled, ...(selected !== undefined ? { selected } : {}) }}
       disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => [
-        styles.row,
+        rowStyle,
         layoutStyle,
+        selected ? styles.rowPressed : null,
         pressed && !disabled ? styles.rowPressed : null,
         disabled ? styles.disabled : null,
         style,
@@ -135,6 +148,7 @@ export function SettingsRow({
 export function SettingsDivider({ inset = 'icon', testID }: SettingsDividerProps): React.JSX.Element {
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
+  const comfortable = useContext(SettingsDensity) === 'comfortable';
   return (
     <View
       testID={testID}
@@ -143,7 +157,7 @@ export function SettingsDivider({ inset = 'icon', testID }: SettingsDividerProps
         inset === 'content'
           ? styles.dividerContent
           : inset === 'icon'
-            ? styles.dividerIcon
+            ? comfortable ? styles.dividerComfortableIcon : styles.dividerIcon
             : null,
       ]}
     />
@@ -156,6 +170,18 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       backgroundColor: colors.surfaceFloating,
       borderRadius: Radius.settingsGroup,
       overflow: 'hidden',
+    },
+    groupComfortable: { borderRadius: Radius.xl },
+    rowComfortable: {
+      minHeight: ControlSize.settingsRowComfortable,
+      paddingVertical: Space.md,
+      gap: Space.lg,
+    },
+    leadingComfortable: {
+      width: Space.xxl,
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexShrink: 0,
     },
     row: {
       minHeight: ControlSize.settingsRow,
@@ -212,7 +238,8 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     rowPressed: { backgroundColor: colors.surface },
     disabled: { opacity: 0.45 },
     divider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.line },
-    dividerContent: { marginLeft: Space.lg },
-    dividerIcon: { marginLeft: ControlSize.settingsRow },
+    dividerContent: { marginStart: Space.lg },
+    dividerIcon: { marginStart: ControlSize.settingsRow },
+    dividerComfortableIcon: { marginStart: ControlSize.settingsRowComfortable, marginEnd: Space.lg },
   });
 }

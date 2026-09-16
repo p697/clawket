@@ -5,6 +5,12 @@ import {
   type DiscoverResult,
   type HeartbeatSettings,
   type ManagementOperations,
+  type ModelCatalogAddInput,
+  type ModelCatalogModelRef,
+  type ModelCatalogState,
+  type ModelCatalogWrite,
+  type ModelCostWrite,
+  type ModelDeletionPreview,
   type ModelSelectionState,
   type ModelSelectionWrite,
   type ModelSelectionWriteResult,
@@ -20,6 +26,9 @@ import {
   buildGatewayRuntimePatch,
   parseGatewayRuntimeSettings,
 } from '../../utils/gateway-settings';
+import { buildModelCatalogPatch, buildModelCatalogState } from '../../utils/model-catalog';
+import { analyzeModelDeletion, buildDeleteModelConfig } from '../../utils/model-config-delete';
+import { buildAddModelPatch, buildModelCostPatch } from '../../utils/model-cost-config';
 import {
   GatewayAdapterBase,
   inferOpenClawAgentId,
@@ -84,13 +93,15 @@ export class OpenClawAdapter extends GatewayAdapterBase {
     const extension = this.gateway as typeof this.gateway & OpenClawConnectMetaGateway;
     const canControlMeta = typeof extension.setConnectRequestMeta === 'function';
 
-    if (this.bridgeCapabilityMode === 'legacy' || !canControlMeta) {
+    if (!canControlMeta) {
       extension.setConnectRequestMeta?.(undefined);
       await this.connectGateway();
       if (this.bridgeCapabilityMode === 'unknown') this.rememberBridgeCapabilityMode('legacy');
       return;
     }
 
+    // caps is Gateway-compatible even through old Bridges. Re-advertise it on
+    // each handshake so a cached legacy result cannot hide a later Bridge upgrade.
     extension.setConnectRequestMeta?.({ capabilities: [OPENCLAW_BRIDGE_CAPABILITY] });
     try {
       await this.connectGateway();
@@ -100,8 +111,7 @@ export class OpenClawAdapter extends GatewayAdapterBase {
       );
     } catch (error) {
       if (
-        this.bridgeCapabilityMode !== 'unknown'
-        || this.compatibilityFallbackAttempted
+        this.compatibilityFallbackAttempted
         || !this.isV2FallbackEligible(error)
       ) {
         throw error;
@@ -147,8 +157,9 @@ export class OpenClawAdapter extends GatewayAdapterBase {
 
   public async listSessions(agentId?: string): Promise<SessionDescriptor[]> {
     const sessions = await this.invoke(() => this.gateway.listSessions({ limit: 200 }));
+    const options = { legacyActivity: !hasOpenClawActivityTimestamps(sessions) };
     const normalized = sessions
-      .map((session) => mapOpenClawSession(this.connection.id, session))
+      .map((session) => mapOpenClawSession(this.connection.id, session, undefined, options))
       .filter((session) => !agentId || session.agentId === agentId);
     return this.rememberSessions(normalized);
   }
@@ -210,8 +221,7 @@ export class OpenClawAdapter extends GatewayAdapterBase {
   }
 
   protected override shouldSuppressConnectError(error: AdapterError): boolean {
-    return this.bridgeCapabilityMode === 'unknown'
-      && !this.compatibilityFallbackAttempted
+    return !this.compatibilityFallbackAttempted
       && this.isV2FallbackEligible(error);
   }
 
@@ -306,6 +316,87 @@ export class OpenClawAdapter extends GatewayAdapterBase {
       currentProvider: slash < 0 ? '' : reference.slice(0, slash), currentBaseUrl: '', models: [] };
   }
 
+  private async readModelCatalog(): Promise<ModelCatalogState> {
+    const [models, view] = await Promise.all([this.gateway.listModels(), this.gateway.getConfig()]);
+    return buildModelCatalogState(view.config, models);
+  }
+
+  private async readVersionedConfig(): Promise<{ config: Record<string, unknown> | null; hash: string }> {
+    const view = await this.gateway.getConfig();
+    if (!view.hash) throw new AdapterError('server', 'Gateway config hash is missing');
+    return { config: view.config, hash: view.hash };
+  }
+
+  private async patchGatewayConfig(
+    patch: Record<string, unknown>,
+    hash: string,
+    rejection: string,
+    replacePaths: ReadonlyArray<string> = [],
+  ): Promise<void> {
+    const result = replacePaths.length > 0
+      ? await this.gateway.patchConfig(JSON.stringify(patch), hash, { replacePaths })
+      : await this.gateway.patchConfig(JSON.stringify(patch), hash);
+    if (!result.ok) throw new AdapterError('server', rejection);
+  }
+
+  private async writeModelCatalog(write: ModelCatalogWrite): Promise<void> {
+    const view = await this.readVersionedConfig();
+    const built = buildModelCatalogPatch(view.config, write);
+    if (!built) return;
+    await this.patchGatewayConfig(built.patch, view.hash, 'Gateway rejected model settings', built.replacePaths);
+  }
+
+  private async addCatalogModel(input: ModelCatalogAddInput): Promise<void> {
+    const view = await this.readVersionedConfig();
+    const patch = buildAddModelPatch({
+      config: view.config,
+      provider: input.provider.trim(),
+      modelId: input.modelId.trim(),
+      modelName: input.modelName.trim() || input.modelId.trim(),
+    });
+    if (!patch) throw new AdapterError('server', 'This model is already configured');
+    await this.patchGatewayConfig(patch, view.hash, 'Gateway rejected the new model');
+  }
+
+  private async inspectCatalogModelDeletion(ref: ModelCatalogModelRef): Promise<ModelDeletionPreview> {
+    const view = await this.gateway.getConfig();
+    const analysis = analyzeModelDeletion({ config: view.config, provider: ref.provider, modelId: ref.modelId });
+    return {
+      canDelete: analysis.canDelete,
+      blocks: analysis.blocks.map((block) => ({
+        path: block.path,
+        reason: block.reason,
+        ...(block.detail ? { detail: block.detail } : {}),
+      })),
+      cleanupCount: analysis.cleanup.length,
+    };
+  }
+
+  private async deleteCatalogModel(ref: ModelCatalogModelRef): Promise<void> {
+    const view = await this.readVersionedConfig();
+    const { nextConfig } = buildDeleteModelConfig({ config: view.config, provider: ref.provider, modelId: ref.modelId });
+    if (!nextConfig) throw new AdapterError('server', 'This model is still referenced by Gateway config');
+    const result = await this.gateway.setConfig(JSON.stringify(nextConfig), view.hash);
+    if (!result.ok) throw new AdapterError('server', 'Gateway rejected model deletion');
+  }
+
+  private async writeCatalogModelCost(write: ModelCostWrite): Promise<void> {
+    const values = [write.cost.input, write.cost.output, write.cost.cacheRead, write.cost.cacheWrite];
+    if (!values.every((value) => Number.isFinite(value) && value >= 0)) {
+      throw new AdapterError('server', 'Cost values must be non-negative numbers');
+    }
+    const view = await this.readVersionedConfig();
+    const patch = buildModelCostPatch({
+      config: view.config,
+      provider: write.provider,
+      modelId: write.modelId,
+      modelName: write.modelName || write.modelId,
+      cost: write.cost,
+    });
+    if (!patch) throw new AdapterError('server', 'Provider is not declared in Gateway config');
+    await this.patchGatewayConfig(patch, view.hash, 'Gateway rejected the cost override');
+  }
+
   private createManagementOperations(): ManagementOperations {
     return {
       models: {
@@ -313,6 +404,12 @@ export class OpenClawAdapter extends GatewayAdapterBase {
         getSelection: (sessionKey) => this.invoke(() => this.readModelSelection(sessionKey)),
         setSelection: (params) => this.invoke(() => this.writeModelSelection(params)),
         listThinkingLevels: () => ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'adaptive'],
+        getCatalog: () => this.invoke(() => this.readModelCatalog()),
+        saveCatalog: (write) => this.invoke(() => this.writeModelCatalog(write)),
+        addModel: (input) => this.invoke(() => this.addCatalogModel(input)),
+        inspectDeletion: (ref) => this.invoke(() => this.inspectCatalogModelDeletion(ref)),
+        deleteModel: (ref) => this.invoke(() => this.deleteCatalogModel(ref)),
+        setCost: (write) => this.invoke(() => this.writeCatalogModelCost(write)),
       },
       skills: {
         status: (agentId) => this.invoke(() => this.gateway.getSkillsStatus(agentId)),
@@ -466,10 +563,46 @@ export class OpenClawAdapter extends GatewayAdapterBase {
   }
 }
 
+export type OpenClawSessionMapOptions = Readonly<{
+  /**
+   * The Gateway list carried no `lastInteractionAt` / `lastActivityAt` on any row
+   * (pre-2026-07 Gateways): fall back to `updatedAt` instead of reporting no activity.
+   */
+  legacyActivity?: boolean;
+}>;
+
+/** True when at least one Gateway row reports a user-facing activity timestamp. */
+export function hasOpenClawActivityTimestamps(
+  sessions: ReadonlyArray<Pick<GatewaySessionRecord, 'updatedAt' | 'lastInteractionAt' | 'lastActivityAt'>>,
+): boolean {
+  return sessions.some((session) => (
+    typeof session.lastInteractionAt === 'number' || typeof session.lastActivityAt === 'number'
+  ));
+}
+
+/**
+ * OpenClaw `updatedAt` moves on every session-record write, including heartbeat
+ * polls and metadata patches. The Gateway keeps two user-facing timestamps that
+ * heartbeats do not touch (mirroring its own unread rule); the later one is the
+ * session's activity time.
+ */
+export function resolveOpenClawActivityAt(
+  session: Pick<GatewaySessionRecord, 'updatedAt' | 'lastInteractionAt' | 'lastActivityAt'>,
+  options: OpenClawSessionMapOptions = {},
+): number | null {
+  const interaction = normalizeSessionUpdatedAt(session.lastInteractionAt);
+  const activity = normalizeSessionUpdatedAt(session.lastActivityAt);
+  if (interaction === null && activity === null) {
+    return options.legacyActivity ? normalizeSessionUpdatedAt(session.updatedAt) : null;
+  }
+  return Math.max(interaction ?? 0, activity ?? 0);
+}
+
 export function mapOpenClawSession(
   connectionId: string,
   session: GatewaySessionRecord,
   fallbackAgentId = 'main',
+  options: OpenClawSessionMapOptions = {},
 ): SessionDescriptor {
   const agentId = inferOpenClawAgentId(session.key, fallbackAgentId);
   const kind = inferOpenClawSessionKind(session);
@@ -484,6 +617,7 @@ export function mapOpenClawSession(
     title: sessionTitle(session),
     channel: session.channel,
     updatedAt: normalizeSessionUpdatedAt(session.updatedAt),
+    lastActivityAt: resolveOpenClawActivityAt(session, options),
     preview: session.lastMessagePreview,
     model: session.model,
     modelProvider: session.modelProvider,

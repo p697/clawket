@@ -57,7 +57,6 @@ function translateConfig(t: AccountSettingsTranslator, key: string): string {
   if (key === 'Share Clawket') return t('Share Clawket', { ns: 'config' });
   if (key === 'Rate Clawket') return t('Rate Clawket', { ns: 'config' });
   if (key === 'Discord') return t('Discord', { ns: 'config' });
-  if (key === 'WeCom') return t('WeCom', { ns: 'config' });
   if (key === 'Community') return t('Community', { ns: 'config' });
   if (key === 'About') return t('About', { ns: 'config' });
   if (key === 'Version') return t('Version', { ns: 'config' });
@@ -67,6 +66,7 @@ function translateConfig(t: AccountSettingsTranslator, key: string): string {
   if (key === 'Debug Mode') return t('Debug Mode', { ns: 'config' });
   if (key === 'Relay Environment') return t('Relay Environment', { ns: 'config' });
   if (key === 'Design System') return t('Design System', { ns: 'config' });
+  if (key === 'Preview update announcement') return t('Preview update announcement', { ns: 'config' });
   if (key === 'Clear Cache') return t('Clear Cache', { ns: 'config' });
   if (key === 'Reset Device') return t('Reset Device', { ns: 'config' });
   if (key === 'Developer') return t('Developer', { ns: 'config' });

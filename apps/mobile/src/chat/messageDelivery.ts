@@ -1,11 +1,11 @@
 import type { UiMessage } from '../types/chat';
 
 /**
- * Telegram-style delivery state for a user message that has left the local
- * queue: a clock while the prompt is in flight, one check once the backend
+ * Delivery state from local acceptance through backend acknowledgement:
+ * a clock while queued/in flight, pause when held, one check once the backend
  * accepted it, two checks once the Agent has visibly picked it up.
  */
-export type UserMessageStatus = 'sending' | 'sent' | 'delivered' | 'uncertain';
+export type UserMessageStatus = 'queued' | 'held' | 'sending' | 'sent' | 'delivered' | 'uncertain';
 
 export type ResolveUserMessageStatusInput = Readonly<{
   /** Newest-first, as the Thread renders it. */
@@ -28,8 +28,7 @@ function isSettledUserMessage(message: UiMessage): boolean {
 }
 
 /**
- * Resolves the status glyph for `messages[index]`. Queued messages own their
- * caption through `delivery` and resolve to null; so do other roles.
+ * Local and acknowledged messages use the same fixed-size status slot.
  */
 export function resolveUserMessageStatus({
   messages,
@@ -38,7 +37,8 @@ export function resolveUserMessageStatus({
   runAcknowledged = false,
 }: ResolveUserMessageStatusInput): UserMessageStatus | null {
   const message = messages[index];
-  if (!message || !isSettledUserMessage(message)) return null;
+  if (!message || message.role !== 'user') return null;
+  if (message.delivery) return message.delivery;
   if (message.sendUncertain) return 'uncertain';
   if (unconfirmedIds?.has(message.id)) return 'sending';
   // Anything the Agent produced after this turn proves it was received.
@@ -54,7 +54,7 @@ export function resolveUserMessageStatus({
   return 'sent';
 }
 
-/** Status for every settled user message, keyed by id. */
+/** Status for every user message, keyed by id. */
 export function resolveUserMessageStatuses(
   input: Omit<ResolveUserMessageStatusInput, 'index'>,
 ): ReadonlyMap<string, UserMessageStatus> {

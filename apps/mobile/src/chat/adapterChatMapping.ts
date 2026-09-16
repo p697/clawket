@@ -18,6 +18,7 @@ export function mapAdapterSessionPatch(
   }
   if (session.preview !== undefined) mapped.lastMessagePreview = session.preview;
   if (session.updatedAt !== undefined) mapped.updatedAt = session.updatedAt;
+  if (session.lastActivityAt !== undefined) mapped.lastActivityAt = session.lastActivityAt;
   if (session.channel !== undefined) mapped.channel = session.channel;
   if (session.model !== undefined) mapped.model = session.model;
   if (session.modelProvider !== undefined) mapped.modelProvider = session.modelProvider;

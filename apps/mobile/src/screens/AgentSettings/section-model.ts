@@ -18,7 +18,6 @@ export type AgentSettingsSectionState =
 
 export type AgentSettingsSectionAction =
   | 'identity.profile'
-  | 'identity.persona-memory'
   | 'models.default'
   | 'models.thinking'
   | 'models.providers-cost'
@@ -134,14 +133,6 @@ const SECTION_DEFINITIONS: Readonly<Record<AgentSettingsSection, SectionDefiniti
           showWhenUnsupported: true,
           value: ({ capabilities }) => capabilities.agentEdit ? undefined : 'Read only',
         },
-        {
-          id: 'identity.persona-memory',
-          title: 'Persona and memory',
-          gate: all('files'),
-          operation: (management) => Boolean(
-            management?.agents?.files?.list && management.agents.files.get,
-          ),
-        },
       ],
     }],
   },
@@ -231,7 +222,7 @@ const SECTION_DEFINITIONS: Readonly<Record<AgentSettingsSection, SectionDefiniti
     }],
   },
   files: {
-    title: 'Files',
+    title: 'Memory',
     gate: all('files'),
     groups: [{
       id: 'files',
@@ -370,7 +361,7 @@ const SECTION_DEFINITIONS: Readonly<Record<AgentSettingsSection, SectionDefiniti
         },
         {
           id: 'openclaw.backups',
-          title: 'Backups',
+          title: 'Back up OpenClaw config',
           gate: all('backups'),
           operation: (management) => Boolean(management?.config?.backups?.list),
         },
@@ -418,9 +409,10 @@ const SECTION_DEFINITIONS: Readonly<Record<AgentSettingsSection, SectionDefiniti
     }],
   },
   logs: {
-    title: 'Logs',
+    title: 'OpenClaw logs',
     gate: all('logs'),
-    requiresPro: true,
+    // The page opens for everyone; LogsSection gates the live tail at the last step.
+    requiresPro: false,
     paywallReason: 'logs',
     groups: [{
       id: 'logs',

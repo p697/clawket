@@ -1,6 +1,5 @@
 import type { ProPaywallPackage } from '../../services/pro-subscription';
 import {
-  THREE_POINT_ZERO_INTRO_CONTENT,
   orderPaywallPackages,
   paywallFailureMessageKey,
   resolvePaywallContent,
@@ -34,9 +33,11 @@ describe('Paywall model', () => {
     ['openclawPermissions', 'manage'],
     ['configBackups', 'manage'],
     ['coreFileEditing', 'logsFiles'],
+    ['modelManage', 'manage'],
     ['logs', 'logsFiles'],
     ['messageHistory', 'search'],
     ['appIcons', 'generic'],
+    ['usage', 'generic'],
     ['launch', 'generic'],
   ] as const)('maps %s to the %s hero', (feature, hero) => {
     expect(resolvePaywallContent(feature).hero).toBe(hero);
@@ -54,12 +55,6 @@ describe('Paywall model', () => {
       'sessions',
       'memory',
     ]);
-  });
-
-  it('exposes a reusable generic Clawket 3.0 introduction with four changes', () => {
-    expect(THREE_POINT_ZERO_INTRO_CONTENT.hero).toBe('generic');
-    expect(THREE_POINT_ZERO_INTRO_CONTENT.titleKey).toBe('Clawket 3.0');
-    expect(THREE_POINT_ZERO_INTRO_CONTENT.benefits).toHaveLength(4);
   });
 
   it('orders plans annual, lifetime, monthly', () => {
@@ -87,7 +82,23 @@ describe('Paywall model', () => {
 it('explains full session access instead of generic message search at the session gate', () => {
   expect(resolvePaywallContent('sessionHistory')).toMatchObject({
     titleKey: 'Explore your Agent conversations',
-    subtitleKey: 'Take your AI world with you.',
+    subtitleKey: 'Read complete channel, task and subagent conversations, and reply where supported.',
     actionKey: null,
   });
+});
+
+
+it('keeps file editing separate from OpenClaw logs and preserves continuation actions', () => {
+  expect(resolvePaywallContent('coreFileEditing')).toMatchObject({
+    titleKey: 'Edit your Agent’s memory and files',
+    actionKey: 'editing this file',
+    benefits: [expect.objectContaining({ kind: 'memory' }), expect.anything(), expect.anything(), expect.anything()],
+  });
+  expect(resolvePaywallContent('logs')).toMatchObject({
+    actionKey: 'viewing logs',
+    benefits: [expect.objectContaining({ kind: 'logsFiles' }), expect.anything(), expect.anything(), expect.anything()],
+  });
+  expect(resolvePaywallContent('agents').benefits.map(item => item.kind)).toEqual([
+    'agents', 'connections', 'sessions', 'memory',
+  ]);
 });
