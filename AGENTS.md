@@ -125,7 +125,8 @@ When implementation, architecture, or release behavior changes, update the close
 2. Check scripts must fail with a non-zero exit code when their inputs are missing, malformed, or empty; they must not silently skip verification.
 3. Checks must print the number or scope of verified items so an accidental coverage reduction is visible.
 4. New check logic should expose testable validation functions and include a corrupted-input regression test.
-5. Tests that require an external checkout or live service must have an explicit integration command and must not make the CI-safe gate depend on a developer's home directory. Keep the ordinary `npm test` command as the broader local suite.
+5. `test:release:compat` is the explicit release integration matrix: read-only production Worker exports are supplied through `CLAWKET_RELEASE_SNAPSHOTS`, exercised locally with historical and candidate Bridges. Missing snapshots must fail. Local code rollback is not proof of Cloudflare migration rollback.
+6. Tests that require an external checkout or live service must have an explicit integration command and must not make the CI-safe gate depend on a developer's home directory. Keep the ordinary `npm test` command as the broader local suite.
 
 ## Hermes Implementation Boundaries
 

@@ -1,5 +1,6 @@
 import {
   getGatewayBackendDescriptor,
+  sessionActivityAt,
   type AgentDescriptor,
   type ConnectionDescriptor,
   type SessionDescriptor,
@@ -66,7 +67,7 @@ export type RosterAgentSummary = Readonly<{
   sessions: ReadonlyArray<SessionDescriptor>;
   subtitle?: RosterAgentSubtitle;
   preview?: string;
-  updatedAt: number | null;
+  /** Latest activity a person took part in across this Agent's human sessions; orders the roster. */
   lastActivityAt: number | null;
   unreadCount: number;
   hasUnread: boolean;
@@ -139,6 +140,10 @@ function normalizeSession(value: unknown, connectionId: string): SessionDescript
     : typeof record.updatedAt === 'number' && Number.isFinite(record.updatedAt)
       ? record.updatedAt
       : undefined;
+  const lastActivityAt = record.lastActivityAt;
+  const lastActivityAtValid = lastActivityAt === undefined
+    || lastActivityAt === null
+    || (typeof lastActivityAt === 'number' && Number.isFinite(lastActivityAt));
   const actions = record.allowedActions;
   if (
     record.connectionId !== connectionId
@@ -147,6 +152,7 @@ function normalizeSession(value: unknown, connectionId: string): SessionDescript
     || !title
     || !SESSION_KINDS.has(record.kind as SessionKind)
     || updatedAt === undefined
+    || !lastActivityAtValid
     || typeof record.hasActiveRun !== 'boolean'
     || !actions
     || typeof actions !== 'object'
@@ -184,6 +190,7 @@ function normalizeSession(value: unknown, connectionId: string): SessionDescript
     title,
     ...(channel ? { channel } : {}),
     updatedAt,
+    ...(lastActivityAt !== undefined ? { lastActivityAt: lastActivityAt as number | null } : {}),
     ...(preview ? { preview } : {}),
     ...(model ? { model } : {}),
     hasActiveRun: record.hasActiveRun,
@@ -231,18 +238,19 @@ function activityValue(value: number | null): number {
   return value ?? Number.NEGATIVE_INFINITY;
 }
 
-function compareAgentSummaries(a: RosterAgentSummary, b: RosterAgentSummary): number {
-  return Number(b.attentionCount > 0) - Number(a.attentionCount > 0)
-    || Number(b.hasUnread) - Number(a.hasUnread)
-    || activityValue(b.lastActivityAt) - activityValue(a.lastActivityAt)
+/**
+ * Roster order is recency of human activity only (owner decision 2026-09-16).
+ * Unread and attention stay badges: ordering on transient state made rows move
+ * without the user doing anything, and the list is short enough to scan.
+ */
+export function compareAgentSummaries(a: RosterAgentSummary, b: RosterAgentSummary): number {
+  return activityValue(b.lastActivityAt) - activityValue(a.lastActivityAt)
     || a.agent.name.localeCompare(b.agent.name)
     || a.agent.agentId.localeCompare(b.agent.agentId);
 }
 
 function compareConnectionGroups(a: RosterConnectionGroup, b: RosterConnectionGroup): number {
-  return Number(b.attentionCount > 0) - Number(a.attentionCount > 0)
-    || Number(b.unreadCount > 0) - Number(a.unreadCount > 0)
-    || activityValue(b.lastActivityAt) - activityValue(a.lastActivityAt)
+  return activityValue(b.lastActivityAt) - activityValue(a.lastActivityAt)
     || a.connection.createdAt - b.connection.createdAt
     || a.connection.id.localeCompare(b.connection.id);
 }
@@ -276,7 +284,7 @@ function buildAgentSummary(
     { unreadEnabled: liveSignalsEnabled },
   ).unreadCount;
   const recentSession = [...agentSessions].sort(
-    (a, b) => activityValue(b.updatedAt) - activityValue(a.updatedAt) || a.key.localeCompare(b.key),
+    (a, b) => activityValue(sessionActivityAt(b)) - activityValue(sessionActivityAt(a)) || a.key.localeCompare(b.key),
   )[0];
   const mainSession = agentSessions.find((session) => session.key === agent.mainSessionKey) ?? recentSession;
   return Object.freeze({
@@ -284,7 +292,6 @@ function buildAgentSummary(
     sessions: Object.freeze(agentSessions),
     ...(subtitle ? { subtitle } : {}),
     ...(mainSession?.preview ? { preview: mainSession.preview } : {}),
-    updatedAt: mainSession?.updatedAt ?? null,
     lastActivityAt: signals.lastActivityAt,
     unreadCount: mainUnreadCount,
     hasUnread: mainUnreadCount > 0,

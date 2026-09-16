@@ -7,17 +7,18 @@ import {
   View,
 } from 'react-native';
 import {
-  ChevronLeft,
   Clock3,
   LockKeyhole,
   MessageSquare,
   MessagesSquare,
   Star,
 } from 'lucide-react-native';
+import { ChevronLeft } from '../../components/ui/DirectionalIcon';
 import { useTranslation } from 'react-i18next';
 
 import { AgentAvatar } from '../../components/ui/AgentAvatar';
 import { Banner } from '../../components/ui/Banner';
+import { ConnectionStatusPill } from '../../components/ui/ConnectionStatusPill';
 import { FloatingButton } from '../../components/ui/FloatingButton';
 import { SearchInput } from '../../components/ui/SearchInput';
 import { SegmentedTabs } from '../../components/ui/SegmentedTabs';
@@ -54,6 +55,8 @@ export type SearchViewProps = Readonly<{
   recentSearches: ReadonlyArray<string>;
   availableResultCount: number;
   errorCode?: string | null;
+  /** The runtime's foreground grace window is open: show quiet reconnecting instead of offline. */
+  reconnecting?: boolean;
   topInset: number;
   bottomInset: number;
   autoFocus?: boolean;
@@ -279,35 +282,60 @@ function SearchLoading(): React.JSX.Element {
   );
 }
 
-function SearchStatusBanner({
+/** Search has no title slot to yield, so the capsule leads the results; the permission banner stays a banner. */
+function SearchConnectionStatus({
   state,
   errorCode,
+  reconnecting,
   onRetry,
-  onOpenPermission,
 }: Pick<
   SearchViewProps,
-  'state' | 'errorCode' | 'onRetry' | 'onOpenPermission'
+  'state' | 'errorCode' | 'reconnecting' | 'onRetry'
 >): React.JSX.Element | null {
   const { t } = useTranslation('common');
+  if (state === 'offline' && reconnecting) {
+    return (
+      <ConnectionStatusPill
+        testID="search-reconnecting"
+        placement="inline"
+        status="reconnecting"
+        message={t('Reconnecting…')}
+      />
+    );
+  }
   if (state === 'offline') {
     return (
-      <Banner
+      <ConnectionStatusPill
         testID="search-offline"
+        placement="inline"
+        status="offline"
         message={t('Offline · showing cached results')}
       />
     );
   }
   if (state === 'error') {
     return (
-      <Banner
+      <ConnectionStatusPill
         testID="search-error"
-        tone="bad"
+        placement="inline"
+        status="error"
         message={t('Search unavailable · {{code}}', { code: errorCode ?? 'network' })}
         actionLabel={onRetry ? t('Retry') : undefined}
         onAction={onRetry}
       />
     );
   }
+  return null;
+}
+
+function SearchStatusBanner({
+  state,
+  onOpenPermission,
+}: Pick<
+  SearchViewProps,
+  'state' | 'onOpenPermission'
+>): React.JSX.Element | null {
+  const { t } = useTranslation('common');
   if (state === 'permission') {
     return (
       <Banner
@@ -329,6 +357,7 @@ export function SearchView({
   recentSearches,
   availableResultCount,
   errorCode,
+  reconnecting = false,
   topInset,
   bottomInset,
   autoFocus = true,
@@ -378,10 +407,14 @@ export function SearchView({
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={[styles.content, contentInsets]}
       >
-        <SearchStatusBanner
+        <SearchConnectionStatus
           state={state}
           errorCode={errorCode}
+          reconnecting={reconnecting}
           onRetry={onRetry}
+        />
+        <SearchStatusBanner
+          state={state}
           onOpenPermission={onOpenPermission}
         />
         {showFilters ? (

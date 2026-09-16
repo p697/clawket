@@ -2,6 +2,221 @@
 
 > 实现者维护。每次开工先读；每完成一个里程碑更新。人类只读这一份文件了解进度。
 
+
+## 付费墙文案与视觉重心（2026-09-16）
+
+聊天优先续改：负责人选定通用标题「和你的 Agent，聊得更多」/「More conversations with your Agents」，同步全部 19 语言，完整聊天/任务记录移至第一条权益，其次连接与 Agent 数量、人格记忆、OpenClaw 管理。继续不显示副标题；连接等专用场景、免费聊天、购买与布局不变。验证：完整 `check:required` 通过（Mobile 278 套 / 2,811 测试，19 语言和文档检查通过）；未操作模拟器。
+
+真机反馈续改：负责人认可整体效果，要求去掉通用版与权益重复的副标题。通用入口（顶部 Pro、设置、启动与 App 图标的通用展示）现在只有标题和四条权益；情境边界说明与购买状态提示保留。删除全部 19 个目录中的废弃副标题，释放高度继续分给猫头。完整 `check:required` 通过（Mobile 277 套 / 2,807 测试、19 语言与文档检查）；未操作模拟器。
+
+负责人选定 A 版通用文案并授权完整落地，真机验收由负责人完成。通用版改为「在手机上，管理更多 Agent」，Agent 入口说明默认 Agent 的免费边界；文件编辑独立于日志标题，管理与日志明确 OpenClaw 范围，搜索与用量去掉过度承诺。简繁中文与英文完整修订；新标题和 Agent 按钮补齐 19 个语言目录。保留套餐、购买/恢复、会员管理和续接语义。
+
+布局将原先价格卡上方的弹性空白移入猫头区域，权益到价格固定 32 pt；所有内容继续在同一滚动容器中，保留大字号换行及现有减少动态效果支持。偏离旧 §2 的固定英雄图/三条权益/价格按钮方案属于负责人明确授权的展示细节，已同步付费墙规格、Mobile AGENTS 与设计指南。
+
+验证：完整 `npm run check:required` 通过（Mobile 2,806 测试、189 个 UI 源文件、19 语言严格检查与文档门禁）；付费墙定向 3 套 / 70 测试通过，覆盖中文各入口、购买回调、会员与大字号，类型与设计检查通过。未启动模拟器、操作真机、刷新配对或部署；真实视觉效果由负责人通过 HT-PAYWALL-COPY-0916 反馈。
+
+## 花名册排序改为「只看有人参与的最近活动」（2026-09-16）
+
+- 负责人反馈 Agent 列表顺序「换来换去、没有逻辑」。核对代码：花名册分两层排序，`aggregateRoster` 按 attention > 未读 > 全会话 `lastActivityAt`，`buildRosterRows` 再按 置顶 > attention > 未读 > **主会话 `updatedAt`** 重排，最终生效的是后者；未读 = `主会话.updatedAt > 本地水位线`。而 OpenClaw 的 `updatedAt` 是 session 记录的最后写入时间，心跳轮询、模型切换、run 准备 / 收尾、用量投影都会推高它；OpenClaw 自己刻意区分了 `lastInteractionAt` / `lastActivityAt`（心跳与内部事件 run 明确跳过，`session-store.ts` 注释原文 "so heartbeat/internal-event runs do not re-flag sessions unread"），官方 UI 的 unread 用的是这两个字段，Clawket 的 `SessionInfo` 没建模它们。本机实证：`~/.openclaw/openclaw.json` 配 `heartbeat.every: 2h`；`codex-operator` 主会话 40 次 `[OpenClaw heartbeat poll]`，`updatedAt` 停在最后一次心跳而两个活动字段皆空 → 每次心跳 Agent 跳顶并标未读。另三处放大「随机感」：只有活动连接 + `live` 才享有未读 / attention 置顶权，适配器一离开 `ready` 来源翻成 `cache` 权重清零、恢复再回来；打开某个 Agent 即消未读、掉到所有未读 Agent 之下；两层对「活跃」口径不同（全会话 vs 主会话）。
+- 负责人判断并决定：界面是聊天列表的形态（头像 / 名字 / 预览 / 时间 / 未读数），用户带的是聊天列表预期——顺序 = 最后一条消息时间、置顶 = 手动；PostHog 2.0 近 60 天约 1,129 人打开 App、`agent_save_tapped` 仅 14 人、`gateway_connect_saved` 135 人，列表通常 1–4 行，优先级排序省不了找的时间，只让位置变。新规则：**Agent 级手动置顶 > 最近一次有人参与的活动时间降序**，同一连接相邻、连接组也按最近活动；未读 / 需要你只做徽标；「有人参与」= 主会话 / 直聊 / 群 / 渠道会话（子 Agent 与 cron 是后台工作，不计入）。
+- 实现：`@clawket/agent-protocol` 增加可选 `SessionDescriptor.lastActivityAt`（`null` = 从未有人参与；未设置 = 退回 `updatedAt`）、`sessionActivityAt()` 与 `HUMAN_SESSION_KINDS`，分支覆盖 100%。OpenClaw 适配器 `resolveOpenClawActivityAt` = `max(lastInteractionAt, lastActivityAt)`，整张列表都不带这两个字段（2026-07 前的 Gateway）才回退 `updatedAt`；Hermes 取 `updated_ts`（Bridge 不会为 housekeeping 写它）；YouMind / 本地模型沿用回退。`roster-cache` 归一化透传并校验该字段（旧缓存无字段 = 未知，下次在线刷新即补齐），`compareAgentSummaries` / `compareConnectionGroups` 只剩活动时间 + 名字 / 创建时间；`buildRosterRows` 删掉第二个比较器，只把置顶 Agent 提到组首；`unread-watermarks` 的未读判定、`lastActivityAt` 汇总与 `markOpened` / `markPromptSucceeded` / `markManyRead` 全部改用活动时钟，汇总只数 `HUMAN_SESSION_KINDS`；花名册行右侧时间、置顶会话行、搜索结果时间、Thread 已读水位线同源（`SessionInfo` 与 `mapAdapterSessionPatch` 透传 `lastActivityAt`），心跳不再触发重复 markRead。缓存态与在线态顺序由此天然一致，无需再保留上一次顺序。
+- 验证：`agent-protocol` Vitest 30 tests（新增 `descriptors.test.ts`）；Mobile `tsc` 无错；Mobile Jest 277 suites / 2,794 tests 通过，其中新增 / 改写：`roster-cache`（人参与活动排序、心跳只推 `updatedAt` 不动位置不标未读、子 Agent / cron 不计入、live 与 cache 同序、缓存往返含 `null` 与畸形值拒绝）、`unread-watermarks`（活动时钟判未读、汇总只数人参与会话、Gateway 时钟超前时以活动时间落水位）、Roster `model`（置顶提升 + 沿用注册表顺序、cache 与 live 同序、置顶会话行时间）、`gateway-adapters.recorded`（当前 Gateway 心跳会话 → `null`、cron 输出计入、v1 列表回退 `updatedAt`、Hermes 镜像 `updatedAt`）、`ThreadScreen`（housekeeping 推 `updatedAt` 不重复标已读）、`adapterChatMapping`。`00` §首屏、`04` §2、`apps/mobile/AGENTS.md`、`packages/agent-protocol/AGENTS.md` 同步；偏离表 `[UX-2026-09-16-roster-order]`。未开模拟器；真机验收见 HT-ROSTER-ORDER-0916。
+
+## 更新公告与更新日志恢复（2026-09-16）
+
+- 负责人反馈更新日志页只剩 3.0.0 两条付费墙文案、看不懂逻辑，2.0 历史丢失。核对：M5 重写 `releases.ts` 时因视觉系统禁用 emoji 图标整体删掉了 1.1.0 → 2.1.0 共 9 版 21 条；`ThreadScreen` 只在 Debug 下加载公告且 `announcementVisible` 永远为 false，`shouldShow…` / `markShown…` 无调用方；06 决定的「3.0 + Pro 介绍页」`showThreePointZeroIntro` 有实现和测试但无任何页面调用；M6 接的启动付费墙在 09-11 检查点已移除。结论：升级到 3.0 的用户什么都看不到。PostHog（真机）：近 30 天活跃约 550，2.1.1 / 2.1.0 各 326 / 208；升到 2.1.1 的来源里 27 来自 2.0.0、14 来自 1.7.0，跨版跳升普遍；4 月 10 天发 4 版是「打扰」的真实来源；2.0 公告与日志页都没有埋点。2.1.2（08-27 仅改版本号）没有真机升级记录，未收录。
+- 负责人决定：公告优先于启动付费墙、废掉 3.0 介绍页、不把「旧页面去哪了」写进公告而是讲「全新升级」、弹层要好看并放大会动的猫头。实现：`releases.ts` 恢复全部历史（含 2.1.1 静默修复、修正 2.1.0 日期为 04-17、emoji → 有界 Lucide 词表、动作只剩 `none` / `open_url` / `open_paywall`）；3.0.0 改为英雄文案「Meet Clawket 3.0 / 全新的体验、界面与产品」+ 五条（所有 Agent 一屏看全 / 会话面板 / 全局搜索 / OpenClaw 与 Hermes 并肩 / 全新视觉）；负责人看过第一版后要求：删掉末尾 Pro 条目、「全新首页花名册」改名、每条描述压到中文一行且小学生能懂，已按此改写 6 键 × 19 语言；`app-update-announcement.ts` 新增「上次公告版本」基线：跳版合并最多 3 版、2.x 升级只弹当前版、全新安装（初始化时无连接）只写基线不弹、显示即打标、存储失败不阻塞启动；弹层移到根层 `AppUpdateAnnouncementSheet`（92% 单档、148pt `curious` Companion、display 标题、条目列表、footer Continue），由 `resolveStartupNavigation` 的 `show_update_announcement` 在花名册渲染 + ready + 审批扫描新鲜后触发并消耗 `launchPaywallShownThisProcess`，付费墙 / 外链在 `onAfterClose` 续做；开发者分组 Debug 下新增「预览更新公告」；更新日志页恢复全部版本，条目不可点。删除 `showThreePointZeroIntro` / `threePointZeroIntro` 模式、`THREE_POINT_ZERO_INTRO_CONTENT`、`onCompleteIntro`、`paywall_launch_*` 事件与 6 个介绍页 `common` 键；Thread 内的死公告状态机一并移除。新增埋点 `app_update_announcement_shown / closed / entry_tapped`、`release_notes_opened`（`version` 规范化为 `x.y.z`，否则 `other`）。i18n：`chat` 新增 53 键 × 19 语言（6 种沿用 2.0 译文、13 种新译），`config` 新增 1 键；`DYNAMIC_KEY_ORIGINS` 登记 7 处动态调用；`releases.test.ts` 校验每个文案键在 19 种语言都存在。
+- 验证：`releases` / 服务 / 弹层 / 条目列表 / 启动决策 / 付费墙 / 账户设置 / Thread / 埋点 26 个套件 226 tests 通过；mobile `tsc` 无错；完整 `npm run check:required` 通过：Mobile 277 suites / 2,778 tests、全部 workspace 类型与自含测试、`check:ui-style` 189 文件、19 语言严格 i18n（1,298 keys / 24,662 translations，missing / removable 均 0）、docs 检查。未开模拟器、未部署、未动配对；效果由负责人真机验收（HT-WHATSNEW-0916）。
+
+## 杀进程后工具回复重复（2026-09-16）
+
+- 负责人反馈仍重复后明确授权模拟器。通过已连接 Metro 的手机只读读取目标缓存，确认两条正文完全一致，但旧副本 ID 与时间均晚 4,622ms，且 `historyMessageId` 指回自身 `h_` ID；这不是上一轮覆盖的“仅显示时间改变”。把这两条实际缓存放入 iPhone 17 模拟器后重现双气泡，补充同用户轮次、精确正文、60 秒有界兼容后，真实 Lucy 历史加载消除副本并写回单份缓存。
+- 另在真实 `chat.history` 发现工具轮次含导入分段与 `cli-assistant:<sendKey>` 累计全文两个表示；仅 OpenClaw 在确认同一用户发送键、完整 CLI 分段已覆盖全部文本时省略累计副本，保留工具顺序与 usage，不省略增量文本、附件或不完整页。协调在缓存合并后执行，Hermes 不受该规则影响。相关回归 7 suites / 203 tests、v1 兼容 39 tests 通过。模拟器修复后连续两次杀进程重进，AX 均确认目标回复 1 条、旧副本 0 条、重复累计全文 0 条；持久化缓存同样确认清理完成。未向 Lucy 主会话发送测试消息，未清空缓存、更新配对或修改后端。新版 Device Hub 的滚动工具报 `noWindowsAvailable`，手动翻页未完成，翻页保护仅有自动化验证。
+- 本轮 Mobile 类型检查首次通过；`check:required` 随后停在同时改动的 roster-cache / ThreadScreen 未读字段测试（275 suites 通过、2 suites 失败）；复查这两套和适配器共 86 tests 已通过。最终类型复查又被并行修改中 `gateway-adapters.recorded.test.ts` 的 `updatedAt` 参数与新时间字段类型不符阻断，不能记为全仓门禁通过。证据目录 `evidence/history-restart-simulator/`；私有会话/缓存样本仅留在被 Git 忽略的证据文件中。
+- 只读检查本地 OpenClaw main session SQLite transcript：截图对应的 12:47 助手正文仅有一个记录；未修改会话、发送测试消息或读取认证表。没有手机缓存，不能证明当次缓存的具体 ID，但已在测试中复现客户端两条重复路径：`stream_segment_` 未被旧去重识别；历史 `h_` ID 搭配保留的流式展示时间，超过两秒后与原始记录并存。
+- UI 和持久化缓存保留 `historyMessageId`，独立于展示 ID/时间；旧缓存通过确切历史投影 ID 或有界一对一匹配兼容。已知不同用户轮次不互相确认；保留旧 Gateway 分页相对 ID 的缓存来源，向上翻页也不恢复已确认副本。未改变连接、重连、发送及工具协议。
+- 修正上一轮前台刷新回归测试：显式模拟失焦→聚焦，配合目前“首次挂载不重复刷新”的实现，不改变生产策略。相关 7 suites / 198 tests、v1 兼容 39 tests、Relay/Bridge 自包含测试、设计/i18n/文档检查通过。`check:required` 被同时修改中的更新公告页面/服务类型错误阻断；单独 `test:required` 的 Mobile 结果为 271 suites 通过、4 suites / 14 tests 失败，位于 SupportScreens、Paywall/model、app-update-announcement、AccountSettings/section-model，不能记为全仓门禁通过。日志在 `evidence/history-restart/`；真机验收见 HT-HISTORY-RESTART-0916。
+
+## 帮助中心内容修正（2026-09-16）
+
+- 按负责人核查结果修正帮助中心：OpenClaw 更新改为 `openclaw update`；LAN / Tailnet 配置补 `gateway.mode=local`、显式关闭 Serve 和准确 `allowedOrigins`，保留 Serve loopback；示例要求合并现有配置、替换地址及强令牌，并用带 URL 的 `pair local --backend openclaw` 生成 QR。
+- 配对补齐 OpenClaw / Hermes、主机 Node.js / npm 前提及码 / QR 步骤。新增双后端 Bridge `status` / `doctor` / `logs --follow` / `start` 排障；区分 Relay 与直连端口、配置与 SecretRef；断线指向当前连接页的重连 / 恢复和主机 Bridge 重启，失效配对码指向重新配对。13 条新文案同步全部 19 语言，移除对应失效键。
+- 验证：帮助中心 SupportScreens 11 tests 通过（含 3 种 JSON 配置及命令复制）；19 语言严格检查通过；设计系统检查通过；`check:docs` 6 对说明文件及 5 tests 通过。`check:required` 全仓类型检查通过，但停在 Mobile 测试：274 套通过、1 套失败（2761 tests 通过、1 失败）。失败为 `useChatController.queue.test.ts:341` 的前台历史刷新时序测试，单独重跑同样失败（37 通过 / 1 失败）；不属于本次修改的帮助逻辑，仍需另行修复，不能记为全仓门禁通过。未执行配对、更新或重启命令，未改动运行中的连接。
+- npm 发布顺序由负责人把控：先发布 npm，再发布 App；本次不改发布配置、不发布。
+
+## 工具分段收尾与首发消息保留（2026-09-16）
+
+- 负责人反馈：一次首发用户消息消失，后续发送顺滑；工具调用间的文本在流式结束后闪动并合成一条。已确认客户端 `run_finished` 会清掉流式分段，历史协调还会把同一轮多条助手消息替换成单条 final；这不是 UI 必须遵循的 Gateway 协议行为。
+- 完成、失败与中止时把已显示文本段及工具原子转入 history，保留各行身份、顺序和内容。文本段记录其前置工具数量，修正多工具间按数组下标交错的问题；累计 final 仅去掉明确重复的顺序前缀。同一用户轮次内协调 stale/split/aggregate 历史，更新工具结果但不折叠段落，保留额外服务器内容；历史中的文本先于同条记录内的工具。旧刷新回调不再清掉新 run。
+- 对偶发消失无法证明真机那次的唯一原因，但重现并修复两处风险：首轮服务端 hydration 不能连同旧缓存一起清除刚发消息；旧的同文消息或显式冲突的发送键不能被当成本次回执。延迟缓存恢复也保留期间新添的本地消息。
+- `npm run check:required` 通过：Mobile 275 suites / 2,757 tests，含 OpenClaw/Hermes 批量 chunk→多工具→累计 final→历史的顺序/身份断言，首轮 hydration、重复短句、迟到刷新回归；类型、各 workspace 协议/自包含测试、设计、i18n、文档门禁通过，收尾清理后类型检查再次通过。证据目录 `evidence/turn-continuity/`，实现记录见 `16-composer-upgrade.md`。未启动模拟器、操作手机、修改外部 Gateway/Hermes 源码或部署。
+
+
+## 档案页头部两处细节：后端进头像角标、去掉重复的连接名（2026-09-16）
+
+- 负责人真机截图：名字「Lucy」下面又一行「lucy · OpenClaw」（连接名与 Agent 名同名、后端专门占一行不值），「身份」卡下面还有一个「lucy」分节标题。两处按负责人的 (c) 方案处理：后端改为头像右下角 24pt 圆角标（`surfaceFloating` 底、2pt `canvasGrouped` 描边、`PlatformMark` 官方图标 20pt；OpenClaw 龙虾 / Hermes 官方 App 图标 / 本地模型显示器图标；无障碍名为后端名；Pro 锁定的 Agent 仍只显示锁角标），灰字只在有心跳（`Active {{age}}`，去掉后端前缀）或 YouMind 邮箱时渲染，其余情况整行不渲染；连接组分节标题删除，连接组直接跟在身份卡后。
+- 代码：`model.ts` `identity.detail` 改为可选（只承载后端给的账号信息）、新增 `identity.backend`，`AgentSettingsGroupDescriptor` 去掉 `title`；`AgentSettingsScreen.tsx` 新增 `agent-settings-backend-mark`，`SettingsSection` 不再渲染标题。`04-app-screens.md` §5、偏离表 `[UX-2026-09-16-hero]`、`apps/mobile/AGENTS.md`、`design-system.md` 同步。
+- 验证：AgentSettings 4 个套件 59 tests 通过（模型、深 / 浅渲染、分栏），`tsc` 无本页错误。按负责人要求未开模拟器；效果图（现状 / OpenClaw / Hermes 三机 + 角标 2× 放大 + 心跳变体）发在 https://claude.ai/code/artifact/a0b08418-5d2b-40c0-8c3f-94d824784e3e ，真机验收与「Hermes 角标裁圆 / 角标 24pt 还是 20pt / 单 Agent 心跳灰字去留」三个点留给负责人。
+- 同日负责人看过效果后追加两点。(1) Hero 再压一点：头像上方减 8pt、名字下方减 4pt（`profileHero` 改为 `paddingTop: Space.sm` / `paddingBottom: Space.md`）。(2) OpenClaw 管理菜单「配置 / 权限 / 诊断结果」三个入口用户看不懂、没有点进去的欲望：2.x 数据里这个 hub 有 1,919 人（Settings 用户的 48%），查看配置 710 人、一键修复权限 311 人、创建备份 71 人、恢复 9 人，都靠 2.0 的「标题 + 一句说明」行；3.0 改成一张 comfortable 卡四行，每行图标 + 标题 + 一行 caption 说明（`OpenClaw config` / `Permissions` / `Diagnostics` / `Back up OpenClaw config`，中文「OpenClaw 配置 / 权限 / 状态诊断 / 备份 OpenClaw 配置」，说明文案见 `04` §5 表；负责人看过第一版后要求再简化——「把用户当小学生或初中生」，四句改成「查看和修改 OpenClaw 的全部设置 / 看 Agent 能不能上网、执行命令，一键修好 / 给 OpenClaw 做个体检，有问题自动修 / 存一份在手机上，改坏了能还原」），行尾只放免费拿到的数字：本屏收到的待处理执行审批（红点 + 数），最新还原点距今（`backups.list()` 是本机存储，菜单与离线都可读；`loadTab` 对 backups 不再要求在线）。不在菜单上读配置 / 权限 / doctor。5 键 × 19 语言（`config`），zh-Hans / zh-Hant / ja / ko / de 的 `Diagnostics` 从「诊断结果」改为「状态诊断」（2.0 命名）；`i18n-prune` 注册表加 `OpenClawManageScreen.tsx` 的 `formatted.key`。`OpenClawManageScreen` 13 tests（新增菜单文案与本地值用例）、`i18n:check` strict、`check:ui-style` 190 文件通过。效果图更新到同一 artifact。
+
+## 模型页重做：找回 2.0 的模型管理，去掉空壳 Tab（2026-09-16）
+
+- 负责人截图指出 3.0 模型页「模型 / 提供方」两个 Tab 点了没变化、点模型只见勾号不知含义、2.0 的管理功能全丢。核对代码：迁移表写的是「`ModelsScreen.tsx` 迁移到 `AgentSettings/Models`」而非删除，PROGRESS 也没有偏离记录，属于迁移只做了一半；「提供方」Tab 与「模型」Tab 渲染同一份分组，只把勾号换成多数模型没有的成本价格；OpenClaw 下 `getSelection()` 不带 sessionKey 读的是 `agents.defaults.model`，点行却 `sessions.patch` 写主会话，重进页面勾号回跳。
+- 依据 2.x PostHog（2026-03-10 起）：模型页 904 人；白名单开关 201 人、保存主模型 / 备用 / 思考等级 156 人（112 人配过备用、116 人设过思考）、删除 79 人、新增 51 人、成本编辑 16 人。前四项保留并放回一级，成本编辑降级到详情弹层，Provider 增删（2.0 也不支持）继续指向配置编辑器。
+- 协议：`Capabilities.modelManage`（可选精化，OpenClaw true，Hermes / YouMind / local-model false，缺省失败关闭）；`ModelsOperations` 加性新增 `getCatalog / saveCatalog / addModel / inspectDeletion / deleteModel / setCost` 与 `ModelCatalogState` 等类型；mock 适配器补默认实现，vitest 25 tests、分支覆盖 100%。
+- OpenClaw 适配器：`utils/model-catalog.ts` 合并 `models.list` 目录与 `config.get`（显式 provider、配置模型、成本覆盖、白名单、默认值），`buildModelCatalogPatch` 把默认值与白名单合成一次 `config.patch`（空备用写 `null` 以真正清空；有白名单时自动把主模型与备用加入）；加模型 / 成本 / 删除复用 2.0 留下的 `model-cost-config.ts`、`model-config-delete.ts`（此前是死代码）。Hermes 与 local-model 不改：仍只有全局 `setSelection`。
+- Mobile：`ModelsSection` 删除，改为独立页 `ModelsScreen` + `ModelDetailSheet` / `ModelProviderSheet` / `FallbackModelsSheet`，结构见 `04-app-screens.md` §5「模型页」。页面读写统一为 Agent 默认模型作用域；输入框选择器仍是会话作用域。`section-model.ts` 里 `models` 的三条描述符行从不渲染，本次未动。
+- 文案 42 键 × 19 语言（`settings`），`i18n-prune --strict` 通过；`check:ui-style` 190 文件通过；`tsc` 通过。测试：`models-model` 8、`ModelsScreen` 7、`model-catalog` 4、适配器目录用例 1、`AgentSettingsSectionScreen` / `section-model` 改为 mock `ModelsScreen`。同时段另一会话在改 Usage 页，`AgentSettingsSections.test.tsx` 的两个 usage 用例失败与本次无关。
+- 按负责人要求未启动模拟器与真机；真机验收记 HT-MODELS-0916。留给负责人的两个点：目录行未放 24pt 厂商图标（沿用「颜色只在头像上」）；成本编辑保留在弹层还是砍掉。
+- 真机发现：删掉一个备用模型后 Save 被 Gateway 拒绝——`config.patch` 对缩短或删除已有数组要求在 `replacePaths` 里点名该路径（OpenClaw `docs/gateway/configuration.md`，2026.6 起）。修复：`buildModelCatalogPatch` 返回 `{ patch, replacePaths }`，只在当前配置已有 `agents.defaults.model.fallbacks` 数组且本次改写它时附带 `['agents.defaults.model.fallbacks']`；`GatewayClient.patchConfig` 新增可选第三参数，未传时请求体与旧版完全一致。模型列表 `models.providers.*.models[]` 走 Gateway 的 ID 合并，不需要 consent；删除模型仍用 `config.set` 整份替换。补 `model-catalog` 1 例、适配器 1 断言。
+- 同日负责人追加：模型页要进付费墙。新增 `ProFeature` `modelManage`（付费墙 hero `manage`，标题「决定你的 Agent 用哪些模型」，动作「管理模型」，2 键 × 19 语言 `common`），`ModelsScreen` 用一个 `requirePro(write)` 包住所有写动作：开关、换默认 / 当前模型（选到不同模型才拦）、备用增删排序、思考等级、加模型、成本、删除；免费用户看到的是真实数据和可用的控件，点到写的那步弹墙，continuation 原地续做，开关不假动。聊天输入框的会话级切换保持免费，与 `00` 的「模型切换保持免费」以此为界，记入偏离记录。`ModelsScreen` 新增 2 个免费用户用例（OpenClaw 三处拦截 + 续做后保存；Hermes 选回原值不拦、选新值拦）。
+
+## 付费墙改为最后一步拦截：OpenClaw 管理与运行日志（2026-09-16）
+
+- 负责人截图指出 OpenClaw 管理 → 权限页对免费用户只剩一条「此智能体需要 Pro / 查看 Pro」横幅，四个分段都是如此；「日志」行在主页就被锁住、名字也没有付费吸引力。对照 2.0：权限 / 诊断页是进入即 `requirePro` 退回，备份页列表可见只拦恢复，日志页用 `expo-blur` 的 `ProBlurOverlay` 盖住整列。3.0 重建时这些都退化成了横幅。
+- 新增共享 `components/pro/ProGate`：真实内容降透明置于向页面底色渐隐的 SVG 遮罩下（不引入 `expo-blur` 等原生模糊依赖，设计系统也禁止产品 chrome 用 live blur），遮罩内容不可点、不进无障碍树；下方锁形图标 + 一句功能说明 + 命名功能的解锁按钮。3 项组件测试覆盖无遮罩、遮罩隐藏语义、深色与自定义底色。
+- OpenClaw 管理免费用户改为预览模式（`preview = !isPro && !permissionDenied`）：四个分段照常加载真实数据；配置展开 key 时 JSON 在遮罩下、编辑弹墙；权限三项状态可读，详情行 / 规则组（遮罩）/ Repair Now 弹墙；诊断免费运行，摘要与前 2 项可读，其余项遮罩且标题写数量，详情 / 尝试修复弹墙；备份列表免费，创建与恢复确认弹墙。所有被拦动作带 continuation，购买 / 恢复后原地续做（含恢复确认表里的具体备份）。锁定 Agent（`permissionDenied`）仍整页走 `agents` 门，原横幅只保留给这一情形。
+- 日志：主页行与页标题由「日志」改为「OpenClaw 运行日志」（`logs` 能力只有 OpenClaw 为真，Hermes / YouMind 不显示此行），行不再上锁；页内免费用户看最新 3 条，后 4 条在遮罩下，非 Pro 不做 2 秒轮询，刷新按钮可用，解锁按钮走 `logs` 付费墙。
+- 文案 13 键 × 19 语言（`config` 9 键、`settings` 4 键），`i18n:check` 严格通过；`check:ui-style`（184 文件）、`check:docs` 通过；`tsc` 在改动文件无错误。规则写入 `apps/mobile/AGENTS.md`「Agent management navigation」、`docs/design-system.md`（`ProGate` 原语与 OpenClaw management 段）、`04-app-screens.md` §5 与 `06-paywall-and-growth.md` §3「最后一步拦截」。
+- 测试：`OpenClawManageScreen` 新增免费预览用例（四分段加载、遮罩、各拦截点与续做），`LogsSection` 新增免费 3 条 + 遮罩 + 不轮询与空日志仍显示门两例，`model` / `section-model` / `AgentSettingsScreen` 旧的「日志行上锁」断言改为进入页面；Mobile 完整套件 271 suites / 2,704 tests 通过。按负责人要求未操作模拟器与真机，视觉与真实购买续做验收记 HT-PAYWALL-0916。
+- 负责人真机复看后的两处细节（2026-09-16 同日）：分段加载中的 Companion 由贴在页头下改为视口居中（ScrollView 内容 `flexGrow: 1`；Roster / Thread 本已居中，其余页面用骨架不受影响）；「备份」入口与页标题改为「备份 OpenClaw 配置」，页首加一段带 Archive 图标的说明（备份存在手机上、一键恢复），按钮改「创建备份」，空态改「还没有还原点，改配置前先创建一个。」，`Backups` / `No backups yet` 两个旧键从 19 语言删除，新增 4 键。
+- 未做（留给负责人决定）：真高斯模糊需要重新引入 `expo-blur` 原生依赖并按 `engineering-baseline.md` 走 prebuild / pod / 双端构建，本次用无依赖遮罩替代；其他付费墙触点（连接、Agent、搜索详情、文件保存、技能源码保存、Session 预览）本次只审阅未改动，建议见本次会话报告。
+
+## 身份页真实写入核对：emoji 走 Agent 记录、气质多行、头像不再编辑（2026-09-16）
+
+- 核对 OpenClaw Gateway（`src/gateway/server-methods/agents.ts`、`gateway/assistant-identity.ts`、`agents/identity-file.ts`）：`agents.update` 接受 `name` / `emoji` / `avatar`，写入 `agents.list[].identity` 并把这几项按行合并回 IDENTITY.md；解析身份时配置记录优先于 IDENTITY.md；`vibe` 没有记录字段，只存在于 IDENTITY.md（随工作区引导文件进入系统提示）。
+- 发现并修复：App 之前只把 emoji 写进 IDENTITY.md、`agents.update` 不带 emoji——当记录里已有 emoji（如新建 Agent 时填过）时手机改 emoji 无效，且同次改名会让 Gateway 用旧 emoji 覆盖刚写的文件行。现在 name / emoji 一起走 `agents.update`（`AgentPatch` 加性新增 `emoji`），emoji 不再依赖 `fileEdit`。名字原本就正确；vibe 原本就正确落到 IDENTITY.md。
+- IDENTITY.md 写入从「整文件按模板重生成」改为按行合并（`mergeAgentIdentityMarkdown`，对齐 Gateway 自己的 merge）：保留 Creature、Theme、Avatar 行与用户/Agent 写的其他文字；只有文件缺失时才生成模板；清空 vibe 会删掉该行。
+- 气质改为多行 `FormTextInput`；IDENTITY.md 字段是单行，保存时把换行/连续空白折成一个空格。头像行从手机端删除（只预览；它是桌面工作区路径或 URL），App 不再向 `agents.update` 发送 `avatar`；19 个 locale 删除孤立 `settings:Avatar`。
+- 已知 OpenClaw 限制：`agents.update` 把空 emoji 当作「不改」，所以手机清空 emoji 只会删掉 IDENTITY.md 的行，配置记录里的旧 emoji 仍会生效。
+- 验证：identity-model 4 tests、IdentityScreen 8 tests、utils 全绿；`mobile:typecheck`、`check:design-system`、`i18n-prune --strict`、`check:docs` 在改动时通过。同时段工作树里其他会话的改动使 `AgentSettingsScreen.test.tsx`（logs Pro 门）与 `gateway-adapters.recorded.test.ts` 的 tsc 报错，与本次改动无关。未操作模拟器、手机或线上服务；负责人真机验收见 HT-IDENTITY-0916。
+
+## 发消息到回复结束的视觉连续性（2026-09-16）
+
+- 负责人真机反馈即时发送已有改善，但气泡宽高突变、消失重现。代码定位：待发态没有时间/状态占位且带独立说明与降透明；派发时插入元信息与时间分隔；入场缩放/淡入；列表复用重播动画；历史/最终回复更换列表 key；首个网络 chunk 到达但 pacer 尚未输出时思考占位提前消失。
+- 待发、派发、确认采用同一布局：本地创建时间、原图片预览与尺寸、固定状态图标槽；排队仍位于列表尾部。`renderKey` 独立于后端 ID，只按确切 ID 或双侧唯一的 role/idempotencyKey 保留；等待、流式、结束回复与工具段保持各自身份。元信息提前留位，去掉气泡缩放、整条淡入与派发后的第二次滚动；会话级已播放记录防列表回收重播，测量 cell 不消费动画。
+- 连接探测、重连、单次 prompt、失败暂停及模糊回执不自动重发策略保持。OpenClaw/Hermes controller 回归验证同一消息的时间/身份/滚动请求稳定，以及回复从等待到结束的身份连续；React 组件测试检查原生节点保留、空 paced text 仍显示思考、减少动态效果及 cell 重挂载。
+- `npm run check:required` 通过，含 Mobile 275 suites / 2,747 tests、各 workspace 类型/协议/自包含测试、190 个 UI 文件设计检查、i18n 与文档检查；随后对回执身份双侧唯一性补充复核。日志：`evidence/send-motion/`。本轮未启动模拟器、安装构建、改配对或部署；原生帧时序与实际手感仍需负责人手机验收，见 HT-SEND-MOTION-0916。实现说明在 `16-composer-upgrade.md`。
+
+## 发送即时反馈与连接保护解耦（2026-09-16）
+
+- 已确认 OpenClaw / Hermes 共用发送预检，本地与 Relay / Tailscale / Cloudflare / custom 均在本地气泡出现前等待网络查询、必要的 health 探测与图片处理。1.5 秒快速探测失败还会进入至少 8 秒的重连等待；这解释了点击后不跟手，但不是实际网络故障的根因证明。
+- 点击发送现在同步进入原有按连接/会话隔离的 outbox，立即清空本次输入并显示发送中气泡；预检、重连、8 MiB 帧保护、真实回执与不确定发送恢复保持原路径。预检/附件读取失败保留可编辑/重试气泡；请求发出后丢回执不自动重放。稳定消息 ID 避免同一气泡重复进入；后续草稿与附件不会被旧操作覆盖。
+- 补齐等待期间切会话、换 adapter、卸载页面、删除待发消息、恢复时发现已有运行的保护；不引入并发 prompt。现有 outbox 仅内存跨页面保留，不声称杀 App 后持久离线投递。调研与取舍见 `16-composer-upgrade.md` 的即时反馈章节。
+- 验证：最终 `test:required` 全绿（Mobile 271 suites / 2,704 tests，含 21 项新增发送回归；协议 25 tests / 100% coverage、Relay Shared 34、Registry 41、Worker 127、Bridge Core 39、Runtime 214、CLI 66、脚本 59）。183 UI 源文件设计门禁、19 locales / 22,705 translations、`check:docs` 与本次文件 `diff --check` 通过。`check:required` 的类型阶段仍被已有模型配置测试 `gateway-adapters.recorded.test.ts:249,265` 两处类型推断错误阻断；最终独立 Mobile typecheck 复核仍仅这两处，未修改该并行工作、未声称全仓类型全绿。全树 `metrics:loc` 已运行，数字含其他未提交工作，不作本次增量。
+- 本轮没有启动模拟器、操作手机、改变配对、安装构建或部署服务。负责人真机验收见 HT-SEND-0916。命令日志在忽略目录 `docs/3.0/evidence/send-feedback/`；一次并行检查碰到设计检查临时目录清理与 Jest 扫描竞态，待设计检查结束后串行重跑 `test:required` 已通过。
+
+## 用量页改版：图表回到 3.0 视觉、范围切换不再串数（2026-09-16）
+
+- 负责人反馈：3.0 用量页退化成五组纯列表，量级不可读、费用为 $0 时仍铺四行 `$0.0000` 明细；切换今天 / 7D / 30D 没有任何加载反馈，连点后最终停在哪个数字取决于网络而不是最后点的档位。根因：每个返回都直接 `setState`，没有序号保护、缓存与骨架。PostHog（项目 337268，近 180 天 `$screen`）：2.0 Usage 5,193 次 / 1,241 人，是控制台子页里按人数第一（Files 989、Models 862），月人均 2–4 次。方案页 https://claude.ai/code/artifact/e98e83d3-2788-4739-a7fa-5847a7d62cdc，负责人按全部建议拍板（纯墨色图表、今天档显示近 7 天并高亮今天、恢复工具榜、海报入口移到页头分享）。
+- 页面：英雄卡（主数字 + 次数字 + 四段 `SegmentBar` 构成条）、2×2 指标卡（消息 / 工具调用 / 会话 / 缓存命中）、`UsageBarChart` 趋势（今天档「近 7 天」默认选中今天，点柱子切换）、模型与工具 `ShareRow` 榜（前 5，带占比条；无工具调用时整卡不渲染）。删除每日日期列表、零值费用明细与页尾按钮，海报改从页头右侧 `Share` 打开。图表全部墨色（界面主题 `accent` 已是 `ink`），不新增 token；`resolveUsageMeasure` 只在 `cost` 能力为真、口径不是 unknown / included 且费用大于 0 时以美元领头，否则以 Token 领头。
+- 加载：新 `useUsageDashboard`：以 adapter / Agent / 范围 / 起止日期为键的内存缓存（60 秒内不重复请求，更久静默刷新），屏幕只显示当前键的数据，另一范围的迟到响应只进缓存；未缓存范围立即显示同形骨架（柱数按范围）；首屏落地后顺带取 7D 作趋势上下文，再按作用域一次性预取其余范围；失败保留旧数据 + Retry `Banner`，无旧数据才显示错误；内容交叉淡入 200 ms、柱子 320 ms 从基线长起，减弱动效静止。两个后端共用同一份 `management.usage` 契约，费用内容按 `cost` 能力显隐，无后端分支。埋点新增 `usage_range_changed{ range, cached }`。
+- 付费（同日第二轮，负责人要求「差点就看到」的蒙层而不是拦在入口）：今天档完整免费；7D / 30D 可切入，真实数据照常加载并渲染在 `ProGate` 六行蒙层之下（英雄卡与指标卡数字若隐若现、不可点、无障碍隐藏），锁 + 「看整周、整月的用量」+ 一句说明 + 全宽墨色「解锁用量趋势」按钮以 `usage` 原因弹付费墙；今天档趋势图里点过去几天的柱子也直接弹墙；购买后随 `isPro` 即时揭开。付费墙 `usage` 原因从通用文案改为专属：标题「看清每一个 token 花在哪」、副标题「7 天与 30 天的用量、费用与趋势属于 Pro」、按钮动作「查看用量趋势」、收益首条「7 天 / 30 天用量与费用趋势」（新增 `usage` 收益类别与 `ChartColumnIncreasing` 图标）。`usage_range_changed` 增加 `locked`。分段控件不加锁标、不禁用。
+- 文案：新增 `Cache hit`、`Last 7 days`，付费墙 4 键（common）与蒙层 3 键（settings），19 locales；删除不再引用的 `Cost Breakdown` / `Daily Usage` / `Top Models`。文档：`04-app-screens.md` §5 新增「用量页」、`07-analytics.md`、Mobile `AGENTS.md` 与 `docs/design-system.md`。
+- 验证：新增 `useUsageDashboard.test`（乱序返回不串数、预取一次、失败保留旧值、离线不请求）、`charts.test`（构成条 / 占比行 / 柱图点选）、usage-model 5 项与分栏 2 项；Mobile 全量 274 suites / 2,729 tests 通过；`tsc` 无错误；`check:design-system`（190 UI 文件）、`i18n:check`（strict，19 locales）、`check:docs` 通过；第一轮 `npm run check:required` exit 0（含全部 workspace 类型检查、Mobile 274 suites / 2,729 tests、Relay / Bridge 必需测试、190 UI 文件设计门禁、strict 19-locale 文案与文档检查）。第二轮（Pro 蒙层）后：`tsc` 无错误、Mobile 全量 274 suites / 2,735 tests、`check:design-system`（190 UI 文件）、`i18n:check`（strict，1,247 keys）、`check:docs` 通过；但重跑 `check:required` 在 `packages/bridge-runtime` 的 Hermes 套件上变红（10 文件 / 47 项，全部因为本机 `/usr/bin/python3` 在本轮期间开始返回「You have not agreed to the Xcode license agreements」，账本脚本无法启动；第一轮同一套件 27 文件全绿，本轮未改任何 Bridge 代码），属机器环境问题，记 HT-ENV-0916，接受许可后需重跑门禁再谈发布。未开模拟器、未提交；真机视觉验收留给负责人（HT-UX-0916 追加用量页：英雄卡 / 趋势图 / 骨架切换 / 深色）。
+
+## 连接状态不再占布局：页头胶囊取代顶部横幅（2026-09-16）
+
+- 用户反馈：任意页面压后台再切回，顶部都会先出现一块灰色「Offline · reconnecting / Reconnecting…」横幅把内容顶下去、再消失；要求不改变高度、更简洁优雅。调研结论：各页各自内联 `Banner`（Roster、Thread、Agent 主页与分栏、账户设置、搜索、消息详情、Session Panel、Cron 编辑器），除 Roster/Thread 外都不区分 20 秒恢复窗口，于是每次回前台都直接弹「离线 + 重连」。
+- 新增共享 `ConnectionStatusPill`（`inline` 40pt `surface` 胶囊 / `floating` 浮起胶囊）：重连中呼吸文字无动作；离线 `WifiOff`、错误红色 `CircleAlert` 但底色保持中性；一个 600 动作词，整颗胶囊即 44pt 点击区；淡入淡出并尊重减弱动效。连接状态一律进页头：Roster 用空置的页头中央（窄位只放图标 + 动作词，完整状态进无障碍标签）；Thread 保留 `HeaderPill` 副标题，时间线顶部悬浮只带动作的胶囊（错误态带文案）；标题页由标题让位给胶囊、状态消失后标题回来；搜索与 Session Panel 没有可让位的标题槽，用内联胶囊领起列表。产品横幅（宽限、Pro、不支持、Bridge 升级、发送失败详情）保留 `Banner`；Logs/Tools/Channels 保留各自原位离线文案。
+- 给 Agent 主页/分栏、搜索、消息详情、Session Panel、Cron 编辑器补传 runtime `recovering`，恢复窗口内统一显示安静的「Reconnecting…」，只有持续离线或连接错误才出现动作词。`ScreenHeader` / `AccountSettingsPageHeader` / Agent 页头新增 `status` 槽。
+- 验证：Mobile 完整套件 269 suites / 2,661 tests 通过（含新增 `ConnectionStatusPill.test.tsx` 10 项与各页头状态回归）；`tsc` 无错误；`check:design-system`（182 UI 文件）、`i18n:check`、`check:docs` 通过。未操作模拟器，未提交；真机视觉验收记 HT-UX-0916。
+
+## 身份与文件的编辑入口合一（2026-09-16）
+
+- 问题：Agent 资料页下「个性与记忆」→ 身份页（资料 / 我的信息 / 人格 / 记忆）与「Files」→ 文件页两处都能编辑 SOUL.md / MEMORY.md / USER.md，且两套弹窗交互不同。来源是 `00-decisions.md` §2 把「人格、记忆文件」写进身份行的同时又保留了「文件」行。调研：OpenClaw 自家 Control UI 把 identity 字段放 Overview、文件只在 Files 面板，服务端 `agents.files.list` 刻意剔除 IDENTITY.md；2.0 Agent Detail 也只有名字 / emoji / vibe / My Info，「Memory」格子直接开文件列表；Hermes 只暴露 MEMORY.md / USER.md、`agentEdit=false`，旧身份页的「人格：未设置」是保存必失败的死路。2.x PostHog（2026-03-10 起）：Files 1,019 人、File Editor 612 人、Agent Detail 528 人、Agent User Info 243 人；612 名 File Editor 用户里 247 人从未进过 Agent Detail。
+- 负责人决定：文件页是 SOUL / MEMORY / USER / AGENTS 的唯一编辑处；身份页只保留非文件的资料（名字 / emoji / vibe / 头像）与新建 / 删除智能体；「我的信息」结构化表单去掉。
+- Mobile：`IdentitySection` 改为独立原生栈页 `IdentityScreen`（对齐 Cron 编辑器：`ScreenHeader` + ghost Save、`KeyboardAwareScrollView` 内联表单、头像预览随 emoji 草稿变化、`usePreventRemove` + `ConfirmationModal` 脏确认、写入后再放行导航；花名册刷新重建描述符不重置草稿）；`identity-model` 只读 agents.list + IDENTITY.md；删除 `utils/agent-user-profile.ts`；Profile 行改为「Identity」并按 `agentEdit || agentCreate` 显隐（Hermes 不渲染）；section-model 去掉 `identity.persona-memory` 行。文件页补齐原身份页独有的能力：`missing` 文件在可编辑时尾值「Create」并可直接创建（原来只有身份页能在 MEMORY.md 不存在时写入），不可编辑时保持「Missing」禁用；埋点 `identity_file_activity` 改名为 `agent_file_activity` 并移到文件页，`document` 为 agents / soul / identity / user / bootstrap / memory / other 有界枚举。文件页弹窗交互本身未改（负责人认为其体验更好），Skills 的 SKILL.md 弹层仍是 93% Markdown 样式，是否统一留给负责人决定。
+- 文档：`04-app-screens.md` §5 新增身份页 / 文件页段落，`07-analytics.md` 新增 `agent_file_activity`，Mobile `AGENTS.md` 与 `docs/design-system.md` 的 Identity 段落改写；i18n 清理 10 个孤立 key（19 locales）。
+- 验证：`IdentityScreen` 8 tests、identity-model 3、AgentSettingsSections 24、AgentSettingsSectionScreen / model / section-model 32、analytics events 全绿；`i18n-prune --strict`（19 locales，1,182 keys）、`check:design-system`（182 UI 文件）、`check:docs` 通过；最终 `npm run check:required` exit 0（Mobile 269 suites / 2,669 tests）。未提交、未部署；真机视觉验收留给负责人。
+
+## 夜间反馈续查：连接竞态、旧工具缓存与空闲成本（2026-09-15）
+
+- 已继续实际复现/修复，而非把剩余问题留作测试结论。Hermes 历史只传当前页的已确认工具 ID 映射，App 按角色/名称/ID 清理旧缓存副本；模拟器 H8/H9/H10 均恢复为一张已完成工具卡。
+- Hermes 云状态查询增加 10 秒期限、取消与 socket 归属保护；旧查询不能关闭新连接，旧本地 socket 迟到帧不能进入新 Relay。失败/取消/重连有针对性回归，不增加重试。
+- 明确零客户端时不再向云端转发周期 tick/health；保留实际消息、响应、本地健康与传输 ping/pong，兼容未知客户端数量的旧服务端。实测空闲 2 分钟 8 次 pong、无断线，云端无消费者丢弃事件从此前 10 条/分钟降至 0；仍保留已有状态探测。
+- 新增真实 H11（35 秒工具 + 切 Lucy）、A4（Lucy 实际回复）、H12（QA Relay 重启后发送 + 冷启动）、H13（空闲后发送）；均各一条消息/结果。A4 发现的时间戳覆盖正文已用原消息截图修复验证。
+- 本轮最终 check:required 全绿（Mobile 268 suites / 2662 tests，Bridge Runtime 27 files / 214 tests），compat 5 files / 39 tests；未跳过失败项。候选 CLI 本地安装并重启现有服务，Hermes 已由服务恢复为全局安装包；无云端部署或 npm 发布。
+- 09:30 的多路共享网络中断尚未定位到具体上游，不能归咎手机或声称永不掉线。复杂工具的截断参数识别、原生附件选择器仍有覆盖缺口；不签署全量发布就绪。详情与最终验证/安装状态见 [续查记录](overnight-qa-2026-09-15.md#follow-up-investigation-and-fixes--0942-onward-jst)。
+
+## 延迟夜间双后端实测与 Hermes 运行恢复（2026-09-15）
+
+- 按用户要求延迟开工，实际 00:51–02:12 JST 操作模拟器；首条聊天 01:03。16 条实际消息（Lucy 6、Hermes 10）、2 张合成图片、6 次真实工具执行。覆盖切后端/Session、后台约 3 分钟、锁屏约 5 分钟、运行中杀 App、草稿、手动暂停跨冷启动、Hermes QA Relay 重启及 50 秒受控停顿。不是双真机或全网络认证。逐项证据见 [nightly report](overnight-qa-2026-09-15.md)。
+- 修复三个明确问题：首次照片授权前先完整关闭 Add sheet，避免遮住 iOS limited picker；Hermes history 补现有协议的运行快照，防止运行中返回丢失工作态/停止按钮；运行中历史先以唯一名称/完整参数/时间匹配工具 ID，防止完成时新增卡片且旧卡持续转圈。保持取消/终止竞态保护，不加轮询或重试、不修改外部 Hermes。
+- 真正复测：两图用户消息经切换/冷启动/重连仍一条；两次有意相同文字仍两条；停顿发送失败保留草稿、不自动重放，恢复后手动发送只一条；Hermes H10 在运行中返回、结束、App/Bridge 重启后都只有同一张完成工具卡。旧 QA H8/H9 的重复缓存未做猜测删除。
+- 最终 check:required 全绿（Mobile 268 suites / 2659 tests；Bridge Runtime 27 files / 211 tests），test:compat 5 files / 39 tests。中间严格历史包测试因新增 idle 字段失败，显式增加该字段断言、保留历史 fixture 后全量重跑通过。
+- 本机已安装候选 CLI，本地 Hermes Bridge 使用新包；未发布 npm 或部署云端。恢复普通 Metro，停止临时 HTTP/inspector 和模拟器 App，保留配对，暂停本轮 heartbeat。旧全局包有临时备份。
+- 仍有边界：本地日志见 owner 1006/心跳超时后恢复，原因未隔离，不声称断线消失；文件选择器和 limited-picker 完整原生操作被 CUA AX/坐标问题阻挡，未标通过；不据此签署发布就绪。
+
+## 权限与诊断等待反馈、管理列表一致性（2026-09-14）
+
+- 本地 Bridge 日志中最近诊断请求均返回：约 13.4 / 14.0 秒、3 项检查；较早请求约 14.4 秒、4 项检查。证明本机命令仍可执行，不代表已验证真机收包。保留 Diagnostics，未修改 OpenClaw 或连接/Relay。
+- 管理读取补 35 秒 UI 截止（协议原有 30 秒超时保留），同 adapter/section 去重；诊断首次及重新运行都显示明确 Companion 进度。迟到结果无法覆盖失败/重试；超时显示错误并允许手动重试，不自动循环。
+- 无审批时隐藏 Pending Requests 整块；有真实 exec approval 时保留审批和过期判断。诊断原始报告移入 Details，保留结果、修复确认与付费门槛。
+- Agent Profile 管理项、权限与管理入口复用账户设置 comfortable 行高与中性圆角图标；日志入口保留，回归其加载/过滤/分页等现有测试。视觉验收仍由用户真机完成，不占用其连接。
+- 验证：check:required 全部通过（Mobile 268 suites / 2,657 tests、workspace 类型与自包含测试、设计/i18n/docs 门禁）；最终图标统一后再次通过 mobile typecheck 和管理/日志专项 17 tests。未提交或部署；真机收包和视觉由用户验收。
+
+## OpenClaw 管理入口与配置浏览优化（2026-09-14）
+
+- 用户明确授权取消 Advanced management 层级，研究 2.0 后优化管理交互。对比 d9c1ada 的 OpenClawConfigScreen：恢复按功能进入详情的导航方式，未搬用旧 Gateway 上下文或自动恢复当前协议未暴露的更新/重启操作。
+- Profile 直接列出受能力和付费约束的管理项；OpenClaw 管理以完整宽度图标行展示四个功能，避免多语言 Tab 截断。仅进入选定栏目才加载，返回保留已加载结果；配置按顶层键折叠浏览，详细报告用 93% 可滚动 Sheet。
+- 保留配置 hash 写入、二次确认、权限审批、诊断/修复、备份/恢复及 Pro 门槛；不触碰 OpenClaw/Hermes 连接或服务端。视觉验收按用户约定交给真机，不连接模拟器。
+- 验证：required 中全部 workspace typecheck、自包含测试、Mobile 268 suites / 2,653 tests、181 个 UI 文件设计门禁通过；i18n 首次发现删除入口留下的孤立翻译 key，已同步清理 19 locales 并重跑 i18n strict 与 docs 全绿。最终管理页专项 17 tests 通过，git diff --check 通过。未提交、未部署、未操作设备连接。
+
+## 本地模型引导：告知支持的模型服务（2026-09-14）
+
+- 问题：Preview「Local model」配对步骤只给一条命令，未说明需先运行 llama.cpp / Ollama 等服务；CLI 在无服务时只输出 `fetch failed`；「No agent yet?」把 local-model 链到仓库根目录。用户决定不换电脑图标、不加问号。
+- Mobile：步骤 01 复用 `SegmentedTabs` 槽位改为 llama.cpp / Ollama / Other 三选一，命令与一行灰字随之变化（Ollama 自动带 `--engine ollama --base-url http://127.0.0.1:11434`，Other 带 `--engine openai-compatible --base-url http://127.0.0.1:1234`）；「No agent yet?」不再列出 local-model（`ONBOARDING_WEBSITE_URLS` 收窄类型）；`bridge_offline` 的「See how to start it」改指 15-local-model.md。6 个 config key 加到 19 个 locale。
+- CLI：`discoverLocalModelEndpoints` 抽为可测函数；连接拒绝/超时/非 OpenAI 兼容/空模型列表/未知引擎均给出含地址与 `--base-url`/`--engine` 建议的错误，新增 3 项单测。
+- 验证：Onboarding 5 suites / 43 tests、CLI 10 files / 66 tests、`i18n:check`（19 locales × 4 namespaces、1,192 keys）、design-system 与 docs 门禁通过；本次改动的 Mobile/CLI typecheck 在改动时点通过。完整 Mobile 套件 266/268 suites（2,642/2,646 tests）通过，2 个失败（`AgentSettingsSections`、`analytics/events` 的 `identity_file_activity`）来自同时进行的 Identity 工作树改动，与本项无关；同一原因（`IdentitySection.tsx` 的 `AgentDescriptor.backendKind`）使 `check:required` 停在 Mobile typecheck，待该工作收口后重跑。本机 Ollama 用手机生成参数实测发现 3 模型、health 通过且 vision 识别正确；无服务时终端实际输出新的引导文案。用户真机确认效果后授权 README：中英 README 各新增「本地模型聊天（预览）」特性条目、「连接本地模型（预览）」小节（App 内开启路径、从源码运行的命令、三种服务的参数表、链接 15-local-model.md）和前置要求一行，行数保持对齐；`check:docs` 通过。核实 npm `@p697/clawket@0.7.0` 不含 `local-model`，App 内展示的 `npx @p697/clawket pair --backend local-model --preview` 需等新版 CLI 发布后才可用，记入 HT-LM-0914。
+
+## 真机 Air 连接与带图消息重复（2026-09-14 夜间）
+
+- 现场只读查手机运行态（重启前）、本地 Bridge/SQLite、Gateway 历史及 Preview 云日志；未操作模拟器、改配对或重启服务。Air 未开代理时对 Preview 两域名超时，用户开启代理后确认恢复；不能将 client socket 数量等同物理手机数量。
+- 电脑重启附近有本机代理拒绝连接，13:00:30–32 UTC 的 channel/Production/Preview owner 心跳同时超时，云端确认 owner 丢失和恢复；此段证明电脑到 Relay 中断，未进一步证明是代理/上游/边缘中的哪一环。未通过加大心跳阈值或额外重试掩盖故障。
+- 确认「你看 + 两张图」只持久化一次。修复 OpenClaw `:user` 事件标识与本地发送标识不一致导致恢复重复：仅识别本 App 生成的 key，保留精确身份匹配的附件，修复此前 OpenClaw 缓存后缀；不按相同文字吞并显式不同 key，不改 Hermes/外部 key。
+- 修复 Roster 手动 Reconnect 误激活 iOS 原生下拉刷新造成大块顶部留白；独立使用 runtime reconnect 并合并连续点击。实际视觉由用户真机验收。
+- 专项 4 suites / 105 tests 通过（新增缺陷回归先红后绿）；完整 `check:required` 全绿（Mobile 266 suites / 2,621 tests、Bridge Runtime 208 项及全部类型/设计/文档门禁）。本轮是 Mobile 修复，无服务端/Bridge 发布。连接恢复有用户与日志证据，修复后的双真机带图体验仍待用户验证，不能视为发布认证。
+- 昨晚的单模拟器交替长测未覆盖「两台手机不同代理 + 电脑重启 + 带图发送中断后恢复」组合，测试时长不能替代场景覆盖。现场时间线与边界见 [连接排障记录](20-connection-diagnostics.md#september-14-device-specific-reachability-and-image-echo-recovery)。
+
+## 发布前跨版本兼容性检查（2026-09-14）
+
+- 只读核对 Production/Preview 版本及 npm latest=0.7.0，导出实际线上四个 Worker，在本地 Wrangler/workerd 跑升级/混合/代码回退矩阵。OpenClaw/Hermes × 旧/新 Bridge × 五阶段，共 20 阶段通过；存量凭据与新版写入配对记录在旧代码下仍可使用。不是云端跨 DO 迁移回滚验证，也不是旧 App 二进制签字。
+- 修复新 App 连接旧 OpenClaw Bridge 的握手：顶层 meta 违反 Gateway 闭合 schema，改为已有 `params.caps`；新 Bridge 兼容两种请求，旧能力缺失保持 legacy。实际 Gateway 校验器确认，回归先红后绿；缓存 v2 的显式 schema 拒绝也保留一次兼容恢复，不放宽网络/鉴权失败。
+- 验证：compat 5 文件 / 39 项；Mobile 专项 168 项；required 全绿（Mobile 266 suites / 2,614 tests、Runtime 208）；真实 Worker/adapter 集成 8 通过 / local-model 公网项 1 未执行；显式外部 Hermes 集成 36 项；Bridge 构建及包来源验证通过。
+- 待发布闭环：Production OpenClaw 两服务缺六位码 `PAIRING_TICKET_SECRET`；新增 Registry DO 后不能直接回滚到旧线上版本，须先准备迁移兼容恢复产物；真实已发布 2.x App 抽验为 HT-COMPAT-0914。本轮未部署、发布 npm、操作模拟器、重启实际 Bridge 或改变用户配对。完整版本、矩阵、命令与边界见 [发布兼容性报告](release-compatibility-2026-09-14.md)。
+
+## Lucy 实际工具调用补测（2026-09-14 03:04–03:18 JST）
+
+- 用户要求实际搜索与约五分钟一次性任务。模拟器发送，原始 CLI 工具记录确认 web_search 返回 6 条结果、automations 成功创建任务；03:10:30 触发、约 7 秒完成并自删，App 会话面板可打开任务子会话并看到提醒。实际间隔 4 分 37 秒，无外部频道投递。
+- 修复 Mobile 漏解析 CLI 合并历史内嵌工具结果：逐块保留调用/结果/错误及工具 ID，普通 Hermes toolResult 路径不变。实际详情已显示完成及真实返回 JSON。4 suites / 81 tests 通过；最新 required/typecheck 被并行定时任务编辑页面的类型调整阻断，不宣称全量通过。未部署云端。
+- 同时记录未解决的合并历史耗时、聚合回复重复与任务原始提示词展示问题；完整证据和边界见 [实测记录](overnight-qa-2026-09-14.md#lucy-real-tool-follow-up--03040318-jst)。
+
+## 双后端夜间模拟器实测（2026-09-14）
+
+- 用户明确授权本轮模拟器实测。00:08 开始构建/准备，Lucy 00:35、Hermes 00:40 首次成功聊天；交替覆盖主聊天、OpenClaw 独立会话、生成中回列表、切连接、键盘/长草稿、5 分钟及 6 分 41 秒锁屏恢复、工具调用/详情和本地 API 故障恢复。详细证据与未覆盖边界见 [实测记录](overnight-qa-2026-09-14.md)。
+- 修复 Hermes 工具秒/毫秒混用导致 1970 年分组、实时/native 工具 ID 不一致导致重复卡片；最新真实调用只有一张卡片，输入、输出及 1.2 秒耗时均复核。修复 Hermes 自有 API 子进程退出后不会恢复，实测退出→就绪 31.394 秒、仅一次启动；保留有界退避，不替换外部或仍存活的 API。
+- 修复 Hermes 用户停止只断本地 SSE 的问题，增加真正的上游停止请求与失败保护；修复消息动画 render 阶段写 shared value、RTL 图标 forwardRef 警告、全局 CLI symlink 导致 doctor 漏检。服务端未部署，外部 Hermes 源码未改，已有其他工作保留。
+- 最终实测：Lucy 约 66 分钟、Hermes 约 65 分钟交替观察；90 秒工具任务实际停止后，Hermes API 确认 cancelled、后续聊天正常。新工具卡片跨 Bridge 重启仍只有一张。完整 required 全绿（Mobile 262 suites / 2,580 tests）、compat 36/36、docs 与 diff 检查通过；本机全局 CLI 已安装新版，未发布 npm/云端/TestFlight。不得将本机 Debug 模拟器通过等同于所有网络或商店 Release 可发布。
+
+## 已付费会员更换方案与终身买断（2026-09-14）
+
+- 用户授权完整实现并操作商店、RevenueCat、PostHog 后台。设置 → Clawket Pro → 会员卡现在允许已付费用户打开付费墙；当前方案标记并锁定，可切月/年或买断。自动功能门禁仍直接放行 Pro。
+- 以实际 catalog 修正购买：iOS lifetime 为 `.buyout`；Android 月/年为同一商品的 `monthly` / `yearly` base plan，采用商店允许的 WITHOUT_PRORATION；跨商品采用 DEFERRED。下单前刷新权益，防止重复买、跨商店误换及错误提前授予权益；保留历史终身升级保护。
+- 买断单独支付，明确不会取消原订阅；购买前提示、购买后保留管理订阅入口及完成页。方案变更提交单独埋点，不作为已实现收入；取消/pending/未确认权益均不假报成功。19 种语言同步。
+- 后台：RevenueCat `default` offering 三包及同一 entitlement 已核对；Play 实时通知已启用并覆盖一次性商品，现有 Pub/Sub 无需改权限。两次测试均抵达 RevenueCat（最后 2026-09-13 15:44 UTC）。PostHog 确认 Clawket / Default project `337268`，新增事件无需预注册。Apple 同等级调整已由负责人保存并独立确认，两方案均为 Level 1；切换至已登录且有付款权限的 Lucy 账号后，确认 Play 告警对应新加坡税务信息缺失，已打开填写入口交给负责人；没有证据表明该税务提醒已阻止客户购买。
+- Apple 服务端通知已通过 RevenueCat 自动应用；独立回读 App Store，Production / Sandbox 均指向本 App 的 RevenueCat 接收地址。Apple 实际通知投递仍需 Sandbox 验收；未记录地址中的私密路径。
+- 验证：`npm run check:required` 全绿，Mobile 261 suites / 2,578 tests、173 个 UI 源文件、19 locales / 21,413 translations、全部 workspace 类型/自包含测试与文档门禁。未提交、未部署、未安装新构建、未执行真实扣款；原生购买验收仍待负责人。细节与后台证据见 [Pro plan management](../../apps/mobile/docs/pro-plan-management.md)。
+
+## 多语言扩展到 19 种语言与 RTL（2026-09-12）
+
+- 用户授权：先清理无用 i18n key，再把支持语言扩展到与 YouMind Mobile 相同的 19 种，并为阿拉伯语做 RTL 适配；工程规则以 `apps/mobile/docs/localization.md` 为准。
+- Key 清理：`i18n-prune` 改为按词法作用域解析 `useTranslation` 绑定并支持命名空间数组，误报的 23 条 MISSING 消失；新增 `DYNAMIC_KEY_ORIGINS` 登记 4 处运行时选 key 的调用点（reply-failure、ChatColorPicker、console-heartbeat、AgentSettings model），命名空间不再被整体保护。实际删除 32 个源码未引用的 key（付费墙旧文案、Design System 示例、旧配对文案等），补上 1 个真正缺失的 key（`config` 的“All local data for this connection will be removed.”，此前六种语言都显示英文）。`npm run i18n:check` 从 `--catalog-only` 升级为 `--strict`，进入 `check:required`。
+- 基础工程：`src/i18n/supported-locales.js` 成为唯一语言列表来源（运行时、`plugins/with-locales.js`、门禁共用）；`language.ts` 新增 BCP-47 设备标签解析（zh-Hant/TW/HK/MO、pt-PT 与葡语区、es-419 与美洲西语区）；`app.json` 注册 19 种 `CFBundleLocalizations` 与 expo-localization `supportedLocales`（Android locale_config）并开启 `supportsRTL`；门禁校验 `app.json` 与共享列表一致、插值 token 与英文一致、非英文目录与英文相同比例 ≤ 40%。
+- RTL：`AppLanguageProvider.syncLayoutDirection` 在方向变化时 `I18nManager.forceRTL` + `reloadAppAsync`；`NavigationContainer` 传入 `direction`；新增 `components/ui/DirectionalIcon`，24 个文件的返回/前进 chevron 与箭头改为镜像版本；图片翻页手势与 Companion 动画保持物理方向。语言选择弹层改为固定 snap point + 可滚动。
+- 翻译：13 个新语言（zh-Hant、fr、it、es-419、pt-BR、pt-PT、ru、uk、tr、vi、th、hi、ar）× 4 命名空间 × 1,107 key 全部人工翻译并校对；zh-Hant 以 zh-Hans 为底经 OpenCC 转换后按台湾用语逐项修订（設定/檔案/連線/權限/唯讀/QR Code 等）；es-419 与 pt-PT 分别基于 es 与 pt-BR 做地区化修订。顺带补译 ja/ko/de/es 中 18 条一直是英文的 YouMind 登录与权限状态文案。与 YouMind Mobile 重叠的 ~270 个 key 做了逐条对照，差异均为风格选择。
+- 验证：`i18n-prune --strict` 19 locales × 4 namespaces、1,107 keys / 21,033 translations、missing/removable/registry_errors 均为 0；`npm run check:required` 全绿（2026-09-12）：全部 workspace typecheck、Mobile 258 suites / 2,518 tests、Relay/Bridge 测试、170 个 UI 源文件的 design-system 检查、i18n strict 与 docs 检查。未提交、未部署。真机 RTL 与 13 种新语言的视觉走查、商店元数据属人类工作（HT-I18N-1/2）。
+
 ## 本地模型连接扩展（2026-09-11）
 
 - 用户授权新增 local-model 后端，分支 `feat/local-model-bridge`；交付仅 PR，禁止正式生产发布。
@@ -337,10 +552,18 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 | 2026-09-05 | `expo-modules-core` 降为 Expo 的传递依赖并由 workspace setup 显式链接；应用从 `expo` 公共入口取得 optional native API。 | 消除不必要的 direct dependency，同时保持干净 hoist、原生 autolink 与可选 app-icon/speech module 可用；独立 fixture 回归已进入 required gate。 |
 | 2026-09-05 | 保留 Knip 无法静态识别的字符串 Expo plugins、CLI externals/系统命令及公共 barrel contracts；每类都记录消费者或运行边界。 | 这些不是零消费者实现；盲删会破坏 prebuild、发布包运行时、平台生命周期或组件契约。只移除 `export` modifier 也不降低代码量。 |
 
+| 2026-09-12 | 新增 locale 采用最短 BCP-47 代码（`fr`、`ru`、`uk`、`vi`、`th`、`hi`、`it`、`tr`、`ar`，仅 `zh-Hant`、`es-419`、`pt-BR`、`pt-PT` 带区域/文字），不照搬 YouMind Mobile 的 `fr-FR`/`ru-RU` 等混合写法。 | 语言集合与 YouMind 一致即可；短代码与 iOS `.lproj`、Android `b+` 资源限定符和 i18next 规范化都兼容，也避免同一语言两套代码。 |
+| 2026-09-12 | RTL ↔ LTR 切换允许一次 `reloadAppAsync`；LTR 之间切换保持原有热更新。 | `I18nManager` 方向是进程级原生状态，不重载无法生效；与 YouMind Mobile 做法一致，且仅阿拉伯语触发。 |
+| 2026-09-12 | 门禁把“非英文目录中与英文相同的值超过 40%”视为未翻译并拒绝。 | 现有六种语言最高约 11%；40% 能挡住整目录复制英文的占位文件，又不会误伤品牌/技术词。 |
 ## 偏离记录（规格与实现不一致之处，最终报告汇总）
 
 | 位置（文件 § 节） | 规格原文 | 实际做法 | 理由 | 影响 |
 |---|---|---|---|---|
+| `[UX-2026-09-16-whatsnew] 06-paywall-and-growth.md` §3 历史用户 / `07-analytics.md` | 升级到 3.0 的首次启动用「3.0 + Pro」介绍页（付费墙布局）替代当次更新公告；`paywall_launch_shown / closed` 统计自动弹出。 | 介绍页删除，改为根层更新公告弹层（大号 curious Companion + 版本英雄文案 + 五条一行文案，不放 Pro 条目——负责人看过首版后去掉），跳版合并、静默版不弹、全新安装不弹；事件改为 `app_update_announcement_*` 与 `release_notes_opened`。 | 负责人 2026-09-16 决定：介绍页从未被任何页面调用，公告一条路径覆盖首发与后续所有版本；同一次启动只弹一个模态。 | 06 §3 与 07 事件表已同步改写；`launchPaywallShownThisProcess` 语义扩展为「本进程启动机会已消耗」。 |
+| `[PAY-2026-09-16-models] 00-decisions.md` §付费 | 「保持免费：…模型切换…」 | 模型页（默认 / 当前模型、白名单开关、备用、思考等级、加删模型、成本）全部走 `modelManage` 付费墙；聊天输入框的会话级切换仍免费。 | 负责人 2026-09-16 明确要求给模型页管理动作加付费墙以提高转化；实现者把「模型切换保持免费」收窄为输入框切换。 | 免费用户仍可浏览完整目录与真实默认值；每个写动作带 continuation。若负责人希望输入框切换也收费，需再改 `useChatModelPicker`。 |
+| `[UX-2026-09-16-models] 10-migration-map.md` / `04-app-screens.md` §5 | `ModelsScreen.tsx` 迁移为 `AgentSettings/Models`；`00` 只说「模型切换保持免费」。 | 迁移补完：模型页恢复 2.0 的默认 / 备用 / 思考等级、白名单开关、加模型、删模型、成本覆盖，去掉「模型 / 提供方」Tab，改为独立 `ModelsScreen` 页 + 三个弹层；协议加 `modelManage` 精化。 | M5 只迁了「选一个模型」，负责人 2026-09-16 指出功能丢失且页面不可理解；2.x 埋点显示这些功能有 51–201 名用户。 | 仅 OpenClaw 获得管理能力；Hermes / local-model 保持全局选择。成本编辑降级为弹层次要行，Provider 增删仍指向配置编辑器。 |
+| `04` §5 / Cron 编辑与文案预算 | 设置行只有标题/尾值，Cron 使用三字段弹层。 | 负责人 2026-09-14 批准：无卡片时间摘要与行内开关，原生栈新建/编辑页，模板和可视化时间引导。 | 恢复 2.0 降低使用门槛的能力，并修复把时区显示文本写回表达式的问题。 | 仅 Mobile 和追加能力元数据；保留双后端、心跳和高级配置，不改连接或调度服务。 |
+| `04` §5 / `05` 文案预算 | 技能已安装/发现分段；设置列表只有名称与尾值。 | 负责人 2026-09-13 确认高保真方案：发现收进 Compass 入口，已安装行加一行用途与直接开关、88pt 最小高度，缺失项单独说明。 | 直接理解和管理技能，减少进入详情操作；开启状态与可用性分开。 | 保留双后端能力、发现来源、聊天安装和卸载；不改协议与连接。 |
 | `[EX-1] 00-decisions.md` §1–2 / 05-visual-system.md | 控制塔定位、首启配置单页、设置长列表、模型/上下文常驻顶栏。 | 按用户后续明确授权以聊天为中心，采用欢迎/配对两步、五类设置、Agent 资料、高级管理、共享连接页及稳定顶栏。具体交互和保留能力见 `11-experience-review.md`。 | 用户要求完整推翻不妥旧决策并直接落地，强调手感、品质和设计。 | 不增加后端、不删除管理能力、不改付费额度；需要重新完成 Release UI 与性能验收，旧 M8 验收不适用于本修订。 |
 | `08-milestones.md` M0.4 | compat 必须先在基线代码上全绿。 | 在 OpenClaw 与 Hermes Relay 各删除一次 accept 后过早的 socket reconcile，再取得首次全绿。 | 基线实现会先把旧 peer 隐藏或以 4010 duplicate 关闭，使公开的 4001/4002 replacement 路径不可达；fixture 正确暴露了现存缺陷。 | 最小双后端修复恢复既有关闭码契约；其余 reconcile/rehydration 行为不变。 |
 | `02-protocol-and-services.md` §7 | 2.1.0 / 2.1.1 / 2.1.2 都应找到线上已发布版本提交并录制。 | 2.1.0 使用 EAS shipped source，2.1.2 使用版本锚点并另记 d9c pre-3.0 wire；2.1.1 明确标为 `31a857…` inferred snapshot。 | 仓库、ref/tag、已检查 EAS 构建与 npm metadata 都没有可证明的精确 2.1.1 App source。 | provenance 缺口在 `tests/compat/PINNED.md` 可见；不会把 2.1.0 源码伪写成 2.1.1。 |
@@ -361,6 +584,7 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 | `02-protocol-and-services.md` §2、§6.2 | Bridge 在转发 `connect` 前附加 capability meta。 | App 把 capability 放在 `connect.start` 顶层私有 meta；Bridge 消费并剥离后再发给 OpenClaw Gateway，仅在成功响应回 App 时注入协商结果。 | 当前官方 Gateway 的 connect schema 是 closed，透传未知顶层 `meta` 会使握手失败；把它塞进现有 Gateway meta 也会污染签名/设备契约。 | 新 App / 新 Bridge 能协商；v1 请求与失败响应字节不变，Gateway 不需要同步升级。M4 对无 meta 的旧 Bridge 做一次性降级重试。 |
 | `02-protocol-and-services.md` §6.3 | `chat.abort` 后发名为 `chatAborted` 的事件。 | Bridge 保留现有统一 raw envelope：`event: 'chat'`、`payload.state: 'aborted'`；M4 adapter 将它归一成契约事件 `chatAborted`。 | OpenClaw/Hermes Bridge wire 原本以 `chat` state 表达生命周期，新增第二种 wire event 会分叉兼容路径。 | 产品层仍收到精确 `chatAborted`；老 App 忽略或按原 chat state 处理，compat 维持全绿。 |
 | `02-protocol-and-services.md` §6.3 | 原生会话只读、Bridge 会话可写，但未规定同 key 冲突。 | legacy `main` 首次发送会创建独立 Bridge-owned main backing session，并在列表中遮住同 key 原生 main；发送前原生 main 仍只读可见。 | v1 App 固定向 `main` 发送且不会先调 `sessions.create`；若因原生同 key 而拒绝，会破坏老 App Hermes 聊天。 | 只对保留 key `main` 特判且有回归锁定；其他 native key 永不建影子，仍严格只读。 |
+| `[COMPAT-0914] 01/02` 能力声明 | 客户端 connect 顶层 meta。 | 改为既有 `params.caps`；Bridge 同时接收预发布 meta。 | 旧 Bridge 不剥离 meta，实际 Gateway 闭合 schema 拒绝该请求；caps 经实际 validator 与历史 Bridge 验证合法。 | 不加往返/重试，保持 v1 无协商响应原字节及 Hermes 路径；39 项回放通过。 |
 | `[M5-1] 04-app-screens.md` §0 / `08-milestones.md` M5 | 每页都实现加载、空、错误、离线、无权限五态。 | Onboarding 按其页面专属规格实现默认表单、连接中、错误、离线与 Debug Preview；不制造独立 empty / permission 页面。 | “没有连接”正是必须显示配对表单的默认态，不是空内容；`04` §8 又明确 Paywall 在 Onboarding 期间永不出现，无权限态会与冻结产品流程冲突。 | 其他六个页面仍覆盖完整五态；Onboarding 的每个可达状态和成功导航均有渲染/路由测试，不减少用户可执行动作。 |
 | `[M6-1] 08-milestones.md` M6.2 / `06-paywall-and-growth.md` §2 | 付费墙实现“五套英雄图”。 | 按同节触发映射表实现 `connections`、`agents`、`manage`、`logsFiles`、`search`、`generic` 六套独立 hero。 | 映射表有六个互不等价的用户情境；合并任意一项会让表内触发点失去对应视觉。 | 只扩大 hero 枚举到规格已逐项定义的六项，不增加新触发点、文案或产品能力。 |
 | `[M6-2] 06-paywall-and-growth.md` §1 | 宽限标记随设备 identity 保存，重装不重置。 | 同一安装生命周期内由 SecureStore 严格一次性；不声称 Android 卸载后仍能保留，因为卸载会删除该应用的 SecureStore 数据。 | 跨卸载绝对保证需要新增服务端账户/稳定设备标识，超出规格范围并扩大隐私面；本地实现无法诚实满足。 | iOS/Android 卸载重装行为列入真机 HUMAN TODO；未新增跟踪后端，恢复购买仍可恢复 Pro。 |
@@ -369,14 +593,44 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 | `[M8-2] 09-release-and-acceptance.md` §3.3 pairing approval | 验收文案可读成所有 `PAIRING_REQUIRED` 都进入同一审批映射。 | 把当前客户端自配对握手与连接级 owner pair approval 拆开；前者只认精确 request ID，后者由连接级 store 维护。 | 别人的审批结果不能误满足当前客户端握手；迟到事件、刷新竞态与失败重试也需要独立生命周期。 | 旧 wire 与 owner 审批 UI 不变；提高双后端重连和审批安全性。 |
 | `[M8-3] 09-release-and-acceptance.md` §1 隐私标签 | 诊断/使用数据写作“不关联身份”。 | 商店草案按更保守的 linked 口径申报 Device ID、RevenueCat purchase 与 YouMind identity/content。 | 实际 PostHog 使用 `identify(deviceId)`，同时接入 RevenueCat 与 YouMind；不能用窄口径掩盖 SDK 的真实关联。 | 不改变 Relay 不持久化消息、本地 cache 与删除清理承诺；公开政策和最终商店标签须同步更新。 |
 | `[UX-2026-09-07] 05-visual-system.md` bubble recipe | 用户气泡直接使用透明 `accentSoft`。 | 先将 tint 合成到 canvas，再应用材质透明度；solid 为不透明浅/深底。 | 用户报告 soft 深紫底黑字；旧解析丢弃 tint alpha，且直接透明底受壁纸影响。 | 保留六色与三种材质存储标识，所有后端共用修正；648 组正文对比度回归。 |
+| `[UX-2026-09-16-identity] 00-decisions.md` §2 Agent 设置 / `04-app-screens.md` §5 | 顶行身份（名字、头像、人格、记忆文件）；Agent 组另有「文件」。 | 身份页只保留名字 / emoji / vibe / 头像与新建 / 删除智能体；SOUL / MEMORY / USER / AGENTS 只在文件页编辑（含创建缺失文件）；「我的信息」表单删除。 | 同一文件两处编辑器互相覆盖且交互不一致；OpenClaw Control UI 与 2.0 都只在 Files 编辑这些文件；Hermes 无 SOUL.md 使身份页出现死路；2.x 数据显示原文编辑器触达（612 人）高于结构化身份编辑（528 / 243 人）。负责人 2026-09-16 决定。 | 不改后端、协议或能力矩阵；埋点 `identity_file_activity` 改名 `agent_file_activity`（3.0 未发布）；Skills SKILL.md 弹层与文件页弹层样式仍不同，待负责人裁定。 |
 | `[UX-2026-09-11-profile] 04-app-screens.md` §5 / `05-visual-system.md` §9 | Agent 设置 = 44pt 身份行 + 「行标题 + 尾值」两档字；卡片下不放小字。 | 档案页改为「数字卡 + 行」：头部右侧墨色圆按钮 = 继续聊天，两张 hero 卡（Cron jobs、Cost today）+ 三块计数格（Models / Skills / Files），卡右侧允许一个 `caption` 数字小字（红色失败数、灰色 tokens）。 | 负责人 2026-09-11 依据 2.0 控制台埋点（定时任务 hero 人均点 6.2 次、费用 3.3 次、用量页触达最广且付费用户超配）要求把数据放回一级；小字是数字不是句子。 | 本页用到 title / secondary / caption 三档（`check-ui-style` ≤ 3 仍通过）；行仍是两档；其他页面不变。 |
-| `[UX-2026-09-11-profile] 04-app-screens.md` §5 身份行 | 灰字 = 连接名 · 后端。 | OpenClaw 有心跳时灰字 = `后端 · Active {{age}}`；否则退回连接名 · 后端。 | 2.0 心跳数字 482 人反复点；连接名与分节标题重复。 | 新增协议只读操作 `cron.heartbeat.last()`（可选），OpenClaw 转调 Gateway `last-heartbeat`；Hermes 不声明，行为不变。 |
+| `[UX-2026-09-11-profile] 04-app-screens.md` §5 身份行 | 灰字 = 连接名 · 后端。 | OpenClaw 有心跳时灰字 = `后端 · Active {{age}}`；否则退回连接名 · 后端。（2026-09-16 再改：后端进头像角标，灰字只剩 `Active {{age}}` / YouMind 邮箱，无信息时整行不渲染，见下一条。） | 2.0 心跳数字 482 人反复点；连接名与分节标题重复。 | 新增协议只读操作 `cron.heartbeat.last()`（可选），OpenClaw 转调 Gateway `last-heartbeat`；Hermes 不声明，行为不变。 |
 | `[UX-2026-09-11-profile] 04-app-screens.md` §5 命名 | 「定时任务」英文 `Scheduled tasks`。 | 全部改回 2.0 的 `Cron jobs` / `New cron job`（中文仍是定时任务）。 | 负责人要求与 2.0 用户心智一致。 | 六语言 `common` / `config` 键改名；无其他页面引用。 |
+| `[UX-2026-09-14-sprite] 00-decisions.md` §首启引导 / `04-app-screens.md` §4 第 5、6 行与「+」菜单 | 引导页第三个入口「YouMind 精灵」；「还没有 Agent？」含 YouMind 键；「+」菜单说明「连接 OpenClaw、Hermes 或 YouMind 精灵」。 | 负责人 2026-09-14 要求隐藏全部 YouMind 精灵入口：三处都由 `apps/mobile/src/config/features.ts` 的 `YOUMIND_SPRITE_ENTRY_VISIBLE=false` 关闭，「+」菜单说明改为「连接 OpenClaw 或 Hermes」（19 语言新增键）。 | 只隐藏入口，不删功能：适配器、邮箱验证码登录、翻译、既有 YouMind 连接与测试全部保留，翻回标志即恢复。 | 新用户无法新建 YouMind 连接；已有连接继续工作。测试覆盖隐藏态与标志开启态。 |
+| `[UX-2026-09-14-profile-cost] 04-app-screens.md` §5 数字卡 | Cost today 右侧灰色「{{value}} tokens」小字。 | 去掉 tokens 小字，费用卡只显示美元数；tokens 仅保留在无美元数时的「Tokens today」退化态。 | 负责人 2026-09-14 依据真机截图：用量稍大（`$0.xx` + `863.8K tokens`）时小字与金额抢同一张 hero 卡的宽度，两者都被省略号截断。 | `model.ts` usage 卡不再产出 `detail`，`AgentSettingsStatDetail.key` 收窄为 `{{count}} failed`；19 语言 `settings` 删除 `{{value}} tokens` 键；Cron 卡的红色失败数与锁位不变。 |
+| `[UX-2026-09-16-hero] 04-app-screens.md` §5 Hero / 行 | 名字下一行灰字 `连接名 · 后端`（有心跳时 `后端 · Active {{age}}`）；连接组分节标题 = 连接名。 | 后端改为头像右下角 24pt 圆角标（`PlatformMark` 官方图标 20pt，`surfaceFloating` 底 + 2pt `canvasGrouped` 描边；Pro 锁定时锁角标占位）；灰字只在有心跳（`Active {{age}}`，不带后端前缀）或 YouMind 邮箱时渲染，否则无第二行；连接组不再有分节标题。 | 负责人 2026-09-16 真机截图：Agent 名「Lucy」下又出现连接名「lucy」，同名重复；后端专门占一行不值；「身份」下再来一个「lucy」小标题很怪。 | 只改档案页头部与分组标题；`identity.detail` 改为可选、新增 `identity.backend`、`AgentSettingsGroupDescriptor` 去掉 `title`。Hermes 角标是该图标唯一被裁成圆的位置（只裁掉它自带的白色安全区），已写入 `apps/mobile/docs/design-system.md`。 |
+| `[UX-2026-09-16-memory] 04-app-screens.md` §5 数字卡 | 第二排第三块计数格叫 Files（文件）。 | 计数格与其分栏页标题改名 Memory（记忆），19 种语言同步；`files` 路由、埋点名 `Files`、`FilesSection` 组件与文件页内文案不变。 | 负责人 2026-09-16 要求：该页承载的是 SOUL / MEMORY / USER 等记忆文件，「文件」对用户不表意。 | 只改标签与翻译，不改能力矩阵、路由或后端。 |
+| `[UX-2026-09-16-roster-order] 00-decisions.md` §首屏 / `04-app-screens.md` §2 第 4 行 | 花名册「按最近活动排序」；04 细化为「需要你 > 有未读 > 最近活动时间」。 | 改为「Agent 级手动置顶 > 最近一次有人参与的活动时间」，未读 / 需要你只做徽标；活动时间取 OpenClaw `max(lastInteractionAt, lastActivityAt)` / Hermes `updated_ts`，只数主会话 / 直聊 / 群 / 渠道会话。 | 负责人 2026-09-16 判断：聊天列表形态带来的是「最后消息时间 + 手动置顶」预期；未读 / attention 是瞬态排序键，导致行在用户没动时上下跳；2.0 数据显示列表通常 1–4 行，徽标一眼可见；原实现用的 `updatedAt` 会被心跳推高，制造假未读与假置顶。 | 协议加可选 `lastActivityAt` 与 `sessionActivityAt` / `HUMAN_SESSION_KINDS`；两层排序合成一层；未读水位线、行时间、搜索、Thread 已读同一时钟；老 Gateway 列表整体无活动字段时回退 `updatedAt`。 |
 
 ## HUMAN TODO（只有人能做的事）
 
 | 编号 | 事项 | 怎么做 | 验证方法 | 状态 |
 |---|---|---|---|---|
+| HT-PAYWALL-COPY-0916 | 付费墙文案与留白真机验收 | 负责人查看通用、锁定 Agent、文件编辑和日志入口；检查猫头区域、标题换行、权益到价格 32 pt 距离，并用大字号展开月付查看滚动。 | A 版通用文案与情境标题清楚，文字区靠近价格，长文案和购买按钮均可完整访问。 | 待负责人反馈；不操作模拟器 |
+| HT-ROSTER-ORDER-0916 | 花名册排序真机验收 | 装新构建后打开花名册：只与 A 聊一句，确认 A 到顶且时间是刚刚；等一次心跳（`heartbeat.every`，本机 2h）或让某个没聊过的 Agent 跑一次 cron / 子 Agent，确认它不上浮、不出未读点；压后台 ≥1 分钟回前台重连，确认顺序在重连前后不变；OpenClaw 与 Hermes 两个连接各做一遍，切换活动连接后顺序也不变。 | 顺序只随「人参与的消息」变；心跳 / 重连 / 切换连接 / 打开会话都不改变顺序；红点与「需要你」仍在行上。 | 待验收 |
+| HT-WHATSNEW-0916 | 更新公告弹层与更新日志真机验收 | 在有连接的设备上装新构建冷启动（模拟 2.x 升级：设备上不能已有 `clawket.appUpdateAnnouncementLastVersion.v1`），花名册连接就绪后应弹「Meet Clawket 3.0」；看猫头动效、浅 / 深色、中文每条描述是否一行、Continue；再冷启动一次不应再弹。账户设置 → 关于 → 高级设置开 Debug 后用「预览更新公告」反复看；账户设置 → 帮助 → 更新日志核对 11 个版本与日期。 | 弹层只出现一次、无叠层、Reduce Motion 下猫头静止；`app_update_announcement_shown/closed` 在 PostHog 诊断里各一条。 | 待处理 |
+| HT-MODELS-0916 | 模型页真机验收（OpenClaw + Hermes） | OpenClaw：改默认模型 / 加备用 / 改思考等级 / 关一个开关 → Save → 确认重启；Provider 弹层加一个模型；详情弹层删一个未被引用的模型、给显式 provider 的模型改成本。Hermes：点行 → 「Set as current model」。 | Gateway `config.get` 里 `agents.defaults.model`、`agents.defaults.models`、`models.providers.*` 与页面一致；输入框模型选择器不受影响；Hermes `model.get` 变化 | 待处理 |
+| HT-PAYWALL-0916 | 最后一步付费墙真机验收 | 用非 Pro 账号进 OpenClaw 管理四个分段与「OpenClaw 运行日志」：看遮罩渐隐在浅 / 深色下是否若隐若现、文案是否有付费冲动；再用 Sandbox 账号在配置编辑、权限修复、诊断修复、备份创建 / 恢复确认、日志解锁各处购买一次，确认原动作在付费墙关闭后自动续做 | 遮罩下内容不可点、读屏不读；每个拦截点弹出对应 hero 的付费墙（`manage` / `logsFiles`）；购买后无需重进页面即解锁并完成原动作；PostHog `paywall_viewed` 的 `blocked_feature` 分布覆盖五个 manage/logs 值 | 待处理；若遮罩效果不够，再决定是否引入 `expo-blur` |
+| HT-IDENTITY-0916 | 真机验收身份页真实写入 | 连上 OpenClaw：改名、改 emoji、在多行气质框输入长文本并保存；再新建一个带 emoji 的 Agent 后只改它的 emoji 保存 | 电脑上 `openclaw.json` 的 `agents.list[].identity` 出现新 name / emoji，工作区 `IDENTITY.md` 的 Name / Emoji / Vibe 行更新且其余内容未丢；花名册与聊天页头显示新 emoji；头像行不再出现、气质框可多行显示 | 待验收 |
+| HT-TURN-CONTINUITY-0916 | 真机复验首发与工具分段 | 首次进入/后台恢复后发送；OpenClaw 与 Hermes 各运行一次多段文字和多次工具调用，等回复结束并稍等历史刷新 | 用户消息不消失；工具前后段落保持原位，结束与刷新不合并、不闪；工具状态正常收尾 | 待负责人实测；单次消失未取得真机事件记录 |
+| HT-HISTORY-RESTART-0916 | 工具回复冷启动去重 | 使用新代码进入截图会话，联网历史加载完成后杀进程重进两次并向上翻页；OpenClaw/Hermes 各复验带工具的新回复 | 同一回复只有一份，不同轮次的同文回复仍保留；工具与正文顺序正常 | 待负责人手机实测；未启动模拟器 |
+| HT-SEND-MOTION-0916 | 真机验收发送/回复连续性 | OpenClaw 与 Hermes：短句、恰好换行的长句、图片；慢回复、发送后下一条草稿、弱网恢复；滚离底部再回来 | 气泡确认前后不缩放、不变暗、不消失重现；回复从思考到正文及结束无空白闪帧；无重复发送，失败气泡仍能手动重试 | 待负责人手机实测；单元测试不等同于原生帧率验收 |
+| HT-SEND-0916 | 真机验收发送即时反馈 | 分别在 OpenClaw / Hermes 发送文字、图片；空闲后首发、后台恢复后发送、发送后立即输入下一条；弱网/断网恢复后重试暂停气泡；覆盖现有本地与隧道连接 | 点击即清空本次输入并出现原位待发气泡；失败仍可编辑/重试；下一条草稿不消失；无重复发送、跨会话消息或同时运行；区分发送中/已确认/未确认 | 待负责人实测；本轮不启动模拟器，不改变配对或服务 |
+| HT-UX-0916 | 真机验收连接状态胶囊 | 在 Roster、Thread、Agent 主页/分栏、账户设置、搜索、Session Panel 各停留后压后台 ≥1 分钟再切回；再断开电脑 Bridge 超过 20 秒；浅/深色各看一遍 | 回前台时页面内容不位移；Roster 页头中央先出现呼吸的「Reconnecting…」再淡出；持续离线时 Roster 只有「⊘ Reconnect」、标题页标题让位给「Offline · reconnecting  Reconnect」并在恢复后回来；Thread 副标题写离线、时间线顶部悬浮「Reconnect」可点；德语等长文案在 375pt 宽机型不撞到左右按钮 | 待处理；本轮仅自动化验证 |
+| HT-USAGE-0916 | 真机验收用量页改版与 Pro 蒙层 | 用免费账号：切到 7D / 30D 看蒙层是否「若隐若现」、按钮是否显眼、点后是否弹用量付费墙；今天档点过去日期的柱子是否弹墙；购买 / 恢复后蒙层是否立即消失。再用 Pro 账号：Agent 主页 → 用量：看今天 / 7D / 30D 三档，快速连点三下看最终数字与档位是否一致；断网后再切档看 Retry 横幅是否保留旧数据；浅 / 深色各看一遍；OpenClaw 与 Hermes 各一台；点页头分享出海报 | 英雄卡主数字与 Agent 主页 Cost today 口径一致；切到未缓存档位立即出同形骨架、无旧数字残留；趋势图今天柱为墨色、其余灰、点柱子切换选中值；费用为 $0 或 unknown 时以 Token 领头且无四行 $0 明细；工具调用为 0 时无工具卡 | 待处理；本轮仅自动化验证 |
+| HT-ENV-0916 | 接受 Xcode 许可后重跑必需门禁 | 在终端执行 `sudo xcodebuild -license accept`，然后从仓库根目录 `npm run check:required` | `/usr/bin/python3 --version` 正常输出版本号；`packages/bridge-runtime` 的 27 个测试文件全绿；`check:required` exit 0 | 待处理；2026-09-16 下午本机 `/usr/bin/python3` 开始要求接受许可，导致 Hermes 账本相关 47 项测试无法启动 Python，与代码改动无关 |
+| HT-QA-0915 | 原生附件与真实网络补验 | 真机选择一张 limited-library 图片及一个文件发送；Wi-Fi/蜂窝/代理对照，保留失败时间 | 附件不丢、无重复气泡、权限窗口无遮挡，跨网络恢复可解释 | 图片双发/冷启动已模拟器通过；文件 picker 和 limited-picker 完成受自动化能力限制，网络原因仍需对照 |
+| HT-LM-0914 | 发布包含 `local-model` 的 bridge CLI 到 npm | 决定发布版本后按既有发布流程 `npm publish` `@p697/clawket`；发布前 `npm run test:compat` 必须全绿 | `npm pack @p697/clawket@latest` 解包后 `dist/index.js` 含 `local-model`；在干净机器上 `npx @p697/clawket pair --backend local-model --preview` 打出六位码 | 待处理。当前 latest=0.7.0 不含该命令，App Preview 的本地模型步骤展示的 npx 命令在发布前只能改用仓库内 `node apps/bridge-cli/dist/index.js local-model pair --preview`（README 已按此写） |
+| HT-COMPAT-0914 | 已发布 2.x App 跨版本抽验 | 保留真实旧包与存量配对，先在隔离候选服务、再在 Production 小范围按 09 §2 验证双后端聊天/流式/停止/附件/会话、重新配对、锁屏恢复；记录具体 App 版本与构建 | 旧包与新服务/新 Bridge 可用；协议回放不替代原生签字 | 39 项协议回放、20 阶段真实 Worker/Bridge 混合测试通过；旧二进制/真机待验收，2.1.1 provenance 不完整 |
+| HT-PRO-0914-1 | Apple 月/年方案调整为同一服务等级 | App Store Connect → Clawket → Clawket Pro 订阅组 → Edit → Edit Level，将月付和年付合到一个 Level 并保存 | 列表不再是 Monthly Level 1 / Yearly Level 2；Sandbox 变更按同等级不同周期规则处理 | 已完成；负责人保存后，2026-09-14 独立打开后台确认两者均为 Level 1，状态 Approved；原生购买验收另见 HT-PRO-0914-3 |
+| HT-PRO-0914-2 | Google 新加坡税务信息提醒 | 使用有付款权限的 Lucy 账号进入商家支付资料 → 税务中心 → 新加坡，按实际税务身份处理；不记录税务文件或支付资料 ID | 按 Google 当前政策核对信息与提醒；客户购买验收单独执行 HT-PRO-0914-3 | 已定位个人表单，UEN 可选；未代填或提交。官方说明新加坡免税相关税务居民信息状态目前不限制账户、不影响付款或预扣税，因此不列为紧急上线阻塞；个人身份不能单独决定免税资格，参见 pro-plan-management.md 的官方来源 |
+| HT-PRO-0914-3 | 月/年切换与买断原生验收 | 按 `apps/mobile/docs/pro-plan-management.md` 用 Sandbox / license tester 覆盖双向换周期、买断后停原订阅、取消、pending、恢复、续费与退款，双后端连接均验收 | 确认商店当前/下期价格日期、实际 entitlement 与 PostHog 新事件；用户停掉原订阅后不再续费，订阅到期不抹去买断 | 自动门禁全绿；未操作模拟器或真实付费账户 |
+| HT-CRON-0914 | 定时任务真机视觉验收 | 双后端验证列表开关、新建模板/四类时间、编辑保存/取消、原生日期选择、运行记录；浅深色、大字体、阿拉伯语 | 内容清晰且控件不重叠；保存失败保留草稿；时区说明真实；返回保持列表位置 | 自动检查及双平台 JS 打包通过，待负责人真机验收；未操作模拟器、配对或线上任务 |
+| HT-SKILLS-0913 | 技能页真机视觉验收 | 双后端查看长名称、用途、开关、缺配置状态；浅/深色、大字体、阿拉伯语；发现返回、详情滚动、安装后进入聊天 | 符合确认的 88pt 列表原型；开关与详情点击独立、切换不跳行、文字不覆盖控件 | 自动交互验证通过；待负责人真机验收，不操作模拟器、不改配对 |
+| HT-NET-0912 | Windows local-model owner 断线根因 | 提供运行 Bridge 的终端末尾错误及进程是否存活；不含配对码/凭据 | 对齐 2026-09-11 18:37:20 UTC owner 断线及恢复后的 cloud owner/health | 待主机信息；Mac 已恢复，未假定 Windows 同因 |
+| HT-I18N-1 | 真机验收 13 种新语言与阿拉伯语 RTL。 | `npm run mobile:sync:native` 重新生成 iOS `.lproj` 与 Android `locale_config.xml` 后做 Release 构建；阿拉伯语冷启动、账户设置里在 ar 与 LTR 语言间来回切换（预期各重载一次）、根/栈导航、花名册与会话面板行、线程气泡与输入框、设置弹层；其余 12 种语言至少走欢迎/配对/花名册/线程/设置五页，关注长文案截断（de/ru/uk/fr 最长）。 | 无 chevron 方向错误、无手势反向、无被截断的按钮文案；发现的文案问题直接改对应 locale JSON 并重跑 `npm run i18n:check`。 | 待处理；本轮仅自动门禁，未做模拟器/真机走查 |
+| HT-I18N-2 | 为 13 种新语言准备商店元数据。 | App Store Connect 与 Google Play 各新增对应本地化（es-419 在 Apple 选 Spanish (Mexico)），名称、副标题、描述、关键词、截图与订阅商品本地化；商店文案不从 App 翻译 JSON 生成。 | 两商店本地化列表与 `apps/mobile/docs/localization.md` 的 19 种一致。 | 待处理；不阻塞代码合入 |
 | HT-AUTH-1 | 真机验收新版 YouMind OTP 与键盘 | 用自己的邮箱走六位码自动填充、粘贴、错误后重试、切后台后重发倒计时，覆盖 iOS/Android 与浅深模式 | 无重复请求、键盘不遮挡、六格与输入一致；无需改动已有连接 | 待处理；本轮 native 已看到邮箱页，之后 CUA 返回 noWindowsAvailable，未发送验证码 |
 | HT-EX-1 | 解锁 Mac 以继续模拟器验收 | 本次 CUA 明确返回 Mac locked，自动解锁不可用；已通过当前任务请求解锁 | Release 模拟器可继续由 CUA 操作 | 已于 2026-09-06 17:37 恢复操作，本轮继续完成管理/外观页面走查和用量、诊断修复；当前不再以锁屏作为阻塞。拖动手势的自动化结果不可靠，真机滚动验收仍需保留 |
 | HT-UX-1 | 临时解除模拟器系统弹窗自动化障碍。 | 在模拟器 Safari 的“在 Clawket 中打开此页？”点“打开”。AX 只暴露 sheet，坐标点击返回 noWindowsAvailable；已发异步请求。 | App 打开设置，随后继续配对与页面实测。 | 待处理；代码诊断和方向草图继续进行，非产品权限审批 |
@@ -918,3 +1172,120 @@ Owner: the full-accent double check was ugly, but plain gray felt flat and the s
 ### 2026-09-12 — Composer placeholder: "Message"
 
 Owner asked for the Telegram placeholder instead of "Ask Lucy". `ThreadCopy.formatAsk` became a plain `placeholder` resolved from the existing `Message...` chat key, whose six values are now the messenger word without an ellipsis (`Message`, `输入消息`, `メッセージ`, `메시지`, `Nachricht`, `Mensaje`); the appearance preview shares it and `Ask {{name}}` is removed. Thread suites (147 tests), six-locale catalog and UI-style checks pass.
+
+
+### 2026-09-12 Preview overnight connection investigation (in progress)
+
+- Confirmed cloud owner loss for Mac OpenClaw and Windows local-model; phone sockets authenticate but have no Bridge route. Mac direct DNS/TCP fails, existing proxy path succeeds. Windows host cause pending terminal logs.
+- Added explicit Relay-only HTTP(S) proxy support and 15-second cloud handshake deadline across Bridge runtimes. No global DNS/proxy mutation or simulator takeover.
+- Added local-model missing-owner retry floors (30/60/120s), preserved offline error classification, and prevented repeated connect calls from bypassing backoff.
+- Full required gate passed; final targeted runtime 190 tests and mobile transport/local-model 18 tests passed; v1 replay 36 passed. CLI package boundary check passed. Mac installed Relay proxy fix and scoped launchd environment; Preview connected at 00:18:43 UTC on attempt 1 (~1.1s), authenticated Relay health evidence followed at 00:18:53. Production also recovered. Installed package/config backups remain under `/tmp/*network-fix-0912*`. No simulator or client takeover; TestFlight has not received mobile changes.
+- Cloudflare Workers adaptive metrics at 00:20 UTC over the preceding hour returned 3 OpenClaw Preview and 25 local-model Preview requests, zero Worker errors. This is not a complete DO/KV billing audit. Windows local process remains unverified; no completion claim for that host.
+
+
+### 2026-09-12 main-session article request failure
+
+- Gateway accepted the main-session turn, but Claude CLI returned HTTP 403 after ~10s. Same logged-in account/model succeeded through existing proxy and failed direct.
+- Configured OpenClaw managed service HTTP(S) proxy with loopback bypass and backed up its plist; restarted service. Verified actual Gateway replies in an isolated diagnostic session: Sonnet 10.7s, explicit Opus 8.7s. No external channel delivery, no automatic replay of the user's request.
+- App reply-error classification no longer prescribes login for an ambiguous HTTP 403; original sanitized details remain. TestFlight delivery-indicator behavior remains owner-tested, not claimed fixed.
+
+### 2026-09-13 — Preview main-session reentry investigation
+
+Correlated phone screenshots, local Bridge/Gateway, read-only main-session history and Cloudflare Preview telemetry. Confirmed nested history activity was ignored, exact imported CLI resume context defeated optimistic reconciliation, and malformed assistant tool prose came from the Gateway history itself. Separately confirmed Mac Production/Preview owner heartbeat loss around 13:30 UTC with owner recovery at 13:30:37; original run completed locally at 13:33:29. Network segment cause remains unproven.
+
+Implemented optional scoped live history snapshots with late-event guards, route reentry activity/text restoration and session-scoped abort hint; preserved legacy/Hermes history handling. Exact resume envelope removal precedes optimistic merge. Malformed imported tool prose retains raw unverified input with unknown status; ordinary code examples remain visible. Thread no longer promotes roster-only request failure to connection error. Added bounded timeout diagnostics and ignored stale socket pongs, without extra cloud polling or changed retry cadence. Validation in progress; owner performs device visual acceptance. No live service deployment/restart or simulator connection.
+
+Validation: full `check:required` passed (Mobile 258 suites / 2,529 tests; protocol 100% branch coverage; design/localization/docs gates). A follow-up live log read identified five retries of one expired channel at 13:36 UTC; the added HTTP-409 retirement path passed the final Bridge suite (193 tests), including fresh-client recovery and unchanged owner HTTP retry. Cloud Workers adaptive metrics for Preview 13:25–13:50 UTC reported 19 invocations/subrequests and zero Worker errors; this is not a complete DO/KV bill or proof of packet delivery. No build was installed on the phone and no live Bridge package was replaced.
+
+### 2026-09-13 — Connection removal completion
+
+Removed the network-idle wait from committed connection deletion so an unreachable fallback adapter cannot strand Profile on its missing-record skeleton. All manual removal entrypoints now reset to Roster or Onboarding from the current runtime snapshot; removed roster groups and scoped stale errors are discarded. Durable storage failure still preserves the connection and local cleanup failures remain reported. Device acceptance remains owner-performed.
+
+Validation: connection coordinator 49 tests, Mobile typecheck, docs checks and v1 compatibility 36 tests passed. Built and verified the CLI tarball, installed it globally, and restarted the existing launchd job without rewriting its proxy configuration. Preview and Production Relay health confirmed in local logs. Refreshed a Preview-only secure six-digit invitation at owner request; no pairing secret recorded here. App build remains owner-run.
+
+### 2026-09-13 — Send entrance cadence and roster work phases
+
+Added a 240ms view-only gap after local message submission, preserving immediate send/stream handling, latest buffered reply, original history, route scope, cancellation controls and reduced-motion behavior. Connection-owned backend-neutral run phases now survive leaving Thread; Roster shows thinking/tool/working labels in place of stale previews, restores previews on completion, and clears live phases on disconnect/switch. Phase changes publish once rather than per streamed token; no new requests, polling, or cloud cost. Automated verification in progress; owner performs device acceptance.
+
+Validation: final targeted 7 suites / 158 tests passed, including controller send lifecycle, connection-owned work after chat exit, phase deduplication, terminal/history cleanup, roster connection isolation, delayed fast replies and reduced motion; Mobile typecheck and docs checks passed. Full required run reached 258 passing Mobile suites / 2,535 passing tests but stopped on three unrelated current-worktree style expectations (logical divider margin and added comfortable settings-row size); those files were preserved. No simulator, service restart, pairing refresh or cloud deployment for this milestone.
+
+
+### 2026-09-13 — Account Settings quality pass
+
+Owner requested a first implementation across Settings and descendants, replacing the generic Pro sparkle. Added the static Companion membership card, separated common preferences from support, moved language alongside appearance, and applied a scoped comfortable grouped-row recipe (64-point minimum, 22-point radius, 32-point icon slots, neutral glyphs, RTL-aware inset hairlines). Membership, preference sheets, chat appearance, support/release history, connection list and detail share the treatment. Selected preferences expose state and guard duplicate saves; long row copy grows. Existing Agent/other row density, backend capabilities, lifecycle actions, confirmation flows, and draft/Save semantics are retained. Deviation from 05 §4/5’s default 52/14 metrics is explicitly requested by the owner and limited to this surface family.
+
+Validation: final `npm run check:required` passes (Mobile 260 suites / 2,540 tests; all workspace typechecks, protocol/Relay/Bridge checks, 172 UI sources, strict 19-locale catalogs and docs). Updated the exact token/divider expectations and added selection/concurrent-save coverage. One intermediate full run hit the pre-existing reply entrance timer test; the final full run passed without changing that hook or test. `git diff --check` passes. Local light/dark/home/appearance study: `docs/3.0/evidence/settings-refinement/preview.png`; it is a layout preview, not a native screenshot. Physical-device acceptance remains owner-performed. No simulator, pairing refresh, build install, service restart or deployment.
+
+### 2026-09-13 — Owner timing adjustment
+
+Increased the shared local-send reply presentation gap from 240ms to 500ms at owner request; network sending remains immediate. Updated the existing timer boundary regression to 499ms + 1ms.
+
+Owner follow-up: increased the same presentation gap to 1000ms; network sending remains immediate. Timer boundary regression updated to 999ms + 1ms.
+
+
+### 2026-09-13 — Skills management: approved inline-switch design
+
+Owner approved the interactive design and requested full implementation. Removed the Installed/Discover segmented control; a capability/operation-gated Compass header action pushes discovery through the existing native stack, preserving installed search/scroll. Installed skills use white canvas, flat search, total/enabled counts and borderless 88pt-minimum rows with name, one-line description, independent neutral switch and detail disclosure. Missing requirements remain distinct from enabled state; Always on and read-only adapters do not expose an editable switch. Detail is scrollable, shows status/source/requirements, and retains capability-gated uninstall.
+
+Writes keep native controls mounted and rows alphabetically stable, block duplicate requests, preserve the previous value on failure, keep acknowledged writes when refresh fails, and discard stale Agent/adapter completions. Focus return quietly reloads status. Installation enters the selected Agent chat after successful request and sheet dismissal; closing the pending detail cancels deferred navigation. Uninstall confirmation follows sheet dismissal. All 19 locales gain 10 translated keys; two obsolete Enable/Disable button keys are removed. Product spec, Mobile instructions and design guide updated. No backend, transport, deployed service, pairing or native dependencies changed.
+
+Validation: initial full `check:required` passed (Mobile 260 suites / 2,555 tests, all workspace types, protocol/runtime suites, design-system, strict 19-locale and documentation gates). Final focused UI/model/shared-search regression run passed 63 tests, including both OpenClaw and Hermes switches, failed writes/refresh, offline cache, scope changes, discovery races and dismiss-before-install-completion; final Mobile typecheck passed. Final complete `check:required` rerun passed with Mobile 260 suites / 2,559 tests, all workspace types/tests, design-system, 19-locale strict checks and docs checks. Native visual acceptance remains HT-SKILLS-0913; no simulator/device operated, release installed or service deployed.
+
+
+### 2026-09-14 — Session Panel row polish: one size down, 6-point signal dot
+
+Owner reviewed the merged Session Panel on device and found it noisy: too much text, too large, and the 12-point unread dot too heavy. Styles only, no behavior or model change. Rows now sit one tier below the roster (the 40-point tile sets the scale): `secondary` 600 title with the `caption` `inkTertiary` time on the same line, `caption` preview (ink when unread) with the unread / attention dot on the same line, the dot reduced to `StatusSize.dot` (6 points — its first consumer). Chip and Subagents counts move to `inkTertiary`; the Subagents chevron drops to `IconSize.sm`; skeleton lines follow the new line heights. Docs 04 §4, 05 copy budget and Mobile AGENTS updated to the new tiers.
+
+Validation: SessionPanel suites (30 tests, dot-size assertions added), `check:ui-style` (178 files; panel still at three `FontSize` tiers) and `check:docs` pass. No device was operated; the before/after was shown as a mock, real-device acceptance remains with the owner. Not committed.
+
+### 2026-09-14 — Cron management: approved guided creation and full-page editing
+
+Implemented the owner-approved design: borderless schedule/next-run rows with independent switches; native-stack create/edit pages; eight templates, daily/weekly multi-select/workday/weekend/interval/once controls and native date/time input; structured schedule validation and next-three-run estimates. Thread drafts enter the form directly. Existing custom expressions, timezone, interval anchor, stagger, payload and delivery metadata survive unrelated edits. Croner 10.0.1 is a pure-JS dependency used without callbacks/timers, matching the OpenClaw scheduler; portable five-field validation applies to new/changed rules only.
+
+Optional central `cronTimeZone` / `cronAdvanced` capabilities gate actual support. Hermes shares the core guide but keeps Agent timezone, whole-minute interval precision and enabled creation. Runs load independently and page without hiding jobs or drafts; notification delivery is distinct from execution status. Native back gestures protect dirty edits; scoped caches, synchronous write locks and late-completion guards preserve acknowledged writes and avoid cross-Agent updates. Existing heartbeat controls remain available. Added 62 translated keys across all 19 locales; removed four obsolete freeform-editor/action keys. Updated Mobile/protocol instructions, product specification and design recipe.
+
+Validation: `npm run check:required` passed, including all workspace typechecks, protocol coverage, Mobile 265 suites / 2,609 tests, Relay/Bridge required tests, 178 UI source checks, strict 19-locale catalog validation (1,185 keys / 22,515 translations; no missing or removable keys), and documentation checks. iOS and Android production JS/Hermes-bytecode exports both succeeded; these are not native builds or device acceptance. Fixed the existing Jest `remend` mapping to resolve both workspace-local and hoisted dependency layouts after installation. `metrics:loc` passed (whole dirty working tree: 109,899 non-test TS/TSX lines, 76,588 test lines, 325 test files; not a task-specific delta). No native dependency change, simulator/device operation, service restart, pairing refresh or deployment; native visual acceptance is HT-CRON-0914.
+
+### 2026-09-14 — Add sheet: `Attach N photos` unreachable at the resting detent
+
+Owner reported on device that picking recent photos in the Thread Add sheet showed the pick badges but no way to confirm. Root cause: the sheet rests on fixed 62% / 92% detents and gorhom lays the content container out for the tallest detent, so the inline footer at the bottom of the body sat below the fold at 62% (only visible after dragging the sheet up). Fix: `Sheet` gains a `footer` slot rendered through gorhom's `BottomSheetFooterContainer` / `BottomSheetFooter` (pinned to the visible bottom edge at every detent, safe-area padded, canvas surface); it is rendered inside the `accessibilityViewIsModal` view through a stable context-fed component so VoiceOver reaches it and label changes never remount it, and the body shrinks by the footer's measured height so the last row is never covered at the top detent. `ThreadAddSheet` moves the ink `Attach N photos` button into that slot with a one-time rise on selection (persistent shared value; reduced motion snaps). Mobile AGENTS and design-system docs record the slot.
+
+Validation: new `Sheet` footer suite (2), Add sheet suite (6, footer-slot assertion added), Thread / ui / chat suites 33 / 316, mobile `tsc` and `check:design-system` (178 files) pass. No device operated; visual acceptance remains with the owner. Not committed.
+
+### 2026-09-14 — Paywall: member layout, no dead `Current plan` button
+
+Owner reviewed the member paywall on device with a lifetime test account: three plan cards were stacked flush against a disabled `Current plan` button, and the owned card was dimmed like the locked ones. Root causes in `PaywallScreen`: the member branch forced monthly visible and dropped the `View monthly plan` link that had been the only spacing between plans and checkout (footer gap is 4 points), the owned plan reused the generic locked opacity, and the checkout button rendered even when the selection was the plan already owned. Confirmed the unsubscribed view is unchanged (annual + lifetime side by side, monthly behind the disclosure link) and that plan changes keep their semantics: monthly members open on `Change to annual`, annual members on `Buy lifetime`, lifetime owners on the owned plan.
+
+Changes: `PaywallPlanCard` gained a `current` state (locked, `surface` fill, never dimmed; the accent outline stays with the selected card). Members now see the owned card plus only the plans they can still move to, so a lifetime owner sees one row-layout card; the full locked catalog remains the fallback when the owned plan cannot be matched. A selection that is the owned plan renders no checkout button or billing caption — `Manage subscription` is the only action — while failure and renewal notices still render. The checkout block keeps a 12-point top margin whenever the disclosure link is absent and `Manage subscription` sits 12 points below it. Compact two-up cards now require exactly two cards.
+
+Validation: `PaywallScreen` suite 35 tests (4 new: lifetime owner, hidden locked alternatives with failure notice, unmatched-plan fallback, owned-card styling and spacing), paywall/pro suites 63 tests, mobile `check:design-system` (180 files) pass; the only `tsc` error is the unrelated in-progress `OnboardingScreen` change from another session. Rules recorded in `apps/mobile/AGENTS.md`, `docs/design-system.md` and `docs/pro-plan-management.md`. No purchase, connection, simulator or deployment was touched; device acceptance remains with the owner.
+
+### 2026-09-14 — Identity long-document recovery
+
+Owner approved retaining core editing after the six-month PostHog investigation (project 337268, Mar 14–Sep 14, Asia/Shanghai): File Editor 4,689 views / 610 users; coreFileEditing paywall 339 / 172 users, subscribe 15 / 12, purchase-success 8 / 8. No save-success instrumentation existed; attribution also includes skill editing and does not independently certify non-sandbox revenue. Legacy skill source editing existed; current SkillsSection has no source editor, recorded as a separate migration gap rather than widening this patch.
+
+Identity now uses a bounded 93% document sheet, integrated scroll, selectable Markdown, header Edit and pinned save actions. Source is preserved, failed drafts remain editable, dirty cancel confirms, duplicate file writes and stale paywall continuations are guarded. Added bounded privacy-safe edit/save-result telemetry. No native dependencies, services, pairing or device operation changed; owner performs visual/keyboard acceptance. Validation: complete `check:required` passed (workspace types/tests, 180 UI files, strict localization and docs); final Identity/analytics 2 suites / 40 tests and design-system checks passed. The initial concurrent build attempt hit transient dist cleanup contention; the subsequent complete gate passed. Final targeted regressions cover long raw-source preservation, failed drafts, dirty cancel, Pro continuation and telemetry privacy.
+
+
+### 2026-09-14 — Identity device feedback: truncated Edit and floating footer
+
+Owner screenshots exposed two defects missed by the mocked regression suite: a padded text Button was squeezed into SheetHeader's 44-point icon slot, truncating Edit; the keyboard-following save footer also left an undesirable floating action area. Identity now uses existing FloatingButton Pencil/Check header actions for read/edit, Close with dirty confirmation, and a stationary error notice above the scrolling document. Removed the Identity footer entirely; shared Sheet/footer consumers are unchanged. This supersedes the initial footer recipe above. No device operated; owner verifies native keyboard behavior. Targeted 29 tests, mobile typecheck, complete design-system checks and documentation checks passed.
+
+### 2026-09-14 — Thread: multi-image messages rendered as one album
+
+Owner reported on device that a six-image message showed only three cropped thumbnails, no way to scroll, and a clipped first tile. Root cause: the 3.0 `ThreadView` rewrite replaced the 2.0 Telegram-style image grid with a stub gallery (`slice(0, 3)` of 88-point squares plus an inline `N attachments` row in the same flex row, one Pressable opening the viewer at index 0); the row overflowed the screen and `alignSelf: 'flex-end'` pushed the overflow off the left edge. The data layer (`imageMetas`, history image cache, `useImageDimensions`) was intact.
+
+Delivered: `components/chat/attachmentAlbumLayout.ts` (pure geometry: single image at its own aspect, rows of at most three split by aspect with the fuller rows last, clamped row heights, 3-point gaps, corrupted sizes treated as squares) and `MessageAttachmentAlbum` (album clipped at the bubble radius, 76% of the row content width, per-tile `imagebutton` labelled `Photo N of M`, taps open the viewer at that index, long press forwards to the row actions). `ThreadView` / `ThreadScreen` pass the tapped index through `onOpenAttachments(message, index)` (clamped in the screen); `ThreadCopy.formatPhotoPosition` and the `chat` key `Photo {{index}} of {{count}}` were added to all 19 locales. Nothing about sending, caching or backends changed; OpenClaw and Hermes share the renderer.
+
+Validation: 10 layout tests, 5 album component tests (including lazy size resolution and a failed lookup), ThreadView/ThreadScreen suites updated (six-image album geometry, single-photo aspect, tapped index, long press), chat component suites 13 / 147 tests green; `check:ui-style` (180 files) and strict localization pass; `tsc` reports only the pre-existing in-progress `Onboarding` `local-model` errors from another session. Simulator (iPhone 17, Metro debug build): seeded the local image cache for the owner's six-screenshot message and confirmed the 3×2 album in dark and light mode, viewer opening at `5 / 6` from the fifth tile, and long press lifting bubble plus album into the actions overlay. Noted separately: the Gateway history for that message carries no image blocks or truncation marker, so a second device shows the text only — a pre-existing cross-device limitation of the sender-side image cache, not changed here.
+
+
+### 2026-09-14 — Restore paid skill source editing
+
+Owner requested restoring the 2.0 skill editor and confirming Memory monetization. Identity still gates USER/SOUL/MEMORY saves through coreFileEditing. Installed Skills now open default SKILL.md through the retained backend-neutral skills.get/content-update adapter contract; no generic file writes or backend/source changes. Details dismiss before source presentation. Both backends share selectable Markdown, Pencil/Check header controls, dirty close, retained failed drafts, write lock and stale continuation checks. The backend editable/binary flags gate changes independently of Pro. Ancillary linked-file editing is not advertised by the key-only write contract. Validation: complete check:required passed (Mobile 268 suites / 2,652 tests, workspace types/runtime tests, 181 UI sources, localization and docs). Targeted section/source/Pro regression: 46 tests passed for both backends, protected content and failed drafts. metrics:loc: whole dirty tree 110,565 production lines / 77,476 test lines / 329 test files, not a task delta; the added document component is consumer-backed. Owner performs device acceptance; no simulator, pairing or service deployment.
+for the owner's six-screenshot message and confirmed the 3×2 album in dark and light mode, viewer opening at `5 / 6` from the fifth tile, and long press lifting bubble plus album into the actions overlay. Noted separately: the Gateway history for that message carries no image blocks or truncation marker, so a second device shows the text only — a pre-existing cross-device limitation of the sender-side image cache, not changed here.
+
+
+### 2026-09-14 — Restore paid skill source editing
+
+Owner requested restoring the 2.0 skill editor and confirming Memory monetization. Identity still gates USER/SOUL/MEMORY saves through coreFileEditing. Installed Skills now open default SKILL.md through the retained backend-neutral skills.get/content-update adapter contract; no generic file writes or backend/source changes. Details dismiss before source presentation. Both backends share selectable Markdown, Pencil/Check header controls, dirty close, retained failed drafts, write lock and stale continuation checks. The backend editable/binary flags gate changes independently of Pro. Ancillary linked-file editing is not advertised by the key-only write contract. Validation: complete check:required passed (Mobile 268 suites / 2,652 tests, workspace types/runtime tests, 181 UI sources, localization and docs). Targeted section/source/Pro regression: 46 tests passed for both backends, protected content and failed drafts. metrics:loc: whole dirty tree 110,565 production lines / 77,476 test lines / 329 test files, not a task delta; the added document component is consumer-backed. Owner performs device acceptance; no simulator, pairing or service deployment.

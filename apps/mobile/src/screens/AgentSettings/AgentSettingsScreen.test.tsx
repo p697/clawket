@@ -7,7 +7,7 @@ import type {
 } from '@clawket/agent-protocol';
 import { CAPABILITY_MATRIX } from '@clawket/agent-protocol';
 import { analyticsEvents } from '../../services/analytics/events';
-import { FontSize, Radius } from '../../theme/tokens';
+import { FontSize, Radius, Space } from '../../theme/tokens';
 import {
   AgentSettingsView,
   type AgentSettingsViewProps,
@@ -88,6 +88,7 @@ jest.mock('react-native', () => {
       OS: 'ios',
       select: (options: Record<string, unknown>) => options.ios ?? options.default,
     },
+    Image: host('Image'),
     Pressable: host('Pressable'),
     ScrollView: host('ScrollView'),
     StyleSheet: {
@@ -108,6 +109,12 @@ jest.mock('react-native-reanimated', () => {
       ReactRuntime.createElement(name, { ...props, ref }, children)
     ),
   );
+  // Entering/exiting presets are chainable builders; the status capsule only needs them to exist.
+  const layoutAnimation = (name: string) => {
+    const animation: Record<string, unknown> = { name };
+    for (const method of ['duration', 'delay', 'easing', 'reduceMotion']) animation[method] = () => animation;
+    return animation;
+  };
   return {
     __esModule: true,
     default: {
@@ -115,7 +122,10 @@ jest.mock('react-native-reanimated', () => {
       createAnimatedComponent: (Component: React.ComponentType<unknown>) => Component,
     },
     cancelAnimation: jest.fn(),
-    Easing: { ease: 'ease', linear: 'linear', inOut: (value: unknown) => value },
+    Easing: { ease: 'ease', linear: 'linear', cubic: 'cubic', inOut: (value: unknown) => value, out: (value: unknown) => value },
+    FadeIn: layoutAnimation('FadeIn'),
+    FadeOut: layoutAnimation('FadeOut'),
+    ReduceMotion: { Always: 'always', Never: 'never', System: 'system' },
     useAnimatedStyle: (factory: () => unknown) => factory(),
     useReducedMotion: () => false,
     useSharedValue: (value: unknown) => ({ value }),
@@ -233,9 +243,20 @@ describe('AgentSettingsView deep rendering', () => {
     });
     expect(flattenStyle(view.getByTestId('agent-settings-identity-group').props.style)).toMatchObject({
       backgroundColor: lightColors.surfaceFloating,
-      borderRadius: Radius.settingsGroup,
+      borderRadius: Radius.xl,
     });
-    expect(view.getByText('Studio · OpenClaw')).toBeTruthy();
+    // No static identity line: the backend sits on the avatar as a corner mark and the
+    // connection group has no heading, so the connection label appears nowhere on the page.
+    expect(view.queryByTestId('agent-settings-identity-detail')).toBeNull();
+    expect(view.queryByText('Studio · OpenClaw')).toBeNull();
+    expect(view.queryByText('Studio')).toBeNull();
+    expect(view.getByTestId('agent-settings-backend-mark').props.accessibilityLabel).toBe('OpenClaw');
+    expect(flattenStyle(view.getByTestId('agent-settings-backend-mark').props.style)).toMatchObject({
+      width: Space.xl,
+      height: Space.xl,
+      borderColor: lightColors.canvasGrouped,
+      backgroundColor: lightColors.surfaceFloating,
+    });
     expect(view.queryByTestId('agent-settings-row-models')).toBeNull();
     expect(view.queryByTestId('agent-settings-row-cron')).toBeNull();
 
@@ -263,14 +284,13 @@ describe('AgentSettingsView deep rendering', () => {
     });
     expect(view.getByText('Cron jobs')).toBeTruthy();
     expect(view.getByTestId('agent-settings-stat-usage-value').props.children).toBe('$0.50');
-    expect(view.getByTestId('agent-settings-stat-usage-detail').props.children).toBe('{{value}} tokens');
-    expect(flattenStyle(view.getByTestId('agent-settings-stat-usage-detail').props.style).color)
-      .toBe(lightColors.inkSecondary);
+    // Dollars only: no token caption competes with the amount for the hero card's width.
+    expect(view.queryByTestId('agent-settings-stat-usage-detail')).toBeNull();
     expect(view.getByTestId('agent-settings-stat-models-value').props.children).toBe('12');
     expect(view.getByTestId('agent-settings-stat-files-value').props.children).toBe('7');
     expect(view.queryByTestId('agent-settings-stat-models-detail')).toBeNull();
 
-    fireEvent.press(view.getByTestId('agent-profile-advanced'));
+    // Management rows are directly accessible.
     expect(view.getByTestId('agent-settings-row-tools')).toBeTruthy();
     expect(view.queryByTestId('agent-settings-row-usage')).toBeNull();
     expect(view.getByTestId('agent-settings-row-channels-devices-attention')).toBeTruthy();
@@ -306,7 +326,7 @@ describe('AgentSettingsView deep rendering', () => {
     expect(onContinueChat).toHaveBeenCalledTimes(1);
     expect(view.getByTestId('agent-profile-chat').props.accessibilityLabel).toBe('Continue chatting');
     expect(view.getByTestId('agent-settings-identity-detail').props.children)
-      .toBe('OpenClaw · Active {{age}}');
+      .toBe('Active {{age}}');
     expect(view.queryByText('Studio · OpenClaw')).toBeNull();
     // Without a dollar figure the card leads with tokens and drops its caption.
     expect(view.getByText('Tokens today')).toBeTruthy();
@@ -315,23 +335,22 @@ describe('AgentSettingsView deep rendering', () => {
     expect(view.getByTestId('agent-settings-stat-cron-value').props.children).toBe('—');
   });
 
-  it('opens contextual management for free users while keeping logs Pro-gated', () => {
+  it('opens management and logs directly for free users; Pro gates live inside the pages', () => {
     const onNavigate = jest.fn();
     const onOpenPro = jest.fn();
     const free = render(<AgentSettingsView {...props({ onNavigate, onOpenPro })} />);
 
-    fireEvent.press(free.getByTestId('agent-profile-advanced'));
+    // Management and logs rows open for everyone; each page previews real data
+    // and presents the contextual paywall only at its last step.
     fireEvent.press(free.getByTestId('agent-settings-row-openclaw'));
-    fireEvent.press(free.getByTestId('agent-profile-advanced'));
+    expect(free.queryByTestId('agent-settings-row-logs-lock-icon')).toBeNull();
     fireEvent.press(free.getByTestId('agent-settings-row-logs'));
-    expect(onOpenPro).toHaveBeenCalledWith('logs', expect.any(Function));
+    expect(onOpenPro).not.toHaveBeenCalled();
     expect(onNavigate).toHaveBeenCalledWith('AgentSettingsSection', {
       connectionId: 'connection-one',
       agentId: 'main',
       section: 'openclaw',
     });
-    const continueToLogs = onOpenPro.mock.calls[0]?.[1] as (() => void) | undefined;
-    continueToLogs?.();
     expect(onNavigate).toHaveBeenCalledWith('AgentSettingsSection', {
       connectionId: 'connection-one',
       agentId: 'main',
@@ -340,7 +359,7 @@ describe('AgentSettingsView deep rendering', () => {
     free.unmount();
 
     const pro = render(<AgentSettingsView {...props({ isPro: true, onNavigate, onOpenPro })} />);
-    fireEvent.press(pro.getByTestId('agent-profile-advanced'));
+    // Management rows are directly accessible.
     fireEvent.press(pro.getByTestId('agent-settings-row-openclaw'));
     expect(onNavigate).toHaveBeenLastCalledWith('AgentSettingsSection', {
       connectionId: 'connection-one',
@@ -371,11 +390,26 @@ describe('AgentSettingsView deep rendering', () => {
     expect(view.getByTestId('agent-settings-offline')).toBeTruthy();
     expect(view.getByTestId('agent-settings-identity')).toBeTruthy();
     expect(view.getByTestId('agent-settings-stat-models-value').props.children).toBe('12');
-    fireEvent.press(view.getByTestId('agent-profile-advanced'));
+    // Management rows are directly accessible.
     expect(view.getByTestId('agent-settings-row-tools')).toBeTruthy();
     expect(view.getByText('Offline')).toBeTruthy();
+    // Connection state takes the header title slot instead of pushing the profile down.
+    expect(view.getByTestId('agent-settings-header-status')).toBeTruthy();
+    expect(view.queryByTestId('agent-settings-title')).toBeNull();
     fireEvent.press(view.getByTestId('agent-settings-offline-action'));
     expect(onRetry).toHaveBeenCalledTimes(1);
+    view.unmount();
+
+    const recovering = render(
+      <AgentSettingsView
+        {...props({ state: 'offline', connectionState: 'reconnecting', reconnecting: true, onRetry })}
+      />,
+    );
+    expect(recovering.getByTestId('agent-settings-reconnecting')).toBeTruthy();
+    expect(recovering.getByText('Reconnecting…')).toBeTruthy();
+    expect(recovering.queryByTestId('agent-settings-offline')).toBeNull();
+    expect(recovering.queryByTestId('agent-settings-title')).toBeNull();
+    expect(recovering.getByTestId('agent-settings-identity')).toBeTruthy();
   });
 
   it('renders actionable error and permission states', () => {
@@ -432,7 +466,7 @@ describe('AgentSettingsView deep rendering', () => {
     expect(view.queryByTestId('agent-settings-stat-models')).toBeNull();
     expect(view.queryByTestId('agent-settings-row-openclaw')).toBeNull();
     expect(view.getByTestId('agent-settings-row-connection')).toBeTruthy();
-    fireEvent.press(view.getByTestId('agent-profile-advanced'));
+    // Management rows are directly accessible.
     expect(view.getByTestId('agent-settings-row-channels-devices')).toBeTruthy();
   });
 });

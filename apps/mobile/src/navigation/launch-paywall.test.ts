@@ -26,7 +26,7 @@ function input(
     launchPaywallShownThisProcess: false,
     pendingAutoOpen: null,
     pendingApproval: null,
-    threePointZeroIntroPending: false,
+    updateAnnouncementPending: false,
     ...patch,
   };
 }
@@ -50,15 +50,27 @@ describe('resolveStartupNavigation', () => {
     expect(resolveStartupNavigation(input())).toEqual({ type: 'stay' });
     expect(resolveStartupNavigation(input({ pendingAutoOpen: onboardingTarget })))
       .toEqual({ type: 'open_thread', target: onboardingTarget, skipLaunchPaywall: false });
-    expect(resolveStartupNavigation(input({ threePointZeroIntroPending: true })))
-      .toEqual({ type: 'stay' });
+  });
+
+  it('shows the update announcement once the backend is ready and no approval is pending', () => {
+    expect(resolveStartupNavigation(input({ updateAnnouncementPending: true })))
+      .toEqual({ type: 'show_update_announcement' });
+    expect(resolveStartupNavigation(input({ updateAnnouncementPending: true, pendingAutoOpen: onboardingTarget })))
+      .toEqual({ type: 'show_update_announcement' });
+    expect(resolveStartupNavigation(input({ updateAnnouncementPending: true, isPro: true })))
+      .toEqual({ type: 'show_update_announcement' });
+  });
+
+  it('waits while the announcement cache is still being read', () => {
+    expect(resolveStartupNavigation(input({ updateAnnouncementPending: null }))).toEqual({ type: 'wait' });
+    expect(resolveStartupNavigation(input({ updateAnnouncementPending: undefined }))).toEqual({ type: 'stay' });
   });
 
   it('opens a pending onboarding thread after the launch opportunity was consumed', () => {
     expect(resolveStartupNavigation(input({
       launchPaywallShownThisProcess: true,
       pendingAutoOpen: onboardingTarget,
-      threePointZeroIntroPending: true,
+      updateAnnouncementPending: true,
     }))).toEqual({
       type: 'open_thread',
       target: onboardingTarget,
@@ -83,7 +95,7 @@ describe('resolveStartupNavigation', () => {
       activeState: 'offline',
       subscriptionLoading: true,
       pendingApproval: approval,
-      threePointZeroIntroPending: true,
+      updateAnnouncementPending: true,
     }))).toEqual({ type: 'wait' });
     expect(resolveStartupNavigation(input({
       approvalScanReady: false,
@@ -96,7 +108,7 @@ describe('resolveStartupNavigation', () => {
     expect(resolveStartupNavigation(input({
       subscriptionLoading: true,
       pendingApproval: approval,
-      threePointZeroIntroPending: true,
+      updateAnnouncementPending: true,
     }))).toEqual({
       type: 'open_thread',
       target: approval,
@@ -115,7 +127,7 @@ describe('resolveStartupNavigation', () => {
   it('stays on the roster after a consumed launch opportunity without a pending thread', () => {
     expect(resolveStartupNavigation(input({
       launchPaywallShownThisProcess: true,
-      threePointZeroIntroPending: true,
+      updateAnnouncementPending: true,
     })))
       .toEqual({ type: 'stay' });
   });

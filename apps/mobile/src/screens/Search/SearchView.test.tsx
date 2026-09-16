@@ -309,6 +309,19 @@ describe('SearchView', () => {
     expect(view.getByTestId(testID)).toBeTruthy();
   });
 
+  it('shows the recovery window as a quiet capsule ahead of cached results', () => {
+    const view = render(<SearchView {...props({
+      state: 'offline',
+      reconnecting: true,
+      query: 'launch',
+      sections,
+    })} />);
+    expect(view.getByTestId('search-reconnecting')).toBeTruthy();
+    expect(view.queryByTestId('search-offline')).toBeNull();
+    expect(view.queryByTestId('search-reconnecting-action')).toBeNull();
+    expect(view.getByTestId('search-sections')).toBeTruthy();
+  });
+
   it('routes header and permission actions without native navigation chrome', () => {
     const onBack = jest.fn();
     const onOpenPermission = jest.fn();

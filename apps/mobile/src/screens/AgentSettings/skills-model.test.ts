@@ -10,6 +10,7 @@ import {
   filterInstalledSkills,
   groupDiscoveredSkills,
   skillAvailability,
+  skillRequirementIssues,
 } from './skills-model';
 
 function skill(patch: Partial<SkillStatusEntry> = {}): SkillStatusEntry {
@@ -63,7 +64,30 @@ describe('Agent skills model', () => {
     expect(filterInstalledSkills([unavailable, disabled, skill()], 'dormant'))
       .toEqual([disabled]);
     expect(filterInstalledSkills([unavailable, disabled, skill()], ''))
-      .toEqual([skill(), disabled, unavailable]);
+      .toEqual([unavailable, skill(), disabled]);
+  });
+
+  it('keeps alphabetical order when switches change and searches descriptions and sources', () => {
+    const items = [skill({ name: 'Zed', skillKey: 'zed' }), skill({ name: 'Alpha', skillKey: 'alpha' })];
+    expect(filterInstalledSkills(items, '').map((item) => item.skillKey)).toEqual(['alpha', 'zed']);
+    expect(filterInstalledSkills(items.map((item) => ({ ...item, disabled: !item.disabled })), '').map((item) => item.skillKey)).toEqual(['alpha', 'zed']);
+    expect(filterInstalledSkills(items, 'builds')).toHaveLength(2);
+    expect(filterInstalledSkills(items, 'managed')).toHaveLength(2);
+  });
+
+  it('reports concrete requirements without treating a disabled switch as a missing requirement', () => {
+    expect(skillRequirementIssues(skill({ disabled: true, eligible: false }))).toEqual([]);
+    expect(skillRequirementIssues(skill({ eligible: false }))).toEqual([{ kind: 'unavailable', requirements: '' }]);
+    expect(skillRequirementIssues(skill({
+      eligible: false, blockedByAllowlist: true,
+      missing: { bins: [' memo ', 'memo'], env: ['IMAGE_KEY'], anyBins: ['uv', 'python'], config: ['image.provider'], os: ['darwin'] },
+      configChecks: [{ path: 'image.provider', label: 'Provider', satisfied: false }],
+    }))).toEqual([
+      { kind: 'blocked', requirements: '' },
+      { kind: 'missing', requirements: 'memo, IMAGE_KEY, image.provider' },
+      { kind: 'any', requirements: 'uv, python' },
+      { kind: 'os', requirements: 'darwin' },
+    ]);
   });
 
   it('groups discovery results by source and sorts popular entries first', () => {

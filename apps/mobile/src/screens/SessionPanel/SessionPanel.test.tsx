@@ -13,7 +13,7 @@ import type {
 
 import type { RosterConnectionGroup } from '../../connection';
 import { analyticsEvents } from '../../services/analytics/events';
-import { FontSize } from '../../theme/tokens';
+import { FontSize, StatusSize } from '../../theme/tokens';
 import {
   SessionPanelView,
   type SessionPanelViewProps,
@@ -280,7 +280,6 @@ function roster(): RosterConnectionGroup {
       {
         agent: main,
         sessions: mainSessions,
-        updatedAt: 950_000,
         lastActivityAt: 950_000,
         unreadCount: 0,
         hasUnread: false,
@@ -291,7 +290,6 @@ function roster(): RosterConnectionGroup {
       {
         agent: builder,
         sessions: builderSessions,
-        updatedAt: 950_000,
         lastActivityAt: 950_000,
         unreadCount: 0,
         hasUnread: false,
@@ -397,12 +395,19 @@ describe('SessionPanelView', () => {
     // Channel rows carry a monochrome platform glyph; pinned, unread, attention and working markers.
     const design = rowById('agent:main:channel:Design');
     expect(view.getByTestId(`session-panel-row-${design.id}-tile`)).toBeTruthy();
-    expect(view.getByTestId(`session-panel-row-${design.id}-unread`)).toBeTruthy();
+    expect(flattenStyle(view.getByTestId(`session-panel-row-${design.id}-unread`).props.style)).toMatchObject({
+      width: StatusSize.dot,
+      height: StatusSize.dot,
+      backgroundColor: lightColors.ink,
+    });
     expect(flattenStyle(view.getByTestId(`session-panel-row-${design.id}-preview`).props.style)).toMatchObject({
       color: lightColors.ink,
     });
     const operations = rowById('agent:main:channel:Operations');
-    expect(view.getByTestId(`session-panel-row-${operations.id}-attention`)).toBeTruthy();
+    expect(flattenStyle(view.getByTestId(`session-panel-row-${operations.id}-attention`).props.style)).toMatchObject({
+      width: StatusSize.dot,
+      backgroundColor: lightColors.bad,
+    });
     expect(view.queryByTestId(`session-panel-row-${operations.id}-unread`)).toBeNull();
     const cron = rowById('agent:main:cron:Daily report');
     expect(view.getByTestId(`session-panel-row-${cron.id}-pinned`)).toBeTruthy();
@@ -604,6 +609,11 @@ describe('SessionPanelView', () => {
 
     view.rerender(<SessionPanelView {...props({ state: 'offline' })} />);
     expect(view.getByTestId('session-panel-offline')).toBeTruthy();
+    expect(view.getByText('Main session')).toBeTruthy();
+
+    view.rerender(<SessionPanelView {...props({ state: 'offline', reconnecting: true })} />);
+    expect(view.getByTestId('session-panel-reconnecting')).toBeTruthy();
+    expect(view.queryByTestId('session-panel-offline')).toBeNull();
     expect(view.getByText('Main session')).toBeTruthy();
 
     view.rerender(<SessionPanelView {...props({ state: 'permission' })} />);

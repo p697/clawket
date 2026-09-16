@@ -1,6 +1,5 @@
-import React, { Fragment, useMemo } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { ChevronRight } from 'lucide-react-native';
+import React, { Fragment, useEffect, useMemo } from 'react';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -12,12 +11,12 @@ import {
   getAppUpdateReleaseHistory,
   type AppUpdateRelease,
 } from '../../features/app-updates/releases';
+import { analyticsEvents } from '../../services/analytics/events';
 import { useAppTheme } from '../../theme';
 import {
   ControlSize,
   FontSize,
   FontWeight,
-  IconSize,
   LineHeight,
   Space,
 } from '../../theme/tokens';
@@ -25,7 +24,6 @@ import { AccountSettingsPageHeader } from './AccountSettingsPageHeader';
 
 export type ReleaseNotesHistoryScreenProps = Readonly<{
   onBack: () => void;
-  onOpenPaywall?: (feature: 'settingsMembershipPreview') => void;
   releases?: ReadonlyArray<AppUpdateRelease>;
 }>;
 
@@ -46,24 +44,13 @@ export function formatReleaseDate(
   }).format(utcNoon);
 }
 
-function translateReleaseCopy(
-  t: ReturnType<typeof useTranslation>['t'],
-  key: string,
-): string {
-  if (key === 'Clawket 3.0') return t('Clawket 3.0', { ns: 'chat' });
-  if (key === 'Every agent and session in one roster.') {
-    return t('Every agent and session in one roster.', { ns: 'chat' });
-  }
-  if (key === 'Clawket 3.0 + Pro') return t('Clawket 3.0 + Pro', { ns: 'chat' });
-  if (key === 'Unlimited connections, agents, management, logs, files, and search.') {
-    return t('Unlimited connections, agents, management, logs, files, and search.', { ns: 'chat' });
-  }
-  return key;
-}
-
+/**
+ * Every release, newest first, as plain reading material. Entries never
+ * navigate (owner decision 2026-09-16): 3.0 moved the destinations, and the
+ * history is a record, not a menu.
+ */
 export function ReleaseNotesHistoryScreen({
   onBack,
-  onOpenPaywall,
   releases = getAppUpdateReleaseHistory(),
 }: ReleaseNotesHistoryScreenProps): React.JSX.Element {
   const { t, i18n } = useTranslation('config');
@@ -74,6 +61,10 @@ export function ReleaseNotesHistoryScreen({
     () => ({ paddingBottom: insets.bottom + Space.xl }),
     [insets.bottom],
   );
+
+  useEffect(() => {
+    analyticsEvents.releaseNotesOpened({ release_count: releases.length });
+  }, [releases.length]);
 
   return (
     <View
@@ -115,18 +106,14 @@ export function ReleaseNotesHistoryScreen({
                 </Text>
               ) : null}
             </View>
-            <SettingsGroup testID={`release-notes-${release.version}-entries`}>
-              {release.entries.map((entry, index) => {
-                const title = translateReleaseCopy(tChat, entry.title);
-                const paywallFeature = entry.action.type === 'open_paywall'
-                  ? entry.action.feature
-                  : null;
-                const opensPaywall = paywallFeature !== null && Boolean(onOpenPaywall);
-                const content = (
-                  <>
+            <SettingsGroup density="comfortable" testID={`release-notes-${release.version}-entries`}>
+              {release.entries.map((entry, index) => (
+                <Fragment key={entry.id}>
+                  {index > 0 ? <SettingsDivider inset="content" /> : null}
+                  <View testID={`release-notes-entry-${entry.id}`} style={styles.entry}>
                     <View style={styles.entryCopy}>
                       <Text style={[styles.entryTitle, { color: theme.colors.ink }]}>
-                        {title}
+                        {tChat(entry.title)}
                       </Text>
                       {entry.subtitle ? (
                         <Text
@@ -135,43 +122,13 @@ export function ReleaseNotesHistoryScreen({
                             { color: theme.colors.inkSecondary },
                           ]}
                         >
-                          {translateReleaseCopy(tChat, entry.subtitle)}
+                          {tChat(entry.subtitle)}
                         </Text>
                       ) : null}
                     </View>
-                    {opensPaywall ? (
-                      <ChevronRight
-                        size={IconSize.sm}
-                        color={theme.colors.inkTertiary}
-                        strokeWidth={2}
-                      />
-                    ) : null}
-                  </>
-                );
-                return (
-                  <Fragment key={entry.id}>
-                    {index > 0 ? <SettingsDivider inset="content" /> : null}
-                    {paywallFeature && onOpenPaywall ? (
-                      <Pressable
-                        testID={`release-notes-entry-${entry.id}`}
-                        accessibilityRole="button"
-                        accessibilityLabel={title}
-                        onPress={() => onOpenPaywall(paywallFeature)}
-                        style={({ pressed }) => [
-                          styles.entry,
-                          pressed ? { backgroundColor: theme.colors.surface } : null,
-                        ]}
-                      >
-                        {content}
-                      </Pressable>
-                    ) : (
-                      <View testID={`release-notes-entry-${entry.id}`} style={styles.entry}>
-                        {content}
-                      </View>
-                    )}
-                  </Fragment>
-                );
-              })}
+                  </View>
+                </Fragment>
+              ))}
             </SettingsGroup>
           </View>
         ))}
@@ -207,9 +164,9 @@ const styles = StyleSheet.create({
     fontWeight: FontWeight.regular,
   },
   entry: {
-    minHeight: ControlSize.settingsRow,
+    minHeight: ControlSize.settingsRowComfortable,
     paddingHorizontal: Space.lg,
-    paddingVertical: Space.md,
+    paddingVertical: Space.lg,
     flexDirection: 'row',
     alignItems: 'center',
     gap: Space.md,

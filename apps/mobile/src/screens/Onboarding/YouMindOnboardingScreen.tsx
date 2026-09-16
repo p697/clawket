@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
-import { ArrowLeft } from 'lucide-react-native';
+import { ArrowLeft } from '../../components/ui/DirectionalIcon';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type {

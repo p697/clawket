@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import { ChevronDown, ChevronRight } from 'lucide-react-native';
+import { ChevronDown } from 'lucide-react-native';
+import { ChevronRight } from '../ui/DirectionalIcon';
 import { useTranslation } from 'react-i18next';
 import { useAppTheme } from '../../theme';
 import { ControlSize, FontSize, IconSize, LineHeight, Space } from '../../theme/tokens';

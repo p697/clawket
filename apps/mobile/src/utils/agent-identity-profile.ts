@@ -96,3 +96,72 @@ export function generateAgentIdentityMarkdown(profile: AgentIdentityProfile): st
     '',
   ].join('\n');
 }
+
+const IDENTITY_LINE_LABELS: ReadonlyArray<readonly [keyof AgentIdentityProfile, string]> = [
+  ['name', 'Name'],
+  ['theme', 'Theme'],
+  ['creature', 'Creature'],
+  ['vibe', 'Vibe'],
+  ['emoji', 'Emoji'],
+  ['avatar', 'Avatar'],
+];
+const IDENTITY_LABEL_SET = new Set(IDENTITY_LINE_LABELS.map(([, label]) => label.toLowerCase()));
+
+function identityLineLabel(line: string): string | null {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith('-')) return null;
+  const cleaned = trimmed.replace(/^\s*-\s*/, '');
+  const colonIndex = cleaned.indexOf(':');
+  if (colonIndex === -1) return null;
+  return cleaned.slice(0, colonIndex).replace(/[*_`]/g, '').trim().toLowerCase();
+}
+
+function identityInsertIndex(lines: string[]): number {
+  // Keep new fields grouped with the existing identity list; otherwise place
+  // them right after the title block so surrounding prose stays intact.
+  let lastIdentityIndex = -1;
+  lines.forEach((line, index) => {
+    const label = identityLineLabel(line);
+    if (label && IDENTITY_LABEL_SET.has(label)) lastIdentityIndex = index;
+  });
+  if (lastIdentityIndex >= 0) return lastIdentityIndex + 1;
+  const headingIndex = lines.findIndex((line) => line.trim().startsWith('#'));
+  if (headingIndex === -1) return 0;
+  let insertIndex = headingIndex + 1;
+  while (insertIndex < lines.length && lines[insertIndex]?.trim() === '') insertIndex += 1;
+  return insertIndex;
+}
+
+/**
+ * Replace the given identity lines inside existing IDENTITY.md content and
+ * preserve everything else. Omitted fields are left untouched, an empty value
+ * removes the line, and duplicate labels collapse into the first occurrence.
+ */
+export function mergeAgentIdentityMarkdown(
+  content: string,
+  fields: Partial<Pick<AgentIdentityProfile, 'name' | 'emoji' | 'creature' | 'vibe' | 'theme' | 'avatar'>>,
+): string {
+  const lines = content.replace(/\r\n/g, '\n').split('\n');
+  for (const [field, label] of IDENTITY_LINE_LABELS) {
+    const raw = fields[field];
+    if (raw === undefined) continue;
+    const value = raw.trim();
+    const matches = lines.reduce<number[]>((indexes, line, index) => {
+      if (identityLineLabel(line) === label.toLowerCase()) indexes.push(index);
+      return indexes;
+    }, []);
+    if (!value) {
+      for (const match of matches.reverse()) lines.splice(match, 1);
+      continue;
+    }
+    const nextLine = `- **${label}:** ${value}`;
+    const [first, ...duplicates] = matches;
+    if (first !== undefined) {
+      lines[first] = nextLine;
+      for (const duplicate of duplicates.reverse()) lines.splice(duplicate, 1);
+      continue;
+    }
+    lines.splice(identityInsertIndex(lines), 0, nextLine);
+  }
+  return lines.join('\n').replace(/\n*$/, '\n');
+}

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  BackHandler,
   Platform,
   ScrollView,
   StyleSheet,
@@ -14,7 +15,7 @@ import type {
   DoctorResult,
   PermissionsReport,
 } from '@clawket/agent-protocol';
-import { ChevronLeft } from 'lucide-react-native';
+import { ChevronLeft } from '../../components/ui/DirectionalIcon';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -22,7 +23,10 @@ import { Banner } from '../../components/ui/Banner';
 import { Button } from '../../components/ui/Button';
 import { FloatingButton } from '../../components/ui/FloatingButton';
 import { FormTextInput } from '../../components/ui/FormTextInput';
-import { SegmentedTabs } from '../../components/ui/SegmentedTabs';
+import { SettingsIcon } from '../../components/ui/SettingsIcon';
+import { SettingsDivider, SettingsGroup, SettingsRow } from '../../components/ui/SettingsGroup';
+import { Archive, FileJson, ShieldCheck, Stethoscope } from 'lucide-react-native';
+import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { Sheet } from '../../components/ui/Sheet';
 import { analyticsEvents } from '../../services/analytics/events';
 import { useAppTheme } from '../../theme';
@@ -40,8 +44,10 @@ import {
   ManageSectionLoading,
   PermissionsSection,
   SectionEmpty,
+  type ManageSectionGate,
 } from './OpenClawManageSections';
 import {
+  withManagementDeadline,
   isOpenClawManageTabSupported,
   managementErrorDetail,
   managementErrorKey,
@@ -51,6 +57,7 @@ import {
   type OpenClawManageTab,
 } from './openclaw-manage-model';
 import { translateAgentSettingsKey } from './translation';
+import { formatConsoleHeartbeatAge, heartbeatMinutesAgo } from '../../utils/console-heartbeat';
 
 type ExecApproval = Extract<ApprovalRequest, { kind: 'exec' }>;
 type FlagMap = Record<OpenClawManageTab, boolean>;
@@ -87,6 +94,7 @@ export type OpenClawManageScreenProps = Readonly<{
   onBack: () => void;
   onOpenPaywall: (
     reason: 'configManage' | 'openclawPermissions' | 'openclawDiagnostics' | 'configBackups',
+    onContinue?: () => void,
   ) => void;
 }>;
 
@@ -105,17 +113,21 @@ export function OpenClawManageScreen({
   adapter,
   isPro,
   permissionDenied = false,
-  initialTab = 'configuration',
+  initialTab,
   onBack,
   onOpenPaywall,
 }: OpenClawManageScreenProps): React.JSX.Element {
-  const { t } = useTranslation(['config', 'common', 'settings', 'chat']);
+  const { t, i18n } = useTranslation(['config', 'common', 'settings', 'chat']);
   const { theme } = useAppTheme();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
   const support = useMemo(() => resolveOpenClawManageSupport(adapter), [adapter]);
-  const hasAccess = isPro && !permissionDenied;
-  const [activeTab, setActiveTab] = useState<OpenClawManageTab>(initialTab);
+  // A locked Agent never reaches management. A free user on an accessible Agent
+  // sees real data and meets the contextual paywall only at the last step.
+  const hasAccess = !permissionDenied;
+  const preview = !isPro && !permissionDenied;
+  const [showMenu, setShowMenu] = useState(initialTab === undefined);
+  const [activeTab, setActiveTab] = useState<OpenClawManageTab>(initialTab ?? 'configuration');
   const [connectionState, setConnectionState] = useState(adapter.state);
   const [configuration, setConfiguration] = useState<ConfigView | null>(null);
   const [permissions, setPermissions] = useState<PermissionsReport | null>(null);
@@ -131,6 +143,7 @@ export function OpenClawManageScreen({
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const adapterLoadEpoch = useRef(0);
+  const inFlightLoads = useRef(new Set<string>());
   const tabLoadIds = useRef<Record<OpenClawManageTab, number>>({
     configuration: 0,
     permissions: 0,
@@ -139,21 +152,67 @@ export function OpenClawManageScreen({
   });
   const online = connectionState === 'ready';
 
+  // Menu copy (owner-requested 2026-09-16): each Pro section says what it does in one plain line —
+  // a bare "Configuration" / "Permissions" / "Diagnostics" told users nothing worth tapping into,
+  // and the owner asked for wording a middle-schooler would follow.
   const tabs = useMemo(() => [
-    { key: 'configuration' as const, label: t('Configuration', { ns: 'settings' }) },
-    { key: 'permissions' as const, label: t('Permissions') },
-    { key: 'diagnostics' as const, label: t('Diagnostics') },
-    { key: 'backups' as const, label: t('Backups') },
+    {
+      key: 'configuration' as const,
+      label: t('OpenClaw config'),
+      description: t('See and change every OpenClaw setting.'),
+    },
+    {
+      key: 'permissions' as const,
+      label: t('Permissions'),
+      description: t('Check web and command access; fix it in one tap.'),
+    },
+    {
+      key: 'diagnostics' as const,
+      label: t('Diagnostics'),
+      description: t('Give OpenClaw a check-up and auto-fix issues.'),
+    },
+    {
+      key: 'backups' as const,
+      label: t('Back up OpenClaw config'),
+      description: t('Keeps a copy on your phone so a bad change can be undone.'),
+    },
   ], [t]);
+
+  // The only live values the menu shows are the ones it already has for free: exec approvals that
+  // arrived over the socket, and the newest restore point (a local read, never a Gateway request).
+  const menuValues = useMemo((): Partial<Record<OpenClawManageTab, Readonly<{ value: string; attention: boolean }>>> => {
+    const values: Partial<Record<OpenClawManageTab, Readonly<{ value: string; attention: boolean }>>> = {};
+    if (approvals.length > 0) values.permissions = { value: String(approvals.length), attention: true };
+    const newestBackupAt = backups?.[0]?.createdAt;
+    const minutes = heartbeatMinutesAgo(newestBackupAt, Date.now());
+    if (minutes !== null) {
+      const formatted = formatConsoleHeartbeatAge(minutes, i18n?.resolvedLanguage ?? i18n?.language ?? 'en');
+      const age = formatted.compactText
+        ?? (formatted.count === undefined
+          ? t(formatted.key, { ns: 'common' })
+          : t(formatted.key, { ns: 'common', count: formatted.count }));
+      values.backups = { value: age, attention: false };
+    }
+    return values;
+  }, [approvals.length, backups, i18n?.language, i18n?.resolvedLanguage, t]);
 
   const translateError = useCallback((error: unknown, fallback: string) => {
     const key = managementErrorKey(error);
     return key ? translateAgentSettingsKey(t, key) : managementErrorDetail(error, fallback);
   }, [t]);
 
+  const gateFor = useCallback((tab: OpenClawManageTab): ManageSectionGate => ({
+    locked: preview,
+    open: (continuation?: () => void) => onOpenPaywall(paywallFeatureForTab(tab), continuation),
+  }), [onOpenPaywall, preview]);
+
   const loadTab = useCallback(async (tab: OpenClawManageTab) => {
-    if (!hasAccess || !online || !isOpenClawManageTabSupported(support, tab)) return;
+    // Restore points live on this phone, so their list does not wait for the Gateway.
+    if (!hasAccess || (!online && tab !== 'backups') || !isOpenClawManageTabSupported(support, tab)) return;
     const loadEpoch = adapterLoadEpoch.current;
+    const loadKey = `${loadEpoch}:${tab}`;
+    if (inFlightLoads.current.has(loadKey)) return;
+    inFlightLoads.current.add(loadKey);
     const loadId = tabLoadIds.current[tab] + 1;
     tabLoadIds.current[tab] = loadId;
     const isCurrentLoad = () => adapterLoadEpoch.current === loadEpoch
@@ -168,12 +227,12 @@ export function OpenClawManageScreen({
         setConfiguration(next);
       } else if (tab === 'permissions') {
         if (support.permissions && config?.permissions) {
-          const next = await config.permissions();
+          const next = await withManagementDeadline(config.permissions());
           if (!isCurrentLoad()) return;
           setPermissions(next);
         }
       } else if (tab === 'diagnostics' && support.diagnostics && config?.doctor) {
-        const next = await config.doctor();
+        const next = await withManagementDeadline(config.doctor());
         if (!isCurrentLoad()) return;
         setDiagnostics(next);
       } else if (tab === 'backups' && support.backups && config?.backups?.list) {
@@ -198,6 +257,7 @@ export function OpenClawManageScreen({
       }));
       setLoaded((current) => ({ ...current, [tab]: true }));
     } finally {
+      inFlightLoads.current.delete(loadKey);
       if (isCurrentLoad()) {
         setLoading((current) => ({ ...current, [tab]: false }));
       }
@@ -249,8 +309,22 @@ export function OpenClawManageScreen({
   }), [adapter]);
 
   useEffect(() => {
-    if (!loaded[activeTab] && !loading[activeTab]) void loadTab(activeTab);
-  }, [activeTab, loadTab, loaded, loading]);
+    if (!showMenu && !loaded[activeTab] && !loading[activeTab]) void loadTab(activeTab);
+  }, [activeTab, loadTab, loaded, loading, showMenu]);
+
+  // The menu reads only the local backup list so its row can show the newest restore point's age.
+  useEffect(() => {
+    if (showMenu && support.backups && !loaded.backups && !loading.backups) void loadTab('backups');
+  }, [loadTab, loaded.backups, loading.backups, showMenu, support.backups]);
+
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (showMenu || sheet) return false;
+      setShowMenu(true);
+      return true;
+    });
+    return () => subscription.remove();
+  }, [showMenu, sheet]);
 
   const retry = useCallback(async () => {
     setErrors((current) => ({ ...current, [activeTab]: null }));
@@ -419,7 +493,7 @@ export function OpenClawManageScreen({
         />
       );
     }
-    if (loading[activeTab] && !loaded[activeTab]) return <ManageSectionLoading />;
+    if (loading[activeTab]) return <ManageSectionLoading diagnostics={activeTab === 'diagnostics'} />;
     if (!loaded[activeTab]) {
       return online || errors[activeTab]
         ? null
@@ -431,6 +505,7 @@ export function OpenClawManageScreen({
           view={configuration}
           canEdit={support.configurationWrite}
           online={online}
+          gate={gateFor('configuration')}
           onEdit={openConfigurationEditor}
         />
       );
@@ -445,6 +520,7 @@ export function OpenClawManageScreen({
           canRepair={support.permissions && Boolean(adapter.management?.config?.repair)}
           online={online}
           repairing={busy === 'repair'}
+          gate={gateFor('permissions')}
           onSelectApproval={(approval) => {
             if (approval.expiresAtMs > Date.now()) {
               setSheetError(null);
@@ -466,6 +542,7 @@ export function OpenClawManageScreen({
           canRepair={support.diagnosticRepair}
           online={online}
           repairing={busy === 'repair'}
+          gate={gateFor('diagnostics')}
           onDiagnose={() => { void loadTab('diagnostics'); }}
           onRepair={() => {
             setSheetError(null);
@@ -482,6 +559,7 @@ export function OpenClawManageScreen({
         canRestore={support.backupRestore}
         online={online}
         busy={Boolean(busy)}
+        gate={gateFor('backups')}
         onCreate={() => { void createBackup(); }}
         onSelectBackup={(backup) => {
           setSheetError(null);
@@ -509,19 +587,22 @@ export function OpenClawManageScreen({
             icon={ChevronLeft}
             appearance="plain"
             accessibilityLabel={t('Back', { ns: 'common' })}
-            onPress={onBack}
+            onPress={() => showMenu ? onBack() : setShowMenu(true)}
           />
         </View>
         <Text style={styles.headerTitle} numberOfLines={1}>
-          {t('OpenClaw management', { ns: 'common' })}
+          {showMenu ? t('OpenClaw management', { ns: 'common' }) : tabs.find(tab => tab.key === activeTab)?.label}
         </Text>
         <View style={styles.headerSide} />
       </View>
 
       <ScrollView
+        key={showMenu ? 'menu' : activeTab}
         automaticallyAdjustContentInsets={false}
         contentContainerStyle={[
           styles.content,
+          // A section still loading owns the whole viewport so the Companion sits centred.
+          !showMenu && support.root && loading[activeTab] ? styles.contentFill : null,
           { paddingBottom: insets.bottom + Space.xl },
         ]}
         keyboardShouldPersistTaps="handled"
@@ -534,19 +615,32 @@ export function OpenClawManageScreen({
           />
         ) : (
           <>
-            <SegmentedTabs
-              testID="openclaw-manage-tabs"
-              tabs={tabs}
-              active={activeTab}
-              onSwitch={(tab) => {
-                setActiveTab(tab);
-                setNotice(null);
-                setSheet(null);
-                setSheetError(null);
-              }}
-              size="sm"
-            />
-            {!hasAccess ? (
+            {showMenu ? (
+              <SettingsGroup density="comfortable" testID="openclaw-manage-menu">
+                {tabs.map((tab, index) => {
+                  const Icon = { configuration: FileJson, permissions: ShieldCheck, diagnostics: Stethoscope, backups: Archive }[tab.key];
+                  const live = menuValues[tab.key];
+                  return (
+                    <React.Fragment key={tab.key}>
+                      {index > 0 ? <SettingsDivider inset="content" /> : null}
+                      <SettingsRow testID={`openclaw-manage-tabs-${tab.key}`}
+                        title={tab.label} subtitle={tab.description}
+                        value={live?.value} attention={live?.attention ?? false}
+                        leading={<SettingsIcon icon={Icon} tone="neutral" size={20} strokeWidth={1.75} />}
+                        showChevron disabled={!isOpenClawManageTabSupported(support, tab.key)}
+                        onPress={() => {
+                          setActiveTab(tab.key);
+                          setShowMenu(false);
+                          setNotice(null);
+                          setSheet(null);
+                          setSheetError(null);
+                        }} />
+                    </React.Fragment>
+                  );
+                })}
+              </SettingsGroup>
+            ) : <>
+            {permissionDenied ? (
               <Banner
                 testID="openclaw-manage-locked"
                 message={t('Pro required for this agent', { ns: 'common' })}
@@ -572,6 +666,7 @@ export function OpenClawManageScreen({
             ) : null}
             {hasAccess && notice ? <Text style={styles.notice}>{notice}</Text> : null}
             {hasAccess ? renderSection() : null}
+            </>}
           </>
         )}
       </ScrollView>
@@ -677,7 +772,13 @@ export function OpenClawManageScreen({
           confirmLabel={t('Restore')}
           onCancel={closeSheet}
           onConfirm={() => {
-            if (sheet?.kind === 'restore') void restoreBackup(sheet.backup);
+            if (sheet?.kind !== 'restore') return;
+            const { backup } = sheet;
+            if (preview) {
+              onOpenPaywall('configBackups', () => { void restoreBackup(backup); });
+              return;
+            }
+            void restoreBackup(backup);
           }}
         />
       </Sheet>
@@ -738,13 +839,14 @@ export function OpenClawManageScreen({
         title={sheet?.kind === 'detail' ? sheet.title : undefined}
         closeAccessibilityLabel={t('Close', { ns: 'common' })}
         onClose={closeSheet}
+        snapPoints={['93%']}
       >
-        <View style={styles.sheetContent}>
+        <BottomSheetScrollView style={styles.screen} contentContainerStyle={styles.sheetContent}>
           <Text selectable style={styles.detailText}>
             {sheet?.kind === 'detail' ? sheet.body : ''}
           </Text>
           <Button label={t('Done', { ns: 'common' })} onPress={closeSheet} />
-        </View>
+        </BottomSheetScrollView>
       </Sheet>
     </View>
   );
@@ -828,6 +930,9 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       paddingHorizontal: Space.lg,
       paddingTop: Space.md,
       gap: Space.lg,
+    },
+    contentFill: {
+      flexGrow: 1,
     },
     notice: {
       color: colors.good,

@@ -9,7 +9,7 @@ This document tracks the local Xcode release process and App Store Connect items
 - Apple Team ID: keep local to the release environment
 - App Store Connect app ID: keep local to the release environment
 - RevenueCat entitlement: `Clawket Pro`
-- RevenueCat control offering: `pro`
+- RevenueCat current/default offering: `default` (live catalog verified 2026-09-14; current customer assignment remains authoritative)
 - RevenueCat packages:
   - `$rc_annual`
   - `$rc_lifetime`
@@ -18,7 +18,7 @@ This document tracks the local Xcode release process and App Store Connect items
 - App Store products:
   - `com.p697.clawket.pro.monthly`
   - `com.p697.clawket.pro.yearly`
-  - `com.p697.clawket.pro.lifetime`
+  - `com.p697.clawket.pro.buyout`
 
 ## 1. App Store Connect Checklist
 
@@ -30,10 +30,12 @@ This document tracks the local Xcode release process and App Store Connect items
 
 ### Subscription products
 
-- [ ] `Clawket Pro Monthly` is configured
-- [ ] `Clawket Pro Yearly` is configured
-- [ ] Monthly and Yearly are in the same subscription group: `Clawket Pro`
-- [ ] `Clawket Pro Lifetime` is configured as a non-consumable In-App Purchase at USD $49.99, with automatic storefront conversion
+- [x] `Clawket Pro Monthly` is configured and approved (2026-09-14)
+- [x] `Clawket Pro Yearly` is configured and approved (2026-09-14)
+- [x] Monthly and Yearly are in the same subscription group: `Clawket Pro`
+- [x] Monthly and Yearly both use level 1 for equal-access duration changes (owner saved; independently verified 2026-09-14; see [plan management](pro-plan-management.md))
+- [x] `Clawket Pro Lifetime` (`com.p697.clawket.pro.buyout`) is an approved non-consumable In-App Purchase
+- [ ] Verify lifetime USD $49.99 and automatic storefront conversion before release; this audit did not change or verify prices
 - [ ] All three products have pricing configured
 - [ ] All three products have required localizations
 - [ ] All three products have a review screenshot
@@ -51,18 +53,18 @@ This document tracks the local Xcode release process and App Store Connect items
 
 ## 2. RevenueCat Checklist
 
-- [ ] App Store app exists in RevenueCat
+- [x] App Store app exists in RevenueCat (2026-09-14)
 - [ ] In-App Purchase Key is uploaded
 - [ ] App Store Connect API Key is uploaded
-- [ ] Control offering `pro` exposes packages in annual, lifetime, monthly order:
-  - [ ] `$rc_annual` -> `com.p697.clawket.pro.yearly`
-  - [ ] `$rc_lifetime` -> `com.p697.clawket.pro.lifetime`
-  - [ ] `$rc_monthly` -> `com.p697.clawket.pro.monthly`
+- [x] Current/default offering `default` exposes all three packages (app orders annual, lifetime, monthly):
+  - [x] `$rc_annual` -> `com.p697.clawket.pro.yearly`
+  - [x] `$rc_lifetime` -> `com.p697.clawket.pro.buyout`
+  - [x] `$rc_monthly` -> `com.p697.clawket.pro.monthly`
 - [ ] Every experiment Offering exposes the same three package types
 - [ ] Offering metadata contains `default_package` (`annual` or `monthly`) and boolean `social_proof`
 - [ ] Experiment variants cover `default_package: annual` vs `monthly` and `social_proof: true` vs `false`; lifetime pricing is not varied
 - [ ] RevenueCat serves the assigned customer-specific current Offering so Experiments and Targeting remain authoritative
-- [ ] `Clawket Pro` entitlement is attached to all three products
+- [x] `Clawket Pro` entitlement is attached to all three products (2026-09-14)
 - [ ] No app build is using `EXPO_PUBLIC_REVENUECAT_TEST_API_KEY`
 
 ## 3. Local Build Environment Checklist
@@ -71,7 +73,7 @@ This document tracks the local Xcode release process and App Store Connect items
 - [ ] `npm run config:check:ios` passes
 - [ ] `.env.local` or local shell environment contains `EXPO_PUBLIC_REVENUECAT_APPLE_API_KEY`
 - [ ] `.env.local` or local shell environment contains `EXPO_PUBLIC_REVENUECAT_PRO_ENTITLEMENT_ID=Clawket Pro`
-- [ ] `.env.local` or local shell environment contains `EXPO_PUBLIC_REVENUECAT_PRO_OFFERING_ID=pro` as the fallback when no current Offering is assigned
+- [ ] Verify `EXPO_PUBLIC_REVENUECAT_PRO_OFFERING_ID` names an existing fallback offering when no current Offering is assigned; the live default is `default`, while older environment examples use `pro`
 - [ ] `EXPO_PUBLIC_REVENUECAT_PRO_PACKAGE_ID` is unset for the standard 3.0 Offering; it is only a legacy fallback for an Offering without standard package types
 - [ ] `EXPO_PUBLIC_REVENUECAT_TEST_API_KEY` is not set for TestFlight / production
 - [ ] `EXPO_PUBLIC_UNLOCK_PRO` is not set for TestFlight / production

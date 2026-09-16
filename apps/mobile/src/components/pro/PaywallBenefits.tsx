@@ -1,13 +1,13 @@
 import React from 'react';
 import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import { Bot, Brain, Files, Infinity as InfinityIcon, MessagesSquare, Network, Search, Wrench, type LucideIcon } from 'lucide-react-native';
+import { Bot, Brain, ChartColumnIncreasing, Files, Infinity as InfinityIcon, MessagesSquare, Network, Search, Wrench, type LucideIcon } from 'lucide-react-native';
 import type { PaywallBenefitKind } from '../../screens/Paywall/model';
 import { useAppTheme } from '../../theme';
 import { FontSize, FontWeight, IconSize, LineHeight, Space } from '../../theme/tokens';
 
 const ICONS: Readonly<Record<PaywallBenefitKind, LucideIcon>> = {
   connections: Network, agents: Bot, manage: Wrench, logsFiles: Files,
-  search: Search, combined: InfinityIcon, memory: Brain, sessions: MessagesSquare,
+  search: Search, combined: InfinityIcon, memory: Brain, sessions: MessagesSquare, usage: ChartColumnIncreasing,
 };
 
 /** Intrinsic-width group for short copy; long translations wrap within the screen margins. */

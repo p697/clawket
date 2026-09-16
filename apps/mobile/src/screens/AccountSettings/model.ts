@@ -54,7 +54,6 @@ export type AccountSettingsCapability =
   | 'notifications'
   | 'help'
   | 'community'
-  | 'wecom'
   | 'about'
   | 'developer'
   | 'previewEnvironment'
@@ -74,7 +73,6 @@ export const DEFAULT_ACCOUNT_SETTINGS_CAPABILITIES: AccountSettingsCapabilities 
     notifications: true,
     help: true,
     community: true,
-    wecom: true,
     about: true,
     developer: true,
     previewEnvironment: true,
@@ -100,12 +98,12 @@ export type AccountSettingsAction =
   | 'share'
   | 'rate'
   | 'discord'
-  | 'wecom'
   | 'repository'
   | 'privacy'
   | 'terms'
   | 'preview-environment'
   | 'design-system'
+  | 'preview-update-announcement'
   | 'clear-cache'
   | 'reset-device';
 
@@ -326,15 +324,15 @@ export function buildAccountSettingsGroups({
   }
 
   if (capabilities.community) {
-    const rows: AccountSettingsRow[] = [
-      { id: 'share', titleKey: 'Share Clawket', action: 'share', kind: 'navigation' },
-      { id: 'rate', titleKey: 'Rate Clawket', action: 'rate', kind: 'navigation' },
-      { id: 'discord', titleKey: 'Discord', action: 'discord', kind: 'navigation' },
-    ];
-    if (capabilities.wecom) {
-      rows.push({ id: 'wecom', titleKey: 'WeCom', action: 'wecom', kind: 'navigation' });
-    }
-    groups.push({ id: 'community', titleKey: 'Community', rows });
+    groups.push({
+      id: 'community',
+      titleKey: 'Community',
+      rows: [
+        { id: 'share', titleKey: 'Share Clawket', action: 'share', kind: 'navigation' },
+        { id: 'rate', titleKey: 'Rate Clawket', action: 'rate', kind: 'navigation' },
+        { id: 'discord', titleKey: 'Discord', action: 'discord', kind: 'navigation' },
+      ],
+    });
   }
 
   if (capabilities.about) {

@@ -1,5 +1,7 @@
 import {
   buildAgentPairingPrompt,
+  buildLocalModelPairingCommand,
+  LOCAL_MODEL_ENGINES,
   createPairingSubmission,
   formatVerificationCode,
   isPlausibleEmail,
@@ -17,6 +19,13 @@ describe('Onboarding model', () => {
     expect(prompt).toContain('open-source');
     expect(prompt).toContain('"Pairing code:"');
     expect(buildAgentPairingPrompt(t)).toContain('npx @p697/clawket pair');
+  });
+
+  it('spells out engine and address for model servers that do not match the CLI default', () => {
+    expect(LOCAL_MODEL_ENGINES).toEqual(['llamacpp', 'ollama', 'openai-compatible']);
+    expect(buildLocalModelPairingCommand('llamacpp')).toBe('npx @p697/clawket pair --backend local-model --preview');
+    expect(buildLocalModelPairingCommand('ollama')).toBe('npx @p697/clawket pair --backend local-model --engine ollama --base-url http://127.0.0.1:11434 --preview');
+    expect(buildLocalModelPairingCommand('openai-compatible')).toBe('npx @p697/clawket pair --backend local-model --engine openai-compatible --base-url http://127.0.0.1:1234 --preview');
   });
 
   it('removes separators without silently changing malformed invitation values', () => {

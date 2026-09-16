@@ -275,7 +275,7 @@ describe('GatewayProtocolClient recorded protocol', () => {
     client.disconnect();
   });
 
-  it('keeps relay.ready additive, negotiates Bridge meta, and acknowledges only capable ticks', async () => {
+  it('keeps relay.ready additive, negotiates Bridge capabilities within the legacy Gateway schema, and acknowledges only capable ticks', async () => {
     const { client, identity, sockets } = harness();
     client.setConnectRequestMeta({ capabilities: ['bridge.capabilities.v2'] });
     client.configure({
@@ -305,7 +305,8 @@ describe('GatewayProtocolClient recorded protocol', () => {
     socket.receive(frame(unknownControlFixture, 'relay-ready.follow-up'));
     await waitFor(() => sentJson(socket).some((entry) => entry.method === 'connect'));
     const request = sentJson(socket).find((entry) => entry.method === 'connect')!;
-    expect(request.meta).toEqual({ capabilities: ['bridge.capabilities.v2'] });
+    expect(request.meta).toBeUndefined();
+    expect(request.params.caps).toEqual(['tool-events', 'bridge.capabilities.v2']);
     socket.receive({
       type: 'res',
       id: request.id,

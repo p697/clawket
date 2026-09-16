@@ -29,8 +29,9 @@ import {
 } from './gateway-session-update';
 import {
   DEFAULT_GATEWAY_HISTORY_CACHE,
-  mapGatewayHistoryMessage,
+  mapGatewayHistoryMessages,
   mergeGatewayHistory,
+  preserveOpenClawCliHistorySegments,
   type GatewayHistoryCache,
 } from './gateway-history';
 import type { ConnectionAdapterRuntimeMetadata } from '../runtime-details';
@@ -74,10 +75,13 @@ export type GatewaySessionRecord = SessionInfo & {
 
 type GatewayHistoryPayload = {
   messages?: unknown[];
+  toolCallAliases?: unknown;
   nextCursor?: string;
   hasActiveRun?: boolean;
   sessionId?: string;
   thinkingLevel?: string;
+  sessionInfo?: { hasActiveRun?: boolean; activeRunIds?: string[] };
+  inFlightRun?: { runId?: string; text?: string; startedAt?: number; sessionAbortable?: boolean };
 };
 
 /**
@@ -104,6 +108,7 @@ export abstract class GatewayAdapterBase implements AgentAdapter {
   };
   private readonly gatewayUnsubscribers: Array<() => void> = [];
   private readonly activeRuns = new Map<string, string>();
+  private readonly runRevisions = new Map<string, number>();
   private readonly terminalRuns = new Set<string>();
   private currentState: ConnectionState = 'idle';
   private pendingConnect: PendingConnect | null = null;
@@ -204,12 +209,13 @@ export abstract class GatewayAdapterBase implements AgentAdapter {
       limit: options?.limit ?? 50,
       ...(options?.cursor ? { cursor: options.cursor } : {}),
     };
+    if (!this.runRevisions.has(key)) this.runRevisions.set(key, 0);
+    const runRevision = this.runRevisions.get(key);
     const payload = await this.invoke(() => (
       this.gateway.request<GatewayHistoryPayload>('chat.history', params)
     ));
-    const remoteMessages = (Array.isArray(payload?.messages) ? payload.messages : [])
-      .map((message, index) => mapGatewayHistoryMessage(key, message, index))
-      .filter((message): message is ChatMessage => message !== null);
+    const rawMessages = Array.isArray(payload?.messages) ? payload.messages : [];
+    const remoteMessages = mapGatewayHistoryMessages(key, rawMessages);
     const cachedMessages = !options?.cursor && this.historyCache
       ? await this.historyCache.load(
           this.connection.id,
@@ -218,13 +224,37 @@ export abstract class GatewayAdapterBase implements AgentAdapter {
           options?.limit ?? 50,
         ).catch(() => [])
       : [];
+    const reportedActive = payload?.sessionInfo?.hasActiveRun ?? payload?.hasActiveRun;
+    if (reportedActive === false && runRevision === this.runRevisions.get(key)) this.clearActiveRunsForSession(key);
+    const localRunId = [...this.activeRuns].find(([, session]) => session === key)?.[0];
+    const snapshot = payload?.inFlightRun;
+    const snapshotRunId = readNonEmptyString(snapshot?.runId)
+      ?? (Array.isArray(payload?.sessionInfo?.activeRunIds)
+        ? payload.sessionInfo.activeRunIds.find(id => typeof id === 'string' && id.trim()) : undefined);
+    const hasActiveRun = Boolean(localRunId) || (runRevision === this.runRevisions.get(key)
+      && (reportedActive === true || (reportedActive !== false && Boolean(snapshotRunId)))
+      && (!snapshotRunId || !this.terminalRuns.has(snapshotRunId)));
+    const recoveredRunId = localRunId ?? snapshotRunId;
+    const mergedMessages = mergeGatewayHistory(remoteMessages, cachedMessages, {
+      openclawUserEchoes: this.connection.backendKind === 'openclaw',
+      hermesToolAliases: this.connection.backendKind === 'hermes' ? payload?.toolCallAliases : undefined,
+    });
     return {
       key,
-      messages: mergeGatewayHistory(remoteMessages, cachedMessages),
+      messages: this.connection.backendKind === 'openclaw'
+        ? preserveOpenClawCliHistorySegments(key, rawMessages, mergedMessages) : mergedMessages,
       ...(typeof payload?.nextCursor === 'string' && payload.nextCursor
         ? { nextCursor: payload.nextCursor }
         : {}),
-      hasActiveRun: payload?.hasActiveRun === true || this.hasActiveRunForSession(key),
+      hasActiveRun,
+      ...(hasActiveRun && recoveredRunId ? { activeRun: {
+        runId: recoveredRunId,
+        text: snapshotRunId === recoveredRunId && typeof snapshot?.text === 'string' ? snapshot.text : '',
+        ...(snapshotRunId === recoveredRunId && typeof snapshot?.startedAt === 'number'
+          && Number.isFinite(snapshot.startedAt) ? { startedAtMs: snapshot.startedAt } : {}),
+        ...(snapshotRunId === recoveredRunId && snapshot?.sessionAbortable === true
+          ? { sessionAbortable: true } : {}),
+      } } : {}),
       ...(readNonEmptyString(payload?.sessionId) ? { sessionId: readNonEmptyString(payload?.sessionId) } : {}),
       ...(readNonEmptyString(payload?.thinkingLevel)
         ? { thinkingLevel: readNonEmptyString(payload?.thinkingLevel) }
@@ -316,6 +346,7 @@ export abstract class GatewayAdapterBase implements AgentAdapter {
   protected beginPrompt(key: string, provisionalRunId: string): void {
     this.setFallbackSessionKey(key);
     this.terminalRuns.delete(provisionalRunId);
+    this.runRevisions.set(key, (this.runRevisions.get(key) ?? 0) + 1);
     this.activeRuns.set(provisionalRunId, key);
     this.refreshActiveRunSnapshots(key);
   }
@@ -539,6 +570,10 @@ export abstract class GatewayAdapterBase implements AgentAdapter {
   }
 
   private trackRun(update: SessionUpdate): void {
+    if ('runId' in update && update.runId) {
+      const key = update.sessionKey;
+      if (key) this.runRevisions.set(key, (this.runRevisions.get(key) ?? 0) + 1);
+    }
     if (
       update.type === 'run_started'
       || update.type === 'agent_message_chunk'
@@ -574,6 +609,7 @@ export abstract class GatewayAdapterBase implements AgentAdapter {
   private clearActiveRunState(): void {
     const hadActiveState = this.activeRuns.size > 0
       || this.lastSessions.some((session) => session.hasActiveRun);
+    for (const key of this.runRevisions.keys()) this.runRevisions.set(key, (this.runRevisions.get(key) ?? 0) + 1);
     this.activeRuns.clear();
     this.terminalRuns.clear();
     if (!hadActiveState) return;

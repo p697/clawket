@@ -22,7 +22,11 @@ export class RelaySessionState {
     return Math.min(maxDelayMs, baseDelayMs * Math.max(1, this.connectAttempt));
   }
 
+  activityAgeMs(nowMs: number = Date.now()): number {
+    return Math.max(0, nowMs - this.lastActivityMs);
+  }
+
   heartbeatTimedOut(timeoutMs: number, nowMs: number = Date.now()): boolean {
-    return nowMs - this.lastActivityMs > timeoutMs;
+    return this.activityAgeMs(nowMs) > timeoutMs;
   }
 }

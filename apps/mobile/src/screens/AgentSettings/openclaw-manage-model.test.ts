@@ -6,6 +6,7 @@ import {
 } from '@clawket/agent-protocol';
 
 import {
+  withManagementDeadline,
   isOpenClawManageTabSupported,
   managementErrorDetail,
   managementErrorKey,
@@ -116,5 +117,25 @@ describe('openclaw manage model', () => {
       'specific failure',
     );
     expect(managementErrorDetail(null, 'fallback')).toBe('fallback');
+  });
+});
+
+describe('management read deadline', () => {
+  afterEach(() => jest.useRealTimers());
+
+  it('settles an unresponsive request and clears its deadline', async () => {
+    jest.useFakeTimers();
+    const result = withManagementDeadline(new Promise(() => {}));
+    const assertion = expect(result).rejects.toThrow('Management request timed out (35s).');
+    await jest.advanceTimersByTimeAsync(35_000);
+    await assertion;
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  it('preserves results and failures without leaving timers behind', async () => {
+    jest.useFakeTimers();
+    await expect(withManagementDeadline(Promise.resolve({ ok: true }))).resolves.toEqual({ ok: true });
+    await expect(withManagementDeadline(Promise.reject(new Error('offline')))).rejects.toThrow('offline');
+    expect(jest.getTimerCount()).toBe(0);
   });
 });

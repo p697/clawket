@@ -18,6 +18,7 @@ export type HermesHistoryMessage = {
   idempotencyKey?: string;
   toolName?: string;
   toolCallId?: string;
+  _nativeToolCallId?: string;
   isError?: boolean;
   toolArgs?: string;
   toolDurationMs?: number;

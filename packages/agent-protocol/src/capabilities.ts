@@ -21,6 +21,11 @@ export interface Capabilities {
   models: boolean;
   /** Refines `models.setSelection` to permit `scope: 'session'`; it is not a separate operation. */
   modelPerSession: boolean;
+  /**
+   * Refines `models` with Gateway config editing: catalog defaults, allowlist,
+   * adding / deleting models and cost overrides. Absent means unsupported.
+   */
+  modelManage?: boolean;
   thinkingLevels: boolean;
   /**
    * Backend interprets the full `/command` catalog, so the App may offer it as
@@ -34,6 +39,9 @@ export interface Capabilities {
   skillInstall: boolean;
   cron: boolean;
   cronCreate: boolean;
+  /** Per-job IANA timezone and OpenClaw execution options; absent refinements fail closed. */
+  cronTimeZone?: boolean;
+  cronAdvanced?: boolean;
   heartbeat: boolean;
   files: boolean;
   fileEdit: boolean;
@@ -71,6 +79,7 @@ export const CAPABILITY_KEYS = [
   'agentCreate',
   'models',
   'modelPerSession',
+  'modelManage',
   'thinkingLevels',
   'slashCommands',
   'skills',
@@ -78,6 +87,8 @@ export const CAPABILITY_KEYS = [
   'skillInstall',
   'cron',
   'cronCreate',
+  'cronTimeZone',
+  'cronAdvanced',
   'heartbeat',
   'files',
   'fileEdit',
@@ -113,6 +124,7 @@ const OPENCLAW_CAPABILITIES: Capabilities = {
   agentCreate: true,
   models: true,
   modelPerSession: true,
+  modelManage: true,
   thinkingLevels: true,
   slashCommands: true,
   skills: true,
@@ -120,6 +132,8 @@ const OPENCLAW_CAPABILITIES: Capabilities = {
   skillInstall: true,
   cron: true,
   cronCreate: true,
+  cronTimeZone: true,
+  cronAdvanced: true,
   heartbeat: true,
   files: true,
   fileEdit: true,
@@ -155,6 +169,7 @@ const HERMES_CAPABILITIES: Capabilities = {
   agentCreate: false,
   models: true,
   modelPerSession: false,
+  modelManage: false,
   thinkingLevels: true,
   slashCommands: false,
   skills: true,
@@ -197,6 +212,7 @@ const YOUMIND_CAPABILITIES: Capabilities = {
   agentCreate: false,
   models: false,
   modelPerSession: false,
+  modelManage: false,
   thinkingLevels: false,
   slashCommands: false,
   skills: false,

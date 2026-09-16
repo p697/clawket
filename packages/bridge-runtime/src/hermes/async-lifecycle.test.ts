@@ -109,11 +109,35 @@ describe('Hermes asynchronous operation lifecycle', () => {
     const broadcast = vi.spyOn(subject, 'broadcastEvent');
     const streaming = subject.streamRunEvents('run-fixture', 'main', session.sessionId, Date.now(), controller.signal);
     await hydrationStarted;
-    subject.handleChatAbort({ sessionKey: 'main' });
+    await subject.handleChatAbort({ sessionKey: 'main' });
     release();
     await streaming;
     expect(subject.sessionStore.findSession('main')?.messages).toEqual([]);
     expect(broadcast.mock.calls.filter(([event, payload]) => event === 'chat' && (payload as {state?: string}).state === 'final')).toEqual([]);
+  });
+
+  it('requests upstream stop before ending the local stream', async () => {
+    const subject = await bridge();
+    const controller = new AbortController();
+    subject.activeRuns.set('run-stop', { runId: 'run-stop', sessionKey: 'main', sessionId: 'main', abortController: controller });
+    let release!: (response: Response) => void;
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(() => new Promise(resolve => { release = resolve; }));
+    const stopping = subject.handleChatAbort({ sessionKey: 'main', runId: 'run-stop' });
+    expect(controller.signal.aborted).toBe(false);
+    expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/v1/runs/run-stop/stop'), expect.objectContaining({ method: 'POST' }));
+    release(new Response('{"status":"stopping"}'));
+    await expect(stopping).resolves.toMatchObject({ abortedRunIds: ['run-stop'], upstreamCancelled: false });
+    expect(controller.signal.aborted).toBe(true);
+  });
+
+  it.each([404, 503])('keeps the real run observable when upstream stop fails (%s)', async status => {
+    const subject = await bridge();
+    const controller = new AbortController();
+    subject.activeRuns.set('run-stop', { runId: 'run-stop', sessionKey: 'main', sessionId: 'main', abortController: controller });
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('', { status }));
+    await expect(subject.handleChatAbort({ sessionKey: 'main' })).rejects.toThrow('may still be working');
+    expect(controller.signal.aborted).toBe(false);
+    expect(subject.activeRuns.has('run-stop')).toBe(true);
   });
 
 });

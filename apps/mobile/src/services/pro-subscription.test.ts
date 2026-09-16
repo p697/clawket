@@ -143,6 +143,7 @@ describe('deriveProSubscriptionSnapshot', () => {
     }, 'pro');
 
     expect(snapshot).toEqual({
+      subscriptions: [],
       isActive: true,
       entitlementId: 'pro',
       productIdentifier: 'clawket_pro_monthly',
@@ -577,7 +578,7 @@ describe('selectRevenueCatPackages', () => {
     expect(hasLifetimeProAccess(packages, {
       isActive: true,
       entitlementId: 'pro',
-      productIdentifier: 'com.p697.clawket.pro.lifetime',
+      productIdentifier: 'lifetime',
       productPlanIdentifier: null,
       activeSubscriptionProductIdentifiers: [],
       purchasedProductIdentifiers: ['com.p697.clawket.pro.lifetime'],
@@ -636,7 +637,7 @@ describe('selectRevenueCatPackages', () => {
     })).toBe(false);
   });
 
-  it('locks recurring packages but keeps lifetime purchasable for active recurring subscribers', () => {
+  it('locks the current plan while allowing annual and lifetime for monthly subscribers', () => {
     const packages = [toProPaywallPackage(monthlyPackage), toProPaywallPackage(annualPackage), toProPaywallPackage(lifetimePackage)];
     const snapshot: ProSubscriptionSnapshot = {
       isActive: true,
@@ -658,7 +659,7 @@ describe('selectRevenueCatPackages', () => {
     };
 
     expect(isRevenueCatPackagePurchaseLocked(packages[0], packages, snapshot)).toBe(true);
-    expect(isRevenueCatPackagePurchaseLocked(packages[1], packages, snapshot)).toBe(true);
+    expect(isRevenueCatPackagePurchaseLocked(packages[1], packages, snapshot)).toBe(false);
     expect(isRevenueCatPackagePurchaseLocked(packages[2], packages, snapshot)).toBe(false);
   });
 
@@ -709,7 +710,7 @@ describe('selectRevenueCatPackages', () => {
       verification: null,
     };
 
-    expect(isRevenueCatPackagePurchaseLocked(packages[0], packages, snapshot)).toBe(true);
+    expect(isRevenueCatPackagePurchaseLocked(packages[0], packages, snapshot)).toBe(false);
     expect(isRevenueCatPackagePurchaseLocked(packages[1], packages, snapshot)).toBe(true);
     expect(isRevenueCatPackagePurchaseLocked(packages[2], packages, snapshot)).toBe(false);
   });
@@ -783,7 +784,7 @@ describe('selectRevenueCatPackages', () => {
     expect(selectOwnedLifetimeRevenueCatPackage(packages, {
       isActive: true,
       entitlementId: 'pro',
-      productIdentifier: 'monthly',
+      productIdentifier: 'lifetime',
       productPlanIdentifier: null,
       activeSubscriptionProductIdentifiers: ['monthly'],
       purchasedProductIdentifiers: ['monthly', 'lifetime'],
@@ -875,8 +876,8 @@ describe('selectRevenueCatPackages', () => {
     expect(selectDisplayedRevenueCatPackage(packages, {
       isActive: true,
       entitlementId: 'pro',
-      productIdentifier: 'yearly',
-      productPlanIdentifier: 'annual',
+      productIdentifier: 'lifetime',
+      productPlanIdentifier: null,
       activeSubscriptionProductIdentifiers: ['yearly'],
       purchasedProductIdentifiers: ['yearly', 'lifetime'],
       nonSubscriptionProductIdentifiers: ['lifetime'],

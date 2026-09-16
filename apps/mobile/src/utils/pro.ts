@@ -16,6 +16,7 @@ export type ProFeature =
   | 'agents'
   | 'coreFileEditing'
   | 'logs'
+  | 'modelManage'
   | 'usage'
   | 'messageHistory'
   | 'sessionHistory'

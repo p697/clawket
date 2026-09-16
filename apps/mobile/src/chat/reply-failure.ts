@@ -23,7 +23,10 @@ export function describeReplyFailure(raw: string, code?: string): {
   details: string;
 } {
   const details = sanitizeReplyFailure(raw);
-  const auth = /(?:oauth|model|claude|provider|credential|api.?key).*(?:expired|authenticat|unauthoriz|invalid|login)|failed to authenticate|model login expired/i.test(raw);
+  // A 403 can be an egress/policy refusal even with valid credentials.
+  // Preserve the diagnostic without prescribing a login that may not help.
+  const forbidden = /\b403\b|request not allowed|forbidden/i.test(details);
+  const auth = !forbidden && /(?:oauth|model|claude|provider|credential|api.?key).*(?:expired|authenticat|unauthoriz|invalid|login)|failed to authenticate|model login expired/i.test(raw);
   const quota = /insufficient[_ ]quota|credit balance|billing|payment required|quota exceeded/i.test(raw);
   const limited = code === 'rate_limited' || /rate.?limit|too many requests|\b429\b/i.test(raw);
   return {

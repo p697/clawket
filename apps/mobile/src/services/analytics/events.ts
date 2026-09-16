@@ -7,8 +7,23 @@ import { getAnalyticsSubscriptionProperties } from './subscription-context';
 type AnalyticsValue = boolean | number | string | null | undefined;
 type AnalyticsProperties = Record<string, AnalyticsValue>;
 type AnalyticsBackend = BackendKind;
+/** Bounded Agent workspace document labels; never a raw file name or path. */
+export type AnalyticsAgentDocument = 'agents' | 'soul' | 'identity' | 'user' | 'bootstrap' | 'memory' | 'other';
+const ANALYTICS_AGENT_DOCUMENTS: Readonly<Record<string, AnalyticsAgentDocument>> = {
+  'AGENTS.md': 'agents',
+  'SOUL.md': 'soul',
+  'IDENTITY.md': 'identity',
+  'USER.md': 'user',
+  'BOOTSTRAP.md': 'bootstrap',
+  'MEMORY.md': 'memory',
+};
+export function analyticsAgentDocument(fileName: string): AnalyticsAgentDocument {
+  return ANALYTICS_AGENT_DOCUMENTS[fileName] ?? 'other';
+}
 type AnalyticsTransport = TransportKind;
 type ScreenArea = 'onboarding' | 'roster' | 'thread' | 'settings' | 'account' | 'search' | 'paywall';
+/** `launch` is the once-per-update sheet; `debug_preview` is the Developer row. */
+type AppUpdateAnnouncementSource = 'launch' | 'debug_preview';
 
 type PaywallPackageSummary = {
   packageIdentifier?: string;
@@ -38,6 +53,7 @@ export const ANALYTICS_GLOBAL_EVENT_PROPERTIES = Object.freeze([
  * Unknown event names and properties fail closed instead of reaching PostHog.
  */
 export const ANALYTICS_EVENT_PROPERTY_WHITELIST = Object.freeze({
+  agent_file_activity: ['action', 'backend', 'document'],
   onboarding_viewed: ['source'],
   pairing_code_submitted: ['length_ok'],
   onboarding_docs_opened: ['backend'],
@@ -85,6 +101,7 @@ export const ANALYTICS_EVENT_PROPERTY_WHITELIST = Object.freeze({
   session_action: ['action'],
   agent_settings_opened: ['backend'],
   settings_row_opened: ['row', 'locked', 'backend'],
+  usage_range_changed: ['range', 'cached', 'locked'],
   search_performed: ['scope', 'has_results', 'result_kinds'],
   search_message_opened: ['is_pro'],
   paywall_viewed: [
@@ -97,6 +114,8 @@ export const ANALYTICS_EVENT_PROPERTY_WHITELIST = Object.freeze({
     'trigger_screen',
     'launch',
   ],
+  paywall_plan_change_submitted: ['package_id', 'package_type', 'price_string', 'blocked_feature', 'preview_only', 'hero', 'variant', 'trigger_screen', 'launch'],
+  paywall_manage_subscription_tapped: ['blocked_feature', 'preview_only', 'hero', 'variant', 'trigger_screen', 'launch'],
   paywall_closed: [
     'blocked_feature',
     'preview_only',
@@ -155,8 +174,10 @@ export const ANALYTICS_EVENT_PROPERTY_WHITELIST = Object.freeze({
   paywall_restore_tapped: ['blocked_feature', 'preview_only', 'hero', 'variant', 'trigger_screen', 'launch'],
   paywall_restore_succeeded: ['blocked_feature', 'preview_only', 'hero', 'variant', 'trigger_screen', 'launch'],
   paywall_restore_failed: ['blocked_feature', 'preview_only', 'hero', 'variant', 'trigger_screen', 'launch', 'reason'],
-  paywall_launch_shown: ['variant', 'first_run'],
-  paywall_launch_closed: ['variant', 'first_run'],
+  app_update_announcement_shown: ['version', 'release_count', 'entry_count', 'source'],
+  app_update_announcement_closed: ['version', 'release_count', 'source', 'action', 'seconds_visible'],
+  app_update_announcement_entry_tapped: ['version', 'entry', 'action'],
+  release_notes_opened: ['release_count'],
   grace_banner_viewed: ['days_left'],
   grace_expired: ['days_left'],
   youmind_sign_in_tapped: ['method', 'source'],
@@ -267,6 +288,9 @@ function legacyTransport(mode: string | undefined): AnalyticsTransport | undefin
 }
 
 export const analyticsEvents = {
+  agentFileActivity(properties: { action: 'edit' | 'saved' | 'failed'; backend: AnalyticsBackend; document: AnalyticsAgentDocument }): void {
+    try { captureAnalyticsEvent('agent_file_activity', properties); } catch { /* Telemetry cannot interrupt editing. */ }
+  },
   onboardingViewed(properties: { source: 'first_run' | 'add_connection' }): void {
     captureAnalyticsEvent('onboarding_viewed', properties);
   },
@@ -549,6 +573,14 @@ export const analyticsEvents = {
     captureAnalyticsEvent('paywall_purchase_succeeded', { ...buildPaywallPackageProperties(pkg), ...properties });
   },
 
+  paywallPlanChangeSubmitted(pkg: PaywallPackageSummary, properties: PaywallContext & { preview_only: boolean }): void {
+    captureAnalyticsEvent('paywall_plan_change_submitted', { ...buildPaywallPackageProperties(pkg), ...properties });
+  },
+
+  paywallManageSubscriptionTapped(properties: PaywallContext & { preview_only: boolean }): void {
+    captureAnalyticsEvent('paywall_manage_subscription_tapped', properties);
+  },
+
   paywallPurchaseFailed(pkg: PaywallPackageSummary, properties: PaywallContext & {
     preview_only: boolean;
     reason?: string;
@@ -568,12 +600,35 @@ export const analyticsEvents = {
     captureAnalyticsEvent('paywall_restore_failed', properties);
   },
 
-  paywallLaunchShown(properties: { variant: string; first_run: boolean }): void {
-    captureAnalyticsEvent('paywall_launch_shown', properties);
+  appUpdateAnnouncementShown(properties: {
+    version: string;
+    release_count: number;
+    entry_count: number;
+    source: AppUpdateAnnouncementSource;
+  }): void {
+    captureAnalyticsEvent('app_update_announcement_shown', properties);
   },
 
-  paywallLaunchClosed(properties: { variant: string; first_run: boolean }): void {
-    captureAnalyticsEvent('paywall_launch_closed', properties);
+  appUpdateAnnouncementClosed(properties: {
+    version: string;
+    release_count: number;
+    source: AppUpdateAnnouncementSource;
+    action: 'dismiss' | 'continue' | 'entry';
+    seconds_visible: number;
+  }): void {
+    captureAnalyticsEvent('app_update_announcement_closed', properties);
+  },
+
+  appUpdateAnnouncementEntryTapped(properties: {
+    version: string;
+    entry: string;
+    action: 'open_url' | 'open_paywall';
+  }): void {
+    captureAnalyticsEvent('app_update_announcement_entry_tapped', properties);
+  },
+
+  releaseNotesOpened(properties: { release_count: number }): void {
+    captureAnalyticsEvent('release_notes_opened', properties);
   },
 
   graceBannerViewed(properties: { days_left: number }): void {
@@ -704,6 +759,10 @@ export const analyticsEvents = {
 
   cronCreateTapped(properties: { source: string }): void {
     captureAnalyticsEvent('cron_create_tapped', properties);
+  },
+
+  usageRangeChanged(properties: { range: 'today' | '7d' | '30d'; cached: boolean; locked: boolean }): void {
+    captureAnalyticsEvent('usage_range_changed', properties);
   },
 
   agentCreateStarted(properties: { source: string }): void {

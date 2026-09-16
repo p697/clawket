@@ -80,6 +80,107 @@ function createConfig() {
 }
 
 describe('hermes relay runtime helpers', () => {
+  it('suppresses only idle periodic snapshots with explicit zero clients, preserving legacy and reconnect traffic', async () => {
+    const sockets: FakeSocket[] = [];
+    const runtime = new HermesRelayRuntime({ config: createConfig(), bridgeUrl: 'ws://localhost/bridge',
+      createWebSocket: (url, options) => { const socket = new FakeSocket(url, options); sockets.push(socket); return socket as never; },
+    });
+    try {
+      runtime.start(); sockets[0].open(); sockets[1].open();
+      const [relay, bridge] = sockets;
+      const tick = JSON.stringify({ type: 'event', event: 'tick', payload: {} });
+      const health = JSON.stringify({ type: 'event', event: 'health', payload: { status: 'ok' } });
+      bridge.pushText(tick); bridge.pushText(health);
+      expect(relay.sent).toEqual([tick, health]);
+      relay.pushText('__clawket_relay_control__:{"event":"client_count","count":0}');
+      bridge.pushText(tick); bridge.pushText(health);
+      expect(relay.sent).toHaveLength(2);
+      const reply = '{"type":"res","id":"client-health","ok":true}';
+      const chat = '{"type":"event","event":"chat","payload":{"state":"final"}}';
+      bridge.pushText(reply); bridge.pushText(chat);
+      expect(relay.sent.slice(-2)).toEqual([reply, chat]);
+      relay.pushText('__clawket_relay_control__:{"event":"gateway_ping","ts":123}');
+      expect(String(relay.sent.at(-1))).toContain('gateway_pong');
+      relay.pushText('__clawket_relay_control__:{"event":"client_connected","count":1}');
+      bridge.pushText(tick); bridge.pushText(health);
+      expect(relay.sent.slice(-2)).toEqual([tick, health]);
+      relay.pushText('__clawket_relay_control__:{"event":"client_count","count":"0"}');
+      bridge.pushText(tick);
+      expect(relay.sent.at(-1)).toBe(tick);
+    } finally { await runtime.stop(); }
+  });
+
+  it('ignores a retired local socket and an old cloud status result after reconnect', async () => {
+    vi.useFakeTimers();
+    const sockets: FakeSocket[] = [];
+    let resolveStatus!: (response: Response) => void;
+    let signal!: AbortSignal;
+    const fetchMock = vi.fn((_url, init) => {
+      signal = init.signal;
+      return new Promise<Response>(resolve => { resolveStatus = resolve; });
+    });
+    const runtime = new HermesRelayRuntime({ config: createConfig(), bridgeUrl: 'ws://localhost/bridge',
+      bridgeStatusPollIntervalMs: 100, bridgeHealthProbeIntervalMs: 60_000,
+      reconnectBaseDelayMs: 10, reconnectMaxDelayMs: 10,
+      fetchImpl: fetchMock as typeof fetch,
+      createWebSocket: (url, options) => { const socket = new FakeSocket(url, options); sockets.push(socket); return socket as never; },
+    });
+    try {
+      runtime.start();
+      const oldRelay = sockets[0]; oldRelay.open();
+      const oldBridge = sockets[1]; oldBridge.open();
+      oldRelay.pushText('__clawket_relay_control__:{"event":"client_count","count":0}');
+      await vi.advanceTimersByTimeAsync(100);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      oldRelay.close();
+      expect(signal.aborted).toBe(true);
+      await vi.advanceTimersByTimeAsync(10);
+      const newRelay = sockets[2]; newRelay.open();
+      resolveStatus(Response.json({ hasBridge: false }));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(newRelay.readyState).toBe(FakeSocket.OPEN);
+      expect(runtime.getSnapshot().relayConnected).toBe(true);
+      const newBridge = sockets[3]; newBridge.open();
+      newBridge.pushText('{"type":"event","event":"health"}');
+      expect(newRelay.sent.at(-1)).toBe('{"type":"event","event":"health"}');
+      const before = newRelay.sent.length;
+      oldBridge.pushText('{"type":"event","event":"chat","payload":{"state":"error"}}');
+      oldBridge.pushBinary(Buffer.from('stale'));
+      expect(newRelay.sent).toHaveLength(before);
+      newBridge.pushText('{"type":"event","event":"chat","payload":{"state":"final"}}');
+      expect(newRelay.sent).toHaveLength(before + 1);
+    } finally { await runtime.stop(); vi.useRealTimers(); }
+  });
+
+  it('bounds a hung status request without closing a healthy relay and resumes later probes', async () => {
+    vi.useFakeTimers();
+    const sockets: FakeSocket[] = [];
+    let signal!: AbortSignal;
+    const fetchMock = vi.fn((_url, init) => new Promise<Response>((_resolve, reject) => {
+      signal = init.signal;
+      signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+    }));
+    const runtime = new HermesRelayRuntime({ config: createConfig(), bridgeUrl: 'ws://localhost/bridge',
+      bridgeStatusPollIntervalMs: 100, bridgeHealthProbeIntervalMs: 60_000,
+      fetchImpl: fetchMock as typeof fetch,
+      createWebSocket: (url, options) => { const socket = new FakeSocket(url, options); sockets.push(socket); return socket as never; },
+    });
+    try {
+      runtime.start(); sockets[0].open(); sockets[1].open();
+      await vi.advanceTimersByTimeAsync(100);
+      const firstSignal = signal;
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(firstSignal.aborted).toBe(true);
+      expect(runtime.getSnapshot().relayConnected).toBe(true);
+      await vi.advanceTimersByTimeAsync(100);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      await runtime.stop();
+      expect(signal.aborted).toBe(true);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally { await runtime.stop(); vi.useRealTimers(); }
+  });
+
   it('recycles a half-open cloud socket even while local Bridge health succeeds', async () => {
     vi.useFakeTimers();
     const sockets: FakeSocket[] = [];

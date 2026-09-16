@@ -81,9 +81,12 @@ describe('YouMindSpriteAdapter Node integration', () => {
     }));
     expect(abortSprite).toHaveBeenCalledTimes(1);
     expect(abortSprite).toHaveBeenCalledWith(expect.objectContaining(youMindFixture.abort.request));
+    // Stream message IDs identify messages, not the adapter run being cancelled.
+    expect(sent.runId).toBe('youmind-node-run');
+    expect(updates.filter(update => update.type === 'run_started')).toHaveLength(1);
     expect(updates).toContainEqual(expect.objectContaining({
       type: 'run_started',
-      runId: youMindFixture.stream[0].data.id,
+      runId: sent.runId,
     }));
     expect(updates).toContainEqual({
       type: 'run_finished',

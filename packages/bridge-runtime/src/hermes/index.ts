@@ -2,6 +2,7 @@ import { createServer, type Server as HttpServer } from 'node:http';
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { resolveHermesCommand, resolveHermesSourcePath } from './installation.js';
+import { correlateActiveNativeTools, correlateLateNativeTools } from './tool-history.js';
 import WebSocket, { WebSocketServer } from 'ws';
 import { WEBSOCKET_FRAME_LIMIT_BYTES } from '../frame-limit.js';
 import { normalizeBridgeVersion } from '../protocol.js';
@@ -120,6 +121,10 @@ export class HermesLocalBridge {
   healthTimer: NodeJS.Timeout | null = null;
   wsHeartbeatTimer: NodeJS.Timeout | null = null;
   hermesChild: ChildProcess | null = null;
+  private managedApi = false;
+  private apiRecoveryAfterMs = 0;
+  private apiRecoveryAttempts = 0;
+  private healthRefresh: Promise<void> | null = null;
   modelStateReadVersion = 0;
   modelStateCache: { value: HermesModelState; expiresAt: number } | null = null;
   readonly contextWindowCache = new Map<string, number | null>();
@@ -264,6 +269,7 @@ export class HermesLocalBridge {
 
   async stop(): Promise<void> {
     this.operationGeneration += 1;
+    this.managedApi = false;
     this.pythonRunner.stop();
     if (this.tickTimer) {
       clearInterval(this.tickTimer);
@@ -321,8 +327,10 @@ export class HermesLocalBridge {
   }
 
   async ensureHermesApiReady(): Promise<boolean> {
+    const generation = this.operationGeneration;
     const startedAt = Date.now();
     const apiStatus = await inspectHermesApi(this.apiBaseUrl, this.apiKey);
+    if (generation !== this.operationGeneration) return false;
     if (apiStatus === 'ready') {
       this.updateSnapshot({ hermesApiReachable: true, lastError: null });
       this.logPerf('hermes_api_probe', {
@@ -358,6 +366,7 @@ export class HermesLocalBridge {
   }
 
   async startHermesGatewayProcess(): Promise<boolean> {
+    const generation = this.operationGeneration;
     const command = this.options.hermesCommand?.trim() || resolveHermesCommand();
     const startedAt = Date.now();
     this.logPerf('hermes_api_cold_start_begin', {
@@ -392,10 +401,12 @@ export class HermesLocalBridge {
       env: hermesChildEnv,
       stdio: verboseHermesStdio ? 'pipe' : 'ignore',
     });
+    this.managedApi = true;
 
     let spawnFailure: Error | null = null;
     const child = this.hermesChild;
     child.once('error', (error: NodeJS.ErrnoException) => {
+      if (generation !== this.operationGeneration || this.hermesChild !== child) return;
       spawnFailure = new Error(error.code === 'ENOENT'
         ? 'Hermes command was not found. Install Hermes and restart the Clawket bridge.'
         : `Hermes could not start (${error.code ?? 'spawn_failed'}).`);
@@ -420,13 +431,18 @@ export class HermesLocalBridge {
     }
     this.hermesChild.once('exit', (code) => {
       this.log(`hermes gateway exited code=${code ?? 'null'}`);
-      if (this.hermesChild === child) this.hermesChild = null;
+      if (generation !== this.operationGeneration || this.hermesChild !== child) return;
+      this.hermesChild = null;
+      this.apiRecoveryAfterMs = Math.max(this.apiRecoveryAfterMs, Date.now() + 30_000);
+      this.updateSnapshot({ hermesApiReachable: false, lastError: 'The managed Hermes API stopped. Clawket will retry starting it automatically.' });
     });
 
     const startMs = Date.now();
     while (Date.now() - startMs < HERMES_BOOT_TIMEOUT_MS) {
-      if (spawnFailure) return false;
-      if (await probeHermesApi(this.apiBaseUrl, this.apiKey)) {
+      if (spawnFailure || generation !== this.operationGeneration || this.hermesChild !== child) return false;
+      const reachable = await probeHermesApi(this.apiBaseUrl, this.apiKey);
+      if (generation !== this.operationGeneration) return false;
+      if (reachable) {
         this.updateSnapshot({ hermesApiReachable: true, lastError: null });
         this.logPerf('hermes_api_cold_start_ready', {
           elapsedMs: Date.now() - startedAt,
@@ -447,10 +463,36 @@ export class HermesLocalBridge {
   }
 
   async refreshHermesHealth(): Promise<void> {
-    const reachable = await probeHermesApi(this.apiBaseUrl, this.apiKey);
+    if (this.healthRefresh) return this.healthRefresh;
+    const refresh = this.refreshHermesHealthOnce();
+    this.healthRefresh = refresh;
+    try { await refresh; } finally {
+      if (this.healthRefresh === refresh) this.healthRefresh = null;
+    }
+  }
+
+  private async refreshHermesHealthOnce(): Promise<void> {
+    const generation = this.operationGeneration;
+    let reachable = await probeHermesApi(this.apiBaseUrl, this.apiKey);
+    if (generation !== this.operationGeneration) return;
+    // Only restart an API this runtime owned after its child has actually
+    // exited. A failed probe must never replace a live or externally owned API.
+    if (!reachable && this.managedApi && !this.hermesChild
+        && this.snapshot.running && this.options.startHermesIfNeeded !== false
+        && Date.now() >= this.apiRecoveryAfterMs) {
+      this.apiRecoveryAttempts += 1;
+      this.apiRecoveryAfterMs = Date.now() + Math.min(300_000, 30_000 * 2 ** Math.min(4, this.apiRecoveryAttempts - 1));
+      this.logPerf('hermes_api_recovery_begin', { attempt: this.apiRecoveryAttempts });
+      reachable = await this.ensureHermesApiReady();
+      if (generation !== this.operationGeneration) return;
+    }
+    if (reachable) {
+      this.apiRecoveryAttempts = 0;
+      this.apiRecoveryAfterMs = 0;
+    }
     this.updateSnapshot({
       hermesApiReachable: reachable,
-      lastError: reachable ? null : this.snapshot.lastError,
+      lastError: reachable ? null : this.snapshot.lastError ?? 'Hermes API is not reachable. Check the local gateway.',
     });
     this.broadcastEvent('health', {
       status: reachable ? 'ok' : 'degraded',
@@ -546,7 +588,9 @@ export class HermesLocalBridge {
     key: string,
     limit: number,
     rawCursor?: unknown,
-  ): Promise<{ messages: HermesHistoryMessage[]; sessionId: string; thinkingLevel: string; nextCursor?: string }> {
+  ): Promise<{ messages: HermesHistoryMessage[]; sessionId: string; thinkingLevel: string; nextCursor?: string;
+    hasActiveRun?: boolean; toolCallAliases?: Record<string, string>;
+    inFlightRun?: { runId: string; text: string; startedAt?: number; sessionAbortable: boolean } }> {
     const bridgeSession = this.sessionStore.findSession(key);
     const nativeListEntry = bridgeSession
       ? null
@@ -564,7 +608,13 @@ export class HermesLocalBridge {
     const sessionId = bridgeSession?.sessionId ?? nativeListEntry!.sessionId;
     const native = (await this.nativeSessions.readHistoryBySessionId(sessionId));
     const nativeMessages = native?.messages ?? [];
-    const localMessages: HermesHistoryMessage[] = (bridgeSession?.messages ?? [])
+    if (bridgeSession) {
+      const tools = [...this.activeRuns.values()]
+        .filter(run => run.sessionKey === key && run.sessionId === sessionId)
+        .flatMap(run => [...(run.tools ?? [])].flatMap(([toolName, calls]) => calls.map(call => ({ ...call, toolName }))));
+      this.sessionStore.rememberToolAliases(key, correlateActiveNativeTools(nativeMessages, tools));
+    }
+    let localMessages: HermesHistoryMessage[] = (bridgeSession?.messages ?? [])
       .map((message) => ({
         role: message.role,
         content: message.content,
@@ -573,6 +623,7 @@ export class HermesLocalBridge {
         idempotencyKey: message.idempotencyKey,
         toolName: message.toolName,
         toolCallId: message.toolCallId,
+        _nativeToolCallId: message._nativeToolCallId,
         isError: message.isError,
         toolArgs: message.toolArgs,
         toolDurationMs: message.toolDurationMs,
@@ -580,7 +631,13 @@ export class HermesLocalBridge {
         toolFinishedAt: message.toolFinishedAt,
         _nativeBoundaryId: message._nativeBoundaryId,
       }));
-    const messages = mergeHermesHistoryMessages(nativeMessages, localMessages);
+    localMessages = correlateLateNativeTools(nativeMessages, localMessages);
+    if (bridgeSession) {
+      this.sessionStore.rememberToolAliases(key, Object.fromEntries(localMessages.flatMap(message =>
+        message._nativeToolCallId && message.toolCallId
+          ? [[message._nativeToolCallId, { toolCallId: message.toolCallId, toolName: message.toolName }]] : [])));
+    }
+    const messages = mergeHermesHistoryMessages(nativeMessages, localMessages, bridgeSession?.toolAliases);
     const cursor = decodeHermesHistoryCursor(rawCursor, sessionId);
     let eligible = messages;
     if (cursor) {
@@ -598,13 +655,33 @@ export class HermesLocalBridge {
       _cursorId: _discarded,
       _nativeId: _nativeId,
       _nativeBoundaryId: _nativeBoundaryId,
+      _nativeToolCallId: _nativeToolCallId,
       _sortId: _sortId,
       ...message
     }) => message);
+    // Old clients may have cached a provider ID before its live alias was known.
+    // Expose only confirmed aliases represented on this page, never guesses.
+    const pageToolIds = new Set(page.flatMap(message => [
+      ...(message.toolCallId ? [message.toolCallId] : []),
+      ...(Array.isArray(message.content) ? message.content.flatMap(block =>
+        isRecord(block) && block.type === 'toolCall' && typeof block.id === 'string' ? [block.id] : []) : []),
+    ]));
+    const toolCallAliases = Object.fromEntries(Object.entries(bridgeSession?.toolAliases ?? {})
+      .filter(([nativeId, alias]) => nativeId !== alias.toolCallId && pageToolIds.has(alias.toolCallId))
+      .map(([nativeId, alias]) => [nativeId, alias.toolCallId]));
+    const thinkingLevel = await this.getSafeHermesThinkingLevel();
+    // Read after asynchronous history/model work: a terminal event may have
+    // removed the run while those reads were pending. Never resurrect it.
+    const active = [...this.activeRuns.values()].find(run => run.sessionKey === key && run.sessionId === sessionId);
     return {
       messages: page,
       sessionId,
-      thinkingLevel: (await this.getSafeHermesThinkingLevel()),
+      thinkingLevel,
+      hasActiveRun: Boolean(active),
+      ...(Object.keys(toolCallAliases).length ? { toolCallAliases } : {}),
+      ...(active ? { inFlightRun: {
+        runId: active.runId, text: active.text ?? '', startedAt: active.startedAt, sessionAbortable: true,
+      } } : {}),
       ...(hasOlder && first ? {
         nextCursor: encodeHermesHistoryCursor({
           version: 1,
@@ -930,7 +1007,29 @@ type CursorHistoryMessage = HermesHistoryMessage & { _cursorId: string; _sortId:
 function mergeHermesHistoryMessages(
   nativeMessages: HermesHistoryMessage[],
   localMessages: HermesHistoryMessage[],
+  persistedAliases: Record<string, { toolCallId: string; toolName?: string }> = {},
 ): CursorHistoryMessage[] {
+  // SSE tools have Bridge IDs; native history learns provider IDs later.
+  // Keep the live identity authoritative while this runtime still owns it.
+  const toolAliases = new Map<string, { toolCallId?: string; toolName?: string; isError?: boolean }>(Object.entries(persistedAliases));
+  for (const [id, message] of localMessages.flatMap(message => (
+    message.role === 'toolResult' && message._nativeToolCallId && message.toolCallId
+      ? [[message._nativeToolCallId, message] as const] : []
+  ))) toolAliases.set(id, message);
+  nativeMessages = nativeMessages.map(message => {
+    if (message.role === 'toolResult' && message.toolCallId) {
+      const local = toolAliases.get(message.toolCallId);
+      if (local) return { ...message, toolCallId: local.toolCallId, toolName: local.toolName ?? message.toolName, isError: local.isError ?? message.isError };
+    }
+    if (message.role === 'assistant' && Array.isArray(message.content)) {
+      return { ...message, content: message.content.map(block => {
+        if (!isRecord(block) || block.type !== 'toolCall' || typeof block.id !== 'string') return block;
+        const local = toolAliases.get(block.id);
+        return local ? { ...block, id: local.toolCallId } : block;
+      }) };
+    }
+    return message;
+  });
   const nativeByDigest = new Map<string, Array<{
     message: CursorHistoryMessage;
     matched: boolean;

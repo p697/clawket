@@ -21,3 +21,12 @@ describe('reply failure diagnostics', () => {
     expect(sanitizeReplyFailure('a'.repeat(20_000))).toHaveLength(12_000);
   });
 });
+
+
+it('does not prescribe reauthentication for a network/policy 403 refusal', () => {
+  const raw = 'Failed to authenticate. API Error: 403 Request not allowed';
+  expect(describeReplyFailure(raw)).toEqual({
+    summaryKey: "The agent couldn't complete this reply. Please try again.",
+    details: raw,
+  });
+});

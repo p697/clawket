@@ -613,3 +613,20 @@ describe('relativeTime', () => {
     expect(translate).toHaveBeenCalledWith('{{count}}h ago', 3);
   });
 });
+
+
+it('strips only the exact leading CLI resume envelope without losing the user prompt', () => {
+  const prefix = "OpenClaw resumed this CLI session after prompt content changed. Follow the current turn's instructions; changed=system-prompt,prompt-tools.";
+  expect(sanitizeUserMessageText(prefix + '\n\n你好')).toBe('你好');
+  expect(sanitizeUserMessageText('Explain: ' + prefix)).toBe('Explain: ' + prefix);
+  expect(sanitizeUserMessageText('```\n' + prefix + '\n\n你好\n```')).toContain(prefix);
+});
+
+
+it('isolates malformed tool prose while preserving code examples and subsequent answer text', () => {
+  const raw = 'antml:invoke name="Bash"\n<parameter name="command">echo test</parameter>\n</invoke>\n<function_results>unverified</function_results>';
+  expect(sanitizeDisplayText(raw)).toBe('');
+  expect(sanitizeDisplayText(raw + '\n\nActual answer')).toBe('Actual answer');
+  expect(sanitizeDisplayText('```xml\n' + raw + '\n```')).toContain(raw);
+  expect(sanitizeDisplayText('The invoke_name=bash parameter is a string')).toBe('The invoke_name=bash parameter is a string');
+});

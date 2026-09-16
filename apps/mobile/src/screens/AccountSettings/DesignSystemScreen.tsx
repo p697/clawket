@@ -1,6 +1,7 @@
 import React, { Fragment, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { ArrowUp, Bell, Check, ChevronLeft, MoreHorizontal, Search, Trash2, WifiOff } from 'lucide-react-native';
+import { ArrowUp, Bell, Check, MoreHorizontal, Search, Trash2, WifiOff } from 'lucide-react-native';
+import { ChevronLeft } from '../../components/ui/DirectionalIcon';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -13,6 +14,7 @@ import { AgentAvatar } from '../../components/ui/AgentAvatar';
 import { RosterRow } from '../../components/ui/RosterRow';
 import { ReplyFailureSheet } from '../../components/chat/ReplyFailureSheet';
 import { Banner } from '../../components/ui/Banner';
+import { ConnectionStatusPill } from '../../components/ui/ConnectionStatusPill';
 import { Button } from '../../components/ui/Button';
 import { FloatingButton } from '../../components/ui/FloatingButton';
 import { FormTextInput } from '../../components/ui/FormTextInput';
@@ -294,6 +296,9 @@ export function DesignSystemScreen({
               invalid
             />
             <Banner tone="neutral" icon={WifiOff} message={t('No network')} actionLabel={t('Retry', { ns: 'common' })} onAction={() => setSheetVisible(true)} />
+            <ConnectionStatusPill placement="inline" status="reconnecting" message={t('Reconnecting…', { ns: 'common' })} />
+            <ConnectionStatusPill placement="inline" status="offline" message={t('Offline · reconnecting', { ns: 'common' })}
+              actionLabel={t('Reconnect', { ns: 'common' })} onAction={() => setSheetVisible(true)} />
             <Banner tone="bad" message={t('Model authentication failed. Sign in again on your computer.', { ns: 'chat' })}
               actionLabel={t('Details', { ns: 'chat' })} onAction={() => setReplyFailureVisible(true)} testID="design-reply-failure" />
             </FormStep>

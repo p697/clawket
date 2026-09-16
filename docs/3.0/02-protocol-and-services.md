@@ -17,7 +17,7 @@
 | `bridge.capabilities.v2` | Bridge | 握手 meta 与健康接口里带 `capabilities: string[]`，并可附带真实 CLI `bridgeVersion` |
 | `hermes.multi-session.v2` | Hermes Bridge | 支持 `sessions.create / patch / reset / delete` 与分页 `chat.history` |
 
-声明位置：客户端在 `connect.start` 请求的 meta（现有 `ConnectHandshakeMeta` 扩展一个可选 `capabilities` 数组）；Relay 在 `/v1/health` 的 `capabilities` 与握手成功后的第一条控制帧 `relay.ready`（新增，老客户端不认识则忽略，因为它是以控制前缀发出的额外帧——**必须验证 2.1.x 客户端对未知控制事件是忽略而不是断开**，`tests/compat` 覆盖）；OpenClaw Bridge 消费客户端 `connect` 的 Bridge meta、不得把该 meta 转发给闭合 schema 的 Gateway，并仅在对应的协商成功响应里回写能力；Hermes Bridge 在 `/v1/hermes/health` 与同构 health 帧里声明。
+声明位置：OpenClaw 客户端在既有的 `connect.params.caps` 数组追加 `bridge.capabilities.v2`，保持旧 Gateway 的闭合请求 schema 合法；Relay 在 `/v1/health` 的 `capabilities` 与握手成功后的第一条控制帧 `relay.ready`（新增，老客户端不认识则忽略，因为它是以控制前缀发出的额外帧——**必须验证 2.1.x 客户端对未知控制事件是忽略而不是断开**，`tests/compat` 覆盖）；OpenClaw Bridge 识别 `params.caps`，并继续兼容预发布客户端的顶层 Bridge meta；不得把该 meta 转发给闭合 schema 的 Gateway，并仅在对应的协商成功响应里回写能力；Hermes Bridge 在 `/v1/hermes/health` 与同构 health 帧里声明。
 
 ## 3. Relay / Registry 合一
 

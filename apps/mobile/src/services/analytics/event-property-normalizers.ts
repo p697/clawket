@@ -90,7 +90,6 @@ const SETTINGS_ROWS = new Set([
   'files_browse',
   'files_edit',
   'identity',
-  'identity_persona_memory',
   'identity_profile',
   'logs',
   'logs_view',
@@ -155,6 +154,12 @@ function normalizeAnalyticsCode(event: AnalyticsEventName, value: string): strin
   return CONNECTION_ERROR_CODES.has(code) ? code : 'other';
 }
 
+/** Release versions are bounded by the catalog; anything else is `other`. */
+function normalizeAppVersion(value: string): string {
+  const version = value.trim();
+  return /^\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(version) ? version : 'other';
+}
+
 function normalizeSettingsRow(value: string): string {
   const row = normalizeAnalyticsToken(value);
   return SETTINGS_ROWS.has(row) ? row : 'other';
@@ -173,9 +178,21 @@ export function normalizeAnalyticsEventString(
   property: string,
   value: string,
 ): string {
+  if (event === 'agent_file_activity') {
+    const allowed: Record<string, readonly string[]> = {
+      action: ['edit', 'saved', 'failed'],
+      document: ['agents', 'soul', 'identity', 'user', 'bootstrap', 'memory'],
+      backend: ['openclaw', 'hermes', 'youmind', 'local-model'],
+    };
+    return allowed[property]?.includes(value) ? value : 'other';
+  }
   if (property === 'provider') return normalizeAnalyticsModelProvider(value);
   if (property === 'code') return normalizeAnalyticsCode(event, value);
   if (event === 'settings_row_opened' && property === 'row') return normalizeSettingsRow(value);
+  if (event.startsWith('app_update_announcement_')) {
+    if (property === 'version') return normalizeAppVersion(value);
+    if (property === 'entry') return normalizeAnalyticsToken(value).slice(0, 48) || 'other';
+  }
   if (
     (event === 'paywall_purchase_failed' || event === 'paywall_restore_failed')
     && property === 'reason'

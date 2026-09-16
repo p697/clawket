@@ -202,15 +202,30 @@ export function formatMessageText(text: string, options: FormatMessageTextOption
   return result;
 }
 
+/** Malformed Claude XML emitted as prose is not evidence of tool execution. */
+export function readMalformedToolName(text: string): string | undefined {
+  return /^antml:invoke name="([^"\r\n]{1,100})"(?:>|\r?\n)/.exec(text)?.[1];
+}
+
 export function sanitizeDisplayText(text: string): string {
+  if (readMalformedToolName(text)) {
+    const end = text.indexOf('</function_results>');
+    // Hold partial control text during streaming, preserving any answer after it.
+    text = end < 0 ? '' : text.slice(end + '</function_results>'.length).trimStart();
+  }
   return formatMessageText(text, {
     stripWrappedFinalTag: true,
     stripBracketedSystemMessageBlocks: true,
   });
 }
 
+/** Exact CLI resume envelope only; preserve its actual user prompt. */
+export function stripCliResumeContext(text: string): string {
+  return text.replace(/^OpenClaw resumed this CLI session after prompt content changed\.\s+Follow the current turn's instructions; changed=[a-z-]+(?:,[a-z-]+)*\.\r?\n\r?\n/, '');
+}
+
 export function sanitizeUserMessageText(text: string): string {
-  return formatMessageText(text, {
+  return formatMessageText(stripCliResumeContext(text), {
     stripGatewayPrefixes: true,
     stripBracketedSystemMessageBlocks: true,
   });

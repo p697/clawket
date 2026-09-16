@@ -1,6 +1,7 @@
 import React from 'react';
 import { Pressable, StyleProp, StyleSheet, Text, type ViewStyle, View } from 'react-native';
-import { ChevronRight, type LucideIcon } from 'lucide-react-native';
+import { type LucideIcon } from 'lucide-react-native';
+import { ChevronRight } from './DirectionalIcon';
 import { useAppTheme } from '../../theme';
 import { FontSize, FontWeight, LineHeight, Radius, Space } from '../../theme/tokens';
 

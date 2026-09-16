@@ -7,6 +7,7 @@ import type {
   AgentFile,
   AgentFileSummary,
 } from '@clawket/agent-protocol';
+import { analyticsAgentDocument, analyticsEvents } from '../../services/analytics/events';
 import { Banner } from '../../components/ui/Banner';
 import { Button } from '../../components/ui/Button';
 import { FormTextInput } from '../../components/ui/FormTextInput';
@@ -67,7 +68,13 @@ export function FilesSection({
   const [discardVisible, setDiscardVisible] = useState(false);
   const changed = draft !== original;
   const editable = canEditAgentFile(adapter.capabilities, operations);
-  const startEditing = useCallback(() => setEditing(true), []);
+  const backend = adapter.connection.backendKind;
+  const startEditing = useCallback(() => {
+    setEditing(true);
+    if (selection) {
+      analyticsEvents.agentFileActivity({ action: 'edit', backend, document: analyticsAgentDocument(selection.name) });
+    }
+  }, [backend, selection]);
 
   const load = useCallback(async () => {
     if (!operations?.list) {
@@ -92,7 +99,20 @@ export function FilesSection({
   }, [load]);
 
   const openFile = useCallback(async (file: AgentFileSummary) => {
-    if (file.missing || !operations?.get) return;
+    if (file.missing) {
+      // A listed-but-absent core file is created in place; the backend owns the list.
+      if (!editable) return;
+      setSelection(file);
+      setDetail({ ...file, content: '' });
+      setDetailError(null);
+      setDetailLoading(false);
+      setDraft('');
+      setOriginal('');
+      setEditing(true);
+      analyticsEvents.agentFileActivity({ action: 'edit', backend, document: analyticsAgentDocument(file.name) });
+      return;
+    }
+    if (!operations?.get) return;
     setSelection(file);
     setDetail(null);
     setDetailError(null);
@@ -109,7 +129,7 @@ export function FilesSection({
     } finally {
       setDetailLoading(false);
     }
-  }, [agent.agentId, operations, t]);
+  }, [agent.agentId, backend, editable, operations, t]);
 
   const closeDetail = useCallback(() => {
     if (saving) return;
@@ -135,16 +155,18 @@ export function FilesSection({
     try {
       const result = await operations?.set?.(selection.name, draft, agent.agentId);
       if (!result?.ok) throw new Error(t('Gateway rejected save request', { ns: 'settings' }));
+      analyticsEvents.agentFileActivity({ action: 'saved', backend, document: analyticsAgentDocument(selection.name) });
       setOriginal(draft);
       setEditing(false);
-      setDetail((current) => current ? { ...current, content: draft } : current);
+      setDetail((current) => current ? { ...current, missing: false, content: draft } : current);
       await load();
     } catch (saveError: unknown) {
+      analyticsEvents.agentFileActivity({ action: 'failed', backend, document: analyticsAgentDocument(selection.name) });
       setDetailError(errorMessage(saveError, t('Save failed', { ns: 'settings' })));
     } finally {
       setSaving(false);
     }
-  }, [adapter.capabilities, agent.agentId, changed, draft, load, online, operations, saving, selection, t]);
+  }, [adapter.capabilities, agent.agentId, backend, changed, draft, load, online, operations, saving, selection, t]);
 
   const save = useCallback(() => {
     if (!isPro) {
@@ -188,10 +210,10 @@ export function FilesSection({
                   testID={`agent-file-${file.name}`}
                   title={file.name}
                   value={file.missing
-                    ? t('Missing', { ns: 'settings' })
+                    ? editable ? t('Create', { ns: 'common' }) : t('Missing', { ns: 'settings' })
                     : formatFileSize(file.size)}
-                  disabled={file.missing || !operations?.get}
-                  showChevron={!file.missing && Boolean(operations?.get)}
+                  disabled={file.missing ? !editable : !operations?.get}
+                  showChevron={file.missing ? editable : Boolean(operations?.get)}
                   onPress={() => { void openFile(file); }}
                 />
               </React.Fragment>
@@ -253,6 +275,10 @@ export function FilesSection({
                     onPress={() => {
                       setDraft(original);
                       setEditing(false);
+                      if (detail.missing) {
+                        setSelection(null);
+                        setDetail(null);
+                      }
                     }}
                     style={styles.actionButton}
                   />

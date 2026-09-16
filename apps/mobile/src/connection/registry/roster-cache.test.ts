@@ -81,10 +81,15 @@ describe('RosterCache', () => {
     const storage = new MemoryCacheStorage();
     const cache = new RosterCache({ storage, now: () => 500 });
     const agents = [{ ...agent('connection-1', 'main'), emoji: '🪽' }];
-    const sessions = [session('connection-1', 'main', 'main:main', 100, {
-      preview: 'Latest answer',
-      source: 'native',
-    })];
+    const sessions = [
+      session('connection-1', 'main', 'main:main', 100, {
+        preview: 'Latest answer',
+        source: 'native',
+        lastActivityAt: 80,
+      }),
+      session('connection-1', 'main', 'main:quiet', 100, { lastActivityAt: null }),
+      session('connection-1', 'main', 'main:legacy', 100),
+    ];
 
     const saved = await cache.set('connection-1', agents, sessions, 'ready');
     const loaded = await cache.get('connection-1');
@@ -95,9 +100,25 @@ describe('RosterCache', () => {
       savedAt: 500,
       connectionStateAtSave: 'ready',
       agents: [{ agentId: 'main', emoji: '🪽' }],
-      sessions: [{ key: 'main:main', preview: 'Latest answer', source: 'native' }],
+      sessions: [
+        { key: 'main:main', preview: 'Latest answer', source: 'native', lastActivityAt: 80 },
+        { key: 'main:quiet', lastActivityAt: null },
+        { key: 'main:legacy' },
+      ],
     });
+    // A cache written before the field existed must keep meaning "unknown".
+    expect(loaded?.sessions[2]).not.toHaveProperty('lastActivityAt');
     expect(JSON.stringify([...storage.entries.values()])).not.toMatch(/token|password|bootstrap/i);
+  });
+
+  it('rejects a malformed activity timestamp instead of caching it', async () => {
+    const cache = new RosterCache({ storage: new MemoryCacheStorage() });
+
+    await expect(cache.set('connection-1', [agent('connection-1', 'main')], [
+      session('connection-1', 'main', 'main:main', 100, {
+        lastActivityAt: 'yesterday' as unknown as number,
+      }),
+    ])).rejects.toThrow('cross-connection');
   });
 
   it('rejects cross-connection or duplicate descriptors instead of poisoning the cache', async () => {
@@ -203,7 +224,7 @@ describe('RosterCache', () => {
 });
 
 describe('aggregateRoster', () => {
-  it('sorts connection groups by live signals and activity without stale cached attention', () => {
+  it('orders groups and Agents by human activity only, keeping unread and attention as badges', () => {
     const groups = aggregateRoster([
       {
         connection: connection('a', 1),
@@ -239,25 +260,89 @@ describe('aggregateRoster', () => {
       },
     ], 'a');
 
-    expect(groups.map((group) => group.connection.id)).toEqual(['a', 'c', 'b']);
-    expect(groups[0].agents.map((entry) => entry.agent.agentId)).toEqual(['main', 'quiet']);
-    expect(groups[0].agents[0]).toMatchObject({
+    // `c` is the most recent even though `a` holds the only unread session.
+    expect(groups.map((group) => group.connection.id)).toEqual(['c', 'a', 'b']);
+    expect(groups[1].agents.map((entry) => entry.agent.agentId)).toEqual(['main', 'quiet']);
+    expect(groups[1].agents[0]).toMatchObject({
       preview: 'unread main',
-      updatedAt: 200,
       lastActivityAt: 600,
       unreadCount: 1,
       hasUnread: true,
     });
-    expect(groups[0].agents[0].unreadSessionKeys).toEqual(expect.arrayContaining(['main:main']));
-    expect(groups[2].agents[0].unreadSessionKeys).toEqual([]);
-    expect(groups[1].unreadCount).toBe(0);
-    expect(groups[2]).toMatchObject({
+    expect(groups[1].agents[0].unreadSessionKeys).toEqual(expect.arrayContaining(['main:main']));
+    expect(groups[0].agents[0].unreadSessionKeys).toEqual([]);
+    expect(groups[2].unreadCount).toBe(0);
+    expect(groups[0]).toMatchObject({
       attentionCount: 0,
       unreadCount: 0,
       source: 'cache',
     });
     expect(groups[2].agents[0]).toMatchObject({ attentionCount: 0, attention: null });
-    expect(flattenRoster(groups).map((entry) => entry.agent.connectionId)).toEqual(['a', 'a', 'c', 'b']);
+    expect(flattenRoster(groups).map((entry) => entry.agent.connectionId)).toEqual(['c', 'a', 'a', 'b']);
+  });
+
+  it('does not move or unread-mark an Agent whose record was only touched by housekeeping', () => {
+    const build = (mainUpdatedAt: number) => aggregateRoster([{
+      connection: connection('a', 1),
+      source: 'live',
+      syncedAt: 100,
+      agents: [agent('a', 'main'), agent('a', 'other')],
+      sessions: [
+        // Heartbeat polls move `updatedAt` but never `lastActivityAt`.
+        session('a', 'main', 'main:main', mainUpdatedAt, { lastActivityAt: 300 }),
+        session('a', 'other', 'other:main', 400, { lastActivityAt: 400 }),
+      ],
+      watermarks: { 'main:main': 300, 'other:main': 400 },
+    }], 'a');
+
+    const before = build(300);
+    const afterHeartbeat = build(9_000);
+
+    expect(afterHeartbeat[0].agents.map((entry) => entry.agent.agentId)).toEqual(['other', 'main']);
+    expect(afterHeartbeat[0].agents.map((entry) => entry.agent.agentId))
+      .toEqual(before[0].agents.map((entry) => entry.agent.agentId));
+    expect(afterHeartbeat[0].agents[1]).toMatchObject({ lastActivityAt: 300, hasUnread: false, unreadCount: 0 });
+    expect(afterHeartbeat[0].lastActivityAt).toBe(400);
+  });
+
+  it('counts only sessions a person takes part in as activity', () => {
+    const groups = aggregateRoster([{
+      connection: connection('a', 1),
+      source: 'live',
+      syncedAt: 100,
+      agents: [agent('a', 'busy'), agent('a', 'chatty')],
+      sessions: [
+        session('a', 'busy', 'busy:main', 100),
+        session('a', 'busy', 'busy:cron', 5_000, { kind: 'cron' }),
+        session('a', 'busy', 'busy:sub', 6_000, { kind: 'subagent' }),
+        session('a', 'chatty', 'chatty:main', 200),
+        session('a', 'chatty', 'chatty:dm', 250, { kind: 'direct' }),
+      ],
+      watermarks: {},
+    }], 'a');
+
+    expect(groups[0].agents.map((entry) => entry.agent.agentId)).toEqual(['chatty', 'busy']);
+    expect(groups[0].agents.map((entry) => entry.lastActivityAt)).toEqual([250, 100]);
+  });
+
+  it('keeps the same order whether a group is live or cached', () => {
+    const inputs = (source: 'live' | 'cache') => [{
+      connection: connection('a', 1),
+      source,
+      syncedAt: 100,
+      agents: [agent('a', 'read'), agent('a', 'unread')],
+      sessions: [
+        session('a', 'read', 'read:main', 900),
+        session('a', 'unread', 'unread:main', 100),
+      ],
+      watermarks: { 'read:main': 900 },
+    }];
+
+    const order = (source: 'live' | 'cache') => aggregateRoster(inputs(source), 'a')[0].agents
+      .map((entry) => entry.agent.agentId);
+
+    expect(order('live')).toEqual(['read', 'unread']);
+    expect(order('cache')).toEqual(order('live'));
   });
 
   it('adds backend subtitle metadata at the registry boundary', () => {

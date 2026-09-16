@@ -30,6 +30,9 @@ export type HermesActiveRun = {
   sessionId: string;
   abortController: AbortController;
   usageBaseline?: HermesObservedSessionUsageSnapshot | null;
+  startedAt?: number;
+  text?: string;
+  tools?: Map<string, Array<{ toolCallId: string; startedAt: number; args?: string }>>;
 };
 
 export type HermesPendingRunStart = {
@@ -200,15 +203,18 @@ export abstract class HermesStreamMethods {
       throw new Error('Hermes run start was invalidated by a session reset or delete.');
     }
     const usageBaseline = this.readHermesSessionUsageSnapshot(sessionId);
+    const startedAt = Date.now();
     this.activeRuns.set(runId, {
       runId,
       sessionKey,
       sessionId,
       abortController,
       usageBaseline,
+      startedAt,
+      text: '',
     });
     this.sendAgentLifecycleStart(runId, sessionKey);
-    void this.streamRunEvents(runId, sessionKey, sessionId, Date.now(), abortController.signal);
+    void this.streamRunEvents(runId, sessionKey, sessionId, startedAt, abortController.signal);
     return { runId };
   }
 
@@ -355,10 +361,29 @@ export abstract class HermesStreamMethods {
   }> {
     const sessionKey = readString(payload.sessionKey) || DEFAULT_SESSION_ID;
     const runId = readString(payload.runId);
-    const selectedRun = runId ? this.activeRuns.get(runId) : null;
-    const abortedRunIds = runId
-      ? (selectedRun?.sessionKey === sessionKey && this.abortActiveRun(runId, true) ? [runId] : [])
-      : this.abortActiveRunsForSession(sessionKey, true);
+    if (!runId) {
+      for (const [requestId, pending] of this.pendingRunStarts) {
+        if (pending.sessionKey !== sessionKey) continue;
+        this.pendingRunStarts.delete(requestId);
+        pending.abortController.abort();
+      }
+    }
+    const targets = [...this.activeRuns.values()].filter(run =>
+      run.sessionKey === sessionKey && (!runId || run.runId === runId));
+    const abortedRunIds: string[] = [];
+    for (const run of targets) {
+      // Closing SSE only stops local rendering. Ask the upstream run to stop
+      // before reporting a local abort; failures leave its stream observable.
+      const response = await fetch(`${this.apiBaseUrl}/v1/runs/${encodeURIComponent(run.runId)}/stop`, {
+        method: 'POST',
+        headers: buildHermesApiHeaders(this.apiKey),
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!response.ok) throw new Error(`Hermes stop request failed (${response.status}). The run may still be working.`);
+      if (this.activeRuns.get(run.runId) === run && this.abortActiveRun(run.runId, true)) {
+        abortedRunIds.push(run.runId);
+      }
+    }
     return {
       ok: true,
       abortedRunIds,
@@ -394,6 +419,8 @@ export abstract class HermesStreamMethods {
         startedAt: number;
         args?: string;
       }>>();
+      const active = this.activeRuns.get(runId);
+      if (active) active.tools = activeTools;
       const completedTools: Array<{
         toolCallId: string;
         toolName: string;
@@ -419,6 +446,8 @@ export abstract class HermesStreamMethods {
             const delta = readString(event.delta);
             if (!delta) continue;
             assistantText += delta;
+            const active = this.activeRuns.get(runId);
+            if (active) active.text = assistantText;
             seq += 1;
             this.broadcastEvent('chat', {
               runId,
@@ -437,7 +466,7 @@ export abstract class HermesStreamMethods {
             toolIndex += 1;
             const toolName = readString(event.tool) || 'tool';
             const toolCallId = `${runId}:tool:${toolIndex}`;
-            const startedAt = readNumber(event.timestamp) ?? Date.now();
+            const startedAt = hermesEventTimestampMs(event.timestamp);
             const args = readString(event.preview) || stringifyUnknown(event.args);
             const queue = activeTools.get(toolName) ?? [];
             queue.push({
@@ -471,9 +500,9 @@ export abstract class HermesStreamMethods {
             } else {
               activeTools.delete(toolName);
             }
-            const toolTimestamp = readNumber(event.timestamp) ?? Date.now();
+            const toolTimestamp = hermesEventTimestampMs(event.timestamp);
             const toolOutput = extractToolOutput(event);
-            const toolDurationMs = readNumber(event.duration)
+            const toolDurationMs = (readNumber(event.duration) != null ? Math.max(0, Number(event.duration) * 1000) : undefined)
               ?? (typeof activeTool?.startedAt === 'number'
                 ? Math.max(0, toolTimestamp - activeTool.startedAt)
                 : undefined);
@@ -819,6 +848,7 @@ export abstract class HermesStreamMethods {
       if (!output.content.trim()) continue;
       const updated = this.sessionStore.updateToolResult(params.sessionKey, match.toolCallId, {
         content: output.content,
+        _nativeToolCallId: output.toolCallId,
       });
       if (!updated) continue;
       this.broadcastEvent('agent', {
@@ -971,6 +1001,13 @@ function extractToolOutput(event: Record<string, unknown>): string {
 
 function isModelCommand(text: string): boolean {
   return /^\/model(?:\s|$)/i.test(text.trim());
+}
+
+// Hermes /v1/runs uses time.time() seconds; tolerate millisecond peers too.
+function hermesEventTimestampMs(value: unknown): number {
+  const timestamp = readNumber(value);
+  if (timestamp == null || timestamp <= 0) return Date.now();
+  return Math.round(timestamp < 100_000_000_000 ? timestamp * 1000 : timestamp);
 }
 
 function isThinkingCommand(text: string): boolean {

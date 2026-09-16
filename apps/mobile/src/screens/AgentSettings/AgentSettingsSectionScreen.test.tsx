@@ -181,11 +181,11 @@ jest.mock('../../components/ui/Skeleton', () => {
   };
 });
 
-jest.mock('./ModelsSection', () => {
+jest.mock('./ModelsScreen', () => {
   const ReactRuntime = require('react');
   const { View } = require('react-native');
   return {
-    ModelsSection: () => ReactRuntime.createElement(View, { testID: 'mock-models-section' }),
+    ModelsScreen: () => ReactRuntime.createElement(View, { testID: 'mock-models-screen' }),
   };
 });
 
@@ -193,8 +193,13 @@ jest.mock('./SkillsSection', () => {
   const ReactRuntime = require('react');
   const { View } = require('react-native');
   return {
-    SkillsSection: () => ReactRuntime.createElement(View, { testID: 'mock-skills-section' }),
+    SkillsSection: (props: Record<string, unknown>) => ReactRuntime.createElement(View, { ...props, testID: 'mock-skills-section' }),
   };
+});
+
+jest.mock('./CronEditorScreen', () => {
+  const ReactRuntime = require('react');
+  return { CronEditorScreen: (props: Record<string, unknown>) => ReactRuntime.createElement('View', { ...props, testID: 'mock-cron-editor' }) };
 });
 
 jest.mock('./CronSection', () => {
@@ -221,11 +226,14 @@ jest.mock('./UsageSection', () => {
   };
 });
 
-jest.mock('./IdentitySection', () => {
+jest.mock('./IdentityScreen', () => {
   const ReactRuntime = require('react');
   const { View } = require('react-native');
   return {
-    IdentitySection: () => ReactRuntime.createElement(View, { testID: 'mock-identity-section' }),
+    IdentityScreen: (props: { openCreateOnMount?: boolean }) => ReactRuntime.createElement(View, {
+      testID: 'mock-identity-screen',
+      openCreateOnMount: props.openCreateOnMount,
+    }),
   };
 });
 
@@ -459,6 +467,8 @@ describe('AgentSettingsSectionView', () => {
       />,
     );
     expect(view.getByTestId('agent-settings-section-offline')).toBeTruthy();
+    expect(view.getByTestId('agent-settings-section-header-status')).toBeTruthy();
+    expect(view.queryByTestId('agent-settings-section-title')).toBeNull();
     expect(view.getByText('Preview')).toBeTruthy();
     expect(view.getByText('Offline')).toBeTruthy();
     expect(flattenStyle(
@@ -505,9 +515,30 @@ describe('AgentSettingsSectionView', () => {
         {...viewProps('models', { state: 'error', errorMessage: 'No network', onRetry })}
       />,
     );
+    expect(error.getByText('No network')).toBeTruthy();
     fireEvent.press(error.getByTestId('agent-settings-section-error-action'));
     expect(onRetry).toHaveBeenCalledTimes(1);
     error.unmount();
+
+    const recovering = render(
+      <AgentSettingsSectionView
+        {...viewProps('models', { state: 'offline', reconnecting: true, onRetry })}
+      />,
+    );
+    expect(recovering.getByTestId('agent-settings-section-reconnecting')).toBeTruthy();
+    expect(recovering.queryByTestId('agent-settings-section-offline')).toBeNull();
+    expect(recovering.queryByTestId('agent-settings-section-title')).toBeNull();
+    recovering.unmount();
+
+    // Logs present their own offline copy in place, so the title stays.
+    const logs = render(
+      <AgentSettingsSectionView
+        {...viewProps('logs', { state: 'offline', onRetry })}
+      />,
+    );
+    expect(logs.queryByTestId('agent-settings-section-offline')).toBeNull();
+    expect(logs.getByTestId('agent-settings-section-title')).toBeTruthy();
+    logs.unmount();
 
     const onAction = jest.fn();
     const unavailable = render(
@@ -559,19 +590,51 @@ describe('AgentSettingsSectionScreen host', () => {
     consoleErrorSpy.mockRestore();
   });
 
-  it('hosts the capability-driven identity implementation instead of descriptor actions', () => {
+  it('hosts the identity editor as its own screen instead of descriptor actions', () => {
     const resolveAction = jest.fn();
     const view = render(<AgentSettingsSectionScreen {...screenProps('identity', resolveAction)} />);
 
-    expect(view.getByTestId('mock-identity-section')).toBeTruthy();
+    expect(view.getByTestId('mock-identity-screen').props.openCreateOnMount).toBe(false);
+    expect(view.queryByTestId('agent-settings-section-screen')).toBeNull();
     expect(view.queryByTestId('agent-settings-section-row-identity.profile')).toBeNull();
     expect(resolveAction).not.toHaveBeenCalled();
+
+    const props = screenProps('identity', resolveAction);
+    const creating = render(<AgentSettingsSectionScreen {...props}
+      route={{ ...props.route, params: { ...props.route.params, action: 'create-agent' } }} />);
+    expect(creating.getByTestId('mock-identity-screen').props.openCreateOnMount).toBe(true);
+  });
+
+  it('opens discovery from the header as a separate route with normal back navigation', () => {
+    const props = screenProps('skills', jest.fn());
+    const view = render(<AgentSettingsSectionScreen {...props} />);
+    fireEvent.press(view.getByTestId('agent-skills-discover'));
+    expect(props.navigation.push).toHaveBeenCalledWith('AgentSettingsSection', {
+      connectionId: 'studio', agentId: 'main', section: 'skills', action: 'discover-skills',
+    });
+    view.rerender(<AgentSettingsSectionScreen {...props} route={{ ...props.route, params: { ...props.route.params, action: 'discover-skills' } }} />);
+    expect(view.getByTestId('mock-skills-section').props.view).toBe('discover');
+    expect(view.queryByTestId('agent-skills-discover')).toBeNull();
+    expect(view.getByTestId('agent-settings-section-title').props.children).toBe('Discover');
+    fireEvent.press(view.getByTestId('agent-settings-section-back'));
+    expect(props.navigation.goBack).toHaveBeenCalledTimes(1);
+    fireEvent(view.getByTestId('mock-skills-section'), 'installRequested');
+    expect(props.navigation.navigate).toHaveBeenCalledWith('Thread', expect.objectContaining({
+      connectionId: 'studio', agentId: 'main', sessionKey: agent.mainSessionKey,
+    }));
+  });
+
+  it('hides the discovery header action when the adapter does not support it', () => {
+    mockRuntime = { ...mockRuntime, activeAdapter: { ...adapter, capabilities: { ...adapter.capabilities, skillDiscover: false } } };
+    const view = render(<AgentSettingsSectionScreen {...screenProps('skills', jest.fn())} />);
+    expect(view.queryByTestId('agent-skills-discover')).toBeNull();
   });
 
   it('hosts the functional models and skills sections in the canonical screen shell', () => {
     const models = render(<AgentSettingsSectionScreen {...screenProps('models', jest.fn())} />);
-    expect(models.getByTestId('mock-models-section')).toBeTruthy();
+    expect(models.getByTestId('mock-models-screen')).toBeTruthy();
     expect(models.queryByTestId('agent-settings-section-row-models.default')).toBeNull();
+    expect(models.queryByTestId('agent-settings-section-screen')).toBeNull();
     models.unmount();
 
     const skills = render(<AgentSettingsSectionScreen {...screenProps('skills', jest.fn())} />);
@@ -667,6 +730,8 @@ function screenProps(
     },
     navigation: {
       goBack: jest.fn(),
+      push: jest.fn(),
+      addListener: jest.fn(() => jest.fn()),
       navigate: jest.fn(),
     },
     isPro: true,

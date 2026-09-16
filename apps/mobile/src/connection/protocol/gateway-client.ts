@@ -318,6 +318,7 @@ export class GatewayProtocolClient {
     return () => set.delete(listener);
   }
 
+  /** Compatibility hook: requests serialize into params.caps, never top-level meta. */
   public setConnectRequestMeta(meta?: { capabilities: string[] }): void {
     this.connectRequestMeta = meta
       ? { capabilities: normalizeStrings(meta.capabilities) }
@@ -756,7 +757,12 @@ export class GatewayProtocolClient {
         mode: clientMode,
         deviceFamily: client.deviceFamily,
       },
-      caps: plan.role === 'node' ? [] : ['tool-events'],
+      // Old Bridges forward this request unchanged. Use the Gateway's existing
+      // extensible caps list; a new top-level meta field violates its closed schema.
+      caps: [
+        ...(plan.role === 'node' ? [] : ['tool-events']),
+        ...(this.route === 'relay' ? this.connectRequestMeta?.capabilities ?? [] : []),
+      ],
       commands: [],
       role: plan.role,
       scopes: plan.scopes,
@@ -1079,9 +1085,6 @@ export class GatewayProtocolClient {
       id,
       method,
       params,
-      ...(allowBeforeReady && this.route === 'relay' && this.connectRequestMeta
-        ? { meta: { capabilities: [...this.connectRequestMeta.capabilities] } }
-        : {}),
     };
     return new Promise<T>((resolve, reject) => {
       const timeout = setTimeout(() => {
@@ -1089,6 +1092,7 @@ export class GatewayProtocolClient {
         reject(new GatewayRequestError({
           code: 'request_timeout',
           message: `${method} request timed out`,
+          details: { method, timeoutMs, state: this.state, route: this.route },
           retryable: true,
         }));
       }, timeoutMs);
@@ -1414,7 +1418,7 @@ export class GatewayProtocolClient {
 
   public async updateAgent(
     agentId: string,
-    patch: { name?: string; workspace?: string; model?: string; avatar?: string },
+    patch: { name?: string; workspace?: string; model?: string; emoji?: string; avatar?: string },
   ): Promise<AgentUpdateResult> {
     return this.request('agents.update', { agentId, ...patch });
   }
@@ -1711,12 +1715,17 @@ export class GatewayProtocolClient {
   public async patchConfig(
     raw: string,
     baseHash: string,
+    options?: { replacePaths?: readonly string[] },
   ): Promise<{ ok: boolean; config?: Record<string, unknown>; hash?: string }> {
+    // `replacePaths` is the Gateway's consent for shrinking or deleting an
+    // existing array; it is only sent when the patch needs it so older
+    // Gateways keep receiving the exact legacy request shape.
+    const replacePaths = options?.replacePaths?.filter((path) => path.trim().length > 0) ?? [];
     const result = await this.request<{
       ok?: boolean;
       config?: Record<string, unknown>;
       hash?: string;
-    }>('config.patch', { raw, baseHash });
+    }>('config.patch', replacePaths.length > 0 ? { raw, baseHash, replacePaths } : { raw, baseHash });
     return {
       ok: result?.ok ?? false,
       config: result?.config,

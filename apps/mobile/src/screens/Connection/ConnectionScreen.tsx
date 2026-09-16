@@ -1,12 +1,13 @@
 import React, { useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Pause, Play, RotateCw } from 'lucide-react-native';
+import { Pause, Play, RotateCw, Settings2 } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ConnectionDescriptor, ConnectionState } from '@clawket/agent-protocol';
 import { useAppTheme } from '../../theme';
 import { FontSize, FontWeight, LineHeight, Radius, Space } from '../../theme/tokens';
-import { ScreenHeader } from '../../components/ui/ScreenHeader';
+import { AccountSettingsPageHeader } from '../AccountSettings/AccountSettingsPageHeader';
+import { SettingsIcon } from '../../components/ui/SettingsIcon';
 import { PlatformMark } from '../../components/ui/PlatformMark';
 import { Button } from '../../components/ui/Button';
 import { Banner } from '../../components/ui/Banner';
@@ -46,7 +47,7 @@ export function ConnectionScreen({ connection, state, paused, agentNames, onBack
     : ['connecting', 'handshaking', 'reconnecting'].includes(state) ? t('Connecting', { ns: 'common' }) : t('Offline', { ns: 'common' });
   return (
     <View testID="connection-screen" style={[styles.screen, { backgroundColor: colors.canvasGrouped }]}>
-      <ScreenHeader title={t('Connection', { ns: 'common' })} topInset={insets.top} onBack={onBack} showBorder={false} style={{ backgroundColor: colors.canvasGrouped }} />
+      <AccountSettingsPageHeader testID="connection" title={t('Connection', { ns: 'common' })} onBack={onBack} />
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + Space.xl }]}>
         <View style={styles.hero}>
           <View style={[styles.symbol, { backgroundColor: colors.surfaceFloating }]}><PlatformMark platform={connection.backendKind} /></View>
@@ -62,8 +63,8 @@ export function ConnectionScreen({ connection, state, paused, agentNames, onBack
           {!paused ? <Button testID="connection-pause" label={t('Pause connection')} icon={Pause} variant="ghost" disabled={busy}
             onPress={() => setConfirmation('pause')} /> : null}
         </View>
-        <SettingsGroup>
-          <SettingsRow testID="connection-details" title={t('Advanced settings')} showChevron onPress={onDetails} />
+        <SettingsGroup density="comfortable">
+          <SettingsRow testID="connection-details" title={t('Advanced settings')} leading={<SettingsIcon icon={Settings2} tone="neutral" size={20} strokeWidth={1.75} />} showChevron onPress={onDetails} />
         </SettingsGroup>
         <Button testID="connection-remove" label={t('Remove connection')} variant="destructive" disabled={busy} onPress={() => setConfirmation('remove')} />
       </ScrollView>
@@ -82,7 +83,7 @@ export function ConnectionScreen({ connection, state, paused, agentNames, onBack
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  content: { paddingHorizontal: Space.xl, gap: Space.xl },
+  content: { paddingHorizontal: Space.lg, gap: Space.xl },
   hero: { alignItems: 'center', paddingVertical: Space.xxl, gap: Space.md },
   symbol: { padding: Space.lg, borderRadius: Radius.xl },
   name: { fontSize: FontSize.title, lineHeight: LineHeight.title, fontWeight: FontWeight.semibold, textAlign: 'center' },

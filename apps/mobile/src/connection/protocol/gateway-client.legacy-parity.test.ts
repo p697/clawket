@@ -1236,7 +1236,8 @@ describe('GatewayProtocolClient migrated parity', () => {
       const pending = client.request('sessions.list', { limit: 1 });
 
       jest.advanceTimersByTime(15_000);
-      await expect(pending).rejects.toMatchObject({ code: 'request_timeout' });
+      await expect(pending).rejects.toMatchObject({ code: 'request_timeout',
+        details: { method: 'sessions.list', timeoutMs: 15000, state: 'ready' } });
 
       expect(firstWs.close).not.toHaveBeenCalled();
       expect((globalThis as any).WebSocket).toHaveBeenCalledTimes(1);

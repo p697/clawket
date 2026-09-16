@@ -852,6 +852,50 @@ describe('ConnectionCoordinator', () => {
     expect(harness.events).toEqual(['connect:alpha']);
   });
 
+  it('keeps live run phases at connection scope without a mounted chat listener', async () => {
+    const harness = await createHarness();
+    await harness.coordinator.start();
+    const adapter = harness.coordinator.getAdapter('alpha')!;
+    const { runId } = await adapter.prompt('main', { text: 'hello', idempotencyKey: 'activity' });
+    expect(harness.coordinator.getSnapshot().runActivities).toEqual([
+      { connectionId: 'alpha', sessionKey: 'main', runId, phase: 'thinking' },
+    ]);
+    await adapter.cancel('main', runId);
+    expect(harness.coordinator.getSnapshot().runActivities).toEqual([]);
+    await adapter.prompt('main', { text: 'again', idempotencyKey: 'activity2' });
+    await harness.coordinator.activate('beta');
+    expect(harness.coordinator.getSnapshot().runActivities).toEqual([]);
+    await harness.coordinator.stop();
+  });
+
+  it('finishes removal without waiting for an unreachable fallback connection', async () => {
+    const { store } = await createStoreHarness();
+    const events: string[] = [];
+    let release: (() => void) | undefined;
+    const coordinator = new ConnectionCoordinator({
+      store,
+      cache: new RosterCache({ storage: new MemoryDashboardStorage() }),
+      watermarks: new UnreadWatermarks({ storage: new MemoryDashboardStorage() }),
+      adapterFactory: (_record, descriptor) => {
+        const adapter = instrumentAdapter(descriptor, events);
+        if (descriptor.id === 'beta') {
+          adapter.connect = () => new Promise<void>((resolve) => { release = resolve; });
+        }
+        return adapter;
+      },
+    });
+    await coordinator.start();
+    try {
+      await expect(coordinator.removeConnection('alpha')).resolves.toBe(true);
+      expect(coordinator.getSnapshot().connections.map((item) => item.id)).toEqual(['beta']);
+      expect(coordinator.getSnapshot().roster.some((group) => group.connection.id === 'alpha')).toBe(false);
+      expect(coordinator.getAdapter('alpha')).toBeNull();
+    } finally {
+      release?.();
+      await coordinator.stop();
+    }
+  });
+
   it('clears only the removed connection chat cache after the registry commit', async () => {
     const clearConnection = jest.fn(async (_connectionId: string) => undefined);
     const harness = await createHarness(true, {}, {
@@ -997,13 +1041,14 @@ describe('ConnectionCoordinator', () => {
     });
     expect(harness.coordinator.getSnapshot()).toMatchObject({
       activeConnectionId: 'beta',
-      activeState: 'ready',
       error: {
         operation: 'remove',
         connectionId: 'alpha',
         message: 'Connection data was removed, but some local data cleanup failed.',
       },
     });
+    await harness.coordinator.whenIdle();
+    expect(harness.coordinator.getSnapshot().activeState).toBe('ready');
   });
 
   it('can load descriptors and cache before the adapter factory is configured', async () => {

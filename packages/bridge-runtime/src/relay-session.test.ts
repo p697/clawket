@@ -20,6 +20,8 @@ describe('RelaySessionState', () => {
   it('tracks activity with the existing strict heartbeat timeout boundary', () => {
     const state = new RelaySessionState();
     state.observeActivity(10_000);
+    expect(state.activityAgeMs(9_000)).toBe(0);
+    expect(state.activityAgeMs(45_000)).toBe(35_000);
 
     expect(state.heartbeatTimedOut(35_000, 45_000)).toBe(false);
     expect(state.heartbeatTimedOut(35_000, 45_001)).toBe(true);

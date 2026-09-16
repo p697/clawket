@@ -6,7 +6,7 @@ import {
 } from './MessageDetailScreen';
 
 let mockIsPro = true;
-let mockRuntime = {
+let mockRuntime: { activeConnectionId: string; activeState: string; recovering?: boolean } = {
   activeConnectionId: 'connection',
   activeState: 'ready',
 };
@@ -211,6 +211,18 @@ describe('Search MessageDetailScreen', () => {
     const view = render(<MessageDetailScreen {...props()} />);
 
     await waitFor(() => expect(view.getByTestId('message-detail-offline')).toBeTruthy());
+    // Connection state takes the header title slot instead of pushing the message down.
+    expect(view.getByTestId('message-detail-header-status')).toBeTruthy();
+    expect(view.queryByText('Message details')).toBeNull();
+    expect(view.getByTestId('message-detail-content')).toBeTruthy();
+  });
+
+  it('shows the recovery window as a quiet reconnecting capsule', async () => {
+    mockRuntime = { activeConnectionId: 'connection', activeState: 'reconnecting', recovering: true };
+    const view = render(<MessageDetailScreen {...props()} />);
+
+    await waitFor(() => expect(view.getByTestId('message-detail-reconnecting')).toBeTruthy());
+    expect(view.queryByTestId('message-detail-offline')).toBeNull();
     expect(view.getByTestId('message-detail-content')).toBeTruthy();
   });
 });

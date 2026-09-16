@@ -178,7 +178,13 @@ describe('Hermes M3 recorded packet contract', () => {
       const request = materializeFixtureValue(packet.request, captures) as JsonRecord;
       const response = await client.request(request);
       capturePacketValues(response, packet.captureValues, captures);
-      expect(response, packet.label).toEqual(materializeFixtureValue(packet.expect, captures));
+      const expected = materializeFixtureValue(packet.expect, captures) as JsonRecord;
+      // Keep the historical payload fixture intact; current history adds
+      // authoritative liveness without changing any recorded message fields.
+      if (request.method === 'chat.history' && response.ok === true) {
+        expected.payload = { ...(expected.payload as JsonRecord), hasActiveRun: false };
+      }
+      expect(response, packet.label).toEqual(expected);
       observed.set(packet.label, response);
     }
 
@@ -221,6 +227,11 @@ describe('Hermes M3 recorded packet contract', () => {
             reject(new DOMException('The operation was aborted.', 'AbortError'));
           }, { once: true });
         });
+      }
+      if (/\/v1\/runs\/run_[^/]+\/stop$/.test(url)) {
+        expect(init?.method).toBe('POST');
+        expect(eventStreamSignal?.aborted).toBe(false);
+        return new Response('{"status":"stopping"}');
       }
       throw new Error(`Unexpected controlled Hermes fetch: ${url}`);
     }));

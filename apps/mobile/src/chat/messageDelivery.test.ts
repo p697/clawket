@@ -35,9 +35,9 @@ describe('resolveUserMessageStatus', () => {
     expect(resolveUserMessageStatus({ messages: [assistant('a2'), user('u2'), user('u1')], index: 2 })).toBe('sent');
   });
 
-  it('leaves queued messages and other roles to their own presentation', () => {
+  it('keeps local delivery distinct from backend evidence and excludes other roles', () => {
     const messages = [user('q1', { delivery: 'queued' }), assistant('a1'), user('u1')];
-    expect(resolveUserMessageStatus({ messages, index: 0 })).toBeNull();
+    expect(resolveUserMessageStatus({ messages, index: 0, runAcknowledged: true })).toBe('queued');
     expect(resolveUserMessageStatus({ messages, index: 1 })).toBeNull();
     expect(resolveUserMessageStatus({ messages, index: 3 })).toBeNull();
     // A queued bubble is not a settled turn, so it does not shadow the sent one.
@@ -47,6 +47,6 @@ describe('resolveUserMessageStatus', () => {
   it('builds the status map for every settled user message', () => {
     const messages = [user('usr_3'), assistant('a2'), user('u2'), user('q1', { delivery: 'held' })];
     const statuses = resolveUserMessageStatuses({ messages, unconfirmedIds: new Set(['usr_3']) });
-    expect([...statuses.entries()]).toEqual([['usr_3', 'sending'], ['u2', 'delivered']]);
+    expect([...statuses.entries()]).toEqual([['usr_3', 'sending'], ['u2', 'delivered'], ['q1', 'held']]);
   });
 });

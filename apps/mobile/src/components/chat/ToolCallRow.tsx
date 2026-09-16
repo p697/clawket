@@ -1,7 +1,8 @@
 import React, { useMemo } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { Brain, CalendarClock, Check, ChevronDown, ChevronRight, CircleAlert, FilePenLine, FileSearch, FolderSearch, Globe, Layers, MessageSquare, Search, Terminal, Wrench } from 'lucide-react-native';
+import { Brain, CalendarClock, Check, ChevronDown, CircleAlert, FilePenLine, FileSearch, FolderSearch, Globe, Layers, MessageSquare, Search, Terminal, Wrench } from 'lucide-react-native';
+import { ChevronRight } from '../ui/DirectionalIcon';
 import type { UiMessage } from '../../types/chat';
 import { useAppTheme } from '../../theme';
 import { ControlSize, FontSize, FontWeight, IconSize, LineHeight, Radius, Space } from '../../theme/tokens';

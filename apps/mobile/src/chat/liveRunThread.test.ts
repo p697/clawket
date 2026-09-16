@@ -1,5 +1,5 @@
 import { UiMessage } from '../types/chat';
-import { buildLiveRunListData, mergeNewestFirstMessages } from './liveRunThread';
+import { buildLiveRunListData, finalReplyTail, finishLiveRunPresentation, liveReplyRenderKey, mergeNewestFirstMessages } from './liveRunThread';
 
 describe('buildLiveRunListData', () => {
   it('interleaves stream segments and tool cards after stable history', () => {
@@ -157,4 +157,44 @@ describe('mergeNewestFirstMessages', () => {
         'pair-tied',
       ]);
   });
+});
+
+
+it('keeps one reply row through waiting, server run adoption, text and finalization', () => {
+  const base = { historyMessages: [] as UiMessage[], streamSegments: [], toolMessages: [], liveStreamStartedAt: 1000, activeRunId: 'optimistic', includePlaceholder: true, nowMs: 1200 };
+  const waiting = buildLiveRunListData({ ...base, liveStreamText: null })[0];
+  const early = buildLiveRunListData({ ...base, activeRunId: 'server', liveStreamText: 'Hi' })[0];
+  const streaming = buildLiveRunListData({ ...base, activeRunId: 'server', liveStreamText: 'Hello, here is the answer.' })[0];
+  expect(waiting.text).toBe('');
+  expect(early.text).toBe('');
+  expect(streaming.text).toBe('Hello, here is the answer.');
+  expect(early.renderKey).toBe(waiting.renderKey);
+  expect(streaming.renderKey).toBe(waiting.renderKey);
+  const final: UiMessage = { id: 'final_server', role: 'assistant', text: streaming.text, renderKey: liveReplyRenderKey(1000, 'server', 0) };
+  expect(buildLiveRunListData({ ...base, activeRunId: null, liveStreamText: null, historyMessages: [final] })).toEqual([final]);
+  expect(final.renderKey).toBe(streaming.renderKey);
+});
+
+it('keeps a committed text segment mounted while giving the next segment a separate identity', () => {
+  const key = liveReplyRenderKey(1000, 'run', 0);
+  const list = buildLiveRunListData({ historyMessages: [], streamSegments: [{ id: 'segment-1', renderKey: key, text: 'Searching now', timestampMs: 2000 }], toolMessages: [], liveStreamStartedAt: 1000, activeRunId: 'run', includePlaceholder: true, liveStreamText: null });
+  expect(list.map(message => message.renderKey)).toEqual([liveReplyRenderKey(1000, 'run', 1), key]);
+});
+
+
+it('keeps text after all preceding tools, and commits exactly the live order without duplicate aggregate text', () => {
+  const segments = [
+    { id: 's0', text: 'First.', timestampMs: 1000, renderKey: 'reply:1:0', afterToolCount: 0 },
+    { id: 's1', text: 'Second.', timestampMs: 2000, renderKey: 'reply:1:1', afterToolCount: 2 },
+  ];
+  const tools: UiMessage[] = ['a', 'b', 'c'].map(id => ({ id, role: 'tool', text: '', toolStatus: 'success' }));
+  const live = buildLiveRunListData({ historyMessages: [], streamSegments: segments, toolMessages: tools, liveStreamText: 'Final answer.', liveStreamStartedAt: 1, activeRunId: 'run', includePlaceholder: true }).reverse();
+  const tail = finalReplyTail('First.\nSecond.\nFinal answer.', segments, 'Final answer.');
+  const finished = finishLiveRunPresentation({ segments, tools, tail, runId: 'run', startedAt: 1 });
+  expect(live.map(message => message.id)).toEqual(['s0', 'a', 'b', 's1', 'c', 'streaming']);
+  expect(finished.map(message => message.text)).toEqual(live.map(message => message.text));
+  expect(finished.map(message => message.renderKey ?? message.id)).toEqual(live.map(message => message.renderKey ?? message.id));
+  expect(finished.every(message => !message.streaming)).toBe(true);
+  expect(finalReplyTail('First.', segments.slice(0, 1), 'First.')).toBe('First.');
+  expect(finalReplyTail('Different final.', segments)).toBe('Different final.');
 });

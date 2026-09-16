@@ -23,6 +23,7 @@
   "dependencies": {
     "@clawket/agent-protocol": "3.0.0",
     "@clawket/bridge-core": "3.0.0",
+    "https-proxy-agent": "^7.0.6",
     "tweetnacl": "^1.0.3",
     "ws": "^8.21.3"
   },

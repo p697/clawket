@@ -275,6 +275,9 @@ describe('createMockAdapter', () => {
     });
 
     expect(Object.keys(adapter.management?.models ?? {})).toEqual(['listThinkingLevels']);
+    const selectOnly = createMockAdapter({ ...fixture(), capabilities: { modelManage: false } });
+    expect(selectOnly.management?.models?.getCatalog).toBeUndefined();
+    expect(selectOnly.management?.models?.setSelection).toBeDefined();
     expect(Object.keys(adapter.management?.skills ?? {})).toEqual(['discover']);
     expect(Object.keys(adapter.management?.cron ?? {})).toEqual(['heartbeat']);
     expect(Object.keys(adapter.management?.agents ?? {}).sort()).toEqual(['create', 'files']);
@@ -312,6 +315,20 @@ describe('createMockAdapter', () => {
     expect(await management.models!.getSelection!()).toMatchObject({ models: [] });
     expect(await management.models!.setSelection!({ model: 'p/m' })).toMatchObject({ ok: true, scope: 'global' });
     expect(management.models!.listThinkingLevels!()).toEqual([]);
+    expect(await management.models!.getCatalog!()).toEqual({
+      defaults: { primary: '', fallbacks: [], thinkingDefault: '' },
+      allowlist: null,
+      providers: [],
+    });
+    await expect(management.models!.saveCatalog!({})).resolves.toBeUndefined();
+    await expect(management.models!.addModel!({ provider: 'p', modelId: 'm', modelName: 'M' })).resolves.toBeUndefined();
+    expect(await management.models!.inspectDeletion!({ provider: 'p', modelId: 'm' })).toEqual({
+      canDelete: false, blocks: [], cleanupCount: 0,
+    });
+    await expect(management.models!.deleteModel!({ provider: 'p', modelId: 'm' })).resolves.toBeUndefined();
+    await expect(management.models!.setCost!({
+      provider: 'p', modelId: 'm', modelName: 'M', cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    })).resolves.toBeUndefined();
 
     expect(await management.skills!.status!()).toMatchObject({ skills: [] });
     expect(await management.skills!.get!('skill')).toMatchObject({ skillKey: 'skill' });
@@ -493,4 +510,17 @@ describe('createMockAdapter', () => {
     expect(adapter.prompt).toBeTypeOf('function');
     expect('install' in (adapter.management?.skills ?? {})).toBe(false);
   });
+});
+
+
+it('isolates live recovery snapshots from fixture and consumer mutations', async () => {
+  const activeRun = { runId: 'run', text: 'partial', startedAtMs: 1000 };
+  const adapter = createMockAdapter({ ...fixture(), histories: { main: {
+    key: 'main', messages: [], hasActiveRun: true, activeRun,
+  } } });
+  activeRun.text = 'mutated fixture';
+  const history = await adapter.loadSession('main');
+  expect(history.activeRun?.text).toBe('partial');
+  history.activeRun!.text = 'mutated consumer';
+  expect((await adapter.loadSession('main')).activeRun?.text).toBe('partial');
 });

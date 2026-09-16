@@ -9,6 +9,7 @@ import {
 import type { AgentAdapter } from '@clawket/agent-protocol';
 import { useTranslation } from 'react-i18next';
 
+import { ProGate } from '../../components/pro/ProGate';
 import { Banner } from '../../components/ui/Banner';
 import { Button } from '../../components/ui/Button';
 import { SearchInput } from '../../components/ui/SearchInput';
@@ -40,6 +41,9 @@ import { translateAgentSettingsKey } from './translation';
 
 const LOG_BUFFER_LIMIT = 2_000;
 const LOG_VISIBLE_LIMIT = 250;
+/** Free users read the newest entries in full; the rest sit behind the last-step gate. */
+export const LOGS_FREE_ENTRIES = 3;
+const LOGS_TEASER_ENTRIES = 4;
 const POLL_INTERVAL_MS = 2_000;
 const LOG_FETCH_LIMIT = 500;
 const LOG_FETCH_MAX_BYTES = 250_000;
@@ -52,13 +56,17 @@ const MONOSPACE_FONT = Platform.select({
 export type LogsSectionProps = Readonly<{
   adapter: AgentAdapter;
   online: boolean;
+  isPro?: boolean;
   onReconnect?: () => void;
+  onOpenPaywall?: (reason: 'logs', onContinue?: () => void) => void;
 }>;
 
 export function LogsSection({
   adapter,
   online,
+  isPro = true,
   onReconnect,
+  onOpenPaywall,
 }: LogsSectionProps): React.JSX.Element {
   const { t } = useTranslation(['settings', 'common', 'config']);
   const { theme } = useAppTheme();
@@ -159,14 +167,15 @@ export function LogsSection({
   }, [fetchPage, online, supported, translateError]);
 
   useEffect(() => {
-    if (!supported || !online || !loaded) return undefined;
+    // Free users get a snapshot plus manual refresh; live tailing is the Pro value.
+    if (!supported || !online || !loaded || !isPro) return undefined;
     const interval = setInterval(() => {
       void fetchPage(false).catch((loadError: unknown) => {
         setError(translateError(loadError));
       });
     }, POLL_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [fetchPage, loaded, online, supported, translateError]);
+  }, [fetchPage, isPro, loaded, online, supported, translateError]);
 
   useEffect(() => () => {
     generationRef.current += 1;
@@ -194,6 +203,10 @@ export function LogsSection({
     query,
     levelFilters,
   ).slice(-LOG_VISIBLE_LIMIT).reverse(), [entries, levelFilters, query]);
+  const visibleEntries = isPro ? filteredEntries : filteredEntries.slice(0, LOGS_FREE_ENTRIES);
+  const teaserEntries = isPro
+    ? []
+    : filteredEntries.slice(LOGS_FREE_ENTRIES, LOGS_FREE_ENTRIES + LOGS_TEASER_ENTRIES);
 
   if (!supported) {
     return (
@@ -263,9 +276,9 @@ export function LogsSection({
         disabled={!online}
         onPress={() => { void refresh(); }}
       />
-      {filteredEntries.length ? (
+      {visibleEntries.length ? (
         <View testID="agent-logs-list" style={styles.logList}>
-          {filteredEntries.map((entry, index) => (
+          {visibleEntries.map((entry, index) => (
             <LogRow
               key={`${entry.time ?? ''}:${entry.raw}:${index}`}
               entry={entry}
@@ -278,6 +291,27 @@ export function LogsSection({
       ) : (
         <SectionMessage testID="agent-logs-empty" message={t('No log entries')} />
       )}
+      {!isPro && (loaded || entries.length > 0) ? (
+        <ProGate
+          testID="agent-logs-gate"
+          title={t('Watch OpenClaw run in real time')}
+          detail={t('Every request, error and restart, streamed to your phone.')}
+          actionLabel={t('Unlock OpenClaw logs')}
+          onUnlock={() => onOpenPaywall?.('logs')}
+        >
+          {teaserEntries.length ? (
+            <View style={styles.logList}>
+              {teaserEntries.map((entry, index) => (
+                <LogRow
+                  key={`${entry.time ?? ''}:${entry.raw}:${index}`}
+                  entry={entry}
+                  index={LOGS_FREE_ENTRIES + index}
+                />
+              ))}
+            </View>
+          ) : null}
+        </ProGate>
+      ) : null}
     </View>
   );
 }

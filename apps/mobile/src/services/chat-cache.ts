@@ -9,6 +9,7 @@ import { sanitizeSilentPreviewText, shouldHideMessage } from "../utils/chat-mess
 /** Lightweight message stored in the cache (strip transient / heavy fields). */
 export type CachedMessage = {
   id: string;
+  historyMessageId?: string;
   role: "user" | "assistant" | "system" | "tool";
   text: string;
   sendUncertain?: boolean;
@@ -139,6 +140,7 @@ function toSlim(msg: UiMessage): CachedMessage {
     text: msg.text,
   };
   if (msg.sendUncertain) slim.sendUncertain = true;
+  if (msg.historyMessageId) slim.historyMessageId = msg.historyMessageId;
   if (msg.idempotencyKey) slim.idempotencyKey = msg.idempotencyKey;
   if (msg.timestampMs) slim.timestampMs = msg.timestampMs;
   if (msg.imageUris?.length) slim.imageUris = msg.imageUris;

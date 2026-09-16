@@ -18,6 +18,42 @@ function flag(args: string[], name: string): string | undefined {
   return value;
 }
 
+const ENGINES: ReadonlyArray<NonNullable<LocalModelEndpoint['engine']>> = ['llamacpp', 'ollama', 'openai-compatible'];
+const SERVER_ADVICE = 'Start llama.cpp, Ollama or another OpenAI-compatible server first, or pass --base-url and --engine for a server on a different address.';
+
+function describeFetchFailure(error: unknown): string {
+  const cause = error instanceof Error ? (error.cause as { code?: string } | undefined) : undefined;
+  if (cause?.code === 'ECONNREFUSED') return 'connection refused';
+  if (error instanceof DOMException && error.name === 'TimeoutError') return 'no response within 10 seconds';
+  return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * Lists the models a server exposes through the OpenAI-compatible `/v1/models`
+ * route. A bare `fetch failed` is what a user sees when nothing is listening,
+ * so every failure names the address and what to start or pass instead.
+ */
+export async function discoverLocalModelEndpoints(baseUrl: string, engine: string, fetchImpl: typeof fetch = fetch): Promise<LocalModelEndpoint[]> {
+  if (!ENGINES.includes(engine as LocalModelEndpoint['engine'] & string)) throw new Error(`Unsupported model engine "${engine}". Use --engine llamacpp, ollama or openai-compatible.`);
+  const normalized = baseUrl.replace(/\/+$/, '').replace(/\/v1$/, '');
+  let response: Response;
+  try {
+    response = await fetchImpl(normalized + '/v1/models', { signal: AbortSignal.timeout(10_000), redirect: 'error' });
+  } catch (error) {
+    throw new Error(`No model server answered at ${normalized} (${describeFetchFailure(error)}). ${SERVER_ADVICE}`);
+  }
+  if (!response.ok) throw new Error(`The server at ${normalized} answered HTTP ${response.status} for /v1/models, so it is not an OpenAI-compatible model server. ${SERVER_ADVICE}`);
+  let body: { data?: { id?: unknown }[] };
+  try { body = await response.json() as typeof body; }
+  catch { throw new Error(`The server at ${normalized} did not return a JSON model list. ${SERVER_ADVICE}`); }
+  const endpoints = (Array.isArray(body?.data) ? body.data : []).flatMap(model => typeof model?.id === 'string' && model.id.length > 0 ? [{
+    id: model.id, name: model.id, model: model.id, baseUrl: normalized, contextWindow: 8192, maxOutputTokens: 1024,
+    engine: engine as LocalModelEndpoint['engine'],
+  }] : []);
+  if (!endpoints.length) throw new Error(`The server at ${normalized} lists no models. Load a model first (for example \`ollama pull <model>\` or a llama.cpp --models-preset), then pair again.`);
+  return endpoints;
+}
+
 async function post<T>(url: string, body: object): Promise<T> {
   const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(20_000), redirect: 'error' });
   if (!response.ok) throw new Error(`Pairing Registry returned HTTP ${response.status}`);
@@ -49,18 +85,7 @@ export async function handleLocalModelCommand(args: string[]): Promise<void> {
     const endpointFile = flag(args, '--endpoints');
     let endpoints: LocalModelEndpoint[];
     if (endpointFile) endpoints = JSON.parse(readFileSync(resolve(endpointFile), 'utf8'));
-    else {
-      const baseUrl = (flag(args, '--base-url') ?? 'http://127.0.0.1:8080').replace(/\/+$/, '').replace(/\/v1$/, '');
-      const engine = flag(args, '--engine') ?? 'llamacpp';
-      if (!['llamacpp', 'ollama', 'openai-compatible'].includes(engine)) throw new Error('Unsupported model engine');
-      const response = await fetch(baseUrl + '/v1/models', { signal: AbortSignal.timeout(10_000), redirect: 'error' });
-      if (!response.ok) throw new Error(`Cannot discover local models: HTTP ${response.status}`);
-      const body = await response.json() as { data?: { id: string }[] };
-      endpoints = (body.data ?? []).filter(model => typeof model.id === 'string' && model.id.length > 0).map(model => ({
-        id: model.id, name: model.id, model: model.id, baseUrl, contextWindow: 8192, maxOutputTokens: 1024,
-        engine: engine as LocalModelEndpoint['engine'],
-      }));
-    }
+    else endpoints = await discoverLocalModelEndpoints(flag(args, '--base-url') ?? 'http://127.0.0.1:8080', flag(args, '--engine') ?? 'llamacpp');
     config = { endpoints, token: randomBytes(32).toString('hex'), launcher };
   }
   const conversation = new LocalModelConversation(config.endpoints, join(dirname(configPath), 'conversation.json'));

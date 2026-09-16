@@ -67,6 +67,7 @@ let mockRoster: ReadonlyArray<RosterConnectionGroup> = [];
 let mockCommonTranslations: Readonly<Record<string, string>> = {};
 const mockRefreshRoster = jest.fn(async () => mockRoster);
 const mockProbeActive = jest.fn(async () => true);
+const mockReconnectConnection = jest.fn(async (_id: string): Promise<void> => undefined);
 
 jest.mock('react-native', () => {
   const ReactRuntime = require('react');
@@ -142,6 +143,12 @@ jest.mock('react-native-reanimated', () => {
       ReactRuntime.createElement(name, { ...props, ref }, children)
     ),
   );
+  // Entering/exiting presets are chainable builders; the status capsule only needs them to exist.
+  const layoutAnimation = (name: string) => {
+    const animation: Record<string, unknown> = { name };
+    for (const method of ['duration', 'delay', 'easing', 'reduceMotion']) animation[method] = () => animation;
+    return animation;
+  };
   return {
     __esModule: true,
     default: {
@@ -157,6 +164,9 @@ jest.mock('react-native-reanimated', () => {
       inOut: (value: unknown) => value,
       out: (value: unknown) => value,
     },
+    FadeIn: layoutAnimation('FadeIn'),
+    FadeOut: layoutAnimation('FadeOut'),
+    ReduceMotion: { Always: 'always', Never: 'never', System: 'system' },
     interpolateColor: jest.fn((_value: number, _input: number[], output: string[]) => output[0]),
     useAnimatedStyle: (factory: () => unknown) => factory(),
     useReducedMotion: () => false,
@@ -194,6 +204,7 @@ jest.mock('../../connection', () => ({
   getConnectionRuntime: () => ({
     refreshRoster: mockRefreshRoster,
     probeActive: mockProbeActive,
+    reconnectConnection: mockReconnectConnection,
   }),
   useConnections: () => mockConnections,
   useRoster: () => mockRoster,
@@ -401,6 +412,7 @@ describe('RosterScreen', () => {
     mockConnections = snapshot();
     mockRefreshRoster.mockClear();
     mockProbeActive.mockClear();
+    mockReconnectConnection.mockReset().mockResolvedValue(undefined);
   });
 
   it('renders account actions and ordered Agent, pinned, unread, attention, cached, and locked rows', () => {
@@ -602,7 +614,8 @@ describe('RosterScreen', () => {
 
     fireEvent.press(view.getByTestId('roster-add'));
     expect(view.getByTestId('roster-action-add_connection')).toBeTruthy();
-    expect(view.getByText('Connect OpenClaw, Hermes or YouMind Sprite')).toBeTruthy();
+    expect(view.getByText('Connect OpenClaw or Hermes')).toBeTruthy();
+    expect(view.queryByText('Connect OpenClaw, Hermes or YouMind Sprite')).toBeNull();
     expect(view.getByText('Create another agent on live')).toBeTruthy();
     expect(view.queryByTestId('roster-action-add_connection-lock-icon')).toBeNull();
     expect(view.getByTestId('roster-action-create_agent-lock-icon')).toBeTruthy();
@@ -646,7 +659,7 @@ describe('RosterScreen', () => {
     fireEvent.press(view.getByTestId('roster-add'));
     expect(view.getByTestId('roster-action-add_connection-lock-icon')).toBeTruthy();
     expect(view.getByTestId('roster-action-add_connection').props.accessibilityLabel).toBe(
-      'Add Connection, Connect OpenClaw, Hermes or YouMind Sprite',
+      'Add Connection, Connect OpenClaw or Hermes',
     );
     fireEvent.press(view.getByTestId('roster-action-add_connection'));
     expect(onAdd).toHaveBeenCalledTimes(1);
@@ -723,7 +736,11 @@ describe('RosterScreen', () => {
     mockRoster = [group('live', 'cache')];
     mockConnections = snapshot({ activeState: 'reconnecting', roster: mockRoster });
     const offline = render(<RosterScreen {...props()} />);
-    expect(offline.getByText('Offline · reconnecting')).toBeTruthy();
+    // Connection state lives in the header centre, never in the list.
+    expect(offline.getByTestId('roster-header-status')).toBeTruthy();
+    expect(offline.getByTestId('roster-offline-banner-action').props.accessibilityLabel)
+      .toBe('Offline · reconnecting, Reconnect');
+    expect(offline.queryByTestId('roster-banners')).toBeNull();
     expect(offline.getByTestId('roster-row-agent:live:main')).toBeTruthy();
     expect(offline.getByTestId('roster-row-agent:live:main').props.style).not.toBeNull();
     offline.unmount();
@@ -745,6 +762,24 @@ describe('RosterScreen', () => {
     expect(onOpenPro).toHaveBeenCalledTimes(1);
   });
 
+  it('shows the recovery window as a quiet header capsule that keeps the list and grace banner in place', () => {
+    mockRoster = [group('live', 'cache')];
+    mockConnections = snapshot({ activeState: 'reconnecting', recovering: true, roster: mockRoster });
+    const view = render(<RosterScreen {...props({
+      isPro: true,
+      graceBanner: { message: '12 days left', actionLabel: 'View Pro' },
+    })} />);
+    const status = view.getByTestId('roster-header-status');
+    expect(status.props.pointerEvents).toBe('box-none');
+    expect(view.getByTestId('roster-reconnecting')).toBeTruthy();
+    expect(view.getByText('Reconnecting…')).toBeTruthy();
+    expect(view.queryByTestId('roster-reconnecting-action')).toBeNull();
+    expect(view.queryByTestId('roster-offline-banner')).toBeNull();
+    // Product banners stay in the list; connection state never joins them.
+    expect(view.getByTestId('roster-grace-banner')).toBeTruthy();
+    expect(view.getByTestId('roster-row-agent:live:main')).toBeTruthy();
+  });
+
   it('refreshes roster data and probes the active adapter from pull-to-refresh and reconnect', async () => {
     const view = render(<RosterScreen {...props()} />);
 
@@ -759,8 +794,28 @@ describe('RosterScreen', () => {
     await act(async () => {
       fireEvent.press(view.getByTestId('roster-offline-banner-action'));
     });
-    expect(mockRefreshRoster).toHaveBeenCalledTimes(2);
-    expect(mockProbeActive).toHaveBeenCalledTimes(2);
+    expect(mockRefreshRoster).toHaveBeenCalledTimes(1);
+    expect(mockProbeActive).toHaveBeenCalledTimes(1);
+    expect(mockReconnectConnection).toHaveBeenCalledWith(mockConnections.activeConnectionId);
+  });
+
+  it('keeps manual reconnect out of native pull refresh and coalesces repeated presses', async () => {
+    let finish!: () => void;
+    mockReconnectConnection.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve; }));
+    mockConnections = snapshot({ activeState: 'offline', roster: mockRoster });
+    const view = render(<RosterScreen {...props()} />);
+    await act(async () => {
+      fireEvent.press(view.getByTestId('roster-offline-banner-action'));
+      fireEvent.press(view.getByTestId('roster-offline-banner-action'));
+    });
+    expect(mockReconnectConnection).toHaveBeenCalledTimes(1);
+    expect(view.getByTestId('roster-refresh-control').props.refreshing).toBe(false);
+    expect(view.getByTestId('roster-list').props.contentInsetAdjustmentBehavior).toBe('never');
+    expect(mockProbeActive).not.toHaveBeenCalled();
+    expect(mockRefreshRoster).not.toHaveBeenCalled();
+    await act(async () => { finish(); });
+    await act(async () => { fireEvent.press(view.getByTestId('roster-offline-banner-action')); });
+    expect(mockReconnectConnection).toHaveBeenCalledTimes(2);
   });
 
   it('renders grace actions and preserves the canonical visual budget in light and dark themes', () => {

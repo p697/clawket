@@ -3,10 +3,6 @@ import { act, render, waitFor } from '@testing-library/react-native';
 import { CAPABILITY_MATRIX } from '@clawket/agent-protocol';
 import type { ComposerHandle } from '../../components/ui/Composer';
 import { analyticsEvents } from '../../services/analytics/events';
-import {
-  getCurrentAppUpdateAnnouncement,
-  shouldShowCurrentAppUpdateAnnouncement,
-} from '../../services/app-update-announcement';
 import { ThreadScreen, type ThreadScreenProps } from './ThreadScreen';
 import type { ThreadViewProps } from './ThreadView';
 import type { ThreadOverlaysProps } from './components/ThreadOverlays';
@@ -23,12 +19,6 @@ let mockScopedApp: Record<string, unknown> | null = null;
 const mockToggleFavorite = jest.fn(async () => ({ favorited: true, favoriteKey: 'favorite-1' }));
 const mockIsFavoritedMessage = jest.fn(() => false);
 const mockedAnalyticsEvents = analyticsEvents as jest.Mocked<typeof analyticsEvents>;
-const mockedGetCurrentAppUpdateAnnouncement = getCurrentAppUpdateAnnouncement as jest.MockedFunction<
-  typeof getCurrentAppUpdateAnnouncement
->;
-const mockedShouldShowCurrentAppUpdateAnnouncement = shouldShowCurrentAppUpdateAnnouncement as jest.MockedFunction<
-  typeof shouldShowCurrentAppUpdateAnnouncement
->;
 
 const mockRuntime = {
   markSessionOpened: jest.fn(async () => ({})),
@@ -99,13 +89,6 @@ jest.mock('../../chat/useMessageFavorites', () => ({
     isFavoritedMessage: mockIsFavoritedMessage,
     toggleFavorite: mockToggleFavorite,
   }),
-}));
-
-jest.mock('../../services/app-update-announcement', () => ({
-  getCurrentAppUpdateAnnouncement: jest.fn(() => null),
-  getCurrentAppVersion: jest.fn(() => '3.0.0'),
-  markCurrentAppUpdateAnnouncementShown: jest.fn(async () => undefined),
-  shouldShowCurrentAppUpdateAnnouncement: jest.fn(async () => false),
 }));
 
 jest.mock('../../services/analytics/events', () => ({
@@ -316,8 +299,6 @@ describe('ThreadScreen connection container', () => {
     mockedAnalyticsEvents.runCardOpened.mockClear();
     mockedAnalyticsEvents.threadOpened.mockClear();
     mockedAnalyticsEvents.threadLoadState.mockClear();
-    mockedGetCurrentAppUpdateAnnouncement.mockClear();
-    mockedShouldShowCurrentAppUpdateAnnouncement.mockClear();
     consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation((message?: unknown) => {
       if (typeof message === 'string' && message.includes('react-test-renderer is deprecated')) return;
     });
@@ -452,20 +433,25 @@ describe('ThreadScreen connection container', () => {
     view.rerender(<ThreadScreen {...props} />);
     await act(async () => Promise.resolve());
     expect(mockRuntime.markSessionOpened).toHaveBeenLastCalledWith({
-      connectionId: 'connection-1', key: 'agent:atlas:main', updatedAt: 120,
+      connectionId: 'connection-1', key: 'agent:atlas:main', updatedAt: 120, lastActivityAt: 120,
     });
     const calls = mockRuntime.markSessionOpened.mock.calls.length;
     view.rerender(<ThreadScreen {...props} />);
     expect(mockRuntime.markSessionOpened).toHaveBeenCalledTimes(calls);
+    // Housekeeping moved updatedAt without new human activity: nothing to re-mark.
+    mockController.sessions = [{ key: 'agent:atlas:main', updatedAt: 900, lastActivityAt: 120 }];
+    view.rerender(<ThreadScreen {...props} />);
+    await act(async () => Promise.resolve());
+    expect(mockRuntime.markSessionOpened).toHaveBeenCalledTimes(calls);
     mockFocused = false;
-    mockController.sessions = [{ key: 'agent:atlas:main', updatedAt: 150 }];
+    mockController.sessions = [{ key: 'agent:atlas:main', updatedAt: 950, lastActivityAt: 150 }];
     view.rerender(<ThreadScreen {...props} />);
     expect(mockRuntime.markSessionOpened).toHaveBeenCalledTimes(calls);
     mockFocused = true;
     view.rerender(<ThreadScreen {...props} />);
     await act(async () => Promise.resolve());
     expect(mockRuntime.markSessionOpened).toHaveBeenLastCalledWith({
-      connectionId: 'connection-1', key: 'agent:atlas:main', updatedAt: 150,
+      connectionId: 'connection-1', key: 'agent:atlas:main', updatedAt: 150, lastActivityAt: 150,
     });
   });
 
@@ -507,6 +493,12 @@ describe('ThreadScreen connection container', () => {
     view.rerender(<ThreadScreen {...props} />);
     expect(mockThreadViewProps?.messages).toBe(visibleMessages);
     expect(mockApp.requestChatSession).not.toHaveBeenCalled();
+  });
+
+  it('does not present a roster refresh timeout as a failed chat connection', () => {
+    mockConnections.error = { operation: 'roster', connectionId: 'connection-1', message: '[request_timeout] sessions.list request timed out' };
+    render(<ThreadScreen {...createNavigationProps()} />);
+    expect(mockThreadViewProps?.state).toMatchObject({ kind: 'ready' });
   });
 
   it('binds the target route, active adapter capabilities, controller, and navigation actions', () => {
@@ -554,9 +546,9 @@ describe('ThreadScreen connection container', () => {
     const message = mockThreadViewProps?.messages[0];
     expect(message).toBeDefined();
     act(() => {
-      if (message) mockThreadViewProps?.onOpenAttachments?.(message);
+      if (message) mockThreadViewProps?.onOpenAttachments?.(message, 2);
     });
-    expect(onOpenAttachments).toHaveBeenCalledWith(message);
+    expect(onOpenAttachments).toHaveBeenCalledWith(message, 2);
 
     act(() => mockThreadViewProps?.onBack());
     expect(props.navigation.goBack).toHaveBeenCalledTimes(1);
@@ -641,54 +633,6 @@ describe('ThreadScreen connection container', () => {
     act(() => mockThreadViewProps?.onOpenPaywall?.());
     expect(connectionProps.navigation.navigate).toHaveBeenCalledWith('Paywall', {
       reason: 'gatewayConnections',
-    });
-  });
-
-  it('does not run the legacy update-announcement state machine in production', () => {
-    render(<ThreadScreen {...createNavigationProps()} />);
-
-    expect(mockedGetCurrentAppUpdateAnnouncement).not.toHaveBeenCalled();
-    expect(mockedShouldShowCurrentAppUpdateAnnouncement).not.toHaveBeenCalled();
-    expect(mockThreadOverlayProps?.announcement).toMatchObject({
-      visible: false,
-      value: null,
-      debugMode: false,
-    });
-  });
-
-  it('retains the update-announcement content for debug previews only', async () => {
-    mockApp.debugMode = true;
-    mockedGetCurrentAppUpdateAnnouncement.mockReturnValue({
-      debugHint: 'Debug preview',
-      entries: [],
-    });
-
-    render(<ThreadScreen {...createNavigationProps()} />);
-
-    await waitFor(() => expect(mockThreadOverlayProps?.announcement.value).toEqual({
-      debugHint: 'Debug preview',
-      entries: [],
-    }));
-    expect(mockedShouldShowCurrentAppUpdateAnnouncement).not.toHaveBeenCalled();
-    expect(mockThreadOverlayProps?.announcement.visible).toBe(false);
-  });
-
-  it('opens the settings membership paywall from the 3.0 Pro announcement entry', () => {
-    const props = createNavigationProps();
-    render(<ThreadScreen {...props} />);
-
-    act(() => mockThreadOverlayProps?.announcement.onEntryPress({
-      id: 'clawket-3-0-pro',
-      icon: 'sparkles',
-      title: 'Clawket 3.0 + Pro',
-      action: {
-        type: 'open_paywall',
-        feature: 'settingsMembershipPreview',
-      },
-    }));
-
-    expect(props.navigation.navigate).toHaveBeenCalledWith('Paywall', {
-      reason: 'settingsMembershipPreview',
     });
   });
 
@@ -892,6 +836,22 @@ describe('ThreadScreen connection container', () => {
       }],
     }));
     expect(openPreview).toHaveBeenCalledWith(['file:///photo.png'], 0);
+
+    // The tapped photo's position opens the viewer there; out-of-range indexes clamp.
+    act(() => mockThreadViewProps?.onOpenAttachments?.({
+      id: 'album',
+      role: 'user',
+      text: '',
+      imageUris: ['file:///one.png', 'file:///two.png', 'file:///three.png'],
+    }, 2));
+    expect(openPreview).toHaveBeenLastCalledWith(['file:///one.png', 'file:///two.png', 'file:///three.png'], 2);
+    act(() => mockThreadViewProps?.onOpenAttachments?.({
+      id: 'album',
+      role: 'user',
+      text: '',
+      imageUris: ['file:///one.png', 'file:///two.png'],
+    }, 9));
+    expect(openPreview).toHaveBeenLastCalledWith(['file:///one.png', 'file:///two.png'], 1);
   });
 
   it('keeps Hermes image actions while withholding non-image file entry points', () => {

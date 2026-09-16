@@ -543,9 +543,9 @@ describe('Hermes history and stream integration', () => {
         start(controller) {
           controller.enqueue(
             new TextEncoder().encode([
-              'data: {"event":"tool.started","timestamp":1000,"tool":"search","preview":"query"}',
+              'data: {"event":"tool.started","timestamp":1,"tool":"search","preview":"query"}',
               '',
-              'data: {"event":"tool.completed","timestamp":1200,"tool":"search","result":{"items":["done"]},"duration":200}',
+              'data: {"event":"tool.completed","timestamp":1.2,"tool":"search","result":{"items":["done"]},"duration":0.2}',
               '',
               'data: {"event":"run.completed","timestamp":1300,"output":"answer"}',
               '',
@@ -630,9 +630,9 @@ describe('Hermes history and stream integration', () => {
         start(controller) {
           controller.enqueue(
             new TextEncoder().encode([
-              'data: {"event":"tool.started","timestamp":1000,"tool":"browser_navigate","preview":"https://example.com"}',
+              'data: {"event":"tool.started","timestamp":1,"tool":"browser_navigate","preview":"https://example.com"}',
               '',
-              'data: {"event":"tool.completed","timestamp":1200,"tool":"browser_navigate","duration":200}',
+              'data: {"event":"tool.completed","timestamp":1.2,"tool":"browser_navigate","duration":0.2}',
               '',
               'data: {"event":"run.completed","timestamp":1300,"output":"DONE"}',
               '',
@@ -744,9 +744,9 @@ describe('Hermes history and stream integration', () => {
         start(controller) {
           controller.enqueue(
             new TextEncoder().encode([
-              'data: {"event":"tool.started","timestamp":1000,"tool":"search","preview":"query"}',
+              'data: {"event":"tool.started","timestamp":1,"tool":"search","preview":"query"}',
               '',
-              'data: {"event":"tool.completed","timestamp":1200,"tool":"search","result":{"items":["done"]},"duration":200}',
+              'data: {"event":"tool.completed","timestamp":1.2,"tool":"search","result":{"items":["done"]},"duration":0.2}',
               '',
               '',
             ].join('\n')),
@@ -817,9 +817,10 @@ describe('Hermes history and stream integration', () => {
     ]);
   });
 
-  it('aborts active bridge-side Hermes streams for a session', async () => {
+  it('requests upstream stop and aborts bridge-side Hermes streams for a session', async () => {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+      if (url.endsWith('/v1/runs/run_abort/stop')) return new Response('{"status":"stopping"}');
       if (url.endsWith('/v1/runs')) {
         return new Response(JSON.stringify({ run_id: 'run_abort' }), {
           status: 200,

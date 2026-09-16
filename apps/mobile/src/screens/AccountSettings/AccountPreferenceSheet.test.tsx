@@ -94,6 +94,7 @@ jest.mock('../../theme', () => ({
         accent: '#1F5EFF',
         bad: '#D64545',
         ink: '#111113',
+        canvas: '#FFFFFF',
         inkSecondary: '#6B6B72',
         inkTertiary: '#A3A3AB',
         line: '#E6E6EA',
@@ -161,21 +162,21 @@ describe('AccountPreferenceSheet', () => {
       <AccountPreferenceSheet preference="theme" onClose={onClose} onChanged={onChanged} />,
     );
     fireEvent.press(view.getByTestId('account-preference-dark'));
-    expect(mockSetMode).toHaveBeenCalledWith('dark');
+    await waitFor(() => expect(mockSetMode).toHaveBeenCalledWith('dark'));
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
 
     view.rerender(
       <AccountPreferenceSheet preference="accent" onClose={onClose} onChanged={onChanged} />,
     );
     fireEvent.press(view.getByTestId('account-preference-jadeGreen'));
-    expect(mockSetAccentId).toHaveBeenCalledWith('jadeGreen');
+    await waitFor(() => expect(mockSetAccentId).toHaveBeenCalledWith('jadeGreen'));
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(2));
 
     view.rerender(
       <AccountPreferenceSheet preference="speech-language" onClose={onClose} onChanged={onChanged} />,
     );
     fireEvent.press(view.getByTestId('account-preference-ja'));
-    expect(mockSetSpeechLanguage).toHaveBeenCalledWith('ja');
+    await waitFor(() => expect(mockSetSpeechLanguage).toHaveBeenCalledWith('ja'));
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(3));
     expect(onChanged).toHaveBeenNthCalledWith(1, 'theme', 'dark');
     expect(onChanged).toHaveBeenNthCalledWith(2, 'accent', 'jadeGreen');
@@ -204,6 +205,7 @@ describe('AccountPreferenceSheet', () => {
     await waitFor(() => {
       expect(view.getByTestId('account-preference-black').props.accessibilityState).toEqual({
         disabled: false,
+        selected: false,
       });
     });
     fireEvent.press(view.getByTestId('account-preference-black'));
@@ -214,6 +216,21 @@ describe('AccountPreferenceSheet', () => {
     });
   });
 
+  it('announces the selection and accepts only one choice while saving', async () => {
+    let finish!: () => void;
+    mockSetLanguage.mockReturnValueOnce(new Promise<void>((resolve) => { finish = resolve; }));
+    const onClose = jest.fn();
+    const view = render(<AccountPreferenceSheet preference="app-language" onClose={onClose} />);
+    expect(view.getByTestId('account-preference-system').props.accessibilityState.selected).toBe(true);
+    fireEvent.press(view.getByTestId('account-preference-ja'));
+    fireEvent.press(view.getByTestId('account-preference-de'));
+    await waitFor(() => expect(mockSetLanguage).toHaveBeenCalledTimes(1));
+    expect(mockSetLanguage).toHaveBeenCalledWith('ja');
+    expect(onClose).not.toHaveBeenCalled();
+    finish();
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+  });
+
   it('keeps app-icon failures inside the app-owned preference sheet', async () => {
     mockedSetIcon.mockRejectedValueOnce(new Error('native failure'));
     const onClose = jest.fn();
@@ -222,6 +239,7 @@ describe('AccountPreferenceSheet', () => {
     await waitFor(() => {
       expect(view.getByTestId('account-preference-black').props.accessibilityState).toEqual({
         disabled: false,
+        selected: false,
       });
     });
     fireEvent.press(view.getByTestId('account-preference-black'));

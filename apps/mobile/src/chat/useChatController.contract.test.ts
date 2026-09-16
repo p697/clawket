@@ -10,6 +10,7 @@ import { StorageService } from '../services/storage';
 import { useChatAutoCache } from '../hooks/useChatAutoCache';
 import { useAdapterChatEvents } from './useAdapterChatEvents';
 import { useChatController as useChatControllerImpl } from './useChatController';
+import { resetMessageQueueStore } from './messageQueue';
 
 const mockT = (key: string) => key;
 const mockI18n = { language: 'en-US' };
@@ -22,6 +23,7 @@ const historyMock = {
   hasMoreHistory: false,
   loadingMoreHistory: false,
   historyLoaded: true,
+  activitySnapshot: null as import('@clawket/agent-protocol').SessionHistory | null,
   messages: [] as any[],
   thinkingLevel: null as string | null,
   historyLimitRef: { current: 50 },
@@ -232,6 +234,9 @@ jest.mock('../services/analytics/events', () => ({
   analyticsEvents: {
     chatSendTapped: jest.fn(),
     chatSlashCommandTriggered: jest.fn(),
+    chatQueueHeld: jest.fn(),
+    chatMessageQueued: jest.fn(),
+    chatQueuedMessageDelivered: jest.fn(),
     approvalResolved: jest.fn(),
   },
 }));
@@ -315,6 +320,8 @@ describe('useChatController contract', () => {
   const mockedAnalytics = analyticsEvents as jest.Mocked<typeof analyticsEvents>;
 
   beforeEach(() => {
+    resetMessageQueueStore();
+    historyMock.activitySnapshot = null;
     jest.useFakeTimers();
     consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation((message?: unknown) => {
       if (typeof message === 'string' && message.includes('react-test-renderer is deprecated')) {
@@ -627,7 +634,8 @@ describe('useChatController contract', () => {
     expect(adapter.probe).toHaveBeenCalledTimes(1);
     expect(adapter.prompt).not.toHaveBeenCalled();
     expect(recordSuccessfulSendForAutomaticReview).not.toHaveBeenCalled();
-    expect(result.current.input).toBe('hello');
+    expect(result.current.input).toBe('');
+    expect(result.current.listData[0]).toMatchObject({ text: 'hello', delivery: 'held' });
     expect(result.current.sendFailure).toBe('Sending failed. Check the conversation before trying again.');
   });
 
@@ -976,7 +984,7 @@ describe('useChatController contract', () => {
     });
   });
 
-  it('releases the send tap guard after a failed preflight so the next tap can retry', async () => {
+  it('releases the send tap guard after a failed preflight so Send now can retry the same bubble', async () => {
     const adapter = createAdapter('ready');
     adapter.probe
       .mockResolvedValueOnce(false)
@@ -1003,15 +1011,17 @@ describe('useChatController contract', () => {
     });
 
     expect(adapter.prompt).not.toHaveBeenCalled();
+    const queuedId = result.current.queuedMessages[0].id;
 
     await act(async () => {
-      staleOnSend();
+      result.current.sendQueuedMessageNow(queuedId);
       await Promise.resolve();
       await Promise.resolve();
     });
 
     expect(adapter.probe).toHaveBeenCalledTimes(2);
     expect(adapter.prompt).toHaveBeenCalledTimes(1);
+    expect(result.current.listData.filter((message) => message.id === queuedId)).toHaveLength(1);
   });
 
   it('captures slash command metadata when sending a typed command', async () => {
@@ -1394,7 +1404,8 @@ describe('useChatController contract', () => {
 
     expect(adapter.prompt).not.toHaveBeenCalled();
     expect(adapter.probe).not.toHaveBeenCalled();
-    expect(result.current.input).toBe('hello');
+    expect(result.current.input).toBe('');
+    expect(result.current.listData[0]).toMatchObject({ text: 'hello', delivery: 'held' });
   });
 
   it('clears sending state when adapter cache scope changes', async () => {
@@ -1786,13 +1797,10 @@ describe('useChatController contract', () => {
     });
 
     expect(result.current.isSending).toBe(false);
-    expect(historyMock.messages).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: 'final_run-adapter',
-        role: 'assistant',
-        text: 'Hello world',
-      }),
-    ]));
+    expect(historyMock.messages.map(message => [message.role, message.text])).toEqual([
+      ['assistant', 'Hello'], ['tool', ''], ['assistant', 'world'],
+    ]);
+    expect(result.current.listData.map(message => message.text)).toEqual(['world', '', 'Hello']);
   });
 
   it('handles cancelled and errored adapter runs without leaving sending state stuck', async () => {
@@ -2133,4 +2141,49 @@ describe('useChatController contract', () => {
       rerender(undefined);
     });
   });
+
+it('restores thinking and streamed text from history after the controller remounts', async () => {
+  historyMock.activitySnapshot = null;
+  const adapter = createAdapter('ready');
+  const { result, rerender, unmount } = renderHook(() => useChatController({ adapter: adapter as any,
+    debugMode: false, showAgentAvatar: true } as any));
+  await act(async () => {
+    historyMock.activitySnapshot = { key: 'agent:main:main', messages: [], hasActiveRun: true,
+      activeRun: { runId: 'recovered', text: '', startedAtMs: Date.now() } };
+    rerender({});
+  });
+  expect(result.current.isSending).toBe(true);
+  await act(async () => {
+    historyMock.activitySnapshot = { ...historyMock.activitySnapshot!, activeRun: {
+      runId: 'recovered', text: 'Working on it', startedAtMs: Date.now() } };
+    rerender({});
+  });
+  expect(result.current.listData.some(message => message.text === 'Working on it')).toBe(true);
+  await act(async () => {
+    historyMock.activitySnapshot = { key: 'agent:main:main', messages: [], hasActiveRun: false };
+    rerender({});
+  });
+  expect(result.current.isSending).toBe(false);
+  unmount();
+  historyMock.activitySnapshot = null;
+});
+
+
+it('does not restore an old history snapshot after a live terminal event', async () => {
+  const adapter = createAdapter('ready');
+  const { result, rerender } = renderHook(() => useChatController({ adapter: adapter as any,
+    debugMode: false, showAgentAvatar: true } as any));
+  const requestedAtMs = Date.now() - 100;
+  await act(async () => {
+    const events = jest.mocked(useAdapterChatEvents).mock.calls.at(-1)![0];
+    events.onUpdate?.({ type: 'run_finished', sessionKey: 'agent:main:main', runId: 'old',
+      stopReason: 'end_turn', activeRunId: null, isSending: false });
+    historyMock.activitySnapshot = { key: 'agent:main:main', hasActiveRun: true, messages: [],
+      activeRun: { runId: 'old', text: 'stale' }, requestedAtMs } as any;
+    rerender({});
+  });
+  expect(result.current.isSending).toBe(false);
+  expect(result.current.listData.some(message => message.text === 'stale')).toBe(false);
+});
+
 });

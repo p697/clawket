@@ -1,5 +1,6 @@
-import React, { Fragment, useEffect, useMemo, useState } from 'react';
+import React, { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { Image, StyleSheet, View } from 'react-native';
+import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { Check } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 
@@ -40,6 +41,10 @@ type PreferenceOption = Readonly<{
   onSelect: () => boolean | void | Promise<boolean | void>;
 }>;
 
+// The language list outgrows a phone screen, so it scrolls inside fixed snap
+// points; the shorter preference lists keep the sheet's dynamic height.
+const LANGUAGE_SHEET_SNAP_POINTS: string[] = ['62%', '92%'];
+
 export function isAccountPreferenceAction(
   action: string,
 ): action is AccountPreferenceAction {
@@ -65,6 +70,7 @@ export function AccountPreferenceSheet({
   const { language, setLanguage } = useAppLanguage();
   const [appIcon, setAppIcon] = useState<AppIconVariant>('default');
   const [appIconSupported, setAppIconSupported] = useState(false);
+  const selecting = useRef(false);
   const [pending, setPending] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -202,6 +208,8 @@ export function AccountPreferenceSheet({
         ? t('Recognition Language')
         : t('App Icon');
 
+  const scrolls = preference === 'app-language' || preference === 'speech-language';
+  const Body = scrolls ? BottomSheetScrollView : View;
   return (
     <Sheet
       testID="account-preference-sheet"
@@ -209,8 +217,13 @@ export function AccountPreferenceSheet({
       title={title}
       closeAccessibilityLabel={t('Close', { ns: 'common' })}
       onClose={onClose}
+      snapPoints={scrolls ? LANGUAGE_SHEET_SNAP_POINTS : undefined}
     >
-      <View style={styles.content}>
+      <Body
+        style={scrolls ? styles.scroll : styles.content}
+        contentContainerStyle={scrolls ? styles.content : undefined}
+        showsVerticalScrollIndicator={false}
+      >
         {errorMessage ? (
           <Banner
             testID="account-preference-error"
@@ -218,45 +231,53 @@ export function AccountPreferenceSheet({
             message={errorMessage}
           />
         ) : null}
-        <SettingsGroup>
+        <SettingsGroup density="comfortable">
           {options.map((option, index) => (
             <Fragment key={option.id}>
               {index > 0 ? <SettingsDivider inset="content" /> : null}
               <SettingsRow
                 testID={`account-preference-${option.id}`}
                 title={option.label}
+                selected={option.selected}
                 disabled={pending || (preference === 'app-icon' && !appIconSupported)}
                 onPress={() => {
-                  void Promise.resolve(option.onSelect()).then((didSelect) => {
+                  if (selecting.current) return;
+                  selecting.current = true;
+                  void Promise.resolve().then(() => option.onSelect()).then((didSelect) => {
                     if (didSelect !== false) {
                       onChanged?.(preference, option.id);
                       onClose();
                     }
-                  }).catch(() => undefined);
+                  }).catch(() => setErrorMessage(t('Please try again later.', { ns: 'common' })))
+                    .finally(() => { selecting.current = false; });
                 }}
                 leading={preference === 'app-icon' ? <Image accessible={false} source={option.id === 'black'
                   ? require('../../../assets/app-icons/black/app-icon-black-1024.png')
                   : require('../../../assets/icon.png')} style={styles.appIcon} /> : option.swatch ? (
                   <View style={[styles.swatch, { backgroundColor: option.swatch }]} />
                 ) : undefined}
-                trailing={option.selected ? (
-                  <Check size={IconSize.sm} color={theme.colors.accent} />
-                ) : undefined}
+                trailing={(
+                  <View style={[styles.selection, option.selected ? { backgroundColor: theme.colors.ink } : null]}>
+                    {option.selected ? <Check size={IconSize.sm} strokeWidth={2} color={theme.colors.canvas} /> : null}
+                  </View>
+                )}
               />
             </Fragment>
           ))}
         </SettingsGroup>
-      </View>
+      </Body>
     </Sheet>
   );
 }
 
 const styles = StyleSheet.create({
+  scroll: { flex: 1, minHeight: 0 },
   content: {
     paddingHorizontal: Space.lg,
     paddingBottom: Space.xxl,
     gap: Space.md,
   },
+  selection: { width: Space.xl, height: Space.xl, borderRadius: Radius.full, alignItems: 'center', justifyContent: 'center' },
   appIcon: { width: ControlSize.pill, height: ControlSize.pill, borderRadius: Radius.settingsGroup },
   swatch: {
     width: IconSize.md,

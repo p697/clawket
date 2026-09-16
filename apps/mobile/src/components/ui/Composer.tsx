@@ -9,6 +9,7 @@ import Animated, {
   FadeIn, LinearTransition, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
+import { countDraftLines } from '../../chat/composerDraftLines';
 import { shouldCaptureComposerKeyboardDismiss } from '../../chat/composerKeyboardDismiss';
 import { triggerLightImpact } from '../../services/haptics';
 import { useAppTheme } from '../../theme';
@@ -176,7 +177,8 @@ export const Composer = React.forwardRef<ComposerHandle, ComposerProps>(function
           accessibilityElementsHidden importantForAccessibility="no-hide-descendants" pointerEvents="none"
           numberOfLines={6} style={[styles.measurement, { height: lineHeight * 6 }]}
           onTextLayout={({ nativeEvent }) => {
-            if (!expanded) setContentHeight(Math.max(1, nativeEvent.lines.length) * lineHeight + inputPadding);
+            // A trailing Return must grow the shell now, not on the next character.
+            if (!expanded) setContentHeight(countDraftLines(nativeEvent.lines) * lineHeight + inputPadding);
           }}>{value || ' '}</Text>
         {onPasteFiles ? <PasteCapableTextInput {...inputProps} onPasteFiles={onPasteFiles} onPasteFailed={onPasteFailed} />
           : <CompositionSafeTextInput {...inputProps} />}

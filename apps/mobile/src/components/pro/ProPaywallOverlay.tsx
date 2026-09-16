@@ -4,12 +4,12 @@ import { useTranslation } from 'react-i18next';
 import { publicAppLinks } from '../../config/public';
 import { useProPaywall } from '../../contexts/ProPaywallContext';
 import { analyticsEvents } from '../../services/analytics/events';
-import { isRevenueCatPackagePurchaseLocked } from '../../services/pro-subscription';
+import { hasRenewingProSubscription, isRevenueCatPackagePurchaseLocked, proSubscriptionManagementUrl, selectDisplayedRevenueCatPackage } from '../../services/pro-subscription';
 import { PaywallScreen } from '../../screens/Paywall/PaywallScreen';
 import { resolvePaywallContent } from '../../screens/Paywall/model';
 import type { ProFeature } from '../../utils/pro';
 
-export type ProPaywallContinueSource = 'purchase' | 'restore' | 'threePointZeroIntro';
+export type ProPaywallContinueSource = 'purchase' | 'restore';
 
 type Props = Readonly<{
   visible: boolean;
@@ -35,12 +35,10 @@ type PurchasePaywallSession = Readonly<{
 
 export function ProPaywallOverlay({ visible, onClose, onContinue }: Props): React.JSX.Element | null {
   const { t } = useTranslation(['common']);
-  const viewedRef = useRef(false);
   const purchaseSessionRef = useRef<PurchasePaywallSession | null>(null);
   const submissionInFlightRef = useRef(false);
   const {
     blockedFeature,
-    completeThreePointZeroIntro,
     failureOperation,
     failureReason,
     isConfigured,
@@ -56,6 +54,7 @@ export function ProPaywallOverlay({ visible, onClose, onContinue }: Props): Reac
     selectedPackage,
     selectedPackageId,
     snapshot,
+    statusCode,
   } = useProPaywall();
 
   const finishPurchasePaywallSession = useCallback(() => {
@@ -71,19 +70,10 @@ export function ProPaywallOverlay({ visible, onClose, onContinue }: Props): Reac
 
   useEffect(() => {
     if (!visible) {
-      viewedRef.current = false;
       finishPurchasePaywallSession();
       return;
     }
     if (!paywallMode) return;
-    if (paywallMode === 'threePointZeroIntro') {
-      finishPurchasePaywallSession();
-      if (viewedRef.current) return;
-      viewedRef.current = true;
-      analyticsEvents.paywallLaunchShown({ variant: 'three_point_zero_intro', first_run: false });
-      return;
-    }
-    viewedRef.current = false;
     if (purchaseSessionRef.current) return;
     const context = buildPurchasePaywallAnalyticsContext(blockedFeature, previewOnly);
     purchaseSessionRef.current = {
@@ -129,11 +119,7 @@ export function ProPaywallOverlay({ visible, onClose, onContinue }: Props): Reac
 
   const handleClose = () => {
     if (interactionLocked) return;
-    if (paywallMode === 'threePointZeroIntro') {
-      analyticsEvents.paywallLaunchClosed({ variant: 'three_point_zero_intro', first_run: false });
-    } else {
-      finishPurchasePaywallSession();
-    }
+    finishPurchasePaywallSession();
     onClose();
   };
 
@@ -150,10 +136,12 @@ export function ProPaywallOverlay({ visible, onClose, onContinue }: Props): Reac
     void purchasePro()
       .then((result) => {
         if (result.success) {
-          analyticsEvents.paywallPurchaseSucceeded(targetPackage, {
-            ...analyticsContext,
-          });
-          onContinue?.('purchase');
+          if (result.outcome === 'scheduled') {
+            analyticsEvents.paywallPlanChangeSubmitted(targetPackage, { ...analyticsContext });
+          } else {
+            analyticsEvents.paywallPurchaseSucceeded(targetPackage, { ...analyticsContext });
+          }
+          if (!result.keepOpen) onContinue?.('purchase');
           return;
         }
         analyticsEvents.paywallPurchaseFailed(targetPackage, {
@@ -187,12 +175,6 @@ export function ProPaywallOverlay({ visible, onClose, onContinue }: Props): Reac
       });
   };
 
-  const handleCompleteIntro = () => {
-    analyticsEvents.paywallLaunchClosed({ variant: 'three_point_zero_intro', first_run: false });
-    completeThreePointZeroIntro();
-    onContinue?.('threePointZeroIntro');
-  };
-
   return (
     <Modal
       testID="pro-paywall-modal"
@@ -203,7 +185,6 @@ export function ProPaywallOverlay({ visible, onClose, onContinue }: Props): Reac
       onRequestClose={handleClose}
     >
       <PaywallScreen
-        mode={paywallMode}
         blockedFeature={blockedFeature}
         phase={paywallPhase}
         packages={paywallPackages}
@@ -213,6 +194,15 @@ export function ProPaywallOverlay({ visible, onClose, onContinue }: Props): Reac
         disabledPackageIds={disabledPackageIds}
         purchaseDisabled={!isConfigured || selectedPackageLocked}
         restoreDisabled={previewOnly && isPro}
+        isMember={Boolean(snapshot?.isActive)}
+        currentPackageId={selectDisplayedRevenueCatPackage(paywallPackages, snapshot)?.packageIdentifier}
+        planChange={Boolean(snapshot?.isActive && snapshot.expirationDate && selectedPackage?.packageType !== 'LIFETIME' && !selectedPackageLocked)}
+        lifetimeRenewalWarning={hasRenewingProSubscription(snapshot) && selectedPackage?.packageType === 'LIFETIME'}
+        statusCode={statusCode}
+        onManageSubscription={proSubscriptionManagementUrl(snapshot) ? () => {
+          analyticsEvents.paywallManageSubscriptionTapped({ ...analyticsContext });
+          void openExternalUrl(proSubscriptionManagementUrl(snapshot));
+        } : undefined}
         onClose={handleClose}
         onRestore={handleRestore}
         onRetry={() => { void refreshOfferings(); }}
@@ -226,7 +216,6 @@ export function ProPaywallOverlay({ visible, onClose, onContinue }: Props): Reac
           selectPackage(packageId);
         }}
         onPurchase={handlePurchase}
-        onCompleteIntro={handleCompleteIntro}
         onOpenTerms={() => { void openExternalUrl(publicAppLinks.termsOfUseUrl); }}
         onOpenPrivacy={() => { void openExternalUrl(publicAppLinks.privacyPolicyUrl); }}
       />

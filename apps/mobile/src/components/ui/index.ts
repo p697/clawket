@@ -25,6 +25,12 @@ export { TypingDots } from './TypingDots';
 export type { TypingDotsProps } from './TypingDots';
 export { Banner } from './Banner';
 export type { BannerProps, BannerTone } from './Banner';
+export { ConnectionStatusPill } from './ConnectionStatusPill';
+export type {
+  ConnectionStatusPillPlacement,
+  ConnectionStatusPillProps,
+  ConnectionStatusPillStatus,
+} from './ConnectionStatusPill';
 export { Bubble } from './Bubble';
 export type { BubbleProps, BubbleRole } from './Bubble';
 export { RunCard } from './RunCard';

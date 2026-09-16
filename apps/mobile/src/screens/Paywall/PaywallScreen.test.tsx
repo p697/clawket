@@ -110,7 +110,6 @@ const callbacks = {
   onRetry: jest.fn(),
   onSelectPackage: jest.fn(),
   onPurchase: jest.fn(),
-  onCompleteIntro: jest.fn(),
   onOpenTerms: jest.fn(),
   onOpenPrivacy: jest.fn(),
 };
@@ -118,7 +117,6 @@ const callbacks = {
 function renderPaywall(overrides: Partial<React.ComponentProps<typeof PaywallScreen>> = {}) {
   return render(
     <PaywallScreen
-      mode="purchase"
       blockedFeature={null}
       phase="ready"
       packages={PACKAGES}
@@ -134,6 +132,99 @@ function renderPaywall(overrides: Partial<React.ComponentProps<typeof PaywallScr
 function resolveHero(feature: unknown) { return feature === 'gatewayConnections' ? 'connections' : feature === 'agents' ? 'agents' : feature === 'openclawDiagnostics' ? 'manage' : feature === 'logs' ? 'logsFiles' : feature === 'messageHistory' ? 'search' : 'generic'; }
 
 describe('PaywallScreen', () => {
+  it('shows a member their current monthly plan and an actionable annual change', () => {
+    const screen = renderPaywall({ isMember: true, currentPackageId: 'monthly', planChange: true, disabledPackageIds: ['monthly'] });
+    expect(screen.getByTestId('paywall-plan-monthly').props.accessibilityLabel).toContain('Current plan');
+    expect(screen.getByTestId('paywall-plan-monthly').props.accessibilityState.disabled).toBe(true);
+    expect(screen.getByTestId('paywall-purchase').props.accessibilityLabel).toBe('Change to annual');
+    expect(screen.getByTestId('paywall-change-timing')).toBeTruthy();
+    // Members see every plan at once; the disclosure link is for prospects only.
+    expect(screen.queryByTestId('paywall-show-monthly')).toBeNull();
+    // The owned plan is locked but stays legible; only the selected card carries the accent.
+    const current = StyleSheet.flatten(screen.getByTestId('paywall-plan-monthly').props.style);
+    expect(current.opacity).toBeUndefined();
+    expect(current.backgroundColor).toBe('#202225');
+    expect(StyleSheet.flatten(screen.getByTestId('paywall-plan-annual').props.style).borderColor).toBe('#F4F4F0');
+    // Without the disclosure link the checkout block keeps its own distance from the plans.
+    expect(StyleSheet.flatten(screen.getByTestId('paywall-checkout').props.style).marginTop).toBe(12);
+  });
+
+  it('shows a lifetime owner only their plan, with no checkout button', () => {
+    const onManageSubscription = jest.fn();
+    const screen = renderPaywall({
+      isMember: true,
+      currentPackageId: 'lifetime',
+      selectedPackageId: 'lifetime',
+      purchaseDisabled: true,
+      disabledPackageIds: ['monthly', 'annual', 'lifetime'],
+      onManageSubscription,
+    });
+    expect(screen.queryByTestId('paywall-plan-annual')).toBeNull();
+    expect(screen.queryByTestId('paywall-plan-monthly')).toBeNull();
+    expect(screen.queryByTestId('paywall-purchase')).toBeNull();
+    expect(screen.queryByTestId('paywall-billing')).toBeNull();
+    expect(screen.queryByTestId('paywall-checkout')).toBeNull();
+    const card = screen.getByTestId('paywall-plan-lifetime');
+    expect(card.props.accessibilityLabel).toContain('Current plan');
+    expect(card.props.accessibilityState).toEqual({ checked: true, disabled: true });
+    // A lone card uses the wrapping row layout, never the two-up compact column.
+    const cardStyle = StyleSheet.flatten(card.props.style);
+    expect(cardStyle.flexDirection).toBe('row');
+    expect(cardStyle.opacity).toBeUndefined();
+    fireEvent.press(screen.getByTestId('paywall-manage-subscription'));
+    expect(onManageSubscription).toHaveBeenCalledTimes(1);
+  });
+
+  it('hides locked alternatives for a member but keeps the failure notice reachable', () => {
+    const screen = renderPaywall({
+      isMember: true,
+      currentPackageId: 'annual',
+      selectedPackageId: 'lifetime',
+      disabledPackageIds: ['annual', 'monthly'],
+    });
+    expect(screen.queryByTestId('paywall-plan-monthly')).toBeNull();
+    expect(screen.getByTestId('paywall-purchase').props.accessibilityLabel).toBe('Buy lifetime');
+    expect(StyleSheet.flatten(screen.getByTestId('paywall-plan-annual').props.style).flexDirection).toBe('column');
+    screen.unmount();
+
+    const failed = renderPaywall({
+      isMember: true,
+      currentPackageId: 'lifetime',
+      selectedPackageId: 'lifetime',
+      disabledPackageIds: ['monthly', 'annual', 'lifetime'],
+      phase: 'failure',
+      failureReason: 'store_error:UNKNOWN',
+      failureOperation: 'restore',
+    });
+    expect(failed.queryByTestId('paywall-purchase')).toBeNull();
+    expect(failed.getByTestId('paywall-failure')).toBeTruthy();
+  });
+
+  it('falls back to the full catalog when a member plan cannot be matched', () => {
+    const screen = renderPaywall({
+      isMember: true,
+      currentPackageId: null,
+      disabledPackageIds: ['monthly', 'annual', 'lifetime'],
+      purchaseDisabled: true,
+    });
+    for (const type of ['annual', 'lifetime', 'monthly']) {
+      expect(screen.getByTestId(`paywall-plan-${type}`).props.accessibilityState.disabled).toBe(true);
+    }
+    expect(screen.getByTestId('paywall-purchase').props.accessibilityState.disabled).toBe(true);
+  });
+
+  it('shows the renewal warning before lifetime checkout and keeps its management action accessible afterwards', () => {
+    const onManageSubscription = jest.fn();
+    const screen = renderPaywall({ isMember: true, selectedPackageId: 'lifetime', lifetimeRenewalWarning: true, onManageSubscription });
+    expect(screen.getByTestId('paywall-lifetime-renewal-warning')).toBeTruthy();
+    screen.unmount();
+    const completed = renderPaywall({ phase: 'complete', statusCode: 'lifetimeManageSubscription', onManageSubscription });
+    expect(completed.queryByTestId('paywall-purchase')).toBeNull();
+    fireEvent.press(completed.getByTestId('paywall-manage-subscription'));
+    expect(onManageSubscription).toHaveBeenCalledTimes(1);
+    fireEvent.press(completed.getByTestId('paywall-done'));
+    expect(callbacks.onClose).toHaveBeenCalledTimes(1);
+  });
   beforeEach(() => {
     jest.clearAllMocks();
     mockTheme.scheme = 'light';
@@ -186,7 +277,7 @@ describe('PaywallScreen', () => {
     const screen = renderPaywall({ blockedFeature: 'agents' });
     expect(screen.getByTestId('paywall-hero-agents')).toBeTruthy();
     expect(screen.getByText('Bring every Agent into the roster')).toBeTruthy();
-    expect(screen.getByText('Start Clawket Pro')).toBeTruthy();
+    expect(screen.getByText('Upgrade to use more Agents')).toBeTruthy();
     expect(screen.getByTestId('paywall-benefits').children).toHaveLength(4);
   });
 
@@ -242,15 +333,6 @@ describe('PaywallScreen', () => {
     expect(failed.getByText('Unable to complete your purchase right now.')).toBeTruthy();
   });
 
-  it('renders the reusable 3.0 intro with four changes and no purchase plans', () => {
-    const screen = renderPaywall({ mode: 'threePointZeroIntro', packages: [] });
-    expect(screen.getByText('Clawket 3.0')).toBeTruthy();
-    expect(screen.getByText('Every Agent and session in one roster')).toBeTruthy();
-    expect(screen.getByTestId('paywall-benefits').children).toHaveLength(4);
-    expect(screen.queryByTestId('paywall-plan-annual')).toBeNull();
-    fireEvent.press(screen.getByTestId('paywall-intro-continue'));
-    expect(callbacks.onCompleteIntro).toHaveBeenCalledTimes(1);
-  });
 });
 
 it('shows one-time billing for lifetime without subscription cancellation copy', () => {
@@ -294,7 +376,7 @@ it('updates the centered copy on a mounted language change and keeps checkout re
   const screen = renderPaywall();
   expect(screen.getByTestId('paywall-layout-scroll').props.scrollEnabled).not.toBe(false);
   mockLocale = 'de';
-  screen.rerender(<PaywallScreen mode="purchase" failureReason={null} failureOperation={null} phase="ready" blockedFeature={null} packages={PACKAGES} selectedPackageId="annual" restoreDisabled={false} purchaseDisabled={false} {...callbacks} />);
+  screen.rerender(<PaywallScreen failureReason={null} failureOperation={null} phase="ready" blockedFeature={null} packages={PACKAGES} selectedPackageId="annual" restoreDisabled={false} purchaseDisabled={false} {...callbacks} />);
   const catalog = require('../../i18n/locales/de/common.json');
   for (const key of BENEFIT_KEYS) expect(screen.getByText(catalog[key])).toBeTruthy();
 });
@@ -321,7 +403,7 @@ it.each(['en', 'zh-Hans', 'de', 'es', 'ja', 'ko'])('keeps %s compact plan blocks
 it('uses concise English without truncating content or shrinking the heading', () => {
   mockLocale = 'en';
   const screen = renderPaywall();
-  expect(screen.getByText('Your agents, elevated.').props.numberOfLines).toBeUndefined();
+  expect(screen.getByText('More conversations with your Agents').props.numberOfLines).toBeUndefined();
   expect(StyleSheet.flatten(screen.getByTestId('paywall-title').props.style).fontSize).toBe(28);
   expect(screen.getByTestId('paywall-billing').props.children).toBe('$24.00/yr · Auto-renews · Cancel anytime');
   fireEvent.press(screen.getByTestId('paywall-show-monthly'));
@@ -329,4 +411,38 @@ it('uses concise English without truncating content or shrinking the heading', (
   expect(row.flexDirection).toBe('row');
   fireEvent.press(screen.getByTestId('paywall-plan-monthly'));
   expect(callbacks.onSelectPackage).toHaveBeenCalledWith('monthly');
+});
+
+
+it.each([
+  [null, '和你的 Agent，聊得更多'],
+  ['agents', '把其他 Agent 也用起来'],
+  ['coreFileEditing', '在手机上修改记忆与文件'],
+  ['logs', '在手机上查看 OpenClaw 日志'],
+  ['messageHistory', '打开搜索到的完整消息'],
+  ['sessionHistory', '查看完整的聊天记录'],
+  ['modelManage', '在手机上设置 Agent 的模型'],
+  ['usage', '看看最近花了多少'],
+] as const)('shows concrete Chinese copy for %s without changing checkout', (blockedFeature, title) => {
+  mockLocale = 'zh-Hans';
+  const screen = renderPaywall({ blockedFeature });
+  expect(screen.getByTestId('paywall-title').props.children).toBe(title);
+  expect(screen.queryByText(/花名册|main/)).toBeNull();
+  expect(screen.getByTestId('paywall-billing').props.children).toContain('$24.00');
+  expect(screen.getByText('折合 $2.00 / 月')).toBeTruthy();
+  expect(screen.getByText(blockedFeature === 'agents' ? '升级，使用更多 Agent' : '升级到 Pro')).toBeTruthy();
+  fireEvent.press(screen.getByTestId('paywall-purchase'));
+  expect(callbacks.onPurchase).toHaveBeenCalled();
+});
+
+it.each([667, 844, 1100])('gives spare height to the artwork at %s without separating benefits and checkout', height => {
+  mockDimensions = { width: 390, height, scale: 3, fontScale: 1 };
+  const screen = renderPaywall();
+  expect(StyleSheet.flatten(screen.getByTestId('paywall-benefits-scroll').props.style)).toMatchObject({ flexGrow: 1, paddingBottom: 32 });
+  const hero = StyleSheet.flatten(screen.getByTestId('paywall-hero-generic').props.style);
+  expect(hero.flexGrow).toBe(1);
+  expect(hero.minHeight).toBeGreaterThanOrEqual(104);
+  expect(hero.height).toBeUndefined();
+  expect(StyleSheet.flatten(screen.getByTestId('paywall-footer').props.style).marginTop).toBeUndefined();
+  expect(screen.getByTestId('paywall-layout-scroll').props.scrollEnabled).not.toBe(false);
 });

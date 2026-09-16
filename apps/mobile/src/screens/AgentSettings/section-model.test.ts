@@ -96,13 +96,13 @@ describe('AgentSettings section model', () => {
       'Models',
       'Skills',
       'Cron jobs',
-      'Files',
+      'Memory',
       'Usage',
       'Connection',
       'OpenClaw management',
       'Tools',
       'Channels & devices',
-      'Logs',
+      'OpenClaw logs',
     ]);
     expect(actions('models')).toEqual([
       'models.default',
@@ -210,7 +210,9 @@ describe('AgentSettings section model', () => {
 
   it('applies section and row Pro gates from descriptors', () => {
     expect(isAgentSettingsSectionLocked('openclaw', false)).toBe(false);
-    expect(isAgentSettingsSectionLocked('logs', false)).toBe(true);
+    // Logs opens for everyone; the live tail is gated inside the page.
+    expect(isAgentSettingsSectionLocked('logs', false)).toBe(false);
+    expect(isAgentSettingsSectionLocked('logs', false, true)).toBe(true);
     expect(isAgentSettingsSectionLocked('models', false)).toBe(false);
 
     const openclaw = model('openclaw', { isPro: false });

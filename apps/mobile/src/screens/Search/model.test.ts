@@ -80,7 +80,6 @@ function rosterGroup(
       agent: descriptorAgent,
       sessions,
       preview: 'Launch preview',
-      updatedAt: sessions[0]?.updatedAt ?? null,
       lastActivityAt: sessions[0]?.updatedAt ?? null,
       unreadCount: 0,
       hasUnread: false,

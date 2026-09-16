@@ -23,8 +23,7 @@ type ApprovalRosterGroup = Readonly<{
 
 export type StartupNavigationAction =
   | Readonly<{ type: 'wait' | 'stay' }>
-  | Readonly<{ type: 'show_launch_paywall' }>
-  | Readonly<{ type: 'show_three_point_zero_intro' }>
+  | Readonly<{ type: 'show_update_announcement' }>
   | Readonly<{ type: 'open_thread'; target: StartupThreadTarget; skipLaunchPaywall: boolean }>;
 
 export type ResolveStartupNavigationInput = Readonly<{
@@ -36,13 +35,15 @@ export type ResolveStartupNavigationInput = Readonly<{
   launchPaywallShownThisProcess: boolean;
   pendingAutoOpen: StartupThreadTarget | null;
   pendingApproval: StartupThreadTarget | null;
-  threePointZeroIntroPending?: boolean;
+  /** `null` while the one-time cache is still being read; `true` shows the What's New sheet. */
+  updateAnnouncementPending?: boolean | null;
 }>;
 
 /**
  * Resolves the only root-level startup decision. Pending approvals pre-empt
- * subscription UI; all other automatic navigation waits for backend-ready so
- * failed connections remain visibly recoverable on the roster.
+ * every launch surface; the What's New sheet comes next and consumes the
+ * once-per-process launch opportunity; all other automatic navigation waits
+ * for backend-ready so failed connections remain visibly recoverable on the roster.
  */
 export function resolveStartupNavigation(
   input: ResolveStartupNavigationInput,
@@ -73,6 +74,9 @@ export function resolveStartupNavigation(
   }
 
   if (input.subscriptionLoading) return { type: 'wait' };
+
+  if (input.updateAnnouncementPending === null) return { type: 'wait' };
+  if (input.updateAnnouncementPending) return { type: 'show_update_announcement' };
 
   if (input.pendingAutoOpen) {
     return {

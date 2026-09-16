@@ -1,6 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ChatCacheService, CachedSessionMeta } from "./chat-cache";
 import { UiMessage } from "../types/chat";
+import { DEFAULT_GATEWAY_HISTORY_CACHE, mergeGatewayHistory } from "../connection/adapters/gateway-history";
+import { stableMessageId } from "../utils/chat-message";
 
 const INDEX_KEY = "clawket.chatCache.index.v2";
 
@@ -82,6 +84,48 @@ function makeMsg(overrides: Partial<UiMessage> = {}): UiMessage {
 
 describe("ChatCacheService", () => {
   describe("saveMessages + getMessages", () => {
+    it("uses projected identity when a legacy Gateway renumbers history-page fallback IDs", async () => {
+      const scope = { gatewayConfigId: "gw1", agentId: "main", sessionKey: "agent:main:main" };
+      const remote = [{ id: `${scope.sessionKey}:history:130000:15`, role: "assistant" as const, text: "Finished", timestampMs: 130_000 }];
+      await ChatCacheService.saveMessages(scope, [{
+        id: stableMessageId("assistant", 130_000, "Finished"),
+        historyMessageId: `${scope.sessionKey}:history:130000:5`,
+        role: "assistant", text: "Finished", timestampMs: 150_000,
+      }]);
+      expect(mergeGatewayHistory(remote, await DEFAULT_GATEWAY_HISTORY_CACHE.load("gw1", "main", scope.sessionKey, 50)))
+        .toEqual(remote);
+    });
+
+    it("round-trips canonical history identity across cold loads without duplicating tool replies", async () => {
+      const scope = { gatewayConfigId: "gw1", agentId: "main", sessionKey: "agent:main:main" };
+      const remote = [
+        { id: "question", role: "user" as const, text: "Check", timestampMs: 100_000 },
+        { id: "paragraph", role: "assistant" as const, text: "Checking now", timestampMs: 110_000 },
+        { id: "tool", role: "tool" as const, text: "", timestampMs: 120_000,
+          tool: { name: "read", callId: "call-1", status: "success" as const } },
+        { id: "answer", role: "assistant" as const, text: "Finished", timestampMs: 130_000 },
+        { id: "next-question", role: "user" as const, text: "Again", timestampMs: 140_000 },
+        { id: "next-answer", role: "assistant" as const, text: "Finished", timestampMs: 150_000 },
+      ];
+      // Display timestamps/IDs survive live reconciliation; source IDs must survive storage too.
+      const rows: UiMessage[] = remote.map((message, index) => ({
+        id: message.tool ? "toolresult_call-1" : `h_local_${index}`,
+        historyMessageId: message.tool ? undefined : message.id,
+        role: message.role, text: message.text, timestampMs: message.timestampMs + 90_000,
+        toolName: message.tool?.name, toolStatus: message.tool?.status,
+      }));
+      await ChatCacheService.saveMessages(scope, rows);
+      const cached = await DEFAULT_GATEWAY_HISTORY_CACHE.load("gw1", "main", scope.sessionKey, 50);
+      expect(cached.filter(message => message.role === "assistant").map(message => message.id))
+        .toEqual(["paragraph", "answer", "next-answer"]);
+      expect(mergeGatewayHistory(remote, cached)).toEqual(remote);
+      // A second restart remains stable, including two intentional equal replies.
+      await ChatCacheService.saveMessages(scope, rows);
+      expect(mergeGatewayHistory(remote, await DEFAULT_GATEWAY_HISTORY_CACHE.load("gw1", "main", scope.sessionKey, 50)))
+        .toEqual(remote);
+      expect(mergeGatewayHistory([], cached)).toEqual(cached);
+    });
+
     it("preserves uncertain delivery when restoring the local cache", async () => {
       await ChatCacheService.saveMessages(
         { gatewayConfigId: "gw1", agentId: "agent1", sessionKey: "agent:agent1:main" },

@@ -97,13 +97,22 @@ jest.mock('../../../components/ui/Sheet', () => {
   const ReactRuntime = require('react');
   const { View } = require('react-native');
   return {
-    Sheet: ({ children, headerRight, testID, visible, onAfterClose }: {
+    Sheet: ({ children, footer, headerRight, testID, visible, onAfterClose }: {
       children: React.ReactNode;
+      footer?: React.ReactNode;
       headerRight?: React.ReactNode;
       testID?: string;
       visible: boolean;
       onAfterClose?: () => void;
-    }) => visible ? ReactRuntime.createElement(View, { testID, onAfterClose }, headerRight, children) : null,
+    }) => (visible
+      ? ReactRuntime.createElement(
+        View,
+        { testID, onAfterClose },
+        headerRight,
+        children,
+        footer ? ReactRuntime.createElement(View, { testID: `${testID}-footer` }, footer) : null,
+      )
+      : null),
   };
 });
 
@@ -235,53 +244,35 @@ describe('ThreadAddSheet', () => {
     expect(view.queryAllByTestId('sheet-divider')).toHaveLength(0);
   });
 
-  it('asks for photo access inline and only falls back to the system picker when refused', async () => {
-    mockRequest.mockResolvedValueOnce('denied');
+  it.each(['granted', 'denied'])(
+    'dismisses its window before native photo authorization (%s)', async (access) => {
+      mockRequest.mockResolvedValueOnce(access);
+      const { view, props } = renderSheet();
+      act(() => { jest.advanceTimersByTime(400); });
+      fireEvent.press(view.getByTestId('thread-add-photo-library'));
+      fireEvent.press(view.getByTestId('thread-add-photo-library'));
+      expect(props.onClose).toHaveBeenCalledTimes(1);
+      expect(mockRequest).not.toHaveBeenCalled();
+      await act(async () => {
+        fireEvent(view.getByTestId('thread-add-sheet'), 'afterClose');
+        await Promise.resolve();
+      });
+      expect(mockRequest).toHaveBeenCalledTimes(1);
+      // Limited access can still have a native selector onscreen even though
+      // authorization resolved; never stack a second picker over that flow.
+      expect(props.onPickImage).not.toHaveBeenCalled();
+    },
+  );
+
+  it('offers the system picker when reopening after permission was denied', () => {
+    mockRecentPhotos.access = 'denied';
     const { view, props } = renderSheet();
     act(() => { jest.advanceTimersByTime(400); });
-
-    await act(async () => {
-      fireEvent.press(view.getByTestId('thread-add-photo-library'));
-      await Promise.resolve();
-    });
-    expect(mockRequest).toHaveBeenCalledTimes(1);
-    expect(props.onClose).toHaveBeenCalledTimes(1);
+    fireEvent.press(view.getByTestId('thread-add-photo-library'));
+    expect(mockRequest).not.toHaveBeenCalled();
+    expect(props.onPickImage).not.toHaveBeenCalled();
     fireEvent(view.getByTestId('thread-add-sheet'), 'afterClose');
     expect(props.onPickImage).toHaveBeenCalledTimes(1);
-
-    mockRequest.mockReset();
-    mockRequest.mockResolvedValueOnce('granted');
-    const second = renderSheet();
-    act(() => { jest.advanceTimersByTime(400); });
-    await act(async () => {
-      fireEvent.press(second.view.getByTestId('thread-add-photo-library'));
-      await Promise.resolve();
-    });
-    expect(second.props.onClose).not.toHaveBeenCalled();
-    expect(second.props.onPickImage).not.toHaveBeenCalled();
-  });
-
-  it('drops a permission fallback that resolves after the sheet was closed externally', async () => {
-    let resolveRequest: (access: string) => void = () => undefined;
-    mockRequest.mockImplementationOnce(() => new Promise((resolve) => { resolveRequest = resolve; }));
-    const { view, props, rerender } = renderSheet();
-    act(() => { jest.advanceTimersByTime(400); });
-
-    fireEvent.press(view.getByTestId('thread-add-photo-library'));
-    rerender({ visible: false });
-    await act(async () => {
-      resolveRequest('denied');
-      await Promise.resolve();
-    });
-    expect(props.onClose).not.toHaveBeenCalled();
-
-    rerender({ visible: true });
-    act(() => { jest.advanceTimersByTime(400); });
-    fireEvent.press(view.getByTestId('thread-add-skills'));
-    expect(props.onClose).toHaveBeenCalledTimes(1);
-    fireEvent(view.getByTestId('thread-add-sheet'), 'afterClose');
-    expect(props.onOpenSkills).toHaveBeenCalledTimes(1);
-    expect(props.onPickImage).not.toHaveBeenCalled();
   });
 
   it('keeps a skeleton strip until the sheet has risen and access is known', () => {
@@ -316,6 +307,9 @@ describe('ThreadAddSheet', () => {
     expect(view.getByTestId('thread-add-photo-a-ordinal').props.children.props.children).toBe(2);
     expect(view.getByTestId('thread-add-photo-c').props.disabled).toBe(true);
     expect(view.getByText('Attach 2 photos')).toBeTruthy();
+    // The button lives in the Sheet's pinned footer slot, not in the scrolling body,
+    // so it stays visible at the resting 62% detent.
+    expect(view.getByTestId('thread-add-sheet-footer').findByProps({ testID: 'thread-add-attach-selected' })).toBeTruthy();
 
     fireEvent.press(view.getByTestId('thread-add-photo-b'));
     expect(view.queryByTestId('thread-add-photo-b-ordinal')).toBeNull();

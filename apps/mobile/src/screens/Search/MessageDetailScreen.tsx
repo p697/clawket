@@ -6,11 +6,12 @@ import {
   View,
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { ChevronLeft } from 'lucide-react-native';
+import { ChevronLeft } from '../../components/ui/DirectionalIcon';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Banner } from '../../components/ui/Banner';
+import { ConnectionStatusPill } from '../../components/ui/ConnectionStatusPill';
 import { Button } from '../../components/ui/Button';
 import { FloatingButton } from '../../components/ui/FloatingButton';
 import { Skeleton } from '../../components/ui/Skeleton';
@@ -60,6 +61,7 @@ function resolveMessageDetailState(input: Readonly<{
 function MessageDetailView({
   state,
   detail,
+  reconnecting = false,
   topInset,
   bottomInset,
   onBack,
@@ -69,6 +71,8 @@ function MessageDetailView({
 }: Readonly<{
   state: MessageDetailState;
   detail: SearchMessageDetail | null;
+  /** The runtime's foreground grace window is open: show quiet reconnecting instead of offline. */
+  reconnecting?: boolean;
   topInset: number;
   bottomInset: number;
   onBack: () => void;
@@ -80,6 +84,31 @@ function MessageDetailView({
   const { theme } = useAppTheme();
   const headerInsets = useMemo(() => ({ paddingTop: topInset + Space.sm }), [topInset]);
   const contentInsets = useMemo(() => ({ paddingBottom: bottomInset + Space.xl }), [bottomInset]);
+  // The title yields its slot to connection state so the header never grows.
+  const connectionStatus = state === 'offline' && reconnecting ? (
+    <ConnectionStatusPill
+      testID="message-detail-reconnecting"
+      placement="inline"
+      status="reconnecting"
+      message={t('Reconnecting…')}
+    />
+  ) : state === 'offline' ? (
+    <ConnectionStatusPill
+      testID="message-detail-offline"
+      placement="inline"
+      status="offline"
+      message={t('Offline · showing cached message')}
+    />
+  ) : state === 'error' ? (
+    <ConnectionStatusPill
+      testID="message-detail-error"
+      placement="inline"
+      status="error"
+      message={t('Message unavailable')}
+      actionLabel={t('Retry')}
+      onAction={onRetry}
+    />
+  ) : null;
 
   return (
     <View testID="message-detail-view" style={[styles.screen, { backgroundColor: theme.colors.canvas }]}>
@@ -90,9 +119,13 @@ function MessageDetailView({
           accessibilityLabel={t('Back')}
           onPress={onBack}
         />
-        <Text style={[styles.headerTitle, { color: theme.colors.ink }]} numberOfLines={1}>
-          {t('Message details')}
-        </Text>
+        {connectionStatus ? (
+          <View testID="message-detail-header-status" style={styles.headerStatus}>{connectionStatus}</View>
+        ) : (
+          <Text style={[styles.headerTitle, { color: theme.colors.ink }]} numberOfLines={1}>
+            {t('Message details')}
+          </Text>
+        )}
         <View style={styles.headerSlot} />
       </View>
       <ScrollView contentContainerStyle={[styles.detailContent, contentInsets]}>
@@ -102,21 +135,6 @@ function MessageDetailView({
             message={t('Message details require Pro')}
             actionLabel={t('View Pro')}
             onAction={onOpenPaywall}
-          />
-        ) : null}
-        {state === 'error' ? (
-          <Banner
-            testID="message-detail-error"
-            tone="bad"
-            message={t('Message unavailable')}
-            actionLabel={t('Retry')}
-            onAction={onRetry}
-          />
-        ) : null}
-        {state === 'offline' ? (
-          <Banner
-            testID="message-detail-offline"
-            message={t('Offline · showing cached message')}
           />
         ) : null}
         {state === 'loading' ? (
@@ -227,6 +245,7 @@ export function MessageDetailScreen({
     <MessageDetailView
       state={state}
       detail={detail}
+      reconnecting={runtime.recovering === true}
       topInset={insets.top}
       bottomInset={insets.bottom}
       onBack={() => navigation.goBack()}
@@ -259,6 +278,12 @@ const styles = StyleSheet.create({
     fontSize: FontSize.body,
     lineHeight: LineHeight.body,
     fontWeight: FontWeight.semibold,
+  },
+  headerStatus: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerSlot: {
     width: ControlSize.floatingButton,

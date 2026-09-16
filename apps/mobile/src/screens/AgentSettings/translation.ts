@@ -16,7 +16,6 @@ export function translateAgentSettingsKey(
   if (key === 'Identity') return t('Identity', { ns: 'config' });
   if (key === 'Name and avatar') return t('Name and avatar', { ns: 'config' });
   if (key === 'Read only') return t('Read only', { ns: 'config' });
-  if (key === 'Persona and memory') return t('Persona and memory', { ns: 'config' });
   if (key === 'Models') return t('Models', { ns: 'common' });
   if (key === 'Default model') return t('Default model', { ns: 'config' });
   if (key === 'Thinking level') return t('Thinking level', { ns: 'config' });
@@ -31,6 +30,7 @@ export function translateAgentSettingsKey(
   if (key === 'Heartbeat') return t('Heartbeat', { ns: 'settings' });
   if (key === 'New cron job') return t('New cron job', { ns: 'config' });
   if (key === 'Files') return t('Files', { ns: 'common' });
+  if (key === 'Memory') return t('Memory', { ns: 'common' });
   if (key === 'Agent files') return t('Agent files', { ns: 'config' });
   if (key === 'Edit files') return t('Edit files', { ns: 'config' });
   if (key === 'Usage') return t('Usage', { ns: 'common' });
@@ -49,7 +49,7 @@ export function translateAgentSettingsKey(
   if (key === 'Configuration') return t('Configuration', { ns: 'settings' });
   if (key === 'Permissions') return t('Permissions', { ns: 'config' });
   if (key === 'Diagnostics') return t('Diagnostics', { ns: 'config' });
-  if (key === 'Backups') return t('Backups', { ns: 'config' });
+  if (key === 'Back up OpenClaw config') return t('Back up OpenClaw config', { ns: 'config' });
   if (key === 'Tools') return t('Tools', { ns: 'common' });
   if (key === 'Tool access') return t('Tool access', { ns: 'config' });
   if (key === 'Channels & devices') return t('Channels & devices', { ns: 'common' });
@@ -57,6 +57,7 @@ export function translateAgentSettingsKey(
   if (key === 'Devices') return t('Devices', { ns: 'settings' });
   if (key === 'Nodes') return t('Nodes', { ns: 'settings' });
   if (key === 'Logs') return t('Logs', { ns: 'common' });
+  if (key === 'OpenClaw logs') return t('OpenClaw logs', { ns: 'settings' });
   if (key === 'Gateway logs') return t('Gateway logs', { ns: 'config' });
   if (key === 'Loading...') return t('Loading...', { ns: 'common' });
   if (key === 'Not supported by this backend') {

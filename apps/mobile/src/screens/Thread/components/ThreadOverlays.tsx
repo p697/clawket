@@ -1,5 +1,4 @@
 import React from 'react';
-import type { AppUpdateAnnouncement } from '../../../features/app-updates/releases';
 import type { UiMessage } from '../../../types/chat';
 import type { ThinkingLevel } from '../../../utils/gateway-settings';
 import type { ModelInfo } from '../../../components/chat/ModelPickerModal';
@@ -11,7 +10,6 @@ import { ModelPickerModal } from '../../../components/chat/ModelPickerModal';
 import { ThinkingLevelPickerModal } from '../../../components/chat/ThinkingLevelPickerModal';
 import { CommandsSheet } from '../../../components/chat/CommandsSheet';
 import type { SlashCommand } from '../../../data/slash-commands';
-import { AppUpdateAnnouncementSheet } from './AppUpdateAnnouncementSheet';
 import { ThreadAddSheet, type ThreadAddSheetProps } from './ThreadAddSheet';
 
 type PreviewState = Readonly<{
@@ -85,14 +83,6 @@ export type ThreadOverlaysProps = Readonly<{
     onClose: () => void;
     onSelect: (level: string) => void;
   }>;
-  announcement: Readonly<{
-    visible: boolean;
-    value: AppUpdateAnnouncement | null;
-    debugMode: boolean;
-    currentVersion: string;
-    onClose: () => void;
-    onEntryPress: (entry: AppUpdateAnnouncement['entries'][number]) => void;
-  }>;
 }>;
 
 export function ThreadOverlays({
@@ -122,7 +112,6 @@ export function ThreadOverlays({
   commandPicker,
   commandsSheet,
   thinkingPicker,
-  announcement,
 }: ThreadOverlaysProps): React.JSX.Element {
   return (
     <>
@@ -200,14 +189,6 @@ export function ThreadOverlays({
         current={thinkingPicker.current}
         options={thinkingPicker.options}
         onSelect={thinkingPicker.onSelect}
-      />
-      <AppUpdateAnnouncementSheet
-        visible={announcement.visible}
-        announcement={announcement.value}
-        debugMode={announcement.debugMode}
-        currentVersion={announcement.currentVersion}
-        onClose={announcement.onClose}
-        onEntryPress={announcement.onEntryPress}
       />
     </>
   );

@@ -45,6 +45,7 @@
     "run": "node scripts/run-command.mjs run"
   },
   "dependencies": {
+    "https-proxy-agent": "^7.0.6",
     "qrcode": "^1.5.4",
     "qrcode-terminal": "^0.12.0",
     "tweetnacl": "^1.0.3",

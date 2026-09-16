@@ -1,6 +1,10 @@
+import { mkdtempSync, writeFileSync, symlinkSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   listPairPrerequisiteFailures,
+  resolveDiagnosticScriptPath,
   normalizeBridgeCapabilities,
   parseHermesBridgeHealth,
   summarizeDoctorReport,
@@ -180,3 +184,15 @@ function buildReport(overrides: Partial<CliDoctorReport> = {}): CliDoctorReport 
     ...overrides,
   };
 }
+
+it('recognizes the installed CLI target when doctor is invoked through its bin symlink', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'clawket-diagnostics-'));
+  try {
+    const target = join(dir, 'index.js');
+    const entry = join(dir, 'clawket');
+    writeFileSync(target, '');
+    symlinkSync(target, entry);
+    expect(resolveDiagnosticScriptPath(entry)).toBe(resolveDiagnosticScriptPath(target));
+    expect(resolveDiagnosticScriptPath(join(dir, 'missing'))).toBe(join(dir, 'missing'));
+  } finally { rmSync(dir, { recursive: true }); }
+});

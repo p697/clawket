@@ -45,7 +45,8 @@ export type RootStackParamList = {
     connectionId: string;
     agentId: string;
     section: AgentSettingsSection;
-    action?: 'create-agent' | 'create-cron';
+    action?: 'create-agent' | 'create-cron' | 'edit-cron' | 'discover-skills';
+    cronJobId?: string;
     /** Draft prompt carried from the Thread composer into the new cron job editor. */
     cronPrompt?: string;
   };
@@ -56,7 +57,7 @@ export type RootStackParamList = {
   AccountSettingsSection: { section: AccountSettingsSection; connectionId?: string };
   ReleaseNotes: undefined;
   ChatAppearance: undefined;
-  HelpCenter: { community?: 'wecom' } | undefined;
+  HelpCenter: undefined;
   Search: { query?: string } | undefined;
   MessageDetail: {
     connectionId: string;

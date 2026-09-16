@@ -49,6 +49,12 @@ export type UiApproval =
 
 export type UiMessage = {
   id: string;
+  /** Original history identity, independent of local row identity/timestamp. */
+  historyMessageId?: string;
+  /** Local presentation identity; never used as a backend/message lookup ID. */
+  renderKey?: string;
+  /** Completed live rows retain their order until the same turn is reconciled. */
+  presentationRunId?: string;
   role: 'user' | 'assistant' | 'system' | 'tool';
   text: string;
   userSkill?: {

@@ -58,6 +58,7 @@ jest.mock('../services/pro-subscription', () => ({
     packages.find((item) => item.packageType === 'ANNUAL') ?? packages[0] ?? null
   ),
   selectDisplayedRevenueCatPackage: jest.fn(() => null),
+  isRevenueCatPackagePurchaseLocked: jest.fn(() => false),
 }));
 
 jest.mock('../services/storage', () => ({
@@ -159,6 +160,34 @@ describe('ProPaywallProvider state machine', () => {
     jest.useRealTimers();
   });
 
+  it('lets an existing member explicitly open plans while feature gates remain satisfied', async () => {
+    mockGetCustomerInfo.mockResolvedValue({ customerInfo: {}, snapshot: PRO_SNAPSHOT });
+    await renderProvider();
+    act(() => { expect(current?.showPaywall('agents')).toBe(false); });
+    act(() => { expect(current?.showPaywall('settingsMembershipPreview')).toBe(true); });
+    expect(current?.visible).toBe(true);
+    expect(current?.previewOnly).toBe(false);
+  });
+
+  it.each([
+    ['scheduled', false, 'planChangeScheduled'],
+    ['activated', true, 'lifetimeManageSubscription'],
+    ['unconfirmed', false, 'purchaseUnconfirmed'],
+  ] as const)('keeps member checkout feedback reviewable for %s', async (outcome, requiresSubscriptionManagement, statusCode) => {
+    mockGetCustomerInfo.mockResolvedValue({ customerInfo: {}, snapshot: PRO_SNAPSHOT });
+    mockPurchasePro.mockResolvedValue({ customerInfo: {}, snapshot: PRO_SNAPSHOT, outcome, requiresSubscriptionManagement });
+    await renderProvider();
+    await act(async () => { current?.showPaywall('settingsMembershipPreview'); });
+    await act(async () => { await current?.purchasePro(); });
+    expect(current?.isPro).toBe(true);
+    expect(current?.visible).toBe(true);
+    expect(current?.paywallPhase).toBe('complete');
+    expect(current?.statusCode).toBe(statusCode);
+    expect(current?.purchasePending).toBe(false);
+    act(() => { current?.hidePaywall(); });
+    expect(current?.visible).toBe(false);
+  });
+
   it.each([false, true])('settles initial loading when the SDK listener wins the refresh race (Pro=%s)', async (isActive) => {
     const pending = deferred<{ customerInfo: object; snapshot: ProSubscriptionSnapshot }>();
     mockGetCustomerInfo.mockReturnValueOnce(pending.promise);
@@ -201,7 +230,7 @@ describe('ProPaywallProvider state machine', () => {
       jest.advanceTimersByTime(PAYWALL_SUCCESS_DISPLAY_MS);
       await purchase;
     });
-    await expect(purchase).resolves.toEqual({ success: true, reason: null });
+    await expect(purchase).resolves.toEqual({ success: true, reason: null, outcome: 'activated' });
     expect(current?.visible).toBe(false);
   });
 
@@ -574,28 +603,4 @@ describe('ProPaywallProvider state machine', () => {
     expect(current?.failureOperation).toBe('purchase');
   });
 
-  it('exposes and completes the reusable Clawket 3.0 introduction mode', async () => {
-    await renderProvider();
-    act(() => expect(current?.showThreePointZeroIntro()).toBe(true));
-    expect(current?.paywallMode).toBe('threePointZeroIntro');
-    expect(current?.visible).toBe(true);
-    act(() => current?.completeThreePointZeroIntro());
-    expect(current?.visible).toBe(false);
-  });
-
-  it('keeps the 3.0 introduction retryable when another paywall owns presentation', async () => {
-    await renderProvider();
-    act(() => {
-      expect(current?.showPaywall('agents')).toBe(true);
-      expect(current?.showThreePointZeroIntro()).toBe(false);
-    });
-    expect(current?.paywallMode).toBe('purchase');
-
-    act(() => current?.hidePaywall());
-    act(() => {
-      expect(current?.showThreePointZeroIntro()).toBe(true);
-      expect(current?.showThreePointZeroIntro()).toBe(false);
-    });
-    expect(current?.paywallMode).toBe('threePointZeroIntro');
-  });
 });

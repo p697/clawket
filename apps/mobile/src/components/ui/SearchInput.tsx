@@ -31,6 +31,7 @@ export type SearchInputProps = {
   onClear?: () => void;
   autoFocus?: boolean;
   inSheet?: boolean;
+  appearance?: 'floating' | 'quiet';
   testID?: string;
 };
 
@@ -43,13 +44,14 @@ export function SearchInput({
   onClear,
   autoFocus = false,
   inSheet = false,
+  appearance = 'floating',
   testID,
 }: SearchInputProps): React.JSX.Element {
   const { theme } = useAppTheme();
   const { t } = useTranslation('common');
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
   const Input = inSheet ? CompositionSafeBottomSheetTextInput : CompositionSafeTextInput;
-  const chrome = inSheet
+  const chrome = inSheet || appearance === 'quiet'
     ? { backgroundColor: theme.colors.surface }
     : createFloatingSurfaceStyle(theme.colors, theme.scheme);
 

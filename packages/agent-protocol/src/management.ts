@@ -48,6 +48,82 @@ export interface ModelSelectionWriteResult extends ModelSelectionState {
   scope: 'global' | 'session';
 }
 
+/** A catalog entry plus its Gateway config status; `modelManage` backends only. */
+export interface ModelCatalogModel extends ModelInfo {
+  /** Declared under `models.providers.<slug>.models[]` in Gateway config. */
+  configured: boolean;
+  /** `cost` comes from an explicit config override rather than the catalog. */
+  costOverridden: boolean;
+}
+
+export interface ModelCatalogProvider {
+  slug: string;
+  /** Declared under `models.providers` in Gateway config; only explicit providers accept cost overrides. */
+  explicit: boolean;
+  baseUrl?: string;
+  api?: string;
+  models: ModelCatalogModel[];
+}
+
+export interface ModelCatalogDefaults {
+  /** `provider/model` reference, or empty when the Gateway default is unset. */
+  primary: string;
+  fallbacks: string[];
+  thinkingDefault: string;
+}
+
+export interface ModelCatalogState {
+  defaults: ModelCatalogDefaults;
+  /** `provider/model` references, or `null` when the Gateway has no allowlist and every catalog model is usable. */
+  allowlist: string[] | null;
+  providers: ModelCatalogProvider[];
+}
+
+export interface ModelAllowlistChange {
+  provider: string;
+  modelId: string;
+  enabled: boolean;
+}
+
+export interface ModelCatalogWrite {
+  defaults?: ModelCatalogDefaults;
+  /** Desired state per model; unchanged entries are ignored. */
+  allowlist?: ModelAllowlistChange[];
+}
+
+export interface ModelCatalogModelRef {
+  provider: string;
+  modelId: string;
+}
+
+export interface ModelCatalogAddInput extends ModelCatalogModelRef {
+  modelName: string;
+}
+
+export interface ModelDeletionBlock {
+  path: string;
+  reason: string;
+  detail?: string;
+}
+
+export interface ModelDeletionPreview {
+  canDelete: boolean;
+  blocks: ModelDeletionBlock[];
+  cleanupCount: number;
+}
+
+export interface ModelCost {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+}
+
+export interface ModelCostWrite extends ModelCatalogModelRef {
+  modelName: string;
+  cost: ModelCost;
+}
+
 export type ThinkingLevel =
   | 'off'
   | 'minimal'
@@ -342,6 +418,7 @@ export interface AgentPatch {
   name?: string;
   workspace?: string;
   model?: string;
+  emoji?: string;
   avatar?: string;
 }
 
@@ -709,6 +786,13 @@ export type ModelsOperations = Partial<{
     getSelection(sessionKey?: string | null): Promise<ModelSelectionState>;
     setSelection(params: ModelSelectionWrite): Promise<ModelSelectionWriteResult>;
     listThinkingLevels(): ThinkingLevel[];
+    /** `modelManage` refinement: Gateway config catalog, defaults and allowlist. */
+    getCatalog(): Promise<ModelCatalogState>;
+    saveCatalog(write: ModelCatalogWrite): Promise<void>;
+    addModel(input: ModelCatalogAddInput): Promise<void>;
+    inspectDeletion(ref: ModelCatalogModelRef): Promise<ModelDeletionPreview>;
+    deleteModel(ref: ModelCatalogModelRef): Promise<void>;
+    setCost(write: ModelCostWrite): Promise<void>;
 }>;
 
 export type SkillsOperations = Partial<{

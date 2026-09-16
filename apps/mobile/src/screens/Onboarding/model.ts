@@ -18,6 +18,27 @@ const LEGACY_PAIRING_CODE = /^[ABCDEFGHJKMNPQRSTVWXYZ2-9]{12}$/;
 
 export type PairableBackendKind = Extract<BackendKind, 'openclaw' | 'hermes' | 'local-model'>;
 
+/** Model servers the local-model Bridge can discover; mirrors the CLI `--engine` values. */
+export type LocalModelEngine = 'llamacpp' | 'ollama' | 'openai-compatible';
+
+export const LOCAL_MODEL_ENGINES: ReadonlyArray<LocalModelEngine> = ['llamacpp', 'ollama', 'openai-compatible'];
+
+/**
+ * The CLI defaults to llama.cpp on port 8080, so other servers need their
+ * engine and address spelled out; Ollama listens on 11434, LM Studio on 1234.
+ */
+export function buildLocalModelPairingCommand(engine: LocalModelEngine): string {
+  const base = `${PAIRING_COMMAND} --backend local-model`;
+  switch (engine) {
+    case 'ollama':
+      return `${base} --engine ollama --base-url http://127.0.0.1:11434 --preview`;
+    case 'openai-compatible':
+      return `${base} --engine openai-compatible --base-url http://127.0.0.1:1234 --preview`;
+    default:
+      return `${base} --preview`;
+  }
+}
+
 export type PairingSubmission = Readonly<{
   backendKind: PairableBackendKind;
   transportKind: Extract<TransportKind, 'relay'>;

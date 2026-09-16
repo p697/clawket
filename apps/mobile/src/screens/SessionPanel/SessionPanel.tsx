@@ -15,10 +15,10 @@ import {
 import {
   Check,
   ChevronDown,
-  ChevronRight,
   Pin,
   Search,
 } from 'lucide-react-native';
+import { ChevronRight } from '../../components/ui/DirectionalIcon';
 import { BottomSheetFlatList } from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import type { AgentDescriptor, Capabilities } from '@clawket/agent-protocol';
@@ -26,6 +26,7 @@ import type { AgentDescriptor, Capabilities } from '@clawket/agent-protocol';
 import { getConnectionRuntime, useConnections, useRoster } from '../../connection';
 import { AgentAvatar, AvatarWorkingBadge } from '../../components/ui/AgentAvatar';
 import { Banner } from '../../components/ui/Banner';
+import { ConnectionStatusPill } from '../../components/ui/ConnectionStatusPill';
 import { Button } from '../../components/ui/Button';
 import { FloatingButton } from '../../components/ui/FloatingButton';
 import { FormTextInput } from '../../components/ui/FormTextInput';
@@ -104,6 +105,8 @@ export type SessionPanelViewProps = Readonly<{
     'sessionRename' | 'sessionReset' | 'sessionDelete'
   >;
   bridgeOutdated?: boolean;
+  /** The runtime's foreground grace window is open: show quiet reconnecting instead of offline. */
+  reconnecting?: boolean;
   onClose: () => void;
   onSelectSession: (row: SessionPanelRow) => MaybePromise;
   onSessionAction?: SessionPanelActionHandler;
@@ -200,6 +203,22 @@ function SessionRow({
   const actions = availableSessionActions(row, capabilities);
   const title = rowTitle(row, t);
   const showUnread = row.unread && !selected && row.attention === null;
+  // One quiet 6-point signal on the preview line: attention wins over unread.
+  const signal = row.attention !== null
+    ? (
+      <View
+        testID={`session-panel-row-${row.id}-attention`}
+        style={[styles.signalDot, { backgroundColor: theme.colors.bad }]}
+      />
+    )
+    : showUnread
+      ? (
+        <View
+          testID={`session-panel-row-${row.id}-unread`}
+          style={[styles.signalDot, { backgroundColor: theme.colors.ink }]}
+        />
+      )
+      : null;
 
   return (
     <Pressable
@@ -228,34 +247,28 @@ function SessionRow({
           <Text style={[styles.rowTitle, { color: theme.colors.ink }]} numberOfLines={1}>
             {title}
           </Text>
-        </View>
-        {row.preview ? (
-          <Text
-            testID={`session-panel-row-${row.id}-preview`}
-            style={[
-              styles.rowPreview,
-              { color: showUnread ? theme.colors.ink : theme.colors.inkSecondary },
-            ]}
-            numberOfLines={1}
-          >
-            {row.preview}
+          <Text style={[styles.rowTime, { color: theme.colors.inkTertiary }]} numberOfLines={1}>
+            {relativeTime(row.updatedAt)}
           </Text>
-        ) : null}
-      </View>
-      <View style={styles.trailing}>
-        <Text style={[styles.rowTime, { color: theme.colors.inkTertiary }]} numberOfLines={1}>
-          {relativeTime(row.updatedAt)}
-        </Text>
-        {row.attention !== null ? (
-          <View
-            testID={`session-panel-row-${row.id}-attention`}
-            style={[styles.signalDot, { backgroundColor: theme.colors.bad }]}
-          />
-        ) : showUnread ? (
-          <View
-            testID={`session-panel-row-${row.id}-unread`}
-            style={[styles.signalDot, { backgroundColor: theme.colors.ink }]}
-          />
+        </View>
+        {row.preview || signal ? (
+          <View style={styles.previewRow}>
+            {row.preview ? (
+              <Text
+                testID={`session-panel-row-${row.id}-preview`}
+                style={[
+                  styles.rowPreview,
+                  { color: showUnread ? theme.colors.ink : theme.colors.inkSecondary },
+                ]}
+                numberOfLines={1}
+              >
+                {row.preview}
+              </Text>
+            ) : (
+              <View style={styles.previewSpacer} />
+            )}
+            {signal}
+          </View>
         ) : null}
       </View>
     </Pressable>
@@ -286,8 +299,8 @@ function SubagentsRow({
       <Text style={[styles.rowTitle, styles.copy, { color: theme.colors.ink }]} numberOfLines={1}>
         {t('Subagents')}
       </Text>
-      <Text style={[styles.rowCount, { color: theme.colors.inkSecondary }]}>{count}</Text>
-      <ChevronRight size={IconSize.md} color={theme.colors.inkTertiary} />
+      <Text style={[styles.rowCount, { color: theme.colors.inkTertiary }]}>{count}</Text>
+      <ChevronRight size={IconSize.sm} color={theme.colors.inkTertiary} />
     </Pressable>
   );
 }
@@ -331,7 +344,7 @@ function FilterChip({
           styles.chipCount,
           selected
             ? { color: theme.colors.canvas, opacity: CHIP_COUNT_SELECTED_OPACITY }
-            : { color: theme.colors.inkSecondary },
+            : { color: theme.colors.inkTertiary },
         ]}
       >
         {chip.count}
@@ -458,7 +471,7 @@ function AgentMenu({
               {selected ? (
                 <Check size={IconSize.md} color={theme.colors.ink} />
               ) : (
-                <Text style={[styles.rowCount, { color: theme.colors.inkSecondary }]}>
+                <Text style={[styles.rowCount, { color: theme.colors.inkTertiary }]}>
                   {option.count}
                 </Text>
               )}
@@ -666,6 +679,7 @@ export function SessionPanelView({
   currentSessionKey,
   capabilities,
   bridgeOutdated = false,
+  reconnecting = false,
   onClose,
   onSelectSession,
   onSessionAction,
@@ -910,21 +924,35 @@ export function SessionPanelView({
               showsVerticalScrollIndicator={false}
               ListHeaderComponent={(
                 <View>
-                  {state === 'offline' ? (
-                    <Banner
+                  {/* The sheet title slot belongs to the Agent switcher, so the capsule leads the list. */}
+                  {state === 'offline' && reconnecting ? (
+                    <ConnectionStatusPill
+                      testID="session-panel-reconnecting"
+                      placement="inline"
+                      status="reconnecting"
+                      message={t('Reconnecting…')}
+                      style={styles.statusPill}
+                    />
+                  ) : state === 'offline' ? (
+                    <ConnectionStatusPill
                       testID="session-panel-offline"
+                      placement="inline"
+                      status="offline"
                       message={t('Offline · reconnecting')}
                       actionLabel={onRetry ? t('Reconnect') : undefined}
                       onAction={onRetry ? () => { void onRetry(); } : undefined}
+                      style={styles.statusPill}
                     />
                   ) : null}
                   {state === 'error' ? (
-                    <Banner
+                    <ConnectionStatusPill
                       testID="session-panel-error"
-                      tone="bad"
+                      placement="inline"
+                      status="error"
                       message={t('Sessions unavailable')}
                       actionLabel={onRetry ? t('Retry') : undefined}
                       onAction={onRetry ? () => { void onRetry(); } : undefined}
+                      style={styles.statusPill}
                     />
                   ) : null}
                   {state === 'permission' ? (
@@ -1034,6 +1062,7 @@ export function SessionPanel({
       currentSessionKey={currentSessionKey}
       capabilities={capabilities}
       bridgeOutdated={group?.connection.bridgeOutdated === true}
+      reconnecting={connections.recovering === true}
       onClose={onClose}
       onSelectSession={onSelectSession}
       onSessionAction={onSessionAction}
@@ -1139,6 +1168,9 @@ const styles = StyleSheet.create({
     paddingBottom: Space.xxl,
     gap: Space.xs,
   },
+  statusPill: {
+    paddingVertical: Space.xs,
+  },
   sessionRow: {
     minHeight: ControlSize.settingsRow,
     paddingHorizontal: Space.sm,
@@ -1164,42 +1196,51 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
+  // Title and time share a line; preview and the signal dot share the next one, so both
+  // trailing marks stay aligned with their text whether or not the row has a preview.
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Space.xs,
   },
+  previewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space.sm,
+  },
+  previewSpacer: {
+    flex: 1,
+  },
+  // One step below the roster row (secondary / caption): the 40-point tile sets the scale.
   rowTitle: {
-    flexShrink: 1,
-    fontSize: FontSize.body,
-    lineHeight: LineHeight.body,
+    flex: 1,
+    fontSize: FontSize.secondary,
+    lineHeight: LineHeight.secondary,
     fontWeight: FontWeight.semibold,
   },
   rowPreview: {
-    fontSize: FontSize.secondary,
-    lineHeight: LineHeight.secondary,
+    flex: 1,
+    fontSize: FontSize.caption,
+    lineHeight: LineHeight.caption,
     fontWeight: FontWeight.regular,
   },
   rowCount: {
-    fontSize: FontSize.secondary,
-    lineHeight: LineHeight.secondary,
+    fontSize: FontSize.caption,
+    lineHeight: LineHeight.caption,
     fontWeight: FontWeight.regular,
     fontVariant: ['tabular-nums'],
   },
-  trailing: {
-    alignSelf: 'flex-start',
-    alignItems: 'flex-end',
-    gap: Space.xs,
-  },
   rowTime: {
+    flexShrink: 0,
+    marginLeft: Space.xs,
     fontSize: FontSize.caption,
     lineHeight: LineHeight.caption,
     fontWeight: FontWeight.regular,
     fontVariant: ['tabular-nums'],
   },
   signalDot: {
-    width: StatusSize.attention,
-    height: StatusSize.attention,
+    width: StatusSize.dot,
+    height: StatusSize.dot,
     borderRadius: Radius.full,
   },
   emptyState: {
@@ -1233,11 +1274,11 @@ const styles = StyleSheet.create({
     gap: Space.xs,
   },
   skeletonTitle: {
-    height: LineHeight.body,
+    height: LineHeight.secondary,
     width: '55%',
   },
   skeletonPreview: {
-    height: LineHeight.secondary,
+    height: LineHeight.caption,
     width: '80%',
   },
   skeletonTime: {

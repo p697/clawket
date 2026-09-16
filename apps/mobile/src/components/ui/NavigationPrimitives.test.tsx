@@ -192,6 +192,16 @@ describe.each(['light', 'dark'] as const)('%s navigation primitives', (scheme) =
     expect(onChangeText).toHaveBeenCalledWith('');
   });
 
+  it('supports flat search chrome without changing floating consumers', () => {
+    const result = render(<SearchInput testID="quiet-search" value="" onChangeText={jest.fn()} appearance="quiet" />);
+    const theme = buildTheme(scheme, scheme, builtInAccents.iceBlue);
+    const style = flattened(result.getByTestId('quiet-search').props.style);
+    expect(style.backgroundColor).toBe(theme.colors.surface);
+    expect(style.shadowOpacity).toBeUndefined();
+    expect(style.elevation).toBeUndefined();
+    expect(style.borderWidth).toBeUndefined();
+  });
+
   it('uses a canonical 44pt FloatingButton for sheet close', () => {
     const onClose = jest.fn();
     const result = render(

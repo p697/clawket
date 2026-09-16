@@ -9,6 +9,7 @@ const DESCRIPTOR: SessionDescriptor = {
   title: 'Daily report',
   channel: 'cron',
   updatedAt: 1_780_000_000_000,
+  lastActivityAt: 1_779_999_000_000,
   preview: 'Finished report',
   model: 'sonnet',
   modelProvider: 'anthropic',
@@ -36,6 +37,7 @@ describe('adapter chat session mapping', () => {
       title: 'Daily report',
       channel: 'cron',
       updatedAt: 1_780_000_000_000,
+      lastActivityAt: 1_779_999_000_000,
       lastMessagePreview: 'Finished report',
       model: 'sonnet',
       modelProvider: 'anthropic',
@@ -60,6 +62,7 @@ describe('adapter chat session mapping', () => {
       kind: 'cron',
       hasActiveRun: false,
       attention: null,
+      lastActivityAt: null,
       parentSessionKey: 'agent:atlas:main',
       allowedActions: {
         rename: false,
@@ -72,6 +75,7 @@ describe('adapter chat session mapping', () => {
       kind: 'cron',
       hasActiveRun: false,
       attention: null,
+      lastActivityAt: null,
       parentSessionKey: 'agent:atlas:main',
       spawnedBy: 'agent:atlas:main',
       allowedActions: {

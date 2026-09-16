@@ -147,8 +147,10 @@ describe('historical BridgeRuntime against the current OpenClaw Relay', () => {
     expect(version212Anchor.builtFromCommit).toBe(inferred211.builtFromCommit);
   });
 
-  it.each(LEGACY_BRIDGE_REPLAY_PINS)(
-    '$release ($key) forwards the v1 protocol through the current Relay',
+  it.each(LEGACY_BRIDGE_REPLAY_PINS.flatMap(pin =>
+    ['legacy', 'current-caps'].map(wireMode => ({ ...pin, wireMode })),
+  ))(
+    '$release ($key, $wireMode) forwards handshake, chat, history and attachments through the current Relay',
     async (pin) => {
       const artifact = requirePrepared(pin.key);
       const BridgeRuntime = await artifact.loadRuntime();
@@ -193,6 +195,13 @@ describe('historical BridgeRuntime against the current OpenClaw Relay', () => {
             if (isBinary) return;
             const parsed = parseJson(toText(data));
             if (!parsed) return;
+            // Gateway RequestFrame has a closed envelope. Historical Bridges do
+            // not strip unknown fields, so new clients must stay inside this schema.
+            if (parsed.method === 'connect' && Object.keys(parsed).some(key =>
+              !['type', 'id', 'method', 'params'].includes(key))) {
+              socket.close(1008, 'invalid request frame');
+              return;
+            }
             gatewayFrames.push(parsed);
             const id = typeof parsed.id === 'string' ? parsed.id : '';
             const responseLabel = responseById.get(id);
@@ -220,7 +229,15 @@ describe('historical BridgeRuntime against the current OpenClaw Relay', () => {
           challengeLabel,
           await client.nextJson((frame) => frame.event === 'connect.challenge', 15_000),
         );
-        await roundTrip(client, gatewayFrames, connectRequestLabel, connectResponseLabel);
+        if (pin.wireMode === 'current-caps') {
+          const request = frameObject(connectRequestLabel);
+          request.params = { ...(request.params as Record<string, unknown>), caps: ['tool-events', 'bridge.capabilities.v2'] };
+          client.socket.send(JSON.stringify(request));
+          expect(await takeGatewayFrame(gatewayFrames, String(request.id), 'current caps handshake was not forwarded')).toEqual(request);
+          assertFixtureFrame(connectResponseLabel, await client.nextJson(frame => frame.id === request.id));
+        } else {
+          await roundTrip(client, gatewayFrames, connectRequestLabel, connectResponseLabel);
+        }
         await roundTrip(client, gatewayFrames, 'chat-send.request', 'chat-send.response');
         await roundTrip(client, gatewayFrames, 'sessions-list.request', 'sessions-list.response');
 

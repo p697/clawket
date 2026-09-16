@@ -1,3 +1,4 @@
+import { relayNetworkOptions } from '../relay-network.js';
 import WebSocket from 'ws';
 import nacl from 'tweetnacl';
 import { randomUUID } from 'node:crypto';
@@ -10,6 +11,7 @@ export interface LocalModelInvitation { sessionId: string; codeKeyHex: string; q
 export interface LocalModelRelayConfig { relayUrl: string; gatewayId: string; relaySecret: string; invitation?: LocalModelInvitation }
 
 export class LocalModelRelay {
+  private readonly relayNetwork = relayNetworkOptions();
   private socket: WebSocket | null = null;
   private retry: ReturnType<typeof setTimeout> | null = null;
   private ping: ReturnType<typeof setInterval> | null = null;
@@ -61,7 +63,7 @@ export class LocalModelRelay {
     url.searchParams.set('gatewayId', this.config.gatewayId);
     url.searchParams.set('role', 'gateway');
     url.searchParams.set('clientId', this.instanceId);
-    const socket = new WebSocket(url, { headers: { Authorization: `Bearer ${this.config.relaySecret}` }, maxPayload: WEBSOCKET_FRAME_LIMIT_BYTES, handshakeTimeout: 15_000 });
+    const socket = new WebSocket(url, { ...this.relayNetwork, headers: { Authorization: `Bearer ${this.config.relaySecret}` }, maxPayload: WEBSOCKET_FRAME_LIMIT_BYTES, handshakeTimeout: 15_000 });
     this.socket = socket;
     let alive = true;
     socket.on('open', () => {
@@ -100,14 +102,23 @@ export class LocalModelRelay {
         } finally { this.pending--; }
       })();
     });
-    socket.on('error', () => this.log('local-model relay transport error'));
-    socket.on('close', () => {
+    socket.on('error', error => {
+      if (this.socket !== socket || this.stopped) return;
+      const code = (error as NodeJS.ErrnoException).code;
+      const safeCode = typeof code === 'string' && /^[A-Z0-9_]{1,48}$/.test(code) ? code : 'transport_error';
+      this.log(`local-model relay transport error code=${safeCode}`);
+    });
+    socket.on('close', code => {
       if (this.socket !== socket) return;
       this.socket = null;
       this.ready = false;
       if (this.ping) clearInterval(this.ping);
       this.ping = null;
-      if (!this.stopped) this.retry = setTimeout(() => this.connect(), Math.min(30_000, 1000 * 2 ** Math.min(++this.attempts, 5)));
+      if (!this.stopped) {
+        const delay = Math.min(30_000, 1000 * 2 ** Math.min(++this.attempts, 5));
+        this.log(`local-model relay closed code=${code} attempt=${this.attempts} retryMs=${delay}`);
+        this.retry = setTimeout(() => this.connect(), delay);
+      }
     });
   }
 

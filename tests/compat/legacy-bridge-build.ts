@@ -135,6 +135,36 @@ type HistoricalInstall = {
   fingerprintMaterial: string;
 };
 
+// Hermes changed between npm 0.6.4 and 0.7.0; OpenClaw's equivalence cache
+// cannot certify it. Build the exact published commit with a separate cache key.
+export async function preparePublishedHermesRelay(repositoryRoot: string): Promise<{
+  loadRuntime(): Promise<typeof import('../../packages/bridge-runtime/src/hermes/relay').HermesRelayRuntime>;
+}> {
+  const pin = LEGACY_BRIDGE_PINS.find(entry => entry.key === 'bd69')!;
+  const cacheRoot = join(await resolveCommonGitDirectory(repositoryRoot), 'clawket-compat-cache', 'published-hermes-v1');
+  await mkdir(cacheRoot, { recursive: true });
+  return withDetachedWorktree(repositoryRoot, pin, async worktree => {
+    const historicalInstall = await createHistoricalInstall(worktree);
+    const openClawFingerprint = createHash('sha256').update([
+      'exact-hermes-source', pin.commit,
+      await computeOpenClawFingerprint(worktree, historicalInstall.fingerprintMaterial),
+    ].join('\n')).digest('hex');
+    const cacheKey = createHash('sha256').update([
+      CACHE_SCHEMA_VERSION, openClawFingerprint, process.versions.node, process.platform, process.arch,
+    ].join('\n')).digest('hex');
+    const cacheDirectory = join(cacheRoot, cacheKey);
+    if (!await readValidCache(cacheDirectory, cacheKey, openClawFingerprint, pin.commit)) {
+      await buildAndCache({ worktree, cacheRoot, cacheDirectory, cacheKey, openClawFingerprint,
+        commit: pin.commit, historicalInstall });
+    }
+    return { async loadRuntime() {
+      const module = await import(pathToFileURL(join(cacheDirectory, 'runtime/dist/hermes-relay.js')).href);
+      if (typeof module.HermesRelayRuntime !== 'function') throw new Error('Published Hermes Relay runtime export missing');
+      return module.HermesRelayRuntime;
+    } };
+  });
+}
+
 export async function prepareLegacyBridgeMatrix(repositoryRoot: string): Promise<PreparedLegacyBridge[]> {
   const commonGitDirectory = await resolveCommonGitDirectory(repositoryRoot);
   const cacheRoot = join(commonGitDirectory, 'clawket-compat-cache', 'legacy-bridge-v2');
