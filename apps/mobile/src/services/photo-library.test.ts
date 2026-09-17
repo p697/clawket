@@ -36,7 +36,7 @@ jest.mock('expo-file-system', () => {
 });
 
 import { Asset } from 'expo-asset';
-import * as MediaLibrary from 'expo-media-library';
+import * as MediaLibrary from 'expo-media-library/legacy';
 import {
   saveBundledImageToPhotoLibrary,
   saveImageUriToPhotoLibrary,
@@ -130,5 +130,25 @@ describe('saveBundledImageToPhotoLibrary', () => {
     expect(copyMock).toHaveBeenCalledTimes(1);
     expect(downloadFileAsyncMock).not.toHaveBeenCalled();
     expect(saveToLibraryAsync).toHaveBeenCalledWith(expect.stringContaining('chat-image-'));
+  });
+
+  it('waits for the SDK 57 asynchronous copy before reading its destination', async () => {
+    (MediaLibrary.requestPermissionsAsync as jest.Mock).mockResolvedValueOnce({ granted: true });
+    let finishCopy!: () => void;
+    copyMock.mockReturnValueOnce(new Promise<void>((resolve) => { finishCopy = resolve; }));
+    const saving = saveImageUriToPhotoLibrary('file:///tmp/original.png', 'chat-image');
+    await Promise.resolve();
+    expect(copyMock).toHaveBeenCalledTimes(1);
+    expect(MediaLibrary.saveToLibraryAsync).not.toHaveBeenCalled();
+    finishCopy();
+    await expect(saving).resolves.toBe('saved');
+    expect(MediaLibrary.saveToLibraryAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it('propagates asynchronous copy failures without saving a missing file', async () => {
+    (MediaLibrary.requestPermissionsAsync as jest.Mock).mockResolvedValueOnce({ granted: true });
+    copyMock.mockRejectedValueOnce(new Error('disk full'));
+    await expect(saveImageUriToPhotoLibrary('file:///tmp/original.png', 'chat-image')).rejects.toThrow('disk full');
+    expect(MediaLibrary.saveToLibraryAsync).not.toHaveBeenCalled();
   });
 });

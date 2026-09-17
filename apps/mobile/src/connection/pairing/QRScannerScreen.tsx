@@ -80,7 +80,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   cancelButton: { borderRadius: Radius.full, borderWidth: BorderWidth.hairline, paddingHorizontal: Space.xl, paddingVertical: Space.sm },
   cancelText: { fontSize: FontSize.caption },
-  overlay: { ...StyleSheet.absoluteFillObject },
+  overlay: { ...StyleSheet.absoluteFill },
   overlayTop: { flex: 1, backgroundColor: PresentationColor.mediaOverlayStrong },
   overlayMiddle: { flexDirection: 'row', height: SCAN_SIZE },
   overlaySide: { flex: 1, backgroundColor: PresentationColor.mediaOverlayStrong },

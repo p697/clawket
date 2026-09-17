@@ -393,6 +393,39 @@ export class RosterCache {
     });
   }
 
+  /**
+   * Rewrites the cached Agent descriptors in place while keeping the entry's own
+   * save time and state, so a local edit cannot pose as fresh backend evidence.
+   */
+  async updateAgents(
+    connectionId: string,
+    update: (agents: ReadonlyArray<AgentDescriptor>) => ReadonlyArray<AgentDescriptor>,
+  ): Promise<RosterCacheSnapshot | null> {
+    return this.enqueue(async () => {
+      const normalizedConnectionId = connectionId.trim();
+      if (!normalizedConnectionId) return null;
+      const scope = rosterScope(normalizedConnectionId);
+      const entry = await this.storage.getDashboardCache<PersistedRoster>(scope);
+      const payload = normalizePersistedRoster(entry?.data, normalizedConnectionId);
+      if (!entry || !payload) return null;
+      const next = normalizePersistedRoster({
+        version: ROSTER_CACHE_VERSION,
+        connectionId: normalizedConnectionId,
+        agents: [...update(payload.agents)],
+        sessions: payload.sessions,
+      }, normalizedConnectionId);
+      if (!next) throw new Error('Roster cache contains invalid or cross-connection descriptors.');
+      await this.storage.setDashboardCache(scope, { ...entry, data: next });
+      return Object.freeze({
+        connectionId: normalizedConnectionId,
+        savedAt: entry.savedAt,
+        connectionStateAtSave: entry.connectionStateAtSave,
+        agents: Object.freeze(next.agents),
+        sessions: Object.freeze(next.sessions),
+      });
+    });
+  }
+
   async get(connectionId: string): Promise<RosterCacheSnapshot | null> {
     return this.enqueue(async () => {
       const normalizedConnectionId = connectionId.trim();

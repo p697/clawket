@@ -288,7 +288,7 @@ describe('handleCameraSnap', () => {
 
 describe('handlePhotosLatest', () => {
   it('returns the official photos.latest payload shape', async () => {
-    const MediaLibrary = require('expo-media-library');
+    const MediaLibrary = require('expo-media-library/legacy');
     const result = await handlePhotosLatest({ limit: 1 });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -307,7 +307,7 @@ describe('handlePhotosLatest', () => {
   });
 
   it('honors limit, maxWidth and quality params', async () => {
-    const MediaLibrary = require('expo-media-library');
+    const MediaLibrary = require('expo-media-library/legacy');
     const ImageManipulator = require('expo-image-manipulator');
 
     const result = await handlePhotosLatest({ limit: 3, maxWidth: 900, quality: 0.5 });
@@ -330,7 +330,7 @@ describe('handlePhotosLatest', () => {
   });
 
   it('returns an empty photos list when the library is empty', async () => {
-    const MediaLibrary = require('expo-media-library');
+    const MediaLibrary = require('expo-media-library/legacy');
     MediaLibrary.getAssetsAsync.mockResolvedValueOnce({ assets: [] });
     const result = await handlePhotosLatest({ limit: 3 });
     expect(result.ok).toBe(true);
@@ -339,7 +339,7 @@ describe('handlePhotosLatest', () => {
   });
 
   it('returns PERMISSION_DENIED when media library is denied', async () => {
-    const MediaLibrary = require('expo-media-library');
+    const MediaLibrary = require('expo-media-library/legacy');
     MediaLibrary.requestPermissionsAsync.mockResolvedValueOnce({ status: 'denied', granted: false });
     const result = await handlePhotosLatest({ limit: 1 });
     expect(result.ok).toBe(false);
@@ -382,7 +382,7 @@ describe('handleClipboardWrite', () => {
 describe('handleMediaSave', () => {
   it('saves base64 image to library', async () => {
     const FS = require('expo-file-system/legacy') as Record<string, jest.Mock>;
-    const ML = require('expo-media-library');
+    const ML = require('expo-media-library/legacy');
     const result = await handleMediaSave({ base64: 'imagedata', filename: 'test.png' });
     expect(result.ok).toBe(true);
     expect(FS.writeAsStringAsync).toHaveBeenCalledWith(
@@ -411,7 +411,7 @@ describe('handleMediaSave', () => {
   });
 
   it('returns PERMISSION_DENIED when media library is denied', async () => {
-    const ML = require('expo-media-library');
+    const ML = require('expo-media-library/legacy');
     ML.requestPermissionsAsync.mockResolvedValueOnce({ status: 'denied' });
     const result = await handleMediaSave({ base64: 'imagedata' });
     expect(result.ok).toBe(false);

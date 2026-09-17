@@ -111,6 +111,24 @@ describe('RosterCache', () => {
     expect(JSON.stringify([...storage.entries.values()])).not.toMatch(/token|password|bootstrap/i);
   });
 
+  it('rewrites cached Agents in place without refreshing the save time or state', async () => {
+    const storage = new MemoryCacheStorage();
+    let now = 500;
+    const cache = new RosterCache({ storage, now: () => now });
+    await cache.set('connection-1', [agent('connection-1', 'main')], [session('connection-1', 'main', 'main:main', 100)], 'idle');
+    now = 900;
+
+    const updated = await cache.updateAgents('connection-1', (agents) => agents.map((entry) => (
+      entry.name === 'MAIN' ? { ...entry, name: 'Studio' } : entry
+    )));
+    expect(updated).toMatchObject({ savedAt: 500, connectionStateAtSave: 'idle', agents: [{ name: 'Studio' }] });
+    expect(await cache.get('connection-1')).toEqual(updated);
+    expect(await cache.updateAgents('missing', (agents) => agents)).toBeNull();
+    await expect(cache.updateAgents('connection-1', () => [agent('other', 'main')]))
+      .rejects.toThrow('cross-connection');
+    expect((await cache.get('connection-1'))?.agents[0]?.name).toBe('Studio');
+  });
+
   it('rejects a malformed activity timestamp instead of caching it', async () => {
     const cache = new RosterCache({ storage: new MemoryCacheStorage() });
 

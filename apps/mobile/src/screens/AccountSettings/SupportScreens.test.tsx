@@ -70,7 +70,7 @@ jest.mock('react-native', () => {
     Pressable: host('Pressable'),
     ScrollView: host('ScrollView'),
     StyleSheet: {
-      absoluteFillObject: {
+      absoluteFill: {
         position: 'absolute',
         top: 0,
         right: 0,

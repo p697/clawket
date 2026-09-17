@@ -126,6 +126,29 @@ export function preserveOpenClawCliHistorySegments(
   sessionKey: string, values: unknown[], messages: ChatMessage[],
 ): ChatMessage[] {
   const redundantIds = new Set<string>();
+  // A resumed CLI can echo the just-persisted mobile input into chat.history.
+  // Require adjacent wire rows, our send identity, an exact resume envelope,
+  // text-only content and a bounded forward timestamp; never dedupe by text alone.
+  values.forEach((value, index) => {
+    const previous = values[index - 1];
+    if (!isRecord(value) || !isRecord(previous)) return;
+    const meta = isRecord(value.__openclaw) ? value.__openclaw : {};
+    const original = mapGatewayHistoryMessage(sessionKey, previous, index - 1);
+    const echo = mapGatewayHistoryMessage(sessionKey, value, index);
+    const textOnly = (content: unknown) => typeof content === 'string'
+      || (Array.isArray(content) && content.every(block => isRecord(block) && block.type === 'text'));
+    if (original?.role !== 'user' || echo?.role !== 'user'
+      || !isRecord(previous.__openclaw) || previous.__openclaw.importedFrom
+      || !original.idempotencyKey || !/^\d{13}_[a-z0-9]{1,8}$/.test(original.idempotencyKey)
+      || meta.importedFrom !== 'claude-cli' || !readNonEmptyString(meta.cliSessionId)
+      || !(readNonEmptyString(value.id) || readNonEmptyString(meta.id))
+      || echo.idempotencyKey || !textOnly(previous.content) || !textOnly(value.content)
+      || original.timestampMs === undefined || echo.timestampMs === undefined
+      || echo.timestampMs < original.timestampMs || echo.timestampMs - original.timestampMs > 60_000) return;
+    const raw = extractHistoryText(value.content);
+    const prompt = stripCliResumeContext(raw);
+    if (prompt !== raw && prompt.trim() && prompt.trim() === original.text.trim()) redundantIds.add(echo.id);
+  });
   const finalMetadata = new Map<string, ChatMessage>();
   let userSendKey: string | undefined;
   let cliSessionId: string | undefined;
@@ -136,6 +159,7 @@ export function preserveOpenClawCliHistorySegments(
     const meta = isRecord(value.__openclaw) ? value.__openclaw : {};
     const message = mapGatewayHistoryMessage(sessionKey, value, index);
     if (!message) return;
+    if (redundantIds.has(message.id)) return;
     if (value.role === 'user' && message.text.trim()) {
       userSendKey = readNonEmptyString(meta.idempotencyKey)?.replace(/:user$/, '');
       cliSessionId = undefined;

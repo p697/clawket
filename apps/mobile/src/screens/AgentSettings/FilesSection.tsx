@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type {
@@ -42,7 +42,11 @@ export type FilesSectionProps = Readonly<{
   onOpenPaywall: (reason: string, onContinue?: () => void) => void;
 }>;
 
-export function FilesSection({
+export function FilesSection(props: FilesSectionProps): React.JSX.Element {
+  return <FilesContent key={`${props.agent.connectionId}:${props.agent.agentId}`} {...props} />;
+}
+
+function FilesContent({
   adapter,
   agent,
   online,
@@ -66,6 +70,16 @@ export function FilesSection({
   const [original, setOriginal] = useState('');
   const [saving, setSaving] = useState(false);
   const [discardVisible, setDiscardVisible] = useState(false);
+  const active = useRef(false);
+  const writeLock = useRef(false);
+  const listRequest = useRef(0);
+  const detailRequest = useRef(0);
+  const current = useRef({ adapter, operations, online, selection, draft, editing });
+  current.current = { adapter, operations, online, selection, draft, editing };
+  useEffect(() => {
+    active.current = true;
+    return () => { active.current = false; };
+  }, []);
   const changed = draft !== original;
   const editable = canEditAgentFile(adapter.capabilities, operations);
   const backend = adapter.connection.backendKind;
@@ -77,6 +91,8 @@ export function FilesSection({
   }, [backend, selection]);
 
   const load = useCallback(async () => {
+    const request = ++listRequest.current;
+    const valid = () => active.current && current.current.operations === operations && request === listRequest.current;
     if (!operations?.list) {
       setFiles([]);
       setLoading(false);
@@ -84,13 +100,16 @@ export function FilesSection({
     }
     setLoading(true);
     try {
-      setFiles(await operations.list(agent.agentId));
+      const result = await operations.list(agent.agentId);
+      if (!valid()) return;
+      setFiles(result);
       setError(null);
     } catch (loadError: unknown) {
+      if (!valid()) return;
       setError(errorMessage(loadError, t('Failed to load files', { ns: 'settings' })));
       setFiles((current) => current ?? []);
     } finally {
-      setLoading(false);
+      if (valid()) setLoading(false);
     }
   }, [agent.agentId, operations, t]);
 
@@ -99,6 +118,9 @@ export function FilesSection({
   }, [load]);
 
   const openFile = useCallback(async (file: AgentFileSummary) => {
+    if (writeLock.current) return;
+    const request = ++detailRequest.current;
+    const valid = () => active.current && current.current.operations === operations && request === detailRequest.current;
     if (file.missing) {
       // A listed-but-absent core file is created in place; the backend owns the list.
       if (!editable) return;
@@ -120,40 +142,48 @@ export function FilesSection({
     setEditing(false);
     try {
       const result = await operations.get(file.name, agent.agentId);
+      if (!valid()) return;
       setDetail(result);
       const content = result.content ?? '';
       setDraft(content);
       setOriginal(content);
     } catch (loadError: unknown) {
+      if (!valid()) return;
       setDetailError(errorMessage(loadError, t('Failed to load file', { ns: 'settings' })));
     } finally {
-      setDetailLoading(false);
+      if (valid()) setDetailLoading(false);
     }
   }, [agent.agentId, backend, editable, operations, t]);
 
   const closeDetail = useCallback(() => {
-    if (saving) return;
+    if (writeLock.current) return;
     if (editing && changed) {
       setDiscardVisible(true);
       return;
     }
+    detailRequest.current += 1;
     setSelection(null);
     setDetail(null);
     setEditing(false);
     setDetailError(null);
-  }, [changed, editing, saving]);
+  }, [changed, editing]);
 
   const commitSave = useCallback(async () => {
-    if (!selection || saving || !canSaveAgentFile({
+    const valid = () => active.current && current.current.adapter === adapter
+      && current.current.operations === operations && current.current.selection === selection
+      && current.current.draft === draft && current.current.editing;
+    if (!valid() || !selection || writeLock.current || !canSaveAgentFile({
       capabilities: adapter.capabilities,
       operations,
-      online,
+      online: current.current.online,
       changed,
     })) return;
+    writeLock.current = true;
     setSaving(true);
     setDetailError(null);
     try {
       const result = await operations?.set?.(selection.name, draft, agent.agentId);
+      if (!valid()) return;
       if (!result?.ok) throw new Error(t('Gateway rejected save request', { ns: 'settings' }));
       analyticsEvents.agentFileActivity({ action: 'saved', backend, document: analyticsAgentDocument(selection.name) });
       setOriginal(draft);
@@ -161,12 +191,14 @@ export function FilesSection({
       setDetail((current) => current ? { ...current, missing: false, content: draft } : current);
       await load();
     } catch (saveError: unknown) {
+      if (!valid()) return;
       analyticsEvents.agentFileActivity({ action: 'failed', backend, document: analyticsAgentDocument(selection.name) });
       setDetailError(errorMessage(saveError, t('Save failed', { ns: 'settings' })));
     } finally {
-      setSaving(false);
+      writeLock.current = false;
+      if (active.current) setSaving(false);
     }
-  }, [adapter.capabilities, agent.agentId, backend, changed, draft, load, online, operations, saving, selection, t]);
+  }, [adapter, agent.agentId, backend, changed, draft, load, operations, selection, t]);
 
   const save = useCallback(() => {
     if (!isPro) {
@@ -241,10 +273,10 @@ export function FilesSection({
               testID="agent-file-detail-error"
               tone="bad"
               message={detailError}
-              actionLabel={t('Retry', { ns: 'common' })}
-              onAction={() => {
+              actionLabel={!detail ? t('Retry', { ns: 'common' }) : undefined}
+              onAction={!detail ? () => {
                 if (selection) void openFile(selection);
-              }}
+              } : undefined}
             />
           ) : null}
           {detail && !detailLoading ? (

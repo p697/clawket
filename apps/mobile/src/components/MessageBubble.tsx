@@ -17,6 +17,7 @@ import {
 import { useAppTheme } from '../theme';
 import { BorderWidth, FontSize, FontWeight, Radius, Shadow, Space, createThemedShadowStyle } from '../theme/tokens';
 import { sanitizeDisplayText, sanitizeUserMessageText } from '../utils/chat-message';
+import { resolveAgentAvatarImageSource } from '../utils/agent-avatar-uri';
 import { triggerSelectionHaptic } from '../services/haptics';
 import { AGENT_AVATAR_SIZE, AGENT_AVATAR_SLOT_WIDTH } from './chat/messageLayout';
 import { createChatMarkdownStyle, getChatMarkdownFlavor, openChatMarkdownLink } from './chat/chatMarkdown';
@@ -199,9 +200,9 @@ function stripReplyTagPrefix(input: string): string {
 }
 
 function Avatar({ uri }: { uri?: string }): React.JSX.Element | null {
-  const normalizedUri = uri?.trim();
-  if (!normalizedUri) return null;
-  return <Image source={{ uri: normalizedUri }} style={avatarStyles.img} />;
+  const source = resolveAgentAvatarImageSource(uri);
+  if (!source) return null;
+  return <Image source={source} style={avatarStyles.img} />;
 }
 
 const avatarStyles = StyleSheet.create({

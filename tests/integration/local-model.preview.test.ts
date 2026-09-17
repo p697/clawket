@@ -13,7 +13,10 @@ import { getFreePort } from './harness';
 
 // Opt-in: creates a short-lived pairing in the isolated Preview services and
 // sends a real inference request to the user's configured localhost model.
-it.skipIf(process.env.CLAWKET_LOCAL_MODEL_PREVIEW_SMOKE !== '1')('CLI six-digit code -> public Preview -> actual mobile adapter -> local model', async () => {
+it('CLI six-digit code -> public Preview -> actual mobile adapter -> local model', async () => {
+  if (process.env.CLAWKET_LOCAL_MODEL_PREVIEW_SMOKE !== '1') {
+    throw new Error('Set CLAWKET_LOCAL_MODEL_PREVIEW_SMOKE=1 and configure a running local model before this live Preview test');
+  }
   const registry = 'https://clawket-local-model-registry-preview.clawket.workers.dev';
   const output = join(process.cwd(), 'docs/3.0/evidence/local-model');
   const runDirectory = join(output, `preview-${Date.now()}`);

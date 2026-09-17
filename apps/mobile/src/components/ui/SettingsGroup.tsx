@@ -134,12 +134,18 @@ export function SettingsRow({
       style={({ pressed }) => [
         rowStyle,
         layoutStyle,
-        selected ? styles.rowPressed : null,
         pressed && !disabled ? styles.rowPressed : null,
         disabled ? styles.disabled : null,
         style,
       ]}
     >
+      {selected ? (
+        <View
+          pointerEvents="none"
+          testID={testID ? `${testID}-selected-fill` : undefined}
+          style={styles.selectedFill}
+        />
+      ) : null}
       {content}
     </Pressable>
   );
@@ -236,6 +242,18 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       backgroundColor: colors.bad,
     },
     rowPressed: { backgroundColor: colors.surface },
+    // Selected rows carry an inset rounded fill instead of a full-bleed
+    // background so a middle row does not read as a square bar; the text
+    // column stays aligned with its neighbours because layout is untouched.
+    selectedFill: {
+      position: 'absolute',
+      top: Space.xs,
+      bottom: Space.xs,
+      start: Space.sm,
+      end: Space.sm,
+      borderRadius: Radius.settingsGroup,
+      backgroundColor: colors.surface,
+    },
     disabled: { opacity: 0.45 },
     divider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.line },
     dividerContent: { marginStart: Space.lg },

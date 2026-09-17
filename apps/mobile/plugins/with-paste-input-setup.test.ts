@@ -1,9 +1,11 @@
 const {
   applyPasteInputSetup,
   applyPasteInputBridgingHeader,
+  applyPasteInputSceneManifest,
 } = require('./with-paste-input-setup.js') as {
   applyPasteInputSetup: (contents: string) => string;
   applyPasteInputBridgingHeader: (contents: string) => string;
+  applyPasteInputSceneManifest: (plist: any) => any;
 };
 
 const APP_DELEGATE = `internal import Expo
@@ -30,6 +32,30 @@ class AppDelegate: ExpoAppDelegate {
 const BRIDGING_HEADER = '// Clawket bridging header\n';
 
 describe('withPasteInputSetup', () => {
+  it('registers paste interception after Expo starts the scene React host', () => {
+    const sceneDelegate = APP_DELEGATE
+      .replace('ExpoAppDelegate {', 'ExpoAppDelegate, ExpoReactNativeFactoryProvider {')
+      .replace(/    factory.startReactNative\([\s\S]*?launchOptions: launchOptions\)\n/, '');
+    const output = applyPasteInputSetup(sceneDelegate);
+    expect(output).toContain('class ClawketSceneDelegate: ExpoAppSceneDelegate');
+    expect(output.indexOf('super.scene(scene, willConnectTo: session, options: connectionOptions)'))
+      .toBeLessThan(output.indexOf('PasteInputModule.setup(factory.rootViewFactory)'));
+    expect(output).not.toContain('factory.startReactNative(');
+    expect(applyPasteInputSetup(output)).toBe(output);
+    expect(() => applyPasteInputSetup(APP_DELEGATE.replace(
+      'ExpoAppDelegate {', 'ExpoAppDelegate, ExpoReactNativeFactoryProvider {',
+    ))).toThrow(/legacy/);
+  });
+
+  it('binds only the official single-scene manifest to the paste-aware subclass', () => {
+    const plist = { UIApplicationSceneManifest: { UISceneConfigurations: {
+      UIWindowSceneSessionRoleApplication: [{ UISceneDelegateClassName: 'EXExpoAppSceneDelegate' }],
+    } } };
+    expect(applyPasteInputSceneManifest(plist).UIApplicationSceneManifest.UISceneConfigurations
+      .UIWindowSceneSessionRoleApplication[0].UISceneDelegateClassName).toBe('ClawketSceneDelegate');
+    expect(applyPasteInputSceneManifest(plist)).toBe(plist);
+    expect(() => applyPasteInputSceneManifest({})).toThrow(/single-scene/);
+  });
   it('registers the root view factory after React Native starts', () => {
     const output = applyPasteInputSetup(APP_DELEGATE);
     expect(output).toContain('PasteInputModule.setup(factory.rootViewFactory)');

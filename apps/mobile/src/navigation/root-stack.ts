@@ -15,6 +15,9 @@ export type AgentSettingsSection =
   | 'channels-devices'
   | 'logs';
 
+/** Sections with their own Agent Settings page; the connection row opens the shared Connection route. */
+export type AgentSettingsDetailSection = Exclude<AgentSettingsSection, 'connection'>;
+
 export type AccountSettingsSection =
   | 'pro'
   | 'connections'
@@ -25,6 +28,9 @@ export type AccountSettingsSection =
   | 'community'
   | 'about'
   | 'developer';
+
+/** Sections with their own settings page; connections open the shared Connections route instead. */
+export type AccountSettingsDetailSection = Exclude<AccountSettingsSection, 'connections'>;
 
 export type RootStackParamList = {
   Onboarding: {
@@ -54,7 +60,7 @@ export type RootStackParamList = {
   Connection: { connectionId: string };
   AccountSettings: undefined;
   DesignSystem: undefined;
-  AccountSettingsSection: { section: AccountSettingsSection; connectionId?: string };
+  AccountSettingsSection: { section: AccountSettingsDetailSection };
   ReleaseNotes: undefined;
   ChatAppearance: undefined;
   HelpCenter: undefined;

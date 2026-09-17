@@ -3,7 +3,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 export type AgentRosterPreferences = Readonly<{
   pinnedSessionKeys: string[];
   agentPinned: boolean;
-  muted: boolean;
 }>;
 
 type SessionPreferenceState = AgentRosterPreferences;
@@ -16,26 +15,26 @@ function makeScopeKey(gatewayConfigId: string, agentId: string): string {
 
 function normalizeState(value: unknown): SessionPreferenceState {
   if (!value || typeof value !== 'object') {
-    return { pinnedSessionKeys: [], agentPinned: false, muted: false };
+    return { pinnedSessionKeys: [], agentPinned: false };
   }
   const record = value as Record<string, unknown>;
   const pinnedSessionKeys = Array.isArray(record.pinnedSessionKeys)
     ? Array.from(new Set(record.pinnedSessionKeys.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)))
     : [];
+  // Older records may still carry `muted`; the Agent mute was removed on 2026-09-17.
   return {
     pinnedSessionKeys,
     agentPinned: record.agentPinned === true,
-    muted: record.muted === true,
   };
 }
 
 async function readState(gatewayConfigId: string, agentId: string): Promise<SessionPreferenceState> {
   try {
     const raw = await AsyncStorage.getItem(makeScopeKey(gatewayConfigId, agentId));
-    if (!raw) return { pinnedSessionKeys: [], agentPinned: false, muted: false };
+    if (!raw) return { pinnedSessionKeys: [], agentPinned: false };
     return normalizeState(JSON.parse(raw));
   } catch {
-    return { pinnedSessionKeys: [], agentPinned: false, muted: false };
+    return { pinnedSessionKeys: [], agentPinned: false };
   }
 }
 
@@ -104,24 +103,4 @@ export const SessionPreferencesService = {
     return next;
   },
 
-  async setAgentMuted(
-    gatewayConfigId: string,
-    agentId: string,
-    muted: boolean,
-  ): Promise<AgentRosterPreferences> {
-    const state = await readState(gatewayConfigId, agentId);
-    const next = { ...state, muted };
-    await writeState(gatewayConfigId, agentId, next);
-    return next;
-  },
-
-  async toggleAgentMuted(
-    gatewayConfigId: string,
-    agentId: string,
-  ): Promise<AgentRosterPreferences> {
-    const state = await readState(gatewayConfigId, agentId);
-    const next = { ...state, muted: !state.muted };
-    await writeState(gatewayConfigId, agentId, next);
-    return next;
-  },
 };

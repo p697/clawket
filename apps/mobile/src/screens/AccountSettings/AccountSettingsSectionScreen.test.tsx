@@ -1,6 +1,5 @@
 import React from 'react';
 import { act, fireEvent, render } from '@testing-library/react-native';
-import type { ConnectionDescriptor } from '@clawket/agent-protocol';
 
 import { FontSize } from '../../theme/tokens';
 import {
@@ -240,37 +239,12 @@ function flattenStyle(style: unknown): Record<string, unknown> {
   return Object.assign({}, ...style.map(flattenStyle));
 }
 
-function connection(
-  patch: Partial<ConnectionDescriptor> = {},
-): ConnectionDescriptor {
-  return {
-    id: 'studio',
-    backendKind: 'hermes',
-    transportKind: 'relay',
-    label: 'Studio',
-    environment: 'preview',
-    createdAt: 1,
-    isFreeSlot: true,
-    ...patch,
-  };
-}
-
 function createProps(
   patch: Partial<AccountSettingsSectionScreenProps> = {},
 ): AccountSettingsSectionScreenProps {
   return {
-    section: 'connections',
+    section: 'about',
     data: {
-      connections: [{
-        ...connection(),
-        state: 'ready',
-        supportsRelayStats: true,
-        relayStats: {
-          state: 'ready',
-          uptimeMs: 3_720_000,
-          serverVersion: '2026.9.5',
-        },
-      }],
       canAddConnection: true,
       labels: {
         theme: 'Dark',
@@ -323,75 +297,22 @@ describe('AccountSettingsSectionScreen', () => {
     consoleErrorSpy.mockRestore();
   });
 
-  it('renders connection and Relay runtime descriptors and routes actions', () => {
+  it('renders the section title and version row and routes navigation actions', () => {
     const onBack = jest.fn();
     const onAction = jest.fn();
     const view = render(
       <AccountSettingsSectionScreen {...createProps({ onBack, onAction })} />,
     );
 
-    expect(view.getByText('Connections')).toBeTruthy();
-    expect(view.getByText('Studio')).toBeTruthy();
-    expect(view.getByText('Hermes')).toBeTruthy();
-    expect(view.getByText('1h 2m')).toBeTruthy();
-    expect(view.getByText('2026.9.5')).toBeTruthy();
+    expect(view.getByText('About')).toBeTruthy();
+    expect(view.getByText('3.0.0')).toBeTruthy();
+    expect(view.queryByText('Connections')).toBeNull();
 
     fireEvent.press(view.getByTestId('account-settings-section-back'));
-    fireEvent.press(view.getByTestId('account-settings-section-row-studio-reconnect'));
-    fireEvent.press(view.getByTestId('account-settings-section-row-studio-remove'));
-
-    expect(view.getByTestId('account-settings-remove-confirm')).toBeTruthy();
-    expect(view.getByText('Are you sure you want to delete "Studio"?')).toBeTruthy();
-    fireEvent.press(view.getByTestId('account-settings-remove-action'));
+    fireEvent.press(view.getByTestId('account-settings-section-row-repository'));
 
     expect(onBack).toHaveBeenCalledTimes(1);
-    expect(onAction).toHaveBeenNthCalledWith(1, {
-      action: 'reconnect-connection',
-      connectionId: 'studio',
-    });
-    expect(onAction).toHaveBeenNthCalledWith(2, {
-      action: 'remove-connection',
-      connectionId: 'studio',
-    });
-  });
-
-  it('routes an available free-connection switch and paywalls locked reconnects', () => {
-    const onAction = jest.fn();
-    const onOpenPaywall = jest.fn();
-    const view = render(
-      <AccountSettingsSectionScreen
-        {...createProps({
-          data: {
-            isPro: false,
-            canAddConnection: false,
-            connections: [
-              { ...connection(), isFreeConnection: true },
-              {
-                ...connection({ id: 'work', label: 'Work', isFreeSlot: false }),
-                locked: true,
-                freeSwitchAvailable: true,
-              },
-            ],
-          },
-          onAction,
-          onOpenPaywall,
-        })}
-      />,
-    );
-
-    fireEvent.press(view.getByTestId('account-settings-section-row-work-reconnect'));
-    expect(onOpenPaywall).toHaveBeenCalledWith('gatewayConnections', expect.any(Function));
-    onOpenPaywall.mock.calls[0]?.[1]?.();
-    expect(onAction).toHaveBeenCalledWith({
-      action: 'reconnect-connection',
-      connectionId: 'work',
-    });
-
-    fireEvent.press(view.getByTestId('account-settings-section-row-work-set-free-connection'));
-    expect(onAction).toHaveBeenCalledWith({
-      action: 'set-free-connection',
-      connectionId: 'work',
-    });
+    expect(onAction).toHaveBeenCalledWith({ action: 'repository' });
   });
 
   it('uses the existing reply-notification state and callback', () => {
@@ -478,7 +399,7 @@ describe('AccountSettingsSectionScreen', () => {
 
     view.rerender(<AccountSettingsSectionScreen {...props} status={{ kind: 'offline' }} />);
     expect(view.getByText('Offline · showing cached settings')).toBeTruthy();
-    expect(view.getByText('Studio')).toBeTruthy();
+    expect(view.getByText('Open Source Repository')).toBeTruthy();
 
     view.rerender(
       <AccountSettingsSectionScreen
@@ -503,7 +424,7 @@ describe('AccountSettingsSectionScreen', () => {
     const view = render(<AccountSettingsSectionScreen {...createProps()} status={status} />);
 
     expect(view.queryByTestId('account-settings-section-offline')).toBeNull();
-    expect(view.getByText('Studio')).toBeTruthy();
+    expect(view.getByText('Open Source Repository')).toBeTruthy();
   });
 
   it('keeps Pro locks distinct from disabled capability rows', () => {

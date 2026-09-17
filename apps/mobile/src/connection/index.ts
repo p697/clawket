@@ -96,7 +96,7 @@ type ConnectionStorePort = Pick<
   | 'upsert'
 >;
 
-type RosterCachePort = Pick<RosterCache, 'getMany' | 'remove' | 'set'>;
+type RosterCachePort = Pick<RosterCache, 'getMany' | 'remove' | 'set' | 'updateAgents'>;
 type ConnectionChatCachePort = Pick<typeof ChatCacheService, 'clearConnection'>;
 type ConnectionSessionPreferencesPort = Pick<
   typeof SessionPreferencesService,
@@ -422,6 +422,45 @@ export class ConnectionCoordinator {
       this.scheduleReconcile();
       await this.whenIdle();
     }
+    return descriptor;
+  }
+
+  /**
+   * Local display name only: credentials and transport are untouched, so an
+   * OpenClaw socket keeps running. Adapters that name their sole Agent after the
+   * connection (Hermes without a Bridge name, local model) read the label at
+   * handshake time, so the roster mirrors the rename onto those Agents at once
+   * and a live one re-handshakes to make it authoritative.
+   */
+  async renameConnection(connectionId: string, label: string): Promise<ConnectionDescriptor> {
+    const name = label.trim();
+    if (!name) throw new Error('Connection name is required.');
+    const previous = this.connectionDescriptor(connectionId)?.label ?? '';
+    const descriptor = await this.store.update(connectionId, { label: name });
+    if (previous === name) return descriptor;
+    // Serialized behind the reconcile the store change already scheduled.
+    await this.enqueue(async () => {
+      const input = this.rosterInputs.get(connectionId);
+      if (!input || !input.agents.some((agent) => agent.name === previous)) return;
+      const rename = (agents: ReadonlyArray<AgentDescriptor>) => agents.map((agent) => (
+        agent.name === previous ? { ...agent, name } : agent
+      ));
+      try {
+        await this.cache.updateAgents(connectionId, rename);
+      } catch {
+        // The cache is a convenience copy; the next roster listing rewrites it.
+      }
+      const current = this.rosterInputs.get(connectionId);
+      if (current) this.rosterInputs.set(connectionId, { ...current, agents: rename(current.agents) });
+      if (this.active?.connectionId === connectionId) {
+        this.nextConnectReason = 'manual';
+        this.disconnectActiveImmediately();
+        this.scheduleReconcile();
+        return;
+      }
+      this.publish();
+    });
+    await this.whenIdle();
     return descriptor;
   }
 

@@ -9,6 +9,7 @@ import {
   CAPABILITY_MATRIX,
   type AgentAdapter,
   type AgentDescriptor,
+  type AgentFile,
   type CostSummary,
   type CronJob,
   type DiscoverSkillItem,
@@ -781,6 +782,77 @@ describe('AgentSettings functional sections', () => {
       [{ action: 'edit', backend: 'openclaw', document: 'soul' }],
       [{ action: 'saved', backend: 'openclaw', document: 'soul' }],
     ]);
+  });
+
+  it.each((['openclaw', 'hermes'] as const).flatMap(backend =>
+    (['unmount', 'offline', 'new-draft', 'adapter', 'agent'] as const).map(change => ({ backend, change }))
+  ))('does not resume a stale $backend file save after $change', async ({ backend, change }) => {
+    const list = jest.fn(async () => [{ name: 'SOUL.md', path: '/SOUL.md', missing: false }]);
+    const get = jest.fn(async () => ({ name: 'SOUL.md', path: '/SOUL.md', missing: false, content: 'Original' }));
+    const set = jest.fn(async () => ({ ok: true }));
+    const adapter = adapterWith({ connection: { backendKind: backend } as AgentAdapter['connection'], capabilities: { ...CAPABILITY_MATRIX[backend] }, management: { agents: { files: { list, get, set } } } });
+    const paywall = jest.fn();
+    const view = render(<FilesSection adapter={adapter} agent={agent} online isPro={false} onOpenPaywall={paywall} />);
+    await waitFor(() => expect(view.getByTestId('agent-file-SOUL.md')).toBeTruthy());
+    fireEvent.press(view.getByTestId('agent-file-SOUL.md'));
+    await waitFor(() => expect(view.getByText('Original')).toBeTruthy());
+    fireEvent.press(view.getByTestId('agent-file-edit'));
+    fireEvent.changeText(view.getByTestId('agent-file-editor-input'), 'First draft');
+    fireEvent.press(view.getByTestId('agent-file-save'));
+    const resume = paywall.mock.calls[0][1];
+    if (change === 'unmount') view.unmount();
+    if (change === 'offline') view.rerender(<FilesSection adapter={adapter} agent={agent} online={false} isPro onOpenPaywall={paywall} />);
+    if (change === 'new-draft') fireEvent.changeText(view.getByTestId('agent-file-editor-input'), 'Newer draft');
+    if (change === 'agent') view.rerender(<FilesSection adapter={adapter} agent={{ ...agent, agentId: 'different-agent' }} online isPro onOpenPaywall={paywall} />);
+    if (change === 'adapter') view.rerender(<FilesSection adapter={adapterWith({ management: adapter.management })} agent={agent} online isPro onOpenPaywall={paywall} />);
+    await act(async () => resume());
+    expect(set).not.toHaveBeenCalled();
+  });
+
+  it('serializes resumed file saves and ignores a superseded file read', async () => {
+    const list = jest.fn(async () => ['SOUL.md', 'USER.md'].map(name => ({ name, path: `/${name}`, missing: false })));
+    let resolveSoul!: (value: AgentFile) => void;
+    const get = jest.fn((name: string) => name === 'SOUL.md'
+      ? new Promise<AgentFile>(resolve => { resolveSoul = resolve; })
+      : Promise.resolve({ name, path: `/${name}`, missing: false, content: 'User document' }));
+    let finish!: () => void;
+    const set = jest.fn(() => new Promise<{ ok: boolean }>(resolve => { finish = () => resolve({ ok: true }); }));
+    const adapter = adapterWith({ management: { agents: { files: { list, get, set } } } });
+    const paywall = jest.fn();
+    const view = render(<FilesSection adapter={adapter} agent={agent} online isPro={false} onOpenPaywall={paywall} />);
+    await waitFor(() => expect(view.getByTestId('agent-file-SOUL.md')).toBeTruthy());
+    fireEvent.press(view.getByTestId('agent-file-SOUL.md'));
+    fireEvent.press(view.getByTestId('agent-file-USER.md'));
+    await waitFor(() => expect(view.getByText('User document')).toBeTruthy());
+    await act(async () => resolveSoul({ name: 'SOUL.md', path: '/SOUL.md', missing: false, content: 'Wrong document' }));
+    expect(view.queryByText('Wrong document')).toBeNull();
+    fireEvent.press(view.getByTestId('agent-file-edit'));
+    fireEvent.changeText(view.getByTestId('agent-file-editor-input'), 'Updated user');
+    fireEvent.press(view.getByTestId('agent-file-save'));
+    act(() => { paywall.mock.calls[0][1](); paywall.mock.calls[0][1](); });
+    expect(set).toHaveBeenCalledTimes(1);
+    expect(set).toHaveBeenCalledWith('USER.md', 'Updated user', agent.agentId);
+    await act(async () => finish());
+  });
+
+  it('keeps failed file drafts editable without a reload action that discards them', async () => {
+    const list = jest.fn(async () => [{ name: 'SOUL.md', path: '/SOUL.md', missing: false }]);
+    const get = jest.fn(async () => ({ name: 'SOUL.md', path: '/SOUL.md', missing: false, content: 'Original' }));
+    const set = jest.fn().mockRejectedValueOnce(new Error('Temporary failure')).mockResolvedValue({ ok: true });
+    const adapter = adapterWith({ management: { agents: { files: { list, get, set } } } });
+    const view = render(<FilesSection adapter={adapter} agent={agent} online isPro onOpenPaywall={jest.fn()} />);
+    await waitFor(() => expect(view.getByTestId('agent-file-SOUL.md')).toBeTruthy());
+    fireEvent.press(view.getByTestId('agent-file-SOUL.md'));
+    await waitFor(() => expect(view.getByText('Original')).toBeTruthy());
+    fireEvent.press(view.getByTestId('agent-file-edit'));
+    fireEvent.changeText(view.getByTestId('agent-file-editor-input'), 'Keep this draft');
+    fireEvent.press(view.getByTestId('agent-file-save'));
+    await waitFor(() => expect(view.getByTestId('agent-file-detail-error')).toBeTruthy());
+    expect(view.getByTestId('agent-file-editor-input').props.value).toBe('Keep this draft');
+    expect(view.getByTestId('agent-file-detail-error').props.onAction).toBeUndefined();
+    fireEvent.press(view.getByTestId('agent-file-save'));
+    await waitFor(() => expect(set).toHaveBeenCalledTimes(2));
+    expect(set).toHaveBeenLastCalledWith('SOUL.md', 'Keep this draft', agent.agentId);
   });
 
   it('creates a listed-but-absent core file in place and keeps missing files inert when editing is unavailable', async () => {

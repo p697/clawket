@@ -31,15 +31,15 @@
 
 **结构**（选择态只有标题一档，无灰字副标题；进入配对步骤后才出现一行灰字）：
 1. 标题（display）：「把 Clawket 连到你的 Agent」/ `Connect Clawket to your agent`；下面一行灰字（secondary）：「需要一台运行 OpenClaw 或 Hermes 的电脑」/ `You need a computer running OpenClaw or Hermes`。没有别的解释。
-2. 两个选择行：「OpenClaw」「Hermes」，只有名字与图标，无副标题。选中后进入配对步骤（标题「连接 OpenClaw / Hermes」，无灰字副标题）。步骤 01「拿到配对码」/ `Get a pairing code` 用一个 44 点 `SegmentedTabs` 二选一，默认选中「发给我的 Agent」/ `Send to my agent`（产品鼓励的路径）：
-   - Agent 路径：一个 surface 文本块展示发给电脑上 Agent 的自然语言消息（说明这是开源 Clawket CLI、要运行的确切命令、并把打印出的 `Pairing code:` 那一行回给用户），下方一个 44 点 neutral 按钮「复制这段话」/ `Copy this message`（Copy 图标，带触感），复制后 1.5 秒内显示「已复制」+ 对勾再恢复；再下一行灰字提示粘贴给平时聊天的 Agent（如 Telegram 里的 OpenClaw / Hermes）即可收到配对码。
-   - 「自己运行命令」/ `Run it myself`：一句「打开终端，运行下面的命令。」+ 等宽命令块 `npx @p697/clawket pair` 与复制键，复制键同样 1.5 秒对勾后恢复。
+2. 两个选择行：「OpenClaw」「Hermes」，只有名字与图标，无副标题。选中后进入配对步骤（标题「连接 OpenClaw / Hermes」，无灰字副标题）。步骤 01 只有一条主路径（2026-09-17 改版：原 `SegmentedTabs` 二选一让「自己运行命令」与主路径平级、四行 prompt 正文压过按钮，Lucy 反馈"字太多、重点不突出"）：
+   - Agent 路径（默认）：步骤标题直接是动作「把这段话发给你的 Agent」/ `Send this message to your agent`；标题下一行灰字「粘贴给你平时聊天的 Agent（比如 Telegram 里的 OpenClaw / Hermes），它会回复配对码。」；再下方是 `MessagePreview`——发给 Agent 的自然语言消息（说明这是开源 Clawket CLI、要运行的确切命令、并把打印出的 `Pairing code:` 那一行回给用户）折叠成两行 secondary 灰字加尾部 chevron，点一下展开全文（展开后可选中），它是给 Agent 读的，不是给人读的；最后一个 44 点 neutral 按钮「复制这段话」/ `Copy this message`（Copy 图标，带触感）是步骤 01 唯一的深色元素，复制后 1.5 秒内显示「已复制」+ 对勾再恢复，并且步骤标题右侧保留一个对勾表示"已发出、等回复"。步骤 02 标题随之改为「输入它回复的配对码」/ `Enter the code it replies with`。
+   - 「自己运行命令」/ `Run it myself` 是底部文字键（Terminal 图标，与「扫码连接」「从相册选择」并列）；切过去后步骤 01 变回「拿到配对码」/ `Get a pairing code`：一句「打开终端，运行下面的命令。」+ 等宽命令块 `npx @p697/clawket pair` 与复制键，复制键同样 1.5 秒对勾后恢复；底部文字键变为「发给我的 Agent」/ `Send to my agent` 可切回。
    旧的「在哪里运行？」文档链接已移除，`bridge_offline` 报错动作仍指向官方文档。
 3. 六位码输入（自动分组 3+3，粘贴自动填充，剪贴板检测提示一句话）。键盘弹起时（iOS）页面用 keyboard-controller 的 padding `KeyboardAvoidingView` 收缩视口，并用 `useKeyboardRevealScroll` 把「配对码输入框 + 连接按钮」这一组刚好推到键盘上方 16 点：只滚实测的差额、按键盘真实高度进度插值，第三方键盘二次改高度时只补增量。Android 保持 adjustResize。不用 RN `automaticallyAdjustKeyboardInsets`（第三方键盘过渡帧会按整个键盘高度过滚），也不用库的 `KeyboardAwareScrollView`（它缓存的输入框位置在滚动后不刷新，键盘改高度时会二次叠加滚动并弹回）。数字键盘不再设 `returnKeyType`，避免 RN 自动附加的 Go 工具条再改一次键盘 frame。
-4. 主按钮「连接」/ `Connect`；下方一个文字键「扫描二维码」/ `Scan QR code`（折叠的兼容路径）。
+4. 主按钮「连接」/ `Connect`；下方一行文字键：「自己运行命令」/「发给我的 Agent」（见 2）、「扫码连接」/ `Scan to connect`、「从相册选择」/ `Choose from photos`（折叠的兼容路径）。
 5. 第三个选择行：「YouMind 精灵」/ `YouMind Sprite`，无副标题 → 邮箱验证码页（邮箱 → 六位验证码 → 完成）。
 6. 底部一个文字链接：「还没有 Agent？」/ `No agent yet?` → 展开 OpenClaw / Hermes / YouMind 三个文字键，各自直接打开官网首页（`openclaw.ai`、`hermes-agent.nousresearch.com`、`youmind.com`），不进安装/快速上手文档。埋点沿用 `onboarding_docs_opened{ backend }`。
-7. Preview 环境（Debug 模式）额外显示第三个选择行「Local model」（2026-09-11 授权的 `local-model` 后端，见 `15-local-model.md`）。其步骤 01 没有「发给我的 Agent」路径：同一 `SegmentedTabs` 槽位改为 llama.cpp / Ollama / Other（OpenAI 兼容）三选一，作为「支持哪些模型服务」的自解释列表；一行灰字说明该服务需先运行，命令块随选择带上 `--engine` / `--base-url`（Ollama 11434、其他 1234；llama.cpp 用 CLI 默认 8080）。「还没有 Agent？」不列出 Local model——它不是要安装的产品，而是用户已在运行的服务；`bridge_offline` 的文档动作指向 `15-local-model.md`。
+7. Preview 环境（Debug 模式）额外显示第三个选择行「Local model」（2026-09-11 授权的 `local-model` 后端，见 `15-local-model.md`）。其步骤 01 没有「发给我的 Agent」路径（底部也不出现切换键）：标题「拿到配对码」下用 `SegmentedTabs` 提供 llama.cpp / Ollama / Other（OpenAI 兼容）三选一，作为「支持哪些模型服务」的自解释列表；一行灰字说明该服务需先运行，命令块随选择带上 `--engine` / `--base-url`（Ollama 11434、其他 1234；llama.cpp 用 CLI 默认 8080）。「还没有 Agent？」不列出 Local model——它不是要安装的产品，而是用户已在运行的服务；`bridge_offline` 的文档动作指向 `15-local-model.md`。
 
 **状态**：连接中（按钮 loading，副标题「正在通过 Relay 连接…」/ `Connecting through Relay…`，三段进度：已连上 Relay → 等待 Bridge → 就绪）；失败（错误码文案 + 动作）；Preview 环境提示（Debug 模式下显示黄色「Preview」标签，沿用现有环境校验）。
 
@@ -62,7 +62,7 @@
 
 **置顶会话行**：头像用该 Agent 头像叠加渠道图标，标题只写「#频道名」，不重复 Agent 名。
 
-**手势**：点行 → 线程；长按 Agent 行 → 菜单：置顶 / 取消置顶（Agent 级）、静音、移除连接（仅当该连接只有这一个 Agent）；长按置顶会话行 → 取消置顶 / 重命名。下拉刷新 → 对活动连接 `listSessions` + `probe`。
+**手势**（2026-09-17 负责人定稿）：点行 → 线程；**左滑 Agent 行**（RTL 下为右滑）→ 两枚图标加短标签的托盘：「置顶 / 取消置顶」「管理」（进该连接的连接页，`Connection` 路由）；左滑置顶会话行 → 「取消置顶」「重命名」。长按 Agent 行 → 同一套动作的完整菜单：置顶 / 取消置顶、管理连接、移除连接（仅当该连接只有这一个 Agent，二次确认）；长按置顶会话行 → 取消置顶 / 重命名。托盘与长按菜单共用一个动作装配器，托盘永远不放「移除」。原「静音」已删除：它只挡默认关闭的 iOS 回复通知，行上没有任何状态，负责人判定看不见效果。下拉刷新 → 对活动连接 `listSessions` + `probe`。
 
 **「+」菜单**（2026-09-11 修订）：底部弹层，用引导页同款 `ChoiceRow`（52 图标块 + 标题 body 600 + 一行 `secondary` 说明 + 右侧箭头 / Pro 锁），不再是设置行文本。两项：添加连接（`MonitorSmartphone`，说明「连接 OpenClaw、Hermes 或 YouMind 精灵」→ 引导模态；免费用户已有一个连接时行尾显示锁，点击 → 付费墙 `gatewayConnections`）、新建 Agent（`Bot`，说明「在 {活动连接名} 上再建一个智能体」，无名称时写「当前连接」；仅活动连接支持 `agentCreate` 时显示；免费用户行尾显示锁，点击 → 付费墙 `agents`）。只剩一项时「+」直接进引导模态，不弹层。
 
@@ -84,7 +84,7 @@
 - 用户气泡、助手气泡、工具调用卡（可展开）、系统事件行（压缩、连接恢复、Hermes 斜杠命令回执、YouMind「正在使用工具」）、子 Agent 运行卡、Cron 运行结果卡、审批卡（exec / 插件 / 配对）、日期分隔。
 - 运行卡：一行标题（任务或子 Agent 名）+ 一行灰字（状态词 · 时间）+ 箭头。没有描述。点 → 以线程形式打开该运行会话。
 - Cron 结果卡：同运行卡；失败时状态词为红色「失败」，右侧动作「日志」（Pro 门槛 `logs`）。
-- 审批卡：一行标题「允许运行 exec？」+ 一行等宽命令 + 两颗按钮「允许」「拒绝」；长按「允许」→ 「总是允许」；到期变灰。配对请求卡：设备名一行 + 两颗按钮。
+- 审批卡：一行标题「允许运行 exec？」+ 一行等宽命令 + 两颗按钮「允许」「拒绝」；长按「允许」→ 「总是允许」；到期变灰。配对请求卡：设备名 +「允许此设备连接到 OpenClaw 吗？」+ 两颗按钮；说明允许换行，避免截断。仅显示待处理请求，请求处理中禁用操作，失败保留重试；允许 / 拒绝成功或已过期后收起，去重墓碑仍保留，不自动授权。
 - 流式输出：光标闪烁；不做逐字动画。
 - 加载更早历史：顶部上拉。
 
@@ -183,7 +183,9 @@
 
 ## 6. 账户设置 `AccountSettings`
 
-分组：Pro（状态 / 横幅 / 恢复购买）；连接（列表：label、后端、传输、环境标签；「添加连接」→ 引导模态；免费第 2 个连接 → 付费墙 `gatewayConnections`）；外观（主题、强调色、聊天外观、App 图标 Pro）；语音（识别语言）；通知（回复通知开关：默认关，沿用本地通知实现并去掉总开关常量）；帮助（帮助中心、OpenClaw 文档、Hermes 文档、发布说明、OpenClaw Releases、反馈）；社区（分享、评分、Discord）；关于（版本、开源仓库、隐私、条款）；开发者（Debug 模式、Preview 环境、设计系统、清缓存、重置设备）。
+分组：Pro（状态 / 横幅 / 恢复购买）；连接（「我的连接」列表：label、Agent 名、在线 / 离线 / 已暂停；行左滑 → 「暂停 / 恢复」「移除」，与连接页同样二次确认；点行 → 连接页；「添加连接」→ 引导模态；免费第 2 个连接 → 付费墙 `gatewayConnections`）；外观（主题、强调色、聊天外观、App 图标 Pro）；语音（识别语言）；通知（回复通知开关：默认关，沿用本地通知实现并去掉总开关常量）；帮助（帮助中心、OpenClaw 文档、Hermes 文档、发布说明、OpenClaw Releases、反馈）；社区（分享、评分、Discord）；关于（版本、开源仓库、隐私、条款）；开发者（Debug 模式、Preview 环境、设计系统、清缓存、重置设备）。
+
+**连接页 `Connection`**（2026-09-17 负责人定稿，唯一的连接级页面；花名册「管理」、我的连接列表、Agent 资料页「连接」行都指向这里）：头部 = 官方图标 + 连接名 + 状态 + Agent 名；主操作「重新连接 / 恢复连接」+「暂停此连接」（确认）；「名称」行 → 改名弹层（`RenameSheet`，只改本机 label，不动凭据、不断 OpenClaw 连接；Hermes 无 Bridge 名与本地模型的 Agent 名来自连接名，改名立即镜像到花名册与缓存，活动连接重新握手一次）；「详情」分组只读：后端、传输、环境、服务器地址、Bridge 版本、Bridge 能力、最近就绪；免费用户多一组「免费连接 · 当前」或「设为免费连接」（24 小时冷却尾值）；底部「移除连接」（确认）。原「高级设置」子页、账户设置的连接分段和 Agent 设置的连接分段一并删除，不再有第二处连接详情或生命周期入口。
 
 2026-09-16 帮助中心发布核查：配对说明覆盖 OpenClaw / Hermes、主机执行前提及配对码 / QR 操作；排障先提供 Clawket status / doctor / logs --follow / start，再提供 OpenClaw 专属检查。区分 Relay 出站联网与直连端口，凭据变更指向重新配对，断线指向连接页重连 / 恢复与主机 Bridge 重启。LAN / Tailnet 配置片段保留旧版 Gateway 启动需要的 allowedOrigins；说明合并配置、替换地址和强令牌、重启后用带 URL 的本地配对命令生成 QR。更新采用 openclaw update。所有帮助文案同步 19 语言；npm 发布由负责人另行把控。
 

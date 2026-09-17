@@ -1,4 +1,37 @@
 import { mapGatewayHistoryMessages, preserveOpenClawCliHistorySegments } from './gateway-history';
+import resumeHistory from './__fixtures__/openclaw-cli-resume-user.json';
+
+describe('recorded OpenClaw CLI resumed input', () => {
+  const project = (values: unknown[]) => preserveOpenClawCliHistorySegments('main', values, mapGatewayHistoryMessages('main', values));
+  it('keeps one canonical user bubble for the recorded resumed input', () => {
+    expect(project(resumeHistory)).toEqual([mapGatewayHistoryMessages('main', resumeHistory)[0]]);
+  });
+  it('keeps intentionally repeated sends', () => {
+    const repeated = { ...resumeHistory[0], id: 'second-send', idempotencyKey: '1789650198142_another:user' };
+    expect(project([resumeHistory[0], repeated, resumeHistory[1]]).map(m => m.id)).toEqual(['persisted-user', 'second-send']);
+  });
+  it.each([
+    ['partial page', [resumeHistory[1]]],
+    ['ordinary imported input', [resumeHistory[0], { ...resumeHistory[1], content: '滴滴' }]],
+    ['different prompt', [resumeHistory[0], { ...resumeHistory[1], content: resumeHistory[1].content + '！' }]],
+    ['explicit other identity', [resumeHistory[0], { ...resumeHistory[1], idempotencyKey: 'other' }]],
+    ['missing CLI provenance', [resumeHistory[0], { ...resumeHistory[1], __openclaw: { id: 'unknown' } }]],
+    ['missing transcript identity', [resumeHistory[0], { ...resumeHistory[1], __openclaw: { importedFrom: 'claude-cli', cliSessionId: 'session' } }]],
+    ['late input', [resumeHistory[0], { ...resumeHistory[1], timestamp: resumeHistory[0].timestamp + 60_001 }]],
+    ['older input', [resumeHistory[0], { ...resumeHistory[1], timestamp: resumeHistory[0].timestamp - 1 }]],
+    ['intervening reply', [resumeHistory[0], { id: 'reply', role: 'assistant', content: 'Hi' }, resumeHistory[1]]],
+    ['attachment', [resumeHistory[0], { ...resumeHistory[1], content: [{ type: 'text', text: resumeHistory[1].content }, { type: 'image', uri: 'file:///photo.png' }] }]],
+    ['opaque original identity', [{ ...resumeHistory[0], idempotencyKey: 'external:user' }, resumeHistory[1]]],
+  ])('preserves unproven copies: %s', (_, values) => {
+    expect(project(values)).toHaveLength(values.length);
+  });
+  it('keeps the canonical run anchor for assistant rollup reconciliation', () => {
+    const reply = { id: 'reply', role: 'assistant', content: '在。滴到了', __openclaw: resumeHistory[1].__openclaw };
+    const rollup = { id: 'rollup', role: 'assistant', provider: 'claude-cli', content: reply.content,
+      __openclaw: { idempotencyKey: `cli-assistant:${resumeHistory[0].idempotencyKey!.replace(/:user$/, '')}` } };
+    expect(project([...resumeHistory, reply, rollup]).map(m => m.id)).toEqual(['persisted-user', 'reply']);
+  });
+});
 
 describe('OpenClaw CLI aggregate history', () => {
   const imported = { importedFrom: 'claude-cli', cliSessionId: 'cli-session' };

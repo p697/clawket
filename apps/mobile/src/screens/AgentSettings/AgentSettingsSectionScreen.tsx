@@ -25,7 +25,6 @@ import {
 } from '../../connection';
 import { Banner } from '../../components/ui/Banner';
 import { ConnectionStatusPill } from '../../components/ui/ConnectionStatusPill';
-import { ConfirmationModal } from '../../components/ui/ConfirmationModal';
 import { FloatingButton } from '../../components/ui/FloatingButton';
 import {
   SettingsDivider,
@@ -106,7 +105,6 @@ export type AgentSettingsSectionScreenProps = NavigationProps & Readonly<{
 export type AgentSettingsSectionViewProps = Readonly<{
   model: AgentSettingsSectionModel;
   backend?: BackendKind;
-  connectionLabel?: string;
   state: AgentSettingsSectionState;
   errorMessage?: string;
   /** The runtime's foreground grace window is open: show quiet reconnecting instead of offline. */
@@ -136,8 +134,7 @@ export function AgentSettingsSectionScreen({
   const [pendingAction, setPendingAction] = useState<AgentSettingsSectionAction | null>(null);
   const [skillsRefresh, setSkillsRefresh] = useState(0);
   const [usagePosterRequest, setUsagePosterRequest] = useState(0);
-  const { t, i18n } = useTranslation('common');
-  const locale = i18n?.resolvedLanguage;
+  const { t } = useTranslation('common');
   const { connectionId, agentId, section } = route.params;
   const discoveringSkills = section === 'skills' && route.params.action === 'discover-skills';
   const editingCron = section === 'cron' && (route.params.action === 'create-cron' || route.params.action === 'edit-cron');
@@ -188,10 +185,6 @@ export function AgentSettingsSectionScreen({
     connectionState: runtime.activeState,
     isPro,
     permissionDenied,
-    ...(runtime.connectionDetails?.[connectionId]
-      ? { connectionDetails: runtime.connectionDetails[connectionId] }
-      : {}),
-    ...(locale ? { locale } : {}),
   }) : emptySectionModel(section, sectionLocked), [
     adapter?.management,
     capabilities,
@@ -199,10 +192,8 @@ export function AgentSettingsSectionScreen({
     isPro,
     permissionDenied,
     runtime.activeState,
-    runtime.connectionDetails,
     section,
     sectionLocked,
-    locale,
   ]);
   const state = resolveAgentSettingsSectionState({
     initialized: sectionLocked
@@ -320,10 +311,6 @@ export function AgentSettingsSectionScreen({
   }
 
   const runAction = useCallback((action: AgentSettingsSectionAction) => {
-    if (action === 'connection.reconnect') {
-      retry();
-      return;
-    }
     if (!resolveAction || !adapter || !connection || !agent || pendingAction) return;
     const request: AgentSettingsSectionActionRequest = {
       section,
@@ -407,7 +394,6 @@ export function AgentSettingsSectionScreen({
     <AgentSettingsSectionView
       model={model}
       backend={connection?.backendKind}
-      connectionLabel={connection?.label}
       state={state}
       errorMessage={errorMessage}
       reconnecting={runtime.recovering && runtime.activeConnectionId === connectionId}
@@ -415,7 +401,7 @@ export function AgentSettingsSectionScreen({
       onBack={navigation.goBack}
       onRetry={retry}
       onAction={runAction}
-      canResolveAction={(action) => action === 'connection.reconnect' || Boolean(resolveAction)}
+      canResolveAction={() => Boolean(resolveAction)}
       onOpenPaywall={openPaywall}
       sectionContent={sectionContent}
       title={discoveringSkills ? t('Discover') : undefined}
@@ -449,7 +435,6 @@ export function AgentSettingsSectionScreen({
 export function AgentSettingsSectionView({
   model,
   backend,
-  connectionLabel,
   state,
   errorMessage,
   reconnecting = false,
@@ -466,17 +451,12 @@ export function AgentSettingsSectionView({
   const { t } = useTranslation(['common', 'settings', 'config']);
   const { theme } = useAppTheme();
   const insets = useSafeAreaInsets();
-  const [removeConfirmationVisible, setRemoveConfirmationVisible] = useState(false);
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
   const translate = useCallback(
     (key: string) => translateAgentSettingsKey(t, key),
     [t],
   );
   const openAvailableRow = (row: AgentSettingsSectionRowDescriptor) => {
-    if (row.id === 'connection.remove') {
-      setRemoveConfirmationVisible(true);
-      return;
-    }
     onAction?.(row.id);
   };
   const openRow = (row: AgentSettingsSectionRowDescriptor) => {
@@ -613,23 +593,6 @@ export function AgentSettingsSectionView({
           </ScrollView>
         )}
       </View>
-      <ConfirmationModal
-        visible={removeConfirmationVisible}
-        title={t('Remove connection', { ns: 'config' })}
-        message={t('Are you sure you want to delete "{{name}}"?', {
-          ns: 'config',
-          name: connectionLabel ?? t('Connection', { ns: 'common' }),
-        })}
-        cancelLabel={t('Cancel', { ns: 'common' })}
-        confirmLabel={t('Remove', { ns: 'common' })}
-        destructive
-        testID="agent-settings-remove-connection-confirmation"
-        onClose={() => setRemoveConfirmationVisible(false)}
-        onConfirm={() => {
-          setRemoveConfirmationVisible(false);
-          onAction?.('connection.remove');
-        }}
-      />
     </>
   );
 }

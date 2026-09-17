@@ -68,5 +68,5 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', gap: Space.sm },
   cell: { flex: 1, minWidth: 0, minHeight: ControlSize.settingsRow, borderRadius: Radius.settingsGroup, borderWidth: StyleSheet.hairlineWidth, alignItems: 'center', justifyContent: 'center' },
   digit: { fontSize: FontSize.title, fontWeight: FontWeight.semibold, fontVariant: ['tabular-nums'] },
-  input: { ...StyleSheet.absoluteFillObject, opacity: 0.01 },
+  input: { ...StyleSheet.absoluteFill, opacity: 0.01 },
 });

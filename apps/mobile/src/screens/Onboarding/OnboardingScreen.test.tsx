@@ -89,9 +89,9 @@ jest.mock('../../theme', () => ({
   useAppTheme: () => ({ theme: mockTheme }),
 }));
 
-// Read through a getter so one test can flip the hidden YouMind Sprite entry
-// back on; the screen reads the flag at render time, never at module load.
-let mockYouMindEntryVisible = false;
+// Read through a getter so one test can hide the YouMind Sprite entry again;
+// the screen reads the flag at render time, never at module load.
+let mockYouMindEntryVisible = true;
 jest.mock('../../config/features', () => ({
   get YOUMIND_SPRITE_ENTRY_VISIBLE() { return mockYouMindEntryVisible; },
 }));
@@ -189,7 +189,7 @@ describe('OnboardingScreen', () => {
 
   beforeEach(() => {
     mockTheme = { scheme: 'light', colors: mockLightColors };
-    mockYouMindEntryVisible = false;
+    mockYouMindEntryVisible = true;
     consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation((message?: unknown) => {
       if (typeof message === 'string' && message.includes('react-test-renderer is deprecated')) return;
     });
@@ -240,7 +240,7 @@ describe('OnboardingScreen', () => {
     expect(view.queryByTestId('onboarding-doc-local-model')).toBeNull();
     fireEvent.press(view.getByTestId('onboarding-backend-local-model'));
     expect(view.queryByTestId('onboarding-agent-prompt')).toBeNull();
-    expect(view.queryByTestId('onboarding-pairing-method')).toBeNull();
+    expect(view.queryByTestId('onboarding-pairing-method-terminal')).toBeNull();
     expect(view.getByText('npx @p697/clawket pair --backend local-model --preview')).toBeTruthy();
     fireEvent.changeText(view.getByTestId('onboarding-pairing-code'), '001234');
     fireEvent.press(view.getByTestId('onboarding-connect'));
@@ -356,7 +356,8 @@ describe('OnboardingScreen', () => {
       );
 
       // Without an agent handler the step offers only the terminal path, with no method switch.
-      expect(view.queryByTestId('onboarding-pairing-method')).toBeNull();
+      expect(view.queryByTestId('onboarding-pairing-method-terminal')).toBeNull();
+      expect(view.queryByTestId('onboarding-pairing-method-agent')).toBeNull();
       expect(view.getByText('npx @p697/clawket pair --preview')).toBeTruthy();
       fireEvent.press(view.getByTestId('onboarding-copy-command'));
       expect(onCopyCommand).toHaveBeenCalledWith('npx @p697/clawket pair --preview');
@@ -385,10 +386,22 @@ describe('OnboardingScreen', () => {
         />,
       );
 
-      expect(view.getByTestId('onboarding-pairing-method-agent').props.accessibilityState).toEqual({ selected: true });
+      // The agent path is the only step-01 content; the terminal path waits in the footer row.
+      expect(view.getByText('Send this message to your agent')).toBeTruthy();
+      expect(view.getByText('Enter the code it replies with')).toBeTruthy();
+      expect(view.queryByTestId('onboarding-pairing-method-agent')).toBeNull();
       expect(view.queryByTestId('onboarding-command')).toBeNull();
+      expect(view.queryByTestId('onboarding-agent-prompt-sent')).toBeNull();
+      // The message is folded to its first lines until the user asks to read it.
+      const preview = view.getByTestId('onboarding-agent-prompt');
+      expect(preview.props.accessibilityState).toEqual({ expanded: false });
+      const promptText = () => view.getByTestId('onboarding-agent-prompt-text');
+      expect(promptText().props.numberOfLines).toBe(2);
+      fireEvent.press(preview);
+      expect(view.getByTestId('onboarding-agent-prompt').props.accessibilityState).toEqual({ expanded: true });
+      expect(promptText().props.numberOfLines).toBeUndefined();
       // The test translator returns raw keys; interpolation is covered in model.test.ts.
-      const prompt = view.getByTestId('onboarding-agent-prompt').findByProps({ accessibilityLabel: 'Message for your agent' }).props.children as string;
+      const prompt = promptText().props.children as string;
       expect(prompt).toContain('{{pairCommand}}');
 
       fireEvent.press(view.getByTestId('onboarding-copy-agent-prompt'));
@@ -398,18 +411,25 @@ describe('OnboardingScreen', () => {
       act(() => { jest.advanceTimersByTime(1500); });
       expect(view.queryByText('Copied')).toBeNull();
       expect(view.getByText('Copy this message')).toBeTruthy();
+      // The step keeps a done mark after the transient label reverts.
+      expect(view.getByTestId('onboarding-agent-prompt-sent')).toBeTruthy();
 
       fireEvent.press(view.getByTestId('onboarding-pairing-method-terminal'));
       expect(view.queryByTestId('onboarding-agent-prompt')).toBeNull();
+      expect(view.getByText('Get a pairing code')).toBeTruthy();
+      expect(view.getByText('Enter the pairing code')).toBeTruthy();
       expect(view.getByText('npx @p697/clawket pair --preview')).toBeTruthy();
       fireEvent.press(view.getByTestId('onboarding-copy-command'));
       expect(onCopyCommand).toHaveBeenCalledWith('npx @p697/clawket pair --preview');
+      fireEvent.press(view.getByTestId('onboarding-pairing-method-agent'));
+      expect(view.getByTestId('onboarding-agent-prompt')).toBeTruthy();
     } finally {
       jest.useRealTimers();
     }
   });
 
-  it('routes QR and official website actions through callbacks without any YouMind Sprite entry', () => {
+  it('hides every YouMind Sprite entry when the entry flag is off', () => {
+    mockYouMindEntryVisible = false;
     const onScanQr = jest.fn();
     const onOpenYouMind = jest.fn();
     const onOpenWebsite = jest.fn();
@@ -432,8 +452,7 @@ describe('OnboardingScreen', () => {
     expect(onOpenWebsite.mock.calls).toEqual([['openclaw'], ['hermes']]);
   });
 
-  it('restores the YouMind Sprite row and website link when the entry flag is on', () => {
-    mockYouMindEntryVisible = true;
+  it('renders the YouMind Sprite row and website link by default', () => {
     const onOpenYouMind = jest.fn();
     const onOpenWebsite = jest.fn();
     const view = render(

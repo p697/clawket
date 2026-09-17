@@ -4,7 +4,7 @@ import type { RosterConnectionGroup } from '../../connection';
 import {
   assembleRosterAddActions,
   assembleRosterRowActions,
-  isRosterAgentMuted,
+  assembleRosterSwipeActions,
   renameRosterSession,
   resolveRosterCreateAgentTarget,
 } from './actions';
@@ -28,7 +28,6 @@ function row(
     cached: false,
     locked: false,
     agentPinned: false,
-    muted: false,
     ...patch,
   };
 }
@@ -88,13 +87,28 @@ describe('Roster action assembly', () => {
       row: row('agent'),
       connectionAgentCount: 1,
       canRenameSession: true,
-    })).toEqual(['pin_agent', 'mute_agent', 'remove_connection']);
+    })).toEqual(['pin_agent', 'manage_connection', 'remove_connection']);
 
     expect(assembleRosterRowActions({
-      row: row('agent', { agentPinned: true, muted: true }),
+      row: row('agent', { agentPinned: true }),
       connectionAgentCount: 2,
       canRenameSession: true,
-    })).toEqual(['unpin_agent', 'unmute_agent']);
+    })).toEqual(['unpin_agent', 'manage_connection']);
+  });
+
+  it('keeps the swipe tray to pin and manage, never removal', () => {
+    expect(assembleRosterSwipeActions({ row: row('agent'), canRenameSession: true }))
+      .toEqual(['pin_agent', 'manage_connection']);
+    expect(assembleRosterSwipeActions({ row: row('agent', { agentPinned: true }), canRenameSession: false }))
+      .toEqual(['unpin_agent', 'manage_connection']);
+    expect(assembleRosterSwipeActions({
+      row: row('pinned_session', { allowedActions: { rename: true, reset: false, delete: false, pin: true } }),
+      canRenameSession: true,
+    })).toEqual(['unpin_session', 'rename_session']);
+    expect(assembleRosterSwipeActions({
+      row: row('pinned_session', { locked: true, allowedActions: { rename: true, reset: false, delete: false, pin: true } }),
+      canRenameSession: true,
+    })).toEqual(['unpin_session']);
   });
 
   it('always permits local unpin but hides unsupported, locked, and disallowed rename', () => {
@@ -143,16 +157,6 @@ describe('Roster action assembly', () => {
       currentAgentId: 'builder',
       roster,
     })).toEqual({ connectionId: 'hermes', agentId: 'main' });
-  });
-
-  it('scopes mute suppression to the exact connection and Agent', () => {
-    const preferences = {
-      'openclaw:main': { muted: true },
-      'hermes:main': { muted: false },
-    };
-    expect(isRosterAgentMuted({ preferences, connectionId: 'openclaw', agentId: 'main' })).toBe(true);
-    expect(isRosterAgentMuted({ preferences, connectionId: 'hermes', agentId: 'main' })).toBe(false);
-    expect(isRosterAgentMuted({ preferences, connectionId: null, agentId: 'main' })).toBe(false);
   });
 
   it('writes a supported pinned-session rename through the adapter and refreshes', async () => {

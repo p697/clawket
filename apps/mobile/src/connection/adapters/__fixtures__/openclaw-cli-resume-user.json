@@ -1,0 +1,24 @@
+[
+  {
+    "role": "user",
+    "content": "滴滴",
+    "timestamp": 1789650192489,
+    "idempotencyKey": "1789650197142_ku5tbzv3:user",
+    "__openclaw": {
+      "senderIsOwner": true,
+      "id": "persisted-user",
+      "idempotencyKey": "1789650197142_ku5tbzv3:user"
+    }
+  },
+  {
+    "role": "user",
+    "content": "OpenClaw resumed this CLI session after prompt content changed. Follow the current turn's instructions; changed=system-prompt.\n\n滴滴",
+    "timestamp": 1789650202344,
+    "__openclaw": {
+      "id": "imported-user",
+      "importedFrom": "claude-cli",
+      "cliSessionId": "recorded-cli-session",
+      "externalId": "imported-user"
+    }
+  }
+]

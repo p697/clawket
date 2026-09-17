@@ -1,6 +1,6 @@
 import { Asset } from 'expo-asset';
 import * as FileSystem from 'expo-file-system';
-import * as MediaLibrary from 'expo-media-library';
+import * as MediaLibrary from 'expo-media-library/legacy';
 
 export type SaveBundledImageToPhotoLibraryResult = 'saved' | 'permission_denied';
 export type SaveImageUriToPhotoLibraryResult = 'saved' | 'permission_denied';
@@ -35,7 +35,7 @@ export async function saveBundledImageToPhotoLibrary(
     `${filenameBase}-${Date.now()}.${extension}`,
   );
 
-  new FileSystem.File(localUri).copy(destination);
+  await new FileSystem.File(localUri).copy(destination);
   await MediaLibrary.saveToLibraryAsync(destination.uri);
   return 'saved';
 }
@@ -56,7 +56,7 @@ export async function saveImageUriToPhotoLibrary(
   );
 
   if (uri.startsWith('file://')) {
-    new FileSystem.File(uri).copy(destination);
+    await new FileSystem.File(uri).copy(destination);
   } else {
     await FileSystem.File.downloadFileAsync(uri, destination);
   }

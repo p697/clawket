@@ -2,7 +2,7 @@
 
 ## 1. 发布顺序
 
-服务端 → Bridge npm → App 的顺序成立，但服务端部署后仍需支持未升级的 App 和 Bridge；发布新版 npm 不会自动升级用户电脑。当前审计与实测矩阵见 [2026-09-14 发布兼容性报告](release-compatibility-2026-09-14.md)。
+服务端 → Bridge npm → App 的顺序成立，但服务端部署后仍需支持未升级的 App 和 Bridge；发布新版 npm 不会自动升级用户电脑。兼容矩阵见 [2026-09-14 发布兼容性报告](release-compatibility-2026-09-14.md)，最新证据与未关闭风险见 [2026-09-16 最终检查](final-release-review-2026-09-16.md)。
 
 1. 固定候选提交和发布包，跑 `check:required`、`test:compat`、`relay:test:integration`、`bridge:cli:verify-package`。导出当时 Production 四个 Worker 的只读代码快照，用 `CLAWKET_RELEASE_SNAPSHOTS=<directory> npm run test:release:compat` 验证混合服务版本、旧/新 Bridge 与存量配对。快照缺失必须失败。
 2. Preview 部署 Registry → Relay，逐后端验证；OpenClaw 与 Hermes 的资源、凭据独立。完成旧 App 协议回放、新版 App 连接旧 Bridge 的测试，并在隔离候选服务上用实际已发布 2.x App 抽验。保存 Production 版本与恢复产物。
@@ -14,24 +14,26 @@
 
 恢复边界：未跨 DO 类生命周期迁移的服务可使用 Cloudflare 版本回滚；跨迁移按第 3 步前向恢复。npm `latest` 指回旧版只影响后续安装，已经装上新 Bridge 的主机需要显式安装指定旧版本并重启。App 商店无法即时回退，因此必须最后发布。[Cloudflare 回滚限制](https://developers.cloudflare.com/workers/versions-and-deployments/rollbacks/)
 
-## 2. 老 App 验证脚本（人手上要有一台装着 2.1.2 的设备）
+自动集成命令边界：`relay:test:integration` 只跑自包含服务与录制适配器；真实本地模型另跑 `CLAWKET_RECOVERY_CONFIG=<config> npm run test:local-model:recovery` 和 `CLAWKET_LOCAL_MODEL_PREVIEW_SMOKE=1 npm run test:local-model:preview`（需要运行中的模型）。两个真实模型命令缺少前置条件必须失败，不能把自包含测试通过写成真实推理通过。
 
-- 打开 2.1.2 → 连接自动恢复 → 发一条消息 → 收到回复 → 后台 2 分钟回前台 → 仍连接 → 打开 Console 的 Sessions Board → 正常。
-- 2.1.2 扫新版 `clawket pair` 输出的二维码 → 配对成功。
-- Hermes：2.1.2 连新 Bridge → 聊天正常（单会话）。
+## 2. 老 App 验证脚本（保留实际已发布的 2.x 二进制和存量配对）
+
+- 优先抽验线上仍活跃的 2.1.0 / 2.1.1，记录版本、构建与二进制来源；源码中的 2.1.2 版本号不能单独证明它已发布，2.1.1 的 fixture provenance 缺口见 `tests/compat/PINNED.md`。
+- 打开旧包 → 存量连接自动恢复 → 发消息 / 流式 / 停止 / 图片 / 历史 → 后台 2 分钟回前台 → 仍可收发 → Console 的 Sessions Board 正常。
+- 旧包扫新版 `clawket pair` 的兼容二维码 → 配对成功；OpenClaw / Hermes 分别覆盖旧、新 Bridge。
 
 ## 3. 验收清单（实现者做可自动验证的项并记录；界面观感与真机由人）
 
-状态约定：`[x] AUTO` 只表示该行可自动验证的部分已完成，不代表同行的真机、控制台或视觉部分已通过；这些剩余部分显式写作 `HUMAN 待人` 并进入 `PROGRESS.md` 的 HUMAN TODO。纯人类项目保持 `[ ] HUMAN`。机器证据、Preview 版本与回滚锚点见 `PROGRESS.md` 的 M8 完成证据。
+状态约定：`[x] AUTO` 只表示该行可自动验证的部分已完成，不代表同行的真机、控制台或视觉部分已通过；这些剩余部分显式写作 `HUMAN 待人` 并进入 `PROGRESS.md` 的 HUMAN TODO。纯人类项目保持 `[ ] HUMAN`。机器证据、Preview 版本与回滚锚点见 `PROGRESS.md` 的 M8 完成证据。以下历史清单遇到后续负责人决策时，以 `PROGRESS.md` 对应决策为准；不得恢复已明确删除的界面来满足旧清单。
 
 ### 3.1 首启与连接
 
 - [x] **AUTO 完成；HUMAN 待人：双端卸载重装。** 全新安装打开 → 首启引导（引导期间不弹付费墙）
-- [x] **AUTO 完成；HUMAN 待人：双端真实输入。** 六位码配对 OpenClaw（Relay）→ 连接就绪进花名册 → 弹一次通用版付费墙 → 关闭后 main 线程自动打开（`06` §3 状态机）
+- [x] **AUTO 完成；HUMAN 待人：双端真实输入。** 六位码配对 OpenClaw（Relay）→ 连接就绪进花名册 → 按当前启动导航进入 main；新安装不弹升级公告，升级用户按版本规则展示公告，不恢复旧的冷启动自动付费墙。
 - [x] **AUTO 完成；HUMAN 待人：真机相机与相册。** 二维码扫描（折叠入口）→ 配对成功
 - [x] **AUTO 完成；HUMAN 待人：真实 LAN / Tailscale。** 直连 / Tailscale URL 配对 → 成功
 - [x] **AUTO 完成；HUMAN 待人：真实双 transport 与旧 Bridge。** Hermes 配对（Relay 与本地各一次）→ 成功；老 Bridge 时显示升级提示
-- [x] **AUTO 完成；HUMAN 待人：真实邮箱、账户与 CDN 头像。** YouMind 邮箱验证码登录 → 精灵出现在花名册（名字、头像正确，副标题 YouMind）
+- [x] **AUTO 完成；HUMAN 待人：真实既有账户。** YouMind 新建入口按 09-14 决策隐藏；既有连接仍可恢复并聊天。标志重新开启时再验收邮箱验证码与新建流程。
 - [x] **AUTO 完成；HUMAN 待人：真实故障复现。** 配对码过期 / Bridge 未运行 / 无网络三种失败分别显示对应文案与动作
 - [x] **AUTO 完成；HUMAN 待人：真机打开链接。** 「还没有 Agent」链接只指向官方文档
 
@@ -58,10 +60,9 @@
 
 ### 3.4 会话面板
 
-- [x] **AUTO 完成；HUMAN 待人：密集真实数据视觉。** 分组模式：当前 Agent 展开、其他折叠；五类分节；折叠计数
-- [x] **AUTO 完成；HUMAN 待人：触控与布局。** 列表模式：紧凑行、摘要、类型 chip、搜索
+- [x] **AUTO 完成；HUMAN 待人：密集真实数据视觉。** 当前单一会话列表、搜索与类型过滤；不恢复负责人删除的分组 / 列表切换。
 - [x] **AUTO 完成；HUMAN 待人：破坏性动作 UX。** 长按：置顶到花名册 / 重命名 / 重置 / 删除（二次确认）
-- [x] **AUTO 完成；HUMAN 待人：真实 Hermes 主机。** Hermes 多会话：新建、重命名、删除、切换
+- [x] **AUTO 完成；HUMAN 待人：真实 Hermes 主机。** Hermes 多会话：重命名、删除、切换；后台仍支持创建，App 新建按钮按负责人决策移除。
 - [x] **AUTO 完成；HUMAN 待人：视觉流畅度。** 切换会话后线程 200 ms 交叉淡入，头部更新；减动效时跳过
 
 ### 3.5 设置
@@ -77,7 +78,7 @@
 
 ### 3.7 付费墙
 
-- [x] **AUTO 完成；HUMAN 待人：双端冷启动。** 冷启动后活动连接就绪时弹一次（引导期间、无连接就绪、有待审批时不弹；同进程内重连与后台切回不弹）
+- [x] **AUTO 完成；HUMAN 待人：双端冷启动。** 待审批优先，升级公告按版本一次；重连 / 后台切回不重复弹。付费墙由实际付费功能入口触发。
 - [x] **AUTO 完成；HUMAN 待人：英雄图视觉签字。** 六个情境触发各一次；英雄图与文案正确
 - [x] **AUTO 完成；HUMAN 待人：控制台本地化商品。** 年付默认选中，折合月价与省百分比正确；展开月付
 - [x] **AUTO 完成；HUMAN 待人：App Store / Play sandbox。** 沙盒购买成功 → 页内成功态 → 自动继续被拦动作；恢复购买；取消不报错
@@ -91,7 +92,7 @@
 - [x] **AUTO 完成；HUMAN 待人：本地化截断检查。** 文案预算：每屏默认只有两档字；设置行无副标题、尾值只有一个值；面板行无文字标签；空态与横幅一句话
 - [x] **AUTO 完成 token / 静态规则；HUMAN 待人：整体视觉判断。** 四屏与 `docs/3.0/mockups` 的整体气质一致（白底、浮动控件、方块头像、两层字、颜色只在头像上），尺寸以 token 表为准
 - [x] **AUTO 完成；HUMAN 待人：手势与呈现检查。** 所有页面级返回 / 关闭 / 标题 / Tab / 弹层 / 确认框为自绘组件（`05` §11），无系统导航栏按钮；全 App 的 Tab 都是全圆胶囊 `Segmented`
-- [x] **AUTO 完成；HUMAN 待人：语境与截断。** 六种语言切换无缺 key（strict `i18n-prune` 与缺 key 检查通过：6 locales × 4 namespaces、992 keys / 5,952 translations、missing/removable/dynamic protected 均为 0）
+- [x] **AUTO 完成；HUMAN 待人：语境与截断。** 19 种语言无缺 key（09-16 strict 检查：19 locales × 4 namespaces、1,297 keys / 24,643 translations，missing / removable 均为 0）；仍需长文案与大字号原生检查。
 
 ### 3.9 服务端
 
@@ -99,7 +100,7 @@
 - [x] **AUTO 完成 live 上限与 replay；HUMAN 待人：老/新真机附件端到端。** 9 MiB 帧被拒（1009）；1.5 MB 图片附件经 Relay 正常送达（老客户端与新客户端各一次）
 - [x] **AUTO 完成。** 注册限速在线精确返回 429
 - [x] **AUTO 完成。** Hermes Preview 实例由合一代码提供，心跳 30 秒
-- [x] **AUTO 完成：compat 5 files / 35 tests；HUMAN 待人：已发布 2.1.2 真机脚本。** `test:compat` 全绿；老 App 脚本（§2）通过
+- [x] **AUTO 完成：compat 5 files / 39 tests；HUMAN 待人：已发布 2.x 真机脚本。** `test:compat` 全绿；§2 的真实旧包抽验尚未关闭。
 - [ ] **HUMAN 待人：Preview `workers.dev` 无 Production zone WAF；见 `HT-M2-1`。** WAF 四条规则与三条告警已配置（HT-1，人）
 
 ### 3.10 减法
@@ -117,4 +118,4 @@
 
 - 副标题：OpenClaw 与 Hermes 的手机控制塔
 - 描述首段：看清每个 Agent 在做什么，随时接管。连接你自己电脑上的 OpenClaw 或 Hermes，聊天、管理会话、定时任务、技能与模型；官方 App 用来聊，Clawket 用来管。
-- 隐私：消息只保存在你的设备上；Relay 只转发，不落盘。
+- 隐私文案须区分手机本地缓存、用户自建 Agent 的历史存储、Relay 转发与分析 / 购买 SDK；不得声称 App 无分析或无第三方处理。公开政策与商店标签更新见 `HT-M8-2`。

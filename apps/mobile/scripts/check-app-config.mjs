@@ -25,6 +25,17 @@ export function validateAppConfig(config) {
     ];
   }
 
+  const plugins = Array.isArray(expo.plugins) ? expo.plugins : [];
+  const buildPropertiesIndex = plugins.findIndex((plugin) => Array.isArray(plugin) && plugin[0] === 'expo-build-properties');
+  const pasteInputIndex = plugins.indexOf('./plugins/with-paste-input-setup');
+  if (buildPropertiesIndex < 0 || plugins[buildPropertiesIndex][1]?.ios?.enableSceneSupport !== true) {
+    return ['Expo SDK 57 must enable ios.enableSceneSupport to launch on iOS 27.'];
+  }
+  // Config mod actions run in reverse registration order: Expo must migrate first.
+  if (pasteInputIndex < 0 || buildPropertiesIndex <= pasteInputIndex) {
+    return ['expo-build-properties must follow with-paste-input-setup so scene migration runs before paste registration.'];
+  }
+
   return [];
 }
 
@@ -52,7 +63,7 @@ function main() {
     return;
   }
 
-  console.log('[check-app-config] verified 1 iOS tablet reachability invariant.');
+  console.log('[check-app-config] verified 3 iOS invariants: tablet support, scene lifecycle, and native plugin ordering.');
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

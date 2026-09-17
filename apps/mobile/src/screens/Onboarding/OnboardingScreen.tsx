@@ -16,8 +16,10 @@ import {
   Circle,
   Copy,
   ImagePlus,
+  MessageSquareText,
   Palette,
   QrCode,
+  Terminal,
   WifiOff,
 } from 'lucide-react-native';
 import { YOUMIND_SPRITE_ENTRY_VISIBLE } from '../../config/features';
@@ -35,7 +37,7 @@ import { Banner } from '../../components/ui/Banner';
 import { Button } from '../../components/ui/Button';
 import { FloatingButton } from '../../components/ui/FloatingButton';
 import { FormTextInput } from '../../components/ui/FormTextInput';
-import { FlowHeader, PageIntro, ChoiceRow, FormStep, CommandBlock } from '../../components/ui/SetupPrimitives';
+import { FlowHeader, PageIntro, ChoiceRow, FormStep, CommandBlock, MessagePreview } from '../../components/ui/SetupPrimitives';
 import { SegmentedTabs } from '../../components/ui/SegmentedTabs';
 import { useKeyboardRevealScroll } from '../../components/ui/useKeyboardRevealScroll';
 import { Skeleton } from '../../components/ui/Skeleton';
@@ -146,6 +148,9 @@ export function OnboardingScreen({
   const [copied, flashCopied] = useCopiedFlash();
   const [agentPromptCopied, flashAgentPromptCopied] = useCopiedFlash();
   const [pairingMethod, setPairingMethod] = useState<PairingMethod>('agent');
+  const [agentPromptExpanded, setAgentPromptExpanded] = useState(false);
+  // Stays on once the message left the phone: the step reads as done while the user waits for the reply.
+  const [agentPromptSent, setAgentPromptSent] = useState(false);
   const [localModelEngine, setLocalModelEngine] = useState<LocalModelEngine>('llamacpp');
   const [localError, setLocalError] = useState(false);
   const [docsExpanded, setDocsExpanded] = useState(false);
@@ -155,10 +160,6 @@ export function OnboardingScreen({
     ? buildLocalModelPairingCommand(localModelEngine)
     : pairingCommand;
   const agentPrompt = useMemo(() => buildAgentPairingPrompt(t, effectiveCommand), [effectiveCommand, t]);
-  const pairingMethodTabs = useMemo((): Array<{ key: PairingMethod; label: string }> => [
-    { key: 'agent', label: t('Send to my agent') },
-    { key: 'terminal', label: t('Run it myself') },
-  ], [t]);
   // The tab row doubles as the list of supported model servers; each hint names
   // the precondition the CLI cannot check for the user before it runs.
   const localModelEngines = useMemo((): Array<{ key: LocalModelEngine; label: string; hint: string }> => [
@@ -240,7 +241,7 @@ export function OnboardingScreen({
   };
 
   const resetPairingStep = () => {
-    setPairingCode(''); setLocalError(false);
+    setPairingCode(''); setLocalError(false); setAgentPromptSent(false); setAgentPromptExpanded(false);
   };
   const goBack = () => {
     if (!choosing && !connecting) { setChoosing(true); resetPairingStep(); }
@@ -251,10 +252,11 @@ export function OnboardingScreen({
   };
   const copyAgentPrompt = () => {
     if (!onCopyAgentPrompt) return;
-    void Promise.resolve(onCopyAgentPrompt(agentPrompt, backendKind)).then(flashAgentPromptCopied, () => setLocalError(true));
+    void Promise.resolve(onCopyAgentPrompt(agentPrompt, backendKind)).then(() => { flashAgentPromptCopied(); setAgentPromptSent(true); }, () => setLocalError(true));
   };
   const backendLabel = backendKind === 'local-model' ? t('Local model') : backendKind === 'openclaw' ? 'OpenClaw' : 'Hermes';
-  const agentMethod = backendKind !== 'local-model' && Boolean(onCopyAgentPrompt) && pairingMethod === 'agent';
+  const agentMethodAvailable = backendKind !== 'local-model' && Boolean(onCopyAgentPrompt);
+  const agentMethod = agentMethodAvailable && pairingMethod === 'agent';
   return (
     <View testID="onboarding-screen" style={[styles.screen, { paddingTop: insets.top }]}>
       <FlowHeader onBack={connecting ? onClose : onClose || !choosing ? goBack : undefined} testID="onboarding-close"
@@ -280,23 +282,23 @@ export function OnboardingScreen({
             {docsExpanded ? <View testID="onboarding-doc-options" style={styles.docsList}>{websiteOptions.map((backend) => <Button key={backend.kind} testID={`onboarding-doc-${backend.kind}`} label={backend.label} variant="text" onPress={() => onOpenWebsite(backend.kind)} />)}</View> : null}
           </View>
         </> : <>
-          <FormStep number="01" title={t('Get a pairing code')}>
+          {agentMethod ? <FormStep number="01" title={t('Send this message to your agent')}
+            action={agentPromptSent ? <Check testID="onboarding-agent-prompt-sent" size={IconSize.sm} color={theme.colors.inkSecondary} strokeWidth={2} accessibilityLabel={t('Copied')} /> : undefined}>
+            <Text style={styles.subtitle}>{t('Paste it to the agent you already chat with, like {{backend}} in Telegram. It will reply with the pairing code.', { backend: backendLabel })}</Text>
+            <MessagePreview testID="onboarding-agent-prompt" message={agentPrompt} expanded={agentPromptExpanded}
+              onToggle={() => setAgentPromptExpanded((expanded) => !expanded)} accessibilityLabel={t('Message for your agent')} />
+            <Button testID="onboarding-copy-agent-prompt" label={agentPromptCopied ? t('Copied') : t('Copy this message')} icon={agentPromptCopied ? Check : Copy}
+              variant="neutral" haptic accessibilityLabel={t('Copy this message')} onPress={copyAgentPrompt} />
+          </FormStep> : <FormStep number="01" title={t('Get a pairing code')}>
             {backendKind === 'local-model'
               ? <SegmentedTabs testID="onboarding-local-model-engine" size="sm" tabs={localModelEngines} active={localModelEngine} onSwitch={setLocalModelEngine} />
-              : onCopyAgentPrompt ? <SegmentedTabs testID="onboarding-pairing-method" size="sm" tabs={pairingMethodTabs} active={pairingMethod} onSwitch={setPairingMethod} /> : null}
-            {agentMethod ? <>
-              <CommandBlock prose command={agentPrompt} accessibilityLabel={t('Message for your agent')} testID="onboarding-agent-prompt" />
-              <Button testID="onboarding-copy-agent-prompt" label={agentPromptCopied ? t('Copied') : t('Copy this message')} icon={agentPromptCopied ? Check : Copy}
-                variant="neutral" haptic accessibilityLabel={t('Copy this message')} onPress={copyAgentPrompt} />
-              <Text style={styles.subtitle}>{t('Paste it to the agent you already chat with, like {{backend}} in Telegram. It will reply with the pairing code.', { backend: backendLabel })}</Text>
-            </> : <>
-              <Text testID="onboarding-command-hint" style={styles.subtitle}>{localModelHint ?? t('Open Terminal and run this command.')}</Text>
-              <CommandBlock command={effectiveCommand} copied={copied} onCopy={onCopyCommand ? () => {
-                void Promise.resolve(onCopyCommand(effectiveCommand)).then(flashCopied, () => setLocalError(true));
-              } : undefined} />
-            </>}
-          </FormStep>
-          <FormStep number="02" title={t('Enter the pairing code')}
+              : null}
+            <Text testID="onboarding-command-hint" style={styles.subtitle}>{localModelHint ?? t('Open Terminal and run this command.')}</Text>
+            <CommandBlock command={effectiveCommand} copied={copied} onCopy={onCopyCommand ? () => {
+              void Promise.resolve(onCopyCommand(effectiveCommand)).then(flashCopied, () => setLocalError(true));
+            } : undefined} />
+          </FormStep>}
+          <FormStep number="02" title={agentMethod ? t('Enter the code it replies with') : t('Enter the pairing code')}
             action={onPastePairingCode ? <Button testID="onboarding-paste-code" label={t('Paste')} variant="text" disabled={connecting} onPress={() => { void pastePairingCode().catch(() => setLocalError(true)); }} /> : undefined}>
             <View ref={keyboardReveal.anchorRef} testID="onboarding-keyboard-anchor" style={styles.keyboardAnchor} onLayout={keyboardReveal.measureAnchor}>
               <FormTextInput testID="onboarding-pairing-code" accessibilityLabel={t('Pairing code')} surface="quiet"
@@ -312,6 +314,9 @@ export function OnboardingScreen({
             </View>
           </FormStep>
           {connecting ? <ConnectionProgress phase={status.phase} /> : <View style={styles.alternatives}>
+            {agentMethodAvailable ? (pairingMethod === 'agent'
+              ? <Button testID="onboarding-pairing-method-terminal" label={t('Run it myself')} icon={Terminal} variant="text" onPress={() => setPairingMethod('terminal')} />
+              : <Button testID="onboarding-pairing-method-agent" label={t('Send to my agent')} icon={MessageSquareText} variant="text" onPress={() => setPairingMethod('agent')} />) : null}
             <Button testID="onboarding-scan-qr" label={t('Scan to connect')} icon={QrCode} variant="text" onPress={() => onScanQr(backendKind)} />
             {onImportQr ? <Button testID="onboarding-import-qr" label={t('Choose from photos')} icon={ImagePlus} variant="text" onPress={() => onImportQr(backendKind)} /> : null}
           </View>}

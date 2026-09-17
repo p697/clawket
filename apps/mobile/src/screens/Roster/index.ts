@@ -15,7 +15,7 @@ export {
 export {
   assembleRosterAddActions,
   assembleRosterRowActions,
-  isRosterAgentMuted,
+  assembleRosterSwipeActions,
   renameRosterSession,
   resolveRosterCreateAgentTarget,
   type RosterAddAction,

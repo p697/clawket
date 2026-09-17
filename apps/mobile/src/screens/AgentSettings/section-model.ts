@@ -4,8 +4,7 @@ import type {
   ConnectionState,
   ManagementOperations,
 } from '@clawket/agent-protocol';
-import type { AgentSettingsSection } from '../../navigation/root-stack';
-import type { ConnectionRuntimeDetails } from '../../connection/runtime-details';
+import type { AgentSettingsDetailSection, AgentSettingsSection } from '../../navigation/root-stack';
 
 export type AgentSettingsSectionState =
   | 'loading'
@@ -30,13 +29,6 @@ export type AgentSettingsSectionAction =
   | 'files.edit'
   | 'usage.activity'
   | 'usage.cost'
-  | 'connection.status'
-  | 'connection.last-ready'
-  | 'connection.bridge-version'
-  | 'connection.bridge-capabilities'
-  | 'connection.environment'
-  | 'connection.reconnect'
-  | 'connection.remove'
   | 'openclaw.config'
   | 'openclaw.permissions'
   | 'openclaw.diagnostics'
@@ -82,8 +74,6 @@ export type BuildAgentSettingsSectionModelInput = Readonly<{
   connectionState: ConnectionState;
   isPro: boolean;
   permissionDenied?: boolean;
-  connectionDetails?: ConnectionRuntimeDetails;
-  locale?: string;
 }>;
 
 type CapabilityGate = Readonly<{
@@ -119,7 +109,9 @@ type SectionDefinition = Readonly<{
   groups: ReadonlyArray<GroupDefinition>;
 }>;
 
-const SECTION_DEFINITIONS: Readonly<Record<AgentSettingsSection, SectionDefinition>> = {
+const CONNECTION_ROUTE_TITLE = 'Connection';
+
+const SECTION_DEFINITIONS: Readonly<Record<AgentSettingsDetailSection, SectionDefinition>> = {
   identity: {
     title: 'Identity',
     groups: [{
@@ -270,69 +262,6 @@ const SECTION_DEFINITIONS: Readonly<Record<AgentSettingsSection, SectionDefiniti
       ],
     }],
   },
-  connection: {
-    title: 'Connection',
-    groups: [{
-      id: 'connection',
-      rows: [
-        {
-          id: 'connection.status',
-          title: 'Status',
-          actionable: false,
-          availableOffline: true,
-          value: ({ connectionState }) => connectionStateLabel(connectionState),
-          attention: ({ connectionState }) => connectionState !== 'ready',
-        },
-        {
-          id: 'connection.last-ready',
-          title: 'Last ready',
-          actionable: false,
-          availableOffline: true,
-          value: ({ connectionDetails, locale }) => formatAgentSettingsLastReady(
-            connectionDetails?.lastReadyAt,
-            locale,
-          ),
-        },
-        {
-          id: 'connection.bridge-version',
-          title: 'Bridge version',
-          actionable: false,
-          availableOffline: true,
-          value: ({ connectionDetails }) => connectionDetails?.bridgeVersion ?? '—',
-        },
-        {
-          id: 'connection.bridge-capabilities',
-          title: 'Bridge capabilities',
-          actionable: false,
-          availableOffline: true,
-          value: ({ connectionDetails }) => connectionDetails?.bridgeCapabilities.join(', ') || '—',
-        },
-        {
-          id: 'connection.reconnect',
-          title: 'Reconnect',
-          availableOffline: true,
-        },
-      ],
-    }, {
-      id: 'environment',
-      rows: [
-        {
-          id: 'connection.environment',
-          title: 'Environment',
-          actionable: false,
-          availableOffline: true,
-          value: ({ connection }) => connection.environment === 'preview'
-            ? 'Preview'
-            : 'Production',
-        },
-        {
-          id: 'connection.remove',
-          title: 'Remove connection',
-          availableOffline: true,
-        },
-      ],
-    }],
-  },
   openclaw: {
     title: 'OpenClaw management',
     gate: all('configManage'),
@@ -426,10 +355,27 @@ const SECTION_DEFINITIONS: Readonly<Record<AgentSettingsSection, SectionDefiniti
   },
 };
 
+/**
+ * The connection row on the profile opens the shared Connection route; it has
+ * no section page of its own, so every lookup treats it as unsupported here.
+ */
+function sectionDefinition(section: AgentSettingsSection): SectionDefinition | null {
+  return section === 'connection' ? null : SECTION_DEFINITIONS[section];
+}
+
 export function buildAgentSettingsSectionModel(
   input: BuildAgentSettingsSectionModelInput,
 ): AgentSettingsSectionModel {
-  const definition = SECTION_DEFINITIONS[input.section];
+  const definition = sectionDefinition(input.section);
+  if (!definition) {
+    return {
+      section: input.section,
+      title: CONNECTION_ROUTE_TITLE,
+      supported: false,
+      locked: input.permissionDenied === true,
+      groups: [],
+    };
+  }
   const supported = passesGate(definition.gate, input.capabilities);
   const locked = input.permissionDenied === true
     || (definition.requiresPro === true && !input.isPro);
@@ -476,11 +422,12 @@ export function isAgentSettingsSectionSupported(
   section: AgentSettingsSection,
   capabilities: Capabilities,
 ): boolean {
-  return passesGate(SECTION_DEFINITIONS[section].gate, capabilities);
+  const definition = sectionDefinition(section);
+  return definition ? passesGate(definition.gate, capabilities) : false;
 }
 
 export function getAgentSettingsSectionTitle(section: AgentSettingsSection): string {
-  return SECTION_DEFINITIONS[section].title;
+  return sectionDefinition(section)?.title ?? CONNECTION_ROUTE_TITLE;
 }
 
 export function isAgentSettingsSectionLocked(
@@ -489,13 +436,13 @@ export function isAgentSettingsSectionLocked(
   permissionDenied = false,
 ): boolean {
   return permissionDenied
-    || (SECTION_DEFINITIONS[section].requiresPro === true && !isPro);
+    || (sectionDefinition(section)?.requiresPro === true && !isPro);
 }
 
 export function getAgentSettingsSectionPaywallReason(
   section: AgentSettingsSection,
 ): string | undefined {
-  return SECTION_DEFINITIONS[section].paywallReason;
+  return sectionDefinition(section)?.paywallReason;
 }
 
 function buildRow(
@@ -506,7 +453,7 @@ function buildRow(
   if (!capabilitySupported && !definition.showWhenUnsupported) return [];
   const operationAvailable = definition.operation?.(input.management) ?? true;
   const available = capabilitySupported && operationAvailable;
-  const sectionRequiresPro = SECTION_DEFINITIONS[input.section].requiresPro === true;
+  const sectionRequiresPro = sectionDefinition(input.section)?.requiresPro === true;
   const locked = input.permissionDenied === true
     || ((sectionRequiresPro || definition.requiresPro === true) && !input.isPro);
   const fallbackValue = available
@@ -545,32 +492,3 @@ function any(...capabilities: ReadonlyArray<keyof Capabilities>): CapabilityGate
   return { capabilities, mode: 'any' };
 }
 
-function connectionStateLabel(state: ConnectionState): string {
-  switch (state) {
-    case 'ready':
-      return 'Online';
-    case 'connecting':
-    case 'handshaking':
-      return 'Connecting';
-    default:
-      return 'Offline';
-  }
-}
-
-export function formatAgentSettingsLastReady(
-  timestampMs: number | null | undefined,
-  locale?: string,
-): string {
-  if (!timestampMs || !Number.isFinite(timestampMs) || timestampMs < 0) return '—';
-  try {
-    return new Intl.DateTimeFormat(locale || undefined, {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-    }).format(new Date(timestampMs));
-  } catch {
-    return new Date(timestampMs).toISOString();
-  }
-}

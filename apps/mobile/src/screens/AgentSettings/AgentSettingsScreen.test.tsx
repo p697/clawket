@@ -92,7 +92,7 @@ jest.mock('react-native', () => {
     Pressable: host('Pressable'),
     ScrollView: host('ScrollView'),
     StyleSheet: {
-      absoluteFillObject: {},
+      absoluteFill: {},
       create: <T,>(styles: T) => styles,
       flatten: (style: unknown) => flattenStyle(style),
       hairlineWidth: 1,

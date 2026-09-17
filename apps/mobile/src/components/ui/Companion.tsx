@@ -99,7 +99,7 @@ export function Companion({ size = 94, pose = 'idle', tone = 'ink', testID }: { 
   }));
   const viewBox = `0 0 ${geometry.width} ${geometry.height}`;
   const ear = (part: CompanionPart | undefined, motion: typeof earLeftMotion, key: string) => part ? (
-    <Animated.View key={key} style={[StyleSheet.absoluteFillObject, motion]}>
+    <Animated.View key={key} style={[StyleSheet.absoluteFill, motion]}>
       <Svg width={size} height={height} viewBox={viewBox}>
         <Path d={part.d} transform={part.transform} fill={faceColor} />
       </Svg>
@@ -112,7 +112,7 @@ export function Companion({ size = 94, pose = 'idle', tone = 'ink', testID }: { 
       <Svg width={size} height={height} viewBox={viewBox}>
         {face.map((part, index) => <Path key={index} d={part.d} transform={part.transform} fill={faceColor} />)}
       </Svg>
-      <Animated.View style={[StyleSheet.absoluteFillObject, eyeMotion]}>
+      <Animated.View style={[StyleSheet.absoluteFill, eyeMotion]}>
         {geometry.eyes.map((eye, index) => <View key={index} style={{ position: 'absolute', left: eye.x * scale, top: eye.y * scale, width: eye.width * scale, height: eye.height * scale, borderRadius: eye.rx * scale, backgroundColor: eyeColor }} />)}
       </Animated.View>
     </Animated.View>

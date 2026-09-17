@@ -7,6 +7,7 @@ import type {
   YouMindSpriteApi,
 } from './youmind-sprite-api';
 import { YouMindSpriteApiError } from './youmind-sprite-api';
+import { YOUMIND_SPRITE_DEFAULT_AVATAR_URI } from './youmind-sprite-avatar';
 import type { YouMindCompletionChunk } from './youmind-sprite-codec';
 
 const session: YouMindAuthSession = {
@@ -100,6 +101,47 @@ describe('YouMindSpriteAdapter', () => {
       spriteId: 'sprite-fixture',
       limit: 1,
     });
+  });
+
+  it('falls back to the bundled default avatar when the Sprite has none on YouMind', async () => {
+    const baseSprite = fixture.ensureDefault.sprite as YouMindSprite;
+    const sprites: YouMindSprite[] = [
+      { ...baseSprite, avatarUrl: null },
+      { ...baseSprite, avatarUrl: 'https://youmind.example.invalid/assets/sprite_default_static.png' },
+      { ...baseSprite, avatarUrl: undefined, avatar_url: 'https://cdn.youmind.example.invalid/assets/sprite_default_avator.jpg' },
+    ];
+    for (const sprite of sprites) {
+      const api = createApi({ ensureDefaultSprite: jest.fn(async () => sprite) });
+      const adapter = createAdapter(api);
+      expect(await adapter.listAgents()).toEqual([expect.objectContaining({
+        avatarUrl: YOUMIND_SPRITE_DEFAULT_AVATAR_URI,
+      })]);
+    }
+  });
+
+  it('re-reads the Sprite identity on every roster refresh and keeps the last one on failure', async () => {
+    const baseSprite = fixture.ensureDefault.sprite as YouMindSprite;
+    const ensureDefaultSprite = jest.fn<Promise<YouMindSprite>, [AbortSignal | undefined]>()
+      .mockResolvedValueOnce(baseSprite)
+      .mockResolvedValueOnce({
+        ...baseSprite,
+        name: 'Renamed Sprite',
+        avatarUrl: 'https://cdn.example.invalid/renamed.png',
+      })
+      .mockRejectedValueOnce(new Error('offline'));
+    const adapter = createAdapter(createApi({ ensureDefaultSprite }));
+
+    await adapter.connect();
+    const renamed = await adapter.listAgents();
+    const offline = await adapter.listAgents();
+
+    expect(renamed).toEqual([expect.objectContaining({
+      name: 'Renamed Sprite',
+      avatarUrl: 'https://cdn.example.invalid/renamed.png',
+    })]);
+    expect(offline).toEqual(renamed);
+    expect(adapter.state).toBe('ready');
+    expect(ensureDefaultSprite).toHaveBeenCalledTimes(3);
   });
 
   it('loads a cursor page and replays the recorded stream as canonical updates', async () => {

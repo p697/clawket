@@ -679,6 +679,21 @@ it('keeps malformed imported tool prose inspectable without declaring execution 
 });
 
 describe('OpenClaw image send recovery', () => {
+  it('removes the recorded CLI echo from a cached history reload only for OpenClaw', async () => {
+    const rows = require('./__fixtures__/openclaw-cli-resume-user.json');
+    const cached = rows.map((row: unknown, index: number) => mapGatewayHistoryMessage('main', row, index)!);
+    for (const backend of ['openclaw', 'hermes'] as const) {
+      const fake = new LifecycleGateway();
+      fake.requestHandler = () => ({ messages: rows, hasActiveRun: false });
+      const options = { gateway: gateway(fake), historyCache: { load: async () => cached } };
+      const adapter = backend === 'openclaw'
+        ? new OpenClawAdapter(connection(backend), options)
+        : new HermesAdapter(connection(backend), options);
+      const recovered = await adapter.loadSession('main');
+      expect(recovered.messages.map(message => message.id)).toEqual(backend === 'openclaw'
+        ? ['persisted-user'] : ['persisted-user', 'imported-user']);
+    }
+  });
   const sendKey = '1789390790301_afobgrvb';
   const cached = { id: 'usr_1789390790301', role: 'user' as const, text: '你看',
     timestampMs: 1789390790301, idempotencyKey: sendKey,

@@ -14,7 +14,7 @@ export function ThemedFullWindowOverlay({
 
   return (
     <FullWindowOverlay>
-      <View style={StyleSheet.absoluteFillObject} pointerEvents="box-none">
+      <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
         <ThemeContext.Provider value={themeValue}>
           {children}
         </ThemeContext.Provider>
