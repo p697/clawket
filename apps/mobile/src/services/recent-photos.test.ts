@@ -3,7 +3,7 @@ const requestPermissionsAsyncMock = jest.fn();
 const getAssetsAsyncMock = jest.fn();
 const getAssetInfoAsyncMock = jest.fn();
 
-jest.mock('expo-media-library', () => ({
+jest.mock('expo-media-library/legacy', () => ({
   MediaType: { photo: 'photo', video: 'video' },
   SortBy: { creationTime: 'creationTime' },
   getPermissionsAsync: (...args: unknown[]) => getPermissionsAsyncMock(...args),

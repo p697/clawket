@@ -7,7 +7,6 @@ import {
 import type { AgentSettingsSection } from '../../navigation/root-stack';
 import {
   buildAgentSettingsSectionModel,
-  formatAgentSettingsLastReady,
   getAgentSettingsSectionTitle,
   isAgentSettingsSectionLocked,
   isAgentSettingsSectionSupported,
@@ -63,7 +62,6 @@ const sections: ReadonlyArray<AgentSettingsSection> = [
   'cron',
   'files',
   'usage',
-  'connection',
   'openclaw',
   'tools',
   'channels-devices',
@@ -98,7 +96,6 @@ describe('AgentSettings section model', () => {
       'Cron jobs',
       'Memory',
       'Usage',
-      'Connection',
       'OpenClaw management',
       'Tools',
       'Channels & devices',
@@ -122,42 +119,16 @@ describe('AgentSettings section model', () => {
       'channels-devices.devices',
       'channels-devices.nodes',
     ]);
-    expect(actions('connection')).toEqual([
-      'connection.status',
-      'connection.last-ready',
-      'connection.bridge-version',
-      'connection.bridge-capabilities',
-      'connection.reconnect',
-      'connection.environment',
-      'connection.remove',
-    ]);
     expect(sections.every((section) => model(section).supported)).toBe(true);
   });
 
-  it('renders connection runtime projection and marks non-ready status for attention', () => {
-    const lastReadyAt = Date.UTC(2026, 8, 5, 7, 30);
-    const connectionModel = model('connection', {
-      connectionState: 'offline',
-      connectionDetails: {
-        lastReadyAt,
-        bridgeVersion: '2026.9.5',
-        bridgeCapabilities: ['bridge.capabilities.v2', 'hermes.multi-session.v2'],
-      },
-      locale: 'en-US',
-    });
-    const rows = connectionModel.groups.flatMap((group) => group.rows);
-
-    expect(rows).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: 'connection.status', value: 'Offline', attention: true }),
-      expect.objectContaining({ id: 'connection.last-ready', value: expect.stringContaining('2026') }),
-      expect.objectContaining({ id: 'connection.bridge-version', value: '2026.9.5' }),
-      expect.objectContaining({
-        id: 'connection.bridge-capabilities',
-        value: 'bridge.capabilities.v2, hermes.multi-session.v2',
-      }),
-    ]));
-    expect(formatAgentSettingsLastReady(null, 'en-US')).toBe('—');
-    expect(formatAgentSettingsLastReady(Number.NaN, 'en-US')).toBe('—');
+  it('treats the profile connection row as a route, not a section page', () => {
+    const connectionModel = model('connection');
+    expect(connectionModel).toMatchObject({ section: 'connection', title: 'Connection', supported: false, groups: [] });
+    expect(model('connection', { permissionDenied: true }).locked).toBe(true);
+    expect(isAgentSettingsSectionSupported('connection', CAPABILITY_MATRIX.openclaw)).toBe(false);
+    expect(getAgentSettingsSectionTitle('connection')).toBe('Connection');
+    expect(isAgentSettingsSectionLocked('connection', false)).toBe(false);
   });
 
   it('uses capability metadata for both section and child visibility', () => {
@@ -182,7 +153,7 @@ describe('AgentSettings section model', () => {
     ]);
 
     const none = { ...CAPABILITY_MATRIX.youmind, devices: false };
-    expect(isAgentSettingsSectionSupported('connection', none)).toBe(true);
+    expect(isAgentSettingsSectionSupported('connection', none)).toBe(false);
     expect(isAgentSettingsSectionSupported('models', none)).toBe(false);
     expect(isAgentSettingsSectionSupported('channels-devices', none)).toBe(false);
   });

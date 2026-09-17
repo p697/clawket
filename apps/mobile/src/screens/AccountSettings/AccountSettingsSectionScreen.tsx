@@ -10,12 +10,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Banner } from '../../components/ui/Banner';
 import { ConnectionStatusPill } from '../../components/ui/ConnectionStatusPill';
-import { Button } from '../../components/ui/Button';
 import { ConfirmationModal } from '../../components/ui/ConfirmationModal';
 import { AccountSettingsPageHeader } from './AccountSettingsPageHeader';
 import { AccountProCard } from './AccountProCard';
 import { AccountSettingsRowIcon, accountSettingsRowHasIcon } from './AccountSettingsRowIcon';
-import { Sheet } from '../../components/ui/Sheet';
 import {
   SettingsDivider,
   SettingsGroup,
@@ -71,7 +69,6 @@ type SectionGroupViewProps = Readonly<{
   onAction: AccountSettingsSectionScreenProps['onAction'];
   onOpenPreference: (preference: AccountPreferenceAction) => void;
   onOpenPaywall: AccountSettingsSectionScreenProps['onOpenPaywall'];
-  onRequestRemove: (connectionId: string, label: string) => void;
 }>;
 
 const SECTION_SKELETONS = Object.freeze(['one', 'two', 'three']);
@@ -100,7 +97,6 @@ function SectionGroupView({
   onAction,
   onOpenPreference,
   onOpenPaywall,
-  onRequestRemove,
 }: SectionGroupViewProps): React.JSX.Element {
   const { t } = useTranslation('config');
   const { theme } = useAppTheme();
@@ -109,19 +105,7 @@ function SectionGroupView({
       onOpenPreference(row.action);
       return;
     }
-    if (row.action === 'remove-connection' && row.connectionId) {
-      onRequestRemove(
-        row.connectionId,
-        group.title ?? t('Connection', { ns: 'common' }),
-      );
-      return;
-    }
-    if (row.action) {
-      onAction({
-        action: row.action,
-        ...(row.connectionId ? { connectionId: row.connectionId } : {}),
-      });
-    }
+    if (row.action) onAction({ action: row.action });
   };
   const openRow = (row: AccountSettingsSectionRow) => {
     if (row.disabled) return;
@@ -160,7 +144,7 @@ function SectionGroupView({
                 testID={`account-settings-section-row-${row.id}`}
                 title={title}
                 leading={accountSettingsRowHasIcon(row) ? <AccountSettingsRowIcon row={row} /> : undefined}
-                destructive={row.action === 'reset-device' || row.action === 'remove-connection'}
+                destructive={row.action === 'reset-device'}
                 value={resolveRowValue(row, t)}
                 locked={row.locked}
                 disabled={row.disabled}
@@ -286,10 +270,6 @@ export function AccountSettingsSectionScreen({
   const { theme } = useAppTheme();
   const insets = useSafeAreaInsets();
   const [preference, setPreference] = useState<AccountPreferenceAction | null>(null);
-  const [pendingRemoval, setPendingRemoval] = useState<Readonly<{
-    connectionId: string;
-    label: string;
-  }> | null>(null);
   const [pendingMaintenance, setPendingMaintenance] = useState<Extract<
     AccountSettingsSectionAction,
     'clear-cache' | 'reset-device'
@@ -370,52 +350,11 @@ export function AccountSettingsSectionScreen({
                 onAction={dispatchAction}
                 onOpenPreference={setPreference}
                 onOpenPaywall={onOpenPaywall}
-                onRequestRemove={(connectionId, label) => {
-                  setPendingRemoval({ connectionId, label });
-                }}
               />
             ))}
           </ScrollView>
         )}
       </View>
-      <Sheet
-        testID="account-settings-remove-confirm"
-        visible={pendingRemoval !== null}
-        title={t('Remove connection')}
-        closeAccessibilityLabel={t('Close', { ns: 'common' })}
-        onClose={() => setPendingRemoval(null)}
-      >
-        <View style={styles.confirmContent}>
-          <Text style={[styles.confirmText, { color: theme.colors.inkSecondary }]}>
-            {t('Are you sure you want to delete "{{name}}"?', {
-              name: pendingRemoval?.label ?? t('Connection', { ns: 'common' }),
-            })}
-          </Text>
-          <View style={styles.confirmActions}>
-            <Button
-              testID="account-settings-remove-cancel"
-              label={t('Cancel', { ns: 'common' })}
-              variant="secondary"
-              style={styles.confirmAction}
-              onPress={() => setPendingRemoval(null)}
-            />
-            <Button
-              testID="account-settings-remove-action"
-              label={t('Remove', { ns: 'common' })}
-              variant="destructive"
-              style={styles.confirmAction}
-              onPress={() => {
-                if (!pendingRemoval) return;
-                onAction({
-                  action: 'remove-connection',
-                  connectionId: pendingRemoval.connectionId,
-                });
-                setPendingRemoval(null);
-              }}
-            />
-          </View>
-        </View>
-      </Sheet>
       {pendingMaintenance && maintenanceConfirmationCopy ? (
         <ConfirmationModal
           visible
@@ -469,22 +408,5 @@ const styles = StyleSheet.create({
   },
   loadingCard: {
     height: ControlSize.rosterRow,
-  },
-  confirmContent: {
-    paddingHorizontal: Space.lg,
-    paddingBottom: Space.xl,
-    gap: Space.lg,
-  },
-  confirmText: {
-    fontSize: FontSize.secondary,
-    lineHeight: LineHeight.secondary,
-    fontWeight: FontWeight.regular,
-  },
-  confirmActions: {
-    flexDirection: 'row',
-    gap: Space.sm,
-  },
-  confirmAction: {
-    flex: 1,
   },
 });

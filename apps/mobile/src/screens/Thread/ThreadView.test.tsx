@@ -45,7 +45,7 @@ jest.mock('react-native', () => {
     ActivityIndicator: host('ActivityIndicator'),
     Pressable: host('Pressable'),
     StyleSheet: {
-      absoluteFillObject: {
+      absoluteFill: {
         position: 'absolute',
         top: 0,
         right: 0,
@@ -296,6 +296,7 @@ const copy: ThreadCopy = {
   toolFailed: 'Failed',
   approvalTitle: 'Allow exec?',
   approvalError: 'Could not update this request. Try again.',
+  pairApprovalDetail: 'Allow this device to connect to OpenClaw?',
   device: 'Device',
   node: 'Node',
   allow: 'Allow',
@@ -834,6 +835,7 @@ describe('ThreadView', () => {
 
     expect(view.getByText('Lucy’s iPhone')).toBeTruthy();
     expect(view.getByText('Node')).toBeTruthy();
+    expect(view.getAllByText(copy.pairApprovalDetail)).toHaveLength(2);
     const allow = view.getByTestId('thread-approval-pair-device-primary');
     expect(allow.props.onLongPress).toBeUndefined();
     fireEvent.press(allow);
@@ -1342,7 +1344,9 @@ describe('ThreadView', () => {
     expect(clone.getByTestId(`thread-favorite-${message.id}`)).toBeTruthy();
     // The row owns no vertical padding: the timeline rhythm lives outside the
     // measured row, so the clone and the list row share one geometry.
-    const cloneStyle = flattenStyle(clone.toJSON()?.props.style);
+    const cloneTree = clone.toJSON();
+    if (!cloneTree || Array.isArray(cloneTree)) throw new Error('Expected one cloned message root');
+    const cloneStyle = flattenStyle(cloneTree.props.style);
     expect(cloneStyle).toMatchObject({ width: 320, paddingHorizontal: Space.lg });
     expect(cloneStyle.paddingTop).toBeUndefined();
     expect(cloneStyle.paddingBottom).toBeUndefined();
@@ -1702,11 +1706,11 @@ describe('continuous message presentation', () => {
     const view = render(<ThreadView {...createProps({ messages: [pending] })} />);
     const bubble = view.getByTestId('thread-bubble-usr_1');
     const meta = view.getByTestId('thread-meta-usr_1');
-    const textBefore = bubble.findAllByType(require('react-native').Text).map((node: { props: { children: unknown } }) => typeof node.props.children === 'string' ? node.props.children : null);
+    const textBefore = bubble.findAllByType(require('react-native').Text).map((node) => typeof node.props.children === 'string' ? node.props.children : null);
     const { delivery: _delivery, ...submitted } = pending;
     view.rerender(<ThreadView {...createProps({ messages: [submitted] })} />);
     expect(view.getByTestId('thread-bubble-usr_1') === bubble).toBe(true);
-    expect(bubble.findAllByType(require('react-native').Text).map((node: { props: { children: unknown } }) => typeof node.props.children === 'string' ? node.props.children : null)).toEqual(textBefore);
+    expect(bubble.findAllByType(require('react-native').Text).map((node) => typeof node.props.children === 'string' ? node.props.children : null)).toEqual(textBefore);
     view.rerender(<ThreadView {...createProps({ messages: [{ ...submitted, id: 'history-1' }] })} />);
     expect(view.getByTestId('thread-bubble-history-1') === bubble).toBe(true);
     expect(view.getByTestId('thread-meta-history-1') === meta).toBe(true);

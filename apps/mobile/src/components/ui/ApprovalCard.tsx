@@ -75,7 +75,7 @@ export function ApprovalCard({
             {command}
           </Text>
         ) : null}
-        {detail ? <Text style={styles.detail} numberOfLines={1}>{detail}</Text> : null}
+        {detail ? <Text style={styles.detail}>{detail}</Text> : null}
         <View style={styles.actions}>
           <ApprovalActionButton
             action={secondaryAction}

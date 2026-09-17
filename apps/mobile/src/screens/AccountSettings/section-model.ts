@@ -1,21 +1,14 @@
+import type { AccountSettingsDetailSection } from '../../navigation/root-stack';
 import type {
-  ConnectionState,
-} from '@clawket/agent-protocol';
-import type { AccountSettingsSection } from '../../navigation/root-stack';
-import {
-  getConnectionValueKeys,
-  type AccountSettingsAction,
-  type AccountSettingsConnection,
-  type AccountSettingsPageStatus,
+  AccountSettingsAction,
+  AccountSettingsPageStatus,
 } from './model';
 
-export type AccountSettingsDetailSection = AccountSettingsSection;
+export type { AccountSettingsDetailSection };
 
 export type AccountSettingsSectionCapability =
   | 'subscription'
   | 'connections'
-  | 'connectionManagement'
-  | 'relayStats'
   | 'appearance'
   | 'appIcons'
   | 'voice'
@@ -35,8 +28,6 @@ export const DEFAULT_ACCOUNT_SETTINGS_SECTION_CAPABILITIES:
 AccountSettingsSectionCapabilities = Object.freeze({
   subscription: true,
   connections: true,
-  connectionManagement: true,
-  relayStats: true,
   appearance: true,
   appIcons: true,
   voice: true,
@@ -49,23 +40,6 @@ AccountSettingsSectionCapabilities = Object.freeze({
   designSystem: true,
 });
 
-export type AccountSettingsRelayStats = Readonly<{
-  state: ConnectionState;
-  uptimeMs?: number;
-  serverVersion?: string;
-}>;
-
-export type AccountSettingsSectionConnection = AccountSettingsConnection & Readonly<{
-  state?: ConnectionState;
-  supportsRelayStats?: boolean;
-  serverHost?: string;
-  relayStats?: AccountSettingsRelayStats;
-  isFreeConnection?: boolean;
-  freeSwitchAvailable?: boolean;
-  freeSwitchStatus?: string;
-  freeSwitching?: boolean;
-}>;
-
 export type AccountSettingsSectionLabels = Readonly<{
   theme: string;
   accent: string;
@@ -77,8 +51,6 @@ export type AccountSettingsSectionLabels = Readonly<{
 }>;
 
 export type AccountSettingsSectionData = Readonly<{
-  connections?: ReadonlyArray<AccountSettingsSectionConnection>;
-  connectionId?: string;
   labels?: Partial<AccountSettingsSectionLabels>;
   isPro?: boolean;
   canAddConnection?: boolean;
@@ -88,15 +60,11 @@ export type AccountSettingsSectionData = Readonly<{
 
 export type AccountSettingsSectionAction = AccountSettingsAction
   | 'advanced-settings'
-  | 'reconnect-connection'
-  | 'remove-connection'
-  | 'set-free-connection'
   | 'set-reply-notifications'
   | 'set-debug-mode';
 
 export type AccountSettingsSectionActionRequest = Readonly<{
   action: AccountSettingsSectionAction;
-  connectionId?: string;
   enabled?: boolean;
 }>;
 
@@ -111,7 +79,6 @@ export type AccountSettingsSectionRow = Readonly<{
   kind: 'navigation' | 'toggle' | 'value';
   action?: AccountSettingsSectionAction;
   toggle?: 'replyNotifications' | 'debugMode';
-  connectionId?: string;
   disabled?: boolean;
   locked?: boolean;
   paywallReason?: Extract<AccountSettingsPageStatus, { kind: 'permission' }>['reason'];
@@ -142,7 +109,6 @@ const SECTION_CAPABILITY: Readonly<
   Record<AccountSettingsDetailSection, AccountSettingsSectionCapability>
 > = Object.freeze({
   pro: 'subscription',
-  connections: 'connections',
   appearance: 'appearance',
   voice: 'voice',
   notifications: 'notifications',
@@ -155,7 +121,6 @@ const SECTION_CAPABILITY: Readonly<
 const SECTION_TITLE_KEYS: Readonly<Record<AccountSettingsDetailSection, string>> =
   Object.freeze({
     pro: 'Clawket Pro',
-    connections: 'Connections',
     appearance: 'Appearance',
     voice: 'Voice',
     notifications: 'Chat & notifications',
@@ -164,16 +129,6 @@ const SECTION_TITLE_KEYS: Readonly<Record<AccountSettingsDetailSection, string>>
     about: 'About',
     developer: 'Developer',
   });
-
-const CONNECTION_STATE_KEYS: Readonly<Record<ConnectionState, string>> = Object.freeze({
-  idle: 'Offline',
-  connecting: 'Connecting',
-  handshaking: 'Connecting',
-  ready: 'Online',
-  reconnecting: 'Connecting',
-  offline: 'Offline',
-  error: 'Error',
-});
 
 function navigationRow(
   id: string,
@@ -207,132 +162,6 @@ function group(
   return { id, rows, ...(title ? { title } : {}) };
 }
 
-function buildConnectionGroups(
-  data: AccountSettingsSectionData,
-  capabilities: AccountSettingsSectionCapabilities,
-): ReadonlyArray<AccountSettingsSectionGroup> {
-  const connections = (data.connections ?? []).filter((connection) => (
-    !data.connectionId || connection.id === data.connectionId
-  ));
-  const groups = connections.map((connection) => {
-    const [backend, transport, environment] = getConnectionValueKeys(connection);
-    const rows: AccountSettingsSectionRow[] = [
-      { id: `${connection.id}-backend`, titleKey: 'Backend', valueKey: backend, kind: 'value' },
-      { id: `${connection.id}-transport`, titleKey: 'Transport', valueKey: transport, kind: 'value' },
-      {
-        id: `${connection.id}-environment`,
-        titleKey: 'Environment',
-        titleNamespace: 'settings',
-        valueKey: environment,
-        kind: 'value',
-      },
-    ];
-
-    if (connection.serverHost) rows.push({ id: `${connection.id}-server`, titleKey: 'Server address', titleNamespace: 'settings', value: connection.serverHost, kind: 'value' });
-
-    if (connection.state) {
-      rows.push({
-        id: `${connection.id}-status`,
-        titleKey: 'Status',
-        valueKey: CONNECTION_STATE_KEYS[connection.state],
-        valueNamespace: 'common',
-        kind: 'value',
-      });
-    }
-
-    if (connection.supportsRelayStats) {
-      if (!capabilities.relayStats) {
-        rows.push(gateRow({
-          id: `${connection.id}-relay-statistics`,
-          titleKey: 'Relay',
-          kind: 'value',
-        }, false));
-      } else if (!connection.relayStats) {
-        rows.push({
-          id: `${connection.id}-relay-statistics`,
-          titleKey: 'Relay',
-          valueKey: 'Unknown',
-          kind: 'value',
-        });
-      } else {
-        rows.push({
-          id: `${connection.id}-relay-status`,
-          titleKey: 'Relay',
-          valueKey: CONNECTION_STATE_KEYS[connection.relayStats.state],
-          valueNamespace: 'common',
-          kind: 'value',
-        });
-        if (connection.relayStats.uptimeMs !== undefined) {
-          rows.push({
-            id: `${connection.id}-relay-uptime`,
-            titleKey: 'Uptime',
-            titleNamespace: 'common',
-            value: formatAccountSettingsUptime(connection.relayStats.uptimeMs),
-            kind: 'value',
-          });
-        }
-        if (connection.relayStats.serverVersion?.trim()) {
-          rows.push({
-            id: `${connection.id}-relay-version`,
-            titleKey: 'Version',
-            value: connection.relayStats.serverVersion.trim(),
-            kind: 'value',
-          });
-        }
-      }
-    }
-
-    if (!data.connectionId) rows.push(
-      gateRow(navigationRow(
-        `${connection.id}-reconnect`,
-        'Reconnect',
-        'reconnect-connection',
-        {
-          connectionId: connection.id,
-          titleNamespace: 'common',
-          locked: connection.locked === true,
-          paywallReason: 'gatewayConnections',
-        },
-      ), capabilities.connectionManagement),
-      gateRow(navigationRow(
-        `${connection.id}-remove`,
-        'Remove',
-        'remove-connection',
-        { connectionId: connection.id, titleNamespace: 'common' },
-      ), capabilities.connectionManagement),
-    );
-    if (data.isPro === false) {
-      rows.push(connection.isFreeConnection ? {
-        id: `${connection.id}-free-connection`,
-        titleKey: 'Free connection',
-        valueKey: 'Current',
-        kind: 'value',
-      } : navigationRow(
-        `${connection.id}-set-free-connection`,
-        'Use as free connection',
-        'set-free-connection',
-        {
-          connectionId: connection.id,
-          value: connection.freeSwitchStatus,
-          disabled: connection.freeSwitchAvailable === false || connection.freeSwitching === true,
-        },
-      ));
-    }
-    return group(`connection-${connection.id}`, rows, connection.label);
-  });
-
-  if (!data.connectionId) groups.push(group('connection-add', [navigationRow(
-    'add-connection',
-    'Add Connection',
-    'add-connection',
-    {
-      locked: data.canAddConnection === false,
-      paywallReason: 'gatewayConnections',
-    },
-  )]));
-  return groups;
-}
-
 function buildSectionGroups(
   section: AccountSettingsDetailSection,
   data: AccountSettingsSectionData,
@@ -347,8 +176,6 @@ function buildSectionGroups(
         }),
         navigationRow('restore-purchases', 'Restore Purchases', 'restore-purchases'),
       ])];
-    case 'connections':
-      return buildConnectionGroups(data, capabilities);
     case 'appearance':
       return [group('appearance', [
         navigationRow('theme', 'Theme', 'theme', { value: labels.theme }),
@@ -453,17 +280,4 @@ export function buildAccountSettingsSectionModel({
     supported,
     groups: supported ? buildSectionGroups(section, data, labels, capabilities) : [],
   };
-}
-
-export function formatAccountSettingsUptime(ms: number): string {
-  if (!Number.isFinite(ms) || ms <= 0) return '—';
-  const totalMinutes = Math.floor(ms / 60_000);
-  const days = Math.floor(totalMinutes / (24 * 60));
-  const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
-  const minutes = totalMinutes % 60;
-  const parts: string[] = [];
-  if (days > 0) parts.push(`${days}d`);
-  if (hours > 0) parts.push(`${hours}h`);
-  if (minutes > 0 || parts.length === 0) parts.push(`${minutes}m`);
-  return parts.join(' ');
 }

@@ -313,5 +313,6 @@
   "Switch, pin and tidy up sessions in one place.": "세션 전환, 고정, 정리를 한곳에서.",
   "Search Agents, sessions and messages at once.": "Agent, 세션, 메시지를 한 번에 검색.",
   "One command, a six-digit code, both on one phone.": "명령어 하나, 6자리 코드, 둘 다 휴대폰 하나로.",
-  "Cleaner, smoother, with live status on every avatar.": "더 깔끔하고 부드럽게, 아바타에 상태 표시."
+  "Cleaner, smoother, with live status on every avatar.": "더 깔끔하고 부드럽게, 아바타에 상태 표시.",
+  "Allow this device to connect to OpenClaw?": "이 기기가 OpenClaw에 연결하도록 허용할까요?"
 }

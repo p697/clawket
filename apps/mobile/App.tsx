@@ -113,14 +113,13 @@ import {
   normalizeProFeature,
 } from './src/utils/pro';
 import type {
-  AccountSettingsSection,
+  AccountSettingsDetailSection,
   AgentSettingsSection,
   RootStackParamList,
 } from './src/navigation/root-stack';
 import { findAgentChatReturnIndex } from './src/navigation/root-stack';
 import {
   buildRosterRows,
-  isRosterAgentMuted,
   renameRosterSession,
   resolveRosterCreateAgentTarget,
   RosterScreen,
@@ -187,7 +186,7 @@ const NO_CAPABILITIES = Object.freeze(Object.fromEntries(
 
 const ACCOUNT_ACTION_SECTION: Readonly<Partial<Record<
   AccountSettingsAction,
-  AccountSettingsSection
+  AccountSettingsDetailSection
 >>> = Object.freeze({
   'theme': 'appearance',
   'accent': 'appearance',
@@ -935,13 +934,6 @@ function AppContent({
         || !canAccessRosterAgent(connections.activeConnectionId, targetAgentId)) {
         return;
       }
-      if (isRosterAgentMuted({
-        preferences: agentPreferences,
-        connectionId: connections.activeConnectionId,
-        agentId: targetAgentId,
-      })) {
-        return;
-      }
       const agentId = targetAgentId || undefined;
       const agentName = resolveAgentNotificationName(sessionKey, agents, currentAgentId);
 
@@ -967,7 +959,6 @@ function AppContent({
     activeAdapter,
     activeCapabilities.chat,
     activeCapabilities.replyNotifications,
-    agentPreferences,
     agents,
     canAccessRosterAgent,
     connections.activeConnectionId,
@@ -1245,45 +1236,47 @@ function AppContent({
     speechRecognitionLanguage,
   ]);
 
-  const [connectionHosts, setConnectionHosts] = useState<Record<string, string>>({});
-  useEffect(() => {
-    let active = true;
-    void Promise.all(connections.connections.map(async (connection) => {
-      try {
-        const record = await getConnectionRuntime().getRuntimeConnectionRecord(connection.id);
-        return [connection.id, new URL(record.url).host] as const;
-      } catch { return [connection.id, ''] as const; }
-    })).then((entries) => { if (active) setConnectionHosts(Object.fromEntries(entries)); });
-    return () => { active = false; };
-  }, [connections.connections]);
-
-  const settingsSectionConnections = useMemo(() => settingsConnections.map((connection) => ({
-    ...connection,
-    state: connection.id === connections.activeConnectionId ? connections.activeState : 'idle' as const,
-    supportsRelayStats: connection.transportKind === 'relay',
-    serverHost: connectionHosts[connection.id],
-    isFreeConnection: connection.id === entitlement.freeConnectionId,
-    freeSwitchAvailable: nextFreeConnectionSwitchAt === null
-      || entitlement.now >= nextFreeConnectionSwitchAt,
-    freeSwitchStatus: nextFreeConnectionSwitchAt !== null
-      && entitlement.now < nextFreeConnectionSwitchAt
+  /** Free-tier slot state for the connection page; Pro users never see the group. */
+  const resolveConnectionFreeSlot = useCallback((connectionId: string) => (isPro ? undefined : {
+    current: connectionId === entitlement.freeConnectionId,
+    switchAvailable: nextFreeConnectionSwitchAt === null || entitlement.now >= nextFreeConnectionSwitchAt,
+    switchStatus: nextFreeConnectionSwitchAt !== null && entitlement.now < nextFreeConnectionSwitchAt
       ? i18n.t('Available {{time}}', {
           ns: 'config',
           time: new Date(nextFreeConnectionSwitchAt).toLocaleString(i18n.language),
         })
       : undefined,
-    freeSwitching: freeConnectionSwitching,
-  })), [
-    connections.activeConnectionId,
-    connections.activeState,
+    switching: freeConnectionSwitching,
+  }), [
     entitlement.freeConnectionId,
     entitlement.now,
     freeConnectionSwitching,
+    isPro,
     nextFreeConnectionSwitchAt,
-    settingsConnections,
-    connectionHosts,
     translate,
   ]);
+  const switchToFreeConnection = useCallback((connectionId: string) => {
+    void switchFreeConnection(connectionId).then(async (result) => {
+      if (result.ok) {
+        if (result.changed) await getConnectionRuntime().activate(connectionId);
+        return;
+      }
+      Alert.alert(
+        i18n.t('Unable to switch free connection', { ns: 'config' }),
+        result.reason === 'cooldown' && result.retryAt !== null
+          ? i18n.t('You can switch again at {{time}}.', {
+              ns: 'config',
+              time: new Date(result.retryAt).toLocaleString(i18n.language),
+            })
+          : i18n.t('Please try again later.', { ns: 'common' }),
+      );
+    }).catch(() => {
+      Alert.alert(
+        i18n.t('Unable to switch free connection', { ns: 'config' }),
+        i18n.t('Please try again later.', { ns: 'common' }),
+      );
+    });
+  }, [switchFreeConnection]);
 
   const graceDaysLeft = isGraceActive(entitlement)
     ? Math.max(1, Math.ceil(((entitlement.graceUntil ?? entitlement.now) - entitlement.now)
@@ -1466,19 +1459,6 @@ function AppContent({
     });
   }, [canAccessConnection, canAccessRosterAgent, presentPaywall]);
 
-  const handleToggleRosterAgentMuted = useCallback(async (row: RosterDisplayRow) => {
-    if (!canAccessRosterAgent(row.connectionId, row.agentId)) {
-      presentPaywall(canAccessConnection(row.connectionId) ? 'agents' : 'gatewayConnections');
-      return;
-    }
-    const scope = `${row.connectionId}:${row.agentId}`;
-    const preferences = await SessionPreferencesService.toggleAgentMuted(
-      row.connectionId,
-      row.agentId,
-    );
-    setAgentPreferences((current) => ({ ...current, [scope]: preferences }));
-  }, [canAccessConnection, canAccessRosterAgent, presentPaywall]);
-
   const handleRosterSessionUnpin = useCallback(async (row: RosterDisplayRow) => {
     if (!canAccessRosterAgent(row.connectionId, row.agentId)) {
       presentPaywall(canAccessConnection(row.connectionId) ? 'agents' : 'gatewayConnections');
@@ -1528,6 +1508,17 @@ function AppContent({
   const handleRosterConnectionRemove = useCallback(async (row: RosterDisplayRow) => {
     await removeConnectionAndExit(row.connectionId);
   }, [removeConnectionAndExit]);
+
+  /** Resume or explicitly reconnect; a free user's second connection meets the paywall first. */
+  const resumeConnection = useCallback(async (connectionId: string, reconnect = false) => {
+    const runtime = getConnectionRuntime();
+    const action = () => reconnect ? runtime.reconnectConnection(connectionId) : runtime.activate(connectionId);
+    if (!canAccessConnection(connectionId)) {
+      presentPaywall('gatewayConnections', async () => { await action(); });
+      return;
+    }
+    await action();
+  }, [canAccessConnection, presentPaywall]);
 
   const handleSessionAction = useCallback(async (
     row: SessionPanelRow,
@@ -1605,40 +1596,6 @@ function AppContent({
         if (preview && !announcementPresentation) presentAnnouncement(preview, 'debug_preview');
         return;
       }
-      case 'reconnect-connection':
-        if (request.connectionId) {
-          void getConnectionRuntime().reconnectConnection(request.connectionId);
-        }
-        return;
-      case 'set-free-connection':
-        if (request.connectionId) {
-          void switchFreeConnection(request.connectionId).then(async (result) => {
-            if (result.ok) {
-              if (result.changed) await getConnectionRuntime().activate(request.connectionId!);
-              return;
-            }
-            Alert.alert(
-              i18n.t('Unable to switch free connection', { ns: 'config' }),
-              result.reason === 'cooldown' && result.retryAt !== null
-                ? i18n.t('You can switch again at {{time}}.', {
-                    ns: 'config',
-                    time: new Date(result.retryAt).toLocaleString(i18n.language),
-                  })
-                : i18n.t('Please try again later.', { ns: 'common' }),
-            );
-          }).catch(() => {
-            Alert.alert(
-              i18n.t('Unable to switch free connection', { ns: 'config' }),
-              i18n.t('Please try again later.', { ns: 'common' }),
-            );
-          });
-        }
-        return;
-      case 'remove-connection':
-        if (request.connectionId) {
-          void removeConnectionAndExit(request.connectionId);
-        }
-        return;
       case 'help-center':
         navigation.navigate('HelpCenter');
         return;
@@ -1722,33 +1679,8 @@ function AppContent({
     updateReplyNotifications,
   ]);
 
-  const resolveAgentSettingsAction = useCallback<AgentSettingsSectionActionResolver>(async (
-    request,
-    context,
-  ) => {
-    if (request.action === 'connection.reconnect') {
-      if (!canAccessRosterAgent(context.connection.id, context.agent.agentId)) {
-        presentPaywall(
-          canAccessConnection(context.connection.id) ? 'agents' : 'gatewayConnections',
-          async () => {
-            await getConnectionRuntime().reconnectConnection(context.connection.id);
-          },
-        );
-        return;
-      }
-      await getConnectionRuntime().reconnectConnection(context.connection.id);
-      return;
-    }
-    if (request.action === 'connection.remove') {
-      await removeConnectionAndExit(context.connection.id);
-    }
-  }, [
-    canAccessConnection,
-    canAccessRosterAgent,
-    removeConnectionAndExit,
-    rootNavigationRef,
-    presentPaywall,
-  ]);
+  // Connection lifecycle moved to the shared Connection route; section rows resolve nothing here yet.
+  const resolveAgentSettingsAction = useCallback<AgentSettingsSectionActionResolver>(async () => {}, []);
 
   if (!connections.initialized) {
     return (
@@ -1952,7 +1884,7 @@ function AppContent({
                         );
                       }}
                       onToggleAgentPinned={handleToggleRosterAgentPinned}
-                      onToggleAgentMuted={handleToggleRosterAgentMuted}
+                      onManageConnection={(row) => navigation.navigate('Connection', { connectionId: row.connectionId })}
                       onRemoveConnection={handleRosterConnectionRemove}
                       onUnpinSession={handleRosterSessionUnpin}
                       onRenameSession={handleRosterSessionRename}
@@ -2131,7 +2063,10 @@ function AppContent({
                 <RootStack.Screen name="Connections">
                   {({ navigation }) => <ConnectionsScreen onBack={navigation.goBack}
                     onAdd={() => navigation.navigate('Onboarding', { presentation: 'modal' })}
-                    onOpen={(connectionId) => navigation.navigate('Connection', { connectionId })} />}
+                    onOpen={(connectionId) => navigation.navigate('Connection', { connectionId })}
+                    onPause={(connectionId) => getConnectionRuntime().pauseConnection(connectionId)}
+                    onResume={(connectionId) => resumeConnection(connectionId)}
+                    onRemove={removeConnectionAndExit} />}
                 </RootStack.Screen>
                 <RootStack.Screen name="DesignSystem">
                   {({ navigation }) => <DesignSystemScreen onBack={navigation.goBack} />}
@@ -2141,22 +2076,17 @@ function AppContent({
                     const connection = connections.connections.find((item) => item.id === route.params.connectionId);
                     if (!connection) return <AgentSettingsRouteLoading onBack={navigation.goBack} />;
                     const runtime = getConnectionRuntime();
-                    const resume = async (reconnect = false) => {
-                      const action = () => reconnect ? runtime.reconnectConnection(connection.id) : runtime.activate(connection.id);
-                      if (!canAccessConnection(connection.id)) {
-                        presentPaywall('gatewayConnections', async () => { await action(); });
-                        return;
-                      }
-                      await action();
-                    };
+                    const freeSlot = resolveConnectionFreeSlot(connection.id);
                     return <ConnectionScreen connection={connection}
                       state={connections.activeConnectionId === connection.id ? connections.activeState : 'offline'}
                       paused={connections.pausedConnectionIds?.includes(connection.id) ?? false}
                       agentNames={connections.roster.find((group) => group.connection.id === connection.id)?.agents.map(({ agent }) => agent.name) ?? []}
-                      onBack={navigation.goBack} onReconnect={() => resume(true)} onResume={() => resume()}
+                      details={connections.connectionDetails[connection.id]}
+                      {...(freeSlot ? { freeSlot, onUseAsFreeConnection: () => switchToFreeConnection(connection.id) } : {})}
+                      onBack={navigation.goBack} onReconnect={() => resumeConnection(connection.id, true)} onResume={() => resumeConnection(connection.id)}
                       onPause={() => runtime.pauseConnection(connection.id)}
-                      onRemove={() => removeConnectionAndExit(connection.id)}
-                      onDetails={() => navigation.navigate('AccountSettingsSection', { section: 'connections', connectionId: connection.id })} />;
+                      onRename={(label) => runtime.renameConnection(connection.id, label)}
+                      onRemove={() => removeConnectionAndExit(connection.id)} />;
                   }}
                 </RootStack.Screen>
                 <RootStack.Screen name="AccountSettings">
@@ -2204,10 +2134,7 @@ function AppContent({
                   {({ navigation, route }) => (
                     <AccountSettingsSectionScreen
                       section={route.params.section}
-                      status={route.params.section === 'connections' ? accountSettingsStatus : { kind: 'ready' }}
                       data={{
-                        connections: settingsSectionConnections,
-                        connectionId: route.params.connectionId,
                         isPro,
                         canAddConnection: canAddSettingsConnection,
                         replyNotificationsEnabled,

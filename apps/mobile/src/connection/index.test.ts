@@ -550,6 +550,66 @@ describe('ConnectionCoordinator', () => {
     await coordinator.stop();
   });
 
+  it('renames a connection without disturbing a live adapter whose Agents carry their own names', async () => {
+    const harness = await createHarness();
+    await harness.coordinator.start();
+    expect(harness.coordinator.getSnapshot().activeState).toBe('ready');
+    const eventsBefore = [...harness.events];
+
+    const descriptor = await harness.coordinator.renameConnection('alpha', '  Studio  ');
+
+    expect(descriptor.label).toBe('Studio');
+    const snapshot = harness.coordinator.getSnapshot();
+    expect(snapshot.connections.find((connection) => connection.id === 'alpha')?.label).toBe('Studio');
+    const group = snapshot.roster.find((candidate) => candidate.connection.id === 'alpha');
+    expect(group?.connection.label).toBe('Studio');
+    expect(group?.agents.map(({ agent: entry }) => entry.name)).toEqual(['alpha agent']);
+    expect(snapshot.activeState).toBe('ready');
+    expect(harness.events).toEqual(eventsBefore);
+    await expect(harness.coordinator.renameConnection('alpha', '   ')).rejects.toThrow('required');
+    await harness.coordinator.stop();
+  });
+
+  it('mirrors a rename onto Agents named after the connection and re-handshakes the live one', async () => {
+    const { secureStorage, store } = await createStoreHarness();
+    await store.update('alpha', { label: 'Alpha desk' });
+    await store.update('beta', { label: 'Beta desk' });
+    const dashboardStorage = new MemoryDashboardStorage();
+    const cache = new RosterCache({ storage: dashboardStorage, now: () => 50 });
+    await cache.set('beta', [{ ...agent('beta'), name: 'Beta desk' }], [session('beta', 30)], 'idle');
+    const events: string[] = [];
+    const coordinator = new ConnectionCoordinator({
+      store,
+      cache,
+      watermarks: new UnreadWatermarks({ storage: dashboardStorage, now: () => 50 }),
+      // Like Hermes without a Bridge name or the local model, the Agent is named after the label.
+      adapterFactory: (_record, descriptor) => {
+        const adapter = instrumentAdapter(descriptor, events);
+        adapter.listAgents = async () => [{ ...agent(descriptor.id), name: descriptor.label }];
+        return adapter;
+      },
+      now: () => 50,
+    });
+    await coordinator.start();
+    const agentName = (connectionId: string) => coordinator.getSnapshot().roster
+      .find((candidate) => candidate.connection.id === connectionId)?.agents[0]?.agent.name;
+    expect(agentName('alpha')).toBe('Alpha desk');
+    expect(agentName('beta')).toBe('Beta desk');
+    events.length = 0;
+
+    await coordinator.renameConnection('alpha', 'Studio');
+    expect(events).toEqual(['disconnect:alpha', 'connect:alpha']);
+    expect(coordinator.getSnapshot().activeState).toBe('ready');
+    expect(agentName('alpha')).toBe('Studio');
+
+    await coordinator.renameConnection('beta', 'Lab');
+    expect(events).toEqual(['disconnect:alpha', 'connect:alpha']);
+    expect(agentName('beta')).toBe('Lab');
+    expect(await cache.get('beta')).toMatchObject({ savedAt: 50, connectionStateAtSave: 'idle', agents: [{ name: 'Lab' }] });
+    expect(JSON.stringify(await secureStorage.getItemAsync('clawket.connectionRegistry.v1'))).toContain('Lab');
+    await coordinator.stop();
+  });
+
   it('reads isolated credential records for trusted runtime consumers', async () => {
     const harness = await createHarness(false);
     await harness.store.update('alpha', {

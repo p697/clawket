@@ -109,7 +109,7 @@ function createStyles(
       paddingHorizontal: Space.lg,
     },
     backdrop: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
       backgroundColor: colors.scrim,
     },
     card: {

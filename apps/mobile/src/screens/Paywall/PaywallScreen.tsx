@@ -218,7 +218,7 @@ function PaywallPresentation({
           accessible={false}
           style={[styles.hero, { minHeight: heroMinHeight }]}
         >
-          <View style={StyleSheet.absoluteFillObject}>
+          <View style={StyleSheet.absoluteFill}>
             <PaywallLumenHero hero={hero} success={isSuccess} />
           </View>
           {isSuccess ? <View testID="paywall-hero-success" style={styles.successMark}><Check size={IconSize.lg} color={theme.colors.good}/></View> : null}

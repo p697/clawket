@@ -14,7 +14,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
-import * as MediaLibrary from 'expo-media-library';
+import * as MediaLibrary from 'expo-media-library/legacy';
 import * as Sharing from 'expo-sharing';
 import { EnrichedMarkdownText } from 'react-native-enriched-markdown';
 import { Download, Share2, X } from 'lucide-react-native';
@@ -32,6 +32,7 @@ import {
 } from '../../theme/tokens';
 import { useAppTheme } from '../../theme';
 import { getDisplayAgentEmoji } from '../../utils/agent-emoji';
+import { resolveAgentAvatarImageSource } from '../../utils/agent-avatar-uri';
 import { sanitizeDisplayText } from '../../utils/chat-message';
 import { PosterThemePicker } from '../poster/PosterThemePicker';
 import { getPosterThemeForAccent } from '../poster/posterThemes';
@@ -256,14 +257,14 @@ export function ChatSharePosterModal({
     }
   }, [capture]);
 
-  const hasAvatar = !!agentAvatarUri;
+  const agentAvatarSource = resolveAgentAvatarImageSource(agentAvatarUri);
 
   const posterContent = (
     <>
       {/* Agent Identity */}
       <View style={s.avatarSection}>
-        {hasAvatar ? (
-          <Image source={{ uri: agentAvatarUri }} style={[s.avatar, { borderColor: theme.accent }]} />
+        {agentAvatarSource ? (
+          <Image source={agentAvatarSource} style={[s.avatar, { borderColor: theme.accent }]} />
         ) : (
           <View style={[s.avatarFallback, { backgroundColor: theme.accentSoft, borderColor: theme.accentMuted }]}>
             <Text style={s.avatarEmoji}>{getDisplayAgentEmoji(agentEmoji)}</Text>

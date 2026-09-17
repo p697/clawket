@@ -313,5 +313,6 @@
   "Switch, pin and tidy up sessions in one place.": "セッションの切り替え、ピン留め、整理をここで。",
   "Search Agents, sessions and messages at once.": "Agent、セッション、メッセージをまとめて検索。",
   "One command, a six-digit code, both on one phone.": "コマンド 1 つと 6 桁のコードで、両方を 1 台で管理。",
-  "Cleaner, smoother, with live status on every avatar.": "より整理され、なめらかに。アバターに状態を表示。"
+  "Cleaner, smoother, with live status on every avatar.": "より整理され、なめらかに。アバターに状態を表示。",
+  "Allow this device to connect to OpenClaw?": "このデバイスの OpenClaw への接続を許可しますか？"
 }

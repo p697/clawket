@@ -22,7 +22,7 @@ jest.mock('react-native', () => {
     Platform: { OS: 'ios', select: (options: Record<string, unknown>) => options.ios ?? options.default },
     Pressable: primitive('Pressable'),
     StyleSheet: {
-      absoluteFillObject: {},
+      absoluteFill: {},
       create: <T extends Record<string, unknown>>(styles: T) => styles,
       flatten: (style: unknown) => style,
       hairlineWidth: 1,

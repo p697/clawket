@@ -862,6 +862,7 @@ export function createThreadCopy(t: TFunction): ThreadCopy {
     toolFailed: t('Failed', { ns: 'chat' }),
     approvalTitle: t('Allow exec?', { ns: 'chat' }),
     approvalError: t('Could not update this request. Try again.', { ns: 'chat' }),
+    pairApprovalDetail: t('Allow this device to connect to OpenClaw?', { ns: 'chat' }),
     device: t('Device', { ns: 'chat' }),
     node: t('Node', { ns: 'chat' }),
     allow: t('Allow', { ns: 'chat' }),

@@ -13,7 +13,6 @@ function translateCommon(t: AccountSettingsTranslator, key: string): string {
   if (key === 'Connecting') return t('Connecting', { ns: 'common' });
   if (key === 'Online') return t('Online', { ns: 'common' });
   if (key === 'Error') return t('Error', { ns: 'common' });
-  if (key === 'Uptime') return t('Uptime', { ns: 'common' });
   if (key === 'Reconnect') return t('Reconnect', { ns: 'common' });
   if (key === 'Remove') return t('Remove', { ns: 'common' });
   return key;
@@ -22,6 +21,9 @@ function translateCommon(t: AccountSettingsTranslator, key: string): string {
 function translateSettings(t: AccountSettingsTranslator, key: string): string {
   if (key === 'Server address') return t('Server address', { ns: 'settings' });
   if (key === 'Environment') return t('Environment', { ns: 'settings' });
+  if (key === 'Bridge version') return t('Bridge version', { ns: 'settings' });
+  if (key === 'Bridge capabilities') return t('Bridge capabilities', { ns: 'settings' });
+  if (key === 'Last ready') return t('Last ready', { ns: 'settings' });
   if (key === 'Unavailable') return t('Unavailable', { ns: 'settings' });
   return key;
 }
@@ -80,6 +82,7 @@ function translateConfig(t: AccountSettingsTranslator, key: string): string {
   if (key === 'OpenClaw') return t('OpenClaw', { ns: 'config' });
   if (key === 'Hermes') return t('Hermes', { ns: 'config' });
   if (key === 'YouMind Sprite') return t('YouMind Sprite', { ns: 'config' });
+  if (key === 'Local model') return t('Local model', { ns: 'config' });
   if (key === 'Local') return t('Local', { ns: 'config' });
   if (key === 'Tailscale') return t('Tailscale', { ns: 'config' });
   if (key === 'Cloudflare') return t('Cloudflare', { ns: 'config' });

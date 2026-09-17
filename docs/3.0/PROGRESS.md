@@ -1,7 +1,54 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+## 首次连接配对卡片与 CLI 重复用户消息（2026-09-17）
+
+- 负责人真机反馈：配对卡片点允许后停留，重开消失；只发一次「滴滴」却显示两条且单 / 双勾不同。本机只读核对 main transcript、Claude CLI transcript 与 `chat.history`：一次发送 / 一次回复，历史接口额外导入带恢复前缀的 CLI 用户副本；不是重复执行。节点授权完成记录与截图时间吻合。
+- 配对审批仍走原设备 / 节点 API，仅线程投影过滤已完成 / 拒绝 / 过期条目；保留处理中防重复点击、失败重试和 store 墓碑以拒绝迟到事件。待处理卡片增加「允许此设备连接到 OpenClaw 吗？」（19 语言），说明可换行。没有自动授权，也没有删除真实审批能力。
+- OpenClaw 历史适配层在缓存合并后仅去除紧邻本地格式发送标识的 CLI 恢复输入副本：明确 CLI 来源及消息 ID、精确恢复前缀、相同纯文本、无冲突发送标识、时间向前且不超过 60 秒。保留真正重复发送、附件、不完整页、未知来源和 Hermes 历史；保留原消息作为回复聚合的轮次锚点。已有缓存副本随成功历史刷新和正常缓存保存更新，不直接改手机存储或 OpenClaw 数据库。
+- 验证：脱敏录制报文回归、缓存重载的双后端适配器回归、审批完成 / 拒绝 / 失败重试 / 并发及外部完成事件回归；最终适配器专项 2 suites / 57 tests 通过。完整 `npm run check:required` 通过（Mobile 286 suites / 2,875 tests、所有 workspace 类型与自含双后端测试、设计系统、19 语言和文档门禁）；最终 Mobile typecheck 通过。未部署、安装 App、重启服务或更换配对，真机展示仍由负责人验收。
+
+
+## 连接管理统一：花名册左滑、连接页吞并高级设置、砍掉静音（2026-09-17）
+
+- 负责人看花名册截图提出加左滑操作，并问「我的连接 → 连接页 → 高级设置」为什么怪。核对代码：连接级信息与操作复制在三处（连接页只有生命周期；「高级设置」其实是账户设置分段页的单连接只读模式：后端 / 传输 / 环境 / 地址 / Relay 状态；Agent 设置里还留着一份没有任何路由能到的「连接」分段，而最有诊断价值的 Bridge 版本、最近就绪只在那份死代码里）；「静音」只挡默认关闭的 iOS 回复通知、行上没有任何状态。负责人定稿：砍掉静音；左滑放「置顶」「管理」；改名放连接页；其余按实现者建议。
+- Mobile：新增 `SwipeableRow` / `useSwipeableRowGroup`（80pt 图标加短标签的单元，中性 `surface` / 破坏性 `bad`，一列表只开一个托盘、滚动即收起、库自带 RTL 镜像）与 `RenameSheet`（花名册会话改名与连接改名共用）；删除 2.x 遗留且无人使用的 `SwipeableGatewayRow`。花名册 Agent 行左滑 = 置顶 / 取消置顶 + 管理（进 `Connection` 路由），置顶会话行左滑 = 取消置顶 + 重命名；长按菜单改为置顶 / 管理连接 / 移除连接（仅单 Agent 连接），托盘与菜单共用 `performRowAction`，托盘永不放移除。`muted` 从偏好存储、花名册模型、动作装配、通知门与 19 语言中删除；旧记录里的字段读取时忽略。
+- 连接页重做为唯一连接页：头部 + 重连 / 恢复 + 暂停 + 「名称」行（`RenameSheet` → 新的 `ConnectionCoordinator.renameConnection`：只改 label，不断 OpenClaw 连接；Agent 名等于旧连接名的（Hermes 无 Bridge 名、本地模型）在内存与 roster 缓存里镜像改名，`RosterCache.updateAgents` 保留原 savedAt 不冒充新鲜就绪，活动连接重新握手一次）+ 只读「详情」（`buildConnectionDetailRows`：后端 / 传输 / 环境 / 服务器地址 / Bridge 版本 / Bridge 能力 / 最近就绪，地址从凭据记录按需读取不入描述符）+ 免费用户的免费连接组 + 移除。「我的连接」列表行左滑 = 暂停 / 恢复 + 移除，与连接页同样确认。删除：`AccountSettingsSection` 的 `connections` 分段（含 Relay 统计类型、`formatAccountSettingsUptime`、连接级 action、路由 `connectionId` 参数）、Agent 设置的 `connection` 分段定义与动作、App 内旧的 `connectionHosts` / `settingsSectionConnections` 装配；免费连接切换逻辑移到连接页回调。
+- i18n：新增 `common` `Pin` / `Unpin` / `Manage` / `Pause` / `Resume`、`config` `Manage connection`，删除 `Mute Agent` / `Unmute Agent` / `Uptime`，19 语言同步，strict 报告 missing=0 / removable=0。文档：Mobile `AGENTS.md`（连接页唯一、滑动托盘规则、静音删除）、`design-system.md` §6 两条新基元、`04` §花名册手势 / §账户设置 / 新增连接页段落。
+- 测试：`SwipeableRow` 4、`connection-details` 4、`ConnectionScreen` 4、`ConnectionsScreen` 3、`RosterCache.updateAgents` 1、coordinator 改名 2（OpenClaw 不断线 / 派生名镜像并重握手）、花名册左滑 1；改写受影响的花名册、账户设置、Agent 设置与偏好用例。负责人真机验收项：托盘手感与阿拉伯语方向、改名后本地模型行名、连接页详情可读性（HT-CONN-0917）。
+- 验证：完整 `npm run check:required` exit 0（Mobile 286 suites / 2,863 tests，全部 workspace 类型检查，protocol 覆盖率、relay / bridge 自含测试与 63 项脚本回归，191 个 UI 文件样式检查，19 locales / 24,738 translations strict 通过，docs 检查通过）。第一次运行因与并行的 `check:design-system` selftest 临时目录竞争而在 jest haste map 阶段报 ENOENT，单独重跑通过；不是代码问题。未操作模拟器 / 真机，未提交。
+
+## 本地调试 ENOSPC 恢复（2026-09-16）
+
+- `mobile:dev:ios` 在 npm postinstall 写入 Android Gradle 补丁时失败，Warp 也无法创建临时文件；实测系统盘仅剩 116 MiB。上一轮独立验证目录 `/tmp/clawket-sdk57` 占 7.2 GiB，收尾未及时释放。
+- 仅对本次指定 DerivedData 执行 `xcodebuild clean`（成功），把剩余验证日志 / 缓存移到 `/Volumes/Lucy-SSD/Relocated/Caches/dev/clawket-sdk57-artifacts`，原 `/tmp/clawket-sdk57` 保留软链接。系统盘恢复约 7.2 GiB 可用；没有清除源码、通用系统缓存、Archive 或手机数据。
+- 实际重跑 `npm run mobile:dev:ios`：npm install 成功，全部四个 postinstall 补丁通过，进入 Expo 真机 / 模拟器选择器（包含插线 iPhone）；主动取消选择，不额外触发构建 / 安装。Android 补丁的 3 个回归测试通过，依赖文件可正常读取与写入。本次未验证新的真机冷启动，HT-SDK57-0916 仍待关闭。
+
+## Expo SDK 57 / iOS 27 启动修复（2026-09-16）
+
+- 负责人授权完整升级。真机 TestFlight 3.0.0(5) 与 Debug 3.0.0(1) 均在 JS 启动前触发 `UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption` / SIGTRAP；采用 Expo 官方 SDK 57.0.23 + build-properties 57.0.20 Scene 支持，未压制系统断言。此前 SDK 55 Device Hub 临时补丁已由新版 CLI 原生能力替换，下节记录保留为历史。
+- Expo 57 / RN 0.86.3 / React 19.2.3 / TS 6 与两份 lockfile、根 overrides 同步。配置插件启用 UIScene，粘贴输入在官方 scene delegate 创建 React host 后注册；保持 ExpoModulesCore 源码权限同步补丁、iOS 16.4 最低版本、启动屏官方插件及 app/extension 团队签名继承。MediaLibrary 旧行为走 `/legacy`，文件复制等待完成，替换 RN 已删除的 absoluteFillObject。
+- 当前验证：Expo dependency check 与 Doctor 21/21 通过；完整 `check:required` exit 0（Mobile 280 suites / 2,841 tests，双后端自含回归、全部类型检查、设计系统 / i18n / docs）。clean prebuild / Pods 与最终 iOS Debug 真机架构构建成功，未依赖命令行签名团队覆盖。Android 初始 Kotlin DSL 错误定位到 Gradle 9.3.1 对外接盘软链接缓存的上游回归；独立真实路径缓存已通过插件编译。原生日志在本机 `/tmp/clawket-sdk57/`。
+- 最终 iOS Debug / Release 均 `BUILD SUCCEEDED`，签名校验通过，成品 Info.plist 含 ClawketSceneDelegate，Release 含 11 MiB 嵌入式 main.jsbundle。两种构建均成功原位安装到已配对 iPhone（未卸载 / 清数据），目前保留 Release 且本轮 Metro 已停止。启动命令被 SpringBoard 以 `Locked` 拒绝，设备 `passcodeRequired: true`；解锁前不能声称冷启动 / 闪退已验收，记录 HT-SDK57-0916。Android arm64 Debug `assembleDebug` 已通过（536 tasks），APK 位于 `apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk`；Google Maven 临时 TLS / 超时经 Gradle 重试恢复，没有修改依赖产物。根与 Mobile production dependency audit 均无 high / critical（仍分别有 31 / 16 项 moderate）。没有提交、上传 TestFlight 或部署后端；保留开始前其他任务的工作树修改。
+
+## Xcode 27 本地 iOS 调试入口修复（2026-09-16）
+
+- `mobile:dev:ios` 在设备选择前报 Simulator 不存在。实测本机 Xcode 27.0 / 27A266a、`xcode-select` 与 `simctl` 正常，但 Apple 已改用 DeviceHub；Expo 55.0.31 / CLI 55.0.36 是 55 系列最新补丁，仍只识别 Simulator。保持 SDK 55 基线，把 Expo 官方 #46757 / #46809 的检测、运行态、启动与激活兼容回移到 `patch-expo-device-hub.mjs`，接入根目录和 Mobile postinstall；三文件 × 两份 CLI 共 6 文件，版本/源块校验、重复执行幂等、全部校验后才写入。无 SDK / 原生依赖 / backend 行为变更。
+- 验证：18 个 Node 回归测试通过（含旧 Simulator、DeviceHub plist fallback、工具缺失、启动失败、激活、源码漂移和安装布局）；实际执行原命令已进入真机与模拟器设备选择列表，主动取消在选择阶段，未安装或启动 App，未宣称完成原生构建或真机验收。完整 `npm run check:required` 通过：Mobile 279 suites / 2,835 tests，workspace 类型、自含 Relay / Bridge 测试、18 个补丁回归、设计系统、19 语言 i18n 和文档检查全部通过。日志：本机 `/tmp/clawket-devicehub-required.log`。
+
 > 实现者维护。每次开工先读；每完成一个里程碑更新。人类只读这一份文件了解进度。
 
+
+## 3.0 最终发布检查（2026-09-16）
+
+完整结论与证据边界见 [最终检查报告](final-release-review-2026-09-16.md)。基线 `c9422fc9` + 当前工作树；保留本轮开始前已有 Xcode 27 原生修复与其他未提交文件。**核心代码可进入候选发布，尚不满足 App 全量发布签字。**
+
+- 修复 FilesSection 的旧购买续做、Agent / adapter 切换、离线 / 卸载页面后提交旧草稿、乱序读取与失败 Retry 丢草稿；先复现红灯，再修复；新增 12 个双后端 / 并发回归，相关 2 suites / 52 tests 通过。
+- 拆开自包含 `relay:test:integration` 与真实 local-model recovery / Preview 命令，真实命令缺少前置条件必须失败而非 skip；修正 Hermes 两处历史精确断言的 additive `hasActiveRun: false`。同步 `09` 中已经被负责人决策替代的验收项。
+- 最终 `check:required` exit 0：Mobile 279 suites / **2,835 tests**、workspace 类型 / 测试、189 UI 文件、19 locales / 24,643 translations 与 docs 通过；`npm test` 通过（当时 Mobile 2,827 项，后续新增用例由最终 required 覆盖）。当前安装 Hermes 外部集成 4 文件 / 36 tests 通过。v1 compat 5 文件 / 39 tests、自包含 integration 5 文件 / 8 tests、当天四个 Production 只读 Worker 快照 × 新 / 0.7.0 Bridge 的 **20 阶段**真实 workerd 矩阵通过。
+- 双后端真实本机文字 / 图片 / 停止 / 历史通过；独立 Preview pairing 经云端请求真实模型与六项管理读取通过；仅断开本次 runtime owner 后恢复约 OpenClaw 4.84 秒 / Hermes 4.73 秒，Hermes 空闲 125 秒后健康请求通过。单次测量不是 p90 / 长期 SLO。QA 会话与 runtime 清理；标准产品 smoke 刷新了已有 Preview access code，没有变更 Production pairing。
+- Bridge 编译 / 包验证、双平台 Expo JS export、本地公开配置检查、根与 Mobile high 级依赖审计通过。没有本轮 Android 原生 Release、商店真实购买、旧包真机或长时观察签字；Simulator 控制工具可发现进程但选择 App 始终 `Invalid app`，因此没有虚报 UI 验收。
+- PostHog 六个月事件与 2.x 源码对照：主要旧付费能力保留；Office 高使用量但按决策删除；技能辅助文件浏览缺等价入口、多连接备份缺来源标识作为产品 / 迁移待决项。详见报告，不将购买成功埋点当作已核实营收。
+- Production 缺六位码 ticket 密钥、npm latest 仍 0.7.0、首次 Registry DO 迁移的前向恢复产物待演练；公开隐私页仍否认实际分析 / 第三方处理。没有部署、发布、购买或修改 Hermes 源码。已有早期门禁红灯（含本机 Python 许可）不代表当前结果，最终 required 与真实 Hermes 集成均已重跑全绿。
 
 ## Bridge CLI 测试在 Windows CI 上的偶发失败（2026-09-16）
 
@@ -573,6 +620,7 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 
 | 位置（文件 § 节） | 规格原文 | 实际做法 | 理由 | 影响 |
 |---|---|---|---|---|
+| `[UX-2026-09-17-connection] 04-app-screens.md` §2 花名册手势 / §6 账户设置 | 长按 Agent 行 → 置顶 / 静音 / 移除连接；账户设置连接分组列出 label、后端、传输、环境标签。 | 静音删除；新增左滑托盘「置顶 / 管理」（置顶会话行「取消置顶 / 重命名」）；长按菜单为置顶 / 管理连接 / 移除连接；连接级详情与生命周期全部合并到唯一的 `Connection` 页并加本机改名，「高级设置」子页、账户设置连接分段、Agent 设置连接分段删除；「我的连接」列表左滑暂停 / 恢复 / 移除。 | 负责人 2026-09-17 决定：静音没有可见效果；连接信息分散三处且「高级设置」名不副实。 | 改名只改本机 label：OpenClaw 行名仍来自 Gateway 身份；Hermes 无 Bridge 名与本地模型的行名随连接名镜像并重新握手。 |
 | `[UX-2026-09-16-whatsnew] 06-paywall-and-growth.md` §3 历史用户 / `07-analytics.md` | 升级到 3.0 的首次启动用「3.0 + Pro」介绍页（付费墙布局）替代当次更新公告；`paywall_launch_shown / closed` 统计自动弹出。 | 介绍页删除，改为根层更新公告弹层（大号 curious Companion + 版本英雄文案 + 五条一行文案，不放 Pro 条目——负责人看过首版后去掉），跳版合并、静默版不弹、全新安装不弹；事件改为 `app_update_announcement_*` 与 `release_notes_opened`。 | 负责人 2026-09-16 决定：介绍页从未被任何页面调用，公告一条路径覆盖首发与后续所有版本；同一次启动只弹一个模态。 | 06 §3 与 07 事件表已同步改写；`launchPaywallShownThisProcess` 语义扩展为「本进程启动机会已消耗」。 |
 | `[PAY-2026-09-16-models] 00-decisions.md` §付费 | 「保持免费：…模型切换…」 | 模型页（默认 / 当前模型、白名单开关、备用、思考等级、加删模型、成本）全部走 `modelManage` 付费墙；聊天输入框的会话级切换仍免费。 | 负责人 2026-09-16 明确要求给模型页管理动作加付费墙以提高转化；实现者把「模型切换保持免费」收窄为输入框切换。 | 免费用户仍可浏览完整目录与真实默认值；每个写动作带 continuation。若负责人希望输入框切换也收费，需再改 `useChatModelPicker`。 |
 | `[UX-2026-09-16-models] 10-migration-map.md` / `04-app-screens.md` §5 | `ModelsScreen.tsx` 迁移为 `AgentSettings/Models`；`00` 只说「模型切换保持免费」。 | 迁移补完：模型页恢复 2.0 的默认 / 备用 / 思考等级、白名单开关、加模型、删模型、成本覆盖，去掉「模型 / 提供方」Tab，改为独立 `ModelsScreen` 页 + 三个弹层；协议加 `modelManage` 精化。 | M5 只迁了「选一个模型」，负责人 2026-09-16 指出功能丢失且页面不可理解；2.x 埋点显示这些功能有 51–201 名用户。 | 仅 OpenClaw 获得管理能力；Hermes / local-model 保持全局选择。成本编辑降级为弹层次要行，Provider 增删仍指向配置编辑器。 |
@@ -611,7 +659,7 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 | `[UX-2026-09-11-profile] 04-app-screens.md` §5 / `05-visual-system.md` §9 | Agent 设置 = 44pt 身份行 + 「行标题 + 尾值」两档字；卡片下不放小字。 | 档案页改为「数字卡 + 行」：头部右侧墨色圆按钮 = 继续聊天，两张 hero 卡（Cron jobs、Cost today）+ 三块计数格（Models / Skills / Files），卡右侧允许一个 `caption` 数字小字（红色失败数、灰色 tokens）。 | 负责人 2026-09-11 依据 2.0 控制台埋点（定时任务 hero 人均点 6.2 次、费用 3.3 次、用量页触达最广且付费用户超配）要求把数据放回一级；小字是数字不是句子。 | 本页用到 title / secondary / caption 三档（`check-ui-style` ≤ 3 仍通过）；行仍是两档；其他页面不变。 |
 | `[UX-2026-09-11-profile] 04-app-screens.md` §5 身份行 | 灰字 = 连接名 · 后端。 | OpenClaw 有心跳时灰字 = `后端 · Active {{age}}`；否则退回连接名 · 后端。（2026-09-16 再改：后端进头像角标，灰字只剩 `Active {{age}}` / YouMind 邮箱，无信息时整行不渲染，见下一条。） | 2.0 心跳数字 482 人反复点；连接名与分节标题重复。 | 新增协议只读操作 `cron.heartbeat.last()`（可选），OpenClaw 转调 Gateway `last-heartbeat`；Hermes 不声明，行为不变。 |
 | `[UX-2026-09-11-profile] 04-app-screens.md` §5 命名 | 「定时任务」英文 `Scheduled tasks`。 | 全部改回 2.0 的 `Cron jobs` / `New cron job`（中文仍是定时任务）。 | 负责人要求与 2.0 用户心智一致。 | 六语言 `common` / `config` 键改名；无其他页面引用。 |
-| `[UX-2026-09-14-sprite] 00-decisions.md` §首启引导 / `04-app-screens.md` §4 第 5、6 行与「+」菜单 | 引导页第三个入口「YouMind 精灵」；「还没有 Agent？」含 YouMind 键；「+」菜单说明「连接 OpenClaw、Hermes 或 YouMind 精灵」。 | 负责人 2026-09-14 要求隐藏全部 YouMind 精灵入口：三处都由 `apps/mobile/src/config/features.ts` 的 `YOUMIND_SPRITE_ENTRY_VISIBLE=false` 关闭，「+」菜单说明改为「连接 OpenClaw 或 Hermes」（19 语言新增键）。 | 只隐藏入口，不删功能：适配器、邮箱验证码登录、翻译、既有 YouMind 连接与测试全部保留，翻回标志即恢复。 | 新用户无法新建 YouMind 连接；已有连接继续工作。测试覆盖隐藏态与标志开启态。 |
+| `[UX-2026-09-14-sprite] 00-decisions.md` §首启引导 / `04-app-screens.md` §4 第 5、6 行与「+」菜单 | 引导页第三个入口「YouMind 精灵」；「还没有 Agent？」含 YouMind 键；「+」菜单说明「连接 OpenClaw、Hermes 或 YouMind 精灵」。 | 负责人 2026-09-14 要求隐藏全部 YouMind 精灵入口：三处都由 `apps/mobile/src/config/features.ts` 的 `YOUMIND_SPRITE_ENTRY_VISIBLE=false` 关闭，「+」菜单说明改为「连接 OpenClaw 或 Hermes」（19 语言新增键）。**2026-09-17 负责人要求恢复：标志翻回 `true`，三处入口与「连接 OpenClaw、Hermes 或 YouMind 精灵」文案按原样回来，此项偏离已关闭。** | 只隐藏入口，不删功能：适配器、邮箱验证码登录、翻译、既有 YouMind 连接与测试全部保留，翻回标志即恢复（已于 2026-09-17 翻回）。 | 当前与规范一致；标志与隐藏态测试保留，便于再次关闭。 |
 | `[UX-2026-09-14-profile-cost] 04-app-screens.md` §5 数字卡 | Cost today 右侧灰色「{{value}} tokens」小字。 | 去掉 tokens 小字，费用卡只显示美元数；tokens 仅保留在无美元数时的「Tokens today」退化态。 | 负责人 2026-09-14 依据真机截图：用量稍大（`$0.xx` + `863.8K tokens`）时小字与金额抢同一张 hero 卡的宽度，两者都被省略号截断。 | `model.ts` usage 卡不再产出 `detail`，`AgentSettingsStatDetail.key` 收窄为 `{{count}} failed`；19 语言 `settings` 删除 `{{value}} tokens` 键；Cron 卡的红色失败数与锁位不变。 |
 | `[UX-2026-09-16-hero] 04-app-screens.md` §5 Hero / 行 | 名字下一行灰字 `连接名 · 后端`（有心跳时 `后端 · Active {{age}}`）；连接组分节标题 = 连接名。 | 后端改为头像右下角 24pt 圆角标（`PlatformMark` 官方图标 20pt，`surfaceFloating` 底 + 2pt `canvasGrouped` 描边；Pro 锁定时锁角标占位）；灰字只在有心跳（`Active {{age}}`，不带后端前缀）或 YouMind 邮箱时渲染，否则无第二行；连接组不再有分节标题。 | 负责人 2026-09-16 真机截图：Agent 名「Lucy」下又出现连接名「lucy」，同名重复；后端专门占一行不值；「身份」下再来一个「lucy」小标题很怪。 | 只改档案页头部与分组标题；`identity.detail` 改为可选、新增 `identity.backend`、`AgentSettingsGroupDescriptor` 去掉 `title`。Hermes 角标是该图标唯一被裁成圆的位置（只裁掉它自带的白色安全区），已写入 `apps/mobile/docs/design-system.md`。 |
 | `[UX-2026-09-16-memory] 04-app-screens.md` §5 数字卡 | 第二排第三块计数格叫 Files（文件）。 | 计数格与其分栏页标题改名 Memory（记忆），19 种语言同步；`files` 路由、埋点名 `Files`、`FilesSection` 组件与文件页内文案不变。 | 负责人 2026-09-16 要求：该页承载的是 SOUL / MEMORY / USER 等记忆文件，「文件」对用户不表意。 | 只改标签与翻译，不改能力矩阵、路由或后端。 |
@@ -621,8 +669,11 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 
 | 编号 | 事项 | 怎么做 | 验证方法 | 状态 |
 |---|---|---|---|---|
+| HT-SDK57-0916 | 解锁手机以完成 SDK 升级的冷启动验收 | 保持该 iPhone 与电脑连接并解锁，继续采集新版 Release 的连续冷启动 / 崩溃日志；Debug 需另开 Metro 安装验证，最终恢复 Release。 | Release 无开发服务器时正常进入应用，无原 UIScene SIGTRAP；Debug 启动 JS；双后端入口、链接与图片粘贴 / 相册待设备操作确认。 | 构建与自动测试通过，Release 已原位安装；系统拒绝启动，原因 Locked / passcodeRequired，待解锁。 |
+| HT-FINAL-0916 | 最终候选发布签字与风险关闭 | 按最终检查报告第 1、7 节汇总关闭既有 HT-COMPAT-0914、HT-PRO-0914-3、HT-M8-1～5；先固定提交，准备保留新 DO / 限速的前向恢复产物，配置生产 ticket 密钥，真实旧包 / 商店购买通过后按服务端 → CLI → App 发布；另决定技能辅助文件浏览、备份来源语义及 Office 移除沟通。 | 每项留下明确版本 / 构建 / 实测记录；不要把本地代码回退当成 Cloudflare 迁移回滚，或把自动绿灯当成原生 / 付费验收。生产 Relay 自定义域名 health 的 WAF 403 与 `/ws` 可达需分别核对。 | 自动检查与真实双后端短时链路通过；生产切换、公开政策、旧包 / 双商店 / 真机和观察窗口未关闭。不重复创建同内容的旧 TODO。 |
 | HT-PAYWALL-COPY-0916 | 付费墙文案与留白真机验收 | 负责人查看通用、锁定 Agent、文件编辑和日志入口；检查猫头区域、标题换行、权益到价格 32 pt 距离，并用大字号展开月付查看滚动。 | A 版通用文案与情境标题清楚，文字区靠近价格，长文案和购买按钮均可完整访问。 | 待负责人反馈；不操作模拟器 |
 | HT-ROSTER-ORDER-0916 | 花名册排序真机验收 | 装新构建后打开花名册：只与 A 聊一句，确认 A 到顶且时间是刚刚；等一次心跳（`heartbeat.every`，本机 2h）或让某个没聊过的 Agent 跑一次 cron / 子 Agent，确认它不上浮、不出未读点；压后台 ≥1 分钟回前台重连，确认顺序在重连前后不变；OpenClaw 与 Hermes 两个连接各做一遍，切换活动连接后顺序也不变。 | 顺序只随「人参与的消息」变；心跳 / 重连 / 切换连接 / 打开会话都不改变顺序；红点与「需要你」仍在行上。 | 待验收 |
+| HT-CONN-0917 | 花名册左滑、连接页与改名真机验收 | 花名册：左滑 Agent 行看「置顶 / 管理」托盘的滑出手感、按下态与只开一个托盘（滚动即收起）；置顶会话行看「取消置顶 / 重命名」；长按菜单不再有「静音」；阿拉伯语下托盘应从另一侧滑出。连接页：从「管理」进入，检查名称行改名（OpenClaw 不掉线；本地模型 / 无 Bridge 名的 Hermes 改名后花名册行名立即变、连接重新握手一次）、详情组（后端 / 传输 / 环境 / 地址 / Bridge 版本 / 最近就绪）的可读性、免费用户的免费连接组；账户设置 → 我的连接 → 行左滑「暂停 / 恢复 / 移除」。 | 无第二处「高级设置」入口；改名后返回花名册与我的连接列表名称一致；深浅色下托盘颜色只有 `surface` 与红色破坏性。 | 待处理 |
 | HT-WHATSNEW-0916 | 更新公告弹层与更新日志真机验收 | 在有连接的设备上装新构建冷启动（模拟 2.x 升级：设备上不能已有 `clawket.appUpdateAnnouncementLastVersion.v1`），花名册连接就绪后应弹「Meet Clawket 3.0」；看猫头动效、浅 / 深色、中文每条描述是否一行、Continue；再冷启动一次不应再弹。账户设置 → 关于 → 高级设置开 Debug 后用「预览更新公告」反复看；账户设置 → 帮助 → 更新日志核对 11 个版本与日期。 | 弹层只出现一次、无叠层、Reduce Motion 下猫头静止；`app_update_announcement_shown/closed` 在 PostHog 诊断里各一条。 | 待处理 |
 | HT-MODELS-0916 | 模型页真机验收（OpenClaw + Hermes） | OpenClaw：改默认模型 / 加备用 / 改思考等级 / 关一个开关 → Save → 确认重启；Provider 弹层加一个模型；详情弹层删一个未被引用的模型、给显式 provider 的模型改成本。Hermes：点行 → 「Set as current model」。 | Gateway `config.get` 里 `agents.defaults.model`、`agents.defaults.models`、`models.providers.*` 与页面一致；输入框模型选择器不受影响；Hermes `model.get` 变化 | 待处理 |
 | HT-PAYWALL-0916 | 最后一步付费墙真机验收 | 用非 Pro 账号进 OpenClaw 管理四个分段与「OpenClaw 运行日志」：看遮罩渐隐在浅 / 深色下是否若隐若现、文案是否有付费冲动；再用 Sandbox 账号在配置编辑、权限修复、诊断修复、备份创建 / 恢复确认、日志解锁各处购买一次，确认原动作在付费墙关闭后自动续做 | 遮罩下内容不可点、读屏不读；每个拦截点弹出对应 hero 的付费墙（`manage` / `logsFiles`）；购买后无需重进页面即解锁并完成原动作；PostHog `paywall_viewed` 的 `blocked_feature` 分布覆盖五个 manage/logs 值 | 待处理；若遮罩效果不够，再决定是否引入 `expo-blur` |
@@ -1308,3 +1359,11 @@ Validation: 10 layout tests, 5 album component tests (including lazy size resolu
 
 Owner requested restoring the 2.0 skill editor and confirming Memory monetization. Identity still gates USER/SOUL/MEMORY saves through coreFileEditing. Installed Skills now open default SKILL.md through the retained backend-neutral skills.get/content-update adapter contract; no generic file writes or backend/source changes. Details dismiss before source presentation. Both backends share selectable Markdown, Pencil/Check header controls, dirty close, retained failed drafts, write lock and stale continuation checks. The backend editable/binary flags gate changes independently of Pro. Ancillary linked-file editing is not advertised by the key-only write contract. Validation: complete check:required passed (Mobile 268 suites / 2,652 tests, workspace types/runtime tests, 181 UI sources, localization and docs). Targeted section/source/Pro regression: 46 tests passed for both backends, protected content and failed drafts. metrics:loc: whole dirty tree 110,565 production lines / 77,476 test lines / 329 test files, not a task delta; the added document component is consumer-backed. Owner performs device acceptance; no simulator, pairing or service deployment.
 
+
+### 2026-09-16 — Xcode 27 Archive compatibility
+
+Owner requested a durable repair after Xcode 27.0 (27A266a) rejected five Pods resource-bundle deployment targets (9.0–13.4). App/React Native already require iOS 15.1. Added the registered `with-ios-pod-deployment-target` Expo plugin: after React Native post-install, raise explicit Pods minima to the greater of the app property and React Native minimum, preserving higher requirements and inherited settings. Repeated generation is idempotent and template drift fails closed.
+
+Release Archive then exposed RevenueCat 5.67.1's Swift 6.4 synthesized initializer collision. Backported RevenueCat upstream commit `870899891ac9a05118ae6ee16d4ae189b2c1eac2` via a reviewed, idempotent Node patch run by the same Pod hook. The generated PaywallColor source matches upstream byte-for-byte; no dependency version or purchase behavior change. Source drift fails with a review instruction. Mobile instructions and engineering baseline document both fixes.
+
+Validation: clean Expo prebuild for both platforms, repeated iOS prebuild and two successful pod installs; 127 Pods, all 290 explicit deployment settings at 15.1; Pod lock diff is only the Podfile checksum. Ruby hook tested with 8 version/inheritance cases plus a higher app floor. Full `check:required` passed (Mobile 279 suites / 2,818 tests); final plugin/backport suite passed 12 tests, Ruby syntax and docs checks passed. Xcode 27 Release generic-device Archive succeeded with `CODE_SIGNING_ALLOWED=NO`; signing, export and App Store upload were not performed. Android Debug verification was attempted but failed on `No space left on device`; removed only generated Android build intermediates to finish iOS verification. Android build remains unverified for this iOS-only plugin change. Evidence is local under `docs/3.0/evidence/xcode-27/`. No simulator/device operated, service deployed, pairing changed or commit created; unrelated `mock.ts.orig` preserved.

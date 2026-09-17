@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// ExpoModulesCore 55.0.26: module initialization can register requesters from
+// ExpoModulesCore 57.0.18: module initialization can register requesters from
 // concurrent AppContexts. Both dictionaries must share one reader/writer lock.
 const accesses = [
   `  for (id<EXPermissionsRequester> requester in newRequesters) {

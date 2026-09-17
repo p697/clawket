@@ -34,7 +34,7 @@ export function SheetBackdrop({
       accessible={false}
     >
       <Pressable testID={testID} accessible={false} disabled={!dismissOnPress}
-        onPress={dismissOnPress ? onBackdropPress : undefined} style={StyleSheet.absoluteFillObject} />
+        onPress={dismissOnPress ? onBackdropPress : undefined} style={StyleSheet.absoluteFill} />
     </BottomSheetBackdrop>
   );
 }

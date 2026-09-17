@@ -16,7 +16,7 @@ describe('useChatListViewport', () => {
     jest.useFakeTimers();
     global.requestAnimationFrame = ((cb: FrameRequestCallback) =>
       setTimeout(() => cb(0), 0) as unknown as number);
-    global.cancelAnimationFrame = ((id: number) =>
+    global.cancelAnimationFrame = ((id: number | null | undefined) =>
       clearTimeout(id as unknown as ReturnType<typeof setTimeout>));
   });
 

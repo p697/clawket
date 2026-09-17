@@ -6,11 +6,6 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.p697.clawket",
@@ -48,7 +43,8 @@
         "CFBundleDevelopmentRegion": "en",
         "UIPrefersShowingLanguageSettings": true
       },
-      "appleTeamId": "C8TM82D73W"
+      "appleTeamId": "C8TM82D73W",
+      "deploymentTarget": "16.4"
     },
     "android": {
       "adaptiveIcon": {
@@ -94,6 +90,15 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff",
+          "imageWidth": 200
+        }
+      ],
       "expo-secure-store",
       [
         "expo-location",
@@ -165,7 +170,18 @@
       "./plugins/with-alternate-app-icons",
       "./plugins/with-android-release-signing",
       "./plugins/with-paste-input-setup",
-      "./plugins/with-xcode-env"
+      "./plugins/with-xcode-env",
+      "./plugins/with-ios-pod-deployment-target",
+      "./plugins/with-ios-signing",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "enableSceneSupport": true,
+            "usePrecompiledModules": false
+          }
+        }
+      ]
     ],
     "scheme": "clawket",
     "extra": {

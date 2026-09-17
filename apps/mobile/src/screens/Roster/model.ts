@@ -25,7 +25,6 @@ export type RosterDisplayRow = Readonly<{
   cached: boolean;
   locked: boolean;
   agentPinned: boolean;
-  muted: boolean;
   allowedActions?: SessionDescriptor['allowedActions'];
 }>;
 
@@ -42,7 +41,6 @@ export type RosterModelOptions = Readonly<{
   pinnedSessionKeys?: Readonly<Record<string, ReadonlyArray<string>>>;
   agentPreferences?: Readonly<Record<string, Readonly<{
     agentPinned: boolean;
-    muted: boolean;
   }>>>;
   canAccessAgent?: (connectionId: string, agentId: string) => boolean;
 }>;
@@ -60,7 +58,6 @@ function buildPinnedRows(
   pinnedKeys: ReadonlyArray<string>,
   locked: boolean,
   agentPinned: boolean,
-  muted: boolean,
 ): RosterDisplayRow[] {
   const cached = group.source === 'cache';
   const rank = new Map(pinnedKeys.map((key, index) => [key, index]));
@@ -91,7 +88,6 @@ function buildPinnedRows(
       cached,
       locked,
       agentPinned,
-      muted,
       allowedActions: { ...session.allowedActions },
     }));
 }
@@ -160,7 +156,6 @@ export function buildRosterRows(
         cached,
         locked,
         agentPinned: preferences?.agentPinned === true,
-        muted: preferences?.muted === true,
       });
       rows.push(...buildPinnedRows(
         group,
@@ -169,7 +164,6 @@ export function buildRosterRows(
         options.pinnedSessionKeys?.[`${group.connection.id}:${agent.agentId}`] ?? [],
         locked,
         preferences?.agentPinned === true,
-        preferences?.muted === true,
       ));
     }
   }

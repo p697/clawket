@@ -12,7 +12,7 @@ jest.mock('react-native', () => {
   const ReactRuntime = require('react');
   const host = (name: string) => ({ children, ...props }: any) => ReactRuntime.createElement(name, props, children);
   return { View: host('View'), Text: host('Text'),
-    StyleSheet: { create: (value: unknown) => value, absoluteFillObject: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 }, flatten: (value: unknown) => value },
+    StyleSheet: { create: (value: unknown) => value, absoluteFill: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 }, flatten: (value: unknown) => value },
     AppState: { currentState: 'active', addEventListener: (_: string, callback: (state: string) => void) => { mockLifecycle = callback; return { remove: mockRemove }; } },
   };
 });

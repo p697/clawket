@@ -655,7 +655,7 @@ function createStyles(
       flex: 1,
     },
     scrim: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
       backgroundColor: colors.scrim,
     },
     clone: {

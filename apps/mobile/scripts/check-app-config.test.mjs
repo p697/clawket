@@ -9,8 +9,16 @@ test('accepts an iOS app config with tablet support enabled', () => {
   assert.deepEqual(validateAppConfig({
     expo: {
       ios: { supportsTablet: true },
+      plugins: ['./plugins/with-paste-input-setup', ['expo-build-properties', { ios: { enableSceneSupport: true } }]],
     },
   }), []);
+});
+
+test('rejects missing scene support and ordering that would restore the launch crash', () => {
+  const expo = { ios: { supportsTablet: true }, plugins: [] };
+  assert.match(validateAppConfig({ expo })[0], /enableSceneSupport/);
+  expo.plugins = [['expo-build-properties', { ios: { enableSceneSupport: true } }], './plugins/with-paste-input-setup'];
+  assert.match(validateAppConfig({ expo })[0], /must follow/);
 });
 
 test('rejects a config that makes the adaptive iPad UI unreachable', () => {

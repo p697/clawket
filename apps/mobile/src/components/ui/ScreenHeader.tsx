@@ -115,7 +115,7 @@ const styles = StyleSheet.create({
     minHeight: 44,
   },
   titleLayer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 48,

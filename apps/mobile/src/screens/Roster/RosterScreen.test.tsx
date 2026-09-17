@@ -126,7 +126,7 @@ jest.mock('react-native', () => {
     Pressable: host('Pressable'),
     RefreshControl: host('RefreshControl'),
     StyleSheet: {
-      absoluteFillObject: {},
+      absoluteFill: {},
       create: <T,>(styles: T) => styles,
       flatten: (style: unknown) => flattenStyle(style),
       hairlineWidth: 1,
@@ -599,7 +599,7 @@ describe('RosterScreen', () => {
     const onCreateAgentLocked = jest.fn();
     const onOpenPro = jest.fn();
     const onToggleAgentPinned = jest.fn();
-    const onToggleAgentMuted = jest.fn();
+    const onManageConnection = jest.fn();
     const onRemoveConnection = jest.fn();
     const screenProps = props({
       canCreateAgent: true,
@@ -607,15 +607,15 @@ describe('RosterScreen', () => {
       onCreateAgentLocked,
       onOpenPro,
       onToggleAgentPinned,
-      onToggleAgentMuted,
+      onManageConnection,
       onRemoveConnection,
     });
     const view = render(<RosterScreen {...screenProps} />);
 
     fireEvent.press(view.getByTestId('roster-add'));
     expect(view.getByTestId('roster-action-add_connection')).toBeTruthy();
-    expect(view.getByText('Connect OpenClaw or Hermes')).toBeTruthy();
-    expect(view.queryByText('Connect OpenClaw, Hermes or YouMind Sprite')).toBeNull();
+    expect(view.getByText('Connect OpenClaw, Hermes or YouMind Sprite')).toBeTruthy();
+    expect(view.queryByText('Connect OpenClaw or Hermes')).toBeNull();
     expect(view.getByText('Create another agent on live')).toBeTruthy();
     expect(view.queryByTestId('roster-action-add_connection-lock-icon')).toBeNull();
     expect(view.getByTestId('roster-action-create_agent-lock-icon')).toBeTruthy();
@@ -635,14 +635,43 @@ describe('RosterScreen', () => {
     expect(onToggleAgentPinned).toHaveBeenCalledWith(expect.objectContaining({ agentId: 'main' }));
 
     fireEvent(view.getByTestId('roster-row-agent:live:main'), 'longPress');
-    fireEvent.press(view.getByTestId('roster-action-mute_agent'));
-    expect(onToggleAgentMuted).toHaveBeenCalledWith(expect.objectContaining({ agentId: 'main' }));
+    expect(view.queryByTestId('roster-action-mute_agent')).toBeNull();
+    fireEvent.press(view.getByTestId('roster-action-manage_connection'));
+    expect(onManageConnection).toHaveBeenCalledWith(expect.objectContaining({ connectionId: 'live', agentId: 'main' }));
 
     fireEvent(view.getByTestId('roster-row-agent:live:main'), 'longPress');
     fireEvent.press(view.getByTestId('roster-action-remove_connection'));
     expect(onRemoveConnection).not.toHaveBeenCalled();
     fireEvent.press(view.getByTestId('roster-remove-connection-confirm'));
     expect(onRemoveConnection).toHaveBeenCalledWith(expect.objectContaining({ connectionId: 'live' }));
+  });
+
+  it('reveals pin and manage on a trailing swipe and never removal', () => {
+    mockRoster = [group('live', 'live', [agent('live', 'main')])];
+    mockConnections = snapshot({ roster: mockRoster });
+    const onToggleAgentPinned = jest.fn();
+    const onManageConnection = jest.fn();
+    const onRemoveConnection = jest.fn();
+    const view = render(<RosterScreen {...props({
+      agentPreferences: { 'live:main': { agentPinned: true } },
+      onToggleAgentPinned,
+      onManageConnection,
+      onRemoveConnection,
+    })} />);
+
+    const tray = view.getByTestId('roster-swipe-agent:live:main-actions');
+    expect(tray).toBeTruthy();
+    expect(view.queryByTestId('roster-swipe-agent:live:main-action-remove_connection')).toBeNull();
+    expect(view.getByText('Unpin')).toBeTruthy();
+    expect(view.getByText('Manage')).toBeTruthy();
+    const unpin = view.getByTestId('roster-swipe-agent:live:main-action-unpin_agent');
+    expect(unpin.props.accessibilityLabel).toBe('Unpin Agent');
+    fireEvent.press(unpin);
+    expect(onToggleAgentPinned).toHaveBeenCalledWith(expect.objectContaining({ agentId: 'main', agentPinned: true }));
+    fireEvent.press(view.getByTestId('roster-swipe-agent:live:main-action-manage_connection'));
+    expect(onManageConnection).toHaveBeenCalledWith(expect.objectContaining({ connectionId: 'live' }));
+    expect(onRemoveConnection).not.toHaveBeenCalled();
+    expect(view.queryByTestId('roster-row-actions')).toBeNull();
   });
 
   it('marks a locked add-connection choice and still routes it through onAdd', () => {
@@ -659,7 +688,7 @@ describe('RosterScreen', () => {
     fireEvent.press(view.getByTestId('roster-add'));
     expect(view.getByTestId('roster-action-add_connection-lock-icon')).toBeTruthy();
     expect(view.getByTestId('roster-action-add_connection').props.accessibilityLabel).toBe(
-      'Add Connection, Connect OpenClaw or Hermes',
+      'Add Connection, Connect OpenClaw, Hermes or YouMind Sprite',
     );
     fireEvent.press(view.getByTestId('roster-action-add_connection'));
     expect(onAdd).toHaveBeenCalledTimes(1);

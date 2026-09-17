@@ -7,7 +7,17 @@ import {
   View,
   type ListRenderItem,
 } from 'react-native';
-import { Bot, MonitorSmartphone, Plus, Search, UserRound } from 'lucide-react-native';
+import {
+  Bot,
+  MonitorSmartphone,
+  Pencil,
+  Pin,
+  PinOff,
+  Plus,
+  Search,
+  Settings2,
+  UserRound,
+} from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -18,12 +28,11 @@ import {
   useRoster,
 } from '../../connection';
 import { Banner } from '../../components/ui/Banner';
-import { Button } from '../../components/ui/Button';
 import { ConnectionStatusPill } from '../../components/ui/ConnectionStatusPill';
-import { CompositionSafeBottomSheetTextInput } from '../../components/ui/CompositionSafeBottomSheetTextInput';
 import { ConfirmationModal } from '../../components/ui/ConfirmationModal';
 import { FloatingButton, FLOATING_PRIMARY_BUTTON_SIZE, type FloatingButtonBadge } from '../../components/ui/FloatingButton';
 import { ProEntryButton } from '../../components/ui/ProEntryButton';
+import { RenameSheet } from '../../components/ui/RenameSheet';
 import { RosterRow } from '../../components/ui/RosterRow';
 import {
   SettingsDivider,
@@ -32,6 +41,11 @@ import {
 } from '../../components/ui/SettingsGroup';
 import { ChoiceRow } from '../../components/ui/SetupPrimitives';
 import { Sheet } from '../../components/ui/Sheet';
+import {
+  SwipeableRow,
+  useSwipeableRowGroup,
+  type SwipeableRowAction,
+} from '../../components/ui/SwipeableRow';
 import { LoadingState } from '../../components/ui/LoadingState';
 import { useAppTheme } from '../../theme';
 import {
@@ -39,7 +53,6 @@ import {
   FontSize,
   FontWeight,
   LineHeight,
-  Radius,
   Space,
 } from '../../theme/tokens';
 import {
@@ -56,6 +69,7 @@ import {
 import {
   assembleRosterAddActions,
   assembleRosterRowActions,
+  assembleRosterSwipeActions,
   type RosterAddAction,
   type RosterRowAction,
 } from './actions';
@@ -86,6 +100,8 @@ export type RosterViewProps = Readonly<{
   onOpenRow: (row: RosterDisplayRow) => void;
   onOpenLockedRow: (row: RosterDisplayRow) => void;
   onLongPressRow?: (row: RosterDisplayRow) => void;
+  /** Trailing swipe tray per row; rows without actions do not swipe. */
+  rowSwipeActions?: (row: RosterDisplayRow) => ReadonlyArray<SwipeableRowAction>;
   onRefresh: () => MaybePromise;
   onReconnect?: () => MaybePromise;
   onGraceAction?: () => void;
@@ -112,7 +128,8 @@ export type RosterScreenProps = Readonly<{
   onCreateAgent?: () => void;
   onCreateAgentLocked?: () => void;
   onToggleAgentPinned?: (row: RosterDisplayRow) => MaybePromise;
-  onToggleAgentMuted?: (row: RosterDisplayRow) => MaybePromise;
+  /** Opens the row's connection page: reconnect, pause, rename, details and removal live there. */
+  onManageConnection?: (row: RosterDisplayRow) => void;
   onRemoveConnection?: (row: RosterDisplayRow) => MaybePromise;
   onUnpinSession?: (row: RosterDisplayRow) => MaybePromise;
   onRenameSession?: (row: RosterDisplayRow, title: string) => MaybePromise;
@@ -371,6 +388,7 @@ export function RosterView({
   onOpenRow,
   onOpenLockedRow,
   onLongPressRow,
+  rowSwipeActions,
   onRefresh,
   onReconnect,
   onGraceAction,
@@ -379,6 +397,7 @@ export function RosterView({
   const { t } = useTranslation('common');
   const { theme } = useAppTheme();
   const insets = useSafeAreaInsets();
+  const swipeGroup = useSwipeableRowGroup();
   const contentInsets = useMemo(() => ({
     paddingTop: insets.top + ControlSize.floatingButton + Space.xl,
     paddingBottom: insets.bottom + Space.xl + FLOATING_PRIMARY_BUTTON_SIZE + Space.lg,
@@ -412,7 +431,7 @@ export function RosterView({
       item.cached ? item.syncedAt : item.lastActivityAt,
       translateRelativeTime,
     );
-    return (
+    const row = (
       <RosterRow
         testID={`roster-row-${item.key}`}
         agentId={item.agentId}
@@ -439,14 +458,28 @@ export function RosterView({
         {...(onLongPressRow ? { onLongPress: () => onLongPressRow(item) } : {})}
       />
     );
+    const swipeActions = rowSwipeActions?.(item) ?? [];
+    if (swipeActions.length === 0) return row;
+    return (
+      <SwipeableRow
+        rowKey={item.key}
+        testID={`roster-swipe-${item.key}`}
+        actions={swipeActions}
+        group={swipeGroup}
+      >
+        {row}
+      </SwipeableRow>
+    );
   }, [
     activeConnectionId,
     onLongPressRow,
     onOpenLockedRow,
     onOpenRow,
+    rowSwipeActions,
     showOfflineBanner,
-  recovering,
+    recovering,
     state,
+    swipeGroup,
     t,
     translateRelativeTime,
   ]);
@@ -482,6 +515,7 @@ export function RosterView({
           data={rows}
           keyExtractor={(item) => item.key}
           renderItem={renderRow}
+          onScrollBeginDrag={swipeGroup.closeAll}
           automaticallyAdjustContentInsets={false}
           contentInsetAdjustmentBehavior="never"
           contentContainerStyle={[
@@ -550,7 +584,7 @@ export function RosterScreen({
   onCreateAgent,
   onCreateAgentLocked,
   onToggleAgentPinned,
-  onToggleAgentMuted,
+  onManageConnection,
   onRemoveConnection,
   onUnpinSession,
   onRenameSession,
@@ -568,8 +602,6 @@ export function RosterScreen({
   const [actionRow, setActionRow] = useState<RosterDisplayRow | null>(null);
   const [removeRow, setRemoveRow] = useState<RosterDisplayRow | null>(null);
   const [renameRow, setRenameRow] = useState<RosterDisplayRow | null>(null);
-  const [renameDraft, setRenameDraft] = useState('');
-  const [renaming, setRenaming] = useState(false);
   const rows = useMemo(() => buildRosterRows(roster, {
     runActivities: connections.runActivities,
     ...(pinnedSessionKeys ? { pinnedSessionKeys } : {}),
@@ -621,23 +653,18 @@ export function RosterScreen({
     () => assembleRosterAddActions({ canCreateAgent: canCreateAgent && Boolean(onCreateAgent) }),
     [canCreateAgent, onCreateAgent],
   );
+  const canRenameRow = useCallback((row: RosterDisplayRow) => canRenamePinnedSession
+    && row.connectionId === connections.activeConnectionId
+    && Boolean(onRenameSession), [canRenamePinnedSession, connections.activeConnectionId, onRenameSession]);
   const rowActions = useMemo(() => {
     if (!actionRow) return [];
     const group = roster.find((item) => item.connection.id === actionRow.connectionId);
     return assembleRosterRowActions({
       row: actionRow,
       connectionAgentCount: group?.agents.length ?? 0,
-      canRenameSession: canRenamePinnedSession
-        && actionRow.connectionId === connections.activeConnectionId
-        && Boolean(onRenameSession),
+      canRenameSession: canRenameRow(actionRow),
     });
-  }, [
-    actionRow,
-    canRenamePinnedSession,
-    connections.activeConnectionId,
-    onRenameSession,
-    roster,
-  ]);
+  }, [actionRow, canRenameRow, roster]);
   const closeLabel = t('Close', { ns: 'common' });
   const activeConnectionLabel = useMemo(() => {
     const group = roster.find((item) => item.connection.id === connections.activeConnectionId);
@@ -648,8 +675,7 @@ export function RosterScreen({
     switch (action as RosterRowAction) {
       case 'pin_agent': return t('Pin Agent', { ns: 'common' });
       case 'unpin_agent': return t('Unpin Agent', { ns: 'common' });
-      case 'mute_agent': return t('Mute Agent', { ns: 'common' });
-      case 'unmute_agent': return t('Unmute Agent', { ns: 'common' });
+      case 'manage_connection': return t('Manage connection', { ns: 'config' });
       case 'remove_connection': return t('Remove connection', { ns: 'config' });
       case 'unpin_session': return t('Unpin from roster', { ns: 'common' });
       default: return t('Rename', { ns: 'common' });
@@ -671,41 +697,50 @@ export function RosterScreen({
     onLongPressRow?.(row);
     setActionRow(row);
   }, [onLongPressRow]);
-  const handleRowAction = useCallback((value: string) => {
-    const row = actionRow;
-    if (!row) return;
-    const action = value as RosterRowAction;
-    setActionRow(null);
+  // The long-press menu and the swipe tray share one dispatcher so they never diverge.
+  const performRowAction = useCallback((row: RosterDisplayRow, action: RosterRowAction) => {
     if (action === 'remove_connection') {
       setRemoveRow(row);
       return;
     }
     if (action === 'rename_session') {
-      setRenameDraft(row.name);
       setRenameRow(row);
+      return;
+    }
+    if (action === 'manage_connection') {
+      onManageConnection?.(row);
       return;
     }
     const run = action === 'pin_agent' || action === 'unpin_agent'
       ? onToggleAgentPinned
-      : action === 'mute_agent' || action === 'unmute_agent'
-        ? onToggleAgentMuted
-        : onUnpinSession;
+      : onUnpinSession;
     if (run) void Promise.resolve(run(row)).catch(() => undefined);
-  }, [actionRow, onToggleAgentMuted, onToggleAgentPinned, onUnpinSession]);
-  const submitRename = useCallback(async () => {
-    const row = renameRow;
-    const title = renameDraft.trim();
-    if (!row || !title || title === row.name || !onRenameSession || renaming) return;
-    setRenaming(true);
-    try {
-      await onRenameSession(row, title);
-      setRenameRow(null);
-    } catch {
-      // Keep the editor open so the user can retry without losing the title.
-    } finally {
-      setRenaming(false);
-    }
-  }, [onRenameSession, renameDraft, renameRow, renaming]);
+  }, [onManageConnection, onToggleAgentPinned, onUnpinSession]);
+  const handleRowAction = useCallback((value: string) => {
+    const row = actionRow;
+    if (!row) return;
+    setActionRow(null);
+    performRowAction(row, value as RosterRowAction);
+  }, [actionRow, performRowAction]);
+  const rowSwipeActions = useCallback((row: RosterDisplayRow): ReadonlyArray<SwipeableRowAction> => (
+    assembleRosterSwipeActions({ row, canRenameSession: canRenameRow(row) }).map((action) => ({
+      key: action,
+      icon: action === 'pin_agent' ? Pin
+        : action === 'manage_connection' ? Settings2
+          : action === 'rename_session' ? Pencil
+            : PinOff,
+      label: action === 'pin_agent' ? t('Pin', { ns: 'common' })
+        : action === 'manage_connection' ? t('Manage', { ns: 'common' })
+          : action === 'rename_session' ? t('Rename', { ns: 'common' })
+            : t('Unpin', { ns: 'common' }),
+      accessibilityLabel: rowActionLabel(action),
+      onPress: () => performRowAction(row, action),
+    }))
+  ), [canRenameRow, performRowAction, rowActionLabel, t]);
+  const submitRename = useCallback(async (title: string) => {
+    if (!renameRow || !onRenameSession) return;
+    await onRenameSession(renameRow, title);
+  }, [onRenameSession, renameRow]);
   const removeConnectionName = removeRow
     ? roster.find((item) => item.connection.id === removeRow.connectionId)?.connection.label
       ?? removeRow.name
@@ -730,6 +765,7 @@ export function RosterScreen({
         onOpenRow={onOpenRow}
         onOpenLockedRow={onOpenLockedRow}
         onLongPressRow={handleLongPressRow}
+        rowSwipeActions={rowSwipeActions}
         onRefresh={refresh}
         onReconnect={reconnect}
         onGraceAction={onGraceAction}
@@ -768,48 +804,13 @@ export function RosterScreen({
       >
         <ActionRows actions={rowActions} label={rowActionLabel} onPress={handleRowAction} />
       </Sheet>
-      <Sheet
-        testID="roster-rename-sheet"
+      <RenameSheet
+        testID="roster-rename"
         visible={renameRow !== null}
-        onClose={() => { if (!renaming) setRenameRow(null); }}
-        closeAccessibilityLabel={closeLabel}
-        title={t('Rename', { ns: 'common' })}
-        dismissOnBackdropPress={!renaming}
-        maxHeight="55%"
-      >
-        <View style={styles.renameContent}>
-          <View style={[styles.renameField, { backgroundColor: theme.colors.surfaceFloating }]}>
-            <CompositionSafeBottomSheetTextInput
-              testID="roster-rename-input"
-              style={[styles.renameInput, { color: theme.colors.ink }]}
-              value={renameDraft}
-              onChangeText={setRenameDraft}
-              editable={!renaming}
-              autoFocus
-              returnKeyType="done"
-              onSubmitEditing={() => { void submitRename(); }}
-            />
-          </View>
-          <View style={styles.renameActions}>
-            <Button
-              testID="roster-rename-cancel"
-              label={t('Cancel', { ns: 'common' })}
-              variant="secondary"
-              disabled={renaming}
-              onPress={() => setRenameRow(null)}
-              style={styles.renameAction}
-            />
-            <Button
-              testID="roster-rename-save"
-              label={t('Save', { ns: 'common' })}
-              loading={renaming}
-              disabled={!renameDraft.trim() || renameDraft.trim() === renameRow?.name}
-              onPress={() => { void submitRename(); }}
-              style={styles.renameAction}
-            />
-          </View>
-        </View>
-      </Sheet>
+        value={renameRow?.name ?? ''}
+        onClose={() => setRenameRow(null)}
+        onSubmit={submitRename}
+      />
       <ConfirmationModal
         testID="roster-remove-connection"
         visible={removeRow !== null}
@@ -897,30 +898,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: Space.xl,
     paddingTop: Space.sm,
     gap: Space.sm,
-  },
-  renameContent: {
-    paddingHorizontal: Space.lg,
-    paddingBottom: Space.lg,
-    gap: Space.lg,
-  },
-  renameActions: {
-    flexDirection: 'row',
-    gap: Space.sm,
-  },
-  renameAction: {
-    flex: 1,
-  },
-  renameField: {
-    minHeight: ControlSize.floatingButton,
-    justifyContent: 'center',
-    borderRadius: Radius.settingsGroup,
-    overflow: 'hidden',
-  },
-  renameInput: {
-    minHeight: ControlSize.floatingButton,
-    paddingHorizontal: Space.md,
-    paddingVertical: 0,
-    fontSize: FontSize.secondary,
-    lineHeight: LineHeight.secondary,
   },
 });

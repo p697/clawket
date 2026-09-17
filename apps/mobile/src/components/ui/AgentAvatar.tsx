@@ -28,6 +28,7 @@ import {
   Space,
   StatusSize,
 } from '../../theme/tokens';
+import { resolveAgentAvatarImageSource } from '../../utils/agent-avatar-uri';
 
 export type AgentAvatarVariant = 'roster' | 'header' | 'settings' | 'sheet' | 'panel';
 export type AgentAvatarStatus = 'idle' | 'working' | 'attention' | 'done' | 'offline' | 'locked';
@@ -149,7 +150,7 @@ export function AgentAvatar({
   const doneDotStyle = useAnimatedStyle(() => ({ opacity: doneOpacity.value }));
   const isMuted = status === 'offline' || status === 'locked';
   const statusDotColor = attentionTone === 'bad' ? theme.colors.bad : theme.colors.warn;
-  const resolvedAvatarUrl = !emoji ? avatarUrl?.trim() : undefined;
+  const resolvedAvatarSource = !emoji ? resolveAgentAvatarImageSource(avatarUrl) : null;
 
   return (
     <View
@@ -178,10 +179,10 @@ export function AgentAvatar({
             {content}
           </Text>
         ) : null}
-        {resolvedAvatarUrl ? (
+        {resolvedAvatarSource ? (
           <Image
             testID={testID ? `${testID}-image` : undefined}
-            source={{ uri: resolvedAvatarUrl }}
+            source={resolvedAvatarSource}
             resizeMode="cover"
             style={styles.image}
           />
@@ -265,7 +266,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   image: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     width: '100%',
     height: '100%',
   },

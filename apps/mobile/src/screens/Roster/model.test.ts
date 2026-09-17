@@ -192,7 +192,7 @@ describe('Roster model', () => {
       agents: [quiet, source.agents[0], builder],
     }], {
       agentPreferences: {
-        'one:builder': { agentPinned: true, muted: true },
+        'one:builder': { agentPinned: true },
       },
     });
 
@@ -201,7 +201,7 @@ describe('Roster model', () => {
       'quiet',
       'main',
     ]);
-    expect(rows[0]).toMatchObject({ agentPinned: true, muted: true });
+    expect(rows[0]).toMatchObject({ agentPinned: true });
     expect(rows.find((row) => row.agentId === 'main')).toMatchObject({
       unreadCount: 2,
       attention: 'approval',

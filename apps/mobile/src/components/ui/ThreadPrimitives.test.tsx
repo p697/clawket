@@ -51,7 +51,7 @@ jest.mock('react-native', () => {
     },
     Pressable: primitive('Pressable'),
     StyleSheet: {
-      absoluteFillObject: {
+      absoluteFill: {
         position: 'absolute',
         top: 0,
         right: 0,

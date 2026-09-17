@@ -221,7 +221,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     plot: { height: PLOT_HEIGHT },
     bars: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
       transformOrigin: 'bottom',
     },
     axisLabel: {

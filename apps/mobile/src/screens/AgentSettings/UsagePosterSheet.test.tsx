@@ -37,7 +37,7 @@ jest.mock('react-i18next', () => ({
   }),
 }));
 
-jest.mock('expo-media-library', () => ({
+jest.mock('expo-media-library/legacy', () => ({
   requestPermissionsAsync: () => mockRequestPermissions(),
   saveToLibraryAsync: (uri: string) => mockSaveToLibrary(uri),
 }));

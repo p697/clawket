@@ -1,6 +1,6 @@
 import React from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Copy, Check, Lock, type LucideIcon } from 'lucide-react-native';
+import { ChevronDown, ChevronUp, Copy, Check, Lock, type LucideIcon } from 'lucide-react-native';
 import { ChevronLeft, ChevronRight } from './DirectionalIcon';
 import { useTranslation } from 'react-i18next';
 import { useAppTheme } from '../../theme';
@@ -72,6 +72,27 @@ export function CommandBlock({ command, onCopy, copied = false, prose = false, a
   </View>;
 }
 
+/**
+ * A message the user forwards rather than reads: collapsed to its first lines so the action
+ * below stays the focus, expandable for anyone who wants to check what they are sending.
+ */
+export function MessagePreview({ message, expanded, onToggle, accessibilityLabel, testID }: {
+  message: string;
+  expanded: boolean;
+  onToggle: () => void;
+  accessibilityLabel: string;
+  testID?: string;
+}) {
+  const { theme: { colors } } = useAppTheme();
+  const Chevron = expanded ? ChevronUp : ChevronDown;
+  return <Pressable testID={testID} accessibilityRole="button" accessibilityLabel={accessibilityLabel} accessibilityState={{ expanded }} onPress={onToggle}
+    style={({ pressed }) => [styles.messagePreview, { backgroundColor: colors.surface, opacity: pressed ? 0.84 : 1 }]}>
+    <Text testID={testID ? `${testID}-text` : undefined} selectable={expanded} numberOfLines={expanded ? undefined : 2} accessibilityLabel={accessibilityLabel}
+      style={[styles.prose, { color: colors.inkSecondary }]}>{message}</Text>
+    <Chevron size={IconSize.sm} color={colors.inkTertiary} strokeWidth={1.75} />
+  </Pressable>;
+}
+
 const styles = StyleSheet.create({
   header: { minHeight: ControlSize.settingsRow, paddingHorizontal: Space.md, flexDirection: 'row', alignItems: 'center', gap: Space.sm },
   slot: { width: ControlSize.floatingButton, minHeight: ControlSize.floatingButton, justifyContent: 'center' },
@@ -90,5 +111,6 @@ const styles = StyleSheet.create({
   commandBlock: { flexDirection: 'row', alignItems: 'center', minHeight: ControlSize.settingsRow, paddingLeft: Space.lg, paddingRight: Space.xs, paddingVertical: Space.xs, borderRadius: Radius.settingsGroup, gap: Space.xs },
   command: { flex: 1, fontSize: FontSize.caption, lineHeight: LineHeight.secondary, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
   proseBlock: { paddingVertical: Space.md, paddingRight: Space.lg },
-  prose: { fontSize: FontSize.secondary, lineHeight: LineHeight.secondary, fontFamily: undefined },
+  messagePreview: { flexDirection: 'row', alignItems: 'center', gap: Space.sm, paddingVertical: Space.md, paddingHorizontal: Space.lg, borderRadius: Radius.settingsGroup },
+  prose: { flex: 1, fontSize: FontSize.secondary, lineHeight: LineHeight.secondary, fontFamily: undefined },
 });

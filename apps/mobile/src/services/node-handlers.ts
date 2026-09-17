@@ -228,7 +228,7 @@ function getClipboard() {
 }
 
 function getMediaLibrary() {
-  return require('expo-media-library') as typeof import('expo-media-library');
+  return require('expo-media-library/legacy') as typeof import('expo-media-library/legacy');
 }
 
 function getFileSystem() {

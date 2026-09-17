@@ -341,7 +341,6 @@ function viewProps(
       isPro: true,
     }),
     backend: connection.backendKind,
-    connectionLabel: connection.label,
     state: 'ready',
     onBack: jest.fn(),
     onRetry: jest.fn(),
@@ -445,55 +444,6 @@ describe('AgentSettingsSectionView', () => {
       locked: true,
       backend: 'openclaw',
     });
-  });
-
-  it('keeps cached connection content visible offline and reconnects', () => {
-    const onAction = jest.fn();
-    const offlineModel = buildAgentSettingsSectionModel({
-      section: 'connection',
-      capabilities: { ...CAPABILITY_MATRIX.openclaw },
-      management,
-      connection,
-      connectionState: 'reconnecting',
-      isPro: true,
-    });
-    const view = render(
-      <AgentSettingsSectionView
-        {...viewProps('connection', {
-          model: offlineModel,
-          state: 'offline',
-          onAction,
-        })}
-      />,
-    );
-    expect(view.getByTestId('agent-settings-section-offline')).toBeTruthy();
-    expect(view.getByTestId('agent-settings-section-header-status')).toBeTruthy();
-    expect(view.queryByTestId('agent-settings-section-title')).toBeNull();
-    expect(view.getByText('Preview')).toBeTruthy();
-    expect(view.getByText('Offline')).toBeTruthy();
-    expect(flattenStyle(
-      view.getByTestId('agent-settings-section-row-connection.status-attention').props.style,
-    )).toMatchObject({ backgroundColor: colors.bad });
-    fireEvent.press(view.getByTestId('agent-settings-section-row-connection.reconnect'));
-    expect(onAction).toHaveBeenCalledWith('connection.reconnect');
-  });
-
-  it('requires app-owned confirmation before removing a connection', () => {
-    const onAction = jest.fn();
-    const view = render(
-      <AgentSettingsSectionView {...viewProps('connection', { onAction })} />,
-    );
-
-    fireEvent.press(view.getByTestId('agent-settings-section-row-connection.remove'));
-    expect(onAction).not.toHaveBeenCalled();
-    expect(view.getByTestId('agent-settings-remove-connection-confirmation')).toBeTruthy();
-    fireEvent.press(view.getByTestId('agent-settings-remove-connection-confirmation-cancel'));
-    expect(view.queryByTestId('agent-settings-remove-connection-confirmation')).toBeNull();
-
-    fireEvent.press(view.getByTestId('agent-settings-section-row-connection.remove'));
-    fireEvent.press(view.getByTestId('agent-settings-remove-connection-confirmation-confirm'));
-    expect(onAction).toHaveBeenCalledWith('connection.remove');
-    expect(view.queryByTestId('agent-settings-remove-connection-confirmation')).toBeNull();
   });
 
   it('renders loading, empty, error, and unavailable-operation states', () => {
@@ -696,25 +646,12 @@ describe('AgentSettingsSectionScreen host', () => {
     expect(view.getByTestId('agent-settings-section-locked')).toBeTruthy();
   });
 
-  it('renders Bridge details only from the coordinator runtime projection', () => {
-    mockRuntime = {
-      ...mockRuntime,
-      connectionDetails: {
-        studio: {
-          lastReadyAt: Date.UTC(2026, 8, 5, 7, 30),
-          bridgeVersion: '2026.9.5',
-          bridgeCapabilities: ['bridge.capabilities.v2'],
-        },
-      },
-    };
-
+  it('renders the connection route as unsupported instead of a dead section', () => {
     const view = render(<AgentSettingsSectionScreen {...screenProps('connection', jest.fn())} />);
 
-    expect(view.getByText('Last ready')).toBeTruthy();
-    expect(view.getByText('Bridge version')).toBeTruthy();
-    expect(view.getByText('2026.9.5')).toBeTruthy();
-    expect(view.getByText('Bridge capabilities')).toBeTruthy();
-    expect(view.getByText('bridge.capabilities.v2')).toBeTruthy();
+    expect(view.getByTestId('agent-settings-section-unsupported')).toBeTruthy();
+    expect(view.queryByText('Bridge version')).toBeNull();
+    expect(view.queryByText('Last ready')).toBeNull();
   });
 });
 

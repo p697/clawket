@@ -288,6 +288,7 @@ describe('Hermes history and stream integration', () => {
       sessionKey: '20260411_122441_d40735',
       limit: 50,
     })).resolves.toEqual({
+      hasActiveRun: false,
       thinkingLevel: 'medium',
       sessionId: '20260411_122441_d40735',
       messages: [
@@ -373,6 +374,7 @@ describe('Hermes history and stream integration', () => {
       sessionKey: 'main',
       limit: 50,
     })).resolves.toEqual({
+      hasActiveRun: false,
       thinkingLevel: 'medium',
       sessionId: bridgeSessionId,
       messages: [

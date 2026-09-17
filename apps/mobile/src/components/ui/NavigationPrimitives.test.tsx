@@ -48,7 +48,7 @@ jest.mock('react-native', () => {
     },
     Pressable: primitive('Pressable'),
     StyleSheet: {
-      absoluteFillObject: {},
+      absoluteFill: {},
       create: <T,>(styles: T) => styles,
       flatten,
       hairlineWidth: 1,

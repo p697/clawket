@@ -313,5 +313,6 @@
   "Switch, pin and tidy up sessions in one place.": "Oturumları tek yerden değiştirin, sabitleyin ve düzenleyin.",
   "Search Agents, sessions and messages at once.": "Agent, oturum ve mesajları tek seferde arayın.",
   "One command, a six-digit code, both on one phone.": "Tek komut, altı haneli kod, ikisi de tek telefonda.",
-  "Cleaner, smoother, with live status on every avatar.": "Daha sade, daha akıcı, her avatarda canlı durum."
+  "Cleaner, smoother, with live status on every avatar.": "Daha sade, daha akıcı, her avatarda canlı durum.",
+  "Allow this device to connect to OpenClaw?": "Bu cihazın OpenClaw'a bağlanmasına izin verilsin mi?"
 }

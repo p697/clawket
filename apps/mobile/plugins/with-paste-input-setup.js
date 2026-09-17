@@ -1,12 +1,33 @@
 const fs = require('fs');
 const path = require('path');
-const { withAppDelegate, withDangerousMod, IOSConfig } = require('expo/config-plugins');
+const { withAppDelegate, withInfoPlist, withDangerousMod, IOSConfig } = require('expo/config-plugins');
 
 const BRIDGE_BLOCK_START = '// @generated begin clawket-paste-input-import';
 const BRIDGE_BLOCK_END = '// @generated end clawket-paste-input-import';
 const SETUP_BLOCK_START = '// @generated begin clawket-paste-input-setup';
 const SETUP_BLOCK_END = '// @generated end clawket-paste-input-setup';
 const SETUP_ANCHOR = 'launchOptions: launchOptions)';
+const SCENE_START = '// @generated begin clawket-paste-input-scene';
+const SCENE_END = '// @generated end clawket-paste-input-scene';
+const SCENE_CLASS = 'ClawketSceneDelegate';
+const SCENE_BLOCK = `${SCENE_START}
+@available(iOSApplicationExtension, unavailable)
+@objc(${SCENE_CLASS})
+class ${SCENE_CLASS}: ExpoAppSceneDelegate {
+  override func scene(
+    _ scene: UIScene,
+    willConnectTo session: UISceneSession,
+    options connectionOptions: UIScene.ConnectionOptions
+  ) {
+    super.scene(scene, willConnectTo: session, options: connectionOptions)
+    // Expo creates the React host in super.scene, not in AppDelegate anymore.
+    if let provider = UIApplication.shared.delegate as? ExpoReactNativeFactoryProvider,
+      let factory = provider.reactNativeFactory {
+      PasteInputModule.setup(factory.rootViewFactory)
+    }
+  }
+}
+${SCENE_END}`;
 
 const BRIDGE_BLOCK = `${BRIDGE_BLOCK_START}
 #import <react-native-paste-input/PasteInputModule.h>
@@ -50,6 +71,14 @@ function applyPasteInputSetup(contents) {
   if (!contents.includes('ExpoReactNativeFactory') && !contents.includes('RCTReactNativeFactory')) {
     throw new Error('AppDelegate does not create a React Native factory.');
   }
+  if (contents.includes('ExpoReactNativeFactoryProvider')) {
+    if (contents.includes('factory.startReactNative(') || contents.includes(SETUP_BLOCK_START)) {
+      throw new Error('Scene AppDelegate must not retain legacy React Native or paste-input startup.');
+    }
+    return upsertBlock(contents, {
+      start: SCENE_START, end: SCENE_END, block: SCENE_BLOCK, anchor: null, label: 'Scene delegate',
+    });
+  }
   return upsertBlock(contents, {
     start: SETUP_BLOCK_START,
     end: SETUP_BLOCK_END,
@@ -57,6 +86,16 @@ function applyPasteInputSetup(contents) {
     anchor: SETUP_ANCHOR,
     label: 'AppDelegate',
   });
+}
+
+function applyPasteInputSceneManifest(infoPlist) {
+  const scenes = infoPlist.UIApplicationSceneManifest?.UISceneConfigurations?.UIWindowSceneSessionRoleApplication;
+  if (!Array.isArray(scenes) || scenes.length !== 1 ||
+    !['EXExpoAppSceneDelegate', SCENE_CLASS].includes(scenes[0].UISceneDelegateClassName)) {
+    throw new Error('Paste input requires the Expo SDK 57 single-scene manifest.');
+  }
+  scenes[0].UISceneDelegateClassName = SCENE_CLASS;
+  return infoPlist;
 }
 
 function applyPasteInputBridgingHeader(contents) {
@@ -85,7 +124,11 @@ const withPasteInputSetup = (config) => {
     return modConfig;
   });
 
-  return withDangerousMod(withSetup, ['ios', (modConfig) => {
+  const withScene = withInfoPlist(withSetup, (modConfig) => {
+    modConfig.modResults = applyPasteInputSceneManifest(modConfig.modResults);
+    return modConfig;
+  });
+  return withDangerousMod(withScene, ['ios', (modConfig) => {
     const headerPath = findBridgingHeader(modConfig.modRequest.projectRoot);
     const contents = fs.readFileSync(headerPath, 'utf8');
     fs.writeFileSync(headerPath, applyPasteInputBridgingHeader(contents));
@@ -96,3 +139,4 @@ const withPasteInputSetup = (config) => {
 module.exports = withPasteInputSetup;
 module.exports.applyPasteInputSetup = applyPasteInputSetup;
 module.exports.applyPasteInputBridgingHeader = applyPasteInputBridgingHeader;
+module.exports.applyPasteInputSceneManifest = applyPasteInputSceneManifest;

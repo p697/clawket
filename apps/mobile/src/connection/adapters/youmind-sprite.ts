@@ -25,6 +25,7 @@ import {
   type YouMindSpriteApi,
   type YouMindSpriteApiError,
 } from './youmind-sprite-api';
+import { resolveYouMindSpriteAvatarUrl } from './youmind-sprite-avatar';
 
 const MAIN_SESSION_KEY = 'main';
 const RECOVERY_DELAYS_MS = [3_000, 6_000, 12_000] as const;
@@ -147,12 +148,13 @@ export class YouMindSpriteAdapter implements AgentAdapter {
 
   public async listAgents(): Promise<AgentDescriptor[]> {
     await this.ensureReady();
+    await this.refreshSprite();
     const sprite = this.requireSprite();
     return [{
       connectionId: this.connection.id,
       agentId: sprite.id,
       name: readString(sprite.name) || this.connection.label || 'YouMind',
-      avatarUrl: readString(sprite.avatarUrl ?? sprite.avatar_url) || undefined,
+      avatarUrl: resolveYouMindSpriteAvatarUrl(sprite),
       isMain: true,
       mainSessionKey: MAIN_SESSION_KEY,
     }];
@@ -267,6 +269,20 @@ export class YouMindSpriteAdapter implements AgentAdapter {
   private async initialize(): Promise<void> {
     const sprite = await this.#api.ensureDefaultSprite();
     this.cacheSprite(sprite);
+  }
+
+  /**
+   * The Sprite's name and avatar are edited on YouMind, not in Clawket. Every
+   * roster refresh re-reads them so a rename or new avatar shows up without a
+   * reconnect; a failed re-read keeps the last known identity.
+   */
+  private async refreshSprite(): Promise<void> {
+    try {
+      const sprite = await this.#api.ensureDefaultSprite();
+      if (sprite?.id) this.cacheSprite(sprite);
+    } catch {
+      // Keep the connect-time Sprite; the next prompt or probe surfaces real failures.
+    }
   }
 
   private cacheSprite(sprite: YouMindSprite): void {

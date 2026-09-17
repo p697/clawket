@@ -81,6 +81,43 @@ jest.mock('react-native-reanimated', () => {
   };
 });
 
+// Swipe trays render already revealed so tests can press their actions; the
+// imperative handle is a stub because there is no gesture to close.
+jest.mock('react-native-gesture-handler/ReanimatedSwipeable', () => {
+  const React = require('react');
+  const Swipeable = React.forwardRef(function Swipeable(
+    {
+      children,
+      renderRightActions,
+      testID,
+    }: {
+      children?: React.ReactNode;
+      renderRightActions?: (
+        progress: { value: number },
+        translation: { value: number },
+        methods: Record<string, () => void>,
+      ) => React.ReactNode;
+      testID?: string;
+    } & Record<string, unknown>,
+    ref: React.Ref<Record<string, () => void>>,
+  ) {
+    const methods = React.useMemo(() => ({
+      close: jest.fn(),
+      openLeft: jest.fn(),
+      openRight: jest.fn(),
+      reset: jest.fn(),
+    }), []);
+    React.useImperativeHandle(ref, () => methods, [methods]);
+    return React.createElement(
+      'Swipeable',
+      { testID },
+      children,
+      renderRightActions ? renderRightActions({ value: 1 }, { value: 0 }, methods) : null,
+    );
+  });
+  return { __esModule: true, default: Swipeable };
+});
+
 // Mock expo-linking
 jest.mock('expo-linking', () => ({
   getInitialURL: jest.fn(() => Promise.resolve(null)),
@@ -217,7 +254,7 @@ jest.mock('expo-image-picker', () => ({
 }));
 
 // Mock expo-media-library
-jest.mock('expo-media-library', () => ({
+jest.mock('expo-media-library/legacy', () => ({
   MediaType: {
     photo: 'photo',
   },
@@ -534,6 +571,7 @@ if (!globalThis.crypto.getRandomValues) {
 jest.mock('./assets/brands/openclaw.png', () => 301);
 jest.mock('./assets/brands/hermes.png', () => 302);
 jest.mock('./assets/brands/youmind.png', () => 303);
+jest.mock('./assets/avatars/youmind-sprite-default.png', () => 306);
 
 jest.mock('./assets/icon.png', () => 304);
 jest.mock('./assets/app-icons/black/app-icon-black-1024.png', () => 305);

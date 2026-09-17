@@ -190,6 +190,7 @@ export type ThreadCopy = Readonly<{
   toolFailed: string;
   approvalTitle: string;
   approvalError: string;
+  pairApprovalDetail: string;
   device: string;
   node: string;
   allow: string;
@@ -1446,7 +1447,7 @@ function ThreadApprovalTimelineItem({
           ? copy.expired
           : approval.resolutionError
             ? copy.approvalError
-            : undefined;
+            : copy.pairApprovalDetail;
     return (
       <View style={stylesStatic.timelineItem}>
         <ApprovalCard
@@ -1719,7 +1720,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       bottom: Space.md,
     },
     sessionContent: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
     },
     timelineContent: {
       paddingTop: Space.lg,
@@ -1744,7 +1745,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       backgroundColor: colors.canvas,
     },
     expandedComposerRegion: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
       zIndex: 3,
     },
     slashSuggestions: {

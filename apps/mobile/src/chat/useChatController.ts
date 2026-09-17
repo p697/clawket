@@ -3172,7 +3172,7 @@ export function useChatController({
       includePlaceholder: true,
     });
     const pairApprovals = pairApprovalProjection.adapter === adapter
-      ? pairApprovalProjection.entries
+      ? pairApprovalProjection.entries.filter((approval) => approval.status === 'pending')
       : [];
     const pairMessages: UiMessage[] = pairApprovals.map((approval) => ({
       id: `approval_pair_${approval.target}_${approval.id}`,

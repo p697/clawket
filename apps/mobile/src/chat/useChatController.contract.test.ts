@@ -1169,8 +1169,6 @@ describe('useChatController contract', () => {
     expect(adapter.management.nodes.reject).toHaveBeenCalledWith('node-request');
     expect(result.current.listData.map((message) => message.approval?.status)).toEqual([
       undefined,
-      'denied',
-      'allowed',
       undefined,
     ]);
     expect(historyMock.messages).toEqual(historyMessages);
@@ -1223,11 +1221,7 @@ describe('useChatController contract', () => {
       kind: 'pair',
       decision: 'approve',
     });
-    expect(result.current.listData[0]?.approval).toMatchObject({
-      status: 'allowed',
-      resolving: false,
-      resolutionError: false,
-    });
+    expect(result.current.listData).toEqual([]);
   });
 
   it('keeps a resolving pair card through refresh and deduplicates rapid decisions', async () => {
@@ -1286,11 +1280,7 @@ describe('useChatController contract', () => {
       approval.resolve();
       await resolution;
     });
-    expect(result.current.listData[0]?.approval).toMatchObject({
-      status: 'allowed',
-      resolving: false,
-      resolutionError: false,
-    });
+    expect(result.current.listData).toEqual([]);
   });
 
   it('does not project one connection pair request after the adapter changes', async () => {
@@ -1993,7 +1983,7 @@ describe('useChatController contract', () => {
       });
     });
     expect(result.current.pairingPending).toBe(true);
-    expect(result.current.listData[0]?.approval?.status).toBe('allowed');
+    expect(result.current.listData.some(message => message.approval?.kind === 'pair')).toBe(false);
     act(() => {
       eventParams!.onUpdate?.({
         type: 'pairing_resolved',
