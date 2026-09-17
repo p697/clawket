@@ -15,7 +15,6 @@ const {
   writePairingQrPngMock,
   writeRawQrPngMock,
   resolveGatewayAuthMock,
-  getServiceStatusMock,
   installServiceMock,
   restartServiceMock,
   stopRuntimeProcessesMock,
@@ -23,8 +22,6 @@ const {
   uninstallServiceMock,
   hermesLocalBridgeCtorMock,
   hermesRelayRuntimeCtorMock,
-  execFileSyncMock,
-  spawnMock,
   buildHermesLocalPairingQrPayloadMock,
   buildLocalPairingInfoMock,
   resolveLocalPairGatewayUrlMock,
@@ -33,7 +30,6 @@ const {
   readOpenClawInfoMock,
   buildHermesRelayWsUrlMock,
   getHermesProcessLogPathsMock,
-  readRecentCliLogsMock,
   buildDoctorReportMock,
   summarizeDoctorReportMock,
   writeServiceStateMock,
@@ -50,8 +46,6 @@ const {
   resolveGatewayAuthMock: vi.fn(),
   hermesLocalBridgeCtorMock: vi.fn(),
   hermesRelayRuntimeCtorMock: vi.fn(),
-  execFileSyncMock: vi.fn(),
-  spawnMock: vi.fn(() => ({ unref: vi.fn() })),
   buildHermesLocalPairingQrPayloadMock: vi.fn(() => '{"v":1,"kind":"hermes-local"}'),
   buildLocalPairingInfoMock: vi.fn(),
   resolveLocalPairGatewayUrlMock: vi.fn(),
@@ -65,7 +59,6 @@ const {
     relayLogPath: '/tmp/hermes-relay.log',
     relayErrorLogPath: '/tmp/hermes-relay-error.log',
   })),
-  readRecentCliLogsMock: vi.fn<() => string[]>(() => []),
   buildDoctorReportMock: vi.fn(),
   summarizeDoctorReportMock: vi.fn(() => ({ overall: 'healthy', findings: [] })),
   installServiceMock: vi.fn(),
@@ -74,16 +67,32 @@ const {
   stopServiceMock: vi.fn(),
   uninstallServiceMock: vi.fn(),
   writeServiceStateMock: vi.fn(),
-  getServiceStatusMock: vi.fn(() => ({
-    installed: true,
-    running: true,
-    method: 'launchagent',
-    servicePath: '/tmp/clawket.plist',
-    logPath: '/tmp/clawket.log',
-    errorLogPath: '/tmp/clawket-error.log',
-    pid: 123,
-  })),
 }));
+
+// `main()` is fire-and-forget, so a finished test's runtime polling (Hermes pid
+// listings every 200 ms, OpenClaw relay reconnect every 200 ms, up to 25 s) keeps
+// calling these four mocks while later tests run. Each test therefore gets fresh
+// instances: `beforeEach` re-registers the module factories below with
+// `vi.doMock`, so a leaked poller keeps hitting the stale fns and cannot consume
+// the next test's `mockReturnValueOnce` queue or inflate its spawn count.
+const polledMocks = vi.hoisted(() => {
+  const create = () => ({
+    execFileSyncMock: vi.fn(),
+    spawnMock: vi.fn(() => ({ unref: vi.fn() })),
+    readRecentCliLogsMock: vi.fn<() => string[]>(() => []),
+    getServiceStatusMock: vi.fn(() => ({
+      installed: true,
+      running: true,
+      method: 'launchagent',
+      servicePath: '/tmp/clawket.plist',
+      logPath: '/tmp/clawket.log',
+      errorLogPath: '/tmp/clawket-error.log',
+      pid: 123,
+    })),
+  });
+  return { create, current: create() };
+});
+let { execFileSyncMock, spawnMock, readRecentCliLogsMock, getServiceStatusMock } = polledMocks.current;
 
 vi.mock('qrcode-terminal', () => ({
   default: {
@@ -91,12 +100,15 @@ vi.mock('qrcode-terminal', () => ({
   },
 }));
 
-vi.mock('./diagnostics.js', () => ({
-  buildDoctorReport: buildDoctorReportMock,
-  ensurePairPrerequisites: vi.fn(),
-  readRecentCliLogs: readRecentCliLogsMock,
-  summarizeDoctorReport: summarizeDoctorReportMock,
-}));
+vi.mock('./diagnostics.js', mockDiagnostics);
+function mockDiagnostics() {
+  return {
+    buildDoctorReport: buildDoctorReportMock,
+    ensurePairPrerequisites: vi.fn(),
+    readRecentCliLogs: polledMocks.current.readRecentCliLogsMock,
+    summarizeDoctorReport: summarizeDoctorReportMock,
+  };
+}
 
 vi.mock('./log-parse.js', () => ({
   parseLookbackToMs: vi.fn(() => null),
@@ -127,44 +139,50 @@ vi.mock('./service-decision.js', () => ({
   decidePairServiceAction: vi.fn(() => 'noop'),
 }));
 
-vi.mock('node:child_process', () => ({
-  execFileSync: execFileSyncMock,
-  spawn: spawnMock,
-}));
+vi.mock('node:child_process', mockChildProcess);
+function mockChildProcess() {
+  return {
+    execFileSync: polledMocks.current.execFileSyncMock,
+    spawn: polledMocks.current.spawnMock,
+  };
+}
 
-vi.mock('@clawket/bridge-core', () => ({
-  buildHermesLocalPairingQrPayload: buildHermesLocalPairingQrPayloadMock,
-  clearServiceState: vi.fn(),
-  deleteHermesRelayConfig: vi.fn(),
-  deletePairingConfig: vi.fn(),
-  getDefaultBridgeDisplayName: vi.fn(() => 'Lucy'),
-  getHermesProcessLogPaths: getHermesProcessLogPathsMock,
-  getHermesRelayConfigPath: vi.fn(() => '/tmp/hermes-relay.json'),
-  getPairingConfigPath: vi.fn(() => '/tmp/bridge-cli.json'),
-  getServicePaths: vi.fn(() => ({
-    logPath: '/tmp/clawket.log',
-    errorLogPath: '/tmp/clawket-error.log',
-  })),
-  getServiceStatus: getServiceStatusMock,
-  installService: installServiceMock,
-  isAutostartUnsupportedError: vi.fn(() => false),
-  listRuntimeProcesses: vi.fn(() => []),
-  pairGateway: pairGatewayMock,
-  pairHermesRelay: pairHermesRelayMock,
-  readHermesRelayConfig: readHermesRelayConfigMock,
-  readPairingConfig: readPairingConfigMock,
-  refreshAccessCode: refreshAccessCodeMock,
-  refreshHermesRelayAccessCode: vi.fn(),
-  registerRuntimeProcess: vi.fn(),
-  restartService: restartServiceMock,
-  startTransientRuntime: vi.fn(),
-  stopRuntimeProcesses: stopRuntimeProcessesMock,
-  stopService: stopServiceMock,
-  uninstallService: uninstallServiceMock,
-  unregisterRuntimeProcess: vi.fn(),
-  writeServiceState: writeServiceStateMock,
-  SECURE_PAIRING_V2_CAPABILITY: 'pairing.secure-short-code.v2',
-}));
+vi.mock('@clawket/bridge-core', mockBridgeCore);
+function mockBridgeCore() {
+  return {
+    buildHermesLocalPairingQrPayload: buildHermesLocalPairingQrPayloadMock,
+    clearServiceState: vi.fn(),
+    deleteHermesRelayConfig: vi.fn(),
+    deletePairingConfig: vi.fn(),
+    getDefaultBridgeDisplayName: vi.fn(() => 'Lucy'),
+    getHermesProcessLogPaths: getHermesProcessLogPathsMock,
+    getHermesRelayConfigPath: vi.fn(() => '/tmp/hermes-relay.json'),
+    getPairingConfigPath: vi.fn(() => '/tmp/bridge-cli.json'),
+    getServicePaths: vi.fn(() => ({
+      logPath: '/tmp/clawket.log',
+      errorLogPath: '/tmp/clawket-error.log',
+    })),
+    getServiceStatus: polledMocks.current.getServiceStatusMock,
+    installService: installServiceMock,
+    isAutostartUnsupportedError: vi.fn(() => false),
+    listRuntimeProcesses: vi.fn(() => []),
+    pairGateway: pairGatewayMock,
+    pairHermesRelay: pairHermesRelayMock,
+    readHermesRelayConfig: readHermesRelayConfigMock,
+    readPairingConfig: readPairingConfigMock,
+    refreshAccessCode: refreshAccessCodeMock,
+    refreshHermesRelayAccessCode: vi.fn(),
+    registerRuntimeProcess: vi.fn(),
+    restartService: restartServiceMock,
+    startTransientRuntime: vi.fn(),
+    stopRuntimeProcesses: stopRuntimeProcessesMock,
+    stopService: stopServiceMock,
+    uninstallService: uninstallServiceMock,
+    unregisterRuntimeProcess: vi.fn(),
+    writeServiceState: writeServiceStateMock,
+    SECURE_PAIRING_V2_CAPABILITY: 'pairing.secure-short-code.v2',
+  };
+}
 
 vi.mock('@clawket/bridge-runtime', () => ({
   BridgeRuntime: bridgeRuntimeCtorMock,
@@ -190,6 +208,11 @@ describe('cli pairing output', () => {
 
   beforeEach(() => {
     vi.resetModules();
+    polledMocks.current = polledMocks.create();
+    ({ execFileSyncMock, spawnMock, readRecentCliLogsMock, getServiceStatusMock } = polledMocks.current);
+    vi.doMock('node:child_process', mockChildProcess);
+    vi.doMock('./diagnostics.js', mockDiagnostics);
+    vi.doMock('@clawket/bridge-core', mockBridgeCore);
     // Process listings below are mocked POSIX ps output.
     vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
     vi.clearAllMocks();
@@ -313,6 +336,9 @@ describe('cli pairing output', () => {
   });
 
   afterEach(() => {
+    // The watchdog test switches to fake timers; restore them here so a failure
+    // before its own `vi.useRealTimers()` cannot stall every later test.
+    vi.useRealTimers();
     process.argv = originalArgv.slice();
     consoleLogSpy.mockRestore();
     consoleErrorSpy.mockRestore();

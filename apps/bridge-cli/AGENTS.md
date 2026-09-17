@@ -41,6 +41,10 @@ When expanding `start`, `install`, `restart`, `stop`, or `uninstall`:
 3. Never log setup bootstrap tokens, decoded setup payloads, or issued device tokens.
 4. Preserve raw token/password pairing for existing installations and keep Hermes pairing behavior unchanged.
 
+## CLI Test Isolation Rule
+
+`index.test.ts` re-imports the CLI per test, but `main()` is fire-and-forget: a finished test's Hermes pid polling and OpenClaw reconnect polling keep running for up to 25 seconds. Mocks those pollers touch (`execFileSync`, `spawn`, `getServiceStatus`, `readRecentCliLogs`) must stay per-test instances re-registered with `vi.doMock` in `beforeEach`; never move them back into the shared hoisted set, and restore real timers in `afterEach`.
+
 ## Preview Environment Rule
 
 1. `clawket pair --preview` uses the official Preview Registry and writes `~/.clawket/bridge-cli.preview.json`; it must never overwrite Production pairing state.
