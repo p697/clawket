@@ -10,9 +10,15 @@ import {
   Radius,
   Space,
 } from '../../theme/tokens';
-import { FloatingButton } from './FloatingButton';
+import { SheetHeaderButton } from './SheetHeaderButton';
 
 const HANDLE_WIDTH = 36;
+/**
+ * Air between the header row and the body. The row already carries 4 points
+ * under a 44-point button, so content starts 16 points below the control edge
+ * (`ScreenHeader` keeps the same relationship on pages).
+ */
+const HEADER_BOTTOM_PADDING = Space.md;
 
 export function useSheetBackgroundStyle(): ViewStyle {
   const { theme } = useAppTheme();
@@ -60,11 +66,10 @@ export function SheetHeader({
   return (
     <View testID={testID ? `${testID}-header` : undefined} style={styles.header}>
       <View style={styles.sideSlot}>
-        <FloatingButton
+        <SheetHeaderButton
           icon={X}
           onPress={onClose}
           accessibilityLabel={closeAccessibilityLabel}
-          appearance="quiet"
           testID={testID ? `${testID}-close` : undefined}
         />
       </View>
@@ -82,10 +87,17 @@ function createHandleStyles(
   colors: ReturnType<typeof useAppTheme>['theme']['colors'],
 ) {
   return StyleSheet.create({
+    // The grabber sits 8 points under the sheet edge in its 16-point area, so
+    // 8 points separate it from the header's 44-point controls. Bottom-aligning
+    // it left only 4 points to the controls, so it read as part of the Session
+    // Panel's Agent pill; centering (6 points) read as too close to the edge
+    // (owner feedback 2026-09-19). `Sheet` reserves this same height in its
+    // content limit.
     handleArea: {
       height: Space.lg,
+      paddingTop: Space.sm,
       alignItems: 'center',
-      justifyContent: 'flex-end',
+      justifyContent: 'flex-start',
     },
     handle: {
       width: HANDLE_WIDTH,
@@ -105,6 +117,7 @@ function createHeaderStyles(
       flexDirection: 'row',
       alignItems: 'center',
       paddingHorizontal: Space.lg,
+      paddingBottom: HEADER_BOTTOM_PADDING,
     },
     sideSlot: {
       width: ControlSize.floatingButton,

@@ -1806,3 +1806,45 @@ it('keeps normal owner retry behavior after an HTTP upgrade failure', async () =
     expect(sockets).toHaveLength(2);
   } finally { const stopped = runtime.stop(); await vi.advanceTimersByTimeAsync(100); await stopped; vi.useRealTimers(); }
 });
+
+it.each([
+  { channel: true, local: true, negotiated: true, expected: true },
+  { channel: false, local: true, negotiated: true, expected: false },
+  { channel: true, local: false, negotiated: true, expected: false },
+  { channel: true, local: true, negotiated: false, expected: false },
+])('advertises skill documents only for a negotiated local full-client channel: %j', async ({ channel, local, negotiated, expected }) => {
+  const stateDir = await createOpenClawStateDir();
+  vi.stubEnv('OPENCLAW_STATE_DIR', stateDir);
+  const baseDir = join(stateDir, 'sample');
+  await mkdir(baseDir);
+  await writeFile(join(baseDir, 'SKILL.md'), '# Real skill source\n');
+  const sockets: FakeSocket[] = [];
+  const runtime = new BridgeRuntime({ config: BASE_CONFIG, gatewayUrl: local ? 'ws://127.0.0.1:18789' : 'ws://remote.example:18789',
+    createWebSocket: (url, options) => { const socket = new FakeSocket(url, options); sockets.push(socket); return socket; },
+  }, channel ? '11111111-1111-4111-8111-111111111111' : undefined);
+  runtime.start();
+  try {
+    const relay = sockets[0]; relay.open();
+    relay.message(JSON.stringify({ type: 'req', id: 'connect-skill', method: 'connect', params: { caps: negotiated ? [BRIDGE_CAPABILITIES_V2] : [] } }));
+    const gateway = sockets[1]; gateway.open();
+    gateway.message(JSON.stringify({ type: 'res', id: 'connect-skill', ok: true, payload: { auth: { role: 'operator', scopes: ['operator.admin'] }, features: { methods: ['skills.status'] } } }));
+    const hello = JSON.parse(String(relay.sent.at(-1)));
+    expect(hello.payload.features.methods.includes('skills.get')).toBe(expected);
+    const request = JSON.stringify({ type: 'req', id: 'read-skill', method: 'skills.get', params: { skillKey: 'sample', agentId: 'work' } });
+    relay.message(request);
+    if (!expected) {
+      expect(gateway.sent.at(-1)).toBe(request);
+      return;
+    }
+    const status = JSON.parse(String(gateway.sent.at(-1)));
+    expect(status).toMatchObject({ method: 'skills.status', params: { agentId: 'work' } });
+    gateway.message(JSON.stringify({ type: 'res', id: status.id, ok: true, payload: { skills: [{ skillKey: 'sample', name: 'Sample', baseDir, filePath: join(baseDir, 'SKILL.md'), bundled: true, source: 'openclaw-bundled' }] } }));
+    expect(JSON.parse(String(relay.sent.at(-1)))).toMatchObject({ id: 'read-skill', ok: true, payload: { content: '# Real skill source\n', editable: false } });
+    relay.message(request);
+    const pending = JSON.parse(String(gateway.sent.at(-1)));
+    await runtime.stop();
+    const count = relay.sent.length;
+    gateway.message(JSON.stringify({ type: 'res', id: pending.id, ok: true, payload: { skills: [] } }));
+    expect(relay.sent).toHaveLength(count);
+  } finally { await runtime.stop(); }
+});

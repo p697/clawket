@@ -40,6 +40,7 @@ import { resolveSessionKindIcon } from './sessionKindIcon';
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export type RosterRowProps = Readonly<{
+  selected?: boolean;
   agentId: string;
   name: string;
   avatarName?: string;
@@ -64,6 +65,7 @@ export type RosterRowProps = Readonly<{
 }>;
 
 export function RosterRow({
+  selected = false,
   agentId,
   name,
   avatarName,
@@ -95,9 +97,9 @@ export function RosterRow({
     backgroundColor: interpolateColor(
       pressProgress.value,
       [0, 1],
-      [theme.colors.canvas, theme.colors.surface],
+      [selected ? theme.colors.surface : theme.colors.canvas, theme.colors.surface],
     ),
-  }), [theme.colors.canvas, theme.colors.surface]);
+  }), [selected ? theme.colors.surface : theme.colors.canvas, theme.colors.surface]);
   const resolvedAvatarStatus: AgentAvatarStatus = locked
     ? 'locked'
     : cached
@@ -110,6 +112,7 @@ export function RosterRow({
     <AnimatedPressable
       testID={testID}
       accessibilityRole="button"
+      accessibilityState={{ selected }}
       accessibilityLabel={accessibilityLabel ?? name}
       onPress={onPress}
       onLongPress={onLongPress}

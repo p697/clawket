@@ -1,26 +1,27 @@
 import React, { useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
-  DynamicColorIOS, Keyboard, PanResponder, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions,
+  ActivityIndicator, DynamicColorIOS, Keyboard, PanResponder, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions,
   type StyleProp, type TextInput, type TextInputProps, type ViewStyle,
 } from 'react-native';
-import { ArrowUp, ChevronDown, Maximize2, Minimize2, Mic, Plus, Square, type LucideIcon } from 'lucide-react-native';
+import { ArrowUp, ChevronDown, Maximize2, Minimize2, Mic, Plus, Square, X, type LucideIcon } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import Animated, {
-  FadeIn, LinearTransition, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming,
+  FadeIn, LinearTransition, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
+import { useVoiceGesture } from '../../chat/useVoiceGesture';
+import { VoiceWaveform } from './VoiceWaveform';
 import { countDraftLines } from '../../chat/composerDraftLines';
 import { shouldCaptureComposerKeyboardDismiss } from '../../chat/composerKeyboardDismiss';
-import { triggerLightImpact } from '../../services/haptics';
 import { useAppTheme } from '../../theme';
+import { createChatGlassStyle } from '../../features/chat-appearance/resolver';
 import { inputInkVariants } from '../../theme/theme';
 import { ControlSize, FontSize, FontWeight, IconSize, LineHeight, Motion, Radius, Space } from '../../theme/tokens';
-import { useConversationTheme } from '../chat/ChatPresentation';
 import { CompositionSafeTextInput } from './CompositionSafeTextInput';
 import { PasteCapableTextInput, type PastedFile } from './PasteCapableTextInput';
 
 export type ComposerHandle = { focus: () => void; blur: () => void; clear: () => void };
-export type ComposerVoiceState = 'idle' | 'authorizing' | 'listening';
+export type ComposerVoiceState = 'idle' | 'authorizing' | 'listening' | 'transcribing';
 export type ComposerAccessibilityLabels = {
   add: string; voice: string; stopVoice?: string; send: string; stop: string;
   /** Send while the Agent is still replying; falls back to `send`. */
@@ -38,6 +39,9 @@ export type ComposerProps = {
   onStop?: () => void;
   onAddPress?: () => void;
   onVoicePress?: () => void;
+  onVoiceStart?: () => void;
+  onVoiceStop?: (send: boolean) => void;
+  onVoiceCancel?: () => void;
   onPasteFiles?: (files: readonly PastedFile[]) => void;
   onPasteFailed?: () => void;
   editable?: boolean;
@@ -46,14 +50,16 @@ export type ComposerProps = {
   isRunning?: boolean;
   addDisabled?: boolean;
   voiceDisabled?: boolean;
-  /** Dictation lifecycle; anything but `idle` turns the trailing slot into a stop-dictation control. */
+  /** Capture/finalization lifecycle; the model toolbar remains mounted throughout. */
   voiceState?: ComposerVoiceState;
-  /** Normalized 0–1 microphone level, driven on the UI thread so the halo never re-renders the thread. */
+  /** Normalized microphone level; only the waveform updates at audio cadence. */
   voiceLevel?: SharedValue<number>;
   autoFocus?: boolean;
   maxLength?: number;
   expanded?: boolean;
   onExpandedChange?: (expanded: boolean) => void;
+  /** `glass` floats the compact card over a chat wallpaper on translucent chrome; full-screen editing always uses the canvas. */
+  appearance?: 'surface' | 'glass';
   onFocus?: TextInputProps['onFocus'];
   onBlur?: TextInputProps['onBlur'];
   style?: StyleProp<ViewStyle>;
@@ -63,10 +69,10 @@ export type ComposerProps = {
 /** One native input survives compact/expanded editing, including marked text and selection. */
 export const Composer = React.forwardRef<ComposerHandle, ComposerProps>(function Composer({
   accessory, attachments, notice, value, placeholder, accessibilityLabels, onChangeText, onSend, onStop,
-  onAddPress, onVoicePress, onPasteFiles, onPasteFailed, editable = true, canSend = true,
+  onAddPress, onVoicePress, onVoiceStart, onVoiceStop, onVoiceCancel, onPasteFiles, onPasteFailed, editable = true, canSend = true,
   hasAttachments = false, isRunning = false, addDisabled = false, voiceDisabled = false,
   voiceState = 'idle', voiceLevel,
-  autoFocus = false, maxLength, expanded = false, onExpandedChange, onFocus, onBlur, style, testID,
+  autoFocus = false, maxLength, expanded = false, onExpandedChange, appearance = 'surface', onFocus, onBlur, style, testID,
 }, forwardedRef): React.JSX.Element {
   const { theme } = useAppTheme();
   const { t } = useTranslation('chat');
@@ -82,13 +88,14 @@ export const Composer = React.forwardRef<ComposerHandle, ComposerProps>(function
     inputRef.current?.focus();
   }, [expanded]);
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
+  const glassChrome = useMemo(() => (appearance === 'glass' ? createChatGlassStyle(theme) : null), [appearance, theme]);
   const inputInk = useMemo(() => Platform.OS === 'ios' ? DynamicColorIOS(inputInkVariants) : theme.colors.ink, [theme.colors.ink]);
   const [contentHeight, setContentHeight] = useState(ControlSize.pill as number);
   const [focused, setFocused] = useState(false);
   const lineHeight = LineHeight.body * fontScale;
   const inputPadding = Space.sm * 2;
   const maxHeight = Math.max(ControlSize.pill, Math.min(lineHeight * 5 + inputPadding, windowHeight * 0.3));
-  const targetHeight = value.length === 0 ? Math.max(ControlSize.pill, lineHeight + inputPadding)
+  const targetHeight = voiceState !== 'idle' ? (voiceState === 'listening' ? Space.xxl + LineHeight.secondary * fontScale * 2 + Space.xs : Math.max(ControlSize.pill, LineHeight.secondary * fontScale + Space.sm)) : value.length === 0 ? Math.max(ControlSize.pill, lineHeight + inputPadding)
     : Math.max(ControlSize.pill, Math.min(contentHeight, maxHeight));
   const animatedHeight = useSharedValue(targetHeight);
   useEffect(() => {
@@ -127,12 +134,18 @@ export const Composer = React.forwardRef<ComposerHandle, ComposerProps>(function
   // it, so the message can join the queue without waiting for the turn to end.
   const showQueueSend = isRunning && hasContent;
   const primaryDisabled = isRunning && !hasContent ? !onStop : !editable || !canSend || !hasContent;
-  const handleVoicePress = () => { triggerLightImpact(); onVoicePress?.(); };
+  const voiceGesture = useVoiceGesture({ phase: voiceState, enabled: Boolean(onVoicePress) && !voiceDisabled && editable && voiceState !== 'transcribing',
+    start: onVoiceStart ?? onVoicePress ?? (() => {}), stop: onVoiceStop ?? onVoicePress ?? (() => {}), cancel: onVoiceCancel ?? (() => {}),
+    focus: () => inputRef.current?.focus() });
+  const inputVoiceTarget = Boolean(onVoicePress) && !voiceDisabled && editable && !expanded && (!focused || !value) && !isRunning;
+  const inputPlaceholder = inputVoiceTarget && !value ? t(voiceGesture.tooShort ? 'Hold longer to talk' : 'Type or hold to talk') : placeholder;
+  const voiceHint = voiceState === 'transcribing' ? t('Transcribing…') : voiceState === 'authorizing' ? t('Preparing voice input…')
+    : voiceGesture.holding ? t(voiceGesture.cancelling ? 'Release to cancel' : 'Release to send · Slide up to cancel') : t('Listening…');
   const inputProps: TextInputProps & { ref: React.Ref<TextInput>; value: string } = {
     ref: inputRef,
     testID: testID ? `${testID}-input` : undefined,
-    accessibilityLabel: placeholder,
-    value, onChangeText, placeholder,
+    accessibilityLabel: inputPlaceholder,
+    value, onChangeText, placeholder: inputPlaceholder,
     placeholderTextColor: theme.colors.inkTertiary,
     // A bounded native Text measurement sizes the shell without changing the
     // native-owned input or relying on delayed Fabric content-size events.
@@ -154,7 +167,7 @@ export const Composer = React.forwardRef<ComposerHandle, ComposerProps>(function
   }), [onChangeText]);
 
   return (
-    <View testID={testID} style={[styles.composer, !expanded ? styles.compact : null, style, expanded ? styles.expanded : null]}
+    <View testID={testID} style={[styles.composer, !expanded ? [styles.compact, glassChrome] : null, style, expanded ? styles.expanded : null]}
       {...(expanded ? null : keyboardDismissResponder.panHandlers)}>
       {expanded ? <View testID={testID ? `${testID}-editor-header` : undefined} style={styles.editorHeader}>
         <ComposerAction icon={Minimize2} label={t('Collapse editor')} onPress={() => onExpandedChange?.(false)}
@@ -180,24 +193,46 @@ export const Composer = React.forwardRef<ComposerHandle, ComposerProps>(function
             // A trailing Return must grow the shell now, not on the next character.
             if (!expanded) setContentHeight(countDraftLines(nativeEvent.lines) * lineHeight + inputPadding);
           }}>{value || ' '}</Text>
+        {voiceActive ? <View style={styles.voicePresentation}>
+          {voiceState === 'listening' ? <VoiceWaveform level={voiceLevel} color={voiceGesture.cancelling ? theme.colors.inkSecondary : theme.colors.accent} /> : null}
+          <Text accessibilityLiveRegion="polite" style={styles.voiceHint}>{voiceHint}</Text>
+        </View> : null}
+        <View style={[styles.inputHost, voiceActive ? styles.hiddenInput : null]} pointerEvents={voiceActive ? 'none' : 'auto'} accessibilityElementsHidden={voiceActive}>
         {onPasteFiles ? <PasteCapableTextInput {...inputProps} onPasteFiles={onPasteFiles} onPasteFailed={onPasteFailed} />
           : <CompositionSafeTextInput {...inputProps} />}
-        {!expanded && showExpand ? <View style={styles.expandAction}>
+        </View>
+        {/* Stable sibling: the native editor stays mounted; an ordinary tap focuses it.
+            Once editing, native cursor placement, selection and paste own the touches. */}
+        <Pressable {...voiceGesture.inputHandlers}
+          testID={testID ? `${testID}-voice-input-target` : undefined}
+          accessible={false} pointerEvents={inputVoiceTarget || voiceActive ? 'auto' : 'none'}
+          style={StyleSheet.absoluteFill} />
+        {!expanded && !voiceActive && showExpand ? <View style={styles.expandAction}>
           <ComposerAction icon={Maximize2} label={t('Expand editor')} onPress={() => onExpandedChange?.(true)}
             testID={testID ? `${testID}-expand` : undefined} />
         </View> : null}
       </Animated.View>
       <View style={styles.toolbar}>
-        {onAddPress ? <ComposerAction icon={Plus} label={accessibilityLabels.add} onPress={onAddPress}
+        {voiceActive && onVoiceCancel ? <ComposerAction icon={X} label={t('Cancel', { ns: 'common' })} onPress={onVoiceCancel}
+          testID={testID ? `${testID}-voice-cancel` : undefined} /> : onAddPress ? <ComposerAction icon={Plus} label={accessibilityLabels.add} onPress={onAddPress}
           tone="secondary" disabled={addDisabled || !editable} testID={testID ? `${testID}-add` : undefined} /> : null}
         {accessory}
         <View style={styles.spacer} />
-        {voiceActive ? <VoiceStopAction label={accessibilityLabels.stopVoice ?? accessibilityLabels.stop}
-          onPress={handleVoicePress} busy={voiceState === 'authorizing'} level={voiceLevel}
-          testID={testID ? `${testID}-voice-stop` : undefined} />
-          : showVoice ? <ComposerAction icon={Mic} label={accessibilityLabels.voice} onPress={handleVoicePress}
-            tone="secondary" disabled={voiceDisabled || !editable} testID={testID ? `${testID}-voice` : undefined} />
-            : showQueueSend ? <>
+        {(voiceActive || showVoice) ? <>
+          {voiceActive && !voiceGesture.holding && voiceState === 'listening' ? <ComposerAction icon={Square}
+            label={accessibilityLabels.stopVoice ?? accessibilityLabels.stop} onPress={() => (onVoiceStop ?? onVoicePress)?.(false)}
+            testID={testID ? `${testID}-voice-stop` : undefined} /> : null}
+          <Pressable {...voiceGesture.handlers} testID={testID ? `${testID}-voice` : undefined}
+            accessibilityRole="button" accessibilityLabel={voiceActive ? accessibilityLabels.send : accessibilityLabels.voice}
+            accessibilityHint={t('Tap to dictate. Hold and release to send.')}
+            accessibilityState={{ busy: voiceState === 'authorizing' || voiceState === 'transcribing', disabled: voiceDisabled }}
+            style={actionStyles.target}>
+            <View pointerEvents="none" style={[actionStyles.surface, { backgroundColor: voiceActive ? theme.colors.ink : theme.colors.canvas }]}>
+              {voiceState === 'authorizing' || voiceState === 'transcribing' ? <ActivityIndicator color={theme.colors.canvas} />
+                : voiceActive ? <ArrowUp size={IconSize.md} color={theme.colors.canvas} /> : <Mic size={IconSize.md} color={theme.colors.ink} />}
+            </View>
+          </Pressable>
+        </> : showQueueSend ? <>
               {onStop ? <Animated.View layout={reducedMotion ? undefined : LinearTransition.duration(Motion.duration.fast)}>
                 <ComposerAction icon={Square} label={accessibilityLabels.stop} onPress={onStop} tone="secondary"
                   testID={testID ? `${testID}-stop` : undefined} />
@@ -214,75 +249,6 @@ export const Composer = React.forwardRef<ComposerHandle, ComposerProps>(function
     </View>
   );
 });
-
-/**
- * Dictation glow. Two translucent discs sit behind the stop control: a quick
- * inner layer that snaps to each syllable and a lazier outer layer that swells
- * behind it, so speech reads as a soft ripple rather than a flicker. Values are
- * scale/opacity pairs from rest (silence) to peak (loudest recent speech).
- */
-const VOICE_INNER_HALO = { rest: { scale: 1.04, opacity: 0.22 }, peak: { scale: 1.32, opacity: 0.38 } };
-const VOICE_OUTER_HALO = { rest: { scale: 1.08, opacity: 0.1 }, peak: { scale: 1.5, opacity: 0.2 } };
-const VOICE_SURFACE_PEAK_SCALE = 1.05;
-const VOICE_INNER_SPRING = { damping: 14, stiffness: 260, mass: 0.6 };
-const VOICE_OUTER_SPRING = { damping: 20, stiffness: 120, mass: 1 };
-
-function mix(from: number, to: number, amount: number): number {
-  'worklet';
-  return from + (to - from) * amount;
-}
-
-/**
- * Stop-dictation control in the shared 40/44-point recipe, tinted with the
- * conversation accent so dictation reads as the user's own voice rather than
- * an alert. The glow behind it follows the processed microphone level on the
- * UI thread, so it is data-driven rather than a loop.
- */
-function VoiceStopAction({ label, onPress, busy, level, testID }: {
-  label: string; onPress: () => void; busy: boolean; level?: SharedValue<number>; testID?: string;
-}): React.JSX.Element {
-  const { colors } = useConversationTheme();
-  const reducedMotion = useReducedMotion();
-  const live = !reducedMotion && Boolean(level);
-  const innerStyle = useAnimatedStyle(() => {
-    if (!live || !level) {
-      return { opacity: VOICE_INNER_HALO.rest.opacity, transform: [{ scale: VOICE_INNER_HALO.rest.scale }] };
-    }
-    const amount = Math.min(1, Math.max(0, level.value));
-    return {
-      opacity: withSpring(mix(VOICE_INNER_HALO.rest.opacity, VOICE_INNER_HALO.peak.opacity, amount), VOICE_INNER_SPRING),
-      transform: [{ scale: withSpring(mix(VOICE_INNER_HALO.rest.scale, VOICE_INNER_HALO.peak.scale, amount), VOICE_INNER_SPRING) }],
-    };
-  }, [level, live]);
-  const outerStyle = useAnimatedStyle(() => {
-    if (!live || !level) {
-      return { opacity: VOICE_OUTER_HALO.rest.opacity, transform: [{ scale: VOICE_OUTER_HALO.rest.scale }] };
-    }
-    const amount = Math.min(1, Math.max(0, level.value));
-    return {
-      opacity: withSpring(mix(VOICE_OUTER_HALO.rest.opacity, VOICE_OUTER_HALO.peak.opacity, amount), VOICE_OUTER_SPRING),
-      transform: [{ scale: withSpring(mix(VOICE_OUTER_HALO.rest.scale, VOICE_OUTER_HALO.peak.scale, amount), VOICE_OUTER_SPRING) }],
-    };
-  }, [level, live]);
-  const surfaceStyle = useAnimatedStyle(() => {
-    if (!live || !level) return { transform: [{ scale: 1 }] };
-    const amount = Math.min(1, Math.max(0, level.value));
-    return { transform: [{ scale: withSpring(mix(1, VOICE_SURFACE_PEAK_SCALE, amount), VOICE_INNER_SPRING) }] };
-  }, [level, live]);
-  return <Pressable testID={testID} accessibilityRole="button" accessibilityLabel={label}
-    accessibilityState={{ busy }} onPress={onPress}
-    style={({ pressed }) => [actionStyles.target, actionStyles.haloHost, { opacity: pressed ? 0.7 : 1,
-      transform: [{ scale: pressed && !reducedMotion ? Motion.pressedScale : 1 }] }]}>
-    <Animated.View testID={testID ? `${testID}-halo-outer` : undefined} pointerEvents="none"
-      style={[actionStyles.halo, { backgroundColor: colors.accent }, outerStyle]} />
-    <Animated.View testID={testID ? `${testID}-halo` : undefined} pointerEvents="none"
-      style={[actionStyles.halo, { backgroundColor: colors.accent }, innerStyle]} />
-    <Animated.View testID={testID ? `${testID}-surface` : undefined}
-      style={[actionStyles.surface, { backgroundColor: colors.accent }, surfaceStyle]}>
-      <Square size={IconSize.md} color={colors.onAccent} strokeWidth={1.75} fill={colors.onAccent} />
-    </Animated.View>
-  </Pressable>;
-}
 
 /** Shared toolbar geometry: 40pt visual inside a 44pt hit target, no floating shadow. */
 function ComposerAction({ icon: Icon, label, onPress, disabled = false, tone = 'plain', testID }: {
@@ -315,6 +281,10 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     compact: { borderRadius: Radius.bubble, backgroundColor: colors.surface },
     expanded: { flex: 1, minHeight: 0, marginHorizontal: 0, paddingHorizontal: Space.lg, backgroundColor: colors.canvas },
     inputShell: { minHeight: ControlSize.pill, flexDirection: 'row', paddingHorizontal: Space.sm, overflow: 'hidden' },
+    inputHost: { flex: 1, alignSelf: 'stretch' },
+    hiddenInput: { opacity: 0 },
+    voicePresentation: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center', gap: Space.xs },
+    voiceHint: { color: colors.inkSecondary, fontSize: FontSize.secondary, lineHeight: LineHeight.secondary, textAlign: 'center' },
     input: { flex: 1, alignSelf: 'stretch', color: colors.ink, fontSize: FontSize.body, lineHeight: LineHeight.body, includeFontPadding: false,
       fontWeight: FontWeight.regular, paddingLeft: 0, paddingRight: ControlSize.floatingButton, paddingVertical: Space.sm },
     expandedInput: { alignSelf: 'stretch', paddingRight: 0 },

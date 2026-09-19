@@ -44,6 +44,7 @@ export function useChatModelPicker({
   const [modelPickerError, setModelPickerError] = useState<string | null>(null);
   const [availableModels, setAvailableModels] = useState<ModelInfo[]>([]);
   const [availableProviders, setAvailableProviders] = useState<ModelProviderInfo[]>([]);
+  const [configuredDefaultModel, setConfiguredDefaultModel] = useState<string | undefined>();
   const [currentModel, setCurrentModel] = useState<string | null>(null);
   const [currentModelProvider, setCurrentModelProvider] = useState<string | null>(null);
   const requestContextRef = useRef({ adapter, connectionState, sessionKey });
@@ -100,11 +101,18 @@ export function useChatModelPicker({
     const connectionId = requestAdapter.connection.id;
     const isCurrent = () => (
       requestId === modelLoadRequestRef.current
-      && isCurrentAdapterRequest(requestAdapter, connectionId)
+      && isCurrentAdapterRequest(requestAdapter, connectionId, sessionKey)
     );
 
     setModelPickerLoading(true);
     setModelPickerError(null);
+    setConfiguredDefaultModel(undefined);
+    // Configuration is additive: failure must never block free model switching.
+    if (requestAdapter.capabilities.modelManage && models.getCatalog) {
+      void models.getCatalog().then((catalog) => {
+        if (isCurrent()) setConfiguredDefaultModel(catalog.defaults.primary || undefined);
+      }).catch(() => {});
+    }
     try {
       const available = await models.list();
       if (!isCurrent()) return;
@@ -193,6 +201,7 @@ export function useChatModelPicker({
   useEffect(() => {
     setModelPickerLoading(false);
     setModelPickerError(null);
+    setConfiguredDefaultModel(undefined);
     setAvailableModels([]);
     setAvailableProviders([]);
   }, [adapter]);
@@ -299,6 +308,7 @@ export function useChatModelPicker({
     : null;
 
   return {
+    configuredDefaultModel,
     availableModels,
     availableProviders,
     currentModel,

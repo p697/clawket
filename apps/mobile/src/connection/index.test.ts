@@ -40,6 +40,14 @@ class MemorySecureStorage implements SecureConnectionStorage {
     }
     this.values.set(key, value);
   }
+
+  async deleteItemAsync(key: string): Promise<void> {
+    this.values.delete(key);
+  }
+
+  has(key: string): boolean {
+    return this.values.has(key);
+  }
 }
 
 class MemoryDashboardStorage implements RosterCacheStorage {
@@ -160,7 +168,7 @@ async function createHarness(
   > = {},
   runtimeOptions: Pick<
     ConnectionCoordinatorOptions,
-    'chatCache' | 'credentialStore' | 'sessionPreferences' | 'telemetry'
+    'chatCache' | 'credentialStore' | 'cronFailureAcks' | 'sessionPreferences' | 'telemetry' | 'threadActivityCache'
   > = {},
 ) {
   const { secureStorage, store } = await createStoreHarness();
@@ -979,6 +987,20 @@ describe('ConnectionCoordinator', () => {
     expect(harness.coordinator.getSnapshot().error).toBeNull();
   });
 
+  it('clears only the removed connection thread activity snapshots after the registry commit', async () => {
+    const clearConnection = jest.fn(async (_connectionId: string) => undefined);
+    const harness = await createHarness(true, {}, {
+      threadActivityCache: { clearConnection },
+    });
+    await harness.coordinator.start();
+
+    await expect(harness.coordinator.removeConnection('beta')).resolves.toBe(true);
+
+    expect(clearConnection).toHaveBeenCalledTimes(1);
+    expect(clearConnection).toHaveBeenCalledWith('beta');
+    expect(harness.coordinator.getSnapshot().error).toBeNull();
+  });
+
   it('clears only the removed connection session preferences after the registry commit', async () => {
     const clearConnection = jest.fn(async (_connectionId: string) => undefined);
     const harness = await createHarness(true, {}, {
@@ -996,10 +1018,25 @@ describe('ConnectionCoordinator', () => {
     expect(harness.coordinator.getSnapshot().error).toBeNull();
   });
 
+  it('clears only the removed connection cron failure acknowledgements after the registry commit', async () => {
+    const clearConnection = jest.fn(async (_connectionId: string) => undefined);
+    const harness = await createHarness(true, {}, {
+      cronFailureAcks: { clearConnection },
+    });
+    await harness.coordinator.start();
+
+    await expect(harness.coordinator.removeConnection('beta')).resolves.toBe(true);
+
+    expect(clearConnection).toHaveBeenCalledTimes(1);
+    expect(clearConnection).toHaveBeenCalledWith('beta');
+    expect(harness.coordinator.getSnapshot().error).toBeNull();
+  });
+
   it('clears operator and node device tokens only for the removed connection scope', async () => {
     const deleteDeviceToken = jest.fn(async () => undefined);
     const harness = await createHarness(true, {}, {
       credentialStore: {
+        clearYouMindAuthSession: async () => undefined,
         getIdentity: async () => ({
           deviceId: 'device-1',
           publicKeyHex: 'public',
@@ -1029,6 +1066,7 @@ describe('ConnectionCoordinator', () => {
     const deleteDeviceToken = jest.fn(async () => undefined);
     const harness = await createHarness(true, {}, {
       credentialStore: {
+        clearYouMindAuthSession: async () => undefined,
         getIdentity: async () => ({
           deviceId: 'device-1',
           publicKeyHex: 'public',
@@ -1056,9 +1094,61 @@ describe('ConnectionCoordinator', () => {
     });
   });
 
+  it('removeAllConnections forgets every record, its credentials and the persisted registry before start', async () => {
+    const deleteDeviceToken = jest.fn(async () => undefined);
+    const clearYouMindAuthSession = jest.fn(async () => undefined);
+    const harness = await createHarness(true, {}, {
+      credentialStore: {
+        clearYouMindAuthSession,
+        getIdentity: async () => ({
+          deviceId: 'device-1',
+          publicKeyHex: 'public',
+          secretKeyHex: 'secret',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        }),
+        deleteDeviceToken,
+      },
+    });
+    await harness.store.add({
+      id: 'youmind-account',
+      backendKind: 'youmind',
+      transportKind: 'https',
+      label: 'YouMind',
+      url: 'https://youmind.example.invalid',
+      youmind: { authScopeKey: 'account-scope' },
+    });
+    await harness.cache.set('alpha', [agent('alpha')], []);
+    expect(harness.secureStorage.has('clawket.connectionRegistry.v1')).toBe(true);
+
+    await expect(harness.coordinator.removeAllConnections()).resolves.toBe(3);
+
+    // Operator + node tokens for both Relay records; the HTTPS record has none.
+    expect(deleteDeviceToken).toHaveBeenCalledTimes(4);
+    expect(deleteDeviceToken).toHaveBeenCalledWith('device-1', {
+      serverUrl: 'https://alpha.example',
+      gatewayId: 'gw_alpha',
+      role: 'node',
+    });
+    expect(clearYouMindAuthSession).toHaveBeenCalledTimes(1);
+    expect(clearYouMindAuthSession).toHaveBeenCalledWith('https://youmind.example.invalid', 'account-scope');
+    expect(harness.secureStorage.has('clawket.connectionRegistry.v1')).toBe(false);
+    expect(harness.secureStorage.has('clawket.connectionRegistry.rollback.v1')).toBe(false);
+    await expect(harness.cache.getMany(['alpha'])).resolves.toEqual([]);
+    expect(harness.store.getSnapshot().connections).toEqual([]);
+    expect(harness.events).toEqual([]);
+
+    const started = await harness.coordinator.start();
+    expect(started.initialized).toBe(true);
+    expect(started.connections).toEqual([]);
+    expect(started.activeConnectionId).toBeNull();
+    expect(started.error).toBeNull();
+    expect(harness.adapters).toHaveLength(0);
+  });
+
   it('keeps a committed removal and reports device-token cleanup failure', async () => {
     const harness = await createHarness(true, {}, {
       credentialStore: {
+        clearYouMindAuthSession: async () => undefined,
         getIdentity: async () => ({
           deviceId: 'device-1',
           publicKeyHex: 'public',

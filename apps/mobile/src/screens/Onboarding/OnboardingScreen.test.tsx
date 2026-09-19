@@ -33,6 +33,9 @@ const mockDarkColors = {
   line: '#2A2A2F',
 };
 
+let mockIPad = false;
+jest.mock('../../utils/platform', () => ({ get isIPad() { return mockIPad; } }));
+
 let mockTheme = { scheme: 'light' as 'light' | 'dark', colors: mockLightColors };
 
 jest.mock('react-native', () => {
@@ -188,6 +191,7 @@ describe('OnboardingScreen', () => {
   let consoleErrorSpy: jest.SpyInstance;
 
   beforeEach(() => {
+    mockIPad = false;
     mockTheme = { scheme: 'light', colors: mockLightColors };
     mockYouMindEntryVisible = true;
     consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation((message?: unknown) => {
@@ -228,12 +232,14 @@ describe('OnboardingScreen', () => {
     });
   });
 
-  it('offers local models only in Preview and submits all six digits including zero and one', () => {
+  it('offers local models in every environment and submits all six digits including zero and one', () => {
     const onSubmitPairing = jest.fn();
     const onOpenWebsite = jest.fn();
+    // Production, no Debug Mode: the local model row is a first-class backend (owner decision 2026-09-19).
     const view = render(<OnboardingScreen {...createProps({ initialBackend: undefined, onSubmitPairing, onOpenWebsite })} />);
-    expect(view.queryByTestId('onboarding-backend-local-model')).toBeNull();
-    view.rerender(<OnboardingScreen {...createProps({ initialBackend: undefined, environment: 'preview', onSubmitPairing, onOpenWebsite })} />);
+    // Chooser order (owner decision 2026-09-19): products first, the user's own model server last.
+    expect(view.getByTestId('onboarding-backends').props.children.map((row: { props: { testID: string } }) => row.props.testID))
+      .toEqual(['onboarding-backend-openclaw', 'onboarding-backend-hermes', 'onboarding-youmind', 'onboarding-backend-local-model']);
     // A local model is a server the user already runs; "No agent yet?" only lists products to install.
     fireEvent.press(view.getByTestId('onboarding-docs-toggle'));
     expect(view.getByTestId('onboarding-doc-openclaw')).toBeTruthy();
@@ -241,7 +247,7 @@ describe('OnboardingScreen', () => {
     fireEvent.press(view.getByTestId('onboarding-backend-local-model'));
     expect(view.queryByTestId('onboarding-agent-prompt')).toBeNull();
     expect(view.queryByTestId('onboarding-pairing-method-terminal')).toBeNull();
-    expect(view.getByText('npx @p697/clawket pair --backend local-model --preview')).toBeTruthy();
+    expect(view.getByText('npx @p697/clawket pair --backend local-model')).toBeTruthy();
     fireEvent.changeText(view.getByTestId('onboarding-pairing-code'), '001234');
     fireEvent.press(view.getByTestId('onboarding-connect'));
     expect(onSubmitPairing).toHaveBeenCalledWith({ backendKind: 'local-model', transportKind: 'relay', code: '001234' });
@@ -249,26 +255,26 @@ describe('OnboardingScreen', () => {
 
   it('lists the supported local model servers and adapts the command and hint to the chosen one', () => {
     const onCopyCommand = jest.fn();
-    const view = render(<OnboardingScreen {...createProps({ initialBackend: 'local-model', environment: 'preview', onCopyCommand })} />);
+    const view = render(<OnboardingScreen {...createProps({ initialBackend: 'local-model', onCopyCommand })} />);
     const engineTabs = view.getByTestId('onboarding-local-model-engine');
     expect(engineTabs).toBeTruthy();
     expect(view.getByTestId('onboarding-local-model-engine-llamacpp').props.accessibilityState).toEqual({ selected: true });
     expect(view.getByTestId('onboarding-command-hint').props.children).toBe('Start llama-server first (default port 8080), then run this in Terminal.');
-    expect(view.getByText('npx @p697/clawket pair --backend local-model --preview')).toBeTruthy();
+    expect(view.getByText('npx @p697/clawket pair --backend local-model')).toBeTruthy();
 
     fireEvent.press(view.getByTestId('onboarding-local-model-engine-ollama'));
     expect(view.getByTestId('onboarding-command-hint').props.children).toBe('Make sure Ollama is running, then run this in Terminal.');
-    const ollamaCommand = 'npx @p697/clawket pair --backend local-model --engine ollama --base-url http://127.0.0.1:11434 --preview';
+    const ollamaCommand = 'npx @p697/clawket pair --backend local-model --engine ollama --base-url http://127.0.0.1:11434';
     expect(view.getByText(ollamaCommand)).toBeTruthy();
     fireEvent.press(view.getByTestId('onboarding-copy-command'));
     expect(onCopyCommand).toHaveBeenCalledWith(ollamaCommand);
 
     fireEvent.press(view.getByTestId('onboarding-local-model-engine-openai-compatible'));
     expect(view.getByTestId('onboarding-command-hint').props.children).toContain('OpenAI-compatible server');
-    expect(view.getByText('npx @p697/clawket pair --backend local-model --engine openai-compatible --base-url http://127.0.0.1:1234 --preview')).toBeTruthy();
+    expect(view.getByText('npx @p697/clawket pair --backend local-model --engine openai-compatible --base-url http://127.0.0.1:1234')).toBeTruthy();
 
     // OpenClaw keeps its generic terminal hint and never shows the engine switch.
-    view.rerender(<OnboardingScreen {...createProps({ initialBackend: 'openclaw', environment: 'preview', onCopyCommand, onCopyAgentPrompt: undefined })} />);
+    view.rerender(<OnboardingScreen {...createProps({ initialBackend: 'openclaw', onCopyCommand, onCopyAgentPrompt: undefined })} />);
     expect(view.queryByTestId('onboarding-local-model-engine')).toBeNull();
     expect(view.getByTestId('onboarding-command-hint').props.children).toBe('Open Terminal and run this command.');
   });
@@ -323,7 +329,7 @@ describe('OnboardingScreen', () => {
     useKeyboardHandler.mockClear();
     const view = render(<OnboardingScreen {...createProps()} />);
     const scroll = view.getByTestId('onboarding-scroll');
-    expect(scroll.props.automaticallyAdjustKeyboardInsets).toBeUndefined();
+    expect(scroll.props.automaticallyAdjustKeyboardInsets).toBe(false);
     expect(scroll.props.keyboardShouldPersistTaps).toBe('handled');
     const anchor = view.getByTestId('onboarding-keyboard-anchor');
     expect(anchor.findByProps({ testID: 'onboarding-pairing-code' })).toBeTruthy();
@@ -338,6 +344,25 @@ describe('OnboardingScreen', () => {
 
     const hermes = render(<OnboardingScreen {...createProps({ initialBackend: 'hermes' })} />);
     expect(hermes.getByTestId('onboarding-pairing-code').props.returnKeyType).toBe('go');
+  });
+
+  it.each(['openclaw', 'hermes'] as const)('uses one native keyboard-avoidance owner on iPad for %s pairing', (backend) => {
+    mockIPad = true;
+    const onSubmitPairing = jest.fn();
+    const view = render(<OnboardingScreen {...createProps({ initialBackend: backend, onSubmitPairing })} />);
+    const scroll = view.getByTestId('onboarding-scroll');
+    expect(scroll.props.automaticallyAdjustKeyboardInsets).toBe(true);
+    expect(scroll.props.keyboardDismissMode).toBe('on-drag');
+    expect(scroll.props.keyboardShouldPersistTaps).toBe('handled');
+    expect(view.getByTestId('onboarding-keyboard-avoiding').props.enabled).toBe(false);
+    expect(view.getByTestId('onboarding-pairing-code').props.keyboardType).toBe('ascii-capable');
+    expect(view.getByTestId('onboarding-pairing-code').props.returnKeyType).toBe('go');
+    fireEvent(view.getByTestId('onboarding-pairing-code'), 'focus');
+    const code = backend === 'hermes' ? 'ABC234' : '123456';
+    fireEvent.changeText(view.getByTestId('onboarding-pairing-code'), code);
+    expect(view.getByTestId('onboarding-connect').props.disabled).toBe(false);
+    fireEvent.press(view.getByTestId('onboarding-connect'));
+    expect(onSubmitPairing).toHaveBeenCalledWith(expect.objectContaining({ code }));
   });
 
   it('renders and copies an environment-specific pairing command, confirming briefly', async () => {
@@ -482,6 +507,8 @@ describe('OnboardingScreen', () => {
       <OnboardingScreen {...createProps({ status: { kind: 'offline' }, onRetry })} />,
     );
     expect(offline.getByTestId('onboarding-offline')).toBeTruthy();
+    expect(offline.getByText('Offline · reconnecting')).toBeTruthy();
+    expect(offline.queryByText('No network')).toBeNull();
     expect(offline.getByTestId('onboarding-pairing-code')).toBeTruthy();
     fireEvent.press(offline.getByTestId('onboarding-offline-action'));
     expect(onRetry).toHaveBeenCalledTimes(1);

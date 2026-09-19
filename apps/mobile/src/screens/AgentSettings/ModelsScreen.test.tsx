@@ -164,6 +164,27 @@ describe('ModelsScreen', () => {
     await waitFor(() => expect(view.getByTestId('agent-models-save').props.disabled).toBe(true));
   });
 
+  it('leads the catalog with the default model provider, labels that row and shows no row subtitles', async () => {
+    const getCatalog = jest.fn(async () => ({
+      ...catalog,
+      providers: [
+        { slug: 'anthropic', explicit: true, models: [{ id: 'sonnet', name: 'Sonnet', provider: 'anthropic', reasoning: true, configured: true, costOverridden: false }] },
+        ...catalog.providers,
+      ],
+    }));
+    const { adapter } = openClawAdapter({ getCatalog });
+    const view = render(<ModelsScreen adapter={adapter} agent={agent} online navigation={navigation} isPro />);
+    await waitFor(() => expect(view.getByTestId('agent-model-row-anthropic:sonnet')).toBeTruthy());
+    const providers = view.getAllByTestId(/^agent-models-provider-/).map((node) => node.props.testID);
+    expect(providers).toEqual(['agent-models-provider-openai', 'agent-models-provider-anthropic']);
+    expect(view.getByTestId('agent-model-default-openai:gpt-5')).toBeTruthy();
+    expect(view.getByTestId('agent-model-enabled-openai:gpt-5').props.disabled).toBe(true);
+    expect(view.queryByTestId('agent-model-default-openai:mini')).toBeNull();
+    expect(view.queryByText('Reasoning')).toBeNull();
+    expect(view.queryByText('200K')).toBeNull();
+    expect(view.getByTestId('agent-models-fallbacks').props.accessibilityLabel).toBe('Fallback models, None');
+  });
+
   it('asks before discarding a dirty draft on back', async () => {
     const { adapter } = openClawAdapter();
     const view = render(<ModelsScreen adapter={adapter} agent={agent} online navigation={navigation} />);
@@ -212,6 +233,19 @@ describe('ModelsScreen', () => {
     await waitFor(() => expect(view.getByText('Still used by Agent defaults')).toBeTruthy());
     expect(view.getByTestId('agent-model-delete').props.disabled).toBe(true);
     expect(models.deleteModel).not.toHaveBeenCalled();
+  });
+
+  it('explains a catalog-only model plainly instead of naming it as a reference', async () => {
+    const inspectDeletion = jest.fn(async () => ({
+      canDelete: false, blocks: [{ path: 'models.providers', reason: 'model_not_configured' }], cleanupCount: 0,
+    }));
+    const { adapter } = openClawAdapter({ inspectDeletion });
+    const view = render(<ModelsScreen adapter={adapter} agent={agent} online navigation={navigation} />);
+    await waitFor(() => expect(view.getByTestId('agent-model-row-openai:gpt-5')).toBeTruthy());
+    fireEvent.press(view.getByTestId('agent-model-row-openai:gpt-5'));
+    await waitFor(() => expect(view.getByText('Not in Gateway config')).toBeTruthy());
+    expect(view.queryByText(/Still used by/)).toBeNull();
+    expect(view.getByTestId('agent-model-delete').props.disabled).toBe(true);
   });
 
   it('saves a cost override through the detail sheet', async () => {
@@ -287,7 +321,7 @@ describe('ModelsScreen', () => {
     }));
   });
 
-  it('keeps the Hermes current-model switch behind the paywall for free users', async () => {
+  it('keeps the Hermes current-model switch free', async () => {
     const { adapter, models } = hermesAdapter();
     const onOpenPaywall = jest.fn();
     const view = render(<ModelsScreen adapter={adapter} agent={agent} online navigation={navigation} onOpenPaywall={onOpenPaywall} />);
@@ -297,10 +331,32 @@ describe('ModelsScreen', () => {
     expect(onOpenPaywall).not.toHaveBeenCalled();
     fireEvent.press(view.getByTestId('agent-models-current'));
     fireEvent.press(view.getByTestId('models-picker-google:pro'));
-    expect(onOpenPaywall).toHaveBeenCalledWith('modelManage', expect.any(Function));
-    expect(models.setSelection).not.toHaveBeenCalled();
-    act(() => { onOpenPaywall.mock.calls[0]![1](); });
+    expect(onOpenPaywall).not.toHaveBeenCalled();
     await waitFor(() => expect(models.setSelection).toHaveBeenCalledWith({ model: 'pro', provider: 'google', scope: 'global', sessionKey: null }));
+  });
+
+  it('adds a model from the visible catalog action after choosing a provider', async () => {
+    const { adapter, models } = openClawAdapter();
+    const view = render(<ModelsScreen adapter={adapter} agent={agent} online navigation={navigation} isPro />);
+    await waitFor(() => expect(view.getByTestId('agent-models-add')).toBeTruthy());
+    fireEvent.press(view.getByTestId('agent-models-add'));
+    expect(view.queryByTestId('agent-model-add-id')).toBeNull();
+    fireEvent.press(view.getByTestId('agent-model-add-provider-openai'));
+    fireEvent.changeText(view.getByTestId('agent-model-add-id'), 'new-model');
+    fireEvent.press(view.getByTestId('agent-model-add-submit'));
+    fireEvent.press(view.getByTestId('agent-models-confirm-confirm'));
+    await waitFor(() => expect(models.addModel).toHaveBeenCalledWith({ provider: 'openai', modelId: 'new-model', modelName: 'new-model' }));
+  });
+
+  it('ignores a purchase continuation after the page goes offline', async () => {
+    const { adapter } = openClawAdapter();
+    const onOpenPaywall = jest.fn();
+    const view = render(<ModelsScreen adapter={adapter} agent={agent} online navigation={navigation} onOpenPaywall={onOpenPaywall} />);
+    await waitFor(() => expect(view.getByTestId('agent-model-enabled-openai:mini')).toBeTruthy());
+    fireEvent(view.getByTestId('agent-model-enabled-openai:mini'), 'valueChange', false);
+    view.rerender(<ModelsScreen adapter={adapter} agent={agent} online={false} navigation={navigation} onOpenPaywall={onOpenPaywall} />);
+    act(() => onOpenPaywall.mock.calls[0][1]());
+    expect(view.getByTestId('agent-model-enabled-openai:mini').props.value).toBe(true);
   });
 
   it('surfaces load failures with retry and keeps writes disabled offline', async () => {

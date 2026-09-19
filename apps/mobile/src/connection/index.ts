@@ -12,6 +12,8 @@ import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { analyticsEvents } from '../services/analytics/events';
 import { getMessageQueueStore } from '../chat/messageQueue';
 import { ChatCacheService } from '../services/chat-cache';
+import { CronFailureAckService } from '../services/cron-failure-acks';
+import { ThreadActivityCacheService } from '../services/thread-activity-cache';
 import { SessionPreferencesService } from '../services/session-preferences';
 import {
   StorageService,
@@ -82,6 +84,7 @@ export type ConnectionRuntimeSnapshot = Readonly<{
 type ConnectionStorePort = Pick<
   ConnectionStore,
   | 'add'
+  | 'clearPersisted'
   | 'createAdapter'
   | 'getRuntimeRecord'
   | 'getSnapshot'
@@ -102,9 +105,11 @@ type ConnectionSessionPreferencesPort = Pick<
   typeof SessionPreferencesService,
   'clearConnection'
 >;
+type ConnectionCronFailureAcksPort = Pick<typeof CronFailureAckService, 'clearConnection'>;
+type ConnectionThreadActivityCachePort = Pick<typeof ThreadActivityCacheService, 'clearConnection'>;
 type ConnectionCredentialStorePort = Pick<
   typeof StorageService,
-  'deleteDeviceToken' | 'getIdentity'
+  'clearYouMindAuthSession' | 'deleteDeviceToken' | 'getIdentity'
 >;
 type UnreadWatermarksPort = Pick<
   UnreadWatermarks,
@@ -117,6 +122,8 @@ export interface ConnectionCoordinatorOptions {
   cache?: RosterCachePort;
   chatCache?: ConnectionChatCachePort;
   sessionPreferences?: ConnectionSessionPreferencesPort;
+  cronFailureAcks?: ConnectionCronFailureAcksPort;
+  threadActivityCache?: ConnectionThreadActivityCachePort;
   credentialStore?: ConnectionCredentialStorePort;
   watermarks?: UnreadWatermarksPort;
   adapterFactory?: ConnectionAdapterFactory;
@@ -205,6 +212,8 @@ export class ConnectionCoordinator {
   private readonly cache: RosterCachePort;
   private readonly chatCache: ConnectionChatCachePort;
   private readonly sessionPreferences: ConnectionSessionPreferencesPort;
+  private readonly cronFailureAcks: ConnectionCronFailureAcksPort;
+  private readonly threadActivityCache: ConnectionThreadActivityCachePort;
   private readonly credentialStore: ConnectionCredentialStorePort;
   private readonly watermarks: UnreadWatermarksPort;
   private readonly now: () => number;
@@ -245,6 +254,8 @@ export class ConnectionCoordinator {
     this.cache = options.cache ?? rosterCache;
     this.chatCache = options.chatCache ?? ChatCacheService;
     this.sessionPreferences = options.sessionPreferences ?? SessionPreferencesService;
+    this.cronFailureAcks = options.cronFailureAcks ?? CronFailureAckService;
+    this.threadActivityCache = options.threadActivityCache ?? ThreadActivityCacheService;
     this.credentialStore = options.credentialStore ?? StorageService;
     this.watermarks = options.watermarks ?? unreadWatermarks;
     this.adapterFactory = options.adapterFactory ?? null;
@@ -485,6 +496,8 @@ export class ConnectionCoordinator {
       this.cache.remove(connectionId),
       this.chatCache.clearConnection(connectionId),
       this.sessionPreferences.clearConnection(connectionId),
+      this.cronFailureAcks.clearConnection(connectionId),
+      this.threadActivityCache.clearConnection(connectionId),
       this.watermarks.clearConnection(connectionId),
       this.clearConnectionDeviceTokens(record),
     ]);
@@ -502,6 +515,35 @@ export class ConnectionCoordinator {
     }
     this.publish();
     return true;
+  }
+
+  /**
+   * Fresh-install reset, called before `start()`. Every connection takes the
+   * normal removal path (device tokens, caches, watermarks, queues), a YouMind
+   * record also drops its stored session, and finally the persisted registry
+   * — rollback copy included — is deleted so no credential outlives the app
+   * bundle. Device identity and the Pro entitlement record beside it are
+   * deliberately untouched (docs/3.0/06-paywall-and-growth.md §宽限期).
+   */
+  async removeAllConnections(): Promise<number> {
+    const { connections } = await this.store.load();
+    let removed = 0;
+    for (const { id } of connections) {
+      let record: ConnectionRecord | null = null;
+      try {
+        record = await this.store.getRuntimeRecord(id);
+      } catch {
+        record = null;
+      }
+      if (record?.backendKind === 'youmind') {
+        await this.credentialStore
+          .clearYouMindAuthSession(record.url, record.youmind?.authScopeKey ?? null)
+          .catch(() => undefined);
+      }
+      if (await this.removeConnection(id)) removed += 1;
+    }
+    await this.store.clearPersisted();
+    return removed;
   }
 
   private async clearConnectionDeviceTokens(record: ConnectionRecord): Promise<void> {

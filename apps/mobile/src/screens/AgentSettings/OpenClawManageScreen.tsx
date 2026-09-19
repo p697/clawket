@@ -15,16 +15,17 @@ import type {
   DoctorResult,
   PermissionsReport,
 } from '@clawket/agent-protocol';
-import { ChevronLeft } from '../../components/ui/DirectionalIcon';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Banner } from '../../components/ui/Banner';
 import { Button } from '../../components/ui/Button';
-import { FloatingButton } from '../../components/ui/FloatingButton';
+import { ScreenHeader } from '../../components/ui/ScreenHeader';
+import { HeaderTextAction } from '../../components/ui/HeaderTextAction';
 import { FormTextInput } from '../../components/ui/FormTextInput';
 import { SettingsIcon } from '../../components/ui/SettingsIcon';
-import { SettingsDivider, SettingsGroup, SettingsRow } from '../../components/ui/SettingsGroup';
+import { SettingsGroup, SettingsRow } from '../../components/ui/SettingsGroup';
+import { ChevronRight } from '../../components/ui/DirectionalIcon';
 import { Archive, FileJson, ShieldCheck, Stethoscope } from 'lucide-react-native';
 import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { Sheet } from '../../components/ui/Sheet';
@@ -34,7 +35,9 @@ import {
   ControlSize,
   FontSize,
   FontWeight,
+  IconSize,
   LineHeight,
+  Radius,
   Space,
 } from '../../theme/tokens';
 import {
@@ -69,8 +72,14 @@ type ManageSheet =
   | Readonly<{ kind: 'repair'; source: 'permissions' | 'diagnostics' }>
   | Readonly<{ kind: 'approval'; approval: ExecApproval }>
   | Readonly<{ kind: 'restore'; backup: Backup }>
+  | Readonly<{ kind: 'delete-backup'; backup: Backup }>
   | Readonly<{ kind: 'detail'; title: string; body: string }>
   | null;
+
+// The whole config outgrows the screen: the editor is a fixed 93% document
+// sheet whose input scrolls through the Gorhom-integrated scroll view, with the
+// Cancel / Save row kept below it (a grown input in a dynamic sheet pushed it off).
+const CONFIGURATION_EDITOR_SNAP_POINTS: string[] = ['93%'];
 
 const EMPTY_FLAGS: FlagMap = {
   configuration: false,
@@ -139,10 +148,17 @@ export function OpenClawManageScreen({
   const [errors, setErrors] = useState<ErrorMap>(EMPTY_ERRORS);
   const [sheet, setSheet] = useState<ManageSheet>(null);
   const [configurationDraft, setConfigurationDraft] = useState('');
+  // Configuration browsing state lives here, not in the section: the ScrollView
+  // remounts per section, and a user who steps out to the menu and back should
+  // find the keys they opened still open (owner request 2026-09-19: several
+  // keys open at once, no exclusive accordion).
+  const [configurationQuery, setConfigurationQuery] = useState('');
+  const [configurationExpanded, setConfigurationExpanded] = useState<ReadonlyArray<string>>([]);
   const [sheetError, setSheetError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const adapterLoadEpoch = useRef(0);
+  const backupDeleteLock = useRef(false);
   const inFlightLoads = useRef(new Set<string>());
   const tabLoadIds = useRef<Record<OpenClawManageTab, number>>({
     configuration: 0,
@@ -154,7 +170,9 @@ export function OpenClawManageScreen({
 
   // Menu copy (owner-requested 2026-09-16): each Pro section says what it does in one plain line —
   // a bare "Configuration" / "Permissions" / "Diagnostics" told users nothing worth tapping into,
-  // and the owner asked for wording a middle-schooler would follow.
+  // and the owner asked for wording a middle-schooler would follow. Since 2026-09-19 each entry is
+  // its own feature card (icon on top, then the name and the sentence on full lines): the four rows
+  // packed into one card read as crowded and left the lower half of the page empty.
   const tabs = useMemo(() => [
     {
       key: 'configuration' as const,
@@ -346,6 +364,12 @@ export function OpenClawManageScreen({
     }
   }, [activeTab, adapter, loadTab, online, t, translateError]);
 
+  const toggleConfigurationKey = useCallback((key: string) => {
+    setConfigurationExpanded((current) => (
+      current.includes(key) ? current.filter((candidate) => candidate !== key) : [...current, key]
+    ));
+  }, []);
+
   const openConfigurationEditor = useCallback(() => {
     if (!configuration || !support.configurationWrite || !online) return;
     setConfigurationDraft(serializeConfigView(configuration));
@@ -461,6 +485,27 @@ export function OpenClawManageScreen({
     }
   }, [adapter.management?.config?.backups?.create, backups?.length, busy, online, support.backupCreate, t, translateError]);
 
+  const deleteBackup = useCallback(async (backup: Backup) => {
+    const remove = adapter.management?.config?.backups?.remove;
+    if (!remove || backupDeleteLock.current || busy) return;
+    backupDeleteLock.current = true;
+    const epoch = adapterLoadEpoch.current;
+    tabLoadIds.current.backups += 1;
+    setBusy(`backup-delete:${backup.id}`);
+    setSheetError(null);
+    try {
+      await remove(backup.id);
+      if (adapterLoadEpoch.current !== epoch) return;
+      setBackups(current => current?.filter(item => item.id !== backup.id) ?? null);
+      setSheet(null);
+    } catch (error) {
+      if (adapterLoadEpoch.current === epoch) setSheetError(translateError(error, t('Error', { ns: 'common' })));
+    } finally {
+      backupDeleteLock.current = false;
+      if (adapterLoadEpoch.current === epoch) setBusy(null);
+    }
+  }, [adapter, busy, t, translateError]);
+
   const restoreBackup = useCallback(async (backup: Backup) => {
     const restore = adapter.management?.config?.backups?.restore;
     if (!support.backupRestore || !restore || !online) return;
@@ -506,6 +551,10 @@ export function OpenClawManageScreen({
           canEdit={support.configurationWrite}
           online={online}
           gate={gateFor('configuration')}
+          query={configurationQuery}
+          onQueryChange={setConfigurationQuery}
+          expandedKeys={configurationExpanded}
+          onToggleKey={toggleConfigurationKey}
           onEdit={openConfigurationEditor}
         />
       );
@@ -557,6 +606,10 @@ export function OpenClawManageScreen({
         backups={backups}
         canCreate={support.backupCreate}
         canRestore={support.backupRestore}
+        onDeleteBackup={adapter.management?.config?.backups?.remove ? backup => {
+          setSheetError(null);
+          setSheet({ kind: 'delete-backup', backup });
+        } : undefined}
         online={online}
         busy={Boolean(busy)}
         gate={gateFor('backups')}
@@ -580,21 +633,22 @@ export function OpenClawManageScreen({
       testID="openclaw-manage-screen"
       style={[styles.screen, { backgroundColor: theme.colors.canvasGrouped }]}
     >
-      <View style={[styles.header, { paddingTop: insets.top }]}>
-        <View style={styles.headerSide}>
-          <FloatingButton
-            testID="openclaw-manage-back"
-            icon={ChevronLeft}
-            appearance="plain"
-            accessibilityLabel={t('Back', { ns: 'common' })}
-            onPress={() => showMenu ? onBack() : setShowMenu(true)}
+      <ScreenHeader
+        testID="openclaw-manage-header"
+        backTestID="openclaw-manage-back"
+        title={(showMenu ? t('OpenClaw management', { ns: 'common' }) : tabs.find(tab => tab.key === activeTab)?.label) ?? ''}
+        topInset={insets.top}
+        onBack={() => showMenu ? onBack() : setShowMenu(true)}
+        backAccessibilityLabel={t('Back', { ns: 'common' })}
+        rightContent={!showMenu && activeTab === 'configuration' && configurationExpanded.length >= 2 ? (
+          <HeaderTextAction
+            testID="openclaw-configuration-collapse-all"
+            label={t('Collapse all')}
+            onPress={() => setConfigurationExpanded([])}
           />
-        </View>
-        <Text style={styles.headerTitle} numberOfLines={1}>
-          {showMenu ? t('OpenClaw management', { ns: 'common' }) : tabs.find(tab => tab.key === activeTab)?.label}
-        </Text>
-        <View style={styles.headerSide} />
-      </View>
+        ) : undefined}
+        style={styles.header}
+      />
 
       <ScrollView
         key={showMenu ? 'menu' : activeTab}
@@ -616,29 +670,45 @@ export function OpenClawManageScreen({
         ) : (
           <>
             {showMenu ? (
-              <SettingsGroup density="comfortable" testID="openclaw-manage-menu">
-                {tabs.map((tab, index) => {
+              <View testID="openclaw-manage-menu" style={styles.menu}>
+                {tabs.map((tab) => {
                   const Icon = { configuration: FileJson, permissions: ShieldCheck, diagnostics: Stethoscope, backups: Archive }[tab.key];
                   const live = menuValues[tab.key];
+                  const testID = `openclaw-manage-tabs-${tab.key}`;
                   return (
-                    <React.Fragment key={tab.key}>
-                      {index > 0 ? <SettingsDivider inset="content" /> : null}
-                      <SettingsRow testID={`openclaw-manage-tabs-${tab.key}`}
-                        title={tab.label} subtitle={tab.description}
-                        value={live?.value} attention={live?.attention ?? false}
-                        leading={<SettingsIcon icon={Icon} tone="neutral" size={20} strokeWidth={1.75} />}
-                        showChevron disabled={!isOpenClawManageTabSupported(support, tab.key)}
+                    <SettingsGroup key={tab.key} density="comfortable" testID={`openclaw-manage-card-${tab.key}`}>
+                      <SettingsRow
+                        testID={testID}
+                        layout="column"
+                        accessibilityLabel={[tab.label, live?.value, tab.description].filter(Boolean).join(', ')}
+                        disabled={!isOpenClawManageTabSupported(support, tab.key)}
                         onPress={() => {
                           setActiveTab(tab.key);
                           setShowMenu(false);
                           setNotice(null);
                           setSheet(null);
                           setSheetError(null);
-                        }} />
-                    </React.Fragment>
+                        }}
+                      >
+                        <View style={styles.featureBody}>
+                          <View style={styles.featureHead}>
+                            <SettingsIcon icon={Icon} tone="neutral" tile="feature" strokeWidth={1.75} />
+                            <View style={styles.featureTail}>
+                              {live?.attention ? <View testID={`${testID}-attention`} style={styles.featureAttention} /> : null}
+                              {live?.value ? <Text style={styles.featureValue} numberOfLines={1}>{live.value}</Text> : null}
+                              <ChevronRight size={IconSize.sm} color={theme.colors.inkTertiary} strokeWidth={2} />
+                            </View>
+                          </View>
+                          <View style={styles.featureCopy}>
+                            <Text style={styles.featureTitle}>{tab.label}</Text>
+                            <Text style={styles.featureDescription}>{tab.description}</Text>
+                          </View>
+                        </View>
+                      </SettingsRow>
+                    </SettingsGroup>
                   );
                 })}
-              </SettingsGroup>
+              </View>
             ) : <>
             {permissionDenied ? (
               <Banner
@@ -678,19 +748,28 @@ export function OpenClawManageScreen({
         closeAccessibilityLabel={t('Close', { ns: 'common' })}
         onClose={closeSheet}
         dismissOnBackdropPress={!busy}
+        snapPoints={CONFIGURATION_EDITOR_SNAP_POINTS}
       >
-        <View style={styles.sheetContent}>
+        <View style={[styles.sheetContent, styles.editorSheet]}>
           {sheetError ? <Banner tone="bad" message={sheetError} /> : null}
-          <FormTextInput
-            testID="openclaw-configuration-input"
-            value={configurationDraft}
-            onChangeText={setConfigurationDraft}
-            multiline
-            autoCapitalize="none"
-            autoCorrect={false}
-            minHeight={ControlSize.settingsRow * 4}
-            inputStyle={styles.codeInput}
-          />
+          <BottomSheetScrollView
+            testID="openclaw-configuration-scroll"
+            style={styles.editorScroll}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="interactive"
+          >
+            <FormTextInput
+              testID="openclaw-configuration-input"
+              value={configurationDraft}
+              onChangeText={setConfigurationDraft}
+              multiline
+              scrollEnabled={false}
+              autoCapitalize="none"
+              autoCorrect={false}
+              minHeight={ControlSize.settingsRow * 4}
+              inputStyle={styles.codeInput}
+            />
+          </BottomSheetScrollView>
           <View style={styles.actionRow}>
             <Button
               testID="openclaw-configuration-cancel"
@@ -753,6 +832,16 @@ export function OpenClawManageScreen({
             if (sheet?.kind === 'repair') void repair(sheet.source);
           }}
         />
+      </Sheet>
+
+      <Sheet visible={sheet?.kind === 'delete-backup'} testID="openclaw-backup-delete-confirm"
+        title={t('Delete', { ns: 'common' })} onClose={closeSheet} dismissOnBackdropPress={!busy}
+        closeAccessibilityLabel={t('Close', { ns: 'common' })}>
+        <ConfirmationContent testIDPrefix="openclaw-backup-delete-confirm"
+          message={t('Delete this local config backup? This does not change the current Gateway config.')}
+          error={sheetError} busy={Boolean(busy?.startsWith('backup-delete:'))}
+          cancelLabel={t('Cancel', { ns: 'common' })} confirmLabel={t('Delete', { ns: 'common' })}
+          onCancel={closeSheet} onConfirm={() => { if (sheet?.kind === 'delete-backup') void deleteBackup(sheet.backup); }} />
       </Sheet>
 
       <Sheet
@@ -904,28 +993,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     screen: {
       flex: 1,
     },
-    header: {
-      minHeight: ControlSize.settingsRow,
-      paddingHorizontal: Space.lg,
-      paddingBottom: Space.sm,
-      flexDirection: 'row',
-      alignItems: 'flex-end',
-    },
-    headerSide: {
-      width: ControlSize.floatingButton,
-      minHeight: ControlSize.floatingButton,
-      justifyContent: 'center',
-    },
-    headerTitle: {
-      flex: 1,
-      alignSelf: 'center',
-      color: colors.ink,
-      fontSize: FontSize.title,
-      lineHeight: LineHeight.title,
-      fontWeight: FontWeight.semibold,
-      textAlign: 'center',
-      paddingHorizontal: Space.sm,
-    },
+    header: { backgroundColor: colors.canvasGrouped },
     content: {
       paddingHorizontal: Space.lg,
       paddingTop: Space.md,
@@ -933,6 +1001,47 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     contentFill: {
       flexGrow: 1,
+    },
+    // Feature cards: 12 between cards; inside, 16 of padding (the comfortable row's 12 plus 4),
+    // the 44-point tile row with the live value and chevron on its right, 12 down to the name,
+    // 4 to the sentence. The two visible sizes are body and secondary.
+    menu: { gap: Space.md },
+    featureBody: { paddingVertical: Space.xs, gap: Space.md },
+    featureHead: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: Space.md,
+    },
+    featureTail: {
+      flexShrink: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Space.sm,
+    },
+    featureAttention: {
+      width: Space.sm,
+      height: Space.sm,
+      borderRadius: Radius.full,
+      backgroundColor: colors.bad,
+    },
+    featureValue: {
+      flexShrink: 1,
+      color: colors.inkSecondary,
+      fontSize: FontSize.secondary,
+      lineHeight: LineHeight.secondary,
+    },
+    featureCopy: { gap: Space.xs },
+    featureTitle: {
+      color: colors.ink,
+      fontSize: FontSize.body,
+      lineHeight: LineHeight.body,
+      fontWeight: FontWeight.semibold,
+    },
+    featureDescription: {
+      color: colors.inkSecondary,
+      fontSize: FontSize.secondary,
+      lineHeight: LineHeight.secondary,
     },
     notice: {
       color: colors.good,
@@ -945,6 +1054,8 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       paddingBottom: Space.xl,
       gap: Space.lg,
     },
+    editorSheet: { flex: 1, minHeight: 0 },
+    editorScroll: { flex: 1, minHeight: 0 },
     actionRow: {
       flexDirection: 'row',
       gap: Space.sm,

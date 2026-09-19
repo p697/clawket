@@ -93,7 +93,7 @@ describe('StorageService chat appearance', () => {
           enabled: true,
           imagePath: 'wallpaper.jpg',
           blur: 24,
-          dim: 0,
+          dim: 0.6,
           fillMode: 'cover',
         },
         bubbles: {
@@ -127,7 +127,7 @@ describe('StorageService chat appearance', () => {
         enabled: true,
         imagePath: 'file:///documents/chat-appearance/wallpaper.jpg',
         blur: 8,
-        dim: 0,
+        dim: 0.28,
         fillMode: 'cover',
       },
       bubbles: {
@@ -144,7 +144,7 @@ describe('StorageService chat appearance', () => {
           enabled: true,
           imagePath: 'wallpaper.jpg',
           blur: 8,
-          dim: 0,
+          dim: 0.28,
           fillMode: 'cover',
         },
         bubbles: {

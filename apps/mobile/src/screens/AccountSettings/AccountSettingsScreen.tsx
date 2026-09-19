@@ -4,11 +4,11 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import { Languages, Cable, Palette, Bell, CircleHelp, Info } from 'lucide-react-native';
+import { Languages, Cable, Palette, CircleHelp, Info, SunMoon, Image } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AccountPreferenceSheet } from './AccountPreferenceSheet';
+import { AccountPreferenceSheet, type AccountPreferenceAction } from './AccountPreferenceSheet';
 import { useAppLanguage } from '../../i18n/AppLanguageProvider';
 import { APP_LANGUAGE_NAMES } from '../../i18n/language';
 import type { AccountSettingsSection } from '../../navigation/root-stack';
@@ -45,7 +45,6 @@ export type AccountSettingsScreenProps = Readonly<{
   labels?: Partial<AccountSettingsLabels>;
   isPro?: boolean;
   canAddConnection?: boolean;
-  replyNotificationsEnabled?: boolean;
   debugMode?: boolean;
   onBack: () => void;
   onOpenSection?: (section: AccountSettingsSection) => void;
@@ -56,7 +55,8 @@ export type AccountSettingsScreenProps = Readonly<{
     reason: 'gatewayConnections' | 'appIcons' | 'generic',
     onContinue?: () => void,
   ) => void;
-  onReplyNotificationsChange: (enabled: boolean) => void;
+  /** Theme, app icon and app language are picked in place on the home page. */
+  onPreferenceChanged?: (preference: AccountPreferenceAction, value: string) => void;
   onDebugModeChange: (enabled: boolean) => void;
 }>;
 
@@ -171,11 +171,12 @@ export function AccountSettingsScreen({
   onRetry,
   onOpenAction,
   onOpenPaywall,
+  onPreferenceChanged,
 }: AccountSettingsScreenProps): React.JSX.Element {
   const { t } = useTranslation('config');
   const { theme } = useAppTheme();
   const { language } = useAppLanguage();
-  const [languagePickerVisible, setLanguagePickerVisible] = useState(false);
+  const [preference, setPreference] = useState<AccountPreferenceAction | null>(null);
   const insets = useSafeAreaInsets();
   const capabilities = useMemo(
     () => resolveAccountSettingsCapabilities(capabilityOverrides),
@@ -186,7 +187,6 @@ export function AccountSettingsScreen({
     accent: labelOverrides?.accent ?? t('Blue'),
     chatAppearance: labelOverrides?.chatAppearance ?? t('Default'),
     appIcon: labelOverrides?.appIcon ?? t('Default'),
-    speechLanguage: labelOverrides?.speechLanguage ?? t('Follow System'),
     appVersion: labelOverrides?.appVersion ?? t('Unknown'),
     previewEnvironment: labelOverrides?.previewEnvironment ?? t(debugMode ? 'Preview' : 'Production'),
   }), [debugMode, labelOverrides, t]);
@@ -225,8 +225,6 @@ export function AccountSettingsScreen({
             <SettingsGroup density="comfortable" testID="account-settings-categories">
               {[
                 { section: 'connections' as const, title: t('My connections'), icon: Cable, enabled: capabilities.connections, value: String(connections.length) },
-                { section: 'appearance' as const, title: t('Appearance'), icon: Palette, enabled: capabilities.appearance, value: labels.theme },
-                { section: 'notifications' as const, title: t('Chat & notifications'), icon: Bell, enabled: capabilities.notifications || capabilities.voice },
                 { section: 'language' as const, title: t('App language'), icon: Languages, enabled: true,
                   value: language === 'system' ? t('Follow System') : APP_LANGUAGE_NAMES[language] },
               ].filter((entry) => entry.enabled).map((entry, index) => (
@@ -234,10 +232,32 @@ export function AccountSettingsScreen({
                   {index > 0 ? <SettingsDivider inset="icon" /> : null}
                   <SettingsRow testID={entry.section === 'language' ? 'account-settings-app-language' : `account-settings-category-${entry.section}`} title={entry.title}
                     value={entry.value} leading={<SettingsIcon icon={entry.icon} tone="neutral" size={20} strokeWidth={1.75} />}
-                    showChevron onPress={() => entry.section === 'language' ? setLanguagePickerVisible(true) : onOpenSection?.(entry.section)} />
+                    showChevron onPress={() => entry.section === 'language' ? setPreference('app-language') : onOpenSection?.(entry.section)} />
                 </Fragment>
               ))}
             </SettingsGroup>
+            {capabilities.appearance ? (
+              // Appearance gets its own card (owner request 2026-09-19): the three
+              // rows sit on the home page without stretching the category card.
+              <SettingsGroup density="comfortable" testID="account-settings-appearance">
+                {[
+                  { id: 'theme' as const, title: t('Theme'), icon: SunMoon, value: labels.theme, enabled: true, locked: false,
+                    open: () => setPreference('theme') },
+                  { id: 'chat-appearance' as const, title: t('Chat theme'), icon: Palette, value: labels.chatAppearance, enabled: true, locked: false,
+                    open: () => onOpenAction('chat-appearance') },
+                  { id: 'app-icon' as const, title: t('App Icon'), icon: Image, value: labels.appIcon, enabled: capabilities.appIcons, locked: !isPro,
+                    open: () => setPreference('app-icon') },
+                ].filter((entry) => entry.enabled).map((entry, index) => (
+                  <Fragment key={entry.id}>
+                    {index > 0 ? <SettingsDivider inset="icon" /> : null}
+                    <SettingsRow testID={`account-settings-row-${entry.id}`} title={entry.title} value={entry.value}
+                      leading={<SettingsIcon icon={entry.icon} tone="neutral" size={20} strokeWidth={1.75} />}
+                      locked={entry.locked} showChevron={!entry.locked}
+                      onPress={() => entry.locked ? onOpenPaywall('appIcons', entry.open) : entry.open()} />
+                  </Fragment>
+                ))}
+              </SettingsGroup>
+            ) : null}
             {capabilities.help || capabilities.community || capabilities.about ? (
               <SettingsGroup density="comfortable" testID="account-settings-support">
                 {[
@@ -256,8 +276,8 @@ export function AccountSettingsScreen({
           </>
         )}
       </ScrollView>
-      {languagePickerVisible ? (
-        <AccountPreferenceSheet preference="app-language" onClose={() => setLanguagePickerVisible(false)} />
+      {preference ? (
+        <AccountPreferenceSheet preference={preference} onClose={() => setPreference(null)} onChanged={onPreferenceChanged} />
       ) : null}
     </View>
   );
@@ -269,7 +289,7 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: Space.lg,
-    paddingTop: Space.sm,
+    paddingTop: Space.lg,
     gap: Space.xl,
   },
   loadingGroups: {

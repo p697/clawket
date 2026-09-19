@@ -1,5 +1,5 @@
 import type { AccentColorId } from '../../types';
-import type { BackendKind, SessionKind, TransportKind } from '@clawket/agent-protocol';
+import type { BackendKind, DmScope, SessionKind, TransportKind } from '@clawket/agent-protocol';
 import { normalizeAnalyticsEventString } from './event-property-normalizers';
 import { posthogClient, recordPostHogDiagnosticEvent } from './posthog';
 import { getAnalyticsSubscriptionProperties } from './subscription-context';
@@ -195,12 +195,15 @@ export const ANALYTICS_EVENT_PROPERTY_WHITELIST = Object.freeze({
   chat_slash_command_triggered: ['action', 'source', 'session_key_present'],
   theme_accent_changed: ['selected_accent_id', 'source'],
   app_icon_changed: ['selected_icon_id', 'source'],
-  skill_install_tapped: ['source'],
+  skill_install_tapped: ['source', 'backend'],
+  skill_discover_detail_viewed: ['source', 'backend'],
   cron_save_succeeded: ['is_editing', 'payload_kind', 'schedule_kind', 'has_model_override', 'delivery_mode', 'source'],
   cron_create_tapped: ['source'],
   agent_create_started: ['source'],
   agent_save_tapped: ['fallback_count', 'has_model', 'has_name'],
   tools_save_tapped: ['changed_count', 'enabled_count', 'total_count'],
+  channel_dm_scope_changed: ['scope'],
+  channel_account_toggled: ['channel', 'enabled'],
   models_save_tapped: ['fallback_count', 'has_primary_model', 'has_thinking_default'],
   model_cost_save_tapped: ['provider', 'has_existing_override', 'changed_field_count', 'source'],
   model_add_tapped: ['provider', 'has_custom_name', 'source'],
@@ -221,8 +224,6 @@ export const ANALYTICS_EVENT_PROPERTY_WHITELIST = Object.freeze({
     'show_model_name',
     'chat_font_size',
   ],
-  chat_reply_notification_shown: ['app_state', 'source', 'session_kind', 'has_preview_text'],
-  chat_reply_notification_opened: ['source', 'session_kind', 'has_agent_id'],
 } as const);
 
 export type AnalyticsEventName = keyof typeof ANALYTICS_EVENT_PROPERTY_WHITELIST;
@@ -410,7 +411,7 @@ export const analyticsEvents = {
   threadOpened(properties: {
     backend: AnalyticsBackend;
     kind: SessionKind;
-    from: 'roster' | 'panel' | 'search' | 'notification' | 'deeplink' | 'onboarding';
+    from: 'roster' | 'panel' | 'search' | 'deeplink' | 'onboarding';
   }): void {
     captureAnalyticsEvent('thread_opened', properties);
   },
@@ -742,8 +743,12 @@ export const analyticsEvents = {
     captureAnalyticsEvent('app_icon_changed', properties);
   },
 
-  skillInstallTapped(properties: { source: string }): void {
+  skillInstallTapped(properties: { source: 'clawhub_web'; backend: AnalyticsBackend }): void {
     captureAnalyticsEvent('skill_install_tapped', properties);
+  },
+
+  skillDiscoverDetailViewed(properties: { source: 'clawhub_web'; backend: AnalyticsBackend }): void {
+    captureAnalyticsEvent('skill_discover_detail_viewed', properties);
   },
 
   cronSaveSucceeded(properties: {
@@ -775,6 +780,16 @@ export const analyticsEvents = {
 
   toolsSaveTapped(properties: { changed_count: number; enabled_count: number; total_count: number }): void {
     captureAnalyticsEvent('tools_save_tapped', properties);
+  },
+
+  /** `scope` is the bounded OpenClaw `session.dmScope` value. */
+  channelDmScopeChanged(properties: { scope: DmScope }): void {
+    captureAnalyticsEvent('channel_dm_scope_changed', properties);
+  },
+
+  /** `channel` is the platform id (telegram, slack, …), bounded at sanitize time; never an account id. */
+  channelAccountToggled(properties: { channel: string; enabled: boolean }): void {
+    captureAnalyticsEvent('channel_account_toggled', properties);
   },
 
   modelsSaveTapped(properties: { fallback_count: number; has_primary_model: boolean; has_thinking_default: boolean }): void {
@@ -833,27 +848,11 @@ export const analyticsEvents = {
     bubble_style: string;
     bubble_opacity: number;
     blur: number;
+    dim: number;
     show_agent_avatar: boolean;
     show_model_name: boolean;
     chat_font_size: number;
   }): void {
     captureAnalyticsEvent('chat_appearance_saved', properties);
-  },
-
-  chatReplyNotificationShown(properties: {
-    app_state: string;
-    source: 'foreground_other_tab' | 'background';
-    session_kind: string;
-    has_preview_text: boolean;
-  }): void {
-    captureAnalyticsEvent('chat_reply_notification_shown', properties);
-  },
-
-  chatReplyNotificationOpened(properties: {
-    source: 'listener' | 'launch';
-    session_kind: string;
-    has_agent_id: boolean;
-  }): void {
-    captureAnalyticsEvent('chat_reply_notification_opened', properties);
   },
 };

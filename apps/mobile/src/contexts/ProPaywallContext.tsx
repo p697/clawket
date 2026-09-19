@@ -6,6 +6,7 @@ import {
   deriveProSubscriptionSnapshot,
   ensureRevenueCatConfigured,
   getProSubscriptionExpirationMs,
+  hasRenewingProSubscription,
   isProSubscriptionSnapshotActiveAt,
   normalizeProSubscriptionSnapshotAt,
   ProSubscriptionService,
@@ -38,7 +39,10 @@ export type ProPaywallStatusCode =
   | 'planChangeScheduled'
   | 'lifetimeManageSubscription'
   | 'purchaseUnconfirmed'
-  | 'restoreSuccess';
+  | 'restoreSuccess'
+  | 'redemptionWaiting'
+  | 'redemptionUnconfirmed'
+  | 'redemptionFailed';
 
 export type ProPaywallPhase =
   | 'loading'
@@ -46,6 +50,7 @@ export type ProPaywallPhase =
   | 'unavailable'
   | 'purchasing'
   | 'restoring'
+  | 'redeeming'
   | 'success'
   | 'complete'
   | 'failure';
@@ -57,6 +62,8 @@ export type ProPaywallActionResult =
 export type ProPaywallContextType = {
   isPro: boolean;
   debugOverrideEnabled: boolean;
+  /** Developer toggle: an active subscription is presented as a free account so Pro gates open the paywall. */
+  simulateFreeAccount: boolean;
   visible: boolean;
   paywallMode: PaywallMode | null;
   paywallPhase: ProPaywallPhase;
@@ -80,7 +87,9 @@ export type ProPaywallContextType = {
   showPaywallPreview: () => void;
   showPaywall: (feature: ProFeature) => boolean;
   requirePro: (feature: ProFeature) => boolean;
+  setSimulateFreeAccount: (enabled: boolean) => void;
   purchasePro: () => Promise<ProPaywallActionResult>;
+  redeemCode: () => Promise<ProPaywallActionResult>;
   selectPackage: (packageId: string) => void;
   restorePurchases: () => Promise<ProPaywallActionResult>;
   refreshSubscription: () => Promise<void>;
@@ -94,6 +103,10 @@ export const PAYWALL_SUCCESS_DISPLAY_MS = 2_000;
 
 export function ProPaywallProvider({ children }: { children: React.ReactNode }): React.JSX.Element {
   const debugOverrideEnabled = useMemo(() => resolveProAccessEnabled(), []);
+  const [simulateFreeAccount, setSimulateFreeAccountState] = useState(false);
+  const [simulateFreeAccountLoaded, setSimulateFreeAccountLoaded] = useState(false);
+  // The env unlock only stands while the developer is not simulating a free account.
+  const proAccessOverride = debugOverrideEnabled && !simulateFreeAccount;
   const [blockedFeature, setBlockedFeature] = useState<ProFeature | null>(null);
   const [previewOnly, setPreviewOnly] = useState(false);
   const [paywallMode, setPaywallMode] = useState<PaywallMode | null>(null);
@@ -122,7 +135,7 @@ export function ProPaywallProvider({ children }: { children: React.ReactNode }):
   const operationIdRef = useRef(0);
   const activePaywallOperationRef = useRef<Readonly<{
     id: number;
-    kind: 'purchase' | 'restore';
+    kind: 'purchase' | 'restore' | 'redeem';
   }> | null>(null);
 
   const delay = useCallback((ms: number) => new Promise<void>((resolve) => {
@@ -269,7 +282,34 @@ export function ProPaywallProvider({ children }: { children: React.ReactNode }):
   }, [refreshOfferingsState, refreshSubscriptionState]);
 
   useEffect(() => {
-    if (debugOverrideEnabled) {
+    let mounted = true;
+    StorageService.getSimulateFreeAccount()
+      .then((enabled) => {
+        if (mounted) setSimulateFreeAccountState(enabled);
+      })
+      .catch(() => undefined) // An unreadable flag means the real subscription decides.
+      .finally(() => {
+        if (mounted) setSimulateFreeAccountLoaded(true);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const simulateFreeAccountRef = useRef(simulateFreeAccount);
+  simulateFreeAccountRef.current = simulateFreeAccount;
+  const setSimulateFreeAccount = useCallback((enabled: boolean) => {
+    simulateFreeAccountRef.current = enabled;
+    setSimulateFreeAccountState(enabled);
+    void StorageService.setSimulateFreeAccount(enabled).catch(() => undefined);
+  }, []);
+  /** Verified store access ends a simulated free account the way a real free user's purchase would. */
+  const endSimulatedFreeAccount = useCallback(() => {
+    if (simulateFreeAccountRef.current) setSimulateFreeAccount(false);
+  }, [setSimulateFreeAccount]);
+
+  useEffect(() => {
+    if (proAccessOverride) {
       setIsLoading(false);
       setOfferingsLoading(false);
       setIsConfigured(false);
@@ -312,7 +352,7 @@ export function ProPaywallProvider({ children }: { children: React.ReactNode }):
       active = false;
       bootstrapRunIdRef.current += 1;
     };
-  }, [debugOverrideEnabled, delay, refreshRevenueCatState]);
+  }, [delay, proAccessOverride, refreshRevenueCatState]);
 
   useEffect(() => {
     if (activePaywallOperationRef.current) return;
@@ -339,7 +379,7 @@ export function ProPaywallProvider({ children }: { children: React.ReactNode }):
   }, [applySnapshot, refreshSubscriptionState, snapshot, subscriptionClock]);
 
   useEffect(() => {
-    if (debugOverrideEnabled) return;
+    if (proAccessOverride) return;
 
     let mounted = true;
 
@@ -371,10 +411,10 @@ export function ProPaywallProvider({ children }: { children: React.ReactNode }):
         paywallListenerRef.current = null;
       }
     };
-  }, [applySnapshot, debugOverrideEnabled]);
+  }, [applySnapshot, proAccessOverride]);
 
   useEffect(() => {
-    if (debugOverrideEnabled) return;
+    if (proAccessOverride) return;
 
     const subscription = AppState.addEventListener('change', (nextState: AppStateStatus) => {
       if (nextState === 'active') {
@@ -383,13 +423,13 @@ export function ProPaywallProvider({ children }: { children: React.ReactNode }):
       }
     });
     return () => subscription.remove();
-  }, [debugOverrideEnabled, refreshRevenueCatState]);
+  }, [proAccessOverride, refreshRevenueCatState]);
 
   useEffect(() => {
-    if (debugOverrideEnabled) return;
+    if (proAccessOverride) return;
     if (!blockedFeature && !previewOnly) return;
     void refreshOfferings();
-  }, [blockedFeature, debugOverrideEnabled, previewOnly, refreshOfferings]);
+  }, [blockedFeature, proAccessOverride, previewOnly, refreshOfferings]);
 
   useEffect(() => {
     if (!previewOnly) {
@@ -429,7 +469,8 @@ export function ProPaywallProvider({ children }: { children: React.ReactNode }):
   }, []);
 
   const hidePaywall = useCallback(() => {
-    if (activePaywallOperationRef.current) return;
+    if (activePaywallOperationRef.current?.kind !== 'redeem' && activePaywallOperationRef.current) return;
+    activePaywallOperationRef.current = null;
     operationIdRef.current += 1;
     clearFeedback();
     setBlockedFeature(null);
@@ -450,10 +491,15 @@ export function ProPaywallProvider({ children }: { children: React.ReactNode }):
     setPaywallPhase(paywallPackages.length > 0 ? 'ready' : 'loading');
   }, [clearFeedback, paywallPackages.length]);
 
+  const hasProAccess = useCallback((now: number): boolean => (
+    !simulateFreeAccount
+    && (debugOverrideEnabled || isProSubscriptionSnapshotActiveAt(snapshot, now))
+  ), [debugOverrideEnabled, simulateFreeAccount, snapshot]);
+
   const showPaywall = useCallback((feature: ProFeature): boolean => {
     if (
-      debugOverrideEnabled
-      || (feature !== 'settingsMembershipPreview' && isProSubscriptionSnapshotActiveAt(snapshot, Date.now()))
+      proAccessOverride
+      || (feature !== 'settingsMembershipPreview' && hasProAccess(Date.now()))
       || activePaywallOperationRef.current
       || paywallModeRef.current !== null
     ) {
@@ -467,13 +513,13 @@ export function ProPaywallProvider({ children }: { children: React.ReactNode }):
     setPaywallMode('purchase');
     setPaywallPhase(paywallPackages.length > 0 ? 'ready' : 'loading');
     return true;
-  }, [clearFeedback, debugOverrideEnabled, paywallPackages.length, snapshot]);
+  }, [clearFeedback, hasProAccess, paywallPackages.length, proAccessOverride]);
 
   const requirePro = useCallback((feature: ProFeature) => {
-    if (debugOverrideEnabled || isProSubscriptionSnapshotActiveAt(snapshot, Date.now())) return true;
+    if (hasProAccess(Date.now())) return true;
     showPaywall(feature);
     return false;
-  }, [debugOverrideEnabled, showPaywall, snapshot]);
+  }, [hasProAccess, showPaywall]);
 
   const showSuccessThenClose = useCallback(async (
     operationId: number,
@@ -535,6 +581,7 @@ export function ProPaywallProvider({ children }: { children: React.ReactNode }):
         setPaywallPhase('failure');
         return { success: false, reason: 'store_error:ENTITLEMENT_INACTIVE' };
       }
+      endSimulatedFreeAccount();
       if (result.outcome === 'scheduled' || result.requiresSubscriptionManagement) {
         setStatusCode(result.outcome === 'scheduled' ? 'planChangeScheduled' : 'lifetimeManageSubscription');
         setPaywallPhase('complete');
@@ -564,7 +611,7 @@ export function ProPaywallProvider({ children }: { children: React.ReactNode }):
         setSubscriptionClock((current) => current + 1);
       }
     }
-  }, [applySnapshot, clearFeedback, isConfigured, paywallPackages, selectedPackageId, showSuccessThenClose]);
+  }, [applySnapshot, clearFeedback, endSimulatedFreeAccount, isConfigured, paywallPackages, selectedPackageId, showSuccessThenClose]);
 
   const restorePro = useCallback(async (): Promise<ProPaywallActionResult> => {
     if (activePaywallOperationRef.current) {
@@ -588,6 +635,7 @@ export function ProPaywallProvider({ children }: { children: React.ReactNode }):
       }
       const appliedSnapshot = await applySnapshot(result.snapshot);
       if (isProSubscriptionSnapshotActiveAt(appliedSnapshot, Date.now())) {
+        endSimulatedFreeAccount();
         if (startedInPaywall) {
           await showSuccessThenClose(operationId, 'restoreSuccess');
         } else {
@@ -623,10 +671,79 @@ export function ProPaywallProvider({ children }: { children: React.ReactNode }):
         setSubscriptionClock((current) => current + 1);
       }
     }
-  }, [applySnapshot, clearFeedback, showSuccessThenClose]);
+  }, [applySnapshot, clearFeedback, endSimulatedFreeAccount, showSuccessThenClose]);
 
-  const isPro = debugOverrideEnabled
-    || isProSubscriptionSnapshotActiveAt(snapshot, Date.now());
+  const redeemCode = useCallback(async (): Promise<ProPaywallActionResult> => {
+    if (activePaywallOperationRef.current || paywallModeRef.current !== 'purchase') {
+      return { success: false, reason: 'pending' };
+    }
+    const operationId = ++operationIdRef.current;
+    activePaywallOperationRef.current = { id: operationId, kind: 'redeem' };
+    subscriptionRequestIdRef.current += 1;
+    clearFeedback();
+    setPaywallPhase('redeeming');
+    setStatusCode('redemptionWaiting');
+    const isCurrent = () => operationId === operationIdRef.current
+      && paywallModeRef.current === 'purchase';
+    try {
+      // Establish the baseline before opening the store: an existing member
+      // dismissing its sheet must not be reported as a new activation.
+      const before = await ProSubscriptionService.getCustomerInfo(true);
+      if (!isCurrent()) return { success: false, reason: 'cancelled' };
+      if (!before) throw new Error('Billing is not configured.');
+      await applySnapshot(before.snapshot);
+      if (!isCurrent()) return { success: false, reason: 'cancelled' };
+      await ProSubscriptionService.presentCodeRedemption();
+      // StoreKit's sheet resolves on presentation, not on dismissal. Bound
+      // foreground reconciliation; the normal listener handles later delivery.
+      for (let attempt = 0; attempt < 12; attempt += 1) {
+        await delay(5_000);
+        if (!isCurrent()) return { success: false, reason: 'cancelled' };
+        if (AppState.currentState && AppState.currentState !== 'active') continue;
+        const result = await ProSubscriptionService.getCustomerInfo(true).catch(() => null);
+        if (!isCurrent()) return { success: false, reason: 'cancelled' };
+        if (!result) continue;
+        const next = await applySnapshot(result.snapshot);
+        if (!isCurrent()) return { success: false, reason: 'cancelled' };
+        const previous = before.snapshot;
+        const changed = !isProSubscriptionSnapshotActiveAt(previous, Date.now())
+          || previous.productIdentifier !== next?.productIdentifier
+          || previous.expirationDate !== next?.expirationDate
+          || previous.latestPurchaseDate !== next?.latestPurchaseDate;
+        if (!isProSubscriptionSnapshotActiveAt(next, Date.now()) || !changed) continue;
+        endSimulatedFreeAccount();
+        if (next?.expirationDate === null && hasRenewingProSubscription(next)) {
+          setStatusCode('lifetimeManageSubscription');
+          setPaywallPhase('complete');
+          return { success: true, reason: null, keepOpen: true };
+        }
+        await showSuccessThenClose(operationId, 'purchaseSuccess');
+        return isCurrent() || operationId === operationIdRef.current
+          ? { success: true, reason: null }
+          : { success: false, reason: 'cancelled' };
+      }
+      setStatusCode('redemptionUnconfirmed');
+      setPaywallPhase('ready');
+      return { success: false, reason: 'pending' };
+    } catch {
+      if (!isCurrent()) return { success: false, reason: 'cancelled' };
+      setStatusCode('redemptionFailed');
+      setPaywallPhase('ready');
+      return { success: false, reason: 'store_error:REDEMPTION_UNAVAILABLE' };
+    } finally {
+      if (activePaywallOperationRef.current?.id === operationId) {
+        activePaywallOperationRef.current = null;
+        setSubscriptionClock((current) => current + 1);
+      }
+    }
+  }, [applySnapshot, clearFeedback, delay, endSimulatedFreeAccount, showSuccessThenClose]);
+
+  useEffect(() => () => {
+    operationIdRef.current += 1;
+    activePaywallOperationRef.current = null;
+  }, []);
+
+  const isPro = hasProAccess(Date.now());
   const selectedPackage = paywallPackages.find((item) => item.packageIdentifier === selectedPackageId) ?? null;
   const selectPackage = useCallback((packageId: string) => {
     setSelectedPackageId(packageId);
@@ -636,12 +753,13 @@ export function ProPaywallProvider({ children }: { children: React.ReactNode }):
     () => ({
       isPro,
       debugOverrideEnabled,
+      simulateFreeAccount,
       visible: paywallMode !== null,
       paywallMode,
       paywallPhase,
       previewOnly,
       blockedFeature,
-      isLoading,
+      isLoading: isLoading || !simulateFreeAccountLoaded,
       offeringsLoading,
       purchasePending,
       restorePending,
@@ -650,7 +768,8 @@ export function ProPaywallProvider({ children }: { children: React.ReactNode }):
       selectedPackage,
       selectedPackageId,
       priceLabel: selectedPackage?.priceString ?? null,
-      snapshot,
+      // A simulated free account also hides the member plan so the paywall renders the free layout.
+      snapshot: simulateFreeAccount ? null : snapshot,
       errorCode,
       statusCode,
       failureReason,
@@ -659,7 +778,9 @@ export function ProPaywallProvider({ children }: { children: React.ReactNode }):
       showPaywallPreview,
       showPaywall,
       requirePro,
+      setSimulateFreeAccount,
       purchasePro,
+      redeemCode,
       selectPackage,
       restorePurchases: restorePro,
       refreshSubscription,
@@ -683,6 +804,7 @@ export function ProPaywallProvider({ children }: { children: React.ReactNode }):
       paywallPackages,
       purchasePending,
       purchasePro,
+      redeemCode,
       refreshOfferings,
       refreshSubscription,
       requirePro,
@@ -691,8 +813,11 @@ export function ProPaywallProvider({ children }: { children: React.ReactNode }):
       selectPackage,
       selectedPackage,
       selectedPackageId,
+      setSimulateFreeAccount,
       showPaywallPreview,
       showPaywall,
+      simulateFreeAccount,
+      simulateFreeAccountLoaded,
       snapshot,
       statusCode,
     ],

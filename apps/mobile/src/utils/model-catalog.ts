@@ -13,6 +13,9 @@ import {
   listConfiguredModelAllowlistRefs,
   listExplicitConfiguredModels,
   listExplicitProviders,
+  MODEL_POLICY_ALLOW_CONFIG_PATH,
+  patchRewritesModelPolicyAllow,
+  readModelPolicyAllow,
 } from './model-cost-config';
 
 type ConfigObject = Record<string, unknown>;
@@ -146,8 +149,8 @@ export type ModelCatalogPatch = Readonly<{
   patch: ConfigObject;
   /**
    * Gateway `config.patch` refuses to shrink or delete an existing array unless
-   * the exact path is listed here; the fallback list is the only array this
-   * save rewrites.
+   * the exact path is listed here; this save rewrites only the fallback list
+   * and, on a policy config, `agents.defaults.modelPolicy.allow`.
    */
   replacePaths: ReadonlyArray<string>;
 }>;
@@ -205,6 +208,11 @@ export function buildModelCatalogPatch(
   const allowlistPatch = allowlistChanges.length > 0
     ? buildBatchModelAllowlistPatch({ config, changes: allowlistChanges })
     : null;
-  if (allowlistPatch) mergePatch(patch, allowlistPatch);
+  if (allowlistPatch) {
+    mergePatch(patch, allowlistPatch);
+    if (patchRewritesModelPolicyAllow(allowlistPatch) && readModelPolicyAllow(config) !== null) {
+      replacePaths.push(MODEL_POLICY_ALLOW_CONFIG_PATH);
+    }
+  }
   return Object.keys(patch).length > 0 ? { patch, replacePaths } : null;
 }

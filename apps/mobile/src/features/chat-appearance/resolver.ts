@@ -1,4 +1,7 @@
+import { StyleSheet, type ViewStyle } from 'react-native';
 import type { AppTheme } from '../../theme';
+import { Shadow } from '../../theme/tokens';
+import { blendOntoBacking, withAlpha } from '../../theme/color';
 import type { ChatAppearanceSettings } from '../../types/chat-appearance';
 
 export type ResolvedChatBubbleAppearance = {
@@ -19,45 +22,25 @@ export type ResolvedChatMetaAppearance = {
   shadow: boolean;
 };
 
-type RgbColor = {
-  r: number;
-  g: number;
-  b: number;
+/**
+ * Translucent chrome for controls that float over a wallpaper: the Thread
+ * header buttons and pill, the compact composer card and time labels.
+ */
+export type ResolvedChatChromeAppearance = {
+  backgroundColor: string;
+  borderColor: string;
+  borderWidth: number;
+  shadow: boolean;
 };
+
+/** The wallpaper is on and has an image to draw; everything immersive keys off this. */
+export function isChatWallpaperActive(settings: ChatAppearanceSettings, imageUri?: string | null): boolean {
+  return settings.background.enabled && Boolean(imageUri ?? settings.background.imagePath);
+}
 
 function clamp(value: number, min: number, max: number): number {
   if (!Number.isFinite(value)) return min;
   return Math.min(max, Math.max(min, value));
-}
-
-function parseHexColor(value: string): RgbColor | null {
-  const normalized = value.replace('#', '').trim();
-  const raw = normalized.length === 3
-    ? normalized.split('').map((part) => `${part}${part}`).join('')
-    : normalized;
-  if (!/^[\da-fA-F]{6}$/.test(raw)) return null;
-  const parsed = Number.parseInt(raw, 16);
-  return {
-    r: (parsed >> 16) & 255,
-    g: (parsed >> 8) & 255,
-    b: parsed & 255,
-  };
-}
-
-function parseRgbColor(value: string): RgbColor | null {
-  const match = value.match(/rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/i);
-  if (!match) return null;
-  return {
-    r: clamp(Number.parseFloat(match[1]), 0, 255),
-    g: clamp(Number.parseFloat(match[2]), 0, 255),
-    b: clamp(Number.parseFloat(match[3]), 0, 255),
-  };
-}
-
-function withAlpha(color: string, alpha: number): string {
-  const rgb = parseHexColor(color) ?? parseRgbColor(color);
-  if (!rgb) return color;
-  return `rgba(${Math.round(rgb.r)},${Math.round(rgb.g)},${Math.round(rgb.b)},${clamp(alpha, 0, 1)})`;
 }
 
 /** Resolve the tint onto a stable canvas before applying material opacity.
@@ -65,13 +48,7 @@ function withAlpha(color: string, alpha: number): string {
  * A stable backing also protects text when a wallpaper is enabled.
  */
 function resolveTintSurface(tint: string, canvas: string): string {
-  const rgb = parseHexColor(tint) ?? parseRgbColor(tint);
-  const base = parseHexColor(canvas) ?? parseRgbColor(canvas);
-  if (!rgb || !base) return canvas;
-  const alphaMatch = tint.match(/rgba\([^)]*,\s*([\d.]+)\s*\)/i);
-  const alpha = alphaMatch ? clamp(Number(alphaMatch[1]), 0, 1) : 1;
-  const blend = (front: number, back: number) => Math.round(front * alpha + back * (1 - alpha));
-  return `rgb(${blend(rgb.r, base.r)},${blend(rgb.g, base.g)},${blend(rgb.b, base.b)})`;
+  return blendOntoBacking(tint, canvas);
 }
 
 export function resolveChatBubbleAppearance(
@@ -148,5 +125,32 @@ export function resolveChatMetaAppearance(theme: AppTheme): ResolvedChatMetaAppe
       scheme === 'dark' ? 0.42 : 0.58,
     ),
     shadow: scheme === 'light',
+  };
+}
+
+/**
+ * Glass over a photo: the floating surface at a bounded opacity with a soft
+ * hairline, so the wallpaper reads through without losing the control edge.
+ * Light mode keeps the floating shadow; dark mode relies on the hairline, as
+ * every other lifted surface does.
+ */
+export function resolveChatChromeAppearance(theme: Pick<AppTheme, 'colors' | 'scheme'>): ResolvedChatChromeAppearance {
+  const { colors, scheme } = theme;
+  return {
+    backgroundColor: withAlpha(colors.surfaceFloating, scheme === 'dark' ? 0.74 : 0.8),
+    borderColor: withAlpha(colors.line, scheme === 'dark' ? 0.64 : 0.5),
+    borderWidth: StyleSheet.hairlineWidth,
+    shadow: scheme === 'light',
+  };
+}
+
+/** The glass recipe as one view style, shared by every control that floats over the wallpaper. */
+export function createChatGlassStyle(theme: Pick<AppTheme, 'colors' | 'scheme'>): ViewStyle {
+  const glass = resolveChatChromeAppearance(theme);
+  return {
+    backgroundColor: glass.backgroundColor,
+    borderWidth: glass.borderWidth,
+    borderColor: glass.borderColor,
+    ...(glass.shadow ? Shadow.floating : { elevation: 0, shadowOpacity: 0 }),
   };
 }

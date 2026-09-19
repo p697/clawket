@@ -431,7 +431,8 @@ export function formatMainSessionLabel(agentName?: string | null): string {
   return trimmedAgentName ? `${trimmedAgentName} (${mainSessionLabel})` : mainSessionLabel;
 }
 
-function formatChannelName(channel: string): string {
+/** Display name for a backend channel id (`telegram` → `Telegram`, `lark` → `Feishu`). */
+export function formatChannelName(channel: string): string {
   const normalized = channel.trim().toLowerCase();
   if (normalized === 'feishu' || normalized === 'lark') return 'Feishu';
   if (normalized === 'whatsapp') return 'WhatsApp';

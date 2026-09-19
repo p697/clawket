@@ -105,6 +105,21 @@ describe('posthog navigation tracking', () => {
     expect(JSON.stringify(tracked)).not.toContain('private');
   });
 
+  it('names the ClawHub discovery page separately from the Skills section', () => {
+    const state = {
+      index: 0,
+      routes: [{
+        key: 'agent-settings-skills-discover',
+        name: 'AgentSettingsSection',
+        params: { section: 'skills', action: 'discover-skills', connectionId: 'private', agentId: 'private' },
+      }],
+    };
+
+    const tracked = getTrackedScreen(state as never);
+    expect(tracked).toMatchObject({ name: 'SkillDiscover', area: 'settings', kind: 'detail' });
+    expect(JSON.stringify(tracked)).not.toContain('private');
+  });
+
   it('uses the account screen area and a stable section name', () => {
     const state = {
       index: 0,

@@ -5,6 +5,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { usePreventRemove, type NavigationAction } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   CAPABILITY_KEYS,
@@ -15,7 +16,6 @@ import {
   type Capabilities,
   type ConnectionDescriptor,
 } from '@clawket/agent-protocol';
-import { ChevronLeft } from '../../components/ui/DirectionalIcon';
 import { Compass, Plus, Share } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -24,8 +24,11 @@ import {
   useConnections,
 } from '../../connection';
 import { Banner } from '../../components/ui/Banner';
+import { Button } from '../../components/ui/Button';
+import { ConfirmationModal } from '../../components/ui/ConfirmationModal';
 import { ConnectionStatusPill } from '../../components/ui/ConnectionStatusPill';
 import { FloatingButton } from '../../components/ui/FloatingButton';
+import { ScreenHeader } from '../../components/ui/ScreenHeader';
 import {
   SettingsDivider,
   SettingsGroup,
@@ -60,12 +63,15 @@ import {
 } from './section-model';
 import { ModelsScreen } from './ModelsScreen';
 import { SkillsSection } from './SkillsSection';
+import { SkillDiscoverScreen } from './SkillDiscoverScreen';
 import { CronSection } from './CronSection';
 import { CronEditorScreen } from './CronEditorScreen';
 import { FilesSection } from './FilesSection';
+import { DocumentScreen } from './DocumentScreen';
+import { agentFileDocument, skillSourceDocument } from './document-model';
 import { UsageSection } from './UsageSection';
 import { IdentityScreen } from './IdentityScreen';
-import { ToolsSection } from './ToolsSection';
+import { ToolsSection, type ToolsEditorState } from './ToolsSection';
 import { ChannelsDevicesSection } from './ChannelsDevicesSection';
 import { LogsSection } from './LogsSection';
 import { OpenClawManageScreen } from './OpenClawManageScreen';
@@ -74,6 +80,12 @@ import { translateAgentSettingsKey } from './translation';
 const NO_CAPABILITIES = Object.freeze(Object.fromEntries(
   CAPABILITY_KEYS.map((capability) => [capability, false]),
 )) as unknown as Capabilities;
+
+const IDLE_TOOLS_EDITOR: ToolsEditorState = Object.freeze({
+  dirty: false,
+  saving: false,
+  editable: false,
+});
 
 type NavigationProps = NativeStackScreenProps<RootStackParamList, 'AgentSettingsSection'>;
 
@@ -134,14 +146,31 @@ export function AgentSettingsSectionScreen({
   const [pendingAction, setPendingAction] = useState<AgentSettingsSectionAction | null>(null);
   const [skillsRefresh, setSkillsRefresh] = useState(0);
   const [usagePosterRequest, setUsagePosterRequest] = useState(0);
+  const [toolsEditor, setToolsEditor] = useState<ToolsEditorState>(IDLE_TOOLS_EDITOR);
+  const [toolsSaveRequest, setToolsSaveRequest] = useState(0);
+  const [pendingLeave, setPendingLeave] = useState<NavigationAction | null>(null);
+  const [leaving, setLeaving] = useState(false);
   const { t } = useTranslation('common');
   const { connectionId, agentId, section } = route.params;
+  // A dirty tool draft blocks route removal until the user confirms; `leaving` re-enables it.
+  const toolsBusy = section === 'tools' && (toolsEditor.dirty || toolsEditor.saving);
+  usePreventRemove(toolsBusy && !leaving, ({ data: removal }) => {
+    if (!toolsEditor.saving) setPendingLeave(removal.action);
+  });
+  useEffect(() => {
+    if (!leaving) return;
+    if (pendingLeave) navigation.dispatch(pendingLeave);
+    else navigation.goBack();
+  }, [leaving, navigation, pendingLeave]);
   const discoveringSkills = section === 'skills' && route.params.action === 'discover-skills';
   const editingCron = section === 'cron' && (route.params.action === 'create-cron' || route.params.action === 'edit-cron');
+  const openingFile = section === 'files' && route.params.action === 'open-file' && Boolean(route.params.fileName);
+  const openingSkillSource = section === 'skills' && route.params.action === 'skill-source' && Boolean(route.params.skillKey);
+  const isDocumentRoute = openingFile || openingSkillSource;
   useEffect(() => {
-    if ((section !== 'skills' && section !== 'cron') || discoveringSkills || editingCron) return;
+    if ((section !== 'skills' && section !== 'cron' && section !== 'files') || discoveringSkills || editingCron || isDocumentRoute) return;
     return navigation.addListener('focus', () => setSkillsRefresh((value) => value + 1));
-  }, [discoveringSkills, editingCron, navigation, section]);
+  }, [discoveringSkills, editingCron, isDocumentRoute, navigation, section]);
   const routeIsActive = runtime.activeConnectionId === connectionId;
   const adapter = routeIsActive && !permissionDenied ? runtime.activeAdapter : null;
   const connectionGroup = runtime.roster.find(
@@ -246,18 +275,15 @@ export function AgentSettingsSectionScreen({
   let sectionContent: React.ReactNode;
   if (adapter && agent) {
     const online = runtime.activeState === 'ready';
-    if (section === 'skills') {
+    if (section === 'skills' && !discoveringSkills) {
       sectionContent = (
         <SkillsSection
-          isPro={isPro}
-          onOpenPaywall={openPaywall}
           adapter={adapter}
           agent={agent}
           online={online}
-          view={discoveringSkills ? 'discover' : 'installed'}
           refreshKey={skillsRefresh}
-          onInstallRequested={() => navigation.navigate('Thread', {
-            connectionId, agentId, sessionKey: agent.mainSessionKey, from: 'roster',
+          onOpenSource={(skill) => navigation.push('AgentSettingsSection', {
+            connectionId, agentId, section: 'skills', action: 'skill-source', skillKey: skill.skillKey, skillName: skill.name,
           })}
         />
       );
@@ -270,6 +296,7 @@ export function AgentSettingsSectionScreen({
           refreshKey={skillsRefresh}
           onCreate={() => navigation.push('AgentSettingsSection', { connectionId, agentId, section: 'cron', action: 'create-cron' })}
           onEdit={(cronJobId) => navigation.push('AgentSettingsSection', { connectionId, agentId, section: 'cron', action: 'edit-cron', cronJobId })}
+          onOpenSession={(sessionKey) => navigation.navigate('Thread', { connectionId, agentId, sessionKey, from: 'panel' })}
         />
       );
     } else if (section === 'files') {
@@ -278,8 +305,10 @@ export function AgentSettingsSectionScreen({
           adapter={adapter}
           agent={agent}
           online={online}
-          isPro={isPro}
-          onOpenPaywall={openPaywall}
+          refreshKey={skillsRefresh}
+          onOpenFile={(file) => navigation.push('AgentSettingsSection', {
+            connectionId, agentId, section: 'files', action: 'open-file', fileName: file.name,
+          })}
         />
       );
     } else if (section === 'usage') {
@@ -294,7 +323,15 @@ export function AgentSettingsSectionScreen({
         />
       );
     } else if (section === 'tools') {
-      sectionContent = <ToolsSection adapter={adapter} agent={agent} online={online} />;
+      sectionContent = (
+        <ToolsSection
+          adapter={adapter}
+          agent={agent}
+          online={online}
+          saveRequest={toolsSaveRequest}
+          onEditorChange={setToolsEditor}
+        />
+      );
     } else if (section === 'channels-devices') {
       sectionContent = <ChannelsDevicesSection adapter={adapter} online={online} />;
     } else if (section === 'logs') {
@@ -309,6 +346,14 @@ export function AgentSettingsSectionScreen({
       );
     }
   }
+
+  // Memoized so a runtime re-render hands the page the same source; the page keys on `source.key`.
+  const documentSource = useMemo(() => {
+    if (!adapter || !agent) return null;
+    if (openingFile && route.params.fileName) return agentFileDocument(adapter, agent, route.params.fileName);
+    if (openingSkillSource && route.params.skillKey) return skillSourceDocument(adapter, agentId, route.params.skillKey, route.params.skillFilePath);
+    return null;
+  }, [adapter, agent, agentId, openingFile, openingSkillSource, route.params.fileName, route.params.skillKey, route.params.skillFilePath]);
 
   const runAction = useCallback((action: AgentSettingsSectionAction) => {
     if (!resolveAction || !adapter || !connection || !agent || pendingAction) return;
@@ -383,6 +428,41 @@ export function AgentSettingsSectionScreen({
     );
   }
 
+  if (discoveringSkills && adapter && agent && connection && supported && !sectionLocked && state !== 'empty' && state !== 'loading') {
+    return (
+      <SkillDiscoverScreen
+        adapter={adapter}
+        agent={agent}
+        backend={connection.backendKind}
+        online={runtime.activeState === 'ready'}
+        reconnecting={runtime.recovering === true}
+        navigation={navigation}
+        onInstallRequested={() => navigation.navigate('Thread', {
+          connectionId, agentId, sessionKey: agent.mainSessionKey, from: 'roster',
+        })}
+      />
+    );
+  }
+
+  if (isDocumentRoute && adapter && agent && supported && !sectionLocked && state !== 'empty' && state !== 'loading') {
+    const { fileName, skillName } = route.params;
+    return (
+      <DocumentScreen
+        title={openingFile && fileName ? fileName : route.params.skillFilePath ?? 'SKILL.md'}
+        {...(openingSkillSource && skillName ? { subtitle: skillName } : {})}
+        onOpenLinkedFile={openingSkillSource ? skillFilePath => navigation.push('AgentSettingsSection', {
+          ...route.params, skillFilePath,
+        }) : undefined}
+        source={documentSource}
+        online={runtime.activeState === 'ready'}
+        reconnecting={runtime.recovering === true}
+        isPro={isPro}
+        navigation={navigation}
+        onOpenPaywall={openPaywall}
+      />
+    );
+  }
+
   if (editingCron && adapter && agent && supported && !sectionLocked && state !== 'empty' && state !== 'loading') {
     return <CronEditorScreen adapter={adapter} agent={agent} online={runtime.activeState === 'ready'}
       reconnecting={runtime.recovering === true}
@@ -391,44 +471,69 @@ export function AgentSettingsSectionScreen({
   }
 
   return (
-    <AgentSettingsSectionView
-      model={model}
-      backend={connection?.backendKind}
-      state={state}
-      errorMessage={errorMessage}
-      reconnecting={runtime.recovering && runtime.activeConnectionId === connectionId}
-      pendingAction={pendingAction}
-      onBack={navigation.goBack}
-      onRetry={retry}
-      onAction={runAction}
-      canResolveAction={() => Boolean(resolveAction)}
-      onOpenPaywall={openPaywall}
-      sectionContent={sectionContent}
-      title={discoveringSkills ? t('Discover') : undefined}
-      headerRight={section === 'skills' && agent && supported && !discoveringSkills && !sectionLocked
-        && adapter?.capabilities.skillDiscover && adapter.management?.skills?.discover ? (
-          <FloatingButton
-            testID="agent-skills-discover"
-            icon={Compass}
-            appearance="quiet"
-            accessibilityLabel={t('Discover')}
-            onPress={() => navigation.push('AgentSettingsSection', {
-              connectionId, agentId, section: 'skills', action: 'discover-skills',
-            })}
-          />
-        ) : section === 'cron' && agent && supported && !sectionLocked && adapter?.capabilities.cronCreate && adapter.management?.cron?.add ? (
-          <FloatingButton testID="agent-cron-new" icon={Plus} appearance="ink"
-            accessibilityLabel={t('New cron job', { ns: 'config' })} disabled={runtime.activeState !== 'ready'}
-            onPress={() => {
-              analyticsEvents.cronCreateTapped({ source: 'cron_header' });
-              navigation.push('AgentSettingsSection', { connectionId, agentId, section: 'cron', action: 'create-cron' });
-            }} />
-        ) : section === 'usage' && agent && supported && !sectionLocked && adapter?.management?.usage?.sessions ? (
-          <FloatingButton testID="agent-usage-share" icon={Share} appearance="quiet"
-            accessibilityLabel={t('Share', { ns: 'settings' })}
-            onPress={() => setUsagePosterRequest((value) => value + 1)} />
-        ) : undefined}
-    />
+    <>
+      <AgentSettingsSectionView
+        model={model}
+        backend={connection?.backendKind}
+        state={state}
+        errorMessage={errorMessage}
+        reconnecting={runtime.recovering && runtime.activeConnectionId === connectionId}
+        pendingAction={pendingAction}
+        onBack={navigation.goBack}
+        onRetry={retry}
+        onAction={runAction}
+        canResolveAction={() => Boolean(resolveAction)}
+        onOpenPaywall={openPaywall}
+        sectionContent={sectionContent}
+        title={discoveringSkills ? t('Discover') : undefined}
+        headerRight={section === 'tools' && agent && supported && !sectionLocked && toolsEditor.editable ? (
+            <Button
+              testID="agent-tools-save"
+              label={t('Save')}
+              variant="ghost"
+              loading={toolsEditor.saving}
+              disabled={!toolsEditor.dirty || toolsEditor.saving}
+              onPress={() => setToolsSaveRequest((value) => value + 1)}
+            />
+          ) : section === 'skills' && agent && supported && !discoveringSkills && !sectionLocked
+          && adapter?.capabilities.skillDiscover ? (
+            <FloatingButton
+              testID="agent-skills-discover"
+              icon={Compass}
+              appearance="quiet"
+              accessibilityLabel={t('Discover')}
+              onPress={() => {
+                if (connection) analyticsEvents.settingsRowOpened({ row: 'skills.discover', locked: false, backend: connection.backendKind });
+                navigation.push('AgentSettingsSection', {
+                  connectionId, agentId, section: 'skills', action: 'discover-skills',
+                });
+              }}
+            />
+          ) : section === 'cron' && agent && supported && !sectionLocked && adapter?.capabilities.cronCreate && adapter.management?.cron?.add ? (
+            <FloatingButton testID="agent-cron-new" icon={Plus} appearance="ink"
+              accessibilityLabel={t('New cron job', { ns: 'config' })} disabled={runtime.activeState !== 'ready'}
+              onPress={() => {
+                analyticsEvents.cronCreateTapped({ source: 'cron_header' });
+                navigation.push('AgentSettingsSection', { connectionId, agentId, section: 'cron', action: 'create-cron' });
+              }} />
+          ) : section === 'usage' && agent && supported && !sectionLocked && adapter?.management?.usage?.sessions ? (
+            <FloatingButton testID="agent-usage-share" icon={Share} appearance="quiet"
+              accessibilityLabel={t('Share', { ns: 'settings' })}
+              onPress={() => setUsagePosterRequest((value) => value + 1)} />
+          ) : undefined}
+      />
+      <ConfirmationModal
+        testID="agent-tools-discard"
+        visible={pendingLeave !== null && !leaving}
+        title={t('Discard changes?', { ns: 'settings' })}
+        message={t('Unsaved changes will be lost.', { ns: 'settings' })}
+        confirmLabel={t('Discard', { ns: 'settings' })}
+        cancelLabel={t('Keep editing', { ns: 'settings' })}
+        destructive
+        onClose={() => setPendingLeave(null)}
+        onConfirm={() => setLeaving(true)}
+      />
+    </>
   );
 }
 
@@ -509,30 +614,21 @@ export function AgentSettingsSectionView({
     <>
       <View
         testID="agent-settings-section-screen"
-        style={[styles.screen, model.section === 'skills' || model.section === 'cron' ? styles.skillsScreen : null, { paddingTop: insets.top }]}
+        style={[styles.screen, model.section === 'skills' || model.section === 'cron' ? styles.skillsScreen : null]}
       >
-        <View testID="agent-settings-section-header" style={styles.header}>
-          <FloatingButton
-            testID="agent-settings-section-back"
-            icon={ChevronLeft}
-            accessibilityLabel={t('Back', { ns: 'common' })}
-            onPress={onBack}
-          />
-          {connectionStatus ? (
-            <View testID="agent-settings-section-header-status" style={styles.headerStatus}>
-              {connectionStatus}
-            </View>
-          ) : (
-            <Text
-              testID="agent-settings-section-title"
-              style={styles.headerTitle}
-              numberOfLines={1}
-            >
-              {title ?? translate(model.title)}
-            </Text>
-          )}
-          {headerRight ?? <View style={styles.headerSlot} />}
-        </View>
+        <ScreenHeader
+          testID="agent-settings-section-header"
+          backTestID="agent-settings-section-back"
+          titleTestID="agent-settings-section-title"
+          statusTestID="agent-settings-section-header-status"
+          title={title ?? translate(model.title)}
+          topInset={insets.top}
+          status={connectionStatus}
+          onBack={onBack}
+          backAccessibilityLabel={t('Back', { ns: 'common' })}
+          rightContent={headerRight}
+          style={model.section === 'skills' || model.section === 'cron' ? undefined : styles.groupedHeader}
+        />
 
         {state === 'loading' ? (
           <AgentSettingsSectionLoading
@@ -728,37 +824,10 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       backgroundColor: colors.canvasGrouped,
     },
     skillsScreen: { backgroundColor: colors.canvas },
-    header: {
-      minHeight: ControlSize.floatingButton,
-      paddingHorizontal: Space.lg,
-      marginTop: Space.sm,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-    },
-    headerSlot: {
-      width: ControlSize.floatingButton,
-      height: ControlSize.floatingButton,
-    },
-    headerTitle: {
-      flex: 1,
-      color: colors.ink,
-      fontSize: FontSize.title,
-      lineHeight: LineHeight.title,
-      fontWeight: FontWeight.semibold,
-      textAlign: 'center',
-      marginHorizontal: Space.sm,
-    },
-    headerStatus: {
-      flex: 1,
-      minWidth: 0,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginHorizontal: Space.sm,
-    },
+    groupedHeader: { backgroundColor: colors.canvasGrouped },
     content: {
       paddingHorizontal: Space.lg,
-      paddingTop: Space.xl,
+      paddingTop: Space.lg,
       gap: Space.xl,
     },
     section: {

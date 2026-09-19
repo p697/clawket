@@ -2,7 +2,8 @@ import { readFile, mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { prepareRecovery, verifyRecovery } from '../../scripts/release/registry-recovery.mjs';
 import WebSocket from 'ws';
 import { BridgeRuntime } from '../../packages/bridge-runtime/src/openclaw/runtime';
 import { HermesRelayRuntime } from '../../packages/bridge-runtime/src/hermes/relay';
@@ -22,10 +23,33 @@ const phases = [
   { name: 'Registry upgraded, Relay old', registry: true, relay: false },
   { name: 'both upgraded', registry: true, relay: true },
   { name: 'Relay rolled back, Registry new', registry: true, relay: false },
-  { name: 'both rolled back', registry: false, relay: false },
+  { name: 'both rolled back (local protocol comparison only)', registry: false, relay: false },
+  { name: 'migration-safe Registry recovery, old Relay', registry: 'recovery' as const, relay: false },
 ];
+let recoveryDir = process.env.CLAWKET_RELEASE_RECOVERY;
+let generatedRecovery: string | undefined;
+beforeAll(async () => {
+  if (!recoveryDir) {
+    generatedRecovery = await mkdtemp(join(tmpdir(), 'clawket-recovery-artifacts-'));
+    recoveryDir = join(generatedRecovery, 'artifacts');
+    await prepareRecovery({ snapshots: snapshotDir, output: recoveryDir, configs: [
+      resolve(root, 'apps/relay-registry/wrangler.toml'), resolve(root, 'apps/relay-registry/wrangler.hermes.toml'),
+    ] });
+  }
+  await verifyRecovery(recoveryDir!);
+  const manifest = JSON.parse(await readFile(join(recoveryDir!, 'manifest.json'), 'utf8'));
+  expect(manifest.artifacts).toHaveLength(2);
+  for (const name of ['clawket-registry', 'clawket-hermes-registry']) {
+    const entry = manifest.artifacts.find((item: { name: string }) => item.name === name);
+    const bundle = await readFile(join(recoveryDir!, name, 'bundle/index.js'));
+    const production = await readFile(join(snapshotDir!, `${name}.js`));
+    expect(createHash('sha256').update(bundle).digest('hex')).toBe(entry.recoverySha256);
+    expect(createHash('sha256').update(production).digest('hex')).toBe(entry.productionSha256);
+  }
+});
+afterAll(async () => { if (generatedRecovery) await rm(generatedRecovery, { recursive: true, force: true }); });
 describe('real production bundles → candidate → rollback, isolated local Workers', () => {
-  it.each(['openclaw', 'hermes'].flatMap(backend => ['candidate', 'published-0.7.0'].map(vintage => ({ backend, vintage }))))('$backend / $vintage retains old pairing across all five service phases', async ({ backend, vintage }) => {
+  it.each(['openclaw', 'hermes'].flatMap(backend => ['candidate', 'published-0.7.0'].map(vintage => ({ backend, vintage }))))('$backend / $vintage retains old pairing across all six service phases', async ({ backend, vintage }) => {
     const OpenClawRuntime = backend === 'openclaw' && vintage === 'published-0.7.0'
       ? await (await prepareLegacyBridgeMatrix(root)).find(artifact => artifact.pin.key === 'bd69')!.loadRuntime()
       : BridgeRuntime;
@@ -69,9 +93,9 @@ describe('real production bundles → candidate → rollback, isolated local Wor
       });
       socket.send(JSON.stringify(backend === 'openclaw' ? wire('connect.c2.challenge') : { type: 'event', event: 'health', payload: { status: 'ok' } }));
     });
-    async function startUnit(unit: 'registry' | 'relay', candidate: boolean) {
+    async function startUnit(unit: 'registry' | 'relay', candidate: boolean | 'recovery') {
       const config = {
-        name: `${prefix}-${unit}`, main: candidate ? resolve(root, `apps/${unit === 'relay' ? 'relay-worker' : 'relay-registry'}/src/index.ts`) : resolve(snapshotDir!, `${prefix}-${unit}.js`),
+        name: `${prefix}-${unit}`, main: candidate === 'recovery' ? resolve(recoveryDir!, `${prefix}-registry/bundle/index.js`) : candidate ? resolve(root, `apps/${unit === 'relay' ? 'relay-worker' : 'relay-registry'}/src/index.ts`) : resolve(snapshotDir!, `${prefix}-${unit}.js`),
         compatibility_date: '2026-03-03',
         kv_namespaces: [{ binding: kv, id: '00000000000000000000000000000000' }],
         ...(unit === 'relay' ? { durable_objects: { bindings: [{ name: room, class_name: klass }] }, migrations: [{ tag: 'v1', new_sqlite_classes: [klass] }] }
@@ -160,6 +184,20 @@ describe('real production bundles → candidate → rollback, isolated local Wor
           await delay(100);
         }
       }
+      const registerPath = backend === 'hermes' ? '/v1/hermes/pair/register' : '/v1/pair/register';
+      const registrationStatuses: number[] = [];
+      for (let attempt = 0; attempt < 11; attempt += 1) {
+        const response = await fetch(regUrl + registerPath, { method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ preferredRegion: 'us' }) });
+        registrationStatuses.push(response.status);
+      }
+      // One registration in the candidate phase consumed the first slot.
+      expect(registrationStatuses).toEqual([...Array(9).fill(200), 429, 429]);
+      await registry!.stop();
+      registry = await startUnit('registry', 'recovery');
+      const limited = await fetch(regUrl + registerPath, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+      expect(limited.status).toBe(429);
+
     }
     finally {
       await Promise.allSettled([relay?.stop(), registry?.stop()]);

@@ -4,7 +4,7 @@ import { usePreventRemove, type NavigationAction } from '@react-navigation/nativ
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
-import { Check } from 'lucide-react-native';
+import { Check, Plus } from 'lucide-react-native';
 import type {
   AgentAdapter,
   AgentDescriptor,
@@ -15,6 +15,8 @@ import type { RootStackParamList } from '../../navigation/root-stack';
 import { Banner } from '../../components/ui/Banner';
 import { Button } from '../../components/ui/Button';
 import { ConfirmationModal } from '../../components/ui/ConfirmationModal';
+import { ChevronRight } from '../../components/ui/DirectionalIcon';
+import { FloatingButton } from '../../components/ui/FloatingButton';
 import { ScreenHeader } from '../../components/ui/ScreenHeader';
 import { SearchInput } from '../../components/ui/SearchInput';
 import {
@@ -47,7 +49,6 @@ import {
   buildModelSelectionWrite,
   displayModelName,
   findModelRow,
-  formatContextWindow,
   isModelsDraftDirty,
   listCatalogModels,
   loadModelsBundle,
@@ -77,7 +78,7 @@ export type ModelsScreenProps = Readonly<{
   /** Opens the OpenClaw config editor for provider keys and endpoints. */
   onOpenProviderConfig?: () => void;
   isPro?: boolean;
-  /** Every write on this page is a Pro feature (owner decision 2026-09-16); the continuation resumes the exact write. */
+  /** Configuration writes are Pro; ordinary global model selection stays free; the continuation resumes the exact write. */
   onOpenPaywall?: (reason: string, onContinue?: () => void) => void;
 }>;
 
@@ -109,6 +110,7 @@ export function ModelsScreen({
   const [busy, setBusy] = useState<Busy>(null);
   const [query, setQuery] = useState('');
   const [detailKey, setDetailKey] = useState<string | null>(null);
+  const [addingModel, setAddingModel] = useState(false);
   const [providerSlug, setProviderSlug] = useState<string | null>(null);
   const [deletion, setDeletion] = useState<ModelDeletionPreview | null>(null);
   const [fallbacksVisible, setFallbacksVisible] = useState(false);
@@ -121,11 +123,18 @@ export function ModelsScreen({
   const scope = useMemo(() => ({}), [adapter, agent.agentId]);
   const activeScope = useRef<object | null>(scope);
   activeScope.current = scope;
+  const liveWriteState = useRef({ online, saving: false });
+  liveWriteState.current = { online, saving: busy !== null };
+  useEffect(() => {
+    activeScope.current = scope;
+    return () => { activeScope.current = null; };
+  }, [scope]);
 
   const manage = bundle?.mode === 'manage';
   const dirty = bundle ? isModelsDraftDirty(bundle) : false;
   const saving = busy !== null;
   const groups = useMemo(() => buildAgentModelGroups(bundle, query), [bundle, query]);
+  const orderedGroups = useMemo(() => sortDefaultProviderFirst(groups), [groups]);
   const allGroups = useMemo(() => buildAgentModelGroups(bundle), [bundle]);
   const detailRow = useMemo(() => findModelRow(allGroups, detailKey), [allGroups, detailKey]);
   const detailGroup = useMemo(
@@ -166,6 +175,14 @@ export function ModelsScreen({
   useEffect(() => {
     setBundle(null);
     setError(null);
+    setPicker(null);
+    setProviderSlug(null);
+    setAddingModel(false);
+    setDetailKey(null);
+    setThinkingVisible(false);
+    setFallbacksVisible(false);
+    setConfirmation(null);
+    setBusy(null);
     void load();
   }, [load]);
 
@@ -191,12 +208,15 @@ export function ModelsScreen({
   // Last-step gate: the page previews real data and every control looks live; the
   // paywall opens on the write itself and resumes it after purchase or restore.
   const requirePro = useCallback((write: () => void) => {
+    const guardedWrite = () => {
+      if (activeScope.current === scope && liveWriteState.current.online && !liveWriteState.current.saving) write();
+    };
     if (isPro || !onOpenPaywall) {
-      write();
+      guardedWrite();
       return;
     }
-    onOpenPaywall('modelManage', write);
-  }, [isPro, onOpenPaywall]);
+    onOpenPaywall('modelManage', guardedWrite);
+  }, [isPro, onOpenPaywall, scope]);
 
   useEffect(() => {
     if (!detailRow || !manage || !operations?.inspectDeletion) {
@@ -283,6 +303,7 @@ export function ModelsScreen({
     );
     if (!done || activeScope.current !== scope) return;
     setProviderSlug(null);
+    setAddingModel(false);
     void load(true);
   }, [load, operations, runWrite, scope, t]);
 
@@ -362,6 +383,7 @@ export function ModelsScreen({
         title={t('Models', { ns: 'settings' })}
         topInset={insets.top}
         onBack={back}
+        style={styles.header}
         rightContent={canSave && bundle ? (
           <Button
             testID="agent-models-save"
@@ -392,114 +414,128 @@ export function ModelsScreen({
           />
         ) : (
           <>
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>{t('Defaults', { ns: 'settings' })}</Text>
-              <SettingsGroup>
-                {manage ? (
-                  <>
-                    <SettingsRow
-                      testID="agent-models-default"
-                      title={t('Default model', { ns: 'config' })}
-                      value={primaryName || t('None', { ns: 'settings' })}
-                      showChevron
-                      disabled={!online || saving}
-                      onPress={() => setPicker('primary')}
-                    />
-                    <SettingsDivider inset="content" />
-                    <SettingsRow
-                      testID="agent-models-fallbacks"
-                      title={t('Fallback models', { ns: 'settings' })}
-                      value={fallbackRows.length > 0 ? String(fallbackRows.length) : t('None', { ns: 'settings' })}
-                      showChevron
-                      onPress={() => setFallbacksVisible(true)}
-                    />
-                    {thinkingLevels.length > 0 ? (
-                      <>
-                        <SettingsDivider inset="content" />
-                        <SettingsRow
-                          testID="agent-models-thinking"
-                          title={t('Thinking level', { ns: 'config' })}
-                          value={bundle.draft.thinkingDefault
-                            ? t(`thinking_${bundle.draft.thinkingDefault}`, { ns: 'chat' })
-                            : t('Default', { ns: 'settings' })}
-                          showChevron
-                          disabled={!online || saving}
-                          onPress={() => setThinkingVisible(true)}
-                        />
-                      </>
-                    ) : null}
-                  </>
-                ) : (
-                  <SettingsRow
-                    testID="agent-models-current"
-                    title={t('Current model', { ns: 'settings' })}
-                    subtitle={t('Applies to all sessions', { ns: 'settings' })}
-                    value={busy === 'select' ? t('Loading...', { ns: 'common' }) : currentName || t('None', { ns: 'settings' })}
-                    showChevron
-                    disabled={!online || saving || !operations?.setSelection}
-                    onPress={() => setPicker('current')}
-                  />
-                )}
-              </SettingsGroup>
-            </View>
-
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>{t('Catalog', { ns: 'settings' })}</Text>
-              <SearchInput
-                testID="agent-models-search"
-                value={query}
-                onChangeText={setQuery}
-                placeholder={t('Search models...', { ns: 'settings' })}
-              />
+            <SettingsGroup testID="agent-models-defaults">
               {manage ? (
-                <Text style={styles.hint}>{t('Switches control which models this Agent may use.', { ns: 'settings' })}</Text>
-              ) : null}
-              {groups.length === 0 ? (
+                <>
+                  <SettingsRow
+                    testID="agent-models-default"
+                    title={t('Default model', { ns: 'config' })}
+                    value={primaryName || t('None', { ns: 'settings' })}
+                    tailWidth="wide"
+                    showChevron
+                    disabled={!online || saving}
+                    onPress={() => setPicker('primary')}
+                  />
+                  <SettingsDivider inset="content" />
+                  <SettingsRow
+                    testID="agent-models-fallbacks"
+                    title={t('Fallback models', { ns: 'settings' })}
+                    value={fallbackRows.length > 0 ? String(fallbackRows.length) : t('None', { ns: 'settings' })}
+                    showChevron
+                    onPress={() => setFallbacksVisible(true)}
+                  />
+                  {thinkingLevels.length > 0 ? (
+                    <>
+                      <SettingsDivider inset="content" />
+                      <SettingsRow
+                        testID="agent-models-thinking"
+                        title={t('Thinking level', { ns: 'config' })}
+                        value={bundle.draft.thinkingDefault
+                          ? t(`thinking_${bundle.draft.thinkingDefault}`, { ns: 'chat' })
+                          : t('Default', { ns: 'settings' })}
+                        showChevron
+                        disabled={!online || saving}
+                        onPress={() => setThinkingVisible(true)}
+                      />
+                    </>
+                  ) : null}
+                </>
+              ) : (
+                <SettingsRow
+                  testID="agent-models-current"
+                  title={t('Current model', { ns: 'settings' })}
+                  value={busy === 'select' ? t('Loading...', { ns: 'common' }) : currentName || t('None', { ns: 'settings' })}
+                  tailWidth="wide"
+                  showChevron
+                  disabled={!online || saving || !operations?.setSelection}
+                  onPress={() => setPicker('current')}
+                />
+              )}
+            </SettingsGroup>
+
+            <View style={styles.catalog}>
+              <View style={styles.catalogTools}>
+                <SearchInput
+                  testID="agent-models-search"
+                  appearance="quiet"
+                  value={query}
+                  onChangeText={setQuery}
+                  placeholder={t('Search models...', { ns: 'settings' })}
+                  style={styles.search}
+                />
+                {canAdd ? (
+                  <FloatingButton
+                    testID="agent-models-add"
+                    icon={Plus}
+                    accessibilityLabel={t('Add model', { ns: 'settings' })}
+                    disabled={!online || saving || dirty}
+                    onPress={() => { setSheetError(null); setProviderSlug(null); setAddingModel(true); }}
+                  />
+                ) : null}
+              </View>
+              {orderedGroups.length === 0 ? (
                 <Text testID="agent-models-empty" style={styles.emptyText}>
                   {t(query.trim() ? 'No models found' : 'No models available', { ns: 'settings' })}
                 </Text>
-              ) : groups.map((group) => (
-                <View key={group.provider || '_'} style={styles.groupWrap}>
+              ) : orderedGroups.map((group) => (
+                <SettingsGroup key={group.provider || '_'} testID={`agent-models-group-${group.provider}`}>
                   <SettingsRow
                     testID={`agent-models-provider-${group.provider}`}
-                    title={formatProviderTitle(group.provider, t('Other', { ns: 'settings' }))}
-                    value={String(group.rows.length)}
-                    showChevron
-                    style={styles.groupHeader}
+                    accessibilityLabel={`${formatProviderTitle(group.provider, t('Other', { ns: 'settings' }))}, ${group.rows.length}`}
                     onPress={() => { setSheetError(null); setProviderSlug(group.provider); }}
-                  />
-                  {group.rows.length > 0 ? (
-                    <SettingsGroup>
-                      {group.rows.map((row, index) => (
-                        <React.Fragment key={row.key}>
-                          {index ? <SettingsDivider inset="content" /> : null}
-                          <SettingsRow
-                            testID={`agent-model-row-${row.key}`}
-                            title={row.name}
-                            subtitle={rowSubtitle(row, t)}
-                            trailing={manage ? (
-                              <ThemedSwitch
-                                testID={`agent-model-enabled-${row.key}`}
-                                accessibilityLabel={row.name}
-                                value={row.enabled === true}
-                                disabled={!online || saving || row.current}
-                                onValueChange={(enabled) => toggleEnabled(row, enabled)}
-                              />
-                            ) : row.current ? (
-                              <Check
-                                testID={`agent-model-current-${row.key}`}
-                                size={IconSize.sm}
-                                color={theme.colors.accent}
-                                strokeWidth={2}
-                              />
-                            ) : undefined}
-                            onPress={() => { setSheetError(null); setDetailKey(row.key); }}
+                  >
+                    <Text style={styles.providerTitle} numberOfLines={1}>
+                      {formatProviderTitle(group.provider, t('Other', { ns: 'settings' }))}
+                    </Text>
+                    <View style={styles.rowTail}>
+                      <Text style={styles.providerCount}>{String(group.rows.length)}</Text>
+                      <ChevronRight size={IconSize.sm} color={theme.colors.inkTertiary} strokeWidth={2} />
+                    </View>
+                  </SettingsRow>
+                  {group.rows.map((row) => (
+                    <React.Fragment key={row.key}>
+                      <SettingsDivider inset="content" />
+                      <SettingsRow
+                        testID={`agent-model-row-${row.key}`}
+                        title={row.name}
+                        trailing={manage ? (
+                          <View style={styles.rowTail}>
+                            {row.current ? (
+                              <Text testID={`agent-model-default-${row.key}`} style={styles.providerCount}>
+                                {t('Default', { ns: 'settings' })}
+                              </Text>
+                            ) : null}
+                            <ThemedSwitch
+                              testID={`agent-model-enabled-${row.key}`}
+                              accessibilityLabel={row.name}
+                              value={row.enabled === true}
+                              disabled={!online || saving || row.current}
+                              onValueChange={(enabled) => toggleEnabled(row, enabled)}
+                            />
+                          </View>
+                        ) : row.current ? (
+                          <Check
+                            testID={`agent-model-current-${row.key}`}
+                            size={IconSize.sm}
+                            color={theme.colors.accent}
+                            strokeWidth={2}
                           />
-                        </React.Fragment>
-                      ))}
-                    </SettingsGroup>
-                  ) : null}
-                </View>
+                        ) : undefined}
+                        onPress={() => { setSheetError(null); setDetailKey(row.key); }}
+                      />
+                    </React.Fragment>
+                  ))}
+                </SettingsGroup>
               ))}
             </View>
           </>
@@ -519,14 +555,13 @@ export function ModelsScreen({
         canDelete={canDelete}
         canEditCost={canEditCost}
         onClose={() => setDetailKey(null)}
-        onSetDefault={(row) => requirePro(() => {
-          if (manage) {
+        onSetDefault={(row) => {
+          if (!manage) { void selectCurrent(row); return; }
+          requirePro(() => {
             updateDraft((draft) => setDraftPrimary(draft, row.reference));
             setDetailKey(null);
-          } else {
-            void selectCurrent(row);
-          }
-        })}
+          });
+        }}
         onToggleFallback={(row) => requirePro(() => {
           updateDraft((draft) => (row.fallbackIndex >= 0
             ? removeDraftFallback(draft, row.fallbackIndex)
@@ -538,14 +573,17 @@ export function ModelsScreen({
       />
 
       <ModelProviderSheet
-        visible={providerGroup !== null}
+        visible={addingModel || providerGroup !== null}
+        adding={addingModel}
+        groups={allGroups}
+        onSelectProvider={setProviderSlug}
         group={providerGroup}
         online={online}
         dirty={dirty}
         busy={saving}
         error={sheetError}
         canAdd={canAdd}
-        onClose={() => setProviderSlug(null)}
+        onClose={() => { setAddingModel(false); setProviderSlug(null); }}
         onAdd={(group, modelId, modelName) => requirePro(() => setConfirmation({ kind: 'add', group, modelId, modelName }))}
         onOpenConfig={manage && adapter.capabilities.configManage && onOpenProviderConfig ? () => {
           setProviderSlug(null);
@@ -580,6 +618,7 @@ export function ModelsScreen({
             : picker === 'current' && bundle?.selection !== null && bundle?.selection !== undefined
               && reference.toLowerCase() === modelReference(bundle.selection.currentProvider, bundle.selection.currentModel).toLowerCase();
           if (unchanged) return;
+          if (picker === 'current') { void selectCurrent({ id: model.id, provider: model.provider }); return; }
           requirePro(() => {
             if (picker === 'primary') updateDraft((draft) => setDraftPrimary(draft, reference));
             else if (picker === 'fallback') updateDraft((draft) => addDraftFallback(draft, reference));
@@ -637,17 +676,11 @@ export function ModelsScreen({
   );
 }
 
-function rowSubtitle(
-  row: AgentModelRow,
-  t: (key: string, options: { ns: string }) => string,
-): string | undefined {
-  const parts = [
-    formatContextWindow(row.model.contextWindow),
-    row.model.reasoning ? t('Reasoning', { ns: 'chat' }) : undefined,
-    row.model.input?.includes('image') ? t('Image', { ns: 'settings' }) : undefined,
-  ].filter(Boolean);
-  if (parts.length > 0) return parts.join(' · ');
-  return row.id !== row.name ? row.id : undefined;
+/** The provider holding the default (or current) model leads the catalog; the rest keep their order. */
+function sortDefaultProviderFirst(groups: ReadonlyArray<AgentModelGroup>): ReadonlyArray<AgentModelGroup> {
+  const index = groups.findIndex((group) => group.rows.some((row) => row.current));
+  if (index <= 0) return groups;
+  return [groups[index], ...groups.slice(0, index), ...groups.slice(index + 1)];
 }
 
 function ModelsLoading(): React.JSX.Element {
@@ -684,28 +717,31 @@ const stylesStatic = StyleSheet.create({
 function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors']) {
   return StyleSheet.create({
     screen: { flex: 1, backgroundColor: colors.canvasGrouped },
+    header: { backgroundColor: colors.canvasGrouped },
     content: {
       paddingHorizontal: Space.lg,
-      paddingTop: Space.md,
+      paddingTop: Space.lg,
       gap: Space.xl,
     },
-    section: { gap: Space.sm },
-    sectionTitle: {
-      paddingHorizontal: Space.xs,
+    catalog: { gap: Space.md },
+    catalogTools: { flexDirection: 'row', alignItems: 'center', gap: Space.md },
+    search: { flex: 1 },
+    providerTitle: {
+      flex: 1,
+      minWidth: 0,
+      color: colors.ink,
+      fontSize: FontSize.body,
+      lineHeight: LineHeight.body,
+      fontWeight: FontWeight.semibold,
+    },
+    providerCount: {
       color: colors.inkSecondary,
       fontSize: FontSize.secondary,
       lineHeight: LineHeight.secondary,
       fontWeight: FontWeight.regular,
+      fontVariant: ['tabular-nums'],
     },
-    hint: {
-      paddingHorizontal: Space.xs,
-      color: colors.inkSecondary,
-      fontSize: FontSize.secondary,
-      lineHeight: LineHeight.secondary,
-      fontWeight: FontWeight.regular,
-    },
-    groupWrap: { gap: Space.xs, paddingTop: Space.sm },
-    groupHeader: { backgroundColor: 'transparent' },
+    rowTail: { flexDirection: 'row', alignItems: 'center', gap: Space.md },
     emptyText: {
       paddingVertical: Space.xxl,
       color: colors.inkSecondary,

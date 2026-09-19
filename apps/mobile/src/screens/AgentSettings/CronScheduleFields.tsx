@@ -7,7 +7,7 @@ import { Button } from '../../components/ui/Button';
 import { FormTextInput } from '../../components/ui/FormTextInput';
 import { SettingsRow } from '../../components/ui/SettingsGroup';
 import { useAppTheme } from '../../theme';
-import { ControlSize, FontSize, LineHeight, Radius, Space } from '../../theme/tokens';
+import { FontSize, LineHeight, Space } from '../../theme/tokens';
 import { describeScheduleHuman } from '../../utils/cron';
 import { deviceTimeZone, formatCronDate, scheduleFromDraft, upcomingRuns, type Frequency, type ScheduleDraft } from './cron-schedule';
 
@@ -111,14 +111,14 @@ export function CronSchedulePreview({ draft }: Readonly<{ draft: ScheduleDraft }
   const now = useMemo(() => Date.now(), [draft]);
   const schedule = useMemo(() => scheduleFromDraft(draft), [draft]);
   const dates = useMemo(() => upcomingRuns(schedule, now), [now, schedule]);
-  return <View testID="cron-schedule-preview" style={[styles.preview, { backgroundColor: theme.colors.surface }]} accessibilityLiveRegion="polite">
+  // Borderless: the grey box is reserved for editable inputs; the timezone row above already names the zone.
+  return <View testID="cron-schedule-preview" style={styles.preview} accessibilityLiveRegion="polite">
     <Text style={[styles.body, { color: theme.colors.ink }]}>{describeScheduleHuman(schedule, t)}</Text>
     <Text style={[styles.label, { color: theme.colors.inkSecondary }]}>{schedule.kind === 'cron' && !schedule.tz
       ? t('Execution times use the Agent timezone.') : t('Estimated next runs')}</Text>
-    {dates.map(date => <Text key={date.getTime()} style={[styles.label, { color: theme.colors.inkSecondary }]}>
+    {dates.map(date => <Text key={date.getTime()} style={[styles.label, { color: theme.colors.ink }]}>
       {formatCronDate(date.getTime(), i18n?.resolvedLanguage, schedule.kind === 'cron' ? schedule.tz : undefined)}
     </Text>)}
-    {schedule.kind === 'cron' && schedule.tz ? <Text style={[styles.label, { color: theme.colors.inkSecondary }]}>{schedule.tz}</Text> : null}
   </View>;
 }
 
@@ -129,5 +129,5 @@ const styles = StyleSheet.create({
   amount: { flex: 1, gap: Space.sm },
   label: { fontSize: FontSize.secondary, lineHeight: LineHeight.secondary },
   body: { fontSize: FontSize.body, lineHeight: LineHeight.body },
-  preview: { padding: Space.lg, borderRadius: Radius.card, gap: Space.sm, minHeight: ControlSize.settingsRow },
+  preview: { gap: Space.xs },
 });

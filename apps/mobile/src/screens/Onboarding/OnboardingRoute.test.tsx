@@ -505,7 +505,7 @@ describe('OnboardingRoute', () => {
     expect(mockConnectBackendPairingCode).not.toHaveBeenCalled();
   });
 
-  it('binds clipboard, official docs, YouMind, modal close, and offline retry', async () => {
+  it('binds clipboard, official docs, YouMind, modal close, and retry', async () => {
     const onOpenYouMind = jest.fn();
     const onDocsOpened = jest.fn();
     const onAgentPromptCopied = jest.fn();
@@ -524,7 +524,8 @@ describe('OnboardingRoute', () => {
       onAgentPromptCopied,
     });
     render(<OnboardingRoute {...props} />);
-    expect(mockScreenProps?.status).toEqual({ kind: 'offline' });
+    // An offline existing connection never surfaces on the add-connection form.
+    expect(mockScreenProps?.status).toEqual({ kind: 'idle' });
 
     await act(async () => {
       await mockScreenProps?.onCopyCommand?.('copy me');
@@ -556,6 +557,48 @@ describe('OnboardingRoute', () => {
     expect(mockYouMindDiscard).toHaveBeenCalledTimes(1);
     act(() => mockScreenProps?.onClose?.());
     expect(navigation.goBack).toHaveBeenCalledTimes(1);
+    // Nothing was paired here, so retry has nothing to probe or replay.
+    act(() => mockScreenProps?.onRetry?.());
+    expect(mockCoordinator.probeActive).not.toHaveBeenCalled();
+  });
+
+  it('keeps an offline existing connection out of an added pairing and its retry', async () => {
+    // Owner report 2026-09-19: "Add connection" showed "No network" because
+    // the current connection was offline. The form stays clean, a failed claim
+    // replays the claim, and only the newly paired connection is probed.
+    mockPro = { ...mockPro, isPro: true };
+    mockRuntime = connectionSnapshot({ id: 'existing', state: 'offline' });
+    mockConnectBackendPairingCode.mockRejectedValueOnce({ code: 'network' });
+    const props = createProps({
+      route: {
+        key: 'Onboarding-key',
+        name: 'Onboarding',
+        params: { presentation: 'modal' },
+      } as never,
+    });
+    const view = render(<OnboardingRoute {...props} />);
+    expect(mockScreenProps?.status).toEqual({ kind: 'idle' });
+
+    const submission = { backendKind: 'openclaw' as const, transportKind: 'relay' as const, code: '123456' };
+    await act(async () => {
+      await mockScreenProps?.onSubmitPairing(submission);
+    });
+    expect(mockScreenProps?.status).toEqual({ kind: 'error', code: 'network' });
+
+    mockConnectBackendPairingCode.mockImplementation(() => {
+      mockRuntime = connectionSnapshot({ id: 'connection-1', state: 'offline' });
+      return Promise.resolve({ backendKind: 'openclaw', connectionId: 'connection-1' });
+    });
+    await act(async () => {
+      mockScreenProps?.onErrorAction?.('network');
+    });
+    expect(mockConnectBackendPairingCode).toHaveBeenCalledTimes(2);
+    expect(mockCoordinator.probeActive).not.toHaveBeenCalled();
+
+    view.rerender(<OnboardingRoute {...props} />);
+    await waitFor(() => {
+      expect(mockScreenProps?.status).toEqual({ kind: 'offline' });
+    });
     act(() => mockScreenProps?.onRetry?.());
     expect(mockCoordinator.probeActive).toHaveBeenCalledTimes(1);
   });

@@ -126,12 +126,13 @@ describe('Agent settings descriptor model', () => {
     expect(model.groups).toHaveLength(1);
     // The connection group carries no heading; the connection label already names the roster group.
     expect(model.groups[0]).not.toHaveProperty('title');
+    // Connection closes the list (owner request 2026-09-19).
     expect(model.groups[0]?.rows.map((row) => [row.id, row.placement])).toEqual([
-      ['connection', 'primary'],
       ['openclaw', 'advanced'],
       ['tools', 'advanced'],
       ['channels-devices', 'advanced'],
       ['logs', 'advanced'],
+      ['connection', 'primary'],
     ]);
     expect(model.groups[0]?.rows).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: 'connection', value: 'Online', attention: false }),

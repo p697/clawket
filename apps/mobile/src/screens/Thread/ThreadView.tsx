@@ -1,3 +1,5 @@
+import { useWorkspaceLayout } from '../../navigation/workspace-context';
+import { IPAD_CHAT_MAX_WIDTH } from '../../utils/ipad-layout';
 import { useReplyEntranceDelay } from '../../chat/useReplyEntranceDelay';
 import { SessionPreviewNotice, SessionPreviewFooter } from './components/SessionPreviewNotice';
 import { useTranslation } from 'react-i18next';
@@ -32,6 +34,7 @@ import Animated, {
 import remend from 'remend';
 import type { Capabilities } from '@clawket/agent-protocol';
 import {
+  PanelLeft,
   ArrowDown,
   Brain,
   CalendarClock,
@@ -56,6 +59,8 @@ import { MessageEntrance } from '../../components/chat/MessageEntrance';
 import { MessageMeta, messageMetaSpacer } from '../../components/chat/MessageMeta';
 import { ThinkingIndicator } from '../../components/chat/ThinkingIndicator';
 import { ChatBackgroundLayer } from '../../components/chat/ChatBackgroundLayer';
+import { ChatWallpaperScrim } from '../../components/chat/ChatWallpaperScrim';
+import { isChatWallpaperActive, resolveChatChromeAppearance } from '../../features/chat-appearance/resolver';
 import { DEFAULT_CHAT_APPEARANCE } from '../../features/chat-appearance/defaults';
 import type { ChatAppearanceSettings } from '../../types';
 import {
@@ -87,7 +92,7 @@ import { RunResult } from '../../components/chat/RunResult';
 import { RunCard } from '../../components/ui/RunCard';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { LoadingState } from '../../components/ui/LoadingState';
-import { Companion } from '../../components/ui/Companion';
+import { ConnectionUnavailable, type ConnectionUnavailableProps } from '../../components/ui/ConnectionUnavailable';
 import { SystemEventRow } from '../../components/ui/SystemEventRow';
 import { triggerLightImpact } from '../../services/haptics';
 import { PendingImageBar } from '../../components/chat/PendingImageBar';
@@ -121,6 +126,7 @@ import { isUsableAnchor, type MessageAnchorFrame } from './components/messageAct
 import { formatThreadClockTime, localDayNumber } from './timestamps';
 import { resolveUserMessageStatuses, type UserMessageStatus } from '../../chat/messageDelivery';
 import { useThreadMessageEntrance } from '../../chat/useThreadMessageEntrance';
+import { useThreadRunEntrance } from '../../chat/useThreadRunEntrance';
 import { useSmoothedStreamText } from '../../chat/useSmoothedStreamText';
 
 const THREAD_MARKDOWN_FLAVOR = getChatMarkdownFlavor();
@@ -153,6 +159,21 @@ const SESSION_CONTENT_FADE_OUT = FadeOut
  */
 const REPLY_PLACEHOLDER_ID = 'streaming';
 const REPLY_PLACEHOLDER: UiMessage = { id: REPLY_PLACEHOLDER_ID, role: 'assistant', text: '', streaming: true };
+/** Execution summaries outgrow the screen: the run sheet scrolls inside fixed detents. */
+const RUN_RESULT_SNAP_POINTS: string[] = ['68%', '92%'];
+const EMPTY_RUN_CARDS: ReadonlyArray<ThreadRunCard> = Object.freeze([]);
+
+function areMessageStatusesEqual(
+  left: ReadonlyMap<string, UserMessageStatus>,
+  right: ReadonlyMap<string, UserMessageStatus>,
+): boolean {
+  if (left === right) return true;
+  if (left.size !== right.size) return false;
+  for (const [id, status] of left) {
+    if (right.get(id) !== status) return false;
+  }
+  return true;
+}
 /** Live activity for the reply placeholder only, so other rows stay out of its re-render. */
 const ThreadLiveActivityContext = createContext('');
 
@@ -226,6 +247,7 @@ export type ThreadQueuedMessageActions = Readonly<{
 }>;
 
 export type ThreadViewProps = Readonly<{
+  connectionFailure?: Pick<ConnectionUnavailableProps, 'name' | 'lastReadyAt' | 'onManage' | 'message'> & { scope: string };
   connectingLabel?: string;
   chatAppearance?: ChatAppearanceSettings;
   chatFontSize?: number;
@@ -238,7 +260,6 @@ export type ThreadViewProps = Readonly<{
   agentEmoji?: string | null;
   agentAvatarUrl?: string | null;
   sessionTitle?: string | null;
-  runContext?: Pick<ThreadRunCard, 'title' | 'kind' | 'statusLabel' | 'summary'>;
   isMainSession?: boolean;
   model?: string | null;
   contextUsed?: number;
@@ -271,6 +292,9 @@ export type ThreadViewProps = Readonly<{
   onCancel?: () => void;
   onOpenAddMenu?: () => void;
   onVoice?: () => void;
+  onVoiceStart?: () => void;
+  onVoiceStop?: (send: boolean) => void;
+  onVoiceCancel?: () => void;
   voiceState?: ComposerVoiceState;
   voiceLevel?: SharedValue<number>;
   onRetry?: () => void;
@@ -281,8 +305,9 @@ export type ThreadViewProps = Readonly<{
     sessionKey: string,
     agentId: string | undefined,
     kind: ThreadRunCard['kind'],
-    context?: Pick<ThreadRunCard, 'title' | 'kind' | 'statusLabel' | 'summary'>,
   ) => void;
+  /** Cron cards open the execution record; the screen owns the sheet. */
+  onOpenCronRun?: (run: ThreadRunCard) => void;
   onOpenRunLogs?: (jobId: string, agentId?: string) => void;
   onOpenAttachments?: (message: UiMessage, index?: number) => void;
   /** Long-press message actions; omitting this disables the gesture. */
@@ -318,7 +343,25 @@ export type ThreadViewProps = Readonly<{
   testID?: string;
 }>;
 
+/**
+ * Header row geometry: the safe-area top, the control gap, the 44-point
+ * control row and the gap below it. The timeline scrolls under this band, so
+ * its content starts this far down; nothing is measured at runtime.
+ */
+export function resolveThreadHeaderHeight(topInset: number): number {
+  return topInset + Space.sm + ControlSize.floatingButton + Space.sm;
+}
+
+/** Fade the timeline out under the header edge (spec: a 24-point canvas → clear gradient). */
+const HEADER_FADE_HEIGHT = Space.xl;
+/** Wallpaper scrim strength behind the header and the composer dock. */
+const WALLPAPER_SCRIM = {
+  light: { top: 0.62, bottom: 0.5 },
+  dark: { top: 0.66, bottom: 0.56 },
+} as const;
+
 export function ThreadView({
+  connectionFailure,
   connectingLabel,
   chatAppearance = DEFAULT_CHAT_APPEARANCE,
   chatFontSize = FontSize.body,
@@ -331,7 +374,6 @@ export function ThreadView({
   agentEmoji,
   agentAvatarUrl,
   sessionTitle,
-  runContext,
   isMainSession = true,
   model,
   contextUsed,
@@ -345,7 +387,7 @@ export function ThreadView({
   sendFailure,
   sendFailureDetails,
   onDismissSendFailure,
-  runCards = [],
+  runCards = EMPTY_RUN_CARDS,
   locale,
   input,
   isRunning,
@@ -363,7 +405,7 @@ export function ThreadView({
   composerRef,
   onCancel,
   onOpenAddMenu,
-  onVoice,
+  onVoice, onVoiceStart, onVoiceStop, onVoiceCancel,
   voiceState = 'idle',
   voiceLevel,
   onRetry,
@@ -371,6 +413,7 @@ export function ThreadView({
   onErrorAction,
   onLoadMoreHistory,
   onOpenRunSession,
+  onOpenCronRun,
   onOpenRunLogs,
   onOpenAttachments,
   messageActions,
@@ -427,10 +470,30 @@ export function ThreadView({
   const selectedToolMessage = selectedToolMessageId
     ? messages.find((message) => message.id === selectedToolMessageId) ?? null
     : null;
+  const workspace = useWorkspaceLayout();
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
-  const offline = state.kind === 'offline';
+  // Immersive mode: the wallpaper fills the screen and every control floats
+  // over it on glass; without a wallpaper the header keeps the canvas and the
+  // white floating circles every page header uses.
+  const wallpaperActive = isChatWallpaperActive(chatAppearance);
+  const headerHeight = resolveThreadHeaderHeight(topInset);
+  const scrimOpacity = WALLPAPER_SCRIM[theme.scheme === 'dark' ? 'dark' : 'light'];
+  const timeLabelChrome = useMemo(() => (
+    wallpaperActive ? { backgroundColor: resolveChatChromeAppearance(theme).backgroundColor } : { backgroundColor: theme.colors.canvas }
+  ), [theme, wallpaperActive]);
+  const offline = state.kind === 'offline' || state.kind === 'error';
+  const [savedScope, setSavedScope] = useState<string | null>(null);
+  useEffect(() => {
+    if (state.kind === 'ready' || state.kind === 'empty') setSavedScope(null);
+  }, [state.kind]);
+  const showConnectionFailure = Boolean(connectionFailure && savedScope !== connectionFailure.scope
+    && offline);
+
+  const connectionOutage = state.kind === 'error' && ['network', 'timeout', 'server', 'bridge_offline', 'gateway_offline'].includes(state.code);
   const locked = state.kind === 'locked';
-  const headerName = runContext?.title ?? resolveThreadHeaderName(agentName, sessionTitle && sessionTitle === sessionKey ? t('New session') : sessionTitle, isMainSession);
+  const headerName = resolveThreadHeaderName(agentName, sessionTitle && sessionTitle === sessionKey ? t('New session') : sessionTitle, isMainSession);
+  // A scheduled run's transcript is read, not continued: the header names it and the composer stays away.
+  const isCronSession = Boolean(sessionKey?.includes(':cron:'));
   const replyEntrance = useReplyEntranceDelay(messages, sessionKey, messageSubmittedAt, reduceMotion);
   const presentedRunning = isRunning && !replyEntrance.holding;
   const headerSubtitle = state.kind === 'reconnecting' ? t('Reconnecting…') : resolveThreadHeaderSubtitle({
@@ -459,6 +522,7 @@ export function ThreadView({
     : voiceState === 'listening' ? copy.listening : copy.preparingVoice;
   const canCancel = capabilities.abort && Boolean(onCancel);
   const timelineClearance = Space.lg;
+  const timelineTopClearance = headerHeight + Space.lg;
   const [selectedRun, setSelectedRun] = useState<ThreadRunCard | null>(null);
   const [calendarDay, setCalendarDay] = useState(() => localDayNumber(Date.now()));
   useEffect(() => {
@@ -473,9 +537,18 @@ export function ThreadView({
     [replyEntrance.messages, showReplyPlaceholder],
   );
   const { entranceIds, claimEntrance } = useThreadMessageEntrance(timelineMessages, sessionKey);
-  const messageStatuses = useMemo(() => resolveUserMessageStatuses({
+  const runEntranceKeys = useMemo(() => runCards.map((run) => `run:${run.kind}:${run.id}`), [runCards]);
+  const runEntrance = useThreadRunEntrance(runEntranceKeys, sessionKey, state.kind === 'ready');
+  const nextMessageStatuses = useMemo(() => resolveUserMessageStatuses({
     messages, unconfirmedIds: unconfirmedMessageIds, runAcknowledged,
   }), [messages, unconfirmedMessageIds, runAcknowledged]);
+  // Every streamed chunk rebuilds the map; visible rows only re-render when a
+  // delivery glyph actually changed.
+  const messageStatusesRef = useRef(nextMessageStatuses);
+  const messageStatuses = areMessageStatusesEqual(messageStatusesRef.current, nextMessageStatuses)
+    ? messageStatusesRef.current
+    : nextMessageStatuses;
+  messageStatusesRef.current = messageStatuses;
   const liveActivity = activityLabel?.trim() || copy.thinking;
   const timelineItems = useMemo(() => withThreadRhythm(groupThreadTools(buildThreadTimelineItems({
     messages: timelineMessages,
@@ -621,8 +694,7 @@ export function ThreadView({
           <View style={[stylesStatic.timeSeparator, rowGapStyles[item.gapAbove]]}>
             <Text testID={`thread-${item.key}`} style={[stylesStatic.timeLabel, {
               color: theme.colors.inkSecondary,
-              backgroundColor: theme.colors.canvas,
-            }]}>{item.label}</Text>
+            }, timeLabelChrome]}>{item.label}</Text>
           </View>
         );
       }
@@ -632,7 +704,10 @@ export function ThreadView({
             run={item.run}
             gapAbove={item.gapAbove}
             copy={copy}
+            animateEntrance={target === 'Cell' && runEntrance.entranceKeys.has(item.key)}
+            claimEntrance={runEntrance.claimEntrance}
             onOpenSession={onOpenRunSession}
+            onOpenCronRun={onOpenCronRun}
             onOpenResult={setSelectedRun}
             onOpenLogs={onOpenRunLogs}
           />
@@ -658,6 +733,7 @@ export function ThreadView({
     },
     [
       theme.colors,
+      timeLabelChrome,
       capabilities,
       expandedTools,
       copy,
@@ -673,31 +749,45 @@ export function ThreadView({
       onOpenRunLogs,
       onOpenRunSession,
       onResolveApproval,
+      runEntrance,
     ],
   );
 
   return (
     <ChatPresentationProvider value={presentation}>
     <ThreadLiveActivityContext.Provider value={liveActivity}>
+    <View testID={testID} style={[styles.screen, { backgroundColor: theme.colors.canvas }]}>
+    {/* The wallpaper sits under the whole screen and stays put while the keyboard pads the content. */}
+    <ChatBackgroundLayer appearance={chatAppearance} />
     <KeyboardAvoidingView
-      testID={testID}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       // The keyboard already covers the home-indicator inset; retain only the control gap.
       keyboardVerticalOffset={Platform.OS === 'ios' ? Space.md - Math.max(bottomInset, Space.lg) : 0}
-      style={[styles.screen, { backgroundColor: theme.colors.canvas }]}
+      style={styles.screen}
     >
       <View style={styles.screen}>
       <View style={styles.screen} pointerEvents={composerExpanded ? 'none' : 'auto'}
         accessibilityElementsHidden={composerExpanded} importantForAccessibility={composerExpanded ? 'no-hide-descendants' : 'auto'}>
       <View
-        pointerEvents="box-none"
-        style={[styles.header, { paddingTop: topInset + Space.sm }]}
+        testID={`${testID}-header`}
+        // The band owns its touches: rows scrolled under the header stay out of reach.
+        pointerEvents="auto"
+        style={[styles.header, { paddingTop: topInset + Space.sm }, wallpaperActive ? null : { backgroundColor: theme.colors.canvas }]}
       >
+        {/* Over a wallpaper the whole band is a soft canvas scrim; over the canvas only the 24-point tail fades the timeline out. */}
+        <ChatWallpaperScrim
+          testID={`${testID}-header-scrim`}
+          edge="top"
+          color={theme.colors.canvas}
+          opacity={wallpaperActive ? scrimOpacity.top : 1}
+          style={wallpaperActive ? styles.headerScrimImmersive : styles.headerScrimTail}
+        />
         <FloatingButton
           testID={`${testID}-back`}
-          icon={ChevronLeft}
-          accessibilityLabel={copy.back}
-          onPress={onBack}
+          icon={workspace.toggleRoster ? PanelLeft : ChevronLeft}
+          appearance={wallpaperActive ? 'glass' : 'surface'}
+          accessibilityLabel={workspace.toggleRoster ? t('Agents', { ns: 'common' }) : copy.back}
+          onPress={workspace.toggleRoster ?? onBack}
         />
         <View style={styles.headerPillSlot}>
           <HeaderPill
@@ -705,12 +795,13 @@ export function ThreadView({
             agentId={agentId}
             name={headerName}
             avatarName={agentName}
-            subtitle={headerWorking ? '' : runContext ? `${agentName} · ${runContext.statusLabel}` : headerSubtitle}
+            subtitle={headerWorking ? '' : headerSubtitle}
             working={headerWorking}
-            icon={runContext ? runContext.kind === 'cron' ? CalendarClock : Bot : undefined}
+            icon={isCronSession ? CalendarClock : undefined}
             emoji={agentEmoji}
             avatarUrl={agentAvatarUrl}
             status={avatarStatus}
+            material={wallpaperActive ? 'glass' : 'surface'}
             accessibilityLabel={copy.settings}
             onPress={!locked ? onOpenSettings : undefined}
           />
@@ -718,7 +809,7 @@ export function ThreadView({
         {canOpenSessions ? <FloatingButton
           testID={`${testID}-sessions`}
           icon={MessagesSquare}
-          appearance="plain"
+          appearance={wallpaperActive ? 'glass' : 'surface'}
           accessibilityLabel={copy.openSessions}
           onPress={() => onOpenSessionPanel?.()}
           disabled={locked}
@@ -726,7 +817,6 @@ export function ThreadView({
       </View>
 
       <View style={styles.timeline}>
-        <ChatBackgroundLayer appearance={chatAppearance} />
         <Animated.View
           key={`thread-session:${sessionKey ?? 'unscoped'}`}
           testID={`${testID}-session-content`}
@@ -735,14 +825,25 @@ export function ThreadView({
           exiting={reduceMotion ? undefined : SESSION_CONTENT_FADE_OUT}
           style={styles.sessionContent}
         >
-          {(state.kind === 'loading' || (state.kind === 'reconnecting' && messages.length === 0)) ? (
-            <View style={[styles.centeredState, { paddingTop: timelineClearance }]}><LoadingState testID="thread-history-loading" message={state.kind === 'reconnecting' ? t('Reconnecting…') : connectingLabel ?? copy.loadingHistory} pose={connectingLabel ? 'connecting' : 'loading'} /></View>
+          {showConnectionFailure && connectionFailure ? (
+            <View style={[styles.sessionContent, { paddingTop: timelineTopClearance }]}>
+              <ConnectionUnavailable
+                {...connectionFailure}
+                testID="thread-connection-unavailable"
+                message={connectionFailure.message ?? (state.kind === 'error' && !connectionOutage ? state.message : undefined)}
+                actionLabel={state.kind === 'error' && !connectionOutage ? state.actionLabel ?? copy.retry : copy.reconnect}
+                onRetry={state.kind === 'error' && !connectionOutage && onErrorAction ? () => onErrorAction(state) : onRetry}
+                onViewSaved={messages.length > 0 || runCards.length > 0 ? () => setSavedScope(connectionFailure.scope) : undefined}
+              />
+            </View>
+          ) : (state.kind === 'loading' || (state.kind === 'reconnecting' && messages.length === 0)) ? (
+            <View style={[styles.centeredState, { paddingTop: timelineTopClearance }]}><LoadingState testID="thread-history-loading" message={state.kind === 'reconnecting' ? t('Reconnecting…') : connectingLabel ?? copy.loadingHistory} pose={connectingLabel ? 'connecting' : 'loading'} /></View>
           ) : messages.length === 0 && (state.kind === 'error' || state.kind === 'offline') ? (
-            <View testID="thread-connection-unavailable" style={[styles.centeredState, { paddingTop: timelineClearance }]}><View style={{ alignSelf: 'center' }}><Companion pose="error" /></View></View>
+            <View style={[styles.sessionContent, { paddingTop: timelineTopClearance }]}><ConnectionUnavailable name={agentName} message={state.kind === 'error' ? state.message : undefined} onRetry={onRetry} /></View>
           ) : state.kind === 'locked' ? (
             <View
               testID={`${testID}-locked`}
-              style={[styles.centeredState, { paddingTop: timelineClearance }]}
+              style={[styles.centeredState, { paddingTop: timelineTopClearance }]}
             >
               <Banner
                 icon={CircleAlert}
@@ -751,12 +852,10 @@ export function ThreadView({
                 onAction={onOpenPaywall}
               />
             </View>
-          ) : state.kind === 'empty' && runContext ? (
-            <RunResult summary={runContext.summary} statusLabel={runContext.statusLabel} />
           ) : state.kind === 'empty' ? (
             <View
               testID={`${testID}-empty`}
-              style={[styles.centeredState, { paddingTop: timelineClearance }]}
+              style={[styles.centeredState, { paddingTop: timelineTopClearance }]}
             >
               <SystemEventRow
                 icon={MessageCircle}
@@ -797,7 +896,7 @@ export function ThreadView({
               renderItem={renderMessage}
               contentContainerStyle={[
                 styles.timelineContent,
-                { paddingBottom: timelineClearance },
+                { paddingTop: timelineTopClearance, paddingBottom: timelineClearance },
               ]}
               onStartReached={onLoadMoreHistory}
               onStartReachedThreshold={0.3}
@@ -834,22 +933,24 @@ export function ThreadView({
           </Animated.View>
         ) : null}
         {/* The header pill already states offline; the floating capsule only carries the action. */}
-        {state.kind === 'offline' && onRetry ? (
+        {!showConnectionFailure && state.kind === 'offline' && onRetry ? (
           <ConnectionStatusPill
             testID={`${testID}-offline`}
             status="offline"
             actionLabel={copy.reconnect}
             accessibilityLabel={`${copy.offline}, ${copy.reconnect}`}
             onAction={onRetry}
+            style={{ top: headerHeight + Space.sm }}
           />
         ) : null}
-        {state.kind === 'error' ? (
+        {!showConnectionFailure && state.kind === 'error' ? (
           <ConnectionStatusPill
             testID={`${testID}-error`}
             status="error"
             message={state.message}
             actionLabel={onErrorAction ? (state.actionLabel ?? copy.retry) : undefined}
             onAction={onErrorAction ? () => onErrorAction(state) : undefined}
+            style={{ top: headerHeight + Space.sm }}
           />
         ) : null}
       </View>
@@ -868,9 +969,12 @@ export function ThreadView({
       <View testID={`${testID}-composer-placeholder`} collapsable={false}
         style={{ height: composerExpanded ? compactComposerHeight.current : 0 }} />
 
-      {sessionPreview ? <SessionPreviewFooter onUpgrade={sessionPreview.onUpgrade}
-        onMain={sessionPreview.onMain} bottomInset={bottomInset} loading={sessionPreview.loading} /> : null}
-      {!locked && !sessionPreview && capabilities.chat && runContext?.kind !== 'cron' ? (
+      {sessionPreview ? <View style={wallpaperActive ? null : { backgroundColor: theme.colors.canvas }}>
+        {wallpaperActive ? <ChatWallpaperScrim edge="bottom" color={theme.colors.canvas} opacity={scrimOpacity.bottom} /> : null}
+        <SessionPreviewFooter onUpgrade={sessionPreview.onUpgrade}
+          onMain={sessionPreview.onMain} bottomInset={bottomInset} loading={sessionPreview.loading} />
+      </View> : null}
+      {!locked && !sessionPreview && capabilities.chat && !isCronSession ? (
         <View
           collapsable={false}
           testID={`${testID}-composer-region`}
@@ -879,8 +983,13 @@ export function ThreadView({
           }}
           accessibilityViewIsModal={composerExpanded}
           style={[styles.composerRegion, { paddingBottom: Math.max(bottomInset, Space.lg) },
+            wallpaperActive && !composerExpanded ? null : { backgroundColor: theme.colors.canvas },
             composerExpanded ? [styles.expandedComposerRegion, { paddingTop: topInset }] : null]}
         >
+          {wallpaperActive && !composerExpanded ? (
+            <ChatWallpaperScrim testID={`${testID}-composer-scrim`} edge="bottom"
+              color={theme.colors.canvas} opacity={scrimOpacity.bottom} />
+          ) : null}
           {showSlashSuggestions && onSelectSlashCommand ? (
             <View style={styles.slashSuggestions}>
               <Pressable
@@ -916,7 +1025,7 @@ export function ThreadView({
                 onChooseFile={onChooseFile}
               />
             ) : null}
-            notice={composerExpanded && (offline || state.kind === 'error') ? (
+            notice={composerExpanded && offline ? (
               <ConnectionStatusPill placement="inline" status="offline" message={copy.offline}
                 actionLabel={onRetry ? copy.reconnect : undefined} onAction={onRetry} />
             ) : undefined}
@@ -952,6 +1061,10 @@ export function ThreadView({
             onStop={canCancel ? onCancel : undefined}
             onAddPress={canOpenAddMenu ? onOpenAddMenu : undefined}
             onVoicePress={canUseVoice ? onVoice : undefined}
+            onVoiceStart={onVoiceStart}
+            onVoiceStop={onVoiceStop}
+            onVoiceCancel={onVoiceCancel}
+            voiceDisabled={offline || state.kind === 'reconnecting'}
             voiceState={canUseVoice ? voiceState : 'idle'}
             voiceLevel={voiceLevel}
             onPasteFiles={capabilities.attachments ? onPasteFiles : undefined}
@@ -961,8 +1074,9 @@ export function ThreadView({
             isRunning={isRunning}
             expanded={composerExpanded}
             onExpandedChange={setComposerExpanded}
+            appearance={wallpaperActive ? 'glass' : 'surface'}
             editable
-            style={styles.composer}
+            style={[styles.composer, workspace.tablet ? { width: Math.max(0, Math.min(workspace.paneWidth, IPAD_CHAT_MAX_WIDTH) - Space.lg * 2), alignSelf: 'center' } : null]}
           />
         </View>
       ) : null}
@@ -971,8 +1085,8 @@ export function ThreadView({
         summary={sendFailure ?? ''} details={sendFailureDetails ?? ''}
         onClose={() => setShowFailureDetails(false)} onDismiss={() => { setShowFailureDetails(false); onDismissSendFailure?.(); }} />
       <Sheet closeAccessibilityLabel={t('Close')} visible={Boolean(selectedRun)} onClose={() => setSelectedRun(null)}
-        title={selectedRun?.title ?? ''} maxHeight="70%" testID="thread-run-result">
-        {selectedRun ? <RunResult summary={selectedRun.summary} statusLabel={copy.formatRunDetail(selectedRun.statusLabel, selectedRun.timeLabel)} /> : null}
+        title={selectedRun?.title ?? ''} snapPoints={RUN_RESULT_SNAP_POINTS} testID="thread-run-result">
+        {selectedRun ? <RunResult presentation="sheet" summary={selectedRun.summary} statusLabel={copy.formatRunDetail(selectedRun.statusLabel, selectedRun.timeLabel)} /> : null}
       </Sheet>
       <ToolDetailModal
         visible={Boolean(selectedToolMessage)}
@@ -1009,6 +1123,7 @@ export function ThreadView({
         />
       ) : null}
     </KeyboardAvoidingView>
+    </View>
     </ThreadLiveActivityContext.Provider>
     </ChatPresentationProvider>
   );
@@ -1018,27 +1133,46 @@ function ThreadRunTimelineItem({
   run,
   gapAbove,
   copy,
+  animateEntrance,
+  claimEntrance,
   onOpenSession,
+  onOpenCronRun,
   onOpenResult,
   onOpenLogs,
 }: Readonly<{
   run: ThreadRunCard;
   gapAbove: ThreadRowGap;
   copy: ThreadCopy;
+  /** A card that arrives while the timeline is visible slides in like a reply. */
+  animateEntrance: boolean;
+  claimEntrance: (key: string) => boolean;
   onOpenSession?: ThreadViewProps['onOpenRunSession'];
+  onOpenCronRun?: ThreadViewProps['onOpenCronRun'];
   onOpenResult: (run: ThreadRunCard) => void;
   onOpenLogs?: ThreadViewProps['onOpenRunLogs'];
 }>): React.JSX.Element {
   const sessionKey = run.sessionKey;
   const jobId = run.jobId;
+  // Cron cards open the execution record (owner decision 2026-09-19); sub-agent
+  // cards open their child session, or the recorded result when there is none.
+  const openCronRun = run.kind === 'cron' && onOpenCronRun && run.cronRun
+    ? () => onOpenCronRun(run)
+    : undefined;
   const openSession = onOpenSession && sessionKey
-    ? () => onOpenSession(sessionKey, run.agentId, run.kind, { title: run.title, kind: run.kind, statusLabel: run.statusLabel, summary: run.summary })
+    ? () => onOpenSession(sessionKey, run.agentId, run.kind)
     : undefined;
   const openLogs = run.canOpenLogs && onOpenLogs && jobId
     ? () => onOpenLogs(jobId, run.agentId)
     : undefined;
   return (
     <View style={[stylesStatic.timelineItem, rowGapStyles[gapAbove]]}>
+      <MessageEntrance
+        testID={`thread-entrance-${run.kind}-run-${run.id}`}
+        animationKey={`run:${run.kind}:${run.id}`}
+        animate={animateEntrance}
+        claimEntrance={claimEntrance}
+        motion="reply"
+      >
       <RunCard
         testID={`thread-${run.kind}-run-${run.id}`}
         title={run.title}
@@ -1053,7 +1187,7 @@ function ThreadRunTimelineItem({
             || run.status === 'skipped'
             ? 'warn'
             : 'accent'}
-        onPress={openSession ?? (() => onOpenResult(run))}
+        onPress={openCronRun ?? openSession ?? (() => onOpenResult(run))}
         accessibilityLabel={`${run.title}, ${copy.formatRunDetail(run.statusLabel, run.timeLabel)}`}
         trailing={openLogs ? (
           <View testID={`thread-${run.kind}-logs-${run.id}`}>
@@ -1061,6 +1195,7 @@ function ThreadRunTimelineItem({
           </View>
         ) : undefined}
       />
+      </MessageEntrance>
     </View>
   );
 }
@@ -1364,7 +1499,9 @@ const MESSAGE_ALBUM_WIDTH_RATIO = 0.76;
  */
 function useMessageAlbumWidth(): number {
   const { width } = useWindowDimensions();
-  return Math.round(Math.max(0, width - THREAD_ROW_INSET * 2) * MESSAGE_ALBUM_WIDTH_RATIO);
+  const workspace = useWorkspaceLayout();
+  const availableWidth = workspace.tablet ? workspace.paneWidth : width;
+  return Math.round(Math.max(0, Math.min(availableWidth, IPAD_CHAT_MAX_WIDTH) - THREAD_ROW_INSET * 2) * MESSAGE_ALBUM_WIDTH_RATIO);
 }
 
 function ThreadMessageAlbum({
@@ -1645,6 +1782,9 @@ const stylesStatic = StyleSheet.create({
     overflow: 'hidden', textAlign: 'center',
   },
   timelineItem: {
+    width: '100%',
+    maxWidth: IPAD_CHAT_MAX_WIDTH,
+    alignSelf: 'center',
     paddingHorizontal: THREAD_ROW_INSET,
     gap: Space.xs,
   },
@@ -1693,13 +1833,26 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     screen: {
       flex: 1,
     },
+    // The header floats over the timeline; content scrolls underneath it
+    // and starts `resolveThreadHeaderHeight` + 16 points down.
     header: {
-      backgroundColor: colors.canvas,
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      zIndex: 2,
       flexDirection: 'row',
       alignItems: 'center',
       gap: Space.sm,
-      paddingHorizontal: Space.xs,
+      paddingHorizontal: Space.lg,
       paddingBottom: Space.sm,
+    },
+    headerScrimImmersive: {
+      bottom: -HEADER_FADE_HEIGHT,
+    },
+    headerScrimTail: {
+      top: '100%',
+      bottom: -HEADER_FADE_HEIGHT,
     },
     headerPillSlot: {
       flex: 1,
@@ -1713,6 +1866,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     timeline: {
       flex: 1,
       minHeight: 0,
+      zIndex: 1,
     },
     scrollToBottom: {
       position: 'absolute',
@@ -1742,7 +1896,6 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     composerRegion: {
       gap: Space.sm,
       paddingTop: Space.sm,
-      backgroundColor: colors.canvas,
     },
     expandedComposerRegion: {
       ...StyleSheet.absoluteFill,

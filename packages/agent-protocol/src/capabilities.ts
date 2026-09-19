@@ -8,8 +8,6 @@ export interface Capabilities {
   attachments: boolean;
   /** Refines `attachments` to permit non-image files. Absent means unsupported. */
   fileAttachments?: boolean;
-  /** Client may surface local reply notifications for adapter run completions. */
-  replyNotifications?: boolean;
   sessions: boolean;
   sessionCreate: boolean;
   sessionRename: boolean;
@@ -42,6 +40,8 @@ export interface Capabilities {
   /** Per-job IANA timezone and OpenClaw execution options; absent refinements fail closed. */
   cronTimeZone?: boolean;
   cronAdvanced?: boolean;
+  /** Per-job `agentTurn` model override is stored and honoured; the Hermes Bridge does not forward one yet. */
+  cronModel?: boolean;
   heartbeat: boolean;
   files: boolean;
   fileEdit: boolean;
@@ -53,6 +53,11 @@ export interface Capabilities {
   backups: boolean;
   tools: boolean;
   channels: boolean;
+  /**
+   * Refines `channels` with Gateway config writes: the direct-message session
+   * scope and per-account enable switches. Absent means unsupported.
+   */
+  channelManage?: boolean;
   devices: boolean;
   nodes: boolean;
   logs: boolean;
@@ -68,7 +73,6 @@ export const CAPABILITY_KEYS = [
   'history',
   'attachments',
   'fileAttachments',
-  'replyNotifications',
   'sessions',
   'sessionCreate',
   'sessionRename',
@@ -89,6 +93,7 @@ export const CAPABILITY_KEYS = [
   'cronCreate',
   'cronTimeZone',
   'cronAdvanced',
+  'cronModel',
   'heartbeat',
   'files',
   'fileEdit',
@@ -100,6 +105,7 @@ export const CAPABILITY_KEYS = [
   'backups',
   'tools',
   'channels',
+  'channelManage',
   'devices',
   'nodes',
   'logs',
@@ -113,7 +119,6 @@ const OPENCLAW_CAPABILITIES: Capabilities = {
   history: true,
   attachments: true,
   fileAttachments: true,
-  replyNotifications: true,
   sessions: true,
   sessionCreate: true,
   sessionRename: true,
@@ -134,6 +139,7 @@ const OPENCLAW_CAPABILITIES: Capabilities = {
   cronCreate: true,
   cronTimeZone: true,
   cronAdvanced: true,
+  cronModel: true,
   heartbeat: true,
   files: true,
   fileEdit: true,
@@ -145,6 +151,7 @@ const OPENCLAW_CAPABILITIES: Capabilities = {
   backups: true,
   tools: true,
   channels: true,
+  channelManage: true,
   devices: true,
   nodes: true,
   logs: true,
@@ -158,7 +165,6 @@ const HERMES_CAPABILITIES: Capabilities = {
   history: true,
   attachments: true,
   fileAttachments: false,
-  replyNotifications: true,
   sessions: true,
   sessionCreate: true,
   sessionRename: true,
@@ -188,6 +194,7 @@ const HERMES_CAPABILITIES: Capabilities = {
   backups: false,
   tools: false,
   channels: false,
+  channelManage: false,
   devices: false,
   nodes: false,
   logs: false,
@@ -201,7 +208,6 @@ const YOUMIND_CAPABILITIES: Capabilities = {
   history: true,
   attachments: false,
   fileAttachments: false,
-  replyNotifications: false,
   sessions: false,
   sessionCreate: false,
   sessionRename: false,
@@ -231,6 +237,7 @@ const YOUMIND_CAPABILITIES: Capabilities = {
   backups: false,
   tools: false,
   channels: false,
+  channelManage: false,
   devices: false,
   nodes: false,
   logs: false,
@@ -245,7 +252,7 @@ export const CAPABILITY_MATRIX: Record<BackendKind, Capabilities> = {
   'local-model': {
     ...YOUMIND_CAPABILITIES,
     chat: true, abort: true, history: true, attachments: true,
-    models: true, replyNotifications: true,
+    models: true,
   },
 };
 

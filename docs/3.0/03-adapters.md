@@ -4,6 +4,8 @@
 
 ## 1. OpenClawAdapter
 
+OpenClaw 技能文档读写按当前握手 `features.methods` 分别开放 `skills.get` / `skills.content.update`，不能从通用 skills 能力推断。Clawket Bridge 在能力协商成功的独立客户端通道上，为本机 Gateway 补齐缺失的方法；通过该客户端的 `skills.status(agentId)` 解析路径，只处理默认 SKILL.md（1 MiB 上限）。内置/额外目录只读，workspace/managed 的非 bundled 文件且 operator.admin 才能原子保存。旧 Bridge、共享旧通道与不提供原生方法的直连 Gateway 不显示文档入口；完整 Relay 修复需 App 与 Bridge 一起更新。Hermes 继续使用原有文档接口。
+
 ### 1.1 传输
 
 - `transportKind = relay`：`RelayWsTransport`（从 `gateway-relay.ts` + `gateway.ts` 抽出）：注册表引导（`relay-pairing.ts`）、`connect.start` + challenge、tick / pong（声明 `relay.client-pong.v1`）、退避 `RECONNECT_BASE_MS × 1.7^n`，上限 `RECONNECT_MAX_MS`，只在 `connect_ready` 后重置（根 AGENTS.md Relay Liveness 规则 4）。
@@ -23,6 +25,7 @@
 | `cancel` | `chat.abort` |
 | `patchSession / resetSession / deleteSession` | `sessions.patch` / `sessions.reset` / `sessions.delete` |
 | `management.*` | 现有 `model.*`、`models.list`、`skills.*`、`cron.*`、`agents.*`、`agents.files.*`、`sessions.usage`、`usage.cost`、`tools.catalog`、`node.*`、`device.*`、config / permissions / diagnostics / backups 的现有请求 |
+| `management.channels`（`channelManage`） | `status` = `channels.status`；`getRouting` 读 `config.get` 的 `session.dmScope`（未设置按 OpenClaw 默认 `main`）；`setRouting` = `config.patch { session: { dmScope } }`；`setAccountEnabled` = `config.patch { channels[id].accounts[accountId].enabled }`。两个写入都先读 hash，Gateway 拒绝时抛 `server` 错误。Hermes / YouMind / local-model 没有这组操作（2026-09-19 找回 2.0 的「DM Scope Settings」与账号开关时新增） |
 
 ### 1.3 事件映射
 
@@ -48,7 +51,8 @@
 ### 1.5 线程内卡片的来源
 
 - 子 Agent 运行卡：`listSessions` 里 `kind === 'subagent'` 且 `parentSessionKey`（若 Gateway 提供）或 `spawnedBy` 指向当前主会话；无 lineage 字段时按时间窗归并（现有 `childSessionActivity.ts` 的规则）。
-- Cron 运行结果卡：`cron.runs` 的最近一次运行（状态、耗时、摘要）按 `updatedAt` 插入主会话时间线。
+- Cron 运行结果卡：`cron.runs` 的最近一次运行（状态、耗时、摘要）按 `updatedAt` 插入主会话时间线；卡片带完整 `CronRunLogEntry`，`sessionKey` 去掉 OpenClaw 隐藏的 `:run:<sessionId>` 后缀（`resolveCronRunSessionKey`）。
+- `cron.runContent(entry)`：一次运行真正产出的内容。OpenClaw 用稳定键调 `chat.history`（limit 200），校验返回 `sessionId` 等于记录的 `sessionId`，从原始消息里提取 `message` 工具的 `send` / `broadcast` 调用（直接调用、`tool_call` 包装 `{id:'message', args}`、`custom` 回显三种形态，按渠道 · 收件人 · 正文去重）→ `deliveries[]` + `sessionKey`；会话已归属更新的运行或不存在时返回空。`CronRunLogEntry` 额外带 `delivery` 轨迹（`intended` / `resolved` / `messageToolSentTo`，只有路由没有正文）、`completionStatus`、`runId`。
 - 卡片位置：按时间戳插在消息之间；同一 Cron 任务连续多次运行折叠成一张卡显示最近一次与次数。
 
 ### 1.6 错误码映射
@@ -86,7 +90,7 @@ Hermes 的 Bridge 版本与能力从 HTTP / WebSocket health 读取；进入重�
 | `prompt` | `chat.send`（附件按 PR #27 的 `attachments` 字段，仅支持 MIME 为 `image/*` 的 `type=image` 项） |
 | `cancel` | `chat.abort` |
 | `createSession / patch / reset / delete` | `sessions.create / patch / reset / delete` |
-| `management` | `models.list` + `hermes.*.get/set`（全局模型、思考、reasoning、fast）；`skills.*`；`hermes.cron.jobs.*`（含 create）；`agents.files.*`；`sessions.usage` / `usage.cost` |
+| `management` | `models.list` + `hermes.*.get/set`（全局模型、思考、reasoning、fast）；`skills.*`；`hermes.cron.jobs.*`（含 create）；`hermes.cron.outputs.list` 映射为 `cron.runs`（每条记录带 `outputRef` = 输出文件名），`cron.runContent` 用 `hermes.cron.outputs.get` 返回全文 `output`；`agents.files.*`；`sessions.usage` / `usage.cost` |
 
 ### 2.4 事件映射
 

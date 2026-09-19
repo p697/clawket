@@ -1,14 +1,18 @@
 import React from 'react';
-import { fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import type {
   AgentDescriptor,
   Capabilities,
   ConnectionDescriptor,
+  CronJob,
+  ManagementOperations,
 } from '@clawket/agent-protocol';
-import { CAPABILITY_MATRIX } from '@clawket/agent-protocol';
+import { CAPABILITY_MATRIX, createMockAdapter } from '@clawket/agent-protocol';
 import { analyticsEvents } from '../../services/analytics/events';
+import { CronFailureAckService, type CronFailureAckScope } from '../../services/cron-failure-acks';
 import { FontSize, Radius, Space } from '../../theme/tokens';
 import {
+  AgentSettingsScreen,
   AgentSettingsView,
   type AgentSettingsViewProps,
 } from './AgentSettingsScreen';
@@ -159,6 +163,17 @@ jest.mock('../../services/analytics/events', () => ({
     settingsRowOpened: jest.fn(),
   },
 }));
+const ackListeners = new Set<(scope: CronFailureAckScope) => void>();
+jest.mock('../../services/cron-failure-acks', () => ({
+  CronFailureAckService: {
+    read: jest.fn(async () => new Set<string>()),
+    subscribe: jest.fn((listener: (scope: CronFailureAckScope) => void) => {
+      ackListeners.add(listener);
+      return () => { ackListeners.delete(listener); };
+    }),
+  },
+}));
+const mockedAcks = CronFailureAckService as jest.Mocked<typeof CronFailureAckService>;
 
 function flattenStyle(style: unknown): Record<string, unknown> {
   if (!style) return {};
@@ -235,16 +250,26 @@ describe('AgentSettingsView deep rendering', () => {
 
     expect(flattenStyle(view.getByTestId('agent-settings-screen').props.style)).toMatchObject({
       backgroundColor: lightColors.canvasGrouped,
-      paddingTop: 24,
+    });
+    // The canonical page header owns the safe-area inset, the 16-point edge and the quiet back circle.
+    expect(flattenStyle(view.getByTestId('agent-settings-header').props.style)).toMatchObject({
+      paddingTop: 24 + Space.sm, paddingHorizontal: Space.lg, paddingBottom: Space.sm, backgroundColor: lightColors.canvasGrouped,
+    });
+    expect(flattenStyle(view.getByTestId('agent-settings-back').props.style)).toMatchObject({
+      borderRadius: Radius.full, backgroundColor: lightColors.surfaceFloating,
     });
     expect(flattenStyle(view.getByTestId('agent-settings-title').props.style)).toMatchObject({
       color: lightColors.ink,
       fontSize: FontSize.title,
     });
-    expect(flattenStyle(view.getByTestId('agent-settings-identity-group').props.style)).toMatchObject({
-      backgroundColor: lightColors.surfaceFloating,
-      borderRadius: Radius.xl,
-    });
+    // Identity opens from the hero itself (owner request 2026-09-19): the avatar and name share one
+    // touch target with an edit glyph beside the name, and the former Identity row is gone.
+    expect(view.queryByTestId('agent-settings-identity-group')).toBeNull();
+    expect(view.queryByText('Identity')).toBeNull();
+    expect(view.getByTestId('agent-settings-identity').props.accessibilityRole).toBe('button');
+    expect(view.getByTestId('agent-settings-identity').props.accessibilityLabel).toBe('Lucy');
+    expect(view.getByTestId('agent-settings-identity-glyph')).toBeTruthy();
+    expect(view.queryByTestId('agent-settings-hero')).toBeNull();
     // No static identity line: the backend sits on the avatar as a corner mark and the
     // connection group has no heading, so the connection label appears nowhere on the page.
     expect(view.queryByTestId('agent-settings-identity-detail')).toBeNull();
@@ -439,6 +464,14 @@ describe('AgentSettingsView deep rendering', () => {
       locked: true,
       backend: 'openclaw',
     });
+    // A locked Agent keeps the hero as the Identity entry, with the lock in place of the edit glyph.
+    fireEvent.press(permission.getByTestId('agent-settings-identity'));
+    expect(onOpenPro).toHaveBeenLastCalledWith('identity', expect.any(Function));
+    expect(mockedAnalyticsEvents.settingsRowOpened).toHaveBeenLastCalledWith({
+      row: 'identity',
+      locked: true,
+      backend: 'openclaw',
+    });
   });
 
   it('uses the same semantic hierarchy in dark mode', () => {
@@ -454,6 +487,81 @@ describe('AgentSettingsView deep rendering', () => {
       .toBe(darkColors.surfaceFloating);
     expect(flattenStyle(view.getByTestId('agent-settings-stat-cron-value').props.style).color)
       .toBe(darkColors.ink);
+  });
+
+  it('opens the Cron page the same way from a lit failure count and a clear card', () => {
+    const onNavigate = jest.fn();
+    const lit = render(<AgentSettingsView {...props({ onNavigate })} />);
+    fireEvent.press(lit.getByTestId('agent-settings-stat-cron-row'));
+    expect(onNavigate).toHaveBeenLastCalledWith('AgentSettingsSection', {
+      connectionId: 'connection-one',
+      agentId: 'main',
+      section: 'cron',
+    });
+    lit.unmount();
+
+    const clear = render(<AgentSettingsView {...props({
+      onNavigate,
+      summary: { ...props().summary, cronFailureCount: 0, hasCronFailure: false },
+    })} />);
+    expect(clear.queryByTestId('agent-settings-stat-cron-detail')).toBeNull();
+    fireEvent.press(clear.getByTestId('agent-settings-stat-cron-row'));
+    expect(onNavigate).toHaveBeenLastCalledWith('AgentSettingsSection', {
+      connectionId: 'connection-one',
+      agentId: 'main',
+      section: 'cron',
+    });
+  });
+
+  it('clears the red failure count once the Runs tab acknowledges it', async () => {
+    const failed: CronJob = {
+      id: 'cron-one',
+      name: 'Daily sync',
+      enabled: true,
+      createdAtMs: 1,
+      updatedAtMs: 2,
+      schedule: { kind: 'every', everyMs: 60_000 },
+      sessionTarget: 'isolated',
+      wakeMode: 'now',
+      payload: { kind: 'agentTurn', message: 'sync' },
+      state: { lastRunStatus: 'error', lastRunAtMs: 100 },
+    };
+    const list = jest.fn(async () => ({ jobs: [failed], total: 1, offset: 0, limit: 200, hasMore: false, nextOffset: null }));
+    const adapter = createMockAdapter({
+      connection,
+      agents: [agent],
+      management: { cron: { list } } as unknown as ManagementOperations,
+      initialState: 'ready',
+    });
+    const view = render(
+      <AgentSettingsScreen
+        adapter={adapter}
+        connection={connection}
+        agent={agent}
+        capabilities={{ ...CAPABILITY_MATRIX.openclaw }}
+        isPro={false}
+        onBack={jest.fn()}
+        onNavigate={jest.fn()}
+        onOpenPro={jest.fn()}
+        onRetry={jest.fn()}
+      />,
+    );
+    await waitFor(() => expect(view.getByTestId('agent-settings-stat-cron-detail').props.children).toBe('{{count}} failed'));
+    expect(ackListeners.size).toBe(1);
+
+    // The Runs tab stored the failure signature; only the Cron card is read again.
+    mockedAcks.read.mockResolvedValue(new Set(['cron-one@100']));
+    act(() => { for (const listener of ackListeners) listener({ connectionId: 'connection-one', agentId: 'main' }); });
+    await waitFor(() => expect(view.queryByTestId('agent-settings-stat-cron-detail')).toBeNull());
+    expect(view.getByTestId('agent-settings-stat-cron-value').props.children).toBe('1');
+    expect(list).toHaveBeenCalledTimes(2);
+
+    // Another Agent's acknowledgement is not this card's business.
+    act(() => { for (const listener of ackListeners) listener({ connectionId: 'connection-one', agentId: 'helper' }); });
+    expect(list).toHaveBeenCalledTimes(2);
+    view.unmount();
+    expect(ackListeners.size).toBe(0);
+    mockedAcks.read.mockResolvedValue(new Set());
   });
 
   it('does not render sections whose capability is false', () => {

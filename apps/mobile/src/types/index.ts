@@ -96,7 +96,6 @@ export interface GatewayConfigsState {
 }
 
 export type ThemeMode = 'system' | 'light' | 'dark';
-export type SpeechRecognitionLanguage = 'system' | 'en' | 'zh-Hans' | 'ja' | 'ko' | 'de' | 'es';
 export type AccentColorId = 'iceBlue' | 'jadeGreen' | 'oceanTeal' | 'sunsetOrange' | 'rosePink' | 'royalPurple';
 export type {
   ChatAppearanceSettings,

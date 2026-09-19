@@ -37,7 +37,7 @@ export const AdaptiveBottomSheetModal = React.forwardRef<
   const insets = useSafeAreaInsets();
   const metrics = useMemo(
     () => (
-      adaptiveIpad && isIPad
+      adaptiveIpad && isIPad && windowWidth >= 600
         ? getIpadModalSheetMetrics({
           windowWidth,
           windowHeight,

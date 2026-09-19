@@ -2,7 +2,15 @@
 jest.mock('react-native-svg', () => {
   const React = require('react');
   const host = (name: string) => ({ children, ...props }: any) => React.createElement(name, props, children);
-  return { __esModule: true, default: host('Svg'), Path: host('Path') };
+  return {
+    __esModule: true,
+    default: host('Svg'),
+    Path: host('Path'),
+    Defs: host('Defs'),
+    LinearGradient: host('LinearGradient'),
+    Rect: host('Rect'),
+    Stop: host('Stop'),
+  };
 });
 
 // Mock AsyncStorage
@@ -586,3 +594,11 @@ jest.mock('./assets/model-icons/select_model_grok.png', () => 406);
 jest.mock('./assets/model-icons/select_model_kimi.png', () => 407);
 jest.mock('./assets/model-icons/select_model_minimax.png', () => 408);
 jest.mock('./assets/model-icons/zhipuai.png', () => 409);
+
+// Native capture is exercised through controlled buffers in voice lifecycle tests.
+jest.mock('expo-audio', () => ({
+  useAudioStream: jest.fn(() => ({ stream: { start: jest.fn(async () => {}), stop: jest.fn() } })),
+  getRecordingPermissionsAsync: jest.fn(async () => ({ granted: false })),
+  requestRecordingPermissionsAsync: jest.fn(async () => ({ granted: false })),
+  setAudioModeAsync: jest.fn(async () => {}),
+}));

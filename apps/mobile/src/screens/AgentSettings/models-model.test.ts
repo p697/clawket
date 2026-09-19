@@ -156,6 +156,29 @@ describe('Agent models model', () => {
     expect(toggleModelEnabled(enabled, catalog, 'OpenAI/Mini', false).allowlist).toEqual(['anthropic/sonnet', 'openai/gpt-5']);
   });
 
+  it('honors provider wildcards in the allowlist and expands one when a model under it is disabled', () => {
+    const wildcard = manageBundle({ allowlist: ['openai/*'] });
+    const rows = buildAgentModelGroups(wildcard).flatMap((group) => group.rows);
+    expect(rows.map((row) => [row.key, row.enabled])).toEqual([
+      ['anthropic:sonnet', false],
+      ['openai:gpt-5', true],
+      ['openai:mini', true],
+    ]);
+    expect(toggleModelEnabled(wildcard.draft, catalog, 'openai/gpt-5', true)).toBe(wildcard.draft);
+    const expanded = toggleModelEnabled(wildcard.draft, catalog, 'openai/mini', false);
+    expect(expanded.allowlist).toEqual(['openai/gpt-5']);
+    expect(isModelsDraftDirty({ ...wildcard, draft: expanded })).toBe(true);
+    expect(buildModelsCatalogWrite({ ...wildcard, draft: expanded })).toEqual({
+      allowlist: [
+        { provider: 'anthropic', modelId: 'sonnet', enabled: false },
+        { provider: 'openai', modelId: 'gpt-5', enabled: true },
+        { provider: 'openai', modelId: 'mini', enabled: false },
+      ],
+    });
+    const mixed = manageBundle({ allowlist: ['anthropic/sonnet', 'openai/*'] });
+    expect(toggleModelEnabled(mixed.draft, catalog, 'anthropic/sonnet', false).allowlist).toEqual(['openai/*']);
+  });
+
   it('edits defaults and fallbacks without duplicates or the primary itself', () => {
     const draft = manageBundle().draft;
     const primary = setDraftPrimary(draft, 'anthropic/sonnet');

@@ -7,6 +7,8 @@ import {
 
 import {
   withManagementDeadline,
+  describeConfigValue,
+  filterConfigEntries,
   isOpenClawManageTabSupported,
   managementErrorDetail,
   managementErrorKey,
@@ -105,6 +107,44 @@ describe('openclaw manage model', () => {
       '"ok": true',
     );
     expect(serializeConfigView({ config: null, hash: null })).toBe('');
+  });
+
+  it('previews top-level config values structurally and filters keys by name or content', () => {
+    expect(describeConfigValue({ telegram: {}, discord: {} })).toEqual({
+      expandable: true,
+      preview: { kind: 'keys', keys: ['telegram', 'discord'] },
+    });
+    expect(describeConfigValue([1, 2, 3])).toEqual({
+      expandable: true,
+      preview: { kind: 'count', count: 3 },
+    });
+    expect(describeConfigValue({})).toEqual({ expandable: false, preview: { kind: 'literal', text: '{}' } });
+    expect(describeConfigValue([])).toEqual({ expandable: false, preview: { kind: 'literal', text: '[]' } });
+    expect(describeConfigValue('dark')).toEqual({ expandable: false, preview: { kind: 'literal', text: '"dark"' } });
+    expect(describeConfigValue(true).preview).toEqual({ kind: 'literal', text: 'true' });
+    expect(describeConfigValue(null).preview).toEqual({ kind: 'literal', text: 'null' });
+    expect(describeConfigValue(undefined).preview).toEqual({ kind: 'literal', text: 'null' });
+
+    const config = {
+      meta: { lastTouchedVersion: '2026.9.1' },
+      channels: { telegram: { enabled: true } },
+      bindings: [{ channel: 'telegram' }],
+      acp: { enabled: false },
+    };
+    expect(filterConfigEntries(config, '').map((entry) => entry.key)).toEqual([
+      'meta', 'channels', 'bindings', 'acp',
+    ]);
+    expect(filterConfigEntries(config, '  Telegram ').map((entry) => entry.key)).toEqual([
+      'channels', 'bindings',
+    ]);
+    expect(filterConfigEntries(config, 'META').map((entry) => entry.key)).toEqual(['meta']);
+    expect(filterConfigEntries(config, 'missing')).toEqual([]);
+    expect(filterConfigEntries(config, 'acp')[0]).toEqual({
+      key: 'acp',
+      value: { enabled: false },
+      expandable: true,
+      preview: { kind: 'keys', keys: ['enabled'] },
+    });
   });
 
   it('maps permission states and adapter error codes without hiding raw details', () => {

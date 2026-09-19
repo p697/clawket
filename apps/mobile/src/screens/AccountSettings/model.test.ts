@@ -12,7 +12,6 @@ const labels: AccountSettingsLabels = {
   accent: 'Blue',
   chatAppearance: 'Default',
   appIcon: 'Default',
-  speechLanguage: 'System',
   appVersion: '3.0.0',
   previewEnvironment: 'Preview',
 };
@@ -83,8 +82,6 @@ describe('AccountSettings model', () => {
       'pro',
       'connections',
       'appearance',
-      'voice',
-      'notifications',
       'help',
       'community',
       'about',
@@ -122,8 +119,6 @@ describe('AccountSettings model', () => {
       capabilities: {
         subscription: false,
         appIcons: false,
-        voice: false,
-        notifications: false,
         community: false,
         developer: false,
       },

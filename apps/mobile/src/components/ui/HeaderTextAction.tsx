@@ -8,6 +8,7 @@ type Props = {
   onPress: () => void;
   disabled?: boolean;
   minWidth?: number;
+  testID?: string;
 };
 
 export function HeaderTextAction({
@@ -15,11 +16,13 @@ export function HeaderTextAction({
   onPress,
   disabled = false,
   minWidth = 56,
+  testID,
 }: Props): React.JSX.Element {
   const { theme } = useAppTheme();
 
   return (
     <Pressable
+      testID={testID}
       accessibilityRole="button"
       accessibilityState={{ disabled }}
       onPress={onPress}

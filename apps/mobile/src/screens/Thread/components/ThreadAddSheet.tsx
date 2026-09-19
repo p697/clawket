@@ -34,7 +34,7 @@ import {
   Space,
 } from '../../../theme/tokens';
 import { Button } from '../../../components/ui/Button';
-import { FloatingButton } from '../../../components/ui/FloatingButton';
+import { SheetHeaderButton } from '../../../components/ui/SheetHeaderButton';
 import { Sheet } from '../../../components/ui/Sheet';
 import { SettingsDivider, SettingsRow } from '../../../components/ui/SettingsGroup';
 import { Skeleton } from '../../../components/ui/Skeleton';
@@ -367,10 +367,9 @@ export function ThreadAddSheet({
       title={t('Add', { ns: 'common' })}
       footer={footer}
       headerRight={showsPhotoStrip ? (
-        <FloatingButton
+        <SheetHeaderButton
           testID="thread-add-all-photos"
           icon={Images}
-          appearance="quiet"
           accessibilityLabel={t('All photos')}
           disabled={attachmentActionsDisabled}
           onPress={() => run('photo-library', onPickImage)}
@@ -450,7 +449,6 @@ function createStyles(colors: SheetColors) {
   return StyleSheet.create({
     content: {
       paddingHorizontal: SHEET_HORIZONTAL_PADDING,
-      paddingTop: Space.xs,
       paddingBottom: Space.xxl,
       gap: Space.sm,
     },

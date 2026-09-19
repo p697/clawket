@@ -6,7 +6,7 @@ import {
 import { NodeClient } from '../services/node-client';
 import { LastOpenedSessionSnapshot, StorageService } from '../services/storage';
 import { DEFAULT_NODE_CAPABILITY_TOGGLES, NodeCapabilityToggles } from '../services/node-capabilities';
-import { AccentColorId, ChatAppearanceSettings, SpeechRecognitionLanguage, ThemeMode } from '../types';
+import { AccentColorId, ChatAppearanceSettings, ThemeMode } from '../types';
 import { defaultAccentId } from '../theme';
 import { DEFAULT_CHAT_APPEARANCE, DEFAULT_CHAT_FONT_SIZE } from '../features/chat-appearance/defaults';
 import {
@@ -68,7 +68,6 @@ export function useAppBootstrap({
   const [execApprovalEnabled, setExecApprovalEnabled] = useState(false);
   const [chatFontSize, setChatFontSize] = useState(DEFAULT_CHAT_FONT_SIZE);
   const [chatAppearance, setChatAppearance] = useState<ChatAppearanceSettings>(DEFAULT_CHAT_APPEARANCE);
-  const [speechRecognitionLanguage, setSpeechRecognitionLanguage] = useState<SpeechRecognitionLanguage>('system');
   const [themeMode, setThemeMode] = useState<ThemeMode>('system');
   const [accentId, setAccentId] = useState<AccentColorId>(defaultAccentId);
   const [loading, setLoading] = useState(true);
@@ -88,7 +87,6 @@ export function useAppBootstrap({
       StorageService.getExecApprovalEnabled(),
       StorageService.getChatFontSize(),
       StorageService.getChatAppearance(),
-      StorageService.getSpeechRecognitionLanguage(),
       StorageService.getNodeEnabled(),
       StorageService.getNodeCapabilityToggles(),
       StorageService.getCurrentAgentId(),
@@ -102,7 +100,6 @@ export function useAppBootstrap({
         savedExecApproval,
         savedChatFontSize,
         savedChatAppearance,
-        savedSpeechRecognitionLanguage,
         savedNodeEnabled,
         savedNodeCapabilityToggles,
         currentAgentId,
@@ -113,7 +110,6 @@ export function useAppBootstrap({
         setExecApprovalEnabled(savedExecApproval);
         setChatFontSize(savedChatFontSize);
         setChatAppearance(savedChatAppearance);
-        setSpeechRecognitionLanguage(savedSpeechRecognitionLanguage);
         setThemeMode(savedThemeMode);
         setAccentId(savedAccentId);
         setNodeEnabled(savedNodeEnabled);
@@ -209,11 +205,9 @@ export function useAppBootstrap({
     setNodeEnabled,
     setShowAgentAvatar,
     setShowModelUsage,
-    setSpeechRecognitionLanguage,
     setThemeMode,
     showAgentAvatar,
     showModelUsage,
-    speechRecognitionLanguage,
     themeMode,
   };
 }

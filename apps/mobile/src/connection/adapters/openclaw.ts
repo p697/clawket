@@ -1,7 +1,11 @@
 import {
   AdapterError,
   type AgentDescriptor,
+  type ChannelAccountEnabledWrite,
+  type ChannelRoutingSettings,
   type ConnectionRecord,
+  type CronRunContent,
+  type CronRunLogEntry,
   type DiscoverResult,
   type HeartbeatSettings,
   type ManagementOperations,
@@ -23,7 +27,10 @@ import { StorageService } from '../../services/storage';
 import { parseLastHeartbeat } from '../../utils/console-heartbeat';
 import type { ConnectionState as LegacyConnectionState, GatewayConfig } from '../../types';
 import {
+  buildChannelAccountEnabledPatch,
+  buildDmScopePatch,
   buildGatewayRuntimePatch,
+  parseDmScope,
   parseGatewayRuntimeSettings,
 } from '../../utils/gateway-settings';
 import { buildModelCatalogPatch, buildModelCatalogState } from '../../utils/model-catalog';
@@ -40,6 +47,10 @@ import {
   type GatewaySessionRecord,
 } from './gateway-adapter';
 import { OPENCLAW_GATEWAY_PROTOCOL_PROFILE } from './gateway-profiles';
+import { extractCronDeliveries, resolveCronRunSessionKey } from './cron-run-content';
+
+// Message sends sit near the end of a run; one page covers every recorded run so far.
+const CRON_RUN_HISTORY_LIMIT = 200;
 
 export const OPENCLAW_BRIDGE_CAPABILITY = 'bridge.capabilities.v2';
 
@@ -398,6 +409,7 @@ export class OpenClawAdapter extends GatewayAdapterBase {
   }
 
   private createManagementOperations(): ManagementOperations {
+    const adapter = this;
     return {
       models: {
         list: () => this.invoke(() => this.gateway.listModels()),
@@ -413,11 +425,17 @@ export class OpenClawAdapter extends GatewayAdapterBase {
       },
       skills: {
         status: (agentId) => this.invoke(() => this.gateway.getSkillsStatus(agentId)),
-        get: (key, params) => this.invoke(() => this.gateway.getSkillDetail(key, params)),
+        get get() {
+          return adapter.gateway.supportsMethod?.('skills.get')
+            ? (key: string, params?: { agentId?: string; filePath?: string | null }) => adapter.invoke(() => adapter.gateway.getSkillDetail(key, params))
+            : undefined;
+        },
         update: (key, patch) => this.invoke(() => this.gateway.updateSkill(key, patch)),
-        updateContent: (key, content, agentId) => this.invoke(() => (
-          this.gateway.updateSkillContent(key, content, agentId)
-        )),
+        get updateContent() {
+          return adapter.gateway.supportsMethod?.('skills.content.update')
+            ? (key: string, content: string, agentId?: string) => adapter.invoke(() => adapter.gateway.updateSkillContent(key, content, agentId))
+            : undefined;
+        },
         remove: (key, agentId) => this.invoke(() => this.gateway.deleteSkill(key, agentId)),
         discover: (query) => discoverSkills(query),
       },
@@ -428,6 +446,7 @@ export class OpenClawAdapter extends GatewayAdapterBase {
         remove: (id) => this.invoke(() => this.gateway.removeCronJob(id)),
         run: (id, mode) => this.invoke(() => this.gateway.runCronJob(id, mode)),
         runs: (params) => this.invoke(() => this.gateway.listCronRuns(params)),
+        runContent: (entry) => this.loadCronRunContent(entry),
         heartbeat: {
           get: () => this.readHeartbeatSettings(),
           set: (settings) => this.writeHeartbeatSettings(settings),
@@ -462,6 +481,7 @@ export class OpenClawAdapter extends GatewayAdapterBase {
           list: () => this.invoke(() => StorageService.listGatewayConfigBackups()),
           create: () => this.createConfigBackup(),
           restore: (id) => this.restoreConfigBackup(id),
+          remove: (id) => this.invoke(() => StorageService.deleteGatewayConfigBackup(id)),
         },
       },
       tools: {
@@ -470,6 +490,9 @@ export class OpenClawAdapter extends GatewayAdapterBase {
       },
       channels: {
         status: (params) => this.invoke(() => this.gateway.getChannelsStatus(params)),
+        getRouting: () => this.readChannelRouting(),
+        setRouting: (settings) => this.writeChannelRouting(settings),
+        setAccountEnabled: (write) => this.writeChannelAccountEnabled(write),
       },
       devices: {
         list: () => this.invoke(() => this.gateway.listDevices()),
@@ -493,6 +516,25 @@ export class OpenClawAdapter extends GatewayAdapterBase {
         )),
       },
     };
+  }
+
+  /**
+   * The messages a cron run sent through the message tool. `cron.runs` names the
+   * hidden per-run session, which `chat.history` does not resolve; the transcript
+   * of the newest run sits on the stable job key. The Gateway's `sessionId` on
+   * that history proves the transcript is this run's and not a later one's.
+   */
+  private async loadCronRunContent(entry: CronRunLogEntry): Promise<CronRunContent> {
+    const sessionKey = resolveCronRunSessionKey(entry.sessionKey);
+    if (!sessionKey) return { deliveries: [] };
+    const payload = await this.invoke(() => this.gateway.request<{ messages?: unknown[]; sessionId?: string }>(
+      'chat.history',
+      { sessionKey, limit: CRON_RUN_HISTORY_LIMIT },
+    ));
+    const historySessionId = typeof payload?.sessionId === 'string' ? payload.sessionId.trim() : '';
+    if (entry.sessionId && historySessionId && historySessionId !== entry.sessionId) return { deliveries: [] };
+    const messages = Array.isArray(payload?.messages) ? payload.messages : [];
+    return { deliveries: extractCronDeliveries(messages), sessionKey };
   }
 
   private async readHeartbeatSettings(): Promise<HeartbeatSettings> {
@@ -523,6 +565,27 @@ export class OpenClawAdapter extends GatewayAdapterBase {
     });
     const result = await this.invoke(() => this.gateway.patchConfig(JSON.stringify(patch), view.hash!));
     if (!result.ok) throw new AdapterError('server', 'Gateway rejected heartbeat settings');
+  }
+
+  private async readChannelRouting(): Promise<ChannelRoutingSettings> {
+    const view = await this.invoke(() => this.gateway.getConfig());
+    return { dmScope: parseDmScope(view.config) };
+  }
+
+  private async writeChannelRouting(settings: ChannelRoutingSettings): Promise<void> {
+    const view = await this.invoke(() => this.gateway.getConfig());
+    if (!view.hash) throw new AdapterError('server', 'Gateway config hash is missing');
+    const patch = buildDmScopePatch(settings.dmScope);
+    const result = await this.invoke(() => this.gateway.patchConfig(JSON.stringify(patch), view.hash!));
+    if (!result.ok) throw new AdapterError('server', 'Gateway rejected the direct message scope');
+  }
+
+  private async writeChannelAccountEnabled(write: ChannelAccountEnabledWrite): Promise<void> {
+    const view = await this.invoke(() => this.gateway.getConfig());
+    if (!view.hash) throw new AdapterError('server', 'Gateway config hash is missing');
+    const patch = buildChannelAccountEnabledPatch(write.channelId, write.accountId, write.enabled);
+    const result = await this.invoke(() => this.gateway.patchConfig(JSON.stringify(patch), view.hash!));
+    if (!result.ok) throw new AdapterError('server', 'Gateway rejected the channel account change');
   }
 
   private async createConfigBackup(): Promise<{ id: string; createdAt: number }> {

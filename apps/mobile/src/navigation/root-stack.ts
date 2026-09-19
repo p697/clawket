@@ -1,6 +1,6 @@
 import type { BackendKind } from '@clawket/agent-protocol';
 
-export type ThreadOrigin = 'roster' | 'panel' | 'search' | 'notification' | 'deeplink' | 'onboarding';
+export type ThreadOrigin = 'roster' | 'panel' | 'search' | 'deeplink' | 'onboarding';
 
 export type AgentSettingsSection =
   | 'identity'
@@ -21,9 +21,6 @@ export type AgentSettingsDetailSection = Exclude<AgentSettingsSection, 'connecti
 export type AccountSettingsSection =
   | 'pro'
   | 'connections'
-  | 'appearance'
-  | 'voice'
-  | 'notifications'
   | 'help'
   | 'community'
   | 'about'
@@ -44,17 +41,22 @@ export type RootStackParamList = {
     agentId: string;
     sessionKey: string;
     from: ThreadOrigin;
-    runContext?: { title: string; kind: 'cron' | 'subagent'; statusLabel: string; summary?: string };
   };
   AgentSettings: { connectionId: string; agentId: string };
   AgentSettingsSection: {
     connectionId: string;
     agentId: string;
     section: AgentSettingsSection;
-    action?: 'create-agent' | 'create-cron' | 'edit-cron' | 'discover-skills';
+    action?: 'create-agent' | 'create-cron' | 'edit-cron' | 'discover-skills' | 'open-file' | 'skill-source';
     cronJobId?: string;
     /** Draft prompt carried from the Thread composer into the new cron job editor. */
     cronPrompt?: string;
+    /** Workspace file opened on the full-page document reader (`open-file`). */
+    fileName?: string;
+    /** Skill whose SKILL.md opens on the document reader (`skill-source`); the name is its header subtitle. */
+    skillKey?: string;
+    skillName?: string;
+    skillFilePath?: string;
   };
   Connections: undefined;
   Connection: { connectionId: string };

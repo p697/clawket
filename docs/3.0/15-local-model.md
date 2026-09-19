@@ -23,19 +23,23 @@ on their respective devices. Relay uses transport encryption, not chat E2EE.
 Use Node 22, then `npm ci` and `npm run bridge:build`. Start a local model server.
 
 ```sh
-node apps/bridge-cli/dist/index.js local-model pair --preview
+node apps/bridge-cli/dist/index.js local-model pair
 ```
 
 The command checks model health and waits for Relay readiness before printing
-the code and terminal QR. Keep it running. The Preview app's Local model entry
-accepts that code. `--qr-file path.png` exports the same QR. Later, restore the
+the code and terminal QR. Keep it running. The app's Local model entry accepts
+that code in every environment: the local-model Registry is dedicated and has no
+Production twin, so the owner decided on 2026-09-19 that neither Debug Mode nor
+the selected Relay Environment gates the entry, the six-digit code, the link or
+the QR (`isEnvironmentIndependentRegistry`). `--preview` is accepted for
+compatibility and changes nothing for local models. `--qr-file path.png` exports the same QR. Later, restore the
 saved connection with `local-model run`; a new `pair` creates a new invitation.
 
 Options: `--base-url` (default `http://127.0.0.1:8080`), `--engine` (`llamacpp`,
 `ollama`, `openai-compatible`), `--endpoints path.json`, `--config path.json`,
 `--port` (Bridge port, default 17880), `--registry`, and `--name`.
 
-The Preview app's Local model step offers llama.cpp, Ollama and Other tabs and
+The app's Local model step offers llama.cpp, Ollama and Other tabs and
 prints the matching command: Ollama adds `--engine ollama --base-url
 http://127.0.0.1:11434`, Other adds `--engine openai-compatible --base-url
 http://127.0.0.1:1234` (LM Studio's default; edit the port). When no server

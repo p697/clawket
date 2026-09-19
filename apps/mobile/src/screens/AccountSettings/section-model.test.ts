@@ -10,7 +10,6 @@ const labels: AccountSettingsSectionLabels = {
   accent: 'Blue',
   chatAppearance: 'Compact',
   appIcon: 'Light',
-  speechLanguage: 'Japanese',
   appVersion: '3.0.0',
   previewEnvironment: 'Preview',
 };
@@ -19,9 +18,6 @@ describe('AccountSettings section model', () => {
   it('builds every root and fine-grained descriptor route', () => {
     const sections: ReadonlyArray<AccountSettingsDetailSection> = [
       'pro',
-      'appearance',
-      'voice',
-      'notifications',
       'help',
       'community',
       'about',
@@ -35,9 +31,6 @@ describe('AccountSettings section model', () => {
 
     expect(models.map((model) => model.titleKey)).toEqual([
       'Clawket Pro',
-      'Appearance',
-      'Voice',
-      'Chat & notifications',
       'Help & feedback',
       'Community',
       'About',
@@ -66,6 +59,7 @@ describe('AccountSettings section model', () => {
       'preview-environment',
       'design-system',
       'preview-update-announcement',
+      'simulate-free-account',
       'clear-cache',
       'reset-device',
     ]);
@@ -74,6 +68,12 @@ describe('AccountSettings section model', () => {
       action: 'preview-update-announcement',
       titleKey: 'Preview update announcement',
     });
+    expect(developerModel.groups[0]?.rows.find((row) => row.id === 'simulate-free-account')).toMatchObject({
+      kind: 'toggle',
+      toggle: 'simulateFreeAccount',
+      action: 'set-simulate-free-account',
+      titleKey: 'Simulate free account',
+    });
 
     const releaseDeveloperModel = buildAccountSettingsSectionModel({
       section: 'developer',
@@ -81,32 +81,26 @@ describe('AccountSettings section model', () => {
       data: { debugMode: false },
     });
     expect(releaseDeveloperModel.groups[0]?.rows.map((row) => row.id)).not.toContain('preview-update-announcement');
+    expect(releaseDeveloperModel.groups[0]?.rows.map((row) => row.id)).not.toContain('simulate-free-account');
   });
 
-  it('keeps paywall locks separate from backend capability gates', () => {
-    const appearance = buildAccountSettingsSectionModel({
-      section: 'appearance',
+  it('marks capability-gated rows unavailable without a paywall lock', () => {
+    // Theme, chat theme and app icon moved to the settings home page and the
+    // voice / notification sections were removed; Advanced settings is the
+    // remaining gated navigation row.
+    const about = buildAccountSettingsSectionModel({
+      section: 'about',
       labels,
-      data: { isPro: false },
-    });
-    expect(appearance.groups[0]?.rows.find((row) => row.id === 'app-icon')).toMatchObject({
-      locked: true,
-      paywallReason: 'appIcons',
-    });
-
-    const unavailableAppearance = buildAccountSettingsSectionModel({
-      section: 'appearance',
-      labels,
-      data: { isPro: false },
-      capabilities: { appIcons: false },
+      capabilities: { developer: false },
     });
     expect(
-      unavailableAppearance.groups[0]?.rows.find((row) => row.id === 'app-icon'),
+      about.groups[0]?.rows.find((row) => row.id === 'advanced-settings'),
     ).toMatchObject({
       locked: false,
       disabled: true,
       valueKey: 'Unavailable',
     });
+    expect(JSON.stringify(about)).not.toMatch(/app-icon|chat-appearance|speech-language|reply-notifications/u);
   });
 
   it('defaults only omitted capabilities', () => {

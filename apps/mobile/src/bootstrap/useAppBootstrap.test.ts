@@ -13,7 +13,6 @@ const mockStorage = {
     background: { fillMode: 'solid' as const, color: null, imageUri: null },
     bubbles: { style: 'solid' as const },
   })),
-  getSpeechRecognitionLanguage: jest.fn(async () => 'system' as const),
   getNodeEnabled: jest.fn(async () => false),
   getNodeCapabilityToggles: jest.fn(async () => ({ camera: true })),
   getCurrentAgentId: jest.fn(async () => 'agent-7'),

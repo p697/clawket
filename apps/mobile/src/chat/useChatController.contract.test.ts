@@ -107,13 +107,7 @@ jest.mock('expo-document-picker', () => ({
   getDocumentAsync: jest.fn().mockResolvedValue({ canceled: true, assets: [] }),
 }));
 
-jest.mock('../services/speech/speechRecognition', () => ({
-  stopSpeechRecognitionAsync: jest.fn().mockResolvedValue(undefined),
-}));
 
-jest.mock('../services/speech/speechText', () => ({
-  resolveSpeechLocale: jest.fn(() => 'en-US'),
-}));
 
 jest.mock('../services/storage', () => ({
   StorageService: {
@@ -167,7 +161,6 @@ const mockAppContext: any = {
   pendingAgentSwitch: null,
   clearPendingAgentSwitch: jest.fn(),
   execApprovalEnabled: false,
-  speechRecognitionLanguage: 'system',
   pendingChatInput: null,
   clearPendingChatInput: jest.fn(),
   pendingMainSessionSwitch: false,
@@ -182,7 +175,6 @@ function resetMockState() {
   mockAppContext.agents = [];
   mockAppContext.pendingAgentSwitch = null;
   mockAppContext.execApprovalEnabled = false;
-  mockAppContext.speechRecognitionLanguage = 'system';
   mockAppContext.pendingChatInput = null;
   mockAppContext.pendingMainSessionSwitch = false;
   mockAppContext.initialChatPreview = null;

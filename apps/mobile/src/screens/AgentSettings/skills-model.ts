@@ -1,6 +1,5 @@
 import type {
   Capabilities,
-  DiscoverSkillItem,
   SkillStatusEntry,
   SkillsOperations,
 } from '@clawket/agent-protocol';
@@ -52,29 +51,6 @@ export function skillRequirementIssues(skill: SkillStatusEntry): ReadonlyArray<{
   return issues;
 }
 
-export function groupDiscoveredSkills(
-  items: ReadonlyArray<DiscoverSkillItem>,
-): ReadonlyArray<Readonly<{
-  source: DiscoverSkillItem['source'];
-  items: ReadonlyArray<DiscoverSkillItem>;
-}>> {
-  const groups = new Map<DiscoverSkillItem['source'], DiscoverSkillItem[]>();
-  for (const item of items) {
-    const group = groups.get(item.source) ?? [];
-    group.push(item);
-    groups.set(item.source, group);
-  }
-  return [...groups.entries()]
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([source, sourceItems]) => ({
-      source,
-      items: sourceItems.sort((left, right) => (
-        (right.installs ?? 0) - (left.installs ?? 0)
-        || left.title.localeCompare(right.title)
-      )),
-    }));
-}
-
 export function canToggleSkill(
   skill: SkillStatusEntry,
   capabilities: Pick<Capabilities, 'skills'>,
@@ -91,8 +67,4 @@ export function canRemoveSkill(
   return capabilities.skillInstall
     && skill.deletable === true
     && Boolean(operations?.remove);
-}
-
-export function buildSkillInstallPrompt(item: DiscoverSkillItem): string {
-  return item.installCommand?.trim() || item.title.trim();
 }

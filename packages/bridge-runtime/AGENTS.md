@@ -10,6 +10,7 @@ OpenClaw, Hermes, and local-model runtime implementations for the Clawket Bridge
 | `src/frame-limit.ts` | Shared 8 MiB WebSocket frame boundary |
 | `src/relay-session.ts` | Backend-neutral Relay connection attempts, health evidence, heartbeat timeout, and reconnect backoff state |
 | `src/openclaw.ts` | Installed OpenClaw discovery, credentials, setup-code, permissions, and diagnostics |
+| `src/openclaw/skill-documents.ts` | Scoped OpenClaw SKILL.md read/write compatibility for authenticated local Gateway client channels |
 | `src/openclaw/runtime.ts` | OpenClaw `BridgeRuntime`, on-demand Gateway lifecycle, and Bridge-owned connect metadata termination |
 | `src/hermes/index.ts` | `HermesLocalBridge` assembly, lifecycle, and request dispatch |
 | `src/hermes/http-server.ts` | Local Hermes HTTP/WebSocket server, authentication, health, and connection handling |
@@ -114,3 +115,7 @@ Hermes `/v1/runs` timestamps and durations use seconds; convert them to the mill
 Hermes history includes session-scoped `hasActiveRun` and the existing `inFlightRun` snapshot (run ID, partial text, start time, abortability). Read live ownership after asynchronous history/model reads so a finished or cancelled run cannot be resurrected. Keep these snapshots in memory; they add no polling or persisted transcript copy.
 
 Hermes history may include additive `toolCallAliases` (native ID to live ID) from the bounded confirmed alias store, restricted to tools represented on that page. This lets newer clients reconcile older cached identities; older clients may ignore the field. Never infer aliases from truncated previews.
+
+## OpenClaw skill documents
+
+Only negotiated isolated full-client channels to a loopback Gateway may supply missing `skills.get` / `skills.content.update` methods in the successful handshake's `features.methods`. Preserve native methods and leave remote/legacy forwarding unchanged. Each operation resolves the key through that same authenticated socket's Agent-scoped `skills.status`; never trust client paths or another session's report. Read permission is mandatory; writes additionally require operator.admin and a nonbundled workspace/managed skill. Only the default SKILL.md is writable. Auxiliary scripts/references are read-only, resolved beneath the same authenticated skill directory; reject hidden/unlisted paths, traversal and symlink components. Listing is bounded to 512 visited entries and five directory levels; validate the opened inode again before returning content. Bound documents to 1 MiB and four in-flight status lookups with ten-second deadlines; reject symlinks, hardlinks, non-files, invalid UTF-8 and binary content. Preserve exact source, replace writes atomically, redact filesystem errors, and dispose pending work on challenge, replacement, disconnect or stop. No cloud or Hermes source changes are required.

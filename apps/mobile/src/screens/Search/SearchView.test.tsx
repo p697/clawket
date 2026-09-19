@@ -81,8 +81,8 @@ jest.mock('lucide-react-native', () => {
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string, options?: Record<string, unknown>) => key.replace(
-      '{{code}}',
-      String(options?.code ?? ''),
+      /\{\{(\w+)\}\}/g,
+      (_match, name: string) => String(options?.[name] ?? ''),
     ),
   }),
 }));
@@ -201,6 +201,7 @@ function props(patch: Partial<SearchViewProps> = {}): SearchViewProps {
     query: 'launch',
     filter: 'all',
     sections,
+    favorites: [],
     recentSearches: [],
     availableResultCount: 4,
     topInset: 24,
@@ -242,9 +243,11 @@ describe('SearchView', () => {
     expect(onSelectResult).toHaveBeenCalledWith(expect.objectContaining({ kind: 'agent' }));
   });
 
-  it('auto-focuses the input and adapts the canvas to light and dark themes', () => {
+  it('auto-focuses the quiet input and adapts the canvas to light and dark themes', () => {
     const first = render(<SearchView {...props()} />);
     expect(first.getByTestId('search-input').props.autoFocus).toBe(true);
+    expect(first.getByTestId('search-input').props.appearance).toBe('quiet');
+    expect(first.getByTestId('search-input').props.placeholder).toBe('Agents, sessions, and messages');
     expect(flattenStyle(first.getByTestId('search-view').props.style).backgroundColor).toBe('#FFFFFF');
 
     mockTheme = { scheme: 'dark', colors: darkColors };
@@ -279,6 +282,51 @@ describe('SearchView', () => {
 
     fireEvent.press(view.getByTestId('search-recent-Hermes sessions'));
     expect(onSelectRecent).toHaveBeenCalledWith('Hermes sessions');
+  });
+
+  it('lists favorites under an empty query, five first, and expands the rest on one tap', () => {
+    const onSelectResult = jest.fn();
+    const favorites = Array.from({ length: 7 }, (_, index) => result('favorite', {
+      id: `favorite-${index}`,
+      favoriteKey: `favorite-key-${index}`,
+      messageId: `favorite-message-${index}`,
+    }) as Extract<SearchResult, { kind: 'favorite' }>);
+    const view = render(<SearchView {...props({
+      query: '',
+      sections: [],
+      recentSearches: ['Hermes sessions'],
+      favorites,
+      onSelectResult,
+    })} />);
+
+    expect(view.getByTestId('search-recent')).toBeTruthy();
+    expect(view.getByTestId('search-favorites')).toBeTruthy();
+    expect(view.queryByTestId('search-empty')).toBeNull();
+    expect(view.getAllByTestId(/^search-result-favorite-/)).toHaveLength(5);
+    expect(view.getByTestId('search-favorites-expand').props.accessibilityLabel).toBe('All 7 favorites');
+
+    fireEvent.press(view.getByTestId('search-favorites-expand'));
+    expect(view.getAllByTestId(/^search-result-favorite-/)).toHaveLength(7);
+    expect(view.queryByTestId('search-favorites-expand')).toBeNull();
+
+    fireEvent.press(view.getByTestId('search-result-favorite-favorite-6'));
+    expect(onSelectResult).toHaveBeenCalledWith(expect.objectContaining({ kind: 'favorite', id: 'favorite-6' }));
+  });
+
+  it('explains the search scope when there is nothing recent or saved to show', () => {
+    const view = render(<SearchView {...props({
+      state: 'empty',
+      query: '',
+      sections: [],
+      recentSearches: [],
+      favorites: [],
+    })} />);
+
+    expect(view.queryByTestId('search-recent')).toBeNull();
+    expect(view.queryByTestId('search-favorites')).toBeNull();
+    expect(view.getByTestId('search-empty').props.children).toBe(
+      'Search agents, sessions, and messages from chats opened on this device',
+    );
   });
 
   it('shows no more than three filters for long result lists', () => {

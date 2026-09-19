@@ -11,6 +11,7 @@ import type {
   ModelsOperations,
 } from '@clawket/agent-protocol';
 import { modelReference } from '../../utils/model-catalog';
+import { matchesAllowlistEntry } from '../../utils/model-cost-config';
 
 /**
  * `manage`: OpenClaw — Gateway config defaults, allowlist, add / delete /
@@ -125,16 +126,17 @@ export function listCatalogModels(catalog: ModelCatalogState | null): ModelCatal
   return catalog ? catalog.providers.flatMap((provider) => provider.models) : [];
 }
 
+/** Policy allowlists may hold `provider/*` wildcards next to exact references. */
 export function isModelEnabled(draft: ModelsDraft, reference: string): boolean {
   if (draft.allowlist === null) return true;
-  const needle = normalizeReference(reference);
-  return draft.allowlist.some((entry) => normalizeReference(entry) === needle);
+  return draft.allowlist.some((entry) => matchesAllowlistEntry(entry, reference));
 }
 
 /**
  * Turning a model off while the Gateway has no allowlist materializes one
  * that keeps every other catalog model enabled, so the list never silently
- * shrinks to a single entry.
+ * shrinks to a single entry. A wildcard covering the model is expanded the
+ * same way: the other catalog models under it become explicit entries.
  */
 export function toggleModelEnabled(
   draft: ModelsDraft,
@@ -143,15 +145,28 @@ export function toggleModelEnabled(
   enabled: boolean,
 ): ModelsDraft {
   const needle = normalizeReference(reference);
+  const catalogReferences = () => listCatalogModels(catalog).map((model) => modelReference(model.provider, model.id));
   if (draft.allowlist === null) {
     if (enabled) return draft;
-    const others = listCatalogModels(catalog)
-      .map((model) => modelReference(model.provider, model.id))
-      .filter((entry) => normalizeReference(entry) !== needle);
-    return { ...draft, allowlist: others };
+    return { ...draft, allowlist: catalogReferences().filter((entry) => normalizeReference(entry) !== needle) };
   }
-  const without = draft.allowlist.filter((entry) => normalizeReference(entry) !== needle);
-  return { ...draft, allowlist: enabled ? [...without, reference] : without };
+  if (enabled) {
+    if (isModelEnabled(draft, reference)) return draft;
+    return { ...draft, allowlist: [...draft.allowlist, reference] };
+  }
+  const allowlist: string[] = [];
+  for (const entry of draft.allowlist) {
+    if (normalizeReference(entry) === needle) continue;
+    if (!entry.trim().endsWith('/*') || !matchesAllowlistEntry(entry, reference)) {
+      allowlist.push(entry);
+      continue;
+    }
+    for (const candidate of catalogReferences()) {
+      if (normalizeReference(candidate) === needle || !matchesAllowlistEntry(entry, candidate)) continue;
+      if (!allowlist.some((existing) => normalizeReference(existing) === normalizeReference(candidate))) allowlist.push(candidate);
+    }
+  }
+  return { ...draft, allowlist };
 }
 
 export function setDraftPrimary(draft: ModelsDraft, reference: string): ModelsDraft {

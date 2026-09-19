@@ -97,13 +97,18 @@ export function getAgentPaletteIndex(agentId: string): number {
   return (hash >>> 0) % agentPalette.length;
 }
 
+/** Full-width scripts: one glyph already fills a small avatar, two crowd its edges. */
+const WIDE_SCRIPT_PATTERN = /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
+
 export function getAgentInitials(name: string): string {
   const words = name.trim().split(/\s+/u).filter(Boolean);
   if (words.length === 0) return '';
   if (words.length > 1) {
     return `${Array.from(words[0] ?? '')[0] ?? ''}${Array.from(words.at(-1) ?? '')[0] ?? ''}`.toLocaleUpperCase();
   }
-  return Array.from(words[0] ?? '').slice(0, 2).join('').toLocaleUpperCase();
+  const word = words[0] ?? '';
+  const length = WIDE_SCRIPT_PATTERN.test(word) ? 1 : 2;
+  return Array.from(word).slice(0, length).join('').toLocaleUpperCase();
 }
 
 export function AgentAvatar({

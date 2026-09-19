@@ -492,7 +492,7 @@ export function ImagePreviewModal({
         maxHeight="45%"
         testID="image-options-sheet"
       >
-        <SettingsGroup>
+        <SettingsGroup chrome="plain" style={styles.imageOptions}>
           <SettingsRow
             testID="image-options-save"
             title={t('Save to Photos')}
@@ -536,6 +536,11 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     page: {
       justifyContent: 'center',
       alignItems: 'center',
+    },
+    // A list sheet: the plain row sits on the 16-point body inset, like Commands.
+    imageOptions: {
+      paddingHorizontal: Space.lg,
+      paddingBottom: Space.lg,
     },
     previewPager: {
       position: 'absolute',

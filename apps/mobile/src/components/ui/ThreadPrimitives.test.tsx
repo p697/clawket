@@ -1,4 +1,5 @@
 import React from 'react';
+import { Text } from 'react-native';
 import { fireEvent, render } from '@testing-library/react-native';
 import { BottomSheetBackdrop, BottomSheetModal, BottomSheetView } from '@gorhom/bottom-sheet';
 import type { SharedValue } from 'react-native-reanimated';
@@ -9,6 +10,7 @@ import {
   BorderWidth,
   ControlSize,
   FontSize,
+  FontWeight,
   LineHeight,
   Motion,
   Radius,
@@ -19,6 +21,8 @@ import { triggerLightImpact } from '../../services/haptics';
 import { ApprovalCard } from './ApprovalCard';
 import { Bubble } from './Bubble';
 import { Composer } from './Composer';
+import { FloatingButton } from './FloatingButton';
+import { createChatGlassStyle } from '../../features/chat-appearance/resolver';
 import { RunCard } from './RunCard';
 import { SettingsDivider, SettingsGroup, SettingsRow } from './SettingsGroup';
 import {
@@ -43,6 +47,7 @@ jest.mock('react-native', () => {
     Keyboard: { dismiss: jest.fn() },
     PanResponder: { create: (config: Record<string, unknown>) => ({ panHandlers: { __config: config } }) },
     Modal: primitive('Modal'),
+    ActivityIndicator: primitive('ActivityIndicator'),
     Platform: {
       OS: 'ios',
       isMacCatalyst: false,
@@ -392,84 +397,49 @@ describe.each(['light', 'dark'] as const)('%s thread primitives', (scheme) => {
     expect(view.getByTestId('composer-primary').props.accessibilityLabel).toBe('Send after this reply');
   });
 
-  it('keeps a stop-dictation control in the trailing slot for the whole dictation lifetime', () => {
-    const theme = activeTheme(scheme);
-    const onVoicePress = jest.fn();
-    const onSend = jest.fn();
-    const level = { value: 0 } as SharedValue<number>;
-    (triggerLightImpact as jest.Mock).mockClear();
+  it('preserves the model toolbar and mic target through capture and finalization', () => {
+    const onVoiceStart = jest.fn(), onVoiceStop = jest.fn(), onVoiceCancel = jest.fn();
     const labels = { add: 'Add', voice: 'Voice', stopVoice: 'Stop voice input', send: 'Send', stop: 'Stop' };
-    const props = { testID: 'composer', placeholder: 'Listening…', accessibilityLabels: labels,
-      onChangeText: jest.fn(), onSend, onVoicePress, canSend: false };
-
-    // Idle + empty draft: the quiet mic is offered and a tap confirms with haptics.
-    const view = render(<Composer {...props} value="" />);
-    fireEvent.press(view.getByTestId('composer-voice'));
-    expect(onVoicePress).toHaveBeenCalledTimes(1);
-    expect(triggerLightImpact).toHaveBeenCalledTimes(1);
-
-    // Authorizing: the slot immediately turns into the stop control, marked busy.
-    view.rerender(<Composer {...props} value="" voiceState="authorizing" voiceLevel={level} />);
-    expect(view.queryByTestId('composer-voice')).toBeNull();
+    const props = { testID: 'composer', placeholder: 'Ask', accessibilityLabels: labels,
+      onChangeText: jest.fn(), onSend: jest.fn(), onVoicePress: jest.fn(), onVoiceStart, onVoiceStop, onVoiceCancel,
+      accessory: <Text testID="model-picker">Model</Text>, value: '' };
+    const view = render(<Composer {...props} />);
+    fireEvent.press(view.getByTestId('composer-voice')); expect(onVoiceStart).toHaveBeenCalledTimes(1);
+    view.rerender(<Composer {...props} voiceState="authorizing" />);
+    expect(view.getByTestId('model-picker')).toBeTruthy();
+    expect(view.getByTestId('composer-voice').props.accessibilityState.busy).toBe(true);
+    view.rerender(<Composer {...props} voiceState="listening" />);
+    expect(view.getByTestId('composer-input', { includeHiddenElements: true }).props.editable).toBe(false);
+    expect(view.getByTestId('model-picker')).toBeTruthy();
+    fireEvent.press(view.getByTestId('composer-voice-stop')); expect(onVoiceStop).toHaveBeenCalledWith(false);
+    fireEvent.press(view.getByTestId('composer-voice-cancel')); expect(onVoiceCancel).toHaveBeenCalledTimes(1);
+    view.rerender(<Composer {...props} voiceState="transcribing" />);
+    expect(view.getByTestId('composer-voice').props.accessibilityState.busy).toBe(true);
+    expect(view.getByTestId('model-picker')).toBeTruthy();
     expect(view.queryByTestId('composer-primary')).toBeNull();
-    const stopControl = view.getByTestId('composer-voice-stop');
-    expect(stopControl.props.accessibilityLabel).toBe('Stop voice input');
-    expect(stopControl.props.accessibilityState).toEqual({ busy: true });
-    expect(flattenStyle(stopControl.props.style).width).toBe(ControlSize.floatingButton);
-    // The control is tinted with the conversation accent, never the alert color.
-    expect(flattenStyle(view.getByTestId('composer-voice-stop-surface').props.style)).toMatchObject({
-      width: ControlSize.pill, height: ControlSize.pill, backgroundColor: theme.colors.accent,
-    });
-    expect(theme.colors.accent).not.toBe(theme.colors.bad);
-    expect(view.UNSAFE_getByType(Square).props.color).toBe(theme.colors.onAccent);
+  });
 
-    // Listening with transcript text: Send must not displace the stop control, and the
-    // draft is locked so manual edits cannot race the next transcript.
-    view.rerender(<Composer {...props} value="Hello from dictation" voiceState="listening" voiceLevel={level} />);
-    expect(view.queryByTestId('composer-primary')).toBeNull();
-    expect(view.getByTestId('composer-voice-stop').props.accessibilityState).toEqual({ busy: false });
-    expect(view.getByTestId('composer-input').props.editable).toBe(false);
-    expect(flattenStyle(view.getByTestId('composer-input-shell').props.style).opacity).toBeUndefined();
-
-    // Both glow layers follow the microphone level rather than looping on their own.
-    const haloScale = (halo: Record<string, unknown>) => (halo.transform as ReadonlyArray<{ scale: number }>)[0].scale;
-    const restHalo = flattenStyle(view.getByTestId('composer-voice-stop-halo').props.style);
-    const restOuter = flattenStyle(view.getByTestId('composer-voice-stop-halo-outer').props.style);
-    expect(restHalo.backgroundColor).toBe(theme.colors.accent);
-    expect(restOuter.backgroundColor).toBe(theme.colors.accent);
-    expect(haloScale(restOuter)).toBeGreaterThan(haloScale(restHalo));
-    level.value = 1;
-    view.rerender(<Composer {...props} value="Hello from dictation" voiceState="listening" voiceLevel={level} />);
-    const peakHalo = flattenStyle(view.getByTestId('composer-voice-stop-halo').props.style);
-    const peakOuter = flattenStyle(view.getByTestId('composer-voice-stop-halo-outer').props.style);
-    expect(peakHalo.opacity as number).toBeGreaterThan(restHalo.opacity as number);
-    expect(haloScale(peakHalo)).toBeGreaterThan(haloScale(restHalo));
-    expect(haloScale(peakOuter)).toBeGreaterThan(haloScale(restOuter));
-    // The outer layer stays the softest and reaches at most the toolbar padding (60pt).
-    expect(peakOuter.opacity as number).toBeLessThan(peakHalo.opacity as number);
-    expect(haloScale(peakOuter) * ControlSize.pill).toBeLessThanOrEqual(ControlSize.pill + Space.sm * 2 + Space.xs);
-    expect(haloScale(flattenStyle(view.getByTestId('composer-voice-stop-surface').props.style))).toBeGreaterThan(1);
-
-    fireEvent.press(view.getByTestId('composer-voice-stop'));
-    expect(onVoicePress).toHaveBeenCalledTimes(2);
-    expect(triggerLightImpact).toHaveBeenCalledTimes(2);
-
-    // Back to idle with text: the slot becomes the ordinary Send action again.
-    view.rerender(<Composer {...props} value="Hello from dictation" canSend />);
-    expect(view.queryByTestId('composer-voice-stop')).toBeNull();
-    fireEvent.press(view.getByTestId('composer-primary'));
-    expect(onSend).toHaveBeenCalledTimes(1);
-    expect(view.getByTestId('composer-input').props.editable).toBe(true);
-
-    // Reduced motion keeps a static rim instead of a level-driven halo.
-    mockReducedMotion = true;
-    try {
-      level.value = 1;
-      view.rerender(<Composer {...props} value="Hello" voiceState="listening" voiceLevel={level} />);
-      expect(flattenStyle(view.getByTestId('composer-voice-stop-halo').props.style)).toMatchObject(restHalo);
-    } finally {
-      mockReducedMotion = false;
-    }
+  it('offers the full input as a hold target and returns touch ownership to native editing', () => {
+    const start = jest.fn();
+    const props = { testID: 'composer', placeholder: 'Message', accessibilityLabels: { add: 'Add', voice: 'Voice', send: 'Send', stop: 'Stop' },
+      onChangeText: jest.fn(), onSend: jest.fn(), onVoicePress: jest.fn(), onVoiceStart: start, value: '' };
+    const view = render(<Composer {...props} />);
+    expect(view.getByTestId('composer-input').props.placeholder).toBe('Type or hold to talk');
+    const target = view.getByTestId('composer-voice-input-target');
+    expect(target.props.pointerEvents).toBe('auto');
+    fireEvent(target, 'pressIn', { nativeEvent: { pageY: 500 } });
+    expect(start).not.toHaveBeenCalled();
+    fireEvent(target, 'longPress'); expect(start).toHaveBeenCalledTimes(1);
+    view.rerender(<Composer {...props} voiceState="authorizing" />);
+    expect(view.getByTestId('composer-voice-input-target')).toBe(target);
+    view.rerender(<Composer {...props} />);
+    fireEvent(view.getByTestId('composer-input'), 'focus', {});
+    expect(view.getByTestId('composer-voice-input-target').props.pointerEvents).toBe('auto');
+    view.rerender(<Composer {...props} value="Editing a draft" />);
+    expect(view.getByTestId('composer-voice-input-target').props.pointerEvents).toBe('none');
+    expect(view.getByTestId('composer-input').props.placeholder).toBe('Message');
+    view.rerender(<Composer {...props} expanded />);
+    expect(view.getByTestId('composer-voice-input-target').props.pointerEvents).toBe('none');
   });
 
   it('renders bottom sheet chrome with one 40 percent backdrop and a visible close action', () => {
@@ -621,6 +591,63 @@ describe.each(['light', 'dark'] as const)('%s thread primitives', (scheme) => {
       marginStart: Space.lg,
     });
   });
+
+  it('puts plain rows on the content edge and fades them on press instead of painting a fill', () => {
+    const theme = activeTheme(scheme);
+    // Outside any group a row is plain; a plain group drops the card chrome too.
+    const result = render(
+      <>
+        <SettingsRow testID="bare-row" title="Heartbeat" value="30m" onPress={jest.fn()} />
+        <SettingsDivider testID="bare-divider" />
+        <SettingsGroup testID="plain-group" chrome="plain">
+          <SettingsRow testID="plain-row" title="Source" onPress={jest.fn()} />
+          <SettingsDivider testID="plain-divider" />
+          <SettingsRow testID="plain-static" title="Status" value="Enabled" />
+        </SettingsGroup>
+        <SettingsGroup testID="card-group">
+          <SettingsRow testID="card-row" title="Connection" onPress={jest.fn()} />
+        </SettingsGroup>
+      </>,
+    );
+    for (const id of ['bare-row', 'plain-row', 'plain-static']) {
+      expect(flattenStyle(result.getByTestId(id).props.style).paddingHorizontal).toBe(0);
+    }
+    for (const id of ['bare-row', 'plain-row']) {
+      const pressed = flattenStyle(result.getByTestId(id).props.style, true);
+      expect(pressed.opacity).toBe(Motion.pressedOpacity);
+      expect(pressed).not.toHaveProperty('backgroundColor');
+    }
+    for (const id of ['bare-divider', 'plain-divider']) {
+      expect(flattenStyle(result.getByTestId(id).props.style)).not.toHaveProperty('marginStart');
+    }
+    const plainGroup = flattenStyle(result.getByTestId('plain-group').props.style);
+    expect(plainGroup).not.toHaveProperty('backgroundColor');
+    expect(plainGroup).not.toHaveProperty('borderRadius');
+    // Card rows keep the 16-point inset and the clipped full-width fill.
+    expect(flattenStyle(result.getByTestId('card-row').props.style).paddingHorizontal).toBe(Space.lg);
+    const cardPressed = flattenStyle(result.getByTestId('card-row').props.style, true);
+    expect(cardPressed.backgroundColor).toBe(theme.colors.surface);
+    expect(cardPressed).not.toHaveProperty('opacity');
+  });
+
+  it('marks an expanded disclosure row with a down chevron and a firm title, never a selected fill', () => {
+    const result = render(
+      <SettingsGroup>
+        <SettingsRow testID="closed" title="meta" subtitle="lastTouchedVersion, migrations" showChevron expanded={false} onPress={jest.fn()} />
+        <SettingsRow testID="open" title="channels" subtitle="telegram, discord" showChevron expanded onPress={jest.fn()} />
+      </SettingsGroup>,
+    );
+    expect(result.getByTestId('closed').props.accessibilityState).toMatchObject({ expanded: false });
+    expect(result.queryByTestId('closed-chevron-down')).toBeNull();
+    expect(flattenStyle(result.getByText('meta').props.style).fontWeight).toBe(FontWeight.regular);
+
+    expect(result.getByTestId('open').props.accessibilityState).toMatchObject({ expanded: true });
+    expect(result.getByTestId('open-chevron-down')).toBeTruthy();
+    expect(flattenStyle(result.getByText('channels').props.style).fontWeight).toBe(FontWeight.semibold);
+    // Expansion is a disclosure, not a choice: no inset fill behind the row.
+    expect(result.queryByTestId('open-selected-fill')).toBeNull();
+    expect(flattenStyle(result.getByTestId('open').props.style)).not.toHaveProperty('backgroundColor');
+  });
 });
 
 describe('long-form composer', () => {
@@ -676,5 +703,35 @@ describe('long-form composer', () => {
     expect(onSend).toHaveBeenCalledTimes(1);
     view.rerender(<Composer {...props} hasAttachments canSend={false} />);
     expect(view.getByTestId('editor-primary').props.accessibilityState.disabled).toBe(true);
+  });
+});
+
+describe.each(['light', 'dark'] as const)('%s glass chrome over a wallpaper', (scheme) => {
+  beforeEach(() => { mockScheme = scheme; });
+
+  it('floats the compact composer card on translucent chrome and keeps full-screen editing on the canvas', () => {
+    const theme = activeTheme(scheme);
+    const glass = createChatGlassStyle(theme);
+    const labels = { add: 'Add', voice: 'Voice', send: 'Send', stop: 'Stop' };
+    const props = { testID: 'composer', placeholder: 'Ask Main', accessibilityLabels: labels, onChangeText: jest.fn(), onSend: jest.fn() };
+    const result = render(<Composer {...props} value="Draft" appearance="glass" />);
+    expect(flattenStyle(result.getByTestId('composer').props.style)).toMatchObject({
+      borderRadius: Radius.bubble, backgroundColor: glass.backgroundColor,
+      borderColor: glass.borderColor, borderWidth: BorderWidth.hairline,
+    });
+    result.rerender(<Composer {...props} value="Draft" appearance="glass" expanded onExpandedChange={jest.fn()} />);
+    expect(flattenStyle(result.getByTestId('composer').props.style).backgroundColor).toBe(theme.colors.canvas);
+  });
+
+  it('gives glass floating buttons the same chrome as the composer card', () => {
+    const theme = activeTheme(scheme);
+    const glass = createChatGlassStyle(theme);
+    const result = render(<FloatingButton testID="glass-button" icon={ArrowUp} appearance="glass" accessibilityLabel="Back" onPress={jest.fn()} />);
+    expect(flattenStyle(result.getByTestId('glass-button').props.style)).toMatchObject({
+      width: ControlSize.floatingButton, borderRadius: Radius.full,
+      backgroundColor: glass.backgroundColor, borderColor: glass.borderColor, borderWidth: BorderWidth.hairline,
+    });
+    if (scheme === 'light') expect(flattenStyle(result.getByTestId('glass-button').props.style)).toMatchObject(Shadow.floating);
+    else expect(flattenStyle(result.getByTestId('glass-button').props.style)).toMatchObject({ elevation: 0, shadowOpacity: 0 });
   });
 });

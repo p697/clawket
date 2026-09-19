@@ -5,12 +5,10 @@ import { useTranslation } from 'react-i18next';
 import type {
   AgentAdapter,
   AgentDescriptor,
-  DiscoverSkillItem,
   SkillStatusEntry,
   SkillStatusReport,
   SkillsOperations,
 } from '@clawket/agent-protocol';
-import { SkillSourceSheet } from './SkillSourceSheet';
 import { Banner } from '../../components/ui/Banner';
 import { Button } from '../../components/ui/Button';
 import { SearchInput } from '../../components/ui/SearchInput';
@@ -32,11 +30,9 @@ import {
   Space,
 } from '../../theme/tokens';
 import {
-  buildSkillInstallPrompt,
   canRemoveSkill,
   canToggleSkill,
   filterInstalledSkills,
-  groupDiscoveredSkills,
   skillAvailability,
 } from './skills-model';
 
@@ -49,35 +45,26 @@ function translateSkillAvailability(
   return t('Unavailable', { ns: 'settings' });
 }
 
-type SkillsView = 'installed' | 'discover';
-type SkillSelection =
-  | Readonly<{ kind: 'installed'; item: SkillStatusEntry }>
-  | Readonly<{ kind: 'discover'; item: DiscoverSkillItem }>;
-
 export type SkillsSectionProps = Readonly<{
   adapter: AgentAdapter;
   agent: AgentDescriptor;
   online: boolean;
-  isPro?: boolean;
-  onOpenPaywall?: (reason: string, onContinue?: () => void) => void;
-  view?: SkillsView;
   refreshKey?: number;
-  onInstallRequested?: () => void;
+  /** Opens the skill's SKILL.md on the full-page document reader once the detail sheet has dismissed. */
+  onOpenSource?: (skill: SkillStatusEntry) => void;
 }>;
 
+/** Installed skills only; discovery is the ClawHub page (`SkillDiscoverScreen`) behind the header action. */
 export function SkillsSection(props: SkillsSectionProps): React.JSX.Element {
-  return <SkillsContent key={`${props.agent.connectionId}:${props.agent.agentId}:${props.view ?? 'installed'}`} {...props} />;
+  return <SkillsContent key={`${props.agent.connectionId}:${props.agent.agentId}`} {...props} />;
 }
 
 function SkillsContent({
   adapter,
   agent,
   online,
-  isPro = false,
-  onOpenPaywall,
-  view = 'installed',
   refreshKey = 0,
-  onInstallRequested,
+  onOpenSource,
 }: SkillsSectionProps): React.JSX.Element {
   const { t } = useTranslation(['common', 'settings', 'config']);
   const { theme } = useAppTheme();
@@ -85,46 +72,34 @@ function SkillsContent({
   const operations = adapter.management?.skills;
   const [query, setQuery] = useState('');
   const [report, setReport] = useState<SkillStatusReport | null>(null);
-  const [discovered, setDiscovered] = useState<ReadonlyArray<DiscoverSkillItem>>([]);
   const [loadingInstalled, setLoadingInstalled] = useState(true);
-  const [loadingDiscover, setLoadingDiscover] = useState(false);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [selection, setSelection] = useState<SkillSelection | null>(null);
-  const selectionRef = useRef(selection);
-  selectionRef.current = selection;
+  const [selection, setSelection] = useState<SkillStatusEntry | null>(null);
   const [removeCandidate, setRemoveCandidate] = useState<SkillStatusEntry | null>(null);
-  const [discoverEpoch, setDiscoverEpoch] = useState(0);
-  const discoverRequest = useRef(0);
   const installedRequest = useRef(0);
   const hasReport = useRef(false);
   const mutation = useRef(false);
-  const [sourceSkill, setSourceSkill] = useState<SkillStatusEntry | null>(null);
   const pendingSource = useRef<SkillStatusEntry | null>(null);
   const pendingRemove = useRef<SkillStatusEntry | null>(null);
-  const pendingInstall = useRef(false);
   const scope = useMemo(() => ({ active: true }), [adapter]);
   const currentScope = useRef(scope);
   currentScope.current = scope;
   const isCurrent = useCallback(() => scope.active && currentScope.current === scope, [scope]);
   useEffect(() => {
     scope.active = true;
-    setSourceSkill(null);
     pendingSource.current = null;
     setReport(null);
     hasReport.current = false;
     setError(null);
-    setDiscovered([]);
-    setLoadingInstalled(online && view === 'installed');
+    setLoadingInstalled(online);
     setSelection(null);
     setRemoveCandidate(null);
     setBusyKey(null);
     mutation.current = false;
     pendingRemove.current = null;
-    pendingInstall.current = false;
     return () => { scope.active = false; };
   }, [scope]);
-  const canDiscover = adapter.capabilities.skillDiscover && Boolean(operations?.discover);
 
   const loadInstalled = useCallback(async (quiet = false) => {
     const request = ++installedRequest.current;
@@ -148,55 +123,20 @@ function SkillsContent({
   }, [agent.agentId, isCurrent, operations, t]);
 
   useEffect(() => {
-    if (view === 'installed' && online) void loadInstalled(true);
+    if (online) void loadInstalled(true);
     else setLoadingInstalled(false);
-  }, [loadInstalled, online, refreshKey, view]);
-
-  useEffect(() => {
-    if (view !== 'discover' || !canDiscover) return undefined;
-    const discover = operations?.discover;
-    if (!discover) return undefined;
-    const request = ++discoverRequest.current;
-    let active = true;
-    setLoadingDiscover(true);
-    const timeout = setTimeout(() => {
-      void discover(query.trim()).then(
-        (result) => {
-          if (!active || !isCurrent() || request !== discoverRequest.current) return;
-          setDiscovered(result.items);
-          setError(null);
-        },
-        (discoverError: unknown) => {
-          if (!active || !isCurrent() || request !== discoverRequest.current) return;
-          setDiscovered([]);
-          setError(errorMessage(discoverError, t('Failed to load skills', { ns: 'settings' })));
-        },
-      ).finally(() => {
-        if (active && isCurrent() && request === discoverRequest.current) setLoadingDiscover(false);
-      });
-    }, 250);
-    return () => {
-      active = false;
-      clearTimeout(timeout);
-    };
-  }, [canDiscover, discoverEpoch, isCurrent, operations, query, t, view]);
+  }, [loadInstalled, online, refreshKey]);
 
   const installed = useMemo(
     () => filterInstalledSkills(report?.skills ?? [], query),
     [query, report?.skills],
   );
-  const discoverGroups = useMemo(
-    () => groupDiscoveredSkills(discovered),
-    [discovered],
-  );
-  const selected = selection?.kind === 'installed'
-    ? report?.skills.find((skill) => skill.skillKey === selection.item.skillKey)
+  // The sheet follows the live report so a toggle or removal shows immediately.
+  const selected = selection
+    ? report?.skills.find((skill) => skill.skillKey === selection.skillKey) ?? null
     : null;
-  const currentSelection: SkillSelection | null = selection?.kind === 'installed'
-    ? selected ? { kind: 'installed', item: selected } : null
-    : selection;
   const openSkill = useCallback((item: SkillStatusEntry) => {
-    setSelection({ kind: 'installed', item });
+    setSelection(item);
   }, []);
 
   const toggleSkill = useCallback(async (skill: SkillStatusEntry) => {
@@ -247,33 +187,6 @@ function SkillsContent({
     }
   }, [adapter.capabilities, agent.agentId, isCurrent, loadInstalled, online, operations, removeCandidate, t]);
 
-  const installSkill = useCallback(async (item: DiscoverSkillItem) => {
-    if (!online || mutation.current || !adapter.capabilities.skillInstall) return;
-    const prompt = buildSkillInstallPrompt(item);
-    if (!prompt) return;
-    mutation.current = true;
-    setBusyKey(item.id);
-    setError(null);
-    try {
-      await adapter.prompt(agent.mainSessionKey, {
-        text: prompt,
-        idempotencyKey: `skill-install:${Date.now()}:${item.id}`,
-      });
-      if (!isCurrent()) return;
-      // Closing or changing the detail while the request runs cancels navigation,
-      // not the already-issued installation request.
-      if (selectionRef.current?.kind === 'discover' && selectionRef.current.item.id === item.id) {
-        pendingInstall.current = true;
-        setSelection(null);
-      }
-    } catch (installError: unknown) {
-      if (isCurrent()) setError(errorMessage(installError, t('Failed to request installation', { ns: 'settings' })));
-    } finally {
-      if (isCurrent()) { mutation.current = false; setBusyKey(null); }
-    }
-  }, [adapter, agent.mainSessionKey, isCurrent, online, t]);
-
-  const loading = view === 'installed' ? loadingInstalled : loadingDiscover;
   return (
     <>
       <View testID="agent-skills-section" style={styles.root}>
@@ -291,15 +204,12 @@ function SkillsContent({
             message={error}
             actionLabel={t('Retry', { ns: 'common' })}
             onAction={() => {
-              if (mutation.current) return;
-              if (view === 'installed' && online) void loadInstalled(Boolean(report));
-              else setDiscoverEpoch((current) => current + 1);
+              if (mutation.current || !online) return;
+              void loadInstalled(Boolean(report));
             }}
           />
         ) : null}
-        {view === 'discover' && !canDiscover ? (
-          <Banner message={t('Not supported by this backend', { ns: 'config' })} />
-        ) : loading ? <SkillsLoading /> : view === 'installed' ? (
+        {loadingInstalled ? <SkillsLoading /> : (
           report ? (
             <View testID="agent-skills-installed-list">
               <Text testID="agent-skills-summary" accessibilityLiveRegion="polite" style={styles.groupTitle}>
@@ -323,62 +233,28 @@ function SkillsContent({
               {online ? t('No skills found', { ns: 'settings' }) : t('Offline', { ns: 'common' })}
             </Text>
           ) : null
-        ) : discoverGroups.length ? (
-          <View style={styles.groups}>
-            {discoverGroups.map((group) => (
-              <View key={group.source} style={styles.groupWrap}>
-                <Text style={styles.groupTitle}>
-                  {group.source === 'clawhub' ? 'ClawHub' : 'skills.sh'}
-                </Text>
-                <View>
-                  {group.items.map((item) => (
-                      <SettingsRow
-                        key={item.id}
-                        testID={`agent-skill-discover-${item.id}`}
-                        title={item.title}
-                        style={styles.discoverRow}
-                        subtitle={item.summary}
-                        showChevron
-                        onPress={() => setSelection({ kind: 'discover', item })}
-                      />
-                  ))}
-                </View>
-              </View>
-            ))}
-          </View>
-        ) : (
-          <Text testID="agent-skills-discover-empty" style={styles.emptyText}>
-            {t('No discover results', { ns: 'common' })}
-          </Text>
         )}
       </View>
 
-      {sourceSkill ? <SkillSourceSheet key={sourceSkill.skillKey} adapter={adapter} agentId={agent.agentId}
-        skill={sourceSkill} online={online} isPro={isPro} onOpenPaywall={onOpenPaywall} onClose={() => setSourceSkill(null)} /> : null}
       <SkillDetailSheet
-        selection={currentSelection}
+        skill={selected}
         adapter={adapter}
         online={online}
         busyKey={busyKey}
         operations={operations}
         error={error}
-        onClose={() => { selectionRef.current = null; setSelection(null); }}
-        onSource={(skill) => { pendingSource.current = skill; setSelection(null); }}
+        onClose={() => setSelection(null)}
+        onSource={onOpenSource ? (skill) => { pendingSource.current = skill; setSelection(null); } : undefined}
         onAfterClose={() => {
           if (!isCurrent()) return;
-          if (pendingSource.current) { setSourceSkill(pendingSource.current); pendingSource.current = null; }
+          if (pendingSource.current) { onOpenSource?.(pendingSource.current); pendingSource.current = null; }
           if (pendingRemove.current) {
             setRemoveCandidate(pendingRemove.current);
             pendingRemove.current = null;
           }
-          if (pendingInstall.current) {
-            pendingInstall.current = false;
-            onInstallRequested?.();
-          }
         }}
         onToggle={(skill) => { void toggleSkill(skill); }}
         onRemove={(skill) => { pendingRemove.current = skill; setSelection(null); }}
-        onInstall={(item) => { void installSkill(item); }}
       />
       <ConfirmationModal
         testID="agent-skill-remove-confirm"
@@ -396,7 +272,7 @@ function SkillsContent({
 }
 
 function SkillDetailSheet({
-  selection,
+  skill: installed,
   adapter,
   online,
   busyKey,
@@ -406,10 +282,9 @@ function SkillDetailSheet({
   onAfterClose,
   onToggle,
   onRemove,
-  onInstall,
   onSource,
 }: Readonly<{
-  selection: SkillSelection | null;
+  skill: SkillStatusEntry | null;
   adapter: AgentAdapter;
   online: boolean;
   busyKey: string | null;
@@ -419,15 +294,12 @@ function SkillDetailSheet({
   onAfterClose: () => void;
   onToggle: (skill: SkillStatusEntry) => void;
   onRemove: (skill: SkillStatusEntry) => void;
-  onInstall: (item: DiscoverSkillItem) => void;
-  onSource: (skill: SkillStatusEntry) => void;
+  onSource?: (skill: SkillStatusEntry) => void;
 }>): React.JSX.Element {
   const { t } = useTranslation(['common', 'settings']);
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
-  const installed = selection?.kind === 'installed' ? selection.item : null;
-  const discovered = selection?.kind === 'discover' ? selection.item : null;
-  const itemKey = installed?.skillKey ?? discovered?.id ?? null;
+  const itemKey = installed?.skillKey ?? null;
   const canToggle = installed
     ? canToggleSkill(installed, adapter.capabilities, operations)
     : false;
@@ -435,58 +307,45 @@ function SkillDetailSheet({
     ? canRemoveSkill(installed, adapter.capabilities, operations)
     : false;
   const issues = useSkillIssues(installed);
-  const canInstall = discovered !== null && adapter.capabilities.skillInstall;
 
   return (
     <Sheet
       testID="agent-skill-detail"
-      visible={selection !== null}
-      title={installed?.name ?? discovered?.title ?? t('Skill', { ns: 'settings' })}
+      visible={installed !== null}
+      title={installed?.name ?? t('Skill', { ns: 'settings' })}
       closeAccessibilityLabel={t('Close', { ns: 'common' })}
       dismissOnBackdropPress={!busyKey}
       onClose={onClose}
       onAfterClose={onAfterClose}
       snapPoints={['68%', '92%']}
     >
-      <BottomSheetScrollView contentContainerStyle={styles.detailContent}>
+      <BottomSheetScrollView testID="agent-skill-detail-scroll" contentContainerStyle={styles.detailContent}>
         {error ? <Banner testID="agent-skill-detail-error" tone="bad" message={error} /> : null}
-        <Text style={styles.detailText}>
-          {installed?.description ?? discovered?.summary ?? ''}
+        <Text testID="agent-skill-description" style={styles.detailText}>
+          {installed?.description ?? ''}
         </Text>
-        <SettingsGroup>
+        <SettingsGroup chrome="plain">
           {installed ? (
             <>
-              <SettingsRow
+              <SettingsRow style={styles.detailRow}
                 title={t('Enabled', { ns: 'settings' })}
                 trailing={canToggle ? <SkillSwitch skill={installed} testID="agent-skill-toggle" disabled={!online || Boolean(busyKey)} busy={busyKey === itemKey} onToggle={onToggle} /> : undefined}
                 value={canToggle ? undefined : installed.always ? t('Always on', { ns: 'settings' }) : t(installed.disabled ? 'Disabled' : 'Enabled', { ns: 'settings' })}
               />
-              <SettingsDivider inset="content" />
-              <SettingsRow
+              <SettingsDivider inset="none" />
+              <SettingsRow style={styles.detailRow}
                 title={t('Status', { ns: 'settings' })}
                 value={issues.length ? t('Unavailable', { ns: 'settings' }) : translateSkillAvailability(skillAvailability(installed), t)}
               />
-              <SettingsDivider inset="content" />
-              <SettingsRow title={t('Source', { ns: 'settings' })} value={installed.source} />
-            </>
-          ) : discovered ? (
-            <>
-              <SettingsRow title={discovered.author} value={discovered.source === 'clawhub' ? 'ClawHub' : 'skills.sh'} />
-              {discovered.installs !== null && discovered.installs !== undefined ? (
-                <>
-                  <SettingsDivider inset="content" />
-                  <SettingsRow
-                    title={t('Installs', { ns: 'common' })}
-                    value={String(discovered.installs)}
-                  />
-                </>
-              ) : null}
+              <SettingsDivider inset="none" />
+              <SettingsRow style={styles.detailRow} title={t('Source', { ns: 'settings' })} value={installed.source} />
+              {adapter.capabilities.skills && operations?.get && onSource ? <>
+                <SettingsDivider inset="none" />
+                <SettingsRow style={styles.detailRow} testID="agent-skill-source" title="SKILL.md" showChevron disabled={!online || Boolean(busyKey)} onPress={() => onSource(installed)} />
+              </> : null}
             </>
           ) : null}
         </SettingsGroup>
-        {installed && adapter.capabilities.skills && operations?.get ? <SettingsGroup>
-          <SettingsRow testID="agent-skill-source" title="SKILL.md" showChevron disabled={!online || Boolean(busyKey)} onPress={() => onSource(installed)} />
-        </SettingsGroup> : null}
         {issues.map((issue) => <Banner key={issue} tone="warn" message={issue} />)}
         {installed && canRemove ? (
           <View style={styles.actionRow}>
@@ -499,15 +358,6 @@ function SkillDetailSheet({
                 style={styles.actionButton}
               />
           </View>
-        ) : null}
-        {discovered && canInstall ? (
-          <Button
-            testID="agent-skill-install"
-            label={t('Install via Chat', { ns: 'common' })}
-            disabled={!online || Boolean(busyKey)}
-            loading={busyKey === itemKey}
-            onPress={() => onInstall(discovered)}
-          />
         ) : null}
       </BottomSheetScrollView>
     </Sheet>
@@ -548,9 +398,6 @@ const stylesStatic = StyleSheet.create({
 function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors']) {
   return StyleSheet.create({
     root: { gap: Space.lg },
-    discoverRow: { minHeight: ControlSize.rosterRow, paddingHorizontal: 0 },
-    groups: { gap: Space.xl },
-    groupWrap: { gap: Space.sm },
     groupTitle: {
       paddingHorizontal: Space.xs,
       color: colors.inkSecondary,
@@ -569,8 +416,9 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     detailContent: {
       paddingHorizontal: Space.xl,
       paddingBottom: Space.xxl,
-      gap: Space.xl,
+      gap: Space.lg,
     },
+    detailRow: { minHeight: ControlSize.settingsRowComfortable },
     detailText: {
       color: colors.inkSecondary,
       fontSize: FontSize.secondary,

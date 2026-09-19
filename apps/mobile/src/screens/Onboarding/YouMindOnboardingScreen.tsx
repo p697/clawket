@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
-import { ArrowLeft } from '../../components/ui/DirectionalIcon';
+import { ChevronLeft } from '../../components/ui/DirectionalIcon';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type {
@@ -11,7 +11,7 @@ import type {
 import { YouMindSignInPanel } from '../../components/youmind/YouMindSignInPanel';
 import { FloatingButton } from '../../components/ui/FloatingButton';
 import { useAppTheme } from '../../theme';
-import { FontSize, FontWeight, Space } from '../../theme/tokens';
+import { ControlSize, FontSize, FontWeight, Space } from '../../theme/tokens';
 
 export type YouMindOnboardingScreenProps = Readonly<{
   client: YouMindEmailAuthClient;
@@ -40,8 +40,8 @@ export function YouMindOnboardingScreen({
       <View style={styles.header}>
         <FloatingButton
           testID="youmind-onboarding-back"
-          icon={ArrowLeft}
-          appearance="plain"
+          icon={ChevronLeft}
+          appearance="surface"
           accessibilityLabel={t('Back', { ns: 'common' })}
           onPress={onBack}
         />
@@ -75,8 +75,8 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     header: {
       alignItems: 'center',
       flexDirection: 'row',
-      minHeight: 52,
-      paddingHorizontal: Space.md,
+      minHeight: ControlSize.settingsRow,
+      paddingHorizontal: Space.lg,
     },
     title: {
       color: colors.ink,
@@ -86,7 +86,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       textAlign: 'center',
     },
     headerSpacer: {
-      width: 44,
+      width: ControlSize.floatingButton,
     },
   });
 }

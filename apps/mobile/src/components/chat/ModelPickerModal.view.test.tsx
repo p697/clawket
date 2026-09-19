@@ -76,6 +76,7 @@ jest.mock('lucide-react-native', () => {
     Check: icon('Check'),
     Orbit: icon('Orbit'),
     Search: icon('Search'),
+    Settings2: icon('Settings2'),
   };
 });
 
@@ -106,6 +107,7 @@ jest.mock('../ui', () => {
   const ReactRuntime = require('react');
   const { Pressable, Text, TextInput, View } = require('react-native');
   return {
+    SheetHeaderButton: (props: Record<string, unknown>) => ReactRuntime.createElement(Pressable, props),
     Button: ({ label, onPress }: { label: string; onPress?: () => void }) => (
       ReactRuntime.createElement(Pressable, { onPress }, label)
     ),
@@ -124,6 +126,7 @@ jest.mock('../ui', () => {
       onClose,
       testID,
       title,
+      headerRight,
       visible,
       ...props
     }: {
@@ -142,6 +145,7 @@ jest.mock('../ui', () => {
         onPress: onClose,
         testID: `${testID}-close`,
       }),
+      headerRight,
       children,
     ) : null,
   };
@@ -240,4 +244,21 @@ describe('ModelPickerModal view', () => {
     expect(view.onClose).toHaveBeenCalledTimes(1);
     expect(view.onSelectModel).not.toHaveBeenCalled();
   });
+});
+
+
+it('shows the configured default independently of the selected checkmark and waits to navigate', () => {
+  const onManage = jest.fn();
+  const onClose = jest.fn();
+  const view = render(<ModelPickerModal visible models={models} loading={false}
+    defaultModel="claude-sonnet" defaultProvider="anthropic" configuredDefaultModel="openai/gpt-5-api"
+    onSelectModel={jest.fn()} onClose={onClose} onManage={onManage} />);
+  expect(view.getByTestId('model-picker-default-openai:gpt-5-api')).toBeTruthy();
+  expect(view.getByTestId('model-picker-selected-anthropic:claude-sonnet')).toBeTruthy();
+  expect(view.queryByTestId('model-picker-selected-openai:gpt-5-api')).toBeNull();
+  fireEvent.press(view.getByTestId('model-picker-manage'));
+  expect(onClose).toHaveBeenCalledTimes(1);
+  expect(onManage).not.toHaveBeenCalled();
+  view.getByTestId('model-picker-shell').props.onAfterClose();
+  expect(onManage).toHaveBeenCalledTimes(1);
 });

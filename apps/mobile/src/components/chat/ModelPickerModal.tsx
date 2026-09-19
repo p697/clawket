@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -9,11 +9,12 @@ import {
 } from 'react-native';
 import { BottomSheetSectionList } from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
-import { Check, Search } from 'lucide-react-native';
+import { Check, Search, Settings2 } from 'lucide-react-native';
 import {
   Button,
   CompositionSafeBottomSheetTextInput,
   Sheet,
+  SheetHeaderButton,
 } from '../ui';
 import { useAppTheme } from '../../theme';
 import {
@@ -57,6 +58,8 @@ type Props = {
   onSelectModel: (model: ModelInfo) => void;
   defaultModel?: string;
   defaultProvider?: string;
+  configuredDefaultModel?: string;
+  onManage?: () => void;
 };
 
 const DEFAULT_MODEL: ModelInfo = { id: '', name: 'Default', provider: '' };
@@ -77,11 +80,14 @@ export function ModelPickerModal({
   onSelectModel,
   defaultModel,
   defaultProvider,
+  configuredDefaultModel,
+  onManage,
 }: Props): React.JSX.Element {
   const { t } = useTranslation('chat');
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
   const [searchQuery, setSearchQuery] = useState('');
+  const manageAfterClose = useRef(false);
 
   const snapPoints = useMemo(() => ['68%', '92%'], []);
   const modelSections = useMemo(
@@ -130,6 +136,9 @@ export function ModelPickerModal({
             {item.name || item.id}
           </Text>
         </View>
+        {configuredDefaultModel && resolveProviderModel(item).toLowerCase() === configuredDefaultModel.toLowerCase() ? (
+          <Text testID={`model-picker-default-${modelKey}`} style={styles.sectionHeaderText}>{t('Default')}</Text>
+        ) : null}
         <View style={styles.selectionMarkWrap}>
           {selected ? (
             <Check
@@ -145,6 +154,8 @@ export function ModelPickerModal({
   }, [
     defaultModel,
     defaultProvider,
+    configuredDefaultModel,
+    t,
     handleSelectModel,
     selectedModelId,
     styles,
@@ -283,6 +294,17 @@ export function ModelPickerModal({
       title={title ?? t('Models')}
       closeAccessibilityLabel={t('Close', { ns: 'common' })}
       onClose={onClose}
+      onAfterClose={() => {
+        if (!manageAfterClose.current) return;
+        manageAfterClose.current = false;
+        onManage?.();
+      }}
+      headerRight={onManage ? <SheetHeaderButton
+        testID="model-picker-manage"
+        icon={Settings2}
+        accessibilityLabel={t('Manage', { ns: 'common' })}
+        onPress={() => { manageAfterClose.current = true; onClose(); }}
+      /> : undefined}
       snapPoints={snapPoints}
       keyboardBehavior="extend"
       keyboardBlurBehavior="none"

@@ -9,14 +9,13 @@ import type {
   ToolPolicy,
 } from '@clawket/agent-protocol';
 import { Banner } from '../../components/ui/Banner';
-import { Button } from '../../components/ui/Button';
+import { ConfirmationModal } from '../../components/ui/ConfirmationModal';
 import { SearchInput } from '../../components/ui/SearchInput';
 import {
   SettingsDivider,
   SettingsGroup,
   SettingsRow,
 } from '../../components/ui/SettingsGroup';
-import { Sheet } from '../../components/ui/Sheet';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { ThemedSwitch } from '../../components/ui/ThemedSwitch';
 import { analyticsEvents } from '../../services/analytics/events';
@@ -43,16 +42,28 @@ import {
   toggleToolInPolicy,
 } from './tools-model';
 
+export type ToolsEditorState = Readonly<{
+  dirty: boolean;
+  saving: boolean;
+  editable: boolean;
+}>;
+
 export type ToolsSectionProps = Readonly<{
   adapter: AgentAdapter;
   agent: AgentDescriptor;
   online: boolean;
+  /** Bumped by the host each time its header Save is pressed; opens the confirmation. */
+  saveRequest?: number;
+  /** Reports the draft state so the host can drive the header Save and its leave guard. */
+  onEditorChange?: (state: ToolsEditorState) => void;
 }>;
 
 export function ToolsSection({
   adapter,
   agent,
   online,
+  saveRequest = 0,
+  onEditorChange,
 }: ToolsSectionProps): React.JSX.Element {
   const { t } = useTranslation(['common', 'settings', 'config']);
   const { theme } = useAppTheme();
@@ -141,6 +152,19 @@ export function ToolsSection({
   const changeCount = Math.max(diff.totalChanged, dirty ? 1 : 0);
   const activeProfile = catalog ? activeToolProfile(catalog, draftPolicy) : null;
 
+  useEffect(() => {
+    onEditorChange?.({ dirty, saving, editable });
+  }, [dirty, editable, onEditorChange, saving]);
+  // The host keeps the last report; an unmounted draft must not leave its Save or leave guard armed.
+  useEffect(() => () => {
+    onEditorChange?.({ dirty: false, saving: false, editable: false });
+  }, [onEditorChange]);
+
+  // Only a new request opens the confirmation; a later draft change must not reopen a cancelled one.
+  useEffect(() => {
+    if (saveRequest > 0 && dirty && editable && !saving) setConfirmVisible(true);
+  }, [saveRequest]);
+
   const save = useCallback(async () => {
     if (!editable || !dirty || saving || !operations?.save) return;
     setSaving(true);
@@ -153,10 +177,8 @@ export function ToolsSection({
         total_count: totalTools,
       });
       setSavedPolicy(draftPolicy);
-      setConfirmVisible(false);
     } catch (saveError: unknown) {
       setError(errorMessage(saveError, t('Save failed', { ns: 'settings' })));
-      setConfirmVisible(false);
     } finally {
       setSaving(false);
     }
@@ -293,65 +315,28 @@ export function ToolsSection({
             ))}
           </View>
         )}
-
-        {dirty && editable ? (
-          <View testID="agent-tools-actions" style={styles.actions}>
-            <Button
-              testID="agent-tools-discard"
-              label={t('Discard', { ns: 'settings' })}
-              variant="secondary"
-              disabled={saving}
-              onPress={() => setDraftPolicy(savedPolicy)}
-              style={styles.actionButton}
-            />
-            <Button
-              testID="agent-tools-save"
-              label={t('Save ({{count}})', { ns: 'settings', count: changeCount })}
-              loading={saving}
-              onPress={() => setConfirmVisible(true)}
-              style={styles.actionButton}
-            />
-          </View>
-        ) : null}
       </View>
 
-      <Sheet
+      <ConfirmationModal
         testID="agent-tools-confirm"
         visible={confirmVisible}
         title={t('Apply {{count}} changes?', { ns: 'settings', count: changeCount })}
-        closeAccessibilityLabel={t('Close', { ns: 'common' })}
+        message={[
+          t('This will restart Gateway. Continue?', { ns: 'common' }),
+          t('{{enabled}}/{{total}} tools will be active after saving.', {
+            ns: 'settings',
+            enabled: enabledTools,
+            total: totalTools,
+          }),
+        ].join('\n')}
+        confirmLabel={t('Save', { ns: 'common' })}
+        cancelLabel={t('Cancel', { ns: 'common' })}
         onClose={() => setConfirmVisible(false)}
-      >
-        <View style={styles.sheetContent}>
-          <Text style={styles.sheetMessage}>
-            {t('This will restart Gateway. Continue?', { ns: 'common' })}
-          </Text>
-          <Text style={styles.sheetSummary}>
-            {t('{{enabled}}/{{total}} tools will be active after saving.', {
-              ns: 'settings',
-              enabled: enabledTools,
-              total: totalTools,
-            })}
-          </Text>
-          <View style={styles.actions}>
-            <Button
-              testID="agent-tools-confirm-cancel"
-              label={t('Cancel', { ns: 'common' })}
-              variant="secondary"
-              disabled={saving}
-              onPress={() => setConfirmVisible(false)}
-              style={styles.actionButton}
-            />
-            <Button
-              testID="agent-tools-confirm-save"
-              label={t('Save', { ns: 'common' })}
-              loading={saving}
-              onPress={() => { void save(); }}
-              style={styles.actionButton}
-            />
-          </View>
-        </View>
-      </Sheet>
+        onConfirm={() => {
+          setConfirmVisible(false);
+          void save();
+        }}
+      />
     </>
   );
 }
@@ -406,28 +391,6 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       lineHeight: LineHeight.secondary,
       fontWeight: FontWeight.regular,
       textAlign: 'center',
-    },
-    actions: {
-      flexDirection: 'row',
-      gap: Space.sm,
-    },
-    actionButton: { flex: 1 },
-    sheetContent: {
-      paddingHorizontal: Space.lg,
-      paddingBottom: Space.xl,
-      gap: Space.lg,
-    },
-    sheetMessage: {
-      color: colors.ink,
-      fontSize: FontSize.body,
-      lineHeight: LineHeight.body,
-      fontWeight: FontWeight.regular,
-    },
-    sheetSummary: {
-      color: colors.inkSecondary,
-      fontSize: FontSize.secondary,
-      lineHeight: LineHeight.secondary,
-      fontWeight: FontWeight.regular,
     },
   });
 }

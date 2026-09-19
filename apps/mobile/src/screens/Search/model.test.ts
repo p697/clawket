@@ -213,6 +213,32 @@ describe('global Search model', () => {
     expect(sessions.filter((result) => result.sessionKey === 'agent:main:main')).toHaveLength(1);
   });
 
+  it('lists every favorite under an empty query so Search doubles as the favorites browser', () => {
+    const input = buildInput();
+    const browse = buildSearchModel({
+      ...input,
+      query: '   ',
+      favorites: [
+        { ...favorite('home'), favoriteKey: 'favorite:old', messageId: 'old', text: 'Older note', timestampMs: 100 },
+        favorite('home'),
+        { ...favorite('travel'), text: 'Unrelated travel note' },
+      ],
+    });
+
+    expect(browse.sections).toEqual([]);
+    expect(browse.availableResultCount).toBe(0);
+    expect(browse.favorites.map((result) => result.favoriteKey)).toEqual([
+      'favorite:home',
+      'favorite:travel',
+      'favorite:old',
+    ]);
+    expect(browse.favorites.every((result) => result.kind === 'favorite' && !result.lockedReason)).toBe(true);
+    expect(buildSearchModel({ ...input, query: '', isPro: false }).favorites[0]).toMatchObject({
+      lockedReason: 'messageHistory',
+    });
+    expect(buildSearchModel(input).favorites).toEqual([]);
+  });
+
   it('filters to messages or favorites without changing the all-results count', () => {
     const messages = buildSearchModel({ ...buildInput(), filter: 'messages' });
     const favorites = buildSearchModel({ ...buildInput(), filter: 'favorites' });
@@ -314,12 +340,15 @@ describe('global Search model', () => {
   });
 
   it.each([
-    [{ initialized: false, permitted: true, loading: false, offline: false, visibleResultCount: 0, recentSearchCount: 0, hasQuery: false }, 'loading'],
-    [{ initialized: true, permitted: false, loading: false, offline: false, visibleResultCount: 1, recentSearchCount: 0, hasQuery: true }, 'permission'],
-    [{ initialized: true, permitted: true, loading: false, offline: false, errorCode: 'network', visibleResultCount: 1, recentSearchCount: 0, hasQuery: true }, 'error'],
-    [{ initialized: true, permitted: true, loading: false, offline: true, visibleResultCount: 1, recentSearchCount: 0, hasQuery: true }, 'offline'],
-    [{ initialized: true, permitted: true, loading: false, offline: false, visibleResultCount: 0, recentSearchCount: 0, hasQuery: true }, 'empty'],
-    [{ initialized: true, permitted: true, loading: false, offline: false, visibleResultCount: 1, recentSearchCount: 0, hasQuery: true }, 'ready'],
+    [{ initialized: false, permitted: true, loading: false, offline: false, visibleResultCount: 0, recentSearchCount: 0, favoriteCount: 0, hasQuery: false }, 'loading'],
+    [{ initialized: true, permitted: false, loading: false, offline: false, visibleResultCount: 1, recentSearchCount: 0, favoriteCount: 0, hasQuery: true }, 'permission'],
+    [{ initialized: true, permitted: true, loading: false, offline: false, errorCode: 'network', visibleResultCount: 1, recentSearchCount: 0, favoriteCount: 0, hasQuery: true }, 'error'],
+    [{ initialized: true, permitted: true, loading: false, offline: true, visibleResultCount: 1, recentSearchCount: 0, favoriteCount: 0, hasQuery: true }, 'offline'],
+    [{ initialized: true, permitted: true, loading: false, offline: false, visibleResultCount: 0, recentSearchCount: 0, favoriteCount: 0, hasQuery: true }, 'empty'],
+    [{ initialized: true, permitted: true, loading: false, offline: false, visibleResultCount: 1, recentSearchCount: 0, favoriteCount: 0, hasQuery: true }, 'ready'],
+    [{ initialized: true, permitted: true, loading: false, offline: false, visibleResultCount: 0, recentSearchCount: 0, favoriteCount: 0, hasQuery: false }, 'empty'],
+    [{ initialized: true, permitted: true, loading: false, offline: false, visibleResultCount: 0, recentSearchCount: 1, favoriteCount: 0, hasQuery: false }, 'ready'],
+    [{ initialized: true, permitted: true, loading: false, offline: false, visibleResultCount: 0, recentSearchCount: 0, favoriteCount: 1, hasQuery: false }, 'ready'],
   ] as const)('resolves all Search page states', (input, expected) => {
     expect(resolveSearchPageState(input)).toBe(expected);
   });

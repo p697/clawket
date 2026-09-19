@@ -55,6 +55,8 @@ export type ThreadOverlaysProps = Readonly<{
     providers?: ModelProviderInfo[];
     defaultModel?: string;
     defaultProvider?: string;
+    configuredDefaultModel?: string;
+    onManage?: () => void;
     onClose: () => void;
     onRetry: () => void;
     onSelect: (model: ModelInfo) => void;
@@ -165,6 +167,8 @@ export function ThreadOverlays({
         onSelectModel={modelPicker.onSelect}
         defaultModel={modelPicker.defaultModel}
         defaultProvider={modelPicker.defaultProvider}
+        configuredDefaultModel={modelPicker.configuredDefaultModel}
+        onManage={modelPicker.onManage}
       />
       <CommandOptionPickerModal
         visible={commandPicker.visible}

@@ -1,3 +1,4 @@
+import { OpenClawSkillDocuments } from './skill-documents.js';
 import { relayNetworkOptions } from '../relay-network.js';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -154,6 +155,7 @@ export class BridgeRuntime {
   private heartbeatTimer: NodeJS.Timeout | null = null;
   private challengeWaitTimer: NodeJS.Timeout | null = null;
   private bootstrapRequestsInFlight = 0;
+  private skillDocuments: OpenClawSkillDocuments | null = null;
   private pendingGatewayMessages: PendingGatewayMessage[] = [];
   private gatewayHandshakeStarted = false;
   private gatewayCloseBoundaryPending = false;
@@ -197,6 +199,7 @@ export class BridgeRuntime {
   async stop(): Promise<void> {
     if (this.stopped) return;
     this.stopped = true;
+    this.clearSkillDocuments();
     this.clearTimers();
     await this.stopClientRuntimes();
     this.relaySocket?.close();
@@ -368,8 +371,10 @@ export class BridgeRuntime {
       await this.handleRelayControl(control);
       return;
     }
+    if (this.skillDocuments?.handleRequest(text)) return;
     const identity = parseConnectStartIdentity(text);
     if (identity) {
+      this.clearSkillDocuments();
       this.observeConnectStart(identity.id, identity.label);
     }
     this.forwardOrQueueGatewayMessage({ kind: 'text', text });
@@ -793,6 +798,7 @@ export class BridgeRuntime {
 
     gateway.once('close', (code: number, reason: Buffer) => {
       if (this.gatewaySocket !== gateway) return;
+      this.clearSkillDocuments();
       this.clearChallengeWait();
       const wasExpectedClose = this.gatewayCloseExpected;
       const queuedConnectRequests = summarizePendingGatewayMessages(this.pendingGatewayMessages).connectRequests;
@@ -840,9 +846,11 @@ export class BridgeRuntime {
     }
     const text = normalizeText(data);
     if (text == null) return;
+    if (this.skillDocuments?.handleResponse(text)) return;
     // A missing connect request cannot be fixed by repeatedly opening only
     // the local socket: the Relay may still route challenges to a stale client.
     if (isGatewayChallenge(text)) {
+      this.clearSkillDocuments();
       this.log(`connection phase=challenge_forwarded sinceGatewayOpenMs=${this.elapsedSince(this.gatewayConnectedAtMs)}`);
       this.startChallengeWait();
     }
@@ -863,6 +871,23 @@ export class BridgeRuntime {
       const pending = this.inFlightConnectHandshakes.get(response.id);
       if (response.ok && pending?.bridgeCapabilitiesRequested) {
         relayText = patchConnectResponseBridgeCapabilities(text, this.bridgeVersion).text;
+        // Only isolated full-client channels to a local Gateway can read host files.
+        // Legacy shared channels and remote Gateways keep transparent forwarding.
+        const hello = JSON.parse(relayText);
+        const auth = hello.payload?.auth;
+        const nativeMethods = normalizeConnectCapabilities(hello.payload?.features?.methods);
+        if (this.targetConnectionId && isLoopbackHostname(new URL(this.options.gatewayUrl).hostname)
+          && auth?.role === 'operator' && nativeMethods.includes('skills.status')) {
+          this.clearSkillDocuments();
+          this.skillDocuments = new OpenClawSkillDocuments({
+            nativeMethods,
+            scopes: normalizeConnectCapabilities(auth.scopes),
+            sendGateway: value => { if (gateway === this.gatewaySocket && gateway) this.sendFrame(gateway, value, 'gateway_out'); },
+            sendClient: value => { if (relay === this.relaySocket) this.sendFrame(relay, value, 'relay_out'); },
+          });
+          hello.payload.features.methods = [...nativeMethods, ...this.skillDocuments.methods];
+          relayText = JSON.stringify(hello);
+        }
       }
       this.observeGatewayResponse(response);
     }
@@ -1044,7 +1069,13 @@ export class BridgeRuntime {
     })}`, 'relay_out');
   }
 
+  private clearSkillDocuments(): void {
+    this.skillDocuments?.dispose();
+    this.skillDocuments = null;
+  }
+
   private closeGateway(reconnectAfterClose = false): void {
+    this.clearSkillDocuments();
     this.clearChallengeWait();
     if (this.gatewayRetryTimer) {
       clearTimeout(this.gatewayRetryTimer);

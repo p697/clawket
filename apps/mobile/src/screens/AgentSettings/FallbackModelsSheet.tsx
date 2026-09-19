@@ -99,7 +99,7 @@ export function FallbackModelsSheet({
 
 function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors']) {
   return StyleSheet.create({
-    content: { gap: Space.md, padding: Space.lg, paddingBottom: Space.xxl },
+    content: { gap: Space.md, paddingHorizontal: Space.lg, paddingBottom: Space.xxl },
     footer: { padding: Space.lg },
     hint: {
       color: colors.inkSecondary,

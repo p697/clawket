@@ -278,6 +278,8 @@ describe('createMockAdapter', () => {
     const selectOnly = createMockAdapter({ ...fixture(), capabilities: { modelManage: false } });
     expect(selectOnly.management?.models?.getCatalog).toBeUndefined();
     expect(selectOnly.management?.models?.setSelection).toBeDefined();
+    const statusOnly = createMockAdapter({ ...fixture(), capabilities: { channelManage: false } });
+    expect(Object.keys(statusOnly.management?.channels ?? {})).toEqual(['status']);
     expect(Object.keys(adapter.management?.skills ?? {})).toEqual(['discover']);
     expect(Object.keys(adapter.management?.cron ?? {})).toEqual(['heartbeat']);
     expect(Object.keys(adapter.management?.agents ?? {}).sort()).toEqual(['create', 'files']);
@@ -352,6 +354,15 @@ describe('createMockAdapter', () => {
       ...jobInput,
       updatedAtMs: 2,
     })).toMatchObject({ name: 'job', enabled: true, updatedAtMs: 2 });
+    for (const model of ['provider/model', null, undefined]) {
+      const result = await management.cron!.update!('job', {
+        payload: { kind: 'agentTurn', message: 'Run the task', model },
+      });
+      expect(result.payload).toEqual({ kind: 'agentTurn', message: 'Run the task',
+        ...(model ? { model } : {}),
+      });
+      if (!model) expect(result.payload).not.toHaveProperty('model');
+    }
     expect(await management.cron!.remove!('job')).toEqual({ ok: true });
     await management.cron!.run!('job', 'force');
     expect(await management.cron!.runs!({ scope: 'job', id: 'job' })).toMatchObject({ entries: [], total: 0 });
@@ -391,9 +402,13 @@ describe('createMockAdapter', () => {
     expect(await management.config!.backups!.list()).toEqual([]);
     expect(await management.config!.backups!.create()).toMatchObject({ id: 'mock-backup' });
     await management.config!.backups!.restore('mock-backup');
+    await management.config!.backups!.remove!('mock-backup');
     expect(await management.tools!.catalog('main')).toMatchObject({ groups: [] });
     await management.tools!.save({ agentId: 'main' });
-    expect(await management.channels!.status({ probe: true, timeoutMs: 100 })).toMatchObject({ channels: {} });
+    expect(await management.channels!.status!({ probe: true, timeoutMs: 100 })).toMatchObject({ channels: {} });
+    expect(await management.channels!.getRouting!()).toEqual({ dmScope: 'main' });
+    await management.channels!.setRouting!({ dmScope: 'per-channel-peer' });
+    await management.channels!.setAccountEnabled!({ channelId: 'telegram', accountId: 'default', enabled: false });
     expect(await management.devices!.list!()).toEqual({ pending: [], paired: [] });
     await management.devices!.approve!('d');
     await management.devices!.reject!('d');
@@ -490,6 +505,7 @@ describe('createMockAdapter', () => {
       backups: adapter.management?.config?.backups,
       tools: adapter.management?.tools?.catalog,
       channels: adapter.management?.channels?.status,
+      channelManage: adapter.management?.channels?.setRouting,
       devices: adapter.management?.devices?.list,
       nodes: adapter.management?.nodes?.list,
       logs: adapter.management?.logs?.fetch,

@@ -446,3 +446,29 @@ it.each([667, 844, 1100])('gives spare height to the artwork at %s without separ
   expect(StyleSheet.flatten(screen.getByTestId('paywall-footer').props.style).marginTop).toBeUndefined();
   expect(screen.getByTestId('paywall-layout-scroll').props.scrollEnabled).not.toBe(false);
 });
+
+describe('store redemption entry', () => {
+  it('opens from the legal footer without collecting a code', () => {
+    const onRedeem = jest.fn();
+    const screen = renderPaywall({ onRedeem });
+    fireEvent.press(screen.getByTestId('paywall-redeem'));
+    expect(onRedeem).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps close usable while disabling checkout, restore and repeated redemption', () => {
+    const onClose = jest.fn();
+    const screen = renderPaywall({ phase: 'redeeming', statusCode: 'redemptionWaiting', onRedeem: jest.fn(), onClose });
+    expect(screen.getByTestId('paywall-redeem').props.accessibilityState.disabled).toBe(true);
+    expect(screen.getByTestId('paywall-purchase').props.accessibilityState.disabled).toBe(true);
+    expect(screen.getByTestId('paywall-restore').props.accessibilityState.disabled).toBe(true);
+    expect(screen.getByTestId('paywall-redemption-status').props.accessibilityLiveRegion).toBe('polite');
+    fireEvent.press(screen.getByTestId('paywall-close'));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers restore after an unconfirmed result instead of claiming success', () => {
+    const screen = renderPaywall({ statusCode: 'redemptionUnconfirmed', onRedeem: jest.fn() });
+    expect(screen.getByText('No new Pro access confirmed yet. If you redeemed a code, tap Restore.')).toBeTruthy();
+    expect(screen.getByTestId('paywall-restore').props.accessibilityState.disabled).toBe(false);
+  });
+});

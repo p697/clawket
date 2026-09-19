@@ -118,6 +118,7 @@ jest.mock('react-native', () => {
   };
   return {
     FlatList,
+    ScrollView: host('ScrollView'),
     Image: host('Image'),
     Platform: {
       OS: 'ios',
@@ -614,8 +615,7 @@ describe('RosterScreen', () => {
 
     fireEvent.press(view.getByTestId('roster-add'));
     expect(view.getByTestId('roster-action-add_connection')).toBeTruthy();
-    expect(view.getByText('Connect OpenClaw, Hermes or YouMind Sprite')).toBeTruthy();
-    expect(view.queryByText('Connect OpenClaw or Hermes')).toBeNull();
+    expect(view.getByText('Connect OpenClaw, Hermes and more')).toBeTruthy();
     expect(view.getByText('Create another agent on live')).toBeTruthy();
     expect(view.queryByTestId('roster-action-add_connection-lock-icon')).toBeNull();
     expect(view.getByTestId('roster-action-create_agent-lock-icon')).toBeTruthy();
@@ -688,7 +688,7 @@ describe('RosterScreen', () => {
     fireEvent.press(view.getByTestId('roster-add'));
     expect(view.getByTestId('roster-action-add_connection-lock-icon')).toBeTruthy();
     expect(view.getByTestId('roster-action-add_connection').props.accessibilityLabel).toBe(
-      'Add Connection, Connect OpenClaw, Hermes or YouMind Sprite',
+      'Add Connection, Connect OpenClaw, Hermes and more',
     );
     fireEvent.press(view.getByTestId('roster-action-add_connection'));
     expect(onAdd).toHaveBeenCalledTimes(1);
@@ -737,6 +737,33 @@ describe('RosterScreen', () => {
       expect.objectContaining({ sessionKey: 'agent:main:main:channel:ops' }),
       'Renamed channel',
     );
+  });
+
+  it.each([
+    { operation: 'remove', connectionId: 'live' },
+    { operation: 'roster', connectionId: 'live' },
+    { operation: 'connect', connectionId: 'other' },
+  ] as const)('does not replace a healthy connection for $operation errors scoped to $connectionId', (error) => {
+    mockConnections = snapshot({ error: { ...error, message: 'Failed' } });
+    const view = render(<RosterScreen {...props()} />);
+    expect(view.queryByTestId('roster-connection-unavailable')).toBeNull();
+    expect(view.getByTestId('roster-row-agent:live:main')).toBeTruthy();
+  });
+
+  it('explains an empty offline roster instead of claiming there are no agents', async () => {
+    mockRoster = [];
+    mockConnections = snapshot({ activeState: 'offline', roster: [] });
+    const onManageActiveConnection = jest.fn();
+    const view = render(<RosterScreen {...props({ onManageActiveConnection })} />);
+    expect(view.queryByText('No agents on this connection')).toBeNull();
+    expect(view.getByTestId('roster-connection-unavailable')).toBeTruthy();
+    fireEvent.press(view.getByTestId('roster-connection-unavailable-manage'));
+    expect(onManageActiveConnection).toHaveBeenCalledWith('live');
+    await act(async () => { fireEvent.press(view.getByTestId('roster-connection-unavailable-retry')); });
+    expect(mockReconnectConnection).toHaveBeenCalledWith('live');
+    mockConnections = snapshot({ recovering: true, activeState: 'reconnecting', roster: [] });
+    view.rerender(<RosterScreen {...props()} />);
+    expect(view.queryByTestId('roster-connection-unavailable')).toBeNull();
   });
 
   it('covers accessible companion loading and empty states', () => {
@@ -800,6 +827,8 @@ describe('RosterScreen', () => {
     })} />);
     const status = view.getByTestId('roster-header-status');
     expect(status.props.pointerEvents).toBe('box-none');
+    // The capsule trails against Search instead of floating in the centre.
+    expect(flattenStyle(status.props.style)).toMatchObject({ alignItems: 'flex-end' });
     expect(view.getByTestId('roster-reconnecting')).toBeTruthy();
     expect(view.getByText('Reconnecting…')).toBeTruthy();
     expect(view.queryByTestId('roster-reconnecting-action')).toBeNull();

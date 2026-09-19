@@ -1,239 +1,206 @@
-import { RefObject, useCallback, useEffect, useRef, useState } from 'react';
-import { Alert } from 'react-native';
+import { type RefObject, useCallback, useEffect, useRef, useState } from 'react';
+import { Alert, AppState, Linking, Platform } from 'react-native';
+import { getRecordingPermissionsAsync, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioStream } from 'expo-audio';
 import { useSharedValue } from 'react-native-reanimated';
 import type { ComposerHandle } from '../components/ui/Composer';
 import { analyticsEvents } from '../services/analytics/events';
-import {
-  addSpeechRecognitionErrorListener,
-  addSpeechRecognitionLevelListener,
-  addSpeechRecognitionResultListener,
-  addSpeechRecognitionStateListener,
-  getSpeechRecognitionAvailabilityAsync,
-  isSpeechRecognitionSupported,
-  requestSpeechRecognitionPermissionsAsync,
-  SpeechRecognitionState,
-  startSpeechRecognitionAsync,
-  stopSpeechRecognitionAsync,
-} from '../services/speech/speechRecognition';
+import { triggerLightImpact } from '../services/haptics';
+import { connectSpeech, speechServiceUrl, type SpeechConnection } from '../services/speech/speechStream';
+import { SpeechPcm } from '../services/speech/speechPcm';
 import { createSpeechLevelState, processSpeechLevel } from '../services/speech/speechLevel';
-import {
-  applySpeechRecognitionResult,
-  buildSpeechDraftText,
-  composeSpeechDraft,
-  createSpeechDraftState,
-  resolveSpeechLocale,
-} from '../services/speech/speechText';
-import { SpeechRecognitionLanguage } from '../types';
 
-type Translate = (key: string, options?: Record<string, unknown>) => string;
-
+type Phase = 'idle' | 'authorizing' | 'listening' | 'transcribing';
 type Props = {
   composerRef: RefObject<ComposerHandle | null>;
   input: string;
-  speechRecognitionLanguage: SpeechRecognitionLanguage;
   setInput: (value: string) => void;
-  t: Translate;
+  t: (key: string, options?: Record<string, unknown>) => string;
+  scope?: string;
+  enabled?: boolean;
+  onSubmit?: (text: string) => void;
+};
+type Attempt = {
+  scope: string | undefined;
+  draft: string;
+  chunks: Uint8Array[];
+  bytes: number;
+  sent: number;
+  pcm: SpeechPcm;
+  cancelled: boolean;
+  stopped: boolean;
+  send: boolean;
+  ready: boolean;
+  starting: boolean;
+  nativeStart?: Promise<void>;
+  captured: boolean;
+  connection?: SpeechConnection;
+  restoring?: Promise<void>;
+  timer?: ReturnType<typeof setTimeout>;
+  failure?: boolean;
 };
 
-export function useChatVoiceInput({
-  composerRef,
-  input,
-  speechRecognitionLanguage,
-  setInput,
-  t,
-}: Props) {
-  const [voiceInputSupported, setVoiceInputSupported] = useState(false);
-  const [voiceInputState, setVoiceInputState] = useState<'idle' | 'authorizing' | SpeechRecognitionState>('idle');
-  // Microphone level arrives ~20 times per second; a shared value keeps that
-  // off the React render path so only the composer halo reacts to it.
+/** One recording owns permission, capture, provider and final delivery through all awaits. */
+export function useChatVoiceInput(options: Props) {
+  const latest = useRef(options); latest.current = options;
+  const mounted = useRef(true);
+  const observedStreaming = useRef(false);
+  const active = useRef<Attempt | null>(null);
+  const saved = useRef<Pick<Attempt, 'scope' | 'draft' | 'chunks' | 'bytes'> | null>(null);
+  const [voiceInputState, setPhase] = useState<Phase>('idle');
   const voiceInputLevel = useSharedValue(0);
-  const voiceInputLevelStateRef = useRef(createSpeechLevelState());
-  const voiceInputBaseTextRef = useRef('');
-  const voiceInputDraftStateRef = useRef(createSpeechDraftState());
-
-  useEffect(() => {
-    let cancelled = false;
-    const locale = resolveSpeechLocale(speechRecognitionLanguage);
-
-    if (!isSpeechRecognitionSupported()) {
-      setVoiceInputSupported(false);
-      return;
-    }
-
-    getSpeechRecognitionAvailabilityAsync(locale)
-      .then((available) => {
-        if (!cancelled) {
-          setVoiceInputSupported(available);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setVoiceInputSupported(false);
-        }
-      });
-
-    const resultSubscription = addSpeechRecognitionResultListener(({ transcript, isFinal }) => {
-      voiceInputDraftStateRef.current = applySpeechRecognitionResult(
-        voiceInputDraftStateRef.current,
-        transcript,
-        isFinal,
-      );
-      setInput(
-        composeSpeechDraft(
-          voiceInputBaseTextRef.current,
-          buildSpeechDraftText(voiceInputDraftStateRef.current),
-        ),
-      );
-    });
-
-    const stateSubscription = addSpeechRecognitionStateListener(({ state }) => {
-      setVoiceInputState(state);
-      if (state === 'idle') {
-        voiceInputBaseTextRef.current = '';
-        voiceInputDraftStateRef.current = createSpeechDraftState();
-        voiceInputLevel.value = 0;
-        voiceInputLevelStateRef.current = createSpeechLevelState();
-      }
-    });
-
-    const levelSubscription = addSpeechRecognitionLevelListener(({ level }) => {
-      const processed = processSpeechLevel(voiceInputLevelStateRef.current, level);
-      voiceInputLevelStateRef.current = processed.state;
-      voiceInputLevel.value = processed.level;
-    });
-
-    const errorSubscription = addSpeechRecognitionErrorListener(({ code, message }) => {
-      analyticsEvents.chatVoiceInputFailed({ code, stage: 'recognition' });
-      setVoiceInputState('idle');
-      voiceInputBaseTextRef.current = '';
-      voiceInputDraftStateRef.current = createSpeechDraftState();
-      voiceInputLevel.value = 0;
-      voiceInputLevelStateRef.current = createSpeechLevelState();
-      Alert.alert(
-        t('Voice input failed', { ns: 'chat' }),
-        message || t('Unable to transcribe speech right now.', { ns: 'chat' }),
-      );
-    });
-
-    return () => {
-      cancelled = true;
-      resultSubscription?.remove();
-      stateSubscription?.remove();
-      levelSubscription?.remove();
-      errorSubscription?.remove();
-      void stopSpeechRecognitionAsync().catch(() => {});
-    };
-  }, [setInput, speechRecognitionLanguage, t, voiceInputLevel]);
-
-  const voiceInputActive = voiceInputState !== 'idle';
-  const voiceInputDisabled = false;
-
-  const toggleVoiceInput = useCallback(async () => {
-    const locale = resolveSpeechLocale(speechRecognitionLanguage);
-    const analyticsLocale = locale ?? 'system';
-
-    if (voiceInputActive) {
-      analyticsEvents.chatVoiceInputTapped({
-        action: 'stop',
-        has_existing_text: input.trim().length > 0,
-        locale: analyticsLocale,
-        source: 'chat_composer',
-      });
+  const meter = useRef(createSpeechLevelState());
+  const finishRef = useRef<(send: boolean) => void>(() => {});
+  const failRef = useRef<() => void>(() => {});
+  const { stream, isStreaming } = useAudioStream({ sampleRate: 16000, channels: 1, encoding: 'float32',
+    onBuffer(buffer) {
+      const op = active.current;
+      if (!op || op.cancelled || op.stopped) return;
       try {
-        await stopSpeechRecognitionAsync();
-      } catch {
-        // Ignore stop errors and let the native module settle.
-      }
-      return;
-    }
-
-    if (!voiceInputSupported) {
-      analyticsEvents.chatVoiceInputFailed({ code: 'ERR_SPEECH_UNAVAILABLE', stage: 'availability' });
-      Alert.alert(
-        t('Voice input unavailable', { ns: 'chat' }),
-        t('Speech recognition is not available on this device.', { ns: 'chat' }),
-      );
-      return;
-    }
-
-    analyticsEvents.chatVoiceInputTapped({
-      action: 'start',
-      has_existing_text: input.trim().length > 0,
-      locale: analyticsLocale,
-      source: 'chat_composer',
+        const pcm = op.pcm.convert(buffer.data, buffer.sampleRate, buffer.channels);
+        const bytes = pcm.slice(0, 120 * 32000 - op.bytes);
+        let energy = 0;
+        const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+        for (let i = 0; i < bytes.length; i += 2) energy += (view.getInt16(i, true) / 32768) ** 2;
+        const processed = processSpeechLevel(meter.current, Math.min(1, Math.sqrt(energy / Math.max(1, bytes.length / 2)) * 5.5));
+        meter.current = processed.state; voiceInputLevel.value = processed.level;
+        if (bytes.length) {
+          op.chunks.push(bytes); op.bytes += bytes.length;
+          if (op.ready) { op.connection!.audio(bytes); op.sent++; }
+        }
+        if (op.bytes >= 120 * 32000) finishRef.current(false);
+      } catch { failRef.current(); }
+    },
+  });
+  const streamRef = useRef(stream); streamRef.current = stream;
+  const current = (op: Attempt) => mounted.current && !op.cancelled && active.current === op &&
+    op.scope === latest.current.scope && latest.current.enabled !== false;
+  const release = (op: Attempt) => {
+    clearTimeout(op.timer);
+    if (op.restoring) return op.restoring;
+    voiceInputLevel.value = 0;
+    op.restoring = (async () => {
+      // Never let an old attempt's finally stop the next recording's shared native stream.
+      if (op.nativeStart) await op.nativeStart.catch(() => {});
+      if (!op.captured) return;
+      try { streamRef.current.stop(); } catch { /* Already released. */ }
+      await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true }).catch(() => {});
+    })();
+    return op.restoring;
+  };
+  const cancelVoiceInput = useCallback(() => {
+    saved.current = null;
+    const op = active.current;
+    if (!op) return;
+    op.cancelled = true; op.stopped = true; op.connection?.cancel();
+    void release(op).then(() => {
+      if (active.current !== op) return;
+      active.current = null;
+      if (mounted.current) setPhase('idle');
     });
-
-    composerRef.current?.blur();
-    voiceInputBaseTextRef.current = input;
-    voiceInputDraftStateRef.current = createSpeechDraftState();
-    voiceInputLevelStateRef.current = createSpeechLevelState();
-    setVoiceInputState('authorizing');
-
+  }, []);
+  const stopVoiceInput = useCallback((send = false) => {
+    const op = active.current;
+    if (!op || op.cancelled || op.stopped) return;
+    if (op.starting || !op.captured || op.bytes < 8000) { cancelVoiceInput(); return; }
+    op.stopped = true; op.send = send;
+    void release(op);
+    if (current(op)) setPhase('transcribing');
+    if (op.ready) op.connection!.finish();
+  }, [cancelVoiceInput]);
+  finishRef.current = stopVoiceInput;
+  failRef.current = () => {
+    const op = active.current;
+    if (!op) return;
+    op.failure = true; op.connection?.cancel(); op.stopped = true;
+    void release(op);
+  };
+  const startVoiceInput = useCallback(async (retry = false) => {
+    if (active.current || latest.current.enabled === false) return;
+    const retained = retry && saved.current?.scope === latest.current.scope ? saved.current : null;
+    saved.current = null;
+    const op: Attempt = { scope: latest.current.scope, draft: latest.current.input, chunks: retained?.chunks ?? [], bytes: retained?.bytes ?? 0,
+      sent: 0, pcm: new SpeechPcm(), cancelled: false, stopped: Boolean(retained), send: false, ready: false, starting: false, captured: false };
+    active.current = op;
+    observedStreaming.current = false;
+    setPhase('authorizing'); meter.current = createSpeechLevelState();
+    latest.current.composerRef.current?.blur();
+    analyticsEvents.chatVoiceInputTapped({ action: 'start', has_existing_text: Boolean(op.draft.trim()), locale: 'system', source: 'chat_composer' });
     try {
-      const permissions = await requestSpeechRecognitionPermissionsAsync();
-      if (!permissions.microphoneGranted) {
-        analyticsEvents.chatVoiceInputFailed({ code: 'ERR_MICROPHONE_PERMISSION_DENIED', stage: 'permissions' });
-        setVoiceInputState('idle');
-        voiceInputBaseTextRef.current = '';
-        voiceInputDraftStateRef.current = createSpeechDraftState();
-        voiceInputLevel.value = 0;
-        voiceInputLevelStateRef.current = createSpeechLevelState();
-        Alert.alert(
-          t('Voice input unavailable', { ns: 'chat' }),
-          t('Microphone access is required to transcribe speech.', { ns: 'chat' }),
-        );
-        return;
+      if (!speechServiceUrl) throw Error('speech_unavailable');
+      if (!retained) {
+      const existing = await getRecordingPermissionsAsync();
+      if (!current(op)) return;
+      const permission = existing.granted ? existing : await requestRecordingPermissionsAsync();
+      if (!current(op)) return;
+      if (!permission.granted) throw Error('speech_permission');
+      op.starting = true; op.captured = true;
+      op.nativeStart = Promise.resolve().then(() => streamRef.current.start());
+      try { await op.nativeStart; } finally { op.starting = false; }
+      if (!current(op)) return;
+      setPhase('listening'); triggerLightImpact();
+      op.timer = setTimeout(() => stopVoiceInput(false), 120000);
+      } else setPhase('transcribing');
+      if (op.failure) throw Error('speech_capture_failed');
+      // Local capture starts first. Buffers preserve the first word during connection setup.
+      op.connection = await connectSpeech();
+      if (!current(op)) { op.connection.cancel(); return; }
+      await op.connection.ready;
+      if (op.failure) throw Error('speech_capture_failed');
+      while (op.sent < op.chunks.length && current(op)) {
+        op.connection.audio(op.chunks[op.sent++]);
+        await new Promise<void>((resolve) => setTimeout(resolve, 20));
       }
-      if (!permissions.speechGranted) {
-        analyticsEvents.chatVoiceInputFailed({ code: 'ERR_SPEECH_PERMISSION_DENIED', stage: 'permissions' });
-        setVoiceInputState('idle');
-        voiceInputBaseTextRef.current = '';
-        voiceInputDraftStateRef.current = createSpeechDraftState();
-        voiceInputLevel.value = 0;
-        voiceInputLevelStateRef.current = createSpeechLevelState();
-        Alert.alert(
-          t('Voice input unavailable', { ns: 'chat' }),
-          t('Speech recognition access is required to transcribe speech.', { ns: 'chat' }),
-        );
-        return;
-      }
-
-      const available = await getSpeechRecognitionAvailabilityAsync(locale);
-      if (!available) {
-        analyticsEvents.chatVoiceInputFailed({ code: 'ERR_SPEECH_UNAVAILABLE', stage: 'availability' });
-        setVoiceInputState('idle');
-        voiceInputBaseTextRef.current = '';
-        voiceInputDraftStateRef.current = createSpeechDraftState();
-        voiceInputLevel.value = 0;
-        voiceInputLevelStateRef.current = createSpeechLevelState();
-        Alert.alert(
-          t('Voice input unavailable', { ns: 'chat' }),
-          t('Speech recognition is not available on this device.', { ns: 'chat' }),
-        );
-        return;
-      }
-
-      await startSpeechRecognitionAsync(locale);
+      if (!current(op)) return;
+      op.ready = true;
+      if (op.stopped) op.connection.finish();
+      const text = await op.connection.result;
+      if (!current(op)) return;
+      if (!text) throw Error('speech_no_speech');
+      const joined = [op.draft.trimEnd(), text].filter(Boolean).join(' ');
+      latest.current.setInput(joined);
+      if (op.send) latest.current.onSubmit?.(joined);
     } catch (error) {
-      analyticsEvents.chatVoiceInputFailed({ code: 'ERR_SPEECH_START_FAILED', stage: 'start' });
-      setVoiceInputState('idle');
-      voiceInputBaseTextRef.current = '';
-      voiceInputDraftStateRef.current = createSpeechDraftState();
-      voiceInputLevel.value = 0;
-      voiceInputLevelStateRef.current = createSpeechLevelState();
-      const message = error instanceof Error && error.message
-        ? error.message
-        : t('Unable to transcribe speech right now.', { ns: 'chat' });
-      Alert.alert(t('Voice input failed', { ns: 'chat' }), message);
+      if (current(op)) {
+        const code = error instanceof Error ? error.message : 'speech_failed';
+        analyticsEvents.chatVoiceInputFailed({ code: ['speech_permission', 'speech_no_speech', 'speech_unavailable'].includes(code) ? code : 'speech_failed', stage: 'recognition' });
+        const t = latest.current.t;
+        const message = code === 'speech_permission' ? t('Microphone access is required to transcribe speech.', { ns: 'chat' })
+          : code === 'speech_no_speech' ? t('No speech detected. Please try again.', { ns: 'chat' })
+          : t('Unable to transcribe speech right now.', { ns: 'chat' });
+        const retryable = op.bytes >= 8000 && code !== 'speech_permission' && code !== 'speech_no_speech';
+        if (retryable) saved.current = { scope: op.scope, draft: op.draft, chunks: op.chunks, bytes: op.bytes };
+        Alert.alert(t('Voice input failed', { ns: 'chat' }), message,
+          code === 'speech_permission' ? [{ text: t('Cancel', { ns: 'common' }), style: 'cancel' },
+            { text: t('Settings', { ns: 'common' }), onPress: () => { void Linking.openSettings(); } }] : retryable ? [{ text: t('Cancel', { ns: 'common' }), style: 'cancel', onPress: () => { saved.current = null; } },
+            { text: t('Retry', { ns: 'common' }), onPress: () => { if (saved.current?.scope === latest.current.scope) void startVoiceInput(true); } }] : undefined);
+      }
+    } finally {
+      op.connection?.cancel();
+      await release(op);
+      op.chunks = [];
+      if (active.current === op) {
+        active.current = null;
+        if (mounted.current) setPhase('idle');
+      }
     }
-  }, [composerRef, input, speechRecognitionLanguage, t, voiceInputActive, voiceInputLevel, voiceInputSupported]);
-
+  }, [stopVoiceInput]);
+  useEffect(() => {
+    mounted.current = true;
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') { if (active.current) active.current.send = false; stopVoiceInput(false); }
+    });
+    return () => { mounted.current = false; cancelVoiceInput(); sub.remove(); };
+  }, [cancelVoiceInput, stopVoiceInput]);
+  useEffect(() => {
+    if (isStreaming) observedStreaming.current = true;
+    // Native status events may arrive after start() resolves. The initial false is not an interruption.
+    if (isStreaming === false && observedStreaming.current && voiceInputState === 'listening') stopVoiceInput(false);
+  }, [isStreaming, voiceInputState, stopVoiceInput]);
+  useEffect(() => { cancelVoiceInput(); }, [options.scope, options.enabled, cancelVoiceInput]);
   return {
-    toggleVoiceInput,
-    voiceInputActive,
-    voiceInputDisabled,
-    voiceInputLevel,
-    voiceInputState,
-    voiceInputSupported,
+    startVoiceInput: () => startVoiceInput(false), stopVoiceInput, cancelVoiceInput,
+    toggleVoiceInput: () => { if (active.current) stopVoiceInput(false); else void startVoiceInput(); },
+    voiceInputActive: voiceInputState !== 'idle', voiceInputDisabled: options.enabled === false,
+    voiceInputLevel, voiceInputState, voiceInputSupported: Boolean(speechServiceUrl) && (Platform.OS === 'ios' || Platform.OS === 'android'),
   };
 }

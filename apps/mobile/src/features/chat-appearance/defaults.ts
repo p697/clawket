@@ -1,6 +1,8 @@
 import type { ChatAppearanceSettings, ChatBubbleStyle } from '../../types/chat-appearance';
 
 const DEFAULT_BLUR = 8;
+/** Wallpaper dim is a canvas overlay opacity; above this the photo stops being a wallpaper. */
+export const MAX_CHAT_BACKGROUND_DIM = 0.6;
 const DEFAULT_OPACITY = 1;
 
 export const DEFAULT_CHAT_FONT_SIZE = 17;
@@ -55,7 +57,11 @@ export function normalizeChatAppearanceSettings(value: unknown): ChatAppearanceS
         0,
         24,
       ),
-      dim: 0,
+      dim: clamp(
+        typeof background.dim === 'number' ? background.dim : 0,
+        0,
+        MAX_CHAT_BACKGROUND_DIM,
+      ),
       fillMode: 'cover',
     },
     bubbles: {
@@ -74,6 +80,7 @@ export function buildChatAppearanceSignature(settings: ChatAppearanceSettings): 
     settings.background.enabled ? '1' : '0',
     settings.background.imagePath ?? '',
     settings.background.blur,
+    settings.background.dim,
     settings.bubbles.style,
     settings.bubbles.opacity,
   ].join(':');

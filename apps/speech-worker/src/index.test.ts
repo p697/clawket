@@ -1,0 +1,57 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+vi.mock('./auth', () => ({ verifyRequest: vi.fn() }));
+vi.mock('./admission', () => ({ SpeechAdmission: class {} }));
+vi.mock('./session', () => ({ serveSession: vi.fn() }));
+import worker from './index';
+import { verifyRequest } from './auth';
+import { serveSession } from './session';
+
+const NativeResponse = Response;
+describe('speech admission and upgrade', () => {
+  const reserve = vi.fn(), release = vi.fn(), upstream = vi.fn(), waitUntil = vi.fn();
+  let server: { binaryType: string; accept: ReturnType<typeof vi.fn> };
+  const env = { SPEECH_ENABLED: 'true', ALIYUN_SPEECH_API_KEY: 'test-secret',
+    ALIYUN_SPEECH_URL: 'https://workspace.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference',
+    ADMISSION: { getByName: () => ({ reserve, release }) } } as unknown as Env & { ALIYUN_SPEECH_API_KEY: string };
+  const request = () => new Request('https://speech.example/v1/speech', { headers: { Upgrade: 'websocket' } });
+  const run = () => worker.fetch(request(), env, { waitUntil } as unknown as ExecutionContext);
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(verifyRequest).mockResolvedValue({ device: 'device', nonce: 'nonce' });
+    reserve.mockResolvedValue(true); release.mockResolvedValue(undefined);
+    server = { binaryType: 'blob', accept: vi.fn(() => expect(server.binaryType).toBe('arraybuffer')) };
+    vi.stubGlobal('WebSocketPair', class { 0 = {}; 1 = server; });
+    vi.stubGlobal('Response', class extends NativeResponse {
+      constructor(body?: BodyInit | null, init?: ResponseInit) {
+        super(body, init?.status === 101 ? { status: 200 } : init);
+        if (init?.status === 101) Object.defineProperty(this, 'status', { value: 101 });
+      }
+    });
+    upstream.mockImplementation(async (_url, options) => {
+      // The edge runtime rejects redirect:error before making a network request.
+      expect(options.redirect).toBe('manual');
+      expect(options.headers.Authorization).toBe('Bearer test-secret');
+      return { status: 101, webSocket: { accept: vi.fn() } };
+    });
+    vi.stubGlobal('fetch', upstream);
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+  afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+  it('accepts PCM as ArrayBuffer before upgrading and reserves all three quotas', async () => {
+    expect((await run()).status).toBe(101);
+    expect(reserve).toHaveBeenCalledTimes(3); expect(server.accept).toHaveBeenCalled(); expect(serveSession).toHaveBeenCalled();
+  });
+  it('rejects redirects instead of forwarding credentials to another host', async () => {
+    upstream.mockResolvedValue({ status: 302 });
+    expect((await run()).status).toBe(502); expect(upstream).toHaveBeenCalledTimes(1);
+    expect(release).toHaveBeenCalledWith('nonce'); expect(serveSession).not.toHaveBeenCalled();
+  });
+  it('rejects unauthenticated requests before allocating admission state', async () => {
+    vi.mocked(verifyRequest).mockResolvedValue(null);
+    expect((await run()).status).toBe(401); expect(reserve).not.toHaveBeenCalled(); expect(upstream).not.toHaveBeenCalled();
+  });
+  it('quota failure never starts a paid provider task', async () => {
+    reserve.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    expect((await run()).status).toBe(429); expect(upstream).not.toHaveBeenCalled(); expect(release).toHaveBeenCalled();
+  });
+});

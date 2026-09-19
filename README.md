@@ -142,12 +142,12 @@ Then scan the generated QR code in the app.
 
 Clawket can also chat with a model that runs on your own computer: llama.cpp, Ollama, or any server that speaks the OpenAI chat API (LM Studio, vLLM, and others). A Bridge on that computer keeps the conversation and calls the model; the Relay only forwards frames. Chat history and model API keys never leave the computer.
 
-This is a Preview feature. In the app, open Account Settings → Advanced settings, turn on Debug Mode, set Relay Environment to Preview, then add a connection and choose Local model. The published npm CLI does not include it yet, so run the Bridge from this checkout with Node.js 22:
+In the app, add a connection and choose Local model; the entry is available in every app environment with no Debug Mode or Relay Environment setting. The feature is still pre-release: the published npm CLI does not include it yet, so run the Bridge from this checkout with Node.js 22:
 
 ```bash
 npm ci
 npm run bridge:build
-node apps/bridge-cli/dist/index.js local-model pair --preview
+node apps/bridge-cli/dist/index.js local-model pair
 ```
 
 Start your model server before pairing. The defaults expect `llama-server` on port 8080; other servers need their engine and address:
@@ -308,5 +308,3 @@ See [SECURITY.md](./SECURITY.md).
 ## License
 
 Unless a subdirectory states otherwise, this repository is licensed under [AGPL-3.0-only](./LICENSE).
-
-The directory [`apps/mobile/modules/clawket-speech-recognition`](./apps/mobile/modules/clawket-speech-recognition) is excluded from the root AGPL grant and remains proprietary under its own local license notice.

@@ -2,14 +2,7 @@ import React from 'react';
 import { LastOpenedSessionSnapshot } from '../services/storage';
 import type { AgentInfo } from '../types/agent';
 import type { NodeCapabilityToggles } from '../services/node-capabilities';
-import type { ChatAppearanceSettings, SpeechRecognitionLanguage } from '../types';
-
-export type ChatNotificationOpenRequest = {
-  requestedAt: number;
-  sessionKey: string;
-  agentId?: string;
-  runId?: string;
-};
+import type { ChatAppearanceSettings } from '../types';
 
 export type AppContextType = {
   foregroundEpoch: number;
@@ -20,7 +13,6 @@ export type AppContextType = {
     requestedAt: number;
     sourceRole?: string;
   } | null;
-  pendingChatNotificationOpen: ChatNotificationOpenRequest | null;
   agents: AgentInfo[];
   currentAgentId: string;
   initialChatPreview: LastOpenedSessionSnapshot | null;
@@ -39,7 +31,6 @@ export type AppContextType = {
   execApprovalEnabled: boolean;
   chatFontSize: number;
   chatAppearance: ChatAppearanceSettings;
-  speechRecognitionLanguage: SpeechRecognitionLanguage;
   onDebugToggle: (enabled: boolean) => void;
   onShowAgentAvatarToggle: (show: boolean) => void;
   onShowModelUsageToggle: (enabled: boolean) => void;
@@ -50,15 +41,8 @@ export type AppContextType = {
   onNodeCapabilityTogglesChange: (toggles: NodeCapabilityToggles) => void;
   onChatFontSizeChange: (size: number) => void;
   onChatAppearanceChange: (settings: ChatAppearanceSettings) => void | Promise<void>;
-  onSpeechRecognitionLanguageChange: (language: SpeechRecognitionLanguage) => void;
   requestChatSession: (sessionKey: string, sourceRole?: string) => void;
   clearChatSessionRequest: () => void;
-  requestOpenChatFromNotification: (params: {
-    sessionKey: string;
-    agentId?: string;
-    runId?: string;
-  }) => void;
-  clearPendingChatNotificationOpen: () => void;
   pendingChatInput: string | null;
   pendingMainSessionSwitch: boolean;
   requestChatWithInput: (text: string) => void;

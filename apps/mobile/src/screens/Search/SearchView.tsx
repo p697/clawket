@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -7,6 +7,7 @@ import {
   View,
 } from 'react-native';
 import {
+  ChevronDown,
   Clock3,
   LockKeyhole,
   MessageSquare,
@@ -36,8 +37,10 @@ import {
 } from '../../theme/tokens';
 import { relativeTime } from '../../utils/chat-message';
 import {
+  SEARCH_FAVORITES_PREVIEW_LIMIT,
   shouldShowSearchFilters,
   splitHighlightSegments,
+  type FavoriteSearchResult,
   type SearchFilter,
   type SearchPageState,
   type SearchResult,
@@ -52,6 +55,8 @@ export type SearchViewProps = Readonly<{
   query: string;
   filter: SearchFilter;
   sections: ReadonlyArray<SearchSection>;
+  /** Listed under an empty query so saved messages stay reachable without a keyword. */
+  favorites: ReadonlyArray<FavoriteSearchResult>;
   recentSearches: ReadonlyArray<string>;
   availableResultCount: number;
   errorCode?: string | null;
@@ -262,6 +267,53 @@ function RecentSearches({
   );
 }
 
+/** Search is the only favorites browser: an empty query lists them, five first, the rest on one tap. */
+function FavoritesBrowse({
+  favorites,
+  onSelectResult,
+}: Readonly<{
+  favorites: ReadonlyArray<FavoriteSearchResult>;
+  onSelectResult: (result: SearchResult) => void;
+}>): React.JSX.Element {
+  const { t } = useTranslation('common');
+  const { theme } = useAppTheme();
+  const themedStyles = useMemo(() => createThemedStyles(theme.colors), [theme.colors]);
+  const [expanded, setExpanded] = useState(false);
+  const visible = expanded ? favorites : favorites.slice(0, SEARCH_FAVORITES_PREVIEW_LIMIT);
+  return (
+    <View testID="search-favorites" style={styles.section}>
+      <Text style={[styles.sectionTitle, { color: theme.colors.inkSecondary }]}>
+        {t('Favorites')}
+      </Text>
+      {visible.map((favorite) => (
+        <SearchResultRow
+          key={favorite.id}
+          result={favorite}
+          query=""
+          onPress={() => onSelectResult(favorite)}
+        />
+      ))}
+      {visible.length < favorites.length ? (
+        <Pressable
+          testID="search-favorites-expand"
+          accessibilityRole="button"
+          accessibilityLabel={t('All {{count}} favorites', { count: favorites.length })}
+          onPress={() => setExpanded(true)}
+          style={({ pressed }) => [styles.resultRow, pressed ? themedStyles.resultPressed : null]}
+        >
+          <View style={styles.resultIcon} />
+          <View style={styles.expandCopy}>
+            <Text style={[styles.expandText, { color: theme.colors.inkSecondary }]}>
+              {t('All {{count}} favorites', { count: favorites.length })}
+            </Text>
+            <ChevronDown size={IconSize.sm} color={theme.colors.inkTertiary} strokeWidth={1.75} />
+          </View>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
 function SearchLoading(): React.JSX.Element {
   const { t } = useTranslation('common');
   return (
@@ -354,6 +406,7 @@ export function SearchView({
   query,
   filter,
   sections,
+  favorites,
   recentSearches,
   availableResultCount,
   errorCode,
@@ -380,9 +433,9 @@ export function SearchView({
   const headerInsets = useMemo(() => ({ paddingTop: topInset + Space.sm }), [topInset]);
   const hasQuery = query.trim().length > 0;
   const showFilters = hasQuery && shouldShowSearchFilters(availableResultCount);
-  const showNoResults = state !== 'loading'
-    && state !== 'permission'
-    && (hasQuery ? sections.length === 0 : recentSearches.length === 0);
+  const showContent = state !== 'loading' && state !== 'permission';
+  const showNoResults = showContent
+    && (hasQuery ? sections.length === 0 : recentSearches.length === 0 && favorites.length === 0);
 
   return (
     <View testID="search-view" style={[styles.screen, { backgroundColor: theme.colors.canvas }]}>
@@ -390,16 +443,18 @@ export function SearchView({
         <FloatingButton
           testID="search-back"
           icon={ChevronLeft}
+          appearance="surface"
           accessibilityLabel={t('Back')}
           onPress={onBack}
         />
         <SearchInput
           testID="search-input"
           style={styles.searchInput}
+          appearance="quiet"
           autoFocus={autoFocus}
           value={query}
           onChangeText={onChangeQuery}
-          placeholder={t('Search')}
+          placeholder={t('Agents, sessions, and messages')}
         />
       </View>
       <ScrollView
@@ -427,10 +482,13 @@ export function SearchView({
           />
         ) : null}
         {state === 'loading' ? <SearchLoading /> : null}
-        {state !== 'loading' && state !== 'permission' && !hasQuery && recentSearches.length > 0 ? (
+        {showContent && !hasQuery && recentSearches.length > 0 ? (
           <RecentSearches searches={recentSearches} onSelect={onSelectRecent} />
         ) : null}
-        {state !== 'loading' && state !== 'permission' && hasQuery && sections.length > 0 ? (
+        {showContent && !hasQuery && favorites.length > 0 ? (
+          <FavoritesBrowse favorites={favorites} onSelectResult={onSelectResult} />
+        ) : null}
+        {showContent && hasQuery && sections.length > 0 ? (
           <SearchSections
             sections={sections}
             query={query}
@@ -442,7 +500,9 @@ export function SearchView({
             testID="search-empty"
             style={[styles.emptyText, { color: theme.colors.inkSecondary }]}
           >
-            {hasQuery ? t('No results') : t('No recent searches')}
+            {hasQuery
+              ? t('No results')
+              : t('Search agents, sessions, and messages from chats opened on this device')}
           </Text>
         ) : null}
       </ScrollView>
@@ -534,6 +594,17 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: FontSize.body,
     lineHeight: LineHeight.body,
+    fontWeight: FontWeight.regular,
+  },
+  expandCopy: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space.xs,
+  },
+  expandText: {
+    fontSize: FontSize.secondary,
+    lineHeight: LineHeight.secondary,
     fontWeight: FontWeight.regular,
   },
   emptyText: {

@@ -93,6 +93,8 @@ export type SearchModel = Readonly<{
   query: string;
   filter: SearchFilter;
   sections: ReadonlyArray<SearchSection>;
+  /** Every favorite, listed under an empty query: Search is the only place favorites can be browsed. */
+  favorites: ReadonlyArray<FavoriteSearchResult>;
   availableResultCount: number;
   visibleResultCount: number;
 }>;
@@ -119,6 +121,8 @@ const SECTION_ORDER: ReadonlyArray<SearchSectionKind> = [
 
 const RECENT_SEARCH_LIMIT = 8;
 export const SEARCH_FILTER_THRESHOLD = 6;
+/** Favorites shown under an empty query before the list expands. */
+export const SEARCH_FAVORITES_PREVIEW_LIMIT = 5;
 
 function normalizeQuery(value: string): string {
   return value.trim().toLocaleLowerCase();
@@ -347,7 +351,7 @@ function buildFavoriteResults(
   for (const favorite of input.favorites) {
     if (!connections.has(favorite.gatewayConfigId)) continue;
     if (!hasCapability(input.capabilitiesByConnection, favorite.gatewayConfigId, 'history')) continue;
-    if (!matchesQuery(
+    if (query && !matchesQuery(
       query,
       favorite.text,
       favorite.toolName,
@@ -389,17 +393,18 @@ function sectionVisible(filter: SearchFilter, section: SearchSectionKind): boole
 export function buildSearchModel(input: SearchModelInput): SearchModel {
   const query = normalizeQuery(input.query);
   const filter = input.filter ?? 'all';
+  const connections = connectionMap(input.connections, input.roster);
   if (!query) {
     return Object.freeze({
       query,
       filter,
       sections: Object.freeze([]),
+      favorites: Object.freeze(buildFavoriteResults(input, query, connections)),
       availableResultCount: 0,
       visibleResultCount: 0,
     });
   }
 
-  const connections = connectionMap(input.connections, input.roster);
   const bySection: Readonly<Record<SearchSectionKind, ReadonlyArray<SearchResult>>> = {
     agents: buildAgentResults(input, query, connections),
     sessions: buildSessionResults(input, query, connections),
@@ -421,6 +426,7 @@ export function buildSearchModel(input: SearchModelInput): SearchModel {
     query,
     filter,
     sections: Object.freeze(sections),
+    favorites: Object.freeze([]),
     availableResultCount,
     visibleResultCount: sections.reduce((count, section) => count + section.results.length, 0),
   });
@@ -434,15 +440,17 @@ export function resolveSearchPageState(input: Readonly<{
   errorCode?: string | null;
   visibleResultCount: number;
   recentSearchCount: number;
+  favoriteCount: number;
   hasQuery: boolean;
 }>): SearchPageState {
   if (!input.permitted) return 'permission';
   if (!input.initialized || input.loading) return 'loading';
   if (input.errorCode) return 'error';
   if (input.offline) return 'offline';
-  if (input.hasQuery ? input.visibleResultCount === 0 : input.recentSearchCount === 0) {
-    return 'empty';
-  }
+  const emptyPage = input.hasQuery
+    ? input.visibleResultCount === 0
+    : input.recentSearchCount === 0 && input.favoriteCount === 0;
+  if (emptyPage) return 'empty';
   return 'ready';
 }
 
