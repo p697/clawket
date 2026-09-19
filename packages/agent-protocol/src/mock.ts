@@ -13,6 +13,8 @@ import type {
   AgentCreate,
   AgentPatch,
   ConfigView,
+  CronJobPatch,
+  CronPayload,
   ManagementOperations,
 } from './management';
 
@@ -162,7 +164,7 @@ function createManagement(
             schedule: patch.schedule ?? { kind: 'every', everyMs: 0 },
             sessionTarget: patch.sessionTarget ?? 'main',
             wakeMode: patch.wakeMode ?? 'now',
-            payload: patch.payload ?? { kind: 'systemEvent', text: '' },
+            payload: mockCronPayload(patch.payload),
             state: {},
           })),
           remove: provided?.cron?.remove ?? (async () => ({ ok: true })),
@@ -329,6 +331,7 @@ function createManagement(
               list: async () => [],
               create: async () => ({ id: 'mock-backup', createdAt: 0 }),
               restore: async () => undefined,
+          remove: async () => undefined,
             },
         }
       : {}),
@@ -385,8 +388,8 @@ function createManagement(
       : {}),
     ...(capabilities.channels
       ? {
-          channels: provided?.channels ?? {
-            status: async () => ({
+          channels: {
+            status: provided?.channels?.status ?? (async () => ({
               ts: 0,
               channelOrder: [],
               channelLabels: {},
@@ -396,7 +399,14 @@ function createManagement(
               channels: {},
               channelAccounts: {},
               channelDefaultAccountId: {},
-            }),
+            })),
+            ...(capabilities.channelManage
+              ? {
+                  getRouting: provided?.channels?.getRouting ?? (async () => ({ dmScope: 'main' as const })),
+                  setRouting: provided?.channels?.setRouting ?? (async () => undefined),
+                  setAccountEnabled: provided?.channels?.setAccountEnabled ?? (async () => undefined),
+                }
+              : {}),
           },
         }
       : {}),
@@ -592,4 +602,12 @@ export function createMockAdapter(fixture: MockAdapterFixture): MockAgentAdapter
   };
 
   return adapter;
+}
+
+/** A patch's `model: null` clears the override; a stored job never carries `null`. */
+function mockCronPayload(payload: CronJobPatch['payload']): CronPayload {
+  if (!payload) return { kind: 'systemEvent', text: '' };
+  if (payload.kind === 'systemEvent') return payload;
+  const { model, ...rest } = payload;
+  return model ? { ...rest, model } : rest;
 }

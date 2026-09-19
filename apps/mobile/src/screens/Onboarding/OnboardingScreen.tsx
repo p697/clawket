@@ -1,3 +1,4 @@
+import { isIPad } from '../../utils/platform';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Keyboard,
@@ -12,6 +13,7 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Check,
+  ArrowUpRight,
   CheckCircle2,
   Circle,
   Copy,
@@ -23,6 +25,8 @@ import {
   WifiOff,
 } from 'lucide-react-native';
 import { YOUMIND_SPRITE_ENTRY_VISIBLE } from '../../config/features';
+import { CLAWKET_GITHUB_REPO_URL } from '../../config/app-links';
+import { openExternalUrl } from '../../utils/openExternalUrl';
 import { useAppTheme } from '../../theme';
 import {
   ControlSize,
@@ -141,7 +145,7 @@ export function OnboardingScreen({
   // iOS: the padding KeyboardAvoidingView shrinks the viewport with the keyboard's real frame;
   // the reveal scroll moves only the measured shortfall, in step with the keyboard, so a
   // third-party keyboard changing height afterwards adds an increment instead of a re-scroll.
-  const keyboardReveal = useKeyboardRevealScroll({ clearance: KEYBOARD_CLEARANCE, enabled: Platform.OS === 'ios' });
+  const keyboardReveal = useKeyboardRevealScroll({ clearance: KEYBOARD_CLEARANCE, enabled: Platform.OS === 'ios' && !isIPad });
   const [backendKind, setBackendKind] = useState<PairableBackendKind>(initialBackend ?? 'openclaw');
   const [pairingCode, setPairingCode] = useState('');
   const [choosing, setChoosing] = useState(!initialBackend);
@@ -171,8 +175,16 @@ export function OnboardingScreen({
   const backendOptions = useMemo(() => [
     { ...BACKEND_OPTIONS[0], label: t('OpenClaw') },
     { ...BACKEND_OPTIONS[1], label: t('Hermes') },
-    ...(environment === 'preview' ? [{ ...BACKEND_OPTIONS[2], label: t('Local model') }] : []),
-  ] as const, [environment, t]);
+    { ...BACKEND_OPTIONS[2], label: t('Local model') },
+  ] as const, [t]);
+  // Chooser order (owner decision 2026-09-19): the installable products first,
+  // then the model server the user already runs.
+  const chooserRows = useMemo((): ReadonlyArray<{ kind: PairableBackendKind | 'youmind'; label: string }> => [
+    backendOptions[0],
+    backendOptions[1],
+    ...(YOUMIND_SPRITE_ENTRY_VISIBLE ? [{ kind: 'youmind' as const, label: t('YouMind Sprite') }] : []),
+    backendOptions[2],
+  ], [backendOptions, t]);
   const websiteOptions = useMemo((): ReadonlyArray<{ kind: OnboardingWebsiteBackendKind; label: string }> => [
     ...backendOptions.flatMap((backend) => backend.kind === 'local-model' ? [] : [{ kind: backend.kind, label: backend.label }]),
     ...(YOUMIND_SPRITE_ENTRY_VISIBLE ? [{ kind: 'youmind' as const, label: t('YouMind') }] : []),
@@ -208,7 +220,11 @@ export function OnboardingScreen({
   }
 
   const pairingReady = isVerificationCodeComplete(pairingCode, backendKind) && !connecting;
-  const pairingInput = PAIRING_INPUT_PRESENTATION[backendKind];
+  // iPadOS 26 numberPad uses an unstable floating popover. Keep pairing on
+  // the full ASCII keyboard; normalization below still enforces the code alphabet.
+  const pairingInput = isIPad
+    ? { keyboardType: 'ascii-capable' as const }
+    : PAIRING_INPUT_PRESENTATION[backendKind];
   const pairingPlaceholder: Readonly<Record<PairableBackendKind, string>> = {
     openclaw: t('123 456'),
     hermes: t('ABC 234'),
@@ -262,24 +278,36 @@ export function OnboardingScreen({
       <FlowHeader onBack={connecting ? onClose : onClose || !choosing ? goBack : undefined} testID="onboarding-close"
         title={environment === 'preview' ? t('Preview') : undefined}
         right={onOpenDesignSystem ? <FloatingButton icon={Palette} appearance="plain" accessibilityLabel={t('Design language')} onPress={onOpenDesignSystem} /> : undefined} />
-      <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView testID="onboarding-keyboard-avoiding" enabled={!isIPad} style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <Reanimated.ScrollView ref={keyboardReveal.scrollRef} testID="onboarding-scroll"
-        automaticallyAdjustContentInsets={false} keyboardDismissMode="interactive"
+        // On iPad use the native keyboard frame and focused-field reveal. Do not also
+        // resize/scroll through keyboard-controller (which can miss a foreground frame).
+        automaticallyAdjustKeyboardInsets={isIPad}
+        automaticallyAdjustContentInsets={false} keyboardDismissMode={isIPad ? 'on-drag' : 'interactive'}
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + Space.xl }]}
         keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <PageIntro title={choosing ? t('Connect your agent') : t('Connect {{backend}}', { backend: backendLabel })} />
-        {status.kind === 'offline' ? <Banner tone="neutral" icon={WifiOff} testID="onboarding-offline" message={t('No network')} actionLabel={onRetry ? t('Retry', { ns: 'common' }) : undefined} onAction={onRetry} /> : null}
+        {status.kind === 'offline' ? <Banner tone="neutral" icon={WifiOff} testID="onboarding-offline" message={t('Offline · reconnecting', { ns: 'common' })} actionLabel={onRetry ? t('Reconnect', { ns: 'common' }) : undefined} onAction={onRetry} /> : null}
         {status.kind === 'error' ? <ErrorBanner code={status.code} backendKind={backendKind} onAction={onErrorAction} /> : null}
         {localError ? <Banner tone="bad" message={t('Please try again later.', { ns: 'common' })} /> : null}
         {choosing ? <>
           <View testID="onboarding-backends" style={styles.backendList}>
-            {backendOptions.map((backend) => <ChoiceRow key={backend.kind} testID={`onboarding-backend-${backend.kind}`} leading={<PlatformMark platform={backend.kind} />} title={backend.label}
-              onPress={() => chooseBackend(backend.kind)} />)}
-            {YOUMIND_SPRITE_ENTRY_VISIBLE ? <ChoiceRow testID="onboarding-youmind" leading={<PlatformMark platform="youmind" />} title={t('YouMind Sprite')} onPress={onOpenYouMind} /> : null}
+            {chooserRows.map((row) => {
+              if (row.kind === 'youmind') return <ChoiceRow key={row.kind} testID="onboarding-youmind" leading={<PlatformMark platform="youmind" />} title={row.label} onPress={onOpenYouMind} />;
+              const kind = row.kind;
+              return <ChoiceRow key={kind} testID={`onboarding-backend-${kind}`} leading={<PlatformMark platform={kind} />} title={row.label} onPress={() => chooseBackend(kind)} />;
+            })}
           </View>
           <View style={styles.secondaryActions}>
             <Button testID="onboarding-docs-toggle" label={t('No agent yet?')} variant="text" onPress={() => setDocsExpanded((expanded) => !expanded)} />
             {docsExpanded ? <View testID="onboarding-doc-options" style={styles.docsList}>{websiteOptions.map((backend) => <Button key={backend.kind} testID={`onboarding-doc-${backend.kind}`} label={backend.label} variant="text" onPress={() => onOpenWebsite(backend.kind)} />)}</View> : null}
+          </View>
+          <View testID="onboarding-open-source" style={styles.openSource}>
+            <Text style={styles.openSourceTitle}>{t('This project is open source.')}</Text>
+            <Text style={styles.openSourceCopy}>{t('Clawket will not store your data on its servers.')}</Text>
+            <Button testID="onboarding-github" label={CLAWKET_GITHUB_REPO_URL.replace('https://', '')}
+              variant="text" size="sm" icon={ArrowUpRight} accessibilityRole="link" multiline
+              onPress={() => { setLocalError(false); void openExternalUrl(CLAWKET_GITHUB_REPO_URL, () => setLocalError(true)); }} />
           </View>
         </> : <>
           {agentMethod ? <FormStep number="01" title={t('Send this message to your agent')}
@@ -477,6 +505,9 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     keyboardAnchor: { gap: Space.md },
     codeInputText: { fontSize: FontSize.title, lineHeight: LineHeight.title, fontVariant: ['tabular-nums'], letterSpacing: Space.xs, textAlign: 'center' },
     secondaryActions: { marginTop: Space.xl, gap: Space.sm },
+    openSource: { marginTop: 'auto', paddingTop: Space.xxl, paddingBottom: Space.lg, alignItems: 'center', gap: Space.xs },
+    openSourceTitle: { color: colors.inkSecondary, fontSize: FontSize.secondary, lineHeight: LineHeight.secondary, fontWeight: FontWeight.semibold, textAlign: 'center' },
+    openSourceCopy: { color: colors.inkSecondary, fontSize: FontSize.secondary, lineHeight: LineHeight.secondary, fontWeight: FontWeight.regular, textAlign: 'center' },
     docsList: { flexDirection: 'row', justifyContent: 'center' },
     alternatives: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: Space.xs },
     progress: {

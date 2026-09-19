@@ -60,6 +60,7 @@
     "expo": "~57.0.23",
     "expo-application": "~57.0.3",
     "expo-asset": "~57.0.17",
+    "expo-audio": "~57.0.5",
     "expo-battery": "~57.0.3",
     "expo-build-properties": "~57.0.20",
     "expo-camera": "~57.0.5",
@@ -99,6 +100,7 @@
     "react-native-screens": "~4.26.0",
     "react-native-svg": "15.15.4",
     "react-native-view-shot": "5.1.0",
+    "react-native-webview": "13.16.1",
     "react-native-worklets": "0.10.1",
     "remend": "^1.2.1",
     "tweetnacl": "^1.0.3"

@@ -25,6 +25,7 @@ export type ModelDeleteCleanup = {
   action:
     | 'remove_configured_model'
     | 'remove_allowlist_entry'
+    | 'remove_policy_allow_entry'
     | 'remove_defaults_fallback'
     | 'remove_defaults_image_fallback'
     | 'remove_defaults_pdf_fallback'
@@ -37,7 +38,10 @@ export type ModelDeleteCleanup = {
 export type ModelDeleteAnalysis = {
   canDelete: boolean;
   hasConfiguredModel: boolean;
+  /** A key in the `agents.defaults.models` map (legacy allowlist, metadata on a policy config). */
   hasAllowlistEntry: boolean;
+  /** An exact reference in `agents.defaults.modelPolicy.allow` or an Agent's `modelPolicy.allow`. */
+  hasPolicyAllowEntry: boolean;
   blocks: ModelDeleteBlock[];
   cleanup: ModelDeleteCleanup[];
 };
@@ -164,6 +168,37 @@ function removeAllowlistEntry(nextConfig: ConfigObject, provider: string, modelI
   return false;
 }
 
+/**
+ * `modelPolicy.allow` arrays that name the model exactly (or by its alias), at
+ * the defaults and on each Agent entry. Wildcards such as `openai/*` are
+ * provider-wide and stay untouched.
+ */
+function listPolicyAllowPaths(config: ConfigObject | null | undefined, matchers: Set<string>): string[] {
+  const paths: string[] = [];
+  const agents = isRecord(config?.agents) ? config.agents : null;
+  const defaults = agents && isRecord(agents.defaults) ? agents.defaults : null;
+  const holdsMatch = (policy: unknown): boolean => (
+    isRecord(policy) && Array.isArray(policy.allow) && policy.allow.some((entry) => matchesTarget(entry, matchers))
+  );
+  if (defaults && holdsMatch(defaults.modelPolicy)) {
+    paths.push('agents.defaults.modelPolicy.allow');
+  }
+  const agentList = agents && Array.isArray(agents.list) ? agents.list : [];
+  agentList.forEach((entry, index) => {
+    if (isRecord(entry) && holdsMatch(entry.modelPolicy)) {
+      paths.push(`agents.list.${index}.modelPolicy.allow`);
+    }
+  });
+  return paths;
+}
+
+function removePolicyAllowEntries(policy: unknown, matchers: Set<string>): unknown {
+  if (!isRecord(policy) || !Array.isArray(policy.allow)) {
+    return policy;
+  }
+  return { ...policy, allow: policy.allow.filter((entry) => !matchesTarget(entry, matchers)) };
+}
+
 function removeConfiguredModel(nextConfig: ConfigObject, provider: string, modelId: string): boolean {
   const providerConfig = findProviderConfig(nextConfig, provider);
   if (!providerConfig || !Array.isArray(providerConfig.models)) {
@@ -185,20 +220,22 @@ export function analyzeModelDeletion(params: {
   const configuredModel = findConfiguredModelEntry(params.config, params.provider, params.modelId);
   const inAllowlist = hasAllowlistEntry(params.config, params.provider, params.modelId);
 
-  if (!configuredModel && !inAllowlist) {
-    return {
-      canDelete: false,
-      hasConfiguredModel: false,
-      hasAllowlistEntry: false,
-      blocks: [{ path: 'models.providers', reason: 'model_not_configured' }],
-      cleanup: [],
-    };
-  }
-
   const alias = getModelAlias(params.config, params.provider, params.modelId);
   const matchers = new Set([normalizeModelRef(params.provider, params.modelId)]);
   if (alias) {
     matchers.add(normalizeToken(alias));
+  }
+  const policyAllowPaths = listPolicyAllowPaths(params.config, matchers);
+
+  if (!configuredModel && !inAllowlist && policyAllowPaths.length === 0) {
+    return {
+      canDelete: false,
+      hasConfiguredModel: false,
+      hasAllowlistEntry: false,
+      hasPolicyAllowEntry: false,
+      blocks: [{ path: 'models.providers', reason: 'model_not_configured' }],
+      cleanup: [],
+    };
   }
 
   const blocks: ModelDeleteBlock[] = [];
@@ -320,6 +357,9 @@ export function analyzeModelDeletion(params: {
     blocks.push({ path: 'hooks.gmail.model', reason: 'hook_gmail_model' });
   }
 
+  for (const path of [...policyAllowPaths].reverse()) {
+    cleanup.unshift({ path, action: 'remove_policy_allow_entry' });
+  }
   if (configuredModel) {
     cleanup.unshift(
       { path: `models.providers.${params.provider}.models`, action: 'remove_configured_model' },
@@ -335,6 +375,7 @@ export function analyzeModelDeletion(params: {
     canDelete: blocks.length === 0,
     hasConfiguredModel: !!configuredModel,
     hasAllowlistEntry: inAllowlist,
+    hasPolicyAllowEntry: policyAllowPaths.length > 0,
     blocks,
     cleanup,
   };
@@ -375,6 +416,9 @@ export function buildDeleteModelConfig(params: {
     if (isRecord(defaults.subagents) && defaults.subagents.model !== undefined) {
       defaults.subagents.model = removeFallbacks(defaults.subagents.model, matchers);
     }
+    if (defaults.modelPolicy !== undefined) {
+      defaults.modelPolicy = removePolicyAllowEntries(defaults.modelPolicy, matchers);
+    }
   }
 
   if (agents && Array.isArray(agents.list)) {
@@ -389,6 +433,9 @@ export function buildDeleteModelConfig(params: {
           ...nextEntry.subagents,
           model: removeFallbacks(nextEntry.subagents.model, matchers),
         };
+      }
+      if (nextEntry.modelPolicy !== undefined) {
+        nextEntry.modelPolicy = removePolicyAllowEntries(nextEntry.modelPolicy, matchers);
       }
       return nextEntry;
     });

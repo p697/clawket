@@ -3,7 +3,7 @@ import { fireEvent, render } from '@testing-library/react-native';
 import { StyleSheet, Text } from 'react-native';
 import { builtInAccents } from '../../theme/accents';
 import { buildTheme } from '../../theme/theme';
-import { ControlSize, FontSize, Radius } from '../../theme/tokens';
+import { ControlSize, FontSize, Radius, Space } from '../../theme/tokens';
 import { ConfirmationModal } from './ConfirmationModal';
 import { Button } from './Button';
 import { SearchInput } from './SearchInput';
@@ -12,6 +12,7 @@ import { FloatingButton } from './FloatingButton';
 import { ThemedSwitch } from './ThemedSwitch';
 import { Search } from 'lucide-react-native';
 import { Sheet } from './Sheet';
+import { SheetHeaderButton } from './SheetHeaderButton';
 
 let mockScheme: 'light' | 'dark' = 'light';
 
@@ -227,6 +228,42 @@ describe.each(['light', 'dark'] as const)('%s navigation primitives', (scheme) =
     expect(result.getByTestId('sheet-header-right')).toBeTruthy();
     fireEvent.press(close);
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps air between the sheet header and the body', () => {
+    const result = render(
+      <Sheet visible title="Models" onClose={jest.fn()} closeAccessibilityLabel="Close" testID="spaced-sheet">
+        <Text>Content</Text>
+      </Sheet>,
+    );
+    const header = flattened(result.getByTestId('spaced-sheet-header').props.style);
+    expect(header.minHeight).toBe(ControlSize.settingsRow);
+    expect(header.paddingBottom).toBe(Space.md);
+  });
+
+  it('gives a trailing SheetHeaderButton the same quiet chrome as the close button', () => {
+    const onManage = jest.fn();
+    const result = render(
+      <Sheet
+        visible
+        title="Models"
+        onClose={jest.fn()}
+        closeAccessibilityLabel="Close"
+        testID="action-sheet"
+        headerRight={<SheetHeaderButton testID="action-sheet-manage" icon={Search} accessibilityLabel="Manage" onPress={onManage} />}
+      >
+        <Text>Content</Text>
+      </Sheet>,
+    );
+    const close = flattened(result.getByTestId('action-sheet-close').props.style);
+    const manage = flattened(result.getByTestId('action-sheet-manage').props.style);
+    expect(manage.backgroundColor).toBe(buildTheme(scheme, scheme, builtInAccents.iceBlue).colors.surface);
+    expect(manage.backgroundColor).toBe(close.backgroundColor);
+    expect(manage.width).toBe(close.width);
+    expect(manage.height).toBe(close.height);
+    expect(manage.borderRadius).toBe(close.borderRadius);
+    fireEvent.press(result.getByTestId('action-sheet-manage'));
+    expect(onManage).toHaveBeenCalledTimes(1);
   });
 
   it('opens a sheet that initially mounts hidden and can reopen it after dismissal', () => {

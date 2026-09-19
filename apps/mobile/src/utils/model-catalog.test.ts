@@ -127,4 +127,66 @@ describe('model-catalog', () => {
       replacePaths: [],
     });
   });
+
+  // OpenClaw ≥ 2026-07-18 restricts through `agents.defaults.modelPolicy.allow`;
+  // the `agents.defaults.models` map is metadata and its keys no longer count.
+  it('reads the policy allow list as the allowlist and asks for array consent when rewriting it', () => {
+    const policyConfig = {
+      ...config,
+      agents: {
+        defaults: {
+          ...config.agents.defaults,
+          models: { 'openai/gpt-5': {}, 'anthropic/sonnet': { alias: 'Sonnet' }, 'openai/config-only': {} },
+          modelPolicy: { allow: ['openai/gpt-5', 'anthropic/*'] },
+        },
+      },
+    };
+    expect(buildModelCatalogState(policyConfig, catalog).allowlist).toEqual(['openai/gpt-5', 'anthropic/*']);
+    expect(buildModelCatalogState({
+      ...policyConfig,
+      agents: { defaults: { ...policyConfig.agents.defaults, modelPolicy: { allow: [] } } },
+    }, catalog).allowlist).toBeNull();
+
+    expect(buildModelCatalogPatch(policyConfig, {
+      allowlist: [
+        { provider: 'openai', modelId: 'gpt-5', enabled: false },
+        { provider: 'openai', modelId: 'config-only', enabled: true },
+        { provider: 'anthropic', modelId: 'sonnet', enabled: true },
+      ],
+    })).toEqual({
+      patch: {
+        agents: {
+          defaults: {
+            modelPolicy: { allow: ['anthropic/*', 'openai/config-only'] },
+          },
+        },
+      },
+      replacePaths: ['agents.defaults.modelPolicy.allow'],
+    });
+    // A defaults write keeps the new primary and fallbacks allowlisted.
+    expect(buildModelCatalogPatch(policyConfig, {
+      defaults: { primary: 'openai/config-only', fallbacks: ['openai/gpt-5'], thinkingDefault: 'medium' },
+      allowlist: [
+        { provider: 'openai', modelId: 'gpt-5', enabled: false },
+        { provider: 'anthropic', modelId: 'sonnet', enabled: false },
+      ],
+    })).toEqual({
+      patch: {
+        agents: {
+          defaults: {
+            model: { primary: 'openai/config-only', fallbacks: ['openai/gpt-5'] },
+            modelPolicy: { allow: ['openai/gpt-5', 'openai/config-only'] },
+          },
+        },
+      },
+      replacePaths: ['agents.defaults.model.fallbacks', 'agents.defaults.modelPolicy.allow'],
+    });
+    // A migrated config without the array yet needs no consent to create it.
+    expect(buildModelCatalogPatch({ meta: { migrations: { modelPolicyAllowlist: true } } }, {
+      allowlist: [{ provider: 'openai', modelId: 'gpt-5', enabled: true }],
+    })).toEqual({
+      patch: { agents: { defaults: { modelPolicy: { allow: ['openai/gpt-5'] }, models: { 'openai/gpt-5': {} } } } },
+      replacePaths: [],
+    });
+  });
 });

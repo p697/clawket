@@ -62,7 +62,15 @@ export type CronJob = {
 
 export type CronJobCreate = Omit<CronJob, 'id' | 'createdAtMs' | 'updatedAtMs' | 'state'>;
 
-export type CronJobPatch = Partial<Omit<CronJob, 'id' | 'createdAtMs' | 'state'>>;
+/**
+ * Payload for `CronJobPatch`. `model: null` clears an `agentTurn` override
+ * (OpenClaw `cron.update` contract); a string replaces it.
+ */
+export type CronPayloadPatch =
+  | Extract<CronPayload, { kind: 'systemEvent' }>
+  | (Omit<Extract<CronPayload, { kind: 'agentTurn' }>, 'model'> & { model?: string | null });
+
+export type CronJobPatch = Partial<Omit<CronJob, 'id' | 'createdAtMs' | 'state' | 'payload'>> & { payload?: CronPayloadPatch };
 
 export type CronListResult = {
   jobs: CronJob[];
@@ -73,18 +81,37 @@ export type CronListResult = {
   nextOffset: number | null;
 };
 
+export type CronDeliveryTraceTarget = {
+  channel?: string;
+  to?: string | null;
+  accountId?: string;
+  threadId?: string | number;
+  source?: string;
+};
+
+export type CronDeliveryTrace = {
+  intended?: CronDeliveryTraceTarget;
+  resolved?: CronDeliveryTraceTarget;
+  messageToolSentTo?: CronDeliveryTraceTarget[];
+  fallbackUsed?: boolean;
+  delivered?: boolean;
+};
+
 export type CronRunLogEntry = {
   ts: number;
   jobId: string;
   action: 'finished';
   status?: CronRunStatus;
+  completionStatus?: 'succeeded' | 'failed' | 'unknown';
   error?: string;
   summary?: string;
   delivered?: boolean;
   deliveryStatus?: CronDeliveryStatus;
   deliveryError?: string;
+  delivery?: CronDeliveryTrace;
   sessionId?: string;
   sessionKey?: string;
+  runId?: string;
   runAtMs?: number;
   durationMs?: number;
   nextRunAtMs?: number;
@@ -96,6 +123,7 @@ export type CronRunLogEntry = {
     total_tokens?: number;
   };
   jobName?: string;
+  outputRef?: string;
 };
 
 export type CronRunsResult = {

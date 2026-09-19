@@ -12,6 +12,7 @@ import {
   type AdapterErrorCode,
   type Capabilities,
   type SessionKind,
+  type CronRunLogEntry,
 } from '@clawket/agent-protocol';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppContextProvider, useAppContext } from '../../contexts/AppContext';
@@ -43,6 +44,7 @@ import {
   type ThreadViewProps,
 } from './ThreadView';
 import {
+  areThreadRunSeedsEqual,
   deriveThreadContentState,
   formatThreadLocalTime,
   isThreadErrorCode,
@@ -55,11 +57,59 @@ import {
 } from './model';
 import { isMainConversation, projectSessionPreview, type SessionPreviewSnapshot } from '../../utils/session-preview';
 import { ThreadOverlays } from './components/ThreadOverlays';
+import { CronRunSheet } from '../AgentSettings/CronRunSheet';
+import { ThreadActivityCacheService } from '../../services/thread-activity-cache';
 import type { ThreadAddAction, ThreadAddSheetProps } from './components/ThreadAddSheet';
 
 const NO_CAPABILITIES = Object.freeze(Object.fromEntries(
   CAPABILITY_KEYS.map((capability) => [capability, false]),
 )) as unknown as Capabilities;
+
+const EMPTY_RUN_SEEDS: ReadonlyArray<ThreadRunSeed> = Object.freeze([]);
+const EMPTY_RUN_CARDS: ReadonlyArray<ThreadRunCard> = Object.freeze([]);
+/** The first frame waits at most this long for the local activity snapshot. */
+const THREAD_ACTIVITY_HYDRATION_TIMEOUT_MS = 300;
+/** A refreshed activity result waits at most this long for the history refresh. */
+const THREAD_ACTIVITY_SETTLE_TIMEOUT_MS = 300;
+
+type ThreadCronActivity = Readonly<{
+  scope: string;
+  runs: ReadonlyArray<ThreadRunSeed>;
+  /** Where the visible snapshot came from; a network result never yields to a later cache read. */
+  source: 'none' | 'cache' | 'network';
+}>;
+
+const NO_CRON_ACTIVITY: ThreadCronActivity = { scope: '', runs: EMPTY_RUN_SEEDS, source: 'none' };
+
+function runCardSignature(card: ThreadRunCard): string {
+  return [
+    card.id,
+    card.kind,
+    card.status,
+    card.statusLabel,
+    card.timeLabel,
+    card.title,
+    card.updatedAt,
+    card.sessionKey ?? '',
+    card.jobId ?? '',
+    card.agentId ?? '',
+    card.summary ?? '',
+    card.canOpenLogs ? '1' : '0',
+    card.cronRun ? '1' : '0',
+  ].join('\u0001');
+}
+
+function areThreadRunCardsEqual(
+  left: ReadonlyArray<ThreadRunCard>,
+  right: ReadonlyArray<ThreadRunCard>,
+): boolean {
+  if (left === right) return true;
+  if (left.length !== right.length) return false;
+  for (let index = 0; index < left.length; index += 1) {
+    if (runCardSignature(left[index]!) !== runCardSignature(right[index]!)) return false;
+  }
+  return true;
+}
 
 type NavigationProps = NativeStackScreenProps<RootStackParamList, 'Thread'>;
 
@@ -73,7 +123,6 @@ export type ThreadScreenProps = NavigationProps & Readonly<{
     sessionKey: string,
     agentId: string | undefined,
     kind: ThreadRunCard['kind'],
-    context?: Pick<ThreadRunCard, 'title' | 'kind' | 'statusLabel' | 'summary'>,
   ) => void;
   onOpenRunLogs?: (jobId: string, agentId?: string) => void;
   onOpenAttachments?: ThreadViewProps['onOpenAttachments'];
@@ -99,7 +148,6 @@ export function ThreadScreen(props: ThreadScreenProps): React.JSX.Element {
     initialChatPreview: null,
     pendingAgentSwitch: null,
     chatSessionRequest: focused && app.chatSessionRequest?.sessionKey === sessionKey ? app.chatSessionRequest : null,
-    pendingChatNotificationOpen: focused ? app.pendingChatNotificationOpen : null,
     pendingChatInput: focused ? app.pendingChatInput : null,
     pendingMainSessionSwitch: focused && app.pendingMainSessionSwitch,
   }), [app, agentId, agent?.mainSessionKey, connectionId, focused, sessionKey]);
@@ -136,7 +184,9 @@ function ThreadScreenContent({
   const [addSheetVisible, setAddSheetVisible] = useState(false);
   const [commandsSheetVisible, setCommandsSheetVisible] = useState(false);
   const [shareMessage, setShareMessage] = useState<UiMessage | null>(null);
-  const [cronActivity, setCronActivity] = useState<{ scope: string; runs: ThreadRunSeed[] }>({ scope: '', runs: [] });
+  const [cronActivity, setCronActivity] = useState<ThreadCronActivity>(NO_CRON_ACTIVITY);
+  const [cronHydratedScope, setCronHydratedScope] = useState<string | null>(null);
+  const [selectedCronRun, setSelectedCronRun] = useState<CronRunLogEntry | null>(null);
   const openedKeyRef = useRef<string | null>(null);
   const analyticsOpenedKeyRef = useRef<string | null>(null);
   const { connectionId, agentId, sessionKey, from } = route.params;
@@ -261,12 +311,87 @@ function ThreadScreenContent({
   const isMainThread = mainConversation;
   const cronFallbackTitle = t('Cron', { ns: 'common' });
   const cronScope = `${connectionId}:${agentId}:${sessionKey}`;
-  const cronRunSeeds = cronActivity.scope === cronScope && isMainThread ? cronActivity.runs : [];
+  const cronOperations = adapter?.management?.cron;
+  const cronSupported = isMainThread
+    && capabilities.cron
+    && Boolean(cronOperations?.list && cronOperations?.runs);
+  const cronRunSeeds = cronActivity.scope === cronScope && isMainThread ? cronActivity.runs : EMPTY_RUN_SEEDS;
+  // The local snapshot is read once per thread; the first frame waits for it so
+  // cached messages and cached scheduled cards land in the same commit.
+  const cronHydrating = cronSupported && cronHydratedScope !== cronScope;
+  const persistedCronRunsRef = useRef<ReadonlyArray<ThreadRunSeed> | null>(null);
+  useEffect(() => {
+    if (!cronSupported || cronHydratedScope === cronScope) return undefined;
+    const scope = cronScope;
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      setCronHydratedScope(scope);
+    };
+    // A slow store must not hold the timeline; a late read is simply dropped.
+    const timer = setTimeout(finish, THREAD_ACTIVITY_HYDRATION_TIMEOUT_MS);
+    void ThreadActivityCacheService.read({ connectionId, agentId, sessionKey }).then((runs) => {
+      if (done) return;
+      if (runs && runs.length > 0) {
+        persistedCronRunsRef.current = runs;
+        setCronActivity((previous) => (
+          previous.scope === scope && previous.source === 'network'
+            ? previous
+            : { scope, runs, source: 'cache' }
+        ));
+      }
+      finish();
+    }, finish);
+    return () => {
+      done = true;
+      clearTimeout(timer);
+    };
+  }, [agentId, connectionId, cronHydratedScope, cronScope, cronSupported, sessionKey]);
   // Chat token/preview updates must not reload every job or clear the timeline.
   const cronSessionsRevision = controller.sessions
     .filter((session) => session.key.includes(':cron:'))
     .map((session) => `${session.key}:${session.updatedAt ?? ''}`)
     .sort().join('|');
+  const historyLoadedRef = useRef(controller.historyLoaded);
+  historyLoadedRef.current = controller.historyLoaded;
+  const pendingCronResultRef = useRef<{ scope: string; runs: ThreadRunSeed[] } | null>(null);
+  const pendingCronTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const commitCronRuns = useCallback((scope: string, runs: ThreadRunSeed[]) => {
+    setCronActivity((previous) => {
+      // An unchanged result keeps the rendered cards' identity: no rebuild, no jump.
+      if (previous.scope === scope && areThreadRunSeedsEqual(previous.runs, runs)) {
+        return previous.source === 'network' ? previous : { ...previous, source: 'network' };
+      }
+      return { scope, runs, source: 'network' };
+    });
+  }, []);
+  const flushPendingCronResult = useCallback(() => {
+    if (pendingCronTimerRef.current) {
+      clearTimeout(pendingCronTimerRef.current);
+      pendingCronTimerRef.current = null;
+    }
+    const pending = pendingCronResultRef.current;
+    if (!pending) return;
+    pendingCronResultRef.current = null;
+    commitCronRuns(pending.scope, pending.runs);
+  }, [commitCronRuns]);
+  useEffect(() => {
+    if (controller.historyLoaded) flushPendingCronResult();
+  }, [controller.historyLoaded, flushPendingCronResult]);
+  useEffect(() => () => {
+    if (pendingCronTimerRef.current) clearTimeout(pendingCronTimerRef.current);
+  }, []);
+  // Persist only a changed network result; the cache read and an equal refresh
+  // already match what is on disk.
+  useEffect(() => {
+    if (cronActivity.source !== 'network' || cronActivity.scope !== cronScope) return;
+    if (persistedCronRunsRef.current === cronActivity.runs) return;
+    persistedCronRunsRef.current = cronActivity.runs;
+    void ThreadActivityCacheService.write({ connectionId, agentId, sessionKey }, cronActivity.runs).catch(() => {
+      // A failed write only costs the next open its first-frame cards.
+    });
+  }, [agentId, connectionId, cronActivity, cronScope, sessionKey]);
   const childSessionCards = useMemo(() => buildChildSessionActivityCards({
     currentSessionKey: controller.sessionKey,
     currentAgentId: agentId,
@@ -285,15 +410,13 @@ function ThreadScreenContent({
     controller.sessions,
   ]);
   useEffect(() => {
-    const operations = adapter?.management?.cron;
+    const operations = cronOperations;
     if (
       !routeIsActive
       || controller.connectionState !== 'ready'
       || controller.sessionKey !== sessionKey
-      || !isMainThread
-      || !capabilities.cron
-      || !operations?.list
-      || !operations.runs
+      || !cronSupported
+      || !operations
     ) {
       return undefined;
     }
@@ -305,7 +428,17 @@ function ThreadScreenContent({
       isMainAgent: currentRosterAgent?.isMain ?? agentId === 'main',
       fallbackTitle: cronFallbackTitle,
     }).then((runs) => {
-      if (!cancelled) setCronActivity({ scope: cronScope, runs });
+      if (cancelled) return;
+      // History and scheduled results refresh in parallel after connect; a result
+      // that lands first waits briefly for history so both settle in one frame.
+      pendingCronResultRef.current = { scope: cronScope, runs };
+      if (historyLoadedRef.current) {
+        flushPendingCronResult();
+        return;
+      }
+      if (!pendingCronTimerRef.current) {
+        pendingCronTimerRef.current = setTimeout(flushPendingCronResult, THREAD_ACTIVITY_SETTLE_TIMEOUT_MS);
+      }
     }).catch(() => {
       // Keep the last successful activity snapshot during transient failures.
     });
@@ -313,21 +446,21 @@ function ThreadScreenContent({
       cancelled = true;
     };
   }, [
-    adapter,
     agentId,
     app.foregroundEpoch,
-    capabilities.cron,
     controller.connectionState,
     controller.sessionKey,
+    cronOperations,
     cronSessionsRevision,
     cronScope,
     cronFallbackTitle,
+    cronSupported,
     currentRosterAgent?.isMain,
-    isMainThread,
+    flushPendingCronResult,
     routeIsActive,
     sessionKey,
   ]);
-  const runCards = useMemo<ThreadRunCard[]>(() => [
+  const nextRunCards = useMemo<ThreadRunCard[]>(() => [
     ...childSessionCards.map((card) => ({
       id: card.sessionKey,
       kind: 'subagent' as const,
@@ -362,6 +495,13 @@ function ThreadScreenContent({
   ].sort((left, right) => (
     right.updatedAt - left.updatedAt || left.id.localeCompare(right.id)
   )), [capabilities.logs, childSessionCards, cronRunSeeds, isPro, locale, onOpenRunLogs, t]);
+  // Session token/preview updates rebuild the child cards; the timeline only
+  // receives a new array when a card would actually render differently.
+  const runCardsRef = useRef<ReadonlyArray<ThreadRunCard>>(EMPTY_RUN_CARDS);
+  const runCards = areThreadRunCardsEqual(runCardsRef.current, nextRunCards)
+    ? runCardsRef.current
+    : nextRunCards;
+  runCardsRef.current = runCards;
 
   useEffect(() => {
     const completed = childSessionCards.filter((card) => card.status === 'completed');
@@ -409,7 +549,7 @@ function ThreadScreenContent({
       }
     }
     navigation.replace('Thread', {
-      connectionId, agentId, sessionKey: app.mainSessionKey, from: 'panel', runContext: undefined,
+      connectionId, agentId, sessionKey: app.mainSessionKey, from: 'panel',
     });
   };
   const gatewayConfigId = adapter?.connection.id ?? null;
@@ -423,7 +563,7 @@ function ThreadScreenContent({
     sessionLabel: currentSession?.title ?? currentSession?.label,
   });
   const connectionError = connections.error
-    && connections.error.operation !== 'roster'
+    && (connections.error.operation === 'connect' || connections.error.operation === 'probe')
     && (!connections.error.connectionId || connections.error.connectionId === connectionId)
     ? connections.error.message
     : null;
@@ -438,9 +578,12 @@ function ThreadScreenContent({
     recovering: routeIsActive && connections.recovering,
     switching: connections.switching || !routeIsActive,
     targetSessionReady: controller.sessionKey === sessionKey,
+    // Cached cards never paint alone ahead of cached messages, and the first
+    // frame waits for the local snapshot instead of inserting it a beat later.
+    hydrating: cronHydrating && visibleMessages.length === 0,
     historyLoaded: controller.historyLoaded,
     hasMessages: visibleMessages.length > 0
-      || (!sessionPreview && runCards.length > 0)
+      || (!sessionPreview && runCards.length > 0 && controller.historyLoaded)
       || (previewReady && Boolean(projection?.hasHiddenHistory)),
     connectionState: connections.recoveryFailed ? 'offline' : controller.connectionState,
     error,
@@ -467,7 +610,10 @@ function ThreadScreenContent({
     });
   }, [focused, analyticsBackend, connectionId, agentId, sessionKey, state.kind, controller.historyLoaded, subscriptionLoading, targetSessionReady, sessionPreview]);
 
+  const retryInFlight = useRef(false);
   const retry = () => {
+    if (retryInFlight.current) return;
+    retryInFlight.current = true;
     setActivationFailure(null);
     void (async () => {
       if (paused) {
@@ -478,10 +624,10 @@ function ThreadScreenContent({
         await getConnectionRuntime().activate(connectionId);
         return;
       }
-      await getConnectionRuntime().probeActive();
+      await getConnectionRuntime().reconnectConnection(connectionId);
     })().catch((retryError: unknown) => {
       setActivationFailure({ error: retryError });
-    });
+    }).finally(() => { retryInFlight.current = false; });
   };
   const cancelCurrentRun = useCallback(() => {
     if (analyticsBackend) analyticsEvents.chatAbortTapped({ backend: analyticsBackend });
@@ -494,11 +640,15 @@ function ThreadScreenContent({
     targetSessionKey: string,
     targetAgentId: string | undefined,
     kind: ThreadRunCard['kind'],
-    context?: Pick<ThreadRunCard, 'title' | 'kind' | 'statusLabel' | 'summary'>,
   ) => {
     analyticsEvents.runCardOpened({ kind });
-    onOpenRunSession?.(targetSessionKey, targetAgentId, kind, context);
+    onOpenRunSession?.(targetSessionKey, targetAgentId, kind);
   }, [onOpenRunSession]);
+  const openCronRun = useCallback((run: ThreadRunCard) => {
+    if (!run.cronRun) return;
+    analyticsEvents.runCardOpened({ kind: 'cron' });
+    setSelectedCronRun(run.cronRun);
+  }, []);
 
   const handleCopyMessage = useCallback((message: UiMessage) => {
     const text = message.role === 'assistant'
@@ -576,7 +726,7 @@ function ThreadScreenContent({
     analyticsEvents.chatAddMenuAction({ backend: analyticsBackend, action, count });
   }, [analyticsBackend]);
 
-  const openAgentSection = useCallback((section: 'skills' | 'tools' | 'cron', action?: 'create-cron', cronPrompt?: string) => {
+  const openAgentSection = useCallback((section: 'skills' | 'tools' | 'cron' | 'models', action?: 'create-cron', cronPrompt?: string) => {
     navigation.navigate('AgentSettingsSection', { connectionId, agentId, section, action, cronPrompt });
   }, [agentId, connectionId, navigation]);
 
@@ -614,6 +764,13 @@ function ThreadScreenContent({
   return (
     <>
       <ThreadView
+        connectionFailure={{
+          scope: `${connectionId}:${agentId}`,
+          name: connections.connections.find((item) => item.id === connectionId)?.label ?? agentName,
+          lastReadyAt: connections.connectionDetails[connectionId]?.lastReadyAt,
+          onManage: () => navigation.navigate('Connection', { connectionId }),
+          message: paused ? t('Connection paused', { ns: 'config' }) : undefined,
+        }}
         connectingLabel={controller.connectionState !== 'ready' ? t('Connecting', { ns: 'common' }) : undefined}
         chatAppearance={app.chatAppearance}
         chatFontSize={app.chatFontSize}
@@ -626,8 +783,7 @@ function ThreadScreenContent({
         messageSubmittedAt={controller.messageSubmittedAt}
         agentEmoji={agentEmoji}
         agentAvatarUrl={agentAvatarUrl}
-        sessionTitle={route.params.runContext?.title ?? currentSession?.title ?? currentSession?.label}
-        runContext={sessionPreview && route.params.runContext ? { ...route.params.runContext, summary: undefined } : route.params.runContext}
+        sessionTitle={currentSession?.title ?? currentSession?.label}
         isMainSession={mainConversation}
         model={controller.currentModelHeaderLabel}
         contextUsed={currentSession?.totalTokensFresh === false
@@ -648,7 +804,7 @@ function ThreadScreenContent({
         sendFailure={controller.sendFailure}
         sendFailureDetails={controller.sendFailureDetails}
         onDismissSendFailure={controller.clearSendFailure}
-        runCards={sessionPreview ? [] : runCards}
+        runCards={sessionPreview ? EMPTY_RUN_CARDS : runCards}
         locale={locale}
         input={controller.input}
         composerRef={controller.composerRef}
@@ -666,13 +822,26 @@ function ThreadScreenContent({
         onCancel={requestCancelCurrentRun}
         onOpenAddMenu={addMenuAvailable ? handleOpenAddMenu : undefined}
         onVoice={controller.voiceInputSupported ? controller.toggleVoiceInput : undefined}
+        onVoiceStart={controller.startVoiceInput}
+        onVoiceStop={controller.stopVoiceInput}
+        onVoiceCancel={controller.cancelVoiceInput}
         voiceState={controller.voiceInputState}
         voiceLevel={controller.voiceInputLevel}
         onRetry={retry}
         onOpenPaywall={() => navigation.navigate('Paywall', { reason: lockedReason })}
-        onErrorAction={() => retry()}
+        onErrorAction={(failure) => {
+          if (failure.code === 'pairing_required' || failure.code === 'pairing_expired' || failure.code === 'unauthorized') {
+            navigation.navigate('Onboarding', {
+              presentation: 'modal',
+              initialBackend: connections.connections.find((item) => item.id === connectionId)?.backendKind,
+            });
+          } else if (failure.code === 'bridge_offline') {
+            navigation.navigate('HelpCenter');
+          } else retry();
+        }}
         onLoadMoreHistory={!sessionPreview && controller.hasMoreHistory ? controller.onLoadMoreHistory : undefined}
         onOpenRunSession={onOpenRunSession ? openRunSession : undefined}
+        onOpenCronRun={openCronRun}
         onOpenRunLogs={onOpenRunLogs}
         onOpenAttachments={handleOpenMessageAttachments}
         messageActions={messageActions}
@@ -736,6 +905,8 @@ function ThreadScreenContent({
           loading: controller.modelPickerLoading,
           error: controller.modelPickerError,
           models: controller.availableModels,
+          configuredDefaultModel: controller.configuredDefaultModel,
+          onManage: () => openAgentSection('models'),
           providers: controller.availableProviders,
           defaultModel: controller.currentModel ?? undefined,
           defaultProvider: controller.currentModelProvider ?? undefined,
@@ -767,6 +938,12 @@ function ThreadScreenContent({
           onClose: controller.closeStaticThinkPicker,
           onSelect: controller.onSelectStaticThinkLevel,
         }}
+      />
+      <CronRunSheet
+        run={selectedCronRun}
+        loadContent={adapter?.management?.cron?.runContent}
+        onOpenSession={onOpenRunSession ? (targetSessionKey) => onOpenRunSession(targetSessionKey, agentId, 'cron') : undefined}
+        onClose={() => setSelectedCronRun(null)}
       />
     </>
   );

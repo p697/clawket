@@ -231,6 +231,8 @@ export const Motion = {
   },
   easing: 'easeOut',
   pressedScale: 0.96,
+  /** Quiet press feedback for borderless pressables (plain settings rows, banners, pills). */
+  pressedOpacity: 0.72,
   messageEnterOffset: 4,
   avatarWorkingLoop: 1_200,
   companionBreath: 1_400,

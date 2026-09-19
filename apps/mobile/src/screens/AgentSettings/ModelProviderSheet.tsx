@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import { Banner } from '../../components/ui/Banner';
 import { Button } from '../../components/ui/Button';
@@ -16,6 +17,9 @@ import type { AgentModelGroup } from './models-model';
 
 export type ModelProviderSheetProps = Readonly<{
   visible: boolean;
+  adding?: boolean;
+  groups?: ReadonlyArray<AgentModelGroup>;
+  onSelectProvider?: (provider: string) => void;
   group: AgentModelGroup | null;
   online: boolean;
   dirty: boolean;
@@ -36,6 +40,9 @@ export function formatProviderTitle(slug: string, fallback: string): string {
 /** Where a provider's models come from, plus the add-model form for `manage` backends. */
 export function ModelProviderSheet({
   visible,
+  adding = false,
+  groups = [],
+  onSelectProvider,
   group,
   online,
   dirty,
@@ -49,9 +56,12 @@ export function ModelProviderSheet({
   const { t } = useTranslation(['common', 'settings', 'config']);
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
+  const [choosingProvider, setChoosingProvider] = useState(true);
   const [modelId, setModelId] = useState('');
   const [modelName, setModelName] = useState('');
   const [validation, setValidation] = useState<string | null>(null);
+
+  useEffect(() => { if (visible) setChoosingProvider(true); }, [visible]);
 
   useEffect(() => {
     setModelId('');
@@ -76,36 +86,56 @@ export function ModelProviderSheet({
     <Sheet
       testID="agent-model-provider"
       visible={visible}
-      title={group ? formatProviderTitle(group.provider, t('Other', { ns: 'settings' })) : ''}
+      title={adding ? t('Add model', { ns: 'settings' }) : group ? formatProviderTitle(group.provider, t('Other', { ns: 'settings' })) : ''}
+      snapPoints={['82%', '92%']}
       closeAccessibilityLabel={t('Close', { ns: 'common' })}
       dismissOnBackdropPress={!busy}
       onClose={() => { if (!busy) onClose(); }}
       keyboardBehavior="interactive"
       keyboardBlurBehavior="restore"
     >
+      <BottomSheetScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
+        {adding ? <View style={styles.form}>
+          <Text style={styles.label}>{t('Provider', { ns: 'settings' })}</Text>
+          <SettingsGroup chrome="plain">
+            {!choosingProvider && group ? <SettingsRow
+              title={formatProviderTitle(group.provider, t('Other', { ns: 'settings' }))}
+              showChevron
+              onPress={() => setChoosingProvider(true)}
+            /> : groups.map((provider) => <SettingsRow
+              key={provider.provider}
+              testID={`agent-model-add-provider-${provider.provider}`}
+              title={formatProviderTitle(provider.provider, t('Other', { ns: 'settings' }))}
+              selected={provider.provider === group?.provider}
+              value={provider.provider === group?.provider ? t('Current', { ns: 'config' }) : undefined}
+              disabled={busy}
+              onPress={() => { onSelectProvider?.(provider.provider); setChoosingProvider(false); }}
+            />)}
+          </SettingsGroup>
+        </View> : null}
       {group ? (
-        <View style={styles.content}>
+        <View style={styles.form}>
           {error ? <Banner testID="agent-model-provider-error" tone="bad" message={error} /> : null}
-          <SettingsGroup>
+          {!adding ? <SettingsGroup chrome="plain">
             <SettingsRow
               title={t('Models', { ns: 'settings' })}
               value={String(group.rows.length)}
             />
             {group.baseUrl ? (
               <>
-                <SettingsDivider inset="content" />
+                <SettingsDivider inset="none" />
                 <SettingsRow title={t('Base URL', { ns: 'settings' })} value={group.baseUrl} />
               </>
             ) : null}
             {group.api ? (
               <>
-                <SettingsDivider inset="content" />
+                <SettingsDivider inset="none" />
                 <SettingsRow title={t('API', { ns: 'settings' })} value={group.api} />
               </>
             ) : null}
             {onOpenConfig ? (
               <>
-                <SettingsDivider inset="content" />
+                <SettingsDivider inset="none" />
                 <SettingsRow
                   testID="agent-model-provider-config"
                   title={t('Keys and endpoints', { ns: 'settings' })}
@@ -115,7 +145,7 @@ export function ModelProviderSheet({
                 />
               </>
             ) : null}
-          </SettingsGroup>
+          </SettingsGroup> : null}
 
           {canAdd ? (
             <View style={styles.form}>
@@ -156,13 +186,14 @@ export function ModelProviderSheet({
           ) : null}
         </View>
       ) : null}
+      </BottomSheetScrollView>
     </Sheet>
   );
 }
 
 function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors']) {
   return StyleSheet.create({
-    content: { gap: Space.lg, padding: Space.lg, paddingBottom: Space.xxl },
+    content: { gap: Space.lg, paddingHorizontal: Space.xl, paddingBottom: Space.xxl },
     form: { gap: Space.md },
     field: { gap: Space.sm },
     sectionTitle: {

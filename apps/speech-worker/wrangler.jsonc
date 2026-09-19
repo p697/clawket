@@ -1,0 +1,15 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "clawket-speech-preview",
+  "account_id": "2af7e222bfcfd78b5df8f627971dfbca",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-19",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true, "head_sampling_rate": 0.1 },
+  "vars": {
+    "ALIYUN_SPEECH_URL": "https://llm-olwuq3n12gevnxxj.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference",
+    "SPEECH_ENABLED": "true"
+  },
+  "durable_objects": { "bindings": [{ "name": "ADMISSION", "class_name": "SpeechAdmission" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["SpeechAdmission"] }]
+}

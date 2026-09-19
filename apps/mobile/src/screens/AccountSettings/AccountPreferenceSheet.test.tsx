@@ -18,7 +18,6 @@ jest.mock('../../i18n/AppLanguageProvider', () => ({
 
 const mockSetMode = jest.fn();
 const mockSetAccentId = jest.fn();
-const mockSetSpeechLanguage = jest.fn();
 
 jest.mock('react-native', () => {
   const ReactRuntime = require('react');
@@ -109,13 +108,6 @@ jest.mock('../../theme', () => ({
   }),
 }));
 
-jest.mock('../../contexts/AppContext', () => ({
-  useAppContext: () => ({
-    speechRecognitionLanguage: 'system',
-    onSpeechRecognitionLanguageChange: mockSetSpeechLanguage,
-  }),
-}));
-
 jest.mock('../../services/app-icon', () => ({
   getCurrentAppIconAsync: jest.fn(),
   isAppIconChangeSupportedAsync: jest.fn(),
@@ -149,13 +141,13 @@ describe('AccountPreferenceSheet', () => {
       'app-language',
       'theme',
       'accent',
-      'speech-language',
       'app-icon',
     ].every(isAccountPreferenceAction)).toBe(true);
     expect(isAccountPreferenceAction('chat-appearance')).toBe(false);
+    expect(isAccountPreferenceAction('speech-language')).toBe(false);
   });
 
-  it('persists theme, accent, and speech choices before closing', async () => {
+  it('persists theme and accent choices before closing', async () => {
     const onClose = jest.fn();
     const onChanged = jest.fn();
     const view = render(
@@ -171,19 +163,12 @@ describe('AccountPreferenceSheet', () => {
     fireEvent.press(view.getByTestId('account-preference-jadeGreen'));
     await waitFor(() => expect(mockSetAccentId).toHaveBeenCalledWith('jadeGreen'));
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(2));
-
-    view.rerender(
-      <AccountPreferenceSheet preference="speech-language" onClose={onClose} onChanged={onChanged} />,
-    );
-    fireEvent.press(view.getByTestId('account-preference-ja'));
-    await waitFor(() => expect(mockSetSpeechLanguage).toHaveBeenCalledWith('ja'));
-    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(3));
     expect(onChanged).toHaveBeenNthCalledWith(1, 'theme', 'dark');
     expect(onChanged).toHaveBeenNthCalledWith(2, 'accent', 'jadeGreen');
-    expect(onChanged).toHaveBeenNthCalledWith(3, 'speech-language', 'ja');
+    expect(onChanged).toHaveBeenCalledTimes(2);
   });
 
-  it('changes app language independently of voice and exposes save failures', async () => {
+  it('changes app language and exposes save failures', async () => {
     const onClose = jest.fn();
     mockSetLanguage.mockResolvedValueOnce(undefined);
     const view = render(<AccountPreferenceSheet preference="app-language" onClose={onClose} />);
@@ -191,7 +176,6 @@ describe('AccountPreferenceSheet', () => {
     fireEvent.press(view.getByTestId('account-preference-ja'));
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
     expect(mockSetLanguage).toHaveBeenCalledWith('ja');
-    expect(mockSetSpeechLanguage).not.toHaveBeenCalled();
     mockSetLanguage.mockRejectedValueOnce(new Error('storage unavailable'));
     fireEvent.press(view.getByTestId('account-preference-system'));
     await waitFor(() => expect(view.getByText('Unable to change app language')).toBeTruthy());

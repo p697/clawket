@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, fireEvent, render } from '@testing-library/react-native';
+import { fireEvent, render } from '@testing-library/react-native';
 
 import { FontSize } from '../../theme/tokens';
 import {
@@ -106,7 +106,6 @@ jest.mock('../../theme', () => ({
 
 jest.mock('../../contexts/AppContext', () => ({
   useAppContext: () => ({
-    speechRecognitionLanguage: 'system',
     onSpeechRecognitionLanguageChange: jest.fn(),
   }),
 }));
@@ -251,7 +250,6 @@ function createProps(
         accent: 'Blue',
         chatAppearance: 'Compact',
         appIcon: 'Light',
-        speechLanguage: 'Japanese',
         appVersion: '3.0.0',
         previewEnvironment: 'Preview',
       },
@@ -315,30 +313,41 @@ describe('AccountSettingsSectionScreen', () => {
     expect(onAction).toHaveBeenCalledWith({ action: 'repository' });
   });
 
-  it('uses the existing reply-notification state and callback', () => {
+  it('exposes the developer free-account simulation as its own switch in debug mode only', () => {
     const onAction = jest.fn();
     const view = render(
       <AccountSettingsSectionScreen
         {...createProps({
-          section: 'notifications',
-          data: {
-            replyNotificationsEnabled: true,
-          },
+          section: 'developer',
+          data: { debugMode: true, simulateFreeAccount: true },
           onAction,
         })}
       />,
     );
 
-    expect(view.getByTestId('account-settings-section-toggle-replyNotifications').props.value).toBe(true);
+    expect(view.getByText('Simulate free account')).toBeTruthy();
+    expect(view.getByTestId('account-settings-section-toggle-simulateFreeAccount').props.value).toBe(true);
+    expect(view.getByTestId('account-settings-section-toggle-debugMode').props.value).toBe(true);
     fireEvent(
-      view.getByTestId('account-settings-section-toggle-replyNotifications'),
+      view.getByTestId('account-settings-section-toggle-simulateFreeAccount'),
       'valueChange',
       false,
     );
     expect(onAction).toHaveBeenCalledWith({
-      action: 'set-reply-notifications',
+      action: 'set-simulate-free-account',
       enabled: false,
     });
+
+    view.rerender(
+      <AccountSettingsSectionScreen
+        {...createProps({
+          section: 'developer',
+          data: { debugMode: false, simulateFreeAccount: true },
+          onAction,
+        })}
+      />,
+    );
+    expect(view.queryByTestId('account-settings-section-toggle-simulateFreeAccount')).toBeNull();
   });
 
   it('dispatches the production Help to Release Notes navigation action', () => {
@@ -427,58 +436,32 @@ describe('AccountSettingsSectionScreen', () => {
     expect(view.getByText('Open Source Repository')).toBeTruthy();
   });
 
-  it('keeps Pro locks distinct from disabled capability rows', () => {
+  it('disables capability-gated rows without a paywall lock', () => {
     const onOpenPaywall = jest.fn();
     const onAction = jest.fn();
     const view = render(
       <AccountSettingsSectionScreen
         {...createProps({
-          section: 'appearance',
-          data: { isPro: false },
+          section: 'about',
+          capabilities: { developer: false },
           onAction,
           onOpenPaywall,
         })}
       />,
     );
-    fireEvent.press(view.getByTestId('account-settings-section-row-app-icon'));
-    expect(onOpenPaywall).toHaveBeenCalledWith('appIcons', expect.any(Function));
-    act(() => onOpenPaywall.mock.calls[0]?.[1]?.());
-    expect(view.getByTestId('account-preference-sheet')).toBeTruthy();
-    expect(onAction).not.toHaveBeenCalled();
-
-    view.rerender(
-      <AccountSettingsSectionScreen
-        {...createProps({
-          section: 'appearance',
-          data: { isPro: false },
-          capabilities: { appIcons: false },
-          onAction,
-          onOpenPaywall,
-        })}
-      />,
-    );
-    expect(view.getByTestId('account-settings-section-row-app-icon').props.accessibilityState).toEqual({
+    expect(view.getByTestId('account-settings-section-row-advanced-settings').props.accessibilityState).toEqual({
       disabled: true,
     });
     expect(view.getByText('Unavailable')).toBeTruthy();
+    fireEvent.press(view.getByTestId('account-settings-section-row-advanced-settings'));
+    expect(onAction).not.toHaveBeenCalled();
+    expect(onOpenPaywall).not.toHaveBeenCalled();
   });
 
-  it('keeps the existing voice, about, and developer section scope', () => {
+  it('keeps the existing about and developer section scope', () => {
     const onAction = jest.fn();
     const props = createProps({ onAction });
     const view = render(
-      <AccountSettingsSectionScreen
-        {...props}
-        section="voice"
-        data={{
-          labels: { speechLanguage: 'Japanese' },
-        }}
-      />,
-    );
-    expect(view.getByText('Recognition Language')).toBeTruthy();
-    expect(view.getByText('Japanese')).toBeTruthy();
-
-    view.rerender(
       <AccountSettingsSectionScreen
         {...props}
         section="about"

@@ -1,7 +1,7 @@
 /**
- * Turns the native microphone level into a readable 0–1 dictation meter.
+ * Turns the PCM microphone RMS into a readable 0–1 dictation meter.
  *
- * The native module emits `min(rms × 5.5, 1)` about 20 times per second. Raw
+ * The PCM capture computes `min(rms × 5.5, 1)` about 20 times per second. Raw
  * RMS is linear and small: ordinary speech lands around 0.05–0.4 and barely
  * moves a linear meter. Loudness is perceived logarithmically, and rooms and
  * microphones differ, so the meter works in decibels relative to an adaptive
@@ -18,7 +18,7 @@ export type SpeechLevelState = Readonly<{
   envelope: number;
 }>;
 
-/** Silence in the native emitted scale; keeps `log10` finite. */
+/** Silence in the normalized microphone scale; keeps `log10` finite. */
 const LEVEL_EPSILON = 1e-4;
 /** Per-sample fraction the floor climbs toward a louder room (about 20 Hz sampling). */
 const NOISE_FLOOR_RISE = 0.01;
@@ -48,7 +48,7 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 /**
- * Feeds one native sample and returns the next state plus the meter value.
+ * Feeds one microphone sample and returns the next state plus the meter value.
  * Pure and time-free: the native cadence is fixed, so coefficients are per sample.
  */
 export function processSpeechLevel(

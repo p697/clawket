@@ -4,6 +4,7 @@ import { ProPaywallOverlay } from './ProPaywallOverlay';
 
 const mockPurchasePro = jest.fn();
 const mockRestorePurchases = jest.fn();
+const mockRedeemCode = jest.fn();
 const mockRefreshOfferings = jest.fn();
 const mockSelectPackage = jest.fn();
 var mockAnalytics: Record<string, jest.Mock>;
@@ -83,6 +84,7 @@ function baseContext() {
     purchasePro: mockPurchasePro,
     refreshOfferings: mockRefreshOfferings,
     restorePurchases: mockRestorePurchases,
+    redeemCode: mockRedeemCode,
     selectPackage: mockSelectPackage,
     selectedPackage: { packageIdentifier: 'annual', offeringIdentifier: 'pro' },
     selectedPackageId: 'annual',
@@ -321,4 +323,36 @@ describe('ProPaywallOverlay', () => {
     expect(onContinue).toHaveBeenCalledWith('restore');
   });
 
+});
+
+describe('redemption continuation', () => {
+  beforeEach(() => { jest.clearAllMocks(); mockContext = baseContext(); });
+
+  it('serializes redemption with checkout and resumes only after verified activation', async () => {
+    const result = deferred<{ success: boolean; reason: null }>();
+    mockRedeemCode.mockReturnValue(result.promise);
+    const onContinue = jest.fn();
+    const screen = render(<ProPaywallOverlay visible onClose={jest.fn()} onContinue={onContinue} />);
+    const paywall = screen.getByTestId('mock-paywall-screen');
+    act(() => { paywall.props.onRedeem(); paywall.props.onPurchase(); paywall.props.onRestore(); });
+    expect(mockRedeemCode).toHaveBeenCalledTimes(1);
+    expect(mockPurchasePro).not.toHaveBeenCalled();
+    expect(mockRestorePurchases).not.toHaveBeenCalled();
+    expect(onContinue).not.toHaveBeenCalled();
+    await act(async () => { result.resolve({ success: true, reason: null }); });
+    expect(onContinue).toHaveBeenCalledWith('redeem');
+    expect(mockAnalytics.paywallPurchaseSucceeded).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { success: false, reason: 'pending' },
+    { success: false, reason: 'cancelled' },
+    { success: true, reason: null, keepOpen: true },
+  ])('does not resume the gated action for %o', async (result) => {
+    mockRedeemCode.mockResolvedValue(result);
+    const onContinue = jest.fn();
+    const screen = render(<ProPaywallOverlay visible onClose={jest.fn()} onContinue={onContinue} />);
+    await act(async () => { screen.getByTestId('mock-paywall-screen').props.onRedeem(); });
+    expect(onContinue).not.toHaveBeenCalled();
+  });
 });

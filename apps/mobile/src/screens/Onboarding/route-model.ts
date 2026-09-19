@@ -46,6 +46,8 @@ const ADAPTER_ERROR_CODES = new Set<AdapterErrorCode>([
 export type OnboardingRouteOperation = Readonly<{
   active: boolean;
   phase: OnboardingConnectionPhase;
+  /** Connection created by this pairing, once it exists; null before then. */
+  targetConnectionId?: string | null;
   errorCode?: AdapterErrorCode;
 }>;
 
@@ -95,7 +97,7 @@ export function resolveOnboardingAdapterError(error: unknown): AdapterErrorCode 
 
 export function resolveOnboardingRouteStatus(input: {
   initialized: boolean;
-  connectionCount: number;
+  activeConnectionId?: string | null;
   activeState: ConnectionState;
   runtimeError?: unknown;
   operation: OnboardingRouteOperation;
@@ -104,25 +106,24 @@ export function resolveOnboardingRouteStatus(input: {
     return { kind: 'error', code: input.operation.errorCode };
   }
   if (!input.initialized && !input.operation.active) return { kind: 'loading' };
+  if (!input.operation.active) return { kind: 'idle' };
 
-  const hasConnectionContext = input.connectionCount > 0 || input.operation.active;
-  if (
-    hasConnectionContext
-    && (input.activeState === 'offline' || input.activeState === 'reconnecting')
-  ) {
+  // Runtime state only describes the connection this pairing created. Before
+  // it exists, or when a modal "add connection" is opened while an unrelated
+  // existing connection is offline, the pairing form must stay clean.
+  const pairedConnectionActive = Boolean(input.operation.targetConnectionId)
+    && input.activeConnectionId === input.operation.targetConnectionId;
+  if (!pairedConnectionActive) {
+    return { kind: 'connecting', phase: input.operation.phase };
+  }
+  if (input.activeState === 'offline' || input.activeState === 'reconnecting') {
     return { kind: 'offline' };
   }
-  if (input.operation.active) {
-    if (input.activeState === 'error' && input.runtimeError) {
-      return { kind: 'error', code: resolveOnboardingAdapterError(input.runtimeError) };
-    }
-    return {
-      kind: 'connecting',
-      phase: input.activeState === 'ready' ? 'ready' : input.operation.phase,
-    };
-  }
-  if (input.runtimeError && hasConnectionContext) {
+  if (input.activeState === 'error' && input.runtimeError) {
     return { kind: 'error', code: resolveOnboardingAdapterError(input.runtimeError) };
   }
-  return { kind: 'idle' };
+  return {
+    kind: 'connecting',
+    phase: input.activeState === 'ready' ? 'ready' : input.operation.phase,
+  };
 }

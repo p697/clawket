@@ -1,9 +1,0 @@
-{
-  "name": "clawket-speech-recognition",
-  "version": "1.0.0",
-  "private": true,
-  "description": "Local Expo module for iOS speech recognition in Clawket.",
-  "license": "Proprietary",
-  "author": "Clawket",
-  "homepage": "https://github.com/openai/clawket"
-}

@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  act,
   fireEvent,
   render,
   waitFor,
@@ -12,7 +13,7 @@ import {
   type ManagementOperations,
 } from '@clawket/agent-protocol';
 import { analyticsEvents } from '../../services/analytics/events';
-import { FontSize, Radius } from '../../theme/tokens';
+import { FontSize, Radius, Space } from '../../theme/tokens';
 import {
   AgentSettingsSectionScreen,
   AgentSettingsSectionView,
@@ -48,14 +49,21 @@ const mockCoordinator = {
 };
 const mockedAnalyticsEvents = analyticsEvents as jest.Mocked<typeof analyticsEvents>;
 
+const mockPreventRemove = jest.fn();
+jest.mock('@react-navigation/native', () => ({
+  usePreventRemove: (...args: unknown[]) => mockPreventRemove(...args),
+}));
+
 jest.mock('../../connection', () => ({
   getConnectionRuntime: () => mockCoordinator,
   useConnections: () => mockRuntime,
 }));
 
 jest.mock('../../services/analytics/events', () => ({
+  analyticsAgentDocument: jest.requireActual('../../services/analytics/events').analyticsAgentDocument,
   analyticsEvents: {
     settingsRowOpened: jest.fn(),
+    agentFileActivity: jest.fn(),
   },
 }));
 
@@ -143,6 +151,24 @@ jest.mock('../../components/ui/FloatingButton', () => {
   };
 });
 
+jest.mock('../../components/ui/Button', () => {
+  const ReactRuntime = require('react');
+  const { Pressable, Text } = require('react-native');
+  return {
+    Button: ({ testID, label, disabled, loading, onPress }: {
+      testID?: string;
+      label: string;
+      disabled?: boolean;
+      loading?: boolean;
+      onPress?: () => void;
+    }) => ReactRuntime.createElement(
+      Pressable,
+      { testID, disabled: disabled || loading, onPress },
+      ReactRuntime.createElement(Text, null, label),
+    ),
+  };
+});
+
 jest.mock('../../components/ui/ConfirmationModal', () => {
   const ReactRuntime = require('react');
   return {
@@ -197,6 +223,14 @@ jest.mock('./SkillsSection', () => {
   };
 });
 
+jest.mock('./SkillDiscoverScreen', () => {
+  const ReactRuntime = require('react');
+  const { View } = require('react-native');
+  return {
+    SkillDiscoverScreen: (props: Record<string, unknown>) => ReactRuntime.createElement(View, { ...props, testID: 'mock-skill-discover-screen' }),
+  };
+});
+
 jest.mock('./CronEditorScreen', () => {
   const ReactRuntime = require('react');
   return { CronEditorScreen: (props: Record<string, unknown>) => ReactRuntime.createElement('View', { ...props, testID: 'mock-cron-editor' }) };
@@ -214,7 +248,15 @@ jest.mock('./FilesSection', () => {
   const ReactRuntime = require('react');
   const { View } = require('react-native');
   return {
-    FilesSection: () => ReactRuntime.createElement(View, { testID: 'mock-files-section' }),
+    FilesSection: (props: Record<string, unknown>) => ReactRuntime.createElement(View, { ...props, testID: 'mock-files-section' }),
+  };
+});
+
+jest.mock('./DocumentScreen', () => {
+  const ReactRuntime = require('react');
+  const { View } = require('react-native');
+  return {
+    DocumentScreen: (props: Record<string, unknown>) => ReactRuntime.createElement(View, { ...props, testID: 'mock-document-screen' }),
   };
 });
 
@@ -241,7 +283,10 @@ jest.mock('./ToolsSection', () => {
   const ReactRuntime = require('react');
   const { View } = require('react-native');
   return {
-    ToolsSection: () => ReactRuntime.createElement(View, { testID: 'mock-tools-section' }),
+    ToolsSection: ({ saveRequest, onEditorChange }: {
+      saveRequest?: number;
+      onEditorChange?: (state: unknown) => void;
+    }) => ReactRuntime.createElement(View, { testID: 'mock-tools-section', saveRequest, onEditorChange }),
   };
 });
 
@@ -372,7 +417,10 @@ describe('AgentSettingsSectionView', () => {
     );
 
     expect(flattenStyle(view.getByTestId('agent-settings-section-screen').props.style))
-      .toMatchObject({ backgroundColor: colors.canvasGrouped, paddingTop: 24 });
+      .toMatchObject({ backgroundColor: colors.canvasGrouped });
+    expect(flattenStyle(view.getByTestId('agent-settings-section-header').props.style))
+      .toMatchObject({ paddingTop: 24 + Space.sm, paddingHorizontal: Space.lg, paddingBottom: Space.sm });
+    expect(view.getByTestId('agent-settings-section-back')).toBeTruthy();
     expect(flattenStyle(view.getByTestId('agent-settings-section-title').props.style))
       .toMatchObject({ color: colors.ink, fontSize: FontSize.title });
     expect(flattenStyle(view.getByTestId('agent-settings-section-model-group').props.style))
@@ -555,7 +603,42 @@ describe('AgentSettingsSectionScreen host', () => {
     expect(creating.getByTestId('mock-identity-screen').props.openCreateOnMount).toBe(true);
   });
 
-  it('opens discovery from the header as a separate route with normal back navigation', () => {
+  it('pushes workspace files and SKILL.md onto the document page and hosts it as its own screen', () => {
+    const files = screenProps('files', jest.fn());
+    const list = render(<AgentSettingsSectionScreen {...files} />);
+    fireEvent(list.getByTestId('mock-files-section'), 'openFile', { name: 'MEMORY.md', path: '/MEMORY.md', missing: false });
+    expect(files.navigation.push).toHaveBeenCalledWith('AgentSettingsSection', {
+      connectionId: 'studio', agentId: 'main', section: 'files', action: 'open-file', fileName: 'MEMORY.md',
+    });
+    list.rerender(<AgentSettingsSectionScreen {...files} route={{ ...files.route, params: { ...files.route.params, action: 'open-file', fileName: 'MEMORY.md' } }} />);
+    const page = list.getByTestId('mock-document-screen');
+    expect(page.props.title).toBe('MEMORY.md');
+    expect(page.props.subtitle).toBeUndefined();
+    expect(page.props.source.key).toBe('studio:main:file:MEMORY.md');
+    expect(page.props.isPro).toBe(true);
+    expect(list.queryByTestId('agent-settings-section-screen')).toBeNull();
+    list.unmount();
+
+    mockRuntime = { ...mockRuntime, activeAdapter: { ...adapter, management: { ...management, skills: { ...management.skills, get: operation } } } };
+    const skills = screenProps('skills', jest.fn());
+    const view = render(<AgentSettingsSectionScreen {...skills} />);
+    fireEvent(view.getByTestId('mock-skills-section'), 'openSource', { skillKey: 'builder', name: 'Builder' });
+    expect(skills.navigation.push).toHaveBeenCalledWith('AgentSettingsSection', {
+      connectionId: 'studio', agentId: 'main', section: 'skills', action: 'skill-source', skillKey: 'builder', skillName: 'Builder',
+    });
+    view.rerender(<AgentSettingsSectionScreen {...skills} route={{ ...skills.route, params: { ...skills.route.params, action: 'skill-source', skillKey: 'builder', skillName: 'Builder' } }} />);
+    const source = view.getByTestId('mock-document-screen');
+    expect(source.props.title).toBe('SKILL.md');
+    expect(source.props.subtitle).toBe('Builder');
+    expect(source.props.source.key).toBe('studio:main:skill:builder');
+    fireEvent(source, 'openLinkedFile', 'scripts/run.py');
+    expect(skills.navigation.push).toHaveBeenLastCalledWith('AgentSettingsSection', {
+      connectionId: 'studio', agentId: 'main', section: 'skills', action: 'skill-source',
+      skillKey: 'builder', skillName: 'Builder', skillFilePath: 'scripts/run.py',
+    });
+  });
+
+  it('opens the ClawHub discovery page from the header as its own screen and returns to chat after an install request', () => {
     const props = screenProps('skills', jest.fn());
     const view = render(<AgentSettingsSectionScreen {...props} />);
     fireEvent.press(view.getByTestId('agent-skills-discover'));
@@ -563,15 +646,55 @@ describe('AgentSettingsSectionScreen host', () => {
       connectionId: 'studio', agentId: 'main', section: 'skills', action: 'discover-skills',
     });
     view.rerender(<AgentSettingsSectionScreen {...props} route={{ ...props.route, params: { ...props.route.params, action: 'discover-skills' } }} />);
-    expect(view.getByTestId('mock-skills-section').props.view).toBe('discover');
-    expect(view.queryByTestId('agent-skills-discover')).toBeNull();
-    expect(view.getByTestId('agent-settings-section-title').props.children).toBe('Discover');
-    fireEvent.press(view.getByTestId('agent-settings-section-back'));
-    expect(props.navigation.goBack).toHaveBeenCalledTimes(1);
-    fireEvent(view.getByTestId('mock-skills-section'), 'installRequested');
+    const page = view.getByTestId('mock-skill-discover-screen');
+    expect(page.props.backend).toBe('openclaw');
+    expect(page.props.agent.agentId).toBe('main');
+    expect(page.props.online).toBe(true);
+    expect(view.queryByTestId('mock-skills-section')).toBeNull();
+    expect(view.queryByTestId('agent-settings-section-screen')).toBeNull();
+    fireEvent(page, 'installRequested');
     expect(props.navigation.navigate).toHaveBeenCalledWith('Thread', expect.objectContaining({
       connectionId: 'studio', agentId: 'main', sessionKey: agent.mainSessionKey,
     }));
+  });
+
+  it('drives the tools draft from a header Save and guards a dirty leave', () => {
+    const props = screenProps('tools', jest.fn());
+    const view = render(<AgentSettingsSectionScreen {...props} />);
+    const section = () => view.getByTestId('mock-tools-section');
+    // No Save until the section reports an editable policy; a clean draft never blocks leaving.
+    expect(view.queryByTestId('agent-tools-save')).toBeNull();
+    expect(mockPreventRemove.mock.calls.at(-1)?.[0]).toBe(false);
+
+    fireEvent(section(), 'editorChange', { dirty: false, saving: false, editable: true });
+    expect(view.getByTestId('agent-tools-save').props.disabled).toBe(true);
+    expect(mockPreventRemove.mock.calls.at(-1)?.[0]).toBe(false);
+
+    fireEvent(section(), 'editorChange', { dirty: true, saving: false, editable: true });
+    expect(view.getByTestId('agent-tools-save').props.disabled).toBe(false);
+    expect(section().props.saveRequest).toBe(0);
+    fireEvent.press(view.getByTestId('agent-tools-save'));
+    expect(section().props.saveRequest).toBe(1);
+
+    // A dirty draft turns route removal into the discard confirmation.
+    const [blocked, onRemove] = mockPreventRemove.mock.calls.at(-1)!;
+    expect(blocked).toBe(true);
+    const removal = { data: { action: { type: 'GO_BACK' } } };
+    act(() => { onRemove(removal); });
+    expect(view.getByTestId('agent-tools-discard')).toBeTruthy();
+    fireEvent.press(view.getByTestId('agent-tools-discard-cancel'));
+    expect(view.queryByTestId('agent-tools-discard')).toBeNull();
+    expect(props.navigation.dispatch).not.toHaveBeenCalled();
+
+    act(() => { onRemove(removal); });
+    fireEvent.press(view.getByTestId('agent-tools-discard-confirm'));
+    expect(view.queryByTestId('agent-tools-discard')).toBeNull();
+    expect(mockPreventRemove.mock.calls.at(-1)?.[0]).toBe(false);
+    expect(props.navigation.dispatch).toHaveBeenCalledWith(removal.data.action);
+
+    // A write in flight keeps the Save busy.
+    fireEvent(section(), 'editorChange', { dirty: true, saving: true, editable: true });
+    expect(view.getByTestId('agent-tools-save').props.disabled).toBe(true);
   });
 
   it('hides the discovery header action when the adapter does not support it', () => {
@@ -668,6 +791,7 @@ function screenProps(
     navigation: {
       goBack: jest.fn(),
       push: jest.fn(),
+      dispatch: jest.fn(),
       addListener: jest.fn(() => jest.fn()),
       navigate: jest.fn(),
     },

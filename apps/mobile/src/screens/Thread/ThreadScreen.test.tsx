@@ -8,6 +8,12 @@ import type { ThreadViewProps } from './ThreadView';
 import type { ThreadOverlaysProps } from './components/ThreadOverlays';
 
 let mockThreadViewProps: ThreadViewProps | null = null;
+let mockThreadViewRenders: Array<{ kind: string; runCount: number }> = [];
+const mockThreadActivityCache = {
+  read: jest.fn(async (): Promise<unknown[] | null> => null),
+  write: jest.fn(async () => undefined),
+};
+let mockCronRunSheetProps: Record<string, unknown> | null = null;
 let mockThreadOverlayProps: ThreadOverlaysProps | null = null;
 let mockConnections: Record<string, unknown>;
 let mockApp: Record<string, unknown>;
@@ -24,6 +30,7 @@ const mockRuntime = {
   markSessionOpened: jest.fn(async () => ({})),
   activate: jest.fn(async () => undefined),
   probeActive: jest.fn(async () => true),
+  reconnectConnection: jest.fn(async () => undefined),
   getSnapshot: jest.fn(() => ({ activeConnectionId: 'connection-1' })),
 };
 
@@ -58,6 +65,9 @@ jest.mock('react-native-safe-area-context', () => ({
 }));
 
 jest.mock('@react-navigation/native', () => ({ useIsFocused: () => mockFocused }));
+jest.mock('../AgentSettings/CronRunSheet', () => ({
+  CronRunSheet: (props: Record<string, unknown>) => { mockCronRunSheetProps = props; return null; },
+}));
 jest.mock('../../contexts/AppContext', () => {
   const ReactRuntime = require('react');
   const Context = ReactRuntime.createContext(null);
@@ -109,10 +119,18 @@ jest.mock('./ThreadView', () => {
   return {
     ThreadView: (props: ThreadViewProps) => {
       mockThreadViewProps = props;
+      mockThreadViewRenders.push({ kind: props.state.kind, runCount: props.runCards?.length ?? 0 });
       return ReactRuntime.createElement(View, { testID: 'connected-thread-view' });
     },
   };
 });
+
+jest.mock('../../services/thread-activity-cache', () => ({
+  ThreadActivityCacheService: {
+    read: (...args: unknown[]) => mockThreadActivityCache.read(...(args as [])),
+    write: (...args: unknown[]) => mockThreadActivityCache.write(...(args as [])),
+  },
+}));
 
 jest.mock('./components/ThreadOverlays', () => {
   const ReactRuntime = require('react');
@@ -272,8 +290,14 @@ describe('ThreadScreen connection container', () => {
     mockFocused = true;
     mockScopedApp = null;
     mockThreadViewProps = null;
+    mockThreadViewRenders = [];
     mockThreadOverlayProps = null;
+    mockThreadActivityCache.read.mockReset();
+    mockThreadActivityCache.read.mockResolvedValue(null);
+    mockThreadActivityCache.write.mockReset();
+    mockThreadActivityCache.write.mockResolvedValue(undefined);
     mockConnections = {
+      connectionDetails: {},
       initialized: true,
       switching: false,
       activeConnectionId: 'connection-1',
@@ -292,6 +316,7 @@ describe('ThreadScreen connection container', () => {
     mockRuntime.markSessionOpened.mockClear();
     mockRuntime.activate.mockClear();
     mockRuntime.probeActive.mockClear();
+    mockRuntime.reconnectConnection.mockClear();
     mockRuntime.getSnapshot.mockReturnValue({ activeConnectionId: 'connection-1' });
     mockToggleFavorite.mockClear();
     mockIsFavoritedMessage.mockClear();
@@ -306,6 +331,29 @@ describe('ThreadScreen connection container', () => {
 
   afterEach(() => {
     consoleErrorSpy.mockRestore();
+  });
+
+  it.each(['openclaw', 'hermes'] as const)('retries %s with a fresh connection and exposes scoped settings', async (backend) => {
+    mockConnections.connections = [{ id: 'connection-1', backendKind: backend, label: 'My computer' }];
+    mockConnections.connectionDetails = { 'connection-1': { lastReadyAt: 1234 } };
+    const props = createNavigationProps();
+    render(<ThreadScreen {...props} />);
+    expect(mockThreadViewProps?.connectionFailure).toMatchObject({ name: 'My computer', lastReadyAt: 1234 });
+    mockThreadViewProps?.connectionFailure?.onManage?.();
+    expect(props.navigation.navigate).toHaveBeenCalledWith('Connection', { connectionId: 'connection-1' });
+    await act(async () => { mockThreadViewProps?.onRetry?.(); mockThreadViewProps?.onRetry?.(); });
+    expect(mockRuntime.reconnectConnection).toHaveBeenCalledTimes(1);
+    expect(mockRuntime.reconnectConnection).toHaveBeenCalledWith('connection-1');
+    expect(mockRuntime.probeActive).not.toHaveBeenCalled();
+  });
+
+  it.each(['openclaw', 'hermes'] as const)('opens %s pairing instead of retrying expired credentials', (backend) => {
+    mockConnections.connections = [{ id: 'connection-1', backendKind: backend, label: 'Computer' }];
+    const props = createNavigationProps();
+    render(<ThreadScreen {...props} />);
+    mockThreadViewProps?.onErrorAction?.({ kind: 'error', code: 'pairing_expired', message: 'Expired' });
+    expect(props.navigation.navigate).toHaveBeenCalledWith('Onboarding', { presentation: 'modal', initialBackend: backend });
+    expect(mockRuntime.reconnectConnection).not.toHaveBeenCalled();
   });
 
   it.each(['openclaw', 'hermes'] as const)('shows scoped cached %s preview while network history is pending', (backend) => {
@@ -375,7 +423,7 @@ describe('ThreadScreen connection container', () => {
     mockIsPro = false;
     mockConnections.activeAdapter = { ...adapter, connection: { ...adapter.connection, backendKind: backend } };
     const props = createNavigationProps();
-    props.route = { ...props.route, params: { ...props.route.params, sessionKey: 'agent:atlas:slack:channel:one', from: 'notification' } };
+    props.route = { ...props.route, params: { ...props.route.params, sessionKey: 'agent:atlas:slack:channel:one', from: 'panel' } };
     mockController.sessionKey = props.route.params.sessionKey;
     mockController.listData = [
       { id: 'new', role: 'assistant', text: 'Latest reply' },
@@ -408,7 +456,7 @@ describe('ThreadScreen connection container', () => {
     render(<ThreadScreen {...props} />);
     act(() => mockThreadViewProps?.sessionPreview?.onMain());
     expect(props.navigation.replace).toHaveBeenCalledWith('Thread', {
-      connectionId: 'connection-1', agentId: 'atlas', sessionKey: 'agent:atlas:main', from: 'panel', runContext: undefined,
+      connectionId: 'connection-1', agentId: 'atlas', sessionKey: 'agent:atlas:main', from: 'panel',
     });
   });
 
@@ -470,11 +518,10 @@ describe('ThreadScreen connection container', () => {
   it('does not let a retained background thread consume global navigation or input', () => {
     mockFocused = false;
     mockApp.pendingChatInput = 'draft for the foreground agent';
-    mockApp.pendingChatNotificationOpen = { sessionKey: 'agent:atlas:main', requestedAt: 1 };
     mockApp.pendingMainSessionSwitch = true;
     render(<ThreadScreen {...createNavigationProps()} />);
     expect(mockScopedApp).toMatchObject({
-      pendingChatInput: null, pendingChatNotificationOpen: null, pendingMainSessionSwitch: false,
+      pendingChatInput: null, pendingMainSessionSwitch: false,
     });
     expect(mockApp.setCurrentAgentId).not.toHaveBeenCalled();
     expect(mockApp.requestChatSession).not.toHaveBeenCalled();
@@ -793,8 +840,21 @@ describe('ThreadScreen connection container', () => {
       'atlas',
       'subagent',
     ));
-    expect(onOpenRunSession).toHaveBeenCalledWith(childSessionKey, 'atlas', 'subagent', undefined);
+    expect(onOpenRunSession).toHaveBeenCalledWith(childSessionKey, 'atlas', 'subagent');
     expect(mockedAnalyticsEvents.runCardOpened).toHaveBeenCalledWith({ kind: 'subagent' });
+
+    // The Cron card carries its run record and opens the execution record sheet on this
+    // screen; the sheet, not the card, decides whether the stable cron session opens.
+    const cronCard = mockThreadViewProps?.runCards?.find((run) => run.kind === 'cron');
+    expect(cronCard?.cronRun).toEqual(expect.objectContaining({ jobId: 'nightly', sessionKey: cronSessionKey }));
+    act(() => mockThreadViewProps?.onOpenCronRun?.(cronCard!));
+    expect(mockedAnalyticsEvents.runCardOpened).toHaveBeenCalledWith({ kind: 'cron' });
+    expect(mockCronRunSheetProps?.run).toEqual(expect.objectContaining({ jobId: 'nightly' }));
+    expect(onOpenRunSession).toHaveBeenCalledTimes(1);
+    (mockCronRunSheetProps?.onOpenSession as (key: string) => void)(cronSessionKey);
+    expect(onOpenRunSession).toHaveBeenLastCalledWith(cronSessionKey, 'atlas', 'cron');
+    act(() => (mockCronRunSheetProps?.onClose as () => void)());
+    expect(mockCronRunSheetProps?.run).toBeNull();
 
     view.unmount();
     mockIsPro = false;
@@ -806,6 +866,94 @@ describe('ThreadScreen connection container', () => {
     await waitFor(() => expect(
       mockThreadViewProps?.runCards?.find((run) => run.kind === 'cron')?.canOpenLogs,
     ).toBe(false));
+  });
+
+  it.each(['openclaw', 'hermes'] as const)('paints cached %s scheduled cards with the first ready frame and refreshes without a rebuild', async (backend) => {
+    const now = Date.now();
+    const cronSessionKey = 'agent:atlas:cron:nightly';
+    const cachedRun = {
+      id: `nightly:${now - 60_000}`,
+      kind: 'cron' as const,
+      sessionKey: cronSessionKey,
+      jobId: 'nightly',
+      agentId: 'atlas',
+      title: 'Nightly report',
+      status: 'succeeded' as const,
+      updatedAt: now - 60_000,
+      cronRun: { ts: now - 60_000, jobId: 'nightly', action: 'finished' as const, status: 'ok' as const, sessionKey: cronSessionKey },
+    };
+    const job = { id: 'nightly', agentId: 'atlas', sessionKey: cronSessionKey, name: 'Nightly report' };
+    const page = { total: 1, offset: 0, limit: 100, hasMore: false, nextOffset: null };
+    let latestEntry: Record<string, unknown> = { ...cachedRun.cronRun, runAtMs: now - 60_000 };
+    mockConnections.activeAdapter = { ...adapter, connection: { ...adapter.connection, backendKind: backend } };
+    mockThreadActivityCache.read.mockResolvedValue([cachedRun]);
+    adapter.management.cron = {
+      list: jest.fn(async () => ({ jobs: [job], ...page })),
+      runs: jest.fn(async () => ({ entries: [latestEntry], ...page })),
+    };
+    // An empty main thread whose history is already known: the first frame must
+    // still wait for the local snapshot rather than flash `empty` and then insert.
+    mockController.listData = [];
+    const view = render(<ThreadScreen {...createNavigationProps()} />);
+
+    await waitFor(() => expect(mockThreadViewProps?.runCards?.map((run) => run.id)).toEqual([cachedRun.id]));
+    expect(mockThreadActivityCache.read).toHaveBeenCalledWith({
+      connectionId: 'connection-1', agentId: 'atlas', sessionKey: 'agent:atlas:main',
+    });
+    const firstReady = mockThreadViewRenders.findIndex((entry) => entry.kind === 'ready');
+    expect(firstReady).toBeGreaterThanOrEqual(0);
+    expect(mockThreadViewRenders.slice(0, firstReady).every((entry) => entry.kind === 'loading')).toBe(true);
+    expect(mockThreadViewRenders.slice(firstReady).every((entry) => entry.runCount === 1)).toBe(true);
+    const hydratedCards = mockThreadViewProps?.runCards;
+
+    // The network refresh matches the snapshot: same cards, nothing persisted again.
+    await waitFor(() => expect(adapter.management.cron.runs as jest.Mock).toHaveBeenCalled());
+    await act(async () => { await Promise.resolve(); });
+    mockController.listData = [{ id: 'message-1', role: 'assistant', text: 'Hello' }];
+    view.rerender(<ThreadScreen {...createNavigationProps()} />);
+    expect(mockThreadViewProps?.runCards).toBe(hydratedCards);
+    expect(mockThreadActivityCache.write).not.toHaveBeenCalled();
+
+    // A changed result replaces the cards and refreshes the snapshot.
+    latestEntry = { ...latestEntry, status: 'error', error: 'Model unavailable' };
+    mockApp = { ...mockApp, foregroundEpoch: 2 };
+    await act(async () => { view.rerender(<ThreadScreen {...createNavigationProps()} />); });
+    await waitFor(() => expect(mockThreadViewProps?.runCards?.[0]?.status).toBe('failed'));
+    expect(mockThreadActivityCache.write).toHaveBeenCalledTimes(1);
+    expect(mockThreadActivityCache.write).toHaveBeenCalledWith(
+      { connectionId: 'connection-1', agentId: 'atlas', sessionKey: 'agent:atlas:main' },
+      [expect.objectContaining({ id: cachedRun.id, status: 'failed', summary: 'Model unavailable' })],
+    );
+  });
+
+  it('keeps cached cards from painting ahead of messages and settles a fresh result with the history refresh', async () => {
+    const now = Date.now();
+    const cronSessionKey = 'agent:atlas:cron:nightly';
+    const job = { id: 'nightly', agentId: 'atlas', sessionKey: cronSessionKey, name: 'Nightly report' };
+    const page = { total: 1, offset: 0, limit: 100, hasMore: false, nextOffset: null };
+    adapter.management.cron = {
+      list: jest.fn(async () => ({ jobs: [job], ...page })),
+      runs: jest.fn(async () => ({
+        entries: [{ ts: now - 1_000, jobId: 'nightly', action: 'finished', status: 'ok', sessionKey: cronSessionKey }],
+        ...page,
+      })),
+    };
+    mockController.historyLoaded = false;
+    mockController.listData = [];
+    const view = render(<ThreadScreen {...createNavigationProps()} />);
+
+    await waitFor(() => expect(adapter.management.cron.runs as jest.Mock).toHaveBeenCalled());
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    // Without history the result waits: no cards-only frame while messages are still loading.
+    expect(mockThreadViewProps?.runCards).toEqual([]);
+    expect(mockThreadViewProps?.state.kind).toBe('loading');
+
+    mockController.historyLoaded = true;
+    mockController.listData = [{ id: 'message-1', role: 'assistant', text: 'Hello' }];
+    view.rerender(<ThreadScreen {...createNavigationProps()} />);
+    await waitFor(() => expect(mockThreadViewProps?.runCards?.map((run) => run.jobId)).toEqual(['nightly']));
+    expect(mockThreadViewProps?.state.kind).toBe('ready');
+    expect(mockThreadActivityCache.write).toHaveBeenCalledTimes(1);
   });
 
   it('opens only image URIs when a message also carries file attachments', () => {

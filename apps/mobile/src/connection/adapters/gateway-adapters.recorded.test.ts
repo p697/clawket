@@ -209,6 +209,38 @@ describe('OpenClawAdapter recorded v1 boundary', () => {
     expect(fake.requests.some(({ method }) => method === 'model.get' || method === 'model.set')).toBe(false);
   });
 
+  it('reads and writes OpenClaw channel routing through versioned config', async () => {
+    const fake = new RecordedGateway();
+    const getConfig = jest.fn(async (): Promise<{ hash: string | null; config: Record<string, unknown> }> => ({
+      hash: 'v1', config: { session: { dmScope: 'per-channel-peer' } },
+    }));
+    const patchConfig = jest.fn(async () => ({ ok: true }));
+    Object.assign(fake, { getConfig, patchConfig });
+    const adapter = new OpenClawAdapter(connection('openclaw'), { gateway: gateway(fake) });
+    const channels = adapter.management.channels!;
+
+    await expect(channels.getRouting!()).resolves.toEqual({ dmScope: 'per-channel-peer' });
+    getConfig.mockResolvedValueOnce({ hash: 'v1', config: {} });
+    await expect(channels.getRouting!()).resolves.toEqual({ dmScope: 'main' });
+
+    await channels.setRouting!({ dmScope: 'main' });
+    expect(patchConfig).toHaveBeenLastCalledWith(JSON.stringify({ session: { dmScope: 'main' } }), 'v1');
+    await channels.setAccountEnabled!({ channelId: 'telegram', accountId: 'default', enabled: false });
+    expect(patchConfig).toHaveBeenLastCalledWith(JSON.stringify({
+      channels: { telegram: { accounts: { default: { enabled: false } } } },
+    }), 'v1');
+    expect(patchConfig).toHaveBeenCalledTimes(2);
+
+    getConfig.mockResolvedValueOnce({ hash: null, config: {} });
+    await expect(channels.setRouting!({ dmScope: 'per-peer' })).rejects.toMatchObject({ message: 'Gateway config hash is missing' });
+    patchConfig.mockResolvedValueOnce({ ok: false });
+    await expect(channels.setAccountEnabled!({ channelId: 'telegram', accountId: 'default', enabled: true }))
+      .rejects.toMatchObject({ message: 'Gateway rejected the channel account change' });
+    patchConfig.mockResolvedValueOnce({ ok: false });
+    await expect(channels.setRouting!({ dmScope: 'per-peer' }))
+      .rejects.toMatchObject({ message: 'Gateway rejected the direct message scope' });
+  });
+
   it('manages the OpenClaw model catalog through versioned config reads and writes', async () => {
     const fake = new RecordedGateway();
     const config = {
@@ -714,4 +746,29 @@ it.each(['openclaw', 'hermes'] as const)('keeps %s usage requests in the backend
   await adapter.management.usage?.cost?.(input);
   expect(fake.fetchUsage).toHaveBeenCalledWith(backend === 'openclaw' ? input : dates);
   expect(fake.fetchCostSummary).toHaveBeenCalledWith(backend === 'openclaw' ? input : dates);
+});
+
+it('exposes OpenClaw skill document operations only when the current handshake advertises each method', async () => {
+  const supported = new Set<string>();
+  const fake = Object.assign(new RecordedGateway(), {
+    supportsMethod: (method: string) => supported.has(method),
+    getSkillDetail: jest.fn(async () => ({ content: '# source', editable: false })),
+    updateSkillContent: jest.fn(async () => ({ ok: true })),
+  });
+  const adapter = new OpenClawAdapter(connection('openclaw'), { gateway: gateway(fake) });
+  expect(adapter.management.skills?.get).toBeUndefined();
+  expect(adapter.management.skills?.updateContent).toBeUndefined();
+  supported.add('skills.get');
+  await adapter.management.skills?.get?.('sample', { agentId: 'work' });
+  expect(fake.getSkillDetail).toHaveBeenCalledWith('sample', { agentId: 'work' });
+  expect(adapter.management.skills?.updateContent).toBeUndefined();
+  supported.add('skills.content.update');
+  await adapter.management.skills?.updateContent?.('sample', '# changed', 'work');
+  expect(fake.updateSkillContent).toHaveBeenCalledWith('sample', '# changed', 'work');
+  supported.clear();
+  expect(adapter.management.skills?.get).toBeUndefined();
+  expect(adapter.management.skills?.updateContent).toBeUndefined();
+  const hermes = new HermesAdapter(connection('hermes'), { gateway: gateway(fake) });
+  expect(hermes.management.skills?.get).toBeDefined();
+  expect(hermes.management.skills?.updateContent).toBeDefined();
 });

@@ -28,6 +28,7 @@ const lightColors = {
 
 const mockSetAccentId = jest.fn();
 const mockUseAppContext = jest.fn();
+const mockUseConnections = jest.fn();
 const mockChatAppearanceOpened = jest.fn();
 const mockChatAppearanceSaved = jest.fn();
 const mockPickChatBackgroundImage = jest.fn();
@@ -115,6 +116,9 @@ jest.mock('../../theme', () => {
 jest.mock('../../contexts/AppContext', () => ({
   useAppContext: () => mockUseAppContext(),
 }));
+jest.mock('../../connection', () => ({
+  useConnections: () => mockUseConnections(),
+}));
 
 jest.mock('../../components/chat/ChatAppearancePreviewCard', () => {
   const ReactRuntime = require('react');
@@ -189,6 +193,8 @@ function createContext(
   patch: Record<string, unknown> = {},
 ): Record<string, unknown> {
   return {
+    agents: [{ id: 'main', connectionId: 'connection-1', name: 'Assistant', identity: { name: '助手', emoji: '🐱' } }],
+    currentAgentId: 'main',
     chatAppearance: appearance(),
     showAgentAvatar: true,
     showModelUsage: true,
@@ -220,6 +226,7 @@ describe('ChatAppearanceScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockUseAppContext.mockReturnValue(createContext());
+    mockUseConnections.mockReturnValue({ activeConnectionId: null, roster: [] });
     mockPickChatBackgroundImage.mockResolvedValue('file:///picked.jpg');
     mockPersistChatBackgroundImage.mockResolvedValue('file:///stored/background.jpg');
     mockDeletePersistedChatBackgroundImage.mockResolvedValue(undefined);
@@ -246,6 +253,7 @@ describe('ChatAppearanceScreen', () => {
     [
       'chat-appearance-background',
       'chat-appearance-blur',
+      'chat-appearance-dim',
       'chat-appearance-opacity',
       'chat-appearance-font-size',
       'chat-appearance-reset',
@@ -276,6 +284,8 @@ describe('ChatAppearanceScreen', () => {
     });
     fireEvent.press(view.getByTestId('chat-appearance-blur'));
     fireEvent.press(view.getByTestId('chat-appearance-blur-12'));
+    fireEvent.press(view.getByTestId('chat-appearance-dim'));
+    fireEvent.press(view.getByTestId('chat-appearance-dim-0.3'));
     fireEvent.press(view.getByText('Save'));
 
     await waitFor(() => expect(onBack).toHaveBeenCalledTimes(1));
@@ -285,6 +295,7 @@ describe('ChatAppearanceScreen', () => {
         enabled: true,
         imagePath: 'file:///stored/background.jpg',
         blur: 12,
+        dim: 0.3,
       }),
       bubbles: { style: 'soft', opacity: 0.84 },
     }));
@@ -293,6 +304,8 @@ describe('ChatAppearanceScreen', () => {
     expect(mockChatAppearanceSaved).toHaveBeenCalledWith(expect.objectContaining({
       has_background_image: true,
       bubble_style: 'soft',
+      blur: 12,
+      dim: 0.3,
       chat_font_size: 18,
     }));
   });
@@ -362,6 +375,33 @@ describe('ChatAppearanceScreen', () => {
   });
 });
 
+
+it('previews the Agent the person is chatting with, preferring the live roster identity', () => {
+  mockUseAppContext.mockReturnValue(createContext());
+  mockUseConnections.mockReturnValue({ activeConnectionId: null, roster: [] });
+  const fallback = render(<ChatAppearanceScreen onBack={jest.fn()} />);
+  expect(fallback.getByTestId('chat-appearance-preview-card').props.agent).toEqual({
+    agentId: 'main', name: '助手', emoji: '🐱', avatarUrl: undefined,
+  });
+  fallback.unmount();
+
+  mockUseConnections.mockReturnValue({
+    activeConnectionId: 'connection-1',
+    roster: [{
+      connection: { id: 'connection-1' },
+      agents: [{ agent: { agentId: 'main', name: '小助手', emoji: undefined, avatarUrl: 'file:///avatars/main.png' } }],
+    }],
+  });
+  const live = render(<ChatAppearanceScreen onBack={jest.fn()} />);
+  expect(live.getByTestId('chat-appearance-preview-card').props.agent).toEqual({
+    agentId: 'main', name: '小助手', emoji: undefined, avatarUrl: 'file:///avatars/main.png',
+  });
+
+  mockUseAppContext.mockReturnValue(createContext({ agents: [], currentAgentId: '' }));
+  mockUseConnections.mockReturnValue({ activeConnectionId: null, roster: [] });
+  const none = render(<ChatAppearanceScreen onBack={jest.fn()} />);
+  expect(none.getByTestId('chat-appearance-preview-card').props.agent).toBeNull();
+});
 
 it('previews a color draft locally and commits it only on Save', async () => {
   mockSetAccentId.mockClear();

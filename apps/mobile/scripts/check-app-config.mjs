@@ -36,6 +36,14 @@ export function validateAppConfig(config) {
     return ['expo-build-properties must follow with-paste-input-setup so scene migration runs before paste registration.'];
   }
 
+  const orientations = ios.infoPlist?.['UISupportedInterfaceOrientations~ipad'];
+  if (!Array.isArray(orientations) || ![
+    'UIInterfaceOrientationPortrait', 'UIInterfaceOrientationPortraitUpsideDown',
+    'UIInterfaceOrientationLandscapeLeft', 'UIInterfaceOrientationLandscapeRight',
+  ].every(value => orientations.includes(value)) || ios.requireFullScreen !== false) {
+    return ['iPad must support all four orientations and allow resizable windows (requireFullScreen: false).'];
+  }
+
   return [];
 }
 
@@ -63,7 +71,7 @@ function main() {
     return;
   }
 
-  console.log('[check-app-config] verified 3 iOS invariants: tablet support, scene lifecycle, and native plugin ordering.');
+  console.log('[check-app-config] verified 4 iOS invariants: tablet support, scene lifecycle, native plugin ordering, and iPad window resizing.');
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

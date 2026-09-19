@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.relay-base.json",
+  "compilerOptions": {
+    "lib": [
+      "ES2022",
+      "WebWorker"
+    ],
+    "types": []
+  },
+  "include": [
+    "src/**/*.ts",
+    "worker-configuration.d.ts"
+  ]
+}

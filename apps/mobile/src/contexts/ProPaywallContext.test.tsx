@@ -14,10 +14,13 @@ const mockGetCustomerInfo = jest.fn();
 const mockGetPaywallPackages = jest.fn();
 const mockPurchasePro = jest.fn();
 const mockRestorePurchases = jest.fn();
+const mockPresentCodeRedemption = jest.fn();
 const mockDeriveProSubscriptionSnapshot = jest.fn();
 const mockSetSnapshot = jest.fn();
 const mockClearSnapshot = jest.fn();
 const mockGetSnapshot = jest.fn();
+const mockGetSimulateFreeAccount = jest.fn();
+const mockSetSimulateFreeAccount = jest.fn();
 let current: ReturnType<typeof useProPaywall> | null = null;
 
 jest.mock('react-native-purchases', () => ({
@@ -53,7 +56,9 @@ jest.mock('../services/pro-subscription', () => ({
     getPaywallPackages: (...args: unknown[]) => mockGetPaywallPackages(...args),
     purchasePro: (...args: unknown[]) => mockPurchasePro(...args),
     restorePurchases: (...args: unknown[]) => mockRestorePurchases(...args),
+    presentCodeRedemption: (...args: unknown[]) => mockPresentCodeRedemption(...args),
   },
+  hasRenewingProSubscription: (snapshot: ProSubscriptionSnapshot | null) => snapshot?.subscriptions?.some((s) => s.isActive && s.willRenew) ?? false,
   selectDefaultRevenueCatPackage: (packages: ProPaywallPackage[]) => (
     packages.find((item) => item.packageType === 'ANNUAL') ?? packages[0] ?? null
   ),
@@ -66,6 +71,8 @@ jest.mock('../services/storage', () => ({
     getProSubscriptionSnapshot: (...args: unknown[]) => mockGetSnapshot(...args),
     setProSubscriptionSnapshot: (...args: unknown[]) => mockSetSnapshot(...args),
     clearProSubscriptionSnapshot: (...args: unknown[]) => mockClearSnapshot(...args),
+    getSimulateFreeAccount: (...args: unknown[]) => mockGetSimulateFreeAccount(...args),
+    setSimulateFreeAccount: (...args: unknown[]) => mockSetSimulateFreeAccount(...args),
   },
 }));
 
@@ -146,10 +153,13 @@ describe('ProPaywallProvider state machine', () => {
     mockGetSnapshot.mockReset().mockResolvedValue(null);
     mockSetSnapshot.mockReset().mockResolvedValue(undefined);
     mockClearSnapshot.mockReset().mockResolvedValue(undefined);
+    mockGetSimulateFreeAccount.mockReset().mockResolvedValue(false);
+    mockSetSimulateFreeAccount.mockReset().mockResolvedValue(undefined);
     mockGetCustomerInfo.mockReset().mockResolvedValue({ customerInfo: {}, snapshot: FREE_SNAPSHOT });
     mockGetPaywallPackages.mockReset().mockResolvedValue([ANNUAL_PACKAGE]);
     mockPurchasePro.mockReset();
     mockRestorePurchases.mockReset();
+    mockPresentCodeRedemption.mockReset().mockResolvedValue(undefined);
     mockDeriveProSubscriptionSnapshot.mockReset().mockReturnValue(FREE_SNAPSHOT);
     (Purchases.addCustomerInfoUpdateListener as jest.Mock).mockClear();
     (Purchases.removeCustomerInfoUpdateListener as jest.Mock).mockClear();
@@ -160,6 +170,67 @@ describe('ProPaywallProvider state machine', () => {
     jest.useRealTimers();
   });
 
+
+  it('does not grant on sheet presentation; confirms real Pro and continues once', async () => {
+    await renderProvider();
+    jest.useFakeTimers();
+    act(() => { current!.showPaywall('agents'); });
+    let result!: ReturnType<NonNullable<typeof current>['redeemCode']>;
+    await act(async () => { result = current!.redeemCode(); });
+    expect(mockPresentCodeRedemption).toHaveBeenCalledTimes(1);
+    expect(current!.isPro).toBe(false);
+    expect(current!.paywallPhase).toBe('redeeming');
+    expect(await current!.purchasePro()).toEqual({ success: false, reason: 'pending' });
+    expect(await current!.redeemCode()).toEqual({ success: false, reason: 'pending' });
+    mockGetCustomerInfo.mockResolvedValue({ customerInfo: {}, snapshot: PRO_SNAPSHOT });
+    await act(async () => { await jest.advanceTimersByTimeAsync(5_000); });
+    expect(current!.isPro).toBe(true);
+    expect(current!.paywallPhase).toBe('success');
+    await act(async () => { await jest.advanceTimersByTimeAsync(PAYWALL_SUCCESS_DISPLAY_MS); });
+    expect(await result).toEqual({ success: true, reason: null });
+    expect(current!.visible).toBe(false);
+    expect(mockGetCustomerInfo).toHaveBeenCalledWith(true);
+  });
+
+  it('allows closing redemption and ignores a late response from the abandoned paywall', async () => {
+    await renderProvider();
+    jest.useFakeTimers();
+    act(() => { current!.showPaywall('agents'); });
+    let result!: ReturnType<NonNullable<typeof current>['redeemCode']>;
+    await act(async () => { result = current!.redeemCode(); });
+    act(() => { current!.hidePaywall(); });
+    expect(current!.visible).toBe(false);
+    mockGetCustomerInfo.mockResolvedValue({ customerInfo: {}, snapshot: PRO_SNAPSHOT });
+    await act(async () => { await jest.advanceTimersByTimeAsync(5_000); });
+    expect(await result).toEqual({ success: false, reason: 'cancelled' });
+    expect(current!.isPro).toBe(false);
+  });
+
+  it('does not report a cancelled sheet or an unchanged existing subscription as success', async () => {
+    mockGetCustomerInfo.mockResolvedValue({ customerInfo: {}, snapshot: PRO_SNAPSHOT });
+    await renderProvider();
+    jest.useFakeTimers();
+    act(() => { current!.showPaywall('settingsMembershipPreview'); });
+    let result!: ReturnType<NonNullable<typeof current>['redeemCode']>;
+    await act(async () => { result = current!.redeemCode(); });
+    await act(async () => { await jest.advanceTimersByTimeAsync(60_000); });
+    expect(await result).toEqual({ success: false, reason: 'pending' });
+    expect(current!.statusCode).toBe('redemptionUnconfirmed');
+    expect(current!.paywallPhase).toBe('ready');
+    expect(current!.visible).toBe(true);
+  });
+
+  it('keeps a store-launch failure retryable without changing access', async () => {
+    await renderProvider();
+    act(() => { current!.showPaywall('agents'); });
+    mockPresentCodeRedemption.mockRejectedValue(new Error('store unavailable'));
+    await act(async () => { await current!.redeemCode(); });
+    expect(current!.isPro).toBe(false);
+    expect(current!.statusCode).toBe('redemptionFailed');
+    expect(current!.paywallPhase).toBe('ready');
+    act(() => { current!.hidePaywall(); });
+    expect(current!.visible).toBe(false);
+  });
   it('lets an existing member explicitly open plans while feature gates remain satisfied', async () => {
     mockGetCustomerInfo.mockResolvedValue({ customerInfo: {}, snapshot: PRO_SNAPSHOT });
     await renderProvider();
@@ -167,6 +238,68 @@ describe('ProPaywallProvider state machine', () => {
     act(() => { expect(current?.showPaywall('settingsMembershipPreview')).toBe(true); });
     expect(current?.visible).toBe(true);
     expect(current?.previewOnly).toBe(false);
+  });
+
+  it('lets a developer simulate a free account over an active subscription', async () => {
+    mockGetCustomerInfo.mockResolvedValue({ customerInfo: {}, snapshot: PRO_SNAPSHOT });
+    await renderProvider();
+    await waitFor(() => expect(current?.isLoading).toBe(false));
+    expect(current?.isPro).toBe(true);
+    expect(current?.simulateFreeAccount).toBe(false);
+
+    act(() => { current?.setSimulateFreeAccount(true); });
+    expect(mockSetSimulateFreeAccount).toHaveBeenLastCalledWith(true);
+    expect(current?.isPro).toBe(false);
+    expect(current?.snapshot).toBeNull();
+    act(() => { expect(current?.requirePro('agents')).toBe(false); });
+    expect(current?.visible).toBe(true);
+    expect(current?.blockedFeature).toBe('agents');
+    act(() => { current?.hidePaywall(); });
+
+    act(() => { current?.setSimulateFreeAccount(false); });
+    expect(mockSetSimulateFreeAccount).toHaveBeenLastCalledWith(false);
+    expect(current?.isPro).toBe(true);
+    expect(current?.snapshot).toEqual(PRO_SNAPSHOT);
+    act(() => { expect(current?.showPaywall('agents')).toBe(false); });
+    expect(current?.visible).toBe(false);
+  });
+
+  it('restores a persisted free-account simulation before reporting the subscription as loaded', async () => {
+    const pending = deferred<boolean>();
+    mockGetSimulateFreeAccount.mockReturnValue(pending.promise);
+    mockGetCustomerInfo.mockResolvedValue({ customerInfo: {}, snapshot: PRO_SNAPSHOT });
+    await renderProvider();
+    expect(current?.isLoading).toBe(true);
+    await act(async () => { pending.resolve(true); });
+    expect(current?.isLoading).toBe(false);
+    expect(current?.simulateFreeAccount).toBe(true);
+    expect(current?.isPro).toBe(false);
+  });
+
+  it('ends the free-account simulation when a restore verifies the real subscription', async () => {
+    mockGetCustomerInfo.mockResolvedValue({ customerInfo: {}, snapshot: PRO_SNAPSHOT });
+    mockRestorePurchases.mockResolvedValue({ customerInfo: {}, snapshot: PRO_SNAPSHOT });
+    await renderProvider();
+    act(() => { current?.setSimulateFreeAccount(true); });
+    mockSetSimulateFreeAccount.mockClear();
+    act(() => { current?.showPaywall('usage'); });
+    jest.useFakeTimers();
+
+    let restore!: ReturnType<NonNullable<typeof current>['restorePurchases']>;
+    await act(async () => {
+      restore = current!.restorePurchases();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(current?.simulateFreeAccount).toBe(false);
+    expect(mockSetSimulateFreeAccount).toHaveBeenCalledTimes(1);
+    expect(mockSetSimulateFreeAccount).toHaveBeenLastCalledWith(false);
+    await act(async () => {
+      jest.advanceTimersByTime(PAYWALL_SUCCESS_DISPLAY_MS);
+      await restore;
+    });
+    expect(current?.isPro).toBe(true);
+    expect(current?.visible).toBe(false);
   });
 
   it.each([

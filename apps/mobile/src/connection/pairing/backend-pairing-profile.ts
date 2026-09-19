@@ -7,6 +7,7 @@ import {
   assessRelayEnvironmentSelection,
   getOfficialHermesRegistryUrl,
   getOfficialRelayRegistryUrl,
+  isEnvironmentIndependentRegistry,
   OFFICIAL_LOCAL_MODEL_PREVIEW_REGISTRY_URL,
 } from '../../services/relay-environment';
 import { parsePairingLink } from '../../services/pairing-session';
@@ -43,11 +44,12 @@ type BackendPairingInput = BackendPairingContext & Readonly<{
       serverUrl: string;
       pairingCode: string;
       expectedBackendKind: PairingBackendKind;
-      environment: RelayServiceEnvironment;
+      /** Omitted for the environment-independent local-model Registry. */
+      environment?: RelayServiceEnvironment;
     }): Promise<boolean>;
     connectLink(url: string, expectation: {
       expectedBackendKind: PairingBackendKind;
-      environment: RelayServiceEnvironment;
+      environment?: RelayServiceEnvironment;
     }): Promise<boolean>;
   }>;
 }>;
@@ -75,23 +77,23 @@ type BackendPairingProfile = Readonly<{
 }>;
 
 const BACKEND_PAIRING_PROFILES: Readonly<Record<PairingBackendKind, BackendPairingProfile>> = {
+  // Local model has one dedicated Registry and no Production twin, so pairing
+  // ignores the selected environment and Debug Mode (owner decision 2026-09-19).
   'local-model': {
     reportsCodeOutcome: false,
     async connectCode(input) {
-      if (input.environment !== 'preview' || !input.debugMode) throw new AdapterError('unsupported', 'Local model pairing requires Preview mode');
       const connected = await input.secureInvitation.connectCode({
         serverUrl: OFFICIAL_LOCAL_MODEL_PREVIEW_REGISTRY_URL, pairingCode: input.pairingCode,
-        expectedBackendKind: 'local-model', environment: 'preview',
+        expectedBackendKind: 'local-model',
       });
       return connected ? requireExpectedActiveConnection('local-model', input.runtime) : null;
     },
     async connectLink(input) {
       const descriptor = parsePairingLink(input.url);
-      if (!descriptor || input.environment !== 'preview' || !input.debugMode
-        || assessRelayEnvironmentSelection({ serverUrl: descriptor.serverUrl, selectedEnvironment: input.environment, debugMode: input.debugMode })) {
-        throw new AdapterError('unsupported', 'Local model pairing requires a matching Preview environment');
+      if (!descriptor || !isEnvironmentIndependentRegistry(descriptor.serverUrl)) {
+        throw new AdapterError('unsupported', 'Local model pairing requires the local model Registry');
       }
-      const connected = await input.secureInvitation.connectLink(input.url, { expectedBackendKind: 'local-model', environment: 'preview' });
+      const connected = await input.secureInvitation.connectLink(input.url, { expectedBackendKind: 'local-model' });
       return connected ? requireExpectedActiveConnection('local-model', input.runtime) : null;
     },
   },

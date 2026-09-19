@@ -44,7 +44,7 @@ export type ModelDetailSheetProps = Readonly<{
 type CostField = keyof ModelCost;
 const COST_FIELDS: ReadonlyArray<CostField> = ['input', 'output', 'cacheRead', 'cacheWrite'];
 
-type Translate = (key: string, options: { ns: string }) => string;
+type Translate = (key: string, options: { ns: string; targets?: string }) => string;
 
 function blockLabel(reason: string, t: Translate): string {
   if (reason === 'model_not_configured') return t('Not in Gateway config', { ns: 'settings' });
@@ -54,9 +54,16 @@ function blockLabel(reason: string, t: Translate): string {
   return t('A hook', { ns: 'settings' });
 }
 
-export function describeDeletionBlocks(preview: ModelDeletionPreview | null, t: Translate): string[] {
-  if (!preview || preview.canDelete) return [];
-  return [...new Set(preview.blocks.map((block) => blockLabel(block.reason, t)))];
+/**
+ * Why the delete row is disabled: the references still using the model, or
+ * the plain fact that Gateway config never held it (a catalog-only row).
+ */
+export function describeDeletionBlock(preview: ModelDeletionPreview | null, t: Translate): string | undefined {
+  if (!preview || preview.canDelete) return undefined;
+  const reasons = preview.blocks.map((block) => block.reason);
+  const targets = [...new Set(reasons.filter((reason) => reason !== 'model_not_configured').map((reason) => blockLabel(reason, t)))];
+  if (targets.length > 0) return t('Still used by {{targets}}', { ns: 'settings', targets: targets.join(', ') });
+  return reasons.length > 0 ? t('Not in Gateway config', { ns: 'settings' }) : undefined;
 }
 
 function costDraftFrom(row: AgentModelRow | null): Record<CostField, string> {
@@ -114,7 +121,7 @@ export function ModelDetailSheet({
   }, [row?.key, visible]);
 
   const manage = mode === 'manage';
-  const blocks = describeDeletionBlocks(deletion, t);
+  const deletionBlock = describeDeletionBlock(deletion, t);
   const contextWindow = formatContextWindow(row?.model.contextWindow);
   const capabilities = [
     row?.model.reasoning ? t('Reasoning', { ns: 'chat' }) : null,
@@ -269,9 +276,7 @@ export function ModelDetailSheet({
                   <SettingsRow
                     testID="agent-model-delete"
                     title={t('Delete model', { ns: 'settings' })}
-                    value={blocks.length > 0
-                      ? t('Still used by {{targets}}', { ns: 'settings', targets: blocks.join(', ') })
-                      : immediateHint}
+                    value={deletionBlock ?? immediateHint}
                     destructive
                     disabled={immediateLocked || deletion === null || !deletion.canDelete}
                     onPress={() => onDelete(row)}
@@ -295,7 +300,7 @@ function translateCostField(field: CostField, t: (key: string, options: { ns: st
 
 function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors']) {
   return StyleSheet.create({
-    content: { gap: Space.lg, padding: Space.lg, paddingBottom: Space.xxl },
+    content: { gap: Space.lg, paddingHorizontal: Space.lg, paddingBottom: Space.xxl },
     costEditor: { gap: Space.md },
     field: { gap: Space.sm },
     sectionTitle: {

@@ -91,6 +91,64 @@ export function serializeConfigView(view: ConfigView): string {
   return view.config ? JSON.stringify(view.config, null, 2) : '';
 }
 
+/**
+ * One-line structural preview of a top-level config value, so the key list
+ * reads as a table of contents (owner request 2026-09-19: 26 identical
+ * collapsed rows said nothing about what was inside). Objects list their
+ * child keys, arrays report a count, and primitives or empty containers are
+ * shown as their literal — those have nothing further to expand.
+ */
+export type ConfigValuePreview =
+  | Readonly<{ kind: 'keys'; keys: ReadonlyArray<string> }>
+  | Readonly<{ kind: 'count'; count: number }>
+  | Readonly<{ kind: 'literal'; text: string }>;
+
+export type ConfigEntry = Readonly<{
+  key: string;
+  value: unknown;
+  expandable: boolean;
+  preview: ConfigValuePreview;
+}>;
+
+export function describeConfigValue(value: unknown): Pick<ConfigEntry, 'expandable' | 'preview'> {
+  if (Array.isArray(value)) {
+    return value.length
+      ? { expandable: true, preview: { kind: 'count', count: value.length } }
+      : { expandable: false, preview: { kind: 'literal', text: '[]' } };
+  }
+  if (value && typeof value === 'object') {
+    const keys = Object.keys(value);
+    return keys.length
+      ? { expandable: true, preview: { kind: 'keys', keys } }
+      : { expandable: false, preview: { kind: 'literal', text: '{}' } };
+  }
+  return {
+    expandable: false,
+    preview: { kind: 'literal', text: value === undefined ? 'null' : JSON.stringify(value) },
+  };
+}
+
+/**
+ * Keys in file order whose name or serialized value contains the query
+ * (case-insensitive). An empty query keeps every key.
+ */
+export function filterConfigEntries(
+  config: Readonly<Record<string, unknown>>,
+  query: string,
+): ReadonlyArray<ConfigEntry> {
+  const needle = query.trim().toLowerCase();
+  const entries: ConfigEntry[] = [];
+  for (const [key, value] of Object.entries(config)) {
+    if (needle
+      && !key.toLowerCase().includes(needle)
+      && !(JSON.stringify(value) ?? '').toLowerCase().includes(needle)) {
+      continue;
+    }
+    entries.push({ key, value, ...describeConfigValue(value) });
+  }
+  return entries;
+}
+
 export function normalizeConfigDraft(raw: string): string {
   const parsed: unknown = JSON.parse(raw);
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {

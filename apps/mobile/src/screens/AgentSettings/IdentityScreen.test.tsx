@@ -157,10 +157,10 @@ describe('IdentityScreen', () => {
     const onOpenPaywall = jest.fn();
     const onCreated = jest.fn();
     const onChanged = jest.fn();
-    const view = render(<IdentityScreen {...data} agent={agent} online isPro={false} onOpenPaywall={onOpenPaywall} onChanged={onChanged} onCreated={onCreated} />);
-    await waitFor(() => expect(view.getByTestId('agent-identity-create')).toBeTruthy());
-    fireEvent.press(view.getByTestId('agent-identity-create'));
-    expect(onOpenPaywall).toHaveBeenCalledWith('agents', expect.any(Function));
+    // The roster `+` sheet is the only creation entry; it lands here with the route action.
+    const view = render(<IdentityScreen {...data} agent={agent} online isPro={false} openCreateOnMount onOpenPaywall={onOpenPaywall} onChanged={onChanged} onCreated={onCreated} />);
+    await waitFor(() => expect(onOpenPaywall).toHaveBeenCalledWith('agents', expect.any(Function)));
+    expect(view.queryByTestId('agent-identity-create')).toBeNull();
     expect(view.queryByTestId('agent-identity-create-sheet')).toBeNull();
     act(() => (onOpenPaywall.mock.calls[0]?.[1] as () => void)());
     expect(view.getByTestId('agent-identity-create-sheet')).toBeTruthy();

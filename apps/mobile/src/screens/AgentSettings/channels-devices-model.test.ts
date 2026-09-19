@@ -5,8 +5,12 @@ import {
 } from '@clawket/agent-protocol';
 import {
   buildChannelRows,
+  channelAccountName,
   compactIdentifier,
   getChannelsDevicesViews,
+  isChannelAccountEnabled,
+  resolveChannelManage,
+  setChannelAccountEnabled,
   sortDeviceRequests,
   sortDevices,
   sortNodeRequests,
@@ -29,7 +33,7 @@ const status: ChannelsStatusResult = {
     telegram: [{ accountId: 'work', connected: true }],
     discord: [{ accountId: 'main', running: true }],
   },
-  channelDefaultAccountId: {},
+  channelDefaultAccountId: { telegram: 'work' },
 };
 
 describe('channels and devices model', () => {
@@ -57,11 +61,43 @@ describe('channels and devices model', () => {
       id: row.id,
       state: row.state,
       detail: row.detailLabel,
+      defaultAccountId: row.defaultAccountId,
     }))).toEqual([
-      { id: 'telegram', state: 'connected', detail: 'Telegram bot' },
-      { id: 'discord', state: 'running', detail: 'Discord' },
-      { id: 'slack', state: 'linked', detail: 'Slack' },
+      { id: 'telegram', state: 'connected', detail: 'Telegram bot', defaultAccountId: 'work' },
+      { id: 'discord', state: 'running', detail: 'Discord', defaultAccountId: undefined },
+      { id: 'slack', state: 'linked', detail: 'Slack', defaultAccountId: undefined },
     ]);
+  });
+
+  it('exposes channel writes only behind channelManage with every operation present', () => {
+    const writes = {
+      getRouting: jest.fn(),
+      setRouting: jest.fn(),
+      setAccountEnabled: jest.fn(),
+    };
+    const management: ManagementOperations = { channels: { status: jest.fn(), ...writes } };
+    expect(resolveChannelManage(CAPABILITY_MATRIX.openclaw, management)).toEqual(writes);
+    expect(resolveChannelManage(CAPABILITY_MATRIX.hermes, management)).toBeNull();
+    expect(resolveChannelManage({ ...CAPABILITY_MATRIX.openclaw, channelManage: false }, management)).toBeNull();
+    expect(resolveChannelManage(CAPABILITY_MATRIX.openclaw, { channels: { status: jest.fn(), getRouting: jest.fn() } })).toBeNull();
+    expect(resolveChannelManage(CAPABILITY_MATRIX.openclaw, undefined)).toBeNull();
+  });
+
+  it('mirrors a confirmed account write without touching other accounts or unknown ids', () => {
+    const next = setChannelAccountEnabled(status, 'telegram', 'work', false);
+    expect(next.channelAccounts.telegram).toEqual([{ accountId: 'work', connected: true, enabled: false }]);
+    expect(next.channelAccounts.discord).toBe(status.channelAccounts.discord);
+    expect(status.channelAccounts.telegram[0].enabled).toBeUndefined();
+    expect(setChannelAccountEnabled(status, 'telegram', 'missing', false)).toBe(status);
+    expect(setChannelAccountEnabled(status, 'slack', 'work', false)).toBe(status);
+  });
+
+  it('names accounts and treats a missing enabled flag as running', () => {
+    expect(channelAccountName({ accountId: 'work', name: ' Work bot ' })).toBe('Work bot');
+    expect(channelAccountName({ accountId: 'work', name: '  ' })).toBe('work');
+    expect(isChannelAccountEnabled({ accountId: 'work' })).toBe(true);
+    expect(isChannelAccountEnabled({ accountId: 'work', enabled: true })).toBe(true);
+    expect(isChannelAccountEnabled({ accountId: 'work', enabled: false })).toBe(false);
   });
 
   it('sorts devices by pairing time and pending requests by request time', () => {

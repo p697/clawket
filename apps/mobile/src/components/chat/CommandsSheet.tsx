@@ -103,7 +103,6 @@ function createStyles() {
   return StyleSheet.create({
     content: {
       paddingHorizontal: Space.lg,
-      paddingTop: Space.xs,
       paddingBottom: Space.xxl,
     },
     row: {

@@ -23,6 +23,7 @@ export function assessRelayEnvironmentSelection(input: {
   selectedEnvironment: RelayServiceEnvironment;
   debugMode: boolean;
 }): RelayEnvironmentSelectionIssue | null {
+  if (isEnvironmentIndependentRegistry(input.serverUrl)) return null;
   const qrEnvironment = resolveOfficialRelayEnvironment(input.serverUrl);
   if (qrEnvironment === 'preview' && !input.debugMode) {
     return 'preview_requires_debug_mode';
@@ -32,6 +33,18 @@ export function assessRelayEnvironmentSelection(input: {
     return 'official_environment_mismatch';
   }
   return null;
+}
+
+/**
+ * Local model ships one set of dedicated Registry / Relay Workers (hosted on the
+ * Preview account) and no Production twin, so the owner decision of 2026-09-19
+ * offers it in every app environment: its origin stays an official pairing
+ * server, but the Debug Mode and selected-environment checks that isolate the
+ * OpenClaw and Hermes Preview services never apply to it.
+ */
+export function isEnvironmentIndependentRegistry(serverUrl?: string): boolean {
+  const origin = normalizeOrigin(serverUrl);
+  return origin !== null && ENVIRONMENT_INDEPENDENT_REGISTRY_ORIGINS.has(origin);
 }
 
 export function getRelayPairCommand(environment: RelayServiceEnvironment): string {
@@ -52,6 +65,10 @@ const OFFICIAL_PREVIEW_REGISTRY_ORIGINS = new Set([
   normalizeOrigin(OFFICIAL_LOCAL_MODEL_PREVIEW_REGISTRY_URL),
   normalizeOrigin(OFFICIAL_PREVIEW_REGISTRY_URL),
   normalizeOrigin(OFFICIAL_HERMES_PREVIEW_REGISTRY_URL),
+]);
+
+const ENVIRONMENT_INDEPENDENT_REGISTRY_ORIGINS = new Set([
+  normalizeOrigin(OFFICIAL_LOCAL_MODEL_PREVIEW_REGISTRY_URL),
 ]);
 
 const OFFICIAL_PRODUCTION_REGISTRY_ORIGINS = new Set([

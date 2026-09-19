@@ -161,6 +161,11 @@ const AGENT_SETTINGS_SECTION_NAMES: Readonly<Record<string, string>> = Object.fr
   logs: 'Logs',
 });
 
+// Section actions that are pages of their own; the plain section keeps its name.
+const AGENT_SETTINGS_ACTION_NAMES: Readonly<Record<string, string>> = Object.freeze({
+  'skills:discover-skills': 'SkillDiscover',
+});
+
 const ACCOUNT_SETTINGS_SECTION_NAMES: Readonly<Record<string, string>> = Object.freeze({
   pro: 'AccountPro',
   connections: 'AccountConnections',
@@ -180,9 +185,12 @@ function resolveParameterizedDefinition(
 ): ScreenDefinition {
   const section = readStringParam(params, 'section');
   if (routeName === 'AgentSettingsSection' && section) {
+    const action = readStringParam(params, 'action');
     return {
       ...fallback,
-      name: AGENT_SETTINGS_SECTION_NAMES[section] ?? fallback.name,
+      name: (action && AGENT_SETTINGS_ACTION_NAMES[`${section}:${action}`])
+        ?? AGENT_SETTINGS_SECTION_NAMES[section]
+        ?? fallback.name,
     };
   }
   if (routeName === 'AccountSettingsSection' && section) {

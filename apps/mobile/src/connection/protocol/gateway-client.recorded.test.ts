@@ -408,7 +408,7 @@ describe('GatewayProtocolClient recorded protocol', () => {
       ok: true,
       payload: {
         server: { version: 'openclaw-gateway-direct', connId: 'direct' },
-        features: { methods: ['sessions.subscribe'] },
+        features: { methods: ['sessions.subscribe', 'skills.get'] },
       },
       meta: {
         capabilities: ['bridge.capabilities.v2'],
@@ -416,6 +416,8 @@ describe('GatewayProtocolClient recorded protocol', () => {
       },
     });
     await waitFor(() => sentJson(socket).some((entry) => entry.method === 'sessions.subscribe'));
+    expect(client.supportsMethod('skills.get')).toBe(true);
+    expect(client.supportsMethod('skills.content.update')).toBe(false);
     expect(client.getGatewayInfo()?.version).toBe('openclaw-gateway-direct');
     expect(client.getConnectResponseBridgeVersion()).toBeUndefined();
     expect(client.getConnectResponseCapabilities()).toBeUndefined();
@@ -424,6 +426,8 @@ describe('GatewayProtocolClient recorded protocol', () => {
     const sessions = [{ key: 'agent:main:main', title: 'Recorded Main' }];
     socket.receive({ type: 'event', event: 'sessions.changed', payload: { sessions } });
     expect(changes).toEqual([{ sessions }]);
+    client.configure(null);
+    expect(client.supportsMethod('skills.get')).toBe(false);
     client.disconnect();
   });
 });

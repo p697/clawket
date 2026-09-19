@@ -87,7 +87,7 @@ export function ConnectionsScreen({ onBack, onAdd, onOpen, onPause, onResume, on
 }
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  content: { paddingHorizontal: Space.lg, paddingTop: Space.sm, gap: Space.lg },
+  content: { paddingHorizontal: Space.lg, paddingTop: Space.lg, gap: Space.lg },
   emptyState: { paddingVertical: Space.xxl, alignItems: 'center', gap: Space.lg },
   empty: { fontSize: FontSize.secondary, lineHeight: LineHeight.secondary, textAlign: 'center' },
 });

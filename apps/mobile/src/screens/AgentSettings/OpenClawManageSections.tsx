@@ -1,5 +1,5 @@
-import React, { Fragment, useCallback, useMemo, useState } from 'react';
-import { Platform, StyleSheet, Text, View } from 'react-native';
+import React, { Fragment, useCallback, useMemo } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 import type {
   ApprovalRequest,
   Backup,
@@ -19,6 +19,7 @@ import {
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '../../components/ui/Button';
+import { JsonValueTree } from '../../components/chat/JsonTree';
 import { ProGate } from '../../components/pro/ProGate';
 import {
   SettingsDivider,
@@ -26,6 +27,7 @@ import {
   SettingsRow,
 } from '../../components/ui/SettingsGroup';
 import { LoadingState } from '../../components/ui/LoadingState';
+import { SearchInput } from '../../components/ui/SearchInput';
 import { SettingsIcon } from '../../components/ui/SettingsIcon';
 import { useAppTheme } from '../../theme';
 import {
@@ -37,14 +39,12 @@ import {
   Radius,
   Space,
 } from '../../theme/tokens';
-import { permissionStatusKey } from './openclaw-manage-model';
+import {
+  filterConfigEntries,
+  permissionStatusKey,
+  type ConfigValuePreview,
+} from './openclaw-manage-model';
 import { translateAgentSettingsKey } from './translation';
-
-const MONOSPACE_FONT = Platform.select({
-  ios: 'Menlo',
-  android: 'monospace',
-  default: 'monospace',
-});
 
 type DetailRequest = Readonly<{
   title: string;
@@ -68,23 +68,52 @@ export type ConfigurationSectionProps = Readonly<{
   canEdit: boolean;
   online: boolean;
   gate?: ManageSectionGate;
+  /** Filters keys by name or serialized value; owned by the screen so it survives the section remount. */
+  query: string;
+  onQueryChange: (query: string) => void;
+  /** Keys whose JSON is open. Several may be open at once; the screen owns the list. */
+  expandedKeys: ReadonlyArray<string>;
+  onToggleKey: (key: string) => void;
   onEdit: () => void;
 }>;
 
+/**
+ * The config is a table of contents first (owner request 2026-09-19): one card
+ * of top-level keys in file order, each captioned with what it holds, a
+ * search capsule above it, and the JSON of an opened key in a `surface` well
+ * under its row. Primitives and empty containers show their literal in the
+ * caption and do not expand; opened JSON renders through the shared
+ * `JsonValueTree` so a 250-line `models` section starts as a few collapsed nodes.
+ */
 export function ConfigurationSection({
   view,
   canEdit,
   online,
   gate,
+  query,
+  onQueryChange,
+  expandedKeys,
+  onToggleKey,
   onEdit,
 }: ConfigurationSectionProps): React.JSX.Element {
   const { t } = useTranslation(['config', 'common']);
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
 
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const config = view?.config ?? null;
+  const entries = useMemo(
+    () => (config ? filterConfigEntries(config, query) : []),
+    [config, query],
+  );
+  const previewText = useCallback((preview: ConfigValuePreview): string => {
+    switch (preview.kind) {
+      case 'keys': return preview.keys.join(', ');
+      case 'count': return t('{{count}} items', { count: preview.count });
+      default: return preview.text;
+    }
+  }, [t]);
 
-  if (!view?.config) {
+  if (!config) {
     return (
       <SectionEmpty
         testID="openclaw-configuration-empty"
@@ -95,33 +124,56 @@ export function ConfigurationSection({
 
   return (
     <View testID="openclaw-configuration-content" style={styles.stack}>
-      {Object.entries(view.config).map(([key, value]) => (
-        <SettingsGroup key={key}>
-          <SettingsRow title={key} testID={`openclaw-config-key-${key}`}
-            showChevron selected={expanded === key}
-            onPress={() => setExpanded(current => current === key ? null : key)} />
-          {expanded === key ? (
-            gate?.locked ? (
-              <ProGate
-                testID={`openclaw-config-gate-${key}`}
-                title={t('Edit OpenClaw config from your phone')}
-                detail={t('View and edit every section, saved with a safe restart.')}
-                actionLabel={t('Unlock full configuration')}
-                surfaceColor={theme.colors.surfaceFloating}
-                onUnlock={() => gate.open()}
-              >
-                <View style={styles.codeBlock}>
-                  <Text style={styles.codeText}>{JSON.stringify(value, null, 2)}</Text>
-                </View>
-              </ProGate>
-            ) : (
-              <View style={styles.codeBlock}>
-                <Text selectable style={styles.codeText}>{JSON.stringify(value, null, 2)}</Text>
-              </View>
-            )
-          ) : null}
+      <SearchInput
+        testID="openclaw-configuration-search"
+        appearance="quiet"
+        value={query}
+        onChangeText={onQueryChange}
+        placeholder={t('Search config...')}
+      />
+      {entries.length === 0 ? (
+        <SectionEmpty
+          testID="openclaw-configuration-no-results"
+          message={t('No results', { ns: 'common' })}
+        />
+      ) : (
+        <SettingsGroup testID="openclaw-configuration-keys">
+          {entries.map((entry, index) => {
+            const expanded = entry.expandable && expandedKeys.includes(entry.key);
+            return (
+              <Fragment key={entry.key}>
+                {index > 0 ? <SettingsDivider inset="content" /> : null}
+                <SettingsRow
+                  testID={`openclaw-config-key-${entry.key}`}
+                  title={entry.key}
+                  subtitle={previewText(entry.preview)}
+                  showChevron={entry.expandable}
+                  expanded={entry.expandable ? expanded : undefined}
+                  onPress={entry.expandable ? () => onToggleKey(entry.key) : undefined}
+                />
+                {expanded ? (
+                  <View testID={`openclaw-config-body-${entry.key}`} style={styles.codeWell}>
+                    {gate?.locked ? (
+                      <ProGate
+                        testID={`openclaw-config-gate-${entry.key}`}
+                        title={t('Edit OpenClaw config from your phone')}
+                        detail={t('View and edit every section, saved with a safe restart.')}
+                        actionLabel={t('Unlock full configuration')}
+                        surfaceColor={theme.colors.surface}
+                        onUnlock={() => gate.open()}
+                      >
+                        <JsonValueTree value={entry.value} />
+                      </ProGate>
+                    ) : (
+                      <JsonValueTree value={entry.value} />
+                    )}
+                  </View>
+                ) : null}
+              </Fragment>
+            );
+          })}
         </SettingsGroup>
-      ))}
+      )}
       {canEdit ? (
         <Button
           testID="openclaw-configuration-edit"
@@ -477,6 +529,7 @@ export type BackupsSectionProps = Readonly<{
   gate?: ManageSectionGate;
   onCreate: () => void;
   onSelectBackup: (backup: Backup) => void;
+  onDeleteBackup?: (backup: Backup) => void;
 }>;
 
 export function BackupsSection({
@@ -488,6 +541,7 @@ export function BackupsSection({
   gate,
   onCreate,
   onSelectBackup,
+  onDeleteBackup,
 }: BackupsSectionProps): React.JSX.Element {
   const { t, i18n } = useTranslation(['config', 'common']);
   const { theme } = useAppTheme();
@@ -529,6 +583,13 @@ export function BackupsSection({
                 disabled={!online || busy || !canRestore}
                 onPress={() => onSelectBackup(backup)}
               />
+              {onDeleteBackup ? <SettingsRow
+                testID={`openclaw-backup-delete-${backup.id}`}
+                title={t('Delete', { ns: 'common' })}
+                destructive
+                disabled={busy}
+                onPress={() => onDeleteBackup(backup)}
+              /> : null}
             </Fragment>
           ))}
         </SettingsGroup>
@@ -611,17 +672,16 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       lineHeight: LineHeight.body,
       fontWeight: FontWeight.semibold,
     },
-    codeBlock: {
-      borderRadius: Radius.card,
-      backgroundColor: colors.surfaceFloating,
-      padding: Space.lg,
+    // The opened JSON sits in a quiet well under its row: the grey belongs to
+    // the content, not to the header (owner feedback 2026-09-19: the inset
+    // `selected` fill on the row read as a misaligned patch).
+    codeWell: {
+      marginHorizontal: Space.lg,
+      marginBottom: Space.lg,
+      padding: Space.md,
+      borderRadius: Radius.settingsGroup,
+      backgroundColor: colors.surface,
       overflow: 'hidden',
-    },
-    codeText: {
-      color: colors.ink,
-      fontSize: FontSize.caption,
-      lineHeight: LineHeight.caption,
-      fontFamily: MONOSPACE_FONT,
     },
     summaryRow: {
       flexDirection: 'row',

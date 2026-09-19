@@ -4,11 +4,14 @@ import { act, fireEvent, render } from '@testing-library/react-native';
 import { CAPABILITY_MATRIX, type Capabilities } from '@clawket/agent-protocol';
 import { builtInAccents } from '../../theme/accents';
 import { buildTheme } from '../../theme/theme';
-import { FontSize, Motion, Radius, Space } from '../../theme/tokens';
+import { ControlSize, FontSize, Motion, Radius, Space } from '../../theme/tokens';
+import { DEFAULT_CHAT_APPEARANCE } from '../../features/chat-appearance/defaults';
+import { resolveChatChromeAppearance } from '../../features/chat-appearance/resolver';
 import type { SharedValue } from 'react-native-reanimated';
 import type { ComposerHandle } from '../../components/ui/Composer';
 import type { UiMessage } from '../../types/chat';
-import { ThreadView, type ThreadCopy, type ThreadViewProps } from './ThreadView';
+import { ThreadView, resolveThreadHeaderHeight, type ThreadCopy, type ThreadViewProps } from './ThreadView';
+import type { ThreadRunCard } from './model';
 
 let mockScheme: 'light' | 'dark' = 'light';
 let mockReducedMotion = false;
@@ -584,6 +587,40 @@ describe('ThreadView', () => {
     expect(view.getByTestId('thread-meta-usr_10-status').props.accessibilityLabel).toBe('Delivered');
   });
 
+  it('keeps hydrated scheduled cards still and slides in only a card that arrives while reading', () => {
+    const { withTiming } = require('react-native-reanimated') as { withTiming: jest.Mock };
+    withTiming.mockClear();
+    // The entrance is the only timing that drives a shared value to 1 over the normal duration
+    // with the ease-out curve; the scroll button animates to 0 here and the header fade is shorter.
+    const entranceCalls = () => withTiming.mock.calls.filter(([target, options]) => (
+      target === 1 && (options as { duration?: number })?.duration === Motion.duration.normal
+    ));
+    const now = Date.now();
+    const card = (id: string, updatedAt: number): ThreadRunCard => ({
+      id, kind: 'cron', jobId: id, agentId: 'atlas', title: `Job ${id}`, status: 'succeeded',
+      statusLabel: 'Succeeded', timeLabel: '11:00 AM', updatedAt,
+    });
+    const reply: UiMessage = { id: 'a0', role: 'assistant', text: 'Earlier', timestampMs: now - 3_600_000 };
+    const view = render(<ThreadView {...createProps({ messages: [reply], runCards: [card('one', now - 1_800_000)] })} />);
+    // Cache hydration lands with the first frame: full size, no offset, no timing.
+    const hydrated = flattenStyle(view.getByTestId('thread-entrance-cron-run-one').props.style);
+    expect(hydrated).toMatchObject({ opacity: 1, transform: [{ translateY: 0 }] });
+    expect(entranceCalls()).toHaveLength(0);
+    withTiming.mockClear();
+
+    view.rerender(<ThreadView {...createProps({ messages: [reply], runCards: [card('two', now - 60_000), card('one', now - 1_800_000)] })} />);
+    expect(flattenStyle(view.getByTestId('thread-entrance-cron-run-two').props.style)).toMatchObject({ opacity: 1 });
+    expect(entranceCalls()).toHaveLength(1);
+
+    // A burst is a reconciliation and lands still.
+    withTiming.mockClear();
+    view.rerender(<ThreadView {...createProps({ messages: [reply], runCards: [
+      card('six', now - 1), card('five', now - 2), card('four', now - 3), card('three', now - 4),
+      card('two', now - 60_000), card('one', now - 1_800_000),
+    ] })} />);
+    expect(entranceCalls()).toHaveLength(0);
+  });
+
   it('arms an entrance only for rows that arrive at the tail after mount', () => {
     const older: UiMessage = { id: 'a0', role: 'assistant', text: 'Earlier' };
     const view = render(<ThreadView {...createProps({ messages: [older] })} />);
@@ -599,6 +636,79 @@ describe('ThreadView', () => {
     const paged: UiMessage = { id: 'h0', role: 'user', text: 'Long ago' };
     view.rerender(<ThreadView {...createProps({ messages: [sent, older, paged], isRunning: true, input: '' })} />);
     expect(flattenStyle(view.getByTestId('thread-entrance-h0').props.style).opacity).toBe(1);
+  });
+
+  it.each([['openclaw', 'light'], ['openclaw', 'dark'], ['hermes', 'light'], ['hermes', 'dark']] as const)('explains a sustained %s outage in %s, preserves the draft and recovers automatically', (backend, scheme) => {
+    mockScheme = scheme;
+    const onRetry = jest.fn();
+    const onManage = jest.fn();
+    const failureProps = createProps({
+      capabilities: { ...CAPABILITY_MATRIX[backend] },
+      state: { kind: 'offline' },
+      connectionFailure: { scope: backend, name: 'My computer', onManage },
+      onRetry,
+    });
+    const view = render(<ThreadView {...failureProps} />);
+    expect(view.getByText('My computer')).toBeTruthy();
+    expect(view.getByText('Check your network and make sure the remote service is running.')).toBeTruthy();
+    expect(view.queryByText('Ready to help.')).toBeNull();
+    expect(view.getByTestId('thread-screen-composer-input').props.defaultValue).toBe('Ship it');
+    fireEvent.press(view.getByTestId('thread-connection-unavailable-retry'));
+    fireEvent.press(view.getByTestId('thread-connection-unavailable-manage'));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+    expect(onManage).toHaveBeenCalledTimes(1);
+    fireEvent.press(view.getByTestId('thread-connection-unavailable-saved'));
+    expect(view.getByText('Ready to help.')).toBeTruthy();
+    expect(view.queryByTestId('thread-connection-unavailable')).toBeNull();
+    view.rerender(<ThreadView {...failureProps} state={{ kind: 'ready' }} />);
+    expect(view.getByText('Ready to help.')).toBeTruthy();
+    view.rerender(<ThreadView {...failureProps} />);
+    expect(view.getByTestId('thread-connection-unavailable')).toBeTruthy();
+  });
+
+  it('shows only a known connection timestamp and keeps timeout guidance neutral', () => {
+    const props = createProps({
+      state: { kind: 'error', code: 'timeout', message: 'Connection timed out' },
+      connectionFailure: { scope: 'first', name: 'Computer', lastReadyAt: 1_700_000_000_000 },
+      onRetry: jest.fn(),
+    });
+    const view = render(<ThreadView {...props} />);
+    expect(view.getByText('Last connected: {{time}}')).toBeTruthy();
+    expect(view.getByText('Connection unavailable')).toBeTruthy();
+    expect(view.queryByText('Connection timed out')).toBeNull();
+    fireEvent.press(view.getByTestId('thread-connection-unavailable-retry'));
+    expect(props.onRetry).toHaveBeenCalledTimes(1);
+    view.rerender(<ThreadView {...props} connectionFailure={{ scope: 'first', name: 'Computer', lastReadyAt: null }} />);
+    expect(view.queryByText('Last connected: {{time}}')).toBeNull();
+  });
+
+  it('keeps the recovery grace quiet and scopes saved-message dismissal to the connection', () => {
+    const props = createProps({ connectionFailure: { name: 'Computer', scope: 'first' }, onRetry: jest.fn() });
+    const view = render(<ThreadView {...props} state={{ kind: 'reconnecting' }} />);
+    expect(view.queryByTestId('thread-connection-unavailable')).toBeNull();
+    expect(view.getByText('Ready to help.')).toBeTruthy();
+    view.rerender(<ThreadView {...props} state={{ kind: 'offline' }} />);
+    fireEvent.press(view.getByTestId('thread-connection-unavailable-saved'));
+    view.rerender(<ThreadView {...props} state={{ kind: 'offline' }} connectionFailure={{ name: 'Other computer', scope: 'second' }} messages={[]} />);
+    expect(view.getByTestId('thread-connection-unavailable')).toBeTruthy();
+    expect(view.queryByTestId('thread-connection-unavailable-saved')).toBeNull();
+  });
+
+  it('preserves actionable pairing errors and a paused connection in the full failure page', () => {
+    const onErrorAction = jest.fn();
+    const props = createProps({
+      connectionFailure: { name: 'Computer', scope: 'first' },
+      state: { kind: 'error', code: 'pairing_expired', message: 'Pairing expired, pair again', actionLabel: 'Pair again' },
+      onErrorAction,
+    });
+    const view = render(<ThreadView {...props} />);
+    fireEvent.press(view.getByTestId('thread-connection-unavailable-retry'));
+    expect(onErrorAction).toHaveBeenCalledWith(props.state);
+    expect(view.queryByTestId('thread-screen-error')).toBeNull();
+    expect(view.getByTestId('thread-screen-composer-primary').props.accessibilityState).toEqual({ disabled: true });
+    view.rerender(<ThreadView {...props} state={{ kind: 'offline' }} connectionFailure={{ name: 'Computer', scope: 'first', message: 'Connection paused' }} />);
+    expect(view.getByText('Connection paused')).toBeTruthy();
+    expect(view.queryByText('Check your network and make sure the remote service is running.')).toBeNull();
   });
 
   it('renders loading, empty, error, offline-cache, and locked permission states', () => {
@@ -773,13 +883,13 @@ describe('ThreadView', () => {
     const onVoice = jest.fn();
     const level = { value: 0.5 } as SharedValue<number>;
     const view = render(<ThreadView {...createProps({ input: '', onVoice, voiceState: 'authorizing', voiceLevel: level })} />);
-    expect(view.getByTestId('thread-screen-composer-input').props.placeholder).toBe('Preparing voice input…');
-    expect(view.queryByTestId('thread-screen-composer-voice')).toBeNull();
-    expect(view.getByTestId('thread-screen-composer-voice-stop').props.accessibilityLabel).toBe('Stop voice input');
+    expect(view.getByText('Preparing voice input…')).toBeTruthy();
+    expect(view.getByTestId('thread-screen-composer-voice').props.accessibilityState.busy).toBe(true);
+    expect(view.queryByTestId('thread-screen-composer-voice-stop')).toBeNull();
 
     view.rerender(<ThreadView {...createProps({ input: 'Dictated draft', onVoice, voiceState: 'listening', voiceLevel: level })} />);
-    const input = view.getByTestId('thread-screen-composer-input');
-    expect(input.props.placeholder).toBe('Listening…');
+    const input = view.getByTestId('thread-screen-composer-input', { includeHiddenElements: true });
+    expect(view.getByText('Listening…')).toBeTruthy();
     expect(input.props.editable).toBe(false);
     expect(view.queryByTestId('thread-screen-composer-primary')).toBeNull();
     fireEvent.press(view.getByTestId('thread-screen-composer-voice-stop'));
@@ -956,6 +1066,7 @@ describe('ThreadView', () => {
 
   it('renders dated subagent and Cron cards without treating tool details as sessions', () => {
     const onOpenRunSession = jest.fn();
+    const onOpenCronRun = jest.fn();
     const onOpenRunLogs = jest.fn();
     const newer = new Date(2026, 8, 5, 11).getTime();
     const older = new Date(2026, 8, 4, 23).getTime();
@@ -994,6 +1105,7 @@ describe('ThreadView', () => {
           timeLabel: '11:00 PM',
           updatedAt: older,
           canOpenLogs: true,
+          cronRun: { ts: older, jobId: 'nightly', action: 'finished', status: 'error', sessionKey: 'agent:atlas:cron:nightly' },
         },
         {
           id: 'hermes-digest-run',
@@ -1008,6 +1120,7 @@ describe('ThreadView', () => {
         },
       ],
       onOpenRunSession,
+      onOpenCronRun,
       onOpenRunLogs,
     })} />);
 
@@ -1036,23 +1149,33 @@ describe('ThreadView', () => {
       'agent:atlas:subagent:worker',
       'atlas',
       'subagent',
-      expect.objectContaining({ kind: 'subagent' }),
     );
 
+    // A Cron card with its run record opens the execution record, never a thread
+    // (owner decision 2026-09-19); the record sheet decides whether a session opens.
     fireEvent.press(view.getByTestId('thread-cron-run-nightly-run'));
-    expect(onOpenRunSession).toHaveBeenLastCalledWith(
-      'agent:atlas:cron:nightly',
-      'atlas',
-      'cron',
-      expect.objectContaining({ kind: 'cron' }),
-    );
+    expect(onOpenCronRun).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'nightly-run',
+      cronRun: expect.objectContaining({ jobId: 'nightly' }),
+    }));
+    expect(onOpenRunSession).toHaveBeenCalledTimes(1);
 
     fireEvent.press(view.getByTestId('thread-run-tool-details'));
     expect(view.getByTestId('thread-tool-detail').props.detail).toBe('package.json');
-    expect(onOpenRunSession).toHaveBeenCalledTimes(2);
+    expect(onOpenRunSession).toHaveBeenCalledTimes(1);
 
     fireEvent.press(view.getByText('Logs'));
     expect(onOpenRunLogs).toHaveBeenCalledWith('nightly', 'atlas');
+  });
+
+  it('reads a scheduled run session without a composer', () => {
+    // The stable cron session behind "View full conversation" is a transcript to read,
+    // not a conversation to continue (owner decision 2026-09-19).
+    const cron = render(<ThreadView {...createProps({ sessionKey: 'agent:atlas:cron:nightly', isMainSession: false })} />);
+    expect(cron.queryByTestId('thread-screen-composer-region')).toBeNull();
+    cron.unmount();
+    const main = render(<ThreadView {...createProps({ sessionKey: 'agent:atlas:main' })} />);
+    expect(main.getByTestId('thread-screen-composer-region')).toBeTruthy();
   });
 
   it('binds the controller composer handle to the canonical input', () => {
@@ -1732,5 +1855,80 @@ describe('continuous message presentation', () => {
     expect(view.getByTestId('thread-markdown-final_run') === markdown).toBe(true);
     expect(view.getByTestId('thread-meta-final_run') === meta).toBe(true);
     expect(markdown.props.markdown).toBe('A complete reply');
+  });
+});
+
+describe.each(['light', 'dark'] as const)('immersive wallpaper in %s', (scheme) => {
+  beforeEach(() => { mockScheme = scheme; });
+  const theme = () => buildTheme(scheme, scheme, builtInAccents.iceBlue);
+  const wallpaper = (): ThreadViewProps['chatAppearance'] => ({
+    ...DEFAULT_CHAT_APPEARANCE,
+    background: { ...DEFAULT_CHAT_APPEARANCE.background, enabled: true, imagePath: 'file:///documents/chat-appearance/background.jpg', blur: 4, dim: 0.2 },
+  });
+
+  it('floats the header over the timeline and keeps the canvas chrome without a wallpaper', () => {
+    const view = render(<ThreadView {...createProps({ topInset: Space.xl })} />);
+    const headerHeight = resolveThreadHeaderHeight(Space.xl);
+    expect(headerHeight).toBe(Space.xl + Space.sm + ControlSize.floatingButton + Space.sm);
+    expect(view.queryByTestId('chat-background-layer')).toBeNull();
+    expect(flattenStyle(view.getByTestId('thread-screen-header').props.style)).toMatchObject({
+      position: 'absolute', top: 0, left: 0, right: 0, backgroundColor: theme().colors.canvas,
+      paddingTop: Space.xl + Space.sm, paddingBottom: Space.sm, paddingHorizontal: Space.lg,
+    });
+    // Only the 24-point tail below the opaque header fades the timeline out.
+    expect(flattenStyle(view.getByTestId('thread-screen-header-scrim').props.style)).toMatchObject({ top: '100%', bottom: -Space.xl });
+    expect(flattenStyle(view.getByTestId('thread-screen-timeline').props.contentContainerStyle))
+      .toMatchObject({ paddingTop: headerHeight + Space.lg });
+    // Navigation controls are white floating circles, like every other page header.
+    expect(flattenStyle(view.getByTestId('thread-screen-back').props.style).backgroundColor).toBe(theme().colors.surfaceFloating);
+    expect(flattenStyle(view.getByTestId('thread-screen-sessions').props.style).backgroundColor).toBe(theme().colors.surfaceFloating);
+    expect(flattenStyle(view.getByTestId('thread-screen-header-pill').props.style).backgroundColor).toBe(theme().colors.surface);
+    expect(flattenStyle(view.getByTestId('thread-screen-composer-region').props.style).backgroundColor).toBe(theme().colors.canvas);
+    expect(view.queryByTestId('thread-screen-composer-scrim')).toBeNull();
+    expect(flattenStyle(view.getByTestId('thread-screen-composer').props.style).backgroundColor).toBe(theme().colors.surface);
+  });
+
+  it('fills the whole screen with the wallpaper and floats every control on glass', () => {
+    const view = render(<ThreadView {...createProps({
+      topInset: Space.xl,
+      chatAppearance: wallpaper(),
+      messages: [{ id: 'timed', role: 'user', text: 'Hello', timestampMs: Date.now() }],
+    })} />);
+    const glass = resolveChatChromeAppearance(theme());
+    const layer = view.getByTestId('chat-background-layer');
+    expect(flattenStyle(layer.props.style)).toMatchObject({ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0 });
+    expect(view.getByTestId('chat-background-layer-image').props.blurRadius).toBe(4);
+    expect(view.getByTestId('chat-background-layer-dim')).toBeTruthy();
+    // The wallpaper is a sibling of the keyboard-avoiding content, so it never moves with the keyboard.
+    const screen = view.getByTestId('thread-screen');
+    expect(screen.props.children[0].props.appearance).toEqual(wallpaper());
+
+    const header = flattenStyle(view.getByTestId('thread-screen-header').props.style);
+    expect(header.position).toBe('absolute');
+    expect(header.backgroundColor).toBeUndefined();
+    expect(flattenStyle(view.getByTestId('thread-screen-header-scrim').props.style)).toMatchObject({ top: 0, bottom: -Space.xl });
+    expect(flattenStyle(view.getByTestId('thread-screen-back').props.style)).toMatchObject({
+      backgroundColor: glass.backgroundColor, borderColor: glass.borderColor, borderWidth: glass.borderWidth,
+    });
+    expect(flattenStyle(view.getByTestId('thread-screen-sessions').props.style).backgroundColor).toBe(glass.backgroundColor);
+    expect(flattenStyle(view.getByTestId('thread-screen-header-pill').props.style)).toMatchObject({
+      backgroundColor: glass.backgroundColor, borderColor: glass.borderColor,
+    });
+    expect(flattenStyle(view.getByTestId('thread-date:message:timed').props.style).backgroundColor).toBe(glass.backgroundColor);
+
+    const region = flattenStyle(view.getByTestId('thread-screen-composer-region').props.style);
+    expect(region.backgroundColor).toBeUndefined();
+    expect(view.getByTestId('thread-screen-composer-scrim')).toBeTruthy();
+    expect(flattenStyle(view.getByTestId('thread-screen-composer').props.style)).toMatchObject({
+      borderRadius: Radius.bubble, backgroundColor: glass.backgroundColor, borderColor: glass.borderColor,
+    });
+  });
+
+  it('returns the composer dock to the canvas for full-screen composition', () => {
+    const view = render(<ThreadView {...createProps({ chatAppearance: wallpaper(), input: 'First\nSecond\nThird' })} />);
+    fireEvent.press(view.getByTestId('thread-screen-composer-expand'));
+    expect(flattenStyle(view.getByTestId('thread-screen-composer-region').props.style).backgroundColor).toBe(theme().colors.canvas);
+    expect(view.queryByTestId('thread-screen-composer-scrim')).toBeNull();
+    expect(flattenStyle(view.getByTestId('thread-screen-composer').props.style).backgroundColor).toBe(theme().colors.canvas);
   });
 });

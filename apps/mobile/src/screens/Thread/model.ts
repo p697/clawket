@@ -8,6 +8,7 @@ import type {
 } from '@clawket/agent-protocol';
 import type { ConnectionState as LegacyConnectionState } from '../../types';
 import type { UiMessage } from '../../types/chat';
+import { resolveCronRunSessionKey } from '../../connection/adapters/cron-run-content';
 import { formatThreadTimestamp, localDayNumber, THREAD_TIME_GAP_MS } from './timestamps';
 
 export type ThreadContentState =
@@ -53,9 +54,42 @@ export type ThreadRunCard = Readonly<{
   updatedAt: number;
   canOpenLogs?: boolean;
   summary?: string;
+  /** The run record behind a Cron card; the execution record sheet reads it. */
+  cronRun?: CronRunLogEntry;
 }>;
 
 export type ThreadRunSeed = Omit<ThreadRunCard, 'statusLabel' | 'timeLabel' | 'canOpenLogs'>;
+
+function runSeedSignature(run: ThreadRunSeed): string {
+  return [
+    run.id,
+    run.kind,
+    run.status,
+    run.title,
+    run.summary ?? '',
+    run.updatedAt,
+    run.sessionKey ?? '',
+    run.jobId ?? '',
+    run.agentId ?? '',
+  ].join('\u0001');
+}
+
+/**
+ * Whether two activity snapshots would render the same cards. A refreshed result
+ * that matches the visible one keeps its state identity so the timeline does not
+ * rebuild or re-persist for nothing.
+ */
+export function areThreadRunSeedsEqual(
+  left: ReadonlyArray<ThreadRunSeed>,
+  right: ReadonlyArray<ThreadRunSeed>,
+): boolean {
+  if (left === right) return true;
+  if (left.length !== right.length) return false;
+  for (let index = 0; index < left.length; index += 1) {
+    if (runSeedSignature(left[index]!) !== runSeedSignature(right[index]!)) return false;
+  }
+  return true;
+}
 
 export type ThreadTimelineItem =
   | Readonly<{ type: 'tools'; key: string; messages: ReadonlyArray<UiMessage>; timestampMs?: number }>
@@ -146,7 +180,8 @@ export function buildCronRunSeeds(params: Readonly<{
     if (!job || seenJobIds.has(entry.jobId)) continue;
     const updatedAt = validTimestamp(entry.runAtMs) ?? validTimestamp(entry.ts);
     if (updatedAt === undefined) continue;
-    const sessionKey = entry.sessionKey?.trim() || job.sessionKey?.trim() || undefined;
+    // OpenClaw names the hidden per-run session; the transcript lives on the stable job key.
+    const sessionKey = resolveCronRunSessionKey(entry.sessionKey) || job.sessionKey?.trim() || undefined;
     if (!cronRunSessionBelongsToAgent(
       sessionKey,
       params.currentSessionKey,
@@ -172,6 +207,7 @@ export function buildCronRunSeeds(params: Readonly<{
       status,
       summary: entry.error?.trim() || entry.summary?.trim() || undefined,
       updatedAt,
+      cronRun: entry,
     });
     seenJobIds.add(entry.jobId);
   }
@@ -314,6 +350,11 @@ export type DeriveThreadContentStateInput = Readonly<{
   recovering?: boolean;
   switching?: boolean;
   targetSessionReady?: boolean;
+  /**
+   * Local timeline snapshots (scheduled activity beside the message cache) are
+   * still being read. The first frame waits for them so cached rows land together.
+   */
+  hydrating?: boolean;
   historyLoaded: boolean;
   hasMessages: boolean;
   connectionState: ThreadConnectionState;
@@ -326,6 +367,7 @@ export function deriveThreadContentState({
   recovering = false,
   switching = false,
   targetSessionReady = true,
+  hydrating = false,
   historyLoaded,
   hasMessages,
   connectionState,
@@ -341,6 +383,7 @@ export function deriveThreadContentState({
     || connectionState === 'closed'
     || connectionState === 'reconnecting';
   if (offline) return { kind: 'offline' };
+  if (hydrating) return { kind: 'loading' };
   // Keep scoped cached messages visible while reconnecting or refreshing history.
   if (hasMessages && !switching && targetSessionReady) return { kind: 'ready' };
 

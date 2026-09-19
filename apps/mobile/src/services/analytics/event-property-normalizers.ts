@@ -113,6 +113,37 @@ const SETTINGS_ROWS = new Set([
   'usage_cost',
 ]);
 
+/** OpenClaw bundled channel ids; plugin channels report as `other`. */
+const CHANNEL_PLATFORMS = new Set([
+  'discord',
+  'feishu',
+  'googlechat',
+  'imessage',
+  'irc',
+  'line',
+  'matrix',
+  'mattermost',
+  'msteams',
+  'nextcloud-talk',
+  'nostr',
+  'signal',
+  'slack',
+  'sms',
+  'synology-chat',
+  'telegram',
+  'twitch',
+  'whatsapp',
+  'zalo',
+  'zalouser',
+]);
+
+const DM_SCOPE_VALUES = new Set([
+  'main',
+  'per-peer',
+  'per-channel-peer',
+  'per-account-channel-peer',
+]);
+
 const PAYWALL_FAILURE_REASONS = new Set([
   'cancelled',
   'pending',
@@ -188,6 +219,13 @@ export function normalizeAnalyticsEventString(
   }
   if (property === 'provider') return normalizeAnalyticsModelProvider(value);
   if (property === 'code') return normalizeAnalyticsCode(event, value);
+  if (event === 'channel_dm_scope_changed' && property === 'scope') {
+    return DM_SCOPE_VALUES.has(value.trim()) ? value.trim() : 'other';
+  }
+  if (event === 'channel_account_toggled' && property === 'channel') {
+    const channel = value.trim().toLowerCase();
+    return CHANNEL_PLATFORMS.has(channel) ? channel : 'other';
+  }
   if (event === 'settings_row_opened' && property === 'row') return normalizeSettingsRow(value);
   if (event.startsWith('app_update_announcement_')) {
     if (property === 'version') return normalizeAppVersion(value);

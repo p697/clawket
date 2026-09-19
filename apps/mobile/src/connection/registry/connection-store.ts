@@ -129,6 +129,7 @@ export type ActiveConnectionChange = Readonly<{
 export interface SecureConnectionStorage {
   getItemAsync(key: string, options?: SecureStore.SecureStoreOptions): Promise<string | null>;
   setItemAsync(key: string, value: string, options?: SecureStore.SecureStoreOptions): Promise<void>;
+  deleteItemAsync(key: string, options?: SecureStore.SecureStoreOptions): Promise<void>;
 }
 
 export interface LegacyConnectionStorage {
@@ -865,6 +866,23 @@ export class ConnectionStore {
       const record = persisted.state.records.find((candidate) => candidate.id === connectionId);
       if (!record) throw new ConnectionNotFoundError(connectionId);
       return cloneRecord(record);
+    });
+  }
+
+  /**
+   * Forgets every persisted registry snapshot: the current one, the rollback
+   * copy that still holds the last removed record, and the retained 2.1.x
+   * configs. Per-connection credential cleanup must already have run; this is
+   * the last step of the fresh-install reset, never a user-facing removal.
+   */
+  async clearPersisted(): Promise<ConnectionStoreSnapshot> {
+    return this.enqueue(async () => {
+      await this.secureStorage.deleteItemAsync(ROLLBACK_STORAGE_KEY, SECURE_OPTIONS);
+      await this.secureStorage.deleteItemAsync(CURRENT_STORAGE_KEY, SECURE_OPTIONS);
+      await this.secureStorage.deleteItemAsync(LEGACY_CONFIGS_STORAGE_KEY, SECURE_OPTIONS);
+      this.bridgeOutdated.clear();
+      this.publish({ activeConnectionId: null, freeConnectionId: null, records: [] }, 0);
+      return this.snapshot;
     });
   }
 

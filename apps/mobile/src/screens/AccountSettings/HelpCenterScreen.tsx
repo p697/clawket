@@ -25,6 +25,7 @@ import {
   Terminal,
   Wrench,
 } from 'lucide-react-native';
+import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -66,6 +67,10 @@ type HelpTopic = Readonly<{
   paragraphs: ReadonlyArray<string>;
   commands?: ReadonlyArray<HelpCommand>;
 }>;
+
+// Topic paragraphs plus config blocks outgrow a phone screen, so the sheet
+// scrolls inside fixed detents through the Gorhom-integrated scroll view.
+const TOPIC_SHEET_SNAP_POINTS: string[] = ['68%', '92%'];
 
 type OfficialLink = Readonly<{
   id: string;
@@ -234,10 +239,12 @@ function TopicSheet({
       testID={topic ? `help-topic-sheet-${topic.id}` : 'help-topic-sheet'}
       title={topic?.title}
       closeAccessibilityLabel={t('common:Close')}
+      snapPoints={TOPIC_SHEET_SNAP_POINTS}
       onClose={onClose}
     >
       {topic ? (
-        <ScrollView
+        <BottomSheetScrollView
+          testID="help-topic-scroll"
           contentContainerStyle={styles.sheetContent}
           showsVerticalScrollIndicator={false}
         >
@@ -257,7 +264,7 @@ function TopicSheet({
               index={index}
             />
           ))}
-        </ScrollView>
+        </BottomSheetScrollView>
       ) : null}
     </Sheet>
   );
@@ -635,7 +642,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1 },
   content: {
     paddingHorizontal: Space.lg,
-    paddingTop: Space.sm,
+    paddingTop: Space.lg,
     gap: Space.xl,
   },
   sheetContent: {

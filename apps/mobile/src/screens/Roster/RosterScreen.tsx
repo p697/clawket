@@ -1,3 +1,4 @@
+import { useWorkspaceLayout } from '../../navigation/workspace-context';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   FlatList,
@@ -21,12 +22,12 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { YOUMIND_SPRITE_ENTRY_VISIBLE } from '../../config/features';
 import {
   getConnectionRuntime,
   useConnections,
   useRoster,
 } from '../../connection';
+import { ConnectionUnavailable, type ConnectionUnavailableProps } from '../../components/ui/ConnectionUnavailable';
 import { Banner } from '../../components/ui/Banner';
 import { ConnectionStatusPill } from '../../components/ui/ConnectionStatusPill';
 import { ConfirmationModal } from '../../components/ui/ConfirmationModal';
@@ -84,6 +85,8 @@ export type RosterGraceBanner = Readonly<{
 }>;
 
 export type RosterViewProps = Readonly<{
+  selectedThread?: Readonly<{ connectionId: string; agentId: string; sessionKey: string }>;
+  connectionFailure?: ConnectionUnavailableProps;
   state: RosterPageState;
   rows: ReadonlyArray<RosterDisplayRow>;
   activeConnectionId: string | null;
@@ -109,6 +112,8 @@ export type RosterViewProps = Readonly<{
 }>;
 
 export type RosterScreenProps = Readonly<{
+  selectedThread?: RosterViewProps['selectedThread'];
+  onManageActiveConnection?: (connectionId: string) => void;
   pinnedSessionKeys?: RosterModelOptions['pinnedSessionKeys'];
   agentPreferences?: RosterModelOptions['agentPreferences'];
   canAccessAgent?: RosterModelOptions['canAccessAgent'];
@@ -147,10 +152,10 @@ function ActionRows({
   onPress: (action: string) => void;
 }>): React.JSX.Element {
   return (
-    <SettingsGroup>
+    <SettingsGroup chrome="plain" style={styles.actionRows}>
       {actions.map((action, index) => (
         <React.Fragment key={action}>
-          {index > 0 ? <SettingsDivider inset="content" /> : null}
+          {index > 0 ? <SettingsDivider /> : null}
           <SettingsRow
             testID={`roster-action-${action}`}
             title={label(action)}
@@ -200,7 +205,7 @@ function RosterAddChoices({
           testID="roster-action-add_connection"
           icon={MonitorSmartphone}
           title={t('Add Connection', { ns: 'config' })}
-          description={t(YOUMIND_SPRITE_ENTRY_VISIBLE ? 'Connect OpenClaw, Hermes or YouMind Sprite' : 'Connect OpenClaw or Hermes', { ns: 'config' })}
+          description={t('Connect OpenClaw, Hermes and more', { ns: 'config' })}
           locked={addConnectionLocked}
           onPress={() => onPress(action)}
         />
@@ -248,7 +253,9 @@ function RosterHeader({
           />
         ) : null}
       </View>
-      {/* The empty centre is where connection state lives: it never pushes the list. */}
+      {/* Connection state sits in the spare width, trailing against Search
+          (owner feedback 2026-09-19: a centred capsule floated between the
+          groups); it never pushes the list. */}
       <View testID="roster-header-status" pointerEvents="box-none" style={styles.headerStatusSlot}>
         {status}
       </View>
@@ -372,6 +379,8 @@ function RosterBanners({
 }
 
 export function RosterView({
+  selectedThread,
+  connectionFailure,
   state,
   rows,
   activeConnectionId,
@@ -395,6 +404,7 @@ export function RosterView({
   onOpenPro,
 }: RosterViewProps): React.JSX.Element {
   const { t } = useTranslation('common');
+  const { dismissRoster } = useWorkspaceLayout();
   const { theme } = useAppTheme();
   const insets = useSafeAreaInsets();
   const swipeGroup = useSwipeableRowGroup();
@@ -434,6 +444,8 @@ export function RosterView({
     const row = (
       <RosterRow
         testID={`roster-row-${item.key}`}
+        selected={selectedThread?.connectionId === item.connectionId
+          && selectedThread.agentId === item.agentId && selectedThread.sessionKey === item.sessionKey}
         agentId={item.agentId}
         name={item.name}
         avatarName={item.avatarName}
@@ -454,7 +466,7 @@ export function RosterView({
         cached={item.cached}
         locked={item.locked}
         accessibilityLabel={item.cached ? `${item.name}, ${t('Last synced')}` : [item.name, item.working ? t('Working') : null, item.unreadCount > 0 ? t('Unread messages') : null].filter(Boolean).join(', ')}
-        onPress={() => open(item)}
+        onPress={() => { dismissRoster?.(); open(item); }}
         {...(onLongPressRow ? { onLongPress: () => onLongPressRow(item) } : {})}
       />
     );
@@ -472,6 +484,8 @@ export function RosterView({
     );
   }, [
     activeConnectionId,
+    selectedThread,
+    dismissRoster,
     onLongPressRow,
     onOpenLockedRow,
     onOpenRow,
@@ -505,7 +519,9 @@ export function RosterView({
           onSearch={onSearch}
         />
       </View>
-      {state === 'loading' ? (
+      {connectionFailure && rows.length === 0 ? (
+        <View style={[styles.list, contentInsets]}><ConnectionUnavailable {...connectionFailure} testID="roster-connection-unavailable" /></View>
+      ) : state === 'loading' || (rows.length === 0 && recovering) ? (
         <View style={[styles.list, contentInsets]}>
           <RosterLoading />
         </View>
@@ -524,12 +540,15 @@ export function RosterView({
             rows.length === 0 ? styles.emptyContent : null,
           ]}
           ListHeaderComponent={(
-            <RosterBanners
-              state={state}
-              graceBanner={graceBanner}
-              onGraceAction={onGraceAction}
-              onOpenPro={onOpenPro}
-            />
+            <>
+              {connectionFailure ? <ConnectionUnavailable {...connectionFailure} compact testID="roster-connection-unavailable" /> : null}
+              <RosterBanners
+                state={state}
+                graceBanner={graceBanner}
+                onGraceAction={onGraceAction}
+                onOpenPro={onOpenPro}
+              />
+            </>
           )}
           ListEmptyComponent={(
             <Text testID="roster-empty" style={[styles.emptyText, { color: theme.colors.inkSecondary }]}>
@@ -566,6 +585,8 @@ export function RosterView({
 }
 
 export function RosterScreen({
+  selectedThread,
+  onManageActiveConnection,
   pinnedSessionKeys,
   agentPreferences,
   canAccessAgent,
@@ -619,6 +640,10 @@ export function RosterScreen({
   });
   const offline = !connections.recovering && (connections.recoveryFailed || connections.activeState === 'offline'
     || connections.activeState === 'reconnecting');
+  const activeConnection = connections.connections.find((item) => item.id === connections.activeConnectionId);
+  const connectionError = connections.error
+    && (connections.error.operation === 'connect' || connections.error.operation === 'probe')
+    && (!connections.error.connectionId || connections.error.connectionId === connections.activeConnectionId);
   const accountBadge = resolveAccountBadge(accountAttentionCount);
   const refresh = useCallback(async () => {
     if (refreshing) return;
@@ -749,6 +774,18 @@ export function RosterScreen({
   return (
     <>
       <RosterView
+        selectedThread={selectedThread}
+        connectionFailure={!connections.recovering && !connections.switching && activeConnection
+          && (offline || connectionError) ? {
+            name: activeConnection.label,
+            lastReadyAt: connections.connectionDetails[activeConnection.id]?.lastReadyAt,
+            message: connections.pausedConnectionIds?.includes(activeConnection.id)
+              ? t('Connection paused', { ns: 'config' }) : undefined,
+            actionLabel: connections.pausedConnectionIds?.includes(activeConnection.id)
+              ? t('Resume connection', { ns: 'config' }) : undefined,
+            onRetry: reconnect,
+            onManage: onManageActiveConnection ? () => onManageActiveConnection(activeConnection.id) : undefined,
+          } : undefined}
         state={state}
         rows={rows}
         activeConnectionId={connections.activeConnectionId}
@@ -863,7 +900,7 @@ const styles = StyleSheet.create({
   headerStatusSlot: {
     flex: 1,
     minWidth: 0,
-    alignItems: 'center',
+    alignItems: 'flex-end',
     justifyContent: 'center',
     paddingHorizontal: Space.sm,
   },
@@ -896,7 +933,11 @@ const styles = StyleSheet.create({
   },
   addChoices: {
     paddingHorizontal: Space.xl,
-    paddingTop: Space.sm,
     gap: Space.sm,
+  },
+  // Action sheets are list sheets: plain rows on the 16-point body inset, like Commands.
+  actionRows: {
+    paddingHorizontal: Space.lg,
+    paddingBottom: Space.lg,
   },
 });

@@ -16,7 +16,6 @@
       "infoPlist": {
         "NSCameraUsageDescription": "Allow Clawket to use your camera to scan QR codes and take photos to send to AI.",
         "NSPhotoLibraryAddUsageDescription": "Allow Clawket to save stats posters to your photo library.",
-        "NSSpeechRecognitionUsageDescription": "Allow Clawket to transcribe your speech into chat messages.",
         "ITSAppUsesNonExemptEncryption": false,
         "CFBundleAllowMixedLocalizations": true,
         "CFBundleLocalizations": [
@@ -41,10 +40,17 @@
           "ar"
         ],
         "CFBundleDevelopmentRegion": "en",
-        "UIPrefersShowingLanguageSettings": true
+        "UIPrefersShowingLanguageSettings": true,
+        "UISupportedInterfaceOrientations~ipad": [
+          "UIInterfaceOrientationPortrait",
+          "UIInterfaceOrientationPortraitUpsideDown",
+          "UIInterfaceOrientationLandscapeLeft",
+          "UIInterfaceOrientationLandscapeRight"
+        ]
       },
       "appleTeamId": "C8TM82D73W",
-      "deploymentTarget": "16.4"
+      "deploymentTarget": "16.4",
+      "requireFullScreen": false
     },
     "android": {
       "adaptiveIcon": {
@@ -180,6 +186,14 @@
             "enableSceneSupport": true,
             "usePrecompiledModules": false
           }
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Allow Clawket to use your microphone for voice input. Audio is sent to Alibaba Cloud for transcription.",
+          "enableBackgroundRecording": false,
+          "enableBackgroundPlayback": false
         }
       ]
     ],

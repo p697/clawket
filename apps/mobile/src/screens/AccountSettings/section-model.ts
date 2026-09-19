@@ -11,8 +11,6 @@ export type AccountSettingsSectionCapability =
   | 'connections'
   | 'appearance'
   | 'appIcons'
-  | 'voice'
-  | 'notifications'
   | 'help'
   | 'community'
   | 'about'
@@ -30,8 +28,6 @@ AccountSettingsSectionCapabilities = Object.freeze({
   connections: true,
   appearance: true,
   appIcons: true,
-  voice: true,
-  notifications: true,
   help: true,
   community: true,
   about: true,
@@ -45,7 +41,6 @@ export type AccountSettingsSectionLabels = Readonly<{
   accent: string;
   chatAppearance: string;
   appIcon: string;
-  speechLanguage: string;
   appVersion: string;
   previewEnvironment: string;
 }>;
@@ -54,14 +49,14 @@ export type AccountSettingsSectionData = Readonly<{
   labels?: Partial<AccountSettingsSectionLabels>;
   isPro?: boolean;
   canAddConnection?: boolean;
-  replyNotificationsEnabled?: boolean;
   debugMode?: boolean;
+  simulateFreeAccount?: boolean;
 }>;
 
 export type AccountSettingsSectionAction = AccountSettingsAction
   | 'advanced-settings'
-  | 'set-reply-notifications'
-  | 'set-debug-mode';
+  | 'set-debug-mode'
+  | 'set-simulate-free-account';
 
 export type AccountSettingsSectionActionRequest = Readonly<{
   action: AccountSettingsSectionAction;
@@ -78,7 +73,7 @@ export type AccountSettingsSectionRow = Readonly<{
   valueNamespace?: 'common' | 'config' | 'settings';
   kind: 'navigation' | 'toggle' | 'value';
   action?: AccountSettingsSectionAction;
-  toggle?: 'replyNotifications' | 'debugMode';
+  toggle?: 'debugMode' | 'simulateFreeAccount';
   disabled?: boolean;
   locked?: boolean;
   paywallReason?: Extract<AccountSettingsPageStatus, { kind: 'permission' }>['reason'];
@@ -109,9 +104,6 @@ const SECTION_CAPABILITY: Readonly<
   Record<AccountSettingsDetailSection, AccountSettingsSectionCapability>
 > = Object.freeze({
   pro: 'subscription',
-  appearance: 'appearance',
-  voice: 'voice',
-  notifications: 'notifications',
   help: 'help',
   community: 'community',
   about: 'about',
@@ -121,9 +113,6 @@ const SECTION_CAPABILITY: Readonly<
 const SECTION_TITLE_KEYS: Readonly<Record<AccountSettingsDetailSection, string>> =
   Object.freeze({
     pro: 'Clawket Pro',
-    appearance: 'Appearance',
-    voice: 'Voice',
-    notifications: 'Chat & notifications',
     help: 'Help & feedback',
     community: 'Community',
     about: 'About',
@@ -176,35 +165,6 @@ function buildSectionGroups(
         }),
         navigationRow('restore-purchases', 'Restore Purchases', 'restore-purchases'),
       ])];
-    case 'appearance':
-      return [group('appearance', [
-        navigationRow('theme', 'Theme', 'theme', { value: labels.theme }),
-        navigationRow('chat-appearance', 'Chat theme', 'chat-appearance', {
-          value: labels.chatAppearance,
-        }),
-        gateRow(navigationRow('app-icon', 'App Icon', 'app-icon', {
-          value: labels.appIcon,
-          locked: !data.isPro,
-          paywallReason: 'appIcons',
-        }), capabilities.appIcons),
-      ])];
-    case 'voice':
-      return [group('voice', [
-        navigationRow('speech-language', 'Recognition Language', 'speech-language', {
-          value: labels.speechLanguage,
-        }),
-      ])];
-    case 'notifications':
-      return [group('notifications', [
-        gateRow(navigationRow('speech-language', 'Recognition Language', 'speech-language', { value: labels.speechLanguage }), capabilities.voice),
-        {
-          id: 'reply-notifications',
-          titleKey: 'Reply Notifications',
-          kind: 'toggle',
-          toggle: 'replyNotifications',
-          action: 'set-reply-notifications',
-        },
-      ])];
     case 'help':
       return [group('help', [
         navigationRow('help-center', 'Help Center', 'help-center'),
@@ -253,7 +213,13 @@ function buildSectionGroups(
           'preview-update-announcement',
           'Preview update announcement',
           'preview-update-announcement',
-        )] : []),
+        ), {
+          id: 'simulate-free-account',
+          titleKey: 'Simulate free account',
+          kind: 'toggle' as const,
+          toggle: 'simulateFreeAccount' as const,
+          action: 'set-simulate-free-account' as const,
+        }] : []),
         navigationRow('clear-cache', 'Clear Cache', 'clear-cache'),
         navigationRow('reset-device', 'Reset Device', 'reset-device'),
       ])];

@@ -45,6 +45,20 @@ const SHEET_CHROME_MODULE_STEMS = new Set([
   'SheetHeader',
   'ThemedFullWindowOverlay',
 ]);
+// Icon buttons in a Sheet header must share the close button's chrome.
+const SHEET_HEADER_ACTION_HOST = 'Sheet';
+const SHEET_HEADER_ACTION_SLOT = 'headerRight';
+const SHEET_HEADER_ACTION_PRIMITIVE = 'SheetHeaderButton';
+const SHEET_HEADER_FORBIDDEN_BUTTONS = new Set([
+  'ActionButton',
+  'FloatingButton',
+]);
+// A stock vertical scrollable inside a Sheet hands its drags to the sheet's pan
+// gesture (the sheet snaps back instead of scrolling); sheet bodies that can
+// outgrow the screen use the Gorhom-integrated scrollables with fixed detents.
+const SHEET_SCROLLABLE_HOST = 'Sheet';
+const SHEET_FORBIDDEN_SCROLLABLES = new Set(['ScrollView', 'FlatList', 'SectionList']);
+const SHEET_SCROLLABLE_HORIZONTAL_ATTRIBUTE = 'horizontal';
 const EMOJI_LITERAL_ALLOWED_FILES = new Set();
 const SCREEN_DIR_PREFIX = 'src/screens/';
 const SCREEN_FONT_SIZE_LIMIT = 3;
@@ -812,6 +826,109 @@ export function validateSheetChromeOwnership(rel, source) {
   return failures;
 }
 
+export function validateSheetHeaderActionUsage(rel, source) {
+  if (rel.startsWith(SHEET_CHROME_ALLOWED_DIR_PREFIX)) return [];
+  if (!source.includes(SHEET_HEADER_ACTION_SLOT) || !source.includes(SHEET_HEADER_ACTION_HOST)) return [];
+  const sourceFile = ts.createSourceFile(
+    rel,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    rel.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  );
+  const failures = [];
+  const lineOf = (node) => sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
+  const tagNameOf = (node) => {
+    const tag = node.tagName;
+    if (ts.isIdentifier(tag)) return tag.text;
+    if (ts.isPropertyAccessExpression(tag) && ts.isIdentifier(tag.name)) return tag.name.text;
+    return null;
+  };
+  const visitSlot = (node) => {
+    if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
+      const tagName = tagNameOf(node);
+      if (tagName && SHEET_HEADER_FORBIDDEN_BUTTONS.has(tagName)) {
+        failures.push(
+          `${rel}:${lineOf(node)} ${tagName} inside ${SHEET_HEADER_ACTION_SLOT} — use ${SHEET_HEADER_ACTION_PRIMITIVE} so both header corners share one chrome`,
+        );
+      }
+    }
+    ts.forEachChild(node, visitSlot);
+  };
+  const visit = (node) => {
+    if (
+      (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node))
+      && tagNameOf(node) === SHEET_HEADER_ACTION_HOST
+    ) {
+      for (const attribute of node.attributes.properties) {
+        if (
+          ts.isJsxAttribute(attribute)
+          && ts.isIdentifier(attribute.name)
+          && attribute.name.text === SHEET_HEADER_ACTION_SLOT
+          && attribute.initializer
+        ) {
+          visitSlot(attribute.initializer);
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return failures;
+}
+
+export function validateSheetScrollableUsage(rel, source) {
+  if (rel.startsWith(SHEET_CHROME_ALLOWED_DIR_PREFIX)) return [];
+  if (!source.includes(`<${SHEET_SCROLLABLE_HOST}`)) return [];
+  const sourceFile = ts.createSourceFile(
+    rel,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    rel.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  );
+  // Local names bound to the stock react-native scrollables, aliases included.
+  const stockScrollables = new Map();
+  for (const statement of sourceFile.statements) {
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
+    if (statement.moduleSpecifier.text !== 'react-native') continue;
+    const bindings = statement.importClause?.namedBindings;
+    if (!bindings || !ts.isNamedImports(bindings)) continue;
+    for (const specifier of bindings.elements) {
+      const importedName = (specifier.propertyName ?? specifier.name).text;
+      if (SHEET_FORBIDDEN_SCROLLABLES.has(importedName)) stockScrollables.set(specifier.name.text, importedName);
+    }
+  }
+  if (stockScrollables.size === 0) return [];
+  const failures = [];
+  const lineOf = (node) => sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
+  const tagNameOf = (node) => (ts.isIdentifier(node.tagName) ? node.tagName.text : null);
+  const isHorizontal = (node) => node.attributes.properties.some((attribute) => (
+    ts.isJsxAttribute(attribute)
+    && ts.isIdentifier(attribute.name)
+    && attribute.name.text === SHEET_SCROLLABLE_HORIZONTAL_ATTRIBUTE
+    && (!attribute.initializer || (ts.isJsxExpression(attribute.initializer)
+      && attribute.initializer.expression?.kind !== ts.SyntaxKind.FalseKeyword))
+  ));
+  const visit = (node, insideSheet) => {
+    // A Sheet's body is the children of its JsxElement; the opening tag alone holds only props.
+    const nextInsideSheet = insideSheet
+      || (ts.isJsxElement(node) && tagNameOf(node.openingElement) === SHEET_SCROLLABLE_HOST);
+    if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
+      const tagName = tagNameOf(node);
+      const stockName = tagName ? stockScrollables.get(tagName) : undefined;
+      if (insideSheet && stockName && !isHorizontal(node)) {
+        failures.push(
+          `${rel}:${lineOf(node)} ${stockName} inside ${SHEET_SCROLLABLE_HOST} — use BottomSheet${stockName} with fixed snapPoints so the sheet drag does not steal the scroll`,
+        );
+      }
+    }
+    ts.forEachChild(node, (child) => visit(child, nextInsideSheet));
+  };
+  visit(sourceFile, false);
+  return failures;
+}
+
 export function validateBaseline(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return 'root must be an object';
   for (const [rel, counts] of Object.entries(value)) {
@@ -896,6 +1013,8 @@ for (const file of files) {
   hardFailures.push(...validateRawShadowUsage(rel, source));
   hardFailures.push(...validateAgentPaletteOwnership(rel, source));
   hardFailures.push(...validateSheetChromeOwnership(rel, source));
+  hardFailures.push(...validateSheetHeaderActionUsage(rel, source));
+  hardFailures.push(...validateSheetScrollableUsage(rel, source));
   for (const { ruleId, line } of result.violations) {
     const fileCounts = (counts[rel] ??= {});
     fileCounts[ruleId] = (fileCounts[ruleId] ?? 0) + 1;

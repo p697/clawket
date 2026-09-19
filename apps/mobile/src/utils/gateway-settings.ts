@@ -1,3 +1,4 @@
+import { DM_SCOPES, type DmScope } from '@clawket/agent-protocol';
 import { sanitizeFallbackModels } from './fallback-models';
 
 type UnknownRecord = Record<string, unknown>;
@@ -89,6 +90,25 @@ export function buildGatewayRuntimePatch(input: GatewayRuntimeSettings): Record<
       defaults: defaultsPatch,
     },
   };
+}
+
+/** OpenClaw leaves `session.dmScope` unset for the personal-agent default, which behaves as `main`. */
+export function parseDmScope(config: Record<string, unknown> | null): DmScope {
+  const session = readRecord(config?.session);
+  const raw = readString(session?.dmScope);
+  return (DM_SCOPES as readonly string[]).includes(raw) ? raw as DmScope : 'main';
+}
+
+export function buildDmScopePatch(dmScope: DmScope): Record<string, unknown> {
+  return { session: { dmScope } };
+}
+
+export function buildChannelAccountEnabledPatch(
+  channelId: string,
+  accountId: string,
+  enabled: boolean,
+): Record<string, unknown> {
+  return { channels: { [channelId]: { accounts: { [accountId]: { enabled } } } } };
 }
 
 function readRecord(value: unknown): UnknownRecord | null {

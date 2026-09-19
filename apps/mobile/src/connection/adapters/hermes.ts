@@ -9,6 +9,7 @@ import {
   type CronJobPatch,
   type CronListParams,
   type CronListResult,
+  type CronRunContent,
   type CronRunLogEntry,
   type CronRunsParams,
   type CronRunsResult,
@@ -325,6 +326,7 @@ export class HermesAdapter extends GatewayAdapterBase {
         remove: async (id) => ({ ok: await this.invoke(() => this.gateway.removeHermesCronJob(id)) }),
         run: (id) => this.invoke(() => this.gateway.runHermesCronJob(id)),
         runs: (params) => this.listCronRuns(params),
+        runContent: (entry) => this.loadCronRunContent(entry),
       },
       agents: {
         list: async () => ({
@@ -420,6 +422,14 @@ export class HermesAdapter extends GatewayAdapterBase {
     const entries = sorted.slice(offset, offset + limit);
     const hasMore = offset + entries.length < total;
     return { entries, total, offset, limit, hasMore, nextOffset: hasMore ? offset + entries.length : null };
+  }
+
+  /** Hermes keeps each run's full output as a file; the run entry carries its name. */
+  private async loadCronRunContent(entry: CronRunLogEntry): Promise<CronRunContent> {
+    if (!entry.outputRef) return { deliveries: [] };
+    const detail = await this.invoke(() => this.gateway.getHermesCronOutput(entry.jobId, entry.outputRef!));
+    const output = detail?.content?.trim();
+    return { deliveries: [], ...(output ? { output } : {}) };
   }
 }
 
@@ -546,7 +556,7 @@ function toHermesCronUpsert(job: CronJobCreate): HermesCronJobUpsert {
   };
 }
 
-function cronPrompt(payload: CronJobCreate['payload']): string {
+function cronPrompt(payload: CronJobCreate['payload'] | NonNullable<CronJobPatch['payload']>): string {
   return payload.kind === 'agentTurn' ? payload.message : payload.text;
 }
 
@@ -576,6 +586,7 @@ function mapHermesCronRun(output: HermesCronOutputEntry): CronRunLogEntry {
     action: 'finished',
     status: output.status === 'unknown' ? undefined : output.status,
     summary: output.preview,
+    outputRef: output.fileName,
   };
 }
 

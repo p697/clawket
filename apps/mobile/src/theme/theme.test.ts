@@ -174,6 +174,7 @@ describe('Clawket 3.0 theme tokens', () => {
       duration: { fast: 120, normal: 200, slow: 320 },
       easing: 'easeOut',
       pressedScale: 0.96,
+      pressedOpacity: 0.72,
       messageEnterOffset: 4,
       avatarWorkingLoop: 1_200,
       avatarDoneFade: 3_000,

@@ -55,6 +55,8 @@ type Props = Readonly<{
   disabledPackageIds?: readonly string[];
   purchaseDisabled?: boolean;
   restoreDisabled?: boolean;
+  redeemDisabled?: boolean;
+  onRedeem?: () => void;
   isMember?: boolean;
   currentPackageId?: string | null;
   planChange?: boolean;
@@ -94,6 +96,8 @@ function PaywallPresentation({
   onManageSubscription,
   onClose,
   onRestore,
+  onRedeem,
+  redeemDisabled = false,
   onRetry,
   onSelectPackage,
   onPurchase,
@@ -110,6 +114,7 @@ function PaywallPresentation({
   const selectedPackage = orderedPackages.find((item) => item.packageIdentifier === selectedPackageId) ?? null;
   const [monthlyVisible, setMonthlyVisible] = useState(selectedPackage?.packageType === 'MONTHLY');
   const interactionLocked = phase === 'purchasing' || phase === 'restoring' || phase === 'success';
+  const actionsLocked = interactionLocked || phase === 'redeeming';
   const isSuccess = phase === 'success';
   const isComplete = phase === 'complete';
   const hero = content.hero;
@@ -190,8 +195,8 @@ function PaywallPresentation({
           testID="paywall-restore"
           accessibilityRole="button"
           accessibilityLabel={t('Restore Purchases')}
-          accessibilityState={{ disabled: interactionLocked || restoreDisabled, busy: phase === 'restoring' }}
-          disabled={interactionLocked || restoreDisabled}
+          accessibilityState={{ disabled: actionsLocked || restoreDisabled, busy: phase === 'restoring' }}
+          disabled={actionsLocked || restoreDisabled}
           onPress={onRestore}
           style={({ pressed }) => [styles.restoreButton, pressed ? styles.pressed : null]}
         >
@@ -237,7 +242,16 @@ function PaywallPresentation({
 
       </View>
 
-      <View testID="paywall-footer" pointerEvents={interactionLocked ? 'none' : 'auto'} style={styles.footer}>
+      {statusCode === 'redemptionWaiting' || statusCode === 'redemptionUnconfirmed' || statusCode === 'redemptionFailed' ? (
+        <Text testID="paywall-redemption-status" accessibilityLiveRegion="polite" style={styles.feedbackText}>
+          {statusCode === 'redemptionWaiting'
+            ? t('Complete redemption in the store. Your Pro access will sync here.')
+            : statusCode === 'redemptionUnconfirmed'
+              ? t('No new Pro access confirmed yet. If you redeemed a code, tap Restore.')
+              : t('Unable to open redemption. Please try again.')}
+        </Text>
+      ) : null}
+      <View testID="paywall-footer" pointerEvents={actionsLocked ? 'none' : 'auto'} style={styles.footer}>
         {isComplete ? (
           <>
             {onManageSubscription ? <Button testID="paywall-manage-subscription" label={t('Manage subscription')} onPress={onManageSubscription} /> : null}
@@ -270,7 +284,7 @@ function PaywallPresentation({
                     badge={item.packageIdentifier === currentPackageId ? t('Current plan') : item.packageType === 'ANNUAL' ? t('Recommended') : null}
                     selected={item.packageIdentifier === selectedPackageId}
                     current={isMember && item.packageIdentifier === currentPackageId}
-                    disabled={interactionLocked || disabledPackageIds.includes(item.packageIdentifier)}
+                    disabled={actionsLocked || disabledPackageIds.includes(item.packageIdentifier)}
                     onPress={() => onSelectPackage(item.packageIdentifier)}
                   />
                 ))}
@@ -281,7 +295,7 @@ function PaywallPresentation({
               <Pressable
                 testID="paywall-show-monthly"
                 accessibilityRole="button"
-                disabled={interactionLocked}
+                disabled={actionsLocked}
                 onPress={() => setMonthlyVisible(true)}
                 style={({ pressed }) => [styles.monthlyButton, pressed ? styles.pressed : null]}
               >
@@ -307,7 +321,7 @@ function PaywallPresentation({
                           : blockedFeature === 'agents' ? t('Upgrade to use more Agents') : t('Start Clawket Pro')}
                       size="lg"
                       loading={phase === 'purchasing'}
-                      disabled={interactionLocked || purchaseDisabled || phase === 'loading' || phase === 'unavailable' || !selectedPackage}
+                      disabled={actionsLocked || purchaseDisabled || phase === 'loading' || phase === 'unavailable' || !selectedPackage}
                       onPress={onPurchase}
                     />
                     {selectedPackage ? <Text testID="paywall-billing" accessibilityHint={selectedPackage.packageType === 'LIFETIME' ? undefined : Platform.OS === 'android' ? t('Cancel anytime in Google Play') : t('Cancel anytime in the App Store')} style={styles.billingText}>{formatBilling(selectedPackage, t)}</Text> : null}
@@ -316,8 +330,13 @@ function PaywallPresentation({
               </View>
             )}
 
-            {isMember && onManageSubscription ? <Button testID="paywall-manage-subscription" label={t('Manage subscription')} variant="secondary" style={styles.manageButton} onPress={onManageSubscription} /> : null}
+            {isMember && onManageSubscription ? <Button testID="paywall-manage-subscription" label={t('Manage subscription')} variant="secondary" style={styles.manageButton} disabled={actionsLocked} onPress={onManageSubscription} /> : null}
             <View style={styles.legalRow}>
+              {onRedeem ? <Pressable testID="paywall-redeem" accessibilityRole="button"
+                disabled={actionsLocked || redeemDisabled} accessibilityState={{ disabled: actionsLocked || redeemDisabled }}
+                onPress={onRedeem} style={styles.legalLink}>
+                <Text style={styles.legalLinkText}>{t('Redeem code')}</Text>
+              </Pressable> : null}
               <Pressable accessibilityRole="link" onPress={onOpenTerms} style={styles.legalLink}>
                 <Text style={styles.legalLinkText}>{t('Terms')}</Text>
               </Pressable>

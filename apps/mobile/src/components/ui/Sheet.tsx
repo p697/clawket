@@ -191,7 +191,7 @@ export function Sheet({
     [insets.bottom, insets.top, maxHeight, windowHeight],
   );
   const fixedIpadSheetHeight = useMemo(
-    () => (isIPad
+    () => (isIPad && windowWidth >= 600
       ? getIpadModalSheetMetrics({
         windowWidth,
         windowHeight,

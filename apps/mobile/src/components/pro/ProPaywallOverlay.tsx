@@ -9,7 +9,7 @@ import { PaywallScreen } from '../../screens/Paywall/PaywallScreen';
 import { resolvePaywallContent } from '../../screens/Paywall/model';
 import type { ProFeature } from '../../utils/pro';
 
-export type ProPaywallContinueSource = 'purchase' | 'restore';
+export type ProPaywallContinueSource = 'purchase' | 'restore' | 'redeem';
 
 type Props = Readonly<{
   visible: boolean;
@@ -48,6 +48,7 @@ export function ProPaywallOverlay({ visible, onClose, onContinue }: Props): Reac
     paywallPhase,
     previewOnly,
     purchasePro,
+    redeemCode,
     refreshOfferings,
     restorePurchases,
     selectPackage,
@@ -175,6 +176,14 @@ export function ProPaywallOverlay({ visible, onClose, onContinue }: Props): Reac
       });
   };
 
+  const handleRedeem = () => {
+    if (submissionInFlightRef.current) return;
+    submissionInFlightRef.current = true;
+    void redeemCode().then((result) => {
+      if (result.success && !result.keepOpen) onContinue?.('redeem');
+    }).finally(() => { submissionInFlightRef.current = false; });
+  };
+
   return (
     <Modal
       testID="pro-paywall-modal"
@@ -205,6 +214,8 @@ export function ProPaywallOverlay({ visible, onClose, onContinue }: Props): Reac
         } : undefined}
         onClose={handleClose}
         onRestore={handleRestore}
+        onRedeem={handleRedeem}
+        redeemDisabled={!isConfigured || (previewOnly && isPro)}
         onRetry={() => { void refreshOfferings(); }}
         onSelectPackage={(packageId) => {
           const selected = paywallPackages.find((item) => item.packageIdentifier === packageId) ?? null;

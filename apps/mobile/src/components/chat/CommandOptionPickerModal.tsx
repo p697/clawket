@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { BottomSheetFlatList } from '@gorhom/bottom-sheet';
 import * as Haptics from 'expo-haptics';
 import { Check } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
@@ -11,6 +12,10 @@ export type CommandPickerItem = {
   value: string;
   isCurrent?: boolean;
 };
+
+// Option lists scroll inside fixed detents through the Gorhom-integrated list;
+// a stock FlatList in a dynamic sheet hands its drags to the sheet instead.
+const SNAP_POINTS: string[] = ['50%', '92%'];
 
 type Props = {
   visible: boolean;
@@ -47,7 +52,7 @@ export function CommandOptionPickerModal({
       onClose={onClose}
       closeAccessibilityLabel={t('Close', { ns: 'common' })}
       title={title}
-      maxHeight="50%"
+      snapPoints={SNAP_POINTS}
       testID="command-option-sheet"
     >
       {loading ? (
@@ -67,10 +72,11 @@ export function CommandOptionPickerModal({
           <Text style={styles.stateText}>{t('No options available')}</Text>
         </View>
       ) : (
-        <FlatList
+        <BottomSheetFlatList
+          testID="command-option-list"
           data={options}
-          keyExtractor={(item) => item.value}
-          renderItem={({ item }) => (
+          keyExtractor={(item: CommandPickerItem) => item.value}
+          renderItem={({ item }: { item: CommandPickerItem }) => (
             <Pressable
               onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onSelectOption(item.value); }}
               disabled={isSending}

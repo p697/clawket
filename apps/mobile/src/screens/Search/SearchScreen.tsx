@@ -232,6 +232,7 @@ export function SearchScreen({
     errorCode,
     visibleResultCount: model.visibleResultCount,
     recentSearchCount: recentSearches.length,
+    favoriteCount: model.favorites.length,
     hasQuery: Boolean(model.query),
   });
 
@@ -289,6 +290,7 @@ export function SearchScreen({
       query={query}
       filter={filter}
       sections={model.sections}
+      favorites={model.favorites}
       recentSearches={recentSearches}
       availableResultCount={model.availableResultCount}
       errorCode={errorCode}

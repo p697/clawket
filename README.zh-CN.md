@@ -142,12 +142,12 @@ clawket pair local --backend hermes
 
 Clawket 也可以和跑在你自己电脑上的模型聊天：llama.cpp、Ollama，或任何提供 OpenAI 聊天接口的服务（LM Studio、vLLM 等）。电脑上的 Bridge 保存对话并调用模型，Relay 只负责转发；聊天记录和模型 API key 不会离开这台电脑。
 
-这是预览功能。在 App 里打开「账户设置 → 高级设置」，开启「调试模式」，把「Relay 环境」设为「预览」，然后添加连接并选择「本地模型」。npm 上已发布的 CLI 还不包含这个功能，需要用 Node.js 22 从本仓库运行 Bridge：
+在 App 里添加连接并选择「本地模型」即可；这个入口在任何 App 环境下都可用，不需要开启「调试模式」或切换「Relay 环境」。该功能仍处于预发布阶段：npm 上已发布的 CLI 还不包含它，需要用 Node.js 22 从本仓库运行 Bridge：
 
 ```bash
 npm ci
 npm run bridge:build
-node apps/bridge-cli/dist/index.js local-model pair --preview
+node apps/bridge-cli/dist/index.js local-model pair
 ```
 
 配对前先启动你的模型服务。默认按 `llama-server` 的 8080 端口查找，其他服务需要指定引擎和地址：
@@ -308,5 +308,3 @@ npm run bridge:test
 ## 许可证
 
 除非某个子目录另有说明，本仓库默认采用 [AGPL-3.0-only](./LICENSE) 许可证。
-
-目录 [`apps/mobile/modules/clawket-speech-recognition`](./apps/mobile/modules/clawket-speech-recognition) 不包含在根目录 AGPL 授权范围内，继续按其本地许可证声明作为专有组件处理。

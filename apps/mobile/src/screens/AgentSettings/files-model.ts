@@ -38,14 +38,3 @@ export function canEditAgentFile(
 ): boolean {
   return capabilities.fileEdit && Boolean(operations?.set);
 }
-
-export function canSaveAgentFile(input: Readonly<{
-  capabilities: Pick<Capabilities, 'fileEdit'>;
-  operations: AgentFileOperations | undefined;
-  online: boolean;
-  changed: boolean;
-}>): boolean {
-  return input.online
-    && input.changed
-    && canEditAgentFile(input.capabilities, input.operations);
-}

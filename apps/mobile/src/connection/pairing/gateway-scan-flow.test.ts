@@ -23,7 +23,8 @@ describe('gateway scan Relay claim', () => {
     expect(resolvePairingPayloadBackend(payload)).toBe('local-model');
     expect(assessPairingPayload({ payload, expectedBackendKind: 'local-model', selectedEnvironment: 'preview', debugMode: true })).toEqual({kind:'accepted',backendKind:'local-model'});
     expect(assessPairingPayload({ payload, expectedBackendKind: 'openclaw', selectedEnvironment: 'preview', debugMode: true }).kind).toBe('rejected');
-    expect(assessPairingPayload({ payload, expectedBackendKind: 'local-model', selectedEnvironment: 'production', debugMode: false }).kind).toBe('rejected');
+    // The local-model Registry is environment-independent: Production without Debug Mode pairs too.
+    expect(assessPairingPayload({ payload, expectedBackendKind: 'local-model', selectedEnvironment: 'production', debugMode: false })).toEqual({kind:'accepted',backendKind:'local-model'});
     (RelayPairingService.claim as jest.Mock).mockResolvedValue({gatewayId:'gw_123',relayUrl:'wss://clawket-local-model-relay-preview.clawket.workers.dev/ws',clientToken:'gct_test'});
     const claimed = await claimRelayPairing(payload, {current:new Map()});
     expect(claimed.backendKind).toBe('local-model');

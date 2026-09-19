@@ -1,8 +1,10 @@
 import type {
   AgentAdapter,
   AgentDescriptor,
-  CronJob,
 } from '@clawket/agent-protocol';
+import { CronFailureAckService } from '../../services/cron-failure-acks';
+import { unacknowledgedCronFailures } from './cron-failures';
+import { cronJobBelongsToAgent } from './cron-model';
 import type { AgentSettingsSummary } from './model';
 
 export async function loadAgentSettingsSummary(
@@ -31,15 +33,7 @@ export async function loadAgentSettingsSummary(
 
   if (adapter.capabilities.cron && management?.cron?.list) {
     tasks.push(ignoreFailure(async () => {
-      const result = await management.cron?.list?.({
-        includeDisabled: true,
-        limit: 200,
-        offset: 0,
-      });
-      if (!result) return;
-      summary.cronJobCount = result.total;
-      summary.cronFailureCount = result.jobs.filter(hasCronFailure).length;
-      summary.hasCronFailure = summary.cronFailureCount > 0;
+      Object.assign(summary, await loadAgentCronSummary(adapter, agent));
     }));
   }
 
@@ -108,11 +102,25 @@ export function formatLocalDate(timestamp: number): string {
   return `${year}-${month}-${day}`;
 }
 
-function hasCronFailure(job: CronJob): boolean {
-  return job.state.lastRunStatus === 'error'
-    || job.state.lastStatus === 'error'
-    || Boolean(job.state.lastError)
-    || (job.state.consecutiveErrors ?? 0) > 0;
+export type AgentCronSummary = Pick<AgentSettingsSummary, 'cronJobCount' | 'cronFailureCount' | 'hasCronFailure'>;
+
+/**
+ * The Cron jobs card: the job total plus the failures this Agent's user has not seen yet. Read on
+ * its own after the Runs tab acknowledges failures so the badge clears without reloading the page.
+ */
+export async function loadAgentCronSummary(
+  adapter: AgentAdapter,
+  agent: AgentDescriptor,
+): Promise<AgentCronSummary> {
+  const list = adapter.management?.cron?.list;
+  if (!list) return {};
+  const [result, acknowledged] = await Promise.all([
+    list({ includeDisabled: true, limit: 200, offset: 0 }),
+    CronFailureAckService.read(agent.connectionId, agent.agentId),
+  ]);
+  const jobs = result.jobs.filter((job) => cronJobBelongsToAgent(job, agent));
+  const cronFailureCount = unacknowledgedCronFailures(jobs, acknowledged).length;
+  return { cronJobCount: result.total, cronFailureCount, hasCronFailure: cronFailureCount > 0 };
 }
 
 type MutableSummary = {

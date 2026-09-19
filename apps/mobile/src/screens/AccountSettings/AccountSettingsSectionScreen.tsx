@@ -31,11 +31,6 @@ import {
 } from '../../theme/tokens';
 import type { AccountSettingsPageStatus } from './model';
 import {
-  AccountPreferenceSheet,
-  isAccountPreferenceAction,
-  type AccountPreferenceAction,
-} from './AccountPreferenceSheet';
-import {
   buildAccountSettingsSectionModel,
   type AccountSettingsSectionAction,
   type AccountSettingsDetailSection,
@@ -56,7 +51,6 @@ export type AccountSettingsSectionScreenProps = Readonly<{
   onBack: () => void;
   onRetry?: () => void;
   onAction: (request: AccountSettingsSectionActionRequest) => void;
-  onPreferenceChanged?: (preference: AccountPreferenceAction, value: string) => void;
   onOpenPaywall: (
     reason: Extract<AccountSettingsPageStatus, { kind: 'permission' }>['reason'],
     onContinue?: () => void,
@@ -67,7 +61,6 @@ type SectionGroupViewProps = Readonly<{
   group: AccountSettingsSectionGroup;
   data: AccountSettingsSectionData;
   onAction: AccountSettingsSectionScreenProps['onAction'];
-  onOpenPreference: (preference: AccountPreferenceAction) => void;
   onOpenPaywall: AccountSettingsSectionScreenProps['onOpenPaywall'];
 }>;
 
@@ -95,16 +88,12 @@ function SectionGroupView({
   group,
   data,
   onAction,
-  onOpenPreference,
   onOpenPaywall,
 }: SectionGroupViewProps): React.JSX.Element {
   const { t } = useTranslation('config');
   const { theme } = useAppTheme();
+  // Preference pickers (theme, app icon, app language) live on the settings home page.
   const openAvailableRow = (row: AccountSettingsSectionRow) => {
-    if (row.action && isAccountPreferenceAction(row.action)) {
-      onOpenPreference(row.action);
-      return;
-    }
     if (row.action) onAction({ action: row.action });
   };
   const openRow = (row: AccountSettingsSectionRow) => {
@@ -134,8 +123,8 @@ function SectionGroupView({
       <SettingsGroup density="comfortable">
         {group.rows.filter((row) => row.id !== 'pro-status').map((row, index) => {
           const title = resolveRowTitle(row, t);
-          const toggleValue = row.toggle === 'replyNotifications'
-            ? data.replyNotificationsEnabled === true
+          const toggleValue = row.toggle === 'simulateFreeAccount'
+            ? data.simulateFreeAccount === true
             : data.debugMode === true;
           return (
             <Fragment key={row.id}>
@@ -263,13 +252,11 @@ export function AccountSettingsSectionScreen({
   onBack,
   onRetry,
   onAction,
-  onPreferenceChanged,
   onOpenPaywall,
 }: AccountSettingsSectionScreenProps): React.JSX.Element {
   const { t } = useTranslation('config');
   const { theme } = useAppTheme();
   const insets = useSafeAreaInsets();
-  const [preference, setPreference] = useState<AccountPreferenceAction | null>(null);
   const [pendingMaintenance, setPendingMaintenance] = useState<Extract<
     AccountSettingsSectionAction,
     'clear-cache' | 'reset-device'
@@ -279,7 +266,6 @@ export function AccountSettingsSectionScreen({
     accent: data.labels?.accent ?? t('Blue'),
     chatAppearance: data.labels?.chatAppearance ?? t('Default'),
     appIcon: data.labels?.appIcon ?? t('Default'),
-    speechLanguage: data.labels?.speechLanguage ?? t('Follow System'),
     appVersion: data.labels?.appVersion ?? t('Unknown'),
     previewEnvironment: data.labels?.previewEnvironment ?? t(data.debugMode ? 'Preview' : 'Production'),
   }), [data.debugMode, data.labels, t]);
@@ -348,7 +334,6 @@ export function AccountSettingsSectionScreen({
                 group={sectionGroup}
                 data={data}
                 onAction={dispatchAction}
-                onOpenPreference={setPreference}
                 onOpenPaywall={onOpenPaywall}
               />
             ))}
@@ -372,13 +357,6 @@ export function AccountSettingsSectionScreen({
           }}
         />
       ) : null}
-      {preference ? (
-        <AccountPreferenceSheet
-          preference={preference}
-          onClose={() => setPreference(null)}
-          onChanged={onPreferenceChanged}
-        />
-      ) : null}
     </Fragment>
   );
 }
@@ -389,7 +367,7 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: Space.lg,
-    paddingTop: Space.sm,
+    paddingTop: Space.lg,
     gap: Space.xl,
   },
   groupSection: {

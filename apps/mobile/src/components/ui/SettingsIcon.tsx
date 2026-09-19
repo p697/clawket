@@ -2,26 +2,36 @@ import React, { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import type { LucideIcon } from 'lucide-react-native';
 import { useAppTheme } from '../../theme';
-import { Radius } from '../../theme/tokens';
+import { ControlSize, Radius, Space } from '../../theme/tokens';
 
-const SETTINGS_ICON_SIZE = 32;
+// `row` is the 32-point tile that sits in a settings row; `feature` is the 44-point
+// tile that heads a feature card (OpenClaw management menu), sized like the
+// settings avatar so the two share one radius scale.
+const TILE_SIZES = {
+  row: { size: Space.xxl, radius: Radius.avatarSheet, glyph: 17 },
+  feature: { size: ControlSize.floatingButton, radius: Radius.avatarSettings, glyph: ControlSize.floatingButton / 2 },
+} as const;
 
 export type SettingsIconTone = 'accent' | 'info' | 'success' | 'warning' | 'danger' | 'neutral';
+export type SettingsIconTile = keyof typeof TILE_SIZES;
 
 type Props = {
   icon: LucideIcon;
   tone?: SettingsIconTone;
   fill?: boolean;
+  /** Glyph size; defaults to the tile's own (17 in a row tile, 22 in a feature tile). */
   size?: number;
   strokeWidth?: number;
+  tile?: SettingsIconTile;
 };
 
 export function SettingsIcon({
   icon: Icon,
   tone = 'accent',
   fill = false,
-  size = 17,
+  size,
   strokeWidth = 2.2,
+  tile = 'row',
 }: Props): React.JSX.Element {
   const { theme } = useAppTheme();
   const palette = useMemo(() => {
@@ -35,10 +45,17 @@ export function SettingsIcon({
     }
   }, [theme.colors, tone]);
 
+  const { size: tileSize, radius, glyph } = TILE_SIZES[tile];
+
   return (
-    <View style={[styles.badge, { backgroundColor: palette.background }]}>
+    <View
+      style={[
+        styles.badge,
+        { width: tileSize, height: tileSize, borderRadius: radius, backgroundColor: palette.background },
+      ]}
+    >
       <Icon
-        size={size}
+        size={size ?? glyph}
         strokeWidth={strokeWidth}
         color={palette.foreground}
         fill={fill ? palette.foreground : 'none'}
@@ -49,9 +66,6 @@ export function SettingsIcon({
 
 const styles = StyleSheet.create({
   badge: {
-    width: SETTINGS_ICON_SIZE,
-    height: SETTINGS_ICON_SIZE,
-    borderRadius: Radius.avatarSheet,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
