@@ -1449,8 +1449,12 @@ function AppContent({
     );
   }
 
-  const renderRoster = (navigation: Pick<NativeStackScreenProps<RootStackParamList, 'Roster'>['navigation'], 'navigate'>) => (
+  const renderRoster = (
+    navigation: Pick<NativeStackScreenProps<RootStackParamList, 'Roster'>['navigation'], 'navigate'>,
+    presentation: 'page' | 'sidebar' = 'page',
+  ) => (
                     <RosterScreen
+                      presentation={presentation}
                       selectedThread={threadContext ?? undefined}
                       onManageActiveConnection={(connectionId) => navigation.navigate('Connection', { connectionId })}
                       pinnedSessionKeys={pinnedSessionKeys}
@@ -1602,7 +1606,7 @@ function AppContent({
             >
               <BottomSheetModalProvider>
               <StatusBar style={theme.scheme === 'dark' ? 'light' : 'dark'} />
-              <AdaptiveWorkspace routeName={activeRouteName ?? 'Roster'} selectionKey={threadContext ? `${threadContext.connectionId}:${threadContext.sessionKey}` : undefined} roster={renderRoster(rootNavigationRef)}>
+              <AdaptiveWorkspace routeName={activeRouteName ?? 'Roster'} selectionKey={threadContext ? `${threadContext.connectionId}:${threadContext.sessionKey}` : undefined} roster={renderRoster(rootNavigationRef, 'sidebar')}>
               {(wideRoster) => <RootStack.Navigator
                 initialRouteName={connections.connections.length > 0 ? 'Roster' : 'Onboarding'}
                 screenOptions={({ route }) => ({

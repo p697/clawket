@@ -99,7 +99,6 @@
   "Text-to-speech": "Text-zu-Sprache",
   "Voice input failed": "Spracheingabe fehlgeschlagen",
   "Microphone access is required to transcribe speech.": "Für die Spracherkennung ist Mikrofonzugriff erforderlich.",
-  "Unable to transcribe speech right now.": "Sprache kann derzeit nicht transkribiert werden. Bitte versuche es später erneut.",
   "Show or change queue mode": "Warteschlangenmodus anzeigen oder ändern",
   "Show available commands": "Verfügbare Befehle anzeigen",
   "Switch to a specific model": "Zu einem bestimmten Modell wechseln",
@@ -316,5 +315,18 @@
   "Tap to dictate. Hold and release to send.": "Zum Diktieren tippen. Gedrückt halten und zum Senden loslassen.",
   "No speech detected. Please try again.": "Keine Sprache erkannt. Bitte erneut versuchen.",
   "Type or hold to talk": "Tippen oder zum Sprechen gedrückt halten",
-  "Hold longer to talk": "Zum Sprechen länger gedrückt halten"
+  "Hold longer to talk": "Zum Sprechen länger gedrückt halten",
+  "The previous voice session is still closing. Please retry shortly.": "Die vorherige Sprachsitzung wird noch beendet. Bitte versuche es gleich erneut.",
+  "The transcription limit has been reached. Your recording is saved.": "Das Transkriptionslimit wurde erreicht. Deine Aufnahme ist gespeichert.",
+  "Voice authentication failed. Check your device date and time.": "Sprachauthentifizierung fehlgeschlagen. Prüfe Datum und Uhrzeit des Geräts.",
+  "Cannot save more audio. Free up device storage or remove a saved recording.": "Es kann kein weiteres Audio gespeichert werden. Schaffe Speicherplatz oder lösche eine gespeicherte Aufnahme.",
+  "The connection was interrupted. Your recording is saved on this device.": "Die Verbindung wurde unterbrochen. Deine Aufnahme ist auf diesem Gerät gespeichert.",
+  "The microphone stopped. Your recorded audio is saved.": "Das Mikrofon wurde angehalten. Das aufgenommene Audio ist gespeichert.",
+  "The transcription service is unavailable. Your recording is saved on this device.": "Der Transkriptionsdienst ist nicht verfügbar. Deine Aufnahme ist auf diesem Gerät gespeichert.",
+  "Try again in {{seconds}} seconds.": "Versuche es in {{seconds}} Sekunden erneut.",
+  "Keep audio": "Audio behalten",
+  "Saved recording": "Gespeicherte Aufnahme",
+  "Your audio is saved on this device. Retry transcription or delete it.": "Dein Audio ist auf diesem Gerät gespeichert. Starte die Transkription erneut oder lösche es.",
+  "Recording saved locally · Transcription paused": "Lokale Aufnahme · Transkription pausiert",
+  "Saved recording · Tap to recover": "Aufnahme gespeichert · Zum Wiederherstellen tippen"
 }

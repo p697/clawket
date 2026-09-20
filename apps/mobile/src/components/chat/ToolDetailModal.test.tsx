@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { fireEvent, render, waitFor, within } from '@testing-library/react-native';
 import * as Clipboard from 'expo-clipboard';
 import { ToolDetailModal } from './ToolDetailModal';
 import { formatToolDuration, prepareToolPayload } from './tool-detail-model';
@@ -21,7 +21,7 @@ jest.mock('../ui', () => {
   const React = require('react');
   const { View, Text, Pressable } = require('react-native');
   return {
-    Sheet: ({ visible, title, children, ...props }: Record<string, unknown>) => visible ? React.createElement(View, props, React.createElement(Text, null, title), children) : null,
+    Sheet: ({ visible, title, titleContent, children, ...props }: Record<string, unknown>) => visible ? React.createElement(View, props, React.createElement(View, { testID: "sheet-header" }, titleContent ?? React.createElement(Text, null, title)), children) : null,
     FloatingButton: ({ onPress, accessibilityLabel, testID }: Record<string, unknown>) => React.createElement(Pressable, { onPress, accessibilityLabel, testID }),
   };
 });
@@ -35,7 +35,9 @@ it('separates the human title and duration from collapsed technical metadata', (
   const view = render(<ToolDetailModal {...props} durationMs={0} />);
   expect(view.getByText('Session status')).toBeTruthy();
   expect(view.getByTestId('tool-detail-duration').props.numberOfLines).toBe(1);
-  expect(view.getByText('<1 ms')).toBeTruthy();
+  expect(within(view.getByTestId('sheet-header')).getByText('· <1 ms')).toBeTruthy();
+  expect(within(view.getByTestId('sheet-header')).getByText('Completed')).toBeTruthy();
+  expect(within(view.getByTestId('tool-detail-scroll')).queryByText('Completed')).toBeNull();
   expect(view.queryByText(props.name)).toBeNull();
   fireEvent.press(view.getByTestId('tool-detail-metadata-toggle'));
   expect(view.getByText(props.name)).toBeTruthy();

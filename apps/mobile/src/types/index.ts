@@ -215,6 +215,9 @@ export interface AgentEventPayload {
   sessionKey?: string;
   data?: {
     phase?: 'start' | 'update' | 'result' | string;
+    text?: string;
+    aborted?: boolean;
+    terminalReply?: { disposition?: string; text?: string };
     name?: string;
     toolCallId?: string;
     args?: unknown;

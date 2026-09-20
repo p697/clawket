@@ -243,7 +243,7 @@ function PaywallPresentation({
       </View>
 
       {statusCode === 'redemptionWaiting' || statusCode === 'redemptionUnconfirmed' || statusCode === 'redemptionFailed' ? (
-        <Text testID="paywall-redemption-status" accessibilityLiveRegion="polite" style={styles.feedbackText}>
+        <Text testID="paywall-redemption-status" accessibilityLiveRegion="polite" style={styles.redemptionText}>
           {statusCode === 'redemptionWaiting'
             ? t('Complete redemption in the store. Your Pro access will sync here.')
             : statusCode === 'redemptionUnconfirmed'
@@ -542,6 +542,16 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     unavailable: { flexDirection: 'row', alignItems: 'center', gap: Space.md },
     feedbackText: {
       flex: 1,
+      color: colors.inkSecondary,
+      fontSize: FontSize.caption,
+      lineHeight: LineHeight.caption,
+      fontWeight: FontWeight.regular,
+    },
+    // Sits between the benefits and the plans, outside both padded containers, so it aligns itself.
+    redemptionText: {
+      paddingHorizontal: Space.xl,
+      marginBottom: Space.md,
+      textAlign: 'center',
       color: colors.inkSecondary,
       fontSize: FontSize.caption,
       lineHeight: LineHeight.caption,

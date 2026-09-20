@@ -99,7 +99,6 @@
   "Text-to-speech": "टेक्स्ट-टू-स्पीच",
   "Voice input failed": "वॉइस इनपुट विफल",
   "Microphone access is required to transcribe speech.": "बोली को टेक्स्ट में बदलने के लिए माइक्रोफ़ोन एक्सेस ज़रूरी है।",
-  "Unable to transcribe speech right now.": "अभी बोली को टेक्स्ट में नहीं बदला जा सका।",
   "Show or change queue mode": "क्यू मोड दिखाएँ या बदलें",
   "Show available commands": "उपलब्ध कमांड दिखाएँ",
   "Switch to a specific model": "किसी विशेष मॉडल पर जाएँ",
@@ -316,5 +315,18 @@
   "Tap to dictate. Hold and release to send.": "बोलकर लिखने के लिए टैप करें। दबाकर रखें और भेजने के लिए छोड़ें।",
   "No speech detected. Please try again.": "कोई आवाज़ नहीं मिली। कृपया फिर से कोशिश करें।",
   "Type or hold to talk": "लिखें या बोलने के लिए दबाकर रखें",
-  "Hold longer to talk": "बोलने के लिए थोड़ी देर और दबाकर रखें"
+  "Hold longer to talk": "बोलने के लिए थोड़ी देर और दबाकर रखें",
+  "The previous voice session is still closing. Please retry shortly.": "पिछला वॉइस सत्र अभी बंद हो रहा है। थोड़ी देर में फिर प्रयास करें।",
+  "The transcription limit has been reached. Your recording is saved.": "ट्रांसक्रिप्शन सीमा पूरी हो गई है। आपकी रिकॉर्डिंग सहेजी गई है।",
+  "Voice authentication failed. Check your device date and time.": "वॉइस प्रमाणीकरण विफल रहा। डिवाइस की तारीख और समय जाँचें।",
+  "Cannot save more audio. Free up device storage or remove a saved recording.": "और ऑडियो नहीं सहेज सकते। डिवाइस में जगह खाली करें या सहेजी गई रिकॉर्डिंग हटाएँ।",
+  "The connection was interrupted. Your recording is saved on this device.": "कनेक्शन टूट गया। आपकी रिकॉर्डिंग इस डिवाइस पर सहेजी गई है।",
+  "The microphone stopped. Your recorded audio is saved.": "माइक्रोफ़ोन रुक गया। रिकॉर्ड किया गया ऑडियो सहेजा गया है।",
+  "The transcription service is unavailable. Your recording is saved on this device.": "ट्रांसक्रिप्शन सेवा उपलब्ध नहीं है। आपकी रिकॉर्डिंग इस डिवाइस पर सहेजी गई है।",
+  "Try again in {{seconds}} seconds.": "{{seconds}} सेकंड बाद फिर प्रयास करें।",
+  "Keep audio": "ऑडियो रखें",
+  "Saved recording": "सहेजी गई रिकॉर्डिंग",
+  "Your audio is saved on this device. Retry transcription or delete it.": "आपका ऑडियो इस डिवाइस पर सहेजा गया है। दोबारा ट्रांसक्रिप्शन करें या इसे हटाएँ।",
+  "Recording saved locally · Transcription paused": "डिवाइस पर रिकॉर्डिंग · ट्रांसक्रिप्शन रुका है",
+  "Saved recording · Tap to recover": "रिकॉर्डिंग सहेजी गई · वापस पाने के लिए टैप करें"
 }

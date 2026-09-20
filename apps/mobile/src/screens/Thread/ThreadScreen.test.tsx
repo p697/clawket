@@ -18,6 +18,7 @@ let mockThreadOverlayProps: ThreadOverlaysProps | null = null;
 let mockConnections: Record<string, unknown>;
 let mockApp: Record<string, unknown>;
 let mockController: Record<string, unknown>;
+const mockShowPaywall = jest.fn(() => true);
 let mockIsPro = true;
 let mockSubscriptionLoading = false;
 let mockFocused = true;
@@ -78,7 +79,7 @@ jest.mock('../../contexts/AppContext', () => {
 });
 
 jest.mock('../../contexts/ProPaywallContext', () => ({
-  useProPaywall: () => ({ isPro: mockIsPro, isLoading: mockSubscriptionLoading }),
+  useProPaywall: () => ({ isPro: mockIsPro, isLoading: mockSubscriptionLoading, showPaywall: mockShowPaywall }),
 }));
 
 jest.mock('../../connection', () => ({
@@ -190,7 +191,6 @@ function createController(): Record<string, unknown> {
     compactionNotice: 'Compacting context...',
     childSessionActivityRef: { current: new Map() },
     childSessionActivityVersion: 0,
-    clearChildSessionActivities: jest.fn(),
     closeCommandPicker: jest.fn(),
     closeStaticThinkPicker: jest.fn(),
     commandPickerError: null,
@@ -330,6 +330,7 @@ describe('ThreadScreen connection container', () => {
   });
 
   afterEach(() => {
+    jest.useRealTimers();
     consoleErrorSpy.mockRestore();
   });
 
@@ -438,7 +439,11 @@ describe('ThreadScreen connection container', () => {
     act(() => mockThreadViewProps?.sessionPreview?.onMain());
     expect(props.navigation.pop).toHaveBeenCalledWith(1);
     act(() => mockThreadViewProps?.sessionPreview?.onUpgrade());
-    expect(props.navigation.navigate).toHaveBeenCalledWith('Paywall', { reason: 'sessionHistory' });
+    expect(mockShowPaywall).toHaveBeenCalledWith('sessionHistory');
+    expect(props.navigation.navigate).not.toHaveBeenCalled();
+    // Offerings/context updates must keep the current session mounted.
+    view.rerender(<ThreadScreen {...props} />);
+    expect(mockThreadViewProps?.sessionPreview).toBeDefined();
     mockIsPro = true;
     view.rerender(<ThreadScreen {...props} />);
     expect(mockThreadViewProps?.messages).toHaveLength(3);
@@ -542,13 +547,13 @@ describe('ThreadScreen connection container', () => {
     expect(mockApp.requestChatSession).not.toHaveBeenCalled();
   });
 
-  it('does not present a roster refresh timeout as a failed chat connection', () => {
+  it('does not present a roster refresh timeout as a failed chat connection', async () => {
     mockConnections.error = { operation: 'roster', connectionId: 'connection-1', message: '[request_timeout] sessions.list request timed out' };
     render(<ThreadScreen {...createNavigationProps()} />);
-    expect(mockThreadViewProps?.state).toMatchObject({ kind: 'ready' });
+    await waitFor(() => expect(mockThreadViewProps?.state).toMatchObject({ kind: 'ready' }));
   });
 
-  it('binds the target route, active adapter capabilities, controller, and navigation actions', () => {
+  it('binds the target route, active adapter capabilities, controller, and navigation actions', async () => {
     const props = createNavigationProps();
     const onThreadOpened = jest.fn();
     const onOpenAttachments = jest.fn();
@@ -573,6 +578,7 @@ describe('ThreadScreen connection container', () => {
       kind: 'main',
       from: 'roster',
     });
+    await waitFor(() => expect(mockThreadViewProps?.state.kind).toBe('ready'));
     expect(mockThreadViewProps).toMatchObject({
       agentId: 'atlas',
       agentName: 'Controller Atlas',
@@ -605,7 +611,8 @@ describe('ThreadScreen connection container', () => {
       agentId: 'atlas',
     });
     act(() => mockThreadViewProps?.onOpenPaywall?.());
-    expect(props.navigation.navigate).toHaveBeenCalledWith('Paywall', { reason: 'agents' });
+    expect(mockShowPaywall).toHaveBeenCalledWith('agents');
+    expect(props.navigation.navigate).not.toHaveBeenCalledWith('Paywall', expect.anything());
     act(() => mockThreadViewProps?.onCancel?.());
     expect(adapter.cancel).not.toHaveBeenCalled();
     expect(mockController.abortCurrentRun).toHaveBeenCalledTimes(1);
@@ -666,7 +673,8 @@ describe('ThreadScreen connection container', () => {
     const defaultProps = createNavigationProps();
     const defaultView = render(<ThreadScreen {...defaultProps} locked />);
     act(() => mockThreadViewProps?.onOpenPaywall?.());
-    expect(defaultProps.navigation.navigate).toHaveBeenCalledWith('Paywall', { reason: 'agents' });
+    expect(mockShowPaywall).toHaveBeenCalledWith('agents');
+    expect(defaultProps.navigation.navigate).not.toHaveBeenCalled();
 
     defaultView.unmount();
     const connectionProps = createNavigationProps();
@@ -678,9 +686,8 @@ describe('ThreadScreen connection container', () => {
       />,
     );
     act(() => mockThreadViewProps?.onOpenPaywall?.());
-    expect(connectionProps.navigation.navigate).toHaveBeenCalledWith('Paywall', {
-      reason: 'gatewayConnections',
-    });
+    expect(mockShowPaywall).toHaveBeenCalledWith('gatewayConnections');
+    expect(connectionProps.navigation.navigate).not.toHaveBeenCalled();
   });
 
   it('normalizes global and unknown session kinds to other for analytics', () => {
@@ -697,6 +704,24 @@ describe('ThreadScreen connection container', () => {
       kind: 'other',
       from: 'roster',
     });
+  });
+
+  it('retains completed child cards beyond the old timeout and activity cleanup', async () => {
+    const childKey = 'agent:atlas:subagent:probe';
+    mockController.childSessionActivityRef = { current: new Map([[childKey, {
+      sessionKey: childKey, agentId: 'atlas', status: 'completed', previewText: 'Done',
+      resultText: 'ASTRA_PROBE_OK GPT-6', toolName: null, updatedAt: Date.now() - 60_000,
+    }]]) };
+    const view = render(<ThreadScreen {...createNavigationProps()} />);
+    await waitFor(() => expect(mockThreadViewProps?.runCards).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'subagent', status: 'completed', summary: 'ASTRA_PROBE_OK GPT-6', sessionAvailable: false }),
+    ])));
+    mockController.childSessionActivityRef = { current: new Map() };
+    mockController.childSessionActivityVersion = 1;
+    view.rerender(<ThreadScreen {...createNavigationProps()} />);
+    expect(mockThreadViewProps?.runCards).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: childKey, summary: 'ASTRA_PROBE_OK GPT-6' }),
+    ]));
   });
 
   it('projects owned child activity and real Cron results into capability- and Pro-gated run cards', async () => {
@@ -924,6 +949,49 @@ describe('ThreadScreen connection container', () => {
       { connectionId: 'connection-1', agentId: 'atlas', sessionKey: 'agent:atlas:main' },
       [expect.objectContaining({ id: cachedRun.id, status: 'failed', summary: 'Model unavailable' })],
     );
+  });
+
+  it.each(['openclaw', 'hermes'])('paints %s cached messages and both activity snapshots in the same first frame', async backend => {
+    let resolveCron!: (runs: unknown[]) => void;
+    let resolveChildren!: (runs: unknown[]) => void;
+    const cronRead = new Promise<unknown[]>(resolve => { resolveCron = resolve; });
+    const childRead = new Promise<unknown[]>(resolve => { resolveChildren = resolve; });
+    mockThreadActivityCache.read.mockImplementation((...args: unknown[]) => args[1] === 'subagent' ? childRead : cronRead);
+    mockConnections.activeAdapter = { ...adapter, connection: { ...adapter.connection, backendKind: backend } };
+    adapter.management.cron = { list: jest.fn(() => new Promise(() => {})), runs: jest.fn(() => new Promise(() => {})) };
+    mockController.listData = [{ id: 'table', role: 'assistant', text: '| A | B |\n|---|---|\n| 1 | 2 |' }];
+    const view = render(<ThreadScreen {...createNavigationProps()} />);
+    expect(mockThreadViewProps?.state.kind).toBe('loading');
+    const base = { title: 'Result', updatedAt: Date.now(), status: 'completed' };
+    await act(async () => { resolveCron([{ ...base, id: 'cron', kind: 'cron' }]); });
+    expect(mockThreadViewProps?.state.kind).toBe('loading');
+    await act(async () => { resolveChildren([{ ...base, id: 'child', kind: 'subagent', sessionKey: 'agent:atlas:subagent:child' }]); });
+    expect(mockThreadViewProps?.state.kind).toBe('ready');
+    expect(mockThreadViewRenders.filter(entry => entry.kind === 'ready').every(entry => entry.runCount === 2)).toBe(true);
+    // Once revealed, ordinary background refreshes must never hide this list.
+    mockController.historyLoaded = false;
+    view.rerender(<ThreadScreen {...createNavigationProps()} />);
+    expect(mockThreadViewProps?.state.kind).toBe('ready');
+  });
+
+  it('bounds slow local activity hydration on every entry without hiding an already revealed timeline', async () => {
+    jest.useFakeTimers();
+    mockThreadActivityCache.read.mockImplementation(() => new Promise(() => {}));
+    const props = createNavigationProps();
+    const view = render(<ThreadScreen {...props} />);
+    expect(mockThreadViewProps?.state.kind).toBe('loading');
+    act(() => jest.advanceTimersByTime(300));
+    expect(mockThreadViewProps?.state.kind).toBe('ready');
+    for (const sessionKey of ['agent:atlas:other', 'agent:atlas:main']) {
+      mockController.sessionKey = sessionKey;
+      view.rerender(<ThreadScreen {...props} route={{ ...props.route, params: { ...props.route.params, sessionKey } }} />);
+      expect(mockThreadViewProps?.state.kind).toBe('loading');
+      act(() => jest.advanceTimersByTime(300));
+      expect(mockThreadViewProps?.state.kind).toBe('ready');
+    }
+    mockController.historyLoaded = false;
+    view.rerender(<ThreadScreen {...props} />);
+    expect(mockThreadViewProps?.state.kind).toBe('ready');
   });
 
   it('keeps cached cards from painting ahead of messages and settles a fresh result with the history refresh', async () => {

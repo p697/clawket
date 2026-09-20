@@ -15,3 +15,15 @@ export function reserveQuota(state: Quota | undefined, nonce: string, limit: num
   return { window, count: count + 1, nonces: [...nonces, { nonce, expires: now + 120000 }],
     activeUntil: exclusive ? now + 150000 : 0, activeNonce: exclusive ? nonce : '' };
 }
+
+export function quotaRejection(state: Quota | undefined, nonce: string, limit: number, period: number, exclusive: boolean, now: number) {
+  if (state && (!Number.isInteger(state.window) || !Number.isInteger(state.count) || state.count < 0 ||
+    !Number.isFinite(state.activeUntil) || typeof state.activeNonce !== 'string' || !Array.isArray(state.nonces) ||
+    state.nonces.some((entry) => !entry || typeof entry.nonce !== 'string' || !Number.isFinite(entry.expires)))) {
+    return { allowed: false as const, reason: 'storage', retryAfterMs: 0 };
+  }
+  const window = Math.floor(now / period);
+  if (state?.nonces.some((entry) => entry.nonce === nonce && entry.expires > now)) return { allowed: false as const, reason: 'replay', retryAfterMs: 0 };
+  if (exclusive && (state?.activeUntil ?? 0) > now) return { allowed: false as const, reason: 'busy', retryAfterMs: state!.activeUntil - now };
+  return { allowed: false as const, reason: 'quota', retryAfterMs: (window + 1) * period - now };
+}

@@ -45,6 +45,8 @@ export type ThreadRunCard = Readonly<{
   id: string;
   kind: 'subagent' | 'cron';
   sessionKey?: string;
+  /** Missing/deleted children open their retained result instead of a dead session. */
+  sessionAvailable?: boolean;
   jobId?: string;
   agentId?: string;
   title: string;

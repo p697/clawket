@@ -99,7 +99,6 @@
   "Text-to-speech": "Text-to-speech",
   "Voice input failed": "Voice input failed",
   "Microphone access is required to transcribe speech.": "Microphone access is required to transcribe speech.",
-  "Unable to transcribe speech right now.": "Unable to transcribe speech right now.",
   "Show or change queue mode": "Show or change queue mode",
   "Show available commands": "Show available commands",
   "Switch to a specific model": "Switch to a specific model",
@@ -316,5 +315,18 @@
   "Tap to dictate. Hold and release to send.": "Tap to dictate. Hold and release to send.",
   "No speech detected. Please try again.": "No speech detected. Please try again.",
   "Type or hold to talk": "Type or hold to talk",
-  "Hold longer to talk": "Hold longer to talk"
+  "Hold longer to talk": "Hold longer to talk",
+  "The previous voice session is still closing. Please retry shortly.": "The previous voice session is still closing. Please retry shortly.",
+  "The transcription limit has been reached. Your recording is saved.": "The transcription limit has been reached. Your recording is saved.",
+  "Voice authentication failed. Check your device date and time.": "Voice authentication failed. Check your device date and time.",
+  "Cannot save more audio. Free up device storage or remove a saved recording.": "Cannot save more audio. Free up device storage or remove a saved recording.",
+  "The connection was interrupted. Your recording is saved on this device.": "The connection was interrupted. Your recording is saved on this device.",
+  "The microphone stopped. Your recorded audio is saved.": "The microphone stopped. Your recorded audio is saved.",
+  "The transcription service is unavailable. Your recording is saved on this device.": "The transcription service is unavailable. Your recording is saved on this device.",
+  "Try again in {{seconds}} seconds.": "Try again in {{seconds}} seconds.",
+  "Keep audio": "Keep audio",
+  "Saved recording": "Saved recording",
+  "Your audio is saved on this device. Retry transcription or delete it.": "Your audio is saved on this device. Retry transcription or delete it.",
+  "Recording saved locally · Transcription paused": "Recording saved locally · Transcription paused",
+  "Saved recording · Tap to recover": "Saved recording · Tap to recover"
 }

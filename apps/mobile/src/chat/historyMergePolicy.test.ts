@@ -1,5 +1,27 @@
 import { UiMessage } from '../types/chat';
-import { preserveMessagePresentation, preserveOptimisticAssistantMessage, prependOlderCachedMessages } from './historyMergePolicy';
+import { preserveHydratedMessageKeys, preserveMessagePresentation, preserveOptimisticAssistantMessage, prependOlderCachedMessages } from './historyMergePolicy';
+
+describe('preserveHydratedMessageKeys', () => {
+  const cached: UiMessage = { id: 'cached-row', historyMessageId: 'server-row', renderKey: 'stable-row', role: 'assistant', text: 'Outdated text', timestampMs: 1000 };
+  const canonical: UiMessage = { id: 'history-row', historyMessageId: 'server-row', role: 'assistant', text: 'Corrected text', timestampMs: 2000 };
+  it('carries only identity, leaving canonical text, timestamps and membership authoritative', () => {
+    const other = { ...canonical, id: 'different-turn', historyMessageId: 'other-server-row', text: cached.text };
+    expect(preserveHydratedMessageKeys([cached, { ...cached, id: 'stale', historyMessageId: 'stale', renderKey: 'stale' }], [canonical, other]))
+      .toEqual([{ ...canonical, renderKey: 'stable-row' }, other]);
+  });
+  it('does not guess between multiple cached or canonical rows with the same history identity', () => {
+    expect(preserveHydratedMessageKeys([cached, { ...cached, id: 'replica', renderKey: 'replica' }], [canonical])).toEqual([canonical]);
+    const duplicate = { ...canonical, id: 'second-part' };
+    expect(preserveHydratedMessageKeys([cached], [canonical, duplicate])).toEqual([canonical, duplicate]);
+  });
+  it('does not create duplicate render keys or replace a newer live key', () => {
+    const other = { ...canonical, id: 'stable-row', historyMessageId: 'other-server-row' };
+    expect(preserveHydratedMessageKeys([cached], [canonical, other])).toEqual([canonical, other]);
+    const live = { ...canonical, renderKey: 'live-row' };
+    expect(preserveHydratedMessageKeys([cached], [live])).toEqual([live]);
+    expect(preserveHydratedMessageKeys([cached, { ...other, renderKey: 'stable-row' }], [canonical])).toEqual([canonical]);
+  });
+});
 
 describe('prependOlderCachedMessages', () => {
   it('does not resurrect cached tool-turn text while paging after a restart', () => {
@@ -354,6 +376,22 @@ describe('live turn reconciliation', () => {
     const reconciled = preserveOptimisticAssistantMessage(local, next);
     expect(reconciled.slice(0, 2)).toEqual(next);
     expect(reconciled.filter(message => message.role === 'user')).toHaveLength(2);
+  });
+  it('repairs old cumulative live bubbles only against confirmed split history', () => {
+    const broken = [user,
+      { ...local[1], text: 'First.' },
+      local[2],
+      { ...local[3], text: 'First.Answer.' },
+    ];
+    const remote: UiMessage[] = [user,
+      { id: 'a', role: 'assistant', text: 'First.' }, local[2],
+      { id: 'b', role: 'assistant', text: 'Answer.' },
+    ];
+    const repaired = preserveOptimisticAssistantMessage(broken, remote);
+    expect(repaired.map(row => row.text)).toEqual(['Check', 'First.', '', 'Answer.']);
+    expect(preserveOptimisticAssistantMessage(repaired, remote)).toEqual(repaired);
+    const intentional = remote.map(row => row.id === 'b' ? { ...row, text: 'First.Answer.' } : row);
+    expect(preserveOptimisticAssistantMessage(broken, intentional).at(-1)?.text).toBe('First.Answer.');
   });
   it('does not drop a repeated short prompt against an older known message or conflicting send key', () => {
     const old: UiMessage = { id: 'history-old', role: 'user', text: 'OK', timestampMs: 1000, idempotencyKey: 'old' };

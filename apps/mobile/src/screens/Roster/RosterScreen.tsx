@@ -112,6 +112,7 @@ export type RosterViewProps = Readonly<{
 }>;
 
 export type RosterScreenProps = Readonly<{
+  presentation?: 'page' | 'sidebar';
   selectedThread?: RosterViewProps['selectedThread'];
   onManageActiveConnection?: (connectionId: string) => void;
   pinnedSessionKeys?: RosterModelOptions['pinnedSessionKeys'];
@@ -585,6 +586,7 @@ export function RosterView({
 }
 
 export function RosterScreen({
+  presentation = 'page',
   selectedThread,
   onManageActiveConnection,
   pinnedSessionKeys,
@@ -774,7 +776,7 @@ export function RosterScreen({
   return (
     <>
       <RosterView
-        selectedThread={selectedThread}
+        selectedThread={presentation === 'sidebar' ? selectedThread : undefined}
         connectionFailure={!connections.recovering && !connections.switching && activeConnection
           && (offline || connectionError) ? {
             name: activeConnection.label,

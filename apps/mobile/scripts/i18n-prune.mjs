@@ -36,6 +36,7 @@ export const DEFAULT_RETAIN_RULES = Object.freeze({
 // file that declares every possible key as a string literal. Unregistered
 // dynamic calls still protect their whole namespace from pruning.
 export const DYNAMIC_KEY_ORIGINS = Object.freeze([
+  Object.freeze({ file: 'src/chat/useChatVoiceInput.ts', argument: 'speechErrorCopy(error)', origin: 'src/services/speech/speechErrors.ts' }),
   Object.freeze({
     file: 'src/chat/useChatController.ts',
     argument: 'failure.summaryKey',

@@ -1,5 +1,5 @@
 import { UiMessage } from '../types/chat';
-import { finalReplyTail } from './liveRunThread';
+import { finalReplyTail } from './streamText';
 
 const ASSISTANT_MATCH_GRACE_MS = 5_000;
 const SAME_TURN_REPLACEMENT_GRACE_MS = 60_000;
@@ -36,6 +36,33 @@ export function preserveMessagePresentation(previous: UiMessage[], next: UiMessa
         imageMetas: local.imageMetas ?? message.imageMetas,
       } : {}),
     };
+  });
+}
+
+/** Preserve only renderer identity from cache; canonical history owns content and membership. */
+export function preserveHydratedMessageKeys(previous: UiMessage[], next: UiMessage[]): UiMessage[] {
+  const identity = (message: UiMessage) => `${message.role}:${message.historyMessageId ?? message.id}`;
+  const candidates = new Map<string, UiMessage | null>();
+  const previousKeyCounts = new Map<string, number>();
+  for (const message of previous) {
+    const key = identity(message);
+    candidates.set(key, candidates.has(key) ? null : message);
+    const renderKey = message.renderKey ?? message.id;
+    previousKeyCounts.set(renderKey, (previousKeyCounts.get(renderKey) ?? 0) + 1);
+  }
+  const counts = new Map<string, number>();
+  for (const message of next) counts.set(identity(message), (counts.get(identity(message)) ?? 0) + 1);
+  const occupiedKeys = new Set(next.map(message => message.renderKey ?? message.id));
+  return next.map(message => {
+    const key = identity(message);
+    const old = candidates.get(key);
+    if (!old || counts.get(key) !== 1 || message.renderKey) return message;
+    const renderKey = old.renderKey ?? old.id;
+    if (renderKey === message.id || previousKeyCounts.get(renderKey) !== 1 || occupiedKeys.has(renderKey)) return message;
+    occupiedKeys.add(renderKey);
+    // Same wire identity, not a text-similarity guess: never retain a stale
+    // optimistic row or conflate repeated paragraphs from different turns.
+    return { ...message, renderKey };
   });
 }
 
@@ -299,14 +326,14 @@ export function preserveOptimisticAssistantMessage(
 
 
 /** Preserve a completed live turn's text/tool boundaries, updating matching server rows in place. */
-export function preserveCompletedRunPresentation(previous: UiMessage[], incoming: UiMessage[]): UiMessage[] {
+export function preserveCompletedRunPresentation(previous: UiMessage[], incoming: UiMessage[], options: { live?: boolean } = {}): UiMessage[] {
   if (!previous.some(message => message.presentationRunId)) return incoming;
   let next = incoming;
   const boundaries = [-1, ...previous.flatMap((message, index) => message.role === 'user' ? [index] : []), previous.length];
   for (let turn = 0; turn < boundaries.length - 1; turn++) {
     const start = boundaries[turn];
-    const local = previous.slice(start + 1, boundaries[turn + 1]).filter(message => message.presentationRunId);
-    if (!local.length) continue;
+    const localRows = previous.slice(start + 1, boundaries[turn + 1]).filter(message => message.presentationRunId);
+    if (!localRows.length) continue;
     const user = previous[start];
     const anchor = user ? next.findIndex(message => message.role === 'user' && (
       message.id === user.id || areMessagesLinkedByIdempotency(message, user)
@@ -317,16 +344,32 @@ export function preserveCompletedRunPresentation(previous: UiMessage[], incoming
     const nextEnd = next.findIndex((message, index) => index > anchor && message.role === 'user');
     const boundary = nextEnd < 0 ? next.length : nextEnd;
     const remote = next.slice(anchor + 1, boundary);
+    // Repair old cumulative live bubbles only when this turn's transcript
+    // confirms the isolated text. Repeated prose in real history stays intact.
+    const confirmedTexts = new Set(remote.filter(message => message.role === 'assistant')
+      .map(message => normalizeAssistantText(message.text)));
+    const precedingTexts: Array<{ text: string }> = [];
+    const local = localRows.map(message => {
+      if (message.role !== 'assistant') return message;
+      const tail = finalReplyTail(message.text, precedingTexts);
+      const repaired = !confirmedTexts.has(normalizeAssistantText(message.text))
+        && tail !== message.text && tail.trim() && confirmedTexts.has(normalizeAssistantText(tail))
+        ? { ...message, text: tail } : message;
+      precedingTexts.push(repaired);
+      return repaired;
+    });
     const consumed = new Set<number>();
     const texts = local.filter(message => message.role === 'assistant');
     const combined = normalizeAssistantText(texts.map(message => message.text).join(' '));
+    const concatenated = normalizeAssistantText(texts.map(message => message.text).join(''));
     const aggregateIndex = texts.length > 1 ? remote.findIndex(message => message.role === 'assistant'
-      && normalizeAssistantText(message.text) === combined) : -1;
+      && [combined, concatenated].includes(normalizeAssistantText(message.text))) : -1;
     if (aggregateIndex >= 0) consumed.add(aggregateIndex);
     const rows = local.map(message => {
       const index = remote.findIndex((candidate, i) => !consumed.has(i) && candidate.role === message.role && (
         candidate.id === message.id
-        || (message.role === 'assistant' && normalizeAssistantText(candidate.text) === normalizeAssistantText(message.text))
+        || (message.role === 'assistant' && (normalizeAssistantText(candidate.text) === normalizeAssistantText(message.text)
+          || ((options.live || message.streaming) && candidate.text.trim().length > 0 && message.text.startsWith(candidate.text))))
         || (message.role === 'tool' && candidate.toolName === message.toolName
           && candidate.id.replace(/^tool(?:call|result)_/, '') === message.id.replace(/^tool(?:call|result)_/, ''))
       ));
@@ -337,7 +380,9 @@ export function preserveCompletedRunPresentation(previous: UiMessage[], incoming
       }
       consumed.add(index);
       return { ...message, ...remote[index], renderKey: message.renderKey ?? message.id,
-        presentationRunId: message.presentationRunId, timestampMs: message.timestampMs, streaming: false };
+        ...(options.live ? { id: message.id, historyMessageId: remote[index].historyMessageId ?? remote[index].id } : {}),
+        ...((options.live || message.streaming) && message.role === 'assistant' ? { text: message.text } : {}),
+        presentationRunId: message.presentationRunId, timestampMs: message.timestampMs, streaming: message.streaming };
     });
     // Keep newly discovered server content; absence from an early history page
     // is not evidence that an already displayed live segment should disappear.

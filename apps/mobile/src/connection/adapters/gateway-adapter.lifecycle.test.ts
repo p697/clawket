@@ -148,6 +148,19 @@ async function flushAsync(): Promise<void> {
 }
 
 describe('GatewayAdapter lifecycle boundaries', () => {
+  it.each(['openclaw', 'hermes'] as const)('declares %s wire text semantics at the adapter boundary', (backend) => {
+    const fake = new LifecycleGateway();
+    const options = { gateway: gateway(fake), historyCache: null };
+    const adapter = backend === 'openclaw'
+      ? new OpenClawAdapter(connection(backend), options)
+      : new HermesAdapter(connection(backend), options);
+    const updates: SessionUpdate[] = [];
+    adapter.on('update', update => updates.push(update));
+    for (const text of ['Same', 'Same']) fake.emit('chatDelta', { runId: 'run', sessionKey: 'main', text });
+    expect(updates).toEqual(['Same', 'Same'].map(text => ({ type: 'agent_message_chunk',
+      runId: 'run', sessionKey: 'main', text, textMode: backend === 'openclaw' ? 'snapshot' : 'delta' })));
+    adapter.disconnect();
+  });
   afterEach(() => {
     jest.useRealTimers();
   });
@@ -307,6 +320,7 @@ describe('GatewayAdapter lifecycle boundaries', () => {
       sessionKey: 'agent:main:subagent:child',
       runId: 'run-child',
       text: 'child delta',
+      textMode: 'snapshot',
     });
   });
 

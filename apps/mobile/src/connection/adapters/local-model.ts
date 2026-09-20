@@ -178,7 +178,8 @@ export class LocalModelAdapter implements AgentAdapter {
       if (!update || typeof update.type !== 'string') return;
       if (update.type === 'run_started') this.active = true;
       if (update.type === 'run_finished') this.active = false;
-      for (const listener of this.listeners.update) listener(update);
+      for (const listener of this.listeners.update) listener(update.type === 'agent_message_chunk'
+        ? { ...update, textMode: 'delta' } : update);
     }
   }
 

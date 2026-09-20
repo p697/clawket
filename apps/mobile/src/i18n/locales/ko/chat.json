@@ -99,7 +99,6 @@
   "Text-to-speech": "텍스트 음성 변환",
   "Voice input failed": "음성 입력 실패",
   "Microphone access is required to transcribe speech.": "음성을 텍스트로 변환하려면 마이크 접근 권한이 필요합니다.",
-  "Unable to transcribe speech right now.": "지금은 음성을 텍스트로 변환할 수 없습니다. 잠시 후 다시 시도하세요.",
   "Show or change queue mode": "대기열 모드 표시 또는 변경",
   "Show available commands": "사용 가능한 명령어 표시",
   "Switch to a specific model": "특정 모델로 전환",
@@ -316,5 +315,18 @@
   "Tap to dictate. Hold and release to send.": "탭하여 음성 입력. 길게 누르고 말한 뒤 놓으면 전송됩니다.",
   "No speech detected. Please try again.": "음성이 감지되지 않았습니다. 다시 시도해 주세요.",
   "Type or hold to talk": "입력하거나 길게 눌러 말하기",
-  "Hold longer to talk": "조금 더 길게 눌러 말하세요"
+  "Hold longer to talk": "조금 더 길게 눌러 말하세요",
+  "The previous voice session is still closing. Please retry shortly.": "이전 음성 세션을 종료하는 중입니다. 잠시 후 다시 시도하세요.",
+  "The transcription limit has been reached. Your recording is saved.": "음성 변환 한도에 도달했습니다. 녹음은 저장되어 있습니다.",
+  "Voice authentication failed. Check your device date and time.": "음성 인증에 실패했습니다. 기기의 날짜와 시간을 확인하세요.",
+  "Cannot save more audio. Free up device storage or remove a saved recording.": "오디오를 더 저장할 수 없습니다. 기기 공간을 확보하거나 저장된 녹음을 삭제하세요.",
+  "The connection was interrupted. Your recording is saved on this device.": "연결이 끊어졌습니다. 녹음은 이 기기에 저장되어 있습니다.",
+  "The microphone stopped. Your recorded audio is saved.": "마이크가 중지되었습니다. 녹음된 오디오는 저장되어 있습니다.",
+  "The transcription service is unavailable. Your recording is saved on this device.": "음성 변환 서비스를 사용할 수 없습니다. 녹음은 이 기기에 저장되어 있습니다.",
+  "Try again in {{seconds}} seconds.": "{{seconds}}초 후 다시 시도하세요.",
+  "Keep audio": "녹음 보관",
+  "Saved recording": "저장된 녹음",
+  "Your audio is saved on this device. Retry transcription or delete it.": "오디오가 이 기기에 저장되어 있습니다. 변환을 다시 시도하거나 삭제할 수 있습니다.",
+  "Recording saved locally · Transcription paused": "기기에 녹음 중 · 변환 일시 중지",
+  "Saved recording · Tap to recover": "녹음 저장됨 · 탭하여 복구"
 }

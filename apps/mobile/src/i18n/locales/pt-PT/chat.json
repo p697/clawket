@@ -99,7 +99,6 @@
   "Text-to-speech": "Texto para fala",
   "Voice input failed": "Falha na entrada por voz",
   "Microphone access is required to transcribe speech.": "É necessário acesso ao microfone para transcrever a fala.",
-  "Unable to transcribe speech right now.": "Não foi possível transcrever a fala agora.",
   "Show or change queue mode": "Mostrar ou alterar o modo de fila",
   "Show available commands": "Mostrar comandos disponíveis",
   "Switch to a specific model": "Mudar para um modelo específico",
@@ -316,5 +315,18 @@
   "Tap to dictate. Hold and release to send.": "Toque para ditar. Mantenha premido e solte para enviar.",
   "No speech detected. Please try again.": "Não foi detetada fala. Tente novamente.",
   "Type or hold to talk": "Escreva ou mantenha premido para falar",
-  "Hold longer to talk": "Mantenha premido mais tempo para falar"
+  "Hold longer to talk": "Mantenha premido mais tempo para falar",
+  "The previous voice session is still closing. Please retry shortly.": "A sessão de voz anterior ainda está a terminar. Tente novamente dentro de instantes.",
+  "The transcription limit has been reached. Your recording is saved.": "O limite de transcrição foi atingido. A gravação está guardada.",
+  "Voice authentication failed. Check your device date and time.": "Falha na autenticação de voz. Verifique a data e a hora do dispositivo.",
+  "Cannot save more audio. Free up device storage or remove a saved recording.": "Não é possível guardar mais áudio. Liberte espaço ou elimine uma gravação guardada.",
+  "The connection was interrupted. Your recording is saved on this device.": "A ligação foi interrompida. A gravação está guardada neste dispositivo.",
+  "The microphone stopped. Your recorded audio is saved.": "O microfone parou. O áudio gravado está guardado.",
+  "The transcription service is unavailable. Your recording is saved on this device.": "O serviço de transcrição está indisponível. A gravação está guardada neste dispositivo.",
+  "Try again in {{seconds}} seconds.": "Tente novamente dentro de {{seconds}} segundos.",
+  "Keep audio": "Manter áudio",
+  "Saved recording": "Gravação guardada",
+  "Your audio is saved on this device. Retry transcription or delete it.": "O áudio está guardado neste dispositivo. Tente transcrever novamente ou elimine-o.",
+  "Recording saved locally · Transcription paused": "Gravação local · Transcrição em pausa",
+  "Saved recording · Tap to recover": "Gravação guardada · Toque para recuperar"
 }

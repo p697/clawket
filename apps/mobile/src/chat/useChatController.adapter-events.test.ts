@@ -1,10 +1,15 @@
-import { act, renderHook } from '@testing-library/react-native';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { resolveCapabilities, type AdapterErrorCode, type BackendKind } from '@clawket/agent-protocol';
 import {
   mapAdapterSessionUpdate,
   useAdapterChatEvents,
 } from './useAdapterChatEvents';
 import { useChatController } from './useChatController';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { routeGatewayEvent } from '../connection/protocol/events';
+import { mapGatewayAdapterEvent, type GatewayAdapterEvent } from '../connection/adapters/gateway-session-update';
+import { buildChildSessionActivityCards } from './childSessionActivity';
+import { useChildRunRecords } from './useChildRunRecords';
 
 const historyMock = {
   sessionKey: 'agent:main:main' as string | null,
@@ -303,6 +308,55 @@ describe('useChatController adapter event migration', () => {
     expect(historyMock.messages).toEqual([]);
   });
 
+  it('persists an agent-event-only child through a cold controller mount using the real cache codec', async () => {
+    // Model disk, not a prebuilt successful cache response: the second mount can
+    // only read bytes actually written by the first through AsyncStorage.
+    const disk = new Map<string, string>();
+    const storage = jest.mocked(AsyncStorage);
+    storage.getItem.mockImplementation(async key => disk.get(key) ?? null);
+    storage.setItem.mockImplementation(async (key, value) => { disk.set(key, value); });
+    storage.removeItem.mockImplementation(async key => { disk.delete(key); });
+    const scope = { connectionId: 'openclaw-connection', agentId: 'main', sessionKey: 'agent:main:main' };
+    const childKey = 'agent:main:subagent:weather-probe';
+    const adapter = createAdapter();
+    const mount = () => renderHook(() => {
+      const controller = useChatController({ adapter: adapter as any, debugMode: false, showAgentAvatar: true });
+      const cards = buildChildSessionActivityCards({
+        currentSessionKey: controller.sessionKey, currentAgentId: 'main', sessions: controller.sessions,
+        activityMap: controller.childSessionActivityRef.current, resolveSessionTitle: session => session.label ?? 'Subagent',
+      });
+      return { controller, records: useChildRunRecords(scope, cards).runs };
+    });
+    const first = mount();
+    const handlers = latestAdapterHandlers();
+    const receive = (stream: string, data: Record<string, unknown>) => routeGatewayEvent('agent', {
+      runId: 'weather-run', sessionKey: childKey, stream, data,
+    }, (event, payload) => {
+      if (!['chatRunStart', 'chatDelta', 'chatFinal', 'chatAborted', 'chatError', 'chatTool'].includes(event)) return;
+      for (const update of mapGatewayAdapterEvent({ type: event, payload } as GatewayAdapterEvent, scope.sessionKey)) {
+        handlers.onUpdate?.(mapAdapterSessionUpdate(update.type === 'agent_message_chunk' ? { ...update, textMode: 'snapshot' } : update));
+      }
+    }, () => Date.now());
+    act(() => {
+      handlers.onState?.('ready');
+      receive('lifecycle', { phase: 'start' });
+      receive('assistant', { text: '杭州明天天气：多云', delta: '杭州明天天气：多云' });
+      receive('assistant', { text: '杭州明天天气：多云，29–31 ℃', delta: '，29–31 ℃' });
+      receive('lifecycle', { phase: 'end' });
+    });
+    const expected = { id: childKey, status: 'completed', summary: '杭州明天天气：多云，29–31 ℃' };
+    await waitFor(() => expect(first.result.current.records).toEqual([expect.objectContaining(expected)]));
+    await waitFor(() => expect([...disk.keys()].some(key => key.endsWith('::subagents'))).toBe(true));
+    first.unmount();
+    const cold = mount();
+    expect(cold.result.current.controller.childSessionActivityRef.current.size).toBe(0);
+    await waitFor(() => expect(cold.result.current.records).toEqual([expect.objectContaining(expected)]));
+    cold.unmount();
+    storage.getItem.mockResolvedValue(null);
+    storage.setItem.mockResolvedValue();
+    storage.removeItem.mockResolvedValue();
+  });
+
   it('tracks a child subagent through start, delta, tool, and final updates', () => {
     const { result, handlers } = renderController();
     const sessionKey = 'agent:main:subagent:coder';
@@ -340,6 +394,7 @@ describe('useChatController adapter event migration', () => {
     expect(result.current.childSessionActivityRef.current.get(sessionKey)).toMatchObject({
       status: 'completed',
       previewText: 'Inspecting repo state',
+      resultText: 'Done',
       toolName: 'read',
     });
     expect(result.current.childSessionActivityVersion).toBeGreaterThan(0);

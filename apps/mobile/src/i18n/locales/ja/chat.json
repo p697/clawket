@@ -99,7 +99,6 @@
   "Text-to-speech": "テキスト読み上げ",
   "Voice input failed": "音声入力に失敗しました",
   "Microphone access is required to transcribe speech.": "音声を文字起こしするにはマイクへのアクセスが必要です。",
-  "Unable to transcribe speech right now.": "現在は音声を文字起こしできません。しばらくしてからもう一度お試しください。",
   "Show or change queue mode": "キューモードの表示・変更",
   "Show available commands": "利用可能なコマンドを表示",
   "Switch to a specific model": "特定のモデルに切替",
@@ -316,5 +315,18 @@
   "Tap to dictate. Hold and release to send.": "タップで音声入力。長押しして話し、離すと送信します。",
   "No speech detected. Please try again.": "音声が検出されませんでした。もう一度お試しください。",
   "Type or hold to talk": "入力、または長押しで話す",
-  "Hold longer to talk": "もう少し長押しして話してください"
+  "Hold longer to talk": "もう少し長押しして話してください",
+  "The previous voice session is still closing. Please retry shortly.": "前の音声セッションを終了中です。少し待って再試行してください。",
+  "The transcription limit has been reached. Your recording is saved.": "文字起こしの上限に達しました。録音は保存されています。",
+  "Voice authentication failed. Check your device date and time.": "音声認証に失敗しました。端末の日時を確認してください。",
+  "Cannot save more audio. Free up device storage or remove a saved recording.": "音声を保存できません。端末の空き容量を増やすか、保存済みの録音を削除してください。",
+  "The connection was interrupted. Your recording is saved on this device.": "接続が切れました。録音はこの端末に保存されています。",
+  "The microphone stopped. Your recorded audio is saved.": "マイクが停止しました。録音済みの音声は保存されています。",
+  "The transcription service is unavailable. Your recording is saved on this device.": "文字起こしサービスを利用できません。録音はこの端末に保存されています。",
+  "Try again in {{seconds}} seconds.": "{{seconds}} 秒後に再試行してください。",
+  "Keep audio": "録音を保持",
+  "Saved recording": "保存済みの録音",
+  "Your audio is saved on this device. Retry transcription or delete it.": "音声はこの端末に保存されています。文字起こしを再試行するか削除できます。",
+  "Recording saved locally · Transcription paused": "端末に録音中 · 文字起こしは一時停止中",
+  "Saved recording · Tap to recover": "録音を保存済み · タップして復元"
 }

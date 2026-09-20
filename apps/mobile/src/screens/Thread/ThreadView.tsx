@@ -3,7 +3,7 @@ import { IPAD_CHAT_MAX_WIDTH } from '../../utils/ipad-layout';
 import { useReplyEntranceDelay } from '../../chat/useReplyEntranceDelay';
 import { SessionPreviewNotice, SessionPreviewFooter } from './components/SessionPreviewNotice';
 import { useTranslation } from 'react-i18next';
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   BackHandler,
   type NativeScrollEvent,
@@ -22,9 +22,6 @@ import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { EnrichedMarkdownText } from 'react-native-enriched-markdown';
 import Animated, {
   Easing,
-  FadeIn,
-  FadeOut,
-  ReduceMotion,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
@@ -57,6 +54,7 @@ import { ChatMessageIdentity } from '../../components/chat/ChatMessageIdentity';
 import { MessageAttachmentAlbum } from '../../components/chat/MessageAttachmentAlbum';
 import { MessageEntrance } from '../../components/chat/MessageEntrance';
 import { MessageMeta, messageMetaSpacer } from '../../components/chat/MessageMeta';
+import { activityCardStyles } from '../../components/chat/activity-card-styles';
 import { ThinkingIndicator } from '../../components/chat/ThinkingIndicator';
 import { ChatBackgroundLayer } from '../../components/chat/ChatBackgroundLayer';
 import { ChatWallpaperScrim } from '../../components/chat/ChatWallpaperScrim';
@@ -144,14 +142,6 @@ const STREAMING_REMEND_OPTIONS = {
   katex: false,
   setextHeadings: true,
 };
-const SESSION_CONTENT_FADE_IN = FadeIn
-  .duration(Motion.duration.normal)
-  .easing(Easing.out(Easing.cubic))
-  .reduceMotion(ReduceMotion.System);
-const SESSION_CONTENT_FADE_OUT = FadeOut
-  .duration(Motion.duration.normal)
-  .easing(Easing.out(Easing.cubic))
-  .reduceMotion(ReduceMotion.System);
 /**
  * The reply bubble exists from the moment a turn is sent: it carries the
  * Agent's live activity until the first token, then the text itself. It uses
@@ -295,6 +285,9 @@ export type ThreadViewProps = Readonly<{
   onVoiceStart?: () => void;
   onVoiceStop?: (send: boolean) => void;
   onVoiceCancel?: () => void;
+  onVoiceRecover?: () => void;
+  voiceRecoveryCount?: number;
+  voiceRecordingSaved?: boolean;
   voiceState?: ComposerVoiceState;
   voiceLevel?: SharedValue<number>;
   onRetry?: () => void;
@@ -405,7 +398,7 @@ export function ThreadView({
   composerRef,
   onCancel,
   onOpenAddMenu,
-  onVoice, onVoiceStart, onVoiceStop, onVoiceCancel,
+  onVoice, onVoiceStart, onVoiceStop, onVoiceCancel, onVoiceRecover, voiceRecoveryCount = 0, voiceRecordingSaved = false,
   voiceState = 'idle',
   voiceLevel,
   onRetry,
@@ -458,12 +451,6 @@ export function ThreadView({
     });
     return () => subscription.remove();
   }, [composerExpanded]);
-  const previousSessionKeyRef = useRef(sessionKey);
-  const sessionChanged = Boolean(
-    previousSessionKeyRef.current
-      && sessionKey
-      && previousSessionKeyRef.current !== sessionKey,
-  );
   const [showFailureDetails, setShowFailureDetails] = useState(false);
   useEffect(() => { setShowFailureDetails(false); }, [sendFailureDetails, sessionKey]);
   const [selectedToolMessageId, setSelectedToolMessageId] = useState<string | null>(null);
@@ -531,7 +518,8 @@ export function ThreadView({
   }, []);
   const [expandedTools, setExpandedTools] = useState<ReadonlySet<string>>(new Set());
   const showReplyPlaceholder = presentedRunning && !locked && !sessionPreview
-    && !messages.some((message) => message.id === REPLY_PLACEHOLDER_ID);
+    && !messages.some((message) => message.id === REPLY_PLACEHOLDER_ID
+      || (message.role === 'assistant' && message.streaming === true));
   const timelineMessages = useMemo(
     () => showReplyPlaceholder ? [REPLY_PLACEHOLDER, ...replyEntrance.messages] : replyEntrance.messages,
     [replyEntrance.messages, showReplyPlaceholder],
@@ -565,6 +553,26 @@ export function ThreadView({
   const distanceFromBottomRef = useRef(0);
   const scrollMetricsRef = useRef({ height: 0, viewport: 0, offset: 0 });
   const timelineRef = useRef<FlashListRef<ThreadTimelineRow>>(null);
+  const timelineLoadedRef = useRef(false);
+  const bottomFollowFrameRef = useRef<number | null>(null);
+  const cancelBottomFollow = useCallback(() => {
+    if (bottomFollowFrameRef.current === null) return;
+    cancelAnimationFrame(bottomFollowFrameRef.current);
+    bottomFollowFrameRef.current = null;
+  }, []);
+  const scheduleBottomFollow = useCallback(() => {
+    // FlashList owns initial placement. Once loaded, coalesce table/layout
+    // measurements into one correction and recheck reader intent at execution.
+    if (!timelineLoadedRef.current || !followNewMessagesRef.current || composerExpanded
+      || bottomFollowFrameRef.current !== null) return;
+    bottomFollowFrameRef.current = requestAnimationFrame(() => {
+      bottomFollowFrameRef.current = null;
+      if (followNewMessagesRef.current && !returningToBottomRef.current) {
+        timelineRef.current?.scrollToEnd({ animated: false });
+      }
+    });
+  }, [composerExpanded]);
+  useLayoutEffect(() => cancelBottomFollow, [cancelBottomFollow, composerExpanded]);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const scrollButtonProgress = useSharedValue(0);
   useEffect(() => {
@@ -578,6 +586,7 @@ export function ThreadView({
     transform: [{ translateY: reduceMotion ? 0 : Space.sm * (1 - scrollButtonProgress.value) }],
   }));
   const scrollToBottom = useCallback(() => {
+    cancelBottomFollow();
     // Let the native scroll finish before streaming/layout can issue another scroll.
     const animated = !reduceMotion && distanceFromBottomRef.current > Space.lg;
     returningToBottomRef.current = animated;
@@ -585,7 +594,7 @@ export function ThreadView({
     followNewMessagesRef.current = !animated;
     setShowScrollToBottom(false);
     timelineRef.current?.scrollToEnd({ animated });
-  }, [reduceMotion]);
+  }, [cancelBottomFollow, reduceMotion]);
   const refreshScrollButton = useCallback(() => {
     const { height, viewport, offset } = scrollMetricsRef.current;
     if (viewport <= 0) return;
@@ -617,14 +626,17 @@ export function ThreadView({
     updateScrollPosition(event);
     readerScrollingRef.current = false;
   }, [updateScrollPosition]);
-  useEffect(() => {
+  useLayoutEffect(() => {
+    cancelBottomFollow();
+    timelineLoadedRef.current = false;
     followNewMessagesRef.current = true;
     returningToBottomRef.current = false;
     distanceFromBottomRef.current = 0;
     scrollMetricsRef.current = { height: 0, viewport: 0, offset: 0 };
     readerScrollingRef.current = false;
     setShowScrollToBottom(false);
-  }, [sessionKey]);
+    return cancelBottomFollow;
+  }, [cancelBottomFollow, sessionKey]);
   useEffect(() => {
     if (scrollToBottomRequestAt != null) scrollToBottom();
   }, [scrollToBottomRequestAt, scrollToBottom]);
@@ -665,9 +677,6 @@ export function ThreadView({
     </View>
   ), [copy, favoriteMessageIds, messageStatuses]);
 
-  useEffect(() => {
-    previousSessionKeyRef.current = sessionKey;
-  }, [sessionKey]);
 
   const openTool = useCallback((message: UiMessage) => setSelectedToolMessageId(message.id), []);
   const renderMessage = useCallback(
@@ -821,8 +830,6 @@ export function ThreadView({
           key={`thread-session:${sessionKey ?? 'unscoped'}`}
           testID={`${testID}-session-content`}
           collapsable={false}
-          entering={sessionChanged && !reduceMotion ? SESSION_CONTENT_FADE_IN : undefined}
-          exiting={reduceMotion ? undefined : SESSION_CONTENT_FADE_OUT}
           style={styles.sessionContent}
         >
           {showConnectionFailure && connectionFailure ? (
@@ -867,9 +874,8 @@ export function ThreadView({
               ref={timelineRef}
               testID={`${testID}-timeline`}
               data={timelineItems}
-              maintainVisibleContentPosition={{
-                startRenderingFromBottom: true,
-              }}
+              maintainVisibleContentPosition={{ startRenderingFromBottom: true }}
+              onLoad={() => { timelineLoadedRef.current = true; }}
               onScrollBeginDrag={() => {
                 returningToBottomRef.current = false;
                 readerScrollingRef.current = true;
@@ -879,14 +885,19 @@ export function ThreadView({
               scrollEventThrottle={16}
               onMomentumScrollEnd={finishScroll}
               onContentSizeChange={(_width, height) => {
+                const changed = scrollMetricsRef.current.height !== height;
                 scrollMetricsRef.current.height = height;
-                if (followNewMessagesRef.current) timelineRef.current?.scrollToEnd({ animated: false });
-                else refreshScrollButton();
+                if (followNewMessagesRef.current) {
+                  if (changed) scheduleBottomFollow();
+                } else refreshScrollButton();
               }}
               onLayout={(event) => {
-                scrollMetricsRef.current.viewport = event.nativeEvent.layout.height;
-                if (!composerExpanded && followNewMessagesRef.current) timelineRef.current?.scrollToEnd({ animated: false });
-                else refreshScrollButton();
+                const height = event.nativeEvent.layout.height;
+                const changed = scrollMetricsRef.current.viewport !== height;
+                scrollMetricsRef.current.viewport = height;
+                if (followNewMessagesRef.current) {
+                  if (changed) scheduleBottomFollow();
+                } else refreshScrollButton();
               }}
               onScrollEndDrag={updateScrollPosition}
               getItemType={(item) => item.type}
@@ -1064,7 +1075,10 @@ export function ThreadView({
             onVoiceStart={onVoiceStart}
             onVoiceStop={onVoiceStop}
             onVoiceCancel={onVoiceCancel}
-            voiceDisabled={offline || state.kind === 'reconnecting'}
+            onVoiceRecover={onVoiceRecover}
+            voiceRecoveryCount={voiceRecoveryCount}
+            voiceRecordingSaved={voiceRecordingSaved}
+            voiceDisabled={false}
             voiceState={canUseVoice ? voiceState : 'idle'}
             voiceLevel={voiceLevel}
             onPasteFiles={capabilities.attachments ? onPasteFiles : undefined}
@@ -1158,7 +1172,7 @@ function ThreadRunTimelineItem({
   const openCronRun = run.kind === 'cron' && onOpenCronRun && run.cronRun
     ? () => onOpenCronRun(run)
     : undefined;
-  const openSession = onOpenSession && sessionKey
+  const openSession = onOpenSession && sessionKey && run.sessionAvailable !== false
     ? () => onOpenSession(sessionKey, run.agentId, run.kind)
     : undefined;
   const openLogs = run.canOpenLogs && onOpenLogs && jobId
@@ -1721,7 +1735,8 @@ function AssistantBubble({
     <Bubble
       testID={`thread-bubble-${message.id}`}
       role="assistant"
-      style={stylesStatic.thinkingBubble}
+      style={[stylesStatic.thinkingBubble, thinking && activityCardStyles.surface,
+        thinking && { backgroundColor: theme.colors.surface, borderWidth: 0, shadowOpacity: 0, elevation: 0 }]}
     >
       {thinking ? (
         <ThinkingIndicator testID={`thread-thinking-${message.id}`} label={liveActivity} />
@@ -1737,11 +1752,7 @@ function AssistantBubble({
             streamingAnimation={textAnimating}
           />
           {time ? (
-            <View
-              style={textAnimating ? stylesStatic.pendingMeta : undefined}
-              accessibilityElementsHidden={textAnimating}
-              importantForAccessibility={textAnimating ? 'no-hide-descendants' : 'auto'}
-            >
+            <View>
               <MessageMeta testID={`thread-meta-${message.id}`} time={time} style={stylesStatic.metaRowAssistant} />
             </View>
           ) : null}
@@ -1772,7 +1783,6 @@ const rowGapStyles = StyleSheet.create<Record<ThreadRowGap, ViewStyle>>({
 });
 
 const stylesStatic = StyleSheet.create({
-  pendingMeta: { opacity: 0 },
   // A time label heads the group below it: its gap above comes from the
   // rhythm, and it owns the space down to the first row of the group.
   timeSeparator: { alignItems: 'center', paddingBottom: Space.md },

@@ -99,7 +99,6 @@
   "Text-to-speech": "文字转语音",
   "Voice input failed": "语音输入失败",
   "Microphone access is required to transcribe speech.": "需要麦克风权限才能转录语音。",
-  "Unable to transcribe speech right now.": "暂时无法转录语音，请稍后再试。",
   "Show or change queue mode": "显示或更改队列模式",
   "Show available commands": "显示可用命令",
   "Switch to a specific model": "切换到指定模型",
@@ -316,5 +315,18 @@
   "Tap to dictate. Hold and release to send.": "轻点持续转录，按住说话、松手发送。",
   "No speech detected. Please try again.": "未检测到语音，请重试。",
   "Type or hold to talk": "打字，或按住说话",
-  "Hold longer to talk": "按住久一点再说话"
+  "Hold longer to talk": "按住久一点再说话",
+  "The previous voice session is still closing. Please retry shortly.": "上一段语音仍在关闭，请稍后重试。",
+  "The transcription limit has been reached. Your recording is saved.": "已达到转录额度，录音已保留。",
+  "Voice authentication failed. Check your device date and time.": "语音验证失败，请检查设备日期和时间。",
+  "Cannot save more audio. Free up device storage or remove a saved recording.": "无法保存更多音频，请释放设备空间或删除已保存的录音。",
+  "The connection was interrupted. Your recording is saved on this device.": "连接中断，录音已保存在这台设备上。",
+  "The microphone stopped. Your recorded audio is saved.": "麦克风已停止，已录下的音频已保留。",
+  "The transcription service is unavailable. Your recording is saved on this device.": "转录服务暂不可用，录音已保存在这台设备上。",
+  "Try again in {{seconds}} seconds.": "请在 {{seconds}} 秒后重试。",
+  "Keep audio": "保留录音",
+  "Saved recording": "已保存的录音",
+  "Your audio is saved on this device. Retry transcription or delete it.": "音频已保存在这台设备上，你可以重新转录或删除。",
+  "Recording saved locally · Transcription paused": "正在本机录音 · 转录已暂停",
+  "Saved recording · Tap to recover": "录音已保留 · 点击恢复"
 }

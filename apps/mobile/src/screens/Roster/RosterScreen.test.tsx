@@ -416,6 +416,36 @@ describe('RosterScreen', () => {
     mockReconnectConnection.mockReset().mockResolvedValue(undefined);
   });
 
+  it.each(['light', 'dark'] as const)('keeps page rows unselected after opening a thread; scopes sidebar selection (%s)', (scheme) => {
+    mockTheme = { scheme, colors: scheme === 'light' ? lightColors : darkColors };
+    mockRoster = [...mockRoster, group('cached')];
+    mockConnections = snapshot({ roster: mockRoster });
+    const selectedThread = { connectionId: 'live', agentId: 'main', sessionKey: 'agent:main:main' };
+    const view = render(<RosterScreen {...props()} />);
+    const main = () => view.getByTestId('roster-row-agent:live:main');
+    const expectSelection = (selected: boolean) => {
+      expect(main().props.accessibilityState.selected).toBe(selected);
+      expect(flattenStyle(main().props.style).backgroundColor).toBe(
+        selected ? mockTheme.colors.surface : mockTheme.colors.canvas,
+      );
+      expect(view.getByTestId('roster-row-agent:live:builder').props.accessibilityState.selected).toBe(false);
+      expect(view.getByTestId('roster-row-agent:cached:main').props.accessibilityState.selected).toBe(false);
+    };
+    fireEvent.press(main());
+    // App retains thread context for the session panel after returning to the page.
+    view.rerender(<RosterScreen {...props({ selectedThread })} />);
+    expectSelection(false);
+    view.rerender(<RosterScreen {...props({ selectedThread, presentation: 'sidebar' })} />);
+    expectSelection(true);
+    // Returning to a single-column page must clear the fill without remounting.
+    view.rerender(<RosterScreen {...props({ selectedThread, presentation: 'page' })} />);
+    expectSelection(false);
+    view.rerender(<RosterScreen {...props({
+      selectedThread: { ...selectedThread, sessionKey: 'another-session' }, presentation: 'sidebar',
+    })} />);
+    expectSelection(false);
+  });
+
   it('renders account actions and ordered Agent, pinned, unread, attention, cached, and locked rows', () => {
     const onOpenAccount = jest.fn();
     const onSearch = jest.fn();

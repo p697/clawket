@@ -17,8 +17,10 @@ export function useChatLocalHistoryPaging({
 }: Params) {
   const activeSessionKeyRef = useRef<string | null>(null);
   const hasMoreLocalRef = useRef(true);
+  const scopeVersionRef = useRef(0);
 
   const resetLocalHistoryPaging = useCallback((sessionKey: string | null) => {
+    scopeVersionRef.current += 1;
     activeSessionKeyRef.current = sessionKey;
     hasMoreLocalRef.current = true;
   }, []);
@@ -34,6 +36,7 @@ export function useChatLocalHistoryPaging({
     }
 
     activeSessionKeyRef.current = sessionKey;
+    const scopeVersion = scopeVersionRef.current;
 
     const beforeMessageId = currentMessages[0]?.id;
     const agentId = agentIdFromSessionKey(sessionKey) ?? currentAgentId;
@@ -46,6 +49,9 @@ export function useChatLocalHistoryPaging({
         pageSize,
       },
     );
+    if (scopeVersion !== scopeVersionRef.current || activeSessionKeyRef.current !== sessionKey) {
+      return { pageMessages: [], hasMore: true };
+    }
 
     const messages = page.messages.map(cachedMessageToUiMessage);
     hasMoreLocalRef.current = page.hasMore;

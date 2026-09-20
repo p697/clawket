@@ -27,9 +27,10 @@ import { MAX_IMAGES } from '../../chat/constants';
 import { SLASH_COMMANDS } from '../../data/slash-commands';
 import {
   buildChildSessionActivityCards,
-  COMPLETED_CHILD_ACTIVITY_TTL_MS,
   getChildSessionStatusLabel,
+  type ChildSessionActivityStatus,
 } from '../../chat/childSessionActivity';
+import { useChildRunRecords } from '../../chat/useChildRunRecords';
 import { useMessageFavorites } from '../../chat/useMessageFavorites';
 import { analyticsEvents } from '../../services/analytics/events';
 import type { UiMessage } from '../../types/chat';
@@ -91,6 +92,7 @@ function runCardSignature(card: ThreadRunCard): string {
     card.title,
     card.updatedAt,
     card.sessionKey ?? '',
+    card.sessionAvailable === false ? 'missing' : '',
     card.jobId ?? '',
     card.agentId ?? '',
     card.summary ?? '',
@@ -174,7 +176,7 @@ function ThreadScreenContent({
   onThreadOpened,
 }: ThreadScreenProps & { focused: boolean }): React.JSX.Element {
   const app = useAppContext();
-  const { isPro, isLoading: subscriptionLoading } = useProPaywall();
+  const { isPro, isLoading: subscriptionLoading, showPaywall } = useProPaywall();
   const connections = useConnections();
   const insets = useSafeAreaInsets();
   const { t, i18n } = useTranslation(['chat', 'common', 'settings']);
@@ -460,22 +462,35 @@ function ThreadScreenContent({
     routeIsActive,
     sessionKey,
   ]);
+  const { runs: childRunRecords, hydrated: childrenHydrated } = useChildRunRecords({ connectionId, agentId, sessionKey },
+    controller.sessionKey === sessionKey ? childSessionCards : []);
+  // Assemble local messages and both kinds of cards before mounting the list.
+  // Once shown, never hide it for a refresh or a capability/subscription update.
+  const activityRevealRef = useRef({ scope: cronScope, revealed: false });
+  if (activityRevealRef.current.scope !== cronScope) activityRevealRef.current = { scope: cronScope, revealed: false };
+  const [activityTimeout, setActivityTimeout] = useState<typeof activityRevealRef.current | null>(null);
+  if (sessionPreview || (!cronHydrating && childrenHydrated) || activityTimeout === activityRevealRef.current) {
+    activityRevealRef.current.revealed = true;
+  }
+  const activityHydrating = !activityRevealRef.current.revealed;
+  useEffect(() => {
+    if (!activityHydrating) return;
+    const entry = activityRevealRef.current;
+    const timer = setTimeout(() => setActivityTimeout(entry), THREAD_ACTIVITY_HYDRATION_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [activityHydrating, cronScope]);
   const nextRunCards = useMemo<ThreadRunCard[]>(() => [
-    ...childSessionCards.map((card) => ({
-      id: card.sessionKey,
-      kind: 'subagent' as const,
-      sessionKey: card.sessionKey,
-      ...(card.agentId ? { agentId: card.agentId } : {}),
-      title: card.title === 'Subagent' ? t('Subagent', { ns: 'chat' }) : card.title,
-      status: card.status,
+    ...childRunRecords.map((run) => ({
+      ...run,
+      title: run.title === 'Subagent' ? t('Subagent', { ns: 'chat' }) : run.title,
+      sessionAvailable: controller.sessions.some(session => session.key === run.sessionKey),
       statusLabel: getChildSessionStatusLabel(
-        card.status,
-        card.previewText,
-        card.toolName,
+        run.status as ChildSessionActivityStatus,
+        null,
+        childSessionCards.find(card => card.sessionKey === run.sessionKey)?.toolName ?? null,
         t,
       ),
-      timeLabel: formatThreadLocalTime(card.updatedAt, locale),
-      updatedAt: card.updatedAt,
+      timeLabel: formatThreadLocalTime(run.updatedAt, locale),
     })),
     ...cronRunSeeds.map((run) => ({
       ...run,
@@ -494,7 +509,7 @@ function ThreadScreenContent({
     })),
   ].sort((left, right) => (
     right.updatedAt - left.updatedAt || left.id.localeCompare(right.id)
-  )), [capabilities.logs, childSessionCards, cronRunSeeds, isPro, locale, onOpenRunLogs, t]);
+  )), [capabilities.logs, childSessionCards, childRunRecords, controller.sessions, cronRunSeeds, isPro, locale, onOpenRunLogs, t]);
   // Session token/preview updates rebuild the child cards; the timeline only
   // receives a new array when a card would actually render differently.
   const runCardsRef = useRef<ReadonlyArray<ThreadRunCard>>(EMPTY_RUN_CARDS);
@@ -503,19 +518,6 @@ function ThreadScreenContent({
     : nextRunCards;
   runCardsRef.current = runCards;
 
-  useEffect(() => {
-    const completed = childSessionCards.filter((card) => card.status === 'completed');
-    if (completed.length === 0) return undefined;
-    const latestCompletedAt = Math.max(...completed.map((card) => card.updatedAt));
-    const delay = Math.max(
-      0,
-      latestCompletedAt + COMPLETED_CHILD_ACTIVITY_TTL_MS - Date.now(),
-    );
-    const timer = setTimeout(() => {
-      controller.clearChildSessionActivities(completed.map((card) => card.sessionKey));
-    }, delay);
-    return () => clearTimeout(timer);
-  }, [childSessionCards, controller.clearChildSessionActivities]);
   const previewReady = controller.historyLoaded && controller.sessionKey === sessionKey;
   // Scoped cache is usable before the network refresh finishes.
   // Free preview is safe before billing resolves. Subscription lookup must not
@@ -535,7 +537,8 @@ function ThreadScreenContent({
     previewEventScope.current = scope;
     analyticsEvents.sessionPreviewViewed({ backend: analyticsBackend, kind: normalizeAnalyticsSessionKind(currentSession?.kind, sessionKey) });
   }, [sessionPreview, previewReady, focused, analyticsBackend, connectionId, sessionKey, currentSession?.kind]);
-  const openSessionPaywall = () => navigation.navigate('Paywall', { reason: 'sessionHistory' });
+  // Present over this session: a modal route plus the global native Modal race on iOS.
+  const openSessionPaywall = () => { showPaywall('sessionHistory'); };
   const returnToMain = () => {
     const stack = navigation.getState();
     for (let index = stack.index - 1; index >= 0; index--) {
@@ -580,7 +583,7 @@ function ThreadScreenContent({
     targetSessionReady: controller.sessionKey === sessionKey,
     // Cached cards never paint alone ahead of cached messages, and the first
     // frame waits for the local snapshot instead of inserting it a beat later.
-    hydrating: cronHydrating && visibleMessages.length === 0,
+    hydrating: activityHydrating,
     historyLoaded: controller.historyLoaded,
     hasMessages: visibleMessages.length > 0
       || (!sessionPreview && runCards.length > 0 && controller.historyLoaded)
@@ -825,10 +828,13 @@ function ThreadScreenContent({
         onVoiceStart={controller.startVoiceInput}
         onVoiceStop={controller.stopVoiceInput}
         onVoiceCancel={controller.cancelVoiceInput}
+        onVoiceRecover={controller.recoverVoiceInput}
+        voiceRecoveryCount={controller.voiceRecoveryCount}
+        voiceRecordingSaved={controller.voiceRecordingSaved}
         voiceState={controller.voiceInputState}
         voiceLevel={controller.voiceInputLevel}
         onRetry={retry}
-        onOpenPaywall={() => navigation.navigate('Paywall', { reason: lockedReason })}
+        onOpenPaywall={() => { showPaywall(lockedReason); }}
         onErrorAction={(failure) => {
           if (failure.code === 'pairing_required' || failure.code === 'pairing_expired' || failure.code === 'unauthorized') {
             navigation.navigate('Onboarding', {

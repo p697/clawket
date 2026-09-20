@@ -46,6 +46,7 @@ export type AdapterChatUpdate =
       sessionKey: string;
       runId: string;
       text: string;
+      textMode?: 'snapshot' | 'delta';
       activeRunId: string;
       isSending: true;
       visible: boolean;

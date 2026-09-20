@@ -99,7 +99,6 @@
   "Text-to-speech": "تحويل النص إلى كلام",
   "Voice input failed": "فشل الإدخال الصوتي",
   "Microphone access is required to transcribe speech.": "يلزم الوصول إلى الميكروفون لتحويل الكلام إلى نص.",
-  "Unable to transcribe speech right now.": "تعذّر تحويل الكلام إلى نص حاليًا.",
   "Show or change queue mode": "عرض وضع الطابور أو تغييره",
   "Show available commands": "عرض الأوامر المتاحة",
   "Switch to a specific model": "التبديل إلى نموذج محدد",
@@ -316,5 +315,18 @@
   "Tap to dictate. Hold and release to send.": "اضغط للإملاء. اضغط مطولًا ثم أفلت للإرسال.",
   "No speech detected. Please try again.": "لم يتم اكتشاف كلام. يرجى المحاولة مرة أخرى.",
   "Type or hold to talk": "اكتب أو اضغط مطولاً للتحدث",
-  "Hold longer to talk": "اضغط مطولاً لمدة أطول للتحدث"
+  "Hold longer to talk": "اضغط مطولاً لمدة أطول للتحدث",
+  "The previous voice session is still closing. Please retry shortly.": "لا تزال الجلسة الصوتية السابقة قيد الإغلاق. أعد المحاولة بعد قليل.",
+  "The transcription limit has been reached. Your recording is saved.": "تم بلوغ حد التفريغ النصي. تسجيلك محفوظ.",
+  "Voice authentication failed. Check your device date and time.": "فشلت مصادقة الصوت. تحقق من تاريخ الجهاز ووقته.",
+  "Cannot save more audio. Free up device storage or remove a saved recording.": "لا يمكن حفظ المزيد من الصوت. أفرغ مساحة على الجهاز أو احذف تسجيلاً محفوظاً.",
+  "The connection was interrupted. Your recording is saved on this device.": "انقطع الاتصال. تسجيلك محفوظ على هذا الجهاز.",
+  "The microphone stopped. Your recorded audio is saved.": "توقف الميكروفون. تم حفظ الصوت المسجل.",
+  "The transcription service is unavailable. Your recording is saved on this device.": "خدمة التفريغ النصي غير متاحة. تسجيلك محفوظ على هذا الجهاز.",
+  "Try again in {{seconds}} seconds.": "أعد المحاولة بعد {{seconds}} ثانية.",
+  "Keep audio": "الاحتفاظ بالصوت",
+  "Saved recording": "تسجيل محفوظ",
+  "Your audio is saved on this device. Retry transcription or delete it.": "صوتك محفوظ على هذا الجهاز. أعد التفريغ النصي أو احذفه.",
+  "Recording saved locally · Transcription paused": "تسجيل محلي · التفريغ متوقف مؤقتاً",
+  "Saved recording · Tap to recover": "التسجيل محفوظ · اضغط لاستعادته"
 }

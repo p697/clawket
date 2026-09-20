@@ -99,7 +99,6 @@
   "Text-to-speech": "Sintesi vocale",
   "Voice input failed": "Input vocale non riuscito",
   "Microphone access is required to transcribe speech.": "Per trascrivere la voce è necessario l’accesso al microfono.",
-  "Unable to transcribe speech right now.": "Impossibile trascrivere la voce al momento.",
   "Show or change queue mode": "Mostra o cambia la modalità coda",
   "Show available commands": "Mostra i comandi disponibili",
   "Switch to a specific model": "Passa a un modello specifico",
@@ -316,5 +315,18 @@
   "Tap to dictate. Hold and release to send.": "Tocca per dettare. Tieni premuto e rilascia per inviare.",
   "No speech detected. Please try again.": "Nessuna voce rilevata. Riprova.",
   "Type or hold to talk": "Scrivi o tieni premuto per parlare",
-  "Hold longer to talk": "Tieni premuto più a lungo per parlare"
+  "Hold longer to talk": "Tieni premuto più a lungo per parlare",
+  "The previous voice session is still closing. Please retry shortly.": "La sessione vocale precedente si sta ancora chiudendo. Riprova tra poco.",
+  "The transcription limit has been reached. Your recording is saved.": "Hai raggiunto il limite di trascrizione. La registrazione è salvata.",
+  "Voice authentication failed. Check your device date and time.": "Autenticazione vocale non riuscita. Controlla data e ora del dispositivo.",
+  "Cannot save more audio. Free up device storage or remove a saved recording.": "Impossibile salvare altro audio. Libera spazio o elimina una registrazione salvata.",
+  "The connection was interrupted. Your recording is saved on this device.": "La connessione è stata interrotta. La registrazione è salvata su questo dispositivo.",
+  "The microphone stopped. Your recorded audio is saved.": "Il microfono si è fermato. L’audio registrato è salvato.",
+  "The transcription service is unavailable. Your recording is saved on this device.": "Il servizio di trascrizione non è disponibile. La registrazione è salvata su questo dispositivo.",
+  "Try again in {{seconds}} seconds.": "Riprova tra {{seconds}} secondi.",
+  "Keep audio": "Conserva audio",
+  "Saved recording": "Registrazione salvata",
+  "Your audio is saved on this device. Retry transcription or delete it.": "L’audio è salvato su questo dispositivo. Riprova la trascrizione o eliminalo.",
+  "Recording saved locally · Transcription paused": "Registrazione locale · Trascrizione in pausa",
+  "Saved recording · Tap to recover": "Registrazione salvata · Tocca per recuperare"
 }

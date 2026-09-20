@@ -177,6 +177,7 @@ describe('Clawket 3.0 theme tokens', () => {
       pressedOpacity: 0.72,
       messageEnterOffset: 4,
       avatarWorkingLoop: 1_200,
+      activityShimmer: 1_800,
       avatarDoneFade: 3_000,
       companionBreath: 1_400,
       companionGaze: 1_200,

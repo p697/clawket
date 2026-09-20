@@ -652,6 +652,16 @@ describe.each(['light', 'dark'] as const)('%s thread primitives', (scheme) => {
 
 describe('long-form composer', () => {
   const labels = { add: 'Add', voice: 'Voice', send: 'Send', stop: 'Stop' };
+
+  it('keeps saved voice recovery reachable with an existing text draft', () => {
+    const recover = jest.fn();
+    const view = render(<Composer testID="voice-recovery" value="typed draft" placeholder="Message"
+      onChangeText={jest.fn()} onSend={jest.fn()} onVoicePress={jest.fn()}
+      onVoiceRecover={recover} voiceRecoveryCount={1}
+      accessibilityLabels={{ add: 'Add', voice: 'Voice', send: 'Send', stop: 'Stop' }} />);
+    fireEvent.press(view.getByTestId('voice-recovery-voice-recover'));
+    expect(recover).toHaveBeenCalledTimes(1);
+  });
   it('offers expansion from the third visual line and retains the same native input', () => {
     const onExpandedChange = jest.fn();
     const onSend = jest.fn();

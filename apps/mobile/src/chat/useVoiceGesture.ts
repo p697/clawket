@@ -22,7 +22,7 @@ export function useVoiceGesture(options: Options) {
   };
   useEffect(() => () => { clearTimeout(cleanup.current); clearTimeout(hintTimer.current); }, []);
   const handlers = (source: Press['source']) => ({
-    delayLongPress: 350,
+    delayLongPress: 200,
     pressRetentionOffset: { top: 600, bottom: 200, left: 200, right: 200 },
     onPressIn(event: GestureResponderEvent) {
       if (!latest.current.enabled || (press.current && !press.current.ended)) return;

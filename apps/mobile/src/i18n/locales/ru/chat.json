@@ -99,7 +99,6 @@
   "Text-to-speech": "Озвучивание текста",
   "Voice input failed": "Сбой голосового ввода",
   "Microphone access is required to transcribe speech.": "Для расшифровки речи нужен доступ к микрофону.",
-  "Unable to transcribe speech right now.": "Сейчас не удаётся расшифровать речь.",
   "Show or change queue mode": "Показать или изменить режим очереди",
   "Show available commands": "Показать доступные команды",
   "Switch to a specific model": "Переключиться на конкретную модель",
@@ -316,5 +315,18 @@
   "Tap to dictate. Hold and release to send.": "Нажмите для диктовки. Удерживайте и отпустите для отправки.",
   "No speech detected. Please try again.": "Речь не обнаружена. Попробуйте ещё раз.",
   "Type or hold to talk": "Введите текст или удерживайте, чтобы говорить",
-  "Hold longer to talk": "Удерживайте дольше, чтобы говорить"
+  "Hold longer to talk": "Удерживайте дольше, чтобы говорить",
+  "The previous voice session is still closing. Please retry shortly.": "Предыдущий голосовой сеанс ещё завершается. Повторите попытку чуть позже.",
+  "The transcription limit has been reached. Your recording is saved.": "Достигнут лимит расшифровки. Ваша запись сохранена.",
+  "Voice authentication failed. Check your device date and time.": "Ошибка голосовой аутентификации. Проверьте дату и время устройства.",
+  "Cannot save more audio. Free up device storage or remove a saved recording.": "Невозможно сохранить больше аудио. Освободите место или удалите сохранённую запись.",
+  "The connection was interrupted. Your recording is saved on this device.": "Соединение прервано. Ваша запись сохранена на этом устройстве.",
+  "The microphone stopped. Your recorded audio is saved.": "Микрофон остановлен. Записанное аудио сохранено.",
+  "The transcription service is unavailable. Your recording is saved on this device.": "Сервис расшифровки недоступен. Ваша запись сохранена на этом устройстве.",
+  "Try again in {{seconds}} seconds.": "Повторите попытку через {{seconds}} сек.",
+  "Keep audio": "Сохранить аудио",
+  "Saved recording": "Сохранённая запись",
+  "Your audio is saved on this device. Retry transcription or delete it.": "Аудио сохранено на этом устройстве. Повторите расшифровку или удалите его.",
+  "Recording saved locally · Transcription paused": "Локальная запись · Расшифровка приостановлена",
+  "Saved recording · Tap to recover": "Запись сохранена · Нажмите для восстановления"
 }

@@ -31,7 +31,7 @@ import { HISTORY_PAGE_SIZE } from './constants';
 import { mapAdapterSession } from './adapterChatMapping';
 import { shouldSuppressHistoryLoadError } from './historyErrorPolicy';
 import { shouldPreserveOptimisticAssistant } from './cacheHydrationPolicy';
-import { preserveMessagePresentation, preserveOptimisticAssistantMessage, prependOlderCachedMessages } from './historyMergePolicy';
+import { preserveHydratedMessageKeys, preserveMessagePresentation, preserveOptimisticAssistantMessage, prependOlderCachedMessages } from './historyMergePolicy';
 import { shouldRestoreCacheBeforeHistoryRefresh } from './historyRefreshPolicy';
 import { ReconcileAssistantOptions, shouldAppendReconciledAssistant } from './historyReconcile';
 import { selectSessionForCurrentAgent } from './sessionSelection';
@@ -293,7 +293,7 @@ export function useChatHistoryState({
 }: Params) {
   const initialPreviewSession = buildSnapshotPreviewSession(initialPreview ?? null);
   const [messages, setMessages] = useState<UiMessage[]>([]);
-  const [sessionKey, setSessionKey] = useState<string | null>(routeSessionKey ?? initialPreview?.sessionKey ?? null);
+  const [sessionKey, setSessionKeyState] = useState<string | null>(routeSessionKey ?? initialPreview?.sessionKey ?? null);
   const [sessions, setSessions] = useState<SessionInfo[]>(initialPreviewSession);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshingSessions, setRefreshingSessions] = useState(false);
@@ -307,6 +307,10 @@ export function useChatHistoryState({
   const historyRawCountRef = useRef(0);
   const loadMoreLockRef = useRef(false);
   const historyRequestIdRef = useRef(0);
+  const historyCommitVersionRef = useRef(0);
+  const cacheRestoreRequestRef = useRef(0);
+  const historyScopeVersionRef = useRef(0);
+  const messageSessionKeyRef = useRef(sessionKey);
   const historyLoadInFlightRef = useRef(new Map<string, Promise<number>>());
   const historyReconcileInFlightRef = useRef(new Map<string, Promise<void>>());
   const startupPreviewRestoredRef = useRef(false);
@@ -321,6 +325,34 @@ export function useChatHistoryState({
     currentAgentId,
     dbg,
   });
+  const { resetLocalHistoryPaging } = localHistoryPaging;
+  const setSessionKey = useCallback((key: string | null) => {
+    if (messageSessionKeyRef.current !== key) {
+      // Key and content must change together. Otherwise the new session's list
+      // mounts with the previous session's messages until asynchronous I/O ends.
+      messageSessionKeyRef.current = key;
+      historyScopeVersionRef.current += 1;
+      historyRequestIdRef.current += 1;
+      cacheRestoreRequestRef.current += 1;
+      historyLoadInFlightRef.current.clear();
+      historyReconcileInFlightRef.current.clear();
+      cacheHydrationSessionKeyRef.current = key;
+      cacheHydrationMessageIdsRef.current = new Set();
+      messagesRef.current = [];
+      localOlderMessagesRef.current = [];
+      historyRawCountRef.current = 0;
+      historyLimitRef.current = HISTORY_PAGE_SIZE;
+      loadMoreLockRef.current = false;
+      resetLocalHistoryPaging(key);
+      setMessages([]);
+      setHistoryLoaded(false);
+      setActivitySnapshot(null);
+      setLoadingMoreHistory(false);
+      setHasMoreHistory(true);
+    }
+    sessionKeyRef.current = key;
+    setSessionKeyState(key);
+  }, [resetLocalHistoryPaging, sessionKeyRef]);
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -333,6 +365,8 @@ export function useChatHistoryState({
   useEffect(() => {
     if (previousGatewayScopeRef.current === gatewayConfigId) return;
     previousGatewayScopeRef.current = gatewayConfigId;
+    historyScopeVersionRef.current += 1;
+    cacheRestoreRequestRef.current += 1;
     startupPreviewRestoredRef.current = false;
     cacheHydrationSessionKeyRef.current = null;
     historyRequestIdRef.current += 1;
@@ -354,7 +388,7 @@ export function useChatHistoryState({
     localHistoryPaging.resetLocalHistoryPaging(null);
     historyLoadInFlightRef.current.clear();
     historyReconcileInFlightRef.current.clear();
-  }, [gatewayConfigId, localHistoryPaging, sessionKeyRef]);
+  }, [gatewayConfigId, localHistoryPaging, sessionKeyRef, setSessionKey]);
 
   const restoreCachedMessages = useCallback(async (
     key: string,
@@ -362,17 +396,27 @@ export function useChatHistoryState({
   ): Promise<boolean> => {
     if (!gatewayConfigId) return false;
 
+    const restoreRequest = ++cacheRestoreRequestRef.current;
+    const commitVersion = historyCommitVersionRef.current;
+    const isStaleRestore = () => restoreRequest !== cacheRestoreRequestRef.current
+      || commitVersion !== historyCommitVersionRef.current
+      || gatewayConfigId !== previousGatewayScopeRef.current
+      || (!!sessionKeyRef.current && !sessionKeysMatch(sessionKeyRef.current, key));
     const visibleIdsAtStart = new Set(messagesRef.current.map(message => message.id));
     try {
       const cacheAgentId = agentIdFromSessionKey(key) ?? currentAgentId;
-      const page = await ChatCacheService.getTimelinePage(gatewayConfigId, cacheAgentId, key, {
-        pageSize: HISTORY_PAGE_SIZE,
-      });
-      if (!!sessionKeyRef.current && !sessionKeysMatch(sessionKeyRef.current, key)) {
+      // Entry needs one current snapshot. The archive timeline concatenates
+      // generations by their first timestamp: a shorter legacy snapshot can
+      // otherwise displace the latest tail of a newer, more complete snapshot.
+      let cached = await ChatCacheService.getMessages(gatewayConfigId, cacheAgentId, key, options?.sessionId);
+      if (cached.length === 0 && options?.sessionId && !isStaleRestore()) {
+        cached = await ChatCacheService.getMessages(gatewayConfigId, cacheAgentId, key);
+      }
+      if (isStaleRestore()) {
         dbg(`cache: drop stale restore for key=${key}`);
         return false;
       }
-      const restored = page.messages.map(cachedMessageToUiMessage);
+      const restored = cached.slice(-HISTORY_PAGE_SIZE).map(cachedMessageToUiMessage);
       if (restored.length === 0) {
         if (options?.clearWhenEmpty) {
           setMessages(previous => previous.filter(message => !visibleIdsAtStart.has(message.id)));
@@ -395,6 +439,7 @@ export function useChatHistoryState({
       );
       return true;
     } catch {
+      if (isStaleRestore()) return false;
       if (options?.clearWhenEmpty) {
         setMessages(previous => previous.filter(message => !visibleIdsAtStart.has(message.id)));
       }
@@ -471,7 +516,7 @@ export function useChatHistoryState({
     return () => {
       cancelled = true;
     };
-  }, [currentAgentId, dbg, gatewayConfigId, localHistoryPaging, mainSessionKey, restoreCachedMessages, sessionKeyRef]);
+  }, [currentAgentId, dbg, gatewayConfigId, localHistoryPaging, mainSessionKey, restoreCachedMessages, sessionKeyRef, setSessionKey]);
 
   const loadHistory = useCallback(async (key: string, limit = historyLimitRef.current): Promise<number> => {
     const requestKey = `${key}::${limit}`;
@@ -874,6 +919,7 @@ export function useChatHistoryState({
         dbg(`history: drop stale parsed result for key=${key}`);
         return history.length;
       }
+      historyCommitVersionRef.current += 1;
       const allowOptimisticPreservation = shouldPreserveOptimisticAssistant({
         pendingHydrationSessionKey: cacheHydrationSessionKeyRef.current,
         targetSessionKey: key,
@@ -884,8 +930,10 @@ export function useChatHistoryState({
         // was in flight. The latter must remain visible even on an empty page.
         const preservable = allowOptimisticPreservation ? prev
           : prev.filter(message => !cacheHydrationMessageIdsRef.current.has(message.id));
-        const mergedMessages = preserveMessagePresentation(preservable,
+        const reconciled = preserveMessagePresentation(preservable,
           preserveOptimisticAssistantMessage(preservable, lineageMergedMessages));
+        const mergedMessages = allowOptimisticPreservation ? reconciled
+          : preserveHydratedMessageKeys(prev, reconciled);
         dbg(
           `history:setMessages key=${key} allowPreserve=${allowOptimisticPreservation} `
           + `currentSessionId=${currentSessionId ?? 'none'} `
@@ -1005,12 +1053,15 @@ export function useChatHistoryState({
     } finally {
       setRefreshing(false);
     }
-  }, [adapter, currentAgentId, dbg, loadHistory, mainSessionKey, routeSessionKey, restoreCachedMessages, sessionKeyRef]);
+  }, [adapter, currentAgentId, dbg, loadHistory, mainSessionKey, routeSessionKey, restoreCachedMessages, sessionKeyRef, setSessionKey]);
 
   const onLoadMoreHistory = useCallback(async () => {
     if (!sessionKey || loadingMoreHistory || refreshing || !hasMoreHistory) return;
     if (loadMoreLockRef.current) return;
     loadMoreLockRef.current = true;
+    const scopeVersion = historyScopeVersionRef.current;
+    const isStalePage = () => scopeVersion !== historyScopeVersionRef.current
+      || !sessionKeysMatch(sessionKeyRef.current, sessionKey);
 
     const prevCount = historyRawCountRef.current;
     setLoadingMoreHistory(true);
@@ -1018,6 +1069,7 @@ export function useChatHistoryState({
 
     try {
       const historyResult = await requireAdapter(adapter).loadSession(sessionKey, { limit: nextLimit });
+      if (isStalePage()) return;
       const history = historyResult.messages;
       historyRawCountRef.current = history.length;
 
@@ -1027,6 +1079,7 @@ export function useChatHistoryState({
           messagesRef.current,
           HISTORY_PAGE_SIZE,
         );
+        if (isStalePage()) return;
         if (localPage.pageMessages.length > 0) {
           localOlderMessagesRef.current = prependUniqueMessages(
             localOlderMessagesRef.current,
@@ -1039,22 +1092,24 @@ export function useChatHistoryState({
         }
         setLoadingMoreHistory(false);
         setTimeout(() => {
-          loadMoreLockRef.current = false;
+          if (!isStalePage()) loadMoreLockRef.current = false;
         }, 350);
         return;
       }
 
       await loadHistory(sessionKey, nextLimit);
+      if (isStalePage()) return;
       historyLimitRef.current = nextLimit;
       setHasMoreHistory(history.length >= nextLimit);
     } catch {
     }
 
+    if (isStalePage()) return;
     setLoadingMoreHistory(false);
     setTimeout(() => {
-      loadMoreLockRef.current = false;
+      if (!isStalePage()) loadMoreLockRef.current = false;
     }, 350);
-  }, [adapter, hasMoreHistory, loadHistory, loadingMoreHistory, localHistoryPaging, refreshing, sessionKey]);
+  }, [adapter, hasMoreHistory, loadHistory, loadingMoreHistory, localHistoryPaging, refreshing, sessionKey, sessionKeyRef]);
 
   const reconcileLatestAssistantFromHistory = useCallback(async (
     key: string,
@@ -1068,6 +1123,7 @@ export function useChatHistoryState({
     }
 
     const request = (async (): Promise<void> => {
+    const scopeVersion = historyScopeVersionRef.current;
     try {
       const historyResult = await requireAdapter(adapter).loadSession(key, { limit: 12 });
       const history = projectSessionHistory(historyResult);
@@ -1095,7 +1151,7 @@ export function useChatHistoryState({
       if (!finalText.trim()) return;
 
       setMessages((prev) => {
-        if (!sessionKeysMatch(sessionKeyRef.current, key)) return prev;
+        if (scopeVersion !== historyScopeVersionRef.current || !sessionKeysMatch(sessionKeyRef.current, key)) return prev;
         dbg(`reconcile:setMessages key=${key} | finalTextLen=${finalText.length} | ${summarizeMessages('prev', prev)}`);
 
         let currentRunIdx = -1;
@@ -1267,7 +1323,7 @@ export function useChatHistoryState({
       void restoreCachedMessages(fallbackKey, { clearWhenEmpty: true });
       loadHistory(fallbackKey, HISTORY_PAGE_SIZE);
     }
-  }, [adapter, currentAgentId, gatewayConfigId, loadHistory, mainSessionKey, routeSessionKey, restoreCachedMessages]);
+  }, [adapter, currentAgentId, gatewayConfigId, loadHistory, mainSessionKey, routeSessionKey, restoreCachedMessages, setSessionKey]);
 
   const refreshCurrentSessionHistory = useCallback(async () => {
     const currentKey = sessionKeyRef.current;
@@ -1332,7 +1388,7 @@ export function useChatHistoryState({
       } finally {
         setRefreshingSessions(false);
       }
-    }, [adapter, currentAgentId, gatewayConfigId, loadHistory, mainSessionKey, routeSessionKey, restoreCachedMessages, sessionKeyRef]),
+    }, [adapter, currentAgentId, gatewayConfigId, loadHistory, mainSessionKey, routeSessionKey, restoreCachedMessages, sessionKeyRef, setSessionKey]),
     reconcileLatestAssistantFromHistory,
   };
 }

@@ -10,6 +10,7 @@ import { resolveChatChromeAppearance } from '../../features/chat-appearance/reso
 import type { SharedValue } from 'react-native-reanimated';
 import type { ComposerHandle } from '../../components/ui/Composer';
 import type { UiMessage } from '../../types/chat';
+import { preserveHydratedMessageKeys } from '../../chat/historyMergePolicy';
 import { ThreadView, resolveThreadHeaderHeight, type ThreadCopy, type ThreadViewProps } from './ThreadView';
 import type { ThreadRunCard } from './model';
 
@@ -17,6 +18,16 @@ let mockScheme: 'light' | 'dark' = 'light';
 let mockReducedMotion = false;
 let mockPacedText: string | undefined;
 const mockScrollToEnd = jest.fn();
+const originalRaf = global.requestAnimationFrame;
+const originalCancelRaf = global.cancelAnimationFrame;
+beforeAll(() => {
+  global.requestAnimationFrame = (callback) => setTimeout(() => callback(0), 16) as unknown as number;
+  global.cancelAnimationFrame = (id) => clearTimeout(id);
+});
+afterAll(() => {
+  global.requestAnimationFrame = originalRaf;
+  global.cancelAnimationFrame = originalCancelRaf;
+});
 
 jest.mock('react-native', () => {
   const ReactRuntime = require('react');
@@ -179,6 +190,7 @@ jest.mock('react-native-reanimated', () => {
       System: 'system',
     },
     useAnimatedStyle: (factory: () => unknown) => factory(),
+    useAnimatedProps: (factory: () => unknown) => factory(),
     useReducedMotion: () => mockReducedMotion,
     useSharedValue: (value: unknown) => ({ value }),
     withDelay: jest.fn((_delay: number, value: unknown) => value),
@@ -397,6 +409,10 @@ describe('ThreadView', () => {
     view.rerender(<ThreadView {...props} sessionPreview={{ hasHiddenHistory: false, onUpgrade, onMain }} />);
     expect(view.queryByTestId('session-preview-history')).toBeNull();
     expect(view.getByTestId('session-preview-footer')).toBeTruthy();
+    expect(view.getByText('Upgrade to Pro')).toBeTruthy();
+    expect(view.queryByText('View Pro')).toBeNull();
+    fireEvent.press(view.getByLabelText('Unlock conversation'));
+    expect(onUpgrade).toHaveBeenCalledTimes(2);
   });
 
   it('opens actionable reply diagnostics without polluting the transcript', () => {
@@ -528,7 +544,9 @@ describe('ThreadView', () => {
     expect(view.getByTestId('thread-screen-header-pill-working')).toBeTruthy();
     expect(view.getAllByText('Thinking…')).toHaveLength(1);
     expect(view.queryByTestId('thread-screen-header-pill-avatar-working')).toBeNull();
-    expect(view.getByTestId('thread-bubble-streaming')).toBeTruthy();
+    expect(flattenStyle(view.getByTestId('thread-bubble-streaming').props.style)).toMatchObject({
+      minHeight: ControlSize.floatingButton, borderRadius: Radius.card, paddingVertical: Space.sm,
+    });
     expect(flattenStyle(view.getByTestId('thread-bubble-streaming').props.style).minWidth).toBeGreaterThan(0);
 
     view.rerender(<ThreadView {...createProps({ messages: [sent], isRunning: true, activityLabel: 'Using exec…', input: '' })} />);
@@ -538,6 +556,7 @@ describe('ThreadView', () => {
     view.rerender(<ThreadView {...createProps({ messages: [streaming, sent], isRunning: true, input: '' })} />);
     expect(view.queryByTestId('thread-thinking-streaming')).toBeNull();
     expect(view.getAllByTestId('thread-bubble-streaming')).toHaveLength(1);
+    expect(flattenStyle(view.getByTestId('thread-bubble-streaming').props.style).borderRadius).toBe(Radius.bubble);
     expect(view.getByTestId('thread-markdown-streaming').props.streamingAnimation).toBe(true);
     // Open syntax is terminated while streaming so styling never flickers, and
     // no cursor glyph is appended to absorb the native tail fade.
@@ -1026,42 +1045,75 @@ describe('ThreadView', () => {
       .toBe('Atlas Agent');
   });
 
-  it('cross-fades overlapping session content and bypasses it for reduced motion', () => {
+  it('replaces session content without overlapping fade layers', () => {
     const view = render(<ThreadView {...createProps({ sessionKey: 'session-a' })} />);
-    expect(view.getByTestId('thread-screen-session-content').props.entering).toBeUndefined();
+    for (const sessionKey of ['session-b', 'session-a', 'session-b']) {
+      view.rerender(<ThreadView {...createProps({ sessionKey })} />);
+      const content = view.getByTestId('thread-screen-session-content');
+      expect(content.props.entering).toBeUndefined();
+      expect(content.props.exiting).toBeUndefined();
+      expect(view.getAllByTestId('thread-screen-timeline')).toHaveLength(1);
+    }
+  });
 
-    view.rerender(<ThreadView {...createProps({ sessionKey: 'session-a' })} />);
-    expect(view.getByTestId('thread-screen-session-content').props.entering).toBeUndefined();
+  it('leaves initial Markdown placement to FlashList and coalesces later measurements', () => {
+    jest.useFakeTimers();
+    const message: UiMessage = { id: 'table', role: 'assistant', text: '| City | Weather |\n|---|---|\n| Hangzhou | Sunny |' };
+    const view = render(<ThreadView {...createProps({ messages: [message] })} />);
+    const timeline = view.getByTestId('thread-screen-timeline');
+    const markdown = view.getByTestId('thread-markdown-table');
+    mockScrollToEnd.mockClear();
+    for (const height of [200, 540, 520, 600]) {
+      act(() => {
+        timeline.props.onLayout({ nativeEvent: { layout: { height: 800 } } });
+        timeline.props.onContentSizeChange(400, height);
+      });
+    }
+    expect(mockScrollToEnd).not.toHaveBeenCalled();
+    expect(timeline.props.maintainVisibleContentPosition).toEqual({ startRenderingFromBottom: true });
+    fireEvent(timeline, 'load', { elapsedTimeInMs: 10 });
+    for (const height of [1000, 1540, 1520, 1600]) fireEvent(timeline, 'contentSizeChange', 400, height);
+    fireEvent(timeline, 'layout', { nativeEvent: { layout: { height: 700 } } });
+    expect(mockScrollToEnd).not.toHaveBeenCalled();
+    act(() => jest.advanceTimersByTime(20));
+    expect(mockScrollToEnd).toHaveBeenCalledTimes(1);
+    expect(mockScrollToEnd).toHaveBeenLastCalledWith({ animated: false });
+    fireEvent(timeline, 'contentSizeChange', 400, 1600);
+    fireEvent(timeline, 'layout', { nativeEvent: { layout: { height: 700 } } });
+    act(() => jest.advanceTimersByTime(20));
+    expect(mockScrollToEnd).toHaveBeenCalledTimes(1);
+    expect(view.getByTestId('thread-markdown-table')).toBe(markdown);
+    expect(markdown.props.streamingAnimation).toBe(false);
+  });
 
-    view.rerender(<ThreadView {...createProps({ sessionKey: 'session-b' })} />);
-    const sessionContent = view.getByTestId('thread-screen-session-content');
-    expect(sessionContent.props.entering).toMatchObject({
-      name: 'FadeIn',
-      durationMs: Motion.duration.normal,
-      easingValue: { kind: 'out', value: 'cubic' },
-      reduceMotionMode: 'system',
-    });
-    expect(sessionContent.props.exiting).toMatchObject({
-      name: 'FadeOut',
-      durationMs: Motion.duration.normal,
-      easingValue: { kind: 'out', value: 'cubic' },
-      reduceMotionMode: 'system',
-    });
-    expect(flattenStyle(sessionContent.props.style)).toMatchObject({
-      position: 'absolute',
-      top: 0,
-      right: 0,
-      bottom: 0,
-      left: 0,
-    });
+  it('keeps the native table mounted when authoritative history replaces its cache row', () => {
+    const cached: UiMessage = { id: 'cached-table', renderKey: 'table-row', historyMessageId: 'server-table', role: 'assistant', text: '| City | Weather |\n|---|---|\n| Hangzhou | Sunny |' };
+    const props = createProps({ messages: [cached] });
+    const view = render(<ThreadView {...props} />);
+    const markdown = view.getByTestId('thread-markdown-cached-table');
+    const canonical = { ...cached, id: 'canonical-table', renderKey: undefined, text: cached.text.replace('Sunny', 'Cloudy') };
+    view.rerender(<ThreadView {...props} messages={preserveHydratedMessageKeys([cached], [canonical])} />);
+    expect(view.getByTestId('thread-markdown-canonical-table')).toBe(markdown);
+    expect(markdown.props.markdown).toContain('Cloudy');
+    expect(view.getAllByTestId(/^thread-markdown-/)).toHaveLength(1);
+  });
 
-    view.unmount();
-    mockReducedMotion = true;
-    const reducedView = render(<ThreadView {...createProps({ sessionKey: 'session-c' })} />);
-    reducedView.rerender(<ThreadView {...createProps({ sessionKey: 'session-d' })} />);
-    const reducedContent = reducedView.getByTestId('thread-screen-session-content');
-    expect(reducedContent.props.entering).toBeUndefined();
-    expect(reducedContent.props.exiting).toBeUndefined();
+  it.each(['drag', 'tool', 'session', 'composer', 'unmount'])('cancels a pending layout correction on %s', (action) => {
+    jest.useFakeTimers();
+    const tool: UiMessage = { id: 'tool', role: 'tool', text: '', toolName: 'bash', toolStatus: 'success' };
+    const props = createProps({ input: 'First\nSecond\nThird', messages: [tool, { ...tool, id: 'other-tool' }] });
+    const view = render(<ThreadView {...props} />);
+    const timeline = view.getByTestId('thread-screen-timeline');
+    fireEvent(timeline, 'load', { elapsedTimeInMs: 10 });
+    mockScrollToEnd.mockClear();
+    fireEvent(timeline, 'contentSizeChange', 400, 2000);
+    if (action === 'drag') fireEvent(timeline, 'scrollBeginDrag');
+    if (action === 'tool') fireEvent.press(view.getByTestId('tools:other-tool'));
+    if (action === 'session') view.rerender(<ThreadView {...props} sessionKey="another-session" />);
+    if (action === 'composer') fireEvent.press(view.getByTestId('thread-screen-composer-expand'));
+    if (action === 'unmount') view.unmount();
+    act(() => jest.advanceTimersByTime(20));
+    expect(mockScrollToEnd).not.toHaveBeenCalled();
   });
 
   it('renders dated subagent and Cron cards without treating tool details as sessions', () => {
@@ -1733,15 +1785,20 @@ it('preserves the native draft and timeline while entering and leaving full-scre
 });
 
 it('follows keyboard and composer size changes only when the reader was at the bottom', () => {
+  jest.useFakeTimers();
   const view = render(<ThreadView {...createProps()} />);
   const list = view.getByTestId('thread-screen-timeline');
+  fireEvent(list, 'load', { elapsedTimeInMs: 10 });
   mockScrollToEnd.mockClear();
   fireEvent(list, 'layout', { nativeEvent: { layout: { height: 360 } } });
+  act(() => jest.advanceTimersByTime(20));
   expect(mockScrollToEnd).toHaveBeenCalledWith({ animated: false });
   mockScrollToEnd.mockClear();
   fireEvent(list, 'scrollBeginDrag');
   fireEvent(list, 'layout', { nativeEvent: { layout: { height: 300 } } });
+  act(() => jest.advanceTimersByTime(20));
   expect(mockScrollToEnd).not.toHaveBeenCalled();
+  jest.useRealTimers();
 });
 
 const scrollEvent = (remaining: number) => ({ nativeEvent: {
@@ -1770,8 +1827,10 @@ it.each(['light', 'dark'] as const)('reveals the bottom action during scrolling 
 });
 
 it('performs one native animated return, defers streaming snaps, then resumes bottom following', () => {
+  jest.useFakeTimers();
   const view = render(<ThreadView {...createProps()} />);
   const list = view.getByTestId('thread-screen-timeline');
+  fireEvent(list, 'load', { elapsedTimeInMs: 10 });
   fireEvent(list, 'scrollBeginDrag');
   fireEvent.scroll(list, scrollEvent(800));
   mockScrollToEnd.mockClear();
@@ -1781,12 +1840,15 @@ it('performs one native animated return, defers streaming snaps, then resumes bo
   fireEvent.scroll(list, scrollEvent(300));
   fireEvent(list, 'contentSizeChange', 393, 2100);
   fireEvent(list, 'layout', { nativeEvent: { layout: { height: 600 } } });
+  act(() => jest.advanceTimersByTime(20));
   expect(mockScrollToEnd).toHaveBeenCalledTimes(1);
   fireEvent(list, 'momentumScrollEnd', scrollEvent(100));
   expect(mockScrollToEnd).toHaveBeenLastCalledWith({ animated: false });
   mockScrollToEnd.mockClear();
   fireEvent(list, 'contentSizeChange', 393, 2200);
+  act(() => jest.advanceTimersByTime(20));
   expect(mockScrollToEnd).toHaveBeenCalledWith({ animated: false });
+  jest.useRealTimers();
 });
 
 it('lets a new drag interrupt the return and resets the action when switching sessions', () => {
@@ -1808,22 +1870,67 @@ it('lets a new drag interrupt the return and resets the action when switching se
 });
 
 it('returns immediately under reduced motion and keeps following subsequent content', () => {
+  jest.useFakeTimers();
   mockReducedMotion = true;
   const view = render(<ThreadView {...createProps()} />);
   const list = view.getByTestId('thread-screen-timeline');
+  fireEvent(list, 'load', { elapsedTimeInMs: 10 });
   fireEvent(list, 'scrollBeginDrag');
   fireEvent.scroll(list, scrollEvent(800));
   mockScrollToEnd.mockClear();
   fireEvent.press(view.getByTestId('thread-screen-scroll-to-bottom'));
   expect(mockScrollToEnd).toHaveBeenLastCalledWith({ animated: false });
   fireEvent(list, 'contentSizeChange', 393, 2100);
+  act(() => jest.advanceTimersByTime(20));
   expect(mockScrollToEnd).toHaveBeenCalledTimes(2);
   mockReducedMotion = false;
+  jest.useRealTimers();
 });
 
 
 describe('continuous message presentation', () => {
   afterEach(() => { mockPacedText = undefined; });
+  it('keeps the known reply clock visible during streaming without a hidden footer', () => {
+    const message: UiMessage = { id: 'streaming', role: 'assistant', text: 'Working on the provider.', timestampMs: 1000, streaming: true };
+    const view = render(<ThreadView {...createProps({ messages: [message], isRunning: true })} />);
+    expect(view.getByTestId('thread-meta-streaming')).toBeTruthy();
+    view.rerender(<ThreadView {...createProps({ messages: [{ ...message, streaming: false }], isRunning: true })} />);
+    expect(view.getByTestId('thread-meta-streaming')).toBeTruthy();
+  });
+  it('never adds a second placeholder when the recovered live row has a history id', () => {
+    const message: UiMessage = { id: 'history-live', renderKey: 'reply:run:0', role: 'assistant', text: 'Working on the provider.', timestampMs: 1000, streaming: true };
+    const view = render(<ThreadView {...createProps({ messages: [message], isRunning: true })} />);
+    expect(view.queryByTestId('thread-thinking-streaming')).toBeNull();
+    expect(view.getByTestId('thread-markdown-history-live')).toBeTruthy();
+  });
+  it('retains native rows, visible clocks and one tail across repeated recovery history projections', () => {
+    const { buildLiveRunListData } = require('../../chat/liveRunThread');
+    const user: UiMessage = { id: 'user', role: 'user', text: 'Inspect', timestampMs: 1000 };
+    const tool: UiMessage = { id: 'toolcall_one', role: 'tool', text: '', toolName: 'exec', toolStatus: 'running' };
+    const params = { historyMessages: [user],
+      streamSegments: [{ id: 'segment', renderKey: 'reply:1000:0', text: 'Checking the provider.', timestampMs: 1000 }],
+      toolMessages: [tool], liveStreamText: 'Now reading the output.', liveStreamStartedAt: 1000,
+      activeRunId: 'run', includePlaceholder: true };
+    const view = render(<ThreadView {...createProps({ messages: buildLiveRunListData(params), isRunning: true })} />);
+    const segment = view.getByTestId('thread-markdown-segment');
+    const tail = view.getByTestId('thread-markdown-streaming');
+    const clock = view.getByTestId('thread-meta-segment');
+    const keys = view.getByTestId('thread-screen-timeline').props.data.map((item: { key: string }) => item.key);
+    for (let index = 0; index < 20; index++) {
+      const historyMessages: UiMessage[] = [user,
+        { id: `history-segment-${index}`, role: 'assistant', text: index % 2 ? 'Checking' : 'Checking the provider.' },
+        tool, { id: `history-tail-${index}`, role: 'assistant', text: 'Now reading' },
+      ];
+      view.rerender(<ThreadView {...createProps({ messages: buildLiveRunListData({ ...params, historyMessages }), isRunning: true })} />);
+      expect(view.getByTestId('thread-markdown-segment')).toBe(segment);
+      expect(segment.props.streamingAnimation).toBe(false);
+      expect(segment.props.markdown).toBe('Checking the provider.');
+      expect(view.getByTestId('thread-meta-segment')).toBe(clock);
+      expect(view.getByTestId('thread-markdown-streaming')).toBe(tail);
+      expect(view.queryByTestId('thread-thinking-streaming')).toBeNull();
+      expect(view.getByTestId('thread-screen-timeline').props.data.map((item: { key: string }) => item.key)).toEqual(keys);
+    }
+  });
   it('retains the same outgoing native subtree and text reservation from pending through server echo', () => {
     const pending: UiMessage = { id: 'usr_1', renderKey: 'usr_1', role: 'user', text: 'A message near the wrapping boundary', timestampMs: 1000, delivery: 'sending' };
     const view = render(<ThreadView {...createProps({ messages: [pending] })} />);

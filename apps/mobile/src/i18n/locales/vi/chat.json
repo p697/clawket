@@ -99,7 +99,6 @@
   "Text-to-speech": "Chuyển văn bản thành giọng nói",
   "Voice input failed": "Nhập bằng giọng nói thất bại",
   "Microphone access is required to transcribe speech.": "Cần quyền truy cập micrô để chuyển giọng nói thành văn bản.",
-  "Unable to transcribe speech right now.": "Hiện không thể chuyển giọng nói thành văn bản.",
   "Show or change queue mode": "Hiện hoặc đổi chế độ hàng đợi",
   "Show available commands": "Hiện các lệnh khả dụng",
   "Switch to a specific model": "Chuyển sang mô hình cụ thể",
@@ -316,5 +315,18 @@
   "Tap to dictate. Hold and release to send.": "Chạm để nhập giọng nói. Nhấn giữ và thả để gửi.",
   "No speech detected. Please try again.": "Không phát hiện giọng nói. Vui lòng thử lại.",
   "Type or hold to talk": "Nhập hoặc nhấn giữ để nói",
-  "Hold longer to talk": "Nhấn giữ lâu hơn để nói"
+  "Hold longer to talk": "Nhấn giữ lâu hơn để nói",
+  "The previous voice session is still closing. Please retry shortly.": "Phiên giọng nói trước vẫn đang đóng. Vui lòng thử lại sau ít phút.",
+  "The transcription limit has been reached. Your recording is saved.": "Đã đạt giới hạn chuyển giọng nói thành văn bản. Bản ghi âm của bạn đã được lưu.",
+  "Voice authentication failed. Check your device date and time.": "Xác thực giọng nói thất bại. Hãy kiểm tra ngày giờ trên thiết bị.",
+  "Cannot save more audio. Free up device storage or remove a saved recording.": "Không thể lưu thêm âm thanh. Hãy giải phóng dung lượng hoặc xóa bản ghi đã lưu.",
+  "The connection was interrupted. Your recording is saved on this device.": "Kết nối bị gián đoạn. Bản ghi âm đã được lưu trên thiết bị này.",
+  "The microphone stopped. Your recorded audio is saved.": "Micrô đã dừng. Âm thanh đã ghi được lưu lại.",
+  "The transcription service is unavailable. Your recording is saved on this device.": "Dịch vụ chuyển giọng nói thành văn bản không khả dụng. Bản ghi âm đã được lưu trên thiết bị này.",
+  "Try again in {{seconds}} seconds.": "Thử lại sau {{seconds}} giây.",
+  "Keep audio": "Giữ âm thanh",
+  "Saved recording": "Bản ghi đã lưu",
+  "Your audio is saved on this device. Retry transcription or delete it.": "Âm thanh đã được lưu trên thiết bị này. Hãy thử chuyển thành văn bản lại hoặc xóa.",
+  "Recording saved locally · Transcription paused": "Đang ghi trên thiết bị · Tạm dừng chuyển văn bản",
+  "Saved recording · Tap to recover": "Bản ghi đã lưu · Nhấn để khôi phục"
 }

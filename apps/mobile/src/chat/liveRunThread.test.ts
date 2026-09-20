@@ -1,7 +1,37 @@
 import { UiMessage } from '../types/chat';
-import { buildLiveRunListData, finalReplyTail, finishLiveRunPresentation, liveReplyRenderKey, mergeNewestFirstMessages } from './liveRunThread';
+import { buildLiveRunListData, finalReplyTail, finishLiveRunPresentation, liveReplyRenderKey, mergeNewestFirstMessages, recoverLiveRunPresentation } from './liveRunThread';
 
 describe('buildLiveRunListData', () => {
+  it('recovers only current-turn snapshot prefixes and tool order', () => {
+    const history: UiMessage[] = [
+      { id: 'old', role: 'assistant', text: 'Earlier reply.' },
+      { id: 'user', role: 'user', text: 'Check' },
+      { id: 'a', role: 'assistant', text: 'Checking.', timestampMs: 1000 },
+      { id: 'tool', role: 'tool', text: '', toolStatus: 'success' },
+      { id: 'b', role: 'assistant', text: 'Found it.', timestampMs: 2000 },
+      { id: 'tool2', role: 'tool', text: '', toolStatus: 'success' },
+    ];
+    const recovered = recoverLiveRunPresentation('Checking.\nFound it.\nWriting the answer.', history);
+    expect(recovered.tail).toBe('Writing the answer.');
+    expect(recovered.segments.map(segment => segment.afterToolCount)).toEqual([0, 1]);
+    const rows = buildLiveRunListData({ historyMessages: history, streamSegments: recovered.segments,
+      toolMessages: recovered.tools, liveStreamText: recovered.tail, liveStreamStartedAt: 1000, activeRunId: 'run' }).reverse();
+    expect(rows.map(row => row.text)).toEqual(['Earlier reply.', 'Check', 'Checking.', '', 'Found it.', '', 'Writing the answer.']);
+    expect(recoverLiveRunPresentation('Different reply.', history).segments).toEqual([]);
+    const partial = recoverLiveRunPresentation('Checking.\nFound it. More text.', history.slice(0, -1));
+    expect(partial.segments.map(segment => segment.text)).toEqual(['Checking.']);
+    expect(partial.tail).toBe('Found it. More text.');
+  });
+
+  it('keeps a growing live tail once when history contains its partial prefix', () => {
+    const rows = buildLiveRunListData({ historyMessages: [
+      { id: 'u', role: 'user', text: 'Check' },
+      { id: 'h', role: 'assistant', text: 'Writing' },
+    ], streamSegments: [], toolMessages: [], liveStreamText: 'Writing the complete answer.',
+    liveStreamStartedAt: 1000, activeRunId: 'run' }).reverse();
+    expect(rows.map(row => row.text)).toEqual(['Check', 'Writing the complete answer.']);
+    expect(rows[1].streaming).toBe(true);
+  });
   it('interleaves stream segments and tool cards after stable history', () => {
     const historyMessages: UiMessage[] = [
       { id: 'u1', role: 'user', text: 'Check status', timestampMs: 1000 },

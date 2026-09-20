@@ -1,5 +1,9 @@
+import { preserveCompletedRunPresentation } from './historyMergePolicy';
+import { finalReplyTail } from './streamText';
 import { UiMessage } from '../types/chat';
 import { isSilentReplyPrefixText, isSilentReplyText } from '../utils/chat-message';
+
+export { finalReplyTail } from './streamText';
 
 export type StreamSegment = {
   id: string;
@@ -13,6 +17,31 @@ export type StreamSegment = {
 /** Remains stable when an optimistic run ID is replaced by the server's ID. */
 export function liveReplyRenderKey(startedAt: number | null, runId: string, segment: number): string {
   return `reply:${startedAt ?? runId}:${segment}`;
+}
+
+/** Recover known text/tool boundaries from the current turn, never earlier turns. */
+export function recoverLiveRunPresentation(text: string, history: UiMessage[]): {
+  segments: StreamSegment[]; tools: UiMessage[]; tail: string;
+} {
+  const start = history.findLastIndex(message => message.role === 'user');
+  const segments: StreamSegment[] = [];
+  const tools: UiMessage[] = [];
+  let tail = text;
+  for (const message of history.slice(start + 1)) {
+    if (message.role === 'tool') {
+      tools.push(message);
+    } else if (message.role === 'assistant' && message.text.trim()) {
+      const prefix = message.text.trim();
+      if (!tail.trimStart().startsWith(prefix)) break;
+      tail = tail.trimStart().slice(prefix.length).trimStart();
+      segments.push({ id: message.id, renderKey: message.renderKey ?? message.id,
+        text: message.text, timestampMs: message.timestampMs ?? Date.now(), afterToolCount: tools.length });
+    }
+  }
+  // A transcript can contain the still-growing assistant message. Only tools
+  // prove a committed boundary; keep the last message in the live tail.
+  while (segments.at(-1)?.afterToolCount === tools.length) segments.pop();
+  return { segments, tools, tail: finalReplyTail(text, segments) };
 }
 
 function finiteTimestamp(message: UiMessage): number | undefined {
@@ -99,7 +128,7 @@ export function buildLiveRunListData(params: {
   const appendToolsUntil = (count: number) => {
     while (toolIndex < count && toolIndex < params.toolMessages.length) {
       const toolMessage = params.toolMessages[toolIndex++];
-      if (!seen.has(toolMessage.id)) transient.push(toolMessage);
+      if (params.activeRunId || !seen.has(toolMessage.id)) transient.push(toolMessage);
     }
   };
   params.streamSegments.forEach((segment, index) => {
@@ -109,7 +138,7 @@ export function buildLiveRunListData(params: {
         id: segment.id,
         ...(segment.renderKey ? { renderKey: segment.renderKey } : {}),
         role: 'assistant', text: segment.text,
-        timestampMs: segment.timestampMs, streaming: true,
+        timestampMs: segment.timestampMs, streaming: false,
       });
     }
   });
@@ -141,24 +170,18 @@ export function buildLiveRunListData(params: {
     });
   }
 
-  return [...dedupedHistory, ...transient].reverse();
-}
-
-
-/** A final payload may contain only the tail, or repeat all earlier text. */
-export function finalReplyTail(finalText: string, segments: ReadonlyArray<StreamSegment>, currentTail?: string): string {
-  if (currentTail && finalText === currentTail) return finalText;
-  let tail = finalText;
-  for (const segment of segments) {
-    const prefix = segment.text.trim();
-    if (!prefix) continue;
-    const trimmed = tail.trimStart();
-    // Only remove an exact ordered prefix, never a substring or a fuzzy match.
-    if (!trimmed.startsWith(prefix)) return finalText;
-    tail = trimmed.slice(prefix.length).trimStart();
+  if (params.activeRunId && transient.length > 0 && !hasTerminalMessage) {
+    // History can catch up during tool execution. Reconcile within this user
+    // turn instead of displaying both the transcript and its live projection.
+    const user = dedupedHistory.findLast(message => message.role === 'user');
+    return preserveCompletedRunPresentation([
+      ...(user ? [user] : []),
+      ...transient.map(message => ({ ...message, presentationRunId: params.activeRunId! })),
+    ], dedupedHistory, { live: true }).reverse();
   }
-  return tail;
+  return [...dedupedHistory, ...transient.filter(message => !seen.has(message.id))].reverse();
 }
+
 
 /** Commit the same live rows in one state transition; don't rebuild a flat answer. */
 export function finishLiveRunPresentation(params: {

@@ -70,6 +70,7 @@ describe('useChatHistoryState', () => {
     (StorageService.setLastSessionKey as jest.Mock).mockResolvedValue(undefined);
     (StorageService.setLastOpenedSessionSnapshot as jest.Mock).mockResolvedValue(undefined);
     (ChatCacheService.getTimelinePage as jest.Mock).mockResolvedValue({ messages: [], hasMore: false });
+    (ChatCacheService.getMessages as jest.Mock).mockReset().mockResolvedValue([]);
     (ChatCacheService.listSessions as jest.Mock).mockResolvedValue([]);
   });
 
@@ -1087,14 +1088,142 @@ describe('useChatHistoryState', () => {
     expect(result.current.state.historyLoaded).toBe(false);
   });
 
+  it.each(['openclaw', 'hermes'])('switches %s message ownership atomically before any cache or network reply', async backendKind => {
+    const main = 'agent:main:main';
+    const other = 'agent:main:other';
+    const adapter = { connection: { backendKind }, state: 'ready', loadSession: jest.fn().mockResolvedValue({ messages: [] }) };
+    const { result } = renderHook(() => {
+      const sessionKeyRef = useRef<string | null>(main);
+      return useChatHistoryState({ adapter: adapter as any, dbg: jest.fn(), t: translate, sessionKeyRef,
+        routeSessionKey: main, mainSessionKey: main, gatewayConfigId: 'gw-1', currentAgentId: 'main' });
+    });
+    act(() => result.current.setMessages([{ id: 'final_main', role: 'assistant', text: 'Main only', timestampMs: 1000 }]));
+    act(() => result.current.setSessionKey(other));
+    expect(result.current.sessionKey).toBe(other);
+    expect(result.current.messages).toEqual([]);
+    (ChatCacheService.getMessages as jest.Mock).mockResolvedValueOnce([
+      { id: 'stale-other', role: 'assistant', text: 'Old duplicate', timestampMs: 1000 },
+    ]);
+    await act(async () => { await result.current.restoreCachedMessages(other); });
+    await act(async () => { await result.current.loadHistory(other); });
+    expect(result.current.messages).toEqual([]);
+  });
+
+  it.each(['history', 'reconcile', 'older-cache'])('ignores an old %s reply after switching away and back to the same session', async source => {
+    const key = 'agent:main:main';
+    const pending = deferred<any>();
+    const adapter = { state: 'ready', loadSession: jest.fn().mockResolvedValue({ messages: [] }) };
+    const { result } = renderHook(() => {
+      const sessionKeyRef = useRef<string | null>(key);
+      return useChatHistoryState({ adapter: adapter as any, dbg: jest.fn(), t: translate, sessionKeyRef,
+        routeSessionKey: key, mainSessionKey: key, gatewayConfigId: 'gw-1', currentAgentId: 'main' });
+    });
+    if (source === 'older-cache') (ChatCacheService.getTimelinePage as jest.Mock).mockReturnValueOnce(pending.promise);
+    else adapter.loadSession.mockReturnValueOnce(pending.promise);
+    let oldRequest!: Promise<unknown>;
+    await act(async () => {
+      oldRequest = source === 'history' ? result.current.loadHistory(key)
+        : source === 'reconcile' ? result.current.reconcileLatestAssistantFromHistory(key, { appendIfMissing: true })
+          : result.current.onLoadMoreHistory();
+      await Promise.resolve();
+    });
+    act(() => result.current.setSessionKey('agent:main:other'));
+    act(() => result.current.setSessionKey(key));
+    act(() => result.current.setMessages([{ id: 'final_new', role: 'assistant', text: 'Current answer', timestampMs: 100_000 }]));
+    const visible = result.current.messages;
+    if (source === 'history') {
+      adapter.loadSession.mockResolvedValueOnce({ messages: [{ role: 'assistant', text: 'Current answer', timestampMs: 100_000 }] });
+      await act(async () => { await result.current.loadHistory(key); });
+      expect(adapter.loadSession).toHaveBeenCalledTimes(2);
+    }
+    const beforeReply = result.current.messages;
+    await act(async () => {
+      pending.resolve({ messages: [{ id: 'old', role: 'assistant', text: 'Obsolete answer', content: 'Obsolete answer', timestampMs: 1000 }], hasMore: false });
+      await oldRequest;
+    });
+    expect(result.current.messages).toBe(beforeReply);
+    if (source !== 'history') expect(result.current.messages).toBe(visible);
+    expect(result.current.messages.map(message => message.text)).toEqual(['Current answer']);
+    if (source === 'older-cache') {
+      // A stale page must not mark the new entry's local paging as exhausted.
+      await act(async () => { await result.current.onLoadMoreHistory(); });
+      expect(ChatCacheService.getTimelinePage).toHaveBeenCalledTimes(2);
+    }
+  });
+
+  it.each(['openclaw', 'hermes'].flatMap(backend => ['populated', 'empty', 'error'].map(cacheState => [backend, cacheState])))
+  ('does not let a late %s cache restore (%s) replace committed network history', async (backendKind, cacheState) => {
+    const key = 'agent:main:main';
+    const cache = deferred<any>();
+    (ChatCacheService.getMessages as jest.Mock).mockReturnValueOnce(cache.promise);
+    const adapter = { connection: { backendKind }, state: 'ready', loadSession: jest.fn().mockResolvedValue({
+      messages: [{ id: 'canonical', role: 'assistant', text: '| City | Weather |\n|---|---|\n| Hangzhou | Sunny |', timestampMs: 2000 }],
+    }) };
+    const { result } = renderHook(() => {
+      const sessionKeyRef = useRef<string | null>(key);
+      return useChatHistoryState({ adapter: adapter as any, dbg: jest.fn(), t: translate, sessionKeyRef,
+        mainSessionKey: key, gatewayConfigId: 'gw-1', currentAgentId: 'main' });
+    });
+    let restore!: Promise<boolean>;
+    act(() => { restore = result.current.restoreCachedMessages(key, { clearWhenEmpty: true }); });
+    await act(async () => { await result.current.loadHistory(key); });
+    const canonical = result.current.messages;
+    await act(async () => {
+      if (cacheState === 'error') cache.reject(new Error('storage unavailable'));
+      else cache.resolve(cacheState === 'empty' ? [] : [{ id: 'final_old', role: 'assistant', text: 'Outdated preview', timestampMs: 1000 }]);
+      await restore;
+    });
+    expect(result.current.messages).toBe(canonical);
+  });
+
+  it.each([false, true])('falls back to a legacy cache only while the restore is current (superseded: %s)', async superseded => {
+    const key = 'agent:main:main';
+    const missingGeneration = deferred<any[]>();
+    (ChatCacheService.getMessages as jest.Mock).mockReturnValueOnce(missingGeneration.promise)
+      .mockResolvedValueOnce([{ id: 'legacy', role: 'assistant', text: 'Offline legacy reply' }]);
+    const { result } = renderHook(() => {
+      const sessionKeyRef = useRef<string | null>(key);
+      return useChatHistoryState({ adapter: null, dbg: jest.fn(), t: translate, sessionKeyRef,
+        routeSessionKey: key, mainSessionKey: key, gatewayConfigId: 'gw-1', currentAgentId: 'main' });
+    });
+    let restore!: Promise<boolean>;
+    act(() => { restore = result.current.restoreCachedMessages(key, { sessionId: 'missing-generation' }); });
+    if (superseded) act(() => result.current.setSessionKey('agent:main:other'));
+    await act(async () => { missingGeneration.resolve([]); await restore; });
+    expect(ChatCacheService.getMessages).toHaveBeenCalledTimes(superseded ? 1 : 2);
+    expect(result.current.messages.map(message => message.text)).toEqual(superseded ? [] : ['Offline legacy reply']);
+  });
+
+  it('keeps only confirmed cache row keys while canonical history replaces stale optimistic rows', async () => {
+    const key = 'agent:main:main';
+    const text = '| City | Weather |\n|---|---|\n| Hangzhou | Sunny |';
+    (ChatCacheService.getMessages as jest.Mock).mockResolvedValueOnce([
+      { id: 'cached-table', renderKey: 'stable-table', historyMessageId: 'canonical', role: 'assistant', text, timestampMs: 2000 },
+      { id: 'final_stale', role: 'assistant', text: 'Stale duplicate', timestampMs: 3000 },
+    ]);
+    const adapter = { state: 'ready', loadSession: jest.fn().mockResolvedValue({
+      messages: [{ id: 'canonical', role: 'assistant', text, timestampMs: 2000 }],
+    }) };
+    const { result } = renderHook(() => {
+      const sessionKeyRef = useRef<string | null>(null);
+      return useChatHistoryState({ adapter: adapter as any, dbg: jest.fn(), t: translate, sessionKeyRef,
+        mainSessionKey: key, gatewayConfigId: 'gw-1', currentAgentId: 'main',
+        initialPreview: { sessionKey: key, agentId: 'main', updatedAt: 2000 } });
+    });
+    await act(async () => { await Promise.resolve(); });
+    await act(async () => { await result.current.loadHistory(key); });
+    expect(result.current.messages).toEqual([expect.objectContaining({ renderKey: 'stable-table', text, historyMessageId: 'canonical' })]);
+    expect(result.current.messages[0].id).not.toBe('cached-table');
+  });
+
   it.each(['openclaw', 'hermes'])('keeps a new %s send when the first server history replaces an old cached preview', async (backendKind) => {
     const key = 'agent:main:main';
     const request = deferred<any>();
     const adapter = { connection: { backendKind }, state: 'ready', loadSession: jest.fn(() => request.promise) };
-    (ChatCacheService.getTimelinePage as jest.Mock).mockResolvedValueOnce({ messages: [
+    (ChatCacheService.getMessages as jest.Mock).mockResolvedValueOnce([
       { id: 'usr_1000', role: 'user', text: 'Old cached send', timestampMs: 1000 },
       { id: 'final_old', role: 'assistant', text: 'Stale cached answer', timestampMs: 2000 },
-    ], hasMore: false });
+    ]);
     const { result } = renderHook(() => {
       const sessionKeyRef = useRef<string | null>(null);
       return useChatHistoryState({ adapter: adapter as any, dbg: jest.fn(), t: translate, sessionKeyRef,
@@ -1148,12 +1277,9 @@ describe('useChatHistoryState', () => {
       agentEmoji: '🤖',
       agentAvatarUri: 'https://example.com/avatar.png',
     });
-    (ChatCacheService.getTimelinePage as jest.Mock).mockResolvedValueOnce({
-      messages: [
+    (ChatCacheService.getMessages as jest.Mock).mockResolvedValueOnce([
         { id: 'cached-1', role: 'assistant', text: 'cached writer hello', timestampMs: 1_700_000_000_100 },
-      ],
-      hasMore: false,
-    });
+    ]);
 
     const { result } = renderHook(() => {
       const sessionKeyRef = useRef<string | null>(null);
@@ -1223,12 +1349,9 @@ describe('useChatHistoryState', () => {
         messageCount: 1,
       },
     ]);
-    (ChatCacheService.getTimelinePage as jest.Mock).mockResolvedValueOnce({
-      messages: [
+    (ChatCacheService.getMessages as jest.Mock).mockResolvedValueOnce([
         { id: 'cached-main', role: 'assistant', text: 'cached main only', timestampMs: 1_700_000_000_100 },
-      ],
-      hasMore: false,
-    });
+    ]);
 
     const { result } = renderHook(() => {
       const sessionKeyRef = useRef<string | null>(null);
