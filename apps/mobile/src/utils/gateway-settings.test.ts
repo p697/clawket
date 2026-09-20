@@ -1,4 +1,10 @@
-import { buildGatewayRuntimePatch, parseGatewayRuntimeSettings } from './gateway-settings';
+import {
+  buildChannelAccountEnabledPatch,
+  buildDmScopePatch,
+  buildGatewayRuntimePatch,
+  parseDmScope,
+  parseGatewayRuntimeSettings,
+} from './gateway-settings';
 
 describe('parseGatewayRuntimeSettings', () => {
   it('returns empty settings when config is missing', () => {
@@ -193,6 +199,24 @@ describe('buildGatewayRuntimePatch', () => {
           thinkingDefault: null,
         },
       },
+    });
+  });
+});
+
+describe('channel routing patches', () => {
+  it('reads the DM scope and falls back to main for unset or unknown values', () => {
+    expect(parseDmScope(null)).toBe('main');
+    expect(parseDmScope({ session: {} })).toBe('main');
+    expect(parseDmScope({ session: { dmScope: ' per-channel-peer ' } })).toBe('per-channel-peer');
+    expect(parseDmScope({ session: { dmScope: 'per-account-channel-peer' } })).toBe('per-account-channel-peer');
+    expect(parseDmScope({ session: { dmScope: 'per-room' } })).toBe('main');
+    expect(parseDmScope({ session: ['main'] })).toBe('main');
+  });
+
+  it('builds the session and channel account merge patches', () => {
+    expect(buildDmScopePatch('per-peer')).toEqual({ session: { dmScope: 'per-peer' } });
+    expect(buildChannelAccountEnabledPatch('telegram', 'default', false)).toEqual({
+      channels: { telegram: { accounts: { default: { enabled: false } } } },
     });
   });
 });

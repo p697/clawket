@@ -20,6 +20,7 @@ export type AgentSettingsSummary = Readonly<{
   modelCount?: number;
   installedSkillCount?: number;
   cronJobCount?: number;
+  /** Failed jobs not yet seen on the Runs tab: a notification count, not the number of failing jobs. */
   cronFailureCount?: number;
   hasCronFailure?: boolean;
   fileCount?: number;
@@ -195,13 +196,6 @@ const STATS: ReadonlyArray<StatDefinition> = [
 
 const CONNECTION_ROWS: ReadonlyArray<RowDefinition> = [
   {
-    id: 'connection',
-    placement: 'primary',
-    title: 'Connection',
-    value: (_summary, connectionState) => CONNECTION_STATE_LABELS[connectionState],
-    attention: (_summary, connectionState) => connectionState !== 'ready',
-  },
-  {
     id: 'openclaw',
     placement: 'advanced',
     title: 'OpenClaw management',
@@ -233,6 +227,15 @@ const CONNECTION_ROWS: ReadonlyArray<RowDefinition> = [
     title: 'OpenClaw logs',
     capabilities: ['logs'],
     value: () => undefined,
+  },
+  {
+    // Last on purpose (owner request 2026-09-19): the connection-level entry sits under the Agent's
+    // management rows rather than leading them.
+    id: 'connection',
+    placement: 'primary',
+    title: 'Connection',
+    value: (_summary, connectionState) => CONNECTION_STATE_LABELS[connectionState],
+    attention: (_summary, connectionState) => connectionState !== 'ready',
   },
 ];
 

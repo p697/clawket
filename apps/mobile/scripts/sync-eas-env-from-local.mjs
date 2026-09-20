@@ -28,6 +28,8 @@ for (const rawLine of raw.split(/\r?\n/)) {
 const storeUnsafeKeys = new Set([
   'EXPO_PUBLIC_REVENUECAT_TEST_API_KEY',
   'EXPO_PUBLIC_UNLOCK_PRO',
+  // The local speech endpoint is Preview infrastructure, never a store-build default.
+  'EXPO_PUBLIC_SPEECH_URL',
 ]);
 
 function syncVar({ name, value, environments, visibility = 'sensitive' }) {

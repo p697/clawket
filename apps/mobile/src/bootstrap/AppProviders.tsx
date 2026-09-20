@@ -7,6 +7,7 @@ import { AppThemeProvider } from '../theme';
 import { AnalyticsProvider } from '../services/analytics/AnalyticsProvider';
 import { AppLanguageProvider } from '../i18n/AppLanguageProvider';
 import { StorageService } from '../services/storage';
+import { isIPad } from '../utils/platform';
 
 type Props = {
   accentId: AccentColorId;
@@ -33,7 +34,8 @@ export function AppProviders({
   }, [onAccentChange]);
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <KeyboardProvider>
+      {/* iPad cold launch must not focus a hidden field before the first real input. */}
+      <KeyboardProvider preload={!isIPad}>
         <SafeAreaProvider>
           <AnalyticsProvider>
             <AppThemeProvider

@@ -26,7 +26,7 @@ export function canCreateAgent(e: Entitlement) { return e.isPro; }
 - 账户设置 → 连接列表里，非 Pro 用户可以把另一个连接设为免费连接，每 24 小时最多一次（防止靠切换白嫖多连接）；切换后原免费连接立即上锁。
 - 其他连接在花名册里可见但整组带锁；点开任一带锁行 → 付费墙 `gatewayConnections`。
 - Pro 到期：按同一规则上锁，`freeConnectionId` 若为空则取当时的活动连接；恢复购买或续订即全部解锁。
-- 重装：连接需要重新配对，`freeConnectionId` 随第一次配对确定；宽限标记随设备 identity 保存，不重发。
+- 重装：连接需要重新配对，`freeConnectionId` 随第一次配对确定；宽限标记随设备 identity 保存，不重发。iOS Keychain 不随删 App 清除，所以首启用 AsyncStorage 里的安装标记（`clawket.installMarker.v1`）判定全新安装：无标记且沙盒无 `clawket.*` 键 → 清掉连接、凭据与本地偏好，保留 identity 与宽限记录，再走首启引导。
 
 - `isMain`：OpenClaw 为 `agentId === 'main'`（或 Gateway 配置的 mainKey）；Hermes 与 YouMind 恒为 true。
 - 锁定的 Agent：花名册可见（去饱和 + 锁），点开 → 付费墙情境版 `agents`；置顶会话若属于锁定 Agent 同样锁定。
@@ -113,3 +113,8 @@ connect_failed → 停留 Roster 显示离线横幅，不弹付费墙，pendingA
 - README 与 README.zh-CN 的首段同步为 3.0 定位；截图更新由人完成（HT-5）。
 - 分享：账户设置「分享 Clawket」沿用。
 - 评分请求：沿用 `auto-app-review.ts`，触发点改为「首次成功发送后的第 3 次冷启动」。
+
+
+### 商店原生兑换码（2026-09-19）
+
+负责人授权：付费墙法律链接旁增加「兑换码」。iOS 使用 StoreKit 原生兑换表单，Android 打开 Google Play 兑换页；不建自有兑换码数据库，不接收、存储或上报码。复用 `Clawket Pro` entitlement，商店账号拥有权益，重装走「恢复购买」。只有 RevenueCat 确认新增有效权益才显示成功，原会员取消、无效码、等待确认不发权益；与购买 / 恢复互斥，等待时可关闭，晚到结果不续做已放弃的操作。iOS 一个月赠送配置为免费且不自动续费，永久赠送复用 buyout；Android 永久赠送复用 lifetime，订阅试用自动续费，不作为无负担月度赠送。后台活动、批次、使用和验收说明见 `apps/mobile/docs/pro-redemption.md`；兑换码 CSV 保存在仓库外。

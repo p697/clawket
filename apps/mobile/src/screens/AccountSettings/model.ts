@@ -50,8 +50,6 @@ export type AccountSettingsCapability =
   | 'connections'
   | 'appearance'
   | 'appIcons'
-  | 'voice'
-  | 'notifications'
   | 'help'
   | 'community'
   | 'about'
@@ -69,8 +67,6 @@ export const DEFAULT_ACCOUNT_SETTINGS_CAPABILITIES: AccountSettingsCapabilities 
     connections: true,
     appearance: true,
     appIcons: true,
-    voice: true,
-    notifications: true,
     help: true,
     community: true,
     about: true,
@@ -88,7 +84,6 @@ export type AccountSettingsAction =
   | 'chat-appearance'
   | 'app-icon'
   | 'app-language'
-  | 'speech-language'
   | 'help-center'
   | 'openclaw-docs'
   | 'hermes-docs'
@@ -111,8 +106,6 @@ export type AccountSettingsGroupId =
   | 'pro'
   | 'connections'
   | 'appearance'
-  | 'voice'
-  | 'notifications'
   | 'help'
   | 'community'
   | 'about'
@@ -127,7 +120,6 @@ export type AccountSettingsLabels = Readonly<{
   accent: string;
   chatAppearance: string;
   appIcon: string;
-  speechLanguage: string;
   appVersion: string;
   previewEnvironment: string;
 }>;
@@ -142,7 +134,7 @@ export type AccountSettingsRow = Readonly<{
   action?: AccountSettingsAction;
   connectionId?: string;
   kind?: 'navigation' | 'toggle' | 'value';
-  toggle?: 'replyNotifications' | 'debugMode';
+  toggle?: 'debugMode';
   locked?: boolean;
   attention?: boolean;
 }>;
@@ -279,33 +271,6 @@ export function buildAccountSettingsGroups({
       });
     }
     groups.push({ id: 'appearance', titleKey: 'Appearance', rows });
-  }
-
-  if (capabilities.voice) {
-    groups.push({
-      id: 'voice',
-      titleKey: 'Voice',
-      rows: [{
-        id: 'speech-language',
-        titleKey: 'Recognition Language',
-        value: labels.speechLanguage,
-        action: 'speech-language',
-        kind: 'navigation',
-      }],
-    });
-  }
-
-  if (capabilities.notifications) {
-    groups.push({
-      id: 'notifications',
-      titleKey: 'Notifications',
-      rows: [{
-        id: 'reply-notifications',
-        titleKey: 'Reply Notifications',
-        kind: 'toggle',
-        toggle: 'replyNotifications',
-      }],
-    });
   }
 
   if (capabilities.help) {

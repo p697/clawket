@@ -7,7 +7,6 @@ export type AccountSettingsTranslator = (
 
 function translateCommon(t: AccountSettingsTranslator, key: string): string {
   if (key === 'Advanced settings') return t('Advanced settings', { ns: 'config' });
-  if (key === 'Chat & notifications') return t('Chat & notifications', { ns: 'config' });
   if (key === 'Help & feedback') return t('Help & feedback', { ns: 'config' });
   if (key === 'Offline') return t('Offline', { ns: 'common' });
   if (key === 'Connecting') return t('Connecting', { ns: 'common' });
@@ -30,7 +29,6 @@ function translateSettings(t: AccountSettingsTranslator, key: string): string {
 
 function translateConfig(t: AccountSettingsTranslator, key: string): string {
   if (key === 'Advanced settings') return t('Advanced settings', { ns: 'config' });
-  if (key === 'Chat & notifications') return t('Chat & notifications', { ns: 'config' });
   if (key === 'Help & feedback') return t('Help & feedback', { ns: 'config' });
   if (key === 'Pro') return t('Pro', { ns: 'config' });
   if (key === 'Clawket Pro') return t('Clawket Pro', { ns: 'config' });
@@ -45,10 +43,6 @@ function translateConfig(t: AccountSettingsTranslator, key: string): string {
   if (key === 'Chat Appearance') return t('Chat Appearance', { ns: 'config' });
   if (key === 'App Icon') return t('App Icon', { ns: 'config' });
   if (key === 'Appearance') return t('Appearance', { ns: 'config' });
-  if (key === 'Voice') return t('Voice', { ns: 'config' });
-  if (key === 'Recognition Language') return t('Recognition Language', { ns: 'config' });
-  if (key === 'Notifications') return t('Notifications', { ns: 'config' });
-  if (key === 'Reply Notifications') return t('Reply Notifications', { ns: 'config' });
   if (key === 'Help') return t('Help', { ns: 'config' });
   if (key === 'Help Center') return t('Help Center', { ns: 'config' });
   if (key === 'OpenClaw Documentation') return t('OpenClaw Documentation', { ns: 'config' });
@@ -69,6 +63,7 @@ function translateConfig(t: AccountSettingsTranslator, key: string): string {
   if (key === 'Relay Environment') return t('Relay Environment', { ns: 'config' });
   if (key === 'Design System') return t('Design System', { ns: 'config' });
   if (key === 'Preview update announcement') return t('Preview update announcement', { ns: 'config' });
+  if (key === 'Simulate free account') return t('Simulate free account', { ns: 'config' });
   if (key === 'Clear Cache') return t('Clear Cache', { ns: 'config' });
   if (key === 'Reset Device') return t('Reset Device', { ns: 'config' });
   if (key === 'Developer') return t('Developer', { ns: 'config' });

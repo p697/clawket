@@ -26,6 +26,7 @@ This repository is the Clawket monorepo.
 | Path | Role |
 |------|------|
 | `apps/mobile` | React Native mobile app |
+| `apps/speech-worker` | Independent Alibaba Cloud transcription proxy; server-only secrets and bounded admission |
 | `apps/relay-registry` | Cloudflare registry worker |
 | `apps/relay-worker` | Cloudflare relay worker |
 | `apps/bridge-cli` | Publishable bridge CLI |
@@ -87,7 +88,7 @@ Active client routing must survive Durable Object hibernation through WebSocket 
 
 ## Preview Service Environment Rule
 
-1. Preview is a service environment, not a backend or transport kind. Preserve the chosen backend identity and `transportKind=relay`; the local-model extension uses dedicated Preview resources (see `docs/3.0/15-local-model.md`).
+1. Preview is a service environment, not a backend or transport kind. Preserve the chosen backend identity and `transportKind=relay`; the local-model extension uses dedicated resources that are offered in every app environment and never gated by Debug Mode (see `docs/3.0/15-local-model.md`).
 2. Production and Preview must use isolated Registry, Relay, KV, Durable Object, pairing credentials, and local pairing files. A Preview deploy must never target Production bindings.
 3. Official QR codes are environment-checked by mobile. Custom/self-hosted Registry URLs remain supported and must not be misclassified as an official environment.
 4. The Bridge service may connect Production and Preview simultaneously, but failure in one environment must not stop the other runtime.
@@ -176,3 +177,7 @@ Before handling any frame, verify that its WebSocket is still the current owner,
 ## Worker Toolchain Audit
 
 Keep Wrangler on a security-patched v4 release (current minimum 4.131.0) with its matching Miniflare/workerd dependencies. Do not force a transitive native override to hide an audit finding; validate the resolved lockfile with both dependency audits and v1 replay after toolchain changes.
+
+## First Registry migration recovery
+
+Prepare and verify fixed recovery bundles with `scripts/release/registry-recovery.mjs` before first production DO migration; follow `docs/3.0/registry-recovery-runbook.md`. Preserve `PairRegisterRateLimiter`, its binding/migration, and registration safety in a forward recovery deployment. The release matrix tests these bundles; local workerd success is not Cloudflare control-plane migration evidence.

@@ -3,6 +3,7 @@ import React, { useEffect, useMemo } from 'react';
 import { Pressable, StyleProp, StyleSheet, Text, type ViewStyle, View } from 'react-native';
 import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useAppTheme } from '../../theme';
+import { createChatGlassStyle } from '../../features/chat-appearance/resolver';
 import {
   ControlSize,
   FontSize,
@@ -29,6 +30,8 @@ export type HeaderPillProps = Readonly<{
   avatarUrl?: string | null;
   status?: AgentAvatarStatus;
   attentionTone?: AgentAttentionTone;
+  /** `glass` floats the pill over a chat wallpaper on translucent chrome. */
+  material?: 'surface' | 'glass';
   onPress?: () => void;
   accessibilityLabel?: string;
   style?: StyleProp<ViewStyle>;
@@ -46,6 +49,7 @@ export function HeaderPill({
   avatarUrl,
   status = 'idle',
   attentionTone,
+  material = 'surface',
   onPress,
   accessibilityLabel,
   style,
@@ -54,8 +58,8 @@ export function HeaderPill({
   const { theme } = useAppTheme();
   const subtitleOpacity = useSharedValue(1);
   const chrome = useMemo(
-    () => ({ backgroundColor: theme.colors.surface }),
-    [theme.colors, theme.scheme],
+    () => (material === 'glass' ? createChatGlassStyle(theme) : { backgroundColor: theme.colors.surface }),
+    [material, theme],
   );
   const subtitleAnimatedStyle = useAnimatedStyle(() => ({ opacity: subtitleOpacity.value }));
 

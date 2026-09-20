@@ -1,13 +1,12 @@
-import React, { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Image, StyleSheet, View } from 'react-native';
 import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { Check } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 
-import { SettingsDivider, SettingsGroup, SettingsRow } from '../../components/ui/SettingsGroup';
+import { SettingsGroup, SettingsRow } from '../../components/ui/SettingsGroup';
 import { Banner } from '../../components/ui/Banner';
 import { Sheet } from '../../components/ui/Sheet';
-import { useAppContext } from '../../contexts/AppContext';
 import {
   getCurrentAppIconAsync,
   isAppIconChangeSupportedAsync,
@@ -20,17 +19,14 @@ import {
   type BuiltInAccentColorId,
 } from '../../theme';
 import { ControlSize, IconSize, Radius, Space } from '../../theme/tokens';
-import type {
-  SpeechRecognitionLanguage,
-  ThemeMode,
-} from '../../types';
+import type { ThemeMode } from '../../types';
 import { useAppLanguage } from '../../i18n/AppLanguageProvider';
 import { APP_LANGUAGES, APP_LANGUAGE_NAMES, type AppLanguage } from '../../i18n/language';
 import type { AccountSettingsAction } from './model';
 
 export type AccountPreferenceAction = Extract<
   AccountSettingsAction,
-  'app-language' | 'theme' | 'accent' | 'speech-language' | 'app-icon'
+  'app-language' | 'theme' | 'accent' | 'app-icon'
 >;
 
 type PreferenceOption = Readonly<{
@@ -51,7 +47,6 @@ export function isAccountPreferenceAction(
   return action === 'app-language'
     || action === 'theme'
     || action === 'accent'
-    || action === 'speech-language'
     || action === 'app-icon';
 }
 
@@ -66,7 +61,6 @@ export function AccountPreferenceSheet({
 }>): React.JSX.Element {
   const { t } = useTranslation(['config', 'common']);
   const { theme, mode, accentId, setMode, setAccentId } = useAppTheme();
-  const app = useAppContext();
   const { language, setLanguage } = useAppLanguage();
   const [appIcon, setAppIcon] = useState<AppIconVariant>('default');
   const [appIconSupported, setAppIconSupported] = useState(false);
@@ -143,22 +137,6 @@ export function AccountPreferenceSheet({
         onSelect: () => setAccentId(id),
       }));
     }
-    if (preference === 'speech-language') {
-      const values: ReadonlyArray<Readonly<{ id: SpeechRecognitionLanguage; label: string }>> = [
-        { id: 'system', label: t('Follow System') },
-        { id: 'en', label: t('English') },
-        { id: 'zh-Hans', label: t('Simplified Chinese') },
-        { id: 'ja', label: t('Japanese') },
-        { id: 'ko', label: t('Korean') },
-        { id: 'de', label: t('German') },
-        { id: 'es', label: t('Spanish') },
-      ];
-      return values.map((option) => ({
-        ...option,
-        selected: option.id === app.speechRecognitionLanguage,
-        onSelect: () => app.onSpeechRecognitionLanguageChange(option.id),
-      }));
-    }
     return ([
       { id: 'default' as const, label: t('Light') },
       { id: 'black' as const, label: t('Dark') },
@@ -185,8 +163,6 @@ export function AccountPreferenceSheet({
     language,
     setLanguage,
     accentId,
-    app.onSpeechRecognitionLanguageChange,
-    app.speechRecognitionLanguage,
     appIcon,
     appIconSupported,
     mode,
@@ -204,11 +180,9 @@ export function AccountPreferenceSheet({
     ? t('Theme')
     : preference === 'accent'
       ? t('Accent Color')
-      : preference === 'speech-language'
-        ? t('Recognition Language')
-        : t('App Icon');
+      : t('App Icon');
 
-  const scrolls = preference === 'app-language' || preference === 'speech-language';
+  const scrolls = preference === 'app-language';
   const Body = scrolls ? BottomSheetScrollView : View;
   return (
     <Sheet
@@ -232,37 +206,35 @@ export function AccountPreferenceSheet({
           />
         ) : null}
         <SettingsGroup density="comfortable">
-          {options.map((option, index) => (
-            <Fragment key={option.id}>
-              {index > 0 ? <SettingsDivider inset="content" /> : null}
-              <SettingsRow
-                testID={`account-preference-${option.id}`}
-                title={option.label}
-                selected={option.selected}
-                disabled={pending || (preference === 'app-icon' && !appIconSupported)}
-                onPress={() => {
-                  if (selecting.current) return;
-                  selecting.current = true;
-                  void Promise.resolve().then(() => option.onSelect()).then((didSelect) => {
-                    if (didSelect !== false) {
-                      onChanged?.(preference, option.id);
-                      onClose();
-                    }
-                  }).catch(() => setErrorMessage(t('Please try again later.', { ns: 'common' })))
-                    .finally(() => { selecting.current = false; });
-                }}
-                leading={preference === 'app-icon' ? <Image accessible={false} source={option.id === 'black'
-                  ? require('../../../assets/app-icons/black/app-icon-black-1024.png')
-                  : require('../../../assets/icon.png')} style={styles.appIcon} /> : option.swatch ? (
-                  <View style={[styles.swatch, { backgroundColor: option.swatch }]} />
-                ) : undefined}
-                trailing={(
-                  <View style={[styles.selection, option.selected ? { backgroundColor: theme.colors.ink } : null]}>
-                    {option.selected ? <Check size={IconSize.sm} strokeWidth={2} color={theme.colors.canvas} /> : null}
-                  </View>
-                )}
-              />
-            </Fragment>
+          {options.map((option) => (
+            <SettingsRow
+              key={option.id}
+              testID={`account-preference-${option.id}`}
+              title={option.label}
+              selected={option.selected}
+              disabled={pending || (preference === 'app-icon' && !appIconSupported)}
+              onPress={() => {
+                if (selecting.current) return;
+                selecting.current = true;
+                void Promise.resolve().then(() => option.onSelect()).then((didSelect) => {
+                  if (didSelect !== false) {
+                    onChanged?.(preference, option.id);
+                    onClose();
+                  }
+                }).catch(() => setErrorMessage(t('Please try again later.', { ns: 'common' })))
+                  .finally(() => { selecting.current = false; });
+              }}
+              leading={preference === 'app-icon' ? <Image accessible={false} source={option.id === 'black'
+                ? require('../../../assets/app-icons/black/app-icon-black-1024.png')
+                : require('../../../assets/icon.png')} style={styles.appIcon} /> : option.swatch ? (
+                <View style={[styles.swatch, { backgroundColor: option.swatch }]} />
+              ) : undefined}
+              trailing={(
+                <View style={[styles.selection, option.selected ? { backgroundColor: theme.colors.ink } : null]}>
+                  {option.selected ? <Check size={IconSize.sm} strokeWidth={2} color={theme.colors.canvas} /> : null}
+                </View>
+              )}
+            />
           ))}
         </SettingsGroup>
       </Body>

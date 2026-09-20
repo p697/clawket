@@ -6,14 +6,13 @@ import {
   View,
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { ChevronLeft } from '../../components/ui/DirectionalIcon';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Banner } from '../../components/ui/Banner';
 import { ConnectionStatusPill } from '../../components/ui/ConnectionStatusPill';
 import { Button } from '../../components/ui/Button';
-import { FloatingButton } from '../../components/ui/FloatingButton';
+import { ScreenHeader } from '../../components/ui/ScreenHeader';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { useConnections } from '../../connection';
 import { useProPaywall } from '../../contexts/ProPaywallContext';
@@ -82,7 +81,6 @@ function MessageDetailView({
 }>): React.JSX.Element {
   const { t } = useTranslation('common');
   const { theme } = useAppTheme();
-  const headerInsets = useMemo(() => ({ paddingTop: topInset + Space.sm }), [topInset]);
   const contentInsets = useMemo(() => ({ paddingBottom: bottomInset + Space.xl }), [bottomInset]);
   // The title yields its slot to connection state so the header never grows.
   const connectionStatus = state === 'offline' && reconnecting ? (
@@ -112,22 +110,16 @@ function MessageDetailView({
 
   return (
     <View testID="message-detail-view" style={[styles.screen, { backgroundColor: theme.colors.canvas }]}>
-      <View testID="message-detail-header" style={[styles.header, headerInsets]}>
-        <FloatingButton
-          testID="message-detail-back"
-          icon={ChevronLeft}
-          accessibilityLabel={t('Back')}
-          onPress={onBack}
-        />
-        {connectionStatus ? (
-          <View testID="message-detail-header-status" style={styles.headerStatus}>{connectionStatus}</View>
-        ) : (
-          <Text style={[styles.headerTitle, { color: theme.colors.ink }]} numberOfLines={1}>
-            {t('Message details')}
-          </Text>
-        )}
-        <View style={styles.headerSlot} />
-      </View>
+      <ScreenHeader
+        testID="message-detail-header"
+        backTestID="message-detail-back"
+        statusTestID="message-detail-header-status"
+        title={t('Message details')}
+        topInset={topInset}
+        status={connectionStatus}
+        onBack={onBack}
+        backAccessibilityLabel={t('Back')}
+      />
       <ScrollView contentContainerStyle={[styles.detailContent, contentInsets]}>
         {state === 'permission' ? (
           <Banner
@@ -265,34 +257,10 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
   },
-  header: {
-    paddingHorizontal: Space.lg,
-    paddingBottom: Space.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Space.sm,
-  },
-  headerTitle: {
-    flex: 1,
-    textAlign: 'center',
-    fontSize: FontSize.body,
-    lineHeight: LineHeight.body,
-    fontWeight: FontWeight.semibold,
-  },
-  headerStatus: {
-    flex: 1,
-    minWidth: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerSlot: {
-    width: ControlSize.floatingButton,
-    height: ControlSize.floatingButton,
-  },
   detailContent: {
     flexGrow: 1,
     paddingHorizontal: Space.lg,
-    paddingTop: Space.sm,
+    paddingTop: Space.lg,
     gap: Space.lg,
   },
   detailBody: {

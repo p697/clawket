@@ -9,10 +9,8 @@ import {
   CAPABILITY_MATRIX,
   type AgentAdapter,
   type AgentDescriptor,
-  type AgentFile,
   type CostSummary,
   type CronJob,
-  type DiscoverSkillItem,
   type SkillStatusEntry,
   type SkillStatusReport,
   type UsageResult,
@@ -20,7 +18,6 @@ import {
 } from '@clawket/agent-protocol';
 import { CronSection } from './CronSection';
 import { FilesSection } from './FilesSection';
-import { SkillSourceSheet } from './SkillSourceSheet';
 import { SkillsSection } from './SkillsSection';
 import { UsageSection } from './UsageSection';
 
@@ -89,13 +86,16 @@ jest.mock('../../theme', () => ({
   useAppTheme: () => ({ theme: { scheme: 'light', colors } }),
 }));
 
-const mockAgentFileActivity = jest.fn();
+const mockAcknowledgeCronFailures = jest.fn(async (..._args: unknown[]) => undefined);
+jest.mock('../../services/cron-failure-acks', () => ({
+  CronFailureAckService: {
+    acknowledge: (...args: unknown[]) => mockAcknowledgeCronFailures(...args),
+  },
+}));
+
 jest.mock('../../services/analytics/events', () => ({
   ...jest.requireActual('../../services/analytics/events'),
-  analyticsEvents: {
-    agentFileActivity: (...args: unknown[]) => mockAgentFileActivity(...args),
-    usageRangeChanged: jest.fn(),
-  },
+  analyticsEvents: { usageRangeChanged: jest.fn() },
 }));
 
 jest.mock('../../components/ui/Banner', () => {
@@ -334,17 +334,6 @@ const report: SkillStatusReport = {
   skills: [skill()],
 };
 
-const discovered: DiscoverSkillItem = {
-  id: 'clawhub:planner',
-  source: 'clawhub',
-  slug: 'planner',
-  title: 'Planner',
-  summary: 'Plans work',
-  author: 'ClawHub',
-  detailUrl: 'https://example.com/planner',
-  installCommand: 'Install planner',
-};
-
 const cronJob: CronJob = {
   id: 'daily',
   name: 'Daily brief',
@@ -412,18 +401,15 @@ describe('AgentSettings functional sections', () => {
     consoleErrorSpy.mockRestore();
   });
 
-  it('manages installed skills and installs discovered skills through adapter operations', async () => {
+  it('manages installed skills through adapter operations', async () => {
     const update = jest.fn(async () => ({ ok: true, skillKey: 'builder', config: {} }));
     const remove = jest.fn(async () => ({ ok: true, skillKey: 'builder' }));
-    const prompt = jest.fn(async () => ({ runId: 'install-run' }));
     const adapter = adapterWith({
-      prompt,
       management: {
         skills: {
           status: jest.fn(async () => report),
           update,
           remove,
-          discover: jest.fn(async () => ({ items: [discovered], nextCursor: null, hasMore: false })),
         },
       },
     });
@@ -440,66 +426,40 @@ describe('AgentSettings functional sections', () => {
     await waitFor(() => expect(view.getByTestId('agent-skill-remove-confirm-confirm')).toBeTruthy());
     fireEvent.press(view.getByTestId('agent-skill-remove-confirm-confirm'));
     await waitFor(() => expect(remove).toHaveBeenCalledWith('builder', agent.agentId));
-
-    view.rerender(<SkillsSection adapter={adapter} agent={agent} online view="discover" />);
-    await waitFor(() => expect(view.getByTestId('agent-skill-discover-clawhub:planner')).toBeTruthy());
-    fireEvent.press(view.getByTestId('agent-skill-discover-clawhub:planner'));
-    fireEvent.press(view.getByTestId('agent-skill-install'));
-    await waitFor(() => expect(prompt).toHaveBeenCalledWith(
-      agent.mainSessionKey,
-      expect.objectContaining({ text: 'Install planner' }),
-    ));
   });
 
-  it.each(['openclaw', 'hermes'] as const)('reads and gates %s skill source saves through Pro', async (backend) => {
-    const updateContent = jest.fn(async () => ({ ok: true, skillKey: 'builder', path: '/SKILL.md' }));
+  it.each(['openclaw', 'hermes'] as const)('hands %s SKILL.md to the document page only after the detail sheet has closed', async (backend) => {
     const get = jest.fn(async () => ({ skillKey: 'builder', name: 'Builder', path: '/SKILL.md', content: '# Original', editable: true, linkedFiles: {} }));
-    const paywall = jest.fn();
     const adapter = adapterWith({ connection: { backendKind: backend } as AgentAdapter['connection'],
-      capabilities: { ...CAPABILITY_MATRIX[backend] }, management: { skills: { status: jest.fn(async () => report), get, updateContent } } });
-    const view = render(<SkillsSection adapter={adapter} agent={agent} online isPro={false} onOpenPaywall={paywall} />);
+      capabilities: { ...CAPABILITY_MATRIX[backend] }, management: { skills: { status: jest.fn(async () => report), get } } });
+    const onOpenSource = jest.fn();
+    const view = render(<SkillsSection adapter={adapter} agent={agent} online onOpenSource={onOpenSource} />);
     await waitFor(() => expect(view.getByTestId('agent-skill-installed-builder')).toBeTruthy());
     fireEvent.press(view.getByTestId('agent-skill-installed-builder'));
     fireEvent.press(view.getByTestId('agent-skill-source'));
-    await waitFor(() => expect(view.getByTestId('skill-source-edit')).toBeTruthy());
-    expect(get).toHaveBeenCalledWith('builder', { agentId: agent.agentId });
-    fireEvent.press(view.getByTestId('skill-source-edit'));
-    fireEvent.changeText(view.getByTestId('skill-source-input'), '# Updated\n\nKeep source.');
-    fireEvent.press(view.getByTestId('skill-source-save'));
-    expect(updateContent).not.toHaveBeenCalled();
-    expect(paywall).toHaveBeenCalledWith('coreFileEditing', expect.any(Function));
-    await act(async () => paywall.mock.calls[0][1]());
-    expect(updateContent).toHaveBeenCalledWith('builder', '# Updated\n\nKeep source.', agent.agentId);
-    await waitFor(() => expect(view.getByTestId('skill-source-edit')).toBeTruthy());
+    // The page is pushed from the sheet's close callback (the mocked sheet closes at once), never over the sheet.
+    await waitFor(() => expect(onOpenSource).toHaveBeenCalledWith(expect.objectContaining({ skillKey: 'builder', name: 'Builder' })));
+    expect(onOpenSource).toHaveBeenCalledTimes(1);
+    expect(view.queryByTestId('agent-skill-detail')).toBeNull();
+    expect(get).not.toHaveBeenCalled();
   });
 
-  it('retains rejected skill drafts and confirms dismissal', async () => {
-    const updateContent = jest.fn(async () => ({ ok: false, skillKey: 'builder', path: '' }));
-    const adapter = adapterWith({ management: { skills: { get: jest.fn(async () => ({ skillKey: 'builder', name: 'Builder', path: '', content: '# Original', editable: true, linkedFiles: {} })), updateContent } } });
-    const onClose = jest.fn();
-    const view = render(<SkillSourceSheet adapter={adapter} agentId={agent.agentId} skill={skill()} online isPro onClose={onClose} />);
-    await waitFor(() => expect(view.getByTestId('skill-source-edit')).toBeTruthy());
-    fireEvent.press(view.getByTestId('skill-source-edit'));
-    fireEvent.changeText(view.getByTestId('skill-source-input'), '# Draft');
-    fireEvent.press(view.getByTestId('skill-source-save'));
-    await waitFor(() => expect(view.getByTestId('skill-source-error')).toBeTruthy());
-    expect(view.getByTestId('skill-source-input').props.value).toBe('# Draft');
-    fireEvent.press(view.getByTestId('skill-source-close'));
-    expect(view.getByTestId('skill-source-discard')).toBeTruthy();
-    expect(onClose).not.toHaveBeenCalled();
-    fireEvent.press(view.getByTestId('skill-source-discard-cancel'));
-    expect(view.getByTestId('skill-source-input').props.value).toBe('# Draft');
+  it('omits the source entry when the adapter does not expose document reading or no page can host it', async () => {
+    const adapter = adapterWith({ management: { skills: { status: jest.fn(async () => report) } } });
+    const view = render(<SkillsSection adapter={adapter} agent={agent} online onOpenSource={jest.fn()} />);
+    await waitFor(() => expect(view.getByTestId('agent-skill-installed-builder')).toBeTruthy());
+    fireEvent.press(view.getByTestId('agent-skill-installed-builder'));
+    expect(view.queryByTestId('agent-skill-source')).toBeNull();
+    view.unmount();
+
+    const readable = adapterWith({ management: { skills: { status: jest.fn(async () => report), get: jest.fn() } } });
+    const hostless = render(<SkillsSection adapter={readable} agent={agent} online />);
+    await waitFor(() => expect(hostless.getByTestId('agent-skill-installed-builder')).toBeTruthy());
+    fireEvent.press(hostless.getByTestId('agent-skill-installed-builder'));
+    expect(hostless.queryByTestId('agent-skill-source')).toBeNull();
   });
 
-  it.each([{ editable: false, isBinary: false }, { editable: true, isBinary: true }])('never edits protected skill content: %j', async (flags) => {
-    const get = jest.fn(async () => ({ skillKey: 'builder', name: 'Builder', path: '', content: 'content', linkedFiles: {}, ...flags }));
-    const adapter = adapterWith({ management: { skills: { get, updateContent: jest.fn() } } });
-    const view = render(<SkillSourceSheet adapter={adapter} agentId={agent.agentId} skill={skill()} online isPro onClose={jest.fn()} />);
-    await waitFor(() => expect(view.getAllByText('Read only').length).toBeGreaterThan(0));
-    expect(view.queryByTestId('skill-source-edit')).toBeNull();
-  });
-
-  it('hides discovery and mutation controls when capabilities are absent', async () => {
+  it('hides mutation controls when capabilities are absent', async () => {
     const adapter = adapterWith({
       capabilities: {
         ...CAPABILITY_MATRIX.openclaw,
@@ -509,7 +469,6 @@ describe('AgentSettings functional sections', () => {
       management: {
         skills: {
           status: jest.fn(async () => report),
-          discover: jest.fn(),
           remove: jest.fn(),
         },
       },
@@ -517,7 +476,6 @@ describe('AgentSettings functional sections', () => {
     const view = render(<SkillsSection adapter={adapter} agent={agent} online />);
 
     await waitFor(() => expect(view.getByTestId('agent-skill-installed-builder')).toBeTruthy());
-    expect(view.queryByTestId('agent-skills-tabs-discover')).toBeNull();
     fireEvent.press(view.getByTestId('agent-skill-installed-builder'));
     expect(view.queryByTestId('agent-skill-toggle')).toBeNull();
     expect(view.queryByTestId('agent-skill-remove')).toBeNull();
@@ -650,21 +608,6 @@ describe('AgentSettings functional sections', () => {
     expect(status).toHaveBeenCalledTimes(1);
   });
 
-  it('ignores an older discovery search after a new query resolves', async () => {
-    let finishFirst!: (result: { items: DiscoverSkillItem[]; nextCursor: null; hasMore: false }) => void;
-    const discover = jest.fn()
-      .mockImplementationOnce(() => new Promise((resolve) => { finishFirst = resolve; }))
-      .mockResolvedValue({ items: [{ ...discovered, id: 'clawhub:new', title: 'New result' }], nextCursor: null, hasMore: false });
-    const adapter = adapterWith({ management: { skills: { discover } } });
-    const view = render(<SkillsSection adapter={adapter} agent={agent} online view="discover" />);
-    await waitFor(() => expect(discover).toHaveBeenCalledWith(''));
-    fireEvent.changeText(view.getByTestId('agent-skills-search-input'), 'new');
-    await waitFor(() => expect(view.getByTestId('agent-skill-discover-clawhub:new')).toBeTruthy());
-    await act(async () => finishFirst({ items: [discovered], nextCursor: null, hasMore: false }));
-    expect(view.queryByTestId('agent-skill-discover-clawhub:planner')).toBeNull();
-    expect(view.getByTestId('agent-skill-discover-clawhub:new')).toBeTruthy();
-  });
-
   it('refreshes on return while preserving the installed search', async () => {
     const status = jest.fn(async () => report);
     const adapter = adapterWith({ management: { skills: { status } } });
@@ -677,57 +620,85 @@ describe('AgentSettings functional sections', () => {
     expect(view.queryByTestId('agent-skills-loading')).toBeNull();
   });
 
-  it('does not load installed data on Discover and continues to chat after its sheet closes', async () => {
-    const status = jest.fn();
-    const onInstallRequested = jest.fn();
-    const adapter = adapterWith({ prompt: jest.fn(async () => ({ runId: 'install' })), management: { skills: {
-      status, discover: jest.fn(async () => ({ items: [discovered], nextCursor: null, hasMore: false })),
-    } } });
-    const view = render(<SkillsSection adapter={adapter} agent={agent} online view="discover" onInstallRequested={onInstallRequested} />);
-    await waitFor(() => expect(view.getByTestId('agent-skill-discover-clawhub:planner')).toBeTruthy());
-    expect(status).not.toHaveBeenCalled();
-    fireEvent.press(view.getByTestId('agent-skill-discover-clawhub:planner'));
-    fireEvent.press(view.getByTestId('agent-skill-install'));
-    await waitFor(() => expect(onInstallRequested).toHaveBeenCalledTimes(1));
-    expect(view.queryByTestId('agent-skill-detail')).toBeNull();
-  });
-
-  it('does not leave a delayed chat navigation when a pending installation detail is closed', async () => {
-    let finishPrompt!: (result: { runId: string }) => void;
-    const onInstallRequested = jest.fn();
-    const adapter = adapterWith({ prompt: jest.fn(() => new Promise((resolve) => { finishPrompt = resolve; })), management: { skills: {
-      discover: jest.fn(async () => ({ items: [discovered], nextCursor: null, hasMore: false })),
-    } } });
-    const view = render(<SkillsSection adapter={adapter} agent={agent} online view="discover" onInstallRequested={onInstallRequested} />);
-    await waitFor(() => expect(view.getByTestId('agent-skill-discover-clawhub:planner')).toBeTruthy());
-    fireEvent.press(view.getByTestId('agent-skill-discover-clawhub:planner'));
-    fireEvent.press(view.getByTestId('agent-skill-install'));
-    fireEvent.press(view.getByTestId('agent-skill-detail-close'));
-    await act(async () => finishPrompt({ runId: 'install' }));
-    fireEvent.press(view.getByTestId('agent-skill-discover-clawhub:planner'));
-    fireEvent.press(view.getByTestId('agent-skill-detail-close'));
-    expect(onInstallRequested).not.toHaveBeenCalled();
-  });
-
   it('renders Cron heartbeat, jobs, and run records from management operations', async () => {
     const adapter = cronAdapter();
     const view = render(<CronSection adapter={adapter} agent={agent} online onCreate={jest.fn()} onEdit={jest.fn()} />);
 
     expect(view.getByTestId('agent-cron-loading')).toBeTruthy();
-    await waitFor(() => expect(view.getByTestId('agent-cron-job-daily')).toBeTruthy());
-    expect(view.getByTestId('agent-cron-heartbeat')).toBeTruthy();
-
-    fireEvent.press(view.getByTestId('agent-cron-tabs-runs'));
+    // An Agent with jobs lands on the run records.
     await waitFor(() => expect(view.getByTestId('agent-cron-run-daily-2000')).toBeTruthy());
+    expect(view.queryByTestId('agent-cron-job-list')).toBeNull();
     fireEvent.press(view.getByTestId('agent-cron-run-daily-2000'));
     expect(view.getByTestId('agent-cron-run-detail')).toBeTruthy();
+
+    fireEvent.press(view.getByTestId('agent-cron-tabs-jobs'));
+    expect(view.getByTestId('agent-cron-job-daily')).toBeTruthy();
+    expect(view.getByTestId('agent-cron-heartbeat')).toBeTruthy();
+  });
+
+  it('opens on the run records with the failures first and marks them as seen', async () => {
+    const failed: CronJob = {
+      ...cronJob,
+      id: 'digest',
+      name: 'Digest',
+      state: { nextRunAtMs: 9_000, lastRunAtMs: 3_000, lastRunStatus: 'error', lastError: 'model quota' },
+    };
+    const adapter = cronAdapter({ jobs: [cronJob, failed] });
+    const runs = adapter.management?.cron?.runs as jest.Mock;
+    runs.mockResolvedValue({
+      entries: [
+        // The history twin of the failed run: shown once, in the failed block.
+        { ts: 3_000, runAtMs: 3_000, jobId: 'digest', jobName: 'Digest', action: 'finished', status: 'error', error: 'model quota' },
+        { ts: 2_000, jobId: 'daily', jobName: 'Daily brief', action: 'finished', status: 'ok' },
+      ],
+      total: 2,
+      offset: 0,
+      limit: 100,
+      hasMore: false,
+      nextOffset: null,
+    });
+    mockAcknowledgeCronFailures.mockClear();
+    const view = render(<CronSection adapter={adapter} agent={agent} online onCreate={jest.fn()} onEdit={jest.fn()} />);
+
+    await waitFor(() => expect(view.getByTestId('agent-cron-failed-digest')).toBeTruthy());
+    expect(view.queryByTestId('agent-cron-job-list')).toBeNull();
+    expect(view.getByTestId('agent-cron-failed-count').props.children).toBe('1 failed');
+    await waitFor(() => expect(view.getByTestId('agent-cron-run-daily-2000')).toBeTruthy());
+    expect(view.queryByTestId('agent-cron-run-digest-3000')).toBeNull();
+    expect(view.queryByTestId('agent-cron-runs-empty')).toBeNull();
+    await waitFor(() => expect(mockAcknowledgeCronFailures).toHaveBeenCalledWith('studio', 'main', [cronJob, failed]));
+
+    fireEvent.press(view.getByTestId('agent-cron-failed-digest'));
+    expect(view.getByTestId('agent-cron-run-detail')).toBeTruthy();
+    expect(view.getByText('model quota')).toBeTruthy();
+  });
+
+  it('lands an Agent without jobs on the job list and keeps it there after the first job is created', async () => {
+    mockAcknowledgeCronFailures.mockClear();
+    const adapter = cronAdapter({ jobs: [] });
+    const list = adapter.management?.cron?.list as jest.Mock;
+    const view = render(<CronSection adapter={adapter} agent={agent} online refreshKey={0} onCreate={jest.fn()} onEdit={jest.fn()} />);
+    await waitFor(() => expect(view.getByTestId('agent-cron-empty')).toBeTruthy());
+    expect(view.getByTestId('agent-cron-create')).toBeTruthy();
+    expect(adapter.management?.cron?.runs).not.toHaveBeenCalled();
+    expect(mockAcknowledgeCronFailures).not.toHaveBeenCalled();
+
+    list.mockResolvedValue({ jobs: [cronJob], total: 1, offset: 0, limit: 100, hasMore: false, nextOffset: null });
+    view.rerender(<CronSection adapter={adapter} agent={agent} online refreshKey={1} onCreate={jest.fn()} onEdit={jest.fn()} />);
+    await waitFor(() => expect(view.getByTestId('agent-cron-job-daily')).toBeTruthy());
+    expect(view.queryByTestId('agent-cron-runs-empty')).toBeNull();
+
+    fireEvent.press(view.getByTestId('agent-cron-tabs-runs'));
+    await waitFor(() => expect(mockAcknowledgeCronFailures).toHaveBeenCalledWith('studio', 'main', [cronJob]));
+    expect(view.queryByTestId('agent-cron-failed')).toBeNull();
   });
 
   it('opens a full task editor, toggles inline, and retains heartbeat editing', async () => {
     const adapter = cronAdapter();
     const onEdit = jest.fn();
     const view = render(<CronSection adapter={adapter} agent={agent} online onCreate={jest.fn()} onEdit={onEdit} />);
-    await waitFor(() => expect(view.getByTestId('agent-cron-job-daily')).toBeTruthy());
+    await waitFor(() => expect(view.getByTestId('agent-cron-tabs-jobs')).toBeTruthy());
+    fireEvent.press(view.getByTestId('agent-cron-tabs-jobs'));
     fireEvent.press(view.getByTestId('agent-cron-job-daily'));
     expect(onEdit).toHaveBeenCalledWith('daily');
     fireEvent(view.getByTestId('agent-cron-switch-daily'), 'valueChange', false);
@@ -738,174 +709,83 @@ describe('AgentSettings functional sections', () => {
     await waitFor(() => expect(adapter.management?.cron?.heartbeat?.set).toHaveBeenCalledWith(expect.objectContaining({ every: '1h' })));
   });
 
-  it('reads and edits files, then routes the save gate to the Pro paywall', async () => {
-    const list = jest.fn(async () => [{
-      name: 'SOUL.md',
-      path: '/SOUL.md',
-      missing: false,
-      size: 12,
-    }]);
-    const get = jest.fn(async () => ({
-      name: 'SOUL.md',
-      path: '/SOUL.md',
-      missing: false,
-      content: 'Original',
-    }));
-    const set = jest.fn(async () => ({ ok: true }));
-    const adapter = adapterWith({ management: { agents: { files: { list, get, set } } } });
-    const onOpenPaywall = jest.fn();
-    const view = render(
-      <FilesSection
-        adapter={adapter}
-        agent={agent}
-        online
-        isPro={false}
-        onOpenPaywall={onOpenPaywall}
-      />,
-    );
-
-    expect(view.getByTestId('agent-files-loading')).toBeTruthy();
-    await waitFor(() => expect(view.getByTestId('agent-file-SOUL.md')).toBeTruthy());
-    fireEvent.press(view.getByTestId('agent-file-SOUL.md'));
-    await waitFor(() => expect(view.getByText('Original')).toBeTruthy());
-    fireEvent.press(view.getByTestId('agent-file-edit'));
-    expect(view.getByTestId('agent-file-editor-input')).toBeTruthy();
-    expect(onOpenPaywall).not.toHaveBeenCalled();
-    fireEvent.changeText(view.getByTestId('agent-file-editor-input'), 'Updated');
-    fireEvent.press(view.getByTestId('agent-file-save'));
-    expect(onOpenPaywall).toHaveBeenCalledWith('coreFileEditing', expect.any(Function));
-    expect(set).not.toHaveBeenCalled();
-    const continueSaving = onOpenPaywall.mock.calls[0]?.[1] as (() => void) | undefined;
-    act(() => continueSaving?.());
-    await waitFor(() => expect(set).toHaveBeenCalledWith('SOUL.md', 'Updated', agent.agentId));
-    expect(mockAgentFileActivity.mock.calls).toEqual([
-      [{ action: 'edit', backend: 'openclaw', document: 'soul' }],
-      [{ action: 'saved', backend: 'openclaw', document: 'soul' }],
-    ]);
-  });
-
-  it.each((['openclaw', 'hermes'] as const).flatMap(backend =>
-    (['unmount', 'offline', 'new-draft', 'adapter', 'agent'] as const).map(change => ({ backend, change }))
-  ))('does not resume a stale $backend file save after $change', async ({ backend, change }) => {
-    const list = jest.fn(async () => [{ name: 'SOUL.md', path: '/SOUL.md', missing: false }]);
-    const get = jest.fn(async () => ({ name: 'SOUL.md', path: '/SOUL.md', missing: false, content: 'Original' }));
-    const set = jest.fn(async () => ({ ok: true }));
-    const adapter = adapterWith({ connection: { backendKind: backend } as AgentAdapter['connection'], capabilities: { ...CAPABILITY_MATRIX[backend] }, management: { agents: { files: { list, get, set } } } });
-    const paywall = jest.fn();
-    const view = render(<FilesSection adapter={adapter} agent={agent} online isPro={false} onOpenPaywall={paywall} />);
-    await waitFor(() => expect(view.getByTestId('agent-file-SOUL.md')).toBeTruthy());
-    fireEvent.press(view.getByTestId('agent-file-SOUL.md'));
-    await waitFor(() => expect(view.getByText('Original')).toBeTruthy());
-    fireEvent.press(view.getByTestId('agent-file-edit'));
-    fireEvent.changeText(view.getByTestId('agent-file-editor-input'), 'First draft');
-    fireEvent.press(view.getByTestId('agent-file-save'));
-    const resume = paywall.mock.calls[0][1];
-    if (change === 'unmount') view.unmount();
-    if (change === 'offline') view.rerender(<FilesSection adapter={adapter} agent={agent} online={false} isPro onOpenPaywall={paywall} />);
-    if (change === 'new-draft') fireEvent.changeText(view.getByTestId('agent-file-editor-input'), 'Newer draft');
-    if (change === 'agent') view.rerender(<FilesSection adapter={adapter} agent={{ ...agent, agentId: 'different-agent' }} online isPro onOpenPaywall={paywall} />);
-    if (change === 'adapter') view.rerender(<FilesSection adapter={adapterWith({ management: adapter.management })} agent={agent} online isPro onOpenPaywall={paywall} />);
-    await act(async () => resume());
-    expect(set).not.toHaveBeenCalled();
-  });
-
-  it('serializes resumed file saves and ignores a superseded file read', async () => {
-    const list = jest.fn(async () => ['SOUL.md', 'USER.md'].map(name => ({ name, path: `/${name}`, missing: false })));
-    let resolveSoul!: (value: AgentFile) => void;
-    const get = jest.fn((name: string) => name === 'SOUL.md'
-      ? new Promise<AgentFile>(resolve => { resolveSoul = resolve; })
-      : Promise.resolve({ name, path: `/${name}`, missing: false, content: 'User document' }));
-    let finish!: () => void;
-    const set = jest.fn(() => new Promise<{ ok: boolean }>(resolve => { finish = () => resolve({ ok: true }); }));
-    const adapter = adapterWith({ management: { agents: { files: { list, get, set } } } });
-    const paywall = jest.fn();
-    const view = render(<FilesSection adapter={adapter} agent={agent} online isPro={false} onOpenPaywall={paywall} />);
-    await waitFor(() => expect(view.getByTestId('agent-file-SOUL.md')).toBeTruthy());
-    fireEvent.press(view.getByTestId('agent-file-SOUL.md'));
-    fireEvent.press(view.getByTestId('agent-file-USER.md'));
-    await waitFor(() => expect(view.getByText('User document')).toBeTruthy());
-    await act(async () => resolveSoul({ name: 'SOUL.md', path: '/SOUL.md', missing: false, content: 'Wrong document' }));
-    expect(view.queryByText('Wrong document')).toBeNull();
-    fireEvent.press(view.getByTestId('agent-file-edit'));
-    fireEvent.changeText(view.getByTestId('agent-file-editor-input'), 'Updated user');
-    fireEvent.press(view.getByTestId('agent-file-save'));
-    act(() => { paywall.mock.calls[0][1](); paywall.mock.calls[0][1](); });
-    expect(set).toHaveBeenCalledTimes(1);
-    expect(set).toHaveBeenCalledWith('USER.md', 'Updated user', agent.agentId);
-    await act(async () => finish());
-  });
-
-  it('keeps failed file drafts editable without a reload action that discards them', async () => {
-    const list = jest.fn(async () => [{ name: 'SOUL.md', path: '/SOUL.md', missing: false }]);
-    const get = jest.fn(async () => ({ name: 'SOUL.md', path: '/SOUL.md', missing: false, content: 'Original' }));
-    const set = jest.fn().mockRejectedValueOnce(new Error('Temporary failure')).mockResolvedValue({ ok: true });
-    const adapter = adapterWith({ management: { agents: { files: { list, get, set } } } });
-    const view = render(<FilesSection adapter={adapter} agent={agent} online isPro onOpenPaywall={jest.fn()} />);
-    await waitFor(() => expect(view.getByTestId('agent-file-SOUL.md')).toBeTruthy());
-    fireEvent.press(view.getByTestId('agent-file-SOUL.md'));
-    await waitFor(() => expect(view.getByText('Original')).toBeTruthy());
-    fireEvent.press(view.getByTestId('agent-file-edit'));
-    fireEvent.changeText(view.getByTestId('agent-file-editor-input'), 'Keep this draft');
-    fireEvent.press(view.getByTestId('agent-file-save'));
-    await waitFor(() => expect(view.getByTestId('agent-file-detail-error')).toBeTruthy());
-    expect(view.getByTestId('agent-file-editor-input').props.value).toBe('Keep this draft');
-    expect(view.getByTestId('agent-file-detail-error').props.onAction).toBeUndefined();
-    fireEvent.press(view.getByTestId('agent-file-save'));
-    await waitFor(() => expect(set).toHaveBeenCalledTimes(2));
-    expect(set).toHaveBeenLastCalledWith('SOUL.md', 'Keep this draft', agent.agentId);
-  });
-
-  it('creates a listed-but-absent core file in place and keeps missing files inert when editing is unavailable', async () => {
-    mockAgentFileActivity.mockClear();
+  it('lists workspace files and opens each row on the document page', async () => {
     const files = [
       { name: 'MEMORY.md', path: '/MEMORY.md', missing: true },
       { name: 'SOUL.md', path: '/SOUL.md', missing: false, size: 12 },
     ];
     const list = jest.fn(async () => files);
-    const get = jest.fn(async () => ({ name: 'SOUL.md', path: '/SOUL.md', missing: false, content: 'Original' }));
-    const set = jest.fn(async () => ({ ok: true }));
+    const get = jest.fn();
+    const set = jest.fn();
+    const onOpenFile = jest.fn();
     const view = render(
-      <FilesSection
-        adapter={adapterWith({ management: { agents: { files: { list, get, set } } } })}
-        agent={agent}
-        online
-        isPro
-        onOpenPaywall={jest.fn()}
-      />,
+      <FilesSection adapter={adapterWith({ management: { agents: { files: { list, get, set } } } })} agent={agent} online onOpenFile={onOpenFile} />,
     );
-    await waitFor(() => expect(view.getByTestId('agent-file-MEMORY.md')).toBeTruthy());
+    expect(view.getByTestId('agent-files-loading')).toBeTruthy();
+    await waitFor(() => expect(view.getByTestId('agent-file-SOUL.md')).toBeTruthy());
+    expect(view.getByText('12 B')).toBeTruthy();
+    // A listed-but-absent file is creatable: the page opens its empty editor.
     expect(view.getByText('Create')).toBeTruthy();
     fireEvent.press(view.getByTestId('agent-file-MEMORY.md'));
-    // A missing file opens straight into the editor without a read.
+    fireEvent.press(view.getByTestId('agent-file-SOUL.md'));
+    expect(onOpenFile.mock.calls.map(([file]) => file.name)).toEqual(['MEMORY.md', 'SOUL.md']);
+    // The list never reads a document itself.
     expect(get).not.toHaveBeenCalled();
-    expect(view.getByTestId('agent-file-editor-input').props.value).toBe('');
-    fireEvent.press(view.getByTestId('agent-file-cancel-edit'));
-    expect(view.queryByTestId('agent-file-detail')).toBeNull();
 
-    fireEvent.press(view.getByTestId('agent-file-MEMORY.md'));
-    fireEvent.changeText(view.getByTestId('agent-file-editor-input'), '# Memory');
-    files[0] = { name: 'MEMORY.md', path: '/MEMORY.md', missing: false, size: 8 };
-    fireEvent.press(view.getByTestId('agent-file-save'));
-    await waitFor(() => expect(set).toHaveBeenCalledWith('MEMORY.md', '# Memory', agent.agentId));
-    await waitFor(() => expect(view.getByText('# Memory')).toBeTruthy());
-    expect(mockAgentFileActivity.mock.calls.at(-1)).toEqual([{ action: 'saved', backend: 'openclaw', document: 'memory' }]);
-    expect(list).toHaveBeenCalledTimes(2);
+    fireEvent.changeText(view.getByTestId('agent-files-search-input'), 'soul');
+    expect(view.queryByTestId('agent-file-MEMORY.md')).toBeNull();
+    expect(view.getByTestId('agent-file-SOUL.md')).toBeTruthy();
+    fireEvent.changeText(view.getByTestId('agent-files-search-input'), 'nothing');
+    expect(view.getByTestId('agent-files-empty')).toBeTruthy();
+    view.unmount();
 
     const readOnly = render(
       <FilesSection
-        adapter={adapterWith({
-          capabilities: { ...CAPABILITY_MATRIX.openclaw, fileEdit: false },
-          management: { agents: { files: { list, get } } },
-        })}
+        adapter={adapterWith({ capabilities: { ...CAPABILITY_MATRIX.openclaw, fileEdit: false }, management: { agents: { files: { list, get } } } })}
         agent={agent}
         online
-        isPro
-        onOpenPaywall={jest.fn()}
+        onOpenFile={onOpenFile}
       />,
     );
-    files[0] = { name: 'MEMORY.md', path: '/MEMORY.md', missing: true };
     await waitFor(() => expect(readOnly.getByText('Missing')).toBeTruthy());
     expect(readOnly.getByTestId('agent-file-MEMORY.md').props.disabled).toBe(true);
+  });
+
+  it('refreshes the file list quietly on return and keeps loaded rows offline', async () => {
+    const files = [{ name: 'SOUL.md', path: '/SOUL.md', missing: false, size: 12 }];
+    const list = jest.fn(async () => [...files]);
+    const adapter = adapterWith({ management: { agents: { files: { list, get: jest.fn(), set: jest.fn() } } } });
+    const view = render(<FilesSection adapter={adapter} agent={agent} online onOpenFile={jest.fn()} />);
+    await waitFor(() => expect(view.getByText('12 B')).toBeTruthy());
+    files[0] = { name: 'SOUL.md', path: '/SOUL.md', missing: false, size: 20 };
+    view.rerender(<FilesSection adapter={adapter} agent={agent} online refreshKey={1} onOpenFile={jest.fn()} />);
+    // No skeleton: the rows stay while the size updates underneath.
+    expect(view.queryByTestId('agent-files-loading')).toBeNull();
+    await waitFor(() => expect(view.getByText('20 B')).toBeTruthy());
+    expect(list).toHaveBeenCalledTimes(2);
+
+    view.rerender(<FilesSection adapter={adapter} agent={agent} online={false} refreshKey={2} onOpenFile={jest.fn()} />);
+    expect(view.getByText('20 B')).toBeTruthy();
+    expect(list).toHaveBeenCalledTimes(2);
+  });
+
+  it('shows the file list error with retry and a genuine empty result distinctly', async () => {
+    const list = jest.fn().mockRejectedValueOnce(new Error('List failed')).mockResolvedValue([{ name: 'SOUL.md', path: '/SOUL.md', missing: false, size: 12 }]);
+    const adapter = adapterWith({ management: { agents: { files: { list, get: jest.fn() } } } });
+    const view = render(<FilesSection adapter={adapter} agent={agent} online onOpenFile={jest.fn()} />);
+    await waitFor(() => expect(view.getByTestId('agent-files-error')).toBeTruthy());
+    expect(view.getByText('List failed')).toBeTruthy();
+    // A failed first load is not an empty workspace.
+    expect(view.getByTestId('agent-files-empty')).toBeTruthy();
+    fireEvent.press(view.getByTestId('agent-files-error-action'));
+    await waitFor(() => expect(view.getByTestId('agent-file-SOUL.md')).toBeTruthy());
+    expect(view.queryByTestId('agent-files-error')).toBeNull();
+    expect(view.queryByTestId('agent-files-empty')).toBeNull();
+    view.unmount();
+
+    const empty = render(<FilesSection adapter={adapterWith({ management: { agents: { files: { list: jest.fn(async () => []), get: jest.fn() } } } })} agent={agent} online onOpenFile={jest.fn()} />);
+    await waitFor(() => expect(empty.getByTestId('agent-files-empty')).toBeTruthy());
+    expect(empty.queryByTestId('agent-files-error')).toBeNull();
   });
 
   it('loads usage and cost summaries and opens the retained stats poster', async () => {
@@ -1007,8 +887,7 @@ describe('AgentSettings functional sections', () => {
         adapter={fileError}
         agent={agent}
         online
-        isPro
-        onOpenPaywall={jest.fn()}
+        onOpenFile={jest.fn()}
       />,
     );
     await waitFor(() => expect(files.getByTestId('agent-files-error')).toBeTruthy());

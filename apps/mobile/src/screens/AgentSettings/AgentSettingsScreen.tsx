@@ -1,12 +1,12 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-import { Fingerprint, Lock, MessageCircle, Plug, Settings2, Wrench, Monitor, FileText } from 'lucide-react-native';
-import { ChevronLeft } from '../../components/ui/DirectionalIcon';
+import { Lock, MessageCircle, PenLine, Plug, Settings2, Wrench, Monitor, FileText } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type {
@@ -22,6 +22,7 @@ import { SettingsIcon } from '../../components/ui/SettingsIcon';
 import { Banner } from '../../components/ui/Banner';
 import { ConnectionStatusPill } from '../../components/ui/ConnectionStatusPill';
 import { FloatingButton } from '../../components/ui/FloatingButton';
+import { ScreenHeader } from '../../components/ui/ScreenHeader';
 import {
   SettingsDivider,
   SettingsGroup,
@@ -33,6 +34,7 @@ import type {
   RootStackParamList,
 } from '../../navigation/root-stack';
 import { analyticsEvents } from '../../services/analytics/events';
+import { CronFailureAckService } from '../../services/cron-failure-acks';
 import { useAppTheme } from '../../theme';
 import {
   BorderWidth,
@@ -41,11 +43,12 @@ import {
   FontWeight,
   IconSize,
   LineHeight,
+  Motion,
   Radius,
   Space,
 } from '../../theme/tokens';
 import { formatConsoleHeartbeatAge } from '../../utils/console-heartbeat';
-import { loadAgentSettingsSummary } from './load-summary';
+import { loadAgentCronSummary, loadAgentSettingsSummary } from './load-summary';
 import {
   buildAgentSettingsModel,
   resolveAgentSettingsPageState,
@@ -146,11 +149,12 @@ export function AgentSettingsRouteLoading({
   return (
     <View
       testID="agent-settings-route-loading"
-      style={[styles.screen, { paddingTop: insets.top }]}
+      style={styles.screen}
     >
       <AgentSettingsHeader
         backLabel={t('Back', { ns: 'common' })}
         title={t('Agent profile', { ns: 'settings' })}
+        topInset={insets.top}
         onBack={onBack}
       />
       <AgentSettingsLoading
@@ -197,25 +201,47 @@ export function AgentSettingsScreen({
     });
   }, [accessibleAdapter]);
 
+  const initialSummaryRef = useRef(initialSummary);
+  initialSummaryRef.current = initialSummary;
+  const mergeSummary = useCallback((key: string, nextSummary: AgentSettingsSummary) => {
+    setLoadedSummary((previous) => ({
+      key,
+      value: {
+        ...(previous?.key === key ? previous.value : initialSummaryRef.current),
+        ...nextSummary,
+      },
+    }));
+  }, []);
+
   useEffect(() => {
     if (!accessibleAdapter || !agent || !summaryKey || connectionState !== 'ready') return undefined;
 
     let active = true;
     const applySummary = (nextSummary: AgentSettingsSummary) => {
-      if (!active) return;
-      setLoadedSummary((previous) => ({
-        key: summaryKey,
-        value: {
-          ...(previous?.key === summaryKey ? previous.value : initialSummary),
-          ...nextSummary,
-        },
-      }));
+      if (active) mergeSummary(summaryKey, nextSummary);
     };
     void loadAgentSettingsSummary(accessibleAdapter, agent, Date.now(), applySummary).then(applySummary);
     return () => {
       active = false;
     };
-  }, [accessibleAdapter, agent?.agentId, connectionState, summaryKey]);
+  }, [accessibleAdapter, agent?.agentId, connectionState, mergeSummary, summaryKey]);
+
+  // The Runs tab marks failures as seen while this page stays mounted underneath it; re-read only
+  // the Cron card so the red count clears on return without reloading the whole profile.
+  useEffect(() => {
+    if (!accessibleAdapter || !agent || !summaryKey || connectionState !== 'ready') return undefined;
+    let active = true;
+    const unsubscribe = CronFailureAckService.subscribe((scope) => {
+      if (scope.connectionId !== agent.connectionId || scope.agentId !== agent.agentId) return;
+      void loadAgentCronSummary(accessibleAdapter, agent)
+        .then((cron) => { if (active) mergeSummary(summaryKey, cron); })
+        .catch(() => { /* The card keeps its last value; the next page load reads it again. */ });
+    });
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [accessibleAdapter, agent, connectionState, mergeSummary, summaryKey]);
 
   const state = resolveAgentSettingsPageState({
     initialized,
@@ -303,6 +329,8 @@ export function AgentSettingsView({
 
   const openRow = (row: AgentSettingsRowDescriptor | AgentSettingsStatDescriptor) => {
     const open = () => {
+      // The Cron page itself lands on the run records (where a lit failure count is marked as
+      // seen), so no row needs to steer its section.
       const onContinue = () => navigate(row.section);
       analyticsEvents.settingsRowOpened({ row: row.id, locked: row.locked, backend: connection.backendKind });
       if (row.locked) onOpenPro(row.section, onContinue);
@@ -325,7 +353,9 @@ export function AgentSettingsView({
     return t('Active {{age}}', { ns: 'settings', age });
   })();
 
+  const identityOpensFromHero = model?.identity.editable === true || model?.identity.locked === true;
   const openIdentity = () => {
+    if (!identityOpensFromHero) return;
     const onContinue = () => navigate('identity');
     analyticsEvents.settingsRowOpened({
       row: 'identity',
@@ -368,12 +398,13 @@ export function AgentSettingsView({
   return (
     <View
       testID="agent-settings-screen"
-      style={[styles.screen, { paddingTop: insets.top }]}
+      style={styles.screen}
     >
       <AgentSettingsHeader
         backLabel={t('Back', { ns: 'common' })}
         title={t('Agent profile', { ns: 'settings' })}
         status={connectionStatus}
+        topInset={insets.top}
         onBack={onBack}
         trailing={(
           <FloatingButton
@@ -414,7 +445,17 @@ export function AgentSettingsView({
             />
           ) : null}
 
-          <View style={styles.profileHero}>
+          {/* The hero is the Identity entry (owner request 2026-09-19): the avatar, the name and the
+              edit glyph beside it share one touch target; nothing else on the page opens Identity. */}
+          <Pressable
+            testID={identityOpensFromHero ? 'agent-settings-identity' : 'agent-settings-hero'}
+            accessibilityRole={identityOpensFromHero ? 'button' : undefined}
+            accessibilityLabel={identityOpensFromHero ? model.identity.name : undefined}
+            accessibilityHint={identityOpensFromHero ? t('Identity', { ns: 'config' }) : undefined}
+            disabled={!identityOpensFromHero}
+            onPress={openIdentity}
+            style={({ pressed }) => [styles.profileHero, pressed && identityOpensFromHero ? styles.profileHeroPressed : null]}
+          >
             <View style={styles.profileAvatar}>
               <AgentAvatar testID="agent-settings-avatar" agentId={agent.agentId}
                 name={model.identity.name} emoji={agent.emoji} avatarUrl={agent.avatarUrl}
@@ -430,24 +471,26 @@ export function AgentSettingsView({
                 </View>
               )}
             </View>
-            <Text style={styles.profileName}>{model.identity.name}</Text>
+            <View style={[styles.profileNameRow, identityOpensFromHero ? styles.profileNameRowEditable : null]}>
+              <Text style={styles.profileName}>{model.identity.name}</Text>
+              {identityOpensFromHero ? (
+                <View testID="agent-settings-identity-glyph" style={styles.profileNameGlyph}>
+                  {model.identity.locked
+                    ? <Lock size={IconSize.sm} color={theme.colors.inkSecondary} strokeWidth={1.75} />
+                    : <PenLine size={IconSize.sm} color={theme.colors.inkSecondary} strokeWidth={1.75} />}
+                </View>
+              ) : null}
+            </View>
             {identityDetailLabel ? (
               <Text testID="agent-settings-identity-detail" style={styles.profileDetail}>{identityDetailLabel}</Text>
             ) : null}
-          </View>
+          </Pressable>
           <AgentSettingsStats
             stats={model.stats}
             translate={(key) => translateAgentSettingsKey(t, key)}
             translateDetail={(detail) => t(detail.key, { ns: 'settings', ...detail.params })}
             onOpen={openRow}
           />
-          {model.identity.editable || model.identity.locked ? (
-            <SettingsGroup density="comfortable" testID="agent-settings-identity-group">
-              <SettingsRow testID="agent-settings-identity" title={t('Identity', { ns: 'config' })}
-                leading={<SettingsIcon icon={Fingerprint} tone="neutral" size={20} strokeWidth={1.75} />}
-                locked={model.identity.locked} showChevron onPress={openIdentity} />
-            </SettingsGroup>
-          ) : null}
           {model.groups.map((group) => (
             <SettingsSection key={group.id} group={group} translate={(key) => translateAgentSettingsKey(t, key)} onOpenRow={openRow} />
           ))}
@@ -457,39 +500,38 @@ export function AgentSettingsView({
   );
 }
 
-/** The title yields its slot to connection state, so the header never grows or pushes content. */
+/** The canonical page header with the Agent profile test hooks; the title yields its slot to connection state. */
 function AgentSettingsHeader({
   backLabel,
   title,
   status,
+  topInset,
   onBack,
   trailing,
 }: Readonly<{
   backLabel: string;
   title: string;
   status?: React.ReactNode;
+  topInset: number;
   onBack: () => void;
   trailing?: React.ReactNode;
 }>): React.JSX.Element {
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
   return (
-    <View testID="agent-settings-header" style={styles.header}>
-      <FloatingButton
-        testID="agent-settings-back"
-        icon={ChevronLeft}
-        accessibilityLabel={backLabel}
-        onPress={onBack}
-      />
-      {status ? (
-        <View testID="agent-settings-header-status" style={styles.headerStatus}>{status}</View>
-      ) : (
-        <Text testID="agent-settings-title" style={styles.headerTitle} numberOfLines={1}>
-          {title}
-        </Text>
-      )}
-      {trailing ?? <View style={styles.headerSlot} />}
-    </View>
+    <ScreenHeader
+      testID="agent-settings-header"
+      backTestID="agent-settings-back"
+      titleTestID="agent-settings-title"
+      statusTestID="agent-settings-header-status"
+      title={title}
+      topInset={topInset}
+      status={status}
+      onBack={onBack}
+      backAccessibilityLabel={backLabel}
+      rightContent={trailing}
+      style={styles.header}
+    />
   );
 }
 
@@ -640,7 +682,18 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
   return StyleSheet.create({
     // Owner trimmed the hero on 2026-09-16: 8 points off the top, 4 off the bottom.
     profileHero: { alignItems: 'center', gap: Space.md, paddingTop: Space.sm, paddingBottom: Space.md },
+    profileHeroPressed: { opacity: Motion.pressedOpacity },
     profileAvatar: { position: 'relative', overflow: 'visible' },
+    // The edit glyph hangs off the name's right edge so the name itself stays centred under the avatar.
+    profileNameRow: { alignItems: 'center', justifyContent: 'center' },
+    profileNameRowEditable: { paddingHorizontal: IconSize.sm + Space.xs },
+    profileNameGlyph: {
+      position: 'absolute',
+      right: 0,
+      top: 0,
+      height: LineHeight.title,
+      justifyContent: 'center',
+    },
     // Corner mark cut out of the avatar by a ring in the page ground, like the roster status badges.
     backendMark: {
       position: 'absolute',
@@ -697,37 +750,10 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       flex: 1,
       backgroundColor: colors.canvasGrouped,
     },
-    header: {
-      minHeight: ControlSize.floatingButton,
-      paddingHorizontal: Space.lg,
-      marginTop: Space.sm,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-    },
-    headerSlot: {
-      width: ControlSize.floatingButton,
-      height: ControlSize.floatingButton,
-    },
-    headerTitle: {
-      flex: 1,
-      color: colors.ink,
-      fontSize: FontSize.title,
-      lineHeight: LineHeight.title,
-      fontWeight: FontWeight.semibold,
-      textAlign: 'center',
-      marginHorizontal: Space.sm,
-    },
-    headerStatus: {
-      flex: 1,
-      minWidth: 0,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginHorizontal: Space.sm,
-    },
+    header: { backgroundColor: colors.canvasGrouped },
     content: {
       paddingHorizontal: Space.lg,
-      paddingTop: Space.xl,
+      paddingTop: Space.lg,
       gap: Space.xl,
     },
     centeredState: {

@@ -19,13 +19,12 @@ function enabled(backend: keyof typeof CAPABILITY_MATRIX): Capability[] {
 describe('canonical capability contract', () => {
   it('publishes the frozen product matrix without conflating Hermes with legacy UI flags', () => {
     expect(enabled('openclaw')).toEqual(CAPABILITY_KEYS);
-    expect(enabled('local-model')).toEqual(['chat', 'abort', 'history', 'attachments', 'replyNotifications', 'models']);
+    expect(enabled('local-model')).toEqual(['chat', 'abort', 'history', 'attachments', 'models']);
     expect(enabled('hermes')).toEqual([
       'chat',
       'abort',
       'history',
       'attachments',
-      'replyNotifications',
       'sessions',
       'sessionCreate',
       'sessionRename',
@@ -58,15 +57,21 @@ describe('canonical capability contract', () => {
       files: false,
     });
     expect(resolveCapabilities('hermes', { fileAttachments: true }).fileAttachments).toBe(false);
-    expect(resolveCapabilities('hermes', { replyNotifications: false }).replyNotifications).toBe(false);
-    expect(resolveCapabilities('youmind', { replyNotifications: true }).replyNotifications).toBe(false);
     expect(resolveCapabilities('openclaw', { cronTimeZone: false, cronAdvanced: false })).toMatchObject({ cronTimeZone: false, cronAdvanced: false });
     expect(resolveCapabilities('hermes', { cronTimeZone: true, cronAdvanced: true }).cronTimeZone).toBeFalsy();
     expect(resolveCapabilities('hermes', { cronTimeZone: true, cronAdvanced: true }).cronAdvanced).toBeFalsy();
+    expect(resolveCapabilities('openclaw').cronModel).toBe(true);
+    expect(resolveCapabilities('openclaw', { cronModel: false }).cronModel).toBe(false);
+    expect(resolveCapabilities('hermes', { cronModel: true }).cronModel).toBeFalsy();
+    expect(resolveCapabilities('local-model', { cronModel: true }).cronModel).toBeFalsy();
     expect(resolveCapabilities('openclaw').modelManage).toBe(true);
     expect(resolveCapabilities('openclaw', { modelManage: false }).modelManage).toBe(false);
     expect(resolveCapabilities('hermes', { modelManage: true }).modelManage).toBe(false);
     expect(resolveCapabilities('local-model', { modelManage: true }).modelManage).toBeFalsy();
+    expect(resolveCapabilities('openclaw').channelManage).toBe(true);
+    expect(resolveCapabilities('openclaw', { channelManage: false }).channelManage).toBe(false);
+    expect(resolveCapabilities('hermes', { channelManage: true }).channelManage).toBe(false);
+    expect(resolveCapabilities('youmind', { channelManage: true }).channelManage).toBe(false);
   });
 
   it('expresses image-only Hermes attachment support without weakening other backends', () => {

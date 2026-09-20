@@ -26,16 +26,18 @@ export const LOCAL_MODEL_ENGINES: ReadonlyArray<LocalModelEngine> = ['llamacpp',
 /**
  * The CLI defaults to llama.cpp on port 8080, so other servers need their
  * engine and address spelled out; Ollama listens on 11434, LM Studio on 1234.
+ * No `--preview`: the CLI always pairs local models through their dedicated
+ * Registry, whichever Relay environment the app has selected.
  */
 export function buildLocalModelPairingCommand(engine: LocalModelEngine): string {
   const base = `${PAIRING_COMMAND} --backend local-model`;
   switch (engine) {
     case 'ollama':
-      return `${base} --engine ollama --base-url http://127.0.0.1:11434 --preview`;
+      return `${base} --engine ollama --base-url http://127.0.0.1:11434`;
     case 'openai-compatible':
-      return `${base} --engine openai-compatible --base-url http://127.0.0.1:1234 --preview`;
+      return `${base} --engine openai-compatible --base-url http://127.0.0.1:1234`;
     default:
-      return `${base} --preview`;
+      return base;
   }
 }
 

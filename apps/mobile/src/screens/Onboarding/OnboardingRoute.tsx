@@ -352,20 +352,22 @@ export function OnboardingRoute({
 
   const status = useMemo(() => resolveOnboardingRouteStatus({
     initialized: runtime.initialized,
-    connectionCount: runtime.connections.length,
+    activeConnectionId: runtime.activeConnectionId,
     activeState: runtime.activeState,
     runtimeError: runtime.error?.message,
     operation,
   }), [
     operation,
+    runtime.activeConnectionId,
     runtime.activeState,
-    runtime.connections.length,
     runtime.error?.message,
     runtime.initialized,
   ]);
 
   const retry = useCallback(() => {
-    if (operation.targetConnectionId || runtime.activeConnectionId) {
+    // Only the connection this pairing created is probed; a failed claim
+    // replays the pairing instead of probing an unrelated existing connection.
+    if (operation.targetConnectionId) {
       void getConnectionRuntime().probeActive().catch((error) => {
         setOperation((current) => ({
           ...current,
@@ -376,7 +378,7 @@ export function OnboardingRoute({
       return;
     }
     lastActionRef.current?.();
-  }, [operation.targetConnectionId, runtime.activeConnectionId]);
+  }, [operation.targetConnectionId]);
 
   const openDocs = useCallback((backendKind: PairableBackendKind) => {
     onDocsOpened?.(backendKind);

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import type { AgentAdapter, AgentDescriptor, CronJob, CronRunLogEntry, HeartbeatSettings } from '@clawket/agent-protocol';
 import { ChevronRight } from '../../components/ui/DirectionalIcon';
@@ -7,16 +8,24 @@ import { Banner } from '../../components/ui/Banner';
 import { Button } from '../../components/ui/Button';
 import { FormTextInput } from '../../components/ui/FormTextInput';
 import { SegmentedTabs } from '../../components/ui/SegmentedTabs';
-import { SettingsDivider, SettingsGroup, SettingsRow } from '../../components/ui/SettingsGroup';
+import { SettingsGroup, SettingsRow } from '../../components/ui/SettingsGroup';
 import { Sheet } from '../../components/ui/Sheet';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { ThemedSwitch } from '../../components/ui/ThemedSwitch';
 import { useAppTheme } from '../../theme';
-import { describeScheduleHuman, formatDurationMs } from '../../utils/cron';
+import { describeScheduleHuman } from '../../utils/cron';
 import { ControlSize, FontSize, FontWeight, IconSize, LineHeight, Space } from '../../theme/tokens';
-import { cronRunStatus, filterAgentCronRuns } from './cron-model';
+import { CronFailureAckService } from '../../services/cron-failure-acks';
+import { cronFailureRunEntry, failedCronJobs } from './cron-failures';
+import { cronJobModel, cronModelLabel, cronRunStatus, filterAgentCronRuns } from './cron-model';
 import { formatCronDate } from './cron-schedule';
+import { CronRunSheet } from './CronRunSheet';
 import { useCronJobs } from './useCronJobs';
+
+// The heartbeat form can outgrow the screen: fixed detents plus the
+// Gorhom-integrated scroll view (a plain ScrollView in a dynamic-height sheet
+// hands its drags to the sheet, which snaps back instead of scrolling).
+const HEARTBEAT_SNAP_POINTS: string[] = ['82%', '92%'];
 
 export type CronSectionProps = Readonly<{
   adapter: AgentAdapter;
@@ -25,6 +34,8 @@ export type CronSectionProps = Readonly<{
   refreshKey?: number;
   onCreate: () => void;
   onEdit: (jobId: string) => void;
+  /** Opens the session that still holds a run's transcript (from the execution record). */
+  onOpenSession?: (sessionKey: string) => void;
 }>;
 
 export function CronSection(props: CronSectionProps): React.JSX.Element {
@@ -33,13 +44,20 @@ export function CronSection(props: CronSectionProps): React.JSX.Element {
   return <CronSectionContent key={`${identity.current.revision}:${props.agent.connectionId}:${props.agent.agentId}`} {...props} />;
 }
 
-function CronSectionContent({ adapter, agent, online, refreshKey, onCreate, onEdit }: CronSectionProps): React.JSX.Element {
+function CronSectionContent({ adapter, agent, online, refreshKey, onCreate, onEdit, onOpenSession }: CronSectionProps): React.JSX.Element {
   const { t, i18n } = useTranslation(['common', 'settings', 'config']);
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
   const operations = adapter.management?.cron;
   const { jobs, loading, error: loadError, reload, accept, invalidate, isCurrent } = useCronJobs(adapter, agent, online, refreshKey);
-  const [view, setView] = useState<'jobs' | 'runs'>('jobs');
+  // The page lands on the run records (owner decision 2026-09-19): what a scheduled task did
+  // matters more often than how it is configured. Only an Agent with no jobs yet opens on the job
+  // list, where the empty state offers creation. The landing tab is settled once the job list is
+  // first known, so a later create or delete never flips a tab the user is looking at.
+  const [chosenView, setView] = useState<'jobs' | 'runs' | null>(null);
+  const landingView = useRef<'jobs' | 'runs' | null>(null);
+  if (landingView.current === null && jobs) landingView.current = jobs.length && operations?.runs ? 'runs' : 'jobs';
+  const view = chosenView ?? landingView.current ?? 'jobs';
   const [runs, setRuns] = useState<ReadonlyArray<CronRunLogEntry>>([]);
   const [nextOffset, setNextOffset] = useState<number | null>(null);
   const [runsLoading, setRunsLoading] = useState(false);
@@ -69,6 +87,14 @@ function CronSectionContent({ adapter, agent, online, refreshKey, onCreate, onEd
     }
   }, [isCurrent, online, operations, t]);
   useEffect(() => { if (view === 'runs') void loadRuns(); }, [loadRuns, refreshKey, view]);
+  // Seeing the run records is what clears the profile's red failure count: the failures head this
+  // tab, so every current one is marked as seen once the job list behind them is known.
+  useEffect(() => {
+    if (view !== 'runs' || !jobs) return;
+    void CronFailureAckService.acknowledge(agent.connectionId, agent.agentId, jobs).catch(() => {
+      // Acknowledgement is a local convenience; the badge simply stays until the next visit.
+    });
+  }, [agent.agentId, agent.connectionId, jobs, view]);
   useEffect(() => {
     if (!online || !canShowHeartbeat) return;
     let active = true;
@@ -112,7 +138,13 @@ function CronSectionContent({ adapter, agent, online, refreshKey, onCreate, onEd
     }
   };
   const message = error ?? (loadError ? errorMessage(loadError, t('Failed to load scheduled tasks', { ns: 'settings' })) : null);
-  const visibleRuns = filterAgentCronRuns(runs, jobs ?? []);
+  const failedJobs = failedCronJobs(jobs ?? []);
+  const failedRuns = failedJobs.map(cronFailureRunEntry);
+  // The failed runs sit first, rebuilt from job state; drop their history twins so the same run
+  // does not appear twice once the page that contains it has loaded.
+  const visibleRuns = filterAgentCronRuns(runs, jobs ?? []).filter((run) => !failedRuns.some((failed) => (
+    failed.jobId === run.jobId && (failed.runAtMs ?? failed.ts) === (run.runAtMs ?? run.ts)
+  )));
   if (jobs === null && !message && online) return <CronLoading />;
   return <>
     <View testID="agent-cron-section" style={styles.root}>
@@ -122,44 +154,54 @@ function CronSectionContent({ adapter, agent, online, refreshKey, onCreate, onEd
       {message ? <Banner testID="agent-cron-error" tone="bad" message={message} actionLabel={t('Retry')}
         onAction={() => { setError(null); void reload(); if (view === 'runs') void loadRuns(); }} /> : null}
       {view === 'jobs' ? <View style={styles.groups}>
-        <View style={styles.actionRow}>
-          <Text style={[styles.fieldLabel, styles.actionButton]}>{t('{{total}} tasks · {{enabled}} enabled', { ns: 'settings', total: jobs?.length ?? 0, enabled: jobs?.filter(job => job.enabled).length ?? 0 })}</Text>
-          <Button label={t('Refresh')} variant="ghost" size="sm" disabled={!online || loading || Boolean(busy)} onPress={() => { void reload(); }} />
+        <View style={styles.jobList}>
+          <View style={styles.summaryRow}>
+            <Text style={[styles.fieldLabel, styles.actionButton]}>{t('{{total}} tasks · {{enabled}} enabled', { ns: 'settings', total: jobs?.length ?? 0, enabled: jobs?.filter(job => job.enabled).length ?? 0 })}</Text>
+            <Button label={t('Refresh')} variant="ghost" size="sm" disabled={!online || loading || Boolean(busy)} onPress={() => { void reload(); }} />
+          </View>
+          <View testID="agent-cron-job-list">{jobs?.map(job => <View key={job.id} style={rowStyles.row}>
+            <Pressable testID={`agent-cron-job-${job.id}`} accessibilityRole="button" accessibilityLabel={job.name}
+              style={rowStyles.content} onPress={() => onEdit(job.id)}>
+              <View style={rowStyles.titleRow}><Text style={[styles.runText, rowStyles.title]}>{job.name}</Text><ChevronRight size={IconSize.sm} color={theme.colors.inkTertiary} /></View>
+              <Text style={styles.fieldLabel}>{describeScheduleHuman(job.schedule, t)}</Text>
+              {adapter.capabilities.cronModel && cronJobModel(job) ? <Text testID={`agent-cron-job-model-${job.id}`} style={styles.fieldLabel}>
+                {`${t('Model', { ns: 'settings' })} · ${cronModelLabel(cronJobModel(job)!, [])}`}</Text> : null}
+              <Text style={styles.fieldLabel}>{job.enabled
+                ? `${t('Next run', { ns: 'settings' })} · ${formatCronDate(job.state.nextRunAtMs, i18n?.resolvedLanguage)}`
+                : t('Paused', { ns: 'settings' })}</Text>
+              {job.state.runningAtMs ? <Text style={styles.fieldLabel}>{t('Running', { ns: 'settings' })}</Text>
+                : (job.state.lastRunStatus ?? job.state.lastStatus) === 'error' ? <Text numberOfLines={2} style={[styles.fieldLabel, { color: theme.colors.bad }]}>
+                  {t('Failed', { ns: 'settings' })}{job.state.lastError ? ` · ${job.state.lastError}` : ''}
+                </Text> : null}
+            </Pressable>
+            {operations?.update ? <View style={rowStyles.switchTarget}><ThemedSwitch testID={`agent-cron-switch-${job.id}`}
+              value={job.enabled} disabled={!online || Boolean(busy)} accessibilityLabel={`${t('Enabled', { ns: 'settings' })}: ${job.name}`}
+              accessibilityState={{ disabled: !online || Boolean(busy), busy: busy === job.id }} onValueChange={() => { void toggle(job); }} /></View> : null}
+          </View>)}</View>
         </View>
-        <View testID="agent-cron-job-list">{jobs?.map(job => <View key={job.id} style={rowStyles.row}>
-          <Pressable testID={`agent-cron-job-${job.id}`} accessibilityRole="button" accessibilityLabel={job.name}
-            style={rowStyles.content} onPress={() => onEdit(job.id)}>
-            <View style={rowStyles.titleRow}><Text style={[styles.runText, rowStyles.title]}>{job.name}</Text><ChevronRight size={IconSize.sm} color={theme.colors.inkTertiary} /></View>
-            <Text style={styles.fieldLabel}>{describeScheduleHuman(job.schedule, t)}</Text>
-            <Text style={styles.fieldLabel}>{job.enabled
-              ? `${t('Next run', { ns: 'settings' })} · ${formatCronDate(job.state.nextRunAtMs, i18n?.resolvedLanguage)}`
-              : t('Paused', { ns: 'settings' })}</Text>
-            {job.state.runningAtMs ? <Text style={styles.fieldLabel}>{t('Running', { ns: 'settings' })}</Text>
-              : (job.state.lastRunStatus ?? job.state.lastStatus) === 'error' ? <Text numberOfLines={2} style={[styles.fieldLabel, { color: theme.colors.bad }]}>
-                {t('Failed', { ns: 'settings' })}{job.state.lastError ? ` · ${job.state.lastError}` : ''}
-              </Text> : null}
-          </Pressable>
-          {operations?.update ? <View style={rowStyles.switchTarget}><ThemedSwitch testID={`agent-cron-switch-${job.id}`}
-            value={job.enabled} disabled={!online || Boolean(busy)} accessibilityLabel={`${t('Enabled', { ns: 'settings' })}: ${job.name}`}
-            accessibilityState={{ disabled: !online || Boolean(busy), busy: busy === job.id }} onValueChange={() => { void toggle(job); }} /></View> : null}
-        </View>)}</View>
         {jobs?.length === 0 ? <View><Text testID="agent-cron-empty" style={styles.emptyText}>{t('No cron jobs configured', { ns: 'settings' })}</Text>
           {canCreate ? <Button testID="agent-cron-create" label={t('New cron job', { ns: 'config' })} disabled={!online} onPress={onCreate} /> : null}</View> : null}
         {canShowHeartbeat ? <SettingsRow testID="agent-cron-heartbeat" title={t('Heartbeat', { ns: 'settings' })} value={heartbeat?.every} showChevron onPress={() => setHeartbeatVisible(true)} /> : null}
       </View> : <View>
+        {failedRuns.length ? <View testID="agent-cron-failed" style={styles.failedGroup}>
+          <Text testID="agent-cron-failed-count" style={[styles.fieldLabel, { color: theme.colors.bad }]}>{t('{{count}} failed', { ns: 'settings', count: failedRuns.length })}</Text>
+          {failedRuns.map((run) => <SettingsRow key={`failed:${run.jobId}`} testID={`agent-cron-failed-${run.jobId}`}
+            title={run.jobName ?? run.jobId} subtitle={formatTimestamp(run.runAtMs ?? run.ts)} value={t('Failed', { ns: 'settings' })}
+            attention showChevron onPress={() => setSelectedRun(run)} />)}
+        </View> : null}
         {runsLoading && !runs.length ? <CronLoading /> : null}
         {visibleRuns.map((run, index) => <SettingsRow key={`${run.jobId}:${run.ts}:${index}`} testID={`agent-cron-run-${run.jobId}-${run.ts}`}
           title={run.jobName ?? jobs?.find(job => job.id === run.jobId)?.name ?? run.jobId}
           subtitle={formatTimestamp(run.runAtMs ?? run.ts)} value={translateCronRunStatus(cronRunStatus(run), t)}
           attention={run.status === 'error'} showChevron onPress={() => setSelectedRun(run)} />)}
-        {!runsLoading && !visibleRuns.length ? <Text testID="agent-cron-runs-empty" style={styles.emptyText}>{t('No runs yet', { ns: 'settings' })}</Text> : null}
+        {!runsLoading && !visibleRuns.length && !failedRuns.length ? <Text testID="agent-cron-runs-empty" style={styles.emptyText}>{t('No runs yet', { ns: 'settings' })}</Text> : null}
         {nextOffset !== null ? <Button testID="cron-runs-more" label={t('Load more', { ns: 'settings' })} variant="ghost" loading={runsLoading} disabled={!online}
           onPress={() => { if (!runsLoading) void loadRuns(nextOffset); }} /> : null}
       </View>}
     </View>
     <HeartbeatSheet visible={heartbeatVisible} settings={heartbeat} online={online} saving={busy === 'heartbeat'}
       canSave={canShowHeartbeat && Boolean(operations?.heartbeat?.set)} onClose={() => { if (!busy) setHeartbeatVisible(false); }} onSave={settings => { void saveHeartbeat(settings); }} />
-    <CronRunSheet run={selectedRun} onClose={() => setSelectedRun(null)} />
+    <CronRunSheet run={selectedRun} loadContent={operations?.runContent} onOpenSession={onOpenSession} onClose={() => setSelectedRun(null)} />
   </>;
 }
 
@@ -209,9 +251,10 @@ function HeartbeatSheet({
       title={t('Heartbeat', { ns: 'settings' })}
       closeAccessibilityLabel={t('Cancel', { ns: 'common' })}
       dismissOnBackdropPress={!saving}
+      snapPoints={HEARTBEAT_SNAP_POINTS}
       onClose={onClose}
     >
-      <ScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
+      <BottomSheetScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
         <FormField
           testID="agent-heartbeat-every"
           label={t('Every', { ns: 'settings' })}
@@ -261,64 +304,7 @@ function HeartbeatSheet({
             onPress={() => onSave(draft)}
           />
         ) : null}
-      </ScrollView>
-    </Sheet>
-  );
-}
-
-export function CronRunSheet({
-  run,
-  onClose,
-}: Readonly<{
-  run: CronRunLogEntry | null;
-  onClose: () => void;
-}>): React.JSX.Element {
-  const { t } = useTranslation(['common', 'settings']);
-  const { theme } = useAppTheme();
-  const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
-  return (
-    <Sheet
-      testID="agent-cron-run-detail"
-      visible={run !== null}
-      title={t('Execution Record', { ns: 'settings' })}
-      maxHeight="85%"
-      contentStyle={styles.runScroll}
-      closeAccessibilityLabel={t('Back', { ns: 'common' })}
-      onClose={onClose}
-    >
-      {run ? (
-        <ScrollView style={styles.runScroll} contentContainerStyle={styles.sheetContent}>
-          <SettingsGroup>
-            <SettingsRow
-              title={run.jobName ?? run.jobId}
-              subtitle={formatTimestamp(run.runAtMs ?? run.ts)}
-              value={translateCronRunStatus(cronRunStatus(run), t)}
-            />
-            <SettingsDivider inset="content" />
-            <SettingsRow
-              title={t('Duration', { ns: 'settings' })}
-              value={formatDurationMs(run.durationMs)}
-            />
-            <SettingsDivider inset="content" />
-            <SettingsRow
-              title={t('Notifications', { ns: 'settings' })}
-              value={run.deliveryStatus === 'delivered' || run.delivered === true ? t('Delivered', { ns: 'settings' })
-                : run.deliveryStatus === 'not-delivered' || run.delivered === false ? t('Not delivered', { ns: 'settings' })
-                : run.deliveryStatus === 'not-requested' ? t('Not requested', { ns: 'settings' }) : t('Unknown', { ns: 'common' })}
-            />
-            {run.model ? (
-              <>
-                <SettingsDivider inset="content" />
-                <SettingsRow title={t('Model', { ns: 'settings' })} value={run.model} />
-              </>
-            ) : null}
-          </SettingsGroup>
-          {run.error || run.summary ? (
-            <Text selectable style={styles.runText}>{run.error ?? run.summary}</Text>
-          ) : null}
-          {run.deliveryError ? <Text selectable style={styles.runText}>{run.deliveryError}</Text> : null}
-        </ScrollView>
-      ) : null}
+      </BottomSheetScrollView>
     </Sheet>
   );
 }
@@ -408,6 +394,16 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
   return StyleSheet.create({
     root: { gap: Space.lg },
     groups: { gap: Space.xl },
+    // The summary line and the first job read as one list: the job rows carry
+    // their own vertical padding, so only a small gap keeps the count from
+    // floating away from the tasks it describes.
+    jobList: { gap: Space.sm },
+    summaryRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Space.md,
+    },
+    failedGroup: { gap: Space.xs, marginBottom: Space.lg },
     emptyText: {
       paddingVertical: Space.xxl,
       color: colors.inkSecondary,
@@ -433,7 +429,6 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       fontWeight: FontWeight.regular,
       textAlign: 'center',
     },
-    runScroll: { flexShrink: 1 },
     runText: {
       color: colors.ink,
       fontSize: FontSize.body,

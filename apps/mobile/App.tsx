@@ -11,9 +11,13 @@ import {
   Share,
   StyleSheet,
   View,
+  Text,
 } from 'react-native';
+import { AdaptiveWorkspace } from './src/navigation/AdaptiveWorkspace';
+import { isIPad } from './src/utils/platform';
+import { IPAD_CHAT_MAX_WIDTH } from './src/utils/ipad-layout';
+import { FontSize, Space } from './src/theme/tokens';
 import { StatusBar } from 'expo-status-bar';
-import * as Notifications from 'expo-notifications';
 import {
   createNavigationContainerRef,
   DarkTheme as NavigationDarkTheme,
@@ -54,14 +58,6 @@ import {
 } from './src/services/node-capabilities';
 import { shouldProbeGatewayOnForegroundResume } from './src/services/foregroundReconnectPolicy';
 import { logAppTelemetry } from './src/services/app-telemetry';
-import {
-  extractChatNotificationOpenPayload,
-  getChatNotificationResponseIdentifier,
-  loadChatReplyNotificationsEnabled,
-  scheduleChatReplyNotification,
-  setChatReplyNotificationsEnabled,
-  shouldShowChatReplyNotification,
-} from './src/services/chat-notifications';
 import { StorageService } from './src/services/storage';
 import {
   clearAccountCache,
@@ -87,13 +83,14 @@ import {
 import { useProEntitlement } from './src/hooks/useProEntitlement';
 import { usePostHogIdentity } from './src/hooks/usePostHogIdentity';
 import { usePostHogScreenTracking } from './src/hooks/usePostHogScreenTracking';
-import { ChatAppearanceSettings, SpeechRecognitionLanguage } from './src/types';
+import { ChatAppearanceSettings } from './src/types';
 import type { AgentInfo } from './src/types/agent';
 import { buildTheme, builtInAccents, defaultAccentId, useAppTheme } from './src/theme';
 import { APP_PACKAGE_VERSION } from './src/constants/app-version';
 import { getCurrentAppIconAsync, type AppIconVariant } from './src/services/app-icon';
 import { AppProviders } from './src/bootstrap/AppProviders';
 import { useAppBootstrap } from './src/bootstrap/useAppBootstrap';
+import { useFreshInstallGate } from './src/bootstrap/useFreshInstallGate';
 import { getActiveLeafRouteName } from './src/utils/posthog-navigation';
 import {
   extractAssistantDisplayText,
@@ -188,11 +185,6 @@ const ACCOUNT_ACTION_SECTION: Readonly<Partial<Record<
   AccountSettingsAction,
   AccountSettingsDetailSection
 >>> = Object.freeze({
-  'theme': 'appearance',
-  'accent': 'appearance',
-  'chat-appearance': 'appearance',
-  'app-icon': 'appearance',
-  'speech-language': 'voice',
   'help-center': 'help',
   'openclaw-docs': 'help',
   'hermes-docs': 'help',
@@ -217,7 +209,24 @@ type AnnouncementPresentation = Readonly<{
   openedAtMs: number;
 }>;
 
+function LaunchLoading(): React.JSX.Element {
+  return (
+    <View style={[loadingStyles.loading, { backgroundColor: LOADING_THEME.colors.canvas }]}>
+      <ActivityIndicator size="large" color={LOADING_THEME.colors.accent} />
+      <StatusBar style="auto" />
+    </View>
+  );
+}
+
 export default function App(): React.JSX.Element {
+  // Keychain state outlives the bundle on iOS: settle the fresh-install reset
+  // before any preference or connection read so a reinstall boots clean.
+  const installState = useFreshInstallGate();
+  if (installState === null) return <LaunchLoading />;
+  return <AppRoot />;
+}
+
+function AppRoot(): React.JSX.Element {
   const [connectionRuntime] = useState(() => getConnectionRuntime());
   const connectionSnapshot = useConnections();
   const activeConnection = connectionSnapshot.connections.find(
@@ -244,11 +253,9 @@ export default function App(): React.JSX.Element {
     setNodeEnabled,
     setShowAgentAvatar,
     setShowModelUsage,
-    setSpeechRecognitionLanguage,
     setThemeMode,
     showAgentAvatar,
     showModelUsage,
-    speechRecognitionLanguage,
     themeMode,
   } = useAppBootstrap({
     nodeClient,
@@ -265,14 +272,7 @@ export default function App(): React.JSX.Element {
     if (!__DEV__) void scheduleAutomaticAppReviewForColdStart();
   }, []);
 
-  if (loading) {
-    return (
-      <View style={[loadingStyles.loading, { backgroundColor: LOADING_THEME.colors.canvas }]}>
-        <ActivityIndicator size="large" color={LOADING_THEME.colors.accent} />
-        <StatusBar style="auto" />
-      </View>
-    );
-  }
+  if (loading) return <LaunchLoading />;
 
   return (
     <AppProviders
@@ -292,7 +292,6 @@ export default function App(): React.JSX.Element {
           nodeCapabilityToggles={nodeCapabilityToggles}
           chatFontSize={chatFontSize}
           chatAppearance={chatAppearance}
-          speechRecognitionLanguage={speechRecognitionLanguage}
           initialAgentId={initialAgentId}
           initialChatPreview={initialChatPreview}
           onDebugToggle={(enabled) => {
@@ -327,10 +326,6 @@ export default function App(): React.JSX.Element {
             await StorageService.setChatAppearance(settings);
             setChatAppearance(settings);
           }}
-          onSpeechRecognitionLanguageChange={(language) => {
-            setSpeechRecognitionLanguage(language);
-            StorageService.setSpeechRecognitionLanguage(language);
-          }}
         />
       </ProPaywallProvider>
     </AppProviders>
@@ -352,26 +347,6 @@ function resolveNodeInvokeSource(req: {
   return 'gateway';
 }
 
-function agentIdFromSessionKey(sessionKey: string | null | undefined): string | null {
-  if (!sessionKey) return null;
-  const match = sessionKey.match(/^agent:([^:]+):/);
-  return match?.[1] ?? null;
-}
-
-function describeSessionKind(sessionKey: string | null | undefined): 'main' | 'subagent' | 'cron' | 'other' {
-  if (!sessionKey) return 'other';
-  if (/^agent:[^:]+:main$/.test(sessionKey)) return 'main';
-  if (sessionKey.includes(':subagent:')) return 'subagent';
-  if (sessionKey.includes(':cron:')) return 'cron';
-  return 'other';
-}
-
-function resolveAgentNotificationName(sessionKey: string, agents: AgentInfo[], currentAgentId: string): string {
-  const agentId = agentIdFromSessionKey(sessionKey) ?? currentAgentId;
-  const agent = agents.find((item) => item.id === agentId);
-  return agent?.identity?.name?.trim() || agent?.name?.trim() || 'Assistant';
-}
-
 type AppContentProps = {
   nodeClient: NodeClient;
   debugMode: boolean;
@@ -382,7 +357,6 @@ type AppContentProps = {
   nodeCapabilityToggles: NodeCapabilityToggles;
   chatFontSize: number;
   chatAppearance: ChatAppearanceSettings;
-  speechRecognitionLanguage: SpeechRecognitionLanguage;
   initialAgentId: string | null;
   initialChatPreview: import('./src/services/storage').LastOpenedSessionSnapshot | null;
   onDebugToggle: (enabled: boolean) => void;
@@ -393,7 +367,6 @@ type AppContentProps = {
   onNodeCapabilityTogglesChange: (toggles: NodeCapabilityToggles) => void;
   onChatFontSizeChange: (size: number) => void;
   onChatAppearanceChange: (settings: ChatAppearanceSettings) => void | Promise<void>;
-  onSpeechRecognitionLanguageChange: (language: SpeechRecognitionLanguage) => void;
 };
 
 function AppContent({
@@ -406,7 +379,6 @@ function AppContent({
   nodeCapabilityToggles,
   chatFontSize,
   chatAppearance,
-  speechRecognitionLanguage,
   initialAgentId,
   initialChatPreview,
   onDebugToggle,
@@ -417,7 +389,6 @@ function AppContent({
   onNodeCapabilityTogglesChange,
   onChatFontSizeChange,
   onChatAppearanceChange,
-  onSpeechRecognitionLanguageChange,
 }: AppContentProps): React.JSX.Element {
   const { t: translate } = useTranslation();
   const { theme, mode: activeThemeMode, accentId: activeAccentId } = useAppTheme();
@@ -428,6 +399,8 @@ function AppContent({
     hidePaywall,
     restorePurchases,
     showPaywall,
+    simulateFreeAccount,
+    setSimulateFreeAccount,
   } = useProPaywall();
   const connections = useConnections();
   const rootNavigationRef = useMemo(() => createNavigationContainerRef<RootStackParamList>(), []);
@@ -447,12 +420,6 @@ function AppContent({
     requestedAt: number;
     sourceRole?: string;
   } | null>(null);
-  const [pendingChatNotificationOpen, setPendingChatNotificationOpen] = useState<{
-    requestedAt: number;
-    sessionKey: string;
-    agentId?: string;
-    runId?: string;
-  } | null>(null);
   const [pendingChatInput, setPendingChatInput] = useState<string | null>(null);
   const [pendingMainSessionSwitch, setPendingMainSessionSwitch] = useState(false);
   const [pendingAddGateway, setPendingAddGateway] = useState(false);
@@ -464,7 +431,6 @@ function AppContent({
   const [agentPreferences, setAgentPreferences] = useState<Readonly<
     Record<string, AgentRosterPreferences>
   >>({});
-  const [replyNotificationsEnabled, setReplyNotificationsEnabled] = useState(false);
   const [currentAppIcon, setCurrentAppIcon] = useState<AppIconVariant>('default');
   const [navigationReady, setNavigationReady] = useState(false);
   const [activeRouteName, setActiveRouteName] = useState<keyof RootStackParamList | null>(null);
@@ -476,7 +442,6 @@ function AppContent({
   const [announcementVisible, setAnnouncementVisible] = useState(false);
   const announcementCloseActionRef = useRef<'dismiss' | 'continue' | 'entry'>('dismiss');
   const announcementFollowUpRef = useRef<AppUpdateAnnouncementEntry['action'] | null>(null);
-  const handledNotificationResponseIdsRef = useRef(new Set<string>());
   const paywallContinuationCoordinatorRef = useRef(new PaywallContinuationCoordinator());
   const rosterViewTrackedRef = useRef(false);
   const presentPaywall = useCallback((
@@ -546,16 +511,6 @@ function AppContent({
   const activeConnection = useMemo(() => connections.connections.find(
     (connection) => connection.id === connections.activeConnectionId,
   ) ?? null, [connections.activeConnectionId, connections.connections]);
-
-  useEffect(() => {
-    let active = true;
-    void loadChatReplyNotificationsEnabled().then((enabled) => {
-      if (active) setReplyNotificationsEnabled(enabled);
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
 
   useEffect(() => {
     let active = true;
@@ -844,170 +799,6 @@ function AppContent({
     return off;
   }, [nodeClient, nodeCapabilityToggles]);
 
-  const openChatFromNotification = useCallback((payload: {
-    sessionKey: string;
-    agentId?: string;
-    runId?: string;
-  }) => {
-    const targetAgentId = payload.agentId ?? agentIdFromSessionKey(payload.sessionKey) ?? currentAgentId;
-    if (targetAgentId !== currentAgentId) {
-      setCurrentAgentId(targetAgentId);
-    }
-    setPendingChatNotificationOpen({
-      requestedAt: Date.now(),
-      sessionKey: payload.sessionKey,
-      agentId: payload.agentId,
-      runId: payload.runId,
-    });
-    if (navigationReady && rootNavigationRef.isReady() && connections.activeConnectionId) {
-      rootNavigationRef.navigate('Thread', {
-        connectionId: connections.activeConnectionId,
-        agentId: targetAgentId,
-        sessionKey: payload.sessionKey,
-        from: 'notification',
-      });
-    }
-  }, [connections.activeConnectionId, currentAgentId, navigationReady, rootNavigationRef, setCurrentAgentId]);
-
-  useEffect(() => {
-    if (
-      Platform.OS !== 'ios'
-      || !activeCapabilities.chat
-      || activeCapabilities.replyNotifications !== true
-    ) return;
-
-    const handleNotificationResponse = (
-      response: Notifications.NotificationResponse | null | undefined,
-      source: 'listener' | 'launch',
-    ) => {
-      const payload = extractChatNotificationOpenPayload(response);
-      if (!payload) return;
-      const identifier = getChatNotificationResponseIdentifier(response)
-        ?? `${payload.sessionKey}:${payload.runId ?? ''}:${source}`;
-      if (handledNotificationResponseIdsRef.current.has(identifier)) return;
-      handledNotificationResponseIdsRef.current.add(identifier);
-      analyticsEvents.chatReplyNotificationOpened({
-        source,
-        session_kind: describeSessionKind(payload.sessionKey),
-        has_agent_id: !!payload.agentId,
-      });
-      openChatFromNotification(payload);
-    };
-
-    const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
-      handleNotificationResponse(response, 'listener');
-    });
-
-    void Notifications.getLastNotificationResponseAsync().then((response) => {
-      handleNotificationResponse(response, 'launch');
-    });
-
-    return () => {
-      subscription.remove();
-    };
-  }, [activeCapabilities.chat, activeCapabilities.replyNotifications, openChatFromNotification]);
-
-  useEffect(() => {
-    if (
-      Platform.OS !== 'ios'
-      || !activeAdapter
-      || !activeCapabilities.chat
-      || activeCapabilities.replyNotifications !== true
-    ) return;
-
-    const off = activeAdapter.on('update', (update) => {
-      if (update.type !== 'run_finished' || !update.message) return;
-      const { sessionKey, message, runId } = update;
-      if (!sessionKey) return;
-      if (isAssistantSilentReplyMessage(message)) return;
-      const previewText = sanitizeSilentPreviewText(
-        extractAssistantDisplayText(message?.content),
-      );
-      const appState = appStateRef.current;
-      const activeTab = activeRouteRef.current === 'Thread' ? 'Chat' : activeRouteRef.current;
-      if (!shouldShowChatReplyNotification({ activeTab, appState })) {
-        return;
-      }
-
-      const targetAgentId = agentIdFromSessionKey(sessionKey) ?? currentAgentId;
-      if (!connections.activeConnectionId
-        || !canAccessRosterAgent(connections.activeConnectionId, targetAgentId)) {
-        return;
-      }
-      const agentId = targetAgentId || undefined;
-      const agentName = resolveAgentNotificationName(sessionKey, agents, currentAgentId);
-
-      void scheduleChatReplyNotification({
-        sessionKey,
-        runId,
-        agentId,
-        agentName,
-        previewText,
-      }).then((scheduled) => {
-        if (!scheduled) return;
-        analyticsEvents.chatReplyNotificationShown({
-          app_state: appState,
-          source: appState === 'active' ? 'foreground_other_tab' : 'background',
-          session_kind: describeSessionKind(sessionKey),
-          has_preview_text: !!previewText,
-        });
-      });
-    });
-
-    return off;
-  }, [
-    activeAdapter,
-    activeCapabilities.chat,
-    activeCapabilities.replyNotifications,
-    agents,
-    canAccessRosterAgent,
-    connections.activeConnectionId,
-    currentAgentId,
-  ]);
-
-  useEffect(() => {
-    if (entitlementLoading || !navigationReady || !pendingChatNotificationOpen) return;
-    if (!rootNavigationRef.isReady()) return;
-    if (!connections.activeConnectionId) return;
-    const targetAgentId = pendingChatNotificationOpen.agentId
-      ?? agentIdFromSessionKey(pendingChatNotificationOpen.sessionKey)
-      ?? currentAgentId;
-    if (!canAccessRosterAgent(connections.activeConnectionId, targetAgentId)) {
-      const target: RootStackParamList['Thread'] = {
-        connectionId: connections.activeConnectionId,
-        agentId: targetAgentId,
-        sessionKey: pendingChatNotificationOpen.sessionKey,
-        from: 'notification',
-      };
-      setPendingChatNotificationOpen(null);
-      presentPaywall(
-        canAccessConnection(connections.activeConnectionId)
-          ? 'agents'
-          : 'gatewayConnections',
-        () => {
-          if (rootNavigationRef.isReady()) rootNavigationRef.navigate('Thread', target);
-        },
-      );
-      return;
-    }
-    rootNavigationRef.navigate('Thread', {
-      connectionId: connections.activeConnectionId,
-      agentId: targetAgentId,
-      sessionKey: pendingChatNotificationOpen.sessionKey,
-      from: 'notification',
-    });
-  }, [
-    canAccessConnection,
-    canAccessRosterAgent,
-    connections.activeConnectionId,
-    currentAgentId,
-    entitlementLoading,
-    navigationReady,
-    pendingChatNotificationOpen,
-    rootNavigationRef,
-    presentPaywall,
-  ]);
-
   const appContextValue = useMemo(
     () => ({
       foregroundEpoch,
@@ -1021,9 +812,7 @@ function AppContent({
       onNodeCapabilityTogglesChange,
       chatFontSize,
       chatAppearance,
-      speechRecognitionLanguage,
       chatSessionRequest,
-      pendingChatNotificationOpen,
       agents,
       agentAvatars,
       setAgentAvatars,
@@ -1052,16 +841,6 @@ function AppContent({
       clearChatSessionRequest: () => {
         setChatSessionRequest(null);
       },
-      requestOpenChatFromNotification: (params: {
-        sessionKey: string;
-        agentId?: string;
-        runId?: string;
-      }) => {
-        openChatFromNotification(params);
-      },
-      clearPendingChatNotificationOpen: () => {
-        setPendingChatNotificationOpen(null);
-      },
       pendingChatInput,
       pendingMainSessionSwitch,
       requestChatWithInput: (text: string) => {
@@ -1081,7 +860,7 @@ function AppContent({
             connectionId: connections.activeConnectionId,
             agentId: currentAgentId,
             sessionKey: mainSessionKey,
-            from: 'notification',
+            from: 'roster',
           });
         }
       },
@@ -1102,7 +881,6 @@ function AppContent({
       clearPendingAddGateway: () => {
         setPendingAddGateway(false);
       },
-      onSpeechRecognitionLanguageChange,
     }),
     [
       agentAvatars,
@@ -1124,17 +902,14 @@ function AppContent({
       isMultiAgent,
       mainSessionKey,
       chatSessionRequest,
-      pendingChatNotificationOpen,
       pendingChatInput,
       pendingMainSessionSwitch,
-      openChatFromNotification,
       onDebugToggle,
       onChatAppearanceChange,
       onChatFontSizeChange,
       onNodeEnabledToggle,
       onNodeCapabilityTogglesChange,
       onExecApprovalToggle,
-      onSpeechRecognitionLanguageChange,
       onShowAgentAvatarToggle,
       onShowModelUsageToggle,
       foregroundEpoch,
@@ -1144,7 +919,6 @@ function AppContent({
       pendingAgentSwitch,
       clearPendingAgentSwitch,
       showModelUsage,
-      speechRecognitionLanguage,
     ],
   );
 
@@ -1203,15 +977,6 @@ function AppContent({
       rosePink: i18n.t('Pink', { ns: 'config' }),
       royalPurple: i18n.t('Purple', { ns: 'config' }),
     } as const;
-    const speechLabels = {
-      system: i18n.t('Follow System', { ns: 'config' }),
-      en: i18n.t('English', { ns: 'config' }),
-      'zh-Hans': i18n.t('Simplified Chinese', { ns: 'config' }),
-      ja: i18n.t('Japanese', { ns: 'config' }),
-      ko: i18n.t('Korean', { ns: 'config' }),
-      de: i18n.t('German', { ns: 'config' }),
-      es: i18n.t('Spanish', { ns: 'config' }),
-    } as const;
     const appearanceLabels = {
       solid: i18n.t('Solid', { ns: 'config' }),
       soft: i18n.t('Soft', { ns: 'config' }),
@@ -1222,7 +987,6 @@ function AppContent({
       accent: accentLabels[activeAccentId],
       chatAppearance: appearanceLabels[chatAppearance.bubbles.style],
       appIcon: i18n.t(currentAppIcon === 'black' ? 'Dark' : 'Light', { ns: 'config' }),
-      speechLanguage: speechLabels[speechRecognitionLanguage],
       appVersion: APP_PACKAGE_VERSION,
       previewEnvironment: i18n.t(debugMode ? 'Preview' : 'Production', { ns: 'config' }),
     };
@@ -1233,7 +997,6 @@ function AppContent({
     chatAppearance.bubbles.style,
     currentAppIcon,
     debugMode,
-    speechRecognitionLanguage,
   ]);
 
   /** Free-tier slot state for the connection page; Pro users never see the group. */
@@ -1552,23 +1315,18 @@ function AppContent({
     await getConnectionRuntime().refreshRoster();
   }, [canAccessConnection, canAccessRosterAgent, presentPaywall]);
 
-  const updateReplyNotifications = useCallback((enabled: boolean) => {
-    setReplyNotificationsEnabled(enabled);
-    void setChatReplyNotificationsEnabled(enabled).catch(() => {
-      setReplyNotificationsEnabled(!enabled);
-    });
-  }, []);
-
   const handleAccountSectionAction = useCallback((
     request: AccountSettingsSectionActionRequest,
     navigation: { navigate: typeof rootNavigationRef.navigate; dispatch: typeof rootNavigationRef.dispatch },
   ) => {
     switch (request.action) {
-      case 'set-reply-notifications':
-        updateReplyNotifications(request.enabled === true);
-        return;
       case 'set-debug-mode':
         onDebugToggle(request.enabled === true);
+        // The developer-only simulation must not outlive the row that controls it.
+        if (request.enabled !== true) setSimulateFreeAccount(false);
+        return;
+      case 'set-simulate-free-account':
+        setSimulateFreeAccount(request.enabled === true);
         return;
       case 'view-pro':
         presentPaywall('settingsMembershipPreview');
@@ -1675,8 +1433,8 @@ function AppContent({
     presentPaywall,
     presentAnnouncement,
     announcementPresentation,
+    setSimulateFreeAccount,
     switchFreeConnection,
-    updateReplyNotifications,
   ]);
 
   // Connection lifecycle moved to the shared Connection route; section rows resolve nothing here yet.
@@ -1691,97 +1449,10 @@ function AppContent({
     );
   }
 
-  return (
-    <AppContextProvider value={appContextValue}>
-      <GlobalLoadingOverlayProvider>
-        <GatewayScannerProvider>
-          {!permissionsLoading ? (
-            <AppDeepLinkHandler
-              rootNavigationRef={rootNavigationRef}
-              activeConnectionId={connections.activeConnectionId}
-              activeAdapter={connections.activeAdapter}
-              currentAgentId={currentAgentId}
-              mainSessionKey={mainSessionKey}
-              canAddConnection={canAddSettingsConnection}
-              activeAccessDeniedReason={activeConnection && !canAccessConnection(activeConnection.id)
-                ? 'gatewayConnections'
-                : activeConnection && !canAccessRosterAgent(activeConnection.id, currentAgentId)
-                  ? 'agents'
-                  : null}
-              onOpenPaywall={presentPaywall}
-            />
-          ) : null}
-          <NodeCameraCaptureProvider>
-            <NavigationContainer
-              ref={rootNavigationRef}
-              theme={navigationTheme}
-              direction={I18nManager.isRTL ? 'rtl' : 'ltr'}
-              onReady={() => {
-                setNavigationReady(true);
-                const routeName = rootNavigationRef.getCurrentRoute()?.name;
-                if (routeName) {
-                  activeRouteRef.current = routeName;
-                  setActiveRouteName(routeName);
-                }
-                trackInitialScreen();
-              }}
-              onStateChange={handleNavigationStateChange}
-            >
-              <BottomSheetModalProvider>
-              <StatusBar style={theme.scheme === 'dark' ? 'light' : 'dark'} />
-              <RootStack.Navigator
-                initialRouteName={connections.connections.length > 0 ? 'Roster' : 'Onboarding'}
-                screenOptions={{
-                  headerShown: false,
-                  contentStyle: { backgroundColor: theme.colors.canvas },
-                }}
-              >
-                <RootStack.Screen name="Onboarding">
-                  {(props) => (
-                    <OnboardingRoute
-                      {...props}
-                      onViewed={() => analyticsEvents.onboardingViewed({
-                        source: props.route.params?.presentation === 'modal'
-                          ? 'add_connection'
-                          : 'first_run',
-                      })}
-                      onPairingCodeSubmitted={({ lengthOk }) => {
-                        analyticsEvents.pairingCodeSubmitted({ length_ok: lengthOk });
-                      }}
-                      onDocsOpened={(backend) => analyticsEvents.onboardingDocsOpened({ backend })}
-                      onAgentPromptCopied={(backend) => analyticsEvents.onboardingAgentPromptCopied({ backend })}
-                      onScanQrTapped={() => analyticsEvents.gatewayScanQrTapped({
-                        source: props.route.params?.presentation === 'modal'
-                          ? 'add_connection'
-                          : 'first_run',
-                      })}
-                      onOpenPaywall={(reason, onContinue) => presentPaywall(reason, onContinue)}
-                      onConnected={({ connectionId, backendKind }) => {
-                        const rosterGroup = getConnectionRuntime().getSnapshot().roster.find((group) => (
-                          group.connection.id === connectionId
-                        ));
-                        const target = resolveConnectedThreadTarget(
-                          backendKind,
-                          rosterGroup?.agents.map((summary) => summary.agent),
-                        );
-                        setCurrentAgentId(target.agentId);
-                        setPendingAutoOpen({
-                          connectionId,
-                          agentId: target.agentId,
-                          sessionKey: target.sessionKey,
-                          from: 'onboarding',
-                        });
-                        props.navigation.reset({
-                          index: 0,
-                          routes: [{ name: 'Roster' }],
-                        });
-                      }}
-                    />
-                  )}
-                </RootStack.Screen>
-                <RootStack.Screen name="Roster">
-                  {({ navigation }) => (
+  const renderRoster = (navigation: Pick<NativeStackScreenProps<RootStackParamList, 'Roster'>['navigation'], 'navigate'>) => (
                     <RosterScreen
+                      selectedThread={threadContext ?? undefined}
+                      onManageActiveConnection={(connectionId) => navigation.navigate('Connection', { connectionId })}
                       pinnedSessionKeys={pinnedSessionKeys}
                       agentPreferences={agentPreferences}
                       canAccessAgent={canAccessRosterAgent}
@@ -1891,7 +1562,106 @@ function AppContent({
                       onGraceAction={() => presentPaywall('settingsMembershipPreview')}
                       onOpenPro={() => presentPaywall('settingsMembershipPreview')}
                     />
+  );
+
+  return (
+    <AppContextProvider value={appContextValue}>
+      <GlobalLoadingOverlayProvider>
+        <GatewayScannerProvider>
+          {!permissionsLoading ? (
+            <AppDeepLinkHandler
+              rootNavigationRef={rootNavigationRef}
+              activeConnectionId={connections.activeConnectionId}
+              activeAdapter={connections.activeAdapter}
+              currentAgentId={currentAgentId}
+              mainSessionKey={mainSessionKey}
+              canAddConnection={canAddSettingsConnection}
+              activeAccessDeniedReason={activeConnection && !canAccessConnection(activeConnection.id)
+                ? 'gatewayConnections'
+                : activeConnection && !canAccessRosterAgent(activeConnection.id, currentAgentId)
+                  ? 'agents'
+                  : null}
+              onOpenPaywall={presentPaywall}
+            />
+          ) : null}
+          <NodeCameraCaptureProvider>
+            <NavigationContainer
+              ref={rootNavigationRef}
+              theme={navigationTheme}
+              direction={I18nManager.isRTL ? 'rtl' : 'ltr'}
+              onReady={() => {
+                setNavigationReady(true);
+                const routeName = rootNavigationRef.getCurrentRoute()?.name;
+                if (routeName) {
+                  activeRouteRef.current = routeName;
+                  setActiveRouteName(routeName);
+                }
+                trackInitialScreen();
+              }}
+              onStateChange={handleNavigationStateChange}
+            >
+              <BottomSheetModalProvider>
+              <StatusBar style={theme.scheme === 'dark' ? 'light' : 'dark'} />
+              <AdaptiveWorkspace routeName={activeRouteName ?? 'Roster'} selectionKey={threadContext ? `${threadContext.connectionId}:${threadContext.sessionKey}` : undefined} roster={renderRoster(rootNavigationRef)}>
+              {(wideRoster) => <RootStack.Navigator
+                initialRouteName={connections.connections.length > 0 ? 'Roster' : 'Onboarding'}
+                screenOptions={({ route }) => ({
+                  headerShown: false,
+                  contentStyle: { backgroundColor: theme.colors.canvas,
+                    ...(isIPad && !['Thread', 'Roster', 'Paywall'].includes(route.name)
+                      ? { maxWidth: IPAD_CHAT_MAX_WIDTH, width: '100%', alignSelf: 'center' } : {}),
+                  },
+                })}
+              >
+                <RootStack.Screen name="Onboarding">
+                  {(props) => (
+                    <OnboardingRoute
+                      {...props}
+                      onViewed={() => analyticsEvents.onboardingViewed({
+                        source: props.route.params?.presentation === 'modal'
+                          ? 'add_connection'
+                          : 'first_run',
+                      })}
+                      onPairingCodeSubmitted={({ lengthOk }) => {
+                        analyticsEvents.pairingCodeSubmitted({ length_ok: lengthOk });
+                      }}
+                      onDocsOpened={(backend) => analyticsEvents.onboardingDocsOpened({ backend })}
+                      onAgentPromptCopied={(backend) => analyticsEvents.onboardingAgentPromptCopied({ backend })}
+                      onScanQrTapped={() => analyticsEvents.gatewayScanQrTapped({
+                        source: props.route.params?.presentation === 'modal'
+                          ? 'add_connection'
+                          : 'first_run',
+                      })}
+                      onOpenPaywall={(reason, onContinue) => presentPaywall(reason, onContinue)}
+                      onConnected={({ connectionId, backendKind }) => {
+                        const rosterGroup = getConnectionRuntime().getSnapshot().roster.find((group) => (
+                          group.connection.id === connectionId
+                        ));
+                        const target = resolveConnectedThreadTarget(
+                          backendKind,
+                          rosterGroup?.agents.map((summary) => summary.agent),
+                        );
+                        setCurrentAgentId(target.agentId);
+                        setPendingAutoOpen({
+                          connectionId,
+                          agentId: target.agentId,
+                          sessionKey: target.sessionKey,
+                          from: 'onboarding',
+                        });
+                        props.navigation.reset({
+                          index: 0,
+                          routes: [{ name: 'Roster' }],
+                        });
+                      }}
+                    />
                   )}
+                </RootStack.Screen>
+                <RootStack.Screen name="Roster">
+                  {({ navigation }) => wideRoster ? (
+                    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: Space.lg }}>
+                      <Text style={{ color: theme.colors.inkSecondary, fontSize: FontSize.body }}>{translate('Select an Agent', { ns: 'common' })}</Text>
+                    </View>
+                  ) : renderRoster(navigation)}
                 </RootStack.Screen>
                 <RootStack.Screen name="Thread">
                   {(props) => (
@@ -1924,7 +1694,7 @@ function AppContent({
                         setThreadContext(props.route.params);
                         setSessionPanelVisible(true);
                       }}
-                      onOpenRunSession={(sessionKey, agentId, _kind, runContext) => {
+                      onOpenRunSession={(sessionKey, agentId) => {
                         const targetAgentId = agentId ?? props.route.params.agentId;
                         if (!canAccessRosterAgent(props.route.params.connectionId, targetAgentId)) {
                           presentPaywall(
@@ -1936,7 +1706,6 @@ function AppContent({
                                 connectionId: props.route.params.connectionId,
                                 agentId: targetAgentId,
                                 sessionKey,
-                                runContext,
                                 from: 'panel',
                               };
                               setThreadContext(target);
@@ -1950,7 +1719,6 @@ function AppContent({
                           connectionId: props.route.params.connectionId,
                           agentId: targetAgentId,
                           sessionKey,
-                          runContext,
                           from: 'panel',
                         };
                         setThreadContext(target);
@@ -2097,7 +1865,6 @@ function AppContent({
                       labels={accountSettingsLabels}
                       isPro={isPro}
                       canAddConnection={canAddSettingsConnection}
-                      replyNotificationsEnabled={replyNotificationsEnabled}
                       debugMode={debugMode}
                       onBack={navigation.goBack}
                       onOpenSection={(section) => section === 'connections' ? navigation.navigate('Connections') : navigation.navigate('AccountSettingsSection', { section })}
@@ -2115,6 +1882,10 @@ function AppContent({
                           navigation.navigate('Onboarding', { presentation: 'modal' });
                           return;
                         }
+                        if (action === 'chat-appearance') {
+                          navigation.navigate('ChatAppearance');
+                          return;
+                        }
                         const section = ACCOUNT_ACTION_SECTION[action];
                         if (section) navigation.navigate('AccountSettingsSection', { section });
                       }}
@@ -2125,7 +1896,11 @@ function AppContent({
                         normalizePaywallFeature(reason),
                         onContinue,
                       )}
-                      onReplyNotificationsChange={updateReplyNotifications}
+                      onPreferenceChanged={(preference, value) => {
+                        if (preference === 'app-icon' && (value === 'default' || value === 'black')) {
+                          setCurrentAppIcon(value);
+                        }
+                      }}
                       onDebugModeChange={onDebugToggle}
                     />
                   )}
@@ -2137,18 +1912,13 @@ function AppContent({
                       data={{
                         isPro,
                         canAddConnection: canAddSettingsConnection,
-                        replyNotificationsEnabled,
                         debugMode,
+                        simulateFreeAccount,
                         labels: accountSettingsLabels,
                       }}
                       onBack={navigation.goBack}
                       onRetry={() => { void getConnectionRuntime().probeActive(); }}
                       onAction={(request) => handleAccountSectionAction(request, navigation)}
-                      onPreferenceChanged={(preference, value) => {
-                        if (preference === 'app-icon' && (value === 'default' || value === 'black')) {
-                          setCurrentAppIcon(value);
-                        }
-                      }}
                       onOpenPaywall={(reason, onContinue) => presentPaywall(
                         normalizePaywallFeature(reason),
                         onContinue,
@@ -2191,7 +1961,8 @@ function AppContent({
                   component={PaywallRouteBridge}
                   options={{ presentation: 'fullScreenModal', gestureEnabled: true }}
                 />
-              </RootStack.Navigator>
+              </RootStack.Navigator>}
+              </AdaptiveWorkspace>
               <AppUpdateAnnouncementSheet
                 visible={announcementVisible}
                 announcement={announcementPresentation?.announcement ?? null}

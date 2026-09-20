@@ -140,7 +140,6 @@ export type ApprovalRequest =
 export type Capabilities = {
   chat: boolean; abort: boolean; history: boolean; attachments: boolean;
   fileAttachments?: boolean; // 非图片文件；缺省为 false，保持旧实现源码兼容
-  replyNotifications?: boolean; // 客户端回复通知；缺省为 false
   sessions: boolean; sessionCreate: boolean; sessionRename: boolean; sessionReset: boolean; sessionDelete: boolean;
   agents: boolean; agentEdit: boolean; agentCreate: boolean;
   models: boolean; modelPerSession: boolean; thinkingLevels: boolean;
@@ -151,12 +150,13 @@ export type Capabilities = {
   usage: boolean; cost: boolean;
   configManage: boolean; permissions: boolean; diagnostics: boolean; backups: boolean;
   tools: boolean; channels: boolean; devices: boolean; nodes: boolean; logs: boolean;
+  channelManage?: boolean; // 细化 `channels`：私聊会话范围与账号启用的配置写入（2026-09-19 找回 2.0 功能时新增；OpenClaw true，其余缺省 false）
   execApproval: boolean; pairRequests: boolean;
 };
 export const CAPABILITY_MATRIX: Record<BackendKind, Capabilities>;
 ```
 
-矩阵值：OpenClaw 全 true。`attachments` 精确表示图片附件；`fileAttachments` 是非图片文件的 additive 细化能力，缺省按 false。`replyNotifications` 是客户端对适配器运行完成事件显示本地回复通知的 additive 细化能力，缺省按 false。Hermes：chat / abort / history / attachments / replyNotifications / sessions / sessionCreate / sessionRename / sessionReset / sessionDelete / agents（只读单 Agent）/ models / thinkingLevels / skills / skillDiscover / skillInstall / cron / cronCreate / files / fileEdit / usage / cost 为 true，`fileAttachments` 与其余能力为 false，因此仍可选图、拍照和粘贴图片，但不显示任意文件入口。YouMind：chat / abort / history 为 true，其余 false。适配器可以在运行时按 Bridge 声明的能力字符串把 true 降为 false（例如老 Bridge 没有 `hermes.multi-session.v2` 时 `sessions*` 降级），不能反向升级。
+矩阵值：OpenClaw 全 true。`attachments` 精确表示图片附件；`fileAttachments` 是非图片文件的 additive 细化能力，缺省按 false。Hermes：chat / abort / history / attachments / sessions / sessionCreate / sessionRename / sessionReset / sessionDelete / agents（只读单 Agent）/ models / thinkingLevels / skills / skillDiscover / skillInstall / cron / cronCreate / files / fileEdit / usage / cost 为 true，`fileAttachments` 与其余能力为 false，因此仍可选图、拍照和粘贴图片，但不显示任意文件入口。YouMind：chat / abort / history 为 true，其余 false。适配器可以在运行时按 Bridge 声明的能力字符串把 true 降为 false（例如老 Bridge 没有 `hermes.multi-session.v2` 时 `sessions*` 降级），不能反向升级。
 
 ### 3.3 适配器接口（ACP 形状）
 
@@ -216,7 +216,7 @@ export type ManagementOperations = Partial<{
   usage: { sessions(p: UsageQuery): Promise<UsageResult>; cost(p: CostQuery): Promise<CostSummary> };
   config: { view(): Promise<ConfigView>; permissions(): Promise<PermissionsReport>; repair(): Promise<RepairResult>; doctor(): Promise<DoctorResult>; backups: { list(): Promise<Backup[]>; create(): Promise<Backup>; restore(id: string): Promise<void> } };
   tools: { catalog(): Promise<ToolCatalog>; save(p: ToolPolicy): Promise<void> };
-  channels: { status(p?: { probe?: boolean }): Promise<ChannelsStatusResult> };
+  channels: { status(p?: { probe?: boolean }): Promise<ChannelsStatusResult>; getRouting(): Promise<ChannelRoutingSettings>; setRouting(s: ChannelRoutingSettings): Promise<void>; setAccountEnabled(w: ChannelAccountEnabledWrite): Promise<void> }; // 后三者随 `channelManage`
   devices: { list(): Promise<DevicePairListResult>; approve(id: string): Promise<void>; reject(id: string): Promise<void>; remove(id: string): Promise<void> };
   nodes: { list(): Promise<NodeListResult>; rename(id: string, name: string): Promise<void>; pairRequests(): Promise<NodePairListResult>; approve(id: string): Promise<void>; reject(id: string): Promise<void> };
   logs: { fetch(p: LogQuery): Promise<LogPage> };

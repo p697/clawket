@@ -6,7 +6,14 @@ import {
   type CronJob,
   type ManagementOperations,
 } from '@clawket/agent-protocol';
-import { formatLocalDate, loadAgentSettingsSummary } from './load-summary';
+import { CronFailureAckService } from '../../services/cron-failure-acks';
+import { formatLocalDate, loadAgentCronSummary, loadAgentSettingsSummary } from './load-summary';
+
+jest.mock('../../services/cron-failure-acks', () => ({
+  CronFailureAckService: { read: jest.fn(async () => new Set<string>()) },
+}));
+
+const mockedAcks = CronFailureAckService as jest.Mocked<typeof CronFailureAckService>;
 
 const connection: ConnectionDescriptor = {
   id: 'connection-one',
@@ -51,11 +58,18 @@ describe('Agent settings summary loader', () => {
       managedSkillsDir: '',
       skills: [{}, {}, {}],
     }));
+    mockedAcks.read.mockResolvedValueOnce(new Set(['cron-seen@100']));
     const cronList = jest.fn(async () => ({
       jobs: [
         cronJob({ state: { lastStatus: 'error' } }),
         cronJob({ id: 'cron-two', state: { lastRunStatus: 'ok' } }),
-        cronJob({ id: 'cron-three', state: { consecutiveErrors: 2 } }),
+        cronJob({ id: 'cron-three', state: { lastRunStatus: 'error', lastRunAtMs: 300 } }),
+        // Seen on the Runs tab already: the badge is a notification, not the failing-job count.
+        cronJob({ id: 'cron-seen', state: { lastRunStatus: 'error', lastRunAtMs: 100 } }),
+        // Error text and a streak without an errored run are not failures the Runs tab can show.
+        cronJob({ id: 'cron-skipped', state: { lastRunStatus: 'skipped', lastError: 'window', consecutiveErrors: 2 } }),
+        // Another Agent's failure never lights this profile.
+        cronJob({ id: 'cron-other', agentId: 'helper', state: { lastRunStatus: 'error', lastRunAtMs: 200 } }),
       ],
       total: 6,
       offset: 0,
@@ -126,6 +140,7 @@ describe('Agent settings summary loader', () => {
     expect(listFiles).toHaveBeenCalledWith('main');
     expect(lastHeartbeat).toHaveBeenCalledTimes(1);
     expect(cronList).toHaveBeenCalledWith({ includeDisabled: true, limit: 200, offset: 0 });
+    expect(mockedAcks.read).toHaveBeenCalledWith('connection-one', 'main');
     expect(cost).toHaveBeenCalledWith({ startDate: '2026-09-05', endDate: '2026-09-05', agentId: 'main' });
     expect(catalog).toHaveBeenCalledWith('main');
   });
@@ -170,6 +185,46 @@ describe('Agent settings summary loader', () => {
     const summary = await loadAgentSettingsSummary(adapter, agent);
     expect(summary.todayCostUsd).toBeUndefined();
     expect(summary.todayTokens).toBe(4_200);
+  });
+
+  it('re-reads the Cron card alone after the Runs tab acknowledged a failure', async () => {
+    const list = jest.fn(async () => ({
+      jobs: [cronJob({ state: { lastRunStatus: 'error', lastRunAtMs: 100 } })],
+      total: 1,
+      offset: 0,
+      limit: 200,
+      hasMore: false,
+      nextOffset: null,
+    }));
+    const adapter = createMockAdapter({
+      connection,
+      agents: [agent],
+      management: { cron: { list } } as unknown as ManagementOperations,
+      initialState: 'ready',
+    });
+
+    await expect(loadAgentCronSummary(adapter, agent)).resolves.toEqual({
+      cronJobCount: 1,
+      cronFailureCount: 1,
+      hasCronFailure: true,
+    });
+    mockedAcks.read.mockResolvedValueOnce(new Set(['cron-one@100']));
+    await expect(loadAgentCronSummary(adapter, agent)).resolves.toEqual({
+      cronJobCount: 1,
+      cronFailureCount: 0,
+      hasCronFailure: false,
+    });
+    // A later failure of the same job is a new signature and lights the card again.
+    list.mockResolvedValueOnce({
+      jobs: [cronJob({ state: { lastRunStatus: 'error', lastRunAtMs: 500 } })],
+      total: 1,
+      offset: 0,
+      limit: 200,
+      hasMore: false,
+      nextOffset: null,
+    });
+    mockedAcks.read.mockResolvedValueOnce(new Set(['cron-one@100']));
+    await expect(loadAgentCronSummary(adapter, agent)).resolves.toMatchObject({ cronFailureCount: 1 });
   });
 
   it('formats a local calendar date without a UTC boundary shift', () => {

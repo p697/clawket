@@ -19,6 +19,8 @@ jest.mock('./posthog', () => ({
 
 const SPEC_EVENT_PROPERTIES: Readonly<Record<string, ReadonlyArray<string>>> = {
   agent_file_activity: ['action', 'backend', 'document'],
+  channel_dm_scope_changed: ['scope'],
+  channel_account_toggled: ['channel', 'enabled'],
   onboarding_viewed: ['source'],
   pairing_code_submitted: ['length_ok'],
   onboarding_agent_prompt_copied: ['backend'],
@@ -64,6 +66,7 @@ const SPEC_EVENT_PROPERTIES: Readonly<Record<string, ReadonlyArray<string>>> = {
   session_action: ['action'],
   agent_settings_opened: ['backend'],
   settings_row_opened: ['row', 'locked', 'backend'],
+  skill_discover_detail_viewed: ['source', 'backend'],
   usage_range_changed: ['range', 'cached', 'locked'],
   search_performed: ['scope', 'has_results', 'result_kinds'],
   search_message_opened: ['is_pro'],
@@ -153,8 +156,6 @@ const RETAINED_COMPAT_EVENT_NAMES = [
   'chat_appearance_opened',
   'chat_appearance_saved',
   'chat_model_selected',
-  'chat_reply_notification_opened',
-  'chat_reply_notification_shown',
   'chat_skill_picker_opened',
   'chat_skill_selected',
   'chat_slash_command_triggered',
@@ -417,6 +418,18 @@ describe('analytics event privacy boundary', () => {
   });
 });
 
+
+test('channel routing telemetry keeps bounded platform ids and scopes only', () => {
+  expect(sanitizeAnalyticsEventProperties('channel_dm_scope_changed', {
+    scope: 'per-channel-peer', accountId: 'private account',
+  })).toEqual({ scope: 'per-channel-peer' });
+  expect(sanitizeAnalyticsEventProperties('channel_dm_scope_changed', { scope: 'per-room' })).toEqual({ scope: 'other' });
+  expect(sanitizeAnalyticsEventProperties('channel_account_toggled', {
+    channel: 'Telegram', enabled: false, accountId: 'private account', name: 'private name',
+  })).toEqual({ channel: 'telegram', enabled: false });
+  expect(sanitizeAnalyticsEventProperties('channel_account_toggled', { channel: 'my-private-plugin', enabled: true }))
+    .toEqual({ channel: 'other', enabled: true });
+});
 
 test('agent file editing telemetry excludes source content and unbounded labels', () => {
   expect(sanitizeAnalyticsEventProperties('agent_file_activity', {

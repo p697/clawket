@@ -298,20 +298,58 @@ export interface CronJob {
 }
 
 export type CronJobCreate = Omit<CronJob, 'id' | 'createdAtMs' | 'updatedAtMs' | 'state'>;
-export type CronJobPatch = Partial<Omit<CronJob, 'id' | 'createdAtMs' | 'state'>>;
+/**
+ * Payload for `CronJobPatch`. `model: null` clears an `agentTurn` override
+ * (OpenClaw `cron.update` contract); a string replaces it.
+ */
+export type CronPayloadPatch =
+  | Extract<CronPayload, { kind: 'systemEvent' }>
+  | (Omit<Extract<CronPayload, { kind: 'agentTurn' }>, 'model'> & { model?: string | null });
+
+export type CronJobPatch = Partial<Omit<CronJob, 'id' | 'createdAtMs' | 'state' | 'payload'>> & { payload?: CronPayloadPatch };
+
+/** One routing target of a run's delivery trace (OpenClaw `delivery.intended` / `messageToolSentTo`). */
+export interface CronDeliveryTraceTarget {
+  channel?: string;
+  to?: string | null;
+  accountId?: string;
+  threadId?: string | number;
+  source?: string;
+}
+
+/**
+ * OpenClaw's per-run delivery trace: where the job meant to deliver and where the
+ * Agent itself sent through the message tool. Routing only; the sent text is not
+ * on the wire and comes from the run transcript (`CronOperations.runContent`).
+ */
+export interface CronDeliveryTrace {
+  intended?: CronDeliveryTraceTarget;
+  resolved?: CronDeliveryTraceTarget;
+  messageToolSentTo?: CronDeliveryTraceTarget[];
+  fallbackUsed?: boolean;
+  delivered?: boolean;
+}
 
 export interface CronRunLogEntry {
   ts: number;
   jobId: string;
   action: 'finished';
   status?: CronRunStatus;
+  completionStatus?: 'succeeded' | 'failed' | 'unknown';
   error?: string;
   summary?: string;
   delivered?: boolean;
   deliveryStatus?: CronDeliveryStatus;
   deliveryError?: string;
+  delivery?: CronDeliveryTrace;
   sessionId?: string;
+  /**
+   * Session that held the run. OpenClaw reports the hidden per-run key
+   * (`agent:<id>:cron:<job>:run:<sessionId>`); the readable transcript lives on the
+   * stable job key, see `resolveCronRunSessionKey` in the Mobile adapters.
+   */
   sessionKey?: string;
+  runId?: string;
   runAtMs?: number;
   durationMs?: number;
   nextRunAtMs?: number;
@@ -319,6 +357,27 @@ export interface CronRunLogEntry {
   provider?: string;
   usage?: { input_tokens?: number; output_tokens?: number; total_tokens?: number };
   jobName?: string;
+  /** Backend-owned reference to the run's stored output (Hermes cron output file name). */
+  outputRef?: string;
+}
+
+/** One message a run sent through a channel tool, in send order. */
+export interface CronRunDeliveredMessage {
+  channel?: string;
+  target?: string;
+  text: string;
+}
+
+/**
+ * What a completed run actually produced for the user, beyond the summary:
+ * the messages it sent and/or the output the backend stored.
+ */
+export interface CronRunContent {
+  deliveries: CronRunDeliveredMessage[];
+  /** Full stored output when the backend keeps one (Hermes cron output files). */
+  output?: string;
+  /** Session that still holds this run's transcript; absent once the backend recycled it. */
+  sessionKey?: string;
 }
 
 export interface CronListParams {
@@ -701,6 +760,34 @@ export interface ChannelsStatusResult {
   channelDefaultAccountId: Record<string, string>;
 }
 
+/**
+ * How direct messages arriving on channels map onto sessions (OpenClaw
+ * `session.dmScope`). `main` shares the Agent's main session across every
+ * channel; the other scopes isolate by sender, by channel + sender, or by
+ * receiving account + channel + sender. Group and channel conversations keep
+ * their own sessions regardless.
+ */
+export const DM_SCOPES = ['main', 'per-peer', 'per-channel-peer', 'per-account-channel-peer'] as const;
+export type DmScope = typeof DM_SCOPES[number];
+
+export interface ChannelRoutingSettings {
+  dmScope: DmScope;
+}
+
+export interface ChannelAccountEnabledWrite {
+  channelId: string;
+  accountId: string;
+  enabled: boolean;
+}
+
+export type ChannelsOperations = Partial<{
+  status(params?: { probe?: boolean; timeoutMs?: number }): Promise<ChannelsStatusResult>;
+  /** `channelManage` refinement: Gateway config writes; the Gateway restarts the affected runtime. */
+  getRouting(): Promise<ChannelRoutingSettings>;
+  setRouting(settings: ChannelRoutingSettings): Promise<void>;
+  setAccountEnabled(write: ChannelAccountEnabledWrite): Promise<void>;
+}>;
+
 export interface DeviceTokenInfo {
   role: string;
   scopes: string[];
@@ -811,6 +898,8 @@ export type CronOperations = Partial<{
     remove(id: string): Promise<{ ok: boolean }>;
     run(id: string, mode?: 'due' | 'force'): Promise<unknown>;
     runs(params: CronRunsParams): Promise<CronRunsResult>;
+    /** Delivered messages / stored output of one run; resolves to empty content when the backend recycled it. */
+    runContent(entry: CronRunLogEntry): Promise<CronRunContent>;
     heartbeat: {
       get(): Promise<HeartbeatSettings>;
       set(settings: HeartbeatSettings): Promise<void>;
@@ -849,6 +938,8 @@ export type ConfigOperations = Partial<{
       list(): Promise<Backup[]>;
       create(): Promise<Backup>;
       restore(id: string): Promise<void>;
+      /** Deletes the phone-local restore point without changing the Gateway. */
+      remove?(id: string): Promise<void>;
     };
 }>;
 
@@ -860,7 +951,7 @@ export type ManagementOperations = Partial<{
   usage: UsageOperations;
   config: ConfigOperations;
   tools: { catalog(agentId?: string): Promise<ToolCatalog>; save(params: ToolPolicy): Promise<void> };
-  channels: { status(params?: { probe?: boolean; timeoutMs?: number }): Promise<ChannelsStatusResult> };
+  channels: ChannelsOperations;
   devices: Partial<{
     list(): Promise<DevicePairListResult>;
     approve(id: string): Promise<unknown>;

@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render } from '@testing-library/react-native';
 import type { ConnectionDescriptor } from '@clawket/agent-protocol';
 
 import { ControlSize, FontSize } from '../../theme/tokens';
@@ -191,7 +191,6 @@ function createProps(
       accent: 'Blue',
       chatAppearance: 'Comfortable',
       appIcon: 'Light',
-      speechLanguage: 'English',
       appVersion: '3.0.0 (300)',
       previewEnvironment: 'Preview',
     },
@@ -200,7 +199,6 @@ function createProps(
     onOpenSection: jest.fn(),
     onOpenConnection: jest.fn(),
     onOpenPaywall: jest.fn(),
-    onReplyNotificationsChange: jest.fn(),
     onDebugModeChange: jest.fn(),
     ...patch,
   };
@@ -244,11 +242,11 @@ describe('AccountSettingsScreen', () => {
     expect(view.getByText('Settings')).toBeTruthy();
     expect(view.getByTestId('account-settings-membership-companion', { includeHiddenElements: true })).toBeTruthy();
     expect(view.getByTestId('account-settings-support')).toBeTruthy();
-    expect(flattenStyle(view.getByTestId('account-settings-category-appearance').props.style).minHeight)
+    expect(flattenStyle(view.getByTestId('account-settings-category-connections').props.style).minHeight)
       .toBe(ControlSize.settingsRowComfortable);
-    expect(view.queryByTestId('account-settings-row-theme')).toBeNull();
+    expect(view.queryByTestId('account-settings-category-appearance')).toBeNull();
     expect(view.queryByTestId('account-settings-toggle-debugMode')).toBeNull();
-    for (const section of ['connections', 'appearance', 'notifications', 'help', 'about']) {
+    for (const section of ['connections', 'help', 'about']) {
       fireEvent.press(view.getByTestId(`account-settings-category-${section}`));
       expect(onOpenSection).toHaveBeenLastCalledWith(section);
     }
@@ -256,6 +254,60 @@ describe('AccountSettingsScreen', () => {
     expect(onOpenSection).toHaveBeenLastCalledWith('pro');
     fireEvent.press(view.getByTestId('account-settings-back'));
     expect(onBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('surfaces theme, chat theme and app icon in their own card on the home page', () => {
+    const onOpenAction = jest.fn();
+    const onOpenPaywall = jest.fn();
+    const onOpenSection = jest.fn();
+    const onPreferenceChanged = jest.fn();
+    const view = render(
+      <AccountSettingsScreen
+        {...createProps({ isPro: true, onOpenAction, onOpenPaywall, onOpenSection, onPreferenceChanged })}
+      />,
+    );
+
+    // A separate card keeps the category card short; the rows carry their live values.
+    const appearance = view.getByTestId('account-settings-appearance');
+    expect(appearance).not.toBe(view.getByTestId('account-settings-categories'));
+    expect(view.getByText('Dark')).toBeTruthy();
+    expect(view.getByText('Comfortable')).toBeTruthy();
+    expect(view.getByText('Light')).toBeTruthy();
+    expect(flattenStyle(view.getByTestId('account-settings-row-theme').props.style).minHeight)
+      .toBe(ControlSize.settingsRowComfortable);
+
+    fireEvent.press(view.getByTestId('account-settings-row-theme'));
+    expect(view.getByTestId('language-sheet').props.preference).toBe('theme');
+    expect(view.getByTestId('language-sheet').props.onChanged).toBe(onPreferenceChanged);
+    fireEvent.press(view.getByTestId('account-settings-row-chat-appearance'));
+    expect(onOpenAction).toHaveBeenCalledWith('chat-appearance');
+    fireEvent.press(view.getByTestId('account-settings-row-app-icon'));
+    expect(view.getByTestId('language-sheet').props.preference).toBe('app-icon');
+    expect(onOpenPaywall).not.toHaveBeenCalled();
+    expect(onOpenSection).not.toHaveBeenCalled();
+  });
+
+  it('keeps the app icon Pro lock and hides it when the platform cannot change icons', () => {
+    const onOpenPaywall = jest.fn();
+    const view = render(<AccountSettingsScreen {...createProps({ isPro: false, onOpenPaywall })} />);
+
+    expect(view.getByTestId('account-settings-row-app-icon-lock-icon')).toBeTruthy();
+    fireEvent.press(view.getByTestId('account-settings-row-app-icon'));
+    expect(onOpenPaywall).toHaveBeenCalledWith('appIcons', expect.any(Function));
+    expect(view.queryByTestId('language-sheet')).toBeNull();
+    act(() => onOpenPaywall.mock.calls[0]?.[1]?.());
+    expect(view.getByTestId('language-sheet').props.preference).toBe('app-icon');
+
+    view.rerender(
+      <AccountSettingsScreen {...createProps({ isPro: false, capabilities: { appIcons: false } })} />,
+    );
+    expect(view.queryByTestId('account-settings-row-app-icon')).toBeNull();
+    expect(view.getByTestId('account-settings-row-theme')).toBeTruthy();
+
+    view.rerender(
+      <AccountSettingsScreen {...createProps({ capabilities: { appearance: false } })} />,
+    );
+    expect(view.queryByTestId('account-settings-appearance')).toBeNull();
   });
 
   it('renders the dark grouped canvas and capability degradation without backend branches', () => {
@@ -267,8 +319,6 @@ describe('AccountSettingsScreen', () => {
           capabilities: {
             subscription: false,
             appIcons: false,
-            voice: false,
-            notifications: false,
             help: false,
             community: false,
             developer: false,
@@ -282,7 +332,6 @@ describe('AccountSettingsScreen', () => {
     );
     expect(view.queryByTestId('account-settings-category-pro')).toBeNull();
     expect(view.queryByTestId('account-settings-row-app-icon')).toBeNull();
-    expect(view.queryByTestId('account-settings-category-voice')).toBeNull();
     expect(view.queryByTestId('account-settings-category-notifications')).toBeNull();
     expect(view.queryByTestId('account-settings-category-help')).toBeNull();
     expect(view.queryByTestId('account-settings-category-community')).toBeNull();

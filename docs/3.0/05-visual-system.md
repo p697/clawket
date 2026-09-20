@@ -146,10 +146,10 @@ Grok Bot 清爽的根源不是留白，而是**每个界面只有两层字**：�
 
 | Clawket 3.0 组件 | 移植自 youmind-mobile | 要点 |
 |---|---|---|
-| `FloatingButton`（44 圆形按钮） | `src/components/ui/ActionButton.tsx`（`variant="icon"`，44×44，22pt 图标） | 保留 `appearance="quiet"`（在已抬升的表面内用）与按下态；阴影换成 `shadowFloating`；返回箭头用 `DirectionalChevronLeft`，不用系统返回 |
-| 页面头部 | `ScreenHeader` 的对称 44 槽位契约 + 我们的浮动布局 | 所有页面头部由内容拥有：左 44 槽、中标题或胶囊、右 44 槽；`native-stack` 的 `headerShown: false`，永远不用系统 header |
+| `FloatingButton`（44 圆形按钮） | `src/components/ui/ActionButton.tsx`（`variant="icon"`，44×44，22pt 图标） | 页面头部的返回 / 关闭 / 会话按钮一律 `appearance="surface"`（`surfaceFloating`：亮色纯白 + 浮起阴影，暗色浮起面 + 细线；2026-09-19 负责人定稿，不再用无底色 `plain` 或与分组底色太接近的灰 `quiet`；弹层内的圆钮仍用 `quiet`）；壁纸上用 `glass`；按下态保留；阴影换成 `shadowFloating`；返回箭头用 `DirectionalChevronLeft`，不用系统返回 |
+| 页面头部 | `ScreenHeader` 的对称 44 槽位契约 + 我们的浮动布局 | 所有页面头部由内容拥有且只用 `ScreenHeader`（2026-09-19 统一）：安全区 + 8 / 44 高控件行、左右距屏幕边 16 / 下方 8，内容再空 16；左 44 槽是纯白（暗色为浮起面）的 44 圆形返回或关闭，中标题（或替换标题的连接状态胶囊）以屏幕居中，右 44 槽放唯一的尾部动作；`native-stack` 的 `headerShown: false`，永远不用系统 header。线程页的浮动头部带、搜索页的输入行与引导页 `FlowHeader` 共用同一边距、行高和圆钮 |
 | `Segmented`（分组 / 列表等） | `src/components/ui/SegmentedTabs.tsx` 原样移植 | **全圆胶囊**：轨道 `Radius.full`、高 44、下沉底色不描边；选中段抬升底色 + `Shadow.xs`（深色改发丝线）；`FontSize.base`，选中 600；`size="sm"` 为 32 高的紧凑档；`variant="text"` 为文字 Tab。全 App 所有 Tab 统一用它 |
-| `Sheet`（会话面板等底部弹层） | `AdaptiveBottomSheetModal` + `SheetHeader` / `SheetDragHandle` / `useSheetBackgroundStyle` + `SheetBackdrop` + `ThemedFullWindowOverlay` | 顶部 chrome 只走这一套：把手、圆角、关闭键 + 居中标题（`titleContent` 可换成会话面板的 Agent 胶囊）；iPad 自动居中面板 |
+| `Sheet`（会话面板等底部弹层） | `AdaptiveBottomSheetModal` + `SheetHeader` / `SheetDragHandle` / `useSheetBackgroundStyle` + `SheetBackdrop` + `ThemedFullWindowOverlay` | 顶部 chrome 只走这一套：把手、圆角、关闭键 + 居中标题（`titleContent` 可换成会话面板的 Agent 胶囊）；header 行下自带 `Space.md` 留白（内容距 44pt 控件 16pt），body 不再补 `paddingTop`；右上角图标动作统一用 `SheetHeaderButton`（与关闭键同一 quiet 圆形）；可能超出屏幕的 body 用固定 `snapPoints` + `BottomSheetScrollView` / `BottomSheetFlatList`（详情 68% / 92%、表单 82% / 92%、文档编辑单档 93%），原生竖向 `ScrollView` 在弹层里滚不动、`check:ui-style` 直接拒绝；iPad 自动居中面板 |
 | 居中弹窗（二次确认、删除） | `ModalSheet` | 不用系统 `Alert` 做确认；`title` 自带关闭键 |
 | `SearchInput` | `src/components/ui/SearchInput.tsx` | 44 高胶囊，`Radius.full`；弹层内传 `inSheet` |
 | 文本输入 | `CompositionSafeTextInput` / `CompositionSafeBottomSheetTextInput` / `PasteCapableTextInput` | 中文输入法组合安全；输入框里粘贴图片走 `PasteCapableTextInput` |

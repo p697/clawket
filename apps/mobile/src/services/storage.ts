@@ -12,7 +12,6 @@ import {
   GatewayProfilesConfig,
   GatewayTransportKind,
   SavedGatewayConfig,
-  SpeechRecognitionLanguage,
   ChatAppearanceSettings,
   ThemeMode,
 } from '../types';
@@ -135,6 +134,7 @@ const KEYS = {
   gatewayConfigsState: 'clawket.gatewayConfigsState.v1',
   deviceTokenPrefix: 'clawket.deviceToken.',
   debugMode: 'clawket.debugMode.v1',
+  simulateFreeAccount: 'clawket.simulateFreeAccount.v1',
   relayServiceEnvironment: 'clawket.relayServiceEnvironment.v1',
   showAgentAvatar: 'clawket.showAgentAvatar.v1',
   themeMode: 'clawket.themeMode.v1',
@@ -144,7 +144,6 @@ const KEYS = {
   execApproval: 'clawket.execApproval.v1',
   chatFontSize: 'clawket.chatFontSize.v1',
   chatAppearance: 'clawket.chatAppearance.v1',
-  speechRecognitionLanguage: 'clawket.speechRecognitionLanguage.v1',
   lastSessionKey: 'clawket.lastSessionKey.v1',
   lastOpenedSessionSnapshotPrefix: 'clawket.lastOpenedSessionSnapshot.v1',
   cachedAgentIdentityPrefix: 'clawket.cachedAgentIdentity.v1',
@@ -868,12 +867,48 @@ export const StorageService = {
     }
   },
 
+  /**
+   * Fresh-install reset for the Keychain-backed local preferences, which
+   * outlive the app bundle on iOS. Identity, device tokens and the Pro
+   * entitlement record are not preferences and stay untouched; scoped
+   * last-session pointers carry no credentials and are left to expire.
+   */
+  async clearLocalPreferences(): Promise<void> {
+    const keys = [
+      KEYS.debugMode,
+      KEYS.simulateFreeAccount,
+      KEYS.relayServiceEnvironment,
+      KEYS.showAgentAvatar,
+      KEYS.themeMode,
+      KEYS.accentColor,
+      KEYS.currentAgentId,
+      KEYS.showModelUsage,
+      KEYS.execApproval,
+      KEYS.chatFontSize,
+      KEYS.chatAppearance,
+      KEYS.lastSessionKey,
+      KEYS.nodeEnabled,
+      KEYS.nodeCapabilityToggles,
+    ];
+    await Promise.all(keys.map((key) => SecureStore.deleteItemAsync(key, SECURE_OPTIONS)));
+  },
+
   async setDebugMode(enabled: boolean): Promise<void> {
     await SecureStore.setItemAsync(KEYS.debugMode, enabled ? '1' : '0', SECURE_OPTIONS);
   },
 
   async getDebugMode(): Promise<boolean> {
     const raw = await SecureStore.getItemAsync(KEYS.debugMode, SECURE_OPTIONS);
+    return raw === '1';
+  },
+
+  /** Developer-only paywall testing: the app treats an active subscription as a free account. */
+  async setSimulateFreeAccount(enabled: boolean): Promise<void> {
+    await SecureStore.setItemAsync(KEYS.simulateFreeAccount, enabled ? '1' : '0', SECURE_OPTIONS);
+  },
+
+  async getSimulateFreeAccount(): Promise<boolean> {
+    const raw = await SecureStore.getItemAsync(KEYS.simulateFreeAccount, SECURE_OPTIONS);
     return raw === '1';
   },
 
@@ -1012,26 +1047,6 @@ export const StorageService = {
         imagePath: resolvedImagePath,
       },
     };
-  },
-
-  async setSpeechRecognitionLanguage(language: SpeechRecognitionLanguage): Promise<void> {
-    await SecureStore.setItemAsync(KEYS.speechRecognitionLanguage, language, SECURE_OPTIONS);
-  },
-
-  async getSpeechRecognitionLanguage(): Promise<SpeechRecognitionLanguage> {
-    const raw = await SecureStore.getItemAsync(KEYS.speechRecognitionLanguage, SECURE_OPTIONS);
-    if (
-      raw === 'system'
-      || raw === 'en'
-      || raw === 'zh-Hans'
-      || raw === 'ja'
-      || raw === 'ko'
-      || raw === 'de'
-      || raw === 'es'
-    ) {
-      return raw;
-    }
-    return 'system';
   },
 
   async setLastSessionKey(key: string, scopeId?: string): Promise<void> {
@@ -1327,30 +1342,5 @@ export const StorageService = {
     } catch {
       return null;
     }
-  },
-
-  // --- Cron failure acknowledgment (AsyncStorage — non-sensitive, dynamic data) ---
-
-  _cronAckedKey: 'clawket.cron.acked-failures',
-
-  async getAckedCronFailures(): Promise<Set<string>> {
-    try {
-      const raw = await AsyncStorage.getItem(this._cronAckedKey);
-      if (!raw) return new Set();
-      const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) return new Set();
-      return new Set(parsed.filter((id: unknown) => typeof id === 'string'));
-    } catch {
-      return new Set();
-    }
-  },
-
-  async ackCronFailures(currentFailedIds: string[]): Promise<void> {
-    const currentSet = new Set(currentFailedIds);
-    if (currentSet.size === 0) {
-      await AsyncStorage.removeItem(this._cronAckedKey);
-      return;
-    }
-    await AsyncStorage.setItem(this._cronAckedKey, JSON.stringify([...currentSet]));
   },
 };

@@ -68,7 +68,6 @@ const mockAppContext: any = {
   pendingAgentSwitch: null,
   clearPendingAgentSwitch: jest.fn(),
   execApprovalEnabled: true,
-  speechRecognitionLanguage: 'system',
   pendingChatInput: null,
   clearPendingChatInput: jest.fn(),
   pendingMainSessionSwitch: false,
@@ -99,9 +98,7 @@ jest.mock('expo-document-picker', () => ({
   getDocumentAsync: jest.fn().mockResolvedValue({ canceled: true, assets: [] }),
 }));
 
-jest.mock('../services/speech/speechRecognition', () => ({
-  stopSpeechRecognitionAsync: jest.fn().mockResolvedValue(undefined),
-}));
+
 
 jest.mock('../services/auto-app-review', () => ({
   recordSuccessfulSendForAutomaticReview: jest.fn().mockResolvedValue(undefined),
@@ -334,6 +331,16 @@ describe('useChatController message queue', () => {
     jest.useRealTimers();
     consoleErrorSpy.mockRestore();
     jest.restoreAllMocks();
+  });
+
+  it.each(['openclaw', 'hermes'] as const)('%s submits the completed voice text without waiting for a draft render', async (backend) => {
+    const { result, adapter } = renderController(backend);
+    act(() => { result.current.setInput('stale draft'); });
+    await act(async () => { result.current.setInput('complete voice text'); result.current.onSend('complete voice text'); });
+    await flush();
+    expect(adapter.prompt).toHaveBeenCalledTimes(1);
+    expect(result.current.listData.some((message) => message.text === 'complete voice text')).toBe(true);
+    expect(result.current.listData.some((message) => message.text === 'stale draft')).toBe(false);
   });
 
   it('does not clear a new live turn when a foreground history refresh finishes late', async () => {

@@ -499,3 +499,18 @@ describe('useChatModelPicker', () => {
     expect(result.current.modelPickerError).toBeNull();
   });
 });
+
+
+describe('configured default model', () => {
+  it.each([false, true])('loads independently of model selection (config failure: %s)', async (fails) => {
+    const adapter = createAdapter({ list: jest.fn().mockResolvedValue([{ id: 'mini', name: 'Mini', provider: 'openai' }]) });
+    adapter.management!.models!.getCatalog = fails
+      ? jest.fn().mockRejectedValue(new Error('config unavailable'))
+      : jest.fn().mockResolvedValue({ defaults: { primary: 'openai/default' } });
+    const { result } = renderHook(() => useChatModelPicker({ adapter, connectionState: 'ready', sessionKey: 'main', setInput: jest.fn(), setSessions: jest.fn() }));
+    await act(async () => { result.current.openModelPicker(); });
+    expect(result.current.configuredDefaultModel).toBe(fails ? undefined : 'openai/default');
+    expect(result.current.modelPickerError).toBeNull();
+    expect(result.current.availableModels).toHaveLength(1);
+  });
+});

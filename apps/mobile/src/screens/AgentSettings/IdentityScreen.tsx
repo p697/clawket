@@ -355,27 +355,18 @@ export function IdentityScreen({
                 />
               </View>
             ))}
-            {agentCreatable || canRemove ? (
+            {/* No `New Agent` button here (owner decision 2026-09-19): the roster `+` sheet is the
+                one creation entry and lands on this page with `openCreateOnMount`. */}
+            {canRemove ? (
               <View style={styles.actions}>
-                {agentCreatable ? (
-                  <Button
-                    testID="agent-identity-create"
-                    label={t('New Agent', { ns: 'chat' })}
-                    variant="secondary"
-                    disabled={!online || saving}
-                    onPress={openCreate}
-                  />
-                ) : null}
-                {canRemove ? (
-                  <Button
-                    testID="agent-identity-delete"
-                    label={t('Delete Agent', { ns: 'settings' })}
-                    variant="destructive"
-                    disabled={!online || saving}
-                    loading={busy === 'delete'}
-                    onPress={() => setDeleteVisible(true)}
-                  />
-                ) : null}
+                <Button
+                  testID="agent-identity-delete"
+                  label={t('Delete Agent', { ns: 'settings' })}
+                  variant="destructive"
+                  disabled={!online || saving}
+                  loading={busy === 'delete'}
+                  onPress={() => setDeleteVisible(true)}
+                />
               </View>
             ) : null}
           </>
@@ -524,7 +515,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       lineHeight: LineHeight.secondary,
     },
     actions: { gap: Space.md, paddingTop: Space.md },
-    sheetContent: { gap: Space.lg, padding: Space.lg, paddingBottom: Space.xxl },
+    sheetContent: { gap: Space.lg, paddingHorizontal: Space.lg, paddingBottom: Space.xxl },
     actionRow: { flexDirection: 'row', gap: Space.md },
     actionButton: { flex: 1 },
   });

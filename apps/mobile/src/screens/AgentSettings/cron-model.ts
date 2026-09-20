@@ -7,8 +7,10 @@ import type {
   CronRunLogEntry,
   CronSchedule,
   CronDelivery,
+  ModelInfo,
 } from '@clawket/agent-protocol';
 
+import { modelReference } from '../../utils/model-catalog';
 import { validateSchedule } from './cron-schedule';
 
 const PAGE_LIMIT = 100;
@@ -20,6 +22,7 @@ export type CronDraft = Readonly<{
   prompt: string;
   enabled: boolean;
   description?: string;
+  /** `provider/model` override for `agentTurn` jobs; empty follows the Agent default. */
   model?: string;
   delivery?: CronDelivery;
 }>;
@@ -88,17 +91,20 @@ export function buildCronJobCreate(
   agent: AgentDescriptor,
 ): CronJobCreate {
   const prompt = draft.prompt.trim();
+  const model = draft.model?.trim();
+  // Every new job is an isolated agent turn, for the default Agent too (owner
+  // decision 2026-09-19, matching the OpenClaw Control UI, CLI and agent tool):
+  // it carries a per-job model and records the resolved model in run history.
+  // Existing main-session system events stay readable and editable.
   return {
     ...(agent.isMain ? {} : { agentId: agent.agentId }),
     name: draft.name.trim(),
     ...(draft.description?.trim() ? { description: draft.description.trim() } : {}),
     enabled: draft.enabled,
     schedule: draft.schedule,
-    sessionTarget: agent.isMain ? 'main' : 'isolated',
+    sessionTarget: 'isolated',
     wakeMode: 'now',
-    payload: agent.isMain
-      ? { kind: 'systemEvent', text: prompt }
-      : { kind: 'agentTurn', message: prompt, ...(draft.model?.trim() ? { model: draft.model.trim() } : {}) },
+    payload: { kind: 'agentTurn', message: prompt, ...(model ? { model } : {}) },
     delivery: draft.delivery ?? { mode: 'none' },
   };
 }
@@ -113,12 +119,32 @@ export function buildCronJobPatch(draft: CronDraft, job: CronJob): CronJobPatch 
     ...(JSON.stringify(draft.schedule) === JSON.stringify(job.schedule) ? {} : { schedule: draft.schedule }),
     payload: job.payload.kind === 'systemEvent'
       ? { ...job.payload, text: prompt }
-      : { ...job.payload, message: prompt, ...(draft.model !== job.payload.model ? { model: draft.model?.trim() ?? '' } : {}) },
+      // `null` clears the override on the wire; an empty string would be stored verbatim.
+      : { ...job.payload, message: prompt, ...(cronModelChanged(draft.model, job.payload.model) ? { model: draft.model?.trim() || null } : {}) },
   };
+}
+
+function cronModelChanged(next: string | undefined, current: string | undefined): boolean {
+  return (next?.trim() ?? '') !== (current?.trim() ?? '');
 }
 
 export function cronPayloadText(job: CronJob): string {
   return job.payload.kind === 'systemEvent' ? job.payload.text : job.payload.message;
+}
+
+/** The per-job model override; `undefined` when the job follows the Agent default or the main session. */
+export function cronJobModel(job: Pick<CronJob, 'payload'>): string | undefined {
+  return job.payload.kind === 'agentTurn' ? job.payload.model?.trim() || undefined : undefined;
+}
+
+/** Catalog display name for a `provider/model` reference, else the reference without its provider. */
+export function cronModelLabel(reference: string, models: ReadonlyArray<ModelInfo>): string {
+  const needle = reference.trim().toLowerCase();
+  const match = models.find((model) => modelReference(model.provider, model.id).toLowerCase() === needle
+    || model.id.trim().toLowerCase() === needle);
+  if (match) return match.name || match.id;
+  const slash = reference.indexOf('/');
+  return slash >= 0 ? reference.slice(slash + 1) : reference;
 }
 
 export function cronRunStatus(entry: CronRunLogEntry): 'Succeeded' | 'Failed' | 'Skipped' | 'Unknown' {

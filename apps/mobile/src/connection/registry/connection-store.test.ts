@@ -36,6 +36,10 @@ class MemorySecureStorage implements SecureConnectionStorage {
     this.values.set(key, value);
     this.writes.push({ key, value });
   }
+
+  async deleteItemAsync(key: string): Promise<void> {
+    this.values.delete(key);
+  }
 }
 
 function legacyStorage(state: GatewayConfigsState = { activeId: null, configs: [] }): LegacyConnectionStorage & {
@@ -672,6 +676,32 @@ describe('ConnectionStore', () => {
 
     const rolledForward = await store.rollback();
     expect(rolledForward.connections.map((connection) => connection.id)).toEqual(['first', 'second']);
+  });
+
+  it('clearPersisted forgets the current, rollback and legacy snapshots so a restart sees no records', async () => {
+    const secureStorage = new MemorySecureStorage();
+    secureStorage.values.set(LEGACY_KEY, JSON.stringify({ activeId: null, configs: [] }));
+    const legacy = legacyStorage();
+    const store = new ConnectionStore({ secureStorage, legacyStorage: legacy });
+    await store.add({ ...openClawInput('First'), id: 'first' });
+    await store.add({ ...openClawInput('Second'), id: 'second' });
+    await store.remove('first');
+    await store.remove('second');
+    // The rollback copy still carries the last removed credential-bearing record.
+    expect(secureStorage.values.get(ROLLBACK_KEY)).toContain('second');
+
+    const cleared = await store.clearPersisted();
+
+    expect(cleared).toMatchObject({ activeConnectionId: null, freeConnectionId: null, connections: [] });
+    expect(secureStorage.values.has(CURRENT_KEY)).toBe(false);
+    expect(secureStorage.values.has(ROLLBACK_KEY)).toBe(false);
+    expect(secureStorage.values.has(LEGACY_KEY)).toBe(false);
+    expect([...secureStorage.values.values()].join('\n')).not.toContain('gct_');
+
+    const restarted = new ConnectionStore({ secureStorage, legacyStorage: legacy });
+    const reloaded = await restarted.load();
+    expect(reloaded.connections).toEqual([]);
+    expect(legacy.readLegacyGatewayConfigsState).toHaveBeenCalled();
   });
 
   it('uses the rollback snapshot when the current snapshot is corrupt', async () => {

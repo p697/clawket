@@ -4,23 +4,23 @@ import {
   Check,
   Blend,
   Droplets,
+  SunDim,
   Type,
   UserRound,
   ImagePlus,
   RotateCcw,
   Trash2,
 } from 'lucide-react-native';
-import { ChevronLeft } from '../../components/ui/DirectionalIcon';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChatColorPicker } from '../../components/chat/ChatColorPicker';
 import { defaultAccentId } from '../../theme/accents';
 import type { AccentColorId } from '../../types';
-import { ChatAppearancePreviewCard } from '../../components/chat/ChatAppearancePreviewCard';
+import { ChatAppearancePreviewCard, type ChatAppearancePreviewAgent } from '../../components/chat/ChatAppearancePreviewCard';
 import { Button } from '../../components/ui/Button';
-import { FloatingButton } from '../../components/ui/FloatingButton';
 import { HeaderTextAction } from '../../components/ui/HeaderTextAction';
+import { ScreenHeader } from '../../components/ui/ScreenHeader';
 import { SegmentedTabs } from '../../components/ui/SegmentedTabs';
 import {
   SettingsDivider,
@@ -29,8 +29,11 @@ import {
 } from '../../components/ui/SettingsGroup';
 import { Sheet } from '../../components/ui/Sheet';
 import { ThemedSwitch } from '../../components/ui/ThemedSwitch';
+import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { useConnections } from '../../connection';
 import { useAppContext } from '../../contexts/AppContext';
-import { DEFAULT_CHAT_APPEARANCE, DEFAULT_CHAT_FONT_SIZE } from '../../features/chat-appearance/defaults';
+import { resolveAgentDisplayName } from '../../services/agent-display-name';
+import { DEFAULT_CHAT_APPEARANCE, DEFAULT_CHAT_FONT_SIZE, MAX_CHAT_BACKGROUND_DIM } from '../../features/chat-appearance/defaults';
 import {
   deletePersistedChatBackgroundImage,
   persistChatBackgroundImage,
@@ -40,7 +43,6 @@ import { analyticsEvents } from '../../services/analytics/events';
 import { SettingsIcon } from '../../components/ui/SettingsIcon';
 import { useAppTheme } from '../../theme';
 import {
-  ControlSize,
   FontSize,
   FontWeight,
   IconSize,
@@ -63,12 +65,18 @@ type AppearanceDraftSnapshot = Readonly<{
   accentId: AccentColorId;
 }>;
 
-type ValueSheetKind = 'blur' | 'opacity' | 'font-size';
+type ValueSheetKind = 'blur' | 'dim' | 'opacity' | 'font-size';
 type ErrorKind = 'photo' | 'save';
 
 const BLUR_STEPS = [0, 4, 8, 12, 16, 20, 24] as const;
+const DIM_STEPS = [0, 0.1, 0.2, 0.3, 0.4, 0.5, MAX_CHAT_BACKGROUND_DIM] as const;
 const OPACITY_STEPS = [0.78, 0.84, 0.9, 0.96, 1] as const;
 const FONT_SIZE_STEPS = [12, 13, 14, 15, 16, 17, 18, 19, 20] as const;
+// Seven or more comfortable rows outgrow a phone screen, so those value lists
+// scroll inside fixed snap points through the Gorhom-integrated scroll view;
+// the five-step opacity list keeps the sheet's dynamic height.
+const SCROLLING_VALUE_SHEET_KINDS: ReadonlySet<ValueSheetKind> = new Set(['blur', 'dim', 'font-size']);
+const VALUE_SHEET_SNAP_POINTS: string[] = ['62%', '92%'];
 
 function serializeDraft(snapshot: AppearanceDraftSnapshot): string {
   return JSON.stringify(snapshot);
@@ -116,30 +124,39 @@ function ValuePickerSheet({
   const { theme } = useAppTheme();
   const title = kind === 'blur'
     ? t('Blur')
-    : kind === 'opacity'
-      ? t('Bubble Opacity')
-      : t('Chat Font Size');
+    : kind === 'dim'
+      ? t('Dim')
+      : kind === 'opacity'
+        ? t('Bubble Opacity')
+        : t('Chat Font Size');
   const values: readonly number[] = kind === 'blur'
     ? BLUR_STEPS
-    : kind === 'opacity'
-      ? OPACITY_STEPS
-      : FONT_SIZE_STEPS;
+    : kind === 'dim'
+      ? DIM_STEPS
+      : kind === 'opacity'
+        ? OPACITY_STEPS
+        : FONT_SIZE_STEPS;
   const formatValue = (value: number) => {
     if (kind === 'blur') return t('{{value}} px', { value });
-    if (kind === 'opacity') return t('{{value}}%', { value: Math.round(value * 100) });
+    if (kind === 'dim' || kind === 'opacity') return t('{{value}}%', { value: Math.round(value * 100) });
     return String(value);
   };
 
+  const scrolls = SCROLLING_VALUE_SHEET_KINDS.has(kind);
+  const Body = scrolls ? BottomSheetScrollView : View;
   return (
     <Sheet
       visible
       testID={`chat-appearance-${kind}-sheet`}
       title={title}
       closeAccessibilityLabel={t('common:Close')}
+      snapPoints={scrolls ? VALUE_SHEET_SNAP_POINTS : undefined}
       onClose={onClose}
     >
-      <ScrollView
-        contentContainerStyle={styles.sheetContent}
+      <Body
+        testID={`chat-appearance-${kind}-sheet-body`}
+        style={scrolls ? styles.sheetScroll : styles.sheetContent}
+        contentContainerStyle={scrolls ? styles.sheetContent : undefined}
         showsVerticalScrollIndicator={false}
       >
         <SettingsGroup density="comfortable">
@@ -161,7 +178,7 @@ function ValuePickerSheet({
             </Fragment>
           ))}
         </SettingsGroup>
-      </ScrollView>
+      </Body>
     </Sheet>
   );
 }
@@ -173,6 +190,8 @@ export function ChatAppearanceScreen({
   const { theme, accentId, setAccentId } = useAppTheme();
   const insets = useSafeAreaInsets();
   const {
+    agents,
+    currentAgentId,
     chatAppearance,
     onChatAppearanceChange,
     showAgentAvatar,
@@ -181,6 +200,21 @@ export function ChatAppearanceScreen({
     chatFontSize,
     onChatFontSizeChange,
   } = useAppContext();
+  const connections = useConnections();
+  // Preview the Agent the person is actually chatting with; the roster carries its local avatar.
+  const previewAgent = useMemo<ChatAppearancePreviewAgent | null>(() => {
+    const rosterAgent = connections.roster
+      .find((group) => group.connection.id === connections.activeConnectionId)
+      ?.agents.find((candidate) => candidate.agent.agentId === currentAgentId)
+      ?.agent;
+    if (rosterAgent) {
+      return { agentId: rosterAgent.agentId, name: rosterAgent.name, emoji: rosterAgent.emoji, avatarUrl: rosterAgent.avatarUrl };
+    }
+    const agent = agents.find((candidate) => candidate.id === currentAgentId);
+    const name = resolveAgentDisplayName(agent);
+    if (!agent || !name) return null;
+    return { agentId: agent.id, name, emoji: agent.identity?.emoji, avatarUrl: agent.identity?.avatarUrl };
+  }, [agents, connections.activeConnectionId, connections.roster, currentAgentId]);
 
   const initialSnapshotRef = useRef<AppearanceDraftSnapshot>({
     appearance: chatAppearance,
@@ -236,7 +270,6 @@ export function ChatAppearanceScreen({
     ],
     [t],
   );
-  const headerInsets = useMemo(() => ({ paddingTop: insets.top + Space.sm }), [insets.top]);
   const contentInsets = useMemo(
     () => ({ paddingBottom: insets.bottom + Space.xl }),
     [insets.bottom],
@@ -303,7 +336,6 @@ export function ChatAppearanceScreen({
           ...draftAppearance.background,
           enabled: Boolean(nextImagePath) && draftAppearance.background.enabled,
           imagePath: nextImagePath,
-          dim: 0,
           fillMode: 'cover',
         },
       };
@@ -325,6 +357,7 @@ export function ChatAppearanceScreen({
         bubble_style: nextAppearance.bubbles.style,
         bubble_opacity: nextAppearance.bubbles.opacity,
         blur: nextAppearance.background.blur,
+        dim: nextAppearance.background.dim,
         show_agent_avatar: draftShowAgentAvatar,
         // Per-message model labels were removed from the timeline; the stored
         // preference is reported unchanged until the key is retired.
@@ -373,6 +406,11 @@ export function ChatAppearanceScreen({
         ...previous,
         background: { ...previous.background, blur: value },
       }));
+    } else if (valueSheet === 'dim') {
+      setDraftAppearance((previous) => ({
+        ...previous,
+        background: { ...previous.background, dim: value },
+      }));
     } else if (valueSheet === 'opacity') {
       setDraftAppearance((previous) => ({
         ...previous,
@@ -385,33 +423,32 @@ export function ChatAppearanceScreen({
 
   const selectedSheetValue = valueSheet === 'blur'
     ? draftAppearance.background.blur
-    : valueSheet === 'opacity'
-      ? draftAppearance.bubbles.opacity
-      : draftChatFontSize;
+    : valueSheet === 'dim'
+      ? draftAppearance.background.dim
+      : valueSheet === 'opacity'
+        ? draftAppearance.bubbles.opacity
+        : draftChatFontSize;
 
   return (
     <View
       testID="chat-appearance-screen"
       style={[styles.screen, { backgroundColor: theme.colors.canvasGrouped }]}
     >
-      <View style={[styles.header, headerInsets]}>
-        <View style={styles.headerSide}>
-          <FloatingButton
-            testID="chat-appearance-back"
-            icon={ChevronLeft}
-            accessibilityLabel={t('common:Back')}
-            onPress={requestBack}
-          />
-        </View>
-        <Text style={[styles.title, { color: theme.colors.ink }]}>{t('Chat theme')}</Text>
-        <View style={[styles.headerSide, styles.headerTrailing]}>
+      <ScreenHeader
+        testID="chat-appearance"
+        title={t('Chat theme')}
+        topInset={insets.top}
+        onBack={requestBack}
+        backAccessibilityLabel={t('common:Back')}
+        rightContent={(
           <HeaderTextAction
             label={saving ? t('common:Saving...') : t('common:Save')}
             onPress={() => { void handleSave(); }}
             disabled={!isDirty || saving}
           />
-        </View>
-      </View>
+        )}
+        style={{ backgroundColor: theme.colors.canvasGrouped }}
+      />
 
       <ScrollView
         automaticallyAdjustContentInsets={false}
@@ -421,6 +458,7 @@ export function ChatAppearanceScreen({
         <SettingsSection title={t('Preview')} testID="chat-appearance-preview">
           <ChatAppearancePreviewCard
             accentId={draftAccentId}
+            agent={previewAgent}
             appearance={draftSnapshot.appearance}
             backgroundImageUri={previewBackgroundUri}
             chatFontSize={draftChatFontSize}
@@ -463,6 +501,16 @@ export function ChatAppearanceScreen({
               showChevron
               disabled={!hasBackgroundImage}
               onPress={() => setValueSheet('blur')}
+            />
+            <SettingsDivider inset="content" />
+            <SettingsRow
+              testID="chat-appearance-dim"
+              leading={<SettingsIcon icon={SunDim} tone="neutral" size={20} strokeWidth={1.75} />}
+              title={t('Dim')}
+              value={t('{{value}}%', { value: Math.round(draftAppearance.background.dim * 100) })}
+              showChevron
+              disabled={!hasBackgroundImage}
+              onPress={() => setValueSheet('dim')}
             />
           </SettingsGroup>
         </SettingsSection>
@@ -591,27 +639,9 @@ export function ChatAppearanceScreen({
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  header: {
-    paddingHorizontal: Space.lg,
-    paddingBottom: Space.lg,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  headerSide: {
-    width: ControlSize.settingsRow,
-    alignItems: 'flex-start',
-  },
-  headerTrailing: { alignItems: 'flex-end' },
-  title: {
-    flex: 1,
-    textAlign: 'center',
-    fontSize: FontSize.title,
-    lineHeight: LineHeight.title,
-    fontWeight: FontWeight.semibold,
-  },
   content: {
     paddingHorizontal: Space.lg,
-    paddingTop: Space.sm,
+    paddingTop: Space.lg,
     gap: Space.xl,
   },
   section: { gap: Space.sm },
@@ -626,6 +656,7 @@ const styles = StyleSheet.create({
     lineHeight: LineHeight.body,
     fontWeight: FontWeight.regular,
   },
+  sheetScroll: { flex: 1, minHeight: 0 },
   sheetContent: {
     paddingHorizontal: Space.lg,
     paddingBottom: Space.xxl,

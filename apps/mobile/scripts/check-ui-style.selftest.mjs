@@ -200,6 +200,61 @@ expectPass('canonical UI primitives may own sheet chrome', {
   source: "import { SheetHeader } from './SheetHeader'; export const x = SheetHeader;\n",
 });
 
+expectFailure('sheet header actions cannot hand-roll a FloatingButton', {
+  componentFile: 'chat/ModelPickerModal.tsx',
+  source: "import { FloatingButton, Sheet } from '../ui'; export const x = <Sheet headerRight={<FloatingButton onPress={() => {}} />} />;\n",
+}, 'FloatingButton inside headerRight');
+
+expectFailure('sheet header actions cannot hide a FloatingButton behind a conditional', {
+  componentFile: 'chat/ModelPickerModal.tsx',
+  source: "import { FloatingButton, Sheet } from '../ui'; export const x = (ok: boolean) => <Sheet headerRight={ok ? <FloatingButton onPress={() => {}} /> : undefined} />;\n",
+}, 'FloatingButton inside headerRight');
+
+expectFailure('sheet header actions cannot use a namespaced floating button', {
+  componentFile: 'chat/ModelPickerModal.tsx',
+  source: "import * as UI from '../ui'; export const x = <UI.Sheet headerRight={<UI.FloatingButton onPress={() => {}} />} />;\n",
+}, 'FloatingButton inside headerRight');
+
+expectPass('sheet header actions use SheetHeaderButton', {
+  componentFile: 'chat/ModelPickerModal.tsx',
+  source: "import { Sheet, SheetHeaderButton } from '../ui'; export const x = <Sheet headerRight={<SheetHeaderButton onPress={() => {}} />} />;\n",
+});
+
+expectFailure('sheet bodies cannot scroll a stock ScrollView', {
+  componentFile: 'chat/RunSheet.tsx',
+  source: "import { ScrollView } from 'react-native'; import { Sheet } from '../ui'; export const x = <Sheet><ScrollView><></></ScrollView></Sheet>;\n",
+}, 'ScrollView inside Sheet');
+
+expectFailure('sheet bodies cannot hide a stock list behind an import alias or a conditional', {
+  componentFile: 'chat/OptionSheet.tsx',
+  source: "import { FlatList as List } from 'react-native'; import { Sheet } from '../ui'; export const x = (ok: boolean) => <Sheet>{ok ? <List data={[]} renderItem={() => null} /> : null}</Sheet>;\n",
+}, 'FlatList inside Sheet');
+
+expectPass('sheet bodies scroll through the Gorhom-integrated scrollables', {
+  componentFile: 'chat/RunSheet.tsx',
+  source: "import { BottomSheetScrollView } from '@gorhom/bottom-sheet'; import { Sheet } from '../ui'; export const x = <Sheet snapPoints={['68%', '92%']}><BottomSheetScrollView><></></BottomSheetScrollView></Sheet>;\n",
+});
+
+expectPass('a horizontal strip inside a sheet and a page scroll view are unaffected', {
+  componentFile: 'chat/Panel.tsx',
+  source: "import { ScrollView } from 'react-native'; import { Sheet } from '../ui'; export const x = <><ScrollView><></></ScrollView><Sheet><ScrollView horizontal><></></ScrollView></Sheet></>;\n",
+});
+
+expectFailure('a corrupted sheet body fails closed instead of passing the scrollable rule', {
+  componentFile: 'chat/RunSheet.tsx',
+  source: "import { ScrollView } from 'react-native'; import { Sheet } from '../ui'; export const x = <Sheet><ScrollView></Sheet>;\n",
+}, 'parse failed');
+
+expectPass('a page-level headerRight slot is not a sheet header', {
+  componentFile: 'chat/SectionScreen.tsx',
+  source: "import { FloatingButton } from '../ui'; import { Layout } from './Layout'; export const x = <Layout headerRight={<FloatingButton onPress={() => {}} />} />;\n",
+});
+
+expectPass('a FloatingButton outside the header slot is unaffected', {
+  componentFile: 'chat/ModelPickerModal.tsx',
+  source: "import { FloatingButton, Sheet } from '../ui'; export const x = <Sheet headerRight={undefined}><FloatingButton onPress={() => {}} /></Sheet>;\n",
+});
+
 expectFailure('business components cannot use the avatar-only agent palette', {
   componentFile: 'chat/ModelPickerModal.tsx',
   source: "import { agentPalette } from '../../theme/theme'; export const color = agentPalette[0];\n",

@@ -15,6 +15,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useAppTheme } from '../../theme';
+import { createChatGlassStyle } from '../../features/chat-appearance/resolver';
 import type { CanonicalThemeColors, ThemeScheme } from '../../theme/theme';
 import {
   BorderWidth,
@@ -38,7 +39,8 @@ export const FLOATING_PRIMARY_BUTTON_SIZE = 64;
 const DISABLED_OPACITY = 0.4;
 const PRESSED_OPACITY = 0.88;
 
-export type FloatingButtonAppearance = 'surface' | 'quiet' | 'plain' | 'accent' | 'ink' | 'destructive';
+/** `glass` is the translucent chrome for controls floating over a chat wallpaper. */
+export type FloatingButtonAppearance = 'surface' | 'quiet' | 'plain' | 'accent' | 'ink' | 'destructive' | 'glass';
 
 export type FloatingButtonBadge = Readonly<{
   tone: 'accent' | 'bad';
@@ -96,6 +98,9 @@ export function resolveFloatingButtonChrome(
       surface: { backgroundColor: colors.surface },
       iconColor: colors.ink,
     };
+  }
+  if (appearance === 'glass') {
+    return { surface: createChatGlassStyle({ colors, scheme }), iconColor: colors.ink };
   }
   if (appearance === 'accent') {
     return {

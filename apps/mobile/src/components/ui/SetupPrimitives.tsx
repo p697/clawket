@@ -12,7 +12,7 @@ export function FlowHeader({ onBack, title, right, testID }: { onBack?: () => vo
   const { theme: { colors } } = useAppTheme();
   const { t } = useTranslation('common');
   return <View style={styles.header}>
-    <View style={styles.slot}>{onBack ? <FloatingButton testID={testID} icon={ChevronLeft} appearance="plain" onPress={onBack} accessibilityLabel={t('Back')} /> : null}</View>
+    <View style={styles.slot}>{onBack ? <FloatingButton testID={testID} icon={ChevronLeft} appearance="surface" onPress={onBack} accessibilityLabel={t('Back')} /> : null}</View>
     <Text numberOfLines={1} style={[styles.headerTitle, { color: colors.inkSecondary }]}>{title}</Text>
     <View style={styles.slot}>{right}</View>
   </View>;
@@ -94,7 +94,7 @@ export function MessagePreview({ message, expanded, onToggle, accessibilityLabel
 }
 
 const styles = StyleSheet.create({
-  header: { minHeight: ControlSize.settingsRow, paddingHorizontal: Space.md, flexDirection: 'row', alignItems: 'center', gap: Space.sm },
+  header: { minHeight: ControlSize.settingsRow, paddingHorizontal: Space.lg, flexDirection: 'row', alignItems: 'center', gap: Space.sm },
   slot: { width: ControlSize.floatingButton, minHeight: ControlSize.floatingButton, justifyContent: 'center' },
   headerTitle: { flex: 1, textAlign: 'center', fontSize: FontSize.secondary, lineHeight: LineHeight.secondary },
   intro: { gap: Space.md, paddingVertical: Space.lg },

@@ -1481,6 +1481,10 @@ export class GatewayProtocolClient {
     };
   }
 
+  public supportsMethod(method: string): boolean {
+    return this.supportedMethods.has(method);
+  }
+
   public async getSkillsStatus(agentId = 'main'): Promise<SkillStatusReport> {
     return this.request('skills.status', { agentId });
   }

@@ -152,6 +152,24 @@ jest.mock('../../components/ui/FormTextInput', () => {
   };
 });
 
+jest.mock('../../components/ui/SearchInput', () => {
+  const ReactRuntime = require('react');
+  const { TextInput } = require('react-native');
+  return {
+    SearchInput: ({ testID, value, onChangeText, placeholder }: {
+      testID?: string;
+      value: string;
+      onChangeText: (value: string) => void;
+      placeholder?: string;
+    }) => ReactRuntime.createElement(TextInput, {
+      testID: `${testID}-input`,
+      value,
+      onChangeText,
+      placeholder,
+    }),
+  };
+});
+
 jest.mock('../../components/ui/SegmentedTabs', () => {
   const ReactRuntime = require('react');
   const { Pressable, Text, View } = require('react-native');
@@ -180,7 +198,7 @@ jest.mock('../../components/ui/SettingsGroup', () => {
     SettingsGroup: ({ children, testID }: { children: React.ReactNode; testID?: string }) => (
       ReactRuntime.createElement(View, { testID }, children)
     ),
-    SettingsRow: ({ testID, title, subtitle, value, attention, children, onPress, disabled }: {
+    SettingsRow: ({ testID, title, subtitle, value, attention, children, onPress, disabled, expanded }: {
       testID?: string;
       title?: string;
       subtitle?: string;
@@ -189,9 +207,10 @@ jest.mock('../../components/ui/SettingsGroup', () => {
       children?: React.ReactNode;
       onPress?: () => void;
       disabled?: boolean;
+      expanded?: boolean;
     }) => ReactRuntime.createElement(
       onPress ? Pressable : View,
-      { testID, onPress: disabled ? undefined : onPress, disabled },
+      { testID, onPress: disabled ? undefined : onPress, disabled, accessibilityState: { disabled, expanded } },
       children,
       title ? ReactRuntime.createElement(Text, null, title) : null,
       subtitle ? ReactRuntime.createElement(Text, null, subtitle) : null,
@@ -332,6 +351,7 @@ type AdapterHarness = Readonly<{
   listBackups: jest.Mock;
   createBackup: jest.Mock;
   restoreBackup: jest.Mock;
+  removeBackup: jest.Mock;
   resolveExec: jest.Mock;
   connect: jest.Mock;
   emitState: (state: ConnectionState) => void;
@@ -347,7 +367,7 @@ function createAdapterHarness(options: Readonly<{
   let state = options.state ?? 'ready';
   const stateListeners = new Set<(next: ConnectionState) => void>();
   const updateListeners = new Set<(update: SessionUpdate) => void>();
-  const view = jest.fn(async () => options.configView ?? ({ config: { theme: 'dark' }, hash: 'hash-1' }));
+  const view = jest.fn(async () => options.configView ?? ({ config: { theme: { mode: 'dark' } }, hash: 'hash-1' }));
   const set = jest.fn(async () => ({ ok: true, config: { theme: 'light' } }));
   const permissions = jest.fn(async () => permissionsReport);
   const doctor = jest.fn(async () => doctorResult);
@@ -355,6 +375,7 @@ function createAdapterHarness(options: Readonly<{
   const listBackups = jest.fn(async () => []);
   const createBackup = jest.fn(async () => ({ id: 'backup-1', createdAt: 1_700_000_000_000 }));
   const restoreBackup = jest.fn(async () => undefined);
+  const removeBackup = jest.fn(async () => undefined);
   const resolveExec = jest.fn(async () => undefined);
   const connect = jest.fn(async () => undefined);
   const adapter = {
@@ -385,7 +406,7 @@ function createAdapterHarness(options: Readonly<{
         permissions,
         repair,
         doctor,
-        backups: { list: listBackups, create: createBackup, restore: restoreBackup },
+        backups: { list: listBackups, create: createBackup, restore: restoreBackup, remove: removeBackup },
       },
       approvals: { resolveExec },
     },
@@ -411,6 +432,7 @@ function createAdapterHarness(options: Readonly<{
     listBackups,
     createBackup,
     restoreBackup,
+    removeBackup,
     resolveExec,
     connect,
     emitState: (next) => {
@@ -453,8 +475,10 @@ describe('OpenClawManageScreen', () => {
     expect(harness.doctor).not.toHaveBeenCalled();
     for (const section of ['configuration', 'permissions', 'diagnostics', 'backups']) {
       expect(screen.getByTestId(`openclaw-manage-tabs-${section}`)).toBeTruthy();
+      // Four feature cards, one per Pro section (owner-approved 2026-09-19).
+      expect(screen.getByTestId(`openclaw-manage-card-${section}`)).toBeTruthy();
     }
-    // One card, four described entries: the menu says what each Pro section does.
+    // Each card says what its section does.
     expect(screen.getByTestId('openclaw-manage-menu')).toBeTruthy();
     expect(screen.getByText('OpenClaw config')).toBeTruthy();
     expect(screen.getByText('See and change every OpenClaw setting.')).toBeTruthy();
@@ -518,6 +542,97 @@ describe('OpenClawManageScreen', () => {
     await waitFor(() => expect(screen.getByTestId('openclaw-permissions-content')).toBeTruthy());
     expect(screen.queryByText('Pending Requests')).toBeNull();
     expect(screen.queryByTestId('openclaw-approvals-empty')).toBeNull();
+  });
+
+  it('lists config keys as a captioned table of contents with several keys open at once', async () => {
+    const harness = createAdapterHarness({
+      configView: {
+        config: {
+          meta: { lastTouchedVersion: '2026.9.1', migrations: { modelPolicyAllowlist: true } },
+          channels: { telegram: { enabled: true }, discord: { enabled: false } },
+          bindings: [{ agentId: 'main' }, { agentId: 'ops' }],
+          acp: {},
+          talk: 'quiet',
+        },
+        hash: 'hash-1',
+      },
+    });
+    const screen = renderScreen(harness);
+    await waitFor(() => expect(screen.getByTestId('openclaw-configuration-keys')).toBeTruthy());
+
+    // Captions describe the shape without opening anything.
+    expect(screen.getByText('lastTouchedVersion, migrations')).toBeTruthy();
+    expect(screen.getByText('telegram, discord')).toBeTruthy();
+    expect(screen.getByText('{{count}} items')).toBeTruthy();
+    expect(screen.getByText('{}')).toBeTruthy();
+    expect(screen.getByText('"quiet"')).toBeTruthy();
+    // Empty containers and primitives have nothing further to show.
+    expect(screen.getByTestId('openclaw-config-key-acp').props.onPress).toBeUndefined();
+    expect(screen.getByTestId('openclaw-config-key-talk').props.onPress).toBeUndefined();
+    expect(screen.queryByTestId('openclaw-config-body-meta')).toBeNull();
+    expect(screen.queryByTestId('openclaw-configuration-collapse-all')).toBeNull();
+
+    // Two keys open together; the header offers Collapse all from the second one.
+    fireEvent.press(screen.getByTestId('openclaw-config-key-meta'));
+    expect(screen.getByTestId('openclaw-config-body-meta')).toBeTruthy();
+    expect(screen.getByTestId('openclaw-config-key-meta').props.accessibilityState.expanded).toBe(true);
+    expect(screen.queryByTestId('openclaw-configuration-collapse-all')).toBeNull();
+    fireEvent.press(screen.getByTestId('openclaw-config-key-channels'));
+    expect(screen.getByTestId('openclaw-config-body-meta')).toBeTruthy();
+    expect(screen.getByTestId('openclaw-config-body-channels')).toBeTruthy();
+    expect(screen.getByText(/2026\.9\.1/)).toBeTruthy();
+    expect(screen.getByTestId('openclaw-configuration-collapse-all')).toBeTruthy();
+
+    // Open keys survive a trip to the menu and back.
+    fireEvent.press(screen.getByTestId('openclaw-manage-back'));
+    fireEvent.press(screen.getByTestId('openclaw-manage-tabs-configuration'));
+    expect(harness.view).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('openclaw-config-body-meta')).toBeTruthy();
+    expect(screen.getByTestId('openclaw-config-body-channels')).toBeTruthy();
+
+    // Tapping an open key closes only that key; Collapse all closes the rest.
+    fireEvent.press(screen.getByTestId('openclaw-config-key-meta'));
+    expect(screen.queryByTestId('openclaw-config-body-meta')).toBeNull();
+    expect(screen.getByTestId('openclaw-config-body-channels')).toBeTruthy();
+    fireEvent.press(screen.getByTestId('openclaw-config-key-bindings'));
+    fireEvent.press(screen.getByTestId('openclaw-configuration-collapse-all'));
+    expect(screen.queryByTestId('openclaw-config-body-channels')).toBeNull();
+    expect(screen.queryByTestId('openclaw-config-body-bindings')).toBeNull();
+    expect(screen.queryByTestId('openclaw-configuration-collapse-all')).toBeNull();
+  });
+
+  it('filters config keys by name or serialized value and keeps open keys through a search', async () => {
+    const harness = createAdapterHarness({
+      configView: {
+        config: {
+          meta: { lastTouchedVersion: '2026.9.1' },
+          channels: { telegram: { enabled: true } },
+          plugins: { entries: { telegramBridge: {} } },
+          acp: { enabled: false },
+        },
+        hash: 'hash-1',
+      },
+    });
+    const screen = renderScreen(harness);
+    await waitFor(() => expect(screen.getByTestId('openclaw-configuration-keys')).toBeTruthy());
+    fireEvent.press(screen.getByTestId('openclaw-config-key-channels'));
+
+    fireEvent.changeText(screen.getByTestId('openclaw-configuration-search-input'), 'Telegram');
+    expect(screen.getByTestId('openclaw-config-key-channels')).toBeTruthy();
+    expect(screen.getByTestId('openclaw-config-key-plugins')).toBeTruthy();
+    expect(screen.queryByTestId('openclaw-config-key-meta')).toBeNull();
+    expect(screen.queryByTestId('openclaw-config-key-acp')).toBeNull();
+    expect(screen.getByTestId('openclaw-config-body-channels')).toBeTruthy();
+
+    fireEvent.changeText(screen.getByTestId('openclaw-configuration-search-input'), 'nothing-here');
+    expect(screen.getByTestId('openclaw-configuration-no-results')).toBeTruthy();
+    expect(screen.queryByTestId('openclaw-configuration-keys')).toBeNull();
+    // Edit stays reachable while a search is active.
+    expect(screen.getByTestId('openclaw-configuration-edit')).toBeTruthy();
+
+    fireEvent.changeText(screen.getByTestId('openclaw-configuration-search-input'), '');
+    expect(screen.getByTestId('openclaw-config-key-meta')).toBeTruthy();
+    expect(screen.getByTestId('openclaw-config-body-channels')).toBeTruthy();
   });
 
   it('loads configuration and requires a second confirmation before saving', async () => {
@@ -600,6 +715,23 @@ describe('OpenClawManageScreen', () => {
     await waitFor(() => expect(harness.restoreBackup).toHaveBeenCalledWith('backup-1'));
   });
 
+  it('deletes a local backup only after confirmation, retries failures, and works offline', async () => {
+    const harness = createAdapterHarness({ state: 'offline' });
+    harness.listBackups.mockResolvedValue([{ id: 'backup-1', createdAt: 1_700_000_000_000 }]);
+    harness.removeBackup.mockRejectedValueOnce(new Error('storage unavailable'));
+    const screen = renderScreen(harness, { isPro: false, initialTab: 'backups' });
+    await waitFor(() => expect(screen.getByTestId('openclaw-backup-delete-backup-1')).toBeTruthy());
+    fireEvent.press(screen.getByTestId('openclaw-backup-delete-backup-1'));
+    expect(harness.removeBackup).not.toHaveBeenCalled();
+    fireEvent.press(screen.getByTestId('openclaw-backup-delete-confirm-action'));
+    await waitFor(() => expect(screen.getByText('storage unavailable')).toBeTruthy());
+    expect(screen.getByTestId('openclaw-backup-backup-1')).toBeTruthy();
+    fireEvent.press(screen.getByTestId('openclaw-backup-delete-confirm-action'));
+    await waitFor(() => expect(screen.getByTestId('openclaw-backups-empty')).toBeTruthy());
+    expect(harness.removeBackup).toHaveBeenCalledTimes(2);
+    expect(harness.restoreBackup).not.toHaveBeenCalled();
+  });
+
   it('ignores a stale tab load after the adapter changes', async () => {
     let resolveFirst: ((value: { config: Record<string, unknown>; hash: string }) => void) | undefined;
     let resolveSecond: ((value: { config: Record<string, unknown>; hash: string }) => void) | undefined;
@@ -637,9 +769,9 @@ describe('OpenClawManageScreen', () => {
     await waitFor(() => expect(
       screen.getByTestId('openclaw-configuration-content'),
     ).toBeTruthy());
-    expect(screen.queryByText(/current/)).toBeNull();
-    fireEvent.press(screen.getByTestId('openclaw-config-key-source'));
-    expect(screen.getByText(/current/)).toBeTruthy();
+    // A primitive section shows its literal in the row caption; there is nothing to expand.
+    expect(screen.getByText('"current"')).toBeTruthy();
+    expect(screen.getByTestId('openclaw-config-key-source').props.onPress).toBeUndefined();
     expect(screen.queryByText(/stale/)).toBeNull();
   });
 

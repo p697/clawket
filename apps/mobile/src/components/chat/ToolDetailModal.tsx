@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as Clipboard from 'expo-clipboard';
-import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { Check, ChevronDown, CircleAlert, Clock3, Copy } from 'lucide-react-native';
 import { ChevronRight } from '../ui/DirectionalIcon';
 import { useTranslation } from 'react-i18next';
@@ -11,6 +12,10 @@ import { ControlSize, FontSize, FontWeight, IconSize, LineHeight, Radius, Space 
 import { formatToolDisplayName } from '../../utils/tool-display';
 import { JsonTree } from './JsonTree';
 import { formatToolDuration, prepareToolPayload } from './tool-detail-model';
+
+// Tool payloads outgrow the screen: scroll inside fixed detents with the
+// Gorhom-integrated scroll view rather than a plain ScrollView the sheet drag steals.
+const SNAP_POINTS: string[] = ['68%', '92%'];
 
 type Props = {
   visible: boolean;
@@ -86,8 +91,8 @@ export function ToolDetailModal(props: Props): React.JSX.Element {
     [t('Total tokens'), s.usage?.totalTokens?.toLocaleString(i18n.language)],
   ].filter((row): row is [string, string] => typeof row[1] === 'string');
   return <Sheet visible={visible} onClose={onClose} title={title}
-    closeAccessibilityLabel={t('Close', { ns: 'common' })} maxHeight="85%" contentStyle={styles.scroll} testID="tool-detail-sheet">
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+    closeAccessibilityLabel={t('Close', { ns: 'common' })} snapPoints={SNAP_POINTS} testID="tool-detail-sheet">
+    <BottomSheetScrollView testID="tool-detail-scroll" contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <View style={styles.statusRow}>
         {s.status === 'running' ? <ActivityIndicator size="small" color={stateColor} /> : <StateIcon size={IconSize.sm} color={stateColor} />}
         <Text style={[styles.secondary, { color: stateColor }]}>{statusLabel}</Text>
@@ -109,13 +114,12 @@ export function ToolDetailModal(props: Props): React.JSX.Element {
           <Text style={styles.caption}>{label}</Text><Text selectable style={styles.metadataValue}>{value}</Text>
         </View>)}
       </View> : null}
-    </ScrollView>
+    </BottomSheetScrollView>
   </Sheet>;
 }
 
 function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors']) {
   return StyleSheet.create({
-    scroll: { flexShrink: 1 },
     content: { paddingHorizontal: Space.xl, paddingBottom: Space.lg, gap: Space.sm },
     statusRow: { flexDirection: 'row', alignItems: 'center', gap: Space.sm, paddingVertical: Space.sm },
     secondary: { color: colors.inkSecondary, fontSize: FontSize.secondary, lineHeight: LineHeight.secondary },

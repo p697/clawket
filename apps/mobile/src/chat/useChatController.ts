@@ -35,7 +35,6 @@ import { useChatImagePreview } from "../hooks/useChatImagePreview";
 import { analyticsEvents } from "../services/analytics/events";
 import { recordSuccessfulSendForAutomaticReview } from "../services/auto-app-review";
 import { cacheMessageImages } from "../services/image-cache";
-import { stopSpeechRecognitionAsync } from "../services/speech/speechRecognition";
 import { StorageService } from "../services/storage";
 import { ConnectionState, SessionInfo } from "../types";
 import { PendingImage, UiMessage } from "../types/chat";
@@ -246,7 +245,6 @@ export function useChatController({
   readOnlyRef.current = readOnly;
   const appContext = useAppContext();
   const { t } = useTranslation("chat");
-  const { speechRecognitionLanguage } = appContext;
   const [connectionState, setConnectionState] = useState<ConnectionState>(
     adapter ? mapAdapterConnectionState(adapter.state) : "idle",
   );
@@ -452,20 +450,6 @@ export function useChatController({
   const compactionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const silentCommandProbesRef = useRef<Map<string, SilentCommandProbe>>(new Map());
 
-  const {
-    toggleVoiceInput,
-    voiceInputActive,
-    voiceInputDisabled,
-    voiceInputLevel,
-    voiceInputState,
-    voiceInputSupported,
-  } = useChatVoiceInput({
-    composerRef,
-    input,
-    speechRecognitionLanguage,
-    setInput,
-    t,
-  });
 
   // Pending run inactivity timeout: if no events arrive for this duration
   // while isSending is true, force-clear the stuck state.
@@ -569,8 +553,6 @@ export function useChatController({
     pendingAgentSwitch,
     clearPendingAgentSwitch,
     execApprovalEnabled,
-    pendingChatNotificationOpen,
-    clearPendingChatNotificationOpen,
     pendingChatInput,
     clearPendingChatInput,
     pendingMainSessionSwitch,
@@ -588,6 +570,24 @@ export function useChatController({
     initialPreview: initialChatPreview,
     routeSessionKey,
   });
+
+  const isFocused = useIsFocused();
+  const voiceSubmitRef = useRef<(text: string) => void>(() => {});
+  const {
+    startVoiceInput, stopVoiceInput, cancelVoiceInput,
+    toggleVoiceInput,
+    voiceInputActive,
+    voiceInputDisabled,
+    voiceInputLevel,
+    voiceInputState,
+    voiceInputSupported,
+  } = useChatVoiceInput({
+    composerRef, input, setInput, t,
+    scope: `${gatewayConfigId}:${history.sessionKey ?? ''}`,
+    enabled: isFocused && !readOnly && connectionState === 'ready',
+    onSubmit: (text) => voiceSubmitRef.current(text),
+  });
+
 
   useEffect(() => {
     pairApprovalStoreRef.current = null;
@@ -1068,7 +1068,6 @@ export function useChatController({
   const lastAutoRefreshRef = useRef(0);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const backgroundedAtRef = useRef<number | null>(null);
-  const pendingNotificationScrollSessionKeyRef = useRef<string | null>(null);
   const [messageSubmittedAt, setMessageSubmittedAt] = useState<number | null>(null);
   const [scrollToBottomRequestAt, setScrollToBottomRequestAt] = useState<number | null>(null);
   const autoRefresh = useCallback(() => {
@@ -1354,7 +1353,6 @@ export function useChatController({
   ]);
 
   // Auto-refresh when Chat tab gains focus (switching from Console/My tab)
-  const isFocused = useIsFocused();
   const prevFocusedRef = useRef(isFocused);
   useEffect(() => {
     const wasFocused = prevFocusedRef.current;
@@ -2517,6 +2515,7 @@ export function useChatController({
   const {
     availableModels,
     availableProviders,
+    configuredDefaultModel,
     currentModel,
     currentModelHeaderLabel,
     currentModelProvider,
@@ -2611,17 +2610,14 @@ export function useChatController({
     t,
   });
 
-  const onSend = useCallback(() => {
+  const onSend = useCallback((voiceText?: string) => {
     if (readOnlyRef.current || sendPreflightInFlightRef.current) return;
     void (async () => {
-      const text = input.trim();
+      const text = (voiceText ?? input).trim();
       const images = [...pendingImages];
       if ((!text && images.length === 0) || !history.sessionKey) return;
       if (!acquireSendTriggerGuard()) return;
 
-      if (voiceInputActive) {
-        void stopSpeechRecognitionAsync().catch(() => {});
-      }
 
       analyticsEvents.chatSendTapped({
         has_text: text.length > 0,
@@ -2746,6 +2742,8 @@ export function useChatController({
     submitMessageWithConnectionCheck,
     voiceInputActive,
   ]);
+
+  voiceSubmitRef.current = (text) => onSend(text);
 
   // Deliver the head of the queue as soon as the session is idle again. The
   // same locks that gate a manual send apply, so a queued message never races
@@ -3060,15 +3058,6 @@ export function useChatController({
   ]);
 
   useEffect(() => {
-    const pendingKey = pendingNotificationScrollSessionKeyRef.current;
-    if (!pendingKey) return;
-    if (!history.historyLoaded || !history.sessionKey) return;
-    if (!sessionKeysMatch(history.sessionKey, pendingKey)) return;
-    pendingNotificationScrollSessionKeyRef.current = null;
-    setScrollToBottomRequestAt(Date.now());
-  }, [history.historyLoaded, history.sessionKey]);
-
-  useEffect(() => {
     const targetKey = routeSessionKey ?? chatSessionRequest?.sessionKey?.trim();
     if (!targetKey) return;
     if (history.sessionKey === targetKey) {
@@ -3090,63 +3079,6 @@ export function useChatController({
     history.setSessions,
     chatSessionRequest,
     routeSessionKey,
-    switchSession,
-  ]);
-
-  useEffect(() => {
-    const targetKey = pendingChatNotificationOpen?.sessionKey?.trim();
-    if (!targetKey) return;
-
-    if (history.historyLoaded && history.sessionKey && sessionKeysMatch(history.sessionKey, targetKey)) {
-      pendingNotificationScrollSessionKeyRef.current = null;
-      setScrollToBottomRequestAt(Date.now());
-      clearPendingChatNotificationOpen();
-      return;
-    }
-
-    let cancelled = false;
-    pendingNotificationScrollSessionKeyRef.current = targetKey;
-
-    const openFromNotification = async () => {
-      let latestSessions = history.sessions;
-      let targetSession = latestSessions.find((session) => session.key === targetKey);
-      if (!targetSession) {
-        try {
-          latestSessions = adapter
-            ? (await adapter.listSessions(currentAgentId)).map(mapAdapterSession)
-            : [];
-          if (cancelled) return;
-          history.setSessions(latestSessions);
-          targetSession = latestSessions.find((session) => session.key === targetKey);
-        } catch {
-          // Ignore and fall back to opening the key directly.
-        }
-      }
-
-      if (cancelled) return;
-      switchSession(
-        targetSession ?? {
-          key: targetKey,
-          kind: 'unknown',
-          label: targetKey,
-        },
-      );
-      clearPendingChatNotificationOpen();
-    };
-
-    void openFromNotification();
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    clearPendingChatNotificationOpen,
-    adapter,
-    currentAgentId,
-    history.historyLoaded,
-    history.sessionKey,
-    history.sessions,
-    history.setSessions,
-    pendingChatNotificationOpen,
     switchSession,
   ]);
 
@@ -3341,6 +3273,7 @@ export function useChatController({
     onLoadMoreHistory: history.onLoadMoreHistory,
     canSend,
     onSend,
+    startVoiceInput, stopVoiceInput, cancelVoiceInput,
     voiceInputSupported,
     voiceInputState,
     voiceInputActive,
@@ -3357,6 +3290,7 @@ export function useChatController({
     modelPickerError,
     availableModels,
     availableProviders,
+    configuredDefaultModel,
     retryModelPickerLoad,
     onSelectModel,
     openModelPicker,

@@ -9,7 +9,7 @@ export function getIpadModalSheetWidth(windowWidth: number): number {
   }
 
   return Math.max(
-    320,
+    1,
     Math.min(
       IPAD_MODAL_SHEET_MAX_WIDTH,
       windowWidth - IPAD_MODAL_SHEET_MIN_MARGIN * 2,
@@ -32,7 +32,7 @@ export function getIpadModalSheetMetrics(params: {
   const topSafeInset = Math.max(0, params.topInset ?? 0);
   const bottomSafeInset = Math.max(0, params.bottomInset ?? 0);
   const availableHeight = Math.max(
-    360,
+    1,
     params.windowHeight
       - topSafeInset
       - bottomSafeInset
@@ -61,10 +61,26 @@ export function getIpadModalSheetMetrics(params: {
     width,
     height,
     horizontalMargin: Math.max(
-      IPAD_MODAL_SHEET_MIN_MARGIN,
+      0,
       Math.floor((params.windowWidth - width) / 2),
     ),
     topInset,
     bottomInset,
+  };
+}
+
+
+export const IPAD_WORKSPACE_MIN_WIDTH = 900;
+export const IPAD_CHAT_MAX_WIDTH = 760;
+export const IPAD_SIDEBAR_WIDTH = 300;
+
+/** Layout follows the current window, never physical-screen orientation. */
+export function resolveWorkspaceLayout({ width, tablet, fontScale = 1 }: {
+  width: number; tablet: boolean; fontScale?: number;
+}): { wide: boolean; sidebarWidth: number } {
+  return {
+    wide: tablet && Number.isFinite(width) && width >= IPAD_WORKSPACE_MIN_WIDTH
+      && width / Math.max(1, fontScale) >= 720,
+    sidebarWidth: IPAD_SIDEBAR_WIDTH,
   };
 }

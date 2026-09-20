@@ -1,7 +1,6 @@
 import type { AgentFileOperations, AgentFileSummary } from '@clawket/agent-protocol';
 import {
   canEditAgentFile,
-  canSaveAgentFile,
   filterAgentFiles,
   formatFileSize,
 } from './files-model';
@@ -26,20 +25,9 @@ describe('Agent files model', () => {
     expect(formatFileSize(-1)).toBeUndefined();
   });
 
-  it('gates editing and save attempts on capability, operation, online state, and changes', () => {
+  it('gates editing on capability and a real write operation', () => {
     expect(canEditAgentFile({ fileEdit: true }, operations)).toBe(true);
     expect(canEditAgentFile({ fileEdit: false }, operations)).toBe(false);
-    expect(canSaveAgentFile({
-      capabilities: { fileEdit: true },
-      operations,
-      online: true,
-      changed: true,
-    })).toBe(true);
-    expect(canSaveAgentFile({
-      capabilities: { fileEdit: false },
-      operations,
-      online: true,
-      changed: true,
-    })).toBe(false);
+    expect(canEditAgentFile({ fileEdit: true }, { get: jest.fn() })).toBe(false);
   });
 });

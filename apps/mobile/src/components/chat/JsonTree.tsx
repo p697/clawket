@@ -57,6 +57,11 @@ export function JsonTree({ text }: { text: string }): React.JSX.Element {
   }, [text]);
   return parsed.ok ? <JsonNode value={parsed.value} /> : <Text selectable style={[s.text, { color: theme.colors.ink }]}>{text}</Text>;
 }
+
+/** The same tree for an already-parsed JSON value (config sections): nodes two levels down start collapsed. */
+export function JsonValueTree({ value }: { value: unknown }): React.JSX.Element {
+  return <JsonNode value={value as JsonValue} />;
+}
 const s = StyleSheet.create({
   text: { fontFamily: MONOSPACE_FONT, fontSize: FontSize.caption, lineHeight: LineHeight.secondary },
   children: { paddingLeft: Space.md },

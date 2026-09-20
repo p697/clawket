@@ -28,7 +28,7 @@ import { AgentAvatar, AvatarWorkingBadge } from '../../components/ui/AgentAvatar
 import { Banner } from '../../components/ui/Banner';
 import { ConnectionStatusPill } from '../../components/ui/ConnectionStatusPill';
 import { Button } from '../../components/ui/Button';
-import { FloatingButton } from '../../components/ui/FloatingButton';
+import { SheetHeaderButton } from '../../components/ui/SheetHeaderButton';
 import { FormTextInput } from '../../components/ui/FormTextInput';
 import { SearchInput } from '../../components/ui/SearchInput';
 import {
@@ -866,10 +866,9 @@ export function SessionPanelView({
         onClose={onClose}
         contentStyle={styles.sheetContent}
         headerRight={(
-          <FloatingButton
+          <SheetHeaderButton
             testID="session-panel-search-toggle"
             icon={Search}
-            appearance="quiet"
             accessibilityLabel={t('Search sessions')}
             onPress={() => setSearchOpen((current) => !current)}
           />
@@ -1091,7 +1090,6 @@ const styles = StyleSheet.create({
   },
   chipRow: {
     paddingHorizontal: Space.lg,
-    paddingTop: Space.md,
     paddingBottom: Space.md,
     flexDirection: 'row',
     alignItems: 'flex-start',

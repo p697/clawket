@@ -4,6 +4,7 @@ import type { UiMessage } from '../../types/chat';
 import {
   buildCronRunSeeds,
   buildThreadTimelineItems,
+  areThreadRunSeedsEqual,
   deriveThreadContentState,
   groupThreadTools,
   withThreadRhythm,
@@ -58,6 +59,54 @@ describe('Thread model', () => {
       message: 'Connection timed out',
       actionLabel: 'Retry',
     });
+  });
+
+  it('holds the first frame while local timeline snapshots are still hydrating', () => {
+    expect(deriveThreadContentState({
+      hydrating: true,
+      historyLoaded: true,
+      hasMessages: true,
+      connectionState: 'ready',
+    })).toEqual({ kind: 'loading' });
+    expect(deriveThreadContentState({
+      hydrating: true,
+      historyLoaded: true,
+      hasMessages: false,
+      connectionState: 'ready',
+    })).toEqual({ kind: 'loading' });
+    // Connection problems and locks still win over the local read.
+    expect(deriveThreadContentState({
+      hydrating: true,
+      historyLoaded: true,
+      hasMessages: true,
+      connectionState: 'offline',
+    })).toEqual({ kind: 'offline' });
+    expect(deriveThreadContentState({
+      hydrating: true,
+      locked: true,
+      historyLoaded: true,
+      hasMessages: true,
+      connectionState: 'ready',
+    })).toEqual({ kind: 'locked' });
+    expect(deriveThreadContentState({
+      hydrating: false,
+      historyLoaded: true,
+      hasMessages: true,
+      connectionState: 'ready',
+    })).toEqual({ kind: 'ready' });
+  });
+
+  it('compares activity snapshots by what their cards would render', () => {
+    const run = {
+      id: 'nightly:1', kind: 'cron' as const, title: 'Nightly', status: 'succeeded' as const, updatedAt: 1,
+      jobId: 'nightly', agentId: 'atlas', sessionKey: 'agent:atlas:cron:nightly',
+      cronRun: { ts: 1, jobId: 'nightly', action: 'finished' as const },
+    };
+    expect(areThreadRunSeedsEqual([run], [{ ...run, cronRun: { ...run.cronRun, durationMs: 5 } }])).toBe(true);
+    expect(areThreadRunSeedsEqual([run], [{ ...run, status: 'failed' }])).toBe(false);
+    expect(areThreadRunSeedsEqual([run], [{ ...run, summary: 'changed' }])).toBe(false);
+    expect(areThreadRunSeedsEqual([run], [run, { ...run, id: 'nightly:2', updatedAt: 2 }])).toBe(false);
+    expect(areThreadRunSeedsEqual([], [])).toBe(true);
   });
 
   it('distinguishes loading, empty, ready, and cache-preserving offline states', () => {

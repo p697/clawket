@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
-import { FlatList, Pressable, StyleSheet, Text } from 'react-native';
+import { Pressable, StyleSheet, Text } from 'react-native';
+import { BottomSheetFlatList } from '@gorhom/bottom-sheet';
 import * as Haptics from 'expo-haptics';
 import { useTranslation } from 'react-i18next';
 import { Check } from 'lucide-react-native';
@@ -39,16 +40,19 @@ export function ThinkingLevelPickerModal({
       onClose={onClose}
       closeAccessibilityLabel={t('Close', { ns: 'common' })}
       title={t('Thinking Level')}
-      maxHeight="50%"
+      snapPoints={['72%', '92%']}
       testID="thinking-level-sheet"
     >
-      <FlatList
+      <BottomSheetFlatList
+        contentContainerStyle={{ paddingHorizontal: Space.xl, paddingBottom: Space.xl }}
         data={staticOptions}
         keyExtractor={(item) => item.value}
         renderItem={({ item }) => {
           const isActive = item.value === normalizedCurrent;
           return (
             <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ selected: isActive, disabled }}
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 onSelect(item.value);
@@ -75,10 +79,11 @@ export function ThinkingLevelPickerModal({
 function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors']) {
   return StyleSheet.create({
     row: {
-      height: 48,
+      minHeight: 48,
+      paddingVertical: Space.md,
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: colors.line,
-      paddingHorizontal: Space.lg,
+      paddingHorizontal: Space.sm,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',

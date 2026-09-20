@@ -37,7 +37,7 @@ PostHog 项目 337268；SDK 与集中式 `src/services/analytics/events.ts` 沿�
 | `roster_viewed` | `connection_count`, `agent_count`, `pinned_count`, `unread_count`, `attention_count` | 花名册显示 |
 | `roster_row_opened` | `kind`, `unread`, `attention`, `locked`, `cached` | 点行 |
 | `roster_pin_toggled` | `action: pin|unpin`, `kind` | |
-| `thread_opened` | `backend`, `kind`, `from: roster|panel|search|notification|deeplink` | |
+| `thread_opened` | `backend`, `kind`, `from: roster|panel|search|deeplink|onboarding` | |
 | `session_preview_viewed` | `backend`, `kind` | 非主会话免费预览曝光；升级沿用 `blocked_feature=sessionHistory` 的付费漏斗 |
 | `chat_send_tapped`（现有） | 现有 + `backend` | |
 | `chat_abort_tapped` | `backend` | 停止键 |
@@ -55,7 +55,11 @@ PostHog 项目 337268；SDK 与集中式 `src/services/analytics/events.ts` 沿�
 | `chat_session_selected`（现有） | 现有 + `from: panel|search` | |
 | `session_action` | `action: pin|rename|reset|delete|create` | |
 | `agent_settings_opened` | `backend` | |
-| `settings_row_opened` | `row`, `locked`, `backend` | |
+| `settings_row_opened` | `row`, `locked`, `backend` | 技能页右上角 Compass 也上报 `row: skills.discover` |
+| `channel_dm_scope_changed` | `scope: main|per-peer|per-channel-peer|per-account-channel-peer` | 渠道 tab 改私聊会话范围并确认后（2026-09-19 找回 2.0 功能时新增；2.0 没有对应事件） |
+| `channel_account_toggled` | `channel`（OpenClaw 内置渠道 id，插件渠道归 `other`）, `enabled` | 渠道弹层里拨账号开关并确认后；永不上报账号 id 或名称 |
+| `skill_discover_detail_viewed` | `source: clawhub_web`, `backend` | 发现页（ClawHub 网页）里进入一个技能详情页，同一技能只报一次（2026-09-19 新增，配 `skill_install_tapped` 算详情→安装转化；不上报 slug） |
+| `skill_install_tapped`（现有） | `source: clawhub_web`, `backend` | 发现页底部「通过 Chat 安装」 |
 | `usage_range_changed` | `range: today|7d|30d`, `cached`, `locked` | 用量页切换范围；`cached` 表示该范围已在内存缓存里，`locked` 表示免费用户看到的是 Pro 蒙层（2026-09-16 新增，补上 2.0 没有范围分布数据的缺口；蒙层按钮进入付费墙沿用 `paywall_viewed{ blocked_feature: usage }`） |
 | `agent_file_activity` | `action: edit|saved|failed`, `backend`, `document: agents|soul|identity|user|bootstrap|memory|other` | 文件页里编辑 Agent 工作区文件；`document` 是有界枚举，永不上报文件名、路径或内容（2026-09-16 由 `identity_file_activity` 改名并移到文件页，3.0 未发布，无历史数据） |
 | `search_performed` | `scope: global|panel`, `has_results`, `result_kinds` | 防抖后 |
@@ -75,7 +79,7 @@ PostHog 项目 337268；SDK 与集中式 `src/services/analytics/events.ts` 沿�
 
 ## 4. 删除的事件
 
-`live_session_opened`、`office_*`、`console_entry_tapped`（由 `settings_row_opened` 替代）、`discover_*`（并入 `settings_row_opened{ row: skills_discover }` 与 `skill_install_tapped`）、`clawhub_*`（同上）、`youmind_material_*`、`youmind_*`（除登录两项）、`chat_reply_notification_*`（保留实现，事件名不变）、`lifetime_upgrade_announcement_*`、`chat_exec_approval_resolved` 与 `pair_request_resolved`（合并）。
+`live_session_opened`、`office_*`、`console_entry_tapped`（由 `settings_row_opened` 替代）、`discover_*`（并入 `settings_row_opened{ row: skills_discover }` 与 `skill_install_tapped`）、`clawhub_*`（同上）、`youmind_material_*`、`youmind_*`（除登录两项）、`chat_reply_notification_*`（本地回复通知随 2026-09-19 的设置清理一并删除）、`lifetime_upgrade_announcement_*`、`chat_exec_approval_resolved` 与 `pair_request_resolved`（合并）。
 
 ## 5. 看板（人在 PostHog 建，规格只定义）
 

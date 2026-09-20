@@ -39,7 +39,7 @@ describe('Onboarding route model', () => {
   it('derives loading, progress, offline, ready, and error page states', () => {
     const base = {
       initialized: true,
-      connectionCount: 0,
+      activeConnectionId: null,
       activeState: 'idle' as const,
       operation: { active: false, phase: 'relay_connected' as const },
     };
@@ -50,17 +50,55 @@ describe('Onboarding route model', () => {
     })).toEqual({ kind: 'connecting', phase: 'waiting_bridge' });
     expect(resolveOnboardingRouteStatus({
       ...base,
-      connectionCount: 1,
+      activeConnectionId: 'paired',
       activeState: 'offline',
+      operation: { active: true, phase: 'waiting_bridge', targetConnectionId: 'paired' },
     })).toEqual({ kind: 'offline' });
     expect(resolveOnboardingRouteStatus({
       ...base,
+      activeConnectionId: 'paired',
       activeState: 'ready',
-      operation: { active: true, phase: 'waiting_bridge' },
+      operation: { active: true, phase: 'waiting_bridge', targetConnectionId: 'paired' },
     })).toEqual({ kind: 'connecting', phase: 'ready' });
+    expect(resolveOnboardingRouteStatus({
+      ...base,
+      activeConnectionId: 'paired',
+      activeState: 'error',
+      runtimeError: 'Could not reach pairing service.',
+      operation: { active: true, phase: 'waiting_bridge', targetConnectionId: 'paired' },
+    })).toEqual({ kind: 'error', code: 'network' });
     expect(resolveOnboardingRouteStatus({
       ...base,
       operation: { active: false, phase: 'relay_connected', errorCode: 'unsupported' },
     })).toEqual({ kind: 'error', code: 'unsupported' });
+  });
+
+  it('ignores the state of an unrelated existing connection', () => {
+    // "Add connection" opened while the current connection is offline: the
+    // pairing form must not report that as a network problem (owner report
+    // 2026-09-19), and the old connection's readiness must not mark the new
+    // pairing as ready or errored.
+    const existing = {
+      initialized: true,
+      activeConnectionId: 'existing',
+      runtimeError: 'OpenClaw is not responding',
+    };
+    for (const activeState of ['offline', 'reconnecting', 'error'] as const) {
+      expect(resolveOnboardingRouteStatus({
+        ...existing,
+        activeState,
+        operation: { active: false, phase: 'relay_connected' },
+      })).toEqual({ kind: 'idle' });
+      expect(resolveOnboardingRouteStatus({
+        ...existing,
+        activeState,
+        operation: { active: true, phase: 'relay_connected', targetConnectionId: null },
+      })).toEqual({ kind: 'connecting', phase: 'relay_connected' });
+    }
+    expect(resolveOnboardingRouteStatus({
+      ...existing,
+      activeState: 'ready',
+      operation: { active: true, phase: 'waiting_bridge', targetConnectionId: 'paired' },
+    })).toEqual({ kind: 'connecting', phase: 'waiting_bridge' });
   });
 });

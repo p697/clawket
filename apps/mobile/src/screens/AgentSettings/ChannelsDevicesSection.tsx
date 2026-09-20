@@ -1,23 +1,29 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { Check } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
-import type {
-  AgentAdapter,
-  ChannelsStatusResult,
-  DeviceInfo,
-  DevicePairListResult,
-  DevicePairRequest,
-  NodeInfo,
-  NodeListResult,
-  NodePairRequest,
+import {
+  DM_SCOPES,
+  type AgentAdapter,
+  type ChannelRoutingSettings,
+  type ChannelStatusAccount,
+  type ChannelsStatusResult,
+  type DeviceInfo,
+  type DevicePairListResult,
+  type DevicePairRequest,
+  type DmScope,
+  type NodeInfo,
+  type NodeListResult,
+  type NodePairRequest,
 } from '@clawket/agent-protocol';
 import { Banner } from '../../components/ui/Banner';
 import { Button } from '../../components/ui/Button';
+import { ConfirmationModal } from '../../components/ui/ConfirmationModal';
 import { FormTextInput } from '../../components/ui/FormTextInput';
 import { SegmentedTabs } from '../../components/ui/SegmentedTabs';
 import {
@@ -27,33 +33,49 @@ import {
 } from '../../components/ui/SettingsGroup';
 import { Sheet } from '../../components/ui/Sheet';
 import { Skeleton } from '../../components/ui/Skeleton';
+import { ThemedSwitch } from '../../components/ui/ThemedSwitch';
 import { analyticsEvents } from '../../services/analytics/events';
 import { useAppTheme } from '../../theme';
 import {
   ControlSize,
   FontSize,
   FontWeight,
+  IconSize,
   LineHeight,
   Space,
 } from '../../theme/tokens';
+import { relativeTime, type RelativeTimeTranslator } from '../../utils/chat-message';
 import {
   buildChannelRows,
+  channelAccountName,
   compactIdentifier,
   deviceLabel,
   deviceRequestLabel,
   getChannelsDevicesViews,
+  isChannelAccountEnabled,
   nodeLabel,
   nodeRequestLabel,
+  resolveChannelManage,
+  setChannelAccountEnabled,
   sortDeviceRequests,
   sortDevices,
   sortNodeRequests,
   sortNodes,
   type ChannelConnectionState,
+  type ChannelRow,
   type ChannelsDevicesView,
 } from './channels-devices-model';
 
 const EMPTY_DEVICE_RESULT: DevicePairListResult = { pending: [], paired: [] };
 const EMPTY_NODE_RESULT: NodeListResult = { ts: 0, nodes: [] };
+// The node detail (rows plus the rename form) can outgrow a phone screen, so it
+// scrolls inside fixed detents through the Gorhom-integrated scroll view.
+const NODE_DETAIL_SNAP_POINTS: string[] = ['68%', '92%'];
+
+/** A channel config write waiting for the restart confirmation. */
+type PendingChannelWrite =
+  | Readonly<{ kind: 'dm-scope'; scope: DmScope }>
+  | Readonly<{ kind: 'account'; channelId: string; accountId: string; name: string; enabled: boolean }>;
 
 export type ChannelsDevicesSectionProps = Readonly<{
   adapter: AgentAdapter;
@@ -72,8 +94,17 @@ export function ChannelsDevicesSection({
     () => getChannelsDevicesViews(adapter.capabilities, management),
     [adapter.capabilities, management],
   );
+  const channelManage = useMemo(
+    () => resolveChannelManage(adapter.capabilities, management),
+    [adapter.capabilities, management],
+  );
   const [view, setView] = useState<ChannelsDevicesView>(views[0] ?? 'channels');
   const [channels, setChannels] = useState<ChannelsStatusResult | null>(null);
+  const [routing, setRouting] = useState<ChannelRoutingSettings | null>(null);
+  const [dmScopeSheetVisible, setDmScopeSheetVisible] = useState(false);
+  const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
+  const [pendingChannelWrite, setPendingChannelWrite] = useState<PendingChannelWrite | null>(null);
+  const [channelWriteBusy, setChannelWriteBusy] = useState(false);
   const [devices, setDevices] = useState<DevicePairListResult>(EMPTY_DEVICE_RESULT);
   const [nodes, setNodes] = useState<NodeListResult>(EMPTY_NODE_RESULT);
   const [nodeRequests, setNodeRequests] = useState<NodePairRequest[]>([]);
@@ -91,15 +122,24 @@ export function ChannelsDevicesSection({
     if (!views.includes(view) && views[0]) setView(views[0]);
   }, [view, views]);
 
-  const loadView = useCallback(async (target: ChannelsDevicesView) => {
+  // `quiet` reconciles channel status after a confirmed write: no skeleton behind
+  // the open sheet, and no routing re-read — the value just written is authoritative.
+  const loadView = useCallback(async (target: ChannelsDevicesView, quiet = false) => {
     if (!online || !views.includes(target)) return;
-    setLoading((current) => ({ ...current, [target]: true }));
+    if (!quiet) setLoading((current) => ({ ...current, [target]: true }));
     setErrors((current) => ({ ...current, [target]: undefined }));
     try {
       if (target === 'channels') {
         const status = management?.channels?.status;
         if (!status) return;
-        setChannels(await status({ probe: false }));
+        // The routing read is additive: a failed config read keeps the last known
+        // scope (or the dash) while the channel list still renders.
+        const [nextStatus, nextRouting] = await Promise.all([
+          status({ probe: false }),
+          channelManage && !quiet ? channelManage.getRouting().catch(() => null) : Promise.resolve(null),
+        ]);
+        setChannels(nextStatus);
+        if (nextRouting) setRouting(nextRouting);
       } else if (target === 'devices') {
         const list = management?.devices?.list;
         if (!list) return;
@@ -131,9 +171,9 @@ export function ChannelsDevicesSection({
         [target]: errorMessage(loadError, fallback),
       }));
     } finally {
-      setLoading((current) => ({ ...current, [target]: false }));
+      if (!quiet) setLoading((current) => ({ ...current, [target]: false }));
     }
-  }, [adapter.capabilities.pairRequests, management, online, t, views]);
+  }, [adapter.capabilities.pairRequests, channelManage, management, online, t, views]);
 
   useEffect(() => {
     void loadView(view);
@@ -251,6 +291,66 @@ export function ChannelsDevicesSection({
     }
   }, [management, mutationBusy, online, renameDraft, selectedNode, t]);
 
+  const channelRows = useMemo(() => (channels ? buildChannelRows(channels) : []), [channels]);
+  const selectedChannel = useMemo(
+    () => channelRows.find((row) => row.id === selectedChannelId) ?? null,
+    [channelRows, selectedChannelId],
+  );
+
+  const commitChannelWrite = useCallback(async () => {
+    const write = pendingChannelWrite;
+    if (!write || !channelManage || !online || channelWriteBusy) return;
+    setChannelWriteBusy(true);
+    setDetailError(null);
+    setErrors((current) => ({ ...current, channels: undefined }));
+    try {
+      if (write.kind === 'dm-scope') {
+        await channelManage.setRouting({ dmScope: write.scope });
+        analyticsEvents.channelDmScopeChanged({ scope: write.scope });
+        setRouting({ dmScope: write.scope });
+        setDmScopeSheetVisible(false);
+      } else {
+        await channelManage.setAccountEnabled({
+          channelId: write.channelId,
+          accountId: write.accountId,
+          enabled: write.enabled,
+        });
+        analyticsEvents.channelAccountToggled({ channel: write.channelId, enabled: write.enabled });
+        setChannels((current) => (current
+          ? setChannelAccountEnabled(current, write.channelId, write.accountId, write.enabled)
+          : current));
+      }
+      setPendingChannelWrite(null);
+      void loadView('channels', true);
+    } catch (writeError: unknown) {
+      const message = errorMessage(writeError, t('Failed to update channel', { ns: 'settings' }));
+      if (write.kind === 'account') setDetailError(message);
+      else setErrors((current) => ({ ...current, channels: message }));
+      setPendingChannelWrite(null);
+    } finally {
+      setChannelWriteBusy(false);
+    }
+  }, [channelManage, channelWriteBusy, loadView, online, pendingChannelWrite, t]);
+
+  const translateRelativeTime = useCallback<RelativeTimeTranslator>((key, count) => {
+    switch (key) {
+      case 'just now':
+        return t('just now', { ns: 'common' });
+      case '{{count}}m ago':
+        return t('{{count}}m ago', { ns: 'common', count });
+      case '{{count}}h ago':
+        return t('{{count}}h ago', { ns: 'common', count });
+      case 'Yesterday':
+        return t('Yesterday', { ns: 'common' });
+      case '{{count}}d ago':
+        return t('{{count}}d ago', { ns: 'common', count });
+      case '{{count}}w ago':
+        return t('{{count}}w ago', { ns: 'common', count });
+      case '{{count}}mo ago':
+        return t('{{count}}mo ago', { ns: 'common', count });
+    }
+  }, [t]);
+
   const tabs = useMemo(() => views.map((item) => ({
     key: item,
     label: item === 'channels'
@@ -301,7 +401,28 @@ export function ChannelsDevicesSection({
         {online && viewLoading ? (
           <ConnectionsLoading />
         ) : online && view === 'channels' ? (
-          <ChannelsContent status={channels} />
+          <View testID="agent-channels-view" style={styles.groups}>
+            {channelManage ? (
+              <SettingsGroup testID="agent-channel-routing">
+                <SettingsRow
+                  testID="agent-channel-dm-scope"
+                  title={t('Direct messages', { ns: 'settings' })}
+                  value={routing ? dmScopeLabel(routing.dmScope, t) : '—'}
+                  tailWidth="wide"
+                  showChevron
+                  disabled={!routing || channelWriteBusy}
+                  onPress={() => setDmScopeSheetVisible(true)}
+                />
+              </SettingsGroup>
+            ) : null}
+            <ChannelsContent
+              rows={channelRows}
+              onOpen={(row) => {
+                setDetailError(null);
+                setSelectedChannelId(row.id);
+              }}
+            />
+          </View>
         ) : online && view === 'devices' ? (
           <View testID="agent-devices-content" style={styles.groups}>
             {devices.pending.length ? (
@@ -500,14 +621,153 @@ export function ChannelsDevicesSection({
       </Sheet>
 
       <Sheet
+        testID="agent-channel-detail"
+        visible={selectedChannel !== null}
+        title={selectedChannel?.label}
+        closeAccessibilityLabel={t('Close', { ns: 'common' })}
+        dismissOnBackdropPress={!channelWriteBusy}
+        onClose={() => {
+          if (!channelWriteBusy) setSelectedChannelId(null);
+        }}
+      >
+        {selectedChannel ? (
+          <View style={styles.sheetContent}>
+            {detailError ? (
+              <Banner testID="agent-channel-detail-error" tone="bad" message={detailError} />
+            ) : null}
+            {selectedChannel.accounts.length ? (
+              <View style={styles.groupWrap}>
+                <Text style={styles.groupTitle}>{t('Accounts', { ns: 'settings' })}</Text>
+                <SettingsGroup testID="agent-channel-accounts">
+                  {selectedChannel.accounts.map((account, index) => {
+                    const name = channelAccountTitle(account, selectedChannel, t);
+                    const enabled = isChannelAccountEnabled(account);
+                    return (
+                      <React.Fragment key={account.accountId}>
+                        {index ? <SettingsDivider inset="content" /> : null}
+                        <SettingsRow
+                          testID={`agent-channel-account-${account.accountId}`}
+                          title={name}
+                          subtitle={formatChannelActivity(account, translateRelativeTime, t)}
+                          value={channelManage
+                            ? undefined
+                            : enabled ? t('Enabled', { ns: 'settings' }) : t('Disabled', { ns: 'settings' })}
+                          trailing={channelManage ? (
+                            <ThemedSwitch
+                              testID={`agent-channel-account-toggle-${account.accountId}`}
+                              accessibilityLabel={name}
+                              value={enabled}
+                              disabled={!online || channelWriteBusy}
+                              onValueChange={(next) => setPendingChannelWrite({
+                                kind: 'account',
+                                channelId: selectedChannel.id,
+                                accountId: account.accountId,
+                                name,
+                                enabled: next,
+                              })}
+                            />
+                          ) : undefined}
+                        />
+                      </React.Fragment>
+                    );
+                  })}
+                </SettingsGroup>
+              </View>
+            ) : (
+              <EmptyMessage
+                testID="agent-channel-accounts-empty"
+                message={t('No accounts configured.', { ns: 'settings' })}
+              />
+            )}
+          </View>
+        ) : null}
+      </Sheet>
+
+      <Sheet
+        testID="agent-channel-dm-scope-sheet"
+        visible={dmScopeSheetVisible}
+        title={t('Direct messages', { ns: 'settings' })}
+        closeAccessibilityLabel={t('Close', { ns: 'common' })}
+        dismissOnBackdropPress={!channelWriteBusy}
+        onClose={() => {
+          if (!channelWriteBusy) setDmScopeSheetVisible(false);
+        }}
+      >
+        <View style={styles.sheetContent}>
+          <Text style={styles.sheetHint}>
+            {t('Applies to direct messages on every channel. Groups and channels always keep their own sessions.', { ns: 'settings' })}
+          </Text>
+          <SettingsGroup testID="agent-channel-dm-scope-options">
+            {DM_SCOPES.map((scope, index) => {
+              const current = routing?.dmScope === scope;
+              return (
+                <React.Fragment key={scope}>
+                  {index ? <SettingsDivider inset="content" /> : null}
+                  <SettingsRow
+                    testID={`agent-channel-dm-scope-${scope}`}
+                    title={dmScopeLabel(scope, t)}
+                    subtitle={dmScopeDescription(scope, t)}
+                    disabled={channelWriteBusy}
+                    trailing={current ? (
+                      <Check
+                        testID={`agent-channel-dm-scope-current-${scope}`}
+                        size={IconSize.sm}
+                        color={theme.colors.accent}
+                        strokeWidth={2}
+                      />
+                    ) : undefined}
+                    onPress={() => {
+                      if (current) {
+                        setDmScopeSheetVisible(false);
+                        return;
+                      }
+                      setPendingChannelWrite({ kind: 'dm-scope', scope });
+                    }}
+                  />
+                </React.Fragment>
+              );
+            })}
+          </SettingsGroup>
+        </View>
+      </Sheet>
+
+      <ConfirmationModal
+        testID="agent-channel-write-confirm"
+        visible={pendingChannelWrite !== null}
+        title={pendingChannelWrite?.kind === 'account'
+          ? pendingChannelWrite.enabled
+            ? t('Enable {{name}}?', { ns: 'settings', name: pendingChannelWrite.name })
+            : t('Disable {{name}}?', { ns: 'settings', name: pendingChannelWrite.name })
+          : pendingChannelWrite
+            ? dmScopeLabel(pendingChannelWrite.scope, t)
+            : ''}
+        message={[
+          pendingChannelWrite?.kind === 'account'
+            ? pendingChannelWrite.enabled
+              ? t('This account starts receiving messages again.', { ns: 'settings' })
+              : t('This account stops receiving messages until you enable it again.', { ns: 'settings' })
+            : t('Existing sessions are kept; new direct messages follow the new scope.', { ns: 'settings' }),
+          t('This will restart Gateway. Continue?', { ns: 'common' }),
+        ].join(' ')}
+        confirmLabel={t('Continue', { ns: 'common' })}
+        cancelLabel={t('Cancel', { ns: 'common' })}
+        onClose={() => {
+          if (!channelWriteBusy) setPendingChannelWrite(null);
+        }}
+        onConfirm={() => { void commitChannelWrite(); }}
+      />
+
+      <Sheet
         testID="agent-node-detail"
         visible={selectedNode !== null}
         title={selectedNode ? nodeLabel(selectedNode) : undefined}
         closeAccessibilityLabel={t('Close', { ns: 'common' })}
+        snapPoints={NODE_DETAIL_SNAP_POINTS}
         onClose={() => setSelectedNode(null)}
       >
         {selectedNode ? (
-          <ScrollView
+          <BottomSheetScrollView
+            testID="agent-node-detail-scroll"
             style={styles.sheetScroll}
             contentContainerStyle={styles.sheetContent}
             keyboardShouldPersistTaps="handled"
@@ -561,16 +821,16 @@ export function ChannelsDevicesSection({
                 />
               </View>
             ) : null}
-          </ScrollView>
+          </BottomSheetScrollView>
         ) : null}
       </Sheet>
     </>
   );
 
-  function ChannelsContent({ status }: Readonly<{
-    status: ChannelsStatusResult | null;
+  function ChannelsContent({ rows, onOpen }: Readonly<{
+    rows: ReadonlyArray<ChannelRow>;
+    onOpen: (row: ChannelRow) => void;
   }>): React.JSX.Element {
-    const rows = status ? buildChannelRows(status) : [];
     if (!rows.length) {
       return (
         <EmptyMessage
@@ -588,6 +848,8 @@ export function ChannelsDevicesSection({
               testID={`agent-channel-row-${row.id}`}
               title={row.label}
               value={channelStateLabel(row.state, t)}
+              showChevron
+              onPress={() => onOpen(row)}
             />
           </React.Fragment>
         ))}
@@ -679,6 +941,45 @@ function channelStateLabel(state: ChannelConnectionState, t: Translate): string 
   return t('Not configured', { ns: 'settings' });
 }
 
+function dmScopeLabel(scope: DmScope, t: Translate): string {
+  if (scope === 'per-peer') return t('Per sender', { ns: 'settings' });
+  if (scope === 'per-channel-peer') return t('Per channel and sender', { ns: 'settings' });
+  if (scope === 'per-account-channel-peer') return t('Per account, channel and sender', { ns: 'settings' });
+  return t('Shared session', { ns: 'settings' });
+}
+
+function dmScopeDescription(scope: DmScope, t: Translate): string {
+  if (scope === 'per-peer') return t('Each person gets one session shared across channels.', { ns: 'settings' });
+  if (scope === 'per-channel-peer') {
+    return t('Each person gets a separate session on each channel. Recommended for shared inboxes.', { ns: 'settings' });
+  }
+  if (scope === 'per-account-channel-peer') {
+    return t('Also separates by the account that received the message.', { ns: 'settings' });
+  }
+  return t("Every direct message on every channel continues the Agent's main conversation.", { ns: 'settings' });
+}
+
+function channelAccountTitle(account: ChannelStatusAccount, channel: ChannelRow, t: Translate): string {
+  const name = channelAccountName(account);
+  return channel.defaultAccountId && account.accountId === channel.defaultAccountId
+    ? t('{{name}} (default)', { ns: 'settings', name })
+    : name;
+}
+
+/** Last inbound / outbound activity; empty for an account that never carried a message. */
+function formatChannelActivity(
+  account: ChannelStatusAccount,
+  translate: RelativeTimeTranslator,
+  t: Translate,
+): string | undefined {
+  const received = account.lastInboundAt ? relativeTime(account.lastInboundAt, translate) : '';
+  const sent = account.lastOutboundAt ? relativeTime(account.lastOutboundAt, translate) : '';
+  if (received && sent) return t('Received {{received}} · Sent {{sent}}', { ns: 'settings', received, sent });
+  if (received) return t('Received {{time}}', { ns: 'settings', time: received });
+  if (sent) return t('Sent {{time}}', { ns: 'settings', time: sent });
+  return undefined;
+}
+
 function formatDeviceValue(device: DeviceInfo, t: Translate): string {
   const values = [device.role, device.platform ? formatPlatform(device.platform, t) : null]
     .filter((value): value is string => Boolean(value));
@@ -761,7 +1062,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       gap: Space.sm,
     },
     actionButton: { flex: 1 },
-    sheetScroll: { flexGrow: 0 },
+    sheetScroll: { flex: 1, minHeight: 0 },
     sheetContent: {
       paddingHorizontal: Space.lg,
       paddingBottom: Space.xl,
@@ -771,6 +1072,12 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       color: colors.ink,
       fontSize: FontSize.body,
       lineHeight: LineHeight.body,
+      fontWeight: FontWeight.regular,
+    },
+    sheetHint: {
+      color: colors.inkSecondary,
+      fontSize: FontSize.secondary,
+      lineHeight: LineHeight.secondary,
       fontWeight: FontWeight.regular,
     },
     renameForm: { gap: Space.sm },

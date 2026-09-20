@@ -55,6 +55,8 @@ export {
   useSheetBackgroundStyle,
 } from './SheetHeader';
 export type { SheetHeaderProps } from './SheetHeader';
+export { SheetHeaderButton } from './SheetHeaderButton';
+export type { SheetHeaderButtonProps } from './SheetHeaderButton';
 export { ThemedFullWindowOverlay } from './ThemedFullWindowOverlay';
 export { Button } from './Button';
 export type { ButtonSize, ButtonVariant } from './Button';
@@ -64,7 +66,6 @@ export { RenameSheet } from './RenameSheet';
 export type { RenameSheetProps } from './RenameSheet';
 export { SwipeableRow, useSwipeableRowGroup, SWIPEABLE_ROW_ACTION_WIDTH } from './SwipeableRow';
 export type { SwipeableRowAction, SwipeableRowGroup, SwipeableRowProps, SwipeableRowTone } from './SwipeableRow';
-export { HeaderActionButton } from './HeaderActionButton';
 export { HeaderTextAction } from './HeaderTextAction';
 export { ProEntryButton } from './ProEntryButton';
 export type { ProEntryButtonProps } from './ProEntryButton';

@@ -25,6 +25,7 @@ import { Banner } from './Banner';
 import { Card } from './Card';
 import { FloatingButton, FLOATING_BUTTON_ICON_SIZE } from './FloatingButton';
 import { HeaderPill } from './HeaderPill';
+import { createChatGlassStyle } from '../../features/chat-appearance/resolver';
 import { Companion } from './Companion';
 import { ProEntryButton, PRO_ENTRY_COMPANION_SIZE, PRO_ENTRY_HEIGHT, PRO_ENTRY_HIT_SLOP } from './ProEntryButton';
 import { RosterRow } from './RosterRow';
@@ -301,6 +302,18 @@ describe.each(['light', 'dark'] as const)('%s roster primitives', (scheme) => {
     expect(root.props.android_ripple).toBeUndefined();
   });
 
+  it('floats the header pill on glass over a wallpaper', () => {
+    const theme = activeTheme(scheme);
+    const glass = createChatGlassStyle(theme);
+    const result = render(
+      <HeaderPill testID="header-pill" agentId="main" name="Main" subtitle="Model · 54%" material="glass" onPress={jest.fn()} />,
+    );
+    expect(flattenStyle(result.getByTestId('header-pill').props.style)).toMatchObject({
+      height: ControlSize.pill, borderRadius: Radius.full,
+      backgroundColor: glass.backgroundColor, borderColor: glass.borderColor,
+    });
+  });
+
   it('replaces the header subtitle with lifting dots while the Agent works', () => {
     const theme = activeTheme(scheme);
     const result = render(
@@ -469,7 +482,9 @@ describe('AgentAvatar states and motion', () => {
     expect(getAgentPaletteIndex('agent-main')).toBeGreaterThanOrEqual(0);
     expect(getAgentPaletteIndex('agent-main')).toBeLessThan(8);
     expect(getAgentInitials('Ada Lovelace')).toBe('AL');
-    expect(getAgentInitials('助手')).toBe('助手');
+    expect(getAgentInitials('助手')).toBe('助');
+    expect(getAgentInitials('小助手 二号')).toBe('小二');
+    expect(getAgentInitials('Bo')).toBe('BO');
     expect(getAgentInitials('   ')).toBe('');
   });
 

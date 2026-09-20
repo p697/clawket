@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+import { Linking, Platform } from 'react-native';
 import Purchases, {
   type CustomerInfo,
   PURCHASES_ERROR_CODE,
@@ -812,7 +812,19 @@ export function classifyProPurchaseFailureReason(error: unknown): ProPurchaseFai
 }
 
 export const ProSubscriptionService = {
-  async getCustomerInfo(): Promise<ProPurchaseResult | null> {
+  /** Opening a store surface is not proof of redemption. Never collect or log the code. */
+  async presentCodeRedemption(): Promise<void> {
+    if (!await ensureRevenueCatConfigured()) throw new Error('RevenueCat is not configured.');
+    if (Platform.OS === 'ios') {
+      await Purchases.presentCodeRedemptionSheet();
+    } else if (Platform.OS === 'android') {
+      await Linking.openURL('https://play.google.com/redeem');
+    } else {
+      throw new Error('Code redemption is unavailable on this platform.');
+    }
+  },
+
+  async getCustomerInfo(forceRefresh = false): Promise<ProPurchaseResult | null> {
     const config = await ensureRevenueCatConfigured();
     if (!config) {
       updateRevenueCatDiagnostics({
@@ -822,6 +834,7 @@ export const ProSubscriptionService = {
       return null;
     }
     try {
+      if (forceRefresh) await Purchases.invalidateCustomerInfoCache();
       const customerInfo = await retryOnce(() => Purchases.getCustomerInfo());
       const snapshot = deriveProSubscriptionSnapshot(customerInfo, config.entitlementId);
       updateRevenueCatDiagnostics({

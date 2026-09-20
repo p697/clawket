@@ -51,7 +51,6 @@ const mockAppContext: any = {
   pendingAgentSwitch: null,
   clearPendingAgentSwitch: jest.fn(),
   execApprovalEnabled: true,
-  speechRecognitionLanguage: 'system',
   pendingChatInput: null,
   clearPendingChatInput: jest.fn(),
   pendingMainSessionSwitch: false,
@@ -82,9 +81,7 @@ jest.mock('expo-document-picker', () => ({
   getDocumentAsync: jest.fn().mockResolvedValue({ canceled: true, assets: [] }),
 }));
 
-jest.mock('../services/speech/speechRecognition', () => ({
-  stopSpeechRecognitionAsync: jest.fn().mockResolvedValue(undefined),
-}));
+
 
 jest.mock('../services/auto-app-review', () => ({
   recordSuccessfulSendForAutomaticReview: jest.fn().mockResolvedValue(undefined),

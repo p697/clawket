@@ -2,6 +2,7 @@ import type {
   Capabilities,
   ChannelStatusAccount,
   ChannelSummary,
+  ChannelsOperations,
   ChannelsStatusResult,
   DeviceInfo,
   DevicePairRequest,
@@ -24,7 +25,64 @@ export type ChannelRow = Readonly<{
   detailLabel: string;
   state: ChannelConnectionState;
   accounts: ReadonlyArray<ChannelStatusAccount>;
+  defaultAccountId?: string;
 }>;
+
+/** The `channelManage` refinement needs every write operation; a partial adapter reads only. */
+export type ChannelManageOperations = Required<Pick<
+  ChannelsOperations,
+  'getRouting' | 'setRouting' | 'setAccountEnabled'
+>>;
+
+export function resolveChannelManage(
+  capabilities: Capabilities,
+  management: ManagementOperations | undefined,
+): ChannelManageOperations | null {
+  const channels = management?.channels;
+  if (
+    !capabilities.channels
+    || capabilities.channelManage !== true
+    || !channels?.getRouting
+    || !channels.setRouting
+    || !channels.setAccountEnabled
+  ) {
+    return null;
+  }
+  return {
+    getRouting: channels.getRouting,
+    setRouting: channels.setRouting,
+    setAccountEnabled: channels.setAccountEnabled,
+  };
+}
+
+export function channelAccountName(account: ChannelStatusAccount): string {
+  return account.name?.trim() || account.accountId;
+}
+
+/** `enabled` is absent on Gateways that never wrote the flag; those accounts run. */
+export function isChannelAccountEnabled(account: ChannelStatusAccount): boolean {
+  return account.enabled !== false;
+}
+
+/** Mirrors a confirmed account write locally until the next status refresh lands. */
+export function setChannelAccountEnabled(
+  status: ChannelsStatusResult,
+  channelId: string,
+  accountId: string,
+  enabled: boolean,
+): ChannelsStatusResult {
+  const accounts = status.channelAccounts[channelId];
+  if (!accounts?.some((account) => account.accountId === accountId)) return status;
+  return {
+    ...status,
+    channelAccounts: {
+      ...status.channelAccounts,
+      [channelId]: accounts.map((account) => (
+        account.accountId === accountId ? { ...account, enabled } : account
+      )),
+    },
+  };
+}
 
 export function getChannelsDevicesViews(
   capabilities: Capabilities,
@@ -54,6 +112,7 @@ export function buildChannelRows(status: ChannelsStatusResult): ChannelRow[] {
       detailLabel: status.channelDetailLabels[id] || label,
       state: resolveChannelConnectionState(status.channels[id] ?? {}, accounts),
       accounts,
+      ...(status.channelDefaultAccountId[id] ? { defaultAccountId: status.channelDefaultAccountId[id] } : {}),
     };
   }).sort((a, b) => {
     const orderDelta = (order.get(a.id) ?? Number.MAX_SAFE_INTEGER)

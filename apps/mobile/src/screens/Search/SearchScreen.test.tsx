@@ -223,6 +223,40 @@ describe('SearchScreen connection container', () => {
     }));
   });
 
+  it('lists stored favorites under an empty query and keeps the page ready without recent searches', async () => {
+    mockLoadRecent.mockResolvedValueOnce([]);
+    mockListFavorites.mockResolvedValueOnce([{
+      favoriteKey: 'favorite-key',
+      favoritedAt: 300,
+      gatewayConfigId: 'connection',
+      agentId: 'agent',
+      agentName: 'Launch Agent',
+      sessionKey: 'session',
+      sessionLabel: 'Launch room',
+      messageId: 'favorite-message',
+      role: 'assistant',
+      text: 'Saved answer',
+      timestampMs: 300,
+    }] as never);
+    const props = createProps('');
+    render(<SearchScreen {...props} isProOverride />);
+
+    await waitFor(() => expect(mockSearchViewProps?.state).toBe('ready'));
+    expect(mockSearchViewProps?.recentSearches).toEqual([]);
+    expect(mockSearchViewProps?.sections).toEqual([]);
+    expect(mockSearchViewProps?.favorites).toEqual([
+      expect.objectContaining({ kind: 'favorite', favoriteKey: 'favorite-key', text: 'Saved answer' }),
+    ]);
+
+    act(() => mockSearchViewProps?.onSelectResult(mockSearchViewProps.favorites[0]!));
+    expect(props.navigation.navigate).toHaveBeenCalledWith('MessageDetail', {
+      connectionId: 'connection',
+      sessionKey: 'session',
+      messageId: 'favorite-message',
+    });
+    expect(mockRememberRecent).not.toHaveBeenCalled();
+  });
+
   it('navigates Agent/session rows to Thread and free message rows to the Pro gate', async () => {
     const props = createProps();
     render(<SearchScreen {...props} />);
