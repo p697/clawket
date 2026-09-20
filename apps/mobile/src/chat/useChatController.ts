@@ -74,6 +74,7 @@ import {
   buildLiveRunListData,
   liveReplyRenderKey,
   finalReplyTail,
+  recoverLiveRunPresentation,
   finishLiveRunPresentation,
   mergeNewestFirstMessages,
   StreamSegment,
@@ -191,7 +192,9 @@ function reconnectAdapter(adapter: AgentAdapter | null): void {
   void adapter.connect().catch(() => undefined);
 }
 
-function mergeStreamText(previous: string | null, incoming: string): string {
+function mergeStreamText(previous: string | null, incoming: string, textMode?: 'snapshot' | 'delta'): string {
+  if (textMode === 'snapshot') return incoming;
+  if (textMode === 'delta') return `${previous ?? ''}${incoming}`;
   if (!previous || incoming.startsWith(previous)) return incoming;
   if (previous.startsWith(incoming)) return previous;
   return `${previous}${incoming}`;
@@ -435,18 +438,6 @@ export function useChatController({
   const onChildSessionActivityChange = useCallback(() => {
     setChildSessionActivityVersion((prev) => prev + 1);
   }, []);
-  const clearChildSessionActivities = useCallback((sessionKeys: string[]) => {
-    if (sessionKeys.length === 0) return;
-    let changed = false;
-    for (const sessionKey of sessionKeys) {
-      if (childSessionActivityRef.current.delete(sessionKey)) {
-        changed = true;
-      }
-    }
-    if (changed) {
-      onChildSessionActivityChange();
-    }
-  }, [onChildSessionActivityChange]);
   const compactionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const silentCommandProbesRef = useRef<Map<string, SilentCommandProbe>>(new Map());
 
@@ -486,10 +477,14 @@ export function useChatController({
 
   const clearTransientRunPresentation = useCallback(
     (options?: { preserveCurrentStream?: boolean }) => {
-      chatStreamSegmentsRef.current = [];
-      setChatStreamSegments([]);
-      chatToolMessagesRef.current = [];
-      setChatToolMessages([]);
+      if (chatStreamSegmentsRef.current.length > 0) {
+        chatStreamSegmentsRef.current = [];
+        setChatStreamSegments([]);
+      }
+      if (chatToolMessagesRef.current.length > 0) {
+        chatToolMessagesRef.current = [];
+        setChatToolMessages([]);
+      }
       if (options?.preserveCurrentStream) {
         return;
       }
@@ -581,11 +576,12 @@ export function useChatController({
     voiceInputLevel,
     voiceInputState,
     voiceInputSupported,
+    recoverVoiceInput, voiceRecoveryCount, voiceRecordingSaved,
   } = useChatVoiceInput({
     composerRef, input, setInput, t,
     scope: `${gatewayConfigId}:${history.sessionKey ?? ''}`,
-    enabled: isFocused && !readOnly && connectionState === 'ready',
-    onSubmit: (text) => voiceSubmitRef.current(text),
+    enabled: isFocused && !readOnly,
+    onSubmit: (text) => { if (connectionState === 'ready') voiceSubmitRef.current(text); },
   });
 
 
@@ -862,10 +858,18 @@ export function useChatController({
           );
         }
         if (!adapter) return;
+        const requestedAt = Date.now();
         const historyResult = await adapter.loadSession(sessionKey, { limit: 12 });
-        if (sessionKeyRef.current !== sessionKey) return;
+        if (lastAdapterRef.current !== adapter || sessionKeyRef.current !== sessionKey
+          || sessionRunStateRef.current.get(sessionKey)?.runId !== remembered.runId) return;
 
-        if (historyResult.hasActiveRun) return;
+        if (historyResult.hasActiveRun) {
+          // A quiet tool can still be working. Confirmed backend activity
+          // resets the watchdog without rebuilding any displayed rows.
+          lastRunSignalAtRef.current = Date.now();
+          return;
+        }
+        if (lastRunSignalAtRef.current > requestedAt) return;
         const latestAssistant = latestVisibleAssistant(historyResult);
         const latestAssistantText = latestAssistant?.text ?? "";
         const latestAssistantTs = latestAssistant?.timestampMs ?? 0;
@@ -890,7 +894,8 @@ export function useChatController({
           appendIfMissing: true,
           minTimestampMs: startedAt,
         });
-        if (sessionKeyRef.current !== sessionKey) return;
+        if (lastAdapterRef.current !== adapter || sessionKeyRef.current !== sessionKey
+          || sessionRunStateRef.current.get(sessionKey)?.runId !== remembered.runId) return;
         const liveRunStillActive = currentRunIdRef.current === remembered.runId;
         const idleMs = Date.now() - lastRunSignalAtRef.current;
         if (liveRunStillActive && idleMs < HISTORY_COMPLETION_IDLE_MS) {
@@ -1235,7 +1240,10 @@ export function useChatController({
         dbg(
           `foregroundRecovery:start session=${sessionKeySnapshot} runId=${runIdSnapshot.slice(0, 8)} idleMs=${idleMs}`,
         );
-      reconnectAdapter(adapter);
+      void adapter?.probe().then((healthy) => {
+        if (!healthy && lastAdapterRef.current === adapter && currentRunIdRef.current === runIdSnapshot
+          && sessionKeyRef.current === sessionKeySnapshot) reconnectAdapter(adapter);
+      }).catch(() => {});
       void requestRunRecovery(sessionKeySnapshot, "foreground");
 
       setTimeout(() => {
@@ -1252,26 +1260,6 @@ export function useChatController({
           .catch(() => {});
       }, 1200);
 
-      setTimeout(() => {
-        if (
-          currentRunIdRef.current !== runIdSnapshot ||
-          history.sessionKey !== sessionKeySnapshot
-        )
-          return;
-        const idleAfterRecoveryMs = Date.now() - lastRunSignalAtRef.current;
-        if (idleAfterRecoveryMs < 15_000) return;
-
-        if (showDebug)
-          dbg(
-            `foregroundRecovery:timeout session=${sessionKeySnapshot} runId=${runIdSnapshot.slice(0, 8)} idleMs=${idleAfterRecoveryMs}`,
-          );
-        clearActiveRunState(
-          sessionKeySnapshot,
-          "foregroundRecoveryTimeout",
-          runIdSnapshot,
-        );
-        history.refreshSessions().catch(() => {});
-      }, 2500);
     }, 1200);
   }, [
     clearActiveRunState,
@@ -1391,18 +1379,6 @@ export function useChatController({
 
       lastRunRecoveryProbeAtRef.current = now;
 
-      // Force-clear if idle exceeds 25s — the history probe may keep failing
-      // (e.g. no parseable assistant message for this OpenClaw version), so
-      // don't rely on it alone; clear unconditionally before the hard timeout.
-      if (idleMs >= 18_000) {
-        if (showDebug)
-          dbg(
-            `watchdog:force-clear session=${sessionKey} runId=${runId.slice(0, 8)} idleMs=${idleMs}`,
-          );
-        clearActiveRunState(sessionKey, `watchdog:force-clear`, runId);
-        return;
-      }
-
       if (showDebug)
         dbg(
           `watchdog:probe session=${sessionKey} runId=${runId.slice(0, 8)} idleMs=${idleMs}`,
@@ -1419,7 +1395,10 @@ export function useChatController({
           dbg(
             `watchdog:reconnect session=${sessionKey} runId=${runId.slice(0, 8)} idleMs=${idleMs}`,
           );
-        reconnectAdapter(adapter);
+        void adapter?.probe().then((healthy) => {
+          if (!healthy && lastAdapterRef.current === adapter && currentRunIdRef.current === runId
+            && sessionKeyRef.current === sessionKey) reconnectAdapter(adapter);
+        }).catch(() => {});
       }
     }, 4_000);
 
@@ -1461,8 +1440,16 @@ export function useChatController({
       currentRunIdRef.current = run.runId;
       streamStartedAtRef.current = startedAt;
       sessionAbortableRunRef.current = run.sessionAbortable ? run.runId : null;
-      chatStreamRef.current = text;
-      setChatStream(text);
+      if (!chatStreamSegmentsRef.current.length && !chatToolMessagesRef.current.length) {
+        const recovered = recoverLiveRunPresentation(text ?? '', history.messages);
+        chatStreamSegmentsRef.current = recovered.segments;
+        setChatStreamSegments(recovered.segments);
+        chatToolMessagesRef.current = recovered.tools;
+        setChatToolMessages(recovered.tools);
+      }
+      const tail = text === null ? null : finalReplyTail(text, chatStreamSegmentsRef.current);
+      chatStreamRef.current = tail;
+      setChatStream(tail);
       lastRunSignalAtRef.current = Date.now();
     }
     setIsSending(true);
@@ -1567,7 +1554,7 @@ export function useChatController({
 
       switch (update.type) {
         case "agent_message_chunk":
-          probe.latestText = mergeStreamText(probe.latestText, update.text);
+          probe.latestText = mergeStreamText(probe.latestText, update.text, update.textMode);
           return true;
         case "run_finished":
           if (probe.finishing) return true;
@@ -1739,7 +1726,7 @@ export function useChatController({
       }
     };
 
-    const markActivityFinished = (sessionKey: string, runId: string) => {
+    const markActivityFinished = (sessionKey: string, runId: string, result?: { text?: string; failed?: boolean }) => {
       clearSessionRunState(sessionRunStateRef.current, sessionKey, runId);
       const agentId = agentIdFromSessionKey(sessionKey);
       if (agentId && agentId !== currentAgentId) {
@@ -1748,7 +1735,7 @@ export function useChatController({
         }
       }
       if (sessionKey.includes(":subagent:")) {
-        applyChildRunEnd(childSessionActivityRef.current, sessionKey);
+        applyChildRunEnd(childSessionActivityRef.current, sessionKey, result);
         onChildSessionActivityChange();
       }
     };
@@ -1809,15 +1796,18 @@ export function useChatController({
         if (lastAdapterStateRef.current !== "ready") return;
         if (!update.visible) return;
         markRunSignal();
+        const remembered = sessionRunStateRef.current.get(update.sessionKey);
         const mergedText = mergeStreamText(
-          sessionRunStateRef.current.get(update.sessionKey)?.streamText ?? null,
-          update.text,
+          remembered?.runId === update.runId ? remembered.streamText : null,
+          update.text, update.textMode,
         );
         markSessionRunDelta(
           sessionRunStateRef.current,
           update.sessionKey,
           update.runId,
           mergedText,
+          undefined,
+          update.textMode !== undefined,
         );
         const agentId = agentIdFromSessionKey(update.sessionKey);
         if (agentId && agentId !== currentAgentId) {
@@ -1829,7 +1819,11 @@ export function useChatController({
         }
         if (!matchesCurrentSession(update.sessionKey)) return;
         if (!acceptRun(update.sessionKey, update.runId)) return;
-        const nextText = mergeStreamText(chatStreamRef.current, update.text);
+        // OpenClaw snapshots cover the entire run, including text already
+        // committed before tools. Delta backends must retain repeated tokens.
+        const nextText = update.textMode === 'snapshot'
+          ? finalReplyTail(update.text, chatStreamSegmentsRef.current)
+          : mergeStreamText(chatStreamRef.current, update.text, update.textMode);
         chatStreamRef.current = nextText;
         setChatStream(nextText);
         setActivityLabel(null);
@@ -1858,6 +1852,7 @@ export function useChatController({
         }
         if (!matchesCurrentSession(update.sessionKey)) return;
         if (!acceptRun(update.sessionKey, update.runId)) return;
+        if (chatToolMessagesRef.current.some(message => message.id === update.message.id)) return;
         commitCurrentStreamSegment();
         setActivityLabel(formatToolActivity(toolName, t));
         const message = {
@@ -1916,7 +1911,10 @@ export function useChatController({
       case "run_finished": {
         if (recoveredActiveSessionRef.current === update.sessionKey) recoveredActiveSessionRef.current = null;
         markRunSignal();
-        markActivityFinished(update.sessionKey, update.runId);
+        markActivityFinished(update.sessionKey, update.runId, {
+          text: update.finalMessage?.text ?? update.systemMessage?.text,
+          failed: update.stopReason === "error" || update.stopReason === "cancelled",
+        });
         if (!matchesCurrentSession(update.sessionKey)) return;
         const activeRunId = currentRunIdRef.current;
         if (
@@ -3275,6 +3273,7 @@ export function useChatController({
     onSend,
     startVoiceInput, stopVoiceInput, cancelVoiceInput,
     voiceInputSupported,
+    recoverVoiceInput, voiceRecoveryCount, voiceRecordingSaved,
     voiceInputState,
     voiceInputActive,
     voiceInputDisabled,
@@ -3333,6 +3332,5 @@ export function useChatController({
     agentActiveCount,
     childSessionActivityRef,
     childSessionActivityVersion,
-    clearChildSessionActivities,
   };
 }

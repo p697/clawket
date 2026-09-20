@@ -92,3 +92,7 @@ PostHog 项目 337268；SDK 与集中式 `src/services/analytics/events.ts` 沿�
 
 - `events.test.ts` 覆盖每个事件的属性白名单（禁止高基数字段）。
 - Debug 模式下的 PostHog 诊断页显示最近 20 条事件（现有 `getPostHogDiagnostics` 扩展）。
+
+## 语音诊断（2026-09-20）
+
+`chat_voice_input_timing{stage: native_started | first_buffer, duration_ms}` 记录本机采集启动耗时（0–60000 ms）。`chat_voice_input_failed{code, stage, request_id?}` 保留白名单错误码；request_id 仅允许语音 Worker 服务端生成的单次随机 UUID，用于关联不含内容的云端日志，不是用户/设备/会话 ID。禁止加入音频、文本、原始 Provider 错误或签名请求头。

@@ -22,8 +22,7 @@ export function routeGatewayEvent(
     case 'chat':
       return routeChatEvent(payload as ChatEventPayload, emit, now);
     case 'agent':
-      routeAgentEvent(payload as AgentEventPayload, emit, now);
-      return {};
+      return routeAgentEvent(payload as AgentEventPayload, emit, now);
     case 'exec.approval.requested':
       if (isRecord(payload)) {
         emit('execApprovalRequested', payload as GatewayProtocolEvents['execApprovalRequested']);
@@ -160,25 +159,46 @@ function routeAgentEvent(
   payload: AgentEventPayload,
   emit: Emit,
   now: () => number,
-): void {
-  if (!payload) return;
+): RoutedEventResult {
+  if (!payload) return {};
   const runId = readString(payload.runId);
-  if (!runId) return;
+  if (!runId) return {};
   const sessionKey = readString(payload.sessionKey);
   if (payload.stream === 'compaction') {
     const phase = payload.data?.phase;
     if (phase === 'start' || phase === 'end') {
       emit('chatCompaction', { runId, sessionKey, phase });
     }
-    return;
+    return {};
+  }
+  // Background OpenClaw children broadcast agent events without a chat.send
+  // subscription. Their lifecycle end may be the only terminal event we receive.
+  // Main conversations still settle exclusively through authoritative chat finals.
+  const isChild = sessionKey?.includes(':subagent:') === true;
+  if (payload.stream === 'assistant' && isChild && sessionKey) {
+    const text = readString(payload.data?.text);
+    if (text && !isSilentReplyPrefixText(text)) emit('chatDelta', { runId, sessionKey, text });
+    return {};
   }
   if (payload.stream === 'lifecycle') {
-    if (payload.data?.phase === 'start') emit('chatRunStart', { runId, sessionKey });
-    return;
+    const phase = payload.data?.phase;
+    if (phase === 'start') emit('chatRunStart', { runId, sessionKey });
+    if (!isChild || (phase !== 'end' && phase !== 'error')) return {};
+    if (phase === 'error') {
+      emit('chatError', { runId, sessionKey, message: readString(payload.data?.error) ?? 'Stream error' });
+    } else if (payload.data?.aborted === true) {
+      emit('chatAborted', { runId, sessionKey });
+    } else {
+      const reply = payload.data?.terminalReply;
+      const text = reply?.disposition === 'visible' ? readString(reply.text) : undefined;
+      emit('chatFinal', { runId, sessionKey, ...(text ? { message: { role: 'assistant', content: text } } : {}) });
+    }
+    emit('sessionsChanged', {});
+    return { terminalSessionChange: true };
   }
-  if (payload.stream !== 'tool' || !payload.data) return;
+  if (payload.stream !== 'tool' || !payload.data) return {};
   const phase = payload.data.phase;
-  if (phase !== 'start' && phase !== 'update' && phase !== 'result') return;
+  if (phase !== 'start' && phase !== 'update' && phase !== 'result') return {};
   const hasError = Boolean(payload.data.isError || payload.data.error);
   emit('chatTool', {
     runId,
@@ -195,6 +215,7 @@ function routeAgentEvent(
         : undefined,
     status: phase === 'result' ? (hasError ? 'error' : 'success') : 'running',
   });
+  return {};
 }
 
 export function extractText(message?: ChatEventPayload['message']): string {

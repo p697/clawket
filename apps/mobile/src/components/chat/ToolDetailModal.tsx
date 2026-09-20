@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as Clipboard from 'expo-clipboard';
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
-import { Check, ChevronDown, CircleAlert, Clock3, Copy } from 'lucide-react-native';
+import { Check, ChevronDown, CircleAlert, Copy } from 'lucide-react-native';
 import { ChevronRight } from '../ui/DirectionalIcon';
 import { useTranslation } from 'react-i18next';
 import { FloatingButton, Sheet } from '../ui';
@@ -91,14 +91,19 @@ export function ToolDetailModal(props: Props): React.JSX.Element {
     [t('Total tokens'), s.usage?.totalTokens?.toLocaleString(i18n.language)],
   ].filter((row): row is [string, string] => typeof row[1] === 'string');
   return <Sheet visible={visible} onClose={onClose} title={title}
+    titleContent={<View style={styles.heading}>
+      <Text accessibilityRole="header" numberOfLines={1} style={styles.title}>{title}</Text>
+      <View style={styles.statusRow} testID="tool-detail-header-status" accessible
+        accessibilityLabel={[statusLabel, duration].filter(Boolean).join(' · ')} accessibilityLiveRegion="polite">
+        <View style={styles.state}>
+          {s.status === 'running' ? <ActivityIndicator size="small" color={stateColor} /> : <StateIcon size={IconSize.sm} color={stateColor} />}
+          <Text style={[styles.caption, styles.stateLabel, { color: stateColor }]}>{statusLabel}</Text>
+        </View>
+        {duration ? <Text numberOfLines={1} style={styles.caption} testID="tool-detail-duration">{`· ${duration}`}</Text> : null}
+      </View>
+    </View>}
     closeAccessibilityLabel={t('Close', { ns: 'common' })} snapPoints={SNAP_POINTS} testID="tool-detail-sheet">
     <BottomSheetScrollView testID="tool-detail-scroll" contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-      <View style={styles.statusRow}>
-        {s.status === 'running' ? <ActivityIndicator size="small" color={stateColor} /> : <StateIcon size={IconSize.sm} color={stateColor} />}
-        <Text style={[styles.secondary, { color: stateColor }]}>{statusLabel}</Text>
-        {duration ? <View style={styles.duration}><Clock3 size={IconSize.sm} color={theme.colors.inkTertiary} />
-          <Text numberOfLines={1} style={styles.caption} testID="tool-detail-duration">{duration}</Text></View> : null}
-      </View>
       {s.args?.trim() ? <PayloadSection key={`input-${s.name}-${s.startedAtMs}`} label={t('Input')} raw={s.args} testID="tool-detail-input" /> : null}
       {s.detail?.trim() ? <PayloadSection key={`output-${s.name}-${s.startedAtMs}`} label={t('Output')} raw={s.detail} testID="tool-detail-output" />
         : <View style={styles.empty}><Text style={styles.secondary}>
@@ -121,14 +126,17 @@ export function ToolDetailModal(props: Props): React.JSX.Element {
 function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors']) {
   return StyleSheet.create({
     content: { paddingHorizontal: Space.xl, paddingBottom: Space.lg, gap: Space.sm },
-    statusRow: { flexDirection: 'row', alignItems: 'center', gap: Space.sm, paddingVertical: Space.sm },
+    heading: { alignSelf: 'stretch', alignItems: 'center', gap: Space.xs },
+    title: { color: colors.ink, fontSize: FontSize.body, lineHeight: LineHeight.body, fontWeight: FontWeight.semibold, textAlign: 'center' },
+    statusRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', columnGap: Space.xs, maxWidth: '100%' },
+    state: { flexDirection: 'row', alignItems: 'center', gap: Space.xs, maxWidth: '100%' },
+    stateLabel: { flexShrink: 1, textAlign: 'center' },
     secondary: { color: colors.inkSecondary, fontSize: FontSize.secondary, lineHeight: LineHeight.secondary },
     caption: { color: colors.inkSecondary, fontSize: FontSize.caption, lineHeight: LineHeight.caption },
-    duration: { flexDirection: 'row', alignItems: 'center', gap: Space.xs, marginLeft: 'auto', flexShrink: 0 },
     section: { gap: Space.xs },
     sectionHeading: { flexDirection: 'row', alignItems: 'center', gap: Space.sm, minHeight: ControlSize.floatingButton },
     sectionLabel: { flex: 1, color: colors.ink, fontSize: FontSize.secondary, lineHeight: LineHeight.secondary, fontWeight: FontWeight.semibold },
-    payload: { backgroundColor: colors.surface, borderRadius: Radius.settingsGroup, padding: Space.lg },
+    payload: { backgroundColor: colors.surface, borderRadius: Radius.settingsGroup, padding: Space.md },
     code: { color: colors.ink, fontSize: FontSize.caption, lineHeight: LineHeight.secondary,
       fontFamily: Platform.select({ ios: 'Menlo', default: 'monospace' }) },
     empty: { paddingVertical: Space.lg },

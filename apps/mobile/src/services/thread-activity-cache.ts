@@ -3,7 +3,7 @@ import type { CronRunLogEntry } from '@clawket/agent-protocol';
 import type { ThreadRunSeed, ThreadRunStatus } from '../screens/Thread/model';
 
 /**
- * The last successful scheduled-activity snapshot shown in a main thread's timeline.
+ * Scoped timeline snapshots: scheduled results and separately stored child-run records.
  *
  * Messages come from the chat cache and paint the first frame; scheduled results
  * used to arrive only after the network round trip and jump into the middle of that
@@ -36,8 +36,10 @@ const RUN_STATUSES: ReadonlySet<ThreadRunStatus> = new Set<ThreadRunStatus>([
   'skipped',
 ]);
 
-function makeScopeKey(scope: ThreadActivityScope): string {
-  return `${THREAD_ACTIVITY_PREFIX}${scope.connectionId}::${scope.agentId}::${scope.sessionKey}`;
+type ActivityKind = 'cron' | 'subagent';
+
+function makeScopeKey(scope: ThreadActivityScope, kind: ActivityKind = 'cron'): string {
+  return `${THREAD_ACTIVITY_PREFIX}${scope.connectionId}::${scope.agentId}::${scope.sessionKey}${kind === 'subagent' ? '::subagents' : ''}`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -58,22 +60,23 @@ function normalizeCronRun(value: unknown): CronRunLogEntry | undefined {
   return value as unknown as CronRunLogEntry;
 }
 
-function normalizeRun(value: unknown): ThreadRunSeed | null {
+function normalizeRun(value: unknown, kind: ActivityKind): ThreadRunSeed | null {
   if (!isRecord(value)) return null;
   const id = optionalString(value.id);
   const title = optionalString(value.title);
   const status = value.status;
-  if (!id || !title || value.kind !== 'cron') return null;
+  if (!id || !title || value.kind !== kind) return null;
   if (typeof status !== 'string' || !RUN_STATUSES.has(status as ThreadRunStatus)) return null;
   if (!isValidTimestamp(value.updatedAt)) return null;
   const sessionKey = optionalString(value.sessionKey);
+  if (kind === 'subagent' && (!sessionKey || !['completed', 'failed'].includes(status))) return null;
   const jobId = optionalString(value.jobId);
   const agentId = optionalString(value.agentId);
-  const summary = optionalString(value.summary);
+  const summary = optionalString(value.summary)?.slice(0, kind === 'subagent' ? 16_000 : undefined);
   const cronRun = normalizeCronRun(value.cronRun);
   return {
     id,
-    kind: 'cron',
+    kind,
     title,
     status: status as ThreadRunStatus,
     updatedAt: value.updatedAt,
@@ -90,12 +93,12 @@ function normalizeRun(value: unknown): ThreadRunSeed | null {
  * silently drops individual entries that no longer match the run shape, so a
  * corrupted store can never paint a broken card or throw during hydration.
  */
-export function normalizeThreadActivityRuns(value: unknown): ThreadRunSeed[] | null {
+export function normalizeThreadActivityRuns(value: unknown, kind: ActivityKind = 'cron'): ThreadRunSeed[] | null {
   if (!isRecord(value) || value.version !== THREAD_ACTIVITY_VERSION || !Array.isArray(value.runs)) return null;
   const runs: ThreadRunSeed[] = [];
   const seen = new Set<string>();
   for (const entry of value.runs) {
-    const run = normalizeRun(entry);
+    const run = normalizeRun(entry, kind);
     if (!run || seen.has(run.id)) continue;
     seen.add(run.id);
     runs.push(run);
@@ -105,19 +108,19 @@ export function normalizeThreadActivityRuns(value: unknown): ThreadRunSeed[] | n
 }
 
 export const ThreadActivityCacheService = {
-  async read(scope: ThreadActivityScope): Promise<ThreadRunSeed[] | null> {
+  async read(scope: ThreadActivityScope, kind: ActivityKind = 'cron'): Promise<ThreadRunSeed[] | null> {
     try {
-      const raw = await AsyncStorage.getItem(makeScopeKey(scope));
+      const raw = await AsyncStorage.getItem(makeScopeKey(scope, kind));
       if (!raw) return null;
-      return normalizeThreadActivityRuns(JSON.parse(raw));
+      return normalizeThreadActivityRuns(JSON.parse(raw), kind);
     } catch {
       return null;
     }
   },
 
   /** Replaces the snapshot; an empty result removes the record instead of storing `[]`. */
-  async write(scope: ThreadActivityScope, runs: ReadonlyArray<ThreadRunSeed>): Promise<void> {
-    const key = makeScopeKey(scope);
+  async write(scope: ThreadActivityScope, runs: ReadonlyArray<ThreadRunSeed>, kind: ActivityKind = 'cron'): Promise<void> {
+    const key = makeScopeKey(scope, kind);
     if (runs.length === 0) {
       await AsyncStorage.removeItem(key);
       return;

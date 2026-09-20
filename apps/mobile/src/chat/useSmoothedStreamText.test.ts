@@ -1,4 +1,5 @@
 import { act, renderHook } from '@testing-library/react-native';
+import { buildLiveRunListData } from './liveRunThread';
 
 const mockUseReducedMotion = jest.fn(() => false);
 jest.mock('react-native-reanimated', () => ({
@@ -66,6 +67,23 @@ describe('useSmoothedStreamText', () => {
 
     expect(setIntervalSpy).not.toHaveBeenCalled();
     setIntervalSpy.mockRestore();
+  });
+
+  it('drains the held-back suffix when a tool commits a paragraph while the run continues', () => {
+    const text = 'Let me run a real end-to-end test through the configured provider.';
+    const { result, rerender } = renderSmoothedStreamText({ text: '', streaming: true });
+    rerender({ text, streaming: true });
+    act(() => { jest.advanceTimersByTime(200); });
+    expect(result.current).not.toBe(text);
+    const committed = buildLiveRunListData({ historyMessages: [],
+      streamSegments: [{ id: 'segment', text, timestampMs: 1000 }],
+      toolMessages: [{ id: 'tool', role: 'tool', text: '', toolStatus: 'running' }],
+      liveStreamText: null, liveStreamStartedAt: 1000, activeRunId: 'run', includePlaceholder: true,
+    }).find(row => row.id === 'segment')!;
+    rerender({ text: committed.text, streaming: committed.streaming === true });
+    act(() => { jest.advanceTimersByTime(5_000); });
+    expect(result.current).toBe(text);
+    expect(jest.getTimerCount()).toBe(0);
   });
 
   it('animates streaming text gradually and settles on the full text with timers cleaned up', () => {

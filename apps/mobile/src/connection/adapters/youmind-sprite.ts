@@ -318,7 +318,7 @@ export class YouMindSpriteAdapter implements AgentAdapter {
             this.latestPreview = assistantPreview;
             this.latestUpdatedAt = Date.now();
           }
-          this.emit('update', update);
+          this.emit('update', update.type === 'agent_message_chunk' ? { ...update, textMode: 'delta' } : update);
         }
         if (updates.some((update) => update.type === 'run_finished')) {
           this.emit('sessions', [this.createMainSession(false)]);

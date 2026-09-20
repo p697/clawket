@@ -3,6 +3,16 @@ import { ChatCacheService, CachedSessionMeta } from "./chat-cache";
 import { UiMessage } from "../types/chat";
 import { DEFAULT_GATEWAY_HISTORY_CACHE, mergeGatewayHistory } from "../connection/adapters/gateway-history";
 import { stableMessageId } from "../utils/chat-message";
+import { act, renderHook } from "@testing-library/react-native";
+import { useRef } from "react";
+import { useChatHistoryState } from "../chat/useChatHistoryState";
+
+jest.mock("./image-cache", () => ({
+  getAllCachedForSession: jest.fn().mockResolvedValue([]),
+  cacheMessageImages: jest.fn(),
+  generateStableKey: jest.fn(() => "stable-key"),
+  findCachedEntry: jest.fn(),
+}));
 
 const INDEX_KEY = "clawket.chatCache.index.v2";
 
@@ -83,6 +93,69 @@ function makeMsg(overrides: Partial<UiMessage> = {}): UiMessage {
 }
 
 describe("ChatCacheService", () => {
+  it.each(["openclaw", "hermes"].flatMap(backend => [true, false].map(known => [backend, known] as const)))(
+    "restores the current %s snapshot before network history (known generation: %s)", async (backendKind, known) => {
+      const key = "agent:main:main";
+      const scope = { gatewayConfigId: "gw1", agentId: "main", sessionKey: key };
+      const messages = Array.from({ length: 123 }, (_, index) => makeMsg({
+        id: `cached-${index}`, historyMessageId: `source-${index}`,
+        role: index % 2 ? "assistant" : "user",
+        text: index === 119 || index === 121 ? "Repeated reply" : `Message ${index}`,
+        timestampMs: 100_000 + index * 1000,
+      }));
+      // The old unscoped snapshot starts later, but its tail is out of date.
+      // Sorting generations by their first row puts this stale copy last.
+      await ChatCacheService.saveMessages(scope, messages.slice(40, 90));
+      await ChatCacheService.saveMessages({ ...scope, sessionId: "current" }, messages);
+      const expected = messages.slice(-50).map(message => message.text);
+      const adapter = { connection: { backendKind }, state: "ready", loadSession: jest.fn().mockResolvedValue({
+        sessionId: "current", messages: messages.slice(-50).map(message => ({
+          id: message.historyMessageId, role: message.role, text: message.text, timestampMs: message.timestampMs,
+        })),
+      }) };
+      const { result, unmount } = renderHook(() => {
+        const sessionKeyRef = useRef<string | null>(key);
+        return useChatHistoryState({ adapter: adapter as any, dbg: jest.fn(), t: key => key, sessionKeyRef,
+          routeSessionKey: key, mainSessionKey: key, gatewayConfigId: "gw1", currentAgentId: "main" });
+      });
+      act(() => result.current.setSessionKey("agent:main:other"));
+      act(() => result.current.setSessionKey(key));
+      await act(async () => { await result.current.restoreCachedMessages(key, { sessionId: known ? "current" : undefined }); });
+      expect(result.current.messages.map(message => message.text)).toEqual(expected);
+      const renderKeys = result.current.messages.map(message => message.renderKey ?? message.id);
+      await act(async () => { await result.current.loadHistory(key); });
+      expect(result.current.messages.map(message => message.text)).toEqual(expected);
+      expect(result.current.messages.map(message => message.renderKey ?? message.id)).toEqual(renderKeys);
+      // Entry must not delete the legacy snapshot or older rows needed for paging.
+      expect(await ChatCacheService.getMessages("gw1", "main", key, "current")).toHaveLength(123);
+      expect(await ChatCacheService.getMessagesByStorageKey(makeStorageKey("gw1", "main", key))).toHaveLength(50);
+      unmount();
+    },
+  );
+
+  it.each(["openclaw", "hermes"])("keeps archived %s history pageable after restoring a short current snapshot", async backendKind => {
+    const key = "agent:main:main";
+    const scope = { gatewayConfigId: "gw1", agentId: "main", sessionKey: key };
+    const archived = [makeMsg({ id: "old", text: "Archived reply", timestampMs: 100_000 })];
+    const current = [makeMsg({ id: stableMessageId("user", 200_000, "Current reply"), historyMessageId: "source", text: "Current reply", timestampMs: 200_000 })];
+    await ChatCacheService.saveMessages({ ...scope, sessionId: "old" }, archived);
+    await ChatCacheService.saveMessages({ ...scope, sessionId: "current" }, current);
+    const adapter = { connection: { backendKind }, state: "ready", loadSession: jest.fn().mockResolvedValue({
+      sessionId: "current", messages: [{ id: "source", role: "user", text: "Current reply", timestampMs: 200_000 }],
+    }) };
+    const { result, unmount } = renderHook(() => {
+      const sessionKeyRef = useRef<string | null>(key);
+      return useChatHistoryState({ adapter: adapter as any, dbg: jest.fn(), t: key => key, sessionKeyRef,
+        routeSessionKey: key, mainSessionKey: key, gatewayConfigId: "gw1", currentAgentId: "main" });
+    });
+    await act(async () => { await result.current.restoreCachedMessages(key, { sessionId: "current" }); });
+    expect(result.current.messages.map(message => message.text)).toEqual(["Current reply"]);
+    await act(async () => { await result.current.loadHistory(key); });
+    await act(async () => { await result.current.onLoadMoreHistory(); });
+    expect(result.current.messages.map(message => message.text)).toEqual(["Archived reply", "Current reply"]);
+    unmount();
+  });
+
   describe("saveMessages + getMessages", () => {
     it("uses projected identity when a legacy Gateway renumbers history-page fallback IDs", async () => {
       const scope = { gatewayConfigId: "gw1", agentId: "main", sessionKey: "agent:main:main" };

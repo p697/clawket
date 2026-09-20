@@ -4,8 +4,9 @@ import { useTranslation } from 'react-i18next';
 import { Brain, CalendarClock, Check, ChevronDown, CircleAlert, FilePenLine, FileSearch, FolderSearch, Globe, Layers, MessageSquare, Search, Terminal, Wrench } from 'lucide-react-native';
 import { ChevronRight } from '../ui/DirectionalIcon';
 import type { UiMessage } from '../../types/chat';
-import { useAppTheme } from '../../theme';
-import { ControlSize, FontSize, FontWeight, IconSize, LineHeight, Radius, Space } from '../../theme/tokens';
+import { useConversationTheme } from './ChatPresentation';
+import { FontSize, IconSize, LineHeight, Space } from '../../theme/tokens';
+import { activityCardStyles } from './activity-card-styles';
 import { formatToolDisplayName, resolveToolDetail } from '../../utils/tool-display';
 
 function toolIcon(name: string) {
@@ -47,15 +48,13 @@ function ToolActivityRow({ title, summary, status, icon: Icon, onPress, expanded
   title: string; summary?: string; status?: UiMessage['toolStatus'];
   icon: typeof Wrench; onPress: () => void; expanded?: boolean; testID: string;
 }): React.JSX.Element {
-  const { theme } = useAppTheme();
+  const theme = useConversationTheme();
   const { t } = useTranslation('chat');
   const styles = useMemo(() => StyleSheet.create({
-    row: { minHeight: ControlSize.floatingButton, flexDirection: 'row', alignItems: 'center',
-      gap: Space.sm, paddingHorizontal: Space.md, paddingVertical: Space.sm,
-      borderRadius: Radius.settingsGroup, backgroundColor: theme.colors.surface },
+    row: { ...activityCardStyles.surface, flexDirection: 'row', alignItems: 'center',
+      gap: Space.sm, backgroundColor: theme.colors.surface },
     copy: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: Space.sm },
-    title: { flexShrink: 1, color: theme.colors.inkSecondary, fontSize: FontSize.secondary,
-      lineHeight: LineHeight.secondary, fontWeight: FontWeight.regular },
+    title: { ...activityCardStyles.label, flexShrink: 1, color: theme.colors.inkSecondary },
     summary: { flex: 1, color: theme.colors.inkTertiary, fontSize: FontSize.caption,
       lineHeight: LineHeight.caption },
     pressed: { opacity: 0.65 },

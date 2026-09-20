@@ -63,7 +63,7 @@ export const CONNECTION_STATUS_PILL_HEIGHT = ControlSize.pill;
 export const CONNECTION_STATUS_PILL_HIT_SLOP = (ControlSize.floatingButton - ControlSize.pill) / 2;
 export const CONNECTION_STATUS_PILL_ICON_SIZE = IconSize.sm;
 
-/** Same breath as `ThinkingIndicator`: the label is a loading surface while recovery runs. */
+/** Quiet recovery breath: the label is a loading surface while recovery runs. */
 const RECONNECTING_RESTING_OPACITY = 0.36;
 const RECONNECTING_PEAK_OPACITY = 0.9;
 const PRESSED_OPACITY = 0.72;

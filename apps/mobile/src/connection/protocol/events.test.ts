@@ -102,3 +102,44 @@ describe('routeGatewayEvent pairing approvals', () => {
     }]);
   });
 });
+
+describe('background child lifecycle', () => {
+  const sessionKey = 'agent:main:subagent:weather';
+  const child = { sessionKey, runId: 'weather-run' };
+
+  it('settles an agent-only child and forwards its terminal result without waiting for chat.final', () => {
+    const result = routeWithResult('agent', {
+      ...child, stream: 'lifecycle', data: { phase: 'end', terminalReply: { disposition: 'visible', text: 'Weather result' } },
+    });
+    expect(result).toEqual({
+      emitted: [
+        { event: 'chatFinal', payload: { ...child, message: { role: 'assistant', content: 'Weather result' } } },
+        { event: 'sessionsChanged', payload: {} },
+      ], result: { terminalSessionChange: true },
+    });
+    expect(route('agent', { ...child, stream: 'assistant', data: { text: 'Weather result', delta: 'result' } }))
+      .toEqual([{ event: 'chatDelta', payload: { ...child, text: 'Weather result' } }]);
+  });
+
+  it('distinguishes errors and cancellation from successful completion', () => {
+    expect(route('agent', { ...child, stream: 'lifecycle', data: { phase: 'error', error: 'Provider unavailable' } })[0])
+      .toEqual({ event: 'chatError', payload: { ...child, message: 'Provider unavailable' } });
+    expect(route('agent', { ...child, stream: 'lifecycle', data: { phase: 'end', aborted: true } })[0])
+      .toEqual({ event: 'chatAborted', payload: child });
+  });
+
+  it('accepts legacy end-only events but does not publish hidden terminal text', () => {
+    for (const data of [{ phase: 'end' }, { phase: 'end', terminalReply: { disposition: 'silent', text: 'NO_REPLY' } }]) {
+      expect(route('agent', { ...child, stream: 'lifecycle', data })[0]).toEqual({ event: 'chatFinal', payload: child });
+    }
+    expect(route('agent', { ...child, stream: 'assistant', data: { text: 'NO_REPLY' } })).toEqual([]);
+  });
+
+  it('does not settle main conversations, missing identities, or nonterminal finishing phases', () => {
+    for (const key of ['agent:main:main', 'hermes:main', undefined]) {
+      expect(route('agent', { ...child, sessionKey: key, stream: 'lifecycle', data: { phase: 'end' } })).toEqual([]);
+      expect(route('agent', { ...child, sessionKey: key, stream: 'assistant', data: { text: 'Do not duplicate chat text' } })).toEqual([]);
+    }
+    expect(route('agent', { ...child, stream: 'lifecycle', data: { phase: 'finishing' } })).toEqual([]);
+  });
+});

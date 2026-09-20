@@ -235,6 +235,7 @@ export const Motion = {
   pressedOpacity: 0.72,
   messageEnterOffset: 4,
   avatarWorkingLoop: 1_200,
+  activityShimmer: 1_800,
   companionBreath: 1_400,
   companionGaze: 1_200,
   companionBlinkPause: 3_200,

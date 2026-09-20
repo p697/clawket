@@ -37,6 +37,12 @@ describe('sessionRunState', () => {
     expect(next.streamText).toBe('hello world');
     expect(next.startedAt).toBe(1000);
   });
+  it('accepts a shorter authoritative snapshot without changing the run start', () => {
+    const map = new Map();
+    markSessionRunDelta(map, 'agent:main', 'run_1', 'Draft with a correction', 1000);
+    const next = markSessionRunDelta(map, 'agent:main', 'run_1', 'Corrected', 1100, true);
+    expect(next).toEqual({ runId: 'run_1', streamText: 'Corrected', startedAt: 1000 });
+  });
 
   it('replaces state when a new run id arrives for the same session', () => {
     const map = new Map();

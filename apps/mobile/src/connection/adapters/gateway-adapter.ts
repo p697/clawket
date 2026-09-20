@@ -530,7 +530,9 @@ export abstract class GatewayAdapterBase implements AgentAdapter {
         event,
         mapGatewayAdapterEvent(event, this.fallbackSessionKey),
       );
-      for (const update of updates) this.emitUpdate(update);
+      for (const update of updates) this.emitUpdate(update.type === 'agent_message_chunk'
+        ? { ...update, textMode: this.connection.backendKind === 'openclaw' ? 'snapshot' : 'delta' }
+        : update);
     });
   }
 

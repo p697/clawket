@@ -190,7 +190,8 @@ export const ANALYTICS_EVENT_PROPERTY_WHITELIST = Object.freeze({
   chat_skill_selected: ['source', 'action', 'session_key_present'],
   message_favorite_toggled: ['action', 'role', 'source'],
   chat_voice_input_tapped: ['action', 'has_existing_text', 'locale', 'source'],
-  chat_voice_input_failed: ['code', 'stage'],
+  chat_voice_input_failed: ['code', 'stage', 'request_id'],
+  chat_voice_input_timing: ['stage', 'duration_ms'],
   chat_model_selected: ['provider', 'source', 'session_key_present'],
   chat_slash_command_triggered: ['action', 'source', 'session_key_present'],
   theme_accent_changed: ['selected_accent_id', 'source'],
@@ -690,8 +691,13 @@ export const analyticsEvents = {
     captureAnalyticsEvent('chat_voice_input_tapped', properties);
   },
 
+  chatVoiceInputTiming(properties: { stage: 'native_started' | 'first_buffer'; duration_ms: number }): void {
+    captureAnalyticsEvent('chat_voice_input_timing', { ...properties, duration_ms: Math.min(60000, Math.max(0, Math.round(properties.duration_ms))) });
+  },
+
   chatVoiceInputFailed(properties: {
     code: string;
+    request_id?: string;
     stage: 'availability' | 'permissions' | 'start' | 'recognition';
   }): void {
     captureAnalyticsEvent('chat_voice_input_failed', properties);

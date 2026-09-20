@@ -1,5 +1,38 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+## 静态会话切换闪动排查与优化（2026-09-20）
+
+- 第三轮反馈只剩一次，且明确是消息出现后再跳。只读检查手机 main 缓存确认：123 条新快照与 50 条旧快照并存；初次恢复误用按首条时间拼接的跨代时间线，旧快照排在后面，先显示旧尾页再被正式历史替换。现在首屏优先当前 session ID 的快照，无对应快照时回退最近保存快照，仅读最后一页；保留归档和原分页、正式历史去重与流式语义。真实存储 → hook 回归先复现失败，覆盖两后端、未知 session ID、重复内容保留、旧历史可翻和过期回退；针对性 2 suites / 98 tests 通过；`npm run check:required` 全绿（Mobile 307 suites / 3,180 tests），日志 `/tmp/clawket-session-snapshot-required.log`。脱敏设备证据 `/tmp/clawket-session-snapshot-evidence.json`，原始临时缓存副本已删除。真机最终效果待复测。
+- 真机第二轮反馈：闪动从 3–4 次减少到约 2 次，尚未解决。继续复现两条独立路径：切换时先改 sessionKey、旧消息异步才清除；已有缓存消息时，Cron 与分身快照各自晚插入。现在会话归属与消息同步切换、每次选择都启用首次正式历史去重策略；首屏合并两个本地卡片快照，最多等待本地读取 300 ms，已展示后不再隐藏，免费预览不等隐藏卡片。
+- A → B → A 还会复用旧请求/接纳迟到分页或终态回填；现在增加会话代次，失效旧历史、分页与回复对齐回调，本地旧分页也不能耗尽新会话的分页状态。新增失败回归后修复，最终针对性 5 suites / 200 tests 通过。第二轮 `check:required` 完整通过（Mobile 307 suites / 3,172 tests），日志 `/tmp/clawket-session-followup-required.log`；最终分页保护追加后定向回归重新全绿。未修改 Markdown 或原生依赖，真机剩余两次闪动是否消除仍待反馈。
+
+- 负责人反馈 main 与其他 session 来回切换，即使没有流式输出也会闪动 2–4 次，要求保留已有去重修复。延迟缓存回归复现 OpenClaw/Hermes 网络先完成后被旧缓存覆盖；现在拒绝过期的缓存成功、空值和失败回调。
+- 首次正式历史只继承唯一、确定匹配的缓存 renderKey，内容与消息集合仍由正式历史决定；清理旧重复消息，保留回填期间的新发送。组件回归验证表格跨缓存/网络替换保持实例、可更新正式内容。
+- 移除新旧会话列表重叠淡入淡出；首屏定位交给 FlashList，之后同帧高度/视口变化只合并执行一次显式跟随。保留工具展开后的防回跳逻辑，不重新启用有历史原生回归的 threshold autoscroll；排队定位尊重拖动、切会话、输入框展开、卸载和手动返回底部。
+- 针对性 3 suites / 156 tests 通过；`npm run check:required` 完整通过（Mobile 307 suites / 3,164 tests、所有工作区类型/协议/Relay/Bridge/语音测试、201 个 UI 文件、i18n 与文档门禁），日志 `/tmp/clawket-session-required.log`。只改 App 呈现/回填，不改 Markdown 依赖、消息分段与确认语义、后端或连接。真机体感按 HT-SESSION-JITTER-0920 由负责人复测，自动化不能代替视觉验收。
+
+## 聊天气泡高度与恢复闪动修复（2026-09-20）
+
+- 负责人确认流式重复已消失，继续反馈空白页脚、句尾不完整和返回运行中会话持续闪动。已提交的工具前段落仍被标为 streaming，导致打字器保留句尾、时间透明占位；现在工具边界结束该段流式状态，已有时间始终可见，缺时间不创建页脚。
+- 活跃历史回填保留 live ID、renderKey、文字和时间；页面识别所有 streaming assistant 行，避免重复“处理中”占位。清理已空的临时状态不再反复创建空数组。20 次交替历史回填组件回归验证气泡/时间实例和列表键不变。
+- 移除仅凭约 18 秒文字静默清空运行状态及前台恢复无条件重连；统一恢复读取后台运行状态，明确仍活跃就延续呈现，仅健康探测失败才重连，异步结果校验 adapter/session/run。OpenClaw、Hermes 都覆盖恢复后一分钟无文字但工具仍运行，再确认完成的路径。
+- `npm run check:required` 完整通过（Mobile 306 suites / 3,134 tests，加所有工作区类型、协议/Relay/Bridge、设计系统、i18n、文档检查）；最终恢复/打字器/ThreadView 针对性回归 3 suites / 126 tests、最终 Mobile typecheck 和 docs 通过，iOS/Android 最新 Metro 开发包编译成功。证据存于本地 `evidence/stream-flicker-0920/`。本轮没有原生依赖或服务部署变更；真机闪动是否消失仍由负责人按 HT-STREAM-0920 验收，自动化不代替现场视觉证据。
+
+## 花名册选中背景残留修复（2026-09-20）
+
+- 负责人截图：手机首个 Agent 的灰色背景一直残留，杀 App 才消失。根因是 `App.renderRoster` 给独立页面和 iPad 侧栏都传了保留的 `threadContext`，并非按压动画卡住。`RosterScreen` 新增默认 `page` 的展示模式，仅 `sidebar` 消费持久选中状态；`AdaptiveWorkspace` 的侧栏/抽屉显式启用。正常按压反馈、会话面板上下文与所有后端连接/聊天行为保持原样。
+- 回归覆盖浅/深色、打开会话后的保留上下文、侧栏与独立页面切换、连接/Agent/session 作用域；Roster/基础组件/AdaptiveWorkspace 共 3 suites / 49 tests 通过。全仓 `check:required` 通过（Mobile 306 suites / 3,134 tests；类型、协议/Relay/Bridge/speech、设计系统、i18n 和文档门禁全绿）。首次运行触及 Node 默认堆内存上限，使用 `NODE_OPTIONS=--max-old-space-size=8192` 重跑成功，日志见本地 `evidence/roster-selection-0920/required-retry.log`。真机返回首页的视觉验收见 HT-ROSTER-0920。
+
+
+## 语音持久恢复、诊断与发送兼容修复（2026-09-20）
+
+- 负责人授权完整落地；实现见 `22-voice-input.md`。PCM 先写设备文件、十分钟分段转录并持久保存结果检查点；弱网失败继续录音，离开/后台保留，重试只回填草稿。权限预检与 200 ms 长按缩短启动路径；原生麦克风使用全局串行租约，避免旧页面清理停止新录音。真实手机启动延迟与十分钟断网恢复仍需负责人验收。
+- 服务错误区分签名、占用、设备/IP/全局额度与上游阶段，附服务端随机 requestId；全采样安全结构化日志不包含凭证、音频、转录或 IP。完成响应前释放设备租约，防止连续使用竞态。模型仍为阿里云 Qwen；额度未放宽。现有实际 Key 对当前已跟踪文件及 6,051 个可达 Git blob 精确比对均无命中；未配置公开 speech URL 的开源构建隐藏入口。
+- 真机 20:20 重试 ID `7246bcf7-2983-4280-8a59-bca88a8da44e`：云端 12:20:31.046Z 连接成功、12:20:39.640Z 断开，接收 0 字节，未触发限流。本轮新增流控错误假设 RN 实现 bufferedAmount，造成不发音频；已改为 v2 协商累计字节 ACK，旧端保持兼容。该结论仅解释本次重试，下午原始故障缺历史细节不能归为同因。
+- 仅独立 Speech Preview 部署版本 `872fdcdf-752b-4388-a3a9-83c033895095`。实际客户端连接代码配合缺失 bufferedAmount 的 RN 形态 socket，对线上合成中文 PCM 连续两次成功（139,858 字节全部 ACK、各 20 字结果）；这不是已完成真机验收。未部署 Relay/Registry，未改 Hermes 外部源码。
+- 最终 `npm run check:required` 全通过（Mobile 306 suites / 3,126 tests；Speech 29 tests，含 RN 无 bufferedAmount 与协商 ACK 回归）；v1 兼容 39 tests 通过。线上旧 v1 合成语音亦成功。验证日志归档 `~/.config/clawket/voice-validation/20260920-recovery/`；没有将 Node socket 模拟或自动测试当成真实手机硬件验收。
+
+
 ## iPad 配对键盘修复（2026-09-20，负责人真机确认恢复）
 
 - 负责人在 USB 连接的 iPad Pro 11 / iPadOS 26.4.2 反馈：无外接键盘，配对框聚焦但软键盘不出现；其他 App 正常，切换回来后键盘出现但遮挡输入。
@@ -775,6 +808,8 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 
 | 位置（文件 § 节） | 规格原文 | 实际做法 | 理由 | 影响 |
 |---|---|---|---|---|
+| 2026-09-20 · `05-visual-system.md` §动效 / Thread | 切换会话时线程内容交叉淡入 200 ms。 | 会话列表立即替换，不重叠淡入淡出；保留新消息和弹层动效。 | 负责人反馈静态会话切换多次闪动；旧/新原生 Markdown 列表重叠与异步测量叠加会放大不稳定感。 | 只改变切换的呈现方式，保留独立会话列表身份与滚动状态隔离；真机按 HT-SESSION-JITTER-0920 复测。 |
+| 2026-09-20 · Thread activity | 状态沿用消息气泡并整行呼吸；普通界面不用渐变。 | 负责人要求：工具与状态共用 16pt 圆角 / 44pt 最小高度；状态文字使用单向循环中性流光。 | 统一视觉并消除闪烁；仅字形内的加载态渐变。 | 仅 Mobile 展示，保持消息身份、后端与连接行为；真机效果由负责人测试。 |
 | `[UX-2026-09-19-connection-unavailable] 04-app-screens.md / Mobile design system` | 持续失败也只用连接胶囊。 | 持续失败增加完整提示；短暂恢复仍用胶囊，缓存与其他连接仍可访问。 | 用户明确要求参考远程电脑离线页，避免无限等待和无说明错误。 | 仅 Mobile 展示与手动重试入口；OpenClaw / Hermes 共用，不改变传输协议。 |
 | `[UX-2026-09-19-channels-tab] 04-app-screens.md` §5 渠道与设备 / `10-migration-map.md` | 「分段页：渠道 / 设备 / 节点」，迁移表写 `ChannelsScreen.tsx` 「迁移合并为 `AgentSettings/ChannelsDevices`」；实现只做了名称 + 状态只读行。 | 找回 2.0 的两项写入：「Direct messages」行 + 四项范围弹层（`session.dmScope`）、渠道弹层里每个账号的启用开关；协议新增 `channelManage` 精化与 `channels.getRouting / setRouting / setAccountEnabled`。 | 负责人 2026-09-19 发现 2.0「所有 channel 共用一个 session 还是各自一个」的设置在 3.0 找不到；规格没写细、实现按最小理解做了只读、没记偏离，属于「以更简单为由砍掉功能而不记录」。 | OpenClaw 渠道 tab 多一张卡、渠道行变可点；Hermes 无渠道 tab不受影响；22 个 `settings` 键 × 19 语言；两个新事件。 |
 | `[UX-2026-09-19-cron-create] 04-app-screens.md` §5 定时任务 / `design-system.md` Cron management | 新建两步各带步骤标题与引导副标题；「Cron 表达式收进高级设置」；`cronAdvanced` 门控「新建时暂停」（OpenClaw 新建页有「已启用」开关）。 | 删掉「1 选择起点」「选择模板，再调整任务内容和时间」「2 设置任务」三行文案；新建页去掉「已启用」开关（新任务一律 `enabled: true`）和整个「高级设置」行（Cron 表达式、描述、模型、通知）；编辑页原样保留全部高级项与开关。顺手修正编辑页「Advanced settings」未翻译（键在 `config` 命名空间，编辑器 hook 首选 `settings`，react-i18next 不做命名空间回退）。 | 负责人 2026-09-19 截图反馈：新建就是要启用，开关多余；步骤标题与副标题拖沓；Cron 表达式「用户可能 800 年都用不到」。PostHog 2026-03→09：`cron_create_tapped` 668 次 / 293 人，`cron_save_succeeded` 219 次 / 60 人且几乎全是编辑已有任务；2.x 向导新建同样只有名称 + 内容 + 时间、固定 `delivery: none`、无模型覆盖，从未有人在新建时用到这些项。 | 新建页更短；需要 Cron 表达式 / 通知 / 模型的用户创建后进编辑页一步到位，或让 Agent 在聊天里建；删除 3 个 `settings` 键 × 19 语言；`CronEditorScreen.test` 新增新建无开关无高级项、编辑页保留的回归。 |
@@ -830,11 +865,16 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 
 | 编号 | 事项 | 怎么做 | 验证方法 | 状态 |
 |---|---|---|---|---|
+| HT-SESSION-JITTER-0920 | 静态 session 切换闪动真机复测 | 开发版 Reload 后，在含表格的 main 与其他 session 间反复切换；再验证查看旧消息、展开工具、键盘弹出及返回底部，OpenClaw/Hermes 分别复测。 | 切换后不再反复闪动/跳位；工具展开与旧消息阅读不被拉回底部；新回复及最终历史无重复、遗漏。 | 负责人确认第二轮降至 1 次，明确为消息出现后再跳；第三轮已修复手机缓存中证实的旧快照误选，待真机复测 |
+| HT-SESSION-PRO-0920 | Session 升级入口真机复测 | 免费账号打开非主会话，点「升级 Pro」，等待商品加载，关闭后再次打开；购买/恢复后检查原地解锁。 | 付费墙持续可见、不闪白，关闭仍在原会话；OpenClaw / Hermes 均可用。 | 148 项相关测试通过，原生展示待负责人真机复测 |
+| HT-ROSTER-0920 | 花名册选中背景验收 | 手机打开任意 Agent 再返回，切后台返回并重复；iPad 查看侧栏和窄窗口独立首页。 | 手机/独立首页无持久灰底；iPad 侧栏仍标记当前会话；正常按压反馈可恢复。 | 49 项相关测试通过，待负责人真机验收 |
+| HT-STREAM-0920 | 聊天流式呈现与恢复真机验收 | 开发版 Reload 后，OpenClaw 连续执行至少三轮“说明＋工具＋说明”，查看段落句尾和时间；工具长时间运行中退出会话/切后台再返回，等待完成并测试停止；Hermes 复测同类任务。 | 每段文字只出现一次且句尾完整，时间不闪烁、无空白页脚，气泡和工具顺序/高度稳定；恢复、完成、停止后无重复或乱序。 | 负责人已确认重复消失；高度/闪动修复自动化通过，待真机复测 |
+| HT-ACTIVITY-0920 | 工具 / 状态卡片真机观感 | 按负责人要求自行在 OpenClaw / Hermes 对话中查看工具组、执行 / 处理状态、首次回复；检查浅深色和减少动态效果。 | 圆角与基础高度一致，文字流光从左到右柔和循环，回复切换正常。 | 待负责人实际测试；代理不做 UI 测试 |
 | HT-MULTIDEVICE-0920 | 固定 3.0 候选后的双设备与版本混用验收 | OpenClaw/Hermes 各用两台真实 App：同/不同会话同时发送，A 锁屏时 B 继续，A 断网恢复，Bridge 重启，旧/新 App 混用，图像与停止；记录 App/Bridge/Relay 版本。沿用 HT-COMPAT-0914 等旧包/购买项，勿以协议回放替代。 | 不串请求/回复、不因 A 重连踢掉 B、run 停止准确、旧配对保留；区分连接共享与本机缓存/图片同步边界。 | 待固定包真机验收；本轮路由/休眠单测和 20 阶段本地兼容矩阵通过 |
 | HT-IPAD-0920 | iPad 真机交互验收 | 安装含本轮原生配置的新构建；横竖屏与系统窗口缩放、软键盘中文组合输入/粘贴/发送、外接键盘、长回复阅读位置、后台恢复；分别连 OpenClaw / Hermes 发收并重连。 | 无裁切或遮挡；草稿保留；发送不重复、不串会话；回复与恢复正常。 | 待真机；模拟器 OpenClaw 链接发送与双后端独立会话实测已通过，Hermes App 内发收仍待补验。 |
 | HT-OFFLINE-0919 | 连接失败页面真机验收 | 分别对 OpenClaw / Hermes 暂停电脑端服务或断网，等待原有恢复宽限结束；查看错误页、缓存入口和草稿，再恢复服务；另查暂停、配对失效、浅深色与大字体。 | 连接名与时间正确；无缓存不显示“没有 Agent”；重连/管理可用；其他连接可访问；恢复后自动回到内容，草稿不丢。 | 待人 |
 | HT-REDEEM-0919 | 原生兑换与重装恢复验收 | 使用真实平台 RevenueCat key 的构建和 sandbox / license-test 账号；按 apps/mobile/docs/pro-redemption.md 验收有效、无效、取消、过期、复用码、月度到期、永久与原订阅并存、删装后 Restore。 | 商店与 RevenueCat 交易一致；OpenClaw / Hermes 的 Pro 门禁同时解锁；Apple 月度不自动扣款；重装恢复成功。 | 待商店沙盒实测；自动化测试已通过 |
-| HT-VOICE-0919 | 云端语音真机与发布验收 | 安装包含 Expo Audio 的新构建，分别在 iOS/Android 验证点击听写、按住发送、上滑取消、停止回填；拒绝/重新授予麦克风权限、蓝牙、来电/后台、弱网重试和切会话。检查浅/深色、大字体、RTL、减少动态效果。正式发布前更新隐私披露并按 22 的后续付费阶段完成服务端权益方案。 | 常驻模型选择器不移动；无重复发送/串会话；失败可恢复草稿；两端麦克风及时释放。 | 待真机验收；付费接入按负责人要求后续实施 |
+| HT-VOICE-0919 | 云端语音真机与发布验收 | 安装包含 Expo Audio 的新构建，分别在 iOS/Android 验证点击听写、按住发送、上滑取消、停止回填；拒绝/重新授予麦克风权限、蓝牙、来电/后台、十分钟录音中断网后保留并重试、App 重启恢复和切会话；记录点击到首个音频帧的实际耗时。检查浅/深色、大字体、RTL、减少动态效果。正式发布前更新隐私披露并按 22 的后续付费阶段完成服务端权益方案。 | 常驻模型选择器不移动；无重复发送/串会话；失败可恢复草稿；两端麦克风及时释放。 | 待真机验收；付费接入按负责人要求后续实施 |
 | HT-INSTALL-0919 | 删 App 重装后直接进首启引导（iOS + Android） | 用带此修复的构建：先配好一个连接，删 App，重新安装同一构建并冷启动：应直接落在首启引导，无「重新连接」胶囊；重新配对后花名册正常；再把 App 覆盖安装一次（不删）确认连接保留。Lucy 手机上现有的「幽灵连接」需要再删一次 App 或在连接页移除。 | 首屏是引导页而非空花名册；「添加连接」不再上锁；重新配对成功；覆盖安装不丢连接；宽限 / Pro 状态按 06 §1 保留（若之前有宽限，重装后不重发）。 | 待处理 |
 | HT-CHANNELS-0919 | 渠道 tab 私聊会话范围与账号开关真机验收 | 装新构建 → OpenClaw Agent 设置 → 渠道与设备 → 频道：顶部应有「Direct messages」行，尾值为当前范围（未改过的 Gateway 显示「Shared session」）；点开弹层选「Per channel and sender」→ 确认 → 行尾值更新；再进弹层勾号在新项。点 Telegram 行 → 弹层列出账号（默认账号带「(default)」、有收发时间的账号有副标题）→ 关掉开关 → 确认 → 开关变灰；`openclaw config get channels.telegram.accounts.<id>.enabled` 应为 false；再打开恢复。 | 弹层里 `ConfirmationModal` 叠在 Sheet 上无遮挡问题；改范围后 `openclaw config get session.dmScope` 与页面一致；停用账号后 Telegram 不再回消息，启用后恢复。 | 待人 |
 | HT-TOOLS-SAVE-0919 | 工具页页头保存与脏状态离开真机验收 | 装新构建，进 Agent 设置 → 工具：页头右侧应有灰字「保存」且不可点；切一个「工具档位」或拨任意开关后「保存」变为可点，页面底部不再有「放弃 / 保存 (N)」按钮行；点「保存」应弹居中确认框「应用 N 项更改？」（正文含重启 Gateway 与「x/y 个工具将启用」），取消后再改开关不应自动重弹；确认后页头按钮转圈、Gateway 重启并重连，档位勾选与开关落到新状态、再进页面仍一致；改动未保存时按返回或右滑应弹「丢弃更改？」，「继续编辑」留在页面、「丢弃」离开；再用显式 allow 列表的 Agent 确认只读横幅且无「保存」；浅 / 深色各看一遍。 | 页头保存与 Identity / Models 页同一观感；确认框文案两行内读完；保存后功能真的变（例如关掉 `exec` 后让 Agent 跑命令应被拒）。 | 待验收；本轮只有自动化验证 |
@@ -1714,3 +1754,48 @@ Implementation deviation authorized by this request: sustained failure may own c
 ### 2026-09-20 — PR #36 CI follow-up
 
 Close OpenClaw skill document read handles before atomic replacement on Windows, while retaining inode revalidation and guaranteed descriptor cleanup. Mobile RNTL async waits use a shared five-second ceiling for loaded CI runners. Ignore local Worker `.dev.vars` files. The stale `mock.ts.orig` backup remains local and is excluded from the PR. Validation is recorded in PR #36 before merge.
+
+### 2026-09-20 — Thread activity card polish
+
+Owner requested matching tool/status geometry and ChatGPT-like left-to-right text shimmer, explicitly reserving UI testing for themselves. Shared activity-card geometry and secondary typography now cover tool rows, tool groups and the pending reply. ThinkingIndicator replaces whole-label opacity breathing with a monochrome SVG glyph gradient using native line measurements, UI-thread progress, reduced-motion/static fallback and background/unmount cleanup. No dependency or backend/protocol change. Validation: `npm run check:required` passes (Mobile 303 suites / 3,107 tests; protocol, Relay, Bridge and speech checks plus design-system/docs gates). Focused activity/Thread/theme regression run: 77 tests passed, including native line geometry, one-way looping, reduced motion, background/resume/unmount cleanup and pending-card → reply-bubble geometry. `git diff --check` passes. No device or simulator operated; owner visual acceptance is HT-ACTIVITY-0920.
+
+
+### 2026-09-20 — Cumulative streaming and transcript reconciliation
+
+Owner screenshots showed A / A+B / A+B+C bubbles after tool calls and split transcript paragraphs appended after the final answer. Confirmed OpenClaw Gateway chat snapshots versus Hermes Bridge deltas in source; a controller regression reproduced the exact cumulative pattern before the fix. Added explicit adapter text semantics, snapshot-prefix segmentation and verbatim delta handling (including repeated tokens); shared live/history reconciliation within the current user turn; recovery of tool boundaries with the growing tail left live; duplicate tool-start protection; canonical-history-confirmed repair of old cumulative local rows. Product behavior and protocol transport/lifecycle remain unchanged. Details: `14-tool-activity-and-chat-reconciliation.md`. Unrelated dirty UI, paywall and speech work was preserved, including concurrent edits to the controller.
+
+Validation: 64 chat/adapter/protocol suites / 749 tests pass; focused final presentation checks and final typecheck recorded in `evidence/stream-0920/`. v1 compatibility: 5 files / 39 tests pass; protocol coverage 100%; design-system and docs checks pass. Existing Metro at port 8081 serves this workspace; iOS and Android development bundles compile with the new message semantics. No native dependency changed, no server deployment, no device/simulator operation. `check:required` completed workspace typechecks but stopped at two concurrently edited Mobile tests (speechStream cancellation timeout and analytics event whitelist), with 301 suites / 3,108 tests passing; not claimed as a green full gate. Physical-device acceptance remains HT-STREAM-0920.
+
+### 2026-09-20 — Compact tool detail header
+
+Owner requested reducing tool-detail chrome. Moved status and duration into the canonical header title slot below the readable name, removed the body status row and clock icon, and reduced payload padding from 16 to 12 points. Status stays visible during scrolling; long translations may wrap and duration fragments stay together. Copy targets, raw payloads, metadata disclosure and 68% / 92% scroll detents remain. Shared presentation applies to OpenClaw and Hermes; no adapter or transport changes.
+
+Validation: five focused tool-detail tests and all 306 Mobile suites / 3,126 tests pass; workspace typechecks, design-system checks, docs checks and diff whitespace check pass. `npm run check:required` passes. Device visual acceptance remains with the owner.
+
+
+### 2026-09-20 — Retain completed child-run cards
+
+Owner reported a SubAgent card appearing briefly then vanishing in the OpenClaw main thread. Read-only local transcript/archive inspection matched the reported probe: `gpt-6-astra` returned `ASTRA_PROBE_OK GPT-6`, the backend archived/deleted its temporary child, and the parent received the result. The App independently expired completed cards after eight seconds and kept only transient activity, so history could not restore them.
+
+Removed the expiry and its unused clearing path. Capture final-only child text and failure/cancel state; merge terminal records into a separate, connection/Agent/parent-scoped local activity snapshot (latest 100 child sessions, result summaries bounded to 16,000 characters). Cache hydration merges newer completions and drops late reads from another scope; writes are serialized. Active runs are never stored as completed. A missing child session opens the existing recorded-result sheet; available children retain session navigation. Explicit parent ownership now wins over key heuristics. No OpenClaw/Hermes source, transport, service, deployment or protocol change. Existing unrelated dirty work preserved.
+
+Validation: focused 6 suites / 154 tests pass; final `npm run check:required` passes, including workspace typechecks, all 307 Mobile suites / 3,144 tests, protocol/Relay/Bridge/speech checks, design-system, i18n and docs. `git diff --check` passes. No device/simulator operated. Scope limit: only observed/local records are restored; cards discarded by older App versions and already deleted on the backend cannot be automatically reconstructed by this change. Owner device acceptance remains pending.
+
+
+### 2026-09-20 — Session upgrade paywall presentation
+
+Owner reported the preview footer showing View Pro and the paywall flashing into a white page. Thread pushed an empty native-stack fullScreenModal whose mount effect immediately presented a second global native Modal. Removed that competing presentation path from both Thread session-history and locked-access actions: call the existing paywall context directly, retaining the mounted session and entitlement-driven unlock. Footer reuses Upgrade to Pro (简中「升级 Pro」) in all existing locales. No subscription, backend or transport logic changed; unrelated dirty work preserved.
+
+Validation: new navigation/copy assertions failed on the old implementation (six assertions); the corrected Thread screen/view plus paywall overlay/context suites pass all 148 tests, covering both backend previews, in-place unlock, locked reasons and both themes. Native iOS presentation has not been device-reproduced or visually certified; follow-up HT-SESSION-PRO-0920. `npm run check:required` passes, including workspace typechecks, all 307 Mobile suites / 3,144 tests, protocol/Relay/Bridge/speech checks, design-system, i18n and docs. `git diff --check` passes. Logs: local `evidence/session-paywall-0920/`.
+
+
+### 2026-09-20 — Child-card cold-start correction
+
+Owner device retest confirmed cards survived in the live turn but disappeared after force-quit/reopen. Read-only retrieval of the connected iPhone's AsyncStorage manifest found one Cron activity key and zero child snapshot keys; the temporary manifest copy was removed after checking only activity keys. Matched the new main-session weather delegation in local OpenClaw history. The missed path is background-child `agent` events: the mobile router handled lifecycle start and tool events but discarded assistant text and lifecycle end/error. Those cards remained `streaming`, so the previous terminal-only cache never wrote them. Earlier tests injected completed adapter states and mocked successful cache reads, bypassing this path.
+
+Fixed the client router for explicit subagent session keys: cumulative assistant text reaches the existing stream mapper, lifecycle end/error/aborted settles the existing controller, visible terminalReply text is retained, and a terminal event refreshes sessions. Main-session finalization and Hermes main chat behavior remain unchanged; intermediate `finishing` is not completion. No backend source or service modification.
+
+Regression now drives raw agent-only events through routing, adapter mapping, controller, card projection and the real cache serializer, with a byte-retaining AsyncStorage test backend; a fresh controller mount has empty activity memory and can restore only bytes written by the first mount. Reverting just the routing change makes this test fail with `streaming` and no summary; restoring it passes. Focused 4 suites / 154 tests and v1 replay 5 suites / 39 tests pass. This is automated cold-mount coverage, not a completed physical-device force-quit acceptance; owner retest remains pending. Previously unsaved cards still require a new observed run.
+
+
+Cold-start follow-up validation: final `npm run check:required` passes (307 Mobile suites / 3,149 tests, workspace types and remaining required gates); v1 replay 39/39 and diff whitespace checks pass. Owner's additional Session Panel screenshot was checked against the local backend database: the weather child has no current session row and a `deleted` archive at 2026-09-20 13:06:16.065 UTC (21:06:16 at the screenshot's UTC+8); the latest retained children are the four September 11 release-monitor checkpoints shown in the screenshot. This explains the panel omission independently of the App persistence defect. The panel remains a current-session list; no archive-browser feature was added.

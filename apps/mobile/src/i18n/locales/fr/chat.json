@@ -99,7 +99,6 @@
   "Text-to-speech": "Synthèse vocale",
   "Voice input failed": "Échec de la saisie vocale",
   "Microphone access is required to transcribe speech.": "L’accès au micro est nécessaire pour transcrire la parole.",
-  "Unable to transcribe speech right now.": "Impossible de transcrire la parole pour le moment.",
   "Show or change queue mode": "Afficher ou modifier le mode de file d’attente",
   "Show available commands": "Afficher les commandes disponibles",
   "Switch to a specific model": "Passer à un modèle spécifique",
@@ -316,5 +315,18 @@
   "Tap to dictate. Hold and release to send.": "Touchez pour dicter. Maintenez puis relâchez pour envoyer.",
   "No speech detected. Please try again.": "Aucune parole détectée. Veuillez réessayer.",
   "Type or hold to talk": "Écrivez ou maintenez pour parler",
-  "Hold longer to talk": "Maintenez plus longtemps pour parler"
+  "Hold longer to talk": "Maintenez plus longtemps pour parler",
+  "The previous voice session is still closing. Please retry shortly.": "La session vocale précédente se ferme encore. Réessayez dans un instant.",
+  "The transcription limit has been reached. Your recording is saved.": "La limite de transcription est atteinte. Votre enregistrement est conservé.",
+  "Voice authentication failed. Check your device date and time.": "Échec de l’authentification vocale. Vérifiez la date et l’heure de votre appareil.",
+  "Cannot save more audio. Free up device storage or remove a saved recording.": "Impossible de sauvegarder davantage d’audio. Libérez de l’espace ou supprimez un enregistrement sauvegardé.",
+  "The connection was interrupted. Your recording is saved on this device.": "La connexion a été interrompue. Votre enregistrement est sauvegardé sur cet appareil.",
+  "The microphone stopped. Your recorded audio is saved.": "Le microphone s’est arrêté. L’audio enregistré est conservé.",
+  "The transcription service is unavailable. Your recording is saved on this device.": "Le service de transcription est indisponible. Votre enregistrement est sauvegardé sur cet appareil.",
+  "Try again in {{seconds}} seconds.": "Réessayez dans {{seconds}} secondes.",
+  "Keep audio": "Conserver l’audio",
+  "Saved recording": "Enregistrement sauvegardé",
+  "Your audio is saved on this device. Retry transcription or delete it.": "Votre audio est sauvegardé sur cet appareil. Réessayez la transcription ou supprimez-le.",
+  "Recording saved locally · Transcription paused": "Enregistrement local · Transcription en pause",
+  "Saved recording · Tap to recover": "Enregistrement conservé · Appuyez pour récupérer"
 }

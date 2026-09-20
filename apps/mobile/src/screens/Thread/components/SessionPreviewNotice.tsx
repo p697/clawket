@@ -37,7 +37,7 @@ export function SessionPreviewFooter({ onUpgrade, onMain, bottomInset, loading =
     <Text style={[styles.detail, { color: theme.colors.inkSecondary }]}>{loading ? t('Loading history') : t('Latest messages · read-only preview')}</Text>
     <View style={[styles.actions, stacked ? { flexDirection: 'column' } : null]}>
       <Button label={t('Main chat')} accessibilityLabel={t('Back to main chat')} variant="secondary" onPress={onMain} style={stacked ? undefined : styles.action} />
-      <Button label={t('View Pro')} accessibilityLabel={t('Unlock conversation')} onPress={onUpgrade} style={stacked ? undefined : styles.action} />
+      <Button label={t('Upgrade to Pro')} accessibilityLabel={t('Unlock conversation')} onPress={onUpgrade} style={stacked ? undefined : styles.action} />
     </View>
   </View>;
 }

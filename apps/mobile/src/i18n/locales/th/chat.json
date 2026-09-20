@@ -99,7 +99,6 @@
   "Text-to-speech": "แปลงข้อความเป็นเสียง",
   "Voice input failed": "ป้อนด้วยเสียงล้มเหลว",
   "Microphone access is required to transcribe speech.": "ต้องได้รับสิทธิ์เข้าถึงไมโครโฟนเพื่อถอดเสียงพูด",
-  "Unable to transcribe speech right now.": "ไม่สามารถถอดเสียงพูดได้ในขณะนี้",
   "Show or change queue mode": "แสดงหรือเปลี่ยนโหมดคิว",
   "Show available commands": "แสดงคำสั่งที่ใช้ได้",
   "Switch to a specific model": "สลับไปยังโมเดลที่ระบุ",
@@ -316,5 +315,18 @@
   "Tap to dictate. Hold and release to send.": "แตะเพื่อป้อนด้วยเสียง กดค้างแล้วปล่อยเพื่อส่ง",
   "No speech detected. Please try again.": "ไม่พบเสียงพูด โปรดลองอีกครั้ง",
   "Type or hold to talk": "พิมพ์หรือกดค้างเพื่อพูด",
-  "Hold longer to talk": "กดค้างนานขึ้นเพื่อพูด"
+  "Hold longer to talk": "กดค้างนานขึ้นเพื่อพูด",
+  "The previous voice session is still closing. Please retry shortly.": "เซสชันเสียงก่อนหน้ายังปิดไม่เสร็จ โปรดลองอีกครั้งในอีกสักครู่",
+  "The transcription limit has been reached. Your recording is saved.": "ถึงขีดจำกัดการถอดเสียงแล้ว บันทึกเสียงของคุณถูกเก็บไว้แล้ว",
+  "Voice authentication failed. Check your device date and time.": "การยืนยันตัวตนเสียงล้มเหลว โปรดตรวจสอบวันที่และเวลาของอุปกรณ์",
+  "Cannot save more audio. Free up device storage or remove a saved recording.": "ไม่สามารถบันทึกเสียงเพิ่มได้ โปรดเพิ่มพื้นที่ว่างหรือลบบันทึกเสียงที่เก็บไว้",
+  "The connection was interrupted. Your recording is saved on this device.": "การเชื่อมต่อขาดหาย บันทึกเสียงถูกเก็บไว้ในอุปกรณ์นี้แล้ว",
+  "The microphone stopped. Your recorded audio is saved.": "ไมโครโฟนหยุดทำงาน เสียงที่บันทึกไว้ถูกเก็บแล้ว",
+  "The transcription service is unavailable. Your recording is saved on this device.": "บริการถอดเสียงไม่พร้อมใช้งาน บันทึกเสียงถูกเก็บไว้ในอุปกรณ์นี้แล้ว",
+  "Try again in {{seconds}} seconds.": "ลองอีกครั้งใน {{seconds}} วินาที",
+  "Keep audio": "เก็บเสียงไว้",
+  "Saved recording": "บันทึกเสียงที่เก็บไว้",
+  "Your audio is saved on this device. Retry transcription or delete it.": "เสียงถูกเก็บไว้ในอุปกรณ์นี้แล้ว คุณสามารถลองถอดเสียงอีกครั้งหรือลบได้",
+  "Recording saved locally · Transcription paused": "กำลังบันทึกในเครื่อง · พักการถอดเสียง",
+  "Saved recording · Tap to recover": "เก็บบันทึกเสียงแล้ว · แตะเพื่อกู้คืน"
 }

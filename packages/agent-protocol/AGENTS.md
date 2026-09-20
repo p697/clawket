@@ -18,4 +18,6 @@ This package is the platform-neutral contract between Clawket UI and backend ada
 
 `SessionHistory.activeRun` is an optional backend recovery snapshot (identity, visible text, start time and session-scoped cancellation hint). Peers without it retain their existing behavior; mocks clone it independently.
 
+`agent_message_chunk.textMode` is additive: `snapshot` replaces the whole run text, `delta` appends verbatim (including repeated tokens); omission preserves legacy adapter behavior. This is text semantics, independent of backend capabilities and transport identity.
+
 `ConfigOperations.backups.remove` is additive and optional: it removes a local restore point without restoring or modifying the Gateway. Older adapters without it remain valid. Cron mock updates normalize `agentTurn.model: null` to an absent stored override.

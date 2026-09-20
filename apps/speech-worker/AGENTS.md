@@ -1,3 +1,7 @@
 # Speech service
 
 Independent Alibaba Cloud transcription service; never add speech secrets or traffic to Relay/Registry. Audio and transcripts stay in memory and must never be logged or persisted. Only bounded anonymous admission counters may persist. Verify signed device requests, reject replays, and reserve the full recording allowance before contacting the provider. Provider errors expose only stable error codes. Keep provider model/endpoint server-controlled and credentials in Worker secrets. Future paid admission belongs at this server boundary; a client Pro flag is not authorization.
+
+V2 requests negotiate bounded WebSocket error frames because mobile cannot read rejected-upgrade HTTP bodies; v1 keeps HTTP rejection semantics. Differentiate device occupancy, replay, device/IP/daily quota, provider authorization/throttling and stage timeouts with server-generated request UUIDs and cooldowns. Await device lease release before acknowledging session completion. Keep the 120-second provider ceiling and existing admission budgets; long client recordings use separately admitted segments. Structured logs contain only codes, UUIDs, stages, byte counts and timing; invocation request logging is disabled to avoid storing signature headers/IP addresses.
+
+Audio receive acknowledgements are negotiated only for v2 (`flowControl: ack.v1`); send cumulative accepted PCM bytes and never send new control frames to legacy v1 clients. Mobile must not depend on React Native implementing browser `bufferedAmount`.

@@ -102,3 +102,13 @@ describe('ThreadActivityCacheService', () => {
     ]);
   });
 });
+
+it('stores terminal child records separately from Cron and rejects stale running snapshots', async () => {
+  const child = seed({ kind: 'subagent', status: 'completed', sessionKey: 'agent:atlas:subagent:probe', summary: 'ASTRA_PROBE_OK GPT-6' });
+  await ThreadActivityCacheService.write(scope, [child], 'subagent');
+  const [key, raw] = mockedStorage.setItem.mock.calls.at(-1)!;
+  expect(key).toBe(`${scopeKey}::subagents`);
+  mockedStorage.getItem.mockResolvedValueOnce(raw);
+  await expect(ThreadActivityCacheService.read(scope, 'subagent')).resolves.toEqual([child]);
+  expect(normalizeThreadActivityRuns({ version: 1, runs: [child, { ...child, id: 'running', status: 'streaming' }, { ...child, id: 'missing-key', sessionKey: undefined }] }, 'subagent')).toEqual([child]);
+});

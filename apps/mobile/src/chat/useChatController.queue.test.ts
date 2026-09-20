@@ -18,6 +18,7 @@ const historyMock = {
   hasMoreHistory: false,
   loadingMoreHistory: false,
   historyLoaded: true,
+  activitySnapshot: null as (import('@clawket/agent-protocol').SessionHistory & { requestedAtMs: number }) | null,
   messages: [] as any[],
   thinkingLevel: null as string | null,
   historyLimitRef: { current: 50 },
@@ -312,6 +313,7 @@ describe('useChatController message queue', () => {
     historyMock.sessions = [{ key: SESSION_KEY, kind: 'direct' as const }];
     historyMock.messages = [];
     historyMock.historyLoaded = true;
+    historyMock.activitySnapshot = null;
     historyMock.refreshing = false;
     historyMock.refreshingSessions = false;
     imagePickerMock.pendingImages = [];
@@ -361,8 +363,37 @@ describe('useChatController message queue', () => {
     expect(result.current.listData).toEqual(before);
   });
 
+  it.each(['openclaw', 'hermes'] as const)('keeps a recovered %s tool run stable through a minute without text events', async (backend) => {
+    const { result, adapter, rerender } = renderController(backend);
+    const text = 'Checking the configured provider.';
+    historyMock.messages = [
+      { id: 'u', role: 'user', text: 'Inspect', timestampMs: Date.now() - 2000 },
+      { id: 'a', role: 'assistant', text, timestampMs: Date.now() - 1000 },
+      { id: 'toolcall_a', role: 'tool', text: '', toolName: 'exec', toolStatus: 'running' },
+    ];
+    const snapshot = { key: SESSION_KEY, messages: [], hasActiveRun: true,
+      activeRun: { runId: 'recovered', text, startedAtMs: Date.now() - 2000 }, requestedAtMs: Date.now() };
+    adapter.loadSession.mockResolvedValue(snapshot);
+    historyMock.activitySnapshot = snapshot;
+    rerender(undefined);
+    const rows = result.current.listData.map(row => [row.renderKey ?? row.id, row.text, row.streaming]);
+    for (let tick = 0; tick < 15; tick++) {
+      await act(async () => { jest.advanceTimersByTime(4000); await Promise.resolve(); });
+      expect(result.current.isSending).toBe(true);
+      expect(result.current.listData.map(row => [row.renderKey ?? row.id, row.text, row.streaming])).toEqual(rows);
+    }
+    expect(adapter.disconnect).not.toHaveBeenCalled();
+    adapter.loadSession.mockResolvedValue({ key: SESSION_KEY, hasActiveRun: false,
+      messages: [{ id: 'done', role: 'assistant', text: 'Done.', timestampMs: Date.now() }] } as any);
+    for (let tick = 0; tick < 5; tick++) {
+      await act(async () => { jest.advanceTimersByTime(4000); await Promise.resolve(); });
+    }
+    expect(result.current.isSending).toBe(false);
+    expect(historyMock.reconcileLatestAssistantFromHistory).toHaveBeenCalledTimes(1);
+  });
+
   it.each(['openclaw', 'hermes'] as const)('keeps %s text/tool boundaries through a batched final event and history refresh', async (backend) => {
-    const { result, handlers } = renderController(backend);
+    const { result, handlers, rerender } = renderController(backend);
     await typeAndSend(result, 'Inspect');
     const user = result.current.listData.find(message => message.role === 'user')!;
     const emit = (event: any) => handlers().onUpdate?.(mapAdapterSessionUpdate({ sessionKey: SESSION_KEY, runId: 'run-1', ...event }));
@@ -393,6 +424,91 @@ describe('useChatController message queue', () => {
         ...finished.filter(message => message.role === 'tool')],
     }));
     expect([...result.current.listData].reverse().map(message => message.text)).toEqual(before.map(message => message.text));
+  });
+
+  it.each(['openclaw', 'hermes'] as const)('renders %s multi-tool wire text once during streaming, history refresh and completion', async (backend) => {
+    const { result, handlers, rerender } = renderController(backend);
+    await typeAndSend(result, 'Inspect');
+    const user = result.current.listData.find(message => message.role === 'user')!;
+    const emit = (event: any) => handlers().onUpdate?.(mapAdapterSessionUpdate({ sessionKey: SESSION_KEY, runId: 'run-1', ...event }));
+    const paragraphs = ['Checking the configuration.', 'Checking the provider.', 'Checking the credentials.'];
+    let accumulated = '';
+    for (const [index, text] of paragraphs.entries()) {
+      act(() => {
+        // OpenClaw chat.message.content is a run snapshot; Hermes sends a delta.
+        accumulated += text;
+        emit({ type: 'agent_message_chunk', text: backend === 'openclaw' ? accumulated : text,
+          textMode: backend === 'openclaw' ? 'snapshot' : 'delta' });
+      });
+      expect([...result.current.listData].reverse().filter(row => row.role === 'assistant' && row.text).map(row => row.text))
+        .toEqual(paragraphs.slice(0, index + 1));
+      act(() => {
+        emit({ type: 'tool_call', toolCallId: `tool-${index}`, title: 'read', kind: 'read' });
+        emit({ type: 'tool_call_update', toolCallId: `tool-${index}`, status: 'success' });
+      });
+    }
+    const remote = [user, ...paragraphs.flatMap((text, index) => [
+      { id: `server-${index}`, role: 'assistant' as const, text },
+      { id: `toolcall_tool-${index}`, role: 'tool' as const, text: '', toolName: 'read', toolStatus: 'success' as const },
+    ])];
+    act(() => handlers().onUpdate?.({ type: 'history_reconciled', sessionKey: SESSION_KEY,
+      history: { key: SESSION_KEY, messages: [], hasActiveRun: true }, hasActiveRun: true, messages: remote }));
+    rerender(undefined);
+    expect([...result.current.listData].reverse().filter(row => row.role === 'assistant' && row.text).map(row => row.text)).toEqual(paragraphs);
+    act(() => {
+      emit({ type: 'agent_message_chunk', text: backend === 'openclaw' ? `${accumulated}Done.` : 'Done.',
+        textMode: backend === 'openclaw' ? 'snapshot' : 'delta' });
+      emit({ type: 'run_finished', stopReason: 'end_turn', message: { role: 'assistant', content: `${accumulated}Done.` } });
+    });
+    const expected = ['Inspect', ...paragraphs.flatMap(text => [text, '']), 'Done.'];
+    expect([...result.current.listData].reverse().map(row => row.text)).toEqual(expected);
+    act(() => handlers().onUpdate?.({ type: 'history_reconciled', sessionKey: SESSION_KEY,
+      history: { key: SESSION_KEY, messages: [], hasActiveRun: false }, hasActiveRun: false,
+      messages: [...remote, { id: 'server-final', role: 'assistant', text: 'Done.' }] }));
+    rerender(undefined);
+    expect([...result.current.listData].reverse().map(row => row.text)).toEqual(expected);
+  });
+
+  it('keeps repeated Hermes delta tokens and words verbatim', async () => {
+    const { result, handlers } = renderController('hermes');
+    await typeAndSend(result, 'Repeat');
+    act(() => {
+      for (const text of ['ha', 'ha', ' ha', ' ha']) handlers().onUpdate?.(mapAdapterSessionUpdate({
+        type: 'agent_message_chunk', sessionKey: SESSION_KEY, runId: 'run-1', text, textMode: 'delta',
+      } as any));
+    });
+    jest.setSystemTime(Date.now() + 1_000);
+    act(() => { result.current.setInput('next'); });
+    expect(result.current.listData.find(row => row.id === 'streaming')?.text).toBe('haha ha ha');
+  });
+
+  it.each(['cancelled', 'error'] as const)('preserves snapshot paragraphs and tool order on %s', async (stopReason) => {
+    const { result, handlers } = renderController();
+    await typeAndSend(result, 'Inspect');
+    const emit = (event: any) => handlers().onUpdate?.(mapAdapterSessionUpdate({ sessionKey: SESSION_KEY, runId: 'run-1', ...event }));
+    act(() => {
+      emit({ type: 'agent_message_chunk', text: 'Checking the files.', textMode: 'snapshot' });
+      emit({ type: 'tool_call', toolCallId: 'a', title: 'read', kind: 'read' });
+      emit({ type: 'agent_message_chunk', text: 'Checking the files.', textMode: 'snapshot' });
+      emit({ type: 'agent_message_chunk', text: 'Checking the files.Found the issue.', textMode: 'snapshot' });
+      // A replayed tool start must not commit the next paragraph again.
+      emit({ type: 'tool_call', toolCallId: 'a', title: 'read', kind: 'read' });
+      emit({ type: 'run_finished', stopReason });
+    });
+    expect([...result.current.listData].reverse().filter(row => row.role !== 'system').map(row => row.text))
+      .toEqual(['Inspect', 'Checking the files.', '', 'Found the issue.']);
+    expect(result.current.isSending).toBe(false);
+  });
+
+  it('replaces a corrected OpenClaw snapshot instead of concatenating two drafts', async () => {
+    const { result, handlers } = renderController();
+    await typeAndSend(result, 'Inspect');
+    act(() => {
+      for (const text of ['The preliminary answer is incorrect.', 'Corrected answer.']) handlers().onUpdate?.(mapAdapterSessionUpdate({
+        type: 'agent_message_chunk', sessionKey: SESSION_KEY, runId: 'run-1', text, textMode: 'snapshot',
+      }));
+    });
+    expect(result.current.listData.find(row => row.id === 'streaming')?.text).toBe('Corrected answer.');
   });
 
   it.each(['openclaw', 'hermes'] as const)(

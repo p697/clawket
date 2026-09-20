@@ -73,6 +73,8 @@ function setup(backend: 'openclaw' | 'hermes' = 'openclaw', initialJobs: CronJob
 }
 
 // The edit page renames through the shared RenameSheet row instead of an inline input.
+// The RenameSheet close alone takes ~1.7 s in Jest; CI runners under load stretch it past Jest's 5 s default.
+const RENAME_TEST_TIMEOUT = 15_000;
 async function rename(view: ReturnType<typeof render>, name: string) {
   fireEvent.press(view.getByTestId('agent-cron-name'));
   fireEvent.changeText(view.getByTestId('cron-rename-input'), name);
@@ -260,7 +262,7 @@ describe('guided Cron management', () => {
     act(() => callback({ data: { action: { type: 'POP' } } }));
     fireEvent.press(view.getByTestId('cron-discard-confirm'));
     await waitFor(() => expect(data.navigation.dispatch).toHaveBeenCalledWith({ type: 'POP' }));
-  });
+  }, RENAME_TEST_TIMEOUT);
 
   it('keeps acknowledged list toggles if refresh fails and prevents duplicate writes', async () => {
     const data = setup();
@@ -302,7 +304,7 @@ describe('guided Cron management', () => {
     const blocked = render(<CronEditorScreen adapter={unavailable} navigation={data.navigation} agent={agent} online />);
     expect(blocked.queryByTestId('cron-template-custom')).toBeNull();
     expect(data.add).not.toHaveBeenCalled();
-  });
+  }, RENAME_TEST_TIMEOUT);
 
   it('shows a paused task and its previous failure independently', async () => {
     const data = setup('hermes', [{ ...existing, enabled: false, state: { lastRunStatus: 'error', lastError: 'Credentials expired' } }]);
@@ -329,7 +331,7 @@ describe('guided Cron management', () => {
     list.rerender(<CronSection adapter={data.adapter} agent={agent} online refreshKey={1} onCreate={jest.fn()} onEdit={jest.fn()} />);
     await waitFor(() => expect(list.getByText('Refresh failed')).toBeTruthy());
     expect(list.getByText('Acknowledged name')).toBeTruthy();
-  });
+  }, RENAME_TEST_TIMEOUT);
 
   it('offers the model row outside advanced settings on create and stores the picked reference', async () => {
     const data = setup('openclaw');

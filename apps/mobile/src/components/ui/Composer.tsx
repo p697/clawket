@@ -42,6 +42,9 @@ export type ComposerProps = {
   onVoiceStart?: () => void;
   onVoiceStop?: (send: boolean) => void;
   onVoiceCancel?: () => void;
+  onVoiceRecover?: () => void;
+  voiceRecoveryCount?: number;
+  voiceRecordingSaved?: boolean;
   onPasteFiles?: (files: readonly PastedFile[]) => void;
   onPasteFailed?: () => void;
   editable?: boolean;
@@ -71,7 +74,7 @@ export const Composer = React.forwardRef<ComposerHandle, ComposerProps>(function
   accessory, attachments, notice, value, placeholder, accessibilityLabels, onChangeText, onSend, onStop,
   onAddPress, onVoicePress, onVoiceStart, onVoiceStop, onVoiceCancel, onPasteFiles, onPasteFailed, editable = true, canSend = true,
   hasAttachments = false, isRunning = false, addDisabled = false, voiceDisabled = false,
-  voiceState = 'idle', voiceLevel,
+  voiceState = 'idle', voiceLevel, onVoiceRecover, voiceRecoveryCount = 0, voiceRecordingSaved = false,
   autoFocus = false, maxLength, expanded = false, onExpandedChange, appearance = 'surface', onFocus, onBlur, style, testID,
 }, forwardedRef): React.JSX.Element {
   const { theme } = useAppTheme();
@@ -140,7 +143,7 @@ export const Composer = React.forwardRef<ComposerHandle, ComposerProps>(function
   const inputVoiceTarget = Boolean(onVoicePress) && !voiceDisabled && editable && !expanded && (!focused || !value) && !isRunning;
   const inputPlaceholder = inputVoiceTarget && !value ? t(voiceGesture.tooShort ? 'Hold longer to talk' : 'Type or hold to talk') : placeholder;
   const voiceHint = voiceState === 'transcribing' ? t('Transcribing…') : voiceState === 'authorizing' ? t('Preparing voice input…')
-    : voiceGesture.holding ? t(voiceGesture.cancelling ? 'Release to cancel' : 'Release to send · Slide up to cancel') : t('Listening…');
+    : voiceRecordingSaved ? t('Recording saved locally · Transcription paused') : voiceGesture.holding ? t(voiceGesture.cancelling ? 'Release to cancel' : 'Release to send · Slide up to cancel') : t('Listening…');
   const inputProps: TextInputProps & { ref: React.Ref<TextInput>; value: string } = {
     ref: inputRef,
     testID: testID ? `${testID}-input` : undefined,
@@ -176,6 +179,11 @@ export const Composer = React.forwardRef<ComposerHandle, ComposerProps>(function
         <ComposerAction icon={ChevronDown} label={t('Hide keyboard')} onPress={Keyboard.dismiss} disabled={!focused}
           testID={testID ? `${testID}-hide-keyboard` : undefined} />
       </View> : null}
+      {voiceRecoveryCount > 0 && !voiceActive && onVoiceRecover ? <Pressable
+        testID={testID ? `${testID}-voice-recover` : undefined} accessibilityRole="button"
+        onPress={onVoiceRecover} style={styles.voiceRecovery}>
+        <Text style={styles.voiceHint}>{t('Saved recording · Tap to recover')}</Text>
+      </Pressable> : null}
       {notice}
       {attachments}
       <Animated.View testID={testID ? `${testID}-input-shell` : undefined}
@@ -283,6 +291,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     inputShell: { minHeight: ControlSize.pill, flexDirection: 'row', paddingHorizontal: Space.sm, overflow: 'hidden' },
     inputHost: { flex: 1, alignSelf: 'stretch' },
     hiddenInput: { opacity: 0 },
+    voiceRecovery: { minHeight: ControlSize.pill, padding: Space.sm, justifyContent: 'center' },
     voicePresentation: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center', gap: Space.xs },
     voiceHint: { color: colors.inkSecondary, fontSize: FontSize.secondary, lineHeight: LineHeight.secondary, textAlign: 'center' },
     input: { flex: 1, alignSelf: 'stretch', color: colors.ink, fontSize: FontSize.body, lineHeight: LineHeight.body, includeFontPadding: false,

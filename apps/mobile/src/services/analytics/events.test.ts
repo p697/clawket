@@ -19,6 +19,7 @@ jest.mock('./posthog', () => ({
 
 const SPEC_EVENT_PROPERTIES: Readonly<Record<string, ReadonlyArray<string>>> = {
   agent_file_activity: ['action', 'backend', 'document'],
+  chat_voice_input_timing: ['stage', 'duration_ms'],
   channel_dm_scope_changed: ['scope'],
   channel_account_toggled: ['channel', 'enabled'],
   onboarding_viewed: ['source'],

@@ -6,10 +6,8 @@ import {
   applyChildRunStart,
   applyChildToolStart,
   buildChildSessionActivityCards,
-  COMPLETED_CHILD_ACTIVITY_TTL_MS,
   getChildSessionStatusLabel,
   inferChildSessionOwnership,
-  pruneChildSessionActivity,
 } from './childSessionActivity';
 
 describe('inferChildSessionOwnership', () => {
@@ -71,38 +69,20 @@ describe('child session activity mutations', () => {
     });
   });
 
-  it('prunes stale completed entries', () => {
-    const now = 100_000;
-    const map = new Map<string, ChildSessionActivity>([
-      [
-        'agent:main:subagent:old',
-        {
-          sessionKey: 'agent:main:subagent:old',
-          agentId: 'main',
-          status: 'completed',
-          previewText: null,
-          toolName: null,
-          updatedAt: now - COMPLETED_CHILD_ACTIVITY_TTL_MS - 1,
-        },
-      ],
-      [
-        'agent:main:subagent:new',
-        {
-          sessionKey: 'agent:main:subagent:new',
-          agentId: 'main',
-          status: 'completed',
-          previewText: null,
-          toolName: null,
-          updatedAt: now - 10,
-        },
-      ],
-    ]);
 
-    pruneChildSessionActivity(map, { now });
+});
 
-    expect(map.has('agent:main:subagent:old')).toBe(false);
-    expect(map.has('agent:main:subagent:new')).toBe(true);
-  });
+it('captures a final-only result and preserves failure status', () => {
+  const map = new Map<string, ChildSessionActivity>();
+  applyChildRunStart(map, 'child');
+  applyChildRunEnd(map, 'child', { text: 'ASTRA_PROBE_OK GPT-6' });
+  expect(map.get('child')).toMatchObject({ status: 'completed', resultText: 'ASTRA_PROBE_OK GPT-6' });
+  applyChildRunEnd(map, 'child', { text: 'Request failed', failed: true });
+  expect(map.get('child')).toMatchObject({ status: 'failed', resultText: 'Request failed' });
+});
+
+it('does not override explicit parent ownership with the main-session heuristic', () => {
+  expect(inferChildSessionOwnership('agent:main:main', 'main', 'agent:main:subagent:child', 'agent:main:other')).toBe(false);
 });
 
 describe('buildChildSessionActivityCards', () => {
@@ -163,7 +143,7 @@ describe('buildChildSessionActivityCards', () => {
     ]);
   });
 
-  it('keeps recent completed cards visible', () => {
+  it('keeps completed cards after eight seconds and after session cleanup', () => {
     const activityMap = new Map<string, ChildSessionActivity>([
       [
         'agent:main:subagent:coder',
@@ -184,7 +164,6 @@ describe('buildChildSessionActivityCards', () => {
         currentAgentId: 'main',
         sessions: [],
         activityMap,
-        now: 500 + COMPLETED_CHILD_ACTIVITY_TTL_MS - 5,
         resolveSessionTitle,
       }),
     ).toHaveLength(1);

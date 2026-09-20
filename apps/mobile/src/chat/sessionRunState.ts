@@ -31,12 +31,13 @@ export function markSessionRunDelta(
   runId: string,
   text: string,
   startedAt = Date.now(),
+  authoritative = false,
 ): SessionRunState {
   const prev = map.get(sessionKey);
   const next: SessionRunState = {
     runId,
     streamText: prev?.runId === runId
-      ? (shouldReplaceStreamText(prev.streamText, text) ? text : prev.streamText)
+      ? (authoritative || shouldReplaceStreamText(prev.streamText, text) ? text : prev.streamText)
       : text,
     startedAt: prev?.runId === runId ? prev.startedAt : startedAt,
   };

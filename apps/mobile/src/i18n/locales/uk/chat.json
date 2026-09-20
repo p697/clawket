@@ -99,7 +99,6 @@
   "Text-to-speech": "Озвучення тексту",
   "Voice input failed": "Збій голосового введення",
   "Microphone access is required to transcribe speech.": "Для розшифрування мовлення потрібен доступ до мікрофона.",
-  "Unable to transcribe speech right now.": "Зараз не вдається розшифрувати мовлення.",
   "Show or change queue mode": "Показати або змінити режим черги",
   "Show available commands": "Показати доступні команди",
   "Switch to a specific model": "Перейти на конкретну модель",
@@ -316,5 +315,18 @@
   "Tap to dictate. Hold and release to send.": "Торкніться для диктування. Утримуйте й відпустіть для надсилання.",
   "No speech detected. Please try again.": "Мовлення не виявлено. Спробуйте ще раз.",
   "Type or hold to talk": "Введіть текст або утримуйте, щоб говорити",
-  "Hold longer to talk": "Утримуйте довше, щоб говорити"
+  "Hold longer to talk": "Утримуйте довше, щоб говорити",
+  "The previous voice session is still closing. Please retry shortly.": "Попередній голосовий сеанс ще завершується. Спробуйте трохи пізніше.",
+  "The transcription limit has been reached. Your recording is saved.": "Досягнуто ліміту транскрибування. Ваш запис збережено.",
+  "Voice authentication failed. Check your device date and time.": "Помилка голосової автентифікації. Перевірте дату й час пристрою.",
+  "Cannot save more audio. Free up device storage or remove a saved recording.": "Неможливо зберегти більше аудіо. Звільніть місце або видаліть збережений запис.",
+  "The connection was interrupted. Your recording is saved on this device.": "З’єднання перервано. Ваш запис збережено на цьому пристрої.",
+  "The microphone stopped. Your recorded audio is saved.": "Мікрофон зупинено. Записане аудіо збережено.",
+  "The transcription service is unavailable. Your recording is saved on this device.": "Сервіс транскрибування недоступний. Ваш запис збережено на цьому пристрої.",
+  "Try again in {{seconds}} seconds.": "Повторіть спробу через {{seconds}} с.",
+  "Keep audio": "Зберегти аудіо",
+  "Saved recording": "Збережений запис",
+  "Your audio is saved on this device. Retry transcription or delete it.": "Аудіо збережено на цьому пристрої. Повторіть транскрибування або видаліть його.",
+  "Recording saved locally · Transcription paused": "Локальний запис · Транскрибування призупинено",
+  "Saved recording · Tap to recover": "Запис збережено · Торкніться для відновлення"
 }

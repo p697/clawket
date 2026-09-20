@@ -1,3 +1,4 @@
+import { providerFailure } from './diagnostics';
 /** Alibaba Cloud's duplex task protocol. No chat content is sent as context. */
 export const SPEECH_MODEL = 'qwen-audio-3.0-asr-flash-streaming';
 export const MAX_SECONDS = 120;
@@ -24,7 +25,7 @@ export class Transcript {
     switch (event.header.event) {
       case 'task-started': return 'started';
       case 'task-finished': return 'finished';
-      case 'task-failed': throw Error('speech_provider_failed');
+      case 'task-failed': throw Error(providerFailure(event.header.error_code));
       case 'result-generated': break;
       default: return 'ignore';
     }

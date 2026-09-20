@@ -99,7 +99,6 @@
   "Text-to-speech": "Metin okuma",
   "Voice input failed": "Sesli giriş başarısız",
   "Microphone access is required to transcribe speech.": "Konuşmayı yazıya dökmek için mikrofon erişimi gerekiyor.",
-  "Unable to transcribe speech right now.": "Konuşma şu anda yazıya dökülemiyor.",
   "Show or change queue mode": "Kuyruk modunu göster veya değiştir",
   "Show available commands": "Kullanılabilir komutları göster",
   "Switch to a specific model": "Belirli bir modele geç",
@@ -316,5 +315,18 @@
   "Tap to dictate. Hold and release to send.": "Dikte etmek için dokunun. Basılı tutun ve göndermek için bırakın.",
   "No speech detected. Please try again.": "Konuşma algılanamadı. Lütfen tekrar deneyin.",
   "Type or hold to talk": "Yazın veya konuşmak için basılı tutun",
-  "Hold longer to talk": "Konuşmak için biraz daha uzun basılı tutun"
+  "Hold longer to talk": "Konuşmak için biraz daha uzun basılı tutun",
+  "The previous voice session is still closing. Please retry shortly.": "Önceki ses oturumu hâlâ kapanıyor. Biraz sonra tekrar deneyin.",
+  "The transcription limit has been reached. Your recording is saved.": "Yazıya dönüştürme sınırına ulaşıldı. Kaydınız saklandı.",
+  "Voice authentication failed. Check your device date and time.": "Ses kimlik doğrulaması başarısız. Cihazın tarih ve saatini kontrol edin.",
+  "Cannot save more audio. Free up device storage or remove a saved recording.": "Daha fazla ses kaydedilemiyor. Yer açın veya saklanan bir kaydı silin.",
+  "The connection was interrupted. Your recording is saved on this device.": "Bağlantı kesildi. Kaydınız bu cihazda saklandı.",
+  "The microphone stopped. Your recorded audio is saved.": "Mikrofon durdu. Kaydedilen ses saklandı.",
+  "The transcription service is unavailable. Your recording is saved on this device.": "Yazıya dönüştürme hizmeti kullanılamıyor. Kaydınız bu cihazda saklandı.",
+  "Try again in {{seconds}} seconds.": "{{seconds}} saniye sonra tekrar deneyin.",
+  "Keep audio": "Sesi sakla",
+  "Saved recording": "Saklanan kayıt",
+  "Your audio is saved on this device. Retry transcription or delete it.": "Sesiniz bu cihazda saklandı. Yeniden yazıya dönüştürün veya silin.",
+  "Recording saved locally · Transcription paused": "Cihaza kaydediliyor · Dönüştürme duraklatıldı",
+  "Saved recording · Tap to recover": "Kayıt saklandı · Kurtarmak için dokunun"
 }

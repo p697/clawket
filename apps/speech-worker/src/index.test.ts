@@ -12,13 +12,13 @@ describe('speech admission and upgrade', () => {
   let server: { binaryType: string; accept: ReturnType<typeof vi.fn> };
   const env = { SPEECH_ENABLED: 'true', ALIYUN_SPEECH_API_KEY: 'test-secret',
     ALIYUN_SPEECH_URL: 'https://workspace.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference',
-    ADMISSION: { getByName: () => ({ reserve, release }) } } as unknown as Env & { ALIYUN_SPEECH_API_KEY: string };
+    ADMISSION: { getByName: () => ({ reserveDetailed: reserve, release }) } } as unknown as Env & { ALIYUN_SPEECH_API_KEY: string };
   const request = () => new Request('https://speech.example/v1/speech', { headers: { Upgrade: 'websocket' } });
   const run = () => worker.fetch(request(), env, { waitUntil } as unknown as ExecutionContext);
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(verifyRequest).mockResolvedValue({ device: 'device', nonce: 'nonce' });
-    reserve.mockResolvedValue(true); release.mockResolvedValue(undefined);
+    reserve.mockResolvedValue({ allowed: true }); release.mockResolvedValue(undefined);
     server = { binaryType: 'blob', accept: vi.fn(() => expect(server.binaryType).toBe('arraybuffer')) };
     vi.stubGlobal('WebSocketPair', class { 0 = {}; 1 = server; });
     vi.stubGlobal('Response', class extends NativeResponse {
@@ -51,7 +51,22 @@ describe('speech admission and upgrade', () => {
     expect((await run()).status).toBe(401); expect(reserve).not.toHaveBeenCalled(); expect(upstream).not.toHaveBeenCalled();
   });
   it('quota failure never starts a paid provider task', async () => {
-    reserve.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    reserve.mockResolvedValueOnce({ allowed: true }).mockResolvedValueOnce({ allowed: false, reason: 'quota', retryAfterMs: 5000 });
     expect((await run()).status).toBe(429); expect(upstream).not.toHaveBeenCalled(); expect(release).toHaveBeenCalled();
   });
+  it.each([
+    ['busy', 'speech_busy', 0], ['quota', 'speech_device_limit', 0],
+    ['quota', 'speech_ip_limit', 1], ['quota', 'speech_daily_limit', 2],
+    ['storage', 'speech_admission_failed', 0],
+  ])('v2 reports %s / %s without starting provider work', async (reason, code, passed) => {
+    server.accept.mockImplementation(() => {});
+    const send = vi.fn(), close = vi.fn(); Object.assign(server, { send, close });
+    for (let n = 0; n < Number(passed); n++) reserve.mockResolvedValueOnce({ allowed: true });
+    reserve.mockResolvedValueOnce({ allowed: false, reason, retryAfterMs: 1234 });
+    const request = new Request('https://speech.example/v1/speech', { headers: { Upgrade: 'websocket', 'x-speech-protocol': '2' } });
+    expect((await worker.fetch(request, env, { waitUntil } as unknown as ExecutionContext)).status).toBe(101);
+    expect(JSON.parse(send.mock.calls[0]![0])).toMatchObject({ type: 'error', code, retryAfterMs: 1234, requestId: expect.any(String) });
+    expect(upstream).not.toHaveBeenCalled(); expect(close).toHaveBeenCalled();
+  });
+
 });
