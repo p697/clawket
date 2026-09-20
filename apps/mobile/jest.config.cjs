@@ -14,6 +14,7 @@ const config = {
   ],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json'],
   setupFiles: ['./jest.setup.ts'],
+  setupFilesAfterEnv: ['./jest.setup-after-env.ts'],
   testEnvironment: 'node',
   moduleNameMapper: {
     // remend exposes only an `import` export condition, which Jest's CommonJS resolver skips.

@@ -182,6 +182,8 @@ Checks must report verified scope, fail when inputs disappear or become malforme
 
 Test transforms for ESM-only dependencies must match both Windows and POSIX separators. Keep `scripts/jest-paths.test.mjs` as the cross-platform path regression; do not mock away real markdown behavior to bypass transformation failures.
 
+`jest.setup-after-env.ts` raises RNTL's `waitFor` ceiling to 5 s because a starved CI runner needs seconds to commit a large mocked list; do not lower it per test, and never pad a test with real sleeps to wait for state.
+
 ## Companion brand
 
 The approved identity is Companion A: asymmetric high-left/low-right ears, rounded face, two capsule eyes, no cheek mark. `src/brand/companion.json` is the shared geometry for `Companion` and `scripts/generate-companion-icons.cjs`; ear parts carry a `role` and root `pivot` so `Companion` can rotate them as separate layers under the face, and the icon script ignores those fields; the Sharp dev dependency rasterizes icon assets only and is not bundled into the App. Regenerate launcher/splash assets after geometry edits and run Expo prebuild to propagate both native icon variants. Preserve existing icon preference identifiers. First-load chat/roster use the readable Companion loading state; cached scoped messages remain visible during connection/history refresh. Brand identity never replaces backend or user Agent avatars.

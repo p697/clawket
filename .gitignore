@@ -16,6 +16,8 @@ dist/
 # Environment
 .env
 .env.local
+.dev.vars
+.dev.vars.*
 
 apps/mobile/.expo/
 apps/mobile/coverage/

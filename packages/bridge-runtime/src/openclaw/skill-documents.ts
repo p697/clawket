@@ -95,8 +95,9 @@ export class OpenClawSkillDocuments {
       const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
       let content: string;
       let editable: boolean;
+      let stat: ReturnType<typeof fstatSync>;
       try {
-        const stat = fstatSync(fd);
+        stat = fstatSync(fd);
         if (!stat.isFile() || stat.nlink !== 1 || stat.size > MAX_BYTES) throw new Error('unsafe file');
         // Read one extra byte so a growing file cannot silently truncate an editable draft.
         const bytes = Buffer.alloc(MAX_BYTES + 1);
@@ -114,23 +115,24 @@ export class OpenClawSkillDocuments {
         if (content.includes('\0')) throw new Error('binary file');
         editable = filePath === 'SKILL.md' && this.options.scopes.includes('operator.admin') && skill.bundled === false
           && ['openclaw-workspace', 'openclaw-managed'].includes(String(skill.source));
-        if (request.method === METHODS[1]) {
-          if (!editable) throw new Error('read only');
-          const next = request.params.content as string;
-          if (next.includes('\0')) throw new Error('binary content');
-          // Atomic replacement keeps the old source intact on a failed write.
-          const temporary = join(dirname(path), `.clawket-skill-${randomUUID()}.tmp`);
-          try {
-            writeFileSync(temporary, next, { flag: 'wx', mode: stat.mode & 0o777 });
-            const current = lstatSync(path);
-            if (resolveSkillPath(skill) !== path || current.dev !== stat.dev || current.ino !== stat.ino
-              || current.size !== stat.size || current.mtimeMs !== stat.mtimeMs) throw new Error('file changed');
-            renameSync(temporary, path);
-          } finally {
-            try { unlinkSync(temporary); } catch { /* renamed or never created */ }
-          }
-        }
       } finally { closeSync(fd); }
+      if (request.method === METHODS[1]) {
+        if (!editable) throw new Error('read only');
+        const next = request.params.content as string;
+        if (next.includes('\0')) throw new Error('binary content');
+        // Atomic replacement keeps the old source intact on a failed write. The read handle is
+        // closed first: Windows refuses to rename over a file that still has an open handle.
+        const temporary = join(dirname(path), `.clawket-skill-${randomUUID()}.tmp`);
+        try {
+          writeFileSync(temporary, next, { flag: 'wx', mode: stat.mode & 0o777 });
+          const current = lstatSync(path);
+          if (resolveSkillPath(skill) !== path || current.dev !== stat.dev || current.ino !== stat.ino
+            || current.size !== stat.size || current.mtimeMs !== stat.mtimeMs) throw new Error('file changed');
+          renameSync(temporary, path);
+        } finally {
+          try { unlinkSync(temporary); } catch { /* renamed or never created */ }
+        }
+      }
       const payload = request.method === METHODS[1]
         ? { ok: true, skillKey: skill.skillKey, path }
         : { skillKey: skill.skillKey, name: skill.name, path, content, filePath, fileType: /\.md$/i.test(filePath) ? 'markdown' : 'text', isBinary: false, linkedFiles, editable };
