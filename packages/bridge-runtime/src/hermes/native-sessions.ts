@@ -1,3 +1,4 @@
+import { hermesToolResultFailed } from './tool-result.js';
 import { existsSync } from 'node:fs';
 import { Buffer } from 'node:buffer';
 import { HermesPythonRunner } from './python-runner.js';
@@ -29,6 +30,7 @@ export type HermesHistoryMessage = {
   _cursorId?: string;
   _nativeId?: string;
   _nativeBoundaryId?: string;
+  _imageCount?: number;
 };
 
 export type HermesNativeHistory = {
@@ -210,7 +212,9 @@ function normalizeHistoryMessages(value: unknown): HermesHistoryMessage[] {
       timestamp,
       toolName: readString(entry.toolName) || undefined,
       toolCallId: readString(entry.toolCallId) || undefined,
-      isError: readBoolean(entry.isError) ?? undefined,
+      isError: entry.role === 'toolResult'
+        ? readBoolean(entry.isError) === true || hermesToolResultFailed(entry.content)
+        : readBoolean(entry.isError) ?? undefined,
       model: readString(entry.model) || undefined,
       provider: readString(entry.provider) || undefined,
       _cursorId: readString(entry._cursorId) || undefined,
@@ -270,6 +274,17 @@ const FIND_SESSION_SCRIPT = [
 
 const READ_HISTORY_SCRIPT = [
   ...READ_ONLY_DB_PREAMBLE,
+  'import ast, re',
+  'def bridge_tool_blocks(content):',
+  ' if len(content) > 262144 or not content.startswith("[{\'type\': \'toolCall\'"): return None',
+  ' try: blocks = ast.literal_eval(content)',
+  ' except (ValueError, SyntaxError, RecursionError, MemoryError): return None',
+  ' if not isinstance(blocks, list) or not 1 <= len(blocks) <= 64: return None',
+  ' for block in blocks:',
+  '  if not isinstance(block, dict) or block.get("type") != "toolCall": return None',
+  '  if not re.fullmatch(r"run_[0-9a-f]{32}:tool:[0-9]+", str(block.get("id") or "")): return None',
+  '  if not isinstance(block.get("name"), str) or not block["name"] or not isinstance(block.get("arguments"), (str, dict)): return None',
+  ' return blocks',
   'session_id = str(payload.get("sessionId") or "")',
   'cur.execute("""SELECT id, title, model, billing_provider, COALESCE((SELECT MAX(m.timestamp) FROM messages m WHERE m.session_id=sessions.id), ended_at, started_at, 0) AS updated_ts FROM sessions WHERE id=? LIMIT 1""", (session_id,))',
   'row = cur.fetchone()',
@@ -282,7 +297,9 @@ const READ_HISTORY_SCRIPT = [
   ' content = str(message["content"] or "")',
   ' if role == "assistant":',
   '  blocks = []',
-  '  if content.strip(): blocks.append({"type":"text","text":content})',
+  '  recovered = bridge_tool_blocks(content) if not message["tool_calls"] else None',
+  '  if recovered: blocks.extend(recovered)',
+  '  elif content.strip(): blocks.append({"type":"text","text":content})',
   '  try: tool_calls = json.loads(message["tool_calls"] or "[]")',
   '  except Exception: tool_calls = []',
   '  for call in tool_calls if isinstance(tool_calls, list) else []:',
@@ -292,7 +309,7 @@ const READ_HISTORY_SCRIPT = [
   ' cursor_id = "native:" + str(message["id"]).zfill(20)',
   ' if role == "assistant":',
   '  if blocks: messages.append({"role":"assistant","content":blocks if len(blocks)>1 or any(b.get("type")=="toolCall" for b in blocks) else blocks[0].get("text", ""),"timestamp":timestamp,"model":str(row["model"] or "") or None,"provider":str(row["billing_provider"] or "") or None,"_cursorId":cursor_id,"_nativeId":str(message["id"])})',
-  ' elif role == "tool": messages.append({"role":"toolResult","content":content,"timestamp":timestamp,"toolCallId":message["tool_call_id"] or None,"toolName":message["tool_name"] or None,"isError":False,"_cursorId":cursor_id,"_nativeId":str(message["id"])})',
+  ' elif role == "tool": messages.append({"role":"toolResult","content":content,"timestamp":timestamp,"toolCallId":message["tool_call_id"] or None,"toolName":message["tool_name"] or None,"_cursorId":cursor_id,"_nativeId":str(message["id"])})',
   ' elif role in ("user", "system"): messages.append({"role":role,"content":content,"timestamp":timestamp,"_cursorId":cursor_id,"_nativeId":str(message["id"])})',
   'title = str(row["title"] or "").strip() or ("Hermes" if session_id == "main" else session_id)',
   'print(json.dumps({"sessionId":session_id,"title":title,"updatedAt":int(float(row["updated_ts"] or 0)*1000),"messages":messages}))',

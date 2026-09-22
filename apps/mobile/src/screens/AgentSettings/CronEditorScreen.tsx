@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { usePreventRemove, type NavigationAction } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -24,7 +24,7 @@ import { useAppTheme } from '../../theme';
 import { ControlSize, FontSize, FontWeight, LineHeight, Space } from '../../theme/tokens';
 import { analyticsEvents } from '../../services/analytics/events';
 import { describeScheduleHuman } from '../../utils/cron';
-import { modelReference } from '../../utils/model-catalog';
+import { explicitModelReference } from '../../utils/model-catalog';
 import { ModelPickerModal } from '../../components/chat/ModelPickerModal';
 import { buildCronJobCreate, buildCronJobPatch, cronDraftFromJob, cronModelLabel, validateCronDraft, type CronDraft } from './cron-model';
 import { deviceTimeZone, formatCronDate, scheduleDraft, scheduleFromDraft, upcomingRuns, type ScheduleDraft } from './cron-schedule';
@@ -69,6 +69,7 @@ function CronEditor({ adapter, agent, online, reconnecting = false, jobId, initi
     time: scheduleDraft(undefined, adapter.capabilities.cronTimeZone ? deviceTimeZone() : ''),
   });
   const originalForm = useRef(form);
+  const compactImportedPrompt = (initialPrompt?.length ?? 0) > 240;
   const [page, setPage] = useState<Page>(jobId || initialPrompt?.trim() ? 'form' : 'templates');
   const [more, setMore] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -80,6 +81,7 @@ function CronEditor({ adapter, agent, online, reconnecting = false, jobId, initi
   const [pendingLeave, setPendingLeave] = useState<NavigationAction | 'templates' | null>(null);
   const [leaving, setLeaving] = useState(false);
   const leaveAction = useRef<NavigationAction | null>(null);
+  const createdNotice = useRef<string | null>(null);
   const [runs, setRuns] = useState<ReadonlyArray<CronRunLogEntry>>([]);
   const [runsError, setRunsError] = useState<string | null>(null);
   const [runOffset, setRunOffset] = useState<number | null>(null);
@@ -115,6 +117,16 @@ function CronEditor({ adapter, agent, online, reconnecting = false, jobId, initi
   });
   useEffect(() => {
     if (!leaving) return;
+    if (createdNotice.current) {
+      const title = createdNotice.current;
+      createdNotice.current = null;
+      // Present on the previous screen after the native pop animation finishes.
+      const unsubscribe = navigation.addListener('transitionEnd', event => {
+        if (!event.data.closing) return;
+        unsubscribe();
+        Alert.alert(title);
+      });
+    }
     if (leaveAction.current) navigation.dispatch(leaveAction.current);
     else navigation.goBack();
   }, [leaving, navigation]);
@@ -196,6 +208,7 @@ function CronEditor({ adapter, agent, online, reconnecting = false, jobId, initi
       analyticsEvents.cronSaveSucceeded({ is_editing: Boolean(original), payload_kind: saved.payload.kind,
         schedule_kind: saved.schedule.kind, has_model_override: saved.payload.kind === 'agentTurn' && Boolean(saved.payload.model),
         delivery_mode: saved.delivery?.mode ?? 'none', source: 'guided_editor' });
+      if (!original) createdNotice.current = t('Scheduled task created');
       setLeaving(true);
     } catch (reason) {
       if (data.isCurrent()) setError(message(reason));
@@ -270,8 +283,8 @@ function CronEditor({ adapter, agent, online, reconnecting = false, jobId, initi
         : !online ? <ConnectionStatusPill testID="agent-cron-editor-offline" placement="inline" status="offline" message={t('Offline · reconnecting')} /> : undefined}
       rightContent={subPage
       ? <Button testID={`cron-${page}-done`} label={t('Done', { ns: 'common' })} variant="ghost" onPress={() => setPage('form')} />
-      : jobId && form && canWrite ? <Button testID="agent-cron-save" label={t('Save', { ns: 'common' })} variant="ghost" loading={busy === 'save'} disabled={locked || !dirty} onPress={() => { void save(); }} /> : undefined} />
-    <KeyboardAwareScrollView testID="cron-editor-scroll" keyboardShouldPersistTaps="handled"
+      : jobId && form && canWrite ? <Button testID="agent-cron-save" label={t('Save', { ns: 'common' })} variant="primary" loading={busy === 'save'} disabled={locked || !dirty} onPress={() => { void save(); }} /> : undefined} />
+    <KeyboardAwareScrollView testID="cron-editor-scroll" keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag"
       contentContainerStyle={[styles.content, page === 'prompt' ? styles.grow : null, { paddingBottom: insets.bottom + Space.xl }]}>
       {error ? <Banner testID="agent-cron-editor-error" tone="bad" message={error} /> : null}
       {notice ? <Banner message={notice} /> : null}
@@ -362,10 +375,12 @@ function CronEditor({ adapter, agent, online, reconnecting = false, jobId, initi
           <View style={styles.section}><Text style={styles.label}>{t('Task name')}</Text>
             <FormTextInput testID="agent-cron-name" accessibilityLabel={t('Task name')} value={form.task.name} editable={!locked} onChangeText={name => patch({ name })} />
           </View>
-          <View style={styles.section}><Text style={styles.label}>{t('What should the Agent do?')}</Text>
+          {compactImportedPrompt ? <SettingsRow testID="cron-prompt-summary" title={t('What should the Agent do?')}
+            subtitle={form.task.prompt || t('Describe what you want in your own words.')} accessibilityLabel={t('Task prompt')}
+            disabled={locked} showChevron onPress={() => setPage('prompt')} /> : <View style={styles.section}><Text style={styles.label}>{t('What should the Agent do?')}</Text>
             <FormTextInput testID="agent-cron-prompt" accessibilityLabel={t('Task prompt')} value={form.task.prompt} multiline
               placeholder={t('Describe what you want in your own words.')} minHeight={ControlSize.rosterRow} editable={!locked} onChangeText={prompt => patch({ prompt })} />
-          </View>
+          </View>}
           <View style={styles.section}>
             <Text accessibilityRole="header" style={styles.label}>{t('When should it run?')}</Text>
             <CronScheduleFields draft={form.time} onChange={changeTime} editableTimeZone={Boolean(adapter.capabilities.cronTimeZone)} disabled={locked} />
@@ -385,7 +400,7 @@ function CronEditor({ adapter, agent, online, reconnecting = false, jobId, initi
       error={modelOptions.error && modelOptions.models.length === 0 ? message(modelOptions.error) : null} onRetry={modelOptions.reload}
       selectedModelId={form?.task.model?.trim() ?? ''} configuredDefaultModel={modelOptions.defaultModel || undefined}
       onClose={() => setModelPickerVisible(false)}
-      onSelectModel={model => patch({ model: model.id ? modelReference(model.provider, model.id) : undefined })} /> : null}
+      onSelectModel={model => patch({ model: model.id ? explicitModelReference(model.provider, model.id) : undefined })} /> : null}
     <ConfirmationModal testID="agent-cron-delete-confirm" visible={confirmDelete} title={t('Delete Task')} message={t('Delete this scheduled task?')}
       confirmLabel={t('Delete', { ns: 'common' })} cancelLabel={t('Cancel', { ns: 'common' })} destructive onClose={() => setConfirmDelete(false)} onConfirm={() => { void remove(); }} />
     <ConfirmationModal testID="cron-discard" visible={pendingLeave !== null} title={t('Discard changes?')} message={t('Unsaved changes will be lost.')}

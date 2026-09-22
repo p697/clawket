@@ -6,6 +6,7 @@ import {
 } from './MessageDetailScreen';
 
 let mockIsPro = true;
+let mockManualSessions: Array<{ connectionId: string; agentId: string; key: string }> = [];
 let mockRuntime: { activeConnectionId: string; activeState: string; recovering?: boolean } = {
   activeConnectionId: 'connection',
   activeState: 'ready',
@@ -80,7 +81,10 @@ jest.mock('../../theme', () => ({
 
 jest.mock('../../connection', () => ({
   useConnections: () => mockRuntime,
+  useRoster: () => [],
 }));
+
+jest.mock('../../services/manual-sessions', () => ({ useManualSessions: () => mockManualSessions }));
 
 jest.mock('../../contexts/ProPaywallContext', () => ({
   useProPaywall: () => ({ isPro: mockIsPro }),
@@ -153,6 +157,7 @@ describe('Search MessageDetailScreen', () => {
 
   beforeEach(() => {
     mockIsPro = true;
+    mockManualSessions = [];
     mockRuntime = { activeConnectionId: 'connection', activeState: 'ready' };
     mockListSessions.mockClear();
     mockGetMessages.mockClear();
@@ -180,6 +185,18 @@ describe('Search MessageDetailScreen', () => {
     expect(screenProps.navigation.goBack).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps an App-created free conversation readable while enforcing its connection gate', async () => {
+    mockIsPro = false;
+    mockManualSessions = [{ connectionId: 'connection', agentId: 'agent', key: 'session' }];
+    const screenProps = props();
+    const view = render(<MessageDetailScreen {...screenProps} />);
+    await waitFor(() => expect(view.getByTestId('message-detail-content')).toBeTruthy());
+    view.rerender(<MessageDetailScreen {...screenProps} resolveThreadLockedReason={() => 'gatewayConnections'} />);
+    expect(view.queryByTestId('message-detail-content')).toBeNull();
+    fireEvent.press(view.getByTestId('message-detail-permission-action'));
+    expect(screenProps.navigation.navigate).toHaveBeenCalledWith('Paywall', { reason: 'gatewayConnections' });
+  });
+
   it('uses the explicit view-in-thread callback when supplied', async () => {
     const onViewInThread = jest.fn();
     const view = render(<MessageDetailScreen {...props()} onViewInThread={onViewInThread} />);
@@ -193,13 +210,13 @@ describe('Search MessageDetailScreen', () => {
     }));
   });
 
-  it('blocks free users at the messageHistory Pro gate before reading cache', () => {
+  it('keeps imported session details behind Pro after resolving their local scope', async () => {
     mockIsPro = false;
     const screenProps = props();
     const view = render(<MessageDetailScreen {...screenProps} />);
 
-    expect(view.getByTestId('message-detail-permission')).toBeTruthy();
-    expect(mockListSessions).not.toHaveBeenCalled();
+    await waitFor(() => expect(view.getByTestId('message-detail-permission')).toBeTruthy());
+    expect(view.queryByTestId('message-detail-content')).toBeNull();
     fireEvent.press(view.getByTestId('message-detail-permission-action'));
     expect(screenProps.navigation.navigate).toHaveBeenCalledWith('Paywall', {
       reason: 'messageHistory',

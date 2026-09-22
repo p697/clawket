@@ -64,7 +64,7 @@ const ENTRY_ICONS: Readonly<Record<AppUpdateAnnouncementIcon, LucideIcon>> = {
 };
 
 export function isNavigableAppUpdateEntry(entry: AppUpdateAnnouncementEntry): boolean {
-  return entry.action.type === 'open_url' || entry.action.type === 'open_paywall';
+  return entry.action.type !== 'none';
 }
 
 function TagBadge({ label, colors }: { label: string; colors: AppTheme['colors'] }) {

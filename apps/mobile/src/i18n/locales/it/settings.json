@@ -19,7 +19,7 @@
   "Cost unavailable": "Costo non disponibile",
   "Hermes tracked token usage, but it could not determine a reliable dollar cost for this route.": "Hermes ha tracciato l’utilizzo dei token, ma non ha potuto determinare un costo affidabile in dollari per questa route.",
   "Mixed cost sources": "Fonti di costo miste",
-  "This range mixes priced usage with included or unpriced routes, so the dollar total is only a partial view.": "Questo intervallo combina utilizzo a pagamento con route incluse o senza prezzo, quindi il totale in dollari è solo una vista parziale.",
+  "This range mixes priced usage with included or unpriced routes, so the dollar total is only a partial view.": "Questo totale include solo gli utilizzi di cui è noto il costo.",
   "Estimated cost": "Costo stimato",
   "Hermes is showing an estimate for this route rather than a reconciled bill.": "Hermes mostra una stima per questa route anziché una fattura riconciliata.",
   "Search logs...": "Cerca nei log…",
@@ -243,7 +243,6 @@
   "Blocked by allowlist": "Bloccato dalla lista delle autorizzazioni",
   "Failed to update skill": "Impossibile aggiornare l’abilità",
   "Failed to uninstall skill": "Impossibile disinstallare l’abilità",
-  "Failed to request installation": "Impossibile richiedere l’installazione",
   "Source": "Origine",
   "Agent timezone": "Fuso orario dell’Agent",
   "Check configured services and summarize problems and suggested fixes.": "Controlla i servizi configurati e riassumi problemi e soluzioni suggerite.",
@@ -380,5 +379,15 @@
   "Disable {{name}}?": "Disattivare {{name}}?",
   "This account starts receiving messages again.": "Questo account riprende a ricevere messaggi.",
   "This account stops receiving messages until you enable it again.": "Questo account smette di ricevere messaggi finché non lo riattivi.",
-  "Failed to update channel": "Impossibile aggiornare il canale"
+  "Failed to update channel": "Impossibile aggiornare il canale",
+  "About me": "Su di me",
+  "Version history": "Cronologia versioni",
+  "No saved versions": "Nessuna versione salvata",
+  "This file changed. Reopen it before saving.": "Il file è cambiato. Riaprilo prima di salvare.",
+  "Model health": "Stato del modello",
+  "Global model": "Modello globale",
+  "Test connections": "Verifica connessioni",
+  "Restore version": "Ripristina versione",
+  "This file is too large for version history.": "Il file è troppo grande per la cronologia delle versioni.",
+  "Scheduled task created": "Attività pianificata creata"
 }

@@ -68,7 +68,10 @@ export function messageMetaSpacer(time: string, hasStatus: boolean): string {
   // Reserve one indivisible run. Breakable/trailing en spaces let iOS trim
   // the status slot, leaving the overlaid check marks on top of the body.
   // Figure spaces use the same tabular-digit width as the visible clock.
-  const reservation = `\u2007${time}${hasStatus ? '\u2007\u2007\u2007' : ''}`;
+  // Android selectable text can inherit the parent's ink for transparent spans.
+  // Reserve glyph widths with spaces so a second clock can never be painted.
+  const clockSpace = [...time].map((character) => character === ':' ? '\u2008' : '\u2007').join('');
+  const reservation = `\u2007${clockSpace}${hasStatus ? '\u2007\u2007\u2007' : ''}`;
   return ` ${[...reservation].join('\u2060')}`;
 }
 

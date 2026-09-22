@@ -346,12 +346,21 @@ describe('Hermes commands and files integration', () => {
     const readStateSpy = vi.spyOn(bridge as any, 'runHermesPython');
 
     await bridge.start();
+    // Startup also probes native capabilities. Count the actual catalog read,
+    // then prove the public request reuses it without another Python operation.
+    expect(readStateSpy.mock.calls.filter(([script]) => typeof script === 'string'
+      && script.includes('list_authenticated_providers'))).toHaveLength(1);
+    const startupReads = readStateSpy.mock.calls.length;
+    expect((bridge as any).modelStateCache?.value).toMatchObject({
+      currentModel: 'moonshot-v1-8k',
+      currentProvider: 'custom:moonshot-local',
+    });
     await expect((bridge as any).dispatchRequest('model.get', {})).resolves.toMatchObject({
       currentModel: 'moonshot-v1-8k',
       currentProvider: 'custom:moonshot-local',
     });
 
-    expect(readStateSpy).toHaveBeenCalledTimes(1);
+    expect(readStateSpy).toHaveBeenCalledTimes(startupReads);
     expect((bridge as any).modelStateCache?.value).toMatchObject({
       currentModel: 'moonshot-v1-8k',
       currentProvider: 'custom:moonshot-local',

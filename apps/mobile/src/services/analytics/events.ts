@@ -527,7 +527,7 @@ export const analyticsEvents = {
     });
   },
 
-  sessionAction(properties: { action: 'pin' | 'rename' | 'reset' | 'delete' | 'create' }): void {
+  sessionAction(properties: { action: 'pin' | 'rename' | 'reset' | 'delete' | 'create' | 'export' }): void {
     captureAnalyticsEvent('session_action', properties);
   },
 
@@ -624,7 +624,7 @@ export const analyticsEvents = {
   appUpdateAnnouncementEntryTapped(properties: {
     version: string;
     entry: string;
-    action: 'open_url' | 'open_paywall';
+    action: 'open_url' | 'open_paywall' | 'open_bridge_upgrade';
   }): void {
     captureAnalyticsEvent('app_update_announcement_entry_tapped', properties);
   },
@@ -723,7 +723,7 @@ export const analyticsEvents = {
 
   chatAddMenuAction(properties: {
     backend?: AnalyticsBackend;
-    action: 'photo-library' | 'camera' | 'file' | 'recent-photos' | 'skills' | 'commands' | 'schedule' | 'tools';
+    action: 'photo-library' | 'camera' | 'file' | 'recent-photos' | 'skills' | 'commands' | 'schedule' | 'tools' | 'recover-draft' | 'session-files';
     count?: number;
   }): void {
     captureAnalyticsEvent('chat_add_menu_action', properties);

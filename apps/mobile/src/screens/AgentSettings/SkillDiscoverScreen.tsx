@@ -7,7 +7,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react-native';
-import type { AgentAdapter, AgentDescriptor, BackendKind } from '@clawket/agent-protocol';
+import type { AgentAdapter, BackendKind } from '@clawket/agent-protocol';
 import type { RootStackParamList } from '../../navigation/root-stack';
 import { Banner } from '../../components/ui/Banner';
 import { Button } from '../../components/ui/Button';
@@ -30,14 +30,13 @@ import {
 
 export type SkillDiscoverScreenProps = Readonly<{
   adapter: AgentAdapter;
-  agent: AgentDescriptor;
   backend: BackendKind;
   online: boolean;
   /** The runtime's foreground grace window is open: show quiet reconnecting instead of offline. */
   reconnecting?: boolean;
   navigation: Pick<NativeStackNavigationProp<RootStackParamList, 'AgentSettingsSection'>, 'goBack'>;
-  /** Runs once the install request is accepted and the page is released: opens the Agent's main chat. */
-  onInstallRequested: () => void;
+  /** Opens the Agent's main chat with reviewable input after releasing the route hold. */
+  onInstallRequested: (text: string) => void;
 }>;
 
 /**
@@ -48,7 +47,6 @@ export type SkillDiscoverScreenProps = Readonly<{
  */
 export function SkillDiscoverScreen({
   adapter,
-  agent,
   backend,
   online,
   reconnecting = false,
@@ -63,17 +61,10 @@ export function SkillDiscoverScreen({
   const [canGoBack, setCanGoBack] = useState(false);
   const [skill, setSkill] = useState<ClawHubSkillRef | null>(null);
   const [failed, setFailed] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   // Route removal is held while the web history can still go back; leaving on
   // purpose (Close, install) releases the hold and then performs the navigation.
   const [leave, setLeave] = useState<(() => void) | null>(null);
-  const active = useRef(true);
   const viewedSkill = useRef<string | null>(null);
-  useEffect(() => {
-    active.current = true;
-    return () => { active.current = false; };
-  }, []);
 
   usePreventRemove(canGoBack && leave === null, () => {
     webView.current?.goBack();
@@ -121,25 +112,12 @@ export function SkillDiscoverScreen({
     setLeave(() => () => navigation.goBack());
   }, [navigation]);
 
-  const install = useCallback(async () => {
-    const target = skill;
-    if (!target || !online || busy || !canInstall) return;
+  const install = useCallback(() => {
+    if (!skill || !canInstall || leave) return;
     analyticsEvents.skillInstallTapped({ source: 'clawhub_web', backend });
-    setBusy(true);
-    setError(null);
-    try {
-      await adapter.prompt(agent.mainSessionKey, {
-        text: buildClawHubInstallPrompt(backend, target),
-        idempotencyKey: `skill-install:${Date.now()}:${target.owner}/${target.slug}`,
-      });
-      if (!active.current) return;
-      setLeave(() => onInstallRequested);
-    } catch (failure: unknown) {
-      if (active.current) setError(errorMessage(failure, t('Failed to request installation', { ns: 'settings' })));
-    } finally {
-      if (active.current) setBusy(false);
-    }
-  }, [adapter, agent.mainSessionKey, backend, busy, canInstall, online, onInstallRequested, skill, t]);
+    const text = buildClawHubInstallPrompt(backend, skill);
+    setLeave(() => () => onInstallRequested(text));
+  }, [backend, canInstall, leave, onInstallRequested, skill]);
 
   const status = !online && reconnecting
     ? <ConnectionStatusPill placement="inline" status="reconnecting" message={t('Reconnecting…', { ns: 'common' })} />
@@ -181,7 +159,9 @@ export function SkillDiscoverScreen({
           allowsBackForwardNavigationGestures
           startInLoadingState
           renderLoading={() => <DiscoverSkeleton />}
-          decelerationRate="normal"
+          // Android Fabric forwards this straight to a Double-only delegate.
+          // 0.998 preserves the iOS wrapper's normal scrolling rate.
+          decelerationRate={0.998}
         />
         {failed ? (
           <View style={styles.notice}>
@@ -197,15 +177,13 @@ export function SkillDiscoverScreen({
       </View>
       {skill && canInstall ? (
         <View testID="skill-discover-footer" style={[styles.footer, { paddingBottom: insets.bottom + Space.md }]}>
-          {error ? <Banner testID="skill-discover-install-error" tone="bad" message={error} /> : null}
           <Text testID="skill-discover-handle" style={styles.handle} numberOfLines={1}>{clawHubSkillHandle(skill)}</Text>
           <Button
             testID="skill-discover-install"
             label={t('Install via Chat', { ns: 'common' })}
             size="lg"
-            loading={busy}
-            disabled={!online || busy}
-            onPress={() => { void install(); }}
+            disabled={leave !== null}
+            onPress={install}
           />
         </View>
       ) : null}
@@ -226,12 +204,6 @@ function DiscoverSkeleton(): React.JSX.Element {
 }
 
 const SKELETON_LINES: ReadonlyArray<`${number}%`> = ['44%', '92%', '84%', '38%', '90%', '76%'];
-
-function errorMessage(error: unknown, fallback: string): string {
-  if (error instanceof Error && error.message.trim()) return error.message;
-  if (typeof error === 'string' && error.trim()) return error;
-  return fallback;
-}
 
 const staticStyles = StyleSheet.create({
   skeletonLine: { height: LineHeight.body - Space.sm },

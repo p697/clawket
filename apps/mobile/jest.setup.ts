@@ -357,7 +357,7 @@ jest.mock('react-native-screens', () => ({
 // Mock @gorhom/bottom-sheet
 jest.mock('@gorhom/bottom-sheet', () => {
   const React = require('react');
-  const { View, TextInput, SectionList } = require('react-native');
+  const { View, TextInput, SectionList, Pressable } = require('react-native');
 
   const BottomSheetModal = React.forwardRef(function BottomSheetModal(
     {
@@ -421,6 +421,7 @@ jest.mock('@gorhom/bottom-sheet', () => {
     } & Record<string, unknown>) => React.createElement(View, props, children),
     BottomSheetModal,
     BottomSheetModalProvider: ({ children }: { children: React.ReactNode }) => children,
+    TouchableOpacity: Pressable,
     BottomSheetFlatList: ({ data = [], renderItem, ListHeaderComponent, ...props }: any) => React.createElement(View, props,
       ListHeaderComponent, ...data.map((item: any, index: number) => React.createElement(React.Fragment, { key: item.key ?? index }, renderItem({ item, index })))),
     BottomSheetScrollView: ({ children, contentContainerStyle: _contentContainerStyle, ...props }: any) => React.createElement(View, props, children),

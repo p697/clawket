@@ -243,5 +243,7 @@
   "Unable to open redemption. Please try again.": "No se puede abrir el canje. Inténtalo de nuevo.",
   "Last connected: {{time}}": "Última conexión: {{time}}",
   "Check your network and make sure the remote service is running.": "Comprueba tu red y que el servicio remoto esté funcionando.",
-  "View saved messages": "Ver mensajes guardados"
+  "View saved messages": "Ver mensajes guardados",
+  "Search and bulk export": "Búsqueda y exportación en lote",
+  "Skill and memory versions": "Versiones de habilidades y memoria"
 }

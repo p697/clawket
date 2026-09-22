@@ -203,8 +203,12 @@ export function validateAppConfig(source, label = 'app.json') {
   const plugins = Array.isArray(parsed?.expo?.plugins) ? parsed.expo.plugins : [];
   const localization = plugins.find((plugin) => Array.isArray(plugin) && plugin[0] === 'expo-localization');
   const options = localization?.[1];
-  if (!isPlainObject(options) || options.supportsRTL !== true) {
-    errors.push(`${label}: expo-localization plugin must set supportsRTL: true`);
+  const extra = parsed?.expo?.extra;
+  if ([options, extra].some(value => isPlainObject(value) && ('supportsRTL' in value || 'forcesRTL' in value))) {
+    errors.push(`${label}: omit static supportsRTL/forcesRTL; AppLanguageProvider owns runtime direction`);
+  }
+  if (!plugins.includes('./plugins/with-locales')) {
+    errors.push(`${label}: with-locales is required for native locale registration and RTL migration`);
   }
   if (!Array.isArray(options?.supportedLocales) || options.supportedLocales.join('\0') !== expected) {
     errors.push(`${label}: expo-localization supportedLocales must list exactly ${SUPPORTED_LOCALES.join(', ')}`);

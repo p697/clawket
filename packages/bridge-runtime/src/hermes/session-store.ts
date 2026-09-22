@@ -22,6 +22,8 @@ export type HermesBridgeSessionMessage = {
   toolStartedAt?: number;
   toolFinishedAt?: number;
   _nativeBoundaryId?: string;
+  /** In-memory projection metadata; never persist image bytes or native history. */
+  _imageCount?: number;
 };
 
 export type HermesBridgeSession = {

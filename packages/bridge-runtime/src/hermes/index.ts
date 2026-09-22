@@ -1,3 +1,9 @@
+import { SessionFileStore } from '../session-files.js';
+import { hermesFileRoots } from './session-files.js';
+import { supportsHermesDocuments } from './documents.js';
+import { supportsHermesModelHealth } from './model-health.js';
+import { HermesRunControlMethods, readHermesRunCapabilities } from './run-control.js';
+import { supportsNativeRunContext } from './native-run-context.js';
 import { createServer, type Server as HttpServer } from 'node:http';
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -7,7 +13,7 @@ import WebSocket, { WebSocketServer } from 'ws';
 import { WEBSOCKET_FRAME_LIMIT_BYTES } from '../frame-limit.js';
 import { normalizeBridgeVersion } from '../protocol.js';
 import { HermesCommandMethods, type HermesModelState } from './commands.js';
-import { HermesCronMethods } from './cron.js';
+import { HermesCronMethods, supportsHermesCronModels } from './cron.js';
 import { HermesHttpServerMethods, inspectHermesApi, probeHermesApi, type HermesLocalBridgeClient } from './http-server.js';
 import { HermesManagementMethods } from './management.js';
 import {
@@ -41,7 +47,6 @@ import {
   DEFAULT_SESSION_ID,
   HEALTH_POLL_INTERVAL_MS,
   HERMES_BOOT_TIMEOUT_MS,
-  HERMES_BRIDGE_CAPABILITIES,
   HERMES_STATE_DB_PATH,
   SESSION_STORE_PATH,
   USAGE_LEDGER_PATH,
@@ -106,6 +111,8 @@ export class HermesLocalBridge {
   readonly bridgeVersion: string | undefined;
   readonly hermesSourcePath: string;
   readonly hermesHomePath: string;
+  private readonly sessionFiles = new SessionFileStore();
+  private listingFiles = false;
   readonly hermesPythonPath: string;
   readonly pythonRunner: HermesPythonRunner;
   readonly nativeSessions: HermesNativeSessionReader;
@@ -119,6 +126,8 @@ export class HermesLocalBridge {
   wsServer: WebSocketServer | null = null;
   tickTimer: NodeJS.Timeout | null = null;
   healthTimer: NodeJS.Timeout | null = null;
+  hermesRunCapabilities: ReadonlySet<string> = new Set();
+  private runCapabilitiesLoaded = false;
   wsHeartbeatTimer: NodeJS.Timeout | null = null;
   hermesChild: ChildProcess | null = null;
   private managedApi = false;
@@ -268,7 +277,10 @@ export class HermesLocalBridge {
   }
 
   async stop(): Promise<void> {
+    this.sessionFiles.clear();
     this.operationGeneration += 1;
+    this.hermesRunCapabilities = new Set();
+    this.runCapabilitiesLoaded = false;
     this.managedApi = false;
     this.pythonRunner.stop();
     if (this.tickTimer) {
@@ -486,6 +498,18 @@ export class HermesLocalBridge {
       reachable = await this.ensureHermesApiReady();
       if (generation !== this.operationGeneration) return;
     }
+    if (reachable && !this.runCapabilitiesLoaded) {
+      const capabilities = new Set(await readHermesRunCapabilities(this.apiBaseUrl, this.apiKey));
+      if (await supportsNativeRunContext(this.runHermesPython.bind(this))) capabilities.add('hermes.native-run-context.v1');
+      if (await supportsHermesDocuments(this.runHermesPython.bind(this))) capabilities.add('hermes.documents.v1');
+      if (await supportsHermesModelHealth(this.runHermesPython.bind(this))) capabilities.add('hermes.model-health.v1');
+      if (await supportsHermesCronModels(this.runHermesPython.bind(this))) capabilities.add('hermes.cron-model.v1');
+      if (generation !== this.operationGeneration) return;
+      this.hermesRunCapabilities = capabilities;
+      this.runCapabilitiesLoaded = true;
+    } else if (!reachable) {
+      this.hermesRunCapabilities = new Set(); this.runCapabilitiesLoaded = false;
+    }
     if (reachable) {
       this.apiRecoveryAttempts = 0;
       this.apiRecoveryAfterMs = 0;
@@ -499,7 +523,7 @@ export class HermesLocalBridge {
       ts: Date.now(),
       hermesApiReachable: reachable,
       mode: 'hermes',
-      capabilities: [...HERMES_BRIDGE_CAPABILITIES],
+      capabilities: this.getBridgeCapabilities(),
       ...(this.bridgeVersion ? { bridgeVersion: this.bridgeVersion } : {}),
     });
   }
@@ -630,6 +654,7 @@ export class HermesLocalBridge {
         toolStartedAt: message.toolStartedAt,
         toolFinishedAt: message.toolFinishedAt,
         _nativeBoundaryId: message._nativeBoundaryId,
+        _imageCount: message._imageCount,
       }));
     localMessages = correlateLateNativeTools(nativeMessages, localMessages);
     if (bridgeSession) {
@@ -658,7 +683,7 @@ export class HermesLocalBridge {
       _nativeToolCallId: _nativeToolCallId,
       _sortId: _sortId,
       ...message
-    }) => message);
+    }) => ({ ...message, ...(_nativeId ? { id: `hermes:${sessionId}:${_nativeId}` } : {}) }));
     // Old clients may have cached a provider ID before its live alias was known.
     // Expose only confirmed aliases represented on this page, never guesses.
     const pageToolIds = new Set(page.flatMap(message => [
@@ -722,6 +747,7 @@ export class HermesLocalBridge {
   resetHermesSession(key: string): { ok: true; key: string; sessionId: string } {
     if (!this.sessionStore.owns(key)) throw new Error(`Hermes native session is read-only: ${key}`);
     this.cancelActiveRunsForSession(key);
+    this.sessionFiles.forget(key);
     const session = this.sessionStore.resetSession(key);
     return { ok: true, key, sessionId: session.sessionId };
   }
@@ -729,6 +755,7 @@ export class HermesLocalBridge {
   deleteHermesSession(key: string): { ok: true; key: string } {
     if (!this.sessionStore.owns(key)) throw new Error(`Hermes native session is read-only: ${key}`);
     this.cancelActiveRunsForSession(key);
+    this.sessionFiles.forget(key);
     this.sessionStore.deleteSession(key);
     this.updateSnapshot({ sessionCount: this.sessionStore.count() });
     return { ok: true, key };
@@ -741,7 +768,7 @@ export class HermesLocalBridge {
   async dispatchRequest(method: string, params: unknown): Promise<unknown> {
     // Keep whole config/session mutations serialized after making Python nonblocking.
     // Read-only requests and health must never wait behind these operations.
-    if (/^(model\.set|skills\.(update|delete|content\.update)|hermes\.(reasoning|fast)\.set|hermes\.cron\.jobs\.(create|update|pause|resume|run|remove)|chat\.send)$/.test(method)) {
+    if (/^(model\.set|skills\.(install|update|delete|content\.update)|hermes\.(reasoning|fast)\.set|hermes\.cron\.jobs\.(create|update|pause|resume|run|remove)|chat\.send)$/.test(method)) {
       if (this.queuedMutations >= 32) throw new Error('Hermes is busy. Try again shortly.');
       this.queuedMutations += 1;
       const generation = this.operationGeneration;
@@ -783,7 +810,7 @@ export class HermesLocalBridge {
           status: this.snapshot.hermesApiReachable ? 'ok' : 'degraded',
           ts: Date.now(),
           hermesApiReachable: this.snapshot.hermesApiReachable,
-          capabilities: [...HERMES_BRIDGE_CAPABILITIES],
+          capabilities: this.getBridgeCapabilities(),
           ...(this.bridgeVersion ? { bridgeVersion: this.bridgeVersion } : {}),
         });
       case 'sessions.list': {
@@ -798,6 +825,20 @@ export class HermesLocalBridge {
       }
       case 'sessions.create':
         return { session: this.createHermesSession(payload) };
+      case 'clawket.files.list': {
+        const key = readString(payload.sessionKey);
+        if (!key || key.length > 1024 || this.listingFiles) throw new Error('Session files unavailable.');
+        this.listingFiles = true;
+        const generation = this.operationGeneration;
+        try {
+          const history = await this.getHermesSessionHistory(key, 200);
+          const roots = await hermesFileRoots(this.runHermesPython.bind(this), this.hermesHomePath);
+          if (generation !== this.operationGeneration) throw new Error('Connection changed.');
+          return { files: this.sessionFiles.list(key, history.messages, roots) };
+        } finally { this.listingFiles = false; }
+      }
+      case 'clawket.files.read':
+        return this.sessionFiles.read(readString(payload.sessionKey), readString(payload.id), payload.offset as number);
       case 'chat.history': {
         const sessionKey = readString(payload.sessionKey);
         if (!sessionKey) throw new Error('chat.history requires sessionKey.');
@@ -807,6 +848,12 @@ export class HermesLocalBridge {
           payload.cursor,
         )));
       }
+      case 'exec.approval.list':
+        return this.listRunApprovals(readString(payload.sessionKey));
+      case 'exec.approval.resolve':
+        return this.handleExecApprovalResolve(payload);
+      case 'chat.steer':
+        return this.handleChatSteer(payload);
       case 'chat.send':
         return this.traceBridgeRequest(method, requestStartedAt, requestSeq, (await this.handleChatSend(payload)));
       case 'sessions.reset': {
@@ -871,6 +918,8 @@ export class HermesLocalBridge {
           readString(payload.content) ?? '',
         );
         return { ok: true };
+      case 'skills.install':
+        return this.installHermesSkill(payload);
       case 'skills.status':
         return (await this.getHermesSkillsStatus(readString(payload.agentId) || 'main'));
       case 'skills.get':
@@ -890,7 +939,7 @@ export class HermesLocalBridge {
         return (await this.updateHermesSkillContent(
           readString(payload.agentId) || 'main',
           readString(payload.skillKey),
-          readString(payload.content) ?? '',
+          typeof payload.content === 'string' ? payload.content : '',
         ));
       case 'sessions.usage':
         return this.readHermesUsageBundle(payload).usageResult;
@@ -902,6 +951,7 @@ export class HermesLocalBridge {
         };
       case 'model.current':
         return (await this.readHermesCurrentModelState());
+      case 'model.health': return this.getHermesModelHealth(payload);
       case 'model.get':
         return (await this.readHermesModelState({ caller: 'model.get' }));
       case 'model.set':
@@ -1019,7 +1069,7 @@ function mergeHermesHistoryMessages(
   nativeMessages = nativeMessages.map(message => {
     if (message.role === 'toolResult' && message.toolCallId) {
       const local = toolAliases.get(message.toolCallId);
-      if (local) return { ...message, toolCallId: local.toolCallId, toolName: local.toolName ?? message.toolName, isError: local.isError ?? message.isError };
+      if (local) return { ...message, toolCallId: local.toolCallId, toolName: local.toolName ?? message.toolName, isError: local.isError === true || message.isError === true };
     }
     if (message.role === 'assistant' && Array.isArray(message.content)) {
       return { ...message, content: message.content.map(block => {
@@ -1127,9 +1177,15 @@ function mergeHermesHistoryMessages(
 }
 
 function hermesHistorySemanticDigest(message: HermesHistoryMessage): string {
+  // Native Hermes persists one marker per image, while Bridge keeps clean text.
+  // Project only locally known image sends; never strip markers from user prose.
+  const imageCount = message.role === 'user' && Number.isInteger(message._imageCount)
+    && message._imageCount! > 0 && message._imageCount! <= 6 ? message._imageCount! : 0;
+  const content = imageCount && typeof message.content === 'string'
+    ? `${message.content}${'\n[screenshot]'.repeat(imageCount)}` : message.content;
   return createHash('sha256').update(JSON.stringify({
     role: message.role,
-    content: normalizeHermesHistoryContent(message.content),
+    content: normalizeHermesHistoryContent(content),
     toolName: message.toolName ?? '',
     toolCallId: message.toolCallId ?? '',
     isError: message.isError === true,
@@ -1142,8 +1198,10 @@ export interface HermesLocalBridge extends
   HermesHttpServerMethods,
   HermesManagementMethods,
   HermesStreamMethods,
+  HermesRunControlMethods,
   HermesUsageMethods {}
 
+installHermesMethods(HermesLocalBridge.prototype, HermesRunControlMethods.prototype);
 installHermesMethods(HermesLocalBridge.prototype, HermesCommandMethods.prototype);
 installHermesMethods(HermesLocalBridge.prototype, HermesCronMethods.prototype);
 installHermesMethods(HermesLocalBridge.prototype, HermesHttpServerMethods.prototype);

@@ -363,6 +363,37 @@ describe('useChatController message queue', () => {
     expect(result.current.listData).toEqual(before);
   });
 
+  it.each(['openclaw', 'hermes'] as const)('keeps the current %s turn after a user echo followed by stale history', async (backend) => {
+    const { result, handlers, rerender } = renderController(backend);
+    const older = [
+      { id: 'old-user', role: 'user', text: 'Previous question', timestampMs: Date.now() - 2000 },
+      { id: 'old-answer', role: 'assistant', text: 'Previous answer', timestampMs: Date.now() - 1000 },
+    ];
+    historyMock.messages = older;
+    rerender(undefined);
+    await typeAndSend(result, 'Current question');
+    const sent = historyMock.messages.at(-1)!;
+    const reconcile = (messages: any[]) => act(() => {
+      handlers().onUpdate?.({ type: 'history_reconciled', sessionKey: SESSION_KEY,
+        history: { key: SESSION_KEY, messages: [], hasActiveRun: true }, hasActiveRun: true, messages });
+    });
+    reconcile([...older, { ...sent, id: 'server-user', renderKey: undefined }]);
+    rerender(undefined);
+    const thinkingKey = result.current.listData.find(message => message.streaming)?.renderKey;
+    reconcile(older);
+    rerender(undefined);
+    expect(result.current.listData.slice().reverse().map(message => message.text))
+      .toEqual(['Previous question', 'Previous answer', 'Current question', '']);
+    expect(result.current.listData.find(message => message.streaming)?.renderKey).toBe(thinkingKey);
+    act(() => handlers().onUpdate?.(mapAdapterSessionUpdate({ type: 'agent_message_chunk',
+      sessionKey: SESSION_KEY, runId: 'run-1', text: 'Current answer streaming',
+      textMode: backend === 'openclaw' ? 'snapshot' : 'delta' })));
+    expect(result.current.listData.slice().reverse().map(message => message.text))
+      .toEqual(['Previous question', 'Previous answer', 'Current question', 'Current answer streaming']);
+    expect(result.current.listData.find(message => message.text === 'Current question')?.renderKey).toBe(sent.renderKey);
+    expect(result.current.listData.find(message => message.id === 'old-answer')?.streaming).not.toBe(true);
+  });
+
   it.each(['openclaw', 'hermes'] as const)('keeps a recovered %s tool run stable through a minute without text events', async (backend) => {
     const { result, adapter, rerender } = renderController(backend);
     const text = 'Checking the configured provider.';
@@ -804,6 +835,31 @@ describe('useChatController message queue', () => {
     await flush();
     expect(adapter.prompt).toHaveBeenCalledTimes(2);
     expect(adapter.prompt).toHaveBeenLastCalledWith(SESSION_KEY, expect.objectContaining({ text: 'second' }));
+  });
+
+  it.each(['openclaw', 'hermes'] as const)('%s keeps an acknowledged stop observable while the backend is active', async (backend) => {
+    const { result, adapter, handlers } = renderController(backend);
+    await typeAndSend(result, 'Run');
+    adapter.loadSession.mockResolvedValue({ key: SESSION_KEY, messages: [], hasActiveRun: true });
+    act(() => result.current.abortCurrentRun());
+    await flush();
+    await act(async () => { jest.advanceTimersByTime(5_001); });
+    await flush();
+    expect(result.current.isSending).toBe(true);
+    finishRun(handlers, 'run-1', 'cancelled');
+    await flush();
+    expect(result.current.isSending).toBe(false);
+  });
+
+  it('retains activity and exposes a failed stop instead of timing out into false success', async () => {
+    const { result, adapter } = renderController('hermes');
+    await typeAndSend(result, 'Run');
+    adapter.cancel.mockRejectedValueOnce(new Error('offline'));
+    act(() => result.current.abortCurrentRun());
+    await flush();
+    await act(async () => { jest.advanceTimersByTime(5_001); });
+    expect(result.current.isSending).toBe(true);
+    expect(result.current.sendFailure).toBe('Could not stop the task. Check its status and try again.');
   });
 
   it('pauses the queue when the user stops the run and resumes on Send now', async () => {

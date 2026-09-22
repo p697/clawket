@@ -301,7 +301,7 @@ export function IdentityScreen({
           <Button
             testID="agent-identity-save"
             label={t('Save', { ns: 'common' })}
-            variant="ghost"
+            variant="primary"
             loading={busy === 'save'}
             disabled={!dirty || !online || saving}
             onPress={() => { void save(); }}

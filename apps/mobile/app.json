@@ -148,7 +148,6 @@
       [
         "expo-localization",
         {
-          "supportsRTL": true,
           "supportedLocales": [
             "en",
             "zh-Hans",
@@ -178,6 +177,7 @@
       "./plugins/with-paste-input-setup",
       "./plugins/with-xcode-env",
       "./plugins/with-ios-pod-deployment-target",
+      "./plugins/with-home-widgets",
       "./plugins/with-ios-signing",
       [
         "expo-build-properties",

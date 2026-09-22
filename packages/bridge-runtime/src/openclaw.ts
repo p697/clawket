@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { chmod, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
+import { assertLegacyBootstrapStorage } from './openclaw/bootstrap-storage.js';
 
 export type OpenClawInfo = {
   configFound: boolean;
@@ -826,6 +827,7 @@ export async function issueLegacyOpenClawBootstrapToken(params: {
 
   return await withBootstrapLock(async () => {
     const stateDir = params.stateDir ?? getOpenClawStateDir();
+    await assertLegacyBootstrapStorage(stateDir);
     const statePath = getOpenClawBootstrapPath(stateDir);
     const state = await loadBootstrapState(statePath);
     const token = generatePairingToken();

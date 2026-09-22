@@ -115,7 +115,7 @@ describe('HermesLocalBridge capability advertisement', () => {
     try {
       await bridge.start();
       const health = await fetch(`${bridge.getHttpUrl()}/v1/hermes/health`).then((response) => response.json()) as any;
-      expect(health.capabilities).toEqual(['bridge.capabilities.v2', 'hermes.multi-session.v2']);
+      expect(health.capabilities).toEqual(['bridge.session-files.v1', 'bridge.capabilities.v2', 'hermes.multi-session.v2']);
       expect(health.bridgeVersion).toBe('3.0.0-test');
 
       const socket = new WebSocket(bridge.getWsUrl());
@@ -125,7 +125,7 @@ describe('HermesLocalBridge capability advertisement', () => {
         type: 'event',
         event: 'health',
         payload: {
-          capabilities: ['bridge.capabilities.v2', 'hermes.multi-session.v2'],
+          capabilities: ['bridge.session-files.v1', 'bridge.capabilities.v2', 'hermes.multi-session.v2'],
           bridgeVersion: '3.0.0-test',
         },
       });
@@ -138,7 +138,7 @@ describe('HermesLocalBridge capability advertisement', () => {
         id: 'health-1',
         ok: true,
         payload: {
-          capabilities: ['bridge.capabilities.v2', 'hermes.multi-session.v2'],
+          capabilities: ['bridge.session-files.v1', 'bridge.capabilities.v2', 'hermes.multi-session.v2'],
           bridgeVersion: '3.0.0-test',
         },
       });

@@ -318,7 +318,7 @@ export function PermissionsSection({
         <Text style={styles.sectionTitle}>{t('Pending Requests', { ns: 'settings' })}</Text>
           <SettingsGroup density="comfortable" testID="openclaw-approvals-list">
             {approvals.map((approval, index) => {
-              const expired = approval.expiresAtMs <= now;
+              const expired = approval.expiresAtMs !== null && approval.expiresAtMs <= now;
               return (
                 <Fragment key={approval.id}>
                   {index ? <SettingsDivider inset="content" /> : null}
@@ -463,8 +463,9 @@ export function DiagnosticsSection({
       <View style={styles.buttonRow}>
         <Button
           testID="openclaw-diagnostics-run"
-          label={t('Diagnose')}
-          variant="secondary"
+          label={t('Run diagnostics again')}
+          variant="outline"
+          multiline
           disabled={!online || repairing}
           onPress={onDiagnose}
           style={styles.buttonGrow}
@@ -606,7 +607,7 @@ export function BackupsSection({
 export function ManageSectionLoading({ diagnostics = false }: { diagnostics?: boolean }): React.JSX.Element {
   const { t } = useTranslation(['config', 'common']);
   return <LoadingState testID="openclaw-manage-loading"
-    message={diagnostics ? t('Running diagnostics…') : t('Loading settings')} />;
+    message={diagnostics ? t('Diagnosing — this may take a few seconds…') : t('Loading settings')} />;
 }
 
 export function SectionEmpty({

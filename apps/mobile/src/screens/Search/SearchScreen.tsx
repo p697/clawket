@@ -28,6 +28,7 @@ import {
   type FavoritedMessage,
 } from '../../services/message-favorites';
 import { analyticsEvents } from '../../services/analytics/events';
+import { useManualSessions } from '../../services/manual-sessions';
 import {
   buildSearchModel,
   resolveSearchPageState,
@@ -40,6 +41,8 @@ import {
   loadRecentSearches,
   rememberRecentSearch,
 } from './recent-searches';
+import { Keyboard } from 'react-native';
+import { ConversationArchiveSheet } from '../../features/sharing/ConversationArchiveSheet';
 import { SearchView } from './SearchView';
 
 const RECENT_SEARCH_SETTLE_MS = 400;
@@ -90,7 +93,9 @@ export function SearchScreen({
   const insets = useSafeAreaInsets();
   const runtime = useConnections();
   const roster = useRoster();
-  const { isPro: contextIsPro } = useProPaywall();
+  const manualSessions = useManualSessions();
+  const { isPro: contextIsPro, visible: paywallVisible, showPaywall } = useProPaywall();
+  const [archivesVisible, setArchivesVisible] = useState(false);
   const isPro = isProOverride ?? contextIsPro;
   const [query, setQuery] = useState(route.params?.query ?? '');
   const [filter, setFilter] = useState<SearchFilter>('all');
@@ -188,6 +193,7 @@ export function SearchScreen({
     favorites,
     capabilitiesByConnection,
     isPro,
+    manualSessions,
     resolveThreadLockedReason,
     canOpenThread,
   }), [
@@ -198,6 +204,7 @@ export function SearchScreen({
     favorites,
     filter,
     isPro,
+    manualSessions,
     messageMatches,
     query,
     resolveThreadLockedReason,
@@ -285,6 +292,7 @@ export function SearchScreen({
   }, [offline, runtime.error]);
 
   return (
+    <>
     <SearchView
       state={state}
       query={query}
@@ -298,6 +306,7 @@ export function SearchScreen({
       topInset={insets.top}
       bottomInset={insets.bottom}
       onBack={() => navigation.goBack()}
+      onOpenArchives={() => { Keyboard.dismiss(); setArchivesVisible(true); }}
       onChangeQuery={setQuery}
       onChangeFilter={setFilter}
       onSelectResult={selectResult}
@@ -308,5 +317,8 @@ export function SearchScreen({
       onRetry={retry}
       onOpenPermission={() => navigation.navigate('Paywall', { reason: 'messageHistory' })}
     />
+    <ConversationArchiveSheet visible={archivesVisible} suspended={paywallVisible} isPro={isPro} onClose={() => setArchivesVisible(false)}
+      onRequirePro={(action) => { if (onOpenPaywall) onOpenPaywall('archiveTools', action); else showPaywall('archiveTools'); }} />
+    </>
   );
 }

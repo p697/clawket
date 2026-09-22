@@ -19,6 +19,8 @@ export type ProFeature =
   | 'modelManage'
   | 'usage'
   | 'messageHistory'
+  | 'archiveTools'
+  | 'documentVersions'
   | 'sessionHistory'
   | 'launch'
   | 'settingsMembershipPreview';

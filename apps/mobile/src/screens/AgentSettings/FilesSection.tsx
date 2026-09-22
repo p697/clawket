@@ -127,7 +127,7 @@ function FilesContent({
               {index ? <SettingsDivider inset="content" /> : null}
               <SettingsRow
                 testID={`agent-file-${file.name}`}
-                title={file.name}
+                title={file.name === 'MEMORY.md' ? t('Memory', { ns: 'common' }) : file.name === 'USER.md' ? t('About me', { ns: 'settings' }) : file.name}
                 value={file.missing
                   ? editable ? t('Create', { ns: 'common' }) : t('Missing', { ns: 'settings' })
                   : formatFileSize(file.size)}

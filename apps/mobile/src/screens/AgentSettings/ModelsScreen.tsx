@@ -4,7 +4,8 @@ import { usePreventRemove, type NavigationAction } from '@react-navigation/nativ
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
-import { Check, Plus } from 'lucide-react-native';
+import { Check, Plus, Activity } from 'lucide-react-native';
+import { ModelHealthSheet } from './ModelHealthSheet';
 import type {
   AgentAdapter,
   AgentDescriptor,
@@ -116,6 +117,7 @@ export function ModelsScreen({
   const [fallbacksVisible, setFallbacksVisible] = useState(false);
   const [picker, setPicker] = useState<'primary' | 'fallback' | 'current' | null>(null);
   const [thinkingVisible, setThinkingVisible] = useState(false);
+  const [healthVisible, setHealthVisible] = useState(false);
   const [confirmation, setConfirmation] = useState<Confirmation>(null);
   const [pendingLeave, setPendingLeave] = useState<NavigationAction | null>(null);
   const [leaving, setLeaving] = useState(false);
@@ -388,12 +390,13 @@ export function ModelsScreen({
           <Button
             testID="agent-models-save"
             label={t('Save', { ns: 'common' })}
-            variant="ghost"
+            variant="primary"
             loading={busy === 'save'}
             disabled={!dirty || !online || saving}
             onPress={() => setConfirmation({ kind: 'save' })}
           />
-        ) : undefined}
+        ) : adapter.capabilities.modelHealth && operations?.health ? <FloatingButton icon={Activity}
+          accessibilityLabel={t('Model health', { ns: 'settings' })} onPress={() => setHealthVisible(true)} testID="agent-models-health" /> : undefined}
       />
       <ScrollView
         testID="agent-models-scroll"
@@ -591,6 +594,7 @@ export function ModelsScreen({
         } : undefined}
       />
 
+      <ModelHealthSheet visible={healthVisible} adapter={adapter} online={online} onClose={() => setHealthVisible(false)} />
       <FallbackModelsSheet
         visible={fallbacksVisible}
         fallbacks={fallbackRows}

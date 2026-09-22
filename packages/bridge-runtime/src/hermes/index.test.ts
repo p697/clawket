@@ -402,6 +402,9 @@ describe('HermesLocalBridge multi-session protocol', () => {
     const start = requests.find((request) => request.url.endsWith('/v1/runs'))!;
     expect(start.body.conversation_history).toEqual([]);
     expect(start.body.session_id).toMatch(/^clawket-hermes:main:/);
+    expect(bridge.sessionStore.findSession('main')?.messages[0]).toMatchObject({
+      role: 'user', content: 'look', _imageCount: 1,
+    });
     expect(start.body.input).toEqual([{
       role: 'user',
       content: [

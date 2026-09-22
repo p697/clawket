@@ -134,7 +134,7 @@ function routeChatEvent(
     const usage = isRecord(payload.usage)
       ? payload.usage as GatewayProtocolEvents['chatFinal']['usage']
       : undefined;
-    emit('chatFinal', { runId, sessionKey, message, usage });
+    emit('chatFinal', { runId, sessionKey, message, usage, ...(typeof payload.unappliedInput === 'string' && payload.unappliedInput.length <= 100_000 ? { unappliedInput: payload.unappliedInput } : {}) });
     emit('sessionsChanged', {});
     return { terminalSessionChange: true };
   }

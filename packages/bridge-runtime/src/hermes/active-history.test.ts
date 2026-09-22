@@ -24,6 +24,78 @@ async function setup() {
   return { bridge, session };
 }
 
+it('uses the native message identity across local echoes and restarts', async () => {
+  const { bridge, session } = await setup();
+  vi.mocked(bridge.nativeSessions.readHistoryBySessionId).mockResolvedValue({ sessionId: session.sessionId, title: '', updatedAt: 10_000,
+    messages: [{ role: 'user', timestamp: 10_000, content: 'Identity test', _nativeId: '42' }] });
+  bridge.sessionStore.appendMessage('main', { role: 'user', content: 'Identity test', ts: 9_900, runId: 'qa', _nativeBoundaryId: '41' });
+  const withEcho = await bridge.getHermesSessionHistory('main', 50);
+  expect(withEcho.messages).toHaveLength(1);
+  expect(withEcho.messages[0]).toMatchObject({ id: `hermes:${session.sessionId}:42` });
+  const stored = bridge.sessionStore.findSession('main')!;
+  stored.messages = [];
+  expect((await bridge.getHermesSessionHistory('main', 50)).messages[0]).toMatchObject({ id: `hermes:${session.sessionId}:42` });
+});
+
+it('matches native screenshot projections one-to-one while preserving clean local text', async () => {
+  const { bridge, session } = await setup();
+  const content = 'Describe this';
+  vi.mocked(bridge.nativeSessions.readHistoryBySessionId).mockResolvedValue({ sessionId: session.sessionId, title: '', updatedAt: 20_000,
+    messages: [
+      { role: 'user', timestamp: 10_000, content: 'Describe this\n[screenshot]', _nativeId: '42' },
+      { role: 'user', timestamp: 20_000, content: 'Describe this\n[screenshot]', _nativeId: '43' },
+      { role: 'user', timestamp: 20_001, content: 'Describe this', _nativeId: '44' },
+    ] });
+  bridge.sessionStore.appendMessage('main', { role: 'user', content, ts: 9_900, runId: 'first', _nativeBoundaryId: '41', _imageCount: 1 });
+  bridge.sessionStore.appendMessage('main', { role: 'user', content, ts: 19_900, runId: 'second', _nativeBoundaryId: '42', _imageCount: 1 });
+  const history = await bridge.getHermesSessionHistory('main', 50);
+  expect(history.messages).toHaveLength(3);
+  expect(history.messages.slice(0, 2)).toEqual([
+    expect.objectContaining({ id: `hermes:${session.sessionId}:42`, content }),
+    expect.objectContaining({ id: `hermes:${session.sessionId}:43`, content }),
+  ]);
+  expect(history.messages[2]).toMatchObject({ id: `hermes:${session.sessionId}:44`, content: 'Describe this' });
+});
+
+it('publishes cancellation only when the native stream confirms it', async () => {
+  const { bridge } = await setup();
+  let source!: ReadableStreamDefaultController<Uint8Array>;
+  const stream = new ReadableStream<Uint8Array>({ start(controller) { source = controller; } });
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(Response.json({ run_id: 'stop-run' })).mockResolvedValueOnce(new Response(stream)));
+  const broadcast = vi.spyOn(bridge, 'broadcastEvent');
+  await bridge.handleChatSend({ sessionKey: 'main', message: 'Wait', idempotencyKey: 'stop-test' });
+  source.enqueue(new TextEncoder().encode('data: {"event":"run.cancelled"}\n\n'));
+  await vi.waitFor(() => expect(bridge.activeRuns.size).toBe(0));
+  expect(broadcast.mock.calls.filter(([name, payload]) => name === 'chat' && (payload as any).state === 'aborted')).toHaveLength(1);
+  expect(broadcast.mock.calls.filter(([name, payload]) => name === 'chat' && (payload as any).state === 'final')).toHaveLength(0);
+});
+
+it('preserves whitespace-only and boundary deltas in live events and recovery text', async () => {
+  const { bridge } = await setup();
+  let source!: ReadableStreamDefaultController<Uint8Array>;
+  const stream = new ReadableStream<Uint8Array>({ start(controller) { source = controller; } });
+  vi.stubGlobal('fetch', vi.fn()
+    .mockResolvedValueOnce(Response.json({ run_id: 'spacing-run' }))
+    .mockResolvedValueOnce(new Response(stream))
+    .mockResolvedValueOnce(Response.json({ run_id: 'spacing-run', status: 'completed' })));
+  const broadcast = vi.spyOn(bridge, 'broadcastEvent');
+  await bridge.handleChatSend({ sessionKey: 'main', message: 'spacing', idempotencyKey: 'spacing' });
+  const deltas = ['Hello', ' ', ' world', '\n\n', '```python\n', '    print("你好")', '\n```'];
+  for (const delta of deltas) {
+    source.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ event: 'message.delta', delta })}\n\n`));
+  }
+  await vi.waitFor(() => expect(bridge.activeRuns.get('spacing-run')?.text).toBe(deltas.join('')));
+  expect(broadcast.mock.calls.filter(([name, payload]) => name === 'chat' && (payload as any).state === 'delta')
+    .map(([, payload]) => (payload as any).message.content)).toEqual(deltas);
+  expect(await bridge.getHermesSessionHistory('main', 50)).toMatchObject({
+    inFlightRun: { text: deltas.join('') },
+  });
+  source.close();
+  await vi.waitFor(() => expect(bridge.activeRuns.size).toBe(0));
+  expect(broadcast.mock.calls.filter(([name, payload]) => name === 'chat' && (payload as any).state === 'final')
+    .map(([, payload]) => (payload as any).message.content)).toEqual([deltas.join('')]);
+});
+
 it('recovers an actual streaming run after a client leaves, without another send', async () => {
   const { bridge, session } = await setup();
   let source!: ReadableStreamDefaultController<Uint8Array>;

@@ -1,3 +1,5 @@
+import { EnrichedMarkdownText } from 'react-native-enriched-markdown';
+import { createChatMarkdownStyle, getChatMarkdownFlavor, openChatMarkdownLink } from '../../components/chat/chatMarkdown';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
@@ -40,6 +42,7 @@ export function CronRunSheet({ run, loadContent, onOpenSession, onClose }: CronR
   const { t } = useTranslation(['common', 'settings']);
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
+  const markdownStyle = useMemo(() => createChatMarkdownStyle(theme.colors, FontSize.body), [theme.colors]);
   const [content, setContent] = useState<ContentState | null>(null);
   const pendingSession = useRef<string | null>(null);
   const loadContentRef = useRef(loadContent);
@@ -63,6 +66,12 @@ export function CronRunSheet({ run, loadContent, onOpenSession, onClose }: CronR
   const deliveries = loaded?.deliveries ?? [];
   const sentTargets = run?.delivery?.messageToolSentTo ?? [];
   const announced = Boolean(run && !deliveries.length && (run.deliveryStatus === 'delivered' || run.delivered === true) && run.summary?.trim());
+  const metadata: Array<{ title: string; value: string }> = [];
+  if (typeof run?.durationMs === 'number' && Number.isFinite(run.durationMs) && run.durationMs >= 0) metadata.push({ title: t('Duration', { ns: 'settings' }), value: formatDurationMs(run.durationMs) });
+  if (run?.model) metadata.push({ title: t('Model', { ns: 'settings' }), value: run.model });
+  if (run && (run.delivered !== undefined || (run.deliveryStatus && run.deliveryStatus !== 'unknown') || run.delivery?.messageToolSentTo?.length)) metadata.push({ title: t('Notifications', { ns: 'settings' }), value: describeDelivery(run, t) });
+  const renderMarkdown = (text: string, testID?: string) => <EnrichedMarkdownText testID={testID} markdown={text} markdownStyle={markdownStyle}
+    flavor={getChatMarkdownFlavor()} selectable onLinkPress={openChatMarkdownLink} />;
   const sessionKey = loaded?.sessionKey;
   const openSession = sessionKey && onOpenSession ? () => {
     pendingSession.current = sessionKey;
@@ -106,14 +115,14 @@ export function CronRunSheet({ run, loadContent, onOpenSession, onClose }: CronR
               {deliveries.map((delivery, index) => (
                 <View key={`${index}:${delivery.channel ?? ''}:${delivery.target ?? ''}`} style={styles.delivery}>
                   {describeTarget(delivery) ? <Text style={styles.caption}>{describeTarget(delivery)}</Text> : null}
-                  <Text selectable testID={`agent-cron-run-delivery-${index}`} style={styles.body}>{delivery.text}</Text>
+                  {renderMarkdown(delivery.text, `agent-cron-run-delivery-${index}`)}
                 </View>
               ))}
             </View>
           ) : loaded?.output ? (
             <View testID="agent-cron-run-output" style={styles.section}>
               <Text style={styles.label}>{t('Run output', { ns: 'settings' })}</Text>
-              <Text selectable style={styles.body}>{loaded.output}</Text>
+              {renderMarkdown(loaded.output)}
             </View>
           ) : announced ? (
             <View testID="agent-cron-run-announced" style={styles.section}>
@@ -121,7 +130,7 @@ export function CronRunSheet({ run, loadContent, onOpenSession, onClose }: CronR
               {describeTarget(run.delivery?.resolved ?? run.delivery?.intended ?? {}) ? (
                 <Text style={styles.caption}>{describeTarget(run.delivery?.resolved ?? run.delivery?.intended ?? {})}</Text>
               ) : null}
-              <Text selectable style={styles.body}>{run.summary}</Text>
+              {renderMarkdown(run.summary ?? '')}
             </View>
           ) : sentTargets.length && current && current.status !== 'loading' ? (
             <View testID="agent-cron-run-content-unavailable" style={styles.section}>
@@ -131,7 +140,7 @@ export function CronRunSheet({ run, loadContent, onOpenSession, onClose }: CronR
             </View>
           ) : null}
 
-          {!announced && (run.error || run.summary) ? (
+          {!announced && (run.error || (run.summary && loaded?.output?.trim() !== run.summary.trim())) ? (
             <View testID="agent-cron-run-summary" style={styles.section}>
               <Text style={styles.label}>{t('Summary', { ns: 'settings' })}</Text>
               <Text selectable style={[styles.body, run.error ? { color: theme.colors.bad } : null]}>{run.error ?? run.summary}</Text>
@@ -139,17 +148,12 @@ export function CronRunSheet({ run, loadContent, onOpenSession, onClose }: CronR
           ) : null}
           {run.deliveryError ? <Text selectable style={[styles.body, { color: theme.colors.bad }]}>{run.deliveryError}</Text> : null}
 
-          <SettingsGroup testID="agent-cron-run-detail-meta" style={styles.group}>
-            <SettingsRow style={styles.row} title={t('Duration', { ns: 'settings' })} value={formatDurationMs(run.durationMs)} />
-            {run.model ? (
-              <>
-                <SettingsDivider inset="none" />
-                <SettingsRow style={styles.row} title={t('Model', { ns: 'settings' })} value={run.model} />
-              </>
-            ) : null}
-            <SettingsDivider inset="none" />
-            <SettingsRow style={styles.row} title={t('Notifications', { ns: 'settings' })} value={describeDelivery(run, t)} />
-          </SettingsGroup>
+          {metadata.length ? <SettingsGroup testID="agent-cron-run-detail-meta" style={styles.group}>
+            {metadata.map((item, index) => <React.Fragment key={item.title}>
+              {index ? <SettingsDivider inset="none" /> : null}
+              <SettingsRow style={styles.row} title={item.title} value={item.value} />
+            </React.Fragment>)}
+          </SettingsGroup> : null}
 
           {openSession ? (
             <Button testID="agent-cron-run-open-session" label={t('View full conversation', { ns: 'settings' })}

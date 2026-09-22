@@ -1,3 +1,12 @@
+jest.mock('./components/SessionFilesSheet', () => ({ SessionFilesSheet: () => null }));
+import { createReplyConversation } from '../../services/reply-conversation';
+jest.mock('../../services/reply-conversation', () => ({ createReplyConversation: jest.fn(), replyConversationDraft: (message: any) => message.role === 'assistant' && !message.streaming ? message.text : null }));
+jest.mock('./components/DraftRecoverySheet', () => ({ DraftRecoverySheet: () => null }));
+jest.mock('./components/RunInputSheet', () => ({ RunInputSheet: () => null }));
+let mockSkillPickerProps: { onSelect: (skill: any) => void } | null = null;
+jest.mock('./components/SkillPickerSheet', () => ({ SkillPickerSheet: (props: any) => { mockSkillPickerProps = props; return null; } }));
+jest.mock('./components/SelectedSkill', () => ({ SelectedSkill: () => null }));
+jest.mock('../../services/incoming-share', () => ({ IncomingShareStore: { list: jest.fn(async () => []), remove: jest.fn(async () => undefined) } }));
 import React from 'react';
 import { act, render, waitFor } from '@testing-library/react-native';
 import { CAPABILITY_MATRIX } from '@clawket/agent-protocol';
@@ -38,6 +47,8 @@ const mockRuntime = {
 jest.mock('react-native', () => {
   const ReactRuntime = require('react');
   return {
+    Alert: { alert: jest.fn() },
+    AppState: { currentState: 'active', addEventListener: jest.fn(() => ({ remove: jest.fn() })) },
     StyleSheet: {
       create: <T,>(styles: T) => styles,
       flatten: (style: unknown) => style,
@@ -155,7 +166,9 @@ function createNavigationProps(): ThreadScreenProps {
   return {
     navigation: {
       goBack: jest.fn(),
+      setParams: jest.fn(),
       navigate: jest.fn(),
+      push: jest.fn(),
       replace: jest.fn(),
       pop: jest.fn(),
       getState: jest.fn(() => ({ index: 1, routes: [
@@ -284,6 +297,17 @@ function createApp(): Record<string, unknown> {
 }
 
 describe('ThreadScreen connection container', () => {
+  it('clears a selected skill with the composer instead of recreating a hidden draft', async () => {
+    const props = createNavigationProps();
+    const view = render(<ThreadScreen {...props} />);
+    await act(async () => mockSkillPickerProps?.onSelect({ name: 'arxiv', invocation: '$arxiv' }));
+    mockController.input = '$arxiv\n\nSummarize';
+    view.rerender(<ThreadScreen {...props} />);
+    expect(mockThreadViewProps?.input).toBe('Summarize');
+    await act(async () => mockThreadViewProps?.onChangeInput(''));
+    expect(mockController.setInput).toHaveBeenLastCalledWith('');
+  });
+
   let consoleErrorSpy: jest.SpyInstance;
 
   beforeEach(() => {
@@ -1070,8 +1094,8 @@ describe('ThreadScreen connection container', () => {
     expect(openPreview).toHaveBeenLastCalledWith(['file:///one.png', 'file:///two.png'], 1);
   });
 
-  it('keeps Hermes image actions while withholding non-image file entry points', () => {
-    adapter.capabilities = { ...CAPABILITY_MATRIX.hermes };
+  it('keeps image actions when Hermes has not negotiated documents', () => {
+    adapter.capabilities = { ...CAPABILITY_MATRIX.hermes, documentAttachments: false };
     render(<ThreadScreen {...createNavigationProps()} />);
 
     expect(mockThreadViewProps?.onPickImage).toBe(mockController.pickImage);
@@ -1084,12 +1108,32 @@ describe('ThreadScreen connection container', () => {
     expect(mockThreadOverlayProps?.onChooseFile).toBeUndefined();
   });
 
+  it.each(['openclaw', 'hermes'] as const)('dismisses the composer before opening sessions or settings on %s', backend => {
+    adapter.capabilities = { ...CAPABILITY_MATRIX[backend] };
+    const props = createNavigationProps();
+    const calls: string[] = [];
+    const onOpenSessionPanel = jest.fn(() => calls.push('sessions'));
+    const blur = jest.fn(() => calls.push('blur'));
+    (mockController.composerRef as React.MutableRefObject<ComposerHandle | null>).current = { focus: jest.fn(), blur, clear: jest.fn() };
+    render(<ThreadScreen {...props} onOpenSessionPanel={onOpenSessionPanel} />);
+    act(() => mockThreadViewProps?.onOpenSessionPanel?.());
+    expect(calls).toEqual(['blur', 'sessions']);
+    act(() => mockThreadViewProps?.onOpenSettings?.());
+    expect(blur).toHaveBeenCalledTimes(2);
+    expect(props.navigation.navigate).toHaveBeenCalledWith('AgentSettings', { connectionId: 'connection-1', agentId: 'atlas' });
+  });
+
   it('gates every Add sheet entry by backend capability for OpenClaw, Hermes and YouMind', () => {
     const props = createNavigationProps();
     adapter.capabilities = { ...CAPABILITY_MATRIX.openclaw };
     const view = render(<ThreadScreen {...props} />);
 
     expect(mockThreadViewProps?.onOpenAddMenu).toBeDefined();
+    const blur = jest.fn();
+    (mockController.composerRef as React.MutableRefObject<ComposerHandle | null>).current = { focus: jest.fn(), blur, clear: jest.fn() };
+    act(() => mockThreadViewProps?.onOpenAddMenu?.());
+    expect(blur).toHaveBeenCalledTimes(1);
+    expect(mockThreadOverlayProps?.addVisible).toBe(true);
     expect(mockThreadOverlayProps?.onAttachRecentPhotos).toBe(mockController.attachLocalImages);
     expect(mockThreadOverlayProps?.remainingAttachmentSlots).toBe(6);
     expect(mockThreadOverlayProps?.onOpenCommands).toBeDefined();
@@ -1215,4 +1259,126 @@ describe('ThreadScreen connection container', () => {
     expect(mockThreadViewProps?.state).toEqual({ kind: 'locked' });
     expect(mockThreadViewProps?.capabilities.chat).toBe(false);
   });
+
+test.each(['openclaw', 'hermes'] as const)('%s install draft waits for hydration, preserves text and never sends', async (backend) => {
+  const base = createNavigationProps();
+  adapter.capabilities = { ...CAPABILITY_MATRIX[backend] };
+  mockConnections.connections = [{ id: 'connection-1', backendKind: backend }];
+  const props = { ...base, route: { ...base.route, params: { ...base.route.params, composerDraft: { id: 'install-1', text: 'Install this skill' } } } };
+  mockController.draftReady = false;
+  mockController.input = 'Existing draft';
+  const view = render(<ThreadScreen {...props} />);
+  expect(mockController.setInput).not.toHaveBeenCalled();
+  mockController.draftReady = true;
+  view.rerender(<ThreadScreen {...props} />);
+  await waitFor(() => expect(mockController.setInput).toHaveBeenCalledWith('Existing draft\n\nInstall this skill'));
+  expect(props.navigation.setParams).toHaveBeenCalledWith({ composerDraft: undefined });
+  mockController.input = 'Edited draft';
+  view.rerender(<ThreadScreen {...props} />);
+  expect(mockController.setInput).toHaveBeenCalledTimes(1);
+  expect(mockController.onSend).not.toHaveBeenCalled();
+});
+
+test('installation input stays pending until the destination session is active and focused', () => {
+  const base = createNavigationProps();
+  const props = { ...base, route: { ...base.route, params: { ...base.route.params, composerDraft: { id: 'install-2', text: 'Install skill' } } } };
+  mockController.draftReady = true;
+  mockController.input = '';
+  mockController.sessionKey = 'agent:other:main';
+  const view = render(<ThreadScreen {...props} />);
+  expect(mockController.setInput).not.toHaveBeenCalled();
+  mockController.sessionKey = base.route.params.sessionKey;
+  mockFocused = false;
+  view.rerender(<ThreadScreen {...props} />);
+  expect(mockController.setInput).not.toHaveBeenCalled();
+  mockFocused = true;
+  view.rerender(<ThreadScreen {...props} />);
+  expect(mockController.setInput).toHaveBeenCalledWith('Install skill');
+  expect(mockController.onSend).not.toHaveBeenCalled();
+});
+
+test.each(['openclaw', 'hermes'])('voice widget starts recording directly for %s without replacing a draft', async (backend) => {
+  const base = createNavigationProps();
+  const props = { ...base, route: { ...base.route, params: { ...base.route.params, shortcut: 'voice' as const } } };
+  mockController.draftReady = true;
+  mockConnections.connections = [{ id: 'connection-1', backendKind: backend }];
+  mockController.input = 'Keep my draft';
+  mockController.startVoiceInput = jest.fn();
+  render(<ThreadScreen {...props} />);
+  await waitFor(() => expect(mockController.startVoiceInput).toHaveBeenCalledTimes(1));
+  expect(mockController.setInput).not.toHaveBeenCalled();
+  expect(props.navigation.setParams).toHaveBeenCalledWith({ shortcut: undefined });
+});
+
+test('voice widget waits for focus, capability, restored draft and the matching active session', async () => {
+  const base = createNavigationProps();
+  const props = { ...base, route: { ...base.route, params: { ...base.route.params, shortcut: 'voice' as const } } };
+  mockController.startVoiceInput = jest.fn();
+  mockController.draftReady = false;
+  const view = render(<ThreadScreen {...props} />);
+  expect(props.navigation.setParams).not.toHaveBeenCalledWith({ shortcut: undefined });
+  mockController.draftReady = true;
+  mockFocused = false;
+  view.rerender(<ThreadScreen {...props} />);
+  expect(props.navigation.setParams).not.toHaveBeenCalledWith({ shortcut: undefined });
+  mockFocused = true;
+  mockController.voiceInputSupported = false;
+  view.rerender(<ThreadScreen {...props} />);
+  expect(props.navigation.setParams).not.toHaveBeenCalledWith({ shortcut: undefined });
+  mockController.voiceInputSupported = true;
+  mockController.sessionKey = 'another-session';
+  view.rerender(<ThreadScreen {...props} />);
+  expect(props.navigation.setParams).not.toHaveBeenCalledWith({ shortcut: undefined });
+  expect(mockController.startVoiceInput).not.toHaveBeenCalled();
+  mockController.sessionKey = base.route.params.sessionKey;
+  view.rerender(<ThreadScreen {...props} />);
+  await waitFor(() => expect(mockController.startVoiceInput).toHaveBeenCalledTimes(1));
+  expect(mockController.onSend).not.toHaveBeenCalled();
+});
+
+  test('opens a prepared reply continuation and ignores a late result after leaving the source', async () => {
+    const props = createNavigationProps();
+    const reply = { id: 'reply', role: 'assistant' as const, text: 'Selected answer' };
+    jest.mocked(createReplyConversation).mockResolvedValueOnce({ key: 'new-chat' } as any);
+    mockRuntime.getSnapshot.mockReturnValue({ activeConnectionId: 'connection-1', activeAdapter: adapter } as any);
+    const view = render(<ThreadScreen {...props} />);
+    await act(async () => mockThreadViewProps?.messageActions?.onBranch?.(reply));
+    expect(createReplyConversation).toHaveBeenCalledWith(adapter, 'atlas', 'agent:atlas:main', reply);
+    expect(props.navigation.push).toHaveBeenCalledWith('Thread', expect.objectContaining({ sessionKey: 'new-chat' }));
+    jest.mocked(props.navigation.push).mockClear();
+    let finish!: (value: any) => void;
+    jest.mocked(createReplyConversation).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    act(() => mockThreadViewProps?.messageActions?.onBranch?.(reply));
+    view.unmount();
+    await act(async () => finish({ key: 'late-chat' }));
+    expect(props.navigation.push).not.toHaveBeenCalled();
+  });
+
+  test.each(['camera', 'photos'] as const)('%s widget waits for a restored draft and opens its native picker once', async (shortcut) => {
+    const base = createNavigationProps();
+    const props = { ...base, route: { ...base.route, params: { ...base.route.params, shortcut } } };
+    mockController.draftReady = false;
+    mockController.takePhoto = jest.fn().mockResolvedValue(undefined);
+    mockController.pickImage = jest.fn().mockResolvedValue(undefined);
+    mockController.input = 'Keep my draft';
+    const view = render(<ThreadScreen {...props} />);
+    expect(mockController.takePhoto).not.toHaveBeenCalled();
+    expect(mockController.pickImage).not.toHaveBeenCalled();
+    mockController.draftReady = true;
+    view.rerender(<ThreadScreen {...props} />);
+    await waitFor(() => expect(shortcut === 'camera' ? mockController.takePhoto : mockController.pickImage).toHaveBeenCalledTimes(1));
+    expect(mockController.setInput).not.toHaveBeenCalled();
+    expect(props.navigation.setParams).toHaveBeenCalledWith({ shortcut: undefined });
+  });
+
+  test('a widget picker is cancelled when its thread leaves before navigation settles', async () => {
+    const base = createNavigationProps();
+    mockController.draftReady = true;
+    mockController.pickImage = jest.fn().mockResolvedValue(undefined);
+    const view = render(<ThreadScreen {...base} route={{ ...base.route, params: { ...base.route.params, shortcut: 'photos' } }} />);
+    view.unmount();
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 400)); });
+    expect(mockController.pickImage).not.toHaveBeenCalled();
+  });
+
 });

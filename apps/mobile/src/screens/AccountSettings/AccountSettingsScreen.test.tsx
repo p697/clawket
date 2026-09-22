@@ -208,6 +208,18 @@ type RenderNode = Readonly<{
   props: Readonly<Record<string, unknown>>;
 }>;
 
+it('keeps the Bridge guide discoverable in settings only while an upgrade is available', () => {
+  const props = createProps();
+  const view = render(<AccountSettingsScreen {...props} />);
+  expect(view.queryByTestId('account-settings-bridge-upgrade')).toBeNull();
+  const onUpgradeBridge = jest.fn();
+  view.rerender(<AccountSettingsScreen {...props} onUpgradeBridge={onUpgradeBridge} />);
+  fireEvent.press(view.getByTestId('account-settings-bridge-upgrade'));
+  expect(onUpgradeBridge).toHaveBeenCalledTimes(1);
+  view.rerender(<AccountSettingsScreen {...props} />);
+  expect(view.queryByTestId('account-settings-bridge-upgrade')).toBeNull();
+});
+
 function renderedFontSizes(view: ReturnType<typeof render>): ReadonlyArray<number> {
   const sizes = new Set<number>();
   view.UNSAFE_root

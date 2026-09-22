@@ -19,7 +19,6 @@ import { defaultAccentId } from '../../theme/accents';
 import type { AccentColorId } from '../../types';
 import { ChatAppearancePreviewCard, type ChatAppearancePreviewAgent } from '../../components/chat/ChatAppearancePreviewCard';
 import { Button } from '../../components/ui/Button';
-import { HeaderTextAction } from '../../components/ui/HeaderTextAction';
 import { ScreenHeader } from '../../components/ui/ScreenHeader';
 import { SegmentedTabs } from '../../components/ui/SegmentedTabs';
 import {
@@ -441,8 +440,11 @@ export function ChatAppearanceScreen({
         onBack={requestBack}
         backAccessibilityLabel={t('common:Back')}
         rightContent={(
-          <HeaderTextAction
-            label={saving ? t('common:Saving...') : t('common:Save')}
+          <Button
+            label={t('common:Save')}
+            accessibilityLabel={saving ? t('common:Saving...') : t('common:Save')}
+            variant="primary"
+            loading={saving}
             onPress={() => { void handleSave(); }}
             disabled={!isDirty || saving}
           />

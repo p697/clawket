@@ -56,7 +56,9 @@ export type ThreadAddAction =
   | 'skills'
   | 'commands'
   | 'schedule'
-  | 'tools';
+  | 'tools'
+  | 'recover-draft'
+  | 'session-files';
 
 export type ThreadAddSheetProps = Readonly<{
   visible: boolean;
@@ -69,10 +71,12 @@ export type ThreadAddSheetProps = Readonly<{
   onTakePhoto: () => void;
   onChooseFile?: () => void;
   onAttachRecentPhotos?: (uris: readonly string[]) => void | Promise<void>;
+  onOpenSessionFiles?: () => void;
   onOpenSkills?: () => void;
   onOpenCommands?: () => void;
   onCreateScheduledTask?: () => void;
   onOpenTools?: () => void;
+  onRecoverDraft?: () => void;
   /** Analytics hook: fires once per open after photo access is known. */
   onPresented?: (details: Readonly<{ photoAccess: RecentPhotosAccessState }>) => void;
   /** Analytics hook: fires when an action is chosen, with the photo count for recent picks. */
@@ -101,10 +105,12 @@ export function ThreadAddSheet({
   onTakePhoto,
   onChooseFile,
   onAttachRecentPhotos,
+  onOpenSessionFiles,
   onOpenSkills,
   onOpenCommands,
   onCreateScheduledTask,
   onOpenTools,
+  onRecoverDraft,
   onPresented,
   onAction,
 }: ThreadAddSheetProps): React.JSX.Element {
@@ -333,6 +339,7 @@ export function ThreadAddSheet({
   );
 
   const composeRows = [
+    onRecoverDraft ? menuRow('recover-draft', 'recover-draft', t('Recover draft'), FileText, onRecoverDraft) : null,
     showsPhotoStrip && onChooseFile
       ? menuRow('file', 'file', t('Choose File'), FileText, onChooseFile, attachmentActionsDisabled)
       : null,
@@ -341,6 +348,7 @@ export function ThreadAddSheet({
   ].filter(Boolean);
 
   const agentRows = [
+    onOpenSessionFiles ? menuRow('session-files', 'session-files', t('Session files'), FileText, onOpenSessionFiles) : null,
     onCreateScheduledTask ? menuRow('schedule', 'schedule', t('Schedule a task'), CalendarClock, onCreateScheduledTask) : null,
     onOpenTools ? menuRow('tools', 'tools', t('Tools'), SlidersHorizontal, onOpenTools) : null,
   ].filter(Boolean);

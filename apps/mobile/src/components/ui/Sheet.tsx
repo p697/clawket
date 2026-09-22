@@ -8,6 +8,8 @@ import React, {
   useState,
 } from 'react';
 import {
+  BackHandler,
+  Platform,
   type DimensionValue,
   type LayoutChangeEvent,
   type StyleProp,
@@ -96,6 +98,7 @@ export type SheetProps = {
   maxHeight?: DimensionValue;
   snapPoints?: BottomSheetModalProps['snapPoints'];
   initialIndex?: number;
+  stackBehavior?: BottomSheetModalProps['stackBehavior'];
   dismissOnBackdropPress?: boolean;
   keyboardBehavior?: BottomSheetModalProps['keyboardBehavior'];
   keyboardBlurBehavior?: BottomSheetModalProps['keyboardBlurBehavior'];
@@ -160,6 +163,7 @@ export function Sheet({
   maxHeight = '90%',
   snapPoints,
   initialIndex = 0,
+  stackBehavior,
   dismissOnBackdropPress = true,
   keyboardBehavior = 'interactive',
   keyboardBlurBehavior = 'restore',
@@ -224,6 +228,17 @@ export function Sheet({
       modalRef.current?.dismiss();
     }
   }, [visible]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android' || !visible) return;
+    // Register only while presented: the last opened sheet consumes Back before
+    // navigation, including nested sheets. A nondismissible sheet still blocks it.
+    const listener = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (dismissOnBackdropPress) onCloseRef.current();
+      return true;
+    });
+    return () => listener.remove();
+  }, [visible, dismissOnBackdropPress]);
 
   const handleDismiss = useCallback(() => {
     presentedRef.current = false;
@@ -311,6 +326,7 @@ export function Sheet({
       ref={modalRef}
       accessible={false}
       index={initialIndex}
+      stackBehavior={stackBehavior}
       enableDynamicSizing={!usesFixedSnapPoints}
       maxDynamicContentSize={usesFixedSnapPoints ? undefined : maxDynamicContentSize}
       snapPoints={snapPoints}

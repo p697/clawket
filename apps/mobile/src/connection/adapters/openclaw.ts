@@ -1,5 +1,10 @@
+import { requestLocalUsage } from '../../services/usage-time-zone';
+import type { SessionFilesOperations } from '@clawket/agent-protocol';
+import { openClawHistoryRequest, openClawHistoryCursor } from './openclaw-history-pagination';
+import { withSkillInvocations } from './skill-invocation';
 import {
   AdapterError,
+  resolveCapabilities,
   type AgentDescriptor,
   type ChannelAccountEnabledWrite,
   type ChannelRoutingSettings,
@@ -45,6 +50,7 @@ import {
   toAdapterError,
   type GatewayAdapterOptions,
   type GatewaySessionRecord,
+  type GatewayHistoryPayload,
 } from './gateway-adapter';
 import { OPENCLAW_GATEWAY_PROTOCOL_PROFILE } from './gateway-profiles';
 import { extractCronDeliveries, resolveCronRunSessionKey } from './cron-run-content';
@@ -68,6 +74,13 @@ export type OpenClawConnectMetaGateway = {
 };
 
 export class OpenClawAdapter extends GatewayAdapterBase {
+  public get sessionFiles(): SessionFilesOperations | undefined {
+    if (!this.capabilities.sessionFiles) return undefined;
+    return {
+      list: sessionKey => this.invoke(() => this.gateway.request('clawket.files.list', { sessionKey })),
+      read: (sessionKey, id, offset) => this.invoke(() => this.gateway.request('clawket.files.read', { sessionKey, id, offset })),
+    };
+  }
   public readonly management: ManagementOperations;
 
   private bridgeCapabilityMode: OpenClawBridgeCapabilityMode;
@@ -92,7 +105,16 @@ export class OpenClawAdapter extends GatewayAdapterBase {
       || !options.loadBridgeCapabilityMode;
     this.loadBridgeCapabilityMode = options.loadBridgeCapabilityMode;
     this.onBridgeCapabilityMode = options.onBridgeCapabilityMode;
+    this.currentCapabilities = resolveCapabilities('openclaw', { sessionFiles: false });
     this.management = this.createManagementOperations();
+  }
+
+  protected override historyRequest(key: string, options?: { limit?: number; cursor?: string }): Record<string, unknown> {
+    return openClawHistoryRequest(key, options);
+  }
+
+  protected override historyCursor(key: string, payload: GatewayHistoryPayload | undefined): string | undefined {
+    return openClawHistoryCursor(key, payload);
   }
 
   public get negotiatedBridgeCapabilityMode(): OpenClawBridgeCapabilityMode {
@@ -237,6 +259,8 @@ export class OpenClawAdapter extends GatewayAdapterBase {
   }
 
   protected override handleGatewayConnectionTransition(state: LegacyConnectionState): void {
+    this.currentCapabilities = resolveCapabilities('openclaw', { sessionFiles: state === 'ready'
+      && this.gateway.supportsMethod?.('clawket.files.list') === true && this.gateway.supportsMethod?.('clawket.files.read') === true });
     if (state === 'connecting') this.v2HandshakeStarted = false;
     if (state === 'challenging') this.v2HandshakeStarted = true;
   }
@@ -424,7 +448,7 @@ export class OpenClawAdapter extends GatewayAdapterBase {
         setCost: (write) => this.invoke(() => this.writeCatalogModelCost(write)),
       },
       skills: {
-        status: (agentId) => this.invoke(() => this.gateway.getSkillsStatus(agentId)),
+        status: async (agentId) => withSkillInvocations(await this.invoke(() => this.gateway.getSkillsStatus(agentId)), 'reference'),
         get get() {
           return adapter.gateway.supportsMethod?.('skills.get')
             ? (key: string, params?: { agentId?: string; filePath?: string | null }) => adapter.invoke(() => adapter.gateway.getSkillDetail(key, params))
@@ -467,8 +491,8 @@ export class OpenClawAdapter extends GatewayAdapterBase {
         },
       },
       usage: {
-        sessions: (params) => this.invoke(() => this.gateway.fetchUsage(params)),
-        cost: (params) => this.invoke(() => this.gateway.fetchCostSummary(params)),
+        sessions: (params) => this.invoke(() => requestLocalUsage((query) => this.gateway.fetchUsage(query), params)),
+        cost: (params) => this.invoke(() => requestLocalUsage((query) => this.gateway.fetchCostSummary(query), params)),
       },
       config: {
         view: () => this.invoke(() => this.gateway.getConfig()),

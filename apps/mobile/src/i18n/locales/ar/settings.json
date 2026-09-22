@@ -19,7 +19,7 @@
   "Cost unavailable": "التكلفة غير متاحة",
   "Hermes tracked token usage, but it could not determine a reliable dollar cost for this route.": "تتبّع Hermes استخدام الرموز، لكنه لم يتمكن من تحديد تكلفة موثوقة بالدولار لهذا المسار.",
   "Mixed cost sources": "مصادر تكلفة مختلطة",
-  "This range mixes priced usage with included or unpriced routes, so the dollar total is only a partial view.": "يجمع هذا النطاق بين استخدام مسعّر ومسارات مشمولة أو غير مسعّرة، لذا فإن الإجمالي بالدولار يمثل صورة جزئية فقط.",
+  "This range mixes priced usage with included or unpriced routes, so the dollar total is only a partial view.": "يشمل هذا الإجمالي الاستخدام الذي تُعرف تكلفته فقط.",
   "Estimated cost": "التكلفة التقديرية",
   "Hermes is showing an estimate for this route rather than a reconciled bill.": "يعرض Hermes تقديرًا لهذا المسار بدلًا من فاتورة مسوّاة.",
   "Search logs...": "البحث في السجلات…",
@@ -243,7 +243,6 @@
   "Blocked by allowlist": "محظور بواسطة قائمة السماح",
   "Failed to update skill": "تعذّر تحديث المهارة",
   "Failed to uninstall skill": "تعذّر إلغاء تثبيت المهارة",
-  "Failed to request installation": "تعذّر طلب التثبيت",
   "Source": "المصدر",
   "Agent timezone": "المنطقة الزمنية للـ Agent",
   "Check configured services and summarize problems and suggested fixes.": "تحقق من الخدمات المهيأة ولخّص المشكلات والحلول المقترحة.",
@@ -380,5 +379,15 @@
   "Disable {{name}}?": "تعطيل {{name}}؟",
   "This account starts receiving messages again.": "سيعود هذا الحساب لاستقبال الرسائل.",
   "This account stops receiving messages until you enable it again.": "سيتوقف هذا الحساب عن استقبال الرسائل حتى تفعّله مجددًا.",
-  "Failed to update channel": "تعذّر تحديث القناة"
+  "Failed to update channel": "تعذّر تحديث القناة",
+  "About me": "نبذة عني",
+  "Version history": "سجل الإصدارات",
+  "No saved versions": "لا توجد إصدارات محفوظة",
+  "This file changed. Reopen it before saving.": "تغيّر الملف. أعد فتحه قبل الحفظ.",
+  "Model health": "حالة النموذج",
+  "Global model": "النموذج العام",
+  "Test connections": "اختبار الاتصالات",
+  "Restore version": "استعادة هذا الإصدار",
+  "This file is too large for version history.": "الملف كبير جدًا لحفظ سجل الإصدارات.",
+  "Scheduled task created": "تم إنشاء المهمة المجدولة"
 }

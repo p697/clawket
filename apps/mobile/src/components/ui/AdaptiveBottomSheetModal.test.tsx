@@ -79,6 +79,7 @@ describe('AdaptiveBottomSheetModal', () => {
         index={1}
         snapPoints={['58%', '92%']}
         enableDynamicSizing
+        style={{ opacity: 0.9 }}
         backgroundStyle={{ backgroundColor: 'surface' }}
         containerStyle={{ opacity: 0.9 }}
       >
@@ -105,6 +106,11 @@ describe('AdaptiveBottomSheetModal', () => {
       borderBottomLeftRadius: Radius.bottomSheet,
       borderBottomRightRadius: Radius.bottomSheet,
     });
+    expect(flattenStyle(nativeSheet.props.style)).toMatchObject({
+      opacity: 0.9,
+      overflow: 'hidden',
+      borderRadius: Radius.bottomSheet,
+    });
   });
 
   it('preserves caller geometry when iPad adaptation is disabled', () => {
@@ -116,6 +122,7 @@ describe('AdaptiveBottomSheetModal', () => {
         enableDynamicSizing={false}
         topInset={12}
         bottomInset={8}
+        style={{ opacity: 0.8 }}
       >
         <></>
       </AdaptiveBottomSheetModal>,
@@ -127,6 +134,7 @@ describe('AdaptiveBottomSheetModal', () => {
       snapPoints: ['58%', '92%'],
       topInset: 12,
       bottomInset: 8,
+      style: { opacity: 0.8 },
     });
   });
 });

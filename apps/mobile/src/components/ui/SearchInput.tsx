@@ -65,6 +65,7 @@ export function SearchInput({
         onChangeText={onChangeText}
         placeholder={placeholder}
         placeholderTextColor={theme.colors.inkTertiary}
+        maxFontSizeMultiplier={1.3}
         autoCapitalize="none"
         autoCorrect={false}
         autoFocus={autoFocus}

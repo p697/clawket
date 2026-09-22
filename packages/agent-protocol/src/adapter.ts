@@ -1,3 +1,4 @@
+import type { SessionFilesOperations } from './session-files';
 import type { Capabilities } from './capabilities';
 import type {
   AgentDescriptor,
@@ -48,6 +49,7 @@ export type SessionUpdate =
       sessionKey: string;
       runId: string;
       stopReason: 'end_turn' | 'cancelled' | 'error' | 'max_tokens';
+      unappliedInput?: string;
       message?: FinalMessage;
       usage?: Usage;
     }
@@ -97,11 +99,13 @@ export interface AgentAdapter {
   loadSession(key: string, options?: { limit?: number; cursor?: string }): Promise<SessionHistory>;
   prompt(key: string, input: PromptInput): Promise<{ runId: string }>;
   cancel(key: string, runId?: string): Promise<void>;
+  steer?(key: string, runId: string, text: string): Promise<void>;
   createSession?(agentId: string, options?: { title?: string }): Promise<SessionDescriptor>;
   patchSession?(key: string, patch: { title?: string }): Promise<void>;
   resetSession?(key: string): Promise<void>;
   deleteSession?(key: string): Promise<void>;
   management?: ManagementOperations;
+  sessionFiles?: SessionFilesOperations;
   on(event: 'update', listener: (update: SessionUpdate) => void): () => void;
   on(event: 'state', listener: (state: ConnectionState, reason?: string) => void): () => void;
   on(event: 'sessions', listener: (sessions: SessionDescriptor[]) => void): () => void;

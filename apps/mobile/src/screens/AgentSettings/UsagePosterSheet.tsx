@@ -20,6 +20,7 @@ import {
 
 export type UsagePosterData = Readonly<{
   cost: string;
+  costCaption?: string;
   tokens: string;
   messages: string;
   toolCalls: string;
@@ -115,7 +116,7 @@ export function UsagePosterSheet({
             </View>
           </View>
           <Text testID="agent-usage-poster-cost" style={styles.hero}>{data.cost}</Text>
-          <Text style={styles.secondaryText}>{t('Total cost', { ns: 'settings' })}</Text>
+          <Text style={styles.secondaryText}>{data.costCaption ?? t('Total cost', { ns: 'settings' })}</Text>
           <View style={styles.grid}>
             <PosterMetric label={t('Tokens', { ns: 'common' })} value={data.tokens} />
             <PosterMetric label={t('Messages', { ns: 'common' })} value={data.messages} />

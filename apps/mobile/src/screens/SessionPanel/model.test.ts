@@ -216,13 +216,13 @@ describe('SessionPanel model', () => {
   it('gates mutation actions with row permissions and capabilities', () => {
     const [row] = buildSessionPanelRows(roster(), { now: 1_000_000 });
     expect(availableSessionActions(row!, mutationCapabilities)).toEqual([
-      'pin', 'rename', 'reset', 'delete',
+      'export', 'pin', 'rename', 'reset', 'delete',
     ]);
     expect(availableSessionActions(row!, {
       sessionRename: false,
       sessionReset: true,
       sessionDelete: false,
-    })).toEqual(['pin', 'reset']);
+    })).toEqual(['export', 'pin', 'reset']);
   });
 
   it('normalizes rename drafts and rejects blank or unchanged titles', () => {

@@ -10,7 +10,7 @@ import type {
 import { CAPABILITY_MATRIX, createMockAdapter } from '@clawket/agent-protocol';
 import { analyticsEvents } from '../../services/analytics/events';
 import { CronFailureAckService, type CronFailureAckScope } from '../../services/cron-failure-acks';
-import { FontSize, Radius, Space } from '../../theme/tokens';
+import { ControlSize, FontSize, Radius, Space } from '../../theme/tokens';
 import {
   AgentSettingsScreen,
   AgentSettingsView,
@@ -88,6 +88,7 @@ jest.mock('react-native', () => {
     ),
   );
   return {
+    AppState: { addEventListener: jest.fn(() => ({ remove: jest.fn() })) },
     Platform: {
       OS: 'ios',
       select: (options: Record<string, unknown>) => options.ios ?? options.default,
@@ -256,7 +257,7 @@ describe('AgentSettingsView deep rendering', () => {
       paddingTop: 24 + Space.sm, paddingHorizontal: Space.lg, paddingBottom: Space.sm, backgroundColor: lightColors.canvasGrouped,
     });
     expect(flattenStyle(view.getByTestId('agent-settings-back').props.style)).toMatchObject({
-      borderRadius: Radius.full, backgroundColor: lightColors.surfaceFloating,
+      borderRadius: ControlSize.floatingButton / 2, backgroundColor: lightColors.surfaceFloating,
     });
     expect(flattenStyle(view.getByTestId('agent-settings-title').props.style)).toMatchObject({
       color: lightColors.ink,

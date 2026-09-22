@@ -19,7 +19,7 @@
   "Cost unavailable": "Chi phí không khả dụng",
   "Hermes tracked token usage, but it could not determine a reliable dollar cost for this route.": "Hermes đã theo dõi mức sử dụng token nhưng không xác định được chi phí đô la đáng tin cậy cho tuyến này.",
   "Mixed cost sources": "Nguồn chi phí hỗn hợp",
-  "This range mixes priced usage with included or unpriced routes, so the dollar total is only a partial view.": "Khoảng thời gian này gồm cả mức sử dụng có giá lẫn các tuyến đã bao gồm hoặc chưa định giá, nên tổng đô la chỉ phản ánh một phần.",
+  "This range mixes priced usage with included or unpriced routes, so the dollar total is only a partial view.": "Tổng này chỉ bao gồm phần sử dụng có chi phí xác định.",
   "Estimated cost": "Chi phí ước tính",
   "Hermes is showing an estimate for this route rather than a reconciled bill.": "Hermes hiển thị ước tính cho tuyến này thay vì hóa đơn đã đối soát.",
   "Search logs...": "Tìm trong nhật ký…",
@@ -243,7 +243,6 @@
   "Blocked by allowlist": "Bị chặn bởi danh sách cho phép",
   "Failed to update skill": "Không thể cập nhật kỹ năng",
   "Failed to uninstall skill": "Không thể gỡ cài đặt kỹ năng",
-  "Failed to request installation": "Không thể yêu cầu cài đặt",
   "Source": "Nguồn",
   "Agent timezone": "Múi giờ của Agent",
   "Check configured services and summarize problems and suggested fixes.": "Kiểm tra các dịch vụ đã cấu hình, tóm tắt vấn đề và đề xuất cách khắc phục.",
@@ -380,5 +379,15 @@
   "Disable {{name}}?": "Tắt {{name}}?",
   "This account starts receiving messages again.": "Tài khoản này sẽ nhận tin nhắn trở lại.",
   "This account stops receiving messages until you enable it again.": "Tài khoản này sẽ ngừng nhận tin nhắn cho đến khi bạn bật lại.",
-  "Failed to update channel": "Không thể cập nhật kênh"
+  "Failed to update channel": "Không thể cập nhật kênh",
+  "About me": "Về tôi",
+  "Version history": "Lịch sử phiên bản",
+  "No saved versions": "Chưa có phiên bản đã lưu",
+  "This file changed. Reopen it before saving.": "Tệp đã thay đổi. Hãy mở lại trước khi lưu.",
+  "Model health": "Trạng thái mô hình",
+  "Global model": "Mô hình toàn cục",
+  "Test connections": "Kiểm tra kết nối",
+  "Restore version": "Khôi phục phiên bản",
+  "This file is too large for version history.": "Tệp quá lớn để lưu lịch sử phiên bản.",
+  "Scheduled task created": "Đã tạo tác vụ theo lịch"
 }

@@ -140,3 +140,7 @@ describe('Agent usage presentation model', () => {
     expect(formatUsageCost(0)).toBe('$0.00');
   });
 });
+
+it('propagates missing-price completeness to the usage dashboard and poster', () => {
+  expect(buildUsageSummary(usage, { ...cost, totals: { ...totals, missingCostEntries: 19 } }).presentation?.mode).toBe('mixed');
+});

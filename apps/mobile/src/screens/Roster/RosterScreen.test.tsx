@@ -919,7 +919,7 @@ describe('RosterScreen', () => {
       position: 'absolute',
       width: 64,
       height: 64,
-      borderRadius: Radius.full,
+      borderRadius: 32,
       backgroundColor: lightColors.ink,
     });
     expect(light.getByTestId('roster-header').findAllByProps({ testID: 'roster-add' })).toHaveLength(0);
@@ -929,7 +929,7 @@ describe('RosterScreen', () => {
     expect(flattenStyle(light.getByTestId('roster-account').props.style)).toMatchObject({
       width: ControlSize.floatingButton,
       height: ControlSize.floatingButton,
-      borderRadius: Radius.full,
+      borderRadius: ControlSize.floatingButton / 2,
     });
     expect(renderedFontSizes(light)).toEqual([
       FontSize.caption,

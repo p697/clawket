@@ -86,3 +86,7 @@ For a lifecycle upgrade, verify Debug with Metro and Release with its embedded J
 ## Gradle cache paths
 
 SDK 57's Gradle 9.3.1 has an [upstream Kotlin DSL symlink regression](https://github.com/gradle/gradle/issues/36483): a symlinked `~/.gradle/caches` can report missing `libs` or `KtfmtCheckTask` even when the files exist. Use a `GRADLE_USER_HOME` whose cache directories are real paths (including on an external disk); do not symlink its `caches` or `modules-2`. Do not patch React Native's Gradle sources or disable checks to hide this host setup problem. On this workstation the verified build uses `/Volumes/Lucy-SSD/Relocated/Caches/dev/clawket-sdk57-gradle`.
+
+## Android incoming text files
+
+`patch-expo-sharing.mjs` preserves `EXTRA_STREAM` for text/plain sends and classifies text MIME streams as files in the raw parser, reviewed against expo-sharing 57.0.20. A MIME type alone does not imply an `EXTRA_TEXT` body. Both root and Mobile postinstall apply this idempotent, fail-closed patch; the required gate exercises source drift and missing-dependency failures. Keep URL/text bodies on their existing path and never resolve shared web URLs automatically. Android `expo.autolinking.android.buildFromSource` explicitly includes `expo-sharing`; SDK 57 otherwise links the unpatched prebuilt AAR even when the Kotlin source was changed. The regression checks this configuration. Remove or review the patch when upgrading Expo Sharing. See [Expo precompiled modules](https://docs.expo.dev/guides/prebuilt-expo-modules/).

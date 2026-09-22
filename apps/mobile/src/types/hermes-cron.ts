@@ -51,6 +51,9 @@ export type HermesCronOutputDetail = HermesCronOutputEntry & {
 };
 
 export type HermesCronJobUpsert = {
+  model?: string;
+  provider?: string;
+  base_url?: string;
   name: string;
   schedule: string;
   prompt: string;

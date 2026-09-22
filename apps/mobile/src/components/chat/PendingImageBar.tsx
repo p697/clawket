@@ -47,17 +47,17 @@ export function PendingImageBar({ images, canAddMore, attachDisabled = false, on
   return (
     <Animated.View testID="pending-attachments" layout={layout} style={styles.bar}>
       {images.map((img, idx) => (
-        <Animated.View key={`${img.uri}_${idx}`} entering={entering} exiting={exiting} layout={layout} style={styles.item}>
+        <Animated.View key={`${img.uri}_${idx}`} entering={entering} exiting={exiting} layout={layout} style={[styles.item, isFileAttachment(img) ? styles.fileItem : null]}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={img.fileName?.trim() || t('File', { ns: 'chat' })}
             onPress={() => onOpenPreview(idx)}
-            style={({ pressed }) => [styles.tile, pressed ? styles.pressed : null]}
+            style={({ pressed }) => [styles.tile, isFileAttachment(img) ? styles.document : null, pressed ? styles.pressed : null]}
           >
             {isFileAttachment(img) ? (
               <View testID={`pending-attachment-file-${idx}`} style={styles.fileTile}>
                 <FileText size={IconSize.md} color={colors.inkSecondary} strokeWidth={1.75} />
-                <Text style={styles.fileName} numberOfLines={1}>
+                <Text style={styles.fileName} numberOfLines={2}>
                   {img.fileName?.trim() || t('File', { ns: 'chat' })}
                 </Text>
               </View>
@@ -119,6 +119,11 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     item: {
       position: 'relative',
     },
+    fileItem: {
+      width: '75%',
+      maxWidth: '100%',
+      flexShrink: 1,
+    },
     tile: {
       width: TILE_SIZE,
       height: TILE_SIZE,
@@ -129,21 +134,27 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     pressed: {
       opacity: PRESSED_OPACITY,
     },
+    document: {
+      width: '100%',
+      height: undefined,
+      minHeight: TILE_SIZE,
+      justifyContent: 'center',
+    },
     image: {
       width: '100%',
       height: '100%',
     },
     fileTile: {
-      flex: 1,
+      flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'center',
-      gap: Space.xs,
-      paddingHorizontal: Space.xs,
+      gap: Space.sm,
+      padding: Space.md,
     },
     fileName: {
-      maxWidth: '100%',
-      fontSize: FontSize.caption,
-      lineHeight: LineHeight.caption,
+      flex: 1,
+      minWidth: 0,
+      fontSize: FontSize.secondary,
+      lineHeight: LineHeight.secondary,
       color: colors.inkSecondary,
       fontWeight: FontWeight.semibold,
     },

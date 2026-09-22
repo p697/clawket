@@ -28,6 +28,12 @@ export type DocumentContent = Readonly<{
 export type DocumentSource = Readonly<{
   /** A different key is a different document: the screen reloads and drops the draft. */
   key: string;
+  connectionId?: string;
+  /** Personal memory corrections are free; arbitrary files retain the existing gate. */
+  freeEditing?: boolean;
+  versioned?: boolean;
+  /** Render skill metadata as source, not Markdown headings. Editing stays verbatim. */
+  skillMarkdown?: boolean;
   load: () => Promise<DocumentContent>;
   save?: (content: string) => Promise<Readonly<{ ok: boolean }>>;
   onActivity?: (action: DocumentActivity) => void;
@@ -47,6 +53,9 @@ export function agentFileDocument(
   const document = analyticsAgentDocument(fileName);
   return {
     key: `${agent.connectionId}:${agent.agentId}:file:${fileName}`,
+    connectionId: agent.connectionId,
+    freeEditing: fileName === 'MEMORY.md' || fileName === 'USER.md',
+    versioned: fileName === 'MEMORY.md' || fileName === 'USER.md',
     load: async () => {
       const file = await get(fileName, agent.agentId);
       return {
@@ -74,6 +83,9 @@ export function skillSourceDocument(
   const updateContent = filePath ? undefined : skills.updateContent;
   return {
     key: `${adapter.connection.id}:${agentId}:skill:${skillKey}${filePath ? `:file:${filePath}` : ''}`,
+    connectionId: adapter.connection.id,
+    versioned: !filePath,
+    skillMarkdown: !filePath,
     load: async () => {
       const detail = await get(skillKey, { agentId, ...(filePath ? { filePath } : {}) });
       return {
@@ -87,4 +99,13 @@ export function skillSourceDocument(
     },
     ...(updateContent ? { save: (content: string) => updateContent(skillKey, content, agentId) } : {}),
   };
+}
+
+export function formatSkillDocumentMarkdown(content: string): string {
+  const header = /^(?:\uFEFF)?---\r?\n[\s\S]*?\r?\n---[\t ]*(?:\r?\n|$)/.exec(content)?.[0];
+  if (!header) return content;
+  let fenceLength = 3;
+  for (const match of header.matchAll(/`+/g)) fenceLength = Math.max(fenceLength, match[0].length + 1);
+  const fence = '`'.repeat(fenceLength);
+  return `${fence}yaml\n${header.replace(/\r?\n$/, '')}\n${fence}\n\n${content.slice(header.length)}`;
 }

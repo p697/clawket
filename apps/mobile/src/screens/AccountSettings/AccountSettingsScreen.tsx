@@ -4,7 +4,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import { Languages, Cable, Palette, CircleHelp, Info, SunMoon, Image } from 'lucide-react-native';
+import { Languages, Cable, Palette, CircleHelp, Info, SunMoon, Image, Download } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -51,6 +51,8 @@ export type AccountSettingsScreenProps = Readonly<{
   onRetry?: () => void;
   onOpenAction: (action: AccountSettingsAction) => void;
   onOpenConnection: (connectionId: string) => void;
+  /** Present only when a saved connection has verified legacy Bridge evidence. */
+  onUpgradeBridge?: () => void;
   onOpenPaywall: (
     reason: 'gatewayConnections' | 'appIcons' | 'generic',
     onContinue?: () => void,
@@ -168,6 +170,7 @@ export function AccountSettingsScreen({
   debugMode = false,
   onBack,
   onOpenSection,
+  onUpgradeBridge,
   onRetry,
   onOpenAction,
   onOpenPaywall,
@@ -233,6 +236,15 @@ export function AccountSettingsScreen({
                   <SettingsRow testID={entry.section === 'language' ? 'account-settings-app-language' : `account-settings-category-${entry.section}`} title={entry.title}
                     value={entry.value} leading={<SettingsIcon icon={entry.icon} tone="neutral" size={20} strokeWidth={1.75} />}
                     showChevron onPress={() => entry.section === 'language' ? setPreference('app-language') : onOpenSection?.(entry.section)} />
+                  {entry.section === 'connections' && onUpgradeBridge ? (
+                    <>
+                      <SettingsDivider inset="icon" />
+                      <SettingsRow testID="account-settings-bridge-upgrade"
+                        title={t('Update your Bridge', { ns: 'chat' })}
+                        leading={<SettingsIcon icon={Download} tone="neutral" size={20} strokeWidth={1.75} />}
+                        showChevron onPress={onUpgradeBridge} />
+                    </>
+                  ) : null}
                 </Fragment>
               ))}
             </SettingsGroup>

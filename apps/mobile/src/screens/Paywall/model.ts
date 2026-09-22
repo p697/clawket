@@ -6,6 +6,8 @@ export type PaywallMode = 'purchase';
 export type PaywallHero = 'connections' | 'agents' | 'manage' | 'logsFiles' | 'search' | 'generic';
 export type PaywallBenefitKind = 'connections' | 'agents' | 'manage' | 'logsFiles' | 'search' | 'combined' | 'memory' | 'sessions' | 'usage';
 export type PaywallTitleKey =
+  | 'Search and bulk export'
+  | 'Skill and memory versions'
   | 'Edit your Agent’s memory and files'
   | 'More possibilities with your Agents'
   | 'Explore your Agent conversations'
@@ -39,6 +41,8 @@ export type PaywallActionKey =
   | 'opening this message'
   | 'viewing usage trends';
 export type PaywallBenefitKey =
+  | 'Search and bulk export'
+  | 'Skill and memory versions'
   | 'Choose which models your Agent uses'
   | 'Conversations across channels and tasks'
   | "Shape your Agent's personality and memory"
@@ -74,7 +78,7 @@ const REPAIR_BENEFIT = {
 } as const;
 
 const SESSION_BENEFIT = { kind: 'sessions', labelKey: 'Conversations across channels and tasks' } as const;
-const MEMORY_BENEFIT = { kind: 'memory', labelKey: "Shape your Agent's personality and memory" } as const;
+const MEMORY_BENEFIT = { kind: 'memory', labelKey: 'Skill and memory versions' } as const;
 
 const COMBINED_BENEFIT = {
   kind: 'combined',
@@ -186,6 +190,12 @@ export function resolvePaywallContent(trigger: PaywallTrigger | null): PaywallCo
         actionKey: null,
         benefits: contextualBenefits(SESSION_BENEFIT),
       };
+    case 'archiveTools':
+      return { hero: 'search', titleKey: 'Search and bulk export', subtitleKey: null, subtitleFeatureKey: null, actionKey: null,
+        benefits: contextualBenefits({ kind: 'search', labelKey: 'Search and bulk export' }) };
+    case 'documentVersions':
+      return { hero: 'logsFiles', titleKey: 'Skill and memory versions', subtitleKey: null, subtitleFeatureKey: null, actionKey: null,
+        benefits: contextualBenefits(MEMORY_BENEFIT) };
     case 'messageHistory':
       return {
         hero: 'search',

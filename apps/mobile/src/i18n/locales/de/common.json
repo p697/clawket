@@ -243,5 +243,7 @@
   "Unable to open redemption. Please try again.": "Einlösung kann nicht geöffnet werden. Bitte versuche es erneut.",
   "Last connected: {{time}}": "Zuletzt verbunden: {{time}}",
   "Check your network and make sure the remote service is running.": "Prüfe dein Netzwerk und ob der Remote-Dienst läuft.",
-  "View saved messages": "Gespeicherte Nachrichten ansehen"
+  "View saved messages": "Gespeicherte Nachrichten ansehen",
+  "Search and bulk export": "Suche und Sammelexport",
+  "Skill and memory versions": "Versionen von Skills und Erinnerungen"
 }

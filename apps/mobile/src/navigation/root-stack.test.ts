@@ -14,6 +14,7 @@ describe('3.0 root navigation', () => {
       'DesignSystem',
       'AccountSettingsSection',
       'ReleaseNotes',
+      'BridgeUpgrade',
       'ChatAppearance',
       'HelpCenter',
       'Search',

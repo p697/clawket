@@ -193,6 +193,8 @@ export interface ChatMessage {
 }
 
 export interface SessionHistory {
+  /** Confirmed source IDs replaced by canonical tool call IDs in this snapshot. */
+  toolCallAliases?: Readonly<Record<string, string>>;
   key: string;
   messages: ChatMessage[];
   nextCursor?: string;
@@ -215,9 +217,11 @@ export type ApprovalRequest =
       kind: 'exec';
       id: string;
       command: string;
+      decisions?: ReadonlyArray<'allow-once' | 'allow-always' | 'deny'>;
       cwd?: string;
       host?: string;
-      expiresAtMs: number;
+      /** Null when the backend does not publish a deadline; its response remains authoritative. */
+      expiresAtMs: number | null;
     }
   | {
       kind: 'plugin';

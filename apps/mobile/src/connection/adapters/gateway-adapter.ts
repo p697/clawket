@@ -31,6 +31,7 @@ import {
   DEFAULT_GATEWAY_HISTORY_CACHE,
   mapGatewayHistoryMessages,
   mergeGatewayHistory,
+  normalizeToolCallAliases,
   preserveOpenClawCliHistorySegments,
   type GatewayHistoryCache,
 } from './gateway-history';
@@ -73,10 +74,12 @@ export type GatewaySessionRecord = SessionInfo & {
   allowedActions?: Partial<SessionDescriptor['allowedActions']>;
 };
 
-type GatewayHistoryPayload = {
+export type GatewayHistoryPayload = {
   messages?: unknown[];
   toolCallAliases?: unknown;
   nextCursor?: string;
+  nextOffset?: number;
+  hasMore?: boolean;
   hasActiveRun?: boolean;
   sessionId?: string;
   thinkingLevel?: string;
@@ -200,20 +203,25 @@ export abstract class GatewayAdapterBase implements AgentAdapter {
 
   public abstract listSessions(agentId?: string): Promise<SessionDescriptor[]>;
 
+  protected historyRequest(key: string, options?: { limit?: number; cursor?: string }): Record<string, unknown> {
+    return { sessionKey: key, limit: options?.limit ?? 50, ...(options?.cursor ? { cursor: options.cursor } : {}) };
+  }
+
+  protected historyCursor(_key: string, payload: GatewayHistoryPayload | undefined): string | undefined {
+    return typeof payload?.nextCursor === 'string' && payload.nextCursor ? payload.nextCursor : undefined;
+  }
+
   public async loadSession(
     key: string,
     options?: { limit?: number; cursor?: string },
   ): Promise<SessionHistory> {
-    const params = {
-      sessionKey: key,
-      limit: options?.limit ?? 50,
-      ...(options?.cursor ? { cursor: options.cursor } : {}),
-    };
+    const params = this.historyRequest(key, options);
     if (!this.runRevisions.has(key)) this.runRevisions.set(key, 0);
     const runRevision = this.runRevisions.get(key);
     const payload = await this.invoke(() => (
       this.gateway.request<GatewayHistoryPayload>('chat.history', params)
     ));
+    const nextCursor = this.historyCursor(key, payload);
     const rawMessages = Array.isArray(payload?.messages) ? payload.messages : [];
     const remoteMessages = mapGatewayHistoryMessages(key, rawMessages);
     const cachedMessages = !options?.cursor && this.historyCache
@@ -238,14 +246,14 @@ export abstract class GatewayAdapterBase implements AgentAdapter {
     const mergedMessages = mergeGatewayHistory(remoteMessages, cachedMessages, {
       openclawUserEchoes: this.connection.backendKind === 'openclaw',
       hermesToolAliases: this.connection.backendKind === 'hermes' ? payload?.toolCallAliases : undefined,
+      hermesUserPresentation: this.connection.backendKind === 'hermes',
     });
     return {
       key,
+      ...(this.connection.backendKind === 'hermes' ? { toolCallAliases: normalizeToolCallAliases(payload?.toolCallAliases) } : {}),
       messages: this.connection.backendKind === 'openclaw'
         ? preserveOpenClawCliHistorySegments(key, rawMessages, mergedMessages) : mergedMessages,
-      ...(typeof payload?.nextCursor === 'string' && payload.nextCursor
-        ? { nextCursor: payload.nextCursor }
-        : {}),
+      ...(nextCursor ? { nextCursor } : {}),
       hasActiveRun,
       ...(hasActiveRun && recoveredRunId ? { activeRun: {
         runId: recoveredRunId,

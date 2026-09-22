@@ -1,5 +1,12 @@
 import { CAPABILITY_MATRIX, type AgentAdapter, type AgentDescriptor } from '@clawket/agent-protocol';
-import { agentFileDocument, skillSourceDocument } from './document-model';
+import { agentFileDocument, skillSourceDocument, formatSkillDocumentMarkdown } from './document-model';
+
+it('renders frontmatter as source while preserving its text and Markdown body', () => {
+  const source = '---\nname: weather\ndescription: "``` example"\n---\n\n# Forecast\n';
+  expect(formatSkillDocumentMarkdown(source)).toBe('````yaml\n---\nname: weather\ndescription: "``` example"\n---\n````\n\n\n# Forecast\n');
+  expect(formatSkillDocumentMarkdown('# Title\n\n---\nBody')).toBe('# Title\n\n---\nBody');
+  expect(formatSkillDocumentMarkdown('---\nname: unfinished')).toBe('---\nname: unfinished');
+});
 
 const mockAgentFileActivity = jest.fn();
 jest.mock('../../services/analytics/events', () => ({

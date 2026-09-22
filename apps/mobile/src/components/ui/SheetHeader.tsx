@@ -78,7 +78,7 @@ export function SheetHeader({
       ) : (
         <Text style={styles.title} numberOfLines={1}>{title}</Text>
       )}
-      <View style={[styles.sideSlot, styles.trailingSlot]}>{right}</View>
+      <View style={styles.trailingSlot}>{right}</View>
     </View>
   );
 }
@@ -126,7 +126,11 @@ function createHeaderStyles(
       justifyContent: 'center',
     },
     trailingSlot: {
+      minWidth: ControlSize.floatingButton,
+      minHeight: ControlSize.floatingButton,
+      flexShrink: 0,
       alignItems: 'flex-end',
+      justifyContent: 'center',
     },
     titleSlot: {
       flex: 1,

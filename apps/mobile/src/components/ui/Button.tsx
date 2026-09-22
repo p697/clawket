@@ -14,6 +14,7 @@ import type { LucideIcon } from 'lucide-react-native';
 import { triggerLightImpact } from '../../services/haptics';
 import { useAppTheme } from '../../theme';
 import {
+  BorderWidth,
   ControlSize,
   FontSize,
   FontWeight,
@@ -23,7 +24,7 @@ import {
   createSurfaceStyle,
 } from '../../theme/tokens';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'destructive' | 'neutral' | 'text';
+export type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'destructive' | 'neutral' | 'text';
 export type ButtonSize = 'sm' | 'md' | 'lg';
 
 type Props = Omit<PressableProps, 'children' | 'style'> & {
@@ -130,6 +131,11 @@ function createStyles(
     neutral: { backgroundColor: colors.ink },
     neutralDisabled: { backgroundColor: colors.surface },
     secondary: { backgroundColor: colors.surface },
+    outline: {
+      backgroundColor: colors.canvas,
+      borderWidth: BorderWidth.hairline,
+      borderColor: colors.inkSecondary,
+    },
     ghost: {
       backgroundColor: 'transparent',
     },

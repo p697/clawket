@@ -243,5 +243,7 @@
   "Unable to open redemption. Please try again.": "تعذر فتح استرداد الرمز. حاول مرة أخرى.",
   "Last connected: {{time}}": "آخر اتصال: {{time}}",
   "Check your network and make sure the remote service is running.": "تحقق من شبكتك وتأكد من تشغيل الخدمة البعيدة.",
-  "View saved messages": "عرض الرسائل المحفوظة"
+  "View saved messages": "عرض الرسائل المحفوظة",
+  "Search and bulk export": "البحث والتصدير الجماعي",
+  "Skill and memory versions": "إصدارات المهارات والذاكرة"
 }

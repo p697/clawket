@@ -1096,14 +1096,23 @@ describe('cli pairing output', () => {
       .mockReturnValueOnce([])
       .mockReturnValueOnce(['[9999999999999] [clawket] relay connected attempt=1']);
 
+    execFileSyncMock.mockReturnValue(`40160 ${process.argv[1]} hermes run --host 0.0.0.0 --port 4321\n40161 ${process.argv[1]} hermes relay run --host 0.0.0.0 --port 4321\n35917 python -m hermes_cli.main gateway\n`);
+    const killSpy = vi.spyOn(process, 'kill').mockImplementation((_pid, signal) => {
+      if (signal === 0) throw new Error('ESRCH');
+      return true;
+    });
     await import('./index.js');
 
     await vi.waitFor(() => {
       expect(restartServiceMock).toHaveBeenCalledTimes(1);
     });
 
+    expect(killSpy).toHaveBeenCalledWith(40160, 'SIGTERM');
+    expect(killSpy).toHaveBeenCalledWith(40161, 'SIGTERM');
+    expect(killSpy).not.toHaveBeenCalledWith(35917, 'SIGTERM');
     expect(spawnMock).not.toHaveBeenCalled();
     await vi.waitFor(() => expect(consoleLogSpy).toHaveBeenCalledWith('Hermes runtimes will be restored by the OpenClaw service launcher.'));
+    killSpy.mockRestore();
   });
 
   it('restores managed Hermes runtimes when the OpenClaw service launcher starts run --service', async () => {

@@ -25,6 +25,7 @@ Path: `apps/relay-registry`
    - Service binding to the matching relay worker.
    - Lets a newly claimed client token become usable immediately without waiting for KV propagation.
    - The public HTTP sync path remains a compatibility fallback when this binding is absent.
+   - Also used by the OpenClaw six-digit capability check. Bind to the same backend and environment Relay; a browser challenge on its public health URL must not be treated as lack of protocol support.
 
 3. `PAIR_REGISTER_LIMITER`
    - SQLite Durable Object namespace for the pairing-registration fixed-window limiter.
@@ -247,3 +248,13 @@ Hermes relay needs its own equivalent set of resources and must not reuse the Op
 1. Confirm the active Cloudflare account before deploy or tail operations with `npm run relay:cf:whoami` or `npx wrangler whoami`.
 2. If your login can access multiple accounts, set `account_id` in each local override file and treat missing account locks as a deploy blocker.
 3. Create and manage all bindings in your own Cloudflare account.
+
+## Production observability and configuration preparation
+
+Production edge admission and alert coverage are recorded in [2026-09-21 security review](../3.0/security-admission-2026-09-21.md). The two Pro rules cover Relay handshakes (120/IP/colo/minute) and both backend pairing routes (20/IP/colo/minute), using JSON 429 and 60-second mitigation. Keep API challenge exemptions without bypassing rate limiting. Authenticated health polling is outside these rules. Account budget and DDoS emails are enabled; daily Workers/DO/KV and session-recovery alerts remain incomplete.
+
+Hermes Bridge candidates yield on an explicit owner-replacement close (4010 / duplicate_socket or 4001 / replaced_by_new_bridge). The losing runtime closes its local transport and cancels retries; its CLI process remains available with a replacement diagnostic to prevent watchdog respawn. Stop duplicate instances before explicitly restarting the intended owner. This does not stop the local Hermes server or change normal network recovery, and a live CLI process alone is not proof that this runtime still owns Relay.
+
+Production Registry/Relay use sanitized application logs with query-string redaction. Keep `observability.logs.invocation_logs = false` and traces disabled: WebSocket URLs and request headers may carry credentials. Mirror these settings in the ignored production deployment configurations so the next source deploy preserves them.
+
+Configuration updates can create new Worker versions without changing code. Verify exported source hashes and refresh the production snapshot manifest/recovery deployment configurations before rollout; never overwrite already rehearsed recovery artifacts. See [2026-09-21 preparation](../3.0/production-config-2026-09-21.md) for the current anchors and the separate WAF/alerting ownership boundary.

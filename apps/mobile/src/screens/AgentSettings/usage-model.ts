@@ -1,3 +1,4 @@
+import { resolveCostPresentation } from '../../services/usage-cost-presentation';
 import type {
   CostPresentation,
   CostSummary,
@@ -91,7 +92,7 @@ export function buildUsageSummary(
       .filter((entry) => entry.count > 0)
       .sort((left, right) => right.count - left.count)
       .slice(0, USAGE_TOP_TOOLS),
-    presentation: cost?.costPresentation ?? usage?.costPresentation ?? null,
+    presentation: resolveCostPresentation(usage, cost),
   };
 }
 

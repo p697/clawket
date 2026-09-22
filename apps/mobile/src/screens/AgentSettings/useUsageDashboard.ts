@@ -1,3 +1,4 @@
+import { useUsageCalendar } from './useUsageCalendar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   AgentAdapter,
@@ -78,7 +79,8 @@ export function useUsageDashboard(
   const [rangeKey, setRangeKeyState] = useState<UsageRangeKey>(options.initialRange ?? 'today');
   const [, setVersion] = useState(0);
   const [cached, setCached] = useState(false);
-  const scope = `${agent.connectionId}:${agent.agentId}`;
+  const calendar = useUsageCalendar(now);
+  const scope = `${agent.connectionId}:${agent.agentId}:${calendar.key}`;
   const today = formatIsoDate(now());
   const range = useMemo(() => getUsageDateRange(rangeKey, nowRef.current()), [rangeKey, today]);
   const weekRange = useMemo(() => getUsageDateRange('7d', nowRef.current()), [today]);
@@ -145,6 +147,13 @@ export function useUsageDashboard(
     };
   }, [adapter, scope]);
 
+  useEffect(() => {
+    if (calendar.revision === 0) return;
+    for (const [id, entry] of storeFor(adapter)) {
+      if (id.startsWith(`${scope}:`)) storeFor(adapter).set(id, { ...entry, fetchedAt: 0 });
+    }
+  }, [adapter, calendar.revision, scope]);
+
   // Load the selected range, keep the week context for the single-day view,
   // then prefetch the other ranges once per scope so later switches are instant.
   useEffect(() => {
@@ -163,7 +172,7 @@ export function useUsageDashboard(
       }
     })();
     return () => { cancelled = true; };
-  }, [adapter, currentKey, load, range, rangeKey, scope, weekRange]);
+  }, [adapter, calendar.revision, currentKey, load, range, rangeKey, scope, weekRange]);
 
   const setRangeKey = useCallback((key: UsageRangeKey) => {
     setRangeKeyState(key);

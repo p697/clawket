@@ -243,5 +243,7 @@
   "Unable to open redemption. Please try again.": "เปิดหน้าแลกรหัสไม่ได้ โปรดลองอีกครั้ง",
   "Last connected: {{time}}": "เชื่อมต่อล่าสุด: {{time}}",
   "Check your network and make sure the remote service is running.": "ตรวจสอบเครือข่ายและตรวจสอบให้แน่ใจว่าบริการระยะไกลกำลังทำงาน",
-  "View saved messages": "ดูข้อความที่บันทึกไว้"
+  "View saved messages": "ดูข้อความที่บันทึกไว้",
+  "Search and bulk export": "ค้นหาและส่งออกเป็นชุด",
+  "Skill and memory versions": "เวอร์ชันทักษะและความจำ"
 }

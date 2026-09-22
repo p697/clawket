@@ -247,7 +247,7 @@ describe('createMockAdapter', () => {
     expect(hermes.management?.agents?.list).toBeDefined();
     expect(hermes.management?.agents?.files?.list).toBeDefined();
     expect(hermes.management?.config).toBeUndefined();
-    expect(hermes.management?.approvals).toBeUndefined();
+    expect(hermes.management?.approvals?.resolveExec).toBeDefined();
 
     const downgraded = createMockAdapter({
       ...fixture(),

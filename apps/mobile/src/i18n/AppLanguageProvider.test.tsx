@@ -14,7 +14,11 @@ function Consumer() { context = useAppLanguage(); return null; }
 const mount = () => render(<AppLanguageProvider><Consumer /></AppLanguageProvider>);
 
 describe('App language preferences', () => {
-  beforeEach(() => { jest.clearAllMocks(); });
+  beforeEach(() => {
+    jest.clearAllMocks();
+    I18nManager.isRTL = false;
+    jest.mocked(getLocales).mockReturnValue([{ languageCode: 'en' }] as unknown as ReturnType<typeof getLocales>);
+  });
 
   it('restores the saved choice on remount and uses a separate storage key', async () => {
     jest.mocked(AsyncStorage.getItem).mockResolvedValue('ja');
@@ -70,7 +74,8 @@ describe('App language preferences', () => {
     await waitFor(() => expect(context.language).toBe('de'));
     expect(reloadAppAsync).not.toHaveBeenCalled();
     await act(async () => { await context.setLanguage('fr'); });
-    expect(I18nManager.forceRTL).not.toHaveBeenCalled();
+    expect(I18nManager.allowRTL).toHaveBeenLastCalledWith(false);
+    expect(I18nManager.forceRTL).toHaveBeenLastCalledWith(false);
     expect(reloadAppAsync).not.toHaveBeenCalled();
     await act(async () => { await context.setLanguage('ar'); });
     expect(I18nManager.allowRTL).toHaveBeenCalledWith(true);
@@ -82,4 +87,48 @@ describe('App language preferences', () => {
     expect(reloadAppAsync).toHaveBeenCalledTimes(2);
     I18nManager.isRTL = false;
   });
+
+  it('restores Arabic across a native reload without requesting another reload', async () => {
+    jest.mocked(AsyncStorage.getItem).mockResolvedValue('ar');
+    const first = mount();
+    await waitFor(() => expect(reloadAppAsync).toHaveBeenCalledTimes(1));
+    expect(I18nManager.forceRTL).toHaveBeenLastCalledWith(true);
+    first.unmount();
+    // A new RN runtime reads the direction persisted by the previous runtime.
+    I18nManager.isRTL = true;
+    mount();
+    await waitFor(() => expect(i18n.changeLanguage).toHaveBeenCalledTimes(2));
+    expect(context.language).toBe('ar');
+    expect(reloadAppAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it('pins an explicit LTR choice even when device direction currently matches', async () => {
+    jest.mocked(AsyncStorage.getItem).mockResolvedValue('en');
+    mount();
+    await waitFor(() => expect(I18nManager.allowRTL).toHaveBeenCalledWith(false));
+    expect(I18nManager.forceRTL).toHaveBeenCalledWith(false);
+    expect(reloadAppAsync).not.toHaveBeenCalled();
+    await act(async () => { await context.setLanguage('zh-Hans'); });
+    expect(reloadAppAsync).not.toHaveBeenCalled();
+  });
+
+  it('leaves Arabic for Chinese once, then restores LTR on the next native runtime', async () => {
+    I18nManager.isRTL = true;
+    jest.mocked(AsyncStorage.getItem).mockResolvedValue('ar');
+    const first = mount();
+    await waitFor(() => expect(context.language).toBe('ar'));
+    expect(reloadAppAsync).not.toHaveBeenCalled();
+    await act(async () => { await context.setLanguage('zh-Hans'); });
+    expect(AsyncStorage.setItem).toHaveBeenLastCalledWith('clawket.appLanguage.v1', 'zh-Hans');
+    expect(I18nManager.allowRTL).toHaveBeenLastCalledWith(false);
+    expect(I18nManager.forceRTL).toHaveBeenLastCalledWith(false);
+    expect(reloadAppAsync).toHaveBeenCalledTimes(1);
+    first.unmount();
+    I18nManager.isRTL = false;
+    jest.mocked(AsyncStorage.getItem).mockResolvedValue('zh-Hans');
+    mount();
+    await waitFor(() => expect(context.language).toBe('zh-Hans'));
+    expect(reloadAppAsync).toHaveBeenCalledTimes(1);
+  });
+
 });

@@ -123,7 +123,8 @@ export function UsageSection({
     ? t('Estimated', { ns: 'settings' })
     : summary?.presentation?.mode === 'mixed'
       ? t('Partial', { ns: 'settings' })
-      : null;
+      : summary?.presentation?.mode === 'unknown'
+        ? t('Unpriced', { ns: 'settings' }) : null;
   const errorMessage = error ?? t('Failed to refresh usage data', { ns: 'settings' });
   const hasData = summary ? hasUsageData(summary) : false;
   const contentKey = summary ? `${rangeKey}:${summaryKey(summary)}:${weekSummary ? summaryKey(weekSummary) : ''}` : rangeKey;
@@ -250,7 +251,8 @@ export function UsageSection({
                   key={`${entry.provider ?? ''}:${entry.model ?? ''}:${index}`}
                   testID={`agent-usage-model-${index}`}
                   name={entry.model ?? entry.provider ?? t('Unknown model', { ns: 'settings' })}
-                  value={formatUsageValue(value, measure)}
+                  value={measure === 'cost' && entry.totals.missingCostEntries > 0 && value === 0
+                    ? t('Unpriced', { ns: 'settings' }) : formatUsageValue(value, measure)}
                   share={topModelValue > 0 ? value / topModelValue : 0}
                 />
               );
@@ -312,6 +314,10 @@ export function UsageSection({
             onAction={() => { void dashboard.refresh(); }}
           />
         ) : null}
+        {summary?.presentation?.mode === 'mixed' ? (
+          <Banner testID="agent-usage-partial" tone="neutral"
+            message={t('This range mixes priced usage with included or unpriced routes, so the dollar total is only a partial view.', { ns: 'settings' })} />
+        ) : null}
         {content}
       </View>
 
@@ -320,6 +326,7 @@ export function UsageSection({
         agent={agent}
         data={{
           cost: costLabel,
+          costCaption: costCaption ?? undefined,
           tokens: formatUsageTokens(summary?.totals?.totalTokens ?? 0),
           messages: String(summary?.messages ?? 0),
           toolCalls: String(summary?.toolCalls ?? 0),

@@ -71,6 +71,7 @@ import {
   Space,
 } from '../../theme/tokens';
 import { ApprovalCard } from '../../components/ui/ApprovalCard';
+import { ConfirmationModal } from '../../components/ui/ConfirmationModal';
 import { Banner } from '../../components/ui/Banner';
 import { ConnectionStatusPill } from '../../components/ui/ConnectionStatusPill';
 import { Bubble, useBubbleTypography } from '../../components/ui/Bubble';
@@ -225,6 +226,10 @@ export type ThreadMessageActions = Readonly<{
   onCopy: (message: UiMessage) => void;
   onToggleFavorite: (message: UiMessage) => void | Promise<MessageFavoriteToggleResult | void>;
   onShare: (message: UiMessage) => void;
+  onBranch?: (message: UiMessage) => void;
+  canBranch?: (message: UiMessage) => boolean;
+  onSchedule?: (message: UiMessage) => void;
+  canSchedule?: (message: UiMessage) => boolean;
 }>;
 
 /** Actions for a message still waiting in the local queue (`message.delivery`). */
@@ -266,6 +271,7 @@ export type ThreadViewProps = Readonly<{
   runCards?: ReadonlyArray<ThreadRunCard>;
   locale?: string;
   input: string;
+  selectedSkill?: React.ReactNode;
   isRunning: boolean;
   canSend: boolean;
   loadingMoreHistory?: boolean;
@@ -383,6 +389,7 @@ export function ThreadView({
   runCards = EMPTY_RUN_CARDS,
   locale,
   input,
+  selectedSkill,
   isRunning,
   canSend,
   loadingMoreHistory = false,
@@ -769,9 +776,9 @@ export function ThreadView({
     {/* The wallpaper sits under the whole screen and stays put while the keyboard pads the content. */}
     <ChatBackgroundLayer appearance={chatAppearance} />
     <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior="padding"
       // The keyboard already covers the home-indicator inset; retain only the control gap.
-      keyboardVerticalOffset={Platform.OS === 'ios' ? Space.md - Math.max(bottomInset, Space.lg) : 0}
+      keyboardVerticalOffset={Space.md - Math.max(bottomInset, Space.lg)}
       style={styles.screen}
     >
       <View style={styles.screen}>
@@ -1036,10 +1043,10 @@ export function ThreadView({
                 onChooseFile={onChooseFile}
               />
             ) : null}
-            notice={composerExpanded && offline ? (
+            notice={selectedSkill || (composerExpanded && offline ? (
               <ConnectionStatusPill placement="inline" status="offline" message={copy.offline}
                 actionLabel={onRetry ? copy.reconnect : undefined} onAction={onRetry} />
-            ) : undefined}
+            ) : undefined)}
             testID={`${testID}-composer`}
             accessory={capabilities.models ? (
               <View style={styles.composerOptions}>
@@ -1126,6 +1133,10 @@ export function ThreadView({
           onCopy={messageActions.onCopy}
           onToggleFavorite={messageActions.onToggleFavorite}
           onShare={messageActions.onShare}
+          onBranch={messageActions.onBranch}
+          canBranch={messageActions.canBranch}
+          onSchedule={messageActions.onSchedule}
+          canSchedule={messageActions.canSchedule}
           queuedActions={selectedActionMessage?.delivery && queuedMessageActions ? {
             canSendNow: queuedMessageActions.canSendNow && selectedActionMessage.delivery !== 'sending',
             editable: selectedActionMessage.delivery !== 'sending',
@@ -1397,7 +1408,10 @@ function ThreadMessageRowContent({
 }>): React.JSX.Element | null {
   if (message.role !== 'assistant' && message.role !== 'user') return null;
   const attachmentCount = message.imageUris?.length ?? 0;
-  const fileAttachments = message.fileAttachments ?? [];
+  const fileAttachments = (message.fileAttachments ?? []).filter(file => (
+    message.role !== 'user' || !file.fileName
+      || !message.text.split('\n').some(line => line.trim() === `📎 ${file.fileName}`)
+  ));
   // A reply that has produced no text yet still owns its bubble.
   const hasBubble = Boolean(message.text) || (message.role === 'assistant' && message.streaming === true);
   return (
@@ -1645,12 +1659,14 @@ function ThreadExecApprovalTimelineItem({
   copy: ThreadCopy;
   onResolveApproval?: ThreadViewProps['onResolveApproval'];
 }>): React.JSX.Element {
+  const { t } = useTranslation(['chat', 'common']);
+  const [confirmAlwaysId, setConfirmAlwaysId] = useState<string | null>(null);
   const [deadlineExpired, setDeadlineExpired] = useState(
-    () => approval.status === 'pending' && approval.expiresAtMs <= Date.now(),
+    () => approval.status === 'pending' && approval.expiresAtMs !== null && approval.expiresAtMs <= Date.now(),
   );
 
   useEffect(() => {
-    if (approval.status !== 'pending') {
+    if (approval.status !== 'pending' || approval.expiresAtMs === null) {
       setDeadlineExpired(false);
       return;
     }
@@ -1665,13 +1681,15 @@ function ThreadExecApprovalTimelineItem({
   }, [approval.expiresAtMs, approval.status]);
 
   const resolved = approval.status !== 'pending' || deadlineExpired;
+  const canAllowAlways = !resolved && !approval.resolving && Boolean(onResolveApproval)
+    && (!approval.decisions || approval.decisions.includes('allow-always'));
   const detail = approval.status === 'allowed'
     ? copy.allowed
     : approval.status === 'denied'
       ? copy.denied
       : resolved
         ? copy.expired
-        : undefined;
+        : approval.resolutionError ? copy.approvalError : undefined;
 
   return (
     <View style={stylesStatic.timelineItem}>
@@ -1680,19 +1698,37 @@ function ThreadExecApprovalTimelineItem({
         title={copy.approvalTitle}
         command={approval.command}
         detail={detail}
+        tone={approval.resolutionError ? 'bad' : undefined}
         expired={resolved}
         primaryAction={{
           label: copy.allow,
           onPress: () => onResolveApproval?.(approval.id, 'allow-once'),
-          onLongPress: () => onResolveApproval?.(approval.id, 'allow-always'),
-          disabled: !onResolveApproval,
+          onLongPress: canAllowAlways ? () => {
+            Keyboard.dismiss();
+            setConfirmAlwaysId(approval.id);
+          } : undefined,
+          disabled: !onResolveApproval || approval.resolving === true || Boolean(approval.decisions && !approval.decisions.includes('allow-once')),
           accessibilityLabel: copy.allow,
         }}
         secondaryAction={{
           label: copy.reject,
           onPress: () => onResolveApproval?.(approval.id, 'deny'),
-          disabled: !onResolveApproval,
+          disabled: !onResolveApproval || approval.resolving === true,
           accessibilityLabel: copy.reject,
+        }}
+      />
+      <ConfirmationModal
+        testID="approval-always"
+        visible={confirmAlwaysId === approval.id && canAllowAlways}
+        title={t('Always allow?')}
+        message={t('Future matching commands will not ask again.')}
+        cancelLabel={t('Cancel', { ns: 'common' })}
+        confirmLabel={copy.allow}
+        onClose={() => setConfirmAlwaysId(null)}
+        onConfirm={() => {
+          if (confirmAlwaysId !== approval.id || !canAllowAlways) return;
+          setConfirmAlwaysId(null);
+          onResolveApproval?.(approval.id, 'allow-always');
         }}
       />
     </View>

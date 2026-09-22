@@ -1,6 +1,7 @@
 import React from 'react';
+import { Alert } from 'react-native';
 import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
-import { CAPABILITY_MATRIX, type AgentAdapter, type AgentDescriptor, type CronJob } from '@clawket/agent-protocol';
+import { CAPABILITY_MATRIX, resolveCapabilities, type AgentAdapter, type AgentDescriptor, type CronJob } from '@clawket/agent-protocol';
 import { CronEditorScreen } from './CronEditorScreen';
 import { CronSection } from './CronSection';
 
@@ -11,12 +12,14 @@ jest.mock('react-native', () => {
   const host = (name: string) => ReactRuntime.forwardRef(({ children, style, ...props }: Record<string, unknown>, ref: unknown) =>
     ReactRuntime.createElement(name, { ...props, ref, style: typeof style === 'function' ? style({ pressed: false }) : style }, children));
   return {
+    Alert: { alert: jest.fn() },
     Platform: { OS: 'ios', select: (options: Record<string, unknown>) => options.ios ?? options.default },
     Pressable: host('Pressable'), View: host('View'), Text: host('Text'), TextInput: host('TextInput'), ScrollView: host('ScrollView'), ActivityIndicator: host('ActivityIndicator'),
     Modal: ({ visible, children }: { visible: boolean; children: React.ReactNode }) => visible ? children : null,
     StyleSheet: { create: <T,>(styles: T) => styles, flatten: (style: unknown) => style, hairlineWidth: 1 },
   };
 });
+jest.mock('react-native-enriched-markdown', () => ({ EnrichedMarkdownText: ({ markdown, ...props }: any) => require('react').createElement('Text', props, markdown) }));
 jest.mock('lucide-react-native', () => new Proxy({}, {
   get: (_target, key) => key === '__esModule' ? true : (props: unknown) => require('react').createElement('Icon', props),
 }));
@@ -68,7 +71,7 @@ function setup(backend: 'openclaw' | 'hermes' = 'openclaw', initialJobs: CronJob
   const getSelection = jest.fn(async () => ({ currentModel: 'claude-sonnet-4-5', currentProvider: 'anthropic', currentBaseUrl: '', models }));
   const listModels = jest.fn(async () => models);
   const adapter = { capabilities: CAPABILITY_MATRIX[backend], management: { cron: { list, add, update, remove, run, runs }, models: { getSelection, list: listModels } } } as unknown as AgentAdapter;
-  const navigation = { goBack: jest.fn(), dispatch: jest.fn() } as unknown as React.ComponentProps<typeof CronEditorScreen>['navigation'];
+  const navigation = { goBack: jest.fn(), dispatch: jest.fn(), addListener: jest.fn(() => jest.fn()) } as unknown as React.ComponentProps<typeof CronEditorScreen>['navigation'];
   return { adapter, navigation, list, add, update, remove, run, runs, getSelection, listModels };
 }
 
@@ -113,6 +116,13 @@ describe('guided Cron management', () => {
     if (backend === 'hermes') expect(schedule.tz).toBeUndefined();
     else expect(schedule.tz).toBeTruthy();
     await waitFor(() => expect(setupData.navigation.goBack).toHaveBeenCalledTimes(1));
+    expect(Alert.alert).not.toHaveBeenCalled();
+    const listener = (setupData.navigation.addListener as jest.Mock).mock.calls[0][1];
+    act(() => listener({ data: { closing: false } }));
+    expect(Alert.alert).not.toHaveBeenCalled();
+    act(() => listener({ data: { closing: true } }));
+    expect(Alert.alert).toHaveBeenCalledWith('Scheduled task created');
+    expect((setupData.navigation.addListener as jest.Mock).mock.results[0].value).toHaveBeenCalledTimes(1);
   });
 
   it('carries a Thread prompt directly into the form and leaves future new tasks blank', async () => {
@@ -129,6 +139,21 @@ describe('guided Cron management', () => {
     const fresh = render(<CronEditorScreen {...data} agent={agent} online />);
     fireEvent.press(fresh.getByTestId('cron-template-custom'));
     expect(fresh.getByTestId('agent-cron-prompt').props.value).toBe('');
+  });
+
+  it('keeps imported conversation context compact and opens the full editable prompt on demand', () => {
+    const data = setup();
+    const prompt = 'Retain the user corrections and reference context. '.repeat(12);
+    const view = render(<CronEditorScreen {...data} agent={agent} online initialPrompt={prompt} />);
+    expect(view.queryByTestId('agent-cron-prompt')).toBeNull();
+    expect(view.getByTestId('cron-frequency-daily')).toBeTruthy();
+    fireEvent.press(view.getByTestId('cron-prompt-summary'));
+    expect(view.getByTestId('agent-cron-prompt').props.value).toBe(prompt);
+    fireEvent.changeText(view.getByTestId('agent-cron-prompt'), 'Reviewed task');
+    fireEvent.press(view.getByTestId('cron-prompt-done'));
+    expect(view.queryByTestId('agent-cron-prompt')).toBeNull();
+    expect(view.getByText('Reviewed task')).toBeTruthy();
+    expect(data.add).not.toHaveBeenCalled();
   });
 
   it('creates new tasks enabled without step labels, pause or advanced controls, which stay on edit', async () => {
@@ -211,6 +236,7 @@ describe('guided Cron management', () => {
     expect(view.getByText('Save unavailable')).toBeTruthy();
     expect(view.getByTestId('agent-cron-name').props.value).toBe('Daily briefing');
     expect(data.navigation.goBack).not.toHaveBeenCalled();
+    expect(Alert.alert).not.toHaveBeenCalled();
   });
 
   it('validates empty content, empty weekdays and zero intervals before writing', () => {
@@ -287,6 +313,7 @@ describe('guided Cron management', () => {
     view.rerender(<CronEditorScreen {...data} agent={{ ...agent, agentId: 'writer', isMain: false }} online />);
     await act(async () => finish(existing));
     expect(data.navigation.goBack).not.toHaveBeenCalled();
+    expect(Alert.alert).not.toHaveBeenCalled();
     expect(view.getByTestId('cron-template-custom')).toBeTruthy();
   });
 
@@ -386,6 +413,7 @@ describe('guided Cron management', () => {
   it('hides the model row and list label on backends without cronModel and keeps Hermes creates prompt-only', async () => {
     const isolated: CronJob = { ...existing, id: 'iso', sessionTarget: 'isolated', payload: { kind: 'agentTurn', message: 'Digest', model: 'openai/gpt-5-mini' } };
     const data = setup('hermes', [isolated]);
+    Object.assign(data.adapter, { capabilities: resolveCapabilities('hermes', { cronModel: false }) });
     const list = render(<CronSection adapter={data.adapter} agent={agent} online onCreate={jest.fn()} onEdit={jest.fn()} />);
     await showJobs(list);
     expect(list.getByTestId('agent-cron-job-iso')).toBeTruthy();

@@ -172,7 +172,9 @@ describe('Hermes M3 recorded packet contract', () => {
     const observed = new Map<string, JsonRecord>();
 
     const firstFrame = await client.next((frame) => frame.type === 'event');
-    expect(firstFrame).toEqual(materializeFixtureValue(fixture.firstFrame, captures));
+    const expectedHealth = materializeFixtureValue(fixture.firstFrame, captures) as { payload: { capabilities: string[] } };
+    expectedHealth.payload.capabilities.unshift('bridge.session-files.v1');
+    expect(firstFrame).toEqual(expectedHealth);
 
     for (const packet of fixture.packets) {
       const request = materializeFixtureValue(packet.request, captures) as JsonRecord;
@@ -183,6 +185,12 @@ describe('Hermes M3 recorded packet contract', () => {
       // authoritative liveness without changing any recorded message fields.
       if (request.method === 'chat.history' && response.ok === true) {
         expected.payload = { ...(expected.payload as JsonRecord), hasActiveRun: false };
+        const payload = expected.payload as JsonRecord;
+        payload.messages = (payload.messages as JsonRecord[]).map(message => {
+          const native = fixture.nativeState.messages.find(row => row.content === message.content && row.role === message.role
+            && row.timestamp * 1000 === message.timestamp);
+          return native ? { ...message, id: `hermes:${native.sessionId}:${native.id}` } : message;
+        });
       }
       expect(response, packet.label).toEqual(expected);
       observed.set(packet.label, response);
@@ -197,7 +205,10 @@ describe('Hermes M3 recorded packet contract', () => {
     const combined = [...older, ...newer].map((message) => message.content);
     expect(combined).toEqual(fixture.assertions.historyOrder);
     expect(new Set(combined).size).toBe(combined.length);
-  });
+    // Twelve sequential packets also launch real Python/SQLite reads. Keep
+    // each packet's five-second deadline, but allow the whole replay to finish
+    // when other self-contained test files are using the subprocess pool.
+  }, 15_000);
 
   it('locks the image run body and raw abort event over the WebSocket boundary', async () => {
     const fixture = readFixture<AttachmentFixture>('m3-attachment-abort-v2.json');
@@ -231,7 +242,7 @@ describe('Hermes M3 recorded packet contract', () => {
       if (/\/v1\/runs\/run_[^/]+\/stop$/.test(url)) {
         expect(init?.method).toBe('POST');
         expect(eventStreamSignal?.aborted).toBe(false);
-        return new Response('{"status":"stopping"}');
+        return new Response('{"status":"cancelled"}');
       }
       throw new Error(`Unexpected controlled Hermes fetch: ${url}`);
     }));
@@ -248,7 +259,9 @@ describe('Hermes M3 recorded packet contract', () => {
     const client = await connectRecordedClient(bridge.getWsUrl());
     const captures = new Map<string, unknown>([['session.id', seeded.sessionId]]);
     const firstFrame = await client.next((frame) => frame.type === 'event' && frame.event === 'health');
-    expect(firstFrame).toEqual(materializeFixtureValue(fixture.firstFrame, captures));
+    const expectedHealth = materializeFixtureValue(fixture.firstFrame, captures) as { payload: { capabilities: string[] } };
+    expectedHealth.payload.capabilities.unshift('bridge.session-files.v1');
+    expect(firstFrame).toEqual(expectedHealth);
 
     const sendRequest = materializeFixtureValue(fixture.sendPacket.request, captures) as JsonRecord;
     const sendResponse = await client.request(sendRequest);

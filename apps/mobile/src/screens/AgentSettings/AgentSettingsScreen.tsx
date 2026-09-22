@@ -1,3 +1,4 @@
+import { useUsageCalendar } from './useUsageCalendar';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Pressable,
@@ -179,7 +180,8 @@ export function AgentSettingsScreen({
   const [connectionState, setConnectionState] = useState<ConnectionState>(
     accessibleAdapter?.state ?? 'offline',
   );
-  const summaryKey = agent ? `${connection.id}:${agent.agentId}` : null;
+  const calendar = useUsageCalendar();
+  const summaryKey = agent ? `${connection.id}:${agent.agentId}:${calendar.key}` : null;
   const [loadedSummary, setLoadedSummary] = useState<Readonly<{
     key: string;
     value: AgentSettingsSummary;
@@ -224,7 +226,7 @@ export function AgentSettingsScreen({
     return () => {
       active = false;
     };
-  }, [accessibleAdapter, agent?.agentId, connectionState, mergeSummary, summaryKey]);
+  }, [accessibleAdapter, agent?.agentId, calendar.revision, connectionState, mergeSummary, summaryKey]);
 
   // The Runs tab marks failures as seen while this page stays mounted underneath it; re-read only
   // the Cron card so the red count clears on return without reloading the whole profile.

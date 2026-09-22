@@ -36,11 +36,23 @@ describe('Paywall model', () => {
     ['modelManage', 'manage'],
     ['logs', 'logsFiles'],
     ['messageHistory', 'search'],
+    ['archiveTools', 'search'],
+    ['documentVersions', 'logsFiles'],
     ['appIcons', 'generic'],
     ['usage', 'generic'],
     ['launch', 'generic'],
   ] as const)('maps %s to the %s hero', (feature, hero) => {
     expect(resolvePaywallContent(feature).hero).toBe(hero);
+  });
+
+  it('describes the paid archive/version action without locking free reading or memory corrections', () => {
+    expect(resolvePaywallContent('archiveTools')).toMatchObject({
+      titleKey: 'Search and bulk export', subtitleKey: null, actionKey: null,
+    });
+    expect(resolvePaywallContent('documentVersions')).toMatchObject({
+      titleKey: 'Skill and memory versions', subtitleKey: null, actionKey: null,
+    });
+    expect(resolvePaywallContent(null).benefits.map(benefit => benefit.labelKey)).toContain('Skill and memory versions');
   });
 
   it('returns exactly four contextual benefits without a duplicate category', () => {

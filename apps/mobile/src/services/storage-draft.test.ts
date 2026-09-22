@@ -58,3 +58,64 @@ describe('StorageService composer draft', () => {
     expect(key1).not.toBe(key2);
   });
 });
+
+test('connection-scoped drafts cannot collide with another connection or legacy keys', async () => {
+  const first = StorageService._draftKey('a-b', 'c', 'one');
+  expect(first).not.toBe(StorageService._draftKey('a', 'b-c', 'one'));
+  expect(first).not.toBe(StorageService._draftKey('a-b', 'c', 'two'));
+  expect(first).not.toBe(StorageService._draftKey('a-b', 'c'));
+  await StorageService.setComposerDraft('a-b', 'c', 'private', 'one');
+  expect(mockSetItem).toHaveBeenCalledWith(first, 'private');
+});
+
+test('connection removal deletes only its scoped drafts and preserves unowned legacy data', async () => {
+  const own = StorageService._draftKey('main', 'main', 'one');
+  const other = StorageService._draftKey('main', 'main', 'one.extra');
+  const legacy = StorageService._draftKey('main', 'main');
+  jest.mocked(AsyncStorage.getAllKeys).mockResolvedValueOnce([own, other, legacy, 'unrelated']);
+  await StorageService.clearConnectionComposerDrafts('one');
+  expect(AsyncStorage.multiRemove).toHaveBeenCalledWith([own]);
+});
+
+test('a submitted draft cannot reappear when an older write completes late', async () => {
+  let finishWrite!: () => void;
+  let stored: string | null = null;
+  mockSetItem.mockImplementationOnce(() => new Promise<void>(resolve => {
+    finishWrite = () => { stored = 'old text'; resolve(); };
+  }));
+  mockRemoveItem.mockImplementationOnce(async () => { stored = null; });
+  const writing = StorageService.setComposerDraft('main', 'main', 'old text', 'one');
+  await Promise.resolve();
+  const clearing = StorageService.setComposerDraft('main', 'main', '', 'one');
+  await Promise.resolve();
+  finishWrite();
+  await Promise.all([writing, clearing]);
+  expect(stored).toBeNull();
+});
+
+test('legacy consumption cannot delete a newer edit while its comparison is pending', async () => {
+  let finishRead!: () => void;
+  let stored: string | null = 'legacy';
+  mockGetItem.mockImplementationOnce(() => new Promise<string>(resolve => {
+    finishRead = () => resolve('legacy');
+  }));
+  mockRemoveItem.mockImplementationOnce(async () => { stored = null; });
+  mockSetItem.mockImplementationOnce(async (_key, text) => { stored = text; });
+  const consuming = StorageService.clearComposerDraftIfMatches('main', 'main', 'legacy');
+  await Promise.resolve();
+  const editing = StorageService.setComposerDraft('main', 'main', 'newer text');
+  await Promise.resolve();
+  finishRead();
+  await Promise.all([consuming, editing]);
+  expect(stored).toBe('newer text');
+});
+
+test('legacy consumption preserves a different draft and storage failures do not poison later operations', async () => {
+  mockGetItem.mockResolvedValueOnce('new text');
+  mockRemoveItem.mockClear();
+  await expect(StorageService.clearComposerDraftIfMatches('main', 'main', 'old text')).resolves.toBe(false);
+  expect(mockRemoveItem).not.toHaveBeenCalled();
+  mockSetItem.mockRejectedValueOnce(new Error('storage full'));
+  await expect(StorageService.setComposerDraft('main', 'main', 'draft', 'one')).rejects.toThrow('storage full');
+  await expect(StorageService.setComposerDraft('main', 'main', '', 'one')).resolves.toBeUndefined();
+});

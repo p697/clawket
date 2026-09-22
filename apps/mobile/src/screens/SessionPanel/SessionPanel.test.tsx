@@ -74,6 +74,7 @@ jest.mock('react-native', () => {
   return {
     Pressable: host('Pressable'),
     ScrollView: host('ScrollView'),
+    useWindowDimensions: () => ({ width: 393, height: 852, fontScale: 1 }),
     StyleSheet: {
       create: <T,>(styles: T) => styles,
       flatten: (style: unknown) => flattenStyle(style),
@@ -124,11 +125,11 @@ jest.mock('../../components/ui/Sheet', () => {
   const ReactRuntime = require('react');
   const { Text, View } = require('react-native');
   return {
-    Sheet: ({ visible, testID, title, titleContent, headerRight, children, onAfterClose }: Record<string, unknown>) => (
+    Sheet: ({ visible, testID, title, titleContent, headerRight, children, onAfterClose, snapPoints }: Record<string, unknown>) => (
       visible
         ? ReactRuntime.createElement(
           View,
-          { testID, onAfterClose },
+          { testID, onAfterClose, snapPoints },
           titleContent ?? (title ? ReactRuntime.createElement(Text, null, title) : null),
           headerRight,
           children,
@@ -440,7 +441,6 @@ describe('SessionPanelView', () => {
     expect(mockedAnalyticsEvents.sessionPanelFilterChanged).toHaveBeenCalledTimes(1);
 
     fireEvent.press(view.getByTestId('session-panel-chip-all'));
-    fireEvent.press(view.getByTestId('session-panel-search-toggle'));
     fireEvent.changeText(view.getByTestId('session-panel-search'), 'daily');
     expect(view.getByText('Daily report')).toBeTruthy();
     expect(view.queryByText('Main session')).toBeNull();
@@ -518,6 +518,17 @@ describe('SessionPanelView', () => {
       from: 'panel',
     });
     await waitFor(() => expect(onClose).toHaveBeenCalled());
+  });
+
+  it('keeps a long press from also opening the conversation when its finger is released', () => {
+    const onSelectSession = jest.fn();
+    const view = render(<SessionPanelView {...props({ onSelectSession })} />);
+    const row = view.getByTestId(`session-panel-row-${rowById('agent:main:main').id}`);
+    fireEvent(row, 'pressIn');
+    fireEvent(row, 'longPress');
+    fireEvent.press(row);
+    expect(onSelectSession).not.toHaveBeenCalled();
+    expect(view.getByTestId('session-panel-action-export')).toBeTruthy();
   });
 
   it('runs pin, reset and delete after the action sheet dismisses and labels pinned rows as Unpin', async () => {
@@ -643,10 +654,26 @@ describe('SessionPanelView', () => {
   });
 });
 
-it('does not offer session creation in the header or the empty state', () => {
+it('does not offer session creation without a handler or an Agent', () => {
   const view = render(<SessionPanelView {...props()} />);
   expect(view.queryByText('New session')).toBeNull();
   view.rerender(<SessionPanelView {...props({ rows: [], agents: [] })} />);
   expect(view.queryByText('New session')).toBeNull();
   expect(view.queryByTestId('session-panel-agent-pill')).toBeNull();
 });
+
+ it('coalesces repeated header creation taps while creation is pending', async () => {
+   let finish!: () => void;
+   const onCreateSession = jest.fn(() => new Promise<void>(resolve => { finish = resolve; }));
+   const onClose = jest.fn();
+   const view = render(<SessionPanelView {...props({ onCreateSession, onClose })} />);
+   expect(view.getByTestId('session-panel').props.snapPoints).toEqual(['95%']);
+   const create = view.getByTestId('session-panel-create');
+   fireEvent.press(create);
+   fireEvent.press(create);
+   await act(async () => Promise.resolve());
+   expect(onCreateSession).toHaveBeenCalledTimes(1);
+   expect(onClose).not.toHaveBeenCalled();
+   await act(async () => finish());
+   expect(onClose).toHaveBeenCalledTimes(1);
+ });

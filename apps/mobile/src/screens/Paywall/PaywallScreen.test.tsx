@@ -348,7 +348,7 @@ it('shows actual renewal price and keeps checkout after the introduction', () =>
 
 const BENEFIT_KEYS = [
   'More Agents, unlimited connections', 'Conversations across channels and tasks',
-  "Shape your Agent's personality and memory", 'Configure, back up and diagnose your Agents',
+  'Skill and memory versions', 'Configure, back up and diagnose your Agents',
 ];
 
 it.each(['en', 'zh-Hans', 'de', 'es', 'ja', 'ko'])('keeps complete %s benefits and store copy readable at enlarged text sizes', locale => {

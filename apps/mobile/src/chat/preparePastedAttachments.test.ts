@@ -130,7 +130,7 @@ describe('preparePastedAttachments', () => {
       ],
       pendingCount: 0,
       maxAttachments: 6,
-      capabilities: CAPABILITY_MATRIX.hermes,
+      capabilities: { ...CAPABILITY_MATRIX.hermes, documentAttachments: false },
     });
 
     expect(result).toEqual({

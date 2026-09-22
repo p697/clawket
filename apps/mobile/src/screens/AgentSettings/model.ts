@@ -27,6 +27,7 @@ export type AgentSettingsSummary = Readonly<{
   /** Undefined when the backend reports no reliable dollar figure for today. */
   todayCostUsd?: number;
   todayTokens?: number;
+  todayCostMode?: 'currency' | 'included' | 'estimated' | 'actual' | 'unknown' | 'mixed';
   lastHeartbeatAt?: number | null;
   toolCount?: number;
   pendingConnectionCount?: number;
@@ -35,12 +36,12 @@ export type AgentSettingsSummary = Readonly<{
 export type AgentSettingsStatId = 'cron' | 'usage' | 'models' | 'skills' | 'files';
 
 export type AgentSettingsStatDetail = Readonly<{
-  key: '{{count}} failed';
+  key: '{{count}} failed' | 'Partial' | 'Estimated' | 'Unpriced' | 'Included';
   params: Readonly<Record<string, string | number>>;
   tone: 'bad' | 'neutral';
 }>;
 
-/** A tappable number card on the profile: one value, one label, at most one numeric caption. */
+/** A tappable number card on the profile: one value, one label, at most one status caption. */
 export type AgentSettingsStatDescriptor = Readonly<{
   id: AgentSettingsStatId;
   section: AgentSettingsStatId;
@@ -170,6 +171,13 @@ const STATS: ReadonlyArray<StatDefinition> = [
       ? 'Tokens today'
       : 'Cost today'),
     value: (summary) => formatUsd(summary.todayCostUsd) ?? formatTokens(summary.todayTokens),
+    detail: (summary) => {
+      const key = summary.todayCostMode === 'mixed' ? 'Partial'
+        : summary.todayCostMode === 'estimated' ? 'Estimated'
+          : summary.todayCostMode === 'unknown' ? 'Unpriced'
+            : summary.todayCostMode === 'included' ? 'Included' : undefined;
+      return key ? { key, params: {}, tone: 'neutral' } : undefined;
+    },
   },
   {
     id: 'models',
@@ -346,6 +354,7 @@ export function formatCount(value: number | undefined): string | undefined {
 export function formatUsd(value: number | undefined): string | undefined {
   if (value === undefined || !Number.isFinite(value)) return undefined;
   const normalized = Math.max(0, value);
+  if (normalized > 0 && normalized < 0.01) return '<$0.01';
   return `$${normalized.toFixed(2)}`;
 }
 

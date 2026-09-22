@@ -19,7 +19,7 @@
   "Cost unavailable": "Cost unavailable",
   "Hermes tracked token usage, but it could not determine a reliable dollar cost for this route.": "Hermes tracked token usage, but it could not determine a reliable dollar cost for this route.",
   "Mixed cost sources": "Mixed cost sources",
-  "This range mixes priced usage with included or unpriced routes, so the dollar total is only a partial view.": "This range mixes priced usage with included or unpriced routes, so the dollar total is only a partial view.",
+  "This range mixes priced usage with included or unpriced routes, so the dollar total is only a partial view.": "Only usage with known costs is included in this total.",
   "Estimated cost": "Estimated cost",
   "Hermes is showing an estimate for this route rather than a reconciled bill.": "Hermes is showing an estimate for this route rather than a reconciled bill.",
   "Search logs...": "Search logs...",
@@ -243,7 +243,6 @@
   "Blocked by allowlist": "Blocked by allowlist",
   "Failed to update skill": "Failed to update skill",
   "Failed to uninstall skill": "Failed to uninstall skill",
-  "Failed to request installation": "Failed to request installation",
   "Source": "Source",
   "Agent timezone": "Agent timezone",
   "Check configured services and summarize problems and suggested fixes.": "Check configured services and summarize problems and suggested fixes.",
@@ -380,5 +379,15 @@
   "Disable {{name}}?": "Disable {{name}}?",
   "This account starts receiving messages again.": "This account starts receiving messages again.",
   "This account stops receiving messages until you enable it again.": "This account stops receiving messages until you enable it again.",
-  "Failed to update channel": "Failed to update channel"
+  "Failed to update channel": "Failed to update channel",
+  "About me": "About me",
+  "Version history": "Version history",
+  "No saved versions": "No saved versions",
+  "This file changed. Reopen it before saving.": "This file changed. Reopen it before saving.",
+  "Model health": "Model health",
+  "Global model": "Global model",
+  "Test connections": "Test connections",
+  "Restore version": "Restore version",
+  "This file is too large for version history.": "This file is too large for version history.",
+  "Scheduled task created": "Scheduled task created"
 }

@@ -3,10 +3,11 @@ import { CLAWKET_GITHUB_REPO_URL } from '../../config/app-links';
 /**
  * Entry actions are limited to what the What's New sheet can honor without
  * deep-linking into screens that moved in 3.0 (owner decision 2026-09-16):
- * an external link or the Pro paywall. The Release Notes history renders
+ * an external link, the Pro paywall, or the conditional Bridge guide (approved 2026-09-22). The Release Notes history renders
  * every entry as plain text and ignores actions entirely.
  */
 export type AppUpdateAnnouncementAction =
+  | { type: 'open_bridge_upgrade' }
   | {
       type: 'none';
     }
@@ -52,6 +53,13 @@ export type AppUpdateAnnouncementEntry = {
   /** `chat` namespace key. */
   subtitle?: string;
   action: AppUpdateAnnouncementAction;
+};
+
+/** Only inserted for authenticated legacy Bridge connections; never part of public release history. */
+export const BRIDGE_UPGRADE_ENTRY: AppUpdateAnnouncementEntry = {
+  id: 'bridge-upgrade', icon: 'link', title: 'Update your Bridge',
+  subtitle: 'Your older Bridge can keep working. Update it for the new features.',
+  action: { type: 'open_bridge_upgrade' },
 };
 
 export type AppUpdateRelease = {

@@ -12,7 +12,7 @@ import {
   type SessionBoardStatus,
 } from './list-model';
 
-export type SessionPanelAction = keyof SessionActions;
+export type SessionPanelAction = keyof SessionActions | 'export';
 export type SessionPanelRenamePayload = Readonly<{
   title: string;
 }>;
@@ -234,7 +234,7 @@ export function availableSessionActions(
     'sessionRename' | 'sessionReset' | 'sessionDelete'
   >,
 ): ReadonlyArray<SessionPanelAction> {
-  const actions: SessionPanelAction[] = [];
+  const actions: SessionPanelAction[] = row.hasActiveRun ? [] : ['export'];
   if (row.allowedActions.pin) actions.push('pin');
   if (row.allowedActions.rename && capabilities.sessionRename) actions.push('rename');
   if (row.allowedActions.reset && capabilities.sessionReset) actions.push('reset');

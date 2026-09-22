@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  BackHandler,
   Platform,
   ScrollView,
   StyleSheet,
@@ -16,6 +15,7 @@ import type {
   PermissionsReport,
 } from '@clawket/agent-protocol';
 import { useTranslation } from 'react-i18next';
+import { createNativeStackNavigator, type NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Banner } from '../../components/ui/Banner';
@@ -61,6 +61,9 @@ import {
 } from './openclaw-manage-model';
 import { translateAgentSettingsKey } from './translation';
 import { formatConsoleHeartbeatAge, heartbeatMinutesAgo } from '../../utils/console-heartbeat';
+
+type ManageStackParams = { Menu: undefined; Section: undefined };
+const ManageStack = createNativeStackNavigator<ManageStackParams>();
 
 type ExecApproval = Extract<ApprovalRequest, { kind: 'exec' }>;
 type FlagMap = Record<OpenClawManageTab, boolean>;
@@ -335,14 +338,6 @@ export function OpenClawManageScreen({
     if (showMenu && support.backups && !loaded.backups && !loading.backups) void loadTab('backups');
   }, [loadTab, loaded.backups, loading.backups, showMenu, support.backups]);
 
-  useEffect(() => {
-    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (showMenu || sheet) return false;
-      setShowMenu(true);
-      return true;
-    });
-    return () => subscription.remove();
-  }, [showMenu, sheet]);
 
   const retry = useCallback(async () => {
     setErrors((current) => ({ ...current, [activeTab]: null }));
@@ -439,7 +434,7 @@ export function OpenClawManageScreen({
     decision: 'allow-once' | 'allow-always' | 'deny',
   ) => {
     const resolve = adapter.management?.approvals?.resolveExec;
-    if (!support.approvals || !resolve || !online || approval.expiresAtMs <= Date.now()) return;
+    if (!support.approvals || !resolve || !online || (approval.expiresAtMs !== null && approval.expiresAtMs <= Date.now())) return;
     setBusy(`approval:${approval.id}`);
     setSheetError(null);
     try {
@@ -571,7 +566,7 @@ export function OpenClawManageScreen({
           repairing={busy === 'repair'}
           gate={gateFor('permissions')}
           onSelectApproval={(approval) => {
-            if (approval.expiresAtMs > Date.now()) {
+            if (approval.expiresAtMs === null || approval.expiresAtMs > Date.now()) {
               setSheetError(null);
               setSheet({ kind: 'approval', approval });
             }
@@ -628,9 +623,9 @@ export function OpenClawManageScreen({
     setSheetError(null);
   }, [busy]);
 
-  return (
+  const renderPage = (showMenu: boolean, navigation: NativeStackNavigationProp<ManageStackParams>) => (
     <View
-      testID="openclaw-manage-screen"
+      testID={showMenu ? "openclaw-manage-menu-page" : "openclaw-manage-section-page"}
       style={[styles.screen, { backgroundColor: theme.colors.canvasGrouped }]}
     >
       <ScreenHeader
@@ -638,7 +633,11 @@ export function OpenClawManageScreen({
         backTestID="openclaw-manage-back"
         title={(showMenu ? t('OpenClaw management', { ns: 'common' }) : tabs.find(tab => tab.key === activeTab)?.label) ?? ''}
         topInset={insets.top}
-        onBack={() => showMenu ? onBack() : setShowMenu(true)}
+        onBack={() => {
+          if (showMenu) onBack();
+          else if (navigation.canGoBack()) navigation.goBack();
+          else navigation.navigate('Menu');
+        }}
         backAccessibilityLabel={t('Back', { ns: 'common' })}
         rightContent={!showMenu && activeTab === 'configuration' && configurationExpanded.length >= 2 ? (
           <HeaderTextAction
@@ -684,7 +683,7 @@ export function OpenClawManageScreen({
                         disabled={!isOpenClawManageTabSupported(support, tab.key)}
                         onPress={() => {
                           setActiveTab(tab.key);
-                          setShowMenu(false);
+                          navigation.push('Section');
                           setNotice(null);
                           setSheet(null);
                           setSheetError(null);
@@ -740,6 +739,26 @@ export function OpenClawManageScreen({
           </>
         )}
       </ScrollView>
+    </View>
+  );
+
+  return (
+    <View testID="openclaw-manage-screen" style={styles.screen}>
+      <ManageStack.Navigator
+        initialRouteName={initialTab ? "Section" : "Menu"}
+        screenOptions={{
+          headerShown: false,
+          animation: "slide_from_right",
+          contentStyle: { backgroundColor: theme.colors.canvasGrouped },
+        }}
+      >
+        <ManageStack.Screen name="Menu" listeners={{ focus: () => setShowMenu(true) }}>
+          {({ navigation }) => renderPage(true, navigation)}
+        </ManageStack.Screen>
+        <ManageStack.Screen name="Section" listeners={{ focus: () => setShowMenu(false) }}>
+          {({ navigation }) => renderPage(false, navigation)}
+        </ManageStack.Screen>
+      </ManageStack.Navigator>
 
       <Sheet
         visible={sheet?.kind === 'configuration-edit'}

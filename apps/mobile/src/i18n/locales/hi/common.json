@@ -243,5 +243,7 @@
   "Unable to open redemption. Please try again.": "कोड रिडीम करने का पेज नहीं खुल सका। फिर से कोशिश करें।",
   "Last connected: {{time}}": "पिछला कनेक्शन: {{time}}",
   "Check your network and make sure the remote service is running.": "अपना नेटवर्क जाँचें और सुनिश्चित करें कि रिमोट सेवा चल रही है।",
-  "View saved messages": "सहेजे गए संदेश देखें"
+  "View saved messages": "सहेजे गए संदेश देखें",
+  "Search and bulk export": "खोज और एक साथ निर्यात",
+  "Skill and memory versions": "कौशल और मेमोरी के संस्करण"
 }

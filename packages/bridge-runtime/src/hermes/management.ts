@@ -1,4 +1,8 @@
+import { readHermesModelHealth } from './model-health.js';
+import type { ModelHealthReport } from '@clawket/agent-protocol';
+import { HERMES_BRIDGE_CAPABILITIES } from './internal.js';
 import { HERMES_SKILLS_COMPAT_PYTHON } from './skills-compat.js';
+import { HERMES_SKILL_PROVENANCE_PYTHON } from './skill-provenance.js';
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import {
@@ -84,9 +88,90 @@ type HermesSkillContentDetail = {
 
 
 export abstract class HermesManagementMethods {
+  declare hermesRunCapabilities: ReadonlySet<string>;
   declare hermesHomePath: string;
   declare hermesSourcePath: string;
   declare runHermesPython: <T>(script: string, stdinPayload?: unknown) => Promise<T>;
+
+  modelHealthFlight?: Promise<ModelHealthReport>;
+  modelProbeAt?: number;
+  skillInstallBusy?: boolean;
+
+  async getHermesModelHealth(payload: Record<string, unknown>): Promise<ModelHealthReport> {
+    if (!this.getBridgeCapabilities().includes('hermes.model-health.v1')) throw new Error('Model health is unavailable. Update Hermes.');
+    if (this.modelHealthFlight) return this.modelHealthFlight;
+    const probe = payload.probe === true;
+    if (probe && Date.now() - (this.modelProbeAt ?? 0) < 10_000) throw new Error('Please wait before testing again.');
+    if (probe) this.modelProbeAt = Date.now();
+    const flight = readHermesModelHealth(this.runHermesPython.bind(this), probe);
+    this.modelHealthFlight = flight;
+    try { return await flight; } finally { if (this.modelHealthFlight === flight) this.modelHealthFlight = undefined; }
+  }
+
+  getBridgeCapabilities(): string[] {
+    const capabilities: string[] = ['bridge.session-files.v1', ...HERMES_BRIDGE_CAPABILITIES, ...(this.hermesRunCapabilities ?? [])];
+    try {
+      const installer = join(this.hermesSourcePath, 'tools', 'skills_hub_install.py');
+      if (statSync(installer).size <= 512_000 && /^def _check_install_target\(/m.test(readFileSync(installer, 'utf8'))
+        && existsSync(join(this.hermesSourcePath, 'tools', 'skills_hub_clawhub.py'))) capabilities.push('hermes.skills-install.v1');
+    } catch { /* Older Hermes versions cannot guarantee no-overwrite installation. */ }
+    return capabilities;
+  }
+
+  async installHermesSkill(payload: Record<string, unknown>): Promise<HermesSkillStatusEntry> {
+    if (!this.getBridgeCapabilities().includes('hermes.skills-install.v1')) throw new Error('Native skill installation is unavailable. Update Hermes.');
+    const owner = readString(payload.owner);
+    const slug = readString(payload.slug);
+    if (payload.source !== 'clawhub' || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/.test(owner)
+      || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/.test(slug)) throw new Error('Invalid skill source.');
+    if (this.skillInstallBusy) throw new Error('A skill installation is already in progress. Try again shortly.');
+    this.skillInstallBusy = true;
+    try {
+      const result = await this.runHermesPython<{ ok: boolean; installPath?: string }>([
+        'import contextlib, io, json, os, sys, httpx',
+        'from rich.console import Console',
+        'from hermes_cli.skills_hub import do_install',
+        'from tools.skills_hub import HubLockFile',
+        'from tools.skills_hub_clawhub import ClawHubSource',
+        'import tools.skills_hub_install as installer',
+        'payload = json.load(sys.stdin)',
+        'identifier = "@" + payload["owner"] + "/" + payload["slug"]',
+        'if HubLockFile().get_installed(payload["slug"]): raise ValueError("Skill is already installed")',
+        // Older native sources discard the owner when forming HTTP requests.
+        // Confine this compatibility shim to this subprocess and exact resource.
+        'native_get = httpx.get',
+        'skill_url = "https://clawhub.ai/api/v1/skills/" + payload["slug"]',
+        'def qualified_get(url, **kwargs):',
+        '  params = dict(kwargs.get("params") or {})',
+        '  if url == skill_url or str(url).startswith(skill_url + "/") or (url == "https://clawhub.ai/api/v1/download" and params.get("slug") == payload["slug"]):',
+        '    params["ownerHandle"] = payload["owner"]',
+        '    kwargs["params"] = params',
+        '  return native_get(url, **kwargs)',
+        'httpx.get = qualified_get',
+        'meta = ClawHubSource().inspect(identifier)',
+        'if meta is None or str((meta.extra or {}).get("owner", "")).lower() != payload["owner"].lower(): raise ValueError("Skill source could not be verified")',
+        // Native force=False protects Hub records, not manually created directories.
+        // Enforce the same no-overwrite policy at its final target validation hook.
+        'check_target = installer._check_install_target',
+        'def refuse_existing_target(path):',
+        '  if os.path.lexists(path): raise ValueError("Skill target already exists")',
+        '  check_target(path)',
+        'installer._check_install_target = refuse_existing_target',
+        'sink = io.StringIO()',
+        'with contextlib.redirect_stdout(sink), contextlib.redirect_stderr(sink):',
+        '  do_install("@" + payload["owner"] + "/" + payload["slug"], source_id="clawhub", skip_confirm=True, force=False, console=Console(file=sink, force_terminal=False))',
+        'record = HubLockFile().get_installed(payload["slug"])',
+        'print(json.dumps({"ok": bool(record and record.get("source") == "clawhub" and record.get("identifier") == payload["slug"]), "installPath": record.get("install_path") if record else None}))',
+      ].join('\n'), { owner, slug });
+      if (!result.ok) throw new Error('Hermes did not install this skill. Check the native security scan or source availability.');
+      const report = await this.getHermesSkillsStatus('main');
+      const installed = result.installPath
+        ? report.skills.find((skill) => skill.baseDir === join(report.managedSkillsDir, result.installPath!))
+        : undefined;
+      if (!installed) throw new Error('Skill installation could not be verified. Refresh the installed list.');
+      return installed;
+    } finally { this.skillInstallBusy = false; }
+  }
 
   listHermesAgentFiles(agentId: string): Array<{
     name: string;
@@ -178,6 +263,9 @@ export abstract class HermesManagementMethods {
         'from pathlib import Path',
         'from agent.skill_utils import get_external_skills_dirs',
         ...HERMES_SKILLS_COMPAT_PYTHON,
+        ...HERMES_SKILL_PROVENANCE_PYTHON,
+        'try: hub_entries = clawket_hub_entries()',
+        'except (OSError, ValueError): hub_entries = {}',
         'def resolve_created_at(path: Path):',
         '  try:',
         '    stat = path.stat()',
@@ -275,6 +363,9 @@ export abstract class HermesManagementMethods {
         '    except Exception:',
         '      rel_path = str(skill_md)',
         '      source = "workspace"',
+        '    deletable = source == "managed"',
+        '    hub_entry = hub_entries.get(skill_dir.resolve())',
+        '    if deletable and hub_entry and hub_entry[1].get("source") == "clawhub": source = "clawhub"',
         '    created_at = resolve_created_at(skill_dir) or resolve_created_at(skill_md)',
         '    updated_at = resolve_updated_at(skill_dir) or resolve_created_at(skill_md)',
         '    requirements = {',
@@ -313,7 +404,7 @@ export abstract class HermesManagementMethods {
         '      "eligible": (name not in disabled) and not missing_env and not missing_cmds and not missing_cred,',
         '      "createdAtMs": created_at,',
         '      "updatedAtMs": updated_at,',
-        '      "deletable": source == "managed",',
+        '      "deletable": deletable,',
         '      "requirements": requirements,',
         '      "missing": missing,',
         '      "configChecks": config_checks,',
@@ -452,7 +543,7 @@ export abstract class HermesManagementMethods {
       skillKey: readString(result.skillKey) || normalizedSkillKey,
       name: readString(result.name) || normalizedSkillKey,
       path: readString(result.path) || '',
-      content: readString(result.content) || '',
+      content: typeof result.content === 'string' ? result.content : '',
       filePath: readString(result.filePath),
       fileType: readString(result.fileType),
       isBinary: readBoolean(result.isBinary) ?? false,
@@ -579,6 +670,7 @@ export abstract class HermesManagementMethods {
         'from hermes_cli.config import load_config, save_config',
         'from tools.skill_manager_tool import _find_skill, skill_manage',
         'from tools.skills_tool import SKILLS_DIR',
+        ...HERMES_SKILL_PROVENANCE_PYTHON,
         'payload = json.loads(input() or "{}")',
         'skill_key = str(payload.get("skillKey") or "").strip()',
         'if not skill_key:',
@@ -593,7 +685,18 @@ export abstract class HermesManagementMethods {
         'if managed_root not in skill_path.parents:',
         '  print(json.dumps({"success": False, "error": "Only managed Hermes skills can be deleted from Clawket."}))',
         '  raise SystemExit(0)',
-        'result = json.loads(skill_manage(action="delete", name=skill_key))',
+        'hub_entry = clawket_hub_entries().get(skill_path)',
+        'if hub_entry:',
+        '  from tools.skills_hub_install import uninstall_skill',
+        '  ok, message = uninstall_skill(hub_entry[0])',
+        '  result = {"success": ok, "error": message if not ok else None}',
+        '  if ok:',
+        '    try:',
+        '      from tools.skill_usage import forget',
+        '      forget(hub_entry[0])',
+        '    except ImportError: pass',
+        'else:',
+        '  result = json.loads(skill_manage(action="delete", name=skill_key))',
         'if result.get("success"):',
         '  cfg = load_config() or {}',
         '  skills_cfg = cfg.setdefault("skills", {})',
@@ -605,7 +708,7 @@ export abstract class HermesManagementMethods {
       ].join('\n'),
       { skillKey: normalizedSkillKey },
     ));
-    if (result.success === false || result.ok === false) {
+    if (result.success !== true && result.ok !== true) {
       throw new Error(readString(result.error) || 'Failed to delete Hermes skill.');
     }
     return {

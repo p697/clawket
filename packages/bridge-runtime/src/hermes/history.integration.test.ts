@@ -8,11 +8,12 @@ import {
   HermesLocalBridge as ProductionHermesLocalBridge,
   type HermesLocalBridgeOptions,
 } from './index.js';
-import { DEFAULT_HERMES_HOME_PATH, DEFAULT_HERMES_SOURCE_PATH } from './internal.js';
+import { DEFAULT_HERMES_HOME_PATH } from './internal.js';
+import { resolveHermesSourcePath } from './installation.js';
 import { resolveHermesPythonPath } from './python-runner.js';
 
 const HERMES_INTEGRATION_PYTHON_PATH = resolveHermesPythonPath({
-  hermesSourcePath: DEFAULT_HERMES_SOURCE_PATH,
+  hermesSourcePath: resolveHermesSourcePath(),
   hermesHomePath: DEFAULT_HERMES_HOME_PATH,
 });
 
@@ -676,7 +677,7 @@ describe('Hermes history and stream integration', () => {
     const broadcastSpy = vi.spyOn(bridge as any, 'broadcastEvent');
     const session = (bridge as any).sessionStore.createSession({ key: 'main' });
 
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => String(input).endsWith('/events') ? new Response(
       new ReadableStream({
         start(controller) {
           controller.enqueue(
@@ -692,7 +693,7 @@ describe('Hermes history and stream integration', () => {
         },
       }),
       { status: 200, headers: { 'content-type': 'text/event-stream' } },
-    )));
+    ) : Response.json({ run_id: 'run_1', status: 'completed' })));
 
     await (bridge as any).streamRunEvents(
       'run_1',
@@ -718,14 +719,14 @@ describe('Hermes history and stream integration', () => {
         sessionKey: 'main',
         seq: 2,
         state: 'delta',
-        message: { role: 'assistant', content: 'world' },
+        message: { role: 'assistant', content: ' world' },
       }),
       expect.objectContaining({
         runId: 'run_1',
         sessionKey: 'main',
         seq: 3,
         state: 'final',
-        message: { role: 'assistant', content: 'Helloworld' },
+        message: { role: 'assistant', content: 'Hello world' },
       }),
     ]);
   });
@@ -741,7 +742,7 @@ describe('Hermes history and stream integration', () => {
     const broadcastSpy = vi.spyOn(bridge as any, 'broadcastEvent');
     const session = (bridge as any).sessionStore.createSession({ key: 'main' });
 
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => String(input).endsWith('/events') ? new Response(
       new ReadableStream({
         start(controller) {
           controller.enqueue(
@@ -757,7 +758,7 @@ describe('Hermes history and stream integration', () => {
         },
       }),
       { status: 200, headers: { 'content-type': 'text/event-stream' } },
-    )));
+    ) : Response.json({ run_id: 'run_1', status: 'completed' })));
 
     await (bridge as any).streamRunEvents(
       'run_1',
@@ -778,7 +779,7 @@ describe('Hermes history and stream integration', () => {
     }));
   });
 
-  it('emits an error when the Hermes events stream ends without recoverable output or tool results', async () => {
+  it('settles an empty response only after confirmed native completion', async () => {
     const bridge = new HermesLocalBridge({
       apiBaseUrl: 'http://127.0.0.1:8642',
       hermesStateDbPath: await createHermesStateDbPath(),
@@ -788,14 +789,14 @@ describe('Hermes history and stream integration', () => {
 
     const broadcastSpy = vi.spyOn(bridge as any, 'broadcastEvent');
 
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => String(input).endsWith('/events') ? new Response(
       new ReadableStream({
         start(controller) {
           controller.close();
         },
       }),
       { status: 200, headers: { 'content-type': 'text/event-stream' } },
-    )));
+    ) : Response.json({ run_id: 'run_1', status: 'completed' })));
 
     await (bridge as any).streamRunEvents(
       'run_1',
@@ -813,8 +814,7 @@ describe('Hermes history and stream integration', () => {
         runId: 'run_1',
         sessionKey: 'main',
         seq: 1,
-        state: 'error',
-        errorMessage: 'Hermes events stream ended before a terminal event was received.',
+        state: 'final',
       }),
     ]);
   });
@@ -822,7 +822,7 @@ describe('Hermes history and stream integration', () => {
   it('requests upstream stop and aborts bridge-side Hermes streams for a session', async () => {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      if (url.endsWith('/v1/runs/run_abort/stop')) return new Response('{"status":"stopping"}');
+      if (url.endsWith('/v1/runs/run_abort/stop')) return new Response('{"status":"cancelled"}');
       if (url.endsWith('/v1/runs')) {
         return new Response(JSON.stringify({ run_id: 'run_abort' }), {
           status: 200,

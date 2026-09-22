@@ -432,13 +432,13 @@ export function AgentSettingsSectionScreen({
     return (
       <SkillDiscoverScreen
         adapter={adapter}
-        agent={agent}
         backend={connection.backendKind}
         online={runtime.activeState === 'ready'}
         reconnecting={runtime.recovering === true}
         navigation={navigation}
-        onInstallRequested={() => navigation.navigate('Thread', {
+        onInstallRequested={(text) => navigation.popTo('Thread', {
           connectionId, agentId, sessionKey: agent.mainSessionKey, from: 'roster',
+          composerDraft: { id: `skill-install:${Date.now()}`, text },
         })}
       />
     );
@@ -490,7 +490,7 @@ export function AgentSettingsSectionScreen({
             <Button
               testID="agent-tools-save"
               label={t('Save')}
-              variant="ghost"
+              variant="primary"
               loading={toolsEditor.saving}
               disabled={!toolsEditor.dirty || toolsEditor.saving}
               onPress={() => setToolsSaveRequest((value) => value + 1)}

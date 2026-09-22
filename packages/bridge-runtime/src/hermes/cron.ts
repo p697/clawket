@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { closeSync, constants, existsSync, fstatSync, lstatSync, openSync, readdirSync, readFileSync, readSync, realpathSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   compareIsoTimestamps,
@@ -11,6 +11,12 @@ import {
   readString,
   requireNonEmptyString,
 } from './internal.js';
+
+export async function supportsHermesCronModels(run: <T>(script: string) => Promise<T>): Promise<boolean> {
+  try {
+    return await run<unknown>('import inspect, json\nfrom tools.cronjob_tools import cronjob\nprint(json.dumps(all(key in inspect.signature(cronjob).parameters for key in ("model", "provider", "base_url"))))') === true;
+  } catch { return false; }
+}
 
 export type HermesCronJob = {
   id: string;
@@ -140,10 +146,11 @@ export abstract class HermesCronMethods {
       name: requireNonEmptyString(readString(payload.name), 'Task name is required.'),
       schedule: requireNonEmptyString(readString(payload.schedule), 'Schedule is required.'),
       prompt: prompt || '',
-      deliver: validateOptionalString(payload.deliver, 'deliver'),
+      deliver: payload.deliver === 'none' ? 'local' : validateOptionalString(payload.deliver, 'deliver'),
       skills,
       repeat: validateRepeat(payload.repeat),
       script: validateOptionalString(payload.script, 'script'),
+      ...validateCronModelFields(payload),
     }));
     const jobId = readString((isRecord(result) ? result.job_id : null));
     if (!jobId) {
@@ -163,10 +170,11 @@ export abstract class HermesCronMethods {
       throw new Error('hermes.cron.jobs.update requires jobId.');
     }
     const updates: Record<string, unknown> = { jobId };
+    Object.assign(updates, validateCronModelFields(payload));
     if (payload.name !== undefined) updates.name = readString(payload.name);
     if (payload.schedule !== undefined) updates.schedule = readString(payload.schedule);
     if (payload.prompt !== undefined) updates.prompt = readString(payload.prompt);
-    if (payload.deliver !== undefined) updates.deliver = readString(payload.deliver) || null;
+    if (payload.deliver !== undefined) updates.deliver = payload.deliver === 'none' ? 'local' : (readString(payload.deliver) || null);
     if (payload.skills !== undefined) updates.skills = validateStringArray(payload.skills, 'skills');
     if (payload.repeat !== undefined) updates.repeat = validateRepeat(payload.repeat);
     if (payload.script !== undefined) updates.script = readString(payload.script) || '';
@@ -187,6 +195,12 @@ export abstract class HermesCronMethods {
   }
 
   async runHermesCronJob(jobId: string | null): Promise<HermesCronJob | null> {
+    // Older Clawket clients persisted the protocol's `none` delivery mode as a
+    // native platform name. Repair only that unambiguous local-only mapping.
+    if (jobId && this.readHermesCronJobsFromDisk()[jobId]?.deliver === 'none') {
+      await this.runHermesCronTool('update', { jobId, deliver: 'local' });
+      if (this.readHermesCronJobsFromDisk()[jobId]?.deliver !== 'local') throw new Error('Hermes did not save the local delivery target.');
+    }
     return (await this.runHermesCronJobAction(jobId, 'run'));
   }
 
@@ -202,13 +216,22 @@ export abstract class HermesCronMethods {
     if (!jobId) {
       throw new Error(`hermes.cron.jobs.${action} requires jobId.`);
     }
-    (await this.runHermesCronTool(action, { jobId }));
+    const result = await this.runHermesCronTool(action, { jobId });
+    if (action === 'run' && isRecord(result.job)) {
+      if (result.job.executed === false) throw new Error(readString(result.job.execution_skipped) || 'Hermes did not start this task.');
+      if (result.job.execution_success === false) throw new Error(readString(result.job.execution_error) || 'Hermes task execution failed.');
+      if (result.job.executed === true && result.job.execution_mode !== 'background'
+        && /^(?:blocked(?:_|$)|error$|failed$)/.test(readString(result.job.last_status))) {
+        throw new Error(readString(result.job.last_error) || 'Hermes task execution failed.');
+      }
+    }
     return this.readHermesCronJobsFromDisk()[jobId] ?? null;
   }
 
   listHermesCronOutputs(payload: Record<string, unknown>): HermesCronOutputEntry[] {
     const requestedJobId = readString(payload.jobId) || null;
-    const limit = readPositiveInt(payload.limit, 100);
+    if (requestedJobId && !isCronJobPathComponent(requestedJobId)) return [];
+    const limit = Math.min(500, readPositiveInt(payload.limit, 100));
     const outputsRoot = join(this.hermesHomePath, 'cron', 'output');
     if (!existsSync(outputsRoot)) {
       return [];
@@ -225,7 +248,7 @@ export abstract class HermesCronMethods {
 
     for (const jobId of jobDirs) {
       const dirPath = join(outputsRoot, jobId);
-      if (!existsSync(dirPath)) {
+      if (!isCronJobPathComponent(jobId) || !isCronOutputDirectory(outputsRoot, dirPath)) {
         continue;
       }
       for (const dirent of readdirSync(dirPath, { withFileTypes: true })) {
@@ -327,15 +350,36 @@ export abstract class HermesCronMethods {
     fileName: string,
     job?: HermesCronJob,
   ): HermesCronOutputDetail | null {
-    if (!/^[A-Za-z0-9._-]+\.md$/.test(fileName)) {
+    if (!isCronJobPathComponent(jobId) || fileName.length > 128 || !/^[A-Za-z0-9][A-Za-z0-9._-]*\.md$/.test(fileName)) {
       return null;
     }
-    const outputPath = join(this.hermesHomePath, 'cron', 'output', jobId, fileName);
-    if (!existsSync(outputPath)) {
+    const root = join(this.hermesHomePath, 'cron', 'output');
+    const directory = join(root, jobId);
+    if (!isCronOutputDirectory(root, directory)) return null;
+    const outputPath = join(directory, fileName);
+    let descriptor: number | undefined;
+    try {
+      const before = lstatSync(outputPath);
+      if (!before.isFile() || before.isSymbolicLink() || before.nlink !== 1 || before.size > 2 * 1024 * 1024) return null;
+      descriptor = openSync(outputPath, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+      const opened = fstatSync(descriptor);
+      if (!opened.isFile() || opened.nlink !== 1 || opened.dev !== before.dev || opened.ino !== before.ino
+        || opened.size > 2 * 1024 * 1024 || !isCronOutputDirectory(root, directory)) return null;
+      const bytes = Buffer.alloc(2 * 1024 * 1024 + 1);
+      let length = 0;
+      while (length < bytes.length) {
+        const count = readSync(descriptor, bytes, length, bytes.length - length, length);
+        if (!count) break;
+        length += count;
+      }
+      if (length > 2 * 1024 * 1024) return null;
+      const content = new TextDecoder('utf-8', { fatal: true }).decode(bytes.subarray(0, length));
+      return parseHermesCronOutput(jobId, fileName, content, outputPath, job?.name);
+    } catch {
       return null;
+    } finally {
+      if (descriptor !== undefined) closeSync(descriptor);
     }
-    const content = readFileSync(outputPath, 'utf8');
-    return parseHermesCronOutput(jobId, fileName, content, outputPath, job?.name);
   }
 
   async runHermesCronTool(
@@ -350,10 +394,12 @@ export abstract class HermesCronMethods {
       error?: unknown;
     }>(
       [
-        'import json',
+        'import inspect, json',
         'import sys',
         'from tools.cronjob_tools import cronjob',
         'payload = json.load(sys.stdin)',
+        'model_fields = {key: payload[key] for key in ("model", "provider", "base_url") if key in payload}',
+        'if any(key not in inspect.signature(cronjob).parameters for key in model_fields): raise ValueError("Update Hermes to configure task models.")',
         'result = cronjob(',
         '  action=payload.get("action"),',
         '  job_id=payload.get("jobId"),',
@@ -364,15 +410,41 @@ export abstract class HermesCronMethods {
         '  deliver=payload.get("deliver"),',
         '  skills=payload.get("skills"),',
         '  script=payload.get("script"),',
+        '  **model_fields,',
         ')',
         'print(result)',
       ].join('\n'),
       { ...payload, action },
     ));
-    if (result.success === false) {
-      throw new Error(readString(result.error) || `Failed to ${action} Hermes scheduled task.`);
+    if (!isRecord(result) || result.success !== true) {
+      throw new Error(readString(isRecord(result) ? result.error : undefined) || `Failed to ${action} Hermes scheduled task.`);
     }
     return result;
+  }
+}
+
+function isCronJobPathComponent(value: string): boolean {
+  return /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(value);
+}
+
+function validateCronModelFields(payload: Record<string, unknown>): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const key of ['model', 'provider', 'base_url']) {
+    if (payload[key] === undefined) continue;
+    const value = payload[key];
+    if (typeof value !== 'string' || value.length > (key === 'base_url' ? 2048 : 256) || /[\u0000-\u001f]/.test(value)) throw new Error(`Invalid task ${key}.`);
+    result[key] = value.trim();
+  }
+  return result;
+}
+
+function isCronOutputDirectory(root: string, directory: string): boolean {
+  try {
+    const entry = lstatSync(directory);
+    return entry.isDirectory() && !entry.isSymbolicLink()
+      && realpathSync(directory) === join(realpathSync(root), directory.slice(root.length + 1));
+  } catch {
+    return false;
   }
 }
 
@@ -429,7 +501,10 @@ function parseHermesCronOutput(
 ): HermesCronOutputDetail {
   const jobNameMatch = content.match(/^# Cron Job: (.+)$/m);
   const heading = readString(jobNameMatch?.[1]);
-  const failed = /\(FAILED\)$/i.test(heading);
+  const header = content.split(/^## (?:Prompt|Response)\s*$/m)[0];
+  const state = readString(header.match(/^\*\*Status:\*\*\s*(.+)$/m)?.[1]).toLowerCase();
+  const failed = /\(FAILED\)$/i.test(heading) || /^(?:blocked|error|failed|script failed|monitor source failed)\b/.test(state)
+    || /^Error:/m.test(header);
   const title = heading.replace(/\s+\(FAILED\)$/i, '') || fallbackJobName || jobId;
   const responseBlock = content.split(/^## Response\s*$/m)[1] ?? '';
   const preview = responseBlock
@@ -456,7 +531,7 @@ function parseHermesCronOutput(
     fileName,
     createdAt,
     createdAtIso: Number.isFinite(createdAt) ? new Date(createdAt).toISOString() : null,
-    status: failed ? 'error' : 'ok',
+    status: failed ? 'error' : (heading && (/^## Response\s*$/m.test(content) || /^(?:ok|success|silent|no_change)\b/.test(state))) ? 'ok' : 'unknown',
     title,
     preview,
     content,

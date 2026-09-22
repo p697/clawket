@@ -168,6 +168,8 @@ Windows ACL assertions must fail on command/module errors or missing paths. When
 
 Relay socket diagnostics use a server-generated per-socket UUID persisted in WebSocket attachments; never derive it from credentials or user/device identity. Preserve it across attachment updates and hibernation. Keep raw IDs and secrets redacted. Pairing/connection triage follows `docs/3.0/20-connection-diagnostics.md`; distinguish local logs, cloud logs and measured end-to-end evidence.
 
+Production observability records sanitized application logs only: keep invocation logs and traces disabled and query-string redaction enabled. Mirror approved cloud settings in the ignored deployment configs; each Registry service binding must target its own backend/environment Relay. Configuration-only version changes still require refreshing the recorded production deployment anchors and verifying source hashes.
+
 ## Independent OpenClaw Client Channels
 
 Negotiated `bridge.client-sockets.v1` uses authenticated owner secondary sockets bound to server-generated full-client socket diagnostic IDs. Keep each local Gateway handshake isolated, preserve raw 8 MiB frames, and reconstruct routes from attachments after hibernation. Restricted pairing sockets cannot become channel targets. Hermes and legacy owners retain their existing policies.
@@ -181,3 +183,7 @@ Keep Wrangler on a security-patched v4 release (current minimum 4.131.0) with it
 ## First Registry migration recovery
 
 Prepare and verify fixed recovery bundles with `scripts/release/registry-recovery.mjs` before first production DO migration; follow `docs/3.0/registry-recovery-runbook.md`. Preserve `PairRegisterRateLimiter`, its binding/migration, and registration safety in a forward recovery deployment. The release matrix tests these bundles; local workerd success is not Cloudflare control-plane migration evidence.
+
+## Production admission and alerting
+
+Preserve machine API challenge exemptions without skipping rate limiting. Review both backend route maps and shared-IP reconnect headroom before changing edge admission. Keep authenticated health probes usable; return JSON 429 for admission rejection. Current settings, limitations and rollback are in `docs/3.0/security-admission-2026-09-21.md`; budget/DDoS notifications do not prove daily usage or session-health alert coverage.

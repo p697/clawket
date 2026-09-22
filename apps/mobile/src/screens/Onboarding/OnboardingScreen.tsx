@@ -312,7 +312,6 @@ export function OnboardingScreen({
         </> : <>
           {agentMethod ? <FormStep number="01" title={t('Send this message to your agent')}
             action={agentPromptSent ? <Check testID="onboarding-agent-prompt-sent" size={IconSize.sm} color={theme.colors.inkSecondary} strokeWidth={2} accessibilityLabel={t('Copied')} /> : undefined}>
-            <Text style={styles.subtitle}>{t('Paste it to the agent you already chat with, like {{backend}} in Telegram. It will reply with the pairing code.', { backend: backendLabel })}</Text>
             <MessagePreview testID="onboarding-agent-prompt" message={agentPrompt} expanded={agentPromptExpanded}
               onToggle={() => setAgentPromptExpanded((expanded) => !expanded)} accessibilityLabel={t('Message for your agent')} />
             <Button testID="onboarding-copy-agent-prompt" label={agentPromptCopied ? t('Copied') : t('Copy this message')} icon={agentPromptCopied ? Check : Copy}
@@ -326,7 +325,7 @@ export function OnboardingScreen({
               void Promise.resolve(onCopyCommand(effectiveCommand)).then(flashCopied, () => setLocalError(true));
             } : undefined} />
           </FormStep>}
-          <FormStep number="02" title={agentMethod ? t('Enter the code it replies with') : t('Enter the pairing code')}
+          <FormStep number="02" style={styles.secondStep} title={agentMethod ? t('Enter the code it replies with') : t('Enter the pairing code')}
             action={onPastePairingCode ? <Button testID="onboarding-paste-code" label={t('Paste')} variant="text" disabled={connecting} onPress={() => { void pastePairingCode().catch(() => setLocalError(true)); }} /> : undefined}>
             <View ref={keyboardReveal.anchorRef} testID="onboarding-keyboard-anchor" style={styles.keyboardAnchor} onLayout={keyboardReveal.measureAnchor}>
               <FormTextInput testID="onboarding-pairing-code" accessibilityLabel={t('Pairing code')} surface="quiet"
@@ -503,6 +502,8 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     subtitle: { color: colors.inkSecondary, fontSize: FontSize.secondary, lineHeight: LineHeight.secondary, fontWeight: FontWeight.regular },
     backendList: { gap: Space.sm },
     keyboardAnchor: { gap: Space.md },
+    // Step 02 gets a touch more air than the page's uniform block gap so the two steps read as separate moves.
+    secondStep: { marginTop: Space.sm },
     codeInputText: { fontSize: FontSize.title, lineHeight: LineHeight.title, fontVariant: ['tabular-nums'], letterSpacing: Space.xs, textAlign: 'center' },
     secondaryActions: { marginTop: Space.xl, gap: Space.sm },
     openSource: { marginTop: 'auto', paddingTop: Space.xxl, paddingBottom: Space.lg, alignItems: 'center', gap: Space.xs },

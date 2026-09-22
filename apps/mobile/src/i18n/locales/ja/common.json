@@ -243,5 +243,7 @@
   "Unable to open redemption. Please try again.": "コードの利用画面を開けません。もう一度お試しください。",
   "Last connected: {{time}}": "最終接続：{{time}}",
   "Check your network and make sure the remote service is running.": "ネットワークとリモートサービスの稼働状況を確認してください。",
-  "View saved messages": "保存済みメッセージを見る"
+  "View saved messages": "保存済みメッセージを見る",
+  "Search and bulk export": "検索と一括エクスポート",
+  "Skill and memory versions": "スキルとメモリの履歴"
 }

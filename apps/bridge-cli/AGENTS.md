@@ -74,3 +74,7 @@ Supervisor Stop must wait for the owned child to exit before acknowledging; Star
 The CLI keeps `https-proxy-agent` as an explicit external runtime dependency for Relay-only proxy support; preserve it in the packaged install. Managed service proxy configuration must not modify global host networking.
 
 Diagnostics resolve the invoked CLI symlink before matching managed process command lines; a global `clawket` symlink and its real bundle path must identify the same runtime. Missing paths remain safe to inspect.
+
+On an explicit `restart`, retire the owned Hermes Bridge and Relay children before the OpenClaw service launcher resumes. Its normal recovery path reuses healthy children, which must not leave a pre-upgrade runtime active. Keep Hermes API/gateway processes and pairing files intact; do not spawn duplicate children alongside the launcher.
+
+A Hermes Relay command that deliberately yields to another owner stays alive with its diagnostic until explicit stop/restart. Do not let the service watchdog respawn a yielded instance and resume the ownership fight; signal shutdown must release the CLI keepalive handle.

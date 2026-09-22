@@ -3,7 +3,7 @@ import { fireEvent, render } from '@testing-library/react-native';
 import { Text } from 'react-native';
 import { builtInAccents } from '../../theme/accents';
 import { buildTheme } from '../../theme/theme';
-import { BorderWidth, ControlSize, FontSize, Radius, Shadow, Space } from '../../theme/tokens';
+import { BorderWidth, ControlSize, FontSize, Shadow, Space } from '../../theme/tokens';
 import { ScreenHeader } from './ScreenHeader';
 
 let mockScheme: 'light' | 'dark' = 'light';
@@ -70,7 +70,7 @@ describe.each(['light', 'dark'] as const)('ScreenHeader in %s', (scheme) => {
     });
     const back = view.getByTestId('page-back');
     expect(flattenStyle(back.props.style)).toMatchObject({
-      width: ControlSize.floatingButton, height: ControlSize.floatingButton, borderRadius: Radius.full,
+      width: ControlSize.floatingButton, height: ControlSize.floatingButton, borderRadius: ControlSize.floatingButton / 2,
       backgroundColor: theme().colors.surfaceFloating,
     });
     // Pure white lifted by the floating shadow in light; the floating surface with a hairline in dark.

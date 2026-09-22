@@ -7,6 +7,7 @@ import {
   View,
 } from 'react-native';
 import {
+  Archive,
   ChevronDown,
   Clock3,
   LockKeyhole,
@@ -66,6 +67,7 @@ export type SearchViewProps = Readonly<{
   bottomInset: number;
   autoFocus?: boolean;
   onBack: () => void;
+  onOpenArchives?: () => void;
   onChangeQuery: (query: string) => void;
   onChangeFilter: (filter: SearchFilter) => void;
   onSelectResult: (result: SearchResult) => void;
@@ -415,6 +417,7 @@ export function SearchView({
   bottomInset,
   autoFocus = true,
   onBack,
+  onOpenArchives,
   onChangeQuery,
   onChangeFilter,
   onSelectResult,
@@ -456,6 +459,7 @@ export function SearchView({
           onChangeText={onChangeQuery}
           placeholder={t('Agents, sessions, and messages')}
         />
+        {onOpenArchives ? <FloatingButton icon={Archive} appearance="surface" accessibilityLabel={t('Saved conversations', { ns: 'chat' })} onPress={onOpenArchives} testID="search-archives" /> : null}
       </View>
       <ScrollView
         testID="search-scroll"

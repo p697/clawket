@@ -94,12 +94,15 @@ describe('real production bundles → candidate → rollback, isolated local Wor
       socket.send(JSON.stringify(backend === 'openclaw' ? wire('connect.c2.challenge') : { type: 'event', event: 'health', payload: { status: 'ok' } }));
     });
     async function startUnit(unit: 'registry' | 'relay', candidate: boolean | 'recovery') {
+      // Production may already have crossed the registration-limiter migration.
+      const snapshotHasLimiter = unit === 'registry' && !candidate
+        && /export\s*\{[^}]*\bPairRegisterRateLimiter\b/s.test(await readFile(resolve(snapshotDir!, `${prefix}-registry.js`), 'utf8'));
       const config = {
         name: `${prefix}-${unit}`, main: candidate === 'recovery' ? resolve(recoveryDir!, `${prefix}-registry/bundle/index.js`) : candidate ? resolve(root, `apps/${unit === 'relay' ? 'relay-worker' : 'relay-registry'}/src/index.ts`) : resolve(snapshotDir!, `${prefix}-${unit}.js`),
         compatibility_date: '2026-03-03',
         kv_namespaces: [{ binding: kv, id: '00000000000000000000000000000000' }],
         ...(unit === 'relay' ? { durable_objects: { bindings: [{ name: room, class_name: klass }] }, migrations: [{ tag: 'v1', new_sqlite_classes: [klass] }] }
-          : candidate ? { durable_objects: { bindings: [{ name: 'PAIR_REGISTER_LIMITER', class_name: 'PairRegisterRateLimiter' }] }, migrations: [{ tag: 'v1', new_sqlite_classes: ['PairRegisterRateLimiter'] }] } : {}),
+          : candidate || snapshotHasLimiter ? { durable_objects: { bindings: [{ name: 'PAIR_REGISTER_LIMITER', class_name: 'PairRegisterRateLimiter' }] }, migrations: [{ tag: 'v1', new_sqlite_classes: ['PairRegisterRateLimiter'] }] } : {}),
       };
       const configPath = join(temp, `${unit}.json`);
       await writeFile(configPath, JSON.stringify(config));
@@ -186,16 +189,17 @@ describe('real production bundles → candidate → rollback, isolated local Wor
       }
       const registerPath = backend === 'hermes' ? '/v1/hermes/pair/register' : '/v1/pair/register';
       const registrationStatuses: number[] = [];
+      const limiterHeaders = { 'content-type': 'application/json', 'CF-Connecting-IP': '192.0.2.123' };
       for (let attempt = 0; attempt < 11; attempt += 1) {
-        const response = await fetch(regUrl + registerPath, { method: 'POST', headers: { 'content-type': 'application/json' },
+        const response = await fetch(regUrl + registerPath, { method: 'POST', headers: limiterHeaders,
           body: JSON.stringify({ preferredRegion: 'us' }) });
         registrationStatuses.push(response.status);
       }
-      // One registration in the candidate phase consumed the first slot.
-      expect(registrationStatuses).toEqual([...Array(9).fill(200), 429, 429]);
+      // A fresh source bucket is independent of baseline and candidate registrations.
+      expect(registrationStatuses).toEqual([...Array(10).fill(200), 429]);
       await registry!.stop();
       registry = await startUnit('registry', 'recovery');
-      const limited = await fetch(regUrl + registerPath, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+      const limited = await fetch(regUrl + registerPath, { method: 'POST', headers: limiterHeaders, body: '{}' });
       expect(limited.status).toBe(429);
 
     }

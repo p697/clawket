@@ -194,7 +194,7 @@ describe.each(['light', 'dark'] as const)('%s roster primitives', (scheme) => {
     expect(style).toMatchObject({
       width: ControlSize.floatingButton,
       height: ControlSize.floatingButton,
-      borderRadius: Radius.full,
+      borderRadius: ControlSize.floatingButton / 2,
       backgroundColor: 'transparent',
     });
     expect(root.props.android_ripple).toBeUndefined();
@@ -358,9 +358,10 @@ describe.each(['light', 'dark'] as const)('%s roster primitives', (scheme) => {
     const resting = flattenStyle(root.props.style);
 
     expect(resting).toMatchObject({
-      height: ControlSize.rosterRow,
+      minHeight: ControlSize.rosterRow,
       backgroundColor: theme.colors.canvas,
     });
+    expect(resting.height).toBeUndefined();
     expect(mockInterpolateColor).toHaveBeenCalledWith(
       0,
       [0, 1],

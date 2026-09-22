@@ -19,7 +19,7 @@
   "Cost unavailable": "Coût indisponible",
   "Hermes tracked token usage, but it could not determine a reliable dollar cost for this route.": "Hermes a suivi l’utilisation des tokens, mais n’a pas pu déterminer un coût fiable en dollars pour cette route.",
   "Mixed cost sources": "Sources de coût mixtes",
-  "This range mixes priced usage with included or unpriced routes, so the dollar total is only a partial view.": "Cette période mêle une utilisation tarifée et des routes incluses ou sans prix : le total en dollars n’est donc qu’une vue partielle.",
+  "This range mixes priced usage with included or unpriced routes, so the dollar total is only a partial view.": "Ce total inclut uniquement les utilisations dont le coût est connu.",
   "Estimated cost": "Coût estimé",
   "Hermes is showing an estimate for this route rather than a reconciled bill.": "Hermes affiche une estimation pour cette route plutôt qu’une facture rapprochée.",
   "Search logs...": "Rechercher dans les journaux…",
@@ -243,7 +243,6 @@
   "Blocked by allowlist": "Bloqué par la liste d’autorisation",
   "Failed to update skill": "Échec de la mise à jour de la compétence",
   "Failed to uninstall skill": "Échec de la désinstallation de la compétence",
-  "Failed to request installation": "Échec de la demande d’installation",
   "Source": "Source",
   "Agent timezone": "Fuseau horaire de l’Agent",
   "Check configured services and summarize problems and suggested fixes.": "Vérifie les services configurés et résume les problèmes et les solutions proposées.",
@@ -380,5 +379,15 @@
   "Disable {{name}}?": "Désactiver {{name}} ?",
   "This account starts receiving messages again.": "Ce compte recommence à recevoir des messages.",
   "This account stops receiving messages until you enable it again.": "Ce compte ne recevra plus de messages jusqu'à ce que vous le réactiviez.",
-  "Failed to update channel": "Impossible de mettre à jour le canal"
+  "Failed to update channel": "Impossible de mettre à jour le canal",
+  "About me": "À propos de moi",
+  "Version history": "Historique des versions",
+  "No saved versions": "Aucune version enregistrée",
+  "This file changed. Reopen it before saving.": "Ce fichier a changé. Rouvrez-le avant de sauvegarder.",
+  "Model health": "État des modèles",
+  "Global model": "Modèle global",
+  "Test connections": "Tester les connexions",
+  "Restore version": "Restaurer cette version",
+  "This file is too large for version history.": "Ce fichier est trop volumineux pour conserver son historique.",
+  "Scheduled task created": "Tâche planifiée créée"
 }

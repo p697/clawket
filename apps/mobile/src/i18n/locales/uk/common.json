@@ -243,5 +243,7 @@
   "Unable to open redemption. Please try again.": "Не вдалося відкрити активацію коду. Спробуйте ще раз.",
   "Last connected: {{time}}": "Останнє підключення: {{time}}",
   "Check your network and make sure the remote service is running.": "Перевірте мережу та переконайтеся, що віддалений сервіс працює.",
-  "View saved messages": "Переглянути збережені повідомлення"
+  "View saved messages": "Переглянути збережені повідомлення",
+  "Search and bulk export": "Пошук і масовий експорт",
+  "Skill and memory versions": "Версії навичок і пам’яті"
 }

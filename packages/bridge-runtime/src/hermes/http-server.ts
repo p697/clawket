@@ -10,7 +10,6 @@ import {
   type WebSocketFrameData,
 } from '../frame-limit.js';
 import {
-  HERMES_BRIDGE_CAPABILITIES,
   SLOW_BRIDGE_REQUEST_LOG_THRESHOLD_MS,
   formatError,
   type HermesBridgeRequest,
@@ -27,6 +26,7 @@ export type HermesHttpContextSnapshot = {
 };
 
 export abstract class HermesHttpServerMethods {
+  declare getBridgeCapabilities: () => string[];
   declare apiBaseUrl: string;
   declare apiKey: string | null;
   declare bridgeVersion: string | undefined;
@@ -50,7 +50,7 @@ export abstract class HermesHttpServerMethods {
         wsPath: '/v1/hermes/ws',
         hermesApiBaseUrl: this.apiBaseUrl,
         hermesApiReachable: reachable,
-        capabilities: [...HERMES_BRIDGE_CAPABILITIES],
+        capabilities: this.getBridgeCapabilities(),
         ...(this.bridgeVersion ? { bridgeVersion: this.bridgeVersion } : {}),
       });
       return;
@@ -101,7 +101,7 @@ export abstract class HermesHttpServerMethods {
       ts: Date.now(),
       hermesApiReachable: this.snapshot.hermesApiReachable,
       mode: 'hermes',
-      capabilities: [...HERMES_BRIDGE_CAPABILITIES],
+      capabilities: this.getBridgeCapabilities(),
       ...(this.bridgeVersion ? { bridgeVersion: this.bridgeVersion } : {}),
     });
   }

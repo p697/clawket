@@ -7,7 +7,7 @@
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "postinstall": "node ./scripts/patch-android-native-deps.mjs && node ./scripts/patch-paste-input-podspec.mjs && node ./scripts/patch-expo-permissions.mjs && node ./scripts/patch-enriched-markdown-tail-fade.mjs",
+    "postinstall": "node ./scripts/patch-android-native-deps.mjs && node ./scripts/patch-paste-input-podspec.mjs && node ./scripts/patch-expo-permissions.mjs && node ./scripts/patch-enriched-markdown-tail-fade.mjs && node ./scripts/patch-expo-sharing.mjs",
     "eas-build-pre-install": "./scripts/eas-validate-public-config.sh",
     "eas:env:sync": "node scripts/sync-eas-env-from-local.mjs",
     "prebuild:clean": "npx expo prebuild --clean",
@@ -132,6 +132,11 @@
     "ws@>=8 <9": "8.21.3"
   },
   "expo": {
+    "autolinking": {
+      "android": {
+        "buildFromSource": ["expo-sharing"]
+      }
+    },
     "install": {
       "exclude": [
         "@shopify/flash-list",

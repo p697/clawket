@@ -19,7 +19,7 @@
   "Cost unavailable": "Custo indisponível",
   "Hermes tracked token usage, but it could not determine a reliable dollar cost for this route.": "O Hermes registrou o uso de tokens, mas não conseguiu determinar um custo confiável em dólares para esta rota.",
   "Mixed cost sources": "Fontes de custo mistas",
-  "This range mixes priced usage with included or unpriced routes, so the dollar total is only a partial view.": "Este período mistura uso com preço e rotas incluídas ou sem preço, então o total em dólares é apenas uma visão parcial.",
+  "This range mixes priced usage with included or unpriced routes, so the dollar total is only a partial view.": "Este total inclui apenas o uso com custo conhecido.",
   "Estimated cost": "Custo estimado",
   "Hermes is showing an estimate for this route rather than a reconciled bill.": "O Hermes está mostrando uma estimativa para esta rota, não uma fatura conciliada.",
   "Search logs...": "Buscar nos logs…",
@@ -243,7 +243,6 @@
   "Blocked by allowlist": "Bloqueado pela lista de permissões",
   "Failed to update skill": "Falha ao atualizar a habilidade",
   "Failed to uninstall skill": "Falha ao desinstalar a habilidade",
-  "Failed to request installation": "Falha ao solicitar a instalação",
   "Source": "Origem",
   "Agent timezone": "Fuso horário do Agent",
   "Check configured services and summarize problems and suggested fixes.": "Verifique os serviços configurados e resuma os problemas e as soluções sugeridas.",
@@ -380,5 +379,15 @@
   "Disable {{name}}?": "Desativar {{name}}?",
   "This account starts receiving messages again.": "Esta conta volta a receber mensagens.",
   "This account stops receiving messages until you enable it again.": "Esta conta deixa de receber mensagens até você ativá-la de novo.",
-  "Failed to update channel": "Não foi possível atualizar o canal"
+  "Failed to update channel": "Não foi possível atualizar o canal",
+  "About me": "Sobre mim",
+  "Version history": "Histórico de versões",
+  "No saved versions": "Nenhuma versão salva",
+  "This file changed. Reopen it before saving.": "O arquivo mudou. Abra-o novamente antes de salvar.",
+  "Model health": "Estado do modelo",
+  "Global model": "Modelo global",
+  "Test connections": "Testar conexões",
+  "Restore version": "Restaurar versão",
+  "This file is too large for version history.": "Este arquivo é grande demais para o histórico de versões.",
+  "Scheduled task created": "Tarefa agendada criada"
 }

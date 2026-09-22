@@ -1,5 +1,5 @@
 import React from 'react';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { ChevronDown, ChevronUp, Copy, Check, Lock, type LucideIcon } from 'lucide-react-native';
 import { ChevronLeft, ChevronRight } from './DirectionalIcon';
 import { useTranslation } from 'react-i18next';
@@ -42,9 +42,9 @@ export function ChoiceRow({ icon: Icon, leading, title, description, locked = fa
   </Pressable>;
 }
 
-export function FormStep({ number, title, children, action }: { number: string; title: string; children: React.ReactNode; action?: React.ReactNode }) {
+export function FormStep({ number, title, children, action, style }: { number: string; title: string; children: React.ReactNode; action?: React.ReactNode; style?: StyleProp<ViewStyle> }) {
   const { theme: { colors } } = useAppTheme();
-  return <View style={styles.step}>
+  return <View style={[styles.step, style]}>
     <View style={styles.stepHeader}>
       <Text style={[styles.number, { color: colors.inkSecondary }]}>{number}</Text>
       <Text accessibilityRole="header" style={[styles.stepTitle, { color: colors.ink }]}>{title}</Text>

@@ -180,7 +180,7 @@ export function AgentAvatar({
         ]}
       >
         {content ? (
-          <Text numberOfLines={1} style={textStyle}>
+          <Text numberOfLines={1} allowFontScaling={false} style={textStyle}>
             {content}
           </Text>
         ) : null}

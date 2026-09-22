@@ -262,3 +262,36 @@ it('shows the configured default independently of the selected checkmark and wai
   view.getByTestId('model-picker-shell').props.onAfterClose();
   expect(onManage).toHaveBeenCalledTimes(1);
 });
+
+it('checks the inherited model without a duplicate Default row and restores inheritance on selection', () => {
+  const view = renderPicker({ showDefault: true, selectedModelId: '', configuredDefaultModel: 'openai/gpt-5-api' });
+  expect(view.queryByTestId('model-picker-row-default')).toBeNull();
+  expect(view.getByTestId('model-picker-selected-openai:gpt-5-api')).toBeTruthy();
+  expect(view.onSelectModel).not.toHaveBeenCalled();
+  fireEvent.changeText(view.getByTestId('model-picker-search'), 'Claude');
+  expect(view.queryByTestId('model-picker-row-default')).toBeNull();
+  fireEvent.changeText(view.getByTestId('model-picker-search'), '');
+  fireEvent.press(view.getByTestId('model-picker-row-openai:gpt-5-api'));
+  expect(view.onSelectModel).toHaveBeenCalledWith({ id: '', name: 'Default', provider: '' });
+});
+
+it('keeps explicit overrides checked and lets them return to the inherited model', () => {
+  const view = renderPicker({ showDefault: true, selectedModelId: 'anthropic/claude-sonnet', configuredDefaultModel: 'openai/gpt-5-api' });
+  expect(view.getByTestId('model-picker-selected-anthropic:claude-sonnet')).toBeTruthy();
+  expect(view.queryByTestId('model-picker-selected-openai:gpt-5-api')).toBeNull();
+  fireEvent.press(view.getByTestId('model-picker-row-openai:gpt-5-api'));
+  expect(view.onSelectModel).toHaveBeenCalledWith({ id: '', name: 'Default', provider: '' });
+});
+
+it.each([undefined, 'missing/model'])('retains the inheritance action when the default cannot be resolved: %s', configuredDefaultModel => {
+  const view = renderPicker({ showDefault: true, selectedModelId: '', configuredDefaultModel });
+  expect(view.getByTestId('model-picker-selected-default')).toBeTruthy();
+  fireEvent.press(view.getByTestId('model-picker-row-default'));
+  expect(view.onSelectModel).toHaveBeenCalledWith({ id: '', name: 'Default', provider: '' });
+});
+
+it('keeps concrete selection semantics for callers without inheritance', () => {
+  const view = renderPicker({ configuredDefaultModel: 'openai/gpt-5-api' });
+  fireEvent.press(view.getByTestId('model-picker-row-openai:gpt-5-api'));
+  expect(view.onSelectModel).toHaveBeenCalledWith(models[0]);
+});

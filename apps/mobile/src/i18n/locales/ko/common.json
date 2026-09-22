@@ -243,5 +243,7 @@
   "Unable to open redemption. Please try again.": "코드 사용 화면을 열 수 없습니다. 다시 시도하세요.",
   "Last connected: {{time}}": "마지막 연결: {{time}}",
   "Check your network and make sure the remote service is running.": "네트워크와 원격 서비스의 실행 상태를 확인하세요.",
-  "View saved messages": "저장된 메시지 보기"
+  "View saved messages": "저장된 메시지 보기",
+  "Search and bulk export": "검색 및 일괄 내보내기",
+  "Skill and memory versions": "스킬 및 메모리 버전"
 }

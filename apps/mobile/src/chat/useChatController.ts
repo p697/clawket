@@ -86,7 +86,7 @@ import {
   SessionRunState,
 } from "./sessionRunState";
 import { shouldAdoptPendingOptimisticRunId } from "./pendingOptimisticRun";
-import { preserveMessagePresentation, preserveOptimisticAssistantMessage } from "./historyMergePolicy";
+import { preserveMessagePresentation, preserveOptimisticAssistantMessage, retireAliasedTools } from "./historyMergePolicy";
 import {
   FOREGROUND_REFRESH_AFTER_RECONNECT_TIMEOUT_MS,
   getForegroundRefreshDelayMs,
@@ -244,6 +244,10 @@ export function useChatController({
   chatSessionRequest,
   clearChatSessionRequest,
 }: ChatControllerOptions) {
+  const attachmentScope = `${adapter?.connection.id ?? ''}:${routeSessionKey ?? ''}`;
+  const attachmentScopeRef = useRef<string | null>(attachmentScope);
+  attachmentScopeRef.current = attachmentScope;
+  useEffect(() => { attachmentScopeRef.current = attachmentScope; return () => { attachmentScopeRef.current = null; }; }, [attachmentScope]);
   const readOnlyRef = useRef(readOnly);
   readOnlyRef.current = readOnly;
   const appContext = useAppContext();
@@ -287,7 +291,7 @@ export function useChatController({
     clearPendingImages,
     removePendingImage,
     canAddMoreImages,
-  } = useChatImagePicker(MAX_IMAGES);
+  } = useChatImagePicker(MAX_IMAGES, attachmentScope);
   const {
     onPasteFiles,
     onPasteFailed,
@@ -325,6 +329,7 @@ export function useChatController({
 
   const takePhoto = useCallback(async () => {
     const IP = await import("expo-image-picker");
+    if (attachmentScopeRef.current !== attachmentScope || !canAddMoreImages) return;
     const res = isMacCatalyst
       ? await IP.launchImageLibraryAsync({
         mediaTypes: ["images"],
@@ -335,13 +340,14 @@ export function useChatController({
       })
       : await (async () => {
         const perm = await IP.requestCameraPermissionsAsync();
-        if (!perm.granted) return { canceled: true, assets: [] };
+        if (!perm.granted || attachmentScopeRef.current !== attachmentScope) return { canceled: true, assets: [] };
         return IP.launchCameraAsync({
           quality: 0.8,
           base64: true,
           exif: false,
         });
       })();
+    if (attachmentScopeRef.current !== attachmentScope) return;
     if (!res.canceled && res.assets?.[0]?.base64) {
       const a = res.assets[0];
       setPendingImages((prev: PendingImage[]) =>
@@ -357,7 +363,7 @@ export function useChatController({
         ].slice(0, MAX_IMAGES),
       );
     }
-  }, [setPendingImages]);
+  }, [setPendingImages, attachmentScope, canAddMoreImages]);
 
   const preview = useChatImagePreview();
   const showDebug = debugMode ?? false;
@@ -373,6 +379,8 @@ export function useChatController({
   const sessionKeyRef = useRef<string | null>(routeSessionKey ?? null);
   const lastAdapterStateRef = useRef<AdapterConnectionState>("idle");
   const lastAdapterRef = useRef<AgentAdapter | null>(adapter);
+  const resolvedExecApprovalsRef = useRef({ adapter, ids: new Set<string>() });
+  if (resolvedExecApprovalsRef.current.adapter !== adapter) resolvedExecApprovalsRef.current = { adapter, ids: new Set() };
   const sendPreflightInFlightRef = useRef(false);
   const sendTriggerGuardRef = useRef(false);
 
@@ -553,6 +561,7 @@ export function useChatController({
     pendingMainSessionSwitch,
     clearPendingMainSessionSwitch,
   } = appContext;
+  const showExecApprovalRequests = execApprovalEnabled || Boolean(adapter?.management?.approvals?.listExec);
   const gatewayConfigId = adapter?.connection.id ?? null;
   const history = useChatHistoryState({
     adapter,
@@ -689,13 +698,22 @@ export function useChatController({
 
   const {
     clearPersistedDraft,
+    draftReadFailed,
+    recoverableDraft,
+    recoverLegacyDraft,
     resetDraftLoadState,
+    draftReady,
   } = useChatComposerDraft({
+    connectionId: gatewayConfigId,
     currentAgentId,
     input,
     sessionKey: history.sessionKey,
     setInput,
   });
+
+  useEffect(() => {
+    if (draftReadFailed) setSendFailure(t('Unable to restore draft.'));
+  }, [draftReadFailed, setSendFailure, t]);
 
   const messageQueueRef = useRef(messageQueue);
   messageQueueRef.current = messageQueue;
@@ -965,16 +983,23 @@ export function useChatController({
   );
 
   const requestVisibleHistoryReload = useCallback(
-    (sessionKey: string, reason: string) => {
+    async (sessionKey: string, reason: string) => {
       const inFlight = historyReloadInFlightRef.current;
       if (inFlight && inFlight.sessionKey === sessionKey) {
-        if (showDebug) dbg(`historyReload:reuse session=${sessionKey} reason=${reason}`);
-        return inFlight.promise;
+        if (reason === "post-stream") {
+          // A tool-result read can precede native persistence. Completion must
+          // read again after it settles, even inside the normal refresh cooldown.
+          await inFlight.promise.catch(() => 0);
+          if (sessionKeyRef.current !== sessionKey || currentRunIdRef.current) return 0;
+        } else {
+          if (showDebug) dbg(`historyReload:reuse session=${sessionKey} reason=${reason}`);
+          return inFlight.promise;
+        }
       }
 
       const recent = recentHistoryReloadRef.current;
       if (
-        recent &&
+        reason !== "post-stream" && recent &&
         recent.sessionKey === sessionKey &&
         Date.now() - recent.at < HISTORY_RELOAD_MIN_INTERVAL_MS
       ) {
@@ -1074,6 +1099,8 @@ export function useChatController({
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const backgroundedAtRef = useRef<number | null>(null);
   const [messageSubmittedAt, setMessageSubmittedAt] = useState<number | null>(null);
+  const [messageAcceptedAt, setMessageAcceptedAt] = useState<number | null>(null);
+  const [acceptedSubmission, setAcceptedSubmission] = useState<{ at: number; text: string; attachmentUris: string[] } | null>(null);
   const [scrollToBottomRequestAt, setScrollToBottomRequestAt] = useState<number | null>(null);
   const autoRefresh = useCallback(() => {
     if (!hasAdapter) {
@@ -1763,9 +1790,10 @@ export function useChatController({
     switch (update.type) {
       case "history_reconciled": {
         if (!matchesCurrentSession(update.sessionKey)) return;
-        history.setMessages((previous) =>
-          preserveMessagePresentation(previous, preserveOptimisticAssistantMessage(previous, update.messages)),
-        );
+        history.setMessages((previous) => {
+          const retained = retireAliasedTools(previous, update.messages, update.history.toolCallAliases);
+          return preserveMessagePresentation(retained, preserveOptimisticAssistantMessage(retained, update.messages));
+        });
         history.historyRawCountRef.current = update.history.messages.length;
         history.setHistoryLoaded(true);
         history.setHasMoreHistory(Boolean(update.nextCursor));
@@ -1923,6 +1951,12 @@ export function useChatController({
         ) {
           return;
         }
+        if (update.unappliedInput?.trim()) {
+          holdQueuedMessages("run_error");
+          const returned = update.unappliedInput.trim();
+          setInput((draft) => draft.includes(returned) ? draft : [draft, returned].filter(Boolean).join('\n\n'));
+          setSendFailure(t('The task finished before using this input. Your draft is restored.'));
+        }
         const activeRunStartedAt = streamStartedAtRef.current;
         const streamText = chatStreamRef.current ?? "";
         const segments = chatStreamSegmentsRef.current;
@@ -2011,9 +2045,10 @@ export function useChatController({
         if (update.approval.kind === "pair") return;
         if (
           update.approval.kind === "exec"
-          && execApprovalEnabled
+          && showExecApprovalRequests
           && (!update.sessionKey || matchesCurrentSession(update.sessionKey))
           && update.message
+          && !resolvedExecApprovalsRef.current.ids.has(update.message.id)
         ) {
           history.setMessages((previous) =>
             appendUniqueMessage(previous, update.message!),
@@ -2022,6 +2057,8 @@ export function useChatController({
         return;
       case "approval_resolved":
         if (update.kind === "pair") return;
+        resolvedExecApprovalsRef.current.ids.add(update.messageId);
+        if (resolvedExecApprovalsRef.current.ids.size > 512) resolvedExecApprovalsRef.current.ids.delete(resolvedExecApprovalsRef.current.ids.values().next().value!);
         history.setMessages((previous) => previous.map((message) => (
           message.id === update.messageId && message.approval
             ? {
@@ -2094,7 +2131,7 @@ export function useChatController({
     commitCurrentStreamSegment,
     consumeSilentCommandUpdate,
     currentAgentId,
-    execApprovalEnabled,
+    showExecApprovalRequests,
     history,
     holdQueuedMessages,
     markRunSignal,
@@ -2303,6 +2340,7 @@ export function useChatController({
       const sourceQueue = { store: messageQueue.store, scopeKey: messageQueue.scopeKey };
       const queued = sourceQueue.store.read(sourceQueue.scopeKey).items.find((item) => item.id === options?.messageId);
       const submittedAt = Date.now();
+      const submissionScope = sendScopeRef.current;
       const localTimestamp = queued?.createdAt ?? submittedAt;
       setMessageSubmittedAt(submittedAt);
       if (!queued) setScrollToBottomRequestAt(submittedAt);
@@ -2370,6 +2408,10 @@ export function useChatController({
       adapter
         .prompt(sessionKey, { text: effectiveText || " ", attachments, idempotencyKey })
         .then(({ runId: serverRunId }) => {
+          if (submissionScope.active && sendScopeRef.current === submissionScope && sessionKeyRef.current === sessionKey) {
+            setMessageAcceptedAt(submittedAt);
+            setAcceptedSubmission({ at: submittedAt, text: effectiveText, attachmentUris: images.map((image) => image.uri) });
+          }
           void recordSuccessfulSendForAutomaticReview();
           markTransportConfirmed();
           setUnconfirmedMessageIds((previous) => {
@@ -2747,6 +2789,35 @@ export function useChatController({
   // same locks that gate a manual send apply, so a queued message never races
   // the post-reply history refresh; the sending marker keeps its bubble in
   // place until history adopts the optimistic message with the same id.
+  const steeringBusyRef = useRef(false);
+  const onSteer = useCallback((expectedRunId?: string) => {
+    const key = history.sessionKey;
+    const runId = currentRunIdRef.current;
+    const text = input.trim();
+    if (expectedRunId && runId !== expectedRunId) {
+      setSendFailure(t('Sending failed. Check the conversation before trying again.'));
+      return;
+    }
+    if (readOnly || steeringBusyRef.current || !key || !runId || !text || pendingImages.length
+      || !adapter?.capabilities.steer || !adapter.steer || connectionState !== 'ready') return;
+    const scope = sendScopeRef.current;
+    steeringBusyRef.current = true;
+    setSendFailure(null);
+    void adapter.steer(key, runId, text).then(() => {
+      if (!scope.active || sendScopeRef.current !== scope || sessionKeyRef.current !== key) return;
+      const timestampMs = Date.now();
+      history.setMessages((messages) => [...messages, { id: `usr_${timestampMs}_steer_${runId}`, role: 'user', text, timestampMs }]);
+      setInput((current) => current === input ? '' : current);
+      setMessageSubmittedAt(timestampMs);
+      setMessageAcceptedAt(timestampMs);
+      setAcceptedSubmission({ at: timestampMs, text, attachmentUris: [] });
+    }).catch((error: unknown) => {
+      if (!scope.active || sendScopeRef.current !== scope) return;
+      setSendFailure(t('Sending failed. Check the conversation before trying again.'));
+      setSendFailureDetails(sanitizeReplyFailure(error instanceof Error ? error.message : String(error)) || null);
+    }).finally(() => { steeringBusyRef.current = false; });
+  }, [adapter, connectionState, history.sessionKey, history.setMessages, input, pendingImages.length, readOnly, t]);
+
   const queueDeliveryReady = !readOnly
     && history.historyLoaded
     && canSendMessage({
@@ -3129,6 +3200,23 @@ export function useChatController({
     return queued.length > 0 ? [...queued, ...merged] : merged;
   }, [adapter, chatStream, chatStreamSegments, chatToolMessages, getUserMessageText, history.messages, messageQueue.state, pairApprovalProjection, recoverableMessages]);
 
+  useEffect(() => {
+    const list = adapter?.management?.approvals?.listExec;
+    const key = history.sessionKey;
+    if (!showExecApprovalRequests || connectionState !== 'ready' || !history.historyLoaded || !key || !list) return;
+    let active = true;
+    void list(key).then((requests) => {
+      if (!active) return;
+      history.setMessages((messages) => requests.filter((request) => request.sessionKey === key
+        && !resolvedExecApprovalsRef.current.ids.has(`approval_${request.approval.id}`))
+        .reduce((current, { approval }) => appendUniqueMessage(current, {
+          id: `approval_${approval.id}`, role: 'system', text: '', timestampMs: Date.now(), approval: { ...approval, status: 'pending' },
+        }), messages));
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [adapter, connectionState, showExecApprovalRequests, history.historyLoaded, history.sessionKey, history.setMessages]);
+
+  const approvalResolutionRef = useRef(new Set<string>());
   const resolveApproval = useCallback(
     (
       id: string,
@@ -3158,66 +3246,66 @@ export function useChatController({
           store.failResolution(id, target);
         });
       }
-      analyticsEvents.approvalResolved({
-        kind: "exec",
-        decision: decision === "approve"
-          ? "allow-once"
-          : decision === "reject"
-            ? "deny"
-            : decision,
-      });
-      const status =
-        decision === "deny" || decision === "reject"
-          ? ("denied" as const)
-          : ("allowed" as const);
-      history.setMessages((prev) =>
-        prev.map((m) =>
-          m.approval?.id === id
-            ? { ...m, approval: { ...m.approval, status } }
-            : m,
-        ),
-      );
-      const execDecision = decision === "approve"
-        ? "allow-once"
-        : decision === "reject"
-          ? "deny"
-          : decision;
-      adapter?.management?.approvals?.resolveExec(id, execDecision).catch(() => {});
+      const operation = adapter?.management?.approvals?.resolveExec;
+      const request = history.messages.find((message) => message.approval?.id === id)?.approval;
+      if (!operation || !request || request.kind === 'pair' || request.status !== 'pending' || (request.expiresAtMs !== null && request.expiresAtMs <= Date.now())) return;
+      const execDecision = decision === 'approve' ? 'allow-once' : decision === 'reject' ? 'deny' : decision;
+      if (request.decisions && !request.decisions.includes(execDecision)) return;
+      const scope = sendScopeRef.current;
+      const lock = `${history.sessionKey}:${id}`;
+      if (approvalResolutionRef.current.has(lock)) return;
+      approvalResolutionRef.current.add(lock);
+      const patch = (changes: { resolving: boolean; resolutionError: boolean; status?: 'allowed' | 'denied' }) => {
+        if (!scope.active || sendScopeRef.current !== scope) return;
+        history.setMessages((messages) => messages.map((message) => message.approval?.id === id
+          ? { ...message, approval: { ...message.approval, ...changes } } : message));
+      };
+      patch({ resolving: true, resolutionError: false });
+      return operation(id, execDecision).then(() => {
+        patch({ resolving: false, resolutionError: false, status: execDecision === 'deny' ? 'denied' : 'allowed' });
+        analyticsEvents.approvalResolved({ kind: 'exec', decision: execDecision });
+      }).catch(() => {
+        patch({ resolving: false, resolutionError: true });
+      }).finally(() => { approvalResolutionRef.current.delete(lock); });
     },
     [adapter, history],
   );
 
+  const abortReviewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortInFlightRef = useRef(false);
+  useEffect(() => () => { if (abortReviewTimerRef.current) clearTimeout(abortReviewTimerRef.current); }, []);
   const abortCurrentRun = useCallback(() => {
-    if (!history.sessionKey) return;
-    if (!adapter?.capabilities.abort) return;
+    const key = history.sessionKey;
+    if (!key || !adapter?.capabilities.abort || abortInFlightRef.current) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid);
-    // Stopping is a decision about what comes next; pause the queue before
-    // any terminal event can settle the run.
     holdQueuedMessages("abort");
     const runIdAtAbort = currentRunIdRef.current;
-    adapter
-      .cancel(history.sessionKey, runIdAtAbort === sessionAbortableRunRef.current ? undefined : runIdAtAbort ?? undefined)
-      .catch((err) => {
+    const scope = sendScopeRef.current;
+    const stillCurrent = () => scope.active && sendScopeRef.current === scope && sessionKeyRef.current === key
+      && currentRunIdRef.current === runIdAtAbort;
+    abortInFlightRef.current = true;
+    void adapter.cancel(key, runIdAtAbort === sessionAbortableRunRef.current ? undefined : runIdAtAbort ?? undefined)
+      .then(() => {
+        if (!stillCurrent() || !runIdAtAbort) return;
+        setActivityLabel(t('Stop requested'));
+        if (abortReviewTimerRef.current) clearTimeout(abortReviewTimerRef.current);
+        // Acknowledgement can mean cooperative stopping. Quiet tools remain
+        // observable until the backend confirms that this session is idle.
+        abortReviewTimerRef.current = setTimeout(() => {
+          abortReviewTimerRef.current = null;
+          if (!stillCurrent()) return;
+          void adapter.loadSession(key, { limit: 12 }).then((snapshot) => {
+            if (!stillCurrent() || snapshot.hasActiveRun !== false) return;
+            clearActiveRunState(key, 'abort:confirmed-idle', runIdAtAbort);
+            void requestVisibleHistoryReload(key, 'abort:confirmed-idle').catch(() => undefined);
+          }).catch(() => undefined);
+        }, 5000);
+      }).catch((err) => {
+        if (!stillCurrent()) return;
         dbg(`Abort failed: ${String(err)}`);
-      });
-    // Local fallback: if no terminal event clears the run within 5s,
-    // force-clear the stuck state so the UI becomes responsive.
-    setTimeout(() => {
-      if (!currentRunIdRef.current) return; // Already cleared
-      if (runIdAtAbort && currentRunIdRef.current !== runIdAtAbort)
-        return; // Different run
-      const sessionKey = sessionKeyRef.current;
-      if (sessionKey) {
-        sessionRunStateRef.current.delete(sessionKey);
-      }
-      currentRunIdRef.current = null;
-      streamStartedAtRef.current = null;
-      clearTransientRunPresentation();
-      setIsSending(false);
-      setActivityLabel(null);
-      dbg("Abort fallback: force-cleared stuck run state");
-    }, 5000);
-  }, [adapter, clearTransientRunPresentation, dbg, history.sessionKey, holdQueuedMessages]);
+        setSendFailure(t('Could not stop the task. Check its status and try again.'));
+      }).finally(() => { abortInFlightRef.current = false; });
+  }, [adapter, clearActiveRunState, dbg, history.sessionKey, holdQueuedMessages, requestVisibleHistoryReload, t]);
 
   const handleRefresh = useCallback(async () => {
     if (connectionState !== "ready") {
@@ -3228,6 +3316,9 @@ export function useChatController({
   }, [adapter, connectionState, history]);
 
   return {
+    draftReady,
+    recoverableDraft,
+    recoverLegacyDraft,
     connectionState,
     sendFailure,
     sendFailureDetails,
@@ -3249,6 +3340,8 @@ export function useChatController({
     historyLoaded: history.historyLoaded,
     scrollToBottomRequestAt,
     messageSubmittedAt,
+    messageAcceptedAt,
+    acceptedSubmission,
     pairingPending,
     copied,
     debugLog,
@@ -3271,6 +3364,9 @@ export function useChatController({
     onLoadMoreHistory: history.onLoadMoreHistory,
     canSend,
     onSend,
+    onSteer,
+    activeRunId: currentRunIdRef.current,
+    canSteer: Boolean(adapter?.capabilities.steer && adapter.steer && isSending && currentRunIdRef.current && !pendingImages.length && input.trim()),
     startVoiceInput, stopVoiceInput, cancelVoiceInput,
     voiceInputSupported,
     recoverVoiceInput, voiceRecoveryCount, voiceRecordingSaved,

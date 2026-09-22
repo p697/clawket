@@ -20,6 +20,7 @@ export type GatewayProtocolEvents = {
     status: 'running' | 'success' | 'error';
   };
   chatFinal: {
+    unappliedInput?: string;
     runId: string;
     sessionKey?: string;
     message?: {
@@ -63,6 +64,7 @@ export type GatewayProtocolEvents = {
     id: string;
     request: {
       command: string;
+      decisions?: ReadonlyArray<'allow-once' | 'allow-always' | 'deny'>;
       commandArgv?: string[];
       cwd?: string;
       host?: string;
@@ -70,7 +72,7 @@ export type GatewayProtocolEvents = {
       sessionKey?: string;
     };
     createdAtMs: number;
-    expiresAtMs: number;
+    expiresAtMs: number | null;
   };
   execApprovalResolved: { id: string; decision: string };
   seqGap: { sessionKey?: string; fromSeq?: number; toSeq?: number };

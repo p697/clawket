@@ -1,4 +1,5 @@
 import React from 'react';
+import { Keyboard } from 'react-native';
 import {
   act,
   fireEvent,
@@ -52,6 +53,8 @@ jest.mock('react-native', () => {
     ),
   );
   return {
+    AppState: { addEventListener: jest.fn(() => ({ remove: jest.fn() })) },
+    Keyboard: { dismiss: jest.fn() },
     Platform: { OS: 'ios', select: (values: Record<string, unknown>) => values.ios ?? values.default },
     ActivityIndicator: host('ActivityIndicator'),
     Pressable: host('Pressable'),
@@ -292,8 +295,8 @@ jest.mock('./UsagePosterSheet', () => {
   const ReactRuntime = require('react');
   const { View } = require('react-native');
   return {
-    UsagePosterSheet: ({ visible }: { visible: boolean }) => visible
-      ? ReactRuntime.createElement(View, { testID: 'mock-usage-poster' })
+    UsagePosterSheet: ({ visible, data }: { visible: boolean; data: { costCaption?: string } }) => visible
+      ? ReactRuntime.createElement(View, { testID: 'mock-usage-poster', costCaption: data.costCaption })
       : null,
   };
 });
@@ -433,9 +436,11 @@ describe('AgentSettings functional sections', () => {
     const adapter = adapterWith({ connection: { backendKind: backend } as AgentAdapter['connection'],
       capabilities: { ...CAPABILITY_MATRIX[backend] }, management: { skills: { status: jest.fn(async () => report), get } } });
     const onOpenSource = jest.fn();
+    jest.mocked(Keyboard.dismiss).mockClear();
     const view = render(<SkillsSection adapter={adapter} agent={agent} online onOpenSource={onOpenSource} />);
     await waitFor(() => expect(view.getByTestId('agent-skill-installed-builder')).toBeTruthy());
     fireEvent.press(view.getByTestId('agent-skill-installed-builder'));
+    expect(Keyboard.dismiss).toHaveBeenCalledTimes(1);
     fireEvent.press(view.getByTestId('agent-skill-source'));
     // The page is pushed from the sheet's close callback (the mocked sheet closes at once), never over the sheet.
     await waitFor(() => expect(onOpenSource).toHaveBeenCalledWith(expect.objectContaining({ skillKey: 'builder', name: 'Builder' })));
@@ -820,6 +825,18 @@ describe('AgentSettings functional sections', () => {
     expect(sessions).toHaveBeenCalledTimes(3);
   });
 
+  it('labels an OpenClaw subtotal as partial and carries that status into sharing', async () => {
+    const sessions = jest.fn(async () => usageResult);
+    const cost = jest.fn(async () => ({ ...costSummary, totals: { ...usageTotals, missingCostEntries: 19 } }));
+    const adapter = adapterWith({ management: { usage: { sessions, cost } } });
+    const view = render(<UsageSection adapter={adapter} agent={agent} online isPro />);
+    await waitFor(() => expect(view.getByTestId('agent-usage-partial')).toBeTruthy());
+    expect(view.getByTestId('agent-usage-primary').props.children).toBe('$1.25');
+    expect(view.getAllByText('Partial').length).toBeGreaterThan(0);
+    view.rerender(<UsageSection adapter={adapter} agent={agent} online isPro posterRequest={1} />);
+    expect(view.getByTestId('mock-usage-poster').props.costCaption).toBe('Partial');
+  });
+
   it('leads with tokens and hides the poster cost when the backend cannot price usage', async () => {
     const sessions = jest.fn(async () => ({
       ...usageResult,
@@ -956,4 +973,3 @@ function cronAdapter(input: Readonly<{ jobs?: CronJob[] }> = {}): AgentAdapter {
     },
   });
 }
-

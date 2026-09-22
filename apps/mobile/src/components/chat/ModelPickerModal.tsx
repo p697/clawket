@@ -94,10 +94,14 @@ export function ModelPickerModal({
     () => buildModelSections(models, searchQuery, providers),
     [models, providers, searchQuery],
   );
-  const showDefaultRow = useMemo(
-    () => shouldShowDefaultRow(searchQuery, showDefault),
-    [searchQuery, showDefault],
-  );
+  // Resolve against the full catalog so filtering never restores a duplicate row.
+  const inheritedModel = useMemo(() => showDefault && configuredDefaultModel
+    ? models.find(model => resolveProviderModel(model).toLowerCase() === configuredDefaultModel.trim().toLowerCase())
+    : undefined, [models, showDefault, configuredDefaultModel]);
+  const effectiveSelectedModelId = showDefault && !selectedModelId && inheritedModel
+    ? resolveProviderModel(inheritedModel)
+    : selectedModelId;
+  const showDefaultRow = shouldShowDefaultRow(searchQuery, showDefault && !inheritedModel);
   const hasVisibleModels = modelSections.some((section) => section.data.length > 0);
   const hasVisibleProviders = modelSections.length > 0;
 
@@ -107,15 +111,15 @@ export function ModelPickerModal({
 
   const handleSelectModel = useCallback((model: ModelInfo) => {
     triggerLightImpact();
-    onSelectModel(model);
+    onSelectModel(model === inheritedModel ? DEFAULT_MODEL : model);
     setSearchQuery('');
     onClose();
-  }, [onClose, onSelectModel]);
+  }, [onClose, onSelectModel, inheritedModel]);
 
   const renderModelRow = useCallback(({ item }: { item: ModelInfo }) => {
     const selected = isModelSelected({
       item,
-      selectedModelId,
+      selectedModelId: effectiveSelectedModelId,
       defaultModel,
       defaultProvider,
     });
@@ -157,7 +161,7 @@ export function ModelPickerModal({
     configuredDefaultModel,
     t,
     handleSelectModel,
-    selectedModelId,
+    effectiveSelectedModelId,
     styles,
     theme.colors.accent,
     theme.colors.inkSecondary,

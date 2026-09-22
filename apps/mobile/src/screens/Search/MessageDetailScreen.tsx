@@ -14,7 +14,9 @@ import { ConnectionStatusPill } from '../../components/ui/ConnectionStatusPill';
 import { Button } from '../../components/ui/Button';
 import { ScreenHeader } from '../../components/ui/ScreenHeader';
 import { Skeleton } from '../../components/ui/Skeleton';
-import { useConnections } from '../../connection';
+import { useConnections, useRoster } from '../../connection';
+import { useManualSessions } from '../../services/manual-sessions';
+import { isFreeSearchSession, type ResolveSearchThreadLockedReason } from './model';
 import { useProPaywall } from '../../contexts/ProPaywallContext';
 import type { RootStackParamList } from '../../navigation/root-stack';
 import { ChatCacheService } from '../../services/chat-cache';
@@ -38,6 +40,7 @@ type NavigationProps = NativeStackScreenProps<RootStackParamList, 'MessageDetail
 export type MessageDetailScreenProps = NavigationProps & Readonly<{
   isProOverride?: boolean;
   onViewInThread?: (detail: SearchMessageDetail) => void;
+  resolveThreadLockedReason?: ResolveSearchThreadLockedReason;
 }>;
 
 type MessageDetailState = 'loading' | 'empty' | 'error' | 'offline' | 'permission' | 'ready';
@@ -172,9 +175,12 @@ export function MessageDetailScreen({
   route,
   isProOverride,
   onViewInThread,
+  resolveThreadLockedReason,
 }: MessageDetailScreenProps): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const runtime = useConnections();
+  const roster = useRoster();
+  const manualSessions = useManualSessions();
   const { isPro: contextIsPro } = useProPaywall();
   const isPro = isProOverride ?? contextIsPro;
   const [detail, setDetail] = useState<SearchMessageDetail | null>(null);
@@ -184,10 +190,6 @@ export function MessageDetailScreen({
   const { connectionId, sessionKey, messageId } = route.params;
 
   useEffect(() => {
-    if (!isPro) {
-      setLoaded(true);
-      return;
-    }
     let cancelled = false;
     setLoaded(false);
     setError(null);
@@ -208,41 +210,47 @@ export function MessageDetailScreen({
     return () => {
       cancelled = true;
     };
-  }, [connectionId, isPro, messageId, retryRevision, sessionKey]);
+  }, [connectionId, messageId, retryRevision, sessionKey]);
+
+  const scopedDetail = detail?.connectionId === connectionId && detail.sessionKey === sessionKey && detail.messageId === messageId ? detail : null;
+  const lockedReason = scopedDetail ? resolveThreadLockedReason?.(connectionId, scopedDetail.agentId) : null;
+  const permitted = !lockedReason && (isPro || Boolean(scopedDetail && isFreeSearchSession(
+    { roster, manualSessions }, connectionId, scopedDetail.agentId, sessionKey,
+  )));
 
   const offline = runtime.activeConnectionId === connectionId
     && (runtime.activeState === 'offline' || runtime.activeState === 'reconnecting');
   const state = resolveMessageDetailState({
-    isPro,
+    isPro: !loaded || permitted,
     loaded,
-    hasDetail: Boolean(detail),
+    hasDetail: Boolean(scopedDetail),
     hasError: Boolean(error),
     offline,
   });
   const viewInThread = useCallback(() => {
-    if (!detail) return;
+    if (!scopedDetail || !permitted) return;
     if (onViewInThread) {
-      onViewInThread(detail);
+      onViewInThread(scopedDetail);
       return;
     }
     navigation.navigate('Thread', {
-      connectionId: detail.connectionId,
-      agentId: detail.agentId,
-      sessionKey: detail.sessionKey,
+      connectionId: scopedDetail.connectionId,
+      agentId: scopedDetail.agentId,
+      sessionKey: scopedDetail.sessionKey,
       from: 'search',
     });
-  }, [detail, navigation, onViewInThread]);
+  }, [scopedDetail, navigation, onViewInThread, permitted]);
 
   return (
     <MessageDetailView
       state={state}
-      detail={detail}
+      detail={scopedDetail}
       reconnecting={runtime.recovering === true}
       topInset={insets.top}
       bottomInset={insets.bottom}
       onBack={() => navigation.goBack()}
       onRetry={() => setRetryRevision((revision) => revision + 1)}
-      onOpenPaywall={() => navigation.navigate('Paywall', { reason: 'messageHistory' })}
+      onOpenPaywall={() => navigation.navigate('Paywall', { reason: lockedReason ?? 'messageHistory' })}
       onViewInThread={viewInThread}
     />
   );

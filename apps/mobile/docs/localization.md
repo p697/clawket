@@ -37,10 +37,10 @@ Unsupported device languages fall back to English. Device tags resolve through `
 - Runtime registration: `src/i18n/index.ts` (one import per locale and namespace; Metro needs static requires)
 - Device-locale resolution and RTL detection: `src/i18n/language.ts`
 - Persisted app-language choice and layout-direction sync: `src/i18n/AppLanguageProvider.tsx`
-- Native registration: `app.json` (`CFBundleLocalizations` and the `expo-localization` plugin's `supportedLocales` / `supportsRTL`) plus `plugins/with-locales.js`, which creates the iOS `.lproj` folders and Known Regions from the shared list
+- Native registration: `app.json` (`CFBundleLocalizations` and the `expo-localization` plugin's `supportedLocales`) plus `plugins/with-locales.js`, which creates the iOS `.lproj` folders and Known Regions from the shared list
 - Gate: `scripts/i18n-prune.mjs` (`npm run i18n:check`, part of the root `check:required`)
 
-`app.json` cannot import the shared list, so the gate verifies that both of its locale arrays equal `supported-locales.js` exactly and that `supportsRTL` stays on.
+`app.json` cannot import the shared list, so the gate verifies that both of its locale arrays equal `supported-locales.js` exactly and rejects static `supportsRTL` / `forcesRTL` options, including `extra` overrides.
 
 ## Changing ordinary copy
 
@@ -80,9 +80,9 @@ Template keys such as `` t(`thinking_${level}`) `` are protected by their prefix
 
 ## Right-to-left layout
 
-Arabic is the only RTL locale. `expo-localization` declares RTL support to both native projects, React Native's `I18nManager` owns the process-wide direction, and `App.tsx` passes the matching `direction` to `NavigationContainer`.
+Arabic is the only RTL locale. `with-locales` preserves Android manifest RTL support and iOS locale registration, while React Native's `I18nManager` alone owns the process-wide direction, and `App.tsx` passes the matching `direction` to `NavigationContainer`.
 
-Switching between RTL and LTR is the one language change that reloads the app: `AppLanguageProvider.syncLayoutDirection` calls `I18nManager.allowRTL` / `forceRTL` and then `reloadAppAsync`. Switching among LTR locales stays live, as before. On a cold start the native side already knows the direction, so no reload happens.
+Switching between RTL and LTR is the one language change that reloads the app: `AppLanguageProvider.syncLayoutDirection` calls `I18nManager.allowRTL` / `forceRTL` and then `reloadAppAsync`. Switching among LTR locales stays live, as before. Both direction preferences are persisted even when the current layout already matches, keeping explicit LTR choices stable on RTL devices. A matching cold start does not reload; a saved choice that differs from native direction is reconciled once.
 
 Rules for UI code:
 
@@ -91,4 +91,6 @@ Rules for UI code:
 - Gesture math (`translationX`, swipe thresholds) and transforms are not mirrored by React Native. Keep image paging and similar physical gestures physical; mirror only gestures whose meaning is “forward/back”.
 - Mixed user content keeps automatic text direction; never force a whole message to RTL.
 
-RTL changes require a native build. Validate at least: a cold Arabic launch, switching Arabic to and from an LTR locale from Account Settings, root and stack navigation, Roster and Session Panel rows, Thread bubbles and composer, settings sheets and inputs.
+Do not set Expo Localization's static `supportsRTL` or `forcesRTL` flags. Its native module reapplies them at initialization and can overwrite the in-app choice, causing a reload loop and white screen. `with-locales` removes stale iOS plist flags and Android string resources during incremental prebuild; the module's absent/unset configuration leaves React Native preferences intact. This follows [Expo's dynamic RTL guidance](https://docs.expo.dev/guides/localization/#dynamically-overriding-rtl-settings). No AppleLanguages override is needed.
+
+This configuration fix requires a new native build, not only a JavaScript update. Validate at least: a cold Arabic launch, switching Arabic to and from an LTR locale from Account Settings, root and stack navigation, Roster and Session Panel rows, Thread bubbles and composer, settings sheets and inputs.

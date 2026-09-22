@@ -42,6 +42,15 @@ import {
 
 export type { AutoAppReviewState } from './auto-app-review-state';
 
+// Reads, writes and conditional legacy consumption share one ordering boundary.
+// A slow pre-send write must never resurrect a submitted or removed draft.
+let composerDraftQueue: Promise<unknown> = Promise.resolve();
+function withComposerDraftStorage<T>(operation: () => Promise<T>): Promise<T> {
+  const result = composerDraftQueue.then(operation, operation);
+  composerDraftQueue = result.then(() => undefined, () => undefined);
+  return result;
+}
+
 export type NodeInvokeAuditEntry = {
   id: string;
   nodeId: string;
@@ -1267,21 +1276,36 @@ export const StorageService = {
 
   // --- Composer draft persistence (AsyncStorage — non-sensitive, dynamic keys) ---
 
-  _draftKey(agentId: string, sessionKey: string): string {
+  _draftKey(agentId: string, sessionKey: string, connectionId?: string): string {
+    if (connectionId) return `clawket.draft.v2.${encodeURIComponent(connectionId).replace(/\./g, '%2E')}.${JSON.stringify([agentId, sessionKey])}`;
     return `clawket.draft.${agentId}-${sessionKey}`;
   },
 
-  async setComposerDraft(agentId: string, sessionKey: string, text: string): Promise<void> {
-    const key = this._draftKey(agentId, sessionKey);
-    if (!text) {
-      await AsyncStorage.removeItem(key);
-    } else {
-      await AsyncStorage.setItem(key, text);
-    }
+  async setComposerDraft(agentId: string, sessionKey: string, text: string, connectionId?: string): Promise<void> {
+    const key = this._draftKey(agentId, sessionKey, connectionId);
+    await withComposerDraftStorage(() => text ? AsyncStorage.setItem(key, text) : AsyncStorage.removeItem(key));
   },
 
-  async getComposerDraft(agentId: string, sessionKey: string): Promise<string | null> {
-    return AsyncStorage.getItem(this._draftKey(agentId, sessionKey));
+  async getComposerDraft(agentId: string, sessionKey: string, connectionId?: string): Promise<string | null> {
+    const key = this._draftKey(agentId, sessionKey, connectionId);
+    return withComposerDraftStorage(() => AsyncStorage.getItem(key));
+  },
+
+  async clearComposerDraftIfMatches(agentId: string, sessionKey: string, expected: string, connectionId?: string): Promise<boolean> {
+    const key = this._draftKey(agentId, sessionKey, connectionId);
+    return withComposerDraftStorage(async () => {
+      if (await AsyncStorage.getItem(key) !== expected) return false;
+      await AsyncStorage.removeItem(key);
+      return true;
+    });
+  },
+
+  async clearConnectionComposerDrafts(connectionId: string): Promise<void> {
+    const prefix = `clawket.draft.v2.${encodeURIComponent(connectionId).replace(/\./g, '%2E')}.`;
+    await withComposerDraftStorage(async () => {
+      const keys = (await AsyncStorage.getAllKeys()).filter(key => key.startsWith(prefix));
+      if (keys.length) await AsyncStorage.multiRemove(keys);
+    });
   },
 
   // --- Dashboard cache (AsyncStorage — non-sensitive, display-only snapshot) ---

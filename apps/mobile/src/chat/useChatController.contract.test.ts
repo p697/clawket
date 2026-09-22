@@ -849,6 +849,7 @@ describe('useChatController contract', () => {
       typeof DocumentPicker.getDocumentAsync
     >;
     const hermes = createAdapter('ready', 'hermes');
+    hermes.capabilities = { ...hermes.capabilities, documentAttachments: false };
     const hermesController = renderHook(() =>
       useChatController({
         adapter: hermes as any,
@@ -1081,6 +1082,7 @@ describe('useChatController contract', () => {
 
   it('captures exec approval decisions', async () => {
     const adapter = createAdapter('ready');
+    historyMock.messages = [{ id: 'approval_approval-1', role: 'system', text: '', approval: { id: 'approval-1', command: 'pwd', expiresAtMs: Date.now() + 60000, status: 'pending' } }];
 
     const { result } = renderHook(() =>
       useChatController({
@@ -1091,7 +1093,7 @@ describe('useChatController contract', () => {
     );
 
     await act(async () => {
-      result.current.resolveApproval('approval-1', 'allow-once');
+      await result.current.resolveApproval('approval-1', 'allow-once');
     });
 
     expect(mockedAnalytics.approvalResolved).toHaveBeenCalledWith({
@@ -1099,6 +1101,18 @@ describe('useChatController contract', () => {
       decision: 'allow-once',
     });
     expect(adapter.management.approvals.resolveExec).toHaveBeenCalledWith('approval-1', 'allow-once');
+  });
+
+  it('keeps failed exec approval pending and refuses an unavailable permanent scope', async () => {
+    const adapter = createAdapter('ready');
+    adapter.management.approvals.resolveExec.mockRejectedValue(new Error('offline'));
+    historyMock.messages = [{ id: 'approval_approval-1', role: 'system', text: '', approval: { id: 'approval-1', command: 'pwd', expiresAtMs: Date.now() + 60000, status: 'pending', decisions: ['allow-once', 'deny'] } }];
+    const { result } = renderHook(() => useChatController({ adapter: adapter as any, debugMode: false, showAgentAvatar: true } as any));
+    await act(async () => { await result.current.resolveApproval('approval-1', 'allow-always'); });
+    expect(adapter.management.approvals.resolveExec).not.toHaveBeenCalled();
+    await act(async () => { await result.current.resolveApproval('approval-1', 'allow-once'); });
+    expect(historyMock.messages[0].approval).toMatchObject({ status: 'pending', resolving: false, resolutionError: true });
+    expect(mockedAnalytics.approvalResolved).not.toHaveBeenCalled();
   });
 
   it('routes pair decisions to the target management operation', async () => {
@@ -2167,5 +2181,66 @@ it('does not restore an old history snapshot after a live terminal event', async
   expect(result.current.isSending).toBe(false);
   expect(result.current.listData.some(message => message.text === 'stale')).toBe(false);
 });
+
+  it('restores unused steering only for the active run without replaying it', async () => {
+    const adapter = createAdapter('ready', 'hermes');
+    const { result } = renderHook(() => useChatController({ adapter: adapter as any, debugMode: false, showAgentAvatar: true } as any));
+    const events = jest.mocked(useAdapterChatEvents).mock.calls.at(-1)![0];
+    await act(async () => {
+      result.current.setInput('Existing draft');
+      events.onState?.('ready');
+      events.onUpdate?.({ type: 'run_started', runId: 'active', sessionKey: 'agent:main:main', activeRunId: 'active', isSending: true, startedAtMs: Date.now() });
+    });
+    await act(async () => {
+      events.onUpdate?.({ type: 'run_finished', runId: 'old', sessionKey: 'agent:main:main', activeRunId: null, isSending: false, stopReason: 'end_turn', unappliedInput: 'stale input' });
+    });
+    expect(result.current.input).toBe('Existing draft');
+    await act(async () => {
+      events.onUpdate?.({ type: 'run_finished', runId: 'active', sessionKey: 'agent:main:main', activeRunId: null, isSending: false, stopReason: 'end_turn', unappliedInput: 'Use the corrected date', finalMessage: { id: 'final-active', role: 'assistant', text: 'Done' } });
+    });
+    expect(result.current.input).toBe('Existing draft\n\nUse the corrected date');
+    expect(result.current.sendFailure).toContain('draft is restored');
+    expect(adapter.prompt).not.toHaveBeenCalled();
+  });
+
+  it('recovers native pending approvals with the legacy display toggle off and ignores a late resolved snapshot', async () => {
+    const adapter = createAdapter('ready', 'hermes');
+    const snapshot = deferred<any[]>();
+    Object.assign(adapter.management.approvals, { listExec: jest.fn(() => snapshot.promise) });
+    const { result } = renderHook(() => useChatController({ adapter: adapter as any, debugMode: false, showAgentAvatar: true } as any));
+    const events = jest.mocked(useAdapterChatEvents).mock.calls.at(-1)![0];
+    await act(async () => { events.onState?.('ready'); });
+    await act(async () => {
+      events.onUpdate?.({ type: 'approval_resolved', kind: 'exec', messageId: 'approval_done', status: 'allowed' } as any);
+      snapshot.resolve([{ sessionKey: 'agent:main:main', approval: { kind: 'exec', id: 'done', command: 'echo done', expiresAtMs: Date.now() + 60000 } },
+        { sessionKey: 'agent:main:main', approval: { kind: 'exec', id: 'pending', command: 'echo pending', expiresAtMs: Date.now() + 60000 } }]);
+      await snapshot.promise;
+    });
+    expect(historyMock.messages.some(message => message.approval?.id === 'done')).toBe(false);
+    expect(historyMock.messages.some(message => message.approval?.id === 'pending')).toBe(true);
+  });
+
+  it.each([false, true])('refreshes terminal history after an in-flight tool read unless a new run owns the session (%s)', async newRun => {
+    const adapter = createAdapter('ready');
+    renderHook(() => useChatController({ adapter: adapter as any, debugMode: false, showAgentAvatar: true } as any));
+    const events = jest.mocked(useAdapterChatEvents).mock.calls.at(-1)![0];
+    let finishRead!: (value: number) => void;
+    historyMock.loadHistory.mockImplementationOnce(() => new Promise<number>(resolve => { finishRead = resolve; }));
+    await act(async () => {
+      events.onState?.('ready');
+      events.onUpdate?.({ type: 'run_started', sessionKey: 'agent:main:main', runId: 'first', activeRunId: 'first', isSending: true, startedAtMs: Date.now() });
+      events.onUpdate?.({ type: 'tool_call_update', sessionKey: 'agent:main:main', runId: 'first', toolCallId: 'tool', activeRunId: 'first', isSending: true, merge: true,
+        message: { id: 'toolcall_tool', role: 'tool', text: '', toolStatus: 'success', toolFinishedAt: Date.now() } });
+      events.onUpdate?.({ type: 'run_finished', sessionKey: 'agent:main:main', runId: 'first', activeRunId: null, isSending: false, stopReason: 'end_turn',
+        finalMessage: { id: 'final_first', role: 'assistant', text: 'Done' } });
+    });
+    await act(async () => { jest.advanceTimersByTime(300); });
+    expect(historyMock.loadHistory).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      if (newRun) events.onUpdate?.({ type: 'run_started', sessionKey: 'agent:main:main', runId: 'second', activeRunId: 'second', isSending: true, startedAtMs: Date.now() });
+      finishRead(1);
+    });
+    expect(historyMock.loadHistory).toHaveBeenCalledTimes(newRun ? 1 : 2);
+  });
 
 });
