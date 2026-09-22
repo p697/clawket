@@ -19,7 +19,7 @@
   "Cost unavailable": "コスト不明",
   "Hermes tracked token usage, but it could not determine a reliable dollar cost for this route.": "Hermes はトークン使用量を追跡しましたが、このルートの信頼できるドル換算コストを判断できませんでした。",
   "Mixed cost sources": "コストソースが混在しています",
-  "This range mixes priced usage with included or unpriced routes, so the dollar total is only a partial view.": "この範囲には価格付き利用と、サブスク込みまたは未価格設定のルートが混在しているため、ドル合計は部分的な値です。",
+  "This range mixes priced usage with included or unpriced routes, so the dollar total is only a partial view.": "この合計には、費用が分かっている利用分のみが含まれます。",
   "Estimated cost": "推定コスト",
   "Hermes is showing an estimate for this route rather than a reconciled bill.": "Hermes はこのルートについて、確定請求額ではなく推定値を表示しています。",
   "Search logs...": "ログを検索...",
@@ -243,7 +243,6 @@
   "Blocked by allowlist": "許可リストでブロックされています",
   "Failed to update skill": "スキルの更新に失敗しました",
   "Failed to uninstall skill": "スキルのアンインストールに失敗しました",
-  "Failed to request installation": "インストールのリクエストに失敗しました",
   "Source": "提供元",
   "Agent timezone": "Agent のタイムゾーン",
   "Check configured services and summarize problems and suggested fixes.": "設定済みサービスを確認し、問題と対応策をまとめてください。",
@@ -380,5 +379,15 @@
   "Disable {{name}}?": "{{name}} を無効にしますか？",
   "This account starts receiving messages again.": "このアカウントはメッセージの受信を再開します。",
   "This account stops receiving messages until you enable it again.": "再び有効にするまで、このアカウントはメッセージを受信しません。",
-  "Failed to update channel": "チャンネルを更新できませんでした"
+  "Failed to update channel": "チャンネルを更新できませんでした",
+  "About me": "自分について",
+  "Version history": "変更履歴",
+  "No saved versions": "保存された履歴はありません",
+  "This file changed. Reopen it before saving.": "ファイルが変更されました。開き直してから保存してください。",
+  "Model health": "モデルの状態",
+  "Global model": "全体のモデル",
+  "Test connections": "接続をテスト",
+  "Restore version": "この版に復元",
+  "This file is too large for version history.": "ファイルが大きすぎるため、履歴を保存できません。",
+  "Scheduled task created": "定期タスクを作成しました"
 }

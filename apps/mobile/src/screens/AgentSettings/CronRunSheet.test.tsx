@@ -14,6 +14,7 @@ jest.mock('react-native', () => {
     StyleSheet: { create: <T,>(styles: T) => styles, flatten: (style: unknown) => style, hairlineWidth: 1 },
   };
 });
+jest.mock('react-native-enriched-markdown', () => ({ EnrichedMarkdownText: ({ markdown, ...props }: any) => require('react').createElement('Text', props, markdown) }));
 jest.mock('lucide-react-native', () => new Proxy({}, {
   get: (_target, key) => key === '__esModule' ? true : (props: unknown) => require('react').createElement('Icon', props),
 }));
@@ -61,6 +62,13 @@ function Host({ run, loadContent, onOpenSession }: Readonly<{
 }
 
 describe('CronRunSheet', () => {
+  it('omits optional metadata that the backend did not provide', () => {
+    const view = render(<Host run={{ ts: 1000, jobId: 'local', action: 'finished', status: 'ok', deliveryStatus: 'unknown' }} />);
+    expect(view.queryByTestId('agent-cron-run-detail-meta')).toBeNull();
+    expect(view.queryByText('Duration')).toBeNull();
+    expect(view.queryByText('Notifications')).toBeNull();
+  });
+
   it('leads with the messages the run sent and opens the stable session after dismissing', async () => {
     const loadContent = jest.fn(async () => ({
       deliveries: [{ channel: 'telegram', target: '8053522863', text: BRIEF }],

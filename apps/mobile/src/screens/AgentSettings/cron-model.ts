@@ -10,7 +10,7 @@ import type {
   ModelInfo,
 } from '@clawket/agent-protocol';
 
-import { modelReference } from '../../utils/model-catalog';
+import { explicitModelReference, modelReference } from '../../utils/model-catalog';
 import { validateSchedule } from './cron-schedule';
 
 const PAGE_LIMIT = 100;
@@ -141,6 +141,7 @@ export function cronJobModel(job: Pick<CronJob, 'payload'>): string | undefined 
 export function cronModelLabel(reference: string, models: ReadonlyArray<ModelInfo>): string {
   const needle = reference.trim().toLowerCase();
   const match = models.find((model) => modelReference(model.provider, model.id).toLowerCase() === needle
+    || explicitModelReference(model.provider, model.id).toLowerCase() === needle
     || model.id.trim().toLowerCase() === needle);
   if (match) return match.name || match.id;
   const slash = reference.indexOf('/');

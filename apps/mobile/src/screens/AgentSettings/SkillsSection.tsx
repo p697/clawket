@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Keyboard, StyleSheet, Text, View } from 'react-native';
 import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import type {
@@ -136,6 +136,7 @@ function SkillsContent({
     ? report?.skills.find((skill) => skill.skillKey === selection.skillKey) ?? null
     : null;
   const openSkill = useCallback((item: SkillStatusEntry) => {
+    Keyboard.dismiss();
     setSelection(item);
   }, []);
 
@@ -296,7 +297,7 @@ function SkillDetailSheet({
   onRemove: (skill: SkillStatusEntry) => void;
   onSource?: (skill: SkillStatusEntry) => void;
 }>): React.JSX.Element {
-  const { t } = useTranslation(['common', 'settings']);
+  const { t } = useTranslation(['common', 'settings', 'config']);
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
   const itemKey = installed?.skillKey ?? null;
@@ -338,7 +339,9 @@ function SkillDetailSheet({
                 value={issues.length ? t('Unavailable', { ns: 'settings' }) : translateSkillAvailability(skillAvailability(installed), t)}
               />
               <SettingsDivider inset="none" />
-              <SettingsRow style={styles.detailRow} title={t('Source', { ns: 'settings' })} value={installed.source} />
+              <SettingsRow style={styles.detailRow} title={t('Source', { ns: 'settings' })}
+                value={installed.source === 'clawhub' ? t('ClawHub')
+                  : installed.source === 'managed' || installed.source === 'workspace' ? t('Local', { ns: 'config' }) : installed.source} />
               {adapter.capabilities.skills && operations?.get && onSource ? <>
                 <SettingsDivider inset="none" />
                 <SettingsRow style={styles.detailRow} testID="agent-skill-source" title="SKILL.md" showChevron disabled={!online || Boolean(busyKey)} onPress={() => onSource(installed)} />

@@ -1,5 +1,9 @@
 # Connection latency and diagnostics
 
+## Android production reproduction (2026-09-20 UTC)
+
+The Android 16 Release QA run reproduced `models.list` timeouts on Production while the same Gateway worked through Preview. A live Production tail at 15:26:24–49 UTC recorded `inactive_client_message_dropped` (`non_connect_before_active`) after rehydration and `gateway_message_dropped_without_active_client` with a client and Gateway still present. The deployed Relay version matches the exported old bundle whose socket reconciliation never restores `activeClientId`. Keep this distinct from slow Gateway execution or App-local failures: candidate attachment recovery is tested, but Production needs rollout and device revalidation. See [the Android QA report](android-release-qa-2026-09-21.md) for evidence and scope; the local rollout matrix does not prove Cloudflare migration recovery.
+
 ## Incident and recovery
 
 On 2026-09-07, the physical iPhone Preview pairing took 46.621 seconds from Bridge client demand to final authentication. Initial bootstrap authentication took 34 ms. Two replacement local Gateway sockets received no connect request and each reached OpenClaw's 15-second handshake timeout. After the cloud Relay owner connection recycled, device-token authentication took 24 ms. History took 71 ms. These timings identify the stalled handoff, not the original packet-loss/routing trigger.

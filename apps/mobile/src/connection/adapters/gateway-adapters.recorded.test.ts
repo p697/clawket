@@ -1,3 +1,4 @@
+import { usageTimeZone } from '../../services/usage-time-zone';
 import type { ConnectionRecord, SessionUpdate } from '@clawket/agent-protocol';
 import openClawFixture from '../../../../../tests/compat/fixtures/v1/bridge/openclaw-forwarding-v1.json';
 import hermesAttachmentFixture from '../../../../../tests/fixtures/hermes/m3-attachment-abort-v2.json';
@@ -744,8 +745,8 @@ it.each(['openclaw', 'hermes'] as const)('keeps %s usage requests in the backend
   const input = { ...dates, agentId: backend === 'openclaw' ? 'ui-operator' : 'hermes' };
   await adapter.management.usage?.sessions?.(input);
   await adapter.management.usage?.cost?.(input);
-  expect(fake.fetchUsage).toHaveBeenCalledWith(backend === 'openclaw' ? input : dates);
-  expect(fake.fetchCostSummary).toHaveBeenCalledWith(backend === 'openclaw' ? input : dates);
+  expect(fake.fetchUsage).toHaveBeenCalledWith(backend === 'openclaw' ? { ...input, ...usageTimeZone() } : dates);
+  expect(fake.fetchCostSummary).toHaveBeenCalledWith(backend === 'openclaw' ? { ...input, ...usageTimeZone() } : dates);
 });
 
 it('exposes OpenClaw skill document operations only when the current handshake advertises each method', async () => {

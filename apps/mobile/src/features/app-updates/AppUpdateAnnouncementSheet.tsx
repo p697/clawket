@@ -9,10 +9,11 @@ import { Sheet } from '../../components/ui/Sheet';
 import { useAppTheme } from '../../theme';
 import { FontSize, FontWeight, LineHeight, Motion, Space } from '../../theme/tokens';
 import { AppUpdateAnnouncementEntryList } from './AppUpdateAnnouncementEntryList';
-import type { AppUpdateAnnouncement, AppUpdateAnnouncementEntry } from './releases';
+import { BRIDGE_UPGRADE_ENTRY, type AppUpdateAnnouncement, type AppUpdateAnnouncementEntry } from './releases';
 
 export type AppUpdateAnnouncementSheetProps = Readonly<{
   visible: boolean;
+  bridgeUpgradeAvailable?: boolean;
   announcement: AppUpdateAnnouncement | null;
   onClose: () => void;
   onAfterClose?: () => void;
@@ -31,6 +32,7 @@ export const ANNOUNCEMENT_COMPANION_SIZE = 148;
  */
 export function AppUpdateAnnouncementSheet({
   visible,
+  bridgeUpgradeAvailable = false,
   announcement,
   onClose,
   onAfterClose,
@@ -100,7 +102,7 @@ export function AppUpdateAnnouncementSheet({
               ) : null}
               <AppUpdateAnnouncementEntryList
                 colors={theme.colors}
-                entries={release.entries}
+                entries={release.version === '3.0.0' && bridgeUpgradeAvailable ? [BRIDGE_UPGRADE_ENTRY, ...release.entries] : release.entries}
                 onEntryPress={onEntryPress}
               />
             </Fragment>

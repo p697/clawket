@@ -65,6 +65,12 @@ export function modelReference(provider: string, modelId: string): string {
   return slug ? `${slug}/${id}` : id;
 }
 
+/** Keep the provider explicit even when the model id contains its own namespace. */
+export function explicitModelReference(provider: string, modelId: string): string {
+  const slug = provider.trim(); const id = modelId.trim();
+  return !slug || id.startsWith(`${slug}/`) ? id : `${slug}/${id}`;
+}
+
 /**
  * Merges the live `models.list` catalog with Gateway config: explicitly
  * configured models that the catalog omits, provider declarations, cost

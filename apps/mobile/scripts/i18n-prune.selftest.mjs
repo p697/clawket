@@ -68,7 +68,8 @@ function makeAppConfig(overrides = {}) {
       ios: { infoPlist: { CFBundleLocalizations: overrides.bundle ?? locales } },
       plugins: [
         'expo-font',
-        ['expo-localization', { supportsRTL: overrides.supportsRTL ?? true, supportedLocales: locales }],
+        './plugins/with-locales',
+        ['expo-localization', { ...overrides.rtl, supportedLocales: locales }],
       ],
     },
   });
@@ -227,8 +228,8 @@ test('fails closed for corrupted, empty, duplicate, missing, and inconsistent in
   assert.deepEqual(validateAppConfig(makeAppConfig({ bundle: ['en'] })), [
     `app.json: expo.ios.infoPlist.CFBundleLocalizations must list exactly ${SUPPORTED_LOCALES.join(', ')}`,
   ]);
-  assert.deepEqual(validateAppConfig(makeAppConfig({ supportsRTL: false })), [
-    'app.json: expo-localization plugin must set supportsRTL: true',
+  assert.deepEqual(validateAppConfig(makeAppConfig({ rtl: { supportsRTL: true } })), [
+    'app.json: omit static supportsRTL/forcesRTL; AppLanguageProvider owns runtime direction',
   ]);
   assert.deepEqual(validateAppConfig(makeAppConfig({ locales: ['en'] })).length, 2);
 });
@@ -389,4 +390,33 @@ test('rejects unsafe CLI combinations and parses explicit retention rules', () =
   });
 
   assert.equal(parseArguments(['--catalog-only']).mode, 'catalog');
+});
+
+
+test('native locale migration removes stale static RTL flags without disabling RTL support', async () => {
+  const { default: plugin } = await import('../plugins/with-locales.js');
+  const config = plugin({ name: 'Clawket', slug: 'clawket' });
+  const apply = async (platform, mod, modResults) => (await config.mods[platform][mod]({ ...config, modRequest: {}, modResults })).modResults;
+  const plist = { CFBundleLocalizations: ['en', 'ar'], ExpoLocalization_supportsRTL: true, ExpoLocalization_forcesRTL: false, Other: 'keep' };
+  assert.deepEqual(await apply('ios', 'infoPlist', plist), { CFBundleLocalizations: ['en', 'ar'], Other: 'keep' });
+  assert.deepEqual(await apply('ios', 'infoPlist', plist), plist);
+  const strings = { resources: { string: [
+    { $: { name: 'app_name' }, _: 'Clawket' },
+    { $: { name: 'ExpoLocalization_supportsRTL' }, _: 'true' },
+    { $: { name: 'ExpoLocalization_forcesRTL' }, _: 'false' },
+  ] } };
+  assert.deepEqual((await apply('android', 'strings', strings)).resources.string, [{ $: { name: 'app_name' }, _: 'Clawket' }]);
+  assert.deepEqual(await apply('android', 'strings', strings), strings);
+  assert.deepEqual(await apply('android', 'strings', { resources: {} }), { resources: {} });
+  const manifest = { manifest: { application: [{ $: { 'android:name': '.MainApplication', 'android:supportsRtl': 'false' } }] } };
+  assert.equal((await apply('android', 'manifest', manifest)).manifest.application[0].$['android:supportsRtl'], 'true');
+  for (const rtl of [{ supportsRTL: false }, { forcesRTL: false }, { forcesRTL: true }]) {
+    assert.match(validateAppConfig(makeAppConfig({ rtl }))[0], /omit static/);
+  }
+  const invalid = JSON.parse(makeAppConfig());
+  invalid.expo.extra = { supportsRTL: true };
+  assert.match(validateAppConfig(JSON.stringify(invalid))[0], /omit static/);
+  delete invalid.expo.extra;
+  invalid.expo.plugins = invalid.expo.plugins.filter(p => p !== './plugins/with-locales');
+  assert.match(validateAppConfig(JSON.stringify(invalid))[0], /with-locales is required/);
 });

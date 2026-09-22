@@ -92,3 +92,15 @@ describe('parseDeepLink', () => {
     });
   });
 });
+
+
+describe('widget shortcuts', () => {
+  it('accepts only known read-only shortcuts', () => {
+    expect(parseDeepLink('clawket://widget?action=chat')).toEqual({ type: 'widget', action: 'chat' });
+    expect(parseDeepLink('clawket://widget?action=camera')).toEqual({ type: 'widget', action: 'camera' });
+    expect(parseDeepLink('clawket://widget?action=photos')).toEqual({ type: 'widget', action: 'photos' });
+    expect(parseDeepLink('clawket://widget?action=voice')).toEqual({ type: 'widget', action: 'voice' });
+    expect(parseDeepLink('clawket://widget?action=skills')).toEqual({ type: 'widget', action: 'skills' });
+    expect(parseDeepLink('clawket://widget?action=send&message=hello')).toBeNull();
+  });
+});

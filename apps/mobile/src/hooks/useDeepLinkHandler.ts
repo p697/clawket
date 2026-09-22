@@ -20,6 +20,8 @@ export type DeepLinkDeps = {
   activeConnectionId: string | null;
   currentAgentId: string;
   mainSessionKey: string;
+  navigationReady: boolean;
+  widgetTarget: { agentId: string; sessionKey: string; accessDeniedReason?: 'gatewayConnections' | 'agents' | null } | null;
   canAddConnection?: boolean;
   activeAccessDeniedReason?: 'gatewayConnections' | 'agents' | null;
   onOpenPaywall?: (
@@ -30,7 +32,7 @@ export type DeepLinkDeps = {
 };
 
 export type DeepLinkConfirmationRequest = Readonly<{
-  action: Exclude<DeepLinkAction, { type: 'pair' }>;
+  action: Exclude<DeepLinkAction, { type: 'pair' | 'widget' }>;
   onConfirm: () => void;
 }>;
 
@@ -75,6 +77,26 @@ async function executeAction(
   }
 
   switch (action.type) {
+    case 'widget': {
+      if (!rootNavigationRef.isReady()) break;
+      if (!activeConnectionId) {
+        rootNavigationRef.navigate('Onboarding', { presentation: 'modal' });
+        break;
+      }
+      const target = deps.widgetTarget;
+      if (!target) break;
+      if (target.accessDeniedReason) {
+        deps.onOpenPaywall?.(target.accessDeniedReason, () => {
+          const current = getConnectionRuntime().getSnapshot();
+          if (current.activeConnectionId !== activeConnectionId || (activeAdapter && current.activeAdapter !== activeAdapter)) return;
+          return executeAction(action, { ...deps, widgetTarget: { ...target, accessDeniedReason: null } });
+        });
+        break;
+      }
+      rootNavigationRef.navigate('Thread', { connectionId: activeConnectionId, agentId: target.agentId,
+        sessionKey: target.sessionKey, from: 'deeplink', shortcut: action.action });
+      break;
+    }
     case 'agent': {
       if (!activeConnectionId) {
         Alert.alert('Connection Required', 'Connect to an Agent before sending this message.');
@@ -180,13 +202,22 @@ async function executeAction(
 }
 
 export function useDeepLinkHandler(deps: DeepLinkDeps) {
-  const processedRef = useRef<string | null>(null);
+  const processedRef = useRef<{ url: string | null; initialConsumed: boolean; pendingWidget?: Extract<DeepLinkAction, { type: 'widget' }> } | null>(null);
   const { connectPairingLink } = useGatewayScanner();
 
-  const handleUrl = (url: string) => {
-    // Deduplicate (same URL delivered via initial + event)
-    if (processedRef.current === url) return;
-    processedRef.current = url;
+  const flushPendingWidget = () => {
+    const pending = processedRef.current?.pendingWidget;
+    if (!pending || !deps.navigationReady || !deps.rootNavigationRef.isReady()
+      || (deps.activeConnectionId && !deps.widgetTarget)) return;
+    delete processedRef.current!.pendingWidget;
+    void executeAction(pending, deps);
+  };
+  const handleUrl = (url: string, initial = false) => {
+    const previous = processedRef.current;
+    if (initial && previous?.initialConsumed) return;
+    processedRef.current = { ...previous, url, initialConsumed: initial || previous?.initialConsumed === true };
+    // A new widget tap is intentional; replaying the launch URL is not.
+    if (previous?.url === url && (initial || parseDeepLink(url)?.type !== 'widget')) return;
 
     const action = parseDeepLink(url);
     if (!action) return;
@@ -203,6 +234,9 @@ export function useDeepLinkHandler(deps: DeepLinkDeps) {
       void connectPairingLink(action.url);
       return;
     }
+
+    if (action.type === 'widget') { processedRef.current.pendingWidget = action; flushPendingWidget(); return; }
+    delete processedRef.current.pendingWidget;
 
     const promptIdempotencyKey = action.type === 'agent' && deps.activeConnectionId
       ? createDeepLinkPromptIdempotencyKey({
@@ -222,17 +256,19 @@ export function useDeepLinkHandler(deps: DeepLinkDeps) {
   };
 
   useEffect(() => {
+    flushPendingWidget();
     // Handle cold-start deep link
+    let active = true;
     Linking.getInitialURL().then((url) => {
-      if (url) handleUrl(url);
-    });
+      if (active && url) handleUrl(url, true);
+    }).catch(() => undefined);
 
     // Handle deep links while app is running
     const sub = Linking.addEventListener('url', ({ url }) => {
       handleUrl(url);
     });
 
-    return () => sub.remove();
+    return () => { active = false; sub.remove(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     connectPairingLink,
@@ -242,6 +278,8 @@ export function useDeepLinkHandler(deps: DeepLinkDeps) {
     deps.canAddConnection,
     deps.currentAgentId,
     deps.mainSessionKey,
+    deps.navigationReady,
+    deps.widgetTarget,
     deps.requestConfirmation,
     deps.rootNavigationRef,
     deps.onOpenPaywall,

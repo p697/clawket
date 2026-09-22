@@ -434,6 +434,23 @@ describe('GatewayAdapter lifecycle boundaries', () => {
 });
 
 describe('mergeGatewayHistory', () => {
+  it('reconciles a cold cached final after history projection changed only its display ID', () => {
+    const ts = 1789948223842;
+    const user = { id: 'af23cfbc', role: 'user' as const, text: '$agents-sdk',
+      timestampMs: ts - 9854, idempotencyKey: '1789948221367_64ef988i' };
+    const answer = { id: '1e1dff2a', role: 'assistant' as const,
+      text: 'ANDROID_OC_SKILL_0921_OK', timestampMs: ts };
+    const cached = { ...answer, id: 'final_1789948221367_64ef988i',
+      cacheRowId: stableMessageId('assistant', ts + 7_000, answer.text), timestampMs: ts + 7_000 };
+    expect(mergeGatewayHistory([user, answer], [user, cached])).toEqual([user, answer]);
+    expect(mergeGatewayHistory([user, answer], [user, answer, cached])).toEqual([user, answer]);
+    const nextUser = { ...user, id: 'next-user', idempotencyKey: 'next-send', timestampMs: ts + 3_000 };
+    expect(mergeGatewayHistory([user, answer, nextUser], [user, answer, nextUser, cached]))
+      .toEqual([user, answer, nextUser, cached]);
+    const later = { ...cached, timestampMs: ts + 90_000 };
+    expect(mergeGatewayHistory([user, answer], [user, later])).toEqual([user, answer, later]);
+  });
+
   it('repairs the observed cold-restart duplicate with a reprojected ID 4622ms after the server reply', () => {
     const ts = 1789530456944;
     const user = { id: 'server-user', role: 'user' as const, text: 'Check', timestampMs: ts - 14_157 };
@@ -758,5 +775,55 @@ describe('OpenClaw image send recovery', () => {
       { role: 'user', content: 'Hi', idempotencyKey: 'external:user', __openclaw: {} },
       { role: 'assistant', content: 'Hi', idempotencyKey: `${sendKey}:user`, __openclaw: {} },
     ]) expect(mapGatewayHistoryMessage('main', value, 0)?.idempotencyKey).toBe(value.idempotencyKey);
+  });
+});
+
+it('pages OpenClaw physical history with native offsets while retaining Hermes opaque cursors', async () => {
+  for (const backend of ['openclaw', 'hermes'] as const) {
+    const fake = new LifecycleGateway();
+    const calls: object[] = [];
+    fake.requestHandler = (_method, params) => {
+      calls.push(params);
+      return calls.length === 1 ? { sessionId: 'physical-1', messages: [],
+        ...(backend === 'openclaw' ? { hasMore: true, nextOffset: 100 } : { nextCursor: 'hermes-page-2' }) }
+        : { sessionId: 'physical-1', messages: [], hasMore: false };
+    };
+    const adapter = backend === 'openclaw'
+      ? new OpenClawAdapter(connection(backend), { gateway: gateway(fake), historyCache: null })
+      : new HermesAdapter(connection(backend), { gateway: gateway(fake), historyCache: null });
+    const first = await adapter.loadSession('main', { limit: 100 });
+    expect(first.nextCursor).toBeDefined();
+    const second = await adapter.loadSession('main', { limit: 100, cursor: first.nextCursor });
+    expect(calls[1]).toEqual(backend === 'openclaw'
+      ? { sessionKey: 'main', limit: 100, sessionId: 'physical-1', offset: 100 }
+      : { sessionKey: 'main', limit: 100, cursor: 'hermes-page-2' });
+    expect(second.nextCursor).toBeUndefined();
+    if (backend === 'openclaw') {
+      await expect(adapter.loadSession('other', { cursor: first.nextCursor })).rejects.toThrow('Invalid history cursor');
+      fake.requestHandler = () => ({ hasMore: true, nextOffset: 0, messages: [] });
+      await expect(adapter.loadSession('main')).rejects.toThrow('Invalid history pagination');
+    }
+    adapter.dispose();
+  }
+});
+
+
+describe('session-file capability negotiation', () => {
+  it('hides OpenClaw retrieval until both methods are advertised and clears it on disconnect', () => {
+    const fake = new LifecycleGateway(); let available = false;
+    Object.assign(fake, { supportsMethod: () => available });
+    const adapter = new OpenClawAdapter(connection('openclaw'), { gateway: gateway(fake), historyCache: null });
+    expect(adapter.sessionFiles).toBeUndefined(); fake.emit('connection', { state: 'ready' });
+    expect(adapter.sessionFiles).toBeUndefined(); available = true; fake.emit('connection', { state: 'ready' });
+    expect(adapter.sessionFiles).toBeDefined(); adapter.disconnect(); expect(adapter.sessionFiles).toBeUndefined();
+  });
+  it('requires Hermes advertised support and downgrades on legacy reconnect', async () => {
+    const fake = new LifecycleGateway();
+    const adapter = new HermesAdapter(connection('hermes'), { gateway: gateway(fake), historyCache: null });
+    expect(adapter.sessionFiles).toBeUndefined(); const started = adapter.connect();
+    fake.emit('health', { status: 'ok', hermesApiReachable: true, capabilities: ['bridge.session-files.v1'] });
+    await started; expect(adapter.sessionFiles).toBeDefined(); adapter.disconnect(); expect(adapter.sessionFiles).toBeUndefined();
+    const reconnected = adapter.connect(); fake.emit('health', { status: 'ok', hermesApiReachable: true, capabilities: [] });
+    await reconnected; expect(adapter.sessionFiles).toBeUndefined(); adapter.disconnect();
   });
 });

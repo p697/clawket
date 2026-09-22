@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { SUPPORTED_LOCALES } from '../../i18n/supported-locales';
 import {
   APP_UPDATE_RELEASES,
+  BRIDGE_UPGRADE_ENTRY,
   MAX_ANNOUNCED_RELEASES,
   collectUnannouncedReleases,
   compareAppVersions,
@@ -63,7 +64,7 @@ describe('release catalog', () => {
   });
 
   it('translates every release copy key in every locale so no note falls back to English', () => {
-    const keys = new Set(APP_UPDATE_RELEASES.flatMap(releaseCopyKeys));
+    const keys = new Set([...APP_UPDATE_RELEASES.flatMap(releaseCopyKeys), BRIDGE_UPGRADE_ENTRY.title, BRIDGE_UPGRADE_ENTRY.subtitle!]);
     expect(keys.size).toBeGreaterThan(40);
     for (const { code } of SUPPORTED_LOCALES) {
       const catalog = chatCatalog(code);

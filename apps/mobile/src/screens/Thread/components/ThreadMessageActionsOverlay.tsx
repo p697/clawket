@@ -16,7 +16,7 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
-import { ArrowUp, Check, Copy, Pencil, Share2, Star, StarOff, Trash2 } from 'lucide-react-native';
+import { ArrowUp, CalendarClock, GitBranch, Check, Copy, Pencil, Share2, Star, StarOff, Trash2 } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import type { UiMessage } from '../../../types/chat';
 import { useAppTheme } from '../../../theme';
@@ -93,6 +93,10 @@ export type ThreadMessageActionsOverlayProps = Readonly<{
   /** May resolve with the recorded outcome so the confirmation row stays truthful. */
   onToggleFavorite: (message: UiMessage) => void | Promise<MessageFavoriteToggleResult | void>;
   onShare: (message: UiMessage) => void;
+  onBranch?: (message: UiMessage) => void;
+  canBranch?: (message: UiMessage) => boolean;
+  onSchedule?: (message: UiMessage) => void;
+  canSchedule?: (message: UiMessage) => boolean;
   queuedActions?: ThreadQueuedMessageOverlayActions;
   /** Fires once the close animation has finished; the owner clears the selection. */
   onClosed: () => void;
@@ -137,6 +141,10 @@ export function ThreadMessageActionsOverlay({
   onCopy,
   onToggleFavorite,
   onShare,
+  onBranch,
+  canBranch,
+  onSchedule,
+  canSchedule,
   queuedActions,
   onClosed,
   testID = 'thread-message-actions',
@@ -177,6 +185,10 @@ export function ThreadMessageActionsOverlay({
           onCopy={onCopy}
           onToggleFavorite={onToggleFavorite}
           onShare={onShare}
+          onBranch={onBranch}
+          canBranch={canBranch}
+          onSchedule={onSchedule}
+          canSchedule={canSchedule}
           queuedActions={queuedActions}
           onClosed={onClosed}
           testID={testID}
@@ -198,6 +210,10 @@ type ContentProps = Readonly<{
   onCopy: (message: UiMessage) => void;
   onToggleFavorite: ThreadMessageActionsOverlayProps['onToggleFavorite'];
   onShare: (message: UiMessage) => void;
+  onBranch?: (message: UiMessage) => void;
+  canBranch?: (message: UiMessage) => boolean;
+  onSchedule?: (message: UiMessage) => void;
+  canSchedule?: (message: UiMessage) => boolean;
   queuedActions?: ThreadQueuedMessageOverlayActions;
   onClosed: () => void;
   testID: string;
@@ -215,6 +231,10 @@ function ThreadMessageActionsContent({
   onCopy,
   onToggleFavorite,
   onShare,
+  onBranch,
+  canBranch,
+  onSchedule,
+  canSchedule,
   queuedActions,
   onClosed,
   testID,
@@ -537,8 +557,20 @@ function ThreadMessageActionsContent({
         onPress: handleShare,
         disabled: !hasText || Boolean(confirmation),
       },
+      ...(onBranch && canBranch?.(message) ? [{
+        key: 'branch', testID: 'thread-message-branch', label: t('New session', { ns: 'common' }),
+        accessibilityLabel: t('Continue in a new chat'),
+        icon: <GitBranch size={IconSize.md} color={iconColor} strokeWidth={2} />,
+        onPress: () => requestClose(() => onBranch(message)), disabled: Boolean(confirmation),
+      } satisfies MenuCell] : []),
+      ...(onSchedule && (!canSchedule || canSchedule(message)) && !message.streaming && hasText ? [{
+        key: 'schedule', testID: 'thread-message-schedule',
+        label: t('Schedule', { ns: 'chat' }), accessibilityLabel: t('Schedule', { ns: 'chat' }),
+        icon: <CalendarClock size={IconSize.md} color={iconColor} strokeWidth={2} />,
+        onPress: () => requestClose(() => onSchedule(message)), disabled: Boolean(confirmation),
+      } satisfies MenuCell] : []),
     ];
-  }, [confirmation, favorited, handleCopy, handleQueuedEdit, handleQueuedRemove, handleQueuedSendNow, handleShare, handleToggleFavorite, hasText, queuedActions, t, theme.colors.accent, theme.colors.bad, theme.colors.good, theme.colors.ink]);
+  }, [canBranch, onBranch, canSchedule, onSchedule, message, requestClose, confirmation, favorited, handleCopy, handleQueuedEdit, handleQueuedRemove, handleQueuedSendNow, handleShare, handleToggleFavorite, hasText, queuedActions, t, theme.colors.accent, theme.colors.bad, theme.colors.good, theme.colors.ink]);
 
   const scrimStyle = useAnimatedStyle(() => ({ opacity: scrimOpacity.value }));
   const cloneStyle = useAnimatedStyle(() => ({
@@ -561,6 +593,7 @@ function ThreadMessageActionsContent({
 
   const cloneWidth = layout?.messageWidth ?? initialWidth;
   const scrollEnabled = layout?.scrollEnabled ?? false;
+  const menuCellWidth = Math.min(MENU_CELL_WIDTH, (screenWidth - Space.lg * 2 - Space.xs * 2) / cells.length);
 
   return (
     <View style={styles.root} testID={testID} accessibilityViewIsModal>
@@ -624,13 +657,14 @@ function ThreadMessageActionsContent({
             onPress={cell.onPress}
             style={({ pressed }) => [
               styles.menuCell,
+              { width: menuCellWidth },
               pressed && !cell.disabled ? styles.menuCellPressed : null,
               cell.disabled ? styles.menuCellDisabled : null,
             ]}
           >
             {cell.icon}
             <Text
-              numberOfLines={1}
+              numberOfLines={cells.length > 3 ? 2 : 1}
               style={[
                 styles.menuLabel,
                 cell.tone === 'good' ? styles.menuLabelGood : null,
@@ -695,6 +729,7 @@ function createStyles(
     },
     menuLabel: {
       maxWidth: '100%',
+      textAlign: 'center',
       color: colors.inkSecondary,
       fontSize: FontSize.caption,
       lineHeight: LineHeight.caption,

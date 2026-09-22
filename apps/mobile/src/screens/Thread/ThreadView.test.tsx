@@ -13,6 +13,32 @@ import type { UiMessage } from '../../types/chat';
 import { preserveHydratedMessageKeys } from '../../chat/historyMergePolicy';
 import { ThreadView, resolveThreadHeaderHeight, type ThreadCopy, type ThreadViewProps } from './ThreadView';
 import type { ThreadRunCard } from './model';
+import { messageMetaSpacer } from '../../components/chat/MessageMeta';
+
+it.each(['ios', 'android'])('keeps the composer above the keyboard on %s', (platform) => {
+  const { Platform } = require('react-native');
+  const previous = Platform.OS;
+  Platform.OS = platform;
+  try {
+    const view = render(<ThreadView {...createProps({ bottomInset: 24 })} />);
+    const avoiding = view.UNSAFE_getByType(require('react-native-keyboard-controller').KeyboardAvoidingView);
+    expect(avoiding.props.behavior).toBe('padding');
+    expect(avoiding.props.keyboardVerticalOffset).toBe(Space.md - Math.max(24, Space.lg));
+  } finally {
+    Platform.OS = previous;
+  }
+});
+
+it('reserves the user clock with nonbreaking whitespace, never another visible time', () => {
+  for (const hasStatus of [false, true]) {
+    const spacer = messageMetaSpacer('22:51', hasStatus);
+    expect(spacer).not.toMatch(/[0-9:]/);
+    expect(spacer.slice(1).split('\u2060')).toEqual([
+      '\u2007', '\u2007', '\u2007', '\u2008', '\u2007', '\u2007',
+      ...(hasStatus ? ['\u2007', '\u2007', '\u2007'] : []),
+    ]);
+  }
+});
 
 let mockScheme: 'light' | 'dark' = 'light';
 let mockReducedMotion = false;
@@ -56,6 +82,8 @@ jest.mock('react-native', () => {
       select: (values: Record<string, unknown>) => values.ios ?? values.default,
     },
     Image: host('Image'),
+    Modal: ({ visible, children, ...props }: any) => visible
+      ? ReactRuntime.createElement('Modal', props, children) : null,
     ActivityIndicator: host('ActivityIndicator'),
     Pressable: host('Pressable'),
     StyleSheet: {
@@ -869,6 +897,8 @@ describe('ThreadView', () => {
     fireEvent.press(view.getByLabelText('Photo 1 of 1'));
     fireEvent.press(view.getByTestId('thread-approval-approval-1-primary'));
     fireEvent(view.getByTestId('thread-approval-approval-1-primary'), 'longPress');
+    expect(onResolveApproval.mock.calls).toEqual([['request-1', 'allow-once']]);
+    fireEvent.press(view.getByTestId('approval-always-confirm'));
     fireEvent.press(view.getByTestId('thread-approval-approval-1-secondary'));
 
     expect(onBack).toHaveBeenCalledTimes(1);
@@ -1405,6 +1435,15 @@ describe('ThreadView', () => {
     expect(view.getByTestId('thread-file-file-only-0').props.onPress).toBeUndefined();
   });
 
+  it('does not repeat the restored document name below its existing compact label', () => {
+    const view = render(<ThreadView {...createProps({ messages: [{
+      id: 'document-echo', role: 'user', text: 'Read this\n\n📎 notes.txt',
+      fileAttachments: [{ fileName: 'notes.txt', mimeType: 'text/plain' }],
+    }] })} />);
+    expect(view.getByText(/^Read this/)).toBeTruthy();
+    expect(view.queryByTestId('thread-file-document-echo-0')).toBeNull();
+  });
+
   it('wires pending attachments, slash commands, thinking, favorites, and message actions', () => {
     const onOpenPendingAttachment = jest.fn();
     const onRemovePendingAttachment = jest.fn();
@@ -1734,6 +1773,45 @@ describe('ThreadView', () => {
     expect(view.getByTestId('thread-approval-approval-deadline').props.accessibilityState)
       .toEqual({ disabled: true });
     expect(view.getByText('Expired')).toBeTruthy();
+  });
+
+  it('does not invent a deadline for a backend-managed approval', () => {
+    jest.useFakeTimers();
+    const view = render(<ThreadView {...createProps({ messages: [{ id: 'approval-native', role: 'tool', text: '',
+      approval: { id: 'approval-native', command: 'test', expiresAtMs: null, status: 'pending' } }] })} />);
+    act(() => { jest.advanceTimersByTime(60_000); });
+    expect(view.getByTestId('thread-approval-approval-native').props.accessibilityState).toEqual({ disabled: false });
+    expect(view.queryByText('Expired')).toBeNull();
+  });
+
+  it.each(['openclaw', 'hermes'] as const)('confirms permanent approval and discards stale consent for %s', (backend) => {
+    const resolve = jest.fn();
+    const approval: Exclude<NonNullable<UiMessage['approval']>, { kind: 'pair' }> = {
+      id: 'first-request', command: 'npm test', expiresAtMs: null, status: 'pending',
+      decisions: ['allow-once', 'allow-always', 'deny'],
+    };
+    const message: UiMessage = { id: 'consent', role: 'tool', text: '', approval };
+    const props = createProps({ capabilities: { ...CAPABILITY_MATRIX[backend], execApproval: true },
+      messages: [message], onResolveApproval: resolve });
+    const view = render(<ThreadView {...props} />);
+    const open = () => fireEvent(view.getByTestId('thread-approval-consent-primary'), 'longPress');
+    open();
+    expect(resolve).not.toHaveBeenCalled();
+    fireEvent.press(view.getByTestId('approval-always-cancel'));
+    expect(view.queryByTestId('approval-always-confirm')).toBeNull();
+    expect(resolve).not.toHaveBeenCalled();
+    open();
+    view.rerender(<ThreadView {...props} messages={[{ ...message,
+      approval: { ...approval, id: 'replacement-request' } }]} />);
+    expect(view.queryByTestId('approval-always-confirm')).toBeNull();
+    open();
+    view.rerender(<ThreadView {...props} messages={[{ ...message,
+      approval: { ...approval, id: 'replacement-request', status: 'allowed' } }]} />);
+    expect(view.queryByTestId('approval-always-confirm')).toBeNull();
+    expect(resolve).not.toHaveBeenCalled();
+    view.rerender(<ThreadView {...props} messages={[{ ...message,
+      approval: { ...approval, decisions: ['allow-once', 'deny'] } }]} />);
+    expect(view.getByTestId('thread-approval-consent-primary').props.onLongPress).toBeUndefined();
   });
 });
 

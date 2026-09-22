@@ -1,3 +1,4 @@
+import type { BridgeGeneration } from './bridge-upgrade';
 import type { AgentAdapter } from '@clawket/agent-protocol';
 
 export type ConnectionAdapterRuntimeMetadata = Readonly<{
@@ -7,6 +8,7 @@ export type ConnectionAdapterRuntimeMetadata = Readonly<{
 
 export type ConnectionRuntimeDetails = Readonly<{
   lastReadyAt: number | null;
+  bridgeGeneration?: BridgeGeneration;
   bridgeVersion: string | null;
   bridgeCapabilities: ReadonlyArray<string>;
 }>;

@@ -1,0 +1,26 @@
+appId: ${APP_ID}
+---
+- runFlow:
+    when:
+      visible:
+        id: welcome-connect
+    commands:
+      - tapOn:
+          id: welcome-connect
+- runFlow:
+    when:
+      visible:
+        id: onboarding-backend-hermes
+    commands:
+      - tapOn:
+          id: onboarding-backend-hermes
+- tapOn:
+    id: onboarding-pairing-code
+- eraseText
+- inputText: ${PAIR_CODE}
+- tapOn:
+    id: onboarding-connect
+- extendedWaitUntil:
+    notVisible:
+      id: onboarding-connect
+    timeout: 60000

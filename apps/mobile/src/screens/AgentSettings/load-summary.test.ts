@@ -132,6 +132,7 @@ describe('Agent settings summary loader', () => {
       lastHeartbeatAt: 1_700_000_000_000,
       fileCount: 3,
       todayCostUsd: 1.25,
+      todayCostMode: 'actual',
       todayTokens: 965_200,
       toolCount: 2,
       pendingConnectionCount: 3,

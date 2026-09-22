@@ -1,5 +1,145 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-09-22 老用户升级引导评估：建议 Bridge 升级但不强制中断已有聊天，不要求重新配对；确认旧 OpenClaw 缺少独立客户端通道与 Bridge 文件/技能文档补充，Hermes 按能力降级。现有公告无 Bridge 更新项，Hermes 会话升级提示缺少外部帮助回调接线。建议公告入口 + 按连接可关闭提示 + 保留配对的更新指南 + 握手确认后消失；尚未实现 UI。详见 [评估](bridge-upgrade-guidance-2026-09-22.md)。
+
+- 2026-09-22 正式发布完成：OpenClaw Registry/Relay、Hermes Registry/Relay 均已上线，四服务 health 200、源码与固定候选一致、安全日志配置核对通过。npm `@p697/clawket@3.0.0` 已公开且 latest=3.0.0，实际下载包 SHA-256 与验收包一致。旧 Android 2.1.0 原凭据恢复、历史、实际聊天、后台 131 秒后继续收发通过；3.0 QA Hermes 历史/真实模型回复通过。required、v1 39、integration 8、发布矩阵 24 阶段通过。完整版本锚点、恢复历史与限制见 [发布执行记录](production-release-2026-09-22.md)。
+
+- 2026-09-22 继续发布：已修复 SQLite 主机对旧 App 发放无效 JSON bootstrap 凭据的问题；旧正式 Android 2.1.0 已真实 token 认证、恢复历史并收到模型回复。负责人确认本机其他 Agent/客户端反复接入，不将该干扰单独阻断发布。required、v1 39、新生产快照 × 新旧 Bridge × 双后端 24 阶段通过；矩阵现保留已迁移生产 Registry 的限流绑定。固定 Bridge tgz SHA-256 `b64f0f9cfbf7545c4e0121c2d9e0ebe9f2e0d1831220580aa1233d1a6508bf8f`，隔离安装字节一致；服务分阶段发布进行中，npm 尚未发布。详见 [执行记录](production-release-2026-09-22.md)。
+
+- 2026-09-22 正式发布中止并恢复：旧 Android 2.1.0 新配对后 Gateway 拒绝旧式 bootstrap 凭据，消息/历史/后台门禁未通过；不是 Relay HTTP 认证失败。OpenClaw 已按前向恢复规则恢复：Registry `2f1c0e40…`、Relay `ffffcd80…`；Registry 保留首次迁移后的限流 DO，配对数据未清空。Hermes/npm 未发布；需修复旧客户端与当前 OpenClaw 首次配对兼容性后再发布，下一轮必须刷新生产快照。详情：[正式发布记录](production-release-2026-09-22.md)。此前“可以发布”意见不再代表无阻断。
+
+- 2026-09-22 正式发布进行中（负责人明确授权）：固定 207 个候选输入及四份无重新打包部署的 Worker bundle；Bridge tgz 与既验收哈希一致。required、v1 39、集成 8、发布矩阵 24 阶段通过；矩阵首次跨整点计数断言失败，原日志保留，整点后复跑通过。生产 OpenClaw Registry 已部署 `cb946ad0-d87d-4023-a492-9f2a7e7a612b`，health 200；Relay 正在部署。npm 登录已由负责人恢复。证据目录 `evidence/production-release-2026-09-22/`；其余服务/npm尚未发布，旧 App 人工抽验待完成。
+
+- 2026-09-22 会话模型一致性：原报告与独立会话均证实 OpenClaw 返回 DeepSeek、实际执行 Claude。显式 `sessions.create(model)` 和 `sessions.patch(model)` 都确认 DeepSeek，但选中默认值会清除 pin，执行仍继承主会话 Claude；`chat.history` 的实际消息与同响应 sessionInfo 也不一致。按负责人“上游无法可靠适配则放弃”的退出条件，不改客户端展示来掩盖执行问题。已清理独立测试会话，原会话保留、配置字节不变；未改 App/后端代码或发布。复现与恢复实现条件见 [模型一致性阻塞](openclaw-model-consistency-2026-09-22.md)。
+
+- 2026-09-22 订阅专项只读核对：2.x→3.0 确有会员状态/过期刷新和 Android 套餐切换购买参数改动，不能以“未改订阅”免测；负责人确认 13 个 TestFlight 构建及多轮双端测试，不能概括为仅 QA。连接手机正式包仍 2.1.0/20109，QA 包为 3.0.0/30000；Play 最新 bundle 20109，内部轨道 10700，尚无可安装的 3.0 商店测试候选。未执行交易或修改商店；建议仅补购买解锁、重启/恢复、套餐切换，许可测试账号资格待核对。详见 [订阅核对](subscription-review-2026-09-22.md)。
+
+- 2026-09-21 发布前再次确认：最终 Bridge 重建与包校验通过，已生成含 Hermes owner 修复的本地 3.0.0 tgz 并记录 SHA-256；四生产 health 200、部署仍为配置准备版本、npm latest 0.7.0。可以进入分阶段发布准备，未执行部署/npm 发布。公开 privacy 仍否认实际分析/第三方处理，最终商店包与购买/覆盖升级验收、正式语音配置和既定 48h 观察未闭环；不能无条件确认今晚提审。最新放行意见及候选 hash 已置顶 [最终复核](release-readiness-2026-09-21.md)。
+
+- 2026-09-21 Hermes 重复 owner 后续：确认候选 Bridge 收到明确 replacement 后仍自动重连，可让同配对双 runtime 无限争抢；新增失败回归后修复为主动让出，保留普通断网/dead/orphan 自动恢复及迟到旧 socket 隔离。CLI 保持让出进程可诊断，避免 watchdog 拉起再次争抢；真实 Node 子进程验证停止信号正常退出。required、连接专项 95、CLI 29、v1 39、integration 8、最终 Bridge typecheck 通过。云端 4010 集中两个无客户端断连记录的房间，尚未定位远端主机来源；未部署/重启生产，不能宣称线上已恢复。证据及操作说明见 [专项后续](security-admission-2026-09-21.md)。
+
+  最终新旧 Bridge × 双后端 × 六阶段发布矩阵全通过。本机全量 Node 入口和日志补查无重复生产 Relay/duplicate_socket 证据，认证云状态正常；负责人也表示预计仅本机，异常房间不归因于其操作。云端脱敏信息不足以可靠映射主机，保留归因限制。
+
+- 2026-09-21 限流/告警专项：按负责人“功能稳定优先、确定优化直接做”授权，接手配置任务已建规则，将双 Relay /ws 调为 120/IP/colo/min，保留配对 20/min 并补 Hermes claim-code，统一 JSON 429；新增 DDoS 邮件，核实既有 $50/$100 预算邮件。四 health 200，短窗口无 rate-limit 事件；Hermes 9 分钟 173 次 gateway 4010 与 179 次重复清理尚需归因，不冒充用户失败率。日 Workers/DO/KV 与 Discord/业务恢复告警未闭环。无代码/服务发布；详见 [专项报告](security-admission-2026-09-21.md)。
+
+- 2026-09-21 生产配置准备（负责人授权）：OpenClaw Registry/Relay 已写入同一份随机 ticket secret；双 Registry 分别绑定自身生产 Relay；四服务开启应用日志并禁用 invocation logs/traces、启用 query redaction；忽略的生产配置已同步。四自定义 health 均 200，四线上脚本 SHA 与旧生产完全相同，没有发布 3.0 代码/npm或迁移 DO。新部署锚点/恢复配置已存入 `evidence/production-config-2026-09-21/`，恢复代码字节未变，v1 39 和新快照×新恢复配置的 24 阶段矩阵通过。限流/告警已交接专门任务，此后本任务不再修改；生产日志观察到 Hermes owner 频繁重连，已同步稳定性跟进。详见 [配置准备](production-config-2026-09-21.md)；六位码端到端仍待新版部署验证。
+
+- 2026-09-21 中文前两图生图对照：按负责人要求以 a-zh-v3 原生排版成图为底图，用内置 imagegen 翻译 Agent 预览及工具调用会话中的英文自然语言，保留 Agent/品牌/模型名与文件路径。两张 851×1849 生成效果图保存于 `evidence/store-styles-2026-09-21/public/a-zh-v4/`，原生七张未替换；存在轻微字形、气泡及材质重绘。
+
+- 2026-09-21 简体中文商店截图原生版：按负责人要求停止生图重绘，将已安装 iOS App 切换为简体中文，重新截取七个真实场景，保留英文对话/技能描述/演示会话名称与模型名；通过 SVG + Sharp 确定性排版，七张均为 1206×2622，手机底部保留 181px。产物、原始 UI、脚本、来源哈希与通过完整性验证的七图 ZIP 在 `evidence/store-styles-2026-09-21/public/a-zh-v3/`。第二张中文工具标签与输入提示原生渲染，第四张沿用既有 Atlas 虚构渠道演示数据。未改 App 源码或后端数据；模拟器 App 保留简体中文。
+
+- 2026-09-21 中文第二张清晰度修订：负责人反馈文字亮边/白色颗粒，暂停全语言批量生成，直接以 a-v4 原始英文图经内置 imagegen 重做两轮，选取较清晰版本替换 a-zh-v2 第二张；总览、提示词与七图 ZIP 同步刷新并校验。仍为生成效果稿，不承诺消除所有细微重绘。其余六张未改。
+
+- 2026-09-21 Lucy 费用体验修正：OpenClaw 按手机 IANA 时区与 Agent owner 查询今日/区间用量，旧 Gateway 仅明确拒绝时区字段时保留 owner 并回退固定偏移；统一 Profile、详情、分享海报的 Partial / Unpriced / Included / Estimated 状态，缺价不再显示为已知零费用，微小非零金额显示 <$0.01。页面跨午夜、时区变化与前台恢复刷新，缓存按日期/时区隔离；Hermes 保持原生单 Agent 日期请求。19 语言部分费用说明同步。`check:required` 全部通过（Mobile 328 suites / 3384 tests），v1 compatibility 5 files / 39 tests 通过；真实 Lucy Gateway 核对 $0.258672624、19 条未计价。iOS Release 与原生验收通过：Lucy $0.26 / Partial、详情费用说明及分享预览均验证，第三张英文商店截图与下载包已同步；详见 `evidence/usage-fix-2026-09-21/verification.md`。
+
+- 2026-09-21 晚间最终发布复核：当前工作区 required 全绿（Mobile 328 suites / 3,384 tests），v1 39、Relay integration 8、新旧 Bridge × 双后端 × 固定恢复六阶段全部通过；包校验通过，根/Mobile audit 无 high/critical。只读核实生产四服务仍旧版、npm latest 0.7.0；OpenClaw ticket 密钥缺失、Relay 自定义 health 403、API skip 跳过 rate limiting、规定的边缘限流/用量告警未就绪。真实旧包/商店支付与覆盖升级、公开隐私/正式语音配置、48h 观察尚未闭环；不签署今晚提审或立即全量发布。云端隔离恢复演练已有证据，不再列为缺失。详情：[最终复核](release-readiness-2026-09-21.md)。未部署、未改云配置、未操作用户后端或手机。
+
+- 2026-09-21 简体中文商店截图二轮：按负责人要求进一步翻译七张手机界面、时间提示、会话标题/预览与对话，保留 Slack/Telegram、Agent 名、模型名及技术标识；使用内置 imagegen，聊天品牌字形额外修订。产物、完整提示词、总览与七图下载包在 `evidence/store-styles-2026-09-21/public/a-zh-v2/`，851×1848，浏览器七图加载和 ZIP 校验通过。生成本地化效果稿，不等同原生中文 App 截图或最终商店尺寸；App 与后端无修改。
+
+- 2026-09-21 简体中文商店截图生图试验：按负责人要求使用内置 imagegen，逐张以 a-v4 英文成图为编辑目标生成 7 张中文海报标题/副标题版本，保留英文手机界面；提示词、生成原图、总览、下载包与预览位于 `evidence/store-styles-2026-09-21/public/a-zh-v1/`。中文文案逐张核对，浏览器七图加载与 ZIP 校验通过；输出为 851×1849（Session 851×1848），存在轻微 UI 重绘和字体差异，不标记为逐像素保持或商店最终提交文件。无 App/服务代码或配置变更。
+
+- 2026-09-21 商店 Session 演示数据：按负责人授权为 Atlas 添加 3 个 Slack、2 个 Telegram 虚构会话；使用 `sessions.patch` 与本地 `chat.inject`，所有新增记录设 `sendPolicy=deny`，未连接真实频道、调用模型或对外发送消息。Gateway 返回渠道和预览正确；原生面板确认 Slack 3 / Telegram 2 图标、筛选和混排。第四张改用该真实界面的演示数据截图，副标题为 “Slack, Telegram, and more.”，a-v4 PNG/总览/下载包同步更新；种子脚本和 manifest 在截图证据目录 `capture-set/`，预览页已注明数据虚构。
+
+- 2026-09-21 Lucy 今日费用只读核查：确认 Profile 本地日期未带时区，Gateway 默认 UTC，$0.067003284 漏掉日本当天 00–09 时段；明确 Asia/Tokyo 后已计价合计 $0.258672624，Gateway 两接口与原始 SQLite 的 105 条 DeepSeek 记录一致。另有 19 条 Claude CLI 缺失价格，卡片忽略 missingCostEntries，不能视为总账单。证据见 `evidence/usage-audit-2026-09-21.md`；尚未修改费用统计代码或截图数字。
+
+- 2026-09-21 商店截图 A 内容去重：按负责人选择移除普通聊天图，原工具调用图移至第二张；第三张按负责人后续建议改为真实 Lucy Agent Profile 控制台（今日花费 $0.07，105 Skills；保留真实 1 failed 提示），展示任务、费用、模型、Skill、Memory、工具与管理入口。新版七张与下载包在 `evidence/store-styles-2026-09-21/public/a-v4/`，保留 a-v3 对照；七图加载、1206×2622 尺寸和 ZIP 校验通过。仅截图与排版产物更新，无生产源码或 Agent 配置变更。
+
+- 2026-09-21 商店截图 A 英文七张：完成 Agent 首页、Hermes 聊天、OpenClaw 工具调用、多 Session、Skill 管理、模型选择和定时任务。副标题约 43→53px，主标题统一两行；真实 1206×2622 iOS UI 内嵌 SVG/Sharp 排版，手机完整且底部留白 181px。产物、原图、可复现脚本和七张 PNG 下载包在 `evidence/store-styles-2026-09-21/public/a-v3/`；浏览器确认七图全部加载、尺寸正确，大图查看可用，ZIP 七文件校验通过。新增五个 Atlas 演示会话、三个暂停的演示定时任务与 Hermes 演示聊天；既有维护任务保持原状。第五张展示 Skill，不主推本地模型。仅英文 iOS 样张，未生成 Android/其他语言版本或发布商店；无生产源码变更。
+
+- 2026-09-21 商店截图 A 二轮：负责人选定柔和极简方向；移除海报顶部字标，保留短标题和副标题，修正完整手机与底部留白。首图改为真实四 Agent 花名册，按授权创建并保留 OpenClaw `atlas`（Atlas 🪐，独立 `~/.openclaw/workspace-store-atlas`），与 Lucy / Codex UI Operator / Hermes 同屏；原有身份未改。原生会话已补英文演示预览。内置生图修订稿与直接嵌入原始 UI 的 1206×2622 HTML 画布保存在 `evidence/store-styles-2026-09-21/public/a-v2/`，两张画布的手机均在边界内且有底部留白；非商店发布。
+
+- 2026-09-21 商店截图风格探索：截取当前已安装 iOS 3.0 的两张英文 OpenClaw 演示会话原图（1206×2622，聊天/真实文件工具调用），使用内置生图工具完成四套双场景概念图：柔和极简、深色银质、亮色海报、暖调编辑。对比页、原图及完整提示词保存在 `evidence/store-styles-2026-09-21/public/`；6 张图片加载与大图查看已验证。概念图包含生成重绘且原始像素尺寸略有差异，不作商店最终导出；完整 Hermes/Agent 首页等场景与 HTML 精确排版待选风格后继续。第五张改为 Skill，当前不主推本地模型。未改生产源码或发布。
+
+- 2026-09-21 OpenClaw 管理导航（负责人截图反馈）：配置、权限、诊断、备份改为嵌套 native stack 次级页面，保留管理菜单及其滚动位置；返回键/Android Back/iOS 侧滑走原生出栈，共享控制器保留读取结果、配置搜索和展开状态。20 项管理页回归（含真实 StackRouter 的四入口入栈/出栈与保留菜单）、Mobile 类型检查、设计系统、文档检查通过。完整 required 的 Mobile 结果为 324 suites / 3353 tests 通过、1 项失败：AgentSettingsScreen 的 Cron failure acknowledgement 测试遇 5 秒超时，定向复跑仍超时，后续 required 阶段未执行，不记全绿；未修改该无关测试。按负责人要求未启动模拟器，转场与手势由负责人真机验收。
+
+- 2026-09-21 文件按需取回试用版：实现 sessionFiles 协商、会话内显式文件引用、10 MiB 上限、128 KiB 分块、路径/软硬链接/修改检测与过期句柄；聊天 ＋ → 会话文件 → 系统分享，19 语言，无新增云端文件存储或付费门禁。required 587 全绿（Mobile 324 suites / 3341 tests）；v1 39、native Hermes 37、额外生命周期/分享 48 项通过。Android Release 586、iOS Release 590 已构建；设备实测 Hermes 双端及 OpenClaw Preview iOS，iOS 两后端下载字节与电脑原件一致。旧生产 OpenClaw Relay 尚无独立 client channel，入口正确隐藏；不将该路径计作文件端到端通过。Android 为接收 App 保留手机本地 URI 缓存，满 24h 后下次下载清理；iOS 分享结束删除临时文件。系统分享菜单已验证，iOS“保存到文件”菜单选择后未完成独立 Files 落盘验收，不能声称覆盖所有接收 App。远程推送暂缓，详见 docs/3.0/24-mobile-task-workflows.md。
+
+- 会话面板最新负责人修订：新建移回右上角，使用与关闭键一致的单个图标按钮；搜索保留筛选下方，95% 高度不变。保留能力门禁和创建中防重复点击。SessionPanel 13 项定向测试及完整 required 577 全部通过；577 双端构建/安装完成，iOS 自动化与 Android ADB 实际打开均确认右上角新建和正文搜索，截图已目检并保存。
+
+- 14:45：527 双端手机及 iPad 模拟器候选已实测。Android 归档精确改名/置顶/文件筛选/系统导出完成；旧草稿预览→主动恢复→冷启动保留→清空→再冷启动为空，测试内容从未发送。iOS 555 精确改名、560 持久化核对原始标题不变、562 冷启动置顶筛选通过；547 自动输入追加旧文字的失败不计通过。iPad 正确本地二维码配对后，549 原生发送/回复与深色横屏会话面板通过。完整门禁仍为 required 526 / v1 531 / Hermes native 533，无后续生产源码变更。新增 [验收说明](acceptance-workflows-2026-09-21.md)，明确完整扩展尚未交付、生产/商店尚未发布。
+
+- 14:26：归档补齐本机重命名、置顶、置顶/文件筛选；保留原始快照与去重标识，操作收于单个菜单，基础整理免费。18 项定向回归通过；完整 required 526 全绿（Mobile 322 suites / 3,327 tests，Bridge 36 files / 316 tests），v1 531 的 39 项与原生 Hermes 533 的 37 项通过。520 门禁曾因 12 包回放共用 5 秒上限超时；现保留每包期限和全部断言，整段给 15 秒，未放宽生产超时。iOS 522 完成菜单/改名/置顶/筛选/系统分享，但脚本清空标题不彻底；527 已加入聚焦全选并完成双端构建，实际重验继续。Android 已保存真实 Hermes 会话并验证置顶；iPad 首次 QA 二维码误用 /ws，未完成握手，不算产品回归通过。
+
+- 13:47：required 508 全绿（Mobile 322 suites / 3,318 tests，Bridge 36 files / 316 tests），508 双端 Release 已安装。Android 发现页原生崩溃已修复，实际浏览/搜索/安装/源码读回/确认卸载完成；临时 Weather 目录、Hub 登记、usage 已清理。iOS 509 新版目录回归通过，先前安装/卸载与重装读回有单独证据；497 Android Maestro USB 失败不算通过，改用实际 ADB 操作截图验证。v1 494 的 39 项、原生 Hermes 492 的 37 项通过，后续无 Bridge 改动。手机已回到新版小组件页；完整扩展与商店支付/发布仍有未完成项，见 24 文档。
+
+- 13:40：493 已双端安装，required 494 全绿。iOS 安装/卸载/重装已实测；496 脚本重复输入筛选词失败，498 清空后读回通过，不能冒充 496 整脚本成功。Android 497 驱动 USB 失败，改直接 ADB 完成来源查看、确认卸载与原生目录/登记/usage 清理。随后打开 Android 发现页暴露 WebView 的 String→Double 原生崩溃；507 回归复现，已改数字滚动参数，508 双端构建和完整门禁正在运行。发现页不能标为 Android 验收通过。
+
+- 13:29：iOS 490 在 App 内完成真实 ClawHub Weather 安装、列表刷新、源码读回；随后修复 Hub 来源与卸载登记残留，原生集成 492 的 37 项、自包含 Bridge 36 files / 316 tests、v1 494 的 39 项通过。493 双端构建成功，本机 CLI 已更新；完整 required 与实际卸载/重装仍在运行，测试技能稍后清理。
+
+- 13:19：required 483 完整通过（Mobile 322 suites / 3,318 tests），双端 Release 构建通过。iOS 旧草稿 481/482 实测预览→主动恢复→重启保留→清空后不再恢复，测试键已清理；发现的标题误译已修正。付费墙 484 连续三次打开/关闭通过，模拟免费开关已恢复关闭，截图复查；不包含商店签名或真实支付验证。App 内技能安装流程继续，完整范围仍未完成。
+
+- 13:05：required 465 完整通过（Mobile 322 suites / 3,318 tests），两端 465 Release 已安装。永久授权改为单独确认：iOS 468 实测长按→取消→仍待审批→拒绝整流程通过；Android 476 实际确认框已截图，随后原生 300 秒审批到期自动拒绝，未执行目标命令。Android 469 自动化驱动启动失败，不能记为取消流程通过；真实 allow-once/deny 已见 448/450/455/459。两轮临时原生配置均逐字节恢复，测试目录清理。完整未交付范围现集中列于 24 文档。
+
+- 12:48：Hermes 真实手动审批已验证 iOS 允许一次、Android 拒绝；后端双会话均 idle、待审批为 0，测试目录结果与选择一致。Android 脚本仍有 USB 截图/收尾中断，另行截图确认，不记为整脚本通过。临时原生审批配置已逐字节恢复，测试文件与私密备份已清理。新增永久授权确认正在回归与原生重建；其余范围仍未完成。
+
+- 12:27：required 441 全绿（Mobile 322 suites / 3,316 tests）；Hermes 原生集成 434 的 36 项、v1 435 的 39 项通过。真实 ClawHub 安装在隔离 QA home 验证下载/原生扫描/读回/重复拒绝，修复作者丢失与手工目录覆盖边界；Hermes Skill 读写保留原文，iOS 编辑→差异→恢复后逐字节一致。双端技能搜索收键盘/源文件入口已实测，441 原生包已装。iOS 442 实测版本删除确认不再被弹层遮挡，Skill 元数据改为源码块。Android 新包桌面截图 433 已复查并展示；完整扩展仍有未完成项，正式服务未发布。
+
+- 11:44：本机 Bridge 已更新，安卓真实图片发送完成，授权只读历史确认仅一条用户消息/原生 ID；iOS 跨设备查看同轮会话完整脚本通过。Android 407 在末尾截图遇 USB 中断，另行 ADB 截图核实，不冒充整脚本通过。最终手机桌面小组件 410 截图已复查，手机留在新版小组件页，普通字号/浅色。完整门禁 402 与 v1 403 全绿，正式服务未发布，完整产品扩展仍有未完成项。
+
+- 11:39：required 402 完整通过（Mobile 322 suites / 3,314 tests），v1 replay 39 项通过。Android 395 / iOS 394 已安装；真实相册系统分享图片、明确发送与 Hermes 识图双端通过，分享目标页改为缩略图并截图检查。跨设备发现 Hermes 图片历史重复用户气泡，候选已按原生图片投影一对一匹配，31 项定向测试通过，本机 Bridge 更新与实测继续。未发布生产，仍不宣称完整范围交付。
+
+- 11:14：Android 小组件按真实桌面尺寸重做，浅深色与大小尺寸真机截图已自检；相册选图→明确发送→Hermes 正确识图通过。会话新建已移至轻量首行，95% 高度与双端大字号已检查。修正 Android 弹层系统返回、热切主题圆按钮方形阴影；最新原生 366/372 已安装。后续草稿迟到写入回归复现并修复，21 项定向测试通过，最终完整门禁/原生包正在刷新。此前 required 348 全绿；371/375 含失败项，不冒充最终通过。完整范围与未完成项仍见 24 文档。
+
+- 10:40：required 327 完整通过（Mobile 322 suites / 3,308 tests）；iOS 326 大字号冷/热切换与新版会话首行新建实测通过。Android 325 安装后语音/技能入口已到达，但自动脚本末尾截图遇 USB 中断；功能证据与整条脚本通过分开记录。负责人再次否定 Android 小组件观感后，337 按桌面真实尺寸重做比例，真机 339 截图已自检并提供；小号/深色/入口复测仍在继续，不能以此前“已截图”替代视觉通过。
+
+- 10:18：required 312 完整通过（322 suites / 3,308 tests）；iOS 新小组件浅深色双尺寸及独立语音/相册入口已实测，测试图片经显式发送到 Hermes 后识别正确。新版会话弹窗正常字号截图已检查。辅助大字号暴露固定紧凑控件裁切、热切字号旧测量问题；Android RemoteViews 不支持 Space 导致小组件加载失败，两项已修正、正在重建，不能标为最终通过。
+
+- 09:45：按用户新反馈重做桌面小组件（聊天胶囊＋圆形快捷入口），会话新建移出右上角、改为列表首行，弹窗固定高度 93→95%。81 项定向测试通过；新原生构建/完整门禁与双端截图仍在进行，尚未验收。
+
+- 09:30：required 281 完整通过（Mobile 322 suites / 3,303 tests），281 iOS/Android 原生 Release 构建通过。iOS 已安装；Android 正在原数据升级。Android Hermes 回复续聊已创建新会话并保留未发送草稿，Maestro 在截图阶段 USB 中断，后续直连截图确认实际结果；不能标整条脚本通过。iOS 辅助大字号花名册无裁切/重叠，之后已恢复普通字号。
+
+- 09:17：required 261 完整通过（Mobile 322 suites / 3,294 tests）。Android 259 原缓存升级后修复冷启动重复回复：保留原始 final ID 的历史投影现按同轮实时回复对齐，未清会话缓存；Gateway/SQLite 均确认只有一条原始回复。iOS 模拟免费账号已走通归档阅读与原生单份导出；发现搜索付费墙沿用错误阅读文案，后续独立归档/版本权益入口与 19 语言文案正在回归，尚未最终验收。
+
+- 08:52：required 234 完整通过（Mobile 320 suites / 3,282 tests）。Android 235 小组件→OpenClaw 已安装技能→显式发送→ANDROID_OC_SKILL_0921_OK，原生 transcript seq 321/322 确认技能引用和终态。iOS 中号小组件已实装，双尺寸深色/辅助大字号截图已检查。后续新增回复续聊、显式语音入口和固定标题裁切修复，246 门禁/247 双端构建正在运行，尚非最终验收。
+
+- 08:21：双后端专用隔离云迁移演练通过（旧包→候选首次 v1 DO→固定恢复包→再次部署），验证旧配对重连、新配对、受控聊天/会话往返及限流跨部署保留。测试专用 4 Worker/2 KV 已清理，证据见 registry-recovery-runbook；正式服务未部署。App 后续补齐 OpenClaw offset 分页与弹层标题避让，双端 192 构建通过，最终全量门禁仍需刷新。
+
+- 08:04：完整 required 175 全绿（Mobile 319 suites / 3,276 tests；Bridge 35 files / 301 tests）。iOS 172 新包完成打开会话收键盘、保存完整对话、搜索页打开本机归档，截图已检查；归档阅读/导出和其余设备矩阵继续。OpenClaw 技能已实际读取指令并返回结果，补回历史时的过程说明顺序已修正并有回归。未发布生产，其余未完成项仍见 24 文档。
+
+- 07:34：完整 required 116 全绿（Mobile 317 suites / 3,263 tests；Bridge 35 files / 301 tests，及其余工作区门禁）。Android TXT 原生分享→Hermes 草稿→显式发送→读取验证码通过；iOS 会话 Markdown 导出已实际保存到“文件”，再分享回 Clawket 后附件草稿已目检。当前候选新增本机完整会话归档/检索/批量导出，并改善文档草稿文件名展示；这些后续更改仍需门禁和新包验收。W5–W8 其余项仍未完成，未发布生产。
+
+## Mobile workflow expansion（2026-09-21，负责人授权）
+
+- 06:39：iOS 会话长按→导出格式自动化通过，截图已检查。根因是嵌套弹层 minimize 导致父会话面板被 dismiss，改为子操作 push 后解决。随后发现 iOS 系统分享被 FullWindowOverlay 遮挡，候选改为依次关闭会话面板与导出弹层再呈现系统分享；16 项相关测试与 typecheck 通过，真机新包待验。分享存储新增 100 MiB/200 组上限、文本不建目录、显式缓存清理后释放已消费文件且保留全部草稿，9 项存储/维护回归通过。Mac 锁屏阻断 CUA，模拟器 Maestro 与截图文件仍可继续；安卓 USB 间歇掉线，60 包安装失败，仍非最终验收。
+
+- 06:28 进展：完整 required 再次全绿（Mobile 317 suites / 3,257 tests；Bridge 34 files / 295 tests，及其余工作区/设计/i18n/docs）。后续会话行防重复点击回归 12 项通过，仍待新包验收。此前 recorded packets 发现普通消息被附加 isError 字段，已修正并保持既有包结构。
+- Hermes 独立 Cron 模型实测：iOS 创建 a518c01a6281，原生读回 deepseek/deepseek-flash，执行得到 CLAWKET_MODEL_PIN_OK；切回默认后 model/provider/base_url 均清空，测试任务已删除。只验证当前供应商模型，不冒充跨供应商执行。
+- 两平台 clean prebuild/原生 Release 构建通过；iOS widget target 重复生成无重复，19 语言资源已复制。小组件冷启动现等待真实 Agent 描述符，避免落入占位 Assistant；新版本视觉回归待完成。会话导出入口实测暴露长按后菜单消失/会话打开，修复候选仍在验证；Android 多轮 Maestro 被 USB 断连中断，不算通过。W5–W8 剩余范围依然未完成。
+
+- 05:50 进展：最新完整 required 全绿（Mobile 316 suites / 3,252 tests）；其后导出弹层测试/小组件重复 prebuild 配置仍需复跑。Hermes Cron 已真实执行返回 CLAWKET_CRON_QA_OK，QA 定时任务已删除；iOS 新建会话→原生当前任务追加指令通过；iOS Safari 原生分享→冷启动保留→目标草稿→显式发送通过。
+- iOS build 8 停止实测：run_491016f5c8914c2b8035aeefeaa3ba6b 的原生状态为 cancelled / run.cancelled，工具中断，界面显示 Operation interrupted.；脚本中文“已停止”断言未通过，不能写整条自动化全过。断流恢复改为核对精确运行终态，不能凭部分文本/工具结果报完成；独立回归与真实本机历史集成 14 项通过。
+- 安卓 QA build 7 小组件已在 Samsung A56 桌面实装，聊天入口打开已配对的 Hermes 主会话；图标布局截图已查看。系统选择器描述仍为英文，发现生成目录未重跑本地化资源复制，下一轮 clean prebuild 验证。Markdown/JSON 会话导出已实现，完整分页、并发变化/取消/容量保护与基本测试通过，真机验收待重建。
+
+- iOS 新包真实 skill_view → 回复完成已通过，技能标签正确清空，终态仅一条工具记录；打开 Add 前收起输入框焦点，技能搜索使用弹层专用输入。模型诊断真实读配置/手动探测 DeepSeek 已通过。记忆编辑→旧版差异→恢复→保存已通过，本机原文件逐字节恢复；发现并修正“恢复此版本”误用支付译文。
+- 分享收件箱改为等待后端发送确认才消费；本地会话创建失败重试复用已创建会话。最新完整 required 全绿（Mobile 315 suites / 3,236 tests）；之后审批空截止时间、Hermes Cron 兼容修复仍需完整重跑。
+- Hermes Cron 实测创建/读回/暂停通过，但发现旧映射 `none` 被原生当成平台名导致 BLOCKED，且旧输出解析误报成功；已修复为原生 `local`、校验 skipped/blocked/failed 和未知结果，25 项 Cron 回归通过，真实复跑进行中。不得将任务创建或接口 success 当成成功执行。功能总账仍未完成，见 24 文档。
+
+- Owner requested full implementation of the researched mobile workflows, system sharing and native widgets, including 3.1 candidates; Android physical-device and iOS simulator acceptance authorized. Scope and evidence ledger: [24-mobile-task-workflows.md](24-mobile-task-workflows.md). Existing dirty work is preserved. Work is in progress; no production-ready claim. Initial required gate passed (Mobile 311 suites); sharing-specific regression 45 passed, current Hermes Bridge 30 files / 246 passed. Android QA Release installed and native text share selection verified; iOS widget Release build and full dual-backend acceptance remain in progress. See the workflow ledger for unfinished scope.
+
+- 后续实测：Android 系统分享到 Hermes 草稿，明确发送并收到真实回复；iOS 本地 QR 连接 Hermes，由输入框发送收到 IOS_HERMES_WORKFLOW_OK。本机原生 notebook 提取通过；双端完整矩阵仍待完成。
+- 修复双后端 restart 复用旧 Hermes 子进程的问题；CLI 10 files / 66 tests 通过。实际重启后健康端点已声明 skill-install、documents、run-steer、run-approval 新能力。保留原生 Hermes API 和配对数据。
+- required 最新 Mobile 313 suites / 3217 tests 及设计系统通过，止于新增 Send 文案 namespace；已修正并单独 i18n 全绿。后续版本记录与生命周期改动需重新完整验证。v1 39 通过，固定恢复矩阵 4 组合各 6 阶段通过；未发布生产。
+
+## 发布前产品、竞品与商业化研究（2026-09-21）
+
+- 同日用户追问交互后补核：`ThreadScreen` 已把输入框草稿经 `cronPrompt` 传给新建定时任务，原研究将草稿预填列作新增不准确，已更正。剩余建议仅为已完成多轮对话提炼成独立任务，降为 P2；未改产品代码。
+
+- 按负责人请求完成 [产品研究与建议](product-research-2026-09-21.md)：核对当前双后端能力、近期上游更新、App Store / Google Play / GitHub 竞品及现有付费墙；明确 Hermes 已有基础管理接入，优先建议技能使用、聊天转定时任务、记忆入口与发布后的分享/通知闭环。
+- PostHog 只读聚合固定窗口 2026-08-21 至 09-20 UTC、2.x、排除明确模拟器：付费墙 188 个标识、点击订阅 10、购买成功 5；这些是独立去重统计而非有序漏斗。Android 12 次失败来自 4 个标识，缺原因，不能称技术失败率。报告保留查询来源与口径限制。
+- 免费会话范围、首次弹墙时机、Pro 体验期等均是研究提案，没有改变现有冻结产品决定或实现；纳入最新 Android QA 的正式 Relay 发布阻断。未改业务代码、外部后端源码、分析配置或商店价格，未部署/购买。
+- 文档验证：`npm run check:docs` 通过（7 组 AGENTS/CLAUDE、5 项回归）；报告 16 个本地引用均存在，所改文档 whitespace 检查通过。未改运行代码，未重复执行应用测试。
+
+## Android 真机发布前回归（2026-09-21）
+
+- Samsung A56 / Android 16 安装独立 Release `Clawket QA`（保留原商店 App）；修复 Android 键盘遮挡、消息时钟重复、Hermes 流式空格/换行/缩进丢失、过期 QR 错误被 `Generate` 误判为限流。双后端真实发收、Hermes 模型切换、OpenClaw Preview 模型切换与后台恢复、管理页、搜索、会话切换、暂停/冷启动/恢复均已实测。重复的 Preview 测试连接已移除；未修改外部 Hermes 源码。
+- 正式 OpenClaw Relay 仍阻断发布：手机 `models.list` 超时与生产实时 tail 的 `inactive_client_message_dropped` / `gateway_message_dropped_without_active_client` 同轮复现；生产仍是与导出快照一致的旧版本，休眠恢复不重建 `activeClientId`。候选代码已有恢复修复，Preview 正常；本轮未部署，不能把候选测试通过当成生产修好。详细证据与剩余验收见 [测试报告](android-release-qa-2026-09-21.md)。
+- 验证：`check:required` 全绿；最终 Mobile 307 suites / 3,190 tests，v1 39、Relay 集成 8、外部 Hermes 集成 36 全通过；发布快照矩阵 4 组合 × 6 阶段通过。最终 Android Release 构建/安装成功，设备 crash buffer 0 行；本地 Hermes 20 次健康请求成功、两会话无残留 active run。商店签名覆盖升级/真实购买、语音/图片、更多 Android 设备与完整多设备/网络矩阵未冒充已通过。
+
+## 隐藏 YouMind 连接入口（2026-09-20）
+
+- 按负责人要求，将现有 `YOUMIND_SPRITE_ENTRY_VISIBLE` 开关关闭，隐藏引导页的 YouMind 连接选项及官网链接；保留登录页面、适配器、翻译、连接逻辑与已有连接。OpenClaw、Hermes、本地模型入口不变。
+- 验证：现有 Onboarding 入口显隐、路由与 YouMind 登录页面回归 3 suites / 32 tests 全过；`npm run check:docs` 与 `git diff --check` 通过。
+
 ## 静态会话切换闪动排查与优化（2026-09-20）
 
 - 第三轮反馈只剩一次，且明确是消息出现后再跳。只读检查手机 main 缓存确认：123 条新快照与 50 条旧快照并存；初次恢复误用按首条时间拼接的跨代时间线，旧快照排在后面，先显示旧尾页再被正式历史替换。现在首屏优先当前 session ID 的快照，无对应快照时回退最近保存快照，仅读最后一页；保留归档和原分页、正式历史去重与流式语义。真实存储 → hook 回归先复现失败，覆盖两后端、未知 session ID、重复内容保留、旧历史可翻和过期回退；针对性 2 suites / 98 tests 通过；`npm run check:required` 全绿（Mobile 307 suites / 3,180 tests），日志 `/tmp/clawket-session-snapshot-required.log`。脱敏设备证据 `/tmp/clawket-session-snapshot-evidence.json`，原始临时缓存副本已删除。真机最终效果待复测。
@@ -808,6 +948,8 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 
 | 位置（文件 § 节） | 规格原文 | 实际做法 | 理由 | 影响 |
 |---|---|---|---|---|
+| 2026-09-21 · 00 §9 / 02 §5 WAF 实施 | WS 30/IP/min，四条 WAF，日用量三阈值和 Discord。 | 按本次负责人明确的正常使用与稳定性优先要求，WS 初始防洪阈值 120，配对 20 补双后端路径，使用 Pro 两条规则；机器 API 不加挑战。日用量/Discord 保留未完成状态。 | 最高成功建连样本 25/min 已接近 30，共享 IP 与新版通道需余量；Pro 规则额度/周期及原生告警能力与旧规格不符。 | 降低误伤同时保留边缘防洪；未降低候选代码注册 10/hour、8 MiB、认证和 liveness 门禁。该项不视为完全满足原始 30/min 规格，前后配置及回退见专项报告。 |
+| 2026-09-21 · Mobile 页面顶部保存 | Ghost / 纯文字 Save。 | 六类编辑页统一复用 primary 胶囊按钮，保留禁用态与原位 loading。 | 负责人截图反馈保存不明显，要求简约、有品质。 | 仅视觉及聊天主题保存中的可访问状态；原有保存条件、确认和后端操作不变。 |
 | 2026-09-20 · `05-visual-system.md` §动效 / Thread | 切换会话时线程内容交叉淡入 200 ms。 | 会话列表立即替换，不重叠淡入淡出；保留新消息和弹层动效。 | 负责人反馈静态会话切换多次闪动；旧/新原生 Markdown 列表重叠与异步测量叠加会放大不稳定感。 | 只改变切换的呈现方式，保留独立会话列表身份与滚动状态隔离；真机按 HT-SESSION-JITTER-0920 复测。 |
 | 2026-09-20 · Thread activity | 状态沿用消息气泡并整行呼吸；普通界面不用渐变。 | 负责人要求：工具与状态共用 16pt 圆角 / 44pt 最小高度；状态文字使用单向循环中性流光。 | 统一视觉并消除闪烁；仅字形内的加载态渐变。 | 仅 Mobile 展示，保持消息身份、后端与连接行为；真机效果由负责人测试。 |
 | `[UX-2026-09-19-connection-unavailable] 04-app-screens.md / Mobile design system` | 持续失败也只用连接胶囊。 | 持续失败增加完整提示；短暂恢复仍用胶囊，缓存与其他连接仍可访问。 | 用户明确要求参考远程电脑离线页，避免无限等待和无说明错误。 | 仅 Mobile 展示与手动重试入口；OpenClaw / Hermes 共用，不改变传输协议。 |
@@ -865,13 +1007,21 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 
 | 编号 | 事项 | 怎么做 | 验证方法 | 状态 |
 |---|---|---|---|---|
+| HT-STREAM-0922 | 流式聊天修复后的 Android 连续发送验收 | 先恢复本机 Android Gradle 插件构建，再覆盖安装保留数据；在现有 OpenClaw/Hermes 测试会话连续发送并录制从发送到终态的全过程。 | 当前用户气泡不消失、思考/流式内容始终归属当前轮、完成前后顺序稳定。 | 代码回归与全仓门禁通过；本轮未生成或安装修复 APK，真机验收未完成。 |
+| HT-STORE-UPLOAD-0922 | 商店截图上传权限 | 用户已手动开启 Chrome 扩展文件访问权限，代理通过标准文件选择器上传。 | App Store 19×7、Google Play 19×7 + 19 置顶图；19 语言逐套核验顺序与已保存文件。 | 已完成手机截图上传；Play 3.0 图标同步并核验所有语言继承。平板资源另待补。 |
+| HT-STORE-DISCLOSURE-0922 | 核实发布版数据申报和审核访问 | 核实 PostHog/RevenueCat/YouMind 的实际收集、保留、关联及审核测试账号；更正官网隐私政策和两商店申报，并核对 MIIT 主体。 | 隐私声明与真实发布行为一致，审核员可访问核心功能，MIIT 主体匹配。 | 已发现旧的不收集数据/无分析声明；未凭猜测提交隐私或主体变更。 |
+| HT-RELEASE-0921 | 固定候选后的最终发布签字 | 按 release-readiness-2026-09-21.md 关闭生产六位码/health、WAF 跳过限流和告警缺口；沿用 HT-COMPAT-0914、HT-MULTIDEVICE-0920、HT-M8-2 与商店支付验收，稳定观察 48h 后提审。 | 留存唯一源码/包版本、实际旧 App 双后端结果、生产冒烟与脱敏趋势、商店签名包和配置证据。 | 自动门禁全绿；生产配置、真实发布验收与观察待完成；本轮仅检查。 |
+| HT-INPUT-0921 | Android 输入展示修复真机回归 | 重新接入手机后安装本次 QA 包，检查 PDF/技能历史和附件标题居中。 | 只显示原始用户请求，文件卡片上下均衡，重复发送不丢失。 | 双端构建通过；本轮 Android 未连接，待设备可用。 |
+| HT-SAVE-0921 | 顶部保存按钮真机观感 | 查看工具、身份、模型、定时、文档和聊天主题，切换浅深色并修改后保存。 | 可保存时黑白实心胶囊清晰，禁用和保存中状态可辨，原有保存流程正常。 | 实现完成，待负责人视觉验收。 |
+| HT-QA-PHOTO-0921 | 清理模拟器的受密码保护最近删除 | iPad Pro 11-inch (M5) 模拟器 Photos → Recently Deleted 中仅永久删除本轮导入的两张配对二维码（9月21日 14:19、14:25）；其余六张预置照片保留。 | 两张 QA 资源不再存在。 | 已从图库删除；永久删除需要已有设备密码。未猜测密码或更改保护设置。本机私密 PNG 与 App ImagePicker 副本已清理。 |
+| HT-WORKFLOW-PUSH-0921 | 提供并验证远程推送应用凭据 | 为正确的 iOS bundle / Android application ID 确认 APNs 签名能力与 FCM 项目凭据；密钥通过本机安全配置提供，不写进仓库。 | 签名真机包退出后收到通用完成/待处理通知，点击后经认证回到对应任务。 | 缺少已验证凭据；通知服务实现也尚未完成，不计为已交付 |
 | HT-SESSION-JITTER-0920 | 静态 session 切换闪动真机复测 | 开发版 Reload 后，在含表格的 main 与其他 session 间反复切换；再验证查看旧消息、展开工具、键盘弹出及返回底部，OpenClaw/Hermes 分别复测。 | 切换后不再反复闪动/跳位；工具展开与旧消息阅读不被拉回底部；新回复及最终历史无重复、遗漏。 | 负责人确认第二轮降至 1 次，明确为消息出现后再跳；第三轮已修复手机缓存中证实的旧快照误选，待真机复测 |
 | HT-SESSION-PRO-0920 | Session 升级入口真机复测 | 免费账号打开非主会话，点「升级 Pro」，等待商品加载，关闭后再次打开；购买/恢复后检查原地解锁。 | 付费墙持续可见、不闪白，关闭仍在原会话；OpenClaw / Hermes 均可用。 | 148 项相关测试通过，原生展示待负责人真机复测 |
 | HT-ROSTER-0920 | 花名册选中背景验收 | 手机打开任意 Agent 再返回，切后台返回并重复；iPad 查看侧栏和窄窗口独立首页。 | 手机/独立首页无持久灰底；iPad 侧栏仍标记当前会话；正常按压反馈可恢复。 | 49 项相关测试通过，待负责人真机验收 |
 | HT-STREAM-0920 | 聊天流式呈现与恢复真机验收 | 开发版 Reload 后，OpenClaw 连续执行至少三轮“说明＋工具＋说明”，查看段落句尾和时间；工具长时间运行中退出会话/切后台再返回，等待完成并测试停止；Hermes 复测同类任务。 | 每段文字只出现一次且句尾完整，时间不闪烁、无空白页脚，气泡和工具顺序/高度稳定；恢复、完成、停止后无重复或乱序。 | 负责人已确认重复消失；高度/闪动修复自动化通过，待真机复测 |
 | HT-ACTIVITY-0920 | 工具 / 状态卡片真机观感 | 按负责人要求自行在 OpenClaw / Hermes 对话中查看工具组、执行 / 处理状态、首次回复；检查浅深色和减少动态效果。 | 圆角与基础高度一致，文字流光从左到右柔和循环，回复切换正常。 | 待负责人实际测试；代理不做 UI 测试 |
 | HT-MULTIDEVICE-0920 | 固定 3.0 候选后的双设备与版本混用验收 | OpenClaw/Hermes 各用两台真实 App：同/不同会话同时发送，A 锁屏时 B 继续，A 断网恢复，Bridge 重启，旧/新 App 混用，图像与停止；记录 App/Bridge/Relay 版本。沿用 HT-COMPAT-0914 等旧包/购买项，勿以协议回放替代。 | 不串请求/回复、不因 A 重连踢掉 B、run 停止准确、旧配对保留；区分连接共享与本机缓存/图片同步边界。 | 待固定包真机验收；本轮路由/休眠单测和 20 阶段本地兼容矩阵通过 |
-| HT-IPAD-0920 | iPad 真机交互验收 | 安装含本轮原生配置的新构建；横竖屏与系统窗口缩放、软键盘中文组合输入/粘贴/发送、外接键盘、长回复阅读位置、后台恢复；分别连 OpenClaw / Hermes 发收并重连。 | 无裁切或遮挡；草稿保留；发送不重复、不串会话；回复与恢复正常。 | 待真机；模拟器 OpenClaw 链接发送与双后端独立会话实测已通过，Hermes App 内发收仍待补验。 |
+| HT-IPAD-0920 | iPad 真机交互验收 | 安装含本轮原生配置的新构建；横竖屏与系统窗口缩放、软键盘中文组合输入/粘贴/发送、外接键盘、长回复阅读位置、后台恢复；分别连 OpenClaw / Hermes 发收并重连。 | 无裁切或遮挡；草稿保留；发送不重复、不串会话；回复与恢复正常。 | 待真机、外接键盘与窗口缩放；模拟器 OpenClaw 链接发送、双后端独立会话已有证据，Release 527 的 Hermes App 内发收与深色横屏会话面板于 549 通过。 |
 | HT-OFFLINE-0919 | 连接失败页面真机验收 | 分别对 OpenClaw / Hermes 暂停电脑端服务或断网，等待原有恢复宽限结束；查看错误页、缓存入口和草稿，再恢复服务；另查暂停、配对失效、浅深色与大字体。 | 连接名与时间正确；无缓存不显示“没有 Agent”；重连/管理可用；其他连接可访问；恢复后自动回到内容，草稿不丢。 | 待人 |
 | HT-REDEEM-0919 | 原生兑换与重装恢复验收 | 使用真实平台 RevenueCat key 的构建和 sandbox / license-test 账号；按 apps/mobile/docs/pro-redemption.md 验收有效、无效、取消、过期、复用码、月度到期、永久与原订阅并存、删装后 Restore。 | 商店与 RevenueCat 交易一致；OpenClaw / Hermes 的 Pro 门禁同时解锁；Apple 月度不自动扣款；重装恢复成功。 | 待商店沙盒实测；自动化测试已通过 |
 | HT-VOICE-0919 | 云端语音真机与发布验收 | 安装包含 Expo Audio 的新构建，分别在 iOS/Android 验证点击听写、按住发送、上滑取消、停止回填；拒绝/重新授予麦克风权限、蓝牙、来电/后台、十分钟录音中断网后保留并重试、App 重启恢复和切会话；记录点击到首个音频帧的实际耗时。检查浅/深色、大字体、RTL、减少动态效果。正式发布前更新隐私披露并按 22 的后续付费阶段完成服务端权益方案。 | 常驻模型选择器不移动；无重复发送/串会话；失败可恢复草稿；两端麦克风及时释放。 | 待真机验收；付费接入按负责人要求后续实施 |
@@ -1799,3 +1949,137 @@ Regression now drives raw agent-only events through routing, adapter mapping, co
 
 
 Cold-start follow-up validation: final `npm run check:required` passes (307 Mobile suites / 3,149 tests, workspace types and remaining required gates); v1 replay 39/39 and diff whitespace checks pass. Owner's additional Session Panel screenshot was checked against the local backend database: the weather child has no current session row and a `deleted` archive at 2026-09-20 13:06:16.065 UTC (21:06:16 at the screenshot's UTC+8); the latest retained children are the four September 11 release-monitor checkpoints shown in the screenshot. This explains the panel omission independently of the App persistence defect. The panel remains a current-session list; no archive-browser feature was added.
+
+
+### 2026-09-21 — Visible page-header Save actions
+
+Owner requested clearer, minimal Save buttons from the Tools screenshot. Tools, Identity, Models, Cron editing, Document editing and Chat theme now reuse the existing primary Button: monochrome 44-point capsule, quiet disabled fill, stable-width loading spinner. Chat theme exposes Saving to accessibility while retaining the Save label geometry. No new component, dependency, backend or save-policy change. Existing unrelated dirty work preserved. Closest instructions and design recipe updated; device appearance remains HT-SAVE-0921.
+
+Validation: affected screen suites and navigation primitives pass; workspace typechecks, design-system, i18n and docs checks pass. First required run: 323 Mobile suites / 3,346 tests passed, two failures in concurrently edited ModelPickerModal inheritance assertions; independent rerun passed 11/11. Final required rerun lost its process/log across the turn interruption, so no full-green claim. Final focused run: all 7 affected screen/navigation suites, 113 tests pass; docs and diff whitespace checks pass. Owner explicitly reserves UI testing and prohibits simulator validation for this task; no simulator/device operated.
+
+### 2026-09-21 — Resolve inherited model selection in the shared picker
+
+Owner requested replacing the standalone Default row with a checkmark on the actual default model, consistently across shared picker entry points. `ModelPickerModal` now resolves inheritance against the unfiltered catalog, checks the resolved model when no override exists, and returns the existing empty-model sentinel when that row is chosen so Cron continues following future Agent default changes. Explicit overrides and concrete-only chat/configuration callers retain their selection semantics. Unknown or absent defaults retain the fallback action; search never reintroduces a duplicate Default row. No backend, protocol or lifecycle change; unrelated dirty work preserved.
+
+Validation: workspace typechecks, design-system and docs checks pass. Full required run stops at a Cron rename-sheet wait timeout (324 Mobile suites / 3,353 tests passed; one failure), after an earlier temporary self-test-directory indexing race. Focused rerun initially hits a different Cron prompt-editor five-second timeout; rerun with a command-only 15-second test ceiling passes all 3 suites / 35 tests, including OpenClaw/Hermes Cron cases and the shared picker. No assertions or repository timeout settings changed; full required is not claimed green. Logs: local evidence/model-picker-0921/. Per owner instruction, no simulator or device operated; visual acceptance belongs to the owner.
+
+
+### 2026-09-21 — Scheduled task creation acknowledgement
+
+Owner requested feedback after the editor closes. Successful creation now queues a localized native “Scheduled task created” acknowledgement for the native-stack closing transition, shared by OpenClaw and Hermes; failures retain the draft and error. Editing/cancellation keep their existing behavior. All 19 settings catalogs updated. Existing unrelated changes preserved.
+
+Validation: CronEditorScreen 21 tests pass, including both backends, acknowledgement after closing (not opening) transition, listener removal and no success alert on failure. Workspace typechecks and all 325 Mobile suites / 3,354 tests pass; design-system, all-locale i18n and docs checks pass. `check:required` stops at the unrelated existing `scripts/jest-paths.test.mjs` Windows remend transform-path assertion (69/70 script tests pass); no Jest config or path-check script changed in this task. Evidence in `evidence/cron-created-*.log`. No simulator or device operated; owner explicitly owns UI testing.
+
+
+### 2026-09-21 — Attachment alignment and native input echoes
+
+Owner screenshots exposed native Claude CLI skill/PDF model-input expansions as duplicate user bubbles. Mobile now unwraps only recognized provenance-marked envelopes, reconciles adjacent matching original sends within the existing time window, and removes stale cached expansion identities. Genuine repeated/different sends and original attachment metadata remain intact. No native backend history or outgoing payload changed. Pending document cards vertically center their icon/title row while preserving multiline growth.
+
+Validation: targeted parser/history/lifecycle tests pass (68 initial checks; final parser/history 24 checks). A temporary read-only regression against the actual reported native history passed, including both screenshot cases and stale-cache merging; private fixture and temporary test removed. Required run passed all typechecks, 325 Mobile suites / 3,354 tests and protocol/Relay/Bridge suites, then exposed a script test selecting the first Babel rule instead of the remend rule. Corrected that test selector without changing production/Jest transforms; reran all script tests and remaining required stages (speech, design, i18n, docs) successfully. This is a completed split gate, not a fresh uninterrupted full run. Both Release QA builds pass; iOS installed and chat navigation/history smoke passed. Android is absent from ADB after reboot, so this patch has no Android physical-device acceptance yet. Logs are in the local external test-evidence-cache as input-context-*.log.
+
+Native visual follow-up: iOS document draft selected from Files and screenshot inspected; icon/title centered in the card. First filename-label tap did not select the file and its assertion failed; thumbnail tap retry passed. No message sent. Android physical retest remains HT-INPUT-0921.
+
+
+### 2026-09-21 — Diagnostic wait copy and repeat action
+
+Owner screenshot feedback: diagnostics now says “正在诊断，可能需要几秒…” and completed results offer “重新诊断”; both strings are translated across 19 config catalogs. Added an opt-in shared Button outline variant (canvas fill, ink text, inkSecondary hairline) used only by the repeat action, with wrapping labels. Existing secondary defaults, global palette, diagnostic execution, repair/Pro gates and OpenClaw/Hermes connections are unchanged. This is an owner-requested local visual recipe refinement.
+
+Validation: 42 focused management/navigation tests, workspace typechecks, all 325 Mobile suites / 3,354 tests, design-system, i18n and documentation checks pass. `npm run check:required` passes end to end. No simulator/device operated; native visual acceptance remains with the owner.
+
+
+### 2026-09-21 — Discover installation returns to a reviewable main-chat draft
+
+Owner requested restoring the 2.0 interaction. Discover now releases WebView navigation protection and pops to the selected Agent main Thread with one-shot installation text. It never calls direct skill installation or adapter.prompt, so the action has no backend loading wait. Both OpenClaw and Hermes use their existing prompt builder. Thread waits for the scoped composer draft, active connection/session and focus, then appends without replacing existing text or sending. Offline draft preparation remains available. Removed the two obsolete installation-result translations across all 19 locales; updated the closest instructions and screen/design documentation. Unrelated dirty work preserved.
+
+Validation: four focused suites cover discovery, settings-to-main routing, Thread hydration/once-only input and draft persistence. Required gate was attempted and stops at an unrelated existing useUsageCalendar.test.ts AppStateStatus callback type error; no clean repository-wide claim. Final focused counts and docs/design/i18n results follow below. No device/simulator or backend service operated.
+
+Final validation: 4 focused suites / 77 tests pass; design-system, 19-locale i18n, documentation and diff-whitespace checks pass. Repository-wide required gate remains blocked by the unrelated calendar-test type error above. Native visual acceptance remains with the owner.
+
+
+### 2026-09-22 — Store screenshots: all 19 native locales completed
+
+Completed the remaining 17 locales (119 posters), preserving accepted English and Simplified Chinese native editions: 19 locales × 7 scenes = 133 posters. Each new scene uses the installed iOS app’s native locale and deterministic Style A composition, with original English conversation content and proper names retained. No image generation or product/backend data changes were used. Output and local gallery: `evidence/store-styles-2026-09-21/public/native-locales/`. Master ZIP includes 133 composed posters and 133 native originals; per-language ZIPs contain seven posters.
+
+Validation: all 266 PNG dimensions are 1206 × 2622, all composed phone bottom margins ≥180 px, and the 267-entry master ZIP integrity check passed. Native scene OCR checks and visual overview review completed; small xlsx OCR omissions were visually checked. Spanish profile was recaptured across midnight and retains the real unavailable daily-cost state. App language restored to Simplified Chinese; temporary simulator language/status-bar overrides removed. No production code changed, so repository code gates were not rerun for this artifact-only work.
+
+Observed an installed-build Arabic switch white screen; native per-app AppleLanguages alignment allowed genuine RTL captures. Product fix remains outstanding; see `evidence/store-styles-2026-09-21/capture-locales/rtl-switch-observation.md` for evidence and recovery details.
+
+
+### 2026-09-22 — Arabic language-switch reload-loop fix
+
+Removed Expo Localization static RTL initialization, which overwrote the in-app I18nManager direction with the device locale on native startup. The existing with-locales plugin removes stale iOS plist flags and Android string overrides while retaining Android manifest RTL capability and all 19 locale registrations. AppLanguageProvider now persists both direction preferences even when the current layout matches, so explicit LTR choices survive an RTL system locale. Language persistence, backend adapters and connection policies remain unchanged. The i18n gate rejects reintroducing static flags (including extra) or removing the native migration plugin; localization documentation and Mobile instructions updated.
+
+Validation before owner steering: check:required passed (328 Mobile suites / 3,387 tests), including direction restore/switch regressions. Final native config-mod regression tests passed 8/8, covering stale flags, idempotency, retained Android RTL capability and invalid configuration. Native prebuild succeeded and generated config has no static Expo RTL flags. Pod installation and Android Debug compilation were interrupted before completion; no new app installed or device runtime validation performed. Owner explicitly requested logic-only completion without further full builds or actual testing. Native build/runtime acceptance is therefore not claimed; this fix must be included in the next native build. Local generated iOS workspace still needs pod install before building. Logs: /Volumes/Lucy-SSD/Relocated/Caches/dev/clawket-rtl-0922/.
+
+### 2026-09-22 Store localization metadata checkpoint
+
+App Store 3.0.0 expanded from 6 to 19 localizations; names/subtitles and descriptions/keywords/promotional text/release notes saved and all 19 reloaded/read back successfully. Google Play expanded from 1 to 19; all copy reloaded/read back, then saved to publishing overview as 21 pending-review changes. No submission/publication/build upload. Prepared 133 App Store 6.5-inch images, 133 Google Play phone images and 19 feature graphics. Upload still blocked by extension file URL access; user approval received but browser-policy restriction requires manual toggle. No screenshots replaced yet. App Store iPad set empty; old Play tablet assets remain. Privacy/MIIT/reviewer-access issues recorded in evidence/store-metadata-2026-09-22/STATUS.md. No production implementation changes or production deployments.
+
+
+### 2026-09-22 — Direct recording from the home widget
+
+Owner requested removing the extra Start recording confirmation and reserves device/UI acceptance. Voice widget taps now enter the existing recording flow after foreground/focus, access/capability checks, restored scoped draft and navigation settling. Startup is consumed once; backgrounding/readiness loss cancels the pending timer, and scope changes/unmount discard it. Existing microphone permissions, saved-recording recovery, draft preservation and explicit send behavior remain shared by OpenClaw and Hermes. Removed the unused confirmation sheet and its 19-locale button label; updated Mobile instructions and durable voice/widget documentation. Unrelated dirty work preserved.
+
+Validation: four focused suites / 99 tests pass, including both backend entries, readiness/focus/capability/session checks, cold-start foreground, scope cancellation, repeat actions, deep-link routing and durable recording behavior. Final `npm run check:required` passes end to end, including all workspace typechecks, 328 Mobile suites / 3,391 tests, protocol/Relay/Bridge/speech, design-system, 19-locale i18n and documentation checks. Diff whitespace check passes. Logs: `/tmp/clawket-widget-voice-{tests,required,docs}.log`. No simulator/device or native build operated. Owner will verify actual widget-to-recording experience.
+
+### 2026-09-22 Store screenshot upload completed
+
+User enabled extension file access. Replaced and verified all 133 App Store iPhone images across 19 locales; corrected upload-completion ordering and re-read each saved locale. Uploaded/saved 133 Google Play phone images, 19 localized feature graphics and current 3.0 app icon. After reload, inspected every Play image detail in order and verified all locales inherit the new icon. Final Google Play Save confirmed changes stored for review; no submission, publication or build upload. Updated evidence/store-metadata-2026-09-22/STATUS.md and upload-verification.json. App Store iPad images, required old Play tablet images, privacy disclosures/policy, MIIT identity and reviewer access remain open; do not claim complete release readiness.
+
+### 2026-09-22 — Android widget camera alignment and compact priority
+
+Owner requested optical polish and verification on the attached Samsung SM-A566B. Updated the camera vector with rounded shoulders and an optically raised body/lens, retaining the shared 1.8-unit stroke and equal circular targets. Owner follow-up sets Android compact actions to camera then voice; updated both RemoteViews layout and provider action bindings. Wide actions remain camera/photos/voice/skills; iOS is unchanged. Closest Mobile instructions and design documentation reflect the Android-specific priority.
+
+Validation: Release APK build passed; 31 widget XML resources parsed, compact IDs/drawables/accessibility labels checked, design-system checks (210 UI files) and docs checks passed. Covered existing QA package on the physical phone without uninstalling or clearing data. Preserved its prior EXPO_PUBLIC_UNLOCK_PRO=1 test configuration using an explicit fresh JS bundle; no production setting changed. Launcher screenshots verified wide light/dark rendering, compact camera/voice order and resize back to wide. Compact camera tap opened the actual system camera with one-time permission; canceled without capture/send. System returned to light mode. This is targeted widget acceptance, not a new full backend/release acceptance. Local evidence and final QA APK: `/Volumes/Lucy-SSD/Relocated/Caches/dev/clawket-widget-0922/`.
+
+
+### 2026-09-22 — Preserve the sending turn through stale history echoes
+
+Owner reported frequent Android send-time user-bubble disappearance, thinking/reply content moving into an earlier turn, and recovery only after completion. A deterministic controller regression reproduced the same ordering failure for both OpenClaw and Hermes: local send → server user echo → stale history → stream chunk erased the current user and placed the new reply before the previous answer. The shared merge recognized local users only by their current `usr_` wire ID; the first server echo removed that protection. Confirmed echoes now retain the local render key, send identity and display timestamp, and stale refreshes preserve that user anchor after its wire ID changes. Older repeated prompts are excluded by both projected and original history IDs. No backend, transport, renderer, dependency or service changes; unrelated dirty work preserved.
+
+Validation: regression failed for both backends before the fix; four focused suites / 157 tests pass after it, including real history-hook projection with missing send metadata, conflicting send keys and repeated-prompt identity changes. `npm run check:required` passes end to end (328 Mobile suites / 3,397 tests plus all other required gates). Additional final controller assertions verify that the empty thinking placeholder also stays after the current user with the same render key; all 53 controller tests pass. Diff whitespace checks pass.
+
+Device evidence: attached Samsung SM-A566B was inspected and one marked no-tool/no-file-change `UI_TEST_0922_A` message was sent in the existing conversation; its final user and assistant bubbles were visible. USB detached during the immediate screenshot sequence, so this is not a captured physical reproduction or post-fix acceptance. Native packaging/acceptance status is recorded below. Local evidence: `/Volumes/Lucy-SSD/Relocated/Caches/dev/clawket-chat-0922/`.
+
+Native packaging follow-up: Release QA build attempts failed while configuring the existing React Native Gradle plugin (`Unresolved reference: libs`; isolated Gradle cache then `KtfmtCheckTask`). No dependency or native source was changed to bypass the failure, and no repaired APK was generated or installed. A temporary per-plugin Gradle cache move was restored; isolated build cache and logs remain under the evidence directory. Device availability coordination received no reply during this turn; post-fix physical acceptance remains HT-STREAM-0922.
+
+### 2026-09-22 — Tablet screenshot preparation checkpoint
+
+Owner approved English iPad proofs and Play tablet reuse preparation. Existing iPad simulator verified in landscape and switched to English; OpenClaw connection remains pending QR import because current CLI/Registry accessCode is a legacy six-character alphanumeric code rejected by the newer code-input validator. Device Hub coordinate actions repeatedly report noWindowsAvailable; requested explicit authorization for simctl/Maestro fallback. No iPad proofs or tablet uploads claimed. Screenshot artifact directories relocated to external SSD with original-path symlinks after disk exhaustion. Details: evidence/store-metadata-2026-09-22/IPAD-STATUS.md.
+
+### 2026-09-22 — Public README refresh for 3.0
+
+- Updated English and Chinese READMEs together: current OpenClaw/Hermes positioning, concise feature list and pairing/build instructions, Node 22.x checkout requirement, self-hosting links, and personal “Follow me on X” link. Removed hidden Sprite promotion and corrected the misleading local-model history claim by replacing the oversized section with the setup guide link.
+- Replaced the old pixel-office hero with current approved native roster/chat/profile captures and the current app mark. Added Google Play alongside App Store with matching locally generated QR images; noted that artwork previews 3.0 while store availability may differ during review.
+- Kept privacy wording factual and compact: Relay message non-persistence and optional source-build PostHog, RevenueCat, and cloud speech configuration, without implying that configured store builds have no integrations. No privacy policy or product behavior changes.
+- Validation: documentation gate passed (7 instruction pairs, 5 checks); all 30 local README links/assets resolve; both READMEs have matching 136-line structure; hero visually inspected with full phone frames; QR destinations decoded with Apple Vision. Artwork renderer retained in local evidence `readme-refresh-2026-09-22/render.cjs`. No commit or publish performed.
+
+### 2026-09-22 — README hero approved
+
+- Owner approved v6 artwork; installed it as `assets/clawket-hero.png`, shared by English and Chinese READMEs. Final canvas: 1840 × 1060; enlarged screen captures and captions, GitHub/open-source/site footer, and raised screen group for balanced margins. Verified byte-for-byte against the approved preview and both README references.
+
+### 2026-09-22 — Native iPad English proofs completed
+
+Owner authorized simctl/Maestro fallback. Connected OpenClaw and Hermes on new 13-inch iPad simulator and captured real English landscape UI with four agents. Produced first two Style A proofs (workspace with demo weekend session, and demo tool input/output detail), 2752×2064 RGB with full device frames, single-line headings and readable subtitles. Native sources, renderer and gallery retained in evidence/store-styles-2026-09-21/public/ipad-a-v1/. Verified rendered output visually and dimensions. No generated or translated UI pixels. Remaining 19-locale iPad production and tablet uploads are still pending; phone/store completion is unchanged. See evidence/store-metadata-2026-09-22/IPAD-STATUS.md for remaining polish and environment details. No production code changed or store release submitted.
+
+### 2026-09-22 — Detached iPad sheet bottom corners
+
+Owner identified square bottom corners on the native Read file screenshot. AdaptiveBottomSheetModal previously rounded only the background sibling, leaving opaque child content unmasked. The centered iPad branch now clips the complete animated panel with Radius.bottomSheet and preserves caller style; phone/compact and opt-out paths retain their original styles. Shared across both backends; no transport or protocol changes. Updated Mobile instructions and iPad/design documentation.
+
+Validation: three focused suites / 11 tests pass, including panel clipping and unadapted style preservation; documentation checks and Mobile typecheck pass. Repository required gate completed Mobile tests with 324 passing / 4 failing suites (3,391 passing / 6 failing tests): five connection metadata assertions omit the new bridgeGeneration field and one route assertion expects BridgeUpgrade. These are outside this change; did not modify concurrent connection/navigation work. Native app has not been rebuilt, so current iPad gallery still shows the old defect and must be recaptured before store use. Logs: /tmp/clawket-ipad-corners-{tests,required,docs}.log.
+
+### 2026-09-22 — Conditional Bridge 3.0 upgrade guide
+
+Implemented the owner-approved conditional announcement entry and a dedicated two-step guide using the existing 3.0 setup primitives. Only authenticated legacy Bridge evidence qualifies: live handshake metadata and persisted negotiation evidence; direct OpenClaw, other backends, and unknown records do not qualify. Previously confirmed offline connections retain the entry; a current handshake or connection removal clears it. Connection details provide the same guide after the announcement is dismissed. Copy/share commands preserve pairing and use the released npm 3.0.0 package; there is no automatic command execution or forced re-pairing. All 19 locales include the new copy.
+
+Validation: `npm run check:required` passed, including 330 mobile suites / 3,407 tests, backend/CLI tests, typechecks, design-system, i18n, and documentation checks. New cases cover both backend generations, excluded/unknown connections, persisted offline evidence, historical capability migration, upgrade/removal clearing, and conditional announcement actions. Native iPhone simulator component preview verifies the conditional entry, opening the guide, exact clipboard contents, and native share sheet. Screenshots: `evidence/bridge-upgrade-ui-2026-09-22/{announcement,guide}.png`; test log: `/tmp/clawket-upgrade-required-final.log`. The preview uses explicit old-Bridge UI input, not a new production upgrade claim. Temporary preview entry removed; no store upload or production deployment in this change. Details: `bridge-upgrade-guidance-2026-09-22.md`.
+
+### 2026-09-22 — Discoverable Bridge guide in Settings
+
+Owner found the announcement entry easy to overlook. Added a conditional standard row directly below My connections on Settings home, opening the existing Bridge guide in one tap. It uses the same verified-old-Bridge eligibility as the announcement and connection details and disappears after upgrade; no badge, forced popup, new lifecycle page, or pairing reset. Existing reconnect remains Settings → My connections → connection → Reconnect.
+
+Validation: Mobile typecheck, 12 focused settings/evidence tests, design-system, i18n, and documentation checks passed. Native iPhone component preview visually verified; screenshot: `evidence/bridge-upgrade-ui-2026-09-22/settings-entry.png`. Temporary preview entry removed. No deployment or store upload.
+
+### 2026-09-22 — iPad corner fix recaptured
+
+Rebuilt the production-mode embedded Hermes JS bundle from current source, retained the existing simulator native binary and QA entitlement override, signed the local app copy and reinstalled over the 13-inch simulator without clearing its data. Opened the same existing demo session and real tool detail; native screenshot confirms both bottom corners now round. Updated second Style A proof in public/ipad-a-v2 (2752×2064), first proof retained. Source/hash and capture provenance recorded in capture-verification.json. No native compilation, store upload or submission claimed.

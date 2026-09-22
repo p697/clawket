@@ -19,7 +19,7 @@
   "Cost unavailable": "Maliyet kullanılamıyor",
   "Hermes tracked token usage, but it could not determine a reliable dollar cost for this route.": "Hermes token kullanımını izledi ancak bu rota için güvenilir bir dolar maliyeti belirleyemedi.",
   "Mixed cost sources": "Karışık maliyet kaynakları",
-  "This range mixes priced usage with included or unpriced routes, so the dollar total is only a partial view.": "Bu aralıkta fiyatlandırılmış kullanım ile dahil veya fiyatlandırılmamış rotalar karışık olduğundan dolar toplamı yalnızca kısmi bir görünümdür.",
+  "This range mixes priced usage with included or unpriced routes, so the dollar total is only a partial view.": "Bu toplam yalnızca maliyeti bilinen kullanımları içerir.",
   "Estimated cost": "Tahmini maliyet",
   "Hermes is showing an estimate for this route rather than a reconciled bill.": "Hermes bu rota için mutabakatı yapılmış bir fatura yerine tahmin gösteriyor.",
   "Search logs...": "Günlüklerde ara…",
@@ -243,7 +243,6 @@
   "Blocked by allowlist": "İzin listesi tarafından engellendi",
   "Failed to update skill": "Beceri güncellenemedi",
   "Failed to uninstall skill": "Beceri kaldırılamadı",
-  "Failed to request installation": "Yükleme isteği gönderilemedi",
   "Source": "Kaynak",
   "Agent timezone": "Agent saat dilimi",
   "Check configured services and summarize problems and suggested fixes.": "Yapılandırılmış hizmetleri kontrol et, sorunları ve önerilen çözümleri özetle.",
@@ -380,5 +379,15 @@
   "Disable {{name}}?": "{{name}} devre dışı bırakılsın mı?",
   "This account starts receiving messages again.": "Bu hesap yeniden mesaj almaya başlar.",
   "This account stops receiving messages until you enable it again.": "Yeniden etkinleştirene kadar bu hesap mesaj almaz.",
-  "Failed to update channel": "Kanal güncellenemedi"
+  "Failed to update channel": "Kanal güncellenemedi",
+  "About me": "Hakkımda",
+  "Version history": "Sürüm geçmişi",
+  "No saved versions": "Kayıtlı sürüm yok",
+  "This file changed. Reopen it before saving.": "Dosya değişti. Kaydetmeden önce yeniden açın.",
+  "Model health": "Model durumu",
+  "Global model": "Genel model",
+  "Test connections": "Bağlantıları test et",
+  "Restore version": "Sürümü geri yükle",
+  "This file is too large for version history.": "Bu dosya sürüm geçmişi için çok büyük.",
+  "Scheduled task created": "Zamanlanmış görev oluşturuldu"
 }

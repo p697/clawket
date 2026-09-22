@@ -31,7 +31,7 @@ import { HISTORY_PAGE_SIZE } from './constants';
 import { mapAdapterSession } from './adapterChatMapping';
 import { shouldSuppressHistoryLoadError } from './historyErrorPolicy';
 import { shouldPreserveOptimisticAssistant } from './cacheHydrationPolicy';
-import { preserveHydratedMessageKeys, preserveMessagePresentation, preserveOptimisticAssistantMessage, prependOlderCachedMessages } from './historyMergePolicy';
+import { preserveHydratedMessageKeys, preserveMessagePresentation, preserveOptimisticAssistantMessage, prependOlderCachedMessages, retireAliasedTools } from './historyMergePolicy';
 import { shouldRestoreCacheBeforeHistoryRefresh } from './historyRefreshPolicy';
 import { ReconcileAssistantOptions, shouldAppendReconciledAssistant } from './historyReconcile';
 import { selectSessionForCurrentAgent } from './sessionSelection';
@@ -928,8 +928,8 @@ export function useChatHistoryState({
         const lineageMergedMessages = prependUniqueMessages(uiMessages, localOlderMessagesRef.current);
         // Exclude stale cached rows, not messages sent while initial hydration
         // was in flight. The latter must remain visible even on an empty page.
-        const preservable = allowOptimisticPreservation ? prev
-          : prev.filter(message => !cacheHydrationMessageIdsRef.current.has(message.id));
+        const preservable = retireAliasedTools(allowOptimisticPreservation ? prev
+          : prev.filter(message => !cacheHydrationMessageIdsRef.current.has(message.id)), lineageMergedMessages, historyResult.toolCallAliases);
         const reconciled = preserveMessagePresentation(preservable,
           preserveOptimisticAssistantMessage(preservable, lineageMergedMessages));
         const mergedMessages = allowOptimisticPreservation ? reconciled

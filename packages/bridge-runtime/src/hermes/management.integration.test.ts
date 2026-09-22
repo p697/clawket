@@ -358,7 +358,9 @@ describe('Hermes management integration', () => {
       '',
       '# Editor skill',
       '',
-      'Updated instructions.',
+      '  Updated instructions.  ',
+      '',
+      '',
     ].join('\n');
     await expect((bridge as any).dispatchRequest('skills.content.update', {
       agentId: 'main',
@@ -370,7 +372,9 @@ describe('Hermes management integration', () => {
       path: join(hermesHomePath, 'skills', 'editor-skill'),
     });
 
-    await expect(readFile(join(hermesHomePath, 'skills', 'editor-skill', 'SKILL.md'), 'utf8')).resolves.toContain('Updated instructions.');
+    await expect(readFile(join(hermesHomePath, 'skills', 'editor-skill', 'SKILL.md'), 'utf8')).resolves.toBe(nextContent);
+    await expect(bridge.dispatchRequest('skills.get', { agentId: 'main', skillKey: 'editor-skill' }))
+      .resolves.toMatchObject({ content: nextContent });
   });
 
   it('deletes managed Hermes skills through bridge-owned methods', async () => {
@@ -412,6 +416,27 @@ describe('Hermes management integration', () => {
       isDirectory: expect.any(Function),
     });
     await expect(readFile(join(hermesHomePath, 'skills', 'delete-me', 'SKILL.md'), 'utf8')).rejects.toThrow();
+  });
+
+  it('reports native Hub provenance and removes its install record together with the skill', async () => {
+    const hermesHomePath = await createHermesHomePath();
+    const skills = join(hermesHomePath, 'skills');
+    await mkdir(join(skills, 'hub-sample'), { recursive: true });
+    await mkdir(join(skills, '.hub'), { recursive: true });
+    await writeFile(join(skills, 'hub-sample', 'SKILL.md'), '---\nname: hub-sample\ndescription: QA\n---\n\nExample\n');
+    const registry = join(skills, '.hub', 'lock.json');
+    const unrelated = { source: 'clawhub', identifier: 'untouched', install_path: 'untouched', trust_level: 'community' };
+    await writeFile(registry, JSON.stringify({ version: 1, installed: {
+      'hub-sample': { source: 'clawhub', identifier: 'hub-sample', install_path: 'hub-sample', trust_level: 'community' },
+      untouched: unrelated,
+    } }));
+    const bridge = new HermesLocalBridge({ hermesHomePath, sessionStorePath: await createSessionStorePath(), startHermesIfNeeded: false });
+    await expect(bridge.dispatchRequest('skills.status', { agentId: 'main' })).resolves.toMatchObject({
+      skills: [expect.objectContaining({ skillKey: 'hub-sample', source: 'clawhub', deletable: true })],
+    });
+    await expect(bridge.dispatchRequest('skills.delete', { agentId: 'main', skillKey: 'hub-sample' })).resolves.toMatchObject({ ok: true });
+    expect(JSON.parse(await readFile(registry, 'utf8')).installed).toEqual({ untouched: unrelated });
+    await expect(stat(join(skills, 'hub-sample'))).rejects.toThrow();
   });
 
 });

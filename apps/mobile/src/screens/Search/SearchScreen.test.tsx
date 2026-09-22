@@ -61,6 +61,10 @@ jest.mock('../../connection', () => ({
   useRoster: () => mockRoster,
 }));
 
+jest.mock('../../features/sharing/ConversationArchiveSheet', () => ({ ConversationArchiveSheet: () => null }));
+
+jest.mock('../../services/manual-sessions', () => ({ useManualSessions: () => [] }));
+
 jest.mock('../../contexts/ProPaywallContext', () => ({
   useProPaywall: () => ({ isPro: mockIsPro }),
 }));
@@ -257,7 +261,7 @@ describe('SearchScreen connection container', () => {
     expect(mockRememberRecent).not.toHaveBeenCalled();
   });
 
-  it('navigates Agent/session rows to Thread and free message rows to the Pro gate', async () => {
+  it('opens free main-session search results without a paywall', async () => {
     const props = createProps();
     render(<SearchScreen {...props} />);
     await waitFor(() => expect(mockSearchViewProps?.state).toBe('ready'));
@@ -273,8 +277,8 @@ describe('SearchScreen connection container', () => {
       from: 'search',
     });
     act(() => mockSearchViewProps?.onSelectResult(messageResult!));
-    expect(props.navigation.navigate).toHaveBeenCalledWith('Paywall', {
-      reason: 'messageHistory',
+    expect(props.navigation.navigate).toHaveBeenCalledWith('MessageDetail', {
+      connectionId: messageResult!.connectionId, sessionKey: messageResult!.sessionKey, messageId: 'message',
     });
     expect(mockedAnalyticsEvents.searchMessageOpened).toHaveBeenCalledWith({ is_pro: false });
   });
@@ -316,7 +320,7 @@ describe('SearchScreen connection container', () => {
       .find((result) => result.kind === 'message');
 
     act(() => mockSearchViewProps?.onSelectResult(message!));
-    expect(onOpenPaywall).toHaveBeenCalledWith('messageHistory', expect.any(Function));
+    expect(onOpenPaywall).toHaveBeenCalledWith('gatewayConnections', expect.any(Function));
     expect(props.navigation.navigate).not.toHaveBeenCalledWith('MessageDetail', expect.anything());
 
     const onContinue = onOpenPaywall.mock.calls[0]?.[1] as (() => void) | undefined;

@@ -243,5 +243,7 @@
   "Unable to open redemption. Please try again.": "Impossibile aprire il riscatto. Riprova.",
   "Last connected: {{time}}": "Ultima connessione: {{time}}",
   "Check your network and make sure the remote service is running.": "Controlla la rete e che il servizio remoto sia in esecuzione.",
-  "View saved messages": "Visualizza i messaggi salvati"
+  "View saved messages": "Visualizza i messaggi salvati",
+  "Search and bulk export": "Ricerca ed esportazione in blocco",
+  "Skill and memory versions": "Versioni di abilità e memoria"
 }

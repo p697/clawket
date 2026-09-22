@@ -1,0 +1,10 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+  android:width="25dp" android:height="25dp"
+  android:viewportWidth="24" android:viewportHeight="24">
+  <!-- Lift the body/lens optically: the raised viewfinder otherwise makes the camera look bottom-heavy. -->
+  <path
+    android:pathData="M8.5,4Q8.8,3.5 9.4,3.5H14.6Q15.2,3.5 15.5,4L17,6.5H19.5Q21.5,6.5 21.5,8.5V17Q21.5,19 19.5,19H4.5Q2.5,19 2.5,17V8.5Q2.5,6.5 4.5,6.5H7Z M16,12.5a4,4 0,1 1,-8 0a4,4 0,1 1,8 0"
+    android:strokeColor="@color/widget_ink" android:strokeWidth="1.8"
+    android:strokeLineCap="round" android:strokeLineJoin="round"
+    android:fillColor="@android:color/transparent"/>
+</vector>

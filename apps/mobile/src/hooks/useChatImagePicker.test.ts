@@ -51,3 +51,15 @@ describe('useChatImagePicker.attachLocalImages', () => {
     expect(result.current.pendingImages.map((image) => image.uri)).toEqual(['file:///c.jpg']);
   });
 });
+
+ it('discards a photo library result returned after switching conversations', async () => {
+   const picker = jest.requireMock('expo-image-picker').launchImageLibraryAsync as jest.Mock;
+   let resolve!: (result: unknown) => void;
+   picker.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
+   const view = renderHook(({ scope }: { scope: string }) => useChatImagePicker(6, scope), { initialProps: { scope: 'openclaw:main' } });
+   let pending!: Promise<void>;
+   act(() => { pending = view.result.current.pickImage(); });
+   view.rerender({ scope: 'hermes:main' });
+   await act(async () => { resolve({ canceled: false, assets: [{ uri: 'private-old-photo', base64: 'old' }] }); await pending; });
+   expect(view.result.current.pendingImages).toEqual([]);
+ });

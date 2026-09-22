@@ -1,3 +1,9 @@
+import { BridgeUpgradeScreen } from './src/features/app-updates/BridgeUpgradeScreen';
+import { useBridgeUpgrade } from './src/features/app-updates/useBridgeUpgrade';
+import { ConversationExportSheet } from './src/features/sharing/ConversationExportSheet';
+import { isMainConversation } from './src/utils/session-preview';
+import { ManualSessions, useManualSessions } from './src/services/manual-sessions';
+import { IncomingShareCoordinator } from './src/features/sharing/IncomingShareCoordinator';
 import 'react-native-get-random-values';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -403,6 +409,7 @@ function AppContent({
     setSimulateFreeAccount,
   } = useProPaywall();
   const connections = useConnections();
+  const bridgeUpgradeIds = useBridgeUpgrade(connections.initialized, connections.connections, connections.connectionDetails);
   const rootNavigationRef = useMemo(() => createNavigationContainerRef<RootStackParamList>(), []);
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [agentAvatars, setAgentAvatars] = useState<Record<string, string>>({});
@@ -424,6 +431,11 @@ function AppContent({
   const [pendingMainSessionSwitch, setPendingMainSessionSwitch] = useState(false);
   const [pendingAddGateway, setPendingAddGateway] = useState(false);
   const [sessionPanelVisible, setSessionPanelVisible] = useState(false);
+  const [exportTarget, setExportTarget] = useState<SessionPanelRow | null>(null);
+  const pendingExport = useRef<SessionPanelRow | null>(null);
+  useEffect(() => { pendingExport.current = null; }, [connections.activeAdapter]);
+  const manualSessions = useManualSessions();
+  useEffect(() => { setExportTarget(null); }, [connections.activeAdapter, sessionPanelVisible]);
   const [threadContext, setThreadContext] = useState<RootStackParamList['Thread'] | null>(null);
   const [pinnedSessionKeys, setPinnedSessionKeys] = useState<Readonly<
     Record<string, ReadonlyArray<string>>
@@ -636,6 +648,15 @@ function AppContent({
       }),
     [activeConnection?.id, activeConnection?.backendKind, connections.roster, currentAgentId],
   );
+  const widgetTarget = useMemo(() => {
+    const group = connections.roster.find(item => item.connection.id === connections.activeConnectionId);
+    const agent = group?.agents.find(item => item.agent.agentId === currentAgentId)?.agent
+      ?? group?.agents.find(item => item.agent.isMain)?.agent;
+    if (!agent) return null;
+    const accessDeniedReason = !canAccessConnection(agent.connectionId) ? 'gatewayConnections' as const
+      : !canAccessRosterAgent(agent.connectionId, agent.agentId) ? 'agents' as const : null;
+    return { agentId: agent.agentId, sessionKey: agent.mainSessionKey, accessDeniedReason };
+  }, [connections.roster, connections.activeConnectionId, currentAgentId, canAccessConnection, canAccessRosterAgent]);
   const isMultiAgent = agents.length > 1;
 
   const setCurrentAgentId = useCallback((id: string) => {
@@ -1166,6 +1187,7 @@ function AppContent({
     }
     if (followUp?.type === 'open_paywall') presentPaywall(followUp.feature);
     else if (followUp?.type === 'open_url') openExternalUrl(followUp.url);
+    else if (followUp?.type === 'open_bridge_upgrade' && rootNavigationRef.isReady()) rootNavigationRef.navigate('BridgeUpgrade');
   }, [announcementPresentation, openExternalUrl, presentPaywall]);
 
   const openStartupThread = useCallback((target: StartupThreadTarget) => {
@@ -1283,6 +1305,16 @@ function AppContent({
     await action();
   }, [canAccessConnection, presentPaywall]);
 
+  const canExportSession = useCallback((row: SessionPanelRow): boolean => {
+    if (!canAccessRosterAgent(row.connectionId, row.agentId)) return false;
+    const agent = connections.roster.find(group => group.connection.id === row.connectionId)
+      ?.agents.find(item => item.agent.agentId === row.agentId)?.agent;
+    if (!agent) return false;
+    return isPro || isGraceActive(entitlement)
+      || manualSessions.some(item => item.connectionId === row.connectionId && item.agentId === row.agentId && item.key === row.key)
+      || isMainConversation({ sessionKey: row.key, mainSessionKey: agent.mainSessionKey, kind: row.kind });
+  }, [canAccessRosterAgent, connections.roster, isPro, entitlement, manualSessions]);
+
   const handleSessionAction = useCallback(async (
     row: SessionPanelRow,
     action: SessionPanelAction,
@@ -1290,6 +1322,16 @@ function AppContent({
   ) => {
     if (!canAccessRosterAgent(row.connectionId, row.agentId)) {
       presentPaywall(canAccessConnection(row.connectionId) ? 'agents' : 'gatewayConnections');
+      return;
+    }
+    if (action === 'export') {
+      if (connections.activeAdapter?.connection.id !== row.connectionId) return;
+      if (!canExportSession(row)) {
+        presentPaywall('sessionHistory', () => setExportTarget(row));
+        return;
+      }
+      pendingExport.current = row;
+      setSessionPanelVisible(false);
       return;
     }
     if (action === 'pin') {
@@ -1313,7 +1355,7 @@ function AppContent({
       await SessionPreferencesService.clearSession(row.connectionId, row.agentId, row.key);
     }
     await getConnectionRuntime().refreshRoster();
-  }, [canAccessConnection, canAccessRosterAgent, presentPaywall]);
+  }, [canAccessConnection, canAccessRosterAgent, presentPaywall, connections.activeAdapter, canExportSession]);
 
   const handleAccountSectionAction = useCallback((
     request: AccountSettingsSectionActionRequest,
@@ -1403,7 +1445,7 @@ function AppContent({
             i18n.t('Done', { ns: 'common' }),
             i18n.t('Cache cleared.', { ns: 'config' }),
           );
-        });
+        }).catch(() => Alert.alert(i18n.t('Error', { ns: 'common' })));
         return;
       case 'reset-device':
         void (async () => {
@@ -1575,6 +1617,8 @@ function AppContent({
           {!permissionsLoading ? (
             <AppDeepLinkHandler
               rootNavigationRef={rootNavigationRef}
+              navigationReady={navigationReady && connections.initialized}
+              widgetTarget={widgetTarget}
               activeConnectionId={connections.activeConnectionId}
               activeAdapter={connections.activeAdapter}
               currentAgentId={currentAgentId}
@@ -1843,6 +1887,9 @@ function AppContent({
                 <RootStack.Screen name="DesignSystem">
                   {({ navigation }) => <DesignSystemScreen onBack={navigation.goBack} />}
                 </RootStack.Screen>
+                <RootStack.Screen name="BridgeUpgrade">
+                  {({ navigation }) => <BridgeUpgradeScreen onBack={navigation.goBack} />}
+                </RootStack.Screen>
                 <RootStack.Screen name="Connection">
                   {({ navigation, route }) => {
                     const connection = connections.connections.find((item) => item.id === route.params.connectionId);
@@ -1854,6 +1901,7 @@ function AppContent({
                       paused={connections.pausedConnectionIds?.includes(connection.id) ?? false}
                       agentNames={connections.roster.find((group) => group.connection.id === connection.id)?.agents.map(({ agent }) => agent.name) ?? []}
                       details={connections.connectionDetails[connection.id]}
+                      onUpgradeBridge={bridgeUpgradeIds.includes(connection.id) ? () => navigation.navigate('BridgeUpgrade') : undefined}
                       {...(freeSlot ? { freeSlot, onUseAsFreeConnection: () => switchToFreeConnection(connection.id) } : {})}
                       onBack={navigation.goBack} onReconnect={() => resumeConnection(connection.id, true)} onResume={() => resumeConnection(connection.id)}
                       onPause={() => runtime.pauseConnection(connection.id)}
@@ -1864,6 +1912,7 @@ function AppContent({
                 <RootStack.Screen name="AccountSettings">
                   {({ navigation }) => (
                     <AccountSettingsScreen
+                      onUpgradeBridge={bridgeUpgradeIds.length > 0 ? () => navigation.navigate('BridgeUpgrade') : undefined}
                       status={accountSettingsStatus}
                       connections={settingsConnections}
                       labels={accountSettingsLabels}
@@ -1959,7 +2008,13 @@ function AppContent({
                     />
                   )}
                 </RootStack.Screen>
-                <RootStack.Screen name="MessageDetail" component={MessageDetailScreen} />
+                <RootStack.Screen name="MessageDetail">
+                  {(props) => <MessageDetailScreen {...props} resolveThreadLockedReason={(connectionId, agentId) => {
+                    if (!canAccessConnection(connectionId)) return 'gatewayConnections';
+                    if (!canAccessRosterAgent(connectionId, agentId)) return 'agents';
+                    return null;
+                  }} />}
+                </RootStack.Screen>
                 <RootStack.Screen
                   name="Paywall"
                   component={PaywallRouteBridge}
@@ -1968,6 +2023,7 @@ function AppContent({
               </RootStack.Navigator>}
               </AdaptiveWorkspace>
               <AppUpdateAnnouncementSheet
+                bridgeUpgradeAvailable={bridgeUpgradeIds.length > 0}
                 visible={announcementVisible}
                 announcement={announcementPresentation?.announcement ?? null}
                 onClose={() => closeAnnouncement('dismiss')}
@@ -2012,13 +2068,46 @@ function AppContent({
                   setCurrentAgentId(row.agentId);
                   if (rootNavigationRef.isReady()) rootNavigationRef.navigate('Thread', params);
                 }}
+                onCreateSession={async (agent) => {
+                  const create = async () => {
+                    const adapter = connections.activeAdapter;
+                    if (adapter?.connection.id !== agent.connectionId || !adapter.capabilities.sessionCreate || !adapter.createSession) throw new Error('Session creation unavailable');
+                    const session = await ManualSessions.create(adapter, agent.agentId);
+                    if (getConnectionRuntime().getSnapshot().activeAdapter !== adapter || !rootNavigationRef.isReady()) return;
+                    const params: RootStackParamList['Thread'] = { connectionId: agent.connectionId, agentId: agent.agentId, sessionKey: session.key, from: 'panel' };
+                    setThreadContext(params); setCurrentAgentId(agent.agentId);
+                    setSessionPanelVisible(false); rootNavigationRef.navigate('Thread', params);
+                  };
+                  if (!canAccessRosterAgent(agent.connectionId, agent.agentId)) {
+                    presentPaywall(canAccessConnection(agent.connectionId) ? 'agents' : 'gatewayConnections', create);
+                  } else await create();
+                }}
                 onSessionAction={handleSessionAction}
+                onAfterClose={() => {
+                  const target = pendingExport.current;
+                  pendingExport.current = null;
+                  if (target && connections.activeAdapter?.connection.id === target.connectionId && canExportSession(target)) setExportTarget(target);
+                }}
                 onOpenPermission={() => presentPaywall(
                   threadContext && !canAccessConnection(threadContext.connectionId)
                     ? 'gatewayConnections'
                     : 'agents',
                 )}
               />
+              <ConversationExportSheet target={exportTarget && !paywallVisible && canExportSession(exportTarget) ? exportTarget : null}
+                adapter={connections.activeAdapter?.connection.id === exportTarget?.connectionId ? connections.activeAdapter : null}
+                onClose={() => setExportTarget(null)} />
+              <IncomingShareCoordinator ready={navigationReady && !permissionsLoading && !paywallVisible && !announcementPresentation}
+                targets={connections.roster.flatMap((group) => group.agents.map((item) => item.agent))}
+                onConnect={() => rootNavigationRef.navigate('Onboarding', { presentation: 'modal' })}
+                onChoose={(agent, shareId, onHandedOff) => {
+                  const open = () => { onHandedOff(); rootNavigationRef.navigate('Thread', {
+                    connectionId: agent.connectionId, agentId: agent.agentId, sessionKey: agent.mainSessionKey, from: 'deeplink', shareId,
+                  }); };
+                  if (!canAccessRosterAgent(agent.connectionId, agent.agentId)) {
+                    presentPaywall(canAccessConnection(agent.connectionId) ? 'agents' : 'gatewayConnections', open);
+                  } else open();
+                }} />
               </BottomSheetModalProvider>
             </NavigationContainer>
             <GlobalGatewayOverlay />

@@ -6,11 +6,12 @@ const config = {
       tsconfig: 'tsconfig.jest.json',
       diagnostics: false,
     }],
-    // remend ships ESM only; Babel lowers it for the CommonJS test runtime.
+    // ESM-only dependencies used by host tests need CommonJS lowering.
+    'node_modules/@react-navigation/routers/.*\\.js$': 'babel-jest',
     'node_modules[/\\\\]remend[/\\\\]dist[/\\\\]index\\.js$': 'babel-jest',
   },
   transformIgnorePatterns: [
-    'node_modules/(?!(tweetnacl|js-sha256|remend)/)',
+    'node_modules/(?!(tweetnacl|js-sha256|remend|@react-navigation/routers)/)',
   ],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json'],
   setupFiles: ['./jest.setup.ts'],

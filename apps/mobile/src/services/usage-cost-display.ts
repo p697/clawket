@@ -1,13 +1,7 @@
+import { resolveCostPresentation as resolvePresentation } from './usage-cost-presentation';
 import type { TFunction } from 'i18next';
-import type { CostPresentation, CostSummary, UsageResult, UsageSessionEntry } from '../types/usage';
+import type { CostSummary, UsageResult, UsageSessionEntry } from '../types/usage';
 import { formatCost } from '../utils/usage-format';
-
-function resolvePresentation(
-  usageResult: UsageResult | null,
-  costSummary: CostSummary | null,
-): CostPresentation | null {
-  return costSummary?.costPresentation ?? usageResult?.costPresentation ?? null;
-}
 
 export function resolveUsageCostSummaryDisplay(params: {
   usageResult: UsageResult | null;

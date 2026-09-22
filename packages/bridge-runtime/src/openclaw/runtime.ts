@@ -1,3 +1,4 @@
+import { OpenClawSessionFiles } from './session-files.js';
 import { OpenClawSkillDocuments } from './skill-documents.js';
 import { relayNetworkOptions } from '../relay-network.js';
 import { randomUUID } from 'node:crypto';
@@ -156,6 +157,7 @@ export class BridgeRuntime {
   private challengeWaitTimer: NodeJS.Timeout | null = null;
   private bootstrapRequestsInFlight = 0;
   private skillDocuments: OpenClawSkillDocuments | null = null;
+  private sessionFiles: OpenClawSessionFiles | null = null;
   private pendingGatewayMessages: PendingGatewayMessage[] = [];
   private gatewayHandshakeStarted = false;
   private gatewayCloseBoundaryPending = false;
@@ -371,6 +373,7 @@ export class BridgeRuntime {
       await this.handleRelayControl(control);
       return;
     }
+    if (this.sessionFiles?.handleRequest(text)) return;
     if (this.skillDocuments?.handleRequest(text)) return;
     const identity = parseConnectStartIdentity(text);
     if (identity) {
@@ -846,6 +849,7 @@ export class BridgeRuntime {
     }
     const text = normalizeText(data);
     if (text == null) return;
+    if (this.sessionFiles?.handleResponse(text)) return;
     if (this.skillDocuments?.handleResponse(text)) return;
     // A missing connect request cannot be fixed by repeatedly opening only
     // the local socket: the Relay may still route challenges to a stale client.
@@ -885,7 +889,13 @@ export class BridgeRuntime {
             sendGateway: value => { if (gateway === this.gatewaySocket && gateway) this.sendFrame(gateway, value, 'gateway_out'); },
             sendClient: value => { if (relay === this.relaySocket) this.sendFrame(relay, value, 'relay_out'); },
           });
-          hello.payload.features.methods = [...nativeMethods, ...this.skillDocuments.methods];
+          this.sessionFiles = new OpenClawSessionFiles({
+            nativeMethods,
+            scopes: normalizeConnectCapabilities(auth.scopes),
+            sendGateway: value => { if (gateway === this.gatewaySocket && gateway) this.sendFrame(gateway, value, 'gateway_out'); },
+            sendClient: value => { if (relay === this.relaySocket) this.sendFrame(relay, value, 'relay_out'); },
+          });
+          hello.payload.features.methods = [...nativeMethods, ...this.skillDocuments.methods, ...this.sessionFiles.methods];
           relayText = JSON.stringify(hello);
         }
       }
@@ -1070,6 +1080,8 @@ export class BridgeRuntime {
   }
 
   private clearSkillDocuments(): void {
+    this.sessionFiles?.dispose();
+    this.sessionFiles = null;
     this.skillDocuments?.dispose();
     this.skillDocuments = null;
   }

@@ -243,5 +243,7 @@
   "Unable to open redemption. Please try again.": "Kod kullanma ekranı açılamadı. Lütfen tekrar dene.",
   "Last connected: {{time}}": "Son bağlantı: {{time}}",
   "Check your network and make sure the remote service is running.": "Ağınızı ve uzak hizmetin çalıştığını kontrol edin.",
-  "View saved messages": "Kayıtlı mesajları görüntüle"
+  "View saved messages": "Kayıtlı mesajları görüntüle",
+  "Search and bulk export": "Arama ve toplu dışa aktarma",
+  "Skill and memory versions": "Beceri ve bellek sürümleri"
 }

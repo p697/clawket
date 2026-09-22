@@ -11,15 +11,16 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import {
   Check,
   ChevronDown,
   Pin,
-  Search,
+  SquarePen,
 } from 'lucide-react-native';
 import { ChevronRight } from '../../components/ui/DirectionalIcon';
-import { BottomSheetFlatList } from '@gorhom/bottom-sheet';
+import { BottomSheetFlatList, TouchableOpacity as SheetTouchableOpacity } from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import type { AgentDescriptor, Capabilities } from '@clawket/agent-protocol';
 
@@ -28,7 +29,6 @@ import { AgentAvatar, AvatarWorkingBadge } from '../../components/ui/AgentAvatar
 import { Banner } from '../../components/ui/Banner';
 import { ConnectionStatusPill } from '../../components/ui/ConnectionStatusPill';
 import { Button } from '../../components/ui/Button';
-import { SheetHeaderButton } from '../../components/ui/SheetHeaderButton';
 import { FormTextInput } from '../../components/ui/FormTextInput';
 import { SearchInput } from '../../components/ui/SearchInput';
 import {
@@ -36,6 +36,7 @@ import {
   resolveSessionKindIcon,
 } from '../../components/ui/sessionKindIcon';
 import { Sheet } from '../../components/ui/Sheet';
+import { SheetHeaderButton } from '../../components/ui/SheetHeaderButton';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { useAppTheme } from '../../theme';
 import {
@@ -108,7 +109,9 @@ export type SessionPanelViewProps = Readonly<{
   /** The runtime's foreground grace window is open: show quiet reconnecting instead of offline. */
   reconnecting?: boolean;
   onClose: () => void;
+  onAfterClose?: () => void;
   onSelectSession: (row: SessionPanelRow) => MaybePromise;
+  onCreateSession?: (agent: AgentDescriptor) => MaybePromise;
   onSessionAction?: SessionPanelActionHandler;
   onRetry?: () => MaybePromise;
   onOpenBridgeHelp?: () => void;
@@ -122,7 +125,9 @@ export type SessionPanelProps = Readonly<{
   permissionDenied?: boolean;
   pinnedSessionKeys?: PinnedSessionKeys;
   onClose: () => void;
+  onAfterClose?: () => void;
   onSelectSession: (row: SessionPanelRow) => MaybePromise;
+  onCreateSession?: (agent: AgentDescriptor) => MaybePromise;
   onSessionAction?: SessionPanelActionHandler;
   onOpenBridgeHelp?: () => void;
   onOpenPermission?: () => void;
@@ -202,6 +207,12 @@ function SessionRow({
   const { t } = useTranslation('common');
   const actions = availableSessionActions(row, capabilities);
   const title = rowTitle(row, t);
+  const longPressHandled = useRef(false);
+  const openActions = () => {
+    if (!actions.length) return;
+    longPressHandled.current = true;
+    onOpenActions(row);
+  };
   const showUnread = row.unread && !selected && row.attention === null;
   // One quiet 6-point signal on the preview line: attention wins over unread.
   const signal = row.attention !== null
@@ -221,18 +232,20 @@ function SessionRow({
       : null;
 
   return (
-    <Pressable
+    <SheetTouchableOpacity
+      activeOpacity={0.72}
       testID={`session-panel-row-${row.id}`}
       accessibilityRole="button"
       accessibilityLabel={title}
       accessibilityState={{ selected }}
-      onPress={onPress}
-      onLongPress={actions.length ? () => onOpenActions(row) : undefined}
-      style={({ pressed }) => [
-        styles.sessionRow,
-        selected ? { backgroundColor: theme.colors.accentSoft } : null,
-        pressed ? { backgroundColor: theme.colors.surfaceFloating } : null,
-      ]}
+      onPressIn={() => { longPressHandled.current = false; }}
+      onPress={() => { if (!longPressHandled.current) onPress(); }}
+      onLongPress={actions.length ? openActions : undefined}
+      accessibilityActions={actions.length ? [{ name: 'longpress', label: t('Session actions') }] : undefined}
+      onAccessibilityAction={(event) => {
+        if (event.nativeEvent.actionName === 'longpress') openActions();
+      }}
+      style={[styles.sessionRow, selected ? { backgroundColor: theme.colors.accentSoft } : null]}
     >
       <SessionTile row={row} agent={agent} />
       <View style={styles.copy}>
@@ -247,7 +260,7 @@ function SessionRow({
           <Text style={[styles.rowTitle, { color: theme.colors.ink }]} numberOfLines={1}>
             {title}
           </Text>
-          <Text style={[styles.rowTime, { color: theme.colors.inkTertiary }]} numberOfLines={1}>
+          <Text style={[styles.rowTime, { color: theme.colors.inkTertiary }]} numberOfLines={1} maxFontSizeMultiplier={1.3}>
             {relativeTime(row.updatedAt)}
           </Text>
         </View>
@@ -271,7 +284,7 @@ function SessionRow({
           </View>
         ) : null}
       </View>
-    </Pressable>
+    </SheetTouchableOpacity>
   );
 }
 
@@ -328,6 +341,7 @@ function FilterChip({
       ]}
     >
       <Text
+        maxFontSizeMultiplier={1.2}
         style={[
           styles.chipLabel,
           {
@@ -340,6 +354,7 @@ function FilterChip({
         {label}
       </Text>
       <Text
+        maxFontSizeMultiplier={1.2}
         style={[
           styles.chipCount,
           selected
@@ -376,7 +391,7 @@ function AgentPill({
         avatarUrl={agent.avatarUrl}
         variant="header"
       />
-      <Text style={[styles.agentName, { color: theme.colors.ink }]} numberOfLines={1}>
+      <Text style={[styles.agentName, { color: theme.colors.ink }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>
         {agent.name}
       </Text>
       {switchable ? (
@@ -506,6 +521,7 @@ function actionLabel(
   pinned: boolean,
   t: Translate,
 ): string {
+  if (action === 'export') return t('Export conversation', { ns: 'chat' });
   if (action === 'pin') return pinned ? t('Unpin from roster') : t('Pin to roster');
   if (action === 'rename') return t('Rename');
   if (action === 'reset') return t('Reset');
@@ -531,6 +547,7 @@ function SessionActionSheet({
   return (
     <Sheet
       testID="session-panel-actions"
+      stackBehavior="push"
       onAfterClose={onAfterClose}
       visible={row !== null}
       title={t('Session actions')}
@@ -573,6 +590,7 @@ function ConfirmActionSheet({
   return (
     <Sheet
       testID="session-panel-confirm"
+      stackBehavior="push"
       visible={pending !== null}
       title={action === 'delete' ? t('Delete session?') : t('Reset session?')}
       closeAccessibilityLabel={t('Close')}
@@ -631,6 +649,7 @@ function RenameSessionSheet({
   return (
     <Sheet
       testID="session-panel-rename"
+      stackBehavior="push"
       visible={row !== null}
       title={t('Rename')}
       closeAccessibilityLabel={t('Cancel')}
@@ -681,18 +700,23 @@ export function SessionPanelView({
   bridgeOutdated = false,
   reconnecting = false,
   onClose,
+  onAfterClose,
   onSelectSession,
+  onCreateSession,
   onSessionAction,
   onRetry,
   onOpenBridgeHelp,
   onOpenPermission,
 }: SessionPanelViewProps): React.JSX.Element {
+  const { fontScale } = useWindowDimensions();
   const { t } = useTranslation('common');
   const { theme } = useAppTheme();
   const [viewAgentId, setViewAgentId] = useState(currentAgentId);
   const [filter, setFilter] = useState<SessionPanelFilter>('all');
   const [query, setQuery] = useState('');
-  const [searchOpen, setSearchOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState(false);
+  const createBusy = useRef(false);
   const [agentMenuOpen, setAgentMenuOpen] = useState(false);
   const [actionRow, setActionRow] = useState<SessionPanelRow | null>(null);
   const [confirmation, setConfirmation] = useState<Readonly<{
@@ -851,7 +875,7 @@ export function SessionPanelView({
     <>
       <Sheet
         testID="session-panel"
-        snapPoints={['93%']}
+        snapPoints={['95%']}
         visible={visible}
         title={t('Sessions')}
         titleContent={viewAgent ? (
@@ -864,17 +888,25 @@ export function SessionPanelView({
         ) : undefined}
         closeAccessibilityLabel={t('Close sessions')}
         onClose={onClose}
+        onAfterClose={onAfterClose}
         contentStyle={styles.sheetContent}
-        headerRight={(
+        headerRight={onCreateSession && viewAgent && (state === 'ready' || state === 'empty') ? (
           <SheetHeaderButton
-            testID="session-panel-search-toggle"
-            icon={Search}
-            accessibilityLabel={t('Search sessions')}
-            onPress={() => setSearchOpen((current) => !current)}
+            testID="session-panel-create"
+            icon={SquarePen}
+            accessibilityLabel={t('New session')}
+            disabled={creating}
+            onPress={() => {
+              if (createBusy.current) return;
+              createBusy.current = true; setCreating(true); setCreateError(false);
+              void Promise.resolve().then(() => onCreateSession(viewAgent)).then(onClose)
+                .catch(() => setCreateError(true)).finally(() => { createBusy.current = false; setCreating(false); });
+            }}
           />
-        )}
+        ) : undefined}
       >
         <View style={styles.body}>
+          {createError ? <Banner message={t('Save Failed')} /> : null}
           {showList && chips.length > 0 ? (
             <ScrollView
               testID="session-panel-chips"
@@ -894,12 +926,12 @@ export function SessionPanelView({
               ))}
             </ScrollView>
           ) : null}
-          {searchOpen ? (
+          {showList ? (
             <View style={styles.searchWrap}>
               <SearchInput
                 testID="session-panel-search"
                 inSheet
-                autoFocus
+                appearance="quiet"
                 value={query}
                 placeholder={t('Search sessions')}
                 onChangeText={setQuery}
@@ -910,6 +942,9 @@ export function SessionPanelView({
 
           {state === 'loading' ? <PanelLoading /> : (
             <BottomSheetFlatList
+              // Recreate native row measurements when system text size changes while open.
+              // The panel, query, filter and in-flight actions stay mounted.
+              key={`session-list-${fontScale}`}
               testID="session-panel-scroll"
               style={styles.list}
               data={showList ? listItems : []}
@@ -1021,7 +1056,9 @@ export function SessionPanel({
   permissionDenied = false,
   pinnedSessionKeys,
   onClose,
+  onAfterClose,
   onSelectSession,
+  onCreateSession,
   onSessionAction,
   onOpenBridgeHelp,
   onOpenPermission,
@@ -1063,7 +1100,9 @@ export function SessionPanel({
       bridgeOutdated={group?.connection.bridgeOutdated === true}
       reconnecting={connections.recovering === true}
       onClose={onClose}
+      onAfterClose={onAfterClose}
       onSelectSession={onSelectSession}
+      onCreateSession={adapter?.capabilities.sessionCreate && adapter.createSession ? onCreateSession : undefined}
       onSessionAction={onSessionAction}
       onRetry={() => Promise.all([
         getConnectionRuntime().refreshRoster(),

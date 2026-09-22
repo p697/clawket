@@ -486,3 +486,23 @@ describe('ThreadMessageActionsOverlay queued messages', () => {
     expect(view.getByTestId('thread-message-copy').props.accessibilityState).toEqual({ disabled: false });
   });
 });
+
+test('hands a selected reply to a new conversation only after closing the overlay', () => {
+  jest.useFakeTimers();
+  const onBranch = jest.fn();
+  const props = createProps({ onBranch, canBranch: () => true });
+  const view = render(<ThreadMessageActionsOverlay {...props} />);
+  layoutOverlay(view);
+  fireEvent.press(view.getByTestId('thread-message-branch'));
+  expect(onBranch).not.toHaveBeenCalled();
+  act(() => { jest.advanceTimersByTime(Motion.duration.fast); });
+  expect(onBranch).toHaveBeenCalledWith(props.message);
+});
+
+test('keeps five actions inside the viewport and lets longer labels wrap', () => {
+  const props = createProps({ onBranch: jest.fn(), canBranch: () => true, onSchedule: jest.fn(), canSchedule: () => true });
+  const view = render(<ThreadMessageActionsOverlay {...props} />);
+  const style = flattenStyle(view.getByTestId('thread-message-branch').props.style);
+  expect(Number(style.width) * 5 + Space.xs * 2).toBeLessThanOrEqual(393 - Space.lg * 2);
+  expect(view.getByText('New session').props.numberOfLines).toBe(2);
+});

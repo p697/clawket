@@ -19,6 +19,7 @@ export type GatewayAdapterEvent =
   | {
       type: 'chatFinal';
       payload: {
+        unappliedInput?: string;
         runId: string;
         sessionKey?: string;
         message?: {
@@ -37,8 +38,8 @@ export type GatewayAdapterEvent =
       type: 'execApprovalRequested';
       payload: {
         id: string;
-        request: { command: string; cwd?: string; host?: string; sessionKey?: string };
-        expiresAtMs: number;
+        request: { command: string; decisions?: ReadonlyArray<'allow-once' | 'allow-always' | 'deny'>; cwd?: string; host?: string; sessionKey?: string };
+        expiresAtMs: number | null;
       };
     }
   | { type: 'execApprovalResolved'; payload: { id: string; decision: string } }
@@ -114,6 +115,7 @@ export function mapGatewayAdapterEvent(
         sessionKey,
         runId: event.payload.runId,
         stopReason: 'end_turn',
+        ...(event.payload.unappliedInput ? { unappliedInput: event.payload.unappliedInput } : {}),
         message: event.payload.message
           ? {
               role: 'assistant',
@@ -158,6 +160,7 @@ export function mapGatewayAdapterEvent(
           kind: 'exec',
           id: event.payload.id,
           command: event.payload.request.command,
+          decisions: event.payload.request.decisions,
           cwd: event.payload.request.cwd,
           host: event.payload.request.host,
           expiresAtMs: event.payload.expiresAtMs,

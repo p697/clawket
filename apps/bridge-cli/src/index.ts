@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { handleLocalModelCommand } from './local-model.js';
+import { keepHermesRelayRuntimeAlive } from './hermes-relay-lifecycle.js';
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { execFileSync, spawn } from 'node:child_process';
@@ -529,6 +530,9 @@ async function handleLifecycleCommand(command: LifecycleCommand, jsonOutput: boo
   } else if (command === 'restart') {
     stopRuntimeProcesses();
     if (openclawConfig) {
+      // The service launcher restores missing Hermes children, but deliberately
+      // reuses healthy ones. Retire old owned children so upgrades take effect.
+      stopHermesBridgeRuntimePids([...listHermesRelayRuntimePids(), ...listHermesBridgeRuntimePids()]);
       openclawServiceStatus = restartService();
       openclawServiceStatus = await waitForOpenClawServiceReady(lifecycleStartedAtMs, openclawServiceStatus);
       openclawMessage = `Restarted background service for gateway ${openclawConfig.gatewayId}.`;
@@ -1557,18 +1561,6 @@ async function startHermesRelayRuntime(bridgeWsUrl: string): Promise<HermesRelay
   });
   runtime.start();
   return runtime;
-}
-
-async function keepHermesRelayRuntimeAlive(runtime: HermesRelayRuntime): Promise<void> {
-  const shutdown = async () => {
-    process.off('SIGINT', shutdown);
-    process.off('SIGTERM', shutdown);
-    await runtime.stop();
-    process.exit(0);
-  };
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
-  await new Promise<void>(() => {});
 }
 
 async function ensureHermesRelayBackgroundRuntime(args: string[]): Promise<string> {

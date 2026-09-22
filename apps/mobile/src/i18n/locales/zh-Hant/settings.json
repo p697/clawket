@@ -19,7 +19,7 @@
   "Cost unavailable": "成本不可用",
   "Hermes tracked token usage, but it could not determine a reliable dollar cost for this route.": "Hermes 已追蹤 token 用量，但無法為這條路由確定可靠的美元成本。",
   "Mixed cost sources": "成本來源混合",
-  "This range mixes priced usage with included or unpriced routes, so the dollar total is only a partial view.": "這個時間範圍內混合了已定價與已包含/未定價的路由，因此美元總額只是部分檢視。",
+  "This range mixes priced usage with included or unpriced routes, so the dollar total is only a partial view.": "此金額僅包含已計價的用量。",
   "Estimated cost": "預估成本",
   "Hermes is showing an estimate for this route rather than a reconciled bill.": "Hermes 對這條路由顯示的是預估成本，而不是對帳後的帳單金額。",
   "Search logs...": "搜尋記錄檔...",
@@ -243,7 +243,6 @@
   "Blocked by allowlist": "未獲允許清單授權",
   "Failed to update skill": "更新技能失敗",
   "Failed to uninstall skill": "解除安裝技能失敗",
-  "Failed to request installation": "提出安裝要求失敗",
   "Source": "來源",
   "Agent timezone": "Agent 所在時區",
   "Check configured services and summarize problems and suggested fixes.": "檢查已設定的服務，彙整異常及處理建議。",
@@ -380,5 +379,15 @@
   "Disable {{name}}?": "停用 {{name}}？",
   "This account starts receiving messages again.": "此帳號將重新開始接收訊息。",
   "This account stops receiving messages until you enable it again.": "此帳號將停止接收訊息，直到你再次啟用。",
-  "Failed to update channel": "更新頻道失敗"
+  "Failed to update channel": "更新頻道失敗",
+  "About me": "關於我",
+  "Version history": "版本記錄",
+  "No saved versions": "暫無版本",
+  "This file changed. Reopen it before saving.": "檔案已更新，請重新開啟後再儲存。",
+  "Model health": "模型狀態",
+  "Global model": "全域模型",
+  "Test connections": "測試連線",
+  "Restore version": "還原此版本",
+  "This file is too large for version history.": "檔案過大，無法保留版本記錄。",
+  "Scheduled task created": "排程任務建立成功"
 }

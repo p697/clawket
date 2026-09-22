@@ -1,3 +1,4 @@
+import { stripOpenClawInputContext } from '../../utils/openclaw-input-context';
 import type { ChatMessage } from '@clawket/agent-protocol';
 import { ChatCacheService, type CachedMessage } from '../../services/chat-cache';
 import { readMalformedToolName, stableMessageId, stripCliResumeContext } from '../../utils/chat-message';
@@ -49,7 +50,7 @@ export function mapGatewayHistoryMessage(
     id,
     role,
     text: role === 'user' && isRecord(value.__openclaw) && value.__openclaw.importedFrom === 'claude-cli'
-      ? stripCliResumeContext(extractHistoryText(content)) : extractHistoryText(content),
+      ? stripOpenClawInputContext(stripCliResumeContext(extractHistoryText(content))) : extractHistoryText(content),
     ...(timestampMs !== undefined ? { timestampMs } : {}),
     ...(idempotencyKey ? { idempotencyKey } : {}),
     ...(readNonEmptyString(value.provider) ? { provider: readNonEmptyString(value.provider) } : {}),
@@ -146,8 +147,11 @@ export function preserveOpenClawCliHistorySegments(
       || original.timestampMs === undefined || echo.timestampMs === undefined
       || echo.timestampMs < original.timestampMs || echo.timestampMs - original.timestampMs > 60_000) return;
     const raw = extractHistoryText(value.content);
-    const prompt = stripCliResumeContext(raw);
-    if (prompt !== raw && prompt.trim() && prompt.trim() === original.text.trim()) redundantIds.add(echo.id);
+    const prompt = stripOpenClawInputContext(stripCliResumeContext(raw));
+    if (prompt !== raw && prompt.trim() && prompt.trim() === original.text.trim()) {
+      redundantIds.add(echo.id);
+      redundantIds.add(stableMessageId('user', echo.timestampMs, raw));
+    }
   });
   const finalMetadata = new Map<string, ChatMessage>();
   let userSendKey: string | undefined;
@@ -190,15 +194,23 @@ export function preserveOpenClawCliHistorySegments(
   });
 }
 
+export function normalizeToolCallAliases(value: unknown): Record<string, string> {
+  if (!isRecord(value)) return {};
+  return Object.fromEntries(Object.entries(value).slice(0, 512)
+    .filter((entry): entry is [string, string] => entry[0].length > 0 && entry[0].length <= 256
+      && typeof entry[1] === 'string' && entry[1].length > 0 && entry[1].length <= 256));
+}
+
 export function mergeGatewayHistory(
   remoteMessages: ChatMessage[],
   cachedMessages: ChatMessage[],
-  options?: { openclawUserEchoes?: boolean; hermesToolAliases?: unknown },
+  options?: { openclawUserEchoes?: boolean; hermesToolAliases?: unknown; hermesUserPresentation?: boolean },
 ): ChatMessage[] {
+  const comparableText = (message: ChatMessage) => options?.hermesUserPresentation && message.role === 'user'
+    ? message.text.replace(/^Use the installed skill "([A-Za-z0-9][A-Za-z0-9._/-]{0,127})" for this request\. Read its instructions with skill_view before proceeding\.(?=\s|$)/, (_, name: string) => `$${name}`)
+    : message.text;
   if (isRecord(options?.hermesToolAliases)) {
-    const aliases = new Map(Object.entries(options.hermesToolAliases).slice(0, 512)
-      .filter((entry): entry is [string, string] => entry[0].length > 0 && entry[0].length <= 256
-        && typeof entry[1] === 'string' && entry[1].length > 0 && entry[1].length <= 256));
+    const aliases = new Map(Object.entries(normalizeToolCallAliases(options.hermesToolAliases)));
     cachedMessages = cachedMessages.map(message => {
       const callId = message.tool?.callId && aliases.get(message.tool.callId);
       return callId && remoteMessages.some(remote => remote.tool?.callId === callId
@@ -259,7 +271,7 @@ export function mergeGatewayHistory(
     if (!cached || !remote) return true;
     if (cached.idempotencyKey && remote.idempotencyKey) return cached.idempotencyKey === remote.idempotencyKey;
     if (cached.id === remote.id) return true;
-    if (cached.text !== remote.text || remote.timestampMs === undefined) return false;
+    if (comparableText(cached) !== comparableText(remote) || remote.timestampMs === undefined) return false;
     const rowId = (cached as CachedHistoryMessage).cacheRowId ?? cached.id;
     return rowId === stableMessageId('user', remote.timestampMs, remote.text)
       || (cached.timestampMs !== undefined && Math.abs(cached.timestampMs - remote.timestampMs) <= 2_000);
@@ -274,7 +286,11 @@ export function mergeGatewayHistory(
     // Match copies one-to-one so a repeated user message is never collapsed.
     const cacheRowId = (message as CachedHistoryMessage).cacheRowId ?? message.id;
     const optimisticUser = message.role === 'user' && /^usr_\d+/.test(cacheRowId);
-    const optimisticAssistant = message.role === 'assistant' && /^(final_|abort_|stream_segment_)/.test(cacheRowId);
+    // A live final can already have been projected into an h_ row before it
+    // reaches disk. Its retained source ID still identifies the optimistic
+    // message; the display row ID alone loses that provenance on cold start.
+    const optimisticAssistant = message.role === 'assistant'
+      && [cacheRowId, message.id].some(id => /^(final_|abort_|stream_segment_)/.test(id));
     // Old cache-only finals were parsed again as history, baking the local
     // completion time into a fresh h_ ID. They have no authoritative source ID.
     const legacyProjectedAssistant = message.role === 'assistant'
@@ -287,7 +303,7 @@ export function mergeGatewayHistory(
       && (optimisticUser || confirmedCopy)
       && remote.role === message.role
       && !(remote.idempotencyKey && message.idempotencyKey && remote.idempotencyKey !== message.idempotencyKey)
-      && remote.text === message.text
+      && comparableText(remote) === comparableText(message)
       && (remote.text.length > 0 || Boolean(remote.tool?.callId && remote.tool.callId === message.tool?.callId))
       && typeof remote.timestampMs === 'number'
       && typeof message.timestampMs === 'number'

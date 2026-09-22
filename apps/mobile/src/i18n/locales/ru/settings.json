@@ -19,7 +19,7 @@
   "Cost unavailable": "Стоимость недоступна",
   "Hermes tracked token usage, but it could not determine a reliable dollar cost for this route.": "Hermes учёл расход токенов, но не смог надёжно определить стоимость этого маршрута в долларах.",
   "Mixed cost sources": "Смешанные источники стоимости",
-  "This range mixes priced usage with included or unpriced routes, so the dollar total is only a partial view.": "В этом периоде платное использование смешано с включёнными в тариф или неоценёнными маршрутами, поэтому сумма в долларах отражает лишь часть.",
+  "This range mixes priced usage with included or unpriced routes, so the dollar total is only a partial view.": "В эту сумму включено только использование с известной стоимостью.",
   "Estimated cost": "Оценочная стоимость",
   "Hermes is showing an estimate for this route rather than a reconciled bill.": "Hermes показывает оценку для этого маршрута, а не сверенный счёт.",
   "Search logs...": "Поиск по логам…",
@@ -243,7 +243,6 @@
   "Blocked by allowlist": "Заблокировано списком разрешений",
   "Failed to update skill": "Не удалось обновить навык",
   "Failed to uninstall skill": "Не удалось удалить навык",
-  "Failed to request installation": "Не удалось запросить установку",
   "Source": "Источник",
   "Agent timezone": "Часовой пояс Agent",
   "Check configured services and summarize problems and suggested fixes.": "Проверь настроенные службы и опиши проблемы и возможные решения.",
@@ -380,5 +379,15 @@
   "Disable {{name}}?": "Отключить {{name}}?",
   "This account starts receiving messages again.": "Этот аккаунт снова начнёт получать сообщения.",
   "This account stops receiving messages until you enable it again.": "Этот аккаунт перестанет получать сообщения, пока вы не включите его снова.",
-  "Failed to update channel": "Не удалось обновить канал"
+  "Failed to update channel": "Не удалось обновить канал",
+  "About me": "Обо мне",
+  "Version history": "История версий",
+  "No saved versions": "Нет сохранённых версий",
+  "This file changed. Reopen it before saving.": "Файл изменён. Откройте его заново перед сохранением.",
+  "Model health": "Состояние модели",
+  "Global model": "Глобальная модель",
+  "Test connections": "Проверить подключения",
+  "Restore version": "Восстановить версию",
+  "This file is too large for version history.": "Файл слишком большой для сохранения истории версий.",
+  "Scheduled task created": "Запланированная задача создана"
 }

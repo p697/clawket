@@ -3,7 +3,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HermesLocalBridge } from './index.js';
 import { cleanupTempDirectories, createTempDirectory, initializeHermesStateDb } from './test-helpers.js';
 
+const bridges: HermesLocalBridge[] = [];
 afterEach(async () => {
+  for (const bridge of bridges.splice(0)) await bridge.stop();
   vi.unstubAllGlobals();
   await cleanupTempDirectories();
 });
@@ -21,6 +23,7 @@ describe('Hermes stream request mapping', () => {
       sessionStorePath: join(directory, 'sessions.json'),
       usageLedgerPath: join(directory, 'usage.json'),
     });
+    bridges.push(bridge);
     const created = await bridge.dispatchRequest('sessions.create', { title: 'Thread' }) as any;
     bridge.sessionStore.appendMessage(created.session.key, {
       role: 'user',
@@ -44,7 +47,7 @@ describe('Hermes stream request mapping', () => {
     expect(startBody.conversation_history).toEqual([{ role: 'user', content: 'prior' }]);
   });
 
-  it('restores native prior turns after restart without duplicating the current turn', async () => {
+  it.each([false, true])('restores native prior turns after restart (native context=%s)', async nativeContext => {
     const directory = await createTempDirectory();
     const dbPath = join(directory, 'state.db');
     const options = {
@@ -56,6 +59,7 @@ describe('Hermes stream request mapping', () => {
       usageLedgerPath: join(directory, 'usage.json'),
     };
     const firstBridge = new HermesLocalBridge(options);
+    bridges.push(firstBridge);
     const created = await firstBridge.dispatchRequest('sessions.create', { title: 'Restarted' }) as any;
     await firstBridge.sessionStore.flush();
     initializeHermesStateDb(dbPath, [{ id: created.session.sessionId, source: 'api_server' }], [
@@ -72,11 +76,18 @@ describe('Hermes stream request mapping', () => {
       return new Response('data: {"event":"run.completed","output":"done"}\n\n');
     }));
     const restarted = new HermesLocalBridge(options);
+    bridges.push(restarted);
+    if (nativeContext) restarted.hermesRunCapabilities = new Set(['hermes.native-run-context.v1']);
     await restarted.dispatchRequest('chat.send', {
       sessionKey: created.session.key,
       message: 'after restart',
     });
 
+    if (nativeContext) {
+      expect(startBody).not.toHaveProperty('conversation_history');
+      expect(startBody.session_id).toBe(created.session.sessionId);
+      return;
+    }
     expect(startBody.conversation_history).toEqual([
       { role: 'user', content: 'before restart' },
       { role: 'assistant', content: 'prior answer' },

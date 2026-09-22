@@ -20,6 +20,11 @@ import { FontSize, LineHeight, Space } from '../../theme/tokens';
 import { formatCronDate } from './cron-schedule';
 import { formatFileSize } from './files-model';
 import type { DocumentContent, DocumentSource } from './document-model';
+import { formatSkillDocumentMarkdown } from './document-model';
+import { History } from 'lucide-react-native';
+import { FloatingButton } from '../../components/ui/FloatingButton';
+import { DocumentVersions } from '../../services/document-versions';
+import { DocumentHistorySheet } from './DocumentHistorySheet';
 
 type Leave = NavigationAction | 'cancel' | null;
 
@@ -70,6 +75,7 @@ function DocumentPage({
   const [loading, setLoading] = useState(source !== null);
   const [loadError, setLoadError] = useState<unknown>(null);
   const [editing, setEditing] = useState(false);
+  const [historyVisible, setHistoryVisible] = useState(false);
   const [draft, setDraft] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -160,6 +166,13 @@ function DocumentPage({
     setSaving(true);
     setError(null);
     try {
+      if (document.versioned) {
+        const latest = await document.load();
+        if (latest.content !== content.content) throw new Error(t('This file changed. Reopen it before saving.', { ns: 'settings' }));
+        if (!valid() || !current.current.online) return;
+        await DocumentVersions.capture(document.key, content.content, document.connectionId);
+        if (!valid() || !current.current.online) return;
+      }
       const result = await document.save(draft);
       if (!valid()) return;
       if (!result.ok) throw new Error(t('Save failed', { ns: 'settings' }));
@@ -184,7 +197,7 @@ function DocumentPage({
   }, [content, dirty, draft, onSaved, t]);
 
   const save = useCallback(() => {
-    if (!isPro) {
+    if (!isPro && !sourceRef.current?.freeEditing) {
       onOpenPaywall('coreFileEditing', () => { void commit(); });
       return;
     }
@@ -223,12 +236,17 @@ function DocumentPage({
           <Button
             testID="document-save"
             label={t('Save', { ns: 'common' })}
-            variant="ghost"
+            variant="primary"
             loading={saving}
             disabled={!dirty || !online || saving}
             onPress={save}
           />
         ) : editable && !loading ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          {source?.versioned ? <FloatingButton icon={History} appearance="plain" testID="document-open-history" accessibilityLabel={t('Version history', { ns: 'settings' })}
+            onPress={() => {
+              if (active.current && !current.current.editing) setHistoryVisible(true);
+            }} /> : null}
           <Button
             testID="document-edit"
             label={t('Edit', { ns: 'common' })}
@@ -236,12 +254,16 @@ function DocumentPage({
             disabled={!online}
             onPress={startEditing}
           />
+          </View>
         ) : undefined}
       />
 
       {editing && content ? (
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.body}>
           {error ? <View style={styles.notice}><Banner testID="document-error" tone="bad" message={error} /></View> : null}
+          {source?.versioned && !DocumentVersions.canCapture(content.content) ? (
+            <View style={styles.notice}><Banner testID="document-version-limit" message={t('This file is too large for version history.', { ns: 'settings' })} /></View>
+          ) : null}
           <CompositionSafeTextInput
             testID="document-input"
             accessibilityLabel={title}
@@ -284,7 +306,7 @@ function DocumentPage({
               {content.binary ? null : content.content.trim() ? (
                 <View testID="document-content">
                   {content.plainText ? <Text selectable style={styles.sourceCode}>{content.content}</Text> : <EnrichedMarkdownText
-                    markdown={content.content}
+                    markdown={source?.skillMarkdown ? formatSkillDocumentMarkdown(content.content) : content.content}
                     markdownStyle={markdownStyle}
                     flavor={getChatMarkdownFlavor()}
                     selectable
@@ -303,6 +325,15 @@ function DocumentPage({
           )}
         </ScrollView>
       )}
+
+      {source?.versioned && content ? <DocumentHistorySheet visible={historyVisible} scope={source.key} current={content.content}
+        onClose={() => setHistoryVisible(false)} onRestore={(text) => {
+          const restore = () => {
+            if (!active.current || !current.current.online || current.current.editing) return;
+            setDraft(text); setEditing(true); setError(null);
+          };
+          if (isPro) restore(); else onOpenPaywall('documentVersions', restore);
+        }} /> : null}
 
       <ConfirmationModal
         testID="document-discard"

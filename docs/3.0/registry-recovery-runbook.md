@@ -1,6 +1,8 @@
 # Registry 首次 DO 迁移的恢复操作
 
-2026-09-20：已准备 OpenClaw / Hermes 两份恢复包，并在本地 workerd 演练。没有部署生产，也没有执行 Cloudflare 控制面迁移；本地通过不能替代隔离云环境的首次迁移验收。
+2026-09-21：已在专用隔离 Worker / KV / DO 完成 OpenClaw、Hermes 的旧包 → 候选 → 固定恢复包云端演练；控制面接受首次 v1 迁移及保留 DO 的前向恢复。生产服务未部署。证据与范围见下文。
+
+同日晚间生产配置准备：仅更新 secret/service binding/observability，四线上代码 SHA-256 未变，但部署版本 ID 已改变。最新快照与恢复配置位于 `evidence/production-config-2026-09-21/production-snapshots/`、`evidence/production-config-2026-09-21/registry-recovery/`。两个恢复 bundle 与已演练版本逐字节相同；恢复部署配置新增对应生产 service binding 和安全日志设置。原演练附件保留，勿继续将 03/04 月版本 ID 当作当前部署。详见 [配置准备记录](production-config-2026-09-21.md)。
 
 ## 它解决什么
 
@@ -41,7 +43,7 @@ npm run test:release:compat
 
 矩阵包含两个后端 × 新旧 Bridge × 六阶段；最后一阶段使用上述固定恢复包，验证已保存配对、握手/健康、聊天、会话、刷新/领取，以及限速在恢复包重启后仍生效。未提供恢复目录时测试会从快照在临时目录生成；生产快照缺失始终失败。
 
-4. 首次生产迁移前，另在**专用隔离 Worker + KV + DO** 完成云端「旧包 → 候选 → 恢复包」演练，验证控制面接受保留 DO 的前向恢复。禁止用生产绑定冒充演练。记录部署 ID、迁移 tag、旧配对复连、新配对与限速结果。此项本轮尚未执行。
+4. 首次生产迁移前，另在**专用隔离 Worker + KV + DO** 完成云端「旧包 → 候选 → 恢复包」演练，验证控制面接受保留 DO 的前向恢复。禁止用生产绑定冒充演练。记录部署 ID、迁移 tag、旧配对复连、新配对与限速结果。2026-09-21 已完成本轮候选演练；以后候选的恢复包或迁移发生改变时重做。
 
 ## 发布后出现问题时
 
@@ -58,3 +60,9 @@ npx wrangler deploy --config "$CLAWKET_RELEASE_RECOVERY/clawket-registry/wrangle
 Hermes 只把最后一条配置路径换成 `clawket-hermes-registry/wrangler.toml`。不执行删除迁移、不清空 KV、不轮换 Secret、不重新配对所有用户。若同时需要 Relay 恢复，按其独立发布单元处理，不能把 Registry 文件部署到 Relay。
 
 部署后用现有配对凭据做受控复连 / 发收，再验旧 QR 的新领取与日志；确认正常后记录新部署 ID，保持降级并修复候选。上面是未来操作说明，本轮没有执行这些生产发布命令。
+
+## 2026-09-21 隔离云演练证据
+
+`evidence/workflows-2026-09-21/cloud-migration-qa/evidence.json` 记录部署版本与日志哈希；相邻配置只引用两份新建 KV 和四个 `clawket-qa-0921-*` Worker，未复用 Production/Preview 绑定。两后端均完成：旧包保存配对；候选首次创建 v1 SQLite 限流 DO；恢复包保留同一绑定与迁移；旧 owner/client 凭据重连、握手/健康、聊天/会话协议往返、访问码刷新/领取、新配对；每源每小时第 11 次注册返回 429，恢复包重新部署后仍返回 429。
+
+测试使用真实云 Registry、旧生产快照 Relay 和候选 Bridge runtime；本地后端是受控 WebSocket fixture，因此该证据证明云迁移与协议恢复，不是新一轮模型执行或移动端真机验收。两份固定恢复包与此前本地四组合 × 六阶段矩阵一致。测试结束已删除本次四个 Worker、两个 KV 和私有测试凭据，保留清理日志；未发布生产、未更换用户配对。

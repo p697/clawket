@@ -188,6 +188,7 @@ export function RosterRow({
                 testID={testID ? `${testID}-synced` : undefined}
                 style={[styles.time, { color: theme.colors.inkTertiary }]}
                 numberOfLines={1}
+                maxFontSizeMultiplier={1.3}
               >
                 {timeLabel}
               </Text>
@@ -215,7 +216,7 @@ export function RosterRow({
             </Text> : null}
           </View>
         ) : timeLabel ? (
-          <Text style={[styles.time, { color: theme.colors.inkTertiary }]} numberOfLines={1}>
+          <Text style={[styles.time, { color: theme.colors.inkTertiary }]} numberOfLines={1} maxFontSizeMultiplier={1.3}>
             {timeLabel}
           </Text>
         ) : null}
@@ -226,7 +227,8 @@ export function RosterRow({
 
 const styles = StyleSheet.create({
   row: {
-    height: ControlSize.rosterRow,
+    minHeight: ControlSize.rosterRow,
+    paddingVertical: Space.sm,
     paddingHorizontal: Space.lg,
     flexDirection: 'row',
     alignItems: 'center',

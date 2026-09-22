@@ -194,3 +194,13 @@ describe('AppUpdateAnnouncementSheet', () => {
     expect(animated).toHaveLength(0);
   });
 });
+
+it('adds an actionable Bridge guide only to 3.0 with verified old connections', () => {
+  const onEntryPress = jest.fn();
+  const { view } = renderSheet({ bridgeUpgradeAvailable: true, onEntryPress });
+  fireEvent.press(view.getByText('Update your Bridge'));
+  expect(onEntryPress).toHaveBeenCalledWith(expect.objectContaining({ action: { type: 'open_bridge_upgrade' } }));
+});
+it('does not advertise a Bridge update to everyone', () => {
+  expect(renderSheet().view.queryByText('Update your Bridge')).toBeNull();
+});

@@ -85,6 +85,7 @@ export type AdapterChatUpdate =
       sessionKey: string;
       runId: string;
       stopReason: 'end_turn' | 'cancelled' | 'error' | 'max_tokens';
+      unappliedInput?: string;
       activeRunId: null;
       isSending: false;
       finalMessage?: UiMessage;
@@ -271,6 +272,7 @@ function mapApprovalMessage(approval: ApprovalRequest, now: () => number): UiMes
       kind: 'exec',
       id: approval.id,
       command: approval.command,
+      decisions: approval.decisions,
       cwd: approval.cwd,
       host: approval.host,
       expiresAtMs: approval.expiresAtMs,

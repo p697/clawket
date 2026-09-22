@@ -19,7 +19,7 @@
   "Cost unavailable": "비용 정보를 사용할 수 없음",
   "Hermes tracked token usage, but it could not determine a reliable dollar cost for this route.": "Hermes가 토큰 사용량은 추적했지만 이 경로의 신뢰할 수 있는 달러 비용은 계산하지 못했습니다.",
   "Mixed cost sources": "비용 출처가 혼합됨",
-  "This range mixes priced usage with included or unpriced routes, so the dollar total is only a partial view.": "이 범위에는 가격이 있는 사용량과 포함/미가격 경로가 섞여 있어 달러 합계는 부분적인 값입니다.",
+  "This range mixes priced usage with included or unpriced routes, so the dollar total is only a partial view.": "이 합계에는 비용이 확인된 사용량만 포함됩니다.",
   "Estimated cost": "예상 비용",
   "Hermes is showing an estimate for this route rather than a reconciled bill.": "Hermes는 이 경로에 대해 정산된 청구서가 아니라 예상값을 표시하고 있습니다.",
   "Search logs...": "로그 검색...",
@@ -243,7 +243,6 @@
   "Blocked by allowlist": "허용 목록에 의해 차단됨",
   "Failed to update skill": "스킬 업데이트 실패",
   "Failed to uninstall skill": "스킬 삭제 실패",
-  "Failed to request installation": "설치 요청 실패",
   "Source": "출처",
   "Agent timezone": "Agent 시간대",
   "Check configured services and summarize problems and suggested fixes.": "설정된 서비스 상태를 확인하고 문제와 해결 방법을 요약하세요.",
@@ -380,5 +379,15 @@
   "Disable {{name}}?": "{{name}}을(를) 비활성화할까요?",
   "This account starts receiving messages again.": "이 계정이 다시 메시지를 받기 시작합니다.",
   "This account stops receiving messages until you enable it again.": "다시 활성화할 때까지 이 계정은 메시지를 받지 않습니다.",
-  "Failed to update channel": "채널을 업데이트하지 못했습니다"
+  "Failed to update channel": "채널을 업데이트하지 못했습니다",
+  "About me": "내 정보",
+  "Version history": "버전 기록",
+  "No saved versions": "저장된 버전 없음",
+  "This file changed. Reopen it before saving.": "파일이 변경되었습니다. 다시 연 후 저장하세요.",
+  "Model health": "모델 상태",
+  "Global model": "전역 모델",
+  "Test connections": "연결 테스트",
+  "Restore version": "이 버전 복원",
+  "This file is too large for version history.": "파일이 너무 커서 버전 기록을 저장할 수 없습니다.",
+  "Scheduled task created": "예약 작업을 만들었어요"
 }

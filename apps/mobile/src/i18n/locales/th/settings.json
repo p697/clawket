@@ -19,7 +19,7 @@
   "Cost unavailable": "ไม่มีข้อมูลค่าใช้จ่าย",
   "Hermes tracked token usage, but it could not determine a reliable dollar cost for this route.": "Hermes ติดตามการใช้โทเค็นแล้ว แต่ไม่สามารถระบุค่าใช้จ่ายเป็นดอลลาร์ที่เชื่อถือได้สำหรับเส้นทางนี้",
   "Mixed cost sources": "แหล่งค่าใช้จ่ายแบบผสม",
-  "This range mixes priced usage with included or unpriced routes, so the dollar total is only a partial view.": "ช่วงนี้มีทั้งการใช้งานที่มีราคาและเส้นทางที่รวมอยู่แล้วหรือไม่มีราคา ยอดรวมเป็นดอลลาร์จึงเป็นเพียงภาพบางส่วน",
+  "This range mixes priced usage with included or unpriced routes, so the dollar total is only a partial view.": "ยอดรวมนี้รวมเฉพาะการใช้งานที่ทราบค่าใช้จ่ายแล้วเท่านั้น",
   "Estimated cost": "ค่าใช้จ่ายโดยประมาณ",
   "Hermes is showing an estimate for this route rather than a reconciled bill.": "Hermes แสดงค่าประมาณสำหรับเส้นทางนี้ ไม่ใช่ใบเรียกเก็บที่กระทบยอดแล้ว",
   "Search logs...": "ค้นหาในบันทึก…",
@@ -243,7 +243,6 @@
   "Blocked by allowlist": "ถูกบล็อกโดยรายการอนุญาต",
   "Failed to update skill": "อัปเดตทักษะไม่สำเร็จ",
   "Failed to uninstall skill": "ถอนการติดตั้งทักษะไม่สำเร็จ",
-  "Failed to request installation": "ส่งคำขอติดตั้งไม่สำเร็จ",
   "Source": "แหล่งที่มา",
   "Agent timezone": "เขตเวลาของ Agent",
   "Check configured services and summarize problems and suggested fixes.": "ตรวจสอบบริการที่ตั้งค่าไว้และสรุปปัญหาพร้อมแนวทางแก้ไข",
@@ -380,5 +379,15 @@
   "Disable {{name}}?": "ปิดใช้ {{name}} ไหม",
   "This account starts receiving messages again.": "บัญชีนี้จะกลับมารับข้อความอีกครั้ง",
   "This account stops receiving messages until you enable it again.": "บัญชีนี้จะหยุดรับข้อความจนกว่าคุณจะเปิดใช้อีกครั้ง",
-  "Failed to update channel": "อัปเดตช่องทางไม่สำเร็จ"
+  "Failed to update channel": "อัปเดตช่องทางไม่สำเร็จ",
+  "About me": "เกี่ยวกับฉัน",
+  "Version history": "ประวัติเวอร์ชัน",
+  "No saved versions": "ยังไม่มีเวอร์ชันที่บันทึก",
+  "This file changed. Reopen it before saving.": "ไฟล์มีการเปลี่ยนแปลง กรุณาเปิดใหม่ก่อนบันทึก",
+  "Model health": "สถานะโมเดล",
+  "Global model": "โมเดลส่วนกลาง",
+  "Test connections": "ทดสอบการเชื่อมต่อ",
+  "Restore version": "กู้คืนเวอร์ชันนี้",
+  "This file is too large for version history.": "ไฟล์นี้มีขนาดใหญ่เกินกว่าจะเก็บประวัติเวอร์ชันได้",
+  "Scheduled task created": "สร้างงานตามกำหนดเวลาแล้ว"
 }

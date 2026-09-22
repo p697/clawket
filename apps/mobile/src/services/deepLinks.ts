@@ -15,6 +15,7 @@ import { parsePairingLink } from './pairing-session';
 export type DeepLinkAction =
   | { type: 'agent'; message: string; sessionKey?: string }
   | { type: 'session'; key: string }
+  | { type: 'widget'; action: 'chat' | 'voice' | 'skills' | 'camera' | 'photos' }
   | { type: 'config' }
   | { type: 'connect'; url: string; token?: string; password?: string }
   | { type: 'pair'; url: string };
@@ -44,6 +45,10 @@ export function parseDeepLink(url: string): DeepLinkAction | null {
       const key = params.get('key');
       if (!key) return null;
       return { type: 'session', key };
+    }
+    case 'widget': {
+      const action = params.get('action');
+      return action === 'chat' || action === 'voice' || action === 'skills' || action === 'camera' || action === 'photos' ? { type: 'widget', action } : null;
     }
     case 'config':
       return { type: 'config' };

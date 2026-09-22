@@ -69,6 +69,44 @@ jest.mock('react-native', () => {
   };
 });
 
+// Exercise the real stack router without loading native screen views in this host-only suite.
+jest.mock('@react-navigation/native-stack', () => {
+  const ReactRuntime = require('react');
+  const { StackRouter, StackActions, CommonActions } = require('@react-navigation/routers');
+  return {
+    createNativeStackNavigator: () => ({
+      Screen: () => null,
+      Navigator: ({ children, initialRouteName }: any) => {
+        const screens = ReactRuntime.Children.toArray(children);
+        const options = {
+          routeNames: screens.map((screen: any) => screen.props.name),
+          routeParamList: {},
+          routeGetIdList: {},
+        };
+        const router = ReactRuntime.useMemo(() => StackRouter({ initialRouteName }), []);
+        const [state, setState] = ReactRuntime.useState(() => router.getInitialState(options));
+        const focused = state.routes[state.index];
+        ReactRuntime.useEffect(() => {
+          screens.find((screen: any) => screen.props.name === focused.name).props.listeners?.focus?.();
+        }, [focused.key]);
+        const dispatch = (action: any) => setState((current: any) => router.getStateForAction(current, action, options) ?? current);
+        const navigation = {
+          push: (name: string) => dispatch(StackActions.push(name)),
+          navigate: (name: string) => dispatch(CommonActions.navigate(name)),
+          goBack: () => dispatch(CommonActions.goBack()),
+          canGoBack: () => state.index > 0,
+        };
+        return ReactRuntime.createElement('View', { testID: 'management-stack', depth: state.routes.length },
+          state.routes.map((route: any, index: number) => ReactRuntime.createElement('View', {
+            key: route.key,
+            accessibilityElementsHidden: index !== state.index,
+            importantForAccessibility: index !== state.index ? 'no-hide-descendants' : 'auto',
+          }, screens.find((screen: any) => screen.props.name === route.name).props.children({ navigation, route }))));
+      },
+    }),
+  };
+});
+
 jest.mock('lucide-react-native', () => {
   const ReactRuntime = require('react');
   const icon = (props: Record<string, unknown>) => ReactRuntime.createElement('Icon', props);
@@ -493,6 +531,24 @@ describe('OpenClawManageScreen', () => {
     expect(harness.view).toHaveBeenCalledTimes(1);
   });
 
+  it.each(['configuration', 'permissions', 'diagnostics', 'backups'])(
+    'pushes %s above the retained menu and pops back before leaving management',
+    async (section) => {
+      const screen = renderScreen(createAdapterHarness(), { initialTab: undefined });
+      fireEvent.press(screen.getByTestId(`openclaw-manage-tabs-${section}`));
+      await waitFor(() => expect(screen.getByTestId('management-stack').props.depth).toBe(2));
+      expect(screen.getByTestId('openclaw-manage-section-page')).toBeTruthy();
+      expect(screen.queryByTestId('openclaw-manage-menu')).toBeNull();
+      expect(screen.getByTestId('openclaw-manage-menu', { includeHiddenElements: true })).toBeTruthy();
+      fireEvent.press(screen.getByTestId('openclaw-manage-back'));
+      expect(screen.getByTestId('management-stack').props.depth).toBe(1);
+      expect(screen.getByTestId('openclaw-manage-menu')).toBeTruthy();
+      expect(screen.onBack).not.toHaveBeenCalled();
+      fireEvent.press(screen.getByTestId('openclaw-manage-back'));
+      expect(screen.onBack).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it('shows the newest restore point age and pending approvals on the menu from local data only', async () => {
     const harness = createAdapterHarness();
     const now = Date.now();
@@ -527,7 +583,7 @@ describe('OpenClawManageScreen', () => {
     let finish: ((value: DoctorResult) => void) | undefined;
     harness.doctor.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
     const screen = renderScreen(harness, { initialTab: 'diagnostics' });
-    expect(screen.getByText('Running diagnostics…')).toBeTruthy();
+    expect(screen.getByText('Diagnosing — this may take a few seconds…')).toBeTruthy();
     expect(harness.doctor).toHaveBeenCalledTimes(1);
     fireEvent.press(screen.getByTestId('openclaw-manage-back'));
     fireEvent.press(screen.getByTestId('openclaw-manage-tabs-diagnostics'));
@@ -535,6 +591,7 @@ describe('OpenClawManageScreen', () => {
     await act(async () => finish?.({ ok: true, checks: [], summary: 'Done' }));
     expect(screen.queryByTestId('openclaw-manage-loading')).toBeNull();
     expect(screen.getByText('Done')).toBeTruthy();
+    expect(screen.getByText('Run diagnostics again')).toBeTruthy();
   });
 
   it('does not present an empty approval inbox as missing settings', async () => {

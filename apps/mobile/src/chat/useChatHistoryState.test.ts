@@ -101,6 +101,36 @@ describe('useChatHistoryState', () => {
       .toEqual(['source-user', 'source-first', 'source-last']);
   });
 
+  it.each(['openclaw', 'hermes'])('retains a locally sent %s user across an echo without send metadata and a stale refresh', async (backendKind) => {
+    const key = 'agent:main:main';
+    const older = [
+      { id: 'old-user', role: 'user', text: 'Earlier', timestampMs: 1000 },
+      { id: 'old-answer', role: 'assistant', text: 'Earlier answer', timestampMs: 2000 },
+    ];
+    const adapter = { connection: { backendKind }, state: 'ready',
+      listSessions: jest.fn().mockResolvedValue([createSession(key)]),
+      loadSession: jest.fn().mockResolvedValue({ key, messages: older, hasActiveRun: false }),
+    };
+    const { result } = renderHook(() => {
+      const sessionKeyRef = useRef<string | null>(key);
+      return useChatHistoryState({ adapter: adapter as any, dbg: jest.fn(), t: translate,
+        sessionKeyRef, mainSessionKey: key, gatewayConfigId: null, currentAgentId: 'main' });
+    });
+    await act(async () => { await result.current.loadSessionsAndHistory(); });
+    const sent = { id: 'usr_3000_qtest', renderKey: 'usr_3000_qtest', role: 'user' as const,
+      text: 'Current question', timestampMs: 3000, idempotencyKey: 'send-current' };
+    act(() => result.current.setMessages(previous => [...previous, sent]));
+    adapter.loadSession.mockResolvedValue({ key, messages: [...older,
+      { id: 'server-user', role: 'user', text: sent.text, timestampMs: 3100 }], hasActiveRun: true });
+    await act(async () => { await result.current.loadHistory(key); });
+    expect(result.current.messages.at(-1)).toMatchObject({ historyMessageId: 'server-user',
+      renderKey: sent.renderKey, timestampMs: sent.timestampMs });
+    adapter.loadSession.mockResolvedValue({ key, messages: older, hasActiveRun: true });
+    await act(async () => { await result.current.loadHistory(key); });
+    expect(result.current.messages.map(message => message.text)).toEqual(['Earlier', 'Earlier answer', 'Current question']);
+    expect(result.current.messages.at(-1)?.renderKey).toBe(sent.renderKey);
+  });
+
   it.each(['openclaw', 'hermes'])('keeps an explicit %s task route even when absent from the session index', async (backendKind) => {
     const key = 'agent:main:cron:archived:run:123';
     const adapter = {

@@ -1,5 +1,6 @@
 import React from 'react';
-import { fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render } from '@testing-library/react-native';
+import { BackHandler, Platform } from 'react-native';
 import { Sheet } from './Sheet';
 import { Space } from '../../theme/tokens';
 
@@ -9,6 +10,8 @@ jest.mock('react-native', () => {
     ReactRuntime.createElement(name, props, children)
   );
   return {
+    Platform: { OS: 'ios' },
+    BackHandler: { addEventListener: jest.fn() },
     StyleSheet: { create: <T,>(styles: T) => styles, flatten: (style: unknown) => style, hairlineWidth: 1 },
     Text: host('Text'),
     View: host('View'),
@@ -116,5 +119,49 @@ describe('Sheet footer', () => {
     expect(view.queryByTestId('sheet-footer')).toBeNull();
     expect(view.queryByTestId('gorhom-footer')).toBeNull();
     expect(flatten(view.getByTestId('sheet-body').props.style).paddingBottom).toBeUndefined();
+  });
+});
+
+describe('Android sheet Back navigation', () => {
+  const listeners: Array<() => boolean> = [];
+  beforeEach(() => {
+    Platform.OS = 'android';
+    listeners.length = 0;
+    jest.mocked(BackHandler.addEventListener).mockImplementation((_event, listener) => {
+      listeners.push(listener as () => boolean);
+      return { remove: () => { const index = listeners.indexOf(listener as () => boolean); if (index >= 0) listeners.splice(index, 1); } };
+    });
+  });
+  afterEach(() => { Platform.OS = 'ios'; });
+
+  it('closes only the topmost sheet, then restores the parent listener', () => {
+    const parentClose = jest.fn(); const childClose = jest.fn();
+    const tree = (child: boolean) => <>
+      <Sheet visible onClose={parentClose} closeAccessibilityLabel="Close">parent</Sheet>
+      <Sheet visible={child} onClose={childClose} closeAccessibilityLabel="Close">child</Sheet>
+    </>;
+    const view = render(tree(false));
+    view.rerender(tree(true));
+    act(() => { expect(listeners.at(-1)?.()).toBe(true); });
+    expect(childClose).toHaveBeenCalledTimes(1);
+    expect(parentClose).not.toHaveBeenCalled();
+    view.rerender(tree(false));
+    act(() => { expect(listeners.at(-1)?.()).toBe(true); });
+    expect(parentClose).toHaveBeenCalledTimes(1);
+    view.unmount();
+    expect(listeners).toHaveLength(0);
+  });
+
+  it('uses the current close callback and consumes Back for a nondismissible sheet', () => {
+    const oldClose = jest.fn(); const close = jest.fn();
+    const view = render(<Sheet visible onClose={oldClose} closeAccessibilityLabel="Close">body</Sheet>);
+    view.rerender(<Sheet visible onClose={close} closeAccessibilityLabel="Close">body</Sheet>);
+    act(() => { expect(listeners.at(-1)?.()).toBe(true); });
+    expect(close).toHaveBeenCalledTimes(1); expect(oldClose).not.toHaveBeenCalled();
+    view.rerender(<Sheet visible onClose={close} dismissOnBackdropPress={false} closeAccessibilityLabel="Close">body</Sheet>);
+    act(() => { expect(listeners.at(-1)?.()).toBe(true); });
+    expect(close).toHaveBeenCalledTimes(1);
+    view.unmount();
+    expect(listeners).toHaveLength(0);
   });
 });

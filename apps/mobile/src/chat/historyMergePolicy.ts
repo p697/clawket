@@ -5,6 +5,18 @@ const ASSISTANT_MATCH_GRACE_MS = 5_000;
 const SAME_TURN_REPLACEMENT_GRACE_MS = 60_000;
 const USER_MATCH_GRACE_MS = 60_000;
 
+/** Retire a stale live/source copy only when the snapshot confirms its replacement. */
+export function retireAliasedTools(previous: UiMessage[], next: UiMessage[], aliases?: Readonly<Record<string, string>>): UiMessage[] {
+  if (!aliases) return previous;
+  return previous.filter(message => {
+    if (message.role !== 'tool') return true;
+    const sourceId = message.id.replace(/^tool(?:call|result)_/, '');
+    const target = aliases[sourceId];
+    return !target || !next.some(candidate => candidate.role === 'tool' && candidate.toolName === message.toolName
+      && candidate.id.replace(/^tool(?:call|result)_/, '') === target);
+  });
+}
+
 /** Carry local row identity across exact echoes; wire IDs still drive reconciliation/actions. */
 export function preserveMessagePresentation(previous: UiMessage[], next: UiMessage[]): UiMessage[] {
   const byId = new Map(previous.filter((message) => message.renderKey).map((message) => [message.id, message]));
@@ -81,7 +93,9 @@ function findLastOptimisticUser(messages: UiMessage[]): UiMessage | null {
   if (lastUserIndex < 0) return null;
 
   const message = messages[lastUserIndex];
-  if (message.role !== 'user' || !message.id.startsWith('usr_')) {
+  // A server echo replaces the wire ID, but the locally submitted turn is
+  // still ours. A later/older history page must not erase its user anchor.
+  if (message.role !== 'user' || !(message.renderKey ?? message.id).startsWith('usr_')) {
     return null;
   }
 
@@ -203,7 +217,7 @@ function findTailUserFallbackMatch(
 
   for (let index = messages.length - 1; index >= 0; index--) {
     const candidate = messages[index];
-    if (candidate.role !== 'user' || knownOlderIds.has(candidate.id)) continue;
+    if (candidate.role !== 'user' || knownOlderIds.has(candidate.historyMessageId ?? candidate.id) || knownOlderIds.has(candidate.id)) continue;
     if (candidate.idempotencyKey && optimisticUser.idempotencyKey && candidate.idempotencyKey !== optimisticUser.idempotencyKey) continue;
     if (normalizeUserText(candidate.text) !== normalizedOptimisticText) continue;
     if (!hasMissingUserMatchMetadata(candidate)) continue;
@@ -239,15 +253,29 @@ export function preserveOptimisticAssistantMessage(
   const previousLastUser = findLastOptimisticUser(previousMessages);
   let mergedMessages = nextMessages;
   if (previousLastUser) {
-    const knownOlderIds = new Set(previousMessages.filter(message => message.role === 'user' && message.id !== previousLastUser.id).map(message => message.id));
-    const hasMatchingUser = nextMessages.some((message) => (
-      message.role === 'user' && !knownOlderIds.has(message.id) && areLikelySameUserMessage(message, previousLastUser)
+    const knownOlderIds = new Set(previousMessages.filter(message => message.role === 'user' && message.id !== previousLastUser.id)
+      .flatMap(message => [message.id, message.historyMessageId ?? message.id]));
+    const matchingUser = nextMessages.find((message) => (
+      message.role === 'user' && !knownOlderIds.has(message.id)
+      && !knownOlderIds.has(message.historyMessageId ?? message.id) && areLikelySameUserMessage(message, previousLastUser)
     ));
-    const fallbackMatch = hasMatchingUser
+    const fallbackMatch = matchingUser
       ? null
       : findTailUserFallbackMatch(previousLastUser, nextMessages, knownOlderIds);
-    if (!hasMatchingUser && !fallbackMatch) {
+    const echo = matchingUser ?? fallbackMatch;
+    if (!echo) {
       mergedMessages = [...nextMessages, previousLastUser];
+    } else if (previousLastUser.renderKey) {
+      // Older backends may omit the send key. Carry the same confirmed match
+      // used above into presentation, so a second refresh cannot lose it.
+      mergedMessages = nextMessages.map(message => message === echo ? {
+        ...message,
+        renderKey: previousLastUser.renderKey,
+        idempotencyKey: message.idempotencyKey ?? previousLastUser.idempotencyKey,
+        timestampMs: previousLastUser.timestampMs ?? message.timestampMs,
+        imageUris: previousLastUser.imageUris ?? message.imageUris,
+        imageMetas: previousLastUser.imageMetas ?? message.imageMetas,
+      } : message);
     }
   }
 
@@ -365,7 +393,8 @@ export function preserveCompletedRunPresentation(previous: UiMessage[], incoming
     const aggregateIndex = texts.length > 1 ? remote.findIndex(message => message.role === 'assistant'
       && [combined, concatenated].includes(normalizeAssistantText(message.text))) : -1;
     if (aggregateIndex >= 0) consumed.add(aggregateIndex);
-    const rows = local.map(message => {
+    const canonicalPositions: Array<number | undefined> = new Array(local.length).fill(undefined);
+    const rows = local.map((message, localIndex) => {
       const index = remote.findIndex((candidate, i) => !consumed.has(i) && candidate.role === message.role && (
         candidate.id === message.id
         || (message.role === 'assistant' && (normalizeAssistantText(candidate.text) === normalizeAssistantText(message.text)
@@ -375,10 +404,12 @@ export function preserveCompletedRunPresentation(previous: UiMessage[], incoming
       ));
       if (index < 0) {
         const aggregate = message === texts.at(-1) && aggregateIndex >= 0 ? remote[aggregateIndex] : undefined;
+        if (aggregate) canonicalPositions[localIndex] = aggregateIndex;
         return aggregate ? { ...message, usage: aggregate.usage ?? message.usage, modelLabel: aggregate.modelLabel ?? message.modelLabel,
           imageUris: aggregate.imageUris ?? message.imageUris, fileAttachments: aggregate.fileAttachments ?? message.fileAttachments } : message;
       }
       consumed.add(index);
+      canonicalPositions[localIndex] = index;
       return { ...message, ...remote[index], renderKey: message.renderKey ?? message.id,
         ...(options.live ? { id: message.id, historyMessageId: remote[index].historyMessageId ?? remote[index].id } : {}),
         ...((options.live || message.streaming) && message.role === 'assistant' ? { text: message.text } : {}),
@@ -386,7 +417,16 @@ export function preserveCompletedRunPresentation(previous: UiMessage[], incoming
     });
     // Keep newly discovered server content; absence from an early history page
     // is not evidence that an already displayed live segment should disappear.
-    rows.push(...remote.filter((_, index) => !consumed.has(index)));
+    // A newly discovered pre-tool paragraph belongs before its confirmed next
+    // row, not after the final answer. Preserve existing live row identities
+    // and order while using the transcript's anchors for previously unseen rows.
+    remote.forEach((message, index) => {
+      if (consumed.has(index)) return;
+      const before = canonicalPositions.findIndex(position => position !== undefined && position > index);
+      const position = before < 0 ? rows.length : before;
+      rows.splice(position, 0, message);
+      canonicalPositions.splice(position, 0, index);
+    });
     next = [...next.slice(0, anchor + 1), ...rows, ...next.slice(boundary)];
   }
   return next;

@@ -159,6 +159,19 @@ function buildInput() {
 }
 
 describe('global Search model', () => {
+  it('opens an explicitly created session for free only in its exact connection and Agent scope', () => {
+    const input = buildInput();
+    const key = 'manual-topic';
+    const scoped = { ...input, isPro: false,
+      messageMatches: [{ meta: cachedMeta('home', key, 350), matches: [cachedMessage('own', 'launch notes', 500)] }],
+      manualSessions: [{ connectionId: 'home', agentId: 'main', key }],
+    };
+    const result = (value: typeof scoped) => buildSearchModel(value).sections.flatMap((section) => section.results).find((row) => row.kind === 'message');
+    expect(result(scoped)).toMatchObject({ text: 'launch notes' });
+    expect(result(scoped)?.lockedReason).toBeUndefined();
+    expect(result({ ...scoped, manualSessions: [{ connectionId: 'travel', agentId: 'main', key }] })).toMatchObject({ text: '', lockedReason: 'messageHistory' });
+    expect(result({ ...scoped, manualSessions: [{ connectionId: 'home', agentId: 'other', key }] })).toMatchObject({ text: '', lockedReason: 'messageHistory' });
+  });
   it('keeps non-main search results discoverable without exposing locked excerpts', () => {
     const input = buildInput();
     const otherSession = 'agent:main:slack:channel:one';
@@ -233,9 +246,7 @@ describe('global Search model', () => {
       'favorite:old',
     ]);
     expect(browse.favorites.every((result) => result.kind === 'favorite' && !result.lockedReason)).toBe(true);
-    expect(buildSearchModel({ ...input, query: '', isPro: false }).favorites[0]).toMatchObject({
-      lockedReason: 'messageHistory',
-    });
+    expect(buildSearchModel({ ...input, query: '', isPro: false }).favorites[0]?.lockedReason).toBeUndefined();
     expect(buildSearchModel(input).favorites).toEqual([]);
   });
 
@@ -270,7 +281,7 @@ describe('global Search model', () => {
     );
   });
 
-  it('preserves message-history priority and exact connection or agent quota reasons', () => {
+  it('preserves exact connection and agent quota reasons before history access', () => {
     const model = buildSearchModel({
       ...buildInput(),
       isPro: false,
@@ -282,7 +293,7 @@ describe('global Search model', () => {
     expect(model.sections.flatMap((section) => section.results).filter(
       (result) => result.kind === 'message' || result.kind === 'favorite',
     )).toEqual(expect.arrayContaining([
-      expect.objectContaining({ lockedReason: 'messageHistory' }),
+      expect.objectContaining({ lockedReason: 'gatewayConnections' }),
     ]));
     expect(model.sections.flatMap((section) => section.results).filter(
       (result) => result.kind === 'agent' || result.kind === 'session',

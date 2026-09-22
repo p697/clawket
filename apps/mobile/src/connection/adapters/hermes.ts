@@ -1,8 +1,12 @@
+import type { SessionFilesOperations } from '@clawket/agent-protocol';
+import { withSkillInvocations } from './skill-invocation';
+import { explicitModelReference } from '../../utils/model-catalog';
 import {
   AdapterError,
   resolveCapabilities,
   supportsPromptAttachment,
   type AgentDescriptor,
+  type ApprovalRequest,
   type ConnectionRecord,
   type CronJob,
   type CronJobCreate,
@@ -16,9 +20,11 @@ import {
   type CronSchedule,
   type DiscoverResult,
   type ManagementOperations,
+  type ModelHealthReport,
   type PromptInput,
   type SessionDescriptor,
   type SessionUpdate,
+  type SkillStatusEntry,
 } from '@clawket/agent-protocol';
 import { searchDiscoverSkills } from '../../features/discover';
 import type { GatewayEvents } from '../protocol';
@@ -46,6 +52,13 @@ import type { ConnectionAdapterRuntimeMetadata } from '../runtime-details';
 export const HERMES_MULTI_SESSION_CAPABILITY = 'hermes.multi-session.v2';
 
 export class HermesAdapter extends GatewayAdapterBase {
+  public get sessionFiles(): SessionFilesOperations | undefined {
+    if (!this.capabilities.sessionFiles) return undefined;
+    return {
+      list: sessionKey => this.invoke(() => this.gateway.request('clawket.files.list', { sessionKey })),
+      read: (sessionKey, id, offset) => this.invoke(() => this.gateway.request('clawket.files.read', { sessionKey, id, offset })),
+    };
+  }
   public readonly management: ManagementOperations;
 
   private healthObserved = false;
@@ -63,7 +76,14 @@ export class HermesAdapter extends GatewayAdapterBase {
       fallbackSessionKey: 'main',
       options,
     });
+    this.currentCapabilities = resolveCapabilities('hermes', { sessionFiles: false, steer: false, execApproval: false, documentAttachments: false, modelHealth: false, cronModel: false });
     this.management = this.createManagementOperations();
+  }
+
+  public async steer(key: string, runId: string, text: string): Promise<void> {
+    if (!this.capabilities.steer) throw new AdapterError('unsupported', 'Current-run steering is unavailable.');
+    const result = await this.invoke(() => this.gateway.request<{ accepted: boolean; runId: string }>('chat.steer', { sessionKey: key, runId, message: text }));
+    if (result.accepted !== true || result.runId !== runId) throw new Error('Steering was not confirmed.');
   }
 
   public override disconnect(): void {
@@ -72,6 +92,7 @@ export class HermesAdapter extends GatewayAdapterBase {
     this.bridgeCapabilities = Object.freeze([]);
     this.commandRuns.clear();
     super.disconnect();
+    this.currentCapabilities = resolveCapabilities('hermes', { sessionFiles: false, steer: false, execApproval: false, documentAttachments: false, modelHealth: false, cronModel: false });
   }
 
   public override getConnectionRuntimeMetadata(): ConnectionAdapterRuntimeMetadata {
@@ -111,7 +132,7 @@ export class HermesAdapter extends GatewayAdapterBase {
     if (input.attachments?.some((attachment) => (
       !supportsPromptAttachment(this.capabilities, attachment)
     ))) {
-      throw new AdapterError('unsupported', 'Hermes supports image attachments only');
+      throw new AdapterError('unsupported', 'This attachment type is unavailable on the connected Hermes Bridge');
     }
     const command = isHermesCommand(input.text)
       ? { sessionKey: key, command: input.text }
@@ -187,15 +208,21 @@ export class HermesAdapter extends GatewayAdapterBase {
       : [];
     this.bridgeCapabilities = Object.freeze([...capabilities]);
     const supportsMultiSession = capabilities.includes(HERMES_MULTI_SESSION_CAPABILITY);
-    this.currentCapabilities = resolveCapabilities('hermes', supportsMultiSession
-      ? undefined
-      : {
+    this.currentCapabilities = resolveCapabilities('hermes', {
+      sessionFiles: capabilities.includes('bridge.session-files.v1'),
+      steer: capabilities.includes('hermes.run-steer.v1'),
+      documentAttachments: capabilities.includes('hermes.documents.v1'),
+      execApproval: capabilities.includes('hermes.run-approval.v1'),
+      modelHealth: capabilities.includes('hermes.model-health.v1'),
+      cronModel: capabilities.includes('hermes.cron-model.v1'),
+      ...(!supportsMultiSession ? {
           sessions: false,
           sessionCreate: false,
           sessionRename: false,
           sessionReset: false,
           sessionDelete: false,
-        });
+        } : {}),
+    });
     if (supportsMultiSession) {
       delete this.connection.bridgeOutdated;
     } else {
@@ -295,8 +322,17 @@ export class HermesAdapter extends GatewayAdapterBase {
   }
 
   private createManagementOperations(): ManagementOperations {
+    const adapter = this;
     return {
+      get approvals() {
+        return adapter.capabilities.execApproval ? {
+          listExec: (sessionKey: string) => adapter.invoke(() => adapter.gateway.request<Array<{ sessionKey: string; approval: Extract<ApprovalRequest, { kind: 'exec' }> }>>('exec.approval.list', { sessionKey })),
+          resolveExec: (id: string, decision: 'allow-once' | 'allow-always' | 'deny') => adapter.invoke(() => adapter.gateway.resolveExecApproval(id, decision)) } : undefined;
+      },
       models: {
+        get health() { return adapter.capabilities.modelHealth
+          ? (options?: { probe?: boolean }) => adapter.invoke(() => adapter.gateway.request<ModelHealthReport>('model.health', { probe: options?.probe === true }))
+          : undefined; },
         list: () => this.invoke(() => this.gateway.listModels()),
         getSelection: () => this.invoke(() => this.gateway.getModelSelectionState()),
         setSelection: (params) => this.invoke(() => this.gateway.setModelSelection({
@@ -307,7 +343,7 @@ export class HermesAdapter extends GatewayAdapterBase {
         listThinkingLevels: () => ['off', 'minimal', 'low', 'medium', 'high', 'xhigh'],
       },
       skills: {
-        status: () => this.invoke(() => this.gateway.getSkillsStatus('main')),
+        status: async () => withSkillInvocations(await this.invoke(() => this.gateway.getSkillsStatus('main')), 'instruction'),
         get: (key, params) => this.invoke(() => this.gateway.getSkillDetail(key, {
           ...params,
           agentId: 'main',
@@ -318,6 +354,10 @@ export class HermesAdapter extends GatewayAdapterBase {
         )),
         remove: (key) => this.invoke(() => this.gateway.deleteSkill(key, 'main')),
         discover: (query) => discoverSkills(query),
+        get install() {
+          if (!adapter.bridgeCapabilities.includes('hermes.skills-install.v1')) return undefined;
+          return (input: { source: 'clawhub'; owner: string; slug: string }) => adapter.invoke(() => adapter.gateway.request<SkillStatusEntry>('skills.install', input));
+        },
       },
       cron: {
         list: (params) => this.listCron(params),
@@ -381,7 +421,9 @@ export class HermesAdapter extends GatewayAdapterBase {
   }
 
   private async addCron(job: CronJobCreate): Promise<CronJob> {
-    const created = await this.invoke(() => this.gateway.createHermesCronJob(toHermesCronUpsert(job)));
+    const input = toHermesCronUpsert(job);
+    if (job.payload.kind === 'agentTurn' && job.payload.model) Object.assign(input, await this.resolveCronModel(job.payload.model));
+    const created = await this.invoke(() => this.gateway.createHermesCronJob(input));
     if (!created) throw new AdapterError('server', 'Hermes did not return the created scheduled task');
     return mapHermesCronJob(created);
   }
@@ -389,23 +431,36 @@ export class HermesAdapter extends GatewayAdapterBase {
   private async updateCron(id: string, patch: CronJobPatch): Promise<CronJob> {
     const current = await this.invoke(() => this.gateway.getHermesCronJob(id));
     if (!current) throw new AdapterError('server', `Hermes scheduled task was not found: ${id}`);
-    if (patch.enabled === false && current.enabled) {
-      await this.invoke(() => this.gateway.pauseHermesCronJob(id));
-    } else if (patch.enabled === true && !current.enabled) {
-      await this.invoke(() => this.gateway.resumeHermesCronJob(id));
-    }
     const nativePatch: Partial<HermesCronJobUpsert> = {};
     const extendedPatch = patch as CronJobPatch & { skills?: string[] };
     if (patch.name !== undefined) nativePatch.name = patch.name;
     if (patch.schedule !== undefined) nativePatch.schedule = serializeHermesSchedule(patch.schedule);
     if (patch.payload !== undefined) nativePatch.prompt = cronPrompt(patch.payload);
-    if (patch.delivery !== undefined) nativePatch.deliver = patch.delivery.mode;
+    if (patch.payload?.kind === 'agentTurn' && patch.payload.model !== undefined
+      && (patch.payload.model || '') !== (current.model ? explicitModelReference(current.provider || '', current.model) : '')) {
+      Object.assign(nativePatch, await this.resolveCronModel(patch.payload.model));
+    }
+    if (patch.delivery !== undefined) nativePatch.deliver = hermesDeliveryTarget(patch.delivery, current.deliver);
     if (extendedPatch.skills !== undefined) nativePatch.skills = extendedPatch.skills;
-    const updated = Object.keys(nativePatch).length > 0
+    let updated = Object.keys(nativePatch).length > 0
       ? await this.invoke(() => this.gateway.updateHermesCronJob(id, nativePatch))
       : await this.invoke(() => this.gateway.getHermesCronJob(id));
     if (!updated) throw new AdapterError('server', `Hermes scheduled task was not found: ${id}`);
+    if (patch.enabled === false && updated.enabled) updated = await this.invoke(() => this.gateway.pauseHermesCronJob(id));
+    else if (patch.enabled === true && !updated.enabled) updated = await this.invoke(() => this.gateway.resumeHermesCronJob(id));
+    if (!updated) throw new AdapterError('server', `Hermes scheduled task was not found: ${id}`);
     return mapHermesCronJob(updated);
+  }
+
+  private async resolveCronModel(reference: string | null): Promise<Partial<HermesCronJobUpsert>> {
+    if (!this.capabilities.cronModel) throw new AdapterError('unsupported', 'Update the Bridge to configure task models');
+    if (!reference?.trim()) return { model: '', provider: '', base_url: '' };
+    const models = await this.invoke(() => this.gateway.listModels());
+    const matches = models.filter((model) => explicitModelReference(model.provider, model.id) === reference.trim());
+    if (matches.length !== 1) throw new AdapterError('server', 'Choose an available task model');
+    const model = matches[0];
+    return { model: model.id.startsWith(`${model.provider}/`) ? model.id.slice(model.provider.length + 1) : model.id,
+      provider: model.provider, base_url: '' };
   }
 
   private async listCronRuns(params: CronRunsParams): Promise<CronRunsResult> {
@@ -428,7 +483,11 @@ export class HermesAdapter extends GatewayAdapterBase {
   private async loadCronRunContent(entry: CronRunLogEntry): Promise<CronRunContent> {
     if (!entry.outputRef) return { deliveries: [] };
     const detail = await this.invoke(() => this.gateway.getHermesCronOutput(entry.jobId, entry.outputRef!));
-    const output = detail?.content?.trim();
+    const raw = detail?.content?.trim();
+    // Native files prepend scheduler instructions and the input prompt. The
+    // reader leads with the actual response; unknown formats retain their text.
+    const response = raw?.startsWith('# Cron Job: ') ? /^## Response\s*\n([\s\S]*)/m.exec(raw)?.[1]?.trim() : undefined;
+    const output = response || raw;
     return { deliveries: [], ...(output ? { output } : {}) };
   }
 }
@@ -511,8 +570,8 @@ export function mapHermesCronJob(job: HermesCronJob): CronJob {
     schedule: parseHermesSchedule(job),
     sessionTarget: 'isolated',
     wakeMode: 'now',
-    payload: { kind: 'agentTurn', message: job.prompt },
-    delivery: { mode: job.deliver === 'none' ? 'none' : 'announce' },
+    payload: { kind: 'agentTurn', message: job.prompt, ...(job.model ? { model: explicitModelReference(job.provider || '', job.model) } : {}) },
+    delivery: !job.deliver || job.deliver === 'none' || job.deliver === 'local' ? { mode: 'none' } : { mode: 'announce', to: job.deliver },
     state: {
       nextRunAtMs: parseIso(job.next_run_at),
       lastRunAtMs: parseIso(job.last_run_at),
@@ -552,8 +611,16 @@ function toHermesCronUpsert(job: CronJobCreate): HermesCronJobUpsert {
     schedule: serializeHermesSchedule(job.schedule),
     prompt,
     ...(skills.length > 0 ? { skills } : {}),
-    deliver: job.delivery?.mode ?? 'none',
+    deliver: hermesDeliveryTarget(job.delivery),
   };
+}
+
+function hermesDeliveryTarget(delivery: CronJobCreate['delivery'], existing?: string): string {
+  if (!delivery || delivery.mode === 'none') return 'local';
+  if (delivery.mode !== 'announce') throw new AdapterError('unsupported', 'Hermes does not support this delivery mode');
+  if (delivery.to) return delivery.channel ? `${delivery.channel}:${delivery.to}` : delivery.to;
+  if (existing && existing !== 'none') return existing;
+  throw new AdapterError('server', 'Hermes delivery requires a target');
 }
 
 function cronPrompt(payload: CronJobCreate['payload'] | NonNullable<CronJobPatch['payload']>): string {
@@ -591,6 +658,7 @@ function mapHermesCronRun(output: HermesCronOutputEntry): CronRunLogEntry {
 }
 
 function normalizeCronStatus(value: string | null): CronJob['state']['lastRunStatus'] {
+  if (value?.startsWith('blocked') || value === 'failed') return 'error';
   if (value === 'ok' || value === 'error' || value === 'skipped') return value;
   return undefined;
 }

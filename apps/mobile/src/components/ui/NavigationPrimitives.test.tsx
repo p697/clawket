@@ -222,7 +222,7 @@ describe.each(['light', 'dark'] as const)('%s navigation primitives', (scheme) =
     expect(flattened(close.props.style)).toMatchObject({
       width: ControlSize.floatingButton,
       height: ControlSize.floatingButton,
-      borderRadius: Radius.full,
+      borderRadius: ControlSize.floatingButton / 2,
     });
     expect(close.props.accessibilityLabel).toBe('Close');
     expect(result.getByTestId('sheet-header-right')).toBeTruthy();
@@ -302,6 +302,11 @@ describe.each(['light', 'dark'] as const)('%s navigation primitives', (scheme) =
       maxWidth: 440,
       alignSelf: 'center',
       borderRadius: Radius.xl,
+    });
+    expect(flattened(result.getByTestId('delete-confirmation').props.style)).toMatchObject({
+      paddingTop: Space.md,
+      paddingBottom: Space.xl,
+      gap: Space.xl,
     });
     expect(result.getByText('This cannot be undone.')).toBeTruthy();
     fireEvent.press(result.getByTestId('delete-confirmation-confirm'));

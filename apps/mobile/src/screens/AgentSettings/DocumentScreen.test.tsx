@@ -1,6 +1,13 @@
 import React from 'react';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { DocumentScreen } from './DocumentScreen';
+import { DocumentVersions } from '../../services/document-versions';
+jest.mock('../../services/document-versions', () => ({ DocumentVersions: {
+  ...jest.requireActual('../../services/document-versions').DocumentVersions,
+  capture: jest.fn(async () => undefined),
+} }));
+jest.mock('./DocumentHistorySheet', () => ({ DocumentHistorySheet: () => null }));
+jest.mock('../../components/ui/FloatingButton', () => ({ FloatingButton: (props: unknown) => require('react').createElement('Pressable', props) }));
 import type { DocumentContent, DocumentSource } from './document-model';
 
 const mockPreventRemove = jest.fn();
@@ -68,6 +75,18 @@ function renderPage(data: ReturnType<typeof sourceWith>, patch: Partial<React.Co
 }
 
 describe('DocumentScreen', () => {
+  it('explains oversized version history before saving while preserving editing', async () => {
+    const data = sourceWith({ content: { content: 'x'.repeat(50_001) } });
+    data.source = { ...data.source, versioned: true };
+    const { view } = renderPage(data);
+    await waitFor(() => expect(view.getByTestId('document-edit')).toBeTruthy());
+    expect(view.queryByTestId('document-version-limit')).toBeNull();
+    fireEvent.press(view.getByTestId('document-edit'));
+    expect(view.getByText('This file is too large for version history.')).toBeTruthy();
+    fireEvent.changeText(view.getByTestId('document-input'), 'Shorter version');
+    fireEvent.press(view.getByTestId('document-save'));
+    await waitFor(() => expect(data.save).toHaveBeenCalledWith('Shorter version'));
+  });
   it('opens linked source files and displays script text without a writable editor', async () => {
     const open = jest.fn();
     const data = sourceWith({ content: { linkedFiles: ['scripts/run.py'], editable: false, plainText: true, content: 'print(1)' }, save: null });
@@ -295,4 +314,31 @@ describe('DocumentScreen', () => {
     expect(view.queryByTestId('document-input')).toBeNull();
     expect(second.load).toHaveBeenCalledTimes(1);
   });
+});
+
+ test('personal memory corrections are free and snapshot the previous content before saving', async () => {
+  const data = sourceWith();
+  data.source = { ...data.source, versioned: true, freeEditing: true };
+  const { view, onOpenPaywall } = renderPage(data, { isPro: false });
+  await waitFor(() => expect(view.getByTestId('document-edit')).toBeTruthy());
+  fireEvent.press(view.getByTestId('document-edit'));
+  fireEvent.changeText(view.getByTestId('document-input'), 'Corrected memory');
+  fireEvent.press(view.getByTestId('document-save'));
+  await waitFor(() => expect(data.save).toHaveBeenCalledWith('Corrected memory'));
+  expect(DocumentVersions.capture).toHaveBeenCalledWith('doc', '# Title\n\nBody', undefined);
+  expect(onOpenPaywall).not.toHaveBeenCalled();
+});
+
+ test('refuses to overwrite memory that changed while its editor was open', async () => {
+  const data = sourceWith();
+  data.source = { ...data.source, versioned: true, freeEditing: true };
+  const { view } = renderPage(data);
+  await waitFor(() => expect(view.getByTestId('document-edit')).toBeTruthy());
+  fireEvent.press(view.getByTestId('document-edit'));
+  fireEvent.changeText(view.getByTestId('document-input'), 'My draft');
+  data.load.mockResolvedValueOnce({ content: 'Agent updated memory', editable: true });
+  fireEvent.press(view.getByTestId('document-save'));
+  await waitFor(() => expect(view.getByTestId('document-error')).toBeTruthy());
+  expect(data.save).not.toHaveBeenCalled();
+  expect(view.getByTestId('document-input').props.value).toBe('My draft');
 });

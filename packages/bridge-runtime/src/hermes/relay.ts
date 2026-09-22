@@ -206,6 +206,18 @@ export class HermesRelayRuntime {
         return;
       }
       this.relaySocket = null;
+      // The Relay deliberately elected a different socket for this owner.
+      // Retrying this connection would evict that winner again, allowing two
+      // runtimes with the same persisted instanceId to fight indefinitely.
+      // Other 4010 reasons are recoverable; never classify by code alone.
+      if ((code === 4010 && reason.toString() === 'duplicate_socket')
+        || (code === 4001 && reason.toString() === 'replaced_by_new_bridge')) {
+        void this.stop();
+        const message = 'Relay ownership moved to another Hermes relay runtime. Stop duplicate instances before restarting this runtime.';
+        this.updateSnapshot({ lastError: message });
+        this.log(message);
+        return;
+      }
       this.clearRelayPing();
       this.clearRelayStabilityReset();
       this.updateSnapshot({

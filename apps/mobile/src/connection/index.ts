@@ -1,3 +1,7 @@
+import { classifyBridge } from './bridge-upgrade';
+import { ConversationArchives } from '../services/conversation-archives';
+import { ManualSessions } from '../services/manual-sessions';
+import { DocumentVersions } from '../services/document-versions';
 import { updateRunActivities, type RunActivity } from './run-activity';
 import { clearUncertainSends } from '../chat/sendRecovery';
 import type {
@@ -495,6 +499,10 @@ export class ConnectionCoordinator {
       this.pausedStore.write(this.pausedIds),
       this.cache.remove(connectionId),
       this.chatCache.clearConnection(connectionId),
+      ManualSessions.removeConnection(connectionId),
+      DocumentVersions.clearConnection(connectionId),
+      ConversationArchives.clearConnection(connectionId),
+      StorageService.clearConnectionComposerDrafts(connectionId),
       this.sessionPreferences.clearConnection(connectionId),
       this.cronFailureAcks.clearConnection(connectionId),
       this.threadActivityCache.clearConnection(connectionId),
@@ -892,6 +900,7 @@ export class ConnectionCoordinator {
         const currentDetails = this.connectionDetails.get(connection.id);
         if (entry.savedAt > (currentDetails?.lastReadyAt ?? 0)) {
           this.connectionDetails.set(connection.id, Object.freeze({
+            ...currentDetails,
             lastReadyAt: entry.savedAt,
             bridgeVersion: currentDetails?.bridgeVersion ?? null,
             bridgeCapabilities: currentDetails?.bridgeCapabilities ?? Object.freeze([]),
@@ -1158,8 +1167,8 @@ export class ConnectionCoordinator {
     const metadata = readConnectionRuntimeMetadata(entry.adapter);
     this.connectionDetails.set(entry.connectionId, Object.freeze({
       lastReadyAt: this.now(),
-      bridgeVersion: metadata.bridgeVersion,
-      bridgeCapabilities: metadata.bridgeCapabilities,
+      ...metadata,
+      bridgeGeneration: classifyBridge(entry.adapter.connection, metadata.bridgeVersion, metadata.bridgeCapabilities),
     }));
   }
 

@@ -1,4 +1,4 @@
-import { mapGatewayHistoryMessages, preserveOpenClawCliHistorySegments } from './gateway-history';
+import { mergeGatewayHistory, mapGatewayHistoryMessages, preserveOpenClawCliHistorySegments } from './gateway-history';
 import resumeHistory from './__fixtures__/openclaw-cli-resume-user.json';
 
 describe('recorded OpenClaw CLI resumed input', () => {
@@ -93,5 +93,39 @@ describe('embedded CLI tool history', () => {
     const mapped = mapGatewayHistoryMessages('main', [null, { role: 'toolResult', toolCallId: 'h', toolName: 'terminal', content: '1517' }]);
     expect(mapped).toHaveLength(1);
     expect(mapped[0]).toMatchObject({ role: 'tool', text: '1517', tool: { callId: 'h', status: 'success' } });
+  });
+});
+
+describe('Hermes installed-skill cache presentation', () => {
+  it('retires a cached display prefix when the canonical prompt is echoed', () => {
+    const remote = { id: 'native:1', role: 'user' as const, timestampMs: 10_310, text: 'Use the installed skill "arxiv" for this request. Read its instructions with skill_view before proceeding.\n\nRead it.' };
+    const cached = { id: 'h_user_10000_old', role: 'user' as const, timestampMs: 10_320, text: '$arxiv\n\nRead it.' };
+    expect(mergeGatewayHistory([remote], [cached], { hermesUserPresentation: true })).toEqual([remote]);
+    expect(mergeGatewayHistory([remote], [cached])).toHaveLength(2);
+    const repeat = { ...remote, id: 'native:2', timestampMs: 10_500 };
+    expect(mergeGatewayHistory([remote, repeat], [cached], { hermesUserPresentation: true })).toEqual([remote, repeat]);
+    expect(mergeGatewayHistory([remote], [{ ...cached, text: '$arxiv\n\nDifferent.' }], { hermesUserPresentation: true })).toHaveLength(2);
+  });
+});
+
+describe('native expanded user inputs', () => {
+  const skill = "Use the following explicitly referenced skills for this request. Read each skill's SKILL.md before acting:\n- apple-notes\n\nUser request:\n$apple-notes\n\nExplain";
+  const doc = '[media attached: media://inbound/report.pdf (application/pdf)]\nRead this\n[media attached: media://inbound/report.pdf]\n\n<file name="report.pdf" mime="application/pdf">\n<<<EXTERNAL_UNTRUSTED_CONTENT id="ab">>>\nextracted text\n<<<END_EXTERNAL_UNTRUSTED_CONTENT id="ab">>>\n</file>';
+  it.each([[skill, '$apple-notes\n\nExplain'], [doc, 'Read this']])('keeps one canonical user send for a proven expansion', (content, original) => {
+    const rows = [
+      { id: 'send', role: 'user', timestamp: 1789976421978, content: original, __openclaw: { idempotencyKey: '1789976428152_r1stw8sb:user' } },
+      { id: 'import', role: 'user', timestamp: 1789976422747, content, __openclaw: { importedFrom: 'claude-cli', cliSessionId: 'cli' } },
+    ];
+    const project = (values: unknown[]) => preserveOpenClawCliHistorySegments('main', values, mapGatewayHistoryMessages('main', values));
+    expect(project(rows).map(m => m.text)).toEqual([original]);
+    expect(project([rows[1]]).map(m => m.text)).toEqual([original]);
+    const cached = mapGatewayHistoryMessages('main', rows);
+    cached[1].text = content;
+    const merged = mergeGatewayHistory(mapGatewayHistoryMessages('main', rows), cached, { openclawUserEchoes: true });
+    expect(preserveOpenClawCliHistorySegments('main', rows, merged).map(m => m.text)).toEqual([original]);
+    expect(project([{ ...rows[0], content: 'Different request' }, rows[1]])).toHaveLength(2);
+    expect(project([rows[0], { ...rows[1], __openclaw: {} }])).toHaveLength(2);
+    expect(project([rows[0], { ...rows[1], timestamp: 1789976522747 }])).toHaveLength(2);
+    expect(project([rows[0], { ...rows[0], id: 'repeat', __openclaw: { idempotencyKey: '1789976429152_repeat:user' } }, rows[1]])).toHaveLength(2);
   });
 });

@@ -1687,11 +1687,12 @@ export class GatewayProtocolClient {
     startDate: string;
     endDate: string;
     agentId?: string;
+    mode?: 'specific';
+    timeZone?: string;
+    utcOffset?: string;
   }): Promise<UsageResult> {
     return this.request('sessions.usage', {
-      startDate: input.startDate,
-      endDate: input.endDate,
-      ...(input.agentId ? { agentId: input.agentId } : {}),
+      ...input,
       limit: 500,
       includeContextWeight: false,
     });
@@ -1701,6 +1702,9 @@ export class GatewayProtocolClient {
     startDate: string;
     endDate: string;
     agentId?: string;
+    mode?: 'specific';
+    timeZone?: string;
+    utcOffset?: string;
   }): Promise<CostSummary> {
     return this.request('usage.cost', input);
   }

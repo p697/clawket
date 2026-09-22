@@ -41,6 +41,10 @@ export type RootStackParamList = {
     agentId: string;
     sessionKey: string;
     from: ThreadOrigin;
+    shareId?: string;
+    /** One-shot reviewable input; never submitted automatically. */
+    composerDraft?: { id: string; text: string };
+    shortcut?: 'chat' | 'voice' | 'skills' | 'camera' | 'photos';
   };
   AgentSettings: { connectionId: string; agentId: string };
   AgentSettingsSection: {
@@ -64,6 +68,7 @@ export type RootStackParamList = {
   DesignSystem: undefined;
   AccountSettingsSection: { section: AccountSettingsDetailSection };
   ReleaseNotes: undefined;
+  BridgeUpgrade: undefined;
   ChatAppearance: undefined;
   HelpCenter: undefined;
   Search: { query?: string } | undefined;
@@ -87,6 +92,7 @@ export const ROOT_ROUTE_NAMES = [
   'DesignSystem',
   'AccountSettingsSection',
   'ReleaseNotes',
+  'BridgeUpgrade',
   'ChatAppearance',
   'HelpCenter',
   'Search',

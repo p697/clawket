@@ -45,6 +45,7 @@ jest.mock('react-native', () => {
     ),
   );
   return {
+    AppState: { addEventListener: jest.fn(() => ({ remove: jest.fn() })) },
     Image: host('Image'),
     Pressable: host('Pressable'),
     ScrollView: host('ScrollView'),

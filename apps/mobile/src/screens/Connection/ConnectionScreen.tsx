@@ -34,6 +34,7 @@ type Props = {
   details?: ConnectionRuntimeDetails;
   freeSlot?: ConnectionFreeSlot;
   onBack: () => void;
+  onUpgradeBridge?: () => void;
   onReconnect: () => Promise<unknown>;
   onResume: () => Promise<unknown>;
   onPause: () => Promise<unknown>;
@@ -69,6 +70,7 @@ export function ConnectionScreen({
   details,
   freeSlot,
   onBack,
+  onUpgradeBridge,
   onReconnect,
   onResume,
   onPause,
@@ -76,7 +78,7 @@ export function ConnectionScreen({
   onRename,
   onUseAsFreeConnection,
 }: Props): React.JSX.Element {
-  const { t, i18n } = useTranslation(['config', 'common', 'settings']);
+  const { t, i18n } = useTranslation(['config', 'common', 'settings', 'chat']);
   const { theme: { colors } } = useAppTheme();
   const insets = useSafeAreaInsets();
   const serverHost = useConnectionServerHost(connection.id);
@@ -106,6 +108,7 @@ export function ConnectionScreen({
     <View testID="connection-screen" style={[styles.screen, { backgroundColor: colors.canvasGrouped }]}>
       <AccountSettingsPageHeader testID="connection" title={t('Connection', { ns: 'common' })} onBack={onBack} />
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + Space.xl }]}>
+        {onUpgradeBridge ? <Banner testID="connection-bridge-upgrade" message={t('Your older Bridge can keep working. Update it for the new features.', { ns: 'chat' })} actionLabel={t('Update your Bridge', { ns: 'chat' })} onAction={onUpgradeBridge} /> : null}
         <View style={styles.hero}>
           <View style={[styles.symbol, { backgroundColor: colors.surfaceFloating }]}><PlatformMark platform={connection.backendKind} /></View>
           <Text testID="connection-label" style={[styles.name, { color: colors.ink }]}>{connection.label}</Text>

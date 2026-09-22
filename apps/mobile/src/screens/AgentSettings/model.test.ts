@@ -14,6 +14,11 @@ import {
 
 const NOW = new Date(2026, 8, 11, 12, 0, 0).getTime();
 
+it('does not round a real sub-cent cost down to free', () => {
+  expect(formatUsd(0.004)).toBe('<$0.01');
+  expect(formatUsd(0)).toBe('$0.00');
+});
+
 const TRANSPORT_BY_BACKEND: Readonly<Record<ConnectionDescriptor['backendKind'], ConnectionDescriptor['transportKind']>> = {
   openclaw: 'relay',
   hermes: 'relay',
@@ -264,4 +269,9 @@ describe('Agent settings descriptor model', () => {
     expect(formatTokens(-5)).toBe('0');
     expect(formatTokens(Number.NaN)).toBeUndefined();
   });
+});
+
+ it.each(['openclaw', 'hermes'] as const)('labels a partial %s profile cost without changing its subtotal', (backend) => {
+  const model = buildAgentSettingsModel({ connection: connection(backend), agent: agent(backend), capabilities: capabilities(backend), connectionState: 'ready', isPro: true, summary: { todayCostUsd: 0.258672624, todayCostMode: 'mixed' } });
+  expect(model.stats.find((s) => s.id === 'usage')).toMatchObject({ value: '$0.26', title: 'Cost today', detail: { key: 'Partial', tone: 'neutral' } });
 });

@@ -17,9 +17,12 @@ export const useAppLanguage = () => useContext(LanguageContext);
 // and an LTR locale is the one language switch that must reload the app.
 export async function syncLayoutDirection(locale: string): Promise<boolean> {
   const rtl = isRtlLocale(locale);
-  if (I18nManager.isRTL === rtl) return false;
+  const changed = I18nManager.isRTL !== rtl;
+  // Persist even when the current device direction matches: an explicit LTR
+  // choice must stay LTR after the system language later changes to Arabic.
   I18nManager.allowRTL(rtl);
   I18nManager.forceRTL(rtl);
+  if (!changed) return false;
   await reloadAppAsync('App layout direction changed');
   return true;
 }

@@ -738,7 +738,7 @@ describe.each(['light', 'dark'] as const)('%s glass chrome over a wallpaper', (s
     const glass = createChatGlassStyle(theme);
     const result = render(<FloatingButton testID="glass-button" icon={ArrowUp} appearance="glass" accessibilityLabel="Back" onPress={jest.fn()} />);
     expect(flattenStyle(result.getByTestId('glass-button').props.style)).toMatchObject({
-      width: ControlSize.floatingButton, borderRadius: Radius.full,
+      width: ControlSize.floatingButton, borderRadius: ControlSize.floatingButton / 2,
       backgroundColor: glass.backgroundColor, borderColor: glass.borderColor, borderWidth: BorderWidth.hairline,
     });
     if (scheme === 'light') expect(flattenStyle(result.getByTestId('glass-button').props.style)).toMatchObject(Shadow.floating);

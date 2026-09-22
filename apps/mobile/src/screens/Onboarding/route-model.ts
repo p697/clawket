@@ -82,7 +82,7 @@ export function resolveOnboardingAdapterError(error: unknown): AdapterErrorCode 
   const message = error instanceof Error
     ? error.message.toLowerCase()
     : String(error ?? '').toLowerCase();
-  if (message.includes('rate') || message.includes('too many')) return 'rate_limited';
+  if (/\brate[\s_-]*limit|\btoo many\b|\b429\b/u.test(message)) return 'rate_limited';
   if (message.includes('timeout') || message.includes('timed out')) return 'timeout';
   if (message.includes('expired') || message.includes('already been used') || message.includes('invalid')) {
     return 'pairing_expired';

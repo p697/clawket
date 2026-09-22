@@ -18,13 +18,15 @@ function enabled(backend: keyof typeof CAPABILITY_MATRIX): Capability[] {
 
 describe('canonical capability contract', () => {
   it('publishes the frozen product matrix without conflating Hermes with legacy UI flags', () => {
-    expect(enabled('openclaw')).toEqual(CAPABILITY_KEYS);
+    expect(enabled('openclaw')).toEqual(CAPABILITY_KEYS.filter((key) => key !== 'steer' && key !== 'documentAttachments' && key !== 'modelHealth'));
     expect(enabled('local-model')).toEqual(['chat', 'abort', 'history', 'attachments', 'models']);
     expect(enabled('hermes')).toEqual([
       'chat',
       'abort',
+      'steer',
       'history',
       'attachments',
+      'documentAttachments',
       'sessions',
       'sessionCreate',
       'sessionRename',
@@ -32,16 +34,20 @@ describe('canonical capability contract', () => {
       'sessionDelete',
       'agents',
       'models',
+      'modelHealth',
       'thinkingLevels',
       'skills',
       'skillDiscover',
       'skillInstall',
       'cron',
       'cronCreate',
+      'cronModel',
+      'sessionFiles',
       'files',
       'fileEdit',
       'usage',
       'cost',
+      'execApproval',
     ]);
     expect(enabled('youmind')).toEqual(['chat', 'abort', 'history']);
   });
@@ -62,7 +68,8 @@ describe('canonical capability contract', () => {
     expect(resolveCapabilities('hermes', { cronTimeZone: true, cronAdvanced: true }).cronAdvanced).toBeFalsy();
     expect(resolveCapabilities('openclaw').cronModel).toBe(true);
     expect(resolveCapabilities('openclaw', { cronModel: false }).cronModel).toBe(false);
-    expect(resolveCapabilities('hermes', { cronModel: true }).cronModel).toBeFalsy();
+    expect(resolveCapabilities('hermes').cronModel).toBe(true);
+    expect(resolveCapabilities('hermes', { cronModel: false }).cronModel).toBe(false);
     expect(resolveCapabilities('local-model', { cronModel: true }).cronModel).toBeFalsy();
     expect(resolveCapabilities('openclaw').modelManage).toBe(true);
     expect(resolveCapabilities('openclaw', { modelManage: false }).modelManage).toBe(false);
@@ -74,14 +81,18 @@ describe('canonical capability contract', () => {
     expect(resolveCapabilities('youmind', { channelManage: true }).channelManage).toBe(false);
   });
 
-  it('expresses image-only Hermes attachment support without weakening other backends', () => {
+  it('permits negotiated Hermes documents while rejecting arbitrary files', () => {
     expect(normalizeAttachmentMimeType(' Image/PNG ')).toBe('image/png');
     expect(normalizeAttachmentMimeType(undefined)).toBe('application/octet-stream');
     expect(normalizeAttachmentMimeType('   ', ' Image/JPEG ')).toBe('image/jpeg');
     expect(isImageAttachmentMimeType(' Image/PNG ')).toBe(true);
     expect(supportsAttachmentMimeType(CAPABILITY_MATRIX.hermes, ' Image/PNG ')).toBe(true);
-    expect(supportsAttachmentMimeType(CAPABILITY_MATRIX.hermes, 'application/pdf')).toBe(false);
-    expect(supportsFileAttachments(CAPABILITY_MATRIX.hermes)).toBe(false);
+    expect(supportsAttachmentMimeType(CAPABILITY_MATRIX.hermes, 'application/pdf')).toBe(true);
+    expect(supportsFileAttachments(CAPABILITY_MATRIX.hermes)).toBe(true);
+    expect(supportsAttachmentMimeType(CAPABILITY_MATRIX.hermes, 'application/zip')).toBe(false);
+    expect(supportsAttachmentMimeType(resolveCapabilities('hermes', { documentAttachments: false }), 'application/pdf')).toBe(false);
+    expect(supportsAttachmentMimeType({ attachments: true }, 'application/pdf')).toBe(false);
+    expect(supportsAttachmentMimeType(undefined, 'image/png')).toBe(false);
     expect(supportsFileAttachments({ attachments: true })).toBe(false);
     expect(supportsFileAttachments(undefined)).toBe(false);
     expect(supportsAttachmentMimeType(CAPABILITY_MATRIX.openclaw, 'application/pdf')).toBe(true);

@@ -1,3 +1,4 @@
+import { resolveCostPresentation } from '../../services/usage-cost-presentation';
 import type {
   AgentAdapter,
   AgentDescriptor,
@@ -57,7 +58,9 @@ export async function loadAgentSettingsSummary(
       const result = await management.usage?.cost?.({ startDate: date, endDate: date, agentId: agent.agentId });
       const total = result?.totals?.totalCost;
       // An "unknown" presentation means the backend counted tokens but could not price them.
-      if (total !== undefined && result?.costPresentation?.mode !== 'unknown') summary.todayCostUsd = total;
+      const mode = resolveCostPresentation(null, result ?? null)?.mode;
+      summary.todayCostMode = mode;
+      summary.todayCostUsd = mode === 'unknown' || mode === 'included' || (mode === 'mixed' && !(total && total > 0)) ? undefined : total;
       const tokens = result?.totals?.totalTokens;
       if (tokens !== undefined) summary.todayTokens = tokens;
     }));

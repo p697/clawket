@@ -4,8 +4,7 @@
 /**
  * YouMind Sprite connection entry: the Onboarding "YouMind Sprite" row, the
  * "No agent yet?" YouMind website link, and the Roster "+" add-connection copy.
- * Hidden by owner decision 2026-09-14, restored by owner decision 2026-09-17.
- * Flip to `false` to hide every entry again; existing YouMind connections keep
- * working either way, only the ways to create a new one are gated.
+ * Hidden by owner decision 2026-09-20. Flip to `true` to restore the entries;
+ * existing YouMind connections keep working either way.
  */
-export const YOUMIND_SPRITE_ENTRY_VISIBLE = true;
+export const YOUMIND_SPRITE_ENTRY_VISIBLE = false;

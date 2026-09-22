@@ -2,14 +2,15 @@ import { ChatCacheService } from './chat-cache';
 import { MessageFavoritesService } from './message-favorites';
 import { StorageService } from './storage';
 import { ThreadActivityCacheService } from './thread-activity-cache';
+import { IncomingShareStore } from './incoming-share';
 
 export async function clearAccountCache(): Promise<void> {
-  await Promise.all([
+  await IncomingShareStore.clearConsumedAfter(async () => { await Promise.all([
     ChatCacheService.clearAll(),
     ThreadActivityCacheService.clearAll(),
     MessageFavoritesService.clearAll(),
     StorageService.clearLifetimeUpgradeAnnouncementShown(),
-  ]);
+  ]); });
 }
 
 /**
@@ -37,11 +38,11 @@ export async function resetAccountDevice(input: Readonly<{
   for (const connectionId of input.connectionIds) {
     await input.removeConnection(connectionId);
   }
-  await Promise.all([
+  await IncomingShareStore.clearConsumedAfter(async () => { await Promise.all([
     ChatCacheService.clearAll(),
     ThreadActivityCacheService.clearAll(),
     MessageFavoritesService.clearAll(),
     StorageService.clearIdentity(),
     StorageService.clearLegacyGatewayConfig(),
-  ]);
+  ]); });
 }

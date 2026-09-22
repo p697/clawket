@@ -83,7 +83,7 @@ export function HeaderPill({
         attentionTone={attentionTone}
       />}
       <View style={styles.labels}>
-        <Text style={[styles.name, { color: theme.colors.ink }]} numberOfLines={1}>
+        <Text style={[styles.name, { color: theme.colors.ink }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>
           {name}
         </Text>
         {working ? (
@@ -93,6 +93,7 @@ export function HeaderPill({
         ) : subtitle.trim() ? <Animated.Text
           style={[styles.subtitle, { color: theme.colors.inkSecondary }, subtitleAnimatedStyle]}
           numberOfLines={1}
+          maxFontSizeMultiplier={1}
         >
           {subtitle}
         </Animated.Text> : null}

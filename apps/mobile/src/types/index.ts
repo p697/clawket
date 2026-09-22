@@ -194,6 +194,7 @@ export interface SessionsListPayload {
 }
 
 export interface ChatEventPayload {
+  unappliedInput?: string;
   runId: string;
   sessionKey: string;
   seq: number;

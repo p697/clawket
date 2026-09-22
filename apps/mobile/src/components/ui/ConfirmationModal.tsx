@@ -106,7 +106,7 @@ function createStyles(
     root: {
       flex: 1,
       justifyContent: 'center',
-      paddingHorizontal: Space.lg,
+      paddingHorizontal: Space.xl,
     },
     backdrop: {
       ...StyleSheet.absoluteFill,
@@ -126,7 +126,7 @@ function createStyles(
       flexDirection: 'row',
       alignItems: 'center',
       paddingHorizontal: Space.lg,
-      paddingTop: Space.sm,
+      paddingTop: Space.md,
     },
     sideSlot: {
       width: ControlSize.floatingButton,
@@ -145,9 +145,9 @@ function createStyles(
     },
     content: {
       paddingHorizontal: Space.lg,
-      paddingTop: Space.sm,
-      paddingBottom: Space.lg,
-      gap: Space.lg,
+      paddingTop: Space.md,
+      paddingBottom: Space.xl,
+      gap: Space.xl,
     },
     message: {
       color: colors.inkSecondary,

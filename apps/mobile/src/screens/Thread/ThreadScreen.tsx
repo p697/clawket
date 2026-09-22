@@ -1,3 +1,15 @@
+import { SessionFilesSheet } from './components/SessionFilesSheet';
+import { Alert } from 'react-native';
+import { createReplyConversation, replyConversationDraft } from '../../services/reply-conversation';
+import { readSkillDraft } from '../../chat/skill-draft';
+import { useManualSession } from '../../services/manual-sessions';
+import { RunInputSheet } from './components/RunInputSheet';
+import { DraftRecoverySheet } from './components/DraftRecoverySheet';
+import { useVoiceShortcut } from './useVoiceShortcut';
+import { SelectedSkill } from './components/SelectedSkill';
+import { useSharedDraft } from '../../features/sharing/useSharedDraft';
+import { SkillPickerSheet } from './components/SkillPickerSheet';
+import { scheduledConversationPrompt } from '../../chat/scheduled-conversation';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Clipboard from 'expo-clipboard';
 import type { TFunction } from 'i18next';
@@ -183,8 +195,14 @@ function ThreadScreenContent({
   const [activationFailure, setActivationFailure] = useState<Readonly<{
     error: unknown;
   }> | null>(null);
+  const [draftRecoveryVisible, setDraftRecoveryVisible] = useState(false);
+  const [recoveringDraft, setRecoveringDraft] = useState(false);
   const [addSheetVisible, setAddSheetVisible] = useState(false);
   const [commandsSheetVisible, setCommandsSheetVisible] = useState(false);
+  const [selectedSkill, setSelectedSkill] = useState<{ scope: string; name: string; prefix: string } | null>(null);
+  const [runInputId, setRunInputId] = useState<string | null>(null);
+  const [sessionFilesVisible, setSessionFilesVisible] = useState(false);
+  const [skillPickerVisible, setSkillPickerVisible] = useState(false);
   const [shareMessage, setShareMessage] = useState<UiMessage | null>(null);
   const [cronActivity, setCronActivity] = useState<ThreadCronActivity>(NO_CRON_ACTIVITY);
   const [cronHydratedScope, setCronHydratedScope] = useState<string | null>(null);
@@ -229,6 +247,10 @@ function ThreadScreenContent({
 
   useEffect(() => {
     setShareMessage(null);
+    setRunInputId(null);
+    setSkillPickerVisible(false);
+    setSessionFilesVisible(false);
+    setDraftRecoveryVisible(false);
     setAddSheetVisible(false);
     setCommandsSheetVisible(false);
   }, [connectionId, sessionKey]);
@@ -236,7 +258,8 @@ function ThreadScreenContent({
   const rosterSession = connections.roster.find((group) => group.connection.id === connectionId)
     ?.agents.find((row) => row.agent.agentId === agentId)?.sessions?.find((session) => session.key === sessionKey);
   const mainConversation = isMainConversation({ sessionKey, mainSessionKey: app.mainSessionKey, kind: rosterSession?.kind });
-  const sessionPreview = !locked && !mainConversation && !isPro && !sessionHistoryGraceActive;
+  const manualSession = useManualSession(connectionId, agentId, sessionKey);
+  const sessionPreview = !locked && !manualSession && !mainConversation && !isPro && !sessionHistoryGraceActive;
   const previewSnapshot = useRef<SessionPreviewSnapshot | null>(null);
   const controller = useChatController({
     adapter,
@@ -247,6 +270,52 @@ function ThreadScreenContent({
     chatSessionRequest: app.chatSessionRequest,
     clearChatSessionRequest: app.clearChatSessionRequest,
   });
+  const consumedComposerDraft = useRef<string | null>(null);
+  useEffect(() => {
+    const draft = route.params.composerDraft;
+    if (!draft || !focused || !controller.draftReady || controller.sessionKey !== sessionKey || !routeIsActive || locked || sessionPreview) return;
+    const key = JSON.stringify([connectionId, agentId, sessionKey, draft.id]);
+    if (consumedComposerDraft.current === key) return;
+    consumedComposerDraft.current = key;
+    // Restore the session's own draft first and preserve any existing unsent text.
+    controller.setInput(controller.input ? `${controller.input}\n\n${draft.text}` : draft.text);
+    navigation.setParams({ composerDraft: undefined });
+  }, [route.params.composerDraft, controller.draftReady, controller.sessionKey, controller.input, controller.setInput,
+    connectionId, agentId, sessionKey, routeIsActive, focused, locked, sessionPreview, navigation]);
+  const skillScope = `${connectionId}:${agentId}:${sessionKey}`;
+  const activeSkill = selectedSkill?.scope === skillScope && controller.input.startsWith(selectedSkill.prefix) ? selectedSkill
+    : controller.draftReady && controller.sessionKey === sessionKey ? readSkillDraft(controller.input) : null;
+  const displayInput = activeSkill ? controller.input.slice(activeSkill.prefix.length) : controller.input;
+  const sharedDraft = useSharedDraft({ shareId: route.params.shareId, scope: `${connectionId}:${agentId}:${sessionKey}`,
+    ready: controller.draftReady && !locked && !sessionPreview && routeIsActive && controller.sessionKey === sessionKey,
+    capabilities, input: controller.input, images: controller.pendingImages, submittedAt: controller.messageSubmittedAt, acceptedAt: controller.messageAcceptedAt, acceptedSubmission: controller.acceptedSubmission,
+    setInput: controller.setInput, setImages: controller.setPendingImages });
+  useVoiceShortcut({
+    requested: route.params.shortcut === 'voice',
+    scope: `${connectionId}:${agentId}:${sessionKey}`,
+    ready: focused && controller.draftReady && controller.sessionKey === sessionKey && routeIsActive
+      && !locked && !sessionPreview && controller.voiceInputSupported,
+    start: controller.startVoiceInput,
+    consume: () => navigation.setParams({ shortcut: undefined }),
+  });
+  useEffect(() => {
+    const shortcut = route.params.shortcut;
+    if (!shortcut || shortcut === 'voice' || !controller.draftReady || controller.sessionKey !== sessionKey || !routeIsActive || locked || sessionPreview) return;
+    if ((shortcut === 'camera' || shortcut === 'photos') && capabilities.attachments && controller.canAddMoreImages) {
+      controller.composerRef.current?.blur();
+      // Let the native navigation transition settle before presenting the system picker.
+      const timer = setTimeout(() => {
+        navigation.setParams({ shortcut: undefined });
+        void (shortcut === 'camera' ? controller.takePhoto() : controller.pickImage()).catch(() => {
+          Alert.alert(t('Failed'));
+        });
+      }, 350);
+      return () => clearTimeout(timer);
+    }
+    navigation.setParams({ shortcut: undefined });
+    if (shortcut === 'skills' && capabilities.skills) setSkillPickerVisible(true);
+    else controller.composerRef.current?.focus();
+  }, [route.params.shortcut, controller.draftReady, controller.sessionKey, sessionKey, routeIsActive, locked, sessionPreview, capabilities.skills, capabilities.attachments, navigation, controller.composerRef, controller.voiceInputSupported, controller.canAddMoreImages, controller.takePhoto, controller.pickImage, t]);
   const currentSession = controller.sessions.find((session) => session.key === sessionKey);
   const lastReadRevisionRef = useRef<string | null>(null);
   // Read watermarks follow the same human-activity clock as roster unread, so a
@@ -673,11 +742,33 @@ function ThreadScreenContent({
     setShareMessage(message);
   }, []);
 
+  const branchBusy = useRef(false);
+  const branchScope = useMemo(() => ({ active: true }), [connectionId, agentId, sessionKey, focused, locked, adapter]);
+  useEffect(() => () => { branchScope.active = false; }, [branchScope]);
+  const handleBranchMessage = useCallback((message: UiMessage) => {
+    if (!adapter || !focused || locked || sessionPreview || branchBusy.current || !branchScope.active) return;
+    branchBusy.current = true;
+    controller.composerRef.current?.blur();
+    void createReplyConversation(adapter, agentId, sessionKey, message).then(session => {
+      if (!branchScope.active || getConnectionRuntime().getSnapshot().activeAdapter !== adapter) return;
+      navigation.push('Thread', { connectionId, agentId, sessionKey: session.key, from: 'panel' });
+    }).catch(() => {
+      if (branchScope.active) Alert.alert(t('Error', { ns: 'common' }), t('Unable to start a new chat'));
+    }).finally(() => { branchBusy.current = false; });
+  }, [adapter, focused, locked, sessionPreview, branchScope, controller.composerRef, agentId, sessionKey, connectionId, navigation, t]);
+
   const messageActions = useMemo(() => ({
     onCopy: handleCopyMessage,
     onToggleFavorite: handleToggleFavorite,
     onShare: handleShareMessage,
-  }), [handleCopyMessage, handleShareMessage, handleToggleFavorite]);
+    onBranch: capabilities.sessionCreate && !sessionPreview ? handleBranchMessage : undefined,
+    canBranch: (message: UiMessage) => Boolean(replyConversationDraft(message)),
+    canSchedule: (message: UiMessage) => Boolean(scheduledConversationPrompt(visibleMessages, message.id)),
+    onSchedule: capabilities.cronCreate && !sessionPreview ? (message: UiMessage) => {
+      const cronPrompt = scheduledConversationPrompt(visibleMessages, message.id);
+      if (cronPrompt) navigation.navigate('AgentSettingsSection', { connectionId, agentId, section: 'cron', action: 'create-cron', cronPrompt });
+    } : undefined,
+  }), [handleBranchMessage, capabilities.sessionCreate, handleCopyMessage, handleShareMessage, handleToggleFavorite, capabilities.cronCreate, sessionPreview, visibleMessages, navigation, connectionId, agentId]);
 
   const {
     canSendQueuedNow,
@@ -714,12 +805,13 @@ function ThreadScreenContent({
   }, [controller.pendingImages, controller.preview]);
 
   const handleOpenAddMenu = useCallback(() => {
+    controller.composerRef.current?.blur();
     if (onOpenAddMenu) {
       onOpenAddMenu();
       return;
     }
     setAddSheetVisible(true);
-  }, [onOpenAddMenu]);
+  }, [onOpenAddMenu, controller.composerRef]);
 
   const handleAddPresented = useCallback<NonNullable<ThreadAddSheetProps['onPresented']>>(({ photoAccess }) => {
     analyticsEvents.chatAddMenuOpened({ backend: analyticsBackend, photo_access: photoAccess });
@@ -738,7 +830,8 @@ function ThreadScreenContent({
   // Every Add sheet entry is capability-gated here so the sheet never offers
   // an action the active backend cannot serve.
   const addSheetActions = useMemo(() => ({
-    onOpenSkills: capabilities.skills ? () => openAgentSection('skills') : undefined,
+    onOpenSessionFiles: capabilities.sessionFiles && !sessionPreview ? () => setSessionFilesVisible(true) : undefined,
+    onOpenSkills: capabilities.skills && !sessionPreview ? () => setSkillPickerVisible(true) : undefined,
     onOpenCommands: capabilities.slashCommands && !sessionPreview ? openCommandsSheet : undefined,
     onCreateScheduledTask: capabilities.cronCreate
       ? () => openAgentSection('cron', 'create-cron', controller.input.trim() || undefined)
@@ -746,6 +839,7 @@ function ThreadScreenContent({
     onOpenTools: capabilities.tools ? () => openAgentSection('tools') : undefined,
   }), [
     capabilities.cronCreate,
+    capabilities.sessionFiles,
     capabilities.skills,
     capabilities.slashCommands,
     capabilities.tools,
@@ -755,6 +849,7 @@ function ThreadScreenContent({
     sessionPreview,
   ]);
   const addMenuAvailable = capabilities.attachments
+    || Boolean(addSheetActions.onOpenSessionFiles)
     || Boolean(addSheetActions.onOpenSkills)
     || Boolean(addSheetActions.onOpenCommands)
     || Boolean(addSheetActions.onCreateScheduledTask)
@@ -804,12 +899,15 @@ function ThreadScreenContent({
           onMain: returnToMain,
         } : undefined}
         compactionNotice={sessionPreview ? undefined : controller.compactionNotice}
-        sendFailure={controller.sendFailure}
+        sendFailure={sharedDraft.failed ? t('Unable to attach shared content') : controller.sendFailure}
         sendFailureDetails={controller.sendFailureDetails}
-        onDismissSendFailure={controller.clearSendFailure}
+        onDismissSendFailure={() => { sharedDraft.dismissError(); controller.clearSendFailure(); }}
         runCards={sessionPreview ? EMPTY_RUN_CARDS : runCards}
         locale={locale}
-        input={controller.input}
+        input={displayInput}
+        selectedSkill={activeSkill ? <SelectedSkill name={activeSkill.name} onRemove={() => {
+          controller.setInput(displayInput); setSelectedSkill(null);
+        }} /> : undefined}
         composerRef={controller.composerRef}
         isRunning={controller.isSending}
         canSend={!sessionPreview && controller.canSend}
@@ -818,10 +916,15 @@ function ThreadScreenContent({
         bottomInset={insets.bottom}
         copy={copy}
         onBack={() => navigation.goBack()}
-        onOpenSessionPanel={onOpenSessionPanel}
-        onOpenSettings={() => navigation.navigate('AgentSettings', { connectionId, agentId })}
-        onChangeInput={controller.setInput}
-        onSend={sessionPreview ? openSessionPaywall : controller.onSend}
+        onOpenSessionPanel={onOpenSessionPanel ? () => { controller.composerRef.current?.blur(); onOpenSessionPanel(); } : undefined}
+        onOpenSettings={() => { controller.composerRef.current?.blur(); navigation.navigate('AgentSettings', { connectionId, agentId }); }}
+        onChangeInput={(value) => {
+          // Composer clears after submission too; never turn that clear back
+          // into a hidden skill-only draft that can be sent a second time.
+          if (!value) { setSelectedSkill(null); controller.setInput(''); }
+          else controller.setInput(activeSkill ? `${activeSkill.prefix}${value}` : value);
+        }}
+        onSend={sessionPreview ? openSessionPaywall : controller.canSteer ? () => { controller.composerRef.current?.blur(); setRunInputId(controller.activeRunId); } : controller.onSend}
         onCancel={requestCancelCurrentRun}
         onOpenAddMenu={addMenuAvailable ? handleOpenAddMenu : undefined}
         onVoice={controller.voiceInputSupported ? controller.toggleVoiceInput : undefined}
@@ -873,6 +976,30 @@ function ThreadScreenContent({
         onSelectThinkingLevel={controller.onSelectStaticThinkLevel}
         onResolveApproval={controller.resolveApproval}
       />
+      <RunInputSheet visible={Boolean(runInputId) && !sessionPreview} scope={`${connectionId}:${agentId}:${sessionKey}`}
+        onClose={() => setRunInputId(null)} onCurrent={() => { if (runInputId) controller.onSteer(runInputId); }} onNext={controller.onSend} canSteer={controller.canSteer && controller.activeRunId === runInputId} />
+      <SessionFilesSheet visible={sessionFilesVisible && focused && !locked && !sessionPreview && routeIsActive} adapter={adapter} sessionKey={sessionKey}
+        online={adapter?.state === 'ready'} onClose={() => setSessionFilesVisible(false)} />
+      <SkillPickerSheet visible={skillPickerVisible && !sessionPreview} adapter={adapter} agentId={agentId}
+        online={adapter?.state === 'ready'} onClose={() => setSkillPickerVisible(false)}
+        onManage={() => openAgentSection('skills')}
+        onSelect={(skill) => {
+          if (!skill.invocation) return;
+          const prefix = `${skill.invocation}\n\n`;
+          setSelectedSkill({ scope: skillScope, name: skill.name, prefix });
+          controller.setInput(`${prefix}${displayInput}`);
+          controller.composerRef.current?.focus();
+        }} />
+      <DraftRecoverySheet visible={draftRecoveryVisible && focused && !locked && !sessionPreview}
+        text={controller.recoverableDraft ?? ''} busy={recoveringDraft} disabled={Boolean(controller.input.trim()) || !controller.recoverableDraft}
+        onClose={() => setDraftRecoveryVisible(false)} onRecover={() => {
+          if (!branchScope.active || !focused || locked || recoveringDraft) return;
+          setRecoveringDraft(true);
+          void controller.recoverLegacyDraft().then((recovered) => {
+            if (recovered && branchScope.active) setDraftRecoveryVisible(false);
+          }).catch(() => { if (branchScope.active) Alert.alert(t('Error', { ns: 'common' }), t('Failed to save', { ns: 'settings' })); })
+            .finally(() => setRecoveringDraft(false));
+        }} />
       <ThreadOverlays
         addVisible={!sessionPreview && addSheetVisible}
         attachmentsEnabled={capabilities.attachments}
@@ -883,10 +1010,12 @@ function ThreadScreenContent({
         onTakePhoto={controller.takePhoto}
         onChooseFile={fileAttachmentsEnabled ? controller.pickFile : undefined}
         onAttachRecentPhotos={capabilities.attachments ? controller.attachLocalImages : undefined}
+        onOpenSessionFiles={addSheetActions.onOpenSessionFiles}
         onOpenSkills={addSheetActions.onOpenSkills}
         onOpenCommands={addSheetActions.onOpenCommands}
         onCreateScheduledTask={addSheetActions.onCreateScheduledTask}
         onOpenTools={addSheetActions.onOpenTools}
+        onRecoverDraft={controller.recoverableDraft && !controller.input.trim() ? () => setDraftRecoveryVisible(true) : undefined}
         onAddPresented={handleAddPresented}
         onAddAction={handleAddAction}
         shareMessage={shareMessage && visibleMessages.some((message) => message.id === shareMessage.id) ? shareMessage : null}

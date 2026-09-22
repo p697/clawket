@@ -1,6 +1,6 @@
 import React from 'react';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
-import { CAPABILITY_MATRIX, type AgentAdapter, type AgentDescriptor } from '@clawket/agent-protocol';
+import { CAPABILITY_MATRIX, type AgentAdapter } from '@clawket/agent-protocol';
 import { SkillDiscoverScreen } from './SkillDiscoverScreen';
 
 const mockPreventRemove = jest.fn();
@@ -57,7 +57,6 @@ jest.mock('../../components/ui/Banner', () => ({ Banner: ({ testID, message, onA
 } }));
 jest.mock('../../components/ui/Skeleton', () => ({ Skeleton: (props: unknown) => require('react').createElement('View', props) }));
 
-const agent = { connectionId: 'studio', agentId: 'main', name: 'Main', mainSessionKey: 'agent:main:main', isMain: true } as unknown as AgentDescriptor;
 const SKILL_URL = 'https://clawhub.ai/spclaudehome/skills/skill-vetter';
 
 function adapterWith(patch: Partial<AgentAdapter> = {}): AgentAdapter {
@@ -72,7 +71,6 @@ function adapterWith(patch: Partial<AgentAdapter> = {}): AgentAdapter {
 function renderPage(patch: Partial<React.ComponentProps<typeof SkillDiscoverScreen>> = {}) {
   const props: React.ComponentProps<typeof SkillDiscoverScreen> = {
     adapter: adapterWith(),
-    agent,
     backend: 'openclaw',
     online: true,
     navigation: { goBack: jest.fn() },
@@ -95,6 +93,11 @@ describe('SkillDiscoverScreen', () => {
   it('opens the ClawHub catalog and grows an install footer only on a skill page', async () => {
     const { view, props, web, navigateTo } = renderPage();
     expect(web().props.source).toEqual({ uri: 'https://clawhub.ai/skills' });
+    // Android's Fabric delegate casts this prop to Double before the native
+    // manager sees it; the iOS-only string convenience crashes Android.
+    expect(typeof web().props.decelerationRate).toBe('number');
+    expect(web().props.decelerationRate).toBeGreaterThan(0);
+    expect(web().props.decelerationRate).toBeLessThan(1);
     expect(view.getByTestId('skill-discover-title').props.children).toBe('Discover');
     expect(view.queryByTestId('skill-discover-footer')).toBeNull();
     expect(view.queryByTestId('skill-discover-close')).toBeNull();
@@ -108,10 +111,8 @@ describe('SkillDiscoverScreen', () => {
     fireEvent.press(view.getByTestId('skill-discover-install'));
     await waitFor(() => expect(props.onInstallRequested).toHaveBeenCalledTimes(1));
     expect(mockAnalytics.skillInstallTapped).toHaveBeenCalledWith({ source: 'clawhub_web', backend: 'openclaw' });
-    expect(props.adapter.prompt).toHaveBeenCalledWith(agent.mainSessionKey, expect.objectContaining({
-      text: expect.stringContaining('Command: openclaw skills install @spclaudehome/skill-vetter'),
-      idempotencyKey: expect.stringMatching(/^skill-install:\d+:spclaudehome\/skill-vetter$/),
-    }));
+    expect(props.onInstallRequested).toHaveBeenCalledWith(expect.stringContaining('Command: openclaw skills install @spclaudehome/skill-vetter'));
+    expect(props.adapter.prompt).not.toHaveBeenCalled();
     // The route hold is released before the chat navigation runs.
     expect(mockPreventRemove.mock.calls.at(-1)?.[0]).toBe(false);
 
@@ -119,14 +120,16 @@ describe('SkillDiscoverScreen', () => {
     expect(view.queryByTestId('skill-discover-footer')).toBeNull();
   });
 
-  it('asks Hermes through its own skills hub command', async () => {
-    const adapter = adapterWith({ capabilities: { ...CAPABILITY_MATRIX.hermes } });
-    const { view, navigateTo } = renderPage({ adapter, backend: 'hermes' });
+  it('prefills Hermes without calling its available direct install operation', async () => {
+    const install = jest.fn(() => new Promise<void>(() => {}));
+    const adapter = adapterWith({ capabilities: { ...CAPABILITY_MATRIX.hermes }, management: { skills: { install } } as unknown as AgentAdapter['management'] });
+    const { view, props, navigateTo } = renderPage({ adapter, backend: 'hermes' });
     navigateTo(SKILL_URL);
     fireEvent.press(view.getByTestId('skill-discover-install'));
-    await waitFor(() => expect(adapter.prompt).toHaveBeenCalledWith(agent.mainSessionKey, expect.objectContaining({
-      text: expect.stringContaining('Command: hermes skills install skill-vetter'),
-    })));
+    await waitFor(() => expect(props.onInstallRequested).toHaveBeenCalledWith(expect.stringContaining('Command: hermes skills install skill-vetter')));
+    expect(adapter.prompt).not.toHaveBeenCalled();
+    expect(install).not.toHaveBeenCalled();
+
   });
 
   it('keeps the page on ClawHub and opens other sites in the system browser', () => {
@@ -166,7 +169,7 @@ describe('SkillDiscoverScreen', () => {
     expect(mockPreventRemove.mock.calls.at(-1)?.[0]).toBe(false);
   });
 
-  it('hides installation without the capability and disables it while the Agent is offline', () => {
+  it('hides installation without the capability and allows offline draft preparation', () => {
     const readOnly = renderPage({ adapter: adapterWith({ capabilities: { ...CAPABILITY_MATRIX.openclaw, skillInstall: false } }) });
     readOnly.navigateTo(SKILL_URL);
     expect(readOnly.view.queryByTestId('skill-discover-footer')).toBeNull();
@@ -175,12 +178,13 @@ describe('SkillDiscoverScreen', () => {
     const offline = renderPage({ online: false });
     offline.navigateTo(SKILL_URL);
     expect(offline.view.getByTestId('skill-discover-offline')).toBeTruthy();
-    expect(offline.view.getByTestId('skill-discover-install').props.disabled).toBe(true);
+    expect(offline.view.getByTestId('skill-discover-install').props.disabled).toBe(false);
     fireEvent.press(offline.view.getByTestId('skill-discover-install'));
     expect(offline.props.adapter.prompt).not.toHaveBeenCalled();
+    expect(offline.props.onInstallRequested).toHaveBeenCalledTimes(1);
   });
 
-  it('shows a load failure with retry and keeps a rejected install on the page', async () => {
+  it('shows a load failure with retry and never waits for a backend prompt', async () => {
     const adapter = adapterWith({ prompt: jest.fn(async () => { throw new Error('Gateway refused'); }) });
     const { view, props, web, navigateTo } = renderPage({ adapter });
     act(() => { (web().props as { onError: () => void }).onError(); });
@@ -190,8 +194,8 @@ describe('SkillDiscoverScreen', () => {
 
     navigateTo(SKILL_URL);
     fireEvent.press(view.getByTestId('skill-discover-install'));
-    await waitFor(() => expect(view.getByTestId('skill-discover-install-error').props.message).toBe('Gateway refused'));
-    expect(props.onInstallRequested).not.toHaveBeenCalled();
-    expect(view.getByTestId('skill-discover-install').props.disabled).toBe(false);
+    await waitFor(() => expect(props.onInstallRequested).toHaveBeenCalledTimes(1));
+    expect(adapter.prompt).not.toHaveBeenCalled();
+
   });
 });

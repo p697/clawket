@@ -1,6 +1,9 @@
 jest.mock('./chat-cache', () => ({
   ChatCacheService: { clearAll: jest.fn(async () => undefined) },
 }));
+jest.mock('./incoming-share', () => ({
+  IncomingShareStore: { clearConsumedAfter: jest.fn(async (clear: () => Promise<void>) => clear()) },
+}));
 jest.mock('./message-favorites', () => ({
   MessageFavoritesService: { clearAll: jest.fn(async () => undefined) },
 }));

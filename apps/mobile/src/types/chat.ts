@@ -29,10 +29,13 @@ export type UiApproval =
     /** Optional for compatibility with approval cards restored from the pre-3.0 cache. */
     kind?: 'exec';
     id: string;
+    resolving?: boolean;
+    resolutionError?: boolean;
     command: string;
+    decisions?: ReadonlyArray<'allow-once' | 'allow-always' | 'deny'>;
     cwd?: string;
     host?: string;
-    expiresAtMs: number;
+    expiresAtMs: number | null;
     status: UiApprovalStatus;
   }
   | {

@@ -19,7 +19,7 @@
   "Cost unavailable": "Вартість недоступна",
   "Hermes tracked token usage, but it could not determine a reliable dollar cost for this route.": "Hermes урахував витрату токенів, але не зміг надійно визначити вартість цього маршруту в доларах.",
   "Mixed cost sources": "Змішані джерела вартості",
-  "This range mixes priced usage with included or unpriced routes, so the dollar total is only a partial view.": "У цьому періоді платне використання змішане з включеними в тариф або неоціненими маршрутами, тому сума в доларах відображає лише частину.",
+  "This range mixes priced usage with included or unpriced routes, so the dollar total is only a partial view.": "До цієї суми включено лише використання з відомою вартістю.",
   "Estimated cost": "Орієнтовна вартість",
   "Hermes is showing an estimate for this route rather than a reconciled bill.": "Hermes показує оцінку для цього маршруту, а не звірений рахунок.",
   "Search logs...": "Пошук у логах…",
@@ -243,7 +243,6 @@
   "Blocked by allowlist": "Заблоковано списком дозволів",
   "Failed to update skill": "Не вдалося оновити навичку",
   "Failed to uninstall skill": "Не вдалося видалити навичку",
-  "Failed to request installation": "Не вдалося надіслати запит на встановлення",
   "Source": "Джерело",
   "Agent timezone": "Часовий пояс Agent",
   "Check configured services and summarize problems and suggested fixes.": "Перевір налаштовані служби й підсумуй проблеми та запропоновані рішення.",
@@ -380,5 +379,15 @@
   "Disable {{name}}?": "Вимкнути {{name}}?",
   "This account starts receiving messages again.": "Цей обліковий запис знову отримуватиме повідомлення.",
   "This account stops receiving messages until you enable it again.": "Цей обліковий запис не отримуватиме повідомлень, доки ви його не ввімкнете знову.",
-  "Failed to update channel": "Не вдалося оновити канал"
+  "Failed to update channel": "Не вдалося оновити канал",
+  "About me": "Про мене",
+  "Version history": "Історія версій",
+  "No saved versions": "Немає збережених версій",
+  "This file changed. Reopen it before saving.": "Файл змінено. Відкрийте його знову перед збереженням.",
+  "Model health": "Стан моделі",
+  "Global model": "Глобальна модель",
+  "Test connections": "Перевірити з’єднання",
+  "Restore version": "Відновити версію",
+  "This file is too large for version history.": "Файл завеликий для збереження історії версій.",
+  "Scheduled task created": "Заплановане завдання створено"
 }

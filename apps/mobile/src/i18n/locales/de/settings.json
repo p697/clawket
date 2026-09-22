@@ -19,7 +19,7 @@
   "Cost unavailable": "Kosten nicht verfügbar",
   "Hermes tracked token usage, but it could not determine a reliable dollar cost for this route.": "Hermes hat die Token-Nutzung erfasst, konnte für diese Route aber keine verlässlichen Dollarkosten bestimmen.",
   "Mixed cost sources": "Gemischte Kostenquellen",
-  "This range mixes priced usage with included or unpriced routes, so the dollar total is only a partial view.": "Dieser Zeitraum mischt bepreiste Nutzung mit enthaltenen oder unbepreisten Routen, daher ist die Dollar-Summe nur ein Teilbild.",
+  "This range mixes priced usage with included or unpriced routes, so the dollar total is only a partial view.": "Diese Summe enthält nur die Nutzung mit bekannten Kosten.",
   "Estimated cost": "Geschätzte Kosten",
   "Hermes is showing an estimate for this route rather than a reconciled bill.": "Hermes zeigt für diese Route eine Schätzung statt einer abgestimmten Rechnung.",
   "Search logs...": "Logs suchen…",
@@ -243,7 +243,6 @@
   "Blocked by allowlist": "Durch Freigabeliste blockiert",
   "Failed to update skill": "Skill konnte nicht aktualisiert werden",
   "Failed to uninstall skill": "Skill konnte nicht deinstalliert werden",
-  "Failed to request installation": "Installation konnte nicht angefordert werden",
   "Source": "Quelle",
   "Agent timezone": "Agent-Zeitzone",
   "Check configured services and summarize problems and suggested fixes.": "Prüfe konfigurierte Dienste und fasse Probleme und Lösungsvorschläge zusammen.",
@@ -380,5 +379,15 @@
   "Disable {{name}}?": "{{name}} deaktivieren?",
   "This account starts receiving messages again.": "Dieses Konto empfängt wieder Nachrichten.",
   "This account stops receiving messages until you enable it again.": "Dieses Konto empfängt keine Nachrichten mehr, bis du es wieder aktivierst.",
-  "Failed to update channel": "Kanal konnte nicht aktualisiert werden"
+  "Failed to update channel": "Kanal konnte nicht aktualisiert werden",
+  "About me": "Über mich",
+  "Version history": "Versionsverlauf",
+  "No saved versions": "Keine gespeicherten Versionen",
+  "This file changed. Reopen it before saving.": "Die Datei wurde geändert. Öffne sie vor dem Speichern erneut.",
+  "Model health": "Modellstatus",
+  "Global model": "Globales Modell",
+  "Test connections": "Verbindungen testen",
+  "Restore version": "Version wiederherstellen",
+  "This file is too large for version history.": "Diese Datei ist zu groß für den Versionsverlauf.",
+  "Scheduled task created": "Geplante Aufgabe erstellt"
 }

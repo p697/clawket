@@ -10,6 +10,7 @@ import type {
   CachedSessionMeta,
 } from '../../services/chat-cache';
 import type { FavoritedMessage } from '../../services/message-favorites';
+import type { ManualSessionEntry } from '../../services/manual-sessions';
 
 export type SearchFilter = 'all' | 'messages' | 'favorites';
 export type SearchResultKind = 'agent' | 'session' | 'message' | 'favorite';
@@ -84,6 +85,7 @@ export type SearchModelInput = Readonly<{
   favorites: ReadonlyArray<FavoritedMessage>;
   capabilitiesByConnection: Readonly<Record<string, Capabilities | undefined>>;
   isPro: boolean;
+  manualSessions?: readonly ManualSessionEntry[];
   resolveThreadLockedReason?: ResolveSearchThreadLockedReason;
   /** @deprecated Prefer resolveThreadLockedReason so connection and agent quota gates stay distinct. */
   canOpenThread?: (connectionId: string, agentId: string) => boolean;
@@ -293,7 +295,8 @@ function buildSessionResults(
   return [...results.values()].sort(resultSort);
 }
 
-function isMainSearchSession(input: SearchModelInput, connectionId: string, agentId: string, sessionKey: string): boolean {
+export function isFreeSearchSession(input: Pick<SearchModelInput, 'roster' | 'manualSessions'>, connectionId: string, agentId: string, sessionKey: string): boolean {
+  if (input.manualSessions?.some((entry) => entry.connectionId === connectionId && entry.agentId === agentId && entry.key === sessionKey)) return true;
   const agent = input.roster.find((group) => group.connection.id === connectionId)
     ?.agents.find((row) => row.agent.agentId === agentId);
   return isMainConversation({
@@ -319,9 +322,9 @@ function buildMessageResults(
         meta.gatewayConfigId,
         `message:${meta.sessionKey}:${message.id}`,
       );
-      const lockedReason = input.isPro
-        ? threadLockReason(input, meta.gatewayConfigId, meta.agentId)
-        : 'messageHistory';
+      const free = isFreeSearchSession(input, meta.gatewayConfigId, meta.agentId, meta.sessionKey);
+      const lockedReason = threadLockReason(input, meta.gatewayConfigId, meta.agentId)
+        ?? (!input.isPro && !free ? 'messageHistory' : undefined);
       results.set(id, {
         id,
         kind: 'message',
@@ -333,7 +336,7 @@ function buildMessageResults(
         updatedAt: message.timestampMs ?? meta.lastMessageMs ?? meta.updatedAt,
         source: 'cache',
         messageId: message.id,
-        text: !input.isPro && !isMainSearchSession(input, meta.gatewayConfigId, meta.agentId, meta.sessionKey)
+        text: !input.isPro && !free
           ? '' : message.text || message.toolSummary || message.toolName || '',
         ...(lockedReason ? { lockedReason } : {}),
       });
@@ -361,9 +364,9 @@ function buildFavoriteResults(
       connections.get(favorite.gatewayConfigId)?.label,
     )) continue;
     const id = resultKey(favorite.gatewayConfigId, `favorite:${favorite.favoriteKey}`);
-    const lockedReason = input.isPro
-      ? threadLockReason(input, favorite.gatewayConfigId, favorite.agentId)
-      : 'messageHistory';
+    const free = isFreeSearchSession(input, favorite.gatewayConfigId, favorite.agentId, favorite.sessionKey);
+    const lockedReason = threadLockReason(input, favorite.gatewayConfigId, favorite.agentId)
+      ?? (!input.isPro && !free ? 'messageHistory' : undefined);
     results.set(id, {
       id,
       kind: 'favorite',
@@ -376,7 +379,7 @@ function buildFavoriteResults(
       source: 'cache',
       favoriteKey: favorite.favoriteKey,
       messageId: favorite.messageId,
-      text: !input.isPro && !isMainSearchSession(input, favorite.gatewayConfigId, favorite.agentId, favorite.sessionKey)
+      text: !input.isPro && !free
         ? '' : favorite.text || favorite.toolSummary || favorite.toolName || '',
       ...(lockedReason ? { lockedReason } : {}),
     });

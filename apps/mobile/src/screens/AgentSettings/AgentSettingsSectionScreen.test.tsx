@@ -638,7 +638,7 @@ describe('AgentSettingsSectionScreen host', () => {
     });
   });
 
-  it('opens the ClawHub discovery page from the header as its own screen and returns to chat after an install request', () => {
+  it('opens the ClawHub discovery page from the header as its own screen and returns to main chat with reviewable installation text', () => {
     const props = screenProps('skills', jest.fn());
     const view = render(<AgentSettingsSectionScreen {...props} />);
     fireEvent.press(view.getByTestId('agent-skills-discover'));
@@ -648,13 +648,13 @@ describe('AgentSettingsSectionScreen host', () => {
     view.rerender(<AgentSettingsSectionScreen {...props} route={{ ...props.route, params: { ...props.route.params, action: 'discover-skills' } }} />);
     const page = view.getByTestId('mock-skill-discover-screen');
     expect(page.props.backend).toBe('openclaw');
-    expect(page.props.agent.agentId).toBe('main');
     expect(page.props.online).toBe(true);
     expect(view.queryByTestId('mock-skills-section')).toBeNull();
     expect(view.queryByTestId('agent-settings-section-screen')).toBeNull();
-    fireEvent(page, 'installRequested');
-    expect(props.navigation.navigate).toHaveBeenCalledWith('Thread', expect.objectContaining({
+    fireEvent(page, 'installRequested', 'Install the selected skill');
+    expect(props.navigation.popTo).toHaveBeenCalledWith('Thread', expect.objectContaining({
       connectionId: 'studio', agentId: 'main', sessionKey: agent.mainSessionKey,
+      composerDraft: { id: expect.any(String), text: 'Install the selected skill' },
     }));
   });
 
@@ -791,6 +791,7 @@ function screenProps(
     navigation: {
       goBack: jest.fn(),
       push: jest.fn(),
+      popTo: jest.fn(),
       dispatch: jest.fn(),
       addListener: jest.fn(() => jest.fn()),
       navigate: jest.fn(),

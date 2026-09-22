@@ -19,7 +19,7 @@
   "Cost unavailable": "लागत उपलब्ध नहीं",
   "Hermes tracked token usage, but it could not determine a reliable dollar cost for this route.": "Hermes ने टोकन उपयोग ट्रैक किया, लेकिन इस रूट के लिए विश्वसनीय डॉलर लागत तय नहीं कर सका।",
   "Mixed cost sources": "मिश्रित लागत स्रोत",
-  "This range mixes priced usage with included or unpriced routes, so the dollar total is only a partial view.": "इस अवधि में मूल्य वाले उपयोग के साथ शामिल या बिना मूल्य वाले रूट मिले हैं, इसलिए डॉलर कुल केवल आंशिक दृश्य है।",
+  "This range mixes priced usage with included or unpriced routes, so the dollar total is only a partial view.": "इस कुल में केवल वह उपयोग शामिल है जिसकी लागत ज्ञात है।",
   "Estimated cost": "अनुमानित लागत",
   "Hermes is showing an estimate for this route rather than a reconciled bill.": "Hermes इस रूट के लिए मिलान किए गए बिल के बजाय अनुमान दिखा रहा है।",
   "Search logs...": "लॉग खोजें…",
@@ -243,7 +243,6 @@
   "Blocked by allowlist": "अनुमति सूची द्वारा अवरुद्ध",
   "Failed to update skill": "स्किल अपडेट नहीं हो सकी",
   "Failed to uninstall skill": "स्किल अनइंस्टॉल नहीं हो सकी",
-  "Failed to request installation": "इंस्टॉलेशन का अनुरोध नहीं किया जा सका",
   "Source": "स्रोत",
   "Agent timezone": "Agent का समय क्षेत्र",
   "Check configured services and summarize problems and suggested fixes.": "कॉन्फ़िगर की गई सेवाओं की जाँच करके समस्याओं और सुझाए गए समाधानों का सार दें।",
@@ -380,5 +379,15 @@
   "Disable {{name}}?": "{{name}} बंद करें?",
   "This account starts receiving messages again.": "यह खाता फिर से संदेश प्राप्त करना शुरू करेगा।",
   "This account stops receiving messages until you enable it again.": "जब तक आप इसे दोबारा चालू नहीं करते, यह खाता संदेश प्राप्त नहीं करेगा।",
-  "Failed to update channel": "चैनल अपडेट नहीं हो सका"
+  "Failed to update channel": "चैनल अपडेट नहीं हो सका",
+  "About me": "मेरे बारे में",
+  "Version history": "संस्करण इतिहास",
+  "No saved versions": "कोई सहेजा गया संस्करण नहीं",
+  "This file changed. Reopen it before saving.": "फ़ाइल बदल गई है। सहेजने से पहले इसे फिर खोलें।",
+  "Model health": "मॉडल की स्थिति",
+  "Global model": "वैश्विक मॉडल",
+  "Test connections": "कनेक्शन जाँचें",
+  "Restore version": "यह संस्करण बहाल करें",
+  "This file is too large for version history.": "यह फ़ाइल संस्करण इतिहास के लिए बहुत बड़ी है।",
+  "Scheduled task created": "शेड्यूल किया गया कार्य बनाया गया"
 }

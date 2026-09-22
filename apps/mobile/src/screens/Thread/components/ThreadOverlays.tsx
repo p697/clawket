@@ -34,10 +34,12 @@ export type ThreadOverlaysProps = Readonly<{
   onTakePhoto: () => void;
   onChooseFile?: () => void;
   onAttachRecentPhotos?: ThreadAddSheetProps['onAttachRecentPhotos'];
+  onOpenSessionFiles?: () => void;
   onOpenSkills?: () => void;
   onOpenCommands?: () => void;
   onCreateScheduledTask?: () => void;
   onOpenTools?: () => void;
+  onRecoverDraft?: () => void;
   onAddPresented?: ThreadAddSheetProps['onPresented'];
   onAddAction?: ThreadAddSheetProps['onAction'];
   shareMessage: UiMessage | null;
@@ -97,10 +99,12 @@ export function ThreadOverlays({
   onTakePhoto,
   onChooseFile,
   onAttachRecentPhotos,
+  onOpenSessionFiles,
   onOpenSkills,
   onOpenCommands,
   onCreateScheduledTask,
   onOpenTools,
+  onRecoverDraft,
   onAddPresented,
   onAddAction,
   shareMessage,
@@ -127,10 +131,12 @@ export function ThreadOverlays({
         onTakePhoto={onTakePhoto}
         onChooseFile={onChooseFile}
         onAttachRecentPhotos={onAttachRecentPhotos}
+        onOpenSessionFiles={onOpenSessionFiles}
         onOpenSkills={onOpenSkills}
         onOpenCommands={onOpenCommands}
         onCreateScheduledTask={onCreateScheduledTask}
         onOpenTools={onOpenTools}
+        onRecoverDraft={onRecoverDraft}
         onPresented={onAddPresented}
         onAction={onAddAction}
       />

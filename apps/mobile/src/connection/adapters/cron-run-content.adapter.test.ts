@@ -119,6 +119,65 @@ describe('OpenClaw cron run content', () => {
 });
 
 describe('Hermes cron run content', () => {
+  it('negotiates model pins, keeps model namespaces, preserves unchanged pins and clears to defaults', async () => {
+    const fake = new FakeGateway();
+    let raw = { id: 'qa', name: 'QA', enabled: true, prompt: 'Test', model: null as string | null, provider: null as string | null,
+      schedule: { kind: 'cron', expr: '0 9 * * *' }, deliver: 'local', created_at: null, paused_at: null, last_run_at: null, next_run_at: null, last_status: null };
+    const create = jest.fn(async (input: Record<string, unknown>) => (raw = { ...raw, ...input }));
+    const update = jest.fn(async (_id: string, input: Record<string, unknown>) => (raw = { ...raw, ...input }));
+    Object.assign(fake, { listModels: async () => [{ id: 'meta/model', provider: 'openrouter', name: 'Model' }],
+      createHermesCronJob: create, getHermesCronJob: async () => raw, updateHermesCronJob: update });
+    const adapter = new HermesAdapter(connection('hermes'), { gateway: fake as unknown as GatewayClient, historyCache: null });
+    const job = { name: 'QA', enabled: true, schedule: { kind: 'cron' as const, expr: '0 9 * * *' }, sessionTarget: 'isolated' as const,
+      wakeMode: 'now' as const, payload: { kind: 'agentTurn' as const, message: 'Test', model: 'openrouter/meta/model' } };
+    try {
+      await expect(adapter.management.cron!.add!(job)).rejects.toThrow('Update the Bridge');
+      expect(create).not.toHaveBeenCalled();
+      fake.emit('health', { capabilities: ['bridge.capabilities.v2', 'hermes.multi-session.v2', 'hermes.cron-model.v1'] });
+      expect(adapter.capabilities.cronModel).toBe(true);
+      const created = await adapter.management.cron!.add!(job);
+      expect(create).toHaveBeenCalledWith(expect.objectContaining({ model: 'meta/model', provider: 'openrouter', base_url: '' }));
+      expect(created.payload).toMatchObject({ model: 'openrouter/meta/model' });
+      await adapter.management.cron!.update!('qa', { payload: job.payload });
+      expect(update).toHaveBeenLastCalledWith('qa', { prompt: 'Test' });
+      await adapter.management.cron!.update!('qa', { payload: { ...job.payload, model: null } });
+      expect(update).toHaveBeenLastCalledWith('qa', { prompt: 'Test', model: '', provider: '', base_url: '' });
+    } finally { adapter.dispose(); }
+  });
+
+  it('shows the complete native response without the scheduler prompt or metadata', async () => {
+    const fake = new FakeGateway();
+    fake.outputDetail = { content: '# Cron Job: QA\n\n**Job ID:** qa\n\n## Prompt\n\nInternal scheduler instructions\n\n## Response\n\n# Report\n\nDone.\n\n## Details\nKept.' };
+    const adapter = new HermesAdapter(connection('hermes'), { gateway: fake as unknown as GatewayClient, historyCache: null });
+    try {
+      expect(await adapter.management?.cron?.runContent?.({ ...runEntry, outputRef: 'result.md' }))
+        .toEqual({ deliveries: [], output: '# Report\n\nDone.\n\n## Details\nKept.' });
+    } finally { adapter.dispose(); }
+  });
+
+  it('uses the native local delivery target and preserves existing external destinations', async () => {
+    const fake = new FakeGateway();
+    const raw = { id: 'qa', name: 'QA', enabled: true, prompt: 'Test', schedule: { kind: 'cron', expr: '0 9 * * *' },
+      deliver: 'local', created_at: null, paused_at: null, last_run_at: null, next_run_at: null, last_status: 'blocked_config' };
+    const create = jest.fn(async () => raw);
+    const get = jest.fn(async () => raw);
+    const update = jest.fn(async (_id: string, patch: Record<string, unknown>) => ({ ...raw, ...patch }));
+    Object.assign(fake, { createHermesCronJob: create, getHermesCronJob: get, updateHermesCronJob: update });
+    const adapter = new HermesAdapter(connection('hermes'), { gateway: fake as unknown as GatewayClient, historyCache: null });
+    try {
+      const created = await adapter.management?.cron?.add?.({ name: 'QA', enabled: true, schedule: { kind: 'cron', expr: '0 9 * * *' },
+        sessionTarget: 'isolated', wakeMode: 'now', payload: { kind: 'agentTurn', message: 'Test' }, delivery: { mode: 'none' } });
+      expect(create).toHaveBeenCalledWith(expect.objectContaining({ deliver: 'local' }));
+      expect(created?.delivery).toEqual({ mode: 'none' });
+      expect(created?.state.lastRunStatus).toBe('error');
+      raw.deliver = 'telegram:qa-destination';
+      await adapter.management?.cron?.update?.('qa', { delivery: { mode: 'announce' } });
+      expect(update).toHaveBeenLastCalledWith('qa', { deliver: 'telegram:qa-destination' });
+      await adapter.management?.cron?.update?.('qa', { delivery: { mode: 'none' } });
+      expect(update).toHaveBeenLastCalledWith('qa', { deliver: 'local' });
+    } finally { adapter.dispose(); }
+  });
+
   it('carries the output file on each run entry and reads its full content on demand', async () => {
     const fake = new FakeGateway();
     fake.outputs = [{

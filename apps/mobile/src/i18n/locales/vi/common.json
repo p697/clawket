@@ -243,5 +243,7 @@
   "Unable to open redemption. Please try again.": "Không thể mở trang đổi mã. Vui lòng thử lại.",
   "Last connected: {{time}}": "Kết nối lần cuối: {{time}}",
   "Check your network and make sure the remote service is running.": "Kiểm tra mạng và đảm bảo dịch vụ từ xa đang chạy.",
-  "View saved messages": "Xem tin nhắn đã lưu"
+  "View saved messages": "Xem tin nhắn đã lưu",
+  "Search and bulk export": "Tìm kiếm và xuất hàng loạt",
+  "Skill and memory versions": "Phiên bản kỹ năng và bộ nhớ"
 }

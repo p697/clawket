@@ -1,5 +1,5 @@
 import { UiMessage } from '../types/chat';
-import { preserveHydratedMessageKeys, preserveMessagePresentation, preserveOptimisticAssistantMessage, prependOlderCachedMessages } from './historyMergePolicy';
+import { preserveHydratedMessageKeys, preserveMessagePresentation, preserveOptimisticAssistantMessage, prependOlderCachedMessages, retireAliasedTools } from './historyMergePolicy';
 
 describe('preserveHydratedMessageKeys', () => {
   const cached: UiMessage = { id: 'cached-row', historyMessageId: 'server-row', renderKey: 'stable-row', role: 'assistant', text: 'Outdated text', timestampMs: 1000 };
@@ -370,6 +370,19 @@ describe('live turn reconciliation', () => {
     expect(refreshed.map(message => message.text)).toEqual(['Check', 'First.', '', 'Answer.', 'Next']);
     expect(preserveOptimisticAssistantMessage(refreshed, aggregate)).toEqual(refreshed);
   });
+  it('places a newly recovered introduction before the tool and final reply, retaining live identities', () => {
+    const missedIntroduction = [user, local[2], local[3]];
+    const remote: UiMessage[] = [user,
+      { id: 'intro', role: 'assistant', text: 'I am reading the instructions.' },
+      { ...local[2], presentationRunId: undefined },
+      { id: 'answer', role: 'assistant', text: 'Answer.' },
+    ];
+    const merged = preserveOptimisticAssistantMessage(missedIntroduction, remote);
+    expect(merged.map(row => row.text)).toEqual(['Check', 'I am reading the instructions.', '', 'Answer.']);
+    expect(merged[2].renderKey).toBe('toolcall_one');
+    expect(merged[3].renderKey).toBe('reply:1000:1');
+    expect(preserveOptimisticAssistantMessage(merged, remote)).toEqual(merged);
+  });
   it('does not attach a local completed turn to another identical prompt', () => {
     const other: UiMessage = { ...user, id: 'other-user', idempotencyKey: 'other-send' };
     const next = [other, { id: 'other-answer', role: 'assistant' as const, text: 'Other answer' }];
@@ -399,5 +412,39 @@ describe('live turn reconciliation', () => {
     expect(preserveOptimisticAssistantMessage([old, fresh], [old])).toEqual([old, fresh]);
     const noMetadata = { ...old, timestampMs: undefined, idempotencyKey: undefined };
     expect(preserveOptimisticAssistantMessage([noMetadata, fresh], [noMetadata])).toEqual([noMetadata, fresh]);
+  });
+});
+
+
+describe('local turn ownership after history echoes', () => {
+  const sent: UiMessage = { id: 'usr_3000', renderKey: 'usr_3000', role: 'user',
+    text: 'OK', timestampMs: 3000, idempotencyKey: 'current-send' };
+
+  it('retains send identity when a confirmed legacy echo omits it', () => {
+    const echo: UiMessage = { id: 'server-user', role: 'user', text: 'OK', timestampMs: 3100 };
+    const adopted = preserveOptimisticAssistantMessage([sent], [echo]);
+    expect(adopted[0]).toMatchObject({ id: echo.id, renderKey: sent.renderKey,
+      idempotencyKey: sent.idempotencyKey, timestampMs: sent.timestampMs });
+    const different = { ...echo, id: 'other-user', idempotencyKey: 'different-send' };
+    expect(preserveOptimisticAssistantMessage(adopted, [different])).toEqual([different, adopted[0]]);
+    expect(preserveOptimisticAssistantMessage(adopted, [])).toEqual(adopted);
+  });
+
+  it('does not acknowledge a repeated prompt with an older row whose UI projection changed', () => {
+    const previous: UiMessage = { id: 'h_old-user', historyMessageId: 'wire-old-user', role: 'user', text: 'OK', timestampMs: 1000 };
+    const wire = { ...previous, id: 'wire-old-user', historyMessageId: undefined };
+    expect(preserveOptimisticAssistantMessage([previous, sent], [wire])).toEqual([wire, sent]);
+  });
+});
+
+describe('confirmed tool aliases', () => {
+  const stale: UiMessage = { id: 'toolcall_native', role: 'tool', text: '', toolName: 'skill_view', toolStatus: 'success' };
+  const canonical: UiMessage = { ...stale, id: 'toolresult_live' };
+  it('retires a source copy only with the exact canonical tool present', () => {
+    expect(retireAliasedTools([stale], [canonical], { native: 'live' })).toEqual([]);
+    expect(retireAliasedTools([stale], [canonical])).toEqual([stale]);
+    expect(retireAliasedTools([stale], [], { native: 'live' })).toEqual([stale]);
+    expect(retireAliasedTools([stale], [{ ...canonical, toolName: 'terminal' }], { native: 'live' })).toEqual([stale]);
+    expect(retireAliasedTools([{ ...stale, role: 'user' }], [canonical], { native: 'live' })).toHaveLength(1);
   });
 });

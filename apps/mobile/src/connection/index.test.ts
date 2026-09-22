@@ -776,6 +776,7 @@ describe('ConnectionCoordinator', () => {
     expect(harness.coordinator.getSnapshot().connectionDetails.alpha).toEqual({
       lastReadyAt: 50,
       bridgeVersion: 'bridge-alpha',
+      bridgeGeneration: 'current',
       bridgeCapabilities: ['bridge.capabilities.v2', 'backend.openclaw.v2'],
     });
 
@@ -785,6 +786,7 @@ describe('ConnectionCoordinator', () => {
     expect(harness.coordinator.getSnapshot().connectionDetails.alpha).toEqual({
       lastReadyAt: 50,
       bridgeVersion: 'bridge-alpha',
+      bridgeGeneration: 'current',
       bridgeCapabilities: ['bridge.capabilities.v2', 'backend.openclaw.v2'],
     });
   });

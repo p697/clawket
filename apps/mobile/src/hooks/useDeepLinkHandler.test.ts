@@ -71,6 +71,8 @@ describe('useDeepLinkHandler', () => {
     activeConnectionId: 'connection-1',
     currentAgentId: 'main',
     mainSessionKey: 'main-session',
+    navigationReady: true,
+    widgetTarget: { agentId: 'hermes', sessionKey: 'main' },
     requestConfirmation: mockRequestConfirmation,
   };
 
@@ -96,6 +98,8 @@ describe('useDeepLinkHandler', () => {
     deps.activeAdapter = mockActiveAdapter as any;
     deps.canAddConnection = undefined;
     deps.activeAccessDeniedReason = null;
+    deps.widgetTarget = { agentId: 'hermes', sessionKey: 'main' };
+    deps.navigationReady = true;
     deps.onOpenPaywall = mockOpenPaywall;
     mockIsReady.mockReturnValue(true);
     mockPrompt.mockResolvedValue({ runId: 'deep-link-run' });
@@ -186,6 +190,43 @@ describe('useDeepLinkHandler', () => {
       simulateUrl('clawket://session?key=abc');
       expect(mockRequestConfirmation).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it('does not reopen the cold-start widget when connection state rerenders, but allows later widget taps', async () => {
+    (Linking.getInitialURL as jest.Mock).mockResolvedValue('clawket://widget?action=chat');
+    setupHook();
+    await flushPromises();
+    expect(mockNavigate).toHaveBeenCalledTimes(1);
+    setupHook();
+    await flushPromises();
+    expect(mockNavigate).toHaveBeenCalledTimes(1);
+    simulateUrl('clawket://widget?action=chat');
+    expect(mockNavigate).toHaveBeenCalledTimes(2);
+    expect(mockPrompt).not.toHaveBeenCalled();
+  });
+
+  it('waits for a real widget Agent and navigation readiness instead of opening a fallback identity', async () => {
+    deps.widgetTarget = null; deps.navigationReady = false;
+    (Linking.getInitialURL as jest.Mock).mockResolvedValue('clawket://widget?action=skills');
+    setupHook(); await flushPromises();
+    expect(mockNavigate).not.toHaveBeenCalled();
+    deps.widgetTarget = { agentId: 'hermes', sessionKey: 'main' }; deps.navigationReady = true;
+    setupHook(); await flushPromises();
+    expect(mockNavigate).toHaveBeenCalledWith('Thread', expect.objectContaining({ agentId: 'hermes', sessionKey: 'main', shortcut: 'skills' }));
+    expect(mockNavigate).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not resume a widget into a replaced connection after purchasing', async () => {
+    deps.widgetTarget = { agentId: 'hermes', sessionKey: 'main', accessDeniedReason: 'gatewayConnections' };
+    (Linking.getInitialURL as jest.Mock).mockResolvedValue('clawket://widget?action=chat');
+    setupHook(); await flushPromises();
+    const resume = mockOpenPaywall.mock.calls[0][1];
+    mockGetSnapshot.mockReturnValue({ activeConnectionId: 'connection-2', activeAdapter: {} });
+    await resume();
+    expect(mockNavigate).not.toHaveBeenCalled();
+    mockGetSnapshot.mockReturnValue({ activeConnectionId: 'connection-1', activeAdapter: mockActiveAdapter });
+    await resume();
+    expect(mockNavigate).toHaveBeenCalledWith('Thread', expect.objectContaining({ connectionId: 'connection-1', agentId: 'hermes' }));
   });
 
   describe('confirmation requests', () => {

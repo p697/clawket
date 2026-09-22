@@ -41,6 +41,7 @@ export type SettingsRowProps = {
   children?: React.ReactNode;
   title?: string;
   subtitle?: string;
+  subtitleLines?: 1 | 2;
   value?: string;
   leading?: React.ReactNode;
   trailing?: React.ReactNode;
@@ -92,6 +93,7 @@ export function SettingsRow({
   children,
   title,
   subtitle,
+  subtitleLines = 2,
   value,
   leading,
   trailing,
@@ -120,7 +122,7 @@ export function SettingsRow({
       {comfortable && leading ? <View style={styles.leadingComfortable}>{leading}</View> : leading}
       <View style={styles.copy}>
         {title ? <Text style={[styles.title, expanded ? styles.titleExpanded : null, destructive ? { color: theme.colors.bad } : null]} numberOfLines={comfortable ? undefined : 2}>{title}</Text> : null}
-        {subtitle ? <Text style={styles.subtitle} numberOfLines={2}>{subtitle}</Text> : null}
+        {subtitle ? <Text style={styles.subtitle} numberOfLines={subtitleLines}>{subtitle}</Text> : null}
       </View>
       <View style={[styles.tail, tailWidth === 'wide' ? styles.tailWide : null]}>
         {attention ? <View testID={testID ? `${testID}-attention` : undefined} style={styles.attention} /> : null}

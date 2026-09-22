@@ -21,6 +21,7 @@ export const AdaptiveBottomSheetModal = React.forwardRef<
 >(function AdaptiveBottomSheetModal(
   {
     adaptiveIpad = true,
+    style,
     backgroundStyle,
     containerStyle,
     detached,
@@ -54,6 +55,7 @@ export const AdaptiveBottomSheetModal = React.forwardRef<
       <BottomSheetModal
         {...props}
         ref={ref}
+        style={style}
         backgroundStyle={backgroundStyle}
         bottomInset={bottomInset}
         containerStyle={containerStyle}
@@ -70,6 +72,15 @@ export const AdaptiveBottomSheetModal = React.forwardRef<
     <BottomSheetModal
       {...props}
       ref={ref}
+      // The background is a sibling of the content, so rounding it alone
+      // cannot clip opaque scroll views or footers in a detached panel.
+      style={[
+        style,
+        {
+          overflow: 'hidden',
+          borderRadius: Radius.bottomSheet,
+        },
+      ]}
       backgroundStyle={[
         backgroundStyle,
         {

@@ -54,6 +54,7 @@ jest.mock('react-native', () => {
   return {
     ActivityIndicator: host('ActivityIndicator'),
     Modal,
+    BackHandler: { addEventListener: jest.fn(() => ({ remove: jest.fn() })) },
     Platform: {
       OS: 'android',
       select: (options: Record<string, unknown>) => options.android ?? options.default,

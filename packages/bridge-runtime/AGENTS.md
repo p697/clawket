@@ -33,6 +33,7 @@ Keep each Hermes implementation file and each Hermes test file at or below 1,200
 2. A native read failure degrades to Bridge-owned sessions and returns a warning; it must not make the Bridge unavailable.
 3. Persist only Bridge-owned session metadata. Do not copy native transcripts into the Clawket store. Reset cancels active work and rotates the Bridge session ID instead of mutating a native record.
 4. Stop, reset, and delete must deterministically release active runs and session resources owned by Clawket.
+5. Preserve Hermes message deltas byte-for-byte, including whitespace-only tokens, newlines and indentation. Identifier normalizers that trim strings must never process streamed text; active history and final text must concatenate the same deltas.
 
 ## Protocol Boundaries
 
@@ -67,6 +68,8 @@ Installation discovery honors explicit runtime options and `HERMES_SOURCE_PATH` 
 The managed Hermes API uses an explicit API key when supplied, otherwise a deterministic SHA-256 derivation of the persisted Bridge token, API URL and Hermes home scope. Pass it to the owned gateway as `API_SERVER_KEY`; never print it. Readiness probes use authenticated `/v1/models`, not the public health endpoint. An already-running API returning 401/403 must report a credential mismatch and must not trigger an automatic replacement. Handle child spawn errors without crashing the Bridge.
 
 Hermes Relay checks cloud socket reachability with matched WebSocket ping/pong independently of local Bridge health. Recycle half-open cloud sockets and clear probe deadlines on stop/replacement; transport pong must not mark the backend ready or reset backend handshake backoff. Ignore frames from replaced cloud sockets.
+
+An explicit current-owner replacement (`4010/duplicate_socket` or `4001/replaced_by_new_bridge`) yields the Hermes Relay runtime until an explicit restart; otherwise two runtimes sharing persisted pairing identity can evict each other forever. Close local transport and cancel probes/retries, report the replacement, and keep ordinary network/dead/orphan-socket recovery. A late replacement event from an already retired socket must not stop its successor.
 
 Ignore late frames from replaced local Bridge sockets too. Cloud status probes are abortable, bounded to 10 seconds and owned by the requesting socket; stop/replacement cancels them. Only an explicit `hasBridge: false` from the current probe may recycle Relay, never a late result or malformed status payload.
 
@@ -118,6 +121,42 @@ Hermes history may include additive `toolCallAliases` (native ID to live ID) fro
 
 ## OpenClaw skill documents
 
+Legacy bootstrap issuance must inspect native credential storage read-only. If SQLite owns `device_bootstrap_tokens`, return the existing bootstrap error so old Apps can use their QR token/password and normal device approval; never write unused JSON credentials or modify SQLite. Keep official mobile setup and JSON-only hosts unchanged. Load the prefix-only `node:sqlite` builtin lazily through `createRequire` so the Node 20-targeted CLI bundle preserves its name.
+
 Only negotiated isolated full-client channels to a loopback Gateway may supply missing `skills.get` / `skills.content.update` methods in the successful handshake's `features.methods`. Preserve native methods and leave remote/legacy forwarding unchanged. Each operation resolves the key through that same authenticated socket's Agent-scoped `skills.status`; never trust client paths or another session's report. Read permission is mandatory; writes additionally require operator.admin and a nonbundled workspace/managed skill. Only the default SKILL.md is writable. Auxiliary scripts/references are read-only, resolved beneath the same authenticated skill directory; reject hidden/unlisted paths, traversal and symlink components. Listing is bounded to 512 visited entries and five directory levels; validate the opened inode again before returning content. Bound documents to 1 MiB and four in-flight status lookups with ten-second deadlines; reject symlinks, hardlinks, non-files, invalid UTF-8 and binary content. Preserve exact source, replace writes atomically, redact filesystem errors, and dispose pending work on challenge, replacement, disconnect or stop. No cloud or Hermes source changes are required.
 
 Close the read descriptor before atomically replacing a skill document so Windows can rename the temporary file. Keep descriptor inspection inside its cleanup guard and revalidate the source inode before replacement.
+
+## Hermes mobile workflows
+
+Native skill installation uses the installed Hermes Hub with an explicit source and owner, retains its security scan, never forces overwrite, and verifies the installed status before returning success. Do not modify the external checkout. `run-control.ts` negotiates `/v1/capabilities` and restricts steering to the exact Bridge-owned active run and session; do not fall back to a new run or replay an uncertain request. Every health/handshake surface must publish the same negotiated capabilities.
+
+Serialize native skill installation and reject existing Hub records or target directories, including manual installs. Advertise installation only with the native target-validation hook. A subprocess-local compatibility shim qualifies only the exact ClawHub resource/download requests with the requested owner; require matching returned owner metadata and verify the installed directory rather than its display name. Preserve native quarantine/scanning and never treat an older lock entry as a successful new install.
+
+Skill source read/write payloads preserve every character, including leading/trailing whitespace and final newlines. Identifier trimming helpers must never normalize document content; otherwise version restore and conflict checks falsely reject the App's own saves.
+
+Resolve Hermes Hub provenance by the contained install path, not a display name. Hub removals must use the native Hub uninstaller so its registry and audit remain consistent; manual skills retain native skill-manager deletion. Reject malformed, escaped or ambiguous registries before deletion, preserve native refusals, and never report an unknown deletion result as success.
+
+Hermes documents require a positively detected native extractor. Bound count, decoded bytes, expanded Office archives and extracted text; never install converters during a request. Preserve the same enriched user content across native/local history for deduplication, while the App renders compact attachment names. Exact-run approvals require negotiated native support and a pending request ID; only acknowledge a decision after the matching native response. Retain unsuccessful requests, expire on run termination, and never resolve every request implicitly. Return accepted-but-unused steering as draft recovery, never replay it automatically.
+
+Image sends retain only an in-memory image count beside clean local text. For history matching, project the native one-marker-per-image representation and keep the existing one-to-one boundary/time matching; never strip literal markers from user prose, merge repeated sends, or persist image bytes/native transcripts in the Bridge store.
+
+## Native Hermes model health
+
+Advertise `hermes.model-health.v1` only after the native configuration/auth/doctor modules import successfully. `model.health` returns bounded provider credential states and optional native doctor probe results, never keys, endpoint details or raw exception text. Reading does not probe; explicit probes are coalesced and rate limited. Keep the operation inside Clawket-owned code and do not modify Hermes source or configuration.
+
+Hermes approvals use a null deadline when native events omit it; never fabricate a timeout. Native `approval_not_pending` / `approval_not_active` retires the exact request, while transport errors retain it. Cron local-only delivery is native `local`, not the client protocol's `none`; normalize legacy writes and repair that exact legacy value before an explicitly requested run. Native processed/skipped/blocked results and output headers are distinct from successful Agent execution; malformed outcomes fail closed and unknown output formats stay unknown.
+
+Native Cron output reads are confined to regular, bounded UTF-8 files under one validated job directory; reject traversal, symlinks and hardlinks. `hermes.cron-model.v1` requires native signature support for model/provider pins; clear pins explicitly and never change the global chat model. Native history exposes stable session-scoped message IDs. A native `stopping` response is only an acknowledgement: preserve the stream/active run and publish cancellation only after a confirmed terminal state or event.
+
+After an event stream ends or fails, poll the exact native run status with abortable, bounded requests and capped backoff. Preserve active ownership until a confirmed terminal status; partial text and completed tools are never completion evidence. Stop/reset/runtime disposal must cancel recovery waits.
+
+Native tool history must preserve structured failures, including nonzero exit codes and interrupted/cancelled results. Never hardcode persisted tool results to success or infer failure from ordinary prose containing error words.
+
+When a native run event stream disconnects, exact-run status polling also recovers `waiting_for_approval` requests. Require matching run IDs in both envelopes, retain resolved-request tombstones for that active run, and never revive acknowledged consent from a stale snapshot. This does not claim process-restart recovery of unowned native runs.
+
+When the installed native run handler positively supports session-history resume and the matching native session has history, omit explicit `conversation_history`: Hermes stringifies that legacy field and loses structured tool IDs. Preserve the old request for unverified versions and locally seeded sessions. Recover only the exact bounded legacy Bridge tool-call repr during read-only history projection; never mutate the native database or evaluate arbitrary text.
+
+## On-demand session files
+
+`clawket.files.list/read` offers bounded assistant-referenced files from the same session under verified local workspaces (Hermes: configured local terminal cwd and outputs). Keep opaque expiring handles, per-session scope, regular-file/size/type checks, and mutation detection on every chunk. Never accept a caller-provided filesystem path, spool file bytes, or add cloud storage. OpenClaw exposes this only on authenticated isolated loopback Gateway channels with native history/workspace read capability. Dispose handles on channel shutdown; Hermes clears them on reset/delete/stop.

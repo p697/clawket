@@ -80,6 +80,95 @@ function createConfig() {
 }
 
 describe('hermes relay runtime helpers', () => {
+  it('converges to one owner when two runtimes share the persisted pairing identity', async () => {
+    vi.useFakeTimers();
+    let owner: FakeSocket | undefined;
+    let cloudConnections = 0;
+    const sockets: FakeSocket[] = [];
+    const createWebSocket = (url: string) => {
+      const socket = new FakeSocket(url);
+      sockets.push(socket);
+      if (url.startsWith('wss:')) {
+        cloudConnections++;
+        socket.once('open', () => {
+          const previous = owner;
+          owner = socket;
+          previous?.close(4010, 'duplicate_socket');
+        });
+      }
+      return socket as never;
+    };
+    const options = { config: createConfig(), bridgeUrl: 'ws://localhost/bridge',
+      reconnectBaseDelayMs: 10, reconnectMaxDelayMs: 10, createWebSocket };
+    const first = new HermesRelayRuntime(options);
+    const second = new HermesRelayRuntime(options);
+    try {
+      first.start(); sockets[0].open(); sockets[1].open();
+      second.start(); sockets[2].open(); sockets[3].open();
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(cloudConnections).toBe(2);
+      expect(first.getSnapshot().running).toBe(false);
+      expect(second.getSnapshot()).toMatchObject({ running: true, relayConnected: true, bridgeConnected: true });
+      expect(owner).toBe(sockets[2]);
+    } finally { await first.stop(); await second.stop(); vi.useRealTimers(); }
+  });
+
+  it.each([
+    [4010, 'duplicate_socket'],
+    [4001, 'replaced_by_new_bridge'],
+  ])('yields to a replacement owner instead of starting a reconnect fight (%s)', async (code, reason) => {
+    vi.useFakeTimers();
+    const sockets: FakeSocket[] = [];
+    const runtime = new HermesRelayRuntime({
+      config: createConfig(), bridgeUrl: 'ws://localhost/bridge',
+      reconnectBaseDelayMs: 10, reconnectMaxDelayMs: 10,
+      createWebSocket: (url, options) => {
+        const socket = new FakeSocket(url, options);
+        sockets.push(socket);
+        return socket as never;
+      },
+    });
+    try {
+      runtime.start(); sockets[0].open(); sockets[1].open();
+      sockets[0].close(code, reason);
+      expect(runtime.getSnapshot()).toMatchObject({
+        running: false, relayConnected: false, bridgeConnected: false,
+        lastError: expect.stringContaining('another Hermes relay runtime'),
+      });
+      expect(sockets[1].readyState).toBe(FakeSocket.CLOSED);
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(sockets).toHaveLength(2);
+      expect(vi.getTimerCount()).toBe(0);
+      // An explicit operator restart is still supported.
+      runtime.start();
+      expect(sockets).toHaveLength(3);
+    } finally { await runtime.stop(); vi.useRealTimers(); }
+  });
+
+  it.each([
+    [4010, 'dead_socket'], [4010, 'orphan_socket'], [1006, ''],
+    [4010, ''], [4001, 'unexpected_reason'],
+  ])('retains automatic recovery for non-replacement closes (%s / %s)', async (code, reason) => {
+    vi.useFakeTimers();
+    const sockets: FakeSocket[] = [];
+    const runtime = new HermesRelayRuntime({
+      config: createConfig(), bridgeUrl: 'ws://localhost/bridge',
+      reconnectBaseDelayMs: 10, reconnectMaxDelayMs: 10,
+      createWebSocket: (url, options) => {
+        const socket = new FakeSocket(url, options);
+        sockets.push(socket);
+        return socket as never;
+      },
+    });
+    try {
+      runtime.start(); sockets[0].open(); sockets[1].open();
+      sockets[0].close(code, reason);
+      await vi.advanceTimersByTimeAsync(100);
+      expect(runtime.getSnapshot().running).toBe(true);
+      expect(sockets).toHaveLength(3);
+    } finally { await runtime.stop(); vi.useRealTimers(); }
+  });
+
   it('suppresses only idle periodic snapshots with explicit zero clients, preserving legacy and reconnect traffic', async () => {
     const sockets: FakeSocket[] = [];
     const runtime = new HermesRelayRuntime({ config: createConfig(), bridgeUrl: 'ws://localhost/bridge',

@@ -36,6 +36,20 @@ describe('Onboarding route model', () => {
     expect(resolveOnboardingAdapterError(new Error('Unexpected response.'))).toBe('server');
   });
 
+  it.each(['expired', 'already been used', 'invalid'])(
+    'does not mistake a %s QR regeneration instruction for rate limiting', (reason) => {
+      expect(resolveOnboardingAdapterError(new Error(
+        `This QR code has ${reason}. Generate a new QR code in Clawket Bridge and try again.`,
+      ))).toBe('pairing_expired');
+    },
+  );
+
+  it.each(['RATE_LIMITED', 'Rate limit exceeded', 'Too many pairing attempts', 'HTTP 429'])(
+    'preserves the actual rate-limit failure %s', (message) => {
+      expect(resolveOnboardingAdapterError(new Error(message))).toBe('rate_limited');
+    },
+  );
+
   it('derives loading, progress, offline, ready, and error page states', () => {
     const base = {
       initialized: true,

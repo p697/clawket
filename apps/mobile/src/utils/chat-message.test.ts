@@ -630,3 +630,16 @@ it('isolates malformed tool prose while preserving code examples and subsequent 
   expect(sanitizeDisplayText('```xml\n' + raw + '\n```')).toContain(raw);
   expect(sanitizeDisplayText('The invoke_name=bash parameter is a string')).toBe('The invoke_name=bash parameter is a string');
 });
+
+it('renders the exact installed-skill instruction as a concise reference without hiding quoted examples', () => {
+  const prefix = 'Use the installed skill "weather" for this request. Read its instructions with skill_view before proceeding.';
+  expect(sanitizeUserMessageText(prefix + '\nTokyo tomorrow')).toBe('$weather\nTokyo tomorrow');
+  expect(sanitizeUserMessageText('Explain: ' + prefix)).toContain(prefix);
+});
+
+ test('compacts valid document context without displaying extracted content or hiding malformed text', () => {
+  const text = 'Summarize\n\n<clawket-document-context>\n' + JSON.stringify([{ name: 'report.pdf', text: 'Long extracted content' }]) + '\n</clawket-document-context>';
+  expect(sanitizeUserMessageText(text)).toBe('Summarize\n\n📎 report.pdf');
+  const malformed = 'Example\n\n<clawket-document-context>\nnot json\n</clawket-document-context>';
+  expect(sanitizeUserMessageText(malformed)).toContain('not json');
+});

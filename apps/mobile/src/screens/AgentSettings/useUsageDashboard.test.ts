@@ -1,3 +1,4 @@
+import { AppState, type AppStateStatus } from 'react-native';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import {
   CAPABILITY_MATRIX,
@@ -131,4 +132,24 @@ describe('useUsageDashboard', () => {
     expect(view.result.current.showSkeleton).toBe(false);
     expect(view.result.current.loading).toBe(false);
   });
+});
+
+it('refreshes on foreground but resumes normal caching after the refresh', async () => {
+  let notify: ((state: AppStateStatus) => void) | undefined;
+  const listener = jest.spyOn(AppState, 'addEventListener').mockImplementation((_event, callback) => {
+    notify = callback;
+    return { remove: jest.fn() };
+  });
+  const sessions = jest.fn(async () => usageFor(25));
+  const base = createAdapter().adapter;
+  const adapter = { ...base, management: { usage: { sessions } } } as unknown as AgentAdapter;
+  const view = renderHook(() => useUsageDashboard(adapter, agent, true, { now }));
+  await waitFor(() => expect(sessions).toHaveBeenCalledTimes(3));
+  act(() => notify?.('active'));
+  await waitFor(() => expect(sessions).toHaveBeenCalledTimes(5));
+  act(() => view.result.current.setRangeKey('7d'));
+  await act(async () => {});
+  expect(sessions).toHaveBeenCalledTimes(5);
+  view.unmount();
+  listener.mockRestore();
 });

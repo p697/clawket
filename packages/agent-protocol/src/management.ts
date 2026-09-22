@@ -1,3 +1,5 @@
+import type { ApprovalRequest } from './descriptors';
+
 // These protocol-owned data shapes mirror the existing mobile GatewayClient
 // return/input types. Keeping them here avoids a forbidden dependency from a
 // platform-neutral package back into the React Native application.
@@ -163,6 +165,8 @@ export type SkillLinkedFiles = {
 } | null;
 
 export interface SkillStatusEntry {
+  /** Adapter-authored, explicit invocation prefix for this available installed skill. */
+  invocation?: string;
   name: string;
   description: string;
   source: string;
@@ -868,7 +872,17 @@ export interface LogPage {
   reset: boolean;
 }
 
+export interface ModelHealthReport {
+  scope: 'global';
+  model: string;
+  provider: string;
+  checkedAtMs: number;
+  providers: Array<{ id: string; name: string; credentials: 'configured' | 'missing' | 'unknown' }>;
+  checks: Array<{ name: string; status: 'reachable' | 'configured' | 'failed' | 'unknown' }>;
+}
+
 export type ModelsOperations = Partial<{
+    health(options?: { probe?: boolean }): Promise<ModelHealthReport>;
     list(): Promise<ModelInfo[]>;
     getSelection(sessionKey?: string | null): Promise<ModelSelectionState>;
     setSelection(params: ModelSelectionWrite): Promise<ModelSelectionWriteResult>;
@@ -889,6 +903,8 @@ export type SkillsOperations = Partial<{
     updateContent(key: string, content: string, agentId?: string): Promise<{ ok: boolean; skillKey: string; path: string }>;
     remove(key: string, agentId?: string): Promise<{ ok: boolean; skillKey: string }>;
     discover(query: string): Promise<DiscoverResult>;
+    /** Native, source-pinned install followed by an installed-status readback. */
+    install(input: { source: 'clawhub'; owner: string; slug: string }): Promise<SkillStatusEntry>;
 }>;
 
 export type CronOperations = Partial<{
@@ -967,6 +983,7 @@ export type ManagementOperations = Partial<{
   }>;
   logs: { fetch(params: LogQuery): Promise<LogPage> };
   approvals: {
+    listExec?(sessionKey: string): Promise<Array<{ sessionKey: string; approval: Extract<ApprovalRequest, { kind: 'exec' }> }>>;
     resolveExec(id: string, decision: 'allow-once' | 'allow-always' | 'deny'): Promise<void>;
   };
 }>;

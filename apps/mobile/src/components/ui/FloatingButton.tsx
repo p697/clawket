@@ -82,6 +82,8 @@ export function createFloatingSurfaceStyle(
   }
   return {
     backgroundColor: colors.surfaceFloating,
+    borderWidth: 0,
+    borderColor: 'transparent',
     ...Shadow.floating,
   };
 }
@@ -218,13 +220,14 @@ const styles = StyleSheet.create({
   button: {
     width: ControlSize.floatingButton,
     height: ControlSize.floatingButton,
-    borderRadius: Radius.full,
+    borderRadius: ControlSize.floatingButton / 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
   primaryButton: {
     width: FLOATING_PRIMARY_BUTTON_SIZE,
     height: FLOATING_PRIMARY_BUTTON_SIZE,
+    borderRadius: FLOATING_PRIMARY_BUTTON_SIZE / 2,
   },
   dotBadge: {
     position: 'absolute',

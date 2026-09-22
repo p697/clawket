@@ -224,8 +224,23 @@ export function stripCliResumeContext(text: string): string {
   return text.replace(/^OpenClaw resumed this CLI session after prompt content changed\.\s+Follow the current turn's instructions; changed=[a-z-]+(?:,[a-z-]+)*\.\r?\n\r?\n/, '');
 }
 
+function compactDocumentContext(text: string): string {
+  const prefix = '\n\n<clawket-document-context>\n';
+  const suffix = '\n</clawket-document-context>';
+  const start = text.lastIndexOf(prefix);
+  if (start < 0 || !text.endsWith(suffix) || text.length - start > 400_000) return text;
+  try {
+    const files: unknown = JSON.parse(text.slice(start + prefix.length, -suffix.length));
+    if (!Array.isArray(files) || !files.length || files.length > 6
+      || files.some((file) => !file || typeof file.name !== 'string' || !file.name || file.name.length > 200 || typeof file.text !== 'string')) return text;
+    return [text.slice(0, start), files.map((file) => `📎 ${file.name}`).join('\n')].filter(Boolean).join('\n\n');
+  } catch { return text; }
+}
+
 export function sanitizeUserMessageText(text: string): string {
-  return formatMessageText(stripCliResumeContext(text), {
+  text = compactDocumentContext(text);
+  const concise = text.replace(/^Use the installed skill "([a-zA-Z0-9][a-zA-Z0-9._/-]{0,127})" for this request\. Read its instructions with skill_view before proceeding\.(?=\s|$)/, (_, name: string) => `$${name}`);
+  return formatMessageText(stripCliResumeContext(concise), {
     stripGatewayPrefixes: true,
     stripBracketedSystemMessageBlocks: true,
   });

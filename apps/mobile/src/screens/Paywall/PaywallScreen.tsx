@@ -383,6 +383,8 @@ function formatBilling(item: ProPaywallPackage, t: Translate): string {
 
 function translatePaywallTitle(key: PaywallTitleKey, t: Translate): string {
   switch (key) {
+    case 'Search and bulk export': return t('Search and bulk export');
+    case 'Skill and memory versions': return t('Skill and memory versions');
     case 'Edit your Agent’s memory and files': return t('Edit your Agent’s memory and files');
     case 'More possibilities with your Agents': return t('More possibilities with your Agents');
     case 'Explore your Agent conversations': return t('Explore your Agent conversations');
@@ -432,6 +434,8 @@ function translatePaywallSubtitleFeature(key: PaywallSubtitleFeatureKey, t: Tran
 
 function translatePaywallBenefit(key: PaywallBenefitKey, t: Translate): string {
   switch (key) {
+    case 'Search and bulk export': return t('Search and bulk export');
+    case 'Skill and memory versions': return t('Skill and memory versions');
     case 'Choose which models your Agent uses': return t('Choose which models your Agent uses');
     case 'Conversations across channels and tasks': return t('Conversations across channels and tasks');
     case "Shape your Agent's personality and memory": return t("Shape your Agent's personality and memory");

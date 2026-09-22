@@ -105,7 +105,8 @@ describe('Hermes asynchronous operation lifecycle', () => {
       entered();
       await new Promise<void>(resolve => { release = resolve; });
     });
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('data: {"event":"run.completed","output":"stale"}\n\n'));
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('data: {"event":"run.completed","output":"stale"}\n\n'))
+      .mockResolvedValueOnce(Response.json({ run_id: 'run-fixture', status: 'cancelled' }));
     const broadcast = vi.spyOn(subject, 'broadcastEvent');
     const streaming = subject.streamRunEvents('run-fixture', 'main', session.sessionId, Date.now(), controller.signal);
     await hydrationStarted;
@@ -116,7 +117,7 @@ describe('Hermes asynchronous operation lifecycle', () => {
     expect(broadcast.mock.calls.filter(([event, payload]) => event === 'chat' && (payload as {state?: string}).state === 'final')).toEqual([]);
   });
 
-  it('requests upstream stop before ending the local stream', async () => {
+  it('retains the local stream while upstream is still stopping', async () => {
     const subject = await bridge();
     const controller = new AbortController();
     subject.activeRuns.set('run-stop', { runId: 'run-stop', sessionKey: 'main', sessionId: 'main', abortController: controller });
@@ -126,8 +127,9 @@ describe('Hermes asynchronous operation lifecycle', () => {
     expect(controller.signal.aborted).toBe(false);
     expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/v1/runs/run-stop/stop'), expect.objectContaining({ method: 'POST' }));
     release(new Response('{"status":"stopping"}'));
-    await expect(stopping).resolves.toMatchObject({ abortedRunIds: ['run-stop'], upstreamCancelled: false });
-    expect(controller.signal.aborted).toBe(true);
+    await expect(stopping).resolves.toMatchObject({ abortedRunIds: [], upstreamCancelled: false });
+    expect(controller.signal.aborted).toBe(false);
+    expect(subject.activeRuns.get('run-stop')?.stopRequested).toBe(true);
   });
 
   it.each([404, 503])('keeps the real run observable when upstream stop fails (%s)', async status => {

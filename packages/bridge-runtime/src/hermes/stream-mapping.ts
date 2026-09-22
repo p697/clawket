@@ -1,3 +1,6 @@
+import { hermesToolResultFailed } from './tool-result.js';
+import { waitForHermesTerminalRun } from './run-recovery.js';
+import { prepareHermesDocuments } from './documents.js';
 import { Buffer } from 'node:buffer';
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
@@ -29,9 +32,12 @@ export type HermesActiveRun = {
   sessionKey: string;
   sessionId: string;
   abortController: AbortController;
+  approvals?: Map<string, { requestId: string; command: string; decisions: string[]; expiresAtMs: number | null; resolving: boolean }>;
+  closedApprovalIds?: Set<string>;
   usageBaseline?: HermesObservedSessionUsageSnapshot | null;
   startedAt?: number;
   text?: string;
+  stopRequested?: boolean;
   tools?: Map<string, Array<{ toolCallId: string; startedAt: number; args?: string }>>;
 };
 
@@ -74,6 +80,9 @@ function isCanonicalBase64(value: string): boolean {
 }
 
 export abstract class HermesStreamMethods {
+  declare getBridgeCapabilities: () => string[];
+  declare handleRunApprovalEvent: (runId: string, event: Record<string, unknown>) => void;
+  declare expireRunApprovals: (runId: string) => void;
   declare apiBaseUrl: string;
   declare apiKey: string | null;
   declare sessionStore: HermesBridgeSessionStore;
@@ -100,12 +109,14 @@ export abstract class HermesStreamMethods {
     if (!text) {
       throw new Error('chat.send requires a non-empty message.');
     }
-    const imageAttachments = normalizeImageAttachments(payload.attachments);
+    const hasDocuments = Array.isArray(payload.attachments) && payload.attachments.some((item) => isRecord(item) && item.type === 'file');
+    if (hasDocuments && !this.getBridgeCapabilities().includes('hermes.documents.v1')) throw new Error('Document support is unavailable. Update Hermes and install its document converter.');
+    const imageAttachments = normalizeImageAttachments(hasDocuments ? (payload.attachments as unknown[]).filter((item) => !isRecord(item) || item.type !== 'file') : payload.attachments);
     const isCommand = isModelCommand(text)
       || isThinkingCommand(text)
       || isReasoningCommand(text)
       || isFastCommand(text);
-    if (isCommand && imageAttachments.length > 0) {
+    if (isCommand && (imageAttachments.length > 0 || hasDocuments)) {
       throw new Error('Hermes slash commands do not accept attachments.');
     }
 
@@ -139,19 +150,26 @@ export abstract class HermesStreamMethods {
     this.pendingRunStarts.set(requestId, { requestId, sessionKey, sessionId, abortController });
     let runId: string;
     try {
+      const prepared = hasDocuments ? await prepareHermesDocuments(payload.attachments, this.runHermesPython.bind(this)) : { appendix: '' };
+      if (abortController.signal.aborted) throw new Error('Hermes run start was aborted.');
+      const inputText = text + prepared.appendix;
       const priorHistory = (await this.getHermesSessionHistory(sessionKey, 0)).messages.map((message) => ({
         role: message.role,
         content: message.content,
       }));
-      const nativeBoundaryId = (await this.nativeSessions
-        .readHistoryBySessionId(session.sessionId))
-        ?.messages.at(-1)?._nativeId;
+      const nativeHistory = await this.nativeSessions.readHistoryBySessionId(session.sessionId);
+      const nativeBoundaryId = nativeHistory?.messages.at(-1)?._nativeId;
+      // Native /v1/runs stringifies explicit history blocks and drops tool IDs.
+      // Its verified session fallback preserves the authoritative native context.
+      const useNativeContext = Boolean(nativeHistory?.messages.length)
+        && this.getBridgeCapabilities().includes('hermes.native-run-context.v1');
       if (abortController.signal.aborted || this.sessionStore.findSession(sessionKey)?.sessionId !== session.sessionId) {
         throw new Error('Hermes run start was aborted.');
       }
       this.sessionStore.appendMessage(sessionKey, {
         role: 'user',
-        content: text,
+        content: inputText,
+        ...(imageAttachments.length ? { _imageCount: imageAttachments.length } : {}),
         ts: Date.now(),
         idempotencyKey: idempotencyKey || undefined,
         _nativeBoundaryId: nativeBoundaryId,
@@ -160,7 +178,7 @@ export abstract class HermesStreamMethods {
 
       let input: string | Array<Record<string, unknown>>;
       if (imageAttachments.length > 0) {
-        const parts: Array<Record<string, unknown>> = [{ type: 'text', text }];
+        const parts: Array<Record<string, unknown>> = [{ type: 'text', text: inputText }];
         for (const att of imageAttachments) {
           parts.push({
             type: 'image_url',
@@ -169,7 +187,7 @@ export abstract class HermesStreamMethods {
         }
         input = [{ role: 'user', content: parts }];
       } else {
-        input = text;
+        input = inputText;
       }
 
       const startResponse = await fetch(`${this.apiBaseUrl}/v1/runs`, {
@@ -177,7 +195,7 @@ export abstract class HermesStreamMethods {
         headers: buildHermesApiHeaders(this.apiKey),
         body: JSON.stringify({
           input,
-          conversation_history: priorHistory,
+          ...(!useNativeContext ? { conversation_history: priorHistory } : {}),
           session_id: sessionId,
         }),
         signal: abortController.signal,
@@ -380,7 +398,14 @@ export abstract class HermesStreamMethods {
         signal: AbortSignal.timeout(5000),
       });
       if (!response.ok) throw new Error(`Hermes stop request failed (${response.status}). The run may still be working.`);
-      if (this.activeRuns.get(run.runId) === run && this.abortActiveRun(run.runId, true)) {
+      const status: unknown = await response.json().catch(() => null);
+      if (!isRecord(status) || (status.run_id !== undefined && status.run_id !== run.runId)
+        || !['stopping', 'cancelled', 'completed', 'failed', 'interrupted'].includes(readString(status.status))) {
+        throw new Error('Hermes did not confirm the stop request. The run may still be working.');
+      }
+      if (status.status === 'stopping') run.stopRequested = true;
+      if (['cancelled', 'interrupted'].includes(readString(status.status))
+        && this.activeRuns.get(run.runId) === run && this.abortActiveRun(run.runId, true)) {
         abortedRunIds.push(run.runId);
       }
     }
@@ -399,20 +424,25 @@ export abstract class HermesStreamMethods {
     signal: AbortSignal,
   ): Promise<void> {
     let sawTerminalEvent = false;
+    let seq = 0;
+    let assistantText = '';
+    const completedTools: Array<{
+      toolCallId: string;
+      toolName: string;
+      isError: boolean;
+      toolDurationMs?: number;
+    }> = [];
     try {
       const response = await fetch(`${this.apiBaseUrl}/v1/runs/${encodeURIComponent(runId)}/events`, {
         headers: buildHermesApiHeaders(this.apiKey),
         signal,
       });
       if (!response.ok || !response.body) {
-        this.sendChatError(runId, sessionKey, `Hermes events stream failed (${response.status}).`);
-        return;
+        throw new Error(`Hermes events stream failed (${response.status}).`);
       }
 
       const decoder = new TextDecoder();
       let buffer = '';
-      let seq = 0;
-      let assistantText = '';
       let toolIndex = 0;
       const activeTools = new Map<string, Array<{
         toolCallId: string;
@@ -421,12 +451,6 @@ export abstract class HermesStreamMethods {
       }>>();
       const active = this.activeRuns.get(runId);
       if (active) active.tools = activeTools;
-      const completedTools: Array<{
-        toolCallId: string;
-        toolName: string;
-        isError: boolean;
-        toolDurationMs?: number;
-      }> = [];
 
       for await (const chunk of response.body) {
         buffer += decoder.decode(chunk, { stream: true });
@@ -442,8 +466,15 @@ export abstract class HermesStreamMethods {
           const eventName = readString(event.event);
           if (!eventName) continue;
 
+          if (eventName === 'approval.request' || eventName === 'approval.responded') {
+            this.handleRunApprovalEvent(runId, event);
+            continue;
+          }
+
           if (eventName === 'message.delta') {
-            const delta = readString(event.delta);
+            // Deltas are text, not identifiers: trimming drops word separators,
+            // paragraph breaks and code indentation (including whitespace-only chunks).
+            const delta = typeof event.delta === 'string' ? event.delta : '';
             if (!delta) continue;
             assistantText += delta;
             const active = this.activeRuns.get(runId);
@@ -513,7 +544,7 @@ export abstract class HermesStreamMethods {
               runId,
               toolName,
               toolCallId,
-              isError: event.error === true,
+              isError: event.error === true || hermesToolResultFailed(toolOutput),
               toolArgs: activeTool?.args,
               toolDurationMs,
               toolStartedAt: activeTool?.startedAt,
@@ -523,7 +554,7 @@ export abstract class HermesStreamMethods {
             completedTools.push({
               toolCallId,
               toolName,
-              isError: event.error === true,
+              isError: event.error === true || hermesToolResultFailed(toolOutput),
               toolDurationMs,
             });
             this.broadcastEvent('agent', {
@@ -539,7 +570,7 @@ export abstract class HermesStreamMethods {
                 output: toolOutput || undefined,
                 args: activeTool?.args,
                 duration: toolDurationMs ?? 0,
-                isError: event.error === true,
+                isError: event.error === true || hermesToolResultFailed(toolOutput),
               },
             });
             continue;
@@ -578,12 +609,19 @@ export abstract class HermesStreamMethods {
               sessionKey,
               seq,
               state: 'final',
+              ...(readString(event.pending_steer) ? { unappliedInput: readString(event.pending_steer).slice(0, 100_000) } : {}),
               message: {
                 role: 'assistant',
                 content: output,
               },
               usage,
             });
+            return;
+          }
+
+          if (eventName === 'run.cancelled' || eventName === 'run.interrupted') {
+            sawTerminalEvent = true;
+            this.abortActiveRun(runId, true);
             return;
           }
 
@@ -596,6 +634,11 @@ export abstract class HermesStreamMethods {
       }
 
       const trailing = parseSseDataLine(buffer);
+      if (trailing && isRecord(trailing) && ['run.cancelled', 'run.interrupted'].includes(readString(trailing.event))) {
+        sawTerminalEvent = true;
+        this.abortActiveRun(runId, true);
+        return;
+      }
       if (trailing && isRecord(trailing) && readString(trailing.event) === 'run.completed') {
         sawTerminalEvent = true;
         const output = readString(trailing.output) || assistantText;
@@ -628,6 +671,7 @@ export abstract class HermesStreamMethods {
           sessionKey,
           seq,
           state: 'final',
+          ...(readString(trailing.pending_steer) ? { unappliedInput: readString(trailing.pending_steer).slice(0, 100_000) } : {}),
           message: {
             role: 'assistant',
             content: output,
@@ -660,8 +704,15 @@ export abstract class HermesStreamMethods {
       if (isAbortError(error) || signal.aborted) {
         return;
       }
-      this.sendChatError(runId, sessionKey, `Hermes events stream failed: ${formatError(error)}`);
+      if (!sawTerminalEvent) {
+        await this.finalizeRunAfterMissingTerminalEvent({
+          runId, sessionKey, sessionId, runStartedAtMs, signal, seq, assistantText, completedTools,
+        });
+      } else {
+        this.sendChatError(runId, sessionKey, 'Hermes could not restore the completed result.');
+      }
     } finally {
+      this.expireRunApprovals(runId);
       this.activeRuns.delete(runId);
     }
   }
@@ -681,6 +732,25 @@ export abstract class HermesStreamMethods {
       toolDurationMs?: number;
     }>;
   }): Promise<boolean> {
+    const terminal = await waitForHermesTerminalRun({
+      apiBaseUrl: this.apiBaseUrl, headers: buildHermesApiHeaders(this.apiKey),
+      runId: params.runId, signal: params.signal,
+      onStatus: status => {
+        if (status.status === 'waiting_for_approval' && isRecord(status.approval)
+          && status.approval.run_id === params.runId) {
+          this.handleRunApprovalEvent(params.runId, status.approval);
+        }
+      },
+    });
+    if (!terminal || params.signal.aborted) return true;
+    if (terminal.status === 'cancelled' || terminal.status === 'interrupted') {
+      this.abortActiveRun(params.runId, true);
+      return true;
+    }
+    if (terminal.status === 'failed') {
+      this.sendChatError(params.runId, params.sessionKey, 'Hermes run failed.');
+      return true;
+    }
     await this.hydrateToolOutputsFromHermesState({
       runId: params.runId,
       sessionKey: params.sessionKey,
@@ -706,7 +776,8 @@ export abstract class HermesStreamMethods {
         && normalizeHermesHistoryContent(message.content).length > 0
         && message.timestamp >= params.runStartedAtMs - 1000
       ));
-    const output = normalizeHermesHistoryContent(historyOutput?.content) || params.assistantText.trim();
+    const output = (typeof terminal.output === 'string' ? terminal.output : '')
+      || normalizeHermesHistoryContent(historyOutput?.content) || params.assistantText;
 
     if (output) {
       const shouldAppendLocalAssistant = !historyOutput || normalizeHermesHistoryContent(historyOutput.content) !== output;
@@ -724,25 +795,25 @@ export abstract class HermesStreamMethods {
         sessionKey: params.sessionKey,
         seq: params.seq + 1,
         state: 'final',
+        ...(readString(terminal.pending_steer) ? { unappliedInput: readString(terminal.pending_steer).slice(0, 100_000) } : {}),
         message: {
           role: 'assistant',
           content: output,
         },
+        usage: mapHermesUsage(terminal.usage),
       });
       return true;
     }
 
-    if (params.completedTools.length > 0) {
-      this.broadcastEvent('chat', {
-        runId: params.runId,
-        sessionKey: params.sessionKey,
-        seq: params.seq + 1,
-        state: 'final',
-      });
-      return true;
-    }
-
-    return false;
+    this.broadcastEvent('chat', {
+      runId: params.runId,
+      sessionKey: params.sessionKey,
+      seq: params.seq + 1,
+      state: 'final',
+      ...(readString(terminal.pending_steer) ? { unappliedInput: readString(terminal.pending_steer).slice(0, 100_000) } : {}),
+      usage: mapHermesUsage(terminal.usage),
+    });
+    return true;
   }
 
   cancelAllActiveRuns(): void {
@@ -780,6 +851,7 @@ export abstract class HermesStreamMethods {
     if (!activeRun) {
       return false;
     }
+    this.expireRunApprovals(runId);
     this.activeRuns.delete(runId);
     activeRun.abortController.abort();
     if (notifyClient) {
