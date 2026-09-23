@@ -301,7 +301,7 @@
   "Send this message to your agent": "Diese Nachricht an deinen Agent senden",
   "Copy this message": "Nachricht kopieren",
   "Open Terminal and run this command.": "Öffne das Terminal und führe diesen Befehl aus.",
-  "Please run {{pairCommand}} on this computer. It installs the open-source Clawket CLI and pairs it with my phone. When it finishes, send me the pairing code it prints (the line that starts with \"Pairing code:\").": "Bitte führe {{pairCommand}} auf diesem Computer aus. Das installiert die Open-Source-Clawket-CLI und koppelt sie mit meinem Handy. Schick mir danach den ausgegebenen Pairing-Code (die Zeile, die mit „Pairing code:“ beginnt).",
+  "Please run {{pairCommand}} on my computer to set up the open-source Clawket CLI and pair it with my phone. I authorize you to reply in this conversation with the temporary pairing code it prints (the line starting with \"Pairing code:\"). Send only the code and backend name, without other credentials.": "Bitte führe {{pairCommand}} auf meinem Computer aus, um die quelloffene Clawket CLI einzurichten und mit meinem Handy zu koppeln. Ich autorisiere dich, den ausgegebenen temporären Kopplungscode (die Zeile mit \"Pairing code:\") in diesem Gespräch zu senden. Sende nur den Code und den Backend-Namen, ohne andere Zugangsdaten.",
   "Message for your agent": "Nachricht an deinen Agent",
   "Copied": "Kopiert",
   "Enter the pairing code": "Kopplungscode eingeben",
@@ -381,5 +381,6 @@
   "Search config...": "Konfiguration suchen…",
   "Collapse all": "Alle zuklappen",
   "{{count}} items": "{{count}} Einträge",
-  "Delete this local config backup? This does not change the current Gateway config.": "Diese lokale Konfigurationssicherung löschen? Die aktuelle Gateway-Konfiguration wird dadurch nicht verändert."
+  "Delete this local config backup? This does not change the current Gateway config.": "Diese lokale Konfigurationssicherung löschen? Die aktuelle Gateway-Konfiguration wird dadurch nicht verändert.",
+  "Backup history": "Bisherige Backups"
 }

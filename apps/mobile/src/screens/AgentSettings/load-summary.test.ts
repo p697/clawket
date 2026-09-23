@@ -126,7 +126,7 @@ describe('Agent settings summary loader', () => {
     await expect(loadAgentSettingsSummary(adapter, agent, now)).resolves.toEqual({
       modelCount: 2,
       installedSkillCount: 3,
-      cronJobCount: 6,
+      cronJobCount: 5,
       cronFailureCount: 2,
       hasCronFailure: true,
       lastHeartbeatAt: 1_700_000_000_000,
@@ -140,7 +140,7 @@ describe('Agent settings summary loader', () => {
     expect(skillStatus).toHaveBeenCalledWith('main');
     expect(listFiles).toHaveBeenCalledWith('main');
     expect(lastHeartbeat).toHaveBeenCalledTimes(1);
-    expect(cronList).toHaveBeenCalledWith({ includeDisabled: true, limit: 200, offset: 0 });
+    expect(cronList).toHaveBeenCalledWith(expect.objectContaining({ includeDisabled: true, offset: 0 }));
     expect(mockedAcks.read).toHaveBeenCalledWith('connection-one', 'main');
     expect(cost).toHaveBeenCalledWith({ startDate: '2026-09-05', endDate: '2026-09-05', agentId: 'main' });
     expect(catalog).toHaveBeenCalledWith('main');
@@ -226,6 +226,45 @@ describe('Agent settings summary loader', () => {
     });
     mockedAcks.read.mockResolvedValueOnce(new Set(['cron-one@100']));
     await expect(loadAgentCronSummary(adapter, agent)).resolves.toMatchObject({ cronFailureCount: 1 });
+  });
+
+  it('counts only the selected Agent across every page, including disabled jobs and later failures', async () => {
+    const child = { ...agent, agentId: 'lalala', isMain: false, mainSessionKey: 'agent:lalala:main' };
+    const jobs = [
+      ...Array.from({ length: 205 }, (_, index) => cronJob({ id: `main-${index}` })),
+      cronJob({ id: 'child-disabled', agentId: 'lalala', enabled: false }),
+      cronJob({ id: 'child-failed', agentId: 'lalala', state: { lastRunStatus: 'error', lastRunAtMs: 500 } }),
+    ];
+    const list = jest.fn(async ({ offset = 0, limit = 100 } = {}) => ({
+      jobs: jobs.slice(offset, offset + limit), total: jobs.length, offset, limit,
+      hasMore: offset + limit < jobs.length,
+      nextOffset: offset + limit < jobs.length ? offset + limit : null,
+    }));
+    const adapter = createMockAdapter({ connection, agents: [agent, child],
+      management: { cron: { list } } as unknown as ManagementOperations, initialState: 'ready' });
+
+    await expect(loadAgentCronSummary(adapter, child)).resolves.toEqual({
+      cronJobCount: 2, cronFailureCount: 1, hasCronFailure: true,
+    });
+    expect(list.mock.calls.length).toBeGreaterThan(1);
+    await expect(loadAgentCronSummary(adapter, agent)).resolves.toEqual({
+      cronJobCount: 205, cronFailureCount: 0, hasCronFailure: false,
+    });
+    await expect(loadAgentCronSummary(adapter, { ...child, agentId: 'new-agent' })).resolves.toEqual({
+      cronJobCount: 0, cronFailureCount: 0, hasCronFailure: false,
+    });
+  });
+
+  it.each(['openclaw', 'hermes'] as const)('preserves default-Agent task counts for %s', async (backendKind) => {
+    const list = jest.fn(async () => ({
+      jobs: [cronJob(), cronJob({ id: 'disabled', enabled: false })],
+      total: 2, offset: 0, limit: 100, hasMore: false, nextOffset: null,
+    }));
+    const adapter = createMockAdapter({ connection: { ...connection, backendKind }, agents: [agent],
+      management: { cron: { list } } as unknown as ManagementOperations, initialState: 'ready' });
+    await expect(loadAgentCronSummary(adapter, agent)).resolves.toEqual({
+      cronJobCount: 2, cronFailureCount: 0, hasCronFailure: false,
+    });
   });
 
   it('formats a local calendar date without a UTC boundary shift', () => {

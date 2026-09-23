@@ -5,7 +5,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { usePreventRemove, type NavigationAction } from '@react-navigation/native';
+import { useIsFocused, usePreventRemove, type NavigationAction } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   CAPABILITY_KEYS,
@@ -141,6 +141,10 @@ export function AgentSettingsSectionScreen({
   onOpenPaywall,
 }: AgentSettingsSectionScreenProps): React.JSX.Element {
   const runtime = useConnections();
+  const isFocused = useIsFocused();
+  const consumeCreateAgentAction = useCallback(() => {
+    navigation.setParams({ action: undefined });
+  }, [navigation]);
   const [activationError, setActivationError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<AgentSettingsSectionAction | null>(null);
@@ -282,6 +286,16 @@ export function AgentSettingsSectionScreen({
           agent={agent}
           online={online}
           refreshKey={skillsRefresh}
+          onUseSkill={(skill) => {
+            if (!skill.invocation) return;
+            navigation.popTo('Thread', {
+              connectionId, agentId, sessionKey: agent.mainSessionKey, from: 'roster',
+              composerDraft: {
+                id: `skill-use:${Date.now()}`, text: '',
+                skill: { name: skill.name, invocation: skill.invocation },
+              },
+            });
+          }}
           onOpenSource={(skill) => navigation.push('AgentSettingsSection', {
             connectionId, agentId, section: 'skills', action: 'skill-source', skillKey: skill.skillKey, skillName: skill.name,
           })}
@@ -420,6 +434,8 @@ export function AgentSettingsSectionScreen({
         isPro={isPro}
         navigation={navigation}
         openCreateOnMount={route.params.action === 'create-agent'}
+        isFocused={isFocused}
+        onCreateActionConsumed={consumeCreateAgentAction}
         onOpenPaywall={openPaywall}
         onChanged={refreshRoster}
         onCreated={() => navigation.navigate('Roster')}
@@ -870,11 +886,13 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     skeletonTitle: {
       width: '42%',
-      height: LineHeight.body,
+      minHeight: 0,
+      height: Space.lg,
     },
     skeletonValue: {
       width: '20%',
-      height: LineHeight.secondary,
+      minHeight: 0,
+      height: Space.md,
     },
   });
 }

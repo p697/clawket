@@ -202,6 +202,7 @@ jest.mock('../../theme', () => ({
 }));
 
 jest.mock('../../connection', () => ({
+  compareAgentSummaries: jest.requireActual('../../connection/registry/roster-cache').compareAgentSummaries,
   getConnectionRuntime: () => ({
     refreshRoster: mockRefreshRoster,
     probeActive: mockProbeActive,
@@ -491,11 +492,12 @@ describe('RosterScreen', () => {
       'roster-row-session:live:agent:main:main:channel:ops-avatar-overlay',
     )).toBeTruthy();
     expect(view.getByTestId('roster-row-agent:cached:builder-lock-icon')).toBeTruthy();
-    expect(view.getAllByText('just now')).toHaveLength(2);
+    expect(view.getByTestId('roster-row-agent:live:main-time').props.children).toBe('1h ago');
+    expect(view.getByTestId('roster-row-agent:live:builder-time').props.children).toBe('1h ago');
     expect(view.queryByTestId('roster-row-agent:cached:main-attention')).toBeNull();
     expect(view.queryByTestId('roster-row-agent:cached:builder-unread')).toBeNull();
     expect(view.getByTestId('roster-row-agent:cached:main').props.accessibilityLabel).toBe(
-      'Main, Last synced',
+      'Main, 1h ago, Last synced just now',
     );
     expect(view.queryByTestId('roster-row-agent:cached:main-avatar-working-ring')).toBeNull();
 
@@ -555,7 +557,7 @@ describe('RosterScreen', () => {
     expect(view.queryByText('Needs approval')).toBeNull();
   });
 
-  it('localizes the cached last-synced time in a non-English locale', () => {
+  it('keeps cached activity time visible and localizes sync metadata for accessibility', () => {
     const now = Date.now();
     mockCommonTranslations = {
       '{{count}}h ago': '{{count}}時間前',
@@ -573,11 +575,11 @@ describe('RosterScreen', () => {
 
     const view = render(<RosterScreen {...props()} />);
 
-    expect(view.getByTestId('roster-row-agent:cached-ja:main-synced').props.children).toBe(
-      '2時間前',
+    expect(view.getByTestId('roster-row-agent:cached-ja:main-time').props.children).toBe(
+      '1時間前',
     );
     expect(view.getByTestId('roster-row-agent:cached-ja:main').props.accessibilityLabel).toBe(
-      'Main, 最終同期',
+      'Main, 1時間前, 最終同期 2時間前',
     );
   });
 

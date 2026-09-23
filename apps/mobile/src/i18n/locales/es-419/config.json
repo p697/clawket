@@ -301,7 +301,7 @@
   "Send this message to your agent": "Envía este mensaje a tu agente",
   "Copy this message": "Copiar este mensaje",
   "Open Terminal and run this command.": "Abre el terminal y ejecuta este comando.",
-  "Please run {{pairCommand}} on this computer. It installs the open-source Clawket CLI and pairs it with my phone. When it finishes, send me the pairing code it prints (the line that starts with \"Pairing code:\").": "Ejecuta {{pairCommand}} en este equipo. Instala la CLI de Clawket de código abierto y la empareja con mi teléfono. Cuando termine, envíame el código de emparejamiento que muestra (la línea que empieza por \"Pairing code:\").",
+  "Please run {{pairCommand}} on my computer to set up the open-source Clawket CLI and pair it with my phone. I authorize you to reply in this conversation with the temporary pairing code it prints (the line starting with \"Pairing code:\"). Send only the code and backend name, without other credentials.": "Ejecuta {{pairCommand}} en mi computadora para configurar la CLI de código abierto Clawket y vincularla con mi teléfono. Te autorizo a responder en esta conversación con el código temporal que se muestra (la línea que empieza por \"Pairing code:\"). Envía solo el código y el nombre del backend, sin otras credenciales.",
   "Message for your agent": "Mensaje para tu agente",
   "Copied": "Copiado",
   "Enter the pairing code": "Ingresa el código",
@@ -381,5 +381,6 @@
   "Search config...": "Buscar en la configuración…",
   "Collapse all": "Contraer todo",
   "{{count}} items": "{{count}} elementos",
-  "Delete this local config backup? This does not change the current Gateway config.": "¿Eliminar esta copia de seguridad local? Esto no cambia la configuración actual del Gateway."
+  "Delete this local config backup? This does not change the current Gateway config.": "¿Eliminar esta copia de seguridad local? Esto no cambia la configuración actual del Gateway.",
+  "Backup history": "Historial de copias de seguridad"
 }

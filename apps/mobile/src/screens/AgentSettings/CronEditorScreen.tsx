@@ -18,7 +18,7 @@ import { ScreenHeader } from '../../components/ui/ScreenHeader';
 import { RenameSheet } from '../../components/ui/RenameSheet';
 import { SettingsDivider, SettingsGroup, SettingsRow } from '../../components/ui/SettingsGroup';
 import { ChoiceRow } from '../../components/ui/SetupPrimitives';
-import { Skeleton } from '../../components/ui/Skeleton';
+import { ListSkeleton } from '../../components/ui/ListSkeleton';
 import { ThemedSwitch } from '../../components/ui/ThemedSwitch';
 import { useAppTheme } from '../../theme';
 import { ControlSize, FontSize, FontWeight, LineHeight, Space } from '../../theme/tokens';
@@ -288,7 +288,7 @@ function CronEditor({ adapter, agent, online, reconnecting = false, jobId, initi
       contentContainerStyle={[styles.content, page === 'prompt' ? styles.grow : null, { paddingBottom: insets.bottom + Space.xl }]}>
       {error ? <Banner testID="agent-cron-editor-error" tone="bad" message={error} /> : null}
       {notice ? <Banner message={notice} /> : null}
-      {!form ? data.loading || (!data.jobs && !data.error && online) ? <Skeleton testID="cron-editor-loading" style={styles.loading} />
+      {!form ? data.loading || (!data.jobs && !data.error && online) ? <ListSkeleton testID="cron-editor-loading" detail trailing="none" rows={4} />
         : <Banner message={data.error ? message(data.error) : t('Failed to load scheduled task')} actionLabel={t('Retry', { ns: 'common' })} onAction={() => { void data.reload(); }} />
         : !canWrite && !jobId ? <Banner message={t('Unavailable')} />
         : page === 'templates' ? <View style={styles.stack}>
@@ -440,6 +440,5 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     placeholder: { color: colors.inkTertiary, fontSize: FontSize.secondary, lineHeight: LineHeight.secondary },
     actions: { flexDirection: 'row', alignItems: 'center', gap: Space.md, paddingTop: Space.sm },
     flex: { flex: 1 },
-    loading: { height: ControlSize.rosterRow },
   });
 }

@@ -188,13 +188,18 @@ export class OpenClawAdapter extends GatewayAdapterBase {
     return agents;
   }
 
+  // Once observed, an empty/filtered Gateway result must not re-enable the
+  // legacy updatedAt clock (which also advances for heartbeat housekeeping).
+  private hasHumanActivityClock = false;
+
   public async listSessions(agentId?: string): Promise<SessionDescriptor[]> {
-    const sessions = await this.invoke(() => this.gateway.listSessions({ limit: 200 }));
-    const options = { legacyActivity: !hasOpenClawActivityTimestamps(sessions) };
-    const normalized = sessions
-      .map((session) => mapOpenClawSession(this.connection.id, session, undefined, options))
-      .filter((session) => !agentId || session.agentId === agentId);
-    return this.rememberSessions(normalized);
+    const snapshot = await this.readSessionSnapshot(async () => {
+      const sessions = await this.invoke(() => this.gateway.listSessions({ limit: 200 }));
+      this.hasHumanActivityClock ||= hasOpenClawActivityTimestamps(sessions);
+      const options = { legacyActivity: !this.hasHumanActivityClock };
+      return sessions.map((session) => mapOpenClawSession(this.connection.id, session, undefined, options));
+    });
+    return agentId ? snapshot.filter((session) => session.agentId === agentId) : snapshot;
   }
 
   public async prompt(key: string, input: PromptInput): Promise<{ runId: string }> {

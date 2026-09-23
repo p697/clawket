@@ -1,5 +1,17 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-09-23 官网 3.0 已发布至 Cloudflare Pages 正式环境 `clawket.ai`：19 语言、76 个静态页面、双商店直链和二维码、开源首屏与动态 Star 数上线；英文标签缩为 “Open source”，中文为“开源”。官网 `npm run check:required` 全绿；Pages 生产部署 `53fd9ec1-022e-445e-8148-f0eb4d5831a1`。正式域名抽查首页、中英/阿拉伯语页面、葡语支持页、二维码和截图均为 HTTP 200 且字节与本地构建一致；浏览器确认中文首屏和实时 Star 数显示正常。此次仅部署官网，未改 App 或 Relay 等服务。
+
+- 2026-09-23 官网开源首屏：将版本胶囊改为 GitHub 图标、开源声明与动态 Star 数，19 语言同步。直接读取公开仓库 API，匿名限流时回退 Shields 数据；五分钟刷新/缓存、超时与失效降级，无前端密钥或虚构数字。浏览器实际返回 344，桌面及 19 语言 320px 排版通过；168 文案键、76 页面、152 截图门禁及 6 项数据/故障回归通过。仅本地预览，未部署。
+
+- 2026-09-23 官网小修：按负责人要求移除“适配你的工作方式”栏的 YouMind 入口，19 个语言版本统一生效；官网 required 检查通过，已更新本地预览和交付包。
+
+- 2026-09-23 官网语言与首屏精简：独立官网核对 App 19 个 locale，补齐 18 份翻译及真实本地化截图（共 152 张）；首页/支持/隐私/条款 76 页完整预渲染。自定义语言浮层/手机底部面板替代系统 select，支持短屏滚动、键盘、焦点恢复、地区码和阿拉伯语 RTL；删除负责人指定的首屏三行文案。字典按需加载，主 JS 937→310 KB；166 文案键 × 18 翻译、8 项损坏输入回归通过，桌面与手机各 19 次切换验证通过。仍为本地验收，未部署。
+
+- 2026-09-23 官网首屏下载补强：独立官网仓库为双商店增加悬停二维码与可点按固定的扫码按钮，保留商店直链；浮层向上展开以适配短屏。替换 Google Play 为标准品牌 SVG，固定图标尺寸；六语言同步，102 文案键检查和构建通过，浏览器验证展开、Esc 收起与手机布局。仍为本地验收版。
+
+- 2026-09-23 官网 3.0 验收版：在独立仓库 `/Users/lucy/Desktop/op/clawket/clawket-site` 重做首页、导航、支持和下载路径；真实 iPhone/iPad 六语言物料、双商店二维码、七屏导览、轻动效与窄屏适配已完成。App Store 3.0 与 Google Play 2.x/3.0 审核状态分别说明。两轮独立设计评审已落实，6 语言首页/支持页静态预渲染、101 文案键 × 5 翻译、48 图片及损坏输入检查通过；二维码实际解码正确，依赖审计 0。详情在官网仓库 `docs/website-3.0.md`。仅本地验收，未替换线上官网；App/Bridge/Relay 不在本轮修改范围。
+
 - 2026-09-22 老用户升级引导评估：建议 Bridge 升级但不强制中断已有聊天，不要求重新配对；确认旧 OpenClaw 缺少独立客户端通道与 Bridge 文件/技能文档补充，Hermes 按能力降级。现有公告无 Bridge 更新项，Hermes 会话升级提示缺少外部帮助回调接线。建议公告入口 + 按连接可关闭提示 + 保留配对的更新指南 + 握手确认后消失；尚未实现 UI。详见 [评估](bridge-upgrade-guidance-2026-09-22.md)。
 
 - 2026-09-22 正式发布完成：OpenClaw Registry/Relay、Hermes Registry/Relay 均已上线，四服务 health 200、源码与固定候选一致、安全日志配置核对通过。npm `@p697/clawket@3.0.0` 已公开且 latest=3.0.0，实际下载包 SHA-256 与验收包一致。旧 Android 2.1.0 原凭据恢复、历史、实际聊天、后台 131 秒后继续收发通过；3.0 QA Hermes 历史/真实模型回复通过。required、v1 39、integration 8、发布矩阵 24 阶段通过。完整版本锚点、恢复历史与限制见 [发布执行记录](production-release-2026-09-22.md)。
@@ -948,6 +960,7 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 
 | 位置（文件 § 节） | 规格原文 | 实际做法 | 理由 | 影响 |
 |---|---|---|---|---|
+| 2026-09-22 · 花名册排序与时间 | 同连接 Agent 强制相邻；预览优先 main；缓存行显示同步时间，徽标替代时间。 | 负责人授权完整优化：跨连接全局置顶 / 活动排序；预览与活动时间同源，非 main 标来源；缓存仍显示活动时间，徽标在时间下方。 | 隐式分组搬动无关 Agent、时间含义变化让聊天列表难以理解；另修局部快照污染与旧响应回写。 | main 点击和单活连接策略保留；Hermes 新增向后兼容活动字段，旧 Bridge 回退原行为；用户负责设备验收。 |
 | 2026-09-21 · 00 §9 / 02 §5 WAF 实施 | WS 30/IP/min，四条 WAF，日用量三阈值和 Discord。 | 按本次负责人明确的正常使用与稳定性优先要求，WS 初始防洪阈值 120，配对 20 补双后端路径，使用 Pro 两条规则；机器 API 不加挑战。日用量/Discord 保留未完成状态。 | 最高成功建连样本 25/min 已接近 30，共享 IP 与新版通道需余量；Pro 规则额度/周期及原生告警能力与旧规格不符。 | 降低误伤同时保留边缘防洪；未降低候选代码注册 10/hour、8 MiB、认证和 liveness 门禁。该项不视为完全满足原始 30/min 规格，前后配置及回退见专项报告。 |
 | 2026-09-21 · Mobile 页面顶部保存 | Ghost / 纯文字 Save。 | 六类编辑页统一复用 primary 胶囊按钮，保留禁用态与原位 loading。 | 负责人截图反馈保存不明显，要求简约、有品质。 | 仅视觉及聊天主题保存中的可访问状态；原有保存条件、确认和后端操作不变。 |
 | 2026-09-20 · `05-visual-system.md` §动效 / Thread | 切换会话时线程内容交叉淡入 200 ms。 | 会话列表立即替换，不重叠淡入淡出；保留新消息和弹层动效。 | 负责人反馈静态会话切换多次闪动；旧/新原生 Markdown 列表重叠与异步测量叠加会放大不稳定感。 | 只改变切换的呈现方式，保留独立会话列表身份与滚动状态隔离；真机按 HT-SESSION-JITTER-0920 复测。 |
@@ -1007,6 +1020,7 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 
 | 编号 | 事项 | 怎么做 | 验证方法 | 状态 |
 |---|---|---|---|---|
+| HT-PLAY-0923 | Google Play 3.0 最终真机与商店验收 | 按 google-play-readiness-2026-09-23.md 使用三星上的 Clawket QA 测试双后端；修正数据安全/隐私与审核访问声明，固定正式签名 AAB 后通过 Play 验证覆盖升级和许可测试购买/恢复。 | QA 连续聊天和后台恢复通过；真实申报与功能一致；正式包版本、签名、交易和数据迁移有证据。 | QA 3.0.0 / 30000 已成功覆盖安装启动；Mobile 330 套 / 3,415 项通过。Play 尚无 3.0 bundle；未提交审核。全仓尚有 Hermes 录制预期和 i18n unused key 两项待收尾。 |
 | HT-STREAM-0922 | 流式聊天修复后的 Android 连续发送验收 | 先恢复本机 Android Gradle 插件构建，再覆盖安装保留数据；在现有 OpenClaw/Hermes 测试会话连续发送并录制从发送到终态的全过程。 | 当前用户气泡不消失、思考/流式内容始终归属当前轮、完成前后顺序稳定。 | 代码回归与全仓门禁通过；本轮未生成或安装修复 APK，真机验收未完成。 |
 | HT-STORE-UPLOAD-0922 | 商店截图上传权限 | 用户已手动开启 Chrome 扩展文件访问权限，代理通过标准文件选择器上传。 | App Store 19×7、Google Play 19×7 + 19 置顶图；19 语言逐套核验顺序与已保存文件。 | 已完成手机截图上传；Play 3.0 图标同步并核验所有语言继承。平板资源另待补。 |
 | HT-STORE-DISCLOSURE-0922 | 核实发布版数据申报和审核访问 | 核实 PostHog/RevenueCat/YouMind 的实际收集、保留、关联及审核测试账号；更正官网隐私政策和两商店申报，并核对 MIIT 主体。 | 隐私声明与真实发布行为一致，审核员可访问核心功能，MIIT 主体匹配。 | 已发现旧的不收集数据/无分析声明；未凭猜测提交隐私或主体变更。 |
@@ -2083,3 +2097,120 @@ Validation: Mobile typecheck, 12 focused settings/evidence tests, design-system,
 ### 2026-09-22 — iPad corner fix recaptured
 
 Rebuilt the production-mode embedded Hermes JS bundle from current source, retained the existing simulator native binary and QA entitlement override, signed the local app copy and reinstalled over the 13-inch simulator without clearing its data. Opened the same existing demo session and real tool detail; native screenshot confirms both bottom corners now round. Updated second Style A proof in public/ipad-a-v2 (2752×2064), first proof retained. Source/hash and capture provenance recorded in capture-verification.json. No native compilation, store upload or submission claimed.
+
+### 2026-09-22 — 11-inch English iPad review set
+
+Owner changed the requested tablet size to 11-inch. Reused the fixed native app bundle and connected the existing 11-inch simulator to the authorized OpenClaw environment; retained its Hermes connection. Re-captured all seven English scenes, including the rounded Read file sheet, real Lucy profile and safe Atlas channel demos. Native 2420×1668 UI is composited without distortion into seven 2752×2064 Style A artworks. Verified all native/export dimensions, opaque RGB output, full frame and visual layout. Gallery and ZIP: evidence/store-styles-2026-09-21/public/ipad-11-en-review/. Previous 13-inch proofs preserved. No product source changes, model changes, task execution or store uploads. Await owner acceptance before other iPad locales and tablet uploads.
+
+### 2026-09-22 — Approved 11-inch iPad localization rollout (in progress)
+
+Owner accepted the English 11-inch set and authorized all remaining native-language iPad images plus store uploads/saves. Captured localized UI through the installed native app, preserving English demo conversations and model names; code-composed Style A exports retain full device frame and fixed 2752×2064 canvas. App Store English plus 14 localized sets have been uploaded and reopened with all seven screenshots in the correct order; remaining four locales are in progress. Google Play tablet slots reuse the approved native phone screenshots as requested; 12 locale pairs are saved, remaining locales are in progress. Per-locale checkpoint: evidence/store-metadata-2026-09-22/tablet-upload-progress.json. No package upload, review submission, or publication performed.
+
+### 2026-09-22 — All 19 tablet localizations saved to both stores
+
+Completed the owner-approved 11-inch iPad rollout: 19 native-language sets, seven scenes each, 133 opaque 2752×2064 PNGs, uploaded to App Store and individually reopened with correct order. Corrected stale locale selections, visible skills keyboards and sheets opened before rotation before final upload. Google Play now has seven approved native phone images in both tablet slots for all 19 locales (266 placements), saved and individually reopened. Gallery/ZIPs: evidence/store-styles-2026-09-21/public/ipad-native-locales/. Final validation hashes and store readback are recorded in that gallery and evidence/store-metadata-2026-09-22/tablet-upload-progress.json. No build upload, review submission or publication; user retains package/review step.
+
+### 2026-09-22 — Purchase-status action spacing
+
+Owner requested a small UI polish without tests. Increased the completed paywall status footer's Manage subscription / Done gap from 4 to 16 points using the shared spacing token. Verification, scheduled-change and lifetime-guidance pages share the spacing; purchase/entitlement logic is unchanged. Updated Mobile instructions and plan-management documentation. Reviewed the source diff and spacing token; documentation check passed. No app tests, builds or device validation run. The documentation gate includes five documentation-validator tests, all passing.
+
+### 2026-09-22 — Original filenames in Memory
+
+Owner requested consistent original document names. Removed the Memory list's localized aliases for MEMORY.md and USER.md; every row now displays the backend-provided filename, matching the existing reader title and filename search. Shared OpenClaw/Hermes file operations are unchanged. Updated Mobile instructions and task-workflow documentation; preserved unrelated dirty work.
+
+Validation: source diff reviewed; documentation gate passed (7 instruction pairs and its 5 built-in checks). No application tests, builds or device validation run at the owner's request. Device acceptance remains with the owner.
+
+### 2026-09-22 — Create Agent keyboard avoidance
+
+Fixed creation fields bypassing the sheet keyboard focus handler: added an opt-in bottomSheet mode to FormTextInput and enabled it for name and emoji. The form uses fixed 55% / 90% detents and a Gorhom scroll view, with Cancel / Create pinned in the footer. Existing page inputs retain their original host. No backend or transport changes. Per owner instruction, no app tests or builds run; device acceptance remains with the owner. The required documentation check passed (7 instruction pairs and 5 documentation checks).
+
+### 2026-09-22 — Backup history section spacing
+
+Owner requested UI polish and will perform testing. Grouped the backup list and empty state under a localized Backup history heading, with 32 points after Create backup and 8 points below the heading. Used existing spacing, typography and theme tokens; all 19 locales updated. Backup actions and backend behavior are unchanged. No application tests, builds or device validation run at the owner's request.
+
+### 2026-09-22 — Use installed skills from their detail sheet
+
+Added a pinned Use skill action to installed-skill details. After dismissal it returns to the scoped Agent main Thread and applies the adapter-authored skill reference after draft restoration, preserving unsent text and replacing a previous skill selection. Unavailable skills remain visibly disabled; no automatic send or backend/protocol changes. Updated Mobile instructions and task-workflow documentation; unrelated dirty work preserved. Per owner instruction, no tests or builds run; device acceptance remains with the owner.
+
+
+### 2026-09-22 — Remove ambiguous working avatar badges
+
+Owner found the three-bar working corner mark unreadable and authorized removal across similar surfaces. Removed the shared activity badge from Agent avatars and Session Panel tiles; existing roster preview text, conversation activity, unread, attention and lock indicators remain. This presentation-only change applies equally to OpenClaw and Hermes. Updated existing assertions and visual guidance to reflect the intentional removal; preserved unrelated dirty work. Per owner instruction, no tests, checks, builds or device validation run; acceptance remains with the owner.
+
+
+### 2026-09-22 — Compact list loading placeholders
+
+Owner requested a visual-only skeleton polish and will perform testing. Replaced the widely spaced Skills loading bars (88-point rows plus 8-point gaps) with shared 64-point title/description rows and compact switch silhouettes. Models, tools, files, schedules, channels/devices, account settings, skill discovery and logs now share content-shaped placeholders; settings text bars, message detail and cron editor placeholders were refined too. Existing request timing, cache/error states, capabilities and both backend paths are unchanged. Preserved concurrent unrelated edits.
+
+Validation: source diff reviewed only. Per the owner's explicit instruction, no tests, validation commands, builds or device checks were run; visual acceptance remains with the owner.
+
+### 2026-09-22 — Prevent reconnect from reopening Create Agent
+
+Owner reported the creation sheet appearing over connection details after Reconnect. Consume the create-agent route action before opening, gate presentation by navigation focus, close it on blur, and reject stale-scope purchase continuations. The consumed action survives identity-child remounts; a new explicit action remains usable. Connection/transport behavior is unchanged for OpenClaw and Hermes. Preserved concurrent UI edits.
+
+Validation: source diff reviewed only. Per owner instruction, no tests, documentation checks, builds or device operations run; device acceptance remains with the owner.
+
+### 2026-09-22 — Agent-scoped profile Cron totals
+
+Owner reported lalala displaying all 27 local OpenClaw tasks. Read-only Gateway queries confirmed 20 main/default, 4 atlas, 2 ui-operator and 1 lalala task; the latter is OpenClaw’s weekly system-owned skill collection review. Profile summary incorrectly used the connection-wide response total despite filtering failure notifications by Agent. It now shares the paginated `loadAgentCronJobs` loader with the job list and counts the filtered jobs, including disabled/system-owned jobs. Failure notifications also cover subsequent pages. No backend, transport, task definitions or scheduling behavior changed; concurrent dirty work preserved. Updated Mobile instructions and task-workflow documentation.
+
+Validation: regression first failed on both the global count and late-page ownership cases; after the fix, 3 focused suites / 17 tests pass, covering default/other/empty Agent scopes, more than 200 jobs, disabled jobs, later-page failures, acknowledgements, and OpenClaw/Hermes default ownership. Repository typechecks and protocol coverage passed. `check:required` stopped at Mobile tests: 328 suites / 3,400 tests passed, 2 suites / 11 tests failed in concurrent IdentityScreen creation UI and AgentSettingsSectionScreen useIsFocused mock changes. Design-system and documentation checks passed separately; i18n strict check reports unrelated unused `settings:About me`. No attempt to change concurrent UI work or translations. Logs: `/tmp/clawket-cron-summary-{before,tests,required,design,i18n,docs}.log`. No native rebuild, device installation, production deployment or live task mutation performed; the fix reaches installed clients in the next App build.
+
+
+### 2026-09-22 — Stable global Agent roster
+
+Owner authorized the investigation follow-up and reserves actual testing. Fixed OpenClaw agent-scoped listing broadcasting an incomplete connection snapshot; filtering now affects only the caller return. Shared Gateway snapshot sequencing protects OpenClaw and Hermes from older responses and retired connections, including background invalidation errors. OpenClaw human-clock detection stays enabled once observed.
+
+Roster rows now sort globally by manual pin then human activity, with immutable identity ties and pinned child sessions kept with their Agent. The newest eligible conversation supplies both preview and time, with a non-main source title; canonical-main navigation and main unread semantics remain. Agent pins are visible, cached rows keep activity time, and unread/attention/lock markers no longer hide it. Hermes Bridge adds a separate nullable human activity clock and matching preview while retaining legacy updatedAt and the old-client contract. Renames and tool/system metadata no longer drive the new clock; resetting can legitimately remove it. Native Hermes storage remains read-only. The snapshot assembly helper moved into native-sessions to keep the touched runtime module below its line bound.
+
+Regression source updated for scoped snapshots, both backend response ordering/retired epochs, global pinning, preview/time semantics and Hermes metadata. Per owner request, no application tests, builds, deployment or device validation run. Static type/documentation verification is recorded below after completion. Hermes human-clock changes require a future Bridge release; the App preserves older Bridges. Unrelated dirty work retained.
+
+Validation for the roster follow-up: Mobile TypeScript and Bridge Runtime TypeScript (`--noEmit`) both pass; `npm run check:docs` passes (7 instruction pairs and 5 documentation-validator checks); diff whitespace check passes. No application/compat tests or native builds were run, and no deployment was performed. Logs: `/tmp/clawket-roster-{typecheck,bridge-types,docs}.log`. Added/updated regression source is intentionally unexecuted pending later validation. Owner acceptance should cover opening/backing out of different OpenClaw Agents, waiting through refresh, cross-connection pins, read/unread, reconnection, and matching source preview/time; new Hermes clock additionally needs the rebuilt Bridge.
+
+### 2026-09-22 — Explicit authorization in copied pairing prompt
+
+Owner reported an external Agent refusing to return the temporary pairing code in chat. The shared OpenClaw/Hermes onboarding prompt now starts with explicit user authorization for setup and delivery in the current conversation, acknowledges unused-code possession and chat retention, and limits output to actual backend-labelled pairing codes plus printed expiry. It excludes tokens/passwords/keys/config files, invented codes and policy bypasses. Preserved exact Production/Preview commands and existing CLI/code compatibility. Added the same authorization paragraph in all 19 locales; updated Mobile instructions and onboarding documentation. Unrelated dirty work preserved.
+
+Validation: existing onboarding model/screen suites pass (2 suites, 26 tests); both prompt paragraphs and interpolation placeholders verified across 19 locales; documentation gate passes (7 instruction pairs, 5 checks); diff whitespace check passes. Global i18n gate reports no missing translations but fails on the pre-existing unused `settings:About me` key; left concurrent work unchanged. No new tests, full repository gate, app build, device operations, external Agent execution, deployment or publication. Real model acceptance remains unverified; installed apps receive this copy in a future build. Logs: `/tmp/clawket-pair-prompt-{tests,docs,i18n}.log`.
+
+### 2026-09-22 — Shorten copied pairing authorization
+
+Owner requested copy close to the original length. Replaced the two-paragraph prompt with one compact paragraph: exact command/open-source CLI purpose, explicit authorization to return its printed temporary code in the current conversation, and only code/backend name without other credentials. Removed the long authorization key from all 19 locales and aligned Mobile instructions/page documentation. Supersedes the verbose prompt described above; pairing behavior is unchanged.
+
+Validation: parsed all 19 catalogs and verified the shared prompt key, command placeholder and printed code label; documentation gate passed (7 instruction pairs, 5 checks). No application tests, builds, external Agent execution or deployment for this copy-only revision.
+
+### 2026-09-23 — Android QA installation and Google Play readiness audit
+
+Owner requested a fresh package on the attached Android phone before Google Play submission. Built current dirty-tree 3.0.0 as an embedded-JS arm64 Release QA APK using Gradle 9.3.1 with the documented real-path SSD cache; updated com.p697.clawket.qa on Samsung SM-A566B without removing either app or clearing data. Installation and launch succeeded after Play Protect confirmation; no Clawket crash appeared in the inspected crash buffer. Forced Pro unlock and RevenueCat test key were disabled for this build. Target SDK 36, 27 native ELF libraries and APK 16 KB alignment checks pass; the phone is a 4 KB device, so no 16 KB runtime acceptance is claimed.
+
+Fixed only two outdated Mobile test mocks (Sheet footer and navigation focus), restoring all 330 suites / 3,415 tests. All workspace typechecks, Relay tests, protocol coverage, CLI/script/speech tests, design/docs checks and v1 replay (5 files / 39 tests) pass. Full required remains red on one concurrent Hermes recorded-packet expectation for the additive lastActivityAt field; separately executed i18n fails on the existing unused settings:About me key, with no missing translations. Preserved unrelated source work and did not weaken assertions or change Bridge fixtures.
+
+Read-only Play Console audit: 19 locale assets stored as 26 pending-review changes; latest uploaded/production bundle remains 20109 / 2.1.0; monthly/yearly plans and lifetime purchase option are active. No current policy alerts, but data safety still declares no collection and reviewer access declares no restrictions; both conflict with current analytics/payment and pairing/Pro behavior. Public privacy page still claims no analytics. Existing broad-media declarations mention owner-authorized OpenClaw Node access; recheck against 3.0 rather than deleting permissions blindly. Report: google-play-readiness-2026-09-23.md; APK/hash/logs: evidence/google-play-2026-09-23/. No store package upload, external form save, review submission, publication or production deployment. Functional phone acceptance, Play-delivered upgrade/billing, RevenueCat mapping and formal signing remain unverified.
+
+### 2026-09-23 — Speech upgrade deadline investigation and local fix
+
+Investigated Android speech_disconnected report and its server UUID. Deployed speech source leaves a 10-second AbortSignal attached to the successful provider WebSocket upgrade. Synthetic 110-second PCM at both 1x and 5x failed around 11.3 seconds total; a shorter 5x upload completed. Local workerd old/new comparison reproduced upstream close at 10006 ms versus working roundtrip after 12 seconds with the cancellable deadline cleared. Latest anonymous service logs also show disconnects 9.3–9.5 seconds after connected. Mobile deliberately defers a streaming failure alert until capture stops, explaining apparent immediate failure on Done; retry accelerates saved PCM. No claim that every short-recording failure has the same cause.
+
+Changed only the provider handshake timeout lifecycle and regression coverage, plus closest instructions/voice documentation. Speech 33 tests and typecheck pass; Mobile stream/segmentation 13 tests pass. No speech deployment or new APK in this investigation; real end-to-end acceptance remains pending deployment. No private recordings accessed. Existing unrelated dirty changes preserved.
+
+### 2026-09-23 — Speech timeout fix deployed on owner request
+
+Owner explicitly requested deployment. Wrangler 4.131.0 deployed only clawket-speech-preview with existing vars/secrets/bindings to version ddeaf1b0-cb86-44e7-a639-f920347d2df4 (100%, 2026-09-23 00:06:56 UTC); previous rollback anchor 872fdcdf-752b-4388-a3a9-83c033895095. Health enabled/protocol 2. Synthetic real-time 5-second and 10-second clips returned nonempty final transcripts; 10-second clip completed after 12.3 seconds total, beyond the old deadline. A request started during propagation hit the old version and reproduced its disconnect (confirmed by cloud scriptVersion). A later 110-second/5x replay on the new version failed with speech_protocol after 74.2 audio seconds; this is a separate unresolved acceptance issue, not proof of full long-recording recovery. No APK replacement required, no Relay/Registry/Bridge deployment. Evidence: evidence/speech-long-0923/deploy.log, deployments-after.log, probe-after.log, probe-repeat.log.
+
+补充实测：110 秒实时合成音频也完整接收（3520000 字节 ACK）并发出 finish，但总耗时 114.5 秒后返回 speech_protocol，请求 e824fdda-b08a-4df8-9489-0fc76163c8ec。10 秒误断已解除，长音频结果/协议处理仍需另查，不能仅归因于 5 倍补传。
+
+### 2026-09-23 — Android production release preparation authorized
+
+Owner accepted basic Android functionality and deployed speech fix on the phone, then authorized progressing the Play release. Owner explicitly requires all privacy-related declarations/policies/settings to remain unchanged; do not treat earlier audit suggestions as authorization to edit them. EAS existing production upload key recovered privately outside the repository and SHA-256 matched Play's upload certificate (62:FC:43:63:DB:E6:22:5C:C0:22:C7:02:61:0A:77:32:6E:06:87:ED:37:2F:F8:EF:03:73:1B:74:48:F1:F7:06). No key rotation or security setting change. Formal package com.p697.clawket 3.0.0/30001 building with all four ABIs, release signing and no Pro/test-key override.
+
+Release gate maintenance: preserve historical Hermes packet fixtures and explicitly assert additive lastActivityAt (native human-message timestamp / null for empty created session); no production Bridge changes. Removed only the unused settings:About me key from 19 catalogs. Focused recorded-packet replay and i18n check pass; complete required gate rerunning. Draft production release created in Play; no upload/review submission yet at this checkpoint.
+
+### 2026-09-23 — Formal bundle built and uploaded
+
+Complete `npm run check:required` passed after the narrowly scoped test/catalog fixes (Mobile 330 suites / 3415 tests). Release AAB built successfully for all four ABIs, followed by a final incremental rebuild after source validation. `bundletool validate` and `jarsigner -verify` pass; package com.p697.clawket, version 3.0.0/30001, min 24/target 36, upload certificate matches Play. Bundle requests PAGE_ALIGNMENT_16K; 108 native libraries checked, all 54 64-bit libraries have LOAD alignment >= 16KB. Artifact `evidence/google-play-2026-09-23/clawket-3.0.0-30001.aab`, SHA-256 `bc561dfed801c4479def917c44f664a3b1a59e86ac34a391ed2d4c36a8343793` (98.8 MB). Existing in-app release copy supplies all 19 localized release notes. Play production draft release 2 created, bundle upload completed and processing. Privacy forms, policy, settings and product pricing untouched. Existing speech long-recording protocol failure remains recorded separately; user accepted basic Android/short speech tests, not a full long-recording pass.
+
+### 2026-09-23 — Google Play submission accepted
+
+Submitted production release `Clawket 3.0.0 (30001)` together with the 26 pre-existing store-listing changes (27 total). Play publishing overview now places them under “正在审核中的更改”; automated quick checks are still running and the UI says successful checks will forward the changes for review. Release validation showed no blocking errors, one missing deobfuscation-file warning, and no reduction in supported devices. Existing 100% target rollout/all target countries and managed publishing remain unchanged; this is not yet a public launch, and approved changes require the managed-publication step. No privacy/data-safety/policy/settings or billing changes were made.
+
+Console: https://play.google.com/console/u/0/developers/5699297822309520683/app/4975023616700245417/publishing

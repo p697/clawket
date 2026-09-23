@@ -5,7 +5,7 @@ import type {
 } from '@clawket/agent-protocol';
 import { CronFailureAckService } from '../../services/cron-failure-acks';
 import { unacknowledgedCronFailures } from './cron-failures';
-import { cronJobBelongsToAgent } from './cron-model';
+import { loadAgentCronJobs } from './cron-model';
 import type { AgentSettingsSummary } from './model';
 
 export async function loadAgentSettingsSummary(
@@ -117,13 +117,12 @@ export async function loadAgentCronSummary(
 ): Promise<AgentCronSummary> {
   const list = adapter.management?.cron?.list;
   if (!list) return {};
-  const [result, acknowledged] = await Promise.all([
-    list({ includeDisabled: true, limit: 200, offset: 0 }),
+  const [jobs, acknowledged] = await Promise.all([
+    loadAgentCronJobs(adapter.management?.cron, agent),
     CronFailureAckService.read(agent.connectionId, agent.agentId),
   ]);
-  const jobs = result.jobs.filter((job) => cronJobBelongsToAgent(job, agent));
   const cronFailureCount = unacknowledgedCronFailures(jobs, acknowledged).length;
-  return { cronJobCount: result.total, cronFailureCount, hasCronFailure: cronFailureCount > 0 };
+  return { cronJobCount: jobs.length, cronFailureCount, hasCronFailure: cronFailureCount > 0 };
 }
 
 type MutableSummary = {

@@ -10,7 +10,7 @@ export function buildAgentPairingPrompt(
   t: (key: string, options: { ns: 'config'; pairCommand: string }) => string,
   pairCommand: string = PAIRING_COMMAND,
 ): string {
-  return t('Please run {{pairCommand}} on this computer. It installs the open-source Clawket CLI and pairs it with my phone. When it finishes, send me the pairing code it prints (the line that starts with "Pairing code:").', { ns: 'config', pairCommand });
+  return t('Please run {{pairCommand}} on my computer to set up the open-source Clawket CLI and pair it with my phone. I authorize you to reply in this conversation with the temporary pairing code it prints (the line starting with "Pairing code:"). Send only the code and backend name, without other credentials.', { ns: 'config', pairCommand });
 }
 export const VERIFICATION_CODE_LENGTH = 6;
 

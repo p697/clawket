@@ -33,7 +33,7 @@ jest.mock('../../components/ui/AgentAvatar', () => ({ AgentAvatar: (props: unkno
 jest.mock('../../components/ui/FormTextInput', () => ({ FormTextInput: (props: unknown) => require('react').createElement('TextInput', props) }));
 jest.mock('../../components/ui/FloatingButton', () => ({ FloatingButton: (props: unknown) => require('react').createElement('Pressable', props) }));
 jest.mock('../../components/ui/Skeleton', () => ({ Skeleton: (props: unknown) => require('react').createElement('View', props) }));
-jest.mock('../../components/ui/Sheet', () => ({ Sheet: ({ visible, children, ...props }: Record<string, unknown>) => visible ? require('react').createElement('View', props, children) : null }));
+jest.mock('../../components/ui/Sheet', () => ({ Sheet: ({ visible, children, footer, ...props }: Record<string, unknown>) => visible ? require('react').createElement('View', props, children, footer) : null }));
 
 const agent: AgentDescriptor = { connectionId: 'studio', agentId: 'main', name: 'Main', emoji: '🦉', isMain: true, mainSessionKey: 'agent:main:main' };
 const writer: AgentDescriptor = { ...agent, agentId: 'writer', name: 'Writer', isMain: false, mainSessionKey: 'agent:writer:main' };

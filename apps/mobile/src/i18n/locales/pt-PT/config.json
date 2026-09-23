@@ -301,7 +301,7 @@
   "Send this message to your agent": "Envie esta mensagem para o seu Agent",
   "Copy this message": "Copiar esta mensagem",
   "Open Terminal and run this command.": "Abra o Terminal e execute este comando.",
-  "Please run {{pairCommand}} on this computer. It installs the open-source Clawket CLI and pairs it with my phone. When it finishes, send me the pairing code it prints (the line that starts with \"Pairing code:\").": "Execute {{pairCommand}} neste computador. Isto instala a CLI open source do Clawket e a emparelha com o meu telemóvel. Quando terminar, envie-me o código de emparelhamento impresso (a linha que começa com “Pairing code:”).",
+  "Please run {{pairCommand}} on my computer to set up the open-source Clawket CLI and pair it with my phone. I authorize you to reply in this conversation with the temporary pairing code it prints (the line starting with \"Pairing code:\"). Send only the code and backend name, without other credentials.": "Executa {{pairCommand}} no meu computador para configurar a CLI de código aberto Clawket e emparelhá-la com o meu telemóvel. Autorizo-te a responder nesta conversa com o código temporário de emparelhamento apresentado (a linha que começa por \"Pairing code:\"). Envia apenas o código e o nome do backend, sem outras credenciais.",
   "Message for your agent": "Mensagem para o seu Agent",
   "Copied": "Copiado",
   "Enter the pairing code": "Introduzir o código de emparelhamento",
@@ -381,5 +381,6 @@
   "Search config...": "Pesquisar na configuração…",
   "Collapse all": "Recolher tudo",
   "{{count}} items": "{{count}} itens",
-  "Delete this local config backup? This does not change the current Gateway config.": "Eliminar esta cópia de segurança local da configuração? A configuração atual do Gateway não será alterada."
+  "Delete this local config backup? This does not change the current Gateway config.": "Eliminar esta cópia de segurança local da configuração? A configuração atual do Gateway não será alterada.",
+  "Backup history": "Histórico de cópias de segurança"
 }

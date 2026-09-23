@@ -23,7 +23,6 @@ import { ChatCacheService } from '../../services/chat-cache';
 import { MessageFavoritesService } from '../../services/message-favorites';
 import { useAppTheme } from '../../theme';
 import {
-  ControlSize,
   FontSize,
   FontWeight,
   LineHeight,
@@ -135,7 +134,11 @@ function MessageDetailView({
         {state === 'loading' ? (
           <View testID="message-detail-loading" style={styles.detailBody}>
             <Skeleton accessibilityLabel={t('Loading message')} style={styles.detailTitleSkeleton} />
-            <Skeleton style={styles.detailBodySkeleton} />
+            <View style={styles.detailBodySkeleton}>
+              {(['96%', '88%', '92%', '64%'] as const).map((width, index) => (
+                <Skeleton key={index} style={[styles.detailLineSkeleton, { width }]} />
+              ))}
+            </View>
           </View>
         ) : null}
         {state === 'empty' ? (
@@ -301,8 +304,14 @@ const styles = StyleSheet.create({
   },
   detailTitleSkeleton: {
     width: '42%',
+    minHeight: 0,
+    height: Space.lg,
+  },
+  detailLineSkeleton: {
+    minHeight: 0,
+    height: Space.md,
   },
   detailBodySkeleton: {
-    minHeight: ControlSize.rosterRow,
+    gap: Space.sm,
   },
 });

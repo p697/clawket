@@ -278,10 +278,20 @@ function ThreadScreenContent({
     if (consumedComposerDraft.current === key) return;
     consumedComposerDraft.current = key;
     // Restore the session's own draft first and preserve any existing unsent text.
-    controller.setInput(controller.input ? `${controller.input}\n\n${draft.text}` : draft.text);
+    if (draft.skill) {
+      const currentSkill = selectedSkill?.scope === `${connectionId}:${agentId}:${sessionKey}`
+        && controller.input.startsWith(selectedSkill.prefix) ? selectedSkill : readSkillDraft(controller.input);
+      const text = currentSkill ? controller.input.slice(currentSkill.prefix.length) : controller.input;
+      const prefix = `${draft.skill.invocation}\n\n`;
+      setSelectedSkill({ scope: `${connectionId}:${agentId}:${sessionKey}`, name: draft.skill.name, prefix });
+      controller.setInput(`${prefix}${text}`);
+      controller.composerRef.current?.focus();
+    } else {
+      controller.setInput(controller.input ? `${controller.input}\n\n${draft.text}` : draft.text);
+    }
     navigation.setParams({ composerDraft: undefined });
   }, [route.params.composerDraft, controller.draftReady, controller.sessionKey, controller.input, controller.setInput,
-    connectionId, agentId, sessionKey, routeIsActive, focused, locked, sessionPreview, navigation]);
+    connectionId, agentId, sessionKey, routeIsActive, focused, locked, sessionPreview, navigation, selectedSkill, controller.composerRef]);
   const skillScope = `${connectionId}:${agentId}:${sessionKey}`;
   const activeSkill = selectedSkill?.scope === skillScope && controller.input.startsWith(selectedSkill.prefix) ? selectedSkill
     : controller.draftReady && controller.sessionKey === sessionKey ? readSkillDraft(controller.input) : null;

@@ -439,7 +439,7 @@ export function RosterView({
       && (showOfflineBanner ?? state === 'offline');
     const open = item.locked ? onOpenLockedRow : onOpenRow;
     const timeLabel = relativeTime(
-      item.cached ? item.syncedAt : item.lastActivityAt,
+      item.lastActivityAt,
       translateRelativeTime,
     );
     const row = (
@@ -456,7 +456,7 @@ export function RosterView({
           ? item.activity === 'thinking' ? t('Thinking…', { ns: 'chat' })
             : item.activity === 'tool' ? t('Using tool', { ns: 'chat' }) : t('Working')
           : item.subtitle?.label ?? item.preview ?? t('No activity yet')}
-        pinned={item.kind === 'pinned_session'}
+        pinned={item.kind === 'pinned_session' || item.agentPinned}
         sessionKind={item.sessionKind}
         avatarStatus={activeConnectionOffline ? 'offline' : item.working ? 'working' : 'idle'}
         timeLabel={timeLabel}
@@ -466,7 +466,7 @@ export function RosterView({
         attentionTone="bad"
         cached={item.cached}
         locked={item.locked}
-        accessibilityLabel={item.cached ? `${item.name}, ${t('Last synced')}` : [item.name, item.working ? t('Working') : null, item.unreadCount > 0 ? t('Unread messages') : null].filter(Boolean).join(', ')}
+        accessibilityLabel={[item.name, timeLabel, item.cached && item.syncedAt ? `${t('Last synced')} ${relativeTime(item.syncedAt, translateRelativeTime)}` : null, item.working ? t('Working') : null, item.unreadCount > 0 ? t('Unread messages') : null].filter(Boolean).join(', ')}
         onPress={() => { dismissRoster?.(); open(item); }}
         {...(onLongPressRow ? { onLongPress: () => onLongPressRow(item) } : {})}
       />

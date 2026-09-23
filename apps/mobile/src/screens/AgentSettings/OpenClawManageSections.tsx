@@ -571,35 +571,40 @@ export function BackupsSection({
           onPress={gate?.locked ? () => gate.open(onCreate) : onCreate}
         />
       ) : null}
-      {backups?.length ? (
-        <SettingsGroup density="comfortable" testID="openclaw-backups-list">
-          {backups.map((backup, index) => (
-            <Fragment key={backup.id}>
-              {index ? <SettingsDivider inset="content" /> : null}
-              <SettingsRow
-                testID={`openclaw-backup-${backup.id}`}
-                title={formatDate(backup.createdAt)}
-                value={canRestore ? t('Restore') : t('Read only')}
-                showChevron={canRestore}
-                disabled={!online || busy || !canRestore}
-                onPress={() => onSelectBackup(backup)}
-              />
-              {onDeleteBackup ? <SettingsRow
-                testID={`openclaw-backup-delete-${backup.id}`}
-                title={t('Delete', { ns: 'common' })}
-                destructive
-                disabled={busy}
-                onPress={() => onDeleteBackup(backup)}
-              /> : null}
-            </Fragment>
-          ))}
-        </SettingsGroup>
-      ) : (
-        <SectionEmpty
-          testID="openclaw-backups-empty"
-          message={t('No restore points yet. Create one before editing.')}
-        />
-      )}
+      <View style={stylesStatic.backupHistory}>
+        <Text accessibilityRole="header" style={styles.backupHistoryTitle}>
+          {t('Backup history')}
+        </Text>
+        {backups?.length ? (
+          <SettingsGroup density="comfortable" testID="openclaw-backups-list">
+            {backups.map((backup, index) => (
+              <Fragment key={backup.id}>
+                {index ? <SettingsDivider inset="content" /> : null}
+                <SettingsRow
+                  testID={`openclaw-backup-${backup.id}`}
+                  title={formatDate(backup.createdAt)}
+                  value={canRestore ? t('Restore') : t('Read only')}
+                  showChevron={canRestore}
+                  disabled={!online || busy || !canRestore}
+                  onPress={() => onSelectBackup(backup)}
+                />
+                {onDeleteBackup ? <SettingsRow
+                  testID={`openclaw-backup-delete-${backup.id}`}
+                  title={t('Delete', { ns: 'common' })}
+                  destructive
+                  disabled={busy}
+                  onPress={() => onDeleteBackup(backup)}
+                /> : null}
+              </Fragment>
+            ))}
+          </SettingsGroup>
+        ) : (
+          <SectionEmpty
+            testID="openclaw-backups-empty"
+            message={t('No restore points yet. Create one before editing.')}
+          />
+        )}
+      </View>
     </View>
   );
 }
@@ -696,6 +701,13 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       paddingHorizontal: Space.lg,
       paddingVertical: Space.lg,
     },
+    backupHistoryTitle: {
+      color: colors.inkSecondary,
+      fontSize: FontSize.secondary,
+      lineHeight: LineHeight.secondary,
+      fontWeight: FontWeight.semibold,
+      paddingHorizontal: Space.lg,
+    },
     introText: {
       flex: 1,
       color: colors.inkSecondary,
@@ -724,6 +736,10 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
 }
 
 const stylesStatic = StyleSheet.create({
+  backupHistory: {
+    marginTop: Space.lg,
+    gap: Space.sm,
+  },
   stack: {
     gap: Space.lg,
   },

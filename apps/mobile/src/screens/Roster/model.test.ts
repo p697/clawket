@@ -91,7 +91,7 @@ function group(id: string, source: 'live' | 'cache' = 'live'): RosterConnectionG
 }
 
 describe('Roster model', () => {
-  it('keeps pinned sessions immediately below their Agent and connection groups adjacent', () => {
+  it('keeps pinned sessions with their Agent while interleaving connections by activity', () => {
     const cachedSource = group('two', 'cache');
     const cachedGroup: RosterConnectionGroup = {
       ...cachedSource,
@@ -115,9 +115,9 @@ describe('Roster model', () => {
     expect(rows.map((row) => row.key)).toEqual([
       'agent:one:main',
       'session:one:agent:main:channel:general',
-      'agent:one:builder',
       'agent:two:main',
       'session:two:agent:main:channel:general',
+      'agent:one:builder',
       'agent:two:builder',
     ]);
     expect(rows[1]).toMatchObject({
@@ -127,13 +127,23 @@ describe('Roster model', () => {
       emoji: 'C',
       sessionKind: 'channel',
     });
-    expect(rows.slice(3).every((row) => (
+    expect(rows.filter((row) => row.connectionId === 'two').every((row) => (
       row.cached
       && row.syncedAt === 100
       && row.unreadCount === 0
       && row.attention === null
       && row.working === false
     ))).toBe(true);
+  });
+
+  it('pins an Agent above newer Agents on other connections', () => {
+    const rows = buildRosterRows([group('one'), group('two')], {
+      agentPreferences: { 'two:builder': { agentPinned: true } },
+    });
+    expect(rows[0]).toMatchObject({ connectionId: 'two', agentId: 'builder', agentPinned: true });
+    expect(rows.map((row) => `${row.connectionId}:${row.agentId}`)).toEqual([
+      'two:builder', 'one:main', 'two:main', 'one:builder',
+    ]);
   });
 
   it('uses live work phases even before a session list snapshot catches up', () => {

@@ -387,7 +387,7 @@ describe.each(['light', 'dark'] as const)('%s roster primitives', (scheme) => {
     expect(result.queryByText('1')).toBeNull();
   });
 
-  it('shows cached sync and lock state without stale attention or unread badges', () => {
+  it('shows cached activity time and lock state without stale attention or unread badges', () => {
     const result = render(
       <RosterRow
         testID="cached-row"
@@ -405,7 +405,7 @@ describe.each(['light', 'dark'] as const)('%s roster primitives', (scheme) => {
     );
 
     expect(result.getByTestId('cached-row-lock-icon')).toBeTruthy();
-    expect(result.getByTestId('cached-row-synced').props.children).toBe('2h');
+    expect(result.getByTestId('cached-row-time').props.children).toBe('2h');
     expect(result.getByTestId('cached-row').props.accessibilityLabel).toBe('Main, Last synced');
     expect(result.queryByTestId('cached-row-attention')).toBeNull();
     expect(result.queryByTestId('cached-row-unread')).toBeNull();
@@ -516,19 +516,16 @@ describe('AgentAvatar states and motion', () => {
     expect(image.getByText('✨')).toBeTruthy();
   });
 
-  it('uses a stable activity badge without rotating the avatar silhouette', () => {
-    const theme = activeTheme('light');
+  it('keeps working avatars free of activity badges and rotating rings', () => {
     const result = render(<AgentAvatar testID="avatar" agentId="main" name="Main" status="working" />);
     expect(result.queryByTestId('avatar-working-ring')).toBeNull();
-    expect(flattenStyle(result.getByTestId('avatar-working').props.style)).toMatchObject({
-      width: Space.lg, height: Space.lg, backgroundColor: theme.colors.ink,
-    });
+    expect(result.queryByTestId('avatar-working')).toBeNull();
     expect(mockWithRepeat).not.toHaveBeenCalled();
     result.rerender(<AgentAvatar testID="avatar" agentId="main" name="Main" status="idle" />);
     expect(result.queryByTestId('avatar-working')).toBeNull();
     mockReducedMotion = true;
     result.rerender(<AgentAvatar testID="avatar" agentId="main" name="Main" status="working" />);
-    expect(result.getByTestId('avatar-working')).toBeTruthy();
+    expect(result.queryByTestId('avatar-working')).toBeNull();
     expect(mockWithRepeat).not.toHaveBeenCalled();
   });
 

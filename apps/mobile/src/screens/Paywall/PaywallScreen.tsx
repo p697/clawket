@@ -251,7 +251,7 @@ function PaywallPresentation({
               : t('Unable to open redemption. Please try again.')}
         </Text>
       ) : null}
-      <View testID="paywall-footer" pointerEvents={actionsLocked ? 'none' : 'auto'} style={styles.footer}>
+      <View testID="paywall-footer" pointerEvents={actionsLocked ? 'none' : 'auto'} style={[styles.footer, isComplete ? styles.completeFooter : null]}>
         {isComplete ? (
           <>
             {onManageSubscription ? <Button testID="paywall-manage-subscription" label={t('Manage subscription')} onPress={onManageSubscription} /> : null}
@@ -536,6 +536,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       fontWeight: FontWeight.regular,
     },
     footer: { paddingHorizontal: Space.xl, gap: Space.xs },
+    completeFooter: { gap: Space.lg },
     plans: { gap: Space.sm },
     plansRow: { flexDirection: 'row', alignItems: 'stretch' },
     checkout: { gap: Space.xs },

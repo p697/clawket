@@ -14,6 +14,7 @@ import { Banner } from '../../components/ui/Banner';
 import { Button } from '../../components/ui/Button';
 import { SearchInput } from '../../components/ui/SearchInput';
 import { Skeleton } from '../../components/ui/Skeleton';
+import { ListSkeleton } from '../../components/ui/ListSkeleton';
 import { useAppTheme } from '../../theme';
 import {
   ControlSize,
@@ -221,8 +222,7 @@ export function LogsSection({
     return (
       <View testID="agent-logs-loading" style={styles.stack}>
         <Skeleton style={styles.skeletonControl} />
-        <Skeleton style={styles.skeletonRow} />
-        <Skeleton style={styles.skeletonRow} />
+        <ListSkeleton detail trailing="none" rows={5} />
       </View>
     );
   }
@@ -395,9 +395,6 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     skeletonControl: {
       minHeight: ControlSize.floatingButton,
-    },
-    skeletonRow: {
-      minHeight: ControlSize.settingsRow * 2,
     },
   });
 }

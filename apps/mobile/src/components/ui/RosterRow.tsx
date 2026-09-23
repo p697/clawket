@@ -173,52 +173,27 @@ export function RosterRow({
         </Text>
       </View>
       <View testID={testID ? `${testID}-trailing` : undefined} style={styles.trailing}>
-        {cached ? (
-          <View style={styles.cachedStatus}>
-            {locked ? (
-              <Lock
-                testID={testID ? `${testID}-lock-icon` : undefined}
-                size={IconSize.sm}
-                color={theme.colors.inkTertiary}
-                strokeWidth={BorderWidth.strong}
-              />
-            ) : null}
-            {timeLabel ? (
-              <Text
-                testID={testID ? `${testID}-synced` : undefined}
-                style={[styles.time, { color: theme.colors.inkTertiary }]}
-                numberOfLines={1}
-                maxFontSizeMultiplier={1.3}
-              >
-                {timeLabel}
+        {timeLabel ? (
+          <Text testID={testID ? `${testID}-time` : undefined}
+            style={[styles.time, { color: theme.colors.inkTertiary }]} numberOfLines={1} maxFontSizeMultiplier={1.3}>
+            {timeLabel}
+          </Text>
+        ) : null}
+        {locked ? (
+          <Lock testID={testID ? `${testID}-lock-icon` : undefined} size={IconSize.sm}
+            color={theme.colors.inkTertiary} strokeWidth={BorderWidth.strong} />
+        ) : !cached && attention ? (
+          <View testID={testID ? `${testID}-attention` : undefined}
+            style={[styles.attentionDot, { backgroundColor: theme.colors.bad }]} />
+        ) : !cached && unreadCount > 0 ? (
+          <View testID={testID ? `${testID}-unread` : undefined}
+            style={[unreadIndicator === 'dot' ? styles.attentionDot : styles.unreadBadge, { backgroundColor: theme.colors.ink }]}>
+            {unreadIndicator === 'count' ? (
+              <Text style={[styles.unreadText, { color: theme.colors.canvas }]}>
+                {formatFloatingButtonBadgeCount(unreadCount)}
               </Text>
             ) : null}
           </View>
-        ) : locked ? (
-          <Lock
-            testID={testID ? `${testID}-lock-icon` : undefined}
-            size={IconSize.sm}
-            color={theme.colors.inkTertiary}
-            strokeWidth={BorderWidth.strong}
-          />
-        ) : attention ? (
-          <View
-            testID={testID ? `${testID}-attention` : undefined}
-            style={[styles.attentionDot, { backgroundColor: theme.colors.bad }]}
-          />
-        ) : unreadCount > 0 ? (
-          <View
-            testID={testID ? `${testID}-unread` : undefined}
-            style={[unreadIndicator === 'dot' ? styles.attentionDot : styles.unreadBadge, { backgroundColor: theme.colors.ink }]}
-          >
-            {unreadIndicator === 'count' ? <Text style={[styles.unreadText, { color: theme.colors.canvas }]}>
-              {formatFloatingButtonBadgeCount(unreadCount)}
-            </Text> : null}
-          </View>
-        ) : timeLabel ? (
-          <Text style={[styles.time, { color: theme.colors.inkTertiary }]} numberOfLines={1} maxFontSizeMultiplier={1.3}>
-            {timeLabel}
-          </Text>
         ) : null}
       </View>
     </AnimatedPressable>
@@ -274,10 +249,6 @@ const styles = StyleSheet.create({
     minWidth: Space.xl,
     alignItems: 'flex-end',
     justifyContent: 'center',
-  },
-  cachedStatus: {
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: Space.xs,
   },
   time: {

@@ -790,11 +790,13 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     skeletonName: {
       width: '42%',
-      height: LineHeight.body,
+      minHeight: 0,
+      height: Space.lg,
     },
     skeletonDetail: {
       width: '66%',
-      height: LineHeight.caption,
+      minHeight: 0,
+      height: Space.md,
     },
     rowSkeleton: {
       minHeight: ControlSize.settingsRow,
@@ -806,11 +808,13 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     skeletonRowTitle: {
       width: '38%',
-      height: LineHeight.body,
+      minHeight: 0,
+      height: Space.lg,
     },
     skeletonRowValue: {
       width: '20%',
-      height: LineHeight.secondary,
+      minHeight: 0,
+      height: Space.md,
     },
   });
 }

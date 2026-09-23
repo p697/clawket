@@ -301,7 +301,7 @@
   "Send this message to your agent": "このメッセージをエージェントに送る",
   "Copy this message": "このメッセージをコピー",
   "Open Terminal and run this command.": "ターミナルを開き、このコマンドを実行します。",
-  "Please run {{pairCommand}} on this computer. It installs the open-source Clawket CLI and pairs it with my phone. When it finishes, send me the pairing code it prints (the line that starts with \"Pairing code:\").": "このコンピュータで {{pairCommand}} を実行してください。オープンソースの Clawket CLI をインストールし、私のスマートフォンとペアリングします。完了したら、表示されたペアリングコード（「Pairing code:」で始まる行）を送ってください。",
+  "Please run {{pairCommand}} on my computer to set up the open-source Clawket CLI and pair it with my phone. I authorize you to reply in this conversation with the temporary pairing code it prints (the line starting with \"Pairing code:\"). Send only the code and backend name, without other credentials.": "私のコンピューターで {{pairCommand}} を実行し、オープンソースの Clawket CLI を設定してスマートフォンとペアリングしてください。出力された一時的なペアリングコード（\"Pairing code:\" で始まる行）をこの会話で返信することを許可します。コードとバックエンド名のみを送り、ほかの認証情報は含めないでください。",
   "Message for your agent": "エージェントへのメッセージ",
   "Copied": "コピーしました",
   "Enter the pairing code": "ペアリングコードを入力",
@@ -381,5 +381,6 @@
   "Search config...": "設定を検索...",
   "Collapse all": "すべて折りたたむ",
   "{{count}} items": "{{count}} 件",
-  "Delete this local config backup? This does not change the current Gateway config.": "このローカル設定バックアップを削除しますか？ 現在の Gateway 設定は変更されません。"
+  "Delete this local config backup? This does not change the current Gateway config.": "このローカル設定バックアップを削除しますか？ 現在の Gateway 設定は変更されません。",
+  "Backup history": "バックアップ履歴"
 }

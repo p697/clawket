@@ -16,12 +16,11 @@ import {
   SettingsGroup,
   SettingsRow,
 } from '../../components/ui/SettingsGroup';
-import { Skeleton } from '../../components/ui/Skeleton';
+import { ListSkeleton } from '../../components/ui/ListSkeleton';
 import { ThemedSwitch } from '../../components/ui/ThemedSwitch';
 import { analyticsEvents } from '../../services/analytics/events';
 import { useAppTheme } from '../../theme';
 import {
-  ControlSize,
   FontSize,
   FontWeight,
   IconSize,
@@ -342,16 +341,7 @@ export function ToolsSection({
 }
 
 function ToolsLoading(): React.JSX.Element {
-  return (
-    <View testID="agent-tools-loading" style={stylesStatic.loading}>
-      {[0, 1, 2, 3].map((row) => (
-        <View key={row} style={stylesStatic.skeletonRow}>
-          <Skeleton style={stylesStatic.skeletonTitle} />
-          <Skeleton style={stylesStatic.skeletonValue} />
-        </View>
-      ))}
-    </View>
-  );
+  return <ListSkeleton testID="agent-tools-loading" trailing="switch" />;
 }
 
 function errorMessage(error: unknown, fallback: string): string {
@@ -359,18 +349,6 @@ function errorMessage(error: unknown, fallback: string): string {
   if (typeof error === 'string' && error.trim()) return error;
   return fallback;
 }
-
-const stylesStatic = StyleSheet.create({
-  loading: { gap: Space.sm },
-  skeletonRow: {
-    minHeight: ControlSize.settingsRow,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Space.lg,
-  },
-  skeletonTitle: { flex: 1, height: LineHeight.body },
-  skeletonValue: { width: '20%', height: LineHeight.secondary },
-});
 
 function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors']) {
   return StyleSheet.create({

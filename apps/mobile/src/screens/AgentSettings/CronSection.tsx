@@ -10,7 +10,7 @@ import { FormTextInput } from '../../components/ui/FormTextInput';
 import { SegmentedTabs } from '../../components/ui/SegmentedTabs';
 import { SettingsGroup, SettingsRow } from '../../components/ui/SettingsGroup';
 import { Sheet } from '../../components/ui/Sheet';
-import { Skeleton } from '../../components/ui/Skeleton';
+import { ListSkeleton } from '../../components/ui/ListSkeleton';
 import { ThemedSwitch } from '../../components/ui/ThemedSwitch';
 import { useAppTheme } from '../../theme';
 import { describeScheduleHuman } from '../../utils/cron';
@@ -344,16 +344,7 @@ function FormField({
 }
 
 function CronLoading(): React.JSX.Element {
-  return (
-    <View testID="agent-cron-loading" style={stylesStatic.loading}>
-      {[0, 1, 2, 3].map((row) => (
-        <View key={row} style={stylesStatic.skeletonRow}>
-          <Skeleton style={stylesStatic.skeletonTitle} />
-          <Skeleton style={stylesStatic.skeletonValue} />
-        </View>
-      ))}
-    </View>
-  );
+  return <ListSkeleton testID="agent-cron-loading" detail trailing="switch" />;
 }
 
 function heartbeatDraft(settings: HeartbeatSettings | null): HeartbeatSettings {
@@ -377,18 +368,6 @@ function errorMessage(error: unknown, fallback: string): string {
   if (typeof error === 'string' && error.trim()) return error;
   return fallback;
 }
-
-const stylesStatic = StyleSheet.create({
-  loading: { gap: Space.sm },
-  skeletonRow: {
-    minHeight: ControlSize.settingsRow,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Space.lg,
-  },
-  skeletonTitle: { flex: 1, height: LineHeight.body },
-  skeletonValue: { width: '20%', height: LineHeight.secondary },
-});
 
 function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors']) {
   return StyleSheet.create({

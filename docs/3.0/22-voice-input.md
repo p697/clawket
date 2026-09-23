@@ -17,6 +17,8 @@
 
 客户端同步采集和转录；每个 Provider task 最多读取 110 秒音频，十分钟使用六个独立准入任务。服务端仍保持 120 秒 / 3.84 MB 单任务上限。连接准备期间首字留在本机文件，补传最高 5 倍实时速度。v2 ready 协商 `flowControl: ack.v1`，服务端每次转发 PCM 后确认累计接收字节；客户端未确认窗口达到 64 KB 时暂停读取，超过等待期限保留原始文件供重试。React Native 的 `bufferedAmount` 可能未实现，不能用它作为必要发送条件；旧服务未协商 ACK 且没有该属性时按实时速度发送。v1 不接收 ACK 新帧。客户端不把整段十分钟录音加载到内存。OpenClaw/Hermes 经过同一发送/排队入口。
 
+Provider WebSocket 握手有独立 10 秒超时，fetch 返回或失败立即清理计时器；不可让握手 AbortSignal 在成功升级后继续计时并关闭长连接。后续启动、音频闲置、单段时长、结束等待由 session 自己控制。转录提前失败时仍继续本机录音，停止后才弹出已保存的错误，因此“点完成立即报错”不等于完成按钮触发断连。
+
 身份用已有 SecureStore Ed25519 key 签署 `clawket-speech-v1|host|timestamp|nonce`；密钥不传输。模型固定 `qwen-audio-3.0-asr-flash-streaming`，Provider endpoint/key 由服务端控制。音频与转录会传给阿里云，服务条款和商店隐私披露仍需覆盖该处理。
 
 ## 额度与诊断

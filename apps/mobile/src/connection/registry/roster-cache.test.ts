@@ -282,7 +282,7 @@ describe('aggregateRoster', () => {
     expect(groups.map((group) => group.connection.id)).toEqual(['c', 'a', 'b']);
     expect(groups[1].agents.map((entry) => entry.agent.agentId)).toEqual(['main', 'quiet']);
     expect(groups[1].agents[0]).toMatchObject({
-      preview: 'unread main',
+      preview: 'main:channel: recent channel',
       lastActivityAt: 600,
       unreadCount: 1,
       hasUnread: true,

@@ -51,6 +51,7 @@ const mockedAnalyticsEvents = analyticsEvents as jest.Mocked<typeof analyticsEve
 
 const mockPreventRemove = jest.fn();
 jest.mock('@react-navigation/native', () => ({
+  useIsFocused: () => true,
   usePreventRemove: (...args: unknown[]) => mockPreventRemove(...args),
 }));
 

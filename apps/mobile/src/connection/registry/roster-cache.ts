@@ -1,5 +1,6 @@
 import {
   getGatewayBackendDescriptor,
+  HUMAN_SESSION_KINDS,
   sessionActivityAt,
   type AgentDescriptor,
   type ConnectionDescriptor,
@@ -245,7 +246,7 @@ function activityValue(value: number | null): number {
  */
 export function compareAgentSummaries(a: RosterAgentSummary, b: RosterAgentSummary): number {
   return activityValue(b.lastActivityAt) - activityValue(a.lastActivityAt)
-    || a.agent.name.localeCompare(b.agent.name)
+    || a.agent.connectionId.localeCompare(b.agent.connectionId)
     || a.agent.agentId.localeCompare(b.agent.agentId);
 }
 
@@ -283,15 +284,21 @@ function buildAgentSummary(
     watermarks,
     { unreadEnabled: liveSignalsEnabled },
   ).unreadCount;
-  const recentSession = [...agentSessions].sort(
-    (a, b) => activityValue(sessionActivityAt(b)) - activityValue(sessionActivityAt(a)) || a.key.localeCompare(b.key),
-  )[0];
-  const mainSession = agentSessions.find((session) => session.key === agent.mainSessionKey) ?? recentSession;
+  const recentSession = agentSessions
+    .filter((session) => HUMAN_SESSION_KINDS.has(session.kind) && sessionActivityAt(session) !== null)
+    .sort((a, b) => activityValue(sessionActivityAt(b)) - activityValue(sessionActivityAt(a))
+      || Number(b.key === agent.mainSessionKey) - Number(a.key === agent.mainSessionKey)
+      || a.key.localeCompare(b.key))[0];
+  const previewSession = recentSession ?? agentSessions.find((session) => session.key === agent.mainSessionKey);
+  const previewText = previewSession?.preview;
+  const sourceTitle = previewSession && previewSession.key !== agent.mainSessionKey
+    ? previewSession.channel || previewSession.title : undefined;
+  const preview = previewText && sourceTitle ? `${sourceTitle}: ${previewText}` : previewText;
   return Object.freeze({
     agent,
     sessions: Object.freeze(agentSessions),
     ...(subtitle ? { subtitle } : {}),
-    ...(mainSession?.preview ? { preview: mainSession.preview } : {}),
+    ...(preview ? { preview } : {}),
     lastActivityAt: signals.lastActivityAt,
     unreadCount: mainUnreadCount,
     hasUnread: mainUnreadCount > 0,

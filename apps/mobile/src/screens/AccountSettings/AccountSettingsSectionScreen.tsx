@@ -19,11 +19,10 @@ import {
   SettingsGroup,
   SettingsRow,
 } from '../../components/ui/SettingsGroup';
-import { Skeleton } from '../../components/ui/Skeleton';
+import { ListSkeleton } from '../../components/ui/ListSkeleton';
 import { ThemedSwitch } from '../../components/ui/ThemedSwitch';
 import { useAppTheme } from '../../theme';
 import {
-  ControlSize,
   FontSize,
   FontWeight,
   LineHeight,
@@ -166,11 +165,12 @@ function SectionLoading(): React.JSX.Element {
   return (
     <View testID="account-settings-section-loading" style={styles.loadingGroups}>
       {SECTION_SKELETONS.map((key) => (
-        <Skeleton
+        <ListSkeleton
           key={key}
           testID={`account-settings-section-skeleton-${key}`}
           accessibilityLabel={t('Loading settings')}
-          style={styles.loadingCard}
+          rows={2}
+          icon
         />
       ))}
     </View>
@@ -383,8 +383,5 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: Space.lg,
     gap: Space.lg,
-  },
-  loadingCard: {
-    height: ControlSize.rosterRow,
   },
 });

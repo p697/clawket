@@ -117,15 +117,14 @@ export class HermesAdapter extends GatewayAdapterBase {
   }
 
   public async listSessions(): Promise<SessionDescriptor[]> {
-    if (!this.capabilities.sessions) {
-      return this.rememberSessions([legacyHermesMainSession(this.connection.id)]);
-    }
-    const payload = await this.invoke(() => this.gateway.request<{
-      sessions?: GatewaySessionRecord[];
-    }>('sessions.list', { limit: 200 }));
-    const sessions = (Array.isArray(payload?.sessions) ? payload.sessions : [])
-      .map((session) => mapHermesSession(this.connection.id, session));
-    return this.rememberSessions(sessions);
+    return this.readSessionSnapshot(async () => {
+      if (!this.capabilities.sessions) return [legacyHermesMainSession(this.connection.id)];
+      const payload = await this.invoke(() => this.gateway.request<{
+        sessions?: GatewaySessionRecord[];
+      }>('sessions.list', { limit: 200 }));
+      return (Array.isArray(payload?.sessions) ? payload.sessions : [])
+        .map((session) => mapHermesSession(this.connection.id, session));
+    });
   }
 
   public async prompt(key: string, input: PromptInput): Promise<{ runId: string }> {
@@ -516,8 +515,10 @@ export function mapHermesSession(
     title: sessionTitle(session),
     channel: session.channel,
     updatedAt: normalizeSessionUpdatedAt(session.updatedAt),
-    // Hermes `updated_ts` is the last message time; the Bridge never writes it for housekeeping.
-    lastActivityAt: normalizeSessionUpdatedAt(session.updatedAt),
+    // New Bridges separate human messages from rename/reset and tool metadata.
+    // Older Bridges retain their existing updatedAt fallback.
+    lastActivityAt: session.lastActivityAt === null ? null
+      : normalizeSessionUpdatedAt(session.lastActivityAt ?? session.updatedAt),
     preview: session.lastMessagePreview,
     model: session.model,
     modelProvider: session.modelProvider,

@@ -1473,3 +1473,5 @@ function disposeAdapter(adapter: AgentAdapter): void {
   if (typeof disposable.dispose === 'function') disposable.dispose();
   else adapter.disconnect();
 }
+
+export { compareAgentSummaries } from './registry/roster-cache';

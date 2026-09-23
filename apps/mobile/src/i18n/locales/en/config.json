@@ -301,7 +301,7 @@
   "Send this message to your agent": "Send this message to your agent",
   "Copy this message": "Copy this message",
   "Open Terminal and run this command.": "Open Terminal and run this command.",
-  "Please run {{pairCommand}} on this computer. It installs the open-source Clawket CLI and pairs it with my phone. When it finishes, send me the pairing code it prints (the line that starts with \"Pairing code:\").": "Please run {{pairCommand}} on this computer. It installs the open-source Clawket CLI and pairs it with my phone. When it finishes, send me the pairing code it prints (the line that starts with \"Pairing code:\").",
+  "Please run {{pairCommand}} on my computer to set up the open-source Clawket CLI and pair it with my phone. I authorize you to reply in this conversation with the temporary pairing code it prints (the line starting with \"Pairing code:\"). Send only the code and backend name, without other credentials.": "Please run {{pairCommand}} on my computer to set up the open-source Clawket CLI and pair it with my phone. I authorize you to reply in this conversation with the temporary pairing code it prints (the line starting with \"Pairing code:\"). Send only the code and backend name, without other credentials.",
   "Message for your agent": "Message for your agent",
   "Copied": "Copied",
   "Enter the pairing code": "Enter the pairing code",
@@ -381,5 +381,6 @@
   "Search config...": "Search config...",
   "Collapse all": "Collapse all",
   "{{count}} items": "{{count}} items",
-  "Delete this local config backup? This does not change the current Gateway config.": "Delete this local config backup? This does not change the current Gateway config."
+  "Delete this local config backup? This does not change the current Gateway config.": "Delete this local config backup? This does not change the current Gateway config.",
+  "Backup history": "Backup history"
 }

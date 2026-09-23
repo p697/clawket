@@ -4,6 +4,7 @@ import { Buffer } from 'node:buffer';
 import { HermesPythonRunner } from './python-runner.js';
 import {
   NATIVE_SESSION_ACTIONS,
+  type HermesBridgeSessionStore,
   type HermesBridgeSessionMessage,
   type HermesSessionListEntry,
 } from './session-store.js';
@@ -37,6 +38,8 @@ export type HermesNativeHistory = {
   sessionId: string;
   title: string;
   updatedAt: number;
+  lastActivityAt?: number | null;
+  lastMessagePreview?: string;
   messages: HermesHistoryMessage[];
 };
 
@@ -157,6 +160,8 @@ export class HermesNativeSessionReader {
         sessionId: resolvedSessionId,
         title: readString(parsed.title) || sessionId,
         updatedAt: readNumber(parsed.updatedAt) ?? 0,
+        lastActivityAt: readNumber(parsed.lastActivityAt) ?? null,
+        lastMessagePreview: readString(parsed.lastMessagePreview) || '',
         messages: normalizeHistoryMessages(parsed.messages),
       };
     } catch (error) {
@@ -186,6 +191,7 @@ function normalizeNativeSessionEntry(
     title,
     label: title,
     updatedAt: readNumber(entry.updatedAt) ?? 0,
+    lastActivityAt: readNumber(entry.lastActivityAt) ?? null,
     lastMessagePreview: preview,
     preview,
     channel: readString(entry.channel) || undefined,
@@ -245,7 +251,8 @@ const LIST_SESSIONS_SCRIPT = [
   'cur.execute("""',
   'SELECT s.id, s.source, s.model, s.billing_provider, s.title,',
   ' COALESCE((SELECT MAX(m.timestamp) FROM messages m WHERE m.session_id=s.id), s.ended_at, s.started_at, 0) AS updated_ts,',
-  ' COALESCE((SELECT m.content FROM messages m WHERE m.session_id=s.id AND m.content IS NOT NULL AND TRIM(m.content) != "" ORDER BY m.timestamp DESC, m.id DESC LIMIT 1), "") AS last_message_preview',
+  ' (SELECT MAX(m.timestamp) FROM messages m WHERE m.session_id=s.id AND m.role IN ("user", "assistant") AND (m.role = "user" OR (m.content IS NOT NULL AND TRIM(m.content) != ""))) AS activity_ts,',
+  ' COALESCE((SELECT m.content FROM messages m WHERE m.session_id=s.id AND m.role IN ("user", "assistant") AND (m.role = "user" OR (m.content IS NOT NULL AND TRIM(m.content) != "")) ORDER BY m.timestamp DESC, m.id DESC LIMIT 1), "") AS last_message_preview',
   'FROM sessions s WHERE (? = "" OR s.id NOT LIKE ?)',
   'ORDER BY updated_ts DESC, s.started_at DESC LIMIT ?',
   '""", (excluded_prefix, excluded_prefix + "%", limit))',
@@ -253,7 +260,7 @@ const LIST_SESSIONS_SCRIPT = [
   'for row in cur.fetchall():',
   ' session_id = str(row["id"] or "")',
   ' title = str(row["title"] or "").strip() or ("Hermes" if session_id == "main" else session_id)',
-  ' rows.append({"key":session_id,"sessionId":session_id,"title":title,"updatedAt":int(float(row["updated_ts"] or 0)*1000),"lastMessagePreview":str(row["last_message_preview"] or ""),"channel":str(row["source"] or "") or None,"model":str(row["model"] or "") or None,"modelProvider":str(row["billing_provider"] or "") or None})',
+  ' rows.append({"key":session_id,"sessionId":session_id,"title":title,"updatedAt":int(float(row["updated_ts"] or 0)*1000),"lastActivityAt":int(float(row["activity_ts"])*1000) if row["activity_ts"] is not None else None,"lastMessagePreview":str(row["last_message_preview"] or ""),"channel":str(row["source"] or "") or None,"model":str(row["model"] or "") or None,"modelProvider":str(row["billing_provider"] or "") or None})',
   'print(json.dumps(rows))',
 ].join('\n');
 
@@ -263,13 +270,14 @@ const FIND_SESSION_SCRIPT = [
   'cur.execute("""',
   'SELECT s.id, s.source, s.model, s.billing_provider, s.title,',
   ' COALESCE((SELECT MAX(m.timestamp) FROM messages m WHERE m.session_id=s.id), s.ended_at, s.started_at, 0) AS updated_ts,',
-  ' COALESCE((SELECT m.content FROM messages m WHERE m.session_id=s.id AND m.content IS NOT NULL AND TRIM(m.content) != "" ORDER BY m.timestamp DESC, m.id DESC LIMIT 1), "") AS last_message_preview',
+  ' (SELECT MAX(m.timestamp) FROM messages m WHERE m.session_id=s.id AND m.role IN ("user", "assistant") AND (m.role = "user" OR (m.content IS NOT NULL AND TRIM(m.content) != ""))) AS activity_ts,',
+  ' COALESCE((SELECT m.content FROM messages m WHERE m.session_id=s.id AND m.role IN ("user", "assistant") AND (m.role = "user" OR (m.content IS NOT NULL AND TRIM(m.content) != "")) ORDER BY m.timestamp DESC, m.id DESC LIMIT 1), "") AS last_message_preview',
   'FROM sessions s WHERE s.id = ? LIMIT 1',
   '""", (session_id,))',
   'row = cur.fetchone()',
   'if row is None: print("null"); raise SystemExit(0)',
   'title = str(row["title"] or "").strip() or ("Hermes" if session_id == "main" else session_id)',
-  'print(json.dumps({"key":session_id,"sessionId":session_id,"title":title,"updatedAt":int(float(row["updated_ts"] or 0)*1000),"lastMessagePreview":str(row["last_message_preview"] or ""),"channel":str(row["source"] or "") or None,"model":str(row["model"] or "") or None,"modelProvider":str(row["billing_provider"] or "") or None}))',
+  'print(json.dumps({"key":session_id,"sessionId":session_id,"title":title,"updatedAt":int(float(row["updated_ts"] or 0)*1000),"lastActivityAt":int(float(row["activity_ts"])*1000) if row["activity_ts"] is not None else None,"lastMessagePreview":str(row["last_message_preview"] or ""),"channel":str(row["source"] or "") or None,"model":str(row["model"] or "") or None,"modelProvider":str(row["billing_provider"] or "") or None}))',
 ].join('\n');
 
 const READ_HISTORY_SCRIPT = [
@@ -311,6 +319,45 @@ const READ_HISTORY_SCRIPT = [
   '  if blocks: messages.append({"role":"assistant","content":blocks if len(blocks)>1 or any(b.get("type")=="toolCall" for b in blocks) else blocks[0].get("text", ""),"timestamp":timestamp,"model":str(row["model"] or "") or None,"provider":str(row["billing_provider"] or "") or None,"_cursorId":cursor_id,"_nativeId":str(message["id"])})',
   ' elif role == "tool": messages.append({"role":"toolResult","content":content,"timestamp":timestamp,"toolCallId":message["tool_call_id"] or None,"toolName":message["tool_name"] or None,"_cursorId":cursor_id,"_nativeId":str(message["id"])})',
   ' elif role in ("user", "system"): messages.append({"role":role,"content":content,"timestamp":timestamp,"_cursorId":cursor_id,"_nativeId":str(message["id"])})',
+  'human_messages = [m for m in messages if m["role"] == "user" or (m["role"] == "assistant" and (isinstance(m["content"], str) and m["content"].strip() or isinstance(m["content"], list) and any(b.get("type") == "text" and str(b.get("text") or "").strip() for b in m["content"])))]',
+  'latest = human_messages[-1] if human_messages else None',
+  'preview = latest["content"] if latest else ""',
+  'if isinstance(preview, list): preview = " ".join(str(b.get("text") or "") for b in preview if b.get("type") == "text")',
   'title = str(row["title"] or "").strip() or ("Hermes" if session_id == "main" else session_id)',
-  'print(json.dumps({"sessionId":session_id,"title":title,"updatedAt":int(float(row["updated_ts"] or 0)*1000),"messages":messages}))',
+  'print(json.dumps({"sessionId":session_id,"title":title,"updatedAt":int(float(row["updated_ts"] or 0)*1000),"lastActivityAt":latest["timestamp"] if latest else None,"lastMessagePreview":str(preview),"messages":messages}))',
 ].join('\n');
+
+/** Keep metadata timestamps for legacy peers, but pair preview and human activity. */
+export async function listHermesSessionSnapshots(
+  store: HermesBridgeSessionStore,
+  native: HermesNativeSessionReader,
+  limit: number,
+  active: (key: string) => boolean,
+): Promise<HermesSessionListEntry[]> {
+  const bridgeSessions: HermesSessionListEntry[] = [];
+  for (const session of store.listSessions(limit, active)) {
+    const backing = (await native.readHistoryBySessionId(session.sessionId));
+    const lastMessage = backing?.messages.at(-1);
+    const nativeActivity = backing?.lastActivityAt ?? null;
+    const localActivity = session.lastActivityAt ?? null;
+    const useNativePreview = nativeActivity !== null && (localActivity === null || nativeActivity >= localActivity);
+    const preview = useNativePreview ? backing?.lastMessagePreview ?? '' : session.preview;
+    bridgeSessions.push({
+      ...session,
+      updatedAt: Math.max(session.updatedAt, backing?.updatedAt ?? 0),
+      lastActivityAt: nativeActivity === null ? localActivity
+        : localActivity === null ? nativeActivity : Math.max(nativeActivity, localActivity),
+      preview,
+      lastMessagePreview: preview,
+      model: lastMessage?.model ?? session.model,
+      modelProvider: lastMessage?.provider ?? session.modelProvider,
+    });
+  }
+  const bridgeKeys = new Set(bridgeSessions.map((session) => session.key));
+  const nativeSessions = (await native
+    .listSessions(Math.max(limit, limit + bridgeSessions.length), active))
+    .filter((session) => !bridgeKeys.has(session.key));
+  return [...bridgeSessions, ...nativeSessions]
+    .sort((left, right) => right.updatedAt - left.updatedAt)
+    .slice(0, limit);
+}

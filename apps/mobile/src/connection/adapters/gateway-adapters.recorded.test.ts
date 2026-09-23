@@ -677,6 +677,8 @@ describe('HermesAdapter recorded M3 boundary', () => {
       updatedAt: null,
       lastActivityAt: null,
     });
+    expect(mapHermesSession('hermes-recorded', { key: 'main', updatedAt: 999, lastActivityAt: 100 }).lastActivityAt).toBe(100);
+    expect(mapHermesSession('hermes-recorded', { key: 'main', updatedAt: 999, lastActivityAt: null }).lastActivityAt).toBeNull();
     expect(legacyHermesMainSession('hermes-legacy').lastActivityAt).toBeNull();
   });
 

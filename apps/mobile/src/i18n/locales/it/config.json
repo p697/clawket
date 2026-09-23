@@ -301,7 +301,7 @@
   "Send this message to your agent": "Invia questo messaggio al tuo Agent",
   "Copy this message": "Copia questo messaggio",
   "Open Terminal and run this command.": "Apri il Terminale ed esegui questo comando.",
-  "Please run {{pairCommand}} on this computer. It installs the open-source Clawket CLI and pairs it with my phone. When it finishes, send me the pairing code it prints (the line that starts with \"Pairing code:\").": "Esegui {{pairCommand}} su questo computer. Installa la CLI open source di Clawket e la abbina al mio telefono. Quando ha finito, inviami il codice di abbinamento stampato (la riga che inizia con “Pairing code:”).",
+  "Please run {{pairCommand}} on my computer to set up the open-source Clawket CLI and pair it with my phone. I authorize you to reply in this conversation with the temporary pairing code it prints (the line starting with \"Pairing code:\"). Send only the code and backend name, without other credentials.": "Esegui {{pairCommand}} sul mio computer per configurare la CLI open source Clawket e abbinarla al mio telefono. Ti autorizzo a rispondere in questa conversazione con il codice temporaneo di abbinamento stampato (la riga che inizia con \"Pairing code:\"). Invia solo il codice e il nome del backend, senza altre credenziali.",
   "Message for your agent": "Messaggio per il tuo Agent",
   "Copied": "Copiato",
   "Enter the pairing code": "Inserisci il codice di abbinamento",
@@ -381,5 +381,6 @@
   "Search config...": "Cerca nella configurazione…",
   "Collapse all": "Comprimi tutto",
   "{{count}} items": "{{count}} elementi",
-  "Delete this local config backup? This does not change the current Gateway config.": "Eliminare questo backup locale della configurazione? La configurazione attuale del Gateway non verrà modificata."
+  "Delete this local config backup? This does not change the current Gateway config.": "Eliminare questo backup locale della configurazione? La configurazione attuale del Gateway non verrà modificata.",
+  "Backup history": "Cronologia dei backup"
 }
