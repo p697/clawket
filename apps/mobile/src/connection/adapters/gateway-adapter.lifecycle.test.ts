@@ -827,3 +827,56 @@ describe('session-file capability negotiation', () => {
     await reconnected; expect(adapter.sessionFiles).toBeUndefined(); adapter.disconnect();
   });
 });
+
+
+describe('complete and ordered roster snapshots', () => {
+  it('filters the caller result without removing sibling Agents from emitted snapshots', async () => {
+    const fake = new LifecycleGateway();
+    fake.sessions = [
+      { key: 'agent:main:main', lastActivityAt: 100 },
+      { key: 'agent:other:main', lastActivityAt: 50 },
+    ];
+    const adapter = new OpenClawAdapter(connection('openclaw'), {
+      gateway: gateway(fake), historyCache: null, bridgeCapabilityMode: 'legacy',
+    });
+    const snapshots: string[][] = [];
+    adapter.on('sessions', (sessions) => snapshots.push(sessions.map((session) => session.agentId)));
+    expect((await adapter.listSessions('other')).map((session) => session.agentId)).toEqual(['other']);
+    expect(snapshots).toEqual([['main', 'other']]);
+    fake.sessions = [{ key: 'agent:other:main', updatedAt: 999 }];
+    expect((await adapter.listSessions())[0].lastActivityAt).toBeNull();
+    adapter.disconnect();
+  });
+
+  it.each(['openclaw', 'hermes'] as const)('ignores late older %s reads for subscribers and callers', async (backend) => {
+    const fake = new LifecycleGateway();
+    const pending: Array<(value: any) => void> = [];
+    fake.listSessions = () => new Promise((resolve) => pending.push(resolve));
+    fake.requestHandler = () => new Promise((resolve) => pending.push(resolve));
+    const adapter = backend === 'openclaw'
+      ? new OpenClawAdapter(connection(backend), { gateway: gateway(fake), historyCache: null, bridgeCapabilityMode: 'legacy' })
+      : new HermesAdapter(connection(backend), { gateway: gateway(fake), historyCache: null });
+    if (backend === 'hermes') fake.emit('health', {
+      status: 'ok', hermesApiReachable: true,
+      capabilities: ['bridge.capabilities.v2', 'hermes.multi-session.v2'],
+    });
+    const snapshots: Array<number | null | undefined> = [];
+    adapter.on('sessions', (sessions) => snapshots.push(sessions[0].lastActivityAt));
+    const older = adapter.listSessions();
+    const newer = adapter.listSessions();
+    const response = (time: number) => {
+      const sessions = [{ key: backend === 'hermes' ? 'main' : 'agent:main:main', updatedAt: time, lastActivityAt: time }];
+      return backend === 'hermes' ? { sessions } : sessions;
+    };
+    pending[1](response(200));
+    await newer;
+    pending[0](response(100));
+    expect((await older)[0].lastActivityAt).toBe(200);
+    expect(snapshots).toEqual([200]);
+    const retired = adapter.listSessions();
+    adapter.disconnect();
+    pending[2](response(300));
+    await expect(retired).rejects.toThrow('previous connection');
+    expect(snapshots).toEqual([200]);
+  });
+});

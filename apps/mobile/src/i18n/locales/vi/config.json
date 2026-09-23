@@ -301,7 +301,7 @@
   "Send this message to your agent": "Gửi tin nhắn này cho Agent của bạn",
   "Copy this message": "Sao chép tin nhắn này",
   "Open Terminal and run this command.": "Mở Terminal và chạy lệnh này.",
-  "Please run {{pairCommand}} on this computer. It installs the open-source Clawket CLI and pairs it with my phone. When it finishes, send me the pairing code it prints (the line that starts with \"Pairing code:\").": "Hãy chạy {{pairCommand}} trên máy tính này. Lệnh sẽ cài Clawket CLI mã nguồn mở và ghép nối với điện thoại của tôi. Khi xong, gửi cho tôi mã ghép nối được in ra (dòng bắt đầu bằng “Pairing code:”).",
+  "Please run {{pairCommand}} on my computer to set up the open-source Clawket CLI and pair it with my phone. I authorize you to reply in this conversation with the temporary pairing code it prints (the line starting with \"Pairing code:\"). Send only the code and backend name, without other credentials.": "Hãy chạy {{pairCommand}} trên máy tính của tôi để thiết lập Clawket CLI mã nguồn mở và ghép nối với điện thoại của tôi. Tôi cho phép bạn trả lời trong cuộc trò chuyện này bằng mã ghép nối tạm thời được in ra (dòng bắt đầu bằng \"Pairing code:\"). Chỉ gửi mã và tên backend, không kèm thông tin xác thực khác.",
   "Message for your agent": "Tin nhắn cho Agent của bạn",
   "Copied": "Đã sao chép",
   "Enter the pairing code": "Nhập mã ghép nối",
@@ -381,5 +381,6 @@
   "Search config...": "Tìm trong cấu hình…",
   "Collapse all": "Thu gọn tất cả",
   "{{count}} items": "{{count}} mục",
-  "Delete this local config backup? This does not change the current Gateway config.": "Xóa bản sao lưu cấu hình cục bộ này? Cấu hình Gateway hiện tại sẽ không thay đổi."
+  "Delete this local config backup? This does not change the current Gateway config.": "Xóa bản sao lưu cấu hình cục bộ này? Cấu hình Gateway hiện tại sẽ không thay đổi.",
+  "Backup history": "Lịch sử sao lưu"
 }

@@ -48,6 +48,7 @@ export type HermesSessionListEntry = {
   title: string;
   label: string;
   updatedAt: number;
+  lastActivityAt?: number | null;
   lastMessagePreview: string;
   preview: string;
   channel?: string;
@@ -198,20 +199,26 @@ export class HermesBridgeSessionStore {
     return [...this.state.sessions]
       .sort((left, right) => right.updatedAt - left.updatedAt)
       .slice(0, limit)
-      .map((session) => ({
-        key: session.key,
-        sessionId: session.sessionId,
-        title: session.title,
-        label: session.title,
-        updatedAt: session.updatedAt,
-        lastMessagePreview: summarizeText(session.messages.at(-1)?.content ?? ''),
-        preview: summarizeText(session.messages.at(-1)?.content ?? ''),
-        source: 'bridge',
-        kind: session.key === DEFAULT_SESSION_ID ? 'main' : 'direct',
-        hasActiveRun: isActive(session.key),
-        allowedActions: { ...BRIDGE_SESSION_ACTIONS },
-        warnings: [],
-      }));
+      .map((session) => {
+        const latest = [...session.messages].reverse().find((message) => (
+          message.role === 'user' || (message.role === 'assistant' && message.content.trim().length > 0)
+        ));
+        return {
+          key: session.key,
+          sessionId: session.sessionId,
+          title: session.title,
+          label: session.title,
+          updatedAt: session.updatedAt,
+          lastActivityAt: latest?.ts ?? null,
+          lastMessagePreview: summarizeText(latest?.content ?? ''),
+          preview: summarizeText(latest?.content ?? ''),
+          source: 'bridge',
+          kind: session.key === DEFAULT_SESSION_ID ? 'main' : 'direct',
+          hasActiveRun: isActive(session.key),
+          allowedActions: { ...BRIDGE_SESSION_ACTIONS },
+          warnings: [],
+        };
+      });
   }
 
   resetSession(key: string): HermesBridgeSession {

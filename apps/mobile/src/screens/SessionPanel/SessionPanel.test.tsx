@@ -151,7 +151,6 @@ jest.mock('../../components/ui/AgentAvatar', () => {
   const ReactRuntime = require('react');
   return {
     AgentAvatar: (props: Record<string, unknown>) => ReactRuntime.createElement('AgentAvatar', props),
-    AvatarWorkingBadge: (props: Record<string, unknown>) => ReactRuntime.createElement('AvatarWorkingBadge', props),
   };
 });
 
@@ -413,7 +412,7 @@ describe('SessionPanelView', () => {
     const cron = rowById('agent:main:cron:Daily report');
     expect(view.getByTestId(`session-panel-row-${cron.id}-pinned`)).toBeTruthy();
     const research = rowById('agent:main:subagent:Research');
-    expect(view.getByTestId(`session-panel-row-${research.id}-working`)).toBeTruthy();
+    expect(view.queryByTestId(`session-panel-row-${research.id}-working`)).toBeNull();
 
     // Finished sub-agent runs fold into one trailing row that opens the Subagents chip.
     expect(view.queryByText('Completed research')).toBeNull();

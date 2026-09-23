@@ -33,7 +33,8 @@ Keep each Hermes implementation file and each Hermes test file at or below 1,200
 2. A native read failure degrades to Bridge-owned sessions and returns a warning; it must not make the Bridge unavailable.
 3. Persist only Bridge-owned session metadata. Do not copy native transcripts into the Clawket store. Reset cancels active work and rotates the Bridge session ID instead of mutating a native record.
 4. Stop, reset, and delete must deterministically release active runs and session resources owned by Clawket.
-5. Preserve Hermes message deltas byte-for-byte, including whitespace-only tokens, newlines and indentation. Identifier normalizers that trim strings must never process streamed text; active history and final text must concatenate the same deltas.
+5. Hermes session listings expose additive `lastActivityAt` (null for no human message), paired with the last user or textual assistant preview. Rename/reset metadata and tool/system messages must not advance it. Preserve legacy `updatedAt`; native reads remain read-only and transcript-free in persisted Clawket metadata. Mobile consumers on older Bridges retain their legacy fallback.
+6. Preserve Hermes message deltas byte-for-byte, including whitespace-only tokens, newlines and indentation. Identifier normalizers that trim strings must never process streamed text; active history and final text must concatenate the same deltas.
 
 ## Protocol Boundaries
 

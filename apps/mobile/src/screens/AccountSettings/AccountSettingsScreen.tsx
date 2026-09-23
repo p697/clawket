@@ -23,10 +23,9 @@ import {
   SettingsRow,
 } from '../../components/ui/SettingsGroup';
 import { Skeleton } from '../../components/ui/Skeleton';
+import { ListSkeleton } from '../../components/ui/ListSkeleton';
 import { useAppTheme } from '../../theme';
 import {
-  ControlSize,
-  LineHeight,
   Space,
 } from '../../theme/tokens';
 import {
@@ -75,9 +74,10 @@ function SettingsLoading(): React.JSX.Element {
             accessibilityLabel={t('Loading settings')}
             style={styles.loadingTitle}
           />
-          <Skeleton
+          <ListSkeleton
             testID={`account-settings-skeleton-card-${key}`}
-            style={styles.loadingCard}
+            rows={2}
+            icon
           />
         </View>
       ))}
@@ -312,10 +312,8 @@ const styles = StyleSheet.create({
   },
   loadingTitle: {
     width: '24%',
-    height: LineHeight.secondary,
+    minHeight: 0,
+    height: Space.md,
     marginHorizontal: Space.xs,
-  },
-  loadingCard: {
-    height: ControlSize.rosterRow,
   },
 });

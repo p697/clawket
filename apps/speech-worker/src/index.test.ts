@@ -36,7 +36,51 @@ describe('speech admission and upgrade', () => {
     vi.stubGlobal('fetch', upstream);
     vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
-  afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+  function fakeUpgradeClock() {
+    vi.useFakeTimers();
+    // Native AbortSignal.timeout is not driven by Vitest's fake clock.
+    vi.spyOn(AbortSignal, 'timeout').mockImplementation((ms) => {
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(), ms);
+      return controller.signal;
+    });
+  }
+  it('does not abort an upgraded provider socket when the handshake deadline passes', async () => {
+    fakeUpgradeClock();
+    expect((await run()).status).toBe(101);
+    const signal = upstream.mock.calls[0]![1].signal as AbortSignal;
+    const disconnected = vi.fn();
+    signal.addEventListener('abort', disconnected);
+    await vi.advanceTimersByTimeAsync(120000);
+    expect(disconnected).not.toHaveBeenCalled();
+    expect(signal.aborted).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+  it('still aborts a stalled provider handshake and releases its device lease', async () => {
+    fakeUpgradeClock();
+    let started!: () => void;
+    const fetching = new Promise<void>((resolve) => { started = resolve; });
+    upstream.mockImplementation((_url, options) => new Promise((_resolve, reject) => {
+      options.signal.addEventListener('abort', () => reject(new Error('timed out')));
+      started();
+    }));
+    const response = run();
+    await fetching;
+    await vi.advanceTimersByTimeAsync(10000);
+    expect((await response).status).toBe(502);
+    expect(release).toHaveBeenCalledWith('nonce');
+    expect(serveSession).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+  it.each(['rejected', 'http-error'])('clears the handshake timer after %s upgrade', async (mode) => {
+    fakeUpgradeClock();
+    if (mode === 'rejected') upstream.mockRejectedValue(new Error('network failed'));
+    else upstream.mockResolvedValue({ status: 503 });
+    expect((await run()).status).toBe(502);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(release).toHaveBeenCalledWith('nonce');
+  });
   it('accepts PCM as ArrayBuffer before upgrading and reserves all three quotas', async () => {
     expect((await run()).status).toBe(101);
     expect(reserve).toHaveBeenCalledTimes(3); expect(server.accept).toHaveBeenCalled(); expect(serveSession).toHaveBeenCalled();

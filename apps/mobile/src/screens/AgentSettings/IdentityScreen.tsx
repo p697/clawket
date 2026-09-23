@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { usePreventRemove, type NavigationAction } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -43,6 +44,8 @@ export type IdentityScreenProps = Readonly<{
   isPro: boolean;
   navigation: Pick<NativeStackNavigationProp<RootStackParamList, 'AgentSettingsSection'>, 'goBack' | 'dispatch'>;
   openCreateOnMount?: boolean;
+  isFocused?: boolean;
+  onCreateActionConsumed?: () => void;
   onOpenPaywall: (reason: string, onContinue?: () => void) => void;
   onChanged?: () => void | Promise<void>;
   onCreated?: (agentId: string) => void | Promise<void>;
@@ -63,6 +66,8 @@ export function IdentityScreen({
   isPro,
   navigation,
   openCreateOnMount = false,
+  isFocused = true,
+  onCreateActionConsumed,
   onOpenPaywall,
   onChanged,
   onCreated,
@@ -100,6 +105,8 @@ export function IdentityScreen({
   const agentRef = useRef(agent);
   agentRef.current = agent;
   const handledOpenCreateRef = useRef(false);
+  const focusedRef = useRef(isFocused);
+  focusedRef.current = isFocused;
   const saving = busy !== null;
   const dirty = bundle !== null && draft !== null && !sameIdentityProfile(draft, bundle.profile);
 
@@ -228,11 +235,12 @@ export function IdentityScreen({
   }, [agent.agentId, agent.isMain, leaveThen, onRemoved, online, operations, profileEditable, saving, scope, t]);
 
   const showCreateSheet = useCallback(() => {
+    if (!focusedRef.current || activeScope.current !== scope) return;
     setCreateName('');
     setCreateEmoji('');
     setCreateError(null);
     setCreateVisible(true);
-  }, []);
+  }, [scope]);
 
   const openCreate = useCallback(() => {
     if (!agentCreatable) return;
@@ -244,10 +252,20 @@ export function IdentityScreen({
   }, [agentCreatable, isPro, onOpenPaywall, showCreateSheet]);
 
   useEffect(() => {
-    if (!openCreateOnMount || handledOpenCreateRef.current) return;
+    if (!openCreateOnMount) {
+      handledOpenCreateRef.current = false;
+      return;
+    }
+    if (!isFocused || !agentCreatable || handledOpenCreateRef.current) return;
     handledOpenCreateRef.current = true;
+    // Consume the navigation intent before opening: reconnect can remount this child.
+    onCreateActionConsumed?.();
     openCreate();
-  }, [openCreate, openCreateOnMount]);
+  }, [agentCreatable, isFocused, onCreateActionConsumed, openCreate, openCreateOnMount]);
+
+  useEffect(() => {
+    if (!isFocused) setCreateVisible(false);
+  }, [isFocused]);
 
   const createAgent = useCallback(async () => {
     if (!agentCreatable || !operations?.create || !online || saving) return;
@@ -406,37 +424,14 @@ export function IdentityScreen({
 
       <Sheet
         testID="agent-identity-create-sheet"
-        visible={createVisible}
+        visible={createVisible && isFocused}
         title={t('Create Agent', { ns: 'chat' })}
         closeAccessibilityLabel={t('Back', { ns: 'common' })}
         dismissOnBackdropPress={!saving}
+        snapPoints={['55%', '90%']}
         keyboardBehavior="interactive"
         keyboardBlurBehavior="restore"
-        onClose={() => { if (!saving) setCreateVisible(false); }}
-      >
-        <View style={styles.sheetContent}>
-          {createError ? <Banner testID="agent-identity-create-error" tone="bad" message={createError} /> : null}
-          <View style={styles.field}>
-            <Text style={styles.label}>{t('Agent name', { ns: 'settings' })}</Text>
-            <FormTextInput
-              testID="agent-identity-create-name"
-              value={createName}
-              onChangeText={setCreateName}
-              editable={!saving}
-              autoCapitalize="words"
-            />
-          </View>
-          <View style={styles.field}>
-            <Text style={styles.label}>{t('Emoji', { ns: 'settings' })}</Text>
-            <FormTextInput
-              testID="agent-identity-create-emoji"
-              value={createEmoji}
-              onChangeText={setCreateEmoji}
-              editable={!saving}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-          </View>
+        footer={
           <View style={styles.actionRow}>
             <Button
               testID="agent-identity-create-cancel"
@@ -455,7 +450,35 @@ export function IdentityScreen({
               style={styles.actionButton}
             />
           </View>
-        </View>
+        }
+        onClose={() => { if (!saving) setCreateVisible(false); }}
+      >
+        <BottomSheetScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.sheetContent}>
+          {createError ? <Banner testID="agent-identity-create-error" tone="bad" message={createError} /> : null}
+          <View style={styles.field}>
+            <Text style={styles.label}>{t('Agent name', { ns: 'settings' })}</Text>
+            <FormTextInput
+              bottomSheet
+              testID="agent-identity-create-name"
+              value={createName}
+              onChangeText={setCreateName}
+              editable={!saving}
+              autoCapitalize="words"
+            />
+          </View>
+          <View style={styles.field}>
+            <Text style={styles.label}>{t('Emoji', { ns: 'settings' })}</Text>
+            <FormTextInput
+              bottomSheet
+              testID="agent-identity-create-emoji"
+              value={createEmoji}
+              onChangeText={setCreateEmoji}
+              editable={!saving}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
+        </BottomSheetScrollView>
       </Sheet>
     </View>
   );

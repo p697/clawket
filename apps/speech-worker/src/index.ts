@@ -59,10 +59,19 @@ export default {
       const providerUrl = new URL(env.ALIYUN_SPEECH_URL);
       if (providerUrl.protocol !== 'https:' || !providerUrl.hostname.endsWith('.maas.aliyuncs.com') || providerUrl.pathname !== '/api-ws/v1/inference') return await release().then(() => reject('speech_config', 503));
       stage = 'provider_upgrade';
-      const response = await fetch(providerUrl, {
-        headers: { Upgrade: 'websocket', Authorization: `Bearer ${env.ALIYUN_SPEECH_API_KEY}` },
-        signal: AbortSignal.timeout(10000), redirect: 'manual',
-      });
+      const upgrade = new AbortController();
+      const upgradeDeadline = setTimeout(() => upgrade.abort(), 10000);
+      let response: Response;
+      try {
+        response = await fetch(providerUrl, {
+          headers: { Upgrade: 'websocket', Authorization: `Bearer ${env.ALIYUN_SPEECH_API_KEY}` },
+          signal: upgrade.signal, redirect: 'manual',
+        });
+      } finally {
+        // Aborting fetch after a successful upgrade also closes its WebSocket.
+        // The handshake deadline must not become a live recording deadline.
+        clearTimeout(upgradeDeadline);
+      }
       upstreamStatus = response.status;
       const provider = response.webSocket;
       if (!provider || response.status !== 101) {

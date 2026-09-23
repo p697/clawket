@@ -301,7 +301,7 @@
   "Send this message to your agent": "Отправьте это сообщение вашему агенту",
   "Copy this message": "Копировать это сообщение",
   "Open Terminal and run this command.": "Откройте Терминал и выполните эту команду.",
-  "Please run {{pairCommand}} on this computer. It installs the open-source Clawket CLI and pairs it with my phone. When it finishes, send me the pairing code it prints (the line that starts with \"Pairing code:\").": "Выполни {{pairCommand}} на этом компьютере. Команда установит open-source Clawket CLI и выполнит сопряжение с моим телефоном. Когда закончится, пришли мне выведенный код сопряжения (строка, начинающаяся с «Pairing code:»).",
+  "Please run {{pairCommand}} on my computer to set up the open-source Clawket CLI and pair it with my phone. I authorize you to reply in this conversation with the temporary pairing code it prints (the line starting with \"Pairing code:\"). Send only the code and backend name, without other credentials.": "Выполни {{pairCommand}} на моём компьютере, чтобы настроить Clawket CLI с открытым исходным кодом и подключить мой телефон. Я разрешаю прислать в этом разговоре выведенный временный код сопряжения (строка, начинающаяся с \"Pairing code:\"). Пришли только код и название бэкенда, без других учётных данных.",
   "Message for your agent": "Сообщение для вашего агента",
   "Copied": "Скопировано",
   "Enter the pairing code": "Ввести код сопряжения",
@@ -381,5 +381,6 @@
   "Search config...": "Поиск по конфигурации…",
   "Collapse all": "Свернуть всё",
   "{{count}} items": "Элементов: {{count}}",
-  "Delete this local config backup? This does not change the current Gateway config.": "Удалить эту локальную резервную копию конфигурации? Текущая конфигурация Gateway не изменится."
+  "Delete this local config backup? This does not change the current Gateway config.": "Удалить эту локальную резервную копию конфигурации? Текущая конфигурация Gateway не изменится.",
+  "Backup history": "История резервных копий"
 }

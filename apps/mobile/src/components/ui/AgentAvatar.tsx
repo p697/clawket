@@ -193,9 +193,6 @@ export function AgentAvatar({
           />
         ) : null}
       </View>
-      {status === 'working' ? (
-        <AvatarWorkingBadge testID={testID ? `${testID}-working` : undefined} />
-      ) : null}
       {status === 'attention' ? (
         <View
           testID={testID ? `${testID}-attention` : undefined}
@@ -242,22 +239,6 @@ export function AgentAvatar({
   );
 }
 
-/** Stationary lower-right activity marker shared by Agent avatars and session tiles. */
-export function AvatarWorkingBadge({ testID }: Readonly<{ testID?: string }>): React.JSX.Element {
-  const { theme } = useAppTheme();
-  return (
-    <View
-      testID={testID}
-      pointerEvents="none"
-      style={[styles.workingBadge, { backgroundColor: theme.colors.ink, borderColor: theme.colors.canvas }]}
-    >
-      {[Space.xs, Space.sm, Space.xs].map((height, index) => (
-        <View key={index} style={[styles.workingBar, { height, backgroundColor: theme.colors.canvas }]} />
-      ))}
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   container: {
     position: 'relative',
@@ -274,23 +255,6 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
     width: '100%',
     height: '100%',
-  },
-  workingBadge: {
-    position: 'absolute',
-    right: -BorderWidth.strong,
-    bottom: -BorderWidth.strong,
-    width: Space.lg,
-    height: Space.lg,
-    borderRadius: Radius.full,
-    borderWidth: BorderWidth.strong,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: BorderWidth.strong,
-  },
-  workingBar: {
-    width: BorderWidth.strong,
-    borderRadius: Radius.full,
   },
   statusDot: {
     position: 'absolute',

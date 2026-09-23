@@ -14,7 +14,7 @@ import { Button } from '../../components/ui/Button';
 import { ConnectionStatusPill } from '../../components/ui/ConnectionStatusPill';
 import { FloatingButton } from '../../components/ui/FloatingButton';
 import { ScreenHeader } from '../../components/ui/ScreenHeader';
-import { Skeleton } from '../../components/ui/Skeleton';
+import { ListSkeleton } from '../../components/ui/ListSkeleton';
 import { analyticsEvents } from '../../services/analytics/events';
 import { useAppTheme } from '../../theme';
 import { BorderWidth, FontSize, LineHeight, Space } from '../../theme/tokens';
@@ -196,18 +196,10 @@ function DiscoverSkeleton(): React.JSX.Element {
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
   return (
     <View testID="skill-discover-loading" style={styles.skeleton}>
-      {SKELETON_LINES.map((width, index) => (
-        <Skeleton key={index} style={[staticStyles.skeletonLine, { width }]} />
-      ))}
+      <ListSkeleton detail trailing="none" />
     </View>
   );
 }
-
-const SKELETON_LINES: ReadonlyArray<`${number}%`> = ['44%', '92%', '84%', '38%', '90%', '76%'];
-
-const staticStyles = StyleSheet.create({
-  skeletonLine: { height: LineHeight.body - Space.sm },
-});
 
 function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors']) {
   return StyleSheet.create({

@@ -301,7 +301,7 @@
   "Send this message to your agent": "Bu mesajı Agent'ınıza gönderin",
   "Copy this message": "Bu mesajı kopyala",
   "Open Terminal and run this command.": "Terminal'i açıp bu komutu çalıştırın.",
-  "Please run {{pairCommand}} on this computer. It installs the open-source Clawket CLI and pairs it with my phone. When it finishes, send me the pairing code it prints (the line that starts with \"Pairing code:\").": "Bu bilgisayarda {{pairCommand}} komutunu çalıştır. Açık kaynaklı Clawket CLI'ı yükler ve telefonumla eşleştirir. Bittiğinde yazdırdığı eşleştirme kodunu bana gönder (\"Pairing code:\" ile başlayan satır).",
+  "Please run {{pairCommand}} on my computer to set up the open-source Clawket CLI and pair it with my phone. I authorize you to reply in this conversation with the temporary pairing code it prints (the line starting with \"Pairing code:\"). Send only the code and backend name, without other credentials.": "Açık kaynaklı Clawket CLI’yi kurup telefonumla eşleştirmek için bilgisayarımda {{pairCommand}} komutunu çalıştır. Yazdırılan geçici eşleştirme kodunu (\"Pairing code:\" ile başlayan satır) bu konuşmada göndermene izin veriyorum. Yalnızca kodu ve backend adını gönder, başka kimlik bilgileri ekleme.",
   "Message for your agent": "Agent'ınız için mesaj",
   "Copied": "Kopyalandı",
   "Enter the pairing code": "Eşleştirme kodunu gir",
@@ -381,5 +381,6 @@
   "Search config...": "Yapılandırmada ara…",
   "Collapse all": "Tümünü daralt",
   "{{count}} items": "{{count}} öğe",
-  "Delete this local config backup? This does not change the current Gateway config.": "Bu yerel yapılandırma yedeği silinsin mi? Mevcut Gateway yapılandırması değişmez."
+  "Delete this local config backup? This does not change the current Gateway config.": "Bu yerel yapılandırma yedeği silinsin mi? Mevcut Gateway yapılandırması değişmez.",
+  "Backup history": "Yedekleme geçmişi"
 }

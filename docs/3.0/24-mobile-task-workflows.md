@@ -31,7 +31,7 @@ This is the current consolidated remainder; historical evidence below is chronol
 
 - Skills: Add → Use skill → searchable installed/available list → draft reference. Selection never sends. Unavailable skills cannot be invoked; selection belongs to the mounted connection/Agent. Backend invocation is resolved by adapters, not screen backend branches.
 - Scheduling: a completed conversation contributes a reviewable standalone task containing the user's final requirements. Opening the editor never creates a job. Preserve existing draft-to-Cron action. A prior scheduled-task tool result must not silently create a duplicate.
-- Memory: direct entries into the existing document reader; do not introduce a second editor or claim MEMORY.md contains all backend memory.
+- Memory: direct entries into the existing document reader; file rows and document titles retain original filenames (including MEMORY.md and USER.md), without localized aliases. Do not introduce a second editor or claim MEMORY.md contains all backend memory.
 - Sharing: copy temporary OS payloads into owned storage, bound count/size/type, retain until a user submission receives a backend acknowledgement, and ask for an eligible destination. Never auto-send or overwrite a current draft. Sharing remains usable through onboarding and cold start.
 - Widgets: no message bodies, tokens, live connection claims or background sockets. Launch into the normal navigation, capability and entitlement flow. Owner update 2026-09-22: the voice widget tap starts the existing recording flow directly after foreground navigation, access/capability checks and scoped draft restoration. No extra confirmation sheet; preserve system permission and saved-recording recovery handling.
 - Notifications: opt-in, generic metadata only, revocable registrations, deduplicated outcomes, verified backend completion. Local notifications are not a substitute for APNs/FCM delivery while terminated. Missing credentials/environment capabilities remain explicit delivery blockers.
@@ -140,3 +140,15 @@ Remote push remains deferred. A future generic task-completed push need not cont
 ### Imported input presentation correction
 
 Claude CLI may import an expanded copy of a mobile request after the original user row. Known explicit-skill prefixes and media/file extraction envelopes are decoded only on CLI-provenance rows. Deduplication requires adjacent native rows, the original mobile send key, an exact recovered request, and a forward timestamp within 60 seconds. This is read-only presentation; native model input and stored transcripts remain unchanged. Document draft cards center their icon/name vertically while retaining a growing two-line filename layout.
+
+### 2026-09-22 — 技能详情进入聊天
+
+技能详情底部固定「使用技能」入口，关闭弹窗后进入同一连接、同一 Agent 的主会话。复用聊天技能选择的适配器 invocation 和可用性规则；未启用、缺少依赖或被限制的技能按钮禁用。等待会话草稿恢复后选中技能，保留原有正文并替换旧技能标签，不自动发送。用户要求不运行测试，真机验收由用户完成。
+
+### Agent profile task counts (2026-09-22)
+
+The profile Cron card and job list share `loadAgentCronJobs`: paginate the connection-wide list, filter by Agent ownership, then count the returned jobs (including disabled and system-owned tasks). Unassigned legacy jobs belong to the default Agent under the existing compatibility policy. Failure notifications use that same filtered set across pages. A new Agent with no tasks displays zero; OpenClaw may automatically create its own maintenance task, which counts only for its owner. Global scheduler totals are not Agent totals.
+
+### Create Agent entry lifecycle (2026-09-22)
+
+The roster creation action is a one-shot navigation intent: clear `action=create-agent` when the focused identity page handles it. Reconnecting may unmount/remount the identity content, but must not replay creation. Leaving the page closes its creation sheet; purchase continuations may open it only while the original adapter/Agent scope and page remain active. A new explicit creation action can open the form again.

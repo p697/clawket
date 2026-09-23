@@ -380,7 +380,6 @@
   "This account starts receiving messages again.": "このアカウントはメッセージの受信を再開します。",
   "This account stops receiving messages until you enable it again.": "再び有効にするまで、このアカウントはメッセージを受信しません。",
   "Failed to update channel": "チャンネルを更新できませんでした",
-  "About me": "自分について",
   "Version history": "変更履歴",
   "No saved versions": "保存された履歴はありません",
   "This file changed. Reopen it before saving.": "ファイルが変更されました。開き直してから保存してください。",

@@ -20,7 +20,7 @@ import {
   SettingsRow,
 } from '../../components/ui/SettingsGroup';
 import { Sheet } from '../../components/ui/Sheet';
-import { Skeleton } from '../../components/ui/Skeleton';
+import { ListSkeleton } from '../../components/ui/ListSkeleton';
 import { useAppTheme } from '../../theme';
 import {
   ControlSize,
@@ -52,6 +52,7 @@ export type SkillsSectionProps = Readonly<{
   refreshKey?: number;
   /** Opens the skill's SKILL.md on the full-page document reader once the detail sheet has dismissed. */
   onOpenSource?: (skill: SkillStatusEntry) => void;
+  onUseSkill?: (skill: SkillStatusEntry) => void;
 }>;
 
 /** Installed skills only; discovery is the ClawHub page (`SkillDiscoverScreen`) behind the header action. */
@@ -65,8 +66,9 @@ function SkillsContent({
   online,
   refreshKey = 0,
   onOpenSource,
+  onUseSkill,
 }: SkillsSectionProps): React.JSX.Element {
-  const { t } = useTranslation(['common', 'settings', 'config']);
+  const { t } = useTranslation(['common', 'settings', 'config', 'chat']);
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
   const operations = adapter.management?.skills;
@@ -80,6 +82,7 @@ function SkillsContent({
   const installedRequest = useRef(0);
   const hasReport = useRef(false);
   const mutation = useRef(false);
+  const pendingUse = useRef<SkillStatusEntry | null>(null);
   const pendingSource = useRef<SkillStatusEntry | null>(null);
   const pendingRemove = useRef<SkillStatusEntry | null>(null);
   const scope = useMemo(() => ({ active: true }), [adapter]);
@@ -89,6 +92,7 @@ function SkillsContent({
   useEffect(() => {
     scope.active = true;
     pendingSource.current = null;
+    pendingUse.current = null;
     setReport(null);
     hasReport.current = false;
     setError(null);
@@ -246,8 +250,12 @@ function SkillsContent({
         error={error}
         onClose={() => setSelection(null)}
         onSource={onOpenSource ? (skill) => { pendingSource.current = skill; setSelection(null); } : undefined}
+        onUse={onUseSkill ? (skill) => { pendingUse.current = skill; setSelection(null); } : undefined}
         onAfterClose={() => {
           if (!isCurrent()) return;
+          const skillToUse = pendingUse.current;
+          pendingUse.current = null;
+          if (skillToUse) onUseSkill?.(skillToUse);
           if (pendingSource.current) { onOpenSource?.(pendingSource.current); pendingSource.current = null; }
           if (pendingRemove.current) {
             setRemoveCandidate(pendingRemove.current);
@@ -284,6 +292,7 @@ function SkillDetailSheet({
   onToggle,
   onRemove,
   onSource,
+  onUse,
 }: Readonly<{
   skill: SkillStatusEntry | null;
   adapter: AgentAdapter;
@@ -296,8 +305,9 @@ function SkillDetailSheet({
   onToggle: (skill: SkillStatusEntry) => void;
   onRemove: (skill: SkillStatusEntry) => void;
   onSource?: (skill: SkillStatusEntry) => void;
+  onUse?: (skill: SkillStatusEntry) => void;
 }>): React.JSX.Element {
-  const { t } = useTranslation(['common', 'settings', 'config']);
+  const { t } = useTranslation(['common', 'settings', 'config', 'chat']);
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
   const itemKey = installed?.skillKey ?? null;
@@ -319,6 +329,14 @@ function SkillDetailSheet({
       onClose={onClose}
       onAfterClose={onAfterClose}
       snapPoints={['68%', '92%']}
+      footer={installed && onUse ? (
+        <Button
+          testID="agent-skill-use"
+          label={t('Use skill', { ns: 'chat' })}
+          disabled={Boolean(busyKey) || !installed.invocation || !installed.eligible || installed.disabled || installed.blockedByAllowlist}
+          onPress={() => onUse(installed)}
+        />
+      ) : undefined}
     >
       <BottomSheetScrollView testID="agent-skill-detail-scroll" contentContainerStyle={styles.detailContent}>
         {error ? <Banner testID="agent-skill-detail-error" tone="bad" message={error} /> : null}
@@ -368,16 +386,7 @@ function SkillDetailSheet({
 }
 
 function SkillsLoading(): React.JSX.Element {
-  return (
-    <View testID="agent-skills-loading" style={stylesStatic.loading}>
-      {[0, 1, 2, 3].map((row) => (
-        <View key={row} style={stylesStatic.skeletonRow}>
-          <Skeleton style={stylesStatic.skeletonTitle} />
-          <Skeleton style={stylesStatic.skeletonValue} />
-        </View>
-      ))}
-    </View>
-  );
+  return <ListSkeleton testID="agent-skills-loading" detail trailing="switch" />;
 }
 
 function errorMessage(error: unknown, fallback: string): string {
@@ -385,18 +394,6 @@ function errorMessage(error: unknown, fallback: string): string {
   if (typeof error === 'string' && error.trim()) return error;
   return fallback;
 }
-
-const stylesStatic = StyleSheet.create({
-  loading: { gap: Space.sm },
-  skeletonRow: {
-    minHeight: ControlSize.rosterRow,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Space.lg,
-  },
-  skeletonTitle: { flex: 1, height: LineHeight.body },
-  skeletonValue: { width: '20%', height: LineHeight.secondary },
-});
 
 function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors']) {
   return StyleSheet.create({

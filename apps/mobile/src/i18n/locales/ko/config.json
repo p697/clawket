@@ -301,7 +301,7 @@
   "Send this message to your agent": "이 메시지를 에이전트에게 보내기",
   "Copy this message": "이 메시지 복사",
   "Open Terminal and run this command.": "터미널을 열고 아래 명령을 실행하세요.",
-  "Please run {{pairCommand}} on this computer. It installs the open-source Clawket CLI and pairs it with my phone. When it finishes, send me the pairing code it prints (the line that starts with \"Pairing code:\").": "이 컴퓨터에서 {{pairCommand}} 를 실행해 주세요. 오픈 소스 Clawket CLI를 설치하고 제 휴대폰과 페어링합니다. 완료되면 출력된 페어링 코드(\"Pairing code:\"로 시작하는 줄)를 보내 주세요.",
+  "Please run {{pairCommand}} on my computer to set up the open-source Clawket CLI and pair it with my phone. I authorize you to reply in this conversation with the temporary pairing code it prints (the line starting with \"Pairing code:\"). Send only the code and backend name, without other credentials.": "내 컴퓨터에서 {{pairCommand}}를 실행해 오픈 소스 Clawket CLI를 설정하고 내 휴대폰과 페어링해 주세요. 출력된 임시 페어링 코드(\"Pairing code:\"로 시작하는 줄)를 이 대화에서 보내도록 허가합니다. 코드와 해당 백엔드 이름만 보내고 다른 인증 정보는 포함하지 마세요.",
   "Message for your agent": "에이전트에게 보낼 메시지",
   "Copied": "복사됨",
   "Enter the pairing code": "페어링 코드 입력",
@@ -381,5 +381,6 @@
   "Search config...": "설정 검색...",
   "Collapse all": "모두 접기",
   "{{count}} items": "{{count}}개 항목",
-  "Delete this local config backup? This does not change the current Gateway config.": "이 로컬 구성 백업을 삭제할까요? 현재 Gateway 구성은 변경되지 않습니다."
+  "Delete this local config backup? This does not change the current Gateway config.": "이 로컬 구성 백업을 삭제할까요? 현재 Gateway 구성은 변경되지 않습니다.",
+  "Backup history": "백업 기록"
 }

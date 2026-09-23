@@ -28,6 +28,8 @@ The iOS lifetime identifier is `buyout`; never replace it with the obsolete `.li
 
 ## Purchase semantics
 
+Completed purchase-status pages (verification pending, scheduled changes, and lifetime renewal guidance) separate Manage subscription and Done by 16 points, retaining primary/secondary emphasis and the safe-area inset.
+
 - Explicit member navigation is separate from automatic launch/feature gates. The latter still return access immediately for Pro users. Members see their owned plan (marked `Current plan`, locked, raised on `surface` and never dimmed) plus every plan they can still move to; locked alternatives are omitted rather than greyed, so a lifetime owner sees one card. A purchasable alternative is initially selected where available. When the selection is the owned plan there is nothing to buy, so no checkout button or billing caption is rendered and store management is the only action; failure notices still render. If the owned plan cannot be matched to the catalog, the full locked catalog is shown as before.
 - Refresh CustomerInfo before opening native checkout. Reject owned plans, foreign-store subscription changes, ambiguous recurring identity and family-shared recurring changes. No optimistic entitlement grant.
 - Compare Android product plus base-plan identity. Within one subscription Google permits `WITHOUT_PRORATION` or `CHARGE_FULL_PRICE`; this app chooses the former (SDK 9.11.2 name `PRORATION_MODE.IMMEDIATE_WITHOUT_PRORATION`, value 3), with the old product's subscription ID. The new plan can become active immediately with charging at the next billing date. Across different subscription IDs use `PRORATION_MODE.DEFERRED` (value 6). Do not apply `DEFERRED` to the live same-product monthly/yearly catalog.

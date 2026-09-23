@@ -43,7 +43,7 @@ export type RootStackParamList = {
     from: ThreadOrigin;
     shareId?: string;
     /** One-shot reviewable input; never submitted automatically. */
-    composerDraft?: { id: string; text: string };
+    composerDraft?: { id: string; text: string; skill?: { name: string; invocation: string } };
     shortcut?: 'chat' | 'voice' | 'skills' | 'camera' | 'photos';
   };
   AgentSettings: { connectionId: string; agentId: string };

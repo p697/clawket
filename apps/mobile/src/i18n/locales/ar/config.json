@@ -301,7 +301,7 @@
   "Send this message to your agent": "أرسل هذه الرسالة إلى وكيلك",
   "Copy this message": "نسخ هذه الرسالة",
   "Open Terminal and run this command.": "افتح الطرفية وشغّل هذا الأمر.",
-  "Please run {{pairCommand}} on this computer. It installs the open-source Clawket CLI and pairs it with my phone. When it finishes, send me the pairing code it prints (the line that starts with \"Pairing code:\").": "يرجى تشغيل {{pairCommand}} على هذا الكمبيوتر. سيثبّت Clawket CLI مفتوح المصدر ويقرنه بهاتفي. عند الانتهاء، أرسل لي رمز الاقتران الذي يطبعه (السطر الذي يبدأ بـ «Pairing code:»).",
+  "Please run {{pairCommand}} on my computer to set up the open-source Clawket CLI and pair it with my phone. I authorize you to reply in this conversation with the temporary pairing code it prints (the line starting with \"Pairing code:\"). Send only the code and backend name, without other credentials.": "شغّل {{pairCommand}} على حاسوبي لإعداد Clawket CLI مفتوح المصدر وإقرانه بهاتفي. أفوّضك بالرد في هذه المحادثة برمز الاقتران المؤقت الذي يظهر (السطر الذي يبدأ بـ \"Pairing code:\"). أرسل الرمز واسم الخلفية فقط، دون بيانات اعتماد أخرى.",
   "Message for your agent": "رسالة لوكيلك",
   "Copied": "تم النسخ",
   "Enter the pairing code": "إدخال رمز الاقتران",
@@ -381,5 +381,6 @@
   "Search config...": "البحث في الإعدادات…",
   "Collapse all": "طي الكل",
   "{{count}} items": "{{count}} عناصر",
-  "Delete this local config backup? This does not change the current Gateway config.": "هل تريد حذف هذه النسخة الاحتياطية المحلية للإعدادات؟ لن تتغير إعدادات Gateway الحالية."
+  "Delete this local config backup? This does not change the current Gateway config.": "هل تريد حذف هذه النسخة الاحتياطية المحلية للإعدادات؟ لن تتغير إعدادات Gateway الحالية.",
+  "Backup history": "سجل النسخ الاحتياطية"
 }

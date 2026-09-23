@@ -301,7 +301,7 @@
   "Send this message to your agent": "把這段話發給你的 Agent",
   "Copy this message": "複製這段話",
   "Open Terminal and run this command.": "開啟終端機，執行下面的指令。",
-  "Please run {{pairCommand}} on this computer. It installs the open-source Clawket CLI and pairs it with my phone. When it finishes, send me the pairing code it prints (the line that starts with \"Pairing code:\").": "請在這台電腦上執行 {{pairCommand}}。它會安裝開源的 Clawket CLI，並和我的手機配對。執行完成後，把它印出的配對碼發給我（以 \"Pairing code:\" 開頭的那一行）。",
+  "Please run {{pairCommand}} on my computer to set up the open-source Clawket CLI and pair it with my phone. I authorize you to reply in this conversation with the temporary pairing code it prints (the line starting with \"Pairing code:\"). Send only the code and backend name, without other credentials.": "請在我的電腦上執行 {{pairCommand}}，設定開源的 Clawket CLI，供我的手機配對。我授權你在目前的對話中回覆它印出的臨時配對碼（以 \"Pairing code:\" 開頭的那一行）。只傳配對碼和對應的後端名稱，不附上其他憑證。",
   "Message for your agent": "發給 Agent 的訊息",
   "Copied": "已複製",
   "Enter the pairing code": "輸入配對碼",
@@ -381,5 +381,6 @@
   "Search config...": "搜尋設定...",
   "Collapse all": "全部收合",
   "{{count}} items": "{{count}} 項",
-  "Delete this local config backup? This does not change the current Gateway config.": "要刪除此本機設定備份嗎？這不會變更目前的 Gateway 設定。"
+  "Delete this local config backup? This does not change the current Gateway config.": "要刪除此本機設定備份嗎？這不會變更目前的 Gateway 設定。",
+  "Backup history": "歷史備份"
 }

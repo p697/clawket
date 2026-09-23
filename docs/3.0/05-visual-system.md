@@ -66,7 +66,7 @@ iOS 用系统 SF Pro，Android 用 Roboto，中文走系统 CJK；不引入第�
 |---|---|
 | `FloatingButton` | 44 圆，`surfaceFloating` + `shadowFloating`，Lucide 图标 22 / 1.75 描边、`ink`；按下缩放 0.96；可带徽标（accent 点或 bad 数字） |
 | `HeaderPill` | 高 40 全圆，`surfaceFloating` + 阴影，内容：头像 28 + 名字 `name` + 副标题 `caption inkSecondary`；副标题变化用 100 ms 淡入淡出（沿用现有头部动画） |
-| `AgentAvatar` | 圆角方块，底色 `agentPalette[hash]`，内容 emoji（若有）或 1–2 字首字母（白，600）；状态环：`working` = 右下小型静态活动标记（三条短竖线），不旋转头像外轮廓（2026-09-06 用户验收修订）；`attention` = 右下 12 圆点 `warn` / `bad` 带 2pt canvas 边；`done` = 右下 `good` 圆点 3 s 后淡出；`offline` = 整体去饱和 60%；`locked` = 去饱和 + 右下锁 |
+| `AgentAvatar` | 圆角方块，底色 `agentPalette[hash]`，内容 emoji（若有）或 1–2 字首字母（白，600）；状态环：`working` = 不加头像或会话图块角标，沿用花名册预览与对话活动展示（2026-09-22 用户修订）；`attention` = 右下 12 圆点 `warn` / `bad` 带 2pt canvas 边；`done` = 右下 `good` 圆点 3 s 后淡出；`offline` = 整体去饱和 60%；`locked` = 去饱和 + 右下锁 |
 | `Bubble` | 助手：`surface` 底、`ink` 字、圆角 20、左对齐；用户：`accentSoft` 底、`ink` 字、右对齐；Markdown 渲染沿用现有 `chatMarkdown` |
 | `SystemEventRow` | 居中，`caption inkSecondary`，前置 Lucide 14；可点带右箭头 |
 | `RunCard` | `surface` 底、圆角 16、左 3pt 状态色竖条（accent / bad / warn）、标题 `secondary 600`、说明 `caption`、右箭头 |
@@ -88,7 +88,7 @@ iOS 用系统 SF Pro，Android 用 Roboto，中文走系统 CJK；不引入第�
 | 时长 | 120 / 200 / 320 ms，`easeOut` |
 | 按下 | 浮动按钮缩放 0.96；行换底色；气泡无 |
 | 新消息 | 淡入 + 上移 4，120 ms |
-| 头像状态环 | 1.2 s 循环；done 3 s 淡出 |
+| 头像状态 | working 无角标或循环装饰；done 3 s 淡出 |
 | 面板 / 付费墙 | 320 ms 从底部推上 |
 | 切换会话 | 线程内容交叉淡入 200 ms，不整页推入 |
 | 减动效 | 全部改为无位移淡入淡出；状态环静止 |

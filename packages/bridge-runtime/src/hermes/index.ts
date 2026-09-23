@@ -21,6 +21,7 @@ import {
   decodeHermesHistoryCursor,
   encodeHermesHistoryCursor,
   normalizeHermesHistoryContent,
+  listHermesSessionSnapshots,
   type HermesHistoryMessage,
 } from './native-sessions.js';
 import { HermesPythonRunner } from './python-runner.js';
@@ -562,28 +563,8 @@ export class HermesLocalBridge {
   }
 
   async listHermesSessions(limit: number): Promise<HermesSessionListEntry[]> {
-    const active = (key: string) => [...this.activeRuns.values()].some((run) => run.sessionKey === key);
-    const bridgeSessions: HermesSessionListEntry[] = [];
-    for (const session of this.sessionStore.listSessions(limit, active)) {
-      const backing = (await this.nativeSessions.readHistoryBySessionId(session.sessionId));
-      const lastMessage = backing?.messages.at(-1);
-      const preview = lastMessage ? normalizeHermesHistoryContent(lastMessage.content) : session.preview;
-      bridgeSessions.push({
-        ...session,
-        updatedAt: Math.max(session.updatedAt, backing?.updatedAt ?? 0),
-        preview,
-        lastMessagePreview: preview,
-        model: lastMessage?.model ?? session.model,
-        modelProvider: lastMessage?.provider ?? session.modelProvider,
-      });
-    }
-    const bridgeKeys = new Set(bridgeSessions.map((session) => session.key));
-    const nativeSessions = (await this.nativeSessions
-      .listSessions(Math.max(limit, limit + bridgeSessions.length), active))
-      .filter((session) => !bridgeKeys.has(session.key));
-    return [...bridgeSessions, ...nativeSessions]
-      .sort((left, right) => right.updatedAt - left.updatedAt)
-      .slice(0, limit);
+    return listHermesSessionSnapshots(this.sessionStore, this.nativeSessions, limit,
+      (key) => [...this.activeRuns.values()].some((run) => run.sessionKey === key));
   }
 
   async isNativeOnlySession(key: string): Promise<boolean> {

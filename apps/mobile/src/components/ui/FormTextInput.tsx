@@ -24,8 +24,10 @@ import {
   CompositionSafeTextInput,
   type CompositionSafeTextInputProps,
 } from './CompositionSafeTextInput';
+import { CompositionSafeBottomSheetTextInput } from './CompositionSafeBottomSheetTextInput';
 
 type Props = Omit<CompositionSafeTextInputProps, 'style'> & {
+  bottomSheet?: boolean;
   containerStyle?: StyleProp<ViewStyle>;
   inputStyle?: StyleProp<TextStyle>;
   invalid?: boolean;
@@ -36,6 +38,7 @@ type Props = Omit<CompositionSafeTextInputProps, 'style'> & {
 
 export const FormTextInput = forwardRef<TextInput, Props>(function FormTextInput(
   {
+    bottomSheet = false,
     containerStyle,
     inputStyle,
     invalid = false,
@@ -53,6 +56,7 @@ export const FormTextInput = forwardRef<TextInput, Props>(function FormTextInput
     () => createStyles(theme.colors, theme.scheme),
     [theme.colors, theme.scheme],
   );
+  const Input = bottomSheet ? CompositionSafeBottomSheetTextInput : CompositionSafeTextInput;
   const field = (
     <View style={[
       styles.field,
@@ -60,7 +64,7 @@ export const FormTextInput = forwardRef<TextInput, Props>(function FormTextInput
       invalid && !errorMessage ? styles.invalid : null,
       containerStyle,
     ]}>
-      <CompositionSafeTextInput
+      <Input
         ref={ref}
         {...rest}
         accessibilityHint={errorMessage ?? rest.accessibilityHint}

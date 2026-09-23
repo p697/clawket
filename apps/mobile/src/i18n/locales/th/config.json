@@ -301,7 +301,7 @@
   "Send this message to your agent": "ส่งข้อความนี้ให้ Agent ของคุณ",
   "Copy this message": "คัดลอกข้อความนี้",
   "Open Terminal and run this command.": "เปิด Terminal แล้วรันคำสั่งนี้",
-  "Please run {{pairCommand}} on this computer. It installs the open-source Clawket CLI and pairs it with my phone. When it finishes, send me the pairing code it prints (the line that starts with \"Pairing code:\").": "โปรดรัน {{pairCommand}} บนคอมพิวเตอร์เครื่องนี้ คำสั่งนี้จะติดตั้ง Clawket CLI แบบโอเพนซอร์สและจับคู่กับโทรศัพท์ของฉัน เมื่อเสร็จแล้ว ส่งรหัสจับคู่ที่แสดงมาให้ฉัน (บรรทัดที่ขึ้นต้นด้วย “Pairing code:”)",
+  "Please run {{pairCommand}} on my computer to set up the open-source Clawket CLI and pair it with my phone. I authorize you to reply in this conversation with the temporary pairing code it prints (the line starting with \"Pairing code:\"). Send only the code and backend name, without other credentials.": "โปรดเรียกใช้ {{pairCommand}} บนคอมพิวเตอร์ของฉันเพื่อตั้งค่า Clawket CLI แบบโอเพนซอร์สและจับคู่กับโทรศัพท์ของฉัน ฉันอนุญาตให้คุณตอบในบทสนทนานี้ด้วยรหัสจับคู่ชั่วคราวที่แสดงออกมา (บรรทัดที่ขึ้นต้นด้วย \"Pairing code:\") ส่งเฉพาะรหัสและชื่อแบ็กเอนด์ โดยไม่แนบข้อมูลรับรองอื่น",
   "Message for your agent": "ข้อความสำหรับ Agent ของคุณ",
   "Copied": "คัดลอกแล้ว",
   "Enter the pairing code": "ป้อนรหัสจับคู่",
@@ -381,5 +381,6 @@
   "Search config...": "ค้นหาการตั้งค่า…",
   "Collapse all": "ย่อทั้งหมด",
   "{{count}} items": "{{count}} รายการ",
-  "Delete this local config backup? This does not change the current Gateway config.": "ลบข้อมูลสำรองนี้หรือไม่? การตั้งค่า Gateway ปัจจุบันจะไม่เปลี่ยนแปลง"
+  "Delete this local config backup? This does not change the current Gateway config.": "ลบข้อมูลสำรองนี้หรือไม่? การตั้งค่า Gateway ปัจจุบันจะไม่เปลี่ยนแปลง",
+  "Backup history": "ประวัติการสำรองข้อมูล"
 }

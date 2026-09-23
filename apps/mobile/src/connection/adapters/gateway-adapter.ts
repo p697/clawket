@@ -118,6 +118,9 @@ export abstract class GatewayAdapterBase implements AgentAdapter {
   private manuallyDisconnected = false;
   private fallbackSessionKey: string;
   private lastSessions: SessionDescriptor[] = [];
+  private sessionReadRevision = 0;
+  private acceptedSessionReadRevision = 0;
+  private sessionReadEpoch = 0;
 
   protected get gateway(): GatewayClient {
     return this.#gateway;
@@ -183,6 +186,7 @@ export abstract class GatewayAdapterBase implements AgentAdapter {
 
   public disconnect(): void {
     this.manuallyDisconnected = true;
+    this.sessionReadEpoch += 1;
     this.rejectPendingConnect(new AdapterError('network', 'Connection closed'));
     this.clearActiveRunState();
     this.gateway.disconnect();
@@ -384,6 +388,23 @@ export abstract class GatewayAdapterBase implements AgentAdapter {
     return false;
   }
 
+  /** Publish only complete, current-connection snapshots, regardless of caller scope. */
+  protected async readSessionSnapshot(
+    load: () => Promise<SessionDescriptor[]>,
+  ): Promise<SessionDescriptor[]> {
+    const revision = ++this.sessionReadRevision;
+    const epoch = this.sessionReadEpoch;
+    const sessions = await load();
+    if (epoch !== this.sessionReadEpoch) {
+      throw new AdapterError('network', 'Session listing belongs to a previous connection.');
+    }
+    // An older request may finish last. Return the accepted data to its caller
+    // too, so neither the roster nor the chat session panel regresses.
+    if (revision < this.acceptedSessionReadRevision) return this.lastSessions.map(cloneSession);
+    this.acceptedSessionReadRevision = revision;
+    return this.rememberSessions(sessions);
+  }
+
   protected rememberSessions(sessions: SessionDescriptor[], emit = true): SessionDescriptor[] {
     for (const session of sessions) {
       if (!session.hasActiveRun) this.clearActiveRunsForSession(session.key);
@@ -407,6 +428,7 @@ export abstract class GatewayAdapterBase implements AgentAdapter {
     if (state === 'idle' || state === 'offline' || state === 'error') {
       this.clearActiveRunState();
     }
+    if (state !== this.currentState && state !== 'ready') this.sessionReadEpoch += 1;
     this.currentState = state;
     this.emit('state', state, reason);
     if (state === 'ready') this.resolvePendingConnect();
@@ -463,7 +485,9 @@ export abstract class GatewayAdapterBase implements AgentAdapter {
       }),
       this.gateway.on('health', (payload) => this.handleGatewayHealth(payload)),
       this.gateway.on('sessionsChanged', () => {
+        const epoch = this.sessionReadEpoch;
         void this.listSessions().catch((error: unknown) => {
+          if (epoch !== this.sessionReadEpoch) return;
           const normalized = toAdapterError(error);
           this.emitUpdate({
             type: 'error',

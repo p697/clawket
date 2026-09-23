@@ -25,7 +25,7 @@ import { useTranslation } from 'react-i18next';
 import type { AgentDescriptor, Capabilities } from '@clawket/agent-protocol';
 
 import { getConnectionRuntime, useConnections, useRoster } from '../../connection';
-import { AgentAvatar, AvatarWorkingBadge } from '../../components/ui/AgentAvatar';
+import { AgentAvatar } from '../../components/ui/AgentAvatar';
 import { Banner } from '../../components/ui/Banner';
 import { ConnectionStatusPill } from '../../components/ui/ConnectionStatusPill';
 import { Button } from '../../components/ui/Button';
@@ -181,9 +181,6 @@ function SessionTile({
           color={theme.colors.ink}
         />
       </View>
-      {row.hasActiveRun ? (
-        <AvatarWorkingBadge testID={`session-panel-row-${row.id}-working`} />
-      ) : null}
     </View>
   );
 }

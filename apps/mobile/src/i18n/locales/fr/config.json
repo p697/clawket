@@ -301,7 +301,7 @@
   "Send this message to your agent": "Envoyer ce message à votre Agent",
   "Copy this message": "Copier ce message",
   "Open Terminal and run this command.": "Ouvrez le Terminal et exécutez cette commande.",
-  "Please run {{pairCommand}} on this computer. It installs the open-source Clawket CLI and pairs it with my phone. When it finishes, send me the pairing code it prints (the line that starts with \"Pairing code:\").": "Exécute {{pairCommand}} sur cet ordinateur. Cela installe la CLI open source Clawket et la jumelle avec mon téléphone. Quand c’est terminé, envoie-moi le code de jumelage affiché (la ligne qui commence par « Pairing code: »).",
+  "Please run {{pairCommand}} on my computer to set up the open-source Clawket CLI and pair it with my phone. I authorize you to reply in this conversation with the temporary pairing code it prints (the line starting with \"Pairing code:\"). Send only the code and backend name, without other credentials.": "Exécute {{pairCommand}} sur mon ordinateur pour configurer la CLI open source Clawket et l’associer à mon téléphone. Je t’autorise à répondre dans cette conversation avec le code d’association temporaire affiché (la ligne commençant par \"Pairing code:\"). Envoie uniquement le code et le nom du backend, sans autres identifiants.",
   "Message for your agent": "Message pour votre Agent",
   "Copied": "Copié",
   "Enter the pairing code": "Saisir le code de jumelage",
@@ -381,5 +381,6 @@
   "Search config...": "Rechercher dans la config…",
   "Collapse all": "Tout replier",
   "{{count}} items": "{{count}} éléments",
-  "Delete this local config backup? This does not change the current Gateway config.": "Supprimer cette sauvegarde locale de configuration ? La configuration actuelle du Gateway ne sera pas modifiée."
+  "Delete this local config backup? This does not change the current Gateway config.": "Supprimer cette sauvegarde locale de configuration ? La configuration actuelle du Gateway ne sera pas modifiée.",
+  "Backup history": "Historique des sauvegardes"
 }

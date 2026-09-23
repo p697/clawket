@@ -181,6 +181,18 @@ describe('Hermes M3 recorded packet contract', () => {
       const response = await client.request(request);
       capturePacketValues(response, packet.captureValues, captures);
       const expected = materializeFixtureValue(packet.expect, captures) as JsonRecord;
+      // The historical recording predates the additive human-message activity field.
+      // These fixtures contain one native session whose last assistant message is at 1700000002.
+      if (request.method === 'sessions.list' && response.ok === true) {
+        const payload = expected.payload as JsonRecord;
+        payload.sessions = (payload.sessions as JsonRecord[]).map(session => ({
+          ...session, lastActivityAt: session.key === 'native-recorded-session' ? 1700000002000 : null,
+        }));
+      }
+      if (request.method === 'sessions.create' && response.ok === true) {
+        const payload = expected.payload as JsonRecord;
+        payload.session = { ...(payload.session as JsonRecord), lastActivityAt: null };
+      }
       // Keep the historical payload fixture intact; current history adds
       // authoritative liveness without changing any recorded message fields.
       if (request.method === 'chat.history' && response.ok === true) {
