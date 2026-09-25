@@ -13,6 +13,7 @@ import type {
 export const ONBOARDING_DOCUMENTATION_URLS: Readonly<Record<PairableBackendKind, string>> = Object.freeze({
   openclaw: 'https://docs.openclaw.ai/install',
   hermes: 'https://hermes-agent.nousresearch.com/docs/getting-started/quickstart',
+  pi: 'https://github.com/p697/clawket/blob/main/docs/3.1/pi.md',
   'local-model': 'https://github.com/p697/clawket/blob/main/docs/3.0/15-local-model.md',
 });
 
@@ -27,6 +28,7 @@ export const ONBOARDING_WEBSITE_URLS: Readonly<Record<OnboardingWebsiteBackendKi
   openclaw: 'https://openclaw.ai',
   hermes: 'https://hermes-agent.nousresearch.com',
   youmind: 'https://youmind.com',
+  pi: 'https://pi.dev',
 });
 
 const ADAPTER_ERROR_CODES = new Set<AdapterErrorCode>([
@@ -59,6 +61,7 @@ export function normalizePairableBackendKind(
     hermes: 'hermes',
     youmind: 'openclaw',
     'local-model': 'local-model',
+    pi: 'pi',
   };
   return normalized[backendKind ?? 'openclaw'];
 }

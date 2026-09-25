@@ -382,5 +382,6 @@
   "Collapse all": "Tümünü daralt",
   "{{count}} items": "{{count}} öğe",
   "Delete this local config backup? This does not change the current Gateway config.": "Bu yerel yapılandırma yedeği silinsin mi? Mevcut Gateway yapılandırması değişmez.",
-  "Backup history": "Yedekleme geçmişi"
+  "Backup history": "Yedekleme geçmişi",
+  "Pi is not responding": "Pi yanıt vermiyor"
 }

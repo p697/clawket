@@ -161,3 +161,15 @@ When the installed native run handler positively supports session-history resume
 ## On-demand session files
 
 `clawket.files.list/read` offers bounded assistant-referenced files from the same session under verified local workspaces (Hermes: configured local terminal cwd and outputs). Keep opaque expiring handles, per-session scope, regular-file/size/type checks, and mutation detection on every chunk. Never accept a caller-provided filesystem path, spool file bytes, or add cloud storage. OpenClaw exposes this only on authenticated isolated loopback Gateway channels with native history/workspace read capability. Dispose handles on channel shutdown; Hermes clears them on reset/delete/stop.
+
+## Pi RPC runtime
+
+`src/pi/` owns independent Pi RPC processes and private sessions for an explicitly configured project. Preserve the installed Pi's configuration and trust; never add automatic approval flags. Native JSONL v3 sessions (including an explicit native session directory) are read-only and can only be copied into a private branch. Remote requests use opaque session IDs, never filesystem paths or arbitrary RPC commands. Ordinary extension questions are not execution approvals.
+
+Persist input fingerprints before acknowledging, serialize session mutations, never replay uncertain prompts, and keep Pi stdin open across phone disconnections. `agent_settled` is terminal; `agent_end` is not. Stop releases only owned children. Real-Pi tests are explicit integration tests and use isolated credentials/state plus a deterministic local model endpoint; required CI tests do not require Pi or inspect user home state.
+
+Pi’s landing record must publish `kind: main` together with the Agent’s `mainSessionKey`; additional private/native sessions remain `direct`. Free main-chat access must not depend on a paid history entitlement.
+
+Pi reset rotates private storage and clears transcript preview/activity and stale model metadata while preserving acceptance fingerprints; old network retries must never repopulate the reset conversation.
+
+While an accepted Pi extension command is waiting before `agent_start`, history projects its in-memory input after completed native entries so phone recovery anchors the pending run to the current turn. Retire that projection on agent start or settlement; never write synthetic commands into native Pi JSONL.

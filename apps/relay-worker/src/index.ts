@@ -34,6 +34,7 @@ import {
   HERMES_BACKEND_POLICY,
   OPENCLAW_BACKEND_POLICY,
   LOCAL_MODEL_BACKEND_POLICY,
+  PI_BACKEND_POLICY,
   clearPrincipalExistenceCache,
   pairedPrincipalExists,
   policyForBackend,
@@ -687,3 +688,7 @@ export const __testing = {
     BRIDGE_UNAVAILABLE: SOCKET_CLOSE_CODES.BRIDGE_UNAVAILABLE,
   },
 };
+
+export class PiRelayRoom extends BaseRelayRoom {
+  constructor(state: DurableObjectState, env: Env) { super(state, env, PI_BACKEND_POLICY); }
+}

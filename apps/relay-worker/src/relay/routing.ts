@@ -288,12 +288,12 @@ export async function handleGatewayMessage(
     return;
   }
   const connectResId = parseResponseId(text);
-  if (runtime.policy.backend === 'local-model' && !connectResId) {
-    // This backend owns one shared conversation. Stream updates reach every
+  if ((runtime.policy.backend === 'local-model' || runtime.policy.backend === 'pi') && !connectResId) {
+    // These backends own their session state. Stream updates reach every
     // fully paired device; temporary pairing-ticket sockets are kept separate.
     let event: { type?: string; event?: string };
     try { event = JSON.parse(text); } catch { return; }
-    if (event?.type !== 'event' || event.event !== 'local-model.update') return;
+    if (event?.type !== 'event' || event.event !== `${runtime.policy.backend}.update`) return;
     for (const [clientId, client] of runtime.clients) {
       if (client.readyState !== WebSocket.OPEN) continue;
       client.send(text);

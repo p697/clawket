@@ -4,6 +4,7 @@ export const OFFICIAL_PRODUCTION_REGISTRY_URL = 'https://registry.clawket.ai';
 export const OFFICIAL_PREVIEW_REGISTRY_URL = 'https://clawket-registry-preview.clawket.workers.dev';
 export const OFFICIAL_HERMES_PRODUCTION_REGISTRY_URL = 'https://hermes-registry.clawket.ai';
 export const OFFICIAL_HERMES_PREVIEW_REGISTRY_URL = 'https://clawket-hermes-registry-preview.clawket.workers.dev';
+export const OFFICIAL_PI_REGISTRY_URL = 'https://clawket-pi-registry.clawket.workers.dev';
 export const OFFICIAL_LOCAL_MODEL_PREVIEW_REGISTRY_URL = 'https://clawket-local-model-registry-preview.clawket.workers.dev';
 
 export type RelayEnvironmentSelectionIssue =
@@ -68,10 +69,12 @@ const OFFICIAL_PREVIEW_REGISTRY_ORIGINS = new Set([
 ]);
 
 const ENVIRONMENT_INDEPENDENT_REGISTRY_ORIGINS = new Set([
+  normalizeOrigin(OFFICIAL_PI_REGISTRY_URL),
   normalizeOrigin(OFFICIAL_LOCAL_MODEL_PREVIEW_REGISTRY_URL),
 ]);
 
 const OFFICIAL_PRODUCTION_REGISTRY_ORIGINS = new Set([
+  normalizeOrigin(OFFICIAL_PI_REGISTRY_URL),
   normalizeOrigin(OFFICIAL_PRODUCTION_REGISTRY_URL),
   normalizeOrigin(OFFICIAL_HERMES_PRODUCTION_REGISTRY_URL),
 ]);

@@ -1022,6 +1022,7 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 
 | 编号 | 事项 | 怎么做 | 验证方法 | 状态 |
 |---|---|---|---|---|
+| HT-PI-0925 | Pi 3.1 实际账号与真机验收 | 在目标项目用 Pi 完成 provider 登录与项目信任，然后通过本地开发版配对；检查浅深色、键盘、扩展回答、原生分支、后台恢复。 | 自己的模型完成真实任务；iOS/Android 观感由负责人确认。 | 自动门禁、真实 Pi、Workers/CLI 与 iOS 模拟器实际配对通过；复用已有 DashScope 配置完成真实模型对话、工具/技能调用。Android 真机真实任务、扩展回答、后台/断线恢复已验收；物理 iOS、负责人观感确认与 Pi 云服务发布仍待完成。详见 ../3.1/pi-android-qa-2026-09-26.md。 |
 | HT-PLAY-0923 | Google Play 3.0 最终真机与商店验收 | 按 google-play-readiness-2026-09-23.md 使用三星上的 Clawket QA 测试双后端；修正数据安全/隐私与审核访问声明，固定正式签名 AAB 后通过 Play 验证覆盖升级和许可测试购买/恢复。 | QA 连续聊天和后台恢复通过；真实申报与功能一致；正式包版本、签名、交易和数据迁移有证据。 | QA 3.0.0 / 30000 已成功覆盖安装启动；Mobile 330 套 / 3,415 项通过。Play 尚无 3.0 bundle；未提交审核。全仓尚有 Hermes 录制预期和 i18n unused key 两项待收尾。 |
 | HT-STREAM-0922 | 流式聊天修复后的 Android 连续发送验收 | 先恢复本机 Android Gradle 插件构建，再覆盖安装保留数据；在现有 OpenClaw/Hermes 测试会话连续发送并录制从发送到终态的全过程。 | 当前用户气泡不消失、思考/流式内容始终归属当前轮、完成前后顺序稳定。 | 代码回归与全仓门禁通过；本轮未生成或安装修复 APK，真机验收未完成。 |
 | HT-STORE-UPLOAD-0922 | 商店截图上传权限 | 用户已手动开启 Chrome 扩展文件访问权限，代理通过标准文件选择器上传。 | App Store 19×7、Google Play 19×7 + 19 置顶图；19 语言逐套核验顺序与已保存文件。 | 已完成手机截图上传；Play 3.0 图标同步并核验所有语言继承。平板资源另待补。 |
@@ -2238,3 +2239,19 @@ Owner approved stronger signature contrast after trying channel attribution on-d
 Focused ThreadView coverage passes (88 tests), including both schemes, stable colors after a display-name change, explicit Agent labels when avatar preferences are off in participant conversations, unchanged incoming bubbles and direct-chat behavior. All 12 palette/scheme pairs exceed 4.5:1 initial/background contrast (minimum 6.03:1). Device visual acceptance remains with the owner.
 
 Final gate: `npm run check:required` passed, including all workspace typechecks, Mobile 331 suites / 3442 tests, protocol/Relay/Bridge/scripts/speech tests, design-system, i18n and documentation checks. `git diff --check` clean. No native build or distribution was performed for this JS-only presentation refinement.
+
+
+### 2026-09-25 — Owner-authorized Pi 3.1 extension
+
+The owner requested full implementation after the Pi feasibility study. Work and acceptance details live in `../3.1/pi.md`; this does not reopen the frozen 3.0 rebuild. Pi adapters, private project sessions, native read-only branching, mobile questions, model/skill controls, authenticated background CLI and isolated Relay/Registry policies are implemented. Required checks passed (Mobile 333 suites / 3,455 tests); legacy replay 39 passed. Real Pi 0.87.1 validates tools, skills, steering, questions/cancellation, per-session models, recovery and idempotency against a local model fixture; local Workers verify secure pairing and multi-device routing; built CLI verifies the full local lifecycle. Final incremental regressions and evidence are recorded in the Pi document. No release/deployment is authorized by this work.
+
+### 2026-09-25 — Pi simulator acceptance and composer polish
+
+Owner-authorized simulator QA uses Pi 0.87.1, local pairing and an isolated project. Real Qwen 3.5 Plus chat/tool/skill execution passed; deterministic models cover cancellation, model isolation and native branching. Fixed the Pi landing session incorrectly classified as paid history, question-sheet keyboard/closing lifecycle, session rename keyboard coordination, and owner-reported provider-heavy/overflowing composer labels. Required gate passed (333 mobile suites / 3,455 tests; 47 runtime suites / 360 tests); subsequent question/session UI tests (15), runtime reset regression (361 runtime tests), mobile typecheck/design-system and docs checks passed. Reset clears stale preview/model metadata; dark confirmation text follows theme. Full evidence and limits: `../3.1/pi-simulator-qa-2026-09-25.md`. No production service, distribution package, subscription or release changed.
+
+
+### 2026-09-26 — Pi Android physical-device acceptance
+
+Owner-authorized ADB QA on Samsung SM-A566B / Android 16 uses an independent 3.1.0 Debug package, real Pi 0.87.1, LAN pairing and Qwen 3.5 Plus. Real file read/edit/test execution, extension confirmation/input with cold recovery, background tool completion, Bridge reconnect, cancellation, model switching and new-session chat passed. Fixed pending-extension history anchoring, Android question keyboard occlusion, duplicate recovered tool completion, and empty composer height after immediate backgrounding. Final new-session inspection exposed Android CommonMark intrinsic-width rounding hiding the final glyph; a reviewed one-physical-pixel native measurement patch restores it on device and is wired into both installs with fail-closed tests.
+
+Required gate passed (334 Mobile suites / 3,456 tests; 362 runtime tests); legacy replay 39 and real Pi integration passed. Final focused UI 37, mobile typecheck/design/docs, native patch 3 tests and Android Debug rebuild passed. Actual scope, evidence and remaining release/physical-iOS/Windows limits: `../3.1/pi-android-qa-2026-09-26.md`. Existing installed apps/data preserved; no release, deployment or live configuration change.

@@ -1,8 +1,12 @@
+import { AgentQuestions } from './AgentQuestions';
 import { SessionFilesSheet } from './components/SessionFilesSheet';
-import { Alert } from 'react-native';
+import { Button } from '../../components/ui/Button';
+import { Banner } from '../../components/ui/Banner';
+import { Space } from '../../theme/tokens';
+import { Alert, View } from 'react-native';
 import { createReplyConversation, replyConversationDraft } from '../../services/reply-conversation';
 import { readSkillDraft } from '../../chat/skill-draft';
-import { useManualSession } from '../../services/manual-sessions';
+import { ManualSessions, useManualSession } from '../../services/manual-sessions';
 import { RunInputSheet } from './components/RunInputSheet';
 import { DraftRecoverySheet } from './components/DraftRecoverySheet';
 import { useVoiceShortcut } from './useVoiceShortcut';
@@ -257,6 +261,10 @@ function ThreadScreenContent({
 
   const rosterSession = connections.roster.find((group) => group.connection.id === connectionId)
     ?.agents.find((row) => row.agent.agentId === agentId)?.sessions?.find((session) => session.key === sessionKey);
+  const nativeReadOnly = capabilities.sessionBranch === true && rosterSession?.source === 'native';
+  const [branching, setBranching] = useState(false);
+  const [branchError, setBranchError] = useState(false);
+  const nativeBranchBusy = useRef(false);
   const mainConversation = isMainConversation({ sessionKey, mainSessionKey: app.mainSessionKey, kind: rosterSession?.kind });
   const manualSession = useManualSession(connectionId, agentId, sessionKey);
   const sessionPreview = !locked && !manualSession && !mainConversation && !isPro && !sessionHistoryGraceActive;
@@ -264,7 +272,7 @@ function ThreadScreenContent({
   const controller = useChatController({
     adapter,
     routeSessionKey: sessionKey,
-    readOnly: sessionPreview,
+    readOnly: sessionPreview || nativeReadOnly,
     debugMode: app.debugMode,
     showAgentAvatar: app.showAgentAvatar,
     chatSessionRequest: app.chatSessionRequest,
@@ -894,12 +902,24 @@ function ThreadScreenContent({
         sessionTitle={currentSession?.title ?? currentSession?.label}
         isMainSession={mainConversation}
         model={controller.currentModelHeaderLabel}
+        modelDisplayName={controller.currentModelDisplayName}
         contextUsed={currentSession?.totalTokensFresh === false
           ? undefined
           : currentSession?.totalTokens}
         contextWindow={currentSession?.contextTokens}
         activityLabel={controller.activityLabel}
-        capabilities={capabilities}
+        capabilities={nativeReadOnly ? { ...capabilities, chat: false } : capabilities}
+        readOnlyFooter={nativeReadOnly && !sessionPreview ? <View style={{ padding: Space.lg, paddingBottom: Math.max(insets.bottom, Space.lg) }}>
+          <Button label={t('Continue in a new session')} loading={branching} disabled={adapter?.state !== 'ready'} onPress={() => {
+            if (nativeBranchBusy.current || !adapter?.createSession) return;
+            nativeBranchBusy.current = true; setBranching(true); setBranchError(false);
+            void ManualSessions.create(adapter, agentId, `native-branch:${sessionKey}`, { fromSession: sessionKey }).then(created => {
+              if (getConnectionRuntime().getSnapshot().activeAdapter !== adapter || !branchScope.active) return;
+              navigation.replace('Thread', { connectionId, agentId, sessionKey: created.key, from: 'panel' });
+            }).catch(() => { if (branchScope.active) setBranchError(true); }).finally(() => { nativeBranchBusy.current = false; if (branchScope.active) setBranching(false); });
+          }} />
+          {branchError ? <Banner tone="bad" message={t('Could not update this request. Try again.')} /> : null}
+        </View> : undefined}
         state={state}
         messages={visibleMessages}
         sessionPreview={sessionPreview ? {
@@ -915,6 +935,7 @@ function ThreadScreenContent({
         runCards={sessionPreview ? EMPTY_RUN_CARDS : runCards}
         locale={locale}
         input={displayInput}
+        pendingQuestions={adapter && capabilities.agentQuestions && !nativeReadOnly ? <AgentQuestions key={`${connectionId}:${sessionKey}`} adapter={adapter} sessionKey={sessionKey} /> : undefined}
         selectedSkill={activeSkill ? <SelectedSkill name={activeSkill.name} onRemove={() => {
           controller.setInput(displayInput); setSelectedSkill(null);
         }} /> : undefined}

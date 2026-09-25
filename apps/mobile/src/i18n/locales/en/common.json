@@ -245,5 +245,7 @@
   "Check your network and make sure the remote service is running.": "Check your network and make sure the remote service is running.",
   "View saved messages": "View saved messages",
   "Search and bulk export": "Search and bulk export",
-  "Skill and memory versions": "Skill and memory versions"
+  "Skill and memory versions": "Skill and memory versions",
+  "Yes": "Yes",
+  "No": "No"
 }

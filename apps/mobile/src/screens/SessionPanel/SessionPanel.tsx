@@ -583,6 +583,7 @@ function ConfirmActionSheet({
   onConfirm: () => void;
 }>): React.JSX.Element {
   const { t } = useTranslation('common');
+  const { theme } = useAppTheme();
   const action = pending?.action;
   return (
     <Sheet
@@ -594,7 +595,7 @@ function ConfirmActionSheet({
       onClose={onClose}
     >
       <View style={styles.confirmContent}>
-        <Text style={styles.confirmText}>{t('This cannot be undone.')}</Text>
+        <Text style={[styles.confirmText, { color: theme.colors.inkSecondary }]}>{t('This cannot be undone.')}</Text>
         <View style={styles.confirmButtons}>
           <Button label={t('Cancel')} variant="secondary" onPress={onClose} style={styles.confirmButton} />
           <Button
@@ -656,6 +657,7 @@ function RenameSessionSheet({
       <View style={styles.renameContent}>
         <FormTextInput
           testID="session-panel-rename-input"
+          bottomSheet
           value={draft}
           placeholder={t('Name')}
           accessibilityLabel={t('Name')}

@@ -377,5 +377,8 @@
   "Using Docker or a custom service? Update and restart Bridge with your usual deployment method.": "Docker veya özel bir hizmet mi kullanıyorsunuz? Bridge’i normal dağıtım yönteminizle güncelleyip yeniden başlatın.",
   "Could not copy or share. You can select the commands above.": "Kopyalanamadı veya paylaşılamadı. Yukarıdaki komutları seçebilirsiniz.",
   "Your older Bridge can keep working. Update it for the new features.": "Eski Bridge’iniz çalışmaya devam eder. Yeni özellikler için güncelleyin.",
-  "{{channel}} member": "{{channel}} üyesi"
+  "{{channel}} member": "{{channel}} üyesi",
+  "Agent needs your input": "Agent yanıtınızı bekliyor",
+  "Respond": "Yanıtla",
+  "Continue in a new session": "Yeni oturumda devam et"
 }

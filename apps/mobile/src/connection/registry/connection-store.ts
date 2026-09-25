@@ -25,7 +25,7 @@ const SECURE_OPTIONS: SecureStore.SecureStoreOptions = {
   keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
 };
 
-const BACKEND_KINDS = new Set<BackendKind>(['openclaw', 'hermes', 'youmind', 'local-model']);
+const BACKEND_KINDS = new Set<BackendKind>(['openclaw', 'hermes', 'youmind', 'local-model', 'pi']);
 const TRANSPORT_KINDS = new Set<TransportKind>([
   'relay',
   'local',
@@ -40,6 +40,7 @@ const LEGACY_TRANSPORT_NORMALIZERS: Record<BackendKind, (value: TransportKind) =
   hermes: (value) => value,
   youmind: () => 'https',
   'local-model': value => value,
+  pi: value => value,
 };
 
 const LEGACY_YOUMIND_METADATA: Record<BackendKind, (id: string) => ConnectionRecord['youmind']> = {
@@ -47,6 +48,7 @@ const LEGACY_YOUMIND_METADATA: Record<BackendKind, (id: string) => ConnectionRec
   hermes: () => undefined,
   youmind: (id) => ({ authScopeKey: `cfg:${id}` }),
   'local-model': () => undefined,
+  pi: () => undefined,
 };
 
 // Before 3.0, onboarding generated `YouMind (<email>)`. Keep the matcher
@@ -519,7 +521,7 @@ function findConnectionIdentityIndex(
       && record.relay?.gatewayId.trim() === gatewayId
     ));
   }
-  if (input.backendKind === 'openclaw' || input.backendKind === 'hermes') {
+  if (input.backendKind === 'openclaw' || input.backendKind === 'hermes' || input.backendKind === 'pi') {
     const endpointUrl = normalizeConnectionIdentityUrl(
       input.backendKind === 'hermes' ? input.hermes?.bridgeUrl ?? input.url : input.url,
     );

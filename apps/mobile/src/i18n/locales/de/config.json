@@ -382,5 +382,6 @@
   "Collapse all": "Alle zuklappen",
   "{{count}} items": "{{count}} Einträge",
   "Delete this local config backup? This does not change the current Gateway config.": "Diese lokale Konfigurationssicherung löschen? Die aktuelle Gateway-Konfiguration wird dadurch nicht verändert.",
-  "Backup history": "Bisherige Backups"
+  "Backup history": "Bisherige Backups",
+  "Pi is not responding": "Pi antwortet nicht"
 }

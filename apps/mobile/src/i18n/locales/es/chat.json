@@ -377,5 +377,8 @@
   "Using Docker or a custom service? Update and restart Bridge with your usual deployment method.": "¿Usas Docker o un servicio personalizado? Actualiza y reinicia Bridge con tu método habitual.",
   "Could not copy or share. You can select the commands above.": "No se pudo copiar o compartir. Puedes seleccionar los comandos de arriba.",
   "Your older Bridge can keep working. Update it for the new features.": "Tu Bridge anterior sigue funcionando. Actualízalo para acceder a las nuevas funciones.",
-  "{{channel}} member": "Miembro de {{channel}}"
+  "{{channel}} member": "Miembro de {{channel}}",
+  "Agent needs your input": "El agente espera tu respuesta",
+  "Respond": "Responder",
+  "Continue in a new session": "Continuar en una sesión nueva"
 }

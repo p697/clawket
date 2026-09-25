@@ -9,6 +9,7 @@ import {
   getOfficialRelayRegistryUrl,
   isEnvironmentIndependentRegistry,
   OFFICIAL_LOCAL_MODEL_PREVIEW_REGISTRY_URL,
+  OFFICIAL_PI_REGISTRY_URL,
 } from '../../services/relay-environment';
 import { parsePairingLink } from '../../services/pairing-session';
 import type { RelayServiceEnvironment } from '../../types';
@@ -24,7 +25,7 @@ import {
   type PairingPayloadAssessment,
 } from './gateway-scan-flow';
 
-export type PairingBackendKind = Extract<BackendKind, 'openclaw' | 'hermes' | 'local-model'>;
+export type PairingBackendKind = Extract<BackendKind, 'openclaw' | 'hermes' | 'local-model' | 'pi'>;
 
 export type BackendPairingResult = Readonly<{
   backendKind: PairingBackendKind;
@@ -77,6 +78,17 @@ type BackendPairingProfile = Readonly<{
 }>;
 
 const BACKEND_PAIRING_PROFILES: Readonly<Record<PairingBackendKind, BackendPairingProfile>> = {
+  pi: {
+    reportsCodeOutcome: false,
+    async connectCode(input) {
+      const connected = await input.secureInvitation.connectCode({ serverUrl: OFFICIAL_PI_REGISTRY_URL, pairingCode: input.pairingCode, expectedBackendKind: 'pi' });
+      return connected ? requireExpectedActiveConnection('pi', input.runtime) : null;
+    },
+    async connectLink(input) {
+      const connected = await input.secureInvitation.connectLink(input.url, { expectedBackendKind: 'pi' });
+      return connected ? requireExpectedActiveConnection('pi', input.runtime) : null;
+    },
+  },
   // Local model has one dedicated Registry and no Production twin, so pairing
   // ignores the selected environment and Debug Mode (owner decision 2026-09-19).
   'local-model': {
