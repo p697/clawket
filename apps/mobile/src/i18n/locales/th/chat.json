@@ -376,5 +376,6 @@
   "Once Bridge restarts, your existing connection reconnects automatically. You can keep chatting.": "เมื่อ Bridge เริ่มใหม่ การเชื่อมต่อเดิมจะกลับมาโดยอัตโนมัติ และคุณสนทนาต่อได้",
   "Using Docker or a custom service? Update and restart Bridge with your usual deployment method.": "ใช้ Docker หรือบริการที่กำหนดเองอยู่หรือไม่? อัปเดตและเริ่ม Bridge ใหม่ด้วยวิธีติดตั้งเดิม",
   "Could not copy or share. You can select the commands above.": "คัดลอกหรือแชร์ไม่สำเร็จ คุณสามารถเลือกคำสั่งด้านบนได้",
-  "Your older Bridge can keep working. Update it for the new features.": "Bridge รุ่นเก่ายังใช้งานได้ อัปเดตเพื่อใช้ฟีเจอร์ใหม่"
+  "Your older Bridge can keep working. Update it for the new features.": "Bridge รุ่นเก่ายังใช้งานได้ อัปเดตเพื่อใช้ฟีเจอร์ใหม่",
+  "{{channel}} member": "สมาชิก {{channel}}"
 }

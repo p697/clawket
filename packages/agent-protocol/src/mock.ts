@@ -57,7 +57,8 @@ function cloneSession(session: SessionDescriptor): SessionDescriptor {
 }
 
 function cloneMessage(message: ChatMessage): ChatMessage {
-  return { ...message };
+  return { ...message, ...(message.attribution ? { attribution: { ...message.attribution,
+    ...(message.attribution.sender ? { sender: { ...message.attribution.sender } } : {}) } } : {}) };
 }
 
 function cloneHistory(history: SessionHistory): SessionHistory {

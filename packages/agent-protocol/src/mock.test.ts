@@ -540,3 +540,20 @@ it('isolates live recovery snapshots from fixture and consumer mutations', async
   history.activeRun!.text = 'mutated consumer';
   expect((await adapter.loadSession('main')).activeRun?.text).toBe('partial');
 });
+
+
+it('clones optional channel attribution independently for every history read', async () => {
+  const data = fixture();
+  const adapter = createMockAdapter({ ...data, histories: {
+    'agent:main:main': { key: 'agent:main:main', hasActiveRun: false, messages: [
+      { id: 'known', role: 'user', text: 'hello', attribution: { channel: 'slack', sender: { id: 'person', name: 'Alice' } } },
+      { id: 'unknown', role: 'user', text: 'hello', attribution: { channel: 'linear' } },
+    ] },
+  } });
+  const first = await adapter.loadSession('agent:main:main');
+  first.messages[0].attribution!.sender!.name = 'Mutated';
+  first.messages[1].attribution!.channel = 'Mutated';
+  const second = await adapter.loadSession('agent:main:main');
+  expect(second.messages[0].attribution!.sender!.name).toBe('Alice');
+  expect(second.messages[1].attribution!.channel).toBe('linear');
+});

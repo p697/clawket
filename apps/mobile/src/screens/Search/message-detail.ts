@@ -1,3 +1,5 @@
+import { normalizeMessageAttribution } from '../../chat/messageAttribution';
+import type { MessageAttribution } from '@clawket/agent-protocol';
 import type {
   CachedMessage,
   CachedSessionMeta,
@@ -11,6 +13,7 @@ export type SearchMessageDetail = Readonly<{
   messageId: string;
   title: string;
   text: string;
+  attribution?: MessageAttribution;
   timestampMs: number | null;
 }>;
 
@@ -38,6 +41,7 @@ function detailFromFavorite(
     sessionKey: favorite.sessionKey,
     messageId: favorite.messageId,
     title: favorite.sessionLabel?.trim() || favorite.agentName?.trim() || favorite.agentId,
+    ...(favorite.attribution ? { attribution: normalizeMessageAttribution(favorite.attribution) } : {}),
     text: favorite.text || favorite.toolSummary || favorite.toolName || '',
     timestampMs: favorite.timestampMs ?? favorite.favoritedAt,
   };
@@ -65,6 +69,7 @@ export async function loadSearchMessageDetail(
       sessionKey: session.sessionKey,
       messageId: message.id,
       title: session.sessionLabel?.trim() || session.agentName?.trim() || session.agentId,
+      ...(message.attribution ? { attribution: normalizeMessageAttribution(message.attribution) } : {}),
       text: message.text || message.toolSummary || message.toolName || '',
       timestampMs: message.timestampMs ?? session.lastMessageMs ?? session.updatedAt,
     };

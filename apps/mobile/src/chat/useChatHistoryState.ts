@@ -1,3 +1,4 @@
+import { normalizeMessageAttribution } from './messageAttribution';
 import { RefObject, useCallback, useEffect, useRef, useState } from 'react';
 import type {
   AgentAdapter,
@@ -148,6 +149,7 @@ function areUiMessagesEquivalent(prev: UiMessage[], next: UiMessage[]): boolean 
     if (a.renderKey !== b.renderKey) return false;
     if (a.presentationRunId !== b.presentationRunId) return false;
     if (a.role !== b.role) return false;
+    if (a.sentLocally !== b.sentLocally || JSON.stringify(a.attribution) !== JSON.stringify(b.attribution)) return false;
     if (a.text !== b.text) return false;
     if (a.idempotencyKey !== b.idempotencyKey) return false;
     if (a.timestampMs !== b.timestampMs) return false;
@@ -416,7 +418,7 @@ export function useChatHistoryState({
         dbg(`cache: drop stale restore for key=${key}`);
         return false;
       }
-      const restored = cached.slice(-HISTORY_PAGE_SIZE).map(cachedMessageToUiMessage);
+      const restored = cached.slice(-HISTORY_PAGE_SIZE).map(message => cachedMessageToUiMessage(message, key));
       if (restored.length === 0) {
         if (options?.clearWhenEmpty) {
           setMessages(previous => previous.filter(message => !visibleIdsAtStart.has(message.id)));
@@ -693,13 +695,17 @@ export function useChatHistoryState({
           const userIdSeed = displayText
             || fileAttachments?.map((file) => file.fileName ?? file.mimeType).join('|')
             || '';
-          const userMsgId = stableMessageId('user', msgTs, userIdSeed);
+          const attribution = normalizeMessageAttribution(message.attribution);
+          const userMsgId = stableMessageId('user', msgTs, attribution
+            ? `${typeof message.id === 'string' ? message.id : JSON.stringify(attribution)}:${userIdSeed}` : userIdSeed);
           if (uiMessages.some((item) => item.id === userMsgId)) continue;
 
           uiMessages.push({
             id: userMsgId,
             historyMessageId: typeof message.id === 'string' ? message.id : undefined,
             role: 'user',
+            ...(attribution ? { attribution } : {}),
+            ...(message.sentLocally === true ? { sentLocally: true as const } : {}),
             text: displayText,
             idempotencyKey,
             timestampMs: msgTs > 0 ? msgTs : undefined,

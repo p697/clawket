@@ -1848,6 +1848,13 @@ function AppContent({
                           void getConnectionRuntime().activate(connection.id)
                             .then(() => getConnectionRuntime().probeActive());
                         }}
+                        onRefresh={async () => {
+                          // Locked agents keep the paywall on the explicit Retry action, not the pull.
+                          if (permissionDenied) return;
+                          const runtime = getConnectionRuntime();
+                          await runtime.activate(connection.id);
+                          await Promise.all([runtime.refreshRoster(), runtime.probeActive()]);
+                        }}
                       />
                     );
                   }}

@@ -17,7 +17,7 @@ import { describeScheduleHuman } from '../../utils/cron';
 import { ControlSize, FontSize, FontWeight, IconSize, LineHeight, Space } from '../../theme/tokens';
 import { CronFailureAckService } from '../../services/cron-failure-acks';
 import { cronFailureRunEntry, failedCronJobs } from './cron-failures';
-import { cronJobModel, cronModelLabel, cronRunStatus, filterAgentCronRuns } from './cron-model';
+import { cronJobModel, cronModelLabel, cronRunStatus, filterAgentCronRuns, isSystemOwnedCronJob } from './cron-model';
 import { formatCronDate } from './cron-schedule';
 import { CronRunSheet } from './CronRunSheet';
 import { useCronJobs } from './useCronJobs';
@@ -106,7 +106,7 @@ function CronSectionContent({ adapter, agent, online, refreshKey, onCreate, onEd
     return () => { active = false; };
   }, [canShowHeartbeat, isCurrent, online, operations, refreshKey, t]);
   const toggle = async (job: CronJob) => {
-    if (!online || busyRef.current || !operations?.update) return;
+    if (!online || busyRef.current || !operations?.update || isSystemOwnedCronJob(job)) return;
     busyRef.current = true;
     invalidate();
     setBusy(job.id);
@@ -164,6 +164,7 @@ function CronSectionContent({ adapter, agent, online, refreshKey, onCreate, onEd
               style={rowStyles.content} onPress={() => onEdit(job.id)}>
               <View style={rowStyles.titleRow}><Text style={[styles.runText, rowStyles.title]}>{job.name}</Text><ChevronRight size={IconSize.sm} color={theme.colors.inkTertiary} /></View>
               <Text style={styles.fieldLabel}>{describeScheduleHuman(job.schedule, t)}</Text>
+              {isSystemOwnedCronJob(job) ? <Text style={styles.fieldLabel}>{t('Managed by OpenClaw', { ns: 'settings' })}</Text> : null}
               {adapter.capabilities.cronModel && cronJobModel(job) ? <Text testID={`agent-cron-job-model-${job.id}`} style={styles.fieldLabel}>
                 {`${t('Model', { ns: 'settings' })} · ${cronModelLabel(cronJobModel(job)!, [])}`}</Text> : null}
               <Text style={styles.fieldLabel}>{job.enabled
@@ -174,7 +175,7 @@ function CronSectionContent({ adapter, agent, online, refreshKey, onCreate, onEd
                   {t('Failed', { ns: 'settings' })}{job.state.lastError ? ` · ${job.state.lastError}` : ''}
                 </Text> : null}
             </Pressable>
-            {operations?.update ? <View style={rowStyles.switchTarget}><ThemedSwitch testID={`agent-cron-switch-${job.id}`}
+            {operations?.update && !isSystemOwnedCronJob(job) ? <View style={rowStyles.switchTarget}><ThemedSwitch testID={`agent-cron-switch-${job.id}`}
               value={job.enabled} disabled={!online || Boolean(busy)} accessibilityLabel={`${t('Enabled', { ns: 'settings' })}: ${job.name}`}
               accessibilityState={{ disabled: !online || Boolean(busy), busy: busy === job.id }} onValueChange={() => { void toggle(job); }} /></View> : null}
           </View>)}</View>

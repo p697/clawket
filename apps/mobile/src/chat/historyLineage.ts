@@ -1,3 +1,4 @@
+import { restoreCachedAttribution } from './messageAttribution';
 import { CachedMessage, CachedSessionSnapshot } from '../services/chat-cache';
 import { UiMessage } from '../types/chat';
 import {
@@ -16,9 +17,9 @@ function buildMessageDedupKey(message: UiMessage): string {
   ]);
 }
 
-export function cachedMessageToUiMessage(message: CachedMessage): UiMessage {
+export function cachedMessageToUiMessage(message: CachedMessage, sessionKey = ''): UiMessage {
   return {
-    ...message,
+    ...restoreCachedAttribution(message, sessionKey),
     streaming: false,
   };
 }
@@ -30,7 +31,7 @@ export function buildCachedLineageMessages(
   const excludeSessionId = options?.excludeSessionId?.trim();
   return snapshots
     .filter((snapshot) => !excludeSessionId || snapshot.meta.sessionId !== excludeSessionId)
-    .flatMap((snapshot) => snapshot.messages.map(cachedMessageToUiMessage))
+    .flatMap((snapshot) => snapshot.messages.map(message => cachedMessageToUiMessage(message, snapshot.meta.sessionKey)))
     .filter((message) => !isAssistantSilentReplyMessage(message))
     .filter((message) => !isAssistantDeliveryMirrorMessage(message))
     .filter((message) => !shouldHideMessage(message));

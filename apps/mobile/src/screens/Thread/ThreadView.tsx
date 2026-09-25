@@ -1,3 +1,5 @@
+import { isIncomingParticipant, messageSenderLabel } from '../../chat/messageAttribution';
+import { ParticipantIdentity } from '../../components/chat/ParticipantIdentity';
 import { useWorkspaceLayout } from '../../navigation/workspace-context';
 import { IPAD_CHAT_MAX_WIDTH } from '../../utils/ipad-layout';
 import { useReplyEntranceDelay } from '../../chat/useReplyEntranceDelay';
@@ -442,10 +444,11 @@ export function ThreadView({
 }: ThreadViewProps): React.JSX.Element {
   const { theme } = useAppTheme();
   const { t } = useTranslation('common');
+  const hasParticipants = messages.some(isIncomingParticipant);
   const presentation = useMemo(() => ({
     appearance: chatAppearance, fontSize: chatFontSize, locale,
-    identity: { agentId, name: agentName, emoji: agentEmoji, avatarUrl: agentAvatarUrl, showAvatar: showAgentAvatar },
-  }), [chatAppearance, chatFontSize, locale, agentId, agentName, agentEmoji, agentAvatarUrl, showAgentAvatar]);
+    identity: { agentId, name: agentName, emoji: agentEmoji, avatarUrl: agentAvatarUrl, showAvatar: showAgentAvatar || hasParticipants, showRoleLabel: hasParticipants },
+  }), [chatAppearance, chatFontSize, locale, agentId, agentName, agentEmoji, agentAvatarUrl, showAgentAvatar, hasParticipants]);
   const reduceMotion = useReducedMotion();
   const [composerExpanded, setComposerExpanded] = useState(false);
   const compactComposerHeight = useRef(0);
@@ -1342,7 +1345,7 @@ const ThreadMessageTimelineItem = React.memo(function ThreadMessageTimelineItem(
         ref={rowRef}
         testID={`thread-message-${message.id}`}
         accessibilityRole={actionable ? 'button' : undefined}
-        accessibilityLabel={[message.text, spokenState].filter(Boolean).join(' · ') || undefined}
+        accessibilityLabel={[isIncomingParticipant(message) && message.attribution ? messageSenderLabel(message.attribution) : '', message.text, spokenState].filter(Boolean).join(' · ') || undefined}
         accessibilityActions={actionable ? MESSAGE_ROW_ACCESSIBILITY_ACTIONS : undefined}
         onAccessibilityAction={actionable ? (event) => {
           if (event.nativeEvent.actionName === 'longpress') handleLongPress();
@@ -1356,6 +1359,7 @@ const ThreadMessageTimelineItem = React.memo(function ThreadMessageTimelineItem(
           message={message}
           copy={copy}
           favorited={favorited}
+          showIdentity={message.role !== 'user' || gapAbove !== 'stack'}
           status={status}
           onOpenAttachments={onOpenAttachments}
           onLongPress={actionable ? handleLongPress : undefined}
@@ -1375,7 +1379,7 @@ const ThreadMessageTimelineItem = React.memo(function ThreadMessageTimelineItem(
         animationKey={message.renderKey ?? message.id}
         animate={animateEntrance}
         claimEntrance={claimEntrance}
-        motion={message.role === 'user' ? 'sent' : 'reply'}
+        motion={message.role === 'user' && !isIncomingParticipant(message) ? 'sent' : 'reply'}
       >
         {content}
       </MessageEntrance>
@@ -1416,6 +1420,9 @@ function ThreadMessageRowContent({
   const hasBubble = Boolean(message.text) || (message.role === 'assistant' && message.streaming === true);
   return (
     <View testID={`thread-delivery-${message.id}`} style={stylesStatic.deliveryFrame}>
+      {showIdentity && isIncomingParticipant(message) && message.attribution ? (
+        <ParticipantIdentity attribution={message.attribution} testID={`thread-sender-${message.id}`} />
+      ) : null}
       {hasBubble ? (
         message.role === 'assistant' ? (
           <AssistantBubble message={message} showIdentity={showIdentity} />
@@ -1429,7 +1436,7 @@ function ThreadMessageRowContent({
           testID={`thread-file-${message.id}-${index}`}
           icon={Paperclip}
           label={file.fileName?.trim() || copy.file}
-          style={message.role === 'user' ? stylesStatic.fileAttachmentUser : undefined}
+          style={message.role === 'user' && !isIncomingParticipant(message) ? stylesStatic.fileAttachmentUser : undefined}
         />
       ))}
       {attachmentCount > 0 ? (
@@ -1444,7 +1451,7 @@ function ThreadMessageRowContent({
         <UserMessageMeta message={message} status={status} copy={copy} />
       ) : null}
       {favorited ? (
-        <FavoriteIndicator messageId={message.id} role={message.role} />
+        <FavoriteIndicator messageId={message.id} role={isIncomingParticipant(message) ? 'assistant' : message.role} />
       ) : null}
     </View>
   );
@@ -1468,9 +1475,11 @@ function UserBubble({
 }: Readonly<{ message: UiMessage; status: UserMessageStatus | null; copy: ThreadCopy }>): React.JSX.Element {
   const typography = useBubbleTypography();
   const time = useMessageClock(message);
+  const incoming = isIncomingParticipant(message);
+  if (incoming) status = null;
   const hasMeta = Boolean(time) || Boolean(status);
   return (
-    <Bubble testID={`thread-bubble-${message.id}`} role="user">
+    <Bubble testID={`thread-bubble-${message.id}`} role={incoming ? "assistant" : "user"}>
       <View style={stylesStatic.userBody}>
         <Text selectable style={typography}>
           {message.text}
@@ -1480,7 +1489,7 @@ function UserBubble({
           <MessageMeta
             testID={`thread-meta-${message.id}`}
             time={time}
-            tone="accent"
+            tone={incoming ? "neutral" : "accent"}
             status={status}
             statusLabel={statusCopy(status, copy)}
             style={stylesStatic.metaOverlay}
@@ -1498,15 +1507,17 @@ function UserMessageMeta({
   copy,
 }: Readonly<{ message: UiMessage; status: UserMessageStatus | null; copy: ThreadCopy }>): React.JSX.Element | null {
   const time = useMessageClock(message);
+  const incoming = isIncomingParticipant(message);
+  if (incoming) status = null;
   if (!time && !status) return null;
   return (
     <MessageMeta
       testID={`thread-meta-${message.id}`}
       time={time}
-      tone="accent"
+      tone={incoming ? "neutral" : "accent"}
       status={status}
       statusLabel={statusCopy(status, copy)}
-      style={stylesStatic.metaRowUser}
+      style={incoming ? undefined : stylesStatic.metaRowUser}
     />
   );
 }
@@ -1552,7 +1563,7 @@ function ThreadMessageAlbum({
       uris={uris}
       metas={message.imageMetas}
       maxWidth={maxWidth}
-      align={message.role === 'user' ? 'end' : 'start'}
+      align={message.role === 'user' && !isIncomingParticipant(message) ? 'end' : 'start'}
       label={copy.formatAttachments(uris.length)}
       formatTileLabel={copy.formatPhotoPosition}
       onPressImage={onOpenAttachments ? (index) => onOpenAttachments(message, index) : undefined}

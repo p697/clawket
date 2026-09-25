@@ -1,3 +1,4 @@
+import { normalizeMessageAttribution } from './messageAttribution';
 import {
   useEffect,
   useRef,
@@ -221,6 +222,8 @@ export function mapAdapterChatMessage(message: ChatMessage): UiMessage | null {
   return {
     id: message.id,
     role: message.role,
+    ...(message.attribution ? { attribution: normalizeMessageAttribution(message.attribution) } : {}),
+    ...(message.sentLocally ? { sentLocally: true as const } : {}),
     text: message.text,
     userSkill: message.skill,
     idempotencyKey: message.idempotencyKey,

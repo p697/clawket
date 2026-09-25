@@ -169,7 +169,7 @@ Remove it to include `armeabi-v7a` for older devices, at the cost of a larger AP
 If you need to upload a replacement build to Google Play and the previous `versionCode` is already used, rebuild with a higher override:
 
 ```bash
-EXPO_ANDROID_VERSION_CODE=30001 npm run build:android:aab
+EXPO_ANDROID_VERSION_CODE=30102 npm run build:android:aab
 ```
 
 ### Store-ready AAB

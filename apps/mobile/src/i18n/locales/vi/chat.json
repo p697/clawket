@@ -376,5 +376,6 @@
   "Once Bridge restarts, your existing connection reconnects automatically. You can keep chatting.": "Sau khi Bridge khởi động lại, kết nối hiện có sẽ tự khôi phục và bạn có thể tiếp tục trò chuyện.",
   "Using Docker or a custom service? Update and restart Bridge with your usual deployment method.": "Dùng Docker hoặc dịch vụ tùy chỉnh? Hãy cập nhật và khởi động lại Bridge theo cách triển khai thường dùng.",
   "Could not copy or share. You can select the commands above.": "Không thể sao chép hoặc chia sẻ. Bạn có thể chọn các lệnh ở trên.",
-  "Your older Bridge can keep working. Update it for the new features.": "Bridge cũ vẫn hoạt động. Hãy cập nhật để dùng các tính năng mới."
+  "Your older Bridge can keep working. Update it for the new features.": "Bridge cũ vẫn hoạt động. Hãy cập nhật để dùng các tính năng mới.",
+  "{{channel}} member": "Thành viên {{channel}}"
 }

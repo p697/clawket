@@ -1,6 +1,6 @@
 # Clawket Mobile workspace
 
-This Expo/React Native app is the Clawket 3.0 client for OpenClaw, Hermes, and YouMind Sprite. Repository-wide rules still apply; this file contains only Mobile-specific implementation rules.
+This Expo/React Native app is the Clawket 3.x client for OpenClaw, Hermes, and YouMind Sprite. Repository-wide rules still apply; this file contains only Mobile-specific implementation rules.
 
 ## Sources of truth
 
@@ -10,6 +10,7 @@ This Expo/React Native app is the Clawket 3.0 client for OpenClaw, Hermes, and Y
 4. Read `docs/design-system.md` before UI work. Exact product recipes live in `../../docs/3.0/05-visual-system.md`.
 5. Read `docs/android-build.md` for Android packaging and `docs/android-onboarding.md` for a fresh build machine.
 6. Release/update announcement content lives in `src/features/app-updates/releases.ts`: the complete 1.1.0 → 3.x history, newest first, with real store dates. Every `title` / `subtitle` / `tag` / release `summary` is a `chat` namespace key present in all 19 locales (`releases.test.ts` fails closed); `DYNAMIC_KEY_ORIGINS` in `scripts/i18n-prune.mjs` names the catalog as the origin of the dynamic `t(entry.*)` calls. Entry actions are `none`, `open_url`, `open_paywall`, plus the owner-approved 3.0 `open_bridge_upgrade` guide (2026-09-22); the Release Notes history renders entries inert. Mark bug-fix / store-rebuild versions `silent` so they are listed but never announced.
+7. Client version changes must align `package.json`, `app.json`, both workspace lockfile entries, and any locally generated iOS/Android projects. Keep the Bridge and shared package versions independent. The release announcement catalog needs verified store dates and approved copy; a version bump alone must not invent them.
 
 OpenClaw may be inspected at `../../../../openclaw` or `/Users/lucy/Desktop/op/openclaw`. Hermes at `/Users/lucy/.hermes/hermes-agent` is read-only unless the user explicitly asks to modify it. `/Users/lucy/Desktop/youmind/youmind-mobile` is a read-only implementation reference, not a product specification.
 
@@ -33,6 +34,7 @@ OpenClaw may be inspected at `../../../../openclaw` or `/Users/lucy/Desktop/op/o
 - Background OpenClaw children may emit only `agent` assistant/lifecycle events: capture cumulative assistant text and settle explicit end/error/abort for child session keys. Main conversations must still wait for authoritative `chat` finals; never treat `finishing` as completion.
 - Completed child-run cards are local execution records, not expiring activity hints. Preserve terminal text and failure state, cache up to 100 records per connection/Agent/parent session, and open the retained result when the child session is gone. Never persist a live run as completed or infer ownership against an explicit different parent.
 - Gateway history may coalesce multiple CLI tool calls/results inside assistant or user content. Project every identified block at the adapter boundary; preserve call IDs, errors and outputs without turning tool-result envelopes into user bubbles.
+- Channel messages carry optional `MessageAttribution` independently of model role. Preserve it through history, recovery, cache and favorites; external participants render incoming with identity and no outgoing receipt. Only exact local send evidence establishes self; owner flags, names and mentions never do. Scope identities by connection/channel/account, and never text-match different or unknown participants. Missing photos use stable identity-colored initials from existing light/dark accent scales; participant conversations add a localized Agent badge without an extra avatar border. Keep bubble colors unchanged and never send channel credentials to the phone. See `docs/3.0/25-message-participants.md` at the repository root.
 
 ### Connection and protocol safety
 
@@ -389,5 +391,6 @@ Detached iPad sheets clip the entire animated panel to Radius.bottomSheet, not o
 Bridge upgrade suggestions require authenticated old-Bridge evidence, retained locally only for saved connections. Never infer age from connection creation, offline state, an unobserved version, or OpenClaw Gateway version. Direct OpenClaw and other backends are excluded. Current handshake evidence supersedes saved evidence; new users see no suggestion. The 3.0 announcement, Settings home row directly below My connections, and connection details share the guide; dismiss the announcement before navigation. Updating preserves pairing, never runs a command on behalf of the user, and does not claim success merely from copying or sharing.
 
 - Agent profile Cron totals and failure badges use the same paginated, Agent-filtered loader as the job list, including disabled jobs. Never display the connection-wide `cron.list` total as an Agent count; unassigned legacy jobs retain the default-Agent fallback for both backends.
+- OpenClaw system-owned cron monitors (`heartbeat`, `skillCollectionReview`) remain visible with run history, but their list switch and detail write/run/delete controls are absent. Identify them by payload kind, not task name; ordinary OpenClaw and Hermes jobs retain their existing actions.
 
 Create Agent navigation actions are consumed in route params before presentation, not only in child component refs. Only the focused identity page may open the sheet; stale purchase continuations and reconnect-driven remounts must never present it over another route.

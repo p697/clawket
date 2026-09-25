@@ -1,3 +1,4 @@
+import { normalizeMessageAttribution } from '../chat/messageAttribution';
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { UiMessage } from "../types/chat";
 import { sanitizeSilentPreviewText, shouldHideMessage } from "../utils/chat-message";
@@ -12,6 +13,8 @@ export type CachedMessage = {
   historyMessageId?: string;
   role: "user" | "assistant" | "system" | "tool";
   text: string;
+  attribution?: UiMessage["attribution"];
+  sentLocally?: true;
   sendUncertain?: boolean;
   idempotencyKey?: string;
   timestampMs?: number;
@@ -130,6 +133,7 @@ function sanitizeCachedMessages(messages: unknown[]): CachedMessage[] {
   return messages
     .filter(isStoredCachedMessage)
     .filter(isCacheableMessage)
+    .map(message => ({ ...message, attribution: normalizeMessageAttribution(message.attribution), sentLocally: message.sentLocally === true ? true as const : undefined }))
     .filter((message) => !shouldHideMessage(message));
 }
 
@@ -139,6 +143,8 @@ function toSlim(msg: UiMessage): CachedMessage {
     role: msg.role,
     text: msg.text,
   };
+  if (msg.attribution) slim.attribution = normalizeMessageAttribution(msg.attribution);
+  if (msg.sentLocally) slim.sentLocally = true;
   if (msg.sendUncertain) slim.sendUncertain = true;
   if (msg.historyMessageId) slim.historyMessageId = msg.historyMessageId;
   if (msg.idempotencyKey) slim.idempotencyKey = msg.idempotencyKey;
@@ -596,6 +602,7 @@ export const ChatCacheService = {
         // Only cache user + assistant + tool messages (skip system noise)
         const cacheable = messages
           .filter(isCacheableMessage)
+          .map(message => ({ ...message, attribution: normalizeMessageAttribution(message.attribution), sentLocally: message.sentLocally === true ? true as const : undefined }))
           .filter((message) => !shouldHideMessage(message))
           .map(toSlim);
 

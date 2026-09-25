@@ -57,6 +57,12 @@ export function cronJobBelongsToAgent(job: CronJob, agent: AgentDescriptor): boo
   return agent.isMain;
 }
 
+/** OpenClaw exposes its own monitors through cron.list but rejects client edits/removal. */
+export function isSystemOwnedCronJob(job: CronJob): boolean {
+  const kind: string = job.payload.kind;
+  return kind === 'heartbeat' || kind === 'skillCollectionReview';
+}
+
 export function filterAgentCronRuns(
   entries: ReadonlyArray<CronRunLogEntry>,
   jobs: ReadonlyArray<CronJob>,
@@ -129,6 +135,7 @@ function cronModelChanged(next: string | undefined, current: string | undefined)
 }
 
 export function cronPayloadText(job: CronJob): string {
+  if (isSystemOwnedCronJob(job)) return '';
   return job.payload.kind === 'systemEvent' ? job.payload.text : job.payload.message;
 }
 
