@@ -1,3 +1,4 @@
+import { ParticipantIdentity } from '../../components/chat/ParticipantIdentity';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ScrollView,
@@ -148,6 +149,7 @@ function MessageDetailView({
         ) : null}
         {detail && state !== 'loading' && state !== 'permission' ? (
           <View testID="message-detail-content" style={styles.detailBody}>
+            {detail.attribution ? <ParticipantIdentity attribution={detail.attribution} /> : null}
             <View>
               <Text style={[styles.detailTitle, { color: theme.colors.ink }]}>
                 {detail.title}

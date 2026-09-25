@@ -1818,7 +1818,14 @@ export function useChatController({
         markRunSignal();
         markActivityStarted(update.sessionKey, update.runId);
         if (!matchesCurrentSession(update.sessionKey)) return;
-        acceptRun(update.sessionKey, update.runId);
+        // Foreign/channel turns have no optimistic user bubble. Hydrate their author
+        // through the existing coalesced history path as soon as execution starts.
+        if (!currentRunIdRef.current) {
+          acceptRun(update.sessionKey, update.runId);
+          void requestVisibleHistoryReload(update.sessionKey, 'incoming-run').catch(() => undefined);
+        } else {
+          acceptRun(update.sessionKey, update.runId);
+        }
         return;
       case "agent_message_chunk": {
         if (lastAdapterStateRef.current !== "ready") return;
@@ -2806,7 +2813,7 @@ export function useChatController({
     void adapter.steer(key, runId, text).then(() => {
       if (!scope.active || sendScopeRef.current !== scope || sessionKeyRef.current !== key) return;
       const timestampMs = Date.now();
-      history.setMessages((messages) => [...messages, { id: `usr_${timestampMs}_steer_${runId}`, role: 'user', text, timestampMs }]);
+      history.setMessages((messages) => [...messages, { id: `usr_${timestampMs}_steer_${runId}`, role: 'user', sentLocally: true, text, timestampMs }]);
       setInput((current) => current === input ? '' : current);
       setMessageSubmittedAt(timestampMs);
       setMessageAcceptedAt(timestampMs);

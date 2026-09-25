@@ -2,6 +2,7 @@ import { useUsageCalendar } from './useUsageCalendar';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -85,13 +86,18 @@ export type AgentSettingsViewProps = Readonly<{
   onNavigate: AgentSettingsNavigate;
   onOpenPro: (section: AgentSettingsSection, onContinue?: () => void) => void;
   onRetry: () => void;
+  /** Pull-to-refresh; omitted means the page has no refresh gesture. */
+  onRefresh?: () => void;
+  refreshing?: boolean;
 }>;
 
 export type AgentSettingsScreenProps = Omit<
   AgentSettingsViewProps,
-  'connectionState' | 'state' | 'summary'
+  'connectionState' | 'state' | 'summary' | 'onRefresh' | 'refreshing'
 > & Readonly<{
   adapter: AgentAdapter | null;
+  /** Route-level refresh (roster identity, connection probe) that runs beside the summary reload. */
+  onRefresh?: () => void | Promise<void>;
   initialSummary?: AgentSettingsSummary;
   permissionDenied?: boolean;
 }>;
@@ -174,6 +180,7 @@ export function AgentSettingsScreen({
   initialSummary,
   permissionDenied = false,
   errorMessage,
+  onRefresh,
   ...viewProps
 }: AgentSettingsScreenProps): React.JSX.Element {
   const accessibleAdapter = permissionDenied ? null : adapter;
@@ -253,6 +260,28 @@ export function AgentSettingsScreen({
     hasError: Boolean(errorMessage) || hasStateError,
   });
 
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshInFlight = useRef(false);
+  const refresh = useCallback(async () => {
+    if (refreshInFlight.current) return;
+    refreshInFlight.current = true;
+    setRefreshing(true);
+    try {
+      const tasks: Array<Promise<unknown>> = [];
+      if (onRefresh) tasks.push(Promise.resolve().then(onRefresh).catch(() => { /* The runtime publishes the actionable error. */ }));
+      // Offline pulls only reconnect; the summary effect reloads once the adapter is ready again.
+      if (accessibleAdapter && agent && summaryKey && connectionState === 'ready') {
+        tasks.push(loadAgentSettingsSummary(accessibleAdapter, agent, Date.now())
+          .then((nextSummary) => mergeSummary(summaryKey, nextSummary))
+          .catch(() => { /* Cards keep their last value. */ }));
+      }
+      await Promise.all(tasks);
+    } finally {
+      refreshInFlight.current = false;
+      setRefreshing(false);
+    }
+  }, [accessibleAdapter, agent, connectionState, mergeSummary, onRefresh, summaryKey]);
+
   return (
     <AgentSettingsView
       {...viewProps}
@@ -265,6 +294,8 @@ export function AgentSettingsScreen({
       summary={summary}
       identityDetail={viewProps.identityDetail}
       errorMessage={errorMessage}
+      refreshing={refreshing}
+      onRefresh={() => { void refresh(); }}
     />
   );
 }
@@ -286,6 +317,8 @@ export function AgentSettingsView({
   onNavigate,
   onOpenPro,
   onRetry,
+  onRefresh,
+  refreshing = false,
 }: AgentSettingsViewProps): React.JSX.Element {
   const { t, i18n } = useTranslation(['common', 'settings', 'config']);
   const { theme } = useAppTheme();
@@ -436,6 +469,15 @@ export function AgentSettingsView({
             styles.content,
             { paddingBottom: insets.bottom + Space.xl },
           ]}
+          refreshControl={onRefresh ? (
+            <RefreshControl
+              testID="agent-settings-refresh-control"
+              refreshing={refreshing}
+              tintColor={theme.colors.inkSecondary}
+              colors={[theme.colors.inkSecondary]}
+              onRefresh={onRefresh}
+            />
+          ) : undefined}
           showsVerticalScrollIndicator={false}
         >
           {state === 'permission' ? (

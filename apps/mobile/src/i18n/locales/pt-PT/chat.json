@@ -376,5 +376,6 @@
   "Once Bridge restarts, your existing connection reconnects automatically. You can keep chatting.": "Após reiniciar o Bridge, a ligação é restabelecida automaticamente e pode continuar a conversa.",
   "Using Docker or a custom service? Update and restart Bridge with your usual deployment method.": "Usa Docker ou um serviço personalizado? Atualize e reinicie o Bridge pelo método habitual.",
   "Could not copy or share. You can select the commands above.": "Não foi possível copiar ou partilhar. Pode selecionar os comandos acima.",
-  "Your older Bridge can keep working. Update it for the new features.": "O seu Bridge antigo continua a funcionar. Atualize para usar as novas funcionalidades."
+  "Your older Bridge can keep working. Update it for the new features.": "O seu Bridge antigo continua a funcionar. Atualize para usar as novas funcionalidades.",
+  "{{channel}} member": "Membro do {{channel}}"
 }

@@ -1,3 +1,5 @@
+import { readGatewayMessageAttribution } from './gateway-message-attribution';
+import { canMatchMessageAuthors, restoreCachedAttribution } from '../../chat/messageAttribution';
 import { stripOpenClawInputContext } from '../../utils/openclaw-input-context';
 import type { ChatMessage } from '@clawket/agent-protocol';
 import { ChatCacheService, type CachedMessage } from '../../services/chat-cache';
@@ -21,7 +23,7 @@ export const DEFAULT_GATEWAY_HISTORY_CACHE: GatewayHistoryCache = {
     const page = await ChatCacheService.getTimelinePage(connectionId, agentId, sessionKey, {
       pageSize: limit,
     });
-    return page.messages.map(cachedMessageToChatMessage);
+    return page.messages.map(message => cachedMessageToChatMessage(restoreCachedAttribution(message, sessionKey)));
   },
 };
 
@@ -63,6 +65,8 @@ export function mapGatewayHistoryMessage(
       name: malformedTool, callId: `unverified:${id}`, status: 'unknown', input: message.text,
     } };
   }
+  const attribution = readGatewayMessageAttribution(sessionKey, value);
+  if (attribution) message.attribution = attribution;
   const usage = normalizeUsage(value.usage);
   if (usage) message.usage = usage;
   const attachments = extractHistoryAttachments(content);
@@ -244,6 +248,13 @@ export function mergeGatewayHistory(
       && cached.idempotencyKey === remote.idempotencyKey && cached.attachments?.length);
     return local ? { ...remote, attachments: local.attachments } : remote;
   });
+  // Own-send provenance survives a canonical echo only through exact send identity.
+  remoteMessages = remoteMessages.map(remote => {
+    if (remote.role !== 'user' || !remote.idempotencyKey) return remote;
+    const own = cachedMessages.find(cached => cached.role === 'user' && cached.sentLocally
+      && cached.idempotencyKey === remote.idempotencyKey);
+    return own ? { ...remote, sentLocally: true as const } : remote;
+  });
   const remoteIds = new Set(remoteMessages.map((message) => message.id));
   const remoteIdempotencyKeys = new Set(
     remoteMessages
@@ -271,6 +282,7 @@ export function mergeGatewayHistory(
     if (!cached || !remote) return true;
     if (cached.idempotencyKey && remote.idempotencyKey) return cached.idempotencyKey === remote.idempotencyKey;
     if (cached.id === remote.id) return true;
+    if (!canMatchMessageAuthors(cached, remote)) return false;
     if (comparableText(cached) !== comparableText(remote) || remote.timestampMs === undefined) return false;
     const rowId = (cached as CachedHistoryMessage).cacheRowId ?? cached.id;
     return rowId === stableMessageId('user', remote.timestampMs, remote.text)
@@ -302,6 +314,7 @@ export function mergeGatewayHistory(
       && (message.role !== 'assistant' || sameUserTurn(cachedUsers[cachedIndex], remoteUsers[index]))
       && (optimisticUser || confirmedCopy)
       && remote.role === message.role
+      && canMatchMessageAuthors(message, remote)
       && !(remote.idempotencyKey && message.idempotencyKey && remote.idempotencyKey !== message.idempotencyKey)
       && comparableText(remote) === comparableText(message)
       && (remote.text.length > 0 || Boolean(remote.tool?.callId && remote.tool.callId === message.tool?.callId))
@@ -361,6 +374,8 @@ function cachedMessageToChatMessage(message: CachedMessage): CachedHistoryMessag
     id: readNonEmptyString(message.historyMessageId) ?? message.id,
     cacheRowId: message.id,
     role: message.role,
+    ...(message.attribution ? { attribution: message.attribution } : {}),
+    ...(message.sentLocally ? { sentLocally: true as const } : {}),
     text: message.role === 'user' ? stripCliResumeContext(message.text) : message.text,
     ...(timestampMs !== undefined ? { timestampMs } : {}),
     ...(message.idempotencyKey ? { idempotencyKey: message.idempotencyKey } : {}),

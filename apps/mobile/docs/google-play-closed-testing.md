@@ -66,7 +66,7 @@ Important:
 - do not enable `EXPO_PUBLIC_UNLOCK_PRO`
 - keep the Android RevenueCat API key separate from the iOS key
 - leave `EXPO_PUBLIC_REVENUECAT_PRO_PACKAGE_ID` unset for the standard 3.0 Offering; it is only a legacy fallback
-- if Google Play says the version code already exists, set a value above the latest Play build in `EXPO_ANDROID_VERSION_CODE` before rebuilding, for example `30001`
+- if Google Play says the version code already exists, set a value above the latest Play build in `EXPO_ANDROID_VERSION_CODE` before rebuilding, for example `30102`
 
 Validate with:
 
@@ -176,7 +176,7 @@ After env and keystore are ready:
 ```bash
 cd apps/mobile
 npm run config:check:android
-EXPO_ANDROID_VERSION_CODE=30001 npm run build:android:aab
+EXPO_ANDROID_VERSION_CODE=30102 npm run build:android:aab
 ```
 
 Expected output:

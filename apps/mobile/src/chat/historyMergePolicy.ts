@@ -1,3 +1,4 @@
+import { canMatchMessageAuthors } from './messageAttribution';
 import { UiMessage } from '../types/chat';
 import { finalReplyTail } from './streamText';
 
@@ -40,6 +41,7 @@ export function preserveMessagePresentation(previous: UiMessage[], next: UiMessa
     return {
       ...message,
       renderKey: local.renderKey,
+      ...(local.sentLocally ? { sentLocally: true as const } : {}),
       // A local user's geometry (including its time break and photo preview)
       // must not change just because the backend echoed the same submission.
       ...(message.role === 'user' ? {
@@ -68,13 +70,15 @@ export function preserveHydratedMessageKeys(previous: UiMessage[], next: UiMessa
   return next.map(message => {
     const key = identity(message);
     const old = candidates.get(key);
-    if (!old || counts.get(key) !== 1 || message.renderKey) return message;
+    if (!old || counts.get(key) !== 1) return message;
+    const restored = old.sentLocally ? { ...message, sentLocally: true as const } : message;
+    if (message.renderKey) return restored;
     const renderKey = old.renderKey ?? old.id;
-    if (renderKey === message.id || previousKeyCounts.get(renderKey) !== 1 || occupiedKeys.has(renderKey)) return message;
+    if (renderKey === message.id || previousKeyCounts.get(renderKey) !== 1 || occupiedKeys.has(renderKey)) return restored;
     occupiedKeys.add(renderKey);
     // Same wire identity, not a text-similarity guess: never retain a stale
     // optimistic row or conflate repeated paragraphs from different turns.
-    return { ...message, renderKey };
+    return { ...restored, renderKey };
   });
 }
 
@@ -156,6 +160,7 @@ function areLikelySameUserMessage(a: UiMessage, b: UiMessage): boolean {
   }
 
   if (a.id === b.id) return true;
+  if (!canMatchMessageAuthors(a, b)) return false;
   if (a.idempotencyKey && b.idempotencyKey) return false;
   const timestampA = a.timestampMs ?? 0;
   const timestampB = b.timestampMs ?? 0;
@@ -219,6 +224,7 @@ function findTailUserFallbackMatch(
     const candidate = messages[index];
     if (candidate.role !== 'user' || knownOlderIds.has(candidate.historyMessageId ?? candidate.id) || knownOlderIds.has(candidate.id)) continue;
     if (candidate.idempotencyKey && optimisticUser.idempotencyKey && candidate.idempotencyKey !== optimisticUser.idempotencyKey) continue;
+    if (!canMatchMessageAuthors(candidate, optimisticUser)) continue;
     if (normalizeUserText(candidate.text) !== normalizedOptimisticText) continue;
     if (!hasMissingUserMatchMetadata(candidate)) continue;
     return candidate;
@@ -271,6 +277,7 @@ export function preserveOptimisticAssistantMessage(
       mergedMessages = nextMessages.map(message => message === echo ? {
         ...message,
         renderKey: previousLastUser.renderKey,
+        ...(previousLastUser.sentLocally ? { sentLocally: true as const } : {}),
         idempotencyKey: message.idempotencyKey ?? previousLastUser.idempotencyKey,
         timestampMs: previousLastUser.timestampMs ?? message.timestampMs,
         imageUris: previousLastUser.imageUris ?? message.imageUris,

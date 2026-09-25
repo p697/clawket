@@ -1,5 +1,7 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-09-25 OpenClaw 的系统监控任务（技能集合审查与心跳）经 `cron.list` 出现在普通任务列表，但 Gateway 禁止 cron 客户端编辑/删除，导致 App 的开关/删除误导用户。Mobile 现在按 payload 类型将其标记为 OpenClaw 管理、展示只读详情与运行记录，技能审查详情说明如何在 OpenClaw 停止后续审查；普通 OpenClaw/Hermes 任务不变。已补回归测试与 19 语言文案；按负责人要求，未执行测试或构建，待真机验收。
+
 - 2026-09-23 官网 3.0 已发布至 Cloudflare Pages 正式环境 `clawket.ai`：19 语言、76 个静态页面、双商店直链和二维码、开源首屏与动态 Star 数上线；英文标签缩为 “Open source”，中文为“开源”。官网 `npm run check:required` 全绿；Pages 生产部署 `53fd9ec1-022e-445e-8148-f0eb4d5831a1`。正式域名抽查首页、中英/阿拉伯语页面、葡语支持页、二维码和截图均为 HTTP 200 且字节与本地构建一致；浏览器确认中文首屏和实时 Star 数显示正常。此次仅部署官网，未改 App 或 Relay 等服务。
 
 - 2026-09-23 官网开源首屏：将版本胶囊改为 GitHub 图标、开源声明与动态 Star 数，19 语言同步。直接读取公开仓库 API，匿名限流时回退 Shields 数据；五分钟刷新/缓存、超时与失效降级，无前端密钥或虚构数字。浏览器实际返回 344，桌面及 19 语言 320px 排版通过；168 文案键、76 页面、152 截图门禁及 6 项数据/故障回归通过。仅本地预览，未部署。
@@ -2214,3 +2216,25 @@ Complete `npm run check:required` passed after the narrowly scoped test/catalog 
 Submitted production release `Clawket 3.0.0 (30001)` together with the 26 pre-existing store-listing changes (27 total). Play publishing overview now places them under “正在审核中的更改”; automated quick checks are still running and the UI says successful checks will forward the changes for review. Release validation showed no blocking errors, one missing deobfuscation-file warning, and no reduction in supported devices. Existing 100% target rollout/all target countries and managed publishing remain unchanged; this is not yet a public launch, and approved changes require the managed-publication step. No privacy/data-safety/policy/settings or billing changes were made.
 
 Console: https://play.google.com/console/u/0/developers/5699297822309520683/app/4975023616700245417/publishing
+
+### 2026-09-25 — Unified channel message participants
+
+Owner approved implementing sender attribution across channel sessions. Added optional backend-neutral message attribution, mapped OpenClaw structured sender/transport fields, and preserved it through history/recovery, cache, paging and favorites. External participants render incoming with name → username → ID → localized channel-member fallback and optional public avatar; same known sender groups, Agent replies remain distinguishable, and local sends retain outgoing delivery status. Exact cached/send identity preserves local provenance; owner flags, body mentions and equal text/time cannot establish self or merge different people. Old channel caches receive source-only fallback, including the existing Linear session shapes. Nineteen chat catalogs updated.
+
+Read-only owner Slack history verified real sender names/IDs but no avatar; anonymized field-shape fixtures cover that path. Generic producer attribution supports Telegram/Discord/Linear/Hermes without new RPCs or channel credentials. The current custom Linear producer still omits structured author data; arbitrary prompt prose is not parsed for identity. See `25-message-participants.md` for contract and upstream data limits. No external OpenClaw/Hermes/Linear source, deployment, pairing, native build or store release changed. Existing concurrent Agent/Cron edits preserved.
+
+Validation: `npm run check:required` passed (Mobile 331 suites / 3439 tests, protocol coverage, both backend Bridge/Relay checks, scripts/speech, design, i18n and docs). Additional avatar-error/ID fallback UI regression passed with the complete ThreadView suite (86 tests); `npm run test:compat` passed 5 files / 39 v1 replay tests. `git diff --check` clean. Fixed the local-history mapping regression found by the initial full run before the successful rerun. Device visual acceptance and App distribution were not performed.
+
+### 2026-09-25 — Prepare Mobile 3.1.0 version
+
+Updated the client version sources from 3.0.0 to 3.1.0: both npm locks and Expo config. Locally generated, Git-ignored iOS and Android projects were synchronized to iOS marketing version 3.1.0 and Android versionName 3.1.0/base versionCode 30100. Bridge and shared package versions remain independent. The in-app release announcement catalog still records verified store releases through 3.0.0; no 3.1.0 store date or release copy was invented. This prepares a build and does not publish it. Existing unrelated Mobile work was preserved.
+
+Validation: Expo-resolved version, both lockfiles and local iOS/Android version fields match 3.1.0; Android base code is 30100. `npm run check:docs` passed (7 instruction pairs, 5 validator tests), `npm run check:app-config --workspace apps/mobile` passed (6 tests), and `git diff --check` was clean. No application tests, native build, device install or store submission was needed for this version-only change.
+
+### 2026-09-25 — Distinguish participants from Agent replies
+
+Owner approved stronger signature contrast after trying channel attribution on-device. Participant fallback avatars now use stable channel/account/sender hashing into the six existing accent scales (accent100 background / accent700 initial), with primary-ink names and subdued channel labels. Agent signatures in participant conversations retain the existing avatar and localized Agent badge; direct-chat signature preferences and bubble colors remain unchanged. The briefly added avatar ring was removed after owner visual review. Real participant photos and their error fallback remain supported. No backend/protocol, native configuration or deployment changes.
+
+Focused ThreadView coverage passes (88 tests), including both schemes, stable colors after a display-name change, explicit Agent labels when avatar preferences are off in participant conversations, unchanged incoming bubbles and direct-chat behavior. All 12 palette/scheme pairs exceed 4.5:1 initial/background contrast (minimum 6.03:1). Device visual acceptance remains with the owner.
+
+Final gate: `npm run check:required` passed, including all workspace typechecks, Mobile 331 suites / 3442 tests, protocol/Relay/Bridge/scripts/speech tests, design-system, i18n and documentation checks. `git diff --check` clean. No native build or distribution was performed for this JS-only presentation refinement.

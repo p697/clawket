@@ -2117,3 +2117,61 @@ describe.each(['light', 'dark'] as const)('immersive wallpaper in %s', (scheme) 
     expect(flattenStyle(view.getByTestId('thread-screen-composer').props.style).backgroundColor).toBe(theme().colors.canvas);
   });
 });
+
+
+it('renders channel participants on the incoming side without delivery ticks and groups only the same person', () => {
+  const attribution = { channel: 'slack', accountId: 'workspace', sender: { id: 'alice', name: 'Alice' } };
+  const view = render(<ThreadView {...createProps({ messages: [
+    { id: 'own', role: 'user', text: 'Mine', sentLocally: true, timestampMs: 105000 },
+    { id: 'reply', role: 'assistant', text: 'Reply', timestampMs: 104000 },
+    { id: 'bob', role: 'user', text: 'Hello', timestampMs: 103000,
+      attribution: { ...attribution, sender: { id: 'bob', name: 'Bob' } } },
+    { id: 'alice-2', role: 'user', text: 'Again', timestampMs: 102000, attribution },
+    { id: 'alice-1', role: 'user', text: 'Hello', timestampMs: 101000, attribution,
+      imageUris: ['https://example.com/photo.png'] },
+  ] })} />);
+  expect(view.getByTestId('thread-sender-alice-1')).toBeTruthy();
+  expect(view.queryByTestId('thread-sender-alice-2')).toBeNull();
+  expect(view.getByTestId('thread-sender-bob')).toBeTruthy();
+  expect(flattenStyle(view.getByTestId('thread-bubble-alice-1').props.style).alignSelf).toBe('flex-start');
+  expect(flattenStyle(view.getByTestId('thread-bubble-own').props.style).alignSelf).toBe('flex-end');
+  expect(view.queryByTestId('thread-meta-alice-1-status')).toBeNull();
+  expect(view.queryByTestId('thread-meta-bob-status')).toBeNull();
+  expect(view.getByTestId('thread-meta-own-status')).toBeTruthy();
+});
+
+it('keeps a legible sender when a remote avatar fails and uses a platform ID without a name', () => {
+  const { ParticipantIdentity } = require('../../components/chat/ParticipantIdentity');
+  const { Image } = require('react-native');
+  const view = render(<ParticipantIdentity attribution={{ channel: 'slack', sender: {
+    id: 'U123', avatarUrl: 'https://cdn.example.com/avatar.png',
+  } }} />);
+  expect(view.getByLabelText('U123 · Slack · U123')).toBeTruthy();
+  expect(view.getByText('U')).toBeTruthy();
+  fireEvent(view.UNSAFE_getByType(Image), 'error', { nativeEvent: { error: 'unavailable' } });
+  expect(view.UNSAFE_queryByType(Image)).toBeNull();
+  expect(view.getByLabelText('U123 · Slack · U123')).toBeTruthy();
+  expect(view.getByText('U')).toBeTruthy();
+});
+
+
+it.each(['light', 'dark'] as const)('distinguishes participants from the Agent in %s without recoloring bubbles', scheme => {
+  mockScheme = scheme;
+  const { participantAvatarColors } = require('../../components/chat/ParticipantIdentity');
+  const attribution = { channel: 'slack', accountId: 'workspace', sender: { id: 'alice', name: 'Alice' } };
+  const palette = participantAvatarColors(attribution, scheme);
+  expect(participantAvatarColors({ ...attribution, sender: { ...attribution.sender, name: 'Renamed' } }, scheme)).toEqual(palette);
+  const view = render(<ThreadView {...createProps({ showAgentAvatar: false, messages: [
+    { id: 'reply', role: 'assistant', text: 'Reply', timestampMs: 102000 },
+    { id: 'alice', role: 'user', text: 'Hello', timestampMs: 101000, attribution },
+  ] })} />);
+  const colors = buildTheme(scheme, scheme, builtInAccents.iceBlue).colors;
+  expect(view.getByTestId('chat-agent-role')).toBeTruthy();
+  expect(flattenStyle(view.getByTestId('chat-agent-role').props.style).backgroundColor).toBe(colors.accentSoft);
+  expect(flattenStyle(view.getByTestId('thread-bubble-alice').props.style).backgroundColor).toBe(colors.surface);
+  expect(flattenStyle(view.getByText('A').props.style).color).toBe(palette.color);
+  view.rerender(<ThreadView {...createProps({ showAgentAvatar: true, messages: [
+    { id: 'reply', role: 'assistant', text: 'Reply', timestampMs: 102000 },
+  ] })} />);
+  expect(view.queryByTestId('chat-agent-role')).toBeNull();
+});

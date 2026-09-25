@@ -48,6 +48,7 @@ jest.mock('react-native', () => {
     AppState: { addEventListener: jest.fn(() => ({ remove: jest.fn() })) },
     Image: host('Image'),
     Pressable: host('Pressable'),
+    RefreshControl: host('RefreshControl'),
     ScrollView: host('ScrollView'),
     StyleSheet: {
       create: <T,>(styles: T) => styles,
@@ -262,6 +263,52 @@ describe('AgentSettingsView shallow states', () => {
     expect(view.getByTestId('agent-settings-stat-skills')).toBeTruthy();
     await waitFor(() => expect(view.getByTestId('agent-settings-stat-models-value').props.children).toBe('12'));
     expect(mockLoadSummary).toHaveBeenCalledWith(adapter, agent, expect.any(Number), expect.any(Function));
+  });
+
+  it('reloads the summary and the route on pull-to-refresh', async () => {
+    mockLoadSummary.mockResolvedValueOnce({ modelCount: 12 }).mockResolvedValueOnce({ modelCount: 13 });
+    const adapter = createMockAdapter({
+      connection,
+      agents: [agent],
+      initialState: 'ready',
+    });
+    const onRefresh = jest.fn(async () => undefined);
+    const view = render(
+      <AgentSettingsScreen
+        {...viewProps()}
+        adapter={adapter}
+        onRefresh={onRefresh}
+      />,
+    );
+    await waitFor(() => expect(view.getByTestId('agent-settings-stat-models-value').props.children).toBe('12'));
+
+    view.getByTestId('agent-settings-content').props.refreshControl.props.onRefresh();
+
+    await waitFor(() => expect(view.getByTestId('agent-settings-stat-models-value').props.children).toBe('13'));
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+    expect(mockLoadSummary).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(view.getByTestId('agent-settings-content').props.refreshControl.props.refreshing).toBe(false));
+  });
+
+  it('only runs the route refresh when pulled offline', async () => {
+    const adapter = createMockAdapter({
+      connection,
+      agents: [agent],
+      initialState: 'offline',
+    });
+    const onRefresh = jest.fn(async () => undefined);
+    const view = render(
+      <AgentSettingsScreen
+        {...viewProps()}
+        adapter={adapter}
+        onRefresh={onRefresh}
+      />,
+    );
+
+    view.getByTestId('agent-settings-content').props.refreshControl.props.onRefresh();
+
+    await waitFor(() => expect(onRefresh).toHaveBeenCalledTimes(1));
+    expect(mockLoadSummary).not.toHaveBeenCalled();
   });
 
   it('renders the authenticated YouMind email through the route-scoped container', async () => {

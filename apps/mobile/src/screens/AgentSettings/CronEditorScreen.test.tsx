@@ -274,6 +274,27 @@ describe('guided Cron management', () => {
     await waitFor(() => expect(data.remove).toHaveBeenCalledWith('daily'));
   });
 
+  it('shows OpenClaw-owned monitors as read-only in the list and details', async () => {
+    const monitor = { ...existing, id: 'review', name: 'skill-collection-review-main',
+      payload: { kind: 'skillCollectionReview' } } as unknown as CronJob;
+    const data = setup('openclaw', [monitor]);
+    const list = render(<CronSection adapter={data.adapter} agent={agent} online onCreate={jest.fn()} onEdit={jest.fn()} />);
+    await showJobs(list);
+    expect(list.getByText('Managed by OpenClaw')).toBeTruthy();
+    expect(list.queryByTestId('agent-cron-switch-review')).toBeNull();
+    list.unmount();
+
+    const detail = render(<CronEditorScreen {...data} agent={agent} online jobId="review" />);
+    await waitFor(() => expect(detail.getByTestId('cron-system-owned-details')).toBeTruthy());
+    expect(detail.getByText('OpenClaw manages this task. You cannot delete it here; to stop future reviews, turn off automatic skill reviews in OpenClaw settings.')).toBeTruthy();
+    expect(detail.queryByTestId('cron-prompt-summary')).toBeNull();
+    expect(detail.queryByTestId('agent-cron-save')).toBeNull();
+    expect(detail.queryByTestId('agent-cron-run')).toBeNull();
+    expect(detail.queryByTestId('agent-cron-delete')).toBeNull();
+    expect(data.update).not.toHaveBeenCalled();
+    expect(data.remove).not.toHaveBeenCalled();
+  });
+
   it('confirms dirty back navigation and keeps the draft when canceled', async () => {
     const data = setup();
     const view = render(<CronEditorScreen {...data} agent={agent} online jobId="daily" />);

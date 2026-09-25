@@ -29,3 +29,5 @@ Execution approvals may carry `expiresAtMs: null` when the backend publishes no 
 Hermes per-job model selection is declared in the product matrix but downgraded until `hermes.cron-model.v1` is positively negotiated. It does not permit per-session model configuration.
 
 `sessionFiles` is an optional runtime-negotiated capability with opaque file IDs and bounded offset-based reads. It is separate from Agent configuration `files`; older peers must leave it unavailable.
+
+`ChatMessage.attribution` optionally supplies channel/account/conversation/message/thread facts and a sender's ID, name, username, avatar and kind. These are display facts, independent of backend, transport, model role and authorization. `sentLocally` is cache-only provenance, never accepted from a wire message or inferred from owner flags. Missing fields preserve older direct-chat contracts; mock histories clone attribution independently.

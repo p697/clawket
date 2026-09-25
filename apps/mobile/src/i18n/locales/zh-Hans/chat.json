@@ -376,5 +376,6 @@
   "Once Bridge restarts, your existing connection reconnects automatically. You can keep chatting.": "Bridge 重启后，App 会自动恢复原有连接，你可以继续聊天。",
   "Using Docker or a custom service? Update and restart Bridge with your usual deployment method.": "使用 Docker 或自定义服务？请按原来的部署方式更新并重启 Bridge。",
   "Could not copy or share. You can select the commands above.": "复制或分享失败，你也可以选中上方命令。",
-  "Your older Bridge can keep working. Update it for the new features.": "旧 Bridge 仍可继续使用，建议更新以获得新增功能。"
+  "Your older Bridge can keep working. Update it for the new features.": "旧 Bridge 仍可继续使用，建议更新以获得新增功能。",
+  "{{channel}} member": "{{channel}} 成员"
 }

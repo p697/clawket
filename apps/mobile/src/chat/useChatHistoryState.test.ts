@@ -78,6 +78,26 @@ describe('useChatHistoryState', () => {
     consoleErrorSpy.mockRestore();
   });
 
+  it.each(['openclaw', 'hermes'])('preserves %s participants with identical timestamps and text', async backendKind => {
+    const key = 'agent:main:slack:channel:room';
+    const adapter = { connection: { backendKind }, state: 'ready',
+      listSessions: jest.fn().mockResolvedValue([createSession(key)]),
+      loadSession: jest.fn().mockResolvedValue({ messages: ['alice', 'bob'].map(id => ({
+        id, role: 'user', text: 'Same', timestampMs: 100000,
+        attribution: { channel: 'slack', sender: { id, name: id } },
+      })), hasActiveRun: false }),
+    };
+    const { result } = renderHook(() => {
+      const sessionKeyRef = useRef<string | null>(key);
+      return useChatHistoryState({ adapter: adapter as any, dbg: jest.fn(), t: translate,
+        sessionKeyRef, mainSessionKey: key, gatewayConfigId: null, currentAgentId: 'main' });
+    });
+    await act(async () => { await result.current.loadSessionsAndHistory(); });
+    expect(result.current.messages).toHaveLength(2);
+    expect(result.current.messages.map(m => m.attribution?.sender?.name)).toEqual(['alice', 'bob']);
+    expect(new Set(result.current.messages.map(m => m.id)).size).toBe(2);
+  });
+
   it.each(['openclaw', 'hermes'])('retains %s source identities when projecting text around tools', async (backendKind) => {
     const key = 'agent:main:main';
     const adapter = {

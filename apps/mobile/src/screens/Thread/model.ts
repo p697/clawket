@@ -1,3 +1,4 @@
+import { isIncomingParticipant, messageParticipantKey } from '../../chat/messageAttribution';
 import type {
   AdapterErrorCode,
   Capabilities,
@@ -566,11 +567,15 @@ export type ThreadRowGap = 'none' | 'stack' | 'turn' | 'section';
 
 export type ThreadTimelineRow = ThreadTimelineItem & Readonly<{ gapAbove: ThreadRowGap }>;
 
-type ThreadVoice = 'user' | 'agent' | 'system' | 'date';
+type ThreadVoice = string;
 
 function timelineVoice(item: ThreadTimelineItem): ThreadVoice {
   if (item.type === 'date') return 'date';
   if (item.type !== 'message' || item.message.approval) return 'agent';
+  if (isIncomingParticipant(item.message) && item.message.attribution) {
+    const attribution = item.message.attribution;
+    return attribution.sender?.id ? `participant:${messageParticipantKey(attribution)}` : `unknown:${item.message.id}`;
+  }
   if (item.message.role === 'user') return 'user';
   if (item.message.role === 'system') return 'system';
   return 'agent';

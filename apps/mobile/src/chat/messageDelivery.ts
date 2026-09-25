@@ -1,3 +1,4 @@
+import { isIncomingParticipant } from './messageAttribution';
 import type { UiMessage } from '../types/chat';
 
 /**
@@ -37,7 +38,7 @@ export function resolveUserMessageStatus({
   runAcknowledged = false,
 }: ResolveUserMessageStatusInput): UserMessageStatus | null {
   const message = messages[index];
-  if (!message || message.role !== 'user') return null;
+  if (!message || message.role !== 'user' || isIncomingParticipant(message)) return null;
   if (message.delivery) return message.delivery;
   if (message.sendUncertain) return 'uncertain';
   if (unconfirmedIds?.has(message.id)) return 'sending';

@@ -161,6 +161,23 @@ export interface Usage {
   costUsd?: number;
 }
 
+/** Display facts supplied by a channel adapter; never authorization or proof of self. */
+export interface MessageAttribution {
+  /** Channel/plugin identity, independent of backend and connection transport. */
+  channel: string;
+  accountId?: string;
+  conversationId?: string;
+  threadId?: string;
+  messageId?: string;
+  sender?: {
+    id?: string;
+    name?: string;
+    username?: string;
+    avatarUrl?: string;
+    kind?: 'human' | 'bot' | 'unknown';
+  };
+}
+
 /** Rendering-neutral subset of the existing mobile `UiMessage` model. */
 export interface ChatMessage {
   id: string;
@@ -169,6 +186,9 @@ export interface ChatMessage {
   timestampMs?: number;
   idempotencyKey?: string;
   skill?: { id: string; name: string };
+  attribution?: MessageAttribution;
+  /** Local cache provenance only; adapters must not accept this flag from wire input. */
+  sentLocally?: true;
   attachments?: Array<{
     type: 'image' | 'file';
     mimeType: string;

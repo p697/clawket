@@ -376,5 +376,6 @@
   "Once Bridge restarts, your existing connection reconnects automatically. You can keep chatting.": "Bridge yeniden başladıktan sonra bağlantınız otomatik olarak geri gelir. Sohbete devam edebilirsiniz.",
   "Using Docker or a custom service? Update and restart Bridge with your usual deployment method.": "Docker veya özel bir hizmet mi kullanıyorsunuz? Bridge’i normal dağıtım yönteminizle güncelleyip yeniden başlatın.",
   "Could not copy or share. You can select the commands above.": "Kopyalanamadı veya paylaşılamadı. Yukarıdaki komutları seçebilirsiniz.",
-  "Your older Bridge can keep working. Update it for the new features.": "Eski Bridge’iniz çalışmaya devam eder. Yeni özellikler için güncelleyin."
+  "Your older Bridge can keep working. Update it for the new features.": "Eski Bridge’iniz çalışmaya devam eder. Yeni özellikler için güncelleyin.",
+  "{{channel}} member": "{{channel}} üyesi"
 }

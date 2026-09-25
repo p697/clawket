@@ -13,6 +13,8 @@ export type FavoritedMessage = {
   sessionLabel?: string;
   messageId: string;
   role: UiMessage['role'];
+  attribution?: UiMessage['attribution'];
+  sentLocally?: true;
   text: string;
   timestampMs?: number;
   modelLabel?: string;
@@ -109,6 +111,8 @@ function toFavoriteRecord(params: ToggleFavoriteParams): FavoritedMessage {
     sessionLabel: params.sessionLabel,
     messageId: params.message.id,
     role: params.message.role,
+    ...(params.message.attribution ? { attribution: params.message.attribution } : {}),
+    ...(params.message.sentLocally ? { sentLocally: true as const } : {}),
     text: params.message.text,
     timestampMs: params.message.timestampMs,
     modelLabel: params.message.modelLabel,

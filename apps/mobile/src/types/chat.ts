@@ -1,3 +1,5 @@
+import type { MessageAttribution } from '@clawket/agent-protocol';
+
 export type MessageUsage = {
   inputTokens?: number;
   outputTokens?: number;
@@ -59,6 +61,8 @@ export type UiMessage = {
   /** Completed live rows retain their order until the same turn is reconciled. */
   presentationRunId?: string;
   role: 'user' | 'assistant' | 'system' | 'tool';
+  attribution?: MessageAttribution;
+  sentLocally?: true;
   text: string;
   userSkill?: {
     id: string;

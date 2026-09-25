@@ -26,7 +26,7 @@ import { analyticsEvents } from '../../services/analytics/events';
 import { describeScheduleHuman } from '../../utils/cron';
 import { explicitModelReference } from '../../utils/model-catalog';
 import { ModelPickerModal } from '../../components/chat/ModelPickerModal';
-import { buildCronJobCreate, buildCronJobPatch, cronDraftFromJob, cronModelLabel, validateCronDraft, type CronDraft } from './cron-model';
+import { buildCronJobCreate, buildCronJobPatch, cronDraftFromJob, cronModelLabel, isSystemOwnedCronJob, validateCronDraft, type CronDraft } from './cron-model';
 import { deviceTimeZone, formatCronDate, scheduleDraft, scheduleFromDraft, upcomingRuns, type ScheduleDraft } from './cron-schedule';
 import { CronScheduleFields, CronSchedulePreview } from './CronScheduleFields';
 import { CronRunSheet } from './CronRunSheet';
@@ -90,12 +90,14 @@ function CronEditor({ adapter, agent, online, reconnecting = false, jobId, initi
   const [selectedRun, setSelectedRun] = useState<CronRunLogEntry | null>(null);
   const runRequest = useRef(0);
   const operations = adapter.management?.cron;
-  const canWrite = jobId ? Boolean(operations?.update) : adapter.capabilities.cronCreate && Boolean(operations?.add);
+  const systemOwned = original !== null && isSystemOwnedCronJob(original);
+  const isSkillReview = original !== null && (original.payload.kind as string) === 'skillCollectionReview';
+  const canWrite = jobId ? !systemOwned && Boolean(operations?.update) : adapter.capabilities.cronCreate && Boolean(operations?.add);
   const locked = !online || !canWrite || Boolean(busy);
   const dirty = form !== null && JSON.stringify(form) !== JSON.stringify(originalForm.current);
   // New jobs are always isolated agent turns; only existing main-session system events lack a per-job model.
   const isAgentTurn = original ? original.payload.kind === 'agentTurn' : true;
-  const showModel = Boolean(adapter.capabilities.cronModel) && form !== null && (isAgentTurn || Boolean(jobId));
+  const showModel = !systemOwned && Boolean(adapter.capabilities.cronModel) && form !== null && (isAgentTurn || Boolean(jobId));
   const modelOptions = useCronModels(adapter, showModel && online);
   const [modelPickerVisible, setModelPickerVisible] = useState(false);
   const modelValue = !isAgentTurn ? t('Follows main session')
@@ -217,7 +219,7 @@ function CronEditor({ adapter, agent, online, reconnecting = false, jobId, initi
     }
   };
   const runNow = async () => {
-    if (!original || !online || busyRef.current || !operations?.run) return;
+    if (!original || systemOwned || !online || busyRef.current || !operations?.run) return;
     busyRef.current = true;
     setBusy('run');
     setError(null);
@@ -233,7 +235,7 @@ function CronEditor({ adapter, agent, online, reconnecting = false, jobId, initi
     }
   };
   const remove = async () => {
-    if (!original || !online || busyRef.current || !operations?.remove) return;
+    if (!original || systemOwned || !online || busyRef.current || !operations?.remove) return;
     busyRef.current = true;
     setConfirmDelete(false);
     setBusy('delete');
@@ -272,7 +274,7 @@ function CronEditor({ adapter, agent, online, reconnecting = false, jobId, initi
     else if (current.time.frequency !== 'interval') parts.push(current.time.timezone || t('Agent timezone'));
     return parts.join(' · ');
   };
-  const title = page === 'prompt' ? t('What should the Agent do?') : page === 'schedule' ? t('Schedule')
+  const title = systemOwned ? t('Task details') : page === 'prompt' ? t('What should the Agent do?') : page === 'schedule' ? t('Schedule')
     : page === 'advanced' ? t('Advanced settings', { ns: 'config' }) : jobId ? t('Edit Task') : t('New cron job', { ns: 'config' });
   // The edit page is a grouped settings page (white cards on the grouped canvas, like Models);
   // create and the sub-pages stay plain forms on the white canvas.
@@ -330,26 +332,39 @@ function CronEditor({ adapter, agent, online, reconnecting = false, jobId, initi
           </> : null}
           {original?.payload.kind === 'agentTurn' && original.payload.timeoutSeconds != null ? <SettingsRow title={t('Timeout')} value={String(original.payload.timeoutSeconds)} /> : null}
         </> : jobId ? <>
-          <SettingsGroup testID="cron-edit-task">
-            <SettingsRow testID="agent-cron-name" title={t('Task name')} value={form.task.name} tailWidth="wide" disabled={locked} showChevron onPress={() => setRenaming(true)} />
-            <SettingsDivider inset="content" />
-            <SettingsRow testID="cron-prompt-summary" title={t('What should the Agent do?')} subtitle={form.task.prompt || t('Describe what you want in your own words.')}
-              accessibilityLabel={t('Task prompt')} showChevron onPress={() => setPage('prompt')} />
-          </SettingsGroup>
-          <SettingsGroup testID="cron-edit-when">
-            <SettingsRow testID="cron-edit-schedule" title={describeScheduleHuman(scheduleFromDraft(form.time), t)} subtitle={scheduleSubtitle(form)}
-              disabled={locked} showChevron onPress={() => setPage('schedule')} />
-            <SettingsDivider inset="content" />
-            <SettingsRow title={t('Enabled')} trailing={<ThemedSwitch testID="agent-cron-enabled" accessibilityLabel={t('Enabled')} value={form.task.enabled} disabled={locked} onValueChange={enabled => patch({ enabled })} />} />
-          </SettingsGroup>
-          <SettingsGroup testID="cron-edit-options">
-            {showModel ? <>
-              <SettingsRow testID="cron-model" title={t('Model')} value={modelValue} tailWidth="wide"
-                disabled={locked} showChevron={isAgentTurn} onPress={isAgentTurn ? () => setModelPickerVisible(true) : undefined} />
+          {systemOwned ? <>
+            <Banner testID="cron-system-owned-notice" message={isSkillReview
+              ? t('OpenClaw manages this task. You cannot delete it here; to stop future reviews, turn off automatic skill reviews in OpenClaw settings.')
+              : t('OpenClaw manages this task. It cannot be edited or deleted here.')} />
+            <SettingsGroup testID="cron-system-owned-details">
+              <SettingsRow title={t('Task name')} value={form.task.name} tailWidth="wide" />
               <SettingsDivider inset="content" />
-            </> : null}
-            <SettingsRow testID="cron-advanced" title={t('Advanced settings', { ns: 'config' })} showChevron onPress={() => setPage('advanced')} />
-          </SettingsGroup>
+              <SettingsRow title={describeScheduleHuman(original!.schedule, t)} subtitle={scheduleSubtitle(form)} />
+              <SettingsDivider inset="content" />
+              <SettingsRow title={t('Enabled')} value={original!.enabled ? t('Enabled') : t('Paused')} />
+            </SettingsGroup>
+          </> : <>
+            <SettingsGroup testID="cron-edit-task">
+              <SettingsRow testID="agent-cron-name" title={t('Task name')} value={form.task.name} tailWidth="wide" disabled={locked} showChevron onPress={() => setRenaming(true)} />
+              <SettingsDivider inset="content" />
+              <SettingsRow testID="cron-prompt-summary" title={t('What should the Agent do?')} subtitle={form.task.prompt || t('Describe what you want in your own words.')}
+                accessibilityLabel={t('Task prompt')} showChevron onPress={() => setPage('prompt')} />
+            </SettingsGroup>
+            <SettingsGroup testID="cron-edit-when">
+              <SettingsRow testID="cron-edit-schedule" title={describeScheduleHuman(scheduleFromDraft(form.time), t)} subtitle={scheduleSubtitle(form)}
+                disabled={locked} showChevron onPress={() => setPage('schedule')} />
+              <SettingsDivider inset="content" />
+              <SettingsRow title={t('Enabled')} trailing={<ThemedSwitch testID="agent-cron-enabled" accessibilityLabel={t('Enabled')} value={form.task.enabled} disabled={locked} onValueChange={enabled => patch({ enabled })} />} />
+            </SettingsGroup>
+            <SettingsGroup testID="cron-edit-options">
+              {showModel ? <>
+                <SettingsRow testID="cron-model" title={t('Model')} value={modelValue} tailWidth="wide"
+                  disabled={locked} showChevron={isAgentTurn} onPress={isAgentTurn ? () => setModelPickerVisible(true) : undefined} />
+                <SettingsDivider inset="content" />
+              </> : null}
+              <SettingsRow testID="cron-advanced" title={t('Advanced settings', { ns: 'config' })} showChevron onPress={() => setPage('advanced')} />
+            </SettingsGroup>
+          </>}
           {operations?.runs ? <View style={styles.section}>
             <View style={styles.listHeader}><Text accessibilityRole="header" style={styles.label}>{t('Runs')}</Text>
               <Button testID="cron-refresh-runs" label={t('Refresh', { ns: 'common' })} variant="ghost" size="sm" style={styles.labelAction} disabled={!online || runsBusy} onPress={() => setRunRefresh(value => value + 1)} />
@@ -367,10 +382,10 @@ function CronEditor({ adapter, agent, online, reconnecting = false, jobId, initi
             </SettingsGroup> : null}
             {runOffset !== null ? <Button testID="cron-runs-more" label={t('Load more')} variant="ghost" size="sm" style={styles.more} disabled={!online || runsBusy} onPress={() => { void loadRuns(runOffset); }} /> : null}
           </View> : null}
-          <View style={styles.actions}>
+          {!systemOwned ? <View style={styles.actions}>
             {operations?.run ? <Button testID="agent-cron-run" icon={Play} label={t('Run now')} variant="secondary" disabled={!online || Boolean(busy)} loading={busy === 'run'} style={styles.flex} onPress={() => { void runNow(); }} /> : null}
             {operations?.remove ? <Button testID="agent-cron-delete" icon={Trash2} label={t('Delete', { ns: 'common' })} variant="destructive" disabled={!online || Boolean(busy)} loading={busy === 'delete'} style={styles.flex} onPress={() => setConfirmDelete(true)} /> : null}
-          </View>
+          </View> : null}
         </> : <>
           <View style={styles.section}><Text style={styles.label}>{t('Task name')}</Text>
             <FormTextInput testID="agent-cron-name" accessibilityLabel={t('Task name')} value={form.task.name} editable={!locked} onChangeText={name => patch({ name })} />

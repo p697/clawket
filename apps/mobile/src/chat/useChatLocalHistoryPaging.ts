@@ -53,7 +53,7 @@ export function useChatLocalHistoryPaging({
       return { pageMessages: [], hasMore: true };
     }
 
-    const messages = page.messages.map(cachedMessageToUiMessage);
+    const messages = page.messages.map(message => cachedMessageToUiMessage(message, sessionKey));
     hasMoreLocalRef.current = page.hasMore;
     dbg(
       `localHistory: key=${sessionKey} before=${beforeMessageId ?? 'none'} `

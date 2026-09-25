@@ -119,6 +119,7 @@ export function buildUserUiMessage(params: {
   return {
     id: params.id,
     role: 'user',
+    sentLocally: true,
     text: params.text,
     ...(params.idempotencyKey ? { idempotencyKey: params.idempotencyKey } : {}),
     ...(params.timestampMs !== undefined ? { timestampMs: params.timestampMs } : {}),
