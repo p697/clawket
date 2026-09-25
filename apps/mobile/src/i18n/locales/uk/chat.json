@@ -377,5 +377,8 @@
   "Using Docker or a custom service? Update and restart Bridge with your usual deployment method.": "Використовуєте Docker або власну службу? Оновіть і перезапустіть Bridge звичним способом.",
   "Could not copy or share. You can select the commands above.": "Не вдалося скопіювати чи надіслати. Можна виділити команди вище.",
   "Your older Bridge can keep working. Update it for the new features.": "Старий Bridge і далі працюватиме. Оновіть його для нових функцій.",
-  "{{channel}} member": "Учасник {{channel}}"
+  "{{channel}} member": "Учасник {{channel}}",
+  "Agent needs your input": "Агент чекає на вашу відповідь",
+  "Respond": "Відповісти",
+  "Continue in a new session": "Продовжити в новій сесії"
 }

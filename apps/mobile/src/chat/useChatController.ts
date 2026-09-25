@@ -1,3 +1,4 @@
+import { sameLiveToolCall, withToolMessage } from './liveToolMessages';
 import { rememberUncertainSend, recoverUncertainSends, useUncertainSends } from './sendRecovery';
 import { describeReplyFailure, sanitizeReplyFailure } from './reply-failure';
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -198,14 +199,6 @@ function mergeStreamText(previous: string | null, incoming: string, textMode?: '
   if (!previous || incoming.startsWith(previous)) return incoming;
   if (previous.startsWith(incoming)) return previous;
   return `${previous}${incoming}`;
-}
-
-function withToolMessage(previous: UiMessage[], message: UiMessage): UiMessage[] {
-  const index = previous.findIndex((candidate) => candidate.id === message.id);
-  if (index < 0) return [...previous, message];
-  const next = [...previous];
-  next[index] = { ...previous[index], ...message, id: message.id };
-  return next;
 }
 
 function appendUniqueMessage(previous: UiMessage[], message: UiMessage): UiMessage[] {
@@ -1887,7 +1880,7 @@ export function useChatController({
         }
         if (!matchesCurrentSession(update.sessionKey)) return;
         if (!acceptRun(update.sessionKey, update.runId)) return;
-        if (chatToolMessagesRef.current.some(message => message.id === update.message.id)) return;
+        if (chatToolMessagesRef.current.some(message => sameLiveToolCall(message, update.message))) return;
         commitCurrentStreamSegment();
         setActivityLabel(formatToolActivity(toolName, t));
         const message = {
@@ -1905,7 +1898,7 @@ export function useChatController({
         if (!matchesCurrentSession(update.sessionKey)) return;
         if (!acceptRun(update.sessionKey, update.runId)) return;
         const previousMessage = chatToolMessagesRef.current.find(
-          (message) => message.id === update.message.id,
+          (message) => sameLiveToolCall(message, update.message),
         );
         const toolName = previousMessage?.toolName ?? "tool";
         const finishedAt = update.message.toolFinishedAt;
@@ -2565,6 +2558,7 @@ export function useChatController({
     configuredDefaultModel,
     currentModel,
     currentModelHeaderLabel,
+    currentModelDisplayName,
     currentModelProvider,
     modelPickerError,
     modelPickerLoading,
@@ -3398,6 +3392,7 @@ export function useChatController({
     openModelPicker,
     currentModel,
     currentModelHeaderLabel,
+    currentModelDisplayName,
     currentModelProvider,
     thinkingLevel: history.thinkingLevel,
     openThinkPicker: openStaticThinkPicker,

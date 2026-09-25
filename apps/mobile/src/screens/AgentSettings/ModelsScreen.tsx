@@ -281,7 +281,7 @@ export function ModelsScreen({
     if (!operations?.setSelection || !online || saving) return;
     const done = await runWrite(
       'select',
-      async () => { await operations.setSelection!(buildModelSelectionWrite(row, { modelPerSession: false }, agent)); },
+      async () => { await operations.setSelection!(buildModelSelectionWrite(row, adapter.capabilities, agent)); },
       setSheetError,
       t('Save failed', { ns: 'settings' }),
     );
@@ -291,7 +291,7 @@ export function ModelsScreen({
       selection: { ...current.selection, currentModel: row.id, currentProvider: row.provider },
     } : current));
     setDetailKey(null);
-  }, [agent, online, operations, runWrite, saving, scope, t]);
+  }, [adapter.capabilities, agent, online, operations, runWrite, saving, scope, t]);
 
   const addModel = useCallback(async (group: AgentModelGroup, modelId: string, modelName: string) => {
     if (!operations?.addModel) return;

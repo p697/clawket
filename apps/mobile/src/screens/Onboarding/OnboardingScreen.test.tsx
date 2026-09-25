@@ -239,7 +239,7 @@ describe('OnboardingScreen', () => {
     const view = render(<OnboardingScreen {...createProps({ initialBackend: undefined, onSubmitPairing, onOpenWebsite })} />);
     // Chooser order (owner decision 2026-09-19): products first, the user's own model server last.
     expect(view.getByTestId('onboarding-backends').props.children.map((row: { props: { testID: string } }) => row.props.testID))
-      .toEqual(['onboarding-backend-openclaw', 'onboarding-backend-hermes', 'onboarding-youmind', 'onboarding-backend-local-model']);
+      .toEqual(['onboarding-backend-openclaw', 'onboarding-backend-hermes', 'onboarding-backend-pi', 'onboarding-youmind', 'onboarding-backend-local-model']);
     // A local model is a server the user already runs; "No agent yet?" only lists products to install.
     fireEvent.press(view.getByTestId('onboarding-docs-toggle'));
     expect(view.getByTestId('onboarding-doc-openclaw')).toBeTruthy();

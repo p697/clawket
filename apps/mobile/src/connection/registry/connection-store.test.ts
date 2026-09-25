@@ -430,6 +430,14 @@ describe('ConnectionStore', () => {
     });
   });
 
+  it('re-pairs the same Pi endpoint without creating a duplicate project', async () => {
+    const store = new ConnectionStore({ secureStorage: new MemorySecureStorage(), legacyStorage: legacyStorage(), now: () => 200, random: () => 0 });
+    await store.upsert({ id: 'pi-stable', backendKind: 'pi', transportKind: 'local', label: 'My project', url: 'ws://127.0.0.1:18001/v1/pi/ws', auth: { token: 'before' } });
+    const refreshed = await store.upsert({ backendKind: 'pi', transportKind: 'local', label: 'Pi', url: 'ws://127.0.0.1:18001/v1/pi/ws', auth: { token: 'after' } });
+    expect(refreshed).toMatchObject({ created: false, connection: { id: 'pi-stable', label: 'My project' } });
+    expect(store.getSnapshot().connections).toHaveLength(1);
+  });
+
   it('upserts the same direct Hermes bridge while keeping its stable record identity', async () => {
     const store = new ConnectionStore({
       secureStorage: new MemorySecureStorage(),

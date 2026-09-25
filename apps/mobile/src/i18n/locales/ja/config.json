@@ -382,5 +382,6 @@
   "Collapse all": "すべて折りたたむ",
   "{{count}} items": "{{count}} 件",
   "Delete this local config backup? This does not change the current Gateway config.": "このローカル設定バックアップを削除しますか？ 現在の Gateway 設定は変更されません。",
-  "Backup history": "バックアップ履歴"
+  "Backup history": "バックアップ履歴",
+  "Pi is not responding": "Pi が応答していません"
 }

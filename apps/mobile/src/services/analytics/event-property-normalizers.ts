@@ -213,7 +213,7 @@ export function normalizeAnalyticsEventString(
     const allowed: Record<string, readonly string[]> = {
       action: ['edit', 'saved', 'failed'],
       document: ['agents', 'soul', 'identity', 'user', 'bootstrap', 'memory'],
-      backend: ['openclaw', 'hermes', 'youmind', 'local-model'],
+      backend: ['openclaw', 'hermes', 'youmind', 'local-model', 'pi'],
     };
     return allowed[property]?.includes(value) ? value : 'other';
   }

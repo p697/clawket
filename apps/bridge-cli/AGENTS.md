@@ -78,3 +78,7 @@ Diagnostics resolve the invoked CLI symlink before matching managed process comm
 On an explicit `restart`, retire the owned Hermes Bridge and Relay children before the OpenClaw service launcher resumes. Its normal recovery path reuses healthy children, which must not leave a pre-upgrade runtime active. Keep Hermes API/gateway processes and pairing files intact; do not spawn duplicate children alongside the launcher.
 
 A Hermes Relay command that deliberately yields to another owner stays alive with its diagnostic until explicit stop/restart. Do not let the service watchdog respawn a yielded instance and resume the ownership fight; signal shutdown must release the CLI keepalive handle.
+
+## Pi project lifecycle
+
+`pi pair` / `pair --backend pi` authorizes the current or explicitly selected project. Pairing starts an isolated background child only after readiness; `--foreground` keeps the terminal-owned path. Pi state/logs live under a project-specific Clawket directory. Temporary pairing output goes over parent IPC, never persistent logs. `pi start/restart/stop/status/doctor/logs/reset` (also `--backend pi`) operate on that configuration only; authenticate local control before stopping anything, never kill a process merely by PID/port. Reset removes pairing and retains session files. Preserve explicit agent/session directories and never copy model credentials. Pi requires its own supported Node version; a Bridge installation alone is not proof Pi can run.

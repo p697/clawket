@@ -110,6 +110,7 @@ const BACKEND_OPTIONS: ReadonlyArray<{
   { kind: 'openclaw' },
   { kind: 'hermes' },
   { kind: 'local-model' },
+  { kind: 'pi' },
 ];
 
 const PAIRING_INPUT_PRESENTATION: Readonly<Record<PairableBackendKind, {
@@ -118,6 +119,7 @@ const PAIRING_INPUT_PRESENTATION: Readonly<Record<PairableBackendKind, {
   openclaw: { keyboardType: 'number-pad' },
   hermes: { keyboardType: 'ascii-capable' },
   'local-model': { keyboardType: 'number-pad' },
+  pi: { keyboardType: 'number-pad' },
 };
 
 export function OnboardingScreen({
@@ -162,7 +164,7 @@ export function OnboardingScreen({
   const submitInFlightRef = useRef(false);
   const effectiveCommand = backendKind === 'local-model'
     ? buildLocalModelPairingCommand(localModelEngine)
-    : pairingCommand;
+    : backendKind === 'pi' ? `${PAIRING_COMMAND} --backend pi` : pairingCommand;
   const agentPrompt = useMemo(() => buildAgentPairingPrompt(t, effectiveCommand), [effectiveCommand, t]);
   // The tab row doubles as the list of supported model servers; each hint names
   // the precondition the CLI cannot check for the user before it runs.
@@ -176,12 +178,14 @@ export function OnboardingScreen({
     { ...BACKEND_OPTIONS[0], label: t('OpenClaw') },
     { ...BACKEND_OPTIONS[1], label: t('Hermes') },
     { ...BACKEND_OPTIONS[2], label: t('Local model') },
+    { ...BACKEND_OPTIONS[3], label: 'Pi' },
   ] as const, [t]);
   // Chooser order (owner decision 2026-09-19): the installable products first,
   // then the model server the user already runs.
   const chooserRows = useMemo((): ReadonlyArray<{ kind: PairableBackendKind | 'youmind'; label: string }> => [
     backendOptions[0],
     backendOptions[1],
+    backendOptions[3],
     ...(YOUMIND_SPRITE_ENTRY_VISIBLE ? [{ kind: 'youmind' as const, label: t('YouMind Sprite') }] : []),
     backendOptions[2],
   ], [backendOptions, t]);
@@ -229,6 +233,7 @@ export function OnboardingScreen({
     openclaw: t('123 456'),
     hermes: t('ABC 234'),
     'local-model': t('123 456'),
+    pi: t('123 456'),
   };
 
   const submitPairing = () => {
@@ -270,7 +275,7 @@ export function OnboardingScreen({
     if (!onCopyAgentPrompt) return;
     void Promise.resolve(onCopyAgentPrompt(agentPrompt, backendKind)).then(() => { flashAgentPromptCopied(); setAgentPromptSent(true); }, () => setLocalError(true));
   };
-  const backendLabel = backendKind === 'local-model' ? t('Local model') : backendKind === 'openclaw' ? 'OpenClaw' : 'Hermes';
+  const backendLabel = backendKind === 'local-model' ? t('Local model') : backendKind === 'openclaw' ? 'OpenClaw' : backendKind === 'pi' ? 'Pi' : 'Hermes';
   const agentMethodAvailable = backendKind !== 'local-model' && Boolean(onCopyAgentPrompt);
   const agentMethod = agentMethodAvailable && pairingMethod === 'agent';
   return (

@@ -245,5 +245,7 @@
   "Check your network and make sure the remote service is running.": "请检查网络，并确认远程服务正在运行。",
   "View saved messages": "查看已保存的消息",
   "Search and bulk export": "搜索与批量导出",
-  "Skill and memory versions": "技能与记忆版本"
+  "Skill and memory versions": "技能与记忆版本",
+  "Yes": "是",
+  "No": "否"
 }

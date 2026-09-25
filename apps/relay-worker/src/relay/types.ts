@@ -1,4 +1,4 @@
-export type BackendKind = 'openclaw' | 'hermes' | 'local-model';
+export type BackendKind = 'openclaw' | 'hermes' | 'local-model' | 'pi';
 
 export interface Env {
   RELAY_BACKEND?: BackendKind;

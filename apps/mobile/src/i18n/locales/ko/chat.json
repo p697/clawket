@@ -377,5 +377,8 @@
   "Using Docker or a custom service? Update and restart Bridge with your usual deployment method.": "Docker 또는 사용자 지정 서비스를 사용하나요? 기존 배포 방식으로 Bridge를 업데이트하고 재시작하세요.",
   "Could not copy or share. You can select the commands above.": "복사하거나 공유하지 못했습니다. 위 명령을 선택할 수 있습니다.",
   "Your older Bridge can keep working. Update it for the new features.": "기존 Bridge도 계속 사용할 수 있습니다. 새 기능을 위해 업데이트를 권장합니다.",
-  "{{channel}} member": "{{channel}} 멤버"
+  "{{channel}} member": "{{channel}} 멤버",
+  "Agent needs your input": "에이전트가 응답을 기다리고 있어요",
+  "Respond": "응답",
+  "Continue in a new session": "새 세션에서 계속"
 }

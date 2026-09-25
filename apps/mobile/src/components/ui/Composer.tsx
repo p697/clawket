@@ -102,11 +102,11 @@ export const Composer = React.forwardRef<ComposerHandle, ComposerProps>(function
     : Math.max(ControlSize.pill, Math.min(contentHeight, maxHeight));
   const animatedHeight = useSharedValue(targetHeight);
   useEffect(() => {
-    animatedHeight.value = reducedMotion ? targetHeight : withTiming(targetHeight, { duration: Motion.duration.fast });
-  }, [animatedHeight, targetHeight, reducedMotion]);
+    animatedHeight.value = reducedMotion || value.length === 0 ? targetHeight : withTiming(targetHeight, { duration: Motion.duration.fast });
+  }, [animatedHeight, targetHeight, reducedMotion, value.length]);
   const inputSizeStyle = useAnimatedStyle(() => expanded
     ? { height: undefined, flexGrow: 1, flexShrink: 1, flexBasis: 0 }
-    : { height: animatedHeight.value, flexGrow: 0, flexShrink: 0, flexBasis: 'auto' }, [expanded]);
+    : { height: value.length === 0 ? targetHeight : animatedHeight.value, flexGrow: 0, flexShrink: 0, flexBasis: 'auto' }, [expanded, value.length, targetHeight]);
   // A downward drag on the compact composer puts the keyboard away, the way a
   // drag on the timeline does; the responder reads live focus/scroll state so
   // it is created once and never steals a scroll from a tall draft.

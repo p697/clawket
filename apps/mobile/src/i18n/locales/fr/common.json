@@ -245,5 +245,7 @@
   "Check your network and make sure the remote service is running.": "Vérifiez votre réseau et que le service distant est en cours d’exécution.",
   "View saved messages": "Voir les messages enregistrés",
   "Search and bulk export": "Recherche et export groupé",
-  "Skill and memory versions": "Versions des compétences et de la mémoire"
+  "Skill and memory versions": "Versions des compétences et de la mémoire",
+  "Yes": "Oui",
+  "No": "Non"
 }

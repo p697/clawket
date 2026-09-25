@@ -245,5 +245,7 @@
   "Check your network and make sure the remote service is running.": "Kiểm tra mạng và đảm bảo dịch vụ từ xa đang chạy.",
   "View saved messages": "Xem tin nhắn đã lưu",
   "Search and bulk export": "Tìm kiếm và xuất hàng loạt",
-  "Skill and memory versions": "Phiên bản kỹ năng và bộ nhớ"
+  "Skill and memory versions": "Phiên bản kỹ năng và bộ nhớ",
+  "Yes": "Có",
+  "No": "Không"
 }

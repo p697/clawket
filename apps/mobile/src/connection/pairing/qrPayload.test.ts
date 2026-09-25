@@ -372,3 +372,11 @@ describe('parseQRPayload', () => {
     });
   });
 });
+
+
+describe('Pi pairing identity', () => {
+  it('preserves Pi independently of direct and Relay transports', () => {
+    expect(parseQRPayload(JSON.stringify({ backendKind: 'pi', mode: 'local', url: 'ws://192.168.1.2:17881/v1/pi/ws', token: 'private' }))).toMatchObject({ backendKind: 'pi', transportKind: 'local', token: 'private' });
+    expect(parseQRPayload(JSON.stringify({ v: 2, k: 'cp', b: 'pi', s: 'https://pi.example', g: 'gw_test', a: 'access' }))).toMatchObject({ backendKind: 'pi', transportKind: 'relay' });
+  });
+});

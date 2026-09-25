@@ -382,5 +382,6 @@
   "Collapse all": "全部收起",
   "{{count}} items": "{{count}} 项",
   "Delete this local config backup? This does not change the current Gateway config.": "删除这个本地配置备份吗？这不会改动当前 Gateway 配置。",
-  "Backup history": "历史备份"
+  "Backup history": "历史备份",
+  "Pi is not responding": "Pi 暂无响应"
 }

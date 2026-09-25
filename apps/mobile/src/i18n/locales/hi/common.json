@@ -245,5 +245,7 @@
   "Check your network and make sure the remote service is running.": "अपना नेटवर्क जाँचें और सुनिश्चित करें कि रिमोट सेवा चल रही है।",
   "View saved messages": "सहेजे गए संदेश देखें",
   "Search and bulk export": "खोज और एक साथ निर्यात",
-  "Skill and memory versions": "कौशल और मेमोरी के संस्करण"
+  "Skill and memory versions": "कौशल और मेमोरी के संस्करण",
+  "Yes": "हाँ",
+  "No": "नहीं"
 }

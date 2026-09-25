@@ -187,3 +187,7 @@ Prepare and verify fixed recovery bundles with `scripts/release/registry-recover
 ## Production admission and alerting
 
 Preserve machine API challenge exemptions without skipping rate limiting. Review both backend route maps and shared-IP reconnect headroom before changing edge admission. Keep authenticated health probes usable; return JSON 429 for admission rejection. Current settings, limitations and rollback are in `docs/3.0/security-admission-2026-09-21.md`; budget/DDoS notifications do not prove daily usage or session-health alert coverage.
+
+## Pi 3.1 extension
+
+Owner-authorized Pi implementation is specified in `docs/3.1/pi.md`. Pi is an independent backend with explicitly authorized project roots and Clawket-owned RPC sessions. Its Registry/Relay example configs must use separate KV, room classes, rate limiter namespace and secrets. Preserve the OpenClaw/Hermes deploy units and contracts. Implementation and local tests do not authorize deployment or publication.

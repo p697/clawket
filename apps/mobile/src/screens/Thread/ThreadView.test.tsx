@@ -532,10 +532,13 @@ describe('ThreadView', () => {
     const props = createProps({ model: 'openrouter/anthropic/claude-sonnet-4-6', onOpenModelPicker: jest.fn() });
     const view = render(<ThreadView {...props} />);
     expect(view.getByTestId('thread-model-icon').props.source).toBe(402);
+    expect(view.getByTestId('thread-model-label').props.children).toBe('claude-sonnet-4-6');
+    expect(view.getByTestId('thread-model-label').props.numberOfLines).toBe(1);
     expect(view.getByTestId('thread-model-icon').props.accessible).toBe(false);
     fireEvent.press(view.getByTestId('thread-model-picker'));
     expect(props.onOpenModelPicker).toHaveBeenCalledTimes(1);
-    view.rerender(<ThreadView {...props} model="openai/gpt-5.4" />);
+    view.rerender(<ThreadView {...props} model="openai/gpt-5.4" modelDisplayName="GPT 5.4" />);
+    expect(view.getByTestId('thread-model-label').props.children).toBe('GPT 5.4');
     expect(view.getByTestId('thread-model-icon').props.source).toBe(401);
     view.rerender(<ThreadView {...props} model="custom/private-model" />);
     expect(view.getByTestId('thread-model-icon').props.color).toBe(buildTheme(scheme, scheme, builtInAccents.iceBlue).colors.inkSecondary);
