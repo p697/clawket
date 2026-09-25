@@ -48,7 +48,6 @@
           "UIInterfaceOrientationLandscapeRight"
         ]
       },
-      "appleTeamId": "C8TM82D73W",
       "deploymentTarget": "16.4",
       "requireFullScreen": false
     },
@@ -216,10 +215,8 @@
               ]
             }
           }
-        },
-        "projectId": "972e845f-da81-44db-a908-24be4ca80288"
+        }
       }
-    },
-    "owner": "p697"
+    }
   }
 }

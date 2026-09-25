@@ -19,16 +19,9 @@ cd "$APP_ROOT"
 
 case "$PROFILE" in
   production|testflight)
-    CLAWKET_REQUIRE_POSTHOG=1 CLAWKET_REQUIRE_REVENUECAT=1 CLAWKET_REQUIRE_SPEECH=1 "$NODE_RUNNER" scripts/check-public-config.mjs "--platform=$PLATFORM"
-    ;;
-  preview)
-    if [[ "$PLATFORM" == "android" ]]; then
-      CLAWKET_REQUIRE_POSTHOG=1 CLAWKET_REQUIRE_REVENUECAT=1 "$NODE_RUNNER" scripts/check-public-config.mjs --platform=android
-    fi
+    CLAWKET_OFFICIAL_BUILD=1 "$NODE_RUNNER" scripts/check-public-config.mjs "--platform=$PLATFORM"
     ;;
   *)
-    if [[ "$PLATFORM" == "android" ]]; then
-      "$NODE_RUNNER" scripts/check-public-config.mjs --platform=android
-    fi
+    "$NODE_RUNNER" scripts/check-public-config.mjs "--platform=$PLATFORM"
     ;;
 esac

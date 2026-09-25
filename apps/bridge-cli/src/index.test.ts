@@ -542,7 +542,7 @@ describe('cli pairing output', () => {
     execFileSyncMock.mockReturnValue(
       [
         `40160 ${process.argv[1]} hermes run --host 0.0.0.0 --port 4321`,
-        '35917 /Users/lucy/.hermes/hermes-agent/venv/bin/python3 /Users/lucy/.local/bin/hermes gateway run --replace',
+        '35917 /Users/developer/.hermes/hermes-agent/venv/bin/python3 /Users/developer/.local/bin/hermes gateway run --replace',
       ].join('\n'),
     );
     const killSpy = vi.spyOn(process, 'kill')

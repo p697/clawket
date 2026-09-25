@@ -16,8 +16,21 @@ dist/
 # Environment
 .env
 .env.local
+.env.*
+!.env.example
 .dev.vars
 .dev.vars.*
+*.pem
+*.key
+*.p8
+*.p12
+*.jks
+*.keystore
+*.mobileprovision
+credentials.json
+credentials/
+*keystore.properties
+!android-keystore.properties.example
 
 apps/mobile/.expo/
 apps/mobile/coverage/
@@ -25,6 +38,8 @@ apps/mobile/ios/build/
 
 apps/*/wrangler.local.toml
 apps/*/wrangler.*.local.toml
+apps/*/wrangler.local.jsonc
+apps/*/wrangler.*.local.jsonc
 
 # Clawket 3.0 implementation evidence (local only)
 docs/3.0/evidence/

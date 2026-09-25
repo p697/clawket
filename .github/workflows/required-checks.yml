@@ -7,6 +7,30 @@ on:
       - main
 
 jobs:
+  secrets:
+    name: Scan Git history for secrets
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install checksum-verified Gitleaks and scan
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=8.30.1
+          archive="gitleaks_${version}_linux_x64.tar.gz"
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${version}"
+          cd "$RUNNER_TEMP"
+          curl --fail --location --silent --show-error "$base/$archive" -o "$archive"
+          curl --fail --location --silent --show-error "$base/gitleaks_${version}_checksums.txt" -o checksums.txt
+          grep "  $archive$" checksums.txt | sha256sum --check --strict
+          tar -xzf "$archive" gitleaks
+          cd "$GITHUB_WORKSPACE"
+          "$RUNNER_TEMP/gitleaks" git . --log-opts=--all --redact=100
+
   desktop-bridge:
     name: Bridge and Relay compatibility (${{ matrix.os }})
     strategy:

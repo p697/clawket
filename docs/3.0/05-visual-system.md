@@ -142,7 +142,7 @@ Grok Bot 清爽的根源不是留白，而是**每个界面只有两层字**：�
 
 ## 11. 自绘导航与组件：从 youmind-mobile 抄什么
 
-原则：**页面级的返回、关闭、标题、Tab、弹层、搜索框全部自绘，不用系统原生控件**（不用原生导航栏按钮、不用系统 `Alert` 以外的原生弹窗、不用系统 segmented control）。youmind-mobile（`/Users/lucy/Desktop/youmind/youmind-mobile/apps/mobile`）已经有一套经过打磨的实现与规范，直接移植，改 token 不改结构。先读它的 `docs/design-system.md` §4–§11 与 `AGENTS.md` 的组件决策表。
+原则：**页面级的返回、关闭、标题、Tab、弹层、搜索框全部自绘，不用系统原生控件**（不用原生导航栏按钮、不用系统 `Alert` 以外的原生弹窗、不用系统 segmented control）。youmind-mobile（`/Users/developer/Desktop/youmind/youmind-mobile/apps/mobile`）已经有一套经过打磨的实现与规范，直接移植，改 token 不改结构。先读它的 `docs/design-system.md` §4–§11 与 `AGENTS.md` 的组件决策表。
 
 | Clawket 3.0 组件 | 移植自 youmind-mobile | 要点 |
 |---|---|---|

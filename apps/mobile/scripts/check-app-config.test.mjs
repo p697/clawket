@@ -2,10 +2,39 @@ import homeWidgets from '../plugins/with-home-widgets.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
+import appConfig from '../app.config.js';
 import {
   validateAppConfig,
   validateAppConfigSource,
 } from './check-app-config.mjs';
+
+test('source config has no operator account and supports explicitly supplied build identities', () => {
+  const source = JSON.parse(readFileSync(new URL('../app.json', import.meta.url), 'utf8'));
+  assert.equal(source.expo.ios.appleTeamId, undefined);
+  assert.equal(source.expo.owner, undefined);
+  assert.equal(source.expo.extra.eas.projectId, undefined);
+  const names = ['EXPO_APPLE_TEAM_ID', 'EXPO_EAS_OWNER', 'EXPO_EAS_PROJECT_ID'];
+  const previous = names.map(name => process.env[name]);
+  try {
+    for (const name of names) delete process.env[name];
+    const community = appConfig({ config: source.expo });
+    assert.equal(community.ios.appleTeamId, undefined);
+    assert.equal(community.extra.eas.projectId, undefined);
+    process.env.EXPO_APPLE_TEAM_ID = 'TESTTEAM00';
+    process.env.EXPO_EAS_OWNER = 'test-owner';
+    process.env.EXPO_EAS_PROJECT_ID = 'test-project';
+    const own = appConfig({ config: source.expo });
+    assert.equal(own.ios.appleTeamId, 'TESTTEAM00');
+    assert.equal(own.owner, 'test-owner');
+    assert.equal(own.extra.eas.projectId, 'test-project');
+    assert.deepEqual(own.extra.eas.build, source.expo.extra.eas.build);
+  } finally {
+    names.forEach((name, index) => {
+      if (previous[index] === undefined) delete process.env[name];
+      else process.env[name] = previous[index];
+    });
+  }
+});
 
 test('accepts an iOS app config with tablet support enabled', () => {
   assert.deepEqual(validateAppConfig(JSON.parse(readFileSync(new URL('../app.json', import.meta.url), 'utf8'))), []);

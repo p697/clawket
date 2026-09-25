@@ -12,7 +12,7 @@
 
 - 2026-09-23 官网首屏下载补强：独立官网仓库为双商店增加悬停二维码与可点按固定的扫码按钮，保留商店直链；浮层向上展开以适配短屏。替换 Google Play 为标准品牌 SVG，固定图标尺寸；六语言同步，102 文案键检查和构建通过，浏览器验证展开、Esc 收起与手机布局。仍为本地验收版。
 
-- 2026-09-23 官网 3.0 验收版：在独立仓库 `/Users/lucy/Desktop/op/clawket/clawket-site` 重做首页、导航、支持和下载路径；真实 iPhone/iPad 六语言物料、双商店二维码、七屏导览、轻动效与窄屏适配已完成。App Store 3.0 与 Google Play 2.x/3.0 审核状态分别说明。两轮独立设计评审已落实，6 语言首页/支持页静态预渲染、101 文案键 × 5 翻译、48 图片及损坏输入检查通过；二维码实际解码正确，依赖审计 0。详情在官网仓库 `docs/website-3.0.md`。仅本地验收，未替换线上官网；App/Bridge/Relay 不在本轮修改范围。
+- 2026-09-23 官网 3.0 验收版：在独立仓库 `/Users/developer/Desktop/op/clawket/clawket-site` 重做首页、导航、支持和下载路径；真实 iPhone/iPad 六语言物料、双商店二维码、七屏导览、轻动效与窄屏适配已完成。App Store 3.0 与 Google Play 2.x/3.0 审核状态分别说明。两轮独立设计评审已落实，6 语言首页/支持页静态预渲染、101 文案键 × 5 翻译、48 图片及损坏输入检查通过；二维码实际解码正确，依赖审计 0。详情在官网仓库 `docs/website-3.0.md`。仅本地验收，未替换线上官网；App/Bridge/Relay 不在本轮修改范围。
 
 - 2026-09-22 老用户升级引导评估：建议 Bridge 升级但不强制中断已有聊天，不要求重新配对；确认旧 OpenClaw 缺少独立客户端通道与 Bridge 文件/技能文档补充，Hermes 按能力降级。现有公告无 Bridge 更新项，Hermes 会话升级提示缺少外部帮助回调接线。建议公告入口 + 按连接可关闭提示 + 保留配对的更新指南 + 握手确认后消失；尚未实现 UI。详见 [评估](bridge-upgrade-guidance-2026-09-22.md)。
 
@@ -362,7 +362,7 @@
 ## 本地调试 ENOSPC 恢复（2026-09-16）
 
 - `mobile:dev:ios` 在 npm postinstall 写入 Android Gradle 补丁时失败，Warp 也无法创建临时文件；实测系统盘仅剩 116 MiB。上一轮独立验证目录 `/tmp/clawket-sdk57` 占 7.2 GiB，收尾未及时释放。
-- 仅对本次指定 DerivedData 执行 `xcodebuild clean`（成功），把剩余验证日志 / 缓存移到 `/Volumes/Lucy-SSD/Relocated/Caches/dev/clawket-sdk57-artifacts`，原 `/tmp/clawket-sdk57` 保留软链接。系统盘恢复约 7.2 GiB 可用；没有清除源码、通用系统缓存、Archive 或手机数据。
+- 仅对本次指定 DerivedData 执行 `xcodebuild clean`（成功），把剩余验证日志 / 缓存移到 `/Volumes/External-SSD/Relocated/Caches/dev/clawket-sdk57-artifacts`，原 `/tmp/clawket-sdk57` 保留软链接。系统盘恢复约 7.2 GiB 可用；没有清除源码、通用系统缓存、Archive 或手机数据。
 - 实际重跑 `npm run mobile:dev:ios`：npm install 成功，全部四个 postinstall 补丁通过，进入 Expo 真机 / 模拟器选择器（包含插线 iPhone）；主动取消选择，不额外触发构建 / 安装。Android 补丁的 3 个回归测试通过，依赖文件可正常读取与写入。本次未验证新的真机冷启动，HT-SDK57-0916 仍待关闭。
 
 ## Expo SDK 57 / iOS 27 启动修复（2026-09-16）
@@ -729,7 +729,7 @@
 - Bridge 目录已按后端与职责拆分：OpenClaw 入口为 `openclaw/runtime.ts`，Relay 生命周期集中在 `relay-session.ts`；Hermes 进入 `hermes/`，旧 `runtime.ts`、`hermes.ts`、`hermes-relay.ts` 及单体测试均删除且无 shim。Hermes 最大实现文件为 1,120 行，全部实现与测试文件低于 1,200 行。
 - Bridge capability 已在握手、成功响应和健康接口声明；OpenClaw 为 `bridge.capabilities.v2`，Hermes 同时声明 `bridge.capabilities.v2`、`hermes.multi-session.v2`。CLI `status` / `doctor` 显示实际探测能力，命令面仍为 19 行。
 - Hermes 支持合并 Bridge / 原生只读会话的列表、创建、重命名、reset ID 轮换、删除、无缺口 keyset 分页历史、AbortController 中止、PR #27 图片体、严格 cron create 参数校验。reset/delete/stop 会取消尚未完成的 `/v1/runs` 启动，Bridge 重启后续聊会从 native + local 合并历史重建上下文。
-- 原生格式依据为官方 Hermes checkout `/Users/lucy/Desktop/op/hermes-agent` 的 `research/clawket-hermes-integration` commit `7d426e6536910c5fedb7cd4a9a9010527b264de1`；全程只读且 worktree 干净。SessionDB 用 SQLite URI `mode=ro` + `query_only`，checksum 回归证明读取不修改数据库。
+- 原生格式依据为官方 Hermes checkout `/Users/developer/Desktop/op/hermes-agent` 的 `research/clawket-hermes-integration` commit `7d426e6536910c5fedb7cd4a9a9010527b264de1`；全程只读且 worktree 干净。SessionDB 用 SQLite URI `mode=ro` + `query_only`，checksum 回归证明读取不修改数据库。
 - 录制报文 fixture 覆盖多会话 CRUD/分页与附件/中止，并经过真实本地 WebSocket Bridge 边界；同时间戳重复内容在并发 native 落盘后旧 cursor 仍稳定，跨 Bridge 重启的 `conversation_history` 不丢历史也不重复当前 turn。
 - `npm run bridge:typecheck && npm run bridge:test && npm run test:compat` 最终 exit 0：Core 39、Runtime broad 183、CLI 61、compat 5 files / 35 tests；`npm run check:required` 同样 exit 0，Runtime CI-safe 子集 147/147。
 - `npm pack` 生成只有 `LICENSE`、`dist/index.js`、`package.json` 的 3.0.0 tarball，SHA-256 `a62befe37eaddb4b4134b349003644422b8f8eb565544c6d265a3958cf739fc0`；47 个输入的 provenance 会让陈旧 bundle fail-closed。tarball 已本机全局安装，workspace / tarball / global dist 字节一致，并重启 Clawket LaunchAgent。
@@ -1022,6 +1022,7 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 
 | 编号 | 事项 | 怎么做 | 验证方法 | 状态 |
 |---|---|---|---|---|
+| HT-YOUMIND-HMAC-0925 | 确认客户端 HMAC 权限边界 | 与 YouMind 服务端维护者确认 EXPO_PUBLIC_YOUMIND_APP_SECRET 按公开客户端值设计，不能授予特权；若实际依赖保密，另行授权协议改造与凭据处置。 | 服务端权限及威胁模型核验；不能用“未进 Git”证明客户端值保密。 | 本机已配置且会随 App 分发；本次可达 Git 历史精确扫描未发现该值。未修改外部服务或轮换凭据。 |
 | HT-PLAY-0923 | Google Play 3.0 最终真机与商店验收 | 按 google-play-readiness-2026-09-23.md 使用三星上的 Clawket QA 测试双后端；修正数据安全/隐私与审核访问声明，固定正式签名 AAB 后通过 Play 验证覆盖升级和许可测试购买/恢复。 | QA 连续聊天和后台恢复通过；真实申报与功能一致；正式包版本、签名、交易和数据迁移有证据。 | QA 3.0.0 / 30000 已成功覆盖安装启动；Mobile 330 套 / 3,415 项通过。Play 尚无 3.0 bundle；未提交审核。全仓尚有 Hermes 录制预期和 i18n unused key 两项待收尾。 |
 | HT-STREAM-0922 | 流式聊天修复后的 Android 连续发送验收 | 先恢复本机 Android Gradle 插件构建，再覆盖安装保留数据；在现有 OpenClaw/Hermes 测试会话连续发送并录制从发送到终态的全过程。 | 当前用户气泡不消失、思考/流式内容始终归属当前轮、完成前后顺序稳定。 | 代码回归与全仓门禁通过；本轮未生成或安装修复 APK，真机验收未完成。 |
 | HT-STORE-UPLOAD-0922 | 商店截图上传权限 | 用户已手动开启 Chrome 扩展文件访问权限，代理通过标准文件选择器上传。 | App Store 19×7、Google Play 19×7 + 19 置顶图；19 语言逐套核验顺序与已保存文件。 | 已完成手机截图上传；Play 3.0 图标同步并核验所有语言继承。平板资源另待补。 |
@@ -2025,7 +2026,7 @@ Observed an installed-build Arabic switch white screen; native per-app AppleLang
 
 Removed Expo Localization static RTL initialization, which overwrote the in-app I18nManager direction with the device locale on native startup. The existing with-locales plugin removes stale iOS plist flags and Android string overrides while retaining Android manifest RTL capability and all 19 locale registrations. AppLanguageProvider now persists both direction preferences even when the current layout matches, so explicit LTR choices survive an RTL system locale. Language persistence, backend adapters and connection policies remain unchanged. The i18n gate rejects reintroducing static flags (including extra) or removing the native migration plugin; localization documentation and Mobile instructions updated.
 
-Validation before owner steering: check:required passed (328 Mobile suites / 3,387 tests), including direction restore/switch regressions. Final native config-mod regression tests passed 8/8, covering stale flags, idempotency, retained Android RTL capability and invalid configuration. Native prebuild succeeded and generated config has no static Expo RTL flags. Pod installation and Android Debug compilation were interrupted before completion; no new app installed or device runtime validation performed. Owner explicitly requested logic-only completion without further full builds or actual testing. Native build/runtime acceptance is therefore not claimed; this fix must be included in the next native build. Local generated iOS workspace still needs pod install before building. Logs: /Volumes/Lucy-SSD/Relocated/Caches/dev/clawket-rtl-0922/.
+Validation before owner steering: check:required passed (328 Mobile suites / 3,387 tests), including direction restore/switch regressions. Final native config-mod regression tests passed 8/8, covering stale flags, idempotency, retained Android RTL capability and invalid configuration. Native prebuild succeeded and generated config has no static Expo RTL flags. Pod installation and Android Debug compilation were interrupted before completion; no new app installed or device runtime validation performed. Owner explicitly requested logic-only completion without further full builds or actual testing. Native build/runtime acceptance is therefore not claimed; this fix must be included in the next native build. Local generated iOS workspace still needs pod install before building. Logs: /Volumes/External-SSD/Relocated/Caches/dev/clawket-rtl-0922/.
 
 ### 2026-09-22 Store localization metadata checkpoint
 
@@ -2046,7 +2047,7 @@ User enabled extension file access. Replaced and verified all 133 App Store iPho
 
 Owner requested optical polish and verification on the attached Samsung SM-A566B. Updated the camera vector with rounded shoulders and an optically raised body/lens, retaining the shared 1.8-unit stroke and equal circular targets. Owner follow-up sets Android compact actions to camera then voice; updated both RemoteViews layout and provider action bindings. Wide actions remain camera/photos/voice/skills; iOS is unchanged. Closest Mobile instructions and design documentation reflect the Android-specific priority.
 
-Validation: Release APK build passed; 31 widget XML resources parsed, compact IDs/drawables/accessibility labels checked, design-system checks (210 UI files) and docs checks passed. Covered existing QA package on the physical phone without uninstalling or clearing data. Preserved its prior EXPO_PUBLIC_UNLOCK_PRO=1 test configuration using an explicit fresh JS bundle; no production setting changed. Launcher screenshots verified wide light/dark rendering, compact camera/voice order and resize back to wide. Compact camera tap opened the actual system camera with one-time permission; canceled without capture/send. System returned to light mode. This is targeted widget acceptance, not a new full backend/release acceptance. Local evidence and final QA APK: `/Volumes/Lucy-SSD/Relocated/Caches/dev/clawket-widget-0922/`.
+Validation: Release APK build passed; 31 widget XML resources parsed, compact IDs/drawables/accessibility labels checked, design-system checks (210 UI files) and docs checks passed. Covered existing QA package on the physical phone without uninstalling or clearing data. Preserved its prior EXPO_PUBLIC_UNLOCK_PRO=1 test configuration using an explicit fresh JS bundle; no production setting changed. Launcher screenshots verified wide light/dark rendering, compact camera/voice order and resize back to wide. Compact camera tap opened the actual system camera with one-time permission; canceled without capture/send. System returned to light mode. This is targeted widget acceptance, not a new full backend/release acceptance. Local evidence and final QA APK: `/Volumes/External-SSD/Relocated/Caches/dev/clawket-widget-0922/`.
 
 
 ### 2026-09-22 — Preserve the sending turn through stale history echoes
@@ -2055,7 +2056,7 @@ Owner reported frequent Android send-time user-bubble disappearance, thinking/re
 
 Validation: regression failed for both backends before the fix; four focused suites / 157 tests pass after it, including real history-hook projection with missing send metadata, conflicting send keys and repeated-prompt identity changes. `npm run check:required` passes end to end (328 Mobile suites / 3,397 tests plus all other required gates). Additional final controller assertions verify that the empty thinking placeholder also stays after the current user with the same render key; all 53 controller tests pass. Diff whitespace checks pass.
 
-Device evidence: attached Samsung SM-A566B was inspected and one marked no-tool/no-file-change `UI_TEST_0922_A` message was sent in the existing conversation; its final user and assistant bubbles were visible. USB detached during the immediate screenshot sequence, so this is not a captured physical reproduction or post-fix acceptance. Native packaging/acceptance status is recorded below. Local evidence: `/Volumes/Lucy-SSD/Relocated/Caches/dev/clawket-chat-0922/`.
+Device evidence: attached Samsung SM-A566B was inspected and one marked no-tool/no-file-change `UI_TEST_0922_A` message was sent in the existing conversation; its final user and assistant bubbles were visible. USB detached during the immediate screenshot sequence, so this is not a captured physical reproduction or post-fix acceptance. Native packaging/acceptance status is recorded below. Local evidence: `/Volumes/External-SSD/Relocated/Caches/dev/clawket-chat-0922/`.
 
 Native packaging follow-up: Release QA build attempts failed while configuring the existing React Native Gradle plugin (`Unresolved reference: libs`; isolated Gradle cache then `KtfmtCheckTask`). No dependency or native source was changed to bypass the failure, and no repaired APK was generated or installed. A temporary per-plugin Gradle cache move was restored; isolated build cache and logs remain under the evidence directory. Device availability coordination received no reply during this turn; post-fix physical acceptance remains HT-STREAM-0922.
 
@@ -2250,3 +2251,17 @@ Set EAS Production `EXPO_PUBLIC_SPEECH_URL=wss://speech.clawket.ai/v1/speech` an
 ### 2026-09-25 — Require explicit release authorization
 
 Owner requested durable boundaries after the agent expanded a speech configuration fix into unrequested Android packaging and a 3.0.1 hotfix worktree. Added the root Release Authorization Rule and a Mobile packaging reference. Bug fixes and successful checks do not authorize distribution builds, live configuration changes, deployment, uploads, review submission or publication. Preserve the selected version and owner testing checkpoint; pending decisions never default to approval, and stop instructions require stopping actual processes. Narrowed the program's “continue” instruction to independent authorized work. Current speech work remains in 3.1.0 for owner-run iOS testing. This change updates documentation only.
+
+### 2026-09-25 — Fix Xcode Archive environment validation order
+
+Owner's Xcode Archive failed in the Hermes engine phase because the newly added Release checker invoked an empty `NODE_BINARY` before React Native loaded `.xcode.env.local`. Reproduced the committed plugin's failure with a GUI-style restricted PATH. The plugin now loads the local override before validation and reports an actionable error for a missing/nonexecutable Node path. Synchronized the current ignored `ios/.xcode.env` directly, preserving the owner's 3.1.0 native project. Production speech validation remains enforced.
+
+Focused configuration tests pass 9/9, including local Node resolution, rejected Preview speech, invalid Node and Debug behavior; the real React Native environment wrapper passes with restricted PATH against the current local project. `npm run check:required` passed, including workspace typechecks, self-contained tests, style, i18n and documentation checks (log: `/tmp/clawket-xcode-env-required.log`). No Archive, upload or deployment was started; complete Archive acceptance remains with the owner.
+
+### 2026-09-25 — Open-source readiness and credential audit
+
+Owner requested a complete source usability/privacy review. Audited tracked source and all locally reachable Git history with redacted Gitleaks 8.30.1 (151 commits); exact-match checks compared four locally configured key/secret values across 6,563 historical blobs without exposing values. No server/signing secrets were found in this scope. Historical PostHog and RevenueCat public SDK keys remain; synthetic scanner findings have narrowly scoped exceptions. Read-only GitHub checks show secret scanning/push protection enabled and no current secret alerts; private vulnerability reporting remains disabled. The client-distributed YouMind HMAC value requires an independent backend-boundary review (HUMAN TODO).
+
+Community Release/Archive builds now allow unconfigured integrations; explicit official-build settings preserve strict billing/analytics/production-speech checks. Operator Apple/EAS identities moved to environment configuration, actual Speech Worker settings preserved in ignored local configs, tracked configs converted to disabled placeholders. Maintainer local Xcode config remains functional. Added Git-history secret-scan CI, expanded ignore rules, sanitized workstation usernames in docs/fixtures, and aligned source/self-hosting/security/contribution documentation. No external configuration change, history rewrite, credential rotation, Archive, deployment, upload or push.
+
+Clean source copy without ignored credentials passed isolated dependency installation/lifecycle scripts, both platform prebuilds (no native compilation), Bridge build, iOS JS/Hermes export and 16 config tests. Current-tree required gate and 39 v1 compatibility tests pass; actual local Xcode environment check also passes. Dependency audit has no high/critical findings but retains moderate/low items; new-machine native/device acceptance and full third-party asset/license review are not claimed. Details and limitations: `docs/open-source-readiness-2026-09-25.md`; local evidence: `/tmp/clawket-opensource-audit/`.

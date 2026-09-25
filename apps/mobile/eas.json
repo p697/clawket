@@ -14,6 +14,12 @@
     "preview": {
       "distribution": "internal"
     },
+    "community": {
+      "distribution": "store",
+      "env": {
+        "CLAWKET_OFFICIAL_BUILD": "0"
+      }
+    },
     "testflight": {
       "extends": "production",
       "distribution": "store",
@@ -23,6 +29,7 @@
       "distribution": "store",
       "environment": "production",
       "env": {
+        "CLAWKET_OFFICIAL_BUILD": "1",
         "CLAWKET_REQUIRE_SPEECH": "1",
         "EXPO_PUBLIC_SPEECH_URL": "wss://speech.clawket.ai/v1/speech"
       },

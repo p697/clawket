@@ -2,7 +2,6 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-export EXPO_PUBLIC_SPEECH_URL="${EXPO_PUBLIC_SPEECH_URL:-$(cd "$ROOT_DIR" && node -p "require('./eas.json').build.production.env.EXPO_PUBLIC_SPEECH_URL")}"
 ANDROID_DIR="$ROOT_DIR/android"
 OUTPUT_DIR="$ANDROID_DIR/app/build/outputs/bundle/release"
 AAB_PATH="$OUTPUT_DIR/app-release.aab"
@@ -169,7 +168,7 @@ fi
 echo "Validating Android public release config..."
 (
   cd "$ROOT_DIR"
-  CLAWKET_REQUIRE_POSTHOG=1 CLAWKET_REQUIRE_REVENUECAT=1 CLAWKET_REQUIRE_SPEECH=1 node scripts/check-public-config.mjs --platform=android
+  node scripts/check-public-config.mjs --platform=android
 )
 
 echo "Restoring Android signing config..."

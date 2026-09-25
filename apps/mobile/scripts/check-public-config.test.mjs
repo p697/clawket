@@ -1,8 +1,58 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, copyFileSync, rmSync, realpathSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { createRequire } from 'node:module';
+import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 
 import { buildConfig, parseBoolean, validateConfig } from './check-public-config.mjs';
+
+const { mergeGeneratedBlock } = createRequire(import.meta.url)('../plugins/with-xcode-env.js');
+
+test('Xcode Release validates after loading local Node with a GUI-style PATH', () => {
+  const app = realpathSync(mkdtempSync(join(tmpdir(), 'clawket-xcode-')));
+  try {
+    const ios = join(app, 'ios');
+    mkdirSync(join(ios, 'Pods'), { recursive: true });
+    mkdirSync(join(app, 'scripts'));
+    copyFileSync(new URL('./check-public-config.mjs', import.meta.url), join(app, 'scripts/check-public-config.mjs'));
+    const generated = mergeGeneratedBlock('export NODE_BINARY=$(command -v node)\n');
+    assert.equal(mergeGeneratedBlock(generated), generated);
+    writeFileSync(join(ios, '.xcode.env'), generated);
+    writeFileSync(join(ios, '.xcode.env.local'), `export NODE_BINARY='${process.execPath.replaceAll("'", "'\\''")}'\n`);
+    writeFileSync(join(app, '.env.local'), [
+      'EXPO_PUBLIC_POSTHOG_API_KEY=phc_test',
+      'EXPO_PUBLIC_POSTHOG_HOST=https://example.test',
+      'EXPO_PUBLIC_REVENUECAT_APPLE_API_KEY=appl_test',
+      'EXPO_PUBLIC_REVENUECAT_PRO_ENTITLEMENT_ID=pro',
+      'EXPO_PUBLIC_SPEECH_URL=wss://speech.clawket.ai/v1/speech',
+    ].join('\n'));
+    // No inherited terminal environment or node on PATH, as in Xcode GUI phases.
+    const env = { PATH: '/usr/bin:/bin', PODS_ROOT: join(ios, 'Pods'), CONFIGURATION: 'Release', CLAWKET_OFFICIAL_BUILD: '1' };
+    const run = (overrides = {}) => spawnSync('/bin/bash', ['-c', '. "$PODS_ROOT/../.xcode.env"'], {
+      cwd: app, env: { ...env, ...overrides }, encoding: 'utf8',
+    });
+    const valid = run();
+    assert.equal(valid.status, 0, valid.stdout + valid.stderr);
+    assert.match(valid.stdout, /Public config check \(ios\)/);
+    const preview = run({ EXPO_PUBLIC_SPEECH_URL: 'wss://clawket-speech-preview.clawket.workers.dev/v1/speech' });
+    assert.equal(preview.status, 1);
+    assert.match(preview.stdout, /Store builds require EXPO_PUBLIC_SPEECH_URL/);
+    writeFileSync(join(app, '.env.local'), '');
+    const community = run({ CLAWKET_OFFICIAL_BUILD: '0' });
+    assert.equal(community.status, 0, community.stdout + community.stderr);
+    assert.match(community.stdout, /Speech: disabled/);
+    assert.equal(run().status, 1, 'Official builds still require integrations');
+    writeFileSync(join(ios, '.xcode.env.local'), 'export NODE_BINARY=/missing/node\n');
+    const missing = run();
+    assert.equal(missing.status, 1);
+    assert.match(missing.stderr, /Set NODE_BINARY to an executable Node path/);
+    assert.equal(run({ CONFIGURATION: 'Debug' }).status, 0);
+  } finally {
+    rmSync(app, { recursive: true, force: true });
+  }
+});
 
 test('parseBoolean rejects malformed values instead of enabling a release flag', () => {
   assert.equal(parseBoolean('tru'), null);
@@ -89,8 +139,11 @@ test('EAS store profiles provide the production speech endpoint', () => {
   const production = eas.build.production;
 
   assert.equal(production.environment, 'production');
+  assert.equal(production.env.CLAWKET_OFFICIAL_BUILD, '1');
   assert.equal(production.env.CLAWKET_REQUIRE_SPEECH, '1');
   assert.equal(production.env.EXPO_PUBLIC_SPEECH_URL, 'wss://speech.clawket.ai/v1/speech');
   assert.equal(eas.build.testflight.extends, 'production');
-  assert.deepEqual(validateConfig(buildConfig(production.env), 'android', production.env), []);
+  assert.match(validateConfig(buildConfig(production.env), 'android', production.env).join('\n'), /RevenueCat must be enabled/);
+  assert.equal(eas.build.community.env.CLAWKET_OFFICIAL_BUILD, '0');
+  assert.deepEqual(validateConfig(buildConfig({}), 'android', eas.build.community.env), []);
 });

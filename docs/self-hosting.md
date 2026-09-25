@@ -12,13 +12,13 @@ The repository includes:
 - direct LAN, Tailscale, and custom-endpoint pairing
 - Cloudflare templates and self-hosting documentation
 
-It does not include private production endpoints, Cloudflare account or namespace IDs, analytics or RevenueCat credentials, support/legal defaults, signing material, or deployment secrets. Bring your own direct connection or Relay infrastructure and enable only the optional integrations you operate.
+Public product endpoints and app identifiers appear in official release profiles and compatibility code. They are not secrets. Deployment templates use placeholders; supply your own account, service endpoints and credentials in ignored local overrides. Bring your own direct connection or Relay infrastructure and enable only the optional integrations you operate. Historical operator metadata is documented in the audit report; no promise of a metadata-free Git history is made.
 
 YouMind Sprite uses its own optional HTTPS adapter and account flow. It is not deployed by the Relay workspaces and is not a Relay transport kind.
 
 ## What You Need
 
-- Node.js and npm
+- Node.js 22.x and npm
 - an OpenClaw or Hermes host that the Bridge can control
 - Xcode or Android/Expo tooling only when building the mobile app
 - a Cloudflare account only when running Relay infrastructure
@@ -124,14 +124,18 @@ You may set `CLAWKET_REGISTRY_URL` or `CLAWKET_HERMES_REGISTRY_URL` instead. Her
 
 ## 6. Configure the Mobile Build
 
-Copy `apps/mobile/.env.example` to `.env.local` and set only the public values needed by your build. Examples include your support, documentation, privacy, and terms links.
+Copy `apps/mobile/.env.example` to `apps/mobile/.env.local` and set only the public values needed by your build. Examples include your support, documentation, privacy, and terms links. For device signing set your own `EXPO_APPLE_TEAM_ID`. For EAS, create/link your own project and supply `EXPO_EAS_OWNER` and `EXPO_EAS_PROJECT_ID`; local simulator development needs neither.
+
+Provide those identity variables in the selected EAS build environment as well as locally when cloud builds need them. Ignored `.env.local` files are not a cloud configuration mechanism. This audit preserved local official identities but did not update or validate remote EAS identity variables.
+
+Before signing a fork for your own devices/store account, replace `ios.bundleIdentifier` and `android.package` in `apps/mobile/app.json`. Align `extra.eas.build.experimental.ios.appExtensions` bundle and application-group identifiers with that identity, and register the app group with your own team. Replace/remove official Associated Domains if you operate your own link host. The default Clawket identifiers and artwork describe this project; they do not grant access to its signing accounts.
 
 Optional private services are configured at build time:
 
 - PostHog: `EXPO_PUBLIC_POSTHOG_ENABLED`, `EXPO_PUBLIC_POSTHOG_HOST`, and `EXPO_PUBLIC_POSTHOG_API_KEY`
 - RevenueCat: `EXPO_PUBLIC_REVENUECAT_ENABLED`, the platform API key, and the Pro entitlement/offering identifiers
 
-In ordinary public development builds, an unconfigured integration stays disabled or hidden; when RevenueCat is disabled, subscription billing is skipped and Pro is unlocked. Store-distribution build commands apply stricter fail-closed configuration checks documented in the platform release guides.
+In community builds, including Release/Archive, an unconfigured integration stays disabled or hidden; when RevenueCat is disabled, subscription billing is skipped and Pro is unlocked. Leave `CLAWKET_OFFICIAL_BUILD` unset (or `0`). Your own `EXPO_PUBLIC_SPEECH_URL` may point to your service. The EAS `community` profile is for your own store build; choose your bundle/package identifiers and signing credentials before distributing a fork. The tracked `production`/`testflight` profiles and the maintainer's ignored local environment set `CLAWKET_OFFICIAL_BUILD=1`, which requires analytics, billing and `wss://speech.clawket.ai/v1/speech`. Release checks still reject malformed settings and debug billing overrides in either mode.
 
 Recommended checks:
 
@@ -150,7 +154,9 @@ When adding a mobile environment variable, add it to `.env.example`, expose it t
 - Relay forwards live traffic and does not persist message content.
 - Message caches stay on the device and deleting a connection clears that connection's cache.
 - Analytics must not include message text, prompts, raw identifiers, credentials, invitation material, or secret-bearing URLs.
-- Keep real Relay/Registry hostnames, account and namespace IDs, analytics and billing credentials, signing material, support aliases, and release-only defaults out of source control.
+- Keep operator account/namespace IDs, service credentials, signing material and private release configuration in ignored files. Public endpoint names and public SDK identifiers alone do not grant administrative access.
+
+The optional YouMind integration currently uses a client HMAC value. Do not supply a server secret through `EXPO_PUBLIC_YOUMIND_APP_SECRET`; all client configuration is extractable. YouMind account/service access is independent of self-hosted OpenClaw/Hermes operation.
 
 Store private values in your environment, ignored local config, or release pipeline.
 

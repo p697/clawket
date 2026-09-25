@@ -16,6 +16,7 @@ This repository is the Clawket monorepo.
 3. Prefer stability and explicit compatibility over broad cleanup, especially across the OpenClaw and Hermes paths.
 4. Keep prompts, documentation, and implementation rules concise and non-duplicative. Put detailed workspace rules in the closest workspace document.
 5. Keep production files, exports, and direct dependencies consumer-backed. Document string-loaded entry points, bundle externals, and other static-analysis exceptions instead of deleting them blindly.
+6. Preserve clean-checkout community builds without maintainer credentials. Keep operator signing/EAS identities and Worker account configuration in ignored local files or build environments; public service URLs are not secrets. Official release guards must not require official integrations in community builds. Keep secret-scan exceptions narrow and reviewed; never rewrite Git history or rotate live credentials without explicit authorization.
 
 ## Release Authorization Rule
 
@@ -52,13 +53,13 @@ This repository is the Clawket monorepo.
 
 ## External Dependency
 
-OpenClaw still lives outside this repository. From the monorepo root, its expected sibling path is `../../openclaw` or `/Users/lucy/Desktop/op/openclaw`.
+OpenClaw still lives outside this repository. From the monorepo root, its expected sibling path is `../../openclaw` or `/Users/developer/Desktop/op/openclaw`.
 
-Hermes source under `/Users/lucy/.hermes/hermes-agent` is also an external dependency.
+Hermes source under `/Users/developer/.hermes/hermes-agent` is also an external dependency.
 
 ## External Source Boundary
 
-1. Do not modify Hermes source code, tests, or scripts under `/Users/lucy/.hermes/hermes-agent`.
+1. Do not modify Hermes source code, tests, or scripts under `/Users/developer/.hermes/hermes-agent`.
 2. Hermes may be inspected for behavior, protocol, and debugging context only.
 3. Any Hermes compatibility work must be implemented inside the Clawket monorepo unless the user explicitly asks to change Hermes itself.
 

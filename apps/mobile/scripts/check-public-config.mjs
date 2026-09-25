@@ -90,6 +90,7 @@ loadEnvFile(resolve(appRoot, '.env'));
 export function validateConfig(config, platform, env = process.env, root = appRoot) {
   const errors = [];
   const booleanFlags = [
+    'CLAWKET_OFFICIAL_BUILD',
     'CLAWKET_REQUIRE_POSTHOG',
     'CLAWKET_REQUIRE_REVENUECAT',
     'EXPO_PUBLIC_POSTHOG_ENABLED',
@@ -105,9 +106,10 @@ export function validateConfig(config, platform, env = process.env, root = appRo
     }
   }
 
-  const requirePostHog = parseBoolean(env.CLAWKET_REQUIRE_POSTHOG) === true;
-  const requireRevenueCat = parseBoolean(env.CLAWKET_REQUIRE_REVENUECAT) === true;
-  const requireSpeech = parseBoolean(env.CLAWKET_REQUIRE_SPEECH) === true;
+  const officialBuild = parseBoolean(env.CLAWKET_OFFICIAL_BUILD) === true;
+  const requirePostHog = officialBuild || parseBoolean(env.CLAWKET_REQUIRE_POSTHOG) === true;
+  const requireRevenueCat = officialBuild || parseBoolean(env.CLAWKET_REQUIRE_REVENUECAT) === true;
+  const requireSpeech = officialBuild || parseBoolean(env.CLAWKET_REQUIRE_SPEECH) === true;
 
   if (requirePostHog && !config.posthog.enabled) {
     errors.push('PostHog must be enabled for this build, but no EXPO_PUBLIC_POSTHOG_* configuration was found.');
