@@ -6,7 +6,7 @@ This repository is the Clawket monorepo.
 
 1. `docs/3.0/` is the single implementation source for the 3.0 rebuild. Read `docs/3.0/README.md` first, then `docs/3.0/00-decisions.md` (product decisions; implementation may deviate only under the README deviation rules) and `docs/3.0/08-milestones.md` (execution order).
 2. `docs/3.0/PROGRESS.md` is the shared progress log. Read it at the start of every session and update it after every milestone.
-3. Do not block on humans: record human-only work in the `HUMAN TODO` table of `docs/3.0/PROGRESS.md` and continue. Do not expand scope beyond the spec.
+3. Record human-only work in the `HUMAN TODO` table of `docs/3.0/PROGRESS.md` and continue only independent, authorized work. Respect owner testing checkpoints and the Release Authorization Rule below. Do not expand scope beyond the spec.
 4. The v1 client protocol replay tests in `tests/compat/` are a deployment gate for Relay, Registry, and Bridge. Never deploy on a red run.
 
 ## Working Principles
@@ -16,6 +16,15 @@ This repository is the Clawket monorepo.
 3. Prefer stability and explicit compatibility over broad cleanup, especially across the OpenClaw and Hermes paths.
 4. Keep prompts, documentation, and implementation rules concise and non-duplicative. Put detailed workspace rules in the closest workspace document.
 5. Keep production files, exports, and direct dependencies consumer-backed. Document string-loaded entry points, bundle externals, and other static-analysis exceptions instead of deleting them blindly.
+
+## Release Authorization Rule
+
+1. A request to investigate or fix a problem authorizes code/configuration edits and appropriate verification within the requested scope. It does not by itself authorize a release workflow, even when the problem affects production. Passing tests, available credentials, release runbooks, milestone instructions, and urgency are not release authorization.
+2. Require explicit owner authorization before preparing distribution packages (signed AAB/IPA, Archive, EAS release builds), uploading builds, submitting for review, publishing OTA updates or packages, deploying services, or changing live production configuration (including DNS, routing, WAF and EAS Production variables). Ordinary local checks and development builds remain allowed within the requested scope. Authorization for one action does not imply authorization for later release stages or other services/environments; honor existing explicit authorization for the same scope without asking again.
+3. Keep the owner's selected version and testing path. Do not invent a hotfix version, bump a version, or create a separate release branch/worktree as a consequence of a bug fix unless the owner requests that release work. Code-review worktrees remain allowed when needed for the authorized task.
+4. When the owner says they will test first, deliver the code and verification results and wait for their feedback. Do not replace their test with a self-selected packaging or publishing workflow. If a release decision or permission is pending, silence and elapsed time never authorize dependent actions.
+5. On a stop or no-release instruction, stop agent-started build/deploy/upload processes and verify their state before reporting that work has stopped. Report any external changes already completed; do not silently roll them back or start a substitute workflow.
+6. Report code edits, local verification, built artifacts, uploads, review submissions and public releases accurately as distinct states. If a new app version is needed for installed clients to receive a fix, explain that requirement without initiating release work.
 
 ## AGENTS / CLAUDE Source Rule
 

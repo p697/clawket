@@ -7,7 +7,7 @@ const GENERATED_BLOCK_END = '# @generated end clawket-xcode-env';
 
 const GENERATED_BLOCK = [
   GENERATED_BLOCK_START,
-  '# Load app-level dotenv files so Xcode Archive sees EXPO_PUBLIC_* values.',
+  '# Load app-level dotenv files without overriding EAS or shell-provided values.',
   'if [ -n "${PODS_ROOT:-}" ]; then',
   '  CLAWKET_IOS_ROOT="$(cd "$PODS_ROOT/.." && pwd)"',
   'else',
@@ -37,15 +37,24 @@ const GENERATED_BLOCK = [
   '    key="${line%%=*}"',
   '    value="${line#*=}"',
   '    key="${key%"${key##*[![:space:]]}"}"',
+  '    if [ -n "${!key+x}" ]; then continue; fi',
   '    case "$value" in',
   '      \\"*\\") value="${value#\\"}"; value="${value%\\"}" ;;',
   '    esac',
   '    export "$key=$value"',
   '  done < "$env_file"',
   '}',
-  'for env_file in "$CLAWKET_APP_ROOT/.env" "$CLAWKET_APP_ROOT/.env.local"; do',
+  'for env_file in "$CLAWKET_APP_ROOT/.env.local" "$CLAWKET_APP_ROOT/.env"; do',
   '  load_dotenv_file "$env_file"',
   'done',
+  'if [ -n "${CONFIGURATION:-}" ]; then',
+  '  case "$CONFIGURATION" in',
+  '    *Debug*) ;;',
+  '    *)',
+  '      CLAWKET_REQUIRE_POSTHOG=1 CLAWKET_REQUIRE_REVENUECAT=1 CLAWKET_REQUIRE_SPEECH=1 "$NODE_BINARY" "$CLAWKET_APP_ROOT/scripts/check-public-config.mjs" --platform=ios || exit 1',
+  '      ;;',
+  '  esac',
+  'fi',
   GENERATED_BLOCK_END,
   '',
 ].join('\n');
@@ -80,3 +89,4 @@ function withXcodeEnv(config) {
 }
 
 module.exports = withXcodeEnv;
+module.exports.mergeGeneratedBlock = mergeGeneratedBlock;

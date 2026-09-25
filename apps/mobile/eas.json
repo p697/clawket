@@ -21,6 +21,11 @@
     },
     "production": {
       "distribution": "store",
+      "environment": "production",
+      "env": {
+        "CLAWKET_REQUIRE_SPEECH": "1",
+        "EXPO_PUBLIC_SPEECH_URL": "wss://speech.clawket.ai/v1/speech"
+      },
       "autoIncrement": true
     }
   },

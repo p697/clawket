@@ -1,6 +1,6 @@
 # Chat 云端语音输入
 
-2026-09-19 负责人授权用 Expo Audio PCM + 阿里云 Qwen 取代系统语音识别。2026-09-20 负责人授权完整落地弱网恢复、错误诊断和启动优化。本次仍使用独立 Preview 服务；不改变 Pro 权益或正式商店发布范围。
+2026-09-19 负责人授权用 Expo Audio PCM + 阿里云 Qwen 取代系统语音识别。2026-09-20 负责人授权完整落地弱网恢复、错误诊断和启动优化。2026-09-25 将正式版语音迁至独立 Production Worker 和 `speech.clawket.ai`；不改变 Pro 权益。
 
 ## 交互与恢复
 
@@ -33,10 +33,12 @@ Provider WebSocket 握手有独立 10 秒超时，fetch 返回或失败立即清
 
 ## 配置与运维
 
-- Preview：`wss://clawket-speech-preview.clawket.workers.dev/v1/speech`；Mobile 本地 `.env.local` 设置 `EXPO_PUBLIC_SPEECH_URL`。它是公开 URL，绝不能填写 Key。未配置时隐藏麦克风/长按入口。EAS 本地同步只将它送到 development，Production 必须显式配置隔离服务。
+- Production：`wss://speech.clawket.ai/v1/speech`，独立 `clawket-speech` Worker、Durable Object、secret 和 `wrangler.production.jsonc`，Custom Domain 启用，`workers.dev` 关闭。EAS Production 环境和 `eas.json` Store profile 都固定这个公开 URL；本地 AAB 脚本在未显式指定时使用同一 URL。Android/iOS EAS Store 构建及 Xcode 非 Debug 打包会拒绝缺失或 Preview URL；Xcode dotenv 加载不覆盖已有的 EAS/命令行值。已上传/安装的 AAB 内嵌旧地址，须重新构建与发布才能更正；配置变更不会改写旧包。
+- Preview：`wss://clawket-speech-preview.clawket.workers.dev/v1/speech`；Mobile 本地 `.env.local` 可设置 `EXPO_PUBLIC_SPEECH_URL`。它只供本地开发/Preview，EAS 本地同步只将它送到 development。URL 是公开配置，绝不能填写 Key；未配置时隐藏麦克风/长按入口。
+- Cloudflare 区域 WAF 仅对 `speech.clawket.ai` 的 `/health` 和 `/v1/speech` 跳过会阻断机器请求的托管防护/安全等级/Bot 检查，不跳过限流；Worker 自身仍执行签名、防重放与设备/IP/总量准入。
 - Key 只放 Worker secret `ALIYUN_SPEECH_API_KEY`；`SPEECH_ENABLED=false` 停用。私有备份在仓库外 owner-only 目录。公开 URL 不等于公开 Provider Key；知道 URL 的自建客户端可能使用我们尚未接订阅授权的 Preview 服务。
 - `npm run speech:typecheck`、`npm run speech:test`、Mobile 语音套件与 `npm run check:required`。真实验证：`node scripts/speech/smoke.mjs <wss endpoint> <16k mono PCM file>`，只用合成或明确授权音频。v1 smoke 继续验证旧手机协议；v2 验证错误码与连续录音。
-- 本轮不增加原生依赖；设备必须已有 Expo SDK 57 / Expo Audio 和 FileSystem 的开发构建。模型、Relay、Registry、Bridge 配对和订阅行为不变。
+- 本轮不增加原生依赖；设备必须使用包含 Expo SDK 57 / Expo Audio 和 FileSystem 的原生构建。模型、Relay、Registry、Bridge 配对和订阅行为不变。
 
 ## 验收
 
