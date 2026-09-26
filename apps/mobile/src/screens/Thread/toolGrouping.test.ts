@@ -20,3 +20,15 @@ it('keeps the oldest call as a stable group identity while streaming adds calls'
 it('never combines activity across a reply or date boundary', () => {
   expect(groupThreadTools([tool('b'), reply, tool('a')], new Set())).toHaveLength(3);
 });
+
+it('keeps a group and its expanded state when history replaces a live call id', () => {
+  const rendered = (id: string, renderKey: string): ThreadTimelineItem => ({
+    type: 'message', key: `message:${renderKey}`, message: { id, renderKey, role: 'tool', text: '', toolStatus: 'success' },
+  });
+  const live = [rendered('toolcall_b', 'toolcall_b'), rendered('toolcall_a', 'toolcall_a')];
+  const settled = [rendered('toolresult_b', 'toolcall_b'), rendered('toolresult_a', 'toolcall_a')];
+  expect(groupThreadTools(live, new Set())[0]?.key).toBe('tools:toolcall_a');
+  expect(groupThreadTools(settled, new Set())[0]?.key).toBe('tools:toolcall_a');
+  expect(groupThreadTools(settled, new Set(['tools:toolcall_a'])).map((item) => item.key))
+    .toEqual(['message:toolcall_b', 'message:toolcall_a', 'tools:toolcall_a']);
+});

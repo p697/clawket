@@ -140,6 +140,7 @@
   "Online": "온라인",
   "Offline": "오프라인",
   "Connecting": "연결 중",
+  "Not connected": "연결 안 됨",
   "Models": "모델",
   "Skills": "스킬",
   "Usage": "사용량",
@@ -168,6 +169,8 @@
   "Reset session?": "세션을 재설정할까요?",
   "Reset": "재설정",
   "Scheduled": "예약",
+  "Scheduled task": "예약 작업",
+  "Scheduled task: {{name}}": "예약 작업: {{name}}",
   "Search sessions": "세션 검색",
   "Session actions": "세션 작업",
   "Sessions require permission": "세션을 보려면 권한이 필요합니다",
@@ -247,5 +250,10 @@
   "Search and bulk export": "검색 및 일괄 내보내기",
   "Skill and memory versions": "스킬 및 메모리 버전",
   "Yes": "예",
-  "No": "아니요"
+  "No": "아니요",
+  "All projects": "모든 프로젝트",
+  "Projects": "프로젝트",
+  "Choose a project": "프로젝트 선택",
+  "Search projects": "프로젝트 검색",
+  "Next": "다음"
 }

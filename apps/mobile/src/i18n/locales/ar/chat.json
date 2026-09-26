@@ -158,7 +158,6 @@
   "Voice input": "الإدخال الصوتي",
   "Stop voice input": "إيقاف الإدخال الصوتي",
   "Listening…": "يستمع…",
-  "Preparing voice input…": "جارٍ تجهيز الإدخال الصوتي…",
   "Send": "إرسال",
   "Reconnect": "إعادة الاتصال",
   "Offline · reconnecting": "غير متصل · جارٍ إعادة الاتصال",
@@ -380,5 +379,12 @@
   "{{channel}} member": "عضو {{channel}}",
   "Agent needs your input": "الوكيل ينتظر إجابتك",
   "Respond": "إجابة",
-  "Continue in a new session": "المتابعة في جلسة جديدة"
+  "Continue in a new session": "المتابعة في جلسة جديدة",
+  "thinking_none": "متوقف",
+  "thinking_max": "أقصى",
+  "thinking_ultra": "فائق",
+  "Allow this action?": "السماح بهذا الإجراء؟",
+  "Stop task": "إيقاف المهمة",
+  "Your answer": "إجابتك",
+  "Question {{current}} of {{total}}": "السؤال {{current}} من {{total}}"
 }

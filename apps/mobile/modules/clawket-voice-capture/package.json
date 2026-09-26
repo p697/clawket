@@ -1,0 +1,9 @@
+{
+  "name": "clawket-voice-capture",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local Expo module for low-latency dictation microphone capture.",
+  "license": "Proprietary",
+  "author": "Clawket",
+  "homepage": "https://github.com/openai/clawket"
+}

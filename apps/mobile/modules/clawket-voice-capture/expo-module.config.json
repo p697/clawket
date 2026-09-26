@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["ClawketVoiceCaptureModule"]
+  },
+  "android": {
+    "modules": ["com.clawket.voicecapture.ClawketVoiceCaptureModule"]
+  }
+}

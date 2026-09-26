@@ -26,12 +26,13 @@ import {
   Motion,
   Radius,
   Space,
-  StatusSize,
 } from '../../theme/tokens';
 import { resolveAgentAvatarImageSource } from '../../utils/agent-avatar-uri';
+import { StatusDot } from './StatusDot';
 
 export type AgentAvatarVariant = 'roster' | 'header' | 'settings' | 'sheet' | 'panel';
-export type AgentAvatarStatus = 'idle' | 'working' | 'attention' | 'done' | 'offline' | 'locked';
+/** `live` marks an Agent on the connection the phone is live on (owner decision 2026-09-26). */
+export type AgentAvatarStatus = 'idle' | 'working' | 'attention' | 'done' | 'live' | 'offline' | 'locked';
 export type AgentAttentionTone = 'warn' | 'bad';
 
 type AvatarMetrics = Readonly<{
@@ -152,7 +153,22 @@ export function AgentAvatar({
     return () => cancelAnimation(doneOpacity);
   }, [doneOpacity, status]);
 
+  // A row that mounts live shows its dot at once; one that becomes live (its
+  // connection finished connecting) fades the dot in. Opacity only, so the
+  // fade also suits reduced motion.
+  const liveOpacity = useSharedValue(status === 'live' ? 1 : 0);
+  useEffect(() => {
+    cancelAnimation(liveOpacity);
+    if (status !== 'live') {
+      liveOpacity.value = 0;
+      return () => cancelAnimation(liveOpacity);
+    }
+    liveOpacity.value = withTiming(1, { duration: Motion.duration.normal });
+    return () => cancelAnimation(liveOpacity);
+  }, [liveOpacity, status]);
+
   const doneDotStyle = useAnimatedStyle(() => ({ opacity: doneOpacity.value }));
+  const liveDotStyle = useAnimatedStyle(() => ({ opacity: liveOpacity.value }));
   const isMuted = status === 'offline' || status === 'locked';
   const statusDotColor = attentionTone === 'bad' ? theme.colors.bad : theme.colors.warn;
   const resolvedAvatarSource = !emoji ? resolveAgentAvatarImageSource(avatarUrl) : null;
@@ -194,31 +210,29 @@ export function AgentAvatar({
         ) : null}
       </View>
       {status === 'attention' ? (
-        <View
+        <StatusDot
           testID={testID ? `${testID}-attention` : undefined}
-          pointerEvents="none"
-          style={[
-            styles.statusDot,
-            {
-              backgroundColor: statusDotColor,
-              borderColor: theme.colors.canvas,
-            },
-          ]}
+          color={statusDotColor}
+          ringColor={theme.colors.canvas}
         />
       ) : null}
       {status === 'done' ? (
-        <Animated.View
-          testID={testID ? `${testID}-done` : undefined}
-          pointerEvents="none"
-          style={[
-            styles.statusDot,
-            {
-              backgroundColor: theme.colors.good,
-              borderColor: theme.colors.canvas,
-            },
-            doneDotStyle,
-          ]}
-        />
+        <Animated.View pointerEvents="none" style={[styles.statusLayer, doneDotStyle]}>
+          <StatusDot
+            testID={testID ? `${testID}-done` : undefined}
+            color={theme.colors.good}
+            ringColor={theme.colors.canvas}
+          />
+        </Animated.View>
+      ) : null}
+      {status === 'live' ? (
+        <Animated.View pointerEvents="none" style={[styles.statusLayer, liveDotStyle]}>
+          <StatusDot
+            testID={testID ? `${testID}-live` : undefined}
+            color={theme.colors.good}
+            ringColor={theme.colors.canvas}
+          />
+        </Animated.View>
       ) : null}
       {status === 'locked' ? (
         <View
@@ -256,14 +270,14 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  statusDot: {
+  // Carries a dot's fade; the dot itself sits on the avatar's corner.
+  statusLayer: {
     position: 'absolute',
-    right: -BorderWidth.strong,
-    bottom: -BorderWidth.strong,
-    width: StatusSize.attention,
-    height: StatusSize.attention,
-    borderRadius: Radius.full,
-    borderWidth: BorderWidth.strong,
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    overflow: 'visible',
   },
   lockBadge: {
     position: 'absolute',

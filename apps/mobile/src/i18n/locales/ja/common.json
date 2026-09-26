@@ -140,6 +140,7 @@
   "Online": "オンライン",
   "Offline": "オフライン",
   "Connecting": "接続中",
+  "Not connected": "未接続",
   "Models": "モデル",
   "Skills": "スキル",
   "Usage": "使用量",
@@ -168,6 +169,8 @@
   "Reset session?": "セッションをリセットしますか？",
   "Reset": "リセット",
   "Scheduled": "スケジュール",
+  "Scheduled task": "定期タスク",
+  "Scheduled task: {{name}}": "定期タスク：{{name}}",
   "Search sessions": "セッションを検索",
   "Session actions": "セッション操作",
   "Sessions require permission": "セッションには権限が必要です",
@@ -247,5 +250,10 @@
   "Search and bulk export": "検索と一括エクスポート",
   "Skill and memory versions": "スキルとメモリの履歴",
   "Yes": "はい",
-  "No": "いいえ"
+  "No": "いいえ",
+  "All projects": "すべてのプロジェクト",
+  "Projects": "プロジェクト",
+  "Choose a project": "プロジェクトを選択",
+  "Search projects": "プロジェクトを検索",
+  "Next": "次へ"
 }

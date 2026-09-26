@@ -22,14 +22,14 @@ it('does not round a real sub-cent cost down to free', () => {
 const TRANSPORT_BY_BACKEND: Readonly<Record<ConnectionDescriptor['backendKind'], ConnectionDescriptor['transportKind']>> = {
   openclaw: 'relay',
   hermes: 'relay',
-  'local-model': 'relay', pi: 'relay', youmind: 'https',
+  'local-model': 'relay', pi: 'relay', codex: 'relay', 'claude-code': 'relay', youmind: 'https',
 };
 
 const MAIN_SESSION_BY_BACKEND: Readonly<Record<ConnectionDescriptor['backendKind'], string>> = {
   openclaw: 'agent:main:main',
   hermes: 'main',
   youmind: 'main',
-  'local-model': 'main', pi: 'pi-session',
+  'local-model': 'main', pi: 'pi-session', codex: 'pi-session', 'claude-code': 'claude-session',
 };
 
 function connection(

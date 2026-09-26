@@ -383,5 +383,7 @@
   "{{count}} items": "{{count}} รายการ",
   "Delete this local config backup? This does not change the current Gateway config.": "ลบข้อมูลสำรองนี้หรือไม่? การตั้งค่า Gateway ปัจจุบันจะไม่เปลี่ยนแปลง",
   "Backup history": "ประวัติการสำรองข้อมูล",
-  "Pi is not responding": "Pi ไม่ตอบสนอง"
+  "Pi is not responding": "Pi ไม่ตอบสนอง",
+  "Codex is not responding": "Codex ไม่ตอบสนอง",
+  "Claude Code is not responding": "Claude Code ไม่ตอบสนอง"
 }

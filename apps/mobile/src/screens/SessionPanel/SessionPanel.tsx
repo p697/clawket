@@ -6,6 +6,7 @@ import React, {
   useState,
 } from 'react';
 import {
+  Keyboard,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -14,16 +15,19 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import {
+  Folder,
   Check,
   ChevronDown,
   Pin,
   SquarePen,
+  Terminal,
 } from 'lucide-react-native';
 import { ChevronRight } from '../../components/ui/DirectionalIcon';
 import { BottomSheetFlatList, TouchableOpacity as SheetTouchableOpacity } from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
-import type { AgentDescriptor, Capabilities } from '@clawket/agent-protocol';
+import type { AgentDescriptor, ProjectDescriptor, Capabilities } from '@clawket/agent-protocol';
 
+import { ProjectPicker } from './ProjectPicker';
 import { getConnectionRuntime, useConnections, useRoster } from '../../connection';
 import { AgentAvatar } from '../../components/ui/AgentAvatar';
 import { Banner } from '../../components/ui/Banner';
@@ -52,6 +56,7 @@ import {
   StatusSize,
   createThemedShadowStyle,
 } from '../../theme/tokens';
+import { useRelativeTimeTranslator } from '../../hooks/useRelativeTimeTranslator';
 import { relativeTime } from '../../utils/chat-message';
 import { analyticsEvents } from '../../services/analytics/events';
 import {
@@ -64,6 +69,7 @@ import {
   normalizeSessionRenameTitle,
   resolveSessionPanelFilterKind,
   resolveSessionPanelPageState,
+  sessionPanelRowName,
   type SessionPanelAction,
   type SessionPanelAgentOption,
   type SessionPanelChip,
@@ -95,6 +101,7 @@ const CHIP_HIT_SLOP = Object.freeze({ top: Space.xs, bottom: Space.xs });
 const CHIP_COUNT_SELECTED_OPACITY = 0.7;
 
 export type SessionPanelViewProps = Readonly<{
+  projects?: readonly ProjectDescriptor[];
   visible: boolean;
   state: SessionPanelPageState;
   rows: ReadonlyArray<SessionPanelRow>;
@@ -111,7 +118,7 @@ export type SessionPanelViewProps = Readonly<{
   onClose: () => void;
   onAfterClose?: () => void;
   onSelectSession: (row: SessionPanelRow) => MaybePromise;
-  onCreateSession?: (agent: AgentDescriptor) => MaybePromise;
+  onCreateSession?: (agent: AgentDescriptor, projectId?: string) => MaybePromise;
   onSessionAction?: SessionPanelActionHandler;
   onRetry?: () => MaybePromise;
   onOpenBridgeHelp?: () => void;
@@ -119,6 +126,7 @@ export type SessionPanelViewProps = Readonly<{
 }>;
 
 export type SessionPanelProps = Readonly<{
+  connectionId?: string;
   visible: boolean;
   currentAgentId: string;
   currentSessionKey: string;
@@ -127,7 +135,7 @@ export type SessionPanelProps = Readonly<{
   onClose: () => void;
   onAfterClose?: () => void;
   onSelectSession: (row: SessionPanelRow) => MaybePromise;
-  onCreateSession?: (agent: AgentDescriptor) => MaybePromise;
+  onCreateSession?: (agent: AgentDescriptor, projectId?: string) => MaybePromise;
   onSessionAction?: SessionPanelActionHandler;
   onOpenBridgeHelp?: () => void;
   onOpenPermission?: () => void;
@@ -145,7 +153,9 @@ function chipLabel(chip: SessionPanelChip, t: Translate): string {
 
 function rowTitle(row: SessionPanelRow, t: Translate): string {
   if (row.kind === 'main') return t('Main session');
-  return row.title === row.key ? t('New session') : row.title;
+  const name = sessionPanelRowName(row);
+  if (row.kind === 'cron') return name ? t('Scheduled task: {{name}}', { name }) : t('Scheduled task');
+  return name || t('New session');
 }
 
 function SessionTile({
@@ -166,7 +176,9 @@ function SessionTile({
       />
     );
   }
-  const Icon = row.kind === 'channel'
+  const Icon = row.project && (row.kind === 'direct' || row.kind === 'other')
+    ? Terminal
+    : row.kind === 'channel'
     ? resolveSessionChannelIcon(row.channel)
     : resolveSessionKindIcon(row.kind);
   return (
@@ -189,6 +201,7 @@ function SessionRow({
   row,
   agent,
   selected,
+  showProject,
   capabilities,
   onPress,
   onOpenActions,
@@ -196,12 +209,14 @@ function SessionRow({
   row: SessionPanelRow;
   agent: AgentDescriptor | null;
   selected: boolean;
+  showProject: boolean;
   capabilities: SessionPanelViewProps['capabilities'];
   onPress: () => void;
   onOpenActions: (row: SessionPanelRow) => void;
 }>): React.JSX.Element {
   const { theme } = useAppTheme();
   const { t } = useTranslation('common');
+  const translateRelativeTime = useRelativeTimeTranslator();
   const actions = availableSessionActions(row, capabilities);
   const title = rowTitle(row, t);
   const longPressHandled = useRef(false);
@@ -210,6 +225,7 @@ function SessionRow({
     longPressHandled.current = true;
     onOpenActions(row);
   };
+  const projectName = showProject ? row.project?.name : undefined;
   const showUnread = row.unread && !selected && row.attention === null;
   // One quiet 6-point signal on the preview line: attention wins over unread.
   const signal = row.attention !== null
@@ -234,6 +250,7 @@ function SessionRow({
       testID={`session-panel-row-${row.id}`}
       accessibilityRole="button"
       accessibilityLabel={title}
+      accessibilityHint={row.project?.path}
       accessibilityState={{ selected }}
       onPressIn={() => { longPressHandled.current = false; }}
       onPress={() => { if (!longPressHandled.current) onPress(); }}
@@ -258,11 +275,17 @@ function SessionRow({
             {title}
           </Text>
           <Text style={[styles.rowTime, { color: theme.colors.inkTertiary }]} numberOfLines={1} maxFontSizeMultiplier={1.3}>
-            {relativeTime(row.updatedAt)}
+            {relativeTime(row.updatedAt, translateRelativeTime)}
           </Text>
         </View>
-        {row.preview || signal ? (
+        {projectName || row.preview || signal ? (
           <View style={styles.previewRow}>
+            {projectName ? <Text
+              testID={`session-panel-row-${row.id}-project`}
+              style={[styles.rowProject, row.preview ? styles.projectWithPreview : styles.previewSpacer, { color: theme.colors.inkSecondary }]}
+              numberOfLines={1}
+            >{projectName}</Text> : null}
+            {projectName && row.preview ? <Text style={[styles.projectSeparator, { color: theme.colors.inkTertiary }]} accessibilityElementsHidden importantForAccessibility="no">·</Text> : null}
             {row.preview ? (
               <Text
                 testID={`session-panel-row-${row.id}-preview`}
@@ -274,9 +297,9 @@ function SessionRow({
               >
                 {row.preview}
               </Text>
-            ) : (
+            ) : !projectName ? (
               <View style={styles.previewSpacer} />
-            )}
+            ) : null}
             {signal}
           </View>
         ) : null}
@@ -624,11 +647,11 @@ function RenameSessionSheet({
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    setDraft(row?.title ?? '');
+    setDraft(row ? sessionPanelRowName(row) : '');
     setSubmitting(false);
   }, [row]);
 
-  const title = row ? normalizeSessionRenameTitle(draft, row.title) : null;
+  const title = row ? normalizeSessionRenameTitle(draft, sessionPanelRowName(row)) : null;
   const close = useCallback(() => {
     if (!submitting) onClose();
   }, [onClose, submitting]);
@@ -689,6 +712,7 @@ function RenameSessionSheet({
 }
 
 export function SessionPanelView({
+  projects,
   visible,
   state,
   rows,
@@ -713,6 +737,8 @@ export function SessionPanelView({
   const [viewAgentId, setViewAgentId] = useState(currentAgentId);
   const [filter, setFilter] = useState<SessionPanelFilter>('all');
   const [query, setQuery] = useState('');
+  const [projectId, setProjectId] = useState<string | null>(null);
+  const [projectPicker, setProjectPicker] = useState<'filter' | 'create' | null>(null);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState(false);
   const createBusy = useRef(false);
@@ -739,7 +765,7 @@ export function SessionPanelView({
     if (!visible) return;
     setViewAgentId(currentAgentId);
     setFilter('all');
-    setAgentMenuOpen(false);
+    setAgentMenuOpen(false); setProjectId(null); setProjectPicker(null);
   }, [currentAgentId, visible]);
 
   const agentOptions = useMemo(() => buildSessionPanelAgents(rows, agents), [agents, rows]);
@@ -754,13 +780,20 @@ export function SessionPanelView({
     () => rows.filter((row) => row.agentId === viewAgentIdResolved),
     [rows, viewAgentIdResolved],
   );
-  const chips = useMemo(() => buildSessionPanelChips(agentRows), [agentRows]);
+  const chips = useMemo(() => projects ? [] : buildSessionPanelChips(agentRows), [agentRows, projects]);
   const activeFilter: SessionPanelFilter = chips.some((chip) => chip.key === filter) ? filter : 'all';
-  const filteredRows = useMemo(() => filterSessionPanelRows(rows, {
+  const filteredRows = useMemo(() => filterSessionPanelRows(projects && projectId ? rows.filter(r => r.project?.id === projectId) : rows, {
     agentId: viewAgentIdResolved,
     filter: activeFilter,
     query,
-  }), [activeFilter, query, rows, viewAgentIdResolved]);
+    displayTitle: (row) => rowTitle(row, t),
+  }), [activeFilter, query, rows, t, viewAgentIdResolved, projects, projectId]);
+  const createInProject = (id?: string) => {
+    if (createBusy.current || !viewAgent || !onCreateSession) return;
+    createBusy.current = true; setCreating(true); setCreateError(false);
+    void Promise.resolve().then(() => id ? onCreateSession(viewAgent, id) : onCreateSession(viewAgent)).then(onClose)
+      .catch(() => setCreateError(true)).finally(() => { createBusy.current = false; setCreating(false); });
+  };
   const searching = query.trim().length > 0;
   const listItems = useMemo<ReadonlyArray<SessionPanelListItem>>(() => (
     searching
@@ -857,12 +890,13 @@ export function SessionPanelView({
         row={item.row}
         agent={viewAgent}
         selected={item.row.key === currentSessionKey}
+        showProject={!projects || !projectId}
         capabilities={capabilities}
         onPress={() => select(item.row)}
         onOpenActions={setActionRow}
       />
     );
-  }, [capabilities, chooseFilter, currentSessionKey, select, viewAgent]);
+  }, [capabilities, chooseFilter, currentSessionKey, select, viewAgent, projects, projectId]);
   const keyExtractor = useCallback((item: SessionPanelListItem) => (
     item.type === 'row' ? item.row.id : 'subagents'
   ), []);
@@ -896,15 +930,14 @@ export function SessionPanelView({
             accessibilityLabel={t('New session')}
             disabled={creating}
             onPress={() => {
-              if (createBusy.current) return;
-              createBusy.current = true; setCreating(true); setCreateError(false);
-              void Promise.resolve().then(() => onCreateSession(viewAgent)).then(onClose)
-                .catch(() => setCreateError(true)).finally(() => { createBusy.current = false; setCreating(false); });
+              if (projects && !projectId) { Keyboard.dismiss(); setProjectPicker('create'); }
+              else createInProject(projectId ?? undefined);
             }}
           />
         ) : undefined}
       >
         <View style={styles.body}>
+          {projects ? <View style={[styles.searchWrap, { alignItems: 'flex-start' }]}><Button variant="text" size="sm" icon={Folder} label={projects.find(p => p.id === projectId)?.name ?? t('All projects')} onPress={() => { Keyboard.dismiss(); setProjectPicker('filter'); }} testID="codex-project-filter" /></View> : null}
           {createError ? <Banner message={t('Save Failed')} /> : null}
           {showList && chips.length > 0 ? (
             <ScrollView
@@ -1027,6 +1060,7 @@ export function SessionPanelView({
         </View>
       </Sheet>
 
+      {projects ? <ProjectPicker visible={projectPicker !== null && visible} projects={projects} selected={projectId} creating={projectPicker === 'create'} onClose={() => setProjectPicker(null)} onSelect={id => { const create = projectPicker === 'create'; setProjectPicker(null); if (create && id) createInProject(id); else setProjectId(id); }} /> : null}
       <SessionActionSheet
         row={actionRow}
         capabilities={capabilities}
@@ -1049,6 +1083,7 @@ export function SessionPanelView({
 }
 
 export function SessionPanel({
+  connectionId,
   visible,
   currentAgentId,
   currentSessionKey,
@@ -1065,17 +1100,24 @@ export function SessionPanel({
   const connections = useConnections();
   const roster = useRoster();
   const group = roster.find((candidate) => (
-    candidate.connection.id === connections.activeConnectionId
+    candidate.connection.id === (connectionId ?? connections.activeConnectionId)
   ));
   const rows = useMemo(
-    () => buildSessionPanelRows(group, { pinnedSessionKeys }),
-    [group, pinnedSessionKeys],
+    () => buildSessionPanelRows(group, { pinnedSessionKeys, recentFirst: connections.activeAdapter?.capabilities.projects === true }),
+    [group, pinnedSessionKeys, connections.activeAdapter?.capabilities.projects],
   );
   const agents = useMemo(
     () => group?.agents.map((summary) => summary.agent) ?? [],
     [group],
   );
-  const adapter = connections.activeAdapter;
+  const adapter = !connectionId || connections.activeAdapter?.connection.id === connectionId
+    ? connections.activeAdapter : null;
+  const [projects, setProjects] = useState<readonly ProjectDescriptor[] | undefined>(undefined);
+  useEffect(() => {
+    let current = true; setProjects(undefined);
+    if (adapter?.capabilities.projects && adapter.projects) void adapter.projects.list().then(value => { if (current) setProjects(value); }).catch(() => { if (current) setProjects(rows.flatMap(r => r.project ? [r.project] : []).filter((p, i, all) => all.findIndex(v => v.id === p.id) === i)); });
+    return () => { current = false; };
+  }, [adapter, visible]);
   const capabilities = adapter?.capabilities ?? {
     ...MUTATION_CAPABILITIES_OFF,
   };
@@ -1083,12 +1125,13 @@ export function SessionPanel({
     initialized: connections.initialized,
     hasPermission: !permissionDenied,
     rowCount: rows.length,
-    activeState: connections.activeState,
+    activeState: connectionId && connections.activeConnectionId !== connectionId ? 'offline' : connections.activeState,
     hasError: connections.error !== null,
   });
 
   return (
     <SessionPanelView
+      projects={adapter?.capabilities.projects ? projects ?? [] : undefined}
       visible={visible}
       state={state}
       rows={rows}
@@ -1101,12 +1144,13 @@ export function SessionPanel({
       onClose={onClose}
       onAfterClose={onAfterClose}
       onSelectSession={onSelectSession}
-      onCreateSession={adapter?.capabilities.sessionCreate && adapter.createSession ? onCreateSession : undefined}
+      onCreateSession={adapter?.capabilities.sessionCreate && adapter.createSession && (!adapter.capabilities.projects || projects?.some(p => p.available)) ? onCreateSession : undefined}
       onSessionAction={onSessionAction}
-      onRetry={() => Promise.all([
-        getConnectionRuntime().refreshRoster(),
-        getConnectionRuntime().probeActive(),
-      ]).then(() => undefined)}
+      onRetry={async () => {
+        const runtime = getConnectionRuntime();
+        if (connectionId) await runtime.activate(connectionId);
+        await Promise.all([runtime.refreshRoster(), runtime.probeActive()]);
+      }}
       onOpenBridgeHelp={onOpenBridgeHelp}
       onOpenPermission={onOpenPermission}
     />
@@ -1259,6 +1303,16 @@ const styles = StyleSheet.create({
     fontSize: FontSize.caption,
     lineHeight: LineHeight.caption,
     fontWeight: FontWeight.regular,
+  },
+  rowProject: {
+    flexShrink: 1,
+    fontSize: FontSize.caption,
+    lineHeight: LineHeight.caption,
+  },
+  projectWithPreview: { maxWidth: '40%' },
+  projectSeparator: {
+    fontSize: FontSize.caption,
+    lineHeight: LineHeight.caption,
   },
   rowCount: {
     fontSize: FontSize.caption,

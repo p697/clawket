@@ -10,6 +10,13 @@ describe('getTailEntranceMessageIds', () => {
     expect(getTailEntranceMessageIds([user('u1')], [])).toEqual([]);
   });
 
+  it('animates the first message of an authoritative empty conversation, within the burst budget', () => {
+    expect(getTailEntranceMessageIds([], [user('u1')], undefined, true)).toEqual(['u1']);
+    expect(getTailEntranceMessageIds([], [], undefined, true)).toEqual([]);
+    const burst = [user('u4'), user('u3'), user('u2'), user('u1')];
+    expect(getTailEntranceMessageIds([], burst, undefined, true)).toEqual([]);
+  });
+
   it('animates a freshly sent turn and the reply placeholder that follows it', () => {
     const previous = [assistant('a0', 'Earlier')];
     const next = [assistant('streaming', '', true), user('usr_2'), ...previous];

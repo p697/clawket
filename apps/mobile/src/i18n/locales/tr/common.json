@@ -140,6 +140,7 @@
   "Online": "Çevrimiçi",
   "Offline": "Çevrimdışı",
   "Connecting": "Bağlanıyor",
+  "Not connected": "Bağlı değil",
   "Models": "Modeller",
   "Skills": "Beceriler",
   "Usage": "Kullanım",
@@ -168,6 +169,8 @@
   "Reset session?": "Oturum sıfırlansın mı?",
   "Reset": "Sıfırla",
   "Scheduled": "Zamanlanmış",
+  "Scheduled task": "Zamanlanmış görev",
+  "Scheduled task: {{name}}": "Zamanlanmış görev: {{name}}",
   "Search sessions": "Oturumlarda ara",
   "Session actions": "Oturum eylemleri",
   "Sessions require permission": "Oturumlar için izin gerekiyor",
@@ -247,5 +250,10 @@
   "Search and bulk export": "Arama ve toplu dışa aktarma",
   "Skill and memory versions": "Beceri ve bellek sürümleri",
   "Yes": "Evet",
-  "No": "Hayır"
+  "No": "Hayır",
+  "All projects": "Tüm projeler",
+  "Projects": "Projeler",
+  "Choose a project": "Proje seç",
+  "Search projects": "Proje ara",
+  "Next": "İleri"
 }

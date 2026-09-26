@@ -1,0 +1,46 @@
+name = "clawket-claude-code-registry"
+main = "src/index.ts"
+compatibility_date = "2026-09-17"
+workers_dev = true
+account_id = "00000000000000000000000000000000"
+
+[observability]
+enabled = true
+redact_query_string = true
+
+[observability.logs]
+enabled = true
+invocation_logs = false
+
+[observability.traces]
+enabled = false
+
+[vars]
+RELAY_BACKEND = "claude-code"
+# Set PAIRING_TICKET_SECRET with `wrangler secret put` on both Claude Code workers;
+# never place that shared secret in this file.
+# Also set the shared PAIRING_SYNC_SECRET from the isolated Claude Code Relay.
+RELAY_REGION_MAP = "{\"cn\":\"wss://clawket-claude-code-relay.example.workers.dev/ws\",\"sg\":\"wss://clawket-claude-code-relay.example.workers.dev/ws\",\"us\":\"wss://clawket-claude-code-relay.example.workers.dev/ws\",\"eu\":\"wss://clawket-claude-code-relay.example.workers.dev/ws\"}"
+PAIR_ACCESS_CODE_TTL_SEC = "600"
+PAIR_CLIENT_TOKEN_MAX = "8"
+PAIR_PUBLIC_BASE_URL = "https://clawket-claude-code-registry.example.workers.dev"
+PAIR_SESSION_RESOLVE_MAX_ATTEMPTS = "5"
+APPLE_APP_IDS = "TEAMID.com.example.clawket"
+ANDROID_APP_LINK_PACKAGE = "com.example.clawket"
+ANDROID_APP_LINK_SHA256_CERT_FINGERPRINTS = ""
+
+[[durable_objects.bindings]]
+name = "PAIR_REGISTER_LIMITER"
+class_name = "PairRegisterRateLimiter"
+
+[[kv_namespaces]]
+binding = "ROUTES_KV"
+id = "00000000000000000000000000000000"
+
+[[services]]
+binding = "RELAY_SYNC_SERVICE"
+service = "clawket-claude-code-relay"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["PairRegisterRateLimiter"]

@@ -158,7 +158,6 @@
   "Voice input": "음성 입력",
   "Stop voice input": "음성 입력 중지",
   "Listening…": "듣는 중…",
-  "Preparing voice input…": "음성 입력을 준비하는 중…",
   "Send": "보내기",
   "Reconnect": "다시 연결",
   "Offline · reconnecting": "오프라인 · 다시 연결 중",
@@ -380,5 +379,12 @@
   "{{channel}} member": "{{channel}} 멤버",
   "Agent needs your input": "에이전트가 응답을 기다리고 있어요",
   "Respond": "응답",
-  "Continue in a new session": "새 세션에서 계속"
+  "Continue in a new session": "새 세션에서 계속",
+  "thinking_none": "끄기",
+  "thinking_max": "최대",
+  "thinking_ultra": "최상",
+  "Allow this action?": "이 작업을 허용할까요?",
+  "Stop task": "작업 중지",
+  "Your answer": "답변",
+  "Question {{current}} of {{total}}": "질문 {{current}} / {{total}}"
 }

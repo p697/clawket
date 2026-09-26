@@ -1,4 +1,7 @@
 import { AgentQuestions } from './AgentQuestions';
+import { ConversationEntry } from './ConversationEntry';
+import { SessionPreferencesService } from '../../services/session-preferences';
+import type { SessionPanelProps } from '../SessionPanel/SessionPanel';
 import { SessionFilesSheet } from './components/SessionFilesSheet';
 import { Button } from '../../components/ui/Button';
 import { Banner } from '../../components/ui/Banner';
@@ -132,6 +135,9 @@ function areThreadRunCardsEqual(
 type NavigationProps = NativeStackScreenProps<RootStackParamList, 'Thread'>;
 
 export type ThreadScreenProps = NavigationProps & Readonly<{
+  onSessionAction?: SessionPanelProps['onSessionAction'];
+  onSessionPanelAfterClose?: () => void;
+  pinnedSessionKeys?: SessionPanelProps['pinnedSessionKeys'];
   locked?: boolean;
   sessionHistoryGraceActive?: boolean;
   lockedReason?: 'gatewayConnections' | 'agents';
@@ -172,6 +178,13 @@ export function ThreadScreen(props: ThreadScreenProps): React.JSX.Element {
   useEffect(() => {
     if (focused && app.currentAgentId !== agentId) app.setCurrentAgentId(agentId);
   }, [focused, app.currentAgentId, app.setCurrentAgentId, agentId]);
+  const sessionExists = snapshot.roster.find(group => group.connection.id === connectionId)?.agents
+    .find(row => row.agent.agentId === agentId)?.sessions?.some(session => session.key === sessionKey) === true;
+  useEffect(() => {
+    if (!focused || props.locked || agent?.entryMode !== 'sessions' || !sessionKey || !sessionExists) return;
+    void SessionPreferencesService.setLastSession(connectionId, agentId, sessionKey).catch(() => {});
+  }, [focused, props.locked, agent?.entryMode, connectionId, agentId, sessionKey, sessionExists]);
+  if (!sessionKey) return <ConversationEntry {...props} />;
   return <AppContextProvider value={scoped}>
     <ThreadScreenContent key={`${connectionId}:${agentId}`} {...props} focused={focused} />
   </AppContextProvider>;
@@ -261,13 +274,20 @@ function ThreadScreenContent({
 
   const rosterSession = connections.roster.find((group) => group.connection.id === connectionId)
     ?.agents.find((row) => row.agent.agentId === agentId)?.sessions?.find((session) => session.key === sessionKey);
-  const nativeReadOnly = capabilities.sessionBranch === true && rosterSession?.source === 'native';
+  const nativeReadOnly = capabilities.sessionBranch === true && rosterSession?.source === 'native' && rosterSession.canContinue !== true;
+  // A stable object, so streamed chunks do not hand the timeline a new row renderer.
+  const timelineCapabilities = useMemo(
+    () => (nativeReadOnly ? { ...capabilities, chat: false } : capabilities),
+    [capabilities, nativeReadOnly],
+  );
   const [branching, setBranching] = useState(false);
   const [branchError, setBranchError] = useState(false);
   const nativeBranchBusy = useRef(false);
   const mainConversation = isMainConversation({ sessionKey, mainSessionKey: app.mainSessionKey, kind: rosterSession?.kind });
   const manualSession = useManualSession(connectionId, agentId, sessionKey);
-  const sessionPreview = !locked && !manualSession && !mainConversation && !isPro && !sessionHistoryGraceActive;
+  const ownedConversation = connections.roster.find(group => group.connection.id === connectionId)?.agents
+    .find(row => row.agent.agentId === agentId)?.agent.entryMode === 'sessions' && rosterSession?.source === 'bridge';
+  const sessionPreview = !locked && !manualSession && !ownedConversation && !mainConversation && !isPro && !sessionHistoryGraceActive;
   const previewSnapshot = useRef<SessionPreviewSnapshot | null>(null);
   const controller = useChatController({
     adapter,
@@ -900,6 +920,7 @@ function ThreadScreenContent({
         agentEmoji={agentEmoji}
         agentAvatarUrl={agentAvatarUrl}
         sessionTitle={currentSession?.title ?? currentSession?.label}
+        projectPath={rosterSession?.project?.path}
         isMainSession={mainConversation}
         model={controller.currentModelHeaderLabel}
         modelDisplayName={controller.currentModelDisplayName}
@@ -908,7 +929,7 @@ function ThreadScreenContent({
           : currentSession?.totalTokens}
         contextWindow={currentSession?.contextTokens}
         activityLabel={controller.activityLabel}
-        capabilities={nativeReadOnly ? { ...capabilities, chat: false } : capabilities}
+        capabilities={timelineCapabilities}
         readOnlyFooter={nativeReadOnly && !sessionPreview ? <View style={{ padding: Space.lg, paddingBottom: Math.max(insets.bottom, Space.lg) }}>
           <Button label={t('Continue in a new session')} loading={branching} disabled={adapter?.state !== 'ready'} onPress={() => {
             if (nativeBranchBusy.current || !adapter?.createSession) return;
@@ -926,7 +947,8 @@ function ThreadScreenContent({
           hasHiddenHistory: Boolean(projection?.hasHiddenHistory),
           loading: state.kind === 'loading' || (state.kind === 'reconnecting' && visibleMessages.length === 0),
           onUpgrade: openSessionPaywall,
-          onMain: returnToMain,
+          onMain: app.mainSessionKey ? returnToMain : onOpenSessionPanel ?? (() => navigation.goBack()),
+          mainLabel: app.mainSessionKey ? undefined : t('Sessions', { ns: 'common' }),
         } : undefined}
         compactionNotice={sessionPreview ? undefined : controller.compactionNotice}
         sendFailure={sharedDraft.failed ? t('Unable to attach shared content') : controller.sendFailure}
@@ -941,6 +963,7 @@ function ThreadScreenContent({
         }} /> : undefined}
         composerRef={controller.composerRef}
         isRunning={controller.isSending}
+        pendingReplyRenderKey={controller.pendingReplyRenderKey}
         canSend={!sessionPreview && controller.canSend}
         loadingMoreHistory={!sessionPreview && controller.loadingMoreHistory}
         topInset={insets.top}
@@ -1181,7 +1204,6 @@ export function createThreadCopy(t: TFunction): ThreadCopy {
     voice: t('Voice input', { ns: 'chat' }),
     stopVoice: t('Stop voice input', { ns: 'chat' }),
     listening: t('Listening…', { ns: 'chat' }),
-    preparingVoice: t('Preparing voice input…', { ns: 'chat' }),
     send: t('Send', { ns: 'chat' }),
     stop: t('Stop', { ns: 'chat' }),
     queueSend: t('Send after this reply', { ns: 'chat' }),

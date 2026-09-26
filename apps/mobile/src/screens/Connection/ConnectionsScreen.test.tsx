@@ -152,6 +152,34 @@ describe('ConnectionsScreen', () => {
     expect(onOpen).toHaveBeenCalledWith('lab');
   });
 
+  it('marks the live connection with the roster dot and reads the others as not connected', () => {
+    const desk = connection({ id: 'desk', label: 'Desk', isFreeSlot: false });
+    const base = runtime();
+    mockRuntime = runtime({
+      connections: [...(base.connections as ConnectionDescriptor[]), desk],
+      roster: [...(base.roster as unknown[]), { connection: desk, agents: [{ agent: { name: 'Ops' } }] }],
+    });
+    const view = render(<ConnectionsScreen {...props()} />);
+
+    expect(view.getByTestId('connection-list-studio-live').props.style).toEqual(expect.arrayContaining([
+      expect.objectContaining({ borderColor: '#FFFFFF' }),
+    ]));
+    expect(view.getByText('Not connected')).toBeTruthy();
+    expect(view.queryByText('Offline')).toBeNull();
+    expect(view.queryByTestId('connection-list-desk-live')).toBeNull();
+    expect(view.queryByTestId('connection-list-lab-live')).toBeNull();
+
+    // The active connection keeps offline for a real failure and loses the dot while connecting.
+    mockRuntime = runtime({ activeState: 'offline' });
+    view.rerender(<ConnectionsScreen {...props()} />);
+    expect(view.getByText('Offline')).toBeTruthy();
+    expect(view.queryByTestId('connection-list-studio-live')).toBeNull();
+    mockRuntime = runtime({ activeState: 'connecting' });
+    view.rerender(<ConnectionsScreen {...props()} />);
+    expect(view.getByText('Connecting')).toBeTruthy();
+    expect(view.queryByTestId('connection-list-studio-live')).toBeNull();
+  });
+
   it('swipes to pause or resume and to remove, confirming what the connection page confirms', async () => {
     const onPause = jest.fn(async () => undefined);
     const onResume = jest.fn(async () => undefined);

@@ -11,7 +11,7 @@ type MockRecentPhotos = {
 
 const mockRequest = jest.fn();
 let mockRecentPhotos: MockRecentPhotos;
-let mockUseRecentPhotosArgs: { active: boolean } | null = null;
+let mockUseRecentPhotosArgs: { active: boolean; prefetch?: boolean } | null = null;
 
 jest.mock('react-native', () => {
   const ReactRuntime = require('react');
@@ -87,7 +87,7 @@ jest.mock('../../../theme', () => ({
 }));
 
 jest.mock('../../../hooks/useRecentPhotos', () => ({
-  useRecentPhotos: (args: { active: boolean }) => {
+  useRecentPhotos: (args: { active: boolean; prefetch?: boolean }) => {
     mockUseRecentPhotosArgs = args;
     return { ...mockRecentPhotos, request: mockRequest };
   },
@@ -275,9 +275,10 @@ describe('ThreadAddSheet', () => {
     expect(props.onPickImage).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps a skeleton strip until the sheet has risen and access is known', () => {
+  it('keeps the skeleton only while photo access is unknown', () => {
     mockRecentPhotos = { access: 'checking', photos: [], loading: true, request: mockRequest };
     const { view, props } = renderSheet();
+    expect(mockUseRecentPhotosArgs).toEqual({ active: true, prefetch: true });
     expect(view.getByTestId('thread-add-media-skeleton')).toBeTruthy();
     expect(view.queryByTestId('thread-add-tiles')).toBeNull();
     expect(props.onPresented).not.toHaveBeenCalled();
@@ -285,12 +286,37 @@ describe('ThreadAddSheet', () => {
     expect(view.getByTestId('thread-add-media-skeleton')).toBeTruthy();
   });
 
+  it('draws the known layout on the first frame, with no skeleton swap', () => {
+    const { view } = renderSheet();
+    expect(view.getByTestId('thread-add-tiles')).toBeTruthy();
+    expect(view.queryByTestId('thread-add-media-skeleton')).toBeNull();
+  });
+
+  it('holds the strip layout with placeholders while granted photos load', () => {
+    mockRecentPhotos = { access: 'granted', photos: [], loading: true, request: mockRequest };
+    const { view, rerender } = renderSheet();
+    expect(view.getByTestId('thread-add-media-strip')).toBeTruthy();
+    expect(view.getAllByTestId('skeleton-tile')).toHaveLength(3);
+    expect(view.getByTestId('thread-add-camera')).toBeTruthy();
+    // The header action and file row are already in place, so nothing reflows when photos land.
+    expect(view.getByTestId('thread-add-all-photos')).toBeTruthy();
+    expect(view.getByTestId('thread-add-file')).toBeTruthy();
+    expect(view.queryByTestId('thread-add-media-skeleton')).toBeNull();
+
+    mockRecentPhotos = { access: 'granted', photos: [photo('a'), photo('b')], loading: false, request: mockRequest };
+    rerender({});
+    expect(view.getByTestId('thread-add-photo-a')).toBeTruthy();
+    expect(view.queryAllByTestId('skeleton-tile')).toHaveLength(0);
+    expect(view.getByTestId('thread-add-all-photos')).toBeTruthy();
+    expect(view.getByTestId('thread-add-file')).toBeTruthy();
+  });
+
   it('renders the recent strip with ordered multi-select and attaches after dismissal', () => {
     mockRecentPhotos = { access: 'granted', photos: [photo('a'), photo('b'), photo('c')], loading: false, request: mockRequest };
     const { view, props } = renderSheet({ remainingAttachmentSlots: 2 });
-    expect(view.getByTestId('thread-add-media-skeleton')).toBeTruthy();
-    act(() => { jest.advanceTimersByTime(400); });
 
+    // Cached photos paint with the sheet's first frame.
+    expect(view.queryByTestId('thread-add-media-skeleton')).toBeNull();
     expect(view.getByTestId('thread-add-media-strip')).toBeTruthy();
     expect(view.getByTestId('thread-add-camera')).toBeTruthy();
     expect(view.getByTestId('thread-add-all-photos')).toBeTruthy();
@@ -331,7 +357,7 @@ describe('ThreadAddSheet', () => {
     mockRecentPhotos = { access: 'granted', photos: [photo('a')], loading: false, request: mockRequest };
     const { view, rerender } = renderSheet({ attachmentsEnabled: false });
     act(() => { jest.advanceTimersByTime(400); });
-    expect(mockUseRecentPhotosArgs).toEqual({ active: false });
+    expect(mockUseRecentPhotosArgs).toEqual({ active: false, prefetch: false });
     expect(view.queryByTestId('thread-add-media-strip')).toBeNull();
 
     rerender({ attachmentsEnabled: true });

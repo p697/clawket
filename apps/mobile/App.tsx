@@ -1311,6 +1311,7 @@ function AppContent({
       ?.agents.find(item => item.agent.agentId === row.agentId)?.agent;
     if (!agent) return false;
     return isPro || isGraceActive(entitlement)
+      || (agent.entryMode === 'sessions' && row.source === 'bridge')
       || manualSessions.some(item => item.connectionId === row.connectionId && item.agentId === row.agentId && item.key === row.key)
       || isMainConversation({ sessionKey: row.key, mainSessionKey: agent.mainSessionKey, kind: row.kind });
   }, [canAccessRosterAgent, connections.roster, isPro, entitlement, manualSessions]);
@@ -1355,7 +1356,23 @@ function AppContent({
       await SessionPreferencesService.clearSession(row.connectionId, row.agentId, row.key);
     }
     await getConnectionRuntime().refreshRoster();
+    if (action === 'delete') {
+      const current = rootNavigationRef.getCurrentRoute();
+      const params = current?.name === 'Thread' ? current.params as RootStackParamList['Thread'] : undefined;
+      const agent = getConnectionRuntime().getSnapshot().roster.find(group => group.connection.id === row.connectionId)
+        ?.agents.find(item => item.agent.agentId === row.agentId)?.agent;
+      if (agent?.entryMode === 'sessions' && params?.connectionId === row.connectionId && params.sessionKey === row.key) {
+        setSessionPanelVisible(false);
+        rootNavigationRef.dispatch(StackActions.replace('Thread', { ...params, sessionKey: '' }));
+      }
+    }
   }, [canAccessConnection, canAccessRosterAgent, presentPaywall, connections.activeAdapter, canExportSession]);
+
+  const handleSessionPanelAfterClose = useCallback(() => {
+    const target = pendingExport.current;
+    pendingExport.current = null;
+    if (target && connections.activeAdapter?.connection.id === target.connectionId && canExportSession(target)) setExportTarget(target);
+  }, [connections.activeAdapter, canExportSession]);
 
   const handleAccountSectionAction = useCallback((
     request: AccountSettingsSectionActionRequest,
@@ -1715,6 +1732,9 @@ function AppContent({
                   {(props) => (
                     <ThreadScreen
                       {...props}
+                      onSessionAction={handleSessionAction}
+                      onSessionPanelAfterClose={handleSessionPanelAfterClose}
+                      pinnedSessionKeys={pinnedSessionKeys}
                       sessionHistoryGraceActive={isGraceActive(entitlement)}
                       locked={!canAccessRosterAgent(
                         props.route.params.connectionId,
@@ -1904,7 +1924,8 @@ function AppContent({
                     const runtime = getConnectionRuntime();
                     const freeSlot = resolveConnectionFreeSlot(connection.id);
                     return <ConnectionScreen connection={connection}
-                      state={connections.activeConnectionId === connection.id ? connections.activeState : 'offline'}
+                      active={connections.activeConnectionId === connection.id}
+                      state={connections.activeConnectionId === connection.id ? connections.activeState : 'idle'}
                       paused={connections.pausedConnectionIds?.includes(connection.id) ?? false}
                       agentNames={connections.roster.find((group) => group.connection.id === connection.id)?.agents.map(({ agent }) => agent.name) ?? []}
                       details={connections.connectionDetails[connection.id]}
@@ -2075,11 +2096,11 @@ function AppContent({
                   setCurrentAgentId(row.agentId);
                   if (rootNavigationRef.isReady()) rootNavigationRef.navigate('Thread', params);
                 }}
-                onCreateSession={async (agent) => {
+                onCreateSession={async (agent, projectId) => {
                   const create = async () => {
                     const adapter = connections.activeAdapter;
                     if (adapter?.connection.id !== agent.connectionId || !adapter.capabilities.sessionCreate || !adapter.createSession) throw new Error('Session creation unavailable');
-                    const session = await ManualSessions.create(adapter, agent.agentId);
+                    const session = await ManualSessions.create(adapter, agent.agentId, 'manual', projectId ? { projectId } : undefined);
                     if (getConnectionRuntime().getSnapshot().activeAdapter !== adapter || !rootNavigationRef.isReady()) return;
                     const params: RootStackParamList['Thread'] = { connectionId: agent.connectionId, agentId: agent.agentId, sessionKey: session.key, from: 'panel' };
                     setThreadContext(params); setCurrentAgentId(agent.agentId);
@@ -2090,11 +2111,7 @@ function AppContent({
                   } else await create();
                 }}
                 onSessionAction={handleSessionAction}
-                onAfterClose={() => {
-                  const target = pendingExport.current;
-                  pendingExport.current = null;
-                  if (target && connections.activeAdapter?.connection.id === target.connectionId && canExportSession(target)) setExportTarget(target);
-                }}
+                onAfterClose={handleSessionPanelAfterClose}
                 onOpenPermission={() => presentPaywall(
                   threadContext && !canAccessConnection(threadContext.connectionId)
                     ? 'gatewayConnections'

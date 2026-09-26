@@ -1,6 +1,6 @@
 import { type RefObject, useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, AppState, Linking, Platform } from 'react-native';
-import { getRecordingPermissionsAsync, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioStream } from 'expo-audio';
+import { getRecordingPermissionsAsync, requestRecordingPermissionsAsync } from 'expo-audio';
 import { useSharedValue } from 'react-native-reanimated';
 import type { ComposerHandle } from '../components/ui/Composer';
 import { analyticsEvents } from '../services/analytics/events';
@@ -12,37 +12,46 @@ import { SpeechError, speechError, speechErrorCopy } from '../services/speech/sp
 import { speechCaptureLease } from '../services/speech/speechCaptureLease';
 import { SpeechPcm } from '../services/speech/speechPcm';
 import { createSpeechLevelState, processSpeechLevel } from '../services/speech/speechLevel';
+import { voiceCapture, voiceCaptureAvailable, type VoiceCaptureTiming } from '../services/speech/voiceCapture';
 
-type Phase = 'idle' | 'authorizing' | 'listening' | 'transcribing';
+type Phase = 'idle' | 'listening' | 'transcribing';
 type Props = {
   composerRef: RefObject<ComposerHandle | null>; input: string; setInput: (value: string) => void;
   t: (key: string, options?: Record<string, unknown>) => string;
   scope?: string; enabled?: boolean; onSubmit?: (text: string) => void;
 };
 type Attempt = {
-  scope: string; draft: string; pcm: SpeechPcm; recording?: SpeechRecording;
+  scope: string; draft: string; pcm: SpeechPcm; recording?: SpeechRecording; captureId: string;
   cancelled: boolean; stopped: boolean; send: boolean; captured: boolean;
   releaseCapture?: () => void;
-  nativeStart?: Promise<void>; restoring?: Promise<void>; timer?: ReturnType<typeof setTimeout>;
+  nativeStart?: Promise<unknown>; restoring?: Promise<void>; timer?: ReturnType<typeof setTimeout>;
   connection?: SpeechConnection; abort: AbortController; stop: () => void; stoppedPromise: Promise<void>;
   error?: SpeechError; startedAt: number; firstBuffer: boolean;
 };
+let captureSequence = 0;
+const nextCaptureId = () => `voice-${Date.now().toString(36)}-${++captureSequence}`;
+const timingProperties = (timing: VoiceCaptureTiming) => ({
+  queue_ms: timing.queueMs, activate_ms: timing.activateMs, engine_ms: timing.engineMs, start_ms: timing.startMs,
+  warm: timing.warm, input_route: timing.inputRoute, bluetooth: timing.bluetooth, other_audio: timing.otherAudio,
+});
 
 /** Capture is local and independent of transcription. Only this attempt owns native teardown. */
 export function useChatVoiceInput(options: Props) {
   const latest = useRef(options); latest.current = options;
   const mounted = useRef(true), permissionGranted = useRef(false), permissionGeneration = useRef(0);
-  const observedStreaming = useRef(false), active = useRef<Attempt | null>(null);
+  const active = useRef<Attempt | null>(null);
   const [voiceInputState, setPhase] = useState<Phase>('idle');
   const [voiceRecoveryCount, setRecoveryCount] = useState(0);
   const [voiceRecordingSaved, setRecordingSaved] = useState(false);
+  const [captureWarm, setCaptureWarm] = useState(false);
   const voiceInputLevel = useSharedValue(0), meter = useRef(createSpeechLevelState());
+  const supported = Boolean(speechServiceUrl) && voiceCaptureAvailable && (Platform.OS === 'ios' || Platform.OS === 'android');
   const finishRef = useRef<(send: boolean) => void>(() => {});
   const stopCaptureError = useRef<(error: unknown) => void>(() => {});
-  const { stream, isStreaming } = useAudioStream({ sampleRate: 16000, channels: 1, encoding: 'float32',
-    onBuffer(buffer) {
+  useEffect(() => {
+    const buffers = voiceCapture.onBuffer((buffer) => {
       const op = active.current;
-      if (!op || op.cancelled || op.stopped || !op.recording) return;
+      if (!op || op.cancelled || op.stopped || !op.recording || buffer.captureId !== op.captureId) return;
       try {
         const pcm = op.pcm.convert(buffer.data, buffer.sampleRate, buffer.channels);
         const bytes = pcm.slice(0, RECORDING_SECONDS * PCM_BYTES_PER_SECOND - op.recording.bytes);
@@ -58,9 +67,14 @@ export function useChatVoiceInput(options: Props) {
         meter.current = level.state; voiceInputLevel.value = level.level;
         if (op.recording.bytes >= RECORDING_SECONDS * PCM_BYTES_PER_SECOND) finishRef.current(false);
       } catch (error) { stopCaptureError.current(error); }
-    },
-  });
-  const streamRef = useRef(stream); streamRef.current = stream;
+    });
+    // Interruptions and lost routes end capture natively; keep and transcribe what was recorded.
+    const statuses = voiceCapture.onStatus((status) => {
+      const op = active.current;
+      if (op && status.captureId === op.captureId && !op.cancelled && !op.stopped) finishRef.current(false);
+    });
+    return () => { buffers.remove(); statuses.remove(); };
+  }, [voiceInputLevel]);
   const currentScopeEnabled = () => latest.current.enabled !== false;
   const current = (op: Attempt) => mounted.current && !op.cancelled && active.current === op && op.scope === (latest.current.scope ?? '') && latest.current.enabled !== false;
   const refresh = () => {
@@ -72,10 +86,7 @@ export function useChatVoiceInput(options: Props) {
     if (op.restoring) return op.restoring;
     op.restoring = (async () => {
       await op.nativeStart?.catch(() => {});
-      if (op.captured) {
-        try { streamRef.current.stop(); } catch { /* Already stopped. */ }
-        await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true }).catch(() => {});
-      }
+      if (op.captured) await voiceCapture.stop(op.captureId).catch(() => {});
       try { op.recording?.close(); } catch { op.error ??= new SpeechError('speech_storage'); } finally { op.releaseCapture?.(); }
       if (active.current === op) voiceInputLevel.value = 0;
     })();
@@ -109,8 +120,9 @@ export function useChatVoiceInput(options: Props) {
   const report = (error: SpeechError, retry?: () => void) => {
     const t = latest.current.t;
     analyticsEvents.chatVoiceInputFailed({ code: error.code, stage: error.code === 'speech_permission' ? 'permissions' : error.code === 'speech_capture_failed' ? 'start' : 'recognition', request_id: error.requestId || undefined });
+    const retryAfterMs = error.remainingRetryMs;
     const detail = [t(speechErrorCopy(error), { ns: 'chat' }),
-      error.retryAfterMs ? t('Try again in {{seconds}} seconds.', { ns: 'chat', seconds: Math.ceil(error.retryAfterMs / 1000) }) : '',
+      retryAfterMs ? t('Try again in {{seconds}} seconds.', { ns: 'chat', seconds: Math.ceil(retryAfterMs / 1000) }) : '',
       `${error.code}${error.requestId ? ` · ${error.requestId}` : ''}`].filter(Boolean).join('\n');
     Alert.alert(t('Voice input failed', { ns: 'chat' }), detail, error.code === 'speech_permission'
       ? [{ text: t('Cancel', { ns: 'common' }), style: 'cancel' }, { text: t('Settings', { ns: 'common' }), onPress: () => { void Linking.openSettings(); } }]
@@ -120,17 +132,20 @@ export function useChatVoiceInput(options: Props) {
     if (active.current || latest.current.enabled === false) return;
     let stop!: () => void;
     const op: Attempt = { scope: latest.current.scope ?? '', draft: latest.current.input || retained?.metadata.draft || '', pcm: new SpeechPcm(),
-      recording: retained, cancelled: false, stopped: Boolean(retained), send: false, captured: false,
+      recording: retained, captureId: nextCaptureId(), cancelled: false, stopped: Boolean(retained), send: false, captured: false,
       abort: new AbortController(), stoppedPromise: new Promise<void>((resolve) => { stop = resolve; }), stop: () => stop(),
       startedAt: Date.now(), firstBuffer: false };
     if (retained) op.stop();
-    active.current = op; observedStreaming.current = false;
-    setPhase(retained ? 'transcribing' : 'authorizing'); setRecordingSaved(false); meter.current = createSpeechLevelState();
+    active.current = op;
+    // With permission known, the recorder appears on the press itself while the microphone starts natively.
+    const listen = () => { setPhase('listening'); triggerLightImpact(); };
+    if (retained) setPhase('transcribing'); else if (permissionGranted.current) listen();
+    setRecordingSaved(false); meter.current = createSpeechLevelState();
     latest.current.composerRef.current?.blur();
     analyticsEvents.chatVoiceInputTapped({ action: 'start', has_existing_text: Boolean(op.draft.trim()), locale: 'system', source: 'chat_composer' });
     let failure: SpeechError | undefined;
     try {
-      if (!speechServiceUrl) throw new SpeechError('speech_unavailable');
+      if (!speechServiceUrl || !voiceCaptureAvailable) throw new SpeechError('speech_unavailable');
       if (!retained) {
         if (!permissionGranted.current) {
           const existing = await getRecordingPermissionsAsync();
@@ -139,16 +154,18 @@ export function useChatVoiceInput(options: Props) {
           if (!current(op)) return;
           permissionGranted.current = permission.granted;
           if (!permission.granted) throw new SpeechError('speech_permission');
+          setCaptureWarm(true); listen();
         }
         op.releaseCapture = await speechCaptureLease.acquire(op.abort.signal);
         if (!current(op)) { op.releaseCapture(); return; }
         op.recording = createRecording(op.scope, op.draft);
         op.captured = true;
-        op.nativeStart = Promise.resolve().then(() => streamRef.current.start());
-        try { await op.nativeStart; } catch { permissionGranted.current = false; throw new SpeechError('speech_capture_failed'); }
+        const nativeStart = voiceCapture.start(op.captureId, op.startedAt);
+        op.nativeStart = nativeStart;
+        let timing: VoiceCaptureTiming;
+        try { timing = await nativeStart; } catch { permissionGranted.current = false; throw new SpeechError('speech_capture_failed'); }
         if (!current(op)) return;
-        analyticsEvents.chatVoiceInputTiming({ stage: 'native_started', duration_ms: Date.now() - op.startedAt });
-        setPhase('listening'); triggerLightImpact();
+        analyticsEvents.chatVoiceInputTiming({ stage: 'native_started', duration_ms: Date.now() - op.startedAt, ...timingProperties(timing) });
         op.timer = setTimeout(() => stopVoiceInput(false), RECORDING_SECONDS * 1000);
       }
       let text = '';
@@ -204,25 +221,28 @@ export function useChatVoiceInput(options: Props) {
     const warmPermission = () => {
       const generation = ++permissionGeneration.current;
       void getRecordingPermissionsAsync().then((permission) => {
-        if (mounted.current && generation === permissionGeneration.current) permissionGranted.current = permission.granted;
+        if (!mounted.current || generation !== permissionGeneration.current) return;
+        permissionGranted.current = permission.granted; setCaptureWarm(permission.granted);
       }).catch(() => {});
     };
-    if (speechServiceUrl) warmPermission(); // Never prompts or opens the microphone.
+    const warmable = Boolean(speechServiceUrl) && voiceCaptureAvailable;
+    if (warmable) warmPermission(); // Never prompts or opens the microphone.
     const sub = AppState.addEventListener('change', (state) => {
-      if (state !== 'active') { permissionGeneration.current++; permissionGranted.current = false; suspend(); }
-      else { if (speechServiceUrl) warmPermission(); refresh(); }
+      if (state !== 'active') { permissionGeneration.current++; permissionGranted.current = false; setCaptureWarm(false); suspend(); }
+      else { if (warmable) warmPermission(); refresh(); }
     });
     return () => { mounted.current = false; permissionGeneration.current++; suspend(); sub.remove(); };
   }, [suspend]);
+  // A focused chat keeps the recorder prepared; nothing is captured until a press.
   useEffect(() => {
-    if (isStreaming) observedStreaming.current = true;
-    if (isStreaming === false && observedStreaming.current && voiceInputState === 'listening') stopVoiceInput(false);
-  }, [isStreaming, voiceInputState, stopVoiceInput]);
+    if (!captureWarm || options.enabled === false || !supported) return undefined;
+    return voiceCapture.hold();
+  }, [captureWarm, options.enabled, supported]);
   useEffect(() => { suspend(); refresh(); }, [options.scope, options.enabled, suspend]);
   return {
     startVoiceInput, stopVoiceInput, cancelVoiceInput, recoverVoiceInput, voiceRecoveryCount, voiceRecordingSaved,
     toggleVoiceInput: () => { if (active.current) stopVoiceInput(false); else startVoiceInput(); },
     voiceInputActive: voiceInputState !== 'idle', voiceInputDisabled: options.enabled === false,
-    voiceInputLevel, voiceInputState, voiceInputSupported: Boolean(speechServiceUrl) && (Platform.OS === 'ios' || Platform.OS === 'android'),
+    voiceInputLevel, voiceInputState, voiceInputSupported: supported,
   };
 }

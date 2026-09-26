@@ -158,7 +158,6 @@
   "Voice input": "語音輸入",
   "Stop voice input": "停止語音輸入",
   "Listening…": "正在聆聽…",
-  "Preparing voice input…": "正在開啟麥克風…",
   "Send": "傳送",
   "Reconnect": "重新連線",
   "Offline · reconnecting": "離線 · 正在重新連線",
@@ -380,5 +379,12 @@
   "{{channel}} member": "{{channel}} 成員",
   "Agent needs your input": "Agent 需要你的回覆",
   "Respond": "回覆",
-  "Continue in a new session": "在新對話中繼續"
+  "Continue in a new session": "在新對話中繼續",
+  "thinking_none": "關閉",
+  "thinking_max": "最高",
+  "thinking_ultra": "極致",
+  "Allow this action?": "允許此操作？",
+  "Stop task": "停止任務",
+  "Your answer": "你的回答",
+  "Question {{current}} of {{total}}": "第 {{current}} / {{total}} 題"
 }

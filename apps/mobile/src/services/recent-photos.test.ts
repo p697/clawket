@@ -2,6 +2,7 @@ const getPermissionsAsyncMock = jest.fn();
 const requestPermissionsAsyncMock = jest.fn();
 const getAssetsAsyncMock = jest.fn();
 const getAssetInfoAsyncMock = jest.fn();
+const addListenerMock = jest.fn();
 
 jest.mock('expo-media-library/legacy', () => ({
   MediaType: { photo: 'photo', video: 'video' },
@@ -10,16 +11,19 @@ jest.mock('expo-media-library/legacy', () => ({
   requestPermissionsAsync: (...args: unknown[]) => requestPermissionsAsyncMock(...args),
   getAssetsAsync: (...args: unknown[]) => getAssetsAsyncMock(...args),
   getAssetInfoAsync: (...args: unknown[]) => getAssetInfoAsyncMock(...args),
+  addListener: (...args: unknown[]) => addListenerMock(...args),
 }));
 
 import {
   RECENT_PHOTO_FIRST_BATCH,
   getRecentPhotoAccess,
+  getRecentPhotoPermission,
   isRenderableLocalUri,
   loadRecentPhotos,
   normalizePhotoPermission,
   requestRecentPhotoAccess,
   resolveRecentPhotoSupport,
+  subscribeToRecentPhotoChanges,
 } from './recent-photos';
 
 function asset(id: string, overrides: Record<string, unknown> = {}) {
@@ -43,6 +47,7 @@ describe('recent-photos', () => {
     requestPermissionsAsyncMock.mockReset();
     getAssetsAsyncMock.mockReset();
     getAssetInfoAsyncMock.mockReset();
+    addListenerMock.mockReset();
   });
 
   it('offers the strip on iOS only; Android keeps the system Photo Picker', () => {
@@ -57,6 +62,17 @@ describe('recent-photos', () => {
     expect(normalizePhotoPermission({ status: 'granted', granted: true, accessPrivileges: 'none' })).toBe('denied');
     expect(normalizePhotoPermission({ status: 'denied', granted: false })).toBe('denied');
     expect(normalizePhotoPermission({ status: 'undetermined', granted: false })).toBe('undetermined');
+  });
+
+  it('reports limited library access separately from full access', async () => {
+    getPermissionsAsyncMock.mockResolvedValueOnce({ status: 'granted', granted: true, accessPrivileges: 'limited' });
+    await expect(getRecentPhotoPermission()).resolves.toEqual({ access: 'granted', limited: true });
+    getPermissionsAsyncMock.mockResolvedValueOnce({ status: 'granted', granted: true, accessPrivileges: 'all' });
+    await expect(getRecentPhotoPermission()).resolves.toEqual({ access: 'granted', limited: false });
+    getPermissionsAsyncMock.mockResolvedValueOnce({ status: 'granted', granted: true, accessPrivileges: 'none' });
+    await expect(getRecentPhotoPermission()).resolves.toEqual({ access: 'denied', limited: false });
+    getPermissionsAsyncMock.mockRejectedValueOnce(new Error('boom'));
+    await expect(getRecentPhotoPermission()).resolves.toEqual({ access: 'unavailable', limited: false });
   });
 
   it('reads and requests access without throwing when the module fails', async () => {
@@ -119,6 +135,20 @@ describe('recent-photos', () => {
     await expect(loadRecentPhotos({ limit: 12, isCancelled: () => true })).resolves.toEqual([]);
     expect(getAssetInfoAsyncMock).not.toHaveBeenCalled();
     await expect(loadRecentPhotos({ limit: 0 })).resolves.toEqual([]);
+  });
+
+  it('forwards library changes until unsubscribed and survives a failing observer', () => {
+    const remove = jest.fn();
+    addListenerMock.mockReturnValueOnce({ remove });
+    const listener = jest.fn();
+    const unsubscribe = subscribeToRecentPhotoChanges(listener);
+    addListenerMock.mock.calls[0][0]({ hasIncrementalChanges: false });
+    expect(listener).toHaveBeenCalledTimes(1);
+    unsubscribe();
+    expect(remove).toHaveBeenCalledTimes(1);
+
+    addListenerMock.mockImplementationOnce(() => { throw new Error('unavailable'); });
+    expect(() => subscribeToRecentPhotoChanges(listener)()).not.toThrow();
   });
 
   it('tolerates a failing asset lookup by skipping that photo', async () => {

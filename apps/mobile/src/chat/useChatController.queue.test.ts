@@ -208,7 +208,7 @@ jest.mock('../services/analytics/events', () => ({
 }));
 
 function createAdapter(backendKind: BackendKind = 'openclaw', transportKind?: string) {
-  const transportKinds = { openclaw: 'relay', hermes: 'relay', 'local-model': 'relay', pi: 'relay', youmind: 'https' } as const;
+  const transportKinds = { openclaw: 'relay', hermes: 'relay', 'local-model': 'relay', pi: 'relay', codex: 'relay', 'claude-code': 'relay', youmind: 'https' } as const;
   let promptSeq = 0;
   return {
     state: 'ready',
@@ -421,6 +421,39 @@ describe('useChatController message queue', () => {
     }
     expect(result.current.isSending).toBe(false);
     expect(historyMock.reconcileLatestAssistantFromHistory).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['openclaw', 'hermes'] as const)('keeps a sent %s run and its rows through a quiet tool while the backend reports it active', async (backend) => {
+    const { result, adapter, handlers } = renderController(backend);
+    adapter.loadSession.mockResolvedValue({ key: SESSION_KEY, messages: [], hasActiveRun: true });
+    await typeAndSend(result, 'Build it');
+    act(() => {
+      handlers().onUpdate?.(mapAdapterSessionUpdate({ type: 'agent_message_chunk', sessionKey: SESSION_KEY, runId: 'run-1',
+        text: 'Running the build.', textMode: backend === 'openclaw' ? 'snapshot' : 'delta' } as any));
+      handlers().onUpdate?.(mapAdapterSessionUpdate({ type: 'tool_call', sessionKey: SESSION_KEY, runId: 'run-1',
+        toolCallId: 'build', title: 'bash', kind: 'bash' }));
+    });
+    const rows = result.current.listData.map(row => [row.renderKey ?? row.id, row.text, row.streaming, row.toolStatus]);
+    expect(rows.some(([, , , status]) => status === 'running')).toBe(true);
+    // Two quiet minutes: the watchdog confirms the run instead of a silence timer ending it.
+    for (let tick = 0; tick < 30; tick++) {
+      await act(async () => { jest.advanceTimersByTime(4000); await Promise.resolve(); });
+      expect(result.current.isSending).toBe(true);
+      expect(result.current.listData.map(row => [row.renderKey ?? row.id, row.text, row.streaming, row.toolStatus])).toEqual(rows);
+    }
+    expect(adapter.loadSession).toHaveBeenCalled();
+    expect(adapter.disconnect).not.toHaveBeenCalled();
+  });
+
+  it('still ends a silent sent run that the backend no longer reports', async () => {
+    const { result, adapter } = renderController('hermes');
+    adapter.loadSession.mockResolvedValue({ key: SESSION_KEY, messages: [], hasActiveRun: false });
+    await typeAndSend(result, 'Hello');
+    expect(result.current.isSending).toBe(true);
+    for (let tick = 0; tick < 8; tick++) {
+      await act(async () => { jest.advanceTimersByTime(4000); await Promise.resolve(); });
+    }
+    expect(result.current.isSending).toBe(false);
   });
 
   it.each(['openclaw', 'hermes'] as const)('keeps %s text/tool boundaries through a batched final event and history refresh', async (backend) => {

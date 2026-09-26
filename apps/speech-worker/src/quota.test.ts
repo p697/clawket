@@ -1,6 +1,26 @@
 import { describe, expect, it } from 'vitest';
-import { reserveQuota, type Quota } from './quota';
+import { activateQuota, quotaRejection, reserveQuota, SETUP_LEASE_MS, type Quota } from './quota';
 describe('durable admission decisions', () => {
+  it('expires abandoned setup in 25 seconds without refunding quota or replay protection', () => {
+    const pending = reserveQuota(undefined, 'old', 60, 3600000, true, 1000000, SETUP_LEASE_MS)!;
+    expect(quotaRejection(pending, 'new', 60, 3600000, true, 1000001)).toMatchObject({ reason: 'busy', retryAfterMs: 24999 });
+    expect(reserveQuota(pending, 'new', 60, 3600000, true, 1024999, SETUP_LEASE_MS)).toBeNull();
+    const replacement = reserveQuota(pending, 'new', 60, 3600000, true, 1025000, SETUP_LEASE_MS)!;
+    expect(replacement.count).toBe(2);
+    expect(activateQuota(pending, 'old', 1025000)).toBeNull();
+    expect(activateQuota(replacement, 'old', 1025001)).toBeNull();
+    expect(quotaRejection(replacement, 'old', 60, 3600000, true, 1025001).reason).toBe('replay');
+  });
+  it('promotes only the current setup and retains the full normal recording allowance', () => {
+    const pending = reserveQuota(undefined, 'a', 60, 3600000, true, 1000000, SETUP_LEASE_MS)!;
+    const active = activateQuota(pending, 'a', 1010000)!;
+    expect(active.activeUntil).toBe(1160000);
+    expect(active.count).toBe(1);
+    expect(reserveQuota(active, 'b', 60, 3600000, true, 1130000, SETUP_LEASE_MS)).toBeNull();
+    expect(activateQuota(undefined, 'a', 0)).toBeNull();
+    expect(activateQuota({ ...pending, activeUntil: NaN }, 'a', 0)).toBeNull();
+    expect(reserveQuota(undefined, 'a', 60, 3600000, true, 0, 1)).toBeNull();
+  });
   it('reserves the full attempt, rejects concurrency and retains replay defense across the hour', () => {
     const first = reserveQuota(undefined, 'a', 60, 3600000, true, 3599000)!;
     expect(reserveQuota(first, 'b', 60, 3600000, true, 3600000)).toBeNull();

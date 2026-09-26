@@ -57,6 +57,11 @@ export type RosterRowProps = Readonly<{
   attention?: boolean;
   locked?: boolean;
   cached?: boolean;
+  /**
+   * The row's connection is the live one. It survives `cached` because the
+   * runtime serves the live connection's rows from cache while it reconnects.
+   */
+  live?: boolean;
   onPress: () => void;
   onLongPress?: () => void;
   accessibilityLabel?: string;
@@ -82,6 +87,7 @@ export function RosterRow({
   attention = false,
   locked = false,
   cached = false,
+  live = false,
   onPress,
   onLongPress,
   accessibilityLabel,
@@ -100,13 +106,17 @@ export function RosterRow({
       [selected ? theme.colors.surface : theme.colors.canvas, theme.colors.surface],
     ),
   }), [selected ? theme.colors.surface : theme.colors.canvas, theme.colors.surface]);
+  // One corner, one marker: lock, then a live row's attention, then the live
+  // dot; cached rows otherwise stay quiet.
   const resolvedAvatarStatus: AgentAvatarStatus = locked
     ? 'locked'
-    : cached
-      ? 'idle'
-      : attention
-        ? 'attention'
-        : avatarStatus;
+    : attention && !cached
+      ? 'attention'
+      : live
+        ? 'live'
+        : cached
+          ? 'idle'
+          : avatarStatus;
 
   return (
     <AnimatedPressable

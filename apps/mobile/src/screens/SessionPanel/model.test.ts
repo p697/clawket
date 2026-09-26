@@ -17,6 +17,7 @@ import {
   normalizeSessionRenameTitle,
   resolveSessionPanelFilterKind,
   resolveSessionPanelPageState,
+  sessionPanelRowName,
 } from './model';
 
 function connection(): ConnectionDescriptor {
@@ -192,6 +193,19 @@ describe('SessionPanel model', () => {
     })).toEqual([]);
   });
 
+  it('also matches the localized title the row renders', () => {
+    const rows = buildSessionPanelRows(roster(), { now: 1_000_000 });
+    const displayTitle = (row: { kind: string; title: string }) => (
+      row.kind === 'cron' ? `定时任务：${row.title}` : row.title
+    );
+    expect(filterSessionPanelRows(rows, {
+      agentId: 'main', filter: 'all', query: '定时任务',
+    })).toEqual([]);
+    expect(filterSessionPanelRows(rows, {
+      agentId: 'main', filter: 'all', query: '定时任务', displayTitle,
+    }).map((row) => row.key)).toEqual(['agent:main:cron:daily']);
+  });
+
   it('folds finished sub-agent runs into one trailing item only in the unfiltered list', () => {
     const rows = buildSessionPanelRows(roster(), { now: 1_000_000 });
     const mainRows = filterSessionPanelRows(rows, { agentId: 'main', filter: 'all', query: '' });
@@ -225,6 +239,18 @@ describe('SessionPanel model', () => {
     })).toEqual(['export', 'pin', 'reset']);
   });
 
+  it('strips the Gateway cron prefix and untitled keys from the editable row name', () => {
+    const row = (kind: SessionDescriptor['kind'], title: string, key = `agent:main:${kind}:x`) => ({ key, kind, title });
+    expect(sessionPanelRowName(row('cron', 'Automation: 日报守卫 07:30'))).toBe('日报守卫 07:30');
+    expect(sessionPanelRowName(row('cron', 'Cron: Nightly backup'))).toBe('Nightly backup');
+    expect(sessionPanelRowName(row('cron', '[Cron] weekly-review'))).toBe('weekly-review');
+    expect(sessionPanelRowName(row('cron', 'Morning digest'))).toBe('Morning digest');
+    expect(sessionPanelRowName(row('cron', 'agent:main:cron:x'))).toBe('');
+    expect(sessionPanelRowName(row('direct', 'agent:main:direct:x'))).toBe('');
+    // Only scheduled runs carry the Gateway prefix; a person's own title stays verbatim.
+    expect(sessionPanelRowName(row('direct', 'Automation: ideas'))).toBe('Automation: ideas');
+  });
+
   it('normalizes rename drafts and rejects blank or unchanged titles', () => {
     expect(normalizeSessionRenameTitle('  Launch review  ', 'Old title')).toBe('Launch review');
     expect(normalizeSessionRenameTitle('   ', 'Old title')).toBeNull();
@@ -241,4 +267,13 @@ describe('SessionPanel model', () => {
   ] as const)('resolves page state %#', (input, expected) => {
     expect(resolveSessionPanelPageState(input)).toBe(expected);
   });
+});
+
+it('uses recency across project conversations without pinning the landing session first', () => {
+  const group = roster();
+  const recent = buildSessionPanelRows(group, { now: 1_000_000, recentFirst: true });
+  expect(recent.map(r => r.updatedAt)).toEqual([...recent.map(r => r.updatedAt)].sort((a,b) => b-a));
+  const oldMain = recent.findIndex(r => r.agentId === 'builder' && r.kind === 'main');
+  expect(oldMain).toBe(recent.length - 1);
+  expect(buildSessionPanelRows(group, { now: 1_000_000 }).slice(0,2).every(r => r.kind === 'main')).toBe(true);
 });

@@ -3,6 +3,7 @@ import type { Capabilities } from './capabilities';
 import type {
   AgentDescriptor,
   AgentQuestion,
+  ProjectDescriptor,
   ApprovalRequest,
   ConnectionDescriptor,
   FinalMessage,
@@ -103,13 +104,14 @@ export interface AgentAdapter {
   prompt(key: string, input: PromptInput): Promise<{ runId: string }>;
   cancel(key: string, runId?: string): Promise<void>;
   steer?(key: string, runId: string, text: string): Promise<void>;
-  createSession?(agentId: string, options?: { title?: string; fromSession?: string }): Promise<SessionDescriptor>;
+  createSession?(agentId: string, options?: { title?: string; fromSession?: string; projectId?: string }): Promise<SessionDescriptor>;
   patchSession?(key: string, patch: { title?: string }): Promise<void>;
   resetSession?(key: string): Promise<void>;
   deleteSession?(key: string): Promise<void>;
+  projects?: { list(): Promise<ProjectDescriptor[]> };
   questions?: {
     list(key: string): Promise<AgentQuestion[]>;
-    respond(key: string, id: string, answer: { value?: string; confirmed?: boolean; cancelled?: boolean }): Promise<void>;
+    respond(key: string, id: string, answer: { value?: string; confirmed?: boolean; cancelled?: boolean; answers?: Record<string, string[]> }): Promise<void>;
   };
   management?: ManagementOperations;
   sessionFiles?: SessionFilesOperations;

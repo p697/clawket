@@ -160,6 +160,8 @@ const BACKEND_LABELS: Readonly<Record<BackendKind, string>> = Object.freeze({
   youmind: 'YouMind Sprite',
   'local-model': 'Local model',
   pi: 'Pi',
+  codex: 'Codex',
+  'claude-code': 'Claude Code',
 });
 
 const TRANSPORT_LABELS: Readonly<Record<TransportKind, string>> = Object.freeze({

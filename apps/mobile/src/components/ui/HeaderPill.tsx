@@ -24,6 +24,7 @@ export type HeaderPillProps = Readonly<{
   name: string;
   avatarName?: string;
   subtitle: string;
+  subtitleEllipsizeMode?: 'head' | 'middle' | 'tail' | 'clip';
   /** The Agent is composing: the subtitle slot shows three lifting dots instead of text. */
   working?: boolean;
   emoji?: string | null;
@@ -34,6 +35,7 @@ export type HeaderPillProps = Readonly<{
   material?: 'surface' | 'glass';
   onPress?: () => void;
   accessibilityLabel?: string;
+  accessibilityHint?: string;
   style?: StyleProp<ViewStyle>;
   testID?: string;
 }>;
@@ -44,6 +46,7 @@ export function HeaderPill({
   name,
   avatarName,
   subtitle,
+  subtitleEllipsizeMode = 'tail',
   working = false,
   emoji,
   avatarUrl,
@@ -52,6 +55,7 @@ export function HeaderPill({
   material = 'surface',
   onPress,
   accessibilityLabel,
+  accessibilityHint,
   style,
   testID,
 }: HeaderPillProps): React.JSX.Element {
@@ -94,6 +98,7 @@ export function HeaderPill({
           style={[styles.subtitle, { color: theme.colors.inkSecondary }, subtitleAnimatedStyle]}
           numberOfLines={1}
           maxFontSizeMultiplier={1}
+          ellipsizeMode={subtitleEllipsizeMode}
         >
           {subtitle}
         </Animated.Text> : null}
@@ -111,6 +116,7 @@ export function HeaderPill({
       testID={testID}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? name}
+      accessibilityHint={accessibilityHint}
       onPress={onPress}
       style={({ pressed }) => [rootStyle, pressed ? styles.pressed : null]}
     >

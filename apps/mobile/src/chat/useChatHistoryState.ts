@@ -235,6 +235,7 @@ function projectHistoryMessage(message: ChatMessage): Record<string, unknown> {
       ...raw,
       role: 'toolResult',
       content: message.text || '',
+      normalizedToolId: message.id,
       toolStatus: message.tool?.status,
       timestamp: message.timestampMs,
       toolCallId: message.tool?.callId ?? message.id.replace(/^tool(?:call|result)_/, ''),
@@ -879,7 +880,8 @@ export function useChatHistoryState({
           } else {
             const baseSummary = formatToolOneLinerLocalized(name, undefined, t);
             uiMessages.push({
-              id: `toolresult_${toolCallId ?? uiMessages.length}`,
+              id: toolCallId && msgRecord.normalizedToolId === `toolcall_${toolCallId}`
+                ? `toolcall_${toolCallId}` : `toolresult_${toolCallId ?? uiMessages.length}`,
               role: 'tool',
               text: '',
               toolName: name,
@@ -1253,6 +1255,16 @@ export function useChatHistoryState({
     );
     let optimisticHistoryPromise: Promise<number> | null = null;
     if (preferredKey) {
+      // A reconnect refreshes the conversation already on screen: its rows keep
+      // their place and render identity until canonical history merges into
+      // them. Only another session, or one not loaded yet, starts from cache
+      // (a cache snapshot lags the screen and carries no render keys).
+      const restoreFromCache = shouldRestoreCacheBeforeHistoryRefresh({
+        targetKey: preferredKey,
+        currentKey,
+        historyLoaded: historyLoadedRef.current,
+        currentMessages: messagesRef.current,
+      });
       sessionKeyRef.current = preferredKey;
       setSessionKey(preferredKey);
       markHermesConnectTrace('session_key_selected', {
@@ -1262,10 +1274,14 @@ export function useChatHistoryState({
       setHasMoreHistory(true);
       setHistoryLoaded(false);
       historyRawCountRef.current = 0;
-      cacheHydrationSessionKeyRef.current = preferredKey;
-      void restoreCachedMessages(preferredKey, {
-        sessionId: snapshot?.sessionKey === preferredKey ? snapshot.sessionId : undefined,
-      });
+      if (restoreFromCache) {
+        cacheHydrationSessionKeyRef.current = preferredKey;
+        void restoreCachedMessages(preferredKey, {
+          sessionId: snapshot?.sessionKey === preferredKey ? snapshot.sessionId : undefined,
+        });
+      } else {
+        dbg(`cache: skip restore for visible session reconnect key=${preferredKey}`);
+      }
       optimisticHistoryPromise = loadHistory(preferredKey, HISTORY_PAGE_SIZE);
     }
 
@@ -1329,7 +1345,7 @@ export function useChatHistoryState({
       void restoreCachedMessages(fallbackKey, { clearWhenEmpty: true });
       loadHistory(fallbackKey, HISTORY_PAGE_SIZE);
     }
-  }, [adapter, currentAgentId, gatewayConfigId, loadHistory, mainSessionKey, routeSessionKey, restoreCachedMessages, setSessionKey]);
+  }, [adapter, currentAgentId, dbg, gatewayConfigId, loadHistory, mainSessionKey, routeSessionKey, restoreCachedMessages, setSessionKey]);
 
   const refreshCurrentSessionHistory = useCallback(async () => {
     const currentKey = sessionKeyRef.current;

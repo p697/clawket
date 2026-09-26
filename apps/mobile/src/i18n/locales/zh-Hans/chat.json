@@ -158,7 +158,6 @@
   "Voice input": "语音输入",
   "Stop voice input": "停止语音输入",
   "Listening…": "正在聆听…",
-  "Preparing voice input…": "正在开启麦克风…",
   "Send": "发送",
   "Reconnect": "重新连接",
   "Offline · reconnecting": "离线 · 正在重连",
@@ -380,5 +379,12 @@
   "{{channel}} member": "{{channel}} 成员",
   "Agent needs your input": "Agent 需要你的回复",
   "Respond": "回复",
-  "Continue in a new session": "在新会话中继续"
+  "Continue in a new session": "在新会话中继续",
+  "thinking_none": "关闭",
+  "thinking_max": "最高",
+  "thinking_ultra": "极致",
+  "Allow this action?": "允许此操作？",
+  "Stop task": "停止任务",
+  "Your answer": "你的回答",
+  "Question {{current}} of {{total}}": "第 {{current}} / {{total}} 题"
 }

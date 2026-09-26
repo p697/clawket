@@ -383,5 +383,7 @@
   "{{count}} items": "{{count}}개 항목",
   "Delete this local config backup? This does not change the current Gateway config.": "이 로컬 구성 백업을 삭제할까요? 현재 Gateway 구성은 변경되지 않습니다.",
   "Backup history": "백업 기록",
-  "Pi is not responding": "Pi가 응답하지 않아요"
+  "Pi is not responding": "Pi가 응답하지 않아요",
+  "Codex is not responding": "Codex가 응답하지 않아요",
+  "Claude Code is not responding": "Claude Code가 응답하지 않아요"
 }

@@ -21,7 +21,7 @@ import { CompositionSafeTextInput } from './CompositionSafeTextInput';
 import { PasteCapableTextInput, type PastedFile } from './PasteCapableTextInput';
 
 export type ComposerHandle = { focus: () => void; blur: () => void; clear: () => void };
-export type ComposerVoiceState = 'idle' | 'authorizing' | 'listening' | 'transcribing';
+export type ComposerVoiceState = 'idle' | 'listening' | 'transcribing';
 export type ComposerAccessibilityLabels = {
   add: string; voice: string; stopVoice?: string; send: string; stop: string;
   /** Send while the Agent is still replying; falls back to `send`. */
@@ -142,7 +142,7 @@ export const Composer = React.forwardRef<ComposerHandle, ComposerProps>(function
     focus: () => inputRef.current?.focus() });
   const inputVoiceTarget = Boolean(onVoicePress) && !voiceDisabled && editable && !expanded && (!focused || !value) && !isRunning;
   const inputPlaceholder = inputVoiceTarget && !value ? t(voiceGesture.tooShort ? 'Hold longer to talk' : 'Type or hold to talk') : placeholder;
-  const voiceHint = voiceState === 'transcribing' ? t('Transcribing…') : voiceState === 'authorizing' ? t('Preparing voice input…')
+  const voiceHint = voiceState === 'transcribing' ? t('Transcribing…')
     : voiceRecordingSaved ? t('Recording saved locally · Transcription paused') : voiceGesture.holding ? t(voiceGesture.cancelling ? 'Release to cancel' : 'Release to send · Slide up to cancel') : t('Listening…');
   const inputProps: TextInputProps & { ref: React.Ref<TextInput>; value: string } = {
     ref: inputRef,
@@ -202,7 +202,8 @@ export const Composer = React.forwardRef<ComposerHandle, ComposerProps>(function
             if (!expanded) setContentHeight(countDraftLines(nativeEvent.lines) * lineHeight + inputPadding);
           }}>{value || ' '}</Text>
         {voiceActive ? <View style={styles.voicePresentation}>
-          {voiceState === 'listening' ? <VoiceWaveform level={voiceLevel} color={voiceGesture.cancelling ? theme.colors.inkSecondary : theme.colors.accent} /> : null}
+          {voiceState === 'listening' ? <VoiceWaveform level={voiceLevel} color={theme.colors.accent} cancelling={voiceGesture.cancelling}
+            testID={testID ? `${testID}-voice-waveform` : undefined} /> : null}
           <Text accessibilityLiveRegion="polite" style={styles.voiceHint}>{voiceHint}</Text>
         </View> : null}
         <View style={[styles.inputHost, voiceActive ? styles.hiddenInput : null]} pointerEvents={voiceActive ? 'none' : 'auto'} accessibilityElementsHidden={voiceActive}>
@@ -227,16 +228,16 @@ export const Composer = React.forwardRef<ComposerHandle, ComposerProps>(function
         {accessory}
         <View style={styles.spacer} />
         {(voiceActive || showVoice) ? <>
-          {voiceActive && !voiceGesture.holding && voiceState === 'listening' ? <ComposerAction icon={Square}
+          {voiceActive && !voiceGesture.holding && !voiceGesture.pressing && voiceState === 'listening' ? <ComposerAction icon={Square}
             label={accessibilityLabels.stopVoice ?? accessibilityLabels.stop} onPress={() => (onVoiceStop ?? onVoicePress)?.(false)}
             testID={testID ? `${testID}-voice-stop` : undefined} /> : null}
           <Pressable {...voiceGesture.handlers} testID={testID ? `${testID}-voice` : undefined}
             accessibilityRole="button" accessibilityLabel={voiceActive ? accessibilityLabels.send : accessibilityLabels.voice}
             accessibilityHint={t('Tap to dictate. Hold and release to send.')}
-            accessibilityState={{ busy: voiceState === 'authorizing' || voiceState === 'transcribing', disabled: voiceDisabled }}
+            accessibilityState={{ busy: voiceState === 'transcribing', disabled: voiceDisabled }}
             style={actionStyles.target}>
             <View pointerEvents="none" style={[actionStyles.surface, { backgroundColor: voiceActive ? theme.colors.ink : theme.colors.canvas }]}>
-              {voiceState === 'authorizing' || voiceState === 'transcribing' ? <ActivityIndicator color={theme.colors.canvas} />
+              {voiceState === 'transcribing' ? <ActivityIndicator color={theme.colors.canvas} />
                 : voiceActive ? <ArrowUp size={IconSize.md} color={theme.colors.canvas} /> : <Mic size={IconSize.md} color={theme.colors.ink} />}
             </View>
           </Pressable>

@@ -20,6 +20,7 @@ describe('Onboarding route model', () => {
       hermes: 'https://hermes-agent.nousresearch.com',
       youmind: 'https://youmind.com',
       pi: 'https://pi.dev',
+      codex: 'https://learn.chatgpt.com/codex',
     });
   });
 

@@ -521,6 +521,62 @@ describe('RosterScreen', () => {
     expect(onLongPressRow).toHaveBeenCalledWith(expect.objectContaining({ agentId: 'main' }));
   });
 
+  it('marks the live connection\'s rows only while the roster mixes connections', () => {
+    const mixed = () => [
+      group('live', 'live', [agent('live', 'main'), agent('live', 'builder')]),
+      group('other', 'cache', [agent('other', 'main')]),
+    ];
+    mockRoster = mixed();
+    mockConnections = snapshot({
+      connections: [connection('live'), connection('other', false)],
+      roster: mockRoster,
+    });
+    const view = render(<RosterScreen {...props()} />);
+    const liveDot = (key: string) => view.queryByTestId(`roster-row-agent:${key}-avatar-live`);
+
+    expect(liveDot('live:builder')).toBeTruthy();
+    // A pending approval keeps its red dot on the same corner.
+    expect(view.getByTestId('roster-row-agent:live:main-avatar-attention')).toBeTruthy();
+    expect(liveDot('live:main')).toBeNull();
+    expect(liveDot('other:main')).toBeNull();
+    expect(view.getByTestId('roster-row-agent:live:builder').props.accessibilityLabel)
+      .toBe('Builder, Connected, 1h ago, Unread messages');
+    expect(view.getByTestId('roster-row-agent:other:main').props.accessibilityLabel)
+      .toBe('Main, 1h ago, Last synced just now');
+
+    // The recovery window serves live rows from cache and keeps the dot steady.
+    mockRoster = [group('live', 'cache', [agent('live', 'main'), agent('live', 'builder')]), mixed()[1]];
+    mockConnections = snapshot({
+      connections: [connection('live'), connection('other', false)],
+      activeState: 'reconnecting',
+      recovering: true,
+      roster: mockRoster,
+    });
+    view.rerender(<RosterScreen {...props()} />);
+    expect(liveDot('live:main')).toBeTruthy();
+    expect(liveDot('live:builder')).toBeTruthy();
+    expect(liveDot('other:main')).toBeNull();
+
+    for (const activeState of ['reconnecting', 'offline', 'connecting', 'idle'] as const) {
+      mockConnections = snapshot({
+        connections: [connection('live'), connection('other', false)],
+        activeState,
+        roster: mockRoster,
+      });
+      view.rerender(<RosterScreen {...props()} />);
+      expect(liveDot('live:main')).toBeNull();
+      expect(liveDot('live:builder')).toBeNull();
+    }
+
+    // One connection has nothing to tell apart.
+    mockRoster = [group('live', 'live', [agent('live', 'main'), agent('live', 'builder')])];
+    mockConnections = snapshot({ roster: mockRoster });
+    view.rerender(<RosterScreen {...props()} />);
+    expect(liveDot('live:builder')).toBeNull();
+    expect(view.getByTestId('roster-row-agent:live:builder').props.accessibilityLabel)
+      .toBe('Builder, 1h ago, Unread messages');
+  });
+
   it('renders the registry-provided semantic subtitle instead of the latest session preview', () => {
     const source = group('sprite');
     mockRoster = [{

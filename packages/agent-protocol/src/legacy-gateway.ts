@@ -136,6 +136,8 @@ const YOUMIND_LEGACY_CAPABILITIES: GatewayBackendCapabilities = {
 };
 
 const LEGACY_BACKENDS: Record<GatewayBackendKind, GatewayBackendDescriptor> = {
+  codex: { kind: 'codex', label: 'Codex', capabilities: { ...YOUMIND_LEGACY_CAPABILITIES, gatewayConnection: true, modelCatalog: true, modelSelection: true, chatAttachments: true, consoleAgentSessionsBoard: true } },
+  'claude-code': { kind: 'claude-code', label: 'Claude Code', capabilities: { ...YOUMIND_LEGACY_CAPABILITIES, gatewayConnection: true, modelCatalog: true, modelSelection: true, chatAttachments: true, consoleAgentSessionsBoard: true } },
   pi: { kind: 'pi', label: 'Pi', capabilities: { ...YOUMIND_LEGACY_CAPABILITIES, gatewayConnection: true, modelCatalog: true, modelSelection: true, chatAttachments: true, consoleAgentSessionsBoard: true } },
   openclaw: { kind: 'openclaw', label: 'OpenClaw', capabilities: OPENCLAW_LEGACY_CAPABILITIES },
   hermes: { kind: 'hermes', label: 'Hermes', capabilities: HERMES_LEGACY_CAPABILITIES },
@@ -163,7 +165,7 @@ export function isGatewayTransportKind(value: unknown): value is GatewayTranspor
 }
 
 export function isGatewayBackendKind(value: unknown): value is GatewayBackendKind {
-  return value === 'openclaw' || value === 'hermes' || value === 'youmind' || value === 'local-model' || value === 'pi';
+  return value === 'openclaw' || value === 'hermes' || value === 'youmind' || value === 'local-model' || value === 'pi' || value === 'codex' || value === 'claude-code';
 }
 
 export function resolveGatewayBackendKind(value: LegacyGatewayLike | null | undefined): GatewayBackendKind {

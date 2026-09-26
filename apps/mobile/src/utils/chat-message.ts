@@ -514,6 +514,14 @@ function formatGeneratedChannelSessionLabel(s: SessionInfo): string {
   return `${base} · ${detail}`;
 }
 
+// OpenClaw labels isolated cron runs `Automation: <job>`; older Gateways wrote `Cron: <job>` or `[Cron] <job>`.
+const CRON_SESSION_TITLE_PREFIX = /^(?:\[cron\]|(?:automation|cron)\s*[:：])\s*/iu;
+
+/** Job name in a scheduled-run session title, without the Gateway's English kind prefix. */
+export function cronSessionName(title: string | null | undefined): string {
+  return title?.trim().replace(CRON_SESSION_TITLE_PREFIX, '').trim() ?? '';
+}
+
 export function sessionLabel(s: SessionInfo, options?: { currentAgentName?: string | null }): string {
   const explicitLabel = s.label?.trim();
   const isMainSession = /^agent:[^:]+:main$/.test(s.key);

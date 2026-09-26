@@ -18,7 +18,9 @@ function enabled(backend: keyof typeof CAPABILITY_MATRIX): Capability[] {
 
 describe('canonical capability contract', () => {
   it('publishes the frozen product matrix without conflating Hermes with legacy UI flags', () => {
-    expect(enabled('openclaw')).toEqual(CAPABILITY_KEYS.filter((key) => key !== 'agentQuestions' && key !== 'sessionBranch' && key !== 'steer' && key !== 'documentAttachments' && key !== 'modelHealth'));
+    expect(enabled('openclaw')).toEqual(CAPABILITY_KEYS.filter((key) => key !== 'projects' && key !== 'agentQuestions' && key !== 'sessionBranch' && key !== 'steer' && key !== 'documentAttachments' && key !== 'modelHealth'));
+    expect(resolveCapabilities('codex')).toMatchObject({ projects: true, agentQuestions: true, sessionBranch: true, modelPerSession: true, channels: false });
+    expect(resolveCapabilities('openclaw', { projects: true }).projects).toBeFalsy();
     expect(resolveCapabilities('pi')).toMatchObject({ chat: true, agentQuestions: true, sessionBranch: true, modelPerSession: true, execApproval: false, channels: false, cron: false });
     expect(enabled('local-model')).toEqual(['chat', 'abort', 'history', 'attachments', 'models']);
     expect(enabled('hermes')).toEqual([
@@ -51,6 +53,12 @@ describe('canonical capability contract', () => {
       'execApproval',
     ]);
     expect(enabled('youmind')).toEqual(['chat', 'abort', 'history']);
+  });
+
+  it('advertises only implemented Claude operations', () => {
+    expect(resolveCapabilities('claude-code')).toMatchObject({ chat: true, projects: true, sessionBranch: true, agentQuestions: true, execApproval: true, steer: false });
+    expect(resolveCapabilities('claude-code', { skills: true, thinkingLevels: true }).skills).toBe(false);
+    expect(resolveCapabilities('claude-code', { skills: true, thinkingLevels: true }).thinkingLevels).toBe(false);
   });
 
   it('allows runtime evidence to downgrade, never upgrade, backend capability policy', () => {

@@ -158,7 +158,6 @@
   "Voice input": "Голосове введення",
   "Stop voice input": "Зупинити голосове введення",
   "Listening…": "Слухаю…",
-  "Preparing voice input…": "Підготовка голосового введення…",
   "Send": "Надіслати",
   "Reconnect": "Перепідключитися",
   "Offline · reconnecting": "Не в мережі · перепідключення",
@@ -380,5 +379,12 @@
   "{{channel}} member": "Учасник {{channel}}",
   "Agent needs your input": "Агент чекає на вашу відповідь",
   "Respond": "Відповісти",
-  "Continue in a new session": "Продовжити в новій сесії"
+  "Continue in a new session": "Продовжити в новій сесії",
+  "thinking_none": "Вимк.",
+  "thinking_max": "Максимальний",
+  "thinking_ultra": "Ультра",
+  "Allow this action?": "Дозволити цю дію?",
+  "Stop task": "Зупинити завдання",
+  "Your answer": "Ваша відповідь",
+  "Question {{current}} of {{total}}": "Запитання {{current}} з {{total}}"
 }

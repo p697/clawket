@@ -41,7 +41,7 @@ export function buildAnalyticsSuperProperties(input: {
     (connection) => connection.id === input.activeConnectionId,
   ) ?? null;
   const backendKindSet = new Set(input.connections.map((connection) => connection.backendKind));
-  const backendKinds = (['openclaw', 'hermes', 'youmind', 'pi'] as const)
+  const backendKinds = (['openclaw', 'hermes', 'youmind', 'pi', 'codex', 'claude-code'] as const)
     .filter((backendKind) => backendKindSet.has(backendKind))
     .join(',');
 

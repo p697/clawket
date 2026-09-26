@@ -28,7 +28,7 @@ type ModelOpsFixture = {
 
 function createAdapter(fixture: ModelOpsFixture = {}) {
   const backendKind = fixture.backendKind ?? 'openclaw';
-  const transportKinds = { openclaw: 'relay', hermes: 'relay', 'local-model': 'relay', pi: 'relay', youmind: 'https' } as const;
+  const transportKinds = { openclaw: 'relay', hermes: 'relay', 'local-model': 'relay', pi: 'relay', codex: 'relay', 'claude-code': 'relay', youmind: 'https' } as const;
   const modelOps = {
     ...(fixture.list ? { list: fixture.list } : {}),
     ...(fixture.getSelection ? { getSelection: fixture.getSelection } : {}),
@@ -513,4 +513,19 @@ describe('configured default model', () => {
     expect(result.current.modelPickerError).toBeNull();
     expect(result.current.availableModels).toHaveLength(1);
   });
+});
+
+it('hydrates and changes native reasoning without sending a slash-command prompt', async () => {
+  const setThinkingLevel = jest.fn();
+  const selection: ModelSelectionState = { currentModel: 'codex-model', currentProvider: 'openai', currentBaseUrl: '', thinkingLevel: 'medium', models: [{ id: 'codex-model', name: 'Codex model', provider: 'openai', reasoningLevels: ['low', 'medium'] }] };
+  const adapter = createAdapter({ backendKind: 'codex', getSelection: jest.fn().mockResolvedValue(selection) });
+  const write = jest.fn().mockResolvedValue({ ...selection, thinkingLevel: 'low' });
+  adapter.management.models!.setThinkingLevel = write;
+  const { result } = renderHook(() => useChatModelPicker({ adapter, connectionState: 'ready', sessionKey: 'owned', setInput: jest.fn(), setSessions: jest.fn(), setThinkingLevel }));
+  await act(async () => {});
+  expect(setThinkingLevel).toHaveBeenCalledWith('medium');
+  await act(async () => { expect(result.current.selectNativeThinkingLevel('low')).toBe(true); });
+  expect(write).toHaveBeenCalledWith('owned', 'low');
+  expect(setThinkingLevel).toHaveBeenLastCalledWith('low');
+  expect(adapter.prompt).not.toHaveBeenCalled();
 });

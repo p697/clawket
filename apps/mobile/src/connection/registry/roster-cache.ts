@@ -113,8 +113,8 @@ function normalizeAgent(value: unknown, connectionId: string): AgentDescriptor |
   const record = value as Record<string, unknown>;
   const agentId = readString(record.agentId);
   const name = readString(record.name);
-  const mainSessionKey = readString(record.mainSessionKey);
-  if (record.connectionId !== connectionId || !agentId || !name || !mainSessionKey || typeof record.isMain !== 'boolean') {
+  const mainSessionKey = record.entryMode === 'sessions' && record.mainSessionKey === '' ? '' : readString(record.mainSessionKey);
+  if (record.connectionId !== connectionId || !agentId || !name || mainSessionKey === undefined || typeof record.isMain !== 'boolean') {
     return null;
   }
   const emoji = readString(record.emoji);
@@ -127,6 +127,7 @@ function normalizeAgent(value: unknown, connectionId: string): AgentDescriptor |
     ...(avatarUrl ? { avatarUrl } : {}),
     isMain: record.isMain,
     mainSessionKey,
+    ...(record.entryMode === 'sessions' ? { entryMode: 'sessions' as const } : {}),
   };
 }
 
@@ -180,6 +181,14 @@ function normalizeSession(value: unknown, connectionId: string): SessionDescript
   const preview = readString(record.preview);
   const model = readString(record.model);
   const parentSessionKey = readString(record.parentSessionKey);
+  const candidateProject = record.project as Record<string, unknown> | undefined;
+  const project = candidateProject && typeof candidateProject === 'object' && !Array.isArray(candidateProject)
+    && typeof candidateProject.id === 'string' && candidateProject.id.length > 0 && candidateProject.id.length <= 200
+    && typeof candidateProject.name === 'string' && candidateProject.name.length <= 1024
+    && typeof candidateProject.path === 'string' && candidateProject.path.length <= 8192
+    && typeof candidateProject.available === 'boolean'
+    ? { id: candidateProject.id, name: candidateProject.name, path: candidateProject.path, available: candidateProject.available }
+    : undefined;
   const source = record.source === 'bridge' || record.source === 'native'
     ? record.source
     : undefined;
@@ -198,6 +207,8 @@ function normalizeSession(value: unknown, connectionId: string): SessionDescript
     attention,
     ...(parentSessionKey ? { parentSessionKey } : {}),
     ...(source ? { source } : {}),
+    ...(project ? { project } : {}),
+    ...(typeof record.canContinue === 'boolean' ? { canContinue: record.canContinue } : {}),
     allowedActions: {
       rename: allowedActions.rename,
       reset: allowedActions.reset,

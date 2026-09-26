@@ -175,3 +175,27 @@ Pi reset rotates private storage and clears transcript preview/activity and stal
 While an accepted Pi extension command is waiting before `agent_start`, history projects its in-memory input after completed native entries so phone recovery anchors the pending run to the current turn. Retire that projection on agent start or settlement; never write synthetic commands into native Pi JSONL.
 
 Pi Relay owner-lease conflicts (HTTP 409) retry every two seconds within the startup readiness deadline; other failures retain exponential backoff. Only `relay.ready` resets recovery state, and retired socket events cannot affect the replacement.
+
+## Claude Code Agent SDK
+
+`src/claude-code/` implements the independent Claude Code runtime using the official SDK and an explicitly selected installed CLI. Native discovery/history is read-only; opaque mappings and acceptance fingerprints may be stored, transcripts and Claude credentials may not. Live ownership includes idle owners and unknown states fail closed. Keep native consent and question identities, respect abort signals, and declare only supported dialogs. See `../../docs/3.1/claude-code.md`; do not change another backend's process or native ownership protocol.
+
+Model choices retain native aliases and optional resolved IDs. Exclude exact native model-switch and interruption envelopes from human chat history without stripping ordinary text discussing commands.
+
+## Codex App Server
+
+`src/codex/` owns one stdio App Server per pairing configuration. Device pairing selects per-thread cwd from saved projects/native thread metadata; legacy project pairing retains its single cwd. Native thread history remains in Codex storage; only private metadata and prompt fingerprints belong to Clawket. Keep remote methods allowlisted and project IDs opaque. Use exact native turn IDs for steering, stopping and approvals. Never equate a stop acknowledgement or missing RPC response with completion. Preserve pending consent while the phone disconnects, retire it on authoritative resolution, and refuse unsupported interactions. Default to project sandboxing and one-time consent; never enable bypass flags or terminate another Codex client.
+
+Never resume a Codex thread that has never submitted a turn after App Server restart: empty native rollouts are not durable. Recreate only that empty case, preserving chosen model; accepted or uncertain inputs retain their original native identity. Native reasoning selection changes session configuration without generating a slash-command prompt.
+
+Codex preserves the selected native reasoning level across owned-process restart. Never rename/archive an unmaterialized native thread solely because its ephemeral ID was indexed; retain the local title until a real thread is available.
+
+Codex model selectors query the configured executable's native `model/list` on every request, consume bounded pagination and retain native picker visibility. Do not inject model names or use another installation's cache as a catalog. Supported desktop-bundled executables may have SemVer prerelease/build suffixes; version recognition is not a substitute for protocol readiness or integration tests. Never silently replace the user's selected executable to obtain more models.
+
+Codex Relay owner-lease conflicts do not increment network-failure backoff. Bound readiness separately from socket-open and allow a lease expiry plus transient handshake failure; keep the CLI parent's startup deadline longer than Relay readiness.
+
+Codex device continuity uses versioned local Desktop IPC with bounded frames and snapshots. Follow only requested conversations; reject foreign hosts, invalid patches and unknown revisions. Preserve canonical turn IDs and the start-turn result envelope. Never retry an uncertain write through another owner. Native metadata stays read-only; original-thread continuation is distinct from branching. Group user-input fields by their original IDs, preserve options/custom input, and keep cancellation pending until native termination. Phone dismissal is never an answer. Only the exact pending command/file/permission request can be answered; unsupported or secret interactions fail closed.
+
+Codex does not create a landing record at startup. Advertise `entryMode: sessions` with an empty `mainSessionKey`; all owned records, including former landing records, are ordinary deletable conversations. Preserve existing IDs/history. A sessionless model list reads the native catalog without creating or selecting a thread; model mutation requires an explicit session.
+
+Claude device discovery supplements native session directories with bounded, read-only project keys from the standard `~/.claude.json`; never expose configuration values or use this fallback across a custom `CLAUDE_CONFIG_DIR`. Explicit project pairings do not read the global project registry.

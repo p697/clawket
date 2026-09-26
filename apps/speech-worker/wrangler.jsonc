@@ -4,9 +4,12 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-09-19",
   "compatibility_flags": [
-    "nodejs_compat"
+    "nodejs_compat",
+    "enable_request_signal"
   ],
   "observability": {
+    "redact_query_string": true,
+    "traces": { "enabled": false },
     "enabled": true,
     "head_sampling_rate": 1,
     "logs": {

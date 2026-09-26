@@ -4,7 +4,7 @@ import { sanitizeFallbackModels } from './fallback-models';
 type UnknownRecord = Record<string, unknown>;
 
 export const THINKING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'adaptive'] as const;
-export type ThinkingLevel = typeof THINKING_LEVELS[number];
+export type ThinkingLevel = typeof THINKING_LEVELS[number] | 'none' | 'max' | 'ultra';
 
 export type GatewayRuntimeSettings = {
   heartbeatEvery: string;

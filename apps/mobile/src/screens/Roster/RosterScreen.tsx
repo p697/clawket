@@ -62,6 +62,7 @@ import {
 } from '../../utils/chat-message';
 import {
   buildRosterRows,
+  resolveRosterLiveConnectionId,
   resolveRosterPageState,
   type RosterDisplayRow,
   type RosterModelOptions,
@@ -90,6 +91,8 @@ export type RosterViewProps = Readonly<{
   state: RosterPageState;
   rows: ReadonlyArray<RosterDisplayRow>;
   activeConnectionId: string | null;
+  /** Rows of this connection carry the live dot; see `resolveRosterLiveConnectionId`. */
+  liveConnectionId?: string | null;
   refreshing?: boolean;
   graceBanner?: RosterGraceBanner;
   accountBadge?: FloatingButtonBadge;
@@ -385,6 +388,7 @@ export function RosterView({
   state,
   rows,
   activeConnectionId,
+  liveConnectionId = null,
   refreshing = false,
   graceBanner,
   accountBadge,
@@ -437,6 +441,7 @@ export function RosterView({
   const renderRow = useCallback<ListRenderItem<RosterDisplayRow>>(({ item }) => {
     const activeConnectionOffline = item.connectionId === activeConnectionId
       && (showOfflineBanner ?? state === 'offline');
+    const live = liveConnectionId !== null && item.connectionId === liveConnectionId;
     const open = item.locked ? onOpenLockedRow : onOpenRow;
     const timeLabel = relativeTime(
       item.lastActivityAt,
@@ -466,7 +471,8 @@ export function RosterView({
         attentionTone="bad"
         cached={item.cached}
         locked={item.locked}
-        accessibilityLabel={[item.name, timeLabel, item.cached && item.syncedAt ? `${t('Last synced')} ${relativeTime(item.syncedAt, translateRelativeTime)}` : null, item.working ? t('Working') : null, item.unreadCount > 0 ? t('Unread messages') : null].filter(Boolean).join(', ')}
+        live={live}
+        accessibilityLabel={[item.name, live ? t('Connected', { ns: 'settings' }) : null, timeLabel, item.cached && item.syncedAt ? `${t('Last synced')} ${relativeTime(item.syncedAt, translateRelativeTime)}` : null, item.working ? t('Working') : null, item.unreadCount > 0 ? t('Unread messages') : null].filter(Boolean).join(', ')}
         onPress={() => { dismissRoster?.(); open(item); }}
         {...(onLongPressRow ? { onLongPress: () => onLongPressRow(item) } : {})}
       />
@@ -485,6 +491,7 @@ export function RosterView({
     );
   }, [
     activeConnectionId,
+    liveConnectionId,
     selectedThread,
     dismissRoster,
     onLongPressRow,
@@ -642,6 +649,13 @@ export function RosterScreen({
   });
   const offline = !connections.recovering && (connections.recoveryFailed || connections.activeState === 'offline'
     || connections.activeState === 'reconnecting');
+  const liveConnectionId = resolveRosterLiveConnectionId({
+    rows,
+    activeConnectionId: connections.activeConnectionId,
+    activeState: connections.activeState,
+    recovering: connections.recovering === true,
+    offline,
+  });
   const activeConnection = connections.connections.find((item) => item.id === connections.activeConnectionId);
   const connectionError = connections.error
     && (connections.error.operation === 'connect' || connections.error.operation === 'probe')
@@ -791,6 +805,7 @@ export function RosterScreen({
         state={state}
         rows={rows}
         activeConnectionId={connections.activeConnectionId}
+        liveConnectionId={liveConnectionId}
         refreshing={refreshing}
         graceBanner={graceBanner}
         accountBadge={accountBadge}

@@ -6,6 +6,7 @@ import type {
 } from '@clawket/agent-protocol';
 
 import type { RosterConnectionGroup } from '../../connection';
+import { cronSessionName } from '../../utils/chat-message';
 import {
   buildSessionDescriptorBoardRows,
   type SessionBoardRow,
@@ -25,6 +26,7 @@ export type SessionPanelPageState =
   | 'ready';
 
 export type SessionPanelRow = SessionBoardRow & Readonly<{
+  project?: SessionDescriptor['project'];
   id: string;
   connectionId: string;
   agentId: string;
@@ -108,6 +110,7 @@ export function buildSessionPanelRows(
   group: RosterConnectionGroup | null | undefined,
   options?: Readonly<{
     now?: number;
+    recentFirst?: boolean;
     pinnedSessionKeys?: Readonly<Record<string, ReadonlyArray<string>>>;
   }>,
 ): ReadonlyArray<SessionPanelRow> {
@@ -125,6 +128,7 @@ export function buildSessionPanelRows(
       if (!board) return [];
       return [{
         ...board,
+        project: session.project,
         id: `${session.connectionId}:${session.agentId}:${session.key}`,
         connectionId: session.connectionId,
         agentId: session.agentId,
@@ -139,7 +143,9 @@ export function buildSessionPanelRows(
       } satisfies SessionPanelRow];
     });
   });
-  return Object.freeze(rows.sort(compareRows));
+  return Object.freeze(rows.sort(options?.recentFirst
+    ? (a, b) => Number(b.pinned) - Number(a.pinned) || b.updatedAt - a.updatedAt || a.key.localeCompare(b.key)
+    : compareRows));
 }
 
 /** The panel shows one Agent at a time; the header pill switches between them. */
@@ -195,13 +201,19 @@ export function filterSessionPanelRows(
     agentId: string;
     filter: SessionPanelFilter;
     query: string;
+    /** The localized title the row renders, so a search matches what people read. */
+    displayTitle?: (row: SessionPanelRow) => string;
   }>,
 ): ReadonlyArray<SessionPanelRow> {
   const query = options.query.trim().toLowerCase();
   return rows.filter((row) => (
     row.agentId === options.agentId
     && matchesFilter(row, options.filter)
-    && (!query || row.searchableText.includes(query))
+    && (
+      !query
+      || row.searchableText.includes(query)
+      || Boolean(options.displayTitle?.(row).toLowerCase().includes(query))
+    )
   ));
 }
 
@@ -240,6 +252,15 @@ export function availableSessionActions(
   if (row.allowedActions.reset && capabilities.sessionReset) actions.push('reset');
   if (row.allowedActions.delete && capabilities.sessionDelete) actions.push('delete');
   return actions;
+}
+
+/**
+ * The editable part of a row title. An untitled row carries its key as the title and a
+ * scheduled run carries the Gateway's English kind prefix; the view localizes both.
+ */
+export function sessionPanelRowName(row: Pick<SessionPanelRow, 'key' | 'kind' | 'title'>): string {
+  if (row.title === row.key) return '';
+  return row.kind === 'cron' ? cronSessionName(row.title) : row.title.trim();
 }
 
 export function normalizeSessionRenameTitle(

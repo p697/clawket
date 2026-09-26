@@ -387,6 +387,41 @@ describe.each(['light', 'dark'] as const)('%s roster primitives', (scheme) => {
     expect(result.queryByText('1')).toBeNull();
   });
 
+  it('marks a live row on the avatar corner and yields that corner to attention and lock', () => {
+    const theme = activeTheme(scheme);
+    const row = (patch: Partial<React.ComponentProps<typeof RosterRow>>) => render(
+      <RosterRow testID="row" agentId="main" name="Main" preview="Reply" live onPress={jest.fn()} {...patch} />,
+    );
+    const live = row({});
+    expect(flattenStyle(live.getByTestId('row-avatar-live').props.style)).toMatchObject({
+      width: 12,
+      height: 12,
+      backgroundColor: theme.colors.good,
+      borderColor: theme.colors.canvas,
+      borderWidth: BorderWidth.strong,
+    });
+    live.unmount();
+
+    // The runtime serves the live connection's rows from cache while it reconnects.
+    const reconnecting = row({ cached: true, attention: true });
+    expect(reconnecting.getByTestId('row-avatar-live')).toBeTruthy();
+    expect(reconnecting.queryByTestId('row-avatar-attention')).toBeNull();
+    reconnecting.unmount();
+
+    const attention = row({ attention: true });
+    expect(attention.getByTestId('row-avatar-attention')).toBeTruthy();
+    expect(attention.queryByTestId('row-avatar-live')).toBeNull();
+    attention.unmount();
+
+    const locked = row({ locked: true });
+    expect(locked.getByTestId('row-avatar-locked')).toBeTruthy();
+    expect(locked.queryByTestId('row-avatar-live')).toBeNull();
+    locked.unmount();
+
+    const quiet = row({ live: false });
+    expect(quiet.queryByTestId('row-avatar-live')).toBeNull();
+  });
+
   it('shows cached activity time and lock state without stale attention or unread badges', () => {
     const result = render(
       <RosterRow
@@ -564,6 +599,24 @@ describe('AgentAvatar states and motion', () => {
     );
     expect(locked.getByTestId('locked-avatar-locked')).toBeTruthy();
     expect(flattenStyle(locked.getByTestId('locked-avatar-fill').props.style).filter).toEqual([{ saturate: 0.4 }]);
+  });
+
+  it('paints a mounted live dot at once and fades one in when an Agent becomes live', () => {
+    const mounted = render(<AgentAvatar testID="live-avatar" agentId="main" name="Main" status="live" />);
+    const layer = mounted.UNSAFE_root.findAll((node) => String(node.type) === 'AnimatedView')[0];
+    expect(flattenStyle(layer?.props.style).opacity).toBe(1);
+    expect(mounted.getByTestId('live-avatar-live')).toBeTruthy();
+    // The dot sits outside the fill, so offline/locked desaturation never greys it.
+    expect(flattenStyle(mounted.getByTestId('live-avatar-fill').props.style).filter).toBeUndefined();
+
+    const later = render(<AgentAvatar testID="later" agentId="main" name="Main" status="idle" />);
+    expect(later.queryByTestId('later-live')).toBeNull();
+    mockWithTiming.mockClear();
+    later.rerender(<AgentAvatar testID="later" agentId="main" name="Main" status="live" />);
+    expect(later.getByTestId('later-live')).toBeTruthy();
+    expect(mockWithTiming).toHaveBeenCalledWith(1, { duration: Motion.duration.normal });
+    later.rerender(<AgentAvatar testID="later" agentId="main" name="Main" status="idle" />);
+    expect(later.queryByTestId('later-live')).toBeNull();
   });
 
   it('stops skeleton pulse animation when reduced motion is enabled', () => {

@@ -1,6 +1,7 @@
 import type { BackendKind, PromptAttachment } from './descriptors';
 
 export interface Capabilities {
+  projects?: boolean;
   agentQuestions?: boolean;
   sessionBranch?: boolean;
   chat: boolean;
@@ -77,6 +78,7 @@ export interface Capabilities {
 export type Capability = keyof Capabilities;
 
 export const CAPABILITY_KEYS = [
+  'projects',
   'agentQuestions',
   'sessionBranch',
   'chat',
@@ -268,6 +270,12 @@ const YOUMIND_CAPABILITIES: Capabilities = {
 };
 
 export const CAPABILITY_MATRIX: Record<BackendKind, Capabilities> = {
+  'claude-code': { ...YOUMIND_CAPABILITIES, steer: false, sessionBranch: true, projects: true, chat: true, abort: true, history: true, attachments: true,
+    sessions: true, sessionCreate: true, sessionRename: true, sessionReset: true, sessionDelete: true,
+    models: true, modelPerSession: true, agentQuestions: true, execApproval: true },
+  codex: { ...YOUMIND_CAPABILITIES, projects: true, chat: true, abort: true, steer: true, history: true, attachments: true,
+    sessions: true, sessionCreate: true, sessionRename: true, sessionReset: true, sessionDelete: true,
+    models: true, modelPerSession: true, thinkingLevels: true, skills: true, agentQuestions: true, sessionBranch: true, execApproval: true },
   pi: { ...YOUMIND_CAPABILITIES, chat: true, abort: true, steer: true, history: true, attachments: true,
     sessions: true, sessionCreate: true, sessionRename: true, sessionReset: true, sessionDelete: true,
     models: true, modelPerSession: true, thinkingLevels: true, skills: true, agentQuestions: true, sessionBranch: true },

@@ -11,3 +11,9 @@ Copied without recoloring or redrawing on 2026-09-06. These marks identify the c
 Static Metro assets are rendered by `PlatformMark`. Do not fetch brand images during onboarding or apply the user's accent color to them.
 
 - `pi.svg`: official Pi logo from https://pi.dev/logo-auto.svg (linked by https://github.com/earendil-works/pi/blob/v0.87.1/README.md), retrieved 2026-09-26. `pi.png` is a 192×192 transparent rasterization for the shared Metro image path, retaining the complete 800×800 viewBox, original colors, geometry and safe area. Regenerate with Sharp resize(192, 192).png(); never substitute a generic mathematical π glyph.
+
+- `codex.png`: unmodified official Codex light app artwork from the installed OpenAI desktop distribution, `/Applications/ChatGPT.app/Contents/Resources/icon-codex-light.png`, copied 2026-09-26. Preserve the complete app artwork and safe area. Brand ownership remains with OpenAI.
+
+- `claude-code.svg`: unmodified official Claude spark vector (fill `#D97757`, 248×248 viewBox) from the installed Claude desktop app 2.9939.2, `/Applications/Claude.app/Contents/Resources/ion-dist/assets/v1/cd02a42d9-Vq_H3mgS.svg`, copied 2026-09-26 at the owner's request: the circular-backed `../model-icons/select_model_claude.png` read as a frame on the Onboarding chooser. `claude-code.png` is a 192×192 transparent rasterization (Sharp; the complete spark scaled to 172 px and centered, original color, no backing). The model picker keeps its own Claude artwork. Brand ownership remains with Anthropic.
+
+Local model is not a brand and has no bundled artwork: `PlatformMark` draws its Clawket-authored mark in code (`LocalModelMark`, 2026-09-26): an ink processor outline on the theme `surface` tile, on the same 42/52-point grid as the app-icon artwork, so it follows light and dark mode.

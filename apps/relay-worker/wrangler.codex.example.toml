@@ -1,0 +1,42 @@
+name = "clawket-codex-relay"
+main = "src/index.ts"
+compatibility_date = "2026-09-17"
+workers_dev = true
+account_id = "00000000000000000000000000000000"
+
+[observability]
+enabled = true
+redact_query_string = true
+
+[observability.logs]
+enabled = true
+invocation_logs = false
+
+[observability.traces]
+enabled = false
+
+[vars]
+RELAY_BACKEND = "codex"
+# Set PAIRING_TICKET_SECRET with `wrangler secret put` on both Codex workers;
+# never place that shared secret in this file.
+# Also set a separate PAIRING_SYNC_SECRET on both workers. This enables immediate
+# credential synchronization; KV propagation alone is not a readiness guarantee.
+MAX_MESSAGES_PER_10S = "120"
+MAX_CLIENT_MESSAGES_PER_10S = "300"
+HEARTBEAT_INTERVAL_MS = "30000"
+AWAITING_CHALLENGE_TTL_MS = "25000"
+CLIENT_PONG_TIMEOUT_MS = "120000"
+REGISTRY_VERIFY_URL = "https://clawket-codex-registry.example.workers.dev"
+GATEWAY_OWNER_LEASE_MS = "20000"
+
+[[durable_objects.bindings]]
+name = "ROOM"
+class_name = "CodexRelayRoom"
+
+[[kv_namespaces]]
+binding = "ROUTES_KV"
+id = "00000000000000000000000000000000"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["CodexRelayRoom"]

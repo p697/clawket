@@ -276,6 +276,8 @@ function mapApprovalMessage(approval: ApprovalRequest, now: () => number): UiMes
       kind: 'exec',
       id: approval.id,
       command: approval.command,
+      category: approval.category,
+      reason: approval.reason,
       decisions: approval.decisions,
       cwd: approval.cwd,
       host: approval.host,

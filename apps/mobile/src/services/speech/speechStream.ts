@@ -12,13 +12,16 @@ export type SpeechConnection = {
   finish(): void;
   cancel(): void;
 };
-export async function connectSpeech(): Promise<SpeechConnection> {
+export async function connectSpeech(signal?: AbortSignal): Promise<SpeechConnection> {
+  const check = () => { if (signal?.aborted) throw new SpeechError('speech_cancelled'); };
+  check();
   const url = new URL(speechServiceUrl);
   if (url.protocol !== 'wss:' || url.pathname !== '/v1/speech' || url.username || url.password || url.search) throw Error('speech_unavailable');
   let identityTimeout: ReturnType<typeof setTimeout> | undefined;
   const identity = await Promise.race([ensureIdentity(), new Promise<never>((_, reject) => {
     identityTimeout = setTimeout(() => reject(new SpeechError('speech_auth')), 5000);
   })]).finally(() => clearTimeout(identityTimeout));
+  check();
   const timestamp = String(Date.now()), nonce = generateId();
   const payload = `clawket-speech-v1|${url.host}|${timestamp}|${nonce}`;
   const signature = bytesToHex(nacl.sign.detached(new TextEncoder().encode(payload), hexToBytes(identity.secretKeyHex)));
@@ -29,11 +32,11 @@ export async function connectSpeech(): Promise<SpeechConnection> {
   return openSpeechSocket(new NativeSocket(url.toString(), undefined, {
     headers: { 'x-speech-protocol': '2', 'x-speech-key': identity.publicKeyHex, 'x-speech-time': timestamp,
       'x-speech-nonce': nonce, 'x-speech-signature': signature },
-  }));
+  }), signal);
 }
 
-/** No automatic retries: a lost final response must never replay a user's prompt. */
-export function openSpeechSocket(socket: WebSocket): SpeechConnection {
+/** This socket never retries or replays audio after a lost final response. */
+export function openSpeechSocket(socket: WebSocket, signal?: AbortSignal): SpeechConnection {
   let resolveReady!: () => void, rejectReady!: (error: Error) => void;
   let resolveResult!: (text: string) => void, rejectResult!: (error: Error) => void;
   const ready = new Promise<void>((resolve, reject) => { resolveReady = resolve; rejectReady = reject; });
@@ -43,10 +46,16 @@ export function openSpeechSocket(socket: WebSocket): SpeechConnection {
   let sentBytes = 0, acknowledgedBytes = 0;
   let requestId = '';
   let timer = setTimeout(() => fail(new SpeechError('speech_connect_timeout')), 20000);
+  const detachAbort = () => signal?.removeEventListener('abort', cancel);
+  const cancel = () => {
+    if (done) return;
+    try { if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'cancel' })); } catch { /* Already closed. */ }
+    fail('speech_cancelled');
+  };
   const fail = (value: string | SpeechError) => {
     const error = value instanceof SpeechError ? value : decodeSpeechError({ code: value, requestId });
     if (done) return;
-    done = true; clearTimeout(timer);
+    done = true; clearTimeout(timer); detachAbort();
     rejectReady(error); rejectResult(error);
     try { socket.close(); } catch { /* Already closed. */ }
   };
@@ -66,7 +75,7 @@ export function openSpeechSocket(socket: WebSocket): SpeechConnection {
         acknowledgedBytes = event.bytes;
       } else if (event.type === 'result') {
         if (!finishing || typeof event.text !== 'string' || event.text.length > 16000) throw Error();
-        done = true; clearTimeout(timer); resolveResult(event.text.trim()); socket.close();
+        done = true; clearTimeout(timer); detachAbort(); resolveResult(event.text.trim()); socket.close();
       } else if (event.type === 'error') {
         fail(decodeSpeechError(event));
       } else if (event.type !== 'transcript') throw Error();
@@ -74,6 +83,10 @@ export function openSpeechSocket(socket: WebSocket): SpeechConnection {
   };
   socket.onerror = () => fail('speech_disconnected');
   socket.onclose = () => fail('speech_disconnected');
+  // Some native transports can finish opening after a CONNECTING socket was closed.
+  socket.onopen = () => { if (done) { try { socket.close(); } catch { /* Already closed. */ } } };
+  signal?.addEventListener('abort', cancel, { once: true });
+  if (signal?.aborted) cancel();
   return {
     ready, result,
     writable: () => !done && socket.readyState === WebSocket.OPEN &&
@@ -97,10 +110,6 @@ export function openSpeechSocket(socket: WebSocket): SpeechConnection {
       timer = setTimeout(() => fail('speech_timeout'), 16000);
       try { socket.send(JSON.stringify({ type: 'finish' })); } catch { fail('speech_disconnected'); }
     },
-    cancel() {
-      if (done) return;
-      try { if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'cancel' })); } catch { /* Already closed. */ }
-      fail('speech_cancelled');
-    },
+    cancel,
   };
 }

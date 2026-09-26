@@ -144,11 +144,17 @@ export const LOCAL_MODEL_BACKEND_POLICY: BackendPolicy = {
   routeRequestsByOrigin: true, rejectRequestWithoutOwner: true,
 };
 
+export const CLAUDE_CODE_BACKEND_POLICY: BackendPolicy = { ...LOCAL_MODEL_BACKEND_POLICY, backend: 'claude-code' };
+
+export const CODEX_BACKEND_POLICY: BackendPolicy = { ...LOCAL_MODEL_BACKEND_POLICY, backend: 'codex' };
+
 export const PI_BACKEND_POLICY: BackendPolicy = { ...LOCAL_MODEL_BACKEND_POLICY, backend: 'pi' };
 
 export function policyForBackend(backend: string | undefined): BackendPolicy {
   if (backend === undefined) return OPENCLAW_BACKEND_POLICY;
   if (backend === 'openclaw') return OPENCLAW_BACKEND_POLICY;
+  if (backend === 'claude-code') return CLAUDE_CODE_BACKEND_POLICY;
+  if (backend === 'codex') return CODEX_BACKEND_POLICY;
   if (backend === 'pi') return PI_BACKEND_POLICY;
   if (backend === 'local-model') return LOCAL_MODEL_BACKEND_POLICY;
   if (backend === 'hermes') return HERMES_BACKEND_POLICY;

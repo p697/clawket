@@ -26,8 +26,8 @@ export function SessionPreviewNotice({ onUpgrade }: { onUpgrade: () => void }): 
   </View>;
 }
 
-export function SessionPreviewFooter({ onUpgrade, onMain, bottomInset, loading = false }: {
-  onUpgrade: () => void; onMain: () => void; bottomInset: number; loading?: boolean;
+export function SessionPreviewFooter({ onUpgrade, onMain, mainLabel, bottomInset, loading = false }: {
+  onUpgrade: () => void; onMain: () => void; mainLabel?: string; bottomInset: number; loading?: boolean;
 }): React.JSX.Element {
   const { theme } = useAppTheme();
   const { t } = useTranslation('chat');
@@ -36,7 +36,7 @@ export function SessionPreviewFooter({ onUpgrade, onMain, bottomInset, loading =
   return <View testID="session-preview-footer" style={[styles.footer, { paddingBottom: Math.max(bottomInset, Space.lg) }]}>
     <Text style={[styles.detail, { color: theme.colors.inkSecondary }]}>{loading ? t('Loading history') : t('Latest messages · read-only preview')}</Text>
     <View style={[styles.actions, stacked ? { flexDirection: 'column' } : null]}>
-      <Button label={t('Main chat')} accessibilityLabel={t('Back to main chat')} variant="secondary" onPress={onMain} style={stacked ? undefined : styles.action} />
+      <Button label={mainLabel ?? t('Main chat')} accessibilityLabel={mainLabel ?? t('Back to main chat')} variant="secondary" onPress={onMain} style={stacked ? undefined : styles.action} />
       <Button label={t('Upgrade to Pro')} accessibilityLabel={t('Unlock conversation')} onPress={onUpgrade} style={stacked ? undefined : styles.action} />
     </View>
   </View>;

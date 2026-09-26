@@ -1,5 +1,8 @@
 /** @type {import('jest').Config} */
 const config = {
+  // Owner rule (root AGENTS.md, Local Test Resource Rule): never run at full
+  // parallelism. The default of one worker per core froze the development machine.
+  maxWorkers: 2,
   testMatch: ['**/*.test.ts', '**/*.test.tsx'],
   transform: {
     '^.+\\.tsx?$': ['ts-jest', {

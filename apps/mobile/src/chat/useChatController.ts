@@ -362,12 +362,6 @@ export function useChatController({
   const showDebug = debugMode ?? false;
   const { logs: debugLog, appendDebugLog: dbg } = useBufferedDebugLog(showDebug);
   const hasAdapter = adapter !== null;
-  const thinkingLevelOptions = useMemo(
-    () => adapter?.capabilities.thinkingLevels
-      ? (adapter.management?.models?.listThinkingLevels?.() ?? [])
-      : [],
-    [adapter],
-  );
 
   const sessionKeyRef = useRef<string | null>(routeSessionKey ?? null);
   const lastAdapterStateRef = useRef<AdapterConnectionState>("idle");
@@ -518,10 +512,17 @@ export function useChatController({
 
   const armPendingRunTimeout = useCallback(() => {
     clearPendingRunTimeout();
-    pendingRunTimeoutRef.current = setTimeout(() => {
+    const schedule = (delayMs: number) => { pendingRunTimeoutRef.current = setTimeout(() => {
       pendingRunTimeoutRef.current = null;
       // Only fire if a run is still tracked
       if (!currentRunIdRef.current) return;
+      // Backend evidence without a stream event (a watchdog probe confirming a
+      // quiet tool) keeps the run: silence alone never tears down live rows.
+      const quietMs = Date.now() - lastRunSignalAtRef.current;
+      if (lastRunSignalAtRef.current > 0 && quietMs < PENDING_RUN_INACTIVITY_MS) {
+        schedule(PENDING_RUN_INACTIVITY_MS - quietMs);
+        return;
+      }
       if (showDebug)
         dbg(
           `[isSending] → false | reason=pendingRunTimeout (${PENDING_RUN_INACTIVITY_MS}ms inactivity) | runId=${currentRunIdRef.current?.slice(0, 8)}`,
@@ -536,7 +537,8 @@ export function useChatController({
       clearTransientRunPresentation();
       setIsSending(false);
       setActivityLabel(null);
-    }, PENDING_RUN_INACTIVITY_MS);
+    }, delayMs); };
+    schedule(PENDING_RUN_INACTIVITY_MS);
   }, [clearPendingRunTimeout, clearTransientRunPresentation]);
 
   const {
@@ -876,8 +878,9 @@ export function useChatController({
 
         if (historyResult.hasActiveRun) {
           // A quiet tool can still be working. Confirmed backend activity
-          // resets the watchdog without rebuilding any displayed rows.
+          // resets both watchdogs without rebuilding any displayed rows.
           lastRunSignalAtRef.current = Date.now();
+          armPendingRunTimeout();
           return;
         }
         if (lastRunSignalAtRef.current > requestedAt) return;
@@ -933,6 +936,7 @@ export function useChatController({
       }
     },
     [
+      armPendingRunTimeout,
       clearActiveRunState,
       dbg,
       adapter,
@@ -2559,6 +2563,8 @@ export function useChatController({
     currentModel,
     currentModelHeaderLabel,
     currentModelDisplayName,
+    selectNativeThinkingLevel,
+    nativeThinkingLevel,
     currentModelProvider,
     modelPickerError,
     modelPickerLoading,
@@ -2573,7 +2579,14 @@ export function useChatController({
     sessionKey: history.sessionKey,
     setInput,
     setSessions: history.setSessions,
+    setThinkingLevel: history.setThinkingLevel,
   });
+  const thinkingLevelOptions = useMemo(
+    () => adapter?.capabilities.thinkingLevels
+      ? (availableModels.find(model => model.id === currentModel)?.reasoningLevels ?? adapter.management?.models?.listThinkingLevels?.() ?? [])
+      : [],
+    [adapter, availableModels, currentModel],
+  );
 
   const runSilentCommandProbe = useCallback(
     (commandText: string): Promise<string> => {
@@ -2999,6 +3012,7 @@ export function useChatController({
     (level: string) => {
       setStaticThinkPickerVisible(false);
 
+      if (selectNativeThinkingLevel(level)) return;
       const effectiveLevel = level === "off" ? null : level;
       history.setThinkingLevel(effectiveLevel);
 
@@ -3013,7 +3027,7 @@ export function useChatController({
         }
       });
     },
-    [connectionState, history, submitMessageWithConnectionCheck],
+    [connectionState, history, selectNativeThinkingLevel, submitMessageWithConnectionCheck],
   );
 
   const openSession = useCallback(
@@ -3106,7 +3120,7 @@ export function useChatController({
       );
       if (found) {
         switchSession(found);
-      } else {
+      } else if (mainSessionKey) {
         switchSession({
           key: mainSessionKey,
           kind: "unknown",
@@ -3367,6 +3381,11 @@ export function useChatController({
     onSend,
     onSteer,
     activeRunId: currentRunIdRef.current,
+    // The identity the live reply row will carry, so a placeholder shown before
+    // the first row reaches the list never remounts when that row lands.
+    pendingReplyRenderKey: currentRunIdRef.current
+      ? liveReplyRenderKey(streamStartedAtRef.current, currentRunIdRef.current, chatStreamSegments.length)
+      : null,
     canSteer: Boolean(adapter?.capabilities.steer && adapter.steer && isSending && currentRunIdRef.current && !pendingImages.length && input.trim()),
     startVoiceInput, stopVoiceInput, cancelVoiceInput,
     voiceInputSupported,
@@ -3394,7 +3413,7 @@ export function useChatController({
     currentModelHeaderLabel,
     currentModelDisplayName,
     currentModelProvider,
-    thinkingLevel: history.thinkingLevel,
+    thinkingLevel: nativeThinkingLevel ?? history.thinkingLevel,
     openThinkPicker: openStaticThinkPicker,
     staticThinkPickerVisible,
     closeStaticThinkPicker,

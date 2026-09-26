@@ -69,6 +69,9 @@ const VOICE_ERROR_CODES = new Set([
   'ERR_SPEECH_UNAVAILABLE',
 ]);
 
+// Native capture reports audio port categories only, never device names.
+const VOICE_INPUT_ROUTES = new Set(['built_in', 'bluetooth', 'wired', 'usb', 'car', 'none', 'other']);
+
 const SETTINGS_ROWS = new Set([
   'channels_devices',
   'channels_devices_channels',
@@ -213,7 +216,7 @@ export function normalizeAnalyticsEventString(
     const allowed: Record<string, readonly string[]> = {
       action: ['edit', 'saved', 'failed'],
       document: ['agents', 'soul', 'identity', 'user', 'bootstrap', 'memory'],
-      backend: ['openclaw', 'hermes', 'youmind', 'local-model', 'pi'],
+      backend: ['openclaw', 'hermes', 'youmind', 'local-model', 'pi', 'codex', 'claude-code'],
     };
     return allowed[property]?.includes(value) ? value : 'other';
   }
@@ -227,6 +230,9 @@ export function normalizeAnalyticsEventString(
     return CHANNEL_PLATFORMS.has(channel) ? channel : 'other';
   }
   if (event === 'settings_row_opened' && property === 'row') return normalizeSettingsRow(value);
+  if (event === 'chat_voice_input_timing' && property === 'input_route') {
+    return VOICE_INPUT_ROUTES.has(value) ? value : 'other';
+  }
   if (event.startsWith('app_update_announcement_')) {
     if (property === 'version') return normalizeAppVersion(value);
     if (property === 'entry') return normalizeAnalyticsToken(value).slice(0, 48) || 'other';

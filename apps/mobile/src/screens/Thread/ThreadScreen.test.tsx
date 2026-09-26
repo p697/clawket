@@ -1,3 +1,4 @@
+jest.mock('./ConversationEntry', () => ({ ConversationEntry: () => require('react').createElement('ConversationEntry') }));
 jest.mock('../../components/ui/Button', () => ({ Button: () => null }));
 jest.mock('../../components/ui/Banner', () => ({ Banner: () => null }));
 jest.mock('./AgentQuestions', () => ({ AgentQuestions: () => null }));
@@ -1401,4 +1402,18 @@ test('voice widget waits for focus, capability, restored draft and the matching 
     expect(mockController.pickImage).not.toHaveBeenCalled();
   });
 
+});
+
+it.each(['bridge', 'native'] as const)('preserves access rules for sessions-first %s chats', (source) => {
+  mockIsPro = false;
+  const props = createNavigationProps();
+  props.route = { ...props.route, params: { ...props.route.params, sessionKey: 'owned-chat' } };
+  mockController.sessionKey = 'owned-chat';
+  mockConnections.roster = [{ connection: adapter.connection, agents: [{
+    agent: { connectionId: 'connection-1', agentId: 'atlas', name: 'Codex', isMain: true, mainSessionKey: '', entryMode: 'sessions' },
+    sessions: [{ key: 'owned-chat', kind: 'direct', source }],
+  }] }];
+  render(<ThreadScreen {...props} />);
+  if (source === 'bridge') expect(mockThreadViewProps?.sessionPreview).toBeUndefined();
+  else expect(mockThreadViewProps?.sessionPreview).toBeDefined();
 });

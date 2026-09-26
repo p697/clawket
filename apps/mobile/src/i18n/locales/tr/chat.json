@@ -158,7 +158,6 @@
   "Voice input": "Sesli giriş",
   "Stop voice input": "Sesli girişi durdur",
   "Listening…": "Dinleniyor…",
-  "Preparing voice input…": "Sesli giriş hazırlanıyor…",
   "Send": "Gönder",
   "Reconnect": "Yeniden bağlan",
   "Offline · reconnecting": "Çevrimdışı · yeniden bağlanıyor",
@@ -380,5 +379,12 @@
   "{{channel}} member": "{{channel}} üyesi",
   "Agent needs your input": "Agent yanıtınızı bekliyor",
   "Respond": "Yanıtla",
-  "Continue in a new session": "Yeni oturumda devam et"
+  "Continue in a new session": "Yeni oturumda devam et",
+  "thinking_none": "Kapalı",
+  "thinking_max": "En yüksek",
+  "thinking_ultra": "Ultra",
+  "Allow this action?": "Bu işleme izin verilsin mi?",
+  "Stop task": "Görevi durdur",
+  "Your answer": "Yanıtınız",
+  "Question {{current}} of {{total}}": "Soru {{current}} / {{total}}"
 }

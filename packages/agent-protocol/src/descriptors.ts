@@ -1,4 +1,4 @@
-export type BackendKind = 'openclaw' | 'hermes' | 'youmind' | 'local-model' | 'pi';
+export type BackendKind = 'openclaw' | 'hermes' | 'youmind' | 'local-model' | 'pi' | 'codex' | 'claude-code';
 
 export type TransportKind =
   | 'relay'
@@ -71,6 +71,8 @@ export interface AgentDescriptor {
   avatarUrl?: string;
   isMain: boolean;
   mainSessionKey: string;
+  /** Sessions-first agents have no privileged main chat; mainSessionKey may be empty. */
+  entryMode?: 'sessions';
 }
 
 export type SessionKind =
@@ -89,7 +91,17 @@ export interface SessionActions {
   pin: boolean;
 }
 
+export interface ProjectDescriptor {
+  id: string;
+  name: string;
+  path: string;
+  available: boolean;
+}
+
 export interface SessionDescriptor {
+  project?: ProjectDescriptor;
+  /** Exact native continuation is available; absent preserves legacy read-only semantics. */
+  canContinue?: boolean;
   connectionId: string;
   agentId: string;
   key: string;
@@ -237,6 +249,8 @@ export type ApprovalRequest =
       kind: 'exec';
       id: string;
       command: string;
+      category?: 'command' | 'file' | 'network' | 'permissions';
+      reason?: string;
       decisions?: ReadonlyArray<'allow-once' | 'allow-always' | 'deny'>;
       cwd?: string;
       host?: string;
@@ -262,7 +276,8 @@ export type ApprovalRequest =
 /** RPC extension questions are user interaction, not execution permission grants. */
 export interface AgentQuestion {
   id: string;
-  kind: 'select' | 'confirm' | 'input' | 'editor';
+  kind: 'select' | 'confirm' | 'input' | 'editor' | 'form';
+  fields?: Array<{ id: string; title: string; header?: string; options: Array<{ label: string; description?: string }>; allowCustom: boolean; multiSelect?: boolean }>;
   title: string;
   message?: string;
   options?: string[];

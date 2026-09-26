@@ -158,7 +158,6 @@
   "Voice input": "音声入力",
   "Stop voice input": "音声入力を停止",
   "Listening…": "聞き取り中…",
-  "Preparing voice input…": "音声入力を準備しています…",
   "Send": "送信",
   "Reconnect": "再接続",
   "Offline · reconnecting": "オフライン · 再接続中",
@@ -380,5 +379,12 @@
   "{{channel}} member": "{{channel}} のメンバー",
   "Agent needs your input": "エージェントが回答を待っています",
   "Respond": "回答する",
-  "Continue in a new session": "新しいセッションで続ける"
+  "Continue in a new session": "新しいセッションで続ける",
+  "thinking_none": "オフ",
+  "thinking_max": "最大",
+  "thinking_ultra": "超高",
+  "Allow this action?": "この操作を許可しますか？",
+  "Stop task": "タスクを停止",
+  "Your answer": "回答",
+  "Question {{current}} of {{total}}": "質問 {{current}} / {{total}}"
 }

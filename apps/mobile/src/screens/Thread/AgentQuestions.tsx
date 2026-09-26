@@ -1,5 +1,8 @@
+import { removeQuestionDraft } from './question-drafts';
+import { ChevronRight, MessageCircleQuestion } from 'lucide-react-native';
+import { StructuredQuestionForm } from './StructuredQuestionForm';
 import React, { useEffect, useRef, useState } from 'react';
-import { Keyboard, StyleSheet, Text, View } from 'react-native';
+import { Keyboard, Pressable, StyleSheet, Text, View } from 'react-native';
 import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import type { AgentAdapter, AgentQuestion } from '@clawket/agent-protocol';
@@ -9,7 +12,7 @@ import { Button } from '../../components/ui/Button';
 import { FormTextInput } from '../../components/ui/FormTextInput';
 import { SettingsGroup, SettingsRow } from '../../components/ui';
 import { useAppTheme } from '../../theme';
-import { FontSize, LineHeight, Space } from '../../theme/tokens';
+import { FontSize, LineHeight, Space, IconSize, Radius, HitSize } from '../../theme/tokens';
 
 /** Pending questions survive route changes through the adapter snapshot. Dismissal never answers implicitly. */
 export function AgentQuestions({ adapter, sessionKey }: { adapter: AgentAdapter; sessionKey: string }): React.JSX.Element | null {
@@ -42,7 +45,7 @@ export function AgentQuestions({ adapter, sessionKey }: { adapter: AgentAdapter;
     const offUpdate = adapter.on('update', update => {
       if (!('sessionKey' in update) || update.sessionKey !== sessionKey) return;
       if (update.type === 'question_requested') { revision++; changed.set(update.question.id, revision); setQuestions(items => [...items.filter(item => item.id !== update.question.id), update.question]); }
-      if (update.type === 'question_resolved') { revision++; resolved.add(update.questionId); setQuestions(items => items.filter(item => item.id !== update.questionId)); }
+      if (update.type === 'question_resolved') { void removeQuestionDraft(`${adapter.connection.id}:${sessionKey}:${update.questionId}`).catch(() => {}); revision++; resolved.add(update.questionId); setQuestions(items => items.filter(item => item.id !== update.questionId)); }
     });
     const offState = adapter.on('state', state => { if (state === 'ready') refresh(); });
     refresh();
@@ -55,15 +58,24 @@ export function AgentQuestions({ adapter, sessionKey }: { adapter: AgentAdapter;
     return () => clearTimeout(timer);
   }, [question]);
   if (!adapter.questions) return null;
-  const submit = async (answer: { value?: string; confirmed?: boolean; cancelled?: boolean }) => {
+  const submit = async (answer: { value?: string; confirmed?: boolean; cancelled?: boolean; answers?: Record<string, string[]> }) => {
     if (busy.current || !question) return;
     if (adapter.state !== 'ready') { setFailed(true); return; }
     busy.current = true; setSaving(true); setFailed(false);
     const epoch = generation.current;
-    try { await adapter.questions!.respond(sessionKey, question.id, answer); if (generation.current === epoch) { setQuestions(items => items.filter(item => item.id !== question.id)); setVisible(false); } }
+    try { await adapter.questions!.respond(sessionKey, question.id, answer); if (generation.current === epoch) { if (!(question.kind === 'form' && answer.cancelled)) { setQuestions(items => items.filter(item => item.id !== question.id)); void removeQuestionDraft(`${adapter.connection.id}:${sessionKey}:${question.id}`).catch(() => {}); } setVisible(false); } }
     catch { if (generation.current === epoch) setFailed(true); }
     finally { busy.current = false; if (generation.current === epoch) setSaving(false); }
   };
+  if (displayedQuestion?.kind === 'form') return <>
+    {question ? <Pressable accessibilityRole="button" accessibilityLabel={t('Respond')} onPress={() => { Keyboard.dismiss(); setVisible(true); }} testID="agent-question-pending" style={styles.prompt}>
+      <MessageCircleQuestion size={IconSize.md} color={theme.colors.inkSecondary} />
+      <Text numberOfLines={1} style={[styles.promptLabel, { color: theme.colors.ink }]}>{question.fields?.map(f => f.header).filter(Boolean).join(' · ') || t('Agent needs your input')}</Text>
+      <Text style={[styles.promptAction, { color: theme.colors.inkSecondary }]}>{t('Respond')}</Text>
+      <ChevronRight size={IconSize.sm} color={theme.colors.inkTertiary} />
+    </Pressable> : null}
+    <StructuredQuestionForm question={displayedQuestion} visible={visible && !!question} scope={`${adapter.connection.id}:${sessionKey}`} saving={saving} failed={failed} onClose={() => { if (!busy.current) setVisible(false); }} onSubmit={submit} />
+  </>;
   return <>
     {question ? <Banner message={t('Agent needs your input')} actionLabel={t('Respond')} onAction={() => { Keyboard.dismiss(); setVisible(true); }} testID="agent-question-pending" /> : null}
     <Sheet visible={visible && !!question} onClose={() => { if (!busy.current) setVisible(false); }} title={displayedQuestion?.title ?? ''}
@@ -84,4 +96,4 @@ export function AgentQuestions({ adapter, sessionKey }: { adapter: AgentAdapter;
     </Sheet>
   </>;
 }
-const styles = StyleSheet.create({ body: { paddingHorizontal: Space.lg, paddingBottom: Space.lg, gap: Space.lg }, actions: { flexDirection: 'row', flexWrap: 'wrap', gap: Space.sm, justifyContent: 'flex-end' }, text: { fontSize: FontSize.body, lineHeight: LineHeight.body } });
+const styles = StyleSheet.create({ prompt: { minHeight: HitSize.md, flexDirection: 'row', alignItems: 'center', gap: Space.sm, paddingHorizontal: Space.lg, paddingVertical: Space.sm, borderRadius: Radius.card }, promptLabel: { flex: 1, fontSize: FontSize.secondary, lineHeight: LineHeight.secondary }, promptAction: { fontSize: FontSize.secondary, lineHeight: LineHeight.secondary }, body: { paddingHorizontal: Space.lg, paddingBottom: Space.lg, gap: Space.lg }, actions: { flexDirection: 'row', flexWrap: 'wrap', gap: Space.sm, justifyContent: 'flex-end' }, text: { fontSize: FontSize.body, lineHeight: LineHeight.body } });

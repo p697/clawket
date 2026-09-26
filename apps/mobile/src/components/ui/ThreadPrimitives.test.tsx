@@ -95,7 +95,9 @@ jest.mock('react-native-reanimated', () => {
     },
     FadeIn: { duration: () => ({ name: 'FadeIn' }) },
     LinearTransition: { duration: () => ({ name: 'LinearTransition' }) },
+    useAnimatedProps: (factory: () => unknown) => factory(),
     useAnimatedStyle: (factory: () => unknown) => factory(),
+    useFrameCallback: () => ({ setActive: jest.fn(), isActive: false, callbackId: -1 }),
     useReducedMotion: () => mockReducedMotion,
     useSharedValue: (value: unknown) => ({ value }),
     withSpring: jest.fn((value: unknown) => value),
@@ -404,11 +406,15 @@ describe.each(['light', 'dark'] as const)('%s thread primitives', (scheme) => {
       onChangeText: jest.fn(), onSend: jest.fn(), onVoicePress: jest.fn(), onVoiceStart, onVoiceStop, onVoiceCancel,
       accessory: <Text testID="model-picker">Model</Text>, value: '' };
     const view = render(<Composer {...props} />);
-    fireEvent.press(view.getByTestId('composer-voice')); expect(onVoiceStart).toHaveBeenCalledTimes(1);
-    view.rerender(<Composer {...props} voiceState="authorizing" />);
-    expect(view.getByTestId('model-picker')).toBeTruthy();
-    expect(view.getByTestId('composer-voice').props.accessibilityState.busy).toBe(true);
+    // The mic's touch-down starts recording; releasing a tap keeps dictating.
+    fireEvent(view.getByTestId('composer-voice'), 'pressIn', { nativeEvent: { pageY: 500 } });
+    expect(onVoiceStart).toHaveBeenCalledTimes(1);
     view.rerender(<Composer {...props} voiceState="listening" />);
+    expect(view.queryByTestId('composer-voice-stop')).toBeNull();
+    fireEvent(view.getByTestId('composer-voice'), 'pressOut'); fireEvent.press(view.getByTestId('composer-voice'));
+    expect(onVoiceStart).toHaveBeenCalledTimes(1); expect(onVoiceStop).not.toHaveBeenCalled();
+    expect(view.getByTestId('model-picker')).toBeTruthy();
+    expect(view.getByTestId('composer-voice').props.accessibilityState.busy).toBe(false);
     expect(view.getByTestId('composer-input', { includeHiddenElements: true }).props.editable).toBe(false);
     expect(view.getByTestId('model-picker')).toBeTruthy();
     fireEvent.press(view.getByTestId('composer-voice-stop')); expect(onVoiceStop).toHaveBeenCalledWith(false);
@@ -430,7 +436,7 @@ describe.each(['light', 'dark'] as const)('%s thread primitives', (scheme) => {
     fireEvent(target, 'pressIn', { nativeEvent: { pageY: 500 } });
     expect(start).not.toHaveBeenCalled();
     fireEvent(target, 'longPress'); expect(start).toHaveBeenCalledTimes(1);
-    view.rerender(<Composer {...props} voiceState="authorizing" />);
+    view.rerender(<Composer {...props} voiceState="listening" />);
     expect(view.getByTestId('composer-voice-input-target')).toBe(target);
     view.rerender(<Composer {...props} />);
     fireEvent(view.getByTestId('composer-input'), 'focus', {});

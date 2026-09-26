@@ -10,6 +10,8 @@ import type { ConnectionAdapterFactoryContext } from '../registry/connection-sto
 import { HermesAdapter } from './hermes';
 import { OpenClawAdapter } from './openclaw';
 import { YouMindSpriteAdapter } from './youmind-sprite';
+import { CodexAdapter } from './codex';
+import { ClaudeCodeAdapter } from './claude-code';
 import { PiAdapter } from './pi';
 import { LocalModelAdapter } from './local-model';
 
@@ -29,6 +31,8 @@ export function createConnectionAdapter(
 ): AgentAdapter {
   const isFreeSlot = descriptor.isFreeSlot;
   switch (record.backendKind) {
+    case 'claude-code': return new ClaudeCodeAdapter(record, { isFreeSlot });
+    case 'codex': return new CodexAdapter(record, { isFreeSlot });
     case 'pi': return new PiAdapter(record, { isFreeSlot });
     case 'local-model':
       return new LocalModelAdapter(record, { isFreeSlot });

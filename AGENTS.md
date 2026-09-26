@@ -143,6 +143,14 @@ When implementation, architecture, or release behavior changes, update the close
 
 Windows ACL assertions must fail on command/module errors or missing paths. When invoking Windows PowerShell from PowerShell 7, resolve its security module from the invoked shell's `$PSHOME`; inherited module paths must not produce a false zero-access result.
 
+## Local Test Resource Rule
+
+Owner rules (2026-09-26, after the development Mac froze three times): never run tests at full parallelism, and never run full suites locally unless the owner asks. Other agent sessions, simulators and builds share the machine's memory.
+
+1. Verify with the narrowest affected test files, one at a time: `npx jest <file> --runInBand` in `apps/mobile`, or Vitest with `--maxWorkers=2` unless its config already limits workers or file parallelism. Report which files were verified.
+2. `npm test`, `npm run mobile:test`, `npm run check:required` and directory-wide runs are owner-requested only, and then run in-band (`npm run mobile:test -- --runInBand`, as `test:required` does). CI is unaffected. Mobile Jest also defaults to two workers (`apps/mobile/jest.config.cjs`); never raise that cap.
+3. Run one test process at a time. Check `memory_pressure` and `ps` for another session's run first; never run tests beside `tsc`, builds, headless browsers or simulators, and never start other heavy work while a run is in the background.
+
 ## Hermes Implementation Boundaries
 
 1. Hermes adapter lifecycle state (run, session, stop) must be self-contained and deterministically cleanable inside the adapter layer.
@@ -201,3 +209,11 @@ Preserve machine API challenge exemptions without skipping rate limiting. Review
 ## Pi 3.1 extension
 
 Owner-authorized Pi implementation is specified in `docs/3.1/pi.md`. Pi is an independent backend with explicitly authorized project roots and Clawket-owned RPC sessions. Its Registry/Relay example configs must use separate KV, room classes, rate limiter namespace and secrets. Preserve the OpenClaw/Hermes deploy units and contracts. Implementation and local tests do not authorize production deployment or publication. Isolated Preview deployment and testing follow the Preview exception in the Release Authorization Rule.
+
+## Codex 3.1 extension
+
+Owner-authorized Codex work is specified in `docs/3.1/codex.md`. New device pairing discovers saved projects and native thread directories; existing explicit project pairings remain scoped. Use Clawket-owned App Server processes and opaque native thread mappings. Preserve OpenClaw, Hermes and Pi. Native continuation routes through the desktop owner; only an explicit no-owner response with no active native turn permits local resume. Unknown dispatch must never create a second writer. Codex Preview uses isolated resources and may be deployed for this authorized testing; production and publication still require authorization.
+
+## Claude Code 3.1 extension
+
+Owner-authorized Claude Code work is specified in `docs/3.1/claude-code.md`. Use the official Agent SDK and the installed unmodified CLI; authentication stays in Claude's native flow. Discover Desktop/CLI projects and histories read-only. An idle owner is still an owner; discovery and resume do not constitute live attach. Never take over an unknown or active owner, harvest Desktop credentials, or advertise unverified native control. Preserve existing backends and isolate any Claude Preview resources.

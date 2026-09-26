@@ -161,6 +161,29 @@ export function buildRosterRows(
   return Object.freeze(rows);
 }
 
+/**
+ * The connection whose rows carry the live dot (owner decision 2026-09-26).
+ * Only the active connection has a live adapter; the dot tells its Agents
+ * apart from the cached rows of other connections, so a roster drawn from a
+ * single connection shows none. The recovery window keeps the dot steady
+ * while the header reports the reconnect; offline, paused or still connecting
+ * shows none.
+ */
+export function resolveRosterLiveConnectionId(input: Readonly<{
+  rows: ReadonlyArray<Pick<RosterDisplayRow, 'connectionId'>>;
+  activeConnectionId: string | null;
+  activeState: string;
+  recovering: boolean;
+  offline: boolean;
+}>): string | null {
+  const { activeConnectionId } = input;
+  if (!activeConnectionId || input.offline) return null;
+  if (input.activeState !== 'ready' && !input.recovering) return null;
+  const connectionIds = new Set(input.rows.map((row) => row.connectionId));
+  if (connectionIds.size < 2 || !connectionIds.has(activeConnectionId)) return null;
+  return activeConnectionId;
+}
+
 export function resolveRosterPageState(input: Readonly<{
   initialized: boolean;
   connectionCount: number;
