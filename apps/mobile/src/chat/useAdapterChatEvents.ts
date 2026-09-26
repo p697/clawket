@@ -26,6 +26,7 @@ import {
 type ApprovalStatus = NonNullable<UiMessage['approval']>['status'];
 
 export type AdapterChatUpdate =
+  | Extract<SessionUpdate, { type: 'question_requested' | 'question_resolved' }>
   | {
       type: 'history_reconciled';
       sessionKey: string;
@@ -301,6 +302,8 @@ export function mapAdapterSessionUpdate(
   ));
 
   switch (update.type) {
+    case 'question_requested':
+    case 'question_resolved': return update;
     case 'history_reconciled': {
       const messages = update.history.messages
         .map(mapAdapterChatMessage)

@@ -269,6 +269,16 @@ describe('ModelsScreen', () => {
     });
   });
 
+  it('switches Pi models only for the displayed agent session', async () => {
+    const { adapter, models } = hermesAdapter();
+    const pi = { ...adapter, capabilities: CAPABILITY_MATRIX.pi } as AgentAdapter;
+    const view = render(<ModelsScreen adapter={pi} agent={agent} online navigation={navigation} />);
+    await waitFor(() => expect(view.getByTestId('agent-models-current')).toBeTruthy());
+    fireEvent.press(view.getByTestId('agent-model-row-google:pro'));
+    fireEvent.press(view.getByTestId('agent-model-set-default'));
+    await waitFor(() => expect(models.setSelection).toHaveBeenCalledWith({ model: 'pro', provider: 'google', scope: 'session', sessionKey: agent.mainSessionKey }));
+  });
+
   it('shows the global current model for Hermes and switches it through the detail sheet', async () => {
     const { adapter, models } = hermesAdapter();
     const view = render(<ModelsScreen adapter={adapter} agent={agent} online navigation={navigation} />);

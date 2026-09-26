@@ -1,0 +1,170 @@
+import { relayNetworkOptions } from '../relay-network.js';
+import WebSocket from 'ws';
+import nacl from 'tweetnacl';
+import { randomUUID } from 'node:crypto';
+import { createSecurePairingBridgeProof, createSecurePairingClientProof, securePairingProofEquals } from '@clawket/bridge-core';
+import { PiService, type PiRequest } from './service.js';
+import { WEBSOCKET_FRAME_LIMIT_BYTES } from '../frame-limit.js';
+
+const PREFIX = '__clawket_relay_control__:';
+export interface PiInvitation { sessionId: string; codeKeyHex: string; qrPayload: string; expiresAt: string; attempts: number }
+export interface PiRelayConfig { relayUrl: string; gatewayId: string; relaySecret: string; invitation?: PiInvitation }
+
+export class PiRelay {
+  private readonly relayNetwork = relayNetworkOptions();
+  private socket: WebSocket | null = null;
+  private retry: ReturnType<typeof setTimeout> | null = null;
+  private ping: ReturnType<typeof setInterval> | null = null;
+  private readiness: ReturnType<typeof setTimeout> | null = null;
+  private stopped = true;
+  private attempts = 0;
+  private pending = 0;
+  private ready = false;
+  private readyWaiters = new Set<{ resolve: () => void; reject: (error: Error) => void }>();
+  private readonly instanceId = randomUUID();
+  private readonly update = (payload: unknown) => this.send(JSON.stringify({ type: 'event', event: 'pi.update', payload }));
+
+  constructor(private readonly service: PiService, private readonly config: PiRelayConfig,
+    private readonly persistInvitation: (invitation: PiInvitation) => void,
+    private readonly log: (message: string) => void = () => {}) {}
+
+  start(): void {
+    if (!this.stopped) return;
+    this.stopped = false;
+    this.service.conversation.on('update', this.update);
+    this.connect();
+  }
+
+  async waitUntilReady(timeoutMs = 30_000): Promise<void> {
+    if (this.ready) return;
+    if (this.stopped) throw new Error('Relay is stopped');
+    return new Promise<void>((resolve, reject) => {
+      const finish = (error?: Error) => { clearTimeout(timer); this.readyWaiters.delete(waiter); error ? reject(error) : resolve(); };
+      const waiter = { resolve: () => finish(), reject: (error: Error) => finish(error) };
+      const timer = setTimeout(() => finish(new Error('Relay did not become ready in time')), timeoutMs);
+      this.readyWaiters.add(waiter);
+    });
+  }
+
+  stop(): void {
+    this.stopped = true;
+    this.ready = false;
+    for (const waiter of this.readyWaiters) waiter.reject(new Error('Relay stopped'));
+    if (this.retry) clearTimeout(this.retry);
+    if (this.ping) clearInterval(this.ping);
+    if (this.readiness) clearTimeout(this.readiness);
+    this.retry = null; this.ping = null; this.readiness = null;
+    const socket = this.socket; this.socket = null; socket?.terminate();
+    this.service.conversation.off('update', this.update);
+  }
+
+  private connect(): void {
+    if (this.stopped) return;
+    const url = new URL(this.config.relayUrl);
+    if (!['ws:', 'wss:'].includes(url.protocol)) throw new Error('Invalid Relay URL');
+    url.searchParams.set('gatewayId', this.config.gatewayId);
+    url.searchParams.set('role', 'gateway');
+    url.searchParams.set('clientId', this.instanceId);
+    const socket = new WebSocket(url, { ...this.relayNetwork, headers: { Authorization: `Bearer ${this.config.relaySecret}` }, maxPayload: WEBSOCKET_FRAME_LIMIT_BYTES, handshakeTimeout: 15_000 });
+    this.socket = socket;
+    let alive = true;
+    let ownerLeasePending = false;
+    socket.on('open', () => {
+      if (this.socket !== socket || this.stopped) { socket.terminate(); return; }
+      this.log('pi relay transport connected');
+      this.readiness = setTimeout(() => {
+        if (this.socket === socket && !this.ready) {
+          this.log('pi relay readiness timeout'); socket.terminate();
+        }
+      }, 15_000);
+      this.ping = setInterval(() => {
+        if (!alive) { socket.terminate(); return; }
+        alive = false; socket.ping();
+      }, 15_000);
+    });
+    socket.on('pong', () => { if (this.socket === socket) alive = true; });
+    socket.on('message', raw => {
+      if (this.socket !== socket || this.stopped) return;
+      const text = raw.toString();
+      if (text.startsWith(PREFIX)) {
+        try {
+          const control = JSON.parse(text.slice(PREFIX.length));
+          if (control.event === 'relay.ready') {
+            if (this.readiness) clearTimeout(this.readiness); this.readiness = null;
+            this.attempts = 0; this.ready = true;
+            this.log('pi relay ready');
+            for (const waiter of this.readyWaiters) waiter.resolve();
+          }
+          if (control.event === 'pairing.secure.start') this.pair(control);
+        } catch { this.log('pi invalid relay control'); }
+        return;
+      }
+      if (++this.pending > 16) { this.pending--; this.log('pi request capacity reached'); return; }
+      void (async () => {
+        let id: string | undefined;
+        try {
+          const frame = JSON.parse(text) as PiRequest;
+          id = typeof frame.id === 'string' && frame.id.length <= 200 ? frame.id : undefined;
+          const payload = await this.service.request(frame);
+          if (this.socket === socket) this.send(JSON.stringify({ type: 'res', id, ok: true, payload }));
+        } catch (error) {
+          if (id && this.socket === socket) this.send(JSON.stringify({ type: 'res', id, ok: false, error: { code: 'pi_error', message: error instanceof Error ? error.message : 'Pi request failed' } }));
+        } finally { this.pending--; }
+      })();
+    });
+    socket.on('error', (error: Error & { code?: string }) => {
+      if (this.socket !== socket || this.stopped) return;
+      const status = /^Unexpected server response: (\d{3})$/.exec(error.message)?.[1];
+      ownerLeasePending = status === '409';
+      const code = status ? `HTTP_${status}` : /^[A-Z0-9_]{1,40}$/.test(error.code ?? '') ? error.code : 'WEBSOCKET_ERROR';
+      this.log(`pi relay transport error code=${code}`);
+    });
+    socket.on('close', (code: number) => {
+      if (this.socket !== socket) return;
+      this.log(`pi relay closed code=${code}`);
+      this.socket = null;
+      this.ready = false;
+      if (this.ping) clearInterval(this.ping);
+      if (this.readiness) clearTimeout(this.readiness);
+      this.ping = null; this.readiness = null;
+      if (code === 4010 || code === 4001) { this.stop(); return; }
+      if (!this.stopped) {
+        this.attempts++;
+        // A previous process can hold the 20s owner lease after abrupt shutdown.
+        // Do not let exponential delays push the next attempt past startup readiness.
+        const delayMs = ownerLeasePending ? 2000 : Math.min(30_000, 1000 * 2 ** Math.min(this.attempts, 5));
+        this.log(`pi relay retry attempt=${this.attempts} delayMs=${delayMs}`);
+        this.retry = setTimeout(() => { this.retry = null; this.connect(); }, delayMs);
+      }
+    });
+  }
+
+  private send(data: string): void {
+    const socket = this.socket;
+    if (socket?.readyState !== WebSocket.OPEN) return;
+    if (Buffer.byteLength(data) > WEBSOCKET_FRAME_LIMIT_BYTES || socket.bufferedAmount > WEBSOCKET_FRAME_LIMIT_BYTES) { socket.terminate(); return; }
+    socket.send(data);
+  }
+
+  private pair(control: { requestId?: string; sourceClientId?: string; payload?: Record<string, unknown> }): void {
+    const invitation = this.config.invitation;
+    const requestId = control.requestId;
+    const targetClientId = control.sourceClientId;
+    const payload = control.payload ?? {};
+    if (!requestId || !targetClientId || !invitation || invitation.sessionId !== payload.sessionId) return;
+    const respond = (event: string, result: object) => this.send(PREFIX + JSON.stringify({ type: 'control', event, requestId, targetClientId, payload: result }));
+    if (Date.parse(invitation.expiresAt) <= Date.now() || invitation.attempts >= 5) { respond('pairing.secure.error', { protocol: 2, code: 'unavailable' }); return; }
+    invitation.attempts++; this.persistInvitation(invitation);
+    const clientPublicKey = typeof payload.clientPublicKey === 'string' ? payload.clientPublicKey : '';
+    const clientProof = typeof payload.clientProof === 'string' ? payload.clientProof : '';
+    if (!/^[A-Za-z0-9_-]{43}$/.test(clientPublicKey) || !securePairingProofEquals(clientProof, createSecurePairingClientProof({ codeKeyHex: invitation.codeKeyHex, sessionId: invitation.sessionId, requestId, clientPublicKey }))) {
+      respond('pairing.secure.error', { protocol: 2, code: 'invalid_code' }); return;
+    }
+    const keys = nacl.box.keyPair();
+    const nonce = nacl.randomBytes(nacl.box.nonceLength);
+    const ciphertext = nacl.box(Buffer.from(invitation.qrPayload), nonce, Buffer.from(clientPublicKey, 'base64url'), keys.secretKey);
+    const result = { protocol: 2, sessionId: invitation.sessionId, bridgePublicKey: Buffer.from(keys.publicKey).toString('base64url'), nonce: Buffer.from(nonce).toString('base64url'), ciphertext: Buffer.from(ciphertext).toString('base64url') };
+    const bridgeProof = createSecurePairingBridgeProof({ ...result, codeKeyHex: invitation.codeKeyHex, requestId, clientPublicKey });
+    respond('pairing.secure.result', { ...result, bridgeProof });
+  }
+}

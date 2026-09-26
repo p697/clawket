@@ -382,5 +382,6 @@
   "Collapse all": "सब छोटा करें",
   "{{count}} items": "{{count}} आइटम",
   "Delete this local config backup? This does not change the current Gateway config.": "यह स्थानीय कॉन्फ़िगरेशन बैकअप हटाएं? इससे वर्तमान Gateway कॉन्फ़िगरेशन नहीं बदलेगा।",
-  "Backup history": "बैकअप इतिहास"
+  "Backup history": "बैकअप इतिहास",
+  "Pi is not responding": "Pi जवाब नहीं दे रहा है"
 }

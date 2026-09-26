@@ -18,7 +18,8 @@ function enabled(backend: keyof typeof CAPABILITY_MATRIX): Capability[] {
 
 describe('canonical capability contract', () => {
   it('publishes the frozen product matrix without conflating Hermes with legacy UI flags', () => {
-    expect(enabled('openclaw')).toEqual(CAPABILITY_KEYS.filter((key) => key !== 'steer' && key !== 'documentAttachments' && key !== 'modelHealth'));
+    expect(enabled('openclaw')).toEqual(CAPABILITY_KEYS.filter((key) => key !== 'agentQuestions' && key !== 'sessionBranch' && key !== 'steer' && key !== 'documentAttachments' && key !== 'modelHealth'));
+    expect(resolveCapabilities('pi')).toMatchObject({ chat: true, agentQuestions: true, sessionBranch: true, modelPerSession: true, execApproval: false, channels: false, cron: false });
     expect(enabled('local-model')).toEqual(['chat', 'abort', 'history', 'attachments', 'models']);
     expect(enabled('hermes')).toEqual([
       'chat',

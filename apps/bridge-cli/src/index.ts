@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { handlePiCommand } from './pi.js';
 import { handleLocalModelCommand } from './local-model.js';
 import { keepHermesRelayRuntimeAlive } from './hermes-relay-lifecycle.js';
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -93,6 +94,9 @@ async function main(): Promise<void> {
     await handleHermesCommand(args, jsonOutput);
     return;
   }
+
+  if (command === 'pi') { await handlePiCommand(args); return; }
+  if (readFlag(args, '--backend') === 'pi') { await handlePiCommand([command, ...args]); return; }
 
   if (command === 'local-model') {
     await handleLocalModelCommand(args);
@@ -2250,6 +2254,9 @@ function printHelp(): void {
     'clawket logs [--last <2m>] [--lines <200>] [--errors] [--follow] [--json]',
     'clawket doctor [--json]',
     'clawket run [--preview] [--gateway-url <ws://127.0.0.1:18789>] [--replace]',
+    'clawket pi pair [--local] [--project <directory>] [--registry <url>] [--port <port>] [--qr-file <path>]',
+    'clawket pi <start|restart|stop|status|doctor|logs|reset> [--project <directory>]',
+    'clawket pair --backend pi [--project <directory>] [--local]',
     'clawket hermes dev [--public-host <192.168.x.x>] [--host <0.0.0.0>] [--port <4319>] [--api-url <http://127.0.0.1:8642>] [--qr-file <path>] [--restart-hermes] [--json]',
     'clawket hermes run [--host <0.0.0.0>] [--port <4319>] [--api-url <http://127.0.0.1:8642>] [--restart-hermes]',
     'clawket hermes pair local [--public-host <192.168.x.x>] [--port <4319>] [--qr-file <path>] [--json]',

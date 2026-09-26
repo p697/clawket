@@ -377,5 +377,8 @@
   "Using Docker or a custom service? Update and restart Bridge with your usual deployment method.": "使用 Docker 或自定义服务？请按原来的部署方式更新并重启 Bridge。",
   "Could not copy or share. You can select the commands above.": "复制或分享失败，你也可以选中上方命令。",
   "Your older Bridge can keep working. Update it for the new features.": "旧 Bridge 仍可继续使用，建议更新以获得新增功能。",
-  "{{channel}} member": "{{channel}} 成员"
+  "{{channel}} member": "{{channel}} 成员",
+  "Agent needs your input": "Agent 需要你的回复",
+  "Respond": "回复",
+  "Continue in a new session": "在新会话中继续"
 }

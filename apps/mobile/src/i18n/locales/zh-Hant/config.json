@@ -382,5 +382,6 @@
   "Collapse all": "全部收合",
   "{{count}} items": "{{count}} 項",
   "Delete this local config backup? This does not change the current Gateway config.": "要刪除此本機設定備份嗎？這不會變更目前的 Gateway 設定。",
-  "Backup history": "歷史備份"
+  "Backup history": "歷史備份",
+  "Pi is not responding": "Pi 沒有回應"
 }

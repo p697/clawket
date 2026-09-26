@@ -382,5 +382,6 @@
   "Collapse all": "Collapse all",
   "{{count}} items": "{{count}} items",
   "Delete this local config backup? This does not change the current Gateway config.": "Delete this local config backup? This does not change the current Gateway config.",
-  "Backup history": "Backup history"
+  "Backup history": "Backup history",
+  "Pi is not responding": "Pi is not responding"
 }

@@ -1,3 +1,6 @@
+jest.mock('../../components/ui/Button', () => ({ Button: () => null }));
+jest.mock('../../components/ui/Banner', () => ({ Banner: () => null }));
+jest.mock('./AgentQuestions', () => ({ AgentQuestions: () => null }));
 jest.mock('./components/SessionFilesSheet', () => ({ SessionFilesSheet: () => null }));
 import { createReplyConversation } from '../../services/reply-conversation';
 jest.mock('../../services/reply-conversation', () => ({ createReplyConversation: jest.fn(), replyConversationDraft: (message: any) => message.role === 'assistant' && !message.streaming ? message.text : null }));
@@ -306,6 +309,23 @@ describe('ThreadScreen connection container', () => {
     expect(mockThreadViewProps?.input).toBe('Summarize');
     await act(async () => mockThreadViewProps?.onChangeInput(''));
     expect(mockController.setInput).toHaveBeenLastCalledWith('');
+  });
+
+  it('keeps native Pi history read-only and explicitly branches into a private session', async () => {
+    const props = createNavigationProps();
+    const pi = { ...adapter, connection: { ...adapter.connection, backendKind: 'pi' }, capabilities: CAPABILITY_MATRIX.pi, state: 'ready', createSession: jest.fn() };
+    mockConnections = { ...mockConnections, activeAdapter: pi, roster: [{ connection: { id: 'connection-1' }, agents: [{ agent: { agentId: 'atlas' }, sessions: [{ key: props.route.params.sessionKey, source: 'native', kind: 'direct' }] }] }] };
+    mockRuntime.getSnapshot.mockReturnValue({ activeConnectionId: 'connection-1', activeAdapter: pi } as any);
+    const { ManualSessions } = require('../../services/manual-sessions');
+    const create = jest.spyOn(ManualSessions, 'create').mockResolvedValue({ key: 'private-branch' });
+    try {
+      render(<ThreadScreen {...props} />);
+      expect(mockThreadViewProps?.capabilities.chat).toBe(false);
+      const footer = mockThreadViewProps?.readOnlyFooter as React.ReactElement<any>;
+      await act(async () => footer.props.children[0].props.onPress());
+      expect(create).toHaveBeenCalledWith(pi, 'atlas', `native-branch:${props.route.params.sessionKey}`, { fromSession: props.route.params.sessionKey });
+      expect(props.navigation.replace).toHaveBeenCalledWith('Thread', expect.objectContaining({ sessionKey: 'private-branch' }));
+    } finally { create.mockRestore(); }
   });
 
   let consoleErrorSpy: jest.SpyInstance;

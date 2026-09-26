@@ -396,3 +396,23 @@ Bridge upgrade suggestions require authenticated old-Bridge evidence, retained l
 - OpenClaw system-owned cron monitors (`heartbeat`, `skillCollectionReview`) remain visible with run history, but their list switch and detail write/run/delete controls are absent. Identify them by payload kind, not task name; ordinary OpenClaw and Hermes jobs retain their existing actions.
 
 Create Agent navigation actions are consumed in route params before presentation, not only in child component refs. Only the focused identity page may open the sheet; stale purchase continuations and reconnect-driven remounts must never present it over another route.
+
+## Pi conversations
+
+Pi uses its own adapter and pairing identity, with project names in Agent descriptors. Reuse the existing session/chat/model controls; model selection remains session-scoped, including the landing session's model on the Models page. Native histories expose no mutation actions; `sessionBranch` shows a quiet continuation footer that creates and remembers a separate manual session. `AgentQuestions` uses the canonical Sheet, scrolling body and pinned footer, scopes snapshots/events to the active adapter/session, preserves failed drafts and requires an explicit answer or cancellation. Closing the sheet does not grant consent. Never represent these questions as execution approvals or expose Pi's terminal-only command catalog as supported mobile commands.
+
+Composer model labels prefer the selected catalog name and omit provider namespaces; retain the full model reference for icon resolution and selection. Keep model text shrinkable with one-line truncation, spacing after Add and a nonshrinking thinking control.
+
+Pi question sheets dismiss the chat keyboard before opening and remain mounted while visibility closes, even after the pending question resolves; removing a question must not orphan a modal overlay.
+
+Session rename inputs opt into BottomSheetTextInput keyboard coordination so the name and Save action remain visible while editing.
+
+Pi question sheets use Android `adjustPan` keyboard coordination so edge-to-edge layouts keep both the editor and pinned response actions above the keyboard; iOS retains the shared interactive behavior.
+
+Foreground run recovery matches live `toolcall_` and history `toolresult_` rows by the exact call ID within the active run, retaining the recovered name and row identity when late completion arrives. Empty composer drafts reset height without an interruptible shrink animation, including immediate backgrounding after send.
+
+Android CommonMark intrinsic width reserves one physical pixel through the reviewed 1.0.2 install-time `patch-enriched-markdown-android-width.mjs` patch; fractional-density rounding must not wrap the final glyph beyond the measured height. Keep both postinstall entry points and the fail-closed source regression in sync.
+
+Pi platform identity uses the bundled official artwork through `PlatformMark`, preserving its original colors and safe area; source provenance lives in `assets/brands/SOURCES.md`. Do not substitute Lucide’s mathematical Pi glyph.
+
+The official Pi Preview Registry is environment-checked like OpenClaw/Hermes Preview. Its explicit Registry QR requires Debug Mode and Preview selection; the default Pi six-digit entry still targets the production Registry.

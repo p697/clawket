@@ -13,6 +13,14 @@ import {
 } from './relay-environment';
 
 describe('relay environment selection', () => {
+  it('isolates the official Pi Preview registry from normal production pairing', () => {
+    const serverUrl = 'https://clawket-pi-registry-preview.clawket.workers.dev';
+    expect(resolveOfficialRelayEnvironment(serverUrl)).toBe('preview');
+    expect(isEnvironmentIndependentRegistry(serverUrl)).toBe(false);
+    expect(assessRelayEnvironmentSelection({ serverUrl, selectedEnvironment: 'production', debugMode: false })).toBe('preview_requires_debug_mode');
+    expect(assessRelayEnvironmentSelection({ serverUrl, selectedEnvironment: 'production', debugMode: true })).toBe('official_environment_mismatch');
+    expect(assessRelayEnvironmentSelection({ serverUrl, selectedEnvironment: 'preview', debugMode: true })).toBeNull();
+  });
   it('recognizes official production and Preview registry URLs', () => {
     expect(resolveOfficialRelayEnvironment(OFFICIAL_PRODUCTION_REGISTRY_URL)).toBe('production');
     expect(resolveOfficialRelayEnvironment(`${OFFICIAL_PREVIEW_REGISTRY_URL}/v1/pair/claim`)).toBe('preview');

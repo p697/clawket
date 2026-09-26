@@ -133,6 +133,7 @@ const BACKEND_LABELS: Readonly<Record<ConnectionDescriptor['backendKind'], strin
   hermes: 'Hermes',
   youmind: 'YouMind',
   'local-model': 'Local model',
+  pi: 'Pi',
 };
 
 const CONNECTION_STATE_LABELS: Readonly<Record<ConnectionState, string>> = {

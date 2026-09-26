@@ -259,6 +259,7 @@ export type ThreadViewProps = Readonly<{
   sessionTitle?: string | null;
   isMainSession?: boolean;
   model?: string | null;
+  modelDisplayName?: string | null;
   contextUsed?: number;
   contextWindow?: number;
   activityLabel?: string | null;
@@ -274,6 +275,8 @@ export type ThreadViewProps = Readonly<{
   locale?: string;
   input: string;
   selectedSkill?: React.ReactNode;
+  pendingQuestions?: React.ReactNode;
+  readOnlyFooter?: React.ReactNode;
   isRunning: boolean;
   canSend: boolean;
   loadingMoreHistory?: boolean;
@@ -377,6 +380,7 @@ export function ThreadView({
   sessionTitle,
   isMainSession = true,
   model,
+  modelDisplayName,
   contextUsed,
   contextWindow,
   activityLabel,
@@ -392,6 +396,8 @@ export function ThreadView({
   locale,
   input,
   selectedSkill,
+  pendingQuestions,
+  readOnlyFooter,
   isRunning,
   canSend,
   loadingMoreHistory = false,
@@ -995,6 +1001,7 @@ export function ThreadView({
         <SessionPreviewFooter onUpgrade={sessionPreview.onUpgrade}
           onMain={sessionPreview.onMain} bottomInset={bottomInset} loading={sessionPreview.loading} />
       </View> : null}
+      {!locked && !sessionPreview ? readOnlyFooter : null}
       {!locked && !sessionPreview && capabilities.chat && !isCronSession ? (
         <View
           collapsable={false}
@@ -1028,6 +1035,7 @@ export function ThreadView({
               />
             </View>
           ) : null}
+          {pendingQuestions}
           <Composer
             ref={composerRef}
             attachments={pendingAttachments.length > 0
@@ -1056,7 +1064,7 @@ export function ThreadView({
                 {onOpenModelPicker ? <Pressable testID="thread-model-picker" accessibilityRole="button"
                   onPress={onOpenModelPicker} style={styles.modelOption}>
                   <ModelIcon compact id={model} testID="thread-model-icon" />
-                  <Text numberOfLines={1} style={styles.thinkingText}>{model?.replace(/^[^/]+\//, '') || copy.chooseModel}</Text>
+                  <Text testID="thread-model-label" numberOfLines={1} ellipsizeMode="tail" maxFontSizeMultiplier={1.3} style={[styles.thinkingText, styles.modelLabel]}>{modelDisplayName || model?.split('/').pop() || copy.chooseModel}</Text>
                 </Pressable> : null}
                 {thinkingLevel && onSelectThinkingLevel ? <ThinkingLevelMenu current={thinkingLevel}
                   onSelect={onSelectThinkingLevel} options={thinkingLevelOptions} style={styles.thinkingMenu}>
@@ -1963,7 +1971,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       zIndex: 2,
     },
     thinkingMenu: {
-      flexShrink: 1,
+      flexShrink: 0,
     },
     thinkingChip: {
       minHeight: ControlSize.floatingButton,
@@ -1973,8 +1981,9 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       borderRadius: Radius.full,
       paddingHorizontal: Space.md,
     },
-    composerOptions: { flexDirection: 'row', alignItems: 'center', flexShrink: 1, maxWidth: '70%' },
-    modelOption: { minHeight: ControlSize.floatingButton, flexDirection: 'row', alignItems: 'center', gap: Space.xs, justifyContent: 'center', paddingHorizontal: Space.xs, maxWidth: 180, flexShrink: 1 },
+    composerOptions: { flexDirection: 'row', alignItems: 'center', flexShrink: 1, minWidth: 0, marginLeft: Space.sm },
+    modelOption: { minHeight: ControlSize.floatingButton, flexDirection: 'row', alignItems: 'center', gap: Space.xs, paddingHorizontal: Space.xs, maxWidth: 160, minWidth: 0, flexShrink: 1 },
+    modelLabel: { flexShrink: 1, minWidth: 0 },
     thinkingText: {
       color: colors.inkSecondary,
       fontSize: FontSize.caption,

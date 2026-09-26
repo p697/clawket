@@ -245,5 +245,7 @@
   "Check your network and make sure the remote service is running.": "네트워크와 원격 서비스의 실행 상태를 확인하세요.",
   "View saved messages": "저장된 메시지 보기",
   "Search and bulk export": "검색 및 일괄 내보내기",
-  "Skill and memory versions": "스킬 및 메모리 버전"
+  "Skill and memory versions": "스킬 및 메모리 버전",
+  "Yes": "예",
+  "No": "아니요"
 }

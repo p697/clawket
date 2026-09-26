@@ -1,4 +1,4 @@
-export type BackendKind = 'openclaw' | 'hermes' | 'youmind' | 'local-model';
+export type BackendKind = 'openclaw' | 'hermes' | 'youmind' | 'local-model' | 'pi';
 
 export type TransportKind =
   | 'relay'
@@ -258,3 +258,15 @@ export type ApprovalRequest =
       platform: string | null;
       receivedAtMs: number;
     };
+
+/** RPC extension questions are user interaction, not execution permission grants. */
+export interface AgentQuestion {
+  id: string;
+  kind: 'select' | 'confirm' | 'input' | 'editor';
+  title: string;
+  message?: string;
+  options?: string[];
+  placeholder?: string;
+  prefill?: string;
+  expiresAtMs: number | null;
+}

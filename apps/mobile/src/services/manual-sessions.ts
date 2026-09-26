@@ -28,7 +28,7 @@ async function save(next: readonly Entry[]): Promise<void> {
   entries = next; listeners.forEach((listener) => listener());
 }
 export const ManualSessions = {
-  create: (adapter: AgentAdapter, agentId: string, operationId = 'manual'): Promise<SessionDescriptor> => {
+  create: (adapter: AgentAdapter, agentId: string, operationId = 'manual', options?: { fromSession?: string }): Promise<SessionDescriptor> => {
     if (!adapter.capabilities.sessionCreate || !adapter.createSession) return Promise.reject(new Error('Session creation unavailable'));
     const scoped = creations.get(adapter) ?? new Map<string, Creation>();
     creations.set(adapter, scoped);
@@ -43,7 +43,7 @@ export const ManualSessions = {
       });
       // If local persistence fails after backend creation, retry the same
       // returned session instead of creating another empty conversation.
-      attempt.session ??= await adapter.createSession!(agentId);
+      attempt.session ??= await adapter.createSession!(agentId, options);
       await ManualSessions.remember({ connectionId: adapter.connection.id, agentId, key: attempt.session.key });
       scoped.delete(operationKey);
       return attempt.session;

@@ -382,5 +382,6 @@
   "Collapse all": "Згорнути все",
   "{{count}} items": "Елементів: {{count}}",
   "Delete this local config backup? This does not change the current Gateway config.": "Видалити цю локальну резервну копію конфігурації? Поточна конфігурація Gateway не зміниться.",
-  "Backup history": "Історія резервних копій"
+  "Backup history": "Історія резервних копій",
+  "Pi is not responding": "Pi не відповідає"
 }

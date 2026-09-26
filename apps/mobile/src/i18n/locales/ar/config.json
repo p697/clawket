@@ -382,5 +382,6 @@
   "Collapse all": "طي الكل",
   "{{count}} items": "{{count}} عناصر",
   "Delete this local config backup? This does not change the current Gateway config.": "هل تريد حذف هذه النسخة الاحتياطية المحلية للإعدادات؟ لن تتغير إعدادات Gateway الحالية.",
-  "Backup history": "سجل النسخ الاحتياطية"
+  "Backup history": "سجل النسخ الاحتياطية",
+  "Pi is not responding": "Pi لا يستجيب"
 }

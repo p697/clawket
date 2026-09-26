@@ -1022,6 +1022,8 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 
 | 编号 | 事项 | 怎么做 | 验证方法 | 状态 |
 |---|---|---|---|---|
+| HT-PI-PREVIEW-0926 | Pi Preview 部署与验收 | 已按负责人免单独审批规则完成，无待办授权。 | 独立云服务、Android 真实模型/工具/扩展冷恢复、双客户端与重启验收通过。 | 已关闭；见 ../3.1/release-readiness-2026-09-26.md。正式生产、npm 与签名客户端仍按发布规则执行。 |
+| HT-PI-0925 | Pi 3.1 实际账号与真机验收 | 在目标项目用 Pi 完成 provider 登录与项目信任，然后通过本地开发版配对；检查浅深色、键盘、扩展回答、原生分支、后台恢复。 | 自己的模型完成真实任务；iOS/Android 观感由负责人确认。 | 自动门禁、真实 Pi、Workers/CLI 与 iOS 模拟器实际配对通过；复用已有 DashScope 配置完成真实模型对话、工具/技能调用。Android 真机真实任务、扩展回答、后台/断线恢复已验收；物理 iOS、负责人观感确认与 Pi 云服务发布仍待完成。详见 ../3.1/pi-android-qa-2026-09-26.md。 |
 | HT-YOUMIND-HMAC-0925 | 确认客户端 HMAC 权限边界 | 与 YouMind 服务端维护者确认 EXPO_PUBLIC_YOUMIND_APP_SECRET 按公开客户端值设计，不能授予特权；若实际依赖保密，另行授权协议改造与凭据处置。 | 服务端权限及威胁模型核验；不能用“未进 Git”证明客户端值保密。 | 本机已配置且会随 App 分发；本次可达 Git 历史精确扫描未发现该值。未修改外部服务或轮换凭据。 |
 | HT-PLAY-0923 | Google Play 3.0 最终真机与商店验收 | 按 google-play-readiness-2026-09-23.md 使用三星上的 Clawket QA 测试双后端；修正数据安全/隐私与审核访问声明，固定正式签名 AAB 后通过 Play 验证覆盖升级和许可测试购买/恢复。 | QA 连续聊天和后台恢复通过；真实申报与功能一致；正式包版本、签名、交易和数据迁移有证据。 | QA 3.0.0 / 30000 已成功覆盖安装启动；Mobile 330 套 / 3,415 项通过。Play 尚无 3.0 bundle；未提交审核。全仓尚有 Hermes 录制预期和 i18n unused key 两项待收尾。 |
 | HT-STREAM-0922 | 流式聊天修复后的 Android 连续发送验收 | 先恢复本机 Android Gradle 插件构建，再覆盖安装保留数据；在现有 OpenClaw/Hermes 测试会话连续发送并录制从发送到终态的全过程。 | 当前用户气泡不消失、思考/流式内容始终归属当前轮、完成前后顺序稳定。 | 代码回归与全仓门禁通过；本轮未生成或安装修复 APK，真机验收未完成。 |
@@ -2265,3 +2267,36 @@ Owner requested a complete source usability/privacy review. Audited tracked sour
 Community Release/Archive builds now allow unconfigured integrations; explicit official-build settings preserve strict billing/analytics/production-speech checks. Operator Apple/EAS identities moved to environment configuration, actual Speech Worker settings preserved in ignored local configs, tracked configs converted to disabled placeholders. Maintainer local Xcode config remains functional. Added Git-history secret-scan CI, expanded ignore rules, sanitized workstation usernames in docs/fixtures, and aligned source/self-hosting/security/contribution documentation. No external configuration change, history rewrite, credential rotation, Archive, deployment, upload or push.
 
 Clean source copy without ignored credentials passed isolated dependency installation/lifecycle scripts, both platform prebuilds (no native compilation), Bridge build, iOS JS/Hermes export and 16 config tests. Current-tree required gate and 39 v1 compatibility tests pass; actual local Xcode environment check also passes. Dependency audit has no high/critical findings but retains moderate/low items; new-machine native/device acceptance and full third-party asset/license review are not claimed. Details and limitations: `docs/open-source-readiness-2026-09-25.md`; local evidence: `/tmp/clawket-opensource-audit/`.
+
+### 2026-09-25 — Owner-authorized Pi 3.1 extension
+
+The owner requested full implementation after the Pi feasibility study. Work and acceptance details live in `../3.1/pi.md`; this does not reopen the frozen 3.0 rebuild. Pi adapters, private project sessions, native read-only branching, mobile questions, model/skill controls, authenticated background CLI and isolated Relay/Registry policies are implemented. Required checks passed (Mobile 333 suites / 3,455 tests); legacy replay 39 passed. Real Pi 0.87.1 validates tools, skills, steering, questions/cancellation, per-session models, recovery and idempotency against a local model fixture; local Workers verify secure pairing and multi-device routing; built CLI verifies the full local lifecycle. Final incremental regressions and evidence are recorded in the Pi document. No release/deployment is authorized by this work.
+
+### 2026-09-25 — Pi simulator acceptance and composer polish
+
+Owner-authorized simulator QA uses Pi 0.87.1, local pairing and an isolated project. Real Qwen 3.5 Plus chat/tool/skill execution passed; deterministic models cover cancellation, model isolation and native branching. Fixed the Pi landing session incorrectly classified as paid history, question-sheet keyboard/closing lifecycle, session rename keyboard coordination, and owner-reported provider-heavy/overflowing composer labels. Required gate passed (333 mobile suites / 3,455 tests; 47 runtime suites / 360 tests); subsequent question/session UI tests (15), runtime reset regression (361 runtime tests), mobile typecheck/design-system and docs checks passed. Reset clears stale preview/model metadata; dark confirmation text follows theme. Full evidence and limits: `../3.1/pi-simulator-qa-2026-09-25.md`. No production service, distribution package, subscription or release changed.
+
+
+### 2026-09-26 — Pi Android physical-device acceptance
+
+Owner-authorized ADB QA on Samsung SM-A566B / Android 16 uses an independent 3.1.0 Debug package, real Pi 0.87.1, LAN pairing and Qwen 3.5 Plus. Real file read/edit/test execution, extension confirmation/input with cold recovery, background tool completion, Bridge reconnect, cancellation, model switching and new-session chat passed. Fixed pending-extension history anchoring, Android question keyboard occlusion, duplicate recovered tool completion, and empty composer height after immediate backgrounding. Final new-session inspection exposed Android CommonMark intrinsic-width rounding hiding the final glyph; a reviewed one-physical-pixel native measurement patch restores it on device and is wired into both installs with fail-closed tests.
+
+Required gate passed (334 Mobile suites / 3,456 tests; 362 runtime tests); legacy replay 39 and real Pi integration passed. Final focused UI 37, mobile typecheck/design/docs, native patch 3 tests and Android Debug rebuild passed. Actual scope, evidence and remaining release/physical-iOS/Windows limits: `../3.1/pi-android-qa-2026-09-26.md`. Existing installed apps/data preserved; no release, deployment or live configuration change.
+
+
+### 2026-09-26 — Official Pi platform artwork
+
+Replaced the generic Lucide mathematical Pi glyph with the official pi.dev artwork in the shared PlatformMark. Bundled the original SVG and a 192px transparent PNG, preserving colors, geometry and safe area; recorded provenance. Applies to onboarding and all shared platform-mark consumers without changing connection behavior.
+
+Validation: Mobile typecheck, design-system checks and docs checks passed; inspected the rasterized official artwork on light/dark backgrounds. No new device build or release performed.
+
+### 2026-09-26 — Three-backend release readiness and legacy device regression
+
+Owner requested overnight pre-release verification including existing OpenClaw/Hermes. Android real-device OpenClaw Preview pairing/history/new-session/model response and reconnect passed; Hermes LAN and production Relay pairing, real DeepSeek responses, cold restart and background recovery passed. Pi real-runtime, CLI lifecycle and isolated Worker integration passed. Official Pi artwork is verified on device; added its missing Jest asset mock after the full gate caught four suite-load failures. Final required gate passes (334 Mobile suites / 3,456 tests; runtime 362), legacy replay 39 and production-snapshot rollout matrix 4 combinations × 6 stages pass. Two fixed Registry recovery bundles were prepared and integrity-verified, without deploying.
+
+Cloud inventory confirms no Pi Worker exists in Preview or Production; existing legacy Preview predates this candidate. Therefore this is not an unconditional release approval. Recommended order: verified services, Bridge npm, then client. Concrete remaining cloud scope and evidence: `../3.1/release-readiness-2026-09-26.md`. Pi Preview deployment authorization requested separately under the root release rule; no npm/OTA/store release, distribution build, Worker deployment or production configuration change performed.
+
+
+### 2026-09-26 morning — Pi Preview deployed and verified
+
+Owner clarified Preview deployments need no separate approval; root release policy updated. Deployed isolated Pi Registry/Relay, KV, room/rate-limiter namespaces and matching private secrets. Verified cloud bindings and redaction. Real Android Qwen file-edit/test task, background recovery and extension question across cold launch passed; dual cloud clients passed response isolation, idempotency, sessions, model selection, questions, cancellation and reset/delete. Fixed Pi 409 owner-lease recovery (real restart 21.24 seconds), backend-specific offline wording, and official Preview URL environment checks. Required gate and 39 historical replay tests passed. Production services and distribution remain unpublished; precise deployment versions, evidence and release sequence are recorded in `../3.1/release-readiness-2026-09-26.md`.

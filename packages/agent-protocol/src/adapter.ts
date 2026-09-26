@@ -2,6 +2,7 @@ import type { SessionFilesOperations } from './session-files';
 import type { Capabilities } from './capabilities';
 import type {
   AgentDescriptor,
+  AgentQuestion,
   ApprovalRequest,
   ConnectionDescriptor,
   FinalMessage,
@@ -23,6 +24,8 @@ export type ConnectionState =
   | 'error';
 
 export type SessionUpdate =
+  | { type: 'question_requested'; sessionKey: string; question: AgentQuestion }
+  | { type: 'question_resolved'; sessionKey: string; questionId: string }
   | { type: 'history_reconciled'; sessionKey: string; history: SessionHistory }
   | { type: 'run_started'; sessionKey: string; runId: string }
   | { type: 'agent_message_chunk'; sessionKey: string; runId: string; text: string; textMode?: 'snapshot' | 'delta' }
@@ -100,10 +103,14 @@ export interface AgentAdapter {
   prompt(key: string, input: PromptInput): Promise<{ runId: string }>;
   cancel(key: string, runId?: string): Promise<void>;
   steer?(key: string, runId: string, text: string): Promise<void>;
-  createSession?(agentId: string, options?: { title?: string }): Promise<SessionDescriptor>;
+  createSession?(agentId: string, options?: { title?: string; fromSession?: string }): Promise<SessionDescriptor>;
   patchSession?(key: string, patch: { title?: string }): Promise<void>;
   resetSession?(key: string): Promise<void>;
   deleteSession?(key: string): Promise<void>;
+  questions?: {
+    list(key: string): Promise<AgentQuestion[]>;
+    respond(key: string, id: string, answer: { value?: string; confirmed?: boolean; cancelled?: boolean }): Promise<void>;
+  };
   management?: ManagementOperations;
   sessionFiles?: SessionFilesOperations;
   on(event: 'update', listener: (update: SessionUpdate) => void): () => void;

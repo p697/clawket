@@ -191,7 +191,7 @@ export function parseQRPayload(raw: string): QRScanResult | null {
     return {
       url: relayUrl,
       token: token || undefined,
-      ...(payload.b === 'local-model' ? { backendKind: 'local-model' as const, transportKind: 'relay' as const } : {}),
+      ...(payload.b === 'local-model' || payload.b === 'pi' ? { backendKind: payload.b as 'pi' | 'local-model', transportKind: 'relay' as const } : {}),
       password: password || undefined,
       mode: 'relay',
       relay: {
@@ -223,6 +223,7 @@ export function parseQRPayload(raw: string): QRScanResult | null {
         const hermes = readHermes(obj.hermes);
         return {
           url: String(obj.url),
+          ...(obj.backendKind === 'pi' ? { backendKind: 'pi' as const } : {}),
           ...(hermes ? { backendKind: 'hermes' as const } : {}),
           ...(mode && mode !== 'hermes' ? { transportKind: mode } : {}),
           ...(typeof obj.token === 'string' ? { token: obj.token } : {}),

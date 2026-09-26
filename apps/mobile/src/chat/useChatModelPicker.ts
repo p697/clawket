@@ -157,6 +157,7 @@ export function useChatModelPicker({
         if (!isCurrent()) return;
         const selectedModel = currentState.currentModel?.trim();
         if (selectedModel) {
+          if (currentState.models?.length) setAvailableModels(currentState.models);
           setCurrentModel(selectedModel);
           setCurrentModelProvider(currentState.currentProvider?.trim() || null);
           return;
@@ -307,7 +308,13 @@ export function useChatModelPicker({
     ? (currentModelProvider ? `${currentModelProvider}/${currentModel}` : currentModel)
     : null;
 
+  const selectedCatalogModel = availableModels.find((item) =>
+    (item.id === currentModel || `${item.provider}/${item.id}` === currentModel)
+    && (!currentModelProvider || item.provider === currentModelProvider));
+  const currentModelDisplayName = (selectedCatalogModel?.name || currentModel)?.split('/').pop() || null;
+
   return {
+    currentModelDisplayName,
     configuredDefaultModel,
     availableModels,
     availableProviders,

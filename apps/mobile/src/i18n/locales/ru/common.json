@@ -245,5 +245,7 @@
   "Check your network and make sure the remote service is running.": "Проверьте сеть и убедитесь, что удалённый сервис работает.",
   "View saved messages": "Посмотреть сохранённые сообщения",
   "Search and bulk export": "Поиск и массовый экспорт",
-  "Skill and memory versions": "Версии навыков и памяти"
+  "Skill and memory versions": "Версии навыков и памяти",
+  "Yes": "Да",
+  "No": "Нет"
 }

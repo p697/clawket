@@ -1,6 +1,8 @@
 import type { BackendKind, PromptAttachment } from './descriptors';
 
 export interface Capabilities {
+  agentQuestions?: boolean;
+  sessionBranch?: boolean;
   chat: boolean;
   abort: boolean;
   /** Exact active-run guidance; missing means unsupported. */
@@ -75,6 +77,8 @@ export interface Capabilities {
 export type Capability = keyof Capabilities;
 
 export const CAPABILITY_KEYS = [
+  'agentQuestions',
+  'sessionBranch',
   'chat',
   'abort',
   'steer',
@@ -264,6 +268,9 @@ const YOUMIND_CAPABILITIES: Capabilities = {
 };
 
 export const CAPABILITY_MATRIX: Record<BackendKind, Capabilities> = {
+  pi: { ...YOUMIND_CAPABILITIES, chat: true, abort: true, steer: true, history: true, attachments: true,
+    sessions: true, sessionCreate: true, sessionRename: true, sessionReset: true, sessionDelete: true,
+    models: true, modelPerSession: true, thinkingLevels: true, skills: true, agentQuestions: true, sessionBranch: true },
   openclaw: OPENCLAW_CAPABILITIES,
   hermes: HERMES_CAPABILITIES,
   youmind: YOUMIND_CAPABILITIES,

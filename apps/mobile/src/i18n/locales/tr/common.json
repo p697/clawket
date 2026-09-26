@@ -245,5 +245,7 @@
   "Check your network and make sure the remote service is running.": "Ağınızı ve uzak hizmetin çalıştığını kontrol edin.",
   "View saved messages": "Kayıtlı mesajları görüntüle",
   "Search and bulk export": "Arama ve toplu dışa aktarma",
-  "Skill and memory versions": "Beceri ve bellek sürümleri"
+  "Skill and memory versions": "Beceri ve bellek sürümleri",
+  "Yes": "Evet",
+  "No": "Hayır"
 }

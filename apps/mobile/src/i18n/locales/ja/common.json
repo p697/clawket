@@ -245,5 +245,7 @@
   "Check your network and make sure the remote service is running.": "ネットワークとリモートサービスの稼働状況を確認してください。",
   "View saved messages": "保存済みメッセージを見る",
   "Search and bulk export": "検索と一括エクスポート",
-  "Skill and memory versions": "スキルとメモリの履歴"
+  "Skill and memory versions": "スキルとメモリの履歴",
+  "Yes": "はい",
+  "No": "いいえ"
 }

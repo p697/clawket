@@ -582,6 +582,7 @@ if (!globalThis.crypto.getRandomValues) {
 jest.mock('./assets/brands/openclaw.png', () => 301);
 jest.mock('./assets/brands/hermes.png', () => 302);
 jest.mock('./assets/brands/youmind.png', () => 303);
+jest.mock('./assets/brands/pi.png', () => 307);
 jest.mock('./assets/avatars/youmind-sprite-default.png', () => 306);
 
 jest.mock('./assets/icon.png', () => 304);

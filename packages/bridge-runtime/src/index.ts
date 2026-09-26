@@ -15,3 +15,8 @@ export { LocalModelConversation } from './local-model/conversation.js';
 export { LocalModelServer, LocalModelService } from './local-model/server.js';
 export { LocalModelRelay, type LocalModelRelayConfig, type LocalModelInvitation } from './local-model/relay.js';
 export { type LocalModelEndpoint } from './local-model/provider.js';
+
+export { PiService, type PiOptions } from './pi/service.js';
+export { PiServer } from './pi/server.js';
+export { PiRelay, type PiRelayConfig } from './pi/relay.js';
+export { inspectPiInstallation } from './pi/executable.js';

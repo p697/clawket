@@ -31,3 +31,5 @@ Hermes per-job model selection is declared in the product matrix but downgraded 
 `sessionFiles` is an optional runtime-negotiated capability with opaque file IDs and bounded offset-based reads. It is separate from Agent configuration `files`; older peers must leave it unavailable.
 
 `ChatMessage.attribution` optionally supplies channel/account/conversation/message/thread facts and a sender's ID, name, username, avatar and kind. These are display facts, independent of backend, transport, model role and authorization. `sentLocally` is cache-only provenance, never accepted from a wire message or inferred from owner flags. Missing fields preserve older direct-chat contracts; mock histories clone attribution independently.
+
+Pi is an explicit backend using ordinary sessions and per-session model selection. Optional `agentQuestions` / `questions` and question updates describe extension select/confirm/input/editor interactions, independently of `execApproval`. Optional `sessionBranch` and `createSession(..., { fromSession })` permit continuing native read-only history as a new owned session. Missing refinements remain unavailable.
