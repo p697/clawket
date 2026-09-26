@@ -11,17 +11,17 @@ if [[ -z "$NODE_RUNNER" ]]; then
   exit 1
 fi
 
-if [[ "$PLATFORM" != "android" ]]; then
+if [[ "$PLATFORM" != "android" && "$PLATFORM" != "ios" ]]; then
   exit 0
 fi
 
 cd "$APP_ROOT"
 
 case "$PROFILE" in
-  production|preview|testflight)
-    CLAWKET_REQUIRE_POSTHOG=1 CLAWKET_REQUIRE_REVENUECAT=1 "$NODE_RUNNER" scripts/check-public-config.mjs --platform=android
+  production|testflight)
+    CLAWKET_OFFICIAL_BUILD=1 "$NODE_RUNNER" scripts/check-public-config.mjs "--platform=$PLATFORM"
     ;;
   *)
-    "$NODE_RUNNER" scripts/check-public-config.mjs --platform=android
+    "$NODE_RUNNER" scripts/check-public-config.mjs "--platform=$PLATFORM"
     ;;
 esac

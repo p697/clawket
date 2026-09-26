@@ -1,6 +1,6 @@
 # Chat 云端语音输入
 
-2026-09-19 负责人授权用 Expo Audio PCM + 阿里云 Qwen 取代系统语音识别。2026-09-20 负责人授权完整落地弱网恢复、错误诊断和启动优化。本次仍使用独立 Preview 服务；不改变 Pro 权益或正式商店发布范围。
+2026-09-19 负责人授权用 Expo Audio PCM + 阿里云 Qwen 取代系统语音识别。2026-09-20 负责人授权完整落地弱网恢复、错误诊断和启动优化。2026-09-25 将正式版语音迁至独立 Production Worker 和 `speech.clawket.ai`；不改变 Pro 权益。
 
 ## 交互与恢复
 
@@ -33,13 +33,17 @@ Provider WebSocket 握手有独立 10 秒超时，fetch 返回或失败立即清
 
 ## 配置与运维
 
-- Preview：`wss://clawket-speech-preview.clawket.workers.dev/v1/speech`；Mobile 本地 `.env.local` 设置 `EXPO_PUBLIC_SPEECH_URL`。它是公开 URL，绝不能填写 Key。未配置时隐藏麦克风/长按入口。EAS 本地同步只将它送到 development，Production 必须显式配置隔离服务。
+- Production：`wss://speech.clawket.ai/v1/speech`，独立 `clawket-speech` Worker、Durable Object、secret 和被 Git 忽略的 `wrangler.production.local.jsonc`，Custom Domain 启用，`workers.dev` 关闭。EAS Production 环境和 `eas.json` Store profile 都固定这个公开 URL；维护者本地 `.env.local` 提供同一 URL 和 `CLAWKET_OFFICIAL_BUILD=1`。官方 Android/iOS EAS Store 构建及启用官方标记的 Xcode 非 Debug 打包会拒绝缺失或 Preview URL；Xcode dotenv 加载不覆盖已有的 EAS/命令行值。已上传/安装的 AAB 内嵌旧地址，须重新构建与发布才能更正；配置变更不会改写旧包。
+- Preview：`wss://clawket-speech-preview.clawket.workers.dev/v1/speech`；Mobile 本地 `.env.local` 可设置 `EXPO_PUBLIC_SPEECH_URL`。它只供本地开发/Preview，EAS 本地同步只将它送到 development。URL 是公开配置，绝不能填写 Key；未配置时隐藏麦克风/长按入口。
+- Cloudflare 区域 WAF 仅对 `speech.clawket.ai` 的 `/health` 和 `/v1/speech` 跳过会阻断机器请求的托管防护/安全等级/Bot 检查，不跳过限流；Worker 自身仍执行签名、防重放与设备/IP/总量准入。
 - Key 只放 Worker secret `ALIYUN_SPEECH_API_KEY`；`SPEECH_ENABLED=false` 停用。私有备份在仓库外 owner-only 目录。公开 URL 不等于公开 Provider Key；知道 URL 的自建客户端可能使用我们尚未接订阅授权的 Preview 服务。
 - `npm run speech:typecheck`、`npm run speech:test`、Mobile 语音套件与 `npm run check:required`。真实验证：`node scripts/speech/smoke.mjs <wss endpoint> <16k mono PCM file>`，只用合成或明确授权音频。v1 smoke 继续验证旧手机协议；v2 验证错误码与连续录音。
-- 本轮不增加原生依赖；设备必须已有 Expo SDK 57 / Expo Audio 和 FileSystem 的开发构建。模型、Relay、Registry、Bridge 配对和订阅行为不变。
+- 本轮不增加原生依赖；设备必须使用包含 Expo SDK 57 / Expo Audio 和 FileSystem 的原生构建。模型、Relay、Registry、Bridge 配对和订阅行为不变。
 
 ## 验收
 
 自动检查覆盖持久文件恢复/损坏输入、限额与分段检查点、十分钟六任务、发送拥塞、断网后继续录音、后台/卸载组件/切会话恢复、取消和迟到清理、双后端只发送一次、重试不发送、具体错误帧和服务端释放先于结果。真机仍须验收 iOS/Android 首次及重复启动、蓝牙/来电、断网一分钟后继续讲话、十分钟录音、杀 App 后回原会话恢复、磁盘不足、连续短录音和长按触摸。
 
 2026-09-22 负责人要求：桌面小组件语音入口直接进入现有录音流程，不再弹「开始录音」确认层。等待 App 前台、线程聚焦和原会话草稿恢复，导航过渡后一次性启动；切换目标或卸载取消待启动动作。系统权限、已有录音恢复及停止/取消沿用聊天录音行为，不自动发送。界面由负责人验收，不操作模拟器。
+
+开源构建：受跟踪 Wrangler 文件为默认停用的占位模板；复制为 `.local.jsonc` 后填写自己的账号、域名、Provider 地址，通过 Worker secret 提供 Key。社区 Release/Archive 不设置 `CLAWKET_OFFICIAL_BUILD`，可不配置语音或使用自建端点。官方 profile 保留正式域名校验。

@@ -555,7 +555,7 @@ export function rejectClientRequestWithoutBridge(
     ok: false,
     error: {
       code: 'BRIDGE_UNAVAILABLE',
-      message: 'Hermes bridge is temporarily unavailable. Please retry.',
+      message: `${runtime.policy.backend === 'pi' ? 'Pi' : 'Hermes'} bridge is temporarily unavailable. Please retry.`,
     },
   });
   try {

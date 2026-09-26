@@ -28,8 +28,9 @@ This repository is still in the migration and open-source-hardening phase.
 Run the relevant checks before submitting changes:
 
 ```bash
-npm run typecheck
-npm run test
+npm ci
+npm run check:required
+npm run test:compat
 ```
 
-For targeted work, run the affected workspace tests directly.
+For targeted work, run the affected workspace tests directly. `npm test` also includes integration checks requiring an external Hermes checkout; it is not the clean-checkout CI gate. Keep `.env.local`, signing files and operator Wrangler overrides untracked. CI scans Git history for secrets; see [SECURITY.md](./SECURITY.md).

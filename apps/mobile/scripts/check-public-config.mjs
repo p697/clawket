@@ -62,6 +62,7 @@ export function buildConfig(env = process.env) {
   ]);
 
   return {
+    speech: { url: readEnv('EXPO_PUBLIC_SPEECH_URL') },
     posthog: {
       enabled: posthogEnabled,
       host: posthogHost,
@@ -89,11 +90,13 @@ loadEnvFile(resolve(appRoot, '.env'));
 export function validateConfig(config, platform, env = process.env, root = appRoot) {
   const errors = [];
   const booleanFlags = [
+    'CLAWKET_OFFICIAL_BUILD',
     'CLAWKET_REQUIRE_POSTHOG',
     'CLAWKET_REQUIRE_REVENUECAT',
     'EXPO_PUBLIC_POSTHOG_ENABLED',
     'EXPO_PUBLIC_REVENUECAT_ENABLED',
     'EXPO_PUBLIC_UNLOCK_PRO',
+    'CLAWKET_REQUIRE_SPEECH',
   ];
 
   for (const flagName of booleanFlags) {
@@ -103,8 +106,10 @@ export function validateConfig(config, platform, env = process.env, root = appRo
     }
   }
 
-  const requirePostHog = parseBoolean(env.CLAWKET_REQUIRE_POSTHOG) === true;
-  const requireRevenueCat = parseBoolean(env.CLAWKET_REQUIRE_REVENUECAT) === true;
+  const officialBuild = parseBoolean(env.CLAWKET_OFFICIAL_BUILD) === true;
+  const requirePostHog = officialBuild || parseBoolean(env.CLAWKET_REQUIRE_POSTHOG) === true;
+  const requireRevenueCat = officialBuild || parseBoolean(env.CLAWKET_REQUIRE_REVENUECAT) === true;
+  const requireSpeech = officialBuild || parseBoolean(env.CLAWKET_REQUIRE_SPEECH) === true;
 
   if (requirePostHog && !config.posthog.enabled) {
     errors.push('PostHog must be enabled for this build, but no EXPO_PUBLIC_POSTHOG_* configuration was found.');
@@ -117,6 +122,10 @@ export function validateConfig(config, platform, env = process.env, root = appRo
 
   if (requireRevenueCat && !config.revenueCat.enabled) {
     errors.push(`RevenueCat must be enabled for ${platform} store builds, but no EXPO_PUBLIC_REVENUECAT_* configuration was found.`);
+  }
+
+  if (requireSpeech && config.speech.url !== 'wss://speech.clawket.ai/v1/speech') {
+    errors.push('Store builds require EXPO_PUBLIC_SPEECH_URL=wss://speech.clawket.ai/v1/speech.');
   }
 
   if (config.revenueCat.enabled) {
@@ -184,6 +193,7 @@ export function runCli(argv = process.argv.slice(2)) {
     console.log(`Public config check (${platform})`);
     console.log(`- PostHog: ${config.posthog.enabled ? 'enabled' : 'disabled'}`);
     console.log(`- RevenueCat: ${config.revenueCat.enabled ? 'enabled' : 'disabled'}`);
+    console.log(`- Speech: ${config.speech.url ?? 'disabled'}`);
     if (errors.length > 0) {
       console.log('');
       for (const error of errors) {

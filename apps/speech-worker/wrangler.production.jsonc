@@ -1,11 +1,23 @@
 {
   "$schema": "../../node_modules/wrangler/config-schema.json",
-  "name": "clawket-speech-self-hosted",
+  "name": "clawket-speech-self-hosted-production",
   "main": "src/index.ts",
   "compatibility_date": "2026-09-19",
   "compatibility_flags": [
     "nodejs_compat"
   ],
+  "workers_dev": false,
+  "routes": [
+    {
+      "pattern": "speech.example.com",
+      "custom_domain": true
+    }
+  ],
+  "secrets": {
+    "required": [
+      "ALIYUN_SPEECH_API_KEY"
+    ]
+  },
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1,

@@ -1,9 +1,9 @@
 {
   "schema": "clawket.youmind-sprite.recorded-contract.v1",
   "source": {
-    "youmindMobileRepository": "/Users/lucy/Desktop/youmind/youmind-mobile",
+    "youmindMobileRepository": "/Users/developer/Desktop/youmind/youmind-mobile",
     "youmindMobileCommit": "ad8bee7ac5dd5bfa5c74016f441d3708b83a3f7b",
-    "serverRepository": "/Users/lucy/Desktop/youmind/youniverse",
+    "serverRepository": "/Users/developer/Desktop/youmind/youniverse",
     "serverCommit": "e24fa3a1ce9a2d1ae1e2011d80e2dd9e620fe57a",
     "evidence": [
       "apps/mobile/src/services/youmind.ts",

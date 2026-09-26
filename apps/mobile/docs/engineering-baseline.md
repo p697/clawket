@@ -46,6 +46,8 @@ After changing Expo, React Native, an Expo module, or another native dependency:
 
 Generated `ios/` and `android/` projects are local build products in this repository. The committed `app.config.js`, package manifests, scripts, and lockfiles are the durable configuration sources.
 
+`plugins/with-xcode-env.js` loads the local `.xcode.env.local` override before Release public-config validation. Xcode GUI phases may not find Node on `PATH`; the override supplies an executable `NODE_BINARY`. Keep this order even though React Native also loads the override afterward. Changes to the plugin must be synchronized into the local generated `ios/.xcode.env`; shell-level regression checks use a restricted GUI-style PATH without creating an Archive.
+
 ## Dependency policy
 
 1. Prefer exact or Expo-recommended ranges for native packages.
@@ -87,7 +89,7 @@ For a lifecycle upgrade, verify Debug with Metro and Release with its embedded J
 
 ## Gradle cache paths
 
-SDK 57's Gradle 9.3.1 has an [upstream Kotlin DSL symlink regression](https://github.com/gradle/gradle/issues/36483): a symlinked `~/.gradle/caches` can report missing `libs` or `KtfmtCheckTask` even when the files exist. Use a `GRADLE_USER_HOME` whose cache directories are real paths (including on an external disk); do not symlink its `caches` or `modules-2`. Do not patch React Native's Gradle sources or disable checks to hide this host setup problem. On this workstation the verified build uses `/Volumes/Lucy-SSD/Relocated/Caches/dev/clawket-sdk57-gradle`.
+SDK 57's Gradle 9.3.1 has an [upstream Kotlin DSL symlink regression](https://github.com/gradle/gradle/issues/36483): a symlinked `~/.gradle/caches` can report missing `libs` or `KtfmtCheckTask` even when the files exist. Use a `GRADLE_USER_HOME` whose cache directories are real paths (including on an external disk); do not symlink its `caches` or `modules-2`. Do not patch React Native's Gradle sources or disable checks to hide this host setup problem. On this workstation the verified build uses `/Volumes/External-SSD/Relocated/Caches/dev/clawket-sdk57-gradle`.
 
 ## Android incoming text files
 

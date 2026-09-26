@@ -13,6 +13,26 @@ vi.mock('ws', async () => {
 });
 import { PiRelay } from './relay.js';
 afterEach(() => { vi.useRealTimers(); state.sockets.length = 0; });
+test('a restarting owner recovers after the cloud lease expires within startup readiness', async () => {
+  vi.useFakeTimers();
+  const relay = new PiRelay({ conversation: new EventEmitter() } as PiService,
+    { relayUrl: 'wss://example.test/ws', gatewayId: 'test', relaySecret: 'test' }, () => {});
+  relay.start();
+  const ready = relay.waitUntilReady();
+  for (let attempt = 0; attempt < 11; attempt++) {
+    const socket = state.sockets.at(-1);
+    socket.emit('error', new Error('Unexpected server response: 409'));
+    socket.emit('close', 1006);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(state.sockets).toHaveLength(attempt + 2);
+  }
+  const socket = state.sockets.at(-1);
+  socket.emit('open');
+  socket.emit('message', '__clawket_relay_control__:{"event":"relay.ready"}');
+  await ready;
+  relay.stop();
+  expect(vi.getTimerCount()).toBe(0);
+});
 test('failed handshakes back off; stale callbacks cannot reset or reconnect; stop clears all timers', async () => {
   vi.useFakeTimers();
   const conversation = new EventEmitter();

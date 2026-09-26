@@ -31,10 +31,20 @@ module.exports = ({ config }) => {
   const expoConfig = config ?? baseConfig.expo ?? {};
   const version = String(packageJson.version || '0.0.0');
   const appleTeamId = process.env.EXPO_APPLE_TEAM_ID?.trim();
+  const easOwner = process.env.EXPO_EAS_OWNER?.trim();
+  const easProjectId = process.env.EXPO_EAS_PROJECT_ID?.trim();
 
   return {
     ...expoConfig,
     version,
+    ...(easOwner ? { owner: easOwner } : {}),
+    extra: {
+      ...expoConfig.extra,
+      eas: {
+        ...expoConfig.extra?.eas,
+        ...(easProjectId ? { projectId: easProjectId } : {}),
+      },
+    },
     ios: {
       ...expoConfig.ios,
       ...(appleTeamId ? { appleTeamId } : {}),

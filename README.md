@@ -66,14 +66,18 @@ To select a backend explicitly, add `--backend openclaw` or `--backend hermes`. 
 Use **Node.js 22.x** and npm for this checkout. iOS development requires macOS and Xcode; Android development requires Android Studio and its SDK.
 
 ```bash
-npm install
-npm run mobile:sync:native
+npm ci
+# Generate only the platform you are developing (Android also works without Xcode):
+npm exec --workspace apps/mobile -- expo prebuild --platform ios
 npm run mobile:dev:ios
-# Or, for Android:
+# Or, generate Android and run it:
+npm exec --workspace apps/mobile -- expo prebuild --platform android
 npm run mobile:dev:android
 ```
 
 Optional public configuration is documented in [`apps/mobile/.env.example`](./apps/mobile/.env.example). Copy it to `apps/mobile/.env.local` to configure your build. Provider secrets belong on the server, never in `EXPO_PUBLIC_*` values.
+
+Community Debug and Release builds work without analytics, billing or speech configuration. Leave `CLAWKET_OFFICIAL_BUILD` unset; the `production`/`testflight` EAS profiles are for official Clawket distribution. Use your own Apple signing team for a physical device and your own EAS project for cloud builds; see [self-hosting](./docs/self-hosting.md). iOS also requires CocoaPods, and Android requires JDK 17 with `ANDROID_HOME` set.
 
 ```bash
 npm run mobile:config:show

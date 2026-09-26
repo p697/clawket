@@ -66,14 +66,18 @@ clawket pair local
 本仓库使用 **Node.js 22.x** 和 npm。iOS 开发需要 macOS 与 Xcode；Android 开发需要 Android Studio 及其 SDK。
 
 ```bash
-npm install
-npm run mobile:sync:native
+npm ci
+# 只生成要开发的平台（Android 不需要 Xcode）：
+npm exec --workspace apps/mobile -- expo prebuild --platform ios
 npm run mobile:dev:ios
-# Android 则运行：
+# 或生成 Android 工程并运行：
+npm exec --workspace apps/mobile -- expo prebuild --platform android
 npm run mobile:dev:android
 ```
 
 可选的公开配置见 [`apps/mobile/.env.example`](./apps/mobile/.env.example)。复制到 `apps/mobile/.env.local` 后即可配置自己的构建。服务商密钥应保留在服务端，不要放入 `EXPO_PUBLIC_*`。
+
+社区的 Debug 和 Release 构建都可以不配置统计、付费或语音。保持 `CLAWKET_OFFICIAL_BUILD` 未设置；EAS 的 `production`/`testflight` profile 用于 Clawket 官方发行。真机签名使用自己的 Apple 开发团队，云构建使用自己的 EAS 项目，详见[自托管指南](./docs/self-hosting.md)。iOS 还需要 CocoaPods，Android 需要 JDK 17 并设置 `ANDROID_HOME`。
 
 ```bash
 npm run mobile:config:show

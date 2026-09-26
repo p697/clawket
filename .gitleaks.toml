@@ -1,0 +1,13 @@
+title = "Clawket secret scanning"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Reviewed non-secret pairing alphabet and synthetic message idempotency keys"
+regexTarget = "secret"
+regexes = [
+  '''^ABCDEFGHJKMNPQRSTVWXYZ23456789$''',
+  '''^1789390790301_afobgrvb$''',
+  '''^1789390791301_otherkey$''',
+]

@@ -6,6 +6,7 @@ account_id = "00000000000000000000000000000000"
 
 [observability]
 enabled = true
+redact_query_string = true
 
 [observability.logs]
 enabled = true

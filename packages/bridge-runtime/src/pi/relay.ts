@@ -68,6 +68,7 @@ export class PiRelay {
     const socket = new WebSocket(url, { ...this.relayNetwork, headers: { Authorization: `Bearer ${this.config.relaySecret}` }, maxPayload: WEBSOCKET_FRAME_LIMIT_BYTES, handshakeTimeout: 15_000 });
     this.socket = socket;
     let alive = true;
+    let ownerLeasePending = false;
     socket.on('open', () => {
       if (this.socket !== socket || this.stopped) { socket.terminate(); return; }
       this.log('pi relay transport connected');
@@ -114,6 +115,7 @@ export class PiRelay {
     socket.on('error', (error: Error & { code?: string }) => {
       if (this.socket !== socket || this.stopped) return;
       const status = /^Unexpected server response: (\d{3})$/.exec(error.message)?.[1];
+      ownerLeasePending = status === '409';
       const code = status ? `HTTP_${status}` : /^[A-Z0-9_]{1,40}$/.test(error.code ?? '') ? error.code : 'WEBSOCKET_ERROR';
       this.log(`pi relay transport error code=${code}`);
     });
@@ -127,7 +129,10 @@ export class PiRelay {
       this.ping = null; this.readiness = null;
       if (code === 4010 || code === 4001) { this.stop(); return; }
       if (!this.stopped) {
-        const delayMs = Math.min(30_000, 1000 * 2 ** Math.min(++this.attempts, 5));
+        this.attempts++;
+        // A previous process can hold the 20s owner lease after abrupt shutdown.
+        // Do not let exponential delays push the next attempt past startup readiness.
+        const delayMs = ownerLeasePending ? 2000 : Math.min(30_000, 1000 * 2 ** Math.min(this.attempts, 5));
         this.log(`pi relay retry attempt=${this.attempts} delayMs=${delayMs}`);
         this.retry = setTimeout(() => { this.retry = null; this.connect(); }, delayMs);
       }

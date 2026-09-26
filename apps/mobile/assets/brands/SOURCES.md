@@ -9,3 +9,5 @@ Copied without recoloring or redrawing on 2026-09-06. These marks identify the c
 `hermes.png` and `youmind.png` were downscaled in place from 1024×1024 to 192×192 on 2026-09-11 (`sips -z 192 192`, no recoloring or cropping). `PlatformMark` renders these marks at most 52 points (156 px at 3×), so the original 1024 px / 541 KB Hermes artwork only added decode latency and memory; keep bundled marks at or near 192 px and re-downscale if an upstream asset is refreshed.
 
 Static Metro assets are rendered by `PlatformMark`. Do not fetch brand images during onboarding or apply the user's accent color to them.
+
+- `pi.svg`: official Pi logo from https://pi.dev/logo-auto.svg (linked by https://github.com/earendil-works/pi/blob/v0.87.1/README.md), retrieved 2026-09-26. `pi.png` is a 192×192 transparent rasterization for the shared Metro image path, retaining the complete 800×800 viewBox, original colors, geometry and safe area. Regenerate with Sharp resize(192, 192).png(); never substitute a generic mathematical π glyph.

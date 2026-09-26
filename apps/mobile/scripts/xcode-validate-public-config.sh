@@ -26,4 +26,4 @@ if [[ "${CONFIGURATION:-}" == *Debug* ]]; then
   exit 0
 fi
 
-CLAWKET_REQUIRE_POSTHOG=1 CLAWKET_REQUIRE_REVENUECAT=1 "$NODE_RUNNER" scripts/check-public-config.mjs --platform=ios
+"$NODE_RUNNER" scripts/check-public-config.mjs --platform=ios

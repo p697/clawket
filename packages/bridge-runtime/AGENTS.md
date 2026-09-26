@@ -173,3 +173,5 @@ Pi’s landing record must publish `kind: main` together with the Agent’s `mai
 Pi reset rotates private storage and clears transcript preview/activity and stale model metadata while preserving acceptance fingerprints; old network retries must never repopulate the reset conversation.
 
 While an accepted Pi extension command is waiting before `agent_start`, history projects its in-memory input after completed native entries so phone recovery anchors the pending run to the current turn. Retire that projection on agent start or settlement; never write synthetic commands into native Pi JSONL.
+
+Pi Relay owner-lease conflicts (HTTP 409) retry every two seconds within the startup readiness deadline; other failures retain exponential backoff. Only `relay.ready` resets recovery state, and retired socket events cannot affect the replacement.
