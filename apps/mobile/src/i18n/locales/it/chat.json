@@ -158,7 +158,6 @@
   "Voice input": "Input vocale",
   "Stop voice input": "Interrompi input vocale",
   "Listening…": "In ascolto…",
-  "Preparing voice input…": "Preparazione dell’input vocale…",
   "Send": "Invia",
   "Reconnect": "Riconnetti",
   "Offline · reconnecting": "Offline · riconnessione",
@@ -380,5 +379,12 @@
   "{{channel}} member": "Membro di {{channel}}",
   "Agent needs your input": "L’agente attende una risposta",
   "Respond": "Rispondi",
-  "Continue in a new session": "Continua in una nuova sessione"
+  "Continue in a new session": "Continua in una nuova sessione",
+  "thinking_none": "Disattivato",
+  "thinking_max": "Massimo",
+  "thinking_ultra": "Ultra",
+  "Allow this action?": "Consentire questa azione?",
+  "Stop task": "Interrompi attività",
+  "Your answer": "La tua risposta",
+  "Question {{current}} of {{total}}": "Domanda {{current}} di {{total}}"
 }

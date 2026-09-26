@@ -417,3 +417,20 @@ it.each(['openclaw', 'hermes', 'youmind'] as const)('counts only canonical main-
     .toMatchObject({ unreadCount: 0, attentionCount: 1 });
   expect(aggregateRoster([{ ...input, sessions: input.sessions.filter((entry) => entry.key !== 'main:main') }], 'a')[0].agents[0].unreadCount).toBe(0);
 });
+
+it('retains native continuity and project metadata through a cold roster cache read', async () => {
+  const storage = new MemoryCacheStorage();
+  const cache = new RosterCache({ storage });
+  const project = { id: 'root-1', name: 'Product', path: '/projects/product', available: true };
+  await cache.set('c', [agent('c', 'codex')], [session('c', 'codex', 'native:one', 10, { source: 'native', canContinue: true, project })], 'ready');
+  const cold = await new RosterCache({ storage }).get('c');
+  expect(cold?.sessions[0]).toMatchObject({ source: 'native', canContinue: true, project });
+});
+
+it('persists sessions-first entry without inventing a main chat', async () => {
+  const storage = new MemoryCacheStorage();
+  const cache = new RosterCache({ storage });
+  await cache.set('c', [{ ...agent('c', 'codex'), entryMode: 'sessions', mainSessionKey: '' }], []);
+  expect((await new RosterCache({ storage }).get('c'))?.agents[0]).toMatchObject({ entryMode: 'sessions', mainSessionKey: '' });
+  await expect(cache.set('c', [{ ...agent('c', 'codex'), mainSessionKey: '' }], [])).rejects.toThrow();
+});

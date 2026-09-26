@@ -42,6 +42,8 @@ export type ModelInfo = {
   id: string;
   name: string;
   provider: string;
+  sortOrder?: number;
+  resolvedModel?: string;
 };
 
 type Props = {
@@ -139,6 +141,9 @@ export function ModelPickerModal({
           <Text style={styles.modelTitle} numberOfLines={1}>
             {item.name || item.id}
           </Text>
+          {item.resolvedModel ? <Text testID={`model-picker-resolved-${modelKey}`} style={styles.modelSubtitle} numberOfLines={2}>
+            {item.resolvedModel}
+          </Text> : null}
         </View>
         {configuredDefaultModel && resolveProviderModel(item).toLowerCase() === configuredDefaultModel.toLowerCase() ? (
           <Text testID={`model-picker-default-${modelKey}`} style={styles.sectionHeaderText}>{t('Default')}</Text>
@@ -403,6 +408,12 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     modelRowPressed: {
       backgroundColor: colors.surface,
+    },
+    modelSubtitle: {
+      color: colors.inkSecondary,
+      fontSize: FontSize.caption,
+      lineHeight: LineHeight.caption,
+      marginTop: Space.xs,
     },
     modelIconWrap: {
       width: IconSize.lg,

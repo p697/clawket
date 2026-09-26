@@ -1,4 +1,4 @@
-import { StyleSheet, type ViewStyle } from 'react-native';
+import { Platform, StyleSheet, type ViewStyle } from 'react-native';
 
 // ─── Spacing (4px grid) ───
 export const Space = {
@@ -20,7 +20,10 @@ export const FontSize = {
 } as const;
 
 export const LineHeight = {
-  display: 34,
+  // Android sizes a mixed Chinese/Latin line from the taller CJK fallback metrics, trims them
+  // into the fixed line box and clips what overflows: at 34 the "g" of the Chinese "Connect your
+  // agent" title lost its descender (owner report 2026-09-26). iOS keeps the 28/34 Title 1 leading.
+  display: Platform.OS === 'android' ? 38 : 34,
   title: 26,
   body: 24,
   secondary: 20,
@@ -241,4 +244,6 @@ export const Motion = {
   companionBlinkPause: 3_200,
   companionCuriosity: 9_600,
   avatarDoneFade: 3_000,
+  /** Dictation waveform: one soft listening pulse leaves the centre per period while the room is quiet. */
+  voiceRipple: 2_600,
 } as const;

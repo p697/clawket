@@ -158,7 +158,6 @@
   "Voice input": "Голосовой ввод",
   "Stop voice input": "Остановить голосовой ввод",
   "Listening…": "Слушаю…",
-  "Preparing voice input…": "Подготовка голосового ввода…",
   "Send": "Отправить",
   "Reconnect": "Переподключиться",
   "Offline · reconnecting": "Не в сети · переподключение",
@@ -380,5 +379,12 @@
   "{{channel}} member": "Участник {{channel}}",
   "Agent needs your input": "Агент ждёт вашего ответа",
   "Respond": "Ответить",
-  "Continue in a new session": "Продолжить в новой сессии"
+  "Continue in a new session": "Продолжить в новой сессии",
+  "thinking_none": "Выкл.",
+  "thinking_max": "Максимальный",
+  "thinking_ultra": "Ультра",
+  "Allow this action?": "Разрешить это действие?",
+  "Stop task": "Остановить задачу",
+  "Your answer": "Ваш ответ",
+  "Question {{current}} of {{total}}": "Вопрос {{current}} из {{total}}"
 }

@@ -237,12 +237,13 @@ describe('OnboardingScreen', () => {
     const onOpenWebsite = jest.fn();
     // Production, no Debug Mode: the local model row is a first-class backend (owner decision 2026-09-19).
     const view = render(<OnboardingScreen {...createProps({ initialBackend: undefined, onSubmitPairing, onOpenWebsite })} />);
-    // Chooser order (owner decision 2026-09-19): products first, the user's own model server last.
+    // Chooser order (owner decision 2026-09-26): products first, the user's own model server last.
     expect(view.getByTestId('onboarding-backends').props.children.map((row: { props: { testID: string } }) => row.props.testID))
-      .toEqual(['onboarding-backend-openclaw', 'onboarding-backend-hermes', 'onboarding-backend-pi', 'onboarding-youmind', 'onboarding-backend-local-model']);
+      .toEqual(['onboarding-backend-openclaw', 'onboarding-backend-hermes', 'onboarding-backend-codex', 'onboarding-backend-claude-code', 'onboarding-backend-pi', 'onboarding-youmind', 'onboarding-backend-local-model']);
     // A local model is a server the user already runs; "No agent yet?" only lists products to install.
     fireEvent.press(view.getByTestId('onboarding-docs-toggle'));
-    expect(view.getByTestId('onboarding-doc-openclaw')).toBeTruthy();
+    expect(view.getByTestId('onboarding-doc-options').props.children.map((link: { props: { testID: string } }) => link.props.testID))
+      .toEqual(['onboarding-doc-openclaw', 'onboarding-doc-hermes', 'onboarding-doc-codex', 'onboarding-doc-claude-code', 'onboarding-doc-pi', 'onboarding-doc-youmind']);
     expect(view.queryByTestId('onboarding-doc-local-model')).toBeNull();
     fireEvent.press(view.getByTestId('onboarding-backend-local-model'));
     expect(view.queryByTestId('onboarding-agent-prompt')).toBeNull();

@@ -140,6 +140,7 @@
   "Online": "У мережі",
   "Offline": "Не в мережі",
   "Connecting": "Підключення",
+  "Not connected": "Не підключено",
   "Models": "Моделі",
   "Skills": "Навички",
   "Usage": "Використання",
@@ -168,6 +169,8 @@
   "Reset session?": "Скинути сесію?",
   "Reset": "Скинути",
   "Scheduled": "За розкладом",
+  "Scheduled task": "Завдання за розкладом",
+  "Scheduled task: {{name}}": "Завдання за розкладом: {{name}}",
   "Search sessions": "Пошук сесій",
   "Session actions": "Дії з сесією",
   "Sessions require permission": "Для сесій потрібен дозвіл",
@@ -247,5 +250,10 @@
   "Search and bulk export": "Пошук і масовий експорт",
   "Skill and memory versions": "Версії навичок і пам’яті",
   "Yes": "Так",
-  "No": "Ні"
+  "No": "Ні",
+  "All projects": "Усі проєкти",
+  "Projects": "Проєкти",
+  "Choose a project": "Вибрати проєкт",
+  "Search projects": "Пошук проєктів",
+  "Next": "Далі"
 }

@@ -98,6 +98,54 @@ describe('useChatHistoryState', () => {
     expect(new Set(result.current.messages.map(m => m.id)).size).toBe(2);
   });
 
+  it.each(['openclaw', 'hermes'])('keeps the visible %s conversation in place when a reconnect refreshes it', async (backendKind) => {
+    const key = 'agent:main:main';
+    const canonical = [
+      { id: 'server-user', role: 'user', text: 'Hi', timestampMs: 100_000 },
+      { id: 'server-reply', role: 'assistant', text: 'Hello', timestampMs: 110_000 },
+    ];
+    const adapter = {
+      connection: { backendKind }, state: 'ready',
+      listSessions: jest.fn().mockResolvedValue([createSession(key)]),
+      loadSession: jest.fn().mockResolvedValue({ messages: canonical, hasActiveRun: false }),
+    };
+    const { result } = renderHook(() => {
+      const sessionKeyRef = useRef<string | null>(key);
+      return useChatHistoryState({ adapter: adapter as any, dbg: jest.fn(), t: translate,
+        sessionKeyRef, mainSessionKey: key, gatewayConfigId: 'connection-1', currentAgentId: 'main' });
+    });
+    await act(async () => { await result.current.loadSessionsAndHistory(); });
+    expect(result.current.messages.map(message => message.text)).toEqual(['Hi', 'Hello']);
+    const visible = result.current.messages;
+    (ChatCacheService.getMessages as jest.Mock).mockClear();
+
+    const refresh = deferred<{ messages: typeof canonical; hasActiveRun: boolean }>();
+    adapter.loadSession.mockReturnValueOnce(refresh.promise);
+    let reconnect!: Promise<void>;
+    await act(async () => { reconnect = result.current.loadSessionsAndHistory(); await Promise.resolve(); });
+    // No lagging cache snapshot replaces the rows on screen while history reloads.
+    expect(ChatCacheService.getMessages).not.toHaveBeenCalled();
+    expect(result.current.messages).toBe(visible);
+    await act(async () => { refresh.resolve({ messages: canonical, hasActiveRun: false }); await reconnect; });
+    expect(result.current.messages.map(message => message.id)).toEqual(visible.map(message => message.id));
+    expect(result.current.historyLoaded).toBe(true);
+  });
+
+  it('still starts another session from its cache on reconnect', async () => {
+    const adapter = {
+      connection: { backendKind: 'openclaw' }, state: 'ready',
+      listSessions: jest.fn().mockResolvedValue([createSession('agent:main:main')]),
+      loadSession: jest.fn().mockResolvedValue({ messages: [], hasActiveRun: false }),
+    };
+    const { result } = renderHook(() => {
+      const sessionKeyRef = useRef<string | null>(null);
+      return useChatHistoryState({ adapter: adapter as any, dbg: jest.fn(), t: translate,
+        sessionKeyRef, mainSessionKey: 'agent:main:main', gatewayConfigId: 'connection-1', currentAgentId: 'main' });
+    });
+    await act(async () => { await result.current.loadSessionsAndHistory(); });
+    expect(ChatCacheService.getMessages).toHaveBeenCalled();
+  });
+
   it.each(['openclaw', 'hermes'])('retains %s source identities when projecting text around tools', async (backendKind) => {
     const key = 'agent:main:main';
     const adapter = {
@@ -442,6 +490,27 @@ describe('useChatHistoryState', () => {
     expect(result.current.messages.find(message => message.id === 'toolresult_saved')?.toolStatus).toBe('success');
     expect(result.current.messages.find(message => message.id === 'toolresult_denied')?.toolStatus).toBe('error');
     expect(result.current.messages.some(message => message.text === 'Remembered.')).toBe(true);
+  });
+
+  it('preserves a normalized standalone tool call identity across native history refresh', async () => {
+    const key = 'claude-owned';
+    const adapter = { connection: { backendKind: 'claude-code' }, state: 'ready',
+      listSessions: jest.fn().mockResolvedValue([]),
+      loadSession: jest.fn().mockResolvedValue({ key, hasActiveRun: false, messages: [
+        { id: 'toolcall_native-call', role: 'tool', text: '',
+          tool: { name: 'AskUserQuestion', callId: 'native-call', status: 'error', output: 'Interrupted' } },
+      ] }),
+    };
+    const { result } = renderHook(() => {
+      const sessionKeyRef = useRef<string | null>(key);
+      return useChatHistoryState({ adapter: adapter as any, dbg: jest.fn(), t: translate,
+        sessionKeyRef, mainSessionKey: key, gatewayConfigId: null, currentAgentId: 'main' });
+    });
+    await act(async () => { result.current.setSessionKey(key); await result.current.loadHistory(key, 12); });
+    expect(result.current.messages).toHaveLength(1);
+    expect(result.current.messages[0]).toMatchObject({ id: 'toolcall_native-call', toolStatus: 'error', toolDetail: 'Interrupted' });
+    await act(async () => { await result.current.loadHistory(key, 12); });
+    expect(result.current.messages.map(message => message.id)).toEqual(['toolcall_native-call']);
   });
 
   it('renders normalized adapter text, image and file attachments, and paired tool history', async () => {

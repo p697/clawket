@@ -158,7 +158,6 @@
   "Voice input": "Nhập bằng giọng nói",
   "Stop voice input": "Dừng nhập bằng giọng nói",
   "Listening…": "Đang nghe…",
-  "Preparing voice input…": "Đang chuẩn bị nhập bằng giọng nói…",
   "Send": "Gửi",
   "Reconnect": "Kết nối lại",
   "Offline · reconnecting": "Ngoại tuyến · đang kết nối lại",
@@ -380,5 +379,12 @@
   "{{channel}} member": "Thành viên {{channel}}",
   "Agent needs your input": "Agent đang chờ phản hồi của bạn",
   "Respond": "Trả lời",
-  "Continue in a new session": "Tiếp tục trong phiên mới"
+  "Continue in a new session": "Tiếp tục trong phiên mới",
+  "thinking_none": "Tắt",
+  "thinking_max": "Tối đa",
+  "thinking_ultra": "Siêu cao",
+  "Allow this action?": "Cho phép thao tác này?",
+  "Stop task": "Dừng tác vụ",
+  "Your answer": "Câu trả lời của bạn",
+  "Question {{current}} of {{total}}": "Câu hỏi {{current}} / {{total}}"
 }

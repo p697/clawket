@@ -383,5 +383,7 @@
   "{{count}} items": "{{count}} 項",
   "Delete this local config backup? This does not change the current Gateway config.": "要刪除此本機設定備份嗎？這不會變更目前的 Gateway 設定。",
   "Backup history": "歷史備份",
-  "Pi is not responding": "Pi 沒有回應"
+  "Pi is not responding": "Pi 沒有回應",
+  "Codex is not responding": "Codex 沒有回應",
+  "Claude Code is not responding": "Claude Code 沒有回應"
 }

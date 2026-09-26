@@ -140,6 +140,7 @@
   "Online": "Online",
   "Offline": "Offline",
   "Connecting": "A ligar",
+  "Not connected": "Não ligado",
   "Models": "Modelos",
   "Skills": "Skills",
   "Usage": "Uso",
@@ -168,6 +169,8 @@
   "Reset session?": "Repor sessão?",
   "Reset": "Repor",
   "Scheduled": "Agendado",
+  "Scheduled task": "Tarefa agendada",
+  "Scheduled task: {{name}}": "Tarefa agendada: {{name}}",
   "Search sessions": "Pesquisar sessões",
   "Session actions": "Ações da sessão",
   "Sessions require permission": "As sessões exigem permissão",
@@ -247,5 +250,10 @@
   "Search and bulk export": "Pesquisa e exportação em lote",
   "Skill and memory versions": "Versões de competências e memória",
   "Yes": "Sim",
-  "No": "Não"
+  "No": "Não",
+  "All projects": "Todos os projetos",
+  "Projects": "Projetos",
+  "Choose a project": "Escolher um projeto",
+  "Search projects": "Pesquisar projetos",
+  "Next": "Seguinte"
 }

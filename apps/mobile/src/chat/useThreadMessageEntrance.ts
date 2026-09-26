@@ -15,12 +15,17 @@ const NO_IDS: ReadonlySet<string> = new Set();
  * Ids of rows that should play their entrance. Ids stay armed for the life of
  * the conversation view so a re-render never replays a row, and a scope
  * change (another session) starts from a quiet, fully settled list.
+ * `emptyConversation` says the rendered list was an authoritative empty
+ * conversation, so its first message enters like any later one.
  */
 export function useThreadMessageEntrance(
   messages: ReadonlyArray<UiMessage>,
   scope: string | null | undefined,
+  emptyConversation = false,
 ): { entranceIds: ReadonlySet<string>; claimEntrance: (key: string) => boolean } {
   const memoryRef = useRef<EntranceMemory>({ scope, messages, armed: NO_IDS, played: new Set() });
+  const emptyConversationRef = useRef(emptyConversation);
+  emptyConversationRef.current = emptyConversation;
   const entranceIds = useMemo(() => {
     const memory = memoryRef.current;
     if (memory.scope !== scope) {
@@ -28,7 +33,7 @@ export function useThreadMessageEntrance(
       return NO_IDS;
     }
     if (memory.messages === messages) return memory.armed;
-    const ids = getTailEntranceMessageIds(memory.messages, messages);
+    const ids = getTailEntranceMessageIds(memory.messages, messages, undefined, emptyConversationRef.current);
     let armed = memory.armed;
     if (ids.length > 0) {
       const present = new Set(messages.map((message) => message.renderKey ?? message.id));

@@ -13,6 +13,9 @@ export type ModelInfo = {
   id: string;
   name: string;
   provider: string;
+  sortOrder?: number;
+  resolvedModel?: string;
+  reasoningLevels?: import('@clawket/agent-protocol').ThinkingLevel[];
 };
 
 function resolveProviderModel(model: ModelInfo): string {
@@ -27,6 +30,7 @@ type Props = {
   adapter: AgentAdapter | null;
   sessionKey: string | null;
   setInput: (value: string) => void;
+  setThinkingLevel?: (value: string | null) => void;
   setSessions: (updater: (prev: SessionInfo[]) => SessionInfo[]) => void;
 };
 
@@ -35,6 +39,7 @@ export function useChatModelPicker({
   adapter,
   sessionKey,
   setInput,
+  setThinkingLevel,
   setSessions,
 }: Props) {
   const { foregroundEpoch } = useAppContext();
@@ -46,6 +51,7 @@ export function useChatModelPicker({
   const [availableProviders, setAvailableProviders] = useState<ModelProviderInfo[]>([]);
   const [configuredDefaultModel, setConfiguredDefaultModel] = useState<string | undefined>();
   const [currentModel, setCurrentModel] = useState<string | null>(null);
+  const [nativeThinkingLevel, setNativeThinkingLevel] = useState<string | null>(null);
   const [currentModelProvider, setCurrentModelProvider] = useState<string | null>(null);
   const requestContextRef = useRef({ adapter, connectionState, sessionKey });
   const modelLoadRequestRef = useRef(0);
@@ -67,10 +73,11 @@ export function useChatModelPicker({
 
   const hydrateModelSelection = useCallback((selection: ModelSelectionState) => {
     setAvailableModels((previous) => selection.models?.length ? selection.models : previous);
+    if (selection.thinkingLevel) { setNativeThinkingLevel(selection.thinkingLevel); setThinkingLevel?.(selection.thinkingLevel); }
     setAvailableProviders(selection.providers ?? []);
     setCurrentModel(selection.currentModel?.trim() || null);
     setCurrentModelProvider(selection.currentProvider?.trim() || null);
-  }, []);
+  }, [setThinkingLevel]);
 
   const hydrateModels = useCallback((models: ModelInfo[]) => {
     setAvailableModels(models);
@@ -157,6 +164,7 @@ export function useChatModelPicker({
         if (!isCurrent()) return;
         const selectedModel = currentState.currentModel?.trim();
         if (selectedModel) {
+          if (currentState.thinkingLevel) { setNativeThinkingLevel(currentState.thinkingLevel); setThinkingLevel?.(currentState.thinkingLevel); }
           if (currentState.models?.length) setAvailableModels(currentState.models);
           setCurrentModel(selectedModel);
           setCurrentModelProvider(currentState.currentProvider?.trim() || null);
@@ -178,6 +186,7 @@ export function useChatModelPicker({
     adapter,
     connectionState,
     hydrateCurrentModelFromSessions,
+    setThinkingLevel,
     isCurrentAdapterRequest,
     sessionKey,
   ]);
@@ -201,6 +210,7 @@ export function useChatModelPicker({
 
   useEffect(() => {
     setModelPickerLoading(false);
+    setNativeThinkingLevel(null);
     setModelPickerError(null);
     setConfiguredDefaultModel(undefined);
     setAvailableModels([]);
@@ -304,6 +314,21 @@ export function useChatModelPicker({
     setSessions,
   ]);
 
+  const selectNativeThinkingLevel = useCallback((level: string): boolean => {
+    const operation = adapter?.management?.models?.setThinkingLevel;
+    if (!operation) return false;
+    if (connectionState !== 'ready' || !sessionKey || !adapter) return true;
+    const currentAdapter = adapter, key = sessionKey;
+    void operation(key, level as import('@clawket/agent-protocol').ThinkingLevel).then(selection => {
+      if (isCurrentAdapterRequest(currentAdapter, currentAdapter.connection.id, key)) hydrateModelSelection(selection);
+    }).catch(error => {
+      if (!isCurrentAdapterRequest(currentAdapter, currentAdapter.connection.id, key)) return;
+      setModelPickerError(error instanceof Error ? error.message : String(error));
+      setModelPickerVisible(true);
+    });
+    return true;
+  }, [adapter, connectionState, sessionKey, hydrateModelSelection, isCurrentAdapterRequest]);
+
   const currentModelHeaderLabel = currentModel
     ? (currentModelProvider ? `${currentModelProvider}/${currentModel}` : currentModel)
     : null;
@@ -315,6 +340,8 @@ export function useChatModelPicker({
 
   return {
     currentModelDisplayName,
+    selectNativeThinkingLevel,
+    nativeThinkingLevel,
     configuredDefaultModel,
     availableModels,
     availableProviders,

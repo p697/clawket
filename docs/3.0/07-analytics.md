@@ -95,4 +95,4 @@ PostHog 项目 337268；SDK 与集中式 `src/services/analytics/events.ts` 沿�
 
 ## 语音诊断（2026-09-20）
 
-`chat_voice_input_timing{stage: native_started | first_buffer, duration_ms}` 记录本机采集启动耗时（0–60000 ms）。`chat_voice_input_failed{code, stage, request_id?}` 保留白名单错误码；request_id 仅允许语音 Worker 服务端生成的单次随机 UUID，用于关联不含内容的云端日志，不是用户/设备/会话 ID。禁止加入音频、文本、原始 Provider 错误或签名请求头。
+`chat_voice_input_timing{stage: native_started | first_buffer, duration_ms, queue_ms?, activate_ms?, engine_ms?, start_ms?, warm?, input_route?, bluetooth?, other_audio?}` 记录从开始请求（麦克风按钮为按下瞬间）到本机采集启动/首个音频块的耗时（0–60000 ms）；`native_started` 另附原生分步耗时（排队、会话激活、引擎准备、启动）、是否复用已预热的会话/引擎，以及音频端口类别 `input_route`（built_in / bluetooth / wired / usb / car / none / other）和两个布尔值（路由中有蓝牙、有其他 App 在放音）。只记类别，不记设备名。`chat_voice_input_failed{code, stage, request_id?}` 保留白名单错误码；request_id 仅允许语音 Worker 服务端生成的单次随机 UUID，用于关联不含内容的云端日志，不是用户/设备/会话 ID。禁止加入音频、文本、原始 Provider 错误或签名请求头。

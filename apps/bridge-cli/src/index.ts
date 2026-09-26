@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { handleClaudeCommand } from './claude-code.js';
+import { handleCodexCommand } from './codex.js';
 import { handlePiCommand } from './pi.js';
 import { handleLocalModelCommand } from './local-model.js';
 import { keepHermesRelayRuntimeAlive } from './hermes-relay-lifecycle.js';
@@ -95,6 +97,10 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (command === 'claude-code') { await handleClaudeCommand(args); return; }
+  if (readFlag(args, '--backend') === 'claude-code') { await handleClaudeCommand([command, ...args]); return; }
+  if (command === 'codex') { await handleCodexCommand(args); return; }
+  if (readFlag(args, '--backend') === 'codex') { await handleCodexCommand([command, ...args]); return; }
   if (command === 'pi') { await handlePiCommand(args); return; }
   if (readFlag(args, '--backend') === 'pi') { await handlePiCommand([command, ...args]); return; }
 
@@ -2254,6 +2260,10 @@ function printHelp(): void {
     'clawket logs [--last <2m>] [--lines <200>] [--errors] [--follow] [--json]',
     'clawket doctor [--json]',
     'clawket run [--preview] [--gateway-url <ws://127.0.0.1:18789>] [--replace]',
+    'clawket claude-code pair [--local] [--project <directory>] [--preview]',
+    'clawket claude-code <start|restart|stop|status|doctor|logs|reset>',
+    'clawket codex pair [--local] [--project <directory>] [--registry <url>] [--qr-file <path>]',
+    'clawket codex <start|restart|stop|status|doctor|logs|reset> [--project <directory>]',
     'clawket pi pair [--local] [--project <directory>] [--registry <url>] [--port <port>] [--qr-file <path>]',
     'clawket pi <start|restart|stop|status|doctor|logs|reset> [--project <directory>]',
     'clawket pair --backend pi [--project <directory>] [--local]',

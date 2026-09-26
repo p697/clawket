@@ -1,7 +1,42 @@
 import type { ConnectionDescriptor } from '@clawket/agent-protocol';
 import type { ConnectionRuntimeDetails } from '../../connection/runtime-details';
 import { getConnectionValueKeys } from '../AccountSettings/model';
-import type { AccountSettingsNamespace } from '../AccountSettings/translation';
+import type { AccountSettingsNamespace, AccountSettingsTranslator } from '../AccountSettings/translation';
+
+/**
+ * How a connection stands for the person reading it. Only the active
+ * connection owns a live adapter, so every other connection is "not
+ * connected" rather than offline (owner decision 2026-09-26); "offline" is
+ * kept for the active connection when it cannot be reached.
+ */
+export type ConnectionPresence = 'paused' | 'online' | 'connecting' | 'offline' | 'not_connected';
+
+const CONNECTING_STATES: ReadonlySet<string> = new Set(['connecting', 'handshaking', 'reconnecting']);
+
+export function resolveConnectionPresence(input: Readonly<{
+  active: boolean;
+  paused: boolean;
+  /** The runtime's active adapter state; ignored for an inactive connection. */
+  state: string;
+}>): ConnectionPresence {
+  if (input.paused) return 'paused';
+  if (!input.active) return 'not_connected';
+  if (input.state === 'ready') return 'online';
+  return CONNECTING_STATES.has(input.state) ? 'connecting' : 'offline';
+}
+
+export function translateConnectionPresence(
+  t: AccountSettingsTranslator,
+  presence: ConnectionPresence,
+): string {
+  switch (presence) {
+    case 'paused': return t('Connection paused', { ns: 'config' });
+    case 'online': return t('Online', { ns: 'common' });
+    case 'connecting': return t('Connecting', { ns: 'common' });
+    case 'offline': return t('Offline', { ns: 'common' });
+    case 'not_connected': return t('Not connected', { ns: 'common' });
+  }
+}
 
 export type ConnectionDetailRow = Readonly<{
   id: 'backend' | 'transport' | 'environment' | 'server' | 'bridge-version' | 'bridge-capabilities' | 'last-ready';

@@ -383,5 +383,7 @@
   "{{count}} items": "Элементов: {{count}}",
   "Delete this local config backup? This does not change the current Gateway config.": "Удалить эту локальную резервную копию конфигурации? Текущая конфигурация Gateway не изменится.",
   "Backup history": "История резервных копий",
-  "Pi is not responding": "Pi не отвечает"
+  "Pi is not responding": "Pi не отвечает",
+  "Codex is not responding": "Codex не отвечает",
+  "Claude Code is not responding": "Claude Code не отвечает"
 }

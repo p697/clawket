@@ -191,7 +191,7 @@ export const ANALYTICS_EVENT_PROPERTY_WHITELIST = Object.freeze({
   message_favorite_toggled: ['action', 'role', 'source'],
   chat_voice_input_tapped: ['action', 'has_existing_text', 'locale', 'source'],
   chat_voice_input_failed: ['code', 'stage', 'request_id'],
-  chat_voice_input_timing: ['stage', 'duration_ms'],
+  chat_voice_input_timing: ['stage', 'duration_ms', 'queue_ms', 'activate_ms', 'engine_ms', 'start_ms', 'warm', 'input_route', 'bluetooth', 'other_audio'],
   chat_model_selected: ['provider', 'source', 'session_key_present'],
   chat_slash_command_triggered: ['action', 'source', 'session_key_present'],
   theme_accent_changed: ['selected_accent_id', 'source'],
@@ -691,8 +691,19 @@ export const analyticsEvents = {
     captureAnalyticsEvent('chat_voice_input_tapped', properties);
   },
 
-  chatVoiceInputTiming(properties: { stage: 'native_started' | 'first_buffer'; duration_ms: number }): void {
-    captureAnalyticsEvent('chat_voice_input_timing', { ...properties, duration_ms: Math.min(60000, Math.max(0, Math.round(properties.duration_ms))) });
+  chatVoiceInputTiming(properties: {
+    stage: 'native_started' | 'first_buffer'; duration_ms: number;
+    queue_ms?: number; activate_ms?: number; engine_ms?: number; start_ms?: number;
+    warm?: boolean; input_route?: string; bluetooth?: boolean; other_audio?: boolean;
+  }): void {
+    const bounded = (value: number | undefined) => value === undefined || !Number.isFinite(value)
+      ? undefined : Math.min(60000, Math.max(0, Math.round(value)));
+    captureAnalyticsEvent('chat_voice_input_timing', {
+      ...properties,
+      duration_ms: bounded(properties.duration_ms) ?? 0,
+      queue_ms: bounded(properties.queue_ms), activate_ms: bounded(properties.activate_ms),
+      engine_ms: bounded(properties.engine_ms), start_ms: bounded(properties.start_ms),
+    });
   },
 
   chatVoiceInputFailed(properties: {

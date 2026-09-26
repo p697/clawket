@@ -43,6 +43,7 @@ import { useRecentPhotos, type RecentPhotosAccessState } from '../../../hooks/us
 import { RECENT_PHOTO_STRIP_COUNT, type RecentPhoto } from '../../../services/recent-photos';
 import {
   pruneOrderedSelection,
+  resolveAddSheetMediaMode,
   resolveMediaStripTileSize,
   selectionOrdinal,
   toggleOrderedSelection,
@@ -118,7 +119,6 @@ export function ThreadAddSheet({
   const { theme } = useAppTheme();
   const { width: windowWidth } = useWindowDimensions();
   const reduceMotion = useReducedMotion();
-  const [contentReady, setContentReady] = useState(false);
   const [selected, setSelected] = useState<readonly string[]>([]);
   const footerProgress = useSharedValue(0);
   const pendingAction = useRef<(() => void) | null>(null);
@@ -126,10 +126,13 @@ export function ThreadAddSheet({
   const visibleRef = useRef(visible);
   visibleRef.current = visible;
 
-  const recentPhotosActive = visible && attachmentsEnabled && Boolean(onAttachRecentPhotos);
-  const recent = useRecentPhotos({ active: recentPhotosActive });
+  const recentPhotosEnabled = attachmentsEnabled && Boolean(onAttachRecentPhotos);
+  // The host keeps the strip warm while the sheet is closed, so an open draws
+  // its final layout on the first frame instead of swapping out a skeleton.
+  const recent = useRecentPhotos({ active: visible && recentPhotosEnabled, prefetch: recentPhotosEnabled });
   const requestPhotoAccess = recent.request;
-  const photoAccess = recentPhotosActive ? recent.access : 'unavailable';
+  // Not tied to `visible`: a dismissing sheet keeps its layout while it slides away.
+  const photoAccess = recentPhotosEnabled ? recent.access : 'unavailable';
   const selectionLimit = Math.max(0, remainingAttachmentSlots);
   const attachmentActionsDisabled = !attachmentsEnabled || selectionLimit <= 0;
 
@@ -137,17 +140,10 @@ export function ThreadAddSheet({
   const tileSize = useMemo(() => resolveMediaStripTileSize(contentWidth, MEDIA_GAP), [contentWidth]);
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
 
-  // Heavy media tiles mount only after the sheet has risen; the skeleton keeps
-  // the layout stable in the meantime.
   useEffect(() => {
-    if (!visible) {
-      setContentReady(false);
-      setSelected([]);
-      presentedRef.current = false;
-      return undefined;
-    }
-    const timer = setTimeout(() => setContentReady(true), Motion.duration.slow);
-    return () => clearTimeout(timer);
+    if (visible) return;
+    setSelected([]);
+    presentedRef.current = false;
   }, [visible]);
 
   useEffect(() => {
@@ -215,10 +211,6 @@ export function ThreadAddSheet({
     run('recent-photos', () => { void onAttachRecentPhotos(uris); }, uris.length);
   }, [onAttachRecentPhotos, recent.photos, run, selected]);
 
-  const hasRecentPhotos = recentPhotosActive && photoAccess === 'granted' && recent.photos.length > 0;
-  const showsPhotoStrip = hasRecentPhotos && contentReady;
-  const showsSkeleton = recentPhotosActive
-    && (hasRecentPhotos ? !contentReady : !contentReady || photoAccess === 'checking' || recent.loading);
   const stripPhotos = useMemo(() => recent.photos.slice(0, RECENT_PHOTO_STRIP_COUNT), [recent.photos]);
   const selectionFull = selected.length >= selectionLimit;
 
@@ -233,51 +225,69 @@ export function ThreadAddSheet({
     }
   }
 
+  const mediaMode = resolveAddSheetMediaMode({
+    recentPhotos: recentPhotosEnabled,
+    access: photoAccess,
+    photoCount: recent.photos.length,
+    loading: recent.loading,
+    tileCount: tiles.length,
+  });
+  const showsPhotoStrip = mediaMode === 'strip';
+  // Photos on screen when the strip first draws rise with the sheet; only later
+  // arrivals (a filled placeholder, a new capture) fade in.
+  const stripShownRef = useRef(false);
+  useEffect(() => {
+    stripShownRef.current = visible && showsPhotoStrip;
+  }, [showsPhotoStrip, visible]);
+
   const attachLabel = selected.length === 1
     ? t('Attach 1 photo')
     : t('Attach {{count}} photos', { count: selected.length });
-  const fadeIn = reduceMotion ? undefined : FadeIn.duration(Motion.duration.fast);
+  const lateFadeIn = reduceMotion || !stripShownRef.current ? undefined : FadeIn.duration(Motion.duration.fast);
 
   const renderPhotoTile = (photo: RecentPhoto) => {
     const ordinal = selectionOrdinal(selected, photo.id);
     const isSelected = ordinal !== null;
     const disabled = attachmentActionsDisabled || (!isSelected && selectionFull);
     return (
-      <Pressable
-        key={photo.id}
-        testID={`thread-add-photo-${photo.id}`}
-        accessibilityRole="button"
-        accessibilityState={{ selected: isSelected, disabled }}
-        accessibilityLabel={isSelected
-          ? t('Photo, selected {{count}}', { count: ordinal })
-          : t('Photo')}
-        disabled={disabled}
-        onPress={() => togglePhoto(photo)}
-        style={({ pressed }) => [
-          styles.photoTile,
-          { width: tileSize, height: tileSize },
-          pressed ? styles.tilePressed : null,
-          disabled && !isSelected ? styles.tileDimmed : null,
-        ]}
-      >
-        <Image source={{ uri: photo.uri }} style={[styles.photoImage, isSelected ? styles.photoImageSelected : null]} />
-        {isSelected ? (
-          <View testID={`thread-add-photo-${photo.id}-ordinal`} style={styles.ordinalBadge}>
-            <Text style={styles.ordinalText}>{ordinal}</Text>
-          </View>
-        ) : null}
-      </Pressable>
+      <Animated.View key={photo.id} entering={lateFadeIn}>
+        <Pressable
+          testID={`thread-add-photo-${photo.id}`}
+          accessibilityRole="button"
+          accessibilityState={{ selected: isSelected, disabled }}
+          accessibilityLabel={isSelected
+            ? t('Photo, selected {{count}}', { count: ordinal })
+            : t('Photo')}
+          disabled={disabled}
+          onPress={() => togglePhoto(photo)}
+          style={({ pressed }) => [
+            styles.photoTile,
+            { width: tileSize, height: tileSize },
+            pressed ? styles.tilePressed : null,
+            disabled && !isSelected ? styles.tileDimmed : null,
+          ]}
+        >
+          <Image source={{ uri: photo.uri }} style={[styles.photoImage, isSelected ? styles.photoImageSelected : null]} />
+          {isSelected ? (
+            <View testID={`thread-add-photo-${photo.id}-ordinal`} style={styles.ordinalBadge}>
+              <Text style={styles.ordinalText}>{ordinal}</Text>
+            </View>
+          ) : null}
+        </Pressable>
+      </Animated.View>
     );
   };
 
-  const mediaSection = showsSkeleton ? (
+  const skeletonTiles = (count: number) => Array.from({ length: count }).map((_, index) => (
+    <Skeleton key={index} style={[styles.skeletonTile, { width: tileSize, height: tileSize }]} />
+  ));
+
+  const mediaSection = mediaMode === 'skeleton' ? (
     <View testID="thread-add-media-skeleton" style={styles.strip}>
-      {Array.from({ length: SKELETON_TILE_COUNT + 1 }).map((_, index) => (
-        <Skeleton key={index} style={[styles.skeletonTile, { width: tileSize, height: tileSize }]} />
-      ))}
+      {skeletonTiles(SKELETON_TILE_COUNT + 1)}
     </View>
-  ) : showsPhotoStrip ? (
-    <Animated.View testID="thread-add-media-strip" entering={fadeIn}>
+  ) : mediaMode === 'strip' ? (
+    <View testID="thread-add-media-strip">
       <GestureScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -296,10 +306,10 @@ export function ThreadAddSheet({
             colors={theme.colors}
           />
         ) : null}
-        {stripPhotos.map(renderPhotoTile)}
+        {stripPhotos.length > 0 ? stripPhotos.map(renderPhotoTile) : skeletonTiles(SKELETON_TILE_COUNT)}
       </GestureScrollView>
-    </Animated.View>
-  ) : tiles.length > 0 ? (
+    </View>
+  ) : mediaMode === 'tiles' ? (
     <View testID="thread-add-tiles" style={styles.tiles}>
       {tiles.map(({ key, title, icon, onPress }) => (
         <ActionTile

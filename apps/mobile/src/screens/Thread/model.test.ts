@@ -8,6 +8,7 @@ import {
   deriveThreadContentState,
   groupThreadTools,
   withThreadRhythm,
+  stabilizeThreadRows,
   formatThreadLocalTime,
   resolveContextRemainingPercent,
   resolveThreadErrorCode,
@@ -430,4 +431,43 @@ describe('Thread model', () => {
 it('preserves cached content during recovery before surfacing a failure', () => {
   expect(deriveThreadContentState({ recovering: true, switching: true, historyLoaded: true, hasMessages: true, connectionState: 'reconnecting', error: { code: 'timeout', message: 'health timed out' } })).toEqual({ kind: 'reconnecting' });
   expect(deriveThreadContentState({ paused: true, recovering: true, historyLoaded: true, hasMessages: true, connectionState: 'idle' })).toEqual({ kind: 'offline' });
+});
+
+describe('stabilizeThreadRows', () => {
+  const rows = (messages: UiMessage[]) => withThreadRhythm(groupThreadTools(buildThreadTimelineItems({ messages, runs: [] }), new Set())).reverse();
+  const tool = (id: string, status: UiMessage['toolStatus'] = 'success'): UiMessage => ({ id, role: 'tool', text: '', toolName: 'bash', toolStatus: status });
+
+  it('returns the previous array when every row renders the same', () => {
+    const messages: UiMessage[] = [{ id: 'a', role: 'assistant', text: 'Hi' }, { id: 'u', role: 'user', text: 'Hello' }];
+    const previous = rows(messages);
+    expect(stabilizeThreadRows(previous, rows(messages.map((message) => ({ ...message }))))).toBe(previous);
+    expect(stabilizeThreadRows(previous, previous)).toBe(previous);
+  });
+
+  it('reuses unchanged rows and replaces only the rows whose content, rhythm or grouping changed', () => {
+    const user: UiMessage = { id: 'u', role: 'user', text: 'Run it' };
+    const previous = rows([{ id: 'streaming', renderKey: 'reply:1:0', role: 'assistant', text: 'Wor', streaming: true }, tool('t2', 'running'), tool('t1'), user]);
+    const next = stabilizeThreadRows(previous, rows([
+      { id: 'streaming', renderKey: 'reply:1:0', role: 'assistant', text: 'World', streaming: true },
+      tool('t2'), tool('t1'), { ...user },
+    ]));
+    expect(next).not.toBe(previous);
+    expect(next.map((row) => row.key)).toEqual(previous.map((row) => row.key));
+    const changed = next.filter((row, index) => row !== previous[index]).map((row) => row.key);
+    expect(changed).toEqual(['tools:t1', 'message:reply:1:0']);
+    expect(next[0]).toBe(previous[0]);
+  });
+
+  it('never reuses a row across a change of key, type or order', () => {
+    const first: UiMessage = { id: 'a', role: 'assistant', text: 'One' };
+    const second: UiMessage = { id: 'b', role: 'assistant', text: 'Two' };
+    const previous = rows([second, first]);
+    const reordered = stabilizeThreadRows(previous, rows([first, second]));
+    expect(reordered).not.toBe(previous);
+    expect(reordered.map((row) => row.key)).toEqual(['message:b', 'message:a']);
+    // A message that gains a field is a different row even when the rest matches.
+    const favorite = stabilizeThreadRows(previous, rows([{ ...second, usage: { totalTokens: 2 } } as UiMessage, first]));
+    expect(favorite.find((row) => row.key === 'message:b')).not.toBe(previous.find((row) => row.key === 'message:b'));
+    expect(favorite.find((row) => row.key === 'message:a')).toBe(previous.find((row) => row.key === 'message:a'));
+  });
 });

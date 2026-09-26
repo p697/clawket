@@ -82,3 +82,15 @@ A Hermes Relay command that deliberately yields to another owner stays alive wit
 ## Pi project lifecycle
 
 `pi pair` / `pair --backend pi` authorizes the current or explicitly selected project. Pairing starts an isolated background child only after readiness; `--foreground` keeps the terminal-owned path. Pi state/logs live under a project-specific Clawket directory. Temporary pairing output goes over parent IPC, never persistent logs. `pi start/restart/stop/status/doctor/logs/reset` (also `--backend pi`) operate on that configuration only; authenticate local control before stopping anything, never kill a process merely by PID/port. Reset removes pairing and retains session files. Preserve explicit agent/session directories and never copy model credentials. Pi requires its own supported Node version; a Bridge installation alone is not proof Pi can run.
+
+## Codex projects
+
+`clawket codex pair` / `clawket pair --backend codex` creates a device connection by default, with a persistent `~/Documents/Clawket/Chats` fallback. Explicit `--project` retains project-only authorization. Existing `--config` files never widen silently. Device lifecycle/state lives under `~/.clawket/codex/device/<environment>`; legacy project configuration stays in its hashed directory. Reuse the installed Codex credentials; never migrate them or change another client process. Local and Relay pairing must report readiness only after native initialization. `--preview` must use the isolated Codex Preview Registry.
+
+Codex default state and listen ports are isolated by project and service environment. Refresh pairing through the existing Registry access-code endpoint so previously paired clients retain their identity; refuse refresh while a task is active.
+
+## Claude Code projects
+
+`clawket claude-code pair` / `pair --backend claude-code` uses the installed, unmodified Claude executable and device discovery by default. `--project` authorizes only that project. State, logs and Preview credentials live under the independent `~/.clawket/claude-code` tree; lifecycle commands stop only authenticated Clawket-owned runtimes. The official `@anthropic-ai/claude-agent-sdk` is an explicit package external, retained as a production dependency; do not bundle its assets or silently substitute its packaged CLI for the user's selected executable. Native authentication remains on the computer. See `../../docs/3.1/claude-code.md`.
+
+Claude first-time detached pairing must carry the resolved device scope into the child even when adding a not-yet-created `--config` path. Existing scoped configurations are never silently widened.

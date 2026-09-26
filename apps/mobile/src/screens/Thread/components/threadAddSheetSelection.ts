@@ -1,3 +1,5 @@
+import type { RecentPhotosAccessState } from '../../../hooks/useRecentPhotos';
+
 /**
  * Ordered photo selection for the Add sheet. Order matters: tiles show the
  * pick number, and photos attach in that order.
@@ -44,4 +46,29 @@ export function resolveMediaStripTileSize(
   const available = Math.max(0, contentWidth - gap * Math.floor(visibleTiles));
   const raw = Math.floor(available / visibleTiles);
   return Math.max(MEDIA_STRIP_MIN_TILE, Math.min(MEDIA_STRIP_MAX_TILE, raw));
+}
+
+export type AddSheetMediaMode = 'none' | 'skeleton' | 'strip' | 'tiles';
+
+/**
+ * The Add sheet's media section. Known photo access decides the final layout
+ * on the first frame: granted access keeps the strip (placeholder tiles until
+ * the list lands) and only unknown access falls back to the skeleton.
+ */
+export function resolveAddSheetMediaMode({
+  recentPhotos,
+  access,
+  photoCount,
+  loading,
+  tileCount,
+}: Readonly<{
+  recentPhotos: boolean;
+  access: RecentPhotosAccessState;
+  photoCount: number;
+  loading: boolean;
+  tileCount: number;
+}>): AddSheetMediaMode {
+  if (recentPhotos && access === 'checking') return 'skeleton';
+  if (recentPhotos && access === 'granted' && (photoCount > 0 || loading)) return 'strip';
+  return tileCount > 0 ? 'tiles' : 'none';
 }

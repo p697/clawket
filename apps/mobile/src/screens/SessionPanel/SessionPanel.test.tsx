@@ -441,13 +441,15 @@ describe('SessionPanelView', () => {
 
     fireEvent.press(view.getByTestId('session-panel-chip-all'));
     fireEvent.changeText(view.getByTestId('session-panel-search'), 'daily');
-    expect(view.getByText('Daily report')).toBeTruthy();
+    expect(view.getByText('Scheduled task: Daily report')).toBeTruthy();
     expect(view.queryByText('Main session')).toBeNull();
     await waitFor(() => expect(mockedAnalyticsEvents.searchPerformed).toHaveBeenCalledWith({
       scope: 'panel',
       has_results: true,
       result_kinds: 'cron',
     }));
+    fireEvent.changeText(view.getByTestId('session-panel-search'), 'scheduled task');
+    expect(view.getByText('Scheduled task: Daily report')).toBeTruthy();
     fireEvent.changeText(view.getByTestId('session-panel-search'), 'completed');
     expect(view.getByText('Completed research')).toBeTruthy();
     fireEvent.changeText(view.getByTestId('session-panel-search'), 'nothing here');
@@ -582,6 +584,57 @@ describe('SessionPanelView', () => {
     expect(onSessionAction).toHaveBeenCalledWith(mainRow, 'rename', { title: 'Launch review' });
     expect(mockedAnalyticsEvents.sessionAction).toHaveBeenCalledWith({ action: 'rename' });
     await waitFor(() => expect(view.queryByTestId('session-panel-rename')).toBeNull());
+  });
+
+  it('names scheduled runs with the localized kind and renames only the job name', async () => {
+    const onSessionAction = jest.fn(async () => undefined);
+    const cronRows = buildSessionPanelRows({
+      ...source,
+      agents: [{
+        ...source.agents[0],
+        sessions: [
+          session('main', 'main', 'Main thread'),
+          session('main', 'cron', 'Automation: Morning digest'),
+          session('main', 'cron', 'Cron: Nightly backup'),
+          session('main', 'cron', 'untitled', { title: 'agent:main:cron:untitled' }),
+        ],
+      }],
+    }, { now: 1_000_000 });
+    const view = render(<SessionPanelView {...props({ rows: cronRows, onSessionAction })} />);
+
+    expect(view.getByText('Scheduled task: Morning digest')).toBeTruthy();
+    expect(view.getByText('Scheduled task: Nightly backup')).toBeTruthy();
+    expect(view.getByText('Scheduled task')).toBeTruthy();
+    expect(view.queryByText(/Automation|Cron:|New session/)).toBeNull();
+
+    const digest = cronRows.find((row) => row.title === 'Automation: Morning digest')!;
+    fireEvent(view.getByTestId(`session-panel-row-${digest.id}`), 'longPress');
+    chooseAfterDismiss(view, 'rename');
+    expect(view.getByTestId('session-panel-rename-input').props.value).toBe('Morning digest');
+    expect(view.getByLabelText('Save').props.disabled).toBe(true);
+
+    fireEvent.changeText(view.getByTestId('session-panel-rename-input'), 'Evening digest');
+    await act(async () => {
+      fireEvent.press(view.getByLabelText('Save'));
+    });
+    expect(onSessionAction).toHaveBeenCalledWith(digest, 'rename', { title: 'Evening digest' });
+  });
+
+  it('shows row times through the localized relative-time copy', () => {
+    const now = Date.now();
+    const timedRows = buildSessionPanelRows({
+      ...source,
+      agents: [{
+        ...source.agents[0],
+        sessions: [
+          session('main', 'main', 'Main thread', { updatedAt: now - 5 * 60_000 }),
+          session('main', 'direct', 'Lucy', { updatedAt: now - 3 * 60 * 60_000 }),
+        ],
+      }],
+    }, { now });
+    const view = render(<SessionPanelView {...props({ rows: timedRows })} />);
+    expect(view.getByText('5m ago')).toBeTruthy();
+    expect(view.getByText('3h ago')).toBeTruthy();
   });
 
   it('keeps rename open for invalid drafts and failed host updates', async () => {

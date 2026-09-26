@@ -1,9 +1,10 @@
-import { openSpeechSocket } from './speechStream';
+import { connectSpeech, openSpeechSocket } from './speechStream';
 jest.mock('../gateway-auth', () => ({ bytesToHex: jest.fn(), ensureIdentity: jest.fn(), generateId: jest.fn(), hexToBytes: jest.fn() }));
 class Socket {
   readyState = 1; bufferedAmount = 0; send = jest.fn(); close = jest.fn();
   onmessage?: (event: { data: string }) => void;
   onerror?: () => void; onclose?: () => void;
+  onopen?: () => void;
   message(value: unknown) { this.onmessage?.({ data: JSON.stringify(value) }); }
 }
 describe('speech stream', () => {
@@ -34,6 +35,21 @@ describe('speech stream', () => {
     const two = setup(); jest.advanceTimersByTime(20000);
     await expect(two.connection.ready).rejects.toThrow('speech_connect_timeout');
     await expect(two.connection.result).rejects.toThrow('speech_connect_timeout');
+  });
+  it('aborts a connecting socket and closes a late native open', async () => {
+    const socket = new Socket(); socket.readyState = 0;
+    const abort = new AbortController();
+    const connection = openSpeechSocket(socket as unknown as WebSocket, abort.signal);
+    abort.abort();
+    await expect(connection.ready).rejects.toThrow('speech_cancelled');
+    expect(socket.close).toHaveBeenCalledTimes(1);
+    socket.readyState = 1; socket.onopen?.();
+    expect(socket.close).toHaveBeenCalledTimes(2); expect(socket.send).not.toHaveBeenCalled();
+    expect(jest.getTimerCount()).toBe(0);
+  });
+  it('does not construct a transport for an already cancelled attempt', async () => {
+    const abort = new AbortController(); abort.abort();
+    await expect(connectSpeech(abort.signal)).rejects.toThrow('speech_cancelled');
   });
   it('does not retry a lost final acknowledgement', async () => {
     const { socket, connection } = setup(); socket.message({ type: 'ready', maxSeconds: 120 }); await connection.ready;

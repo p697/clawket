@@ -158,7 +158,6 @@
   "Voice input": "वॉइस इनपुट",
   "Stop voice input": "वॉइस इनपुट रोकें",
   "Listening…": "सुन रहा है…",
-  "Preparing voice input…": "वॉइस इनपुट तैयार हो रहा है…",
   "Send": "भेजें",
   "Reconnect": "फिर से कनेक्ट करें",
   "Offline · reconnecting": "ऑफ़लाइन · फिर से कनेक्ट हो रहा है",
@@ -380,5 +379,12 @@
   "{{channel}} member": "{{channel}} सदस्य",
   "Agent needs your input": "एजेंट आपके जवाब का इंतज़ार कर रहा है",
   "Respond": "जवाब दें",
-  "Continue in a new session": "नए सत्र में जारी रखें"
+  "Continue in a new session": "नए सत्र में जारी रखें",
+  "thinking_none": "बंद",
+  "thinking_max": "अधिकतम",
+  "thinking_ultra": "अत्यधिक",
+  "Allow this action?": "इस कार्रवाई की अनुमति दें?",
+  "Stop task": "कार्य रोकें",
+  "Your answer": "आपका उत्तर",
+  "Question {{current}} of {{total}}": "प्रश्न {{current}} / {{total}}"
 }

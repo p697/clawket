@@ -383,5 +383,7 @@
   "{{count}} items": "{{count}} عناصر",
   "Delete this local config backup? This does not change the current Gateway config.": "هل تريد حذف هذه النسخة الاحتياطية المحلية للإعدادات؟ لن تتغير إعدادات Gateway الحالية.",
   "Backup history": "سجل النسخ الاحتياطية",
-  "Pi is not responding": "Pi لا يستجيب"
+  "Pi is not responding": "Pi لا يستجيب",
+  "Codex is not responding": "Codex لا يستجيب",
+  "Claude Code is not responding": "Claude Code لا يستجيب"
 }

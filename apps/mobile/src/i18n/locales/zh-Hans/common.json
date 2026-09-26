@@ -140,6 +140,7 @@
   "Online": "在线",
   "Offline": "离线",
   "Connecting": "正在连接",
+  "Not connected": "未连接",
   "Models": "模型",
   "Skills": "技能",
   "Usage": "用量",
@@ -168,6 +169,8 @@
   "Reset session?": "重置会话？",
   "Reset": "重置",
   "Scheduled": "定时",
+  "Scheduled task": "定时任务",
+  "Scheduled task: {{name}}": "定时任务：{{name}}",
   "Search sessions": "搜索会话",
   "Session actions": "会话操作",
   "Sessions require permission": "需要权限才能查看会话",
@@ -247,5 +250,10 @@
   "Search and bulk export": "搜索与批量导出",
   "Skill and memory versions": "技能与记忆版本",
   "Yes": "是",
-  "No": "否"
+  "No": "否",
+  "All projects": "所有项目",
+  "Projects": "项目",
+  "Choose a project": "选择项目",
+  "Search projects": "搜索项目",
+  "Next": "下一步"
 }

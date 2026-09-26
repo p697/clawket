@@ -383,5 +383,7 @@
   "{{count}} items": "{{count}} elementos",
   "Delete this local config backup? This does not change the current Gateway config.": "¿Eliminar este respaldo local de configuración? Esto no cambia la configuración actual del Gateway.",
   "Backup history": "Historial de copias de seguridad",
-  "Pi is not responding": "Pi no responde"
+  "Pi is not responding": "Pi no responde",
+  "Codex is not responding": "Codex no responde",
+  "Claude Code is not responding": "Claude Code no responde"
 }

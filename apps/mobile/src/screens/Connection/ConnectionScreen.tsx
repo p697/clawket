@@ -16,7 +16,12 @@ import { Banner } from '../../components/ui/Banner';
 import { RenameSheet } from '../../components/ui/RenameSheet';
 import { SettingsDivider, SettingsGroup, SettingsRow } from '../../components/ui/SettingsGroup';
 import { ConfirmationModal } from '../../components/ui/ConfirmationModal';
-import { buildConnectionDetailRows, parseConnectionServerHost } from './connection-details';
+import {
+  buildConnectionDetailRows,
+  parseConnectionServerHost,
+  resolveConnectionPresence,
+  translateConnectionPresence,
+} from './connection-details';
 
 /** Free tier only: which connection the free allowance is bound to. */
 export type ConnectionFreeSlot = Readonly<{
@@ -28,6 +33,8 @@ export type ConnectionFreeSlot = Readonly<{
 
 type Props = {
   connection: ConnectionDescriptor;
+  /** Whether this is the active connection; `state` describes only the active one. */
+  active: boolean;
   state: ConnectionState;
   paused: boolean;
   agentNames: string[];
@@ -64,6 +71,7 @@ function useConnectionServerHost(connectionId: string): string | undefined {
  */
 export function ConnectionScreen({
   connection,
+  active,
   state,
   paused,
   agentNames,
@@ -95,8 +103,7 @@ export function ConnectionScreen({
     try { await action(); } catch { setFailed(true); }
     finally { inFlight.current = false; setBusy(false); }
   };
-  const status = paused ? t('Connection paused') : state === 'ready' ? t('Online', { ns: 'common' })
-    : ['connecting', 'handshaking', 'reconnecting'].includes(state) ? t('Connecting', { ns: 'common' }) : t('Offline', { ns: 'common' });
+  const status = translateConnectionPresence(t, resolveConnectionPresence({ active, paused, state }));
   const locale = i18n?.resolvedLanguage;
   const detailRows = useMemo(() => buildConnectionDetailRows({
     connection,

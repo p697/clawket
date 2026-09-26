@@ -134,6 +134,8 @@ const BACKEND_LABELS: Readonly<Record<ConnectionDescriptor['backendKind'], strin
   youmind: 'YouMind',
   'local-model': 'Local model',
   pi: 'Pi',
+  codex: 'Codex',
+  'claude-code': 'Claude Code',
 };
 
 const CONNECTION_STATE_LABELS: Readonly<Record<ConnectionState, string>> = {

@@ -16,7 +16,7 @@ export const VERIFICATION_CODE_LENGTH = 6;
 
 const LEGACY_PAIRING_CODE = /^[ABCDEFGHJKMNPQRSTVWXYZ2-9]{12}$/;
 
-export type PairableBackendKind = Extract<BackendKind, 'openclaw' | 'hermes' | 'local-model' | 'pi'>;
+export type PairableBackendKind = Extract<BackendKind, 'openclaw' | 'hermes' | 'local-model' | 'pi' | 'codex' | 'claude-code'>;
 
 /** Model servers the local-model Bridge can discover; mirrors the CLI `--engine` values. */
 export type LocalModelEngine = 'llamacpp' | 'ollama' | 'openai-compatible';
@@ -64,6 +64,8 @@ export type OnboardingErrorPresentation = Readonly<{
 const BACKEND_OFFLINE_MESSAGE: Record<PairableBackendKind, string> = {
   openclaw: 'OpenClaw is not responding',
   hermes: 'Hermes is not responding',
+  codex: 'Codex is not responding',
+  'claude-code': 'Claude Code is not responding',
   pi: 'Pi is not responding',
   'local-model': 'Local model is not responding',
 };
@@ -94,7 +96,7 @@ export function isVerificationCodeComplete(
   backendKind: PairableBackendKind = 'openclaw',
 ): boolean {
   const code = normalizeVerificationCode(value, backendKind);
-  if (backendKind === 'local-model' || backendKind === 'pi') return /^\d{6}$/.test(code);
+  if (backendKind === 'local-model' || backendKind === 'pi' || backendKind === 'codex' || backendKind === 'claude-code') return /^\d{6}$/.test(code);
   return backendKind === 'openclaw'
     ? /^\d{6}$/.test(code) || LEGACY_PAIRING_CODE.test(code)
     : /^[A-HJ-KM-NP-TV-Z2-9]{6}$/.test(code);

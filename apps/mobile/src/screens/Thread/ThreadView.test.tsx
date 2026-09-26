@@ -44,6 +44,8 @@ let mockScheme: 'light' | 'dark' = 'light';
 let mockReducedMotion = false;
 let mockPacedText: string | undefined;
 const mockScrollToEnd = jest.fn();
+/** Geometry the FlashList mock reports from its imperative handle. */
+const mockListLayout = { content: 0, viewport: 0 };
 const originalRaf = global.requestAnimationFrame;
 const originalCancelRaf = global.cancelAnimationFrame;
 beforeAll(() => {
@@ -106,7 +108,7 @@ jest.mock('react-native', () => {
 });
 
 jest.mock('react-i18next', () => ({
-  useTranslation: () => ({ t: (key: string, options?: Record<string, unknown>) => key === 'Yesterday' ? require(`../../i18n/locales/${options?.lng === 'zh-Hans' ? 'zh-Hans' : String(options?.lng || 'en').split('-')[0]}/common.json`).Yesterday : key.replace('{{count}}', String(options?.count ?? '')).replace('{{percent}}', String(options?.percent ?? '')) }),
+  useTranslation: () => ({ t: (key: string, options?: Record<string, unknown>) => key === 'Yesterday' ? require(`../../i18n/locales/${options?.lng === 'zh-Hans' ? 'zh-Hans' : String(options?.lng || 'en').split('-')[0]}/common.json`).Yesterday : key.replace('{{count}}', String(options?.count ?? '')).replace('{{percent}}', String(options?.percent ?? '')).replace('{{name}}', String(options?.name ?? '')) }),
 }));
 
 jest.mock('react-native-enriched-markdown', () => {
@@ -156,7 +158,14 @@ jest.mock('@shopify/flash-list', () => {
       ListHeaderComponent?: React.ReactNode;
       ListFooterComponent?: React.ReactNode;
     }, ref: unknown) => {
-      ReactRuntime.useImperativeHandle(ref, () => ({ scrollToEnd: mockScrollToEnd }));
+      // Like FlashList, one stable handle per list instance; follow corrections
+      // reach the same scroll spy through the native scroll view.
+      ReactRuntime.useImperativeHandle(ref, () => ({
+        scrollToEnd: mockScrollToEnd,
+        getNativeScrollRef: () => ({ scrollToEnd: mockScrollToEnd }),
+        getChildContainerDimensions: () => ({ width: 393, height: mockListLayout.content }),
+        getWindowSize: () => ({ width: 393, height: mockListLayout.viewport }),
+      }), []);
       return ReactRuntime.createElement(
       View,
       { ...props, data },
@@ -219,6 +228,7 @@ jest.mock('react-native-reanimated', () => {
     },
     useAnimatedStyle: (factory: () => unknown) => factory(),
     useAnimatedProps: (factory: () => unknown) => factory(),
+    useFrameCallback: () => ({ setActive: jest.fn(), isActive: false, callbackId: -1 }),
     useReducedMotion: () => mockReducedMotion,
     useSharedValue: (value: unknown) => ({ value }),
     withDelay: jest.fn((_delay: number, value: unknown) => value),
@@ -316,7 +326,6 @@ const copy: ThreadCopy = {
   voice: 'Voice input',
   stopVoice: 'Stop voice input',
   listening: 'Listening…',
-  preparingVoice: 'Preparing voice input…',
   send: 'Send',
   stop: 'Stop',
   queueSend: 'Send after this reply',
@@ -524,7 +533,12 @@ describe('ThreadView', () => {
     expect(view.getByTestId('thread-markdown-message-1').props.markdownStyle.paragraph.fontSize)
       .toBe(FontSize.body);
     expect(view.getByTestId('thread-screen-timeline').props.inverted).toBeUndefined();
-    expect(view.getByTestId('thread-screen-timeline').props.maintainVisibleContentPosition.startRenderingFromBottom).toBe(true);
+    // Chronological and top-anchored: a short conversation reads down from the
+    // header; the list still opens on its newest row, clamped to the real end.
+    const timeline = view.getByTestId('thread-screen-timeline');
+    expect(timeline.props.maintainVisibleContentPosition).toBeUndefined();
+    expect(timeline.props.initialScrollIndex).toBe(timeline.props.data.length - 1);
+    expect(timeline.props.initialScrollIndexParams.viewOffset).toBeGreaterThan(100_000);
   });
 
   it.each(['light', 'dark'] as const)('updates manufacturer artwork and preserves model capability in %s mode', (scheme) => {
@@ -544,6 +558,26 @@ describe('ThreadView', () => {
     expect(view.getByTestId('thread-model-icon').props.color).toBe(buildTheme(scheme, scheme, builtInAccents.iceBlue).colors.inkSecondary);
     view.rerender(<ThreadView {...props} capabilities={{ ...props.capabilities, models: false }} />);
     expect(view.queryByTestId('thread-model-picker')).toBeNull();
+  });
+
+  it('uses the fixed header subtitle for a project path and gives transient states priority', () => {
+    const projectPath = '/Users/example/projects/a-very-long-project-name';
+    const props = createProps({ projectPath, contextUsed: 46, contextWindow: 100 });
+    const view = render(<ThreadView {...props} />);
+    expect(view.getByText(projectPath).props).toMatchObject({ numberOfLines: 1, ellipsizeMode: 'middle' });
+    expect(view.getByTestId('thread-screen-header-pill').props.accessibilityHint).toBe(projectPath);
+    expect(flattenStyle(view.getByTestId('thread-screen-header-pill').props.style).height).toBe(ControlSize.pill);
+    expect(view.queryByText('Context remaining: 54%')).toBeNull();
+    view.rerender(<ThreadView {...props} isRunning />);
+    expect(view.queryByText(projectPath)).toBeNull();
+    expect(view.getByTestId('thread-screen-header-pill-working')).toBeTruthy();
+    view.rerender(<ThreadView {...props} state={{ kind: 'reconnecting' }} />);
+    expect(view.queryByText(projectPath)).toBeNull();
+    expect(view.getByText('Reconnecting…')).toBeTruthy();
+    view.rerender(<ThreadView {...props} state={{ kind: 'offline' }} />);
+    expect(view.queryByText(projectPath)).toBeNull();
+    view.rerender(<ThreadView {...props} />);
+    expect(view.getByText(projectPath)).toBeTruthy();
   });
 
   it('uses the saved text size and stamps replies with their time instead of a model label', () => {
@@ -934,10 +968,11 @@ describe('ThreadView', () => {
   it('shows dictation progress in the composer and keeps a stop control while listening', () => {
     const onVoice = jest.fn();
     const level = { value: 0.5 } as SharedValue<number>;
-    const view = render(<ThreadView {...createProps({ input: '', onVoice, voiceState: 'authorizing', voiceLevel: level })} />);
-    expect(view.getByText('Preparing voice input…')).toBeTruthy();
-    expect(view.getByTestId('thread-screen-composer-voice').props.accessibilityState.busy).toBe(true);
-    expect(view.queryByTestId('thread-screen-composer-voice-stop')).toBeNull();
+    // Listening is the first dictation state; the microphone starts behind it without a preparing state.
+    const view = render(<ThreadView {...createProps({ input: '', onVoice, voiceState: 'listening', voiceLevel: level })} />);
+    expect(view.getByText('Listening…')).toBeTruthy();
+    expect(view.queryByText('Preparing voice input…')).toBeNull();
+    expect(view.getByTestId('thread-screen-composer-voice').props.accessibilityState.busy).toBe(false);
 
     view.rerender(<ThreadView {...createProps({ input: 'Dictated draft', onVoice, voiceState: 'listening', voiceLevel: level })} />);
     const input = view.getByTestId('thread-screen-composer-input', { includeHiddenElements: true });
@@ -946,6 +981,10 @@ describe('ThreadView', () => {
     expect(view.queryByTestId('thread-screen-composer-primary')).toBeNull();
     fireEvent.press(view.getByTestId('thread-screen-composer-voice-stop'));
     expect(onVoice).toHaveBeenCalledTimes(1);
+
+    view.rerender(<ThreadView {...createProps({ input: 'Dictated draft', onVoice, voiceState: 'transcribing', voiceLevel: level })} />);
+    expect(view.getByTestId('thread-screen-composer-voice').props.accessibilityState.busy).toBe(true);
+    expect(view.queryByTestId('thread-screen-composer-voice-stop')).toBeNull();
 
     view.rerender(<ThreadView {...createProps({ input: 'Dictated draft', onVoice, voiceState: 'idle', voiceLevel: level })} />);
     expect(view.getByTestId('thread-screen-composer-input').props.placeholder).toBe('Message');
@@ -1103,7 +1142,7 @@ describe('ThreadView', () => {
       });
     }
     expect(mockScrollToEnd).not.toHaveBeenCalled();
-    expect(timeline.props.maintainVisibleContentPosition).toEqual({ startRenderingFromBottom: true });
+    expect(timeline.props.maintainVisibleContentPosition).toBeUndefined();
     fireEvent(timeline, 'load', { elapsedTimeInMs: 10 });
     for (const height of [1000, 1540, 1520, 1600]) fireEvent(timeline, 'contentSizeChange', 400, height);
     fireEvent(timeline, 'layout', { nativeEvent: { layout: { height: 700 } } });
@@ -1829,7 +1868,7 @@ it('keeps expanded tool activity open through updates and opens full tool detail
   expect(view.getByTestId('tools:a').props.accessibilityState).toEqual({ expanded: true });
   const timeline = view.getByTestId('thread-screen-timeline');
   expect(timeline.props.data.map((item: any) => item.key)).toEqual(['tools:a', 'message:a', 'message:b']);
-  expect(timeline.props.maintainVisibleContentPosition.autoscrollToBottomThreshold).toBeUndefined();
+  expect(timeline.props.maintainVisibleContentPosition?.autoscrollToBottomThreshold).toBeUndefined();
   fireEvent.scroll(timeline, scrollEvent(0));
   act(() => timeline.props.onContentSizeChange(400, 2300));
   expect(view.getByTestId('thread-screen-scroll-to-bottom')).toBeTruthy();
@@ -1847,6 +1886,15 @@ it('uses a human title for a new session whose backend title is only its interna
   const view = render(<ThreadView {...createProps({ sessionKey: key, sessionTitle: key, isMainSession: false })} />);
   expect(view.getByText('Atlas · New session')).toBeTruthy();
   expect(view.queryByText(key)).toBeNull();
+});
+
+it('names a scheduled run with the localized kind instead of the Gateway prefix', () => {
+  const key = 'agent:atlas:cron:nightly';
+  const view = render(<ThreadView {...createProps({ sessionKey: key, sessionTitle: 'Automation: Nightly digest', isMainSession: false })} />);
+  expect(view.getByText('Atlas · Scheduled task: Nightly digest')).toBeTruthy();
+  view.rerender(<ThreadView {...createProps({ sessionKey: key, sessionTitle: key, isMainSession: false })} />);
+  expect(view.getByText('Atlas · Scheduled task')).toBeTruthy();
+  expect(view.queryByText(/Automation|New session/)).toBeNull();
 });
 
 it('preserves the native draft and timeline while entering and leaving full-screen composition', () => {
@@ -2177,4 +2225,306 @@ it.each(['light', 'dark'] as const)('distinguishes participants from the Agent i
     { id: 'reply', role: 'assistant', text: 'Reply', timestampMs: 102000 },
   ] })} />);
   expect(view.queryByTestId('chat-agent-role')).toBeNull();
+});
+
+describe('messenger timeline layout', () => {
+  const entranceCalls = () => {
+    const { withTiming } = require('react-native-reanimated') as { withTiming: jest.Mock };
+    return withTiming.mock.calls.filter(([target, options]) => (
+      target === 1 && (options as { duration?: number })?.duration === Motion.duration.normal
+    ));
+  };
+  const frameOpacity = (view: ReturnType<typeof render>) => (
+    flattenStyle(view.getByTestId('thread-screen-timeline-frame').props.style).opacity
+  );
+
+  beforeEach(() => {
+    mockListLayout.content = 0;
+    mockListLayout.viewport = 0;
+    mockScrollToEnd.mockClear();
+    mockReducedMotion = false;
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('keeps one list from the empty conversation through its first message, which enters like any sent message', () => {
+    const { withTiming } = require('react-native-reanimated') as { withTiming: jest.Mock };
+    const props = createProps({ state: { kind: 'empty' }, messages: [], input: '' });
+    const view = render(<ThreadView {...props} />);
+    const timeline = view.getByTestId('thread-screen-timeline');
+    expect(timeline.props.data).toEqual([]);
+    expect(timeline.props.initialScrollIndex).toBeUndefined();
+    expect(frameOpacity(view)).toBeUndefined();
+    const hint = view.getByTestId('thread-screen-empty');
+    expect(hint.props.pointerEvents).toBe('none');
+    expect(hint.props.exiting).toMatchObject({ name: 'FadeOut', durationMs: Motion.duration.fast });
+
+    withTiming.mockClear();
+    const sent: UiMessage = { id: 'usr_1', renderKey: 'usr_1', role: 'user', text: '滴', timestampMs: Date.now() };
+    view.rerender(<ThreadView {...props} state={{ kind: 'ready' }} messages={[sent]} />);
+    expect(view.getByTestId('thread-screen-timeline')).toBe(timeline);
+    expect(view.queryByTestId('thread-screen-empty')).toBeNull();
+    expect(view.getByTestId('thread-bubble-usr_1')).toBeTruthy();
+    expect(frameOpacity(view)).toBeUndefined();
+    expect(entranceCalls()).toHaveLength(1);
+  });
+
+  it('never slides in history that loads into a list that was still loading', () => {
+    const { withTiming } = require('react-native-reanimated') as { withTiming: jest.Mock };
+    const view = render(<ThreadView {...createProps({ state: { kind: 'ready' }, messages: [] })} />);
+    withTiming.mockClear();
+    view.rerender(<ThreadView {...createProps({ messages: [{ id: 'h1', role: 'assistant', text: 'Earlier' }] })} />);
+    expect(entranceCalls()).toHaveLength(0);
+  });
+
+  it('drops the empty hint without a fade under reduced motion', () => {
+    mockReducedMotion = true;
+    const view = render(<ThreadView {...createProps({ state: { kind: 'empty' }, messages: [] })} />);
+    expect(view.getByTestId('thread-screen-empty').props.exiting).toBeUndefined();
+  });
+
+  it('opens saved history hidden until its first load settles, then shows it complete', () => {
+    jest.useFakeTimers();
+    const view = render(<ThreadView {...createProps()} />);
+    expect(frameOpacity(view)).toBe(0);
+    fireEvent(view.getByTestId('thread-screen-timeline'), 'load', { elapsedTimeInMs: 5 });
+    expect(frameOpacity(view)).toBe(0);
+    act(() => jest.advanceTimersByTime(20));
+    expect(frameOpacity(view)).toBeUndefined();
+    // A later reply never hides the list again.
+    view.rerender(<ThreadView {...createProps({ messages: [
+      { id: 'message-2', role: 'assistant', text: 'More' },
+      { id: 'message-1', role: 'assistant', text: 'Ready to help.' },
+    ] })} />);
+    expect(frameOpacity(view)).toBeUndefined();
+  });
+
+  it('reveals saved history even when the list never reports its load', () => {
+    jest.useFakeTimers();
+    const view = render(<ThreadView {...createProps()} />);
+    expect(frameOpacity(view)).toBe(0);
+    act(() => jest.advanceTimersByTime(400));
+    expect(frameOpacity(view)).toBeUndefined();
+  });
+
+  it('pins the newest row in the same layout commit while the reader follows, never while reading history', () => {
+    jest.useFakeTimers();
+    const view = render(<ThreadView {...createProps()} />);
+    const timeline = view.getByTestId('thread-screen-timeline');
+    mockListLayout.content = 900;
+    mockListLayout.viewport = 600;
+    // FlashList places the list itself until it has loaded.
+    act(() => timeline.props.onCommitLayoutEffect());
+    mockListLayout.content = 940;
+    act(() => timeline.props.onCommitLayoutEffect());
+    expect(mockScrollToEnd).not.toHaveBeenCalled();
+    fireEvent(timeline, 'load', { elapsedTimeInMs: 5 });
+    mockListLayout.content = 1010;
+    act(() => timeline.props.onCommitLayoutEffect());
+    // Synchronously, in the commit that grew the rows: no frame to wait for.
+    expect(mockScrollToEnd).toHaveBeenCalledTimes(1);
+    expect(mockScrollToEnd).toHaveBeenLastCalledWith({ animated: false });
+    act(() => timeline.props.onCommitLayoutEffect());
+    expect(mockScrollToEnd).toHaveBeenCalledTimes(1);
+    // A keyboard or composer that shrinks the viewport keeps the newest row in view.
+    mockListLayout.viewport = 320;
+    act(() => timeline.props.onCommitLayoutEffect());
+    expect(mockScrollToEnd).toHaveBeenCalledTimes(2);
+
+    fireEvent(timeline, 'scrollBeginDrag');
+    fireEvent.scroll(timeline, scrollEvent(800));
+    mockListLayout.content = 1400;
+    act(() => timeline.props.onCommitLayoutEffect());
+    expect(mockScrollToEnd).toHaveBeenCalledTimes(2);
+
+    // Rows removed below a reader near the end never leave the offset past it.
+    fireEvent.scroll(timeline, scrollEvent(40));
+    mockListLayout.content = 1300;
+    act(() => timeline.props.onCommitLayoutEffect());
+    expect(mockScrollToEnd).toHaveBeenCalledTimes(3);
+    act(() => jest.advanceTimersByTime(20));
+    expect(mockScrollToEnd).toHaveBeenCalledTimes(3);
+  });
+
+  it('glides a new row into view while following, and keeps the exact end for growth, the keyboard and big bursts', () => {
+    jest.useFakeTimers();
+    const buttonVisible = (view: ReturnType<typeof render>) => view.getByTestId('thread-screen-scroll-to-bottom-container', { includeHiddenElements: true }).props.pointerEvents === 'auto';
+    const first: UiMessage = { id: 'm1', role: 'assistant', text: 'One' };
+    const props = createProps({ messages: [first] });
+    const view = render(<ThreadView {...props} />);
+    const timeline = view.getByTestId('thread-screen-timeline');
+    mockListLayout.content = 900;
+    mockListLayout.viewport = 600;
+    act(() => timeline.props.onCommitLayoutEffect());
+    fireEvent(timeline, 'load', { elapsedTimeInMs: 5 });
+
+    // The send's own scroll request leaves the pinning to the commit that adds the row.
+    const sent: UiMessage = { id: 'usr_2', renderKey: 'usr_2', role: 'user', text: 'Two' };
+    view.rerender(<ThreadView {...props} messages={[sent, first]} scrollToBottomRequestAt={1} />);
+    expect(mockScrollToEnd).not.toHaveBeenCalled();
+    mockListLayout.content = 980;
+    act(() => timeline.props.onCommitLayoutEffect());
+    expect(mockScrollToEnd).toHaveBeenCalledTimes(1);
+    expect(mockScrollToEnd).toHaveBeenLastCalledWith({ animated: true });
+    // Growth during the glide re-targets it, and its scroll events never reveal the return action.
+    mockListLayout.content = 1004;
+    act(() => timeline.props.onCommitLayoutEffect());
+    expect(mockScrollToEnd).toHaveBeenLastCalledWith({ animated: true });
+    fireEvent.scroll(timeline, scrollEvent(300));
+    expect(buttonVisible(view)).toBe(false);
+    // So does a composer that shrinks right after the send.
+    mockListLayout.viewport = 560;
+    act(() => timeline.props.onCommitLayoutEffect());
+    expect(mockScrollToEnd).toHaveBeenLastCalledWith({ animated: true });
+
+    // Once settled, a growing reply keeps the exact end.
+    act(() => jest.advanceTimersByTime(500));
+    mockListLayout.content = 1030;
+    act(() => timeline.props.onCommitLayoutEffect());
+    expect(mockScrollToEnd).toHaveBeenLastCalledWith({ animated: false });
+
+    // A new row that arrives with a keyboard change snaps with the viewport.
+    const third: UiMessage = { id: 'm3', role: 'assistant', text: 'Three' };
+    view.rerender(<ThreadView {...props} messages={[third, sent, first]} />);
+    mockListLayout.content = 1090;
+    mockListLayout.viewport = 320;
+    act(() => timeline.props.onCommitLayoutEffect());
+    expect(mockScrollToEnd).toHaveBeenLastCalledWith({ animated: false });
+
+    // A burst taller than the glide budget snaps.
+    const fourth: UiMessage = { id: 'm4', role: 'assistant', text: 'Four' };
+    view.rerender(<ThreadView {...props} messages={[fourth, third, sent, first]} />);
+    mockListLayout.content = 1500;
+    act(() => timeline.props.onCommitLayoutEffect());
+    expect(mockScrollToEnd).toHaveBeenLastCalledWith({ animated: false });
+  });
+
+  it('never glides under reduced motion', () => {
+    mockReducedMotion = true;
+    const first: UiMessage = { id: 'm1', role: 'assistant', text: 'One' };
+    const props = createProps({ messages: [first] });
+    const view = render(<ThreadView {...props} />);
+    const timeline = view.getByTestId('thread-screen-timeline');
+    mockListLayout.content = 900;
+    mockListLayout.viewport = 600;
+    act(() => timeline.props.onCommitLayoutEffect());
+    fireEvent(timeline, 'load', { elapsedTimeInMs: 5 });
+    view.rerender(<ThreadView {...props} messages={[{ id: 'm2', role: 'assistant', text: 'Two' }, first]} />);
+    mockListLayout.content = 960;
+    act(() => timeline.props.onCommitLayoutEffect());
+    expect(mockScrollToEnd).toHaveBeenLastCalledWith({ animated: false });
+  });
+
+  it('pulls an offset pushed past the end of a short list back, but never fights the reader', () => {
+    const view = render(<ThreadView {...createProps()} />);
+    const timeline = view.getByTestId('thread-screen-timeline');
+    const scrolledTo = (offset: number, height = 900) => ({ nativeEvent: {
+      contentSize: { height, width: 393 }, layoutMeasurement: { height: 600, width: 393 }, contentOffset: { y: offset, x: 0 },
+    } });
+    // Older rows inserted above keep the visible rows in place and leave the offset past the end.
+    fireEvent.scroll(timeline, scrolledTo(520));
+    expect(mockScrollToEnd).toHaveBeenLastCalledWith({ animated: false });
+    mockScrollToEnd.mockClear();
+    fireEvent.scroll(timeline, scrolledTo(300));
+    fireEvent.scroll(timeline, scrolledTo(40, 400));
+    expect(mockScrollToEnd).toHaveBeenCalledTimes(1);
+    // A reader's own bounce past the end belongs to the native view.
+    mockScrollToEnd.mockClear();
+    fireEvent(timeline, 'scrollBeginDrag');
+    fireEvent.scroll(timeline, scrolledTo(360));
+    expect(mockScrollToEnd).not.toHaveBeenCalled();
+  });
+
+  it('does not follow layout commits while composing full screen or returning to the bottom', () => {
+    const view = render(<ThreadView {...createProps({ input: 'First\nSecond\nThird' })} />);
+    const timeline = view.getByTestId('thread-screen-timeline');
+    mockListLayout.content = 900;
+    mockListLayout.viewport = 600;
+    act(() => timeline.props.onCommitLayoutEffect());
+    fireEvent(timeline, 'load', { elapsedTimeInMs: 5 });
+    fireEvent.press(view.getByTestId('thread-screen-composer-expand'));
+    mockListLayout.content = 1200;
+    act(() => timeline.props.onCommitLayoutEffect());
+    expect(mockScrollToEnd).not.toHaveBeenCalled();
+    fireEvent.press(view.getByTestId('thread-screen-composer-collapse'));
+
+    fireEvent(timeline, 'scrollBeginDrag');
+    fireEvent.scroll(timeline, scrollEvent(900));
+    fireEvent.press(view.getByTestId('thread-screen-scroll-to-bottom'));
+    expect(mockScrollToEnd).toHaveBeenLastCalledWith({ animated: true });
+    mockScrollToEnd.mockClear();
+    mockListLayout.content = 1500;
+    act(() => timeline.props.onCommitLayoutEffect());
+    expect(mockScrollToEnd).not.toHaveBeenCalled();
+  });
+
+  it('hands the list the same row objects and renderer for rows a streamed chunk did not change', () => {
+    const history: UiMessage[] = [
+      { id: 'a1', role: 'assistant', text: 'Hello', timestampMs: 2_000 },
+      { id: 'u1', role: 'user', text: 'Hi', timestampMs: 1_000 },
+    ];
+    const asked: UiMessage = { id: 'u2', role: 'user', text: 'More please', timestampMs: 2_500 };
+    const live = (text: string): UiMessage => ({
+      id: 'streaming', renderKey: 'reply:3000:0', role: 'assistant', text, streaming: true, timestampMs: 3_000,
+    });
+    const props = createProps({ isRunning: true, messages: [live('Wor'), asked, ...history] });
+    const view = render(<ThreadView {...props} />);
+    const timeline = () => view.getByTestId('thread-screen-timeline');
+    const before = timeline().props.data as ReadonlyArray<{ key: string }>;
+    const renderItem = timeline().props.renderItem;
+
+    // The controller rebuilds every message object for each chunk.
+    view.rerender(<ThreadView {...props} messages={[live('World'), { ...asked }, ...history.map((message) => ({ ...message }))]} />);
+    const after = timeline().props.data as ReadonlyArray<{ key: string }>;
+    expect(after.filter((row, index) => row !== before[index]).map((row) => row.key)).toEqual(['message:reply:3000:0']);
+    expect(timeline().props.renderItem).toBe(renderItem);
+
+    view.rerender(<ThreadView {...props} messages={[live('World'), { ...asked }, ...history]} />);
+    expect(timeline().props.data).toBe(after);
+  });
+
+  it('lets the first streamed row of a run take over the reply placeholder cell', () => {
+    const { withTiming } = require('react-native-reanimated') as { withTiming: jest.Mock };
+    const earlier: UiMessage = { id: 'h1', role: 'assistant', text: 'Earlier', timestampMs: 1_000 };
+    const props = createProps({ messages: [earlier], isRunning: true, pendingReplyRenderKey: 'reply:5000:0' });
+    const view = render(<ThreadView {...props} />);
+    const keys = () => (view.getByTestId('thread-screen-timeline').props.data as ReadonlyArray<{ key: string }>).map((row) => row.key);
+    expect(keys().at(-1)).toBe('message:reply:5000:0');
+    withTiming.mockClear();
+    // A run the phone did not start: its first text arrives after the placeholder.
+    const streamed: UiMessage = { id: 'streaming', renderKey: 'reply:5000:0', role: 'assistant', text: 'Checking the channel.', streaming: true, timestampMs: 5_000 };
+    view.rerender(<ThreadView {...props} messages={[streamed, earlier]} />);
+    expect(keys().at(-1)).toBe('message:reply:5000:0');
+    expect(keys().filter((key) => key.startsWith('message:reply') || key === 'message:streaming')).toHaveLength(1);
+    expect(entranceCalls()).toHaveLength(0);
+  });
+
+  it('lets the last streamed words finish in streaming mode, then settles without changing the text', () => {
+    jest.useFakeTimers();
+    const { STREAM_SETTLE_HOLD_MS } = require('../../chat/useStreamingSettleHold') as { STREAM_SETTLE_HOLD_MS: number };
+    const streaming: UiMessage = {
+      id: 'streaming', renderKey: 'reply:1:0', role: 'assistant', text: 'Scores:\n- > 25 wins', streaming: true, timestampMs: 1_000,
+    };
+    const view = render(<ThreadView {...createProps({ isRunning: true, messages: [streaming] })} />);
+    const markdown = view.getByTestId('thread-markdown-streaming');
+    // Complete text is never rewritten while streaming, so it matches the settled reply.
+    expect(markdown.props.markdown).toBe('Scores:\n- > 25 wins');
+    expect(markdown.props.streamingAnimation).toBe(true);
+
+    const settled: UiMessage = { ...streaming, id: 'final_run', text: 'Scores:\n- > 25 wins\n- 20~25 ties', streaming: false };
+    view.rerender(<ThreadView {...createProps({ messages: [settled] })} />);
+    expect(view.getByTestId('thread-markdown-final_run')).toBe(markdown);
+    expect(markdown.props.markdown).toBe(settled.text);
+    expect(markdown.props.streamingAnimation).toBe(true);
+    act(() => jest.advanceTimersByTime(STREAM_SETTLE_HOLD_MS));
+    expect(markdown.props.streamingAnimation).toBe(false);
+    expect(markdown.props.markdown).toBe(settled.text);
+  });
+
+  it('never puts a settled history reply in streaming mode', () => {
+    const view = render(<ThreadView {...createProps({ messages: [{ id: 'h1', role: 'assistant', text: 'Done - > 25' }] })} />);
+    expect(view.getByTestId('thread-markdown-h1').props.streamingAnimation).toBe(false);
+    expect(view.getByTestId('thread-markdown-h1').props.markdown).toBe('Done - > 25');
+  });
 });

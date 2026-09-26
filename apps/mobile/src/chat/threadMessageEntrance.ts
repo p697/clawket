@@ -14,7 +14,9 @@ function entranceSignature(message: UiMessage): string {
  * Ids that appeared at the newest end of the timeline since the previous
  * render and should enter with motion. Both lists are newest-first.
  *
- * - An empty previous list is an initial load: nothing animates.
+ * - An empty previous list is an initial load: nothing animates, unless the
+ *   empty list was an authoritative empty conversation (`fromEmpty`): then
+ *   the first message is a conversation beat like any other.
  * - Rows inserted above the previous newest row are history paging.
  * - A row whose content matches a row that vanished in the same update is an
  *   id swap (optimistic → server, streaming → final) and must not replay.
@@ -27,8 +29,9 @@ export function getTailEntranceMessageIds(
   previous: ReadonlyArray<UiMessage>,
   next: ReadonlyArray<UiMessage>,
   maxCount = MAX_TAIL_ENTRANCE_COUNT,
+  fromEmpty = false,
 ): string[] {
-  if (previous.length === 0 || next.length === 0) return [];
+  if (next.length === 0 || (previous.length === 0 && !fromEmpty)) return [];
   const previousIds = new Set(previous.map((message) => message.renderKey ?? message.id));
   const nextIds = new Set(next.map((message) => message.renderKey ?? message.id));
   const tailNew: UiMessage[] = [];

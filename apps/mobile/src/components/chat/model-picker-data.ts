@@ -37,8 +37,16 @@ function modelMatchesQuery(model: ModelInfo, query: string): boolean {
   return (
     normalize(model.name).includes(normalizedQuery)
     || normalize(model.id).includes(normalizedQuery)
+    || normalize(model.resolvedModel).includes(normalizedQuery)
     || normalize(model.provider).includes(normalizedQuery)
   );
+}
+
+function compareModels(a: ModelInfo, b: ModelInfo): number {
+  const aOrder = typeof a.sortOrder === 'number' && Number.isFinite(a.sortOrder) ? a.sortOrder : Infinity;
+  const bOrder = typeof b.sortOrder === 'number' && Number.isFinite(b.sortOrder) ? b.sortOrder : Infinity;
+  if (aOrder !== bOrder) return aOrder - bOrder;
+  return normalize(a.name || a.id).localeCompare(normalize(b.name || b.id));
 }
 
 export function resolveProviderModel(model: ModelInfo): string {
@@ -75,11 +83,7 @@ export function buildModelSections(
           return {
             title,
             provider: slug,
-            data: [...group].sort((modelA, modelB) => {
-              const left = normalize(modelA.name || modelA.id);
-              const right = normalize(modelB.name || modelB.id);
-              return left.localeCompare(right);
-            }),
+            data: [...group].sort(compareModels),
             totalModels: typeof provider.totalModels === 'number' ? provider.totalModels : group.length,
             source: provider.source,
             apiUrl: provider.apiUrl,
@@ -103,11 +107,7 @@ export function buildModelSections(
     .map(([provider, group]) => ({
       title: formatProvider(provider),
       provider,
-      data: [...group].sort((modelA, modelB) => {
-        const left = normalize(modelA.name || modelA.id);
-        const right = normalize(modelB.name || modelB.id);
-        return left.localeCompare(right);
-      }),
+      data: [...group].sort(compareModels),
       totalModels: group.length,
     }));
 }

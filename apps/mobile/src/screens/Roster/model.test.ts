@@ -4,7 +4,7 @@ import type {
   SessionDescriptor,
 } from '@clawket/agent-protocol';
 import type { RosterConnectionGroup } from '../../connection';
-import { buildRosterRows, resolveRosterPageState } from './model';
+import { buildRosterRows, resolveRosterLiveConnectionId, resolveRosterPageState } from './model';
 
 const actions = { rename: true, reset: true, delete: true, pin: true };
 
@@ -253,5 +253,36 @@ describe('Roster model', () => {
     [{ initialized: true, connectionCount: 1, rowCount: 1, activeState: 'ready', hasError: false }, 'ready'],
   ] as const)('resolves the page state deterministically', (input, expected) => {
     expect(resolveRosterPageState(input)).toBe(expected);
+  });
+});
+
+describe('resolveRosterLiveConnectionId', () => {
+  const mixed = [{ connectionId: 'one' }, { connectionId: 'two' }, { connectionId: 'one' }];
+  const live = (patch: Partial<Parameters<typeof resolveRosterLiveConnectionId>[0]> = {}) => (
+    resolveRosterLiveConnectionId({
+      rows: mixed,
+      activeConnectionId: 'one',
+      activeState: 'ready',
+      recovering: false,
+      offline: false,
+      ...patch,
+    })
+  );
+
+  it('marks the ready active connection only when the roster mixes connections', () => {
+    expect(live()).toBe('one');
+    expect(live({ rows: [{ connectionId: 'one' }, { connectionId: 'one' }] })).toBeNull();
+    // Rows of another connection alone never borrow the dot.
+    expect(live({ rows: [{ connectionId: 'two' }, { connectionId: 'three' }] })).toBeNull();
+    expect(live({ rows: [] })).toBeNull();
+    expect(live({ activeConnectionId: null })).toBeNull();
+  });
+
+  it('holds the dot through the recovery window and drops it offline, paused or connecting', () => {
+    expect(live({ activeState: 'reconnecting', recovering: true })).toBe('one');
+    expect(live({ activeState: 'reconnecting' })).toBeNull();
+    expect(live({ activeState: 'connecting' })).toBeNull();
+    expect(live({ activeState: 'idle' })).toBeNull();
+    expect(live({ activeState: 'ready', offline: true })).toBeNull();
   });
 });

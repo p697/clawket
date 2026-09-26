@@ -3,6 +3,8 @@ import {
   buildConnectionDetailRows,
   formatConnectionLastReady,
   parseConnectionServerHost,
+  resolveConnectionPresence,
+  translateConnectionPresence,
 } from './connection-details';
 
 function connection(patch: Partial<ConnectionDescriptor> = {}): ConnectionDescriptor {
@@ -70,5 +72,32 @@ describe('parseConnectionServerHost', () => {
     expect(parseConnectionServerHost('wss://relay.example:8443/ws?token=secret')).toBe('relay.example:8443');
     expect(parseConnectionServerHost('not a url')).toBeUndefined();
     expect(parseConnectionServerHost('')).toBeUndefined();
+  });
+});
+
+describe('resolveConnectionPresence', () => {
+  it('keeps offline for the active connection and never for an inactive one', () => {
+    expect(resolveConnectionPresence({ active: true, paused: false, state: 'ready' })).toBe('online');
+    for (const state of ['connecting', 'handshaking', 'reconnecting']) {
+      expect(resolveConnectionPresence({ active: true, paused: false, state })).toBe('connecting');
+    }
+    for (const state of ['offline', 'error', 'idle']) {
+      expect(resolveConnectionPresence({ active: true, paused: false, state })).toBe('offline');
+    }
+    // An inactive connection has no adapter; whatever state is passed describes another one.
+    for (const state of ['ready', 'offline', 'idle']) {
+      expect(resolveConnectionPresence({ active: false, paused: false, state })).toBe('not_connected');
+    }
+    expect(resolveConnectionPresence({ active: true, paused: true, state: 'ready' })).toBe('paused');
+    expect(resolveConnectionPresence({ active: false, paused: true, state: 'idle' })).toBe('paused');
+  });
+
+  it('labels each presence with its namespaced key', () => {
+    const t = jest.fn((key: string, options?: Record<string, unknown>) => `${String(options?.ns)}:${key}`);
+    expect(translateConnectionPresence(t, 'paused')).toBe('config:Connection paused');
+    expect(translateConnectionPresence(t, 'online')).toBe('common:Online');
+    expect(translateConnectionPresence(t, 'connecting')).toBe('common:Connecting');
+    expect(translateConnectionPresence(t, 'offline')).toBe('common:Offline');
+    expect(translateConnectionPresence(t, 'not_connected')).toBe('common:Not connected');
   });
 });

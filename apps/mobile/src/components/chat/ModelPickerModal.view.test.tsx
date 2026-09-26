@@ -11,6 +11,7 @@ jest.mock('react-native', () => {
     ),
   );
   return {
+    Platform: { OS: 'ios' },
     ActivityIndicator: primitive('ActivityIndicator'),
     Image: primitive('Image'),
     Pressable: primitive('Pressable'),
@@ -294,4 +295,13 @@ it('keeps concrete selection semantics for callers without inheritance', () => {
   const view = renderPicker({ configuredDefaultModel: 'openai/gpt-5-api' });
   fireEvent.press(view.getByTestId('model-picker-row-openai:gpt-5-api'));
   expect(view.onSelectModel).toHaveBeenCalledWith(models[0]);
+});
+
+it('shows native resolved model IDs below aliases and still submits the original alias', () => {
+  const model = { id: 'haiku', name: 'Haiku', provider: 'anthropic', resolvedModel: 'claude-haiku-4-5-20251001' };
+  const selected = jest.fn();
+  const view = renderPicker({ models: [model], onSelectModel: selected });
+  expect(view.getByTestId('model-picker-resolved-anthropic:haiku').props.children).toBe(model.resolvedModel);
+  fireEvent.press(view.getByTestId('model-picker-row-anthropic:haiku'));
+  expect(selected).toHaveBeenCalledWith(model);
 });

@@ -42,6 +42,8 @@ const args = [
   "--external",
   "qrcode",
   "--external",
+  "@anthropic-ai/claude-agent-sdk",
+  "--external",
   "https-proxy-agent",
   "--external",
   "ws",

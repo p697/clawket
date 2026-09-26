@@ -1,4 +1,5 @@
 import {
+  cronSessionName,
   formatMessageText,
   stableMessageId,
   extractAssistantDisplayText,
@@ -456,6 +457,24 @@ describe('stripGatewayPrefixes', () => {
 
   it('handles empty string', () => {
     expect(stripGatewayPrefixes('')).toBe('');
+  });
+});
+
+describe('cronSessionName', () => {
+  it('drops the Gateway kind prefix of every OpenClaw generation', () => {
+    expect(cronSessionName('Automation: 日报守卫 07:30')).toBe('日报守卫 07:30');
+    expect(cronSessionName('automation:Nightly')).toBe('Nightly');
+    expect(cronSessionName('Cron: daily-task')).toBe('daily-task');
+    expect(cronSessionName('[Cron] daily-task')).toBe('daily-task');
+    expect(cronSessionName('  Automation：Morning digest  ')).toBe('Morning digest');
+  });
+
+  it('keeps a renamed title and reports nothing for an empty one', () => {
+    expect(cronSessionName('Morning digest')).toBe('Morning digest');
+    expect(cronSessionName('Automation plan: phase 2')).toBe('Automation plan: phase 2');
+    expect(cronSessionName('Automation:')).toBe('');
+    expect(cronSessionName(undefined)).toBe('');
+    expect(cronSessionName(null)).toBe('');
   });
 });
 

@@ -55,6 +55,21 @@ describe('bounded duplex session', () => {
     expect(client.sent.some(value => typeof value === 'string' && value.includes('"type":"result"'))).toBe(true);
   });
 
+  it('keeps a normal 110-second segment alive and still releases before its result', async () => {
+    const { client, provider, release } = setup();
+    provider.message(providerEvent('task-started'));
+    for (let second = 0; second < 110; second++) {
+      client.message(new ArrayBuffer(32000));
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(release).not.toHaveBeenCalled();
+    }
+    provider.message(providerEvent('result-generated', 'long synthetic result'));
+    client.message('{"type":"finish"}'); provider.message(providerEvent('task-finished'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(release).toHaveBeenCalledTimes(1);
+    expect(client.sent.map(value => typeof value === 'string' && JSON.parse(value)).at(-1)).toMatchObject({ type: 'result' });
+  });
+
   it('acknowledges cumulative received bytes only when negotiated by a v2 client', () => {
     const client = new Socket(), provider = new Socket();
     serveSession(client as unknown as WebSocket, provider as unknown as WebSocket, 'task', () => {}, undefined, true);

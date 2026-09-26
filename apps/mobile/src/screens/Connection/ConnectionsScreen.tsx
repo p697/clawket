@@ -13,11 +13,13 @@ import { FloatingButton } from '../../components/ui/FloatingButton';
 import { Button } from '../../components/ui/Button';
 import { ConfirmationModal } from '../../components/ui/ConfirmationModal';
 import { SettingsGroup, SettingsRow } from '../../components/ui/SettingsGroup';
+import { StatusDot } from '../../components/ui/StatusDot';
 import {
   SwipeableRow,
   useSwipeableRowGroup,
   type SwipeableRowAction,
 } from '../../components/ui/SwipeableRow';
+import { resolveConnectionPresence, translateConnectionPresence } from './connection-details';
 
 type Props = {
   onBack: () => void;
@@ -55,14 +57,23 @@ export function ConnectionsScreen({ onBack, onAdd, onOpen, onPause, onResume, on
         onScrollBeginDrag={swipeGroup.closeAll}>
         {runtime.connections.map((connection) => {
           const paused = runtime.pausedConnectionIds?.includes(connection.id) ?? false;
-          const online = runtime.activeConnectionId === connection.id && runtime.activeState === 'ready';
+          const presence = resolveConnectionPresence({
+            active: runtime.activeConnectionId === connection.id,
+            paused,
+            state: runtime.activeState,
+          });
           return <SettingsGroup density="comfortable" key={connection.id}>
             <SwipeableRow rowKey={connection.id} testID={`connection-swipe-${connection.id}`}
               actions={swipeActions(connection, paused)} group={swipeGroup}>
               <SettingsRow testID={`connection-list-${connection.id}`} title={connection.label}
-                leading={<PlatformMark platform={connection.backendKind} size={32} />}
+                leading={<View style={styles.mark}>
+                  <PlatformMark platform={connection.backendKind} size={32} />
+                  {/* The roster's live dot, on the connection it belongs to. */}
+                  {presence === 'online' ? <StatusDot testID={`connection-list-${connection.id}-live`}
+                    color={colors.good} ringColor={colors.surfaceFloating} /> : null}
+                </View>}
                 subtitle={runtime.roster.find((group) => group.connection.id === connection.id)?.agents.map(({ agent }) => agent.name).join(' · ')}
-                value={paused ? t('Connection paused') : t(online ? 'Online' : 'Offline', { ns: 'common' })}
+                value={translateConnectionPresence(t, presence)}
                 showChevron onPress={() => onOpen(connection.id)} />
             </SwipeableRow>
           </SettingsGroup>;
@@ -88,6 +99,7 @@ export function ConnectionsScreen({ onBack, onAdd, onOpen, onPause, onResume, on
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   content: { paddingHorizontal: Space.lg, paddingTop: Space.lg, gap: Space.lg },
+  mark: { position: 'relative' },
   emptyState: { paddingVertical: Space.xxl, alignItems: 'center', gap: Space.lg },
   empty: { fontSize: FontSize.secondary, lineHeight: LineHeight.secondary, textAlign: 'center' },
 });

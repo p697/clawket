@@ -1,4 +1,4 @@
-export type RegistryBackend = 'openclaw' | 'hermes' | 'local-model' | 'pi';
+export type RegistryBackend = 'openclaw' | 'hermes' | 'local-model' | 'pi' | 'codex' | 'claude-code';
 
 export type RegistryKvBinding = 'ROUTES_KV' | 'HERMES_ROUTES_KV';
 export type RegistryPrincipalParam = 'gatewayId' | 'bridgeId';
@@ -78,11 +78,17 @@ export const LOCAL_MODEL_REGISTRY_POLICY: RegistryBackendPolicy = {
   ...OPENCLAW_REGISTRY_POLICY, backend: 'local-model',
 };
 
+export const CLAUDE_CODE_REGISTRY_POLICY: RegistryBackendPolicy = { ...OPENCLAW_REGISTRY_POLICY, backend: 'claude-code' };
+
+export const CODEX_REGISTRY_POLICY: RegistryBackendPolicy = { ...OPENCLAW_REGISTRY_POLICY, backend: 'codex' };
+
 export const PI_REGISTRY_POLICY: RegistryBackendPolicy = { ...OPENCLAW_REGISTRY_POLICY, backend: 'pi' };
 
 export function resolveRegistryBackendPolicy(value: string | undefined): RegistryBackendPolicy {
   if (value === undefined) return OPENCLAW_REGISTRY_POLICY;
   if (value === 'openclaw') return OPENCLAW_REGISTRY_POLICY;
+  if (value === 'claude-code') return CLAUDE_CODE_REGISTRY_POLICY;
+  if (value === 'codex') return CODEX_REGISTRY_POLICY;
   if (value === 'pi') return PI_REGISTRY_POLICY;
   if (value === 'local-model') return LOCAL_MODEL_REGISTRY_POLICY;
   if (value === 'hermes') return HERMES_REGISTRY_POLICY;

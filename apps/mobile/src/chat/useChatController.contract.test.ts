@@ -2244,3 +2244,19 @@ it('does not restore an old history snapshot after a live terminal event', async
   });
 
 });
+
+it('puts external input in the chosen chat without switching to an empty main key', async () => {
+  mockAppContext.mainSessionKey = '';
+  mockAppContext.clearPendingChatInput.mockImplementationOnce(() => { mockAppContext.pendingChatInput = null; });
+  mockAppContext.clearPendingMainSessionSwitch.mockImplementationOnce(() => { mockAppContext.pendingMainSessionSwitch = false; });
+  mockAppContext.pendingChatInput = 'Review this';
+  mockAppContext.pendingMainSessionSwitch = true;
+  historyMock.sessionKey = 'chosen';
+  historyMock.sessions = [{ key: 'chosen', kind: 'direct' as const }];
+  const adapter = createAdapter('ready');
+  const { result } = renderHook(() => useChatController({ adapter: adapter as any, debugMode: false, showAgentAvatar: false } as any));
+  await act(async () => { await Promise.resolve(); });
+  expect(result.current.input).toBe('Review this');
+  expect(historyMock.setSessionKey).not.toHaveBeenCalledWith('');
+  expect(mockAppContext.clearPendingMainSessionSwitch).toHaveBeenCalled();
+});

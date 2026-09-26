@@ -383,5 +383,7 @@
   "{{count}} items": "{{count}} mục",
   "Delete this local config backup? This does not change the current Gateway config.": "Xóa bản sao lưu cấu hình cục bộ này? Cấu hình Gateway hiện tại sẽ không thay đổi.",
   "Backup history": "Lịch sử sao lưu",
-  "Pi is not responding": "Pi không phản hồi"
+  "Pi is not responding": "Pi không phản hồi",
+  "Codex is not responding": "Codex không phản hồi",
+  "Claude Code is not responding": "Claude Code không phản hồi"
 }

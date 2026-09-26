@@ -1,4 +1,5 @@
-import { connectSpeech, type SpeechConnection } from './speechStream';
+import { type SpeechConnection } from './speechStream';
+import { connectAdmittedSpeech } from './speechAdmissionConnection';
 import { PCM_BYTES_PER_SECOND, SEGMENT_BYTES, type SpeechRecording } from './speechRecordings';
 import { SpeechError } from './speechErrors';
 
@@ -15,9 +16,8 @@ export async function transcribeRecording(recording: SpeechRecording, signal: Ab
     const cancel = () => connection?.cancel();
     signal.addEventListener('abort', cancel);
     try {
-      connection = await connectSpeech();
-      onConnection(connection); check();
-      await connection.ready; check();
+      connection = await connectAdmittedSpeech(signal, onConnection);
+      check();
       const end = offset + SEGMENT_BYTES;
       for (let cursor = offset; cursor < end;) {
         if (cursor >= recording.bytes) {

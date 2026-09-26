@@ -158,7 +158,6 @@
   "Voice input": "ป้อนด้วยเสียง",
   "Stop voice input": "หยุดป้อนด้วยเสียง",
   "Listening…": "กำลังฟัง…",
-  "Preparing voice input…": "กำลังเตรียมการป้อนด้วยเสียง…",
   "Send": "ส่ง",
   "Reconnect": "เชื่อมต่อใหม่",
   "Offline · reconnecting": "ออฟไลน์ · กำลังเชื่อมต่อใหม่",
@@ -380,5 +379,12 @@
   "{{channel}} member": "สมาชิก {{channel}}",
   "Agent needs your input": "Agent กำลังรอคำตอบของคุณ",
   "Respond": "ตอบกลับ",
-  "Continue in a new session": "ดำเนินการต่อในเซสชันใหม่"
+  "Continue in a new session": "ดำเนินการต่อในเซสชันใหม่",
+  "thinking_none": "ปิด",
+  "thinking_max": "สูงสุด",
+  "thinking_ultra": "สูงเป็นพิเศษ",
+  "Allow this action?": "อนุญาตการดำเนินการนี้ไหม?",
+  "Stop task": "หยุดงาน",
+  "Your answer": "คำตอบของคุณ",
+  "Question {{current}} of {{total}}": "คำถาม {{current}} จาก {{total}}"
 }

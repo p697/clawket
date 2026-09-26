@@ -41,13 +41,26 @@ export function normalizePhotoPermission(permission: PhotoPermissionSnapshot): R
   return permission.status === 'denied' ? 'denied' : 'undetermined';
 }
 
-export async function getRecentPhotoAccess(): Promise<RecentPhotoAccess> {
-  if (!recentPhotosSupported) return 'unavailable';
+export type RecentPhotoPermission = Readonly<{
+  access: RecentPhotoAccess;
+  /** iOS limited library: the first library read of each launch may raise the system selection alert. */
+  limited: boolean;
+}>;
+
+/** Reads the authorization status only; it never prompts and never reads the library. */
+export async function getRecentPhotoPermission(): Promise<RecentPhotoPermission> {
+  if (!recentPhotosSupported) return { access: 'unavailable', limited: false };
   try {
-    return normalizePhotoPermission(await MediaLibrary.getPermissionsAsync());
+    const permission = await MediaLibrary.getPermissionsAsync();
+    const access = normalizePhotoPermission(permission);
+    return { access, limited: access === 'granted' && permission.accessPrivileges === 'limited' };
   } catch {
-    return 'unavailable';
+    return { access: 'unavailable', limited: false };
   }
+}
+
+export async function getRecentPhotoAccess(): Promise<RecentPhotoAccess> {
+  return (await getRecentPhotoPermission()).access;
 }
 
 export async function requestRecentPhotoAccess(): Promise<RecentPhotoAccess> {
@@ -56,6 +69,21 @@ export async function requestRecentPhotoAccess(): Promise<RecentPhotoAccess> {
     return normalizePhotoPermission(await MediaLibrary.requestPermissionsAsync());
   } catch {
     return 'unavailable';
+  }
+}
+
+/**
+ * Notifies when photos are added to or removed from the library (including a
+ * changed limited-library selection). Subscribe only with granted access:
+ * observing an undetermined library would make PhotoKit prompt.
+ */
+export function subscribeToRecentPhotoChanges(listener: () => void): () => void {
+  if (!recentPhotosSupported) return () => undefined;
+  try {
+    const subscription = MediaLibrary.addListener(() => listener());
+    return () => subscription.remove();
+  } catch {
+    return () => undefined;
   }
 }
 

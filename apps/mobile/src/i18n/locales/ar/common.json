@@ -140,6 +140,7 @@
   "Online": "متصل",
   "Offline": "غير متصل",
   "Connecting": "جارٍ الاتصال",
+  "Not connected": "غير متصل حاليًا",
   "Models": "النماذج",
   "Skills": "المهارات",
   "Usage": "الاستخدام",
@@ -168,6 +169,8 @@
   "Reset session?": "هل تريد إعادة تعيين الجلسة؟",
   "Reset": "إعادة تعيين",
   "Scheduled": "مجدولة",
+  "Scheduled task": "مهمة مجدولة",
+  "Scheduled task: {{name}}": "مهمة مجدولة: {{name}}",
   "Search sessions": "البحث في الجلسات",
   "Session actions": "إجراءات الجلسة",
   "Sessions require permission": "تتطلب الجلسات إذنًا",
@@ -247,5 +250,10 @@
   "Search and bulk export": "البحث والتصدير الجماعي",
   "Skill and memory versions": "إصدارات المهارات والذاكرة",
   "Yes": "نعم",
-  "No": "لا"
+  "No": "لا",
+  "All projects": "كل المشاريع",
+  "Projects": "المشاريع",
+  "Choose a project": "اختيار مشروع",
+  "Search projects": "البحث عن المشاريع",
+  "Next": "التالي"
 }

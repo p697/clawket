@@ -288,7 +288,7 @@ export async function handleGatewayMessage(
     return;
   }
   const connectResId = parseResponseId(text);
-  if ((runtime.policy.backend === 'local-model' || runtime.policy.backend === 'pi') && !connectResId) {
+  if ((runtime.policy.backend === 'local-model' || runtime.policy.backend === 'pi' || runtime.policy.backend === 'codex' || runtime.policy.backend === 'claude-code') && !connectResId) {
     // These backends own their session state. Stream updates reach every
     // fully paired device; temporary pairing-ticket sockets are kept separate.
     let event: { type?: string; event?: string };
@@ -555,7 +555,7 @@ export function rejectClientRequestWithoutBridge(
     ok: false,
     error: {
       code: 'BRIDGE_UNAVAILABLE',
-      message: `${runtime.policy.backend === 'pi' ? 'Pi' : 'Hermes'} bridge is temporarily unavailable. Please retry.`,
+      message: `${runtime.policy.backend === 'claude-code' ? 'Claude Code' : runtime.policy.backend === 'codex' ? 'Codex' : runtime.policy.backend === 'pi' ? 'Pi' : 'Hermes'} bridge is temporarily unavailable. Please retry.`,
     },
   });
   try {

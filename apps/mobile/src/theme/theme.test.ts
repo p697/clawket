@@ -147,6 +147,14 @@ describe('Clawket 3.0 theme tokens', () => {
       .toEqual([34, 26, 24, 20, 18]);
     expect([...new Set(Object.values(LineHeight))].sort((a, b) => a - b))
       .toEqual([18, 20, 24, 26, 34]);
+    // Android's CJK fallback metrics clip Latin descenders in a 34-point display line.
+    jest.isolateModules(() => {
+      const { Platform } = require('react-native') as { Platform: { OS: string } };
+      Platform.OS = 'android';
+      const android = require('./tokens') as typeof import('./tokens');
+      expect([android.LineHeight.display, android.LineHeight.title, android.LineHeight.body, android.LineHeight.secondary, android.LineHeight.caption])
+        .toEqual([38, 26, 24, 20, 18]);
+    });
     expect([...new Set(Object.values(FontWeight))].sort()).toEqual(['400', '600']);
     expect([...new Set(Object.values(Space))].sort((a, b) => a - b))
       .toEqual([4, 8, 12, 16, 24, 32]);
@@ -183,6 +191,7 @@ describe('Clawket 3.0 theme tokens', () => {
       companionGaze: 1_200,
       companionBlinkPause: 3_200,
       companionCuriosity: 9_600,
+      voiceRipple: 2_600,
     });
     expect(Shadow.floating).toEqual({
       shadowColor: '#111113',

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Pressable,
   StyleProp,
@@ -7,6 +7,7 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { useAppTheme } from '../../theme';
 import {
   BorderWidth,
@@ -51,6 +52,8 @@ export function ApprovalCard({
   testID,
 }: ApprovalCardProps): React.JSX.Element {
   const { theme } = useAppTheme();
+  const { t } = useTranslation('chat');
+  const [expanded, setExpanded] = useState(false);
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
 
   return (
@@ -70,11 +73,12 @@ export function ApprovalCard({
             testID={testID ? `${testID}-command` : undefined}
             style={styles.command}
             selectable
-            numberOfLines={3}
+            numberOfLines={expanded ? undefined : 3}
           >
             {command}
           </Text>
         ) : null}
+        {command && (command.length > 120 || command.split('\n').length > 3) && !expanded ? <Pressable accessibilityRole="button" onPress={() => setExpanded(true)} hitSlop={Space.sm}><Text style={styles.detail}>{t('Show more')}</Text></Pressable> : null}
         {detail ? <Text style={styles.detail}>{detail}</Text> : null}
         <View style={styles.actions}>
           <ApprovalActionButton

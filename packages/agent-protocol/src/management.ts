@@ -8,8 +8,13 @@ export interface ModelInfo {
   id: string;
   name: string;
   provider: string;
+  /** Optional backend recommendation order within a provider; lower comes first. */
+  sortOrder?: number;
+  /** Native canonical model behind an alias. Display/search only; writes keep `id`. */
+  resolvedModel?: string;
   contextWindow?: number;
   reasoning?: boolean;
+  reasoningLevels?: ThinkingLevel[];
   input?: Array<'text' | 'image'>;
   cost?: {
     input: number;
@@ -30,6 +35,7 @@ export interface ModelProviderInfo {
 }
 
 export interface ModelSelectionState {
+  thinkingLevel?: ThinkingLevel;
   currentModel: string;
   currentProvider: string;
   currentBaseUrl: string;
@@ -133,7 +139,10 @@ export type ThinkingLevel =
   | 'medium'
   | 'high'
   | 'xhigh'
-  | 'adaptive';
+  | 'adaptive'
+  | 'none'
+  | 'max'
+  | 'ultra';
 
 export interface RequirementStatus {
   bins?: string[];
@@ -887,6 +896,7 @@ export type ModelsOperations = Partial<{
     getSelection(sessionKey?: string | null): Promise<ModelSelectionState>;
     setSelection(params: ModelSelectionWrite): Promise<ModelSelectionWriteResult>;
     listThinkingLevels(): ThinkingLevel[];
+    setThinkingLevel(sessionKey: string, level: ThinkingLevel): Promise<ModelSelectionState>;
     /** `modelManage` refinement: Gateway config catalog, defaults and allowlist. */
     getCatalog(): Promise<ModelCatalogState>;
     saveCatalog(write: ModelCatalogWrite): Promise<void>;

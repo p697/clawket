@@ -35,6 +35,8 @@ import {
   OPENCLAW_BACKEND_POLICY,
   LOCAL_MODEL_BACKEND_POLICY,
   PI_BACKEND_POLICY,
+  CODEX_BACKEND_POLICY,
+  CLAUDE_CODE_BACKEND_POLICY,
   clearPrincipalExistenceCache,
   pairedPrincipalExists,
   policyForBackend,
@@ -691,4 +693,12 @@ export const __testing = {
 
 export class PiRelayRoom extends BaseRelayRoom {
   constructor(state: DurableObjectState, env: Env) { super(state, env, PI_BACKEND_POLICY); }
+}
+
+export class CodexRelayRoom extends BaseRelayRoom {
+  constructor(state: DurableObjectState, env: Env) { super(state, env, CODEX_BACKEND_POLICY); }
+}
+
+export class ClaudeCodeRelayRoom extends BaseRelayRoom {
+  constructor(state: DurableObjectState, env: Env) { super(state, env, CLAUDE_CODE_BACKEND_POLICY); }
 }

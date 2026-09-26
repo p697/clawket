@@ -34,6 +34,8 @@ export type UiApproval =
     resolving?: boolean;
     resolutionError?: boolean;
     command: string;
+    category?: 'command' | 'file' | 'network' | 'permissions';
+    reason?: string;
     decisions?: ReadonlyArray<'allow-once' | 'allow-always' | 'deny'>;
     cwd?: string;
     host?: string;

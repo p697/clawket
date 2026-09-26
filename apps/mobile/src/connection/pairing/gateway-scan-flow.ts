@@ -38,7 +38,7 @@ export type GatewayScanPayload = {
   };
 };
 
-export type PairingBackendKind = Extract<GatewayBackendKind, 'openclaw' | 'hermes' | 'local-model' | 'pi'>;
+export type PairingBackendKind = Extract<GatewayBackendKind, 'openclaw' | 'hermes' | 'local-model' | 'pi' | 'codex' | 'claude-code'>;
 
 export type PairingPayloadAssessment =
   | Readonly<{ kind: 'accepted'; backendKind: PairingBackendKind }>
@@ -63,7 +63,7 @@ export function resolvePairingPayloadBackend(
   const hints = new Set<PairingBackendKind>();
 
   if (payload.backendKind !== undefined) {
-    if (payload.backendKind !== 'openclaw' && payload.backendKind !== 'hermes' && payload.backendKind !== 'local-model' && payload.backendKind !== 'pi') {
+    if (payload.backendKind !== 'openclaw' && payload.backendKind !== 'hermes' && payload.backendKind !== 'local-model' && payload.backendKind !== 'pi' && payload.backendKind !== 'codex' && payload.backendKind !== 'claude-code') {
       return null;
     }
     hints.add(payload.backendKind);
@@ -71,7 +71,7 @@ export function resolvePairingPayloadBackend(
 
   if (payload.mode === 'hermes') {
     hints.add('hermes');
-  } else if (payload.backendKind !== 'pi' && payload.mode !== undefined && !(payload.backendKind === 'local-model' && payload.mode === 'relay')) {
+  } else if (payload.backendKind !== 'pi' && payload.backendKind !== 'codex' && payload.backendKind !== 'claude-code' && payload.mode !== undefined && !(payload.backendKind === 'local-model' && payload.mode === 'relay')) {
     hints.add('openclaw');
   }
 
@@ -186,7 +186,7 @@ async function claimOpenClawRelay(
   const relayUrl = claimed.relayUrl.trim();
   return {
     url: relayUrl,
-    backendKind: payload.backendKind === 'pi' ? 'pi' : payload.backendKind === 'local-model' ? 'local-model' : 'openclaw',
+    backendKind: payload.backendKind === 'claude-code' ? 'claude-code' : payload.backendKind === 'codex' ? 'codex' : payload.backendKind === 'pi' ? 'pi' : payload.backendKind === 'local-model' ? 'local-model' : 'openclaw',
     transportKind: 'relay',
     token: payload.token,
     password: payload.password,

@@ -10,6 +10,10 @@ import {
   isEnvironmentIndependentRegistry,
   OFFICIAL_LOCAL_MODEL_PREVIEW_REGISTRY_URL,
   OFFICIAL_PI_REGISTRY_URL,
+  OFFICIAL_CLAUDE_CODE_REGISTRY_URL,
+  OFFICIAL_CLAUDE_CODE_PREVIEW_REGISTRY_URL,
+  OFFICIAL_CODEX_REGISTRY_URL,
+  OFFICIAL_CODEX_PREVIEW_REGISTRY_URL,
 } from '../../services/relay-environment';
 import { parsePairingLink } from '../../services/pairing-session';
 import type { RelayServiceEnvironment } from '../../types';
@@ -25,7 +29,7 @@ import {
   type PairingPayloadAssessment,
 } from './gateway-scan-flow';
 
-export type PairingBackendKind = Extract<BackendKind, 'openclaw' | 'hermes' | 'local-model' | 'pi'>;
+export type PairingBackendKind = Extract<BackendKind, 'openclaw' | 'hermes' | 'local-model' | 'pi' | 'codex' | 'claude-code'>;
 
 export type BackendPairingResult = Readonly<{
   backendKind: PairingBackendKind;
@@ -78,6 +82,28 @@ type BackendPairingProfile = Readonly<{
 }>;
 
 const BACKEND_PAIRING_PROFILES: Readonly<Record<PairingBackendKind, BackendPairingProfile>> = {
+  'claude-code': {
+    reportsCodeOutcome: false,
+    async connectCode(input) {
+      const connected = await input.secureInvitation.connectCode({ serverUrl: input.environment === 'preview' ? OFFICIAL_CLAUDE_CODE_PREVIEW_REGISTRY_URL : OFFICIAL_CLAUDE_CODE_REGISTRY_URL, pairingCode: input.pairingCode, expectedBackendKind: 'claude-code', environment: input.environment });
+      return connected ? requireExpectedActiveConnection('claude-code', input.runtime) : null;
+    },
+    async connectLink(input) {
+      const connected = await input.secureInvitation.connectLink(input.url, { expectedBackendKind: 'claude-code', environment: input.environment });
+      return connected ? requireExpectedActiveConnection('claude-code', input.runtime) : null;
+    },
+  },
+  codex: {
+    reportsCodeOutcome: false,
+    async connectCode(input) {
+      const connected = await input.secureInvitation.connectCode({ serverUrl: input.environment === 'preview' ? OFFICIAL_CODEX_PREVIEW_REGISTRY_URL : OFFICIAL_CODEX_REGISTRY_URL, pairingCode: input.pairingCode, expectedBackendKind: 'codex', environment: input.environment });
+      return connected ? requireExpectedActiveConnection('codex', input.runtime) : null;
+    },
+    async connectLink(input) {
+      const connected = await input.secureInvitation.connectLink(input.url, { expectedBackendKind: 'codex', environment: input.environment });
+      return connected ? requireExpectedActiveConnection('codex', input.runtime) : null;
+    },
+  },
   pi: {
     reportsCodeOutcome: false,
     async connectCode(input) {

@@ -1,5 +1,6 @@
 import {
   pruneOrderedSelection,
+  resolveAddSheetMediaMode,
   resolveMediaStripTileSize,
   selectionOrdinal,
   toggleOrderedSelection,
@@ -36,5 +37,22 @@ describe('threadAddSheetSelection', () => {
     expect(resolveMediaStripTileSize(120, 8)).toBe(84);
     expect(resolveMediaStripTileSize(1000, 8)).toBe(104);
     expect(resolveMediaStripTileSize(0, 8)).toBe(84);
+  });
+
+  it('draws the final media layout from known access and keeps the skeleton for unknown access only', () => {
+    const base = { recentPhotos: true, photoCount: 0, loading: false, tileCount: 3 } as const;
+    expect(resolveAddSheetMediaMode({ ...base, access: 'checking', loading: true })).toBe('skeleton');
+    // Granted access holds the strip layout while the list is still loading.
+    expect(resolveAddSheetMediaMode({ ...base, access: 'granted', loading: true })).toBe('strip');
+    expect(resolveAddSheetMediaMode({ ...base, access: 'granted', photoCount: 4 })).toBe('strip');
+    // An empty (or empty limited) library falls back to the three tiles.
+    expect(resolveAddSheetMediaMode({ ...base, access: 'granted' })).toBe('tiles');
+    expect(resolveAddSheetMediaMode({ ...base, access: 'denied' })).toBe('tiles');
+    expect(resolveAddSheetMediaMode({ ...base, access: 'undetermined' })).toBe('tiles');
+    expect(resolveAddSheetMediaMode({ ...base, access: 'unavailable' })).toBe('tiles');
+    // Hosts without recent photos never show the strip or its skeleton.
+    expect(resolveAddSheetMediaMode({ ...base, recentPhotos: false, access: 'checking', loading: true })).toBe('tiles');
+    expect(resolveAddSheetMediaMode({ ...base, recentPhotos: false, access: 'granted', photoCount: 4 })).toBe('tiles');
+    expect(resolveAddSheetMediaMode({ ...base, recentPhotos: false, access: 'unavailable', tileCount: 0 })).toBe('none');
   });
 });

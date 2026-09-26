@@ -1,3 +1,7 @@
+export const OFFICIAL_CLAUDE_CODE_REGISTRY_URL = 'https://clawket-claude-code-registry.clawket.workers.dev';
+export const OFFICIAL_CLAUDE_CODE_PREVIEW_REGISTRY_URL = 'https://clawket-claude-code-registry-preview.clawket.workers.dev';
+export const OFFICIAL_CODEX_REGISTRY_URL = 'https://clawket-codex-registry.clawket.workers.dev';
+export const OFFICIAL_CODEX_PREVIEW_REGISTRY_URL = 'https://clawket-codex-registry-preview.clawket.workers.dev';
 import type { RelayServiceEnvironment } from '../types';
 
 export const OFFICIAL_PRODUCTION_REGISTRY_URL = 'https://registry.clawket.ai';
@@ -65,6 +69,8 @@ export function getOfficialHermesRegistryUrl(environment: RelayServiceEnvironmen
 
 const OFFICIAL_PREVIEW_REGISTRY_ORIGINS = new Set([
   normalizeOrigin(OFFICIAL_PI_PREVIEW_REGISTRY_URL),
+  normalizeOrigin(OFFICIAL_CLAUDE_CODE_PREVIEW_REGISTRY_URL),
+  normalizeOrigin(OFFICIAL_CODEX_PREVIEW_REGISTRY_URL),
   normalizeOrigin(OFFICIAL_LOCAL_MODEL_PREVIEW_REGISTRY_URL),
   normalizeOrigin(OFFICIAL_PREVIEW_REGISTRY_URL),
   normalizeOrigin(OFFICIAL_HERMES_PREVIEW_REGISTRY_URL),
@@ -76,6 +82,8 @@ const ENVIRONMENT_INDEPENDENT_REGISTRY_ORIGINS = new Set([
 ]);
 
 const OFFICIAL_PRODUCTION_REGISTRY_ORIGINS = new Set([
+  normalizeOrigin(OFFICIAL_CLAUDE_CODE_REGISTRY_URL),
+  normalizeOrigin(OFFICIAL_CODEX_REGISTRY_URL),
   normalizeOrigin(OFFICIAL_PI_REGISTRY_URL),
   normalizeOrigin(OFFICIAL_PRODUCTION_REGISTRY_URL),
   normalizeOrigin(OFFICIAL_HERMES_PRODUCTION_REGISTRY_URL),

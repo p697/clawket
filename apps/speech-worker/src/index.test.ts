@@ -8,18 +8,18 @@ import { serveSession } from './session';
 
 const NativeResponse = Response;
 describe('speech admission and upgrade', () => {
-  const reserve = vi.fn(), release = vi.fn(), upstream = vi.fn(), waitUntil = vi.fn();
-  let server: { binaryType: string; accept: ReturnType<typeof vi.fn> };
+  const reserve = vi.fn(), release = vi.fn(), activate = vi.fn(), upstream = vi.fn(), waitUntil = vi.fn();
+  let server: EventTarget & { binaryType: string; accept: ReturnType<typeof vi.fn> };
   const env = { SPEECH_ENABLED: 'true', ALIYUN_SPEECH_API_KEY: 'test-secret',
     ALIYUN_SPEECH_URL: 'https://workspace.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference',
-    ADMISSION: { getByName: () => ({ reserveDetailed: reserve, release }) } } as unknown as Env & { ALIYUN_SPEECH_API_KEY: string };
+    ADMISSION: { getByName: () => ({ reservePending: reserve, reserveDetailed: reserve, release, activate }) } } as unknown as Env & { ALIYUN_SPEECH_API_KEY: string };
   const request = () => new Request('https://speech.example/v1/speech', { headers: { Upgrade: 'websocket' } });
   const run = () => worker.fetch(request(), env, { waitUntil } as unknown as ExecutionContext);
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(verifyRequest).mockResolvedValue({ device: 'device', nonce: 'nonce' });
-    reserve.mockResolvedValue({ allowed: true }); release.mockResolvedValue(undefined);
-    server = { binaryType: 'blob', accept: vi.fn(() => expect(server.binaryType).toBe('arraybuffer')) };
+    activate.mockResolvedValue(true); reserve.mockResolvedValue({ allowed: true }); release.mockResolvedValue(undefined);
+    server = Object.assign(new EventTarget(), { binaryType: 'blob', accept: vi.fn(() => expect(server.binaryType).toBe('arraybuffer')) });
     vi.stubGlobal('WebSocketPair', class { 0 = {}; 1 = server; });
     vi.stubGlobal('Response', class extends NativeResponse {
       constructor(body?: BodyInit | null, init?: ResponseInit) {
@@ -109,8 +109,82 @@ describe('speech admission and upgrade', () => {
     reserve.mockResolvedValueOnce({ allowed: false, reason, retryAfterMs: 1234 });
     const request = new Request('https://speech.example/v1/speech', { headers: { Upgrade: 'websocket', 'x-speech-protocol': '2' } });
     expect((await worker.fetch(request, env, { waitUntil } as unknown as ExecutionContext)).status).toBe(101);
+    await Promise.all(waitUntil.mock.calls.map(([promise]) => promise));
     expect(JSON.parse(send.mock.calls[0]![0])).toMatchObject({ type: 'error', code, retryAfterMs: 1234, requestId: expect.any(String) });
     expect(upstream).not.toHaveBeenCalled(); expect(close).toHaveBeenCalled();
+  });
+
+  it('keeps setup alive and releases a reservation that commits after the caller disconnects', async () => {
+    let complete!: (value: { allowed: boolean }) => void;
+    reserve.mockReturnValueOnce(new Promise(resolve => { complete = resolve; }));
+    const abort = new AbortController();
+    const response = worker.fetch(new Request('https://speech.example/v1/speech', {
+      headers: { Upgrade: 'websocket' }, signal: abort.signal,
+    }), env, { waitUntil } as unknown as ExecutionContext);
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+    expect(waitUntil).toHaveBeenCalled();
+    abort.abort(); complete({ allowed: true });
+    await response;
+    expect(release).toHaveBeenCalledWith('nonce');
+    expect(upstream).not.toHaveBeenCalled();
+  });
+
+  it('aborts provider setup on disconnect and never activates a speech task', async () => {
+    let started!: () => void;
+    const fetching = new Promise<void>(resolve => { started = resolve; });
+    upstream.mockImplementation((_url, options) => new Promise((_resolve, reject) => {
+      options.signal.addEventListener('abort', () => reject(Error('aborted'))); started();
+    }));
+    const abort = new AbortController();
+    const response = worker.fetch(new Request('https://speech.example/v1/speech', {
+      headers: { Upgrade: 'websocket' }, signal: abort.signal,
+    }), env, { waitUntil } as unknown as ExecutionContext);
+    await fetching; abort.abort();
+    expect((await response).status).toBe(499);
+    expect(release).toHaveBeenCalledTimes(1);
+    expect(activate).not.toHaveBeenCalled(); expect(serveSession).not.toHaveBeenCalled();
+  });
+
+  it('closes a provider socket if setup lost its reservation before activation', async () => {
+    const close = vi.fn();
+    upstream.mockResolvedValue({ status: 101, webSocket: { accept: vi.fn(), close } });
+    activate.mockResolvedValue(false);
+    expect((await run()).status).toBe(502);
+    expect(close).toHaveBeenCalled(); expect(release).toHaveBeenCalledWith('nonce');
+    expect(serveSession).not.toHaveBeenCalled();
+  });
+
+  it('does not start provider work when an admission RPC outlives the setup deadline', async () => {
+    vi.useFakeTimers();
+    let complete!: (value: { allowed: boolean }) => void;
+    reserve.mockResolvedValueOnce({ allowed: true }).mockReturnValueOnce(new Promise(resolve => { complete = resolve; }));
+    const response = run();
+    await vi.advanceTimersByTimeAsync(20001);
+    complete({ allowed: true }); await response;
+    expect(release).toHaveBeenCalledWith('nonce'); expect(upstream).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('retries a transient release failure before completing setup cleanup', async () => {
+    vi.useFakeTimers();
+    release.mockRejectedValueOnce(Error('storage unavailable'));
+    reserve.mockResolvedValueOnce({ allowed: true }).mockResolvedValueOnce({ allowed: false, reason: 'quota', retryAfterMs: 5000 });
+    const response = run(); await vi.advanceTimersByTimeAsync(101);
+    expect((await response).status).toBe(429);
+    expect(release).toHaveBeenCalledTimes(2); expect(upstream).not.toHaveBeenCalled();
+  });
+
+  it('accepts v2 before slow setup and cleans up when its socket closes', async () => {
+    let complete!: (value: { allowed: boolean }) => void;
+    reserve.mockReturnValueOnce(new Promise(resolve => { complete = resolve; }));
+    Object.assign(server, { send: vi.fn(), close: vi.fn() });
+    const response = await worker.fetch(new Request('https://speech.example/v1/speech', {
+      headers: { Upgrade: 'websocket', 'x-speech-protocol': '2' },
+    }), env, { waitUntil } as unknown as ExecutionContext);
+    expect(response.status).toBe(101); expect(upstream).not.toHaveBeenCalled();
+    server.dispatchEvent(new Event('close')); complete({ allowed: true });
+    await Promise.all(waitUntil.mock.calls.map(([promise]) => promise));
+    expect(release).toHaveBeenCalledWith('nonce'); expect(activate).not.toHaveBeenCalled();
   });
 
 });

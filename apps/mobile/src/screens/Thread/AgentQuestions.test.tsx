@@ -1,3 +1,4 @@
+jest.mock('lucide-react-native', () => ({ Circle: () => null, CircleCheck: () => null, Square: () => null, SquareCheck: () => null, ChevronRight: () => null, MessageCircleQuestion: () => null }));
 import React from 'react';
 import { Keyboard } from 'react-native';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
@@ -7,7 +8,7 @@ import { createMockAdapter, type AgentQuestion } from '@clawket/agent-protocol';
 jest.mock('react-native', () => {
   const R = require('react');
   const host = (name: string) => ({ children, ...props }: any) => R.createElement(name, props, children);
-  return { Keyboard: { dismiss: jest.fn() }, View: host('View'), Text: host('Text'), TextInput: host('TextInput'), StyleSheet: { create: (value: unknown) => value } };
+  return { Platform: { OS: 'ios' }, Keyboard: { dismiss: jest.fn() }, View: host('View'), Pressable: host('Pressable'), Text: host('Text'), TextInput: host('TextInput'), StyleSheet: { create: (value: unknown) => value } };
 });
 jest.mock('../../components/ui/Sheet', () => ({ Sheet: ({ visible, children, footer, ...props }: any) => visible ? <>{children}{footer}</> : null }));
 jest.mock('../../components/ui/Banner', () => ({ Banner: ({ message, actionLabel, onAction }: any) => { const { Text } = require('react-native'); return <><Text>{message}</Text><Text onPress={onAction}>{actionLabel}</Text></>; } }));
@@ -50,4 +51,66 @@ it('cancels without granting confirmation and ignores a late snapshot from anoth
   view.rerender(<AgentQuestions adapter={adapter} sessionKey="other" />);
   view.unmount(); await act(async () => resolve([{ id: 'late', kind: 'confirm', title: 'Late', expiresAtMs: null }]));
   expect(respond).toHaveBeenCalledTimes(1);
+});
+
+jest.mock('../../components/ui/SettingsGroup', () => ({ SettingsGroup: ({ children }: any) => <>{children}</>, SettingsRow: ({ title, onPress }: any) => { const { Text } = require('react-native'); return <Text onPress={onPress}>{title}</Text>; } }));
+
+it('keeps a structured question pending after stop acknowledgement until native resolution', async () => {
+  const { adapter, respond } = setup({ id: 'stop-form', kind: 'form', title: 'Plan?', fields: [{ id: 'decision', title: 'Choose', options: [], allowCustom: true }], expiresAtMs: null });
+  const view = render(<AgentQuestions adapter={adapter} sessionKey="s" />);
+  await waitFor(() => expect(view.getByText('Respond')).toBeTruthy()); fireEvent.press(view.getByText('Respond'));
+  fireEvent.press(view.getByText('Stop task'));
+  await waitFor(() => expect(respond).toHaveBeenCalledWith('s', 'stop-form', { cancelled: true }));
+  expect(view.getByText('Respond')).toBeTruthy();
+});
+
+it('aggregates all native question IDs and retains custom answers through a failed submission', async () => {
+  const { adapter, respond } = setup({ id: 'multi-form', kind: 'form', title: 'Plan?', fields: [
+    { id: 'format', title: 'Format?', options: [{ label: 'Compact', description: 'Brief explanation' }], allowCustom: true },
+    { id: 'language', title: 'Language?', options: [], allowCustom: true },
+  ], expiresAtMs: null });
+  const view = render(<AgentQuestions adapter={adapter} sessionKey="s" />);
+  await waitFor(() => expect(view.getByText('Respond')).toBeTruthy()); fireEvent.press(view.getByText('Respond'));
+  fireEvent.press(view.getByText('Compact')); fireEvent.press(view.getByText('Next'));
+  fireEvent.changeText(view.getByTestId('codex-question-answer'), 'Chinese with English terms');
+  respond.mockRejectedValueOnce(new Error('offline'));
+  fireEvent.press(view.getByText('Send'));
+  await waitFor(() => expect(view.getByText('Could not update this request. Try again.')).toBeTruthy());
+  expect(view.getByTestId('codex-question-answer').props.value).toBe('Chinese with English terms');
+  fireEvent.press(view.getByText('Send'));
+  await waitFor(() => expect(respond).toHaveBeenCalledTimes(2));
+  expect(respond).toHaveBeenLastCalledWith('s', 'multi-form', { answers: { format: ['Compact'], language: ['Chinese with English terms'] } });
+});
+
+it('exposes mutually exclusive radio choices and opens custom input only on demand', async () => {
+  const { adapter } = setup({ id: 'radio-form', kind: 'form', title: 'Choose?', fields: [{ id: 'choice', title: 'Choose?', options: [{ label: 'One' }, { label: 'Two' }], allowCustom: true }], expiresAtMs: null });
+  const view = render(<AgentQuestions adapter={adapter} sessionKey="s" />);
+  await waitFor(() => expect(view.getByText('Respond')).toBeTruthy()); fireEvent.press(view.getByText('Respond'));
+  expect(view.queryByTestId('codex-question-answer')).toBeNull();
+  expect(view.getByTestId('codex-question-option-0').props.accessibilityState.checked).toBe(false);
+  fireEvent.press(view.getByText('One'));
+  expect(view.getByTestId('codex-question-option-0').props.accessibilityState.checked).toBe(true);
+  fireEvent.press(view.getByText('Two'));
+  expect(view.getByTestId('codex-question-option-0').props.accessibilityState.checked).toBe(false);
+  expect(view.getByTestId('codex-question-option-1').props.accessibilityState.checked).toBe(true);
+  fireEvent.press(view.getByTestId('codex-question-custom'));
+  expect(view.getByTestId('codex-question-answer').props.value).toBe('');
+  expect(view.getByTestId('codex-question-option-1').props.accessibilityState.checked).toBe(false);
+});
+
+it('lets Claude multi-select questions toggle independent checkboxes and submit all selections', async () => {
+  const { adapter, respond } = setup({ id: 'claude-multi', kind: 'form', title: 'Tests?', fields: [{ id: 'tests', title: 'Which tests?', multiSelect: true, options: [{ label: 'Unit' }, { label: 'Integration' }], allowCustom: true }], expiresAtMs: null });
+  const view = render(<AgentQuestions adapter={adapter} sessionKey="s" />);
+  await waitFor(() => expect(view.getByText('Respond')).toBeTruthy()); fireEvent.press(view.getByText('Respond'));
+  expect(view.getByTestId('codex-question-option-0').props.accessibilityRole).toBe('checkbox');
+  act(() => {
+    view.getByTestId('codex-question-option-0').props.onPress();
+    view.getByTestId('codex-question-option-1').props.onPress();
+  });
+  expect(view.getByTestId('codex-question-option-0').props.accessibilityState.checked).toBe(true);
+  expect(view.getByTestId('codex-question-option-1').props.accessibilityState.checked).toBe(true);
+  fireEvent.press(view.getByText('Unit'));
+  expect(view.getByTestId('codex-question-option-0').props.accessibilityState.checked).toBe(false);
+  fireEvent.press(view.getByText('Unit')); fireEvent.press(view.getByText('Send'));
+  await waitFor(() => expect(respond).toHaveBeenCalledWith('s', 'claude-multi', { answers: { tests: ['Integration', 'Unit'] } }));
 });

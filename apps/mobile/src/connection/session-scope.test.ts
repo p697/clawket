@@ -51,3 +51,12 @@ describe('connection session scope', () => {
     });
   });
 });
+
+it('routes sessions-first agents to the picker and accepts opaque actual chat keys', () => {
+  expect(resolveConnectedThreadTarget('codex', [{ connectionId: 'c', agentId: 'codex', name: 'Codex', isMain: true, mainSessionKey: '', entryMode: 'sessions' }]))
+    .toEqual({ agentId: 'codex', sessionKey: '' });
+  expect(isSessionKeyInAgentScope('opaque-id', 'codex', { mainSessionKey: '' })).toBe(true);
+  expect(isSessionKeyInAgentScope('agent:main:main', 'codex', { mainSessionKey: '' })).toBe(false);
+  expect(isSessionKeyInAgentScope('', 'codex', { mainSessionKey: '' })).toBe(false);
+  expect(sanitizeSnapshotForAgent({ sessionKey: 'opaque-id', agentId: 'other' }, 'codex', { mainSessionKey: '' })).toBeNull();
+});

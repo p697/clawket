@@ -140,6 +140,7 @@
   "Online": "Trực tuyến",
   "Offline": "Ngoại tuyến",
   "Connecting": "Đang kết nối",
+  "Not connected": "Chưa kết nối",
   "Models": "Mô hình",
   "Skills": "Kỹ năng",
   "Usage": "Mức sử dụng",
@@ -168,6 +169,8 @@
   "Reset session?": "Đặt lại phiên này?",
   "Reset": "Đặt lại",
   "Scheduled": "Đã lên lịch",
+  "Scheduled task": "Tác vụ theo lịch",
+  "Scheduled task: {{name}}": "Tác vụ theo lịch: {{name}}",
   "Search sessions": "Tìm phiên",
   "Session actions": "Thao tác với phiên",
   "Sessions require permission": "Cần quyền để xem phiên",
@@ -247,5 +250,10 @@
   "Search and bulk export": "Tìm kiếm và xuất hàng loạt",
   "Skill and memory versions": "Phiên bản kỹ năng và bộ nhớ",
   "Yes": "Có",
-  "No": "Không"
+  "No": "Không",
+  "All projects": "Tất cả dự án",
+  "Projects": "Dự án",
+  "Choose a project": "Chọn dự án",
+  "Search projects": "Tìm dự án",
+  "Next": "Tiếp theo"
 }

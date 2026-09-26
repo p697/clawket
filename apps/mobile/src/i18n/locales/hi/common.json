@@ -140,6 +140,7 @@
   "Online": "ऑनलाइन",
   "Offline": "ऑफ़लाइन",
   "Connecting": "कनेक्ट हो रहा है",
+  "Not connected": "कनेक्ट नहीं है",
   "Models": "मॉडल",
   "Skills": "स्किल",
   "Usage": "उपयोग",
@@ -168,6 +169,8 @@
   "Reset session?": "सेशन रीसेट करें?",
   "Reset": "रीसेट करें",
   "Scheduled": "शेड्यूल किया गया",
+  "Scheduled task": "शेड्यूल किया गया कार्य",
+  "Scheduled task: {{name}}": "शेड्यूल किया गया कार्य: {{name}}",
   "Search sessions": "सेशन खोजें",
   "Session actions": "सेशन क्रियाएँ",
   "Sessions require permission": "सेशन के लिए अनुमति ज़रूरी है",
@@ -247,5 +250,10 @@
   "Search and bulk export": "खोज और एक साथ निर्यात",
   "Skill and memory versions": "कौशल और मेमोरी के संस्करण",
   "Yes": "हाँ",
-  "No": "नहीं"
+  "No": "नहीं",
+  "All projects": "सभी प्रोजेक्ट",
+  "Projects": "प्रोजेक्ट",
+  "Choose a project": "प्रोजेक्ट चुनें",
+  "Search projects": "प्रोजेक्ट खोजें",
+  "Next": "अगला"
 }

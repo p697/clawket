@@ -431,6 +431,7 @@ export function resolveThreadHeaderName(
 }
 
 export type ThreadHeaderSubtitleInput = Readonly<{
+  projectPath?: string | null;
   capabilities: Capabilities;
   state: ThreadContentState;
   isRunning: boolean;
@@ -444,6 +445,7 @@ export type ThreadHeaderSubtitleInput = Readonly<{
 }>;
 
 export function resolveThreadHeaderSubtitle({
+  projectPath,
   capabilities,
   state,
   isRunning,
@@ -457,6 +459,7 @@ export function resolveThreadHeaderSubtitle({
 }: ThreadHeaderSubtitleInput): string {
   if (state.kind === 'offline') return offlineLabel;
   if (isRunning) return activityLabel?.trim() || thinkingLabel;
+  if (projectPath?.trim() && (state.kind === 'ready' || state.kind === 'empty')) return projectPath.trim();
   if (!capabilities.models) return '';
 
   const normalizedModel = model?.trim() ?? '';
@@ -547,7 +550,11 @@ export function groupThreadTools(items: ThreadTimelineItem[], expanded: Readonly
       calls.push(next); index += 1;
     }
     if (calls.length < 2) { result.push(...calls); continue; }
-    const key = `tools:${calls[calls.length - 1]!.message.id}`;
+    // Keyed like message rows: history can replace a live call's id
+    // (`toolcall_` → `toolresult_`, Hermes aliases) while its render identity,
+    // and with it the group and its expanded state, stays put.
+    const oldest = calls[calls.length - 1]!.message;
+    const key = `tools:${oldest.renderKey ?? oldest.id}`;
     // Inverted list: children follow the summary visually, newest first in data.
     if (expanded.has(key)) result.push(...calls);
     result.push({ type: 'tools', key, timestampMs: item.timestampMs, messages: calls.map((call) => call.message) });
@@ -591,4 +598,58 @@ export function withThreadRhythm(items: ReadonlyArray<ThreadTimelineItem>): Thre
     else gapAbove = timelineVoice(item) === timelineVoice(older) ? 'stack' : 'turn';
     return { ...item, gapAbove };
   });
+}
+
+function hasSameFields(left: object, right: object): boolean {
+  if (left === right) return true;
+  const leftRecord = left as Record<string, unknown>;
+  const rightRecord = right as Record<string, unknown>;
+  const keys = Object.keys(leftRecord);
+  if (keys.length !== Object.keys(rightRecord).length) return false;
+  return keys.every((key) => (
+    Object.prototype.hasOwnProperty.call(rightRecord, key) && Object.is(leftRecord[key], rightRecord[key])
+  ));
+}
+
+function hasSameMessages(left: ReadonlyArray<UiMessage>, right: ReadonlyArray<UiMessage>): boolean {
+  return left === right
+    || (left.length === right.length && left.every((message, index) => hasSameFields(message, right[index]!)));
+}
+
+function reuseThreadRow(previous: ThreadTimelineRow, next: ThreadTimelineRow): ThreadTimelineRow {
+  if (previous === next) return previous;
+  if (previous.type !== next.type || previous.gapAbove !== next.gapAbove || previous.timestampMs !== next.timestampMs) return next;
+  switch (next.type) {
+    case 'message':
+      return previous.type === 'message' && hasSameFields(previous.message, next.message) ? previous : next;
+    case 'tools':
+      return previous.type === 'tools' && hasSameMessages(previous.messages, next.messages) ? previous : next;
+    case 'run':
+      return previous.type === 'run' && previous.run === next.run ? previous : next;
+    case 'date':
+      return previous.type === 'date' && previous.label === next.label ? previous : next;
+  }
+}
+
+/**
+ * Keeps the previous render's row objects wherever a row would render the same
+ * thing. Streaming rebuilds the whole timeline for every chunk; without this,
+ * each chunk hands the list a fresh object for every row and re-renders every
+ * visible cell instead of only the reply that grew. Returns `previous` itself
+ * when no row changed.
+ */
+export function stabilizeThreadRows(
+  previous: ReadonlyArray<ThreadTimelineRow>,
+  next: ReadonlyArray<ThreadTimelineRow>,
+): ReadonlyArray<ThreadTimelineRow> {
+  if (previous === next) return previous;
+  const previousByKey = new Map(previous.map((row) => [row.key, row]));
+  let changed = previous.length !== next.length;
+  const rows = next.map((row, index) => {
+    const known = previousByKey.get(row.key);
+    const stable = known ? reuseThreadRow(known, row) : row;
+    if (stable !== previous[index]) changed = true;
+    return stable;
+  });
+  return changed ? rows : previous;
 }

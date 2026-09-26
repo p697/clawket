@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next';
 import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   BackHandler,
+  type LayoutChangeEvent,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   Keyboard,
@@ -19,11 +20,12 @@ import {
   View,
   type ViewStyle,
 } from 'react-native';
-import { FlashList, type FlashListRef, type ListRenderItemInfo } from '@shopify/flash-list';
+import { FlashList, type FlashListProps, type FlashListRef, type ListRenderItemInfo } from '@shopify/flash-list';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { EnrichedMarkdownText } from 'react-native-enriched-markdown';
 import Animated, {
   Easing,
+  FadeOut,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
@@ -100,6 +102,7 @@ import { PendingImageBar } from '../../components/chat/PendingImageBar';
 import { SlashSuggestions } from '../../components/chat/SlashSuggestions';
 import { ThinkingLevelMenu } from '../../components/chat/ThinkingLevelMenu';
 import { ToolDetailModal } from '../../components/chat/ToolDetailModal';
+import { cronSessionName } from '../../utils/chat-message';
 import {
   createChatMarkdownStyle,
   getChatMarkdownFlavor,
@@ -110,6 +113,7 @@ import {
   groupThreadTools,
   resolveThreadHeaderName,
   resolveThreadHeaderSubtitle,
+  stabilizeThreadRows,
   type ThreadContentState,
   type ThreadRowGap,
   type ThreadRunCard,
@@ -129,10 +133,14 @@ import { resolveUserMessageStatuses, type UserMessageStatus } from '../../chat/m
 import { useThreadMessageEntrance } from '../../chat/useThreadMessageEntrance';
 import { useThreadRunEntrance } from '../../chat/useThreadRunEntrance';
 import { useSmoothedStreamText } from '../../chat/useSmoothedStreamText';
+import { useStreamingSettleHold } from '../../chat/useStreamingSettleHold';
 
 const THREAD_MARKDOWN_FLAVOR = getChatMarkdownFlavor();
 // Terminates markdown syntax that is still open while tokens stream in, so a
 // half-typed `**bold` or `` `code `` never flickers between literal and styled.
+// Escapes that rewrite already complete text stay off: they would render the
+// streamed reply differently from the settled one (`- > 25` as text, then as
+// a quote) and make it change style and height the moment it ends.
 const STREAMING_REMEND_OPTIONS = {
   bold: true,
   italic: true,
@@ -144,6 +152,8 @@ const STREAMING_REMEND_OPTIONS = {
   inlineCode: true,
   katex: false,
   setextHeadings: true,
+  comparisonOperators: false,
+  singleTilde: false,
 };
 /**
  * The reply bubble exists from the moment a turn is sent: it carries the
@@ -155,6 +165,36 @@ const REPLY_PLACEHOLDER: UiMessage = { id: REPLY_PLACEHOLDER_ID, role: 'assistan
 /** Execution summaries outgrow the screen: the run sheet scrolls inside fixed detents. */
 const RUN_RESULT_SNAP_POINTS: string[] = ['68%', '92%'];
 const EMPTY_RUN_CARDS: ReadonlyArray<ThreadRunCard> = Object.freeze([]);
+const EMPTY_TIMELINE_ROWS: ReadonlyArray<ThreadTimelineRow> = Object.freeze([]);
+/** The last committed list geometry, owned by one list instance. */
+type CommittedTimelineLayout = Readonly<{
+  list: FlashListRef<ThreadTimelineRow> | null;
+  content: number;
+  viewport: number;
+  /** Key and count of the rows that geometry was measured for. */
+  tailKey: string | null;
+  rows: number;
+}>;
+const UNMEASURED_TIMELINE_LAYOUT: CommittedTimelineLayout = { list: null, content: -1, viewport: -1, tailKey: null, rows: 0 };
+/**
+ * A new row that lands while the reader follows glides into view like a
+ * messenger instead of jumping the whole list; larger bursts (a restored page)
+ * and viewport changes still snap.
+ */
+const FOLLOW_GLIDE_MAX_VIEWPORT_RATIO = 0.6;
+/** Longer than the native animated scroll (about 300 ms on iOS, 250 ms on Android). */
+const FOLLOW_GLIDE_SETTLE_MS = 420;
+/**
+ * The list opens on its newest row. FlashList scrolls to that row's top plus
+ * this offset and the native scroll view clamps it to the real end, so a
+ * newest reply taller than the screen still opens at its bottom.
+ */
+const INITIAL_SCROLL_TO_END = { viewOffset: 1_000_000 } as const;
+/** Reveals a list that opened on saved rows even if its load never reports. */
+const TIMELINE_PLACEMENT_TIMEOUT_MS = 320;
+const EMPTY_HINT_EXIT = FadeOut.duration(Motion.duration.fast);
+const getTimelineRowKey = (row: ThreadTimelineRow): string => row.key;
+const getTimelineRowType = (row: ThreadTimelineRow): string => row.type;
 
 function areMessageStatusesEqual(
   left: ReadonlyMap<string, UserMessageStatus>,
@@ -180,7 +220,6 @@ export type ThreadCopy = Readonly<{
   voice: string;
   stopVoice: string;
   listening: string;
-  preparingVoice: string;
   send: string;
   stop: string;
   queueSend?: string;
@@ -257,6 +296,7 @@ export type ThreadViewProps = Readonly<{
   agentEmoji?: string | null;
   agentAvatarUrl?: string | null;
   sessionTitle?: string | null;
+  projectPath?: string | null;
   isMainSession?: boolean;
   model?: string | null;
   modelDisplayName?: string | null;
@@ -266,7 +306,7 @@ export type ThreadViewProps = Readonly<{
   capabilities: Capabilities;
   state: ThreadContentState;
   messages: ReadonlyArray<UiMessage>;
-  sessionPreview?: { loading?: boolean; hasHiddenHistory: boolean; onUpgrade: () => void; onMain: () => void };
+  sessionPreview?: { loading?: boolean; hasHiddenHistory: boolean; onUpgrade: () => void; onMain: () => void; mainLabel?: string };
   compactionNotice?: string | null;
   sendFailure?: string | null;
   sendFailureDetails?: string | null;
@@ -278,6 +318,8 @@ export type ThreadViewProps = Readonly<{
   pendingQuestions?: React.ReactNode;
   readOnlyFooter?: React.ReactNode;
   isRunning: boolean;
+  /** Identity of the live reply row the controller will add for the current run. */
+  pendingReplyRenderKey?: string | null;
   canSend: boolean;
   loadingMoreHistory?: boolean;
   topInset?: number;
@@ -378,6 +420,7 @@ export function ThreadView({
   agentEmoji,
   agentAvatarUrl,
   sessionTitle,
+  projectPath,
   isMainSession = true,
   model,
   modelDisplayName,
@@ -399,6 +442,7 @@ export function ThreadView({
   pendingQuestions,
   readOnlyFooter,
   isRunning,
+  pendingReplyRenderKey,
   canSend,
   loadingMoreHistory = false,
   topInset = 0,
@@ -494,9 +538,16 @@ export function ThreadView({
 
   const connectionOutage = state.kind === 'error' && ['network', 'timeout', 'server', 'bridge_offline', 'gateway_offline'].includes(state.code);
   const locked = state.kind === 'locked';
-  const headerName = resolveThreadHeaderName(agentName, sessionTitle && sessionTitle === sessionKey ? t('New session') : sessionTitle, isMainSession);
   // A scheduled run's transcript is read, not continued: the header names it and the composer stays away.
   const isCronSession = Boolean(sessionKey?.includes(':cron:'));
+  const untitledSession = sessionTitle === sessionKey;
+  const cronName = isCronSession && !untitledSession ? cronSessionName(sessionTitle) : '';
+  const cronTitle = cronName ? t('Scheduled task: {{name}}', { name: cronName }) : t('Scheduled task');
+  const headerName = resolveThreadHeaderName(
+    agentName,
+    sessionTitle && (isCronSession ? cronTitle : untitledSession ? t('New session') : sessionTitle),
+    isMainSession,
+  );
   const replyEntrance = useReplyEntranceDelay(messages, sessionKey, messageSubmittedAt, reduceMotion);
   const presentedRunning = isRunning && !replyEntrance.holding;
   const headerSubtitle = state.kind === 'reconnecting' ? t('Reconnecting…') : resolveThreadHeaderSubtitle({
@@ -509,6 +560,7 @@ export function ThreadView({
     contextWindow,
     offlineLabel: copy.offline,
     thinkingLabel: copy.thinking,
+    projectPath,
     formatModelContext: (_model, percent) => t('Context remaining: {{percent}}%', { ns: 'chat', percent }),
   });
   // The header never wears the working badge: while a run is active the pill
@@ -521,8 +573,7 @@ export function ThreadView({
   // skills, commands, thinking, cron, tools); the view only needs the handler.
   const canOpenAddMenu = Boolean(onOpenAddMenu);
   const canUseVoice = Boolean(onVoice);
-  const composerPlaceholder = !canUseVoice || voiceState === 'idle' ? copy.placeholder
-    : voiceState === 'listening' ? copy.listening : copy.preparingVoice;
+  const composerPlaceholder = canUseVoice && voiceState === 'listening' ? copy.listening : copy.placeholder;
   const canCancel = capabilities.abort && Boolean(onCancel);
   const timelineClearance = Space.lg;
   const timelineTopClearance = headerHeight + Space.lg;
@@ -536,11 +587,19 @@ export function ThreadView({
   const showReplyPlaceholder = presentedRunning && !locked && !sessionPreview
     && !messages.some((message) => message.id === REPLY_PLACEHOLDER_ID
       || (message.role === 'assistant' && message.streaming === true));
+  // Carries the controller's identity for this run's reply, so the first
+  // streamed row takes over this placeholder's cell instead of replacing it.
+  const replyPlaceholder = useMemo(() => (pendingReplyRenderKey
+    ? { ...REPLY_PLACEHOLDER, renderKey: pendingReplyRenderKey } : REPLY_PLACEHOLDER), [pendingReplyRenderKey]);
   const timelineMessages = useMemo(
-    () => showReplyPlaceholder ? [REPLY_PLACEHOLDER, ...replyEntrance.messages] : replyEntrance.messages,
-    [replyEntrance.messages, showReplyPlaceholder],
+    () => showReplyPlaceholder ? [replyPlaceholder, ...replyEntrance.messages] : replyEntrance.messages,
+    [replyEntrance.messages, replyPlaceholder, showReplyPlaceholder],
   );
-  const { entranceIds, claimEntrance } = useThreadMessageEntrance(timelineMessages, sessionKey);
+  // Whether the previous render showed this session as an authoritative empty
+  // conversation: its first message then enters like any later one.
+  const emptyConversationRef = useRef(false);
+  const { entranceIds, claimEntrance } = useThreadMessageEntrance(timelineMessages, sessionKey, emptyConversationRef.current);
+  emptyConversationRef.current = state.kind === 'empty';
   const runEntranceKeys = useMemo(() => runCards.map((run) => `run:${run.kind}:${run.id}`), [runCards]);
   const runEntrance = useThreadRunEntrance(runEntranceKeys, sessionKey, state.kind === 'ready');
   const nextMessageStatuses = useMemo(() => resolveUserMessageStatuses({
@@ -554,12 +613,22 @@ export function ThreadView({
     : nextMessageStatuses;
   messageStatusesRef.current = messageStatuses;
   const liveActivity = activityLabel?.trim() || copy.thinking;
-  const timelineItems = useMemo(() => withThreadRhythm(groupThreadTools(buildThreadTimelineItems({
+  const rhythmRows = useMemo(() => withThreadRhythm(groupThreadTools(buildThreadTimelineItems({
     messages: timelineMessages,
     runs: runCards,
     locale,
     yesterdayLabel: t('Yesterday', { lng: locale }),
   }), expandedTools)).reverse(), [locale, timelineMessages, runCards, expandedTools, calendarDay, t]);
+  // Unchanged rows keep their objects: a streamed chunk re-renders the reply
+  // that grew, not every visible cell.
+  const stableRowsRef = useRef<ReadonlyArray<ThreadTimelineRow>>(EMPTY_TIMELINE_ROWS);
+  const timelineItems = stabilizeThreadRows(stableRowsRef.current, rhythmRows);
+  stableRowsRef.current = timelineItems;
+  // Read in the list's commit phase, which follows this render's commit.
+  const committedRowsRef = useRef({ tailKey: null as string | null, rows: 0 });
+  committedRowsRef.current = { tailKey: timelineItems.at(-1)?.key ?? null, rows: timelineItems.length };
+  const reduceMotionRef = useRef(reduceMotion);
+  reduceMotionRef.current = reduceMotion;
   const followNewMessagesRef = useRef(true);
   const previewWasVisible = useRef(Boolean(sessionPreview));
   if (previewWasVisible.current && !sessionPreview) followNewMessagesRef.current = false;
@@ -569,26 +638,109 @@ export function ThreadView({
   const distanceFromBottomRef = useRef(0);
   const scrollMetricsRef = useRef({ height: 0, viewport: 0, offset: 0 });
   const timelineRef = useRef<FlashListRef<ThreadTimelineRow>>(null);
-  const timelineLoadedRef = useRef(false);
+  // Placement state belongs to one list instance: another session mounts a new
+  // list whose layout commits run before this view's effects, and they must
+  // never act on the previous list's measurements.
+  const loadedTimelineRef = useRef<FlashListRef<ThreadTimelineRow> | null>(null);
+  const timelineLoaded = useCallback(() => (
+    loadedTimelineRef.current !== null && loadedTimelineRef.current === timelineRef.current
+  ), []);
+  const committedLayoutRef = useRef<CommittedTimelineLayout>(UNMEASURED_TIMELINE_LAYOUT);
+  const composerExpandedRef = useRef(composerExpanded);
+  composerExpandedRef.current = composerExpanded;
   const bottomFollowFrameRef = useRef<number | null>(null);
   const cancelBottomFollow = useCallback(() => {
     if (bottomFollowFrameRef.current === null) return;
     cancelAnimationFrame(bottomFollowFrameRef.current);
     bottomFollowFrameRef.current = null;
   }, []);
+  // A follow glide in flight: its scroll events are not the reader's, and the
+  // corrections that land during it re-target the glide instead of cutting it.
+  const followGlideRef = useRef(false);
+  const followGlideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const endFollowGlide = useCallback(() => {
+    if (followGlideTimerRef.current !== null) clearTimeout(followGlideTimerRef.current);
+    followGlideTimerRef.current = null;
+    followGlideRef.current = false;
+  }, []);
+  useEffect(() => endFollowGlide, [endFollowGlide]);
+  // Follow corrections go straight to the native scroll view: FlashList's own
+  // scrollToEnd waits a macrotask, leaving grown content clipped under the
+  // composer for a frame or two before it jumps into view.
+  const followToEnd = useCallback((glide: boolean) => {
+    const list = timelineRef.current;
+    const animated = glide && !reduceMotionRef.current;
+    if (animated) {
+      if (followGlideTimerRef.current !== null) clearTimeout(followGlideTimerRef.current);
+      followGlideRef.current = true;
+      followGlideTimerRef.current = setTimeout(() => {
+        followGlideTimerRef.current = null;
+        followGlideRef.current = false;
+      }, FOLLOW_GLIDE_SETTLE_MS);
+    } else {
+      endFollowGlide();
+    }
+    const native = list?.getNativeScrollRef?.();
+    if (native) native.scrollToEnd({ animated });
+    else list?.scrollToEnd({ animated });
+  }, [endFollowGlide]);
+  const snapToEnd = useCallback(() => followToEnd(false), [followToEnd]);
   const scheduleBottomFollow = useCallback(() => {
-    // FlashList owns initial placement. Once loaded, coalesce table/layout
-    // measurements into one correction and recheck reader intent at execution.
-    if (!timelineLoadedRef.current || !followNewMessagesRef.current || composerExpanded
+    // FlashList owns initial placement. Size reports from native views
+    // (tables, images, the keyboard) arrive after their frame; coalesce them
+    // into one correction and recheck reader intent when it runs.
+    if (!timelineLoaded() || !followNewMessagesRef.current || composerExpandedRef.current
       || bottomFollowFrameRef.current !== null) return;
     bottomFollowFrameRef.current = requestAnimationFrame(() => {
       bottomFollowFrameRef.current = null;
-      if (followNewMessagesRef.current && !returningToBottomRef.current) {
-        timelineRef.current?.scrollToEnd({ animated: false });
+      if (followNewMessagesRef.current && !returningToBottomRef.current && !composerExpandedRef.current) {
+        snapToEnd();
       }
     });
-  }, [composerExpanded]);
+  }, [snapToEnd, timelineLoaded]);
   useLayoutEffect(() => cancelBottomFollow, [cancelBottomFollow, composerExpanded]);
+  // FlashList calls this in its layout-commit phase, in the same JS task as the
+  // render that changed the rows, so a bottom correction reaches the native
+  // view together with the new layout instead of a frame later.
+  const handleCommittedLayout = useCallback(() => {
+    const list = timelineRef.current;
+    if (!list) return;
+    let content: number;
+    let viewport: number;
+    try {
+      content = list.getChildContainerDimensions().height;
+      viewport = list.getWindowSize().height;
+    } catch {
+      return;
+    }
+    const previous = committedLayoutRef.current.list === list ? committedLayoutRef.current : null;
+    if (previous?.content === content && previous.viewport === viewport) return;
+    const { tailKey, rows } = committedRowsRef.current;
+    committedLayoutRef.current = { list, content, viewport, tailKey, rows };
+    if (!previous || !timelineLoaded() || composerExpandedRef.current || returningToBottomRef.current) return;
+    // Rows removed below a reader near the end, or a taller viewport once the
+    // keyboard hides, would leave the offset past the new end (iOS keeps it and
+    // shows blank space until the next touch).
+    const overshoot = (previous.content - content) + (viewport - previous.viewport);
+    if (!followNewMessagesRef.current) {
+      if (overshoot > 0 && overshoot >= distanceFromBottomRef.current) {
+        cancelBottomFollow();
+        snapToEnd();
+      }
+      return;
+    }
+    cancelBottomFollow();
+    // A new row at the end glides in; a growing reply, a keyboard or composer
+    // that moves the viewport, and anything that shrinks keep the exact end.
+    // While a glide is in flight, changes within budget re-target it rather
+    // than cut it short with a jump.
+    const growth = content - previous.content;
+    const appended = rows > previous.rows && tailKey !== previous.tailKey;
+    const withinBudget = Math.abs(growth) <= viewport * FOLLOW_GLIDE_MAX_VIEWPORT_RATIO;
+    const glide = withinBudget && (followGlideRef.current
+      || (appended && growth > 0 && viewport === previous.viewport));
+    followToEnd(glide);
+  }, [cancelBottomFollow, followToEnd, snapToEnd, timelineLoaded]);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const scrollButtonProgress = useSharedValue(0);
   useEffect(() => {
@@ -602,49 +754,88 @@ export function ThreadView({
     transform: [{ translateY: reduceMotion ? 0 : Space.sm * (1 - scrollButtonProgress.value) }],
   }));
   const scrollToBottom = useCallback(() => {
+    const far = distanceFromBottomRef.current > Space.lg;
+    readerScrollingRef.current = false;
+    setShowScrollToBottom(false);
+    // A reader already at the end is pinned by the commit that adds the new
+    // row; another scroll here would cut that row's glide short.
+    if (!far && followNewMessagesRef.current && timelineLoaded()) return;
     cancelBottomFollow();
     // Let the native scroll finish before streaming/layout can issue another scroll.
-    const animated = !reduceMotion && distanceFromBottomRef.current > Space.lg;
+    const animated = !reduceMotion && far;
+    endFollowGlide();
     returningToBottomRef.current = animated;
-    readerScrollingRef.current = false;
     followNewMessagesRef.current = !animated;
-    setShowScrollToBottom(false);
     timelineRef.current?.scrollToEnd({ animated });
-  }, [cancelBottomFollow, reduceMotion]);
+  }, [cancelBottomFollow, endFollowGlide, reduceMotion, timelineLoaded]);
   const refreshScrollButton = useCallback(() => {
     const { height, viewport, offset } = scrollMetricsRef.current;
     if (viewport <= 0) return;
     const remaining = Math.max(0, height - viewport - offset);
     distanceFromBottomRef.current = remaining;
-    if (returningToBottomRef.current) return;
+    // Neither an explicit return nor a follow glide is the reader leaving the end.
+    if (returningToBottomRef.current || followGlideRef.current) return;
     // Separate reveal/dismiss thresholds avoid flicker near the bottom edge.
     setShowScrollToBottom((visible) => visible ? remaining > Space.lg : remaining > ControlSize.rosterRow);
   }, []);
   const updateScrollPosition = useCallback(({ nativeEvent }: NativeSyntheticEvent<NativeScrollEvent>) => {
-    scrollMetricsRef.current = {
+    const metrics = {
       height: nativeEvent.contentSize.height,
       viewport: nativeEvent.layoutMeasurement.height,
       offset: nativeEvent.contentOffset.y,
     };
+    scrollMetricsRef.current = metrics;
     refreshScrollButton();
     if (!returningToBottomRef.current && readerScrollingRef.current) {
       followNewMessagesRef.current = distanceFromBottomRef.current <= Space.lg;
     }
-  }, [refreshScrollButton]);
+    // Rows inserted above a short top-anchored list (older history, a preview
+    // unlocked) make the anchor correction push the offset past the end; iOS
+    // keeps it there as blank space until the next touch. A reader's own
+    // bounce is left to the native view.
+    const overscroll = metrics.offset - Math.max(0, metrics.height - metrics.viewport);
+    if (overscroll > 1 && metrics.viewport > 0 && !readerScrollingRef.current
+      && !returningToBottomRef.current && !followGlideRef.current) {
+      snapToEnd();
+    }
+  }, [refreshScrollButton, snapToEnd]);
   const finishScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     if (returningToBottomRef.current) {
       returningToBottomRef.current = false;
       followNewMessagesRef.current = true;
       // Include text appended while the native scroll was in flight.
-      timelineRef.current?.scrollToEnd({ animated: false });
+      snapToEnd();
       return;
     }
     updateScrollPosition(event);
     readerScrollingRef.current = false;
-  }, [updateScrollPosition]);
+  }, [snapToEnd, updateScrollPosition]);
+  const handleTimelineLoad = useCallback(() => { loadedTimelineRef.current = timelineRef.current; }, []);
+  const handleScrollBeginDrag = useCallback(() => {
+    // The reader's finger takes over any glide in flight.
+    endFollowGlide();
+    returningToBottomRef.current = false;
+    readerScrollingRef.current = true;
+    followNewMessagesRef.current = false;
+  }, [endFollowGlide]);
+  const handleContentSizeChange = useCallback((_width: number, height: number) => {
+    const changed = scrollMetricsRef.current.height !== height;
+    scrollMetricsRef.current.height = height;
+    if (followNewMessagesRef.current) {
+      if (changed) scheduleBottomFollow();
+    } else refreshScrollButton();
+  }, [refreshScrollButton, scheduleBottomFollow]);
+  const handleTimelineLayout = useCallback((event: LayoutChangeEvent) => {
+    const height = event.nativeEvent.layout.height;
+    const changed = scrollMetricsRef.current.viewport !== height;
+    scrollMetricsRef.current.viewport = height;
+    if (followNewMessagesRef.current) {
+      if (changed) scheduleBottomFollow();
+    } else refreshScrollButton();
+  }, [refreshScrollButton, scheduleBottomFollow]);
   useLayoutEffect(() => {
     cancelBottomFollow();
-    timelineLoadedRef.current = false;
+    endFollowGlide();
     followNewMessagesRef.current = true;
     returningToBottomRef.current = false;
     distanceFromBottomRef.current = 0;
@@ -652,7 +843,7 @@ export function ThreadView({
     readerScrollingRef.current = false;
     setShowScrollToBottom(false);
     return cancelBottomFollow;
-  }, [cancelBottomFollow, sessionKey]);
+  }, [cancelBottomFollow, endFollowGlide, sessionKey]);
   useEffect(() => {
     if (scrollToBottomRequestAt != null) scrollToBottom();
   }, [scrollToBottomRequestAt, scrollToBottom]);
@@ -695,6 +886,11 @@ export function ThreadView({
 
 
   const openTool = useCallback((message: UiMessage) => setSelectedToolMessageId(message.id), []);
+  // The row renderer reads only stable values, so a streamed chunk that changes
+  // one row does not hand every visible cell a new renderer.
+  const hasMessageActions = Boolean(messageActions);
+  const queuedTapOpensActions = Boolean(messageActions && queuedMessageActions);
+  const { entranceKeys: runEntranceKeysArmed, claimEntrance: claimRunEntrance } = runEntrance;
   const renderMessage = useCallback(
     ({ item, target }: ListRenderItemInfo<ThreadTimelineRow>) => {
       if (item.type === 'tools') {
@@ -729,8 +925,8 @@ export function ThreadView({
             run={item.run}
             gapAbove={item.gapAbove}
             copy={copy}
-            animateEntrance={target === 'Cell' && runEntrance.entranceKeys.has(item.key)}
-            claimEntrance={runEntrance.claimEntrance}
+            animateEntrance={target === 'Cell' && runEntranceKeysArmed.has(item.key)}
+            claimEntrance={claimRunEntrance}
             onOpenSession={onOpenRunSession}
             onOpenCronRun={onOpenCronRun}
             onOpenResult={setSelectedRun}
@@ -749,8 +945,8 @@ export function ThreadView({
           claimEntrance={claimEntrance}
           onOpenTool={openTool}
           onOpenAttachments={onOpenAttachments}
-          onLongPress={messageActions ? handleMessageLongPress : undefined}
-          queuedTapOpensActions={Boolean(messageActions && queuedMessageActions)}
+          onLongPress={hasMessageActions ? handleMessageLongPress : undefined}
+          queuedTapOpensActions={queuedTapOpensActions}
           favorited={favoriteMessageIds?.has(item.message.id) ?? false}
           onResolveApproval={onResolveApproval}
         />
@@ -766,17 +962,35 @@ export function ThreadView({
       claimEntrance,
       favoriteMessageIds,
       handleMessageLongPress,
-      messageActions,
+      hasMessageActions,
       messageStatuses,
       openTool,
-      queuedMessageActions,
+      queuedTapOpensActions,
       onOpenAttachments,
       onOpenRunLogs,
       onOpenRunSession,
       onResolveApproval,
-      runEntrance,
+      runEntranceKeysArmed,
+      claimRunEntrance,
     ],
   );
+  const timelineContentStyle = useMemo(() => [
+    styles.timelineContent,
+    { paddingTop: timelineTopClearance, paddingBottom: timelineClearance },
+  ], [styles.timelineContent, timelineClearance, timelineTopClearance]);
+  const timelineFooter = useMemo(() => (compactionNotice ? (
+    <View testID={`${testID}-compaction`} style={[stylesStatic.timelineItem, rowGapStyles.turn]}>
+      <SystemEventRow icon={Info} label={compactionNotice} />
+    </View>
+  ) : null), [compactionNotice, testID]);
+  const previewUpgrade = sessionPreview?.hasHiddenHistory ? sessionPreview.onUpgrade : undefined;
+  const timelineHeader = useMemo(() => (previewUpgrade ? <SessionPreviewNotice onUpgrade={previewUpgrade} /> : loadingMoreHistory ? (
+    <Skeleton
+      testID={`${testID}-history-more`}
+      accessibilityLabel={copy.loadingHistory}
+      style={styles.historyMore}
+    />
+  ) : null), [copy.loadingHistory, loadingMoreHistory, previewUpgrade, styles.historyMore, testID]);
 
   return (
     <ChatPresentationProvider value={presentation}>
@@ -821,6 +1035,8 @@ export function ThreadView({
             name={headerName}
             avatarName={agentName}
             subtitle={headerWorking ? '' : headerSubtitle}
+            subtitleEllipsizeMode={projectPath?.trim() === headerSubtitle ? 'middle' : undefined}
+            accessibilityHint={!headerWorking && projectPath?.trim() === headerSubtitle ? headerSubtitle : undefined}
             working={headerWorking}
             icon={isCronSession ? CalendarClock : undefined}
             emoji={agentEmoji}
@@ -875,71 +1091,49 @@ export function ThreadView({
                 onAction={onOpenPaywall}
               />
             </View>
-          ) : state.kind === 'empty' ? (
-            <View
-              testID={`${testID}-empty`}
-              style={[styles.centeredState, { paddingTop: timelineTopClearance }]}
-            >
-              <SystemEventRow
-                icon={MessageCircle}
-                label={copy.formatEmpty(agentName)}
-              />
-            </View>
           ) : (
-            <FlashList
-              ref={timelineRef}
-              testID={`${testID}-timeline`}
-              data={timelineItems}
-              maintainVisibleContentPosition={{ startRenderingFromBottom: true }}
-              onLoad={() => { timelineLoadedRef.current = true; }}
-              onScrollBeginDrag={() => {
-                returningToBottomRef.current = false;
-                readerScrollingRef.current = true;
-                followNewMessagesRef.current = false;
-              }}
-              onScroll={updateScrollPosition}
-              scrollEventThrottle={16}
-              onMomentumScrollEnd={finishScroll}
-              onContentSizeChange={(_width, height) => {
-                const changed = scrollMetricsRef.current.height !== height;
-                scrollMetricsRef.current.height = height;
-                if (followNewMessagesRef.current) {
-                  if (changed) scheduleBottomFollow();
-                } else refreshScrollButton();
-              }}
-              onLayout={(event) => {
-                const height = event.nativeEvent.layout.height;
-                const changed = scrollMetricsRef.current.viewport !== height;
-                scrollMetricsRef.current.viewport = height;
-                if (followNewMessagesRef.current) {
-                  if (changed) scheduleBottomFollow();
-                } else refreshScrollButton();
-              }}
-              onScrollEndDrag={updateScrollPosition}
-              getItemType={(item) => item.type}
-              keyboardShouldPersistTaps="handled"
-              keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-              keyExtractor={(item) => item.key}
-              renderItem={renderMessage}
-              contentContainerStyle={[
-                styles.timelineContent,
-                { paddingTop: timelineTopClearance, paddingBottom: timelineClearance },
-              ]}
-              onStartReached={onLoadMoreHistory}
-              onStartReachedThreshold={0.3}
-              ListFooterComponent={compactionNotice ? (
-                <View testID={`${testID}-compaction`} style={[stylesStatic.timelineItem, rowGapStyles.turn]}>
-                  <SystemEventRow icon={Info} label={compactionNotice} />
-                </View>
+            // One list serves the empty conversation and every later message,
+            // so the first send never remounts it (a fresh list paints a blank
+            // frame before its first layout).
+            <>
+              <ThreadTimelineList
+                ref={timelineRef}
+                testID={`${testID}-timeline`}
+                data={timelineItems}
+                onLoad={handleTimelineLoad}
+                onCommitLayoutEffect={handleCommittedLayout}
+                onScrollBeginDrag={handleScrollBeginDrag}
+                onScroll={updateScrollPosition}
+                scrollEventThrottle={16}
+                onMomentumScrollEnd={finishScroll}
+                onContentSizeChange={handleContentSizeChange}
+                onLayout={handleTimelineLayout}
+                onScrollEndDrag={updateScrollPosition}
+                getItemType={getTimelineRowType}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+                keyExtractor={getTimelineRowKey}
+                renderItem={renderMessage}
+                contentContainerStyle={timelineContentStyle}
+                onStartReached={onLoadMoreHistory}
+                onStartReachedThreshold={0.3}
+                ListFooterComponent={timelineFooter}
+                ListHeaderComponent={timelineHeader}
+              />
+              {state.kind === 'empty' && timelineItems.length === 0 ? (
+                <Animated.View
+                  testID={`${testID}-empty`}
+                  pointerEvents="none"
+                  exiting={reduceMotion ? undefined : EMPTY_HINT_EXIT}
+                  style={[styles.emptyHint, { paddingTop: timelineTopClearance }]}
+                >
+                  <SystemEventRow
+                    icon={MessageCircle}
+                    label={copy.formatEmpty(agentName)}
+                  />
+                </Animated.View>
               ) : null}
-              ListHeaderComponent={sessionPreview?.hasHiddenHistory ? <SessionPreviewNotice onUpgrade={sessionPreview.onUpgrade} /> : loadingMoreHistory ? (
-                <Skeleton
-                  testID={`${testID}-history-more`}
-                  accessibilityLabel={copy.loadingHistory}
-                  style={styles.historyMore}
-                />
-              ) : null}
-            />
+            </>
           )}
         </Animated.View>
         {timelineItems.length > 0 && !locked ? (
@@ -999,7 +1193,7 @@ export function ThreadView({
       {sessionPreview ? <View style={wallpaperActive ? null : { backgroundColor: theme.colors.canvas }}>
         {wallpaperActive ? <ChatWallpaperScrim edge="bottom" color={theme.colors.canvas} opacity={scrimOpacity.bottom} /> : null}
         <SessionPreviewFooter onUpgrade={sessionPreview.onUpgrade}
-          onMain={sessionPreview.onMain} bottomInset={bottomInset} loading={sessionPreview.loading} />
+          onMain={sessionPreview.onMain} mainLabel={sessionPreview.mainLabel} bottomInset={bottomInset} loading={sessionPreview.loading} />
       </View> : null}
       {!locked && !sessionPreview ? readOnlyFooter : null}
       {!locked && !sessionPreview && capabilities.chat && !isCronSession ? (
@@ -1164,6 +1358,59 @@ export function ThreadView({
     </ChatPresentationProvider>
   );
 }
+
+type ThreadTimelineListProps = Omit<
+  FlashListProps<ThreadTimelineRow>,
+  'data' | 'initialScrollIndex' | 'initialScrollIndexParams' | 'maintainVisibleContentPosition'
+> & Readonly<{ data: ReadonlyArray<ThreadTimelineRow> }>;
+
+/**
+ * The timeline list: chronological and top-anchored, so a short conversation
+ * reads down from the header like a messenger, and a conversation that fills
+ * the screen opens on its newest row. FlashList's first pass renders only the
+ * rows from the newest row's top down and fills in the rows above a frame or
+ * two later, so a list that opens on saved rows stays invisible until its
+ * first load settles: entry paints once, complete. A list that opens empty is
+ * never hidden, so a first message shows the moment it is sent.
+ */
+const ThreadTimelineList = React.forwardRef(function ThreadTimelineList(
+  { data, onLoad, ...props }: ThreadTimelineListProps,
+  ref: React.ForwardedRef<FlashListRef<ThreadTimelineRow>>,
+): React.JSX.Element {
+  const [initialScrollIndex] = useState(() => (data.length > 0 ? data.length - 1 : undefined));
+  const [placing, setPlacing] = useState(() => data.length > 0);
+  const revealFrameRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!placing) return undefined;
+    const timer = setTimeout(() => setPlacing(false), TIMELINE_PLACEMENT_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [placing]);
+  useEffect(() => () => {
+    if (revealFrameRef.current !== null) cancelAnimationFrame(revealFrameRef.current);
+  }, []);
+  const handleLoad = useCallback((info: { elapsedTimeInMs: number }) => {
+    onLoad?.(info);
+    if (revealFrameRef.current !== null) return;
+    // One more frame lets the rows above the newest one commit.
+    revealFrameRef.current = requestAnimationFrame(() => {
+      revealFrameRef.current = null;
+      setPlacing(false);
+    });
+  }, [onLoad]);
+  return (
+    <View testID={props.testID ? `${props.testID}-frame` : undefined}
+      style={[stylesStatic.timelineFill, placing ? stylesStatic.timelinePlacing : null]}>
+      <FlashList
+        ref={ref}
+        data={data}
+        initialScrollIndex={initialScrollIndex}
+        initialScrollIndexParams={initialScrollIndex === undefined ? undefined : INITIAL_SCROLL_TO_END}
+        onLoad={handleLoad}
+        {...props}
+      />
+    </View>
+  );
+});
 
 function ThreadRunTimelineItem({
   run,
@@ -1714,9 +1961,9 @@ function ThreadExecApprovalTimelineItem({
     <View style={stylesStatic.timelineItem}>
       <ApprovalCard
         testID={`thread-approval-${messageId}`}
-        title={copy.approvalTitle}
+        title={approval.category && approval.category !== 'command' ? t('Allow this action?', { ns: 'chat' }) : copy.approvalTitle}
         command={approval.command}
-        detail={detail}
+        detail={detail ?? approval.reason}
         tone={approval.resolutionError ? 'bad' : undefined}
         expired={resolved}
         primaryAction={{
@@ -1777,6 +2024,9 @@ function AssistantBubble({
   // markdown bubble between the first network chunk and its first shown word.
   const thinking = message.streaming === true && pacedText.trim().length === 0;
   const textAnimating = message.streaming === true || pacedText !== message.text;
+  // The final words land while the view is still in streaming mode; the mode
+  // switch follows in a commit that leaves the text alone.
+  const streamingAnimation = useStreamingSettleHold(textAnimating, message.renderKey ?? message.id);
   const displayText = useMemo(() => {
     if (!textAnimating) return message.text;
     // No synthetic cursor: the native view animates only truly appended tail
@@ -1804,7 +2054,7 @@ function AssistantBubble({
             markdownStyle={markdownStyle}
             onLinkPress={openChatMarkdownLink}
             selectable
-            streamingAnimation={textAnimating}
+            streamingAnimation={streamingAnimation}
           />
           {time ? (
             <View>
@@ -1838,6 +2088,8 @@ const rowGapStyles = StyleSheet.create<Record<ThreadRowGap, ViewStyle>>({
 });
 
 const stylesStatic = StyleSheet.create({
+  timelineFill: { flex: 1 },
+  timelinePlacing: { opacity: 0 },
   // A time label heads the group below it: its gap above comes from the
   // rhythm, and it owns the space down to the first row of the group.
   timeSeparator: { alignItems: 'center', paddingBottom: Space.md },
@@ -1947,6 +2199,12 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     centeredState: {
       flex: 1,
+      justifyContent: 'center',
+      paddingHorizontal: Space.lg,
+    },
+    // The empty conversation's hint floats over the (empty) list it replaces.
+    emptyHint: {
+      ...StyleSheet.absoluteFill,
       justifyContent: 'center',
       paddingHorizontal: Space.lg,
     },

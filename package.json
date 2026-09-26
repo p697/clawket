@@ -133,7 +133,11 @@
     "bridge:run": "npm run --workspace @p697/clawket run --",
     "speech:typecheck": "npm run --workspace @clawket/speech-worker typecheck",
     "speech:test": "npm run --workspace @clawket/speech-worker test",
+    "speech:test:integration": "vitest run --config tests/speech/vitest.config.ts",
     "speech:dev": "npm run --workspace @clawket/speech-worker dev",
+    "test:claude-code:relay": "vitest run --config tests/claude-code-relay/vitest.config.ts",
+    "test:codex:relay": "vitest run --config tests/codex-relay/vitest.config.ts",
+    "test:codex:integration": "npm exec --workspace packages/bridge-runtime -- vitest run src/codex/codex.integration.test.ts",
     "test:pi:integration": "npm exec --workspace packages/bridge-runtime -- vitest run src/pi/pi.integration.test.ts",
     "test:pi:relay": "vitest run --config tests/pi-relay/vitest.config.ts",
     "test:pi:cli": "npm run bridge:build && vitest run --config tests/pi-cli/vitest.config.ts"

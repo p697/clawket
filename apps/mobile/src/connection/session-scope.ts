@@ -21,6 +21,7 @@ export function resolveConnectedThreadTarget(
 ): ConnectedThreadTarget {
   const agent = agents.find((candidate) => candidate.isMain) ?? agents[0];
   const agentId = agent?.agentId.trim() || 'main';
+  if (agent?.entryMode === 'sessions') return { agentId, sessionKey: '' };
   const declaredMainSessionKey = agent?.mainSessionKey.trim();
   return {
     agentId,
@@ -58,7 +59,7 @@ export function isSessionKeyInAgentScope(
   options?: { mainSessionKey?: string | null },
 ): boolean {
   const normalizedSessionKey = sessionKey?.trim();
-  if (isBackendScopedMainSessionKey(options?.mainSessionKey)) {
+  if (options?.mainSessionKey === '' || isBackendScopedMainSessionKey(options?.mainSessionKey)) {
     if (!normalizedSessionKey) return false;
     // Backend-scoped sessions must not accept legacy OpenClaw agent keys
     // while restoring a cached session during startup.

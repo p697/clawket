@@ -128,6 +128,7 @@ function connection(patch: Partial<ConnectionDescriptor> = {}): ConnectionDescri
 function props(patch: Partial<React.ComponentProps<typeof ConnectionScreen>> = {}): React.ComponentProps<typeof ConnectionScreen> {
   return {
     connection: connection(),
+    active: true,
     state: 'ready',
     paused: false,
     agentNames: ['Lucy', 'Codex'],
@@ -174,6 +175,20 @@ describe('ConnectionScreen', () => {
     expect(view.queryByText('Advanced settings')).toBeNull();
     expect(view.queryByTestId('connection-free-slot')).toBeNull();
     expect(mockGetRuntimeConnectionRecord).toHaveBeenCalledWith('studio');
+  });
+
+  it('reads an inactive connection as not connected and keeps offline for the active one', async () => {
+    const view = render(<ConnectionScreen {...props({ active: false, state: 'idle' })} />);
+    await flush();
+    expect(view.getByText('Not connected')).toBeTruthy();
+    expect(view.queryByText('Offline')).toBeNull();
+
+    view.rerender(<ConnectionScreen {...props({ state: 'handshaking' })} />);
+    expect(view.getByText('Connecting')).toBeTruthy();
+    view.rerender(<ConnectionScreen {...props({ state: 'offline' })} />);
+    expect(view.getByText('Offline')).toBeTruthy();
+    view.rerender(<ConnectionScreen {...props({ active: false, paused: true, state: 'idle' })} />);
+    expect(view.getByText('Connection paused')).toBeTruthy();
   });
 
   it('renames through the shared sheet and keeps an unchanged or empty name unsaveable', async () => {

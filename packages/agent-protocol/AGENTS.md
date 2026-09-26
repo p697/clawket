@@ -2,6 +2,10 @@
 
 This package is the platform-neutral contract between Clawket UI and backend adapters.
 
+`ModelInfo.resolvedModel` is optional native evidence for an alias’s concrete model; display/search it without replacing the selectable `id` or guessing a version when absent.
+
+`ModelInfo.sortOrder` is optional backend recommendation order within a provider (lower first). Missing order retains legacy alphabetical presentation; consumers must not infer model age from names.
+
 1. Keep runtime dependencies empty. Do not import React, React Native, storage, networking, or backend implementations.
 2. Export only serializable protocol data, adapter interfaces, capability policy, errors, and deterministic test helpers.
 3. Backend support is expressed through `Capabilities`; unsupported management groups are absent instead of throwing at runtime. `attachments` means image attachments, while the additive optional `fileAttachments` capability enables non-image files. Missing refinements fail closed.
@@ -33,3 +37,9 @@ Hermes per-job model selection is declared in the product matrix but downgraded 
 `ChatMessage.attribution` optionally supplies channel/account/conversation/message/thread facts and a sender's ID, name, username, avatar and kind. These are display facts, independent of backend, transport, model role and authorization. `sentLocally` is cache-only provenance, never accepted from a wire message or inferred from owner flags. Missing fields preserve older direct-chat contracts; mock histories clone attribution independently.
 
 Pi is an explicit backend using ordinary sessions and per-session model selection. Optional `agentQuestions` / `questions` and question updates describe extension select/confirm/input/editor interactions, independently of `execApproval`. Optional `sessionBranch` and `createSession(..., { fromSession })` permit continuing native read-only history as a new owned session. Missing refinements remain unavailable.
+
+Structured question fields may opt into `multiSelect: true`. Omission remains single-select. Answer arrays contain selected labels or an explicit custom answer; adapters retain the native question identity separately and must not infer an answer from dismissal or a default selection.
+
+Codex is an independent backend with an optional runtime-negotiated `projects` capability. `ProjectDescriptor` provides an opaque ID and display path; `SessionDescriptor.canContinue` explicitly opts native sessions into original-thread continuation. Absence retains read-only behavior. Structured `form` questions group native IDs, options/descriptions and optional custom answers in one response, separate from approvals. `ModelInfo.reasoningLevels` optionally carries the native model-specific levels; missing metadata preserves existing adapters. Execution approvals may describe command/file/network/permission categories and a reason, with the same exact-request decision contract; category is display metadata, never authorization.
+
+Optional `AgentDescriptor.entryMode: sessions` declares that an Agent has no privileged main chat. Its empty `mainSessionKey` is a navigation entry only, never a backend conversation ID. Consumers must choose/restore a real session before chat operations; Agents without this refinement keep their existing main-session behavior.

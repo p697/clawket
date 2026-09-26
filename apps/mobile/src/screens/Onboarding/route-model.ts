@@ -14,6 +14,8 @@ export const ONBOARDING_DOCUMENTATION_URLS: Readonly<Record<PairableBackendKind,
   openclaw: 'https://docs.openclaw.ai/install',
   hermes: 'https://hermes-agent.nousresearch.com/docs/getting-started/quickstart',
   pi: 'https://github.com/p697/clawket/blob/main/docs/3.1/pi.md',
+  codex: 'https://github.com/p697/clawket/blob/main/docs/3.1/codex.md',
+  'claude-code': 'https://github.com/p697/clawket/blob/main/docs/3.1/claude-code.md',
   'local-model': 'https://github.com/p697/clawket/blob/main/docs/3.0/15-local-model.md',
 });
 
@@ -29,6 +31,8 @@ export const ONBOARDING_WEBSITE_URLS: Readonly<Record<OnboardingWebsiteBackendKi
   hermes: 'https://hermes-agent.nousresearch.com',
   youmind: 'https://youmind.com',
   pi: 'https://pi.dev',
+  codex: 'https://learn.chatgpt.com/codex',
+  'claude-code': 'https://code.claude.com/docs/en/overview',
 });
 
 const ADAPTER_ERROR_CODES = new Set<AdapterErrorCode>([
@@ -62,6 +66,8 @@ export function normalizePairableBackendKind(
     youmind: 'openclaw',
     'local-model': 'local-model',
     pi: 'pi',
+    codex: 'codex',
+    'claude-code': 'claude-code',
   };
   return normalized[backendKind ?? 'openclaw'];
 }

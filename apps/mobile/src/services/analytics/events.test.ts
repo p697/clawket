@@ -19,7 +19,7 @@ jest.mock('./posthog', () => ({
 
 const SPEC_EVENT_PROPERTIES: Readonly<Record<string, ReadonlyArray<string>>> = {
   agent_file_activity: ['action', 'backend', 'document'],
-  chat_voice_input_timing: ['stage', 'duration_ms'],
+  chat_voice_input_timing: ['stage', 'duration_ms', 'queue_ms', 'activate_ms', 'engine_ms', 'start_ms', 'warm', 'input_route', 'bluetooth', 'other_audio'],
   channel_dm_scope_changed: ['scope'],
   channel_account_toggled: ['channel', 'enabled'],
   onboarding_viewed: ['source'],
@@ -430,6 +430,18 @@ test('channel routing telemetry keeps bounded platform ids and scopes only', () 
   })).toEqual({ channel: 'telegram', enabled: false });
   expect(sanitizeAnalyticsEventProperties('channel_account_toggled', { channel: 'my-private-plugin', enabled: true }))
     .toEqual({ channel: 'other', enabled: true });
+});
+
+test('voice start timing keeps bounded step durations and port categories only', () => {
+  expect(sanitizeAnalyticsEventProperties('chat_voice_input_timing', {
+    stage: 'native_started', duration_ms: 120, queue_ms: 1, activate_ms: 0, engine_ms: 3, start_ms: 96,
+    warm: true, input_route: 'bluetooth', bluetooth: true, other_audio: false, device_name: 'private headset',
+  })).toEqual({
+    stage: 'native_started', duration_ms: 120, queue_ms: 1, activate_ms: 0, engine_ms: 3, start_ms: 96,
+    warm: true, input_route: 'bluetooth', bluetooth: true, other_audio: false,
+  });
+  expect(sanitizeAnalyticsEventProperties('chat_voice_input_timing', { input_route: 'Lucy AirPods Pro' }))
+    .toEqual({ input_route: 'other' });
 });
 
 test('agent file editing telemetry excludes source content and unbounded labels', () => {

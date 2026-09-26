@@ -140,6 +140,7 @@
   "Online": "Online",
   "Offline": "Offline",
   "Connecting": "Connecting",
+  "Not connected": "Not connected",
   "Models": "Models",
   "Skills": "Skills",
   "Usage": "Usage",
@@ -168,6 +169,8 @@
   "Reset session?": "Reset session?",
   "Reset": "Reset",
   "Scheduled": "Scheduled",
+  "Scheduled task": "Scheduled task",
+  "Scheduled task: {{name}}": "Scheduled task: {{name}}",
   "Search sessions": "Search sessions",
   "Session actions": "Session actions",
   "Sessions require permission": "Sessions require permission",
@@ -247,5 +250,10 @@
   "Search and bulk export": "Search and bulk export",
   "Skill and memory versions": "Skill and memory versions",
   "Yes": "Yes",
-  "No": "No"
+  "No": "No",
+  "All projects": "All projects",
+  "Projects": "Projects",
+  "Choose a project": "Choose a project",
+  "Search projects": "Search projects",
+  "Next": "Next"
 }

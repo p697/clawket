@@ -18,7 +18,10 @@ export function useReplyEntranceDelay(
   } else if (submittedAt != null && submittedAt !== previous.submittedAt) {
     memory.current = {
       scope, submittedAt, messages,
-      baseline: new Set(previous.messages.map((message) => message.id)),
+      // Rows keep their render identity when a post-run refresh swaps their
+      // backend ids (`final_` / `stream_segment_` → history ids); remember both
+      // so the previous reply never vanishes for the hold.
+      baseline: new Set(previous.messages.flatMap((message) => [message.id, message.renderKey ?? message.id])),
       until: submittedAt + REPLY_ENTRANCE_DELAY_MS,
     };
   } else {
@@ -33,6 +36,8 @@ export function useReplyEntranceDelay(
   }, [holding, until]);
   return {
     holding,
-    messages: holding ? messages.filter((message) => message.role === 'user' || memory.current.baseline.has(message.id)) : messages,
+    messages: holding ? messages.filter((message) => message.role === 'user'
+      || memory.current.baseline.has(message.id)
+      || memory.current.baseline.has(message.renderKey ?? message.id)) : messages,
   };
 }

@@ -43,6 +43,15 @@ async function writeState(gatewayConfigId: string, agentId: string, state: Sessi
 }
 
 export const SessionPreferencesService = {
+  async getLastSession(connectionId: string, agentId: string): Promise<string | null> {
+    const value = await AsyncStorage.getItem(makeScopeKey(connectionId, agentId) + '.lastSession');
+    return value && value.length <= 512 ? value : null;
+  },
+
+  async setLastSession(connectionId: string, agentId: string, sessionKey: string): Promise<void> {
+    if (!sessionKey || sessionKey.length > 512) return;
+    await AsyncStorage.setItem(makeScopeKey(connectionId, agentId) + '.lastSession', sessionKey);
+  },
   async clearConnection(gatewayConfigId: string): Promise<void> {
     const connectionPrefix = `${SESSION_PREFERENCES_PREFIX}${gatewayConfigId}::`;
     const keys = (await AsyncStorage.getAllKeys()).filter((key) => (
@@ -80,6 +89,9 @@ export const SessionPreferencesService = {
 
   async clearSession(gatewayConfigId: string, agentId: string, sessionKey: string): Promise<void> {
     await this.setPinnedSession(gatewayConfigId, agentId, sessionKey, false);
+    if (await this.getLastSession(gatewayConfigId, agentId) === sessionKey) {
+      await AsyncStorage.multiRemove([makeScopeKey(gatewayConfigId, agentId) + '.lastSession']);
+    }
   },
 
   async setAgentPinned(

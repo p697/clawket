@@ -80,6 +80,8 @@ jest.mock('react-native-reanimated', () => {
     useAnimatedRef: () => ({ current: null }),
     useAnimatedProps: (factory: () => unknown) => factory(),
     useAnimatedStyle: (factory: () => unknown) => factory(),
+    // Frame callbacks never tick in Node; tests drive worklet models directly.
+    useFrameCallback: () => ({ setActive: () => undefined, isActive: false, callbackId: -1 }),
     useScrollOffset: () => ({ value: 0 }),
     useReducedMotion: () => false,
     useSharedValue: <T>(value: T) => ({ value }),
@@ -583,6 +585,8 @@ jest.mock('./assets/brands/openclaw.png', () => 301);
 jest.mock('./assets/brands/hermes.png', () => 302);
 jest.mock('./assets/brands/youmind.png', () => 303);
 jest.mock('./assets/brands/pi.png', () => 307);
+jest.mock('./assets/brands/codex.png', () => 308);
+jest.mock('./assets/brands/claude-code.png', () => 309);
 jest.mock('./assets/avatars/youmind-sprite-default.png', () => 306);
 
 jest.mock('./assets/icon.png', () => 304);

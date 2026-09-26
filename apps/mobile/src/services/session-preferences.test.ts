@@ -121,3 +121,19 @@ describe('SessionPreferencesService', () => {
     });
   });
 });
+
+it('remembers the last chat per connection and agent, clearing only deleted targets', async () => {
+  await SessionPreferencesService.setLastSession('a', 'codex', 'first');
+  await SessionPreferencesService.setLastSession('b', 'codex', 'second');
+  await SessionPreferencesService.setLastSession('a', 'other', 'third');
+  await SessionPreferencesService.clearSession('a', 'codex', 'unrelated');
+  expect(await SessionPreferencesService.getLastSession('a', 'codex')).toBe('first');
+  await SessionPreferencesService.clearSession('a', 'codex', 'first');
+  expect(await SessionPreferencesService.getLastSession('a', 'codex')).toBeNull();
+  expect(await SessionPreferencesService.getLastSession('a', 'other')).toBe('third');
+  await SessionPreferencesService.clearConnection('a');
+  expect(await SessionPreferencesService.getLastSession('a', 'other')).toBeNull();
+  expect(await SessionPreferencesService.getLastSession('b', 'codex')).toBe('second');
+  await SessionPreferencesService.setLastSession('b', 'codex', '');
+  expect(await SessionPreferencesService.getLastSession('b', 'codex')).toBe('second');
+});

@@ -10,9 +10,10 @@ describe('voice gestures', () => {
     const hook = renderHook(({ phase }: { phase: string }) => useVoiceGesture({ phase, enabled: true, start, stop, cancel, focus }), { initialProps: { phase: 'idle' } });
     return { ...hook, start, stop, cancel, focus };
   }
-  it.each(['before', 'after', 'absent'])('a tap starts once with touch-end %s press and is not cancelled by press-out', (order) => {
+  it.each(['before', 'after', 'absent'])('a mic touch-down starts once and the tap keeps dictating with touch-end %s press', (order) => {
     const h = setup(); act(() => h.result.current.handlers.onPressIn(touch(500)));
-    expect(h.start).not.toHaveBeenCalled();
+    expect(h.start).toHaveBeenCalledTimes(1); expect(h.result.current.pressing).toBe(true);
+    h.rerender({ phase: 'listening' });
     act(() => {
       if (order === 'before') h.result.current.handlers.onTouchEnd();
       h.result.current.handlers.onPressOut(); h.result.current.handlers.onPress();
@@ -20,18 +21,28 @@ describe('voice gestures', () => {
       jest.runOnlyPendingTimers();
     });
     expect(h.start).toHaveBeenCalledTimes(1); expect(h.cancel).not.toHaveBeenCalled(); expect(h.stop).not.toHaveBeenCalled();
+    expect(h.result.current.pressing).toBe(false);
   });
-  it('repeat taps while preparing leave the first start intact', () => {
-    const h = setup(); act(() => h.result.current.handlers.onPress()); h.rerender({ phase: 'authorizing' });
-    for (let i = 0; i < 5; i++) act(() => {
-      h.result.current.handlers.onPressIn(touch(500)); h.result.current.handlers.onPress();
-      h.result.current.handlers.onPressOut(); jest.runOnlyPendingTimers();
+  it('a tap on the listening control sends and taps during finalization are ignored', () => {
+    const h = setup(); h.rerender({ phase: 'listening' });
+    act(() => {
+      h.result.current.handlers.onPressIn(touch(500)); h.result.current.handlers.onPressOut();
+      h.result.current.handlers.onPress(); jest.runOnlyPendingTimers();
     });
-    expect(h.start).toHaveBeenCalledTimes(1); expect(h.cancel).not.toHaveBeenCalled(); expect(h.stop).not.toHaveBeenCalled();
+    expect(h.stop).toHaveBeenCalledWith(true); expect(h.start).not.toHaveBeenCalled();
+    h.rerender({ phase: 'transcribing' });
+    for (let i = 0; i < 3; i++) act(() => {
+      h.result.current.handlers.onPressIn(touch(500)); h.result.current.handlers.onPressOut();
+      h.result.current.handlers.onPress(); jest.runOnlyPendingTimers();
+    });
+    expect(h.stop).toHaveBeenCalledTimes(1); expect(h.start).not.toHaveBeenCalled(); expect(h.cancel).not.toHaveBeenCalled();
   });
   it.each(['handlers', 'inputHandlers'] as const)('hold release from %s sends once and suppresses the following press', (source) => {
-    const h = setup(); act(() => { h.result.current[source].onPressIn(touch(500)); h.result.current[source].onLongPress(); });
-    expect(h.start).toHaveBeenCalledTimes(1); h.rerender({ phase: 'listening' });
+    const h = setup(); act(() => h.result.current[source].onPressIn(touch(500)));
+    // Only the mic starts on touch-down; the input area waits for the hold so typing never opens audio.
+    expect(h.start).toHaveBeenCalledTimes(source === 'handlers' ? 1 : 0);
+    act(() => h.result.current[source].onLongPress());
+    expect(h.start).toHaveBeenCalledTimes(1); expect(h.result.current.holding).toBe(true); h.rerender({ phase: 'listening' });
     act(() => { jest.advanceTimersByTime(450); h.result.current[source].onTouchEnd(); h.result.current[source].onPress(); });
     expect(h.stop).toHaveBeenCalledTimes(1); expect(h.stop).toHaveBeenCalledWith(true); expect(h.focus).not.toHaveBeenCalled();
   });
@@ -53,6 +64,13 @@ describe('voice gestures', () => {
   it('pointer termination cancels a held recording but never a completed tap', () => {
     const h = setup(); act(() => { h.result.current.handlers.onPressIn(touch(500)); h.result.current.handlers.onLongPress(); h.result.current.handlers.onTouchCancel(); h.result.current.handlers.onPress(); });
     expect(h.cancel).toHaveBeenCalledTimes(1); expect(h.start).toHaveBeenCalledTimes(1); expect(h.stop).not.toHaveBeenCalled();
+  });
+  it('a touch-down recording is cancelled when the system takes the touch before release', () => {
+    const h = setup(); act(() => h.result.current.handlers.onPressIn(touch(500)));
+    h.rerender({ phase: 'listening' });
+    act(() => { h.result.current.handlers.onTouchCancel(); h.result.current.handlers.onPressOut(); jest.runOnlyPendingTimers(); });
+    expect(h.start).toHaveBeenCalledTimes(1); expect(h.cancel).toHaveBeenCalledTimes(1); expect(h.stop).not.toHaveBeenCalled();
+    expect(h.result.current.pressing).toBe(false);
   });
   it('a too-short hold cancels and a later press can start again', () => {
     const h = setup(); act(() => { h.result.current.handlers.onPressIn(touch(500)); h.result.current.handlers.onLongPress(); });

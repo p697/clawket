@@ -8,7 +8,11 @@ export const SPEECH_CODES = [
 ] as const;
 export type SpeechCode = typeof SPEECH_CODES[number];
 export class SpeechError extends Error {
-  constructor(public readonly code: SpeechCode, public readonly requestId = '', public readonly retryAfterMs = 0) { super(code); }
+  readonly retryAt: number;
+  constructor(public readonly code: SpeechCode, public readonly requestId = '', public readonly retryAfterMs = 0) {
+    super(code); this.retryAt = Date.now() + retryAfterMs;
+  }
+  get remainingRetryMs(): number { return Math.max(0, this.retryAt - Date.now()); }
 }
 export function speechError(error: unknown): SpeechError {
   if (error instanceof SpeechError) return error;
