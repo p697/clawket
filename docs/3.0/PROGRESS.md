@@ -2740,3 +2740,8 @@ Cleanup follow-up verification: no Bridge entrypoints after documentation checks
 ### 2026-09-30 — Bridge 3.1.6 release preparation
 
 Owner explicitly authorized a complete Bridge release after the local cleanup. Isolated `codex/bridge-3-1-6` includes only the Codex fast-terminal snapshot reconciliation, its six regressions and supporting instructions/evidence, based on merged Bridge 3.1.5 and attachment integration. The CLI manifest, lockfile and publish guard advance to 3.1.6; internal workspace versions remain unchanged. Uncommitted Mobile changes stay in the original checkout and are not an App release. Tests, CI, exact package verification and npm publication results will be recorded in the release document. Cleaned local user runtimes remain stopped.
+
+
+### 2026-09-30 — Bridge 3.1.6 publication accepted
+
+Fixed candidate `a1831e4a` passed all four required CI jobs, serial v1 replay (41 cases), fresh production-snapshot local upgrade/recovery matrix (24 phases), local integration (eight cases), affected Codex tests (149 service / nine history), package provenance and isolated CLI smoke. Native browser authentication completed; npm accepted the immutable 3.1.6 tarball at approximately 12:22 UTC. Public synchronization and installation verification remain a distinct step; final results are recorded on [PR #53](https://github.com/p697/clawket/pull/53) and the [release record](../3.1/bridge-3.1.6-release.md). A concurrent Android QA merge required rebasing the source PR; bundled inputs remain identical, and rebased CI gates source merge. No App/Worker release or local user-runtime installation/start.
