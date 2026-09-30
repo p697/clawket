@@ -106,6 +106,33 @@ it('maps session ownership, questions and model writes without credential-bearin
   expect(adapter.connection).not.toHaveProperty('auth'); expect(adapter.capabilities.execApproval).toBe(true);
 });
 
+it('makes a legacy failed turn visible even when the Bridge supplies no failure message', async () => {
+  const connected = adapter.connect(); sockets[0].open(); sockets[0].reply(); await connected;
+  const listener = jest.fn(); adapter.on('update', listener);
+  const update = { type: 'run_finished', sessionKey: 's', runId: 'legacy-run', stopReason: 'error' };
+  sockets[0].onmessage?.({ data: JSON.stringify({ type: 'event', event: 'codex.update', payload: update }) });
+  expect(listener).toHaveBeenCalledWith({ ...update, terminalMessage: {
+    id: 'codex-run-error:legacy-run', role: 'system',
+    text: "The agent couldn't complete this reply. Please try again.",
+  } });
+  expect(adapter.state).toBe('ready');
+  expect(sockets[0].sent.map(frame => JSON.parse(frame).method)).toEqual(['health']);
+});
+
+it.each([
+  { stopReason: 'end_turn' },
+  { stopReason: 'cancelled' },
+  { stopReason: 'error', message: { role: 'assistant', content: 'An existing failure explanation' } },
+  { stopReason: 'error', message: { role: 'assistant', content: '', attachments: [{ type: 'image', artifactId: 'image' }] } },
+  { stopReason: 'error', terminalMessage: { id: 'codex-turn-error:native', role: 'system', text: 'Model authentication failed. Sign in again on your computer.' } },
+])('preserves the authoritative completion and existing failure content: %j', async completion => {
+  const connected = adapter.connect(); sockets[0].open(); sockets[0].reply(); await connected;
+  const listener = jest.fn(); adapter.on('update', listener);
+  const update = { type: 'run_finished', sessionKey: 's', runId: 'run', ...completion };
+  sockets[0].onmessage?.({ data: JSON.stringify({ type: 'event', event: 'codex.update', payload: update }) });
+  expect(listener).toHaveBeenCalledWith(update);
+});
+
 it('publishes the selected project before navigating into a newly created conversation', async () => {
   const connected = adapter.connect(); sockets[0].open(); sockets[0].reply(); await connected;
   const updates = jest.fn(); adapter.on('update', updates);

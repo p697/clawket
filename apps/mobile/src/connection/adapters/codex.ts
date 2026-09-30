@@ -246,8 +246,16 @@ export class CodexAdapter implements AgentAdapter {
       if (frame.ok) pending.resolve(frame.payload);
       else pending.reject(new AdapterError(frame.error?.code === 'BRIDGE_UNAVAILABLE' ? 'bridge_offline' : requiresConnectionAction(frame.error) ? 'unauthorized' : 'server', frame.error?.code === 'BRIDGE_UNAVAILABLE' ? 'Codex Bridge is offline. Keep the Bridge running on your computer.' : frame.error?.message ?? 'Codex request failed'));
     } else if (frame.type === 'event' && frame.event === 'codex.update') {
-      const update = artifactUpdateDisplay(frame.payload as SessionUpdate);
+      let update = artifactUpdateDisplay(frame.payload as SessionUpdate);
       if (!update || typeof update.type !== 'string') return;
+      // Older Bridges report failed completion without any displayable content.
+      // Explicit failure is evidence; silence or a lost connection is not.
+      if (update.type === 'run_finished' && update.stopReason === 'error' && !update.terminalMessage
+        && !update.message?.content?.trim() && !update.message?.attachments?.length
+        && typeof update.runId === 'string' && update.runId.length > 0 && update.runId.length <= 200) {
+        update = { ...update, terminalMessage: { id: `codex-run-error:${update.runId}`, role: 'system',
+          text: "The agent couldn't complete this reply. Please try again." } };
+      }
       if (update.type === 'session_info_update') update.session.connectionId = this.record.id;
       for (const listener of this.listeners.update) listener(update.type === 'agent_message_chunk'
         ? { ...update, textMode: update.textMode ?? 'snapshot' } : update);
