@@ -55,6 +55,7 @@ describe('OpenClawAdapter Node integration', () => {
     const sent = await adapter.prompt(request.params.sessionKey, {
       text: request.params.message,
       idempotencyKey: request.params.idempotencyKey,
+      thinkingLevel: request.params.thinking,
     });
     await adapter.cancel(request.params.sessionKey, sent.runId);
     gateway.emit('chatAborted', {

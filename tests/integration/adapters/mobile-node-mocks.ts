@@ -1,5 +1,10 @@
 import { vi } from 'vitest';
 
+// Native analytics is outside recorded protocol replay; keep the real reporter.
+vi.mock('../../../apps/mobile/src/services/analytics/events', () => ({
+  analyticsEvents: { transportDiagnostic: vi.fn() },
+}));
+
 vi.mock('../../../apps/mobile/src/connection/protocol', () => ({
   GatewayClient: class NodeIntegrationGatewayClient {},
 }));
