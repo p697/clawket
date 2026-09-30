@@ -1178,7 +1178,7 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 
 | 编号 | 事项 | 怎么做 | 验证方法 | 状态 |
 |---|---|---|---|---|
-| HT-CODEX-RUNTIME-0930 | 桌面运行时优先的手机验收 | 本机现有 3.1.6 已通过保存的原生执行路径切到桌面 0.159.2，Bridge 重启完成；手机重新连接，无需重新扫码。 | 模型目录与新对话一致，消息得到回复；旧原生会话仍可继续。 | 隔离真实新对话成功；本机配对保留、认证/目录读回通过，待负责人手机验收。自动优先和新错误提示源码不等于 npm/App 已发布。见 ../3.1/codex-desktop-runtime-2026-09-30.md。 |
+| HT-CODEX-RUNTIME-0930 | 桌面运行时优先的手机验收 | 本机现有 3.1.6 已通过保存的原生执行路径切到桌面 0.159.2，Bridge 重启完成；手机重新连接，无需重新扫码。 | 模型目录与新对话一致，消息得到回复；旧原生会话仍可继续。 | 隔离真实新对话成功；本机配对保留、认证/目录读回通过，负责人已确认手机新建成功；旧原生会话续聊仍待验收。负责人已授权本次 Bridge 发布，App 更新另行授权。见 ../3.1/codex-desktop-runtime-2026-09-30.md。 |
 | HT-CODEX-AUTH-0930 | 原故障 iPhone 的认证与错误回显验收 | 负责人恢复必要的原生登录，安装本轮公开 Bridge 后重新配对，在新对话发送无副作用消息。 | 手机得到真实回复；认证失败显示明确提示，退出重进历史仍保留。记录 App build 和运行 Bridge。 | 原故障与旧/新历史差异已只读复现；本机清理完成，本轮 Bridge 发布进行中。新 Mobile 通用兜底需要独立 App 更新，真机验收待负责人完成。 |
 | HT-FIRST-SCAN-0930 | 首次扫码故障真机验证 | 已确认两个后端均立即报错、只有一个二维码、App 为当前仓库构建的 3.1.0；后续授权的 App 更新后重测首次扫码并保留固定校验原因。 | 区分真实首次校验原因与受控旧回调复现；当前代码修改不等于手机已收到修复。 | 本地旧回调竞态和错误反馈修复已实现，原现场的环境变化仍无证据，待 App 更新后负责人验证。见 ../3.1/first-scan-investigation-2026-09-30.md。 |
 | HT-NPM-315-0930 | Bridge 3.1.5 npm 发布两步验证 | 在 npm 官方浏览器流程完成验证，不在聊天中发送密码或验证码。 | npm 发布成功，公开 latest=3.1.5，公开包与固定候选逐字节一致。 | 已完成：npm 两步验证成功；公开 latest=3.1.5，下载包逐字节及 SHA-1/SHA-512 校验通过。 |
@@ -2777,3 +2777,8 @@ Owner requested desktop priority after a phone-created turn failed with a native
 Exact bounded unsupported-model refusals now produce fixed choose-model/update-Codex copy in live completion and history, localized in 19 Mobile languages. Malformed and unrelated responses retain generic privacy-safe copy. Explicit native integration with both installations present selected desktop 0.159.2 and verified its exact catalog/default, project sandbox permissions and a completed fresh text reply; its test owner was stopped. Focused tests: resolver 16, history 19, service 149, Mobile notices 10, v1 replay 41; Bridge/Mobile types, strict locales and docs pass. Initial source CI passed all required jobs; the final documentation commit keeps the exact-head gate. No package/App publication or cloud change.
 
 For immediate owner acceptance, authenticated control confirmed zero active owned runs; privately backed up local Clawket config, changed only its executable command to desktop 0.159.2 and restarted installed public Bridge 3.1.6. The old owner/child exited; readback confirms native readiness, Desktop IPC, eight models including the incident model and unchanged pairing/configuration except command. OpenClaw and unrelated owners were preserved. The phone can reconnect without rescanning; HT-CODEX-RUNTIME-0930 records the remaining device check. Automatic preference/new failure copy remain source changes for later package/App delivery. [Incident record](../3.1/codex-desktop-runtime-2026-09-30.md).
+
+
+### 2026-09-30 — Bridge 3.1.7 release preparation
+
+Owner confirmed a phone-created Codex conversation succeeds after the local runtime switch, then explicitly authorized a new Bridge release. The candidate includes merged macOS Desktop-first executable resolution and privacy-safe unsupported-model guidance; the CLI manifest, lock entry and publish guard advance from 3.1.6 to 3.1.7. Native ownership, explicit executable overrides and OpenClaw/Hermes/Pi/Claude paths remain intact. Fixed-artifact verification, exact candidate CI, npm publication and public installation results are tracked in [the release record](../3.1/bridge-3.1.7-release.md). No App or Worker release is included, and existing local user runtimes are preserved.
