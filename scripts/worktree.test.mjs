@@ -222,6 +222,21 @@ test('create builds a task worktree from origin/main with linked local files', (
   assert.match(nested.stderr, /inside the primary checkout/);
 });
 
+test('a link the branch would track is skipped with a warning, not created', (t) => {
+  const fixture = createFixture(t);
+  write(fixture.primary, '.gitignore', '.env*.local\ndocs/3.0/evidence/\nnode_modules/\n');
+  fixture.git(['commit', '--quiet', '-am', 'directory-only evidence pattern']);
+  fixture.git(['push', '--quiet', 'origin', 'main']);
+
+  const created = fixture.run(['create', 'claude/old-ignore', '--no-install']);
+  assert.equal(created.status, 0, created.stderr);
+  assert.match(created.stderr, /not linked because this branch's \.gitignore would track the link: docs\/3\.0\/evidence/);
+  const worktree = created.stdout.trim();
+  assert.equal(existsSync(path.join(worktree, 'docs/3.0/evidence')), false);
+  assert.equal(readlinkSync(path.join(worktree, 'apps/demo/.env.local')), path.join(fixture.primary, 'apps/demo/.env.local'));
+  assert.equal(fixture.git(['status', '--porcelain', '--untracked-files=all'], worktree), '');
+});
+
 test('remove parks only clean, pushed work and never follows linked files', (t) => {
   const fixture = createFixture(t);
   const worktree = fixture.run(['create', 'claude/park-me', '--no-install']).stdout.trim();

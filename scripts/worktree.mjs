@@ -301,7 +301,8 @@ export function linkLocalFiles({ primary, worktree, log = () => {} }) {
   }
   log(`linked ${report.linked.length} local files (${report.kept.length} already present)`);
   if (report.refused.length) {
-    throw new WorktreeError(`refused to link paths git would track: ${report.refused.join(', ')}; ignore them without a trailing slash`);
+    log(`warning: not linked because this branch's .gitignore would track the link: ${report.refused.join(', ')} `
+      + '(ignore them without a trailing slash)');
   }
   return report;
 }
