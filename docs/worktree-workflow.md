@@ -59,7 +59,7 @@ node scripts/worktree.mjs lease status
 
 Leases last two hours by default (`--ttl 45m`, at most 12 hours), renew when their holder acquires them again, and can be taken over once expired. A busy lease exits with status 3 and names its holder. They live in the shared `.git/clawket-leases/`; a corrupted lease file fails closed until it is inspected and replaced with `--force`.
 
-- **Android**: `ANDROID_SERIAL` selects the phone and `METRO_PORT` gives each worktree its own Metro for Debug builds (`npm run mobile:dev:android`). The Gradle cache stays in the machine-wide `GRADLE_USER_HOME`. Phone QA builds never use the store application ID: a debug-signed build cannot replace the store app, and agents never uninstall the store app to make room (`apps/mobile/docs/android-build.md` covers signing).
+- **Android**: `ANDROID_SERIAL` selects the phone and `METRO_PORT` gives each worktree its own Metro for Debug builds (`npm run mobile:dev:android`). The Gradle cache stays in the machine-wide `GRADLE_USER_HOME`. Phone builds use the QA application ID (`-Pclawket.qa=true`, see "Local QA package" in `apps/mobile/docs/android-build.md`): `com.p697.clawket.qa` installs beside the store app, and agents never uninstall the store app to make room.
 - **iOS**: build with `-derivedDataPath "$(node scripts/worktree.mjs paths derived-data)"` so worktrees never share build products.
 - **Acceptance builds of `main`** are made from the primary checkout after `sync-main`, under the device lease, only when the owner asks for one.
 
