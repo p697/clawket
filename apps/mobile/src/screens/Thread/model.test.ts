@@ -387,10 +387,11 @@ describe('Thread model', () => {
     );
   });
 
-  it('spaces rows by voice: stacked within a turn, apart across turns, sectioned by time labels', () => {
+  it('spaces rows by voice: joined within a speaker group, apart across turns, sectioned by time labels', () => {
     const at = (minute: number) => new Date(2026, 8, 5, 12, minute).getTime();
     const timeline = groupThreadTools(buildThreadTimelineItems({
       messages: [
+        { id: 'follow-up', role: 'assistant', text: 'Anything else?', timestampMs: at(10) },
         { id: 'reply', role: 'assistant', text: 'Done', timestampMs: at(10) },
         { id: 'exec-2', role: 'tool', text: '', toolStatus: 'success', timestampMs: at(10) },
         { id: 'exec-1', role: 'tool', text: '', toolStatus: 'success', timestampMs: at(10) },
@@ -402,20 +403,21 @@ describe('Thread model', () => {
       ],
       runs: [],
       locale: 'en-US',
-    }), new Set());
+    }));
 
     // Newest first, as the list data is built before it is reversed.
-    expect(withThreadRhythm(timeline).map((row) => [row.key, row.gapAbove])).toEqual([
-      ['message:reply', 'stack'],
-      ['tools:exec-1', 'stack'],
-      ['message:failed', 'turn'],
-      ['message:ask', 'none'],
-      ['date:message:ask', 'section'],
-      ['message:again', 'stack'],
-      ['message:first', 'none'],
-      ['date:message:first', 'section'],
+    expect(withThreadRhythm(timeline).map((row) => [row.key, row.gapAbove, row.joinsOlder, row.joinsNewer])).toEqual([
+      ['message:follow-up', 'joined', true, false],
+      ['message:reply', 'stack', false, true],
+      ['tools:exec-1', 'stack', false, false],
+      ['tools:failed', 'turn', false, false],
+      ['message:ask', 'none', false, false],
+      ['date:message:ask', 'section', false, false],
+      ['message:again', 'joined', true, false],
+      ['message:first', 'none', false, true],
+      ['date:message:first', 'section', false, false],
       // An untimed system notice gets no time label and sits under the list inset.
-      ['message:notice', 'none'],
+      ['message:notice', 'none', false, false],
     ]);
   });
 
@@ -427,6 +429,17 @@ describe('Thread model', () => {
       { type: 'message', key: 'ask', message: { id: 'ask', role: 'user', text: 'Run it' } },
     ]);
     expect(rows.map((row) => row.gapAbove)).toEqual(['stack', 'turn', 'none']);
+    // An approval card is not a bubble: the reply after it starts a new group.
+    expect(rows.map((row) => row.joinsOlder)).toEqual([false, false, false]);
+  });
+
+  it('never joins bubbles from different participants', () => {
+    const attribution = (id: string): UiMessage['attribution'] => ({ channel: 'telegram', sender: { id, name: id } });
+    const rows = withThreadRhythm([
+      { type: 'message', key: 'bob', message: { id: 'bob', role: 'user', text: 'Hi', attribution: attribution('bob') } },
+      { type: 'message', key: 'alice', message: { id: 'alice', role: 'user', text: 'Hey', attribution: attribution('alice') } },
+    ]);
+    expect(rows.map((row) => [row.joinsOlder, row.joinsNewer])).toEqual([[false, false], [false, false]]);
   });
 
   it('keeps input order stable when timeline timestamps are equal or absent', () => {
@@ -457,7 +470,7 @@ it('preserves cached content during recovery before surfacing a failure', () => 
 });
 
 describe('stabilizeThreadRows', () => {
-  const rows = (messages: UiMessage[]) => withThreadRhythm(groupThreadTools(buildThreadTimelineItems({ messages, runs: [] }), new Set())).reverse();
+  const rows = (messages: UiMessage[]) => withThreadRhythm(groupThreadTools(buildThreadTimelineItems({ messages, runs: [] }))).reverse();
   const tool = (id: string, status: UiMessage['toolStatus'] = 'success'): UiMessage => ({ id, role: 'tool', text: '', toolName: 'bash', toolStatus: status });
 
   it('returns the previous array when every row renders the same', () => {
@@ -479,6 +492,17 @@ describe('stabilizeThreadRows', () => {
     const changed = next.filter((row, index) => row !== previous[index]).map((row) => row.key);
     expect(changed).toEqual(['tools:t1', 'message:reply:1:0']);
     expect(next[0]).toBe(previous[0]);
+  });
+
+  it('replaces a bubble row whose group changed so its corners and tail follow', () => {
+    const first: UiMessage = { id: 'a', role: 'assistant', text: 'One' };
+    const previous = rows([first]);
+    const next = stabilizeThreadRows(previous, rows([{ id: 'b', role: 'assistant', text: 'Two' }, first]));
+    const before = previous.find((row) => row.key === 'message:a')!;
+    const after = next.find((row) => row.key === 'message:a')!;
+    expect(before.joinsNewer).toBe(false);
+    expect(after.joinsNewer).toBe(true);
+    expect(after).not.toBe(before);
   });
 
   it('never reuses a row across a change of key, type or order', () => {

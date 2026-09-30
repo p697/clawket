@@ -110,7 +110,6 @@
   "Wallpaper": "Papel de parede",
   "Background Image": "Imagem de fundo",
   "Change Photo": "Trocar foto",
-  "Choose Photo": "Escolher foto",
   "Remove Photo": "Remover foto",
   "Blur": "Desfoque",
   "{{value}} px": "{{value}} px",
@@ -387,5 +386,8 @@
   "Claude Code is not responding": "Claude Code não está respondendo",
   "To connect Codex, Claude Code or Pi, choose your Agent in Add connection and follow its pairing instructions.": "Para conectar Codex, Claude Code ou Pi, escolha seu Agent em Adicionar conexão e siga as instruções de emparelhamento.",
   "This QR code belongs to another backend. Scan the QR code for this backend.": "Este código QR pertence a outro backend. Escaneie o código QR deste backend.",
-  "Pairing environment does not match. Use the command shown on this page.": "O ambiente de pareamento não corresponde. Use o comando mostrado nesta página."
+  "Pairing environment does not match. Use the command shown on this page.": "O ambiente de pareamento não corresponde. Use o comando mostrado nesta página.",
+  "Pattern": "Padrão",
+  "Photo": "Foto",
+  "Plain": "Liso"
 }

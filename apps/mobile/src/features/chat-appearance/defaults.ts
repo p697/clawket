@@ -1,4 +1,4 @@
-import type { ChatAppearanceSettings, ChatBubbleStyle } from '../../types/chat-appearance';
+import type { ChatAppearanceSettings, ChatBubbleStyle, ChatWallpaperKind } from '../../types/chat-appearance';
 
 const DEFAULT_BLUR = 8;
 /** Wallpaper dim is a canvas overlay opacity; above this the photo stops being a wallpaper. */
@@ -17,9 +17,23 @@ function normalizeBubbleStyle(value: unknown): ChatBubbleStyle {
   return 'solid';
 }
 
+/**
+ * Settings saved before the built-in wallpaper existed carry no kind: a saved
+ * photo stays the photo, everything else gets the built-in pattern, which is
+ * the conversation's default look (owner decision 2026-09-30). A photo kind
+ * without an image to draw falls back to the pattern too.
+ */
+function normalizeWallpaperKind(value: unknown, hasPhoto: boolean): ChatWallpaperKind {
+  if (value === 'plain') return 'plain';
+  if (value === 'pattern') return 'pattern';
+  if (value === 'photo') return hasPhoto ? 'photo' : 'pattern';
+  return hasPhoto ? 'photo' : 'pattern';
+}
+
 export const DEFAULT_CHAT_APPEARANCE: ChatAppearanceSettings = {
   version: 1,
   background: {
+    kind: 'pattern',
     enabled: false,
     imagePath: undefined,
     blur: DEFAULT_BLUR,
@@ -45,13 +59,19 @@ export function normalizeChatAppearanceSettings(value: unknown): ChatAppearanceS
     ? record.bubbles as Record<string, unknown>
     : {};
   const imagePathRaw = typeof background.imagePath === 'string' ? background.imagePath.trim() : '';
-  const enabled = background.enabled === true && imagePathRaw.length > 0;
+  const legacyPhoto = background.enabled === true && imagePathRaw.length > 0;
+  const kind = normalizeWallpaperKind(
+    background.kind,
+    imagePathRaw.length > 0 && (background.kind === 'photo' || (background.kind === undefined && legacyPhoto)),
+  );
 
   return {
     version: 1,
     background: {
-      enabled,
-      imagePath: imagePathRaw || undefined,
+      kind,
+      enabled: kind === 'photo',
+      // Only a photo wallpaper keeps an image; a stale path never revives it.
+      imagePath: kind === 'photo' ? imagePathRaw : undefined,
       blur: clamp(
         typeof background.blur === 'number' ? background.blur : DEFAULT_BLUR,
         0,
@@ -77,6 +97,7 @@ export function normalizeChatAppearanceSettings(value: unknown): ChatAppearanceS
 
 export function buildChatAppearanceSignature(settings: ChatAppearanceSettings): string {
   return [
+    settings.background.kind,
     settings.background.enabled ? '1' : '0',
     settings.background.imagePath ?? '',
     settings.background.blur,

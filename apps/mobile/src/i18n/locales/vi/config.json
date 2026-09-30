@@ -110,7 +110,6 @@
   "Wallpaper": "Hình nền",
   "Background Image": "Ảnh nền",
   "Change Photo": "Đổi ảnh",
-  "Choose Photo": "Chọn ảnh",
   "Remove Photo": "Gỡ ảnh",
   "Blur": "Làm mờ",
   "{{value}} px": "{{value}} px",
@@ -387,5 +386,8 @@
   "Claude Code is not responding": "Claude Code không phản hồi",
   "To connect Codex, Claude Code or Pi, choose your Agent in Add connection and follow its pairing instructions.": "Để kết nối Codex, Claude Code hoặc Pi, hãy chọn Agent trong Thêm kết nối rồi làm theo hướng dẫn ghép nối.",
   "This QR code belongs to another backend. Scan the QR code for this backend.": "Mã QR này thuộc về một backend khác. Hãy quét mã QR của backend này.",
-  "Pairing environment does not match. Use the command shown on this page.": "Môi trường ghép nối không khớp. Hãy dùng lệnh hiển thị trên trang này."
+  "Pairing environment does not match. Use the command shown on this page.": "Môi trường ghép nối không khớp. Hãy dùng lệnh hiển thị trên trang này.",
+  "Pattern": "Họa tiết",
+  "Photo": "Ảnh",
+  "Plain": "Trơn"
 }

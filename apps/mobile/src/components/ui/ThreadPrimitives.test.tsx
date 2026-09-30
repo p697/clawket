@@ -20,7 +20,8 @@ import {
 } from '../../theme/tokens';
 import { triggerLightImpact } from '../../services/haptics';
 import { ApprovalCard } from './ApprovalCard';
-import { Bubble } from './Bubble';
+import { BUBBLE_TAIL_WIDTH, Bubble } from './Bubble';
+import { chatWallpaperPalettes } from '../../theme/chat-wallpaper';
 import { Composer } from './Composer';
 import { FloatingButton } from './FloatingButton';
 import { createChatGlassStyle } from '../../features/chat-appearance/resolver';
@@ -197,13 +198,17 @@ describe.each(['light', 'dark'] as const)('%s thread primitives', (scheme) => {
 
   it('renders the two canonical bubble variants without surface borders', () => {
     const theme = activeTheme(scheme);
+    const palette = chatWallpaperPalettes.iceBlue[scheme];
     const assistant = render(<Bubble testID="assistant" role="assistant">Hello</Bubble>);
     const assistantStyle = flattenStyle(assistant.getByTestId('assistant').props.style);
+    // Over the built-in wallpaper the Agent speaks on white (tinted charcoal in dark).
     expect(assistantStyle).toMatchObject({
       maxWidth: '92%',
       borderRadius: Radius.bubble,
-      backgroundColor: theme.colors.surface,
+      backgroundColor: palette.incoming,
       alignSelf: 'flex-start',
+      paddingHorizontal: Space.md,
+      paddingVertical: Space.sm,
     });
     expect(assistantStyle.borderWidth).toBe(0);
     expect(flattenStyle(assistant.getByText('Hello').props.style)).toMatchObject({
@@ -212,12 +217,37 @@ describe.each(['light', 'dark'] as const)('%s thread primitives', (scheme) => {
       lineHeight: LineHeight.body,
     });
 
+    // The user's own words: the solid accent with white text.
     const user = render(<Bubble testID="user" role="user">Hi</Bubble>);
     expect(flattenStyle(user.getByTestId('user').props.style)).toMatchObject({
-      backgroundColor: scheme === 'light' ? 'rgb(233,239,255)' : 'rgb(27,34,52)',
+      backgroundColor: palette.outgoing,
       alignSelf: 'flex-end',
       borderRadius: Radius.bubble,
     });
+    expect(flattenStyle(user.getByText('Hi').props.style).color).toBe(palette.onOutgoing);
+  });
+
+  it('joins a speaker\'s bubbles and gives only the last of a group a tail', () => {
+    const palette = chatWallpaperPalettes.iceBlue[scheme];
+    const alone = render(<Bubble testID="alone" role="assistant">One</Bubble>);
+    expect(flattenStyle(alone.getByTestId('alone').props.style)).toMatchObject({
+      borderTopLeftRadius: Radius.bubble, borderBottomLeftRadius: Radius.bubbleTail,
+    });
+    const tail = alone.getByTestId('alone-tail');
+    expect(flattenStyle(tail.props.style)).toMatchObject({ position: 'absolute', bottom: 0, left: -BUBBLE_TAIL_WIDTH });
+    expect(tail.findAll((node) => (node.type as unknown) === 'Path')[0]?.props.fill).toBe(palette.incoming);
+
+    const first = render(<Bubble testID="first" role="user" joinsNewer>One</Bubble>);
+    expect(flattenStyle(first.getByTestId('first').props.style)).toMatchObject({
+      borderTopRightRadius: Radius.bubble, borderBottomRightRadius: Radius.bubbleJoined,
+    });
+    expect(first.queryByTestId('first-tail')).toBeNull();
+
+    const last = render(<Bubble testID="last" role="user" joinsOlder>Two</Bubble>);
+    expect(flattenStyle(last.getByTestId('last').props.style)).toMatchObject({
+      borderTopRightRadius: Radius.bubbleJoined, borderBottomRightRadius: Radius.bubbleTail,
+    });
+    expect(flattenStyle(last.getByTestId('last-tail').props.style)).toMatchObject({ right: -BUBBLE_TAIL_WIDTH });
   });
 
   it('renders a borderless run event without a status rail', () => {

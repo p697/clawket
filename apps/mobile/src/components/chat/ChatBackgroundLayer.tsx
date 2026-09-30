@@ -2,7 +2,11 @@ import React from 'react';
 import { Image, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import { useAppTheme } from '../../theme';
 import { withAlpha } from '../../theme/color';
+import { resolveChatWallpaperPalette } from '../../theme/chat-wallpaper';
+import { resolveChatWallpaperKind } from '../../features/chat-appearance/resolver';
 import type { ChatAppearanceSettings } from '../../types/chat-appearance';
+import { useChatAccentId } from './ChatPresentation';
+import { ChatWallpaper } from './ChatWallpaper';
 
 type Props = {
   appearance: ChatAppearanceSettings;
@@ -14,10 +18,11 @@ type Props = {
 
 /**
  * The wallpaper. It fills whatever region hosts it edge to edge (the whole
- * Thread, or the appearance preview card) and never takes touches. The saved
- * blur softens the photo itself; the saved dim lays the theme canvas over it
- * at that opacity so text and translucent chrome keep their contrast on a
- * busy or bright picture.
+ * Thread, or the appearance preview card) and never takes touches. The
+ * default is the built-in accent-colored gradient with Clawket doodles; a
+ * photo replaces it, softened by the saved blur, with the theme canvas laid
+ * over it at the saved dim so text and translucent chrome keep their
+ * contrast on a busy or bright picture; the plain choice draws nothing.
  */
 export function ChatBackgroundLayer({
   appearance,
@@ -27,29 +32,25 @@ export function ChatBackgroundLayer({
   testID = 'chat-background-layer',
 }: Props): React.JSX.Element | null {
   const { theme } = useAppTheme();
-  const effectiveUri = appearance.background.enabled
-    ? imageUri ?? appearance.background.imagePath ?? null
-    : null;
+  const accentId = useChatAccentId();
+  const kind = resolveChatWallpaperKind(appearance, imageUri);
+  if (kind === 'plain') return null;
+  const rootStyle = [styles.root, { backgroundColor: theme.colors.canvas, borderRadius }, style];
 
-  if (!effectiveUri) return null;
+  if (kind === 'pattern') {
+    return (
+      <View testID={testID} pointerEvents="none" style={rootStyle}>
+        <ChatWallpaper testID={`${testID}-pattern`} palette={resolveChatWallpaperPalette(accentId, theme.scheme)} />
+      </View>
+    );
+  }
+
   const dim = Math.min(0.6, Math.max(0, appearance.background.dim));
-
   return (
-    <View
-      testID={testID}
-      pointerEvents="none"
-      style={[
-        styles.root,
-        {
-          backgroundColor: theme.colors.canvas,
-          borderRadius,
-        },
-        style,
-      ]}
-    >
+    <View testID={testID} pointerEvents="none" style={rootStyle}>
       <Image
         testID={`${testID}-image`}
-        source={{ uri: effectiveUri }}
+        source={{ uri: imageUri ?? appearance.background.imagePath ?? '' }}
         style={styles.image}
         resizeMode="cover"
         blurRadius={Math.round(appearance.background.blur)}

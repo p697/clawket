@@ -101,6 +101,7 @@ export type {
   ChatAppearanceSettings,
   ChatBackgroundFillMode,
   ChatBubbleStyle,
+  ChatWallpaperKind,
 } from './chat-appearance';
 
 // ---- Real Protocol Frames (req / res / event) ----

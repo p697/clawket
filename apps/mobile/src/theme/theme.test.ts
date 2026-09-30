@@ -141,12 +141,14 @@ describe('Clawket 3.0 theme tokens', () => {
   it('limits typography, spacing, weight, shape, and motion to the 3.0 values', () => {
     expect([FontSize.display, FontSize.title, FontSize.body, FontSize.secondary, FontSize.caption])
       .toEqual([28, 20, 17, 15, 13]);
+    // Bubble meta (clock and delivery glyphs) is one step under the caption (A+ chat design, 2026-09-30).
+    expect([FontSize.meta, LineHeight.meta]).toEqual([12, 16]);
     expect([...new Set(Object.values(FontSize))].sort((a, b) => a - b))
-      .toEqual([13, 15, 17, 20, 28]);
+      .toEqual([12, 13, 15, 17, 20, 28]);
     expect([LineHeight.display, LineHeight.title, LineHeight.body, LineHeight.secondary, LineHeight.caption])
       .toEqual([34, 26, 24, 20, 18]);
     expect([...new Set(Object.values(LineHeight))].sort((a, b) => a - b))
-      .toEqual([18, 20, 24, 26, 34]);
+      .toEqual([16, 18, 20, 24, 26, 34]);
     // Android's CJK fallback metrics clip Latin descenders in a 34-point display line.
     jest.isolateModules(() => {
       const { Platform } = require('react-native') as { Platform: { OS: string } };
@@ -159,7 +161,9 @@ describe('Clawket 3.0 theme tokens', () => {
     expect([...new Set(Object.values(Space))].sort((a, b) => a - b))
       .toEqual([4, 8, 12, 16, 24, 32]);
     expect(Radius).toEqual({
-      bubble: 20,
+      bubble: 18,
+      bubbleJoined: 6,
+      bubbleTail: 0,
       card: 16,
       settingsGroup: 14,
       avatarRoster: 18,

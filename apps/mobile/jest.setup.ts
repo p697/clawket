@@ -16,6 +16,8 @@ jest.mock('react-native-svg', () => {
     LinearGradient: host('LinearGradient'),
     Rect: host('Rect'),
     Stop: host('Stop'),
+    // The built-in chat wallpaper tiles its doodles with a pattern fill.
+    Pattern: host('Pattern'),
   };
 });
 

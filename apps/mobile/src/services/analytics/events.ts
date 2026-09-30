@@ -220,6 +220,7 @@ export const ANALYTICS_EVENT_PROPERTY_WHITELIST = Object.freeze({
   chat_appearance_opened: ['source'],
   chat_appearance_saved: [
     'source',
+    'wallpaper_kind',
     'has_background_image',
     'bubble_style',
     'bubble_opacity',
@@ -876,6 +877,8 @@ export const analyticsEvents = {
 
   chatAppearanceSaved(properties: {
     source: string;
+    /** `pattern`, `photo` or `plain`. */
+    wallpaper_kind: string;
     has_background_image: boolean;
     bubble_style: string;
     bubble_opacity: number;

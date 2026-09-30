@@ -24,6 +24,7 @@ describe('StorageService chat appearance', () => {
     await expect(StorageService.getChatAppearance()).resolves.toEqual({
       version: 1,
       background: {
+        kind: 'pattern',
         enabled: false,
         imagePath: undefined,
         blur: 8,
@@ -56,6 +57,7 @@ describe('StorageService chat appearance', () => {
     await expect(StorageService.getChatAppearance()).resolves.toEqual({
       version: 1,
       background: {
+        kind: 'pattern',
         enabled: false,
         imagePath: undefined,
         blur: 24,
@@ -73,6 +75,7 @@ describe('StorageService chat appearance', () => {
     await StorageService.setChatAppearance({
       version: 1,
       background: {
+        kind: 'photo',
         enabled: true,
         imagePath: 'file:///wallpaper.jpg',
         blur: 30,
@@ -90,6 +93,7 @@ describe('StorageService chat appearance', () => {
       JSON.stringify({
         version: 1,
         background: {
+          kind: 'photo',
           enabled: true,
           imagePath: 'wallpaper.jpg',
           blur: 24,
@@ -124,6 +128,7 @@ describe('StorageService chat appearance', () => {
     await expect(StorageService.getChatAppearance()).resolves.toEqual({
       version: 1,
       background: {
+        kind: 'photo',
         enabled: true,
         imagePath: 'file:///documents/chat-appearance/wallpaper.jpg',
         blur: 8,
@@ -141,6 +146,7 @@ describe('StorageService chat appearance', () => {
       JSON.stringify({
         version: 1,
         background: {
+          kind: 'photo',
           enabled: true,
           imagePath: 'wallpaper.jpg',
           blur: 8,
@@ -176,6 +182,7 @@ describe('StorageService chat appearance', () => {
     await expect(StorageService.getChatAppearance()).resolves.toEqual({
       version: 1,
       background: {
+        kind: 'pattern',
         enabled: false,
         imagePath: undefined,
         blur: 8,
@@ -193,6 +200,7 @@ describe('StorageService chat appearance', () => {
       JSON.stringify({
         version: 1,
         background: {
+          kind: 'pattern',
           enabled: false,
           imagePath: undefined,
           blur: 8,
@@ -206,5 +214,21 @@ describe('StorageService chat appearance', () => {
       }),
       expect.any(Object),
     );
+  });
+
+  it('keeps an explicit plain canvas and moves photo-less appearances onto the built-in wallpaper', async () => {
+    mockGetItemAsync.mockResolvedValueOnce(JSON.stringify({
+      version: 1,
+      background: { kind: 'plain', enabled: false, blur: 8, dim: 0, fillMode: 'cover' },
+      bubbles: { style: 'solid', opacity: 1 },
+    }));
+    await expect(StorageService.getChatAppearance()).resolves.toMatchObject({ background: { kind: 'plain', enabled: false } });
+
+    mockGetItemAsync.mockResolvedValueOnce(JSON.stringify({
+      version: 1,
+      background: { kind: 'photo', enabled: true, imagePath: '', blur: 8, dim: 0, fillMode: 'cover' },
+      bubbles: { style: 'solid', opacity: 1 },
+    }));
+    await expect(StorageService.getChatAppearance()).resolves.toMatchObject({ background: { kind: 'pattern', enabled: false } });
   });
 });

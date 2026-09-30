@@ -176,6 +176,7 @@ function appearance(
   return {
     version: 1,
     background: {
+      kind: 'pattern',
       enabled: false,
       blur: 8,
       dim: 0,
@@ -252,14 +253,17 @@ describe('ChatAppearanceScreen', () => {
       FontSize.title,
     ]);
     [
-      'chat-appearance-background',
-      'chat-appearance-blur',
-      'chat-appearance-dim',
       'chat-appearance-opacity',
       'chat-appearance-font-size',
       'chat-appearance-reset',
     ].forEach((testID) => {
       expect(flattenStyle(view.getByTestId(testID).props.style).borderWidth).toBeUndefined();
+    });
+    // The built-in wallpaper is the default; photo controls wait for a photo.
+    expect(view.getByTestId('chat-appearance-wallpaper-kind')).toBeTruthy();
+    expect(view.getByTestId('chat-appearance-preview-card').props.appearance.background.kind).toBe('pattern');
+    ['chat-appearance-background', 'chat-appearance-blur', 'chat-appearance-dim'].forEach((testID) => {
+      expect(view.queryByTestId(testID)).toBeNull();
     });
     expect(view.queryByText('Soften the wallpaper behind the chat content.')).toBeNull();
     expect(view.queryByText('Display avatar beside agent messages')).toBeNull();
@@ -278,11 +282,13 @@ describe('ChatAppearanceScreen', () => {
     fireEvent.press(view.getByTestId('chat-appearance-font-size-18'));
     fireEvent.press(view.getByTestId('chat-appearance-opacity'));
     fireEvent.press(view.getByTestId('chat-appearance-opacity-0.84'));
-    fireEvent.press(view.getByTestId('chat-appearance-background'));
+    // Choosing Photo without one opens the library first.
+    fireEvent.press(view.getByTestId('chat-appearance-wallpaper-kind-photo'));
 
     await waitFor(() => {
       expect(view.getByTestId('chat-appearance-remove-background')).toBeTruthy();
     });
+    expect(view.getByTestId('chat-appearance-preview-card').props.backgroundImageUri).toBe('file:///picked.jpg');
     fireEvent.press(view.getByTestId('chat-appearance-blur'));
     fireEvent.press(view.getByTestId('chat-appearance-blur-12'));
     fireEvent.press(view.getByTestId('chat-appearance-dim'));
@@ -293,6 +299,7 @@ describe('ChatAppearanceScreen', () => {
     expect(mockPersistChatBackgroundImage).toHaveBeenCalledWith('file:///picked.jpg');
     expect(context.onChatAppearanceChange).toHaveBeenCalledWith(expect.objectContaining({
       background: expect.objectContaining({
+        kind: 'photo',
         enabled: true,
         imagePath: 'file:///stored/background.jpg',
         blur: 12,
@@ -303,6 +310,7 @@ describe('ChatAppearanceScreen', () => {
     expect(context.onShowAgentAvatarToggle).toHaveBeenCalledWith(false);
     expect(context.onChatFontSizeChange).toHaveBeenCalledWith(18);
     expect(mockChatAppearanceSaved).toHaveBeenCalledWith(expect.objectContaining({
+      wallpaper_kind: 'photo',
       has_background_image: true,
       bubble_style: 'soft',
       blur: 12,
@@ -316,6 +324,7 @@ describe('ChatAppearanceScreen', () => {
     const context = createContext({
       chatAppearance: appearance({
         background: {
+          kind: 'photo',
           enabled: true,
           imagePath: 'file:///stored/old.jpg',
           blur: 8,
@@ -339,7 +348,7 @@ describe('ChatAppearanceScreen', () => {
     await waitFor(() => expect(onBack).toHaveBeenCalledTimes(1));
     expect(mockDeletePersistedChatBackgroundImage).toHaveBeenCalledWith('file:///stored/old.jpg');
     expect(context.onChatAppearanceChange).toHaveBeenCalledWith(expect.objectContaining({
-      background: expect.objectContaining({ enabled: false, imagePath: undefined }),
+      background: expect.objectContaining({ kind: 'pattern', enabled: false, imagePath: undefined }),
     }));
   });
 
@@ -347,7 +356,7 @@ describe('ChatAppearanceScreen', () => {
     const onBack = jest.fn();
     mockUseAppContext.mockReturnValue(createContext({
       chatAppearance: appearance({ background: {
-        enabled: true, imagePath: 'file:///stored/old.jpg', blur: 8, dim: 0, fillMode: 'cover',
+        kind: 'photo', enabled: true, imagePath: 'file:///stored/old.jpg', blur: 8, dim: 0, fillMode: 'cover',
       } }),
       onChatAppearanceChange: jest.fn().mockRejectedValue(new Error('Storage unavailable')),
     }));
@@ -362,11 +371,53 @@ describe('ChatAppearanceScreen', () => {
     expect(mockChatAppearanceSaved).not.toHaveBeenCalled();
   });
 
+  it('keeps the current wallpaper when the photo picker is cancelled, and saves the plain canvas', async () => {
+    mockPickChatBackgroundImage.mockResolvedValueOnce(null);
+    const onBack = jest.fn();
+    const context = createContext();
+    mockUseAppContext.mockReturnValue(context);
+    const view = render(<ChatAppearanceScreen onBack={onBack} />);
+
+    fireEvent.press(view.getByTestId('chat-appearance-wallpaper-kind-photo'));
+    await waitFor(() => expect(mockPickChatBackgroundImage).toHaveBeenCalled());
+    expect(view.getByTestId('chat-appearance-preview-card').props.appearance.background.kind).toBe('pattern');
+    expect(view.queryByTestId('chat-appearance-remove-background')).toBeNull();
+
+    fireEvent.press(view.getByTestId('chat-appearance-wallpaper-kind-plain'));
+    expect(view.getByTestId('chat-appearance-preview-card').props.appearance.background.kind).toBe('plain');
+    fireEvent.press(view.getByText('Save'));
+    await waitFor(() => expect(onBack).toHaveBeenCalledTimes(1));
+    expect(context.onChatAppearanceChange).toHaveBeenCalledWith(expect.objectContaining({
+      background: expect.objectContaining({ kind: 'plain', enabled: false, imagePath: undefined }),
+    }));
+    expect(mockPersistChatBackgroundImage).not.toHaveBeenCalled();
+    expect(mockChatAppearanceSaved).toHaveBeenCalledWith(expect.objectContaining({ wallpaper_kind: 'plain', has_background_image: false }));
+  });
+
+  it('drops a saved photo when another wallpaper is saved', async () => {
+    const onBack = jest.fn();
+    const context = createContext({
+      chatAppearance: appearance({ background: {
+        kind: 'photo', enabled: true, imagePath: 'file:///stored/old.jpg', blur: 8, dim: 0, fillMode: 'cover',
+      } }),
+    });
+    mockUseAppContext.mockReturnValue(context);
+    const view = render(<ChatAppearanceScreen onBack={onBack} />);
+    fireEvent.press(view.getByTestId('chat-appearance-wallpaper-kind-pattern'));
+    expect(view.queryByTestId('chat-appearance-blur')).toBeNull();
+    fireEvent.press(view.getByText('Save'));
+    await waitFor(() => expect(onBack).toHaveBeenCalledTimes(1));
+    expect(mockDeletePersistedChatBackgroundImage).toHaveBeenCalledWith('file:///stored/old.jpg');
+    expect(context.onChatAppearanceChange).toHaveBeenCalledWith(expect.objectContaining({
+      background: expect.objectContaining({ kind: 'pattern', enabled: false, imagePath: undefined }),
+    }));
+  });
+
   it('shows an app-owned error sheet when the photo picker fails', async () => {
     mockPickChatBackgroundImage.mockRejectedValueOnce(new Error('denied'));
     const view = render(<ChatAppearanceScreen onBack={jest.fn()} />);
 
-    fireEvent.press(view.getByTestId('chat-appearance-background'));
+    fireEvent.press(view.getByTestId('chat-appearance-wallpaper-kind-photo'));
     await waitFor(() => {
       expect(view.getByTestId('chat-appearance-error-sheet')).toBeTruthy();
     });

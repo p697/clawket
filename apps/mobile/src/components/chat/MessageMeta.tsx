@@ -3,23 +3,16 @@ import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-na
 import { Check, CheckCheck, Clock, CircleAlert, Pause } from 'lucide-react-native';
 import { FontSize, FontWeight, LineHeight, Space } from '../../theme/tokens';
 import type { UserMessageStatus } from '../../chat/messageDelivery';
-import { useConversationTheme } from './ChatPresentation';
+import { useChatSurfaces, useConversationTheme } from './ChatPresentation';
 
-/** Glyph size that sits on the caption baseline without outweighing the time. */
+/** Glyph size that sits on the meta baseline without outweighing the time. */
 export const MESSAGE_META_ICON_SIZE = 14;
-/** Matches the 1.75 chrome stroke so the glyph weighs the same as the caption digits. */
+/** Matches the 1.75 chrome stroke so the glyph weighs the same as the meta digits. */
 const MESSAGE_META_STROKE_WIDTH = 1.75;
-
-/**
- * Inside the tinted user bubble the meta is the bubble's own hue, softened:
- * accent at this opacity over `accentSoft` lands on a mid tone that belongs to
- * the surface (Telegram's outgoing ticks), never the full accent.
- */
-const ACCENT_META_OPACITY = 0.62;
 
 export type MessageMetaProps = Readonly<{
   time: string;
-  /** `accent` inside the user's tinted bubble; `neutral` (tertiary ink) elsewhere. */
+  /** `accent` on the user's solid bubble; `neutral` on the Agent's bubble and elsewhere. */
   tone?: 'accent' | 'neutral';
   status?: UserMessageStatus | null;
   /** Spoken form of the status glyph. */
@@ -32,19 +25,21 @@ export type MessageMetaProps = Readonly<{
  * Telegram-style trailing meta: the clock time plus, for the user's own
  * messages, a delivery glyph. A clock while the prompt is in flight, one
  * check when the backend accepted it and two checks once the Agent has picked
- * it up. Time and glyph share one color: the softened accent inside the user's
- * tinted bubble, the tertiary ink elsewhere. Only an uncertain send borrows
- * the semantic warn tone.
+ * it up. Time and glyph share one color: the bubble's own white, softened, on
+ * the user's solid accent; a quiet secondary ink on the Agent's bubble. An
+ * uncertain send keeps the bubble's meta color on the accent (the warn hue
+ * would vanish on it) and borrows the semantic warn tone everywhere else.
  */
 export function MessageMeta({ time, tone = 'neutral', status, statusLabel, style, testID }: MessageMetaProps): React.JSX.Element {
   const { colors } = useConversationTheme();
-  const metaColor = tone === 'accent' ? colors.accent : colors.inkTertiary;
+  const surfaces = useChatSurfaces();
+  const metaColor = tone === 'accent' ? surfaces.outgoing.metaColor : surfaces.incoming.metaColor;
   const Icon = status === 'delivered' ? CheckCheck : status === 'sent' ? Check
     : status === 'sending' || status === 'queued' ? Clock : status === 'held' ? Pause
       : status === 'uncertain' ? CircleAlert : null;
-  const iconColor = status === 'uncertain' ? colors.warn : metaColor;
+  const iconColor = status === 'uncertain' && tone !== 'accent' ? colors.warn : metaColor;
   return (
-    <View testID={testID} style={[styles.row, tone === 'accent' ? styles.accentTone : null, style]} pointerEvents="none">
+    <View testID={testID} style={[styles.row, style]} pointerEvents="none">
       {time ? <Text style={[styles.time, { color: metaColor }]} numberOfLines={1}>{time}</Text> : null}
       {Icon ? (
         <View
@@ -81,18 +76,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Space.xs,
   },
-  accentTone: {
-    opacity: ACCENT_META_OPACITY,
-  },
   time: {
-    fontSize: FontSize.caption,
-    lineHeight: LineHeight.caption,
+    fontSize: FontSize.meta,
+    lineHeight: LineHeight.meta,
     fontWeight: FontWeight.regular,
     fontVariant: ['tabular-nums'],
   },
   glyph: {
     width: MESSAGE_META_ICON_SIZE,
-    height: LineHeight.caption,
+    height: LineHeight.meta,
     justifyContent: 'center',
   },
 });

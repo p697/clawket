@@ -28,6 +28,8 @@ type Props = {
   startedAtMs?: number;
   finishedAtMs?: number;
   usage?: MessageUsage;
+  /** `push` rises over the work record sheet and returns to it on close. */
+  stackBehavior?: 'push' | 'replace' | 'switch';
 };
 
 function PayloadSection({ label, raw, testID }: { label: string; raw: string; testID: string }) {
@@ -102,7 +104,7 @@ export function ToolDetailModal(props: Props): React.JSX.Element {
         {duration ? <Text numberOfLines={1} style={styles.caption} testID="tool-detail-duration">{`· ${duration}`}</Text> : null}
       </View>
     </View>}
-    closeAccessibilityLabel={t('Close', { ns: 'common' })} snapPoints={SNAP_POINTS} testID="tool-detail-sheet">
+    closeAccessibilityLabel={t('Close', { ns: 'common' })} snapPoints={SNAP_POINTS} stackBehavior={props.stackBehavior} testID="tool-detail-sheet">
     <BottomSheetScrollView testID="tool-detail-scroll" contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       {s.args?.trim() ? <PayloadSection key={`input-${s.name}-${s.startedAtMs}`} label={t('Input')} raw={s.args} testID="tool-detail-input" /> : null}
       {s.detail?.trim() ? <PayloadSection key={`output-${s.name}-${s.startedAtMs}`} label={t('Output')} raw={s.detail} testID="tool-detail-output" />

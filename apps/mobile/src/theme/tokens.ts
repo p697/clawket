@@ -17,6 +17,8 @@ export const FontSize = {
   body: 17,
   secondary: 15,
   caption: 13,
+  /** Clock and delivery glyphs inside a chat bubble: one step under the caption so they recede. */
+  meta: 12,
 } as const;
 
 export const LineHeight = {
@@ -28,6 +30,7 @@ export const LineHeight = {
   body: 24,
   secondary: 20,
   caption: 18,
+  meta: 16,
 } as const;
 
 export const FontWeight = {
@@ -37,7 +40,11 @@ export const FontWeight = {
 
 // ─── Border Radius ───
 export const Radius = {
-  bubble: 20,
+  bubble: 18,
+  /** The corner where two bubbles from one speaker meet (Telegram-style grouping). */
+  bubbleJoined: 6,
+  /** The corner a bubble tail grows from: the tail continues that edge. */
+  bubbleTail: 0,
   card: 16,
   settingsGroup: 14,
   avatarRoster: 18,

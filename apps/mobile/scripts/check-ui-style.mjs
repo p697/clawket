@@ -64,12 +64,14 @@ const SCREEN_DIR_PREFIX = 'src/screens/';
 const SCREEN_FONT_SIZE_LIMIT = 3;
 const EMOJI_LITERAL_RE = /\p{Extended_Pictographic}/u;
 const CANONICAL_TOKEN_MEMBERS = new Map([
-  ['FontSize', new Set(['display', 'title', 'body', 'secondary', 'caption'])],
-  ['LineHeight', new Set(['display', 'title', 'body', 'secondary', 'caption'])],
+  ['FontSize', new Set(['display', 'title', 'body', 'secondary', 'caption', 'meta'])],
+  ['LineHeight', new Set(['display', 'title', 'body', 'secondary', 'caption', 'meta'])],
   ['FontWeight', new Set(['regular', 'semibold'])],
   ['Space', new Set(['xs', 'sm', 'md', 'lg', 'xl', 'xxl'])],
   ['Radius', new Set([
     'bubble',
+    'bubbleJoined',
+    'bubbleTail',
     'card',
     'settingsGroup',
     'avatarRoster',

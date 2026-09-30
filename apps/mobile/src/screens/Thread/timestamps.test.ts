@@ -37,10 +37,9 @@ describe('Thread time grouping', () => {
     expect(paged.slice(-4).map((row) => row.key)).toEqual(rows([message('a', at(7)), message('b', at(7, 13))]).map((row) => row.key));
   });
 
-  it('keeps tool grouping and expansion around time boundaries', () => {
+  it('keeps tool grouping around time boundaries', () => {
     const timeline = buildThreadTimelineItems({ messages: [message('b', at(7, 12, 1), 'tool'), message('a', at(7), 'tool')], runs: [] });
-    expect(groupThreadTools(timeline, new Set()).map((row) => row.key)).toEqual(['tools:a', 'date:message:a']);
-    expect(groupThreadTools(timeline, new Set(['tools:a'])).map((row) => row.key)).toEqual(['message:b', 'message:a', 'tools:a', 'date:message:a']);
+    expect(groupThreadTools(timeline).map((row) => row.key)).toEqual(['tools:a', 'date:message:a']);
   });
 
   it('keeps equal or backwards timestamps in source order', () => {

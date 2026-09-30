@@ -2,10 +2,19 @@
 
 The owner approved compact, icon-led tool rows with optional consecutive-call grouping, plus independent scheduled events without the thick rail. This supersedes the old RunCard rail recipe in `05-visual-system.md`; it does not change backend capabilities or tool execution.
 
-## Implementation
+> **Superseded in part by the A+ chat design (owner decision 2026-09-30).** Tool rows and inline expansion are replaced by three centred pills and a work record sheet; see "A+ tool pills" below. Grouping identity and reconciliation rules still apply.
 
-- `ToolCallRow` owns the 44-point tool row, shared category icons, localized action names, optional single-line argument preview, running/failure feedback, and detail-sheet entry.
-- Consecutive calls have a stable group identity derived from the oldest call. Expanding reveals individual rows; arrivals and completion do not reset expansion. Prose, dates, scheduled results, errors, approvals, and media break groups.
+## A+ tool pills — 2026-09-30
+
+- `groupThreadTools` folds every run of adjacent calls into one `tools` row, including a single call. A failed call, or one carrying media, stands alone; approvals stay messages; prose and dates break runs. The row key stays `tools:<oldest render key>` so live-to-history id swaps keep it.
+- `ToolActivityPill` renders the row as one of three pills: running (spinner, the current step's verb and command/path/query in monospace, elapsed seconds), finished (a verb-first summary of at most two kinds with distinct files counted once, plus the wall-clock span when at least one second), or failed (red, "`command` failed").
+- Every pill opens `WorkRecordSheet` for the turn around it (the calls between the user's prompt before it and the next prompt), oldest first; a step opens `ToolDetailModal` pushed over the sheet. The sheet follows the turn by render key and closes when the turn disappears. Nothing expands inside the timeline, so opening a record never moves the list.
+- Summary logic (`tool-activity-model.ts`) is pure and unit-tested; the phrase tables are registered as dynamic i18n origins.
+
+## Implementation (2026-09-06)
+
+- `ToolCallRow` owned the 44-point tool row, shared category icons, localized action names, optional single-line argument preview, running/failure feedback, and detail-sheet entry. (Replaced by `ToolActivityPill` on 2026-09-30.)
+- Consecutive calls have a stable group identity derived from the oldest call. Expanding revealed individual rows (removed 2026-09-30); arrivals and completion did not reset expansion. Prose, dates, scheduled results, errors, approvals, and media break groups.
 - `RunCard` now presents scheduled/subagent results with category icons and no decorative rail. Full titles may wrap; time, failure text, navigation, and log actions remain available.
 - Gateway history reconciliation deduplicates cached IDs and matches tool call identity independently of missing timestamps. Untimed cached activity precedes the authoritative snapshot instead of being appended after fresh messages. ISO timestamps and OpenClaw history IDs are normalized at the adapter boundary.
 

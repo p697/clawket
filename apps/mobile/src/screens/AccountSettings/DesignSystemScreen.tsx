@@ -13,6 +13,8 @@ import type { CompanionSceneKey } from '../../brand/companion-scenes';
 
 const GALLERY_SCENES: ReadonlyArray<CompanionSceneKey> = ['peek', 'fetch', 'yarn', 'pounce', 'listen'];
 import { Bubble } from '../../components/ui/Bubble';
+import { ChatBackgroundLayer } from '../../components/chat/ChatBackgroundLayer';
+import { DEFAULT_CHAT_APPEARANCE } from '../../features/chat-appearance/defaults';
 import { AgentAvatar } from '../../components/ui/AgentAvatar';
 import { RosterRow } from '../../components/ui/RosterRow';
 import { ReplyFailureSheet } from '../../components/chat/ReplyFailureSheet';
@@ -340,8 +342,12 @@ export function DesignSystemScreen({
               actionLabel={t('Details', { ns: 'chat' })} onAction={() => setReplyFailureVisible(true)} testID="design-reply-failure" />
             </FormStep>
             <FormStep number="04" title={t('Conversation')}>
-              <Bubble role="user">{t('A little more room to think.')}</Bubble>
-              <Bubble role="assistant">{t('Clear words. Calm surfaces. Familiar controls.')}</Bubble>
+              {/* Bubbles are drawn for the built-in chat wallpaper, so they sit on it here too. */}
+              <View style={styles.conversationSample}>
+                <ChatBackgroundLayer appearance={DEFAULT_CHAT_APPEARANCE} />
+                <Bubble role="user">{t('A little more room to think.')}</Bubble>
+                <Bubble role="assistant">{t('Clear words. Calm surfaces. Familiar controls.')}</Bubble>
+              </View>
             </FormStep>
             <FormStep number="05" title={t('Secondary actions')}>
 
@@ -430,6 +436,7 @@ const styles = StyleSheet.create({
   tokenGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Space.sm },
   tokenCard: { width: '47%', flexGrow: 1, padding: Space.md, borderRadius: Radius.card, gap: Space.sm },
   groupedSample: { padding: Space.md, borderRadius: Radius.card },
+  conversationSample: { padding: Space.lg, gap: Space.md, borderRadius: Radius.card, overflow: 'hidden' },
   tokenPaint: { height: ControlSize.floatingButton, borderRadius: Radius.settingsGroup },
   swatch: {
     width: IconSize.md,

@@ -46,8 +46,6 @@ import {
   CircleAlert,
   FilePenLine,
   Globe,
-  Info,
-  MessageCircle,
   MonitorSmartphone,
   Paperclip,
   MessagesSquare,
@@ -63,17 +61,16 @@ import type { PendingImage, UiApprovalStatus, UiMessage } from '../../types/chat
 import type { SlashCommand } from '../../data/slash-commands';
 import type { ThinkingLevel } from '../../utils/gateway-settings';
 import { useAppTheme } from '../../theme';
-import { ChatPresentationProvider, useChatPresentation, useConversationTheme } from '../../components/chat/ChatPresentation';
+import { ChatPresentationProvider, useChatPresentation, useChatSurfaces, useConversationTheme } from '../../components/chat/ChatPresentation';
 import { ModelIcon } from '../../components/chat/ModelIcon';
 import { ChatMessageIdentity } from '../../components/chat/ChatMessageIdentity';
 import { MessageAttachmentAlbum } from '../../components/chat/MessageAttachmentAlbum';
 import { MessageEntrance } from '../../components/chat/MessageEntrance';
 import { MessageMeta, messageMetaSpacer } from '../../components/chat/MessageMeta';
-import { activityCardStyles } from '../../components/chat/activity-card-styles';
 import { ThinkingIndicator } from '../../components/chat/ThinkingIndicator';
 import { ChatBackgroundLayer } from '../../components/chat/ChatBackgroundLayer';
 import { ChatWallpaperScrim } from '../../components/chat/ChatWallpaperScrim';
-import { isChatWallpaperActive, resolveChatChromeAppearance } from '../../features/chat-appearance/resolver';
+import { isChatWallpaperActive, resolveChatSurfaces } from '../../features/chat-appearance/resolver';
 import { DEFAULT_CHAT_APPEARANCE } from '../../features/chat-appearance/defaults';
 import type { ChatAppearanceSettings } from '../../types';
 import {
@@ -100,7 +97,10 @@ import { FloatingButton } from '../../components/ui/FloatingButton';
 import { HeaderTextAction } from '../../components/ui/HeaderTextAction';
 import { HeaderPill } from '../../components/ui/HeaderPill';
 import type { PlatformKind } from '../../components/ui/PlatformMark';
-import { ToolCallRow, ToolGroupRow } from '../../components/chat/ToolCallRow';
+import { ToolActivityPill } from '../../components/chat/ToolActivityPill';
+import { ServicePill } from '../../components/chat/ServicePill';
+import { WorkRecordSheet } from '../../components/chat/WorkRecordSheet';
+import { collectTurnToolSteps } from '../../components/chat/tool-activity-model';
 import { Sheet } from '../../components/ui/Sheet';
 import { ReplyFailureSheet } from '../../components/chat/ReplyFailureSheet';
 import { RunResult } from '../../components/chat/RunResult';
@@ -179,6 +179,7 @@ const REPLY_PLACEHOLDER: UiMessage = { id: REPLY_PLACEHOLDER_ID, role: 'assistan
 /** Execution summaries outgrow the screen: the run sheet scrolls inside fixed detents. */
 const RUN_RESULT_SNAP_POINTS: string[] = ['68%', '92%'];
 const EMPTY_RUN_CARDS: ReadonlyArray<ThreadRunCard> = Object.freeze([]);
+const EMPTY_TOOL_STEPS: ReadonlyArray<UiMessage> = Object.freeze([]);
 const EMPTY_TIMELINE_ROWS: ReadonlyArray<ThreadTimelineRow> = Object.freeze([]);
 /** The last committed list geometry, owned by one list instance. */
 type CommittedTimelineLayout = Readonly<{
@@ -530,7 +531,7 @@ export function ThreadView({
   // Android follows native frames; iOS retains its verified React padding path.
   const KeyboardAvoidingView = Platform.OS === 'ios'
     ? NativeKeyboardAvoidingView : AndroidChatKeyboardAvoider;
-  const { theme } = useAppTheme();
+  const { theme, accentId } = useAppTheme();
   const { t } = useTranslation('common');
   const hasParticipants = messages.some(isIncomingParticipant);
   const presentation = useMemo(() => ({
@@ -560,6 +561,17 @@ export function ThreadView({
   const selectedToolMessage = selectedToolMessageId
     ? messages.find((message) => message.id === selectedToolMessageId) ?? null
     : null;
+  // The work record follows the turn of the pill that opened it, by render
+  // identity, so history replacing live call ids keeps it open.
+  const [workRecordAnchor, setWorkRecordAnchor] = useState<string | null>(null);
+  useEffect(() => { setWorkRecordAnchor(null); }, [sessionKey]);
+  const workRecordSteps = useMemo(
+    () => (workRecordAnchor ? collectTurnToolSteps(messages, workRecordAnchor) : EMPTY_TOOL_STEPS),
+    [messages, workRecordAnchor],
+  );
+  useEffect(() => {
+    if (workRecordAnchor && workRecordSteps.length === 0) setWorkRecordAnchor(null);
+  }, [workRecordAnchor, workRecordSteps.length]);
   const workspace = useWorkspaceLayout();
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
   // Immersive mode: the wallpaper fills the screen and every control floats
@@ -568,9 +580,10 @@ export function ThreadView({
   const wallpaperActive = isChatWallpaperActive(chatAppearance);
   const headerHeight = resolveThreadHeaderHeight(topInset);
   const scrimOpacity = WALLPAPER_SCRIM[theme.scheme === 'dark' ? 'dark' : 'light'];
-  const timeLabelChrome = useMemo(() => (
-    wallpaperActive ? { backgroundColor: resolveChatChromeAppearance(theme).backgroundColor } : { backgroundColor: theme.colors.canvas }
-  ), [theme, wallpaperActive]);
+  // The scrims fade from the wallpaper's own top and bottom colors so the
+  // floating chrome melts into it; the timeline reads the same surfaces
+  // through the presentation context.
+  const surfaces = useMemo(() => resolveChatSurfaces(theme, chatAppearance, accentId), [accentId, chatAppearance, theme]);
   const offline = state.kind === 'offline' || state.kind === 'error';
   const [savedScope, setSavedScope] = useState<string | null>(null);
   const readableScope = `${connectionFailure?.scope ?? ''}\u0000${sessionKey ?? ''}`;
@@ -645,7 +658,6 @@ export function ThreadView({
     const timer = setInterval(() => setCalendarDay(localDayNumber(Date.now())), 60_000);
     return () => clearInterval(timer);
   }, []);
-  const [expandedTools, setExpandedTools] = useState<ReadonlySet<string>>(new Set());
   const showReplyPlaceholder = presentedRunning && !awaitingInput && !locked && !sessionPreview
     && !messages.some((message) => message.id === REPLY_PLACEHOLDER_ID
       || (message.role === 'assistant' && message.streaming === true));
@@ -690,7 +702,7 @@ export function ThreadView({
     runs: runCards,
     locale,
     yesterdayLabel: t('Yesterday', { lng: locale }),
-  }), expandedTools)).reverse(), [locale, timelineMessages, runCards, expandedTools, calendarDay, t]);
+  }))).reverse(), [locale, timelineMessages, runCards, calendarDay, t]);
   // Unchanged rows keep their objects: a streamed chunk re-renders the reply
   // that grew, not every visible cell.
   const stableRowsRef = useRef<ReadonlyArray<ThreadTimelineRow>>(EMPTY_TIMELINE_ROWS);
@@ -958,21 +970,32 @@ export function ThreadView({
     setMessageSelection({ messageId: message.id, role: message.role, anchor, remeasure });
   }, []);
   const clearMessageSelection = useCallback(() => setMessageSelection(null), []);
-  const renderSelectedMessage = useCallback((message: UiMessage, width: number) => (
-    <View style={[stylesStatic.timelineItem, { width }]}>
-      <ThreadMessageRowContent
-        message={message}
-        copy={copy}
-        favorited={favoriteMessageIds?.has(message.id) ?? false}
-        status={messageStatuses.get(message.id) ?? null}
-        showIdentity={false}
-        selectable
-      />
-    </View>
-  ), [copy, favoriteMessageIds, messageStatuses]);
+  // The lifted clone keeps the row's corners and tail so it covers the original exactly.
+  const timelineItemsRef = useRef(timelineItems);
+  timelineItemsRef.current = timelineItems;
+  const renderSelectedMessage = useCallback((message: UiMessage, width: number) => {
+    const row = timelineItemsRef.current.find((candidate) => candidate.type === 'message' && candidate.message.id === message.id);
+    return (
+      <View style={[stylesStatic.timelineItem, { width }]}>
+        <ThreadMessageRowContent
+          message={message}
+          copy={copy}
+          favorited={favoriteMessageIds?.has(message.id) ?? false}
+          status={messageStatuses.get(message.id) ?? null}
+          showIdentity={false}
+          joinsOlder={row?.joinsOlder ?? false}
+          joinsNewer={row?.joinsNewer ?? false}
+          selectable
+        />
+      </View>
+    );
+  }, [copy, favoriteMessageIds, messageStatuses]);
 
 
-  const openTool = useCallback((message: UiMessage) => setSelectedToolMessageId(message.id), []);
+  const openWorkRecord = useCallback((calls: ReadonlyArray<UiMessage>) => {
+    const oldest = calls[calls.length - 1];
+    if (oldest) setWorkRecordAnchor(oldest.renderKey ?? oldest.id);
+  }, []);
   // The row renderer reads only stable values, so a streamed chunk that changes
   // one row does not hand every visible cell a new renderer.
   const hasMessageActions = Boolean(messageActions);
@@ -982,27 +1005,13 @@ export function ThreadView({
     ({ item, target }: ListRenderItemInfo<ThreadTimelineRow>) => {
       if (item.type === 'tools') {
         return <View style={[stylesStatic.timelineItem, rowGapStyles[item.gapAbove]]}>
-          <ToolGroupRow testID={item.key} count={item.messages.length}
-            expanded={expandedTools.has(item.key)} running={item.messages.some((message) => message.toolStatus === 'running')}
-            incomplete={item.messages.some((message) => message.toolStatus === 'unknown')}
-            onPress={() => {
-              followNewMessagesRef.current = false;
-              readerScrollingRef.current = false;
-              returningToBottomRef.current = false;
-              setExpandedTools((previous) => {
-              const next = new Set(previous);
-              if (next.has(item.key)) next.delete(item.key); else next.add(item.key);
-              return next;
-            });
-            }} />
+          <ToolActivityPill testID={item.key} messages={item.messages} onPress={() => openWorkRecord(item.messages)} />
         </View>;
       }
       if (item.type === 'date') {
         return (
           <View style={[stylesStatic.timeSeparator, rowGapStyles[item.gapAbove]]}>
-            <Text testID={`thread-${item.key}`} style={[stylesStatic.timeLabel, {
-              color: theme.colors.inkSecondary,
-            }, timeLabelChrome]}>{item.label}</Text>
+            <ServicePill testID={`thread-${item.key}`} emphasis label={item.label} />
           </View>
         );
       }
@@ -1025,12 +1034,13 @@ export function ThreadView({
         <ThreadMessageTimelineItem
           message={item.message}
           gapAbove={item.gapAbove}
+          joinsOlder={item.joinsOlder}
+          joinsNewer={item.joinsNewer}
           capabilities={capabilities}
           copy={copy}
           status={messageStatuses.get(item.message.id) ?? null}
           animateEntrance={target === 'Cell' && entranceIds.has(item.message.renderKey ?? item.message.id)}
           claimEntrance={claimEntrance}
-          onOpenTool={openTool}
           onOpenAttachments={onOpenAttachments}
           onLongPress={hasMessageActions ? handleMessageLongPress : undefined}
           queuedTapOpensActions={queuedTapOpensActions}
@@ -1040,10 +1050,7 @@ export function ThreadView({
       );
     },
     [
-      theme.colors,
-      timeLabelChrome,
       capabilities,
-      expandedTools,
       copy,
       entranceIds,
       claimEntrance,
@@ -1051,7 +1058,7 @@ export function ThreadView({
       handleMessageLongPress,
       hasMessageActions,
       messageStatuses,
-      openTool,
+      openWorkRecord,
       queuedTapOpensActions,
       onOpenAttachments,
       onOpenRunLogs,
@@ -1067,7 +1074,7 @@ export function ThreadView({
   ], [styles.timelineContent, timelineClearance, timelineTopClearance]);
   const timelineFooter = useMemo(() => (compactionNotice ? (
     <View testID={`${testID}-compaction`} style={[stylesStatic.timelineItem, rowGapStyles.turn]}>
-      <SystemEventRow icon={Info} label={compactionNotice} />
+      <ServicePill label={compactionNotice} numberOfLines={3} />
     </View>
   ) : null), [compactionNotice, testID]);
   const previewUpgrade = sessionPreview?.hasHiddenHistory ? sessionPreview.onUpgrade : undefined;
@@ -1108,7 +1115,7 @@ export function ThreadView({
         <ChatWallpaperScrim
           testID={`${testID}-header-scrim`}
           edge="top"
-          color={theme.colors.canvas}
+          color={surfaces.scrim.top}
           opacity={wallpaperActive ? scrimOpacity.top : 1}
           style={wallpaperActive ? styles.headerScrimImmersive : styles.headerScrimTail}
         />
@@ -1218,10 +1225,7 @@ export function ThreadView({
                   exiting={reduceMotion ? undefined : EMPTY_HINT_EXIT}
                   style={[styles.emptyHint, { paddingTop: timelineTopClearance }]}
                 >
-                  <SystemEventRow
-                    icon={MessageCircle}
-                    label={copy.formatEmpty(agentName)}
-                  />
+                  <ServicePill label={copy.formatEmpty(agentName)} numberOfLines={3} />
                 </Animated.View>
               ) : null}
             </>
@@ -1293,7 +1297,7 @@ export function ThreadView({
         style={{ height: composerExpanded ? compactComposerHeight.current : 0 }} />
 
       {sessionPreview ? <View style={wallpaperActive ? null : { backgroundColor: theme.colors.canvas }}>
-        {wallpaperActive ? <ChatWallpaperScrim edge="bottom" color={theme.colors.canvas} opacity={scrimOpacity.bottom} /> : null}
+        {wallpaperActive ? <ChatWallpaperScrim edge="bottom" color={surfaces.scrim.bottom} opacity={scrimOpacity.bottom} /> : null}
         <SessionPreviewFooter onUpgrade={sessionPreview.onUpgrade}
           onMain={sessionPreview.onMain} mainLabel={sessionPreview.mainLabel} bottomInset={bottomInset} loading={sessionPreview.loading} />
       </View> : null}
@@ -1312,7 +1316,7 @@ export function ThreadView({
         >
           {wallpaperActive && !composerExpanded ? (
             <ChatWallpaperScrim testID={`${testID}-composer-scrim`} edge="bottom"
-              color={theme.colors.canvas} opacity={scrimOpacity.bottom} />
+              color={surfaces.scrim.bottom} opacity={scrimOpacity.bottom} />
           ) : null}
           {showSlashSuggestions && onSelectSlashCommand ? (
             <View style={styles.slashSuggestions}>
@@ -1427,9 +1431,16 @@ export function ThreadView({
         title={selectedRun?.title ?? ''} snapPoints={RUN_RESULT_SNAP_POINTS} testID="thread-run-result">
         {selectedRun ? <RunResult presentation="sheet" summary={selectedRun.summary} statusLabel={copy.formatRunDetail(selectedRun.statusLabel, selectedRun.timeLabel)} /> : null}
       </Sheet>
+      <WorkRecordSheet
+        visible={workRecordSteps.length > 0}
+        steps={workRecordSteps}
+        onClose={() => setWorkRecordAnchor(null)}
+        onOpenStep={(message) => setSelectedToolMessageId(message.id)}
+      />
       <ToolDetailModal
         visible={Boolean(selectedToolMessage)}
         onClose={() => setSelectedToolMessageId(null)}
+        stackBehavior="push"
         name={selectedToolMessage?.toolName?.trim() || copy.tool}
         status={selectedToolMessage?.toolStatus ?? 'success'}
         args={selectedToolMessage?.toolArgs}
@@ -1548,6 +1559,7 @@ function ThreadRunTimelineItem({
   onOpenResult: (run: ThreadRunCard) => void;
   onOpenLogs?: ThreadViewProps['onOpenRunLogs'];
 }>): React.JSX.Element {
+  const surfaces = useChatSurfaces();
   const sessionKey = run.sessionKey;
   const jobId = run.jobId;
   // Cron cards open the execution record (owner decision 2026-09-19); sub-agent
@@ -1586,6 +1598,7 @@ function ThreadRunTimelineItem({
             : 'accent'}
         onPress={openCronRun ?? openSession ?? (() => onOpenResult(run))}
         accessibilityLabel={`${run.title}, ${copy.formatRunDetail(run.statusLabel, run.timeLabel)}`}
+        style={{ backgroundColor: surfaces.card }}
         trailing={openLogs ? (
           <View testID={`thread-${run.kind}-logs-${run.id}`}>
             <HeaderTextAction label={copy.logs} onPress={openLogs} />
@@ -1601,6 +1614,9 @@ type ThreadMessageTimelineItemProps = Readonly<{
   message: UiMessage;
   /** Rhythm toward the older row above; owned by the timeline model. */
   gapAbove: ThreadRowGap;
+  /** Bubble grouping with the same speaker's neighbours; owned by the timeline model. */
+  joinsOlder: boolean;
+  joinsNewer: boolean;
   capabilities: Capabilities;
   copy: ThreadCopy;
   /** Delivery glyph for the user's own settled messages. */
@@ -1608,7 +1624,6 @@ type ThreadMessageTimelineItemProps = Readonly<{
   /** Plays the row's entrance once; latched per message id inside the row. */
   animateEntrance: boolean;
   claimEntrance: (key: string) => boolean;
-  onOpenTool: (message: UiMessage) => void;
   onOpenAttachments?: (message: UiMessage, index?: number) => void;
   onLongPress?: (
     message: UiMessage,
@@ -1638,12 +1653,13 @@ function statusCopy(status: UserMessageStatus | null, copy: ThreadCopy): string 
 const ThreadMessageTimelineItem = React.memo(function ThreadMessageTimelineItem({
   message,
   gapAbove,
+  joinsOlder,
+  joinsNewer,
   capabilities,
   copy,
   status,
   animateEntrance,
   claimEntrance,
-  onOpenTool,
   onOpenAttachments,
   onLongPress,
   favorited,
@@ -1692,16 +1708,10 @@ const ThreadMessageTimelineItem = React.memo(function ThreadMessageTimelineItem(
         onResolveApproval={onResolveApproval}
       />
     );
-  } else if (message.role === 'tool') {
-    content = (
-      <View style={stylesStatic.timelineItem}>
-        <ToolCallRow message={message} onPress={() => onOpenTool(message)} />
-      </View>
-    );
   } else if (message.role === 'system') {
     content = (
       <View style={stylesStatic.timelineItem}>
-        <SystemEventRow icon={Info} label={localizeAgentSystemNotice(message.text, t)} />
+        <ServicePill label={localizeAgentSystemNotice(message.text, t)} numberOfLines={3} />
       </View>
     );
   } else if (message.role === 'assistant' || message.role === 'user') {
@@ -1729,7 +1739,9 @@ const ThreadMessageTimelineItem = React.memo(function ThreadMessageTimelineItem(
           message={message}
           copy={copy}
           favorited={favorited}
-          showIdentity={message.role !== 'user' || gapAbove !== 'stack'}
+          showIdentity={!joinsOlder}
+          joinsOlder={joinsOlder}
+          joinsNewer={joinsNewer}
           status={status}
           onOpenAttachments={onOpenAttachments}
           onLongPress={actionable ? handleLongPress : undefined}
@@ -1768,6 +1780,8 @@ function ThreadMessageRowContent({
   favorited,
   status = null,
   showIdentity = true,
+  joinsOlder = false,
+  joinsNewer = false,
   selectable = false,
   onOpenAttachments,
   onLongPress,
@@ -1777,6 +1791,9 @@ function ThreadMessageRowContent({
   favorited: boolean;
   status?: UserMessageStatus | null;
   showIdentity?: boolean;
+  /** Bubble grouping with the same speaker's neighbours (see `ThreadTimelineRow`). */
+  joinsOlder?: boolean;
+  joinsNewer?: boolean;
   /**
    * Text selection lives on the lifted clone only, Telegram style: in the list
    * a long press belongs to the message actions, and a selectable text view
@@ -1788,6 +1805,7 @@ function ThreadMessageRowContent({
   onLongPress?: () => void;
 }>): React.JSX.Element | null {
   const { colors } = useConversationTheme();
+  const surfaces = useChatSurfaces();
   const artifactWidth = useMessageAlbumWidth();
   if (message.role !== 'assistant' && message.role !== 'user') return null;
   const attachmentCount = message.imageUris?.length ?? 0;
@@ -1797,6 +1815,10 @@ function ThreadMessageRowContent({
   ));
   // A reply that has produced no text yet still owns its bubble.
   const hasBubble = Boolean(message.text) || (message.role === 'assistant' && message.streaming === true);
+  // The message's own files and photos follow its bubble: the bubble joins
+  // them and leaves the tail to the group's last bubble.
+  const followedBySelf = fileAttachments.length > 0 || Boolean(message.artifactAttachments?.length) || attachmentCount > 0;
+  const bubbleJoinsNewer = joinsNewer || followedBySelf;
   return (
     <View testID={`thread-delivery-${message.id}`} style={stylesStatic.deliveryFrame}>
       {showIdentity && isIncomingParticipant(message) && message.attribution ? (
@@ -1804,9 +1826,11 @@ function ThreadMessageRowContent({
       ) : null}
       {hasBubble ? (
         message.role === 'assistant' ? (
-          <AssistantBubble message={message} showIdentity={showIdentity} selectable={selectable} />
+          <AssistantBubble message={message} showIdentity={showIdentity} selectable={selectable}
+            joinsOlder={joinsOlder} joinsNewer={bubbleJoinsNewer} />
         ) : (
-          <UserBubble message={message} status={status} copy={copy} selectable={selectable} />
+          <UserBubble message={message} status={status} copy={copy} selectable={selectable}
+            joinsOlder={joinsOlder} joinsNewer={bubbleJoinsNewer} />
         )
       ) : null}
       {fileAttachments.map((file, index) => (
@@ -1815,7 +1839,8 @@ function ThreadMessageRowContent({
           testID={`thread-file-${message.id}-${index}`}
           icon={Paperclip}
           label={file.fileName?.trim() || copy.file}
-          style={message.role === 'user' && !isIncomingParticipant(message) ? stylesStatic.fileAttachmentUser : undefined}
+          style={[stylesStatic.fileAttachment, { backgroundColor: surfaces.card },
+            message.role === 'user' && !isIncomingParticipant(message) ? stylesStatic.fileAttachmentUser : null]}
         />
       ))}
       {message.artifactAttachments?.length ? <ArtifactAttachments attachments={message.artifactAttachments} maxWidth={artifactWidth}
@@ -1857,14 +1882,23 @@ function UserBubble({
   status,
   copy,
   selectable = false,
-}: Readonly<{ message: UiMessage; status: UserMessageStatus | null; copy: ThreadCopy; selectable?: boolean }>): React.JSX.Element {
-  const typography = useBubbleTypography();
-  const time = useMessageClock(message);
+  joinsOlder = false,
+  joinsNewer = false,
+}: Readonly<{
+  message: UiMessage;
+  status: UserMessageStatus | null;
+  copy: ThreadCopy;
+  selectable?: boolean;
+  joinsOlder?: boolean;
+  joinsNewer?: boolean;
+}>): React.JSX.Element {
   const incoming = isIncomingParticipant(message);
+  const typography = useBubbleTypography(incoming ? 'assistant' : 'user');
+  const time = useMessageClock(message);
   if (incoming) status = null;
   const hasMeta = Boolean(time) || Boolean(status);
   return (
-    <Bubble testID={`thread-bubble-${message.id}`} role={incoming ? "assistant" : "user"}>
+    <Bubble testID={`thread-bubble-${message.id}`} role={incoming ? "assistant" : "user"} joinsOlder={joinsOlder} joinsNewer={joinsNewer}>
       <View style={stylesStatic.userBody}>
         <Text selectable={selectable} style={typography}>
           {message.text}
@@ -2142,10 +2176,14 @@ function AssistantBubble({
   message,
   showIdentity = true,
   selectable = false,
+  joinsOlder = false,
+  joinsNewer = false,
 }: {
   message: UiMessage;
   showIdentity?: boolean;
   selectable?: boolean;
+  joinsOlder?: boolean;
+  joinsNewer?: boolean;
 }): React.JSX.Element {
   const theme = useConversationTheme();
   const { fontSize, identity } = useChatPresentation();
@@ -2180,8 +2218,9 @@ function AssistantBubble({
     <Bubble
       testID={`thread-bubble-${message.id}`}
       role="assistant"
-      style={[stylesStatic.thinkingBubble, thinking && activityCardStyles.surface,
-        thinking && { backgroundColor: theme.colors.surface, borderWidth: 0, shadowOpacity: 0, elevation: 0 }]}
+      joinsOlder={joinsOlder}
+      joinsNewer={joinsNewer}
+      style={stylesStatic.thinkingBubble}
     >
       {thinking ? (
         <ThinkingIndicator testID={`thread-thinking-${message.id}`} label={liveActivity} />
@@ -2220,12 +2259,15 @@ const MESSAGE_LONG_PRESS_DELAY = 220;
 // Timeline rhythm, one value per relation between a row and the older row
 // above it (see `ThreadRowGap`). Rows own no vertical padding of their own,
 // so any two neighbours are separated by exactly one of these values; the
-// list's own top/bottom insets frame the oldest and newest rows.
+// list's own top/bottom insets frame the oldest and newest rows. Bubbles of
+// one speaker sit 2 points apart as one group, Telegram style (A+ chat
+// design, owner decision 2026-09-30).
 const rowGapStyles = StyleSheet.create<Record<ThreadRowGap, ViewStyle>>({
   none: {},
+  joined: { paddingTop: Space.xs / 2 },
   stack: { paddingTop: Space.sm },
-  turn: { paddingTop: Space.lg },
-  section: { paddingTop: Space.xl },
+  turn: { paddingTop: Space.md },
+  section: { paddingTop: Space.lg },
 });
 
 const stylesStatic = StyleSheet.create({
@@ -2234,17 +2276,17 @@ const stylesStatic = StyleSheet.create({
   // A time label heads the group below it: its gap above comes from the
   // rhythm, and it owns the space down to the first row of the group.
   timeSeparator: { alignItems: 'center', paddingBottom: Space.md },
-  timeLabel: {
-    fontSize: FontSize.caption, lineHeight: LineHeight.caption,
-    paddingHorizontal: Space.sm, paddingVertical: Space.xs, borderRadius: Radius.full,
-    overflow: 'hidden', textAlign: 'center',
-  },
   timelineItem: {
     width: '100%',
     maxWidth: IPAD_CHAT_MAX_WIDTH,
     alignSelf: 'center',
     paddingHorizontal: THREAD_ROW_INSET,
     gap: Space.xs,
+  },
+  // A file sits on the wallpaper as a small card-colored chip beside its bubble.
+  fileAttachment: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: Space.md,
   },
   fileAttachmentUser: {
     alignSelf: 'flex-end',
@@ -2268,7 +2310,7 @@ const stylesStatic = StyleSheet.create({
   // leaves exactly enough room for the overlay.
   metaSpacer: {
     color: 'transparent',
-    fontSize: FontSize.caption,
+    fontSize: FontSize.meta,
     fontVariant: ['tabular-nums'],
   },
   metaOverlay: {

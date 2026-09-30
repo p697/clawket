@@ -9,6 +9,7 @@ import { receiveSessionFile, validateSessionFiles } from '../../services/session
 import { MessageAttachmentAlbum } from './MessageAttachmentAlbum';
 import { BorderWidth, ControlSize, FontSize, FontWeight, IconSize, LineHeight, Radius, Space } from '../../theme/tokens';
 import { useAppTheme } from '../../theme';
+import { useChatSurfaces } from './ChatPresentation';
 
 type Downloaded = { uri: string; mimeType: string; name: string; size: number };
 let scopeSequence = 0;
@@ -86,6 +87,10 @@ function ArtifactAttachment({ attachment, onOpenImage, maxWidth }: {
 }): React.JSX.Element {
   const scope = useContext(Context);
   const { t } = useTranslation('chat'); const { theme } = useAppTheme();
+  // A file card sits among the bubbles on the conversation's card color; its
+  // glyph well takes the contrasting neutral.
+  const surfaces = useChatSurfaces();
+  const wellColor = surfaces.card === theme.colors.surface ? theme.colors.canvas : theme.colors.surface;
   const [loaded, setLoaded] = useState<Downloaded | null>(null);
   const [failed, setFailed] = useState(false); const [busy, setBusy] = useState(false);
   const live = useRef(true); const loading = useRef(false);
@@ -130,9 +135,9 @@ function ArtifactAttachment({ attachment, onOpenImage, maxWidth }: {
       : <Pressable testID="artifact-file-card" accessibilityRole="button" accessibilityLabel={`${name}, ${busy ? t('Downloading attachment') : action}`}
         accessibilityState={{ disabled: !scope || busy, busy }} disabled={!scope || busy}
         onPress={() => { void load(!isImage); }}
-        style={({ pressed }) => [styles.card, { width: maxWidth, backgroundColor: theme.colors.surface,
+        style={({ pressed }) => [styles.card, { width: maxWidth, backgroundColor: surfaces.card,
           borderColor: theme.colors.line, opacity: pressed ? 0.7 : 1 }]}>
-        <View style={[styles.fileIcon, { backgroundColor: theme.colors.canvas }]}><Icon size={IconSize.lg} color={theme.colors.inkSecondary} strokeWidth={1.6} /></View>
+        <View style={[styles.fileIcon, { backgroundColor: wellColor }]}><Icon size={IconSize.lg} color={theme.colors.inkSecondary} strokeWidth={1.6} /></View>
         <View style={styles.fileInfo}>
           <Text numberOfLines={2} style={[styles.name, { color: theme.colors.ink }]}>{name}</Text>
           <Text numberOfLines={1} style={[styles.detail, { color: failed ? theme.colors.bad : theme.colors.inkSecondary }]}>

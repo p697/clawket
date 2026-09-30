@@ -4,6 +4,7 @@ import { useAppTheme } from '../../theme';
 import { buildTheme, resolveChatTheme } from '../../theme/theme';
 import { resolveAccentScale } from '../../theme/accents';
 import { DEFAULT_CHAT_APPEARANCE } from '../../features/chat-appearance/defaults';
+import { resolveChatSurfaces, type ChatSurfaces } from '../../features/chat-appearance/resolver';
 import type { ChatMessageIdentityProps } from './ChatMessageIdentity';
 import type { AccentColorId, ChatAppearanceSettings } from '../../types';
 
@@ -32,4 +33,22 @@ export function useConversationTheme() {
   return useMemo(() => accentId
     ? buildTheme(theme.mode, theme.scheme, resolveAccentScale(accentId))
     : resolveChatTheme(theme), [accentId, theme]);
+}
+
+/** The conversation accent: the editor draft when there is one, else the saved color. */
+export function useChatAccentId(): AccentColorId {
+  const { accentId: savedAccentId } = useAppTheme();
+  const { accentId } = useChatPresentation();
+  return accentId ?? savedAccentId;
+}
+
+/**
+ * Wallpaper, bubble, card and pill colors for the conversation, shared by the
+ * real thread and the appearance preview so both paint the same surfaces.
+ */
+export function useChatSurfaces(): ChatSurfaces {
+  const theme = useConversationTheme();
+  const { appearance } = useChatPresentation();
+  const accentId = useChatAccentId();
+  return useMemo(() => resolveChatSurfaces(theme, appearance, accentId), [accentId, appearance, theme]);
 }

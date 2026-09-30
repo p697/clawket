@@ -6,13 +6,14 @@ jest.mock('expo-file-system', () => ({
 jest.mock('expo-sharing', () => ({ isAvailableAsync: jest.fn().mockResolvedValue(false), shareAsync: jest.fn() }));
 jest.mock('../../components/ui/Sheet', () => ({ Sheet: ({ visible, children, ...props }: any) => visible ? React.createElement(require('react-native').View, props, children) : null }));
 import React from 'react';
-import { act, fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render, within } from '@testing-library/react-native';
 import { CAPABILITY_MATRIX, type Capabilities } from '@clawket/agent-protocol';
 import { builtInAccents } from '../../theme/accents';
 import { buildTheme } from '../../theme/theme';
 import { ControlSize, FontSize, Motion, Radius, Space } from '../../theme/tokens';
 import { DEFAULT_CHAT_APPEARANCE } from '../../features/chat-appearance/defaults';
 import { resolveChatChromeAppearance } from '../../features/chat-appearance/resolver';
+import { CHAT_PHOTO_SERVICE, chatWallpaperPalettes } from '../../theme/chat-wallpaper';
 import type { SharedValue } from 'react-native-reanimated';
 import type { ComposerHandle } from '../../components/ui/Composer';
 import type { UiMessage } from '../../types/chat';
@@ -153,8 +154,10 @@ jest.mock('react-native', () => {
   };
 });
 
+// Tokens the copy under test fills in; others stay visible as keys.
+const mockInterpolatedTokens = new Set(['count', 'percent', 'name', 'detail', 'first', 'second', 'minutes', 'seconds', 'hours']);
 jest.mock('react-i18next', () => ({
-  useTranslation: () => ({ t: (key: string, options?: Record<string, unknown>) => key === 'Yesterday' ? require(`../../i18n/locales/${options?.lng === 'zh-Hans' ? 'zh-Hans' : String(options?.lng || 'en').split('-')[0]}/common.json`).Yesterday : key.replace('{{count}}', String(options?.count ?? '')).replace('{{percent}}', String(options?.percent ?? '')).replace('{{name}}', String(options?.name ?? '')) }),
+  useTranslation: () => ({ t: (key: string, options?: Record<string, unknown>) => key === 'Yesterday' ? require(`../../i18n/locales/${options?.lng === 'zh-Hans' ? 'zh-Hans' : String(options?.lng || 'en').split('-')[0]}/common.json`).Yesterday : key.replace(/\{\{(\w+)\}\}/g, (match, token: string) => (mockInterpolatedTokens.has(token) ? String(options?.[token] ?? '') : match)) }),
 }));
 
 jest.mock('react-native-enriched-markdown', () => {
@@ -593,16 +596,14 @@ describe('ThreadView', () => {
     ] });
     const view = render(<ThreadView {...props} />);
     const label = () => view.getByTestId('thread-date:message:timed');
-    expect(label().props.children).toBe('23:59');
-    expect(flattenStyle(label().props.style)).toMatchObject({
-      color: buildTheme(scheme, scheme, builtInAccents.iceBlue).colors.inkSecondary,
-      backgroundColor: buildTheme(scheme, scheme, builtInAccents.iceBlue).colors.canvas,
-      textAlign: 'center',
-    });
+    const palette = chatWallpaperPalettes.iceBlue[scheme];
+    // A centred service pill over the wallpaper, Telegram style.
+    expect(flattenStyle(label().props.style)).toMatchObject({ backgroundColor: palette.service, borderRadius: Radius.full, alignSelf: 'center' });
+    expect(flattenStyle(within(label()).getByText('23:59').props.style)).toMatchObject({ color: palette.onService, textAlign: 'center' });
     act(() => jest.advanceTimersByTime(60_000));
-    expect(label().props.children).toBe('昨天 23:59');
+    expect(within(label()).getByText('昨天 23:59')).toBeTruthy();
     view.rerender(<ThreadView {...props} locale="de" />);
-    expect(label().props.children).toBe('Gestern 23:59');
+    expect(within(label()).getByText('Gestern 23:59')).toBeTruthy();
     view.unmount();
   });
 
@@ -621,10 +622,12 @@ describe('ThreadView', () => {
       flex: 1,
       backgroundColor: theme.colors.canvas,
     });
+    // The built-in wallpaper is on by default, so the header floats on glass.
     expect(flattenStyle(view.getByTestId('thread-screen-header-pill').props.style)).toMatchObject({
       borderRadius: Radius.full,
-      backgroundColor: theme.colors.surface,
+      backgroundColor: resolveChatChromeAppearance(theme).backgroundColor,
     });
+    expect(view.getByTestId('chat-background-layer-pattern')).toBeTruthy();
     expect(view.getByText('Context remaining: 54%')).toBeTruthy();
     expect(view.getByTestId('thread-markdown-message-1').props.markdownStyle.paragraph.fontSize)
       .toBe(FontSize.body);
@@ -719,9 +722,11 @@ describe('ThreadView', () => {
     expect(view.getByTestId('thread-screen-header-pill-working')).toBeTruthy();
     expect(view.getAllByText('Thinking…')).toHaveLength(1);
     expect(view.queryByTestId('thread-screen-header-pill-avatar-working')).toBeNull();
+    // The placeholder is already the reply's own bubble, tail and all.
     expect(flattenStyle(view.getByTestId('thread-bubble-streaming').props.style)).toMatchObject({
-      minHeight: ControlSize.floatingButton, borderRadius: Radius.card, paddingVertical: Space.sm,
+      borderRadius: Radius.bubble, borderBottomLeftRadius: Radius.bubbleTail, paddingVertical: Space.sm,
     });
+    expect(view.getByTestId('thread-bubble-streaming-tail')).toBeTruthy();
     expect(flattenStyle(view.getByTestId('thread-bubble-streaming').props.style).minWidth).toBeGreaterThan(0);
 
     view.rerender(<ThreadView {...createProps({ messages: [sent], isRunning: true, activityLabel: 'Using exec…', input: '' })} />);
@@ -1140,6 +1145,7 @@ describe('ThreadView', () => {
     expect(view.queryByTestId('thread-screen-composer-voice')).toBeNull();
     fireEvent.press(view.getByTestId('thread-screen-composer-primary'));
     view.getByTestId('thread-screen-timeline').props.onStartReached();
+    fireEvent.press(view.getByTestId('tools:tool-1'));
     fireEvent.press(view.getByTestId('thread-run-tool-1'));
     fireEvent.press(view.getByLabelText('Photo 1 of 1'));
     fireEvent.press(view.getByTestId('thread-approval-approval-1-primary'));
@@ -1380,7 +1386,7 @@ describe('ThreadView', () => {
     expect(view.getAllByTestId(/^thread-markdown-/)).toHaveLength(1);
   });
 
-  it.each(['drag', 'tool', 'session', 'composer', 'unmount'])('cancels a pending layout correction on %s', (action) => {
+  it.each(['drag', 'session', 'composer', 'unmount'])('cancels a pending layout correction on %s', (action) => {
     jest.useFakeTimers();
     const tool: UiMessage = { id: 'tool', role: 'tool', text: '', toolName: 'bash', toolStatus: 'success' };
     const props = createProps({ input: 'First\nSecond\nThird', messages: [tool, { ...tool, id: 'other-tool' }] });
@@ -1390,7 +1396,6 @@ describe('ThreadView', () => {
     mockScrollToEnd.mockClear();
     fireEvent(timeline, 'contentSizeChange', 400, 2000);
     if (action === 'drag') fireEvent(timeline, 'scrollBeginDrag');
-    if (action === 'tool') fireEvent.press(view.getByTestId('tools:other-tool'));
     if (action === 'session') view.rerender(<ThreadView {...props} sessionKey="another-session" />);
     if (action === 'composer') fireEvent.press(view.getByTestId('thread-screen-composer-expand'));
     if (action === 'unmount') view.unmount();
@@ -1494,6 +1499,7 @@ describe('ThreadView', () => {
     }));
     expect(onOpenRunSession).toHaveBeenCalledTimes(1);
 
+    fireEvent.press(view.getByTestId('tools:tool-details'));
     fireEvent.press(view.getByTestId('thread-run-tool-details'));
     expect(view.getByTestId('thread-tool-detail').props.detail).toBe('package.json');
     expect(onOpenRunSession).toHaveBeenCalledTimes(1);
@@ -2106,28 +2112,50 @@ describe('ThreadView', () => {
   });
 });
 
-it('keeps expanded tool activity open through updates and opens full tool details', () => {
+it('folds tool activity into one pill that opens the turn work record and each step\'s full details', () => {
+  const prompt: UiMessage = { id: 'ask', role: 'user', text: 'Check the repo' };
   const first: UiMessage = { id: 'a', role: 'tool', text: '', toolName: 'bash', toolArgs: JSON.stringify({ command: 'git status' }), toolStatus: 'success' };
-  const second: UiMessage = { ...first, id: 'b', toolStatus: 'running' };
-  const props = createProps({ messages: [second, first] });
+  const second: UiMessage = { ...first, id: 'b', toolArgs: JSON.stringify({ command: 'git log' }), toolStatus: 'running' };
+  const props = createProps({ messages: [second, first, prompt] });
   const view = render(<ThreadView {...props} />);
+  const timeline = () => view.getByTestId('thread-screen-timeline');
+  // One live pill for the running step; the calls themselves stay off the timeline.
+  expect(timeline().props.data.map((item: any) => item.key)).toEqual(['message:ask', 'tools:a']);
+  expect(view.getByTestId('tools:a-busy')).toBeTruthy();
+  expect(view.getByText('git log')).toBeTruthy();
   expect(view.queryByTestId('thread-run-a')).toBeNull();
   mockScrollToEnd.mockClear();
+
   fireEvent.press(view.getByTestId('tools:a'));
-  expect(view.getByTestId('tools:a').props.accessibilityState).toEqual({ expanded: true });
-  const timeline = view.getByTestId('thread-screen-timeline');
-  expect(timeline.props.data.map((item: any) => item.key)).toEqual(['tools:a', 'message:a', 'message:b']);
-  expect(timeline.props.maintainVisibleContentPosition?.autoscrollToBottomThreshold).toBeUndefined();
-  fireEvent.scroll(timeline, scrollEvent(0));
-  act(() => timeline.props.onContentSizeChange(400, 2300));
-  expect(view.getByTestId('thread-screen-scroll-to-bottom')).toBeTruthy();
+  expect(view.getByTestId('work-record-sheet').props.title).toBe('Work record');
+  expect(view.getByTestId('thread-run-a')).toBeTruthy();
+  expect(view.getByTestId('thread-run-b')).toBeTruthy();
   expect(mockScrollToEnd).not.toHaveBeenCalled();
-  view.rerender(<ThreadView {...props} messages={[{ ...first, id: 'c' }, { ...second, toolStatus: 'success' }, first]} />);
-  expect(view.getByTestId('tools:a').props.accessibilityState).toEqual({ expanded: true });
-  expect(view.getByTestId('thread-screen-timeline').props.data.map((item: any) => item.key)).toEqual(['tools:a', 'message:a', 'message:b', 'message:c']);
+
+  // The record follows the turn through updates: finished steps, new calls, a replaced id.
+  view.rerender(<ThreadView {...props} messages={[{ ...first, id: 'c' }, { ...second, toolStatus: 'success' }, first, prompt]} />);
+  expect(timeline().props.data.map((item: any) => item.key)).toEqual(['message:ask', 'tools:a']);
+  expect(view.getByText('Ran 3 commands')).toBeTruthy();
+  expect(view.getByTestId('work-record-sheet')).toBeTruthy();
   expect(view.getByTestId('thread-run-c')).toBeTruthy();
   fireEvent.press(view.getByTestId('thread-run-a'));
-  expect(view.getByTestId('thread-tool-detail').props.args).toEqual(JSON.stringify({ command: 'git status' }));
+  expect(view.getByTestId('thread-tool-detail').props).toMatchObject({
+    args: JSON.stringify({ command: 'git status' }),
+    stackBehavior: 'push',
+  });
+});
+
+it('gives a failed call its own red pill and keeps it in the work record', () => {
+  const prompt: UiMessage = { id: 'ask', role: 'user', text: 'Check CI' };
+  const ok: UiMessage = { id: 'a', role: 'tool', text: '', toolName: 'exec', toolArgs: JSON.stringify({ command: 'gh pr view 50' }), toolStatus: 'success' };
+  const failed: UiMessage = { ...ok, id: 'b', toolArgs: JSON.stringify({ command: 'gh pr checks 50' }), toolStatus: 'error' };
+  const view = render(<ThreadView {...createProps({ messages: [failed, ok, prompt] })} />);
+  expect(view.getByTestId('thread-screen-timeline').props.data.map((item: any) => item.key))
+    .toEqual(['message:ask', 'tools:a', 'tools:b']);
+  expect(view.getByTestId('tools:b').props.accessibilityLabel).toBe('gh pr checks 50 failed');
+  fireEvent.press(view.getByTestId('tools:b'));
+  expect(view.getByTestId('thread-run-a')).toBeTruthy();
+  expect(view.getByTestId('thread-run-b').props.accessibilityLabel).toContain('Failed');
 });
 
 it('uses a human title for a new session whose backend title is only its internal key', () => {
@@ -2348,11 +2376,28 @@ describe.each(['light', 'dark'] as const)('immersive wallpaper in %s', (scheme) 
   const theme = () => buildTheme(scheme, scheme, builtInAccents.iceBlue);
   const wallpaper = (): ThreadViewProps['chatAppearance'] => ({
     ...DEFAULT_CHAT_APPEARANCE,
-    background: { ...DEFAULT_CHAT_APPEARANCE.background, enabled: true, imagePath: 'file:///documents/chat-appearance/background.jpg', blur: 4, dim: 0.2 },
+    background: { ...DEFAULT_CHAT_APPEARANCE.background, kind: 'photo', enabled: true, imagePath: 'file:///documents/chat-appearance/background.jpg', blur: 4, dim: 0.2 },
+  });
+  const plain = (): ThreadViewProps['chatAppearance'] => ({
+    ...DEFAULT_CHAT_APPEARANCE,
+    background: { ...DEFAULT_CHAT_APPEARANCE.background, kind: 'plain' },
   });
 
-  it('floats the header over the timeline and keeps the canvas chrome without a wallpaper', () => {
+  it('draws the built-in wallpaper by default and melts the scrims into its own colors', () => {
     const view = render(<ThreadView {...createProps({ topInset: Space.xl })} />);
+    const palette = chatWallpaperPalettes.iceBlue[scheme];
+    expect(view.getByTestId('chat-background-layer-pattern')).toBeTruthy();
+    const stops = (testID: string) => view.getByTestId(testID).findAll((node) => (node.type as unknown) === 'Stop')
+      .map((node) => node.props.stopColor);
+    expect(new Set(stops('thread-screen-header-scrim'))).toEqual(new Set([palette.gradient[0]]));
+    expect(new Set(stops('thread-screen-composer-scrim'))).toEqual(new Set([palette.gradient[2]]));
+    const glass = resolveChatChromeAppearance(theme());
+    expect(flattenStyle(view.getByTestId('thread-screen-header-pill').props.style).backgroundColor).toBe(glass.backgroundColor);
+    expect(flattenStyle(view.getByTestId('thread-screen-composer').props.style).backgroundColor).toBe(glass.backgroundColor);
+  });
+
+  it('floats the header over the timeline and keeps the canvas chrome on the plain canvas', () => {
+    const view = render(<ThreadView {...createProps({ topInset: Space.xl, chatAppearance: plain() })} />);
     const headerHeight = resolveThreadHeaderHeight(Space.xl);
     expect(headerHeight).toBe(Space.xl + Space.sm + ControlSize.floatingButton + Space.sm);
     expect(view.queryByTestId('chat-background-layer')).toBeNull();
@@ -2400,7 +2445,8 @@ describe.each(['light', 'dark'] as const)('immersive wallpaper in %s', (scheme) 
     expect(flattenStyle(view.getByTestId('thread-screen-header-pill').props.style)).toMatchObject({
       backgroundColor: glass.backgroundColor, borderColor: glass.borderColor,
     });
-    expect(flattenStyle(view.getByTestId('thread-date:message:timed').props.style).backgroundColor).toBe(glass.backgroundColor);
+    // Over a photo a pill carries its own dark backing.
+    expect(flattenStyle(view.getByTestId('thread-date:message:timed').props.style).backgroundColor).toBe(CHAT_PHOTO_SERVICE.service);
 
     const region = flattenStyle(view.getByTestId('thread-screen-composer-region').props.style);
     expect(region.backgroundColor).toBeUndefined();
@@ -2469,7 +2515,11 @@ it.each(['light', 'dark'] as const)('distinguishes participants from the Agent i
   const colors = buildTheme(scheme, scheme, builtInAccents.iceBlue).colors;
   expect(view.getByTestId('chat-agent-role')).toBeTruthy();
   expect(flattenStyle(view.getByTestId('chat-agent-role').props.style).backgroundColor).toBe(colors.accentSoft);
-  expect(flattenStyle(view.getByTestId('thread-bubble-alice').props.style).backgroundColor).toBe(colors.surface);
+  // A participant speaks on the same incoming bubble as the Agent.
+  expect(flattenStyle(view.getByTestId('thread-bubble-alice').props.style).backgroundColor)
+    .toBe(chatWallpaperPalettes.iceBlue[scheme].incoming);
+  expect(flattenStyle(view.getByTestId('thread-bubble-reply').props.style).backgroundColor)
+    .toBe(chatWallpaperPalettes.iceBlue[scheme].incoming);
   expect(flattenStyle(view.getByText('A').props.style).color).toBe(palette.color);
   view.rerender(<ThreadView {...createProps({ showAgentAvatar: true, messages: [
     { id: 'reply', role: 'assistant', text: 'Reply', timestampMs: 102000 },

@@ -561,44 +561,66 @@ export function resolveThreadErrorDetail(error: unknown): string | undefined {
   return typeof message === 'string' ? message.trim() || undefined : undefined;
 }
 
-/** Input is newest-first. The oldest call anchors a group while new calls arrive. */
-export function groupThreadTools(items: ThreadTimelineItem[], expanded: ReadonlySet<string>): ThreadTimelineItem[] {
+/** A tool row that joins its neighbours in one activity pill. */
+function isGroupableTool(item: ThreadTimelineItem): item is Extract<ThreadTimelineItem, { type: 'message' }> {
+  return item.type === 'message' && item.message.role === 'tool' && !item.message.approval
+    && !item.message.toolPresentation?.length && !item.message.imageUris?.length && item.message.toolStatus !== 'error';
+}
+
+/**
+ * Folds tool activity into pills (A+ chat design, owner decision 2026-09-30):
+ * every run of adjacent calls becomes one `tools` row, a failed call or one
+ * carrying media stands alone as its own pill, and approvals stay messages.
+ * Input is newest-first. The oldest call anchors a group while new calls arrive.
+ */
+export function groupThreadTools(items: ReadonlyArray<ThreadTimelineItem>): ThreadTimelineItem[] {
   const result: ThreadTimelineItem[] = [];
   for (let index = 0; index < items.length;) {
     const item = items[index]!;
-    if (item.type !== 'message' || item.message.role !== 'tool' || item.message.approval || item.message.toolPresentation?.length || item.message.imageUris?.length || item.message.toolStatus === 'error') {
+    if (item.type !== 'message' || item.message.role !== 'tool' || item.message.approval) {
       result.push(item); index += 1; continue;
     }
-    const calls: Extract<ThreadTimelineItem, { type: 'message' }>[] = [];
-    while (index < items.length) {
-      const next = items[index]!;
-      if (next.type !== 'message' || next.message.role !== 'tool' || next.message.approval || next.message.toolPresentation?.length || next.message.imageUris?.length || next.message.toolStatus === 'error') break;
-      calls.push(next); index += 1;
+    const calls: Extract<ThreadTimelineItem, { type: 'message' }>[] = [item];
+    index += 1;
+    if (isGroupableTool(item)) {
+      while (index < items.length) {
+        const next = items[index]!;
+        if (!isGroupableTool(next)) break;
+        calls.push(next); index += 1;
+      }
     }
-    if (calls.length < 2) { result.push(...calls); continue; }
     // Keyed like message rows: history can replace a live call's id
     // (`toolcall_` → `toolresult_`, Hermes aliases) while its render identity,
-    // and with it the group and its expanded state, stays put.
+    // and with it the pill, stays put.
     const oldest = calls[calls.length - 1]!.message;
-    const key = `tools:${oldest.renderKey ?? oldest.id}`;
-    // Inverted list: children follow the summary visually, newest first in data.
-    if (expanded.has(key)) result.push(...calls);
-    result.push({ type: 'tools', key, timestampMs: item.timestampMs, messages: calls.map((call) => call.message) });
+    result.push({
+      type: 'tools',
+      key: `tools:${oldest.renderKey ?? oldest.id}`,
+      timestampMs: item.timestampMs,
+      messages: calls.map((call) => call.message),
+    });
   }
   return result;
 }
 
 /**
  * Vertical rhythm of a timeline row: the gap it owns toward the older row
- * above it. `stack` keeps one voice's rows together (consecutive tool calls,
- * an activity stack and the reply it produced, repeated bubbles from one
- * speaker), `turn` separates the user's voice from the Agent's, and
- * `section` sets a time label apart from everything before it. The row after
- * a time label owns nothing: the label carries its own gap below.
+ * above it. `joined` keeps consecutive bubbles from one speaker together as
+ * one Telegram-style group; `stack` keeps other rows of one voice close (an
+ * activity pill and the reply it produced); `turn` separates the user's voice
+ * from the Agent's and sets service pills apart; `section` sets a time label
+ * apart from everything before it. The row after a time label owns nothing:
+ * the label carries its own gap below.
  */
-export type ThreadRowGap = 'none' | 'stack' | 'turn' | 'section';
+export type ThreadRowGap = 'none' | 'joined' | 'stack' | 'turn' | 'section';
 
-export type ThreadTimelineRow = ThreadTimelineItem & Readonly<{ gapAbove: ThreadRowGap }>;
+export type ThreadTimelineRow = ThreadTimelineItem & Readonly<{
+  gapAbove: ThreadRowGap;
+  /** The older row is a bubble from the same speaker: the bubble joins it. */
+  joinsOlder: boolean;
+  /** The newer row is a bubble from the same speaker: the tail waits for it. */
+  joinsNewer: boolean;
+}>;
 
 type ThreadVoice = string;
 
@@ -614,15 +636,28 @@ function timelineVoice(item: ThreadTimelineItem): ThreadVoice {
   return 'agent';
 }
 
-/** Assigns every row its gap from the visually preceding (older, next in data) row. */
+/** A row that draws a message bubble, so neighbours from its speaker can join it. */
+function isBubbleRow(item: ThreadTimelineItem | undefined): boolean {
+  return item?.type === 'message' && !item.message.approval
+    && (item.message.role === 'user' || item.message.role === 'assistant');
+}
+
+function joins(item: ThreadTimelineItem, neighbour: ThreadTimelineItem | undefined): boolean {
+  return isBubbleRow(item) && isBubbleRow(neighbour) && timelineVoice(item) === timelineVoice(neighbour!);
+}
+
+/** Assigns every row its gap from the visually preceding (older, next in data) row and its bubble joins. */
 export function withThreadRhythm(items: ReadonlyArray<ThreadTimelineItem>): ThreadTimelineRow[] {
   return items.map((item, index) => {
     const older = items[index + 1];
+    const newer = index > 0 ? items[index - 1] : undefined;
+    const joinsOlder = joins(item, older);
     let gapAbove: ThreadRowGap;
     if (!older || older.type === 'date') gapAbove = 'none';
     else if (item.type === 'date') gapAbove = 'section';
+    else if (joinsOlder) gapAbove = 'joined';
     else gapAbove = timelineVoice(item) === timelineVoice(older) ? 'stack' : 'turn';
-    return { ...item, gapAbove };
+    return { ...item, gapAbove, joinsOlder, joinsNewer: joins(item, newer) };
   });
 }
 
@@ -644,7 +679,8 @@ function hasSameMessages(left: ReadonlyArray<UiMessage>, right: ReadonlyArray<Ui
 
 function reuseThreadRow(previous: ThreadTimelineRow, next: ThreadTimelineRow): ThreadTimelineRow {
   if (previous === next) return previous;
-  if (previous.type !== next.type || previous.gapAbove !== next.gapAbove || previous.timestampMs !== next.timestampMs) return next;
+  if (previous.type !== next.type || previous.gapAbove !== next.gapAbove || previous.timestampMs !== next.timestampMs
+    || previous.joinsOlder !== next.joinsOlder || previous.joinsNewer !== next.joinsNewer) return next;
   switch (next.type) {
     case 'message':
       return previous.type === 'message' && hasSameFields(previous.message, next.message) ? previous : next;

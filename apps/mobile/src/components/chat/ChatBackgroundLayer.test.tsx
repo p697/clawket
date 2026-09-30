@@ -3,6 +3,7 @@ import { render } from '@testing-library/react-native';
 import { builtInAccents } from '../../theme/accents';
 import { buildTheme } from '../../theme/theme';
 import { withAlpha } from '../../theme/color';
+import { chatWallpaperPalettes } from '../../theme/chat-wallpaper';
 import { DEFAULT_CHAT_APPEARANCE } from '../../features/chat-appearance/defaults';
 import type { ChatAppearanceSettings } from '../../types/chat-appearance';
 import { ChatBackgroundLayer } from './ChatBackgroundLayer';
@@ -16,6 +17,7 @@ jest.mock('react-native', () => {
   );
   return {
     Image: primitive('Image'),
+    Platform: { OS: 'ios', select: (options: Record<string, unknown>) => options.ios ?? options.default },
     StyleSheet: {
       absoluteFill: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 },
       create: <T,>(styles: T) => styles,
@@ -35,8 +37,10 @@ jest.mock('react-native', () => {
   };
 });
 
+let mockAccentId: 'iceBlue' | 'jadeGreen' = 'iceBlue';
+
 jest.mock('../../theme', () => ({
-  useAppTheme: () => ({ theme: buildTheme(mockScheme, mockScheme, builtInAccents.iceBlue) }),
+  useAppTheme: () => ({ theme: buildTheme(mockScheme, mockScheme, builtInAccents[mockAccentId]), accentId: mockAccentId }),
 }));
 
 function flattenStyle(value: unknown): Record<string, unknown> {
@@ -50,6 +54,7 @@ function wallpaper(patch: Partial<ChatAppearanceSettings['background']> = {}): C
     ...DEFAULT_CHAT_APPEARANCE,
     background: {
       ...DEFAULT_CHAT_APPEARANCE.background,
+      kind: 'photo',
       enabled: true,
       imagePath: 'file:///documents/chat-appearance/background.jpg',
       ...patch,
@@ -58,11 +63,30 @@ function wallpaper(patch: Partial<ChatAppearanceSettings['background']> = {}): C
 }
 
 describe.each(['light', 'dark'] as const)('ChatBackgroundLayer in %s', (scheme) => {
-  beforeEach(() => { mockScheme = scheme; });
+  beforeEach(() => { mockScheme = scheme; mockAccentId = 'iceBlue'; });
 
-  it('renders nothing while the wallpaper is off or has no image', () => {
-    expect(render(<ChatBackgroundLayer appearance={DEFAULT_CHAT_APPEARANCE} />).toJSON()).toBeNull();
-    expect(render(<ChatBackgroundLayer appearance={wallpaper({ imagePath: undefined })} />).toJSON()).toBeNull();
+  it('draws nothing on the plain canvas', () => {
+    const plain = { ...DEFAULT_CHAT_APPEARANCE, background: { ...DEFAULT_CHAT_APPEARANCE.background, kind: 'plain' as const } };
+    expect(render(<ChatBackgroundLayer appearance={plain} />).toJSON()).toBeNull();
+  });
+
+  it('draws the built-in wallpaper by default and when a photo choice has no image', () => {
+    const view = render(<ChatBackgroundLayer appearance={DEFAULT_CHAT_APPEARANCE} />);
+    expect(view.getByTestId('chat-background-layer').props.pointerEvents).toBe('none');
+    expect(view.getByTestId('chat-background-layer-pattern')).toBeTruthy();
+    expect(view.queryByTestId('chat-background-layer-image')).toBeNull();
+    view.rerender(<ChatBackgroundLayer appearance={wallpaper({ imagePath: undefined })} />);
+    expect(view.getByTestId('chat-background-layer-pattern')).toBeTruthy();
+  });
+
+  it('colors the built-in wallpaper from the conversation accent', () => {
+    mockAccentId = 'jadeGreen';
+    const palette = chatWallpaperPalettes.jadeGreen[scheme];
+    const view = render(<ChatBackgroundLayer appearance={DEFAULT_CHAT_APPEARANCE} />);
+    const stops = view.UNSAFE_root.findAll((node) => (node.type as unknown) === 'Stop');
+    expect(stops.map((node) => node.props.stopColor)).toEqual([...palette.gradient]);
+    const doodles = view.UNSAFE_root.findAll((node) => (node.type as unknown) === 'G' && node.props.stroke !== undefined);
+    expect(doodles[0]?.props).toMatchObject({ stroke: palette.doodle, strokeOpacity: palette.doodleOpacity, fill: 'none' });
   });
 
   it('fills its host edge to edge with the blurred photo over the theme canvas and takes no touches', () => {

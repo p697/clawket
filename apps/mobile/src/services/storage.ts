@@ -1004,11 +1004,14 @@ export const StorageService = {
     const storedImagePath = normalized.background.enabled
       ? toStoredChatBackgroundImagePath(normalized.background.imagePath)
       : undefined;
+    const photo = Boolean(storedImagePath) && normalized.background.enabled;
     await setJson(KEYS.chatAppearance, {
       ...normalized,
       background: {
         ...normalized.background,
-        enabled: Boolean(storedImagePath) && normalized.background.enabled,
+        // A photo that cannot be stored falls back to the built-in wallpaper.
+        kind: normalized.background.kind === 'photo' && !photo ? 'pattern' : normalized.background.kind,
+        enabled: photo,
         imagePath: storedImagePath,
       },
     });
@@ -1029,6 +1032,7 @@ export const StorageService = {
         ...normalized,
         background: {
           ...normalized.background,
+          kind: 'pattern',
           enabled: false,
           imagePath: undefined,
         },

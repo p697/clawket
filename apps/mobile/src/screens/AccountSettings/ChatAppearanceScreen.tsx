@@ -51,6 +51,7 @@ import {
 import type {
   ChatAppearanceSettings,
   ChatBubbleStyle,
+  ChatWallpaperKind,
 } from '../../types/chat-appearance';
 
 export type ChatAppearanceScreenProps = Readonly<{
@@ -232,20 +233,22 @@ export function ChatAppearanceScreen({
   const [errorKind, setErrorKind] = useState<ErrorKind | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const hasBackgroundImage = Boolean(
-    pickedBackgroundUri
-      || (draftAppearance.background.enabled && draftAppearance.background.imagePath),
-  );
-  const previewBackgroundUri = hasBackgroundImage
-    ? pickedBackgroundUri ?? draftAppearance.background.imagePath ?? null
-    : null;
+  // A picked photo stays in the draft while the person compares wallpapers;
+  // only the photo choice shows (and saves) it.
+  const photoUri = pickedBackgroundUri ?? draftAppearance.background.imagePath ?? null;
+  const hasBackgroundImage = Boolean(photoUri);
+  const wallpaperKind: ChatWallpaperKind = draftAppearance.background.kind === 'photo' && !hasBackgroundImage
+    ? 'pattern'
+    : draftAppearance.background.kind;
+  const previewBackgroundUri = wallpaperKind === 'photo' ? photoUri : null;
   const draftSnapshot = useMemo<AppearanceDraftSnapshot>(() => ({
     appearance: {
       ...draftAppearance,
       background: {
         ...draftAppearance.background,
-        enabled: hasBackgroundImage && draftAppearance.background.enabled,
-        imagePath: hasBackgroundImage ? previewBackgroundUri ?? undefined : undefined,
+        kind: wallpaperKind,
+        enabled: wallpaperKind === 'photo',
+        imagePath: previewBackgroundUri ?? undefined,
       },
     },
     showAgentAvatar: draftShowAgentAvatar,
@@ -256,10 +259,18 @@ export function ChatAppearanceScreen({
     draftAccentId,
     draftChatFontSize,
     draftShowAgentAvatar,
-    hasBackgroundImage,
     previewBackgroundUri,
+    wallpaperKind,
   ]);
   const isDirty = serializeDraft(draftSnapshot) !== initialSerializedRef.current;
+  const wallpaperTabs = useMemo(
+    (): Array<{ key: ChatWallpaperKind; label: string }> => [
+      { key: 'pattern', label: t('Pattern') },
+      { key: 'photo', label: t('Photo') },
+      { key: 'plain', label: t('Plain') },
+    ],
+    [t],
+  );
   const bubbleStyleTabs = useMemo(
     (): Array<{ key: ChatBubbleStyle; label: string }> => [
       { key: 'solid', label: t('Solid') },
@@ -284,12 +295,24 @@ export function ChatAppearanceScreen({
       setPickedBackgroundUri(uri);
       setDraftAppearance((previous) => ({
         ...previous,
-        background: { ...previous.background, enabled: true },
+        background: { ...previous.background, kind: 'photo', enabled: true },
       }));
     } catch {
       setErrorKind('photo');
     }
   }, []);
+
+  // Choosing Photo without one opens the library; cancelling keeps the current wallpaper.
+  const selectWallpaperKind = useCallback((kind: ChatWallpaperKind) => {
+    if (kind === 'photo' && !hasBackgroundImage) {
+      void handlePickBackground();
+      return;
+    }
+    setDraftAppearance((previous) => ({
+      ...previous,
+      background: { ...previous.background, kind, enabled: kind === 'photo' },
+    }));
+  }, [handlePickBackground, hasBackgroundImage]);
 
   const handleRemoveBackground = useCallback(() => {
     setPickedBackgroundUri(null);
@@ -297,6 +320,7 @@ export function ChatAppearanceScreen({
       ...previous,
       background: {
         ...previous.background,
+        kind: 'pattern',
         enabled: false,
         imagePath: undefined,
       },
@@ -319,20 +343,19 @@ export function ChatAppearanceScreen({
     let appearanceCommitted = false;
     try {
       const previousImagePath = initialBackgroundPathRef.current;
-      let nextImagePath = draftAppearance.background.enabled
-        ? draftAppearance.background.imagePath
-        : undefined;
-      if (draftAppearance.background.enabled && pickedBackgroundUri) {
+      const photo = wallpaperKind === 'photo';
+      let nextImagePath = photo ? draftAppearance.background.imagePath : undefined;
+      if (photo && pickedBackgroundUri) {
         nextImagePath = await persistChatBackgroundImage(pickedBackgroundUri);
         stagedImagePath = nextImagePath;
       }
-      if (!draftAppearance.background.enabled) nextImagePath = undefined;
 
       const nextAppearance: ChatAppearanceSettings = {
         ...draftAppearance,
         background: {
           ...draftAppearance.background,
-          enabled: Boolean(nextImagePath) && draftAppearance.background.enabled,
+          kind: photo && !nextImagePath ? 'pattern' : wallpaperKind,
+          enabled: Boolean(nextImagePath),
           imagePath: nextImagePath,
           fillMode: 'cover',
         },
@@ -351,6 +374,7 @@ export function ChatAppearanceScreen({
       }
       analyticsEvents.chatAppearanceSaved({
         source: 'chat_appearance_screen',
+        wallpaper_kind: nextAppearance.background.kind,
         has_background_image: Boolean(nextImagePath),
         bubble_style: nextAppearance.bubbles.style,
         bubble_opacity: nextAppearance.bubbles.opacity,
@@ -388,6 +412,7 @@ export function ChatAppearanceScreen({
     saving,
     showAgentAvatar,
     showModelUsage,
+    wallpaperKind,
   ]);
 
   const requestBack = useCallback(() => {
@@ -473,16 +498,26 @@ export function ChatAppearanceScreen({
 
         <SettingsSection title={t('Wallpaper')}>
           <SettingsGroup density="comfortable">
-            <SettingsRow
-              testID="chat-appearance-background"
-              title={t('Background Image')}
-              value={hasBackgroundImage ? t('Change Photo') : t('Choose Photo')}
-              leading={<SettingsIcon icon={ImagePlus} tone="neutral" size={20} strokeWidth={1.75} />}
-              showChevron
-              onPress={() => { void handlePickBackground(); }}
-            />
-            {hasBackgroundImage ? (
+            <SettingsRow layout="column">
+              <SegmentedTabs
+                testID="chat-appearance-wallpaper-kind"
+                tabs={[...wallpaperTabs]}
+                active={wallpaperKind}
+                onSwitch={selectWallpaperKind}
+                size="sm"
+              />
+            </SettingsRow>
+            {wallpaperKind === 'photo' ? (
               <>
+                <SettingsDivider inset="content" />
+                <SettingsRow
+                  testID="chat-appearance-background"
+                  title={t('Background Image')}
+                  value={t('Change Photo')}
+                  leading={<SettingsIcon icon={ImagePlus} tone="neutral" size={20} strokeWidth={1.75} />}
+                  showChevron
+                  onPress={() => { void handlePickBackground(); }}
+                />
                 <SettingsDivider inset="content" />
                 <SettingsRow
                   testID="chat-appearance-remove-background"
@@ -491,28 +526,26 @@ export function ChatAppearanceScreen({
                   leading={<SettingsIcon icon={Trash2} tone="neutral" size={20} strokeWidth={1.75} />}
                   onPress={handleRemoveBackground}
                 />
+                <SettingsDivider inset="content" />
+                <SettingsRow
+                  testID="chat-appearance-blur"
+                  leading={<SettingsIcon icon={Droplets} tone="neutral" size={20} strokeWidth={1.75} />}
+                  title={t('Blur')}
+                  value={t('{{value}} px', { value: Math.round(draftAppearance.background.blur) })}
+                  showChevron
+                  onPress={() => setValueSheet('blur')}
+                />
+                <SettingsDivider inset="content" />
+                <SettingsRow
+                  testID="chat-appearance-dim"
+                  leading={<SettingsIcon icon={SunDim} tone="neutral" size={20} strokeWidth={1.75} />}
+                  title={t('Dim')}
+                  value={t('{{value}}%', { value: Math.round(draftAppearance.background.dim * 100) })}
+                  showChevron
+                  onPress={() => setValueSheet('dim')}
+                />
               </>
             ) : null}
-            <SettingsDivider inset="content" />
-            <SettingsRow
-              testID="chat-appearance-blur"
-              leading={<SettingsIcon icon={Droplets} tone="neutral" size={20} strokeWidth={1.75} />}
-              title={t('Blur')}
-              value={t('{{value}} px', { value: Math.round(draftAppearance.background.blur) })}
-              showChevron
-              disabled={!hasBackgroundImage}
-              onPress={() => setValueSheet('blur')}
-            />
-            <SettingsDivider inset="content" />
-            <SettingsRow
-              testID="chat-appearance-dim"
-              leading={<SettingsIcon icon={SunDim} tone="neutral" size={20} strokeWidth={1.75} />}
-              title={t('Dim')}
-              value={t('{{value}}%', { value: Math.round(draftAppearance.background.dim * 100) })}
-              showChevron
-              disabled={!hasBackgroundImage}
-              onPress={() => setValueSheet('dim')}
-            />
           </SettingsGroup>
         </SettingsSection>
 

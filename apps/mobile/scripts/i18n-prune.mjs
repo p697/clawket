@@ -47,6 +47,10 @@ export const DYNAMIC_KEY_ORIGINS = Object.freeze([
     argument: 'label',
     origin: 'src/components/chat/ChatColorPicker.tsx',
   }),
+  // Tool activity pills pick their phrase from literal tables in the same module.
+  Object.freeze({ file: 'src/components/chat/tool-activity-model.ts', argument: 'one', origin: 'src/components/chat/tool-activity-model.ts' }),
+  Object.freeze({ file: 'src/components/chat/tool-activity-model.ts', argument: 'many', origin: 'src/components/chat/tool-activity-model.ts' }),
+  Object.freeze({ file: 'src/components/chat/tool-activity-model.ts', argument: 'template', origin: 'src/components/chat/tool-activity-model.ts' }),
   Object.freeze({
     file: 'src/screens/AgentSettings/AgentSettingsScreen.tsx',
     argument: 'formatted.key',

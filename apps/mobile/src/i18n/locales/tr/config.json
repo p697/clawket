@@ -110,7 +110,6 @@
   "Wallpaper": "Duvar kâğıdı",
   "Background Image": "Arka plan görseli",
   "Change Photo": "Fotoğrafı değiştir",
-  "Choose Photo": "Fotoğraf seç",
   "Remove Photo": "Fotoğrafı kaldır",
   "Blur": "Bulanıklık",
   "{{value}} px": "{{value}} px",
@@ -387,5 +386,8 @@
   "Claude Code is not responding": "Claude Code yanıt vermiyor",
   "To connect Codex, Claude Code or Pi, choose your Agent in Add connection and follow its pairing instructions.": "Codex, Claude Code veya Pi bağlamak için Bağlantı ekle bölümünde Agent’ınızı seçin ve eşleştirme talimatlarını izleyin.",
   "This QR code belongs to another backend. Scan the QR code for this backend.": "Bu QR kod başka bir arka uca ait. Bu arka ucun QR kodunu tarayın.",
-  "Pairing environment does not match. Use the command shown on this page.": "Eşleştirme ortamı uyuşmuyor. Bu sayfada gösterilen komutu kullanın."
+  "Pairing environment does not match. Use the command shown on this page.": "Eşleştirme ortamı uyuşmuyor. Bu sayfada gösterilen komutu kullanın.",
+  "Pattern": "Desen",
+  "Photo": "Fotoğraf",
+  "Plain": "Düz"
 }

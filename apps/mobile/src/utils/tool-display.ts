@@ -1,5 +1,22 @@
 type Translate = (key: string, options?: Record<string, unknown>) => string;
 
+/** What a tool call does, for icons and the activity summary; `other` covers everything unrecognized. */
+export type ToolCategory = 'command' | 'read' | 'edit' | 'search' | 'web' | 'memory' | 'schedule' | 'message' | 'other';
+
+/** Classifies a tool by name across OpenClaw, Hermes, Codex, Claude Code and MCP naming. */
+export function toolCategory(name: string): ToolCategory {
+  const key = name.replace(/^mcp__.+?__/, '').toLowerCase();
+  if (/^(exec|bash|shell|terminal|run_command|local_shell)$/.test(key)) return 'command';
+  if (/^(read|read_file|view_image|notebookread)$/.test(key)) return 'read';
+  if (/^(write|edit|multiedit|write_file|edit_file|apply_patch|patch|notebookedit)$/.test(key)) return 'edit';
+  if (/^(glob|grep|ls|list_directory|file_search|search_files)$/.test(key) || key.includes('search')) return 'search';
+  if (key.includes('memory')) return 'memory';
+  if (/browser|web_fetch|webfetch|fetch_url/.test(key)) return 'web';
+  if (/cron|schedule/.test(key)) return 'schedule';
+  if (/message|send/.test(key)) return 'message';
+  return 'other';
+}
+
 export function resolveToolDetail(name: string, args?: unknown): string | undefined {
   if (typeof args === 'string') {
     const raw = args;
