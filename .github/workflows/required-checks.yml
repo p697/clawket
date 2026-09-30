@@ -153,6 +153,9 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # bridge-runtime tests import @clawket/bridge-core through its built dist entry;
+      # in the unsplit gate, typecheck built it first.
+      - run: npm run bridge:build
       - run: npm run test:required:rest
       - run: npm run check:static
 
