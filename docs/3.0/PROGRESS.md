@@ -1178,6 +1178,7 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 
 | 编号 | 事项 | 怎么做 | 验证方法 | 状态 |
 |---|---|---|---|---|
+| HT-CODEX-AUTH-0930 | 原故障 iPhone 的认证与错误回显验收 | 负责人恢复必要的原生登录，安装本轮公开 Bridge 后重新配对，在新对话发送无副作用消息。 | 手机得到真实回复；认证失败显示明确提示，退出重进历史仍保留。记录 App build 和运行 Bridge。 | 原故障与旧/新历史差异已只读复现；本机清理完成，本轮 Bridge 发布进行中。新 Mobile 通用兜底需要独立 App 更新，真机验收待负责人完成。 |
 | HT-NPM-315-0930 | Bridge 3.1.5 npm 发布两步验证 | 在 npm 官方浏览器流程完成验证，不在聊天中发送密码或验证码。 | npm 发布成功，公开 latest=3.1.5，公开包与固定候选逐字节一致。 | 已完成：npm 两步验证成功；公开 latest=3.1.5，下载包逐字节及 SHA-1/SHA-512 校验通过。 |
 | HT-NPM-314-0929 | Bridge 3.1.4 npm 发布安全密钥验证 | 在已打开的 npm 官方页面完成安全密钥/Touch ID，无需提供密钥。 | npm发布成功，公开latest及下载包SHA与固定候选一致。 | 已完成：五Relay已发布并核验；npm latest=3.1.4，公开下载包三项哈希与固定候选一致。 |
 | HT-COMPOSER-PASTE-0928 | 输入框系统菜单与语音共存验收 | 在后续开发包分别测试 iOS/Android：空白框轻点进入编辑，再长按粘贴；已有草稿双击选词、全选、拖选择手柄、替换粘贴；展开/收起后重复。 | 文本/图片粘贴沿用原入口；不误开麦克风、不因向下拖选择手柄收键盘；空白未聚焦长按语音和麦克风点击/按住松手/上滑取消正常。 | 代码与回归用例已更新；原生菜单和语音触摸待设备验证。 |
@@ -2735,3 +2736,7 @@ Owner requested a clean local environment before personally reinstalling the pub
 Public npm latest was independently verified as 3.1.5. No replacement installation, pairing, inference, phone operation, credential change, package publication or cloud change was performed; owner fresh-device acceptance remains HT-CODEX-AUTH-0930. Today's two additional code hardening changes are not in public 3.1.5. Backup manifest contains the exact local operational verification; [incident record](../3.1/codex-silent-auth-failure-2026-09-30.md) distinguishes initial investigation from this later authorized cleanup.
 
 Cleanup follow-up verification: no Bridge entrypoints after documentation checks; `check:docs` passed all 7 instruction pairs / 5 checker cases, and diff whitespace passed. No implementation tests were repeated for runtime removal.
+
+### 2026-09-30 — Bridge 3.1.6 release preparation
+
+Owner explicitly authorized a complete Bridge release after the local cleanup. Isolated `codex/bridge-3-1-6` includes only the Codex fast-terminal snapshot reconciliation, its six regressions and supporting instructions/evidence, based on merged Bridge 3.1.5 and attachment integration. The CLI manifest, lockfile and publish guard advance to 3.1.6; internal workspace versions remain unchanged. Uncommitted Mobile changes stay in the original checkout and are not an App release. Tests, CI, exact package verification and npm publication results will be recorded in the release document. Cleaned local user runtimes remain stopped.

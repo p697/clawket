@@ -671,6 +671,57 @@ describe('device project discovery and desktop routing', () => {
     await request('chat.send', { sessionKey: `native:${threadId}`, text: 'Continue', idempotencyKey: 'native-send' });
     expect(desktop.request).toHaveBeenCalledTimes(1);
   });
+  it.each(['failed', 'completed', 'interrupted'])('reconciles a fast Desktop %s snapshot received before its start acknowledgement', async status => {
+    const desktop = await device();
+    service.on('update', update => updates.push(update));
+    const original = mock.request.getMockImplementation()!;
+    mock.request.mockImplementation((method, params) => method === 'thread/list' ? Promise.resolve({ data: [{ id: threadId, cwd: project, updatedAt: 1 }] }) : original(method, params));
+    await request('sessions.list'); key = `native:${threadId}`;
+    let accept!: (value: unknown) => void;
+    desktop.request.mockImplementationOnce(() => new Promise(resolve => { accept = resolve; }));
+    const sent = await request('chat.send', { sessionKey: key, text: 'Continue', idempotencyKey: 'fast-native-send' });
+    const turn = { id: 'fast-turn', status, startedAt: 10, completedAt: 12,
+      ...(status === 'failed' ? { error: { codexErrorInfo: 'unauthorized', message: 'private provider detail' } } : {}),
+      items: status === 'completed' ? [{ id: 'reply', type: 'agentMessage', text: 'Done' }] : [] };
+    const snapshot = { fresh: true, state: { turns: [turn], requests: [] } };
+    desktop.snapshots.set(threadId, snapshot); desktop.emit('snapshot', threadId, snapshot);
+    expect(updates.filter(u => u.type === 'run_finished')).toEqual([]);
+    accept({ result: { turn: { id: 'fast-turn' } } });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const finished = updates.filter(u => u.type === 'run_finished');
+    expect(finished).toEqual([expect.objectContaining({ runId: sent.runId,
+      stopReason: status === 'failed' ? 'error' : status === 'interrupted' ? 'cancelled' : 'end_turn' })]);
+    if (status === 'failed') expect(finished[0].terminalMessage).toMatchObject({ id: 'codex-turn-error:fast-turn',
+      text: 'Model authentication failed. Sign in again on your computer.' });
+    if (status === 'completed') expect(finished[0].message.content).toBe('Done');
+    expect((service as any).runs.has(key)).toBe(false);
+    desktop.emit('snapshot', threadId, snapshot);
+    expect(updates.filter(u => u.type === 'run_finished')).toHaveLength(1);
+    expect(desktop.request).toHaveBeenCalledTimes(1);
+    expect(mock.request.mock.calls.filter(([method]) => ['thread/resume', 'turn/start'].includes(method))).toEqual([]);
+    expect(JSON.stringify(finished)).not.toContain('private');
+  });
+  it.each(['stale', 'another-turn', 'incomplete'])('preserves an unknown Desktop outcome after start acknowledgement with %s evidence', async reason => {
+    const desktop = await device();
+    service.on('update', update => updates.push(update));
+    const original = mock.request.getMockImplementation()!;
+    mock.request.mockImplementation((method, params) => method === 'thread/list' ? Promise.resolve({ data: [{ id: threadId, cwd: project, updatedAt: 1 }] }) : original(method, params));
+    await request('sessions.list'); key = `native:${threadId}`;
+    let accept!: (value: unknown) => void;
+    desktop.request.mockImplementationOnce(() => new Promise(resolve => { accept = resolve; }));
+    await request('chat.send', { sessionKey: key, text: 'Continue', idempotencyKey: 'unknown-native-send' });
+    const snapshot = { fresh: reason !== 'stale', state: { requests: [], turns: [{
+      id: reason === 'another-turn' ? 'old-turn' : 'current-turn',
+      status: reason === 'incomplete' ? 'incomplete' : 'failed',
+    }] } };
+    desktop.snapshots.set(threadId, snapshot); desktop.emit('snapshot', threadId, snapshot);
+    accept({ result: { turn: { id: 'current-turn' } } });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(updates.filter(u => u.type === 'run_finished')).toEqual([]);
+    expect((service as any).runs.get(key)).toMatchObject({ desktop: true, turnId: 'current-turn' });
+    expect(desktop.request).toHaveBeenCalledTimes(1);
+    expect(mock.request.mock.calls.filter(([method]) => ['thread/resume', 'turn/start'].includes(method))).toEqual([]);
+  });
   it('keeps a released native thread locally owned for subsequent mobile and follower turns', async () => {
     const desktop = await device();
     const original = mock.request.getMockImplementation()!;

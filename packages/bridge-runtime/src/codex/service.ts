@@ -1111,7 +1111,17 @@ export class CodexService extends EventEmitter {
       if (this.starts.size >= 256) this.starts.delete(this.starts.keys().next().value!);
       this.starts.set(runId, accepted);
       void accepted.then(result => {
-        const run = this.runs.get(r.id); if (run?.id === runId) run.turnId = result.turn?.id;
+        const run = this.runs.get(r.id); if (run?.id !== runId) return;
+        run.turnId = result.turn?.id;
+        // A fast Desktop failure can reach the follower before the start ACK.
+        // Reconcile only that confirmed turn; never dispatch or infer a new one.
+        const snapshot = run.desktop && r.threadId ? this.desktop?.snapshots.get(r.threadId) : undefined;
+        const terminal = run.turnId && snapshot?.fresh && desktopTurns(snapshot.state).find((turn: any) =>
+          (turn.turnId ?? turn.id) === run.turnId && ['completed', 'interrupted', 'failed'].includes(turn.status));
+        if (terminal) {
+          run.final = (terminal.items ?? []).filter((item: any) => item.type === 'agentMessage').map((item: any) => item.text ?? '').join('\n\n');
+          this.finish(r, terminal.status === 'interrupted' ? 'cancelled' : terminal.status === 'failed' ? 'error' : 'end_turn', terminal);
+        }
       }).catch(error => {
         const current = this.runs.get(r.id);
         if (current?.id !== runId) return;

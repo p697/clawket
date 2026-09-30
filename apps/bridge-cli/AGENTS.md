@@ -105,7 +105,7 @@ Claude first-time detached pairing must carry the resolved device scope into the
 
 ## 3.1 release
 
-The authorized Bridge patch release is `3.1.5`. Keep the publish guard and bundled workspace versions aligned. Preserve the existing OpenClaw/Hermes pair behavior for old clients. `pair choose` is interactive and read-only until selection; explicit `--backend` is required for agent/script prompts. Client distribution is a separate release stage.
+The authorized Bridge patch release is `3.1.6`. Keep the publish guard and bundled workspace versions aligned. Preserve the existing OpenClaw/Hermes pair behavior for old clients. `pair choose` is interactive and read-only until selection; explicit `--backend` is required for agent/script prompts. Client distribution is a separate release stage.
 
 Codex and Claude Code Registry registrations and QR invitations default to `Codex` / `Claude Code`; project/device scope remains in configuration and must not be inferred from the display name.
 
