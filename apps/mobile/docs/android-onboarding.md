@@ -206,7 +206,7 @@ Cause:
 
 - phone still has another signed build of `com.p697.clawket`
 
-Fix:
+Fix: on the owner's personal phone, never uninstall `com.p697.clawket`, which deletes the store app's data and pairings; build a [local QA package](android-build.md#local-qa-package) that installs beside it. Only on a dedicated test device:
 
 ```bash
 adb uninstall com.p697.clawket

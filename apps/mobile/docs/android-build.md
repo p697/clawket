@@ -172,6 +172,19 @@ If you need to upload a replacement build to Google Play and the previous `versi
 EXPO_ANDROID_VERSION_CODE=30102 npm run build:android:aab
 ```
 
+### Local QA package
+
+`-Pclawket.qa=true` (or `CLAWKET_ANDROID_QA=1`) builds `com.p697.clawket.qa`, labeled "Clawket QA", so it installs beside the store app on a personal phone. The Kotlin namespace and everything else stay the same; `plugins/with-android-qa-variant.js` generates the switch. Combine it with local debug signing:
+
+```bash
+cd android
+./gradlew app:assembleRelease -x lint -x test --build-cache -PreactNativeArchitectures=arm64-v8a \
+  -Pclawket.allowDebugReleaseSigning=true -Pclawket.qa=true
+adb install -r app/build/outputs/apk/release/app-release.apk
+```
+
+A QA package is a local development build: Google Play billing and verified App Links do not apply to it, and it is never uploaded. Samsung phones may ask Google Play Protect to scan every `adb install`; someone has to answer that prompt on the phone.
+
 ### Store-ready AAB
 
 Preferred command:
@@ -230,10 +243,10 @@ If you switch between differently signed builds, Android may reject the install 
 INSTALL_FAILED_UPDATE_INCOMPATIBLE
 ```
 
-When that happens:
+On the owner's phone, never uninstall `com.p697.clawket`: that deletes the store app's data and pairings. Install a [local QA package](#local-qa-package) beside it instead. Only a QA package, or any build on a dedicated test device, may be replaced:
 
 ```bash
-adb uninstall com.p697.clawket
+adb uninstall com.p697.clawket.qa
 adb install android/app/build/outputs/apk/release/app-release.apk
 ```
 
@@ -456,10 +469,10 @@ Cause:
 
 - Android does not allow overwriting an installed app signed with a different certificate
 
-Fix:
+Fix: build a [local QA package](#local-qa-package), which installs beside the store app. Never uninstall `com.p697.clawket` from the owner's phone; replace only a QA package or a build on a dedicated test device:
 
 ```bash
-adb uninstall com.p697.clawket
+adb uninstall com.p697.clawket.qa
 adb install android/app/build/outputs/apk/release/app-release.apk
 ```
 
