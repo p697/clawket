@@ -1,3 +1,4 @@
+import { DeliveredArtifacts } from '../delivered-artifacts.js';
 import { SessionCatalogSync } from '../session-catalog.js';
 import { InteractionAttention } from '../interaction-attention.js';
 import { readPromptIdentity, recordedPromptStatus } from '../prompt-status.js';
@@ -122,8 +123,10 @@ export class PiService extends EventEmitter {
     void tail.then(() => { if (this.queues.get(record.id) === tail) this.queues.delete(record.id); });
     return next;
   }
+  private readonly artifacts = new DeliveredArtifacts();
   private readonly attention = new InteractionAttention();
   private update(update: SessionUpdate): void {
+    if (update.type === 'run_finished') update = this.artifacts.final(update, [this.project]);
     const patch = this.attention.accept(update);
     this.emit('update', update);
     if (patch) this.emit('update', patch);
@@ -174,11 +177,12 @@ export class PiService extends EventEmitter {
     const catalog = await live.rpc.request('get_available_models');
     const record = this.records.find(item => this.processes.get(item.id) === live);
     if (record) { record.model = state.model?.id; record.provider = state.model?.provider; }
-    return { backend: 'pi', sessionCatalogSync: 1, promptStatus: true, protocol: 1, modelReady: (catalog.models ?? []).some((m: any) => m.provider === state.model?.provider && m.id === state.model?.id), model: state.model?.id ?? '', vision: state.model?.input?.includes('image') === true, project: basename(this.project) };
+    return { backend: 'pi', sessionCatalogSync: 1, artifacts: true, promptStatus: true, protocol: 1, modelReady: (catalog.models ?? []).some((m: any) => m.provider === state.model?.provider && m.id === state.model?.id), model: state.model?.id ?? '', vision: state.model?.input?.includes('image') === true, project: basename(this.project) };
   }
   async request(frame: PiRequest): Promise<unknown> {
     const result = await this.dispatch(frame);
     if (['sessions.create', 'sessions.rename', 'sessions.reset', 'sessions.delete'].includes(frame.method)) this.catalogSync.invalidate();
+    if (['sessions.reset', 'sessions.delete'].includes(frame.method) && typeof frame.params?.sessionKey === 'string') this.artifacts.forget(frame.params.sessionKey);
     return result;
   }
   private async dispatch(frame: PiRequest): Promise<unknown> {
@@ -218,7 +222,9 @@ export class PiService extends EventEmitter {
         this.save(); return { ok: true };
         });
       }
-      case 'chat.history': return this.history(p.sessionKey, p.cursor);
+      case 'clawket.artifacts.open': return this.artifacts.resolve(p.sessionKey, p.artifactId, cursor => this.history(String(p.sessionKey), cursor));
+      case 'clawket.artifacts.read': return this.artifacts.read(p.sessionKey, p.id, p.offset);
+      case 'chat.history': return this.history(p.sessionKey, p.cursor, p.artifacts === true);
       case 'chat.send': return this.prompt(this.record(p.sessionKey), p as unknown as PromptInput);
       case 'chat.abort': {
         const record = this.record(p.sessionKey), live = this.processes.get(record.id);
@@ -264,7 +270,8 @@ export class PiService extends EventEmitter {
       default: throw new Error('Unsupported Pi operation');
     }
   }
-  private async history(key: unknown, cursor: unknown): Promise<SessionHistory> {
+  private async history(key: unknown, cursor: unknown, artifactProjection = true): Promise<SessionHistory> {
+    const artifactEpoch = this.artifacts.epoch;
     let entries: any[], live: Running | undefined, state: any;
     const native = this.native.get(String(key));
     if (native) entries = piBranch(this.readEntries(native));
@@ -306,7 +313,16 @@ export class PiService extends EventEmitter {
     let start = end, bytes = 0;
     while (start > Math.max(0, end - 40)) { const size = Buffer.byteLength(JSON.stringify(messages[start - 1])); if (bytes + size > 7 * 1024 * 1024) break; bytes += size; start--; }
     if (start === end && end > 0) throw new Error('This message exceeds the history transfer limit');
-    return { key: String(key), messages: messages.slice(start, end), nextCursor: start ? String(start) : undefined, hasActiveRun: !!run, activeRun: run ? { runId: run.id, text: run.text, startedAtMs: run.started, sessionAbortable: true } : undefined, sessionId: state?.sessionId, thinkingLevel: state?.thinkingLevel };
+    const page = messages.slice(start, end);
+    const projected = this.artifacts.project(String(key), page, [this.project], artifactEpoch, cursor);
+    // Old Pi clients already render native inline assistant images. Keep those
+    // bytes until the reader explicitly opts into opaque artifact references.
+    if (!artifactProjection) for (let i = 0; i < page.length; i++) {
+      if (page[i].role !== 'assistant' || !page[i].attachments?.some(a => a.content)) continue;
+      projected[i] = { ...projected[i], attachments: [...page[i].attachments!,
+        ...(projected[i].attachments ?? []).filter(a => a.artifactId?.startsWith('file_'))] };
+    }
+    return { key: String(key), messages: projected, nextCursor: start ? String(start) : undefined, hasActiveRun: !!run, activeRun: run ? { runId: run.id, text: run.text, startedAtMs: run.started, sessionAbortable: true } : undefined, sessionId: state?.sessionId, thinkingLevel: state?.thinkingLevel };
   }
   private prompt(record: RecordEntry, input: PromptInput): Promise<{ runId: string }> {
     return this.serial(record, async live => {
@@ -429,13 +445,13 @@ export class PiService extends EventEmitter {
     const reply = run.visibleReply;
     if (reply) { record.activity = Date.now(); record.preview = reply; }
     this.save();
-    this.update({ type: 'run_finished', sessionKey: record.id, runId: run.id, stopReason, message: run.final ? { role: 'assistant', content: piText(run.final.content).slice(0, 128_000), model: run.final.model, provider: run.final.provider } : undefined, usage: piUsage(run.final?.usage) });
+    this.update({ type: 'run_finished', sessionKey: record.id, runId: run.id, stopReason, message: run.final ? { role: 'assistant', content: piText(run.final.content).slice(0, 128_000), attachments: piMessages([{ id: run.id, message: run.final }]).find(message => message.role === 'assistant')?.attachments, model: run.final.model, provider: run.final.provider } : undefined, usage: piUsage(run.final?.usage) });
     this.update({ type: 'session_info_update', session: this.descriptor(record) });
   }
   async stop(): Promise<void> {
     if (this.stopped) return;
-    this.stopped = true;
-    await Promise.all([...this.processes.values()].map(live => live.rpc.stop())); this.processes.clear();
+    this.stopped = true; this.artifacts.clear();
+    await Promise.all([...this.processes.values()].map(live => live.rpc.stop())); this.processes.clear(); this.artifacts.clear();
     if (existsSync(this.lockPath)) unlinkSync(this.lockPath);
   }
 }

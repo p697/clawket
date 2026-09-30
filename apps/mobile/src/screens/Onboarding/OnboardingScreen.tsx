@@ -7,14 +7,13 @@ import {
   Text,
   View,
 } from 'react-native';
-import Reanimated from 'react-native-reanimated';
+import Reanimated, { useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Check,
   ArrowUpRight,
-  CheckCircle2,
   Copy,
   ImagePlus,
   MessageSquareText,
@@ -22,7 +21,6 @@ import {
   QrCode,
   ScanLine,
   Terminal,
-  WifiOff,
 } from 'lucide-react-native';
 import { YOUMIND_SPRITE_ENTRY_VISIBLE } from '../../config/features';
 import { CLAWKET_GITHUB_REPO_URL } from '../../config/app-links';
@@ -34,6 +32,7 @@ import {
   FontWeight,
   IconSize,
   LineHeight,
+  Motion,
   Space,
 } from '../../theme/tokens';
 import { PlatformMark } from '../../components/ui/PlatformMark';
@@ -45,7 +44,7 @@ import { FlowHeader, PageIntro, ChoiceRow, FormStep, CommandBlock, MessagePrevie
 import { SegmentedTabs } from '../../components/ui/SegmentedTabs';
 import { useKeyboardRevealScroll } from '../../components/ui/useKeyboardRevealScroll';
 import { Skeleton } from '../../components/ui/Skeleton';
-import { LoadingState, useLoadingHandoff } from '../../components/ui/LoadingState';
+import { LoadingState } from '../../components/ui/LoadingState';
 import {
   buildAgentPairingPrompt,
   buildBackendPairingCommand,
@@ -225,15 +224,22 @@ export function OnboardingScreen({
   }, [initialBackend]);
 
   const connecting = status.kind === 'connecting';
+  // A submitted pairing (code, QR or link) owns the page until its outcome, including a paired
+  // connection that is reconnecting: its code is spent, so nothing on the form can help any more.
+  const pairingInFlight = connecting || status.kind === 'offline';
   useEffect(() => {
     if (!connecting) submitInFlightRef.current = false;
   }, [connecting]);
+  useEffect(() => {
+    // A link or QR can start a pairing while the code field still has focus.
+    if (pairingInFlight) Keyboard.dismiss();
+  }, [pairingInFlight]);
   // The last failure keeps its place while the next attempt connects and changes only with that
   // attempt's outcome: removing it at Connect moved the form, and the button under the finger, up
   // and back down on every failed retry (owner rule 2026-09-29).
   const heldErrorRef = useRef<Extract<OnboardingStatus, { kind: 'error' }> | null>(null);
   if (status.kind === 'error') heldErrorRef.current = status;
-  else if (!connecting) heldErrorRef.current = null;
+  else if (!pairingInFlight) heldErrorRef.current = null;
   const shownError = status.kind === 'error' ? status : heldErrorRef.current;
 
   if (status.kind === 'loading') {
@@ -246,7 +252,7 @@ export function OnboardingScreen({
     );
   }
 
-  const pairingReady = isVerificationCodeComplete(pairingCode, backendKind) && !connecting;
+  const pairingReady = isVerificationCodeComplete(pairingCode, backendKind) && !pairingInFlight;
   // iPadOS 26 numberPad uses an unstable floating popover. Keep pairing on
   // the full ASCII keyboard; normalization below still enforces the code alphabet.
   const pairingInput: { keyboardType: 'number-pad' | 'ascii-capable' | 'visible-password' } = isIPad
@@ -294,7 +300,7 @@ export function OnboardingScreen({
     setPairingCode(''); setLocalError(false); setAgentPromptSent(false); setAgentPromptExpanded(false);
   };
   const goBack = () => {
-    if (!choosing && !connecting) { setChoosing(true); resetPairingStep(); }
+    if (!choosing && !pairingInFlight) { setChoosing(true); resetPairingStep(); }
     else onClose?.();
   };
   const chooseBackend = (kind: PairableBackendKind) => {
@@ -309,12 +315,15 @@ export function OnboardingScreen({
   const agentMethod = agentMethodAvailable && pairingMethod === 'agent';
   return (
     <View testID="onboarding-screen" style={[styles.screen, { paddingTop: insets.top }]}>
-      <FlowHeader onBack={connecting ? onClose : onClose || !choosing ? goBack : undefined} testID="onboarding-close"
+      <FlowHeader onBack={pairingInFlight ? onClose : onClose || !choosing ? goBack : undefined} testID="onboarding-close"
         title={environment === 'preview' ? t('Preview') : undefined}
         right={choosing && onScanAnyQr
           ? <FloatingButton testID="onboarding-scan-any-qr" icon={ScanLine} appearance="plain" accessibilityLabel={t('Scan to connect')} onPress={onScanAnyQr} />
           : onOpenDesignSystem ? <FloatingButton icon={Palette} appearance="plain" accessibilityLabel={t('Design language')} onPress={onOpenDesignSystem} /> : undefined} />
-      <KeyboardAvoidingView testID="onboarding-keyboard-avoiding" enabled={!isIPad} style={styles.screen} behavior="padding">
+      <View style={styles.body}>
+      {/* The form stays mounted under the connecting stage, so a failed pairing returns to it unchanged. */}
+      <KeyboardAvoidingView testID="onboarding-keyboard-avoiding" enabled={!isIPad} style={styles.screen} behavior="padding"
+        accessibilityElementsHidden={pairingInFlight} importantForAccessibility={pairingInFlight ? 'no-hide-descendants' : 'auto'}>
       <Reanimated.ScrollView ref={keyboardReveal.scrollRef} testID="onboarding-scroll"
         // On iPad use the native keyboard frame and focused-field reveal. Do not also
         // resize/scroll through keyboard-controller (which can miss a foreground frame).
@@ -323,10 +332,9 @@ export function OnboardingScreen({
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + Space.xl }]}
         keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <PageIntro title={choosing ? t('Connect your agent') : t('Connect {{backend}}', { backend: backendLabel })} />
-        {status.kind === 'offline' ? <Banner tone="neutral" icon={WifiOff} testID="onboarding-offline" message={t('Offline · reconnecting', { ns: 'common' })} actionLabel={onRetry ? t('Reconnect', { ns: 'common' }) : undefined} onAction={onRetry} /> : null}
         {shownError ? <ErrorBanner code={shownError.code} backendKind={backendKind}
           // Its action stays drawn during the attempt, so the banner keeps its size, but never starts a second one.
-          onAction={onErrorAction ? (code) => { if (!connecting) onErrorAction(code); } : undefined} /> : null}
+          onAction={onErrorAction ? (code) => { if (!pairingInFlight) onErrorAction(code); } : undefined} /> : null}
         {localError ? <Banner tone="bad" message={t('Please try again later.', { ns: 'common' })} /> : null}
         {choosing ? <>
           <View testID="onboarding-chooser" style={styles.chooser}>
@@ -366,10 +374,10 @@ export function OnboardingScreen({
             } : undefined} />
           </FormStep>}
           <FormStep number="02" style={styles.secondStep} title={agentMethod ? t('Enter the code it replies with') : t('Enter the pairing code')}
-            action={onPastePairingCode ? <Button testID="onboarding-paste-code" label={t('Paste')} variant="text" disabled={connecting} onPress={() => { void pastePairingCode().catch(() => setLocalError(true)); }} /> : undefined}>
+            action={onPastePairingCode ? <Button testID="onboarding-paste-code" label={t('Paste')} variant="text" disabled={pairingInFlight} onPress={() => { void pastePairingCode().catch(() => setLocalError(true)); }} /> : undefined}>
             <View ref={keyboardReveal.anchorRef} testID="onboarding-keyboard-anchor" style={styles.keyboardAnchor} onLayout={keyboardReveal.measureAnchor}>
               <FormTextInput testID="onboarding-pairing-code" accessibilityLabel={t('Pairing code')} surface="quiet"
-                autoComplete="one-time-code" autoCapitalize="characters" autoCorrect={false} editable={!connecting}
+                autoComplete="one-time-code" autoCapitalize="characters" autoCorrect={false} editable={!pairingInFlight}
                 keyboardType={pairingInput.keyboardType} maxLength={backendKind === 'openclaw' ? 14 : 7}
                 onChangeText={(value) => setPairingCode(normalizeVerificationCode(value, backendKind))}
                 onFocus={keyboardReveal.measureAnchor} onSubmitEditing={submitPairing} placeholder={pairingPlaceholder[backendKind]}
@@ -377,19 +385,22 @@ export function OnboardingScreen({
                 // which changes the keyboard frame again. The Connect button below stays visible instead.
                 returnKeyType={pairingInput.keyboardType === 'number-pad' ? undefined : 'go'}
                 value={formatVerificationCode(pairingCode, backendKind)} minHeight={ControlSize.settingsRow} inputStyle={styles.codeInputText} />
-              <Button testID="onboarding-connect" label={t('Connect')} variant="neutral" size="lg" loading={connecting} disabled={!pairingReady} onPress={submitPairing} />
+              {/* The spinner answers the press during the stage's grace period; a quick failure never shows the stage. */}
+              <Button testID="onboarding-connect" label={t('Connect')} variant="neutral" size="lg" loading={pairingInFlight} disabled={!pairingReady} onPress={submitPairing} />
             </View>
           </FormStep>
-          {connecting ? <ConnectionProgress phase={status.phase} /> : <View style={styles.alternatives}>
+          <View style={styles.alternatives}>
             {agentMethodAvailable ? (pairingMethod === 'agent'
               ? <Button testID="onboarding-pairing-method-terminal" label={t('Run it myself')} icon={Terminal} variant="text" onPress={() => setPairingMethod('terminal')} />
               : <Button testID="onboarding-pairing-method-agent" label={t('Send to my agent')} icon={MessageSquareText} variant="text" onPress={() => setPairingMethod('agent')} />) : null}
             <Button testID="onboarding-scan-qr" label={t('Scan to connect')} icon={QrCode} variant="text" onPress={() => onScanQr(backendKind)} />
             {onImportQr ? <Button testID="onboarding-import-qr" label={t('Choose from photos')} icon={ImagePlus} variant="text" onPress={() => onImportQr(backendKind)} /> : null}
-          </View>}
+          </View>
         </>}
       </Reanimated.ScrollView>
       </KeyboardAvoidingView>
+      <ConnectingStage status={status} onRetry={onRetry} />
+      </View>
     </View>
   );
 }
@@ -416,24 +427,62 @@ function ErrorBanner({
   );
 }
 
-function ConnectionProgress({
-  phase,
+/**
+ * A submitted pairing owns the page until its outcome (owner request 2026-09-30: under a waiting cat the
+ * steps above still offered a copy button, a spent code and a live-looking Connect). The stage fades in
+ * over the form with its Companion after `Motion.loadingGrace`, so a quick failure only ever shows the
+ * Connect spinner; a failure fades it back out to the unchanged form and its held error, and success plays
+ * the cat's exit while the app moves on to the new Agent.
+ */
+function ConnectingStage({
+  status,
+  onRetry,
 }: Readonly<{
-  phase: Extract<OnboardingStatus, { kind: 'connecting' }>['phase'];
-}>): React.JSX.Element {
+  status: OnboardingStatus;
+  onRetry?: () => void;
+}>): React.JSX.Element | null {
   const { t } = useTranslation('config');
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
-  const ready = phase === 'ready';
-  const loadingPhase = useLoadingHandoff(!ready, ready);
+  const inFlight = status.kind === 'connecting' || status.kind === 'offline';
+  const ready = status.kind === 'connecting' && status.phase === 'ready';
+  // Once the paired connection has gone offline, its automatic retries keep that label and the Reconnect
+  // action until the pairing ends, as in the Roster and Thread, so they do not flicker with every attempt.
+  // A stage that is fading out keeps what it showed.
+  const offlineRef = useRef(status.kind === 'offline');
+  const wasInFlightRef = useRef(inFlight);
+  if (inFlight && !wasInFlightRef.current) offlineRef.current = false;
+  if (status.kind === 'offline') offlineRef.current = true;
+  wasInFlightRef.current = inFlight;
+  const offline = offlineRef.current;
+
+  const [mounted, setMounted] = useState(inFlight);
+  // Mirrors `mounted` for the effect: true from an attempt's start until its stage has faded out.
+  const shownRef = useRef(inFlight);
+  // A page opened for a pairing (a link) starts on the stage rather than flashing the form.
+  const opacity = useSharedValue(inFlight ? 1 : 0);
+  useEffect(() => {
+    if (inFlight) {
+      setMounted(true);
+      // A stage still fading out comes straight back; a new one waits out the grace period with its cat.
+      opacity.value = shownRef.current
+        ? withTiming(1, { duration: Motion.duration.normal })
+        : withDelay(Motion.loadingGrace, withTiming(1, { duration: Motion.duration.normal }));
+      shownRef.current = true;
+      return undefined;
+    }
+    opacity.value = withTiming(0, { duration: Motion.duration.normal });
+    const timer = setTimeout(() => { shownRef.current = false; setMounted(false); }, Motion.duration.normal);
+    return () => clearTimeout(timer);
+  }, [inFlight, opacity]);
+  const appear = useAnimatedStyle(() => ({ opacity: opacity.value }));
+  if (!mounted && !inFlight) return null;
   return (
-    <View testID="onboarding-progress" style={styles.progress}>
-      {loadingPhase ? <LoadingState testID="onboarding-connecting-cat" phase={loadingPhase} message={t('common:Connecting')} /> : null}
-      {ready ? <View style={styles.readyProgress}>
-        <CheckCircle2 size={IconSize.sm} color={theme.colors.good} />
-        <Text style={styles.progressLabel}>{t('Ready')}</Text>
-      </View> : null}
-    </View>
+    <Reanimated.View testID="onboarding-progress" pointerEvents={inFlight ? 'auto' : 'none'} style={[styles.stage, appear]}>
+      <LoadingState testID="onboarding-connecting-cat" pose="connecting" headline phase={ready ? 'ready' : 'wait'}
+        message={offline ? t('Offline · reconnecting', { ns: 'common' }) : t('common:Connecting')}
+        action={offline && onRetry ? { label: t('Reconnect', { ns: 'common' }), onPress: onRetry } : undefined} />
+    </Reanimated.View>
   );
 }
 
@@ -524,6 +573,9 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       flex: 1,
       backgroundColor: colors.canvas,
     },
+    // Everything under the header: the form, and the connecting stage over it.
+    body: { flex: 1 },
+    stage: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: colors.canvas },
     content: { flexGrow: 1, paddingHorizontal: Space.xl, gap: Space.xl },
     subtitle: { color: colors.inkSecondary, fontSize: FontSize.secondary, lineHeight: LineHeight.secondary, fontWeight: FontWeight.regular },
     keyboardAnchor: { gap: Space.md },
@@ -540,23 +592,6 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     // Five or more website links outgrow one line on a phone; wrap them rather than run off both edges.
     docsList: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' },
     alternatives: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: Space.xs },
-    progress: {
-      alignSelf: 'stretch',
-      paddingVertical: Space.md,
-    },
-    readyProgress: {
-      flexDirection: 'row',
-      justifyContent: 'center',
-      alignItems: 'center',
-      gap: Space.xs,
-    },
-    progressLabel: {
-      color: colors.inkSecondary,
-      fontSize: FontSize.secondary,
-      lineHeight: LineHeight.secondary,
-      fontWeight: FontWeight.regular,
-      textAlign: 'center',
-    },
     skeletonScreen: {
       paddingHorizontal: Space.lg,
       paddingBottom: Space.xl,

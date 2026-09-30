@@ -428,8 +428,8 @@ export class GatewayProtocolClient {
     return false;
   }
 
-  public async request<T = unknown>(method: string, params?: object): Promise<T> {
-    return this.sendRequest<T>(method, params ?? {});
+  public async request<T = unknown>(method: string, params?: object, timeoutMs?: number): Promise<T> {
+    return timeoutMs === undefined ? this.sendRequest<T>(method, params ?? {}) : this.sendRequest<T>(method, params ?? {}, timeoutMs);
   }
 
   private async startTransport(epoch: number): Promise<void> {

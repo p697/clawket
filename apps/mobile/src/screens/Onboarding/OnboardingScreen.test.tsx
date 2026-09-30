@@ -1,6 +1,6 @@
 import React from 'react';
 import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
-import { ControlSize, FontSize, Radius, Space } from '../../theme/tokens';
+import { ControlSize, FontSize, Motion, Radius, Space } from '../../theme/tokens';
 import { ChoiceRow } from '../../components/ui/SetupPrimitives';
 import { OnboardingScreen, type OnboardingScreenProps } from './OnboardingScreen';
 
@@ -95,11 +95,22 @@ jest.mock('../../theme', () => ({
 
 jest.mock('../../components/ui/LoadingState', () => {
   const ReactRuntime = require('react');
-  const { View, Text } = require('react-native');
+  const { Pressable, View, Text } = require('react-native');
   return {
-    useLoadingHandoff: (loading: boolean, ready: boolean) => loading ? 'wait' : ready ? 'ready' : null,
-    LoadingState: ({ testID, phase, message }: { testID: string; phase: string; message: string }) =>
-      ReactRuntime.createElement(View, { testID, phase }, phase === 'wait' ? ReactRuntime.createElement(Text, null, message) : null),
+    LoadingState: ({ testID, phase, message, headline, action }: {
+      testID: string;
+      phase: string;
+      message: string;
+      headline?: boolean;
+      action?: { label: string; onPress: () => void };
+    }) => ReactRuntime.createElement(
+      View,
+      { testID, phase, headline },
+      phase === 'wait' ? ReactRuntime.createElement(Text, null, message) : null,
+      action
+        ? ReactRuntime.createElement(Pressable, { testID: `${testID}-action`, onPress: action.onPress }, ReactRuntime.createElement(Text, null, action.label))
+        : null,
+    ),
   };
 });
 
@@ -224,10 +235,64 @@ describe('OnboardingScreen', () => {
       expect(view.queryByText('Relay connected')).toBeNull();
       expect(view.queryByText('Ready')).toBeNull();
     }
+    // Success is the cat's exit while the app moves on; the stage adds no label of its own.
     view.rerender(<OnboardingScreen {...props} status={{ kind: 'connecting', phase: 'ready' }} />);
-    expect(view.getByText('Ready')).toBeTruthy();
     expect(view.getByTestId('onboarding-connecting-cat').props.phase).toBe('ready');
     expect(view.queryByText('common:Connecting')).toBeNull();
+    expect(view.queryByText('Ready')).toBeNull();
+  });
+
+  it('covers the spent form with the connecting stage until the pairing ends', () => {
+    jest.useFakeTimers();
+    try {
+      const onClose = jest.fn();
+      const onRetry = jest.fn();
+      const props = createProps({ initialBackend: 'codex', onClose, onRetry });
+      const view = render(<OnboardingScreen {...props} />);
+      const hidden = { includeHiddenElements: true };
+      const form = () => view.getByTestId('onboarding-keyboard-avoiding', hidden);
+      expect(view.queryByTestId('onboarding-progress')).toBeNull();
+      expect(form().props.accessibilityElementsHidden).toBe(false);
+
+      view.rerender(<OnboardingScreen {...props} status={{ kind: 'connecting', phase: 'relay_connected' }} />);
+      expect(view.getByTestId('onboarding-progress').props.pointerEvents).toBe('auto');
+      expect(view.getByTestId('onboarding-connecting-cat').props.headline).toBe(true);
+      expect(view.getByText('common:Connecting')).toBeTruthy();
+      // The form stays mounted underneath for a failure to return to, hidden from assistive technology.
+      expect(view.queryByTestId('onboarding-pairing-code')).toBeNull();
+      expect(view.getByTestId('onboarding-pairing-code', hidden)).toBeTruthy();
+      expect(form().props.accessibilityElementsHidden).toBe(true);
+      expect(form().props.importantForAccessibility).toBe('no-hide-descendants');
+      // Back leaves the flow; it never returns to the chooser underneath the stage.
+      fireEvent.press(view.getByTestId('onboarding-close'));
+      expect(onClose).toHaveBeenCalledTimes(1);
+
+      // Automatic retries keep the offline label and its manual reconnect until the pairing ends.
+      view.rerender(<OnboardingScreen {...props} status={{ kind: 'offline' }} />);
+      expect(view.getByText('Offline · reconnecting')).toBeTruthy();
+      view.rerender(<OnboardingScreen {...props} status={{ kind: 'connecting', phase: 'waiting_bridge' }} />);
+      expect(view.getByText('Offline · reconnecting')).toBeTruthy();
+      expect(view.queryByText('common:Connecting')).toBeNull();
+      fireEvent.press(view.getByTestId('onboarding-connecting-cat-action'));
+      expect(onRetry).toHaveBeenCalledTimes(1);
+
+      // A failure hands the page back at once and fades the stage out over the form and its error.
+      view.rerender(<OnboardingScreen {...props} status={{ kind: 'error', code: 'timeout' }} />);
+      expect(view.getByTestId('onboarding-progress').props.pointerEvents).toBe('none');
+      expect(view.getByText('Offline · reconnecting')).toBeTruthy();
+      expect(view.getByText('Connection timed out')).toBeTruthy();
+      expect(form().props.accessibilityElementsHidden).toBe(false);
+      expect(view.getByTestId('onboarding-pairing-code').props.editable).toBe(true);
+      act(() => { jest.advanceTimersByTime(Motion.duration.normal); });
+      expect(view.queryByTestId('onboarding-progress')).toBeNull();
+
+      // The next attempt starts over with the connecting label.
+      view.rerender(<OnboardingScreen {...props} status={{ kind: 'connecting', phase: 'relay_connected' }} />);
+      expect(view.getByText('common:Connecting')).toBeTruthy();
+      expect(view.queryByTestId('onboarding-connecting-cat-action')).toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('separates backend selection from pairing and returns without retaining a stale code', () => {
@@ -327,9 +392,11 @@ describe('OnboardingScreen', () => {
         status={{ kind: 'connecting', phase: 'relay_connected' }}
       />,
     );
-    expect(view.getByTestId('onboarding-pairing-code').props.editable).toBe(false);
-    fireEvent(view.getByTestId('onboarding-pairing-code'), 'submitEditing');
-    fireEvent.press(view.getByTestId('onboarding-connect'));
+    // The connecting stage covers the form; underneath it the controls are locked as well.
+    const hidden = { includeHiddenElements: true };
+    expect(view.getByTestId('onboarding-pairing-code', hidden).props.editable).toBe(false);
+    fireEvent(view.getByTestId('onboarding-pairing-code', hidden), 'submitEditing');
+    fireEvent.press(view.getByTestId('onboarding-connect', hidden));
     expect(onSubmitPairing).toHaveBeenCalledTimes(1);
   });
 
@@ -575,11 +642,14 @@ describe('OnboardingScreen', () => {
     const offline = render(
       <OnboardingScreen {...createProps({ status: { kind: 'offline' }, onRetry })} />,
     );
-    expect(offline.getByTestId('onboarding-offline')).toBeTruthy();
+    // A paired connection that dropped mid-pairing is still this pairing's wait: the stage says so.
+    const hidden = { includeHiddenElements: true };
+    expect(offline.getByTestId('onboarding-progress')).toBeTruthy();
     expect(offline.getByText('Offline · reconnecting')).toBeTruthy();
     expect(offline.queryByText('No network')).toBeNull();
-    expect(offline.getByTestId('onboarding-pairing-code')).toBeTruthy();
-    fireEvent.press(offline.getByTestId('onboarding-offline-action'));
+    expect(offline.queryByTestId('onboarding-pairing-code')).toBeNull();
+    expect(offline.getByTestId('onboarding-pairing-code', hidden)).toBeTruthy();
+    fireEvent.press(offline.getByTestId('onboarding-connecting-cat-action'));
     expect(onRetry).toHaveBeenCalledTimes(1);
     offline.unmount();
 
@@ -596,10 +666,10 @@ describe('OnboardingScreen', () => {
     expect(error.getByText('Hermes is not responding')).toBeTruthy();
     fireEvent.press(error.getByTestId('onboarding-error-action'));
     expect(onErrorAction).toHaveBeenCalledWith('gateway_offline');
-    // The failure keeps its place while the next attempt connects, and cannot start another one.
+    // The failure keeps its place under the stage while the next attempt connects, and cannot start another one.
     error.rerender(<OnboardingScreen {...createProps({ initialBackend: 'hermes', status: { kind: 'connecting', phase: 'waiting_bridge' }, onErrorAction })} />);
-    expect(error.getByText('Hermes is not responding')).toBeTruthy();
-    fireEvent.press(error.getByTestId('onboarding-error-action'));
+    expect(error.getByText('Hermes is not responding', hidden)).toBeTruthy();
+    fireEvent.press(error.getByTestId('onboarding-error-action', hidden));
     expect(onErrorAction).toHaveBeenCalledTimes(1);
     error.rerender(<OnboardingScreen {...createProps({ initialBackend: 'hermes', status: { kind: 'idle' }, onErrorAction })} />);
     expect(error.queryByTestId('onboarding-error')).toBeNull();
@@ -610,9 +680,9 @@ describe('OnboardingScreen', () => {
         {...createProps({ status: { kind: 'connecting', phase: 'waiting_bridge' } })}
       />,
     );
-    expect(connecting.getByText('Connect {{backend}}')).toBeTruthy();
+    expect(connecting.getByText('Connect {{backend}}', hidden)).toBeTruthy();
     expect(connecting.getByTestId('onboarding-progress')).toBeTruthy();
-    expect(connecting.getByTestId('onboarding-connect').props.accessibilityState).toEqual({
+    expect(connecting.getByTestId('onboarding-connect', hidden).props.accessibilityState).toEqual({
       disabled: true,
       busy: true,
     });

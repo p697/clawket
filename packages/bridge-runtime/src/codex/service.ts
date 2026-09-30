@@ -1,3 +1,4 @@
+import { DeliveredArtifacts } from '../delivered-artifacts.js';
 import { SessionCatalogSync } from '../session-catalog.js';
 import { readPromptIdentity, recordedPromptStatus } from '../prompt-status.js';
 import { InteractionAttention } from '../interaction-attention.js';
@@ -11,7 +12,7 @@ import type { SessionDescriptor, SessionUpdate, SessionHistory, PromptInput, Age
 import { nativeSettings, matchesNativeSettings, permissionMode, permissionSelectionPatch, type NativeSettings } from './settings.js';
 import { fastServiceTier, isFastServiceTier, hasServiceTier } from './speed.js';
 import { CodexRpc } from './rpc.js';
-import { codexMessages, codexTool, codexTurnFailure } from './history.js';
+import { codexMessages, codexGeneratedImage, codexTool, codexTurnFailure } from './history.js';
 import { loadDesktopHistory } from './desktop-history.js';
 import { nativeResumeSpeed } from './resume-settings.js';
 import { desktopTurns, desktopState } from './desktop-state.js';
@@ -618,8 +619,10 @@ export class CodexService extends EventEmitter {
     void next.finally(() => { if (this.queues.get(record.id) === next) this.queues.delete(record.id); }).catch(() => {});
     return next;
   }
+  private readonly artifacts = new DeliveredArtifacts();
   private readonly attention = new InteractionAttention();
   private update(update: SessionUpdate): void {
+    if (update.type === 'run_finished') { const key = update.sessionKey; update = this.artifacts.final(update, [this.records.find(row => row.id === key)?.cwd ?? this.native.get(key)?.cwd ?? this.project]); }
     const patch = this.attention.accept(update);
     this.emit('update', update);
     if (patch) this.emit('update', patch);
@@ -729,7 +732,7 @@ export class CodexService extends EventEmitter {
     await this.recover();
     const catalog = this.catalog.length ? this.catalog : await this.refreshModels();
     const account = await this.rpc.request('account/read', { refreshToken: false });
-    return { backend: 'codex', sessionCatalogSync: 1, modelReady: account.requiresOpenaiAuth !== true || !!account.account, model: catalog.find(m => m.isDefault)?.model ?? '', vision: true, project: basename(this.project), projects: !!this.options.device, fastMode: true, sessionPermissions: true, sessionArchive: true, promptStatus: true, desktopConnected: this.desktop?.ready === true };
+    return { backend: 'codex', sessionCatalogSync: 1, artifacts: true, modelReady: account.requiresOpenaiAuth !== true || !!account.account, model: catalog.find(m => m.isDefault)?.model ?? '', vision: true, project: basename(this.project), projects: !!this.options.device, fastMode: true, sessionPermissions: true, sessionArchive: true, promptStatus: true, desktopConnected: this.desktop?.ready === true };
   }
   async request(frame: CodexRequest): Promise<unknown> {
     const result = await this.dispatch(frame);
@@ -821,6 +824,8 @@ export class CodexService extends EventEmitter {
           this.loaded.delete(r.id); this.effectiveSettings.delete(r.id); delete r.permissionsUnconfirmed; this.save(); return { ok: true };
         });
       });
+      case 'clawket.artifacts.open': return this.artifacts.resolve(p.sessionKey, p.artifactId, cursor => this.history(String(p.sessionKey), cursor));
+      case 'clawket.artifacts.read': return this.artifacts.read(p.sessionKey, p.id, p.offset);
       case 'chat.history': return this.history(p.sessionKey, p.cursor);
       case 'chat.promptStatus': {
         const r = this.records.find(record => record.id === p.sessionKey);
@@ -1006,6 +1011,7 @@ export class CodexService extends EventEmitter {
     return cached.turns;
   }
   private async history(key: unknown, cursor: unknown): Promise<SessionHistory> {
+    const artifactEpoch = this.artifacts.epoch;
     const owned = this.options.device && this.native.has(String(key)) ? this.record(key) : this.records.find(r => r.id === key), native = this.native.get(String(key));
     if (!owned && !native) throw new Error('Session unavailable; refresh the conversation list');
     if (owned && (!owned.threadId || !owned.activity)) return { key: owned.id, messages: [], hasActiveRun: false };
@@ -1048,7 +1054,7 @@ export class CodexService extends EventEmitter {
       for (const [id, item] of active.items) combined.set(id, item);
       liveTurn.items = [...combined.values()];
     }
-    const messages = codexMessages(turns);
+    const messages = this.artifacts.project(String(key), codexMessages(turns), [metadata.thread.cwd], artifactEpoch, cursor);
     const end = page.end ?? messages.length;
     if (end > messages.length) throw new Error('History changed; refresh this conversation');
     let start = end, bytes = 0;
@@ -1199,17 +1205,18 @@ export class CodexService extends EventEmitter {
     const reply = sessionPreview(run.final);
     if (reply) { r.preview = reply; r.activity = Date.now(); }
     this.save(); this.scheduleDesktop(r);
+    const generated = [...run.items.values()].flatMap(item => codexGeneratedImage(item)?.attachments ?? []);
     const terminalMessage = stopReason === 'error' ? codexTurnFailure({ id: run.turnId ?? `run:${run.id}`, status: 'failed', ...nativeTurn }) : undefined;
     this.update({ type: 'run_finished', sessionKey: r.id, runId: run.id, stopReason, ...(terminalMessage ? { terminalMessage,
-      message: { role: 'assistant', content: terminalMessage.text } } : run.final ? { message: { role: 'assistant', content: run.final, model: r.model, provider: r.provider } } : {}) });
+      message: { role: 'assistant', content: terminalMessage.text } } : run.final || generated.length ? { message: { role: 'assistant', content: run.final ?? '', ...(generated.length ? { attachments: generated } : {}), model: r.model, provider: r.provider } } : {}) });
     this.update({ type: 'session_info_update', session: this.descriptor(r) });
   }
   async stop(): Promise<void> {
-    if (this.stopped) return; this.stopped = true;
+    if (this.stopped) return; this.stopped = true; this.artifacts.clear();
     for (const timer of this.publishTimers.values()) clearTimeout(timer); this.publishTimers.clear();
     for (const waiter of this.settingsWaiters.values()) { clearTimeout(waiter.timer); waiter.reject(new Error('Codex Bridge stopped')); }
     this.settingsWaiters.clear(); this.desktop?.stop();
-    await this.rpc.stop();
+    await this.rpc.stop(); this.artifacts.clear();
     if (existsSync(this.lockPath)) unlinkSync(this.lockPath);
   }
 }

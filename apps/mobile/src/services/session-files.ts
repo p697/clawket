@@ -14,7 +14,7 @@ export function validateSessionFiles(value: unknown): SessionFile[] {
 }
 
 /** Writes one bounded chunk at a time; the caller owns temporary-file cleanup. */
-export async function receiveSessionFile(operations: SessionFilesOperations, key: string, file: SessionFile,
+export async function receiveSessionFile(operations: Pick<SessionFilesOperations, 'read'> & Partial<Pick<SessionFilesOperations, 'list'>>, key: string, file: SessionFile,
   signal: AbortSignal, write: (bytes: Uint8Array) => void, progress: (fraction: number) => void): Promise<void> {
   validateSessionFiles({ files: [file] });
   let offset = 0;

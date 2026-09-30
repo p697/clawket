@@ -1,4 +1,5 @@
 import { codexControl, startCodexBackground } from './codex-lifecycle.js';
+import { agentPairProgress, type Progress } from './progress.js';
 import { openSync, readSync, closeSync, fstatSync, mkdirSync, readFileSync, writeFileSync, renameSync, existsSync, unlinkSync, realpathSync } from 'node:fs';
 import { dirname, join, resolve, basename } from 'node:path';
 import { homedir } from 'node:os';
@@ -19,6 +20,13 @@ async function post<T>(url: string, body: object): Promise<T> {
   return response.json() as Promise<T>;
 }
 export async function handleCodexCommand(args: string[]): Promise<void> {
+  const progress = agentPairProgress(args, 'codex', 'Codex');
+  try { await runCodexCommand(args, progress); }
+  catch (error) { progress.fail(); throw error; }
+  finally { progress.stop(); }
+}
+
+async function runCodexCommand(args: string[], progress: Progress): Promise<void> {
   const command = args[0] ?? 'pair';
   if (!['pair', 'run', 'doctor', 'status', 'start', 'restart', 'stop', 'logs', 'reset'].includes(command)) throw new Error('Use codex pair, run, start, restart, stop, status, doctor, logs or reset');
   if (args.includes('--device') && flag(args, '--project')) throw new Error('Choose --device or --project, not both');
@@ -59,6 +67,7 @@ export async function handleCodexCommand(args: string[]): Promise<void> {
     if (command === 'pair' && health) {
       const sessions = await codexControl(config, 'sessions.list') as unknown as Array<{ hasActiveRun?: boolean }>;
       if (sessions.some(s => s.hasActiveRun)) throw new Error('Finish the current Codex task before refreshing pairing. Existing phone connections remain usable.');
+      progress.update('Stopping the previous Codex bridge…');
       await codexControl(config, 'bridge.stop');
       stoppedOwned = true;
     }
@@ -71,11 +80,12 @@ export async function handleCodexCommand(args: string[]): Promise<void> {
     if (command === 'start' && health) { console.log('Codex Bridge is already running.'); return; }
     if (command === 'start' || command === 'restart') { if (!existsSync(configPath)) throw new Error('Pair this Codex connection first'); await startCodexBackground(['run', '--config', configPath], join(directory, 'codex.log')); return; }
   }
+  progress.update('Starting Codex…');
   if (command === 'pair' && !args.includes('--foreground')) {
     // The child receives --config before it exists; preserve the resolved scope.
-    await startCodexBackground([...args, ...(config.device && !args.includes('--device') ? ['--device'] : []), '--config', configPath], join(directory, 'codex.log')); return;
+    await startCodexBackground([...args, ...(config.device && !args.includes('--device') ? ['--device'] : []), '--config', configPath], join(directory, 'codex.log'), progress); return;
   }
-  const show = (text: string) => { if (process.send) process.send({ type: 'codex.display', text }); else console.log(text); };
+  const show = (text: string) => { if (process.send) process.send({ type: 'codex.display', text }); else { progress.succeed(); console.log(text); } };
   const installed = await inspectCodexInstallation(config.command);
   const service = new CodexService({ project: config.project, directory: join(directory, 'sessions'), command: config.command, device: config.device });
   service.on('diagnostic', diagnostic => console.log(JSON.stringify({
@@ -94,6 +104,7 @@ export async function handleCodexCommand(args: string[]): Promise<void> {
         if (!address) throw new Error('No LAN address found. Supply --address reachable-from-phone');
         qrPayload = JSON.stringify({ version: 1, backendKind: 'codex', mode: 'local', url: `ws://${address}:${config.port}/v1/codex/ws`, token: config.token });
       } else {
+        progress.update('Requesting a pairing code for Codex…');
         const registryUrl = flag(args, '--registry') ?? (args.includes('--preview') ? 'https://clawket-codex-registry-preview.clawket.workers.dev' : 'https://clawket-codex-registry.clawket.workers.dev');
         const url = new URL(registryUrl);
         if (url.protocol !== 'https:' && !['127.0.0.1', 'localhost'].includes(url.hostname)) throw new Error('Codex Registry requires HTTPS');
@@ -117,6 +128,7 @@ export async function handleCodexCommand(args: string[]): Promise<void> {
     } else if (!existsSync(configPath)) throw new Error('Pair this Codex connection first');
     server = new CodexServer(service, config.token, message => console.error(message)); await server.start(config.port, config.host);
     if (config.relay) {
+      progress.update('Connecting to Clawket Relay…');
       relay = new CodexRelay(service, config.relay, invitation => { config.relay!.invitation = invitation; save(config); }, message => console.error(message));
       relay.start(); await relay.waitUntilReady();
     }

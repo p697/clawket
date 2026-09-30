@@ -1,3 +1,8 @@
+import { reconcileOpenClawArtifactHistory, stripOpenClawMediaDirectives } from './gateway-attachments';
+import type { GatewayAdapterEvent } from './gateway-session-update';
+import type { SessionUpdate, SessionHistory } from '@clawket/agent-protocol';
+import { readRebuildingOpenClawHistory } from './openclaw-history-retry';
+import { OpenClawArtifactReader } from './openclaw-artifacts';
 import { requestLocalUsage } from '../../services/usage-time-zone';
 import type { SessionFilesOperations } from '@clawket/agent-protocol';
 import { openClawHistoryRequest, openClawHistoryCursor } from './openclaw-history-pagination';
@@ -74,6 +79,18 @@ export type OpenClawConnectMetaGateway = {
 };
 
 export class OpenClawAdapter extends GatewayAdapterBase {
+  private historyEpoch = 0;
+  private artifactReader?: OpenClawArtifactReader;
+  private readonly bridgeArtifacts = {
+    open: (sessionKey: string, artifactId: string) => this.invoke(() => this.gateway.request<import('@clawket/agent-protocol').SessionFile>('clawket.artifacts.open', { sessionKey, artifactId }, 60_000)),
+    read: (sessionKey: string, id: string, offset: number) => this.invoke(() => this.gateway.request<import('@clawket/agent-protocol').SessionFileChunk>('clawket.artifacts.read', { sessionKey, id, offset })),
+  };
+  public get artifacts(): import('@clawket/agent-protocol').ArtifactOperations | undefined {
+    if (this.state !== 'ready') return undefined;
+    if (this.gateway.supportsMethod?.('clawket.artifacts.open') && this.gateway.supportsMethod?.('clawket.artifacts.read')) return this.bridgeArtifacts;
+    return this.connection.transportKind !== 'relay' && this.gateway.supportsMethod?.('artifacts.get') && this.gateway.supportsMethod?.('artifacts.download') ? this.artifactReader?.operations : undefined;
+  }
+
   public get sessionFiles(): SessionFilesOperations | undefined {
     if (!this.capabilities.sessionFiles) return undefined;
     return {
@@ -100,6 +117,7 @@ export class OpenClawAdapter extends GatewayAdapterBase {
       fallbackSessionKey: 'agent:main:main',
       options,
     });
+    this.artifactReader = new OpenClawArtifactReader((method, params) => this.invoke(() => this.gateway.request(method, params)), record.url);
     this.bridgeCapabilityMode = options.bridgeCapabilityMode ?? 'unknown';
     this.bridgeCapabilityModeLoaded = this.bridgeCapabilityMode !== 'unknown'
       || !options.loadBridgeCapabilityMode;
@@ -107,6 +125,26 @@ export class OpenClawAdapter extends GatewayAdapterBase {
     this.onBridgeCapabilityMode = options.onBridgeCapabilityMode;
     this.currentCapabilities = resolveCapabilities('openclaw', { sessionFiles: false });
     this.management = this.createManagementOperations();
+  }
+
+  protected override transformGatewayUpdates(_event: GatewayAdapterEvent, updates: SessionUpdate[]): SessionUpdate[] {
+    if (!this.artifacts) return updates;
+    return updates.map(update => {
+      if (update.type === 'agent_message_chunk') return { ...update, text: stripOpenClawMediaDirectives(update.text) };
+      if (update.type === 'run_finished' && update.message) return { ...update, message: { ...update.message, content: stripOpenClawMediaDirectives(update.message.content) } };
+      return update;
+    });
+  }
+
+  public override async loadSession(key: string, options?: { limit?: number; cursor?: string }): Promise<SessionHistory> {
+    const epoch = this.historyEpoch;
+    const history = await readRebuildingOpenClawHistory(
+      () => super.loadSession(key, options),
+      () => this.state === 'ready' && this.historyEpoch === epoch,
+    );
+    return this.artifacts ? { ...history, messages: reconcileOpenClawArtifactHistory(history.messages),
+      ...(history.activeRun ? { activeRun: { ...history.activeRun, text: stripOpenClawMediaDirectives(history.activeRun.text) } } : {}),
+    } : history;
   }
 
   protected override historyRequest(key: string, options?: { limit?: number; cursor?: string }): Record<string, unknown> {
@@ -265,6 +303,7 @@ export class OpenClawAdapter extends GatewayAdapterBase {
   }
 
   protected override handleGatewayConnectionTransition(state: LegacyConnectionState): void {
+    if (state !== 'ready') { this.historyEpoch++; this.artifactReader?.clear(); }
     this.updateCapabilities(resolveCapabilities('openclaw', { sessionFiles: state === 'ready'
       && this.gateway.supportsMethod?.('clawket.files.list') === true && this.gateway.supportsMethod?.('clawket.files.read') === true }));
     if (state === 'connecting') this.v2HandshakeStarted = false;

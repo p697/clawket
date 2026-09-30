@@ -1,3 +1,5 @@
+import { manipulateAsync } from 'expo-image-manipulator';
+jest.mock('expo-image-manipulator', () => ({ manipulateAsync: jest.fn(), SaveFormat: { JPEG: 'jpeg' } }));
 jest.mock('expo-asset', () => ({
   Asset: {
     loadAsync: jest.fn(),
@@ -151,4 +153,22 @@ describe('saveBundledImageToPhotoLibrary', () => {
     await expect(saveImageUriToPhotoLibrary('file:///tmp/original.png', 'chat-image')).rejects.toThrow('disk full');
     expect(MediaLibrary.saveToLibraryAsync).not.toHaveBeenCalled();
   });
+});
+
+it('saves inline images through a temporary local file with write-only photo permission', async () => {
+  jest.clearAllMocks();
+  (MediaLibrary.requestPermissionsAsync as jest.Mock).mockResolvedValueOnce({ granted: true });
+  (manipulateAsync as jest.Mock).mockResolvedValueOnce({ uri: 'file:///inline.jpg' });
+  await expect(saveImageUriToPhotoLibrary('data:image/png;base64,aA==', 'chat-image')).resolves.toBe('saved');
+  expect(MediaLibrary.requestPermissionsAsync).toHaveBeenCalledWith(true, ['photo']);
+  expect(manipulateAsync).toHaveBeenCalled();
+  expect(downloadFileAsyncMock).not.toHaveBeenCalled();
+  expect(deleteMock).toHaveBeenCalledTimes(2);
+});
+it('cleans image save scratch files after a library write failure', async () => {
+  jest.clearAllMocks();
+  (MediaLibrary.requestPermissionsAsync as jest.Mock).mockResolvedValueOnce({ granted: true });
+  (MediaLibrary.saveToLibraryAsync as jest.Mock).mockRejectedValueOnce(new Error('full'));
+  await expect(saveImageUriToPhotoLibrary('file:///original.png', 'chat-image')).rejects.toThrow('full');
+  expect(deleteMock).toHaveBeenCalledTimes(1);
 });

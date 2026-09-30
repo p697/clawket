@@ -20,6 +20,7 @@ export type CachedMessage = {
   timestampMs?: number;
   imageUris?: string[];
   imageMetas?: UiMessage["imageMetas"];
+  artifactAttachments?: UiMessage["artifactAttachments"];
   fileAttachments?: UiMessage["fileAttachments"];
   modelLabel?: string;
   usage?: UiMessage["usage"];
@@ -151,6 +152,7 @@ function toSlim(msg: UiMessage): CachedMessage {
   if (msg.timestampMs) slim.timestampMs = msg.timestampMs;
   if (msg.imageUris?.length) slim.imageUris = msg.imageUris;
   if (msg.imageMetas?.length) slim.imageMetas = msg.imageMetas;
+  if (msg.artifactAttachments?.length) slim.artifactAttachments = msg.artifactAttachments.map(({ type, mimeType, name, artifactId }) => ({ type, mimeType, name, artifactId }));
   if (msg.fileAttachments?.length) slim.fileAttachments = msg.fileAttachments;
   if (msg.modelLabel) slim.modelLabel = msg.modelLabel;
   if (msg.usage) slim.usage = msg.usage;

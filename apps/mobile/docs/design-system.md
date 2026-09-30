@@ -228,6 +228,10 @@ Owner report: the Codex model and permission sheets opened with a `Loading…` l
 - OpenClaw management keeps a section's content while it re-reads after Save, Attempt Fix, Retry or Run diagnostics again; the Companion covers only a section with nothing to show yet. Edit waits for the re-read that returns the config hash, and a diagnostics re-run spins its own button.
 - During the foreground recovery window Tools, Channels & Devices, Logs, OpenClaw management and Model health keep what they show and insert no offline notice; the header already says `Reconnecting…`. Their in-place offline copy remains for a sustained outage.
 
+### Onboarding connecting stage — September 30
+
+Owner feedback on device: while a pairing connected, the Companion waited under the steps it had already finished — the agent message could still be copied, the spent code sat in its field and the Connect button looked live. A submitted pairing (code, QR or link) now owns the page until its outcome. The stage covers everything under the `FlowHeader` on the canvas and fades in with its page-size `LoadingState` after `Motion.loadingGrace`, so a faster failure shows only the Connect spinner; the label is a `headline` (`title`, semibold) `Connecting`. The form stays mounted underneath, locked and hidden from assistive technology: a failure fades the stage out onto the unchanged form and its held error, and the next attempt covers it again. Once the paired connection goes offline, the stage keeps `Offline · reconnecting` with one `Reconnect` text action (`LoadingState` `action`) through the automatic retries, as the Roster and Thread do. Back leaves the flow, and success plays the cat's exit while the app opens the new Agent. This is the one wait that replaces its page: a committed step, not a refresh of content already on screen.
+
 ### Connection state lives in the chrome — September 16
 
 Owner feedback: returning from the background produced a grey `Banner` at the top of every page that pushed content down and then vanished. Connection state (recovering, offline, connection error) never takes layout space any more; it is rendered by `ConnectionStatusPill` in the header chrome:
@@ -508,3 +512,7 @@ Pi standard questions share the structured-question radio affordance and fully t
 - Image sending respects explicit selected-model input metadata: reject a known text-only model before enqueueing and retain its photo/text draft; absent metadata preserves legacy behavior. Never infer vision support from the model name. Tile-based Add menus with at most two action rows fit their contents; photo strips and longer menus retain scrolling detents.
 
 - A recovered backend echo with the exact send identity clears its matching send-failure banner and uncertainty together; unrelated replies, matching text or transport reconnection alone cannot clear it. Later failures retain their own state. Ordered-list marker space must keep three-digit item numbers visible on Android.
+
+### Generated attachments — September 30
+
+Managed documents use a neutral rounded card: a 44-point file icon tile, a two-line filename, caption type/size, and a trailing download/share action. During transfer the action becomes a spinner; failures keep the filename and provide retry in place. Image tiles open the black shared viewer; avoid detached Save rows under images. Its top bar offers labeled Copy and Save to Photos controls plus Close, all at least 44 points. A bottom zoom control explains double-tap/pinch and also toggles zoom directly. Successful copy/save uses brief feedback inside the viewer; errors remain actionable, and late completion after closing or paging does not affect another image.

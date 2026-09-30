@@ -2,6 +2,7 @@ import React from 'react';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { Alert } from 'react-native';
 import { saveImageUriToPhotoLibrary } from '../../services/photo-library';
+import { copyImageToClipboard } from '../../services/image-clipboard';
 import { ImagePreviewModal } from './ImagePreviewModal';
 
 let triggerLongPress: (() => void) | null = null;
@@ -16,6 +17,7 @@ jest.mock('react-native', () => {
     Alert: { alert: jest.fn() },
     StatusBar: { pushStackEntry: jest.fn((props: unknown) => ({ props })), popStackEntry: jest.fn() },
     Modal: primitive('Modal'),
+    ActivityIndicator: primitive('ActivityIndicator'),
     Pressable: primitive('Pressable'),
     StyleSheet: {
       create: <T,>(styles: T) => styles,
@@ -96,6 +98,9 @@ jest.mock('lucide-react-native', () => {
   const ReactRuntime = require('react');
   const { View } = require('react-native');
   return {
+    Copy: (props: Record<string, unknown>) => ReactRuntime.createElement(View, props),
+    Check: (props: Record<string, unknown>) => ReactRuntime.createElement(View, props),
+    ZoomIn: (props: Record<string, unknown>) => ReactRuntime.createElement(View, props),
     Download: (props: Record<string, unknown>) => ReactRuntime.createElement(View, props),
     X: (props: Record<string, unknown>) => ReactRuntime.createElement(View, props),
   };
@@ -114,6 +119,8 @@ jest.mock('../../theme', () => ({
     },
   }),
 }));
+
+jest.mock('../../services/image-clipboard', () => ({ copyImageToClipboard: jest.fn() }));
 
 jest.mock('../../services/photo-library', () => ({
   saveImageUriToPhotoLibrary: jest.fn(),
@@ -202,4 +209,29 @@ describe('ImagePreviewModal image actions', () => {
       global.cancelAnimationFrame = originalCancel;
     }
   });
+});
+
+const viewerProps = { uris: ['file://first.jpg', 'file://second.jpg'], index: 1, screenWidth: 390, screenHeight: 844, insetsTop: 24, insetsBottom: 16, onClose: jest.fn(), onIndexChange: jest.fn() };
+it('exposes copy and album save in the viewer and acts on the selected image', async () => {
+  (copyImageToClipboard as jest.Mock).mockResolvedValue(undefined);
+  const view = render(<ImagePreviewModal visible {...viewerProps} />);
+  fireEvent.press(view.getByTestId('image-preview-copy'));
+  await waitFor(() => expect(copyImageToClipboard).toHaveBeenCalledWith('file://second.jpg'));
+  await waitFor(() => expect(view.getByText('Copied')).toBeTruthy());
+  fireEvent.press(view.getByTestId('image-preview-save'));
+  await waitFor(() => expect(view.getByText('Saved to Photos!')).toBeTruthy());
+  expect(view.getByTestId('image-preview-zoom')).toBeTruthy();
+});
+it('blocks duplicate actions and ignores feedback after closing', async () => {
+  jest.clearAllMocks();
+  let finish!: () => void;
+  (copyImageToClipboard as jest.Mock).mockReturnValueOnce(new Promise<void>(resolve => { finish = resolve; }));
+  const view = render(<ImagePreviewModal visible {...viewerProps} />);
+  fireEvent.press(view.getByTestId('image-preview-copy'));
+  fireEvent.press(view.getByTestId('image-preview-copy'));
+  expect(copyImageToClipboard).toHaveBeenCalledTimes(1);
+  view.rerender(<ImagePreviewModal visible={false} {...viewerProps} />);
+  await act(async () => finish());
+  view.rerender(<ImagePreviewModal visible {...viewerProps} />);
+  expect(view.queryByText('Copied')).toBeNull();
 });

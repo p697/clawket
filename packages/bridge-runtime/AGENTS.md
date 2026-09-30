@@ -245,3 +245,13 @@ Claude service project scope uses `realpathSync.native` to match the catalog’s
 Codex native RPC diagnostics emit only a fixed lifecycle/failure reason, pending count and optional frame byte count. Forward them to the Clawket-owned local log without methods, params, transcripts, stderr, native error strings, paths or IDs. Logging failures must not interrupt request settlement or process cleanup; a timeout retains uncertain dispatch and never authorizes replay.
 
 Negotiated `chat.promptStatus` is a read-only lookup of a bounded, durable input fingerprint. `recorded` proves Bridge receipt only, never native execution/completion; `unknown` never authorizes automatic resend. Codex echoes use exact native client message IDs. Pi may persist an exact native entry mapping only with the owned process/session, pre-dispatch leaf, ordered acknowledgement and a single unambiguous native user entry; any branching, extension ordering, persistence or bounded-read uncertainty leaves the receipt unresolved. Store identity metadata only, never duplicate transcript text.
+
+## OpenClaw attachment transfer
+
+`src/openclaw/artifacts.ts` terminates negotiated artifact reads only on authenticated isolated local Gateway client channels. Obtain transcript authority through native `artifacts.get/download`; never accept caller paths/URLs, forward owner credentials, follow redirects or persist payloads. Preserve the 8 MiB frame limit with inline-size preflight; managed-file buffers, chunk sizes, timeouts and disposal are bounded as documented in `../../docs/3.1/openclaw-attachments.md`. Keep existing workspace-file and other backend behavior unchanged.
+
+## SDK and Hermes delivered attachments
+
+`src/delivered-artifacts.ts` projects explicit assistant file references inside the session's verified project (Hermes: configured local cwd/outputs). Exclude fenced examples, user/tool arguments, private paths and filesystem links. Only a successful native Codex image-generation result or an assistant image block may supply inline image bytes; ordinary tool screenshots are not delivery. Negotiate artifact operations separately from image-input support, retain opaque session-scoped IDs, bounded chunk reads and mutation checks, and retire handles on reset/delete/stop. Keep cloud storage unchanged; RAM buffers and native-page recovery metadata are bounded. Keep legacy wire text intact; only the additive `artifactDisplayText` projection strips links actually converted to attachments. See `../../docs/3.1/backend-attachments.md`.
+
+Pi history retains legacy inline assistant image bytes unless the reader explicitly sends `artifacts: true`; new-client handle projection must not remove an older client's existing image display.

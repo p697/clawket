@@ -173,7 +173,7 @@ describe('Hermes M3 recorded packet contract', () => {
 
     const firstFrame = await client.next((frame) => frame.type === 'event');
     const expectedHealth = materializeFixtureValue(fixture.firstFrame, captures) as { payload: { capabilities: string[] } };
-    expectedHealth.payload.capabilities.unshift('bridge.session-files.v1');
+    expectedHealth.payload.capabilities.unshift('bridge.session-files.v1', 'bridge.artifacts.v1');
     expect(firstFrame).toEqual(expectedHealth);
 
     for (const packet of fixture.packets) {
@@ -272,7 +272,7 @@ describe('Hermes M3 recorded packet contract', () => {
     const captures = new Map<string, unknown>([['session.id', seeded.sessionId]]);
     const firstFrame = await client.next((frame) => frame.type === 'event' && frame.event === 'health');
     const expectedHealth = materializeFixtureValue(fixture.firstFrame, captures) as { payload: { capabilities: string[] } };
-    expectedHealth.payload.capabilities.unshift('bridge.session-files.v1');
+    expectedHealth.payload.capabilities.unshift('bridge.session-files.v1', 'bridge.artifacts.v1');
     expect(firstFrame).toEqual(expectedHealth);
 
     const sendRequest = materializeFixtureValue(fixture.sendPacket.request, captures) as JsonRecord;

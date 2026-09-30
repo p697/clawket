@@ -23,8 +23,9 @@ import {
 import { parseLookbackToMs } from './log-parse.js';
 import { buildGatewayControlUiOrigin, buildLocalPairingInfo, detectLanIp, resolveLocalPairGatewayUrl } from './local-pair.js';
 import { readCliVersion } from './metadata.js';
-import { discoverPairChoices, promptPairChoice } from './pair-choose.js';
+import { discoverPairChoices, promptPairChoice, type PairChoice } from './pair-choose.js';
 import { buildLocalPairingJson, buildPairingJson } from './pairing-output.js';
+import { noProgress, startProgress, track, type Progress } from './progress.js';
 import { writePairingQrPng, writeRawQrPng } from './qr-file.js';
 import { decidePairServiceAction } from './service-decision.js';
 import {
@@ -133,11 +134,12 @@ async function main(): Promise<void> {
     if ('error' in gatewayAuth) {
       throw new Error(gatewayAuth.error);
     }
-    const paired = await refreshAccessCode({
+    const progress = startProgress('Refreshing the OpenClaw pairing code…', { enabled: !jsonOutput, doneText: 'Pairing code refreshed' });
+    const paired = await track(progress, () => refreshAccessCode({
       gatewayToken: gatewayAuth.token,
       gatewayPassword: gatewayAuth.password,
       environment,
-    });
+    }));
     const currentService = getServiceStatus();
     if (paired.pairingSession?.protocol === 2
       && currentService.running
@@ -159,7 +161,8 @@ async function main(): Promise<void> {
 
   if (command === 'hermes-refresh-code') {
     const qrFile = readFlag(args, '--qr-file');
-    const paired = await refreshHermesRelayAccessCode();
+    const progress = startProgress('Refreshing the Hermes pairing code…', { enabled: !jsonOutput, doneText: 'Pairing code refreshed' });
+    const paired = await track(progress, () => refreshHermesRelayAccessCode());
     const qrImagePath = await writeRawQrPng(paired.qrPayload, 'clawket-hermes-relay-pair', qrFile);
     if (jsonOutput) {
       printJson({
@@ -441,10 +444,17 @@ async function handlePairChoose(args: string[]): Promise<void> {
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
     throw new Error('clawket pair choose needs an interactive terminal. Agents and scripts should use clawket pair --backend <name>.');
   }
-  const choices = await discoverPairChoices({
-    openclaw: { available: canPairOpenClaw(), configured: Boolean(readPairingConfig()) },
-    hermes: { available: canPairHermes(), configured: Boolean(readHermesRelayConfig() || readHermesBridgeCliConfig()) },
-  });
+  // Native version probes can take a few seconds; the list replaces this transient line.
+  const discovery = startProgress('Looking for agents on this computer…');
+  let choices: PairChoice[];
+  try {
+    choices = await discoverPairChoices({
+      openclaw: { available: canPairOpenClaw(), configured: Boolean(readPairingConfig()) },
+      hermes: { available: canPairHermes(), configured: Boolean(readHermesRelayConfig() || readHermesBridgeCliConfig()) },
+    });
+  } finally {
+    discovery.stop();
+  }
   const line = createInterface({ input: process.stdin, output: process.stdout });
   let selection: Awaited<ReturnType<typeof promptPairChoice>>;
   try {
@@ -463,6 +473,12 @@ async function handlePairChoose(args: string[]): Promise<void> {
 
 function printPairChooseHint(): void {
   console.log('\nTo find and choose Codex, Claude Code, Pi or another Agent, run: clawket pair choose');
+}
+
+/** One live line per backend; each perform* step names what the terminal is waiting for. */
+function startPairProgress(backend: PairBackendKind, jsonOutput: boolean): Progress {
+  const name = backend === 'hermes' ? 'Hermes' : 'OpenClaw';
+  return startProgress(`Checking ${name}…`, { enabled: !jsonOutput, doneText: `${name} is ready to pair` });
 }
 
 async function handlePairCommand(args: string[], jsonOutput: boolean): Promise<void> {
@@ -513,14 +529,15 @@ async function handlePairCommand(args: string[], jsonOutput: boolean): Promise<v
   const successes: PairSuccessResult[] = [];
   const failures: PairFailureResult[] = [];
   for (const backend of backends) {
+    const progress = startPairProgress(backend, jsonOutput);
     try {
-      const result = localPair
+      const result = await track(progress, () => localPair
         ? backend === 'hermes'
-          ? await performHermesLocalPairing(args)
-          : await performOpenClawLocalPairing(args)
+          ? performHermesLocalPairing(args, progress)
+          : performOpenClawLocalPairing(args, progress)
         : backend === 'hermes'
-          ? await performHermesRelayPairing(args)
-          : await performOpenClawRelayPairing(args);
+          ? performHermesRelayPairing(args, progress)
+          : performOpenClawRelayPairing(args, progress));
       successes.push(result);
     } catch (error) {
       failures.push({
@@ -862,7 +879,7 @@ function printLocalPairingInfo(
   console.log(`QR image: ${qrImagePath}`);
 }
 
-async function performOpenClawLocalPairing(args: string[]): Promise<PairSuccessResult> {
+async function performOpenClawLocalPairing(args: string[], progress: Progress = noProgress): Promise<PairSuccessResult> {
   const gatewayAuth = resolveGatewayAuth();
   if ('error' in gatewayAuth) {
     throw new Error(gatewayAuth.error);
@@ -877,9 +894,11 @@ async function performOpenClawLocalPairing(args: string[]): Promise<PairSuccessR
 
   if (!explicitLocalUrl) {
     controlUiOrigin = buildGatewayControlUiOrigin(gatewayUrl);
+    progress.update('Checking OpenClaw LAN access…');
     const lanConfig = await configureOpenClawLanAccess({ controlUiOrigin });
     configUpdated = lanConfig.bindChanged || lanConfig.allowedOriginAdded;
     if (configUpdated) {
+      progress.update('Restarting the OpenClaw Gateway…');
       const restart = await restartOpenClawGateway();
       gatewayRestartAction = restart.action;
     }
@@ -888,7 +907,9 @@ async function performOpenClawLocalPairing(args: string[]): Promise<PairSuccessR
       : 'OpenClaw already allowed LAN pairing. Generated a local gateway pairing QR.';
   }
 
-  const bootstrap = !gatewayAuth.token && !gatewayAuth.password
+  const needsSetupCode = !gatewayAuth.token && !gatewayAuth.password;
+  if (needsSetupCode) progress.update('Requesting an OpenClaw setup code…');
+  const bootstrap = needsSetupCode
     ? await issueOpenClawPairingSetupToken({ gatewayUrl })
     : undefined;
   const local = buildLocalPairingInfo({
@@ -926,10 +947,11 @@ async function performOpenClawLocalPairing(args: string[]): Promise<PairSuccessR
   };
 }
 
-async function performOpenClawRelayPairing(args: string[]): Promise<PairSuccessResult> {
+async function performOpenClawRelayPairing(args: string[], progress: Progress = noProgress): Promise<PairSuccessResult> {
   const environment = resolvePairingEnvironment(args);
   const forcePair = hasFlag(args, '--force');
   if (!forcePair) {
+    progress.update('Checking OpenClaw…');
     await ensurePairPrerequisites();
   }
   const gatewayAuth = resolveGatewayAuth();
@@ -939,6 +961,7 @@ async function performOpenClawRelayPairing(args: string[]): Promise<PairSuccessR
   const server = resolvePairServer(args, 'openclaw');
   const name = readFlag(args, '--name') ?? readFlag(args, '-n') ?? getDefaultBridgeDisplayName();
   const qrFile = readFlag(args, '--qr-file');
+  progress.update('Requesting a pairing code for OpenClaw…');
   const paired = await pairGateway({
     serverUrl: server,
     displayName: name,
@@ -963,11 +986,13 @@ async function performOpenClawRelayPairing(args: string[]): Promise<PairSuccessR
   if (serviceAction === 'noop') {
     const runtimeProcesses = listRuntimeProcesses();
     if (runtimeProcesses.length > 1) {
+      progress.update('Restarting the background service…');
       stopRuntimeProcesses();
       serviceStatus = restartService();
       serviceMessage = 'Detected duplicate bridge runtimes. Restarted the background service cleanly.';
     }
   } else {
+    progress.update(serviceAction === 'install' ? 'Installing the background service…' : 'Restarting the background service…');
     try {
       stopRuntimeProcesses();
       serviceStatus = serviceAction === 'install' ? installService() : restartService();
@@ -978,6 +1003,7 @@ async function performOpenClawRelayPairing(args: string[]): Promise<PairSuccessR
           : 'Background service was installed but stopped. Restarted it.';
     } catch (error) {
       if (isAutostartUnsupportedError(error)) {
+        progress.update('Starting the bridge runtime…');
         serviceStatus = await startTransientRuntime();
         serviceMessage = buildUnsupportedAutostartMessage(serviceStatus);
       } else {
@@ -1014,7 +1040,8 @@ async function performOpenClawRelayPairing(args: string[]): Promise<PairSuccessR
   };
 }
 
-async function performHermesLocalPairing(args: string[]): Promise<PairSuccessResult> {
+async function performHermesLocalPairing(args: string[], progress: Progress = noProgress): Promise<PairSuccessResult> {
+  progress.update('Starting the Hermes bridge…');
   const { port, token } = await ensureHermesPairingRuntimeReady(args);
   const publicHost = readFlag(args, '--public-host') ?? detectLanIp();
   if (!publicHost) {
@@ -1049,12 +1076,13 @@ async function performHermesLocalPairing(args: string[]): Promise<PairSuccessRes
   };
 }
 
-async function performHermesRelayPairing(args: string[]): Promise<PairSuccessResult> {
+async function performHermesRelayPairing(args: string[], progress: Progress = noProgress): Promise<PairSuccessResult> {
   const pairingStartedAt = Date.now();
   logHermesPerf('pair_relay_begin');
   const server = resolvePairServer(args, 'hermes');
   const name = readFlag(args, '--name') ?? readFlag(args, '-n') ?? 'Hermes';
   const qrFile = readFlag(args, '--qr-file');
+  progress.update('Requesting a pairing code for Hermes…');
   const paired = await pairHermesRelay({
     serverUrl: server,
     displayName: name,
@@ -1074,11 +1102,12 @@ async function performHermesRelayPairing(args: string[]): Promise<PairSuccessRes
   if (paired.action === 'registered') {
     const stalePids = listHermesRelayRuntimePids();
     if (stalePids.length > 0) {
+      progress.update('Stopping the previous Hermes Relay runtime…');
       stopHermesBridgeRuntimePids(stalePids);
     }
   }
 
-  const runtimeMessage = await ensureHermesRelayBackgroundRuntime(args);
+  const runtimeMessage = await ensureHermesRelayBackgroundRuntime(args, progress);
   logHermesPerf('pair_relay_ready', {
     elapsedMs: Date.now() - pairingStartedAt,
   });
@@ -1111,7 +1140,8 @@ async function performHermesRelayPairing(args: string[]): Promise<PairSuccessRes
 }
 
 async function handleOpenClawRelayPairCommand(args: string[], jsonOutput: boolean): Promise<void> {
-  const result = await performOpenClawRelayPairing(args);
+  const progress = startPairProgress('openclaw', jsonOutput);
+  const result = await track(progress, () => performOpenClawRelayPairing(args, progress));
   if (jsonOutput) {
     printJson(result.jsonValue);
     return;
@@ -1178,7 +1208,8 @@ function printPairResultBundle(input: {
 
 async function handleOpenClawLocalPairCommand(args: string[], jsonOutput: boolean): Promise<void> {
   const explicitLocalUrl = readFlag(args, '--url');
-  const result = await performOpenClawLocalPairing(args);
+  const progress = startPairProgress('openclaw', jsonOutput);
+  const result = await track(progress, () => performOpenClawLocalPairing(args, progress));
   if (jsonOutput) {
     printJson(result.jsonValue);
   } else {
@@ -1204,7 +1235,8 @@ async function handleOpenClawLocalPairCommand(args: string[], jsonOutput: boolea
 }
 
 async function handleHermesLocalPairCommand(args: string[], jsonOutput: boolean): Promise<void> {
-  const result = await performHermesLocalPairing(args);
+  const progress = startPairProgress('hermes', jsonOutput);
+  const result = await track(progress, () => performHermesLocalPairing(args, progress));
   if (jsonOutput) {
     printJson(result.jsonValue);
   } else {
@@ -1216,7 +1248,8 @@ async function handleHermesLocalPairCommand(args: string[], jsonOutput: boolean)
 }
 
 async function handleHermesRelayPairCommand(args: string[], jsonOutput: boolean): Promise<void> {
-  const result = await performHermesRelayPairing(args);
+  const progress = startPairProgress('hermes', jsonOutput);
+  const result = await track(progress, () => performHermesRelayPairing(args, progress));
   if (jsonOutput) {
     printJson(result.jsonValue);
     return;
@@ -1614,7 +1647,7 @@ async function startHermesRelayRuntime(bridgeWsUrl: string): Promise<HermesRelay
   return runtime;
 }
 
-async function ensureHermesRelayBackgroundRuntime(args: string[]): Promise<string> {
+async function ensureHermesRelayBackgroundRuntime(args: string[], progress: Progress = noProgress): Promise<string> {
   const startedAt = Date.now();
   logHermesPerf('relay_runtime_ensure_begin');
   const relayConfig = readHermesRelayConfig();
@@ -1623,6 +1656,7 @@ async function ensureHermesRelayBackgroundRuntime(args: string[]): Promise<strin
   }
   const relayPids = listHermesRelayRuntimePids();
   if (relayPids.length === 1) {
+    progress.update('Confirming the Hermes Relay connection…');
     await waitForHermesRelayCloudBridgeReady(relayConfig, 20_000);
     logHermesPerf('relay_runtime_ensure_reused', {
       elapsedMs: Date.now() - startedAt,
@@ -1634,7 +1668,9 @@ async function ensureHermesRelayBackgroundRuntime(args: string[]): Promise<strin
     stopHermesBridgeRuntimePids(relayPids);
   }
 
+  progress.update('Starting the Hermes bridge…');
   const { host, port, apiBaseUrl, token } = await ensureHermesPairingRuntimeReady(args);
+  progress.update('Starting the Hermes Relay runtime…');
   const relayStartedAt = Date.now();
   startDetachedHermesRelayRuntime({
     host,
@@ -1644,6 +1680,7 @@ async function ensureHermesRelayBackgroundRuntime(args: string[]): Promise<strin
     restartHermes: hasFlag(args, '--restart-hermes'),
   });
   await waitForHermesRelayRuntimeReady(relayStartedAt, 20_000);
+  progress.update('Confirming the Hermes Relay connection…');
   await waitForHermesRelayCloudBridgeReady(relayConfig, 20_000);
   const startedPids = listHermesRelayRuntimePids();
   if (startedPids.length === 0) {

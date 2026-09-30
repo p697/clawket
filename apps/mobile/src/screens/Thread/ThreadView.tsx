@@ -1,3 +1,4 @@
+import { ArtifactProvider, ArtifactAttachments } from '../../components/chat/ArtifactAttachments';
 import { AndroidChatKeyboardAvoider } from '../../components/chat/AndroidChatKeyboardAvoider';
 import { isIncomingParticipant, messageSenderLabel } from '../../chat/messageAttribution';
 import { localizeAgentSystemNotice } from '../../chat/agentSystemNotice';
@@ -292,6 +293,7 @@ export type ThreadQueuedMessageActions = Readonly<{
 }>;
 
 export type ThreadViewProps = Readonly<{
+  artifactOperations?: import('@clawket/agent-protocol').ArtifactOperations;
   connectionFailure?: Pick<ConnectionUnavailableProps, 'name' | 'lastReadyAt' | 'onManage' | 'message'> & { scope: string };
   connectingLabel?: string;
   chatAppearance?: ChatAppearanceSettings;
@@ -433,6 +435,7 @@ export function ThreadView({
   agentId,
   agentName,
   sessionKey,
+  artifactOperations,
   scrollToBottomRequestAt,
   messageSubmittedAt,
   agentEmoji,
@@ -1076,6 +1079,7 @@ export function ThreadView({
 
   return (
     <ChatPresentationProvider value={presentation}>
+    <ArtifactProvider operations={artifactOperations} sessionKey={sessionKey}>
     <ThreadLiveActivityContext.Provider value={liveActivity}>
     <View testID={testID} style={[styles.screen, { backgroundColor: theme.colors.canvas }]}>
     {/* The wallpaper sits under the whole screen and stays put while the keyboard pads the content. */}
@@ -1459,6 +1463,7 @@ export function ThreadView({
     </KeyboardAvoidingView>
     </View>
     </ThreadLiveActivityContext.Provider>
+    </ArtifactProvider>
     </ChatPresentationProvider>
   );
 }
@@ -1778,6 +1783,7 @@ function ThreadMessageRowContent({
   onLongPress?: () => void;
 }>): React.JSX.Element | null {
   const { colors } = useConversationTheme();
+  const artifactWidth = useMessageAlbumWidth();
   if (message.role !== 'assistant' && message.role !== 'user') return null;
   const attachmentCount = message.imageUris?.length ?? 0;
   const fileAttachments = (message.fileAttachments ?? []).filter(file => (
@@ -1807,6 +1813,8 @@ function ThreadMessageRowContent({
           style={message.role === 'user' && !isIncomingParticipant(message) ? stylesStatic.fileAttachmentUser : undefined}
         />
       ))}
+      {message.artifactAttachments?.length ? <ArtifactAttachments attachments={message.artifactAttachments} maxWidth={artifactWidth}
+        onOpenImage={uri => onOpenAttachments?.({ ...message, imageUris: [uri] }, 0)} /> : null}
       {attachmentCount > 0 ? (
         <ThreadMessageAlbum
           message={message}

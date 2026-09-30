@@ -1,3 +1,5 @@
+import { artifactHistoryDisplay, artifactUpdateDisplay } from './artifact-display';
+import type { ArtifactOperations } from '@clawket/agent-protocol';
 import {
   AdapterError, resolveCapabilities,
   type AgentAdapter, type AgentDescriptor, type ConnectionDescriptor, type ConnectionRecord,
@@ -26,6 +28,12 @@ function withNativeModelOrder<T extends ModelSelectionState>(state: T, unencrypt
 
 /** Project-scoped Codex sessions, native history and extension questions over the authenticated Bridge. */
 export class CodexAdapter implements AgentAdapter {
+  private artifactsEnabled = false;
+  private readonly artifactOperations: ArtifactOperations = {
+    open: (sessionKey, artifactId) => this.rpc('clawket.artifacts.open', { sessionKey, artifactId }),
+    read: (sessionKey, id, offset) => this.rpc('clawket.artifacts.read', { sessionKey, id, offset }),
+  };
+  get artifacts(): ArtifactOperations | undefined { return this.currentState === 'ready' && this.artifactsEnabled ? this.artifactOperations : undefined; }
   readonly connection: ConnectionDescriptor;
   readonly capabilities = resolveCapabilities('codex', { promptStatus: false, attachments: false, fastMode: false, sessionPermissions: false, sessionArchive: false });
   readonly projects = { list: () => this.rpc<import('@clawket/agent-protocol').ProjectDescriptor[]>('projects.list') };
@@ -99,10 +107,11 @@ export class CodexAdapter implements AgentAdapter {
     try {
       // Relay authenticates its socket; only direct connections need connect/token.
       // A Relay connect request starts OpenClaw's challenge lifecycle.
-      const health = await this.rpc<{ promptStatus?: boolean; sessionCatalogSync?: unknown; backend: string; vision: boolean; model: string; projects?: boolean; fastMode?: boolean; sessionPermissions?: boolean; sessionArchive?: boolean }>(this.record.transportKind === 'relay' ? 'health' : 'connect', { token: this.record.auth?.token });
+      const health = await this.rpc<{ artifacts?: boolean; promptStatus?: boolean; sessionCatalogSync?: unknown; backend: string; vision: boolean; model: string; projects?: boolean; fastMode?: boolean; sessionPermissions?: boolean; sessionArchive?: boolean }>(this.record.transportKind === 'relay' ? 'health' : 'connect', { token: this.record.auth?.token });
       if (epoch !== this.epoch) return;
       if (health.backend !== 'codex') throw new AdapterError('unsupported', 'Endpoint is not a Codex Bridge');
       this.sessionCatalog.configure(health.sessionCatalogSync);
+      this.artifactsEnabled = health.artifacts === true;
       this.capabilities.promptStatus = health.promptStatus === true;
       this.capabilities.attachments = true; this.capabilities.projects = health.projects === true; this.capabilities.fastMode = health.fastMode === true;
       this.capabilities.sessionPermissions = health.sessionPermissions === true; this.capabilities.sessionArchive = health.sessionArchive === true;
@@ -156,9 +165,10 @@ export class CodexAdapter implements AgentAdapter {
   async probe(timeoutMs = 5_000): Promise<boolean> {
     const epoch = this.epoch;
     try {
-      const health = await this.rpc<{ promptStatus?: boolean; sessionCatalogSync?: unknown; backend: string; vision: boolean; model: string; projects?: boolean; fastMode?: boolean; sessionPermissions?: boolean; sessionArchive?: boolean }>('health', {}, timeoutMs);
+      const health = await this.rpc<{ artifacts?: boolean; promptStatus?: boolean; sessionCatalogSync?: unknown; backend: string; vision: boolean; model: string; projects?: boolean; fastMode?: boolean; sessionPermissions?: boolean; sessionArchive?: boolean }>('health', {}, timeoutMs);
       if (epoch !== this.epoch || health.backend !== 'codex') return false;
       this.sessionCatalog.configure(health.sessionCatalogSync);
+      this.artifactsEnabled = health.artifacts === true;
       this.capabilities.promptStatus = health.promptStatus === true;
       this.capabilities.attachments = true; this.capabilities.projects = health.projects === true; this.capabilities.fastMode = health.fastMode === true;
       this.capabilities.sessionPermissions = health.sessionPermissions === true; this.capabilities.sessionArchive = health.sessionArchive === true;
@@ -185,7 +195,7 @@ export class CodexAdapter implements AgentAdapter {
     this.sessionCatalog.invalidate();
   }
   loadSession(key: string, options?: { limit?: number; cursor?: string }): Promise<SessionHistory> {
-    return this.rpc('chat.history', { sessionKey: key, cursor: options?.cursor });
+    return this.rpc<SessionHistory>('chat.history', { sessionKey: key, cursor: options?.cursor }).then(artifactHistoryDisplay);
   }
   prompt(key: string, input: PromptInput): Promise<{ runId: string }> {
     if (this.state !== 'ready') throw new AdapterError('bridge_offline', 'Codex Bridge is offline');
@@ -236,7 +246,7 @@ export class CodexAdapter implements AgentAdapter {
       if (frame.ok) pending.resolve(frame.payload);
       else pending.reject(new AdapterError(frame.error?.code === 'BRIDGE_UNAVAILABLE' ? 'bridge_offline' : requiresConnectionAction(frame.error) ? 'unauthorized' : 'server', frame.error?.code === 'BRIDGE_UNAVAILABLE' ? 'Codex Bridge is offline. Keep the Bridge running on your computer.' : frame.error?.message ?? 'Codex request failed'));
     } else if (frame.type === 'event' && frame.event === 'codex.update') {
-      const update = frame.payload as SessionUpdate;
+      const update = artifactUpdateDisplay(frame.payload as SessionUpdate);
       if (!update || typeof update.type !== 'string') return;
       if (update.type === 'session_info_update') update.session.connectionId = this.record.id;
       for (const listener of this.listeners.update) listener(update.type === 'agent_message_chunk'

@@ -5,3 +5,9 @@ export interface SessionFilesOperations {
   list(sessionKey: string): Promise<{ files: SessionFile[] }>;
   read(sessionKey: string, id: string, offset: number): Promise<SessionFileChunk>;
 }
+
+/** Resolve only transcript-backed artifacts; opaque handles expire with the connection. */
+export interface ArtifactOperations {
+  open(sessionKey: string, artifactId: string): Promise<SessionFile>;
+  read(sessionKey: string, id: string, offset: number): Promise<SessionFileChunk>;
+}

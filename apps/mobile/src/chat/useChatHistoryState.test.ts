@@ -80,6 +80,26 @@ describe('useChatHistoryState', () => {
     consoleErrorSpy.mockRestore();
   });
 
+  it('preserves image-only managed artifacts through history projection and refresh', async () => {
+    const key = 'agent:main:artifact-test';
+    const attachments = [{ type: 'image', mimeType: 'image/png', artifactId: 'opaque-image' }];
+    const adapter = { connection: { backendKind: 'openclaw' }, state: 'ready',
+      loadSession: jest.fn().mockResolvedValue({ messages: [{ id: 'image-message', role: 'assistant', text: '', timestampMs: 1000, attachments }], hasActiveRun: false }),
+    };
+    const { result, unmount } = renderHook(() => {
+      const sessionKeyRef = useRef<string | null>(key);
+      return useChatHistoryState({ adapter: adapter as any, dbg: jest.fn(), t: translate,
+        sessionKeyRef, mainSessionKey: key, routeSessionKey: key, gatewayConfigId: null, currentAgentId: 'main' });
+    });
+    await act(async () => { await result.current.loadHistory(key); });
+    expect(result.current.messages).toHaveLength(1);
+    expect(result.current.messages[0].artifactAttachments).toEqual(attachments);
+    await act(async () => { await result.current.loadHistory(key); });
+    expect(result.current.messages).toHaveLength(1);
+    expect(result.current.messages[0].artifactAttachments).toEqual(attachments);
+    unmount();
+  });
+
   describe.each(['codex', 'claude-code', 'pi'])('%s catalog cancellation', backendKind => {
     it.each(['loadSessionsAndHistory', 'onRefresh', 'refreshSessions'] as const)('retries only the pure directory once during %s', async operation => {
       const key = 'owned-session';

@@ -194,7 +194,7 @@ export function finishLiveRunPresentation(params: {
   }).reverse().map(message => ({ ...message, streaming: false, presentationRunId: params.runId,
     ...(message.role === 'tool' && message.toolStatus === 'running' ? { toolStatus: 'unknown' as const } : {}),
   }));
-  if (params.tail.trim()) rows.push({
+  if (params.tail.trim() || params.finalMessage?.artifactAttachments?.length || params.finalMessage?.imageUris?.length || params.finalMessage?.fileAttachments?.length) rows.push({
     ...params.finalMessage,
     id: params.finalMessage?.id ?? `${params.cancelled ? 'abort' : 'final'}_${params.runId}`,
     renderKey: liveReplyRenderKey(params.startedAt, params.runId, params.segments.length),

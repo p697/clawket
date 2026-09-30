@@ -1,4 +1,4 @@
-import type { MessageAttribution } from '@clawket/agent-protocol';
+import type { ChatMessage, MessageAttribution } from '@clawket/agent-protocol';
 
 export type MessageUsage = {
   inputTokens?: number;
@@ -77,6 +77,7 @@ export type UiMessage = {
   idempotencyKey?: string;
   timestampMs?: number;
   streaming?: boolean;
+  artifactAttachments?: NonNullable<ChatMessage['attachments']>;
   imageUris?: string[];
   imageMetas?: ImageMeta[];
   fileAttachments?: UiFileAttachment[];

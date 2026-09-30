@@ -1,4 +1,5 @@
 import { piControl, startPiBackground } from './pi-lifecycle.js';
+import { agentPairProgress, type Progress } from './progress.js';
 import { openSync, readSync, closeSync, fstatSync, mkdirSync, readFileSync, writeFileSync, renameSync, existsSync, unlinkSync, realpathSync } from 'node:fs';
 import { dirname, join, resolve, basename } from 'node:path';
 import { homedir } from 'node:os';
@@ -79,6 +80,13 @@ async function refreshRunningPair(args: string[], config: Config, show: (text: s
 }
 
 export async function handlePiCommand(args: string[]): Promise<void> {
+  const progress = agentPairProgress(args, 'pi', 'Pi');
+  try { await runPiCommand(args, progress); }
+  catch (error) { progress.fail(); throw error; }
+  finally { progress.stop(); }
+}
+
+async function runPiCommand(args: string[], progress: Progress): Promise<void> {
   const command = args[0] ?? 'pair';
   if (!['pair', 'run', 'doctor', 'status', 'start', 'restart', 'stop', 'logs', 'reset'].includes(command)) throw new Error('Use pi pair, run, start, restart, stop, status, doctor, logs or reset');
   const project = realpathSync(resolve(flag(args, '--project') ?? process.cwd()));
@@ -88,7 +96,7 @@ export async function handlePiCommand(args: string[]): Promise<void> {
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   const save = (value: Config) => { writeFileSync(configPath + '.pending', JSON.stringify(value, null, 2), { mode: 0o600 }); renameSync(configPath + '.pending', configPath); };
   let config: Config = existsSync(configPath) ? JSON.parse(readFileSync(configPath, 'utf8')) : { project, agentDirectory: flag(args, '--agent-dir') ?? process.env.PI_CODING_AGENT_DIR, nativeSessionDirectory: flag(args, '--sessions-dir'), command: flag(args, '--pi-command') ?? 'pi', token: randomBytes(32).toString('hex'), port: Number(flag(args, '--port') ?? (18000 + parseInt(projectId.slice(0, 4), 16) % 20000)), host: '127.0.0.1' };
-  const show = (text: string) => { if (process.send) process.send({ type: 'pi.display', text }); else console.log(text); };
+  const show = (text: string) => { if (process.send) process.send({ type: 'pi.display', text }); else { progress.succeed(); console.log(text); } };
   if (command === 'pair' && existsSync(configPath)) {
     let running = false;
     try { await piControl(config); running = true; }
@@ -97,7 +105,7 @@ export async function handlePiCommand(args: string[]): Promise<void> {
         throw new Error('Cannot verify the existing Pi Bridge safely. Check clawket pi status / logs with the same pairing options; the owner has not been changed.');
       }
     }
-    if (running) { await refreshRunningPair(args, config, show); process.send?.({ type: 'pi.ready' }); return; }
+    if (running) { progress.update('Refreshing the Pi pairing code…'); await refreshRunningPair(args, config, show); process.send?.({ type: 'pi.ready' }); return; }
   }
   if (command === 'pair' && flag(args, '--port')) config.port = Number(flag(args, '--port'));
   if (!Number.isInteger(config.port) || config.port < 1 || config.port > 65535) throw new Error('Invalid Pi Bridge port');
@@ -124,8 +132,9 @@ export async function handlePiCommand(args: string[]): Promise<void> {
     if (command === 'start' && health) { console.log('Pi Bridge is already running.'); return; }
     if (command === 'start' || command === 'restart') { if (!existsSync(configPath)) throw new Error('Pair this project first'); await startPiBackground(['run', '--config', configPath], join(directory, 'pi.log')); return; }
   }
+  progress.update('Starting Pi…');
   if (command === 'pair' && !args.includes('--foreground')) {
-    await startPiBackground([...args, '--config', configPath], join(directory, 'pi.log')); return;
+    await startPiBackground([...args, '--config', configPath], join(directory, 'pi.log'), progress); return;
   }
   const installed = await inspectPiInstallation(config.command);
   const service = new PiService({ project: config.project, directory: join(directory, 'sessions'), command: config.command, agentDirectory: config.agentDirectory, nativeSessionDirectory: config.nativeSessionDirectory });
@@ -141,6 +150,7 @@ export async function handlePiCommand(args: string[]): Promise<void> {
         if (!address) throw new Error('No LAN address found. Supply --address reachable-from-phone');
         qrPayload = JSON.stringify({ version: 1, backendKind: 'pi', mode: 'local', url: `ws://${address}:${config.port}/v1/pi/ws`, token: config.token });
       } else {
+        progress.update('Requesting a pairing code for Pi…');
         const registryUrl = flag(args, '--registry') ?? 'https://clawket-pi-registry.clawket.workers.dev';
         const url = new URL(registryUrl);
         if (url.protocol !== 'https:' && !['127.0.0.1', 'localhost'].includes(url.hostname)) throw new Error('Pi Registry requires HTTPS');
@@ -160,6 +170,7 @@ export async function handlePiCommand(args: string[]): Promise<void> {
     } else if (!existsSync(configPath)) throw new Error('Pair this Pi project first');
     server = new PiServer(service, config.token, message => console.error(message)); await server.start(config.port, config.host);
     if (config.relay) {
+      progress.update('Connecting to Clawket Relay…');
       relay = new PiRelay(service, config.relay, invitation => { config.relay!.invitation = invitation; save(config); }, message => console.error(message));
       relay.start(); await relay.waitUntilReady();
     }

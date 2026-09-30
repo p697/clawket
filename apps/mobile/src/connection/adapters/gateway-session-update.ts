@@ -1,3 +1,4 @@
+import { extractHistoryAttachments } from './gateway-attachments';
 import type { AdapterErrorCode, SessionUpdate, Usage } from '@clawket/agent-protocol';
 
 export type GatewayAdapterEvent =
@@ -24,7 +25,7 @@ export type GatewayAdapterEvent =
         sessionKey?: string;
         message?: {
           role?: string;
-          content?: string | Array<{ type: string; text?: string }>;
+          content?: string | Array<{ type: string; text?: string; artifactDisplayText?: string }>;
           provider?: string;
           model?: string;
         };
@@ -110,6 +111,7 @@ export function mapGatewayAdapterEvent(
       }];
     case 'chatFinal': {
       const text = extractGatewayMessageText(event.payload.message?.content);
+      const attachments = extractHistoryAttachments(event.payload.message?.content);
       return [{
         type: 'run_finished',
         sessionKey,
@@ -120,6 +122,7 @@ export function mapGatewayAdapterEvent(
           ? {
               role: 'assistant',
               content: text,
+              ...(attachments.length ? { attachments } : {}),
               provider: event.payload.message.provider,
               model: event.payload.message.model,
             }
@@ -235,12 +238,12 @@ export function mapGatewayErrorCode(code: string): AdapterErrorCode {
 }
 
 export function extractGatewayMessageText(
-  content?: string | Array<{ type: string; text?: string }>,
+  content?: string | Array<{ type: string; text?: string; artifactDisplayText?: string }>,
 ): string {
   if (typeof content === 'string') return content;
   if (!Array.isArray(content)) return '';
   return content
     .filter((block) => block.type === 'text')
-    .map((block) => block.text ?? '')
+    .map((block) => block.artifactDisplayText ?? block.text ?? '')
     .join('');
 }

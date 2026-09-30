@@ -2057,10 +2057,12 @@ export function useChatController({
         const streamText = chatStreamRef.current ?? "";
         const segments = chatStreamSegmentsRef.current;
         const tools = chatToolMessagesRef.current;
+        const hasFinalAttachments = Boolean(update.finalMessage?.artifactAttachments?.length || update.finalMessage?.imageUris?.length || update.finalMessage?.fileAttachments?.length);
+        const completedText = hasFinalAttachments ? update.finalMessage!.text : (update.finalMessage?.text || streamText);
         if (segments.length > 0 || tools.length > 0) {
           const completed = update.stopReason !== "cancelled" && update.stopReason !== "error";
           const finalText = completed
-            ? (update.finalMessage?.text || streamText) : streamText;
+            ? completedText : streamText;
           const rows = finishLiveRunPresentation({
             segments, tools, tail: finalReplyTail(finalText, segments, streamText),
             runId: update.runId, startedAt: activeRunStartedAt,
@@ -2079,8 +2081,8 @@ export function useChatController({
             role: "assistant", text: streamText, timestampMs: Date.now(),
           }));
         } else if (update.stopReason !== "error") {
-          const finalText = update.finalMessage?.text || streamText;
-          if (finalText.trim()) {
+          const finalText = completedText;
+          if (finalText.trim() || hasFinalAttachments) {
             const finalMessage: UiMessage = {
               ...(update.finalMessage ?? { id: `final_${update.runId}`, role: "assistant" as const, timestampMs: Date.now() }),
               text: finalText, renderKey: liveReplyRenderKey(activeRunStartedAt, update.runId, 0),

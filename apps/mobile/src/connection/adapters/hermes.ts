@@ -52,6 +52,13 @@ import type { ConnectionAdapterRuntimeMetadata } from '../runtime-details';
 export const HERMES_MULTI_SESSION_CAPABILITY = 'hermes.multi-session.v2';
 
 export class HermesAdapter extends GatewayAdapterBase {
+  private readonly artifactOperations: import('@clawket/agent-protocol').ArtifactOperations = {
+    open: (sessionKey, artifactId) => this.invoke(() => this.gateway.request('clawket.artifacts.open', { sessionKey, artifactId })),
+    read: (sessionKey, id, offset) => this.invoke(() => this.gateway.request('clawket.artifacts.read', { sessionKey, id, offset })),
+  };
+  public get artifacts(): import('@clawket/agent-protocol').ArtifactOperations | undefined {
+    return this.state === 'ready' && this.bridgeCapabilities.includes('bridge.artifacts.v1') ? this.artifactOperations : undefined;
+  }
   public get sessionFiles(): SessionFilesOperations | undefined {
     if (!this.capabilities.sessionFiles) return undefined;
     return {

@@ -1,6 +1,6 @@
-import { ImageZoom } from '@likashefqet/react-native-image-zoom';
+import { ImageZoom, type ImageZoomRef } from '@likashefqet/react-native-image-zoom';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Modal, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { Gesture, GestureDetector, gestureHandlerRootHOC } from 'react-native-gesture-handler';
 import Animated, {
@@ -14,11 +14,12 @@ import Animated, {
   withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
-import { Download, X } from 'lucide-react-native';
+import { Check, Copy, Download, ZoomIn, X } from 'lucide-react-native';
 import { useLightStatusBarBeforeModal } from '../../hooks/useLightStatusBarBeforeModal';
+import { copyImageToClipboard } from '../../services/image-clipboard';
 import { saveImageUriToPhotoLibrary } from '../../services/photo-library';
 import { useAppTheme } from '../../theme';
-import { BorderWidth, FontSize, IconSize, PresentationColor, Radius, Space } from '../../theme/tokens';
+import { BorderWidth, ControlSize, FontSize, FontWeight, IconSize, LineHeight, PresentationColor, Radius, Space } from '../../theme/tokens';
 import { FloatingButton, SettingsGroup, SettingsRow, Sheet } from '../ui';
 
 type Props = {
@@ -65,21 +66,24 @@ function PreviewZoomImage({
   width,
   height,
   scale,
+  zoomRef,
 }: {
   uri: string;
   width: number;
   height: number;
   scale: SharedValue<number>;
+  zoomRef: (value: ImageZoomRef | null) => void;
 }) {
   return (
     <ImageZoom
+      ref={zoomRef}
       uri={uri}
       minScale={1}
       maxScale={4}
       scale={scale}
       doubleTapScale={2.2}
       isDoubleTapEnabled
-      style={{ width, height: height * 0.88 }}
+      style={{ flex: 0, width, height }}
       resizeMode="contain"
     />
   );
@@ -106,9 +110,26 @@ export function ImagePreviewModal({
 }: Props): React.JSX.Element {
   const { t } = useTranslation('chat');
   const { theme } = useAppTheme();
+  const imageHeight = Math.max(ControlSize.floatingButton, screenHeight - insetsTop - insetsBottom
+    - 2 * (ControlSize.floatingButton + Space.xl));
   const styles = useMemo(() => createStyles(theme.colors), [theme]);
   const closeRequestedRef = useRef(false);
   const [imageActionsIndex, setImageActionsIndex] = useState<number | null>(null);
+  const zoomRefs = useRef<Array<ImageZoomRef | null>>([]);
+  const actionGeneration = useRef(0);
+  const actionLock = useRef<symbol | null>(null);
+  const [action, setAction] = useState<{ kind: 'copy' | 'save'; status: 'busy' | 'done' } | null>(null);
+  useEffect(() => {
+    actionGeneration.current++;
+    actionLock.current = null;
+    setAction(null);
+    return () => { actionGeneration.current++; };
+  }, [visible, index, uris]);
+  useEffect(() => {
+    if (action?.status !== 'done') return;
+    const timer = setTimeout(() => setAction(null), 2400);
+    return () => clearTimeout(timer);
+  }, [action]);
   // The black viewer otherwise keeps the app's dark status bar icons on Android (invisible clock).
   const statusBarReady = useLightStatusBarBeforeModal(visible);
 
@@ -194,20 +215,32 @@ export function ImagePreviewModal({
     [onIndexChange],
   );
 
-  const handleSaveCurrentImage = useCallback(async (targetIndex: number) => {
+  const handleImageAction = useCallback(async (kind: 'copy' | 'save', targetIndex: number) => {
     const uri = uris[targetIndex];
-    if (!uri) return;
-
+    if (!uri || actionLock.current) return;
+    const token = Symbol();
+    const generation = actionGeneration.current;
+    actionLock.current = token;
+    setAction({ kind, status: 'busy' });
     try {
-      const result = await saveImageUriToPhotoLibrary(uri, 'chat-image');
-      if (result === 'permission_denied') {
-        Alert.alert(t('Permission denied'));
-        return;
+      if (kind === 'copy') await copyImageToClipboard(uri);
+      else {
+        const result = await saveImageUriToPhotoLibrary(uri, 'chat-image');
+        if (generation !== actionGeneration.current) return;
+        if (result === 'permission_denied') {
+          setAction(null);
+          Alert.alert(t('Permission denied'));
+          return;
+        }
       }
-      Alert.alert(t('Saved to Photos!'));
-    } catch (error) {
-      console.warn('[ImagePreviewModal] save failed:', error);
-      Alert.alert(t('Failed to save'));
+      if (generation === actionGeneration.current) setAction({ kind, status: 'done' });
+    } catch {
+      if (generation === actionGeneration.current) {
+        setAction(null);
+        Alert.alert(t(kind === 'copy' ? 'Copy failed' : 'Failed to save'));
+      }
+    } finally {
+      if (actionLock.current === token) actionLock.current = null;
     }
   }, [t, uris]);
 
@@ -219,8 +252,8 @@ export function ImagePreviewModal({
     if (imageActionsIndex == null) return;
     const targetIndex = imageActionsIndex;
     setImageActionsIndex(null);
-    void handleSaveCurrentImage(targetIndex);
-  }, [handleSaveCurrentImage, imageActionsIndex]);
+    void handleImageAction('save', targetIndex);
+  }, [handleImageAction, imageActionsIndex]);
 
   const panGesture = useMemo(
     () =>
@@ -436,7 +469,21 @@ export function ImagePreviewModal({
       <Modal visible={visible} animationType="none" transparent onRequestClose={animateClose}>
         <ModalGestureRoot>
           <Animated.View style={[styles.previewOverlay, overlayAnimatedStyle]}>
+          <View pointerEvents="none" style={[styles.statusBarScrim, { height: insetsTop }]} />
           <Animated.View style={[styles.previewClose, { top: insetsTop + Space.md }, closeButtonAnimatedStyle]}>
+            <View style={styles.actionBar}>
+              {(['copy', 'save'] as const).map(kind => {
+                const Icon = action?.kind === kind && action.status === 'done' ? Check : kind === 'copy' ? Copy : Download;
+                const label = kind === 'copy' ? t('Copy image') : t('Save to Photos');
+                return <Pressable key={kind} testID={`image-preview-${kind}`} accessibilityRole="button" accessibilityLabel={label}
+                  accessibilityState={{ disabled: action?.status === 'busy', busy: action?.kind === kind && action.status === 'busy' }}
+                  disabled={action?.status === 'busy'} onPress={() => { void handleImageAction(kind, index); }}
+                  style={({ pressed }) => [styles.imageAction, styles.previewCloseButton, { opacity: pressed ? 0.7 : 1 }]}>
+                  {action?.kind === kind && action.status === 'busy' ? <ActivityIndicator color={PresentationColor.onMedia} /> : <Icon size={IconSize.sm} color={PresentationColor.onMedia} />}
+                  <Text style={styles.imageActionText}>{kind === 'copy' ? t('Copy', { ns: 'common' }) : t('Save to Photos')}</Text>
+                </Pressable>;
+              })}
+            </View>
             <FloatingButton
               testID="image-preview-close"
               icon={X}
@@ -470,8 +517,9 @@ export function ImagePreviewModal({
                     <PreviewZoomImage
                       uri={uri}
                       width={screenWidth}
-                      height={screenHeight}
+                      height={imageHeight}
                       scale={scales[itemIndex]}
+                      zoomRef={value => { zoomRefs.current[itemIndex] = value; }}
                     />
                   </View>
                 ))}
@@ -479,8 +527,22 @@ export function ImagePreviewModal({
             </Animated.View>
           </GestureDetector>
 
+          <View style={[styles.viewerFooter, { bottom: Math.max(insetsBottom, Space.lg) }]}>
+            <Pressable testID="image-preview-zoom" accessibilityRole="button" accessibilityLabel={t('Zoom image')}
+              onPress={() => {
+                const zoom = zoomRefs.current[index];
+                if ((scales[index]?.value ?? 1) > 1.02) zoom?.reset();
+                else zoom?.zoom({ x: screenWidth / 2, y: imageHeight / 2, scale: 2.2 });
+              }} style={[styles.zoomHint, styles.previewCloseButton]}>
+              <ZoomIn size={IconSize.sm} color={PresentationColor.onMedia} />
+              <Text style={styles.imageActionText}>{t('Double-tap or pinch to zoom')}</Text>
+            </Pressable>
+            {action?.status === 'done' ? <Text accessibilityLiveRegion="polite" style={styles.feedback}>
+              {action.kind === 'copy' ? t('Copied') : t('Saved to Photos!')}
+            </Text> : null}
+          </View>
           {uris.length > 1 ? (
-            <Text style={[styles.previewPager, { bottom: Math.max(insetsBottom, Space.lg) }]}>
+            <Text style={[styles.previewPager, { bottom: Math.max(insetsBottom, Space.lg) + ControlSize.floatingButton + Space.md }]}>
               {index + 1} / {uris.length}
             </Text>
           ) : null}
@@ -522,9 +584,21 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     },
     previewClose: {
       position: 'absolute',
+      left: Space.lg,
       right: Space.lg,
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      gap: Space.sm,
       zIndex: 10,
     },
+    statusBarScrim: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 9, backgroundColor: PresentationColor.mediaOverlayStrong },
+    actionBar: { flexDirection: 'row', gap: Space.sm, flexShrink: 1 },
+    imageAction: { minHeight: ControlSize.floatingButton, borderRadius: Radius.full, paddingHorizontal: Space.md,
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Space.sm, flexShrink: 1 },
+    imageActionText: { color: PresentationColor.onMedia, fontSize: FontSize.caption, lineHeight: LineHeight.caption, fontWeight: FontWeight.semibold, flexShrink: 1 },
+    viewerFooter: { position: 'absolute', left: Space.lg, right: Space.lg, alignItems: 'center', gap: Space.sm },
+    zoomHint: { minHeight: ControlSize.floatingButton, paddingHorizontal: Space.lg, borderRadius: Radius.full, flexDirection: 'row', alignItems: 'center', gap: Space.sm },
+    feedback: { backgroundColor: PresentationColor.mediaOverlayStrong, borderRadius: Radius.full, paddingHorizontal: Space.md, paddingVertical: Space.xs, color: PresentationColor.onMedia, fontSize: FontSize.caption, lineHeight: LineHeight.caption },
     // A 15% white disc vanished over white screenshots (device review 2026-09-27); a dark
     // translucent disc with a light hairline stays visible over any photo.
     previewCloseButton: {

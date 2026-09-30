@@ -1340,3 +1340,16 @@ it('uses only the exact native client ID for prompt reconciliation', () => {
   expect(messages[0].idempotencyKey).toBe('exact-id');
   expect(messages[1].idempotencyKey).toBeUndefined();
 });
+
+it('serves Codex assistant attachments with the native thread project and rejects cross-session reads', async () => {
+  await start(); writeFileSync(join(project, 'report.txt'), 'Codex attachment');
+  const original = mock.request.getMockImplementation()!;
+  mock.request.mockImplementation(async (method: string, params: any) => method === 'thread/items/list'
+    ? { data: [{ turnId: 'turn-1', item: { id: 'reply', type: 'agentMessage', text: '[Report](report.txt)' } }] }
+    : original(method, params));
+  const history = await request('chat.history', { sessionKey: key });
+  const artifactId = history.messages[0].attachments[0].artifactId;
+  const file = await request('clawket.artifacts.open', { sessionKey: key, artifactId });
+  expect(Buffer.from((await request('clawket.artifacts.read', { sessionKey: key, id: file.id, offset: 0 })).data, 'base64').toString()).toBe('Codex attachment');
+  await expect(request('clawket.artifacts.read', { sessionKey: 'other', id: file.id, offset: 0 })).rejects.toThrow();
+});

@@ -1,4 +1,4 @@
-import type { SessionFilesOperations } from './session-files';
+import type { ArtifactOperations, SessionFilesOperations } from './session-files';
 import type { Capabilities } from './capabilities';
 import type {
   AgentDescriptor,
@@ -122,6 +122,7 @@ export interface AgentAdapter {
   };
   management?: ManagementOperations;
   sessionFiles?: SessionFilesOperations;
+  artifacts?: ArtifactOperations;
   on(event: 'update', listener: (update: SessionUpdate) => void): () => void;
   on(event: 'state', listener: (state: ConnectionState, reason?: string) => void): () => void;
   on(event: 'sessions', listener: (sessions: SessionDescriptor[]) => void): () => void;

@@ -1,5 +1,6 @@
 import { Asset } from 'expo-asset';
 import * as FileSystem from 'expo-file-system';
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import * as MediaLibrary from 'expo-media-library/legacy';
 
 export type SaveBundledImageToPhotoLibraryResult = 'saved' | 'permission_denied';
@@ -44,7 +45,7 @@ export async function saveImageUriToPhotoLibrary(
   uri: string,
   filenameBase: string,
 ): Promise<SaveImageUriToPhotoLibraryResult> {
-  const permission = await MediaLibrary.requestPermissionsAsync();
+  const permission = await MediaLibrary.requestPermissionsAsync(true, ['photo']);
   if (!permission.granted) {
     return 'permission_denied';
   }
@@ -55,12 +56,22 @@ export async function saveImageUriToPhotoLibrary(
     `${filenameBase}-${Date.now()}.${extension}`,
   );
 
-  if (uri.startsWith('file://')) {
-    await new FileSystem.File(uri).copy(destination);
-  } else {
-    await FileSystem.File.downloadFileAsync(uri, destination);
+  let materializedUri: string | undefined;
+  try {
+    if (uri.startsWith('data:')) {
+      materializedUri = (await manipulateAsync(uri, [], { format: SaveFormat.JPEG })).uri;
+      await new FileSystem.File(materializedUri).copy(destination);
+    } else if (uri.startsWith('file://')) {
+      await new FileSystem.File(uri).copy(destination);
+    } else {
+      await FileSystem.File.downloadFileAsync(uri, destination);
+    }
+    await MediaLibrary.saveToLibraryAsync(destination.uri);
+    return 'saved';
+  } finally {
+    try { destination.delete(); } catch { /* Cache may already be gone. */ }
+    if (materializedUri && materializedUri !== uri) {
+      try { new FileSystem.File(materializedUri).delete(); } catch { /* Cache may already be gone. */ }
+    }
   }
-
-  await MediaLibrary.saveToLibraryAsync(destination.uri);
-  return 'saved';
 }

@@ -26,6 +26,7 @@ export type HermesHttpContextSnapshot = {
 };
 
 export abstract class HermesHttpServerMethods {
+  declare projectArtifactContent: (key: string, content: unknown) => unknown;
   declare getBridgeCapabilities: () => string[];
   declare apiBaseUrl: string;
   declare apiKey: string | null;
@@ -189,6 +190,10 @@ export abstract class HermesHttpServerMethods {
   }
 
   broadcastEvent(event: string, payload: unknown): void {
+    const chat = payload as { state?: string; sessionKey?: string; message?: { role?: string; content?: unknown } } | null;
+    if (event === 'chat' && chat?.state === 'final' && typeof chat.sessionKey === 'string' && chat.message?.role === 'assistant') {
+      payload = { ...chat, message: { ...chat.message, content: this.projectArtifactContent(chat.sessionKey, chat.message.content) } };
+    }
     for (const client of this.clients) {
       this.sendEvent(client.socket, event, payload);
     }

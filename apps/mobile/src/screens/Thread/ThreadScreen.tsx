@@ -42,6 +42,7 @@ import { useProPaywall } from '../../contexts/ProPaywallContext';
 import {
   getConnectionRuntime,
   useConnections,
+  type ConnectionRuntimeSnapshot,
 } from '../../connection';
 import type { RootStackParamList, ThreadOrigin } from '../../navigation/root-stack';
 import { useChatController } from '../../chat/useChatController';
@@ -68,6 +69,7 @@ import {
 } from './ThreadView';
 import {
   areThreadRunSeedsEqual,
+  copiedSessionTitle,
   deriveThreadContentState,
   formatThreadLocalTime,
   isThreadErrorCode,
@@ -103,6 +105,11 @@ type ThreadCronActivity = Readonly<{
 }>;
 
 const NO_CRON_ACTIVITY: ThreadCronActivity = { scope: '', runs: EMPTY_RUN_SEEDS, source: 'none' };
+
+function findRosterSession(roster: ConnectionRuntimeSnapshot['roster'], connectionId: string, agentId: string, sessionKey: string) {
+  return roster.find((group) => group.connection.id === connectionId)
+    ?.agents.find((row) => row.agent.agentId === agentId)?.sessions?.find((session) => session.key === sessionKey);
+}
 
 function runCardSignature(card: ThreadRunCard): string {
   return [
@@ -276,9 +283,9 @@ function ThreadScreenContent({
     setCommandsSheetVisible(false);
   }, [connectionId, sessionKey]);
 
-  const rosterSession = connections.roster.find((group) => group.connection.id === connectionId)
-    ?.agents.find((row) => row.agent.agentId === agentId)?.sessions?.find((session) => session.key === sessionKey);
+  const rosterSession = findRosterSession(connections.roster, connectionId, agentId, sessionKey);
   const nativeReadOnly = capabilities.sessionBranch === true && rosterSession?.source === 'native' && rosterSession.canContinue !== true;
+  const blockedReason = rosterSession?.continuationBlockedReason;
   // A stable object, so streamed chunks do not hand the timeline a new row renderer.
   const timelineCapabilities = useMemo(
     () => (nativeReadOnly ? { ...capabilities, chat: false } : capabilities),
@@ -287,6 +294,9 @@ function ThreadScreenContent({
   const [checkingNative, setCheckingNative] = useState(false);
   const [branching, setBranching] = useState(false);
   const [branchError, setBranchError] = useState(false);
+  // A check the reader asked for still found the conversation open on the computer.
+  const [stillOpenAfterCheck, setStillOpenAfterCheck] = useState(false);
+  useEffect(() => { setStillOpenAfterCheck(false); }, [blockedReason, connectionId, sessionKey]);
   const nativeBranchBusy = useRef(false);
   const mainConversation = isMainConversation({ sessionKey, mainSessionKey: app.mainSessionKey, kind: rosterSession?.kind });
   const manualSession = useManualSession(connectionId, agentId, sessionKey);
@@ -926,6 +936,7 @@ function ThreadScreenContent({
   return (
     <>
       <ThreadView
+        artifactOperations={focused && !locked && !sessionPreview && routeIsActive ? adapter?.artifacts : undefined}
         connectionFailure={{
           scope: `${connectionId}:${agentId}`,
           name: connections.connections.find((item) => item.id === connectionId)?.label ?? agentName,
@@ -960,27 +971,36 @@ function ThreadScreenContent({
         capabilities={timelineCapabilities}
         readOnlyFooter={nativeReadOnly && !sessionPreview ? <View style={{ padding: Space.lg, paddingBottom: Math.max(insets.bottom, Space.lg), gap: Space.md }}>
           <Text testID="native-session-read-only-hint" style={{ fontSize: FontSize.secondary, color: theme.colors.inkSecondary, textAlign: 'center' }}>
-            {rosterSession?.continuationBlockedReason === 'in_use'
-              ? t('This conversation is open on your computer. Close that conversation, then check again, or continue in a new session.')
-              : rosterSession?.continuationBlockedReason === 'ownership_unknown'
-                ? t('Could not verify whether this conversation is in use. Check again, or continue in a new session.')
-                : rosterSession?.continuationBlockedReason === 'project_unavailable'
+            {blockedReason === 'in_use'
+              ? stillOpenAfterCheck
+                ? t('It’s still open on your computer. Archive or exit it there, then try again.')
+                : t('This conversation is still open on your computer. Archive or exit it there to keep chatting here.')
+              : blockedReason === 'ownership_unknown'
+                ? t('Could not confirm whether this conversation is still open on your computer.')
+                : blockedReason === 'project_unavailable'
                   ? t('This conversation’s project folder is unavailable on your computer.')
-                  : t('Imported conversations are read-only. Continue with their context in a new session; the original stays unchanged.')}
+                  : t('This conversation came from your computer and is view-only here. Continue in a copy; the original stays unchanged.')}
           </Text>
-          <Button label={t('Continue in a new session')} variant={rosterSession?.continuationBlockedReason ? 'secondary' : 'primary'} loading={branching} disabled={adapter?.state !== 'ready' || checkingNative || rosterSession?.continuationBlockedReason === 'project_unavailable'} onPress={() => {
+          {/* The copy is the main action: whoever reads this on the phone is usually away from the computer (owner decision 2026-09-30). */}
+          {blockedReason ? <Button testID="native-session-recheck" label={blockedReason === 'in_use' ? t('I’ve closed it on my computer') : t('Retry')} variant={blockedReason === 'project_unavailable' ? 'primary' : 'secondary'} loading={checkingNative} disabled={adapter?.state !== 'ready' || branching} onPress={() => {
+            if (!adapter || nativeBranchBusy.current) return;
+            const checkedReason = blockedReason;
+            nativeBranchBusy.current = true; setBranchError(false); setCheckingNative(true);
+            // The Bridge publishes fresh ownership before answering, so the runtime roster already holds the result.
+            void adapter.loadSession(sessionKey).then(() => {
+              if (!branchScope.active || checkedReason !== 'in_use') return;
+              setStillOpenAfterCheck(findRosterSession(getConnectionRuntime().getSnapshot().roster, connectionId, agentId, sessionKey)?.continuationBlockedReason === 'in_use');
+            }).catch(() => { if (branchScope.active) setBranchError(true); })
+              .finally(() => { nativeBranchBusy.current = false; if (branchScope.active) setCheckingNative(false); });
+          }} /> : null}
+          {blockedReason !== 'project_unavailable' ? <Button testID="native-session-copy" label={t('Continue in a copy')} variant="primary" loading={branching} disabled={adapter?.state !== 'ready' || checkingNative} onPress={() => {
             if (nativeBranchBusy.current || !adapter?.createSession) return;
             nativeBranchBusy.current = true; setBranching(true); setBranchError(false);
-            void ManualSessions.create(adapter, agentId, `native-branch:${sessionKey}`, { fromSession: sessionKey }).then(created => {
+            const title = copiedSessionTitle(currentSession?.title ?? currentSession?.label ?? rosterSession?.title, source => t('{{title}} (copy)', { title: source }));
+            void ManualSessions.create(adapter, agentId, `native-branch:${sessionKey}`, { fromSession: sessionKey, ...(title ? { title } : {}) }).then(created => {
               if (getConnectionRuntime().getSnapshot().activeAdapter !== adapter || !branchScope.active) return;
               navigation.replace('Thread', { connectionId, agentId, sessionKey: created.key, from: 'panel' });
             }).catch(() => { if (branchScope.active) setBranchError(true); }).finally(() => { nativeBranchBusy.current = false; if (branchScope.active) setBranching(false); });
-          }} />
-          {rosterSession?.continuationBlockedReason ? <Button label={t('Check again')} variant="primary" loading={checkingNative} disabled={adapter?.state !== 'ready' || branching} onPress={() => {
-            if (!adapter || nativeBranchBusy.current) return;
-            nativeBranchBusy.current = true; setBranchError(false); setCheckingNative(true);
-            void adapter.loadSession(sessionKey).catch(() => { if (branchScope.active) setBranchError(true); })
-              .finally(() => { nativeBranchBusy.current = false; if (branchScope.active) setCheckingNative(false); });
           }} /> : null}
           {branchError ? <Banner tone="bad" message={t('Could not update this request. Try again.')} /> : null}
         </View> : undefined}

@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -344,4 +344,19 @@ describe('Claude service durable send and ownership boundary', () => {
     expect(mocks.starts).not.toHaveBeenCalled();
   });
 
+});
+
+it('serves assistant-delivered native Claude attachments inside their actual project without resuming a writer', async () => {
+  const { service, project } = fixture();
+  writeFileSync(join(project, 'report.txt'), 'Claude attachment');
+  mocks.list.mockResolvedValue([{ sessionId: randomUUID(), cwd: project, summary: 'Native', lastModified: 1 }]);
+  mocks.history.mockResolvedValue([{ uuid: 'reply', type: 'assistant', message: { content: '[Report](report.txt)' } }]);
+  const rows = await request(service, 'sessions.list') as any[];
+  const key = rows.find(row => row.source === 'native').key;
+  const history = await request(service, 'chat.history', { sessionKey: key }) as any;
+  const artifactId = history.messages[0].attachments[0].artifactId;
+  const file = await request(service, 'clawket.artifacts.open', { sessionKey: key, artifactId }) as any;
+  expect(Buffer.from((await request(service, 'clawket.artifacts.read', { sessionKey: key, id: file.id, offset: 0 }) as any).data, 'base64').toString()).toBe('Claude attachment');
+  expect(mocks.starts).not.toHaveBeenCalled();
+  await expect(request(service, 'clawket.artifacts.read', { sessionKey: 'other', id: file.id, offset: 0 })).rejects.toThrow();
 });

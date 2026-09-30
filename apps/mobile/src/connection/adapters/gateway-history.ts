@@ -1,3 +1,4 @@
+import { extractHistoryAttachments, stripOpenClawMediaDirectives } from './gateway-attachments';
 import { readGatewayMessageAttribution } from './gateway-message-attribution';
 import { canMatchMessageAuthors, restoreCachedAttribution } from '../../chat/messageAttribution';
 import { stripOpenClawInputContext } from '../../utils/openclaw-input-context';
@@ -184,17 +185,31 @@ export function preserveOpenClawCliHistorySegments(
     }
     const textOnly = typeof value.content === 'string' || (Array.isArray(value.content)
       && value.content.every(block => isRecord(block) && block.type === 'text'));
-    if (userSendKey && cliSessionId && segments.length && textOnly
+    const managed = message.attachments?.length && message.attachments.every(a => a.artifactId);
+    const deliveryOnly = managed && Array.isArray(value.content) && value.content.every(block => isRecord(block)
+      && (block.type === 'text' || extractHistoryAttachments([block]).some(a => a.artifactId)));
+    const comparable = (text: string) => normalized(managed ? stripOpenClawMediaDirectives(text) : text);
+    if (userSendKey && cliSessionId && segments.length && (textOnly || deliveryOnly)
       && value.provider === 'claude-cli' && meta.idempotencyKey === `cli-assistant:${userSendKey}`
-      && normalized(message.text) === normalized(segments.map(segment => segment.text).join('\n\n'))) {
+      && comparable(message.text) === comparable(segments.map(segment => segment.text).join('\n\n'))) {
       redundantIds.add(message.id);
+      if (managed) {
+        // Exact native run provenance retires the stripped, optimistic live final too.
+        for (const cached of messages) if (cached.id === `final_${userSendKey}`
+          && cached.role === 'assistant' && comparable(cached.text) === comparable(message.text)) redundantIds.add(cached.id);
+      }
       finalMetadata.set(segments[segments.length - 1].id, message);
     }
     segments = [];
   });
   return messages.filter(message => !redundantIds.has(message.id)).map(message => {
     const final = finalMetadata.get(message.id);
-    return final ? { ...message, usage: final.usage ?? message.usage } : message;
+    return final ? { ...message, usage: final.usage ?? message.usage,
+      ...(final.attachments?.some(a => a.artifactId) ? {
+        text: stripOpenClawMediaDirectives(message.text).trim(),
+        attachments: final.attachments, idempotencyKey: final.idempotencyKey,
+      } : {}),
+    } : message;
   });
 }
 
@@ -358,6 +373,7 @@ export function mergeGatewayHistory(
 function cachedMessageToChatMessage(message: CachedMessage): CachedHistoryMessage {
   const timestampMs = message.timestampMs ?? message.toolFinishedAt ?? message.toolStartedAt;
   const attachments: NonNullable<ChatMessage['attachments']> = [
+    ...(message.artifactAttachments ?? []),
     ...(message.imageUris ?? []).map((uri) => ({
       type: 'image' as const,
       mimeType: 'image/*',
@@ -417,36 +433,10 @@ function extractHistoryText(content: unknown): string {
   return content
     .filter(isRecord)
     .filter((block) => block.type === 'text' || block.type === 'content')
-    .map((block) => typeof block.text === 'string' ? block.text : '')
+    .map((block) => typeof block.artifactDisplayText === 'string' ? block.artifactDisplayText : typeof block.text === 'string' ? block.text : '')
     .join('');
 }
 
-function extractHistoryAttachments(content: unknown): NonNullable<ChatMessage['attachments']> {
-  if (!Array.isArray(content)) return [];
-  const attachments: NonNullable<ChatMessage['attachments']> = [];
-  for (const raw of content) {
-    if (!isRecord(raw)) continue;
-    const type = raw.type;
-    if (type !== 'image' && type !== 'file' && type !== 'image_url') continue;
-    const imageUrl = isRecord(raw.image_url) ? readNonEmptyString(raw.image_url.url) : undefined;
-    const uri = readNonEmptyString(raw.uri) ?? imageUrl;
-    const source = isRecord(raw.source) ? raw.source : null;
-    const base64 = readNonEmptyString(raw.content)
-      ?? readNonEmptyString(raw.data)
-      ?? readNonEmptyString(source?.data);
-    attachments.push({
-      type: type === 'file' ? 'file' : 'image',
-      mimeType: readNonEmptyString(raw.mimeType)
-        ?? readNonEmptyString(raw.mime_type)
-        ?? readNonEmptyString(source?.media_type)
-        ?? 'application/octet-stream',
-      ...(base64 ? { content: base64 } : {}),
-      ...(uri ? { uri } : {}),
-      ...(readNonEmptyString(raw.name) ? { name: readNonEmptyString(raw.name) } : {}),
-    });
-  }
-  return attachments;
-}
 
 function extractHistoryTool(
   message: Record<string, unknown>,

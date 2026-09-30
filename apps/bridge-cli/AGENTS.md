@@ -110,3 +110,7 @@ The authorized Bridge patch release is `3.1.4`. Keep the publish guard and bundl
 Codex and Claude Code Registry registrations and QR invitations default to `Codex` / `Claude Code`; project/device scope remains in configuration and must not be inferred from the display name.
 
 Codex foreground/background native RPC diagnostics use the runtime's bounded metadata contract in the existing local log. Never forward raw native frames, stderr or exception text, and do not upload local logs automatically. See `../../docs/3.0/20-connection-diagnostics.md`.
+
+## Pairing progress
+
+`src/progress.ts` draws one live status line while `pair`, `pair choose` discovery, `refresh-code` and Agent/local-model pairing wait. It draws only on an interactive stderr outside CI and `TERM=dumb`; `--json`, pipes and scripts keep byte-identical output. Detached Agent children forward step text over IPC (`<backend>.progress`), and the launching terminal closes the line with ✔/✖ before printing a code, QR or error. Step text must never contain codes, tokens or payloads.

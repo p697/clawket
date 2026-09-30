@@ -738,6 +738,19 @@ describe('useChatController message queue', () => {
     expect(adapter.loadSession).toHaveBeenCalledTimes(calls);
   });
 
+  it.each([false, true])('commits an attachment-only final without retaining its streamed delivery path (tools=%s)', async withTool => {
+    const { result, handlers } = renderController('openclaw');
+    await typeAndSend(result, 'Attach image');
+    const emit = (event: any) => handlers().onUpdate?.(mapAdapterSessionUpdate({ sessionKey: SESSION_KEY, runId: 'run-1', ...event }));
+    act(() => {
+      if (withTool) { emit({ type: 'tool_call', toolCallId: 'a', title: 'image', kind: 'image' }); emit({ type: 'tool_call_update', toolCallId: 'a', status: 'success' }); }
+      emit({ type: 'agent_message_chunk', text: 'MEDIA: /tmp/private.png' });
+      emit({ type: 'run_finished', stopReason: 'end_turn', message: { role: 'assistant', content: '', attachments: [{ type: 'image', mimeType: 'image/png', artifactId: 'managed-image' }] } });
+    });
+    expect(result.current.listData.filter(message => message.artifactAttachments?.length)).toHaveLength(1);
+    expect(result.current.listData.some(message => message.text.includes('MEDIA:'))).toBe(false);
+  });
+
   it.each(['openclaw', 'hermes'] as const)('keeps %s text/tool boundaries through a batched final event and history refresh', async (backend) => {
     const { result, handlers, rerender } = renderController(backend);
     await typeAndSend(result, 'Inspect');

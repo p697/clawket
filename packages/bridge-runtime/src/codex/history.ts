@@ -1,5 +1,18 @@
 import type { ChatMessage } from '@clawket/agent-protocol';
 
+/** Only the native generated-image result is delivery evidence; view_image/tool screenshots are not. */
+export function codexGeneratedImage(item: any): ChatMessage | undefined {
+  if (item.type !== 'imageGeneration' || item.status !== 'completed' || item.failure || typeof item.id !== 'string') return undefined;
+  const result = item.result;
+  if (typeof result !== 'string' || !result || result.length > 4 * Math.ceil(5 * 1024 * 1024 / 3)
+    || (result.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(result))) return undefined;
+  const prefix = Buffer.from(result.slice(0, 32), 'base64');
+  const mimeType = prefix.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) ? 'image/png'
+    : prefix[0] === 255 && prefix[1] === 216 && prefix[2] === 255 ? 'image/jpeg'
+      : prefix.toString('ascii', 0, 4) === 'RIFF' && prefix.toString('ascii', 8, 12) === 'WEBP' ? 'image/webp' : undefined;
+  return mimeType ? { id: `${item.id}:image`, role: 'assistant', text: '', attachments: [{ type: 'image', mimeType, content: result }] } : undefined;
+}
+
 /** Native errors may contain private provider bodies. Expose fixed copy only. */
 export function codexTurnFailure(turn: any): (Pick<ChatMessage, 'id' | 'text' | 'timestampMs'> & { role: 'system' }) | undefined {
   if (turn?.status !== 'failed' || typeof turn.id !== 'string' || !turn.id || turn.id.length > 200) return undefined;
@@ -17,7 +30,8 @@ export function codexTool(item: any): ChatMessage['tool'] | undefined {
   const failed = ['failed', 'declined', 'interrupted'].includes(item.status) || (typeof item.exitCode === 'number' && item.exitCode !== 0) || !!item.error;
   return { callId: item.id, name: names[item.type], status: failed ? 'error' : item.status === 'inProgress' ? 'running' : item.status === 'completed' || item.type === 'webSearch' ? 'success' : 'unknown',
     input: item.type === 'commandExecution' ? { command: item.command, cwd: item.cwd } : item.type === 'fileChange' ? { changes: item.changes } : item.arguments ?? { query: item.query, path: item.path },
-    output: String(item.aggregatedOutput ?? (item.result ? JSON.stringify(item.result) : item.error ? JSON.stringify(item.error) : item.type === 'fileChange' ? JSON.stringify(item.changes) : '')).slice(0, 32000) };
+    output: item.type === 'imageGeneration' ? (item.status === 'completed' && !item.failure ? 'Image generated' : '')
+      : String(item.aggregatedOutput ?? (item.result ? JSON.stringify(item.result) : item.error ? JSON.stringify(item.error) : item.type === 'fileChange' ? JSON.stringify(item.changes) : '')).slice(0, 32000) };
 }
 export function codexMessages(turns: any[]): ChatMessage[] {
   const messages: ChatMessage[] = [];
@@ -40,6 +54,8 @@ export function codexMessages(turns: any[]): ChatMessage[] {
       } else {
         const tool = codexTool(item);
         if (tool) messages.push({ ...base, id: `toolcall_${item.id}`, role: 'tool', text: '', tool });
+        const image = codexGeneratedImage(item);
+        if (image) messages.push({ ...image, timestampMs });
       }
     }
     const failure = codexTurnFailure(turn);

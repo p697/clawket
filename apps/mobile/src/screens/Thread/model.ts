@@ -437,6 +437,25 @@ export function displayProjectPath(path: string): string {
     .replace(/^[A-Za-z]:\\Users\\[^\\]+(?=\\|$)/, '~');
 }
 
+/**
+ * Title for a copy of a conversation, such as `Fix login (copy)`, kept within every Bridge's
+ * title limit by dropping whole characters from the source title. Undefined leaves the Bridge default.
+ */
+export function copiedSessionTitle(
+  title: string | null | undefined,
+  format: (title: string) => string,
+  maxLength = 200,
+): string | undefined {
+  const characters = Array.from(title?.trim() ?? '');
+  if (characters.length === 0) return undefined;
+  let copied = format(characters.join(''));
+  while (copied.length > maxLength && characters.length > 1) {
+    characters.pop();
+    copied = format(`${characters.join('').trimEnd()}…`);
+  }
+  return copied.length <= maxLength ? copied : undefined;
+}
+
 export type ThreadHeaderSubtitleInput = Readonly<{
   projectPath?: string | null;
   capabilities: Capabilities;

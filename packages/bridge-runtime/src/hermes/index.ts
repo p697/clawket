@@ -1,5 +1,6 @@
+import { HermesArtifacts } from './artifacts.js';
 import { SessionFileStore } from '../session-files.js';
-import { hermesFileRoots } from './session-files.js';
+import { HermesFileListing, hermesFileRoots } from './session-files.js';
 import { supportsHermesDocuments } from './documents.js';
 import { supportsHermesModelHealth } from './model-health.js';
 import { HermesRunControlMethods, readHermesRunCapabilities } from './run-control.js';
@@ -113,7 +114,15 @@ export class HermesLocalBridge {
   readonly hermesSourcePath: string;
   readonly hermesHomePath: string;
   private readonly sessionFiles = new SessionFileStore();
-  private listingFiles = false;
+  private readonly artifacts = new HermesArtifacts(
+    () => hermesFileRoots(this.runHermesPython.bind(this), this.hermesHomePath),
+    () => this.operationGeneration,
+  );
+
+  projectArtifactContent(key: string, content: unknown): unknown { return this.artifacts.content(key, content); }
+  private readonly workspaceFileListing = new HermesFileListing(this.sessionFiles,
+    key => this.getHermesSessionHistory(key, 200),
+    () => hermesFileRoots(this.runHermesPython.bind(this), this.hermesHomePath), () => this.operationGeneration);
   readonly hermesPythonPath: string;
   readonly pythonRunner: HermesPythonRunner;
   readonly nativeSessions: HermesNativeSessionReader;
@@ -278,7 +287,7 @@ export class HermesLocalBridge {
   }
 
   async stop(): Promise<void> {
-    this.sessionFiles.clear();
+    this.sessionFiles.clear(); this.artifacts.clear();
     this.operationGeneration += 1;
     this.hermesRunCapabilities = new Set();
     this.runCapabilitiesLoaded = false;
@@ -728,7 +737,7 @@ export class HermesLocalBridge {
   resetHermesSession(key: string): { ok: true; key: string; sessionId: string } {
     if (!this.sessionStore.owns(key)) throw new Error(`Hermes native session is read-only: ${key}`);
     this.cancelActiveRunsForSession(key);
-    this.sessionFiles.forget(key);
+    this.sessionFiles.forget(key); this.artifacts.forget(key);
     const session = this.sessionStore.resetSession(key);
     return { ok: true, key, sessionId: session.sessionId };
   }
@@ -736,7 +745,7 @@ export class HermesLocalBridge {
   deleteHermesSession(key: string): { ok: true; key: string } {
     if (!this.sessionStore.owns(key)) throw new Error(`Hermes native session is read-only: ${key}`);
     this.cancelActiveRunsForSession(key);
-    this.sessionFiles.forget(key);
+    this.sessionFiles.forget(key); this.artifacts.forget(key);
     this.sessionStore.deleteSession(key);
     this.updateSnapshot({ sessionCount: this.sessionStore.count() });
     return { ok: true, key };
@@ -806,28 +815,20 @@ export class HermesLocalBridge {
       }
       case 'sessions.create':
         return { session: this.createHermesSession(payload) };
-      case 'clawket.files.list': {
-        const key = readString(payload.sessionKey);
-        if (!key || key.length > 1024 || this.listingFiles) throw new Error('Session files unavailable.');
-        this.listingFiles = true;
-        const generation = this.operationGeneration;
-        try {
-          const history = await this.getHermesSessionHistory(key, 200);
-          const roots = await hermesFileRoots(this.runHermesPython.bind(this), this.hermesHomePath);
-          if (generation !== this.operationGeneration) throw new Error('Connection changed.');
-          return { files: this.sessionFiles.list(key, history.messages, roots) };
-        } finally { this.listingFiles = false; }
-      }
+      case 'clawket.artifacts.open': return this.artifacts.resolve(payload.sessionKey, payload.artifactId, cursor =>
+        this.artifacts.history(String(payload.sessionKey), () => this.getHermesSessionHistory(String(payload.sessionKey), 200, cursor), cursor));
+      case 'clawket.artifacts.read': return this.artifacts.read(payload.sessionKey, payload.id, payload.offset);
+      case 'clawket.files.list': return this.workspaceFileListing.list(readString(payload.sessionKey));
       case 'clawket.files.read':
         return this.sessionFiles.read(readString(payload.sessionKey), readString(payload.id), payload.offset as number);
       case 'chat.history': {
         const sessionKey = readString(payload.sessionKey);
         if (!sessionKey) throw new Error('chat.history requires sessionKey.');
-        return this.traceBridgeRequest(method, requestStartedAt, requestSeq, (await this.getHermesSessionHistory(
+        return this.traceBridgeRequest(method, requestStartedAt, requestSeq, (await this.artifacts.history(sessionKey, () => this.getHermesSessionHistory(
           sessionKey,
           readPositiveInt(payload.limit, 50),
           payload.cursor,
-        )));
+        ), payload.cursor)));
       }
       case 'exec.approval.list':
         return this.listRunApprovals(readString(payload.sessionKey));

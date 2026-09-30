@@ -1827,9 +1827,11 @@ it.each([
     const relay = sockets[0]; relay.open();
     relay.message(JSON.stringify({ type: 'req', id: 'connect-skill', method: 'connect', params: { caps: negotiated ? [BRIDGE_CAPABILITIES_V2] : [] } }));
     const gateway = sockets[1]; gateway.open();
-    gateway.message(JSON.stringify({ type: 'res', id: 'connect-skill', ok: true, payload: { auth: { role: 'operator', scopes: ['operator.admin'] }, features: { methods: ['skills.status'] } } }));
+    gateway.message(JSON.stringify({ type: 'res', id: 'connect-skill', ok: true, payload: { auth: { role: 'operator', scopes: ['operator.admin'] }, features: { methods: ['skills.status', 'artifacts.get', 'artifacts.download'] } } }));
     const hello = JSON.parse(String(relay.sent.at(-1)));
     expect(hello.payload.features.methods.includes('skills.get')).toBe(expected);
+    expect(hello.payload.features.methods.includes('clawket.artifacts.open')).toBe(expected);
+    expect(hello.payload.features.methods.includes('clawket.artifacts.read')).toBe(expected);
     const request = JSON.stringify({ type: 'req', id: 'read-skill', method: 'skills.get', params: { skillKey: 'sample', agentId: 'work' } });
     relay.message(request);
     if (!expected) {

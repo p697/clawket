@@ -129,3 +129,16 @@ describe('native expanded user inputs', () => {
     expect(project([rows[0], { ...rows[0], id: 'repeat', __openclaw: { idempotencyKey: '1789976429152_repeat:user' } }, rows[1]])).toHaveLength(2);
   });
 });
+
+it('merges a CLI managed attachment with its imported final and retires only its exact live run copy', () => {
+  const values = [
+    { id: 'user', role: 'user', content: 'Send', __openclaw: { idempotencyKey: 'run-7:user' } },
+    { id: 'imported', role: 'assistant', content: 'Here\n\nMEDIA:/Desktop/Screen Shot.png', __openclaw: { importedFrom: 'claude-cli', cliSessionId: 'cli' } },
+    { id: 'managed', role: 'assistant', provider: 'claude-cli', content: [{ type: 'text', text: 'Here' }, { type: 'image', mimeType: 'image/jpeg', artifactId: 'image-7' }], __openclaw: { idempotencyKey: 'cli-assistant:run-7' } },
+  ];
+  const messages = [...mapGatewayHistoryMessages('main', values), { id: 'final_run-7', role: 'assistant' as const, text: 'Here\n' }];
+  const result = preserveOpenClawCliHistorySegments('main', values, messages);
+  expect(result.map(m => m.id)).toEqual(['user', 'imported']);
+  expect(result[1]).toMatchObject({ text: 'Here', attachments: [{ artifactId: 'image-7' }] });
+  expect(preserveOpenClawCliHistorySegments('main', values, [...messages, { id: 'final_other', role: 'assistant', text: 'Here' }]).at(-1)?.id).toBe('final_other');
+});

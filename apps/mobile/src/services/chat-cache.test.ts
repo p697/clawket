@@ -157,6 +157,14 @@ describe("ChatCacheService", () => {
   });
 
   describe("saveMessages + getMessages", () => {
+    it("caches stable artifact references without tickets or bytes", async () => {
+      const scope = { gatewayConfigId: "gw1", agentId: "main", sessionKey: "agent:main:main" };
+      await ChatCacheService.saveMessages(scope, [{ id: "artifact", role: "assistant", text: "", artifactAttachments: [{ type: "image", mimeType: "image/png", artifactId: "opaque", uri: "https://private/?ticket=secret", content: "private-bytes" }] }]);
+      const messages = await ChatCacheService.getMessages(scope.gatewayConfigId, scope.agentId, scope.sessionKey);
+      expect(messages[0].artifactAttachments?.[0].artifactId).toBe("opaque");
+      expect(JSON.stringify(messages)).not.toContain("secret");
+      expect(JSON.stringify(messages)).not.toContain("private-bytes");
+    });
     it("uses projected identity when a legacy Gateway renumbers history-page fallback IDs", async () => {
       const scope = { gatewayConfigId: "gw1", agentId: "main", sessionKey: "agent:main:main" };
       const remote = [{ id: `${scope.sessionKey}:history:130000:15`, role: "assistant" as const, text: "Finished", timestampMs: 130_000 }];

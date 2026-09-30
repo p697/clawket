@@ -1,3 +1,4 @@
+import { DeliveredArtifacts } from '../delivered-artifacts.js';
 import { SessionCatalogSync } from '../session-catalog.js';
 import { InteractionAttention } from '../interaction-attention.js';
 import { readPromptIdentity, recordedPromptStatus } from '../prompt-status.js';
@@ -52,8 +53,10 @@ export class ClaudeService extends EventEmitter {
     this.owners = new ClaudeOwners(options.executable);
   }
 
+  private readonly artifacts = new DeliveredArtifacts();
   private readonly attention = new InteractionAttention();
   private update(update: SessionUpdate): void {
+    if (update.type === 'run_finished') { const key = update.sessionKey; update = this.artifacts.final(update, [this.store.records.find(row => row.key === key)?.cwd ?? this.project]); }
     const patch = this.attention.accept(update);
     this.emit('update', update);
     if (patch) this.emit('update', patch);
@@ -101,13 +104,14 @@ export class ClaudeService extends EventEmitter {
   async health(): Promise<object> {
     if (this.stopped) throw new ClaudeFault('Claude Bridge is stopped');
     // Viewing projects/history remains useful when model authentication needs attention.
-    return { backend: 'claude-code', sessionCatalogSync: 1, promptStatus: true, projects: true, vision: true,
+    return { backend: 'claude-code', sessionCatalogSync: 1, artifacts: true, promptStatus: true, projects: true, vision: true,
       capabilities: { steer: false, thinkingLevels: false, skills: false, sessionBranch: true } };
   }
 
   async request(frame: ClaudeRequest): Promise<unknown> {
     const result = await this.dispatch(frame);
     if (['sessions.create', 'sessions.rename', 'sessions.reset', 'sessions.delete'].includes(frame.method)) this.catalogSync.invalidate();
+    if (['sessions.reset', 'sessions.delete'].includes(frame.method) && typeof frame.params?.sessionKey === 'string') this.artifacts.forget(frame.params.sessionKey);
     return result;
   }
   private async dispatch(frame: ClaudeRequest): Promise<unknown> {
@@ -173,6 +177,8 @@ export class ClaudeService extends EventEmitter {
         this.previews.delete(record.key);
         return { ok: true };
       });
+      case 'clawket.artifacts.open': return this.artifacts.resolve(p.sessionKey, p.artifactId, cursor => this.history(String(p.sessionKey), cursor));
+      case 'clawket.artifacts.read': return this.artifacts.read(p.sessionKey, p.id, p.offset);
       case 'chat.history': return this.history(string(p.sessionKey, 'session'), p.cursor);
       case 'chat.send': return this.serial(async () => this.send(await this.continuationRecord(p.sessionKey), p));
       case 'chat.abort': {
@@ -399,17 +405,19 @@ export class ClaudeService extends EventEmitter {
   }
 
   private async history(key: string, cursor: unknown): Promise<SessionHistory> {
+    const artifactEpoch = this.artifacts.epoch;
     const record = this.store.records.find(row => row.key === key);
     if (!record) {
       const descriptors = await this.discover();
       const descriptor = descriptors.find(row => row.key === key);
       if (descriptor) this.update({ type: 'session_info_update', session: descriptor });
-      return this.catalog.history(key, cursor);
+      const page = await this.catalog.history(key, cursor);
+      return { ...page, messages: this.artifacts.project(key, page.messages, [this.catalog.native(key).cwd], artifactEpoch, cursor) };
     }
     if (record.imported) this.update({ type: 'session_info_update', session: await this.descriptor(record) });
     const page = record.materialized ? await claudeHistoryPage(record.nativeId!, record.cwd, cursor) : { messages: [] };
     const activeRun = this.sessions.get(key)?.activeRun;
-    const rendered = page.messages;
+    const rendered = this.artifacts.project(key, page.messages, [record.cwd], artifactEpoch, cursor);
     for (const message of rendered) {
       const accepted = Object.values(record.fingerprints).find(item => item.runId === message.id);
       if (message.role === 'user' && accepted) message.idempotencyKey = accepted.clientKey;
@@ -420,12 +428,12 @@ export class ClaudeService extends EventEmitter {
 
   async stop(): Promise<void> {
     if (this.stopped) return;
-    this.stopped = true;
+    this.stopped = true; this.artifacts.clear();
     for (const probe of this.probes) await probe.close();
     for (const session of this.sessions.values()) await session.close();
     await this.queue.catch(() => {});
     this.sessions.clear();
     for (const lock of this.locks.values()) lock.close();
-    this.locks.clear(); this.store.close();
+    this.locks.clear(); this.store.close(); this.artifacts.clear();
   }
 }

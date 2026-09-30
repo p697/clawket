@@ -1,3 +1,4 @@
+import { extractHistoryAttachments } from '../connection/adapters/gateway-attachments';
 import { normalizeMessageAttribution } from './messageAttribution';
 import { RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
@@ -160,6 +161,7 @@ function areUiMessagesEquivalent(prev: UiMessage[], next: UiMessage[]): boolean 
     if (a.modelLabel !== b.modelLabel) return false;
     if (!areStringArraysEqual(a.imageUris, b.imageUris)) return false;
     if (!areFileAttachmentsEqual(a.fileAttachments, b.fileAttachments)) return false;
+    if (JSON.stringify(a.artifactAttachments) !== JSON.stringify(b.artifactAttachments)) return false;
     if (a.imageMetas !== b.imageMetas) return false;
     if (a.toolName !== b.toolName) return false;
     if (a.toolStatus !== b.toolStatus) return false;
@@ -221,6 +223,7 @@ function projectHistoryMessage(message: ChatMessage): Record<string, unknown> {
   const content: Array<Record<string, unknown>> = [];
   if (message.text) content.push({ type: 'text', text: message.text });
   for (const attachment of message.attachments ?? []) {
+    if (attachment.artifactId) { content.push({ ...attachment }); continue; }
     if (attachment.type === 'image') {
       if (attachment.uri) {
         content.push({ type: 'image', uri: attachment.uri, mimeType: attachment.mimeType });
@@ -716,6 +719,7 @@ export function useChatHistoryState({
       let currentTurnText = '';
       let currentTurnImages: string[] = [];
       let currentTurnFiles: UiFileAttachment[] = [];
+      let currentTurnArtifacts: NonNullable<UiMessage['artifactAttachments']> = [];
       let currentTurnTimestamp = 0;
       let currentHistoryMessageId: string | undefined;
       let currentTurnModel = '';
@@ -724,6 +728,7 @@ export function useChatHistoryState({
         currentTurnText.trim().length > 0
         || currentTurnImages.length > 0
         || currentTurnFiles.length > 0
+        || currentTurnArtifacts.length > 0
       );
 
       const flushAssistantTurn = () => {
@@ -731,7 +736,7 @@ export function useChatHistoryState({
         const hasTurnContent = currentTurnHasContent();
         if (hasTurnContent) {
           const idSeed = currentTurnText
-            || `${currentTurnImages.length}_img_${currentTurnFiles.length}_file`;
+            || (currentTurnArtifacts.length ? currentTurnArtifacts.map(a => a.artifactId).join('_') : `${currentTurnImages.length}_img_${currentTurnFiles.length}_file`);
           uiMessages.push({
             id: stableMessageId('assistant', currentTurnTimestamp, idSeed),
             historyMessageId: currentHistoryMessageId,
@@ -739,6 +744,7 @@ export function useChatHistoryState({
             text: currentTurnText,
             timestampMs: currentTurnTimestamp > 0 ? currentTurnTimestamp : undefined,
             imageUris: currentTurnImages.length > 0 ? currentTurnImages : undefined,
+            artifactAttachments: currentTurnArtifacts.length ? currentTurnArtifacts : undefined,
             fileAttachments: currentTurnFiles.length > 0 ? currentTurnFiles : undefined,
             modelLabel: currentTurnModel || undefined,
           });
@@ -747,6 +753,7 @@ export function useChatHistoryState({
         currentTurnText = '';
         currentTurnImages = [];
         currentTurnFiles = [];
+        currentTurnArtifacts = [];
         currentTurnTimestamp = 0;
         currentHistoryMessageId = undefined;
         currentTurnModel = '';
@@ -903,8 +910,10 @@ export function useChatHistoryState({
             currentTurnText = currentTurnText ? `${currentTurnText}\n${text}` : text;
           }
 
-          appendUniqueUris(currentTurnImages, extractImageUris(message.content));
-          appendUniqueFileAttachments(currentTurnFiles, extractFileAttachments(message.content));
+          currentTurnArtifacts.push(...extractHistoryAttachments(message.content).filter(a => a.artifactId));
+          const inlineContent = Array.isArray(message.content) ? message.content.filter(block => !block?.artifactId && !block?.attachment?.artifactId) : message.content;
+          appendUniqueUris(currentTurnImages, extractImageUris(inlineContent));
+          appendUniqueFileAttachments(currentTurnFiles, extractFileAttachments(inlineContent));
 
           if (Array.isArray(message.content)) {
             for (let index = 0; index < message.content.length; index++) {

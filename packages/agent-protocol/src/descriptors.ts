@@ -196,6 +196,8 @@ export interface MessageAttribution {
 
 /** Rendering-neutral subset of the existing mobile `UiMessage` model. */
 export interface ChatMessage {
+  /** Additive attachment-card projection; legacy text remains intact on the wire. */
+  artifactDisplayText?: string;
   id: string;
   role: 'user' | 'assistant' | 'system' | 'tool';
   text: string;
@@ -211,6 +213,7 @@ export interface ChatMessage {
     content?: string;
     uri?: string;
     name?: string;
+    artifactId?: string;
   }>;
   provider?: string;
   model?: string;
@@ -242,8 +245,10 @@ export interface SessionHistory {
 }
 
 export interface FinalMessage {
+  artifactDisplayText?: string;
   role: 'assistant';
   content: string;
+  attachments?: ChatMessage['attachments'];
   provider?: string;
   model?: string;
 }

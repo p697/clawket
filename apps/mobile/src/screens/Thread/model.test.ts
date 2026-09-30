@@ -5,6 +5,7 @@ import {
   buildCronRunSeeds,
   buildThreadTimelineItems,
   areThreadRunSeedsEqual,
+  copiedSessionTitle,
   deriveThreadContentState,
   groupThreadTools,
   withThreadRhythm,
@@ -192,6 +193,18 @@ describe('Thread model', () => {
     expect(displayProjectPath('C:\\Users\\Lucy\\repo')).toBe('~\\repo');
     expect(displayProjectPath('/opt/work/app')).toBe('/opt/work/app');
     expect(displayProjectPath('/Users2/lucy/app')).toBe('/Users2/lucy/app');
+  });
+
+  it('titles a copied conversation within the Bridge title limit without splitting characters', () => {
+    const format = (title: string) => `${title} (copy)`;
+    expect(copiedSessionTitle('  Fix login  ', format)).toBe('Fix login (copy)');
+    expect(copiedSessionTitle(`${'a'.repeat(195)}😀😀`, format)).toBe(`${'a'.repeat(192)}… (copy)`);
+    expect(copiedSessionTitle(`${'a'.repeat(190)}${'😀'.repeat(5)}`, format)).toBe(`${'a'.repeat(190)}😀… (copy)`);
+    expect(copiedSessionTitle(`${'a'.repeat(193)}`, format)).toBe(`${'a'.repeat(193)} (copy)`);
+    // No usable source title, or a format that cannot fit, keeps the Bridge's own default title.
+    expect(copiedSessionTitle('   ', format)).toBeUndefined();
+    expect(copiedSessionTitle(null, format)).toBeUndefined();
+    expect(copiedSessionTitle('abc', (title) => `${title}${'x'.repeat(300)}`)).toBeUndefined();
   });
 
   it('adds a session title only for non-main sessions', () => {

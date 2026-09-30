@@ -389,6 +389,7 @@ export function preserveOptimisticAssistantMessage(
         timestampMs: previousLastAssistant.timestampMs ?? nextCurrentTurnAssistant.message.timestampMs,
         modelLabel: previousLastAssistant.modelLabel ?? nextCurrentTurnAssistant.message.modelLabel,
         usage: previousLastAssistant.usage ?? nextCurrentTurnAssistant.message.usage,
+        artifactAttachments: nextCurrentTurnAssistant.message.artifactAttachments ?? previousLastAssistant.artifactAttachments,
         imageUris: previousLastAssistant.imageUris ?? nextCurrentTurnAssistant.message.imageUris,
         imageMetas: previousLastAssistant.imageMetas ?? nextCurrentTurnAssistant.message.imageMetas,
       });
@@ -458,7 +459,7 @@ export function preserveCompletedRunPresentation(previous: UiMessage[], incoming
         const aggregate = message === texts.at(-1) && aggregateIndex >= 0 ? remote[aggregateIndex] : undefined;
         if (aggregate) canonicalPositions[localIndex] = aggregateIndex;
         return aggregate ? { ...message, usage: aggregate.usage ?? message.usage, modelLabel: aggregate.modelLabel ?? message.modelLabel,
-          imageUris: aggregate.imageUris ?? message.imageUris, fileAttachments: aggregate.fileAttachments ?? message.fileAttachments } : message;
+          artifactAttachments: aggregate.artifactAttachments ?? message.artifactAttachments, imageUris: aggregate.imageUris ?? message.imageUris, fileAttachments: aggregate.fileAttachments ?? message.fileAttachments } : message;
       }
       consumed.add(index);
       canonicalPositions[localIndex] = index;

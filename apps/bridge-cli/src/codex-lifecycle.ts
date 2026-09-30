@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { openSync, closeSync } from 'node:fs';
 import WebSocket from 'ws';
+import type { Progress } from './progress.js';
 
 /** A bounded authenticated local control call; never infer ownership from a PID or an occupied port. */
 export function codexControl(config: { port: number; token: string }, method = 'health'): Promise<any> {
@@ -40,7 +41,7 @@ export function codexControl(config: { port: number; token: string }, method = '
 }
 
 /** Detach only after authenticated startup. Pairing credentials go over IPC to the invoking terminal, never to persistent logs. */
-export async function startCodexBackground(args: string[], logPath: string, executable = process.execPath, entry = process.argv[1]): Promise<void> {
+export async function startCodexBackground(args: string[], logPath: string, progress?: Progress, executable = process.execPath, entry = process.argv[1]): Promise<void> {
   const fd = openSync(logPath, 'a', 0o600);
   const child = spawn(executable, [entry, 'codex', ...args, '--foreground'], { detached: true, stdio: ['ignore', fd, fd, 'ipc'], windowsHide: true });
   closeSync(fd);
@@ -56,7 +57,8 @@ export async function startCodexBackground(args: string[], logPath: string, exec
     child.once('error', () => finish(new Error('Could not start Codex Bridge')));
     child.once('exit', () => finish(new Error('Codex Bridge exited during startup. Inspect clawket codex logs.')));
     child.on('message', (message: any) => {
-      if (message?.type === 'codex.display' && typeof message.text === 'string') console.log(message.text);
+      if (message?.type === 'codex.progress' && typeof message.text === 'string') progress?.update(message.text);
+      if (message?.type === 'codex.display' && typeof message.text === 'string') { progress?.succeed(); console.log(message.text); }
       if (message?.type === 'codex.ready') finish();
     });
   });

@@ -6,6 +6,7 @@ import { buildPairingSessionDraft, securePairingCodeKeyHex } from '@clawket/brid
 import { LocalModelConversation, LocalModelServer, LocalModelService, LocalModelRelay, type LocalModelEndpoint, type LocalModelRelayConfig } from '@clawket/bridge-runtime';
 import QRCode from 'qrcode';
 import { ensureLocalModelRouter, type LocalModelLauncher } from './local-model-launcher.js';
+import { noProgress, startProgress, type Progress } from './progress.js';
 
 const PREVIEW = 'https://clawket-local-model-registry-preview.clawket.workers.dev';
 interface RuntimeConfig { endpoints: LocalModelEndpoint[]; token: string; relay?: LocalModelRelayConfig; launcher?: LocalModelLauncher }
@@ -62,6 +63,13 @@ async function post<T>(url: string, body: object): Promise<T> {
 
 /** One foreground command keeps the Bridge and its secure pairing responder alive. */
 export async function handleLocalModelCommand(args: string[]): Promise<void> {
+  const progress = (args[0] ?? 'pair') === 'pair' ? startProgress('Finding local models…', { doneText: 'Local model is ready to pair' }) : noProgress;
+  try { await runLocalModelCommand(args, progress); }
+  catch (error) { progress.fail(); throw error; }
+  finally { progress.stop(); }
+}
+
+async function runLocalModelCommand(args: string[], progress: Progress): Promise<void> {
   // A detached supervisor owns only this child. IPC loss must not leave an orphan.
   let requestStop: (() => void) | undefined;
   const supervisorStop = () => { if (requestStop) requestStop(); else process.exit(0); };
@@ -88,13 +96,14 @@ export async function handleLocalModelCommand(args: string[]): Promise<void> {
     const preset = flag(args, '--models-preset');
     if (Boolean(executable) !== Boolean(preset)) throw new Error('Provide both --llama-server and --models-preset');
     const launcher = executable && preset ? { executable: resolve(executable), preset: resolve(preset), baseUrl: flag(args, '--base-url') ?? 'http://127.0.0.1:8080' } : undefined;
-    if (launcher) await ensureLocalModelRouter(launcher, dirname(configPath));
+    if (launcher) { progress.update('Starting the llama.cpp router…'); await ensureLocalModelRouter(launcher, dirname(configPath)); }
     const endpointFile = flag(args, '--endpoints');
     let endpoints: LocalModelEndpoint[];
     if (endpointFile) endpoints = JSON.parse(readFileSync(resolve(endpointFile), 'utf8'));
-    else endpoints = await discoverLocalModelEndpoints(flag(args, '--base-url') ?? 'http://127.0.0.1:8080', flag(args, '--engine') ?? 'llamacpp');
+    else { progress.update('Finding local models…'); endpoints = await discoverLocalModelEndpoints(flag(args, '--base-url') ?? 'http://127.0.0.1:8080', flag(args, '--engine') ?? 'llamacpp'); }
     config = { endpoints, token: randomBytes(32).toString('hex'), launcher };
   }
+  progress.update('Starting the local model bridge…');
   const conversation = new LocalModelConversation(config.endpoints, join(dirname(configPath), 'conversation.json'));
   await conversation.select(conversation.selection);
   const server = new LocalModelServer(conversation, config.token);
@@ -106,6 +115,7 @@ export async function handleLocalModelCommand(args: string[]): Promise<void> {
     let code: string | undefined;
     let qrPayload: string | undefined;
     if (command === 'pair') {
+      progress.update('Requesting a pairing code…');
       const registryUrl = flag(args, '--registry') ?? PREVIEW;
       const origin = new URL(registryUrl);
       if (origin.protocol !== 'https:' && !['127.0.0.1', 'localhost'].includes(origin.hostname)) throw new Error('Registry requires HTTPS');
@@ -121,8 +131,10 @@ export async function handleLocalModelCommand(args: string[]): Promise<void> {
     }
     if (!config.relay) throw new Error('Pair the local model Bridge before running it');
     relay = new LocalModelRelay(new LocalModelService(conversation), config.relay, invitation => { config.relay!.invitation = invitation; save(config); }, message => console.error(message));
+    progress.update('Connecting to Clawket Relay…');
     relay.start();
     await relay.waitUntilReady();
+    progress.succeed();
     if (code && qrPayload) {
       console.log(`Pairing code: ${code}`);
       console.log(await QRCode.toString(qrPayload, { type: 'terminal', small: true }));

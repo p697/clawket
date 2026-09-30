@@ -356,38 +356,94 @@ describe('ThreadScreen connection container', () => {
     expect(mockController.setInput).toHaveBeenLastCalledWith('');
   });
 
-  it.each(['pi', 'claude-code'] as const)('explains native %s read-only history and explicitly branches with its context', async (backend) => {
+  const readOnlyFooterParts = () => React.Children.toArray((mockThreadViewProps?.readOnlyFooter as React.ReactElement<any>).props.children)
+    .filter((child): child is React.ReactElement<any> => React.isValidElement(child));
+  const readOnlyFooterPart = (testID: string) => readOnlyFooterParts().find(child => child.props.testID === testID);
+  const blockedNativeRoster = (sessionKey: string, blocked: Record<string, unknown>) => [{ connection: { id: 'connection-1' }, agents: [{ agent: { agentId: 'atlas' }, sessions: [{ key: sessionKey, source: 'native', ...blocked }] }] }];
+
+  it.each(['pi', 'claude-code'] as const)('explains native %s read-only history and continues it in a titled copy', async (backend) => {
     const props = createNavigationProps();
     const pi = { ...adapter, connection: { ...adapter.connection, backendKind: backend }, capabilities: CAPABILITY_MATRIX[backend], state: 'ready', createSession: jest.fn() };
-    mockConnections = { ...mockConnections, activeAdapter: pi, roster: [{ connection: { id: 'connection-1' }, agents: [{ agent: { agentId: 'atlas' }, sessions: [{ key: props.route.params.sessionKey, source: 'native', kind: 'direct' }] }] }] };
+    mockConnections = { ...mockConnections, activeAdapter: pi, roster: blockedNativeRoster(props.route.params.sessionKey, { kind: 'direct' }) };
     mockRuntime.getSnapshot.mockReturnValue({ activeConnectionId: 'connection-1', activeAdapter: pi } as any);
     const { ManualSessions } = require('../../services/manual-sessions');
     const create = jest.spyOn(ManualSessions, 'create').mockResolvedValue({ key: 'private-branch' });
     try {
       render(<ThreadScreen {...props} />);
       expect(mockThreadViewProps?.capabilities.chat).toBe(false);
-      const footer = mockThreadViewProps?.readOnlyFooter as React.ReactElement<any>;
-      expect(footer.props.children[0].props.children).toBe('Imported conversations are read-only. Continue with their context in a new session; the original stays unchanged.');
-      await act(async () => footer.props.children[1].props.onPress());
-      expect(create).toHaveBeenCalledWith(pi, 'atlas', `native-branch:${props.route.params.sessionKey}`, { fromSession: props.route.params.sessionKey });
+      expect(readOnlyFooterPart('native-session-read-only-hint')?.props.children).toBe('This conversation came from your computer and is view-only here. Continue in a copy; the original stays unchanged.');
+      expect(readOnlyFooterPart('native-session-recheck')).toBeUndefined();
+      const copy = readOnlyFooterPart('native-session-copy');
+      expect(copy?.props).toMatchObject({ label: 'Continue in a copy', variant: 'primary' });
+      await act(async () => copy?.props.onPress());
+      expect(create).toHaveBeenCalledWith(pi, 'atlas', `native-branch:${props.route.params.sessionKey}`, { fromSession: props.route.params.sessionKey, title: 'Main thread (copy)' });
       expect(props.navigation.replace).toHaveBeenCalledWith('Thread', expect.objectContaining({ sessionKey: 'private-branch' }));
-    } finally { create.mockRestore(); }
+    } finally {
+      create.mockRestore();
+      mockRuntime.getSnapshot.mockReturnValue({ activeConnectionId: 'connection-1' } as any);
+    }
   });
 
   it.each([
-    ['in_use', 'This conversation is open on your computer. Close that conversation, then check again, or continue in a new session.'],
-    ['ownership_unknown', 'Could not verify whether this conversation is in use. Check again, or continue in a new session.'],
-    ['project_unavailable', 'This conversation’s project folder is unavailable on your computer.'],
-  ])('explains native continuation blocked by %s and refreshes status without sending', async (reason, hint) => {
+    ['in_use', 'This conversation is still open on your computer. Archive or exit it there to keep chatting here.', 'I’ve closed it on my computer'],
+    ['ownership_unknown', 'Could not confirm whether this conversation is still open on your computer.', 'Retry'],
+    ['project_unavailable', 'This conversation’s project folder is unavailable on your computer.', 'Retry'],
+  ])('explains native continuation blocked by %s, leads with the copy and rechecks without sending', async (reason, hint, recheckLabel) => {
     const props = createNavigationProps();
     const native = { ...adapter, capabilities: CAPABILITY_MATRIX['claude-code'], state: 'ready', loadSession: jest.fn().mockResolvedValue({ messages: [] }) };
-    mockConnections = { ...mockConnections, activeAdapter: native, roster: [{ connection: { id: 'connection-1' }, agents: [{ agent: { agentId: 'atlas' }, sessions: [{ key: props.route.params.sessionKey, source: 'native', canContinue: false, continuationBlockedReason: reason }] }] }] };
-    render(<ThreadScreen {...props} />);
-    const footer = mockThreadViewProps?.readOnlyFooter as React.ReactElement<any>;
-    expect(footer.props.children[0].props.children).toBe(hint);
-    expect(footer.props.children[1].props.disabled).toBe(reason === 'project_unavailable');
-    await act(async () => footer.props.children[2].props.onPress());
-    expect(native.loadSession).toHaveBeenCalledWith(props.route.params.sessionKey);
+    const roster = blockedNativeRoster(props.route.params.sessionKey, { canContinue: false, continuationBlockedReason: reason });
+    mockConnections = { ...mockConnections, activeAdapter: native, roster };
+    // The Bridge publishes the same blocked state before answering the recheck.
+    mockRuntime.getSnapshot.mockReturnValue({ activeConnectionId: 'connection-1', activeAdapter: native, roster } as any);
+    try {
+      render(<ThreadScreen {...props} />);
+      expect(readOnlyFooterPart('native-session-read-only-hint')?.props.children).toBe(hint);
+      const recheck = readOnlyFooterPart('native-session-recheck');
+      if (reason === 'project_unavailable') {
+        expect(readOnlyFooterPart('native-session-copy')).toBeUndefined();
+        expect(recheck?.props).toMatchObject({ label: recheckLabel, variant: 'primary' });
+      } else {
+        expect(readOnlyFooterPart('native-session-copy')?.props).toMatchObject({ label: 'Continue in a copy', variant: 'primary' });
+        expect(recheck?.props).toMatchObject({ label: recheckLabel, variant: 'secondary' });
+      }
+      await act(async () => recheck?.props.onPress());
+      expect(native.loadSession).toHaveBeenCalledWith(props.route.params.sessionKey);
+      expect(readOnlyFooterPart('native-session-read-only-hint')?.props.children).toBe(reason === 'in_use'
+        ? 'It’s still open on your computer. Archive or exit it there, then try again.'
+        : hint);
+      expect(readOnlyFooterParts().some(child => child.props.tone === 'bad')).toBe(false);
+    } finally {
+      mockRuntime.getSnapshot.mockReturnValue({ activeConnectionId: 'connection-1' } as any);
+    }
+  });
+
+  it('reports a native conversation as still open only while the check that found it still applies', async () => {
+    const props = createNavigationProps();
+    const native = { ...adapter, capabilities: CAPABILITY_MATRIX['claude-code'], state: 'ready', loadSession: jest.fn().mockResolvedValue({ messages: [] }) };
+    const inUse = blockedNativeRoster(props.route.params.sessionKey, { canContinue: false, continuationBlockedReason: 'in_use' });
+    const regularHint = 'This conversation is still open on your computer. Archive or exit it there to keep chatting here.';
+    const stillOpenHint = 'It’s still open on your computer. Archive or exit it there, then try again.';
+    mockConnections = { ...mockConnections, activeAdapter: native, roster: inUse };
+    // The computer released it: the screen may still show the old roster for a moment, but must not claim it is open.
+    mockRuntime.getSnapshot.mockReturnValue({ activeConnectionId: 'connection-1', activeAdapter: native, roster: blockedNativeRoster(props.route.params.sessionKey, { canContinue: true }) } as any);
+    try {
+      const view = render(<ThreadScreen {...props} />);
+      await act(async () => readOnlyFooterPart('native-session-recheck')?.props.onPress());
+      expect(readOnlyFooterPart('native-session-read-only-hint')?.props.children).toBe(regularHint);
+
+      mockRuntime.getSnapshot.mockReturnValue({ activeConnectionId: 'connection-1', activeAdapter: native, roster: inUse } as any);
+      await act(async () => readOnlyFooterPart('native-session-recheck')?.props.onPress());
+      expect(readOnlyFooterPart('native-session-read-only-hint')?.props.children).toBe(stillOpenHint);
+
+      // A later change of state retires the result of the earlier check.
+      mockConnections = { ...mockConnections, roster: blockedNativeRoster(props.route.params.sessionKey, { canContinue: false, continuationBlockedReason: 'ownership_unknown' }) };
+      view.rerender(<ThreadScreen {...props} />);
+      mockConnections = { ...mockConnections, roster: inUse };
+      view.rerender(<ThreadScreen {...props} />);
+      expect(readOnlyFooterPart('native-session-read-only-hint')?.props.children).toBe(regularHint);
+    } finally {
+      mockRuntime.getSnapshot.mockReturnValue({ activeConnectionId: 'connection-1' } as any);
+    }
   });
 
   it('discards a session this app just created when the reader leaves it without writing anything', async () => {

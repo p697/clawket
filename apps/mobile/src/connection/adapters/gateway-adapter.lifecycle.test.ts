@@ -913,3 +913,40 @@ describe('complete and ordered roster snapshots', () => {
     expect(snapshots).toEqual([200]);
   });
 });
+
+it.each([['openclaw', true], ['openclaw', false], ['hermes', true]] as const)('handles delivery directives only on artifact-capable OpenClaw (%s, %s)', (backend, supported) => {
+  const fake = new LifecycleGateway();
+  (fake as any).supportsMethod = (method: string) => supported && method.startsWith('clawket.artifacts.');
+  const options = { gateway: gateway(fake), historyCache: null, bridgeCapabilityMode: 'legacy' as const };
+  const adapter = backend === 'openclaw' ? new OpenClawAdapter(connection('openclaw', 'media'), options) : new HermesAdapter(connection('hermes', 'media'), options);
+  const updates: SessionUpdate[] = []; adapter.on('update', update => updates.push(update));
+  fake.emit('connection', { state: 'ready' });
+  fake.emit('chatDelta', { sessionKey: 'agent:main:test', runId: 'r', text: 'MEDIA: /tmp/image.png' });
+  fake.emit('chatFinal', { sessionKey: 'agent:main:test', runId: 'r', message: { content: 'MEDIA: /tmp/image.png' } });
+  const expected = backend === 'openclaw' && supported ? '' : 'MEDIA: /tmp/image.png';
+  expect(updates.find(update => update.type === 'agent_message_chunk')).toMatchObject({ text: expected });
+  expect(updates.find(update => update.type === 'run_finished')).toMatchObject({ message: { content: expected } });
+  adapter.disconnect();
+});
+
+it.each([false, true])('rebuild retries preserve native artifacts and fence a replaced connection (replace=%s)', async replace => {
+  jest.useFakeTimers();
+  const fake = new LifecycleGateway();
+  const adapter = new OpenClawAdapter(connection('openclaw', 'retry-media'), { gateway: gateway(fake), historyCache: null, bridgeCapabilityMode: 'legacy' });
+  let reads = 0;
+  fake.requestHandler = method => {
+    if (method !== 'chat.history') return {};
+    if (++reads === 1) throw new Error('[UNAVAILABLE] session history is rebuilding; retry shortly');
+    return { messages: [{ id: 'managed', role: 'assistant', content: [{ type: 'image', artifactId: 'confirmed', mimeType: 'image/png' }] }] };
+  };
+  fake.emit('connection', { state: 'ready' });
+  try {
+    const pending = adapter.loadSession('agent:main:main').catch(error => error);
+    await jest.advanceTimersByTimeAsync(0);
+    if (replace) { fake.emit('connection', { state: 'reconnecting' }); fake.emit('connection', { state: 'ready' }); }
+    await jest.runAllTimersAsync();
+    const result = await pending;
+    if (replace) { expect(result).toBeInstanceOf(Error); expect(reads).toBe(1); }
+    else { expect(result.messages[0].attachments[0].artifactId).toBe('confirmed'); expect(reads).toBe(2); }
+  } finally { adapter.dispose(); jest.useRealTimers(); }
+});

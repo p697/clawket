@@ -49,7 +49,7 @@
 6. 底部一个文字链接：「还没有 Agent？」/ `No agent yet?` → 展开 OpenClaw / Hermes / YouMind 三个文字键，各自直接打开官网首页（`openclaw.ai`、`hermes-agent.nousresearch.com`、`youmind.com`），不进安装/快速上手文档。埋点沿用 `onboarding_docs_opened{ backend }`。
 7. Preview 环境（Debug 模式）额外显示第三个选择行「Local model」（2026-09-11 授权的 `local-model` 后端，见 `15-local-model.md`）。其步骤 01 没有「发给我的 Agent」路径（底部也不出现切换键）：标题「拿到配对码」下用 `SegmentedTabs` 提供 llama.cpp / Ollama / Other（OpenAI 兼容）三选一，作为「支持哪些模型服务」的自解释列表；一行灰字说明该服务需先运行，命令块随选择带上 `--engine` / `--base-url`（Ollama 11434、其他 1234；llama.cpp 用 CLI 默认 8080）。「还没有 Agent？」不列出 Local model——它不是要安装的产品，而是用户已在运行的服务；`bridge_offline` 的文档动作指向 `15-local-model.md`。
 
-**状态**：连接中（按钮 loading，副标题「正在通过 Relay 连接…」/ `Connecting through Relay…`，三段进度：已连上 Relay → 等待 Bridge → 就绪）；失败（错误码文案 + 动作）；Preview 环境提示（Debug 模式下显示黄色「Preview」标签，沿用现有环境校验）。
+**状态**：连接中（2026-09-30 负责人要求：提交配对码、扫码或打开配对链接之后，上面的复制按钮、已用掉的配对码和看起来还能点的「连接」都没有意义了）——页头以下整页换成连接舞台：与猫猫等待场景一起在 `Motion.loadingGrace` 后淡入（更快的失败只会看到「连接」按钮里的转圈），猫下方用 title 半粗体大字写「正在连接」，不显示传输阶段；已配对的连接掉线时保持「离线 · 正在重连」和一个「重新连接」文字键，直到这次配对结束。表单留在舞台下面（锁定、对读屏隐藏），失败时舞台淡出，回到原样的表单和保留的错误条；返回键离开引导；成功时猫咪笑眼淡出、立即打开新 Agent，不为动画推迟跳转。失败（错误码文案 + 动作）；Preview 环境提示（Debug 模式下显示黄色「Preview」标签，沿用现有环境校验）。
 
 **成功**：保存连接 → 跳花名册 → 连接就绪 → 若应弹自动付费墙（`06` §3 状态机）则先弹，关闭后再自动打开 main 线程；不应弹则直接打开 main 线程。
 

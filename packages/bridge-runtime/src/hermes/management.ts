@@ -109,7 +109,7 @@ export abstract class HermesManagementMethods {
   }
 
   getBridgeCapabilities(): string[] {
-    const capabilities: string[] = ['bridge.session-files.v1', ...HERMES_BRIDGE_CAPABILITIES, ...(this.hermesRunCapabilities ?? [])];
+    const capabilities: string[] = ['bridge.session-files.v1', 'bridge.artifacts.v1', ...HERMES_BRIDGE_CAPABILITIES, ...(this.hermesRunCapabilities ?? [])];
     try {
       const installer = join(this.hermesSourcePath, 'tools', 'skills_hub_install.py');
       if (statSync(installer).size <= 512_000 && /^def _check_install_target\(/m.test(readFileSync(installer, 'utf8'))

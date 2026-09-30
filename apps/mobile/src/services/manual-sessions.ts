@@ -29,7 +29,7 @@ async function save(next: readonly Entry[]): Promise<void> {
   entries = next; listeners.forEach((listener) => listener());
 }
 export const ManualSessions = {
-  create: (adapter: AgentAdapter, agentId: string, operationId = 'manual', options?: { fromSession?: string; projectId?: string }): Promise<SessionDescriptor> => {
+  create: (adapter: AgentAdapter, agentId: string, operationId = 'manual', options?: { fromSession?: string; projectId?: string; title?: string }): Promise<SessionDescriptor> => {
     if (!adapter.capabilities.sessionCreate || !adapter.createSession) return Promise.reject(new Error('Session creation unavailable'));
     const scoped = creations.get(adapter) ?? new Map<string, Creation>();
     creations.set(adapter, scoped);

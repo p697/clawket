@@ -203,7 +203,7 @@ export function mapAdapterChatMessage(
   }
 
   const imageUris = message.attachments
-    ?.filter((attachment) => attachment.type === 'image')
+    ?.filter((attachment) => attachment.type === 'image' && !attachment.artifactId)
     .map((attachment) => {
       if (attachment.uri) return attachment.uri;
       if (!attachment.content) return undefined;
@@ -213,7 +213,7 @@ export function mapAdapterChatMessage(
     })
     .filter((uri): uri is string => Boolean(uri));
   const fileAttachments = message.attachments
-    ?.filter((attachment) => attachment.type === 'file')
+    ?.filter((attachment) => attachment.type === 'file' && !attachment.artifactId)
     .map((attachment) => {
       const fileName = attachment.name?.trim();
       const uri = attachment.uri?.trim();
@@ -234,6 +234,7 @@ export function mapAdapterChatMessage(
     userSkill: message.skill,
     idempotencyKey: message.idempotencyKey,
     timestampMs: message.timestampMs,
+    ...(message.attachments?.some(attachment => attachment.artifactId) ? { artifactAttachments: message.attachments.filter(attachment => Boolean(attachment.artifactId)) } : {}),
     imageUris: imageUris && imageUris.length > 0 ? imageUris : undefined,
     fileAttachments: fileAttachments && fileAttachments.length > 0
       ? fileAttachments
@@ -400,8 +401,9 @@ export function mapAdapterSessionUpdate(
       const isSilent = update.message
         ? isAssistantSilentReplyMessage({ role: 'assistant', text: update.message.content })
         : false;
-      const finalMessage = update.message && !isSilent && update.message.content.trim()
+      const finalMessage = update.message && !isSilent && (update.message.content.trim() || update.message.attachments?.length)
         ? {
+            ...mapAdapterChatMessage({ id: `final_${update.runId}`, role: 'assistant', text: update.message.content, attachments: update.message.attachments }, translate),
             id: `final_${update.runId}`,
             role: 'assistant' as const,
             text: update.message.content,
