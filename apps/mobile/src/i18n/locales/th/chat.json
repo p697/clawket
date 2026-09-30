@@ -179,7 +179,6 @@
   "Expired": "หมดอายุ",
   "Start a conversation with {{name}}": "เริ่มบทสนทนากับ {{name}}",
   "{{count}} attachments": "ไฟล์แนบ {{count}} รายการ",
-  "{{model}} · {{percent}}% left": "{{model}} · เหลือ {{percent}}%",
   "Bridge is not running on your computer": "Bridge ไม่ได้ทำงานอยู่บนคอมพิวเตอร์ของคุณ",
   "Pairing required": "ต้องจับคู่ก่อน",
   "Agent is not responding": "Agent ไม่ตอบสนอง",
@@ -471,5 +470,6 @@
   "View logs": "ดูบันทึก",
   "Run again": "รันอีกครั้ง",
   "Run started": "เริ่มรันแล้ว",
-  "Could not start the run": "เริ่มรันไม่ได้"
+  "Could not start the run": "เริ่มรันไม่ได้",
+  "Project": "โปรเจกต์"
 }

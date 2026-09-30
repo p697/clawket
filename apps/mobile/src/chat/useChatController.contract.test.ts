@@ -1821,6 +1821,60 @@ describe('useChatController contract', () => {
     expect(result.current.listData.map(message => message.text)).toEqual(['world', '', 'Hello']);
   });
 
+  it('stops labelling the turn with a tool once that tool settles', async () => {
+    const adapter = createAdapter('ready');
+    const { result } = renderHook(() =>
+      useChatController({
+        adapter: adapter as any,
+        debugMode: false,
+        showAgentAvatar: true,
+      } as any),
+    );
+    const eventParams = jest.mocked(useAdapterChatEvents).mock.calls.at(-1)?.[0];
+    const tool = (id: string, toolName: string) => ({
+      type: 'tool_call' as const,
+      sessionKey: 'agent:main:main',
+      runId: 'run-settle',
+      toolCallId: id,
+      activeRunId: 'run-settle',
+      isSending: true as const,
+      merge: false as const,
+      message: { id: `toolcall_${id}`, role: 'tool' as const, text: '', toolName, toolStatus: 'running' as const },
+    });
+    const settle = (id: string) => ({
+      type: 'tool_call_update' as const,
+      sessionKey: 'agent:main:main',
+      runId: 'run-settle',
+      toolCallId: id,
+      activeRunId: 'run-settle',
+      isSending: true as const,
+      merge: true as const,
+      message: { id: `toolcall_${id}`, role: 'tool' as const, text: '', toolStatus: 'success' as const, toolFinishedAt: 200 },
+    });
+
+    await act(async () => {
+      eventParams!.onState?.('ready');
+      eventParams!.onUpdate?.({
+        type: 'run_started',
+        sessionKey: 'agent:main:main',
+        runId: 'run-settle',
+        activeRunId: 'run-settle',
+        isSending: true,
+        startedAtMs: 100,
+      });
+      eventParams!.onUpdate?.(tool('read-1', 'read'));
+      eventParams!.onUpdate?.(tool('exec-1', 'exec'));
+    });
+    expect(result.current.activityLabel).toBe('Running command');
+
+    await act(async () => { eventParams!.onUpdate?.(settle('exec-1')); });
+    expect(result.current.activityLabel).toBe('Reading file');
+
+    await act(async () => { eventParams!.onUpdate?.(settle('read-1')); });
+    expect(result.current.isSending).toBe(true);
+    expect(result.current.activityLabel).toBeNull();
+  });
+
   it('handles cancelled and errored adapter runs without leaving sending state stuck', async () => {
     const adapter = createAdapter('ready');
     const { result } = renderHook(() =>

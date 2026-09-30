@@ -64,6 +64,7 @@ export abstract class BaseWebSocketTransport {
 
   private currentState: TransportState = 'idle';
   private reconnectAttempts = 0;
+  private unhealthyBackendRetries = 0;
   private attemptId = 0;
   private opening = false;
   private manuallyClosed = false;
@@ -146,8 +147,24 @@ export abstract class BaseWebSocketTransport {
     this.openConnection();
   }
 
+  /**
+   * The peer answered but reported its backend unhealthy. Reconnecting at once
+   * only repeats that answer at network speed, so wait out a delay that grows
+   * until a handshake completes. It is tracked apart from the ordinary backoff,
+   * which a direct socket resets on its first (unhealthy) health frame.
+   */
+  public reconnectAfterUnhealthyBackend(reason: string): void {
+    this.unhealthyBackendRetries += 1;
+    const delay = Math.min(
+      this.reconnectMaxMs,
+      this.reconnectBaseMs * Math.pow(this.reconnectFactor, this.unhealthyBackendRetries - 1),
+    );
+    this.forceReconnect(undefined, reason, delay);
+  }
+
   public disconnect(code?: number, reason?: string): void {
     this.manuallyClosed = true;
+    this.unhealthyBackendRetries = 0;
     this.attemptId += 1;
     this.clearReconnectTimer();
     this.clearOpenTimer();
@@ -178,6 +195,7 @@ export abstract class BaseWebSocketTransport {
   protected setReady(resetBackoff: boolean): void {
     if (!this.isSocketOpen) return;
     if (resetBackoff) this.resetReconnectBackoff();
+    this.unhealthyBackendRetries = 0;
     this.setState('ready');
   }
 

@@ -136,7 +136,7 @@ Grok Bot 清爽的根源不是留白，而是**每个界面只有两层字**：�
 | 页面 | 允许的两档 | 例外 |
 |---|---|---|
 | 花名册 | 名字（body 600）+ 预览 / 时间（secondary / caption） | 徽标数字 |
-| 线程 | 消息正文（body）+ 系统事件 / 时间（secondary / caption） | 头部胶囊的一行灰字（模型 · 上下文剩余）是产品负责人指定保留的唯一一处头部辅文字 |
+| 线程 | 消息正文（body）+ 系统事件 / 时间（secondary / caption） | 头部胶囊名字下的一行是唯一一处头部辅文字：空闲时强调色「在线」、工作时强调色状态句、等你时琥珀色（A+，负责人 2026-09-30 决定；模型与上下文剩余移到模型面板） |
 | 会话面板 | 标题（secondary 600）+ 预览 / 时间（caption），比花名册小一档，40pt 头像位定尺度；未读 / 需要你用 6pt `StatusSize.dot` | 头部 Agent 胶囊名字（body 600）、chip 文字（secondary）与数量（caption `inkTertiary`） |
 | Agent 设置 / 账户设置 | 行标题（body）+ 尾值（secondary） | 页面标题（title）、身份卡副标题一行 |
 | 技能管理（2026-09-13 负责人确认） | 技能名（body 600）+ 一行用途（secondary）+ 独立中性开关 | 88pt 最小行高；缺失项可增加一行 warning 图标/说明；无 Active 重复尾值，发现移至右上角 Compass。 |

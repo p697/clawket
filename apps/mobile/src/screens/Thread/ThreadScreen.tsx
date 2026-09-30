@@ -71,9 +71,11 @@ import {
   areThreadRunSeedsEqual,
   copiedSessionTitle,
   deriveThreadContentState,
+  displayProjectPath,
   formatThreadLocalTime,
   isThreadErrorCode,
   loadThreadCronRunSeeds,
+  resolveContextRemainingPercent,
   resolveThreadErrorCode,
   resolveThreadErrorDetail,
   type ThreadErrorInput,
@@ -371,6 +373,13 @@ function ThreadScreenContent({
     else controller.composerRef.current?.focus();
   }, [route.params.shortcut, controller.draftReady, controller.sessionKey, sessionKey, routeIsActive, locked, sessionPreview, capabilities.skills, capabilities.attachments, navigation, controller.composerRef, controller.voiceInputSupported, controller.canAddMoreImages, controller.takePhoto, controller.pickImage, t]);
   const currentSession = controller.sessions.find((session) => session.key === sessionKey);
+  // Context left and the project sit in the model sheet (A+ composer, 2026-09-30).
+  const contextRemainingPercent = resolveContextRemainingPercent(
+    currentSession?.totalTokensFresh === false ? undefined : currentSession?.totalTokens,
+    currentSession?.contextTokens,
+  );
+  const sessionProjectPath = rosterSession?.project?.path?.trim();
+  const sessionProject = sessionProjectPath ? { label: displayProjectPath(sessionProjectPath), path: sessionProjectPath } : null;
   const lastReadRevisionRef = useRef<string | null>(null);
   // Read watermarks follow the same human-activity clock as roster unread, so a
   // heartbeat or metadata patch neither re-flags this thread nor re-marks it.
@@ -964,14 +973,9 @@ function ThreadScreenContent({
         agentAvatarUrl={agentAvatarUrl}
         agentPlatform={agentPlatform}
         sessionTitle={currentSession?.title ?? currentSession?.label}
-        projectPath={rosterSession?.project?.path}
         isMainSession={mainConversation}
         model={controller.currentModelHeaderLabel}
         modelDisplayName={controller.currentModelDisplayName}
-        contextUsed={currentSession?.totalTokensFresh === false
-          ? undefined
-          : currentSession?.totalTokens}
-        contextWindow={currentSession?.contextTokens}
         activityLabel={controller.activityLabel}
         interactionAttention={rosterSession ? rosterSession.attention : currentSession?.attention}
         capabilities={timelineCapabilities}
@@ -1097,7 +1101,6 @@ function ThreadScreenContent({
         showSlashSuggestions={controller.showSlashSuggestions}
         onSelectSlashCommand={controller.onSelectSlashCommand}
         onDismissSlashSuggestions={controller.dismissSlashSuggestions}
-        runtimeSettings={controller.hasRuntimeSettings}
         onReviewRuntimeSettings={controller.runtimeSettingsUnconfirmed && !controller.runtimeSettingsBusy ? () => {
           controller.composerRef.current?.blur();
           Keyboard.dismiss();
@@ -1108,9 +1111,6 @@ function ThreadScreenContent({
         } : undefined}
         permissionMode={controller.permissions?.mode}
         onOpenPermissions={() => { Keyboard.dismiss(); controller.openPermissionPicker(); }}
-        thinkingLevel={controller.thinkingLevel}
-        thinkingLevelOptions={controller.thinkingLevelOptions}
-        onSelectThinkingLevel={controller.onSelectStaticThinkLevel}
         onResolveApproval={controller.resolveApproval}
       />
       <RunInputSheet visible={Boolean(runInputId) && !sessionPreview} scope={`${connectionId}:${agentId}:${sessionKey}`}
@@ -1186,6 +1186,15 @@ function ThreadScreenContent({
           onClose: () => controller.setModelPickerVisible(false),
           onRetry: controller.retryModelPickerLoad,
           onSelect: controller.onSelectModel,
+          session: {
+            thinking: controller.thinkingLevel && controller.thinkingLevelOptions.length ? {
+              current: controller.thinkingLevel,
+              options: controller.thinkingLevelOptions,
+              onSelect: controller.onSelectStaticThinkLevel,
+            } : undefined,
+            contextRemainingPercent,
+            project: sessionProject,
+          },
         }}
         runtimeSettings={controller.hasRuntimeSettings ? {
           visible: !sessionPreview && (controller.modelPickerVisible || controller.permissionPickerVisible),
@@ -1196,6 +1205,7 @@ function ThreadScreenContent({
           onClose: () => { controller.setModelPickerVisible(false); controller.setPermissionPickerVisible(false); },
           onSelectThinking: controller.onSelectStaticThinkLevel,
           onSelectFastMode: controller.onSelectFastMode, onSelectPermissions: controller.onSelectPermissions,
+          contextRemainingPercent, project: sessionProject,
         } : undefined}
         commandPicker={{
           visible: !sessionPreview && controller.commandPickerVisible,
@@ -1339,11 +1349,5 @@ export function createThreadCopy(t: TFunction): ThreadCopy {
       : status,
     logs: t('Logs', { ns: 'common' }),
     chooseModel: t('Models', { ns: 'settings' }),
-    formatModelContext: (model, remainingPercent) => t('{{model}} · {{percent}}% left', {
-      ns: 'chat',
-      model,
-      percent: remainingPercent,
-    }),
-    formatThinkingLevel: (level) => t(`thinking_${level}`, { ns: 'chat' }),
   };
 }

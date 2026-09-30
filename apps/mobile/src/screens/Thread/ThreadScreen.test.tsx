@@ -799,14 +799,15 @@ describe('ThreadScreen connection container', () => {
       agentName: 'Controller Atlas',
       sessionKey: 'agent:atlas:main',
       model: 'Sonnet',
-      contextUsed: 46,
-      contextWindow: 100,
       state: { kind: 'ready' },
       capabilities: adapter.capabilities,
       topInset: 24,
       bottomInset: 16,
       compactionNotice: 'Compacting context...',
     });
+    // Context left moved from the header into the model sheet (A+ composer).
+    expect(mockThreadViewProps).not.toHaveProperty('contextUsed');
+    expect(mockThreadOverlayProps?.modelPicker.session?.contextRemainingPercent).toBe(54);
     expect(mockThreadViewProps?.composerRef).toBe(mockController.composerRef);
     expect(mockThreadViewProps?.onPasteFiles).toBe(mockController.onPasteFiles);
     expect(mockThreadViewProps?.onPasteFailed).toBe(mockController.onPasteFailed);

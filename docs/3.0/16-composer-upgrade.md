@@ -14,6 +14,14 @@ The owner authorized a first complete refinement of composer quality, long-form 
 
 Reference: [Keyboard Controller](https://github.com/kirillzyusko/react-native-keyboard-controller/blob/main/docs/docs/api/components/keyboard-sticky-view/index.mdx) documents the distinction between moving an accessory and resizing a container. Implementation was checked against the installed 1.20.7 source; newer chat-scroll APIs were not assumed available. The third-line expansion behavior is the owner's explicit Telegram reference.
 
+## A+ single-row composer — 2026-10-01
+
+Owner decision 2026-09-30 (A+ chat design, step 3) supersedes the two-row card and the 40-point action recipe above:
+
+- One row: a 44-point add circle, a capsule (radius `xl`, surface or glass) holding pending attachments, the draft and the model chip, and a 44-point send / voice / stop circle. Circles and capsule share the bottom line, so a growing draft rises above them. Send is the user's own bubble color; Stop stays ink; the circles use the capsule's surface or glass. Full-screen editing keeps its header and bottom toolbar, and the native input keeps one parent chain across both modes.
+- The model chip shows the model's icon and short name (`shortModelLabel`; Claude ids read as the product) on a faint tint of the user's bubble color, and only the icon while a draft is written. It opens the model sheet, which now also holds thinking depth, context remaining and the project path (the runtime settings overview for Codex / Claude Code adds permissions, context and project rows). The thinking chip left the composer; the permissions shield appears in the capsule only for full access or an unknown mode.
+- The Thread header's idle subtitle is Online in the accent; context remaining and the project path no longer appear there.
+
 ## Immediate send feedback — 2026-09-16
 
 The owner requested responsive sending while retaining tunnel reliability. Inspection confirmed a shared OpenClaw/Hermes controller path across Relay, local, Tailscale, Cloudflare and custom transports: system network lookup → reuse health confirmed within 3 seconds or probe → attachment preparation → local bubble and prompt. The fast probe is 1.5 seconds; a failed Gateway probe reconnects and waits at least 8 seconds for readiness. This made local feedback depend on network latency. A preflight improves recovery but cannot guarantee the subsequent write succeeds or its acknowledgement arrives.

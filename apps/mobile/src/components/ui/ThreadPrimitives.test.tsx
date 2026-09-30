@@ -445,8 +445,14 @@ describe.each(['light', 'dark'] as const)('%s thread primitives', (scheme) => {
     );
     const inputShell = flattenStyle(result.getByTestId('composer-input-shell').props.style);
     expect(inputShell).toMatchObject({ minHeight: ControlSize.pill });
-    expect(flattenStyle(result.getByTestId('composer').props.style)).toMatchObject({
-      borderRadius: Radius.bubble, backgroundColor: theme.colors.surface,
+    // One row (A+): add circle, the draft's capsule, the send circle.
+    expect(flattenStyle(result.getByTestId('composer-row').props.style)).toMatchObject({ flexDirection: 'row', alignItems: 'flex-end' });
+    expect(flattenStyle(result.getByTestId('composer').props.style).backgroundColor).toBeUndefined();
+    expect(flattenStyle(result.getByTestId('composer-capsule').props.style)).toMatchObject({
+      borderRadius: Radius.xl, backgroundColor: theme.colors.surface, minHeight: ControlSize.floatingButton,
+    });
+    expect(flattenStyle(result.getByTestId('composer-add-surface').props.style)).toMatchObject({
+      width: ControlSize.floatingButton, backgroundColor: theme.colors.surface,
     });
     const input = result.getByTestId('composer-input');
     expect(input.type).toBe('PasteInput');
@@ -468,8 +474,9 @@ describe.each(['light', 'dark'] as const)('%s thread primitives', (scheme) => {
     expect(onPasteFailed).toHaveBeenCalledTimes(1);
     expect(flattenStyle(result.getByTestId('composer-add').props.style).width)
       .toBe(ControlSize.floatingButton);
+    // Send wears the user's own bubble color.
     expect(flattenStyle(result.getByTestId('composer-primary-surface').props.style).backgroundColor)
-      .toBe(theme.colors.ink);
+      .toBe(chatWallpaperPalettes.iceBlue[scheme].outgoing);
     expect(result.UNSAFE_getByType(ArrowUp)).toBeTruthy();
     fireEvent.press(result.getByTestId('composer-primary'));
     expect(send).toHaveBeenCalledTimes(1);
@@ -513,12 +520,12 @@ describe.each(['light', 'dark'] as const)('%s thread primitives', (scheme) => {
     const stopAction = view.getByTestId('composer-stop');
     expect(stopAction.props.accessibilityLabel).toBe('Stop');
     expect(flattenStyle(view.getByTestId('composer-stop-surface').props.style).backgroundColor)
-      .toBe(theme.colors.canvas);
+      .toBe(theme.colors.surface);
     const primary = view.getByTestId('composer-primary');
     expect(primary.props.accessibilityLabel).toBe('Send after this reply');
     expect(primary.props.accessibilityState).toEqual({ disabled: false });
     expect(flattenStyle(view.getByTestId('composer-primary-surface').props.style).backgroundColor)
-      .toBe(theme.colors.ink);
+      .toBe(chatWallpaperPalettes.iceBlue[scheme].outgoing);
     expect(view.UNSAFE_getByType(ArrowUp)).toBeTruthy();
     expect(view.UNSAFE_getByType(Square)).toBeTruthy();
     fireEvent.press(primary);
@@ -537,7 +544,7 @@ describe.each(['light', 'dark'] as const)('%s thread primitives', (scheme) => {
     expect(view.getByTestId('composer-primary').props.accessibilityLabel).toBe('Send after this reply');
   });
 
-  it('preserves the model toolbar and mic target through capture and finalization', () => {
+  it('keeps the mic target through capture and finalization and returns the model chip after it', () => {
     const onVoiceStart = jest.fn(), onVoiceStop = jest.fn(), onVoiceCancel = jest.fn();
     const labels = { add: 'Add', voice: 'Voice', stopVoice: 'Stop voice input', send: 'Send', stop: 'Stop' };
     const props = { testID: 'composer', placeholder: 'Ask', accessibilityLabels: labels,
@@ -551,16 +558,40 @@ describe.each(['light', 'dark'] as const)('%s thread primitives', (scheme) => {
     expect(view.queryByTestId('composer-voice-stop')).toBeNull();
     fireEvent(view.getByTestId('composer-voice'), 'pressOut'); fireEvent.press(view.getByTestId('composer-voice'));
     expect(onVoiceStart).toHaveBeenCalledTimes(1); expect(onVoiceStop).not.toHaveBeenCalled();
-    expect(view.getByTestId('model-picker')).toBeTruthy();
+    // The waveform owns the capsule while dictating; the chip steps aside.
+    expect(view.queryByTestId('model-picker')).toBeNull();
     expect(view.getByTestId('composer-voice').props.accessibilityState.busy).toBe(false);
     expect(view.getByTestId('composer-input', { includeHiddenElements: true }).props.editable).toBe(false);
-    expect(view.getByTestId('model-picker')).toBeTruthy();
     fireEvent.press(view.getByTestId('composer-voice-stop')); expect(onVoiceStop).toHaveBeenCalledWith(false);
     fireEvent.press(view.getByTestId('composer-voice-cancel')); expect(onVoiceCancel).toHaveBeenCalledTimes(1);
     view.rerender(<Composer {...props} voiceState="transcribing" />);
     expect(view.getByTestId('composer-voice').props.accessibilityState.busy).toBe(true);
-    expect(view.getByTestId('model-picker')).toBeTruthy();
     expect(view.queryByTestId('composer-primary')).toBeNull();
+    view.rerender(<Composer {...props} />);
+    expect(view.getByTestId('model-picker')).toBeTruthy();
+    expect(view.getByTestId('composer-accessory')).toBeTruthy();
+  });
+
+  it('tells a sizing accessory the room left beside the whole placeholder', () => {
+    const accessory = jest.fn(({ drafting, room }: { drafting: boolean; room: number | null }) => (
+      <Text testID="chip">{`${drafting}:${room}`}</Text>
+    ));
+    const props = { testID: 'composer', placeholder: 'Message', accessibilityLabels: { add: 'Add', voice: 'Voice', send: 'Send', stop: 'Stop' },
+      onChangeText: jest.fn(), onSend: jest.fn(), accessory };
+    const view = render(<Composer {...props} value="" />);
+    // Unmeasured, the chip keeps its own width.
+    expect(view.getByTestId('chip').props.children).toBe('false:null');
+    fireEvent(view.getByTestId('composer-input-shell'), 'layout', { nativeEvent: { layout: { width: 220, height: 40 } } });
+    const measurement = () => view.getByTestId('composer-placeholder-measurement', { includeHiddenElements: true });
+    fireEvent(measurement(), 'textLayout', { nativeEvent: { lines: [{ width: 120.4 }] } });
+    expect(measurement().props.children).toBe('Message');
+    // The shell's two paddings and the whole placeholder come first.
+    expect(view.getByTestId('chip').props.children).toBe(`false:${220 - Space.sm * 2 - 121}`);
+    view.rerender(<Composer {...props} value="Hi" />);
+    expect(view.getByTestId('chip').props.children).toMatch(/^true:/);
+    // Full-screen editing has room: its toolbar gets the full chip.
+    view.rerender(<Composer {...props} value="Hi" expanded onExpandedChange={jest.fn()} />);
+    expect(view.getByTestId('chip').props.children).toBe('false:null');
   });
 
   it('limits input hold-to-talk to an empty unfocused editor', () => {
@@ -606,9 +637,13 @@ describe.each(['light', 'dark'] as const)('%s thread primitives', (scheme) => {
     expect(view.getByTestId('composer').props.__config).toBeUndefined();
     expect(view.getByTestId('composer-input-shell').props.__config).toBeUndefined();
     fireEvent(view.getByTestId('composer-input'), 'focus', {});
-    const capture = view.getByTestId('composer-toolbar').props.__config.onMoveShouldSetPanResponderCapture;
+    // The circles beside the capsule catch a downward swipe; the draft keeps its own touches.
+    expect(view.getByTestId('composer-capsule').props.__config).toBeUndefined();
+    const capture = view.getByTestId('composer-trailing').props.__config.onMoveShouldSetPanResponderCapture;
     expect(capture({}, { dx: 0, dy: 24, numberActiveTouches: 1 })).toBe(true);
+    expect(view.getByTestId('composer-leading').props.__config.onMoveShouldSetPanResponderCapture).toBe(capture);
     view.rerender(<Composer {...props} expanded />);
+    expect(view.queryByTestId('composer-trailing')).toBeNull();
     expect(view.getByTestId('composer-toolbar').props.__config).toBeUndefined();
   });
 
@@ -971,15 +1006,18 @@ describe('long-form composer', () => {
 describe.each(['light', 'dark'] as const)('%s glass chrome over a wallpaper', (scheme) => {
   beforeEach(() => { mockScheme = scheme; });
 
-  it('floats the compact composer card on translucent chrome and keeps full-screen editing on the canvas', () => {
+  it('floats the compact capsule and circles on translucent chrome and keeps full-screen editing on the canvas', () => {
     const theme = activeTheme(scheme);
     const glass = createChatGlassStyle(theme);
     const labels = { add: 'Add', voice: 'Voice', send: 'Send', stop: 'Stop' };
     const props = { testID: 'composer', placeholder: 'Ask Main', accessibilityLabels: labels, onChangeText: jest.fn(), onSend: jest.fn() };
-    const result = render(<Composer {...props} value="Draft" appearance="glass" />);
-    expect(flattenStyle(result.getByTestId('composer').props.style)).toMatchObject({
-      borderRadius: Radius.bubble, backgroundColor: glass.backgroundColor,
+    const result = render(<Composer {...props} value="Draft" appearance="glass" onAddPress={jest.fn()} />);
+    expect(flattenStyle(result.getByTestId('composer-capsule').props.style)).toMatchObject({
+      borderRadius: Radius.xl, backgroundColor: glass.backgroundColor,
       borderColor: glass.borderColor, borderWidth: BorderWidth.hairline,
+    });
+    expect(flattenStyle(result.getByTestId('composer-add-surface').props.style)).toMatchObject({
+      backgroundColor: glass.backgroundColor, borderColor: glass.borderColor, borderWidth: BorderWidth.hairline,
     });
     result.rerender(<Composer {...props} value="Draft" appearance="glass" expanded onExpandedChange={jest.fn()} />);
     expect(flattenStyle(result.getByTestId('composer').props.style).backgroundColor).toBe(theme.colors.canvas);

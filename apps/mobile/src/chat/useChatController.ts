@@ -97,6 +97,7 @@ import {
 import {
   formatToolActivity,
   formatToolOneLinerLocalized,
+  unwrapToolCall,
 } from "../utils/tool-display";
 import { useChatVoiceInput } from "./useChatVoiceInput";
 import { useChatModelPicker } from "./useChatModelPicker";
@@ -1978,7 +1979,7 @@ export function useChatController({
         if (!acceptRun(update.sessionKey, update.runId)) return;
         if (chatToolMessagesRef.current.some(message => sameLiveToolCall(message, update.message))) return;
         commitCurrentStreamSegment();
-        setActivityLabel(formatToolActivity(toolName, t));
+        setActivityLabel(formatToolActivity(unwrapToolCall(toolName, update.message.toolArgs).name, t));
         const message = {
           ...update.message,
           toolSummary: formatToolOneLinerLocalized(toolName, update.message.toolArgs, t),
@@ -2020,6 +2021,16 @@ export function useChatController({
         chatToolMessagesRef.current = withToolMessage(chatToolMessagesRef.current, message);
         setChatToolMessages(chatToolMessagesRef.current);
         if (update.message.toolStatus === "running") return;
+        // A settled step stops describing the turn: a step still running takes
+        // over, else the header and working pill fall back to "Thinking…".
+        const settledLabel = formatToolActivity(unwrapToolCall(toolName, previousMessage?.toolArgs).name, t);
+        const stillRunning = chatToolMessagesRef.current.findLast(
+          (candidate) => candidate.toolStatus === "running" && !candidate.approval,
+        );
+        setActivityLabel((current) => current !== settledLabel ? current
+          : stillRunning
+            ? formatToolActivity(unwrapToolCall(stillRunning.toolName ?? "tool", stillRunning.toolArgs).name, t)
+            : null);
         clearToolSettledRecoveryTimer();
         requestVisibleHistoryReload(update.sessionKey, "tool-result").catch(() => {});
         toolSettledRecoveryTimerRef.current = setTimeout(() => {

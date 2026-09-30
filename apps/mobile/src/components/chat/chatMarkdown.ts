@@ -87,6 +87,14 @@ export function getChatMarkdownFlavor(): 'github' | undefined {
   return Platform.OS === 'ios' ? 'github' : undefined;
 }
 
+/**
+ * Android measures a bubble's Markdown at the full bubble width, then shrinks
+ * the view to its widest line and breaks the text again at that width. The
+ * paragraph-optimising breakers can choose a layout one line longer there,
+ * which the measured height clips; greedy breaks do not change on that shrink.
+ */
+export const CHAT_MARKDOWN_BREAK_STRATEGY = 'simple' as const;
+
 export function openChatMarkdownLink({ url }: { url: string }): void {
   Linking.openURL(url);
 }

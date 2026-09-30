@@ -179,7 +179,6 @@
   "Expired": "Caducado",
   "Start a conversation with {{name}}": "Inicia una conversación con {{name}}",
   "{{count}} attachments": "{{count}} archivos adjuntos",
-  "{{model}} · {{percent}}% left": "{{model}} · queda un {{percent}} %",
   "Bridge is not running on your computer": "Bridge no se está ejecutando en tu ordenador",
   "Pairing required": "Se requiere vinculación",
   "Agent is not responding": "El agente no responde",
@@ -471,5 +470,6 @@
   "View logs": "Ver registro",
   "Run again": "Volver a ejecutar",
   "Run started": "Ejecución iniciada",
-  "Could not start the run": "No se pudo iniciar"
+  "Could not start the run": "No se pudo iniciar",
+  "Project": "Proyecto"
 }

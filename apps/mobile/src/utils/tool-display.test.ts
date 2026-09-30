@@ -4,7 +4,23 @@ import {
   formatToolOneLiner,
   formatToolOneLinerLocalized,
   stripToolStatusPrefix,
+  unwrapToolCall,
 } from './tool-display';
+
+describe('unwrapToolCall', () => {
+  it('reads OpenClaw\'s generic tool_call wrapper as the tool it carries', () => {
+    expect(unwrapToolCall('tool_call', '{"id":"exec","args":{"command":"ls -A"}}'))
+      .toEqual({ name: 'exec', args: '{"command":"ls -A"}' });
+    expect(unwrapToolCall('Tool_Call', '{"id":" read "}')).toEqual({ name: 'read', args: undefined });
+  });
+
+  it('keeps other tools and malformed wrappers as recorded', () => {
+    expect(unwrapToolCall('exec', '{"command":"pwd"}')).toEqual({ name: 'exec', args: '{"command":"pwd"}' });
+    expect(unwrapToolCall('tool_call', 'not json')).toEqual({ name: 'tool_call', args: 'not json' });
+    expect(unwrapToolCall('tool_call', '{"args":{}}')).toEqual({ name: 'tool_call', args: '{"args":{}}' });
+    expect(unwrapToolCall('tool_call')).toEqual({ name: 'tool_call', args: undefined });
+  });
+});
 
 describe('formatToolActivity', () => {
   const t = (key: string, options?: Record<string, unknown>) => {
@@ -16,6 +32,13 @@ describe('formatToolActivity', () => {
     expect(formatToolActivity('exec', t)).toBe('Running command');
     expect(formatToolActivity('bash', t)).toBe('Running command');
     expect(formatToolActivity('Bash', t)).toBe('Running command');
+  });
+
+  it('labels other backends\' command and file tools by what they do', () => {
+    expect(formatToolActivity('terminal', t)).toBe('Running command');
+    expect(formatToolActivity('local_shell', t)).toBe('Running command');
+    expect(formatToolActivity('mcp__fs__read_file', t)).toBe('Reading file');
+    expect(formatToolActivity('MultiEdit', t)).toBe('Writing file');
   });
 
   it('maps read to reading file', () => {

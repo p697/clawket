@@ -179,7 +179,6 @@
   "Expired": "已過期",
   "Start a conversation with {{name}}": "開始與 {{name}} 對話",
   "{{count}} attachments": "{{count}} 個附件",
-  "{{model}} · {{percent}}% left": "{{model}} · 剩餘 {{percent}}%",
   "Bridge is not running on your computer": "電腦上的 Bridge 未執行",
   "Pairing required": "需要配對",
   "Agent is not responding": "Agent 沒有回應",
@@ -471,5 +470,6 @@
   "View logs": "看紀錄",
   "Run again": "重跑",
   "Run started": "已開始重跑",
-  "Could not start the run": "無法重跑"
+  "Could not start the run": "無法重跑",
+  "Project": "專案"
 }

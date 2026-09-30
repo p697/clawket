@@ -179,7 +179,6 @@
   "Expired": "Expired",
   "Start a conversation with {{name}}": "Start a conversation with {{name}}",
   "{{count}} attachments": "{{count}} attachments",
-  "{{model}} · {{percent}}% left": "{{model}} · {{percent}}% left",
   "Bridge is not running on your computer": "Bridge is not running on your computer",
   "Pairing required": "Pairing required",
   "Agent is not responding": "Agent is not responding",
@@ -471,5 +470,6 @@
   "View logs": "View logs",
   "Run again": "Run again",
   "Run started": "Run started",
-  "Could not start the run": "Could not start the run"
+  "Could not start the run": "Could not start the run",
+  "Project": "Project"
 }

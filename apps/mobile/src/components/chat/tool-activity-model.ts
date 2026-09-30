@@ -1,6 +1,6 @@
 import { isIncomingParticipant } from '../../chat/messageAttribution';
 import type { UiMessage } from '../../types/chat';
-import { resolveToolDetail, toolCategory, type ToolCategory } from '../../utils/tool-display';
+import { resolveToolDetail, toolCategory, unwrapToolCall, type ToolCategory } from '../../utils/tool-display';
 
 type Translate = (key: string, options?: Record<string, unknown>) => string;
 
@@ -25,6 +25,11 @@ function validTime(value: number | undefined): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined;
 }
 
+/** The tool a message actually ran, with OpenClaw's generic `tool_call` wrapper opened. */
+export function effectiveTool(message: UiMessage): { name: string; args?: string } {
+  return unwrapToolCall(message.toolName?.trim() ?? '', message.toolArgs);
+}
+
 function parseArgs(raw: string | undefined): unknown {
   if (!raw?.trim()) return undefined;
   try { return JSON.parse(raw); } catch { return undefined; }
@@ -35,15 +40,16 @@ function parseArgs(raw: string | undefined): unknown {
  * Codex file changes carry every path in `changes`; other tools name one path.
  */
 export function toolCallFiles(message: UiMessage): string[] {
-  const name = message.toolName?.trim() ?? '';
-  const args = parseArgs(message.toolArgs);
+  const tool = effectiveTool(message);
+  const name = tool.name;
+  const args = parseArgs(tool.args);
   if (args && typeof args === 'object' && Array.isArray((args as { changes?: unknown }).changes)) {
     const paths = ((args as { changes: unknown[] }).changes)
       .map((change) => (change && typeof change === 'object' ? (change as { path?: unknown }).path : undefined))
       .filter((path): path is string => typeof path === 'string' && path.trim().length > 0);
     if (paths.length > 0) return paths;
   }
-  const detail = resolveToolDetail(name, message.toolArgs);
+  const detail = resolveToolDetail(name, tool.args);
   return detail ? [detail] : [];
 }
 
@@ -78,7 +84,7 @@ export function summarizeToolActivity(messages: ReadonlyArray<UiMessage>): ToolA
   ));
   const counts = new Map<ToolActivityKind, { count: number; files: Set<string>; order: number }>();
   ordered.forEach((message, index) => {
-    const kind = activityKind(toolCategory(message.toolName?.trim() ?? ''));
+    const kind = activityKind(toolCategory(effectiveTool(message).name));
     const entry = counts.get(kind) ?? { count: 0, files: new Set<string>(), order: index };
     entry.count += 1;
     if (kind === 'read' || kind === 'edit') toolCallFiles(message).forEach((file) => entry.files.add(file));
@@ -167,8 +173,8 @@ function clip(value: string): string {
 
 /** The step a live pill names: its verb, and the command, path or query it acts on (null when unknown). */
 export function describeLiveStep(message: UiMessage, t: Translate): TemplateParts | null {
-  const name = message.toolName?.trim() ?? '';
-  const detail = resolveToolDetail(name, message.toolArgs);
+  const { name, args } = effectiveTool(message);
+  const detail = resolveToolDetail(name, args);
   const template = LIVE_COPY[activityKind(toolCategory(name))];
   if (!template || !detail) return null;
   return splitTemplate((placeholder) => t(template, { ns: 'chat', detail: placeholder }), clip(detail));
@@ -176,8 +182,8 @@ export function describeLiveStep(message: UiMessage, t: Translate): TemplatePart
 
 /** A failed step's pill: what failed, with its command or path styled as code when known. */
 export function describeFailedStep(message: UiMessage, fallbackName: string, t: Translate): TemplateParts & { code: boolean } {
-  const name = message.toolName?.trim() ?? '';
-  const detail = resolveToolDetail(name, message.toolArgs);
+  const { name, args } = effectiveTool(message);
+  const detail = resolveToolDetail(name, args);
   const parts = splitTemplate((placeholder) => t('{{detail}} failed', { ns: 'chat', detail: placeholder }), clip(detail ?? fallbackName));
   return { ...parts, code: Boolean(detail) };
 }

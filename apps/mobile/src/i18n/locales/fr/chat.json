@@ -179,7 +179,6 @@
   "Expired": "Expiré",
   "Start a conversation with {{name}}": "Démarrer une conversation avec {{name}}",
   "{{count}} attachments": "{{count}} pièces jointes",
-  "{{model}} · {{percent}}% left": "{{model}} · {{percent}} % restants",
   "Bridge is not running on your computer": "Bridge n’est pas lancé sur votre ordinateur",
   "Pairing required": "Jumelage requis",
   "Agent is not responding": "L’Agent ne répond pas",
@@ -471,5 +470,6 @@
   "View logs": "Voir le journal",
   "Run again": "Relancer",
   "Run started": "Relance démarrée",
-  "Could not start the run": "Impossible de relancer"
+  "Could not start the run": "Impossible de relancer",
+  "Project": "Projet"
 }

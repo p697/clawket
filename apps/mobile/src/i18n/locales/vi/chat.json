@@ -179,7 +179,6 @@
   "Expired": "Đã hết hạn",
   "Start a conversation with {{name}}": "Bắt đầu trò chuyện với {{name}}",
   "{{count}} attachments": "{{count}} tệp đính kèm",
-  "{{model}} · {{percent}}% left": "{{model}} · còn {{percent}}%",
   "Bridge is not running on your computer": "Bridge chưa chạy trên máy tính của bạn",
   "Pairing required": "Cần ghép nối",
   "Agent is not responding": "Agent không phản hồi",
@@ -471,5 +470,6 @@
   "View logs": "Xem nhật ký",
   "Run again": "Chạy lại",
   "Run started": "Đã bắt đầu chạy",
-  "Could not start the run": "Không thể bắt đầu"
+  "Could not start the run": "Không thể bắt đầu",
+  "Project": "Dự án"
 }

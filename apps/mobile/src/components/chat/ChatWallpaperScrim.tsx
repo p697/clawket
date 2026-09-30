@@ -11,6 +11,8 @@ type Props = {
   color: string;
   /** Peak opacity at the anchored edge. */
   opacity: number;
+  /** Where the scrim still holds `ratio` of its peak; defaults suit photos. */
+  hold?: Readonly<{ stop: number; ratio: number }>;
   style?: StyleProp<ViewStyle>;
   testID?: string;
 };
@@ -28,7 +30,7 @@ const HOLD_OPACITY_RATIO = 0.62;
  * takes no touches and no layout of its own: the host positions it under the
  * header or the composer dock and it fills that box.
  */
-export function ChatWallpaperScrim({ edge, color, opacity, style, testID }: Props): React.JSX.Element {
+export function ChatWallpaperScrim({ edge, color, opacity, hold, style, testID }: Props): React.JSX.Element {
   const gradientId = `chat-wallpaper-scrim-${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
   const anchoredAtTop = edge === 'top';
   return (
@@ -37,7 +39,7 @@ export function ChatWallpaperScrim({ edge, color, opacity, style, testID }: Prop
         <Defs>
           <LinearGradient id={gradientId} x1="0" y1={anchoredAtTop ? '0' : '1'} x2="0" y2={anchoredAtTop ? '1' : '0'}>
             <Stop offset={0} stopColor={color} stopOpacity={opacity} />
-            <Stop offset={HOLD_STOP} stopColor={color} stopOpacity={opacity * HOLD_OPACITY_RATIO} />
+            <Stop offset={hold?.stop ?? HOLD_STOP} stopColor={color} stopOpacity={opacity * (hold?.ratio ?? HOLD_OPACITY_RATIO)} />
             <Stop offset={1} stopColor={color} stopOpacity={0} />
           </LinearGradient>
         </Defs>

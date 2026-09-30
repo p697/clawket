@@ -648,7 +648,7 @@ export class GatewayProtocolClient {
           message: readiness.message,
           retryable: readiness.retryable ?? true,
         });
-        this.recycleTransport(epoch, this.handshakeSerial);
+        this.recycleTransportAfterUnhealthyBackend(epoch, this.handshakeSerial);
       } else {
         this.emit('health', health);
       }
@@ -1043,6 +1043,14 @@ export class GatewayProtocolClient {
     this.handshakeSerial += 1;
     this.clearReadinessTimer();
     this.#transport?.reconnect();
+  }
+
+  /** A reachable Bridge whose backend is down answers the same at once; retry after a growing delay. */
+  private recycleTransportAfterUnhealthyBackend(epoch: number, serial: number): void {
+    if (!this.isCurrentHandshake(epoch, serial)) return;
+    this.handshakeSerial += 1;
+    this.clearReadinessTimer();
+    this.#transport?.reconnectAfterUnhealthyBackend('backend_unhealthy');
   }
 
   private handleRelayControl(control: RelayControlFrame, epoch: number): void {

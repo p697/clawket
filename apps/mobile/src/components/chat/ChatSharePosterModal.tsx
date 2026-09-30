@@ -20,7 +20,7 @@ import { EnrichedMarkdownText } from 'react-native-enriched-markdown';
 import { Download, Share2, X } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getChatMarkdownFlavor, openChatMarkdownLink } from './chatMarkdown';
+import { CHAT_MARKDOWN_BREAK_STRATEGY, getChatMarkdownFlavor, openChatMarkdownLink } from './chatMarkdown';
 import {
   BorderWidth,
   FontSize,
@@ -307,6 +307,7 @@ export function ChatSharePosterModal({
           onLinkPress={openChatMarkdownLink}
           allowTrailingMargin={false}
           flavor={CHAT_MARKDOWN_FLAVOR}
+          textBreakStrategy={CHAT_MARKDOWN_BREAK_STRATEGY}
           containerStyle={s.contentMarkdown}
         />
       </View>

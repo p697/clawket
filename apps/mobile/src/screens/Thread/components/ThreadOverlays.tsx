@@ -2,7 +2,7 @@ import React from 'react';
 import { RuntimeSettingsSheet, type RuntimeSettingsSheetProps } from '../../../components/chat/RuntimeSettingsSheet';
 import type { UiMessage } from '../../../types/chat';
 import type { ThinkingLevel } from '../../../utils/gateway-settings';
-import type { ModelInfo } from '../../../components/chat/ModelPickerModal';
+import type { ModelInfo, ModelSheetSession } from '../../../components/chat/ModelPickerModal';
 import type { ModelProviderInfo } from '../../../components/chat/model-picker-data';
 import { ChatSharePosterModal } from '../../../components/chat/ChatSharePosterModal';
 import type { PlatformKind } from '../../../components/ui/PlatformMark';
@@ -65,6 +65,7 @@ export type ThreadOverlaysProps = Readonly<{
     onClose: () => void;
     onRetry: () => void;
     onSelect: (model: ModelInfo) => void;
+    session?: ModelSheetSession;
   }>;
   runtimeSettings?: Omit<RuntimeSettingsSheetProps, 'models' | 'onSelectModel' | 'onRetry' | 'currentModel' | 'currentProvider'>;
   commandPicker: Readonly<{
@@ -184,6 +185,7 @@ export function ThreadOverlays({
         defaultProvider={modelPicker.defaultProvider}
         configuredDefaultModel={modelPicker.configuredDefaultModel}
         onManage={modelPicker.onManage}
+        session={modelPicker.session}
       />}
       <CommandOptionPickerModal
         visible={commandPicker.visible}

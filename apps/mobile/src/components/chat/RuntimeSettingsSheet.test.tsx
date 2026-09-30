@@ -36,6 +36,21 @@ it('keeps one model/thinking/speed sheet and displays the resolved native model'
   expect(view.getByTestId('runtime-settings-speed-standard').props.accessibilityState.selected).toBe(false);
   expect(view.getByTestId('runtime-settings-speed-fast').props.accessibilityState.selected).toBe(false);
 });
+it('lists permissions, context left and the project in the overview (A+ composer)', () => {
+  const view = render(<RuntimeSettingsSheet {...props({ permissions: { mode: 'full-access', available: true, scope: 'session', availableModes: ['workspace', 'full-access'] },
+    contextRemainingPercent: 54, project: { label: '~/repo', path: '/Users/lucy/repo' } })} />);
+  const permissions = view.getByTestId('runtime-settings-permissions');
+  expect(view.getByText('Full access')).toBeTruthy();
+  expect(view.getByText('Permissions').props.style).toEqual(expect.arrayContaining([expect.objectContaining({ color: 'warn' })]));
+  // Context and project are facts: readable, never pressable.
+  const context = view.getByTestId('runtime-settings-context');
+  expect(context.props.onPress).toBeUndefined();
+  expect(context.props.accessibilityLabel).toBe('Context remaining: {{percent}}%');
+  expect(view.getByTestId('runtime-settings-project').props.accessibilityLabel).toBe('Project: /Users/lucy/repo');
+  expect(view.getByText('~/repo').props.ellipsizeMode).toBe('middle');
+  fireEvent.press(permissions);
+  expect(view.getByTestId('runtime-settings-permission-full-access')).toBeTruthy();
+});
 it('does not optimistically show Fast as selected and blocks duplicate writes while pending', () => {
   const callbacks = props({ fastMode: { enabled: false, available: true } });
   const view = render(<RuntimeSettingsSheet {...callbacks} />);

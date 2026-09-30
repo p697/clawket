@@ -179,7 +179,6 @@
   "Expired": "期限切れ",
   "Start a conversation with {{name}}": "{{name}} との会話を始める",
   "{{count}} attachments": "添付ファイル {{count}} 件",
-  "{{model}} · {{percent}}% left": "{{model}} · 残り {{percent}}%",
   "Bridge is not running on your computer": "コンピューターで Bridge が実行されていません",
   "Pairing required": "ペアリングが必要です",
   "Agent is not responding": "エージェントが応答していません",
@@ -471,5 +470,6 @@
   "View logs": "ログを見る",
   "Run again": "もう一度実行",
   "Run started": "実行を開始しました",
-  "Could not start the run": "実行を開始できませんでした"
+  "Could not start the run": "実行を開始できませんでした",
+  "Project": "プロジェクト"
 }

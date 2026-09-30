@@ -537,6 +537,28 @@ describe('mergeGatewayHistory', () => {
     ])).toEqual([...remote, pending]);
   });
 
+  it('keeps a live-only tool step before the reply it preceded when history omits the step', () => {
+    // Observed 2026-10-01: the provider ran `ls` itself, so chat.history held
+    // only the prompt and a reply stamped at response start, before the step.
+    const user = { id: 'server-user', role: 'user' as const, text: 'Count the files', timestampMs: 1790784965713,
+      idempotencyKey: 'send-1' };
+    const reply = { id: 'h_assistant_1790784986809_c6fa3ea7', role: 'assistant' as const, text: 'There are 31 entries.',
+      timestampMs: 1790784986809 };
+    const step = { id: 'toolcall_toolu_X', role: 'tool' as const, text: '', timestampMs: 1790784993000,
+      tool: { name: 'exec', callId: 'toolu_X', status: 'success' as const } };
+    const merged = mergeGatewayHistory([user, reply], [{ ...user, id: 'usr_1790784965000' }, step, reply]);
+    expect(merged.map(message => message.id)).toEqual(['server-user', 'toolcall_toolu_X', reply.id]);
+    expect(mergeGatewayHistory([user, reply], merged)).toEqual(merged);
+
+    // Consecutive steps keep their order; a step with no confirmed successor
+    // still follows the clock.
+    const second = { ...step, id: 'toolcall_toolu_Y', timestampMs: 1790784994000, tool: { ...step.tool, callId: 'toolu_Y' } };
+    expect(mergeGatewayHistory([user, reply], [user, step, second, reply]).map(message => message.id))
+      .toEqual(['server-user', 'toolcall_toolu_X', 'toolcall_toolu_Y', reply.id]);
+    expect(mergeGatewayHistory([user, reply], [user, reply, step]).map(message => message.id))
+      .toEqual(['server-user', reply.id, 'toolcall_toolu_X']);
+  });
+
   it('keeps the remote canonical message and only the optimistic cache tail', () => {
     expect(mergeGatewayHistory(
       [

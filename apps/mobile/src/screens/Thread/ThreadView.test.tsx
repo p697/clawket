@@ -330,18 +330,6 @@ jest.mock('../../components/chat/SlashSuggestions', () => {
   };
 });
 
-jest.mock('../../components/chat/ThinkingLevelMenu', () => {
-  const ReactRuntime = require('react');
-  const { View } = require('react-native');
-  return {
-    ThinkingLevelMenu: ({ children, ...props }: Record<string, unknown>) => ReactRuntime.createElement(
-      View,
-      { ...props, testID: 'thread-thinking-menu' },
-      children,
-    ),
-  };
-});
-
 jest.mock('../../components/chat/ToolDetailModal', () => {
   const ReactRuntime = require('react');
   const { View } = require('react-native');
@@ -418,8 +406,6 @@ const copy: ThreadCopy = {
   formatAttachments: (count) => `${count} attachments`,
   formatPhotoPosition: (index, count) => `Photo ${index} of ${count}`,
   formatRunDetail: (status, time) => time ? `${status} · ${time}` : status,
-  formatModelContext: (model, remaining) => `${model} · ${remaining}% left`,
-  formatThinkingLevel: (level) => level,
 };
 
 function createProps(overrides: Partial<ThreadViewProps> = {}): ThreadViewProps {
@@ -469,17 +455,18 @@ describe('ThreadView', () => {
     expect(callbacks.onChangeInput).not.toHaveBeenCalled();
   });
 
-  it.each([
-    ['custom', 'Computer settings', 'Shield'],
-    ['workspace', 'Workspace access', 'Shield'],
-    ['read-only', 'Read only', 'Shield'],
-    ['full-access', 'Full access', 'ShieldAlert'],
-  ])('keeps confirmed %s permissions distinct from unknown', (permissionMode, label, icon) => {
+  it.each(['custom', 'workspace', 'read-only'])('keeps a confirmed %s permission mode out of the capsule', (permissionMode) => {
+    // The model sheet lists permissions; the capsule only warns (A+ composer).
     const view = render(<ThreadView {...createProps({ capabilities: { ...CAPABILITY_MATRIX.codex }, permissionMode, onOpenPermissions: jest.fn() })} />);
+    expect(view.queryByTestId('thread-permissions')).toBeNull();
+  });
+
+  it('warns about full access in the capsule', () => {
+    const view = render(<ThreadView {...createProps({ capabilities: { ...CAPABILITY_MATRIX.codex }, permissionMode: 'full-access', onOpenPermissions: jest.fn() })} />);
     const button = view.getByTestId('thread-permissions');
-    expect(button.props.accessibilityLabel).toBe(`Permissions: ${label}`);
+    expect(button.props.accessibilityLabel).toBe('Permissions: Full access');
     expect(button.props.accessibilityHint).toBeUndefined();
-    expect(button.findAll(node => typeof node.type === 'string' && node.type === icon)).toHaveLength(1);
+    expect(button.findAll(node => typeof node.type === 'string' && String(node.type) === 'ShieldAlert')).toHaveLength(1);
     expect(button.findAll(node => typeof node.type === 'string' && String(node.type) === 'ShieldQuestionMark')).toHaveLength(0);
   });
   it('shows one actionable settings notice only while settings are unconfirmed and preserves the draft', () => {
@@ -612,8 +599,6 @@ describe('ThreadView', () => {
     const props = createProps({
       topInset: Space.xl,
       bottomInset: Space.lg,
-      contextUsed: 46,
-      contextWindow: 100,
     });
     const view = render(<ThreadView {...props} />);
     const theme = buildTheme(scheme, scheme, builtInAccents.iceBlue);
@@ -628,7 +613,9 @@ describe('ThreadView', () => {
       backgroundColor: resolveChatChromeAppearance(theme).backgroundColor,
     });
     expect(view.getByTestId('chat-background-layer-pattern')).toBeTruthy();
-    expect(view.getByText('Context remaining: 54%')).toBeTruthy();
+    // Idle reads "Online"; context left lives in the model sheet.
+    expect(view.getByText('Online')).toBeTruthy();
+    expect(view.queryByText('Context remaining: 54%')).toBeNull();
     expect(view.getByTestId('thread-markdown-message-1').props.markdownStyle.paragraph.fontSize)
       .toBe(FontSize.body);
     expect(view.getByTestId('thread-screen-timeline').props.inverted).toBeUndefined();
@@ -642,14 +629,20 @@ describe('ThreadView', () => {
 
   it.each(['light', 'dark'] as const)('updates manufacturer artwork and preserves model capability in %s mode', (scheme) => {
     mockScheme = scheme;
-    const props = createProps({ model: 'openrouter/anthropic/claude-sonnet-4-6', onOpenModelPicker: jest.fn() });
+    const props = createProps({ model: 'openrouter/anthropic/claude-sonnet-4-6', onOpenModelPicker: jest.fn(), input: '' });
     const view = render(<ThreadView {...props} />);
     expect(view.getByTestId('thread-model-icon').props.source).toBe(402);
-    expect(view.getByTestId('thread-model-label').props.children).toBe('claude-sonnet-4-6');
+    expect(view.getByTestId('thread-model-label').props.children).toBe('Sonnet 4.6');
     expect(view.getByTestId('thread-model-label').props.numberOfLines).toBe(1);
+    expect(view.getByTestId('thread-model-picker').props.accessibilityLabel).toBe('Model settings: Sonnet 4.6');
     expect(view.getByTestId('thread-model-icon').props.accessible).toBe(false);
     fireEvent.press(view.getByTestId('thread-model-picker'));
     expect(props.onOpenModelPicker).toHaveBeenCalledTimes(1);
+    // A draft keeps the room: only the model's mark stays in the chip.
+    view.rerender(<ThreadView {...props} input="Hello" />);
+    expect(view.queryByTestId('thread-model-label')).toBeNull();
+    expect(view.getByTestId('thread-model-icon')).toBeTruthy();
+    view.rerender(<ThreadView {...props} />);
     view.rerender(<ThreadView {...props} model="openai/gpt-5.4" modelDisplayName="GPT 5.4" />);
     expect(view.getByTestId('thread-model-label').props.children).toBe('GPT 5.4');
     expect(view.getByTestId('thread-model-icon').props.source).toBe(401);
@@ -659,26 +652,23 @@ describe('ThreadView', () => {
     expect(view.queryByTestId('thread-model-picker')).toBeNull();
   });
 
-  it('uses the fixed header subtitle for a project path and gives transient states priority', () => {
-    const projectPath = '/Users/example/projects/a-very-long-project-name';
-    const shown = '~/projects/a-very-long-project-name';
-    const props = createProps({ projectPath, contextUsed: 46, contextWindow: 100 });
+  it('reads Online in the accent while idle and gives transient states priority', () => {
+    const props = createProps({ onOpenModelPicker: jest.fn() });
     const view = render(<ThreadView {...props} />);
-    // Home-relative on screen; the full path stays in the accessibility hint.
-    expect(view.getByText(shown).props).toMatchObject({ numberOfLines: 1, ellipsizeMode: 'middle' });
-    expect(view.getByTestId('thread-screen-header-pill').props.accessibilityHint).toBe(projectPath);
+    const subtitle = () => view.getByTestId('thread-screen-header-pill-subtitle');
+    expect(subtitle().props.children).toBe('Online');
+    expect(flattenStyle(subtitle().props.style).color).not.toBe(buildTheme('light', 'light', builtInAccents.iceBlue).colors.inkSecondary);
     expect(flattenStyle(view.getByTestId('thread-screen-header-pill').props.style).height).toBe(ControlSize.pill);
-    expect(view.queryByText('Context remaining: 54%')).toBeNull();
     view.rerender(<ThreadView {...props} isRunning />);
-    expect(view.queryByText(shown)).toBeNull();
+    expect(view.queryByText('Online')).toBeNull();
     expect(view.getByTestId('thread-screen-header-pill-working')).toBeTruthy();
     view.rerender(<ThreadView {...props} state={{ kind: 'reconnecting' }} />);
-    expect(view.queryByText(shown)).toBeNull();
+    expect(view.queryByText('Online')).toBeNull();
     expect(view.getByText('Reconnecting…')).toBeTruthy();
     view.rerender(<ThreadView {...props} state={{ kind: 'offline' }} />);
-    expect(view.queryByText(shown)).toBeNull();
+    expect(view.queryByText('Online')).toBeNull();
     view.rerender(<ThreadView {...props} />);
-    expect(view.getByText(shown)).toBeTruthy();
+    expect(subtitle().props.children).toBe('Online');
   });
 
   it('uses the saved text size and stamps replies with their time instead of a model label', () => {
@@ -1732,7 +1722,7 @@ describe('ThreadView', () => {
     expect(view.queryByTestId('thread-file-document-echo-0')).toBeNull();
   });
 
-  it('wires pending attachments, slash commands, thinking, favorites, and message actions', () => {
+  it('wires pending attachments, slash commands, favorites, and message actions', () => {
     const onOpenPendingAttachment = jest.fn();
     const onRemovePendingAttachment = jest.fn();
     const onPickImage = jest.fn();
@@ -1740,7 +1730,6 @@ describe('ThreadView', () => {
     const onChooseFile = jest.fn();
     const onSelectSlashCommand = jest.fn();
     const onDismissSlashSuggestions = jest.fn();
-    const onSelectThinkingLevel = jest.fn();
     const messageActions = { onCopy: jest.fn(), onToggleFavorite: jest.fn(), onShare: jest.fn() };
     const message: UiMessage = {
       id: 'favorite-1',
@@ -1773,9 +1762,6 @@ describe('ThreadView', () => {
       showSlashSuggestions: true,
       onSelectSlashCommand,
       onDismissSlashSuggestions,
-      thinkingLevel: 'high',
-      thinkingLevelOptions: ['off', 'low', 'high'],
-      onSelectThinkingLevel,
     })} />);
 
     const pending = view.getByTestId('thread-pending-attachments');
@@ -1798,9 +1784,8 @@ describe('ThreadView', () => {
     fireEvent.press(view.getByTestId('thread-screen-dismiss-slash-suggestions'));
     expect(onDismissSlashSuggestions).toHaveBeenCalledTimes(1);
 
-    expect(view.getByTestId('thread-screen-thinking-level')).toBeTruthy();
-    act(() => view.getByTestId('thread-thinking-menu').props.onSelect('low'));
-    expect(onSelectThinkingLevel).toHaveBeenCalledWith('low');
+    // Thinking moved into the model sheet (A+ composer).
+    expect(view.queryByTestId('thread-screen-thinking-level')).toBeNull();
     expect(view.getByTestId(`thread-favorite-${message.id}`)).toBeTruthy();
     expect(view.queryByTestId('thread-message-actions')).toBeNull();
     const { triggerLightImpact } = require('../../services/haptics');
@@ -2422,7 +2407,10 @@ describe.each(['light', 'dark'] as const)('immersive wallpaper in %s', (scheme) 
     expect(new Set(stops('thread-screen-composer-scrim'))).toEqual(new Set([palette.gradient[2]]));
     const glass = resolveChatChromeAppearance(theme());
     expect(flattenStyle(view.getByTestId('thread-screen-header-pill').props.style).backgroundColor).toBe(glass.backgroundColor);
-    expect(flattenStyle(view.getByTestId('thread-screen-composer').props.style).backgroundColor).toBe(glass.backgroundColor);
+    // One row (A+): the capsule and both circles float on glass, the row itself stays clear.
+    expect(flattenStyle(view.getByTestId('thread-screen-composer').props.style).backgroundColor).toBeUndefined();
+    expect(flattenStyle(view.getByTestId('thread-screen-composer-capsule').props.style).backgroundColor).toBe(glass.backgroundColor);
+    expect(flattenStyle(view.getByTestId('thread-screen-composer-add-surface').props.style).backgroundColor).toBe(glass.backgroundColor);
   });
 
   it('floats the header over the timeline and keeps the canvas chrome on the plain canvas', () => {
@@ -2445,7 +2433,8 @@ describe.each(['light', 'dark'] as const)('immersive wallpaper in %s', (scheme) 
     expect(flattenStyle(view.getByTestId('thread-screen-header-pill').props.style).backgroundColor).toBe(theme().colors.surface);
     expect(flattenStyle(view.getByTestId('thread-screen-composer-region').props.style).backgroundColor).toBe(theme().colors.canvas);
     expect(view.queryByTestId('thread-screen-composer-scrim')).toBeNull();
-    expect(flattenStyle(view.getByTestId('thread-screen-composer').props.style).backgroundColor).toBe(theme().colors.surface);
+    expect(flattenStyle(view.getByTestId('thread-screen-composer-capsule').props.style).backgroundColor).toBe(theme().colors.surface);
+    expect(flattenStyle(view.getByTestId('thread-screen-composer-add-surface').props.style).backgroundColor).toBe(theme().colors.surface);
   });
 
   it('fills the whole screen with the wallpaper and floats every control on glass', () => {
@@ -2480,8 +2469,8 @@ describe.each(['light', 'dark'] as const)('immersive wallpaper in %s', (scheme) 
     const region = flattenStyle(view.getByTestId('thread-screen-composer-region').props.style);
     expect(region.backgroundColor).toBeUndefined();
     expect(view.getByTestId('thread-screen-composer-scrim')).toBeTruthy();
-    expect(flattenStyle(view.getByTestId('thread-screen-composer').props.style)).toMatchObject({
-      borderRadius: Radius.bubble, backgroundColor: glass.backgroundColor, borderColor: glass.borderColor,
+    expect(flattenStyle(view.getByTestId('thread-screen-composer-capsule').props.style)).toMatchObject({
+      borderRadius: Radius.xl, backgroundColor: glass.backgroundColor, borderColor: glass.borderColor,
     });
   });
 

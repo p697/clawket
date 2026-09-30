@@ -25,6 +25,9 @@ export type RuntimeSettingsSheetProps = {
   thinkingLevels: ThinkingLevel[];
   fastMode?: ModelSelectionState['fastMode'];
   permissions?: ModelSelectionState['permissions'];
+  /** Read-only facts of the conversation (A+ composer): context left and its project. */
+  contextRemainingPercent?: number | null;
+  project?: Readonly<{ label: string; path: string }> | null;
   onClose: () => void;
   onRetry: () => void;
   onSelectModel: (model: ModelInfo) => void;
@@ -87,6 +90,13 @@ export function RuntimeSettingsSheet(props: RuntimeSettingsSheetProps): React.JS
       </Pressable>
     );
   };
+  // Facts, not settings: no chevron, no press.
+  const fact = (key: string, label: string, value?: string, accessibilityLabel?: string) => (
+    <View key={key} testID={`runtime-settings-${key}`} accessible accessibilityLabel={accessibilityLabel ?? (value ? `${label}: ${value}` : label)} style={styles.row}>
+      <View style={styles.rowText}><Text style={[styles.label, { color: colors.ink }]}>{label}</Text></View>
+      {value ? <Text numberOfLines={1} ellipsizeMode="middle" style={[styles.value, styles.factValue, { color: colors.inkSecondary }]}>{value}</Text> : null}
+    </View>
+  );
   const filteredModels = useMemo(() => { const search = query.trim().toLocaleLowerCase();
     return search ? props.models.filter(model => [model.id, model.name, model.resolvedModel, model.provider].some(value => value?.toLocaleLowerCase().includes(search))) : props.models;
   }, [props.models, query]);
@@ -108,6 +118,9 @@ export function RuntimeSettingsSheet(props: RuntimeSettingsSheetProps): React.JS
         {row('model', t('Model'), () => setPage('models'), { value: modelName })}
         {props.thinkingLevels.length ? row('thinking', t('Thinking Level'), () => setPage('thinking'), { value: props.thinkingLevel ? t(`thinking_${props.thinkingLevel}`) : t('Computer settings') }) : null}
         {props.fastMode?.available ? row('speed', t('Speed'), () => setPage('speed'), { value: props.fastMode.enabled === null ? t('Computer settings') : props.fastMode.enabled ? t('Fast') : t('Standard') }) : null}
+        {props.permissions ? row('permissions', t('Permissions', { ns: 'common' }), () => setPage('permissions'), { value: permissionPending ? undefined : permissionLabel, warning: props.permissions.mode === 'full-access' }) : null}
+        {props.contextRemainingPercent != null ? fact('context', t('Context remaining: {{percent}}%', { percent: props.contextRemainingPercent })) : null}
+        {props.project ? fact('project', t('Project'), props.project.label, `${t('Project')}: ${props.project.path}`) : null}
       </> : null}
       {page === 'models' ? <>
         <SearchInput inSheet appearance="quiet" testID="runtime-settings-search" value={query} onChangeText={setQuery}
@@ -159,6 +172,8 @@ const styles = StyleSheet.create({
   label: { fontSize: FontSize.secondary, lineHeight: LineHeight.secondary, fontWeight: FontWeight.semibold },
   detail: { fontSize: FontSize.caption, lineHeight: LineHeight.caption },
   value: { flexShrink: 1, maxWidth: '55%', fontSize: FontSize.secondary, lineHeight: LineHeight.secondary },
+  // A fact has no chevron and a short label, so a path keeps more of itself.
+  factValue: { maxWidth: '78%' },
   // The spinner of a write in flight takes the radio's exact box, so the row never reflows.
   radioSlot: { width: 22, height: 22, alignItems: 'center', justifyContent: 'center' },
   radio: { borderRadius: Radius.full, borderWidth: BorderWidth.strong },

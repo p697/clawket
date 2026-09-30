@@ -160,29 +160,24 @@ describe('Thread model', () => {
     expect(resolveContextRemainingPercent(undefined, 100)).toBeNull();
   });
 
-  it('uses capability metadata to suppress model copy and prioritizes activity states', () => {
+  it('reads Online while idle and prioritizes activity states', () => {
     const base = {
-      capabilities: CAPABILITIES,
       state: { kind: 'ready' } as const,
       isRunning: false,
-      model: 'Sonnet',
-      contextUsed: 46,
-      contextWindow: 100,
       offlineLabel: 'Offline · reconnecting',
       thinkingLabel: 'Thinking…',
-      formatModelContext: (model: string, remaining: number) => `${model} · ${remaining}% left`,
+      onlineLabel: 'Online',
     };
 
-    expect(resolveThreadHeaderSubtitle(base)).toBe('Sonnet · 54% left');
-    expect(resolveThreadHeaderSubtitle({
-      ...base,
-      capabilities: { ...CAPABILITIES, models: false },
-    })).toBe('');
+    expect(resolveThreadHeaderSubtitle(base)).toBe('Online');
+    expect(resolveThreadHeaderSubtitle({ ...base, state: { kind: 'empty' } })).toBe('Online');
+    expect(resolveThreadHeaderSubtitle({ ...base, state: { kind: 'loading' } })).toBe('');
     expect(resolveThreadHeaderSubtitle({
       ...base,
       isRunning: true,
       activityLabel: 'Using exec…',
     })).toBe('Using exec…');
+    expect(resolveThreadHeaderSubtitle({ ...base, isRunning: true })).toBe('Thinking…');
     expect(resolveThreadHeaderSubtitle({
       ...base,
       state: { kind: 'offline' },

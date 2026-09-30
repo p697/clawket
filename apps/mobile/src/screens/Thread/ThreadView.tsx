@@ -40,7 +40,6 @@ import type { Capabilities, SessionDescriptor } from '@clawket/agent-protocol';
 import {
   PanelLeft,
   ArrowDown,
-  Brain,
   CalendarClock,
   Bot,
   CircleAlert,
@@ -59,7 +58,6 @@ import {
 import { ChevronLeft } from '../../components/ui/DirectionalIcon';
 import type { PendingImage, UiApprovalStatus, UiMessage } from '../../types/chat';
 import type { SlashCommand } from '../../data/slash-commands';
-import type { ThinkingLevel } from '../../utils/gateway-settings';
 import { useAppTheme } from '../../theme';
 import { ChatPresentationProvider, useChatPresentation, useChatSurfaces, useConversationTheme } from '../../components/chat/ChatPresentation';
 import { ModelIcon } from '../../components/chat/ModelIcon';
@@ -76,11 +74,13 @@ import {
   ControlSize,
   FontSize,
   FontWeight,
+  HitSize,
   LineHeight,
   Motion,
   Radius,
   Space,
 } from '../../theme/tokens';
+import { withAlpha } from '../../theme/color';
 import { ApprovalCard, type ApprovalCardOutcome } from '../../components/ui/ApprovalCard';
 import { ConfirmationModal } from '../../components/ui/ConfirmationModal';
 import { Banner } from '../../components/ui/Banner';
@@ -88,6 +88,7 @@ import { ConnectionStatusPill } from '../../components/ui/ConnectionStatusPill';
 import { Bubble, useBubbleTypography } from '../../components/ui/Bubble';
 import {
   Composer,
+  type ComposerAccessorySpace,
   type ComposerHandle,
   type ComposerProps,
   type ComposerVoiceState,
@@ -112,10 +113,12 @@ import { SystemEventRow } from '../../components/ui/SystemEventRow';
 import { triggerLightImpact } from '../../services/haptics';
 import { PendingImageBar } from '../../components/chat/PendingImageBar';
 import { SlashSuggestions } from '../../components/chat/SlashSuggestions';
-import { ThinkingLevelMenu } from '../../components/chat/ThinkingLevelMenu';
+import { shortModelLabel } from '../../components/chat/model-label';
 import { ToolDetailModal } from '../../components/chat/ToolDetailModal';
 import { cronSessionName } from '../../utils/chat-message';
+import { unwrapToolCall } from '../../utils/tool-display';
 import {
+  CHAT_MARKDOWN_BREAK_STRATEGY,
   createChatMarkdownStyle,
   getChatMarkdownFlavor,
   openChatMarkdownLink,
@@ -123,7 +126,6 @@ import {
 import { useMarkdownSelectionMenu } from '../../components/chat/useMarkdownSelectionMenu';
 import {
   buildThreadTimelineItems,
-  displayProjectPath,
   groupThreadRuns,
   groupThreadTools,
   resolveThreadHeaderName,
@@ -280,8 +282,6 @@ export type ThreadCopy = Readonly<{
   /** Spoken name of one photo inside a message album, e.g. “Photo 2 of 6”. */
   formatPhotoPosition: (index: number, count: number) => string;
   formatRunDetail: (status: string, time: string) => string;
-  formatModelContext: (model: string, remainingPercent: number) => string;
-  formatThinkingLevel: (level: string) => string;
 }>;
 
 export type ThreadMessageActions = Readonly<{
@@ -320,12 +320,9 @@ export type ThreadViewProps = Readonly<{
   /** The Agent's backend, so a product Agent wears its official mark in the header and signatures. */
   agentPlatform?: PlatformKind | null;
   sessionTitle?: string | null;
-  projectPath?: string | null;
   isMainSession?: boolean;
   model?: string | null;
   modelDisplayName?: string | null;
-  contextUsed?: number;
-  contextWindow?: number;
   activityLabel?: string | null;
   interactionAttention?: SessionDescriptor['attention'];
   capabilities: Capabilities;
@@ -407,10 +404,6 @@ export type ThreadViewProps = Readonly<{
   showSlashSuggestions?: boolean;
   onSelectSlashCommand?: (command: SlashCommand) => void;
   onDismissSlashSuggestions?: () => void;
-  thinkingLevel?: string | null;
-  thinkingLevelOptions?: ThinkingLevel[];
-  onSelectThinkingLevel?: (level: string) => void;
-  runtimeSettings?: boolean;
   onReviewRuntimeSettings?: () => void;
   permissionMode?: string | null;
   onOpenPermissions?: () => void;
@@ -438,6 +431,15 @@ const WALLPAPER_SCRIM = {
   light: { top: 0.62, bottom: 0.5 },
   dark: { top: 0.66, bottom: 0.56 },
 } as const;
+/**
+ * Over the built-in wallpaper the scrim is the wallpaper's own color, so it can
+ * be nearly opaque at the edge without reading as a band: rows scrolling under
+ * the status bar and the floating controls disappear, as in the A+ design
+ * (device review 2026-10-01: at the photo strength they stayed legible there).
+ */
+const PATTERN_SCRIM = { top: 0.94, bottom: 0.95 } as const;
+/** Where the pattern scrim still holds most of its strength, and how much. */
+const PATTERN_SCRIM_HOLD = { stop: 0.62, ratio: 0.8 } as const;
 
 export function ThreadView({
   connectionFailure,
@@ -455,12 +457,9 @@ export function ThreadView({
   agentAvatarUrl,
   agentPlatform,
   sessionTitle,
-  projectPath,
   isMainSession = true,
   model,
   modelDisplayName,
-  contextUsed,
-  contextWindow,
   activityLabel,
   interactionAttention,
   capabilities,
@@ -525,10 +524,6 @@ export function ThreadView({
   showSlashSuggestions = false,
   onSelectSlashCommand,
   onDismissSlashSuggestions,
-  thinkingLevel,
-  thinkingLevelOptions,
-  onSelectThinkingLevel,
-  runtimeSettings,
   onReviewRuntimeSettings,
   permissionMode,
   onOpenPermissions,
@@ -587,7 +582,9 @@ export function ThreadView({
   // white floating circles every page header uses.
   const wallpaperActive = isChatWallpaperActive(chatAppearance);
   const headerHeight = resolveThreadHeaderHeight(topInset);
-  const scrimOpacity = WALLPAPER_SCRIM[theme.scheme === 'dark' ? 'dark' : 'light'];
+  const patternWallpaper = chatAppearance.background.kind === 'pattern';
+  const scrimOpacity = patternWallpaper ? PATTERN_SCRIM : WALLPAPER_SCRIM[theme.scheme === 'dark' ? 'dark' : 'light'];
+  const scrimHold = patternWallpaper ? PATTERN_SCRIM_HOLD : undefined;
   // The scrims fade from the wallpaper's own top and bottom colors so the
   // floating chrome melts into it; the timeline reads the same surfaces
   // through the presentation context.
@@ -642,20 +639,16 @@ export function ThreadView({
     : waitingForYou ? interactionAttention === 'input' ? t('Agent needs your input', { ns: 'chat' }) : t('Waiting for your approval', { ns: 'chat' })
     : headerWorking ? resolveThreadWorkingStatus({ messages, activityLabel, thinkingLabel: copy.thinking, t })
     : resolveThreadHeaderSubtitle({
-    capabilities,
     state,
     isRunning: presentedRunning,
     activityLabel,
-    model,
-    contextUsed,
-    contextWindow,
     offlineLabel: copy.offline,
     thinkingLabel: copy.thinking,
-    projectPath,
-    formatModelContext: (_model, percent) => t('Context remaining: {{percent}}%', { ns: 'chat', percent }),
+    onlineLabel: t('Online', { ns: 'common' }),
   });
+  const headerOnline = !headerPresence && !presentedRunning && (state.kind === 'ready' || state.kind === 'empty');
+  const modelChipLabel = shortModelLabel(modelDisplayName || model) || copy.chooseModel || t('Models', { ns: 'settings' });
   const avatarStatus = locked ? 'locked' : offline ? 'offline' : 'idle';
-  const projectSubtitle = projectPath?.trim() ? displayProjectPath(projectPath) : undefined;
   const canOpenSessions = capabilities.sessions && Boolean(onOpenSessionPanel);
   // The screen decides availability from the full capability set (attachments,
   // skills, commands, thinking, cron, tools); the view only needs the handler.
@@ -1170,6 +1163,7 @@ export function ThreadView({
           edge="top"
           color={surfaces.scrim.top}
           opacity={wallpaperActive ? scrimOpacity.top : 1}
+          hold={wallpaperActive ? scrimHold : undefined}
           style={wallpaperActive ? styles.headerScrimImmersive : styles.headerScrimTail}
         />
         <FloatingButton
@@ -1186,9 +1180,8 @@ export function ThreadView({
             name={headerName}
             avatarName={agentName}
             subtitle={headerSubtitle}
-            subtitleEllipsizeMode={projectSubtitle === headerSubtitle ? 'middle' : undefined}
-            accessibilityHint={!headerWorking && projectSubtitle === headerSubtitle ? projectPath?.trim() : undefined}
             presence={headerPresence}
+            online={headerOnline}
             icon={isCronSession ? CalendarClock : undefined}
             emoji={agentEmoji}
             avatarUrl={agentAvatarUrl}
@@ -1350,7 +1343,7 @@ export function ThreadView({
         style={{ height: composerExpanded ? compactComposerHeight.current : 0 }} />
 
       {sessionPreview ? <View style={wallpaperActive ? null : { backgroundColor: theme.colors.canvas }}>
-        {wallpaperActive ? <ChatWallpaperScrim edge="bottom" color={surfaces.scrim.bottom} opacity={scrimOpacity.bottom} /> : null}
+        {wallpaperActive ? <ChatWallpaperScrim edge="bottom" color={surfaces.scrim.bottom} opacity={scrimOpacity.bottom} hold={scrimHold} /> : null}
         <SessionPreviewFooter onUpgrade={sessionPreview.onUpgrade}
           onMain={sessionPreview.onMain} mainLabel={sessionPreview.mainLabel} bottomInset={bottomInset} loading={sessionPreview.loading} />
       </View> : null}
@@ -1369,7 +1362,7 @@ export function ThreadView({
         >
           {wallpaperActive && !composerExpanded ? (
             <ChatWallpaperScrim testID={`${testID}-composer-scrim`} edge="bottom"
-              color={surfaces.scrim.bottom} opacity={scrimOpacity.bottom} />
+              color={surfaces.scrim.bottom} opacity={scrimOpacity.bottom} hold={scrimHold} />
           ) : null}
           {showSlashSuggestions && onSelectSlashCommand ? (
             <View style={styles.slashSuggestions}>
@@ -1417,28 +1410,25 @@ export function ThreadView({
                 actionLabel={onRetry ? copy.reconnect : undefined} onAction={onRetry} />
             ) : undefined)}
             testID={`${testID}-composer`}
-            accessory={capabilities.models ? (
-              <View style={styles.composerOptions}>
-                {capabilities.sessionPermissions && onOpenPermissions ? <Pressable testID="thread-permissions" accessibilityRole="button"
-                  accessibilityLabel={`${t('Permissions', { ns: 'common' })}: ${permissionMode == null ? t('Unknown', { ns: 'common' }) : t(permissionMode === 'full-access' ? 'Full access' : permissionMode === 'workspace' ? 'Workspace access' : permissionMode === 'read-only' ? 'Read only' : 'Computer settings', { ns: 'chat' })}`}
-                  accessibilityHint={permissionMode == null ? t('Retry', { ns: 'common' }) : undefined}
-                  onPress={onOpenPermissions} style={styles.permissionOption}>
-                  {permissionMode == null ? <ShieldQuestionMark size={19} color={theme.colors.inkSecondary} strokeWidth={1.75} /> : permissionMode === 'full-access' ? <ShieldAlert size={19} color={theme.colors.warn} strokeWidth={1.75} /> : <Shield size={19} color={theme.colors.inkSecondary} strokeWidth={1.75} />}
-                </Pressable> : null}
-                {onOpenModelPicker ? <Pressable testID="thread-model-picker" accessibilityRole="button"
-                  onPress={onOpenModelPicker} style={styles.modelOption}>
-                  <ModelIcon compact id={model} testID="thread-model-icon" />
-                  <Text testID="thread-model-label" numberOfLines={1} ellipsizeMode="tail" maxFontSizeMultiplier={1.3} style={[styles.thinkingText, styles.modelLabel]}>{modelDisplayName || model?.split('/').pop() || copy.chooseModel}</Text>
-                </Pressable> : null}
-                {!runtimeSettings && thinkingLevel && onSelectThinkingLevel ? <ThinkingLevelMenu current={thinkingLevel}
-                  onSelect={onSelectThinkingLevel} options={thinkingLevelOptions} style={styles.thinkingMenu}>
-                  <View testID={`${testID}-thinking-level`} style={styles.thinkingChip}>
-                    <Brain size={16} color={theme.colors.inkSecondary} strokeWidth={1.75} />
-                    <Text style={styles.thinkingText}>{copy.formatThinkingLevel(thinkingLevel)}</Text>
-                  </View>
-                </ThinkingLevelMenu> : null}
-              </View>
-            ) : undefined}
+            accessory={capabilities.models ? ({ drafting, room }: ComposerAccessorySpace) => {
+              // Only a risky or unknown permission mode earns a place in the capsule; the model sheet lists it always.
+              const showShield = Boolean(capabilities.sessionPermissions && onOpenPermissions && (permissionMode == null || permissionMode === 'full-access'));
+              const chipRoom = room == null ? null : room - Space.sm - (showShield ? HitSize.sm + Space.xs : 0);
+              return (
+                <View style={styles.composerOptions}>
+                  {showShield ? <Pressable testID="thread-permissions" accessibilityRole="button"
+                    accessibilityLabel={`${t('Permissions', { ns: 'common' })}: ${permissionMode == null ? t('Unknown', { ns: 'common' }) : t('Full access', { ns: 'chat' })}`}
+                    accessibilityHint={permissionMode == null ? t('Retry', { ns: 'common' }) : undefined}
+                    onPress={onOpenPermissions} hitSlop={COMPOSER_CHIP_HIT_SLOP} style={styles.permissionOption}>
+                    {permissionMode == null ? <ShieldQuestionMark size={19} color={theme.colors.inkSecondary} strokeWidth={1.75} /> : <ShieldAlert size={19} color={theme.colors.warn} strokeWidth={1.75} />}
+                  </Pressable> : null}
+                  {onOpenModelPicker ? <ComposerModelChip model={model} label={modelChipLabel}
+                    iconOnly={drafting || (chipRoom != null && chipRoom < COMPOSER_CHIP_NAMED_MIN_WIDTH)}
+                    maxWidth={chipRoom == null ? undefined : chipRoom} onPress={onOpenModelPicker}
+                    accessibilityLabel={`${t('Model settings', { ns: 'chat' })}: ${modelChipLabel}`} /> : null}
+                </View>
+              );
+            } : undefined}
             value={input}
             placeholder={composerPlaceholder}
             accessibilityLabels={{
@@ -1494,7 +1484,7 @@ export function ThreadView({
         visible={Boolean(selectedToolMessage)}
         onClose={() => setSelectedToolMessageId(null)}
         stackBehavior="push"
-        name={selectedToolMessage?.toolName?.trim() || copy.tool}
+        name={(selectedToolMessage ? unwrapToolCall(selectedToolMessage.toolName?.trim() ?? '', selectedToolMessage.toolArgs).name : '') || copy.tool}
         status={selectedToolMessage?.toolStatus ?? 'success'}
         args={selectedToolMessage?.toolArgs}
         detail={selectedToolMessage?.toolDetail}
@@ -2290,6 +2280,7 @@ function AssistantBubble({
           flavor={THREAD_MARKDOWN_FLAVOR}
           markdown={displayText}
           markdownStyle={markdownStyle}
+          textBreakStrategy={CHAT_MARKDOWN_BREAK_STRATEGY}
           onLinkPress={openChatMarkdownLink}
           selectable={selectable}
           selectionMenuConfig={selectionMenu}
@@ -2305,6 +2296,57 @@ function AssistantBubble({
     </View>
   );
 }
+
+const COMPOSER_CHIP_HIT_SLOP = { top: (HitSize.md - HitSize.sm) / 2, bottom: (HitSize.md - HitSize.sm) / 2 } as const;
+const COMPOSER_CHIP_MAX_WIDTH = 148;
+// Below this the name would shrink to a letter or two; the mark alone says more.
+const COMPOSER_CHIP_NAMED_MIN_WIDTH = HitSize.sm + 44;
+
+/**
+ * The model chip inside the composer capsule (A+ chat design, owner decision
+ * 2026-09-30): the model's mark and short name on a faint tint of the user's
+ * bubble color. While a draft is written only the mark stays, leaving the
+ * words the room. It opens the model sheet (thinking, context, project).
+ */
+function ComposerModelChip({ model, label, iconOnly, maxWidth, onPress, accessibilityLabel }: Readonly<{
+  model?: string | null;
+  label: string;
+  iconOnly: boolean;
+  /** The room beside the whole placeholder; the name ellipsizes into it. */
+  maxWidth?: number;
+  onPress: () => void;
+  accessibilityLabel: string;
+}>): React.JSX.Element {
+  const { theme } = useAppTheme();
+  const surfaces = useChatSurfaces();
+  const tint = useMemo(() => withAlpha(surfaces.outgoing.backgroundColor, 0.1), [surfaces.outgoing.backgroundColor]);
+  return (
+    <Pressable testID="thread-model-picker" accessibilityRole="button" accessibilityLabel={accessibilityLabel}
+      onPress={onPress} hitSlop={COMPOSER_CHIP_HIT_SLOP}
+      style={({ pressed }) => [composerChipStyles.chip, iconOnly ? composerChipStyles.iconOnly : null,
+        { backgroundColor: tint, opacity: pressed ? 0.7 : 1 },
+        !iconOnly && maxWidth != null ? { maxWidth: Math.min(COMPOSER_CHIP_MAX_WIDTH, maxWidth) } : null]}>
+      <ModelIcon compact id={model} testID="thread-model-icon" />
+      {iconOnly ? null : <Text testID="thread-model-label" numberOfLines={1} ellipsizeMode="tail" maxFontSizeMultiplier={1.3}
+        style={[composerChipStyles.label, { color: theme.colors.ink }]}>{label}</Text>}
+    </Pressable>
+  );
+}
+
+const composerChipStyles = StyleSheet.create({
+  chip: {
+    minHeight: HitSize.sm,
+    maxWidth: COMPOSER_CHIP_MAX_WIDTH,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space.xs,
+    paddingLeft: Space.xs,
+    paddingRight: Space.sm,
+    borderRadius: Radius.full,
+  },
+  iconOnly: { width: HitSize.sm, paddingLeft: 0, paddingRight: 0, justifyContent: 'center' },
+  label: { flexShrink: 1, minWidth: 0, fontSize: FontSize.caption, lineHeight: LineHeight.caption, fontWeight: FontWeight.semibold },
+});
 
 /** The reply before its first words: a spinner, what the Agent is doing, and how long this turn has run. */
 function ThinkingPill({ testID }: Readonly<{ testID: string }>): React.JSX.Element {
@@ -2467,7 +2509,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       marginVertical: Space.md,
     },
     composer: {
-      marginHorizontal: Space.lg,
+      marginHorizontal: Space.md,
     },
     composerRegion: {
       gap: Space.sm,
@@ -2481,26 +2523,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       paddingHorizontal: Space.lg,
       zIndex: 2,
     },
-    thinkingMenu: {
-      flexShrink: 0,
-    },
-    thinkingChip: {
-      minHeight: ControlSize.floatingButton,
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: Space.xs,
-      borderRadius: Radius.full,
-      paddingHorizontal: Space.md,
-    },
-    composerOptions: { flexDirection: 'row', alignItems: 'center', flexShrink: 1, minWidth: 0, marginLeft: Space.sm },
-    permissionOption: { width: ControlSize.floatingButton, minHeight: ControlSize.floatingButton, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-    modelOption: { minHeight: ControlSize.floatingButton, flexDirection: 'row', alignItems: 'center', gap: Space.xs, paddingHorizontal: Space.xs, maxWidth: 160, minWidth: 0, flexShrink: 1 },
-    modelLabel: { flexShrink: 1, minWidth: 0 },
-    thinkingText: {
-      color: colors.inkSecondary,
-      fontSize: FontSize.caption,
-      lineHeight: LineHeight.caption,
-      fontWeight: FontWeight.semibold,
-    },
+    composerOptions: { flexDirection: 'row', alignItems: 'center', gap: Space.xs, flexShrink: 1, minWidth: 0, marginLeft: Space.sm },
+    permissionOption: { width: HitSize.sm, height: HitSize.sm, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   });
 }

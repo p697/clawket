@@ -543,6 +543,38 @@ describe('GatewayProtocolClient migrated parity', () => {
       expect(states).toContain('ready');
     });
 
+    it('backs off instead of reconnecting at once while Hermes reports its API down', () => {
+      // Observed 2026-10-01: a Bridge whose Hermes API rejected its key answered
+      // every probe as degraded, and the App reconnected about 1.4 times a second.
+      client.configure({
+        url: 'ws://127.0.0.1:4319/v1/hermes/ws',
+        backendKind: 'hermes',
+        mode: 'hermes',
+      }, HERMES_GATEWAY_PROTOCOL_PROFILE);
+      client.connect();
+      const sockets = () => ((globalThis as any).WebSocket as jest.Mock).mock.calls.length;
+      const answer = (payload: object) => {
+        createdWs.onopen!();
+        createdWs.onmessage!({ data: JSON.stringify({ type: 'event', event: 'health', payload }) });
+      };
+
+      answer({ status: 'degraded', hermesApiReachable: false });
+      const first = sockets();
+      jest.advanceTimersByTime(799);
+      expect(sockets()).toBe(first);
+      jest.advanceTimersByTime(1);
+      expect(sockets()).toBe(first + 1);
+
+      answer({ status: 'degraded', hermesApiReachable: false });
+      jest.advanceTimersByTime(1_359);
+      expect(sockets()).toBe(first + 1);
+      jest.advanceTimersByTime(1);
+      expect(sockets()).toBe(first + 2);
+
+      answer({ status: 'ok', hermesApiReachable: true });
+      expect(client.getConnectionState()).toBe('ready');
+    });
+
     it('keeps current connect attempt valid when connect is called repeatedly during connecting', () => {
       const states: string[] = [];
       client.on('connection', (e) => states.push(e.state));

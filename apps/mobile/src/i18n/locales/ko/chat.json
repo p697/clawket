@@ -179,7 +179,6 @@
   "Expired": "만료됨",
   "Start a conversation with {{name}}": "{{name}}와 대화 시작",
   "{{count}} attachments": "첨부 파일 {{count}}개",
-  "{{model}} · {{percent}}% left": "{{model}} · {{percent}}% 남음",
   "Bridge is not running on your computer": "컴퓨터에서 Bridge가 실행되고 있지 않습니다",
   "Pairing required": "페어링이 필요합니다",
   "Agent is not responding": "에이전트가 응답하지 않습니다",
@@ -471,5 +470,6 @@
   "View logs": "로그 보기",
   "Run again": "다시 실행",
   "Run started": "실행을 시작했어요",
-  "Could not start the run": "실행을 시작하지 못했어요"
+  "Could not start the run": "실행을 시작하지 못했어요",
+  "Project": "프로젝트"
 }

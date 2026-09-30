@@ -179,7 +179,6 @@
   "Expired": "Минув",
   "Start a conversation with {{name}}": "Почніть розмову з {{name}}",
   "{{count}} attachments": "Вкладень: {{count}}",
-  "{{model}} · {{percent}}% left": "{{model}} · залишилося {{percent}}%",
   "Bridge is not running on your computer": "Bridge не запущено на вашому комп’ютері",
   "Pairing required": "Потрібне з’єднання",
   "Agent is not responding": "Агент не відповідає",
@@ -471,5 +470,6 @@
   "View logs": "Відкрити журнал",
   "Run again": "Запустити знову",
   "Run started": "Запуск розпочато",
-  "Could not start the run": "Не вдалося запустити"
+  "Could not start the run": "Не вдалося запустити",
+  "Project": "Проєкт"
 }

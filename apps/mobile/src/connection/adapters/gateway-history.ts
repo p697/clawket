@@ -304,11 +304,22 @@ export function mergeGatewayHistory(
       || (cached.timestampMs !== undefined && Math.abs(cached.timestampMs - remote.timestampMs) <= 2_000);
   };
   const matchedRemote = new Set<number>();
+  // The server row that confirmed each dropped cache row, for anchoring below.
+  const confirmedBy = new Map<number, ChatMessage>();
+  const confirm = (cachedIndex: number, remote: ChatMessage | undefined) => {
+    if (remote) confirmedBy.set(cachedIndex, remote);
+    return false;
+  };
   const optimisticCacheTail = cachedMessages.filter((message, cachedIndex) => {
-    if (remoteIds.has(message.id)) return false;
+    if (remoteIds.has(message.id)) return confirm(cachedIndex, remoteMessages.find(remote => remote.id === message.id));
     if (message.tool?.callId && remoteMessages.some((remote) => remote.tool?.callId === message.tool?.callId
-      && remote.role === message.role)) return false;
-    if (message.idempotencyKey && remoteIdempotencyKeys.has(message.idempotencyKey)) return false;
+      && remote.role === message.role)) {
+      return confirm(cachedIndex, remoteMessages.find(remote => remote.tool?.callId === message.tool?.callId
+        && remote.role === message.role));
+    }
+    if (message.idempotencyKey && remoteIdempotencyKeys.has(message.idempotencyKey)) {
+      return confirm(cachedIndex, remoteMessages.find(remote => remote.idempotencyKey === message.idempotencyKey));
+    }
     // Local optimistic IDs/timestamps differ from the Gateway's persisted IDs.
     // Match copies one-to-one so a repeated user message is never collapsed.
     const cacheRowId = (message as CachedHistoryMessage).cacheRowId ?? message.id;
@@ -346,7 +357,7 @@ export function mergeGatewayHistory(
     ));
     if (canonicalIndex >= 0) {
       if (optimistic) matchedRemote.add(canonicalIndex);
-      return false;
+      return confirm(cachedIndex, remoteMessages[canonicalIndex]);
     }
     return earliestRemoteTimestamp === undefined
       || message.timestampMs === undefined
@@ -357,7 +368,7 @@ export function mergeGatewayHistory(
   // after new replies made old tools look newest on every reconciliation.
   const untimed = optimisticCacheTail.filter((message) => message.timestampMs === undefined);
   const timed = optimisticCacheTail.filter((message) => message.timestampMs !== undefined);
-  return [...untimed, ...remoteMessages, ...timed]
+  const merged = [...untimed, ...remoteMessages, ...timed]
     .map((message, index) => ({ message, index }))
     .sort((left, right) => {
       const leftTimestamp = left.message.timestampMs;
@@ -368,6 +379,26 @@ export function mergeGatewayHistory(
       return leftTimestamp - rightTimestamp || left.index - right.index;
     })
     .map(({ message }) => message);
+
+  // A tool step the transcript never recorded (the provider ran it itself)
+  // stays before the confirmed row that followed it on screen: that reply is
+  // stamped with its response start, earlier than the step's own clock.
+  const retained = new Set(optimisticCacheTail);
+  const anchoredTools = new Map<ChatMessage, ChatMessage>();
+  cachedMessages.forEach((message, cachedIndex) => {
+    if (message.role !== 'tool' || !retained.has(message)) return;
+    let next = cachedIndex + 1;
+    while (cachedMessages[next]?.role === 'tool' && retained.has(cachedMessages[next]!)) next++;
+    const anchor = confirmedBy.get(next);
+    if (anchor) anchoredTools.set(message, anchor);
+  });
+  if (anchoredTools.size === 0) return merged;
+  const ordered = merged.filter(message => !anchoredTools.has(message));
+  for (const [tool, anchor] of anchoredTools) {
+    const at = ordered.indexOf(anchor);
+    ordered.splice(at < 0 ? ordered.length : at, 0, tool);
+  }
+  return ordered;
 }
 
 function cachedMessageToChatMessage(message: CachedMessage): CachedHistoryMessage {

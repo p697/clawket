@@ -8,6 +8,7 @@ import { ServicePill, servicePillCodeStyle } from './ServicePill';
 import {
   describeFailedStep,
   describeLiveStep,
+  effectiveTool,
   formatActivityDuration,
   formatToolActivitySummary,
   summarizeToolActivity,
@@ -68,7 +69,7 @@ export function ToolActivityPill({ messages, onPress, testID }: Readonly<{
   const running = messages.find((message) => message.toolStatus === 'running');
   const elapsed = useElapsed(running ? running.toolStartedAt ?? running.timestampMs : undefined);
   if (running) {
-    const name = running.toolName?.trim() || t('Tool');
+    const name = effectiveTool(running).name || t('Tool');
     const live = describeLiveStep(running, t);
     const label = live ? `${live.before}${live.value}${live.after}` : formatToolActivity(name, t);
     const time = elapsed !== undefined && elapsed >= ELAPSED_TICK_MS ? formatActivityDuration(elapsed, t) : undefined;
@@ -86,7 +87,7 @@ export function ToolActivityPill({ messages, onPress, testID }: Readonly<{
   }
   const only = messages.length === 1 ? messages[0]! : null;
   if (only?.toolStatus === 'error') {
-    const failed = describeFailedStep(only, formatToolDisplayName(only.toolName?.trim() || t('Tool'), t), t);
+    const failed = describeFailedStep(only, formatToolDisplayName(effectiveTool(only).name || t('Tool'), t), t);
     return (
       <ServicePill
         testID={testID}

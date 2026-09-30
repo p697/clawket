@@ -1,5 +1,25 @@
 type Translate = (key: string, options?: Record<string, unknown>) => string;
 
+/**
+ * OpenClaw can record a call through its generic `tool_call` tool, naming the
+ * real tool in `args.id` and passing its arguments in `args.args` (see
+ * `cron-run-content.ts`). Names, icons and summaries read the real tool; the
+ * detail sheet keeps the raw input.
+ */
+export function unwrapToolCall(name: string, args?: string): { name: string; args?: string } {
+  if (name.trim().toLowerCase() !== 'tool_call' || !args?.trim()) return { name, args };
+  try {
+    const parsed: unknown = JSON.parse(args);
+    if (parsed && typeof parsed === 'object') {
+      const record = parsed as { id?: unknown; args?: unknown };
+      if (typeof record.id === 'string' && record.id.trim()) {
+        return { name: record.id.trim(), args: record.args === undefined ? undefined : JSON.stringify(record.args) };
+      }
+    }
+  } catch { /* A malformed wrapper stays as recorded. */ }
+  return { name, args };
+}
+
 /** What a tool call does, for icons and the activity summary; `other` covers everything unrecognized. */
 export type ToolCategory = 'command' | 'read' | 'edit' | 'search' | 'web' | 'memory' | 'schedule' | 'message' | 'other';
 
@@ -87,14 +107,17 @@ export function formatToolActivity(
   t: Translate,
 ): string {
   const lower = name.toLowerCase();
-  if (lower === 'exec' || lower === 'bash') return t('Running command', { ns: 'chat' });
-  if (lower === 'read' || lower === 'read_file') return t('Reading file', { ns: 'chat' });
-  if (lower === 'write' || lower === 'edit' || lower === 'apply_patch' || lower === 'write_file' || lower === 'edit_file') return t('Writing file', { ns: 'chat' });
   if (lower === 'web_search') return t('Searching web', { ns: 'chat' });
   if (lower === 'web_fetch') return t('Web fetching', { ns: 'chat' });
   if (lower === 'browser') return t('Browsing', { ns: 'chat' });
   if (lower === 'message') return t('Messaging', { ns: 'chat' });
-  return t('Using {{toolName}}', { ns: 'chat', toolName: name });
+  // Backends name the same step differently (Hermes runs commands as `terminal`).
+  switch (toolCategory(name)) {
+    case 'command': return t('Running command', { ns: 'chat' });
+    case 'read': return t('Reading file', { ns: 'chat' });
+    case 'edit': return t('Writing file', { ns: 'chat' });
+    default: return t('Using {{toolName}}', { ns: 'chat', toolName: name });
+  }
 }
 
 /** Strip status wrapper (Running/Failed/Completed) from a tool summary. */

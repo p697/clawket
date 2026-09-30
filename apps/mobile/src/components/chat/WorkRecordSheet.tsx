@@ -7,7 +7,7 @@ import { useAppTheme } from '../../theme';
 import type { UiMessage } from '../../types/chat';
 import { FontSize, FontWeight, IconSize, LineHeight, Motion, Radius, Space } from '../../theme/tokens';
 import { formatToolDisplayName, resolveToolDetail } from '../../utils/tool-display';
-import { formatActivityDuration, toolActivityDuration } from './tool-activity-model';
+import { effectiveTool, formatActivityDuration, toolActivityDuration } from './tool-activity-model';
 import { toolIcon } from './ToolActivityPill';
 
 // A long run outgrows the screen: scroll inside fixed detents with the
@@ -72,9 +72,10 @@ export function WorkRecordSheet({ visible, steps, onClose, onOpenStep }: WorkRec
     >
       <BottomSheetScrollView testID="work-record-scroll" contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {list.map((message) => {
-          const name = message.toolName?.trim() || t('Tool');
+          const tool = effectiveTool(message);
+          const name = tool.name || t('Tool');
           const Icon = toolIcon(name);
-          const detail = resolveToolDetail(name, message.toolArgs)?.replace(/\s+/g, ' ').trim();
+          const detail = resolveToolDetail(name, tool.args)?.replace(/\s+/g, ' ').trim();
           const failed = message.toolStatus === 'error';
           const running = message.toolStatus === 'running';
           const status = failed ? t('Failed') : running ? t('Running') : message.toolStatus === 'unknown' ? t('Result unavailable') : undefined;

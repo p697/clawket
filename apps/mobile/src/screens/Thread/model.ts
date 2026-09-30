@@ -9,7 +9,7 @@ import type {
 } from '@clawket/agent-protocol';
 import type { ConnectionState as LegacyConnectionState } from '../../types';
 import type { UiMessage } from '../../types/chat';
-import { toolCategory } from '../../utils/tool-display';
+import { toolCategory, unwrapToolCall } from '../../utils/tool-display';
 import { resolveCronRunSessionKey } from '../../connection/adapters/cron-run-content';
 import { isSystemOwnedCronJob } from '../AgentSettings/cron-model';
 import { formatThreadTimestamp, localDayNumber, THREAD_TIME_GAP_MS } from './timestamps';
@@ -473,42 +473,30 @@ export function copiedSessionTitle(
 }
 
 export type ThreadHeaderSubtitleInput = Readonly<{
-  projectPath?: string | null;
-  capabilities: Capabilities;
   state: ThreadContentState;
   isRunning: boolean;
   activityLabel?: string | null;
-  model?: string | null;
-  contextUsed?: number;
-  contextWindow?: number;
   offlineLabel: string;
   thinkingLabel: string;
-  formatModelContext: (model: string, remainingPercent: number) => string;
+  onlineLabel: string;
 }>;
 
+/**
+ * The header's line under the Agent's name when no status sentence applies
+ * (A+ chat design, owner decision 2026-09-30): "Online" while the Agent can
+ * answer. Its model, context left and project live in the model sheet.
+ */
 export function resolveThreadHeaderSubtitle({
-  projectPath,
-  capabilities,
   state,
   isRunning,
   activityLabel,
-  model,
-  contextUsed,
-  contextWindow,
   offlineLabel,
   thinkingLabel,
-  formatModelContext,
+  onlineLabel,
 }: ThreadHeaderSubtitleInput): string {
   if (state.kind === 'offline') return offlineLabel;
   if (isRunning) return activityLabel?.trim() || thinkingLabel;
-  if (projectPath?.trim() && (state.kind === 'ready' || state.kind === 'empty')) return displayProjectPath(projectPath);
-  if (!capabilities.models) return '';
-
-  const normalizedModel = model?.trim() ?? '';
-  const remainingPercent = resolveContextRemainingPercent(contextUsed, contextWindow);
-  return remainingPercent === null
-    ? ''
-    : formatModelContext(normalizedModel, remainingPercent);
+  return state.kind === 'ready' || state.kind === 'empty' ? onlineLabel : '';
 }
 
 type Translate = (key: string, options?: Record<string, unknown>) => string;
@@ -548,7 +536,7 @@ export function resolveThreadWorkingStatus({
   for (const message of messages) {
     if (isOwnPrompt(message)) break;
     if (message.role === 'tool' && message.toolStatus === 'running' && !message.approval) {
-      switch (toolCategory(message.toolName?.trim() ?? '')) {
+      switch (toolCategory(unwrapToolCall(message.toolName?.trim() ?? '', message.toolArgs).name)) {
         case 'command': return t('Running a command…', { ns: 'chat' });
         case 'read': return t('Reading files…', { ns: 'chat' });
         case 'edit': return t('Editing files…', { ns: 'chat' });

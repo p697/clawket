@@ -179,7 +179,6 @@
   "Expired": "समाप्त",
   "Start a conversation with {{name}}": "{{name}} के साथ बातचीत शुरू करें",
   "{{count}} attachments": "{{count}} अटैचमेंट",
-  "{{model}} · {{percent}}% left": "{{model}} · {{percent}}% बाकी",
   "Bridge is not running on your computer": "आपके कंप्यूटर पर Bridge नहीं चल रहा है",
   "Pairing required": "पेयरिंग ज़रूरी है",
   "Agent is not responding": "Agent जवाब नहीं दे रहा है",
@@ -471,5 +470,6 @@
   "View logs": "लॉग देखें",
   "Run again": "फिर से चलाएँ",
   "Run started": "चलना शुरू हुआ",
-  "Could not start the run": "चला नहीं सके"
+  "Could not start the run": "चला नहीं सके",
+  "Project": "प्रोजेक्ट"
 }

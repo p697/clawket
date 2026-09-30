@@ -179,7 +179,6 @@
   "Expired": "Süresi doldu",
   "Start a conversation with {{name}}": "{{name}} ile sohbet başlatın",
   "{{count}} attachments": "{{count}} ek",
-  "{{model}} · {{percent}}% left": "{{model}} · %{{percent}} kaldı",
   "Bridge is not running on your computer": "Bridge bilgisayarınızda çalışmıyor",
   "Pairing required": "Eşleştirme gerekli",
   "Agent is not responding": "Agent yanıt vermiyor",
@@ -471,5 +470,6 @@
   "View logs": "Günlüğü gör",
   "Run again": "Yeniden çalıştır",
   "Run started": "Çalıştırma başladı",
-  "Could not start the run": "Başlatılamadı"
+  "Could not start the run": "Başlatılamadı",
+  "Project": "Proje"
 }

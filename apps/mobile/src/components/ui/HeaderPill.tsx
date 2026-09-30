@@ -36,6 +36,8 @@ export type HeaderPillProps = Readonly<{
    * in the accent; `attention` breathes a full ring and colors it amber.
    */
   presence?: PresenceRingTone | null;
+  /** An idle Agent that can answer: its "Online" subtitle takes the accent, as in Telegram. */
+  online?: boolean;
   emoji?: string | null;
   avatarUrl?: string | null;
   /** The Agent's backend: a product Agent wears the official mark, as on the roster. */
@@ -59,6 +61,7 @@ export function HeaderPill({
   subtitle,
   subtitleEllipsizeMode = 'tail',
   presence = null,
+  online = false,
   emoji,
   avatarUrl,
   platform,
@@ -74,7 +77,7 @@ export function HeaderPill({
   const { theme } = useAppTheme();
   const conversation = useConversationTheme();
   const presenceColors = useMemo(() => resolveChatPresenceColors(conversation), [conversation]);
-  const subtitleColor = presence === 'working' ? presenceColors.working
+  const subtitleColor = presence === 'working' || (!presence && online) ? presenceColors.working
     : presence === 'attention' ? presenceColors.attentionText : theme.colors.inkSecondary;
   const subtitleOpacity = useSharedValue(1);
   const chrome = useMemo(

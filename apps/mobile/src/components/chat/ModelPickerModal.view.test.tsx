@@ -15,6 +15,7 @@ jest.mock('react-native', () => {
     ActivityIndicator: primitive('ActivityIndicator'),
     Image: primitive('Image'),
     Pressable: primitive('Pressable'),
+    ScrollView: primitive('ScrollView'),
     StyleSheet: {
       create: <T extends Record<string, unknown>>(styles: T) => styles,
       flatten: (style: unknown) => style,
@@ -75,6 +76,7 @@ jest.mock('lucide-react-native', () => {
   );
   return {
     Check: icon('Check'),
+    Folder: icon('Folder'),
     Orbit: icon('Orbit'),
     Search: icon('Search'),
     Settings2: icon('Settings2'),
@@ -94,6 +96,9 @@ jest.mock('../../theme', () => ({
     theme: {
       colors: {
         accent: '#1677ff',
+        onAccent: '#ffffff',
+        line: '#e5e5e5',
+        warn: '#d9791c',
         ink: '#111111',
         inkSecondary: '#555555',
         inkTertiary: '#888888',
@@ -237,6 +242,29 @@ describe('ModelPickerModal view', () => {
     expect(triggerLightImpact).toHaveBeenCalledTimes(1);
     expect(view.onSelectModel).toHaveBeenCalledWith(models[1]);
     expect(view.onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('puts the conversation\'s thinking, context left and project above the catalog', () => {
+    const onSelectThinking = jest.fn();
+    const view = renderPicker({ session: {
+      thinking: { current: 'high', options: ['off', 'low', 'high'], onSelect: onSelectThinking },
+      contextRemainingPercent: 12,
+      project: { label: '~/Documents/Clawket/Chats', path: '/Users/lucy/Documents/Clawket/Chats' },
+    } });
+    expect(view.getByTestId('model-picker-thinking-high').props.accessibilityState).toEqual({ checked: true });
+    expect(view.getByTestId('model-picker-thinking-low').props.accessibilityState).toEqual({ checked: false });
+    fireEvent.press(view.getByTestId('model-picker-thinking-low'));
+    expect(onSelectThinking).toHaveBeenCalledWith('low');
+    // Thinking stays a sheet setting: the picker does not close or pick a model.
+    expect(view.onClose).not.toHaveBeenCalled();
+    expect(view.onSelectModel).not.toHaveBeenCalled();
+    expect(view.getByText('Context remaining: {{percent}}%')).toBeTruthy();
+    expect(view.getByTestId('model-picker-project').props.accessibilityLabel).toBe('/Users/lucy/Documents/Clawket/Chats');
+    expect(view.getByText('~/Documents/Clawket/Chats').props.ellipsizeMode).toBe('middle');
+
+    view.rerender(<ModelPickerModal visible onClose={view.onClose} models={models} loading={false}
+      onSelectModel={view.onSelectModel} session={{ contextRemainingPercent: null, project: null }} />);
+    expect(view.queryByTestId('model-picker-session')).toBeNull();
   });
 
   it('forwards the canonical Sheet close action once', () => {

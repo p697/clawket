@@ -179,7 +179,6 @@
   "Expired": "منتهي الصلاحية",
   "Start a conversation with {{name}}": "ابدأ محادثة مع {{name}}",
   "{{count}} attachments": "{{count}} مرفقات",
-  "{{model}} · {{percent}}% left": "{{model}} · متبقٍ {{percent}}%",
   "Bridge is not running on your computer": "Bridge لا يعمل على جهاز الكمبيوتر",
   "Pairing required": "الاقتران مطلوب",
   "Agent is not responding": "الوكيل لا يستجيب",
@@ -471,5 +470,6 @@
   "View logs": "عرض السجل",
   "Run again": "تشغيل مرة أخرى",
   "Run started": "بدأ التشغيل",
-  "Could not start the run": "تعذّر بدء التشغيل"
+  "Could not start the run": "تعذّر بدء التشغيل",
+  "Project": "المشروع"
 }
