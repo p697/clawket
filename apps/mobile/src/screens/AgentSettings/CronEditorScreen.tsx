@@ -387,7 +387,7 @@ function CronEditor({ adapter, agent, online, reconnecting = false, jobId, initi
             {runOffset !== null ? <Button testID="cron-runs-more" label={t('Load more')} variant="ghost" size="sm" style={styles.more} disabled={!online || runsBusy} onPress={() => { void loadRuns(runOffset); }} /> : null}
           </View> : null}
           {!systemOwned ? <View style={styles.actions}>
-            {operations?.run ? <Button testID="agent-cron-run" icon={Play} label={t('Run now')} variant="secondary" disabled={!online || Boolean(busy)} loading={busy === 'run'} style={styles.flex} onPress={() => { void runNow(); }} /> : null}
+            {operations?.run ? <Button testID="agent-cron-run" icon={Play} label={t('Run now')} variant="card" disabled={!online || Boolean(busy)} loading={busy === 'run'} style={styles.flex} onPress={() => { void runNow(); }} /> : null}
             {operations?.remove ? <Button testID="agent-cron-delete" icon={Trash2} label={t('Delete', { ns: 'common' })} variant="destructive" disabled={!online || Boolean(busy)} loading={busy === 'delete'} style={styles.flex} onPress={() => setConfirmDelete(true)} /> : null}
           </View> : null}
         </> : <>

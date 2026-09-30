@@ -180,7 +180,7 @@ export function ConfigurationSection({
         <Button
           testID="openclaw-configuration-edit"
           label={t('Edit', { ns: 'common' })}
-          variant="secondary"
+          variant="card"
           disabled={!online}
           onPress={gate?.locked ? () => gate.open(onEdit) : onEdit}
         />
@@ -307,7 +307,7 @@ export function PermissionsSection({
             <Button
               testID="openclaw-permissions-repair"
               label={t('Repair Now')}
-              variant="secondary"
+              variant="card"
               loading={repairing}
               disabled={!online}
               onPress={gate?.locked ? () => gate.open(onRepair) : onRepair}
@@ -469,7 +469,7 @@ export function DiagnosticsSection({
         <Button
           testID="openclaw-diagnostics-run"
           label={t('Run diagnostics again')}
-          variant="outline"
+          variant="card"
           multiline
           // After Attempt Fix the re-read belongs to that button's spinner.
           loading={diagnosing && !repairing}

@@ -1,13 +1,14 @@
 import React, { useMemo, useRef } from 'react';
-import { Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { BottomSheetFlatList } from '@gorhom/bottom-sheet';
 import * as Haptics from 'expo-haptics';
 import { Check } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { Sheet } from '../ui';
+import { Button } from '../ui/Button';
 import { ListSkeleton } from '../ui/ListSkeleton';
 import { useAppTheme } from '../../theme';
-import { FontSize, FontWeight, Radius, Space } from '../../theme/tokens';
+import { FontSize, FontWeight, Space } from '../../theme/tokens';
 
 export type CommandPickerItem = {
   value: string;
@@ -64,9 +65,7 @@ export function CommandOptionPickerModal({
       ) : view.error ? (
         <View style={styles.stateWrap}>
           <Text style={styles.stateText}>{view.error}</Text>
-          <TouchableOpacity style={styles.retryBtn} onPress={onRetry}>
-            <Text style={styles.retryText}>{t('Retry')}</Text>
-          </TouchableOpacity>
+          <Button testID="command-option-retry" label={t('Retry')} variant="secondary" size="sm" onPress={onRetry} style={styles.retry} />
         </View>
       ) : view.options.length === 0 ? (
         <View style={styles.stateWrap}>
@@ -141,19 +140,6 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       textAlign: 'center',
       lineHeight: 20,
     },
-    retryBtn: {
-      marginTop: Space.md,
-      paddingHorizontal: 14,
-      paddingVertical: Space.sm,
-      borderRadius: Radius.full,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.line,
-      backgroundColor: colors.surface,
-    },
-    retryText: {
-      color: colors.ink,
-      fontSize: FontSize.caption,
-      fontWeight: FontWeight.semibold,
-    },
+    retry: { marginTop: Space.md },
   });
 }

@@ -3,7 +3,7 @@ import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { CameraView, BarcodeScanningResult } from 'expo-camera';
 import { useTranslation } from 'react-i18next';
 import { useAppTheme } from '../../theme';
-import { BorderWidth, FontSize, FontWeight, PresentationColor, Radius, Space } from '../../theme/tokens';
+import { BorderWidth, ControlSize, FontSize, FontWeight, LineHeight, Motion, PresentationColor, Radius, Space } from '../../theme/tokens';
 import { parseQRPayload, QRScanResult } from './qrPayload';
 
 type Props = {
@@ -65,8 +65,9 @@ export function QRScannerScreen({ onScanned, onCancel }: Props): React.JSX.Eleme
         </View>
         <View style={styles.overlayBottom}>
           <Text style={styles.hint}>{t('Scan the pairing QR code')}</Text>
-          <Pressable onPress={onCancel} style={[styles.cancelButton, { borderColor: PresentationColor.onMediaBorder, marginTop: Space.lg }]}>
-            <Text style={[styles.cancelText, { color: PresentationColor.onMedia }]}>{t('Cancel', { ns: 'common' })}</Text>
+          {/* A filled media capsule, like the viewer's image actions: buttons carry no outline (owner decision 2026-09-30). */}
+          <Pressable testID="qr-scanner-cancel" accessibilityRole="button" onPress={onCancel} style={({ pressed }) => [styles.cancelButton, pressed ? styles.cancelPressed : null]}>
+            <Text style={styles.cancelText}>{t('Cancel', { ns: 'common' })}</Text>
           </Pressable>
         </View>
       </View>
@@ -78,8 +79,16 @@ const SCAN_SIZE = 250;
 
 const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  cancelButton: { borderRadius: Radius.full, borderWidth: BorderWidth.hairline, paddingHorizontal: Space.xl, paddingVertical: Space.sm },
-  cancelText: { fontSize: FontSize.caption },
+  cancelButton: {
+    minHeight: ControlSize.floatingButton,
+    marginTop: Space.lg,
+    paddingHorizontal: Space.xl,
+    borderRadius: Radius.full,
+    justifyContent: 'center',
+    backgroundColor: PresentationColor.mediaControl,
+  },
+  cancelPressed: { opacity: Motion.pressedOpacity },
+  cancelText: { color: PresentationColor.onMedia, fontSize: FontSize.secondary, lineHeight: LineHeight.secondary, fontWeight: FontWeight.semibold },
   overlay: { ...StyleSheet.absoluteFill },
   overlayTop: { flex: 1, backgroundColor: PresentationColor.mediaOverlayStrong },
   overlayMiddle: { flexDirection: 'row', height: SCAN_SIZE },

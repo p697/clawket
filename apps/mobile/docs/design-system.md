@@ -456,9 +456,22 @@ Successful scheduled-task creation shows one localized native acknowledgement af
 
 OpenClaw management uses a nested native stack with the shared custom ScreenHeader and grouped canvas. Each feature card pushes a detail page with a horizontal transition; popping reveals the retained menu and its scroll position. Data, config search and expanded keys stay in the management controller across page visits. Native navigation owns hardware Back and swipe; shared sheets retain their own dismissal priority.
 
+### Borderless buttons (owner decision 2026-09-30)
+
+The owner found the healthy Connection page's Reconnect capsule ugly because of its `inkSecondary` hairline and asked for every similar border to go. No `Button` variant draws a border:
+
+- `secondary` fills with `surface` and belongs on white canvases and sheets.
+- `card` fills with `surfaceFloating`, the `SettingsGroup` card material, and is the secondary action placed directly on `canvasGrouped`, where the grey fill disappears (the reason the removed `outline` variant existed). It presses to `surface`. Consumers: Connection Reconnect / Pause, OpenClaw config Edit, permissions Repair Now, diagnostics re-run, Logs Refresh and the checked Logs level toggles, and the Cron edit page's Run now.
+- `destructive` is the `badSoft` fill alone; the shared flat hairline no longer applies.
+- Media keeps its own filled recipe: the QR scanner Cancel is a 44-point `PresentationColor.mediaControl` capsule. Command option Retry uses the shared `Button` (`secondary`, `sm`) instead of a hand-drawn bordered pill.
+
+Outlines that mark input or selection stay: text fields, question radio cards (owner-requested ink selected frame, 2026-09-26), the paywall's selected plan, dark-mode floating hairlines and album edges.
+
+The Connection page puts its lifecycle action and Pause in one row of two equal `multiline` capsules (owner-picked B, 2026-09-30): Pause shows the short `common` `Pause` label and keeps `Pause connection` as its accessibility label. Online keeps both `card`; offline, not connected and paused turn the lifecycle action `primary` (the 2026-09-27 rule), and paused shows Resume alone across the row. Long translations wrap inside the capsule instead of truncating.
+
 ### Diagnostic actions
 
-Diagnostics uses “正在诊断，可能需要几秒…” while waiting and “重新诊断” after a result. The latter opts into shared `Button variant="outline"`: canvas fill, ink text, inkSecondary hairline, and ordinary surface press feedback. It keeps the 44-point minimum and allows translated labels to wrap. This variant is opt-in; existing secondary buttons and global palette stay unchanged. Attempt Fix remains the primary action.
+Diagnostics uses “正在诊断，可能需要几秒…” while waiting and “重新诊断” after a result. The re-run is a `card` button beside the primary Attempt Fix on the grouped page; it keeps the 44-point minimum and allows translated labels to wrap.
 
 ### Usage completeness and calendar boundaries (2026-09-21)
 

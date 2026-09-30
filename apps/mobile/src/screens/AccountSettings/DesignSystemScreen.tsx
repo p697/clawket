@@ -360,6 +360,10 @@ export function DesignSystemScreen({
               variant="secondary"
               onPress={() => setSheetVisible(true)}
             />
+            {/* The same action directly on a grouped page takes the white card material, never a border. */}
+            <View testID="design-system-grouped-actions" style={[styles.groupedSample, { backgroundColor: theme.colors.canvasGrouped }]}>
+              <Button label={t('Reconnect', { ns: 'common' })} variant="card" onPress={() => setSheetVisible(true)} />
+            </View>
             </FormStep>
             <FormStep number="06" title={t('Icon actions')}>
               <Text style={[styles.secondarySample, { color: theme.colors.inkSecondary }]}>{t('Navigation · plain icons')}</Text>
@@ -425,6 +429,7 @@ const styles = StyleSheet.create({
   stack: { gap: Space.xxl },
   tokenGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Space.sm },
   tokenCard: { width: '47%', flexGrow: 1, padding: Space.md, borderRadius: Radius.card, gap: Space.sm },
+  groupedSample: { padding: Space.md, borderRadius: Radius.card },
   tokenPaint: { height: ControlSize.floatingButton, borderRadius: Radius.settingsGroup },
   swatch: {
     width: IconSize.md,

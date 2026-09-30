@@ -1,5 +1,5 @@
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { fireEvent, render } from '@testing-library/react-native';
 import { CommandOptionPickerModal } from './CommandOptionPickerModal';
 
 jest.mock('react-native', () => {
@@ -31,4 +31,14 @@ it('keeps the sheet mounted and its last options on screen while it slides away'
   view.rerender(<CommandOptionPickerModal {...base} visible title="Speed" loading options={[]} />);
   expect(view.getByTestId('command-option-loading')).toBeTruthy();
   expect(view.UNSAFE_getByType('Sheet' as never).props.title).toBe('Speed');
+});
+
+it('retries a failed option load through the shared borderless button', () => {
+  const onRetry = jest.fn();
+  const view = render(<CommandOptionPickerModal {...base} onRetry={onRetry} visible loading={false} error="Options unavailable" options={[]} />);
+  expect(view.getByText('Options unavailable')).toBeTruthy();
+  const retry = view.getByTestId('command-option-retry');
+  expect(retry.props.accessibilityRole).toBe('button');
+  fireEvent.press(retry);
+  expect(onRetry).toHaveBeenCalledTimes(1);
 });

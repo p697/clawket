@@ -261,15 +261,16 @@ export function LogsSection({
         contentContainerStyle={styles.filters}
         showsHorizontalScrollIndicator={false}
       >
-        {/* Toggles, all on by default: a checked outline pill is shown, bare grey text is hidden.
-            Six ink pills read as six primary actions and hid which levels were on (device review 2026-09-27). */}
+        {/* Toggles, all on by default: a checked white pill is shown, bare grey text is hidden.
+            Six ink pills read as six primary actions and hid which levels were on (device review 2026-09-27);
+            the pill is the borderless card capsule since the owner removed button borders (2026-09-30). */}
         {LOG_LEVELS.map((level) => (
           <Button
             key={level}
             testID={`agent-logs-filter-${level}`}
             label={levelLabels[level]}
             size="sm"
-            variant={levelFilters[level] ? 'outline' : 'text'}
+            variant={levelFilters[level] ? 'card' : 'text'}
             icon={levelFilters[level] ? Check : undefined}
             accessibilityState={{ selected: levelFilters[level] }}
             onPress={() => toggleLevel(level)}
@@ -279,7 +280,7 @@ export function LogsSection({
       <Button
         testID="agent-logs-refresh"
         label={t('Refresh', { ns: 'common' })}
-        variant="secondary"
+        variant="card"
         loading={refreshing}
         disabled={!online}
         onPress={() => { void refresh(); }}

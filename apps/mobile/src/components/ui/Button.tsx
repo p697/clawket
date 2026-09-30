@@ -14,17 +14,20 @@ import type { LucideIcon } from 'lucide-react-native';
 import { triggerLightImpact } from '../../services/haptics';
 import { useAppTheme } from '../../theme';
 import {
-  BorderWidth,
   ControlSize,
   FontSize,
   FontWeight,
   HitSize,
   Radius,
   Space,
-  createSurfaceStyle,
 } from '../../theme/tokens';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'destructive' | 'neutral' | 'text';
+/**
+ * Buttons never carry a border (owner decision 2026-09-30). `secondary` is the grey fill for
+ * white canvases and sheets; `card` is the same action directly on the grouped canvas, where
+ * that grey vanishes, so it takes the white card material of `SettingsGroup` instead.
+ */
+export type ButtonVariant = 'primary' | 'secondary' | 'card' | 'ghost' | 'destructive' | 'neutral' | 'text';
 export type ButtonSize = 'sm' | 'md' | 'lg';
 
 type Props = Omit<PressableProps, 'children' | 'style'> & {
@@ -59,10 +62,7 @@ export function Button({
   ...rest
 }: Props): React.JSX.Element {
   const { theme } = useAppTheme();
-  const styles = useMemo(
-    () => createStyles(theme.colors, theme.scheme),
-    [theme.colors, theme.scheme],
-  );
+  const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
   const isDisabled = disabled || loading;
   const contentColor = variant === 'text' ? theme.colors.inkSecondary : variant === 'neutral' || variant === 'primary'
     ? disabled && !loading ? theme.colors.inkTertiary : theme.colors.canvas
@@ -109,10 +109,7 @@ export function Button({
   );
 }
 
-function createStyles(
-  colors: ReturnType<typeof useAppTheme>['theme']['colors'],
-  scheme: ReturnType<typeof useAppTheme>['theme']['scheme'],
-) {
+function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors']) {
   return StyleSheet.create({
     base: {
       alignItems: 'center',
@@ -131,20 +128,13 @@ function createStyles(
     neutral: { backgroundColor: colors.ink },
     neutralDisabled: { backgroundColor: colors.surface },
     secondary: { backgroundColor: colors.surface },
-    outline: {
-      backgroundColor: colors.canvas,
-      borderWidth: BorderWidth.hairline,
-      borderColor: colors.inkSecondary,
-    },
+    card: { backgroundColor: colors.surfaceFloating },
     ghost: {
       backgroundColor: 'transparent',
     },
     text: { backgroundColor: 'transparent' },
     textLabel: { fontWeight: FontWeight.regular },
-    destructive: {
-      ...createSurfaceStyle(colors, scheme, 'flat'),
-      backgroundColor: colors.badSoft,
-    },
+    destructive: { backgroundColor: colors.badSoft },
     primaryPressed: { opacity: 0.84 },
     surfacePressed: { backgroundColor: colors.surface },
     disabled: { opacity: 0.45 },

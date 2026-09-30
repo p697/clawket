@@ -74,8 +74,8 @@ jest.mock('../../components/ui/Button', () => {
   const ReactRuntime = require('react');
   const { Pressable, Text } = require('react-native');
   return {
-    Button: ({ testID, label, onPress, disabled, variant }: { testID?: string; label: string; onPress: () => void; disabled?: boolean; variant?: string }) => (
-      ReactRuntime.createElement(Pressable, { testID, onPress, disabled, variant }, ReactRuntime.createElement(Text, null, label))
+    Button: ({ testID, label, onPress, disabled, variant, accessibilityLabel, multiline }: { testID?: string; label: string; onPress: () => void; disabled?: boolean; variant?: string; accessibilityLabel?: string; multiline?: boolean }) => (
+      ReactRuntime.createElement(Pressable, { testID, onPress, disabled, variant, accessibilityLabel, multiline }, ReactRuntime.createElement(Text, null, label))
     ),
   };
 });
@@ -257,11 +257,19 @@ describe('ConnectionScreen', () => {
   it('keeps Reconnect quiet while online and makes the needed action the ink one', async () => {
     const view = render(<ConnectionScreen {...props({ active: true, state: 'ready' })} />);
     await flush();
-    expect(view.getByTestId('connection-reconnect').props.variant).toBe('outline');
+    // Reconnect and Pause share one row of borderless card capsules on the grouped canvas.
+    expect(view.getByTestId('connection-reconnect').props).toMatchObject({ variant: 'card', multiline: true });
     expect(view.getByText('Reconnect')).toBeTruthy();
+    expect(view.getByTestId('connection-pause').props).toMatchObject({
+      variant: 'card',
+      multiline: true,
+      accessibilityLabel: 'Pause connection',
+    });
+    expect(view.getByText('Pause')).toBeTruthy();
 
     view.rerender(<ConnectionScreen {...props({ active: true, state: 'offline' })} />);
     expect(view.getByTestId('connection-reconnect').props.variant).toBe('primary');
+    expect(view.getByTestId('connection-pause').props.variant).toBe('card');
 
     view.rerender(<ConnectionScreen {...props({ active: false, state: 'idle' })} />);
     expect(view.getByTestId('connection-reconnect').props.variant).toBe('primary');

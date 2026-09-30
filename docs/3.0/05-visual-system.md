@@ -155,7 +155,7 @@ Grok Bot 清爽的根源不是留白，而是**每个界面只有两层字**：�
 | 文本输入 | `CompositionSafeTextInput` / `CompositionSafeBottomSheetTextInput` / `PasteCapableTextInput` | 中文输入法组合安全；输入框里粘贴图片走 `PasteCapableTextInput` |
 | 长文本编辑 | `TextEditorSheet` | 编辑 Agent 人格、记忆文件 |
 | 抬升表面的阴影 | `createThemedShadowStyle(colors, scheme, Shadow.tier)` | 浅色柔影、深色发丝线，一处实现，不在业务文件里手写 |
-| 主按钮 / 次按钮 | `Button`（`md` 44 高全圆胶囊；`sm` 紧凑） | 付费墙、引导、审批卡按钮 |
+| 主按钮 / 次按钮 | `Button`（`md` 44 高全圆胶囊；`sm` 紧凑；一律不带描边，灰底页面上的次按钮用 `card` 白色胶囊，2026-09-30 负责人决定） | 付费墙、引导、审批卡按钮 |
 | 状态页 | `EmptyState`、`LoadErrorState`、`SkeletonPulse` | 一句话 + 一个动作；骨架屏用 `SkeletonPulse` |
 | 样式护栏 | `scripts/check-ui-style.mjs` 的规则集与 baseline 机制 | 我们已有同源脚本，按 youmind-mobile 当前版本补齐规则（数值 `borderRadius` / `fontSize` / 非零 `borderWidth` / 硬编码颜色 / `FontSize` 算术 / 错误的 `KeyboardAvoidingView` 来源） |
 

@@ -225,8 +225,8 @@ describe('LogsSection', () => {
     expect(view.getByText('Bridge closed')).toBeTruthy();
     expect(view.getByText('Gateway ready')).toBeTruthy();
 
-    // Every level starts shown as a checked outline toggle; a hidden level reads as plain text.
-    expect(view.getByTestId('agent-logs-filter-info').props).toMatchObject({ variant: 'outline', accessibilityState: { selected: true } });
+    // Every level starts shown as a checked card toggle; a hidden level reads as plain text.
+    expect(view.getByTestId('agent-logs-filter-info').props).toMatchObject({ variant: 'card', accessibilityState: { selected: true } });
     fireEvent.press(view.getByTestId('agent-logs-filter-info'));
     expect(view.queryByText('Gateway ready')).toBeNull();
     expect(view.getByTestId('agent-logs-filter-info').props).toMatchObject({ variant: 'text', accessibilityState: { selected: false } });
