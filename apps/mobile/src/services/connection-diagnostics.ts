@@ -5,10 +5,13 @@ import { analyticsEvents } from './analytics/events';
 export type ConnectionDiagnosticContext = Readonly<{
   backend: BackendKind | 'unknown';
   transport: TransportKind;
-  operation: 'connect' | 'foreground_recovery' | 'pair_claim' | 'pair_claim_code';
+  operation: 'connect' | 'foreground_recovery' | 'pair_claim' | 'pair_claim_code' | 'pair_validation';
   environment?: 'production' | 'preview' | 'custom' | 'unknown';
+  detected_backend?: BackendKind | 'unknown';
+  detected_environment?: 'production' | 'preview' | 'custom' | 'unknown';
 }>;
-export type DiagnosticPhase = 'socket' | 'handshake' | 'ready' | 'fetch' | 'body';
+export type DiagnosticPhase = 'socket' | 'handshake' | 'ready' | 'fetch' | 'body'
+  | 'pair_payload' | 'pair_claim_result' | 'pair_saved_connection';
 type NetworkEvidence = 'offline' | 'wifi' | 'cellular' | 'ethernet' | 'other' | 'unknown' | 'not_sampled';
 export type ConnectionDiagnosticResult = Readonly<{
   outcome: 'success' | 'error' | 'timeout';
@@ -19,7 +22,7 @@ export type ConnectionDiagnosticResult = Readonly<{
 export type ConnectionDiagnosticEvent = ConnectionDiagnosticContext & ConnectionDiagnosticResult & {
   elapsed_ms: number;
   network: NetworkEvidence;
-  evidence: 'http_response' | 'os_offline' | 'unconfirmed' | 'completed';
+  evidence: 'http_response' | 'os_offline' | 'unconfirmed' | 'completed' | 'local_validation';
 };
 
 /** No IP, SSID, reachability probe, URL, request payload or persistent identity. */
@@ -60,12 +63,13 @@ export function startConnectionDiagnostic(context: ConnectionDiagnosticContext) 
         try {
           analyticsEvents.connectionDiagnostic({
             ...context, ...result, http_status, elapsed_ms, network,
-            evidence: result.outcome === 'success' ? 'completed' : http_status ? 'http_response'
+            evidence: context.operation === 'pair_validation' ? 'local_validation'
+              : result.outcome === 'success' ? 'completed' : http_status ? 'http_response'
               : network === 'offline' ? 'os_offline' : 'unconfirmed',
           });
         } catch { /* Observability must never change connection behavior. */ }
       };
-      if (result.outcome === 'success') publish('not_sampled');
+      if (result.outcome === 'success' || context.operation === 'pair_validation') publish('not_sampled');
       else void sampleNetworkAtFailure().then(publish).catch(() => {});
     },
   };

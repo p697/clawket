@@ -66,7 +66,7 @@ export const ANALYTICS_EVENT_PROPERTY_WHITELIST = Object.freeze({
   connect_phase: ['protocol', 'route', 'phase', 'elapsed_ms', 'phase_ms', 'attempt'],
   connect_ready: ['backend', 'transport', 'elapsed_ms', 'attempt'],
   connect_failed: ['backend', 'transport', 'code', 'stage', 'attempt'],
-  connection_diagnostic: ['backend', 'transport', 'operation', 'environment', 'outcome', 'phase', 'code', 'http_status', 'elapsed_ms', 'network', 'evidence'],
+  connection_diagnostic: ['backend', 'transport', 'operation', 'environment', 'detected_backend', 'detected_environment', 'outcome', 'phase', 'code', 'http_status', 'elapsed_ms', 'network', 'evidence'],
   transport_diagnostic: ['backend', 'transport', 'environment', 'event', 'phase', 'code', 'close_code', 'elapsed_ms'],
   reconnect: ['backend', 'transport', 'reason', 'origin', 'cause'],
   roster_viewed: ['connection_count', 'agent_count', 'pinned_count', 'unread_count', 'attention_count'],

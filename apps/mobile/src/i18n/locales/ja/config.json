@@ -385,5 +385,7 @@
   "Pi is not responding": "Pi が応答していません",
   "Codex is not responding": "Codex が応答していません",
   "Claude Code is not responding": "Claude Code が応答していません",
-  "To connect Codex, Claude Code or Pi, choose your Agent in Add connection and follow its pairing instructions.": "Codex、Claude Code、Pi に接続するには、「接続を追加」で Agent を選び、表示されるペアリング手順に従ってください。"
+  "To connect Codex, Claude Code or Pi, choose your Agent in Add connection and follow its pairing instructions.": "Codex、Claude Code、Pi に接続するには、「接続を追加」で Agent を選び、表示されるペアリング手順に従ってください。",
+  "This QR code belongs to another backend. Scan the QR code for this backend.": "この QR コードは別のバックエンド用です。現在のバックエンドの QR コードをスキャンしてください。",
+  "Pairing environment does not match. Use the command shown on this page.": "ペアリング環境が一致しません。このページに表示されたコマンドを使用してください。"
 }

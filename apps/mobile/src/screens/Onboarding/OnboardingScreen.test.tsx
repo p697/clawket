@@ -210,6 +210,17 @@ function createProps(overrides: Partial<OnboardingScreenProps> = {}): Onboarding
 }
 
 describe('OnboardingScreen', () => {
+  it.each([
+    ['backend_mismatch', 'This QR code belongs to another backend. Scan the QR code for this backend.'],
+    ['invalid_backend', 'This QR code does not contain valid connection info.'],
+    ['preview_requires_debug_mode', 'Enable Debug Mode before pairing with the Preview environment.'],
+    ['official_environment_mismatch', 'Pairing environment does not match. Use the command shown on this page.'],
+    ['saved_connection_mismatch', 'Could not save this connection. Try again.'],
+  ] as const)('shows actionable feedback for %s without a capability error', (pairingReason, message) => {
+    const view = render(<OnboardingScreen {...createProps({ status: { kind: 'error', code: 'unsupported', pairingReason } })} />);
+    expect(view.getByText(message)).toBeTruthy();
+    expect(view.queryByText('Not supported by this backend')).toBeNull();
+  });
   let consoleErrorSpy: jest.SpyInstance;
 
   beforeEach(() => {

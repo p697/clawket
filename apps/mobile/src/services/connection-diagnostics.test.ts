@@ -28,6 +28,19 @@ it('does not sample the OS on success and reports only once', () => {
   expect(capture).toHaveBeenCalledTimes(1);
   expect(capture).toHaveBeenCalledWith(expect.objectContaining({ evidence: 'completed', network: 'not_sampled' }));
 });
+it.each(['pair_payload', 'pair_claim_result', 'pair_saved_connection'] as const)(
+  'records %s as local validation without sampling or blaming the network', (phase) => {
+    startConnectionDiagnostic({ ...context, operation: 'pair_validation',
+      detected_backend: 'codex', environment: 'production', detected_environment: 'preview',
+    }).finish({ outcome: 'error', phase, code: 'pairing_backend_mismatch' });
+    expect(network).not.toHaveBeenCalled();
+    expect(capture).toHaveBeenCalledWith(expect.objectContaining({
+      operation: 'pair_validation', phase, code: 'pairing_backend_mismatch',
+      evidence: 'local_validation', network: 'not_sampled', detected_backend: 'codex',
+      environment: 'production', detected_environment: 'preview',
+    }));
+  },
+);
 it('does not equate a connected Wi-Fi path with proven Internet reachability or network fault', async () => {
   startConnectionDiagnostic(context).finish({ outcome: 'timeout', phase: 'handshake', code: 'timeout' });
   await jest.advanceTimersByTimeAsync(0);

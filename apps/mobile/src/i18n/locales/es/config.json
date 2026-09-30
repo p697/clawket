@@ -385,5 +385,7 @@
   "Pi is not responding": "Pi no responde",
   "Codex is not responding": "Codex no responde",
   "Claude Code is not responding": "Claude Code no responde",
-  "To connect Codex, Claude Code or Pi, choose your Agent in Add connection and follow its pairing instructions.": "Para conectar Codex, Claude Code o Pi, elige tu Agent en Añadir conexión y sigue las instrucciones de vinculación."
+  "To connect Codex, Claude Code or Pi, choose your Agent in Add connection and follow its pairing instructions.": "Para conectar Codex, Claude Code o Pi, elige tu Agent en Añadir conexión y sigue las instrucciones de vinculación.",
+  "This QR code belongs to another backend. Scan the QR code for this backend.": "Este código QR pertenece a otro backend. Escanea el código QR de este backend.",
+  "Pairing environment does not match. Use the command shown on this page.": "El entorno de vinculación no coincide. Usa el comando que aparece en esta página."
 }

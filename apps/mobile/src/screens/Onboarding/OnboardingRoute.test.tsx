@@ -71,6 +71,7 @@ jest.mock('../../connection', () => ({
   connectBackendPairingPayload: (...args: unknown[]) => mockConnectBackendPairingPayload(...args),
   // The real resolver is covered in gateway-scan-flow tests; the route only forwards its answer.
   resolvePairingPayloadBackend: (payload: { backendKind?: string }) => payload.backendKind ?? null,
+  resolvePairingValidationReason: jest.requireActual('../../connection/pairing/pairing-validation').resolvePairingValidationReason,
   createYouMindOnboardingConnection: (...args: unknown[]) => (
     mockCreateYouMindOnboardingConnection(...args)
   ),
@@ -163,6 +164,7 @@ describe('OnboardingRoute', () => {
       connectPairingCode: jest.fn(async () => true),
       connectPairingLink: jest.fn(async () => true),
       openGatewayScanner: jest.fn(),
+      importGatewayQrImage: jest.fn(),
     };
     mockCoordinator.getSnapshot.mockReset();
     mockCoordinator.getSnapshot.mockReturnValue(connectionSnapshot({ state: 'idle' }));
@@ -466,6 +468,52 @@ describe('OnboardingRoute', () => {
       });
     });
   });
+
+  it('keeps the fixed local validation reason when the first QR fails immediately', async () => {
+    mockConnectBackendPairingPayload.mockRejectedValueOnce({ code: 'unsupported', pairingReason: 'official_environment_mismatch', message: 'private detail' });
+    render(<OnboardingRoute {...createProps()} />);
+    act(() => mockScreenProps?.onScanQr('openclaw'));
+    await act(async () => {
+      await mockScanner.openGatewayScanner.mock.calls[0][0].onScanned({ url: '', mode: 'relay', relay: { serverUrl: 'https://registry.clawket.ai', gatewayId: 'gateway', accessCode: 'synthetic' } });
+    });
+    expect(mockScreenProps?.status).toEqual({ kind: 'error', code: 'unsupported', pairingReason: 'official_environment_mismatch' });
+  });
+
+  it.each([
+    ['openclaw', 'camera'], ['codex', 'camera'],
+    ['openclaw', 'image'], ['codex', 'image'],
+    ['openclaw', 'header'], ['codex', 'header'],
+  ] as const)(
+    'uses current settings for the first %s %s scan delivered after opening', async (backendKind, method) => {
+      mockApp.debugMode = true;
+      mockConnectBackendPairingPayload.mockImplementationOnce(async (input) => {
+        const assessment = jest.requireActual('../../connection/pairing/gateway-scan-flow').assessPairingPayload({
+          payload: input.payload, expectedBackendKind: input.backendKind,
+          selectedEnvironment: input.environment, debugMode: input.debugMode,
+        });
+        if (assessment.kind === 'rejected') throw { code: 'unsupported', pairingReason: assessment.reason };
+        return null;
+      });
+      const props = createProps();
+      const view = render(<OnboardingRoute {...props} />);
+      act(() => {
+        if (method === 'header') mockScreenProps?.onScanAnyQr?.();
+        else if (method === 'image') mockScreenProps?.onImportQr?.(backendKind);
+        else mockScreenProps?.onScanQr(backendKind);
+      });
+      const firstCameraCallback = (method === 'image' ? mockScanner.importGatewayQrImage : mockScanner.openGatewayScanner).mock.calls[0][0].onScanned;
+      // Preserve the callback already held by the native camera, across a context update.
+      mockApp.debugMode = false;
+      view.rerender(<OnboardingRoute {...props} />);
+      await act(async () => {
+        await firstCameraCallback({ backendKind, mode: 'relay', relay: { serverUrl: backendKind === 'codex' ? 'https://clawket-codex-registry.clawket.workers.dev' : 'https://registry.clawket.ai', gatewayId: 'gateway', accessCode: 'synthetic' } });
+      });
+      expect(mockConnectBackendPairingPayload).toHaveBeenCalledWith(expect.objectContaining({
+        backendKind, environment: 'production', debugMode: false,
+      }));
+      expect(mockScreenProps?.status).toEqual({ kind: 'idle' });
+    },
+  );
 
   it('pairs a header-scanned QR with the backend the QR names', async () => {
     const props = createProps({ route: { key: 'Onboarding-key', name: 'Onboarding', params: { presentation: 'modal' } } } as Partial<OnboardingRouteProps>);

@@ -385,5 +385,7 @@
   "Pi is not responding": "Pi لا يستجيب",
   "Codex is not responding": "Codex لا يستجيب",
   "Claude Code is not responding": "Claude Code لا يستجيب",
-  "To connect Codex, Claude Code or Pi, choose your Agent in Add connection and follow its pairing instructions.": "للاتصال بـ Codex أو Claude Code أو Pi، اختر Agent من «إضافة اتصال» واتبع تعليمات الاقتران."
+  "To connect Codex, Claude Code or Pi, choose your Agent in Add connection and follow its pairing instructions.": "للاتصال بـ Codex أو Claude Code أو Pi، اختر Agent من «إضافة اتصال» واتبع تعليمات الاقتران.",
+  "This QR code belongs to another backend. Scan the QR code for this backend.": "رمز QR هذا يخص واجهة خلفية أخرى. امسح رمز QR لهذه الواجهة الخلفية.",
+  "Pairing environment does not match. Use the command shown on this page.": "بيئة الاقتران غير متطابقة. استخدم الأمر المعروض في هذه الصفحة."
 }

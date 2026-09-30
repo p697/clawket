@@ -3,6 +3,8 @@ import {
   type BackendKind,
 } from '@clawket/agent-protocol';
 import { analyticsEvents } from '../../services/analytics/events';
+import { startConnectionDiagnostic } from '../../services/connection-diagnostics';
+import { PairingValidationError, type PairingValidationReason } from './pairing-validation';
 import {
   assessRelayEnvironmentSelection,
   getOfficialHermesRegistryUrl,
@@ -14,6 +16,7 @@ import {
   OFFICIAL_CLAUDE_CODE_PREVIEW_REGISTRY_URL,
   OFFICIAL_CODEX_REGISTRY_URL,
   OFFICIAL_CODEX_PREVIEW_REGISTRY_URL,
+  resolveOfficialRelayEnvironment,
 } from '../../services/relay-environment';
 import { parsePairingLink } from '../../services/pairing-session';
 import type { RelayServiceEnvironment } from '../../types';
@@ -246,23 +249,29 @@ const relayClaimInFlightRef: {
 export async function connectBackendPairingPayload(
   input: BackendPayloadPairingInput,
 ): Promise<BackendPairingResult> {
-  assertAcceptedPayload(input, input.payload);
+  assertAcceptedPayload(input, input.payload, 'pair_payload');
   const resolved = input.payload.relay?.accessCode
     ? await claimRelayPairing(input.payload, relayClaimInFlightRef)
     : input.payload;
-  assertAcceptedPayload(input, resolved);
+  assertAcceptedPayload(input, resolved, 'pair_claim_result');
   const saved = await savePairedConnection({
     runtime: input.runtime,
     payload: resolved,
     debugMode: input.debugMode,
     source: 'pairing_qr',
   });
-  return requireExpectedConnection(input.backendKind, saved.connection);
+  try {
+    return requireExpectedConnection(input.backendKind, saved.connection);
+  } catch (error) {
+    recordValidationFailure(input, 'pair_saved_connection', 'saved_connection_mismatch');
+    throw error;
+  }
 }
 
 function assertAcceptedPayload(
   input: BackendPayloadPairingInput,
   payload: GatewayScanPayload,
+  phase: 'pair_payload' | 'pair_claim_result',
 ): void {
   const assessment = assessPairingPayload({
     payload,
@@ -272,7 +281,27 @@ function assertAcceptedPayload(
     ...(input.sourceServerUrl ? { sourceServerUrl: input.sourceServerUrl } : {}),
   });
   if (assessment.kind === 'accepted') return;
-  throw new AdapterError('unsupported', pairingPayloadRejectionMessage(assessment));
+  recordValidationFailure(input, phase, assessment.reason, assessment.backendKind ?? 'unknown', payload);
+  throw new PairingValidationError(assessment.reason, pairingPayloadRejectionMessage(assessment));
+}
+
+function recordValidationFailure(
+  input: BackendPayloadPairingInput,
+  phase: 'pair_payload' | 'pair_claim_result' | 'pair_saved_connection',
+  reason: PairingValidationReason,
+  detectedBackend?: PairingBackendKind | 'unknown',
+  payload: GatewayScanPayload = input.payload,
+): void {
+  startConnectionDiagnostic({
+    backend: input.backendKind,
+    transport: payload?.transportKind ?? (payload?.relay ? 'relay' : 'custom'),
+    operation: 'pair_validation',
+    environment: input.environment,
+    ...(detectedBackend ? { detected_backend: detectedBackend } : {}),
+    ...(payload?.relay ? {
+      detected_environment: resolveOfficialRelayEnvironment(payload.relay.serverUrl) ?? 'custom',
+    } : {}),
+  }).finish({ outcome: 'error', phase, code: `pairing_${reason}` });
 }
 
 function pairingPayloadRejectionMessage(
@@ -306,7 +335,7 @@ function requireExpectedConnection(
   connection: Readonly<{ id: string; backendKind: BackendKind }> | null | undefined,
 ): BackendPairingResult {
   if (!connection || connection.backendKind !== backendKind) {
-    throw new AdapterError('unsupported', 'Pairing did not create the expected backend connection.');
+    throw new PairingValidationError('saved_connection_mismatch', 'Pairing did not create the expected backend connection.');
   }
   return { backendKind, connectionId: connection.id };
 }

@@ -1,6 +1,7 @@
 import React, {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -17,8 +18,10 @@ import {
   createYouMindOnboardingConnection,
   getConnectionRuntime,
   resolvePairingPayloadBackend,
+  resolvePairingValidationReason,
   type BackendPairingPayload,
   type BackendPairingResult,
+  type PairingValidationReason,
   type YouMindOnboardingAuthSession,
   type YouMindOnboardingConnection,
   useConnections,
@@ -76,6 +79,7 @@ type PairingOperation = Readonly<{
   phase: OnboardingConnectionPhase;
   targetConnectionId: string | null;
   errorCode?: ReturnType<typeof resolveOnboardingAdapterError>;
+  pairingReason?: PairingValidationReason;
 }>;
 
 const INITIAL_OPERATION: PairingOperation = Object.freeze({
@@ -159,6 +163,7 @@ export function OnboardingRoute({
       ...current,
       active: false,
       errorCode: resolveOnboardingAdapterError(error),
+      pairingReason: resolvePairingValidationReason(error),
     }));
   }, []);
 
@@ -237,7 +242,7 @@ export function OnboardingRoute({
   ) => {
     if (pairingRequestInFlightRef.current) return;
     if (!acquirePairingRequest()) return;
-    const action = () => { void connectScannedPayload(payload, expectedBackendKind); };
+    const action = () => { void connectScannedPayloadRef.current(payload, expectedBackendKind); };
     lastActionRef.current = action;
     const requestId = beginOperation(expectedBackendKind);
     try {
@@ -265,6 +270,13 @@ export function OnboardingRoute({
     releasePairingRequest,
   ]);
 
+  // Camera permission/modal work is asynchronous. Validate a delivered result
+  // against the current environment, rather than the render which opened it.
+  const connectScannedPayloadRef = useRef(connectScannedPayload);
+  useLayoutEffect(() => {
+    connectScannedPayloadRef.current = connectScannedPayload;
+  }, [connectScannedPayload]);
+
   const scanQr = useCallback((expectedBackendKind: PairableBackendKind, importImage = false) => {
     const perform = () => {
       if (pairingRequestInFlightRef.current) return;
@@ -274,15 +286,16 @@ export function OnboardingRoute({
         active: false,
         backendKind: expectedBackendKind,
         errorCode: undefined,
+        pairingReason: undefined,
       }));
       const openScanner = importImage ? importGatewayQrImage : openGatewayScanner;
       void openScanner({
-        onScanned: (result) => connectScannedPayload(result, expectedBackendKind),
+        onScanned: (result) => connectScannedPayloadRef.current(result, expectedBackendKind),
       });
     };
     if (!canBeginPairing(perform)) return;
     perform();
-  }, [canBeginPairing, connectScannedPayload, onScanQrTapped, openGatewayScanner, importGatewayQrImage]);
+  }, [canBeginPairing, onScanQrTapped, openGatewayScanner, importGatewayQrImage]);
 
   // The chooser's header scan (owner request 2026-09-28): every pairing QR names its backend, so
   // the scanned payload selects the step and then runs the same backend-checked claim path.
@@ -297,13 +310,13 @@ export function OnboardingRoute({
             showNoticeAlert(t('Invalid QR Code'), t('This QR code does not contain valid connection info.'));
             return;
           }
-          return connectScannedPayload(result, backendKind);
+          return connectScannedPayloadRef.current(result, backendKind);
         },
       });
     };
     if (!canBeginPairing(perform)) return;
     perform();
-  }, [canBeginPairing, connectScannedPayload, openGatewayScanner, t]);
+  }, [canBeginPairing, openGatewayScanner, t]);
 
   const connectFromPairingLink = useCallback(async (url: string) => {
     const perform = async () => {
@@ -398,6 +411,7 @@ export function OnboardingRoute({
           ...current,
           active: false,
           errorCode: resolveOnboardingAdapterError(error),
+          pairingReason: resolvePairingValidationReason(error),
         }));
       });
       return;

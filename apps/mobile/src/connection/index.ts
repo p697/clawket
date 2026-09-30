@@ -1684,6 +1684,8 @@ export {
   connectBackendPairingPayload,
 } from './pairing/backend-pairing-profile';
 export { resolvePairingPayloadBackend } from './pairing/gateway-scan-flow';
+export { resolvePairingValidationReason } from './pairing/pairing-validation';
+export type { PairingValidationReason } from './pairing/pairing-validation';
 export type {
   BackendCodePairingInput,
   BackendLinkPairingInput,

@@ -52,6 +52,11 @@ const CONNECTION_ERROR_CODES = new Set([
   'not_connected',
   'pairing_expired',
   'pairing_required',
+  'pairing_invalid_backend',
+  'pairing_backend_mismatch',
+  'pairing_preview_requires_debug_mode',
+  'pairing_official_environment_mismatch',
+  'pairing_saved_connection_mismatch',
   'rate_limited',
   'request_timeout',
   'server',
@@ -237,12 +242,14 @@ export function normalizeAnalyticsEventString(
     const values: Record<string, readonly string[]> = {
       backend: ['openclaw', 'hermes', 'youmind', 'local-model', 'pi', 'codex', 'claude-code', 'unknown'],
       transport: ['local', 'relay', 'tailscale', 'cloudflare', 'custom', 'https'],
-      operation: ['connect', 'foreground_recovery', 'pair_claim', 'pair_claim_code'],
+      operation: ['connect', 'foreground_recovery', 'pair_claim', 'pair_claim_code', 'pair_validation'],
       environment: ['production', 'preview', 'custom', 'unknown'],
+      detected_backend: ['openclaw', 'hermes', 'youmind', 'local-model', 'pi', 'codex', 'claude-code', 'unknown'],
+      detected_environment: ['production', 'preview', 'custom', 'unknown'],
       outcome: ['success', 'error', 'timeout'],
-      phase: ['socket', 'handshake', 'ready', 'fetch', 'body'],
+      phase: ['socket', 'handshake', 'ready', 'fetch', 'body', 'pair_payload', 'pair_claim_result', 'pair_saved_connection'],
       network: ['offline', 'wifi', 'cellular', 'ethernet', 'other', 'unknown', 'not_sampled'],
-      evidence: ['http_response', 'os_offline', 'unconfirmed', 'completed'],
+      evidence: ['http_response', 'os_offline', 'unconfirmed', 'completed', 'local_validation'],
     };
     if (values[property]) return values[property].includes(value) ? value : 'other';
     // Numeric diagnostic fields must never become a free-text escape hatch.

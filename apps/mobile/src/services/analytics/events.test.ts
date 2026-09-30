@@ -31,7 +31,7 @@ const SPEC_EVENT_PROPERTIES: Readonly<Record<string, ReadonlyArray<string>>> = {
   connect_phase: ['protocol', 'route', 'phase', 'elapsed_ms', 'phase_ms', 'attempt'],
   connect_ready: ['backend', 'transport', 'elapsed_ms', 'attempt'],
   connect_failed: ['backend', 'transport', 'code', 'stage', 'attempt'],
-  connection_diagnostic: ['backend', 'transport', 'operation', 'environment', 'outcome', 'phase', 'code', 'http_status', 'elapsed_ms', 'network', 'evidence'],
+  connection_diagnostic: ['backend', 'transport', 'operation', 'environment', 'detected_backend', 'detected_environment', 'outcome', 'phase', 'code', 'http_status', 'elapsed_ms', 'network', 'evidence'],
   transport_diagnostic: ['backend', 'transport', 'environment', 'event', 'phase', 'code', 'close_code', 'elapsed_ms'],
   reconnect: ['backend', 'transport', 'reason', 'origin', 'cause'],
   roster_viewed: ['connection_count', 'agent_count', 'pinned_count', 'unread_count', 'attention_count'],
@@ -467,6 +467,19 @@ it('closes every free-text path in connection diagnostics and drops payloads and
   expect(new Set(Object.values(sanitized))).toEqual(new Set(['other']));
   expect(sanitizeAnalyticsEventProperties('connection_diagnostic', { code: 'unknown', phase: 'body', http_status: 429 }))
     .toEqual({ code: 'unknown', phase: 'body', http_status: 429 });
+});
+
+it('retains fixed pairing validation evidence and drops QR contents', () => {
+  expect(sanitizeAnalyticsEventProperties('connection_diagnostic', {
+    backend: 'openclaw', detected_backend: 'codex', operation: 'pair_validation',
+    environment: 'production', detected_environment: 'preview', phase: 'pair_payload',
+    code: 'pairing_backend_mismatch', network: 'not_sampled', evidence: 'local_validation',
+    qr: 'private QR', accessCode: 'private code', url: 'https://private/?secret=private',
+  })).toEqual({
+    backend: 'openclaw', detected_backend: 'codex', operation: 'pair_validation',
+    environment: 'production', detected_environment: 'preview', phase: 'pair_payload',
+    code: 'pairing_backend_mismatch', network: 'not_sampled', evidence: 'local_validation',
+  });
 });
 
 

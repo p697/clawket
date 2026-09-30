@@ -385,5 +385,7 @@
   "Pi is not responding": "Pi 暂无响应",
   "Codex is not responding": "Codex 暂无响应",
   "Claude Code is not responding": "Claude Code 暂无响应",
-  "To connect Codex, Claude Code or Pi, choose your Agent in Add connection and follow its pairing instructions.": "连接 Codex、Claude Code 或 Pi 时，请在“添加连接”中选择对应的 Agent，并按照页面上的配对说明操作。"
+  "To connect Codex, Claude Code or Pi, choose your Agent in Add connection and follow its pairing instructions.": "连接 Codex、Claude Code 或 Pi 时，请在“添加连接”中选择对应的 Agent，并按照页面上的配对说明操作。",
+  "This QR code belongs to another backend. Scan the QR code for this backend.": "这个二维码属于另一个后端，请扫描当前后端的二维码。",
+  "Pairing environment does not match. Use the command shown on this page.": "配对环境不一致，请使用本页显示的命令。"
 }

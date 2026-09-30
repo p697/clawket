@@ -332,7 +332,7 @@ export function OnboardingScreen({
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + Space.xl }]}
         keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <PageIntro title={choosing ? t('Connect your agent') : t('Connect {{backend}}', { backend: backendLabel })} />
-        {shownError ? <ErrorBanner code={shownError.code} backendKind={backendKind}
+        {shownError ? <ErrorBanner code={shownError.code} pairingReason={shownError.pairingReason} backendKind={backendKind}
           // Its action stays drawn during the attempt, so the banner keeps its size, but never starts a second one.
           onAction={onErrorAction ? (code) => { if (!pairingInFlight) onErrorAction(code); } : undefined} /> : null}
         {localError ? <Banner tone="bad" message={t('Please try again later.', { ns: 'common' })} /> : null}
@@ -407,15 +407,17 @@ export function OnboardingScreen({
 
 function ErrorBanner({
   code,
+  pairingReason,
   backendKind,
   onAction,
 }: Readonly<{
   code: Extract<OnboardingStatus, { kind: 'error' }>['code'];
+  pairingReason?: Extract<OnboardingStatus, { kind: 'error' }>['pairingReason'];
   backendKind: PairableBackendKind;
   onAction?: OnboardingScreenProps['onErrorAction'];
 }>): React.JSX.Element {
   const { t } = useTranslation('config');
-  const error = resolveOnboardingError(code, backendKind);
+  const error = resolveOnboardingError(code, backendKind, pairingReason);
   return (
     <Banner
       testID="onboarding-error"
@@ -542,6 +544,16 @@ function translateErrorMessage(
       return t('Message too large to send');
     case 'Not supported by this backend':
       return t('Not supported by this backend');
+    case 'This QR code belongs to another backend. Scan the QR code for this backend.':
+      return t('This QR code belongs to another backend. Scan the QR code for this backend.');
+    case 'Pairing environment does not match. Use the command shown on this page.':
+      return t('Pairing environment does not match. Use the command shown on this page.');
+    case 'This QR code does not contain valid connection info.':
+      return t('This QR code does not contain valid connection info.');
+    case 'Enable Debug Mode before pairing with the Preview environment.':
+      return t('Enable Debug Mode before pairing with the Preview environment.');
+    case 'Could not save this connection. Try again.':
+      return t('Could not save this connection. Try again.');
     case 'Server error':
       return t('Server error');
     default:

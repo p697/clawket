@@ -1,4 +1,6 @@
 import type { PairingConnectionRuntime } from './save-paired-connection';
+import { parseQRPayload } from './qrPayload';
+import { resolvePairingValidationReason } from './pairing-validation';
 import {
   connectBackendPairingCode,
   connectBackendPairingLink,
@@ -10,6 +12,7 @@ const mockClaimCode = jest.fn();
 const mockClaimRelayPairing = jest.fn();
 const mockSavePairedConnection = jest.fn();
 const mockPairingFinished = jest.fn();
+const mockDiagnostic = jest.fn();
 
 jest.mock('../registry/hermes-relay-pairing', () => ({
   HermesRelayPairingService: {
@@ -29,6 +32,7 @@ jest.mock('./gateway-scan-flow', () => ({
 jest.mock('../../services/analytics/events', () => ({
   analyticsEvents: {
     gatewaySecurePairingFinished: (...args: unknown[]) => mockPairingFinished(...args),
+    connectionDiagnostic: (...args: unknown[]) => mockDiagnostic(...args),
   },
 }));
 
@@ -314,6 +318,14 @@ describe('backend pairing profiles', () => {
 
     expect(mockClaimRelayPairing).not.toHaveBeenCalled();
     expect(mockSavePairedConnection).not.toHaveBeenCalled();
+    expect(mockDiagnostic).toHaveBeenCalledWith(expect.objectContaining({
+      backend: 'hermes', detected_backend: 'openclaw', operation: 'pair_validation',
+      phase: 'pair_payload', code: 'pairing_backend_mismatch', evidence: 'local_validation',
+      network: 'not_sampled',
+    }));
+    expect(mockDiagnostic).toHaveBeenCalledWith(expect.objectContaining({
+      detected_backend: 'unknown', code: 'pairing_invalid_backend',
+    }));
   });
 
   it('rejects an official QR from the wrong environment before claim or save', async () => {
@@ -337,6 +349,10 @@ describe('backend pairing profiles', () => {
 
     expect(mockClaimRelayPairing).not.toHaveBeenCalled();
     expect(mockSavePairedConnection).not.toHaveBeenCalled();
+    expect(mockDiagnostic).toHaveBeenCalledWith(expect.objectContaining({
+      phase: 'pair_payload', code: 'pairing_preview_requires_debug_mode',
+      environment: 'production', detected_environment: 'preview',
+    }));
   });
 
   it('claims and re-validates a matching QR before saving through the runtime', async () => {
@@ -412,5 +428,46 @@ describe('backend pairing profiles', () => {
 
     expect(mockClaimRelayPairing).toHaveBeenCalledTimes(1);
     expect(mockSavePairedConnection).not.toHaveBeenCalled();
+    expect(mockDiagnostic).toHaveBeenCalledWith(expect.objectContaining({
+      phase: 'pair_claim_result', code: 'pairing_backend_mismatch',
+    }));
+  });
+
+  it.each(['openclaw', 'hermes', 'codex', 'claude-code', 'pi', 'local-model'] as const)(
+    'accepts the first matching parsed %s QR without needing a warm saved connection', async (backendKind) => {
+      const raw = backendKind === 'hermes'
+        ? { version: 1, kind: 'clawket_hermes_pair', server: 'https://custom.example', bridgeId: 'bridge', accessCode: 'synthetic' }
+        : { v: 2, k: 'cp', s: 'https://custom.example', g: 'gateway', a: 'synthetic', ...(backendKind === 'openclaw' ? {} : { b: backendKind }) };
+      const payload = parseQRPayload(JSON.stringify(raw));
+      expect(payload).not.toBeNull();
+      mockSavePairedConnection.mockResolvedValueOnce({
+        connection: { id: 'first-connection', backendKind }, created: true, probeSucceeded: true,
+      });
+      await expect(connectBackendPairingPayload({
+        payload: payload!, backendKind, environment: 'production', debugMode: false,
+        runtime: createRuntime(null),
+      })).resolves.toEqual({ backendKind, connectionId: 'first-connection' });
+      expect(mockClaimRelayPairing).toHaveBeenCalledTimes(1);
+      expect(mockDiagnostic).not.toHaveBeenCalled();
+    },
+  );
+
+  it('preserves a saved-connection mismatch as a local failure without logging the payload', async () => {
+    const payload = parseQRPayload(JSON.stringify({ v: 2, k: 'cp', s: 'https://custom.example', g: 'gateway', a: 'private-code' }))!;
+    let failure: unknown;
+    try {
+      await connectBackendPairingPayload({ payload, backendKind: 'openclaw', environment: 'production', debugMode: false, runtime: createRuntime(null) });
+    } catch (error) { failure = error; }
+    expect(resolvePairingValidationReason(failure)).toBe('saved_connection_mismatch');
+    expect(mockDiagnostic).toHaveBeenCalledWith(expect.objectContaining({ phase: 'pair_saved_connection', code: 'pairing_saved_connection_mismatch' }));
+    expect(JSON.stringify(mockDiagnostic.mock.calls)).not.toContain('private-code');
+    expect(JSON.stringify(mockDiagnostic.mock.calls)).not.toContain('https://custom.example');
+  });
+
+  it('reads only known typed validation failures, without matching private exception text', () => {
+    expect(resolvePairingValidationReason({ code: 'unsupported', pairingReason: 'backend_mismatch' })).toBe('backend_mismatch');
+    expect(resolvePairingValidationReason({ code: 'network', pairingReason: 'backend_mismatch' })).toBeUndefined();
+    expect(resolvePairingValidationReason({ code: 'unsupported', pairingReason: 'private-token' })).toBeUndefined();
+    expect(resolvePairingValidationReason(new Error('backend_mismatch private-token'))).toBeUndefined();
   });
 });

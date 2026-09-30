@@ -4,6 +4,7 @@ import type {
   ConnectionState,
 } from '@clawket/agent-protocol';
 import type { RelayServiceEnvironment } from '../../types';
+import type { PairingValidationReason } from '../../connection';
 import {
   PAIRING_COMMAND,
   type OnboardingConnectionPhase,
@@ -56,6 +57,7 @@ export type OnboardingRouteOperation = Readonly<{
   /** Connection created by this pairing, once it exists; null before then. */
   targetConnectionId?: string | null;
   errorCode?: AdapterErrorCode;
+  pairingReason?: PairingValidationReason;
 }>;
 
 export function normalizePairableBackendKind(
@@ -113,7 +115,10 @@ export function resolveOnboardingRouteStatus(input: {
   operation: OnboardingRouteOperation;
 }): OnboardingStatus {
   if (input.operation.errorCode) {
-    return { kind: 'error', code: input.operation.errorCode };
+    return {
+      kind: 'error', code: input.operation.errorCode,
+      ...(input.operation.pairingReason ? { pairingReason: input.operation.pairingReason } : {}),
+    };
   }
   if (!input.initialized && !input.operation.active) return { kind: 'loading' };
   if (!input.operation.active) return { kind: 'idle' };
