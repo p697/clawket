@@ -430,6 +430,8 @@ Skill readers render YAML frontmatter as a source block, never accidental Markdo
 
 Long-pressing an execution approval never grants permanent permission directly. Require explicit confirmation, retain the simple once/deny card, and bind that confirmation to the same still-pending request and advertised decisions; cancellation, resolution, expiry or request replacement must not authorize anything.
 
+Approval cards have no status rail (owner decision 2026-09-30): a tool-row category glyph beside the title, the command in a `surfaceFloating` monospace well (`Menlo` on iOS; a bare `monospace` family resolves only on Android), 44-point capsules, a spinner only in the capsule the reader pressed, and a `bad` glyph plus sentence for a failed resolution. A settled request collapses to title, outcome and command without actions. Recipe: `docs/design-system.md`.
+
 Session file retrieval is negotiated through `sessionFiles`, never inferred from backend identity alone. Keep listing metadata-only, downloads explicit and chunk-bounded, and temporary-file cleanup on cancellation/failure. Close the owning sheet before the system share sheet and reject stale connection/session completions. Basic file retrieval has no additional paid gate.
 
 Successful scheduled-task creation shows one localized native acknowledgement after the editor’s closing transition. Failed saves stay in the editor; editing and cancellation do not show a creation acknowledgement.

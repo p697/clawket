@@ -2033,6 +2033,37 @@ describe('ThreadView', () => {
     expect(view.getByTestId('thread-approval-approval-deadline').props.accessibilityState)
       .toEqual({ disabled: true });
     expect(view.getByText('Expired')).toBeTruthy();
+    expect(view.queryByTestId('thread-approval-approval-deadline-primary')).toBeNull();
+    expect(view.queryByTestId('thread-approval-approval-deadline-secondary')).toBeNull();
+  });
+
+  it('keeps settled exec approvals as compact records without actions', () => {
+    const settled = (id: string, status: 'allowed' | 'denied'): UiMessage => ({
+      id,
+      role: 'tool',
+      text: '',
+      approval: {
+        id: `${id}-request`,
+        command: `echo ${id}`,
+        reason: 'Needed to verify the build',
+        expiresAtMs: null,
+        status,
+      },
+    });
+    const view = render(<ThreadView {...createProps({
+      messages: [settled('approval-allowed', 'allowed'), settled('approval-denied', 'denied')],
+      onResolveApproval: jest.fn(),
+    })} />);
+
+    expect(view.getByText('Allowed')).toBeTruthy();
+    expect(view.getByText('Denied')).toBeTruthy();
+    expect(view.getByText('echo approval-allowed')).toBeTruthy();
+    expect(view.queryByText('Needed to verify the build')).toBeNull();
+    for (const id of ['approval-allowed', 'approval-denied']) {
+      expect(view.getByTestId(`thread-approval-${id}`).props.accessibilityState).toEqual({ disabled: true });
+      expect(view.queryByTestId(`thread-approval-${id}-primary`)).toBeNull();
+      expect(view.queryByTestId(`thread-approval-${id}-secondary`)).toBeNull();
+    }
   });
 
   it('does not invent a deadline for a backend-managed approval', () => {

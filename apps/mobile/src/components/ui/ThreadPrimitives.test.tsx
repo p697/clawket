@@ -11,6 +11,7 @@ import {
   ControlSize,
   FontSize,
   FontWeight,
+  IconSize,
   LineHeight,
   Motion,
   Radius,
@@ -116,6 +117,9 @@ jest.mock('lucide-react-native', () => {
   const icon = (name: string) => (props: Record<string, unknown>) => ReactRuntime.createElement(name, props);
   return {
     ArrowUp: icon('ArrowUp'),
+    Check: icon('Check'),
+    CircleAlert: icon('CircleAlert'),
+    Clock3: icon('Clock3'),
     Maximize2: icon('Maximize2'),
     Minimize2: icon('Minimize2'),
     ChevronDown: icon('ChevronDown'),
@@ -249,16 +253,19 @@ describe.each(['light', 'dark'] as const)('%s thread primitives', (scheme) => {
     expect(onPress).toHaveBeenCalledTimes(1);
   });
 
-  it('renders approval preview and two semantic capsule actions', () => {
+  it('renders approvals with a category glyph, a monospace command well and 44pt capsules, without a status rail', () => {
     const theme = activeTheme(scheme);
+    const Glyph = jest.fn((_props: { size: number; color: string; strokeWidth: number }) => null);
     const allow = jest.fn();
     const alwaysAllow = jest.fn();
     const reject = jest.fn();
     const result = render(
       <ApprovalCard
         testID="approval"
+        icon={Glyph}
         title="Allow exec?"
         command="npm test"
+        detail="Run the unit tests"
         primaryAction={{ label: 'Allow', onPress: allow, onLongPress: alwaysAllow }}
         secondaryAction={{ label: 'Reject', onPress: reject }}
       />,
@@ -267,15 +274,30 @@ describe.each(['light', 'dark'] as const)('%s thread primitives', (scheme) => {
     expect(cardStyle).toMatchObject({
       backgroundColor: theme.colors.surface,
       borderRadius: Radius.card,
+      padding: Space.lg,
     });
     expect(cardStyle).not.toHaveProperty('borderWidth');
+    expect(cardStyle).not.toHaveProperty('flexDirection');
+    expect(result.queryByTestId('approval-status')).toBeNull();
+    expect(Glyph.mock.calls[0]?.[0]).toMatchObject({ size: IconSize.sm, color: theme.colors.inkSecondary });
+    expect(result.getByTestId('approval').props.accessibilityState).toEqual({ disabled: false });
+    expect(flattenStyle(result.getByTestId('approval-well').props.style)).toMatchObject({
+      backgroundColor: theme.colors.surfaceFloating,
+      borderRadius: Radius.avatarSheet,
+    });
+    // iOS resolves no family called `monospace`; the command must name a real monospaced face.
     expect(flattenStyle(result.getByTestId('approval-command').props.style)).toMatchObject({
-      fontFamily: 'monospace',
+      fontFamily: 'Menlo',
       fontSize: FontSize.caption,
-      lineHeight: LineHeight.caption,
+      lineHeight: LineHeight.secondary,
+    });
+    expect(result.getByTestId('approval-command').props.selectable).toBe(true);
+    expect(flattenStyle(result.getByTestId('approval-detail').props.style)).toMatchObject({
+      color: theme.colors.inkSecondary,
+      fontSize: FontSize.secondary,
     });
     expect(flattenStyle(result.getByTestId('approval-primary').props.style)).toMatchObject({
-      minHeight: ControlSize.pill,
+      minHeight: ControlSize.floatingButton,
       borderRadius: Radius.full,
       backgroundColor: theme.colors.ink,
     });
@@ -287,6 +309,83 @@ describe.each(['light', 'dark'] as const)('%s thread primitives', (scheme) => {
     expect(allow).toHaveBeenCalledTimes(1);
     expect(alwaysAllow).toHaveBeenCalledTimes(1);
     expect(reject).toHaveBeenCalledTimes(1);
+  });
+
+  it('spins only the pressed approval capsule and releases both after a failed resolution', () => {
+    const theme = activeTheme(scheme);
+    const props = {
+      testID: 'approval',
+      title: 'Allow exec?',
+      command: 'npm test',
+      detail: 'Run the unit tests',
+      primaryAction: { label: 'Allow', onPress: jest.fn() },
+      secondaryAction: { label: 'Reject', onPress: jest.fn() },
+    };
+    const result = render(<ApprovalCard {...props} />);
+    fireEvent.press(result.getByTestId('approval-primary'));
+    result.rerender(<ApprovalCard {...props} busy />);
+
+    expect(result.getByTestId('approval-primary-spinner').props.color).toBe(theme.colors.canvas);
+    expect(result.queryByText('Allow')).toBeNull();
+    expect(result.getByTestId('approval-primary').props.accessibilityState).toEqual({ disabled: true, busy: true });
+    expect(flattenStyle(result.getByTestId('approval-primary').props.style)).not.toHaveProperty('opacity');
+    expect(result.getByTestId('approval-secondary').props.accessibilityState).toEqual({ disabled: true });
+    expect(flattenStyle(result.getByTestId('approval-secondary').props.style).opacity).toBe(0.55);
+
+    result.rerender(<ApprovalCard {...props} error="Could not update this request. Try again." />);
+    expect(result.queryByTestId('approval-primary-spinner')).toBeNull();
+    expect(result.getByTestId('approval-primary').props.accessibilityState).toEqual({ disabled: false });
+    expect(flattenStyle(result.getByText('Could not update this request. Try again.').props.style))
+      .toMatchObject({ color: theme.colors.bad, fontSize: FontSize.secondary });
+    expect(result.queryByTestId('approval-detail')).toBeNull();
+
+    // Without a new press the card cannot know which capsule a later confirmation belongs to.
+    result.rerender(<ApprovalCard {...props} busy />);
+    expect(result.queryByTestId('approval-primary-spinner')).toBeNull();
+    expect(result.queryByTestId('approval-secondary-spinner')).toBeNull();
+  });
+
+  it('collapses a settled approval to its title, outcome and command', () => {
+    const result = render(
+      <ApprovalCard
+        testID="approval"
+        title="Allow exec?"
+        command="npm test"
+        detail="Run the unit tests"
+        outcome={{ kind: 'allowed', label: 'Allowed' }}
+        primaryAction={{ label: 'Allow', onPress: jest.fn() }}
+        secondaryAction={{ label: 'Reject', onPress: jest.fn() }}
+      />,
+    );
+
+    expect(result.getByTestId('approval').props.accessibilityState).toEqual({ disabled: true });
+    expect(result.getByTestId('approval-outcome')).toBeTruthy();
+    expect(result.getByText('Allowed')).toBeTruthy();
+    expect(result.getByTestId('approval-command')).toBeTruthy();
+    expect(result.queryByTestId('approval-detail')).toBeNull();
+    expect(result.queryByTestId('approval-primary')).toBeNull();
+    expect(result.queryByTestId('approval-secondary')).toBeNull();
+  });
+
+  it('previews a long approval command in three lines and expands the whole well', () => {
+    const command = `npx jest ${'src/components/ui/ThreadPrimitives.test.tsx '.repeat(4)}--runInBand`;
+    const result = render(
+      <ApprovalCard
+        testID="approval"
+        title="Allow exec?"
+        command={command}
+        primaryAction={{ label: 'Allow', onPress: jest.fn() }}
+        secondaryAction={{ label: 'Reject', onPress: jest.fn() }}
+      />,
+    );
+
+    expect(result.getByTestId('approval-command').props.numberOfLines).toBe(3);
+    expect(result.getByTestId('approval-show-more').props.accessibilityState).toEqual({ expanded: false });
+    expect(result.getByTestId('approval-show-more').props.accessibilityLabel).toBe(command);
+    fireEvent.press(result.getByTestId('approval-show-more'));
+    expect(result.queryByTestId('approval-show-more')).toBeNull();
+    expect(result.getByTestId('approval-command').props.numberOfLines).toBeUndefined();
+    expect(result.getByTestId('approval-command').props.selectable).toBe(true);
   });
 
   it('uses 44pt floating actions and a five-line composition field', () => {

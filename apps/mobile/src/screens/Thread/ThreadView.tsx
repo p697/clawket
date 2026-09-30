@@ -44,17 +44,22 @@ import {
   CalendarClock,
   Bot,
   CircleAlert,
+  FilePenLine,
+  Globe,
   Info,
   MessageCircle,
+  MonitorSmartphone,
   Paperclip,
   MessagesSquare,
+  Server,
   Star,
   Shield,
   ShieldAlert,
   ShieldQuestionMark,
+  Terminal,
 } from 'lucide-react-native';
 import { ChevronLeft } from '../../components/ui/DirectionalIcon';
-import type { PendingImage, UiMessage } from '../../types/chat';
+import type { PendingImage, UiApprovalStatus, UiMessage } from '../../types/chat';
 import type { SlashCommand } from '../../data/slash-commands';
 import type { ThinkingLevel } from '../../utils/gateway-settings';
 import { useAppTheme } from '../../theme';
@@ -80,7 +85,7 @@ import {
   Radius,
   Space,
 } from '../../theme/tokens';
-import { ApprovalCard } from '../../components/ui/ApprovalCard';
+import { ApprovalCard, type ApprovalCardOutcome } from '../../components/ui/ApprovalCard';
 import { ConfirmationModal } from '../../components/ui/ConfirmationModal';
 import { Banner } from '../../components/ui/Banner';
 import { ConnectionStatusPill } from '../../components/ui/ConnectionStatusPill';
@@ -1979,6 +1984,26 @@ function FavoriteIndicator({
   );
 }
 
+/** Approval glyphs reuse the tool-row vocabulary so a request reads as the tool it will run. */
+function approvalCategoryIcon(
+  category: Exclude<NonNullable<UiMessage['approval']>, { kind: 'pair' }>['category'],
+): typeof Terminal {
+  if (category === 'file') return FilePenLine;
+  if (category === 'network') return Globe;
+  if (category === 'permissions') return Shield;
+  return Terminal;
+}
+
+function approvalOutcome(
+  status: Exclude<UiApprovalStatus, 'pending'>,
+  copy: ThreadCopy,
+): ApprovalCardOutcome {
+  return {
+    kind: status,
+    label: status === 'allowed' ? copy.allowed : status === 'denied' ? copy.denied : copy.expired,
+  };
+}
+
 function ThreadApprovalTimelineItem({
   messageId,
   approval,
@@ -1994,24 +2019,16 @@ function ThreadApprovalTimelineItem({
     const title = approval.displayName?.trim()
       || approval.platform?.trim()
       || (approval.target === 'node' ? copy.node : copy.device);
-    const resolved = approval.status !== 'pending';
-    const detail = approval.status === 'allowed'
-      ? copy.allowed
-      : approval.status === 'denied'
-        ? copy.denied
-        : approval.status === 'expired'
-          ? copy.expired
-          : approval.resolutionError
-            ? copy.approvalError
-            : copy.pairApprovalDetail;
     return (
       <View style={stylesStatic.timelineItem}>
         <ApprovalCard
           testID={`thread-approval-${messageId}`}
+          icon={approval.target === 'node' ? Server : MonitorSmartphone}
           title={title}
-          detail={detail}
-          tone={approval.resolutionError ? 'bad' : undefined}
-          expired={resolved}
+          detail={copy.pairApprovalDetail}
+          error={approval.resolutionError ? copy.approvalError : undefined}
+          busy={approval.resolving === true}
+          outcome={approval.status === 'pending' ? undefined : approvalOutcome(approval.status, copy)}
           primaryAction={{
             label: copy.allow,
             onPress: () => onResolveApproval?.(approval.id, 'approve', approval.target),
@@ -2074,23 +2091,18 @@ function ThreadExecApprovalTimelineItem({
   const resolved = approval.status !== 'pending' || deadlineExpired;
   const canAllowAlways = !resolved && !approval.resolving && Boolean(onResolveApproval)
     && (!approval.decisions || approval.decisions.includes('allow-always'));
-  const detail = approval.status === 'allowed'
-    ? copy.allowed
-    : approval.status === 'denied'
-      ? copy.denied
-      : resolved
-        ? copy.expired
-        : approval.resolutionError ? copy.approvalError : undefined;
 
   return (
     <View style={stylesStatic.timelineItem}>
       <ApprovalCard
         testID={`thread-approval-${messageId}`}
+        icon={approvalCategoryIcon(approval.category)}
         title={approval.category && approval.category !== 'command' ? t('Allow this action?', { ns: 'chat' }) : copy.approvalTitle}
         command={approval.command}
-        detail={detail ?? approval.reason}
-        tone={approval.resolutionError ? 'bad' : undefined}
-        expired={resolved}
+        detail={approval.reason}
+        error={approval.resolutionError ? copy.approvalError : undefined}
+        busy={approval.resolving === true}
+        outcome={resolved ? approvalOutcome(approval.status === 'pending' ? 'expired' : approval.status, copy) : undefined}
         primaryAction={{
           label: copy.allow,
           onPress: () => onResolveApproval?.(approval.id, 'allow-once'),

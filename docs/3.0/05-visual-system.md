@@ -70,7 +70,7 @@ iOS 用系统 SF Pro，Android 用 Roboto，中文走系统 CJK；不引入第�
 | `Bubble` | 助手：`surface` 底、`ink` 字、圆角 20、左对齐；用户：`accentSoft` 底、`ink` 字、右对齐；Markdown 渲染沿用现有 `chatMarkdown` |
 | `SystemEventRow` | 居中，`caption inkSecondary`，前置 Lucide 14；可点带右箭头 |
 | `RunCard` | `surface` 底、圆角 16、左 3pt 状态色竖条（accent / bad / warn）、标题 `secondary 600`、说明 `caption`、右箭头 |
-| `ApprovalCard` | 同 RunCard 外形 + 命令预览（等宽 13）+ 底部两颗胶囊：主 `ink` 底白字、次 `surfaceFloating`；过期态整体 60% |
+| `ApprovalCard` | `surface` 底、圆角 16、内边距 16，不带状态竖条（2026-09-30 负责人选定方案 B）；标题行 = 类别图标（命令 `Terminal`、改文件 `FilePenLine`、网络 `Globe`、权限 `Shield`、设备 / 节点配对 `MonitorSmartphone` / `Server`，16 `inkSecondary`）+ `secondary 600` 标题；命令放进 `surfaceFloating` 命令块（圆角 10，等宽 13/20，iOS 用 Menlo），长命令先显示三行、点整块展开；说明 `secondary inkSecondary`；底部两颗 44 高胶囊：主 `ink` 底白字、次 `surfaceFloating`；等待确认时只在按下的那颗里转圈；提交失败换成 `bad` 图标 + 一句提示；处理完收成「标题 + 右侧结果（已允许 / 已拒绝 / 已过期）+ 命令」，不留按钮 |
 | `Composer` | 安静底色与统一 40pt 按钮视觉 / 44pt 点击区域；输入自动增高到五行，第三行出现展开按钮；全屏编辑保留同一个原生输入框、草稿与光标，附件归入输入区；发送 / 停止使用无浮动阴影的 ink 主操作。2026-09-06 按负责人授权升级，详见 `16-composer-upgrade.md`。 |
 | `Sheet` | 底部弹层，圆角 20，`surface` 底，把手 36×4 `line`；背景压暗 40%；320 ms 推上 |
 | `SettingsGroup` / `SettingsRow` | 白卡圆角 14；行高 52，标题 `name 400`（17/400）、副标题 `caption`、右箭头 / 锁；行间 `line` 发丝线，首尾无线 |

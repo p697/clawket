@@ -168,7 +168,7 @@ Backend identity and transport identity never select a visual route directly. Ro
 | `Bubble` | One assistant/user shape recipe with Markdown-compatible content |
 | `SystemEventRow` | One centered supporting line with Lucide icon and optional disclosure |
 | `RunCard` | Quiet scheduled/subagent event with category icon, no status rail, and compact time/status |
-| `ApprovalCard` | Run-card shell plus command preview and primary/secondary capsule actions |
+| `ApprovalCard` | Decision card without a status rail (owner decision 2026-09-30): category glyph + `secondary` semibold title, the exact command in a `surfaceFloating` monospace well (Menlo on iOS; a long command previews three lines and the whole well expands it), `secondary` detail, 44-point primary/secondary capsules. The pressed capsule spins while the backend confirms, a failed resolution shows a `bad` glyph and sentence, and a settled request keeps only its title, outcome and command |
 | `Composer` | Add button, composition-safe growing capsule input, mic, and send/stop action |
 | `CompositionSafeTextInput` | Sole stock `TextInput` host; iOS native-owns composing text while external replacement/reset still syncs |
 | `CompositionSafeBottomSheetTextInput` | Gorhom input with the same native-owned iOS composition and external sync contract |
