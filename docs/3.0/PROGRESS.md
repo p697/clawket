@@ -2686,6 +2686,10 @@ Support boundaries, native-source findings and private evidence references: [bac
 
 During owner-authorized Bridge 3.1.5 preparation, retained original assistant wire text for old Apps and introduced additive `artifactDisplayText` for new attachment-card UI. Mobile SDK and Gateway mappers consume the display projection; original native transcripts remain unchanged. Four directed Mobile files passed (36 cases) and Mobile types passed; Bridge artifact/legacy OpenClaw tests passed (85 cases). An isolated installation of the candidate tarball served actual Codex, Claude Code and Pi histories with both original text and display metadata; Codex and Hermes phone sessions rendered the projected cards correctly. Release source/evidence and final publication status live in the attached `codex/bridge-3-1-5` worktree and PR #49. App changes remain uncommitted here and are not an App release.
 
+### 2026-09-30 — Bridge 3.1.5 release preparation
+
+Owner explicitly authorized publishing the Bridge. Isolated `codex/bridge-3-1-5` contains the five-backend attachment runtime/shared contracts plus the existing merged CLI fixes; uncommitted Mobile changes remain in the original checkout. Publish guard, CLI manifest and lockfile advance to 3.1.5. Pre-release review preserves original wire text for legacy clients with additive attachment display metadata. No cloud deployment or App release is authorized by this workflow. See [release record](../3.1/bridge-3.1.5-release.md) for final gates/public verification.
+
 
 ### 2026-09-30 — Bridge 3.1.5 published
 
@@ -2694,3 +2698,4 @@ Owner-authorized npm publication completed; public latest is 3.1.5. Downloaded t
 ### 2026-09-30 — Onboarding connecting stage
 
 Owner request from a device screenshot of 连接 Codex: while a pairing connected, the Companion waited under steps that no longer applied (copyable agent message, spent code, live-looking Connect). A submitted pairing (code, QR or link) now owns the page: `ConnectingStage` covers everything under the header, fading in with its page-size `LoadingState` after `Motion.loadingGrace` so a faster failure shows only the Connect spinner, with a `headline` `Connecting` label. The form stays mounted underneath, locked and hidden from assistive technology; a failure fades the stage out onto the unchanged form and its held error. A paired connection that goes offline keeps `Offline · reconnecting` plus a Reconnect action (`LoadingState` `action`) through its automatic retries instead of flipping back to the form, whose spent code could only fail again. Back leaves the flow while a pairing is in flight; success plays the cat's exit while the app opens the new Agent. The separate `Ready` row was removed. Serial verification: `OnboardingScreen.test.tsx` (26) and `companion/CompanionScene.test.tsx` (18) in-band, scoped type check of the changed files, `check:ui-style`. Uncommitted and not device-verified; no build, upload or release.
+

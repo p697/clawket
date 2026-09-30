@@ -1,5 +1,7 @@
 # Backend-delivered images and files
 
+Publication follow-up: Bridge 3.1.5 was published on 2026-09-30; see the [release record](bridge-3.1.5-release.md). The implementation/testing scope below is historical; App distribution and Production services remain unchanged.
+
 Owner-authorized extension, 2026-09-30. This is local candidate implementation and Preview testing, not a Production deployment or package/App release.
 
 ## Capability and delivery

@@ -1,5 +1,7 @@
 # OpenClaw generated attachments
 
+Publication follow-up: Bridge 3.1.5 was published on 2026-09-30; see the [release record](bridge-3.1.5-release.md). The implementation/testing scope below is historical; App distribution and Production services remain unchanged.
+
 Owner requested implementation and physical Android verification on 2026-09-29. Cloud persistence, CDN uploads, native upgrades and releases are outside this change.
 
 ## Contract
