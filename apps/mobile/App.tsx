@@ -96,7 +96,7 @@ import { usePostHogScreenTracking } from './src/hooks/usePostHogScreenTracking';
 import { ChatAppearanceSettings } from './src/types';
 import type { AgentInfo } from './src/types/agent';
 import { buildTheme, builtInAccents, defaultAccentId, useAppTheme } from './src/theme';
-import { APP_PACKAGE_VERSION } from './src/constants/app-version';
+import { getAppVersionLabel } from './src/services/app-version-label';
 import { getCurrentAppIconAsync, type AppIconVariant } from './src/services/app-icon';
 import { AppProviders } from './src/bootstrap/AppProviders';
 import { useAppBootstrap } from './src/bootstrap/useAppBootstrap';
@@ -1022,7 +1022,7 @@ function AppContent({
       accent: accentLabels[activeAccentId],
       chatAppearance: appearanceLabels[chatAppearance.bubbles.style],
       appIcon: i18n.t(currentAppIcon === 'black' ? 'Dark' : 'Light', { ns: 'config' }),
-      appVersion: APP_PACKAGE_VERSION,
+      appVersion: getAppVersionLabel(),
       previewEnvironment: i18n.t(debugMode ? 'Preview' : 'Production', { ns: 'config' }),
     };
   }, [
