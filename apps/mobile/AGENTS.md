@@ -534,3 +534,5 @@ Preserve native stable artifact references in both history and live finals, incl
 Hermes, Pi, Codex and Claude Code reuse the generated-attachment UI only after positive Bridge negotiation (`bridge.artifacts.v1` or `health.artifacts`). Receiving attachments is independent of whether the selected model accepts image input. Preserve stable operation identity during equivalent health updates and disable it when disconnected. Keep native link projection and filesystem authorization in the Bridge, never interpret a chat path as a phone path. See `../../docs/3.1/backend-attachments.md`.
 
 Delivered attachment display uses optional `artifactDisplayText` only on the new-client presentation path. Bridge wire text remains intact for older Apps; an empty display projection is valid for attachment-only replies.
+
+Keep standalone Mobile dependency security overrides aligned with the root manifest and both lockfiles; current patched major-specific brace-expansion pins are documented in `docs/engineering-baseline.md`.
