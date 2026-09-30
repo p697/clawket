@@ -1,4 +1,4 @@
-import { StyleSheet } from 'react-native';
+import { Platform, StyleSheet } from 'react-native';
 import { buildTheme } from '../../theme/theme';
 import { builtInAccents, defaultAccentId } from '../../theme/accents';
 import { chatWallpaperPalettes, CHAT_PHOTO_SERVICE, CHAT_SERVICE_BAD } from '../../theme/chat-wallpaper';
@@ -171,11 +171,31 @@ describe('immersive wallpaper chrome', () => {
     expect(channels(chrome.backgroundColor).slice(0, 3)).toEqual(channels(theme.colors.surfaceFloating).slice(0, 3));
     expect(chrome.borderWidth).toBe(StyleSheet.hairlineWidth);
     expect(chrome.borderColor).toContain('rgba(');
+    // Dark glass on a dark wallpaper keeps a faint light rim (owner report 2026-10-01).
+    expect(channels(chrome.borderColor).slice(0, 3))
+      .toEqual(channels(scheme === 'dark' ? theme.colors.ink : theme.colors.line).slice(0, 3));
     expect(chrome.shadow).toBe(scheme === 'light');
     const style = createChatGlassStyle(theme);
     expect(style).toMatchObject({ backgroundColor: chrome.backgroundColor, borderColor: chrome.borderColor });
     if (scheme === 'light') expect(style).toMatchObject(Shadow.floating);
     else expect(style).toMatchObject({ elevation: 0, shadowOpacity: 0 });
+  });
+
+  it('draws the Android glass shadow outside the see-through fill only', () => {
+    // Android draws `elevation` beneath the whole outline; under the 80% fill it
+    // showed as a grey cast or a pale octagon (owner report 2026-10-01).
+    const replaced = jest.replaceProperty(Platform, 'OS', 'android');
+    try {
+      const light = createChatGlassStyle(buildTheme('light', 'light', builtInAccents[defaultAccentId]));
+      expect(light).toMatchObject(Shadow.floatingOutside);
+      expect(light).toMatchObject({ elevation: 0, shadowOpacity: 0 });
+      expect(String(light.boxShadow)).toMatch(/^0px 2px 8px 0px rgba\(/);
+      const dark = createChatGlassStyle(buildTheme('dark', 'dark', builtInAccents[defaultAccentId]));
+      expect(dark).toMatchObject({ elevation: 0, shadowOpacity: 0 });
+      expect(dark.boxShadow).toBeUndefined();
+    } finally {
+      replaced.restore();
+    }
   });
 
   it('keeps ink readable on glass chrome over black and white wallpapers and every built-in gradient', () => {

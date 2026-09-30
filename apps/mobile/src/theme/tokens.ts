@@ -128,6 +128,17 @@ export const Shadow = {
     shadowRadius: 5,
     elevation: 2,
   },
+  /**
+   * `floating` drawn outside the view only (a box shadow; both platforms clip it
+   * to the outside). Android draws `elevation` beneath the whole outline, so a
+   * see-through surface shows it through. Sized after Android's elevation-2
+   * shadow as measured on device (owner report 2026-10-01).
+   */
+  floatingOutside: {
+    boxShadow: '0px 2px 8px 0px rgba(17, 17, 19, 0.16), 0px 0px 2px 0px rgba(17, 17, 19, 0.06)',
+    elevation: 0,
+    shadowOpacity: 0,
+  },
   xs: {
     shadowColor: '#071218',
     shadowOffset: { width: 0, height: 1 },

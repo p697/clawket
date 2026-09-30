@@ -1,4 +1,4 @@
-import { StyleSheet, type ViewStyle } from 'react-native';
+import { Platform, StyleSheet, type ViewStyle } from 'react-native';
 import type { AppTheme } from '../../theme';
 import { Shadow } from '../../theme/tokens';
 import { blendOntoBacking, withAlpha } from '../../theme/color';
@@ -257,16 +257,16 @@ export function resolveChatMetaAppearance(theme: AppTheme): ResolvedChatMetaAppe
 }
 
 /**
- * Glass over a photo: the floating surface at a bounded opacity with a soft
+ * Glass over a wallpaper: the floating surface at a bounded opacity with a soft
  * hairline, so the wallpaper reads through without losing the control edge.
- * Light mode keeps the floating shadow; dark mode relies on the hairline, as
- * every other lifted surface does.
+ * Light mode keeps the floating shadow; dark glass sits on a dark wallpaper, so
+ * a faint light rim keeps its edge readable (owner report 2026-10-01).
  */
 export function resolveChatChromeAppearance(theme: Pick<AppTheme, 'colors' | 'scheme'>): ResolvedChatChromeAppearance {
   const { colors, scheme } = theme;
   return {
     backgroundColor: withAlpha(colors.surfaceFloating, scheme === 'dark' ? 0.74 : 0.8),
-    borderColor: withAlpha(colors.line, scheme === 'dark' ? 0.64 : 0.5),
+    borderColor: scheme === 'dark' ? withAlpha(colors.ink, 0.12) : withAlpha(colors.line, 0.5),
     borderWidth: StyleSheet.hairlineWidth,
     shadow: scheme === 'light',
   };
@@ -279,6 +279,11 @@ export function createChatGlassStyle(theme: Pick<AppTheme, 'colors' | 'scheme'>)
     backgroundColor: glass.backgroundColor,
     borderWidth: glass.borderWidth,
     borderColor: glass.borderColor,
-    ...(glass.shadow ? Shadow.floating : { elevation: 0, shadowOpacity: 0 }),
+    // Android draws `elevation` beneath the whole outline, and the see-through
+    // fill showed it: an even grey on some controls, a grey ring around a pale
+    // octagon on others, depending on where each sat. Its box shadow is drawn
+    // outside only, so every glass control keeps the same clean fill.
+    ...(!glass.shadow ? { elevation: 0, shadowOpacity: 0 }
+      : Platform.OS === 'android' ? Shadow.floatingOutside : Shadow.floating),
   };
 }

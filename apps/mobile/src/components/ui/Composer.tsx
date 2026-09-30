@@ -248,8 +248,7 @@ export const Composer = React.forwardRef<ComposerHandle, ComposerProps>(function
       <View testID={testID ? `${testID}-row` : undefined} style={expanded ? styles.editorBody : styles.row}>
         {expanded ? null : <View testID={testID ? `${testID}-leading` : undefined} style={styles.side} {...dismissHandlers}>{leadingAction}</View>}
         <View testID={testID ? `${testID}-capsule` : undefined}
-          style={expanded ? styles.editorCapsule : [styles.capsule, capsuleSurface, glassChrome, attachments ? styles.capsuleWithTray : null,
-            Platform.OS === 'android' ? styles.capsuleFlatAndroid : null]}>
+          style={expanded ? styles.editorCapsule : [styles.capsule, capsuleSurface, glassChrome, attachments ? styles.capsuleWithTray : null]}>
           {attachments}
           <Animated.View testID={testID ? `${testID}-input-shell` : undefined}
             collapsable={false}
@@ -349,9 +348,6 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     row: { flexDirection: 'row', alignItems: 'flex-end', gap: Space.sm },
     side: { flexDirection: 'row', alignItems: 'flex-end', gap: Space.xs },
     capsule: { flex: 1, minWidth: 0, minHeight: ControlSize.floatingButton, borderRadius: Radius.xl, paddingVertical: 2, paddingLeft: Space.sm, paddingRight: Space.xs, justifyContent: 'center', overflow: 'hidden' },
-    // Android draws an elevation shadow under a translucent fill: once the capsule grows past its
-    // corner radius the shadow shows through as a pale inner rectangle, so it keeps only its edge.
-    capsuleFlatAndroid: { elevation: 0 },
     // Photos waiting to send ride inside the capsule, above the draft.
     capsuleWithTray: { paddingTop: Space.sm - 2, gap: Space.xs },
     editorBody: { flex: 1, minHeight: 0 },
