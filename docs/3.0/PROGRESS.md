@@ -2745,3 +2745,8 @@ Owner explicitly authorized a complete Bridge release after the local cleanup. I
 ### 2026-09-30 — Bridge 3.1.6 publication accepted
 
 Fixed candidate `a1831e4a` passed all four required CI jobs, serial v1 replay (41 cases), fresh production-snapshot local upgrade/recovery matrix (24 phases), local integration (eight cases), affected Codex tests (149 service / nine history), package provenance and isolated CLI smoke. Native browser authentication completed; npm accepted the immutable 3.1.6 tarball at approximately 12:22 UTC. Public synchronization and installation verification remain a distinct step; final results are recorded on [PR #53](https://github.com/p697/clawket/pull/53) and the [release record](../3.1/bridge-3.1.6-release.md). A concurrent Android QA merge required rebasing the source PR; bundled inputs remain identical, and rebased CI gates source merge. No App/Worker release or local user-runtime installation/start.
+
+
+### 2026-09-30 — Bridge 3.1.6 published and publicly verified
+
+Public npm reads at 12:27:49 UTC confirmed version 3.1.6 and `latest=3.1.6`. The downloaded tarball matches the fixed tested artifact byte-for-byte (SHA-256 `06852c7b61e0ebaa5bb7120c00052c33755798620818a7c7b7e76a6c77cb74d3`); SHA-1 and npm SHA-512 integrity also match. An isolated public installation and CLI help smoke passed. [Release record](../3.1/bridge-3.1.6-release.md), [PR #53](https://github.com/p697/clawket/pull/53). Local user runtimes remain stopped for the owner's fresh reinstall; native Codex authentication remains an independent owner action. No App publication or cloud deployment.
