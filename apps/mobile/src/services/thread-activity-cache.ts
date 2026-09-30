@@ -85,6 +85,8 @@ function normalizeRun(value: unknown, kind: ActivityKind): ThreadRunSeed | null 
     ...(agentId ? { agentId } : {}),
     ...(summary ? { summary } : {}),
     ...(cronRun ? { cronRun } : {}),
+    // Kept so a cached digest offers "Run again" exactly as the refreshed one will.
+    ...(value.runnable === true ? { runnable: true } : {}),
   };
 }
 

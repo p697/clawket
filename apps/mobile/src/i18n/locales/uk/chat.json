@@ -458,5 +458,18 @@
   "{{detail}} failed": "Збій: {{detail}}",
   "Work record": "Журнал роботи",
   "1 step": "1 крок",
-  "{{count}} steps": "Кроків: {{count}}"
+  "{{count}} steps": "Кроків: {{count}}",
+  "Running a command…": "Виконую команду…",
+  "Reading files…": "Читаю файли…",
+  "Editing files…": "Змінюю файли…",
+  "Searching…": "Шукаю…",
+  "Browsing the web…": "Переглядаю веб…",
+  "Using tools…": "Використовую інструменти…",
+  "Typing…": "Друкує…",
+  "Waiting for your approval": "Чекає на ваше схвалення",
+  "Scheduled tasks": "Заплановані завдання",
+  "View logs": "Відкрити журнал",
+  "Run again": "Запустити знову",
+  "Run started": "Запуск розпочато",
+  "Could not start the run": "Не вдалося запустити"
 }

@@ -458,5 +458,18 @@
   "{{detail}} failed": "{{detail}} 失败",
   "Work record": "工作记录",
   "1 step": "1 步",
-  "{{count}} steps": "{{count}} 步"
+  "{{count}} steps": "{{count}} 步",
+  "Running a command…": "正在运行命令…",
+  "Reading files…": "正在读文件…",
+  "Editing files…": "正在改文件…",
+  "Searching…": "正在搜索…",
+  "Browsing the web…": "正在浏览网页…",
+  "Using tools…": "正在使用工具…",
+  "Typing…": "正在输入…",
+  "Waiting for your approval": "等你批准",
+  "Scheduled tasks": "定时任务",
+  "View logs": "看日志",
+  "Run again": "重跑",
+  "Run started": "已开始重跑",
+  "Could not start the run": "没能重跑"
 }

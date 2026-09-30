@@ -10,6 +10,7 @@ import {
   isChatWallpaperActive,
   resolveChatBubbleAppearance,
   resolveChatChromeAppearance,
+  resolveChatPresenceColors,
   resolveChatSurfaces,
   resolveChatWallpaperKind,
 } from './resolver';
@@ -186,6 +187,33 @@ describe('immersive wallpaper chrome', () => {
           expect(contrastOn(theme.colors.ink, chrome, backdrop)).toBeGreaterThanOrEqual(4.5);
         }
       }
+    }
+  });
+});
+
+describe('presence colors', () => {
+  it.each(['light', 'dark'] as const)('keeps the %s status sentence readable on the header glass', (scheme) => {
+    for (const accentId of ACCENTS) {
+      const theme = buildTheme(scheme, scheme, builtInAccents[accentId]);
+      const presence = resolveChatPresenceColors(theme);
+      const glass = resolveChatChromeAppearance(theme).backgroundColor;
+      expect(presence.working).toBe(theme.colors.accent);
+      expect(presence.attentionRing).toBe(theme.colors.warn);
+      for (const backdrop of chatWallpaperPalettes[accentId][scheme].gradient) {
+        expect(contrastOn(presence.attentionText, glass, backdrop)).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+
+  it('gives insets a color that reads against the card they sit in', () => {
+    for (const scheme of ['light', 'dark'] as const) {
+      const theme = buildTheme(scheme, scheme, builtInAccents.iceBlue);
+      const pattern = resolveChatSurfaces(theme, appearance('pattern'), 'iceBlue');
+      expect(pattern.well).not.toBe(pattern.card);
+      expect(pattern.well).toBe(scheme === 'dark' ? theme.colors.canvas : theme.colors.surface);
+      const plain = resolveChatSurfaces(theme, appearance('plain'), 'iceBlue');
+      expect(plain.card).toBe(theme.colors.surface);
+      expect(plain.well).toBe(theme.colors.canvas);
     }
   });
 });

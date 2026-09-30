@@ -458,5 +458,18 @@
   "{{detail}} failed": "{{detail}} thất bại",
   "Work record": "Nhật ký làm việc",
   "1 step": "1 bước",
-  "{{count}} steps": "{{count}} bước"
+  "{{count}} steps": "{{count}} bước",
+  "Running a command…": "Đang chạy lệnh…",
+  "Reading files…": "Đang đọc tệp…",
+  "Editing files…": "Đang sửa tệp…",
+  "Searching…": "Đang tìm kiếm…",
+  "Browsing the web…": "Đang duyệt web…",
+  "Using tools…": "Đang dùng công cụ…",
+  "Typing…": "Đang nhập…",
+  "Waiting for your approval": "Đang chờ bạn duyệt",
+  "Scheduled tasks": "Tác vụ theo lịch",
+  "View logs": "Xem nhật ký",
+  "Run again": "Chạy lại",
+  "Run started": "Đã bắt đầu chạy",
+  "Could not start the run": "Không thể bắt đầu"
 }

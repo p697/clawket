@@ -1,7 +1,7 @@
 import { StyleSheet, type ViewStyle } from 'react-native';
 import type { AppTheme } from '../../theme';
 import { Shadow } from '../../theme/tokens';
-import { withAlpha } from '../../theme/color';
+import { blendOntoBacking, withAlpha } from '../../theme/color';
 import {
   CHAT_PHOTO_SERVICE,
   CHAT_SERVICE_BAD,
@@ -62,6 +62,8 @@ export type ChatSurfaces = {
   outgoing: ChatBubbleSurface;
   /** Cards that sit among the bubbles: scheduled runs, approvals, artifacts. */
   card: string;
+  /** An inset inside a card or bubble (a command, a file glyph): it must read against `card`. */
+  well: string;
   service: ChatServiceSurface;
   /** Colors the header and composer scrims fade from, so they melt into the wallpaper. */
   scrim: { top: string; bottom: string };
@@ -196,10 +198,35 @@ export function resolveChatSurfaces(
     incoming,
     outgoing,
     card: onWallpaper ? palette.incoming : colors.surface,
+    well: !onWallpaper || scheme === 'dark' ? colors.canvas : colors.surface,
     service,
     scrim: wallpaper === 'pattern'
       ? { top: palette.gradient[0], bottom: palette.gradient[2] }
       : { top: colors.canvas, bottom: colors.canvas },
+  };
+}
+
+/** The Agent's presence colors around the header avatar (A+ chat design). */
+export type ChatPresenceColors = {
+  /** The turning arc and the status sentence while the Agent works. */
+  working: string;
+  /** The breathing ring while the Agent waits for you. */
+  attentionRing: string;
+  /** The "Waiting for your approval" sentence: amber that still reads as text on light glass. */
+  attentionText: string;
+};
+
+/** Light glass is near white; the attention amber darkens toward ink until it reads as text (≥ 4.5:1). */
+const LIGHT_ATTENTION_TEXT_WEIGHT = 0.75;
+
+export function resolveChatPresenceColors(theme: Pick<AppTheme, 'colors' | 'scheme'>): ChatPresenceColors {
+  const { colors, scheme } = theme;
+  return {
+    working: colors.accent,
+    attentionRing: colors.warn,
+    attentionText: scheme === 'dark'
+      ? colors.warn
+      : blendOntoBacking(withAlpha(colors.warn, LIGHT_ATTENTION_TEXT_WEIGHT), colors.ink),
   };
 }
 

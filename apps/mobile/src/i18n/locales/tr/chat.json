@@ -458,5 +458,18 @@
   "{{detail}} failed": "{{detail}} başarısız",
   "Work record": "Çalışma kaydı",
   "1 step": "1 adım",
-  "{{count}} steps": "{{count}} adım"
+  "{{count}} steps": "{{count}} adım",
+  "Running a command…": "Komut çalıştırıyor…",
+  "Reading files…": "Dosyaları okuyor…",
+  "Editing files…": "Dosyaları düzenliyor…",
+  "Searching…": "Arıyor…",
+  "Browsing the web…": "Web'de geziniyor…",
+  "Using tools…": "Araç kullanıyor…",
+  "Typing…": "Yazıyor…",
+  "Waiting for your approval": "Onayını bekliyor",
+  "Scheduled tasks": "Zamanlanmış görevler",
+  "View logs": "Günlüğü gör",
+  "Run again": "Yeniden çalıştır",
+  "Run started": "Çalıştırma başladı",
+  "Could not start the run": "Başlatılamadı"
 }

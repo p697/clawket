@@ -9,7 +9,9 @@ import type {
 } from '@clawket/agent-protocol';
 import type { ConnectionState as LegacyConnectionState } from '../../types';
 import type { UiMessage } from '../../types/chat';
+import { toolCategory } from '../../utils/tool-display';
 import { resolveCronRunSessionKey } from '../../connection/adapters/cron-run-content';
+import { isSystemOwnedCronJob } from '../AgentSettings/cron-model';
 import { formatThreadTimestamp, localDayNumber, THREAD_TIME_GAP_MS } from './timestamps';
 
 export type ThreadContentState =
@@ -59,6 +61,8 @@ export type ThreadRunCard = Readonly<{
   summary?: string;
   /** The run record behind a Cron card; the execution record sheet reads it. */
   cronRun?: CronRunLogEntry;
+  /** The job may be run again from the conversation (system-owned jobs may not, as in the editor). */
+  runnable?: boolean;
 }>;
 
 export type ThreadRunSeed = Omit<ThreadRunCard, 'statusLabel' | 'timeLabel' | 'canOpenLogs'>;
@@ -74,6 +78,7 @@ function runSeedSignature(run: ThreadRunSeed): string {
     run.sessionKey ?? '',
     run.jobId ?? '',
     run.agentId ?? '',
+    run.runnable ? '1' : '0',
   ].join('\u0001');
 }
 
@@ -107,6 +112,13 @@ export type ThreadTimelineItem =
       key: string;
       timestampMs: number;
       run: ThreadRunCard;
+    }>
+  | Readonly<{
+      /** Adjacent scheduled results as one message (A+ chat design); runs are newest-first. */
+      type: 'cron';
+      key: string;
+      timestampMs: number;
+      runs: ReadonlyArray<ThreadRunCard>;
     }>
   | Readonly<{
       type: 'date';
@@ -211,6 +223,7 @@ export function buildCronRunSeeds(params: Readonly<{
       summary: entry.error?.trim() || entry.summary?.trim() || undefined,
       updatedAt,
       cronRun: entry,
+      runnable: !isSystemOwnedCronJob(job),
     });
     seenJobIds.add(entry.jobId);
   }
@@ -327,10 +340,13 @@ export function buildThreadTimelineItems(params: Readonly<{
     const current = merged[index]!;
     const timestamp = current.item.type === 'message' && current.item.message.role === 'system'
       ? undefined : current.timestampMs;
+    // A scheduled result carries its own time inside the digest, so it only
+    // starts a new day; the results of one day stay adjacent and merge.
+    const scheduled = current.item.type === 'run' && current.item.run.kind === 'cron';
     if (timestamp !== undefined) {
       if (previousTimestamp === undefined
         || localDayNumber(timestamp) !== localDayNumber(previousTimestamp)
-        || timestamp - previousTimestamp >= THREAD_TIME_GAP_MS) {
+        || (!scheduled && timestamp - previousTimestamp >= THREAD_TIME_GAP_MS)) {
         timeline.push({
           type: 'date',
           // Server echoes can correct optimistic time without remounting rows.
@@ -495,6 +511,58 @@ export function resolveThreadHeaderSubtitle({
     : formatModelContext(normalizedModel, remainingPercent);
 }
 
+type Translate = (key: string, options?: Record<string, unknown>) => string;
+
+function isOwnPrompt(message: UiMessage): boolean {
+  return message.role === 'user' && !isIncomingParticipant(message);
+}
+
+/** A tool call of the current turn is still running. `messages` is newest-first. */
+export function isToolRunningInTurn(messages: ReadonlyArray<UiMessage>): boolean {
+  for (const message of messages) {
+    if (isOwnPrompt(message)) return false;
+    if (message.role === 'tool' && message.toolStatus === 'running' && !message.approval) return true;
+  }
+  return false;
+}
+
+/**
+ * The sentence under the Agent's name while it works (A+ chat design, owner
+ * decision 2026-09-30): what the running step of this turn does, "Typing…"
+ * once the reply streams, else the controller's activity or "Thinking…".
+ * Only the current turn counts, so an orphaned call from an earlier turn
+ * never speaks for this one. `messages` is newest-first.
+ */
+export function resolveThreadWorkingStatus({
+  messages,
+  activityLabel,
+  thinkingLabel,
+  t,
+}: Readonly<{
+  messages: ReadonlyArray<UiMessage>;
+  activityLabel?: string | null;
+  thinkingLabel: string;
+  t: Translate;
+}>): string {
+  let typing = false;
+  for (const message of messages) {
+    if (isOwnPrompt(message)) break;
+    if (message.role === 'tool' && message.toolStatus === 'running' && !message.approval) {
+      switch (toolCategory(message.toolName?.trim() ?? '')) {
+        case 'command': return t('Running a command…', { ns: 'chat' });
+        case 'read': return t('Reading files…', { ns: 'chat' });
+        case 'edit': return t('Editing files…', { ns: 'chat' });
+        case 'search': return t('Searching…', { ns: 'chat' });
+        case 'web': return t('Browsing the web…', { ns: 'chat' });
+        default: return t('Using tools…', { ns: 'chat' });
+      }
+    }
+    if (message.role === 'assistant' && message.streaming === true && message.text.trim()) typing = true;
+  }
+  if (typing) return t('Typing…', { ns: 'chat' });
+  return activityLabel?.trim() || thinkingLabel;
+}
+
 export const THREAD_ERROR_COPY: Readonly<Record<AdapterErrorCode, Readonly<{
   messageKey: string;
   actionKey?: string;
@@ -604,6 +672,30 @@ export function groupThreadTools(items: ReadonlyArray<ThreadTimelineItem>): Thre
 }
 
 /**
+ * Merges adjacent scheduled results into one digest message (A+ chat design,
+ * owner decision 2026-09-30); a lone result is a digest of one. The oldest
+ * run anchors the key so a newer result joins without remounting it.
+ * Sub-agent runs keep their own cards. Input is newest-first.
+ */
+export function groupThreadRuns(items: ReadonlyArray<ThreadTimelineItem>): ThreadTimelineItem[] {
+  const result: ThreadTimelineItem[] = [];
+  for (let index = 0; index < items.length;) {
+    const item = items[index]!;
+    if (item.type !== 'run' || item.run.kind !== 'cron') {
+      result.push(item); index += 1; continue;
+    }
+    const runs: ThreadRunCard[] = [];
+    while (index < items.length) {
+      const next = items[index]!;
+      if (next.type !== 'run' || next.run.kind !== 'cron') break;
+      runs.push(next.run); index += 1;
+    }
+    result.push({ type: 'cron', key: `cron:${runs[runs.length - 1]!.id}`, timestampMs: item.timestampMs, runs });
+  }
+  return result;
+}
+
+/**
  * Vertical rhythm of a timeline row: the gap it owns toward the older row
  * above it. `joined` keeps consecutive bubbles from one speaker together as
  * one Telegram-style group; `stack` keeps other rows of one voice close (an
@@ -688,6 +780,9 @@ function reuseThreadRow(previous: ThreadTimelineRow, next: ThreadTimelineRow): T
       return previous.type === 'tools' && hasSameMessages(previous.messages, next.messages) ? previous : next;
     case 'run':
       return previous.type === 'run' && previous.run === next.run ? previous : next;
+    case 'cron':
+      return previous.type === 'cron' && previous.runs.length === next.runs.length
+        && previous.runs.every((run, index) => run === next.runs[index]) ? previous : next;
     case 'date':
       return previous.type === 'date' && previous.label === next.label ? previous : next;
   }

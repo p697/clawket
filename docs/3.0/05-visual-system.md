@@ -68,15 +68,18 @@ iOS 用系统 SF Pro，Android 用 Roboto，中文走系统 CJK；不引入第�
 | 组件 | 规格 |
 |---|---|
 | `FloatingButton` | 44 点击区，Lucide 图标 22 / 1.75 描边、`ink`；页头、弹层头与确认弹窗一律 `plain` 纯图标（2026-09-27 负责人决定）；只有悬浮在内容上的按钮（回到底部）用 `surfaceFloating` + `shadowFloating`，壁纸上用 `glass`；按下缩放 0.96；可带徽标（accent 点或 bad 数字） |
-| `HeaderPill` | 高 40 全圆，`surfaceFloating` + 阴影，内容：头像 28 + 名字 `name` + 副标题 `caption inkSecondary`；副标题变化用 100 ms 淡入淡出（沿用现有头部动画） |
+| `HeaderPill` | 高 40 全圆，`surfaceFloating` + 阴影，内容：头像 28 + 名字 `name` + 副标题 `caption inkSecondary`；副标题变化用 100 ms 淡入淡出（沿用现有头部动画）。线程在场感（A+，2026-09-30）：工作时头像外 2pt 转一段强调色弧（`PresenceRing`，1.4 s 一圈，轨道 16%），副标题换成状态句并用强调色（正在运行命令… / 正在输入… / 正在思考…）；等你批准或回复时整圈琥珀色呼吸，副标题琥珀色；减弱动态效果时静止 |
+| `PresenceRing` | 头像外圈：工作 = 强调色四分之一弧旋转；等你 = `warn` 整圈呼吸；只在 UI 线程动 transform / opacity |
 | `AgentAvatar` | 圆角方块，底色 `agentPalette[hash]`，内容 emoji（若有）或 1–2 字首字母（白，600）；状态环：`working` = 不加头像或会话图块角标，沿用花名册预览与对话活动展示（2026-09-22 用户修订）；`attention` = 右下 12 圆点 `warn` / `bad` 带 2pt canvas 边；`done` = 右下 `good` 圆点 3 s 后淡出；`live` = 右下 `good` 圆点常驻，标出实时连接的 Agent（2026-09-26 负责人决定，规则见 04 §2 Agent 行），变为实时时 200 ms 淡入；圆点统一用 `StatusDot`（12pt 含 2pt 所在表面色描边）；头像是正圆，圆点与锁徽标的圆心压在圆周 45° 处，描边切出完整缺口（2026-09-27 负责人反馈：按方框角外扩时描边只擦到圆边一点，像 bug）；同一角一次只放一个标记，锁 > 需要你 > 实时；右上角只给首页会话行放对话徽标（`badgeIcon`：20pt `surface` 灰底圆 + 2pt canvas 描边，同样压在圆周 45°，2026-09-27）；`offline` = 整体去饱和 60%；`locked` = 去饱和 + 右下锁；官方图标（2026-09-27 负责人决定）：`platform` 为产品型后端（Hermes、Codex、Claude Code、Pi、本地模型）时，脸就是官方图标——白底圆 + 发丝描边，裸图标占直径 54%，App 图标类素材满圆裁切——不画 emoji、首字母或图片；`platformBadge` 让有自己头像的 Agent 在右下带后端角标：24pt 画布色环 + 20pt `surface` 灰底圆（白底在画布上会消失）+ 官方图标，圆心压圆周 45°，只在花名册混合两种以上后端时使用；锁 > 需要你 > 角标，实时连接的角标环变 `good`，不再另加绿点 |
 | `Bubble` | 颜色来自 `useChatSurfaces()`（线程底面）：Agent 左对齐白底 `ink` 字，用户右对齐实色白字；`joinsOlder` / `joinsNewer` 由时间线给出，挂靠侧合并圆角，组末一条带尾巴（描边材质不画尾巴）；消息自己的附件跟在气泡后时气泡按「后面还有」处理；Markdown 渲染沿用现有 `chatMarkdown` |
 | `ServicePill` | 居中半透明胶囊（`components/chat`）：`caption`、白字、上下 3 / 左右 10、全圆；日期用 600；可点的末尾带 14 右箭头；`busy` 在图标位转圈，`trailing` 放较淡的用时；`bad` 为失败红 |
 | `ToolActivityPill` | 工具过程只有三种胶囊：运行中（转圈 +「正在运行 `命令`」+ 用时，每秒刷新）、完成摘要（「运行了 6 个命令，读了 1 个文件 · 38 秒」，最多两类，否则「用了 N 个工具」）、失败（红色「`命令` 失败」，单独一颗）；点任一颗打开 `WorkRecordSheet` |
 | `WorkRecordSheet` | 「工作记录」弹层：本轮提示词下的全部工具调用，一步一行（36 图标井、名称、等宽的命令 / 路径 / 查询、状态、用时），标题下写总用时 · 步数；点一步推入 `ToolDetailModal` 看完整输入输出，关掉回到记录 |
 | `SystemEventRow` | 居中，`caption inkSecondary`，前置 Lucide 14；可点带右箭头；线程里只剩消息附件的文件条（卡片色底） |
-| `RunCard` | `surface` 底（线程里为卡片色，壁纸上即白色）、圆角 16、标题 `secondary 600`、说明 `caption`、右箭头 |
-| `ApprovalCard` | `surface` 底、圆角 16、内边距 16，不带状态竖条（2026-09-30 负责人选定方案 B）；标题行 = 类别图标（命令 `Terminal`、改文件 `FilePenLine`、网络 `Globe`、权限 `Shield`、设备 / 节点配对 `MonitorSmartphone` / `Server`，16 `inkSecondary`）+ `secondary 600` 标题；命令放进 `surfaceFloating` 命令块（圆角 10，等宽 13/20，iOS 用 Menlo），长命令先显示三行、点整块展开；说明 `secondary inkSecondary`；底部两颗 44 高胶囊：主 `ink` 底白字、次 `surfaceFloating`；等待确认时只在按下的那颗里转圈；提交失败换成 `bad` 图标 + 一句提示；处理完收成「标题 + 右侧结果（已允许 / 已拒绝 / 已过期）+ 命令」，不留按钮 |
+| `RunCard` | `surface` 底（线程里为卡片色，壁纸上即白色）、圆角 16、标题 `secondary 600`、说明 `caption`、右箭头；线程里只剩子 Agent 运行 |
+| `CronDigest` | 相邻的定时任务结果合成一条 Agent 气泡（A+）：强调色日历图标 +「定时任务」，一任务一行（绿勾 / 红色警示 + 红字状态 / 灰色跳过，右侧 12 号时间），点一行打开执行记录；有失败时气泡下挂「看日志 / 重跑」；同一天的结果之间不插时间胶囊 |
+| `InlineKeyboard` | 消息下挂按钮（Telegram 内联键盘）：高 44、圆角 14、间距 4、15/600；普通按钮为胶囊色底，消息要你做的那个为实色强调色；进行中原地转圈，禁用 55% |
+| `ApprovalCard` | A+（2026-09-30 晚）起为 Agent 的气泡 + 下挂按钮：气泡占行宽 88%、带尾巴，类别图标放进 28 圆 `warnSoft` 井，标题 15/600，命令块用 `well` 色，说明灰字；气泡下 `InlineKeyboard`「拒绝 / 允许」（允许为实色强调色，长按 = 总是允许）；处理完只留标题、结果和命令。以下为 2026-09-30 上午方案 B 的原配方：`surface` 底、圆角 16、内边距 16，不带状态竖条；标题行 = 类别图标（命令 `Terminal`、改文件 `FilePenLine`、网络 `Globe`、权限 `Shield`、设备 / 节点配对 `MonitorSmartphone` / `Server`，16 `inkSecondary`）+ `secondary 600` 标题；命令放进 `surfaceFloating` 命令块（圆角 10，等宽 13/20，iOS 用 Menlo），长命令先显示三行、点整块展开；说明 `secondary inkSecondary`；底部两颗 44 高胶囊：主 `ink` 底白字、次 `surfaceFloating`；等待确认时只在按下的那颗里转圈；提交失败换成 `bad` 图标 + 一句提示；处理完收成「标题 + 右侧结果（已允许 / 已拒绝 / 已过期）+ 命令」，不留按钮 |
 | `Composer` | 安静底色与统一 40pt 按钮视觉 / 44pt 点击区域；输入自动增高到五行，第三行出现展开按钮；全屏编辑保留同一个原生输入框、草稿与光标，附件归入输入区；发送 / 停止使用无浮动阴影的 ink 主操作。2026-09-06 按负责人授权升级，详见 `16-composer-upgrade.md`。 |
 | `Sheet` | 底部弹层，圆角 20，`surface` 底，把手 36×4 `line`；背景压暗 40%；320 ms 推上 |
 | `SettingsGroup` / `SettingsRow` | 白卡圆角 14；行高 52，标题 `name 400`（17/400）、副标题 `caption`、右箭头 / 锁；行间 `line` 发丝线，首尾无线 |

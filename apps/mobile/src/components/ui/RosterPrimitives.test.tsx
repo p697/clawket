@@ -324,28 +324,30 @@ describe.each(['light', 'dark'] as const)('%s roster primitives', (scheme) => {
     });
   });
 
-  it('replaces the header subtitle with lifting dots while the Agent works', () => {
+  it('turns an accent ring and says what the Agent is doing while it works', () => {
     const theme = activeTheme(scheme);
     const result = render(
-      <HeaderPill testID="header-pill" agentId="main" name="Main" subtitle="Thinking…" working />,
+      <HeaderPill testID="header-pill" agentId="main" name="Main" subtitle="Running a command…" presence="working" />,
     );
-    expect(result.queryByText('Thinking…')).toBeNull();
-    const dots = result.getByTestId('header-pill-working');
-    expect(dots.props.accessibilityRole).toBe('progressbar');
-    expect(result.getAllByTestId(/typing-dot-\d/)).toHaveLength(3);
-    expect(flattenStyle(result.getByTestId('typing-dot-0').props.style)).toMatchObject({
-      width: Space.xs,
-      height: Space.xs,
-      borderRadius: Radius.full,
-      backgroundColor: theme.colors.inkSecondary,
-    });
-    // No avatar badge competes with the dots.
+    // The status sentence replaces the idle subtitle, in the conversation accent.
+    expect(result.UNSAFE_getByProps({ children: 'Running a command…' }).props.style)
+      .toEqual(expect.arrayContaining([expect.objectContaining({ color: theme.colors.accent })]));
+    const ring = result.getByTestId('header-pill-working');
+    expect(ring.props.pointerEvents).toBe('none');
+    expect(ring.findAll((node) => (node.type as unknown) === 'Path')).toHaveLength(1);
+    // No avatar badge competes with the ring.
     expect(result.queryByTestId('header-pill-avatar-working')).toBeNull();
 
+    result.rerender(<HeaderPill testID="header-pill" agentId="main" name="Main" subtitle="Waiting for your approval" presence="attention" />);
+    const attention = result.getByTestId('header-pill-attention');
+    expect(attention.findAll((node) => (node.type as unknown) === 'Path')).toHaveLength(0);
+    expect(attention.findAll((node) => (node.type as unknown) === 'Circle')[0]?.props.stroke).toBe(theme.colors.warn);
+    expect(result.queryByTestId('header-pill-working')).toBeNull();
+
     result.rerender(<HeaderPill testID="header-pill" agentId="main" name="Main" subtitle="Model · 54%" />);
-    // The subtitle is an Animated.Text host in this mock, so match it by props.
     expect(result.UNSAFE_getByProps({ children: 'Model · 54%' })).toBeTruthy();
     expect(result.queryByTestId('header-pill-working')).toBeNull();
+    expect(result.queryByTestId('header-pill-attention')).toBeNull();
   });
 
   it('renders a borderless 84pt roster row with tokenized pressed feedback', () => {

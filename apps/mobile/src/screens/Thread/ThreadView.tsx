@@ -67,7 +67,6 @@ import { ChatMessageIdentity } from '../../components/chat/ChatMessageIdentity';
 import { MessageAttachmentAlbum } from '../../components/chat/MessageAttachmentAlbum';
 import { MessageEntrance } from '../../components/chat/MessageEntrance';
 import { MessageMeta, messageMetaSpacer } from '../../components/chat/MessageMeta';
-import { ThinkingIndicator } from '../../components/chat/ThinkingIndicator';
 import { ChatBackgroundLayer } from '../../components/chat/ChatBackgroundLayer';
 import { ChatWallpaperScrim } from '../../components/chat/ChatWallpaperScrim';
 import { isChatWallpaperActive, resolveChatSurfaces } from '../../features/chat-appearance/resolver';
@@ -97,10 +96,11 @@ import { FloatingButton } from '../../components/ui/FloatingButton';
 import { HeaderTextAction } from '../../components/ui/HeaderTextAction';
 import { HeaderPill } from '../../components/ui/HeaderPill';
 import type { PlatformKind } from '../../components/ui/PlatformMark';
-import { ToolActivityPill } from '../../components/chat/ToolActivityPill';
+import { ToolActivityPill, useElapsed } from '../../components/chat/ToolActivityPill';
 import { ServicePill } from '../../components/chat/ServicePill';
 import { WorkRecordSheet } from '../../components/chat/WorkRecordSheet';
-import { collectTurnToolSteps } from '../../components/chat/tool-activity-model';
+import { CronDigest } from '../../components/chat/CronDigest';
+import { collectTurnToolSteps, formatActivityDuration } from '../../components/chat/tool-activity-model';
 import { Sheet } from '../../components/ui/Sheet';
 import { ReplyFailureSheet } from '../../components/chat/ReplyFailureSheet';
 import { RunResult } from '../../components/chat/RunResult';
@@ -124,9 +124,12 @@ import { useMarkdownSelectionMenu } from '../../components/chat/useMarkdownSelec
 import {
   buildThreadTimelineItems,
   displayProjectPath,
+  groupThreadRuns,
   groupThreadTools,
   resolveThreadHeaderName,
   resolveThreadHeaderSubtitle,
+  resolveThreadWorkingStatus,
+  isToolRunningInTurn,
   stabilizeThreadRows,
   type ThreadContentState,
   type ThreadRowGap,
@@ -223,7 +226,9 @@ function areMessageStatusesEqual(
   return true;
 }
 /** Live activity for the reply placeholder only, so other rows stay out of its re-render. */
-const ThreadLiveActivityContext = createContext('');
+/** What the Agent is doing now, and since when (the user's newest prompt), for the thinking pill. */
+type ThreadLiveActivity = Readonly<{ label: string; startedAt?: number }>;
+const ThreadLiveActivityContext = createContext<ThreadLiveActivity>({ label: '' });
 
 export type ThreadCopy = Readonly<{
   close?: string;
@@ -376,6 +381,8 @@ export type ThreadViewProps = Readonly<{
   ) => void;
   /** Cron cards open the execution record; the screen owns the sheet. */
   onOpenCronRun?: (run: ThreadRunCard) => void;
+  /** Runs a failed scheduled task again from its digest (the backend's cron `run`). */
+  onRerunCron?: (run: ThreadRunCard) => Promise<unknown>;
   onOpenRunLogs?: (jobId: string, agentId?: string) => void;
   onOpenAttachments?: (message: UiMessage, index?: number) => void;
   /** Long-press message actions; omitting this disables the gesture. */
@@ -498,6 +505,7 @@ export function ThreadView({
   onOpenRunSession,
   onOpenCronRun,
   onOpenRunLogs,
+  onRerunCron,
   onOpenAttachments,
   messageActions,
   queuedMessageActions,
@@ -622,8 +630,17 @@ export function ThreadView({
   const replyEntrance = useReplyEntranceDelay(messages, sessionKey, messageSubmittedAt, reduceMotion);
   const presentedRunning = isRunning && !replyEntrance.holding;
   const awaitingInput = interactionAttention === 'input' || interactionAttention === 'approval';
+  // The Agent's presence in the header (A+ chat design, owner decision
+  // 2026-09-30): an accent arc turns around the avatar and the subtitle says
+  // what it is doing while it works; an amber ring breathes and the subtitle
+  // asks for you while an approval or an answer waits.
+  const waitingForYou = state.kind !== 'reconnecting'
+    && (awaitingInput || hasPendingApproval(messages, capabilities, Date.now()));
+  const headerWorking = presentedRunning && !waitingForYou && state.kind !== 'reconnecting';
+  const headerPresence = waitingForYou ? 'attention' as const : headerWorking ? 'working' as const : null;
   const headerSubtitle = state.kind === 'reconnecting' ? t('Reconnecting…')
-    : awaitingInput ? interactionAttention === 'input' ? t('Agent needs your input', { ns: 'chat' }) : t('Needs attention', { ns: 'common' })
+    : waitingForYou ? interactionAttention === 'input' ? t('Agent needs your input', { ns: 'chat' }) : t('Waiting for your approval', { ns: 'chat' })
+    : headerWorking ? resolveThreadWorkingStatus({ messages, activityLabel, thinkingLabel: copy.thinking, t })
     : resolveThreadHeaderSubtitle({
     capabilities,
     state,
@@ -637,11 +654,7 @@ export function ThreadView({
     projectPath,
     formatModelContext: (_model, percent) => t('Context remaining: {{percent}}%', { ns: 'chat', percent }),
   });
-  // The header never wears the working badge: while a run is active the pill
-  // shows lifting dots where the subtitle sits, and the reply bubble carries
-  // the actual activity.
   const avatarStatus = locked ? 'locked' : offline ? 'offline' : 'idle';
-  const headerWorking = presentedRunning && !awaitingInput && state.kind !== 'reconnecting';
   const projectSubtitle = projectPath?.trim() ? displayProjectPath(projectPath) : undefined;
   const canOpenSessions = capabilities.sessions && Boolean(onOpenSessionPanel);
   // The screen decides availability from the full capability set (attachments,
@@ -658,7 +671,10 @@ export function ThreadView({
     const timer = setInterval(() => setCalendarDay(localDayNumber(Date.now())), 60_000);
     return () => clearInterval(timer);
   }, []);
-  const showReplyPlaceholder = presentedRunning && !awaitingInput && !locked && !sessionPreview
+  // A running step already has its own live pill; a second "Thinking" spinner
+  // beside it would contradict it, so the empty reply waits for the step.
+  const toolRunning = isToolRunningInTurn(messages);
+  const showReplyPlaceholder = presentedRunning && !awaitingInput && !locked && !sessionPreview && !toolRunning
     && !messages.some((message) => message.id === REPLY_PLACEHOLDER_ID
       || (message.role === 'assistant' && message.streaming === true));
   // Carries the controller's identity for this run's reply, so the first
@@ -666,10 +682,10 @@ export function ThreadView({
   const replyPlaceholder = useMemo(() => (pendingReplyRenderKey
     ? { ...REPLY_PLACEHOLDER, renderKey: pendingReplyRenderKey } : REPLY_PLACEHOLDER), [pendingReplyRenderKey]);
   const timelineMessages = useMemo(
-    () => awaitingInput
+    () => awaitingInput || toolRunning
       ? replyEntrance.messages.filter(message => !(message.role === 'assistant' && message.streaming && !message.text.trim()))
       : showReplyPlaceholder ? [replyPlaceholder, ...replyEntrance.messages] : replyEntrance.messages,
-    [awaitingInput, replyEntrance.messages, replyPlaceholder, showReplyPlaceholder],
+    [awaitingInput, replyEntrance.messages, replyPlaceholder, showReplyPlaceholder, toolRunning],
   );
   // Whether the previous render showed this session as an authoritative empty
   // conversation: its first message then enters like any later one.
@@ -696,13 +712,18 @@ export function ThreadView({
     && newestUserIndex >= 0 && unconfirmedMessageIds?.has(messages[newestUserIndex]!.id)
     && !messages.slice(0, newestUserIndex).some(message => message.role === 'tool'
       || (message.role === 'assistant' && message.text.trim().length > 0));
-  const liveActivity = awaitingSendAcknowledgement ? copy.sending ?? t('Sending…', { ns: 'chat' }) : activityLabel?.trim() || copy.thinking;
-  const rhythmRows = useMemo(() => withThreadRhythm(groupThreadTools(buildThreadTimelineItems({
+  const liveActivityLabel = awaitingSendAcknowledgement ? copy.sending ?? t('Sending…', { ns: 'chat' }) : activityLabel?.trim() || copy.thinking;
+  const runStartedAt = newestUserIndex >= 0 ? messages[newestUserIndex]!.timestampMs : undefined;
+  const liveActivity = useMemo<ThreadLiveActivity>(
+    () => ({ label: liveActivityLabel, startedAt: runStartedAt }),
+    [liveActivityLabel, runStartedAt],
+  );
+  const rhythmRows = useMemo(() => withThreadRhythm(groupThreadRuns(groupThreadTools(buildThreadTimelineItems({
     messages: timelineMessages,
     runs: runCards,
     locale,
     yesterdayLabel: t('Yesterday', { lng: locale }),
-  }))).reverse(), [locale, timelineMessages, runCards, calendarDay, t]);
+  })))).reverse(), [locale, timelineMessages, runCards, calendarDay, t]);
   // Unchanged rows keep their objects: a streamed chunk re-renders the reply
   // that grew, not every visible cell.
   const stableRowsRef = useRef<ReadonlyArray<ThreadTimelineRow>>(EMPTY_TIMELINE_ROWS);
@@ -1015,6 +1036,36 @@ export function ThreadView({
           </View>
         );
       }
+      if (item.type === 'cron') {
+        // The digest slides in when it first appears while reading; a later
+        // result joins it as one more line.
+        const oldest = item.runs[item.runs.length - 1]!;
+        return (
+          <View style={[stylesStatic.timelineItem, rowGapStyles[item.gapAbove]]}>
+            <MessageEntrance
+              testID={`thread-entrance-${item.key}`}
+              animationKey={`run:cron:${oldest.id}`}
+              animate={target === 'Cell' && runEntranceKeysArmed.has(`run:cron:${oldest.id}`)}
+              claimEntrance={claimRunEntrance}
+              motion="reply"
+            >
+              <CronDigest
+                testID={`thread-${item.key}`}
+                runs={item.runs}
+                onOpenRun={(run) => {
+                  // Cron results open their execution record (owner decision
+                  // 2026-09-19); without one, the session or the recorded result.
+                  if (onOpenCronRun && run.cronRun) onOpenCronRun(run);
+                  else if (onOpenRunSession && run.sessionKey && run.sessionAvailable !== false) onOpenRunSession(run.sessionKey, run.agentId, run.kind);
+                  else setSelectedRun(run);
+                }}
+                onOpenLogs={onOpenRunLogs ? (run) => { if (run.jobId) onOpenRunLogs(run.jobId, run.agentId); } : undefined}
+                onRerun={onRerunCron}
+              />
+            </MessageEntrance>
+          </View>
+        );
+      }
       if (item.type === 'run') {
         return (
           <ThreadRunTimelineItem
@@ -1061,8 +1112,10 @@ export function ThreadView({
       openWorkRecord,
       queuedTapOpensActions,
       onOpenAttachments,
+      onOpenCronRun,
       onOpenRunLogs,
       onOpenRunSession,
+      onRerunCron,
       onResolveApproval,
       runEntranceKeysArmed,
       claimRunEntrance,
@@ -1132,10 +1185,10 @@ export function ThreadView({
             agentId={agentId}
             name={headerName}
             avatarName={agentName}
-            subtitle={headerWorking ? '' : headerSubtitle}
+            subtitle={headerSubtitle}
             subtitleEllipsizeMode={projectSubtitle === headerSubtitle ? 'middle' : undefined}
             accessibilityHint={!headerWorking && projectSubtitle === headerSubtitle ? projectPath?.trim() : undefined}
-            working={headerWorking}
+            presence={headerPresence}
             icon={isCronSession ? CalendarClock : undefined}
             emoji={agentEmoji}
             avatarUrl={agentAvatarUrl}
@@ -2028,6 +2081,13 @@ function approvalCategoryIcon(
   return Terminal;
 }
 
+/** An approval the person can still answer is on screen (supported kind, not yet expired). */
+function hasPendingApproval(messages: ReadonlyArray<UiMessage>, capabilities: Capabilities, nowMs: number): boolean {
+  return messages.some(({ approval }) => approval?.status === 'pending'
+    && (approval.kind === 'pair' ? capabilities.pairRequests : capabilities.execApproval)
+    && (approval.kind === 'pair' || approval.expiresAtMs === null || approval.expiresAtMs > nowMs));
+}
+
 function approvalOutcome(
   status: Exclude<UiApprovalStatus, 'pending'>,
   copy: ThreadCopy,
@@ -2187,7 +2247,6 @@ function AssistantBubble({
 }): React.JSX.Element {
   const theme = useConversationTheme();
   const { fontSize, identity } = useChatPresentation();
-  const liveActivity = useContext(ThreadLiveActivityContext);
   const time = useMessageClock(message);
   const selectionMenu = useMarkdownSelectionMenu();
   const markdownStyle = useMemo(
@@ -2212,6 +2271,10 @@ function AssistantBubble({
     return remend(pacedText, STREAMING_REMEND_OPTIONS);
   }, [message.text, pacedText, textAnimating]);
 
+  // Until the first words show, the reply is a live pill (A+ chat design):
+  // the same row becomes the bubble, so the cell never remounts.
+  if (thinking) return <ThinkingPill testID={`thread-thinking-${message.id}`} />;
+
   return (
     <View>
     {identity && showIdentity ? <ChatMessageIdentity {...identity} /> : null}
@@ -2220,30 +2283,39 @@ function AssistantBubble({
       role="assistant"
       joinsOlder={joinsOlder}
       joinsNewer={joinsNewer}
-      style={stylesStatic.thinkingBubble}
     >
-      {thinking ? (
-        <ThinkingIndicator testID={`thread-thinking-${message.id}`} label={liveActivity} />
-      ) : (
-        <View>
-          <EnrichedMarkdownText
-            testID={`thread-markdown-${message.id}`}
-            flavor={THREAD_MARKDOWN_FLAVOR}
-            markdown={displayText}
-            markdownStyle={markdownStyle}
-            onLinkPress={openChatMarkdownLink}
-            selectable={selectable}
-            selectionMenuConfig={selectionMenu}
-            streamingAnimation={streamingAnimation}
-          />
-          {time ? (
-            <View>
-              <MessageMeta testID={`thread-meta-${message.id}`} time={time} style={stylesStatic.metaRowAssistant} />
-            </View>
-          ) : null}
-        </View>
-      )}
+      <View>
+        <EnrichedMarkdownText
+          testID={`thread-markdown-${message.id}`}
+          flavor={THREAD_MARKDOWN_FLAVOR}
+          markdown={displayText}
+          markdownStyle={markdownStyle}
+          onLinkPress={openChatMarkdownLink}
+          selectable={selectable}
+          selectionMenuConfig={selectionMenu}
+          streamingAnimation={streamingAnimation}
+        />
+        {time ? (
+          <View>
+            <MessageMeta testID={`thread-meta-${message.id}`} time={time} style={stylesStatic.metaRowAssistant} />
+          </View>
+        ) : null}
+      </View>
     </Bubble>
+    </View>
+  );
+}
+
+/** The reply before its first words: a spinner, what the Agent is doing, and how long this turn has run. */
+function ThinkingPill({ testID }: Readonly<{ testID: string }>): React.JSX.Element {
+  const { t } = useTranslation('chat');
+  const live = useContext(ThreadLiveActivityContext);
+  const elapsed = useElapsed(live.startedAt);
+  const time = elapsed !== undefined && elapsed >= 1000 ? formatActivityDuration(elapsed, t) : undefined;
+  return (
+    <View testID={`${testID}-row`} accessibilityLiveRegion="polite" accessibilityState={{ busy: true }}>
+      <ServicePill testID={testID} busy label={live.label} trailing={time}
+        accessibilityLabel={[live.label, time].filter(Boolean).join(', ')} />
     </View>
   );
 }
@@ -2299,9 +2371,6 @@ const stylesStatic = StyleSheet.create({
   },
   deliveryFrame: {
     gap: Space.xs,
-  },
-  thinkingBubble: {
-    minWidth: ControlSize.rosterRow,
   },
   userBody: {
     position: 'relative',

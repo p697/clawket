@@ -458,5 +458,18 @@
   "{{detail}} failed": "Сбой: {{detail}}",
   "Work record": "Журнал работы",
   "1 step": "1 шаг",
-  "{{count}} steps": "Шагов: {{count}}"
+  "{{count}} steps": "Шагов: {{count}}",
+  "Running a command…": "Выполняю команду…",
+  "Reading files…": "Читаю файлы…",
+  "Editing files…": "Изменяю файлы…",
+  "Searching…": "Ищу…",
+  "Browsing the web…": "Просматриваю веб…",
+  "Using tools…": "Использую инструменты…",
+  "Typing…": "Печатает…",
+  "Waiting for your approval": "Ждёт вашего одобрения",
+  "Scheduled tasks": "Задачи по расписанию",
+  "View logs": "Открыть журнал",
+  "Run again": "Запустить снова",
+  "Run started": "Запуск начат",
+  "Could not start the run": "Не удалось запустить"
 }

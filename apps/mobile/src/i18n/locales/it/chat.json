@@ -458,5 +458,18 @@
   "{{detail}} failed": "{{detail}} non riuscito",
   "Work record": "Registro attività",
   "1 step": "1 passaggio",
-  "{{count}} steps": "{{count}} passaggi"
+  "{{count}} steps": "{{count}} passaggi",
+  "Running a command…": "Esegue un comando…",
+  "Reading files…": "Legge file…",
+  "Editing files…": "Modifica file…",
+  "Searching…": "Cerca…",
+  "Browsing the web…": "Naviga sul web…",
+  "Using tools…": "Usa strumenti…",
+  "Typing…": "Sta scrivendo…",
+  "Waiting for your approval": "In attesa della tua approvazione",
+  "Scheduled tasks": "Attività pianificate",
+  "View logs": "Vedi log",
+  "Run again": "Esegui di nuovo",
+  "Run started": "Esecuzione avviata",
+  "Could not start the run": "Impossibile avviare"
 }

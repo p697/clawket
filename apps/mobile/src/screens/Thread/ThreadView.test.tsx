@@ -709,25 +709,22 @@ describe('ThreadView', () => {
     expect(view.getByTestId('thread-screen-header-pill-working')).toBeTruthy();
   });
 
-  it('keeps the reply bubble present from send until the first token', () => {
+  it('keeps the reply present as a live pill from send until the first token', () => {
     const sent: UiMessage = { id: 'usr_1', role: 'user', text: 'Hello', timestampMs: Date.now() };
     const messageActions = { onCopy: jest.fn(), onToggleFavorite: jest.fn(), onShare: jest.fn() };
     const view = render(<ThreadView {...createProps({ messages: [sent], isRunning: true, activityLabel: null, input: '', messageActions })} />);
-    // Thinking placeholder shares the live stream id so the row never remounts.
+    // The placeholder shares the live stream id so the row never remounts; until
+    // the first words it is a live pill (A+ chat design), not an empty bubble.
     expect(view.getByTestId('thread-thinking-streaming')).toHaveTextContent('Thinking…');
+    expect(view.getByTestId('thread-thinking-streaming-busy')).toBeTruthy();
+    expect(view.queryByTestId('thread-bubble-streaming')).toBeNull();
     // Nothing to copy or share yet, so the placeholder has no long-press menu while the sent turn keeps its own.
     expect(view.getByTestId('thread-message-streaming').props.onLongPress).toBeUndefined();
     expect(view.getByTestId('thread-message-usr_1').props.onLongPress).toBeDefined();
-    // The header says it with lifting dots, not a second "Thinking…" and not an avatar badge.
+    // The header turns its ring and says it too, as the approved motion prototype does; no avatar badge.
     expect(view.getByTestId('thread-screen-header-pill-working')).toBeTruthy();
-    expect(view.getAllByText('Thinking…')).toHaveLength(1);
+    expect(view.getByTestId('thread-screen-header-pill-subtitle').props.children).toBe('Thinking…');
     expect(view.queryByTestId('thread-screen-header-pill-avatar-working')).toBeNull();
-    // The placeholder is already the reply's own bubble, tail and all.
-    expect(flattenStyle(view.getByTestId('thread-bubble-streaming').props.style)).toMatchObject({
-      borderRadius: Radius.bubble, borderBottomLeftRadius: Radius.bubbleTail, paddingVertical: Space.sm,
-    });
-    expect(view.getByTestId('thread-bubble-streaming-tail')).toBeTruthy();
-    expect(flattenStyle(view.getByTestId('thread-bubble-streaming').props.style).minWidth).toBeGreaterThan(0);
 
     view.rerender(<ThreadView {...createProps({ messages: [sent], isRunning: true, activityLabel: 'Using exec…', input: '' })} />);
     expect(view.getByTestId('thread-thinking-streaming')).toHaveTextContent('Using exec…');
@@ -736,6 +733,7 @@ describe('ThreadView', () => {
     view.rerender(<ThreadView {...createProps({ messages: [streaming, sent], isRunning: true, input: '' })} />);
     expect(view.queryByTestId('thread-thinking-streaming')).toBeNull();
     expect(view.getAllByTestId('thread-bubble-streaming')).toHaveLength(1);
+    expect(view.getByTestId('thread-screen-header-pill-subtitle').props.children).toBe('Typing…');
     expect(flattenStyle(view.getByTestId('thread-bubble-streaming').props.style).borderRadius).toBe(Radius.bubble);
     expect(view.getByTestId('thread-markdown-streaming').props.streamingAnimation).toBe(true);
     // Open syntax is terminated while streaming so styling never flickers, and
@@ -819,7 +817,7 @@ describe('ThreadView', () => {
     expect(view.getByTestId('thread-meta-usr_10-status').props.accessibilityLabel).toBe('Delivered');
   });
 
-  it('keeps hydrated scheduled cards still and slides in only a card that arrives while reading', () => {
+  it('keeps hydrated scheduled results still and slides in only a digest that arrives while reading', () => {
     const { withTiming } = require('react-native-reanimated') as { withTiming: jest.Mock };
     withTiming.mockClear();
     // The entrance is the only timing that drives a shared value to 1 over the normal duration
@@ -827,28 +825,37 @@ describe('ThreadView', () => {
     const entranceCalls = () => withTiming.mock.calls.filter(([target, options]) => (
       target === 1 && (options as { duration?: number })?.duration === Motion.duration.normal
     ));
-    const now = Date.now();
+    const now = new Date(new Date().setHours(12, 0, 0, 0)).getTime();
     const card = (id: string, updatedAt: number): ThreadRunCard => ({
       id, kind: 'cron', jobId: id, agentId: 'atlas', title: `Job ${id}`, status: 'succeeded',
       statusLabel: 'Succeeded', timeLabel: '11:00 AM', updatedAt,
     });
     const reply: UiMessage = { id: 'a0', role: 'assistant', text: 'Earlier', timestampMs: now - 3_600_000 };
-    const view = render(<ThreadView {...createProps({ messages: [reply], runCards: [card('one', now - 1_800_000)] })} />);
+    const view = render(<ThreadView {...createProps({ messages: [reply], runCards: [card('one', now - 5_400_000)] })} />);
     // Cache hydration lands with the first frame: full size, no offset, no timing.
-    const hydrated = flattenStyle(view.getByTestId('thread-entrance-cron-run-one').props.style);
+    const hydrated = flattenStyle(view.getByTestId('thread-entrance-cron:one').props.style);
     expect(hydrated).toMatchObject({ opacity: 1, transform: [{ translateY: 0 }] });
     expect(entranceCalls()).toHaveLength(0);
     withTiming.mockClear();
 
-    view.rerender(<ThreadView {...createProps({ messages: [reply], runCards: [card('two', now - 60_000), card('one', now - 1_800_000)] })} />);
-    expect(flattenStyle(view.getByTestId('thread-entrance-cron-run-two').props.style)).toMatchObject({ opacity: 1 });
+    // A result after the reply starts a new digest, which slides in.
+    view.rerender(<ThreadView {...createProps({ messages: [reply], runCards: [card('two', now - 60_000), card('one', now - 5_400_000)] })} />);
+    expect(flattenStyle(view.getByTestId('thread-entrance-cron:two').props.style)).toMatchObject({ opacity: 1 });
     expect(entranceCalls()).toHaveLength(1);
 
-    // A burst is a reconciliation and lands still.
+    // The next result of the same day joins that digest as one more line.
     withTiming.mockClear();
     view.rerender(<ThreadView {...createProps({ messages: [reply], runCards: [
-      card('six', now - 1), card('five', now - 2), card('four', now - 3), card('three', now - 4),
-      card('two', now - 60_000), card('one', now - 1_800_000),
+      card('three', now - 30_000), card('two', now - 60_000), card('one', now - 5_400_000),
+    ] })} />);
+    expect(view.getByTestId('thread-cron:two-run-three')).toBeTruthy();
+    expect(view.queryByTestId('thread-entrance-cron:three')).toBeNull();
+    expect(entranceCalls()).toHaveLength(0);
+
+    // A burst is a reconciliation and lands still.
+    view.rerender(<ThreadView {...createProps({ messages: [reply], runCards: [
+      card('six', now - 1), card('five', now - 2), card('four', now - 3), card('three', now - 30_000),
+      card('two', now - 60_000), card('one', now - 5_400_000),
     ] })} />);
     expect(entranceCalls()).toHaveLength(0);
   });
@@ -1305,7 +1312,7 @@ describe('ThreadView', () => {
 
     expect(view.getByText('Could not update this request. Try again.')).toBeTruthy();
     const allow = view.getByTestId('thread-approval-pair-failed-primary');
-    expect(allow.props.accessibilityState).toEqual({ disabled: false });
+    expect(allow.props.accessibilityState).toEqual({ disabled: false, busy: false });
     fireEvent.press(allow);
     expect(onResolveApproval).toHaveBeenCalledWith('failed-request', 'approve', 'device');
   });
@@ -1466,22 +1473,18 @@ describe('ThreadView', () => {
     expect(view.getByTestId(
       'thread-subagent-run-agent:atlas:subagent:worker-detail',
     ).props.children).toEqual(expect.arrayContaining(['11:00 AM']));
-    expect(view.getByTestId(
-      'thread-cron-run-nightly-run-detail',
-    ).props.children).toEqual(expect.arrayContaining(['11:00 PM']));
-    expect(view.getByTestId(
-      'thread-cron-run-hermes-digest-run-detail',
-    ).props.children).toEqual(expect.arrayContaining(['10:55 AM']));
-    fireEvent.press(view.getByTestId('thread-cron-run-hermes-digest-run'));
+    // Scheduled results read as digest messages from the Agent (A+ chat design),
+    // one line per task with its own time; different days stay apart.
+    expect(view.getByTestId('thread-cron:nightly-run-run-nightly-run').props.accessibilityLabel)
+      .toBe('Nightly report, Failed, 11:00 PM');
+    expect(view.getByTestId('thread-cron:hermes-digest-run-run-hermes-digest-run').props.accessibilityLabel)
+      .toBe('Hermes digest, Succeeded, 10:55 AM');
+    fireEvent.press(view.getByTestId('thread-cron:hermes-digest-run-run-hermes-digest-run'));
     expect(view.getByTestId('thread-run-result')).toBeTruthy();
     expect(view.getAllByTestId(/^thread-date:/)).toHaveLength(3);
-    expect(view.queryByTestId('thread-cron-run-nightly-run-status')).toBeNull();
-    expect(flattenStyle(
-      view.getByTestId('thread-cron-run-nightly-run-detail-status').props.style,
-    )).toMatchObject({ color: buildTheme('light', 'light', builtInAccents.iceBlue).colors.bad });
-    expect(flattenStyle(
-      view.getByTestId('thread-cron-run-nightly-run-detail').props.style,
-    )).toMatchObject({ color: buildTheme('light', 'light', builtInAccents.iceBlue).colors.inkSecondary });
+    // A failed task says so in red after its name.
+    expect(flattenStyle(view.getByText(' Failed').props.style))
+      .toMatchObject({ color: buildTheme('light', 'light', builtInAccents.iceBlue).colors.bad });
 
     fireEvent.press(view.getByTestId('thread-subagent-run-agent:atlas:subagent:worker'));
     expect(onOpenRunSession).toHaveBeenCalledWith(
@@ -1492,7 +1495,7 @@ describe('ThreadView', () => {
 
     // A Cron card with its run record opens the execution record, never a thread
     // (owner decision 2026-09-19); the record sheet decides whether a session opens.
-    fireEvent.press(view.getByTestId('thread-cron-run-nightly-run'));
+    fireEvent.press(view.getByTestId('thread-cron:nightly-run-run-nightly-run'));
     expect(onOpenCronRun).toHaveBeenCalledWith(expect.objectContaining({
       id: 'nightly-run',
       cronRun: expect.objectContaining({ jobId: 'nightly' }),
@@ -1504,8 +1507,34 @@ describe('ThreadView', () => {
     expect(view.getByTestId('thread-tool-detail').props.detail).toBe('package.json');
     expect(onOpenRunSession).toHaveBeenCalledTimes(1);
 
-    fireEvent.press(view.getByText('Logs'));
+    // Logs hang under the failed digest; there is no Run again without the backend's run.
+    fireEvent.press(view.getByTestId('thread-cron:nightly-run-logs'));
     expect(onOpenRunLogs).toHaveBeenCalledWith('nightly', 'atlas');
+    expect(view.queryByTestId('thread-cron:nightly-run-rerun')).toBeNull();
+  });
+
+  it('merges a day\'s scheduled results into one digest and runs a failed task again from it', async () => {
+    const onRerunCron = jest.fn<Promise<unknown>, [ThreadRunCard]>().mockResolvedValue(undefined);
+    const day = new Date(2026, 8, 5).getTime();
+    const run = (id: string, hour: number, status: ThreadRunCard['status']): ThreadRunCard => ({
+      id, kind: 'cron', jobId: id, agentId: 'atlas', title: id, status, runnable: true,
+      statusLabel: status === 'failed' ? 'Failed' : 'Succeeded', timeLabel: `${hour}:00`, updatedAt: day + hour * 3_600_000,
+    });
+    const view = render(<ThreadView {...createProps({
+      messages: [{ id: 'reply', role: 'assistant', text: 'Morning', timestampMs: day + 6 * 3_600_000 }],
+      runCards: [run('release-duty', 11, 'failed'), run('guard', 8, 'succeeded'), run('daily', 7, 'succeeded')],
+      onRerunCron,
+    })} />);
+    const keys = view.getByTestId('thread-screen-timeline').props.data.map((row: { key: string }) => row.key);
+    // Three results hours apart share one digest under one day label.
+    expect(keys.filter((key: string) => key.startsWith('cron:'))).toEqual(['cron:daily']);
+    expect(view.getByTestId('thread-cron:daily').props.children).toBeTruthy();
+    expect(['daily', 'guard', 'release-duty'].map((id) => view.getByTestId(`thread-cron:daily-run-${id}`))).toHaveLength(3);
+    expect(view.queryByTestId('thread-cron:daily-logs')).toBeNull();
+    await act(async () => { fireEvent.press(view.getByTestId('thread-cron:daily-rerun')); });
+    expect(onRerunCron).toHaveBeenCalledWith(expect.objectContaining({ id: 'release-duty' }));
+    expect(view.getByTestId('thread-cron:daily-rerun').props.accessibilityState).toEqual({ disabled: true, busy: false });
+    expect(view.getByText('Run started')).toBeTruthy();
   });
 
   it('reads a scheduled run session without a composer', () => {

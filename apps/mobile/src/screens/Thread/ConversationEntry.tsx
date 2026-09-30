@@ -12,6 +12,9 @@ import { SessionPanel } from '../SessionPanel';
 import { ManualSessions } from '../../services/manual-sessions';
 import { SessionPreferencesService } from '../../services/session-preferences';
 import { useAppTheme } from '../../theme';
+import { useAppContext } from '../../contexts/AppContext';
+import { ChatBackgroundLayer } from '../../components/chat/ChatBackgroundLayer';
+import { isChatWallpaperActive } from '../../features/chat-appearance/resolver';
 import { ControlSize, Space } from '../../theme/tokens';
 import { useProPaywall } from '../../contexts/ProPaywallContext';
 import type { ThreadScreenProps } from './ThreadScreen';
@@ -23,6 +26,9 @@ export function ConversationEntry({ navigation, route, locked, lockedReason = 'a
   const focused = useIsFocused();
   const connections = useConnections();
   const { theme } = useAppTheme();
+  const { chatAppearance } = useAppContext();
+  // The thread's own wallpaper and glass controls, so opening it never swaps the page underneath.
+  const wallpaperActive = isChatWallpaperActive(chatAppearance);
   const { t } = useTranslation('common');
   const insets = useSafeAreaInsets();
   const { showPaywall } = useProPaywall();
@@ -100,14 +106,15 @@ export function ConversationEntry({ navigation, route, locked, lockedReason = 'a
   };
   const close = () => { closed.current = true; setVisible(false); };
   return <View testID="conversation-entry" style={[styles.page, { backgroundColor: theme.colors.canvas }]}>
+    <ChatBackgroundLayer appearance={chatAppearance} />
     {/* The chat's own header and loading state, so entry, picker and thread never swap chrome. */}
     <View style={[styles.header, { paddingTop: insets.top + Space.sm }]}>
-      <FloatingButton testID="conversation-entry-back" icon={ChevronLeft} appearance="plain"
+      <FloatingButton testID="conversation-entry-back" icon={ChevronLeft} appearance={wallpaperActive ? 'glass' : 'plain'}
         accessibilityLabel={t('Back')} onPress={() => navigation.goBack()} />
       <View style={styles.pillSlot}>
         <HeaderPill testID="conversation-entry-header-pill" agentId={agentId} name={title} subtitle=""
           emoji={rosterAgent?.emoji} avatarUrl={rosterAgent?.avatarUrl}
-          platform={rosterGroup?.connection.backendKind} />
+          platform={rosterGroup?.connection.backendKind} material={wallpaperActive ? 'glass' : 'surface'} />
       </View>
       <View style={styles.headerSpacer} pointerEvents="none" />
     </View>

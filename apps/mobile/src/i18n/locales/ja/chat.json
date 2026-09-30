@@ -458,5 +458,18 @@
   "{{detail}} failed": "{{detail}} に失敗",
   "Work record": "作業記録",
   "1 step": "1ステップ",
-  "{{count}} steps": "{{count}}ステップ"
+  "{{count}} steps": "{{count}}ステップ",
+  "Running a command…": "コマンドを実行中…",
+  "Reading files…": "ファイルを読み込み中…",
+  "Editing files…": "ファイルを編集中…",
+  "Searching…": "検索中…",
+  "Browsing the web…": "Webを閲覧中…",
+  "Using tools…": "ツールを使用中…",
+  "Typing…": "入力中…",
+  "Waiting for your approval": "承認を待っています",
+  "Scheduled tasks": "定期タスク",
+  "View logs": "ログを見る",
+  "Run again": "もう一度実行",
+  "Run started": "実行を開始しました",
+  "Could not start the run": "実行を開始できませんでした"
 }

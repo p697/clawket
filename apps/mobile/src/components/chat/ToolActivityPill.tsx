@@ -31,8 +31,8 @@ export function toolIcon(name: string): LucideIcon {
   }
 }
 
-/** Seconds since a running step started, refreshed once a second while it runs. */
-function useElapsed(startMs: number | undefined): number | undefined {
+/** Milliseconds since a running step started, refreshed once a second while it runs. */
+export function useElapsed(startMs: number | undefined): number | undefined {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (startMs === undefined) return undefined;

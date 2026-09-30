@@ -59,7 +59,8 @@ export function cronJobBelongsToAgent(job: CronJob, agent: AgentDescriptor): boo
 
 /** OpenClaw exposes its own monitors through cron.list but rejects client edits/removal. */
 export function isSystemOwnedCronJob(job: CronJob): boolean {
-  const kind: string = job.payload.kind;
+  // Some Gateway lists omit the payload; such a job is the user's own.
+  const kind: string | undefined = (job.payload as CronJob['payload'] | undefined)?.kind;
   return kind === 'heartbeat' || kind === 'skillCollectionReview';
 }
 

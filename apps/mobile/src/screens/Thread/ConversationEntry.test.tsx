@@ -19,6 +19,12 @@ jest.mock('@react-navigation/native', () => ({ useIsFocused: () => true }));
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0 }) }));
 jest.mock('../../theme', () => ({ useAppTheme: () => ({ theme: { colors: { canvas: '#fff', inkSecondary: '#888' } } }) }));
 jest.mock('../../contexts/ProPaywallContext', () => ({ useProPaywall: () => ({ showPaywall: jest.fn() }) }));
+let mockWallpaperKind = 'pattern';
+jest.mock('../../contexts/AppContext', () => ({ useAppContext: () => ({ chatAppearance: {
+  version: 1, background: { kind: mockWallpaperKind, enabled: false, blur: 8, dim: 0, fillMode: 'cover' }, bubbles: { style: 'solid', opacity: 1 },
+} }) }));
+jest.mock('../../components/chat/ChatBackgroundLayer', () => ({ ChatBackgroundLayer: (props: any) => { mockWallpaper = props; return null; } }));
+let mockWallpaper: any;
 jest.mock('../../components/ui/FloatingButton', () => ({ FloatingButton: () => null }));
 jest.mock('../../components/ui/HeaderPill', () => ({ HeaderPill: (props: any) => { mockPill = props; return null; } }));
 jest.mock('../../components/ui/LoadingState', () => ({
@@ -63,6 +69,17 @@ it('waits with the chat header and the shared Companion loading state, following
   view.rerender(<ConversationEntry {...props} />);
   expect(mockLoading).toBeNull();
   expect(mockPill).toMatchObject({ name: 'Codex' });
+});
+
+it('waits on the thread\'s own wallpaper and glass header, or the plain canvas when chosen', async () => {
+  const view = render(<ConversationEntry {...props} />);
+  expect(mockWallpaper.appearance.background.kind).toBe('pattern');
+  expect(mockPill).toMatchObject({ material: 'glass' });
+  mockWallpaperKind = 'plain';
+  view.rerender(<ConversationEntry {...props} />);
+  expect(mockPill).toMatchObject({ material: 'surface' });
+  mockWallpaperKind = 'pattern';
+  await waitFor(() => expect(mockPanel.visible).toBe(true));
 });
 
 it('opens the scoped picker without creating a placeholder conversation', async () => {

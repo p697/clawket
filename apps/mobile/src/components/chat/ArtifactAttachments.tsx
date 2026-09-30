@@ -88,9 +88,9 @@ function ArtifactAttachment({ attachment, onOpenImage, maxWidth }: {
   const scope = useContext(Context);
   const { t } = useTranslation('chat'); const { theme } = useAppTheme();
   // A file card sits among the bubbles on the conversation's card color; its
-  // glyph well takes the contrasting neutral.
+  // glyph well takes the contrasting inset.
   const surfaces = useChatSurfaces();
-  const wellColor = surfaces.card === theme.colors.surface ? theme.colors.canvas : theme.colors.surface;
+  const wellColor = surfaces.well;
   const [loaded, setLoaded] = useState<Downloaded | null>(null);
   const [failed, setFailed] = useState(false); const [busy, setBusy] = useState(false);
   const live = useRef(true); const loading = useRef(false);

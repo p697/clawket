@@ -458,5 +458,18 @@
   "{{detail}} failed": "{{detail}} fehlgeschlagen",
   "Work record": "Arbeitsprotokoll",
   "1 step": "1 Schritt",
-  "{{count}} steps": "{{count}} Schritte"
+  "{{count}} steps": "{{count}} Schritte",
+  "Running a command…": "Führt einen Befehl aus…",
+  "Reading files…": "Liest Dateien…",
+  "Editing files…": "Bearbeitet Dateien…",
+  "Searching…": "Sucht…",
+  "Browsing the web…": "Surft im Web…",
+  "Using tools…": "Verwendet Werkzeuge…",
+  "Typing…": "Schreibt…",
+  "Waiting for your approval": "Wartet auf deine Freigabe",
+  "Scheduled tasks": "Geplante Aufgaben",
+  "View logs": "Protokoll ansehen",
+  "Run again": "Erneut ausführen",
+  "Run started": "Ausführung gestartet",
+  "Could not start the run": "Ausführung konnte nicht starten"
 }

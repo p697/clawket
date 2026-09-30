@@ -458,5 +458,18 @@
   "{{detail}} failed": "{{detail}} ล้มเหลว",
   "Work record": "บันทึกการทำงาน",
   "1 step": "1 ขั้นตอน",
-  "{{count}} steps": "{{count}} ขั้นตอน"
+  "{{count}} steps": "{{count}} ขั้นตอน",
+  "Running a command…": "กำลังรันคำสั่ง…",
+  "Reading files…": "กำลังอ่านไฟล์…",
+  "Editing files…": "กำลังแก้ไขไฟล์…",
+  "Searching…": "กำลังค้นหา…",
+  "Browsing the web…": "กำลังท่องเว็บ…",
+  "Using tools…": "กำลังใช้เครื่องมือ…",
+  "Typing…": "กำลังพิมพ์…",
+  "Waiting for your approval": "รอการอนุมัติจากคุณ",
+  "Scheduled tasks": "งานที่ตั้งเวลาไว้",
+  "View logs": "ดูบันทึก",
+  "Run again": "รันอีกครั้ง",
+  "Run started": "เริ่มรันแล้ว",
+  "Could not start the run": "เริ่มรันไม่ได้"
 }

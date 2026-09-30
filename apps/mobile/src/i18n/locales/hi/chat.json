@@ -458,5 +458,18 @@
   "{{detail}} failed": "{{detail}} विफल",
   "Work record": "कार्य रिकॉर्ड",
   "1 step": "1 चरण",
-  "{{count}} steps": "{{count}} चरण"
+  "{{count}} steps": "{{count}} चरण",
+  "Running a command…": "कमांड चला रहे हैं…",
+  "Reading files…": "फ़ाइलें पढ़ रहे हैं…",
+  "Editing files…": "फ़ाइलें बदल रहे हैं…",
+  "Searching…": "खोज रहे हैं…",
+  "Browsing the web…": "वेब देख रहे हैं…",
+  "Using tools…": "टूल इस्तेमाल कर रहे हैं…",
+  "Typing…": "लिख रहे हैं…",
+  "Waiting for your approval": "आपकी मंज़ूरी का इंतज़ार",
+  "Scheduled tasks": "शेड्यूल किए गए काम",
+  "View logs": "लॉग देखें",
+  "Run again": "फिर से चलाएँ",
+  "Run started": "चलना शुरू हुआ",
+  "Could not start the run": "चला नहीं सके"
 }

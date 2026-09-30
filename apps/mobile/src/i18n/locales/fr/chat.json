@@ -458,5 +458,18 @@
   "{{detail}} failed": "Échec de {{detail}}",
   "Work record": "Journal de travail",
   "1 step": "1 étape",
-  "{{count}} steps": "{{count}} étapes"
+  "{{count}} steps": "{{count}} étapes",
+  "Running a command…": "Exécute une commande…",
+  "Reading files…": "Lit des fichiers…",
+  "Editing files…": "Modifie des fichiers…",
+  "Searching…": "Recherche…",
+  "Browsing the web…": "Navigue sur le Web…",
+  "Using tools…": "Utilise des outils…",
+  "Typing…": "Écrit…",
+  "Waiting for your approval": "Attend ton accord",
+  "Scheduled tasks": "Tâches planifiées",
+  "View logs": "Voir le journal",
+  "Run again": "Relancer",
+  "Run started": "Relance démarrée",
+  "Could not start the run": "Impossible de relancer"
 }

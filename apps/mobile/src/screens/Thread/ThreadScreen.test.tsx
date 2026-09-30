@@ -1121,6 +1121,7 @@ describe('ThreadScreen connection container', () => {
       status: 'succeeded' as const,
       updatedAt: now - 60_000,
       cronRun: { ts: now - 60_000, jobId: 'nightly', action: 'finished' as const, status: 'ok' as const, sessionKey: cronSessionKey },
+      runnable: true,
     };
     const job = { id: 'nightly', agentId: 'atlas', sessionKey: cronSessionKey, name: 'Nightly report' };
     const page = { total: 1, offset: 0, limit: 100, hasMore: false, nextOffset: null };

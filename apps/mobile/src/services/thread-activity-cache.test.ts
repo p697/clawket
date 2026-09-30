@@ -31,7 +31,8 @@ describe('ThreadActivityCacheService', () => {
   });
 
   it('round-trips a snapshot under a connection, Agent and session scoped key', async () => {
-    const runs = [seed(), seed({ id: 'digest:1699999000000', jobId: 'digest', updatedAt: 1_699_999_000_000 })];
+    // A runnable job keeps its flag so the cached digest offers "Run again" like the refreshed one.
+    const runs = [seed({ runnable: true }), seed({ id: 'digest:1699999000000', jobId: 'digest', updatedAt: 1_699_999_000_000 })];
     await ThreadActivityCacheService.write(scope, runs);
 
     expect(mockedStorage.setItem).toHaveBeenCalledTimes(1);

@@ -458,5 +458,18 @@
   "{{detail}} failed": "{{detail}} 실패",
   "Work record": "작업 기록",
   "1 step": "1단계",
-  "{{count}} steps": "{{count}}단계"
+  "{{count}} steps": "{{count}}단계",
+  "Running a command…": "명령 실행 중…",
+  "Reading files…": "파일 읽는 중…",
+  "Editing files…": "파일 수정 중…",
+  "Searching…": "검색 중…",
+  "Browsing the web…": "웹 탐색 중…",
+  "Using tools…": "도구 사용 중…",
+  "Typing…": "입력 중…",
+  "Waiting for your approval": "승인을 기다리는 중",
+  "Scheduled tasks": "예약 작업",
+  "View logs": "로그 보기",
+  "Run again": "다시 실행",
+  "Run started": "실행을 시작했어요",
+  "Could not start the run": "실행을 시작하지 못했어요"
 }

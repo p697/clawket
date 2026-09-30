@@ -458,5 +458,18 @@
   "{{detail}} failed": "{{detail}} failed",
   "Work record": "Work record",
   "1 step": "1 step",
-  "{{count}} steps": "{{count}} steps"
+  "{{count}} steps": "{{count}} steps",
+  "Running a command…": "Running a command…",
+  "Reading files…": "Reading files…",
+  "Editing files…": "Editing files…",
+  "Searching…": "Searching…",
+  "Browsing the web…": "Browsing the web…",
+  "Using tools…": "Using tools…",
+  "Typing…": "Typing…",
+  "Waiting for your approval": "Waiting for your approval",
+  "Scheduled tasks": "Scheduled tasks",
+  "View logs": "View logs",
+  "Run again": "Run again",
+  "Run started": "Run started",
+  "Could not start the run": "Could not start the run"
 }

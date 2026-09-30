@@ -283,8 +283,9 @@ describe.each(['light', 'dark'] as const)('%s thread primitives', (scheme) => {
     expect(onPress).toHaveBeenCalledTimes(1);
   });
 
-  it('renders approvals with a category glyph, a monospace command well and 44pt capsules, without a status rail', () => {
+  it('asks for approval in the Agent\'s bubble with Telegram-style buttons under it', () => {
     const theme = activeTheme(scheme);
+    const palette = chatWallpaperPalettes.iceBlue[scheme];
     const Glyph = jest.fn((_props: { size: number; color: string; strokeWidth: number }) => null);
     const allow = jest.fn();
     const alwaysAllow = jest.fn();
@@ -300,19 +301,19 @@ describe.each(['light', 'dark'] as const)('%s thread primitives', (scheme) => {
         secondaryAction={{ label: 'Reject', onPress: reject }}
       />,
     );
-    const cardStyle = flattenStyle(result.getByTestId('approval').props.style);
-    expect(cardStyle).toMatchObject({
-      backgroundColor: theme.colors.surface,
-      borderRadius: Radius.card,
-      padding: Space.lg,
-    });
-    expect(cardStyle).not.toHaveProperty('borderWidth');
-    expect(cardStyle).not.toHaveProperty('flexDirection');
-    expect(result.queryByTestId('approval-status')).toBeNull();
-    expect(Glyph.mock.calls[0]?.[0]).toMatchObject({ size: IconSize.sm, color: theme.colors.inkSecondary });
+    expect(flattenStyle(result.getByTestId('approval').props.style)).toMatchObject({ alignSelf: 'flex-start', width: '88%' });
     expect(result.getByTestId('approval').props.accessibilityState).toEqual({ disabled: false });
+    // The question is the Agent's own bubble, tail and all.
+    expect(flattenStyle(result.getByTestId('approval-bubble').props.style)).toMatchObject({
+      backgroundColor: palette.incoming, borderRadius: Radius.bubble, alignSelf: 'stretch',
+    });
+    expect(result.getByTestId('approval-bubble-tail')).toBeTruthy();
+    expect(flattenStyle(result.getByTestId('approval-glyph').props.style)).toMatchObject({
+      backgroundColor: theme.colors.warnSoft, borderRadius: Radius.full,
+    });
+    expect(Glyph.mock.calls[0]?.[0]).toMatchObject({ size: IconSize.sm, color: theme.colors.warn });
     expect(flattenStyle(result.getByTestId('approval-well').props.style)).toMatchObject({
-      backgroundColor: theme.colors.surfaceFloating,
+      backgroundColor: scheme === 'dark' ? theme.colors.canvas : theme.colors.surface,
       borderRadius: Radius.avatarSheet,
     });
     // iOS resolves no family called `monospace`; the command must name a real monospaced face.
@@ -326,13 +327,13 @@ describe.each(['light', 'dark'] as const)('%s thread primitives', (scheme) => {
       color: theme.colors.inkSecondary,
       fontSize: FontSize.secondary,
     });
+    // Reject on the service tint beside the solid accent Allow, 44 points tall.
     expect(flattenStyle(result.getByTestId('approval-primary').props.style)).toMatchObject({
       minHeight: ControlSize.floatingButton,
-      borderRadius: Radius.full,
-      backgroundColor: theme.colors.ink,
+      borderRadius: Radius.settingsGroup,
+      backgroundColor: palette.outgoing,
     });
-    expect(flattenStyle(result.getByTestId('approval-secondary').props.style).backgroundColor)
-      .toBe(theme.colors.surfaceFloating);
+    expect(flattenStyle(result.getByTestId('approval-secondary').props.style).backgroundColor).toBe(palette.service);
     fireEvent.press(result.getByTestId('approval-primary'));
     fireEvent(result.getByTestId('approval-primary'), 'longPress');
     fireEvent.press(result.getByTestId('approval-secondary'));
@@ -341,8 +342,9 @@ describe.each(['light', 'dark'] as const)('%s thread primitives', (scheme) => {
     expect(reject).toHaveBeenCalledTimes(1);
   });
 
-  it('spins only the pressed approval capsule and releases both after a failed resolution', () => {
+  it('spins only the pressed approval button and releases both after a failed resolution', () => {
     const theme = activeTheme(scheme);
+    const palette = chatWallpaperPalettes.iceBlue[scheme];
     const props = {
       testID: 'approval',
       title: 'Allow exec?',
@@ -355,24 +357,24 @@ describe.each(['light', 'dark'] as const)('%s thread primitives', (scheme) => {
     fireEvent.press(result.getByTestId('approval-primary'));
     result.rerender(<ApprovalCard {...props} busy />);
 
-    expect(result.getByTestId('approval-primary-spinner').props.color).toBe(theme.colors.canvas);
+    expect(result.getByTestId('approval-primary-busy').props.color).toBe(palette.onOutgoing);
     expect(result.queryByText('Allow')).toBeNull();
     expect(result.getByTestId('approval-primary').props.accessibilityState).toEqual({ disabled: true, busy: true });
     expect(flattenStyle(result.getByTestId('approval-primary').props.style)).not.toHaveProperty('opacity');
-    expect(result.getByTestId('approval-secondary').props.accessibilityState).toEqual({ disabled: true });
+    expect(result.getByTestId('approval-secondary').props.accessibilityState).toEqual({ disabled: true, busy: false });
     expect(flattenStyle(result.getByTestId('approval-secondary').props.style).opacity).toBe(0.55);
 
     result.rerender(<ApprovalCard {...props} error="Could not update this request. Try again." />);
-    expect(result.queryByTestId('approval-primary-spinner')).toBeNull();
-    expect(result.getByTestId('approval-primary').props.accessibilityState).toEqual({ disabled: false });
+    expect(result.queryByTestId('approval-primary-busy')).toBeNull();
+    expect(result.getByTestId('approval-primary').props.accessibilityState).toEqual({ disabled: false, busy: false });
     expect(flattenStyle(result.getByText('Could not update this request. Try again.').props.style))
       .toMatchObject({ color: theme.colors.bad, fontSize: FontSize.secondary });
     expect(result.queryByTestId('approval-detail')).toBeNull();
 
-    // Without a new press the card cannot know which capsule a later confirmation belongs to.
+    // Without a new press the card cannot know which button a later confirmation belongs to.
     result.rerender(<ApprovalCard {...props} busy />);
-    expect(result.queryByTestId('approval-primary-spinner')).toBeNull();
-    expect(result.queryByTestId('approval-secondary-spinner')).toBeNull();
+    expect(result.queryByTestId('approval-primary-busy')).toBeNull();
+    expect(result.queryByTestId('approval-secondary-busy')).toBeNull();
   });
 
   it('collapses a settled approval to its title, outcome and command', () => {
@@ -395,6 +397,7 @@ describe.each(['light', 'dark'] as const)('%s thread primitives', (scheme) => {
     expect(result.queryByTestId('approval-detail')).toBeNull();
     expect(result.queryByTestId('approval-primary')).toBeNull();
     expect(result.queryByTestId('approval-secondary')).toBeNull();
+    expect(result.queryByTestId('approval-actions')).toBeNull();
   });
 
   it('previews a long approval command in three lines and expands the whole well', () => {

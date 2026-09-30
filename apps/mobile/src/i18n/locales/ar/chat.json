@@ -458,5 +458,18 @@
   "{{detail}} failed": "فشل {{detail}}",
   "Work record": "سجل العمل",
   "1 step": "خطوة واحدة",
-  "{{count}} steps": "عدد الخطوات: {{count}}"
+  "{{count}} steps": "عدد الخطوات: {{count}}",
+  "Running a command…": "يشغّل أمرًا…",
+  "Reading files…": "يقرأ الملفات…",
+  "Editing files…": "يعدّل الملفات…",
+  "Searching…": "يبحث…",
+  "Browsing the web…": "يتصفح الويب…",
+  "Using tools…": "يستخدم الأدوات…",
+  "Typing…": "يكتب…",
+  "Waiting for your approval": "بانتظار موافقتك",
+  "Scheduled tasks": "المهام المجدولة",
+  "View logs": "عرض السجل",
+  "Run again": "تشغيل مرة أخرى",
+  "Run started": "بدأ التشغيل",
+  "Could not start the run": "تعذّر بدء التشغيل"
 }

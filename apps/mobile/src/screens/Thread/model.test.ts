@@ -18,6 +18,10 @@ import {
   resolveThreadHeaderSubtitle,
   displayProjectPath,
   THREAD_ERROR_COPY,
+  groupThreadRuns,
+  isToolRunningInTurn,
+  resolveThreadWorkingStatus,
+  type ThreadRunCard,
 } from './model';
 
 const CAPABILITIES = {
@@ -516,5 +520,77 @@ describe('stabilizeThreadRows', () => {
     const favorite = stabilizeThreadRows(previous, rows([{ ...second, usage: { totalTokens: 2 } } as UiMessage, first]));
     expect(favorite.find((row) => row.key === 'message:b')).not.toBe(previous.find((row) => row.key === 'message:b'));
     expect(favorite.find((row) => row.key === 'message:a')).toBe(previous.find((row) => row.key === 'message:a'));
+  });
+});
+
+describe('A+ presence and scheduled digests', () => {
+  const t = (key: string) => key;
+  const prompt: UiMessage = { id: 'ask', role: 'user', text: 'Go' };
+  const tool = (id: string, toolName: string, toolStatus: UiMessage['toolStatus']): UiMessage => ({ id, role: 'tool', text: '', toolName, toolStatus });
+
+  it('says what the running step of this turn does, then typing, then the activity or thinking', () => {
+    const status = (messages: UiMessage[], activityLabel?: string) => resolveThreadWorkingStatus({ messages, activityLabel, thinkingLabel: 'Thinking…', t });
+    expect(status([tool('b', 'exec', 'running'), prompt])).toBe('Running a command…');
+    expect(status([tool('b', 'Read', 'running'), prompt])).toBe('Reading files…');
+    expect(status([tool('b', 'apply_patch', 'running'), prompt])).toBe('Editing files…');
+    expect(status([tool('b', 'web_search', 'running'), prompt])).toBe('Searching…');
+    expect(status([tool('b', 'browser', 'running'), prompt])).toBe('Browsing the web…');
+    expect(status([tool('b', 'mcp__linear__save_issue', 'running'), prompt])).toBe('Using tools…');
+    expect(status([{ id: 'r', role: 'assistant', text: 'Hel', streaming: true }, tool('b', 'exec', 'success'), prompt])).toBe('Typing…');
+    expect(status([{ id: 'r', role: 'assistant', text: '', streaming: true }, prompt], 'Using exec…')).toBe('Using exec…');
+    expect(status([prompt])).toBe('Thinking…');
+    // An orphaned call from an earlier turn never speaks for this one.
+    expect(status([prompt, tool('old', 'exec', 'running')])).toBe('Thinking…');
+    expect(isToolRunningInTurn([prompt, tool('old', 'exec', 'running')])).toBe(false);
+    expect(isToolRunningInTurn([tool('now', 'exec', 'running'), prompt])).toBe(true);
+  });
+
+  it('merges adjacent scheduled results of one day into one digest keyed by the oldest', () => {
+    const day = new Date(2026, 8, 5).getTime();
+    const cron = (id: string, hour: number, dayOffset = 0): ThreadRunCard => ({
+      id, kind: 'cron', title: id, status: 'succeeded', statusLabel: 'Succeeded', timeLabel: `${hour}:00`,
+      updatedAt: day + dayOffset * 86_400_000 + hour * 3_600_000,
+    });
+    const subagent: ThreadRunCard = { id: 'worker', kind: 'subagent', title: 'Worker', status: 'completed', statusLabel: 'Done', timeLabel: '9:30', updatedAt: day + 9.5 * 3_600_000 };
+    const timeline = buildThreadTimelineItems({
+      messages: [{ id: 'reply', role: 'assistant', text: 'Hi', timestampMs: day + 12 * 3_600_000 }],
+      runs: [cron('late', 11), cron('b', 8), cron('a', 7), cron('yesterday', 22, -1)],
+      locale: 'en-US',
+    });
+    // Results carry their own times: hours apart on one day, no labels between them.
+    // Newest first: each label follows the row it heads.
+    expect(timeline.map((item) => item.key)).toEqual([
+      'message:reply', 'date:message:reply', 'run:cron:late', 'run:cron:b', 'run:cron:a', 'date:run:cron:a', 'run:cron:yesterday', 'date:run:cron:yesterday',
+    ]);
+    const grouped = groupThreadRuns(timeline);
+    expect(grouped.map((item) => item.key)).toEqual([
+      'message:reply', 'date:message:reply', 'cron:a', 'date:run:cron:a', 'cron:yesterday', 'date:run:cron:yesterday',
+    ]);
+    const digest = grouped.find((item) => item.key === 'cron:a');
+    expect(digest?.type === 'cron' ? digest.runs.map((run) => run.id) : null).toEqual(['late', 'b', 'a']);
+    // Sub-agent runs keep their own cards and break a digest.
+    const mixed = groupThreadRuns([
+      { type: 'run', key: 'run:cron:b', timestampMs: 2, run: cron('b', 8) },
+      { type: 'run', key: 'run:subagent:worker', timestampMs: 1, run: subagent },
+      { type: 'run', key: 'run:cron:a', timestampMs: 0, run: cron('a', 7) },
+    ]);
+    expect(mixed.map((item) => item.key)).toEqual(['cron:b', 'run:subagent:worker', 'cron:a']);
+  });
+
+  it('marks jobs the conversation may run again, as the editor does', () => {
+    const job = (id: string, kind: string) => ({ id, name: id, agentId: 'main', enabled: true, sessionKey: 'agent:main:main',
+      schedule: { kind: 'every', everyMs: 60_000 }, payload: { kind } } as unknown as CronJob);
+    const seeds = buildCronRunSeeds({
+      entries: [
+        { ts: 2, runAtMs: 2, jobId: 'daily', action: 'finished', status: 'error', sessionKey: 'agent:main:main' },
+        { ts: 1, runAtMs: 1, jobId: 'beat', action: 'finished', status: 'ok', sessionKey: 'agent:main:main' },
+      ],
+      jobs: [job('daily', 'agentTurn'), job('beat', 'heartbeat')],
+      currentSessionKey: 'agent:main:main',
+      currentAgentId: 'main',
+      isMainAgent: true,
+      fallbackTitle: 'Task',
+    });
+    expect(seeds.map((seed) => [seed.id.split(':')[0], seed.runnable])).toEqual([['daily', true], ['beat', false]]);
   });
 });

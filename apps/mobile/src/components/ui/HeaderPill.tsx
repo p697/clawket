@@ -3,7 +3,8 @@ import React, { useEffect, useMemo } from 'react';
 import { Pressable, StyleProp, StyleSheet, Text, type ViewStyle, View } from 'react-native';
 import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useAppTheme } from '../../theme';
-import { createChatGlassStyle } from '../../features/chat-appearance/resolver';
+import { createChatGlassStyle, resolveChatPresenceColors } from '../../features/chat-appearance/resolver';
+import { useConversationTheme } from '../chat/ChatPresentation';
 import {
   ControlSize,
   FontSize,
@@ -15,7 +16,10 @@ import {
 } from '../../theme/tokens';
 import { AgentAvatar, type AgentAttentionTone, type AgentAvatarStatus } from './AgentAvatar';
 import type { PlatformKind } from './PlatformMark';
-import { TypingDots } from './TypingDots';
+import { PresenceRing, type PresenceRingTone } from './PresenceRing';
+
+/** The header avatar's diameter (`AgentAvatar` header variant). */
+const HEADER_AVATAR_SIZE = ControlSize.pill - Space.md;
 
 const PRESSED_OPACITY = 0.88;
 
@@ -26,8 +30,12 @@ export type HeaderPillProps = Readonly<{
   avatarName?: string;
   subtitle: string;
   subtitleEllipsizeMode?: 'head' | 'middle' | 'tail' | 'clip';
-  /** The Agent is composing: the subtitle slot shows three lifting dots instead of text. */
-  working?: boolean;
+  /**
+   * The Agent's presence (A+ chat design, 2026-09-30): `working` turns an
+   * accent arc around the avatar and colors the subtitle (the status sentence)
+   * in the accent; `attention` breathes a full ring and colors it amber.
+   */
+  presence?: PresenceRingTone | null;
   emoji?: string | null;
   avatarUrl?: string | null;
   /** The Agent's backend: a product Agent wears the official mark, as on the roster. */
@@ -50,7 +58,7 @@ export function HeaderPill({
   avatarName,
   subtitle,
   subtitleEllipsizeMode = 'tail',
-  working = false,
+  presence = null,
   emoji,
   avatarUrl,
   platform,
@@ -64,6 +72,10 @@ export function HeaderPill({
   testID,
 }: HeaderPillProps): React.JSX.Element {
   const { theme } = useAppTheme();
+  const conversation = useConversationTheme();
+  const presenceColors = useMemo(() => resolveChatPresenceColors(conversation), [conversation]);
+  const subtitleColor = presence === 'working' ? presenceColors.working
+    : presence === 'attention' ? presenceColors.attentionText : theme.colors.inkSecondary;
   const subtitleOpacity = useSharedValue(1);
   const chrome = useMemo(
     () => (material === 'glass' ? createChatGlassStyle(theme) : { backgroundColor: theme.colors.surface }),
@@ -76,31 +88,38 @@ export function HeaderPill({
     subtitleOpacity.value = 0;
     subtitleOpacity.value = withTiming(1, { duration: Motion.duration.fast });
     return () => cancelAnimation(subtitleOpacity);
-  }, [subtitle, subtitleOpacity, working]);
+  }, [subtitle, subtitleOpacity]);
 
   const content = (
     <>
-      {Icon ? <Icon size={24} color={theme.colors.inkSecondary} strokeWidth={1.5} /> : <AgentAvatar
-        testID={testID ? `${testID}-avatar` : undefined}
-        agentId={agentId}
-        name={avatarName ?? name}
-        emoji={emoji}
-        avatarUrl={avatarUrl}
-        platform={platform}
-        variant="header"
-        status={status}
-        attentionTone={attentionTone}
-      />}
+      <View style={styles.avatarSlot}>
+        {Icon ? <Icon size={24} color={theme.colors.inkSecondary} strokeWidth={1.5} /> : <AgentAvatar
+          testID={testID ? `${testID}-avatar` : undefined}
+          agentId={agentId}
+          name={avatarName ?? name}
+          emoji={emoji}
+          avatarUrl={avatarUrl}
+          platform={platform}
+          variant="header"
+          status={status}
+          attentionTone={attentionTone}
+        />}
+        {presence ? (
+          <PresenceRing
+            testID={testID ? `${testID}-${presence}` : undefined}
+            tone={presence}
+            avatarSize={HEADER_AVATAR_SIZE}
+            color={presence === 'working' ? presenceColors.working : presenceColors.attentionRing}
+          />
+        ) : null}
+      </View>
       <View style={styles.labels}>
         <Text style={[styles.name, { color: theme.colors.ink }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>
           {name}
         </Text>
-        {working ? (
-          <Animated.View style={[styles.working, subtitleAnimatedStyle]}>
-            <TypingDots testID={testID ? `${testID}-working` : undefined} />
-          </Animated.View>
-        ) : subtitle.trim() ? <Animated.Text
-          style={[styles.subtitle, { color: theme.colors.inkSecondary }, subtitleAnimatedStyle]}
+        {subtitle.trim() ? <Animated.Text
+          testID={testID ? `${testID}-subtitle` : undefined}
+          style={[styles.subtitle, { color: subtitleColor }, subtitleAnimatedStyle]}
           numberOfLines={1}
           maxFontSizeMultiplier={1}
           ellipsizeMode={subtitleEllipsizeMode}
@@ -141,6 +160,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Space.sm,
   },
+  avatarSlot: {
+    width: HEADER_AVATAR_SIZE,
+    height: HEADER_AVATAR_SIZE,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   labels: {
     flexShrink: 1,
   },
@@ -155,11 +180,6 @@ const styles = StyleSheet.create({
     lineHeight: LineHeight.secondary - Space.xs,
     fontWeight: FontWeight.regular,
     includeFontPadding: false,
-  },
-  // The dots sit a step in from the name's left edge; flush-left they read
-  // as hanging off the pill (owner-requested 2026-09-11).
-  working: {
-    paddingLeft: Space.xs,
   },
   pressed: {
     opacity: PRESSED_OPACITY,

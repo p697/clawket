@@ -127,6 +127,7 @@ function runCardSignature(card: ThreadRunCard): string {
     card.summary ?? '',
     card.canOpenLogs ? '1' : '0',
     card.cronRun ? '1' : '0',
+    card.runnable ? '1' : '0',
   ].join('\u0001');
 }
 
@@ -793,6 +794,11 @@ function ThreadScreenContent({
     analyticsEvents.runCardOpened({ kind: 'cron' });
     setSelectedCronRun(run.cronRun);
   }, []);
+  // "Run again" under a failed scheduled result: the same forced run as the editor's "Run now".
+  const rerunCron = useCallback(async (run: ThreadRunCard) => {
+    if (!cronOperations?.run || !run.jobId) throw new Error('Scheduled task unavailable');
+    await cronOperations.run(run.jobId, 'force');
+  }, [cronOperations]);
 
   const handleCopyMessage = useCallback((message: UiMessage) => {
     const text = message.role === 'assistant'
@@ -1071,6 +1077,7 @@ function ThreadScreenContent({
         onOpenRunSession={onOpenRunSession ? openRunSession : undefined}
         onOpenCronRun={openCronRun}
         onOpenRunLogs={onOpenRunLogs}
+        onRerunCron={cronOperations?.run && !locked ? rerunCron : undefined}
         onOpenAttachments={handleOpenMessageAttachments}
         messageActions={messageActions}
         queuedMessageActions={sessionPreview ? undefined : queuedMessageActions}
