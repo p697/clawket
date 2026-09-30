@@ -2782,3 +2782,10 @@ For immediate owner acceptance, authenticated control confirmed zero active owne
 ### 2026-09-30 — Bridge 3.1.7 release preparation
 
 Owner confirmed a phone-created Codex conversation succeeds after the local runtime switch, then explicitly authorized a new Bridge release. The candidate includes merged macOS Desktop-first executable resolution and privacy-safe unsupported-model guidance; the CLI manifest, lock entry and publish guard advance from 3.1.6 to 3.1.7. Native ownership, explicit executable overrides and OpenClaw/Hermes/Pi/Claude paths remain intact. Fixed-artifact verification, exact candidate CI, npm publication and public installation results are tracked in [the release record](../3.1/bridge-3.1.7-release.md). No App or Worker release is included, and existing local user runtimes are preserved.
+
+
+### 2026-10-01 — Bridge 3.1.7 published and publicly verified
+
+Owner-authorized Bridge 3.1.7 is public (`latest=3.1.7`; verified September 30 UTC). Immutable source `3c76843fc1bfaa9ba45a891b89ccb682f2d3d10b` passed all 11 CI jobs, 35 affected Codex cases, six publish-guard cases, 41 v1 replay cases, a real Desktop 0.159.2 fresh reply, 24 local production-snapshot upgrade/recovery phases, package provenance and isolated candidate installation. Native-browser login and separate publish authentication completed; public tarball SHA-256 `d66a0aefbecc1cefedfc0893737369d0396573c95b8ed10e71af5d6e48b88973` matches the candidate, and a fresh credential-free public installation/CLI smoke passed. Source [PR #62](https://github.com/p697/clawket/pull/62) merged as `92bfbceb`; its worktree/branch were removed and main was synchronized.
+
+This package delivers automatic macOS Desktop priority and privacy-safe model-unavailable guidance. The owner's existing 3.1.6 runtime continues using the earlier explicit Desktop command; no user-runtime restart, configuration/pairing change, App publication or Worker deployment occurred during this release. App localization/first-scan delivery and old native conversation phone acceptance remain their independent checkpoints. [Release artifact and gates](../3.1/bridge-3.1.7-release.md).
