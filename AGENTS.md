@@ -149,7 +149,7 @@ When implementation, architecture, or release behavior changes, update the close
 
 ## Quality Gate Rule
 
-1. `npm run check:required` is the repository-wide, CI-safe required gate for typechecks, self-contained tests, mobile design-system checks, and documentation checks.
+1. `npm run check:required` is the repository-wide, CI-safe required gate for typechecks, self-contained tests, mobile design-system checks, and documentation checks. CI runs its parts (`typecheck`, `test:required:mobile` as three in-band shards, `test:required:rest`, `check:static`) and the v1 replay as parallel jobs behind the `Typecheck, tests, design system, and docs` gate job; keep that job list and the `check:required` composition in sync. The Windows and macOS Bridge jobs run for desktop-affecting pull requests (`scripts/ci/desktop-changes.mjs`) and on every push to `main`.
 2. Check scripts must fail with a non-zero exit code when their inputs are missing, malformed, or empty; they must not silently skip verification.
 3. Checks must print the number or scope of verified items so an accidental coverage reduction is visible.
 4. New check logic should expose testable validation functions and include a corrupted-input regression test.

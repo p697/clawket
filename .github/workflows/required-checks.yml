@@ -6,6 +6,11 @@ on:
     branches:
       - main
 
+# A new push to a pull request supersedes its running checks; every push to main completes.
+concurrency:
+  group: required-checks-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   secrets:
     name: Scan Git history for secrets
@@ -31,13 +36,29 @@ jobs:
           cd "$GITHUB_WORKSPACE"
           "$RUNNER_TEMP/gitleaks" git . --log-opts=--all --redact=100
 
-  desktop-bridge:
-    name: Bridge and Relay compatibility (${{ matrix.os }})
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+  changes:
+    name: Detect desktop-affecting changes
+    runs-on: ubuntu-latest
+    outputs:
+      desktop: ${{ steps.detect.outputs.desktop }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: detect
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/ci/desktop-changes.mjs >> "$GITHUB_OUTPUT"
+
+  # The desktop Bridge ships to Windows and macOS users. These jobs run for changes that can
+  # affect it (scripts/ci/desktop-changes.mjs) and on every push to main; a failed selector runs them.
+  desktop-windows:
+    name: Bridge and Relay compatibility (windows-latest)
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.desktop != 'false') }}
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -56,37 +77,116 @@ jobs:
       - run: npm run test:compat
       - run: npx vitest run tests/integration/local-model.e2e.test.ts
 
-  required:
-    name: Typecheck, tests, design system, and docs
-    runs-on: ubuntu-latest
+  desktop-macos:
+    name: Bridge and Relay compatibility (macos-latest)
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.desktop != 'false') }}
+    runs-on: macos-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci
+      - run: npm run bridge:build
+      - run: npm run bridge:test:required
+      - run: node --test scripts/bridge/local-model-supervisor.test.mjs
+      - run: npm run test:compat
+      - run: npx vitest run tests/integration/local-model.e2e.test.ts
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run required checks
-        run: npm run check:required
-
-      - name: Run v1 protocol compatibility replay
-        run: npm run test:compat
-
+  # `npm run check:required` split into parallel jobs; the gate job below keeps the required name.
+  typecheck:
+    name: Typecheck and dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
       - name: Audit high-severity dependencies in both lockfiles
         run: |
           npm audit --audit-level=high
           npm --prefix apps/mobile audit --audit-level=high --workspaces=false
+
+  mobile-tests:
+    name: Mobile tests (shard ${{ matrix.shard }}/3)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test:required:mobile -- --shard=${{ matrix.shard }}/3
+
+  tests:
+    name: Tests and static checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test:required:rest
+      - run: npm run check:static
+
+  compat:
+    name: v1 protocol compatibility replay
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test:compat
+
+  required:
+    name: Typecheck, tests, design system, and docs
+    needs: [typecheck, mobile-tests, tests, compat]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every part of check:required and the v1 replay to pass
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          node -e '
+            const jobs = Object.entries(JSON.parse(process.env.NEEDS));
+            for (const [name, job] of jobs) console.log(`${name}: ${job.result}`);
+            const failed = jobs.filter(([, job]) => job.result !== "success").map(([name]) => name);
+            if (jobs.length !== 4 || failed.length) {
+              console.error(`gate failed: expected 4 successful jobs, failed: ${failed.join(", ") || "none"}`);
+              process.exit(1);
+            }
+            console.log(`gate passed; verified ${jobs.length} jobs`);
+          '

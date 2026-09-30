@@ -24,7 +24,7 @@ node scripts/worktree.mjs finish                        # fast-forward main, rem
 
 - `create` links the local files below and runs `npm ci`. Pass `--no-install` for documentation-only work; `bootstrap` later re-links and installs. An existing local or remote branch is attached instead of recreated.
 - When `main` moves under an open PR: `git fetch origin && git rebase origin/main && git push --force-with-lease` (or `gh pr update-branch`), then wait for the checks again. Claude desktop worktree sessions may use the app's base-branch sync instead.
-- Wait for checks with the tool's CI notifications or `gh pr checks <number> --watch`. A red required check is fixed in the same branch; never merge around it.
+- Wait for checks with the tool's CI notifications or `gh pr checks <number> --watch`; the required gate usually takes a few minutes, and the Windows and macOS Bridge jobs run only when a change can affect the desktop Bridge. A red required check is fixed in the same branch; never merge around it.
 - Do not use `gh pr merge --delete-branch`: it tries to check out `main` inside the task worktree, which git refuses because the primary checkout holds `main`. `finish` deletes the local branch after confirming the PR merged at the local head; GitHub deletes the remote branch.
 - `finish` deletes the directory it runs in; continue from the primary checkout path it prints.
 - To park unfinished work, push the branch and run `remove`: it requires a clean worktree whose commits exist on a remote branch, and keeps the branch. Never delete an unmerged branch.
