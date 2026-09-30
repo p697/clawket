@@ -1,3 +1,9 @@
+// Keep the real attachment components; native file/share behavior has its own focused tests.
+jest.mock('expo-file-system', () => ({
+  Paths: { cache: 'file:///cache' }, FileMode: { WriteOnly: 1 },
+  Directory: jest.fn(), File: jest.fn(),
+}));
+jest.mock('expo-sharing', () => ({ isAvailableAsync: jest.fn().mockResolvedValue(false), shareAsync: jest.fn() }));
 jest.mock('../../components/ui/Sheet', () => ({ Sheet: ({ visible, children, ...props }: any) => visible ? React.createElement(require('react-native').View, props, children) : null }));
 import React from 'react';
 import { act, fireEvent, render } from '@testing-library/react-native';
