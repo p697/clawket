@@ -41,5 +41,6 @@ apps/*/wrangler.*.local.toml
 apps/*/wrangler.local.jsonc
 apps/*/wrangler.*.local.jsonc
 
-# Clawket 3.0 implementation evidence (local only)
-docs/3.0/evidence/
+# Implementation evidence (local only). No trailing slash: task worktrees
+# link these directories, and git treats a link as a file.
+/docs/*/evidence
