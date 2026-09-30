@@ -6,7 +6,7 @@ The rule lives in the root `AGENTS.md` (Branch and Worktree Rule). This page hol
 
 - **Primary checkout**: the directory that holds `.git`. It stays on a clean `main`; the owner's launchd Bridge service runs its `apps/bridge-cli/dist`.
 - **Worktree root**: `git config clawket.worktreeRoot <absolute path>` in the primary checkout (repository-local, shared by all worktrees). `CLAWKET_WORKTREE_ROOT` overrides it; without either, the root is a `<checkout>-worktrees` directory beside the primary checkout. The script refuses roots inside the primary checkout (its Metro, Jest and document checks would scan nested copies) and temporary directories (a restart clears them).
-- **Owner's Mac**: `/Volumes/Lucy-SSD/clawket-worktrees`. The internal disk cannot hold per-worktree dependencies: about 10 GiB of `node_modules`, and 16 GiB once `ios/` and `android/` are generated.
+- **Owner's Mac**: `/Volumes/Lucy-SSD/clawket-worktrees`. The internal disk cannot hold per-worktree dependencies: a fresh `npm ci` takes about 1.5 GiB, and generated `android/` and `ios/` projects add several GiB once built.
 - A worktree is `<root>/<branch with / replaced by ->`. iOS DerivedData for it goes to `<root>/.derived-data/<worktree>`; `paths derived-data` prints the path, and `finish`/`remove` delete it.
 
 ## Task lifecycle

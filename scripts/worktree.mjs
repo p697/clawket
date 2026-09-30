@@ -33,7 +33,7 @@ export const LEASE_RESOURCES = Object.freeze(['android', 'ios', 'simulator', 'he
 export const DERIVED_DATA_DIRECTORY = '.derived-data';
 const DEFAULT_LEASE_TTL = '2h';
 const MAX_LEASE_MS = 12 * 60 * 60 * 1000;
-const MIN_INSTALL_FREE_BYTES = 12 * 1024 ** 3;
+const MIN_INSTALL_FREE_BYTES = 4 * 1024 ** 3;
 
 /**
  * Ignored primary-checkout files a task worktree needs. They are linked, never
@@ -323,7 +323,7 @@ function installDependencies(worktree, { reinstall, log }) {
   }
   const free = freeBytes(worktree);
   if (free !== null && free < MIN_INSTALL_FREE_BYTES) {
-    throw new WorktreeError(`${(free / 1024 ** 3).toFixed(1)} GiB free on the worktree volume; npm ci needs about 12 GiB`);
+    throw new WorktreeError(`${(free / 1024 ** 3).toFixed(1)} GiB free on the worktree volume; keep at least 4 GiB for npm ci`);
   }
   log(`running npm ci in ${worktree}`);
   // npm writes progress to our stderr so stdout stays reserved for the worktree path.
