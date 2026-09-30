@@ -205,6 +205,7 @@
   "Sent": "Надіслано",
   "Delivered": "Доставлено",
   "Send now": "Надіслати зараз",
+  "This model is unavailable in the current Codex runtime. Choose another model or update Codex on your computer.": "Ця модель недоступна в поточному Codex. Виберіть іншу модель або оновіть Codex на комп’ютері.",
   "The agent couldn't complete this reply. Please try again.": "Агент не зміг завершити відповідь. Спробуйте ще раз.",
   "Tool activity ({{count}})": "Робота інструментів ({{count}})",
   "No execution summary was recorded.": "Підсумок виконання не записано.",

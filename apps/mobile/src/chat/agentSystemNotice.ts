@@ -11,6 +11,8 @@ export function localizeAgentSystemNotice(
       return t('The model account has insufficient credits or quota.', { ns: 'chat' });
     case 'The model is rate limited. Try again shortly.':
       return t('The model is rate limited. Try again shortly.', { ns: 'chat' });
+    case 'This model is unavailable in the current Codex runtime. Choose another model or update Codex on your computer.':
+      return t('This model is unavailable in the current Codex runtime. Choose another model or update Codex on your computer.', { ns: 'chat' });
     case "The agent couldn't complete this reply. Please try again.":
       return t("The agent couldn't complete this reply. Please try again.", { ns: 'chat' });
     default:

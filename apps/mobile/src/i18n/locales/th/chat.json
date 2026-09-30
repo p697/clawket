@@ -205,6 +205,7 @@
   "Sent": "ส่งแล้ว",
   "Delivered": "ส่งถึงแล้ว",
   "Send now": "ส่งตอนนี้",
+  "This model is unavailable in the current Codex runtime. Choose another model or update Codex on your computer.": "โมเดลนี้ไม่พร้อมใช้งานใน Codex ปัจจุบัน เลือกโมเดลอื่นหรืออัปเดต Codex บนคอมพิวเตอร์ของคุณ",
   "The agent couldn't complete this reply. Please try again.": "Agent ไม่สามารถตอบกลับให้เสร็จสมบูรณ์ได้ โปรดลองอีกครั้ง",
   "Tool activity ({{count}})": "กิจกรรมเครื่องมือ ({{count}})",
   "No execution summary was recorded.": "ไม่มีการบันทึกสรุปการรัน",

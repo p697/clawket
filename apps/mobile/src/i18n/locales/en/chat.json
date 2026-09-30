@@ -205,6 +205,7 @@
   "Sent": "Sent",
   "Delivered": "Delivered",
   "Send now": "Send now",
+  "This model is unavailable in the current Codex runtime. Choose another model or update Codex on your computer.": "This model is unavailable in the current Codex runtime. Choose another model or update Codex on your computer.",
   "The agent couldn't complete this reply. Please try again.": "The agent couldn't complete this reply. Please try again.",
   "Tool activity ({{count}})": "Tool activity ({{count}})",
   "No execution summary was recorded.": "No execution summary was recorded.",

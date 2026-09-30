@@ -14,12 +14,26 @@ export function codexGeneratedImage(item: any): ChatMessage | undefined {
 }
 
 /** Native errors may contain private provider bodies. Expose fixed copy only. */
+function unsupportedChatGptModel(error: any): boolean {
+  let message = error?.message;
+  if (typeof message !== 'string' || message.length > 16384) return false;
+  if (message.startsWith('{')) {
+    try {
+      const response = JSON.parse(message);
+      if (response.type !== 'error' || response.status !== 400 || response.error?.type !== 'invalid_request_error') return false;
+      message = response.error.message;
+    } catch { return false; }
+  }
+  return typeof message === 'string' && /^The '[A-Za-z0-9._-]{1,200}' model is not supported when using Codex with a ChatGPT account\.$/.test(message);
+}
+
 export function codexTurnFailure(turn: any): (Pick<ChatMessage, 'id' | 'text' | 'timestampMs'> & { role: 'system' }) | undefined {
   if (turn?.status !== 'failed' || typeof turn.id !== 'string' || !turn.id || turn.id.length > 200) return undefined;
   const code = turn.error?.codexErrorInfo;
   const timestamp = typeof turn.completedAt === 'number' ? turn.completedAt : turn.startedAt;
   return { id: `codex-turn-error:${turn.id}`, role: 'system',
     text: code === 'unauthorized' ? 'Model authentication failed. Sign in again on your computer.'
+      : unsupportedChatGptModel(turn.error) ? 'This model is unavailable in the current Codex runtime. Choose another model or update Codex on your computer.'
       : "The agent couldn't complete this reply. Please try again.",
     ...(typeof timestamp === 'number' && Number.isFinite(timestamp) && timestamp >= 0 ? { timestampMs: timestamp * 1000 } : {}) };
 }

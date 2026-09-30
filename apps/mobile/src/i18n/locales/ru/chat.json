@@ -205,6 +205,7 @@
   "Sent": "Отправлено",
   "Delivered": "Доставлено",
   "Send now": "Отправить сейчас",
+  "This model is unavailable in the current Codex runtime. Choose another model or update Codex on your computer.": "Эта модель недоступна в текущем Codex. Выберите другую модель или обновите Codex на компьютере.",
   "The agent couldn't complete this reply. Please try again.": "Агент не смог завершить ответ. Попробуйте ещё раз.",
   "Tool activity ({{count}})": "Работа инструментов ({{count}})",
   "No execution summary was recorded.": "Сводка выполнения не записана.",

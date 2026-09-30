@@ -205,6 +205,7 @@
   "Sent": "Enviado",
   "Delivered": "Entregue",
   "Send now": "Enviar agora",
+  "This model is unavailable in the current Codex runtime. Choose another model or update Codex on your computer.": "Este modelo não está disponível no Codex atual. Escolha outro modelo ou atualize o Codex no computador.",
   "The agent couldn't complete this reply. Please try again.": "O Agent não conseguiu concluir esta resposta. Tente novamente.",
   "Tool activity ({{count}})": "Atividade de ferramentas ({{count}})",
   "No execution summary was recorded.": "Nenhum resumo de execução foi registrado.",

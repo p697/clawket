@@ -205,6 +205,7 @@
   "Sent": "전송됨",
   "Delivered": "전달됨",
   "Send now": "지금 보내기",
+  "This model is unavailable in the current Codex runtime. Choose another model or update Codex on your computer.": "현재 Codex에서 이 모델을 사용할 수 없습니다. 다른 모델을 선택하거나 컴퓨터에서 Codex를 업데이트하세요.",
   "The agent couldn't complete this reply. Please try again.": "에이전트가 답변을 완료하지 못했습니다. 다시 시도해 주세요.",
   "Tool activity ({{count}})": "도구 활동 ({{count}})",
   "No execution summary was recorded.": "이 실행의 요약이 기록되지 않았습니다.",

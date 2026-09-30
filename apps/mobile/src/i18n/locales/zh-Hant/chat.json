@@ -205,6 +205,7 @@
   "Sent": "已傳送",
   "Delivered": "已送達",
   "Send now": "立即傳送",
+  "This model is unavailable in the current Codex runtime. Choose another model or update Codex on your computer.": "目前 Codex 無法使用這個模型。請選擇其他模型，或在電腦上更新 Codex。",
   "The agent couldn't complete this reply. Please try again.": "Agent 未能完成回覆，請重試。",
   "Tool activity ({{count}})": "工具活動（{{count}}）",
   "No execution summary was recorded.": "此次執行未記錄摘要。",

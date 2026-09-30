@@ -205,6 +205,7 @@
   "Sent": "تم الإرسال",
   "Delivered": "تم التسليم",
   "Send now": "إرسال الآن",
+  "This model is unavailable in the current Codex runtime. Choose another model or update Codex on your computer.": "هذا النموذج غير متاح في Codex الحالي. اختر نموذجًا آخر أو حدّث Codex على جهاز الكمبيوتر.",
   "The agent couldn't complete this reply. Please try again.": "لم يتمكن الوكيل من إكمال هذا الرد. يرجى المحاولة مرة أخرى.",
   "Tool activity ({{count}})": "نشاط الأدوات ({{count}})",
   "No execution summary was recorded.": "لم يُسجَّل ملخص للتنفيذ.",

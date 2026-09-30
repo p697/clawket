@@ -205,6 +205,7 @@
   "Sent": "Đã gửi",
   "Delivered": "Đã nhận",
   "Send now": "Gửi ngay",
+  "This model is unavailable in the current Codex runtime. Choose another model or update Codex on your computer.": "Mô hình này không khả dụng trong Codex hiện tại. Hãy chọn mô hình khác hoặc cập nhật Codex trên máy tính.",
   "The agent couldn't complete this reply. Please try again.": "Agent không thể hoàn thành câu trả lời này. Vui lòng thử lại.",
   "Tool activity ({{count}})": "Hoạt động công cụ ({{count}})",
   "No execution summary was recorded.": "Không có bản tóm tắt thực thi nào được ghi lại.",

@@ -1178,6 +1178,7 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 
 | 编号 | 事项 | 怎么做 | 验证方法 | 状态 |
 |---|---|---|---|---|
+| HT-CODEX-RUNTIME-0930 | 桌面运行时优先的手机验收 | 使用包含本轮修改的 Bridge 重启后，在手机重新连接并新建对话。 | 同时安装 CLI/Desktop 时选择桌面内置运行时；模型目录与新对话一致，消息得到回复；旧原生会话仍可继续。 | 本机 0.159.2 的真实新对话已成功，手机验收待负责人完成；代码合并不等于 npm/App 已发布。见 ../3.1/codex-desktop-runtime-2026-09-30.md。 |
 | HT-CODEX-AUTH-0930 | 原故障 iPhone 的认证与错误回显验收 | 负责人恢复必要的原生登录，安装本轮公开 Bridge 后重新配对，在新对话发送无副作用消息。 | 手机得到真实回复；认证失败显示明确提示，退出重进历史仍保留。记录 App build 和运行 Bridge。 | 原故障与旧/新历史差异已只读复现；本机清理完成，本轮 Bridge 发布进行中。新 Mobile 通用兜底需要独立 App 更新，真机验收待负责人完成。 |
 | HT-FIRST-SCAN-0930 | 首次扫码故障真机验证 | 已确认两个后端均立即报错、只有一个二维码、App 为当前仓库构建的 3.1.0；后续授权的 App 更新后重测首次扫码并保留固定校验原因。 | 区分真实首次校验原因与受控旧回调复现；当前代码修改不等于手机已收到修复。 | 本地旧回调竞态和错误反馈修复已实现，原现场的环境变化仍无证据，待 App 更新后负责人验证。见 ../3.1/first-scan-investigation-2026-09-30.md。 |
 | HT-NPM-315-0930 | Bridge 3.1.5 npm 发布两步验证 | 在 npm 官方浏览器流程完成验证，不在聊天中发送密码或验证码。 | npm 发布成功，公开 latest=3.1.5，公开包与固定候选逐字节一致。 | 已完成：npm 两步验证成功；公开 latest=3.1.5，下载包逐字节及 SHA-1/SHA-512 校验通过。 |
@@ -2767,3 +2768,10 @@ Local verification, sequential affected files: pairing profile 21, route 24, scr
 ### 2026-09-30 — Settings version row shows the build number
 
 Owner asked Settings → About → Version to show the build alongside the marketing version. The row now reads the installed binary as `version (build)`, for example `3.1.0 (30101)`: iOS CFBundleVersion (EAS remote auto-increment for store builds; local Xcode builds report `1`) and Android versionCode. It falls back to the package version without a build when native values are unavailable, and omits a build equal to the version. This also lets owners report the exact installed build for triage. Verified with two focused Jest files; no device, build or release work.
+
+
+### 2026-09-30 — Prefer Codex Desktop runtime for automatic pairing
+
+Owner requested desktop priority after a phone-created turn failed with a native unsupported-model HTTP 400. Read-only probes confirmed PATH CLI 0.153.3 lacked the configured model in its native catalog while desktop-bundled 0.159.2 included it. The previous catalog and new-thread operations used the same CLI App Server; the effective configured model was also rendered in the picker, which was not availability evidence. Default macOS discovery now prefers runnable known Desktop bundles over PATH, retaining CLI-only fallback and explicit executable overrides. One owned App Server supplies both catalog and new threads; existing Desktop-owned conversations keep their IPC path. No native credential copies, owner takeover, silent post-failure CLI fallback or model replacement.
+
+Exact bounded unsupported-model refusals now produce fixed choose-model/update-Codex copy in live completion and history, localized in 19 Mobile languages. Malformed and unrelated responses retain generic privacy-safe copy. Explicit native integration with both installations present selected desktop 0.159.2 and verified its exact catalog/default, project sandbox permissions and a completed fresh text reply; its test owner was stopped. Phone acceptance remains HT-CODEX-RUNTIME-0930. Focused local checks and CI results are recorded in the task PR and [incident record](../3.1/codex-desktop-runtime-2026-09-30.md). No package/App release, owner-runtime restart or cloud change; a running old Bridge requires restart with updated code, not merely phone reconnection.

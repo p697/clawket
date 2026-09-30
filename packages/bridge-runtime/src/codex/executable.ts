@@ -5,18 +5,20 @@ import { delimiter, dirname, join, isAbsolute } from 'node:path';
 /** npm's Windows .cmd shim is not an executable for shell:false. Resolve its installed JS entry without invoking a shell. */
 export function resolveCodexExecutable(command = 'codex', platform = process.platform, searchPath = process.env.PATH ?? '', applicationDirectories = [join(homedir(), 'Applications'), '/Applications']): { command: string; prefix: string[] } {
   const candidates = isAbsolute(command) || command.includes('/') || command.includes('\\') ? [command] : searchPath.split(platform === 'win32' ? ';' : delimiter).flatMap(dir => platform === 'win32' ? [join(dir, command + '.exe'), join(dir, command + '.cmd'), join(dir, command)] : [join(dir, command)]);
-  // Only the default command may fall back to a desktop installation. An explicit
-  // executable (including a missing one) must never silently select another model/runtime.
-  let found = candidates.find(path => existsSync(path));
-  if (!found && command === 'codex' && platform === 'darwin') {
+  // Automatic discovery prefers the desktop's runtime over a separately installed
+  // CLI. Explicit commands remain deliberate overrides, including missing ones.
+  let found: string | undefined;
+  if (command === 'codex' && platform === 'darwin') {
     const desktopCandidates = applicationDirectories.flatMap(directory => ['Codex.app', 'ChatGPT.app'].flatMap(app => [
       join(directory, app, 'Contents', 'Resources', 'codex'),
       join(directory, app, 'Contents', 'Resources', 'codex-cli', 'CodexCLI.app', 'Contents', 'MacOS', 'codex'),
+      join(directory, app, 'Contents', 'Resources', 'codex-cli', 'bin', 'codex'),
     ]));
     found = desktopCandidates.find(path => {
       try { accessSync(path, constants.X_OK); return statSync(path).isFile(); } catch { return false; }
     });
   }
+  found ??= candidates.find(path => existsSync(path));
   if (!found) return { command, prefix: [] };
   const resolved = realpathSync(found);
   if (platform === 'win32' && /\.cmd$/i.test(resolved)) {

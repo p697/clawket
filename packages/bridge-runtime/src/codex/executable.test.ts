@@ -29,13 +29,24 @@ it.each(['Codex.app', 'ChatGPT.app'])('discovers %s without a PATH CLI', app => 
   const desktop = executable(bundledPath(root, app));
   expect(resolveCodexExecutable('codex', 'darwin', '', [root])).toEqual({ command: desktop, prefix: [] });
 });
-it('keeps PATH CLI ahead of desktop and honors explicit commands', () => {
-  executable(bundledPath(root, 'Codex.app'));
+it('prefers the desktop runtime over PATH CLI and honors explicit commands', () => {
+  const desktop = executable(bundledPath(root, 'Codex.app'));
   const cli = executable(join(root, 'bin', 'codex'));
-  expect(resolveCodexExecutable('codex', 'darwin', dirname(cli), [root]).command).toBe(cli);
+  expect(resolveCodexExecutable('codex', 'darwin', dirname(cli), [root]).command).toBe(desktop);
+  expect(resolveCodexExecutable(cli, 'darwin', dirname(cli), [root]).command).toBe(cli);
   const explicit = join(root, 'missing-codex');
   expect(resolveCodexExecutable(explicit, 'darwin', '', [root]).command).toBe(explicit);
   expect(resolveCodexExecutable('custom-codex', 'darwin', '', [root]).command).toBe('custom-codex');
+});
+it('falls back to PATH only when no executable desktop runtime exists', () => {
+  const desktop = bundledPath(root, 'Codex.app');
+  mkdirSync(desktop, { recursive: true });
+  const cli = executable(join(root, 'bin', 'codex'));
+  expect(resolveCodexExecutable('codex', 'darwin', dirname(cli), [root]).command).toBe(cli);
+});
+it('recognizes the desktop codex-cli/bin layout without a standalone CLI', () => {
+  const desktop = executable(join(root, 'ChatGPT.app', 'Contents', 'Resources', 'codex-cli', 'bin', 'codex'));
+  expect(resolveCodexExecutable('codex', 'darwin', '', [root])).toEqual({ command: desktop, prefix: [] });
 });
 it('does not treat an app shell, directory or non-executable resource as Codex', () => {
   const path = bundledPath(root, 'Codex.app');
