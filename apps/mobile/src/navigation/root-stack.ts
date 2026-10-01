@@ -12,6 +12,7 @@ export type AgentSettingsSection =
   | 'connection'
   | 'openclaw'
   | 'tools'
+  | 'plugins'
   | 'channels-devices'
   | 'logs';
 
@@ -61,6 +62,8 @@ export type RootStackParamList = {
     skillKey?: string;
     skillName?: string;
     skillFilePath?: string;
+    profileProjectId?: string;
+    profileDocument?: { id: string; name: string };
   };
   Connections: undefined;
   Connection: { connectionId: string };

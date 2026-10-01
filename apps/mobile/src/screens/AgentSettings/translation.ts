@@ -50,6 +50,7 @@ export function translateAgentSettingsKey(
   if (key === 'Permissions') return t('Permissions', { ns: 'config' });
   if (key === 'Diagnostics') return t('Diagnostics', { ns: 'config' });
   if (key === 'Back up OpenClaw config') return t('Back up OpenClaw config', { ns: 'config' });
+  if (key === 'Plugins') return t('profile.plugins', { ns: 'settings' });
   if (key === 'Tools') return t('Tools', { ns: 'common' });
   if (key === 'Tool access') return t('Tool access', { ns: 'config' });
   if (key === 'Channels & devices') return t('Channels & devices', { ns: 'common' });

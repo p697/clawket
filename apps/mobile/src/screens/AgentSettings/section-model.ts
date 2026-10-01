@@ -112,6 +112,7 @@ type SectionDefinition = Readonly<{
 const CONNECTION_ROUTE_TITLE = 'Connection';
 
 const SECTION_DEFINITIONS: Readonly<Record<AgentSettingsDetailSection, SectionDefinition>> = {
+  plugins: { title: 'Plugins', gate: all('profileManagement'), groups: [] },
   identity: {
     title: 'Identity',
     groups: [{
@@ -376,17 +377,18 @@ export function buildAgentSettingsSectionModel(
       groups: [],
     };
   }
-  const supported = passesGate(definition.gate, input.capabilities);
+  const native = input.capabilities.profileManagement === true && ['models', 'skills', 'files', 'usage', 'tools', 'plugins'].includes(input.section);
+  const supported = native || passesGate(definition.gate, input.capabilities);
   const locked = input.permissionDenied === true
     || (definition.requiresPro === true && !input.isPro);
 
   return {
     section: input.section,
-    title: definition.title,
+    title: native && input.section === 'files' ? 'AGENTS.md' : definition.title,
     supported,
     locked,
     ...(definition.paywallReason ? { paywallReason: definition.paywallReason } : {}),
-    groups: supported
+    groups: native ? [] : supported
       ? definition.groups
         .map((group) => ({
           id: group.id,
@@ -422,6 +424,7 @@ export function isAgentSettingsSectionSupported(
   section: AgentSettingsSection,
   capabilities: Capabilities,
 ): boolean {
+  if (capabilities.profileManagement && ['models', 'skills', 'files', 'usage', 'tools', 'plugins'].includes(section)) return true;
   const definition = sectionDefinition(section);
   return definition ? passesGate(definition.gate, capabilities) : false;
 }

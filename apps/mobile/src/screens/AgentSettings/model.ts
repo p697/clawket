@@ -199,13 +199,15 @@ const STATS: ReadonlyArray<StatDefinition> = [
   {
     id: 'files',
     placement: 'tile',
-    capabilities: ['files'],
+    capabilities: ['files', 'profileManagement'],
+    capabilityMode: 'any',
     title: () => 'Memory',
     value: (summary) => formatCount(summary.fileCount),
   },
 ];
 
 const CONNECTION_ROWS: ReadonlyArray<RowDefinition> = [
+  { id: 'plugins', placement: 'advanced', title: 'Plugins', capabilities: ['profileManagement'], value: () => undefined },
   {
     id: 'openclaw',
     placement: 'advanced',
@@ -217,7 +219,8 @@ const CONNECTION_ROWS: ReadonlyArray<RowDefinition> = [
     id: 'tools',
     placement: 'advanced',
     title: 'Tools',
-    capabilities: ['tools'],
+    capabilities: ['tools', 'profileManagement'],
+    capabilityMode: 'any',
     value: (summary) => formatCount(summary.toolCount),
   },
   {
@@ -290,7 +293,7 @@ export function buildAgentSettingsModel(
         id: definition.id,
         section: definition.id,
         placement: definition.placement,
-        title: definition.title(summary),
+        title: input.capabilities.profileManagement && definition.id === 'files' ? 'AGENTS.md' : definition.title(summary),
         value: definition.value(summary),
         detail: definition.detail?.(summary),
         attention: definition.attention?.(summary) ?? false,
@@ -326,7 +329,7 @@ function buildRows(
       id: definition.id,
       section: definition.id,
       placement: definition.placement,
-      title: definition.title,
+      title: capabilities.profileManagement && definition.id === 'tools' ? 'MCP' : definition.title,
       value: definition.value(summary, connectionState),
       attention: definition.attention?.(summary, connectionState) ?? false,
       locked: permissionDenied || (definition.requiresPro === true && !isPro),

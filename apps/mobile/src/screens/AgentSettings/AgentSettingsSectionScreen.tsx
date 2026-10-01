@@ -61,6 +61,7 @@ import {
   type AgentSettingsSectionRowDescriptor,
   type AgentSettingsSectionState,
 } from './section-model';
+import { NativeProfileScreen, isNativeProfileSection } from './NativeProfileScreen';
 import { ModelsScreen } from './ModelsScreen';
 import { SkillsSection } from './SkillsSection';
 import { SkillDiscoverScreen } from './SkillDiscoverScreen';
@@ -279,7 +280,7 @@ export function AgentSettingsSectionScreen({
   }, [navigation, refreshRoster]);
 
   let sectionContent: React.ReactNode;
-  if (adapter && agent) {
+  if (adapter && agent && !capabilities.profileManagement) {
     const online = runtime.activeState === 'ready';
     // The foreground grace window: sections keep what they show while the header says Reconnecting….
     const reconnecting = runtime.recovering === true;
@@ -404,6 +405,10 @@ export function AgentSettingsSectionScreen({
     retry,
     section,
   ]);
+
+  if (adapter && agent && !sectionLocked && capabilities.profileManagement && isNativeProfileSection(section)) {
+    return <NativeProfileScreen adapter={adapter} section={section} online={runtime.activeState === 'ready'} isPro={isPro} navigation={navigation} params={route.params} onOpenPaywall={openPaywall} />;
+  }
 
   if (section === 'openclaw' && adapter) {
     return (

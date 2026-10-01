@@ -13,6 +13,7 @@ import { randomUUID, createHash } from 'node:crypto';
 import type { SessionDescriptor, SessionUpdate, SessionHistory, PromptInput, AgentQuestion, ApprovalRequest } from '@clawket/agent-protocol';
 import { nativeSettings, matchesNativeSettings, permissionMode, permissionSelectionPatch, type NativeSettings } from './settings.js';
 import { fastServiceTier, isFastServiceTier, hasServiceTier } from './speed.js';
+import { CodexProfile } from './profile.js';
 import { CodexRpc } from './rpc.js';
 import { codexMessages, codexGeneratedImage, codexTool, codexTurnFailure } from './history.js';
 import { loadDesktopHistory } from './desktop-history.js';
@@ -41,6 +42,7 @@ export class CodexService extends EventEmitter {
   private readonly lockPath: string;
   private rpc: CodexRpc;
   private sessionActivity?: CodexSessionActivity;
+  private profile!: CodexProfile;
   private records: Entry[] = [];
   private metadataState = new WeakMap<Entry, { revision: number; pending: boolean }>();
   private missingActiveRecords = new Set<Entry>();
@@ -112,7 +114,28 @@ export class CodexService extends EventEmitter {
         void this.desktop.connect().catch(() => {});
       }
       this.rpc = this.createRpc();
+      this.profile = this.createProfile();
     } catch (error) { unlinkSync(this.lockPath); throw error; }
+  }
+  private createProfile(): CodexProfile {
+    const rpc = this.rpc;
+    const current = () => !this.stopped && !this.disconnected && this.rpc === rpc;
+    return new CodexProfile({
+      request: async (method, params) => {
+        if (!current()) throw new Error('Reconnect and refresh before continuing');
+        const result = await rpc.request(method, params);
+        if (!current()) throw new Error('Reconnect and refresh before continuing');
+        return result;
+      },
+      projects: async () => {
+        if (!current()) throw new Error('Reconnect and refresh before continuing');
+        if (this.options.device) await this.discover();
+        if (!current()) throw new Error('Reconnect and refresh before continuing');
+        return [...this.projects.values()];
+      },
+      models: () => this.refreshModels(),
+      current,
+    });
   }
   private createRpc(): CodexRpc {
     const rpc = new CodexRpc(this.options.command ?? 'codex', this.project, this.options.env);
@@ -147,6 +170,7 @@ export class CodexService extends EventEmitter {
       await this.rpc.request('account/read', { refreshToken: false });
       if (this.stopped) throw new Error('Codex Bridge stopped');
       this.disconnected = false; this.recoveryFailures = 0;
+      this.profile.clear(); this.profile = this.createProfile();
       // Read-only reconciliation: never resume/replay a task merely because our child restarted.
       for (const r of this.records) {
         const run = this.runs.get(r.id); if (!run || run.desktop || !run.turnId || !r.threadId) continue;
@@ -742,7 +766,7 @@ export class CodexService extends EventEmitter {
     await this.recover();
     const catalog = this.catalog.length ? this.catalog : await this.refreshModels();
     const account = await this.rpc.request('account/read', { refreshToken: false });
-    return { backend: 'codex', sessionActivity: 1, sessionCatalogSync: 1, artifacts: true, modelReady: account.requiresOpenaiAuth !== true || !!account.account, model: catalog.find(m => m.isDefault)?.model ?? '', vision: true, project: basename(this.project), projects: !!this.options.device, fastMode: true, sessionPermissions: true, sessionArchive: true, promptStatus: true, desktopConnected: this.desktop?.ready === true };
+    return { backend: 'codex', sessionActivity: 1, profileVersion: 1, sessionCatalogSync: 1, artifacts: true, modelReady: account.requiresOpenaiAuth !== true || !!account.account, model: catalog.find(m => m.isDefault)?.model ?? '', vision: true, project: basename(this.project), projects: !!this.options.device, fastMode: true, sessionPermissions: true, sessionArchive: true, promptStatus: true, desktopConnected: this.desktop?.ready === true };
   }
   async request(frame: CodexRequest): Promise<unknown> {
     const result = await this.dispatch(frame);
@@ -754,6 +778,20 @@ export class CodexService extends EventEmitter {
     const p = frame.params ?? {};
     switch (frame.method) {
       case 'health': return this.health();
+      case 'profile.projects': await this.recover(); return this.profile.projects();
+      case 'profile.defaults': await this.recover(); return this.profile.defaults();
+      case 'profile.defaults.set': await this.recover(); return this.profile.setDefaults(p);
+      case 'profile.usage': await this.recover(); return this.profile.usage();
+      case 'profile.skills': {
+        if (p.forceReload !== undefined && typeof p.forceReload !== 'boolean') throw new Error('Invalid skill refresh');
+        await this.recover(); return this.profile.skills(p.projectId, p.forceReload === true);
+      }
+      case 'profile.skills.set': await this.recover(); return this.profile.setSkillEnabled(p.id, p.enabled);
+      case 'profile.instructions': await this.recover(); return this.profile.instructions(p.projectId);
+      case 'profile.document': await this.recover(); return this.profile.document(p.id);
+      case 'profile.document.set': await this.recover(); return this.profile.saveDocument(p);
+      case 'profile.mcp': await this.recover(); return this.profile.mcp();
+      case 'profile.plugins': await this.recover(); return this.profile.plugins(p.projectId);
       case 'agents.list': return [{ connectionId: '', agentId: 'codex', name: this.options.device ? 'Codex' : `Codex · ${basename(this.project)}`, isMain: true, mainSessionKey: '', entryMode: 'sessions' }];
       case 'projects.list': {
         if (!this.options.device) throw new Error('Project browsing is unavailable');
@@ -1250,7 +1288,7 @@ export class CodexService extends EventEmitter {
     for (const timer of this.publishTimers.values()) clearTimeout(timer); this.publishTimers.clear();
     for (const waiter of this.settingsWaiters.values()) { clearTimeout(waiter.timer); waiter.reject(new Error('Codex Bridge stopped')); }
     this.settingsWaiters.clear(); this.sessionActivity?.stop(); this.desktop?.stop();
-    await this.rpc.stop(); this.artifacts.clear();
+    this.profile.clear(); await this.rpc.stop(); this.artifacts.clear();
     if (existsSync(this.lockPath)) unlinkSync(this.lockPath);
   }
 }

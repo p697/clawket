@@ -219,3 +219,19 @@ it.each([
   } }) });
   expect((await state).permissions?.unencryptedTransport).toBe(expected);
 });
+
+ it('negotiates profile version and rejects corrupt management replies before rendering', async () => {
+  expect(adapter.capabilities.profileManagement).toBe(false);
+  await expect(adapter.management.profile!.usage()).rejects.toThrow();
+  const connected = adapter.connect(); sockets[0].open();
+  let request = JSON.parse(sockets[0].sent.at(-1)!);
+  sockets[0].onmessage?.({ data: JSON.stringify({ type: 'res', id: request.id, ok: true, payload: { backend: 'codex', profileVersion: 1, models: [] } }) });
+  await connected; expect(adapter.capabilities.profileManagement).toBe(true);
+  const read = adapter.management.profile!.usage(); request = JSON.parse(sockets[0].sent.at(-1)!);
+  expect(request.method).toBe('profile.usage');
+  sockets[0].onmessage?.({ data: JSON.stringify({ type: 'res', id: request.id, ok: true, payload: { plan: null, quotas: [], lifetimeTokens: null, daily: [] } }) });
+  await expect(read).resolves.toMatchObject({ lifetimeTokens: null });
+  const corrupted = adapter.management.profile!.usage(); request = JSON.parse(sockets[0].sent.at(-1)!);
+  sockets[0].onmessage?.({ data: JSON.stringify({ type: 'res', id: request.id, ok: true, payload: { plan: null, quotas: 'broken', lifetimeTokens: null, daily: [] } }) });
+  await expect(corrupted).rejects.toThrow();
+});

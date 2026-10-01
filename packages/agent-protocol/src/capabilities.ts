@@ -1,6 +1,8 @@
 import type { BackendKind, PromptAttachment } from './descriptors';
 
 export interface Capabilities {
+  /** Complete profile management v1; negotiated independently of session controls. */
+  profileManagement?: boolean;
   projects?: boolean;
   agentQuestions?: boolean;
   sessionBranch?: boolean;
@@ -86,6 +88,7 @@ export interface Capabilities {
 export type Capability = keyof Capabilities;
 
 export const CAPABILITY_KEYS = [
+  'profileManagement',
   'projects',
   'agentQuestions',
   'sessionBranch',
@@ -285,7 +288,7 @@ export const CAPABILITY_MATRIX: Record<BackendKind, Capabilities> = {
   'claude-code': { ...YOUMIND_CAPABILITIES, promptStatus: true, steer: false, sessionBranch: true, projects: true, chat: true, abort: true, history: true, attachments: true,
     sessions: true, sessionCreate: true, sessionRename: true, sessionReset: true, sessionDelete: true,
     models: true, modelPerSession: true, agentQuestions: true, execApproval: true },
-  codex: { ...YOUMIND_CAPABILITIES, promptStatus: true, projects: true, chat: true, abort: true, steer: true, history: true, attachments: true,
+  codex: { ...YOUMIND_CAPABILITIES, profileManagement: true, promptStatus: true, projects: true, chat: true, abort: true, steer: true, history: true, attachments: true,
     sessions: true, sessionCreate: true, sessionRename: true, sessionReset: true, sessionDelete: true, sessionArchive: true, sessionPermissions: true,
     models: true, modelPerSession: true, fastMode: true, thinkingLevels: true, skills: true, agentQuestions: true, sessionBranch: true, execApproval: true },
   pi: { ...YOUMIND_CAPABILITIES, promptStatus: true, chat: true, abort: true, steer: true, history: true, attachments: true,

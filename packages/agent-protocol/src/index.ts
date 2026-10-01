@@ -7,3 +7,4 @@ export * from './management';
 export * from './mock';
 export * from './session-files';
 export * from './session-catalog';
+export * from './profile';

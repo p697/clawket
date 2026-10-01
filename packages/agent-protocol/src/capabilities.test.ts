@@ -18,9 +18,11 @@ function enabled(backend: keyof typeof CAPABILITY_MATRIX): Capability[] {
 
 describe('canonical capability contract', () => {
   it('publishes the frozen product matrix without conflating Hermes with legacy UI flags', () => {
-    expect(enabled('openclaw')).toEqual(CAPABILITY_KEYS.filter((key) => !['projects', 'agentQuestions', 'sessionBranch', 'steer', 'documentAttachments', 'modelHealth', 'fastMode', 'sessionPermissions', 'sessionArchive', 'promptStatus'].includes(key)));
+    expect(enabled('openclaw')).toEqual(CAPABILITY_KEYS.filter((key) => !['profileManagement', 'projects', 'agentQuestions', 'sessionBranch', 'steer', 'documentAttachments', 'modelHealth', 'fastMode', 'sessionPermissions', 'sessionArchive', 'promptStatus'].includes(key)));
     expect(resolveCapabilities('codex')).toMatchObject({ projects: true, agentQuestions: true, sessionBranch: true, modelPerSession: true, channels: false });
     expect(resolveCapabilities('openclaw', { projects: true }).projects).toBeFalsy();
+    expect(resolveCapabilities('codex', { profileManagement: false }).profileManagement).toBe(false);
+    expect(resolveCapabilities('hermes', { profileManagement: true }).profileManagement).toBeFalsy();
     expect(resolveCapabilities('pi')).toMatchObject({ chat: true, agentQuestions: true, sessionBranch: true, modelPerSession: true, execApproval: false, channels: false, cron: false });
     expect(enabled('local-model')).toEqual(['chat', 'abort', 'history', 'attachments', 'models']);
     expect(enabled('hermes')).toEqual([

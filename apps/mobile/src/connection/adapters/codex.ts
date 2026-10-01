@@ -1,4 +1,5 @@
 import { sessionActivityUpdate, validateSessionActivity } from './session-activity';
+import { validProfileReply } from './profile-reply';
 import { artifactHistoryDisplay, artifactUpdateDisplay } from './artifact-display';
 import type { ArtifactOperations } from '@clawket/agent-protocol';
 import {
@@ -36,7 +37,7 @@ export class CodexAdapter implements AgentAdapter {
   };
   get artifacts(): ArtifactOperations | undefined { return this.currentState === 'ready' && this.artifactsEnabled ? this.artifactOperations : undefined; }
   readonly connection: ConnectionDescriptor;
-  readonly capabilities = resolveCapabilities('codex', { promptStatus: false, attachments: false, fastMode: false, sessionPermissions: false, sessionArchive: false });
+  readonly capabilities = resolveCapabilities('codex', { promptStatus: false, attachments: false, fastMode: false, sessionPermissions: false, sessionArchive: false, profileManagement: false });
   readonly projects = { list: () => this.rpc<import('@clawket/agent-protocol').ProjectDescriptor[]>('projects.list') };
   readonly questions = {
     list: (key: string) => this.rpc<AgentQuestion[]>('questions.list', { sessionKey: key }),
@@ -88,7 +89,19 @@ export class CodexAdapter implements AgentAdapter {
       if (change.state !== 'ready') this.setState(change.state === 'closed' ? 'offline' : change.state, change.reason);
     });
     this.transport.onSocketRetired(() => { this.epoch++; this.sessionCatalog.retire(); this.rejectPending(); });
-    this.management = { approvals: { listExec: sessionKey => this.rpc('approvals.list', { sessionKey }), resolveExec: async (id, decision) => { await this.rpc('approvals.resolve', { id, decision }); } }, skills: { status: (_agentId, context) => this.rpc('skills.list', context?.sessionKey ? { sessionKey: context.sessionKey } : {}) }, models: {
+    this.management = { profile: {
+      projects: () => this.profileRpc('profile.projects'),
+      defaults: () => this.profileRpc('profile.defaults'),
+      setDefaults: input => this.profileRpc('profile.defaults.set', input),
+      usage: () => this.profileRpc('profile.usage'),
+      skills: (projectId, forceReload) => this.profileRpc('profile.skills', { projectId, forceReload }),
+      setSkillEnabled: (id, enabled) => this.profileRpc('profile.skills.set', { id, enabled }),
+      instructions: projectId => this.profileRpc('profile.instructions', { projectId }),
+      document: id => this.profileRpc('profile.document', { id }),
+      saveDocument: input => this.profileRpc('profile.document.set', input),
+      mcp: () => this.profileRpc('profile.mcp'),
+      plugins: projectId => this.profileRpc('profile.plugins', { projectId }),
+    }, approvals: { listExec: sessionKey => this.rpc('approvals.list', { sessionKey }), resolveExec: async (id, decision) => { await this.rpc('approvals.resolve', { id, decision }); } }, skills: { status: (_agentId, context) => this.rpc('skills.list', context?.sessionKey ? { sessionKey: context.sessionKey } : {}) }, models: {
       list: async () => withNativeModelOrder(await this.rpc<ModelSelectionState>('models.list'), this.unencryptedTransport).models,
       getSelection: async key => withNativeModelOrder(await this.rpc<ModelSelectionState>('models.list', { sessionKey: key ?? undefined }), this.unencryptedTransport),
       setSelection: async params => withNativeModelOrder(await this.rpc<ModelSelectionWriteResult>('models.select', { ...params }), this.unencryptedTransport),
@@ -105,6 +118,13 @@ export class CodexAdapter implements AgentAdapter {
     } };
   }
 
+  private async profileRpc<T>(method: string, params?: Record<string, unknown>): Promise<T> {
+    if (!this.capabilities.profileManagement) throw new AdapterError('unsupported', 'Update the Bridge to manage the Codex profile.');
+    const value = await this.rpc<T>(method, params);
+    if (!validProfileReply(method, value)) throw new AdapterError('unsupported', 'Profile data could not be validated. Refresh and try again.');
+    return value;
+  }
+
   get state(): ConnectionState { return this.currentState; }
 
   private setState(state: ConnectionState, reason?: string): void {
@@ -119,12 +139,13 @@ export class CodexAdapter implements AgentAdapter {
     try {
       // Relay authenticates its socket; only direct connections need connect/token.
       // A Relay connect request starts OpenClaw's challenge lifecycle.
-      const health = await this.rpc<{ sessionActivity?: unknown; artifacts?: boolean; promptStatus?: boolean; sessionCatalogSync?: unknown; backend: string; vision: boolean; model: string; projects?: boolean; fastMode?: boolean; sessionPermissions?: boolean; sessionArchive?: boolean }>(this.record.transportKind === 'relay' ? 'health' : 'connect', { token: this.record.auth?.token });
+      const health = await this.rpc<{ sessionActivity?: unknown; profileVersion?: unknown; artifacts?: boolean; promptStatus?: boolean; sessionCatalogSync?: unknown; backend: string; vision: boolean; model: string; projects?: boolean; fastMode?: boolean; sessionPermissions?: boolean; sessionArchive?: boolean }>(this.record.transportKind === 'relay' ? 'health' : 'connect', { token: this.record.auth?.token });
       if (epoch !== this.epoch) return;
       if (health.backend !== 'codex') throw new AdapterError('unsupported', 'Endpoint is not a Codex Bridge');
       this.activityEnabled = health.sessionActivity === 1;
       this.sessionCatalog.configure(health.sessionCatalogSync);
       this.artifactsEnabled = health.artifacts === true;
+      this.capabilities.profileManagement = health.profileVersion === 1;
       this.capabilities.promptStatus = health.promptStatus === true;
       this.capabilities.attachments = true; this.capabilities.projects = health.projects === true; this.capabilities.fastMode = health.fastMode === true;
       this.capabilities.sessionPermissions = health.sessionPermissions === true; this.capabilities.sessionArchive = health.sessionArchive === true;
@@ -178,11 +199,12 @@ export class CodexAdapter implements AgentAdapter {
   async probe(timeoutMs = 5_000): Promise<boolean> {
     const epoch = this.epoch;
     try {
-      const health = await this.rpc<{ sessionActivity?: unknown; artifacts?: boolean; promptStatus?: boolean; sessionCatalogSync?: unknown; backend: string; vision: boolean; model: string; projects?: boolean; fastMode?: boolean; sessionPermissions?: boolean; sessionArchive?: boolean }>('health', {}, timeoutMs);
+      const health = await this.rpc<{ sessionActivity?: unknown; profileVersion?: unknown; artifacts?: boolean; promptStatus?: boolean; sessionCatalogSync?: unknown; backend: string; vision: boolean; model: string; projects?: boolean; fastMode?: boolean; sessionPermissions?: boolean; sessionArchive?: boolean }>('health', {}, timeoutMs);
       if (epoch !== this.epoch || health.backend !== 'codex') return false;
       this.activityEnabled = health.sessionActivity === 1;
       this.sessionCatalog.configure(health.sessionCatalogSync);
       this.artifactsEnabled = health.artifacts === true;
+      this.capabilities.profileManagement = health.profileVersion === 1;
       this.capabilities.promptStatus = health.promptStatus === true;
       this.capabilities.attachments = true; this.capabilities.projects = health.projects === true; this.capabilities.fastMode = health.fastMode === true;
       this.capabilities.sessionPermissions = health.sessionPermissions === true; this.capabilities.sessionArchive = health.sessionArchive === true;

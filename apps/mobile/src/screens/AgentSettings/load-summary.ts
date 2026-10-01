@@ -25,10 +25,22 @@ export async function loadAgentSettingsSummary(
     }));
   }
 
-  if (adapter.capabilities.skills && management?.skills?.status) {
+  if (!adapter.capabilities.profileManagement && adapter.capabilities.skills && management?.skills?.status) {
     tasks.push(ignoreFailure(async () => {
       const status = await management.skills?.status?.(agent.agentId);
       if (status) summary.installedSkillCount = status.skills.length;
+    }));
+  }
+
+  if (adapter.capabilities.profileManagement && management?.profile) {
+    const profile = management.profile;
+    tasks.push(ignoreFailure(async () => {
+      const project = (await profile.projects()).find(row => row.available);
+      if (!project) return;
+      await Promise.all([
+        ignoreFailure(async () => { summary.installedSkillCount = (await profile.skills(project.id)).skills.length; }),
+        ignoreFailure(async () => { summary.fileCount = (await profile.instructions(project.id)).filter(row => row.exists).length; }),
+      ]);
     }));
   }
 

@@ -995,6 +995,7 @@ export type ConfigOperations = Partial<{
 }>;
 
 export type ManagementOperations = Partial<{
+  profile: import('./profile').AgentProfileOperations;
   models: ModelsOperations;
   skills: SkillsOperations;
   cron: CronOperations;

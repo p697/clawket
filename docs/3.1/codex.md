@@ -94,6 +94,10 @@ This launches a Clawket-owned App Server using the desktop's installed executabl
 
 The exact native ChatGPT unsupported-model refusal maps to a fixed model-selection/update notice in live completion and history (19 Mobile locales). The matcher accepts only a bounded exact refusal or its known HTTP 400 envelope; it never exposes provider bodies or infers availability from unrelated errors. Catalog membership is not successful inference evidence. [Incident and verification](codex-desktop-runtime-2026-09-30.md). The explicit `CLAWKET_CODEX_DESKTOP_LIVE=1 npm run test:codex-desktop-integration --workspace packages/bridge-runtime` command uses native login in an isolated test project; ordinary CI tests keep disposable home profiles.
 
+### Agent profile management
+
+Owner-authorized default model/reasoning, complete installed skills, native quota, read-only MCP/plugins and paid instruction editing are specified in [Codex Agent profile](codex-profile.md). They use negotiated `profileManagement` and isolated management RPCs; existing native thread ownership and continuation rules remain unchanged.
+
 ### Local display names
 
 New Bridge configurations default to `Codex · Device name` / `Claude Code · Device name`. macOS prefers the system ComputerName; Windows/Linux and unavailable macOS names use the hostname, with a plain product fallback. The label is saved once and reused across pairing refresh and computer renames. Existing Bridge configurations without that field retain their plain product default; existing phone connections and manual names remain unchanged on re-pairing.

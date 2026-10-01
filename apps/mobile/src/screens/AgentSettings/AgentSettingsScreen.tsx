@@ -1,3 +1,4 @@
+import { NativeQuotaCard } from './NativeQuotaCard';
 import { useUsageCalendar } from './useUsageCalendar';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -86,6 +87,7 @@ export type AgentSettingsViewProps = Readonly<{
    * showed dashes for counts that were only late).
    */
   summaryLoading?: boolean;
+  quotaCard?: React.ReactNode;
   identityDetail?: string;
   /** Agents on the connection; the shared Gateway heartbeat line shows only for a lone Agent. */
   agentCount?: number;
@@ -319,6 +321,7 @@ export function AgentSettingsScreen({
       connectionState={connectionState}
       state={state}
       isPro={viewProps.isPro}
+      quotaCard={accessibleAdapter?.capabilities.profileManagement && accessibleAdapter.management?.profile ? <NativeQuotaCard profile={accessibleAdapter.management.profile} online={connectionState === 'ready'} refreshing={refreshing} onPress={() => viewProps.onNavigate('AgentSettingsSection', { connectionId: connection.id, agentId: agent?.agentId ?? '', section: 'usage' })} /> : undefined}
       summary={summary}
       summaryLoading={summaryPendingKey !== null && summaryPendingKey === summaryKey}
       identityDetail={viewProps.identityDetail}
@@ -338,6 +341,7 @@ export function AgentSettingsView({
   isPro,
   summary,
   summaryLoading = false,
+  quotaCard,
   identityDetail,
   agentCount,
   errorMessage,
@@ -568,6 +572,7 @@ export function AgentSettingsView({
               <Text testID="agent-settings-identity-detail" style={styles.profileDetail}>{identityDetailLabel}</Text>
             ) : null}
           </Pressable>
+          {quotaCard}
           <AgentSettingsStats
             stats={model.stats}
             loading={summaryLoading}
