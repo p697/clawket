@@ -13,6 +13,7 @@ import {
 import { SheetHeaderButton } from './SheetHeaderButton';
 
 const HANDLE_WIDTH = 36;
+const LABELLED_SIDE_SLOT_WIDTH = 104;
 /**
  * Air between the header row and the body. The row already carries 4 points
  * under a 44-point button, so content starts 16 points below the control edge
@@ -20,15 +21,19 @@ const HANDLE_WIDTH = 36;
  */
 const HEADER_BOTTOM_PADDING = Space.md;
 
-export function useSheetBackgroundStyle(): ViewStyle {
+/** `grouped` sheets hold `SettingsGroup` cards on the grouped canvas, like settings pages. */
+export type SheetTone = 'canvas' | 'grouped';
+
+export function useSheetBackgroundStyle(tone: SheetTone = 'canvas'): ViewStyle {
   const { theme } = useAppTheme();
+  const backgroundColor = tone === 'grouped' ? theme.colors.canvasGrouped : theme.colors.canvas;
   return useMemo(
     () => ({
-      backgroundColor: theme.colors.canvas,
+      backgroundColor,
       borderTopLeftRadius: Radius.bottomSheet,
       borderTopRightRadius: Radius.bottomSheet,
     }),
-    [theme.colors.canvas],
+    [backgroundColor],
   );
 }
 
@@ -48,6 +53,11 @@ export type SheetHeaderProps = {
   titleContent?: React.ReactNode;
   onClose: () => void;
   closeAccessibilityLabel: string;
+  /**
+   * Replaces the close button, e.g. a sub-page's labelled Back. Both side
+   * slots then share one wider width so the title stays centered.
+   */
+  leading?: React.ReactNode;
   right?: React.ReactNode;
   testID?: string;
 };
@@ -57,6 +67,7 @@ export function SheetHeader({
   titleContent,
   onClose,
   closeAccessibilityLabel,
+  leading,
   right,
   testID,
 }: SheetHeaderProps): React.JSX.Element {
@@ -65,20 +76,22 @@ export function SheetHeader({
 
   return (
     <View testID={testID ? `${testID}-header` : undefined} style={styles.header}>
-      <View style={styles.sideSlot}>
-        <SheetHeaderButton
-          icon={X}
-          onPress={onClose}
-          accessibilityLabel={closeAccessibilityLabel}
-          testID={testID ? `${testID}-close` : undefined}
-        />
+      <View style={[styles.sideSlot, leading ? styles.labelledSideSlot : null]}>
+        {leading ?? (
+          <SheetHeaderButton
+            icon={X}
+            onPress={onClose}
+            accessibilityLabel={closeAccessibilityLabel}
+            testID={testID ? `${testID}-close` : undefined}
+          />
+        )}
       </View>
       {titleContent ? (
         <View style={styles.titleSlot}>{titleContent}</View>
       ) : (
         <Text style={styles.title} numberOfLines={1}>{title}</Text>
       )}
-      <View style={styles.trailingSlot}>{right}</View>
+      <View style={[styles.trailingSlot, leading ? styles.labelledSideSlot : null]}>{right}</View>
     </View>
   );
 }
@@ -124,6 +137,10 @@ function createHeaderStyles(
       minHeight: ControlSize.floatingButton,
       alignItems: 'flex-start',
       justifyContent: 'center',
+    },
+    // A labelled Back needs room for its word; the trailing slot matches it.
+    labelledSideSlot: {
+      width: LABELLED_SIDE_SLOT_WIDTH,
     },
     trailingSlot: {
       minWidth: ControlSize.floatingButton,

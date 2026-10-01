@@ -51,8 +51,6 @@ import {
   Server,
   Star,
   Shield,
-  ShieldAlert,
-  ShieldQuestionMark,
   Terminal,
 } from 'lucide-react-native';
 import { ChevronLeft } from '../../components/ui/DirectionalIcon';
@@ -407,8 +405,8 @@ export type ThreadViewProps = Readonly<{
   onSelectSlashCommand?: (command: SlashCommand) => void;
   onDismissSlashSuggestions?: () => void;
   onReviewRuntimeSettings?: () => void;
+  /** The conversation's confirmed permission mode; full access marks the header (A+ model sheet, 2026-10-01). */
   permissionMode?: string | null;
-  onOpenPermissions?: () => void;
   onResolveApproval?: (
     approvalId: string,
     decision: 'allow-once' | 'allow-always' | 'deny' | 'approve' | 'reject',
@@ -529,7 +527,6 @@ export function ThreadView({
   onDismissSlashSuggestions,
   onReviewRuntimeSettings,
   permissionMode,
-  onOpenPermissions,
   onResolveApproval,
   testID = 'thread-screen',
 }: ThreadViewProps): React.JSX.Element {
@@ -1193,6 +1190,7 @@ export function ThreadView({
             platform={agentPlatform}
             status={avatarStatus}
             material={wallpaperActive ? 'glass' : 'surface'}
+            warning={capabilities.sessionPermissions && permissionMode === 'full-access' ? t('Full access', { ns: 'chat' }) : undefined}
             accessibilityLabel={copy.settings}
             onPress={!locked ? onOpenSettings : undefined}
           />
@@ -1416,17 +1414,11 @@ export function ThreadView({
             ) : undefined)}
             testID={`${testID}-composer`}
             accessory={capabilities.models ? ({ drafting, room }: ComposerAccessorySpace) => {
-              // Only a risky or unknown permission mode earns a place in the capsule; the model sheet lists it always.
-              const showShield = Boolean(capabilities.sessionPermissions && onOpenPermissions && (permissionMode == null || permissionMode === 'full-access'));
-              const chipRoom = room == null ? null : room - Space.sm - (showShield ? HitSize.sm + Space.xs : 0);
+              // The capsule holds the model only: permissions live in the model sheet,
+              // and full access marks the header (A+ model sheet, owner decision 2026-10-01).
+              const chipRoom = room == null ? null : room - Space.sm;
               return (
                 <View style={styles.composerOptions}>
-                  {showShield ? <Pressable testID="thread-permissions" accessibilityRole="button"
-                    accessibilityLabel={`${t('Permissions', { ns: 'common' })}: ${permissionMode == null ? t('Unknown', { ns: 'common' }) : t('Full access', { ns: 'chat' })}`}
-                    accessibilityHint={permissionMode == null ? t('Retry', { ns: 'common' }) : undefined}
-                    onPress={onOpenPermissions} hitSlop={COMPOSER_CHIP_HIT_SLOP} style={styles.permissionOption}>
-                    {permissionMode == null ? <ShieldQuestionMark size={19} color={theme.colors.inkSecondary} strokeWidth={1.75} /> : <ShieldAlert size={19} color={theme.colors.warn} strokeWidth={1.75} />}
-                  </Pressable> : null}
                   {onOpenModelPicker ? <ComposerModelChip model={model} label={modelChipLabel}
                     iconOnly={drafting || (chipRoom != null && chipRoom < COMPOSER_CHIP_NAMED_MIN_WIDTH)}
                     maxWidth={chipRoom == null ? undefined : chipRoom} onPress={onOpenModelPicker}
@@ -2530,6 +2522,5 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       zIndex: 2,
     },
     composerOptions: { flexDirection: 'row', alignItems: 'center', gap: Space.xs, flexShrink: 1, minWidth: 0, marginLeft: Space.sm },
-    permissionOption: { width: HitSize.sm, height: HitSize.sm, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   });
 }

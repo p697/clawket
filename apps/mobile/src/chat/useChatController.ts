@@ -2692,6 +2692,7 @@ export function useChatController({
   );
 
   const {
+    recentModels, modelScope,
     hasRuntimeSettings, runtimeSettingsBusy, runtimeSettingsPendingRef, runtimeSettingsUnconfirmed, runtimeSettingsUnconfirmedRef,
     fastMode, permissions, permissionPickerVisible, setPermissionPickerVisible,
     onSelectFastMode, onSelectPermissions, openPermissionPicker,
@@ -3556,6 +3557,8 @@ export function useChatController({
     dismissSlashSuggestions,
     hasRuntimeSettings, runtimeSettingsBusy, runtimeSettingsUnconfirmed, fastMode, permissions,
     permissionPickerVisible, setPermissionPickerVisible, onSelectFastMode, onSelectPermissions, openPermissionPicker,
+    recentModels,
+    modelScope,
     modelPickerVisible,
     setModelPickerVisible,
     modelPickerLoading,

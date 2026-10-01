@@ -137,3 +137,23 @@ it('remembers the last chat per connection and agent, clearing only deleted targ
   await SessionPreferencesService.setLastSession('b', 'codex', '');
   expect(await SessionPreferencesService.getLastSession('b', 'codex')).toBe('second');
 });
+
+it('remembers recently chosen models per connection, newest first, bounded and cleared with the connection', async () => {
+  for (const ref of ['openai/a', 'openai/b', 'openai/a', 'anthropic/c', 'x/d', 'x/e', 'x/f', 'x/g']) {
+    await SessionPreferencesService.recordRecentModel('gw-1', ref);
+  }
+  expect(await SessionPreferencesService.getRecentModels('gw-1')).toEqual(['x/g', 'x/f', 'x/e', 'x/d', 'anthropic/c', 'openai/a']);
+  expect(await SessionPreferencesService.getRecentModels('gw-2')).toEqual([]);
+  // Blank or oversized references never enter the list.
+  expect(await SessionPreferencesService.recordRecentModel('gw-1', '  ')).toHaveLength(6);
+  expect(await SessionPreferencesService.recordRecentModel('gw-1', 'x/'.padEnd(300, 'y'))).toHaveLength(6);
+  await SessionPreferencesService.clearConnection('gw-1');
+  expect(await SessionPreferencesService.getRecentModels('gw-1')).toEqual([]);
+});
+
+it('reads a corrupted recent-model record as empty', async () => {
+  await AsyncStorage.setItem('clawket.sessionPreferences.v1.gw-3::recentModels', '{not json');
+  expect(await SessionPreferencesService.getRecentModels('gw-3')).toEqual([]);
+  await AsyncStorage.setItem('clawket.sessionPreferences.v1.gw-3::recentModels', JSON.stringify(['ok/model', 7, '', 'ok/model']));
+  expect(await SessionPreferencesService.getRecentModels('gw-3')).toEqual(['ok/model']);
+});

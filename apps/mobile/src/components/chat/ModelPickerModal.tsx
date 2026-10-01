@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Pressable,
-  ScrollView,
   type SectionListData,
   StyleSheet,
   Text,
@@ -9,7 +8,7 @@ import {
 } from 'react-native';
 import { BottomSheetSectionList } from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
-import { Check, Folder, Search, Settings2 } from 'lucide-react-native';
+import { Check, Search, Settings2 } from 'lucide-react-native';
 import {
   Button,
   CompositionSafeBottomSheetTextInput,
@@ -47,21 +46,8 @@ export type ModelInfo = {
   resolvedModel?: string;
 };
 
-/**
- * The conversation's own settings, shown above the catalog (A+ chat design,
- * owner decision 2026-09-30): the composer keeps one model chip, so thinking
- * depth, context left and the project moved here from the composer and header.
- */
-export type ModelSheetSession = Readonly<{
-  thinking?: Readonly<{ current: string; options: ReadonlyArray<string>; onSelect: (level: string) => void }>;
-  contextRemainingPercent?: number | null;
-  /** `label` is the home-relative path on screen; `path` is read aloud in full. */
-  project?: Readonly<{ label: string; path: string }> | null;
-}>;
-
 type Props = {
   visible: boolean;
-  session?: ModelSheetSession;
   onClose: () => void;
   title?: string;
   models: ModelInfo[];
@@ -84,7 +70,6 @@ export { resolveProviderModel };
 
 export function ModelPickerModal({
   visible,
-  session,
   onClose,
   title,
   models,
@@ -209,36 +194,6 @@ export function ModelPickerModal({
       </View>
     );
   }, [styles, t]);
-
-  const contextPercent = session?.contextRemainingPercent;
-  const sessionSettings = session && (session.thinking?.options.length || contextPercent != null || session.project) ? (
-    <View testID="model-picker-session" style={styles.session}>
-      {session.thinking?.options.length ? <View style={styles.sessionBlock}>
-        <Text style={styles.sessionLabel}>{t('Thinking Level')}</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="always"
-          contentContainerStyle={styles.thinkingOptions}>
-          {session.thinking.options.map((level) => {
-            const checked = (session.thinking?.current || 'off') === level;
-            return <Pressable key={level} testID={`model-picker-thinking-${level}`} accessibilityRole="radio"
-              accessibilityState={{ checked }} onPress={() => { triggerLightImpact(); session.thinking?.onSelect(level); }}
-              style={({ pressed }) => [styles.thinkingOption, checked ? styles.thinkingOptionChecked : null, pressed ? styles.pressed : null]}>
-              <Text style={[styles.thinkingOptionText, checked ? styles.thinkingOptionTextChecked : null]}>{t(`thinking_${level}`)}</Text>
-            </Pressable>;
-          })}
-        </ScrollView>
-      </View> : null}
-      {contextPercent != null ? <View testID="model-picker-context" style={styles.sessionBlock}>
-        <Text style={styles.sessionLabel}>{t('Context remaining: {{percent}}%', { percent: contextPercent })}</Text>
-        <View style={styles.contextTrack} accessible={false}>
-          <View style={[styles.contextFill, contextPercent <= 15 ? styles.contextFillLow : null, { width: `${contextPercent}%` }]} />
-        </View>
-      </View> : null}
-      {session.project ? <View testID="model-picker-project" accessible accessibilityLabel={session.project.path} style={styles.project}>
-        <Folder size={16} color={theme.colors.inkSecondary} strokeWidth={1.75} />
-        <Text numberOfLines={1} ellipsizeMode="middle" style={styles.projectText}>{session.project.label}</Text>
-      </View> : null}
-    </View>
-  ) : null;
 
   const renderControls = useCallback(() => (
     <View style={styles.listHeader}>
@@ -369,7 +324,6 @@ export function ModelPickerModal({
       androidKeyboardInputMode="adjustResize"
       style={styles.sheetContent}
     >
-      {sessionSettings}
       {!error ? renderControls() : null}
       {content}
     </Sheet>
@@ -502,72 +456,6 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
       fontSize: FontSize.secondary,
       lineHeight: LineHeight.secondary,
       textAlign: 'center',
-    },
-    session: {
-      paddingHorizontal: Space.lg,
-      paddingBottom: Space.md,
-      gap: Space.md,
-      backgroundColor: colors.canvas,
-    },
-    sessionBlock: {
-      gap: Space.sm,
-    },
-    sessionLabel: {
-      color: colors.inkSecondary,
-      fontSize: FontSize.caption,
-      lineHeight: LineHeight.caption,
-      fontWeight: FontWeight.semibold,
-    },
-    thinkingOptions: {
-      gap: Space.xs,
-    },
-    thinkingOption: {
-      minHeight: ControlSize.pill,
-      justifyContent: 'center',
-      paddingHorizontal: Space.md,
-      borderRadius: Radius.full,
-      backgroundColor: colors.surface,
-    },
-    thinkingOptionChecked: {
-      backgroundColor: colors.accent,
-    },
-    thinkingOptionText: {
-      color: colors.ink,
-      fontSize: FontSize.caption,
-      lineHeight: LineHeight.caption,
-      fontWeight: FontWeight.semibold,
-    },
-    thinkingOptionTextChecked: {
-      color: colors.onAccent,
-    },
-    pressed: {
-      opacity: 0.7,
-    },
-    contextTrack: {
-      height: Space.xs,
-      borderRadius: Radius.full,
-      backgroundColor: colors.line,
-      overflow: 'hidden',
-    },
-    contextFill: {
-      height: '100%',
-      borderRadius: Radius.full,
-      backgroundColor: colors.accent,
-    },
-    contextFillLow: {
-      backgroundColor: colors.warn,
-    },
-    project: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: Space.xs,
-    },
-    projectText: {
-      flex: 1,
-      minWidth: 0,
-      color: colors.inkSecondary,
-      fontSize: FontSize.caption,
-      lineHeight: LineHeight.caption,
     },
   });
 }

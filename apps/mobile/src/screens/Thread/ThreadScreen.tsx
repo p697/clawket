@@ -1111,7 +1111,6 @@ function ThreadScreenContent({
           controller.retryModelPickerLoad();
         } : undefined}
         permissionMode={controller.permissions?.mode}
-        onOpenPermissions={() => { Keyboard.dismiss(); controller.openPermissionPicker(); }}
         onResolveApproval={controller.resolveApproval}
       />
       <RunInputSheet visible={Boolean(runInputId) && !sessionPreview} scope={`${connectionId}:${agentId}:${sessionKey}`}
@@ -1174,40 +1173,40 @@ function ThreadScreenContent({
           onClose: controller.preview.closePreview,
           onIndexChange: controller.preview.setPreviewIndex,
         }}
-        modelPicker={{
-          visible: !sessionPreview && controller.modelPickerVisible,
+        modelSheet={{
+          visible: !sessionPreview && (controller.modelPickerVisible || controller.permissionPickerVisible),
+          focusPermissions: controller.permissionPickerVisible,
+          scope: controller.modelScope,
+          // Native settings backends (Codex) confirm every write; the others switch at once.
+          writes: controller.hasRuntimeSettings ? 'native' : 'optimistic',
           loading: controller.modelPickerLoading,
+          busy: controller.hasRuntimeSettings ? controller.runtimeSettingsBusy : undefined,
+          running: controller.hasRuntimeSettings ? controller.isSending : undefined,
           error: controller.modelPickerError,
           models: controller.availableModels,
-          configuredDefaultModel: controller.configuredDefaultModel,
-          onManage: () => openAgentSection('models'),
           providers: controller.availableProviders,
-          defaultModel: controller.currentModel ?? undefined,
-          defaultProvider: controller.currentModelProvider ?? undefined,
-          onClose: () => controller.setModelPickerVisible(false),
-          onRetry: controller.retryModelPickerLoad,
-          onSelect: controller.onSelectModel,
-          session: {
-            thinking: controller.thinkingLevel && controller.thinkingLevelOptions.length ? {
-              current: controller.thinkingLevel,
-              options: controller.thinkingLevelOptions,
-              onSelect: controller.onSelectStaticThinkLevel,
-            } : undefined,
-            contextRemainingPercent,
-            project: sessionProject,
-          },
-        }}
-        runtimeSettings={controller.hasRuntimeSettings ? {
-          visible: !sessionPreview && (controller.modelPickerVisible || controller.permissionPickerVisible),
-          permissionsOnly: controller.permissionPickerVisible,
-          loading: controller.modelPickerLoading, busy: controller.runtimeSettingsBusy, running: controller.isSending, error: controller.modelPickerError,
-          thinkingLevel: controller.thinkingLevel, thinkingLevels: controller.thinkingLevelOptions,
-          fastMode: controller.fastMode, permissions: controller.permissions,
+          currentModel: controller.currentModel ?? undefined,
+          currentProvider: controller.currentModelProvider ?? undefined,
+          configuredDefaultModel: controller.configuredDefaultModel,
+          recentModels: controller.recentModels,
+          thinking: controller.thinkingLevelOptions.length && (controller.hasRuntimeSettings || controller.thinkingLevel) ? {
+            current: controller.thinkingLevel ?? null,
+            options: controller.thinkingLevelOptions,
+            onSelect: controller.onSelectStaticThinkLevel,
+          } : undefined,
+          fastMode: controller.fastMode,
+          onSelectFastMode: controller.onSelectFastMode,
+          permissionsSupported: capabilities.sessionPermissions === true,
+          permissions: controller.permissions,
+          onSelectPermissions: controller.onSelectPermissions,
+          contextRemainingPercent,
+          project: sessionProject,
+          onManage: controller.hasRuntimeSettings ? undefined : () => openAgentSection('models'),
+          onStopRun: requestCancelCurrentRun,
           onClose: () => { controller.setModelPickerVisible(false); controller.setPermissionPickerVisible(false); },
-          onSelectThinking: controller.onSelectStaticThinkLevel,
-          onSelectFastMode: controller.onSelectFastMode, onSelectPermissions: controller.onSelectPermissions,
-          contextRemainingPercent, project: sessionProject,
-        } : undefined}
+          onRetry: controller.retryModelPickerLoad,
+          onSelectModel: controller.onSelectModel,
+        }}
         commandPicker={{
           visible: !sessionPreview && controller.commandPickerVisible,
           title: controller.commandPickerTitle,

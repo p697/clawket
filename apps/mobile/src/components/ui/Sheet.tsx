@@ -43,6 +43,7 @@ import { SheetBackdrop } from './SheetBackdrop';
 import {
   SheetDragHandle,
   SheetHeader,
+  type SheetTone,
   useSheetBackgroundStyle,
 } from './SheetHeader';
 import { ThemedFullWindowOverlay } from './ThemedFullWindowOverlay';
@@ -87,7 +88,11 @@ export type SheetProps = {
   closeAccessibilityLabel: string;
   title?: string;
   titleContent?: React.ReactNode;
+  /** Replaces the close button (a sub-page's Back); swipe and the backdrop still close. */
+  headerLeading?: React.ReactNode;
   headerRight?: React.ReactNode;
+  /** `grouped` lays settings cards on the grouped canvas (A+ model sheet, owner-approved 2026-10-01). */
+  tone?: SheetTone;
   children: React.ReactNode;
   /**
    * Pinned to the visible bottom edge at every detent (fixed-snap content is
@@ -157,7 +162,9 @@ export function Sheet({
   closeAccessibilityLabel,
   title,
   titleContent,
+  headerLeading,
   headerRight,
+  tone = 'canvas',
   children,
   footer,
   maxHeight = '90%',
@@ -189,7 +196,8 @@ export function Sheet({
   onAfterCloseRef.current = onAfterClose;
 
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
-  const backgroundStyle = useSheetBackgroundStyle();
+  const backgroundStyle = useSheetBackgroundStyle(tone);
+  const toneStyle = tone === 'grouped' ? styles.grouped : null;
   const usesFixedSnapPoints = snapPoints !== undefined;
   const maxDynamicContentSize = useMemo(
     () => resolveSheetMaxHeight(
@@ -283,6 +291,19 @@ export function Sheet({
     () => ({ ...styles.footer, paddingBottom: bottomPadding }),
     [bottomPadding, styles.footer],
   );
+  // Gorhom's BottomSheetView composes only the first two entries of a style
+  // array (`StyleSheet.compose(...style)`), which dropped the bottom padding,
+  // tone and viewport limit behind them, so the measured body gets one style.
+  const dynamicSheetStyle = useMemo(
+    () => (usesFixedSnapPoints ? undefined : StyleSheet.flatten([
+      styles.sheet,
+      toneStyle,
+      { paddingBottom: bottomPadding },
+      style,
+      contentViewportStyle,
+    ])),
+    [bottomPadding, contentViewportStyle, style, styles.sheet, toneStyle, usesFixedSnapPoints],
+  );
   const footerSlot = useMemo<SheetFooterSlot>(
     () => ({
       node: footer,
@@ -308,6 +329,7 @@ export function Sheet({
         titleContent={titleContent}
         onClose={onClose}
         closeAccessibilityLabel={closeAccessibilityLabel}
+        leading={headerLeading}
         right={headerRight}
         testID={testID}
       />
@@ -350,7 +372,7 @@ export function Sheet({
       {usesFixedSnapPoints ? (
         <View
           testID={testID}
-          style={[styles.sheet, styles.fixedSheet, { paddingBottom: bottomPadding }, style]}
+          style={[styles.sheet, toneStyle, styles.fixedSheet, { paddingBottom: bottomPadding }, style]}
           accessibilityViewIsModal
         >
           {sheetContent}
@@ -358,7 +380,7 @@ export function Sheet({
       ) : (
         <BottomSheetView
           testID={testID}
-          style={[styles.sheet, { paddingBottom: bottomPadding }, style, contentViewportStyle]}
+          style={dynamicSheetStyle}
           accessibilityViewIsModal
         >
           {sheetContent}
@@ -377,6 +399,9 @@ function createStyles(
       backgroundColor: colors.canvas,
       borderTopLeftRadius: Radius.bottomSheet,
       borderTopRightRadius: Radius.bottomSheet,
+    },
+    grouped: {
+      backgroundColor: colors.canvasGrouped,
     },
     fixedBody: {
       flex: 1,

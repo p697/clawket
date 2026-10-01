@@ -515,6 +515,25 @@ describe('useChatModelPicker', () => {
     expect(sessions[0]).toEqual(expect.objectContaining({ model: 'gpt-5', modelProvider: 'openai' }));
   });
 
+  it('keeps the model sheet open after a choice and offers that model first next time', async () => {
+    const setSelection = jest.fn().mockResolvedValue({ ok: true, scope: 'session', ...modelSelection('gpt-5', 'openai') });
+    const adapter = createAdapter({ setSelection });
+    const { result } = renderHook(() => useChatModelPicker({
+      connectionState: 'ready',
+      adapter,
+      sessionKey: 'agent:main:main',
+      setInput: jest.fn(),
+      setSessions: jest.fn(),
+    }));
+    act(() => result.current.setModelPickerVisible(true));
+    act(() => { result.current.onSelectModel({ id: 'gpt-5', name: 'gpt-5', provider: 'openai' }); });
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+    // A+ model sheet (owner-approved 2026-10-01): the check moves, the sheet stays.
+    expect(result.current.modelPickerVisible).toBe(true);
+    expect(result.current.recentModels).toEqual(['openai/gpt-5']);
+    expect(result.current.modelScope).toBe('session');
+  });
+
   it('loads Hermes providers and current global model from adapter selection state', async () => {
     const selection = modelSelection('gpt-5.3-codex', 'openai-codex', {
       models: [{ id: 'gpt-5.3-codex', name: 'gpt-5.3-codex', provider: 'openai-codex' }],

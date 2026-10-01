@@ -12,7 +12,11 @@ jest.mock('react-native', () => {
   return {
     Platform: { OS: 'ios' },
     BackHandler: { addEventListener: jest.fn() },
-    StyleSheet: { create: <T,>(styles: T) => styles, flatten: (style: unknown) => style, hairlineWidth: 1 },
+    StyleSheet: {
+      create: <T,>(styles: T) => styles,
+      flatten: (style: unknown) => Object.assign({}, ...([style].flat(Infinity) as unknown[]).filter(Boolean)),
+      hairlineWidth: 1,
+    },
     Text: host('Text'),
     View: host('View'),
     useWindowDimensions: () => ({ width: 390, height: 844, scale: 3, fontScale: 1 }),
@@ -67,7 +71,7 @@ jest.mock('./ThemedFullWindowOverlay', () => ({ ThemedFullWindowOverlay: ({ chil
 jest.mock('../../utils/platform', () => ({ isIPad: false }));
 jest.mock('../../utils/ipad-layout', () => ({ getIpadModalSheetMetrics: () => ({ height: 0 }) }));
 jest.mock('../../theme', () => ({
-  useAppTheme: () => ({ theme: { colors: { canvas: '#ffffff' } } }),
+  useAppTheme: () => ({ theme: { colors: { canvas: '#ffffff', canvasGrouped: '#f5f5f7' } } }),
 }));
 
 const flatten = (style: unknown): Record<string, unknown> => Object.assign(
@@ -119,6 +123,26 @@ describe('Sheet footer', () => {
     expect(view.queryByTestId('sheet-footer')).toBeNull();
     expect(view.queryByTestId('gorhom-footer')).toBeNull();
     expect(flatten(view.getByTestId('sheet-body').props.style).paddingBottom).toBeUndefined();
+  });
+});
+
+describe('Content-sized sheet', () => {
+  it('hands Gorhom one flat style so the padding, tone and viewport limit survive', () => {
+    const { Text } = require('react-native');
+    const view = render(
+      <Sheet visible onClose={jest.fn()} closeAccessibilityLabel="Close" tone="grouped" testID="sheet">
+        <Text>body</Text>
+      </Sheet>,
+    );
+
+    // BottomSheetView keeps only the first two entries of a style array.
+    const style = view.getByTestId('sheet').props.style;
+    expect(Array.isArray(style)).toBe(false);
+    expect(style).toMatchObject({
+      backgroundColor: '#f5f5f7',
+      paddingBottom: 34,
+      maxHeight: (844 - 59 - 34) * 0.9 - Space.lg,
+    });
   });
 });
 

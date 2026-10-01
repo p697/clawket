@@ -691,6 +691,20 @@ describe.each(['light', 'dark'] as const)('%s thread primitives', (scheme) => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it('lays a grouped sheet on the grouped canvas and lets a sub-page Back replace Close', () => {
+    const theme = activeTheme(scheme);
+    const result = render(
+      <Sheet testID="sheet" visible title="All models" tone="grouped" headerLeading={<Text testID="sheet-back">Back</Text>}
+        closeAccessibilityLabel="Close" onClose={jest.fn()}>
+        <></>
+      </Sheet>,
+    );
+    expect(flattenStyle(result.getByTestId('sheet').props.style).backgroundColor).toBe(theme.colors.canvasGrouped);
+    expect(result.UNSAFE_getByType(BottomSheetModal).props.backgroundStyle).toMatchObject({ backgroundColor: theme.colors.canvasGrouped });
+    expect(result.getByTestId('sheet-back')).toBeTruthy();
+    expect(result.queryByTestId('sheet-close')).toBeNull();
+  });
+
   it('uses one 320ms timing and keeps disabled backdrop dismissal inert', () => {
     const onClose = jest.fn();
     const result = render(

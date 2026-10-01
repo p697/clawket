@@ -8,6 +8,22 @@ export type AgentRosterPreferences = Readonly<{
 type SessionPreferenceState = AgentRosterPreferences;
 
 const SESSION_PREFERENCES_PREFIX = 'clawket.sessionPreferences.v1.';
+/** Models chosen on this device, newest first: the model sheet offers them before the catalog order. */
+const RECENT_MODELS_LIMIT = 6;
+const RECENT_MODEL_REF_MAX_LENGTH = 256;
+
+function recentModelsKey(connectionId: string): string {
+  // Under the connection's prefix, so `clearConnection` removes it with the rest.
+  return `${SESSION_PREFERENCES_PREFIX}${connectionId}::recentModels`;
+}
+
+function normalizeRecentModels(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const refs = value.filter((item): item is string => (
+    typeof item === 'string' && item.trim().length > 0 && item.length <= RECENT_MODEL_REF_MAX_LENGTH
+  ));
+  return Array.from(new Set(refs)).slice(0, RECENT_MODELS_LIMIT);
+}
 
 function makeScopeKey(gatewayConfigId: string, agentId: string): string {
   return `${SESSION_PREFERENCES_PREFIX}${gatewayConfigId}::${agentId}`;
@@ -52,6 +68,25 @@ export const SessionPreferencesService = {
     if (!sessionKey || sessionKey.length > 512) return;
     await AsyncStorage.setItem(makeScopeKey(connectionId, agentId) + '.lastSession', sessionKey);
   },
+  async getRecentModels(connectionId: string): Promise<string[]> {
+    try {
+      const raw = await AsyncStorage.getItem(recentModelsKey(connectionId));
+      return raw ? normalizeRecentModels(JSON.parse(raw)) : [];
+    } catch {
+      return [];
+    }
+  },
+
+  /** Moves `modelRef` (a provider/model reference) to the front; returns the new list. */
+  async recordRecentModel(connectionId: string, modelRef: string): Promise<string[]> {
+    const ref = modelRef.trim();
+    const current = await this.getRecentModels(connectionId);
+    if (!ref || ref.length > RECENT_MODEL_REF_MAX_LENGTH) return current;
+    const next = normalizeRecentModels([ref, ...current.filter((item) => item !== ref)]);
+    await AsyncStorage.setItem(recentModelsKey(connectionId), JSON.stringify(next));
+    return next;
+  },
+
   async clearConnection(gatewayConfigId: string): Promise<void> {
     const connectionPrefix = `${SESSION_PREFERENCES_PREFIX}${gatewayConfigId}::`;
     const keys = (await AsyncStorage.getAllKeys()).filter((key) => (

@@ -1,14 +1,11 @@
 import React from 'react';
-import { RuntimeSettingsSheet, type RuntimeSettingsSheetProps } from '../../../components/chat/RuntimeSettingsSheet';
 import type { UiMessage } from '../../../types/chat';
 import type { ThinkingLevel } from '../../../utils/gateway-settings';
-import type { ModelInfo, ModelSheetSession } from '../../../components/chat/ModelPickerModal';
-import type { ModelProviderInfo } from '../../../components/chat/model-picker-data';
+import { ModelSheet, type ModelSheetProps } from '../../../components/chat/ModelSheet';
 import { ChatSharePosterModal } from '../../../components/chat/ChatSharePosterModal';
 import type { PlatformKind } from '../../../components/ui/PlatformMark';
 import { CommandOptionPickerModal } from '../../../components/chat/CommandOptionPickerModal';
 import { ImagePreviewModal } from '../../../components/chat/ImagePreviewModal';
-import { ModelPickerModal } from '../../../components/chat/ModelPickerModal';
 import { ThinkingLevelPickerModal } from '../../../components/chat/ThinkingLevelPickerModal';
 import { CommandsSheet } from '../../../components/chat/CommandsSheet';
 import type { SlashCommand } from '../../../data/slash-commands';
@@ -52,22 +49,8 @@ export type ThreadOverlaysProps = Readonly<{
   shareProductLabel?: string;
   onCloseShare: () => void;
   preview: PreviewState;
-  modelPicker: Readonly<{
-    visible: boolean;
-    loading: boolean;
-    error: string | null;
-    models: ModelInfo[];
-    providers?: ModelProviderInfo[];
-    defaultModel?: string;
-    defaultProvider?: string;
-    configuredDefaultModel?: string;
-    onManage?: () => void;
-    onClose: () => void;
-    onRetry: () => void;
-    onSelect: (model: ModelInfo) => void;
-    session?: ModelSheetSession;
-  }>;
-  runtimeSettings?: Omit<RuntimeSettingsSheetProps, 'models' | 'onSelectModel' | 'onRetry' | 'currentModel' | 'currentProvider'>;
+  /** The conversation's one model sheet, for every backend (A+ model sheet, owner-approved 2026-10-01). */
+  modelSheet: ModelSheetProps;
   commandPicker: Readonly<{
     visible: boolean;
     title: string;
@@ -120,8 +103,7 @@ export function ThreadOverlays({
   shareProductLabel,
   onCloseShare,
   preview,
-  modelPicker,
-  runtimeSettings,
+  modelSheet,
   commandPicker,
   commandsSheet,
   thinkingPicker,
@@ -170,23 +152,7 @@ export function ThreadOverlays({
         onClose={preview.onClose}
         onIndexChange={preview.onIndexChange}
       />
-      {runtimeSettings ? <RuntimeSettingsSheet {...runtimeSettings} models={modelPicker.models}
-        currentModel={modelPicker.defaultModel} currentProvider={modelPicker.defaultProvider}
-        onSelectModel={modelPicker.onSelect} onRetry={modelPicker.onRetry} /> : <ModelPickerModal
-        visible={modelPicker.visible}
-        loading={modelPicker.loading}
-        error={modelPicker.error}
-        models={modelPicker.models}
-        providers={modelPicker.providers}
-        onClose={modelPicker.onClose}
-        onRetry={modelPicker.onRetry}
-        onSelectModel={modelPicker.onSelect}
-        defaultModel={modelPicker.defaultModel}
-        defaultProvider={modelPicker.defaultProvider}
-        configuredDefaultModel={modelPicker.configuredDefaultModel}
-        onManage={modelPicker.onManage}
-        session={modelPicker.session}
-      />}
+      <ModelSheet {...modelSheet} />
       <CommandOptionPickerModal
         visible={commandPicker.visible}
         title={commandPicker.title}

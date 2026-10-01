@@ -807,7 +807,7 @@ describe('ThreadScreen connection container', () => {
     });
     // Context left moved from the header into the model sheet (A+ composer).
     expect(mockThreadViewProps).not.toHaveProperty('contextUsed');
-    expect(mockThreadOverlayProps?.modelPicker.session?.contextRemainingPercent).toBe(54);
+    expect(mockThreadOverlayProps?.modelSheet.contextRemainingPercent).toBe(54);
     expect(mockThreadViewProps?.composerRef).toBe(mockController.composerRef);
     expect(mockThreadViewProps?.onPasteFiles).toBe(mockController.onPasteFiles);
     expect(mockThreadViewProps?.onPasteFailed).toBe(mockController.onPasteFailed);

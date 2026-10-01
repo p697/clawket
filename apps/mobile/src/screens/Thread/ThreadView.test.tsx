@@ -455,33 +455,26 @@ function isEntranceTiming([target, options]: unknown[]): boolean {
 
 describe('ThreadView', () => {
 
-  it.each([undefined, null])('labels unread permission mode %s as unknown and retries only its read action', (permissionMode) => {
-    const callbacks = createProps({ capabilities: { ...CAPABILITY_MATRIX.codex }, permissionMode, onOpenPermissions: jest.fn() });
+  it.each([undefined, null, 'custom', 'workspace', 'read-only', 'full-access'])('keeps permission mode %s out of the composer: the model sheet holds it', (permissionMode) => {
+    // A+ model sheet (owner decision 2026-10-01): the capsule holds the model only.
+    const callbacks = createProps({ capabilities: { ...CAPABILITY_MATRIX.codex }, permissionMode, onOpenModelPicker: jest.fn() });
     const view = render(<ThreadView {...callbacks} />);
-    const button = view.getByTestId('thread-permissions');
-    expect(button.props.accessibilityLabel).toBe('Permissions: Unknown');
-    expect(button.props.accessibilityHint).toBe('Retry');
-    expect(button.findAll(node => typeof node.type === 'string' && String(node.type) === 'ShieldQuestionMark')).toHaveLength(1);
-    expect(view.getByTestId('thread-screen-composer-primary').props.accessibilityState.disabled).toBe(false);
-    fireEvent.press(button);
-    expect(callbacks.onOpenPermissions).toHaveBeenCalledTimes(1);
-    expect(callbacks.onSend).not.toHaveBeenCalled();
-    expect(callbacks.onChangeInput).not.toHaveBeenCalled();
-  });
-
-  it.each(['custom', 'workspace', 'read-only'])('keeps a confirmed %s permission mode out of the capsule', (permissionMode) => {
-    // The model sheet lists permissions; the capsule only warns (A+ composer).
-    const view = render(<ThreadView {...createProps({ capabilities: { ...CAPABILITY_MATRIX.codex }, permissionMode, onOpenPermissions: jest.fn() })} />);
     expect(view.queryByTestId('thread-permissions')).toBeNull();
+    expect(view.getByTestId('thread-model-picker')).toBeTruthy();
+    expect(view.getByTestId('thread-screen-composer-primary').props.accessibilityState.disabled).toBe(false);
+    // Only full access marks the header, beside the name.
+    const warning = view.queryByTestId('thread-screen-header-pill-warning');
+    if (permissionMode === 'full-access') {
+      expect(warning).toBeTruthy();
+      expect(view.getByTestId('thread-screen-header-pill').props.accessibilityLabel).toBe('Agent settings, Full access');
+    } else {
+      expect(warning).toBeNull();
+    }
   });
 
-  it('warns about full access in the capsule', () => {
-    const view = render(<ThreadView {...createProps({ capabilities: { ...CAPABILITY_MATRIX.codex }, permissionMode: 'full-access', onOpenPermissions: jest.fn() })} />);
-    const button = view.getByTestId('thread-permissions');
-    expect(button.props.accessibilityLabel).toBe('Permissions: Full access');
-    expect(button.props.accessibilityHint).toBeUndefined();
-    expect(button.findAll(node => typeof node.type === 'string' && String(node.type) === 'ShieldAlert')).toHaveLength(1);
-    expect(button.findAll(node => typeof node.type === 'string' && String(node.type) === 'ShieldQuestionMark')).toHaveLength(0);
+  it('never marks the header for a backend without per-conversation permissions', () => {
+    const view = render(<ThreadView {...createProps({ capabilities: { ...CAPABILITY_MATRIX.openclaw }, permissionMode: 'full-access' })} />);
+    expect(view.queryByTestId('thread-screen-header-pill-warning')).toBeNull();
   });
   it('shows one actionable settings notice only while settings are unconfirmed and preserves the draft', () => {
     const onReviewRuntimeSettings = jest.fn();

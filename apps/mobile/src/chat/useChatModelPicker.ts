@@ -4,6 +4,7 @@ import { analyticsEvents } from '../services/analytics/events';
 import { useAppContext } from '../contexts/AppContext';
 import { runtimeSettingsStatus } from '../connection/runtime-settings-status';
 import { SessionCatalogSupersededError } from '../connection/adapters/session-catalog';
+import { SessionPreferencesService } from '../services/session-preferences';
 import type {
   AgentAdapter,
   ModelProviderInfo,
@@ -67,6 +68,8 @@ export function useChatModelPicker({
   const [fastMode, setFastMode] = useState<ModelSelectionState['fastMode']>();
   const [permissions, setPermissions] = useState<ModelSelectionState['permissions']>();
   const [permissionPickerVisible, setPermissionPickerVisible] = useState(false);
+  // Models chosen on this device for this connection, newest first (the model sheet's first rows).
+  const [recentModels, setRecentModels] = useState<string[]>([]);
   const runtimeSettingsPendingRef = useRef(false);
   // An interrupted write may have reached the computer. Keep that uncertainty
   // with its conversation, including while another adapter/session is shown.
@@ -82,6 +85,14 @@ export function useChatModelPicker({
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   requestContextRef.current = { adapter, connectionState, sessionKey };
+  const recentScope = adapter?.connection.id ?? null;
+  useEffect(() => {
+    setRecentModels([]);
+    if (!recentScope) return undefined;
+    let current = true;
+    void SessionPreferencesService.getRecentModels(recentScope).then((refs) => { if (current) setRecentModels(refs); });
+    return () => { current = false; };
+  }, [recentScope]);
 
   const isSameAdapterRequest = useCallback((
     requestAdapter: AgentAdapter,
@@ -437,6 +448,12 @@ export function useChatModelPicker({
       source: 'chat_model_picker',
       session_key_present: Boolean(sessionKey),
     });
+    if (adapter) {
+      const recentConnection = adapter.connection.id;
+      void SessionPreferencesService.recordRecentModel(recentConnection, providerModel).then((refs) => {
+        if (mounted.current && requestContextRef.current.adapter?.connection.id === recentConnection) setRecentModels(refs);
+      }).catch(() => {});
+    }
 
     if (hasRuntimeSettings) {
       const operation = adapter?.management?.models?.setSelection;
@@ -483,7 +500,8 @@ export function useChatModelPicker({
       requestId === modelSelectionRequestRef.current
       && isCurrentAdapterRequest(requestAdapter, connectionId, requestSessionKey)
     );
-    setModelPickerVisible(false);
+    // The sheet stays open (A+ model sheet, owner-approved 2026-10-01): the
+    // check moves at once, thinking and the other settings sit beside it.
     void setSelection({
       model: modelId,
       ...(providerId ? { provider: providerId } : {}),
@@ -566,6 +584,8 @@ export function useChatModelPicker({
     : permissions;
 
   return {
+    recentModels,
+    modelScope: (adapter?.capabilities.modelPerSession ? 'session' : 'global') as 'session' | 'global',
     hasRuntimeSettings, runtimeSettingsBusy, runtimeSettingsPendingRef, runtimeSettingsUnconfirmed, runtimeSettingsUnconfirmedRef,
     fastMode, permissions: visiblePermissions, permissionPickerVisible, setPermissionPickerVisible,
     onSelectFastMode, onSelectPermissions, openPermissionPicker,

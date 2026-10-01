@@ -26,9 +26,30 @@ function normalizeProvider(provider: string): string {
   return provider.trim() || 'unknown';
 }
 
+/** How providers write their own names; a plain capital would read "Openai" or "Deepseek". */
+const PROVIDER_NAMES: Readonly<Record<string, string>> = {
+  anthropic: 'Anthropic',
+  deepseek: 'DeepSeek',
+  google: 'Google',
+  groq: 'Groq',
+  lmstudio: 'LM Studio',
+  minimax: 'MiniMax',
+  mistral: 'Mistral',
+  moonshot: 'Moonshot',
+  moonshotai: 'Moonshot',
+  ollama: 'Ollama',
+  openai: 'OpenAI',
+  openrouter: 'OpenRouter',
+  qwen: 'Qwen',
+  xai: 'xAI',
+  zai: 'Z.ai',
+  zhipu: 'Zhipu AI',
+  zhipuai: 'Zhipu AI',
+};
+
 function formatProvider(provider: string): string {
   if (!provider) return 'Unknown';
-  return provider.charAt(0).toUpperCase() + provider.slice(1);
+  return PROVIDER_NAMES[provider.trim().toLowerCase()] ?? provider.charAt(0).toUpperCase() + provider.slice(1);
 }
 
 function modelMatchesQuery(model: ModelInfo, query: string): boolean {

@@ -51,3 +51,12 @@ it('searches the resolved native model without changing the selectable alias', (
   expect(buildModelSections(models, '20251001')[0].data[0]).toEqual(models[0]);
   expect(resolveProviderModel(models[0])).toBe('anthropic/haiku');
 });
+
+it('spells provider section titles the way the providers do', () => {
+  const sections = buildModelSections([
+    { id: 'gpt', name: 'GPT', provider: 'openai' },
+    { id: 'v4', name: 'V4', provider: 'deepseek' },
+    { id: 'mystery', name: 'Mystery', provider: 'acme' },
+  ], '');
+  expect(sections.map((section) => section.title)).toEqual(['Acme', 'DeepSeek', 'OpenAI']);
+});
