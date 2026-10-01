@@ -572,6 +572,24 @@ describe.each(['light', 'dark'] as const)('%s thread primitives', (scheme) => {
     expect(view.getByTestId('composer-accessory')).toBeTruthy();
   });
 
+  it('sets the model chip concentric in the capsule and wraps the draft where the chip begins', () => {
+    const labels3 = { add: 'Add', voice: 'Voice', send: 'Send', stop: 'Stop' };
+    const props = { testID: 'composer', placeholder: 'Message', accessibilityLabels: labels3,
+      onChangeText: jest.fn(), onSend: jest.fn(), value: '' };
+    const view = render(<Composer {...props} accessory={<Text testID="chip">Opus</Text>} />);
+    const shell = () => flattenStyle(view.getByTestId('composer-input-shell').props.style);
+    // As far from the capsule's end as from its top and bottom (owner report 2026-10-01).
+    expect(shell().paddingRight).toBe(0);
+    expect(shell().paddingHorizontal).toBe(Space.sm);
+    fireEvent(view.getByTestId('composer-accessory'), 'layout', { nativeEvent: { layout: { width: 96, height: 36 } } });
+    expect(flattenStyle(view.getByTestId('composer-measurement', { includeHiddenElements: true }).props.style).right).toBe(96);
+    // Without a chip the end padding and the send room come back.
+    view.rerender(<Composer {...props} />);
+    expect(shell().paddingRight).toBe(Space.sm);
+    expect(flattenStyle(view.getByTestId('composer-measurement', { includeHiddenElements: true }).props.style).right)
+      .toBe(Space.sm + ControlSize.floatingButton);
+  });
+
   it('tells a sizing accessory the room left beside the whole placeholder', () => {
     const accessory = jest.fn(({ drafting, room }: { drafting: boolean; room: number | null }) => (
       <Text testID="chip">{`${drafting}:${room}`}</Text>
@@ -585,8 +603,8 @@ describe.each(['light', 'dark'] as const)('%s thread primitives', (scheme) => {
     const measurement = () => view.getByTestId('composer-placeholder-measurement', { includeHiddenElements: true });
     fireEvent(measurement(), 'textLayout', { nativeEvent: { lines: [{ width: 120.4 }] } });
     expect(measurement().props.children).toBe('Message');
-    // The shell's two paddings and the whole placeholder come first.
-    expect(view.getByTestId('chip').props.children).toBe(`false:${220 - Space.sm * 2 - 121}`);
+    // The shell's leading padding and the whole placeholder come first; beside the chip it has no end padding.
+    expect(view.getByTestId('chip').props.children).toBe(`false:${220 - Space.sm - 121}`);
     view.rerender(<Composer {...props} value="Hi" />);
     expect(view.getByTestId('chip').props.children).toMatch(/^true:/);
     // Full-screen editing has room: its toolbar gets the full chip.
