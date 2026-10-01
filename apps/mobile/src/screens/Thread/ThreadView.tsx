@@ -7,6 +7,7 @@ import { useWorkspaceLayout } from '../../navigation/workspace-context';
 import { IPAD_CHAT_MAX_WIDTH } from '../../utils/ipad-layout';
 import { useReplyEntranceDelay } from '../../chat/useReplyEntranceDelay';
 import { SessionPreviewNotice, SessionPreviewFooter } from './components/SessionPreviewNotice';
+import { useUiThreadFollow, type UiThreadFollow } from './useUiThreadFollow';
 import { useTranslation } from 'react-i18next';
 import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -196,12 +197,14 @@ type CommittedTimelineLayout = Readonly<{
 const UNMEASURED_TIMELINE_LAYOUT: CommittedTimelineLayout = { list: null, content: -1, viewport: -1, tailKey: null, rows: 0 };
 /**
  * A new row that lands while the reader follows glides into view like a
- * messenger instead of jumping the whole list; larger bursts (a restored page)
- * and viewport changes still snap.
+ * messenger instead of jumping the whole list (on Android a growing reply
+ * too); larger bursts (a restored page) and viewport changes still snap.
  */
 const FOLLOW_GLIDE_MAX_VIEWPORT_RATIO = 0.6;
-/** Longer than the native animated scroll (about 300 ms on iOS, 250 ms on Android). */
+/** Longer than the native animated scroll on iOS (about 300 ms). */
 const FOLLOW_GLIDE_SETTLE_MS = 420;
+/** Android's UI-thread glide reports when it settles; this only covers a lost report. */
+const FOLLOW_GLIDE_FALLBACK_MS = 1_200;
 /** A send whose row never lands in a measured list still lets the composer shrink. */
 const COMPOSER_HOLD_FALLBACK_MS = 320;
 /**
@@ -785,7 +788,10 @@ export function ThreadView({
   const composerExpandedRef = useRef(composerExpanded);
   composerExpandedRef.current = composerExpanded;
   const bottomFollowFrameRef = useRef<number | null>(null);
+  // Whether a pending size correction includes a viewport change.
+  const bottomFollowViewportRef = useRef(false);
   const cancelBottomFollow = useCallback(() => {
+    bottomFollowViewportRef.current = false;
     if (bottomFollowFrameRef.current === null) return;
     cancelAnimationFrame(bottomFollowFrameRef.current);
     bottomFollowFrameRef.current = null;
@@ -794,46 +800,88 @@ export function ThreadView({
   // corrections that land during it re-target the glide instead of cutting it.
   const followGlideRef = useRef(false);
   const followGlideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const endFollowGlide = useCallback(() => {
+  const followGlideGenerationRef = useRef(0);
+  // Android glides on the UI thread once the list's scroll view is bound
+  // (`useUiThreadFollow`); iOS runs its scroll commands after the mount, so it
+  // keeps the native ones.
+  const uiFollowRef = useRef<UiThreadFollow | null>(null);
+  const clearFollowGlide = useCallback(() => {
     if (followGlideTimerRef.current !== null) clearTimeout(followGlideTimerRef.current);
     followGlideTimerRef.current = null;
     followGlideRef.current = false;
   }, []);
+  const endFollowGlide = useCallback(() => {
+    const gliding = followGlideRef.current;
+    clearFollowGlide();
+    if (gliding) uiFollowRef.current?.stop();
+  }, [clearFollowGlide]);
   useEffect(() => endFollowGlide, [endFollowGlide]);
+  const snapNatively = useCallback(() => {
+    const list = timelineRef.current;
+    const native = list?.getNativeScrollRef?.();
+    if (native) native.scrollToEnd({ animated: false });
+    else list?.scrollToEnd({ animated: false });
+  }, []);
+  const uiFollow = useUiThreadFollow({
+    onSettled: (generation) => {
+      if (generation === followGlideGenerationRef.current) clearFollowGlide();
+    },
+    onUnavailable: () => {
+      uiFollowRef.current = null;
+      clearFollowGlide();
+      if (followNewMessagesRef.current && !readerScrollingRef.current) snapNatively();
+    },
+  });
   // Follow corrections go straight to the native scroll view: FlashList's own
   // scrollToEnd waits a macrotask, leaving grown content clipped under the
   // composer for a frame or two before it jumps into view.
   const followToEnd = useCallback((glide: boolean) => {
     const list = timelineRef.current;
     const animated = glide && !reduceMotionRef.current;
+    const uiThreadFollow = uiFollowRef.current;
     if (animated) {
       if (followGlideTimerRef.current !== null) clearTimeout(followGlideTimerRef.current);
       followGlideRef.current = true;
-      followGlideTimerRef.current = setTimeout(() => {
-        followGlideTimerRef.current = null;
-        followGlideRef.current = false;
-      }, FOLLOW_GLIDE_SETTLE_MS);
-    } else {
-      endFollowGlide();
+      followGlideGenerationRef.current += 1;
+      followGlideTimerRef.current = setTimeout(
+        endFollowGlide,
+        uiThreadFollow ? FOLLOW_GLIDE_FALLBACK_MS : FOLLOW_GLIDE_SETTLE_MS,
+      );
+      if (uiThreadFollow) {
+        uiThreadFollow.glide(followGlideGenerationRef.current, scrollMetricsRef.current.offset);
+        return;
+      }
+    } else if (followGlideRef.current) {
+      clearFollowGlide();
+      // The glide scrolls on the UI thread; ending it there lands this jump
+      // after its last step instead of under it.
+      if (uiThreadFollow) {
+        uiThreadFollow.snap();
+        return;
+      }
     }
     const native = list?.getNativeScrollRef?.();
     if (native) native.scrollToEnd({ animated });
     else list?.scrollToEnd({ animated });
-  }, [endFollowGlide]);
+  }, [clearFollowGlide, endFollowGlide]);
   const snapToEnd = useCallback(() => followToEnd(false), [followToEnd]);
-  const scheduleBottomFollow = useCallback(() => {
+  const scheduleBottomFollow = useCallback((viewportChanged: boolean) => {
     // FlashList owns initial placement. Size reports from native views
     // (tables, images, the keyboard) arrive after their frame; coalesce them
     // into one correction and recheck reader intent when it runs.
-    if (!timelineLoaded() || !followNewMessagesRef.current || composerExpandedRef.current
-      || bottomFollowFrameRef.current !== null) return;
+    if (!timelineLoaded() || !followNewMessagesRef.current || composerExpandedRef.current) return;
+    if (viewportChanged) bottomFollowViewportRef.current = true;
+    if (bottomFollowFrameRef.current !== null) return;
     bottomFollowFrameRef.current = requestAnimationFrame(() => {
       bottomFollowFrameRef.current = null;
-      if (followNewMessagesRef.current && !returningToBottomRef.current && !composerExpandedRef.current) {
-        snapToEnd();
-      }
+      const viewport = bottomFollowViewportRef.current;
+      bottomFollowViewportRef.current = false;
+      if (!followNewMessagesRef.current || returningToBottomRef.current || composerExpandedRef.current) return;
+      // The content size report of a row that is gliding in re-targets the
+      // glide; a jump would cut it short. A moved viewport keeps the exact end.
+      followToEnd(followGlideRef.current && !viewport);
     });
-  }, [snapToEnd, timelineLoaded]);
+  }, [followToEnd, timelineLoaded]);
   useLayoutEffect(() => cancelBottomFollow, [cancelBottomFollow, composerExpanded]);
   // FlashList calls this in its layout-commit phase, in the same JS task as the
   // render that changed the rows, so a bottom correction reaches the native
@@ -863,16 +911,16 @@ export function ThreadView({
     // FlashList moves the visible anchor as those estimates settle.
     if (readerScrollingRef.current || !followNewMessagesRef.current) return;
     cancelBottomFollow();
-    // A new row at the end glides in; a growing reply, a keyboard or composer
-    // that moves the viewport, and anything that shrinks keep the exact end.
-    // While a glide is in flight, changes within budget re-target it rather
-    // than cut it short with a jump.
+    // A new row at the end glides in, and so does a growing reply on Android,
+    // where the glide runs on the UI thread (iOS lands a jump in the frame that
+    // grew the row); a keyboard or composer that moves the viewport, and
+    // anything that shrinks, keep the exact end. While a glide is in flight,
+    // changes within budget re-target it rather than cut it short with a jump.
     const growth = content - previous.content;
     const appended = rows > previous.rows && tailKey !== previous.tailKey;
     const withinBudget = Math.abs(growth) <= viewport * FOLLOW_GLIDE_MAX_VIEWPORT_RATIO;
-    const glide = withinBudget && (followGlideRef.current
-      || (appended && growth > 0 && viewport === previous.viewport));
-    followToEnd(glide);
+    const grew = growth > 0 && viewport === previous.viewport && (appended || uiFollowRef.current !== null);
+    followToEnd(withinBudget && (followGlideRef.current || grew));
   }, [cancelBottomFollow, followToEnd, releaseComposerHold, timelineLoaded]);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const scrollButtonProgress = useSharedValue(0);
@@ -887,7 +935,8 @@ export function ThreadView({
     transform: [{ translateY: reduceMotion ? 0 : Space.sm * (1 - scrollButtonProgress.value) }],
   }));
   const scrollToBottom = useCallback(() => {
-    const far = distanceFromBottomRef.current > Space.lg;
+    // A glide in flight is already on its way to the end.
+    const far = distanceFromBottomRef.current > Space.lg && !followGlideRef.current;
     cancelReaderSettle();
     readerScrollingRef.current = false;
     setShowScrollToBottom(false);
@@ -955,7 +1004,11 @@ export function ThreadView({
     cancelReaderSettle();
     readerSettleTimerRef.current = setTimeout(settleReaderScroll, 150);
   }, [cancelReaderSettle, settleReaderScroll, updateScrollPosition]);
-  const handleTimelineLoad = useCallback(() => { loadedTimelineRef.current = timelineRef.current; }, []);
+  const handleTimelineLoad = useCallback(() => {
+    const list = timelineRef.current;
+    loadedTimelineRef.current = list;
+    uiFollowRef.current = Platform.OS === 'android' && uiFollow.bind(list?.getNativeScrollRef?.()) ? uiFollow : null;
+  }, [uiFollow]);
   const handleScrollBeginDrag = useCallback(() => {
     // The reader's finger takes over any glide in flight.
     cancelReaderSettle();
@@ -970,7 +1023,7 @@ export function ThreadView({
     const changed = scrollMetricsRef.current.height !== height;
     scrollMetricsRef.current.height = height;
     if (followNewMessagesRef.current) {
-      if (changed) scheduleBottomFollow();
+      if (changed) scheduleBottomFollow(false);
     } else refreshScrollButton();
   }, [refreshScrollButton, scheduleBottomFollow]);
   const handleTimelineLayout = useCallback((event: LayoutChangeEvent) => {
@@ -978,7 +1031,7 @@ export function ThreadView({
     const changed = scrollMetricsRef.current.viewport !== height;
     scrollMetricsRef.current.viewport = height;
     if (followNewMessagesRef.current) {
-      if (changed) scheduleBottomFollow();
+      if (changed) scheduleBottomFollow(true);
     } else refreshScrollButton();
   }, [refreshScrollButton, scheduleBottomFollow]);
   useLayoutEffect(() => {
