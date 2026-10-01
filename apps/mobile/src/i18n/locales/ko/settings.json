@@ -392,5 +392,6 @@
   "Test connections": "연결 테스트",
   "Restore version": "이 버전 복원",
   "This file is too large for version history.": "파일이 너무 커서 버전 기록을 저장할 수 없습니다.",
-  "Scheduled task created": "예약 작업을 만들었어요"
+  "Scheduled task created": "예약 작업을 만들었어요",
+  "Connection settings": "연결 설정"
 }

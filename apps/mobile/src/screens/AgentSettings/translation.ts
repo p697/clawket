@@ -36,7 +36,7 @@ export function translateAgentSettingsKey(
   if (key === 'Usage') return t('Usage', { ns: 'common' });
   if (key === 'Activity') return t('Activity', { ns: 'config' });
   if (key === 'Cost') return t('Cost', { ns: 'common' });
-  if (key === 'Connection') return t('Connection', { ns: 'common' });
+  if (key === 'Connection settings') return t('Connection settings', { ns: 'settings' });
   if (key === 'Status') return t('Status', { ns: 'settings' });
   if (key === 'Last ready') return t('Last ready', { ns: 'settings' });
   if (key === 'Bridge version') return t('Bridge version', { ns: 'settings' });

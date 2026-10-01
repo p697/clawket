@@ -392,5 +392,6 @@
   "Test connections": "接続をテスト",
   "Restore version": "この版に復元",
   "This file is too large for version history.": "ファイルが大きすぎるため、履歴を保存できません。",
-  "Scheduled task created": "定期タスクを作成しました"
+  "Scheduled task created": "定期タスクを作成しました",
+  "Connection settings": "接続設定"
 }

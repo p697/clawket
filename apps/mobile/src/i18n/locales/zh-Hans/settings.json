@@ -392,5 +392,6 @@
   "Test connections": "测试连接",
   "Restore version": "恢复此版本",
   "This file is too large for version history.": "文件过大，无法保留版本记录。",
-  "Scheduled task created": "定时任务创建成功"
+  "Scheduled task created": "定时任务创建成功",
+  "Connection settings": "连接设置"
 }

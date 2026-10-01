@@ -392,5 +392,6 @@
   "Test connections": "Probar conexiones",
   "Restore version": "Restaurar versión",
   "This file is too large for version history.": "El archivo es demasiado grande para guardar su historial de versiones.",
-  "Scheduled task created": "Tarea programada creada"
+  "Scheduled task created": "Tarea programada creada",
+  "Connection settings": "Configuración de conexión"
 }

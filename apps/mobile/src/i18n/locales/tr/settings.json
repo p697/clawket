@@ -392,5 +392,6 @@
   "Test connections": "Bağlantıları test et",
   "Restore version": "Sürümü geri yükle",
   "This file is too large for version history.": "Bu dosya sürüm geçmişi için çok büyük.",
-  "Scheduled task created": "Zamanlanmış görev oluşturuldu"
+  "Scheduled task created": "Zamanlanmış görev oluşturuldu",
+  "Connection settings": "Bağlantı ayarları"
 }

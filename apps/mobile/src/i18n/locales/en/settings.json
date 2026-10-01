@@ -392,5 +392,6 @@
   "Test connections": "Test connections",
   "Restore version": "Restore version",
   "This file is too large for version history.": "This file is too large for version history.",
-  "Scheduled task created": "Scheduled task created"
+  "Scheduled task created": "Scheduled task created",
+  "Connection settings": "Connection settings"
 }

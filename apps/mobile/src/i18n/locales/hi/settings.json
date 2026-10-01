@@ -392,5 +392,6 @@
   "Test connections": "कनेक्शन जाँचें",
   "Restore version": "यह संस्करण बहाल करें",
   "This file is too large for version history.": "यह फ़ाइल संस्करण इतिहास के लिए बहुत बड़ी है।",
-  "Scheduled task created": "शेड्यूल किया गया कार्य बनाया गया"
+  "Scheduled task created": "शेड्यूल किया गया कार्य बनाया गया",
+  "Connection settings": "कनेक्शन सेटिंग्स"
 }

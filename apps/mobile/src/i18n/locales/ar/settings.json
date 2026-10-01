@@ -392,5 +392,6 @@
   "Test connections": "اختبار الاتصالات",
   "Restore version": "استعادة هذا الإصدار",
   "This file is too large for version history.": "الملف كبير جدًا لحفظ سجل الإصدارات.",
-  "Scheduled task created": "تم إنشاء المهمة المجدولة"
+  "Scheduled task created": "تم إنشاء المهمة المجدولة",
+  "Connection settings": "إعدادات الاتصال"
 }

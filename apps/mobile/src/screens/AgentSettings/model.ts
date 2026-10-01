@@ -244,7 +244,7 @@ const CONNECTION_ROWS: ReadonlyArray<RowDefinition> = [
     // management rows rather than leading them.
     id: 'connection',
     placement: 'primary',
-    title: 'Connection',
+    title: 'Connection settings',
     value: (_summary, connectionState) => CONNECTION_STATE_LABELS[connectionState],
     attention: (_summary, connectionState) => connectionState !== 'ready',
   },
