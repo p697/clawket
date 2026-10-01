@@ -126,6 +126,13 @@ describe('resolveChatSurfaces', () => {
   });
 });
 
+/**
+ * White on the user's own solid bubble: 17-point message text. The owner
+ * chose a bubble halfway between the 4.5:1 accent and the lighter option B
+ * on 2026-10-01; the Agent's text and service pills keep 4.5:1.
+ */
+const OUTGOING_MIN_CONTRAST = 4.3;
+
 it.each(ACCENTS)('keeps %s message text readable across materials, schemes and wallpapers', (accentId) => {
   let checked = 0;
   for (const scheme of ['light', 'dark'] as const) {
@@ -134,9 +141,9 @@ it.each(ACCENTS)('keeps %s message text readable across materials, schemes and w
       for (const style of ['solid', 'soft', 'glass'] as const) {
         for (const opacity of [0.78, 0.9, 1]) {
           const surfaces = resolveChatSurfaces(theme, appearance(kind, { style, opacity }), accentId);
-          for (const bubble of [surfaces.outgoing, surfaces.incoming]) {
+          for (const [bubble, minimum] of [[surfaces.outgoing, OUTGOING_MIN_CONTRAST], [surfaces.incoming, 4.5]] as const) {
             for (const backdrop of backdrops(kind, accentId, scheme)) {
-              expect(contrastOn(bubble.textColor, bubble.backgroundColor, backdrop)).toBeGreaterThanOrEqual(4.5);
+              expect(contrastOn(bubble.textColor, bubble.backgroundColor, backdrop)).toBeGreaterThanOrEqual(minimum);
               checked += 1;
             }
           }
