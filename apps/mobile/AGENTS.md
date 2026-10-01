@@ -76,6 +76,8 @@ Keep recovery origin separate from transport failure cause. Record only the firs
 
 ### Connection and protocol safety
 
+- Publish successful Agent discovery independently of conversation catalog loading. A pending/failed catalog keeps its last complete sessions, freshness and unread baseline; do not cache a partial catalog or certify it as a first live snapshot. Fence partial discovery and late errors by adapter, ready generation and roster read. A ready connection's roster error offers `Retry list` and refreshes the roster; genuine connection failures still reconnect. Transport readiness and catalog completeness are distinct evidence.
+
 - The copied pairing prompt stays close to the original length: exact environment command, open-source CLI purpose, explicit authorization to return the printed temporary code in this conversation, and code/backend-only output without other credentials. Keep all locales aligned.
 
 - Treat socket open, a valid frame, handshake completion, and backend ready as distinct stages. Successful health evidence resets reconnect backoff; raw WebSocket open does not. A health answer reporting an unhealthy backend (Hermes `degraded` / `hermesApiReachable: false`) is not success: `reconnectAfterUnhealthyBackend` retries after a delay that grows until a handshake completes (observed 2026-10-01: an immediate retry reconnected about 1.4 times a second).
