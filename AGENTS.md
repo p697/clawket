@@ -203,6 +203,8 @@ Owner rules (2026-09-26, after the development Mac froze three times): never run
 
 Relay socket diagnostics use a server-generated per-socket UUID persisted in WebSocket attachments; never derive it from credentials or user/device identity. Preserve it across attachment updates and hibernation. Keep raw IDs and secrets redacted. Pairing/connection triage follows `docs/3.0/20-connection-diagnostics.md`; distinguish local logs, cloud logs and measured end-to-end evidence.
 
+The standalone `scripts/diagnostics/codex-roster.mjs` checks an existing authenticated loopback Codex Bridge without starting or stopping native/Relay processes. Keep its read-method allowlist, 20-second RPC / 90-second total budgets and Mobile catalog validation bounds. Output only fixed categories, counts, durations and invalid field names; never output payloads or credentials. A local pass is not proof of the phone/Relay path or inference. Its corrupted-input/socket tests belong in the CI-safe gate.
+
 Production observability records sanitized application logs only: keep invocation logs and traces disabled and query-string redaction enabled. Mirror approved cloud settings in the ignored deployment configs; each Registry service binding must target its own backend/environment Relay. Configuration-only version changes still require refreshing the recorded production deployment anchors and verifying source hashes.
 
 Observe Relay cold initialization only when its serial authenticated rehydration fails or exceeds one second. Record fixed stage categories and bounded I/O wall durations; preserve the constructor input gate and awaited heartbeat setup. Workers clocks exclude pre-constructor wakeup/queue time and do not measure synchronous CPU time.
