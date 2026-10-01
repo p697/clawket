@@ -24,3 +24,15 @@ it('retains the paid editing gate and exact loaded version, without retrying con
   await source.save!('Next');
   expect(profile.saveDocument).toHaveBeenLastCalledWith({ id: 'opaque', version: 'v2', content: 'Next' });
 });
+
+it('localizes native file conflicts and failures without exposing native error text', async () => {
+  const profile = { document: jest.fn(async () => ({ content: '', version: 'v', editable: true, missing: true, size: 0 })), saveDocument: jest.fn() } as unknown as jest.Mocked<AgentProfileOperations>;
+  const source = nativeProfileDocument(profile, 'c', 'opaque', false, { changed: '文件已改变', load: '读取失败', save: '保存失败' });
+  await source.load();
+  profile.saveDocument.mockRejectedValueOnce(new Error('Document changed; refresh before saving'));
+  await expect(source.save!('Draft')).rejects.toThrow('文件已改变');
+  profile.saveDocument.mockRejectedValueOnce(new Error('Native diagnostic'));
+  await expect(source.save!('Draft')).rejects.toThrow('保存失败');
+  profile.document.mockRejectedValueOnce(new Error('Native diagnostic'));
+  await expect(source.load()).rejects.toThrow('读取失败');
+});

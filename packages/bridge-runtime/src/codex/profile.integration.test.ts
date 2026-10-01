@@ -14,10 +14,12 @@ it('persists defaults, skills and instructions through an installed App Server i
   const rpc = new CodexRpc(process.env.CLAWKET_CODEX_PROFILE_COMMAND ?? 'codex', project, { ...process.env, CODEX_HOME: user });
   const profile = new CodexProfile({ request: (method, params) => rpc.request(method, params), projects: async () => [{ id: 'qa', name: 'QA', path: project, available: true }], models: async () => (await rpc.request('model/list', { limit: 100 })).data });
   try {
-    const defaults = await profile.defaults(); const model = defaults.models.find(row => row.isDefault) ?? defaults.models[0]; expect(model).toBeDefined();
+    const defaults = await profile.defaults(); const model = defaults.models.find(row => !row.isDefault) ?? defaults.models[0]; expect(model).toBeDefined();
     const thinking = model.levels[0] ?? null;
     const saved = await profile.setDefaults({ model: model.id, thinking, version: defaults.version }); expect(saved).toMatchObject({ model: model.id, thinking });
     expect(await readFile(join(user, 'config.toml'), 'utf8')).toContain('model');
+    const created = await rpc.request('thread/start', { cwd: project, approvalPolicy: 'never', sandbox: 'workspace-write' });
+    expect(created.model).toBe(model.id); expect(created.reasoningEffort).toBe(thinking);
     const skill = (await profile.skills('qa', true)).skills.find(row => row.name === 'profile-qa'); expect(skill).toBeDefined();
     expect((await profile.setSkillEnabled(skill!.id, false)).skills.find(row => row.name === 'profile-qa')!.enabled).toBe(false);
     expect((await profile.setSkillEnabled(skill!.id, true)).skills.find(row => row.name === 'profile-qa')!.enabled).toBe(true);

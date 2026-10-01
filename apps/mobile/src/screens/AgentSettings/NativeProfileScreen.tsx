@@ -41,10 +41,13 @@ type Props = {
 };
 
 export function NativeProfileScreen(props: Props) {
+  const { t } = useTranslation('settings');
   const profile = props.adapter.management?.profile;
   const source = useMemo(() => profile && props.params.profileDocument
-    ? nativeProfileDocument(profile, props.params.connectionId, props.params.profileDocument.id, props.section === 'skills') : null,
-  [profile, props.params.connectionId, props.params.profileDocument?.id, props.section]);
+    ? nativeProfileDocument(profile, props.params.connectionId, props.params.profileDocument.id, props.section === 'skills', {
+      changed: t('This file changed. Reopen it before saving.'), load: t('Failed to load file'), save: t('Save failed'),
+    }) : null,
+  [profile, props.params.connectionId, props.params.profileDocument?.id, props.section, t]);
   if (props.params.profileDocument) return <DocumentScreen title={props.params.profileDocument.name} source={source} online={props.online} isPro={props.isPro} navigation={props.navigation} onOpenPaywall={props.onOpenPaywall} />;
   if (!profile) return null;
   return <ProfilePage key={`${profileIdentity(profile)}:${props.params.connectionId}:${props.section}`} {...props} profile={profile} />;
