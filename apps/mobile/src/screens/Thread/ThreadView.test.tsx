@@ -119,6 +119,7 @@ jest.mock('react-native', () => {
     ...require('../../../__mocks__/native-animated'),
     DynamicColorIOS: (variants: unknown) => ({ dynamic: variants }),
     Keyboard: { dismiss: jest.fn() },
+    I18nManager: { isRTL: false },
     KeyboardAvoidingView: host('NativeKeyboardAvoidingView'),
     PanResponder: { create: (config: Record<string, unknown>) => ({ panHandlers: { __config: config } }) },
     BackHandler: { addEventListener: jest.fn(() => ({ remove: jest.fn() })) },
@@ -237,27 +238,27 @@ jest.mock('@shopify/flash-list', () => {
 
 jest.mock('react-native-reanimated', () => {
   const { Text, View } = require('react-native');
-  const createLayoutAnimation = (name: string) => {
-    const animation = {
-      name,
-      durationMs: undefined as number | undefined,
-      easingValue: undefined as unknown,
-      reduceMotionMode: undefined as string | undefined,
-      duration(durationMs: number) {
-        animation.durationMs = durationMs;
-        return animation;
-      },
-      easing(easingValue: unknown) {
-        animation.easingValue = easingValue;
-        return animation;
-      },
-      reduceMotion(reduceMotionMode: string) {
-        animation.reduceMotionMode = reduceMotionMode;
-        return animation;
-      },
-    };
-    return animation;
+  // Like Reanimated's builders, each modifier returns its own copy, so one
+  // component's duration never leaks into another's.
+  type LayoutAnimationMock = {
+    name: string;
+    durationMs?: number;
+    easingValue?: unknown;
+    reduceMotionMode?: string;
+    duration(durationMs: number): LayoutAnimationMock;
+    easing(easingValue: unknown): LayoutAnimationMock;
+    reduceMotion(reduceMotionMode: string): LayoutAnimationMock;
   };
+  const createLayoutAnimation = (name: string, fields: Partial<LayoutAnimationMock> = {}): LayoutAnimationMock => ({
+    name,
+    durationMs: undefined,
+    easingValue: undefined,
+    reduceMotionMode: undefined,
+    ...fields,
+    duration(durationMs: number) { return createLayoutAnimation(name, { ...this, durationMs }); },
+    easing(easingValue: unknown) { return createLayoutAnimation(name, { ...this, easingValue }); },
+    reduceMotion(reduceMotionMode: string) { return createLayoutAnimation(name, { ...this, reduceMotionMode }); },
+  });
   return {
     __esModule: true,
     default: {
@@ -272,6 +273,7 @@ jest.mock('react-native-reanimated', () => {
       linear: 'linear',
       inOut: (value: unknown) => value,
       out: (value: unknown) => ({ kind: 'out', value }),
+      bezier: (...points: number[]) => ({ kind: 'bezier', points }),
     },
     FadeIn: createLayoutAnimation('FadeIn'),
     FadeOut: createLayoutAnimation('FadeOut'),
@@ -437,6 +439,18 @@ function createProps(overrides: Partial<ThreadViewProps> = {}): ThreadViewProps 
     onResolveApproval: jest.fn(),
     ...overrides,
   };
+}
+
+/**
+ * One withTiming call per row entrance: a reply rises over `duration.normal`
+ * (eased out cubically); a sent row's flight counts once, by its Y curve.
+ */
+function isEntranceTiming([target, options]: unknown[]): boolean {
+  const config = options as { duration?: number; easing?: { kind?: string; value?: unknown; points?: number[] } } | undefined;
+  if (target !== 1 || !config) return false;
+  if (config.duration === Motion.duration.normal) return config.easing?.kind === 'out' && config.easing.value === 'cubic';
+  return config.duration === Motion.send.duration && config.easing?.kind === 'bezier'
+    && config.easing.points?.[1] === Motion.send.curveY[1];
 }
 
 describe('ThreadView', () => {
@@ -776,6 +790,47 @@ describe('ThreadView', () => {
     expect(view.getByTestId('thread-thinking-streaming')).toHaveTextContent('Thinking…');
   });
 
+  it('slides a live pill\'s next step in from below, never its first', () => {
+    const prompt: UiMessage = { id: 'accepted-prompt', role: 'user', text: 'Hello' };
+    const props = createProps({ messages: [prompt], input: '', isRunning: true });
+    const view = render(<ThreadView {...props} />);
+    const step = () => view.getByTestId('thread-thinking-streaming-step');
+    view.rerender(<ThreadView {...props} />);
+    expect(step().props.entering).toBeUndefined();
+    view.rerender(<ThreadView {...props} activityLabel="Using exec…" />);
+    const entering = step().props.entering as () => { initialValues: unknown };
+    expect(entering().initialValues).toEqual({ opacity: 0, transform: [{ translateY: Motion.step.rise }] });
+    // A re-render on the same step, such as its elapsed time ticking, does not replay it.
+    view.rerender(<ThreadView {...props} activityLabel="Using exec…" />);
+    expect(step().props.entering).toBe(entering);
+    // Reduced motion: the words fade in place and the spinner stands still.
+    mockReducedMotion = true;
+    view.rerender(<ThreadView {...props} activityLabel={null} />);
+    expect(step().props.entering).toMatchObject({ name: 'FadeIn', durationMs: Motion.step.duration });
+    expect(view.getByTestId('thread-thinking-streaming-busy').findAll((node) => String(node.type) === 'LoaderCircle')).toHaveLength(1);
+  });
+
+  it('turns send into a dimmed stop while the message is still leaving', () => {
+    const onCancel = jest.fn();
+    const prompt: UiMessage = { id: 'pending-prompt', role: 'user', text: 'Hello' };
+    const props = createProps({ messages: [prompt], input: '', isRunning: false, sendInFlight: true, onCancel });
+    const view = render(<ThreadView {...props} />);
+    const primary = () => view.getByTestId('thread-screen-composer-primary');
+    // No run to stop yet: Stop is already there, inert and dimmed, never a grey flash or the mic.
+    expect(primary().props.accessibilityLabel).toBe('Stop');
+    expect(primary().props.accessibilityState).toEqual({ disabled: true });
+    expect(view.queryByTestId('thread-screen-composer-voice')).toBeNull();
+    const surface = flattenStyle(view.getByTestId('thread-screen-composer-primary-surface').props.style);
+    expect(surface.opacity).toBe(0.4);
+    expect(surface.backgroundColor).toBe(buildTheme(mockScheme, mockScheme, builtInAccents.iceBlue).colors.ink);
+    // The run starts: the same Stop becomes live.
+    view.rerender(<ThreadView {...props} isRunning sendInFlight={false} />);
+    expect(primary().props.accessibilityState).toEqual({ disabled: false });
+    expect(flattenStyle(view.getByTestId('thread-screen-composer-primary-surface').props.style).opacity).toBeUndefined();
+    fireEvent.press(primary());
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
   it('marks the user’s own messages with Telegram-style delivery glyphs', () => {
     const now = Date.now();
     const turn: UiMessage = { id: 'usr_9', role: 'user', text: 'Ping', timestampMs: now };
@@ -812,9 +867,7 @@ describe('ThreadView', () => {
     withTiming.mockClear();
     // The entrance is the only timing that drives a shared value to 1 over the normal duration
     // with the ease-out curve; the scroll button animates to 0 here and the header fade is shorter.
-    const entranceCalls = () => withTiming.mock.calls.filter(([target, options]) => (
-      target === 1 && (options as { duration?: number })?.duration === Motion.duration.normal
-    ));
+    const entranceCalls = () => withTiming.mock.calls.filter(isEntranceTiming);
     const now = new Date(new Date().setHours(12, 0, 0, 0)).getTime();
     const card = (id: string, updatedAt: number): ThreadRunCard => ({
       id, kind: 'cron', jobId: id, agentId: 'atlas', title: `Job ${id}`, status: 'succeeded',
@@ -2548,9 +2601,7 @@ it.each(['light', 'dark'] as const)('distinguishes participants from the Agent i
 describe('messenger timeline layout', () => {
   const entranceCalls = () => {
     const { withTiming } = require('react-native-reanimated') as { withTiming: jest.Mock };
-    return withTiming.mock.calls.filter(([target, options]) => (
-      target === 1 && (options as { duration?: number })?.duration === Motion.duration.normal
-    ));
+    return withTiming.mock.calls.filter(isEntranceTiming);
   };
   const frameOpacity = (view: ReturnType<typeof render>) => (
     flattenStyle(view.getByTestId('thread-screen-timeline-frame').props.style).opacity

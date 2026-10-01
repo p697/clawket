@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
-import type { LucideIcon } from 'lucide-react-native';
+import { LoaderCircle, type LucideIcon } from 'lucide-react-native';
+import { Easing, FadeIn, useReducedMotion, withTiming, type EntryExitAnimationFunction } from 'react-native-reanimated';
 import { ChevronRight } from '../ui/DirectionalIcon';
+import { SwapEntrance } from '../ui/SwapEntrance';
 import { FontSize, FontWeight, LineHeight, Motion, Radius, Space } from '../../theme/tokens';
 import { useChatSurfaces } from './ChatPresentation';
 
@@ -29,6 +31,11 @@ export type ServicePillProps = Readonly<{
   busy?: boolean;
   /** Quieter trailing text, such as a running step's elapsed time. */
   trailing?: string;
+  /**
+   * Identity of a live pill's current step. When it changes the new words
+   * slide in from below (A+ motion, 160 ms); reduced motion fades them in.
+   */
+  stepKey?: string;
   numberOfLines?: number;
   onPress?: () => void;
   accessibilityLabel?: string;
@@ -50,6 +57,7 @@ export function ServicePill({
   icon: Icon,
   busy = false,
   trailing,
+  stepKey,
   numberOfLines = 1,
   onPress,
   accessibilityLabel,
@@ -57,24 +65,30 @@ export function ServicePill({
   testID,
 }: ServicePillProps): React.JSX.Element {
   const { service } = useChatSurfaces();
+  const reduceMotion = useReducedMotion();
   const bad = tone === 'bad';
   const textColor = bad ? service.badTextColor : service.textColor;
   const secondary = bad ? service.badTextColor : service.secondaryTextColor;
+  const labelText = (
+    <Text
+      style={[styles.label, { color: textColor }, emphasis ? styles.emphasis : null]}
+      numberOfLines={numberOfLines}
+    >
+      {children ?? label}
+    </Text>
+  );
   const content = (
     <>
       {busy ? (
         <View style={styles.glyph} testID={testID ? `${testID}-busy` : undefined}>
-          <ActivityIndicator size="small" color={textColor} style={styles.spinner} />
+          {reduceMotion
+            ? <LoaderCircle size={SERVICE_PILL_ICON_SIZE} color={textColor} strokeWidth={SERVICE_PILL_STROKE_WIDTH} />
+            : <ActivityIndicator size="small" color={textColor} style={styles.spinner} />}
         </View>
       ) : Icon ? (
         <Icon size={SERVICE_PILL_ICON_SIZE} color={textColor} strokeWidth={SERVICE_PILL_STROKE_WIDTH} />
       ) : null}
-      <Text
-        style={[styles.label, { color: textColor }, emphasis ? styles.emphasis : null]}
-        numberOfLines={numberOfLines}
-      >
-        {children ?? label}
-      </Text>
+      {stepKey === undefined ? labelText : <StepSwap stepKey={stepKey} testID={testID ? `${testID}-step` : undefined}>{labelText}</StepSwap>}
       {trailing ? <Text style={[styles.label, styles.trailing, { color: secondary }]} numberOfLines={1}>{trailing}</Text> : null}
       {onPress ? (
         <ChevronRight size={SERVICE_PILL_ICON_SIZE} color={secondary} strokeWidth={SERVICE_PILL_STROKE_WIDTH} />
@@ -103,7 +117,35 @@ export function ServicePill({
   );
 }
 
+const STEP_DURATION = Motion.step.duration;
+const STEP_RISE = Motion.step.rise;
+const stepRiseIn: EntryExitAnimationFunction = () => {
+  'worklet';
+  return {
+    initialValues: { opacity: 0, transform: [{ translateY: STEP_RISE }] },
+    animations: {
+      opacity: withTiming(1, { duration: STEP_DURATION, easing: Easing.out(Easing.cubic) }),
+      transform: [{ translateY: withTiming(0, { duration: STEP_DURATION, easing: Easing.out(Easing.cubic) }) }],
+    },
+  };
+};
+const stepFadeIn = FadeIn.duration(STEP_DURATION);
+
+/** The live step's words; a new step replaces them from below. The first step is already there. */
+function StepSwap({ stepKey, testID, children }: Readonly<{ stepKey: string; testID?: string; children: React.ReactNode }>): React.JSX.Element {
+  const [ready, setReady] = useState(false);
+  useEffect(() => { setReady(true); }, []);
+  return (
+    <SwapEntrance swapKey={stepKey} ready={ready} entering={stepRiseIn} reducedEntering={stepFadeIn} style={styles.step} testID={testID}>
+      {children}
+    </SwapEntrance>
+  );
+}
+
 const styles = StyleSheet.create({
+  step: {
+    flexShrink: 1,
+  },
   pill: {
     alignSelf: 'center',
     maxWidth: '100%',

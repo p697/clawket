@@ -1,7 +1,9 @@
 import type { LucideIcon } from 'lucide-react-native';
 import React, { useEffect, useMemo } from 'react';
 import { Pressable, StyleProp, StyleSheet, Text, type ViewStyle, View } from 'react-native';
-import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, {
+  cancelAnimation, Easing, FadeIn, FadeOut, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming,
+} from 'react-native-reanimated';
 import { useAppTheme } from '../../theme';
 import { createChatGlassStyle, resolveChatPresenceColors } from '../../features/chat-appearance/resolver';
 import { useConversationTheme } from '../chat/ChatPresentation';
@@ -79,19 +81,24 @@ export function HeaderPill({
   const presenceColors = useMemo(() => resolveChatPresenceColors(conversation), [conversation]);
   const subtitleColor = presence === 'working' || (!presence && online) ? presenceColors.working
     : presence === 'attention' ? presenceColors.attentionText : theme.colors.inkSecondary;
-  const subtitleOpacity = useSharedValue(1);
+  const reduceMotion = useReducedMotion();
+  const subtitleProgress = useSharedValue(1);
   const chrome = useMemo(
     () => (material === 'glass' ? createChatGlassStyle(theme) : { backgroundColor: theme.colors.surface }),
     [material, theme],
   );
-  const subtitleAnimatedStyle = useAnimatedStyle(() => ({ opacity: subtitleOpacity.value }));
+  // A new status sentence fades in and rises a few points (A+ motion, 200 ms); reduced motion only fades.
+  const subtitleAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: subtitleProgress.value,
+    transform: [{ translateY: reduceMotion ? 0 : (1 - subtitleProgress.value) * Motion.status.rise }],
+  }), [reduceMotion]);
 
   useEffect(() => {
-    cancelAnimation(subtitleOpacity);
-    subtitleOpacity.value = 0;
-    subtitleOpacity.value = withTiming(1, { duration: Motion.duration.fast });
-    return () => cancelAnimation(subtitleOpacity);
-  }, [subtitle, subtitleOpacity]);
+    cancelAnimation(subtitleProgress);
+    subtitleProgress.value = 0;
+    subtitleProgress.value = withTiming(1, { duration: Motion.status.duration, easing: Easing.out(Easing.quad) });
+    return () => cancelAnimation(subtitleProgress);
+  }, [subtitle, subtitleProgress]);
 
   const content = (
     <>
@@ -108,12 +115,15 @@ export function HeaderPill({
           attentionTone={attentionTone}
         />}
         {presence ? (
-          <PresenceRing
-            testID={testID ? `${testID}-${presence}` : undefined}
-            tone={presence}
-            avatarSize={HEADER_AVATAR_SIZE}
-            color={presence === 'working' ? presenceColors.working : presenceColors.attentionRing}
-          />
+          <Animated.View key={presence} style={styles.ringLayer} pointerEvents="none"
+            entering={FadeIn.duration(Motion.status.duration)} exiting={FadeOut.duration(Motion.status.duration)}>
+            <PresenceRing
+              testID={testID ? `${testID}-${presence}` : undefined}
+              tone={presence}
+              avatarSize={HEADER_AVATAR_SIZE}
+              color={presence === 'working' ? presenceColors.working : presenceColors.attentionRing}
+            />
+          </Animated.View>
         ) : null}
       </View>
       <View style={styles.labels}>
@@ -168,6 +178,10 @@ const styles = StyleSheet.create({
     height: HEADER_AVATAR_SIZE,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  // The ring centres itself on its parent, so its fade layer covers the avatar box.
+  ringLayer: {
+    ...StyleSheet.absoluteFill,
   },
   labels: {
     flexShrink: 1,

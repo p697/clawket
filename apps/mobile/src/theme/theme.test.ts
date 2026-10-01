@@ -200,6 +200,18 @@ describe('Clawket 3.0 theme tokens', () => {
       loadingSceneRotate: 9_000,
       loadingExit: 260,
       voiceRipple: 2_600,
+      send: {
+        duration: 300,
+        offsetX: 118,
+        offsetY: 148,
+        startScale: 0.94,
+        startOpacity: 0.35,
+        curveX: [0.23, 1, 0.32, 1],
+        curveY: [0.199, 0.011, 0.279, 0.91],
+      },
+      morph: { duration: 150, startScale: 0.6 },
+      step: { duration: 160, rise: 6 },
+      status: { duration: 200, rise: 4 },
     });
     expect(Shadow.floating).toEqual({
       shadowColor: '#111113',

@@ -340,6 +340,8 @@ export type ThreadViewProps = Readonly<{
   pendingQuestions?: React.ReactNode;
   readOnlyFooter?: React.ReactNode;
   isRunning: boolean;
+  /** A local send is leaving the device; the composer already shows Stop (A+ motion: send turns into stop). */
+  sendInFlight?: boolean;
   /** Identity of the live reply row the controller will add for the current run. */
   pendingReplyRenderKey?: string | null;
   canSend: boolean;
@@ -477,6 +479,7 @@ export function ThreadView({
   pendingQuestions,
   readOnlyFooter,
   isRunning,
+  sendInFlight = false,
   pendingReplyRenderKey,
   canSend,
   loadingMoreHistory = false,
@@ -1441,7 +1444,8 @@ export function ThreadView({
             }}
             onChangeText={onChangeInput}
             onSend={() => { onSend(); setComposerExpanded(false); }}
-            onStop={canCancel ? onCancel : undefined}
+            // While the message is still leaving there is no run to stop yet; Stop shows, dimmed.
+            onStop={canCancel && (isRunning || !sendInFlight) ? onCancel : undefined}
             onAddPress={canOpenAddMenu ? onOpenAddMenu : undefined}
             onVoicePress={canUseVoice ? onVoice : undefined}
             onVoiceStart={onVoiceStart}
@@ -1457,7 +1461,7 @@ export function ThreadView({
             onPasteFailed={capabilities.attachments ? onPasteFailed : undefined}
             canSend={!offline && state.kind !== 'reconnecting' && canSend}
             hasAttachments={pendingAttachments.length > 0}
-            isRunning={isRunning}
+            isRunning={isRunning || sendInFlight}
             expanded={composerExpanded}
             onExpandedChange={setComposerExpanded}
             appearance={wallpaperActive ? 'glass' : 'surface'}
@@ -2356,7 +2360,7 @@ function ThinkingPill({ testID }: Readonly<{ testID: string }>): React.JSX.Eleme
   const time = elapsed !== undefined && elapsed >= 1000 ? formatActivityDuration(elapsed, t) : undefined;
   return (
     <View testID={`${testID}-row`} accessibilityLiveRegion="polite" accessibilityState={{ busy: true }}>
-      <ServicePill testID={testID} busy label={live.label} trailing={time}
+      <ServicePill testID={testID} busy label={live.label} stepKey={live.label} trailing={time}
         accessibilityLabel={[live.label, time].filter(Boolean).join(', ')} />
     </View>
   );

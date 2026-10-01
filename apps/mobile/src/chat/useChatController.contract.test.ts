@@ -1821,6 +1821,49 @@ describe('useChatController contract', () => {
     expect(result.current.listData.map(message => message.text)).toEqual(['world', '', 'Hello']);
   });
 
+  it('ends a reply watched live with Success, a failed one with Warning, and stays still out of view', async () => {
+    const ExpoHaptics = jest.requireMock('expo-haptics') as { notificationAsync: jest.Mock };
+    const { useIsFocused } = jest.requireMock('@react-navigation/native') as { useIsFocused: jest.Mock };
+    const run = async (runId: string, stopReason: 'end_turn' | 'error') => {
+      const adapter = createAdapter('ready');
+      const view = renderHook(() => useChatController({ adapter: adapter as any, debugMode: false, showAgentAvatar: true } as any));
+      const eventParams = jest.mocked(useAdapterChatEvents).mock.calls.at(-1)?.[0];
+      await act(async () => {
+        eventParams!.onState?.('ready');
+        eventParams!.onUpdate?.({ type: 'run_started', sessionKey: 'agent:main:main', runId, activeRunId: runId, isSending: true, startedAtMs: 100 });
+        // OpenClaw reports a failed run twice: as an error, then as a finished run.
+        if (stopReason === 'error') {
+          eventParams!.onUpdate?.({
+            type: 'error', sessionKey: 'agent:main:main', runId, code: 'server', errorMessage: 'Backend failed',
+            message: { id: `error_${runId}`, role: 'system', text: 'Backend failed' },
+          });
+        }
+        eventParams!.onUpdate?.({
+          type: 'run_finished', sessionKey: 'agent:main:main', runId, stopReason, activeRunId: null, isSending: false,
+          finalMessage: { id: `final_${runId}`, role: 'assistant', text: 'Done', timestampMs: 300 },
+        });
+        await Promise.resolve();
+      });
+      view.unmount();
+    };
+
+    ExpoHaptics.notificationAsync.mockClear();
+    await run('run-ok', 'end_turn');
+    expect(ExpoHaptics.notificationAsync).toHaveBeenCalledWith('success');
+    ExpoHaptics.notificationAsync.mockClear();
+    await run('run-failed', 'error');
+    expect(ExpoHaptics.notificationAsync).toHaveBeenCalledTimes(1);
+    expect(ExpoHaptics.notificationAsync).toHaveBeenCalledWith('warning');
+    ExpoHaptics.notificationAsync.mockClear();
+    useIsFocused.mockReturnValue(false);
+    try {
+      await run('run-unseen', 'end_turn');
+    } finally {
+      useIsFocused.mockReturnValue(true);
+    }
+    expect(ExpoHaptics.notificationAsync).not.toHaveBeenCalled();
+  });
+
   it('stops labelling the turn with a tool once that tool settles', async () => {
     const adapter = createAdapter('ready');
     const { result } = renderHook(() =>

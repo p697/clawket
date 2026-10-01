@@ -77,6 +77,7 @@ export function ToolActivityPill({ messages, onPress, testID }: Readonly<{
       <ServicePill
         testID={testID}
         busy
+        stepKey={label}
         trailing={time}
         onPress={onPress}
         accessibilityLabel={[label, time].filter(Boolean).join(', ')}

@@ -1036,6 +1036,7 @@ function ThreadScreenContent({
         }} /> : undefined}
         composerRef={controller.composerRef}
         isRunning={controller.isSending}
+        sendInFlight={controller.sendInFlight}
         pendingReplyRenderKey={controller.pendingReplyRenderKey}
         canSend={!sessionPreview && controller.canSend}
         loadingMoreHistory={!sessionPreview && controller.loadingMoreHistory}

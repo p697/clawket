@@ -78,8 +78,12 @@ jest.mock('react-native-reanimated', () => {
     Easing: {
       ease: 'ease',
       linear: 'linear',
+      cubic: 'cubic',
       inOut: (value: unknown) => value,
+      out: (value: unknown) => value,
     },
+    FadeIn: { duration: () => 'fade-in' },
+    FadeOut: { duration: () => 'fade-out' },
     interpolateColor: jest.fn((_value: number, _input: number[], output: string[]) => output[0]),
     useAnimatedStyle: (factory: () => unknown) => factory(),
     useReducedMotion: () => mockReducedMotion,
@@ -348,6 +352,23 @@ describe.each(['light', 'dark'] as const)('%s roster primitives', (scheme) => {
     expect(result.UNSAFE_getByProps({ children: 'Model · 54%' })).toBeTruthy();
     expect(result.queryByTestId('header-pill-working')).toBeNull();
     expect(result.queryByTestId('header-pill-attention')).toBeNull();
+  });
+
+  it('fades a new status sentence in as it rises, and fades the ring in and out', () => {
+    const { withTiming } = jest.requireMock('react-native-reanimated') as { withTiming: jest.Mock };
+    const result = render(<HeaderPill testID="header-pill" agentId="main" name="Main" subtitle="Online" />);
+    withTiming.mockClear();
+    result.rerender(<HeaderPill testID="header-pill" agentId="main" name="Main" subtitle="Thinking…" presence="working" />);
+    // A+ motion: 200 ms, eased out, rising 4 points while it fades in.
+    expect(withTiming).toHaveBeenCalledWith(1, expect.objectContaining({ duration: Motion.status.duration }));
+    const subtitle = result.getByTestId('header-pill-subtitle');
+    expect(subtitle.props.style).toEqual(expect.arrayContaining([expect.objectContaining({
+      transform: [{ translateY: expect.any(Number) }],
+    })]));
+    const ringLayer = result.UNSAFE_getAllByType('AnimatedView' as unknown as React.ComponentType)
+      .find((node) => node.props.entering === 'fade-in');
+    expect(ringLayer?.props.exiting).toBe('fade-out');
+    expect(ringLayer?.findByProps({ testID: 'header-pill-working' })).toBeTruthy();
   });
 
   it('renders a borderless 84pt roster row with tokenized pressed feedback', () => {

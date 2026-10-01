@@ -1,6 +1,7 @@
 import { sameLiveToolCall, withToolMessage } from './liveToolMessages';
 import { hasBackendEcho, rememberUncertainSend, recoverUncertainSends, reconcilePromptReceipts, useUncertainSends } from './sendRecovery';
 import { describeReplyFailure, sanitizeReplyFailure } from './reply-failure';
+import { triggerSendHaptic, triggerSuccessHaptic, triggerWarningHaptic } from '../services/haptics';
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AppState,
@@ -158,6 +159,18 @@ function mapAdapterConnectionState(state: AdapterConnectionState): ConnectionSta
     case "error":
       return "closed";
   }
+}
+
+/** Conversation haptics play only for the conversation in front of an active app, never from the background. */
+function conversationHapticsAllowed(focusedRef: { current: boolean }): boolean {
+  return focusedRef.current && AppState.currentState === 'active';
+}
+
+/** One closing beat per run: OpenClaw reports a failed run as an error and then as a finished run. */
+function playRunEndHaptic(runId: string, endedRunRef: { current: string | null }, play: () => void): void {
+  if (endedRunRef.current === runId) return;
+  endedRunRef.current = runId;
+  play();
 }
 
 function mapAdapterAgent(agent: AgentDescriptor) {
@@ -565,6 +578,11 @@ export function useChatController({
   });
 
   const isFocused = useIsFocused();
+  // Conversation haptics (A+) play only for the conversation in front of the user.
+  const hapticsFocusedRef = useRef(isFocused);
+  hapticsFocusedRef.current = isFocused;
+  const approvalHapticIdsRef = useRef(new Set<string>());
+  const endedRunHapticRef = useRef<string | null>(null);
   const voiceSubmitRef = useRef<(text: string) => void>(() => {});
   const {
     startVoiceInput, stopVoiceInput, cancelVoiceInput,
@@ -2065,6 +2083,10 @@ export function useChatController({
           setSendFailure(t('The task finished before using this input. Your draft is restored.'));
         }
         const activeRunStartedAt = streamStartedAtRef.current;
+        // A reply watched live ends with Success, a failed one with Warning; a stop is the user's own act.
+        if (activeRunStartedAt !== null && update.stopReason !== "cancelled" && conversationHapticsAllowed(hapticsFocusedRef)) {
+          playRunEndHaptic(update.runId, endedRunHapticRef, update.stopReason === "error" ? triggerWarningHaptic : triggerSuccessHaptic);
+        }
         const streamText = chatStreamRef.current ?? "";
         const segments = chatStreamSegmentsRef.current;
         const tools = chatToolMessagesRef.current;
@@ -2162,6 +2184,12 @@ export function useChatController({
           history.setMessages((previous) =>
             appendUniqueMessage(previous, update.message!),
           );
+          const approvalHaptics = approvalHapticIdsRef.current;
+          if (!approvalHaptics.has(update.message.id) && conversationHapticsAllowed(hapticsFocusedRef)) {
+            approvalHaptics.add(update.message.id);
+            if (approvalHaptics.size > 512) approvalHaptics.delete(approvalHaptics.values().next().value!);
+            triggerWarningHaptic();
+          }
         }
         return;
       case "approval_resolved":
@@ -2219,6 +2247,7 @@ export function useChatController({
           );
         }
         if (update.runId) {
+          if (conversationHapticsAllowed(hapticsFocusedRef)) playRunEndHaptic(update.runId, endedRunHapticRef, triggerWarningHaptic);
           const failure = describeReplyFailure(update.errorMessage, update.code);
           setSendFailure(t(failure.summaryKey));
           setSendFailureDetails(failure.details || null);
@@ -2861,7 +2890,7 @@ export function useChatController({
         const queued = messageQueue.enqueue({ text, images });
         releaseSendTriggerGuard();
         if (!queued) return;
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        triggerSendHaptic();
         analyticsEvents.chatMessageQueued({
           backend: adapter?.connection.backendKind,
           queue_length: messageQueue.readCurrent().items.length,
@@ -2872,8 +2901,7 @@ export function useChatController({
         return;
       }
 
-      // Haptic feedback — crisp impact
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid);
+      triggerSendHaptic();
 
       // Local acceptance is synchronous. Network checks and image preparation
       // happen behind the visible bubble, with the existing delivery safeguards.
@@ -3017,7 +3045,7 @@ export function useChatController({
   }, [adapter, messageQueue]);
 
   const sendQueuedMessageNow = useCallback((id: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid);
+    triggerSendHaptic();
     messageQueue.promote(id);
   }, [messageQueue]);
 
@@ -3570,6 +3598,8 @@ export function useChatController({
     canAbortCurrentRun: adapter?.capabilities.abort === true,
     queuedMessages: messageQueue.state.items,
     queueHeld: messageQueue.state.held,
+    /** A local send is leaving the device and its run has not started yet. */
+    sendInFlight: messageQueue.state.sendingId !== null,
     canSendQueuedNow: queueDeliveryReady && messageQueue.state.held,
     editQueuedMessage,
     removeQueuedMessage: removeQueuedMessageById,

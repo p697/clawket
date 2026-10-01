@@ -1003,6 +1003,48 @@ describe('long-form composer', () => {
   });
 });
 
+describe('composer slot morph', () => {
+  const labels = { add: 'Add', voice: 'Voice', send: 'Send', stop: 'Stop' };
+  const props = { testID: 'composer', placeholder: 'Message', accessibilityLabels: labels,
+    onChangeText: jest.fn(), onSend: jest.fn(), onStop: jest.fn(), onVoicePress: jest.fn(), onVoiceStart: jest.fn() };
+  afterEach(() => { mockReducedMotion = false; });
+
+  it('pops a control in when it replaces another, never the one already on screen', () => {
+    const view = render(<Composer {...props} value="" />);
+    // The mic was there when the composer mounted: a later re-render does not make it pop.
+    view.rerender(<Composer {...props} value="" />);
+    expect(view.getByTestId('composer-slot-mic').props.entering).toBeUndefined();
+    view.rerender(<Composer {...props} value="Hi" />);
+    const entering = view.getByTestId('composer-slot-send').props.entering as () => {
+      initialValues: { opacity: number; transform: Array<{ scale: number }> };
+    };
+    expect(entering().initialValues).toEqual({ opacity: 0, transform: [{ scale: Motion.morph.startScale }] });
+    // Sending turns send into stop, which pops in the same way.
+    view.rerender(<Composer {...props} value="" isRunning />);
+    expect(view.queryByTestId('composer-slot-send')).toBeNull();
+    expect(view.getByTestId('composer-slot-stop').props.entering).toBe(entering);
+  });
+
+  it('fades a replacing control in place under reduced motion', () => {
+    mockReducedMotion = true;
+    const view = render(<Composer {...props} value="" />);
+    view.rerender(<Composer {...props} value="Hi" />);
+    expect(view.getByTestId('composer-slot-send').props.entering).toEqual({ name: 'FadeIn' });
+  });
+
+  it('keeps the held voice target mounted while only its surface turns into send', () => {
+    const view = render(<Composer {...props} value="" />);
+    const target = view.getByTestId('composer-voice');
+    fireEvent(target, 'pressIn', { nativeEvent: { pageY: 500 } });
+    view.rerender(<Composer {...props} value="" voiceState="listening" />);
+    // The finger that started dictation is still down on the same target.
+    expect(view.getByTestId('composer-voice')).toBe(target);
+    const surface = view.getByTestId('composer-slot-voice-send');
+    expect(surface.props.pointerEvents).toBe('none');
+    expect(typeof surface.props.entering).toBe('function');
+  });
+});
+
 describe.each(['light', 'dark'] as const)('%s glass chrome over a wallpaper', (scheme) => {
   beforeEach(() => { mockScheme = scheme; });
 

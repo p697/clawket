@@ -221,8 +221,10 @@ jest.mock('expo-haptics', () => ({
   impactAsync: jest.fn(),
   notificationAsync: jest.fn(),
   selectionAsync: jest.fn(),
-  ImpactFeedbackStyle: { Light: 'light', Medium: 'medium', Heavy: 'heavy' },
+  performAndroidHapticsAsync: jest.fn(),
+  ImpactFeedbackStyle: { Light: 'light', Medium: 'medium', Heavy: 'heavy', Rigid: 'rigid', Soft: 'soft' },
   NotificationFeedbackType: { Success: 'success', Warning: 'warning', Error: 'error' },
+  AndroidHaptics: { Confirm: 'confirm', Reject: 'reject', Virtual_Key: 'virtual-key' },
 }));
 
 // Mock expo-clipboard

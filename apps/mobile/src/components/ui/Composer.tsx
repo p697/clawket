@@ -6,11 +6,12 @@ import {
 import { ArrowUp, ChevronDown, Maximize2, Minimize2, Mic, Plus, Square, X, type LucideIcon } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import Animated, {
-  FadeIn, LinearTransition, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming,
-  type SharedValue,
+  Easing, FadeIn, LinearTransition, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming,
+  type EntryExitAnimationFunction, type SharedValue,
 } from 'react-native-reanimated';
 import { useVoiceGesture } from '../../chat/useVoiceGesture';
 import { VoiceWaveform } from './VoiceWaveform';
+import { SwapEntrance } from './SwapEntrance';
 import { countDraftLines } from '../../chat/composerDraftLines';
 import { shouldCaptureComposerKeyboardDismiss } from '../../chat/composerKeyboardDismiss';
 import { useAppTheme } from '../../theme';
@@ -85,6 +86,9 @@ export const Composer = React.forwardRef<ComposerHandle, ComposerProps>(function
   const { t } = useTranslation('chat');
   const { fontScale, height: windowHeight } = useWindowDimensions();
   const reducedMotion = useReducedMotion();
+  // The slot's first control is part of the screen; only a later swap pops in.
+  const [slotReady, setSlotReady] = useState(false);
+  useEffect(() => { setSlotReady(true); }, []);
   const inputRef = useRef<TextInput>(null);
   const previousExpandedRef = useRef(expanded);
   const focusAfterLayoutRef = useRef(false);
@@ -196,33 +200,41 @@ export const Composer = React.forwardRef<ComposerHandle, ComposerProps>(function
     : onAddPress ? <ComposerAction icon={Plus} label={accessibilityLabels.add} onPress={onAddPress}
       tone={expanded ? 'secondary' : 'chrome'} chrome={glassChrome} disabled={addDisabled || !editable} testID={testID ? `${testID}-add` : undefined} /> : null;
   const trailingActions = (voiceActive || showVoice) ? <>
-    {voiceActive && !voiceGesture.holding && !voiceGesture.pressing && voiceState === 'listening' ? <ComposerAction icon={Square}
+    {voiceActive && !voiceGesture.holding && !voiceGesture.pressing && voiceState === 'listening' ? <SlotMorph slot="voice-stop" ready={slotReady}>
+      <ComposerAction icon={Square}
       label={accessibilityLabels.stopVoice ?? accessibilityLabels.stop} onPress={() => (onVoiceStop ?? onVoicePress)?.(false)}
-      tone={expanded ? 'plain' : 'chrome'} chrome={glassChrome} testID={testID ? `${testID}-voice-stop` : undefined} /> : null}
+      tone={expanded ? 'plain' : 'chrome'} chrome={glassChrome} testID={testID ? `${testID}-voice-stop` : undefined} />
+    </SlotMorph> : null}
     <Pressable {...voiceGesture.handlers} testID={testID ? `${testID}-voice` : undefined}
       accessibilityRole="button" accessibilityLabel={voiceActive ? accessibilityLabels.send : accessibilityLabels.voice}
       accessibilityHint={t('Tap to dictate. Hold and release to send.')}
       accessibilityState={{ busy: voiceState === 'transcribing', disabled: voiceDisabled }}
       style={actionStyles.target}>
-      <View pointerEvents="none" style={[actionStyles.surface, voiceActive ? { backgroundColor: theme.colors.ink }
-        : expanded ? { backgroundColor: theme.colors.canvas } : [chromeSurface, glassChrome]]}>
-        {voiceState === 'transcribing' ? <ActivityIndicator color={theme.colors.canvas} />
-          : voiceActive ? <ArrowUp size={IconSize.md} color={theme.colors.canvas} /> : <Mic size={IconSize.md} color={theme.colors.ink} strokeWidth={1.75} />}
-      </View>
+      {/* The press that starts dictation is still down when the mic turns into send:
+          only the surface morphs, the touch target stays mounted. */}
+      <SlotMorph slot={voiceActive ? 'voice-send' : 'mic'} ready={slotReady} inert>
+        <View style={[actionStyles.surface, voiceActive ? { backgroundColor: theme.colors.ink }
+          : expanded ? { backgroundColor: theme.colors.canvas } : [chromeSurface, glassChrome]]}>
+          {voiceState === 'transcribing' ? <ActivityIndicator color={theme.colors.canvas} />
+            : voiceActive ? <ArrowUp size={IconSize.md} color={theme.colors.canvas} /> : <Mic size={IconSize.md} color={theme.colors.ink} strokeWidth={1.75} />}
+        </View>
+      </SlotMorph>
     </Pressable>
   </> : showQueueSend ? <>
     {onStop ? <Animated.View layout={reducedMotion ? undefined : LinearTransition.duration(Motion.duration.fast)}>
       <ComposerAction icon={Square} label={accessibilityLabels.stop} onPress={onStop} tone={expanded ? 'secondary' : 'chrome'} chrome={glassChrome}
         testID={testID ? `${testID}-stop` : undefined} />
     </Animated.View> : null}
-    <Animated.View entering={reducedMotion ? undefined : FadeIn.duration(Motion.duration.fast)}>
+    <SlotMorph slot="queue-send" ready={slotReady}>
       <ComposerAction icon={ArrowUp} label={accessibilityLabels.queue ?? accessibilityLabels.send} onPress={onSend}
         tone="send" disabled={primaryDisabled} testID={testID ? `${testID}-primary` : undefined} />
-    </Animated.View>
+    </SlotMorph>
   </>
-    : <ComposerAction icon={isRunning ? Square : ArrowUp} label={isRunning ? accessibilityLabels.stop : accessibilityLabels.send}
-      onPress={isRunning ? (onStop ?? (() => undefined)) : onSend} tone={isRunning ? 'primary' : 'send'}
-      disabled={primaryDisabled} testID={testID ? `${testID}-primary` : undefined} />;
+    : <SlotMorph slot={isRunning ? 'stop' : 'send'} ready={slotReady}>
+      <ComposerAction icon={isRunning ? Square : ArrowUp} label={isRunning ? accessibilityLabels.stop : accessibilityLabels.send}
+        onPress={isRunning ? (onStop ?? (() => undefined)) : onSend} tone={isRunning ? 'primary' : 'send'}
+        disabled={primaryDisabled} testID={testID ? `${testID}-primary` : undefined} />
+    </SlotMorph>;
   const dismissHandlers = expanded ? null : keyboardDismissResponder.panHandlers;
 
   // One row (A+ chat design, owner decision 2026-09-30): the add circle, the
@@ -308,6 +320,33 @@ export const Composer = React.forwardRef<ComposerHandle, ComposerProps>(function
   );
 });
 
+const MORPH_DURATION = Motion.morph.duration;
+const MORPH_START_SCALE = Motion.morph.startScale;
+/** A control replacing another in its slot pops in: 60% to full size with a fade (A+ motion, 150 ms). */
+const slotPopIn: EntryExitAnimationFunction = () => {
+  'worklet';
+  return {
+    initialValues: { opacity: 0, transform: [{ scale: MORPH_START_SCALE }] },
+    animations: {
+      opacity: withTiming(1, { duration: MORPH_DURATION, easing: Easing.out(Easing.cubic) }),
+      transform: [{ scale: withTiming(1, { duration: MORPH_DURATION, easing: Easing.out(Easing.cubic) }) }],
+    },
+  };
+};
+const slotFadeIn = FadeIn.duration(MORPH_DURATION);
+
+/** One composer slot: send, stop and mic take one another's place. `inert` leaves touches to the parent. */
+function SlotMorph({ slot, ready, inert = false, children }: Readonly<{
+  slot: string; ready: boolean; inert?: boolean; children: React.ReactNode;
+}>): React.JSX.Element {
+  return (
+    <SwapEntrance swapKey={slot} ready={ready} entering={slotPopIn} reducedEntering={slotFadeIn}
+      pointerEvents={inert ? 'none' : 'box-none'} testID={`composer-slot-${slot}`}>
+      {children}
+    </SwapEntrance>
+  );
+}
+
 /**
  * Composer circles, all 44 points (A+): `chrome` floats beside the capsule on
  * the same glass or neutral surface, `send` is the conversation's solid accent
@@ -322,14 +361,18 @@ function ComposerAction({ icon: Icon, label, onPress, disabled = false, tone = '
   const { outgoing } = useChatSurfaces();
   const reducedMotion = useReducedMotion();
   const filled = tone === 'primary' || tone === 'send';
-  const backgroundColor = filled ? disabled ? theme.colors.line : tone === 'send' ? outgoing.backgroundColor : theme.colors.ink
+  // A stop that is not available yet (the message is still leaving) keeps its
+  // ink, dimmed, so it does not flash grey before the reply starts.
+  const dimmedStop = disabled && tone === 'primary';
+  const backgroundColor = filled ? disabled && !dimmedStop ? theme.colors.line : tone === 'send' ? outgoing.backgroundColor : theme.colors.ink
     : tone === 'secondary' ? theme.colors.canvas : tone === 'chrome' ? theme.colors.surface : 'transparent';
-  const color = disabled ? theme.colors.inkTertiary : tone === 'send' ? outgoing.textColor : tone === 'primary' ? theme.colors.canvas : theme.colors.ink;
+  const color = disabled && !dimmedStop ? theme.colors.inkTertiary : tone === 'send' ? outgoing.textColor : tone === 'primary' ? theme.colors.canvas : theme.colors.ink;
   return <Pressable testID={testID} accessibilityRole="button" accessibilityLabel={label}
     accessibilityState={{ disabled }} disabled={disabled} onPress={onPress}
     style={({ pressed }) => [actionStyles.target, { opacity: pressed ? 0.7 : 1,
       transform: [{ scale: pressed && !reducedMotion ? Motion.pressedScale : 1 }] }]}>
-    <View testID={testID ? `${testID}-surface` : undefined} style={[actionStyles.surface, { backgroundColor }, tone === 'chrome' ? chrome : null]}>
+    <View testID={testID ? `${testID}-surface` : undefined} style={[actionStyles.surface, { backgroundColor }, tone === 'chrome' ? chrome : null,
+      dimmedStop ? actionStyles.dimmed : null]}>
       <Icon size={IconSize.md} color={color} strokeWidth={filled ? 2 : 1.75} />
     </View>
   </Pressable>;
@@ -337,6 +380,7 @@ function ComposerAction({ icon: Icon, label, onPress, disabled = false, tone = '
 const actionStyles = StyleSheet.create({
   target: { width: ControlSize.floatingButton, height: ControlSize.floatingButton, alignItems: 'center', justifyContent: 'center' },
   surface: { width: ControlSize.floatingButton, height: ControlSize.floatingButton, borderRadius: Radius.full, alignItems: 'center', justifyContent: 'center' },
+  dimmed: { opacity: 0.4 },
   haloHost: { overflow: 'visible' },
   halo: { position: 'absolute', width: ControlSize.pill, height: ControlSize.pill, borderRadius: Radius.full },
 });
