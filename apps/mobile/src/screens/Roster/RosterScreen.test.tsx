@@ -1047,6 +1047,21 @@ describe('RosterScreen', () => {
     expect(mockReconnectConnection).toHaveBeenCalledWith(mockConnections.activeConnectionId);
   });
 
+  it('retries a failed roster without replacing the ready connection or opening pull refresh', async () => {
+    mockConnections = snapshot({
+      activeState: 'ready', error: { operation: 'roster', connectionId: 'live', message: 'catalog failed' },
+    });
+    const view = render(<RosterScreen {...props()} />);
+    expect(view.getByTestId('roster-error-banner-label').props.children).toBe('Retry list');
+    expect(view.getByTestId('roster-error-banner-action').props.accessibilityLabel).toBe('Retry list');
+    await act(async () => { fireEvent.press(view.getByTestId('roster-error-banner-action')); });
+    expect(mockRefreshRoster).toHaveBeenCalledTimes(1);
+    expect(mockReconnectConnection).not.toHaveBeenCalled();
+    expect(mockProbeActive).not.toHaveBeenCalled();
+    expect(view.getByTestId('roster-refresh-control').props.refreshing).toBe(false);
+    expect(view.getByTestId('roster-row-agent:live:main')).toBeTruthy();
+  });
+
   it('keeps manual reconnect out of native pull refresh and coalesces repeated presses', async () => {
     let finish!: () => void;
     mockReconnectConnection.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve; }));

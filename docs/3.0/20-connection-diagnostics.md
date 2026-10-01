@@ -178,6 +178,12 @@ A cloud owner replacement storm is a separate diagnostic pattern. The September 
 
 Locally verified sequentially: Mobile diagnostics, pairing deadline, analytics events/local ring, coordinator, Gateway mapping/lifecycle, both claim services and QR flow (10 files, 197 tests); Codex RPC/service and CLI (3 files, 74 tests); OpenClaw/Hermes Relay entrypoints and telemetry (4 files, 100 tests); Registry OpenClaw/Hermes entrypoints (2 files, 21 tests). Five affected workspace typechecks passed. Full suites, release matrix and physical-device fault-injection acceptance were not run. Deployment/release remains separate from source verification.
 
+### 2026-10-01: Codex ready connection missing from the roster
+
+The owner's iPhone retained the new Codex in My connections with an online dot, while home showed Retry and no Codex Agent. Removing all prior Codex connections did not resolve it. Matching sanitized App events at 07:41:10–12 UTC show a successful claim, an 842 ms handshake, saved connections increasing from one to two and roster Agents remaining at four. This places the failure after handshake; it does not identify a failed RPC. Existing connection diagnostics do not record roster-read failures, and Relay response delivery does not certify application success. The remote computer's catalog error/native version remains unconfirmed.
+
+The coordinator previously published Agents only after both Agent and conversation reads succeeded. A self-contained regression reproduces a ready adapter with no Agent while its first catalog stalls/fails, across OpenClaw, Hermes, Pi, Codex and Claude Code. Successful Agent discovery now appears independently, retaining the last complete sessions/freshness and leaving a first catalog cache-only until complete. Partial catalogs do not seed unread baselines or overwrite persistent caches; late discovery/errors are fenced by read and ready generations. Home offers `Retry list` for a ready connection's roster error without replacing the socket; real connection errors retain reconnect and failed-list health checks. An online dot still means the active connection is ready, not that its catalog or inference has succeeded.
+
 
 ### Negotiated owner cadence with connected full clients
 
