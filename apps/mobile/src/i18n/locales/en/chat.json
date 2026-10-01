@@ -206,6 +206,8 @@
   "Send now": "Send now",
   "This model is unavailable in the current Codex runtime. Choose another model or update Codex on your computer.": "This model is unavailable in the current Codex runtime. Choose another model or update Codex on your computer.",
   "The agent couldn't complete this reply. Please try again.": "The agent couldn't complete this reply. Please try again.",
+  "Session reset": "Session reset",
+  "Context compacted": "Context compacted",
   "No execution summary was recorded.": "No execution summary was recorded.",
   "Completed without a text reply.": "Completed without a text reply.",
   "Context remaining: {{percent}}%": "Context remaining: {{percent}}%",

@@ -206,6 +206,8 @@
   "Send now": "立即傳送",
   "This model is unavailable in the current Codex runtime. Choose another model or update Codex on your computer.": "目前 Codex 無法使用這個模型。請選擇其他模型，或在電腦上更新 Codex。",
   "The agent couldn't complete this reply. Please try again.": "Agent 未能完成回覆，請重試。",
+  "Session reset": "會話已重置",
+  "Context compacted": "上下文已壓縮",
   "No execution summary was recorded.": "此次執行未記錄摘要。",
   "Completed without a text reply.": "此次執行未產生文字回覆。",
   "Context remaining: {{percent}}%": "上下文剩餘 {{percent}}%",

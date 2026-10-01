@@ -206,6 +206,8 @@
   "Send now": "Şimdi gönder",
   "This model is unavailable in the current Codex runtime. Choose another model or update Codex on your computer.": "Bu model mevcut Codex ortamında kullanılamıyor. Başka bir model seçin veya bilgisayarınızda Codex’i güncelleyin.",
   "The agent couldn't complete this reply. Please try again.": "Agent bu yanıtı tamamlayamadı. Lütfen yeniden deneyin.",
+  "Session reset": "Oturum sıfırlandı",
+  "Context compacted": "Bağlam sıkıştırıldı",
   "No execution summary was recorded.": "Çalıştırma özeti kaydedilmedi.",
   "Completed without a text reply.": "Metin yanıtı olmadan tamamlandı.",
   "Context remaining: {{percent}}%": "Kalan bağlam: %{{percent}}",

@@ -49,11 +49,15 @@ export function mapGatewayHistoryMessage(
     || readNonEmptyString(value.messageId)
     || (isRecord(value.__openclaw) ? readNonEmptyString(value.__openclaw.id) : undefined)
     || `${sessionKey}:history:${timestampMs ?? 'unknown'}:${index}`;
+  // OpenClaw projects its transcript reset and compaction boundaries as one-word
+  // system rows ("Reset", "Compaction"); only that structured kind becomes a
+  // known notice, and other system text stays verbatim.
+  const boundaryNotice = role === 'system' ? readOpenClawBoundaryNotice(value.__openclaw) : undefined;
   const message: ChatMessage = {
     id,
     role,
-    text: role === 'user' && isRecord(value.__openclaw) && value.__openclaw.importedFrom === 'claude-cli'
-      ? stripOpenClawInputContext(stripCliResumeContext(extractHistoryText(content))) : extractHistoryText(content),
+    text: boundaryNotice ?? (role === 'user' && isRecord(value.__openclaw) && value.__openclaw.importedFrom === 'claude-cli'
+      ? stripOpenClawInputContext(stripCliResumeContext(extractHistoryText(content))) : extractHistoryText(content)),
     ...(timestampMs !== undefined ? { timestampMs } : {}),
     ...(idempotencyKey ? { idempotencyKey } : {}),
     ...(readNonEmptyString(value.provider) ? { provider: readNonEmptyString(value.provider) } : {}),
@@ -531,6 +535,14 @@ function extractHistoryTool(
           ? { input: toolCall.input }
         : {}),
   };
+}
+
+/** The fixed notice `localizeAgentSystemNotice` translates for an OpenClaw boundary. */
+function readOpenClawBoundaryNotice(meta: unknown): string | undefined {
+  if (!isRecord(meta)) return undefined;
+  if (meta.kind === 'reset') return 'Session reset';
+  if (meta.kind === 'compaction') return 'Context compacted';
+  return undefined;
 }
 
 function normalizeRole(value: unknown): ChatMessage['role'] {

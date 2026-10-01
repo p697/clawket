@@ -206,6 +206,8 @@
   "Send now": "今すぐ送信",
   "This model is unavailable in the current Codex runtime. Choose another model or update Codex on your computer.": "現在の Codex ではこのモデルを使用できません。別のモデルを選択するか、パソコンで Codex を更新してください。",
   "The agent couldn't complete this reply. Please try again.": "エージェントが返信を完了できませんでした。もう一度お試しください。",
+  "Session reset": "セッションをリセットしました",
+  "Context compacted": "コンテキストを圧縮しました",
   "No execution summary was recorded.": "この実行の概要は記録されていません。",
   "Completed without a text reply.": "テキストの返信なしで完了しました。",
   "Context remaining: {{percent}}%": "コンテキスト残り {{percent}}%",

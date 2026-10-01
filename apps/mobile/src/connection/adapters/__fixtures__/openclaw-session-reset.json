@@ -1,0 +1,63 @@
+[
+  {
+    "role": "user",
+    "content": "Morning",
+    "timestamp": 1790811103447,
+    "idempotencyKey": "1790811112443_q420ycea:user",
+    "__openclaw": {
+      "senderIsOwner": true,
+      "id": "first-user-after-reset",
+      "idempotencyKey": "1790811112443_q420ycea:user",
+      "recordTimestampMs": 1790811105135,
+      "transcriptPosition": {
+        "source": "recorded-transcript",
+        "rawSeq": 3793
+      },
+      "seq": 2
+    }
+  },
+  {
+    "role": "system",
+    "content": [
+      {
+        "type": "text",
+        "text": "Reset"
+      }
+    ],
+    "timestamp": 1790811104359,
+    "__openclaw": {
+      "kind": "reset",
+      "id": "5e4bd6a9",
+      "transcriptPosition": {
+        "source": "recorded-transcript",
+        "rawSeq": 3792
+      },
+      "seq": 1
+    }
+  },
+  {
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "Good morning."
+      }
+    ],
+    "stopReason": "stop",
+    "api": "cli",
+    "provider": "claude-cli",
+    "model": "claude-opus-5-5",
+    "timestamp": 1790811120791,
+    "idempotencyKey": "cli-assistant:1790811112443_q420ycea",
+    "__openclaw": {
+      "id": "first-reply-after-reset",
+      "idempotencyKey": "cli-assistant:1790811112443_q420ycea",
+      "recordTimestampMs": 1790811120798,
+      "transcriptPosition": {
+        "source": "recorded-transcript",
+        "rawSeq": 3794
+      },
+      "seq": 3
+    }
+  }
+]

@@ -206,6 +206,8 @@
   "Send now": "अभी भेजें",
   "This model is unavailable in the current Codex runtime. Choose another model or update Codex on your computer.": "मौजूदा Codex में यह मॉडल उपलब्ध नहीं है। कोई दूसरा मॉडल चुनें या अपने कंप्यूटर पर Codex अपडेट करें।",
   "The agent couldn't complete this reply. Please try again.": "Agent यह जवाब पूरा नहीं कर सका। कृपया फिर कोशिश करें।",
+  "Session reset": "सेशन रीसेट हो गया",
+  "Context compacted": "कॉन्टेक्स्ट संक्षिप्त हो गया",
   "No execution summary was recorded.": "निष्पादन सारांश दर्ज नहीं हुआ।",
   "Completed without a text reply.": "बिना टेक्स्ट जवाब के पूरा हुआ।",
   "Context remaining: {{percent}}%": "शेष कॉन्टेक्स्ट: {{percent}}%",

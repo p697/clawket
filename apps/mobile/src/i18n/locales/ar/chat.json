@@ -206,6 +206,8 @@
   "Send now": "إرسال الآن",
   "This model is unavailable in the current Codex runtime. Choose another model or update Codex on your computer.": "هذا النموذج غير متاح في Codex الحالي. اختر نموذجًا آخر أو حدّث Codex على جهاز الكمبيوتر.",
   "The agent couldn't complete this reply. Please try again.": "لم يتمكن الوكيل من إكمال هذا الرد. يرجى المحاولة مرة أخرى.",
+  "Session reset": "تمت إعادة تعيين الجلسة",
+  "Context compacted": "تم ضغط السياق",
   "No execution summary was recorded.": "لم يُسجَّل ملخص للتنفيذ.",
   "Completed without a text reply.": "اكتمل دون رد نصي.",
   "Context remaining: {{percent}}%": "السياق المتبقي: {{percent}}%",

@@ -1074,6 +1074,8 @@ describe('ThreadView', () => {
     'The model account has insufficient credits or quota.',
     'The model is rate limited. Try again shortly.',
     "The agent couldn't complete this reply. Please try again.",
+    'Session reset',
+    'Context compacted',
   ])('localizes cold or cached fixed system notices without rewriting conversation text: %s', (text) => {
     const translated = `localized:${text}`;
     const translation = jest.spyOn(require('react-i18next'), 'useTranslation').mockReturnValue({

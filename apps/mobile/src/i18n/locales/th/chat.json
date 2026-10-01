@@ -206,6 +206,8 @@
   "Send now": "ส่งตอนนี้",
   "This model is unavailable in the current Codex runtime. Choose another model or update Codex on your computer.": "โมเดลนี้ไม่พร้อมใช้งานใน Codex ปัจจุบัน เลือกโมเดลอื่นหรืออัปเดต Codex บนคอมพิวเตอร์ของคุณ",
   "The agent couldn't complete this reply. Please try again.": "Agent ไม่สามารถตอบกลับให้เสร็จสมบูรณ์ได้ โปรดลองอีกครั้ง",
+  "Session reset": "รีเซ็ตเซสชันแล้ว",
+  "Context compacted": "บีบอัดบริบทแล้ว",
   "No execution summary was recorded.": "ไม่มีการบันทึกสรุปการรัน",
   "Completed without a text reply.": "เสร็จสมบูรณ์โดยไม่มีคำตอบเป็นข้อความ",
   "Context remaining: {{percent}}%": "บริบทที่เหลือ: {{percent}}%",

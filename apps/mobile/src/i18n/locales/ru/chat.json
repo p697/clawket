@@ -206,6 +206,8 @@
   "Send now": "Отправить сейчас",
   "This model is unavailable in the current Codex runtime. Choose another model or update Codex on your computer.": "Эта модель недоступна в текущем Codex. Выберите другую модель или обновите Codex на компьютере.",
   "The agent couldn't complete this reply. Please try again.": "Агент не смог завершить ответ. Попробуйте ещё раз.",
+  "Session reset": "Сессия сброшена",
+  "Context compacted": "Контекст сжат",
   "No execution summary was recorded.": "Сводка выполнения не записана.",
   "Completed without a text reply.": "Завершено без текстового ответа.",
   "Context remaining: {{percent}}%": "Осталось контекста: {{percent}}%",
