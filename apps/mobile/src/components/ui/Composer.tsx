@@ -124,6 +124,12 @@ export const Composer = React.forwardRef<ComposerHandle, ComposerProps>(function
   // A late UI-thread height can outlive a cleared draft. Native layout bounds
   // collapse the empty editor without remounting it or disturbing selection.
   const emptyInputHeight = !expanded && voiceState === 'idle' && value.length === 0 ? targetHeight : undefined;
+  // Below the shell's visible height the native editor keeps one more line of
+  // room. A newly wrapped line lands there, so Android never scrolls the
+  // editor to its caret and hides the first line while the shell catches up
+  // (device report 2026-10-01); the shell then reveals the new line as it grows.
+  const inputFrameHeight = !expanded && voiceState === 'idle' && contentHeight <= maxHeight
+    ? Math.min(maxHeight, targetHeight + lineHeight) : undefined;
   // Only the toolbar owns drag-to-dismiss. Capturing above the native editor
   // would also steal downward cursor/selection-handle drags.
   const inputScrollable = !expanded && contentHeight > maxHeight;
@@ -289,7 +295,10 @@ export const Composer = React.forwardRef<ComposerHandle, ComposerProps>(function
                 testID={testID ? `${testID}-voice-waveform` : undefined} /> : null}
               <Text accessibilityLiveRegion="polite" style={styles.voiceHint}>{voiceHint}</Text>
             </View> : null}
-            <View style={[styles.inputHost, voiceActive ? styles.hiddenInput : null]} pointerEvents={voiceActive ? 'none' : 'auto'} accessibilityElementsHidden={voiceActive}>
+            <View testID={testID ? `${testID}-input-host` : undefined}
+              style={[styles.inputHost, inputFrameHeight !== undefined ? { alignSelf: 'flex-start', height: inputFrameHeight } : null,
+                voiceActive ? styles.hiddenInput : null]}
+              pointerEvents={voiceActive ? 'none' : 'auto'} accessibilityElementsHidden={voiceActive}>
             {onPasteFiles ? <PasteCapableTextInput {...inputProps} onPasteFiles={onPasteFiles} onPasteFailed={onPasteFailed} />
               : <CompositionSafeTextInput {...inputProps} />}
             </View>

@@ -917,6 +917,26 @@ describe('long-form composer', () => {
     }
   });
 
+  it('keeps one line of room below the visible draft so a wrapped line never scrolls the first one away', () => {
+    const props = { testID: 'editor', value: 'A draft that wraps', placeholder: 'Message', accessibilityLabels: labels,
+      onChangeText: jest.fn(), onSend: jest.fn() };
+    const view = render(<Composer {...props} />);
+    try {
+      const host = () => flattenStyle(view.getByTestId('editor-input-host').props.style);
+      fireEvent(view.getByTestId('editor-measurement', { includeHiddenElements: true }), 'textLayout', {
+        nativeEvent: { lines: [{}, {}] },
+      });
+      // Two lines show; the editor holds a third, clipped by the shell until it grows.
+      expect(host()).toMatchObject({ alignSelf: 'flex-start', height: LineHeight.body * 3 + Space.sm * 2 });
+      // Past the five-line cap the editor scrolls inside the shell as before.
+      fireEvent(view.getByTestId('editor-measurement', { includeHiddenElements: true }), 'textLayout', {
+        nativeEvent: { lines: [{}, {}, {}, {}, {}, {}] },
+      });
+      expect(host().height).toBeUndefined();
+      expect(host().alignSelf).toBe('stretch');
+    } finally { view.unmount(); }
+  });
+
   it('keeps the empty editor tall enough for enlarged text without changing its native input', () => {
     const props = { testID: 'editor', value: '', placeholder: 'Message', accessibilityLabels: labels,
       onChangeText: jest.fn(), onSend: jest.fn() };
