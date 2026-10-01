@@ -935,6 +935,23 @@ describe('long-form composer', () => {
     }
   });
 
+  it('keeps a sent draft at its height while the thread holds it, then collapses', () => {
+    const props = { testID: 'editor', value: 'Three\nline\ndraft', placeholder: 'Message', accessibilityLabels: labels,
+      onChangeText: jest.fn(), onSend: jest.fn() };
+    const view = render(<Composer {...props} />);
+    try {
+      fireEvent(view.getByTestId('editor-measurement', { includeHiddenElements: true }), 'textLayout', {
+        nativeEvent: { lines: [{}, {}, {}] },
+      });
+      const draftHeight = LineHeight.body * 3 + Space.sm * 2;
+      const shellStyle = () => flattenStyle(view.getByTestId('editor-input-shell').props.style);
+      view.rerender(<Composer {...props} value="" holdHeight />);
+      expect(shellStyle()).toMatchObject({ minHeight: draftHeight, maxHeight: draftHeight });
+      view.rerender(<Composer {...props} value="" />);
+      expect(shellStyle()).toMatchObject({ minHeight: ControlSize.pill, maxHeight: ControlSize.pill });
+    } finally { view.unmount(); }
+  });
+
   it('keeps the empty editor tall enough for enlarged text without changing its native input', () => {
     const props = { testID: 'editor', value: '', placeholder: 'Message', accessibilityLabels: labels,
       onChangeText: jest.fn(), onSend: jest.fn() };
