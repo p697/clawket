@@ -5,7 +5,8 @@
     - 发送飞行动画的第 0 帧是左移 118pt、下移 148pt、透明度 0.35，就是截图里的气泡。
     - 对话列表淡入的第 0 帧是透明度 0，就是整页空白。
   - 复现：iPhone 17 模拟器，Release 包换入探针。动画结束后卡 JS 2.6 秒再重新渲染：气泡退回起飞点、半透明，淡入块消失；不卡 JS 的对照组正常。
-  - 改法：`react-native-reanimated` 4.5.1 → 4.5.5（同一小版本的补丁，RN 0.86、worklets 0.10 兼容），并加入 `expo.install.exclude`，防止被 Expo 拉回 4.5.1。原生依赖变化，装到手机上要重新出包。
+  - 改法：`react-native-reanimated` 4.5.1 → 4.5.5（同一小版本的补丁，RN 0.86、worklets 0.10 兼容），根目录和 apps/mobile 两份 lockfile 同步，并加入 `expo.install.exclude`，防止被 Expo 拉回 4.5.1。原生依赖变化，装到手机上要重新出包；已上传 Google Play 的 3.1.1（30102）不含这个修复。
+  - 验证：iOS 模拟器 Release 原生构建（Pod 装的是 RNReanimated 4.5.5），同一个探针卡 JS 2.6 秒后重新渲染，气泡和淡入块都保持最终状态，和对照组一致。
 
 - 2026-10-02 Google Play 3.1.1 就绪，未提审（负责人最初授权打包/上传/提审，随后明确要求「先不要立即点提审，先就绪」）。
   - 从最新 main `0dc875fb` 加版本同步提交 `a8e78226` 构建正式签名 AAB：`com.p697.clawket` 3.1.1/30102，99,644,556 bytes。两个 manifest、两份 lockfile 同步；Bridge/共享包版本保持独立。
