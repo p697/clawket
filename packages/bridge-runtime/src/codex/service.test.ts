@@ -3,6 +3,7 @@ import { mkdtempSync, mkdirSync, rmSync, readFileSync, realpathSync, writeFileSy
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 const mock = vi.hoisted(() => ({ instances: [] as any[], request: vi.fn(), respond: vi.fn(), refuse: vi.fn(), resumeSpeed: vi.fn() }));
 vi.mock('./resume-settings.js', () => ({ nativeResumeSpeed: (...args: any[]) => mock.resumeSpeed(...args) }));
 vi.mock('./rpc.js', async () => {
@@ -27,6 +28,15 @@ import { CodexService } from './service.js';
 import { codexMessages } from './history.js';
 import { DesktopIpcError } from './desktop-ipc.js';
 import { permissionPatch } from './settings.js';
+// Use Node's standalone loader rather than Vitest's cross-workspace transform.
+function validateRows(rows: unknown[]) {
+  const diagnostic = new URL('../../../../scripts/diagnostics/codex-roster.mjs', import.meta.url).href;
+  const code = `import { readFileSync } from 'node:fs'; import { validateRows } from ${JSON.stringify(diagnostic)};
+    console.log(JSON.stringify(validateRows(JSON.parse(readFileSync(0, 'utf8')))));`;
+  return JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e', code], {
+    input: JSON.stringify(rows), encoding: 'utf8', timeout: 10_000, maxBuffer: 64 * 1024, windowsHide: true,
+  }));
+}
 let root: string, project: string, service: CodexService, key: string, threadId: string;
 let updates: any[];
 let settings: any;
@@ -80,6 +90,56 @@ beforeEach(async () => {
 });
 afterEach(async () => { await service.stop(); rmSync(root, { recursive: true, force: true }); });
 describe('Codex owned sessions', () => {
+  it.each([null, 42, false, { name: 'private-native-value' }, ['private-native-value']])(
+    'keeps the complete catalog when a native model is not a string: %j', async model => {
+      const knownId = randomUUID();
+      const original = mock.request.getMockImplementation()!;
+      mock.request.mockImplementation((method, params) => method === 'thread/list'
+        ? Promise.resolve({ data: [
+          { id: threadId, cwd: project, updatedAt: 1, model, modelProvider: 'custom' },
+          { id: knownId, cwd: project, updatedAt: 1, model: 'native-model', modelProvider: 'custom' },
+        ] }) : original(method, params));
+      const snapshot = await request('sessions.sync');
+      const wire = JSON.parse(JSON.stringify(snapshot.sessions));
+      expect(snapshot).toMatchObject({ kind: 'full', total: 3 });
+      expect(validateRows(wire)).toEqual({ rowCount: 3, invalidRows: 0, invalidFields: [] });
+      expect(wire.find((row: any) => row.sessionId === threadId)).not.toHaveProperty('model');
+      expect(wire.find((row: any) => row.sessionId === knownId)).toMatchObject({ model: 'native-model' });
+      expect(JSON.parse(JSON.stringify(await request('sessions.list')))).toEqual(wire);
+      expect(mock.request.mock.calls.some(([method]) => ['thread/resume', 'thread/settings/update', 'turn/start'].includes(method))).toBe(false);
+    },
+  );
+  it('keeps older indexed null-model sessions valid in lists, live metadata and archives without rewriting the model', async () => {
+    Object.assign((service as any).records[0], { model: null, threadId, activity: 1000 }); (service as any).save();
+    await service.stop(); service = new CodexService({ project, directory: join(root, 'state') });
+    const events: any[] = []; service.on('update', update => events.push(update));
+    const wire = JSON.parse(JSON.stringify(await request('sessions.list')));
+    expect(validateRows(wire)).toEqual({ rowCount: 1, invalidRows: 0, invalidFields: [] });
+    expect(wire[0]).not.toHaveProperty('model');
+    expect((await request('sessions.sync')).sessions).toEqual(await request('sessions.list'));
+    expect(JSON.parse(readFileSync(join(root, 'state', 'sessions.json'), 'utf8')).sessions[0].model).toBeNull();
+    await request('sessions.rename', { sessionKey: key, title: 'Renamed' });
+    expect(validateRows(JSON.parse(JSON.stringify([events.find(update => update.type === 'session_info_update').session]))).invalidRows).toBe(0);
+    await request('sessions.archive', { sessionKey: key, archived: true });
+    const archived = JSON.parse(JSON.stringify(await request('sessions.archived')));
+    expect(validateRows(archived)).toEqual({ rowCount: 1, invalidRows: 0, invalidFields: [] });
+    expect(archived[0]).not.toHaveProperty('model');
+    expect(mock.request.mock.calls.some(([method]) => ['thread/resume', 'thread/settings/update', 'turn/start'].includes(method))).toBe(false);
+  });
+  it('indexes a native conversation with unknown model metadata without inventing a model or changing native settings', async () => {
+    await service.stop(); service = new CodexService({ project, directory: join(root, 'state'), device: true });
+    const native = { id: threadId, cwd: project, updatedAt: 1, model: null, modelProvider: 'custom' };
+    const original = mock.request.getMockImplementation()!;
+    mock.request.mockImplementation((method, params) => method === 'thread/list' ? Promise.resolve({ data: [native] }) : original(method, params));
+    await request('sessions.list');
+    await request('sessions.rename', { sessionKey: `native:${threadId}`, title: 'Renamed' });
+    const indexed = JSON.parse(readFileSync(join(root, 'state', 'sessions.json'), 'utf8')).sessions.find((row: any) => row.threadId === threadId);
+    expect(indexed).toMatchObject({ native: true, provider: 'custom', title: 'Renamed' });
+    expect(indexed).not.toHaveProperty('model');
+    expect(native.model).toBeNull();
+    expect(validateRows(JSON.parse(JSON.stringify(await request('sessions.list')))).invalidRows).toBe(0);
+    expect(mock.request.mock.calls.some(([method]) => ['thread/resume', 'thread/settings/update', 'turn/start'].includes(method))).toBe(false);
+  });
   it('sync negotiates immutable pages and does not report removed rows after an incomplete native scan', async () => {
     const original = mock.request.getMockImplementation()!;
     const native = { id: threadId, cwd: project, updatedAt: 1, name: 'Native' };
