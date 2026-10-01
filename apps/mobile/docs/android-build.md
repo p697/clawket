@@ -505,6 +505,26 @@ Mitigation:
 - reconnect the cable
 - verify `adb devices` before starting the dev stack or installing an APK
 
+### Truncated Device Screenshots
+
+Symptom:
+
+- a screenshot shows the screen down to a straight horizontal edge, often through a line of text, and plain white below it, including where the system navigation bar should be
+- the full-size PNG has no `IEND` chunk (on the SM-A566B its size is 360 bytes plus whole 8204-byte data chunks): the stream stopped part-way, and image viewers draw the rows that never arrived as white
+
+Device QA on 2026-10-01 read three such captures as rendering bugs (a Session Panel list that seemed to stay blank for 2–3 seconds, a roster with two rows after a theme switch, a slow model sheet); screen recordings of the same steps showed complete frames.
+
+Mitigation:
+
+- write the capture on the device, pull it, and check that it ends with the `IEND` chunk before judging what it shows:
+
+```bash
+adb shell screencap -p /sdcard/qa.png && adb pull /sdcard/qa.png .
+tail -c 8 qa.png | xxd -p   # a complete PNG prints 49454e44ae426082
+```
+
+- time transitions from an `adb shell screenrecord` video and its frame timestamps (`ffprobe -show_entries frame=pts_time`), not from screenshots taken seconds apart
+
 ## Practical Summary
 
 Use this for daily Android development:
