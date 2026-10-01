@@ -4,6 +4,19 @@ import type { PairingValidationReason } from '../../connection';
 // `@latest`: a bare `npx @p697/clawket` runs an older global install when one exists, and a 3.0 CLI
 // rejects `--backend codex|claude-code|pi` (Samsung A56 device review, 2026-09-27).
 export const PAIRING_COMMAND = 'npx @p697/clawket@latest pair';
+// Interactive discovery is production-only and must run in a person's terminal.
+export const PAIRING_CHOOSE_COMMAND = `${PAIRING_COMMAND} choose`;
+
+export type PairingMethod = 'agent' | 'terminal';
+
+const DEFAULT_PAIRING_METHOD: Readonly<Record<PairableBackendKind, PairingMethod>> = {
+  openclaw: 'agent', hermes: 'agent', codex: 'terminal',
+  'claude-code': 'terminal', pi: 'terminal', 'local-model': 'terminal',
+};
+
+export function getDefaultPairingMethod(backend: PairableBackendKind): PairingMethod {
+  return DEFAULT_PAIRING_METHOD[backend];
+}
 
 /**
  * Message the user pastes to the agent already running on their computer so it

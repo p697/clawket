@@ -292,7 +292,6 @@
   "Design language": "لغة التصميم",
   "Connect your agent": "وصّل وكيلك",
   "Connect {{backend}}": "توصيل {{backend}}",
-  "Get a pairing code": "الحصول على رمز اقتران",
   "Send to my agent": "إرسال إلى وكيلي",
   "Run it myself": "سأشغّله بنفسي",
   "Send this message to your agent": "أرسل هذه الرسالة إلى وكيلك",
@@ -389,5 +388,16 @@
   "Pairing environment does not match. Use the command shown on this page.": "بيئة الاقتران غير متطابقة. استخدم الأمر المعروض في هذه الصفحة.",
   "Pattern": "نقش",
   "Photo": "صورة",
-  "Plain": "سادة"
+  "Plain": "سادة",
+  "Connect on your computer": "الاتصال على الكمبيوتر",
+  "Detect and choose on your computer": "اكتشاف واختيار على الكمبيوتر",
+  "One command to choose the agent you want to connect.": "أمر واحد لاختيار الوكيل الذي تريد الاتصال به.",
+  "Have a QR code? Scan to connect": "لديك رمز QR؟ امسحه للاتصال",
+  "Run in your computer terminal": "تشغيل في طرفية الكمبيوتر",
+  "Choose an agent, then scan": "اختر وكيلًا، ثم امسح الرمز",
+  "Scan the QR code in your terminal": "امسح رمز QR في الطرفية",
+  "Choose an installed agent in Terminal, then scan its QR code here.": "اختر وكيلًا مثبتًا في الطرفية، ثم امسح رمز QR الخاص به هنا.",
+  "Change platform": "تغيير المنصة",
+  "Choose the platform that printed your code.": "اختر المنصة التي أنشأت الرمز.",
+  "Enter pairing code": "إدخال رمز الاقتران"
 }

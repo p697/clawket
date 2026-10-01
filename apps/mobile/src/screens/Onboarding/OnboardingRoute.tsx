@@ -297,13 +297,14 @@ export function OnboardingRoute({
     perform();
   }, [canBeginPairing, onScanQrTapped, openGatewayScanner, importGatewayQrImage]);
 
-  // The chooser's header scan (owner request 2026-09-28): every pairing QR names its backend, so
+  // The chooser's generic scan (owner request 2026-09-28): every pairing QR names its backend, so
   // the scanned payload selects the step and then runs the same backend-checked claim path.
-  const scanAnyQr = useCallback(() => {
+  const scanAnyQr = useCallback((importImage = false) => {
     const perform = () => {
       if (pairingRequestInFlightRef.current) return;
       setOperation((current) => ({ ...current, active: false, errorCode: undefined }));
-      void openGatewayScanner({
+      const openScanner = importImage ? importGatewayQrImage : openGatewayScanner;
+      void openScanner({
         onScanned: (result) => {
           const backendKind = resolvePairingPayloadBackend(result);
           if (!backendKind) {
@@ -316,15 +317,15 @@ export function OnboardingRoute({
     };
     if (!canBeginPairing(perform)) return;
     perform();
-  }, [canBeginPairing, openGatewayScanner, t]);
+  }, [canBeginPairing, importGatewayQrImage, openGatewayScanner, t]);
 
-  const connectFromPairingLink = useCallback(async (url: string) => {
+  const connectFromPairingLink = useCallback(async (url: string, expectedBackendKind = initialBackend) => {
     const perform = async () => {
       if (!acquirePairingRequest()) return;
-      const requestId = beginOperation(initialBackend);
+      const requestId = beginOperation(expectedBackendKind);
       try {
         const result = await connectBackendPairingLink({
-          backendKind: initialBackend,
+          backendKind: expectedBackendKind,
           environment,
           debugMode,
           runtime: getConnectionRuntime(),
@@ -493,17 +494,18 @@ export function OnboardingRoute({
         await Clipboard.setStringAsync(prompt);
         onAgentPromptCopied?.(backend);
       }}
-      onPastePairingCode={async () => {
+      onPastePairingCode={async (backend) => {
         const pasted = (await Clipboard.getStringAsync()).trim();
         if (/^(https?:\/\/|clawket:\/\/)/i.test(pasted)) {
-          await connectFromPairingLink(pasted);
+          await connectFromPairingLink(pasted, backend);
           return null;
         }
         return pasted;
       }}
       onSubmitPairing={submitPairing}
       onScanQr={scanQr}
-      onScanAnyQr={scanAnyQr}
+      onScanAnyQr={() => scanAnyQr()}
+      onImportAnyQr={() => scanAnyQr(true)}
       onImportQr={(backend) => scanQr(backend, true)}
       onOpenYouMind={openYouMind}
       onOpenWebsite={openWebsite}

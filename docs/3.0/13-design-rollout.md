@@ -102,3 +102,11 @@ Build recovery: the final full gates initially hit disk exhaustion. Removed only
 
 
 Automated checkpoint: current required gate passes (228 Mobile suites / 2,092 tests; 148 UI source files; 6,318 translated entries). Signed iOS Release built and installed; Android arm64 Debug build and Android JS/Hermes export passed. These results do not close any pending native-review row above.
+
+## Platform-first pairing (2026-10-01)
+
+The owner approved the “按平台连接” mockup and its implementation. Keep the official platform list; add a quiet “Detect and choose on your computer” card below it and a prominent generic QR scanner. Discovery displays `npx @p697/clawket@latest pair choose` only in Production: the interactive command accepts no flags, detects installed products in the terminal, and does not include local model servers. Never put this interactive command in an Agent prompt.
+
+OpenClaw and Hermes default to the folded Agent prompt with transient clipboard feedback and the existing pairing-code form. Codex, Claude Code, Pi, and local models default to a stacked, selectable terminal command and a primary QR scanner. Step 01 carries the quiet method switch; local models keep their engine selector and Pi keeps its project-directory hint. Terminal code entry is disclosed on request, photos remain secondary, and changing platforms resets drafts and restores the platform default. A generic human code requires selecting its platform before entering it; QR and photo payloads supply their own backend. Use the existing secure claim path and current environment validation for every entry method.
+
+Reuse neutral Buttons, SetupPrimitives, official PlatformMarks and theme tokens in both appearances. Retain plain page headers, keyboard reveal, the held error and connecting cover. Automated interaction checks are not physical-device visual acceptance; do not connect a simulator for acceptance without owner authorization.

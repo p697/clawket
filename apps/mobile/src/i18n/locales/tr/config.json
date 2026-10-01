@@ -292,7 +292,6 @@
   "Design language": "Tasarım dili",
   "Connect your agent": "Agent'ınızı bağlayın",
   "Connect {{backend}}": "{{backend}} bağla",
-  "Get a pairing code": "Eşleştirme kodu al",
   "Send to my agent": "Agent'ıma gönder",
   "Run it myself": "Kendim çalıştıracağım",
   "Send this message to your agent": "Bu mesajı Agent'ınıza gönderin",
@@ -389,5 +388,16 @@
   "Pairing environment does not match. Use the command shown on this page.": "Eşleştirme ortamı uyuşmuyor. Bu sayfada gösterilen komutu kullanın.",
   "Pattern": "Desen",
   "Photo": "Fotoğraf",
-  "Plain": "Düz"
+  "Plain": "Düz",
+  "Connect on your computer": "Bilgisayarınızda bağlanın",
+  "Detect and choose on your computer": "Bilgisayarınızda algılayın ve seçin",
+  "One command to choose the agent you want to connect.": "Bağlamak istediğiniz ajanı tek komutla seçin.",
+  "Have a QR code? Scan to connect": "QR kodunuz var mı? Bağlanmak için tarayın",
+  "Run in your computer terminal": "Bilgisayar terminalinde çalıştırın",
+  "Choose an agent, then scan": "Bir ajan seçin, ardından tarayın",
+  "Scan the QR code in your terminal": "Terminaldeki QR kodunu tarayın",
+  "Choose an installed agent in Terminal, then scan its QR code here.": "Terminalde kurulu bir ajan seçin, ardından QR kodunu burada tarayın.",
+  "Change platform": "Platformu değiştir",
+  "Choose the platform that printed your code.": "Kodunuzu oluşturan platformu seçin.",
+  "Enter pairing code": "Eşleştirme kodunu girin"
 }

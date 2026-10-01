@@ -292,7 +292,6 @@
   "Design language": "Язык дизайна",
   "Connect your agent": "Подключите агента",
   "Connect {{backend}}": "Подключить {{backend}}",
-  "Get a pairing code": "Получить код сопряжения",
   "Send to my agent": "Отправить моему агенту",
   "Run it myself": "Запустить самому",
   "Send this message to your agent": "Отправьте это сообщение вашему агенту",
@@ -389,5 +388,16 @@
   "Pairing environment does not match. Use the command shown on this page.": "Среда сопряжения не совпадает. Используйте команду, показанную на этой странице.",
   "Pattern": "Узор",
   "Photo": "Фото",
-  "Plain": "Однотонный"
+  "Plain": "Однотонный",
+  "Connect on your computer": "Подключить на компьютере",
+  "Detect and choose on your computer": "Найти и выбрать на компьютере",
+  "One command to choose the agent you want to connect.": "Одна команда для выбора подключаемого агента.",
+  "Have a QR code? Scan to connect": "Уже есть QR-код? Сканируйте для подключения",
+  "Run in your computer terminal": "Запустите в терминале компьютера",
+  "Choose an agent, then scan": "Выберите агента и сканируйте",
+  "Scan the QR code in your terminal": "Сканируйте QR-код в терминале",
+  "Choose an installed agent in Terminal, then scan its QR code here.": "Выберите установленного агента в терминале, затем отсканируйте его QR-код здесь.",
+  "Change platform": "Сменить платформу",
+  "Choose the platform that printed your code.": "Выберите платформу, которая выдала код.",
+  "Enter pairing code": "Ввести код сопряжения"
 }

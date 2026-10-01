@@ -1,5 +1,7 @@
 import {
   buildAgentPairingPrompt,
+  getDefaultPairingMethod,
+  PAIRING_CHOOSE_COMMAND,
   buildBackendPairingCommand,
   buildLocalModelPairingCommand,
   LOCAL_MODEL_ENGINES,
@@ -13,6 +15,14 @@ import {
 } from './model';
 
 describe('Onboarding model', () => {
+  it('uses backend defaults and reserves discovery for a terminal', () => {
+    expect(getDefaultPairingMethod('openclaw')).toBe('agent');
+    expect(getDefaultPairingMethod('hermes')).toBe('agent');
+    for (const backend of ['codex', 'claude-code', 'pi', 'local-model'] as const) {
+      expect(getDefaultPairingMethod(backend)).toBe('terminal');
+    }
+    expect(PAIRING_CHOOSE_COMMAND).toBe('npx @p697/clawket@latest pair choose');
+  });
   it('builds an agent message that names the open-source CLI, the exact command, and the printed code line', () => {
     const t = (key: string, options: { ns: 'config'; pairCommand: string }) => key.replace('{{pairCommand}}', options.pairCommand);
     const prompt = buildAgentPairingPrompt(t, 'npx @p697/clawket pair --preview');

@@ -292,7 +292,6 @@
   "Design language": "Lenguaje de diseño",
   "Connect your agent": "Conecta tu agente",
   "Connect {{backend}}": "Conectar {{backend}}",
-  "Get a pairing code": "Obtén un código de emparejamiento",
   "Send to my agent": "Enviar a mi agente",
   "Run it myself": "Ejecutarlo yo mismo",
   "Send this message to your agent": "Envía este mensaje a tu agente",
@@ -389,5 +388,16 @@
   "Pairing environment does not match. Use the command shown on this page.": "El entorno de vinculación no coincide. Usa el comando que aparece en esta página.",
   "Pattern": "Patrón",
   "Photo": "Foto",
-  "Plain": "Liso"
+  "Plain": "Liso",
+  "Connect on your computer": "Conectar desde tu ordenador",
+  "Detect and choose on your computer": "Detectar y elegir en tu ordenador",
+  "One command to choose the agent you want to connect.": "Un comando para elegir el agente que quieres conectar.",
+  "Have a QR code? Scan to connect": "¿Tienes un código QR? Escanea para conectar",
+  "Run in your computer terminal": "Ejecutar en el terminal de tu ordenador",
+  "Choose an agent, then scan": "Elige un agente y escanea",
+  "Scan the QR code in your terminal": "Escanea el código QR del terminal",
+  "Choose an installed agent in Terminal, then scan its QR code here.": "Elige un agente instalado en el terminal y escanea aquí su código QR.",
+  "Change platform": "Cambiar de plataforma",
+  "Choose the platform that printed your code.": "Elige la plataforma que generó tu código.",
+  "Enter pairing code": "Introducir código de emparejamiento"
 }

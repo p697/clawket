@@ -292,7 +292,6 @@
   "Design language": "デザイン言語",
   "Connect your agent": "エージェントを接続",
   "Connect {{backend}}": "{{backend}} に接続",
-  "Get a pairing code": "ペアリングコードを取得",
   "Send to my agent": "エージェントに送る",
   "Run it myself": "自分で実行する",
   "Send this message to your agent": "このメッセージをエージェントに送る",
@@ -389,5 +388,16 @@
   "Pairing environment does not match. Use the command shown on this page.": "ペアリング環境が一致しません。このページに表示されたコマンドを使用してください。",
   "Pattern": "パターン",
   "Photo": "写真",
-  "Plain": "無地"
+  "Plain": "無地",
+  "Connect on your computer": "コンピューターで接続",
+  "Detect and choose on your computer": "コンピューターで検出して選択",
+  "One command to choose the agent you want to connect.": "1つのコマンドで接続するエージェントを選べます。",
+  "Have a QR code? Scan to connect": "QRコードをお持ちですか？スキャンして接続",
+  "Run in your computer terminal": "コンピューターのターミナルで実行",
+  "Choose an agent, then scan": "エージェントを選んでスキャン",
+  "Scan the QR code in your terminal": "ターミナルのQRコードをスキャン",
+  "Choose an installed agent in Terminal, then scan its QR code here.": "ターミナルでインストール済みのエージェントを選び、ここでQRコードをスキャンしてください。",
+  "Change platform": "プラットフォームを変更",
+  "Choose the platform that printed your code.": "コードを生成したプラットフォームを選んでください。",
+  "Enter pairing code": "ペアリングコードを入力"
 }

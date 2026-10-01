@@ -292,7 +292,6 @@
   "Design language": "Ngôn ngữ thiết kế",
   "Connect your agent": "Kết nối Agent của bạn",
   "Connect {{backend}}": "Kết nối {{backend}}",
-  "Get a pairing code": "Lấy mã ghép nối",
   "Send to my agent": "Gửi cho Agent của tôi",
   "Run it myself": "Tự chạy",
   "Send this message to your agent": "Gửi tin nhắn này cho Agent của bạn",
@@ -389,5 +388,16 @@
   "Pairing environment does not match. Use the command shown on this page.": "Môi trường ghép nối không khớp. Hãy dùng lệnh hiển thị trên trang này.",
   "Pattern": "Họa tiết",
   "Photo": "Ảnh",
-  "Plain": "Trơn"
+  "Plain": "Trơn",
+  "Connect on your computer": "Kết nối trên máy tính",
+  "Detect and choose on your computer": "Phát hiện và chọn trên máy tính",
+  "One command to choose the agent you want to connect.": "Một lệnh để chọn agent bạn muốn kết nối.",
+  "Have a QR code? Scan to connect": "Đã có mã QR? Quét để kết nối",
+  "Run in your computer terminal": "Chạy trong terminal trên máy tính",
+  "Choose an agent, then scan": "Chọn agent rồi quét",
+  "Scan the QR code in your terminal": "Quét mã QR trong terminal",
+  "Choose an installed agent in Terminal, then scan its QR code here.": "Chọn agent đã cài trong terminal, rồi quét mã QR của agent tại đây.",
+  "Change platform": "Đổi nền tảng",
+  "Choose the platform that printed your code.": "Chọn nền tảng đã tạo mã của bạn.",
+  "Enter pairing code": "Nhập mã ghép đôi"
 }

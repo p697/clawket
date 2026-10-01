@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { useAppTheme } from '../../theme';
 import { ControlSize, FontSize, FontWeight, IconSize, LineHeight, Radius, Space } from '../../theme/tokens';
 import { FloatingButton } from './FloatingButton';
+import { Button } from './Button';
 
 /** Shared onboarding and design-review recipes; no backend or network state. */
 export function FlowHeader({ onBack, title, right, testID }: { onBack?: () => void; title?: string; right?: React.ReactNode; testID?: string }) {
@@ -54,21 +55,25 @@ export function FormStep({ number, title, children, action, style }: { number: s
   </View>;
 }
 
-export function CommandBlock({ command, onCopy, copied = false, prose = false, accessibilityLabel, testID = 'onboarding-command', copyTestID = 'onboarding-copy-command' }: {
+export function CommandBlock({ command, onCopy, copied = false, prose = false, stacked = false, accessibilityLabel, testID = 'onboarding-command', copyTestID = 'onboarding-copy-command' }: {
   command: string;
   onCopy?: () => void;
   copied?: boolean;
   /** Natural-language text for an agent rather than a terminal command. */
   prose?: boolean;
+  /** A full-width command with its copy action below, for terminal onboarding. */
+  stacked?: boolean;
   accessibilityLabel?: string;
   testID?: string;
   copyTestID?: string;
 }) {
   const { theme: { colors } } = useAppTheme();
   const { t } = useTranslation('config');
-  return <View testID={testID} style={[styles.commandBlock, prose ? styles.proseBlock : null, { backgroundColor: colors.surface }]}>
-    <Text selectable accessibilityLabel={accessibilityLabel ?? t('Pairing command')} style={[styles.command, prose ? styles.prose : null, { color: colors.ink }]}>{command}</Text>
-    {onCopy ? <FloatingButton testID={copyTestID} icon={copied ? Check : Copy} appearance="plain" onPress={onCopy} accessibilityLabel={t(copied ? 'Copied' : 'Copy command')} /> : null}
+  return <View testID={testID} style={[styles.commandBlock, prose ? styles.proseBlock : null, stacked ? styles.commandStacked : null, { backgroundColor: colors.surface }]}>
+    <Text selectable accessibilityLabel={accessibilityLabel ?? t('Pairing command')} style={[styles.command, prose ? styles.prose : null, stacked ? styles.commandFullWidth : null, { color: colors.ink }]}>{command}</Text>
+    {onCopy ? stacked
+      ? <View style={styles.commandCopy}><Button testID={copyTestID} label={t(copied ? 'Copied' : 'Copy command')} icon={copied ? Check : Copy} variant="card" size="sm" multiline style={styles.commandCopyButton} haptic onPress={onCopy} accessibilityLabel={t(copied ? 'Copied' : 'Copy command')} /></View>
+      : <FloatingButton testID={copyTestID} icon={copied ? Check : Copy} appearance="plain" onPress={onCopy} accessibilityLabel={t(copied ? 'Copied' : 'Copy command')} /> : null}
   </View>;
 }
 
@@ -115,6 +120,10 @@ const styles = StyleSheet.create({
   stepTitle: { flex: 1, fontSize: FontSize.body, lineHeight: LineHeight.body, fontWeight: FontWeight.semibold },
   commandBlock: { flexDirection: 'row', alignItems: 'center', minHeight: ControlSize.settingsRow, paddingLeft: Space.lg, paddingRight: Space.xs, paddingVertical: Space.xs, borderRadius: Radius.settingsGroup, gap: Space.xs },
   command: { flex: 1, fontSize: FontSize.caption, lineHeight: LineHeight.secondary, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
+  commandStacked: { flexDirection: 'column', alignItems: 'stretch', paddingLeft: Space.lg, paddingRight: Space.lg, paddingVertical: Space.lg, gap: Space.sm },
+  commandFullWidth: { flex: undefined },
+  commandCopy: { alignSelf: 'flex-end', maxWidth: '100%' },
+  commandCopyButton: { minHeight: ControlSize.floatingButton },
   proseBlock: { paddingVertical: Space.md, paddingRight: Space.lg },
   messagePreview: { flexDirection: 'row', alignItems: 'center', gap: Space.sm, paddingVertical: Space.md, paddingHorizontal: Space.lg, borderRadius: Radius.settingsGroup },
   prose: { flex: 1, fontSize: FontSize.secondary, lineHeight: LineHeight.secondary, fontFamily: undefined },
