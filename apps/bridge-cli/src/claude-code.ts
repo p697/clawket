@@ -1,5 +1,6 @@
 import { claudeControl, startClaudeBackground } from './claude-code-lifecycle.js';
 import { agentPairProgress, type Progress } from './progress.js';
+import { defaultDeviceConnectionName } from './device-connection-name.js';
 import { openSync, readSync, closeSync, fstatSync, mkdirSync, readFileSync, writeFileSync, renameSync, existsSync, unlinkSync, realpathSync } from 'node:fs';
 import { dirname, join, resolve, basename } from 'node:path';
 import { homedir } from 'node:os';
@@ -9,7 +10,7 @@ import { buildPairingSessionDraft, securePairingCodeKeyHex } from '@clawket/brid
 import { ClaudeService, ClaudeServer, ClaudeRelay, inspectClaudeInstallation, type ClaudeRelayConfig } from '@clawket/bridge-runtime';
 import QRCode from 'qrcode';
 
-interface Config { device?: boolean; project: string; token: string; command: string; port: number; host: string; relay?: ClaudeRelayConfig }
+interface Config { device?: boolean; displayName?: string; project: string; token: string; command: string; port: number; host: string; relay?: ClaudeRelayConfig }
 function flag(args: string[], name: string): string | undefined {
   const i = args.indexOf(name); if (i < 0) return undefined;
   const value = args[i + 1]; if (!value || value.startsWith('--')) throw new Error(`${name} requires a value`); return value;
@@ -39,7 +40,8 @@ async function runClaudeCommand(args: string[], progress: Progress): Promise<voi
   const directory = dirname(configPath);
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   const save = (value: Config) => { writeFileSync(configPath + '.pending', JSON.stringify(value, null, 2), { mode: 0o600 }); renameSync(configPath + '.pending', configPath); };
-  let config: Config = existsSync(configPath) ? JSON.parse(readFileSync(configPath, 'utf8')) : { device, project, command: flag(args, '--claude-command') ?? 'claude', token: randomBytes(32).toString('hex'), port: Number(flag(args, '--port') ?? (18000 + (parseInt(projectId.slice(0, 4), 16) % 10000) * 2 + (args.includes('--preview') ? 1 : 0))), host: '127.0.0.1' };
+  const configExists = existsSync(configPath);
+  let config: Config = configExists ? JSON.parse(readFileSync(configPath, 'utf8')) : { device, project, command: flag(args, '--claude-command') ?? 'claude', token: randomBytes(32).toString('hex'), port: Number(flag(args, '--port') ?? (18000 + (parseInt(projectId.slice(0, 4), 16) % 10000) * 2 + (args.includes('--preview') ? 1 : 0))), host: '127.0.0.1' };
   if (existsSync(configPath) && ((args.includes('--device') && config.device !== true) || (flag(args, '--project') && config.device === true))) throw new Error('This pairing has a different scope. Choose a separate config for the new scope.');
   const label = config.device ? 'Computer' : basename(config.project);
   if (command === 'pair' && flag(args, '--port')) config.port = Number(flag(args, '--port'));
@@ -83,11 +85,13 @@ async function runClaudeCommand(args: string[], progress: Progress): Promise<voi
     if (command === 'doctor') { console.log(`Claude Code ${installed.version}: installed\nProject: ${basename(config.project)}\nAuthentication: complete native sign-in in Claude Desktop or check authentication with the selected CLI`); return; }
     let qrPayload: string | undefined, code: string | undefined;
     if (command === 'pair') {
+      if (!configExists) config.displayName = defaultDeviceConnectionName('Claude Code');
+      const displayName = typeof config.displayName === 'string' && config.displayName.trim() || 'Claude Code';
       if (args.includes('local') || args.includes('--local')) {
         config.host = flag(args, '--host') ?? '0.0.0.0'; config.relay = undefined;
         const address = flag(args, '--address') ?? Object.values(networkInterfaces()).flat().find(a => a?.family === 'IPv4' && !a.internal)?.address;
         if (!address) throw new Error('No LAN address found. Supply --address reachable-from-phone');
-        qrPayload = JSON.stringify({ version: 1, backendKind: 'claude-code', mode: 'local', url: `ws://${address}:${config.port}/v1/claude-code/ws`, token: config.token });
+        qrPayload = JSON.stringify({ version: 1, backendKind: 'claude-code', mode: 'local', url: `ws://${address}:${config.port}/v1/claude-code/ws`, token: config.token, displayName });
       } else {
         progress.update('Requesting a pairing code for Claude Code…');
         const registryUrl = flag(args, '--registry') ?? (args.includes('--preview') ? 'https://clawket-claude-code-registry-preview.clawket.workers.dev' : 'https://clawket-claude-code-registry.clawket.workers.dev');
@@ -97,9 +101,9 @@ async function runClaudeCommand(args: string[], progress: Progress): Promise<voi
         const previousRegistry = previous?.registryUrl ?? (() => { try { return JSON.parse(previous?.invitation?.qrPayload ?? '{}').s; } catch { return undefined; } })();
         const registered = previous && previousRegistry === registryUrl
           ? { ...previous, ...await post<{ accessCode: string }>(registryUrl.replace(/\/$/, '') + '/v1/pair/access-code', { gatewayId: previous.gatewayId, relaySecret: previous.relaySecret }) }
-          : await post<{ gatewayId: string; relaySecret: string; relayUrl: string; accessCode: string }>(registryUrl.replace(/\/$/, '') + '/v1/pair/register', { displayName: 'Claude Code' });
+          : await post<{ gatewayId: string; relaySecret: string; relayUrl: string; accessCode: string }>(registryUrl.replace(/\/$/, '') + '/v1/pair/register', { displayName });
         if (!registered.gatewayId || !registered.relaySecret || !registered.relayUrl || !registered.accessCode) throw new Error('Invalid Claude registration');
-        qrPayload = JSON.stringify({ v: 2, k: 'cp', b: 'claude-code', s: registryUrl, g: registered.gatewayId, a: registered.accessCode, n: 'Claude Code' });
+        qrPayload = JSON.stringify({ v: 2, k: 'cp', b: 'claude-code', s: registryUrl, g: registered.gatewayId, a: registered.accessCode, n: displayName });
         const draft = buildPairingSessionDraft({ ...registered, qrPayload });
         config.host = '127.0.0.1'; config.relay = { registryUrl, relayUrl: registered.relayUrl, gatewayId: registered.gatewayId, relaySecret: registered.relaySecret };
         try {

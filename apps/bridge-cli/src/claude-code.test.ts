@@ -2,10 +2,11 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { mkdtempSync, mkdirSync, readFileSync, realpathSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-const mock = vi.hoisted(() => ({ control: vi.fn(), background: vi.fn(), fetch: vi.fn(), inspect: vi.fn(), serviceOptions: vi.fn(), home: '' }));
+const mock = vi.hoisted(() => ({ control: vi.fn(), background: vi.fn(), fetch: vi.fn(), name: vi.fn(), qr: vi.fn(), inspect: vi.fn(), serviceOptions: vi.fn(), home: '' }));
 vi.mock('node:os', async (original) => ({ ...await original<typeof import('node:os')>(), homedir: () => mock.home }));
 vi.mock('./claude-code-lifecycle.js', () => ({ claudeControl: mock.control, startClaudeBackground: mock.background }));
-vi.mock('qrcode', () => ({ default: { toString: async () => '[test QR]' } }));
+vi.mock('./device-connection-name.js', () => ({ defaultDeviceConnectionName: mock.name }));
+vi.mock('qrcode', () => ({ default: { toString: mock.qr } }));
 vi.mock('@clawket/bridge-runtime', async () => {
   const { EventEmitter } = await import('node:events');
   return {
@@ -20,6 +21,7 @@ let root: string, project: string, path: string;
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'claude-code-cli-')); mock.home = root; project = join(root, 'project'); mkdirSync(project); path = join(root, 'runtime.json');
   mock.control.mockReset(); mock.background.mockReset(); mock.fetch.mockReset();
+  mock.name.mockReset().mockReturnValue('Claude Code · 工作室 Mac'); mock.qr.mockReset().mockResolvedValue('[test QR]');
   mock.inspect.mockReset(); mock.serviceOptions.mockReset();
   mock.inspect.mockResolvedValue({ version: 'test', executable: '/desktop/claude' });
   mock.control.mockRejectedValue(new Error('offline'));
@@ -28,6 +30,34 @@ beforeEach(() => {
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); rmSync(root, { recursive: true, force: true }); });
 const saved = (relay: object) => writeFileSync(path, JSON.stringify({ project, command: 'claude-code', token: 'local-test-token', port: 18499, host: '127.0.0.1', relay }));
+it('reuses one device label for Registry, QR and code invitations after a computer rename', async () => {
+  mock.fetch.mockImplementation(async (url: string) => {
+    if (url.endsWith('/register')) return Response.json({ gatewayId: 'new-id', relaySecret: 'new-secret', relayUrl: 'wss://relay.example', accessCode: 'code' });
+    if (url.endsWith('/access-code')) return Response.json({ accessCode: 'refreshed-code' });
+    return Response.json({ sessionId: `ps_${'a'.repeat(64)}`, expiresAt: new Date(Date.now() + 60_000).toISOString(), capabilities: ['pairing.secure-short-code.v2'] });
+  });
+  const args = ['pair', '--foreground', '--device', '--config', path, '--registry', 'https://claude-code.example'];
+  await handleClaudeCommand(args);
+  const initial = JSON.parse(readFileSync(path, 'utf8'));
+  expect(JSON.parse(mock.fetch.mock.calls[0][1].body)).toEqual({ displayName: 'Claude Code · 工作室 Mac' });
+  expect(initial.displayName).toBe('Claude Code · 工作室 Mac');
+  expect(JSON.parse(initial.relay.invitation.qrPayload)).toMatchObject({ b: 'claude-code', n: initial.displayName });
+  expect(JSON.parse(mock.qr.mock.calls[0][0]).n).toBe(initial.displayName);
+  mock.name.mockReturnValue('Claude Code · Renamed computer');
+  await handleClaudeCommand(args);
+  expect(mock.name).toHaveBeenCalledTimes(1);
+  expect(JSON.parse(mock.fetch.mock.calls[2][1].body)).toEqual({ gatewayId: initial.relay.gatewayId, relaySecret: initial.relay.relaySecret });
+  expect(JSON.parse(mock.qr.mock.calls[1][0]).n).toBe(initial.displayName);
+});
+
+it.each([undefined, 'Studio laptop'])('preserves an existing local pairing label %s', async displayName => {
+  saved({});
+  const initial = JSON.parse(readFileSync(path, 'utf8'));
+  writeFileSync(path, JSON.stringify({ ...initial, displayName }));
+  await handleClaudeCommand(['pair', '--foreground', '--local', '--address', '127.0.0.1', '--config', path]);
+  expect(JSON.parse(mock.qr.mock.calls[0][0])).toMatchObject({ backendKind: 'claude-code', mode: 'local', displayName: displayName ?? 'Claude Code', token: initial.token });
+  expect(mock.name).not.toHaveBeenCalled();
+});
 it('refreshes the same registration without invalidating existing client identity', async () => {
   saved({ registryUrl: 'https://claude-code.example', gatewayId: 'existing-id', relaySecret: 'existing-secret', relayUrl: 'wss://relay.example' });
   mock.fetch.mockImplementation(async (url: string) => url.endsWith('/access-code') ? Response.json({ accessCode: 'new-code' }) : Response.json({ sessionId: 'legacy' }));
@@ -78,8 +108,9 @@ it('preserves default device discovery through the first background pairing laun
   const childConfig = childArgs[childArgs.indexOf('--config') + 1];
   await handleClaudeCommand([...childArgs, '--foreground']);
   expect(JSON.parse(readFileSync(childConfig, 'utf8'))).toMatchObject({
-    device: true, project: realpathSync(join(root, 'Documents', 'Clawket', 'Chats')),
+    device: true, displayName: 'Claude Code · 工作室 Mac', project: realpathSync(join(root, 'Documents', 'Clawket', 'Chats')),
   });
+  expect(JSON.parse(mock.qr.mock.calls[0][0])).toMatchObject({ backendKind: 'claude-code', mode: 'local', displayName: 'Claude Code · 工作室 Mac' });
 });
 
 it.each([undefined, '/explicit/claude'])('starts the SDK service with the inspected executable for command %s', async command => {
