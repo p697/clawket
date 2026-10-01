@@ -173,6 +173,16 @@ jest.mock('react-native-enriched-markdown', () => {
   };
 });
 
+// The UI-thread follow is unit-tested beside its hook; here it records what the timeline asks of it.
+const mockUiFollow = { bind: jest.fn(() => true), glide: jest.fn(), snap: jest.fn(), stop: jest.fn() };
+let mockUiFollowCallbacks: { onSettled: (generation: number) => void; onUnavailable: () => void } | null = null;
+jest.mock('./useUiThreadFollow', () => ({
+  useUiThreadFollow: (callbacks: NonNullable<typeof mockUiFollowCallbacks>) => {
+    mockUiFollowCallbacks = callbacks;
+    return mockUiFollow;
+  },
+}));
+
 // The word pacer is unit-tested in src/chat; here the stream renders as it arrives.
 jest.mock('../../chat/useSmoothedStreamText', () => ({
   useSmoothedStreamText: (text: string) => mockPacedText ?? text,
@@ -2655,6 +2665,8 @@ describe('messenger timeline layout', () => {
     mockListLayout.viewport = 0;
     mockScrollToEnd.mockClear();
     mockReducedMotion = false;
+    for (const method of Object.values(mockUiFollow)) method.mockClear();
+    mockUiFollow.bind.mockImplementation(() => true);
   });
   afterEach(() => {
     jest.useRealTimers();
@@ -2933,6 +2945,138 @@ describe('messenger timeline layout', () => {
     act(() => timeline.props.onCommitLayoutEffect());
     expect(mockScrollToEnd).toHaveBeenLastCalledWith({ animated: false });
   });
+
+  const onPlatform = (platform: 'ios' | 'android', run: () => void) => {
+    const { Platform } = require('react-native');
+    const previous = Platform.OS;
+    Platform.OS = platform;
+    try { run(); } finally { Platform.OS = previous; }
+  };
+  const layoutEvent = (height: number) => ({ nativeEvent: { layout: { x: 0, y: 0, width: 393, height } } });
+
+  it('keeps an iOS glide going when its row reports its size, and jumps for a moved viewport', () => {
+    jest.useFakeTimers();
+    const first: UiMessage = { id: 'm1', role: 'assistant', text: 'One' };
+    const props = createProps({ messages: [first] });
+    const view = render(<ThreadView {...props} />);
+    const timeline = view.getByTestId('thread-screen-timeline');
+    mockListLayout.content = 900;
+    mockListLayout.viewport = 600;
+    act(() => timeline.props.onCommitLayoutEffect());
+    fireEvent(timeline, 'load', { elapsedTimeInMs: 5 });
+    expect(mockUiFollow.bind).not.toHaveBeenCalled();
+    fireEvent(timeline, 'layout', layoutEvent(600));
+    fireEvent(timeline, 'contentSizeChange', 393, 900);
+    act(() => jest.advanceTimersByTime(20));
+    mockScrollToEnd.mockClear();
+
+    const second: UiMessage = { id: 'm2', role: 'assistant', text: 'Two' };
+    view.rerender(<ThreadView {...props} messages={[second, first]} />);
+    mockListLayout.content = 980;
+    act(() => timeline.props.onCommitLayoutEffect());
+    expect(mockScrollToEnd).toHaveBeenLastCalledWith({ animated: true });
+    // The native size report that follows the row re-targets the glide instead of cutting it short.
+    fireEvent(timeline, 'contentSizeChange', 393, 980);
+    act(() => jest.advanceTimersByTime(20));
+    expect(mockScrollToEnd.mock.calls).toEqual([[{ animated: true }], [{ animated: true }]]);
+    // A send while it glides leaves the pinning to the glide: no second, explicit return.
+    fireEvent.scroll(timeline, scrollEvent(300));
+    view.rerender(<ThreadView {...props} messages={[second, first]} scrollToBottomRequestAt={2} />);
+    expect(mockScrollToEnd).toHaveBeenCalledTimes(2);
+    // A keyboard that moves the viewport keeps the exact end.
+    fireEvent(timeline, 'layout', layoutEvent(320));
+    act(() => jest.advanceTimersByTime(20));
+    expect(mockScrollToEnd).toHaveBeenLastCalledWith({ animated: false });
+    expect(mockUiFollow.glide).not.toHaveBeenCalled();
+  });
+
+  it('glides a growing reply and each new row on the UI thread on Android, and ends that glide there', () => onPlatform('android', () => {
+    jest.useFakeTimers();
+    const first: UiMessage = { id: 'm1', role: 'assistant', text: 'One' };
+    const props = createProps({ messages: [first] });
+    const view = render(<ThreadView {...props} />);
+    const timeline = view.getByTestId('thread-screen-timeline');
+    mockListLayout.content = 900;
+    mockListLayout.viewport = 600;
+    act(() => timeline.props.onCommitLayoutEffect());
+    fireEvent(timeline, 'load', { elapsedTimeInMs: 5 });
+    expect(mockUiFollow.bind).toHaveBeenCalledTimes(1);
+    fireEvent(timeline, 'layout', layoutEvent(600));
+    fireEvent.scroll(timeline, scrollEvent(0));
+
+    // The reply's first words grow its row: a glide from where JS last saw the list.
+    mockListLayout.content = 1004;
+    act(() => timeline.props.onCommitLayoutEffect());
+    expect(mockUiFollow.glide).toHaveBeenLastCalledWith(1, 1400);
+    // Its native size report re-targets the glide in flight.
+    fireEvent(timeline, 'contentSizeChange', 393, 2104);
+    act(() => jest.advanceTimersByTime(20));
+    expect(mockUiFollow.glide).toHaveBeenLastCalledWith(2, 1400);
+    expect(mockScrollToEnd).not.toHaveBeenCalled();
+    // The settled report clears the glide: the next growth starts a new one.
+    act(() => mockUiFollowCallbacks?.onSettled(1));
+    fireEvent.scroll(timeline, scrollEvent(300));
+    expect(view.getByTestId('thread-screen-scroll-to-bottom-container', { includeHiddenElements: true }).props.pointerEvents).not.toBe('auto');
+    act(() => mockUiFollowCallbacks?.onSettled(2));
+    const second: UiMessage = { id: 'm2', role: 'assistant', text: 'Two' };
+    view.rerender(<ThreadView {...props} messages={[second, first]} />);
+    mockListLayout.content = 1080;
+    act(() => timeline.props.onCommitLayoutEffect());
+    expect(mockUiFollow.glide).toHaveBeenLastCalledWith(3, 1100);
+
+    // A moved viewport ends the glide on the UI thread, after its last step.
+    fireEvent(timeline, 'layout', layoutEvent(320));
+    act(() => jest.advanceTimersByTime(20));
+    expect(mockUiFollow.snap).toHaveBeenCalledTimes(1);
+    // With no glide in flight, jumps stay native.
+    mockListLayout.content = 1800;
+    act(() => timeline.props.onCommitLayoutEffect());
+    expect(mockScrollToEnd).toHaveBeenLastCalledWith({ animated: false });
+    expect(mockUiFollow.snap).toHaveBeenCalledTimes(1);
+
+    // The reader's drag takes a glide in flight over.
+    mockListLayout.content = 1840;
+    act(() => timeline.props.onCommitLayoutEffect());
+    expect(mockUiFollow.glide).toHaveBeenCalledTimes(4);
+    fireEvent(timeline, 'scrollBeginDrag');
+    expect(mockUiFollow.stop).toHaveBeenCalledTimes(1);
+    view.unmount();
+    expect(mockUiFollow.stop).toHaveBeenCalledTimes(1);
+  }));
+
+  it('follows natively on Android when the list cannot be followed on the UI thread', () => onPlatform('android', () => {
+    jest.useFakeTimers();
+    const first: UiMessage = { id: 'm1', role: 'assistant', text: 'One' };
+    const props = createProps({ messages: [first] });
+    const view = render(<ThreadView {...props} />);
+    const timeline = view.getByTestId('thread-screen-timeline');
+    mockListLayout.content = 900;
+    mockListLayout.viewport = 600;
+    act(() => timeline.props.onCommitLayoutEffect());
+    fireEvent(timeline, 'load', { elapsedTimeInMs: 5 });
+    mockListLayout.content = 1004;
+    act(() => timeline.props.onCommitLayoutEffect());
+    expect(mockUiFollow.glide).toHaveBeenCalledTimes(1);
+    // The UI thread could not measure the list: jump natively, and keep following natively.
+    act(() => mockUiFollowCallbacks?.onUnavailable());
+    expect(mockScrollToEnd).toHaveBeenLastCalledWith({ animated: false });
+    mockListLayout.content = 1040;
+    act(() => timeline.props.onCommitLayoutEffect());
+    expect(mockScrollToEnd).toHaveBeenCalledTimes(2);
+    expect(mockScrollToEnd).toHaveBeenLastCalledWith({ animated: false });
+    expect(mockUiFollow.glide).toHaveBeenCalledTimes(1);
+
+    // A list that cannot be bound follows like iOS from the start.
+    mockUiFollow.bind.mockImplementation(() => false);
+    view.rerender(<ThreadView {...createProps({ sessionKey: 'another-session', messages: [first] })} />);
+    const next = view.getByTestId('thread-screen-timeline');
+    act(() => next.props.onCommitLayoutEffect());
+    fireEvent(next, 'load', { elapsedTimeInMs: 5 });
+    mockListLayout.content = 1100;
+    act(() => next.props.onCommitLayoutEffect());
+    expect(mockScrollToEnd).toHaveBeenLastCalledWith({ animated: false });
+    expect(mockUiFollow.glide).toHaveBeenCalledTimes(1);
+  }));
 
   it('pulls an offset pushed past the end of a short list back, but never fights the reader', () => {
     const view = render(<ThreadView {...createProps()} />);

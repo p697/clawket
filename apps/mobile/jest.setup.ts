@@ -81,12 +81,17 @@ jest.mock('react-native-reanimated', () => {
     interpolate: (_value: number, _input: number[], output: unknown[]) => output[0],
     interpolateColor: (_value: number, _input: number[], output: unknown[]) => output[0],
     makeMutable: <T>(value: T) => ({ value }),
+    measure: () => null,
     ReduceMotion: { Always: 'always', Never: 'never', System: 'system' },
     runOnJS: identity,
+    runOnUI: identity,
     scrollTo: jest.fn(),
+    useAnimatedReaction: () => undefined,
     useAnimatedRef: () => ({ current: null }),
     useAnimatedProps: (factory: () => unknown) => factory(),
     useAnimatedStyle: (factory: () => unknown) => factory(),
+    // Worklet event handlers never receive native events in Node.
+    useEvent: () => ({}),
     // Frame callbacks never tick in Node; tests drive worklet models directly.
     useFrameCallback: () => ({ setActive: () => undefined, isActive: false, callbackId: -1 }),
     useScrollOffset: () => ({ value: 0 }),
