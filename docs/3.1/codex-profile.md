@@ -22,4 +22,4 @@ Self-contained contract, corrupted-reply, configuration conflict, file-boundary 
 CLAWKET_CODEX_PROFILE_NATIVE=1 npm run test:codex-profile-integration --workspace packages/bridge-runtime
 ```
 
-It creates an isolated `CODEX_HOME` and project, persists/restores model defaults, toggles a fixture skill and creates/reads/writes a fixture instruction file. It copies no credentials, performs no inference and stops its owned native process. `CLAWKET_CODEX_PROFILE_COMMAND` optionally selects a native executable. Missing prerequisites fail rather than skip. Local verification is separate from Android acceptance and from publishing an App/Bridge update.
+It creates an isolated `CODEX_HOME` and project, persists/restores model defaults, confirms saved model/reasoning on a new native thread, toggles a fixture skill and creates/reads/writes a fixture instruction file. It copies no credentials, performs no inference and stops its owned native process. `CLAWKET_CODEX_PROFILE_COMMAND` optionally selects a native executable. Missing prerequisites fail rather than skip. Local verification is separate from Android acceptance and from publishing an App/Bridge update.

@@ -45,6 +45,14 @@ it('shows quota prominently and keeps unavailable values unknown', async () => {
   screen.rerender(<NativeQuotaCard profile={profile} online refreshing onPress={jest.fn()} />);
   await waitFor(() => expect(screen.getByText('profile.quotaUnavailable')).toBeTruthy()); expect(screen.getByText('—')).toBeTruthy();
 });
+it('preserves compatible reasoning when restoring the native default model', async () => {
+  profile.setDefaults.mockResolvedValue({ ...defaults, model: null, version: 'v2' });
+  const screen = render(<NativeProfileScreen {...props('models')} />);
+  await waitFor(() => expect(screen.getByTestId('native-default-model')).toBeTruthy());
+  fireEvent.press(screen.getByTestId('native-default-model'));
+  fireEvent.press(screen.getByTestId('native-model-choice-default'));
+  await waitFor(() => expect(profile.setDefaults).toHaveBeenCalledWith({ model: null, thinking: 'high', version: 'v1' }));
+});
 it('includes disabled skills, force refreshes by project and confirms toggles', async () => {
   const screen = render(<NativeProfileScreen {...props('skills')} />);
   await waitFor(() => expect(screen.getByTestId('native-skill-toggle-example')).toBeTruthy());

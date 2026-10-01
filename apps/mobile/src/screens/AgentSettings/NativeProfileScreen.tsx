@@ -94,7 +94,7 @@ function ProfilePage({ adapter, profile, section, online, navigation, params }: 
   const selectedModel = defaults?.models.find(row => row.id === defaults.model) ?? defaults?.models.find(row => row.isDefault);
   const chooseModel = (model: string | null) => {
     if (!defaults?.editable) return;
-    const chosen = defaults.models.find(row => row.id === model);
+    const chosen = defaults.models.find(row => model === null ? row.isDefault : row.id === model);
     const thinking = defaults.thinking && chosen?.levels.includes(defaults.thinking) ? defaults.thinking : null;
     void mutate(() => profile.setDefaults({ model, thinking, version: defaults.version }), value => read.replace(value as ProfileDefaults));
   };
