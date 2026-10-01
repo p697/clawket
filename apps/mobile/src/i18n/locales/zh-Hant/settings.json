@@ -436,5 +436,7 @@
   "profile.auth.authenticated": "已驗證",
   "profile.auth.required": "需要登入",
   "profile.auth.unsupported": "不支援登入",
-  "profile.auth.unknown": "驗證狀態未知"
+  "profile.auth.unknown": "驗證狀態未知",
+  "profile.hours": "{{count}} 小時用量",
+  "profile.days": "{{count}} 天用量"
 }

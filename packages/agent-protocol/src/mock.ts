@@ -388,6 +388,7 @@ function createManagement(
   };
 
   const management: ManagementOperations = {
+    ...(capabilities.profileManagement && provided?.profile ? { profile: provided.profile } : {}),
     ...(Object.keys(models).length > 0 ? { models } : {}),
     ...(Object.keys(skills).length > 0 ? { skills } : {}),
     ...(Object.keys(cron).length > 0 ? { cron } : {}),
@@ -457,6 +458,7 @@ function createManagement(
 /** Create a deterministic adapter whose data and event stream come from a fixture. */
 export function createMockAdapter(fixture: MockAdapterFixture): MockAgentAdapter {
   const capabilities = resolveCapabilities(fixture.connection.backendKind, fixture.capabilities);
+  if (capabilities.profileManagement && !fixture.management?.profile) capabilities.profileManagement = false;
   const agents = (fixture.agents ?? []).map(cloneAgent);
   let sessions = (fixture.sessions ?? []).map(cloneSession);
   const histories = new Map(

@@ -436,5 +436,7 @@
   "profile.auth.authenticated": "प्रमाणित",
   "profile.auth.required": "साइन इन ज़रूरी",
   "profile.auth.unsupported": "साइन इन समर्थित नहीं",
-  "profile.auth.unknown": "प्रमाणीकरण अज्ञात"
+  "profile.auth.unknown": "प्रमाणीकरण अज्ञात",
+  "profile.hours": "{{count}} घंटे की अवधि",
+  "profile.days": "{{count}} दिन की अवधि"
 }

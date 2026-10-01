@@ -436,5 +436,7 @@
   "profile.auth.authenticated": "Authenticated",
   "profile.auth.required": "Sign-in required",
   "profile.auth.unsupported": "No sign-in support",
-  "profile.auth.unknown": "Authentication unknown"
+  "profile.auth.unknown": "Authentication unknown",
+  "profile.hours": "{{count}} hour window",
+  "profile.days": "{{count}} day window"
 }

@@ -137,9 +137,9 @@ function ProfilePage({ adapter, profile, section, online, navigation, params }: 
       </> : null}
       {instructions ? <SettingsGroup>{instructions.map((file, index) => <React.Fragment key={file.id}>{index ? <SettingsDivider inset="content" /> : null}<SettingsRow title={file.name} subtitle={t(`profile.scope.${file.scope}`)} value={!file.exists ? t('profile.create') : undefined} showChevron onPress={() => openDocument(file.id, file.name)} /></React.Fragment>)}</SettingsGroup> : null}
       {usage ? <>
-        <SettingsGroup><SettingsRow title={t('profile.quota')} value={quotaRemaining(usage) === null ? '—' : `${Math.floor(quotaRemaining(usage)!)}%`} /><SettingsDivider inset="content" /><SettingsRow title={t('profile.plan')} value={usage.plan ?? t('profile.unknown')} /></SettingsGroup>
+        <SettingsGroup><SettingsRow title={t('profile.quota')} value={quotaRemaining(usage) === null ? '—' : `${Math.floor(quotaRemaining(usage)!)}%`} /><SettingsDivider inset="content" /><SettingsRow title={t('profile.plan')} value={usage.plan ? usage.plan[0].toUpperCase() + usage.plan.slice(1) : t('profile.unknown')} /></SettingsGroup>
         {usage.quotas.flatMap(quota => quota.windows.map((window, index) => <SettingsGroup key={`${quota.id}:${index}`}>
-          <View style={styles.quotaCopy}><Text style={styles.label}>{quota.name}</Text><Text style={styles.number}>{Math.floor(Math.max(0, 100 - window.usedPercent))}%</Text><Text style={styles.caption}>{t('profile.window', { count: window.minutes })}</Text>
+          <View style={styles.quotaCopy}><Text style={styles.label}>{quota.name}</Text><Text style={styles.number}>{Math.floor(Math.max(0, 100 - window.usedPercent))}%</Text><Text style={styles.caption}>{window.minutes % 1440 === 0 ? t('profile.days', { count: window.minutes / 1440 }) : window.minutes % 60 === 0 ? t('profile.hours', { count: window.minutes / 60 }) : t('profile.window', { count: window.minutes })}</Text>
             <View style={styles.rail}><View style={[styles.fill, { width: `${Math.max(0, Math.min(100, 100 - window.usedPercent))}%` }]} /></View>
             <Text style={styles.caption}>{window.resetsAt === null ? t('profile.resetUnknown') : t('profile.resets', { time: new Date(window.resetsAt * 1000).toLocaleString(i18n.resolvedLanguage ?? i18n.language) })}</Text>
           </View>

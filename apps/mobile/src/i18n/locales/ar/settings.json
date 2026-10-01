@@ -436,5 +436,7 @@
   "profile.auth.authenticated": "تمت المصادقة",
   "profile.auth.required": "تسجيل الدخول مطلوب",
   "profile.auth.unsupported": "تسجيل الدخول غير مدعوم",
-  "profile.auth.unknown": "المصادقة غير معروفة"
+  "profile.auth.unknown": "المصادقة غير معروفة",
+  "profile.hours": "نافذة {{count}} ساعة",
+  "profile.days": "نافذة {{count}} يوم"
 }

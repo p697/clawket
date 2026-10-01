@@ -436,5 +436,7 @@
   "profile.auth.authenticated": "Authentifié",
   "profile.auth.required": "Connexion requise",
   "profile.auth.unsupported": "Connexion non prise en charge",
-  "profile.auth.unknown": "Authentification inconnue"
+  "profile.auth.unknown": "Authentification inconnue",
+  "profile.hours": "Période de {{count}} heures",
+  "profile.days": "Période de {{count}} jours"
 }

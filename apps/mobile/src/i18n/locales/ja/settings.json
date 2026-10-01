@@ -436,5 +436,7 @@
   "profile.auth.authenticated": "認証済み",
   "profile.auth.required": "ログインが必要",
   "profile.auth.unsupported": "ログイン非対応",
-  "profile.auth.unknown": "認証状態不明"
+  "profile.auth.unknown": "認証状態不明",
+  "profile.hours": "{{count}} 時間の利用枠",
+  "profile.days": "{{count}} 日の利用枠"
 }

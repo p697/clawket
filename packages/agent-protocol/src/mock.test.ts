@@ -20,6 +20,12 @@ const connection: ConnectionDescriptor = {
   isFreeSlot: true,
 };
 
+it('does not advertise native profile operations without an explicit fixture', () => {
+  const adapter = createMockAdapter({ connection: { ...connection, backendKind: 'codex' } });
+  expect(adapter.capabilities.profileManagement).toBe(false);
+  expect(adapter.management?.profile).toBeUndefined();
+});
+
 it('exposes receipt lookup only where supported and never invents persistence in generic fixtures', async () => {
   for (const backendKind of ['codex', 'claude-code', 'pi'] as const) {
     const adapter = createMockAdapter({ connection: { ...connection, backendKind } });

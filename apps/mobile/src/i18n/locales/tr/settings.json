@@ -436,5 +436,7 @@
   "profile.auth.authenticated": "Kimliği doğrulandı",
   "profile.auth.required": "Oturum açmak gerekli",
   "profile.auth.unsupported": "Oturum açma desteklenmiyor",
-  "profile.auth.unknown": "Kimlik doğrulama bilinmiyor"
+  "profile.auth.unknown": "Kimlik doğrulama bilinmiyor",
+  "profile.hours": "{{count}} saatlik dönem",
+  "profile.days": "{{count}} günlük dönem"
 }

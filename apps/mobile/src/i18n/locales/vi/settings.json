@@ -436,5 +436,7 @@
   "profile.auth.authenticated": "Đã xác thực",
   "profile.auth.required": "Cần đăng nhập",
   "profile.auth.unsupported": "Không hỗ trợ đăng nhập",
-  "profile.auth.unknown": "Không rõ trạng thái xác thực"
+  "profile.auth.unknown": "Không rõ trạng thái xác thực",
+  "profile.hours": "Khoảng {{count}} giờ",
+  "profile.days": "Khoảng {{count}} ngày"
 }

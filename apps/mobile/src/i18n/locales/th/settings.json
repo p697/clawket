@@ -436,5 +436,7 @@
   "profile.auth.authenticated": "ยืนยันตัวตนแล้ว",
   "profile.auth.required": "ต้องลงชื่อเข้าใช้",
   "profile.auth.unsupported": "ไม่รองรับการลงชื่อเข้าใช้",
-  "profile.auth.unknown": "ไม่ทราบสถานะการยืนยันตัวตน"
+  "profile.auth.unknown": "ไม่ทราบสถานะการยืนยันตัวตน",
+  "profile.hours": "ช่วง {{count}} ชั่วโมง",
+  "profile.days": "ช่วง {{count}} วัน"
 }

@@ -436,5 +436,7 @@
   "profile.auth.authenticated": "Авторизован",
   "profile.auth.required": "Нужен вход",
   "profile.auth.unsupported": "Вход не поддерживается",
-  "profile.auth.unknown": "Авторизация неизвестна"
+  "profile.auth.unknown": "Авторизация неизвестна",
+  "profile.hours": "Период: {{count}} ч",
+  "profile.days": "Период: {{count}} дн."
 }

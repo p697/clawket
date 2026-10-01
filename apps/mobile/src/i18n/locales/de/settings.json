@@ -436,5 +436,7 @@
   "profile.auth.authenticated": "Authentifiziert",
   "profile.auth.required": "Anmeldung erforderlich",
   "profile.auth.unsupported": "Anmeldung nicht unterstützt",
-  "profile.auth.unknown": "Authentifizierung unbekannt"
+  "profile.auth.unknown": "Authentifizierung unbekannt",
+  "profile.hours": "{{count}}-Stunden-Zeitraum",
+  "profile.days": "{{count}}-Tage-Zeitraum"
 }

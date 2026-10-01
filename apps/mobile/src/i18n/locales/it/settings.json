@@ -436,5 +436,7 @@
   "profile.auth.authenticated": "Autenticato",
   "profile.auth.required": "Accesso richiesto",
   "profile.auth.unsupported": "Accesso non supportato",
-  "profile.auth.unknown": "Autenticazione sconosciuta"
+  "profile.auth.unknown": "Autenticazione sconosciuta",
+  "profile.hours": "Periodo di {{count}} ore",
+  "profile.days": "Periodo di {{count}} giorni"
 }

@@ -436,5 +436,7 @@
   "profile.auth.authenticated": "인증됨",
   "profile.auth.required": "로그인 필요",
   "profile.auth.unsupported": "로그인 미지원",
-  "profile.auth.unknown": "인증 상태 알 수 없음"
+  "profile.auth.unknown": "인증 상태 알 수 없음",
+  "profile.hours": "{{count}}시간 사용량",
+  "profile.days": "{{count}}일 사용량"
 }
