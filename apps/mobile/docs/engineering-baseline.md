@@ -11,7 +11,7 @@ This document records the durable engineering baseline for the Clawket mobile wo
 - TypeScript: 6.0, strict mode; explicit Jest/Node/React ambient types
 - Package manager: npm workspaces with committed lockfiles
 
-The client is prepared at version 3.1.0. `apps/mobile/package.json` drives Expo's runtime version; `app.json` and both lockfiles mirror it. Locally generated native projects are ignored by Git and should be resynchronized before a build. Android's 3.1.0 base `versionCode` is 30100. The store bundle script advances beyond a code already in the native project; use `EXPO_ANDROID_VERSION_CODE` if Play needs a higher code. iOS build numbers are managed separately by EAS.
+The client is prepared at version 3.1.1. `apps/mobile/package.json` drives Expo's runtime version; `app.json` and both lockfiles mirror it. Locally generated native projects are ignored by Git and should be resynchronized before a build. Android's 3.1.1 base `versionCode` is 30101 (already used by Play 3.1.0); the owner-authorized 3.1.1 Play submission uses explicit code 30102. The store bundle script advances beyond a code already in the native project; use `EXPO_ANDROID_VERSION_CODE` if Play needs a higher code. iOS build numbers are managed separately by EAS.
 
 Do not cross an Expo or React Native minor/major boundary as incidental cleanup. Patch updates within the active Expo SDK are allowed only when `npx expo install --check`, TypeScript, focused backend tests, the full mobile test suite, native dependency sync, and at least one native platform build are evaluated together.
 
