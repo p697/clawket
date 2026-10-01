@@ -6,12 +6,15 @@ import type { ThemeScheme } from './theme';
  * The conversation's own colors for one accent and scheme (owner-approved
  * A+ chat design, 2026-09-30). The built-in wallpaper is a 165° gradient of
  * three same-family stops under faint Clawket doodles; the user's own bubble
- * is the solid accent with white text; the Agent's bubble is white (a tinted
+ * is a solid accent-family color with white text, one step lighter than the
+ * accent itself (owner choice "B" on the design canvas, 2026-10-01: the old
+ * electric blue read too deep); the Agent's bubble is white (a tinted
  * charcoal in dark); centred service pills are a deep accent-family tint.
  *
  * Every value is checked by `features/chat-appearance/resolver.test.ts`:
- * white text stays at least 4.5:1 on the outgoing bubble and on a service
- * pill over every gradient stop.
+ * white text stays at least 3.8:1 on the outgoing bubble (17-point message
+ * text, the band iMessage and Telegram use) and 4.5:1 on a service pill over
+ * every gradient stop.
  */
 export type ChatWallpaperPalette = Readonly<{
   /** Top-left, middle and bottom-right stops of the wallpaper gradient. */
@@ -50,7 +53,7 @@ export const chatWallpaperPalettes: Readonly<Record<AccentColorId, AccentWallpap
       gradient: ['#DCE7FE', '#E8EEFD', '#F1E9FB'],
       doodle: '#2C4FC4',
       doodleOpacity: LIGHT_DOODLE_OPACITY,
-      outgoing: '#1F5EFF',
+      outgoing: '#2C7AFA',
       onOutgoing: WHITE,
       incoming: WHITE,
       service: lightService('36,52,104'),
@@ -60,7 +63,7 @@ export const chatWallpaperPalettes: Readonly<Record<AccentColorId, AccentWallpap
       gradient: ['#0F1526', '#111A33', '#1A1530'],
       doodle: '#9DB4FF',
       doodleOpacity: DARK_DOODLE_OPACITY,
-      outgoing: '#2A57D6',
+      outgoing: '#2768E8',
       onOutgoing: WHITE,
       incoming: '#1E2029',
       service: DARK_SERVICE,
@@ -72,7 +75,7 @@ export const chatWallpaperPalettes: Readonly<Record<AccentColorId, AccentWallpap
       gradient: ['#E9E1FB', '#F0EAFB', '#F8E8F2'],
       doodle: '#533197',
       doodleOpacity: LIGHT_DOODLE_OPACITY,
-      outgoing: '#6C43C2',
+      outgoing: '#7C55D6',
       onOutgoing: WHITE,
       incoming: WHITE,
       service: lightService('62,36,104'),
@@ -82,7 +85,7 @@ export const chatWallpaperPalettes: Readonly<Record<AccentColorId, AccentWallpap
       gradient: ['#151028', '#1A1330', '#22122C'],
       doodle: '#CBB9FF',
       doodleOpacity: DARK_DOODLE_OPACITY,
-      outgoing: '#6A45C9',
+      outgoing: '#7754D9',
       onOutgoing: WHITE,
       incoming: '#211E2B',
       service: DARK_SERVICE,
@@ -94,7 +97,7 @@ export const chatWallpaperPalettes: Readonly<Record<AccentColorId, AccentWallpap
       gradient: ['#DAF0E6', '#E8F3EC', '#F1F0E2'],
       doodle: '#0F5F47',
       doodleOpacity: LIGHT_DOODLE_OPACITY,
-      outgoing: '#147A5B',
+      outgoing: '#2F8C6C',
       onOutgoing: WHITE,
       incoming: WHITE,
       service: lightService('20,72,56'),
@@ -104,7 +107,7 @@ export const chatWallpaperPalettes: Readonly<Record<AccentColorId, AccentWallpap
       gradient: ['#0D1A16', '#10201B', '#17201A'],
       doodle: '#91DEC3',
       doodleOpacity: DARK_DOODLE_OPACITY,
-      outgoing: '#1E7A5C',
+      outgoing: '#32896A',
       onOutgoing: WHITE,
       incoming: '#1C2422',
       service: DARK_SERVICE,
@@ -116,7 +119,7 @@ export const chatWallpaperPalettes: Readonly<Record<AccentColorId, AccentWallpap
       gradient: ['#FCE6D3', '#FBEEE3', '#F8E4E8'],
       doodle: '#843F0C',
       doodleOpacity: LIGHT_DOODLE_OPACITY,
-      outgoing: '#A85312',
+      outgoing: '#BB652A',
       onOutgoing: WHITE,
       incoming: WHITE,
       service: lightService('104,52,20'),
@@ -126,7 +129,7 @@ export const chatWallpaperPalettes: Readonly<Record<AccentColorId, AccentWallpap
       gradient: ['#1C140E', '#221812', '#221418'],
       doodle: '#F7C993',
       doodleOpacity: DARK_DOODLE_OPACITY,
-      outgoing: '#B35A1C',
+      outgoing: '#C4692F',
       onOutgoing: WHITE,
       incoming: '#27211D',
       service: DARK_SERVICE,
@@ -138,7 +141,7 @@ export const chatWallpaperPalettes: Readonly<Record<AccentColorId, AccentWallpap
       gradient: ['#D7EFF2', '#E4F1F4', '#E4EAF8'],
       doodle: '#0B5864',
       doodleOpacity: LIGHT_DOODLE_OPACITY,
-      outgoing: '#0F7180',
+      outgoing: '#2A8292',
       onOutgoing: WHITE,
       incoming: WHITE,
       service: lightService('16,70,82'),
@@ -148,7 +151,7 @@ export const chatWallpaperPalettes: Readonly<Record<AccentColorId, AccentWallpap
       gradient: ['#0C181B', '#0F1D22', '#101A26'],
       doodle: '#92DCE4',
       doodleOpacity: DARK_DOODLE_OPACITY,
-      outgoing: '#147585',
+      outgoing: '#2A8394',
       onOutgoing: WHITE,
       incoming: '#1B2427',
       service: DARK_SERVICE,
@@ -160,7 +163,7 @@ export const chatWallpaperPalettes: Readonly<Record<AccentColorId, AccentWallpap
       gradient: ['#F9DDE8', '#FAE8EF', '#EFE4F8'],
       doodle: '#8D214C',
       doodleOpacity: LIGHT_DOODLE_OPACITY,
-      outgoing: '#B12D62',
+      outgoing: '#C54173',
       onOutgoing: WHITE,
       incoming: WHITE,
       service: lightService('104,24,60'),
@@ -170,7 +173,7 @@ export const chatWallpaperPalettes: Readonly<Record<AccentColorId, AccentWallpap
       gradient: ['#1C0F16', '#22121B', '#1A1226'],
       doodle: '#F5ABC4',
       doodleOpacity: DARK_DOODLE_OPACITY,
-      outgoing: '#B8356A',
+      outgoing: '#C94578',
       onOutgoing: WHITE,
       incoming: '#281E24',
       service: DARK_SERVICE,
