@@ -23,7 +23,9 @@ Expo Camera 57.0.5 already iterates iOS metadata objects, but its Android analyz
 
 ## Validation and delivery
 
-Local Jest files ran individually in-band: scanner 12, geometry 23, legacy QR parser 14, QR payload 23, backend pairing profile 21, scanner view 1 (94 total). They cover competing codes, entry into the frame, bounds fallback, both platform corner orders, all edges, corrupt geometry, layout changes, bursts and retired callbacks; existing pairing checks preserve all six pairable backends. Native patch tests passed five cases for source drift, idempotence, all-copy validation, missing dependencies and build/install wiring. Design-system checks and agent docs passed. Native synchronization/Android compilation and Mobile types remain to be completed under the exclusive heavy lease.
+Local Jest files ran individually in-band: scanner 12, geometry 23, legacy QR parser 14, QR payload 23, backend pairing profile 21, scanner view 1 (94 total). They cover competing codes, entry into the frame, bounds fallback, both platform corner orders, all edges, corrupt geometry, layout changes, bursts and retired callbacks; existing pairing checks preserve all six pairable backends. Native patch tests passed five cases for source drift, idempotence, all-copy validation, missing dependencies and build/install wiring. Design-system checks and agent docs passed.
+
+Under the exclusive heavy lease, `mobile:sync:native` and Mobile types passed without tracked manifest/lockfile churn. Generated Pods retain Expo Camera 57.0.5 and React Native 0.86.3. Android `:expo-camera:compileDebugKotlin` passed (52 seconds, 59 tasks executed; two workers, bounded in-process Kotlin compilation), compiling the patched analyzer from this task's own dependencies. This was module compilation, not an APK/IPA build, install or physical-camera acceptance.
 
 `expo install --check` reports 11 newer recommended patch versions against the repository's existing pinned baseline, including Camera 57.0.6 versus installed 57.0.5. No dependency upgrade is part of this fix; this compatibility-catalog result is recorded separately from the scanner tests.
 
