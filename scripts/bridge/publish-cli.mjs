@@ -8,7 +8,7 @@ import { loadBridgeCliEnv } from "../../apps/bridge-cli/scripts/load-env.mjs";
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(scriptDir, "..", "..");
 const bridgePkgPath = path.join(rootDir, "apps", "bridge-cli", "package.json");
-const REQUIRED_CLI_VERSION = "3.1.8";
+const REQUIRED_CLI_VERSION = "3.1.9";
 
 function runOrThrow(command, args, cwd = rootDir, spawn = spawnSync) {
   const result = spawn(command, args, {
