@@ -14,7 +14,7 @@ import type {
 
 import { useConnections, useRoster, type RosterConnectionGroup } from '../../connection';
 import { analyticsEvents } from '../../services/analytics/events';
-import { FontSize, Space, StatusSize } from '../../theme/tokens';
+import { FontSize, Motion, Space, StatusSize } from '../../theme/tokens';
 import { CONNECTION_STATUS_FLOATING_CLEARANCE } from '../../components/ui/ConnectionStatusPill';
 import {
   SessionPanel,
@@ -401,6 +401,26 @@ describe('SessionPanelView', () => {
 
   afterEach(() => {
     consoleErrorSpy.mockRestore();
+  });
+
+  it('renders only the first screen of sessions while the panel slides up, then widens the list window', () => {
+    jest.useFakeTimers();
+    try {
+      const view = render(<SessionPanelView {...props()} />);
+      const windowSize = () => view.getByTestId('session-panel-scroll').props.windowSize;
+      // Rows the list renders ahead would mount during the slide and drop its frames.
+      expect(windowSize()).toBe(1);
+      act(() => jest.advanceTimersByTime(Motion.duration.slow + 79));
+      expect(windowSize()).toBe(1);
+      act(() => jest.advanceTimersByTime(1));
+      expect(windowSize()).toBe(5);
+      // Each opening starts on its first screen again.
+      view.rerender(<SessionPanelView {...props({ visible: false })} />);
+      view.rerender(<SessionPanelView {...props()} />);
+      expect(windowSize()).toBe(1);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('shows the current Agent in the header pill with roster-style rows and chips', () => {

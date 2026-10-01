@@ -52,6 +52,7 @@ import {
   HitSize,
   IconSize,
   LineHeight,
+  Motion,
   Radius,
   Shadow,
   Space,
@@ -99,6 +100,15 @@ const MUTATION_CAPABILITIES_OFF = Object.freeze({
 
 const PANEL_SKELETON_ROWS = Object.freeze(['one', 'two', 'three', 'four', 'five']);
 const PANEL_SEARCH_ANALYTICS_DEBOUNCE_MS = 400;
+/**
+ * While the panel slides up the list renders only its first screen. A wider
+ * window mounts the rows ahead in batches during the slide, and those batches
+ * dropped its frames (device check 2026-10-01). It widens once the panel has
+ * arrived.
+ */
+const PANEL_OPENING_LIST_WINDOW = 1;
+const PANEL_LIST_WINDOW = 5;
+const PANEL_OPENING_SETTLE_MS = Motion.duration.slow + 80;
 /** Chips are 36 points tall; the slop restores the 44-point target. */
 const CHIP_HIT_SLOP = Object.freeze({ top: Space.xs, bottom: Space.xs });
 const CHIP_COUNT_SELECTED_OPACITY = 0.7;
@@ -863,6 +873,15 @@ export function SessionPanelView({
     action: 'reset' | 'delete';
   }> | null>(null);
   const [renameRow, setRenameRow] = useState<SessionPanelRow | null>(null);
+  const [listSettled, setListSettled] = useState(false);
+  useEffect(() => {
+    if (!visible) {
+      setListSettled(false);
+      return undefined;
+    }
+    const timer = setTimeout(() => setListSettled(true), PANEL_OPENING_SETTLE_MS);
+    return () => clearTimeout(timer);
+  }, [visible]);
   const wasVisibleRef = useRef(false);
   useEffect(() => {
     if (!visible) {
@@ -1177,7 +1196,7 @@ export function SessionPanelView({
                 renderItem={renderItem}
                 initialNumToRender={12}
                 maxToRenderPerBatch={12}
-                windowSize={5}
+                windowSize={listSettled ? PANEL_LIST_WINDOW : PANEL_OPENING_LIST_WINDOW}
                 keyboardShouldPersistTaps="handled"
                 // While a status floats over the bottom, the last row can still scroll above it.
                 contentContainerStyle={[styles.scrollContent, state === 'offline' || state === 'error' ? styles.scrollContentUnderStatus : null]}
