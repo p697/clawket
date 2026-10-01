@@ -17,3 +17,26 @@ Android physical-device QA used `com.p697.clawket.connectionqa`, the current wor
 Limits: the available local CLI reports OpenClaw 2026.9.1, while the issue reports 2026.9.6. The local Gateway accepted the old explicit-off control, so the reported model rejection was **not** reproduced on this environment. The serialization defect is independently reproduced by the regression tests, and successful real calls do not establish all model/version combinations. iOS was not retested this round. No client package, server deployment or npm publication was initiated.
 
 Private sanitized result summaries and raw QA-only diagnostics: `~/.clawket/testing/issue-46-20260929/`. No credentials or user conversations are committed here. Issue: https://github.com/p697/clawket/issues/46.
+
+## Per-model levels · 2026-10-01
+
+Owner report on 2026-10-01: the model sheet offered OpenClaw sessions a static list (off, minimal, low, medium, high, xhigh, adaptive). On GPT-6-Astra it showed `Minimal` and `Adaptive` but not `Max`; the Gateway refused `Adaptive` and the choice snapped back to `Medium`. Each choice also posted a visible `/think <level>` message and a reply.
+
+OpenClaw 2026.9.1 already resolves the levels per session from the session's model, agent runtime and catalog. These are read-only findings from the installed Gateway (`dist/session-utils-model-*.js`, `dist/sessions-patch-*.js`):
+
+- `sessions.list` rows report:
+  - `thinkingLevels` (`{ id, label }`) and `thinkingOptions` (labels);
+  - `thinkingDefault`;
+  - the stored `thinkingLevel`, and the `effectiveThinkingLevel` (stored, else default).
+- `sessions.patch { key, thinkingLevel }`:
+  - rejects a level the model does not support;
+  - with `null`, clears the override;
+  - on a model change, normalizes an unsupported stored level to a supported one.
+- The patch result's `resolved` names the model, its `thinkingLevels`, and the level in effect.
+
+Clawket now does the following:
+
+- **Reading:** the OpenClaw adapter reads these levels with the session (`ModelSelectionState.thinkingLevels`). The order is depth, then `adaptive` last; unknown IDs are dropped. It marks the level in effect and takes the new model's levels from the `sessions.patch` result after a model switch.
+- **Writing:** once a Gateway has reported levels, choices go through `sessions.patch` `thinkingLevel`, which posts no chat message. Older Gateways keep the static list and `/think <level>`.
+- **Unchanged:** sends still omit `chat.send.thinking` unless a per-message preference is supplied (issue #46 above). Displaying the level in effect adds no per-message override.
+

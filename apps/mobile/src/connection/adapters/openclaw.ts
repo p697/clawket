@@ -30,6 +30,7 @@ import {
   type ModelSelectionWriteResult,
   type PromptInput,
   type SessionDescriptor,
+  type ThinkingLevel,
   type ToolPolicy,
 } from '@clawket/agent-protocol';
 import { searchDiscoverSkills } from '../../features/discover';
@@ -229,11 +230,15 @@ export class OpenClawAdapter extends GatewayAdapterBase {
   // Once observed, an empty/filtered Gateway result must not re-enable the
   // legacy updatedAt clock (which also advances for heartbeat housekeeping).
   private hasHumanActivityClock = false;
+  // A Gateway that reports per-session thinking levels (2026.x) also validates
+  // `sessions.patch` thinkingLevel; older ones keep the `/think` command path.
+  private reportsSessionThinking = false;
 
   public async listSessions(agentId?: string): Promise<SessionDescriptor[]> {
     const snapshot = await this.readSessionSnapshot(async () => {
       const sessions = await this.invoke(() => this.gateway.listSessions({ limit: 200 }));
       this.hasHumanActivityClock ||= hasOpenClawActivityTimestamps(sessions);
+      this.reportsSessionThinking ||= sessions.some((session) => readOpenClawSessionThinking(session).thinkingLevels);
       const options = { legacyActivity: !this.hasHumanActivityClock };
       return sessions.map((session) => mapOpenClawSession(this.connection.id, session, undefined, options));
     });
@@ -359,10 +364,13 @@ export class OpenClawAdapter extends GatewayAdapterBase {
     const models = await this.gateway.listModels();
     let modelRef = '';
     let provider = '';
+    let thinking: SessionThinking = {};
     if (sessionKey) {
       const session = (await this.gateway.listSessions()).find((item) => item.key === sessionKey);
       modelRef = session?.model?.trim() ?? '';
       provider = session?.modelProvider?.trim() ?? '';
+      thinking = readOpenClawSessionThinking(session);
+      this.reportsSessionThinking ||= Boolean(thinking.thinkingLevels);
     } else {
       const { config } = await this.gateway.getConfig();
       const agents = config?.agents as { defaults?: { model?: string | { primary?: string } } } | undefined;
@@ -374,7 +382,7 @@ export class OpenClawAdapter extends GatewayAdapterBase {
       provider ||= modelRef.slice(0, slash);
       modelRef = modelRef.slice(slash + 1);
     }
-    return { currentModel: modelRef, currentProvider: provider, currentBaseUrl: '', models };
+    return { currentModel: modelRef, currentProvider: provider, currentBaseUrl: '', models, ...thinking };
   }
 
   private async writeModelSelection(input: ModelSelectionWrite): Promise<ModelSelectionWriteResult> {
@@ -382,9 +390,16 @@ export class OpenClawAdapter extends GatewayAdapterBase {
     const reference = model.includes('/') || !input.provider ? model : `${input.provider}/${model}`;
     if (!model) throw new AdapterError('server', 'A model is required');
     const scope = input.scope ?? 'global';
+    let thinking: SessionThinking = {};
     if (scope === 'session') {
       if (!input.sessionKey) throw new AdapterError('server', 'A session is required');
-      await this.gateway.request('sessions.patch', { key: input.sessionKey, model: reference });
+      // The result carries the new model's levels and the level the Gateway kept,
+      // which falls back to a supported one when the old level is not.
+      const result = await this.gateway.request<{ resolved?: unknown } | undefined>(
+        'sessions.patch',
+        { key: input.sessionKey, model: reference },
+      );
+      thinking = readOpenClawSessionThinking(result?.resolved);
     } else {
       const { hash } = await this.gateway.getConfig();
       if (!hash) throw new AdapterError('server', 'Configuration version is unavailable');
@@ -393,7 +408,27 @@ export class OpenClawAdapter extends GatewayAdapterBase {
     }
     const slash = reference.indexOf('/');
     return { ok: true, scope, currentModel: slash < 0 ? reference : reference.slice(slash + 1),
-      currentProvider: slash < 0 ? '' : reference.slice(0, slash), currentBaseUrl: '', models: [] };
+      currentProvider: slash < 0 ? '' : reference.slice(0, slash), currentBaseUrl: '', models: [], ...thinking };
+  }
+
+  /** Validated by the Gateway against the session's current model; no chat message is sent. */
+  private async writeThinkingLevel(sessionKey: string, level: ThinkingLevel): Promise<ModelSelectionState> {
+    const result = await this.gateway.request<{ resolved?: { model?: unknown; modelProvider?: unknown } } | undefined>(
+      'sessions.patch',
+      { key: sessionKey, thinkingLevel: level },
+    );
+    const resolved = result?.resolved;
+    const currentModel = typeof resolved?.model === 'string' ? resolved.model.trim() : '';
+    const thinking = readOpenClawSessionThinking(resolved);
+    // An older result shape names no model: read the session back rather than clear it.
+    if (!currentModel || !thinking.thinkingLevels) return this.readModelSelection(sessionKey);
+    return {
+      currentModel,
+      currentProvider: typeof resolved?.modelProvider === 'string' ? resolved.modelProvider.trim() : '',
+      currentBaseUrl: '',
+      models: [],
+      ...thinking,
+    };
   }
 
   private async readModelCatalog(): Promise<ModelCatalogState> {
@@ -484,7 +519,13 @@ export class OpenClawAdapter extends GatewayAdapterBase {
         list: () => this.invoke(() => this.gateway.listModels()),
         getSelection: (sessionKey) => this.invoke(() => this.readModelSelection(sessionKey)),
         setSelection: (params) => this.invoke(() => this.writeModelSelection(params)),
+        // Older Gateways: the sheet offers this list and writes through `/think <level>`.
         listThinkingLevels: () => ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'adaptive'],
+        get setThinkingLevel() {
+          return adapter.reportsSessionThinking
+            ? (sessionKey: string, level: ThinkingLevel) => adapter.invoke(() => adapter.writeThinkingLevel(sessionKey, level))
+            : undefined;
+        },
         getCatalog: () => this.invoke(() => this.readModelCatalog()),
         saveCatalog: (write) => this.invoke(() => this.writeModelCatalog(write)),
         addModel: (input) => this.invoke(() => this.addCatalogModel(input)),
@@ -702,6 +743,42 @@ export type OpenClawSessionMapOptions = Readonly<{
    */
   legacyActivity?: boolean;
 }>;
+
+type SessionThinking = Pick<ModelSelectionState, 'thinkingLevel' | 'thinkingLevels'>;
+
+/** Depth from none to the most, then `adaptive`, where the model decides each time. */
+const OPENCLAW_THINKING_ORDER: readonly ThinkingLevel[] = [
+  'off', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra', 'adaptive',
+];
+
+function readOpenClawThinkingId(value: unknown): ThinkingLevel | undefined {
+  const raw = typeof value === 'string'
+    ? value
+    : value && typeof value === 'object' ? (value as { id?: unknown }).id : undefined;
+  if (typeof raw !== 'string') return undefined;
+  const id = raw.trim().toLowerCase();
+  return OPENCLAW_THINKING_ORDER.find((level) => level === id);
+}
+
+/**
+ * The thinking levels an OpenClaw session row or `sessions.patch` result reports
+ * for the session's current model (2026.x Gateways): `thinkingLevels` objects,
+ * else the `thinkingOptions` labels, in display order, plus the level in effect.
+ * Unknown ids are dropped. Rows from older Gateways yield nothing, so their
+ * sessions keep the static list and the `/think` command path.
+ */
+export function readOpenClawSessionThinking(source: unknown): SessionThinking {
+  if (!source || typeof source !== 'object') return {};
+  const row = source as Record<string, unknown>;
+  const reported = Array.isArray(row.thinkingLevels) ? row.thinkingLevels
+    : Array.isArray(row.thinkingOptions) ? row.thinkingOptions : [];
+  const ids = new Set(reported.map(readOpenClawThinkingId));
+  const thinkingLevels = OPENCLAW_THINKING_ORDER.filter((level) => ids.has(level));
+  if (thinkingLevels.length === 0) return {};
+  // Session rows name the stored and effective levels; patch results name the effective one.
+  const thinkingLevel = readOpenClawThinkingId(row.effectiveThinkingLevel ?? row.thinkingLevel ?? row.thinkingDefault);
+  return { thinkingLevels, ...(thinkingLevel ? { thinkingLevel } : {}) };
+}
 
 /** True when at least one Gateway row reports a user-facing activity timestamp. */
 export function hasOpenClawActivityTimestamps(

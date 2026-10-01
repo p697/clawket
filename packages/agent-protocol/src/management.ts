@@ -53,6 +53,11 @@ export interface ModelSelectionState {
   /** Missing means unsupported; null means the native owner's setting is not yet known. */
   fastMode?: { enabled: boolean | null; available: boolean };
   thinkingLevel?: ThinkingLevel;
+  /**
+   * The levels the current model accepts, in display order, when the backend
+   * reports them per model; missing means `listThinkingLevels()` applies.
+   */
+  thinkingLevels?: ThinkingLevel[];
   currentModel: string;
   currentProvider: string;
   currentBaseUrl: string;

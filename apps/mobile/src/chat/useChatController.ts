@@ -2705,6 +2705,7 @@ export function useChatController({
     currentModelSupportsImages,
     selectNativeThinkingLevel,
     nativeThinkingLevel,
+    nativeThinkingLevels,
     currentModelProvider,
     modelPickerError,
     modelPickerLoading,
@@ -2722,11 +2723,16 @@ export function useChatController({
     setSessions: history.setSessions,
     setThinkingLevel: history.setThinkingLevel,
   });
+  // The levels the backend reports for the session's current model come first
+  // (OpenClaw 2026.x); a static list would offer levels the model refuses.
   const thinkingLevelOptions = useMemo(
     () => adapter?.capabilities.thinkingLevels
-      ? (availableModels.find(model => model.id === currentModel)?.reasoningLevels ?? adapter.management?.models?.listThinkingLevels?.() ?? [])
+      ? (nativeThinkingLevels
+        ?? availableModels.find(model => model.id === currentModel)?.reasoningLevels
+        ?? adapter.management?.models?.listThinkingLevels?.()
+        ?? [])
       : [],
-    [adapter, availableModels, currentModel],
+    [adapter, availableModels, currentModel, nativeThinkingLevels],
   );
 
   const runSilentCommandProbe = useCallback(

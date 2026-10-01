@@ -962,6 +962,32 @@ describe('native confirmed runtime settings', () => {
     expect(adapter.prompt).not.toHaveBeenCalled();
   });
 
+  it('offers the levels the backend reports for the current model until a read stops reporting them', async () => {
+    const reported = modelSelection('gpt-6-astra', 'openai', {
+      thinkingLevel: 'medium', thinkingLevels: ['off', 'low', 'medium', 'high', 'xhigh', 'max'],
+    });
+    const getSelection = jest.fn().mockResolvedValue(reported);
+    const setSelection = jest.fn().mockResolvedValue({
+      ...modelSelection('claude-fable-5', 'anthropic', { thinkingLevel: 'adaptive', thinkingLevels: ['low', 'high', 'adaptive'] }),
+      ok: true, scope: 'session',
+    });
+    const adapter = createAdapter({ getSelection, setSelection });
+    const { result } = renderHook(() => useChatModelPicker({
+      adapter, connectionState: 'ready', sessionKey: 'session', setInput: jest.fn(), setSessions: jest.fn(),
+    }));
+    await act(async () => {});
+    expect(result.current.nativeThinkingLevels).toEqual(['off', 'low', 'medium', 'high', 'xhigh', 'max']);
+    expect(result.current.nativeThinkingLevel).toBe('medium');
+    // A model switch reports the new model's levels and the level the backend kept.
+    await act(async () => result.current.onSelectModel({ id: 'claude-fable-5', name: 'Claude Fable 5', provider: 'anthropic' }));
+    expect(result.current.nativeThinkingLevels).toEqual(['low', 'high', 'adaptive']);
+    expect(result.current.nativeThinkingLevel).toBe('adaptive');
+    getSelection.mockResolvedValue(modelSelection('gpt-6-astra', 'openai'));
+    await act(async () => result.current.refreshCurrentModel());
+    expect(result.current.nativeThinkingLevels).toBeNull();
+    expect(adapter.prompt).not.toHaveBeenCalled();
+  });
+
   it('clears the old thinking choice when a confirmed model change has no reasoning levels', async () => {
     const getSelection = jest.fn().mockResolvedValue({ ...native(), thinkingLevel: 'high' });
     const nextModel = { id: 'plain', name: 'Plain', provider: 'provider', reasoningLevels: [] };

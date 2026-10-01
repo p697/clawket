@@ -10,6 +10,7 @@ import type {
   ModelProviderInfo,
   ModelSelectionState,
   SessionPermissionMode,
+  ThinkingLevel,
 } from '@clawket/agent-protocol';
 import { ConnectionState, SessionInfo } from '../types';
 
@@ -59,6 +60,8 @@ export function useChatModelPicker({
   const [configuredDefaultModel, setConfiguredDefaultModel] = useState<string | undefined>();
   const [currentModel, setCurrentModel] = useState<string | null>(null);
   const [nativeThinkingLevel, setNativeThinkingLevel] = useState<string | null>(null);
+  // Levels the backend reports for the current model (OpenClaw 2026.x); null keeps the static list.
+  const [nativeThinkingLevels, setNativeThinkingLevels] = useState<ThinkingLevel[] | null>(null);
   const [currentModelProvider, setCurrentModelProvider] = useState<string | null>(null);
   const [runtimeSettingsBusy, setRuntimeSettingsBusy] = useState(false);
   const [runtimeSettingsUnconfirmed, setRuntimeSettingsUnconfirmed] = useState(() => (
@@ -143,6 +146,7 @@ export function useChatModelPicker({
     modelMetadataScope.current = { adapter, sessionKey };
     setAvailableModels((previous) => selection.models?.length ? selection.models : previous);
     setNativeThinkingLevel(selection.thinkingLevel ?? null);
+    setNativeThinkingLevels(selection.thinkingLevels?.length ? selection.thinkingLevels : null);
     if (selection.thinkingLevel) setThinkingLevel?.(selection.thinkingLevel);
     setAvailableProviders(selection.providers ?? []);
     setCurrentModel(selection.currentModel?.trim() || null);
@@ -174,6 +178,7 @@ export function useChatModelPicker({
     setCurrentModel(null);
     setCurrentModelProvider(null);
     setNativeThinkingLevel(null);
+    setNativeThinkingLevels(null);
     setFastMode(undefined);
     setPermissions(undefined);
     setPermissionPickerVisible(false);
@@ -303,6 +308,7 @@ export function useChatModelPicker({
         }
         if (!isCurrent()) return;
         setNativeThinkingLevel(currentState.thinkingLevel ?? null);
+        setNativeThinkingLevels(currentState.thinkingLevels?.length ? currentState.thinkingLevels : null);
         const selectedModel = currentState.currentModel?.trim();
         if (selectedModel) {
           modelMetadataScope.current = { adapter: requestAdapter, sessionKey: requestSessionKey };
@@ -358,6 +364,7 @@ export function useChatModelPicker({
   useEffect(() => {
     setModelPickerLoading(false);
     setNativeThinkingLevel(null);
+    setNativeThinkingLevels(null);
     setModelPickerError(null);
     setConfiguredDefaultModel(undefined);
     setAvailableModels([]);
@@ -595,6 +602,7 @@ export function useChatModelPicker({
     currentModelDisplayName,
     selectNativeThinkingLevel,
     nativeThinkingLevel,
+    nativeThinkingLevels,
     configuredDefaultModel,
     availableModels,
     availableProviders,

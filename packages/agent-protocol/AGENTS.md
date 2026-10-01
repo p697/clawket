@@ -6,6 +6,8 @@ This package is the platform-neutral contract between Clawket UI and backend ada
 
 `ModelInfo.sortOrder` is optional backend recommendation order within a provider (lower first). Missing order retains legacy alphabetical presentation; consumers must not infer model age from names.
 
+`ModelSelectionState.thinkingLevels` optionally carries the levels the current model accepts, in display order, when the backend reports them per session or model. It takes precedence over `ModelInfo.reasoningLevels` and `listThinkingLevels()`; a missing field keeps those. An adapter exposes `setThinkingLevel` only when its backend validates the write.
+
 1. Keep runtime dependencies empty. Do not import React, React Native, storage, networking, or backend implementations.
 2. Export only serializable protocol data, adapter interfaces, capability policy, errors, and deterministic test helpers.
 3. Backend support is expressed through `Capabilities`; unsupported management groups are absent instead of throwing at runtime. `attachments` means image attachments, while the additive optional `fileAttachments` capability enables non-image files. Missing refinements fail closed.
