@@ -16,6 +16,7 @@ export const HERMES_MODEL_STATE_CACHE_TTL_MS = 60_000;
 export const SLOW_BRIDGE_REQUEST_LOG_THRESHOLD_MS = 250;
 export const SESSION_STORE_PATH = join(homedir(), '.clawket', 'hermes-bridge-sessions.json');
 export const USAGE_LEDGER_PATH = join(homedir(), '.clawket', 'hermes-usage-ledger.json');
+export const HERMES_GATEWAY_OWNER_PATH = join(homedir(), '.clawket', 'hermes-gateway-owner.json');
 export const HERMES_STATE_DB_PATH = join(homedir(), '.hermes', 'state.db');
 export const DEFAULT_HERMES_SOURCE_PATH = join(homedir(), '.hermes', 'hermes-agent');
 export const DEFAULT_HERMES_HOME_PATH = join(homedir(), '.hermes');

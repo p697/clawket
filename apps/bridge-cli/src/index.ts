@@ -4,6 +4,7 @@ import { handleCodexCommand } from './codex.js';
 import { handlePiCommand } from './pi.js';
 import { handleLocalModelCommand } from './local-model.js';
 import { keepHermesRelayRuntimeAlive } from './hermes-relay-lifecycle.js';
+import { describeHermesApiIssue, HermesApiNotReadyError, readHermesApiIssue, type HermesApiIssue } from './hermes-readiness.js';
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { execFileSync, spawn } from 'node:child_process';
@@ -78,6 +79,10 @@ import {
 } from '@clawket/bridge-runtime';
 
 const HERMES_SERVICE_WATCHDOG_INTERVAL_MS = 30_000;
+// A Bridge replacing its own earlier gateway waits for Hermes' takeover before it listens.
+const HERMES_PAIRING_BRIDGE_READY_TIMEOUT_MS = 30_000;
+// After the Bridge is up, a gateway that is still starting gets this long to answer.
+const HERMES_API_READY_GRACE_MS = 10_000;
 const PREVIEW_REGISTRY_URL = 'https://clawket-registry-preview.clawket.workers.dev';
 // bridge-runtime is already bundled into the published CLI, but relay-shared is
 // not a CLI dependency. Keep this wire value local until those package
@@ -1042,11 +1047,12 @@ async function performOpenClawRelayPairing(args: string[], progress: Progress = 
 
 async function performHermesLocalPairing(args: string[], progress: Progress = noProgress): Promise<PairSuccessResult> {
   progress.update('Starting the Hermes bridge…');
-  const { port, token } = await ensureHermesPairingRuntimeReady(args);
+  const { port, token, apiBaseUrl } = await ensureHermesPairingRuntimeReady(args);
   const publicHost = readFlag(args, '--public-host') ?? detectLanIp();
   if (!publicHost) {
     throw new Error('Failed to determine a LAN IP address for Hermes pairing. Pass --public-host explicitly.');
   }
+  await requireHermesApiReady({ port, apiBaseUrl, progress, result: { backend: 'hermes', transport: 'local' } });
   const pairing = await buildHermesLocalPairing({
     publicHost,
     port,
@@ -1091,7 +1097,6 @@ async function performHermesRelayPairing(args: string[], progress: Progress = no
     elapsedMs: Date.now() - pairingStartedAt,
     action: paired.action,
   });
-  const qrImagePath = await writeRawQrPng(paired.qrPayload, 'clawket-hermes-relay-pair', qrFile);
 
   // When a fresh registration replaced the relay config (new bridgeId / relayUrl /
   // relaySecret), any previously running relay runtime still holds the OLD values
@@ -1107,7 +1112,15 @@ async function performHermesRelayPairing(args: string[], progress: Progress = no
     }
   }
 
-  const runtimeMessage = await ensureHermesRelayBackgroundRuntime(args, progress);
+  const runtime = await ensureHermesRelayBackgroundRuntime(args, progress);
+  await requireHermesApiReady({
+    port: runtime.port,
+    apiBaseUrl: runtime.apiBaseUrl,
+    progress,
+    result: { backend: 'hermes', transport: 'relay', bridgeId: paired.config.bridgeId, relayUrl: paired.config.relayUrl },
+  });
+  const runtimeMessage = runtime.message;
+  const qrImagePath = await writeRawQrPng(paired.qrPayload, 'clawket-hermes-relay-pair', qrFile);
   logHermesPerf('pair_relay_ready', {
     elapsedMs: Date.now() - pairingStartedAt,
   });
@@ -1236,7 +1249,8 @@ async function handleOpenClawLocalPairCommand(args: string[], jsonOutput: boolea
 
 async function handleHermesLocalPairCommand(args: string[], jsonOutput: boolean): Promise<void> {
   const progress = startPairProgress('hermes', jsonOutput);
-  const result = await track(progress, () => performHermesLocalPairing(args, progress));
+  const result = await trackHermesPairing(progress, jsonOutput, () => performHermesLocalPairing(args, progress));
+  if (!result) return;
   if (jsonOutput) {
     printJson(result.jsonValue);
   } else {
@@ -1249,7 +1263,8 @@ async function handleHermesLocalPairCommand(args: string[], jsonOutput: boolean)
 
 async function handleHermesRelayPairCommand(args: string[], jsonOutput: boolean): Promise<void> {
   const progress = startPairProgress('hermes', jsonOutput);
-  const result = await track(progress, () => performHermesRelayPairing(args, progress));
+  const result = await trackHermesPairing(progress, jsonOutput, () => performHermesRelayPairing(args, progress));
+  if (!result) return;
   if (jsonOutput) {
     printJson(result.jsonValue);
     return;
@@ -1259,6 +1274,26 @@ async function handleHermesRelayPairCommand(args: string[], jsonOutput: boolean)
   qrcodeTerminal.generate(result.qrPayload, { small: true });
   for (const line of result.summaryLines.slice(1)) {
     console.log(line);
+  }
+}
+
+/** A Hermes API the App cannot use fails the command: no QR, an explanation and a non-zero exit. */
+async function trackHermesPairing(
+  progress: Progress,
+  jsonOutput: boolean,
+  task: () => Promise<PairSuccessResult>,
+): Promise<PairSuccessResult | null> {
+  try {
+    return await track(progress, task);
+  } catch (error) {
+    if (!(error instanceof HermesApiNotReadyError)) throw error;
+    process.exitCode = 1;
+    if (jsonOutput) {
+      printJson(error.jsonValue);
+    } else {
+      console.error(error.message);
+    }
+    return null;
   }
 }
 
@@ -1647,13 +1682,20 @@ async function startHermesRelayRuntime(bridgeWsUrl: string): Promise<HermesRelay
   return runtime;
 }
 
-async function ensureHermesRelayBackgroundRuntime(args: string[], progress: Progress = noProgress): Promise<string> {
+async function ensureHermesRelayBackgroundRuntime(
+  args: string[],
+  progress: Progress = noProgress,
+): Promise<{ message: string; port: number; apiBaseUrl: string }> {
   const startedAt = Date.now();
   logHermesPerf('relay_runtime_ensure_begin');
   const relayConfig = readHermesRelayConfig();
   if (!relayConfig) {
     throw new Error('Hermes relay is not paired.');
   }
+  // The local Bridge comes first even when the relay runtime is already up, so
+  // pairing can check its Hermes API and an explicit --restart-hermes still applies.
+  progress.update('Starting the Hermes bridge…');
+  const { host, port, apiBaseUrl, token } = await ensureHermesPairingRuntimeReady(args);
   const relayPids = listHermesRelayRuntimePids();
   if (relayPids.length === 1) {
     progress.update('Confirming the Hermes Relay connection…');
@@ -1662,14 +1704,12 @@ async function ensureHermesRelayBackgroundRuntime(args: string[], progress: Prog
       elapsedMs: Date.now() - startedAt,
       pid: relayPids[0],
     });
-    return `Hermes relay runtime already running (pid ${relayPids[0]}) and confirmed by relay.`;
+    return { port, apiBaseUrl, message: `Hermes relay runtime already running (pid ${relayPids[0]}) and confirmed by relay.` };
   }
   if (relayPids.length > 1) {
     stopHermesBridgeRuntimePids(relayPids);
   }
 
-  progress.update('Starting the Hermes bridge…');
-  const { host, port, apiBaseUrl, token } = await ensureHermesPairingRuntimeReady(args);
   progress.update('Starting the Hermes Relay runtime…');
   const relayStartedAt = Date.now();
   startDetachedHermesRelayRuntime({
@@ -1677,7 +1717,6 @@ async function ensureHermesRelayBackgroundRuntime(args: string[], progress: Prog
     port,
     apiBaseUrl,
     token,
-    restartHermes: hasFlag(args, '--restart-hermes'),
   });
   await waitForHermesRelayRuntimeReady(relayStartedAt, 20_000);
   progress.update('Confirming the Hermes Relay connection…');
@@ -1687,13 +1726,21 @@ async function ensureHermesRelayBackgroundRuntime(args: string[], progress: Prog
     logHermesPerf('relay_runtime_ensure_requested_no_pid', {
       elapsedMs: Date.now() - startedAt,
     });
-    return 'Hermes relay runtime launch was requested. Run `clawket hermes relay run` manually if it did not stay up.';
+    return {
+      port,
+      apiBaseUrl,
+      message: 'Hermes relay runtime launch was requested. Run `clawket hermes relay run` manually if it did not stay up.',
+    };
   }
   logHermesPerf('relay_runtime_ensure_started', {
     elapsedMs: Date.now() - startedAt,
     pid: startedPids[0],
   });
-  return `Auto-started Hermes relay runtime (pid ${startedPids[0]}) and confirmed cloud bridge attachment.`;
+  return {
+    port,
+    apiBaseUrl,
+    message: `Auto-started Hermes relay runtime (pid ${startedPids[0]}) and confirmed cloud bridge attachment.`,
+  };
 }
 
 async function ensureHermesBridgeBackgroundRuntime(input: {
@@ -1732,7 +1779,6 @@ async function ensureHermesRelayBackgroundRuntimeWithConfig(input: {
     port: input.config.port,
     apiBaseUrl: input.config.apiBaseUrl,
     token: input.config.token,
-    restartHermes: false,
   });
   await waitForHermesRelayRuntimeReady(relayStartedAt, 20_000);
   const relayConfig = readHermesRelayConfig();
@@ -1990,15 +2036,21 @@ async function ensureHermesPairingRuntimeReady(args: string[]): Promise<{
   const port = Number(readFlag(args, '--port') ?? saved?.port ?? '4319');
   const apiBaseUrl = readFlag(args, '--api-url') ?? saved?.apiBaseUrl ?? 'http://127.0.0.1:8642';
   const token = readFlag(args, '--token') ?? process.env.CLAWKET_HERMES_BRIDGE_TOKEN ?? saved?.token ?? randomUUID();
+  const restartHermes = hasFlag(args, '--restart-hermes');
   const existingBridgePids = listHermesBridgeRuntimePids();
 
   if (existingBridgePids.length > 0) {
     const resolved = await resolveExistingHermesPairingRuntime(saved);
-    logHermesPerf('pairing_runtime_ready_reused', {
-      elapsedMs: Date.now() - startedAt,
-      port: resolved.port,
-    });
-    return resolved;
+    if (!restartHermes) {
+      logHermesPerf('pairing_runtime_ready_reused', {
+        elapsedMs: Date.now() - startedAt,
+        port: resolved.port,
+      });
+      return resolved;
+    }
+    // A reused Bridge would ignore --restart-hermes. Replace this Clawket-managed
+    // Bridge; the start below keeps its saved token, so a running relay reconnects.
+    stopHermesBridgeRuntimePids(existingBridgePids);
   }
 
   if (!existsSync(resolveDefaultHermesSourcePath())) {
@@ -2011,9 +2063,9 @@ async function ensureHermesPairingRuntimeReady(args: string[]): Promise<{
     port,
     apiBaseUrl,
     token,
-    restartHermes: hasFlag(args, '--restart-hermes'),
+    restartHermes,
   });
-  await waitForHermesBridgeHealth(port);
+  await waitForHermesBridgeHealth(port, HERMES_PAIRING_BRIDGE_READY_TIMEOUT_MS);
   logHermesPerf('pairing_runtime_ready_started', {
     elapsedMs: Date.now() - startedAt,
     port,
@@ -2089,7 +2141,6 @@ function startDetachedHermesRelayRuntime(input: {
   port: number;
   apiBaseUrl: string;
   token: string;
-  restartHermes: boolean;
 }): void {
   const logFiles = getHermesProcessLogPaths();
   const stdoutFd = openSync(logFiles.relayLogPath, 'a');
@@ -2111,9 +2162,8 @@ function startDetachedHermesRelayRuntime(input: {
     '--api-url',
     input.apiBaseUrl,
   ];
-  if (input.restartHermes) {
-    childArgs.push('--restart-hermes');
-  }
+  // The relay child only connects to the Bridge; any --restart-hermes was already
+  // applied when that Bridge started, and repeating it would restart it again.
   const child = spawn(process.execPath, childArgs, {
     detached: true,
     stdio: ['ignore', stdoutFd, stderrFd],
@@ -2155,6 +2205,7 @@ async function readHermesBridgeHealth(port: number): Promise<{
   running: boolean;
   bridgeUrl: string | null;
   hermesApiBaseUrl: string | null;
+  hermesApiIssue: HermesApiIssue | null;
 }> {
   const response = await fetch(`http://127.0.0.1:${port}/health`);
   if (!response.ok) {
@@ -2173,7 +2224,47 @@ async function readHermesBridgeHealth(port: number): Promise<{
     hermesApiBaseUrl: typeof payload.hermesApiBaseUrl === 'string' && payload.hermesApiBaseUrl.trim()
       ? payload.hermesApiBaseUrl
       : null,
+    hermesApiIssue: readHermesApiIssue(payload),
   };
+}
+
+/**
+ * A Bridge that cannot use the Hermes API leaves the App connecting forever, so
+ * pairing must not print its QR. A rejected key fails at once; a gateway that is
+ * still starting gets a short grace period.
+ */
+async function requireHermesApiReady(input: {
+  port: number;
+  apiBaseUrl: string;
+  progress: Progress;
+  result: Record<string, unknown>;
+}): Promise<void> {
+  input.progress.update('Checking the Hermes API…');
+  const deadline = Date.now() + HERMES_API_READY_GRACE_MS;
+  let issue = await readBridgeHermesApiIssue(input.port);
+  while (issue && issue !== 'credential_mismatch' && Date.now() < deadline) {
+    await sleep(500);
+    issue = await readBridgeHermesApiIssue(input.port);
+  }
+  if (!issue) return;
+  logHermesPerf('pair_hermes_api_not_ready', { issue });
+  const message = describeHermesApiIssue(issue, input.apiBaseUrl);
+  throw new HermesApiNotReadyError(issue, message, {
+    ok: false,
+    ...input.result,
+    hermesApiReachable: false,
+    hermesApiIssue: issue,
+    error: message,
+    runtimeMessage: message,
+  });
+}
+
+async function readBridgeHermesApiIssue(port: number): Promise<HermesApiIssue | null> {
+  try {
+    return (await readHermesBridgeHealth(port)).hermesApiIssue;
+  } catch {
+    return 'unavailable';
+  }
 }
 
 function parseHermesBridgeUrl(value: string | null): { host: string; port: number } | null {
@@ -2349,8 +2440,8 @@ function printHelp(): void {
     'clawket pair --backend pi [--project <directory>] [--local]',
     'clawket hermes dev [--public-host <192.168.x.x>] [--host <0.0.0.0>] [--port <4319>] [--api-url <http://127.0.0.1:8642>] [--qr-file <path>] [--restart-hermes] [--json]',
     'clawket hermes run [--host <0.0.0.0>] [--port <4319>] [--api-url <http://127.0.0.1:8642>] [--restart-hermes]',
-    'clawket hermes pair local [--public-host <192.168.x.x>] [--port <4319>] [--qr-file <path>] [--json]',
-    'clawket hermes pair relay [--server <url>] [--name <displayName>] [--qr-file <path>] [--json]',
+    'clawket hermes pair local [--public-host <192.168.x.x>] [--port <4319>] [--qr-file <path>] [--restart-hermes] [--json]',
+    'clawket hermes pair relay [--server <url>] [--name <displayName>] [--qr-file <path>] [--restart-hermes] [--json]',
     'clawket hermes relay run [--host <127.0.0.1>] [--port <4319>] [--api-url <http://127.0.0.1:8642>] [--restart-hermes] [--json]',
   ].join('\n'));
 }

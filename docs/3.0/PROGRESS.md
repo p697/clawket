@@ -1,5 +1,14 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-02 Hermes 重新配对后 gateway 拒绝新 API key，App 一直「正在连接」（10-01 安卓 QA 拆出的独立任务，#69）。
+  - 原因：bridge token 变了（`~/.clawket` 被清空或 `clawket reset` 后重新配对），按 token 派生的 API key 随之变化，而此前由 Clawket 启动的 `hermes gateway run --replace` 仍用旧 key；bridge 只报凭据不匹配、不替换，配对却打印「confirmed cloud bridge attachment」。
+  - 改法：bridge 每次启动 gateway 时写 `~/.clawket/hermes-gateway-owner.json`（pid、`ps` 读出的进程启动时间、API 地址、Hermes home，不含凭据）。API 返回 401/403 时，只有这份记录证明同一作用域里那个仍在运行的 `gateway run` 进程正是 Clawket 启动的，才再起一个 `gateway run --replace`，由 Hermes 自己的接管流程停掉旧实例；不看环境变量、不按端口猜、不直接给旧 pid 发信号；读不到进程启动时间的平台（Windows）一律不自动替换。
+  - 证明不了时保持原行为，但失败可见：bridge `/health` 新增固定取值的 `hermesApiIssue`（`credential_mismatch` / `unreachable`）；Hermes relay / local 配对在 API 不可用时不打印二维码、退出码非零，`--json` 返回 `ok: false`、`hermesApiIssue` 和说明 `--restart-hermes` 与 `CLAWKET_HERMES_API_KEY` 的 `runtimeMessage`；多后端 `clawket pair` 把它列进配对错误，不影响 OpenClaw。配对命令上的 `--restart-hermes` 以前在 bridge 已运行时被忽略，现在用保存的 token 替换正在运行的 Clawket bridge（relay 自动重连），且不再转给 relay 子进程（否则会二次重启）。
+  - 不改：派生 key 不做成跨 reset 的固定值。普通重配本来就复用保存的 token，reset 后换 key 是应有的凭据轮换；固定 key 也救不了这次（`~/.clawket` 被清空时它同样会丢）。start / stop / restart / uninstall / reset 与 OpenClaw 路径不变；reset 保留所有权记录（网关仍在运行，记录不含凭据）。
+  - 限制：3.1.10 及更早版本启动的 gateway 没有记录，新版本对它们只给出明确失败和补救命令；由新 bridge 启动的 gateway 才能自动恢复。
+  - 验证（逐个文件）：bridge-runtime 网关记录 3（另 1 项仅 Windows）、api-recovery 11、http-server 5、hermes/index 22；bridge-cli hermes-readiness 3、index 32；关掉替换逻辑的变异检查会让对应测试失败；持 heavy 租约 `npm run bridge:typecheck` 通过；用编译后的 bridge-runtime 加一个假的 `hermes gateway run` 脚本做真实进程演练（临时目录、回环端口，不碰本机真实 bridge / gateway）：换 token 后 Clawket 启动的网关被接管、`/health` 恢复 ok，用户自己启动的网关保持运行且报 `credential_mismatch`，记录文件不含 key；check:docs 通过。
+  - 影响：3.1.10 从 `accfe2f4` 起，不含本修复；已安装用户要等后续 Bridge 版本（HT-HERMES-GATEWAY-KEY-1002）。未打包、发布或部署。
+
 - 2026-10-02 安卓 Companion 等待动画偶发闪退（负责人：SM-A566B QA 包 10-01 22:47 与 10-02 12:59 两次 `Underflow in restore - more restores than saves`，第二次在「重新连接…」时从会话面板新开 OpenClaw 会话）。
   - 原因：react-native-svg 15.15.4 安卓 `GroupView.drawGroup`（上游 #2450 引入，15.15.5 与上游 main 未变，也无人报过）。opacity 不为 1 的 `<G>` 把子元素画进自己的离屏画布；opacity 为 1 时却把「画它的那块画布」存进同一个字段，之后 opacity 一离开 1 就对它 `setBitmap`。那块画布若是外层半透明 `<G>` 正在用的离屏画布，外层的保存栈被清空，它的 `restore()` 抛异常，App 退出。
   - 哪个 SVG：只有 Fetch（挖洞）场景有两层都带 opacity 动画的 `<G>`：土堆约 59% 的时间 opacity 为 0，土粒在它里面淡入淡出。两份崩溃栈都是三层 `drawGroup`（Svg 根组 → shake 组 → 土堆组，第 172 行）。土粒 opacity 在缓动顶点转成原生 float 时约 0.01% 的时间恰为 1.0f；按真实关键帧取样，120 Hz 下每个 9.6 秒循环约 13% 触发，所以等得越久越容易中。聊天壁纸、其他场景和头像没有这种嵌套。
@@ -1324,6 +1333,7 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 
 | 编号 | 事项 | 怎么做 | 验证方法 | 状态 |
 |---|---|---|---|---|
+| HT-HERMES-GATEWAY-KEY-1002 | Hermes gateway 所有权恢复（#69）的发布决定 | 3.1.10 从 `accfe2f4` 起，不含本修复；由负责人决定随哪个 Bridge 版本发布 | 升级后用 `clawket pair --backend hermes --restart-hermes` 让新 bridge 启动并记录 gateway，再 `clawket reset` 后重新配对：手机应直接连上，`hermes-bridge.log` 出现 `owner=clawket`；没有记录的旧 gateway 应在配对时失败并提示 `--restart-hermes` | 待负责人决定；本轮不打包、不发布。 |
 | HT-NPM-3110-1002 | Bridge 3.1.10 npm 本机认证 | 在 npm 官方登录与独立发布认证页解锁现有安全密钥；不在聊天中发送密码或验证码。 | npm 接受固定候选，公开 latest=3.1.10，下载包逐字节/三项哈希与全新安装通过。 | 负责人已完成两次本机认证；npm 接受固定候选，公开 registry 仍在处理，下载与公开安装待验证。 |
 | HT-SVG-RESTORE-1002 | 安卓等待动画闪退修复的出包决定 | 决定已上传未提审的 Play 3.1.1/30102 是否换成含本修复的新包（新 versionCode）；线上 3.1.0 同样受影响。 | 新包在设计系统 → Clawket → 场景 2（Fetch）连续播放 10 分钟以上不闪退，`adb logcat -b crash` 无新的 `GroupView.drawGroup`。 | 待负责人决定：代码修复与真机验证见本条 PR，本轮不打正式包、不上传、不提审。 |
 | HT-TOOL-DOCK-1002 | 工具过程方案 C 真机验收（iOS 与负责人设备） | 在包含本轮代码的开发 App 或后续授权更新中，分别让 OpenClaw / Codex / Claude Code / Hermes / Pi 执行会调用工具的任务；各触发一次执行审批，并让 Claude Code 或 Codex 提问一次。 | 工具步骤不进对话；工具运行超过 1 秒停靠条升起，点开是工作面板；审批时停靠条变琥珀色，「查看」跳到卡片；提问时停靠条换成「回答」；结束后最后一条回复下有带时长的工作记录 chip，记录里有每一步、审批结果和问答。 | 安卓 QA 包已逐个后端实测（见 PROGRESS 2026-10-02 工具过程条目）；Claude Code 权限弹窗因本机 Claude 设置预先允许工具未能触发，由单元测试覆盖；iOS 未测。未升版本、未分发。 |

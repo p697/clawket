@@ -188,4 +188,47 @@ describe('Hermes authenticated readiness', () => {
       expect(fetchMock.mock.calls.every(([url]) => url.endsWith('/v1/models'))).toBe(true);
     } finally { vi.unstubAllGlobals(); }
   });
+
+  it('reports a fixed Hermes API issue on Bridge health', async () => {
+    let apiStatus = 401;
+    const api = createServer((request, response) => {
+      response.statusCode = request.url === '/v1/models' ? apiStatus : 404;
+      response.end('{}');
+    });
+    await new Promise<void>((resolve) => api.listen(0, '127.0.0.1', () => resolve()));
+    const stateDir = await mkdtemp(join(tmpdir(), 'clawket-hermes-api-issue-'));
+    const bridge = new HermesLocalBridge({
+      host: '127.0.0.1',
+      port: await reserveAvailablePort(),
+      apiBaseUrl: `http://127.0.0.1:${(api.address() as AddressInfo).port}`,
+      bridgeToken: 'api-issue-test',
+      startHermesIfNeeded: false,
+      hermesSourcePath: join(stateDir, 'missing-hermes-source'),
+      hermesHomePath: join(stateDir, 'home'),
+      hermesPythonPath: (process.platform === 'win32' ? 'python' : 'python3'),
+      sessionStorePath: join(stateDir, 'sessions.json'),
+      usageLedgerPath: join(stateDir, 'usage.json'),
+      gatewayOwnerPath: join(stateDir, 'gateway-owner.json'),
+    });
+    const readHealth = async () => await (await fetch(`${bridge.getHttpUrl()}/health`)).json() as Record<string, unknown>;
+    try {
+      await bridge.start();
+      await expect(readHealth()).resolves.toMatchObject({
+        status: 'degraded',
+        hermesApiReachable: false,
+        hermesApiIssue: 'credential_mismatch',
+      });
+      apiStatus = 503;
+      await expect(readHealth()).resolves.toMatchObject({ hermesApiReachable: false, hermesApiIssue: 'unreachable' });
+      apiStatus = 200;
+      const ready = await readHealth();
+      expect(ready).toMatchObject({ status: 'ok', hermesApiReachable: true });
+      expect(ready).not.toHaveProperty('hermesApiIssue');
+    } finally {
+      await bridge.stop();
+      api.closeAllConnections();
+      await new Promise<void>((resolve) => api.close(() => resolve()));
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  }, 15_000);
 });

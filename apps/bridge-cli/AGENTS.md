@@ -7,12 +7,18 @@ Publishable bridge CLI (`@p697/clawket`) inside the Clawket monorepo.
 When improving the local Hermes testing flow:
 
 1. Prefer a single productized `bridge-cli` entrypoint over ad hoc shell scripts that duplicate pairing and bridge startup logic.
-2. Auto-clean only Clawket-managed Hermes local bridge processes, plus Hermes gateway processes when the user explicitly opts into a restart.
+2. Auto-clean only Clawket-managed Hermes local bridge processes, plus Hermes gateway processes when the user explicitly opts into a restart. The Bridge may replace a key-rejecting gateway only with the ownership record defined in `packages/bridge-runtime`.
 3. Do not kill unrelated processes solely because they occupy the same port; fail with a clear error instead of risking collateral damage.
 4. QR generation, PNG export, and terminal QR output should all come from the same CLI flow so local testing, docs, and future automation stay aligned.
 5. If a watch mode is added for Hermes local development, keep its watch scope narrow to bridge-only sources and config (`apps/bridge-cli`, `packages/bridge-core`, `packages/bridge-runtime`), and do not rebuild on unrelated app changes.
 6. Treat `clawket pair local` as a shared product entrypoint. If multiple local-capable backends are installed, emit one local pairing result per detected backend from the same command so the user can choose which QR to scan.
 7. Use Bridge Runtime's shared Hermes installation resolver for pairing detection and doctor output. Honor explicit source/command overrides and the current official installation directory without requiring a user to edit shell PATH.
+
+## Hermes Pairing Readiness
+
+1. Hermes relay and local pairing print a QR only after the Bridge `/health` reports a usable Hermes API. Otherwise print no QR, exit non-zero and emit `ok: false` JSON with `hermesApiIssue` and a remedy in `runtimeMessage`; a rejected key fails at once, other issues after a short grace. Bridges that predate `hermesApiReachable` keep the old success path.
+2. `--restart-hermes` on pairing replaces a running Clawket-managed Bridge with its saved token, so a running relay runtime reconnects; never forward it to the relay child, which would restart the Bridge again.
+3. `reset` keeps `hermes-gateway-owner.json`: the gateway it names keeps running, and the record holds no credential.
 
 ## CLI Observability Rule
 

@@ -41,7 +41,8 @@ export abstract class HermesHttpServerMethods {
   async handleHttpRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const pathname = readRequestPathname(req.url);
     if (req.method === 'GET' && (pathname === '/health' || pathname === '/v1/hermes/health')) {
-      const reachable = await probeHermesApi(this.apiBaseUrl, this.apiKey);
+      const apiStatus = await inspectHermesApi(this.apiBaseUrl, this.apiKey);
+      const reachable = apiStatus === 'ready';
       this.writeJson(res, 200, {
         ok: true,
         running: this.snapshot.running,
@@ -51,6 +52,8 @@ export abstract class HermesHttpServerMethods {
         wsPath: '/v1/hermes/ws',
         hermesApiBaseUrl: this.apiBaseUrl,
         hermesApiReachable: reachable,
+        // A fixed cause lets pairing explain a degraded Bridge without exposing logs.
+        ...(reachable ? {} : { hermesApiIssue: apiStatus === 'unauthorized' ? 'credential_mismatch' : 'unreachable' }),
         capabilities: this.getBridgeCapabilities(),
         ...(this.bridgeVersion ? { bridgeVersion: this.bridgeVersion } : {}),
       });
