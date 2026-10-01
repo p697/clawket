@@ -935,6 +935,41 @@ describe('long-form composer', () => {
     }
   });
 
+  it('raises the Android editor’s text, caret and placeholder together under a CJK placeholder', () => {
+    const { Platform } = require('react-native');
+    const previousPlatform = Platform.OS;
+    Platform.OS = 'android';
+    const props = { testID: 'editor', value: '', accessibilityLabels: labels, onChangeText: jest.fn(), onSend: jest.fn() };
+    const view = render(<Composer {...props} placeholder="输入消息" />);
+    try {
+      const input = () => flattenStyle(view.getByTestId('editor-input').props.style);
+      expect(input().transform).toEqual([{ translateY: -FontSize.body * 0.08 }]);
+      // The placeholder decides, so typing Latin under it never moves the text.
+      view.rerender(<Composer {...props} value="hello" placeholder="输入消息" />);
+      expect(input().transform).toEqual([{ translateY: -FontSize.body * 0.08 }]);
+      view.rerender(<Composer {...props} value="你好" placeholder="Message" />);
+      expect(input().transform).toBeUndefined();
+    } finally {
+      view.unmount();
+      Platform.OS = previousPlatform;
+    }
+  });
+
+  it('gives the iOS editor the baseline offset React Native leaves out, whatever the script', () => {
+    const props = { testID: 'editor', value: '', accessibilityLabels: labels, onChangeText: jest.fn(), onSend: jest.fn() };
+    const view = render(<Composer {...props} placeholder="Message" />);
+    try {
+      const raise = () => {
+        const transform = flattenStyle(view.getByTestId('editor-input').props.style).transform as Array<{ translateY: number }> | undefined;
+        return -(transform?.[0]?.translateY ?? 0);
+      };
+      // Half of the 24-point line's surplus over SF's 20.3-point line height.
+      expect(raise()).toBeCloseTo((LineHeight.body - FontSize.body * 1.193) / 2, 3);
+      view.rerender(<Composer {...props} value="你好" placeholder="输入消息" />);
+      expect(raise()).toBeCloseTo((LineHeight.body - FontSize.body * 1.193) / 2, 3);
+    } finally { view.unmount(); }
+  });
+
   it('keeps one line of room below the visible draft so a wrapped line never scrolls the first one away', () => {
     const props = { testID: 'editor', value: 'A draft that wraps', placeholder: 'Message', accessibilityLabels: labels,
       onChangeText: jest.fn(), onSend: jest.fn() };

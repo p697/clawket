@@ -866,6 +866,27 @@ describe('ThreadView', () => {
     expect(view.getByTestId('thread-meta-usr_10-status').props.accessibilityLabel).toBe('Delivered');
   });
 
+  it.each(['android', 'ios'])('raises CJK words within the user’s bubble only on Android, leaving its clock in place on %s', (platform) => {
+    const { Platform } = require('react-native');
+    const previous = Platform.OS;
+    Platform.OS = platform;
+    try {
+      const now = Date.now();
+      const zh: UiMessage = { id: 'usr_zh', role: 'user', text: '在吗？', timestampMs: now };
+      const en: UiMessage = { id: 'usr_en', role: 'user', text: 'Reply with one word: ok', timestampMs: now };
+      const view = render(<ThreadView {...createProps({ messages: [en, zh] })} />);
+      const words = (id: string, text: string) => flattenStyle(
+        within(view.getByTestId(`thread-bubble-${id}`)).getByText(text, { exact: false }).props.style,
+      );
+      // Android CJK lines sit about 0.08 em low; iOS centers every line (device measure 2026-10-01).
+      expect(words('usr_zh', '在吗？').transform)
+        .toEqual(platform === 'android' ? [{ translateY: -FontSize.body * 0.08 }] : undefined);
+      expect(words('usr_en', 'Reply with one word: ok').transform).toBeUndefined();
+      expect(flattenStyle(view.getByTestId('thread-meta-usr_zh').props.style).transform).toBeUndefined();
+      view.unmount();
+    } finally { Platform.OS = previous; }
+  });
+
   it('keeps hydrated scheduled results still and slides in only a digest that arrives while reading', () => {
     const { withTiming } = require('react-native-reanimated') as { withTiming: jest.Mock };
     withTiming.mockClear();

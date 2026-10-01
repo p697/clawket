@@ -12,6 +12,7 @@ import Animated, {
 import { useVoiceGesture } from '../../chat/useVoiceGesture';
 import { VoiceWaveform } from './VoiceWaveform';
 import { SwapEntrance } from './SwapEntrance';
+import { editorTextRaise } from '../../chat/textCentering';
 import { countDraftLines } from '../../chat/composerDraftLines';
 import { shouldCaptureComposerKeyboardDismiss } from '../../chat/composerKeyboardDismiss';
 import { useAppTheme } from '../../theme';
@@ -192,6 +193,9 @@ export const Composer = React.forwardRef<ComposerHandle, ComposerProps>(function
   const toolbarAccessory = typeof accessory === 'function' ? accessory({ drafting: false, room: null }) : accessory;
   const voiceHint = voiceState === 'transcribing' ? t('Transcribing…')
     : voiceRecordingSaved ? t('Recording saved locally · Transcription paused') : voiceGesture.holding ? t(voiceGesture.cancelling ? 'Release to cancel' : 'Release to send · Slide up to cancel') : t('Listening…');
+  // The native editor leaves its line low (`chat/textCentering`): its text,
+  // caret and placeholder rise together.
+  const editorRaise = editorTextRaise(inputPlaceholder, FontSize.body, LineHeight.body) * fontScale;
   const inputProps: TextInputProps & { ref: React.Ref<TextInput>; value: string } = {
     ref: inputRef,
     testID: testID ? `${testID}-input` : undefined,
@@ -200,7 +204,8 @@ export const Composer = React.forwardRef<ComposerHandle, ComposerProps>(function
     placeholderTextColor: theme.colors.inkTertiary,
     // A bounded native Text measurement sizes the shell without changing the
     // native-owned input or relying on delayed Fabric content-size events.
-    style: [styles.input, { color: inputInk }, expanded ? styles.expandedInput : { minHeight: ControlSize.pill, maxHeight, paddingRight: inputEndInset }],
+    style: [styles.input, { color: inputInk }, editorRaise ? { transform: [{ translateY: -editorRaise }] } : null,
+      expanded ? styles.expandedInput : { minHeight: ControlSize.pill, maxHeight, paddingRight: inputEndInset }],
     // Manual edits during dictation would be overwritten by the next transcript.
     editable: editable && !voiceActive, autoFocus, maxLength,
     multiline: true,

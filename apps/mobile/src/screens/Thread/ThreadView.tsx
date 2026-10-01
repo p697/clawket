@@ -6,6 +6,7 @@ import { ParticipantIdentity } from '../../components/chat/ParticipantIdentity';
 import { useWorkspaceLayout } from '../../navigation/workspace-context';
 import { IPAD_CHAT_MAX_WIDTH } from '../../utils/ipad-layout';
 import { useReplyEntranceDelay } from '../../chat/useReplyEntranceDelay';
+import { messageTextRaise } from '../../chat/textCentering';
 import { SessionPreviewNotice, SessionPreviewFooter } from './components/SessionPreviewNotice';
 import { useUiThreadFollow, type UiThreadFollow } from './useUiThreadFollow';
 import { useTranslation } from 'react-i18next';
@@ -2051,13 +2052,19 @@ function UserBubble({
 }>): React.JSX.Element {
   const incoming = isIncomingParticipant(message);
   const typography = useBubbleTypography(incoming ? 'assistant' : 'user');
+  // Android leaves CJK lines low in their line box (`chat/textCentering`):
+  // the words rise, the clock keeps its place at the bubble's corner.
+  const textStyle = useMemo(() => {
+    const raise = messageTextRaise(message.text, typography.fontSize ?? FontSize.body);
+    return raise ? [typography, { transform: [{ translateY: -raise }] }] : typography;
+  }, [message.text, typography]);
   const time = useMessageClock(message);
   if (incoming) status = null;
   const hasMeta = Boolean(time) || Boolean(status);
   return (
     <Bubble testID={`thread-bubble-${message.id}`} role={incoming ? "assistant" : "user"} joinsOlder={joinsOlder} joinsNewer={joinsNewer}>
       <View style={stylesStatic.userBody}>
-        <Text selectable={selectable} style={typography}>
+        <Text selectable={selectable} style={textStyle}>
           {message.text}
           {hasMeta ? <Text style={stylesStatic.metaSpacer}>{messageMetaSpacer(time, Boolean(status))}</Text> : null}
         </Text>
