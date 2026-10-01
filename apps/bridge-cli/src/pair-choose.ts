@@ -66,7 +66,8 @@ export async function discoverPairChoices(input: DiscoveryInput): Promise<PairCh
   ]);
   const nativeChoice = (index: number, backend: PairChoiceBackend, name: string, config: string, detail: string): PairChoice => ({
     backend, name, available: native[index].status === 'fulfilled', configured: existsSync(config),
-    detail: native[index].status === 'fulfilled' ? detail : backend === 'codex' ? 'Codex CLI or supported desktop app unavailable' : 'CLI unavailable or unsupported',
+    detail: native[index].status === 'fulfilled' ? detail : backend === 'codex' ? 'Codex CLI or supported desktop app unavailable'
+      : backend === 'claude-code' ? 'Claude Desktop runtime or CLI unavailable or unsupported' : 'CLI unavailable or unsupported',
   });
   const piCount = piConfigCount(home);
   return [

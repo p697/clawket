@@ -2,15 +2,15 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { mkdtempSync, mkdirSync, readFileSync, realpathSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-const mock = vi.hoisted(() => ({ control: vi.fn(), background: vi.fn(), fetch: vi.fn(), home: '' }));
+const mock = vi.hoisted(() => ({ control: vi.fn(), background: vi.fn(), fetch: vi.fn(), inspect: vi.fn(), serviceOptions: vi.fn(), home: '' }));
 vi.mock('node:os', async (original) => ({ ...await original<typeof import('node:os')>(), homedir: () => mock.home }));
 vi.mock('./claude-code-lifecycle.js', () => ({ claudeControl: mock.control, startClaudeBackground: mock.background }));
 vi.mock('qrcode', () => ({ default: { toString: async () => '[test QR]' } }));
 vi.mock('@clawket/bridge-runtime', async () => {
   const { EventEmitter } = await import('node:events');
   return {
-    inspectClaudeInstallation: async () => ({ version: 'test' }),
-    ClaudeService: class extends EventEmitter { async health() { return { modelReady: true }; } async stop() {} },
+    inspectClaudeInstallation: mock.inspect,
+    ClaudeService: class extends EventEmitter { constructor(options: unknown) { super(); mock.serviceOptions(options); } async health() { return { modelReady: true }; } async stop() {} },
     ClaudeServer: class { constructor(private service: any) {} async start() { setTimeout(() => this.service.emit('shutdown'), 30); } async stop() {} },
     ClaudeRelay: class { start() {} async waitUntilReady() {} stop() {} },
   };
@@ -20,6 +20,8 @@ let root: string, project: string, path: string;
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'claude-code-cli-')); mock.home = root; project = join(root, 'project'); mkdirSync(project); path = join(root, 'runtime.json');
   mock.control.mockReset(); mock.background.mockReset(); mock.fetch.mockReset();
+  mock.inspect.mockReset(); mock.serviceOptions.mockReset();
+  mock.inspect.mockResolvedValue({ version: 'test', executable: '/desktop/claude' });
   mock.control.mockRejectedValue(new Error('offline'));
   if (process.send) vi.spyOn(process as unknown as { send: (...args: unknown[]) => boolean }, 'send').mockImplementation(() => true);
   vi.stubGlobal('fetch', mock.fetch); vi.spyOn(console, 'log').mockImplementation(() => {}); vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -78,4 +80,13 @@ it('preserves default device discovery through the first background pairing laun
   expect(JSON.parse(readFileSync(childConfig, 'utf8'))).toMatchObject({
     device: true, project: realpathSync(join(root, 'Documents', 'Clawket', 'Chats')),
   });
+});
+
+it.each([undefined, '/explicit/claude'])('starts the SDK service with the inspected executable for command %s', async command => {
+  await handleClaudeCommand(['pair', '--foreground', '--local', '--address', '127.0.0.1', '--project', project, '--config', path,
+    ...(command ? ['--claude-command', command] : [])]);
+  expect(mock.inspect).toHaveBeenCalledWith(command ?? 'claude');
+  expect(mock.serviceOptions).toHaveBeenCalledWith(expect.objectContaining({ executable: '/desktop/claude', project: realpathSync(project) }));
+  // Keep automatic selection symbolic so Desktop upgrades can be discovered on restart.
+  expect(JSON.parse(readFileSync(path, 'utf8')).command).toBe(command ?? 'claude');
 });
