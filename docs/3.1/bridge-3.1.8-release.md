@@ -1,6 +1,6 @@
 # Bridge 3.1.8 release
 
-The owner authorized a new Bridge publication from the latest code on 2026-10-01 after the affected Mac's diagnostic confirmed a Codex catalog descriptor failure. This release starts from `main` at `d36e76af`; publication and public artifact verification are recorded below when complete.
+The owner authorized a new Bridge publication from the latest code on 2026-10-01 after the affected Mac's diagnostic confirmed a Codex catalog descriptor failure. This release starts from `main` at `d36e76af`; the fixed 3.1.8 package is public with `latest=3.1.8`, and public download/installation verification passed. Source and delivery are tracked in [PR #88](https://github.com/p697/clawket/pull/88).
 
 ## Changes
 
@@ -13,5 +13,13 @@ Only the CLI manifest, its lock entry and publish guard advance from 3.1.7 to 3.
 ## Verification and delivery
 
 The release uses a fixed tarball with source/build provenance, serial affected tests, v1 replay, an isolated local production-snapshot upgrade/recovery matrix and exact-head CI. Candidate/public installation and download equality are checked before reporting delivery. These tests do not substitute for the original phone's acceptance or imply an installed computer has upgraded.
+
+Fixed candidate source is `d04781a771a4e2a3570b3fffc1b52ba878030eec` in [PR #88](https://github.com/p697/clawket/pull/88). Sequential local checks passed: Bridge build/typecheck, Codex service 156 cases, Claude executable discovery 26, publish guard six, v1 replay 41 and docs seven instruction pairs/five cases. Four unchanged current Production deployment IDs were checked against the retained read-only exports; their verified source hashes passed the isolated OpenClaw/Hermes upgrade/recovery matrix, four cases across 24 phases. Controlled local Workers/model responses provide compatibility evidence, not a Production rollout or original phone acceptance.
+
+Package verification covered three files, four required runtime boundaries, 86 runtime modules and 127 provenance inputs. Immutable `p697-clawket-3.1.8.tgz` has SHA-256 `33cad471836e45024db3b926db30eeb9a1083de7bac362bd08db660cce6772be`, SHA-1 `faa5c7f9a50aed651623141e7910f71ffd6ea922` and npm integrity `sha512-/55+wMjYoeC0U2T2re8OTUdWekkbVEccr2waUHG+y32dmlUJNeq4ATWmLYJUuJMoGyR7j5wE2jTsVtDeiSR6VQ==`. At `2026-10-01T11:22:54Z`, an isolated candidate installation using empty user/global npm authentication configurations passed CLI help and installed-bundle equality. The exact candidate passed all 11 jobs in [CI run 36854772041](https://github.com/p697/clawket/actions/runs/36854772041), including Windows and macOS.
+
+Native-browser login and the separate publish authentication completed. npm accepted the exact tarball, recorded at `2026-10-01T11:33:25Z`, and reported processing before public availability. At `2026-10-01T11:38:24.650Z`, unauthenticated public reads confirmed version 3.1.8 and `latest=3.1.8`; the downloaded tarball matches the candidate byte-for-byte, SHA-256, SHA-1 and npm SHA-512 integrity. A fresh public-registry installation using empty user/global npm authentication configurations and an independent cache passed at `2026-10-01T11:40:08Z`; the installed bundle equals the candidate and CLI help passed. The [public package](https://www.npmjs.com/package/@p697/clawket/v/3.1.8) is available. Persistent artifact and check evidence are in the maintainer's private release-evidence directory. Final source documentation remains subject to the exact-head CI/merge gate.
+
+On the affected computer, install `@p697/clawket@3.1.8` globally and run `clawket codex restart`, retaining the original `--project` / `--config` / `--preview` options if used. Existing pairing is preserved; then reconnect the phone and repeat the read-only roster diagnostic to verify zero invalid rows. This release did not update/restart any installed user runtime, refresh pairing, distribute an App or deploy Workers.
 
 Recovery retains public 3.1.7: explicitly install that version and restart the managed Bridge if needed. Changing a dist-tag alone does not replace a running process.
