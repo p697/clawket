@@ -67,3 +67,12 @@ it('keeps MCP and plugins read-only and points management to the computer', asyn
   screen.rerender(<NativeProfileScreen {...props('plugins')} />); await waitFor(() => expect(screen.getByText('Plugin')).toBeTruthy());
   expect(profile.setDefaults).not.toHaveBeenCalled(); expect(profile.setSkillEnabled).not.toHaveBeenCalled(); expect(profile.saveDocument).not.toHaveBeenCalled();
 });
+
+it('keeps custom provider defaults readable and directs changes to the computer', async () => {
+  profile.defaults.mockResolvedValue({ ...defaults, model: 'custom', editable: false, models: [] });
+  const screen = render(<NativeProfileScreen {...props('models')} />);
+  await waitFor(() => expect(screen.getByText('custom')).toBeTruthy());
+  expect(screen.getByText('profile.desktopManage')).toBeTruthy();
+  expect(screen.getByTestId('native-default-model').props.accessibilityState.disabled).toBe(true);
+  expect(profile.setDefaults).not.toHaveBeenCalled();
+});

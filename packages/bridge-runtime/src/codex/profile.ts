@@ -62,11 +62,11 @@ export class CodexProfile {
   async defaults(): Promise<ProfileDefaults> {
     const config = await this.config();
     const editable = config.config.model_provider == null || config.config.model_provider === 'openai';
-    const models = rows(await this.host.models(), 2000).map(model => ({
+    const models = editable ? rows(await this.host.models(), 2000).map(model => ({
       id: text(model.model), isDefault: model.isDefault === true, name: text(model.displayName ?? model.model),
       levels: rows(model.supportedReasoningEfforts ?? [], 16).map(row => text(row.reasoningEffort, 32)),
       ...(model.defaultReasoningEffort ? { defaultLevel: text(model.defaultReasoningEffort, 32) } : {}),
-    }));
+    })) : [];
     this.guard();
     const token = randomUUID();
     if (this.snapshots.size >= 32) this.snapshots.delete(this.snapshots.keys().next().value!);
