@@ -66,6 +66,13 @@ export type ComposerProps = {
   maxLength?: number;
   expanded?: boolean;
   onExpandedChange?: (expanded: boolean) => void;
+  /**
+   * Keeps a cleared draft at the height it was sent with until the thread has
+   * laid out the row it sent, so the list never sees the composer shrink a
+   * frame before that row lands (device check 2026-10-01: the rows above
+   * dropped 52 points for a frame, then jumped up).
+   */
+  holdHeight?: boolean;
   /** `glass` floats the compact card over a chat wallpaper on translucent chrome; full-screen editing always uses the canvas. */
   appearance?: 'surface' | 'glass';
   onFocus?: TextInputProps['onFocus'];
@@ -80,7 +87,7 @@ export const Composer = React.forwardRef<ComposerHandle, ComposerProps>(function
   onAddPress, onVoicePress, onVoiceStart, onVoiceStop, onVoiceCancel, onPasteFiles, onPasteFailed, editable = true, canSend = true,
   hasAttachments = false, isRunning = false, addDisabled = false, voiceDisabled = false,
   voiceState = 'idle', voiceLevel, onVoiceRecover, voiceRecoveryCount = 0, voiceRecordingSaved = false,
-  autoFocus = false, maxLength, expanded = false, onExpandedChange, appearance = 'surface', onFocus, onBlur, style, testID,
+  autoFocus = false, maxLength, expanded = false, onExpandedChange, holdHeight = false, appearance = 'surface', onFocus, onBlur, style, testID,
 }, forwardedRef): React.JSX.Element {
   const { theme } = useAppTheme();
   const { t } = useTranslation('chat');
@@ -121,9 +128,14 @@ export const Composer = React.forwardRef<ComposerHandle, ComposerProps>(function
   const inputSizeStyle = useAnimatedStyle(() => expanded
     ? { height: undefined, flexGrow: 1, flexShrink: 1, flexBasis: 0 }
     : { height: value.length === 0 ? targetHeight : animatedHeight.value, flexGrow: 0, flexShrink: 0, flexBasis: 'auto' }, [expanded, value.length, targetHeight]);
+  // The last draft's height, which `holdHeight` keeps while the sent row lands.
+  const draftHeightRef = useRef(targetHeight);
+  if (!expanded && voiceState === 'idle' && value.length > 0) draftHeightRef.current = targetHeight;
   // A late UI-thread height can outlive a cleared draft. Native layout bounds
   // collapse the empty editor without remounting it or disturbing selection.
-  const emptyInputHeight = !expanded && voiceState === 'idle' && value.length === 0 ? targetHeight : undefined;
+  const emptyInputHeight = !expanded && voiceState === 'idle' && value.length === 0
+    ? (holdHeight ? Math.max(targetHeight, draftHeightRef.current) : targetHeight)
+    : undefined;
   // Below the shell's visible height the native editor keeps one more line of
   // room. A newly wrapped line lands there, so Android never scrolls the
   // editor to its caret and hides the first line while the shell catches up

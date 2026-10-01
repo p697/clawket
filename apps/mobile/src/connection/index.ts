@@ -193,6 +193,7 @@ type ActiveAdapterEntry = {
   lastProbeSucceededAt: number;
   lastProbeRevision: number;
   sessionSnapshotRevision: number;
+  rosterReadRevision: number;
 };
 
 export const DEFAULT_ROSTER_REFRESH_INTERVAL_MS = 30_000;
@@ -899,6 +900,7 @@ export class ConnectionCoordinator {
       lastProbeSucceededAt: Number.NEGATIVE_INFINITY,
       lastProbeRevision: -1,
       sessionSnapshotRevision: 0,
+      rosterReadRevision: 0,
     };
     const connectReason = this.nextConnectReason;
     this.nextConnectReason = 'retry';
@@ -1020,7 +1022,8 @@ export class ConnectionCoordinator {
 
     for (const connection of descriptors) {
       const current = this.rosterInputs.get(connection.id);
-      if (current?.source === 'live' && this.active?.connectionId === connection.id) {
+      if (current && this.active?.connectionId === connection.id
+        && (current.source === 'live' || this.active.adapter.state === 'ready')) {
         this.rosterInputs.set(connection.id, {
           ...current,
           connection,
@@ -1045,11 +1048,11 @@ export class ConnectionCoordinator {
       this.rosterInputs.set(connection.id, {
         connection,
         agents: connectionAgentDefaultName(connection.backendKind)
-          ? (entry?.agents ?? EMPTY_AGENTS).map(agent => ({ ...agent, name: connection.label }))
-          : entry?.agents ?? EMPTY_AGENTS,
-        sessions: entry?.sessions ?? EMPTY_SESSIONS,
+          ? (entry?.agents ?? current?.agents ?? EMPTY_AGENTS).map(agent => ({ ...agent, name: connection.label }))
+          : entry?.agents ?? current?.agents ?? EMPTY_AGENTS,
+        sessions: entry?.sessions ?? current?.sessions ?? EMPTY_SESSIONS,
         source: 'cache',
-        syncedAt: entry?.savedAt ?? 0,
+        syncedAt: entry?.savedAt ?? current?.syncedAt ?? 0,
         ...(connection.id === storeSnapshot.activeConnectionId
           ? { watermarks: activeWatermarks }
           : {}),
@@ -1092,21 +1095,40 @@ export class ConnectionCoordinator {
   private async performActiveRosterRefresh(entry: ActiveAdapterEntry): Promise<'superseded' | void> {
     if (this.active !== entry || entry.adapter.state !== 'ready') return;
     const readyRevision = entry.readyRevision;
+    const rosterReadRevision = ++entry.rosterReadRevision;
+    const isCurrentRead = () => this.active === entry && entry.adapter.state === 'ready'
+      && entry.readyRevision === readyRevision && entry.rosterReadRevision === rosterReadRevision;
     try {
       const sessionSnapshotRevision = entry.sessionSnapshotRevision;
       const [listedAgents, sessions] = await Promise.all([
-        entry.adapter.listAgents(),
+        entry.adapter.listAgents().then((agents) => {
+          if (!isCurrentRead()) return agents;
+          const connection = this.connectionDescriptor(entry.connectionId);
+          if (!connection) return agents;
+          const current = this.rosterInputs.get(entry.connectionId);
+          // Agent discovery stands on its own. Keep the last complete catalog
+          // and its freshness until sessions succeed; never persist a partial
+          // catalog or turn a first-load failure into a missing Agent.
+          this.rosterInputs.set(entry.connectionId, {
+            connection,
+            agents: cloneAgents(connectionAgentDefaultName(connection.backendKind)
+              ? agents.map(agent => ({ ...agent, name: connection.label }))
+              : agents),
+            sessions: current?.sessions ?? EMPTY_SESSIONS,
+            source: current?.source ?? 'cache',
+            syncedAt: current?.syncedAt ?? 0,
+            watermarks: current?.watermarks,
+          });
+          this.publish();
+          return agents;
+        }),
         entry.adapter.listSessions(),
       ]);
       // A never-tracked connection takes this first snapshot as its read baseline.
       const watermarks = this.watermarks.seedIfUnset
         ? await this.watermarks.seedIfUnset(entry.connectionId, sessions)
         : await this.watermarks.get(entry.connectionId);
-      if (
-        this.active !== entry
-        || entry.adapter.state !== 'ready'
-        || entry.readyRevision !== readyRevision
-      ) return;
+      if (!isCurrentRead()) return;
       const connection = this.connectionDescriptor(entry.connectionId);
       if (!connection) return;
       const agents = connectionAgentDefaultName(connection.backendKind)
@@ -1133,11 +1155,7 @@ export class ConnectionCoordinator {
         acceptedSessions,
         entry.adapter.state,
       );
-      if (
-        this.active !== entry
-        || entry.adapter.state !== 'ready'
-        || entry.readyRevision !== readyRevision
-      ) return;
+      if (!isCurrentRead()) return;
       if (entry.sessionSnapshotRevision !== acceptedSessionRevision) return;
       // A local rename can finish while the cache write is pending.
       const currentConnection = this.connectionDescriptor(entry.connectionId) ?? connection;
@@ -1153,15 +1171,13 @@ export class ConnectionCoordinator {
       });
       this.publish();
     } catch (error) {
-      if (this.active !== entry || entry.adapter.state !== 'ready'
-        || entry.readyRevision !== readyRevision) return;
+      if (!isCurrentRead()) return;
       if (error instanceof SessionCatalogSupersededError) return 'superseded';
       // A timed-out list is often the first sign of a half-open socket. Use
       // the coalesced health path before surfacing a list error or waiting for
       // the much longer heartbeat watchdog. Recovery never waits for roster work.
       void this.probeEntry(entry, 5_000, 'probe_failed', readyRevision).then((healthy) => {
-        if (!healthy || this.active !== entry || entry.adapter.state !== 'ready'
-          || entry.readyRevision !== readyRevision) return;
+        if (!healthy || !isCurrentRead()) return;
         this.error = failure('roster', error, entry.connectionId);
         this.publish();
       });

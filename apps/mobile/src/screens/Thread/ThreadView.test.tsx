@@ -2709,6 +2709,37 @@ describe('messenger timeline layout', () => {
     expect(frameOpacity(view)).toBeUndefined();
   });
 
+  it('holds the composer at the sent draft height until the list lays out the sent row', () => {
+    jest.useFakeTimers();
+    const { Composer } = require('../../components/ui/Composer');
+    const props = createProps({ input: 'Line one\nLine two' });
+    const view = render(<ThreadView {...props} />);
+    const timeline = view.getByTestId('thread-screen-timeline');
+    const held = () => view.UNSAFE_getByType(Composer).props.holdHeight;
+    mockListLayout.content = 900;
+    mockListLayout.viewport = 600;
+    act(() => timeline.props.onCommitLayoutEffect());
+    fireEvent(timeline, 'load', { elapsedTimeInMs: 5 });
+    fireEvent.press(view.getByTestId('thread-screen-composer-primary'));
+    expect(props.onSend).toHaveBeenCalledTimes(1);
+    const sent: UiMessage = { id: 'usr_sent', role: 'user', text: 'Line one\nLine two', timestampMs: Date.now() };
+    view.rerender(<ThreadView {...props} input="" messages={[sent, ...props.messages]} />);
+    expect(held()).toBe(true);
+    // FlashList positions the new row in a later commit; the composer shrinks in that one.
+    act(() => timeline.props.onCommitLayoutEffect());
+    expect(held()).toBe(true);
+    mockListLayout.content = 1010;
+    act(() => timeline.props.onCommitLayoutEffect());
+    expect(held()).toBe(false);
+
+    // A send whose row never lands in the measured list still lets the composer shrink.
+    view.rerender(<ThreadView {...props} input="Again" messages={[sent, ...props.messages]} />);
+    fireEvent.press(view.getByTestId('thread-screen-composer-primary'));
+    expect(held()).toBe(true);
+    act(() => jest.advanceTimersByTime(320));
+    expect(held()).toBe(false);
+  });
+
   it('pins the newest row in the same layout commit while the reader follows, never while reading history', () => {
     jest.useFakeTimers();
     const view = render(<ThreadView {...createProps()} />);

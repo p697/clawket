@@ -52,6 +52,8 @@ Only installing the desktop GUI does not prove the Code runtime is present. Miss
 
 Self-contained resolver tests cover macOS/Windows installation combinations and selection boundaries. Explicit native verification: `CLAWKET_CLAUDE_DESKTOP_LIVE=1 npm run --workspace @clawket/bridge-runtime test:claude-desktop-integration`. It requires authenticated macOS Desktop Code, exercises native models and two same-session replies in an isolated project, and fails when prerequisites are absent. It is excluded from the CI-safe gate. Native Windows acceptance and a truly Desktop-only account profile remain separate from filesystem fixtures and coexistence-machine evidence.
 
+Physical Android acceptance on 2026-10-01 verified secure Preview pairing, project selection, 12 native models, three owned replies and context/history recovery after a cold app restart through automatically selected Desktop 2.1.284. The temporary phone connection and Bridge were cleaned up; [device evidence and limits](claude-desktop-android-qa-2026-10-01.md) retain the separate Desktop-only/Windows checkpoints.
+
 Claude model rows retain the native alias as the write identity and expose SDK `resolvedModel` as a searchable secondary label. Never hardcode a moving alias’s concrete version. Preview Registry/Relay use independent `ClaudeCodeRelayRoom`, KV, rate-limiter namespace and pairing/sync secrets; `npm run test:claude-code:relay` tests secure pairing, request origin, streams and reconnect against local Workers.
 
 Native model-switch records and interruption markers are excluded from displayed human turns; ordinary text discussing commands remains intact. Device and native evidence, with remaining coverage limits, is recorded in [candidate QA](claude-code-qa-2026-09-26.md).

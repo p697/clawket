@@ -39,6 +39,15 @@ Owner request 2026-10-01. Lucy found the model picker lacking quality on OpenCla
 - **Shared fix:** provider section titles use the providers' own spelling (`OpenAI`, `DeepSeek`) in both pickers.
 - **Device findings (SM-A566B, QA build, 2026-10-01):** the OpenClaw sheet first ended under the navigation bar. A Gorhom scrollable sizes a dynamic sheet from its own content, leaving out the header; and `BottomSheetView` composes only two style entries, so `Sheet`'s safe-area padding was dropped once the grouped tone took the second slot. The content-sized first page is now a plain view, and `Sheet` flattens the body style (this also applies its long-ignored viewport limit). OpenClaw's thinking levels come from a static list when `models.list` gives none for the model: GPT-6-Astra is offered `Minimal` and `Adaptive` but not `Max`, and the Gateway refuses `Adaptive`, so the choice snaps back to `Medium`. Fixed the same day: the sheet now offers the levels the Gateway reports for the session's current model and writes choices with `sessions.patch` (see `docs/3.1/openclaw-thinking-default.md`).
 
+## A+ motion, batch 2b — 2026-10-01
+
+Batch 2b removes the jolt when a multi-line draft is sent. To measure it, a script tracks a fixed message patch frame by frame in a screen recording, so no screenshots need to be read. The recordings were made on an SM-A566B QA build, sending the same three-line draft in an OpenClaw test session.
+
+- **Before:** in the first frame after the send, the rows above dropped 136 px (52 dp). They jumped up 348 px in the next frame and 48 px in the one after. The cleared composer collapsed from three lines to one in the first commit, which grew the list's viewport. FlashList lays out the new row in a later commit. Android scroll commands run before the same batch's layout, so no correction could land in between.
+- **Change:** the send holds the compact composer at the draft's height (`Composer holdHeight`). It is released in the layout commit where the list adds the sent row, with a 320 ms fallback. The shrink and the new row now reach the screen together.
+- **After:** the rows above glide up 260 px over 8 frames (about 53 ms) and never move down.
+- **Left as is:** the live pill rises over 4 frames. The first words still move the list in one 104 px (40 dp) step as the pill becomes a bubble with its clock. Gliding that step would need FlashList's scroll anchor (a dependency patch) to correct in the same commit; this is noted, not done.
+
 ## A+ motion, batch 2a — 2026-10-01
 
 The first part of batch 2 fixes three glitches seen in the batch 1 recordings. Each was traced in code and is locked by a unit test. The list follow remains for batch 2b.
