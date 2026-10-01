@@ -5,8 +5,8 @@ it('rejects malformed catalogs, duplicate IDs and unsupported replies', () => {
   expect(validProfileReply('profile.projects', projects)).toBe(true);
   expect(validProfileReply('profile.projects', [...projects, ...projects])).toBe(false);
   expect(validProfileReply('profile.projects', [{ ...projects[0], available: 'true' }])).toBe(false);
-  expect(validProfileReply('profile.defaults', { model: null, thinking: null, version: 'v', models: [{ id: 'm', name: 'Model', isDefault: true, levels: ['high'] }] })).toBe(true);
-  expect(validProfileReply('profile.defaults', { model: null, thinking: null, version: 'v', models: [{ id: 'm', name: 'Model', isDefault: true, levels: [null] }] })).toBe(false);
+  expect(validProfileReply('profile.defaults', { model: null, thinking: null, version: 'v', editable: true, models: [{ id: 'm', name: 'Model', isDefault: true, levels: ['high'] }] })).toBe(true);
+  expect(validProfileReply('profile.defaults', { model: null, thinking: null, version: 'v', editable: true, models: [{ id: 'm', name: 'Model', isDefault: true, levels: [null] }] })).toBe(false);
   expect(validProfileReply('profile.unknown', {})).toBe(false);
 });
 

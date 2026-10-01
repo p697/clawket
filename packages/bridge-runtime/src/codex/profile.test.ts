@@ -79,3 +79,11 @@ it('rejects corrupt quota/project results and unfinished pagination', async () =
   request.mockResolvedValue({ data: [], nextCursor: 'repeated' }); await expect(profile.mcp()).rejects.toThrow('cursor');
   profile.clear(); await expect(profile.document('random')).rejects.toThrow('unavailable');
 });
+
+it('never writes the OpenAI catalog into a custom provider configuration', async () => {
+  config = { model: 'custom-model', model_provider: 'custom' };
+  const defaults = await profile.defaults();
+  expect(defaults).toMatchObject({ model: 'custom-model', editable: false, models: [] });
+  await expect(profile.setDefaults({ model: 'two', thinking: 'low', version: defaults.version })).rejects.toThrow('computer');
+  expect(request.mock.calls.some(([method]) => method === 'config/batchWrite')).toBe(false);
+});

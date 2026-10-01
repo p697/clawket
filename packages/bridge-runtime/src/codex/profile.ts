@@ -61,6 +61,7 @@ export class CodexProfile {
   }
   async defaults(): Promise<ProfileDefaults> {
     const config = await this.config();
+    const editable = config.config.model_provider == null || config.config.model_provider === 'openai';
     const models = rows(await this.host.models(), 2000).map(model => ({
       id: text(model.model), isDefault: model.isDefault === true, name: text(model.displayName ?? model.model),
       levels: rows(model.supportedReasoningEfforts ?? [], 16).map(row => text(row.reasoningEffort, 32)),
@@ -70,7 +71,7 @@ export class CodexProfile {
     const token = randomUUID();
     if (this.snapshots.size >= 32) this.snapshots.delete(this.snapshots.keys().next().value!);
     this.snapshots.set(token, { nativeVersion: config.version, fingerprint: config.fingerprint });
-    return { model: optional(config.config.model), thinking: optional(config.config.model_reasoning_effort), version: token, models };
+    return { model: optional(config.config.model), thinking: optional(config.config.model_reasoning_effort), version: token, editable, models: editable ? models : [] };
   }
   setDefaults(input: Record<string, unknown>): Promise<ProfileDefaults> {
     return this.serial(async () => {
@@ -78,6 +79,7 @@ export class CodexProfile {
       if (!snapshot) throw new Error('Settings changed; refresh before saving');
       const latest = await this.config();
       if (latest.version !== snapshot.nativeVersion || latest.fingerprint !== snapshot.fingerprint) throw new Error('Settings changed; refresh before saving');
+      if (latest.config.model_provider != null && latest.config.model_provider !== 'openai') throw new Error('Manage custom provider defaults on the computer');
       if (input.model !== null && typeof input.model !== 'string' || input.thinking !== null && typeof input.thinking !== 'string') throw new Error('Invalid model defaults');
       const catalog = rows(await this.host.models(), 2000);
       const model = input.model === null ? catalog.find(row => row.isDefault) : catalog.find(row => row.model === input.model);
@@ -202,7 +204,7 @@ export class CodexProfile {
       const temporary = join(dirname(handle.path), `.clawket-document-${randomUUID()}`);
       try {
         const file = await open(temporary, 'wx', current.mode);
-        try { await file.writeFile(input.content, 'utf8'); await file.sync(); } finally { await file.close(); }
+        try { await file.chmod(current.mode); await file.writeFile(input.content, 'utf8'); await file.sync(); } finally { await file.close(); }
         const latest = await this.read(handle);
         if (latest.version !== input.version) throw new Error('Document changed; refresh before saving');
         this.guard();

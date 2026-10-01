@@ -12,7 +12,7 @@ export function validProfileReply(method: string, value: any): boolean {
   switch (method) {
     case 'profile.projects': return list(value, row => text(row.id) && text(row.name) && bool(row.available), 10000) && unique(value, 'id');
     case 'profile.defaults': case 'profile.defaults.set':
-      return object(value) && nullableText(value.model) && nullableText(value.thinking) && text(value.version, 512)
+      return object(value) && nullableText(value.model) && nullableText(value.thinking) && text(value.version, 512) && bool(value.editable)
         && list(value.models, row => text(row.id) && text(row.name) && bool(row.isDefault) && Array.isArray(row.levels) && row.levels.length <= 16 && row.levels.every((level: any) => text(level, 32)) && (row.defaultLevel === undefined || text(row.defaultLevel, 32)), 2000) && unique(value.models, 'id');
     case 'profile.usage': return object(value) && nullableText(value.plan) && (value.lifetimeTokens === null || number(value.lifetimeTokens))
       && list(value.quotas, row => text(row.id) && text(row.name) && list(row.windows, window => Number.isFinite(window.usedPercent) && window.usedPercent >= 0 && number(window.minutes) && window.minutes > 0 && (window.resetsAt === null || number(window.resetsAt) && window.resetsAt <= 8640000000000), 2), 32) && unique(value.quotas, 'id')

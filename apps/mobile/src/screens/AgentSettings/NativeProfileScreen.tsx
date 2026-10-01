@@ -120,10 +120,11 @@ function ProfilePage({ adapter, profile, section, online, navigation, params }: 
       {!online ? <Text style={styles.note}>{t('profile.offline')}</Text> : null}
       {(!read.value && (read.pending || scoped && projects.pending)) ? <SettingsGroup><Skeleton style={styles.loading} /><Skeleton style={styles.loading} /></SettingsGroup> : null}
       {scoped && !projects.pending && !projects.failed && !selectedId ? <Text style={styles.note}>{t('profile.noProjects')}</Text> : null}
+      {defaults?.editable === false ? <Text style={styles.note}>{t('profile.desktopManage')}</Text> : null}
       {defaults ? <SettingsGroup>
-        <SettingsRow title={t('Default model', { ns: 'config' })} value={defaults.models.find(row => row.id === defaults.model)?.name ?? defaults.model ?? t('profile.nativeDefault')} tailWidth="wide" showChevron disabled={busy || !online} onPress={() => setDetail({ kind: 'model' })} testID="native-default-model" />
+        <SettingsRow title={t('Default model', { ns: 'config' })} value={defaults.models.find(row => row.id === defaults.model)?.name ?? defaults.model ?? t('profile.nativeDefault')} tailWidth="wide" showChevron disabled={busy || !online || !defaults.editable} onPress={() => setDetail({ kind: 'model' })} testID="native-default-model" />
         <SettingsDivider inset="content" />
-        <SettingsRow title={t('Thinking level', { ns: 'config' })} value={defaults.thinking ? levelLabel(defaults.thinking) : t('profile.nativeDefault')} showChevron disabled={busy || !online} onPress={() => setDetail({ kind: 'thinking' })} testID="native-default-thinking" />
+        <SettingsRow title={t('Thinking level', { ns: 'config' })} value={defaults.thinking ? levelLabel(defaults.thinking) : t('profile.nativeDefault')} showChevron disabled={busy || !online || !defaults.editable} onPress={() => setDetail({ kind: 'thinking' })} testID="native-default-thinking" />
         {busy ? <ActivityIndicator color={theme.colors.inkSecondary} style={styles.busy} /> : null}
       </SettingsGroup> : null}
       {skills ? <>

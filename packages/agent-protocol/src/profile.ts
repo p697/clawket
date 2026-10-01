@@ -1,7 +1,7 @@
 /** Additive management surface, available only after profile protocol negotiation. */
 export interface ProfileProject { id: string; name: string; available: boolean }
 export interface ProfileModel { id: string; name: string; isDefault: boolean; levels: string[]; defaultLevel?: string }
-export interface ProfileDefaults { model: string | null; thinking: string | null; version: string; models: ProfileModel[] }
+export interface ProfileDefaults { model: string | null; thinking: string | null; version: string; editable: boolean; models: ProfileModel[] }
 export interface ProfileQuota { id: string; name: string; windows: Array<{ minutes: number; usedPercent: number; resetsAt: number | null }> }
 export interface ProfileUsage { plan: string | null; quotas: ProfileQuota[]; lifetimeTokens: number | null; daily: Array<{ date: string; tokens: number }> }
 export interface ProfileSkill {
