@@ -149,15 +149,16 @@ jest.mock('../../components/ui/Button', () => {
   const ReactRuntime = require('react');
   const { Pressable, Text } = require('react-native');
   return {
-    Button: ({ testID, label, onPress, disabled, loading }: {
+    Button: ({ testID, label, onPress, disabled, loading, accessibilityLabel }: {
       testID?: string;
       label: string;
+      accessibilityLabel?: string;
       onPress: () => void;
       disabled?: boolean;
       loading?: boolean;
     }) => ReactRuntime.createElement(
       Pressable,
-      { testID, onPress, disabled, accessibilityState: { disabled, busy: loading } },
+      { testID, onPress, disabled, accessibilityLabel, accessibilityState: { disabled, busy: loading } },
       ReactRuntime.createElement(Text, null, label),
     ),
   };
@@ -264,6 +265,8 @@ describe('OnboardingScreen', () => {
       const form = () => view.getByTestId('onboarding-keyboard-avoiding', hidden);
       expect(view.queryByTestId('onboarding-progress')).toBeNull();
       expect(form().props.accessibilityElementsHidden).toBe(false);
+      fireEvent.press(view.getByTestId('onboarding-show-code'));
+      fireEvent.changeText(view.getByTestId('onboarding-pairing-code'), '123456');
 
       view.rerender(<OnboardingScreen {...props} status={{ kind: 'connecting', phase: 'relay_connected' }} />);
       expect(view.getByTestId('onboarding-progress').props.pointerEvents).toBe('auto');
@@ -352,6 +355,7 @@ describe('OnboardingScreen', () => {
     expect(view.queryByTestId('onboarding-agent-prompt')).toBeNull();
     expect(view.queryByTestId('onboarding-pairing-method-terminal')).toBeNull();
     expect(view.getByText('npx @p697/clawket@latest pair --backend local-model')).toBeTruthy();
+    fireEvent.press(view.getByTestId('onboarding-show-code'));
     fireEvent.changeText(view.getByTestId('onboarding-pairing-code'), '001234');
     fireEvent.press(view.getByTestId('onboarding-connect'));
     expect(onSubmitPairing).toHaveBeenCalledWith({ backendKind: 'local-model', transportKind: 'relay', code: '001234' });
@@ -545,7 +549,7 @@ describe('OnboardingScreen', () => {
         />,
       );
 
-      // The agent path is the only step-01 content; the terminal path waits in the footer row.
+      // The agent path leads step 01; its terminal alternative stays beside the step title.
       expect(view.getByText('Send this message to your agent')).toBeTruthy();
       expect(view.getByText('Enter the code it replies with')).toBeTruthy();
       expect(view.queryByTestId('onboarding-pairing-method-agent')).toBeNull();
@@ -570,13 +574,13 @@ describe('OnboardingScreen', () => {
       act(() => { jest.advanceTimersByTime(1500); });
       expect(view.queryByText('Copied')).toBeNull();
       expect(view.getByText('Copy this message')).toBeTruthy();
-      // The step keeps a done mark after the transient label reverts.
-      expect(view.getByTestId('onboarding-agent-prompt-sent')).toBeTruthy();
+      // Clipboard success is not proof that the agent ran the command.
+      expect(view.queryByTestId('onboarding-agent-prompt-sent')).toBeNull();
 
       fireEvent.press(view.getByTestId('onboarding-pairing-method-terminal'));
       expect(view.queryByTestId('onboarding-agent-prompt')).toBeNull();
-      expect(view.getByText('Get a pairing code')).toBeTruthy();
-      expect(view.getByText('Enter the pairing code')).toBeTruthy();
+      expect(view.getByText('Run in your computer terminal')).toBeTruthy();
+      expect(view.getByText('Scan the QR code in your terminal')).toBeTruthy();
       expect(view.getByText('npx @p697/clawket pair --preview --backend hermes')).toBeTruthy();
       fireEvent.press(view.getByTestId('onboarding-copy-command'));
       expect(onCopyCommand).toHaveBeenCalledWith('npx @p697/clawket pair --preview --backend hermes');
@@ -587,7 +591,7 @@ describe('OnboardingScreen', () => {
     }
   });
 
-  it('offers a header scan on the chooser only', () => {
+  it('offers a prominent generic scan on the chooser only', () => {
     const onScanAnyQr = jest.fn();
     const view = render(<OnboardingScreen {...createProps({ onScanAnyQr, initialBackend: undefined })} />);
 
@@ -598,6 +602,97 @@ describe('OnboardingScreen', () => {
     fireEvent.press(view.getByTestId('onboarding-backend-hermes'));
     expect(view.queryByTestId('onboarding-scan-any-qr')).toBeNull();
     expect(view.getByTestId('onboarding-scan-qr')).toBeTruthy();
+  });
+
+  it.each(['codex', 'claude-code', 'pi', 'local-model'] as const)('leads %s with a terminal command and scanner, revealing codes on request', (backend) => {
+    const onScanQr = jest.fn();
+    const onSubmitPairing = jest.fn();
+    const view = render(<OnboardingScreen {...createProps({ initialBackend: backend, onScanQr, onSubmitPairing })} />);
+    expect(view.queryByTestId('onboarding-agent-prompt')).toBeNull();
+    expect(view.getByText(`npx @p697/clawket@latest pair --backend ${backend}`)).toBeTruthy();
+    expect(view.queryByTestId('onboarding-pairing-code')).toBeNull();
+    expect(view.getByTestId('onboarding-scan-qr')).toBeTruthy();
+    fireEvent.press(view.getByTestId('onboarding-scan-qr'));
+    expect(onScanQr).toHaveBeenCalledWith(backend);
+    fireEvent.press(view.getByTestId('onboarding-show-code'));
+    fireEvent.changeText(view.getByTestId('onboarding-pairing-code'), '001234');
+    fireEvent.press(view.getByTestId('onboarding-connect'));
+    expect(onSubmitPairing).toHaveBeenCalledWith({ backendKind: backend, transportKind: 'relay', code: '001234' });
+  });
+
+  it('restores each backend default after switching platforms and preserves a draft across pairing methods', () => {
+    const view = render(<OnboardingScreen {...createProps({ initialBackend: undefined })} />);
+    fireEvent.press(view.getByTestId('onboarding-backend-codex'));
+    fireEvent.press(view.getByTestId('onboarding-show-code'));
+    fireEvent.changeText(view.getByTestId('onboarding-pairing-code'), '123');
+    fireEvent.press(view.getByTestId('onboarding-pairing-method-agent'));
+    expect(view.getByTestId('onboarding-pairing-code').props.value).toBe('123');
+    fireEvent.press(view.getByTestId('onboarding-pairing-method-terminal'));
+    expect(view.getByTestId('onboarding-pairing-code').props.value).toBe('123');
+    fireEvent.press(view.getByTestId('onboarding-change-platform'));
+    fireEvent.press(view.getByTestId('onboarding-backend-hermes'));
+    expect(view.getByTestId('onboarding-agent-prompt')).toBeTruthy();
+    expect(view.getByTestId('onboarding-pairing-code').props.value).toBe('');
+    fireEvent.press(view.getByTestId('onboarding-close'));
+    fireEvent.press(view.getByTestId('onboarding-backend-codex'));
+    expect(view.queryByTestId('onboarding-agent-prompt')).toBeNull();
+    expect(view.queryByTestId('onboarding-pairing-code')).toBeNull();
+  });
+
+  it('exposes interactive discovery to a person and requires an explicit backend for its code fallback', async () => {
+    const onCopyCommand = jest.fn().mockResolvedValue(undefined);
+    const onScanAnyQr = jest.fn();
+    const onImportAnyQr = jest.fn();
+    const onSubmitPairing = jest.fn();
+    const view = render(<OnboardingScreen {...createProps({ initialBackend: undefined, onCopyCommand, onScanAnyQr, onImportAnyQr, onSubmitPairing })} />);
+    fireEvent.press(view.getByTestId('onboarding-computer-choose'));
+    expect(view.getByText('npx @p697/clawket@latest pair choose')).toBeTruthy();
+    expect(view.queryByTestId('onboarding-pairing-method-agent')).toBeNull();
+    fireEvent.press(view.getByTestId('onboarding-copy-command'));
+    expect(onCopyCommand).toHaveBeenCalledWith('npx @p697/clawket@latest pair choose');
+    await act(async () => { await Promise.resolve(); });
+    fireEvent.press(view.getByTestId('onboarding-scan-qr'));
+    expect(onScanAnyQr).toHaveBeenCalledTimes(1);
+    fireEvent.press(view.getByTestId('onboarding-import-qr'));
+    expect(onImportAnyQr).toHaveBeenCalledTimes(1);
+    fireEvent.press(view.getByTestId('onboarding-show-code'));
+    expect(view.queryByTestId('onboarding-pairing-code')).toBeNull();
+    expect(view.queryByTestId('onboarding-code-backend-local-model')).toBeNull();
+    fireEvent.press(view.getByTestId('onboarding-code-backend-hermes'));
+    fireEvent.changeText(view.getByTestId('onboarding-pairing-code'), 'ABC234');
+    fireEvent.press(view.getByTestId('onboarding-connect'));
+    expect(onSubmitPairing).toHaveBeenCalledWith({ backendKind: 'hermes', transportKind: 'relay', code: 'ABC234' });
+    fireEvent.press(view.getByTestId('onboarding-change-code-backend'));
+    expect(view.queryByTestId('onboarding-pairing-code')).toBeNull();
+    fireEvent.press(view.getByTestId('onboarding-code-backend-codex'));
+    expect(view.getByTestId('onboarding-pairing-code').props.value).toBe('');
+    expect(view.getByTestId('onboarding-connect').props.disabled).toBe(true);
+  });
+
+  it('keeps a discovery code form intact when route progress echoes its selected backend', () => {
+    const props = createProps({ initialBackend: undefined, onScanAnyQr: jest.fn() });
+    const view = render(<OnboardingScreen {...props} />);
+    fireEvent.press(view.getByTestId('onboarding-computer-choose'));
+    fireEvent.press(view.getByTestId('onboarding-show-code'));
+    fireEvent.press(view.getByTestId('onboarding-code-backend-hermes'));
+    fireEvent.changeText(view.getByTestId('onboarding-pairing-code'), 'ABC234');
+    view.rerender(<OnboardingScreen {...props} initialBackend="hermes" status={{ kind: 'connecting', phase: 'relay_connected' }} />);
+    view.rerender(<OnboardingScreen {...props} initialBackend="hermes" status={{ kind: 'error', code: 'timeout' }} />);
+    expect(view.getByText('npx @p697/clawket@latest pair choose')).toBeTruthy();
+    expect(view.getByTestId('onboarding-pairing-code').props.value).toBe('ABC 234');
+    expect(view.queryByTestId('onboarding-agent-prompt')).toBeNull();
+  });
+
+  it('keeps discovery out of Preview while preserving generic scanning', () => {
+    const view = render(<OnboardingScreen {...createProps({ initialBackend: undefined, environment: 'preview', onScanAnyQr: jest.fn() })} />);
+    expect(view.queryByTestId('onboarding-computer-choose')).toBeNull();
+    expect(view.getByTestId('onboarding-scan-any-qr')).toBeTruthy();
+    const props = createProps({ initialBackend: undefined, onScanAnyQr: jest.fn() });
+    view.rerender(<OnboardingScreen {...props} />);
+    fireEvent.press(view.getByTestId('onboarding-computer-choose'));
+    view.rerender(<OnboardingScreen {...props} environment="preview" />);
+    expect(view.getByTestId('onboarding-chooser')).toBeTruthy();
+    expect(view.queryByText('npx @p697/clawket@latest pair choose')).toBeNull();
   });
 
   it('hides every YouMind Sprite entry when the entry flag is off', () => {

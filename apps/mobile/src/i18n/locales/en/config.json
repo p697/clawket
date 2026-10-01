@@ -292,7 +292,6 @@
   "Design language": "Design language",
   "Connect your agent": "Connect your agent",
   "Connect {{backend}}": "Connect {{backend}}",
-  "Get a pairing code": "Get a pairing code",
   "Send to my agent": "Send to my agent",
   "Run it myself": "Run it myself",
   "Send this message to your agent": "Send this message to your agent",
@@ -389,5 +388,16 @@
   "Pairing environment does not match. Use the command shown on this page.": "Pairing environment does not match. Use the command shown on this page.",
   "Pattern": "Pattern",
   "Photo": "Photo",
-  "Plain": "Plain"
+  "Plain": "Plain",
+  "Connect on your computer": "Connect on your computer",
+  "Detect and choose on your computer": "Detect and choose on your computer",
+  "One command to choose the agent you want to connect.": "One command to choose the agent you want to connect.",
+  "Have a QR code? Scan to connect": "Have a QR code? Scan to connect",
+  "Run in your computer terminal": "Run in your computer terminal",
+  "Choose an agent, then scan": "Choose an agent, then scan",
+  "Scan the QR code in your terminal": "Scan the QR code in your terminal",
+  "Choose an installed agent in Terminal, then scan its QR code here.": "Choose an installed agent in Terminal, then scan its QR code here.",
+  "Change platform": "Change platform",
+  "Choose the platform that printed your code.": "Choose the platform that printed your code.",
+  "Enter pairing code": "Enter pairing code"
 }

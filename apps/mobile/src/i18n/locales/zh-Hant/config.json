@@ -292,7 +292,6 @@
   "Design language": "設計語言",
   "Connect your agent": "連線你的 Agent",
   "Connect {{backend}}": "連線 {{backend}}",
-  "Get a pairing code": "拿到配對碼",
   "Send to my agent": "發給我的 Agent",
   "Run it myself": "自己執行指令",
   "Send this message to your agent": "把這段話發給你的 Agent",
@@ -389,5 +388,16 @@
   "Pairing environment does not match. Use the command shown on this page.": "配對環境不一致，請使用本頁顯示的指令。",
   "Pattern": "圖案",
   "Photo": "照片",
-  "Plain": "純色"
+  "Plain": "純色",
+  "Connect on your computer": "在電腦上連線",
+  "Detect and choose on your computer": "在電腦上偵測並選擇",
+  "One command to choose the agent you want to connect.": "一行指令，選擇要連線的 Agent。",
+  "Have a QR code? Scan to connect": "已有 QR 碼？掃碼連線",
+  "Run in your computer terminal": "在電腦終端機執行",
+  "Choose an agent, then scan": "選擇 Agent，然後掃碼",
+  "Scan the QR code in your terminal": "掃描終端機裡的 QR 碼",
+  "Choose an installed agent in Terminal, then scan its QR code here.": "在終端機選擇已安裝的 Agent，再到這裡掃描 QR 碼。",
+  "Change platform": "更換平台",
+  "Choose the platform that printed your code.": "選擇產生配對碼的平台。",
+  "Enter pairing code": "輸入配對碼"
 }

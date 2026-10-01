@@ -292,7 +292,6 @@
   "Design language": "디자인 언어",
   "Connect your agent": "에이전트 연결",
   "Connect {{backend}}": "{{backend}} 연결",
-  "Get a pairing code": "페어링 코드 받기",
   "Send to my agent": "내 에이전트에게 보내기",
   "Run it myself": "직접 실행하기",
   "Send this message to your agent": "이 메시지를 에이전트에게 보내기",
@@ -389,5 +388,16 @@
   "Pairing environment does not match. Use the command shown on this page.": "페어링 환경이 일치하지 않습니다. 이 페이지에 표시된 명령을 사용하세요.",
   "Pattern": "패턴",
   "Photo": "사진",
-  "Plain": "단색"
+  "Plain": "단색",
+  "Connect on your computer": "컴퓨터에서 연결",
+  "Detect and choose on your computer": "컴퓨터에서 감지하고 선택",
+  "One command to choose the agent you want to connect.": "명령어 하나로 연결할 에이전트를 선택하세요.",
+  "Have a QR code? Scan to connect": "QR 코드가 있나요? 스캔하여 연결",
+  "Run in your computer terminal": "컴퓨터 터미널에서 실행",
+  "Choose an agent, then scan": "에이전트 선택 후 스캔",
+  "Scan the QR code in your terminal": "터미널의 QR 코드 스캔",
+  "Choose an installed agent in Terminal, then scan its QR code here.": "터미널에서 설치된 에이전트를 선택한 다음 여기에서 QR 코드를 스캔하세요.",
+  "Change platform": "플랫폼 변경",
+  "Choose the platform that printed your code.": "코드를 생성한 플랫폼을 선택하세요.",
+  "Enter pairing code": "페어링 코드 입력"
 }

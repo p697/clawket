@@ -292,7 +292,6 @@
   "Design language": "ภาษาการออกแบบ",
   "Connect your agent": "เชื่อมต่อ Agent ของคุณ",
   "Connect {{backend}}": "เชื่อมต่อ {{backend}}",
-  "Get a pairing code": "รับรหัสจับคู่",
   "Send to my agent": "ส่งให้ Agent ของฉัน",
   "Run it myself": "รันด้วยตัวเอง",
   "Send this message to your agent": "ส่งข้อความนี้ให้ Agent ของคุณ",
@@ -389,5 +388,16 @@
   "Pairing environment does not match. Use the command shown on this page.": "สภาพแวดล้อมการจับคู่ไม่ตรงกัน โปรดใช้คำสั่งที่แสดงในหน้านี้",
   "Pattern": "ลวดลาย",
   "Photo": "รูปภาพ",
-  "Plain": "สีพื้น"
+  "Plain": "สีพื้น",
+  "Connect on your computer": "เชื่อมต่อบนคอมพิวเตอร์",
+  "Detect and choose on your computer": "ตรวจหาและเลือกบนคอมพิวเตอร์",
+  "One command to choose the agent you want to connect.": "คำสั่งเดียวเพื่อเลือกเอเจนต์ที่ต้องการเชื่อมต่อ",
+  "Have a QR code? Scan to connect": "มีคิวอาร์โค้ดแล้ว? สแกนเพื่อเชื่อมต่อ",
+  "Run in your computer terminal": "เรียกใช้ในเทอร์มินัลบนคอมพิวเตอร์",
+  "Choose an agent, then scan": "เลือกเอเจนต์ แล้วสแกน",
+  "Scan the QR code in your terminal": "สแกนคิวอาร์โค้ดในเทอร์มินัล",
+  "Choose an installed agent in Terminal, then scan its QR code here.": "เลือกเอเจนต์ที่ติดตั้งไว้ในเทอร์มินัล แล้วสแกนคิวอาร์โค้ดที่นี่",
+  "Change platform": "เปลี่ยนแพลตฟอร์ม",
+  "Choose the platform that printed your code.": "เลือกแพลตฟอร์มที่สร้างรหัสของคุณ",
+  "Enter pairing code": "ป้อนรหัสจับคู่"
 }

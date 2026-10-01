@@ -40,7 +40,7 @@ Clawket 是面向 [OpenClaw](https://github.com/openclaw/openclaw) 和 [Hermes A
 - **自由选择连接方式。** 通过 Relay 远程访问，或使用局域网、Tailscale、自定义端点直连，也可以自建基础设施。
 - **使用熟悉的语言。** 支持 19 种界面语言、浅色与深色主题，以及配合可选转写服务的语音输入。
 
-Clawket 连接的是你自己运行的 Agent，需要先安装 OpenClaw 或 Hermes。具体工具和管理功能取决于所连接的后端。
+Clawket 连接的是你自己运行的 Agent，需要先安装受支持的 Agent 或运行模型服务。具体工具和管理功能取决于所连接的后端。
 
 ## 开始连接
 
@@ -51,7 +51,15 @@ npm install -g @p697/clawket
 clawket pair
 ```
 
-在 Clawket 中扫描生成的二维码。CLI 会检测已安装的后端，为每个后端分别生成带标签的配对结果。默认使用 Relay；Hermes 配对时也会尝试启动由 Clawket 管理的 Bridge 和 Relay runtime。
+在 Clawket 中扫描生成的二维码。默认命令会检测已安装的 OpenClaw 和 Hermes 后端，为每个后端分别生成带标签的配对结果。默认使用 Relay；Hermes 配对时也会尝试启动由 Clawket 管理的 Bridge 和 Relay runtime。
+
+也可以在电脑终端里检测已安装的平台，再选择一个连接（包括 Codex、Claude Code 和 Pi）：
+
+```bash
+npx @p697/clawket@latest pair choose
+```
+
+App 的「在电脑上检测并选择」入口会显示这条命令。按平台连接时，Codex、Claude Code、Pi 和本地模型默认走终端扫码，OpenClaw 和 Hermes 默认让 Agent 代跑；可切换方式，也可输入配对码代替扫码。`pair choose` 需要交互式终端，不接受参数，不适用于 Preview。
 
 如果希望通过本地网络直连：
 
@@ -59,7 +67,7 @@ clawket pair
 clawket pair local
 ```
 
-添加 `--backend openclaw` 或 `--backend hermes` 可指定后端。使用 `clawket status`、`clawket doctor` 和 `clawket logs` 查看连接状态与诊断信息。
+使用 `--backend` 加上 `openclaw`、`hermes`、`codex`、`claude-code`、`pi` 或 `local-model` 可指定后端。使用 `clawket status`、`clawket doctor` 和 `clawket logs` 查看连接状态与诊断信息。
 
 ## 从源码运行
 

@@ -483,6 +483,7 @@ describe('OnboardingRoute', () => {
     ['openclaw', 'camera'], ['codex', 'camera'],
     ['openclaw', 'image'], ['codex', 'image'],
     ['openclaw', 'header'], ['codex', 'header'],
+    ['hermes', 'generic-image'], ['claude-code', 'generic-image'],
   ] as const)(
     'uses current settings for the first %s %s scan delivered after opening', async (backendKind, method) => {
       mockApp.debugMode = true;
@@ -497,16 +498,17 @@ describe('OnboardingRoute', () => {
       const props = createProps();
       const view = render(<OnboardingRoute {...props} />);
       act(() => {
-        if (method === 'header') mockScreenProps?.onScanAnyQr?.();
+        if (method === 'generic-image') mockScreenProps?.onImportAnyQr?.();
+        else if (method === 'header') mockScreenProps?.onScanAnyQr?.();
         else if (method === 'image') mockScreenProps?.onImportQr?.(backendKind);
         else mockScreenProps?.onScanQr(backendKind);
       });
-      const firstCameraCallback = (method === 'image' ? mockScanner.importGatewayQrImage : mockScanner.openGatewayScanner).mock.calls[0][0].onScanned;
+      const firstCameraCallback = (method === 'image' || method === 'generic-image' ? mockScanner.importGatewayQrImage : mockScanner.openGatewayScanner).mock.calls[0][0].onScanned;
       // Preserve the callback already held by the native camera, across a context update.
       mockApp.debugMode = false;
       view.rerender(<OnboardingRoute {...props} />);
       await act(async () => {
-        await firstCameraCallback({ backendKind, mode: 'relay', relay: { serverUrl: backendKind === 'codex' ? 'https://clawket-codex-registry.clawket.workers.dev' : 'https://registry.clawket.ai', gatewayId: 'gateway', accessCode: 'synthetic' } });
+        await firstCameraCallback({ backendKind, mode: backendKind === 'hermes' ? 'hermes' : 'relay', relay: { serverUrl: backendKind === 'codex' ? 'https://clawket-codex-registry.clawket.workers.dev' : 'https://registry.clawket.ai', gatewayId: 'gateway', accessCode: 'synthetic' } });
       });
       expect(mockConnectBackendPairingPayload).toHaveBeenCalledWith(expect.objectContaining({
         backendKind, environment: 'production', debugMode: false,
@@ -608,16 +610,16 @@ describe('OnboardingRoute', () => {
     ));
   });
 
-  it('routes a pasted invitation through secure link pairing without putting it in the code field', async () => {
+  it.each(['openclaw', 'hermes', 'codex', 'claude-code', 'pi'] as const)('routes a pasted invitation through the selected %s backend without putting it in the code field', async (backend) => {
     const invitation = 'https://clawket.ai/pair/example#test-fragment';
     mockClipboardGetString.mockResolvedValueOnce(` ${invitation} `);
     render(<OnboardingRoute {...createProps()} />);
     let pasted: string | null | undefined;
     await act(async () => {
-      pasted = await mockScreenProps?.onPastePairingCode?.('openclaw');
+      pasted = await mockScreenProps?.onPastePairingCode?.(backend);
     });
     expect(pasted).toBeNull();
-    expect(mockConnectBackendPairingLink).toHaveBeenCalledWith(expect.objectContaining({ url: invitation }));
+    expect(mockConnectBackendPairingLink).toHaveBeenCalledWith(expect.objectContaining({ url: invitation, backendKind: backend }));
     expect(mockConnectBackendPairingCode).not.toHaveBeenCalled();
   });
 

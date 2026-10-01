@@ -16,9 +16,7 @@ import {
   ArrowUpRight,
   Copy,
   ImagePlus,
-  MessageSquareText,
   Palette,
-  QrCode,
   ScanLine,
   Terminal,
 } from 'lucide-react-native';
@@ -30,9 +28,9 @@ import {
   ControlSize,
   FontSize,
   FontWeight,
-  IconSize,
   LineHeight,
   Motion,
+  Radius,
   Space,
 } from '../../theme/tokens';
 import { PlatformMark } from '../../components/ui/PlatformMark';
@@ -50,14 +48,17 @@ import {
   buildBackendPairingCommand,
   createPairingSubmission,
   formatVerificationCode,
+  getDefaultPairingMethod,
   isVerificationCodeComplete,
   normalizeVerificationCode,
   PAIRING_COMMAND,
+  PAIRING_CHOOSE_COMMAND,
   resolveOnboardingError,
   type LocalModelEngine,
   type OnboardingStatus,
   type PairableBackendKind,
   type PairingSubmission,
+  type PairingMethod,
 } from './model';
 import type { OnboardingWebsiteBackendKind } from './route-model';
 
@@ -76,8 +77,9 @@ export type OnboardingScreenProps = Readonly<{
   onPastePairingCode?: (backendKind: PairableBackendKind) => MaybePromise<string | null>;
   onSubmitPairing: (submission: PairingSubmission) => MaybePromise<void>;
   onScanQr: (expectedBackendKind: PairableBackendKind) => void;
-  /** Chooser header scan: the scanned QR names its own backend. */
+  /** The scanned QR names its own backend. */
   onScanAnyQr?: () => void;
+  onImportAnyQr?: () => void;
   onImportQr?: (expectedBackendKind: PairableBackendKind) => void;
   onOpenYouMind: () => void;
   onOpenWebsite: (backendKind: OnboardingWebsiteBackendKind) => void;
@@ -90,8 +92,6 @@ const COPY_FEEDBACK_MS = 1500;
 
 /** Space kept between the pairing field + Connect action and the top of the keyboard. */
 const KEYBOARD_CLEARANCE = Space.lg;
-
-type PairingMethod = 'agent' | 'terminal';
 
 /** True for a short window after `flash()`; the timer resets on repeat and clears on unmount. */
 function useCopiedFlash(): [boolean, () => void] {
@@ -140,6 +140,7 @@ export function OnboardingScreen({
   onSubmitPairing,
   onScanQr,
   onScanAnyQr,
+  onImportAnyQr,
   onImportQr,
   onOpenYouMind,
   onOpenWebsite,
@@ -157,19 +158,23 @@ export function OnboardingScreen({
   const keyboardReveal = useKeyboardRevealScroll({ clearance: KEYBOARD_CLEARANCE, enabled: !isIPad });
   const [backendKind, setBackendKind] = useState<PairableBackendKind>(initialBackend ?? 'openclaw');
   const [pairingCode, setPairingCode] = useState('');
+  // Route pairing progress echoes the selected backend; that echo must not replace the form.
+  const selectedBackendRef = useRef<PairableBackendKind | undefined>(initialBackend);
   const [choosing, setChoosing] = useState(!initialBackend);
   const [copied, flashCopied] = useCopiedFlash();
   const [agentPromptCopied, flashAgentPromptCopied] = useCopiedFlash();
-  const [pairingMethod, setPairingMethod] = useState<PairingMethod>('agent');
+  const [pairingMethod, setPairingMethod] = useState<PairingMethod>(() => getDefaultPairingMethod(initialBackend ?? 'openclaw'));
   const [agentPromptExpanded, setAgentPromptExpanded] = useState(false);
-  // Stays on once the message left the phone: the step reads as done while the user waits for the reply.
-  const [agentPromptSent, setAgentPromptSent] = useState(false);
+  const [computerChooser, setComputerChooser] = useState(false);
+  const [codeExpanded, setCodeExpanded] = useState(false);
+  // A human code does not identify its Registry; require a backend before accepting it.
+  const [codeBackendSelected, setCodeBackendSelected] = useState(false);
   const [localModelEngine, setLocalModelEngine] = useState<LocalModelEngine>('llamacpp');
   const [localError, setLocalError] = useState(false);
   const [docsExpanded, setDocsExpanded] = useState(false);
   const viewedRef = useRef(false);
   const submitInFlightRef = useRef(false);
-  const effectiveCommand = buildBackendPairingCommand(backendKind, pairingCommand, localModelEngine);
+  const effectiveCommand = computerChooser ? PAIRING_CHOOSE_COMMAND : buildBackendPairingCommand(backendKind, pairingCommand, localModelEngine);
   const agentPrompt = useMemo(() => buildAgentPairingPrompt(t, effectiveCommand), [effectiveCommand, t]);
   // The tab row doubles as the list of supported model servers; each hint names
   // the precondition the CLI cannot check for the user before it runs.
@@ -220,8 +225,23 @@ export function OnboardingScreen({
   }, [onViewed]);
 
   useEffect(() => {
-    if (initialBackend) { setBackendKind(initialBackend); setChoosing(false); }
+    if (initialBackend) {
+      const keepForm = selectedBackendRef.current === initialBackend;
+      selectedBackendRef.current = initialBackend;
+      setBackendKind(initialBackend); setChoosing(false);
+      if (!keepForm) {
+        setComputerChooser(false); setPairingMethod(getDefaultPairingMethod(initialBackend));
+        setPairingCode(''); setCodeExpanded(false); setCodeBackendSelected(false);
+      }
+    }
   }, [initialBackend]);
+
+  useEffect(() => {
+    if (environment !== 'preview' || !computerChooser) return;
+    selectedBackendRef.current = undefined;
+    setComputerChooser(false); setChoosing(true); setCodeExpanded(false);
+    setCodeBackendSelected(false); setPairingCode(''); Keyboard.dismiss();
+  }, [computerChooser, environment]);
 
   const connecting = status.kind === 'connecting';
   // A submitted pairing (code, QR or link) owns the page until its outcome, including a paired
@@ -252,7 +272,7 @@ export function OnboardingScreen({
     );
   }
 
-  const pairingReady = isVerificationCodeComplete(pairingCode, backendKind) && !pairingInFlight;
+  const pairingReady = isVerificationCodeComplete(pairingCode, backendKind) && !pairingInFlight && (!computerChooser || codeBackendSelected);
   // iPadOS 26 numberPad uses an unstable floating popover. Keep pairing on
   // the full ASCII keyboard; normalization below still enforces the code alphabet.
   const pairingInput: { keyboardType: 'number-pad' | 'ascii-capable' | 'visible-password' } = isIPad
@@ -297,29 +317,36 @@ export function OnboardingScreen({
   };
 
   const resetPairingStep = () => {
-    setPairingCode(''); setLocalError(false); setAgentPromptSent(false); setAgentPromptExpanded(false);
+    setPairingCode(''); setLocalError(false); setAgentPromptExpanded(false);
+    setCodeExpanded(false); setCodeBackendSelected(false); Keyboard.dismiss();
   };
   const goBack = () => {
-    if (!choosing && !pairingInFlight) { setChoosing(true); resetPairingStep(); }
+    if (!choosing && !pairingInFlight) { selectedBackendRef.current = undefined; setChoosing(true); setComputerChooser(false); resetPairingStep(); }
     else onClose?.();
   };
   const chooseBackend = (kind: PairableBackendKind) => {
-    setBackendKind(kind); setChoosing(false); resetPairingStep();
+    selectedBackendRef.current = kind;
+    setBackendKind(kind); setChoosing(false); setComputerChooser(false);
+    setPairingMethod(getDefaultPairingMethod(kind)); resetPairingStep();
   };
   const copyAgentPrompt = () => {
     if (!onCopyAgentPrompt) return;
-    void Promise.resolve(onCopyAgentPrompt(agentPrompt, backendKind)).then(() => { flashAgentPromptCopied(); setAgentPromptSent(true); }, () => setLocalError(true));
+    void Promise.resolve(onCopyAgentPrompt(agentPrompt, backendKind)).then(() => { flashAgentPromptCopied(); }, () => setLocalError(true));
   };
   const backendLabel = backendKind === 'local-model' ? t('Local model') : backendKind === 'openclaw' ? 'OpenClaw' : backendKind === 'claude-code' ? 'Claude Code' : backendKind === 'codex' ? 'Codex' : backendKind === 'pi' ? 'Pi' : 'Hermes';
-  const agentMethodAvailable = backendKind !== 'local-model' && Boolean(onCopyAgentPrompt);
+  const agentMethodAvailable = !computerChooser && backendKind !== 'local-model' && Boolean(onCopyAgentPrompt);
   const agentMethod = agentMethodAvailable && pairingMethod === 'agent';
+  const codeVisible = agentMethod || codeExpanded;
+  const scan = computerChooser ? onScanAnyQr : () => onScanQr(backendKind);
+  const importQr = computerChooser ? onImportAnyQr : onImportQr ? () => onImportQr(backendKind) : undefined;
+  const methodAction = agentMethodAvailable ? (agentMethod
+    ? <Button testID="onboarding-pairing-method-terminal" label={t('Run it myself')} variant="text" size="sm" multiline style={styles.methodSwitch} onPress={() => { Keyboard.dismiss(); setPairingMethod('terminal'); }} />
+    : <Button testID="onboarding-pairing-method-agent" label={t('Send to my agent')} variant="text" size="sm" multiline style={styles.methodSwitch} onPress={() => setPairingMethod('agent')} />) : undefined;
   return (
     <View testID="onboarding-screen" style={[styles.screen, { paddingTop: insets.top }]}>
       <FlowHeader onBack={pairingInFlight ? onClose : onClose || !choosing ? goBack : undefined} testID="onboarding-close"
         title={environment === 'preview' ? t('Preview') : undefined}
-        right={choosing && onScanAnyQr
-          ? <FloatingButton testID="onboarding-scan-any-qr" icon={ScanLine} appearance="plain" accessibilityLabel={t('Scan to connect')} onPress={onScanAnyQr} />
-          : onOpenDesignSystem ? <FloatingButton icon={Palette} appearance="plain" accessibilityLabel={t('Design language')} onPress={onOpenDesignSystem} /> : undefined} />
+        right={onOpenDesignSystem ? <FloatingButton icon={Palette} appearance="plain" accessibilityLabel={t('Design language')} onPress={onOpenDesignSystem} /> : undefined} />
       <View style={styles.body}>
       {/* The form stays mounted under the connecting stage, so a failed pairing returns to it unchanged. */}
       <KeyboardAvoidingView testID="onboarding-keyboard-avoiding" enabled={!isIPad} style={styles.screen} behavior="padding"
@@ -331,7 +358,7 @@ export function OnboardingScreen({
         automaticallyAdjustContentInsets={false} keyboardDismissMode={isIPad ? 'on-drag' : 'interactive'}
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + Space.xl }]}
         keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-        <PageIntro title={choosing ? t('Connect your agent') : t('Connect {{backend}}', { backend: backendLabel })} />
+        <PageIntro title={choosing ? t('Connect your agent') : computerChooser ? t('Connect on your computer') : t('Connect {{backend}}', { backend: backendLabel })} />
         {shownError ? <ErrorBanner code={shownError.code} pairingReason={shownError.pairingReason} backendKind={backendKind}
           // Its action stays drawn during the attempt, so the banner keeps its size, but never starts a second one.
           onAction={onErrorAction ? (code) => { if (!pairingInFlight) onErrorAction(code); } : undefined} /> : null}
@@ -344,6 +371,14 @@ export function OnboardingScreen({
                 const kind = row.kind;
                 return <ChoiceRow key={kind} testID={`onboarding-backend-${kind}`} leading={<PlatformMark platform={kind} balanced />} title={row.label} onPress={() => chooseBackend(kind)} />;
               })}
+            </View>
+            <View style={styles.chooserActions}>
+              {environment === 'production' && onScanAnyQr ? <View style={styles.computerChoice}>
+                <ChoiceRow testID="onboarding-computer-choose" icon={Terminal} title={t('Detect and choose on your computer')}
+                  description={t('One command to choose the agent you want to connect.')}
+                  onPress={() => { resetPairingStep(); selectedBackendRef.current = undefined; setComputerChooser(true); setChoosing(false); setPairingMethod('terminal'); }} />
+              </View> : null}
+              {onScanAnyQr ? <Button testID="onboarding-scan-any-qr" label={t('Have a QR code? Scan to connect')} icon={ScanLine} variant="neutral" size="lg" multiline haptic onPress={onScanAnyQr} /> : null}
             </View>
             <View style={styles.secondaryActions}>
               <Button testID="onboarding-docs-toggle" label={t('No agent yet?')} variant="text" onPress={() => setDocsExpanded((expanded) => !expanded)} />
@@ -358,24 +393,36 @@ export function OnboardingScreen({
               onPress={() => { setLocalError(false); void openExternalUrl(CLAWKET_GITHUB_REPO_URL, () => setLocalError(true)); }} />
           </View>
         </> : <>
-          {agentMethod ? <FormStep number="01" title={t('Send this message to your agent')}
-            action={agentPromptSent ? <Check testID="onboarding-agent-prompt-sent" size={IconSize.sm} color={theme.colors.inkSecondary} strokeWidth={2} accessibilityLabel={t('Copied')} /> : undefined}>
+          {agentMethod ? <FormStep number="01" title={t('Send this message to your agent')} action={methodAction}>
             <MessagePreview testID="onboarding-agent-prompt" message={agentPrompt} expanded={agentPromptExpanded}
               onToggle={() => setAgentPromptExpanded((expanded) => !expanded)} accessibilityLabel={t('Message for your agent')} />
             <Button testID="onboarding-copy-agent-prompt" label={agentPromptCopied ? t('Copied') : t('Copy this message')} icon={agentPromptCopied ? Check : Copy}
               variant="neutral" haptic accessibilityLabel={t('Copy this message')} onPress={copyAgentPrompt} />
-          </FormStep> : <FormStep number="01" title={t('Get a pairing code')}>
-            {backendKind === 'local-model'
+          </FormStep> : <FormStep number="01" title={t('Run in your computer terminal')} action={methodAction}>
+            {!computerChooser && backendKind === 'local-model'
               ? <SegmentedTabs testID="onboarding-local-model-engine" size="sm" tabs={localModelEngines} active={localModelEngine} onSwitch={setLocalModelEngine} />
               : null}
-            <Text testID="onboarding-command-hint" style={styles.subtitle}>{commandHint}</Text>
-            <CommandBlock command={effectiveCommand} copied={copied} onCopy={onCopyCommand ? () => {
+            <Text testID="onboarding-command-hint" style={styles.subtitle}>{computerChooser ? t('Open Terminal and run this command.') : commandHint}</Text>
+            <CommandBlock stacked command={effectiveCommand} copied={copied} onCopy={onCopyCommand ? () => {
               void Promise.resolve(onCopyCommand(effectiveCommand)).then(flashCopied, () => setLocalError(true));
             } : undefined} />
           </FormStep>}
-          <FormStep number="02" style={styles.secondStep} title={agentMethod ? t('Enter the code it replies with') : t('Enter the pairing code')}
-            action={onPastePairingCode ? <Button testID="onboarding-paste-code" label={t('Paste')} variant="text" disabled={pairingInFlight} onPress={() => { void pastePairingCode().catch(() => setLocalError(true)); }} /> : undefined}>
-            <View ref={keyboardReveal.anchorRef} testID="onboarding-keyboard-anchor" style={styles.keyboardAnchor} onLayout={keyboardReveal.measureAnchor}>
+          <FormStep number="02" style={styles.secondStep} title={agentMethod ? t('Enter the code it replies with') : codeExpanded ? t('Enter the pairing code') : computerChooser ? t('Choose an agent, then scan') : t('Scan the QR code in your terminal')}
+            action={codeVisible && (!computerChooser || codeBackendSelected) && onPastePairingCode ? <Button testID="onboarding-paste-code" label={t('Paste')} variant="text" disabled={pairingInFlight} onPress={() => { void pastePairingCode().catch(() => setLocalError(true)); }} /> : undefined}>
+            {!codeVisible ? <>
+              {computerChooser ? <Text style={styles.subtitle}>{t('Choose an installed agent in Terminal, then scan its QR code here.')}</Text> : null}
+              <Button testID="onboarding-scan-qr" label={t('Scan to connect')} icon={ScanLine} variant="neutral" size="lg" multiline haptic onPress={scan} />
+            </> : null}
+            {computerChooser && codeExpanded ? <View testID="onboarding-code-backend">
+              {!codeBackendSelected ? <Text style={styles.subtitle}>{t('Choose the platform that printed your code.')}</Text> : null}
+              {!codeBackendSelected ? backendOptions.filter((row) => row.kind !== 'local-model').map((row) => {
+                const kind = row.kind;
+                return <ChoiceRow key={kind} testID={`onboarding-code-backend-${kind}`} leading={<PlatformMark platform={kind} balanced />} title={row.label}
+                  onPress={() => { selectedBackendRef.current = kind; setBackendKind(kind); setCodeBackendSelected(true); setPairingCode(''); }} />;
+              }) : <ChoiceRow testID="onboarding-change-code-backend" leading={<PlatformMark platform={backendKind} balanced />} title={backendLabel} description={t('Change platform')}
+                onPress={() => { Keyboard.dismiss(); selectedBackendRef.current = undefined; setCodeBackendSelected(false); setPairingCode(''); }} />}
+            </View> : null}
+            {codeVisible && (!computerChooser || codeBackendSelected) ? <View ref={keyboardReveal.anchorRef} testID="onboarding-keyboard-anchor" style={styles.keyboardAnchor} onLayout={keyboardReveal.measureAnchor}>
               <FormTextInput testID="onboarding-pairing-code" accessibilityLabel={t('Pairing code')} surface="quiet"
                 autoComplete="one-time-code" autoCapitalize="characters" autoCorrect={false} editable={!pairingInFlight}
                 keyboardType={pairingInput.keyboardType} maxLength={backendKind === 'openclaw' ? 14 : 7}
@@ -387,15 +434,15 @@ export function OnboardingScreen({
                 value={formatVerificationCode(pairingCode, backendKind)} minHeight={ControlSize.settingsRow} inputStyle={styles.codeInputText} />
               {/* The spinner answers the press during the stage's grace period; a quick failure never shows the stage. */}
               <Button testID="onboarding-connect" label={t('Connect')} variant="neutral" size="lg" loading={pairingInFlight} disabled={!pairingReady} onPress={submitPairing} />
-            </View>
+            </View> : null}
           </FormStep>
           <View style={styles.alternatives}>
-            {agentMethodAvailable ? (pairingMethod === 'agent'
-              ? <Button testID="onboarding-pairing-method-terminal" label={t('Run it myself')} icon={Terminal} variant="text" onPress={() => setPairingMethod('terminal')} />
-              : <Button testID="onboarding-pairing-method-agent" label={t('Send to my agent')} icon={MessageSquareText} variant="text" onPress={() => setPairingMethod('agent')} />) : null}
-            <Button testID="onboarding-scan-qr" label={t('Scan to connect')} icon={QrCode} variant="text" onPress={() => onScanQr(backendKind)} />
-            {onImportQr ? <Button testID="onboarding-import-qr" label={t('Choose from photos')} icon={ImagePlus} variant="text" onPress={() => onImportQr(backendKind)} /> : null}
+            {codeVisible
+              ? <Button testID="onboarding-scan-qr" label={t('Scan to connect')} icon={ScanLine} variant="text" onPress={scan} />
+              : <Button testID="onboarding-show-code" label={t('Enter pairing code')} variant="text" onPress={() => setCodeExpanded(true)} />}
+            {importQr ? <Button testID="onboarding-import-qr" label={t('Choose from photos')} icon={ImagePlus} variant="text" onPress={importQr} /> : null}
           </View>
+          <Button testID="onboarding-change-platform" label={t('Change platform')} variant="text" onPress={goBack} />
         </>}
       </Reanimated.ScrollView>
       </KeyboardAvoidingView>
@@ -589,6 +636,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     body: { flex: 1 },
     stage: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: colors.canvas },
     content: { flexGrow: 1, paddingHorizontal: Space.xl, gap: Space.xl },
+    methodSwitch: { maxWidth: '45%', minHeight: ControlSize.floatingButton, flexShrink: 1 },
     subtitle: { color: colors.inkSecondary, fontSize: FontSize.secondary, lineHeight: LineHeight.secondary, fontWeight: FontWeight.regular },
     keyboardAnchor: { gap: Space.md },
     // Step 02 gets a touch more air than the page's uniform block gap so the two steps read as separate moves.
@@ -597,6 +645,8 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     // "No agent yet?" sits under the choices it answers; the open-source note follows as its own block
     // rather than anchoring to the screen bottom (owner feedback 2026-09-27: the help floated between them).
     chooser: { gap: Space.sm },
+    chooserActions: { gap: Space.lg, paddingTop: Space.lg },
+    computerChoice: { backgroundColor: colors.surface, borderRadius: Radius.settingsGroup, paddingHorizontal: Space.sm },
     secondaryActions: { gap: Space.sm },
     openSource: { paddingTop: Space.lg, paddingBottom: Space.lg, alignItems: 'center', gap: Space.xs },
     openSourceTitle: { color: colors.inkSecondary, fontSize: FontSize.secondary, lineHeight: LineHeight.secondary, fontWeight: FontWeight.semibold, textAlign: 'center' },
