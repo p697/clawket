@@ -194,6 +194,8 @@ Pi Relay owner-lease conflicts (HTTP 409) retry every two seconds within the sta
 
 Model choices retain native aliases and optional resolved IDs. Exclude exact native model-switch and interruption envelopes from human chat history without stripping ordinary text discussing commands.
 
+Default Claude executable discovery prefers the newest runnable Desktop Code host runtime in macOS/Windows user data, then PATH/native CLI. The GUI and VM guest are not SDK executables. Explicit commands override automatic discovery; selected-runtime version/startup failures must not silently retry another installation. Use that same executable for SDK sessions and native owner queries. Layouts, minimum version and explicit real-model verification are documented in `../../docs/3.1/claude-code.md`.
+
 ## Codex App Server
 
 Native thread provenance does not imply a remote owner after an authorized local resume. Keep subsequent turns and settings on the owning App Server, publish ownership to followers, and repeat owner discovery after process restart. Settings-only resume uses the same ownership proof as continuation. A Bridge-created thread may recover after a proven pre-dispatch Desktop-broker failure only with matching idle history and an explicitly verified native version whose atomic writer lock rejects even an idle competing owner; imported threads and unknown versions still require explicit no-owner. Uncertain dispatch never opens another writer.

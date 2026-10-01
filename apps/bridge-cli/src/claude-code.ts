@@ -56,7 +56,7 @@ async function runClaudeCommand(args: string[], progress: Progress): Promise<voi
     let health: { model: string; modelReady: boolean } | undefined;
     try { health = await claudeControl(config); } catch { /* An offline runtime may be started or diagnosed below. */ }
     if (command === 'status') { console.log(`Claude Code · ${label}: ${health ? 'ready' : 'offline'}`); return; }
-    if (command === 'doctor' && health) { console.log('Claude Code Bridge: ready. Check native authentication with claude auth status.'); return; }
+    if (command === 'doctor' && health) { console.log('Claude Code Bridge: ready. Complete native sign-in in Claude Desktop or check authentication with the selected CLI.'); return; }
     if (['pair', 'stop', 'restart', 'reset'].includes(command) && health) {
       if (command === 'pair') { const sessions = await claudeControl(config, 'sessions.list') as unknown as Array<{ hasActiveRun?: boolean }>; if (sessions.some(s => s.hasActiveRun)) throw new Error('Finish the current Claude task before refreshing pairing. Existing phone connections remain usable.'); }
       progress.update('Stopping the previous Claude Code bridge…');
@@ -80,7 +80,7 @@ async function runClaudeCommand(args: string[], progress: Progress): Promise<voi
   let server: ClaudeServer | undefined, relay: ClaudeRelay | undefined;
   try {
     await service.health();
-    if (command === 'doctor') { console.log(`Claude Code ${installed.version}: installed\nProject: ${basename(config.project)}\nAuthentication: run claude auth status on this computer`); return; }
+    if (command === 'doctor') { console.log(`Claude Code ${installed.version}: installed\nProject: ${basename(config.project)}\nAuthentication: complete native sign-in in Claude Desktop or check authentication with the selected CLI`); return; }
     let qrPayload: string | undefined, code: string | undefined;
     if (command === 'pair') {
       if (args.includes('local') || args.includes('--local')) {

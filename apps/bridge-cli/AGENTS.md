@@ -101,6 +101,8 @@ Codex first-time detached pairing must carry the resolved device scope into the 
 
 `clawket claude-code pair` / `pair --backend claude-code` uses the installed, unmodified Claude executable and device discovery by default. `--project` authorizes only that project. State, logs and Preview credentials live under the independent `~/.clawket/claude-code` tree; lifecycle commands stop only authenticated Clawket-owned runtimes. The official `@anthropic-ai/claude-agent-sdk` is an explicit package external, retained as a production dependency; do not bundle its assets or silently substitute its packaged CLI for the user's selected executable. Native authentication remains on the computer. See `../../docs/3.1/claude-code.md`.
 
+Claude pairing discovery and SDK startup share the runtime's Desktop-first executable resolver. Default macOS/Windows pairing prefers the installed Desktop Code host runtime, including Desktop-only machines, and retains CLI-only fallback. Explicit saved commands stay authoritative. Keep authentication/install guidance usable without a terminal CLI; no credential copying or existing Desktop owner takeover.
+
 Claude first-time detached pairing must carry the resolved device scope into the child even when adding a not-yet-created `--config` path. Existing scoped configurations are never silently widened.
 
 ## 3.1 release

@@ -34,7 +34,23 @@ describe('pair choose', () => {
     expect(inspect.codex).toHaveBeenCalledWith('/custom/codex');
     expect(inspect.pi).toHaveBeenCalledWith('/custom/pi');
     expect(inspect.claude).toHaveBeenCalledWith('claude');
+    expect(choices.find(choice => choice.backend === 'claude-code')?.detail).toBe('Claude Desktop runtime or CLI unavailable or unsupported');
     expect(JSON.stringify(choices)).not.toContain('do-not-print');
+  });
+
+  it('accepts a detected Desktop runtime and preserves an explicit saved Claude command', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'clawket-choose-')); roots.push(root);
+    const inspect = { codex: vi.fn(async () => ({})), claude: vi.fn(async () => ({ executable: '/desktop/claude' })), pi: vi.fn(async () => ({})) };
+    const input = { home: root, cwd: root, openclaw: { available: false, configured: false }, hermes: { available: false, configured: false }, inspect };
+    const choices = await discoverPairChoices(input);
+    expect(choices.find(choice => choice.backend === 'claude-code')).toMatchObject({ available: true, configured: false });
+    expect(inspect.claude).toHaveBeenLastCalledWith('claude');
+    const directory = join(root, '.clawket', 'claude-code', 'device', 'production'); mkdirSync(directory, { recursive: true });
+    writeFileSync(join(directory, 'runtime.json'), JSON.stringify({ command: '/custom/claude', token: 'do-not-print' }));
+    const saved = await discoverPairChoices(input);
+    expect(inspect.claude).toHaveBeenLastCalledWith('/custom/claude');
+    expect(saved.find(choice => choice.backend === 'claude-code')).toMatchObject({ available: true, configured: true });
+    expect(JSON.stringify(saved)).not.toContain('do-not-print');
   });
 
   it('rejects unavailable choices, then returns only the selected backend', async () => {
