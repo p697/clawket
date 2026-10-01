@@ -47,6 +47,14 @@ Part of the owner's request to land every remaining motion item. The sheets and 
 - **Entering a conversation:** after the tap, about 140 ms of JavaScript mounts the page. A quick native cross-fade follows, then an empty conversation (header, wallpaper and composer) for 250–340 ms while the cached messages and Cron cards are read together (the 300 ms hydration hold) and FlashList places the newest row. The messages then appeared in a single frame. They now fade in over `Motion.duration.normal`, reaching full strength in about 120 ms, and appear at once under reduced motion. The hydration hold and placement are unchanged.
 - **Left as is:** the Session Panel's first frames still stall. On opening it mounts its header, chips, search and about a screen of session rows (12), each with a gesture-handler touchable and an icon, and draws them for the first time. Two frames take 37 ms and 72 ms to mount, and one takes 45 ms to draw, so the sheet appears about a third of the way up and reaches about two thirds within two frames before easing smoothly the rest of the way. A screen of rows is all it renders at first, so trimming the list does not help. Keeping the panel's content mounted (frozen) between openings would remove the stall from every opening after the first. That change is in the shared `Sheet` and touches the panel's stacked action, rename and export flows, so it waits for the owner.
 
+## A+ motion, batch 3 — composer growth, 2026-10-01
+
+Part of the owner's request to land every remaining motion item. On Android, when a draft wrapped onto a new line, the editor's first line scrolled out of view for a moment before the capsule grew to show both lines.
+
+- **Cause:** the native editor was exactly as tall as the capsule's visible height. A newly wrapped line had no room inside it, so Android scrolled the editor to keep the caret visible. The capsule grows only after React measures the new line, and only then does the editor scroll back.
+- **Change:** while the draft fits under the five-line cap, the editor's host is one line taller than the capsule shows (`inputFrameHeight`), and the capsule clips it. A new line lands in that spare room, and the capsule then grows to reveal it. Past the cap the editor scrolls inside the capsule as before, and a sent draft keeps its height while the thread holds it (batch 2b).
+- **Device check (SM-A566B QA build):** a draft typed word by word over five lines was recorded, and its first line was tracked frame by frame. Each wrap moved the first line up about 66 px in about 100 ms as the capsule grew. It was never scrolled away and back.
+
 ## A+ motion, batch 2b — 2026-10-01
 
 Batch 2b removes the jolt when a multi-line draft is sent. To measure it, a script tracks a fixed message patch frame by frame in a screen recording, so no screenshots need to be read. The recordings were made on an SM-A566B QA build, sending the same three-line draft in an OpenClaw test session.

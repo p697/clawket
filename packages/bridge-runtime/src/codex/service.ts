@@ -28,6 +28,8 @@ type QuestionGroup = { desktop?: boolean; wireId: string | number; entry: Entry;
 type MetadataBaseline = Map<Entry, { threadId: string; revision: number; pending: boolean }>;
 const ID = /^[a-f0-9-]{36}$/;
 const PERMISSIONS = { approvalPolicy: 'on-request', approvalsReviewer: 'user', permissions: ':workspace' };
+// Native catalog/index metadata may lack a model; the wire field is optional string.
+const modelName = (value: unknown): string | undefined => typeof value === 'string' ? value : undefined;
 
 /** Device pairing discovers local projects; native writes retain the authoritative owner. */
 export class CodexService extends EventEmitter {
@@ -602,7 +604,7 @@ export class CodexService extends EventEmitter {
     let record = this.records.find(r => r.id === key);
     const native = this.native.get(String(key)) ?? this.archivedNative.get(String(key));
     if (!record && native && this.options.device) {
-      record = { id: String(key), archived: this.archivedNative.has(String(key)), threadId: native.id, native: true, cwd: native.cwd, title: native.name || native.preview?.slice(0, 80) || '', created: native.createdAt * 1000 || Date.now(), activity: native.updatedAt * 1000 || Date.now(), model: native.model, provider: native.modelProvider, keys: {} };
+      record = { id: String(key), archived: this.archivedNative.has(String(key)), threadId: native.id, native: true, cwd: native.cwd, title: native.name || native.preview?.slice(0, 80) || '', created: native.createdAt * 1000 || Date.now(), activity: native.updatedAt * 1000 || Date.now(), model: modelName(native.model), provider: native.modelProvider, keys: {} };
       if (this.records.length >= 1000) throw new Error('Conversation index limit reached');
       this.records.push(record); this.save(); this.desktop?.follow(native.id);
     }
@@ -628,7 +630,7 @@ export class CodexService extends EventEmitter {
     if (patch) this.emit('update', patch);
   }
   private descriptor(r: Entry): SessionDescriptor {
-    return { connectionId: '', agentId: 'codex', key: r.id, kind: 'direct', title: r.title || basename(r.cwd ?? this.project), updatedAt: r.activity ?? r.created, lastActivityAt: r.activity ?? null, preview: r.preview, model: r.model, modelProvider: r.provider, sessionId: r.threadId, hasActiveRun: this.runs.has(r.id), attention: this.attention.get(r.id), project: this.options.device ? this.projectDetails(r.cwd ?? this.project) : undefined, canContinue: r.native ? !!this.options.device : undefined, source: r.native ? 'native' : 'bridge', archived: r.archived === true, allowedActions: { rename: true, reset: !r.native, delete: !r.native, pin: true, archive: !!r.threadId } };
+    return { connectionId: '', agentId: 'codex', key: r.id, kind: 'direct', title: r.title || basename(r.cwd ?? this.project), updatedAt: r.activity ?? r.created, lastActivityAt: r.activity ?? null, preview: r.preview, model: modelName(r.model), modelProvider: r.provider, sessionId: r.threadId, hasActiveRun: this.runs.has(r.id), attention: this.attention.get(r.id), project: this.options.device ? this.projectDetails(r.cwd ?? this.project) : undefined, canContinue: r.native ? !!this.options.device : undefined, source: r.native ? 'native' : 'bridge', archived: r.archived === true, allowedActions: { rename: true, reset: !r.native, delete: !r.native, pin: true, archive: !!r.threadId } };
   }
   private async thread(r: Entry, released = false, permissionSelection?: Record<string, unknown>): Promise<void> {
     if (r.permissionsUnconfirmed && !permissionSelection) throw new Error('Codex did not restore the conversation permissions. Select and confirm permissions before sending.');
@@ -724,7 +726,7 @@ export class CodexService extends EventEmitter {
           updatedAt: Math.max(r.activity ?? r.created, native.lastActivityAt ?? 0) } : this.descriptor(r);
     }), ...[...discovered.entries].filter(([, t]) => !this.records.some(r => r.threadId === t.id)).map(([key, t]): SessionDescriptor => {
       const visible = this.nativePreviews.get(key);
-      return { connectionId: '', agentId: 'codex', key, kind: 'direct', title: t.name || t.preview?.slice(0, 80) || basename(t.cwd), updatedAt: t.updatedAt * 1000, lastActivityAt: visible?.lastActivityAt ?? (t.recencyAt ?? t.updatedAt) * 1000, preview: visible?.preview, model: t.model, modelProvider: t.modelProvider, hasActiveRun: t.status?.type === 'active', project: this.options.device ? this.projectDetails(t.cwd) : undefined, canContinue: this.options.device === true, source: 'native', sessionId: t.id, allowedActions: { rename: this.options.device === true, reset: false, delete: false, pin: true, archive: this.options.device === true } };
+      return { connectionId: '', agentId: 'codex', key, kind: 'direct', title: t.name || t.preview?.slice(0, 80) || basename(t.cwd), updatedAt: t.updatedAt * 1000, lastActivityAt: visible?.lastActivityAt ?? (t.recencyAt ?? t.updatedAt) * 1000, preview: visible?.preview, model: modelName(t.model), modelProvider: t.modelProvider, hasActiveRun: t.status?.type === 'active', project: this.options.device ? this.projectDetails(t.cwd) : undefined, canContinue: this.options.device === true, source: 'native', sessionId: t.id, allowedActions: { rename: this.options.device === true, reset: false, delete: false, pin: true, archive: this.options.device === true } };
     })];
   }
   async health(): Promise<object> {

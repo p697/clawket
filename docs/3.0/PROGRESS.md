@@ -6,6 +6,12 @@
   - 留待负责人决定：会话面板打开时开头仍会卡。原因是挂载头部、筛选、搜索和一屏约 12 行会话（每行一个手势触摸组件和一个图标），再加第一次绘制，有两帧挂载各耗 37ms、72ms，一帧绘制 45ms。表现为面板一出现就在约三分之一高处，两帧内跳到约三分之二，之后才平滑。首屏本来只渲染一屏，减行数没用。根治办法是关闭后保留面板内容（冻结），之后每次打开都只做动画；但要改共用的 `Sheet`，并牵动面板里叠加的操作、重命名和导出流程，所以先不做。
   - 单测逐文件串行：ThreadView 142、ThreadScreen 68、ConversationEntry 28。tsc、ui-style 通过。
 
+- 2026-10-01 聊天界面 A+ 第 4 步「动效与手感」第三批之一：输入框长高时首行不再被顶掉（负责人：剩下 4 条动效全部落地）。原因：安卓上原生输入框和胶囊可见高度一样高，折出新一行时没有空位，系统把输入框滚到光标处，第一行先被顶出去；等 React 量完新行、胶囊长高，才滚回来。改法：草稿没超过五行上限时，输入框的宿主比胶囊可见高度多留一行（`inputFrameHeight`），多出的一行被胶囊裁掉；新折出的一行落在这一行里，胶囊随后长高把它露出来。超过上限后仍在胶囊内滚动；发送时保持草稿高度（第二批之二）不受影响。
+  真机验证：SM-A566B QA 包，逐词输入五行草稿并录屏，逐帧追踪第一行。每次折行，第一行都随胶囊长高在约 100ms 内平滑上移约 66px，从没有被顶走再回来。
+  单测：ThreadPrimitives 57。
+
+- 2026-10-01 输入框模型按钮右侧间距（负责人安卓真机反馈：底部模型按钮离右边太远、看着怪）：按界面层级坐标，按钮离输入框右缘约 13dp、离上下缘约 5dp——外层右内边距 4dp 加输入区右内边距 8dp 叠出来的。改为有模型按钮时输入区不留右内边距，按钮与输入框外缘四周等距（约 4–5dp，胶囊套胶囊）；隐藏测量文字的右侧留白与按钮可用宽度同步（按钮多出 8dp 可用宽度）；多行草稿时按钮在「展开」按钮下方的同一列居中对齐。验证：单文件 in-band Jest——ThreadPrimitives 57（新增 1 条）、ThreadView 141；负责人正在用手机，未上机。
+
 - 2026-10-01 Claude Desktop 优先的安卓真机验收（负责人明确要求操作已连接手机测试）：源码 `58f903eb` 的本地开发 Bridge，现有 SM-A566B QA App `3.1.0 (30100)`，双安装 Mac 自动选择 Desktop Code 2.1.284，不指定程序路径。独立项目/配置及既有隔离 Preview，手机正常六位码确认与 claim、项目选择、新建会话、12 个原生模型、两轮真实回复与上下文均通过；强停/重开 QA App 后连接在线且两轮历史完整，第三轮仍返回原标记。只读 SDK 原生历史核对三轮回复来自同一个自有会话；推理子进程路径确认属于 Desktop host。最初 Production 设置不能解析 Preview 码，切换 QA 调试环境后成功。
 
   测试结束移除本次新增 Preview 连接，原有 10 个连接保留，调试模式恢复关闭；测试 Bridge 正常退出、监听端口关闭、自有 owner 锁释放。未替换商店 App，未构建/安装 APK，未改原有用户 Bridge、原生凭据或 Desktop 会话。未发现新缺陷，未重跑实现测试；验证与局限见 [真机验收记录](../3.1/claude-desktop-android-qa-2026-10-01.md)。仅 Desktop 账号独立机器和 Windows 原生验收仍留 HT-CLAUDE-DESKTOP-1001；未发布 npm/App 或部署服务。
@@ -1218,7 +1224,7 @@ Clawket 3.0 围绕统一 Agent 花名册与持续线程重构：新增 Hermes �
 
 | 编号 | 事项 | 怎么做 | 验证方法 | 状态 |
 |---|---|---|---|---|
-| HT-CODEX-ROSTER-1001 | 原故障 iPhone 与另一台电脑的目录加载验收 | 记录远端原生 Codex 版本并核对目录加载失败的固定分类；在包含本次客户端修复的负责人授权测试版本上重新连接。 | Codex Agent 保持可见；目录错误明确重试列表；完整会话刷新成功。 | 客户端首次目录失败机制已在五后端回归复现；远端具体失败原因与原手机验收待确认。代码修复不更新已安装 TestFlight，未启动 App 发布。见 20-connection-diagnostics.md。 |
+| HT-CODEX-ROSTER-1001 | 原故障 iPhone 与另一台电脑的目录加载验收 | 负责人另行授权 Bridge 发布/更新并重启运行版本后，在原手机重新连接并运行同一只读诊断；后续客户端授权更新再验收 Agent 独立展示与列表重试。 | 2,823 条会话完整返回且 invalidRows=0；首页出现 Codex Agent；原会话保持可用。 | 远端 08:59 UTC 报告已确认 24 条会话的 model 违反响应契约，新旧目录接口均失败；Bridge 源码修复不要求改变现有客户端契约。未发布/更新 Bridge 或 App；原手机验收、原生版本记录仍待负责人完成。见 20-connection-diagnostics.md。 |
 | HT-ONBOARDING-1001 | 按平台连接引导真机视觉验收 | 在后续授权的 App 更新或开发包中查看平台列表、Codex 终端、Hermes Agent、电脑自动选择及手输码；不要求刷新现有配对凭据。 | iOS/Android 浅色与深色、大字号、键盘避让和方式切换；核对扫码/相册/码连接失败恢复表单。 | 自动化交互与代码检查已通过，未操作模拟器或设备；真机视觉验收待负责人完成，未发起打包或发布。 |
 | HT-CODEX-RUNTIME-0930 | 桌面运行时优先的手机验收 | 本机现有 3.1.6 已通过保存的原生执行路径切到桌面 0.159.2，Bridge 重启完成；手机重新连接，无需重新扫码。 | 模型目录与新对话一致，消息得到回复；旧原生会话仍可继续。 | 隔离真实新对话成功；本机配对保留、认证/目录读回通过，负责人已确认手机新建成功；旧原生会话续聊仍待验收。负责人已授权本次 Bridge 发布，App 更新另行授权。见 ../3.1/codex-desktop-runtime-2026-09-30.md。 |
 | HT-CODEX-AUTH-0930 | 原故障 iPhone 的认证与错误回显验收 | 负责人恢复必要的原生登录，安装本轮公开 Bridge 后重新配对，在新对话发送无副作用消息。 | 手机得到真实回复；认证失败显示明确提示，退出重进历史仍保留。记录 App build 和运行 Bridge。 | 原故障与旧/新历史差异已只读复现；本机清理完成，本轮 Bridge 发布进行中。新 Mobile 通用兜底需要独立 App 更新，真机验收待负责人完成。 |
@@ -2842,3 +2848,9 @@ Focused verification ran serially in the task worktree with no booted simulator:
 ### 2026-10-01 — Codex local roster diagnostic prepared
 
 Owner can run a diagnostic on the affected second macOS computer. Added a standalone Node 22 reader for its existing local authenticated Bridge: health, Agents and frozen catalog pages with Mobile contract checks, plus one legacy list comparison on failure. It uses no extra dependencies, native/Relay startup, lifecycle writes, inference or automatic upload. Fixed categories/counts/field names replace payloads, native errors, paths and credentials; deadlines and catalog sizes stay bounded. Eight self-contained corrupted-input/privacy/socket regressions and a real read on this Mac (1,004 valid rows / ten pages) verify the tool, not the second computer's root cause. Its test is wired into the CI-safe gate; original incident remains HT-CODEX-ROSTER-1001 pending the owner's remote report. No distribution package, release, version bump or service configuration change. See [diagnostics](20-connection-diagnostics.md).
+
+### 2026-10-01 — Codex roster model metadata failure confirmed
+
+The owner's affected Mac report at 08:59:19 UTC passed local authentication, health and Agent discovery; fresh sync (2,823 rows / 27 pages) and legacy listing both had exactly 24 invalid rows, solely `model`. This confirms the local descriptor-contract failure behind a ready connection's unusable catalog, independent of multiple saved Codex connections; the metadata-only report does not reveal the exact wrong type or certify inference/native version. Six new regressions failed on the original projection. Codex now omits non-string optional model metadata from every session descriptor and newly indexed native records, retaining all conversations and exact valid model names. Listing leaves old index/native settings intact; no default model selection, client-validator relaxation or other backend changes.
+
+Focused `packages/bridge-runtime/src/codex/service.test.ts` verification passed 156 cases (seven new cases for native types, old indexed/live/archive metadata and native indexing); Bridge types/build checks, docs (seven instruction pairs / five checker cases) and whitespace pass. Full suites and v1 replay remain CI-only. HT-CODEX-ROSTER-1001 now records the confirmed contract defect and original phone acceptance after a separately authorized Bridge update. No version bump, distribution package, publication, installed runtime restart, App update or cloud change.
