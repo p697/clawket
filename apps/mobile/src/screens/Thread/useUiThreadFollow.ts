@@ -21,7 +21,19 @@ import {
  */
 export const FOLLOW_GLIDE_SPRING = { mass: 1, stiffness: 600, damping: 49, overshootClamping: true } as const;
 
-const FOLLOW_SCROLL_EVENTS = ['onScroll', 'onScrollBeginDrag'];
+const FOLLOW_SCROLL_EVENTS = ['onScroll', 'onScrollBeginDrag', 'onScrollEndDrag', 'onMomentumScrollBegin', 'onMomentumScrollEnd'];
+/** A drag or fling with no event for this long no longer holds the list, so a lost end event cannot stop following. */
+export const READER_HOLD_STALE_MS = 1_500;
+
+/**
+ * Whether the reader's drag or fling still owns the list. JS decides to follow
+ * a frame or more after the UI thread sees a drag begin, so a request that
+ * arrives while the reader holds the list is older than the drag.
+ */
+export function readerHoldsList(touching: boolean, flinging: boolean, lastEventAt: number, now: number): boolean {
+  'worklet';
+  return (touching || flinging) && now - lastEventAt < READER_HOLD_STALE_MS;
+}
 
 /** The offset that shows the end of the content, from committed layout. */
 export function followEndOffset(content: MeasuredDimensions | null, viewport: MeasuredDimensions | null): number | null {
@@ -62,7 +74,8 @@ export type UiThreadFollow = Readonly<{
  * issued from JS reaches the screen late and as a jump. Here the offset moves
  * every frame on the UI thread: the end is measured from the committed layout,
  * a critically damped spring carries the list there, a new end re-targets the
- * spring, and the reader's drag stops it before JS hears about the drag.
+ * spring, and the reader's drag or fling stops it before JS hears about it;
+ * a request JS made before hearing about the drag does not move the list.
  */
 export function useUiThreadFollow(callbacks: Readonly<{
   onSettled: (generation: number) => void;
@@ -75,6 +88,9 @@ export function useUiThreadFollow(callbacks: Readonly<{
   const offset = useSharedValue(-1);
   const position = useSharedValue(0);
   const gliding = useSharedValue(false);
+  const readerTouching = useSharedValue(false);
+  const readerFlinging = useSharedValue(false);
+  const readerEventAt = useSharedValue(0);
   const callbacksRef = useRef(callbacks);
   callbacksRef.current = callbacks;
   const settled = useCallback((generation: number) => callbacksRef.current.onSettled(generation), []);
@@ -83,7 +99,16 @@ export function useUiThreadFollow(callbacks: Readonly<{
   const scrollEvents = useEvent<NativeSyntheticEvent<NativeScrollEvent>>((event) => {
     'worklet';
     offset.value = event.contentOffset.y;
-    if (gliding.value && event.eventName.endsWith('onScrollBeginDrag')) {
+    const name = event.eventName;
+    const dragBegins = name.endsWith('onScrollBeginDrag');
+    const flingBegins = name.endsWith('onMomentumScrollBegin');
+    if (dragBegins) readerTouching.value = true;
+    else if (flingBegins) readerFlinging.value = true;
+    else if (name.endsWith('onScrollEndDrag')) readerTouching.value = false;
+    else if (name.endsWith('onMomentumScrollEnd')) readerFlinging.value = false;
+    if (readerTouching.value || readerFlinging.value) readerEventAt.value = Date.now();
+    // The reader takes a glide over before JS hears about the drag.
+    if ((dragBegins || flingBegins) && gliding.value) {
       gliding.value = false;
       cancelAnimation(position);
     }
@@ -121,12 +146,19 @@ export function useUiThreadFollow(callbacks: Readonly<{
       return false;
     }
     offset.value = -1;
+    readerTouching.value = false;
+    readerFlinging.value = false;
     return true;
-  }, [contentRef, offset, scrollRef]);
+  }, [contentRef, offset, readerFlinging, readerTouching, scrollRef]);
 
   const glide = useCallback((generation: number, knownOffset: number) => {
     runOnUI((nextGeneration: number, fallbackOffset: number) => {
       'worklet';
+      if (readerHoldsList(readerTouching.value, readerFlinging.value, readerEventAt.value, Date.now())) {
+        gliding.value = false;
+        cancelAnimation(position);
+        return;
+      }
       const end = scrollRef() && contentRef() ? followEndOffset(measure(contentRef), measure(scrollRef)) : null;
       if (end === null) {
         gliding.value = false;
@@ -146,18 +178,19 @@ export function useUiThreadFollow(callbacks: Readonly<{
         runOnJS(settled)(nextGeneration);
       });
     })(generation, knownOffset);
-  }, [contentRef, gliding, offset, position, scrollRef, settled, unavailable]);
+  }, [contentRef, gliding, offset, position, readerEventAt, readerFlinging, readerTouching, scrollRef, settled, unavailable]);
 
   const snap = useCallback(() => {
     runOnUI(() => {
       'worklet';
       gliding.value = false;
       cancelAnimation(position);
+      if (readerHoldsList(readerTouching.value, readerFlinging.value, readerEventAt.value, Date.now())) return;
       const end = scrollRef() && contentRef() ? followEndOffset(measure(contentRef), measure(scrollRef)) : null;
       if (end === null) runOnJS(unavailable)();
       else scrollTo(scrollRef, 0, end, false);
     })();
-  }, [contentRef, gliding, position, scrollRef, unavailable]);
+  }, [contentRef, gliding, position, readerEventAt, readerFlinging, readerTouching, scrollRef, unavailable]);
 
   const stop = useCallback(() => {
     runOnUI(() => {

@@ -1,5 +1,5 @@
 import { act, renderHook } from '@testing-library/react-native';
-import { FOLLOW_GLIDE_SPRING, followEndOffset, useUiThreadFollow } from './useUiThreadFollow';
+import { FOLLOW_GLIDE_SPRING, READER_HOLD_STALE_MS, followEndOffset, readerHoldsList, useUiThreadFollow } from './useUiThreadFollow';
 
 type MockSpring = {
   to: number;
@@ -249,10 +249,50 @@ it('hands a glide to the reader the moment a drag begins', () => {
   step(mockSprings[0], 990);
   expect(mockScrollTo).not.toHaveBeenCalled();
   expect(onSettled).not.toHaveBeenCalled();
-  // The next glide starts from where the reader left the list.
+  // Once the finger lifts, the next glide starts from where the reader left the list.
   act(() => events.handler(scrollEventFor('onScroll', 700)));
+  act(() => events.handler(scrollEventFor('onScrollEndDrag', 700)));
   act(() => follow.glide(2, 0));
   expect(mockSprings[1]).toMatchObject({ from: 700 });
+});
+
+it('leaves the list to a drag or fling that JS has not heard about yet', () => {
+  const { follow, events } = renderFollow();
+  follow.bind(mockScroller);
+  act(() => events.handler(scrollEventFor('onScrollBeginDrag', 900)));
+  // JS decided to follow before it saw the drag: the request does not move the list.
+  act(() => follow.glide(1, 0));
+  act(() => follow.snap());
+  expect(mockSprings).toHaveLength(0);
+  expect(mockScrollTo).not.toHaveBeenCalled();
+  act(() => events.handler(scrollEventFor('onScrollEndDrag', 860)));
+  act(() => events.handler(scrollEventFor('onMomentumScrollBegin', 860)));
+  act(() => follow.glide(2, 0));
+  expect(mockSprings).toHaveLength(0);
+  act(() => events.handler(scrollEventFor('onMomentumScrollEnd', 640)));
+  act(() => follow.glide(3, 0));
+  expect(mockSprings[0]).toMatchObject({ to: 1000, from: 640 });
+  // A fling that begins during a glide takes it over too.
+  act(() => events.handler(scrollEventFor('onMomentumScrollBegin', 650)));
+  expect(mockSprings[0].done).toBe(true);
+});
+
+it('stops holding the list for a drag whose end never arrived', () => {
+  expect(readerHoldsList(true, false, 1_000, 1_000 + READER_HOLD_STALE_MS - 1)).toBe(true);
+  expect(readerHoldsList(false, true, 1_000, 1_000 + READER_HOLD_STALE_MS - 1)).toBe(true);
+  expect(readerHoldsList(true, true, 1_000, 1_000 + READER_HOLD_STALE_MS)).toBe(false);
+  expect(readerHoldsList(false, false, 1_000, 1_001)).toBe(false);
+  const now = jest.spyOn(Date, 'now').mockReturnValue(10_000);
+  try {
+    const { follow, events } = renderFollow();
+    follow.bind(mockScroller);
+    act(() => events.handler(scrollEventFor('onScrollBeginDrag', 900)));
+    now.mockReturnValue(10_000 + READER_HOLD_STALE_MS);
+    act(() => follow.glide(1, 0));
+    expect(mockSprings[0]).toMatchObject({ to: 1000, from: 900 });
+  } finally {
+    now.mockRestore();
+  }
 });
 
 it('ends a glide with one jump to the end, or where it is when stopped', () => {
