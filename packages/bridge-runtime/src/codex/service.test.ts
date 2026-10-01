@@ -3,6 +3,7 @@ import { mkdtempSync, mkdirSync, rmSync, readFileSync, realpathSync, writeFileSy
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 const mock = vi.hoisted(() => ({ instances: [] as any[], request: vi.fn(), respond: vi.fn(), refuse: vi.fn(), resumeSpeed: vi.fn() }));
 vi.mock('./resume-settings.js', () => ({ nativeResumeSpeed: (...args: any[]) => mock.resumeSpeed(...args) }));
 vi.mock('./rpc.js', async () => {
@@ -27,7 +28,15 @@ import { CodexService } from './service.js';
 import { codexMessages } from './history.js';
 import { DesktopIpcError } from './desktop-ipc.js';
 import { permissionPatch } from './settings.js';
-import { validateRows } from '../../../../scripts/diagnostics/codex-roster.mjs';
+// Use Node's standalone loader rather than Vitest's cross-workspace transform.
+function validateRows(rows: unknown[]) {
+  const diagnostic = new URL('../../../../scripts/diagnostics/codex-roster.mjs', import.meta.url).href;
+  const code = `import { readFileSync } from 'node:fs'; import { validateRows } from ${JSON.stringify(diagnostic)};
+    console.log(JSON.stringify(validateRows(JSON.parse(readFileSync(0, 'utf8')))));`;
+  return JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e', code], {
+    input: JSON.stringify(rows), encoding: 'utf8', timeout: 10_000, maxBuffer: 64 * 1024, windowsHide: true,
+  }));
+}
 let root: string, project: string, service: CodexService, key: string, threadId: string;
 let updates: any[];
 let settings: any;
