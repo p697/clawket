@@ -202,6 +202,8 @@ const UNMEASURED_TIMELINE_LAYOUT: CommittedTimelineLayout = { list: null, conten
 const FOLLOW_GLIDE_MAX_VIEWPORT_RATIO = 0.6;
 /** Longer than the native animated scroll (about 300 ms on iOS, 250 ms on Android). */
 const FOLLOW_GLIDE_SETTLE_MS = 420;
+/** A send whose row never lands in a measured list still lets the composer shrink. */
+const COMPOSER_HOLD_FALLBACK_MS = 320;
 /**
  * The list opens on its newest row. FlashList scrolls to that row's top plus
  * this offset and the native scroll view clamps it to the real end, so a
@@ -760,6 +762,26 @@ export function ThreadView({
     loadedTimelineRef.current !== null && loadedTimelineRef.current === timelineRef.current
   ), []);
   const committedLayoutRef = useRef<CommittedTimelineLayout>(UNMEASURED_TIMELINE_LAYOUT);
+  // A send keeps the composer at the draft's height until the list lays out the
+  // row it sent, so both changes reach the screen in the same frame (Composer
+  // `holdHeight`).
+  const [holdComposerHeight, setHoldComposerHeight] = useState(false);
+  const holdComposerHeightRef = useRef(holdComposerHeight);
+  holdComposerHeightRef.current = holdComposerHeight;
+  const composerHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const releaseComposerHold = useCallback(() => {
+    if (composerHoldTimerRef.current !== null) clearTimeout(composerHoldTimerRef.current);
+    composerHoldTimerRef.current = null;
+    setHoldComposerHeight(false);
+  }, []);
+  useEffect(() => () => {
+    if (composerHoldTimerRef.current !== null) clearTimeout(composerHoldTimerRef.current);
+  }, []);
+  const holdComposerForSend = useCallback(() => {
+    if (composerHoldTimerRef.current !== null) clearTimeout(composerHoldTimerRef.current);
+    composerHoldTimerRef.current = setTimeout(releaseComposerHold, COMPOSER_HOLD_FALLBACK_MS);
+    setHoldComposerHeight(true);
+  }, [releaseComposerHold]);
   const composerExpandedRef = useRef(composerExpanded);
   composerExpandedRef.current = composerExpanded;
   const bottomFollowFrameRef = useRef<number | null>(null);
@@ -831,6 +853,10 @@ export function ThreadView({
     if (previous?.content === content && previous.viewport === viewport) return;
     const { tailKey, rows } = committedRowsRef.current;
     committedLayoutRef.current = { list, content, viewport, tailKey, rows };
+    // The sent row is laid out: the held composer shrinks in this same commit.
+    if (holdComposerHeightRef.current && previous && rows > previous.rows && tailKey !== previous.tailKey) {
+      releaseComposerHold();
+    }
     if (!previous || !timelineLoaded() || composerExpandedRef.current || returningToBottomRef.current) return;
     // Virtualized history replaces estimated row heights while scrolling.
     // A smaller total is not evidence that the reader is beyond the end:
@@ -847,7 +873,7 @@ export function ThreadView({
     const glide = withinBudget && (followGlideRef.current
       || (appended && growth > 0 && viewport === previous.viewport));
     followToEnd(glide);
-  }, [cancelBottomFollow, followToEnd, timelineLoaded]);
+  }, [cancelBottomFollow, followToEnd, releaseComposerHold, timelineLoaded]);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const scrollButtonProgress = useSharedValue(0);
   useEffect(() => {
@@ -1448,7 +1474,8 @@ export function ThreadView({
               queue: copy.queueSend,
             }}
             onChangeText={onChangeInput}
-            onSend={() => { onSend(); setComposerExpanded(false); }}
+            onSend={() => { holdComposerForSend(); onSend(); setComposerExpanded(false); }}
+            holdHeight={holdComposerHeight}
             // While the message is still leaving there is no run to stop yet; Stop shows, dimmed.
             onStop={canCancel && (isRunning || !sendInFlight) ? onCancel : undefined}
             onAddPress={canOpenAddMenu ? onOpenAddMenu : undefined}
