@@ -65,6 +65,7 @@ import { MessageEntrance } from '../../components/chat/MessageEntrance';
 import { MessageMeta, messageMetaSpacer } from '../../components/chat/MessageMeta';
 import { ChatBackgroundLayer } from '../../components/chat/ChatBackgroundLayer';
 import { ChatWallpaperScrim } from '../../components/chat/ChatWallpaperScrim';
+import { chatWallpaperDriftPosition, chatWallpaperDriftScrims } from '../../theme/chat-wallpaper';
 import { isChatWallpaperActive, resolveChatSurfaces } from '../../features/chat-appearance/resolver';
 import { DEFAULT_CHAT_APPEARANCE } from '../../features/chat-appearance/defaults';
 import type { ChatAppearanceSettings } from '../../types';
@@ -591,6 +592,15 @@ export function ThreadView({
   // floating chrome melts into it; the timeline reads the same surfaces
   // through the presentation context.
   const surfaces = useMemo(() => resolveChatSurfaces(theme, chatAppearance, accentId), [accentId, chatAppearance, theme]);
+  // The built-in wallpaper drifts one step per send (A+ motion prototype); the
+  // scrims fade from the colors it shows at the screen's top and bottom.
+  const [wallpaperDrift, setWallpaperDrift] = useState(0);
+  const windowSize = useWindowDimensions();
+  const [screenSize, setScreenSize] = useState<{ width: number; height: number } | null>(null);
+  const screenAspect = (screenSize?.height ?? windowSize.height) / Math.max(1, screenSize?.width ?? windowSize.width);
+  const scrim = useMemo(() => (surfaces.wallpaper === 'pattern'
+    ? chatWallpaperDriftScrims(surfaces.palette, chatWallpaperDriftPosition(reduceMotion ? 0 : wallpaperDrift), screenAspect)
+    : surfaces.scrim), [reduceMotion, screenAspect, surfaces, wallpaperDrift]);
   const offline = state.kind === 'offline' || state.kind === 'error';
   const [savedScope, setSavedScope] = useState<string | null>(null);
   const readableScope = `${connectionFailure?.scope ?? ''}\u0000${sessionKey ?? ''}`;
@@ -1178,9 +1188,13 @@ export function ThreadView({
     <ChatPresentationProvider value={presentation}>
     <ArtifactProvider operations={artifactOperations} sessionKey={sessionKey}>
     <ThreadLiveActivityContext.Provider value={liveActivity}>
-    <View testID={testID} style={[styles.screen, { backgroundColor: theme.colors.canvas }]}>
+    <View testID={testID} style={[styles.screen, { backgroundColor: theme.colors.canvas }]}
+      onLayout={({ nativeEvent }) => {
+        const { width, height } = nativeEvent.layout;
+        setScreenSize((previous) => (previous?.width === width && previous.height === height ? previous : { width, height }));
+      }}>
     {/* The wallpaper sits under the whole screen and stays put while the keyboard pads the content. */}
-    <ChatBackgroundLayer appearance={chatAppearance} />
+    <ChatBackgroundLayer appearance={chatAppearance} driftStep={wallpaperDrift} />
     <KeyboardAvoidingView
       behavior="padding"
       // The keyboard already covers the home-indicator inset; retain only the control gap.
@@ -1200,7 +1214,7 @@ export function ThreadView({
         <ChatWallpaperScrim
           testID={`${testID}-header-scrim`}
           edge="top"
-          color={surfaces.scrim.top}
+          color={scrim.top}
           opacity={wallpaperActive ? scrimOpacity.top : 1}
           hold={wallpaperActive ? scrimHold : undefined}
           style={wallpaperActive ? styles.headerScrimImmersive : styles.headerScrimTail}
@@ -1383,7 +1397,7 @@ export function ThreadView({
         style={{ height: composerExpanded ? compactComposerHeight.current : 0 }} />
 
       {sessionPreview ? <View style={wallpaperActive ? null : { backgroundColor: theme.colors.canvas }}>
-        {wallpaperActive ? <ChatWallpaperScrim edge="bottom" color={surfaces.scrim.bottom} opacity={scrimOpacity.bottom} hold={scrimHold} /> : null}
+        {wallpaperActive ? <ChatWallpaperScrim edge="bottom" color={scrim.bottom} opacity={scrimOpacity.bottom} hold={scrimHold} /> : null}
         <SessionPreviewFooter onUpgrade={sessionPreview.onUpgrade}
           onMain={sessionPreview.onMain} mainLabel={sessionPreview.mainLabel} bottomInset={bottomInset} loading={sessionPreview.loading} />
       </View> : null}
@@ -1402,7 +1416,7 @@ export function ThreadView({
         >
           {wallpaperActive && !composerExpanded ? (
             <ChatWallpaperScrim testID={`${testID}-composer-scrim`} edge="bottom"
-              color={surfaces.scrim.bottom} opacity={scrimOpacity.bottom} hold={scrimHold} />
+              color={scrim.bottom} opacity={scrimOpacity.bottom} hold={scrimHold} />
           ) : null}
           {showSlashSuggestions && onSelectSlashCommand ? (
             <View style={styles.slashSuggestions}>
@@ -1474,7 +1488,7 @@ export function ThreadView({
               queue: copy.queueSend,
             }}
             onChangeText={onChangeInput}
-            onSend={() => { holdComposerForSend(); onSend(); setComposerExpanded(false); }}
+            onSend={() => { holdComposerForSend(); setWallpaperDrift((step) => step + 1); onSend(); setComposerExpanded(false); }}
             holdHeight={holdComposerHeight}
             // While the message is still leaving there is no run to stop yet; Stop shows, dimmed.
             onStop={canCancel && (isRunning || !sendInFlight) ? onCancel : undefined}

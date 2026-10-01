@@ -1,6 +1,10 @@
-import React, { useId } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import { StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
+import { useReducedMotion } from 'react-native-reanimated';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
+import { mixColors } from '../../theme/color';
+import { Motion } from '../../theme/tokens';
+import { cubicBezier } from '../../utils/cubic-bezier';
 
 export type ChatWallpaperScrimEdge = 'top' | 'bottom';
 
@@ -30,8 +34,43 @@ const HOLD_OPACITY_RATIO = 0.62;
  * takes no touches and no layout of its own: the host positions it under the
  * header or the composer dock and it fills that box.
  */
-export function ChatWallpaperScrim({ edge, color, opacity, hold, style, testID }: Props): React.JSX.Element {
+const DRIFT_EASING = cubicBezier(...Motion.wallpaper.curve);
+
+/**
+ * Eases from the color on screen to `target` with the wallpaper's drift, so a
+ * scrim keeps fading from the color behind it while the gradient slides. Only
+ * this scrim re-renders: SVG stops cannot be animated on the UI thread.
+ */
+function useDriftingColor(target: string): string {
+  const reduceMotion = useReducedMotion();
+  const [shown, setShown] = useState(target);
+  const shownRef = useRef(target);
+  useEffect(() => {
+    if (shownRef.current === target) return undefined;
+    if (reduceMotion) {
+      shownRef.current = target;
+      setShown(target);
+      return undefined;
+    }
+    const from = shownRef.current;
+    const start = Date.now();
+    let frame = 0;
+    const tick = () => {
+      const progress = Math.min(1, (Date.now() - start) / Motion.wallpaper.duration);
+      const next = progress >= 1 ? target : mixColors(from, target, DRIFT_EASING(progress));
+      shownRef.current = next;
+      setShown(next);
+      if (progress < 1) frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [reduceMotion, target]);
+  return shown;
+}
+
+export function ChatWallpaperScrim({ edge, color: target, opacity, hold, style, testID }: Props): React.JSX.Element {
   const gradientId = `chat-wallpaper-scrim-${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
+  const color = useDriftingColor(target);
   const anchoredAtTop = edge === 'top';
   return (
     <View testID={testID} pointerEvents="none" style={[StyleSheet.absoluteFill, style]}>

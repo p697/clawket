@@ -13,7 +13,7 @@ import { buildTheme } from '../../theme/theme';
 import { ControlSize, FontSize, Motion, Radius, Space } from '../../theme/tokens';
 import { DEFAULT_CHAT_APPEARANCE } from '../../features/chat-appearance/defaults';
 import { resolveChatChromeAppearance } from '../../features/chat-appearance/resolver';
-import { CHAT_PHOTO_SERVICE, chatWallpaperPalettes } from '../../theme/chat-wallpaper';
+import { CHAT_PHOTO_SERVICE, chatWallpaperDriftScrims, chatWallpaperPalettes } from '../../theme/chat-wallpaper';
 import type { SharedValue } from 'react-native-reanimated';
 import type { ComposerHandle } from '../../components/ui/Composer';
 import type { UiMessage } from '../../types/chat';
@@ -2483,13 +2483,24 @@ describe.each(['light', 'dark'] as const)('immersive wallpaper in %s', (scheme) 
   });
 
   it('draws the built-in wallpaper by default and melts the scrims into its own colors', () => {
+    jest.useFakeTimers();
     const view = render(<ThreadView {...createProps({ topInset: Space.xl })} />);
     const palette = chatWallpaperPalettes.iceBlue[scheme];
     expect(view.getByTestId('chat-background-layer-pattern')).toBeTruthy();
     const stops = (testID: string) => view.getByTestId(testID).findAll((node) => (node.type as unknown) === 'Stop')
       .map((node) => node.props.stopColor);
-    expect(new Set(stops('thread-screen-header-scrim'))).toEqual(new Set([palette.gradient[0]]));
-    expect(new Set(stops('thread-screen-composer-scrim'))).toEqual(new Set([palette.gradient[2]]));
+    // At rest the scrims fade from the wallpaper's colors at the screen's top and bottom.
+    const rest = chatWallpaperDriftScrims(palette, [0, 0], 852 / 393);
+    expect(new Set(stops('thread-screen-header-scrim'))).toEqual(new Set([rest.top]));
+    expect(new Set(stops('thread-screen-composer-scrim'))).toEqual(new Set([rest.bottom]));
+    // A send drifts the wallpaper one step: the scrims head for the colors of the next window.
+    fireEvent.press(view.getByTestId('thread-screen-composer-primary'));
+    expect(view.getByTestId('chat-background-layer-pattern-gradient')).toBeTruthy();
+    const next = chatWallpaperDriftScrims(palette, [0.45, 0.35], 852 / 393);
+    expect(next.top).not.toBe(rest.top);
+    act(() => jest.advanceTimersByTime(700));
+    expect(new Set(stops('thread-screen-header-scrim'))).toEqual(new Set([next.top]));
+    expect(new Set(stops('thread-screen-composer-scrim'))).toEqual(new Set([next.bottom]));
     const glass = resolveChatChromeAppearance(theme());
     expect(flattenStyle(view.getByTestId('thread-screen-header-pill').props.style).backgroundColor).toBe(glass.backgroundColor);
     // One row (A+): the capsule and both circles float on glass, the row itself stays clear.

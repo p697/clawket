@@ -1,7 +1,14 @@
-import React, { useId } from 'react';
-import { StyleSheet, View } from 'react-native';
-import Svg, { Circle, Defs, Ellipse, G, LinearGradient, Path, Pattern, Rect, Stop } from 'react-native-svg';
-import type { ChatWallpaperPalette } from '../../theme/chat-wallpaper';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { type LayoutChangeEvent, StyleSheet, View } from 'react-native';
+import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
+import Svg, { Circle, Defs, Ellipse, G, Path, Pattern, Rect } from 'react-native-svg';
+import {
+  CHAT_WALLPAPER_DRIFT_SCALE,
+  chatWallpaperDriftGradient,
+  chatWallpaperDriftPosition,
+  type ChatWallpaperPalette,
+} from '../../theme/chat-wallpaper';
+import { Motion } from '../../theme/tokens';
 
 /** One doodle tile, in points; the pattern repeats it edge to edge. */
 export const CHAT_WALLPAPER_TILE = 132;
@@ -9,30 +16,63 @@ const DOODLE_STROKE_WIDTH = 1.4;
 
 type Props = Readonly<{
   palette: ChatWallpaperPalette;
+  /** Sends so far: each one drifts the gradient to the next position. Omitted, it rests. */
+  driftStep?: number;
   testID?: string;
 }>;
+
+const DRIFT_TIMING = {
+  duration: Motion.wallpaper.duration,
+  easing: Easing.bezier(...Motion.wallpaper.curve),
+};
 
 /**
  * The built-in chat wallpaper: a soft 165° gradient of the accent family
  * under a faint repeating tile of Clawket doodles (paw, sparkles, terminal
- * prompt, clock, speech bubble, code brackets). It is one static drawing, so
- * scrolling never repaints it, and it takes no touches.
+ * prompt, clock, speech bubble, code brackets). Scrolling never repaints it,
+ * and it takes no touches.
+ *
+ * The gradient is a native layer three times the screen in each direction;
+ * each send slides it to the next window (`driftStep`) on the UI thread while
+ * the doodles stay put. The first window is the resting wallpaper, and
+ * reduced motion keeps it there.
  */
-export const ChatWallpaper = React.memo(function ChatWallpaper({ palette, testID }: Props): React.JSX.Element {
+export const ChatWallpaper = React.memo(function ChatWallpaper({ palette, driftStep, testID }: Props): React.JSX.Element {
   const id = useId().replace(/[^a-zA-Z0-9]/g, '');
-  const gradientId = `chat-wallpaper-gradient-${id}`;
   const doodlesId = `chat-wallpaper-doodles-${id}`;
-  const [top, middle, bottom] = palette.gradient;
+  const reduceMotion = useReducedMotion();
+  const gradient = useMemo(() => chatWallpaperDriftGradient(palette), [palette]);
+  const [size, setSize] = useState<{ width: number; height: number } | null>(null);
+  const handleLayout = (event: LayoutChangeEvent) => {
+    const { width, height } = event.nativeEvent.layout;
+    setSize((previous) => (previous?.width === width && previous.height === height ? previous : { width, height }));
+  };
+  const position = chatWallpaperDriftPosition(reduceMotion ? 0 : driftStep ?? 0);
+  const offsetX = useSharedValue(0);
+  const offsetY = useSharedValue(0);
+  // Only a new send glides; the first measurement and a new size place the window at once.
+  const placedRef = useRef<{ step: number; width: number; height: number } | null>(null);
+  useEffect(() => {
+    if (!size) return;
+    const x = -position[0] * (CHAT_WALLPAPER_DRIFT_SCALE - 1) * size.width;
+    const y = -position[1] * (CHAT_WALLPAPER_DRIFT_SCALE - 1) * size.height;
+    const step = driftStep ?? 0;
+    const placed = placedRef.current;
+    const glide = !reduceMotion && placed !== null && placed.width === size.width && placed.height === size.height
+      && placed.step !== step;
+    placedRef.current = { step, width: size.width, height: size.height };
+    offsetX.value = glide ? withTiming(x, DRIFT_TIMING) : x;
+    offsetY.value = glide ? withTiming(y, DRIFT_TIMING) : y;
+  }, [driftStep, offsetX, offsetY, position, reduceMotion, size]);
+  const driftStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: offsetX.value }, { translateY: offsetY.value }],
+  }));
   return (
-    <View testID={testID} pointerEvents="none" style={StyleSheet.absoluteFill}>
+    <View testID={testID} pointerEvents="none" style={StyleSheet.absoluteFill} onLayout={handleLayout}>
+      <Animated.View testID={testID ? `${testID}-gradient` : undefined}
+        style={[styles.drift, { experimental_backgroundImage: gradient }, driftStyle]} />
       <Svg width="100%" height="100%">
         <Defs>
-          {/* 165° reads as a gentle top-left to bottom-right drift on a portrait screen. */}
-          <LinearGradient id={gradientId} x1="0.3" y1="0" x2="0.7" y2="1">
-            <Stop offset="0" stopColor={top} />
-            <Stop offset="0.45" stopColor={middle} />
-            <Stop offset="1" stopColor={bottom} />
-          </LinearGradient>
           <Pattern id={doodlesId} patternUnits="userSpaceOnUse" width={CHAT_WALLPAPER_TILE} height={CHAT_WALLPAPER_TILE}>
             <G
               fill="none"
@@ -76,9 +116,18 @@ export const ChatWallpaper = React.memo(function ChatWallpaper({ palette, testID
             </G>
           </Pattern>
         </Defs>
-        <Rect x="0" y="0" width="100%" height="100%" fill={`url(#${gradientId})`} />
         <Rect x="0" y="0" width="100%" height="100%" fill={`url(#${doodlesId})`} />
       </Svg>
     </View>
   );
+});
+
+const styles = StyleSheet.create({
+  drift: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    width: `${CHAT_WALLPAPER_DRIFT_SCALE * 100}%`,
+    height: `${CHAT_WALLPAPER_DRIFT_SCALE * 100}%`,
+  },
 });

@@ -212,6 +212,7 @@ describe('Clawket 3.0 theme tokens', () => {
       morph: { duration: 150, startScale: 0.6 },
       step: { duration: 160, rise: 6 },
       status: { duration: 200, rise: 4 },
+      wallpaper: { duration: 600, curve: [0.2, 0.01, 0.28, 0.91] },
     });
     expect(Shadow.floating).toEqual({
       shadowColor: '#111113',

@@ -3,7 +3,7 @@ import { render } from '@testing-library/react-native';
 import { builtInAccents } from '../../theme/accents';
 import { buildTheme } from '../../theme/theme';
 import { withAlpha } from '../../theme/color';
-import { chatWallpaperPalettes } from '../../theme/chat-wallpaper';
+import { chatWallpaperDriftGradient, chatWallpaperPalettes } from '../../theme/chat-wallpaper';
 import { DEFAULT_CHAT_APPEARANCE } from '../../features/chat-appearance/defaults';
 import type { ChatAppearanceSettings } from '../../types/chat-appearance';
 import { ChatBackgroundLayer } from './ChatBackgroundLayer';
@@ -83,8 +83,11 @@ describe.each(['light', 'dark'] as const)('ChatBackgroundLayer in %s', (scheme) 
     mockAccentId = 'jadeGreen';
     const palette = chatWallpaperPalettes.jadeGreen[scheme];
     const view = render(<ChatBackgroundLayer appearance={DEFAULT_CHAT_APPEARANCE} />);
-    const stops = view.UNSAFE_root.findAll((node) => (node.type as unknown) === 'Stop');
-    expect(stops.map((node) => node.props.stopColor)).toEqual([...palette.gradient]);
+    // One native gradient three screens wide and tall: each send slides it to the next window.
+    expect(flattenStyle(view.getByTestId('chat-background-layer-pattern-gradient').props.style)).toMatchObject({
+      position: 'absolute', left: 0, top: 0, width: '300%', height: '300%',
+      experimental_backgroundImage: chatWallpaperDriftGradient(palette),
+    });
     const doodles = view.UNSAFE_root.findAll((node) => (node.type as unknown) === 'G' && node.props.stroke !== undefined);
     expect(doodles[0]?.props).toMatchObject({ stroke: palette.doodle, strokeOpacity: palette.doodleOpacity, fill: 'none' });
   });

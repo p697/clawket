@@ -67,3 +67,16 @@ export function blendOntoBacking(tint: string, backing: string): string {
   const blend = (a: number, b: number) => Math.round(a * alpha + b * (1 - alpha));
   return `rgb(${blend(front.r, back.r)},${blend(front.g, back.g)},${blend(front.b, back.b)})`;
 }
+
+function toHexChannel(value: number): string {
+  return Math.round(clamp(value, 0, 255)).toString(16).padStart(2, '0').toUpperCase();
+}
+
+/** A straight sRGB mix of two opaque theme colors as `#RRGGBB`; unparsable input keeps the nearer end. */
+export function mixColors(from: string, to: string, amount: number): string {
+  const a = parseColor(from);
+  const b = parseColor(to);
+  if (!a || !b) return amount < 0.5 ? from : to;
+  const t = clamp(amount, 0, 1);
+  return `#${toHexChannel(a.r + (b.r - a.r) * t)}${toHexChannel(a.g + (b.g - a.g) * t)}${toHexChannel(a.b + (b.b - a.b) * t)}`;
+}

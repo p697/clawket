@@ -10,6 +10,8 @@ import { ChatWallpaper } from './ChatWallpaper';
 
 type Props = {
   appearance: ChatAppearanceSettings;
+  /** Sends so far; the built-in wallpaper drifts one step per send (see `ChatWallpaper`). */
+  driftStep?: number;
   imageUri?: string | null;
   style?: StyleProp<ViewStyle>;
   borderRadius?: number;
@@ -26,6 +28,7 @@ type Props = {
  */
 export function ChatBackgroundLayer({
   appearance,
+  driftStep,
   imageUri,
   style,
   borderRadius = 0,
@@ -40,7 +43,7 @@ export function ChatBackgroundLayer({
   if (kind === 'pattern') {
     return (
       <View testID={testID} pointerEvents="none" style={rootStyle}>
-        <ChatWallpaper testID={`${testID}-pattern`} palette={resolveChatWallpaperPalette(accentId, theme.scheme)} />
+        <ChatWallpaper testID={`${testID}-pattern`} palette={resolveChatWallpaperPalette(accentId, theme.scheme)} driftStep={driftStep} />
       </View>
     );
   }

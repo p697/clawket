@@ -279,6 +279,7 @@ export const Motion = {
    * `startScale` and `startOpacity`. `morph`: send / stop / mic replace one
    * another in the composer slot. `step`: a live pill's new step slides in.
    * `status`: the header's status sentence fades in and rises `statusRise`.
+   * `wallpaper`: the built-in wallpaper's gradient drifts one step per send.
    */
   send: {
     duration: 300,
@@ -292,4 +293,5 @@ export const Motion = {
   morph: { duration: 150, startScale: 0.6 },
   step: { duration: 160, rise: 6 },
   status: { duration: 200, rise: 4 },
+  wallpaper: { duration: 600, curve: [0.2, 0.01, 0.28, 0.91] },
 } as const;
