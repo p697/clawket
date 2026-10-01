@@ -12,7 +12,7 @@ import Animated, {
 import { useVoiceGesture } from '../../chat/useVoiceGesture';
 import { VoiceWaveform } from './VoiceWaveform';
 import { SwapEntrance } from './SwapEntrance';
-import { editorTextRaise } from '../../chat/textCentering';
+import { editorIncludeFontPadding, editorTextRaise } from '../../chat/textCentering';
 import { countDraftLines } from '../../chat/composerDraftLines';
 import { shouldCaptureComposerKeyboardDismiss } from '../../chat/composerKeyboardDismiss';
 import { useAppTheme } from '../../theme';
@@ -193,9 +193,11 @@ export const Composer = React.forwardRef<ComposerHandle, ComposerProps>(function
   const toolbarAccessory = typeof accessory === 'function' ? accessory({ drafting: false, room: null }) : accessory;
   const voiceHint = voiceState === 'transcribing' ? t('Transcribing…')
     : voiceRecordingSaved ? t('Recording saved locally · Transcription paused') : voiceGesture.holding ? t(voiceGesture.cancelling ? 'Release to cancel' : 'Release to send · Slide up to cancel') : t('Listening…');
-  // The native editor leaves its line low (`chat/textCentering`): its text,
-  // caret and placeholder rise together.
+  // The native editor leaves its line off-center (`chat/textCentering`): its
+  // text, caret and placeholder rise together, and on Android under a Latin
+  // placeholder font padding lowers the placeholder and an empty caret.
   const editorRaise = editorTextRaise(inputPlaceholder, FontSize.body, LineHeight.body) * fontScale;
+  const editorFontPadding = editorIncludeFontPadding(inputPlaceholder);
   const inputProps: TextInputProps & { ref: React.Ref<TextInput>; value: string } = {
     ref: inputRef,
     testID: testID ? `${testID}-input` : undefined,
@@ -204,7 +206,8 @@ export const Composer = React.forwardRef<ComposerHandle, ComposerProps>(function
     placeholderTextColor: theme.colors.inkTertiary,
     // A bounded native Text measurement sizes the shell without changing the
     // native-owned input or relying on delayed Fabric content-size events.
-    style: [styles.input, { color: inputInk }, editorRaise ? { transform: [{ translateY: -editorRaise }] } : null,
+    style: [styles.input, { color: inputInk }, editorFontPadding ? styles.inputFontPadding : null,
+      editorRaise ? { transform: [{ translateY: -editorRaise }] } : null,
       expanded ? styles.expandedInput : { minHeight: ControlSize.pill, maxHeight, paddingRight: inputEndInset }],
     // Manual edits during dictation would be overwritten by the next transcript.
     editable: editable && !voiceActive, autoFocus, maxLength,
@@ -441,6 +444,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     voiceHint: { color: colors.inkSecondary, fontSize: FontSize.secondary, lineHeight: LineHeight.secondary, textAlign: 'center' },
     input: { flex: 1, alignSelf: 'stretch', color: colors.ink, fontSize: FontSize.body, lineHeight: LineHeight.body, includeFontPadding: false,
       fontWeight: FontWeight.regular, paddingLeft: 0, paddingRight: 0, paddingVertical: Space.sm },
+    inputFontPadding: { includeFontPadding: true },
     expandedInput: { alignSelf: 'stretch', paddingRight: 0 },
     measurement: { position: 'absolute', left: Space.sm,
       opacity: 0, fontSize: FontSize.body, lineHeight: LineHeight.body, fontWeight: FontWeight.regular, includeFontPadding: false },

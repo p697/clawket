@@ -955,6 +955,32 @@ describe('long-form composer', () => {
     }
   });
 
+  it('pads the Android editor under a Latin placeholder so its hint and empty caret sit on the typed line', () => {
+    const { Platform } = require('react-native');
+    const previousPlatform = Platform.OS;
+    Platform.OS = 'android';
+    const props = { testID: 'editor', value: '', accessibilityLabels: labels, onChangeText: jest.fn(), onSend: jest.fn() };
+    const view = render(<Composer {...props} placeholder="Message" />);
+    try {
+      const input = () => flattenStyle(view.getByTestId('editor-input').props.style);
+      expect(input()).toMatchObject({ includeFontPadding: true, lineHeight: LineHeight.body });
+      expect(input().transform).toBeUndefined();
+      // Static per placeholder: neither the first keystroke nor a cleared draft changes it.
+      view.rerender(<Composer {...props} value="h" placeholder="Message" />);
+      expect(input().includeFontPadding).toBe(true);
+      view.rerender(<Composer {...props} value="" placeholder="Message" />);
+      expect(input().includeFontPadding).toBe(true);
+      view.rerender(<Composer {...props} placeholder="输入消息" />);
+      expect(input().includeFontPadding).toBe(false);
+      Platform.OS = 'ios';
+      view.rerender(<Composer {...props} placeholder="Message" />);
+      expect(input().includeFontPadding).toBe(false);
+    } finally {
+      view.unmount();
+      Platform.OS = previousPlatform;
+    }
+  });
+
   it('gives the iOS editor the baseline offset React Native leaves out, whatever the script', () => {
     const props = { testID: 'editor', value: '', accessibilityLabels: labels, onChangeText: jest.fn(), onSend: jest.fn() };
     const view = render(<Composer {...props} placeholder="Message" />);
