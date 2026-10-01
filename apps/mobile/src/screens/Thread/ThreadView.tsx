@@ -212,6 +212,8 @@ const COMPOSER_HOLD_FALLBACK_MS = 320;
 const INITIAL_SCROLL_TO_END = { viewOffset: 1_000_000 } as const;
 /** Reveals a list that opened on saved rows even if its load never reports. */
 const TIMELINE_PLACEMENT_TIMEOUT_MS = 320;
+/** Placed saved history fades in rather than appearing at once on an empty conversation. */
+const TIMELINE_REVEAL_TIMING = { duration: Motion.duration.normal, easing: Easing.out(Easing.quad) };
 const EMPTY_HINT_EXIT = FadeOut.duration(Motion.duration.fast);
 const getTimelineRowKey = (row: ThreadTimelineRow): string => row.key;
 const getTimelineRowType = (row: ThreadTimelineRow): string => row.type;
@@ -1583,6 +1585,15 @@ const ThreadTimelineList = React.forwardRef(function ThreadTimelineList(
 ): React.JSX.Element {
   const [initialScrollIndex] = useState(() => (data.length > 0 ? data.length - 1 : undefined));
   const [placing, setPlacing] = useState(() => data.length > 0);
+  const reduceMotion = useReducedMotion();
+  const revealed = useSharedValue(placing ? 0 : 1);
+  const revealDoneRef = useRef(!placing);
+  useEffect(() => {
+    if (placing || revealDoneRef.current) return;
+    revealDoneRef.current = true;
+    revealed.value = reduceMotion ? 1 : withTiming(1, TIMELINE_REVEAL_TIMING);
+  }, [placing, reduceMotion, revealed]);
+  const revealStyle = useAnimatedStyle(() => ({ opacity: revealed.value }));
   const revealFrameRef = useRef<number | null>(null);
   useEffect(() => {
     if (!placing) return undefined;
@@ -1602,8 +1613,8 @@ const ThreadTimelineList = React.forwardRef(function ThreadTimelineList(
     });
   }, [onLoad]);
   return (
-    <View testID={props.testID ? `${props.testID}-frame` : undefined}
-      style={[stylesStatic.timelineFill, placing ? stylesStatic.timelinePlacing : null]}>
+    <Animated.View testID={props.testID ? `${props.testID}-frame` : undefined}
+      style={[stylesStatic.timelineFill, revealStyle]}>
       <FlashList
         ref={ref}
         data={data}
@@ -1612,7 +1623,7 @@ const ThreadTimelineList = React.forwardRef(function ThreadTimelineList(
         onLoad={handleLoad}
         {...props}
       />
-    </View>
+    </Animated.View>
   );
 });
 
@@ -2425,7 +2436,6 @@ const rowGapStyles = StyleSheet.create<Record<ThreadRowGap, ViewStyle>>({
 
 const stylesStatic = StyleSheet.create({
   timelineFill: { flex: 1 },
-  timelinePlacing: { opacity: 0 },
   // A time label heads the group below it: its gap above comes from the
   // rhythm, and it owns the space down to the first row of the group.
   timeSeparator: { alignItems: 'center', paddingBottom: Space.md },

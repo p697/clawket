@@ -271,6 +271,7 @@ jest.mock('react-native-reanimated', () => {
       cubic: 'cubic',
       ease: 'ease',
       linear: 'linear',
+      quad: 'quad',
       inOut: (value: unknown) => value,
       out: (value: unknown) => ({ kind: 'out', value }),
       bezier: (...points: number[]) => ({ kind: 'bezier', points }),
@@ -2656,7 +2657,7 @@ describe('messenger timeline layout', () => {
     const timeline = view.getByTestId('thread-screen-timeline');
     expect(timeline.props.data).toEqual([]);
     expect(timeline.props.initialScrollIndex).toBeUndefined();
-    expect(frameOpacity(view)).toBeUndefined();
+    expect(frameOpacity(view)).toBe(1);
     const hint = view.getByTestId('thread-screen-empty');
     expect(hint.props.pointerEvents).toBe('none');
     expect(hint.props.exiting).toMatchObject({ name: 'FadeOut', durationMs: Motion.duration.fast });
@@ -2667,7 +2668,7 @@ describe('messenger timeline layout', () => {
     expect(view.getByTestId('thread-screen-timeline')).toBe(timeline);
     expect(view.queryByTestId('thread-screen-empty')).toBeNull();
     expect(view.getByTestId('thread-bubble-usr_1')).toBeTruthy();
-    expect(frameOpacity(view)).toBeUndefined();
+    expect(frameOpacity(view)).toBe(1);
     expect(entranceCalls()).toHaveLength(1);
   });
 
@@ -2685,28 +2686,45 @@ describe('messenger timeline layout', () => {
     expect(view.getByTestId('thread-screen-empty').props.exiting).toBeUndefined();
   });
 
-  it('opens saved history hidden until its first load settles, then shows it complete', () => {
+  const revealFades = () => {
+    const { withTiming } = require('react-native-reanimated') as { withTiming: jest.Mock };
+    return withTiming.mock.calls.filter(([value, config]) => {
+      const timing = config as { duration?: number; easing?: { value?: unknown } } | undefined;
+      return value === 1 && timing?.duration === Motion.duration.normal && timing.easing?.value === 'quad';
+    });
+  };
+
+  it('opens saved history hidden until its first load settles, then fades it in complete', () => {
     jest.useFakeTimers();
+    const { withTiming } = require('react-native-reanimated') as { withTiming: jest.Mock };
+    withTiming.mockClear();
     const view = render(<ThreadView {...createProps()} />);
     expect(frameOpacity(view)).toBe(0);
     fireEvent(view.getByTestId('thread-screen-timeline'), 'load', { elapsedTimeInMs: 5 });
     expect(frameOpacity(view)).toBe(0);
+    expect(revealFades()).toHaveLength(0);
     act(() => jest.advanceTimersByTime(20));
-    expect(frameOpacity(view)).toBeUndefined();
+    expect(frameOpacity(view)).toBe(1);
+    expect(revealFades()).toEqual([[1, { duration: Motion.duration.normal, easing: { kind: 'out', value: 'quad' } }]]);
     // A later reply never hides the list again.
     view.rerender(<ThreadView {...createProps({ messages: [
       { id: 'message-2', role: 'assistant', text: 'More' },
       { id: 'message-1', role: 'assistant', text: 'Ready to help.' },
     ] })} />);
-    expect(frameOpacity(view)).toBeUndefined();
+    expect(frameOpacity(view)).toBe(1);
+    expect(revealFades()).toHaveLength(1);
   });
 
-  it('reveals saved history even when the list never reports its load', () => {
+  it('reveals saved history even when the list never reports its load, at once under reduced motion', () => {
     jest.useFakeTimers();
+    mockReducedMotion = true;
+    const { withTiming } = require('react-native-reanimated') as { withTiming: jest.Mock };
+    withTiming.mockClear();
     const view = render(<ThreadView {...createProps()} />);
     expect(frameOpacity(view)).toBe(0);
     act(() => jest.advanceTimersByTime(400));
-    expect(frameOpacity(view)).toBeUndefined();
+    expect(frameOpacity(view)).toBe(1);
+    expect(revealFades()).toHaveLength(0);
   });
 
   it('holds the composer at the sent draft height until the list lays out the sent row', () => {
