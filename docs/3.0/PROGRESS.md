@@ -1,5 +1,10 @@
 # PROGRESS · Clawket 3.0 进度日志
 
+- 2026-10-01 聊天界面 A+ 第 4 步「动效与手感」第三批之二：发送时壁纸渐变挪一步（负责人：剩下 4 条动效全部落地；出自已定稿的动效原型）。
+  - 改法：图案壁纸的渐变改为原生绘制（`experimental_backgroundImage`），画在一块三倍屏幕大的图层上，SVG 只画涂鸦。每发一条消息，图层用 `Motion.wallpaper`（600ms，原型的曲线）挪到四个位置中的下一个；色标循环排列，任何位置看到的都是一段自然的渐变。顶部和输入栏的渐隐层取渐变在屏幕上下边缘的颜色（`chatWallpaperDriftScrims`），按同一曲线换色。减少动态效果时壁纸不动；照片和纯色不受影响。
+  - 真机验证：SM-A566B QA 包，逐帧采样屏幕左边缘的纯壁纸。浅色发送后约 500ms 内从 (224,233,249) 变到 (239,232,249)；深色从 (15,24,47) 变到 (17,20,42)。顶部渐隐层和挪动后的渐变之间没有色带。
+  - 单测逐文件串行：chat-wallpaper 4、ChatBackgroundLayer 12、ChatAppearanceScreen 10、SupportScreens 12、ConversationEntry 28、ThreadScreen 68、ThreadView 142、theme 7、resolver 26、cubic-bezier 1。tsc、ui-style 通过。
+
 - 2026-10-01 Claude Desktop 优先的安卓真机验收（负责人明确要求操作已连接手机测试）：源码 `58f903eb` 的本地开发 Bridge，现有 SM-A566B QA App `3.1.0 (30100)`，双安装 Mac 自动选择 Desktop Code 2.1.284，不指定程序路径。独立项目/配置及既有隔离 Preview，手机正常六位码确认与 claim、项目选择、新建会话、12 个原生模型、两轮真实回复与上下文均通过；强停/重开 QA App 后连接在线且两轮历史完整，第三轮仍返回原标记。只读 SDK 原生历史核对三轮回复来自同一个自有会话；推理子进程路径确认属于 Desktop host。最初 Production 设置不能解析 Preview 码，切换 QA 调试环境后成功。
 
   测试结束移除本次新增 Preview 连接，原有 10 个连接保留，调试模式恢复关闭；测试 Bridge 正常退出、监听端口关闭、自有 owner 锁释放。未替换商店 App，未构建/安装 APK，未改原有用户 Bridge、原生凭据或 Desktop 会话。未发现新缺陷，未重跑实现测试；验证与局限见 [真机验收记录](../3.1/claude-desktop-android-qa-2026-10-01.md)。仅 Desktop 账号独立机器和 Windows 原生验收仍留 HT-CLAUDE-DESKTOP-1001；未发布 npm/App 或部署服务。

@@ -39,6 +39,13 @@ Owner request 2026-10-01. Lucy found the model picker lacking quality on OpenCla
 - **Shared fix:** provider section titles use the providers' own spelling (`OpenAI`, `DeepSeek`) in both pickers.
 - **Device findings (SM-A566B, QA build, 2026-10-01):** the OpenClaw sheet first ended under the navigation bar. A Gorhom scrollable sizes a dynamic sheet from its own content, leaving out the header; and `BottomSheetView` composes only two style entries, so `Sheet`'s safe-area padding was dropped once the grouped tone took the second slot. The content-sized first page is now a plain view, and `Sheet` flattens the body style (this also applies its long-ignored viewport limit). OpenClaw's thinking levels come from a static list when `models.list` gives none for the model: GPT-6-Astra is offered `Minimal` and `Adaptive` but not `Max`, and the Gateway refuses `Adaptive`, so the choice snaps back to `Medium`. Fixed the same day: the sheet now offers the levels the Gateway reports for the session's current model and writes choices with `sessions.patch` (see `docs/3.1/openclaw-thinking-default.md`).
 
+## A+ motion, batch 3 — wallpaper step on send, 2026-10-01
+
+Part of the owner's request to land every remaining motion item. The approved motion prototype moves the built-in wallpaper's gradient a small step with each send, so the conversation feels as if it advanced.
+
+- **Change:** the pattern's gradient is drawn natively (`experimental_backgroundImage`) on a layer three times the screen in each direction, and only the doodles stay in SVG. Each send moves the layer to the next of four positions with `Motion.wallpaper` (600 ms, the prototype's curve). The stops repeat so that every position shows a believable slice. The header and composer scrims take the colors the gradient shows at the screen's top and bottom edges (`chatWallpaperDriftScrims`), and cross-fade on the same curve. Reduced motion keeps the wallpaper at rest; photos and the plain canvas are unchanged.
+- **Device check (SM-A566B QA build):** a strip of pure wallpaper at the screen's left edge was sampled frame by frame. In light mode it moved from (224, 233, 249) to (239, 232, 249) within about 500 ms of a send; in dark mode from (15, 24, 47) to (17, 20, 42). The header scrim showed no band against the moved gradient.
+
 ## A+ motion, batch 2b — 2026-10-01
 
 Batch 2b removes the jolt when a multi-line draft is sent. To measure it, a script tracks a fixed message patch frame by frame in a screen recording, so no screenshots need to be read. The recordings were made on an SM-A566B QA build, sending the same three-line draft in an OpenClaw test session.
