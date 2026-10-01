@@ -39,6 +39,14 @@ Owner request 2026-10-01. Lucy found the model picker lacking quality on OpenCla
 - **Shared fix:** provider section titles use the providers' own spelling (`OpenAI`, `DeepSeek`) in both pickers.
 - **Device findings (SM-A566B, QA build, 2026-10-01):** the OpenClaw sheet first ended under the navigation bar. A Gorhom scrollable sizes a dynamic sheet from its own content, leaving out the header; and `BottomSheetView` composes only two style entries, so `Sheet`'s safe-area padding was dropped once the grouped tone took the second slot. The content-sized first page is now a plain view, and `Sheet` flattens the body style (this also applies its long-ignored viewport limit). OpenClaw's thinking levels come from a static list when `models.list` gives none for the model: GPT-6-Astra is offered `Minimal` and `Adaptive` but not `Max`, and the Gateway refuses `Adaptive`, so the choice snaps back to `Medium`. Fixed the same day: the sheet now offers the levels the Gateway reports for the session's current model and writes choices with `sessions.patch` (see `docs/3.1/openclaw-thinking-default.md`).
 
+## A+ motion, batch 2a — 2026-10-01
+
+The first part of batch 2 fixes three glitches seen in the batch 1 recordings. Each was traced in code and is locked by a unit test. The list follow remains for batch 2b.
+
+- **No empty bubble at completion.** A reply that showed no words yet can arrive whole with the run's end. Its text reaches the pacer a commit later, so the bubble, clock and tail used to flash empty for about 30 ms. The row now stays the live pill until the pacer has visible text, whether or not the run is still streaming. The bubble then appears with its words, clock and tail in one commit.
+- **The bubble above keeps its tail.** A reply with no words yet is the live pill, not a bubble, so it no longer joins the Agent bubble above it. Before, that bubble lost its tail and its gap whenever the pill appeared, and got them back as the pill left around each tool step. It now joins only once the reply has words.
+- **The pill's clock keeps counting from the start it first saw.** It counts from the newest prompt's time with the phone's clock. An exact history echo keeps the prompt's row identity but takes the computer's clock, so a mid-run history read could move the start; one recording jumped from 10 s to 20 s. The start is now latched per prompt row identity (`renderKey`).
+
 ## A+ motion, batch 1 — 2026-10-01
 
 Step 4 of the A+ chat plan (owner request 2026-10-01: polish motion and feel everywhere) implements the approved motion prototype (PMotion, 2026-09-30) for the send path and live presence. Recorded on device before the change (SM-A566B, main at 2ccdecc9): the composer cleared with no motion; send → mic (about 0.7 s, while the message was still leaving) → stop, and stop → mic were hard cuts; the header status and the live pill's steps cut instantly.

@@ -706,7 +706,18 @@ export function ThreadView({
     && !messages.slice(0, newestUserIndex).some(message => message.role === 'tool'
       || (message.role === 'assistant' && message.text.trim().length > 0));
   const liveActivityLabel = awaitingSendAcknowledgement ? copy.sending ?? t('Sending…', { ns: 'chat' }) : activityLabel?.trim() || copy.thinking;
-  const runStartedAt = newestUserIndex >= 0 ? messages[newestUserIndex]!.timestampMs : undefined;
+  // The pill's clock keeps the turn's start as first seen. An exact history
+  // echo keeps the prompt's row identity but takes the computer's clock, and
+  // the pill counts with the phone's (device check 2026-10-01: 10 s jumped
+  // to 20 s mid-run).
+  const newestUser = newestUserIndex >= 0 ? messages[newestUserIndex]! : undefined;
+  const newestUserKey = newestUser ? newestUser.renderKey ?? newestUser.id : null;
+  const runStartRef = useRef<{ key: string; startedAt: number | undefined } | null>(null);
+  if (newestUserKey === null) runStartRef.current = null;
+  else if (runStartRef.current?.key !== newestUserKey || runStartRef.current.startedAt === undefined) {
+    runStartRef.current = { key: newestUserKey, startedAt: newestUser!.timestampMs };
+  }
+  const runStartedAt = runStartRef.current?.startedAt;
   const liveActivity = useMemo<ThreadLiveActivity>(
     () => ({ label: liveActivityLabel, startedAt: runStartedAt }),
     [liveActivityLabel, runStartedAt],
@@ -2245,10 +2256,13 @@ function AssistantBubble({
   // view word-sized increments so its tail fade-in reads as a cascade. Once
   // the run ends the pacer drains the remainder, then the settled text shows.
   const pacedText = useSmoothedStreamText(message.text, message.streaming === true);
-  // Keep the placeholder until the pacer has visible text, never an empty
-  // markdown bubble between the first network chunk and its first shown word.
-  const thinking = message.streaming === true && pacedText.trim().length === 0;
   const textAnimating = message.streaming === true || pacedText !== message.text;
+  // Keep the placeholder until the pacer has visible text, never an empty
+  // markdown bubble: between the first network chunk and its first shown
+  // word, and at completion, when a reply that showed no words yet arrives
+  // whole and the pacer publishes it a commit later (device check
+  // 2026-10-01: the empty bubble, clock and tail flashed for about 30 ms).
+  const thinking = textAnimating && pacedText.trim().length === 0;
   // The final words land while the view is still in streaming mode; the mode
   // switch follows in a commit that leaves the text alone.
   const streamingAnimation = useStreamingSettleHold(textAnimating, message.renderKey ?? message.id);

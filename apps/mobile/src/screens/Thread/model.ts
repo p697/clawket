@@ -716,10 +716,15 @@ function timelineVoice(item: ThreadTimelineItem): ThreadVoice {
   return 'agent';
 }
 
-/** A row that draws a message bubble, so neighbours from its speaker can join it. */
+/**
+ * A row that draws a message bubble, so neighbours from its speaker can join it.
+ * A reply with no words yet is the live pill: the bubble above keeps its tail
+ * while the pill comes and goes around tool steps.
+ */
 function isBubbleRow(item: ThreadTimelineItem | undefined): boolean {
   return item?.type === 'message' && !item.message.approval
-    && (item.message.role === 'user' || item.message.role === 'assistant');
+    && (item.message.role === 'user' || item.message.role === 'assistant')
+    && !(item.message.streaming === true && !item.message.text.trim());
 }
 
 function joins(item: ThreadTimelineItem, neighbour: ThreadTimelineItem | undefined): boolean {

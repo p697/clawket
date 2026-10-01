@@ -2415,6 +2415,41 @@ describe('continuous message presentation', () => {
     expect(view.getByTestId('thread-bubble-history-1') === bubble).toBe(true);
     expect(view.getByTestId('thread-meta-history-1') === meta).toBe(true);
   });
+  it('keeps the live pill when a reply that showed no words completes before the pacer publishes it', () => {
+    const streaming: UiMessage = { id: 'streaming', renderKey: 'reply:1000:0', role: 'assistant', text: '', timestampMs: 1000, streaming: true };
+    mockPacedText = '';
+    const view = render(<ThreadView {...createProps({ messages: [streaming], isRunning: true })} />);
+    expect(view.getByTestId('thread-thinking-streaming')).toBeTruthy();
+    // The whole reply arrives with the run's end and is published a commit later:
+    // never an empty bubble with its clock and tail in between.
+    const final: UiMessage = { ...streaming, id: 'final_run', text: 'Done', streaming: false };
+    view.rerender(<ThreadView {...createProps({ messages: [final] })} />);
+    expect(view.getByTestId('thread-thinking-final_run')).toBeTruthy();
+    expect(view.queryByTestId('thread-bubble-final_run')).toBeNull();
+    mockPacedText = undefined;
+    view.rerender(<ThreadView {...createProps({ messages: [final] })} />);
+    expect(view.queryByTestId('thread-thinking-final_run')).toBeNull();
+    expect(view.getByTestId('thread-markdown-final_run').props.markdown).toBe('Done');
+  });
+
+  it('keeps the live pill clock on the turn start it first saw when a history echo corrects the prompt time', () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-10-01T08:00:12.000Z'));
+    try {
+      const sent: UiMessage = { id: 'usr_1', renderKey: 'send:1', role: 'user', text: 'Hello', timestampMs: Date.parse('2026-10-01T08:00:00.000Z') };
+      const view = render(<ThreadView {...createProps({ messages: [sent], isRunning: true, input: '' })} />);
+      const label = () => view.getByTestId('thread-thinking-streaming').props.accessibilityLabel as string;
+      const before = label();
+      expect(before).toContain(', ');
+      // The echo keeps the row identity but carries the computer's clock, 10 s behind the phone.
+      const echoed: UiMessage = { ...sent, id: 'history-1', timestampMs: sent.timestampMs! - 10_000 };
+      view.rerender(<ThreadView {...createProps({ messages: [echoed], isRunning: true, input: '' })} />);
+      expect(label()).toBe(before);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('keeps thinking until paced text is visible and preserves markdown through finalization', () => {
     const streaming: UiMessage = { id: 'streaming', renderKey: 'reply:1000:0', role: 'assistant', text: 'A complete reply', timestampMs: 1000, streaming: true };
     mockPacedText = '';

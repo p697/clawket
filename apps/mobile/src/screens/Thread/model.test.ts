@@ -432,6 +432,16 @@ describe('Thread model', () => {
     expect(rows.map((row) => row.joinsOlder)).toEqual([false, false, false]);
   });
 
+  it('joins a reply to its speaker only once it has words', () => {
+    const rows = (text: string) => withThreadRhythm([
+      { type: 'message', key: 'live', message: { id: 'streaming', role: 'assistant', text, streaming: true } },
+      { type: 'message', key: 'earlier', message: { id: 'earlier', role: 'assistant', text: 'Checking.' } },
+    ]).map((row) => [row.gapAbove, row.joinsOlder, row.joinsNewer]);
+    // The live pill is not a bubble: the reply above keeps its tail.
+    expect(rows('')).toEqual([['stack', false, false], ['none', false, false]]);
+    expect(rows('Found it')).toEqual([['joined', true, false], ['none', false, true]]);
+  });
+
   it('never joins bubbles from different participants', () => {
     const attribution = (id: string): UiMessage['attribution'] => ({ channel: 'telegram', sender: { id, name: id } });
     const rows = withThreadRhythm([
