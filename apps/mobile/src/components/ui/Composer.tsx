@@ -136,6 +136,12 @@ export const Composer = React.forwardRef<ComposerHandle, ComposerProps>(function
   const emptyInputHeight = !expanded && voiceState === 'idle' && value.length === 0
     ? (holdHeight ? Math.max(targetHeight, draftHeightRef.current) : targetHeight)
     : undefined;
+  // Below the shell's visible height the native editor keeps one more line of
+  // room. A newly wrapped line lands there, so Android never scrolls the
+  // editor to its caret and hides the first line while the shell catches up
+  // (device report 2026-10-01); the shell then reveals the new line as it grows.
+  const inputFrameHeight = !expanded && voiceState === 'idle' && contentHeight <= maxHeight
+    ? Math.min(maxHeight, targetHeight + lineHeight) : undefined;
   // Only the toolbar owns drag-to-dismiss. Capturing above the native editor
   // would also steal downward cursor/selection-handle drags.
   const inputScrollable = !expanded && contentHeight > maxHeight;
@@ -167,7 +173,11 @@ export const Composer = React.forwardRef<ComposerHandle, ComposerProps>(function
   // The chip shares the draft's line: the measured text wraps where the input does.
   const hasAccessory = Boolean(accessory) && !expanded && !voiceActive;
   const inputEndInset = hasAccessory ? 0 : ControlSize.floatingButton;
-  const measurementInset = Space.sm + (hasAccessory ? accessoryWidth : inputEndInset);
+  // Beside the chip the shell keeps no end padding: the chip then sits as far
+  // from the capsule's end as from its top and bottom, a pill inside a pill
+  // (owner report 2026-10-01: 13 points at the end against 5 above looked off).
+  const shellEndPadding = hasAccessory ? 0 : Space.sm;
+  const measurementInset = shellEndPadding + (hasAccessory ? accessoryWidth : inputEndInset);
   const primaryDisabled = isRunning && !hasContent ? !onStop : !editable || !canSend || !hasContent;
   const voiceGesture = useVoiceGesture({ phase: voiceState, enabled: Boolean(onVoicePress) && !voiceDisabled && editable && voiceState !== 'transcribing',
     start: onVoiceStart ?? onVoicePress ?? (() => {}), stop: onVoiceStop ?? onVoicePress ?? (() => {}), cancel: onVoiceCancel ?? (() => {}),
@@ -177,7 +187,7 @@ export const Composer = React.forwardRef<ComposerHandle, ComposerProps>(function
   // The placeholder is never clipped by the chip: it gets what the whole hint leaves on the line
   // (the accessory brings its own leading gap).
   const accessoryRoom = shellWidth > 0 && placeholderWidth > 0
-    ? Math.max(0, shellWidth - Space.sm * 2 - placeholderWidth) : null;
+    ? Math.max(0, shellWidth - Space.sm - shellEndPadding - placeholderWidth) : null;
   const compactAccessory = typeof accessory === 'function' ? accessory({ drafting: value.length > 0, room: accessoryRoom }) : accessory;
   const toolbarAccessory = typeof accessory === 'function' ? accessory({ drafting: false, room: null }) : accessory;
   const voiceHint = voiceState === 'transcribing' ? t('Transcribing…')
@@ -282,7 +292,7 @@ export const Composer = React.forwardRef<ComposerHandle, ComposerProps>(function
               focusAfterLayoutRef.current = false;
               inputRef.current?.focus();
             }}
-            style={[styles.inputShell, inputSizeStyle,
+            style={[styles.inputShell, { paddingRight: shellEndPadding }, inputSizeStyle,
               { minHeight: emptyInputHeight ?? ControlSize.pill, maxHeight: emptyInputHeight },
               !editable ? styles.disabled : null]}>
             <Text testID={testID ? `${testID}-measurement` : undefined} accessible={false}
@@ -301,7 +311,10 @@ export const Composer = React.forwardRef<ComposerHandle, ComposerProps>(function
                 testID={testID ? `${testID}-voice-waveform` : undefined} /> : null}
               <Text accessibilityLiveRegion="polite" style={styles.voiceHint}>{voiceHint}</Text>
             </View> : null}
-            <View style={[styles.inputHost, voiceActive ? styles.hiddenInput : null]} pointerEvents={voiceActive ? 'none' : 'auto'} accessibilityElementsHidden={voiceActive}>
+            <View testID={testID ? `${testID}-input-host` : undefined}
+              style={[styles.inputHost, inputFrameHeight !== undefined ? { alignSelf: 'flex-start', height: inputFrameHeight } : null,
+                voiceActive ? styles.hiddenInput : null]}
+              pointerEvents={voiceActive ? 'none' : 'auto'} accessibilityElementsHidden={voiceActive}>
             {onPasteFiles ? <PasteCapableTextInput {...inputProps} onPasteFiles={onPasteFiles} onPasteFailed={onPasteFailed} />
               : <CompositionSafeTextInput {...inputProps} />}
             </View>
@@ -431,7 +444,8 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['theme']['colors'])
     expandAction: { position: 'absolute', right: 0, top: 0 },
     // The model chip sits at the end of the draft's last line.
     accessory: { alignSelf: 'flex-end', minHeight: ControlSize.pill, justifyContent: 'center' },
-    accessoryUnderExpand: { minWidth: ControlSize.floatingButton, alignItems: 'flex-end' },
+    // Under the expand control the chip shares its column, centered beneath it.
+    accessoryUnderExpand: { minWidth: ControlSize.floatingButton, alignItems: 'center' },
     toolbar: { flexDirection: 'row', alignItems: 'center', gap: Space.xs },
     editorHeader: { flexDirection: 'row', alignItems: 'center', gap: Space.sm, paddingBottom: Space.md },
     editorTitle: { flex: 1, textAlign: 'center', color: colors.ink, fontSize: FontSize.body, fontWeight: FontWeight.semibold },

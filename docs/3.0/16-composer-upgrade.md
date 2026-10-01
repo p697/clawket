@@ -46,6 +46,14 @@ Part of the owner's request to land every remaining motion item. The approved mo
 - **Change:** the pattern's gradient is drawn natively (`experimental_backgroundImage`) on a layer three times the screen in each direction, and only the doodles stay in SVG. Each send moves the layer to the next of four positions with `Motion.wallpaper` (600 ms, the prototype's curve). The stops repeat so that every position shows a believable slice. The header and composer scrims take the colors the gradient shows at the screen's top and bottom edges (`chatWallpaperDriftScrims`), and cross-fade on the same curve. Reduced motion keeps the wallpaper at rest; photos and the plain canvas are unchanged.
 - **Device check (SM-A566B QA build):** a strip of pure wallpaper at the screen's left edge was sampled frame by frame. In light mode it moved from (224, 233, 249) to (239, 232, 249) within about 500 ms of a send; in dark mode from (15, 24, 47) to (17, 20, 42). The header scrim showed no band against the moved gradient.
 
+## A+ motion, batch 3 — composer growth, 2026-10-01
+
+Part of the owner's request to land every remaining motion item. On Android, when a draft wrapped onto a new line, the editor's first line scrolled out of view for a moment before the capsule grew to show both lines.
+
+- **Cause:** the native editor was exactly as tall as the capsule's visible height. A newly wrapped line had no room inside it, so Android scrolled the editor to keep the caret visible. The capsule grows only after React measures the new line, and only then does the editor scroll back.
+- **Change:** while the draft fits under the five-line cap, the editor's host is one line taller than the capsule shows (`inputFrameHeight`), and the capsule clips it. A new line lands in that spare room, and the capsule then grows to reveal it. Past the cap the editor scrolls inside the capsule as before, and a sent draft keeps its height while the thread holds it (batch 2b).
+- **Device check (SM-A566B QA build):** a draft typed word by word over five lines was recorded, and its first line was tracked frame by frame. Each wrap moved the first line up about 66 px in about 100 ms as the capsule grew. It was never scrolled away and back.
+
 ## A+ motion, batch 2b — 2026-10-01
 
 Batch 2b removes the jolt when a multi-line draft is sent. To measure it, a script tracks a fixed message patch frame by frame in a screen recording, so no screenshots need to be read. The recordings were made on an SM-A566B QA build, sending the same three-line draft in an OpenClaw test session.
